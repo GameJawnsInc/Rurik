@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=457)   # SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=467)   # SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
 def section_weapon_damage():
@@ -5362,15 +5362,19 @@ def section_hold_plane():
 
         now = time.time()
         # 1. nobody engaged: the body stands down -- no target, no swing.
-        st = _fight_world((300.0, 0.0), (0.0, 110.0))
+        # (SLICE-H5: under Fight a foe inside the hero's AGGRO_RANGE is
+        # attacked on sight, WIKI -- so this idle foe stands 1500 u off.)
+        st = _fight_world((1500.0, 0.0), (0.0, 110.0))
         t0 = authsrv.party_fight_target(st, 200, st["agents"][200], now)
         sent = _attacks(st)
         LEDGER.ok(t0 is None and sent == [],
-                  "with no leader engagement and no hostile on the party, a "
-                  "party body fights NOBODY (F30's 12 unexplained retail opens "
-                  "are not modelled)", f"target {t0}, sent {sent}")
+                  "with no leader engagement, no hostile on the party and no "
+                  "foe in the hero's aggro range, a party body fights NOBODY "
+                  "(F30's 12 unexplained retail opens are not modelled)",
+                  f"target {t0}, sent {sent}")
         # 2. the leader's swing stamps the engagement; the caster opens on the
         # leader's target from its slot: [4, 200, 10, 0], facing first.
+        st = _fight_world((300.0, 0.0), (0.0, 110.0))
         authsrv.leader_engaged(st, 10, now, "swing")
         t1 = authsrv.party_fight_target(st, 200, st["agents"][200], now)
         sent = _attacks(st)
@@ -5436,10 +5440,10 @@ def section_hold_plane():
         # 7. the engagement expires: 7 s after the leader's last start, with
         # the foe not fighting the party and never the body's own foe, the
         # body stands down; but a body ALREADY on that foe keeps it.
-        st = _fight_world((300.0, 0.0), (0.0, 110.0))
+        st = _fight_world((1500.0, 0.0), (0.0, 110.0))
         authsrv.leader_engaged(st, 10, time.time() - 7.0, "swing")
         t7 = authsrv.party_fight_target(st, 200, st["agents"][200], time.time())
-        st2 = _fight_world((300.0, 0.0), (0.0, 110.0))
+        st2 = _fight_world((1500.0, 0.0), (0.0, 110.0))
         authsrv.leader_engaged(st2, 10, time.time(), "swing")
         authsrv.party_fight_target(st2, 200, st2["agents"][200], time.time())
         st2["leader_engaged"]["at"] = time.time() - 7.0
@@ -5451,7 +5455,7 @@ def section_hold_plane():
                   f"fresh body {t7}, engaged body {t7b}")
         # 8. a hostile that opened on the party engages the body without the
         # leader (retail: 5 of 89): its H3 pick locked on a party member.
-        st = _fight_world((300.0, 0.0), (0.0, 110.0))
+        st = _fight_world((1500.0, 0.0), (0.0, 110.0))
         st["agents"][10]["target"], st["agents"][10]["target_locked"] = 200, True
         t8 = authsrv.party_fight_target(st, 200, st["agents"][200], time.time())
         st["agents"][10]["target_locked"] = False
@@ -5510,7 +5514,7 @@ def section_hold_plane():
         authsrv.ally_cast_tick(lambda op, vals, label="", quiet=False: sent.append((op, vals)),
                                st, 1)
         casts = [v for op, v in sent if op == INT_T and v[0] == 60]
-        st3 = _fight_world((300.0, 0.0), (0.0, 110.0))
+        st3 = _fight_world((1500.0, 0.0), (0.0, 110.0))
         st3["agents"][200].update(skills=((252, 1.0, 10.0), (281, 1.0, 2.0)),
                                   skill_ready=[0.0, 0.0])
         st3["player_health"] = 50.0
@@ -5565,6 +5569,192 @@ def section_hold_plane():
                   "ally_cast_tick", f"stamps {_stamps}, order {_order} < {_order2}")
     finally:
         authsrv.PARTY_FIGHTS = _saved_pf
+
+    # ---- SLICE-H5: the commander's orders ---------------------------------------
+    # WIKI (GWW "Hero" Combat modes, "Hero behavior" Targeting, "Hero flag"):
+    # Fight attacks the selected foe within spirit range and any foe in the
+    # hero's aggro range, softest first; Guard refrains until the party is
+    # engaged and does not leave its area; Avoid never attacks; the lock tops
+    # the hierarchy; a flag parks the body, the party flag the group.
+    print("\nSLICE-H5: the commander's clicks are obeyed -- stance gates the "
+          "engagement, the lock tops the targeting, a flag parks the body and "
+          "the party flag the group; each still echoed for the client to draw")
+    _saved_pc = authsrv.PARTY_COMMANDS
+    _saved_ids = authsrv.HERO_IDS
+    try:
+        authsrv.HERO_IDS = [3]                # hero_slots(): agent 200
+        AI_SET, LOCK_SET = authsrv.GAME_SMSG_HERO_AI_MODE_SET, authsrv.GAME_SMSG_HERO_LOCK_TARGET_SET
+        HFLAG_SET, PFLAG_SET = authsrv.GAME_SMSG_HERO_FLAG_SET, authsrv.GAME_SMSG_PARTY_FLAG_SET
+        LEAD = authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT
+
+        def _cmd(state, opcode, *payload):
+            sent = []
+            authsrv.handle_hero_command(
+                [opcode] + list(payload),
+                lambda op, vals, label="", quiet=False: sent.append((op, vals)),
+                state, 1, opcode)
+            return sent
+
+        def _cmd_world(hostile_pos, monk_pos, second=None):
+            st = _fight_world(hostile_pos, monk_pos)
+            if second is not None:
+                st["agents"][11] = dict(st["agents"][10], pos=second,
+                                        npc={"profession": 3, "level": 5},
+                                        target=None, target_locked=False)
+            return st
+
+        # 1. the stance click: echoed on 0x0062 and STORED; a non-hero agent
+        # gets nothing.
+        st = _cmd_world((300.0, 0.0), (0.0, 110.0))
+        sent = _cmd(st, authsrv.GAME_CMSG_HERO_AI_MODE, 200, 1)
+        other = _cmd(st, authsrv.GAME_CMSG_HERO_AI_MODE, 10, 1)
+        LEDGER.ok(sent == [(AI_SET, [200, 1])] and other == []
+                  and authsrv.hero_command(st, 200)["ai_mode"] == 1,
+                  "0x0015 [hero, 1] is echoed as 0x0062 [hero, 1] (pvpui 28.6, "
+                  "the ring's setter) and stored as the hero's stance; an "
+                  "agent that is no hero slot is ignored",
+                  f"sent {sent}, other {other}, cmd {authsrv.hero_command(st, 200)}")
+        # 2. GUARD refrains: the leader's start engages nothing, a foe in
+        # aggro range engages nothing, the selection engages nothing -- a
+        # hostile that OPENED on the party does.
+        authsrv.leader_engaged(st, 10, time.time(), "swing")
+        st["target"] = 10
+        g1 = authsrv.party_fight_target(st, 200, st["agents"][200], time.time())
+        st["agents"][10]["target"], st["agents"][10]["target_locked"] = 200, True
+        g2 = authsrv.party_fight_target(st, 200, st["agents"][200], time.time())
+        LEDGER.ok(g1 is None and g2 == 10,
+                  "GUARD: the leader's start, the selection and a foe in aggro "
+                  "range engage nothing; a hostile that opened on the party "
+                  "does (GWW: 'refraining from combat until actively engaged')",
+                  f"guard {g1}, engaged {g2}")
+        # 3. the LOCK tops the hierarchy: with the leader on foe 11 and the
+        # lock on foe 10, the body fights 10; the clear [hero, 0] hands it
+        # back to the leader's target; a dead lock falls through.
+        st = _cmd_world((300.0, 0.0), (0.0, 110.0), second=(0.0, 400.0))
+        authsrv.leader_engaged(st, 11, time.time(), "swing")
+        sent = _cmd(st, authsrv.GAME_CMSG_HERO_LOCK_TARGET, 200, 10)
+        l1 = authsrv.party_fight_target(st, 200, st["agents"][200], time.time())
+        sent2 = _cmd(st, authsrv.GAME_CMSG_HERO_LOCK_TARGET, 200, 0)
+        l2 = authsrv.party_fight_target(st, 200, st["agents"][200], time.time())
+        _cmd(st, authsrv.GAME_CMSG_HERO_LOCK_TARGET, 200, 10)
+        st["agents"][10]["dead"] = True
+        l3 = authsrv.party_fight_target(st, 200, st["agents"][200], time.time())
+        LEDGER.ok(sent == [(LOCK_SET, [200, 10])] and l1 == 10
+                  and sent2 == [(LOCK_SET, [200, 0])] and l2 == 11 and l3 == 11,
+                  "0x0016 [hero, foe] is echoed as 0x0063 and the LOCK tops the "
+                  "targeting over the leader's target; [hero, 0] clears it "
+                  "(pvpui 28.7) and the leader's target rules again; a dead "
+                  "lock falls through ('until the target gets killed')",
+                  f"lock {sent} -> {l1}; clear {sent2} -> {l2}; dead lock -> {l3}")
+        # 4. AVOID never attacks: lock, leader and aggro range all engage
+        # nothing, and the attack tick sends nothing.
+        st = _cmd_world((300.0, 0.0), (0.0, 110.0))
+        _cmd(st, authsrv.GAME_CMSG_HERO_AI_MODE, 200, 2)
+        _cmd(st, authsrv.GAME_CMSG_HERO_LOCK_TARGET, 200, 10)
+        authsrv.leader_engaged(st, 10, time.time(), "swing")
+        a1 = authsrv.party_fight_target(st, 200, st["agents"][200], time.time())
+        sent = _attacks(st)
+        LEDGER.ok(a1 is None and sent == [],
+                  "AVOID COMBAT: neither the lock, the leader's start nor a foe "
+                  "in aggro range engages the body, and it swings at nobody "
+                  "(GWW: 'Heroes never attack')", f"target {a1}, sent {sent}")
+        # 5. FIGHT: the leader's SELECTION within spirit range engages with no
+        # start; with nobody selected a foe inside the hero's aggro range is
+        # attacked on sight, the softest class first (a Monk-class foe 800 u
+        # off over a Warrior-class foe 300 u off).
+        st = _cmd_world((300.0, 0.0), (0.0, 110.0), second=(800.0, 0.0))
+        st["target"] = 11
+        f1 = authsrv.party_fight_target(st, 200, st["agents"][200], time.time())
+        st["target"] = 0
+        st["agents"][200]["fight"] = None
+        f2 = authsrv.party_fight_target(st, 200, st["agents"][200], time.time())
+        st["agents"][11]["pos"] = (1500.0, 0.0)
+        st["agents"][200]["fight"] = None
+        f3 = authsrv.party_fight_target(st, 200, st["agents"][200], time.time())
+        LEDGER.ok(f1 == 11 and f2 == 11 and f3 == 10,
+                  "FIGHT: the leader's selected foe within spirit range is "
+                  "attacked with no start; with nobody selected a foe inside "
+                  "the hero's aggro range is attacked on sight, the lowest "
+                  "armour class first (GWW, Hero: Combat modes)",
+                  f"selected {f1}, aggro softest {f2}, aggro nearest-left {f3}")
+        # 6. the HERO FLAG: 0x001A echoed as 0x0066; the move tick leads the
+        # body to the FLAG (a 0x0029 point lead), not its slot; the clear
+        # (+INF, +INF) sends it back to the slot.
+        st = _cmd_world((1500.0, 0.0), (0.0, 110.0))
+        sent = _cmd(st, authsrv.GAME_CMSG_HERO_FLAG_PLACE, 200, (500.0, 500.0), 0)
+        walk = [v for op, v, _l in _walk(st) if op == LEAD and v[0] == 200]
+        st["agents"][200]["follow"] = None
+        st["agents"][200]["pos"] = (500.0, 500.0)       # it got there
+        sent2 = _cmd(st, authsrv.GAME_CMSG_HERO_FLAG_PLACE, 200,
+                     (float("inf"), float("inf")), 0)
+        walk2 = [v for op, v, _l in _walk(st) if op == LEAD and v[0] == 200]
+        LEDGER.ok(sent == [(HFLAG_SET, [200, (500.0, 500.0), 0])]
+                  and len(walk) == 1 and tuple(walk[0][1]) == (500.0, 500.0)
+                  and sent2 == [(HFLAG_SET, [200, (float("inf"), float("inf")), 0])]
+                  and len(walk2) == 1 and tuple(walk2[0][1]) == (0.0, 110.0),
+                  "0x001A is echoed as 0x0066 (the compass marker and the world "
+                  "flag) and the body walks to the FLAG by a 0x0029 point lead; "
+                  "the (+INF, +INF) clear returns it to its slot (GWW Hero flag)",
+                  f"flag {sent} -> lead {walk}; clear -> lead {walk2}")
+        # 7. the PARTY FLAG moves the group: two bodies get leads at the flag
+        # plus their own slot offsets.
+        st = _cmd_world((1500.0, 0.0), (0.0, 110.0))
+        st["agents"][201] = _pbody("warrior", (0.0, -110.0), 1, slot=1)
+        sent = _cmd(st, authsrv.GAME_CMSG_PARTY_FLAG_PLACE, (900.0, 300.0), 0)
+        walk = {v[0]: tuple(v[1]) for op, v, _l in _walk(st)
+                if op == LEAD and v[0] in (200, 201)}
+        LEDGER.ok(sent == [(PFLAG_SET, [(900.0, 300.0), 0])]
+                  and walk == {200: (900.0, 410.0), 201: (900.0, 190.0)},
+                  "0x001B is echoed as 0x0067 and the party flag moves the "
+                  "group 'as a single group': each body walks to the flag at "
+                  "its own slot offset", f"echo {sent}, leads {walk}")
+        # 8. a flagged MELEE body under Fight still chases its foe ('will
+        # separate from the flag if necessary'); under Guard it stays.
+        st = _cmd_world((500.0, 0.0), (0.0, 110.0))
+        st["agents"][200]["npc"]["profession"] = 1
+        _cmd(st, authsrv.GAME_CMSG_HERO_FLAG_PLACE, 200, (0.0, 110.0), 0)
+        authsrv.leader_engaged(st, 10, time.time(), "swing")
+        fight = [(op, v) for op, v, _l in _walk(st) if v[0] == 200
+                 and op in (LEAD, FOLLOW)]
+        st = _cmd_world((500.0, 0.0), (0.0, 110.0))
+        st["agents"][200]["npc"]["profession"] = 1
+        _cmd(st, authsrv.GAME_CMSG_HERO_AI_MODE, 200, 1)
+        st["agents"][10]["target"], st["agents"][10]["target_locked"] = 200, True
+        guard = [(op, v) for op, v, _l in _walk(st) if v[0] == 200
+                 and op in (LEAD, FOLLOW)]
+        LEDGER.ok(len(fight) == 1 and fight[0][0] == FOLLOW and fight[0][1][-1] == 10
+                  and all(op != FOLLOW for op, _v in guard),
+                  "a flagged MELEE body under FIGHT chases its foe (a 0x002A "
+                  "naming it -- 'will separate from the flag'); under GUARD it "
+                  "does not leave its area (no chase, though the foe is on it)",
+                  f"fight {fight}, guard {guard}")
+        # 9. the revert arm: --party-ignore-commands echoes and obeys nothing.
+        authsrv.PARTY_COMMANDS = False
+        st = _cmd_world((300.0, 0.0), (0.0, 110.0))
+        sent = _cmd(st, authsrv.GAME_CMSG_HERO_AI_MODE, 200, 2)
+        sent += _cmd(st, authsrv.GAME_CMSG_HERO_FLAG_PLACE, 200, (500.0, 500.0), 0)
+        authsrv.leader_engaged(st, 10, time.time(), "swing")
+        r1 = authsrv.party_fight_target(st, 200, st["agents"][200], time.time())
+        fp = authsrv.party_flag_point(st, 200, st["agents"][200])
+        LEDGER.ok([op for op, _v in sent] == [AI_SET, HFLAG_SET] and r1 == 10
+                  and fp is None,
+                  "--party-ignore-commands: the stance and flag echoes still go "
+                  "out (the client draws them) and nothing changes -- Avoid "
+                  "does not stop the fight, the flag parks nobody (the known-"
+                  "bad arm)", f"echoes {[hex(op) for op, _v in sent]}, target "
+                  f"{r1}, flag point {fp}")
+        # 10. source: the four commander opcodes reach ONE handler from the
+        # dispatch chain.
+        _src = inspect.getsource(authsrv)
+        _call = ("        handle_hero_command(values, send, state, conn_id, "
+                 "opcode)\n")
+        LEDGER.ok(_src.count(_call) == 1
+                  and "elif opcode in (GAME_CMSG_HERO_AI_MODE," in _src,
+                  "source: the dispatch hands 0x0015/0x0016/0x001A/0x001B to "
+                  "handle_hero_command at one site", f"calls {_src.count(_call)}")
+    finally:
+        authsrv.PARTY_COMMANDS = _saved_pc
+        authsrv.HERO_IDS = _saved_ids
 
 
 if __name__ == "__main__":

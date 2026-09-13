@@ -9404,6 +9404,34 @@ PARTY_WEAPON_BY_PROFESSION = {1: "sword", 2: "shortbow", 3: "staff", 4: "staff",
                               5: "staff", 6: "staff", 7: "daggers", 8: "staff",
                               9: "spear", 10: "scythe"}
 HERO_WEAPON = None             # --hero-weapon KEY / [party.KEY].weapon
+# ---- SLICE-H5: THE COMMANDER'S ORDERS (studies/slice F31) -------------------
+#
+# The three clicks the commander UI sends (pvpui 28.5-28.7, all captured on
+# our own client) were echoed and did nothing. WIKI (GWW "Hero", Combat
+# modes; "Hero behavior", Targeting; "Hero flag"), the corpus carrying no
+# retail commander click at all:
+#   FIGHT (0)  attacks, in priority, called targets, SELECTED targets within
+#              spirit range of the hero, foes engaged with the party, foes
+#              within the hero's aggro range; prefers the lowest armour
+#              rating; will separate from the flag or the player if it must.
+#   GUARD (1)  holds near the flag or the player, refraining from combat
+#              until engaged: the selected foe engaging the party, a foe in
+#              the party's aggro circle; does not move beyond the area.
+#   AVOID (2)  never attacks, not even a selected or called target.
+#   LOCK       "lock your hero unto it until the target gets killed" -- the
+#              top of the targeting hierarchy (Hero behavior: 1. locked,
+#              2. called, 3. attacked -- H4's rule is the third).
+#   FLAG       the hero walks to the flag and stays while it is active; the
+#              party flag moves "all heroes and henchmen as a single group";
+#              removing a flag sends them back to the player.
+PARTY_COMMANDS = True          # False (--party-ignore-commands): the clicks
+                               # are echoed and change nothing -- every run
+                               # before 2026-09-13.
+AI_MODE_FIGHT, AI_MODE_GUARD, AI_MODE_AVOID = 0, 1, 2   # 0x0015's byte (pvpui 28.5)
+AI_MODE_NAMES = {0: "Fight", 1: "Guard", 2: "Avoid Combat"}
+SPIRIT_RANGE = 2512.0          # u -- WIKI (GWW "Range"): binding rituals /
+                               # "spirit range"; Fight attacks a SELECTED foe
+                               # this far from the hero.
 # The health fraction at or below which a party caster will heal. OURS, and it
 # is AI rather than protocol -- studies/monsterai established that ArenaNet's
 # decision logic is not recoverable from anything, so this is authored or it
@@ -17049,6 +17077,115 @@ def resurrect_target(send, state, tid, conn_id, caster_id, skill_id):
         revive_party_body(send, state, tid, row, conn_id, why=why)
 
 
+def hero_command(state, agent_id):
+    """SLICE-H5: the commander's standing orders for hero agent `agent_id`
+    -- {"ai_mode", "lock", "flag"} -- kept on `state` rather than the body
+    row because the row does not exist in a town and is re-created on a zone
+    (the orders are the activation record's fields, pvpui 28.7: +0xC aiMode,
+    +0x10 flag, +0x20 lockedTarget)."""
+    return state.setdefault("hero_cmd", {}).setdefault(
+        agent_id, {"ai_mode": AI_MODE_FIGHT, "lock": None, "flag": None})
+
+
+def _flag_is_clear(xy):
+    try:
+        return any(math.isinf(float(c)) or math.isnan(float(c)) for c in xy)
+    except (TypeError, ValueError):
+        return True
+
+
+def handle_hero_command(values, send, state, conn_id, opcode):
+    """One commander click, either of its four opcodes (SLICE-H5).
+
+    THE ECHO FIRST, unchanged from pvpui 28.6 -- the client draws nothing on
+    its own send: the stance ring reads 0x0062, the crosshair 0x0063, the
+    compass marker and the world flag model 0x0066/0x0067 (the clear form is
+    coords (+INF, +INF), plane 0; retail sends the party clear in the
+    instance-load batch beside 0x0103, 3 of 3 connections carrying one). A
+    hero opcode acts only on an agent that is one of this run's hero slots,
+    so every arm is inert on a non-hero rig. THEN THE ORDER (PARTY_COMMANDS):
+    the stance and the lock are read by `party_fight_target`, the flags by
+    `enemy_move_tick`'s party branch; a flag's coordinates (+INF, +INF) clear
+    it. `values[0]` is the header word.
+    """
+    if opcode == GAME_CMSG_PARTY_FLAG_PLACE:
+        _axy, _apl = values[1], values[2]
+        send(GAME_SMSG_PARTY_FLAG_SET, [_axy, _apl],
+             f"PARTY_FLAG_SET({_axy}, plane {_apl})")
+        if not PARTY_COMMANDS:
+            print(f"[c{conn_id}] party flag echo: {_axy} (ignored: "
+                  f"--party-ignore-commands)", flush=True)
+            return
+        if _flag_is_clear(_axy):
+            state["party_flag"] = None
+            print(f"[c{conn_id}] PARTY FLAG cleared -- the party returns to "
+                  f"the leader [SLICE-H5]", flush=True)
+        else:
+            state["party_flag"] = (float(_axy[0]), float(_axy[1]), int(_apl))
+            print(f"[c{conn_id}] PARTY FLAG at ({_axy[0]:.0f},{_axy[1]:.0f}) "
+                  f"plane {_apl} -- the party walks there as a group "
+                  f"[SLICE-H5]", flush=True)
+        return
+    _aid = values[1]
+    if not any(_haid == _aid for _hid, _haid, _hdef in hero_slots()):
+        return
+    cmd = hero_command(state, _aid)
+    if opcode == GAME_CMSG_HERO_AI_MODE:
+        _mode = int(values[2])
+        send(GAME_SMSG_HERO_AI_MODE_SET, [_aid, _mode],
+             f"HERO_AI_MODE_SET(agent {_aid}, mode {_mode})")
+        if PARTY_COMMANDS:
+            cmd["ai_mode"] = _mode
+        print(f"[c{conn_id}] hero stance: agent {_aid} -> aiMode {_mode} "
+              f"({AI_MODE_NAMES.get(_mode, '?')}) via 0x0062"
+              + ("" if PARTY_COMMANDS else " (ignored: --party-ignore-commands)"),
+              flush=True)
+    elif opcode == GAME_CMSG_HERO_LOCK_TARGET:
+        _tid = int(values[2])
+        send(GAME_SMSG_HERO_LOCK_TARGET_SET, [_aid, _tid],
+             f"HERO_LOCK_TARGET_SET(agent {_aid} -> target {_tid})")
+        if PARTY_COMMANDS:
+            cmd["lock"] = _tid or None
+        print(f"[c{conn_id}] hero lock: agent {_aid} -> "
+              f"{'target %d' % _tid if _tid else 'cleared'}"
+              + ("" if PARTY_COMMANDS else " (ignored: --party-ignore-commands)"),
+              flush=True)
+    elif opcode == GAME_CMSG_HERO_FLAG_PLACE:
+        _axy, _apl = values[2], values[3]
+        send(GAME_SMSG_HERO_FLAG_SET, [_aid, _axy, _apl],
+             f"HERO_FLAG_SET(agent {_aid}, {_axy}, plane {_apl})")
+        if not PARTY_COMMANDS:
+            print(f"[c{conn_id}] hero flag echo: agent {_aid} at {_axy} "
+                  f"(ignored: --party-ignore-commands)", flush=True)
+            return
+        if _flag_is_clear(_axy):
+            cmd["flag"] = None
+            print(f"[c{conn_id}] hero flag cleared: agent {_aid} returns to "
+                  f"the leader [SLICE-H5]", flush=True)
+        else:
+            cmd["flag"] = (float(_axy[0]), float(_axy[1]), int(_apl))
+            print(f"[c{conn_id}] hero flag: agent {_aid} walks to "
+                  f"({_axy[0]:.0f},{_axy[1]:.0f}) plane {_apl} and holds "
+                  f"[SLICE-H5]", flush=True)
+
+
+def party_flag_point(state, agent_id, agent):
+    """Where a party body is FLAGGED to stand, or None: its own hero flag
+    first, else the party flag at its own slot offset (the party moves "as a
+    single group", GWW Hero flag) -- the leader's frame rotated about the
+    flag, so the group keeps its shape there."""
+    if not PARTY_COMMANDS:
+        return None
+    own = hero_command(state, agent_id).get("flag") if "hero_cmd" in state else None
+    if own is not None:
+        return (own[0], own[1])
+    pf = state.get("party_flag")
+    if pf is None:
+        return None
+    return party_slot_point(state, agent.get("party_slot", 0),
+                            origin=(pf[0], pf[1]))
+
+
 def leader_engaged(state, target_id, now, why):
     """SLICE-H4: the leader's own start or press at `target_id` -- what the
     party reads to fight (F30: 77 of 89 retail party opening starts followed
@@ -17115,24 +17252,56 @@ def party_fight_target(state, agent_id, agent, now):
     cur = agent.get("fight")
     le = state.get("leader_engaged")
     pick, why = None, None
-    if (le and now - le["at"] <= PARTY_ENGAGE_WINDOW
+    # SLICE-H5: the commander's stance and lock (WIKI, GWW "Hero" Combat
+    # modes / "Hero behavior" Targeting). AVOID never attacks; the LOCK is
+    # the top of the hierarchy under Fight and Guard; GUARD refrains until
+    # the party is engaged (no leader-target rule, no selection, no
+    # aggro-range pick); FIGHT adds the leader's SELECTED foe within spirit
+    # range and, last, any foe inside the hero's own aggro range, softest
+    # class first.
+    cmd = hero_command(state, agent_id) if PARTY_COMMANDS else None
+    mode = cmd["ai_mode"] if cmd else AI_MODE_FIGHT
+    ax, ay = agent["pos"]
+
+    def _softest(cands, why_):
+        best = None
+        for hid in cands:
+            hx, hy = state["agents"][hid]["pos"]
+            d = math.hypot(hx - ax, hy - ay)
+            ar = BASE_ARMOUR_BY_PROFESSION.get(target_profession(state, hid), 60)
+            if best is None or (ar, d) < best[0]:
+                best = ((ar, d), hid)
+        return (best[1], why_) if best else (None, None)
+
+    if mode == AI_MODE_AVOID:
+        pick, why = None, None
+    elif cmd and cmd.get("lock") is not None and live_hostile(state, cmd["lock"]):
+        pick, why = cmd["lock"], "the commander's lock"
+    elif (mode == AI_MODE_FIGHT and le and now - le["at"] <= PARTY_ENGAGE_WINDOW
             and live_hostile(state, le["target"])):
         pick, why = le["target"], "the leader's target"
     elif cur is not None and live_hostile(state, cur) and (
-            (le and le["target"] == cur) or hostile_fights_party(state, cur)):
+            (mode == AI_MODE_FIGHT and le and le["target"] == cur)
+            or hostile_fights_party(state, cur)):
         pick, why = cur, agent.get("fight_why")
     else:
-        ax, ay = agent["pos"]
-        best = None
-        for hid, row in list(state.get("agents", {}).items()):
-            if not live_hostile(state, hid) or not hostile_fights_party(state, hid):
-                continue
-            hx, hy = row["pos"]
-            d = math.hypot(hx - ax, hy - ay)
-            if best is None or d < best[0]:
-                best = (d, hid)
-        if best is not None:
-            pick, why = best[1], "it opened on the party"
+        pick, why = _softest(
+            [hid for hid in list(state.get("agents", {}))
+             if live_hostile(state, hid) and hostile_fights_party(state, hid)],
+            "it opened on the party")
+        if pick is None and mode == AI_MODE_FIGHT:
+            sel = state.get("target")
+            if sel and live_hostile(state, sel):
+                sx, sy = state["agents"][sel]["pos"]
+                if math.hypot(sx - ax, sy - ay) <= SPIRIT_RANGE:
+                    pick, why = sel, "the leader's selection (Fight)"
+        if pick is None and mode == AI_MODE_FIGHT:
+            pick, why = _softest(
+                [hid for hid in list(state.get("agents", {}))
+                 if live_hostile(state, hid)
+                 and math.hypot(state["agents"][hid]["pos"][0] - ax,
+                                state["agents"][hid]["pos"][1] - ay) <= AGGRO_RANGE],
+                "in the hero's aggro range (Fight)")
     if pick != cur:
         agent["fight"] = pick
         agent["fight_why"] = why
@@ -17214,7 +17383,7 @@ def ally_attack_tick(send, state, conn_id):
         agent["swing_lands_at"] = now + swing_windup(interval)
 
 
-def party_slot_point(state, slot):
+def party_slot_point(state, slot, origin=None):
     """Where party slot `slot` stands: the leader's position plus
     PARTY_SLOTS[slot] rotated into the leader's frame (+along = the way the
     leader faces, +across = the leader's LEFT). The heading is the last 0x003D
@@ -17222,7 +17391,7 @@ def party_slot_point(state, slot):
     moving heading is kept here, because a slot that snapped back to the
     spawn's facing at every stop would walk the party around the leader each
     time they paused (SLICE-H2)."""
-    px, py = state.get("pos", (0.0, 0.0))
+    px, py = origin if origin is not None else state.get("pos", (0.0, 0.0))
     h = state.get("heading")
     if h is not None:
         state["party_heading"] = tuple(h)
@@ -17301,7 +17470,10 @@ def enemy_move_tick(send, state, conn_id, rec=None):
             _leash = HERO_FOLLOW_LEASH if _ally else None
             _ft = (party_fight_target(state, agent_id, agent, now)
                    if _ally else None)
-            if _ally and _ft is not None and party_melee(agent):
+            _guard = (_ally and PARTY_COMMANDS
+                      and hero_command(state, agent_id)["ai_mode"] == AI_MODE_GUARD)
+            _fp = party_flag_point(state, agent_id, agent) if _ally else None
+            if _ally and _ft is not None and party_melee(agent) and not _guard:
                 # SLICE-H4: a MELEE party body chases its foe by a 0x002A
                 # naming it, in the hostile's own shape and radii (retail's
                 # Warrior henchman: 17 of 27 opening starts stood behind
@@ -17311,6 +17483,15 @@ def enemy_move_tick(send, state, conn_id, rec=None):
                 _tgt = target_pos(state, _ft)
                 dist = math.hypot(_tgt[0] - ax, _tgt[1] - ay)
                 _stop, _slot, _leash = None, False, None
+            elif _ally and _fp is not None:
+                # SLICE-H5: a FLAGGED body walks to its flag by the slot
+                # walk's own shape (a 0x0029 point lead, no 0x0028) and holds
+                # there while the flag stands; Guard keeps a melee body here
+                # ("will not move beyond the guarded area"), Fight lets the
+                # chase above separate it from the flag (GWW, Hero).
+                _tgt = _fp
+                dist = math.hypot(_tgt[0] - ax, _tgt[1] - ay)
+                _stop, _slot = PARTY_SLOT_STOP, True
             elif _ally and PARTY_SLOT_LEADS:
                 # SLICE-H2: a party body walks to its SLOT in the leader's
                 # frame, not to the leader (F28) -- the same follow machinery
@@ -22868,65 +23049,17 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # that provoke a c2s reply, and "how many came back" is the
                         # question a send-then-count experiment asks.
                         state["ack_0079_count"] = state.get("ack_0079_count", 0) + 1
-                    elif opcode == GAME_CMSG_HERO_AI_MODE:
-                        # The stance echo. values[0] is the header word; the
-                        # payload is [agent_id, mode]. Acts only on an agent
-                        # that is one of this run's hero slots, so the arm is
-                        # inert on every non-hero rig. 0x0062 and not 0x0072:
-                        # see the constants block -- 0x0072's event is one the
-                        # panel ignores, measured 2026-08-19.
-                        _aid, _mode = values[1], values[2]
-                        for _hid, _haid, _hdef in hero_slots():
-                            if _haid == _aid:
-                                send(GAME_SMSG_HERO_AI_MODE_SET,
-                                     [_aid, _mode],
-                                     f"HERO_AI_MODE_SET(agent {_aid}, "
-                                     f"mode {_mode})")
-                                print(f"[c{conn_id}] hero stance echo: agent "
-                                      f"{_aid} -> aiMode {_mode} via 0x0062",
-                                      flush=True)
-                                break
-                    elif opcode == GAME_CMSG_HERO_LOCK_TARGET:
-                        # The lock echo: rec+0x20 is server-set, so without
-                        # this the crosshair never lights and a second click
-                        # re-sends LOCK instead of UNLOCK (captured 2026-08-19
-                        # run 105048, 0x0016 twice).
-                        _aid, _tid = values[1], values[2]
-                        for _hid, _haid, _hdef in hero_slots():
-                            if _haid == _aid:
-                                send(GAME_SMSG_HERO_LOCK_TARGET_SET,
-                                     [_aid, _tid],
-                                     f"HERO_LOCK_TARGET_SET(agent {_aid} -> "
-                                     f"target {_tid})")
-                                print(f"[c{conn_id}] hero lock echo: agent "
-                                      f"{_aid} -> target {_tid}", flush=True)
-                                break
-                    # 0x0017 deliberately has NO arm -- see its constant. It
-                    # is not the unlock, our rig cannot make it fire, and the
-                    # clear it used to echo is really 0x0016 [hero, 0], which
-                    # the branch above already handles.
-                    elif opcode == GAME_CMSG_HERO_FLAG_PLACE:
-                        # The hero flag echo: the client sent [agent, [x,y],
-                        # plane] and drew nothing -- the draw is 0x0066, and
-                        # its store is gated on the 0x0072 activation record
-                        # existing, which the hero-slot check mirrors.
-                        _aid, _axy, _apl = values[1], values[2], values[3]
-                        for _hid, _haid, _hdef in hero_slots():
-                            if _haid == _aid:
-                                send(GAME_SMSG_HERO_FLAG_SET,
-                                     [_aid, _axy, _apl],
-                                     f"HERO_FLAG_SET(agent {_aid}, "
-                                     f"{_axy}, plane {_apl})")
-                                print(f"[c{conn_id}] hero flag echo: agent "
-                                      f"{_aid} at {_axy}", flush=True)
-                                break
-                    elif opcode == GAME_CMSG_PARTY_FLAG_PLACE:
-                        # The party flag echo -- no agent field on either leg.
-                        _axy, _apl = values[1], values[2]
-                        send(GAME_SMSG_PARTY_FLAG_SET, [_axy, _apl],
-                             f"PARTY_FLAG_SET({_axy}, plane {_apl})")
-                        print(f"[c{conn_id}] party flag echo: {_axy}",
-                              flush=True)
+                    elif opcode in (GAME_CMSG_HERO_AI_MODE,
+                                    GAME_CMSG_HERO_LOCK_TARGET,
+                                    GAME_CMSG_HERO_FLAG_PLACE,
+                                    GAME_CMSG_PARTY_FLAG_PLACE):
+                        # The commander's four clicks: the echo the client
+                        # draws from (pvpui 28.6) and, since SLICE-H5, the
+                        # order the party obeys. 0x0017 deliberately has NO
+                        # arm -- see its constant: it is not the unlock, our
+                        # rig cannot make it fire, and the clear is 0x0016
+                        # [hero, 0], which the handler takes.
+                        handle_hero_command(values, send, state, conn_id, opcode)
                     elif opcode == GAME_CMSG_CANCEL_ACTION:
                         # The one door that reaches a held cast -- the client
                         # sends no movement while casting, only this (the
@@ -26688,6 +26821,12 @@ def main():
         print("[map] --no-interact-route: an out-of-range interact is HELD "
               "and nobody walks the player over. Every run before 2026-09-12, "
               "and the known-bad arm.", flush=True)
+    if a.party_ignore_commands:
+        global PARTY_COMMANDS
+        PARTY_COMMANDS = False
+        print("[party] --party-ignore-commands: the commander's stance, lock "
+              "and flags are echoed and change nothing -- every run before "
+              "SLICE-H5 (2026-09-13).", flush=True)
     if a.party_no_fight:
         global PARTY_FIGHTS
         PARTY_FIGHTS = False

@@ -10346,6 +10346,17 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   is held while Orison goes to the hurt player; the party's spell landing on a hostile pays the
   reward; `--party-no-fight` (the known-bad arm) engages nobody; and a source lock counts the three
   `leader_engaged` stamps and the tick order (`ally_attack_tick` right after `ally_cast_tick`).
+  **SLICE-H5 (2026-09-13, floor 457 -> 467): the commander's orders.** 0x0015 [hero, 1] is echoed
+  as 0x0062 and stored (a non-hero agent is ignored); GUARD engages on nothing but a hostile that
+  opened on the party; the LOCK (0x0016, echoed 0x0063) tops the leader's target, [hero, 0] clears
+  it and a dead lock falls through; AVOID engages nothing and swings at nobody; FIGHT attacks the
+  leader's selection within spirit range with no start and, with nobody selected, a foe inside the
+  hero's aggro range, softest class first; 0x001A is echoed as 0x0066 and the body walks to the
+  FLAG by a 0x0029 lead, the (+INF, +INF) clear leads it back to its slot; 0x001B is echoed as
+  0x0067 and two bodies walk to the party flag at their slot offsets; a flagged MELEE body under
+  Fight still chases (0x002A) and under Guard does not; `--party-ignore-commands` (the known-bad
+  arm) echoes and obeys nothing; and a source lock finds the one dispatch call. Four H4 checks
+  moved their idle foe to 1500 u, because Fight attacks a foe inside AGGRO_RANGE on sight.
   `test_router.py`'s cast-abandon ordering lock was re-aimed from `if CAST_STOP and not
   is_attack:` (gone since SLICE-C2) to the bare `if CAST_STOP:`, and its recv-loop attach-point
   census from 2+1 to the three qualified sites (C5 gated one on the player being alive, C2's

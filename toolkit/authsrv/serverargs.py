@@ -853,6 +853,15 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "0x009A, bags, appearance, pipeline-first): the "
                          "SLICE-B7 shape, follow and heal only, no panel. The "
                          "revert arm if the full rig asserts on a client.")
+    ap.add_argument("--party-ignore-commands", action="store_true",
+                    help="SLICE-H5 REVERT: the commander's clicks (0x0015 "
+                         "stance, 0x0016 lock, 0x001A/0x001B flags) are "
+                         "echoed for the client to draw and change nothing "
+                         "-- every run before 2026-09-13. By default Fight/"
+                         "Guard/Avoid gate the party's engagement, the lock "
+                         "tops its targeting, and a flag parks the body "
+                         "(GWW Hero / Hero behavior / Hero flag; studies/"
+                         "slice F31).")
     ap.add_argument("--party-no-fight", action="store_true",
                     help="SLICE-H4 REVERT: the party never swings or casts at "
                          "a foe -- every run before 2026-09-13. By default a "
