@@ -1791,7 +1791,24 @@ of a closed window; the owner asked for the harness at that moment). Nothing on 
 is new since H7's green runs except those level messages, and the client drew them. The fight at
 these numbers is the owner's hands.
 
-`test_agentlife` §H8 (floor 472 → 478); `test_effects`' stance-duration lock reads rank 12 by name
+**The rerun the owner asked for (`20260913T163333`) and the two knobs after it.** At the new
+numbers the fight ran for the whole hold and nobody died: Tahlkora healed herself sixty times
+(the self-heal, working), the raider took 2–4 a swing and 3–5 from the player, its monk's Orison
+gave it 27 every 8 s — and its own **Healing Signet gave it 88 every 4 s**, ten casts, refilling it
+from 44 to full in one; the owner: *"couldn't bring them down, healing signet too strong."* The
+signet's 88 is the skill's table at Tactics 1 (82…172), not a rank we can lower, so **SLICE-H8b**:
+its recharge on every raider row is 20 s against the table's 4 (4.4 health a second, under the
+party's output; retail's counter, −40 armour while it activates, is not modelled). Rerun
+`20260913T163821`: **the raider died** (`KILL agent 90`, its monk healed it twice, the signet once)
+— *"able to kill now"* — **and got back up eight seconds later**, because every hostile shared the
+test enemy's `REVIVE_AFTER`; the owner: *"that's correct for the training dummies, but not for
+normal enemies."* **SLICE-H8c:** the revive is a per-row opt-in — `revives = true` on
+`[spawn.test_enemy]` (the practice target, the Isle's dummy shape), nothing on an area row, so a
+killed raider stays killed; a missing key still revives (the legacy `--enemy` body and every
+offline fixture). Both runs ended in a clean client exit with no assert once the owner took the
+keyboard.
+
+`test_agentlife` §H8 (floor 472 → 480); `test_effects`' stance-duration lock reads rank 12 by name
 and `test_spawn_burst`'s hand-copied `0x003A` row follows the H7 base ranks (both were red on main
 since H7, unrun then). **Not modelled, said here:** knock-down, block, the wiki's level-scaled
 damage multiplier column, an NPC's energy at low level, and the hero's own attribute spend.

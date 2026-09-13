@@ -10376,6 +10376,9 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   Tactics 1 = 10 of 10 points over the base row's level-1 / 100 / 200 fixture (restored after).
   `test_effects`' stance-duration lock now reads rank 12 by name and `test_spawn_burst`'s
   hand-copied 0x003A row follows the H7 base ranks -- both had been red since H7.
+  **SLICE-H8c (floor 478 -> 480):** an agent whose row says `revives = false` stays down past
+  REVIVE_AFTER while `revives = true` and a MISSING key get back up; and content: the practice
+  target's row opts in, no corridor row does.
   `test_router.py`'s cast-abandon ordering lock was re-aimed from `if CAST_STOP and not
   is_attack:` (gone since SLICE-C2) to the bare `if CAST_STOP:`, and its recv-loop attach-point
   census from 2+1 to the three qualified sites (C5 gated one on the player being alive, C2's

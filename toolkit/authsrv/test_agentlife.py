@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=478)   # SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=480)   # SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
 def section_weapon_damage():
@@ -5902,6 +5902,31 @@ def section_hold_plane():
                   "200-point fixture the offline locks price",
                   f"base {base}, changed {changed}, spent {st.spent} of "
                   f"{st.points_total}")
+        # SLICE-H8c: a normal enemy stays dead; the training dummy gets up.
+        st = _world(dist=85.0)
+        st["agents"][10].update(dead=True, died_at=time.time() - 1000.0, revives=False)
+        st["agents"][11] = dict(st["agents"][10], revives=True)
+        st["agents"][12] = dict(st["agents"][10])
+        del st["agents"][12]["revives"]
+        sent = []
+        authsrv.revive_due(lambda op, vals, label="", quiet=False: sent.append((op, vals)),
+                           st, 1)
+        LEDGER.ok(st["agents"][10]["dead"] and not st["agents"][11]["dead"]
+                  and not st["agents"][12]["dead"],
+                  "an agent whose row says `revives = false` stays DOWN past "
+                  "REVIVE_AFTER (retail respawns nothing in an instance but the "
+                  "training targets); `revives = true` and a MISSING key (the "
+                  "legacy --enemy body, every fixture) get back up",
+                  f"no: dead {st['agents'][10]['dead']}; yes: dead "
+                  f"{st['agents'][11]['dead']}; missing: dead {st['agents'][12]['dead']}")
+        _rows = agents.WORLD.rows("spawn")
+        LEDGER.ok(_rows["test_enemy"].get("revives") is True
+                  and all("revives" not in _rows[k]
+                          for k in _rows if k.startswith("corridor_")),
+                  "content: the practice target's row opts in to the revive; no "
+                  "corridor row does, so a killed raider stays killed",
+                  f"test_enemy {_rows['test_enemy'].get('revives')}, corridor rows "
+                  f"{[k for k in _rows if k.startswith('corridor_')]}")
     finally:
         (agents.PLAYER_LEVEL, agents.PLAYER_HEALTH,
          agents.PLAYER_ATTRIBUTE_RANKS, agents.PLAYER_ATTRIBUTE_POINTS) = _saved_pl

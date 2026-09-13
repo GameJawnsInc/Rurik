@@ -15946,6 +15946,15 @@ def revive_due(send, state, conn_id):
             continue
         if not agent["dead"] or now - agent["died_at"] < REVIVE_AFTER:
             continue
+        # SLICE-H8c (the owner: "the enemies respawn after a little while
+        # though. that's correct for the training dummies, but not for
+        # normal enemies"): retail respawns nothing inside an instance but
+        # the Isle's training targets, so the timer is a per-row opt-in --
+        # `revives = true` on a spawn row (the practice target has it), an
+        # area row without it stays down. A MISSING key still revives: the
+        # legacy --enemy body and every offline fixture are the dummy.
+        if agent.get("revives", True) is False:
+            continue
         if agent.get("allegiance") == agents.ALLEGIANCE_PLAYER:
             # SLICE-H3: a party body does not get up on a timer. Retail's
             # henchman died five times in one fight and a party member's
@@ -20296,6 +20305,8 @@ def spawn_population(send, state, origin, conn_id, area=None):
             "skill_ready": [0.0] * len(bar),
             "attributes": {int(a_): int(r_) for a_, r_ in
                            (row.get("attributes") or npc.get("attributes") or ())},
+            # SLICE-H8c: an area body stays dead unless its row says otherwise.
+            "revives": bool(row.get("revives", False)),
             "damage": (list(row["damage"]) if row.get("damage") else None),
             "weapon_attribute": row.get("weapon_attribute"),
         }
