@@ -1428,6 +1428,19 @@ click, a lock, a flag in an explorable). None of those blocks the arc; all would
 session on an account that owns a hero, with a marks plan that adds the hero in an outpost,
 zones, fights, flags it, sets each stance and locks a target.
 
+**OBSERVED on the owner's run, 2026-09-13 (SLICE-H2):** *"tahlkora shows up and walks beside me
+now."* The full rig — body, bar, activation, char table, bags, appearance pair, pipeline-first —
+composed on a client for the first time with no assert. **And one stock rule the tapes could not
+give, because every henchman session was already in a field:** *"in the outpost she (i.e. her
+model) should be hidden. only show in explorable areas."* SLICE-H2b: a town sends the roster row,
+the activation, the level and the vitals and withholds the `0x0020` (the panel opens bodiless,
+pvpui §28.3); a field creates the body. `party_bodies_here` is the same switch the `0x0199`
+is_explorable byte is built from; `--party-body-in-outpost` is every hero rig before it.
+Residual, cosmetic: a bodiless roster row has no profession segment ("Lvl 5 Tahlkora" rather than
+"Mo5 Tahlkora", heroes §28.8's rule that the row reads the AGENT) — whether `0x00A6` can carry
+the bytes for an agent never created is UNTESTED.
+
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:

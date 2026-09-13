@@ -5085,6 +5085,35 @@ def section_hold_plane():
               "block read `a`, and it turns the commander rig on (pipeline-first, "
               "heroes 38)", "order in main()")
 
+    # SLICE-H2b: the hero's BODY is a field thing. The owner, on the H2 run:
+    # "in the outpost her model should be hidden. only show in explorable
+    # areas." Map 148 is the slice's outpost, 168 its corridor (maps.toml).
+    print("\nSLICE-H2b: the party's world bodies are withheld in a town, sent in "
+          "a field, and --party-body-in-outpost is the revert arm")
+    _saved_bio = authsrv.PARTY_BODY_IN_OUTPOST
+    try:
+        authsrv.PARTY_BODY_IN_OUTPOST = False
+        town = authsrv.party_bodies_here({"map_id": 148})
+        field = authsrv.party_bodies_here({"map_id": 168})
+        LEDGER.ok(town is False and field is True,
+                  "map 148 (an outpost) gets no party body; map 168 (the "
+                  "corridor, explorable) does -- content/maps.toml's own flag",
+                  f"town {town}, field {field}")
+        authsrv.PARTY_BODY_IN_OUTPOST = True
+        LEDGER.ok(authsrv.party_bodies_here({"map_id": 148}) is True,
+                  "--party-body-in-outpost: the body stands in the town too -- "
+                  "every hero rig before SLICE-H2b, the known-bad arm",
+                  "revert arm")
+    finally:
+        authsrv.PARTY_BODY_IN_OUTPOST = _saved_bio
+    LEDGER.ok(_src.count("party_bodies_here(state)") == 4     # the def + 3 sites
+              and _src.count("if HERO_BODY and party_bodies_here(state) else ()") == 1
+              and "HENCHMAN_BODY and party_bodies_here(state)" in _src,
+              "both party body sites in the load path -- the hero loop and the "
+              "henchman's -- are gated on party_bodies_here; the roster/"
+              "activation/level/vitals sends are not (the panel opens bodiless, "
+              "pvpui 28.3)", f"{_src.count('party_bodies_here(state)')} sites")
+
 
 if __name__ == "__main__":
     sys.exit(main())
