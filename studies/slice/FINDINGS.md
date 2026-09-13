@@ -1969,9 +1969,11 @@ burst, the E2-only press, the dropped swing, the accepted press on rising), Hamm
 Blow / Heavy Blow / Desperation Blow through the player's own press → landing, the three readers,
 the hostile's Bonetti's blocking a forced roll (the word, no damage, no adrenaline) and letting a
 forced miss-roll through, Irresistible Blow's punishment, the player's Bonetti's (the block, +5
-energy on the wire, the stance ending on a press), `holds_shield`, Weakness. **Unobserved on a
-client, all of it** — the fall animation on a hostile, on the player, the "block" callout, the
-Bonetti's icon. **Not modelled, said here:** Shield Stance's damage reduction (the row is not
+energy on the wire, the stance ending on a press), `holds_shield`, Weakness. **OBSERVED the
+same night, the owner's hand:** *"knock-down and block work (only saw Desperation Blow work)"* — the
+boss's own fall after its blow and the block (Bonetti's on the player's bar); the hammer skills
+themselves are on no bar the owner played, so Hammer Bash / Heavy Blow / Crushing Blow /
+Irresistible Blow stay desk-and-tests. **Not modelled, said here:** Shield Stance's damage reduction (the row is not
 written), Crippled's slow, Weakness's attribute loss, quarterknocking's re-knock at the rise
 instant (a down body simply refuses until its clock runs out).
 
