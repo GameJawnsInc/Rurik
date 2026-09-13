@@ -10256,6 +10256,14 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   owner's 105-halt, 4-swing run). The fixture is the chase section's follow world plus the
   keys the attack tick reads (`attacks_back`, an empty bar) -- without them the loop's
   passive-body drop swallowed the swing and the first cut of the section measured nothing.
+  **SLICE-F23 / C5 (2026-09-12): the degeneration clock and the corpse.** `test_effects.py`
+  §4f (floor 74 -> 80): a tick with no live effect still stamps `degen_at`, so a Bleeding
+  applied after a 300 s quiet gap costs ~nothing on its first tick (the owner's "kills me
+  instantly": 90 -> dead in one tick). §6a: `kill_player` drops the keyboard leg, the dest,
+  the follow and the router chain, leaves the movement latches to their arms, sends no
+  movement message; a source lock counts the `player_dead` gates on the four grant ticks and
+  places the dead-report refusal ahead of both movement arms; refused corpse reports are
+  counted. `test_playerswing.py` §9k's abandon-site count 10 -> 11 (kill_player).
   `toolkit/authsrv/test_castcycle.py` (the four-opcode cast cycle against
   ArenaNet's own template — six complete cycles, two live captures, same order
   every time: E4 at the press, E5 at cast end carrying the recharge in whole
