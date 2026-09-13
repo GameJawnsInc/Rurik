@@ -1353,9 +1353,18 @@ went. So the arrival is what owes the swing, not a re-test: both arrival sites s
 `in_reach_at_arrival` on any park (disc or leg end). The flag stays a flag for the day a
 stale-point rule is measured (the re-follow, 1 of 6). `test_agentlife` §11b (floor 414 →
 417): a follow sent at the player, the player 300 u off by the park, the park owes, the halt
-stamps, the circler is swung at on the next tick. Unobserved on a client; **refuted if** the
-circler is still never swung at, or if the raider swings at halts where the body was never
+stamps, the circler is swung at on the next tick. **OBSERVED on the owner's next run: *"he
+stops and swings when I circle now."*** Refuted if the raider swings at halts where the body was never
 near — the 1-of-6 case, which would then be worth its own scan.
+
+**Where the combat thread stands, 2026-09-12.** Every item from the owner's first combat report
+(F19) through this one is done and observed on the client: the attack skill walks in, roots,
+halts a running press and frees a held key at the strike; a hostile that catches you swings
+and the swing lands wherever you went; its attack skills are swings with a windup; bleeding
+ticks at its rate; the corpse stays where it fell and the raider comes to where you are. Open,
+all recorded rather than guessed: the halt-slot residual (F20), the 1-of-6 re-follow (here),
+the in-reach press engaging the chain (F20, n=1), and 0x002D's flags gate on our player agent
+(F26).
 
 ## SLICE-F6 — what the desk cannot settle
 
