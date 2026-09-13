@@ -215,6 +215,41 @@ note = "Verbatim from GmDefaultArmors.c entry 5. See the family note above."
 # capacity is **20** -- matching the type-1 bag's slot count exactly -- and "the
 # Backpack cannot be dragged away into another container or be destroyed". An item
 # that cannot be removed is still an item, and the client wants it declared.
+[item.caster_staff]
+name = "a caster's staff (the henchman Monk's, retail wire)"
+file_id = 0x1B5D1              # 112081
+item_type = 26                 # ItemType_Staff, OpenTyria GmItem.h enum (the NUMBER is the wire's)
+dye_tint = 0
+dye_colors = 0
+materials = 0
+unk1 = 0
+flags = 0x22200100
+value = 0
+model_id = 6462
+quantity = 1
+enc_name = [0x2186]            # 8582, the one string id the wire carried
+# The four modifier words, verbatim from the wire (decode with
+# toolkit/clientscan/itemmods.py --decode WORD): a damage-type line, a damage
+# range, and two the henchman's own staff carried -- copied, not composed.
+modifiers = [0x24B80800, 0x26980005, 0x62C80A00, 0xA488160B]
+
+[item.caster_staff.provenance]
+source = "capture"
+capture = "20260817T231139"
+origin = "live"
+verified = """OBSERVED on ArenaNet's own wire (SLICE-H7, 2026-09-13): every retail \
+henchman body is followed at its create by ONE 0x0161 CREATE_NAMED_ITEM per weapon \
+and a 0x006D NPC_UPDATE_WEAPONS [agent, leadhand, offhand] naming them -- 12 of 12 \
+bodies across 20260817T231139 and 20260819T132414. This row is item 20 of \
+20260817T231139 (connection 50286), the level-20 Monk henchman's: file 112081, \
+type 26, flags 0x22200100, model 6462, name id 8582 and the four words, byte for \
+byte; the Elementalist carried 94937/26 with the same words but one, another \
+player's staff 112081/26 with a value and a requirement word. The client's own \
+archive binds file 112081 (archive.binds_plainly, row 10668 on the slice run's \
+Gw.dat). Given to the party's caster bodies (party_weapon_item) so the client \
+draws a STAFF attack from casting range instead of a punch -- the owner, H4's \
+run: "Tahlkora attacks, but from long range with a melee punch animation"."""
+
 [item.backpack]
 name = "Backpack (the first item container)"
 file_id = 0x8001B536

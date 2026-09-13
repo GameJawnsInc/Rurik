@@ -10357,6 +10357,14 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   Fight still chases (0x002A) and under Guard does not; `--party-ignore-commands` (the known-bad
   arm) echoes and obeys nothing; and a source lock finds the one dispatch call. Four H4 checks
   moved their idle foe to 1500 u, because Fight attacks a foe inside AGGRO_RANGE on sight.
+  **SLICE-H7 (2026-09-13, floor 467 -> 472): what the hero holds, and the player's bar.** The
+  `caster_staff` row builds the retail Monk henchman's item byte for byte (file 112081, type 26,
+  flags 0x22200100, model 6462, four words); a Monk or Elementalist body holds it and a Warrior
+  body nothing yet; a source lock finds the item and the 0x006D [hero, item, 0] right after the
+  hero body's create, through hsend; `default_skillbar()` is the content row and every attack on
+  it resolves to a damage number; at Hammer Mastery 12 the four hammer attacks add 34/24/16/17.
+  `test_skilldamage`'s two rank locks (Power Attack reads Strength, Desperation Blow reads
+  Tactics) re-aimed from 12/1 to the shipped 9/6 (+28 and +22).
   `test_router.py`'s cast-abandon ordering lock was re-aimed from `if CAST_STOP and not
   is_attack:` (gone since SLICE-C2) to the bare `if CAST_STOP:`, and its recv-loop attach-point
   census from 2+1 to the three qualified sites (C5 gated one on the player being alive, C2's

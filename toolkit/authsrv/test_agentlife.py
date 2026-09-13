@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=467)   # SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=472)   # SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
 def section_weapon_damage():
@@ -5755,6 +5755,54 @@ def section_hold_plane():
     finally:
         authsrv.PARTY_COMMANDS = _saved_pc
         authsrv.HERO_IDS = _saved_ids
+
+    # ---- SLICE-H7: what the hero holds, and the player's bar --------------------
+    # Retail follows every henchman body's create with a CREATE_NAMED_ITEM per
+    # weapon and a 0x006D naming them (12 of 12); the Monk's is a staff, and
+    # the client draws the swing the held item's type says. The owner, H4's
+    # run: "Tahlkora attacks, but from long range with a melee punch
+    # animation" -- and "let's move to giving the player some actual skills".
+    print("\nSLICE-H7: a party caster holds the retail Monk henchman's staff "
+          "(the item, then 0x006D, after its create), and the session's default "
+          "bar is the content row of modelled hammer skills")
+    _staff = agents.item_template("caster_staff")
+    _msg = agents.named_item(authsrv.HERO_WEAPON_ITEM_ID, _staff)
+    LEDGER.ok(_msg[1] == 112081 and _msg[2] == 26 and _msg[7] == 0x22200100
+              and _msg[9] == 6462 and len(_msg[12]) == 4,
+              "the staff row is the retail Monk henchman's item, byte for byte "
+              "(file 112081, type 26, flags 0x22200100, model 6462, four words)",
+              f"{_msg[:12]}")
+    LEDGER.ok(authsrv.party_weapon_item({"profession": 3}) == "caster_staff"
+              and authsrv.party_weapon_item({"profession": 6}) == "caster_staff"
+              and authsrv.party_weapon_item({"profession": 1}) is None,
+              "a Monk or Elementalist body holds the staff; a Warrior body holds "
+              "nothing yet (its sword and shield are on the tape, not extracted)",
+              f"monk {authsrv.party_weapon_item({'profession': 3})}, warrior "
+              f"{authsrv.party_weapon_item({'profession': 1})}")
+    _src = inspect.getsource(authsrv)
+    _a = _src.find('f"hero body (hero {_hid})", conn_id=conn_id)')
+    _b = _src.find("hsend(GAME_SMSG_CREATE_NAMED_ITEM,", _a)
+    _c = _src.find("hsend(GAME_SMSG_NPC_UPDATE_WEAPONS, [_haid, _wid, 0],", _b)
+    LEDGER.ok(0 < _a < _b < _c < _a + 1500,
+              "source: the hero body site sends the item and then 0x006D "
+              "[hero, item, 0] right after the body's create, through hsend "
+              "(retail's order: 0x0020, 0x0161, 0x006D)", f"{_a} < {_b} < {_c}")
+    _bar = authsrv.default_skillbar()
+    LEDGER.ok(_bar == [351, 359, 352, 356, 322, 346, 1, 2]
+              and all(authsrv.skill_damage(sid, 12) is not None
+                      for sid in (351, 359, 352, 356, 322)),
+              "the default bar is [player.skillbar] -- four hammer attacks with "
+              "+damage rows, Power Attack, Frenzy, Healing Signet, Resurrection "
+              "Signet -- and every attack on it resolves to a damage number",
+              f"bar {_bar}, Mighty Blow at 12: {authsrv.skill_damage(351, 12)}")
+    LEDGER.ok(authsrv.skill_damage(351, 12) == (34, "additive")
+              and authsrv.skill_damage(359, 12) == (24, "additive")
+              and authsrv.skill_damage(352, 12) == (16, "additive")
+              and authsrv.skill_damage(356, 12) == (17, "additive"),
+              "at Hammer Mastery 12 (the shipped rank) Mighty Blow +34, Heavy "
+              "Blow +24, Crushing Blow +16, Irresistible Blow +17 -- the client's "
+              "own interpolator over the wiki-verified endpoints",
+              f"{[authsrv.skill_damage(s, 12) for s in (351, 359, 352, 356)]}")
 
 
 if __name__ == "__main__":

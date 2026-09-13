@@ -151,18 +151,26 @@ def main():
     # THE CHAIN STEP 7 AND STEP 8 EXIST TO JOIN: the skill record names its
     # attribute, the attribute is an s_attrib index, and the rank comes from
     # the same content row 0x003A is built from. Before this, `2 * rank` was 0.
-    check(authsrv.player_rank_for_skill(322) == 12
-          and authsrv.player_rank_for_skill(323) == 1,
-          "Power Attack reads Strength (12), Desperation Blow reads Tactics (1)",
+    # SLICE-H7 (2026-09-13): the shipped ranks became a hammer warrior's --
+    # Strength 9, Tactics 6 (Hammer Mastery 12). The two locks follow the
+    # content row rather than a literal, so the claim they make -- the RANK is
+    # what separates two identical tables -- survives the next re-spec too.
+    _ranks = {int(a): int(r) for a, r in agents.WORLD.get("player", "attributes")["ranks"]}
+    check(authsrv.player_rank_for_skill(322) == _ranks[17]
+          and authsrv.player_rank_for_skill(323) == _ranks[21]
+          and _ranks[17] != _ranks[21],
+          f"Power Attack reads Strength ({_ranks[17]}), Desperation Blow reads "
+          f"Tactics ({_ranks[21]})",
           "same scale endpoints, different attributes -- so the ranks are what "
           "separate them")
     pa = authsrv.skill_damage(322, authsrv.player_rank_for_skill(322))
     db = authsrv.skill_damage(323, authsrv.player_rank_for_skill(323))
-    check(pa[0] == 34 and db[0] == 12,
-          "so Power Attack adds 34 and Desperation Blow adds 12",
-          f"{pa} vs {db} -- identical 10->40 tables, 22 points apart because "
-          f"the ranks differ. This is what 'the server models no attribute "
-          f"ranks' cost us")
+    _want = lambda r: 10 + round(30 * r / 15)
+    check(pa[0] == _want(_ranks[17]) and db[0] == _want(_ranks[21]),
+          f"so Power Attack adds {_want(_ranks[17])} and Desperation Blow adds "
+          f"{_want(_ranks[21])}",
+          f"{pa} vs {db} -- identical 10->40 tables, apart because the ranks "
+          f"differ. This is what 'the server models no attribute ranks' cost us")
     check(authsrv.player_rank_for_skill(312) == 0,
           "and a Warrior has rank 0 in Smiting Prayers -- correct, not missing",
           "Holy Strike is a Monk skill; the player has no rank in its attribute")
