@@ -1329,6 +1329,34 @@ not the lead's end and not the last report; `test_kbdsync` §11 counts five kill
 **Refuted if** the first report after a revive still sits at the last lead's end, or the
 raider still halts "0 u from the player" on a spot the body is not at.
 
+## SLICE-F27 — **the arrival itself owes the swing: the circling kiter, and two measurements that said no to my first two ideas**
+
+**The owner** (after C8): *"corpse stays put now. Attacks are still kiteable though, I'm able to
+run around him in circles and he never quite stops to attack."* Harness `20260912T224429`:
+**34 halts, 103 follows, 6 swings**; the halts read *"arrived 0.41–0.51 s ago, 106–215 u from
+the player"*. F22's owed swing required the LIVE distance at the arrival to be inside 92 u,
+and a circler never is at the instant the copy parks at the point it had been chasing.
+
+**Two things the tapes refused first.** (1) *Raise the hostile's start reach to 144.* The
+parked retail hostile of `20260817T183756` (agent 37) chained swings at a STANDING player from
+an estimated **87 u** (its last follow point pulled 80 u back along its approach, to the
+player's stop report; `c9_reach`), and opened on a moving player at ~11 u — 92 stands, 144 is
+not supported. (2) *Judge the arrival on the last report instead of the frame.* Retail's copy
+lags (§40.2), but the lag is not the mechanism.
+
+**What the tapes said instead** (`c9_halt`): of the **6** hostile halts that ended a chase on
+the observer, **5 were followed by a swing within 0.8 s** and 1 by a re-follow — and the one
+halt at which the player was still moving (t=330.686) swung. Retail's server halts when ITS
+copy of the hostile parks at the disc of ITS copy of the player, so at a retail halt the
+target is in reach **by construction**, and the swing follows; F21 lands it wherever the body
+went. So the arrival is what owes the swing, not a re-test: both arrival sites set
+`in_reach_at_arrival` on any park (disc or leg end). The flag stays a flag for the day a
+stale-point rule is measured (the re-follow, 1 of 6). `test_agentlife` §11b (floor 414 →
+417): a follow sent at the player, the player 300 u off by the park, the park owes, the halt
+stamps, the circler is swung at on the next tick. Unobserved on a client; **refuted if** the
+circler is still never swung at, or if the raider swings at halts where the body was never
+near — the 1-of-6 case, which would then be worth its own scan.
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:

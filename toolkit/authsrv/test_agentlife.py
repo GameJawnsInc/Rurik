@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=414)   # SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=417)   # SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
 def section_weapon_damage():
@@ -2268,9 +2268,40 @@ def section_owed_swing():
               ag.get("follow") is not None,
               "and once the window has passed unpaid, the chase resumes",
               f"{[hex(op) for op, _v, _l in followed]}")
-    # CONTROLS: an expired debt does not swing; a halt whose arrival found the
-    # player OUT of reach owes nothing (the stale-point halt behind a straight
-    # runner -- retail's mid-chase halt re-followed with no swing)
+    # SLICE-F27: THE ARRIVAL ITSELF OWES THE SWING, however far the runner is
+    # by then -- the circling case (the owner: "I'm able to run around him in
+    # circles and he never quite stops to attack", 34 halts, 6 swings). The
+    # follow is sent at the player at (0, 0); the player is 300 u off by the
+    # time the copy parks at the point it chased; retail's halt would have
+    # been at ITS lagging copy's disc and the swing followed (5 of 6 halts).
+    st = _fresh_follow((900.0, 0.0), (0.0, 0.0), player_plane=0)
+    st["player_health"] = 100.0
+    st["agents"][10].update(_FIGHTER)
+    _tick_parked(st, pm, now=0.0)                    # the follow, at (0, 0)
+    st["pos"] = (0.0, 300.0)                         # the runner circles off
+    st["agents"][10]["follow"]["sent_at"] = 29.9
+    _tick_parked(st, pm, now=30.0)                   # parks at the chased point
+    fol = st["agents"][10]["follow"]
+    LEDGER.ok(fol is not None and fol.get("arrived_at") is not None
+              and fol.get("in_reach_at_arrival") is True,
+              "a park at the point the hostile CHASED is an arrival in reach, "
+              "even with the runner 300 u off by then -- retail's halt is at "
+              "its lagging copy's disc, in reach by construction (SLICE-F27)",
+              f"arrived {fol.get('arrived_at')}, flag {fol.get('in_reach_at_arrival')}")
+    fol["sent_at"] -= 0.6
+    _tick_parked(st, pm, now=30.05)                  # the clock fires: the halt
+    ag = st["agents"][10]
+    LEDGER.ok(ag.get("follow") is None and ag.get("swing_owed_at") == 30.05,
+              "and the halt stamps the debt", f"owed {ag.get('swing_owed_at')}")
+    ag["swing_owed_at"] = _t.time()
+    sent = swing_tick(st)
+    LEDGER.ok(starts(sent) == [[4, 10, 1, 0]],
+              "so the circler is swung at on the tick after the halt -- one "
+              "swing per catch, landing wherever they went (F21)",
+              f"starts {starts(sent)}")
+    # CONTROLS: an expired debt does not swing; a halt whose arrival flag was
+    # CLEARED owes nothing -- the flag's own arm, kept for the day a stale-
+    # point rule is measured (retail re-followed after 1 of 6 halts)
     st = parked_then_halted()
     ag = st["agents"][10]
     ag["swing_owed_at"] = _t.time() - authsrv.SWING_OWED_WINDOW - 0.1
@@ -2291,9 +2322,10 @@ def section_owed_swing():
     _tick_parked(st, pm, now=30.05)
     LEDGER.ok(st["agents"][10].get("follow") is None
               and st["agents"][10].get("swing_owed_at") is None,
-              "a halt whose arrival found the player OUT of reach owes "
-              "nothing -- the copy arriving at a stale point behind a straight "
-              "runner is re-followed, not swung at (sec.40.2's mid-chase halt)",
+              "a halt whose arrival flag is CLEARED owes nothing -- the flag "
+              "is the one lever a measured stale-point rule would pull "
+              "(retail re-followed after 1 of 6 halts, sec.40.2's mid-chase "
+              "halt); since SLICE-F27 every arrival sets it",
               f"owed {st['agents'][10].get('swing_owed_at')}")
     # THE REVERT ARM
     saved = authsrv.SWING_OWED_AT_HALT
