@@ -43,7 +43,7 @@ import checks  # noqa: E402
 import effects  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("the effect channel", floor=81)   # SLICE-F24 +1 (the death hold); SLICE-F23 +6 (the degen clock across quiet ticks; a corpse does not walk); from the green run
+LEDGER = checks.Ledger("the effect channel", floor=83)   # SLICE-F25 +2 (0x002D in the death batch; the mirror stops); SLICE-F24 +1 (the death hold); SLICE-F23 +6 (the degen clock across quiet ticks; a corpse does not walk); from the green run
 
 
 
@@ -858,9 +858,30 @@ def section_deaths():
           "kbd_moving_at": 1.0, "attacking": 10,
           "approach": {"target": 10, "t0": 1.0},
           "router_chain": {"i": 0, "n": 2, "queue": [1]}}
+    # the server's MIRROR of the client's sync copy is mid-walk: 520 u of a
+    # lead left, at the base speed -- the owner's "when I respawned after
+    # warping, the enemy was able to hit me from far away"
+    import time as _t2
+    st["sync_from"], st["sync_to"] = (0.0, 0.0), (520.0, 0.0)
+    st["sync_at"] = _t2.time() - 0.5
+    st["declared_speed_base"] = 288.0
+    walking = authsrv._sync_position(st, _t2.time())
     corpse = []
     authsrv.kill_player(lambda op, v, why="", quiet=False: corpse.append(op),
                         st, 0, "test")
+    # the real send() runs _note_wire_move on every message; this fake one
+    # does not, so the hook is driven here with the 0x002D kill_player sent
+    authsrv._note_wire_move(st, authsrv.GAME_SMSG_AGENT_MOVE_CANCEL,
+                            [authsrv.PLAYER_AGENT_ID], _t2.time())
+    frozen = authsrv._sync_position(st, _t2.time() + 3.0)
+    LEDGER.ok(walking is not None and 100.0 < walking[0] < 200.0
+              and st.get("sync_to") is None and frozen is not None
+              and abs(frozen[0] - walking[0]) < 5.0,
+              "SLICE-F25: the mirror of the sync copy STOPS where the death's "
+              "0x002D stops the client's -- three seconds later it is where "
+              "it was, not at the lead's end; the raider's reach is judged on "
+              "this model for a moving player (_npc_frame)",
+              f"walking {walking}, frozen {frozen}, sync_to {st.get('sync_to')}")
     LEDGER.ok(st["player_dead"] and "kbd_leg" not in st and st["dest"] is None
               and st.get("approach") is None and "router_chain" not in st
               and st["attacking"] is None
@@ -880,6 +901,17 @@ def section_deaths():
               "batch behind the STATUS, retail 2 of 2 (the client's walk gate; "
               "the owner's corpse 'warped slightly' on its converging copies)",
               f"hold {st.get('action_hold')}")
+    order = [op for op in corpse if op in (authsrv.GAME_SMSG_AGENT_UPDATE_STATUS,
+                                           0x009F,
+                                           authsrv.GAME_SMSG_AGENT_MOVE_CANCEL)]
+    LEDGER.ok(authsrv.GAME_SMSG_AGENT_MOVE_CANCEL == 0x002D
+              and order[:3] == [authsrv.GAME_SMSG_AGENT_UPDATE_STATUS, 0x009F,
+                                authsrv.GAME_SMSG_AGENT_MOVE_CANCEL],
+              "SLICE-F25: and the sync copy's walk is CANCELLED -- 0x002D [me] "
+              "behind the hold, retail's death batch 3 of 3; the handler zeroes "
+              "the copy's velocity (studies/enemy PLAN 6h), so the corpse's "
+              "copies stay where the body fell (the hold alone still warped)",
+              f"{[hex(o) for o in order]}")
     src = open(os.path.join(os.path.dirname(authsrv.__file__), "authsrv.py"),
                encoding="utf-8").read()
     LEDGER.ok(src.count('and not state.get("player_dead")') >= 4
