@@ -9332,6 +9332,22 @@ PARTY_SLOT_LEADS = True     # False (--party-follow-agent): the B7b shape, a
 PARTY_SLOT_STOP = 30.0      # u from its slot within which a party body stands.
 PARTY_SLOTS = ((0.0, 110.0), (0.0, -110.0), (-110.0, 0.0), (-80.0, 110.0),
                (-80.0, -110.0), (-160.0, 0.0), (-160.0, 110.0))   # (along, across)
+# SLICE-H3 (studies/slice/FINDINGS.md F29): HOSTILES FIGHT THE PARTY. Every
+# hostile in this server chased, swung at and cast at the PLAYER and nothing
+# else; retail's hostiles named a henchman 162 times to the observer's 13.
+# Their pick, read off 58 opening starts (henchjoin.py --hostile): the body in
+# the LOWEST BASE-ARMOUR class alive in 51 of 58, the nearest of that class in
+# 41 -- the Monk over the Warrior at 380-500 u, the Elementalist once the Monk
+# was down -- and the seven exceptions are the Warrior observer at rank 1-2 by
+# distance. So: softest class first, nearest within it, and the pick is kept
+# while it lives (retail switched inside a bout 12 times in 58; unmodelled).
+# The class table is GWW's base armour by profession; the rule is a
+# RECONSTRUCTION fitted to those 58, said so.
+HOSTILE_TARGETS_PARTY = True   # False (--hostile-target-player): the player only,
+                               # every run before 2026-09-13.
+BASE_ARMOUR_BY_PROFESSION = {1: 80, 2: 70, 3: 60, 4: 60, 5: 60, 6: 60,
+                             7: 70, 8: 60, 9: 80, 10: 70}
+SCALE_MEANS_RESURRECT = {"Resurrect"}
 # SLICE-B7c: the party body CASTS. Empty by default -- a hero with no bar is
 # every hero run before 2026-09-12, and `--hero-skills` is what fills it. The
 # ids come from the command line; every NUMBER behind them (activation,
@@ -12594,7 +12610,7 @@ def attack_tick(send, state, conn_id, rec=None):
 
 
 
-def kill_agent(send, state, target_id, agent, conn_id, now):
+def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
     """Put an agent down. ONE place since SKILLS-DW (2026-09-09).
 
     This body lived inline at the bottom of `hit_enemy` -- the only thing that
@@ -12629,6 +12645,12 @@ def kill_agent(send, state, target_id, agent, conn_id, now):
     # reward, then the flags byte. Same tick, same agent, all three.
     send(GAME_SMSG_AGENT_UPDATE_STATUS, [target_id, agents.EFFECT_DEAD],
          f"KILL agent {target_id}")
+    if not reward:
+        # SLICE-H3: a PARTY body's death -- the status and the flags byte,
+        # no kill reward, no objective, no morale: nobody is paid for it.
+        send(GAME_SMSG_AGENT_UPDATE_FLAGS, [target_id, AGENT_FLAGS_KILLED],
+             f"flags {AGENT_FLAGS_KILLED} on the dying party agent {target_id}")
+        return
     # A SINGLE [0, 26], and the single is the finding. The pair
     # [10,0]+[0,X] looks like the richer template and is NOT a kill shape:
     # 6 of its 7 occurrences fire 6.8-31.5 s from any death, inside a
@@ -15802,6 +15824,12 @@ def revive_due(send, state, conn_id):
             continue
         if not agent["dead"] or now - agent["died_at"] < REVIVE_AFTER:
             continue
+        if agent.get("allegiance") == agents.ALLEGIANCE_PLAYER:
+            # SLICE-H3: a party body does not get up on a timer. Retail's
+            # henchman died five times in one fight and a party member's
+            # Resurrection Signet raised it every time (F28); a hostile's
+            # timer revive is this server's own placeholder and stays theirs.
+            continue
         # Guard before the body stands up: a refused refill must leave the
         # agent DEAD so next tick retries the whole revive, not half-alive
         # with a status sent and no bar behind it (test_guards section 5).
@@ -16108,11 +16136,9 @@ def enemy_attack_tick(send, state, conn_id):
     the cause.
     """
     player_pools(state)
-    if state["player_dead"]:
-        # Nothing swings at a corpse. Without this the player is re-killed every
-        # interval while face-down and the revive never gets a clean window.
-        return
-    px, py = state.get("pos", (0.0, 0.0))
+    # "Nothing swings at a corpse" was a top-of-function return on the
+    # PLAYER's death; since SLICE-H3 it is per hostile, on ITS target, below
+    # -- a dead player no longer stops the hostiles fighting the party.
     now = time.time()
     for agent_id, agent in list(state.get("agents", {}).items()):
         if agent_id not in state.get("agents", {}):
@@ -16136,6 +16162,19 @@ def enemy_attack_tick(send, state, conn_id):
             continue
         if agent.get("allegiance") != agents.ALLEGIANCE_HOSTILE:
             continue
+        # SLICE-H3: THIS hostile's target (enemy_move_tick picks it), and a
+        # corpse is not swung at -- the armed swing at a body that died in
+        # the windup drops, as it always did for the player.
+        _tid = ((agent.get("target") or PLAYER_AGENT_ID) if HOSTILE_TARGETS_PARTY
+                else PLAYER_AGENT_ID)
+        if target_dead(state, _tid):
+            agent["swinging"] = False
+            agent["swing_lands_at"] = None
+            agent["cast_lands_at"] = None
+            agent["casting"] = None
+            continue
+        px, py = (state.get("pos", (0.0, 0.0)) if _tid == PLAYER_AGENT_ID
+                  else target_pos(state, _tid))
         # A body mid-burrow is half in the world and must not swing out of it. The
         # hidden ones are not in state["agents"] at all, so this covers only the
         # 2.00 s transitions either side.
@@ -16164,7 +16203,8 @@ def enemy_attack_tick(send, state, conn_id):
             if _armed is not None:
                 if now >= _armed:
                     agent["swing_lands_at"] = None
-                    land_swing(send, state, agent_id, agent, conn_id)
+                    land_swing(send, state, agent_id, agent, conn_id,
+                               target_id=_tid)
                 continue
             # SLICE-F25: AND A CAST IN FLIGHT LANDS TOO. The owner, after F24:
             # "sometimes the enemy Power Attack or Sever Artery shows up on
@@ -16225,8 +16265,9 @@ def enemy_attack_tick(send, state, conn_id):
             # begin_attack makes for the player. A fight that opens with a second
             # and a half of nothing reads as a fight that did not start.
             agent["last_swing"] = 0.0
-            print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) attacks the "
-                  f"player", flush=True)
+            print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) attacks "
+                  f"{target_label(state, _tid)}", flush=True)
+            agent["target_locked"] = True         # SLICE-H3: the bout opened
         # A CAST IN FLIGHT BEATS EVERYTHING, and is resolved before a swing can
         # start -- otherwise a slow tick lets an agent cast and swing at once.
         cast_due = agent.get("cast_lands_at")
@@ -16243,7 +16284,7 @@ def enemy_attack_tick(send, state, conn_id):
         if due is not None:
             if now >= due:
                 agent["swing_lands_at"] = None
-                land_swing(send, state, agent_id, agent, conn_id)
+                land_swing(send, state, agent_id, agent, conn_id, target_id=_tid)
             continue
 
         # A SKILL GOES FIRST when the bar has one ready. WHICH one is pick_skill's
@@ -16308,7 +16349,7 @@ def enemy_attack_tick(send, state, conn_id):
         # taken -- a fixture choice in the round-robin's own spirit, said
         # here so nobody reads it as a monster's preference. Everything not
         # an ally spell aims at the player, as it always has.
-        cast_target = PLAYER_AGENT_ID
+        cast_target = _tid
         # SLICE-B3: A HOSTILE'S HEAL AIMS AT WHOEVER IS HURT -- the same
         # `ally_heal_target` policy the party's monk uses (SLICE-F10), extended
         # to the caster's own body for an `ally` skill: Orison of Healing may
@@ -16373,7 +16414,7 @@ def enemy_attack_tick(send, state, conn_id):
                       f"{HERO_HEAL_AT:.0%}", flush=True)
             _next = pick_skill(agent, now)
             slot = None if (_next is None or _next in _held) else _next
-            cast_target = PLAYER_AGENT_ID
+            cast_target = _tid
         # SLICE-F24: an ATTACK skill is a swing -- it waits for the swing
         # clock like the plain swing below does, so a bar with two ready
         # attack skills fires one per interval (retail: two [50]s by one
@@ -16385,6 +16426,8 @@ def enemy_attack_tick(send, state, conn_id):
         if slot is not None:
             skill_id, activation, recharge = agent["skills"][slot]
             agent["cast_target"] = cast_target
+            if cast_target == _tid:
+                agent["target_locked"] = True     # SLICE-H3: the bout opened
             # THE ENEMY PAYS, AND NOTHING GOES ON THE WIRE FOR IT. Property 62
             # is the observing player's OWN agent's and nobody else's: across
             # the live corpus, 722 casts by other agents -- 579 of them paid --
@@ -16400,7 +16443,7 @@ def enemy_attack_tick(send, state, conn_id):
             agent["last_slot"] = slot          # the round-robin cursor
             agent["casting"] = slot
             agent["last_swing"] = now      # a cast is not a free swing
-            face_player(send, state, agent_id, agent, conn_id)
+            face_player(send, state, agent_id, agent, conn_id, at=(px, py))
             # The bar is single-target-always at the player (land_skill's own
             # flag), so under the form rule this cast names its target -- the
             # 0x009F shape it used to take matched the corpus's one NPC
@@ -16439,9 +16482,9 @@ def enemy_attack_tick(send, state, conn_id):
         # so it is also what keeps the facing current when the player walks around
         # the agent. Gating it here is what makes that tracking cost one message
         # instead of one per swing.
-        face_player(send, state, agent_id, agent, conn_id)
+        face_player(send, state, agent_id, agent, conn_id, at=(px, py))
         agent["swing_owed_at"] = None            # SLICE-F22: the debt is paid
-        start_swing(send, agent_id, conn_id)
+        start_swing(send, agent_id, conn_id, target_id=_tid)
         # `interval` is this agent's own declared attack base -- the same number it
         # was told to the client in 0x0035. The windup is a fraction OF THAT, not a
         # constant, so an agent that declares a slower weapon also winds up longer.
@@ -16576,12 +16619,31 @@ def ally_cast_tick(send, state, conn_id):
         skills = agent.get("skills") or ()
         if not skills:
             continue
-        target = ally_heal_target(state, agent_id)
-        if target is None:
-            continue
-        slot = pick_skill(agent, now)
-        if slot is None:
-            continue
+        # SLICE-H3: THE DEAD FIRST. A dead ally and a ready resurrection on
+        # the bar is the cast, before any heal (retail's monk raised its
+        # fallen henchman five times in one fight, F28); a resurrection slot
+        # with nobody dead is HELD, not spent -- round robin steps past it.
+        _dead = party_dead_target(state, agent_id)
+        _res = None
+        if _dead is not None:
+            for _i, _s in enumerate(skills):
+                if skill_resurrects(_s[0]) and agent["skill_ready"][_i] <= now:
+                    _res = _i
+                    break
+        if _res is not None:
+            target, slot = _dead, _res
+        else:
+            target = ally_heal_target(state, agent_id)
+            if target is None:
+                continue
+            slot = pick_skill(agent, now)
+            if slot is not None and skill_resurrects(skills[slot][0]):
+                agent["last_slot"] = slot
+                slot = pick_skill(agent, now)
+                if slot is not None and skill_resurrects(skills[slot][0]):
+                    slot = None
+            if slot is None:
+                continue
         skill_id, activation, recharge = skills[slot]
         # The client's own target byte decides whether this slot may land on
         # the ally we picked -- the same gate the hostile cast site applies,
@@ -16620,7 +16682,7 @@ def ally_cast_tick(send, state, conn_id):
               f"{len(skills)})", flush=True)
 
 
-def face_player(send, state, agent_id, agent, conn_id, force=False):
+def face_player(send, state, agent_id, agent, conn_id, force=False, at=None):
     """Turn an agent to look at the player, if it is not looking there already.
 
     Gated on a change rather than sent per tick: at 20 ticks a second an ungated
@@ -16628,7 +16690,7 @@ def face_player(send, state, agent_id, agent, conn_id, force=False):
     the right way. `force` is for the moment a swing opens, where being turned the
     wrong way is the whole thing anyone would notice.
     """
-    px, py = state.get("pos", (0.0, 0.0))
+    px, py = at if at is not None else state.get("pos", (0.0, 0.0))   # SLICE-H3
     ax, ay = agent["pos"]
     dx, dy = px - ax, py - ay
     if not dx and not dy:
@@ -16677,6 +16739,189 @@ def party_bodies_here(state):
     if OUTPOST:
         return False
     return bool(EXPLORABLE or map_explorable(state.get("map_id")))
+
+
+def party_bodies(state):
+    """[(agent_id, row)] for every party body -- ALLEGIANCE_PLAYER rows."""
+    return [(aid, row) for aid, row in list(state.get("agents", {}).items())
+            if isinstance(row, dict)
+            and row.get("allegiance") == agents.ALLEGIANCE_PLAYER]
+
+
+def target_pos(state, tid):
+    if tid == PLAYER_AGENT_ID:
+        return state.get("pos", (0.0, 0.0))
+    row = state.get("agents", {}).get(tid)
+    return row["pos"] if row else state.get("pos", (0.0, 0.0))
+
+
+def target_dead(state, tid):
+    if tid == PLAYER_AGENT_ID:
+        return bool(state.get("player_dead"))
+    row = state.get("agents", {}).get(tid)
+    return row is None or bool(row.get("dead"))
+
+
+def target_profession(state, tid):
+    if tid == PLAYER_AGENT_ID:
+        return SPAWN_PROFESSION
+    row = state.get("agents", {}).get(tid) or {}
+    return (row.get("npc") or {}).get("profession")
+
+
+def target_label(state, tid):
+    if tid == PLAYER_AGENT_ID:
+        return "the player"
+    row = state.get("agents", {}).get(tid) or {}
+    return f"party agent {tid} ({row.get('name', '?')})"
+
+
+def hostile_target(state, agent_id, agent, now):
+    """SLICE-H3: who this hostile fights -- the current pick while it lives,
+    else the softest live party body inside AGGRO_RANGE, nearest within the
+    class, else None (nobody to fight). See HOSTILE_TARGETS_PARTY."""
+    cur = agent.get("target")
+    if cur is not None and target_dead(state, cur):
+        agent["target_locked"] = False
+    elif cur is not None and agent.get("target_locked"):
+        return cur
+    # Unlocked: the pick is PROVISIONAL until the first start (retail's rule
+    # is read off OPENING starts, F29). Harness 20260913T102921: a raider
+    # noticed the player 600 u out while the hero still stood past
+    # AGGRO_RANGE, and a pick kept from that instant never saw the Monk.
+    ax, ay = agent["pos"]
+    best = None
+    for tid in [PLAYER_AGENT_ID] + [aid for aid, _r in party_bodies(state)]:
+        if target_dead(state, tid):
+            continue
+        tx, ty = target_pos(state, tid)
+        d = math.hypot(tx - ax, ty - ay)
+        if d > AGGRO_RANGE:
+            continue
+        ar = BASE_ARMOUR_BY_PROFESSION.get(target_profession(state, tid), 60)
+        if best is None or (ar, d) < best[0]:
+            best = ((ar, d), tid)
+    if best is None:
+        agent["target"] = None
+        return None
+    if best[1] != cur:
+        agent["target"] = best[1]
+        print(f"[{agent.get('name', agent_id)}] agent {agent_id} targets "
+              f"{target_label(state, best[1])} (armour class "
+              f"{best[0][0]}, {best[0][1]:.0f} u) [SLICE-H3]", flush=True)
+    return best[1]
+
+
+def hurt_party_body(send, state, attacker_id, tid, dealt, frac, conn_id, what):
+    """SLICE-H3: `dealt` health off party body `tid`, on the same property-16
+    channel a hit on any agent rides ([16, TARGET, cause, fraction]); the
+    body dies through kill_agent with no kill reward -- a party death pays
+    nobody."""
+    row = state.get("agents", {}).get(tid)
+    if row is None or row.get("dead"):
+        return
+    now = time.time()
+    row["health"] = max(0.0, row["health"] - dealt)
+    row["last_hit"] = now
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+         [agents.PROP_DAMAGE, tid, attacker_id, frac],
+         f"{what}: {dealt:.0f} to party agent {tid}")
+    print(f"[c{conn_id}] party agent {tid} ({row.get('name', '?')}) takes "
+          f"{dealt:.0f} from agent {attacker_id} ({what}): "
+          f"{row['health']:.0f}/{row['max_health']:.0f}", flush=True)
+    if row["health"] <= 0.0:
+        kill_agent(send, state, tid, row, conn_id, now, reward=False)
+        print(f"[c{conn_id}] PARTY AGENT {tid} IS DEAD -- it waits for a "
+              f"resurrection (SLICE-H3)", flush=True)
+
+
+def land_swing_on_body(send, state, agent_id, agent, tid, conn_id, bonus=0.0,
+                       skill_id=None):
+    """SLICE-H3: land_swing's closing half aimed at a party body -- the same
+    ENEMY_HIT_FRACTION at the body's own armour (its row's rating, else the
+    creature formula from its level and profession), the skill's bonus after
+    armour, retail's [finished, damage] order."""
+    row = state.get("agents", {}).get(tid)
+    if row is None or row.get("dead"):
+        return
+    dealt = float(row["max_health"]) * ENEMY_HIT_FRACTION
+    armour = row.get("armor_rating")
+    if armour is None:
+        armour = creature_armor_rating(row.get("npc") or {})
+    if ARMOUR_TERM and armour is not None:
+        dealt *= armour_multiplier(float(armour))
+    dealt += float(bonus)
+    what = "an enemy swing" if skill_id is None else f"skill {skill_id}"
+    frac = _damage_fraction(dealt, row["max_health"], agents.PROP_DAMAGE, what)
+    if skill_id is None:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_MELEE_ATTACK_FINISHED, agent_id, 0],
+             "melee_attack_finished")
+    else:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_ATTACK_SKILL_FINISHED, agent_id, 0],
+             f"attack_skill_finished: agent {agent_id}'s skill {skill_id} "
+             f"strikes party agent {tid} (+{bonus:.0f})")
+    hurt_party_body(send, state, agent_id, tid, dealt, frac, conn_id, what)
+
+
+def skill_resurrects(skill_id):
+    """Is this a resurrection skill (a `skill_effect` row whose scale means
+    Resurrect)? The client's own target byte 6 marks the family -- all 11
+    skills carrying it are resurrections (Resurrection Signet, Resurrect,
+    Rebirth, Restore Life, Vengeance, ... Sunspear Rebirth Signet; F29)."""
+    try:
+        row = agents.WORLD.get("skill_effect", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return False
+    return row.get("scale_means") in SCALE_MEANS_RESURRECT
+
+
+def party_dead_target(state, caster_id):
+    """A dead ally of `caster_id` to raise -- the player first, else the
+    first dead party body -- or None."""
+    # Not allies_of: that set drops the dead, which is exactly who is wanted.
+    if state.get("player_dead"):
+        return PLAYER_AGENT_ID
+    for aid, row in party_bodies(state):
+        if aid != caster_id and row.get("dead"):
+            return aid
+    return None
+
+
+def revive_party_body(send, state, tid, row, conn_id, health_frac=1.0, why=""):
+    """Stand a party body up: the agent revive's own two operations (status,
+    then the refill) with the resurrection's health fraction."""
+    frac = _fraction(health_frac, agents.GV_HEALTH, "a resurrection's health")
+    row["dead"] = False
+    row["health"] = float(row["max_health"]) * health_frac
+    row["last_hit"] = 0.0
+    if ENERGY:
+        agent_energy(row).refill()
+    send(GAME_SMSG_AGENT_UPDATE_STATUS, [tid, 0],
+         f"resurrect party agent {tid}{why}")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.PROP_HEALTH_MAX, tid, int(row["max_health"])],
+         f"restore max health on party agent {tid}")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+         [agents.GV_HEALTH, tid, tid, frac],
+         f"refill bar on party agent {tid}")
+    print(f"[c{conn_id}] party agent {tid} ({row.get('name', '?')}) is back "
+          f"up{why}", flush=True)
+
+
+def resurrect_target(send, state, tid, conn_id, caster_id, skill_id):
+    """SLICE-H3: a resurrection skill lands -- the player through the revive
+    path, a party body through revive_party_body. Retail: Resurrection Signet
+    [60] -> 3.0 s -> [id, 0] (F28)."""
+    why = f" by agent {caster_id}'s skill {skill_id}"
+    if tid == PLAYER_AGENT_ID:
+        if state.get("player_dead"):
+            revive_player(send, state, conn_id, why=why)
+        return
+    row = state.get("agents", {}).get(tid)
+    if row is not None and row.get("dead"):
+        revive_party_body(send, state, tid, row, conn_id, why=why)
 
 
 def party_slot_point(state, slot):
@@ -16746,9 +16991,21 @@ def enemy_move_tick(send, state, conn_id, rec=None):
         if agent.get("effects", 0) & agents.EFFECT_TRANSITION:
             continue
         ax, ay = agent["pos"]
-        dist = math.hypot(px - ax, py - ay)
+        _tid = PLAYER_AGENT_ID
+        if not _ally and HOSTILE_TARGETS_PARTY:
+            # SLICE-H3: a hostile fights a party body or the player -- the
+            # softest class alive in range, nearest within it, kept while it
+            # lives. A stale (dead) pick is handed to the follow once more so
+            # its chase halts on "the target is dead" like the player's did.
+            _tid = hostile_target(state, agent_id, agent, now)
+            if _tid is None:
+                _tid = agent.get("target_was") or PLAYER_AGENT_ID
+            else:
+                agent["target_was"] = _tid
+        tx, ty = (px, py) if _tid == PLAYER_AGENT_ID else target_pos(state, _tid)
+        dist = math.hypot(tx - ax, ty - ay)
         if NPC_FOLLOW:
-            _tgt = (px, py)
+            _tgt = (tx, ty)
             _stop = HERO_FOLLOW_STOP if _ally else None
             _slot = False
             if _ally and PARTY_SLOT_LEADS:
@@ -16761,7 +17018,7 @@ def enemy_move_tick(send, state, conn_id, rec=None):
             _npc_follow_tick(send, state, conn_id, agent_id, agent,
                              _tgt, dist, now, pm, rec,
                              leash=HERO_FOLLOW_LEASH if _ally else None,
-                             stop_at=_stop, slot=_slot)
+                             stop_at=_stop, slot=_slot, target_id=_tid)
             continue
         if _ally:
             # The legacy chase below is the hostile's pre-NPC_FOLLOW arm and
@@ -17683,14 +17940,14 @@ def _reach_frame(state, now=None):
         return float(px), float(py)
 
 
-def _npc_frame_reach(state, agent, now, player):
+def _npc_frame_reach(state, agent, now, player, frame=None):
     """Would a follow toward `player` park AT ONCE in the client's frame? The
     same test _npc_disc_hit_ms runs at a leg's first instant: the frame point
     (where the client believes the player stands, F5) inside the swing reach
     of the copy AND inside the +-60 degree cone of the leg about to be ordered.
     A frame point BEHIND the copy does not park it, so it does not hold it.
     -> (would_park, frame, dist)."""
-    fx, fy = _npc_frame(state, now)
+    fx, fy = frame if frame is not None else _npc_frame(state, now)
     ax, ay = agent["pos"]
     dx, dy = fx - ax, fy - ay
     d = math.hypot(dx, dy)
@@ -17703,7 +17960,8 @@ def _npc_frame_reach(state, agent, now, player):
     return (vx * dx + vy * dy) / (v * d) >= NPC_DISC_COS_CONE, (fx, fy), d
 
 
-def _npc_model_advance(state, agent, now, elapsed=0.0, rec=None, agent_id=None):
+def _npc_model_advance(state, agent, now, elapsed=0.0, rec=None, agent_id=None,
+                       frame=None):
     """Advance the model by `elapsed` seconds, applying the resolver's
     stop-at-reach on the way (0x006020B0: velocity 0, targets +INF, follow
     cleared) and the leg's own arrival. Writes agent["pos"]. Returns True when
@@ -17718,7 +17976,7 @@ def _npc_model_advance(state, agent, now, elapsed=0.0, rec=None, agent_id=None):
             and not agent.get("cmodel_slot")):
         # SLICE-H2: the resolver's disc parks a FOLLOW at the player; a party
         # body's slot lead is a point move and walks to its end.
-        fx, fy = _npc_frame(state, now)
+        fx, fy = frame if frame is not None else _npc_frame(state, now)
         hit = _npc_disc_hit_ms(sa, fx, fy, follow_stop_radius(agent),
                                last_ms, min(ms, sa.t_arrive))
         if hit is not None:
@@ -17741,7 +17999,8 @@ def _npc_model_advance(state, agent, now, elapsed=0.0, rec=None, agent_id=None):
 
 
 def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, pm,
-                     rec=None, leash=None, stop_at=None, slot=False):
+                     rec=None, leash=None, stop_at=None, slot=False,
+                     target_id=PLAYER_AGENT_ID):
     """One hostile's chase, in retail's shape (ANIMREF-RE 40; NPC_FOLLOW).
 
     SLICE-B7b MADE TWO NUMBERS ARGUMENTS, and nothing else about this function
@@ -17813,6 +18072,14 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
     ax, ay = agent["pos"]
     fol = agent.get("follow")
     agent["cmodel_slot"] = bool(slot)     # SLICE-H2: _npc_model_advance's disc gate
+    # SLICE-H3: the chase's target may be a party body. Its "frame" -- where
+    # the client believes it stands -- is its own position (its slot lead
+    # parks it there); the player keeps the sync-copy frame (F5).
+    _tdead = target_dead(state, target_id)
+
+    def _frame():
+        return (_npc_frame(state, now) if target_id == PLAYER_AGENT_ID
+                else target_pos(state, target_id))
     # ANIMREF-RE 42.5 (MOVECODE-1z-bz). `plane` was agent.get("plane", 0) --
     # the SPAWN plane, frozen for the session. It is now the mover's own,
     # re-resolved at the copy's point every tick and written back so the
@@ -17863,7 +18130,7 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
                     and tag == " re-path":
                 return                  # the same leg is already in flight
             if rec is not None:
-                _fr = _npc_frame(state, now)          # 1z-cs, as above
+                _fr = _frame()                        # 1z-cs, as above
                 rec.event("npc_order", agent=agent_id, act="corridor-leg",
                           tag=tag.strip(), solve_from=[float(cx), float(cy)],
                           to=[float(wx), float(wy)],
@@ -17911,7 +18178,7 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
             # to BRACKET each order and substitute a proxy for a value the server
             # held in its hand. Third time this lesson has landed (npc_order at
             # sec.1z-cn, mt/kbd_dest at sec.1z-cr): the row names its operand.
-            _fr = _npc_frame(state, now)
+            _fr = _frame()
             rec.event("npc_order", agent=agent_id, act="follow-bare", tag=tag.strip(),
                       solve_from=[float(cx), float(cy)],
                       to=[float(px), float(py)],
@@ -17919,8 +18186,8 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
                       plane=plane, dest_plane=dest_plane, dist=round(float(dist), 1))
         _send(GAME_SMSG_AGENT_UPDATE_DESTINATION,
               [agent_id, (float(px), float(py)), dest_plane, plane,
-               PLAYER_AGENT_ID],
-              f"FOLLOW{tag}: agent {agent_id} -> player at ({px:.0f},{py:.0f}) "
+               target_id],
+              f"FOLLOW{tag}: agent {agent_id} -> {'player' if target_id == PLAYER_AGENT_ID else 'party agent %d' % target_id} at ({px:.0f},{py:.0f}) "
               f"plane {plane}->{dest_plane}, {dist:.0f} u out{why}")
 
     def _leg_done():
@@ -17959,9 +18226,9 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
         leash_d = min(leash_d, math.hypot(px - fol["solve_from"][0],
                                           py - fol["solve_from"][1]))
     _leash = AGGRO_RANGE if leash is None else leash
-    if state["player_dead"] or leash_d > _leash:
+    if _tdead or leash_d > _leash:
         if fol is not None:
-            _halt("the player is dead" if state["player_dead"]
+            _halt("the target is dead" if _tdead
                   else f"{leash_d:.0f} u is past the {_leash:.0f} u leash")
         agent["moved_at"] = now
         return
@@ -17993,7 +18260,7 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
             # 77 s). Hold until the frame moves; no swing either, because the
             # swing reads state["pos"]. Recorded once per hold, not per tick.
             in_reach, frame, dframe = _npc_frame_reach(state, agent, now,
-                                                       (px, py))
+                                                       (px, py), frame=_frame())
             if in_reach:
                 if not agent.get("cmodel_hold") and rec is not None:
                     rec.event("npc_model", agent=agent_id, act="hold",
@@ -18082,7 +18349,8 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
         # straight (the drawn body paths; the two agree to <= 12 u at 38 of
         # 40 measured halts). The plane word is still resolved at the copy's
         # point (1z-bz) and the halt still waits for the clock (40.9).
-        parked = _npc_model_advance(state, agent, now, elapsed, rec, agent_id)
+        parked = _npc_model_advance(state, agent, now, elapsed, rec, agent_id,
+                                    frame=_frame())
         ax, ay = agent["pos"]
         agent["plane"] = _npc_plane(pm, ax, ay, plane, state=state)
         dist = math.hypot(px - ax, py - ay)
@@ -18168,7 +18436,7 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
                   "clock had already fired")
 
 
-def start_swing(send, agent_id, conn_id):
+def start_swing(send, agent_id, conn_id, target_id=PLAYER_AGENT_ID):
     """The opening half of an agent's swing: the animation, and nothing else.
 
     SLOT 1 IS THE AGENT SWINGING. hit_enemy's comment records how that was found
@@ -18180,12 +18448,12 @@ def start_swing(send, agent_id, conn_id):
     reading (studies/enemy/PLAN.md 11.1).
     """
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
-         [agents.GV_ATTACK_STARTED, agent_id, PLAYER_AGENT_ID, 0],
+         [agents.GV_ATTACK_STARTED, agent_id, target_id, 0],
          f"attack_started: agent {agent_id} swings at the player")
 
 
 def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
-               skill_id=None):
+               skill_id=None, target_id=PLAYER_AGENT_ID):
     """The closing half: the swing connects, `swing_windup(interval)` seconds later.
 
     THE ORDER IS ARENANET'S, and it is the opposite of hit_enemy's. OBSERVED in
@@ -18201,6 +18469,11 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
     # daemon thread and a KeyError here would stop the world for the rest of the
     # session with a traceback nowhere near the cause.
     player_pools(state)
+    if target_id != PLAYER_AGENT_ID:
+        # SLICE-H3: the swing was at a party body.
+        land_swing_on_body(send, state, agent_id, agent, target_id, conn_id,
+                           bonus=bonus, skill_id=skill_id)
+        return
     # A CORPSE IS NOT SWUNG AT, and this guard was missing until 2026-08-20.
     # The tick-side caller checks, so nothing on the wire was ever wrong -- but
     # `land_swing` called directly re-killed the body and re-sent the effects
@@ -18413,6 +18686,19 @@ def land_skill(send, state, agent_id, agent, conn_id):
     slot = agent.get("casting")
     skills = agent.get("skills") or ()
     skill_id = skills[slot][0] if slot is not None and slot < len(skills) else 0
+    # SLICE-H3: a RESURRECTION lands -- the finish, then the target stands
+    # (retail: [60] -> 3.0 s -> [id, 0], F28). Nothing else of a cast applies.
+    if skill_resurrects(skill_id):
+        agent["casting"] = None
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_SKILL_FINISHED, agent_id, 0],
+             f"agent {agent_id} finishes casting {skill_id}")
+        resurrect_target(send, state, agent.get("cast_target"), conn_id,
+                         agent_id, skill_id)
+        return
+    # SLICE-H3: the cast's target may be a party body (a hostile's pick).
+    _tid = agent.get("cast_target") or PLAYER_AGENT_ID
+    _tbody = _tid != PLAYER_AGENT_ID and _tid in state.get("agents", {})
     # Tidiness, and NOTHING TODAY CAN OBSERVE IT -- said here rather than left to
     # look load-bearing. `casting` is read only from this function, which runs only
     # when `cast_lands_at` fires, which is only ever set alongside a fresh
@@ -18451,14 +18737,13 @@ def land_skill(send, state, agent_id, agent, conn_id):
         agent["casting"] = None
         bonus = float(damage[0]) if damage and damage[1] == "additive" else 0.0
         land_swing(send, state, agent_id, agent, conn_id, bonus=bonus,
-                   skill_id=skill_id)
-        send_skill_visual(send, state, agent_id, skill_id,
-                          agent.get("cast_target") or PLAYER_AGENT_ID, conn_id)
+                   skill_id=skill_id, target_id=_tid)
+        send_skill_visual(send, state, agent_id, skill_id, _tid, conn_id)
         apply_effect(send, state, agent_id, skill_id, ENEMY_SKILL_RANK,
-                     PLAYER_AGENT_ID, conn_id)
+                     _tid, conn_id)
         inflicted = skill_condition(skill_id, ENEMY_SKILL_RANK)
-        if inflicted and not state.get("player_dead"):
-            apply_condition(send, state, PLAYER_AGENT_ID, inflicted[0],
+        if inflicted and not target_dead(state, _tid):
+            apply_condition(send, state, _tid, inflicted[0],
                             inflicted[1], ENEMY_SKILL_RANK, conn_id, skill_id)
         resolve_heal(send, state, skill_id, ENEMY_SKILL_RANK, agent_id,
                      agent.get("cast_target"), conn_id)
@@ -18476,10 +18761,12 @@ def land_skill(send, state, agent_id, agent, conn_id):
         base = float(damage[0])
         if spell_ar is not None:
             base *= armour_multiplier(spell_ar)
-        dealt, conversion = taker_damage(state, PLAYER_AGENT_ID, base)
+        dealt, conversion = taker_damage(state, _tid, base)
         if dealt > 0:
-            frac = _damage_fraction(dealt, player_max_health(state),
-                                    agents.PROP_DAMAGE, f"skill {skill_id}")
+            frac = _damage_fraction(
+                dealt, (state["agents"][_tid]["max_health"] if _tbody
+                        else player_max_health(state)),
+                agents.PROP_DAMAGE, f"skill {skill_id}")
     # THE FINISH ANNOUNCEMENT OPENS THE BATCH -- ANIMREF-R2's cleanest yield
     # (studies/animref/FINDINGS.md sec.9). Retail closes EVERY other-agent
     # cast episode with a property-58 batch, 58 leading (709/709 finished
@@ -18507,15 +18794,15 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # (Retail's finish batches carry their effect/heal properties BEHIND the
     # 58, which is the order these lines now produce.)
     episode = apply_effect(send, state, agent_id, skill_id, ENEMY_SKILL_RANK,
-                           PLAYER_AGENT_ID, conn_id)
+                           _tid, conn_id)
 
     # A CONDITION FROM THE ENEMY, symmetric with the player's cast. Without
     # this the only way to see degeneration is on a monster's nameplate, where
     # the pips are three pixels; with it the player's own HUD shows the arrows,
     # which is what closes `studies/isle` B4's one UNVERIFIED clause.
     inflicted = skill_condition(skill_id, ENEMY_SKILL_RANK)
-    if inflicted and not state.get("player_dead"):
-        apply_condition(send, state, PLAYER_AGENT_ID, inflicted[0],
+    if inflicted and not target_dead(state, _tid):
+        apply_condition(send, state, _tid, inflicted[0],
                         inflicted[1], ENEMY_SKILL_RANK, conn_id, skill_id)
 
     # The enemy heals too, and its own bar has one: Restore Condition (276),
@@ -18548,6 +18835,11 @@ def land_skill(send, state, agent_id, agent, conn_id):
               f"no damage message goes out", flush=True)
         return
     agent["casting"] = None
+    if _tbody:
+        # SLICE-H3: the spell was at a party body.
+        hurt_party_body(send, state, agent_id, _tid, dealt, frac, conn_id,
+                        f"skill {skill_id}")
+        return
     state["player_health"] = max(0.0, state["player_health"] - dealt)
     # THE GAIN PRECEDES THE DAMAGE (see hit_enemy for the census). No strike
     # for the caster: that half of the rule says WEAPON hit, and a cast is not
@@ -18609,6 +18901,17 @@ def player_revive_due(send, state, conn_id):
         return
     if time.time() - state["player_died_at"] < PLAYER_REVIVE_AFTER:
         return
+    revive_player(send, state, conn_id)
+
+
+def revive_player(send, state, conn_id, health_frac=1.0, why=" (the timer)"):
+    """Stand the player up -- player_revive_due's body since SLICE-H3, so a
+    party member's resurrection (Resurrection Signet, 100% health) can call
+    it too. The energy fraction is not modelled: restore_player_energy fills
+    the pool as the timer revive always did."""
+    player_pools(state)
+    if not state["player_dead"]:
+        return
     # NOTHING RESETS THE AGENTS' `facing_told` HERE, and that is deliberate rather
     # than forgotten. The stale value is still the correct one: a dead player
     # cannot move and nothing chases or turns toward a corpse, so the geometry at
@@ -18619,14 +18922,15 @@ def player_revive_due(send, state, conn_id):
     # Guard before the flag flips, same as revive_due: a refused refill must
     # leave the player DEAD so the next tick retries the whole revive
     # (test_guards section 6).
-    frac = _fraction(1.0, agents.GV_HEALTH, "refill the player to a full pool")
+    frac = _fraction(health_frac, agents.GV_HEALTH,
+                     "refill the player to a full pool")
     state["player_dead"] = False
     state["corpse_reports"] = 0
     # THE GRACE WINDOW STARTS HERE, not at the refill: a player who is put back
     # on their feet and killed again before they can act has not had a turn,
     # and the deferred-refill experiment must not be able to move a game rule.
     state["player_revived_at"] = time.time()
-    state["player_health"] = player_max_health(state)
+    state["player_health"] = player_max_health(state) * health_frac
     send(GAME_SMSG_AGENT_UPDATE_STATUS, [PLAYER_AGENT_ID, 0], "revive the player")
     # THE EXPERIMENT of studies/agentprops 1f, off by default. The client logs
     # `Health non-zero on resurrect` on every revive we send -- 49 times across the
@@ -26071,6 +26375,12 @@ def main():
         print("[map] --no-interact-route: an out-of-range interact is HELD "
               "and nobody walks the player over. Every run before 2026-09-12, "
               "and the known-bad arm.", flush=True)
+    if a.hostile_target_player:
+        global HOSTILE_TARGETS_PARTY
+        HOSTILE_TARGETS_PARTY = False
+        print("[enemy] --hostile-target-player: every hostile fights the player "
+              "only -- every run before SLICE-H3 (2026-09-13); retail's named a "
+              "henchman 162 times to the observer's 13.", flush=True)
     if a.party_body_in_outpost:
         global PARTY_BODY_IN_OUTPOST
         PARTY_BODY_IN_OUTPOST = True

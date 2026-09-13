@@ -853,6 +853,14 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "0x009A, bags, appearance, pipeline-first): the "
                          "SLICE-B7 shape, follow and heal only, no panel. The "
                          "revert arm if the full rig asserts on a client.")
+    ap.add_argument("--hostile-target-player", action="store_true",
+                    help="SLICE-H3 REVERT: hostiles chase, swing at and cast at "
+                         "the PLAYER only -- every run before 2026-09-13. By "
+                         "default a hostile picks the softest base-armour class "
+                         "alive in range (GWW's per-profession table), the "
+                         "nearest within it, and keeps the pick while it lives: "
+                         "retail's own choice in 51 of 58 opening starts on a "
+                         "party (studies/slice F29, henchjoin.py --hostile).")
     ap.add_argument("--party-body-in-outpost", action="store_true",
                     help="SLICE-H2b REVERT: create the party's world bodies "
                          "in a town as well. Stock shows a hero's model in a "

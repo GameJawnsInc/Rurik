@@ -5127,6 +5127,198 @@ def section_hold_plane():
               "party_bodies_here being False, ahead of its prop-36 level "
               "(the pair's retail order)", "site order in the load path")
 
+    # ---- SLICE-H3: hostiles fight the party -----------------------------------
+    # F29: retail's hostiles named a henchman 162 times to the observer's 13;
+    # their pick was the lowest base-armour class alive (51 of 58 opening
+    # starts), the nearest within it (41). Every check below has the arm that
+    # makes it mean something: the Warrior nearer than the Monk, a same-class
+    # pair, the pick's owner dying, and the --hostile-target-player revert.
+    print("\nSLICE-H3: a hostile picks the softest party body alive in range and "
+          "the nearest within the class, keeps it while it lives; the chase names "
+          "it, the swing lands on it, it dies and waits for a signet; the hero "
+          "raises it, and the player")
+    FLOAT_T = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
+    INT_T = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+    STATUS = authsrv.GAME_SMSG_AGENT_UPDATE_STATUS
+    FOLLOW = authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION
+    PLAYER = authsrv.PLAYER_AGENT_ID
+    _saved_htp = authsrv.HOSTILE_TARGETS_PARTY
+    try:
+        def _body(name, pos, prof, slot):
+            return {"name": name, "dead": False, "died_at": 0.0, "health": 100.0,
+                    "max_health": 100.0, "last_hit": 0.0, "pos": pos, "plane": 0,
+                    "allegiance": agents.ALLEGIANCE_PLAYER, "effects": 0,
+                    "attack_speed": authsrv.ENEMY_ATTACK_SPEED,
+                    "attacks_back": False, "skills": (), "skill_ready": [],
+                    "npc": {"profession": prof, "level": 5}, "party_slot": slot}
+
+        def _party_world(hostile_pos, monk_pos, warrior_pos=None):
+            st = _world(dist=0.0)
+            # an EMPTY bar: a ready skill goes first and would cast at the body
+            # instead of swinging, which is the cast path's business (below)
+            st["agents"][10].update(pos=hostile_pos, skills=(), skill_ready=[])
+            st["agents"][30] = _body("monk", monk_pos, 3, 0)
+            if warrior_pos is not None:
+                st["agents"][31] = _body("warrior", warrior_pos, 1, 1)
+            return st
+
+        now = time.time()
+        # 1. the class first: the player (a Warrior, AR 80) stands 200 u off,
+        # the Monk body (AR 60) 500 u off -- the Monk is picked.
+        st = _party_world((200.0, 0.0), (-300.0, 0.0))
+        tid = authsrv.hostile_target(st, 10, st["agents"][10], now)
+        LEDGER.ok(tid == 30,
+                  "the softest class first: the Monk body 500 u off over the "
+                  "Warrior player 200 u off (retail: the Monk at 380-500 u over "
+                  "nearer warriors, F29)", f"target {tid}")
+        # 2. within a class, the nearest: a Warrior body 50 u off over the
+        # Warrior player 200 u off, the Monk out of aggro range.
+        st2 = _party_world((200.0, 0.0), (-3000.0, 0.0), warrior_pos=(250.0, 0.0))
+        tid2 = authsrv.hostile_target(st2, 10, st2["agents"][10], now)
+        LEDGER.ok(tid2 == 31,
+                  "and within a class the nearest: the Warrior body 50 u off "
+                  "over the Warrior player 200 u off; a Monk 3200 u off is "
+                  "past AGGRO_RANGE and not a candidate", f"target {tid2}")
+        # 3. the pick is PROVISIONAL until the bout opens (retail's rule is
+        # read off opening starts), LOCKED from the first start while the
+        # target lives, and re-made when it dies.
+        st2["agents"][30]["pos"] = (-300.0, 0.0)     # the Monk walks into range
+        moved = authsrv.hostile_target(st2, 10, st2["agents"][10], now)
+        LEDGER.ok(moved == 30,
+                  "an UNLOCKED pick moves to a softer body that walks into range "
+                  "-- harness 20260913T102921: a raider that noticed the player "
+                  "600 u out kept them though the Monk arrived a moment later",
+                  f"target {moved}")
+        st["agents"][10]["target_locked"] = True      # the first swing opened
+        st["pos"] = (210.0, 0.0)                     # the player now 10 u off
+        st["agents"][30]["pos"] = (-900.0, 0.0)      # the Monk 1100 u off
+        kept = authsrv.hostile_target(st, 10, st["agents"][10], now)
+        st["agents"][30]["dead"] = True
+        after = authsrv.hostile_target(st, 10, st["agents"][10], now)
+        LEDGER.ok(kept == 30 and after == PLAYER
+                  and not st["agents"][10].get("target_locked"),
+                  "a LOCKED pick is kept while it lives (the player at 10 u does "
+                  "not steal it), re-made at its death, and the lock drops",
+                  f"kept {kept}, after the death {after}")
+        # 4. the chase names the party body in the 0x002A's target field.
+        st = _party_world((200.0, 0.0), (-300.0, 0.0))
+        sent = _walk(st)
+        fol = [v for op, v, _l in sent if op == FOLLOW]
+        LEDGER.ok(len(fol) == 1 and fol[0][-1] == 30
+                  and tuple(fol[0][1]) == (-300.0, 0.0),
+                  "the chase is a 0x002A naming the MONK BODY at its position, "
+                  "not the player", f"follows {fol}")
+        # 5. the swing opens on the body and lands on it: [4, hostile, body, 0],
+        # then [1, hostile, 0] and property 16 [16, body, hostile, fraction].
+        st = _party_world((200.0, 0.0), (285.0, 0.0))       # the Monk 85 u off
+        authsrv.hostile_target(st, 10, st["agents"][10], now)
+        sent = _swings(st)
+        started = [v for op, v, _l in sent if op == INT_T and v[0] == 4]
+        LEDGER.ok(started == [[4, 10, 30, 0]] and st["agents"][10].get("target_locked"),
+                  "the swing OPENS on the party body: attack_started names it "
+                  "as the target, and the bout LOCKS the pick", f"starts {started}")
+        st["agents"][10]["swing_lands_at"] = time.time() - 0.01
+        sent = _swings(st)
+        dmg = [v for op, v, _l in sent if op == FLOAT_T and v[0] == 16]
+        LEDGER.ok(len(dmg) == 1 and dmg[0][1] == 30 and dmg[0][2] == 10
+                  and st["agents"][30]["health"] < 100.0,
+                  "and LANDS on it: property 16 [16, BODY, hostile, fraction] "
+                  "and the body's health drops", f"damage {dmg}, health "
+                  f"{st['agents'][30]['health']:.1f}")
+        # 6. the body dies through kill_agent with NO kill reward, and
+        # revive_due does not stand it up on the hostile's timer.
+        st["agents"][30]["health"] = 0.5
+        st["agents"][10]["swing_lands_at"] = time.time() - 0.01
+        sent = _swings(st)
+        died = [v for op, v, _l in sent if op == STATUS and v[0] == 30]
+        rewards = [op for op, _v, _l in sent
+                   if op == authsrv.GAME_SMSG_AGENT_KILL_REWARD]
+        LEDGER.ok(st["agents"][30]["dead"] and died == [[30, agents.EFFECT_DEAD]]
+                  and rewards == [],
+                  "a killing swing puts the body DOWN (status dead bit) and pays "
+                  "NO kill reward -- nobody is paid for a party death",
+                  f"dead {st['agents'][30]['dead']}, status {died}, rewards {rewards}")
+        st["agents"][30]["died_at"] = time.time() - 1000.0
+        sent = []
+        authsrv.revive_due(lambda op, vals, label="", quiet=False: sent.append((op, vals)),
+                           st, 1)
+        LEDGER.ok(st["agents"][30]["dead"] and sent == [],
+                  "and revive_due leaves a party body DEAD however long it lies "
+                  "there -- retail's henchman was raised by a signet five times, "
+                  "never by a timer (F28)", f"dead {st['agents'][30]['dead']}, "
+                  f"sent {sent}")
+        # 7. the hero raises it: a dead ally and a ready Resurrection Signet on
+        # the bar is the cast, ahead of any heal; 3 s later the body stands.
+        hero = _body("hero", (0.0, 110.0), 3, 0)
+        hero.update(skills=((281, 1.0, 2.0), (276, 0.75, 2.0), (2, 3.0, 0.0)),
+                    skill_ready=[0.0, 0.0, 0.0])
+        st["agents"][200] = hero
+        st["player_health"] = 50.0                   # a hurt player, too
+        sent = []
+        authsrv.ally_cast_tick(lambda op, vals, label="", quiet=False: sent.append((op, vals)),
+                               st, 1)
+        casts = [v for op, v in sent if op == INT_T and v[0] == 60]
+        LEDGER.ok(casts == [[60, 200, 30, 2]] and hero.get("cast_target") == 30
+                  and hero.get("casting") == 2,
+                  "the hero casts Resurrection Signet (2) at the DEAD body ahead "
+                  "of Orison at the hurt player -- the dead first",
+                  f"casts {casts}, target {hero.get('cast_target')}")
+        hero["cast_lands_at"] = time.time() - 0.01
+        sent = []
+        authsrv.ally_cast_tick(lambda op, vals, label="", quiet=False: sent.append((op, vals)),
+                               st, 1)
+        up = [v for op, v in sent if op == STATUS and v[0] == 30]
+        LEDGER.ok(up == [[30, 0]] and not st["agents"][30]["dead"]
+                  and st["agents"][30]["health"] == 100.0,
+                  "and when it lands the body STANDS: status [body, 0], full "
+                  "health (retail: [60] -> 3.0 s -> [id, 0], F28)",
+                  f"status {up}, dead {st['agents'][30]['dead']}, "
+                  f"health {st['agents'][30]['health']}")
+        # 7b. nobody dead: the signet slot is HELD, round robin steps past it.
+        hero["skill_ready"] = [0.0, 0.0, 0.0]
+        hero["last_slot"] = 1                        # next in the round is the signet
+        hero["cast_lands_at"] = None
+        hero["casting"] = None
+        sent = []
+        authsrv.ally_cast_tick(lambda op, vals, label="", quiet=False: sent.append((op, vals)),
+                               st, 1)
+        casts = [v for op, v in sent if op == INT_T and v[0] == 60]
+        LEDGER.ok(casts and casts[0][3] != 2,
+                  "with nobody dead the signet slot is held: the round robin "
+                  "steps past it to a heal", f"casts {casts}")
+        # 8. the dead PLAYER is raised by the hero's signet through the revive
+        # path, without waiting for the timer.
+        hero["skill_ready"] = [0.0, 0.0, 0.0]
+        hero["cast_lands_at"] = None
+        hero["casting"] = None
+        st["player_dead"], st["player_died_at"] = True, time.time()
+        sent = []
+        authsrv.ally_cast_tick(lambda op, vals, label="", quiet=False: sent.append((op, vals)),
+                               st, 1)
+        casts = [v for op, v in sent if op == INT_T and v[0] == 60]
+        hero["cast_lands_at"] = time.time() - 0.01
+        authsrv.ally_cast_tick(lambda op, vals, label="", quiet=False: sent.append((op, vals)),
+                               st, 1)
+        up = [v for op, v in sent if op == STATUS and v[0] == PLAYER]
+        LEDGER.ok(casts == [[60, 200, PLAYER, 2]] and up == [[PLAYER, 0]]
+                  and not st["player_dead"],
+                  "the dead PLAYER is raised the same way: the signet at the "
+                  "player, then the revive path stands them up at once (retail "
+                  "raised the observer twice, F28)",
+                  f"casts {casts}, status {up}, dead {st['player_dead']}")
+        # 9. the revert arm: --hostile-target-player, every run before H3.
+        authsrv.HOSTILE_TARGETS_PARTY = False
+        st = _party_world((85.0, 0.0), (85.0, 40.0))        # both in reach
+        st["agents"][10]["target"] = 30                       # a stale pick
+        sent = _swings(st)
+        started = [v for op, v, _l in sent if op == INT_T and v[0] == 4]
+        LEDGER.ok(started == [[4, 10, PLAYER, 0]],
+                  "--hostile-target-player: the swing opens on the PLAYER whatever "
+                  "the party looks like -- the known-bad arm",
+                  f"starts {started}")
+    finally:
+        authsrv.HOSTILE_TARGETS_PARTY = _saved_htp
+
 
 if __name__ == "__main__":
     sys.exit(main())

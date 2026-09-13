@@ -32,6 +32,13 @@ WHAT IS JOINED, per connection with a henchman body created in it:
   casts      every party [60|50, H, T, skill]: the skill, T's class, and for
              a heal-shaped spell whether damage had landed on T inside 5 s.
   deaths     0x00F1 [H, status] with the dead bit (rising edges), per member.
+  hostile    (--hostile, SLICE-H3) every hostile start [4|50, X, T] that OPENS
+             X's bout (no start by X in 3 s): is T the NEAREST party body to X
+             at that instant (positions sample-and-held from creates, leads,
+             destinations and 0x002C; the observer from its own reports), is
+             T the last party body to have HIT X inside 10 s, and T's rank by
+             distance; then every SWITCH inside a bout (a start naming a
+             different T than X's previous one): nearer? the last hitter?
   cadence    the gap between one party 0x0029 and the next by the same body
              while the observer is moving; leads sent while the observer has
              stood > 1 s; and 0x0028 halts per body against its leads.
@@ -248,6 +255,95 @@ def scan():
     return out
 
 
+# Base armour by profession (GWW, Armor rating: Warrior 80, Ranger 70, Monk /
+# Elementalist / Mesmer / Necromancer / Ritualist 60, Assassin 70, Paragon 80,
+# Dervish 70), the enum order of 0x00A6's field 2 / 0x01BF's profession byte.
+BASE_AR = {1: 80, 2: 70, 3: 60, 4: 60, 5: 60, 6: 60, 7: 70, 8: 60, 9: 80, 10: 70}
+
+
+def hostile_targets():
+    """-> (opens, switches): rows for hostile opening starts and in-bout
+    retargets, with the distance ranking and the last-hitter test."""
+    opens, switches = [], []
+    for capdir, gf in livewire.live_connections():
+        stamp = os.path.basename(capdir)
+        conn, merged, _ok = livewire.decode_conn(capdir, gf)
+        if not merged:
+            continue
+        party = party_of(merged)
+        if not party:
+            continue
+        me = whose_agent(merged)
+        if me is None:
+            continue
+        pos = {}                      # agent -> (x, y), sample-and-hold
+        dead = {}
+        prof = {a: pl[0] for a, pl in party.items()}
+        last_hit = {}                 # hostile -> (t, party attacker)
+        last_start = {}               # hostile -> (t, T)
+        for t, d, op, v in merged:
+            if d == "c2s":
+                if op in (0x003D, 0x0047) and len(v) > 1 \
+                        and isinstance(v[1], (tuple, list)):
+                    pos[me] = (float(v[1][0]), float(v[1][1]))
+                continue
+            if op == 0x00A6 and len(v) > 2 and int(v[1]) == me:
+                prof[me] = int(v[2])
+            if op == CREATE and len(v) > 5 and isinstance(v[5], (tuple, list)):
+                pos[int(v[1])] = (float(v[5][0]), float(v[5][1]))
+            elif op in (LEAD, DEST, 0x002C) and len(v) > 2 \
+                    and isinstance(v[2], (tuple, list)):
+                pos[int(v[1])] = (float(v[2][0]), float(v[2][1]))
+            elif op == STATUS and len(v) > 2:
+                dead[int(v[1])] = bool(int(v[2]) & DEAD_BIT)
+            elif op == PFLOAT_T and len(v) > 3 and int(v[1]) in (16, 17):
+                tgt, atk = int(v[2]), int(v[3])
+                if (atk == me or atk in party) and tgt != me and tgt not in party:
+                    last_hit[tgt] = (t, atk)
+            elif op == PINT_T and len(v) > 3 and int(v[1]) in (4, 50):
+                A, T = int(v[2]), int(v[3])
+                if A == me or A in party:
+                    if T != me and T not in party:
+                        # a start on X counts as a hit for the "who is on
+                        # me" test even before its damage lands
+                        last_hit.setdefault(T, (t, A))
+                        if last_hit[T][0] < t:
+                            last_hit[T] = (t, A)
+                    continue
+                if T != me and T not in party:
+                    continue
+                cands = [c for c in [me] + list(party)
+                         if c in pos and not dead.get(c)]
+                if A not in pos or T not in pos:
+                    continue
+                ax, ay = pos[A]
+                ranked = sorted(cands, key=lambda c: math.hypot(
+                    pos[c][0] - ax, pos[c][1] - ay))
+                rank = ranked.index(T) + 1 if T in ranked else None
+                dT = math.hypot(pos[T][0] - ax, pos[T][1] - ay)
+                d1 = math.hypot(pos[ranked[0]][0] - ax,
+                                pos[ranked[0]][1] - ay) if ranked else None
+                lh = last_hit.get(A)
+                hitter = lh[1] if lh and t - lh[0] <= 10.0 else None
+                ars = {c: BASE_AR.get(prof.get(c, 0), 99) for c in ranked}
+                soft = [c for c in ranked if ars[c] == min(ars.values())] \
+                    if ranked else []
+                row = dict(stamp=stamp, t=t, X=A, T=T,
+                           tclass=classify(T, me, party), rank=rank,
+                           n=len(ranked), dT=dT, d1=d1,
+                           hitter=hitter, hit_by_T=(hitter == T),
+                           softest=(T in soft), soft_nearest=(bool(soft) and soft[0] == T),
+                           soft_n=len(soft), T_prof=prof.get(T))
+                prev = last_start.get(A)
+                if prev is None or t - prev[0] > BOUT_GAP:
+                    opens.append(row)
+                elif prev[1] != T:
+                    row["prev"] = prev[1]
+                    switches.append(row)
+                last_start[A] = (t, T)
+    return opens, switches
+
+
 def pct(xs, p):
     if not xs:
         return None
@@ -259,7 +355,46 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--rows", action="store_true")
     ap.add_argument("--casts", action="store_true")
+    ap.add_argument("--hostile", action="store_true",
+                    help="SLICE-H3: how a hostile picks among the party")
     args = ap.parse_args(argv)
+    if args.hostile:
+        opens, switches = hostile_targets()
+        c = collections.Counter((r["tclass"], r["rank"], r["hit_by_T"])
+                                for r in opens)
+        print("HOSTILE OPENING STARTS -- T's class, T's rank by distance "
+              "among the live party (1 = nearest), T is the last party body "
+              "to hit X (10 s):")
+        for k in sorted(c, key=str):
+            print(f"  {k[0]:7s} rank={k[1]!s:5s} last-hitter={k[2]!s:5s} n={c[k]}")
+        near = [r for r in opens if r["rank"] == 1]
+        print(f"  nearest: {len(near)} of {len(opens)}; last-hitter: "
+              f"{sum(1 for r in opens if r['hit_by_T'])} of {len(opens)}; "
+              f"either: {sum(1 for r in opens if r['rank'] == 1 or r['hit_by_T'])}")
+        print(f"  ARMOUR: T in the lowest-base-armour set of the live party: "
+              f"{sum(1 for r in opens if r['softest'])} of {len(opens)}; T the "
+              f"NEAREST of that set: {sum(1 for r in opens if r['soft_nearest'])}; "
+              f"set size p50 {pct([r['soft_n'] for r in opens], .5)!r}")
+        cp = collections.Counter((r["T_prof"], r["softest"]) for r in opens)
+        print("  by T's profession byte:", dict(sorted(cp.items(), key=str)))
+        gaps = [r["dT"] - r["d1"] for r in opens if r["rank"] != 1]
+        print(f"  when NOT nearest, T was further than the nearest by "
+              f"p10/p50/p90 = {pct(gaps, .1)!r} {pct(gaps, .5)!r} "
+              f"{pct(gaps, .9)!r}")
+        c2 = collections.Counter((r["rank"] == 1, r["hit_by_T"]) for r in switches)
+        print(f"SWITCHES inside a bout: n={len(switches)}")
+        for k in sorted(c2, key=str):
+            print(f"  new T nearest={k[0]!s:5s} new T last-hitter={k[1]!s:5s} n={c2[k]}")
+        if args.rows:
+            for r in opens:
+                print(f"    open   {r['stamp']} t={r['t']:8.3f} X={r['X']:4d} "
+                      f"T={r['T']:4d} {r['tclass']:6s} rank={r['rank']}/{r['n']} "
+                      f"dT={r['dT']:.0f} d1={r['d1']:.0f} hitter={r['hitter']}")
+            for r in switches:
+                print(f"    switch {r['stamp']} t={r['t']:8.3f} X={r['X']:4d} "
+                      f"{r['prev']}->{r['T']} rank={r['rank']}/{r['n']} "
+                      f"dT={r['dT']:.0f} d1={r['d1']:.0f} hitter={r['hitter']}")
+        return 0
     out = scan()
     print("connections with a henchman body:")
     for stamp, gf, me, party in out["conns"]:

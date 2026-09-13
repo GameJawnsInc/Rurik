@@ -10317,6 +10317,20 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   (the client's no-body arm writes the summary record the roster reads), gated on
   `party_bodies_here` being False and placed AHEAD of the prop-36 level -- one source lock on the
   site and its order.
+  **SLICE-H3 (2026-09-13, floor 428 -> 442): hostiles fight the party.** A hostile at 200 u picks
+  the Monk body 500 u off over the Warrior player 200 u off (the softest class first, F29), the
+  Warrior body 50 u off over the Warrior player 200 u off (nearest within a class; a Monk 3200 u
+  off is past AGGRO_RANGE), moves an UNLOCKED pick to a softer body that walks into range (the
+  harness run's lesson), keeps a LOCKED one while it lives (the lock is the first start) and
+  re-picks at its death; the chase's
+  0x002A names the body at its position; the swing opens [4, hostile, body, 0] and lands
+  [16, body, hostile, fraction] with the body's health dropping; a killing swing puts it down with
+  NO kill reward and `revive_due` leaves it dead; the hero casts Resurrection Signet (2) at the
+  dead body ahead of Orison at a hurt player, the landing stands it up ([body, 0], full health),
+  with nobody dead the signet slot is held (round robin steps past it), and the dead PLAYER is
+  raised through `revive_player`. `--hostile-target-player` (the known-bad arm) opens the swing on
+  the player whatever the party looks like. The hostile fixture carries an EMPTY bar -- a ready
+  skill goes first and would cast at the body instead of swinging.
   `test_router.py`'s cast-abandon ordering lock was re-aimed from `if CAST_STOP and not
   is_attack:` (gone since SLICE-C2) to the bare `if CAST_STOP:`, and its recv-loop attach-point
   census from 2+1 to the three qualified sites (C5 gated one on the player being alive, C2's
