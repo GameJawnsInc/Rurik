@@ -10583,6 +10583,31 @@ NPC_FOLLOW = True   # False (--legacy-npc-chase): 0x0029 to the point, 150 u.
 # (CANCELWALK-R6). So the arrival is noted, and the 0x0028 goes out when the
 # follow's own half-second clock next fires; the swing opens on the tick after.
 HALT_ON_CLOCK = True   # False (--halt-on-arrival): the 0x0028 at the copy's arrival.
+# SLICE-F22 (2026-09-12) -- THE HALT OWES A SWING. The owner, after F21: "there's
+# a delay between when the chase ends, the enemy stops, and the attack begins
+# ... if I just keep moving the enemy never quite settles and starts an
+# attack." Harness 20260912T203323: 105 halts, 18 re-paths, 4 swings -- the
+# raider halts "arrived 0.20 s ago, 112 u from the player", re-follows a
+# 20-40 u leg, halts "95 u from the player", and never swings: the halt
+# waits for the clock (above, sec.40.9), the runner drifts 15-30 u past the
+# 92 u start reach meanwhile, and the swing tick re-tests the LIVE distance.
+# Retail does not re-test: the halt is the arrival, and the swing follows it
+# within 0.14-0.38 s (5 of 5 halted chases, sec.40.2) on a copy of the player
+# that lags its reports by up to 0.5 s (12-32 u fresh, 75-85 u at 0.5 s) --
+# and its hostiles do open swings on a running player (3 of 45 starts at the
+# observer had move reports 0.1-0.17 s before and 0.17-0.33 s after, 77-144 u
+# apart; every one landed, F21). So a halt whose ARRIVAL found the player in
+# reach owes one swing: enemy_attack_tick opens it on the tick after the halt
+# without re-testing the distance, for SWING_OWED_WINDOW after the halt (the
+# 0.38 s retail maximum, rounded up); the follow tick holds a new chase for
+# that window so the swing's tick is not spent on a 20 u leg; the landing is
+# F21's (it lands wherever the runner went). A halt whose arrival found the
+# player OUT of reach (the copy arriving at a stale point behind a straight
+# runner -- retail's mid-chase halt, sec.40.2, re-followed with no swing)
+# owes nothing. False = --no-owed-swing: the swing tick re-tests the live
+# distance, the pre-F22 arm.
+SWING_OWED_AT_HALT = True
+SWING_OWED_WINDOW = 0.5     # s after the halt; retail's halt->swing max 0.379
 
 # AND IT TURNS TO FACE YOU. GAME_SMSG_AGENT_UPDATE_ROTATION (0x002E) has been
 # defined and documented in this file for days and never once sent: an absolute
@@ -15992,8 +16017,19 @@ def enemy_attack_tick(send, state, conn_id):
         # ANIMREF-RE 40: and a hostile MID-FOLLOW does not swing -- retail opens
         # no attack_started between the follows of a chase (0 of 4 multi-follow
         # chases); the swing opens after the halt, on the tick the walk arrives.
-        if (math.hypot(ax - px, ay - py) > enemy_reach()
-                or (NPC_FOLLOW and agent.get("follow") is not None)):
+        # SLICE-F22: A HALT THAT FOUND THE PLAYER IN REACH OWES THIS SWING --
+        # opened without re-testing the live distance for SWING_OWED_WINDOW
+        # after the halt, as retail's swing follows its halt within 0.38 s on
+        # a copy that lags the runner (5 of 5; 3 of 45 starts on a runner).
+        # The debt is consumed at the START below, or expires.
+        _owed_at = agent.get("swing_owed_at")
+        _owed = (SWING_OWED_AT_HALT and _owed_at is not None
+                 and now - _owed_at <= SWING_OWED_WINDOW
+                 and agent.get("follow") is None)
+        if _owed_at is not None and not _owed:
+            agent["swing_owed_at"] = None            # expired, or re-following
+        if not _owed and (math.hypot(ax - px, ay - py) > enemy_reach()
+                          or (NPC_FOLLOW and agent.get("follow") is not None)):
             agent["swinging"] = False
             agent["swing_lands_at"] = None
             agent["cast_lands_at"] = None
@@ -16213,6 +16249,7 @@ def enemy_attack_tick(send, state, conn_id):
         # the agent. Gating it here is what makes that tracking cost one message
         # instead of one per swing.
         face_player(send, state, agent_id, agent, conn_id)
+        agent["swing_owed_at"] = None            # SLICE-F22: the debt is paid
         start_swing(send, agent_id, conn_id)
         # `interval` is this agent's own declared attack base -- the same number it
         # was told to the client in 0x0035. The windup is a fraction OF THAT, not a
@@ -17546,6 +17583,12 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
         _npc_model_emit(agent, op, vals, now)
 
     def _halt(why):
+        # SLICE-F22: a halt whose arrival found the player in reach owes the
+        # swing enemy_attack_tick opens next tick without re-testing the
+        # distance (SWING_OWED_AT_HALT); the leash/death halts owe nothing.
+        _f = agent.get("follow") or {}
+        if SWING_OWED_AT_HALT and _f.get("in_reach_at_arrival"):
+            agent["swing_owed_at"] = now
         agent["follow"] = None
         agent["moving"] = False
         agent.pop("froute", None)       # 1z-by: a new follow re-solves
@@ -17663,6 +17706,14 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
     stop = follow_stop_radius(agent) if stop_at is None else stop_at
     _reach = enemy_reach() if stop_at is None else stop_at
     if fol is None:
+        _owed = agent.get("swing_owed_at")
+        if (_owed is not None and SWING_OWED_AT_HALT
+                and now - _owed <= SWING_OWED_WINDOW and stop_at is None):
+            # SLICE-F22: the halt owes a swing -- the attack tick opens it
+            # this tick or the next; a fresh follow here would block it
+            # (the mid-follow rule) and spend the catch on a 20 u leg.
+            agent["moved_at"] = now
+            return
         if dist <= _reach:
             # In reach and standing: the attack tick's business, not a walk --
             # but GROUNDZ-Q5's correction still goes out, because THIS is the
@@ -17784,6 +17835,7 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
                 return
             if fol.get("arrived_at") is None:
                 fol["arrived_at"] = now
+                fol["in_reach_at_arrival"] = dist <= _reach   # SLICE-F22
             if now - fol["sent_at"] >= FOLLOW_REPATH_INTERVAL:
                 _halt(f"parked, {dist:.0f} u from the player; the "
                       "half-second clock had already fired")
@@ -17825,6 +17877,7 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
             _halt(f"arrived, {dist:.0f} u from the player")
             return
         fol["arrived_at"] = now
+        fol["in_reach_at_arrival"] = dist <= _reach           # SLICE-F22
         if now - fol["sent_at"] >= FOLLOW_REPATH_INTERVAL:
             _halt(f"arrived, {dist:.0f} u from the player; the half-second "
                   "clock had already fired")
@@ -25482,6 +25535,14 @@ def main():
     if a.attack_approach:
         print("[map] --attack-approach: no-op, the approach is the default "
               "since ANIMREF-RE 39 (--no-attack-approach reverts it).",
+              flush=True)
+    if a.no_owed_swing:
+        global SWING_OWED_AT_HALT
+        SWING_OWED_AT_HALT = False
+        print("[map] --no-owed-swing: the swing tick after a halt re-tests the "
+              "live distance, so a runner who drifted past the start reach "
+              "during the halt clock is re-followed instead of swung at -- "
+              "the pre-F22 arm (105 halts, 4 swings on the owner's run).",
               flush=True)
     if a.no_late_hit:
         global LATE_HIT

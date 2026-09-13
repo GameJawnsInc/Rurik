@@ -1137,6 +1137,50 @@ target that plainly stepped out does damage on retail's client but not here in t
 shape — either would mean the landing has a term the seven swings did not exercise (e.g. a
 plane change, or a distance past ~400 u).
 
+## SLICE-F22 — **the halt owes a swing: why kiting stayed free after F21, and retail's halt-then-swing on a runner**
+
+**The owner, after F21** (harness `20260912T203323`): *"kiting still too effective. There's a
+delay between when the chase ends, the enemy stops, and the attack begins. I got attacked
+when I stood still, but if I just keep moving the enemy never quite settles and starts an
+attack."* The log agrees and names the shape: **105 halts, 18 re-paths, 4 swings**. The raider
+halts *"arrived 0.20 s ago, 112 u from the player"*, re-follows a 20–40 u leg, halts *"95 u
+from the player"*, re-follows, halts — and never swings. Two of our own rules compose into
+that: the halt waits for the follow's half-second clock (ANIMREF-RE 40.9, the fix for a
+rendered body trailing its copy), and the swing tick that follows the halt **re-tests the
+live distance** against the 92 u start reach. A runner drifts 15–30 u in the clock wait,
+lands at 95–112 u, and the catch is spent on another 20 u leg.
+
+**Retail, from the same corpus.** The halt IS the arrival and the swing follows it: 0.159 /
+0.242 / 0.139 / 0.379 / 0.153 s after the halt, 5 of 5 halted chases (§40.2) — on a server
+copy of the player that lags its reports (12–32 u when a report is fresh, 75–85 u at 0.5 s),
+so the geometry the swing opens on is the halt's, not the live body's. And retail's hostiles
+do open swings on a running player: **3 of the 45 hostile starts at the observer have a move
+report 0.10–0.17 s before and 0.17–0.33 s after the start, 77–144 u apart** (337.071 with the
+follow point 77 u from the player's report; 193.935; 204.855 — `c4_start` scan, this
+session), and every one of them landed (F21). The one halt retail did NOT swing after is
+§40.2's mid-chase halt: the copy arriving at a stale point behind a straight runner, re-
+followed 0.23 s later — the arrival found nobody in reach.
+
+**Shipped** (`SWING_OWED_AT_HALT`, `SWING_OWED_WINDOW = 0.5` s, `--no-owed-swing` reverts): the
+arrival records whether the player's frame was inside `enemy_reach()` at that instant (both
+arrival sites, `in_reach_at_arrival`); a halt with that flag stamps `swing_owed_at`; the
+enemy loop opens the swing on the tick after the halt **without re-testing the live
+distance** for the window (retail's halt→swing maximum 0.379 s, rounded up), consumes the
+debt at the START, and lets it expire otherwise; the follow tick starts no new chase while
+a swing is owed, so the catch is not spent on a 20 u leg that would block it under the
+mid-follow rule. A halt whose arrival found the player out of reach owes nothing and
+re-follows as before. The landing is F21's: it lands wherever the runner went.
+`test_agentlife` §11b (floor 398 → 406): the stamp, the swing on a runner 330 u away with
+no re-test, the follow hold and its expiry, the expired debt, the out-of-reach halt owing
+nothing, and the revert arm.
+
+**What this leaves.** The halt clock itself (0–0.5 s) still stands between the catch and the
+swing, as it does on retail; a runner who keeps a straight line at equal speed is never
+caught on either server (§40.2's mid-chase halt). What changes is the turn, the stop and the
+pass-by: every catch now costs one swing that lands. **Unobserved on a client.** Refuted if
+the owner's kiter is still never swung at after a catch, or if a swing opens on a body that
+was never in reach (the debt stamped on a stale-point halt).
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:

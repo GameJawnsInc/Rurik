@@ -645,6 +645,16 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                     help="No-op since ANIMREF-RE 39: the approach is the "
                          "default. Kept so the CASE 7 command line still "
                          "parses.")
+    ap.add_argument("--no-owed-swing", action="store_true",
+                    help="THE REVERT ARM for SLICE-F22: after a hostile's halt "
+                         "the swing tick re-tests the live distance, so a "
+                         "runner who drifted past the 92 u start reach during "
+                         "the halt clock is re-followed instead of swung at "
+                         "(the owner's 105-halt, 4-swing run). The default "
+                         "lets a halt whose arrival found the player in reach "
+                         "owe one swing, opened within 0.5 s without the "
+                         "re-test -- retail's halt-then-swing (5 of 5) on a "
+                         "copy that lags the runner.")
     ap.add_argument("--no-late-hit", action="store_true",
                     help="THE REVERT ARM for SLICE-F21: drop an armed swing "
                          "when its target leaves reach (both the enemy loop "

@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=398)   # SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=406)   # SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
 def section_weapon_damage():
@@ -536,6 +536,7 @@ def main():
     section_disc_clip()
     section_enemy_count()
     section_hold_plane()
+    section_owed_swing()
     section_facing()
     section_enemy_skill()
     section_constants()
@@ -2179,6 +2180,136 @@ def section_chase():
                   "rendered body short")
     finally:
         authsrv.HALT_ON_CLOCK = True
+
+
+def section_owed_swing():
+    """SLICE-F22: a halt whose arrival found the player in reach OWES a swing.
+
+    The owner's run 20260912T203323: 105 halts, 4 swings -- the raider halted
+    "112 u from the player", re-followed 20-40 u, halted "95 u", and never
+    swung, because the swing tick re-tested the live distance after the halt
+    clock and the runner had drifted past 92 u. Retail's swing follows its
+    halt within 0.38 s (5 of 5) on a copy that lags the runner, and its
+    hostiles open swings on a running player (3 of 45 starts; all land).
+    """
+    import authsrv
+    import time as _t
+    print("\n11b. SLICE-F22: the halt owes a swing")
+    START = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+    FOLLOW = authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION
+    HALT = authsrv.GAME_SMSG_AGENT_STOP_MOVING
+    pm = _Flat()
+    stop = authsrv.follow_stop_radius()
+    _FIGHTER = {"died_at": 0.0, "health": 100.0, "max_health": 100.0,
+                "last_hit": 0.0, "attack_speed": authsrv.ENEMY_ATTACK_SPEED,
+                "effects": 0, "attacks_back": True, "skills": (),
+                "skill_ready": [], "last_slot": -1}
+
+    def parked_then_halted():
+        """A follow from 900 u parks at the disc (80 u, in reach) and the
+        halt fires on the clock; the player then RUNS 330 u away."""
+        st = _fresh_follow((900.0, 0.0), (0.0, 0.0), player_plane=0)
+        st["player_health"] = 100.0
+        # the keys the ATTACK tick reads (the follow fixture carries only
+        # the chase's): a hostile that attacks back, an empty bar
+        st["agents"][10].update(_FIGHTER)
+        _tick_parked(st, pm, now=0.0)
+        st["agents"][10]["follow"]["sent_at"] = 29.9
+        _tick_parked(st, pm, now=30.0)                   # parks at the disc
+        fol = st["agents"][10]["follow"]
+        assert fol is not None and fol.get("arrived_at") is not None
+        fol["sent_at"] -= 0.6
+        halted = _tick_parked(st, pm, now=30.05)         # the clock fires
+        assert [op for op, _v, _l in halted] == [HALT]
+        st["pos"] = (-250.0, 0.0)                        # 330 u from (80, 0)
+        return st
+
+    def swing_tick(st):
+        sent = []
+        authsrv.enemy_attack_tick(
+            lambda op, vals, label="", quiet=False: sent.append((op, vals, label)),
+            st, 1)
+        return sent
+
+    def starts(sent):
+        return [v for op, v, _l in sent if op == START and v[0] == 4]
+
+    st = parked_then_halted()
+    ag = st["agents"][10]
+    LEDGER.ok(ag.get("follow") is None and ag.get("swing_owed_at") == 30.05
+              and abs(math.hypot(*ag["pos"]) - stop) < 0.5,
+              "the halt STAMPS the debt with its own instant, because the "
+              "arrival found the player inside enemy_reach() (the disc park, "
+              "80 u); the follow is over",
+              f"owed_at {ag.get('swing_owed_at')}, follow {ag.get('follow')}, "
+              f"at {math.hypot(*ag['pos']):.1f} u")
+    ag["swing_owed_at"] = _t.time()          # the tick clocks are real time
+    sent = swing_tick(st)
+    d = math.hypot(st["pos"][0] - ag["pos"][0], st["pos"][1] - ag["pos"][1])
+    LEDGER.ok(starts(sent) == [[4, 10, 1, 0]] and ag.get("swing_owed_at") is None
+              and ag.get("swing_lands_at") is not None,
+              f"the swing OPENS on the next tick with the runner {d:.0f} u away "
+              f"-- no re-test of the live distance -- and the debt is consumed "
+              f"at the START; the landing is F21's (it lands wherever the "
+              f"runner went)",
+              f"starts {starts(sent)}, owed {ag.get('swing_owed_at')}")
+    # the follow tick HOLDS while the debt stands, so the catch is not spent
+    # on a 20 u leg that would block the swing (the mid-follow rule)
+    st = parked_then_halted()
+    ag = st["agents"][10]
+    held = _tick_parked(st, pm, now=30.10)
+    LEDGER.ok(held == [] and ag.get("follow") is None,
+              "with a swing owed, the follow tick starts NO new chase at the "
+              "runner 330 u out (a fresh follow would block the swing)",
+              f"{[hex(op) for op, _v, _l in held]}, follow {ag.get('follow')}")
+    followed = _tick_parked(st, pm, now=30.05 + authsrv.SWING_OWED_WINDOW + 0.05)
+    LEDGER.ok([op for op, _v, _l in followed if op == FOLLOW] and
+              ag.get("follow") is not None,
+              "and once the window has passed unpaid, the chase resumes",
+              f"{[hex(op) for op, _v, _l in followed]}")
+    # CONTROLS: an expired debt does not swing; a halt whose arrival found the
+    # player OUT of reach owes nothing (the stale-point halt behind a straight
+    # runner -- retail's mid-chase halt re-followed with no swing)
+    st = parked_then_halted()
+    ag = st["agents"][10]
+    ag["swing_owed_at"] = _t.time() - authsrv.SWING_OWED_WINDOW - 0.1
+    sent = swing_tick(st)
+    LEDGER.ok(starts(sent) == [] and ag.get("swing_owed_at") is None
+              and ag.get("swing_lands_at") is None,
+              "an EXPIRED debt (older than the window) opens nothing and is "
+              "cleared -- the live distance rules again",
+              f"starts {starts(sent)}, owed {ag.get('swing_owed_at')}")
+    st = _fresh_follow((900.0, 0.0), (0.0, 0.0), player_plane=0)
+    st["player_health"] = 100.0
+    _tick_parked(st, pm, now=0.0)
+    st["agents"][10]["follow"]["sent_at"] = 29.9
+    _tick_parked(st, pm, now=30.0)
+    fol = st["agents"][10]["follow"]
+    fol["in_reach_at_arrival"] = False            # the arrival found nobody
+    fol["sent_at"] -= 0.6
+    _tick_parked(st, pm, now=30.05)
+    LEDGER.ok(st["agents"][10].get("follow") is None
+              and st["agents"][10].get("swing_owed_at") is None,
+              "a halt whose arrival found the player OUT of reach owes "
+              "nothing -- the copy arriving at a stale point behind a straight "
+              "runner is re-followed, not swung at (sec.40.2's mid-chase halt)",
+              f"owed {st['agents'][10].get('swing_owed_at')}")
+    # THE REVERT ARM
+    saved = authsrv.SWING_OWED_AT_HALT
+    authsrv.SWING_OWED_AT_HALT = False
+    try:
+        st = parked_then_halted()
+        ag = st["agents"][10]
+        LEDGER.ok(ag.get("swing_owed_at") is None,
+                  "--no-owed-swing: the halt stamps no debt")
+        ag["swing_owed_at"] = _t.time()
+        sent = swing_tick(st)
+        LEDGER.ok(starts(sent) == [] and ag.get("swing_lands_at") is None,
+                  "and the swing tick re-tests the live distance: the runner "
+                  "330 u out is not swung at -- the pre-F22 arm (105 halts, "
+                  "4 swings)", f"starts {starts(sent)}")
+    finally:
+        authsrv.SWING_OWED_AT_HALT = saved
 
 
 def section_facing():

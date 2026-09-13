@@ -10246,6 +10246,16 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   `test_guards.py` §9's hit_enemy caller census walks one level up through
   `_land_player_swing` (attack_tick's helper) so the world-tick-only guarantee is still the
   thing checked.
+  **SLICE-F22 / C4 (2026-09-12): the halt owes a swing.** `test_agentlife.py` §11b (floor 398
+  -> 406): a follow that parks at the disc (in reach) and halts on the clock stamps
+  `swing_owed_at` with the halt's instant; the attack tick then opens the swing on a runner
+  330 u away with no re-test of the live distance and consumes the debt at the START; the
+  follow tick starts no new chase while the debt stands and resumes once the window passes
+  unpaid; an expired debt opens nothing and is cleared; a halt whose arrival found the player
+  OUT of reach owes nothing; `--no-owed-swing` stamps nothing and re-tests the distance (the
+  owner's 105-halt, 4-swing run). The fixture is the chase section's follow world plus the
+  keys the attack tick reads (`attacks_back`, an empty bar) -- without them the loop's
+  passive-body drop swallowed the swing and the first cut of the section measured nothing.
   `toolkit/authsrv/test_castcycle.py` (the four-opcode cast cycle against
   ArenaNet's own template — six complete cycles, two live captures, same order
   every time: E4 at the press, E5 at cast end carrying the recharge in whole
