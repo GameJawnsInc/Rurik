@@ -70,6 +70,16 @@ EXPECT_PATHS = {
     # which is the census holding rather than the check going quiet -- every
     # one of those five figures is re-derived per build.
     "2026-08-20_21511009c460": 937,
+    # 38888, MEASURED 2026-09-13 by running `st.source_paths` over the pristine
+    # image: 938 -- the census MOVED for the first time since 38519 -> 38797.
+    # The one new path is `Gw\Ui\Char\UiChStoreBtn.cpp` (a set-difference
+    # against 38849's paths, nothing removed), a client-side UI unit; zero
+    # server-side translation units, the same two `Srv`-named client files,
+    # the same twelve Cli-split subsystems, one PDB naming target `Gw`, and the
+    # four shared trees at 79/297/18/37 files with nothing under Cli -- so the
+    # five census figures held while the count did not. `asserts.py` on the
+    # SAME image names 866 files (up from 865), all contained, remainder 72.
+    "2026-09-01_44fbd68767a8": 938,
 }
 BUILDS = [(b.stamp, EXPECT_PATHS.get(b.stamp)) for b in pinned.BUILDS]
 
@@ -103,8 +113,10 @@ MOCK_STRINGS = {("ascii", "mockDevice"), ("utf16", "mock"), ("utf16", "MockDevic
 #
 # It was 30 over two builds until 2026-08-14, when 38833 was registered; the
 # per-build term is why registering a build moves this number by 9 rather than
-# by 1, and re-deriving it here beats bumping the constant.
-LEDGER = checks.Ledger("srctree", floor=48)
+# by 1, and re-deriving it here beats bumping the constant. 39 -> 48 when
+# 38849 registered (2026-08-29), 48 -> 57 when 38888 did (2026-09-13): five
+# builds, each floor read off its own green run.
+LEDGER = checks.Ledger("srctree", floor=57)
 check = checks.adopt(LEDGER)
 
 
@@ -205,7 +217,15 @@ sys.path.insert(0, HERE)
 from asserts import Asserts                                  # noqa: E402
 import pinned as _P                                          # noqa: E402
 
-_st = set(st.source_paths(load(BUILDS[-1][0])))
+# BOTH SCANS READ THE PIN. Until 2026-09-13 this line loaded `BUILDS[-1]` --
+# the NEWEST registered build -- while the line below it asked `asserts.py` for
+# the pin, and the three literals under them were measured on the pin. That is a
+# cross-build comparison, and it passed for two registrations (38833, 38849)
+# only because every build then in the vault happened to count 937; 38888
+# counts 938 and turned it red for a reason that was not the census. The same
+# defect class as `sorted(exes)[-1]` picking the wrong client: "last one" is
+# not "the one these numbers were measured on". Name the build instead.
+_st = set(st.source_paths(load(_P.PINNED.stamp)))
 _az = {a.file for a in Asserts(_P.find()[0]).items}
 check(len(_st) == 937, "srctree finds 937 paths", "%d" % len(_st))
 check(len(_az) == 865, "asserts names 865 of them", "%d" % len(_az))
@@ -253,7 +273,8 @@ check(not _azo.grep("AGENT_MIN_MOVE_SPEED"),
 # --- 4. -mock is a graphics device, not a mock server ------------------------
 print()
 print("4. -mock closeout, on the pinned build")
-blob = load(BUILDS[-1][0])
+# The banner said "pinned" and the load said "newest" -- same fix as 3b.
+blob = load(_P.PINNED.stamp)
 found = set()
 for m in re.finditer(rb"[\x20-\x7e]{3,80}", blob):
     s = m.group().decode()

@@ -7556,7 +7556,23 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   two client-side `Srv`-named files, the same twelve Cli-split subsystems and one
   PDB path naming target `Gw`. Three consecutive builds now agree, which is the
   census HOLDING rather than the check going quiet — every one of those five
-  figures is re-derived per build. Floor 48 (39 + 9 for the third build)),
+  figures is re-derived per build. **2026-09-13, 38888: the census MOVED for
+  the first time since 38519 → 38797.** `source_paths` over the pristine image
+  counts **938**; the set-difference against 38849 is exactly one new path,
+  `Gw\Ui\Char\UiChStoreBtn.cpp`, a client-side UI unit, and nothing removed. The
+  five figures held (0 / 2 / 12 / 1, and the four shared trees at 79/297/18/37
+  files with nothing under Cli), and `asserts.py` on the SAME image names 866
+  files (up from 865), all contained, remainder still 72. **The registration
+  also caught a cross-build mix this file had carried since 38833:** §3b loaded
+  `BUILDS[-1]` — the NEWEST registered build — for the srctree half while
+  asking `asserts.py` for the PIN, and its three literals (937 / 865 / 72) were
+  measured on the pin. It passed two registrations only because every build
+  then in the vault counted 937; 38888's 938 turned it red for a reason that
+  was not the census. §4's `-mock` closeout said "pinned" in its banner and
+  loaded the newest in its code, same defect. Both now load `PINNED.stamp` by
+  name — "last one" is not "the one these numbers were measured on", the same
+  class as `sorted(exes)[-1]` picking the wrong client. Floor **57** (48 + 9
+  for the fifth build, read off the green run)),
   `toolkit/clientscan/test_sigcorpus.py` (every byte-shape anchor in the repo,
   counted on both vaulted builds — `studies/crossbuild/PLAN.md` §7.2. It is where
   that plan's two derived-but-never-landed signatures live: `WORKAROUNDS.md` §3.5
@@ -7678,7 +7694,14 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   answer on two builds has degenerated into a lookup, which does not follow. Now
   pairwise: at least ONE pair must be disjoint — a lookup could not manage that —
   and agreeing pairs are printed as the measurement they are.
-  Needs the vault. Floor 26 (was 19; 38833 adds 7), ~50 s),
+  **2026-09-13, 38888: both allocators MOVED**, the first movement since
+  38519 → 38797 — action **0x007F32F0** (+0x460) and effect **0x007F57B0**
+  (+0x470), derived by `Image.allocators` over the pristine image, two distinct
+  addresses, 23 call sites and 22 kinds still reproducing. This is the build
+  whose image grew by 9,216 B, and the region shifted with it; the row refused
+  by name (the 2026-08-29 shape) before it was measured, which is the class-(c)
+  expectation doing its job. Needs the vault. Floor **40** (26 → 33 for 38849,
+  33 → 40 for 38888, 7 per build, each from a real green run), ~60 s),
   `toolkit/clientscan/test_codedstr.py` (the coded string — markers, and
   `0x100`-biased base-`0x7F00` varints — and `studies/quests/FINDINGS.md` §3.2's **66 of
   66** turned from a paragraph into a check, which §7.9 asked for by name. The rule was
@@ -8758,7 +8781,16 @@ the same-tick ALIAS**: the
   reading — the wire total being the half a wrong capacity cannot fake. Its
   negative control builds a `Field` the old way and asserts it STILL prints
   `string16(0)`, so dropping `cap=` again reddens 14 checks; verified by doing
-  exactly that. Needs the vault throughout. Floor 73, ~75 s),
+  exactly that. **2026-09-13, 38888: `RegisterMsgs` MOVED to 0x007DE470**
+  (+0x460 from the three builds before it), measured by `find_register_msgs`
+  over the pristine image with the anchor still unique in `.text` (1 hit) and
+  the −0x22 delta still landing on an int3 boundary. It is the first build since
+  38797 whose image grew, and the first whose row differs from the pin's — the
+  38833/38849 rows were re-derivations that happened to agree, and this one is
+  the re-derivation that did not, refused by name until measured. Every §2/§4
+  count (25 tables, 751 entries, 141 wide strings, the capacity histogram)
+  reproduces on it. Needs the vault throughout. Floor **105** (73 → 89 for
+  38849, 89 → 105 for 38888, 16 per build, each from a real green run), ~90 s),
   `toolkit/clientscan/test_pinned.py` (which `Gw.exe` a tool actually reads, and
   the guard on it going red — `studies/crossbuild/PLAN.md` §5. `pinned.find()`
   used to answer with `os.path.isfile` and return, so `identify()`, the only
@@ -9148,7 +9180,9 @@ the same-tick ALIAS**: the
   instrument excludes itself and says so. `--diff` exits **1 for a changed
   census, which is a result**, 0 for unchanged, the same contract `datcheck.py`
   draws. **68/7 is the founding measurement and not today's**: the census pin is
-  a literal in the test and it is **235 across 22 files** as of 2026-09-08, with
+  a literal in the test and it is **236 across 22 files** as of 2026-09-13 (the
+  +1 is build 38888's number in `pinned.BUILDS`, measured as the one arrived row
+  between two vault baselines with nothing gone; 235 across 22 as of 2026-09-08), with
   2,044 prose citations and 447 test expectations — the +2 being `groundz.py`,
   the GROUNDZ AgentView height reader, whose two array VAs are a second hand-copy
   of `agentprobe.py`'s and whose only desk check compares one of them against a

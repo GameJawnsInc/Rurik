@@ -55,8 +55,9 @@ import vaultpath                                             # noqa: E402
 # floor re-measured 2026-08-14 from a real green run: 19 -> 26, the third
 # vaulted build (38833) adding 7. Per-build sections mean the floor tracks how
 # many builds the vault holds, which is the intent -- a run that silently saw
-# fewer builds measured less than a healthy one.
-LEDGER = checks.Ledger("AgentView event allocators", floor=33)
+# fewer builds measured less than a healthy one. 26 -> 33 for 38849 on
+# 2026-08-29, 33 -> 40 for 38888 on 2026-09-13, both from real green runs.
+LEDGER = checks.Ledger("AgentView event allocators", floor=40)
 check = checks.adopt(LEDGER)
 
 # MEASURED 2026-08-12. Class-(c) expectations: a new build SHOULD move these,
@@ -72,6 +73,13 @@ EXPECT = {
     # rather than a copy: `Image.allocators` finds these by shape and this run
     # still returns exactly two distinct addresses for the build.
     "2026-08-20_21511009c460": {0x007F2E90: "action", 0x007F5340: "effect"},
+    # 38888, MEASURED 2026-09-13 by `Image.allocators` over the pristine image:
+    # BOTH MOVED, action by +0x460 and effect by +0x470, the first movement
+    # since 38519 -> 38797. The image grew by 9,216 B with this build and this
+    # region shifted with it. Two distinct addresses, 23 call sites and 22
+    # kinds still derive on it, so the census held while the addresses did not
+    # -- exactly the shape a class-(c) row is expected to go red in.
+    "2026-09-01_44fbd68767a8": {0x007F32F0: "action", 0x007F57B0: "effect"},
 }
 EXPECT_ACTION_SITES = 23
 EXPECT_ACTION_KINDS = 22
