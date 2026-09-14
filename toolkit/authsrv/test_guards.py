@@ -436,8 +436,10 @@ def section_player_revive_due():
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
         authsrv.player_revive_due(send, state, 0)
-    check(state["player_dead"] is False and len(sent) in (1, 3),
-          "control: the in-range revive stands the player up",
+    check(state["player_dead"] is False and len(sent) in (2, 4),
+          "control: the in-range revive stands the player up (the status and "
+          "the flags byte 0x0026 [me, 5] -- JARIN -- with the two refills when "
+          "not deferred)",
           f"player_dead={state['player_dead']}, "
           f"ops={[op for op, _, _ in sent]}")
 

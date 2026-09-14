@@ -82,7 +82,14 @@ def whose_agent(merged):
     seen = {int(v[2]) for _t, d, op, v in merged
             if d == "s2c" and op == PINT and len(v) > 2
             and int(v[1]) == PROP_MAX_ENERGY}
-    return seen.pop() if len(seen) == 1 else None
+    if len(seen) == 1:
+        return seen.pop()
+    # JARIN: a hero carries property 41 too; the kind-5 create (fourth word
+    # 5 on the observer, 9 on a party body) breaks the tie -- adrenjoin's rule.
+    fives = {int(v[1]) for _t, d, op, v in merged
+             if d == "s2c" and op == CREATE and len(v) > 4 and int(v[4]) == 5}
+    both = seen & fives
+    return both.pop() if len(both) == 1 else None
 
 
 def party_of(merged):

@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=502)   # SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=522)   # JARIN-S +20 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
 def section_weapon_damage():
@@ -5106,7 +5106,7 @@ def section_hold_plane():
                   "revert arm")
     finally:
         authsrv.PARTY_BODY_IN_OUTPOST = _saved_bio
-    LEDGER.ok(_src.count("party_bodies_here(state)") == 5     # the def + 4 sites
+    LEDGER.ok(_src.count("party_bodies_here(state)") == 6     # the def + 4 sites + zone_carry_apply (JARIN)
               and _src.count("if HERO_BODY and party_bodies_here(state) else ()") == 1
               and "HENCHMAN_BODY and party_bodies_here(state)" in _src,
               "both party body sites in the load path -- the hero loop and the "
@@ -6386,6 +6386,260 @@ def section_hold_plane():
                   f"plain {plain:.1f}, weakened {weak:.1f}")
     finally:
         authsrv.skill_cost, authsrv.random.random, agents.PLAYER_OFFHAND = _saved_kd
+
+    # ---- JARIN-S: the first retail hero's corrections (studies/slice F39) ------
+    print("\nJARIN-S: the hero is a second player on the wire (its pools and its "
+          "skill family), its lock is cleared at the kill, a lone hero walks to "
+          "the party flag itself, a hero's death is the player's tick, a wipe "
+          "stands the party up at the shrine, a zone carries the stance and "
+          "clears the penalty in a town, and the rig is retail's block")
+    _sv = (authsrv.HERO_IDS, authsrv.PARTY_COMMANDS, authsrv.HERO_WIRE_POOLS,
+           authsrv.WIPE_SHRINE, authsrv.ZONE_CARRY_ON, authsrv.DEATH_PENALTY_FORCED,
+           authsrv.HERO_LEVEL, authsrv.HERO_SKILLS, authsrv.HERO_VITALS,
+           dict(authsrv.ZONE_CARRY))
+    try:
+        authsrv.HERO_IDS = [6]
+        authsrv.PARTY_COMMANDS = True
+        authsrv.HERO_WIRE_POOLS = True
+        authsrv.WIPE_SHRINE = True
+        authsrv.ZONE_CARRY_ON = True
+        authsrv.DEATH_PENALTY_FORCED = True
+        authsrv.ZONE_CARRY.clear()
+        HERO = authsrv.HERO_AGENT_ID
+        FLAGS, STATUS = authsrv.GAME_SMSG_AGENT_UPDATE_FLAGS, authsrv.GAME_SMSG_AGENT_UPDATE_STATUS
+        PINT = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+
+        def _koss(**over):
+            row = {"name": "koss", "dead": False, "died_at": 0.0, "health": 100.0,
+                   "max_health": 100.0, "base_max_health": 100.0, "base_max_energy": 20.0,
+                   "last_hit": 0.0, "pos": (100.0, 0.0), "plane": 0,
+                   "allegiance": agents.ALLEGIANCE_PLAYER, "effects": 0,
+                   "attack_speed": 1.33, "attacks_back": False,
+                   "skills": ((322, 0.0, 3.0), (385, 0.0, 0.0)), "skill_ready": [0.0, 0.0],
+                   "npc": dict(agents.npc_template(authsrv.HERO_BODY_NPC),
+                               profession=1, level=3),
+                   "definition": authsrv.HERO_DEFINITION, "party_slot": 0,
+                   "hero": 6, "weapon_item_id": 210}
+            row.update(over)
+            return row
+
+        def _jw(**over):
+            st = {"agents": {}, "pos": (0.0, 0.0), "plane": 0, "map_id": 168,
+                  "level": 3, "spawn_point": (500.0, 500.0, 0), "player_dead": False,
+                  "player_died_at": 0.0, "player_health": 100.0}
+            st.update(over)
+            return st
+
+        def _sends():
+            out = []
+            return out, (lambda op, vals, label="", quiet=False: out.append((op, vals)))
+
+        # 1. the pools: 0x00CF / 0x00D0 for a HERO row, nothing for a henchman
+        st = _jw(); st["agents"][HERO] = _koss(); st["agents"][201] = _koss(hero=None)
+        sent, send = _sends()
+        authsrv.hero_pool_gain(send, st, HERO, st["agents"][HERO], 25, "t")
+        authsrv.hero_pool_gain(send, st, 201, st["agents"][201], 25, "t")
+        authsrv.hero_pool_gain(send, st, HERO, st["agents"][HERO], 0, "t")
+        LEDGER.ok(sent == [(authsrv.AGENT_ADRENALINE_GAIN, [HERO, 25])],
+                  "a hero's adrenaline gain is on the wire -- 0x00CF [hero, 25] -- a "
+                  "henchman's is not, and a zero-unit gain sends nothing (retail: 107 "
+                  "rows on the hero, 0 on eleven henchman bodies)", f"{sent}")
+        sent.clear()
+        authsrv.hero_pool_clear(send, st, HERO, st["agents"][HERO], "t")
+        authsrv.hero_pool_clear(send, st, 201, st["agents"][201], "t")
+        LEDGER.ok(sent == [(authsrv.AGENT_ADRENALINE_CLEAR, [HERO])],
+                  "and its clear: 0x00D0 [hero], the henchman's never", f"{sent}")
+        sent.clear()
+        authsrv.HERO_WIRE_POOLS = False
+        authsrv.hero_pool_gain(send, st, HERO, st["agents"][HERO], 25, "t")
+        authsrv.hero_pool_clear(send, st, HERO, st["agents"][HERO], "t")
+        authsrv.hero_skill_messages(send, st, HERO, st["agents"][HERO], 322, 3.0, time.time())
+        LEDGER.ok(sent == [], "--hero-silent-pools: nothing of the family goes out "
+                  "(the pre-JARIN arm)", f"{sent}")
+        authsrv.HERO_WIRE_POOLS = True
+        # 2. the skill family at a hero cast's completion, and its recharge
+        sent.clear(); _now = time.time()
+        authsrv.hero_skill_messages(send, st, HERO, st["agents"][HERO], 322, 3.0, _now)
+        LEDGER.ok(sent == [(authsrv.GAME_SMSG_SKILL_RECHARGE, [HERO, 322, 0, 3]),
+                           (authsrv.GAME_SMSG_SKILL_ACTIVATED, [HERO, 322, 0])],
+                  "a hero's cast completes as 0x00E5 [hero, skill, 0, recharge] then "
+                  "0x00E3 [hero, skill, 0] (the tape's +0.56 s pair, 35 / 48)", f"{sent}")
+        sent.clear()
+        authsrv.hero_recharged_tick(send, st, 0)
+        _early = list(sent)
+        st["agents"][HERO]["hero_recharged_due"][322] = _now - 1.0
+        authsrv.hero_recharged_tick(send, st, 0)
+        _due = list(sent)
+        authsrv.hero_recharged_tick(send, st, 0)
+        LEDGER.ok(_early == [] and _due == [(authsrv.GAME_SMSG_SKILL_RECHARGED, [HERO, 322, 0])]
+                  and sent == _due,
+                  "0x00E6 [hero, skill, 0] once, when the recharge runs out -- not "
+                  "before, not twice", f"early {_early}, due {_due}, after {sent}")
+        sent.clear()
+        authsrv.hero_skill_messages(send, st, 201, st["agents"][201], 322, 3.0, _now)
+        LEDGER.ok(sent == [], "a henchman's cast sends none of the family", f"{sent}")
+        # 3. the lock is released on the wire at the kill (JARIN-Q5)
+        cmd = authsrv.hero_command(st, HERO); cmd["lock"] = 10
+        sent.clear()
+        authsrv.hero_locks_release(send, st, 11, 0)
+        _other = list(sent)
+        authsrv.hero_locks_release(send, st, 10, 0)
+        LEDGER.ok(_other == [] and cmd["lock"] is None
+                  and sent == [(authsrv.GAME_SMSG_HERO_LOCK_TARGET_SET, [HERO, 0])],
+                  "the locked target's death clears the lock on the wire, 0x0063 "
+                  "[hero, 0] (the tape's 0.57 s after the kill); another agent's "
+                  "death touches nothing", f"other {_other}, sent {sent}")
+        # 4. a lone hero walks to the party flag ITSELF
+        st2 = _jw(); st2["agents"][HERO] = _koss(); st2["party_flag"] = (500.0, 600.0, 0)
+        fp1 = authsrv.party_flag_point(st2, HERO, st2["agents"][HERO])
+        st2["agents"][201] = _koss(party_slot=1, hero=None)
+        fp2 = authsrv.party_flag_point(st2, HERO, st2["agents"][HERO])
+        LEDGER.ok(fp1 == (500.0, 600.0) and fp2 != (500.0, 600.0),
+                  "one party body: the party flag point IS the flag (the lead ended "
+                  "0.0 u off it, 463.51 s); two bodies: the slot offsets, as before",
+                  f"lone {fp1}, group {fp2}")
+        # 5. a hero's death is the player's tick, plus its clear and its closes
+        st3 = _jw(); st3["agents"][HERO] = _koss(); sent.clear()
+        authsrv.kill_agent(send, st3, HERO, st3["agents"][HERO], 0, time.time(), reward=False)
+        ops = [op for op, _v in sent]
+        LEDGER.ok(sent[0] == (STATUS, [HERO, agents.EFFECT_DEAD])
+                  and (authsrv.GAME_SMSG_AGENT_MORALE, [HERO, 85]) in sent
+                  and (authsrv.AGENT_ADRENALINE_CLEAR, [HERO]) in sent
+                  and (PINT, [agents.PROP_HEALTH_MAX, HERO, 85]) in sent
+                  and (PINT, [agents.PROP_ENERGY_MAX, HERO, 17]) in sent
+                  and sent[-1] == (FLAGS, [HERO, 8])
+                  and ops.index(authsrv.GAME_SMSG_AGENT_MORALE) < ops.index(authsrv.AGENT_ADRENALINE_CLEAR)
+                  and authsrv.hero_morale(st3, HERO) == 85
+                  and st3["agents"][HERO]["max_health"] == 85.0,
+                  "a hero's death: the status, 0x009C [hero, 85], 0x00D0 [hero], the "
+                  "maxima at 85 % (prop 41 = 17, prop 42 = 85) and the flags byte 8 "
+                  "LAST -- retail's 307.83 s tick; the row's maximum shrinks with it",
+                  f"{[(hex(op), v) for op, v in sent]}")
+        # 6. the rise: the flags byte 9 closes it and the grace window starts
+        sent.clear()
+        authsrv.revive_party_body(send, st3, HERO, st3["agents"][HERO], 0)
+        LEDGER.ok(sent[0] == (STATUS, [HERO, 0]) and sent[-1] == (FLAGS, [HERO, 9])
+                  and (PINT, [agents.PROP_HEALTH_MAX, HERO, 85]) in sent
+                  and st3["agents"][HERO]["revived_at"] > 0
+                  and not st3["agents"][HERO]["dead"],
+                  "a party body's rise: status 0 first, the maximum KEPT at 85, "
+                  "0x0026 [body, 9] last (retail 250 / the hero's 340.21 s)",
+                  f"{[(hex(op), v) for op, v in sent]}")
+        # 7. the wipe -- and the signet that pre-empts it
+        st4 = _jw(player_dead=True, player_died_at=time.time() - 20.0)
+        st4["agents"][HERO] = _koss(skills=((2, 3.0, 0.0),), skill_ready=[0.0])
+        sent.clear()
+        authsrv.player_revive_due(send, st4, 0)
+        LEDGER.ok(sent == [] and st4["player_dead"],
+                  "a live party body holding a resurrection: NO timer -- the signet "
+                  "raises the player (F28 5 of 5; the hero's at 599.43 s)", f"{sent}")
+        st4["agents"][HERO]["skills"] = ((322, 0.0, 3.0),)
+        st4["agents"][HERO].update(dead=True, died_at=time.time() - 5.0)
+        authsrv.player_revive_due(send, st4, 0)
+        LEDGER.ok(sent == [] and st4["player_dead"],
+                  "everyone down 5 s ago: not yet -- the shrine comes "
+                  f"{authsrv.WIPE_RESURRECT_AFTER} s after the LAST death (the tape's "
+                  "10.0 / 12.2 / 12.8 / 10.6)", f"{sent}")
+        st4["agents"][HERO]["died_at"] = time.time() - 20.0
+        authsrv.player_revive_due(send, st4, 0)
+        ops = [op for op, _v in sent]
+        _pos = st4["agents"][HERO]["pos"]
+        LEDGER.ok((authsrv.GAME_SMSG_AGENT_MOVE_DIRECTION, [authsrv.PLAYER_AGENT_ID, (1.0, 0.0), 1]) in sent
+                  and (authsrv.GAME_SMSG_AGENT_UPDATE_POSITION, [authsrv.PLAYER_AGENT_ID, [500.0, 500.0], 0]) in sent
+                  and (authsrv.GAME_SMSG_WORLD_REMOVE_AGENT, [HERO]) in sent
+                  and authsrv.GAME_SMSG_WORLD_CREATE_AGENT in ops
+                  and (authsrv.GAME_SMSG_NPC_UPDATE_WEAPONS, [HERO, 210, 0]) in sent
+                  and (FLAGS, [HERO, 9]) in sent and (FLAGS, [authsrv.PLAYER_AGENT_ID, 5]) in sent
+                  and (STATUS, [authsrv.PLAYER_AGENT_ID, 0]) in sent
+                  and 0x01D8 not in ops
+                  and ops.index(authsrv.GAME_SMSG_WORLD_REMOVE_AGENT) < ops.index(authsrv.GAME_SMSG_WORLD_CREATE_AGENT) < ops.index(authsrv.GAME_SMSG_NPC_UPDATE_WEAPONS)
+                  and st4["pos"] == (500.0, 500.0) and not st4["player_dead"]
+                  and not st4["agents"][HERO]["dead"]
+                  and _pos == (500.0 + authsrv.HERO_BODY_OFFSET[0], 500.0),
+                  "THE WIPE (340.21 s): the player faces and is placed at the shrine "
+                  "(0x0025, 0x002C), the hero's body is DELETED and RE-CREATED there "
+                  "with its weapons re-declared (0x0021, 0x0020, 0x006D), both rise "
+                  "with the flags bytes 9 and 5, and no PARTY_DEFEATED",
+                  f"{[hex(o) for o in ops]}, pos {st4['pos']}, hero {_pos}")
+        authsrv.WIPE_SHRINE = False
+        st5 = _jw(player_dead=True, player_died_at=time.time() - 20.0)
+        st5["agents"][HERO] = _koss(dead=True, died_at=time.time() - 20.0)
+        sent.clear()
+        authsrv.player_revive_due(send, st5, 0)
+        LEDGER.ok(not st5["player_dead"]
+                  and authsrv.GAME_SMSG_AGENT_UPDATE_POSITION not in [op for op, _v in sent]
+                  and st5["agents"][HERO]["dead"],
+                  "--no-wipe-shrine: the timer stands the player up where it fell and "
+                  "the body stays down (the pre-JARIN placeholder)",
+                  f"{[hex(op) for op, _v in sent]}")
+        authsrv.WIPE_SHRINE = True
+        # 8. the zone carry: the stance always, the penalty into a field only
+        st6 = {"char_uuid": "abc", "morale": 85, "morale_xp_bank": 40,
+               "hero_cmd": {HERO: {"ai_mode": 2, "lock": None, "flag": None}},
+               "hero_morale": {HERO: 85}}
+        authsrv.zone_carry_store(st6)
+        st7 = {"char_uuid": "abc", "map_id": 168}
+        authsrv.zone_carry_apply(st7, 0)
+        LEDGER.ok(st7.get("morale") == 85 and st7.get("morale_xp_bank") == 40
+                  and authsrv.hero_command(st7, HERO)["ai_mode"] == 2
+                  and st7.get("hero_morale") == {HERO: 85}
+                  and "abc" not in authsrv.ZONE_CARRY,
+                  "a zone into a FIELD carries the death penalty, its bank, the hero's "
+                  "morale and the hero's stance (the tape's aiMode 2 in the next "
+                  "0x0072), and the carry is consumed", f"{st7}")
+        authsrv.zone_carry_store(st6)
+        st8 = {"char_uuid": "abc", "map_id": 148}
+        authsrv.zone_carry_apply(st8, 0)
+        LEDGER.ok("morale" not in st8 and authsrv.hero_command(st8, HERO)["ai_mode"] == 2,
+                  "a zone into an OUTPOST clears the penalty (0x009C 100 for both at "
+                  "651.62 s) and still carries the stance", f"{st8}")
+        authsrv.ZONE_CARRY_ON = False
+        authsrv.zone_carry_store(st6)
+        LEDGER.ok("abc" not in authsrv.ZONE_CARRY,
+                  "--no-zone-carry: nothing is carried", f"{authsrv.ZONE_CARRY}")
+        authsrv.ZONE_CARRY_ON = True
+        # 9. the rig: retail's character block for the hero, in the tape's order
+        authsrv.HERO_LEVEL = None
+        authsrv.HERO_SKILLS = ((322, 0.0, 3.0), (385, 0.0, 0.0))
+        authsrv.HERO_VITALS = (140, 20)
+        blk = authsrv.hero_character_block(_jw(), HERO, 6)
+        bops = [op for op, _v, _l in blk]
+        _bar = next(v for op, v, _l in blk if op == authsrv.GAME_SMSG_SKILLBAR_UPDATE)
+        LEDGER.ok(bops == [authsrv.GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS,
+                           authsrv.GAME_SMSG_AGENT_PROFESSIONS,
+                           authsrv.GAME_SMSG_SKILLBAR_UPDATE, PINT, PINT,
+                           authsrv.GAME_SMSG_AGENT_MORALE,
+                           authsrv.GAME_SMSG_AGENT_SET_PROFESSION,
+                           authsrv.GAME_SMSG_AGENT_UPDATE_ATTRIBUTES]
+                  and _bar[0] == HERO and _bar[1][:3] == [322, 385, 0]
+                  and (PINT, [agents.PROP_HEALTH_MAX, HERO, 140], blk[4][2]) == blk[4]
+                  and blk[5][1] == [HERO, 100],
+                  "the hero's load block is the PLAYER's own, addressed to the hero: "
+                  "0x0037, 0x00B7, 0x00DA (the hero's OWN bar), prop 41, prop 42, "
+                  "0x009C, 0x00A6, 0x003A -- the tape's order at 37.73 s and 87.21 s",
+                  f"{[hex(o) for o in bops]}, bar {_bar[1]}")
+        authsrv.HERO_LEVEL = 3
+        blk = authsrv.hero_character_block(_jw(), HERO, 6)
+        LEDGER.ok([op for op, _v, _l in blk][6:8] == [PINT, authsrv.GAME_SMSG_AGENT_SET_PROFESSION]
+                  and blk[6][1] == [agents.PROP_LEVEL, HERO, 3],
+                  "...with prop 36 (the level) right before 0x00A6 when a level is set",
+                  f"{[hex(op) for op, _v, _l in blk]}")
+        _src = inspect.getsource(authsrv)
+        LEDGER.ok("if HERO_INFO and not (HERO_RIG_RETAIL and HERO_ACTIVATE):" in _src
+                  and _src.index("_seq.extend(hero_character_block(state, _haid, _hid))")
+                  < _src.index("_party = tuple(agents.party_build(")
+                  and "if HERO_PIPELINE_FIRST or _rig_retail:" in _src
+                  and _src.count("and not _rig_retail") >= 4,
+                  "SOURCE: under the retail rig no 0x0074 goes out, the block and "
+                  "0x0072 are queued AHEAD of the party build, the build is deferred "
+                  "past the body, and the four legacy sites (vitals, attribs, bar, "
+                  "the last 0x0072) stand down (--hero-rig-legacy is every rig before)",
+                  f"{_src.count('and not _rig_retail')} legacy sites gated")
+    finally:
+        (authsrv.HERO_IDS, authsrv.PARTY_COMMANDS, authsrv.HERO_WIRE_POOLS,
+         authsrv.WIPE_SHRINE, authsrv.ZONE_CARRY_ON, authsrv.DEATH_PENALTY_FORCED,
+         authsrv.HERO_LEVEL, authsrv.HERO_SKILLS, authsrv.HERO_VITALS, _zc) = _sv
+        authsrv.ZONE_CARRY.clear(); authsrv.ZONE_CARRY.update(_zc)
 
 
 if __name__ == "__main__":

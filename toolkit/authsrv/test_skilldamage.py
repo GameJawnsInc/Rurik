@@ -502,9 +502,17 @@ def main():
     check(sc["n_cast"] >= 100 and sc["announced"] >= 0.95 * sc["n_cast"],
           "P1 cast damage is announced by a property-60 from its cause",
           f"{sc['announced']} of {sc['n_cast']} inside 4 s (floor 100, 95%)")
+    # JARIN (20260914T005758): the caster 54's skill 222 on the Ranger and on
+    # the hero spans TWO death penalties each (the targets' maxima 140 -> 119
+    # -> 99 / 101) and the hero's Frenzy doubled its intake -- the join keys
+    # on the target, not on the target's current maximum, so those two pairs
+    # are several values by construction. Named, not widened: a third pair
+    # is a new fact.
+    PENALTY_SPLIT = {"54 222 29", "54 222 30"}
     check(sc["pairs"] >= 10 and sc["pair_hits"] >= 60
-          and not sc["multi_valued"],
-          "P2 every (caster, skill, target) pair with >= 3 hits is ONE value",
+          and set(sc["multi_valued"]) <= PENALTY_SPLIT,
+          "P2 every (caster, skill, target) pair with >= 3 hits is ONE value "
+          "(the two JARIN pairs that span a death penalty set aside by name)",
           f"{sc['pairs']} pairs over {sc['pair_hits']} hits, skills "
           f"{sc['skills']}, multi-valued {sc['multi_valued']} -- a 1-in-8 "
           f"head roll on any armour difference leaves one bucket with "
@@ -518,9 +526,10 @@ def main():
           f"the projectile 0.4 s after its 58, in one batch (43.5). A second "
           f"such pair is a new fact, not noise: read it before raising this")
     check(len(sc["onto_player"]) >= 1
-          and all(n >= 3 and len(vals) == 1
-                  for n, vals in sc["onto_player"].values()),
-          "and the pairs onto the connection's OWN player are one value too",
+          and all(n >= 3 and (len(vals) == 1 or k in PENALTY_SPLIT)
+                  for k, (n, vals) in sc["onto_player"].items()),
+          "and the pairs onto the connection's OWN player are one value too "
+          "(the JARIN penalty-split pair set aside by name)",
           f"{sc['onto_player']} -- the player is the one body whose armour "
           f"this server models")
     check(sc["swing_pairs"] >= 5 and sc["swing_pairs_3plus"] == sc["swing_pairs"],

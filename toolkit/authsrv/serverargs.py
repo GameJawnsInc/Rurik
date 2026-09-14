@@ -674,6 +674,33 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                     help="THE REVERT ARM for MANTID: a hex whose row says "
                          "triggers_on_attack deals nothing when its wearer "
                          "swings.")
+    ap.add_argument("--attack-speed-at-change", action="store_true",
+                    help="THE REVERT ARM for JARIN: send the 0x0035 resend at "
+                         "the tick the stance changes (SLICE-H13's shape). "
+                         "Retail sends it with the agent's next attack start, "
+                         "19 of 19 on the hero tape, never at the apply.")
+    ap.add_argument("--hero-rig-legacy", action="store_true",
+                    help="THE REVERT ARM for JARIN: the pre-JARIN hero rig -- "
+                         "0x0074 first, the hero's block after its body, 0x0072 "
+                         "last. Retail sends no 0x0074 (3 of 3 instances): the "
+                         "hero gets the player's character block, then 0x0072, "
+                         "then its body, then the party build.")
+    ap.add_argument("--hero-silent-pools", action="store_true",
+                    help="THE REVERT ARM for JARIN: no 0x00CF / 0x00D0 / 0x00E3 "
+                         "/ 0x00E5 / 0x00E6 for a hero. Retail sends a hero's "
+                         "adrenaline and skill family like the player's (107 / "
+                         "7 / 48 / 35 rows); a henchman's never.")
+    ap.add_argument("--no-wipe-shrine", action="store_true",
+                    help="THE REVERT ARM for JARIN: a party wipe stands the "
+                         "player up on the timer where it fell. Retail "
+                         "teleports the party to the shrine ~11 s after the "
+                         "last death, re-creates the hero's body, raises all at "
+                         "full health with the maxima kept, no 0x01D8.")
+    ap.add_argument("--no-zone-carry", action="store_true",
+                    help="THE REVERT ARM for JARIN: a zone forgets the death "
+                         "penalty and the hero's stance. Retail carries the "
+                         "stance into the next instance's 0x0072 and clears the "
+                         "penalty on an OUTPOST load only.")
     ap.add_argument("--no-attack-speed-sync", action="store_true",
                     help="THE REVERT ARM for SLICE-H13: never re-declare an "
                          "agent's 0x0035 attack-speed pair when a stance "

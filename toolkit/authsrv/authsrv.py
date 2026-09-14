@@ -1449,6 +1449,7 @@ def send_transfer(send, state, conn_id, dest_map, local_host):
          f"transfer 3/3: MAP_UPDATE_CURRENT {dest_map}")
     TRANSFERS_ISSUED[(world_id, player_id)] = int(dest_map)
     state["transfer_sent"] = int(dest_map)
+    zone_carry_store(state)                                    # JARIN
     print(f"[c{conn_id}] TRANSFER to map {dest_map} via {host}:{TRANSFER_PORT}"
           + ("" if changed else " -- SAME alias the client is on: whether it "
                                 "re-dials one it was just cut from is NOT "
@@ -3849,6 +3850,44 @@ MOVE_SPEED_EFFECTS = False
 # The tick below re-declares an agent's pair whenever its factor changes --
 # the stance opening, expiring, being replaced or cured -- and only then.
 ATTACK_SPEED_SYNC = True      # False (--no-attack-speed-sync): the pre-H13 arm, one declaration ever.
+
+# ---- JARIN-S (2026-09-14): the first retail hero on a tape -----------------
+# studies/slice/FINDINGS.md SLICE-F39, capture 20260914T005758 (Kamadan 449 ->
+# Plains of Jarin 430 -> Kamadan, a level-3 Ranger with Koss). Every flag
+# below is a measured default with its pre-JARIN arm as the revert.
+#
+# ATTACK_SPEED_AT_START: retail declares a changed 0x0035 pair WITH the
+# agent's next attack start -- 19 of 19 on the hero, in the start's own
+# instant, never at the stance apply (6 out-of-combat applies sent nothing)
+# and nothing at the close (the 1.0 rides the next chain's first start).
+# H13 sent at the tick; the client multiplies at animation time either way.
+ATTACK_SPEED_AT_START = True   # False (--attack-speed-at-change): H13's tick-time send.
+# HERO_RIG_RETAIL: no 0x0074 on the tape (3 of 3 instances); the hero gets
+# the player's own character block, then 0x0072, then (a field) its items,
+# body and 0x006D, and the party build LAST (37.73 s, 87.21 s, 651.62 s).
+HERO_RIG_RETAIL = True         # False (--hero-rig-legacy): 0x0074 first, the block after the body.
+# HERO_WIRE_POOLS: a hero's adrenaline (0x00CF 107 rows, 0x00D0 7) and its
+# skill family (0x00E3 48, 0x00E5 35, 0x00E6) are on the wire like the
+# player's; a HENCHMAN's never are (0 on eleven henchman bodies).
+HERO_WIRE_POOLS = True         # False (--hero-silent-pools): the pre-JARIN silence.
+# WIPE_SHRINE: a party wipe -> both teleported to the shrine (0x0025, 0x002C
+# on plane 19), the hero's body deleted and re-created, both raised at full
+# health with the maxima kept, no 0x01D8 (340.21 s; three earlier tapes the
+# same for the observer). The delay is the median of the four: 10.0, 12.2,
+# 12.8, 10.6 s.
+WIPE_SHRINE = True             # False (--no-wipe-shrine): the timer stands the player up where it fell.
+WIPE_RESURRECT_AFTER = 11.4    # seconds from the last death to the shrine.
+# ZONE_CARRY_ON: the hero's aiMode persisted into the next instance's 0x0072
+# (Avoid clicked at 510.66 s, [6, 324, 157, 2] at 651.62 s); the death
+# penalty was CLEARED on the outpost load (0x009C 100 for both). State is per
+# connection here, so a zone carries these by character uuid.
+ZONE_CARRY_ON = True           # False (--no-zone-carry): every zone forgets.
+ZONE_CARRY = {}                # char_uuid -> what survives a transfer.
+# The 0x0026 flags byte: the player's death is 4 and rise 5 (3 of 3 in the
+# corpus), a body's 8 and 9 (91 / 250; the hero's 307.83 s and 340.21 s).
+AGENT_FLAGS_PLAYER_DEAD = 4
+AGENT_FLAGS_PLAYER_ALIVE = 5
+AGENT_FLAGS_BODY_ALIVE = 9
 # ---- MANTID: WHAT THE TUTORIAL TAPE CORRECTED (studies/slice F38) ----
 #
 # THE EFFECT LIST IS THE PLAYER'S OWN. Across all 61 live connections in the
@@ -12947,6 +12986,7 @@ def attack_tick(send, state, conn_id, rec=None):
                            3))
         return
     state["player_last_swing"] = now
+    attack_speed_flush(send, state, PLAYER_AGENT_ID)   # JARIN: with the start
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
          [agents.GV_ATTACK_STARTED, PLAYER_AGENT_ID, target_id, 0],
          f"attack_started: player swings at {target_id}")
@@ -13005,7 +13045,9 @@ def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
          f"KILL agent {target_id}")
     if not reward:
         # SLICE-H3: a PARTY body's death -- the status and the flags byte,
-        # no kill reward, no objective, no morale: nobody is paid for it.
+        # no kill reward, no objective: nobody is paid for it. JARIN: a HERO
+        # takes its own morale tick between the two (307.83 s).
+        hero_death_tick(send, state, target_id, agent, conn_id)
         send(GAME_SMSG_AGENT_UPDATE_FLAGS, [target_id, AGENT_FLAGS_KILLED],
              f"flags {AGENT_FLAGS_KILLED} on the dying party agent {target_id}")
         return
@@ -13022,6 +13064,8 @@ def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
          f"kill reward [{KILL_REWARD_ATTR}, {KILL_REWARD_VALUE}]")
     send(GAME_SMSG_AGENT_UPDATE_FLAGS, [target_id, AGENT_FLAGS_KILLED],
          f"flags {AGENT_FLAGS_KILLED} on the dying agent {target_id}")
+    # JARIN-Q5: a hero locked on this target is released on the wire.
+    hero_locks_release(send, state, target_id, conn_id)
     # AFTER the measured three-message template, never inside it: the
     # status/reward/flags order is ArenaNet's own tick shape, and the
     # accrual only appends to it (and only under --persist).
@@ -14593,6 +14637,8 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
                     send(GAME_SMSG_AGENT_STOP_MOVING,
                          agents.agent_stop_moving(PLAYER_AGENT_ID),
                          _cs_label)
+        if is_attack:
+            attack_speed_flush(send, state, PLAYER_AGENT_ID)   # JARIN
         _op, _vals = cast_anim_msg(
             agents.GV_ATTACK_SKILL_ACTIVATED if is_attack
             else agents.GV_SKILL_ACTIVATED,
@@ -14782,6 +14828,8 @@ def begin_cast(send, state, cast, conn_id):
             print(f"[c{conn_id}] skill {skill_id} costs {cost} energy at "
                   f"cast-begin: {pool.current:.2f}/{pool.maximum:.0f} left",
                   flush=True)
+    if cast["attack"]:
+        attack_speed_flush(send, state, PLAYER_AGENT_ID)       # JARIN
     _op, _vals = cast_anim_msg(
         agents.GV_ATTACK_SKILL_ACTIVATED if cast["attack"]
         else agents.GV_SKILL_ACTIVATED,
@@ -15678,50 +15726,11 @@ def kill_player(send, state, conn_id, why="took a killing blow"):
     router_abandon(state, None, "death", time.time())
     send(GAME_SMSG_AGENT_UPDATE_STATUS,
          [PLAYER_AGENT_ID, agents.EFFECT_DEAD], f"KILL the player ({why})")
-    # SLICE-F24: THE CORPSE IS HELD. Retail's death batch for the observing
-    # player -- 2 of 2 on the live corpus (20260817T183756 t=353.299,
-    # 20260821T152147 t=550.319) -- is STATUS [me, 16], then [8, me, 1],
-    # then the 41/42 maxima, 0x002D [me] and 0x0026 [me, 4]; no 0x0028, no
-    # 0x002C. Property 8 is the client's walk gate (ANIMREF 28), so the
-    # corpse cannot take a step. Ours sent no hold, and the owner's corpse
-    # "warped slightly" on its converging copies. 0x002D (unnamed in the
-    # catalog) and the flags value 4 (ours sends 8, the four NPC deaths')
-    # are recorded, not sent.
-    action_hold(send, state, 1, f"the player died ({why})")
-    # SLICE-F25: and the SYNC copy's walk is cancelled (0x002D, retail 3 of
-    # 3 in this batch, behind the hold). The owner's corpse still "warped
-    # slightly" with the hold alone: the hold gates the client's INPUT, but
-    # the sync copy was already walking our last lead, and the rendered
-    # corpse converged onto it as it arrived. The client's handler zeroes
-    # that copy's velocity (studies/enemy PLAN 6h) -- both copies stay where
-    # the body fell. No 0x0028: retail sends none here, and a 0x0028 would
-    # halt the body onto the copy (CANCELWALK-F34's warp) rather than the
-    # copy onto the body.
-    send(GAME_SMSG_AGENT_MOVE_CANCEL, [PLAYER_AGENT_ID],
-         f"MOVE_CANCEL 0x002D: the corpse's sync copy stops where the body "
-         f"died [SLICE-F25]")
-    # SLICE-F26: AND THE OUTSTANDING LEAD IS KILLED, because the 0x002D did
-    # NOT stop our client's copy. Measured on the owner's run (capture
-    # authsrv-20260912T223203-c4): the last report before the death at
-    # (1347,1483); a KBD LEAD to (1732,1133) granted 0.10 s before it; the
-    # first report after the revive at (1731.8,1132.7) -- the lead's END,
-    # to the unit, 520 u from where the body fell. So the client walked our
-    # lead out after the death (the 0x002D's velocity cancel is gated on a
-    # flags bit our player agent evidently does not carry -- studies/enemy
-    # PLAN 6h's null, seen again), the corpse followed its copy (the warp),
-    # and the raider was then sent to the death spot, halted "0 u from the
-    # player" on a phantom and swung there while the body stood 520 u away
-    # -- "attacked from out of normal range". The lead in flight is ended
-    # the way a press ends one (MOVECODE-1z-y): a zero-lead grant at the
-    # modelled body, so the copy parks where the corpse is and every belief
-    # on both sides agrees on where the body fell. Retail never leaves this
-    # lead shape outstanding, so the repair is ours and says so.
-    if not _kbd_lead_kill(send, state, conn_id, None, "death"):
-        state.pop("kbd_leg", None)
-    # AND THE BILL, in ArenaNet's own order: the death bit first, the morale
-    # tick behind it, same tick. Silent in every map this server ships, because
-    # pre-Searing charges nothing -- `map_death_penalty` is where that is
-    # decided and `content/maps.toml` is where it is written down.
+    # JARIN: THE ORDER IS RETAIL'S, on two player deaths now (MANTID 436.9 s,
+    # JARIN 329.64 s): the status, then the morale tick (0x009C, 0x00EE, the
+    # maxima), then the hold [8, me, 1] and 0x002D, then the flags byte
+    # 0x0026 [me, 4] LAST. The hold and the cancel used to ride between the
+    # status and the tick, which test_morale section 5 had been red on.
     pushed = death_penalty_due(send, state, conn_id)
     # THE DEATH BATCH'S OTHER HALF, OBSERVED: retail sends property 43 = 0.0
     # in the same instant the death bit goes up -- twice in the corpus, and
@@ -15766,10 +15775,58 @@ def kill_player(send, state, conn_id, why="took a killing blow"):
     # stand up from a revive with a full bar and nothing could correct it --
     # 209 is the resync and retail sends it 0 times in 724. Wrong under one
     # reading, harmless under the other.
+    # SLICE-F24: THE CORPSE IS HELD. Retail's death batch for the observing
+    # player -- 2 of 2 on the live corpus (20260817T183756 t=353.299,
+    # 20260821T152147 t=550.319) -- is STATUS [me, 16], then [8, me, 1],
+    # then the 41/42 maxima, 0x002D [me] and 0x0026 [me, 4]; no 0x0028, no
+    # 0x002C. Property 8 is the client's walk gate (ANIMREF 28), so the
+    # corpse cannot take a step. Ours sent no hold, and the owner's corpse
+    # "warped slightly" on its converging copies. 0x002D (unnamed in the
+    # catalog) and the flags value 4 (ours sends 8, the four NPC deaths')
+    # are recorded, not sent.
+    action_hold(send, state, 1, f"the player died ({why})")
+    # SLICE-F25: and the SYNC copy's walk is cancelled (0x002D, retail 3 of
+    # 3 in this batch, behind the hold). The owner's corpse still "warped
+    # slightly" with the hold alone: the hold gates the client's INPUT, but
+    # the sync copy was already walking our last lead, and the rendered
+    # corpse converged onto it as it arrived. The client's handler zeroes
+    # that copy's velocity (studies/enemy PLAN 6h) -- both copies stay where
+    # the body fell. No 0x0028: retail sends none here, and a 0x0028 would
+    # halt the body onto the copy (CANCELWALK-F34's warp) rather than the
+    # copy onto the body.
+    send(GAME_SMSG_AGENT_MOVE_CANCEL, [PLAYER_AGENT_ID],
+         f"MOVE_CANCEL 0x002D: the corpse's sync copy stops where the body "
+         f"died [SLICE-F25]")
+    # SLICE-F26: AND THE OUTSTANDING LEAD IS KILLED, because the 0x002D did
+    # NOT stop our client's copy. Measured on the owner's run (capture
+    # authsrv-20260912T223203-c4): the last report before the death at
+    # (1347,1483); a KBD LEAD to (1732,1133) granted 0.10 s before it; the
+    # first report after the revive at (1731.8,1132.7) -- the lead's END,
+    # to the unit, 520 u from where the body fell. So the client walked our
+    # lead out after the death (the 0x002D's velocity cancel is gated on a
+    # flags bit our player agent evidently does not carry -- studies/enemy
+    # PLAN 6h's null, seen again), the corpse followed its copy (the warp),
+    # and the raider was then sent to the death spot, halted "0 u from the
+    # player" on a phantom and swung there while the body stood 520 u away
+    # -- "attacked from out of normal range". The lead in flight is ended
+    # the way a press ends one (MOVECODE-1z-y): a zero-lead grant at the
+    # modelled body, so the copy parks where the corpse is and every belief
+    # on both sides agrees on where the body fell. Retail never leaves this
+    # lead shape outstanding, so the repair is ours and says so.
+    if not _kbd_lead_kill(send, state, conn_id, None, "death"):
+        state.pop("kbd_leg", None)
+    # AND THE BILL, in ArenaNet's own order: the death bit first, the morale
+    # tick behind it, same tick. Silent in every map this server ships, because
+    # pre-Searing charges nothing -- `map_death_penalty` is where that is
+    # decided and `content/maps.toml` is where it is written down.
     if ENERGY:
         player_adrenaline(state).clear()
         send(AGENT_ADRENALINE_CLEAR, [PLAYER_AGENT_ID],
              f"adrenaline cleared: the player died ({why})")
+    # JARIN: the flags byte closes the death tick -- 0x0026 [player, 4],
+    # 3 of 3 player deaths in the corpus (the morale study's tick).
+    send(GAME_SMSG_AGENT_UPDATE_FLAGS, [PLAYER_AGENT_ID, AGENT_FLAGS_PLAYER_DEAD],
+         f"flags {AGENT_FLAGS_PLAYER_DEAD} on the dead player")
 
 
 def agent_pool_max(state, agent_id):
@@ -17012,6 +17069,7 @@ def morale_experience(send, state, conn_id, gained):
     honest at our kill sizes: a 26-XP kill is not a third of a percent on the
     wire, it is nothing at all until the third one.
     """
+    hero_morale_experience(send, state, conn_id, gained)     # JARIN: per hero
     before = player_morale(state)
     after, bank, recovered = morale.experience_credit(
         before, int(state.get("morale_xp_bank", 0)), gained)
@@ -17347,6 +17405,8 @@ def enemy_attack_tick(send, state, conn_id):
             # 0x009F shape it used to take matched the corpus's one NPC
             # activation, but that one was a cast that names nobody.
             _atk = NPC_ATTACK_SKILL_SWINGS and _is_attack_skill(skill_id)
+            if _atk:
+                attack_speed_flush(send, state, agent_id)      # JARIN
             _op, _vals = cast_anim_msg(
                 agents.GV_ATTACK_SKILL_ACTIVATED if _atk
                 else agents.GV_SKILL_ACTIVATED,
@@ -17382,7 +17442,7 @@ def enemy_attack_tick(send, state, conn_id):
         # instead of one per swing.
         face_player(send, state, agent_id, agent, conn_id, at=(px, py))
         agent["swing_owed_at"] = None            # SLICE-F22: the debt is paid
-        start_swing(send, agent_id, conn_id, target_id=_tid)
+        start_swing(send, agent_id, conn_id, target_id=_tid, state=state)
         # `interval` is this agent's own declared attack base -- the same number it
         # was told to the client in 0x0035. The windup is a fraction OF THAT, not a
         # constant, so an agent that declares a slower weapon also winds up longer.
@@ -17617,6 +17677,8 @@ def ally_cast_tick(send, state, conn_id):
             agent["cast_lands_at"] = now + activation
         face_player(send, state, agent_id, agent, conn_id,
                     at=target_pos(state, target))
+        if _atk:
+            attack_speed_flush(send, state, agent_id)          # JARIN
         _op, _vals = cast_anim_msg(agents.GV_ATTACK_SKILL_ACTIVATED if _atk
                                    else agents.GV_SKILL_ACTIVATED, agent_id,
                                    target, skill_id)
@@ -17775,9 +17837,16 @@ def hurt_agent_row(send, state, attacker_id, tid, dealt, frac, conn_id, what):
     row["health"] = max(0.0, row["health"] - dealt)
     if not hostile:
         row["last_hit"] = now
+        if ENERGY:
+            # JARIN: a party body charges on the hit it takes, and a HERO's
+            # charge is on the wire ([30, 2] at 175.4 s, before the damage word).
+            _frac = dealt / float(row["max_health"] or 1.0)
+            agent_adrenaline(row).on_damage_taken(_frac, now)
+            hero_pool_gain(send, state, tid, row, pools.damage_units(_frac),
+                           "hit taken")
     elif ENERGY:
         # SILENT, as hit_enemy's own half is: retail's adrenaline traffic is
-        # self-scoped 9 of 9.
+        # self-scoped 9 of 9 -- for a HOSTILE. A hero's is not (JARIN).
         agent_adrenaline(row).on_damage_taken(
             dealt / float(row["max_health"] or 1.0), now)
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
@@ -17903,6 +17972,11 @@ def revive_party_body(send, state, tid, row, conn_id, health_frac=1.0, why=""):
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.GV_HEALTH, tid, tid, frac],
          f"refill bar on party agent {tid}")
+    # JARIN: a body's rise closes with 0x0026 [body, 9] (250 in the corpus;
+    # the hero's at 340.21 s), and the grace window starts here.
+    row["revived_at"] = time.time()
+    send(GAME_SMSG_AGENT_UPDATE_FLAGS, [tid, AGENT_FLAGS_BODY_ALIVE],
+         f"flags {AGENT_FLAGS_BODY_ALIVE} on the risen party agent {tid}")
     print(f"[c{conn_id}] party agent {tid} ({row.get('name', '?')}) is back "
           f"up{why}", flush=True)
 
@@ -17919,6 +17993,301 @@ def resurrect_target(send, state, tid, conn_id, caster_id, skill_id):
     row = state.get("agents", {}).get(tid)
     if row is not None and row.get("dead"):
         revive_party_body(send, state, tid, row, conn_id, why=why)
+
+
+def hero_body_id(row):
+    """The hero index a party body carries (the create entry's `hero`), or
+    None for a henchman, a hostile, anything else. JARIN: this key was never
+    set before 2026-09-14, so `effect_list_visible`'s hero branch -- shipped
+    by MANTID-S "for want of a witness" -- had never fired; the tape witnessed
+    it (24 applies on the hero) and the body now carries the key."""
+    return (row or {}).get("hero")
+
+
+def hero_morale(state, agent_id):
+    """A hero's own morale percentage: per party member on retail (the hero
+    took its -15 at 307.83 s while the player stayed at 100; +1 each at
+    410.84 s)."""
+    return int(state.setdefault("hero_morale", {}).setdefault(
+        agent_id, morale.BASELINE))
+
+
+def hero_morale_apply(state, agent_id, row, new_value):
+    """Move a hero's morale in the books and rescale its maxima the way the
+    player's are (base x morale): returns (energy_max, health_max)."""
+    state.setdefault("hero_morale", {})[agent_id] = int(new_value)
+    base_h = float(row.get("base_max_health") or row.get("max_health") or 100.0)
+    row.setdefault("base_max_health", base_h)
+    base_e = float(row.get("base_max_energy")
+                   or (HERO_VITALS[1] if HERO_VITALS else 20))
+    row.setdefault("base_max_energy", base_e)
+    row["max_health"] = float(morale.effective_max(base_h, base_h, new_value))
+    row["health"] = min(float(row.get("health", 0.0)), row["max_health"])
+    return (int(morale.effective_max(base_e, base_e, new_value)),
+            int(row["max_health"]))
+
+
+def hero_pool_gain(send, state, agent_id, row, units, why):
+    """JARIN: a hero's adrenaline is on the wire like the player's -- 0x00CF
+    [hero, 25] per hit landed, [hero, units] per hit taken (107 rows on the
+    tape); a henchman's never (0 on eleven bodies). --hero-silent-pools is
+    the pre-JARIN arm. A zero-unit gain sends nothing, as the player's."""
+    if not HERO_WIRE_POOLS or hero_body_id(row) is None or int(units) <= 0:
+        return
+    send(AGENT_ADRENALINE_GAIN, [agent_id, int(units)],
+         f"hero agent {agent_id} adrenaline +{int(units)} ({why}) [JARIN]")
+
+
+def hero_pool_clear(send, state, agent_id, row, why):
+    """0x00D0 [hero]: at each Final Thrust (5 of 5) and at its death (2 of 2)."""
+    if not HERO_WIRE_POOLS or hero_body_id(row) is None:
+        return
+    send(AGENT_ADRENALINE_CLEAR, [agent_id],
+         f"hero agent {agent_id} adrenaline cleared ({why}) [JARIN]")
+
+
+def hero_skill_messages(send, state, agent_id, row, skill_id, recharge, now):
+    """JARIN: a hero's cast rides the player's own skill family at the
+    completion -- 0x00E5 [hero, skill, 0, recharge] then 0x00E3 [hero, skill,
+    0] (+0.56 s after the start, 35 / 48 on the tape), and 0x00E6 [hero,
+    skill, 0] when it recharges (hero_recharged_tick). The hero panel draws
+    its recharge from these; a henchman has no panel and gets none."""
+    if not HERO_WIRE_POOLS or hero_body_id(row) is None or not skill_id:
+        return
+    send(GAME_SMSG_SKILL_RECHARGE, [agent_id, int(skill_id), 0, int(recharge)],
+         f"SKILL_RECHARGE(hero agent {agent_id}, skill {skill_id}, "
+         f"{int(recharge)}s) [JARIN]")
+    send(GAME_SMSG_SKILL_ACTIVATED, [agent_id, int(skill_id), 0],
+         f"SKILL_ACTIVATED(hero agent {agent_id}, skill {skill_id}) [JARIN]")
+    if float(recharge) > 0.0:
+        row.setdefault("hero_recharged_due", {})[int(skill_id)] = (
+            float(now) + float(recharge))
+
+
+def hero_recharged_tick(send, state, conn_id):
+    """0x00E6 for each hero skill whose recharge has run out."""
+    if not HERO_WIRE_POOLS:
+        return
+    now = time.time()
+    for aid, row in party_bodies(state):
+        due = row.get("hero_recharged_due")
+        if not due:
+            continue
+        for sid, at in list(due.items()):
+            if now >= at:
+                del due[sid]
+                send(GAME_SMSG_SKILL_RECHARGED, [aid, int(sid), 0],
+                     f"SKILL_RECHARGED(hero agent {aid}, skill {sid}) [JARIN]")
+
+
+def hero_death_tick(send, state, agent_id, row, conn_id):
+    """The hero's death, after its status bit: retail's 307.83 s tick --
+    0x009C [hero, 85], 0x00D0 [hero], prop 41 (energy max at morale), 0x00A2
+    [43, hero, 0], prop 42 (health max at morale); the effect closes ride
+    strip_effects and the flags byte follows in kill_agent. The map's
+    death-penalty rule and the resurrection grace apply as the player's."""
+    if hero_body_id(row) is None:
+        return
+    charge = (map_death_penalty(state.get("map_id", -1))
+              and not morale.death_is_free(time.time(), row.get("revived_at", 0.0)))
+    before = hero_morale(state, agent_id)
+    after = morale.after_death(before) if charge else before
+    e_max, h_max = hero_morale_apply(state, agent_id, row, after)
+    if after != before:
+        send(GAME_SMSG_AGENT_MORALE, [agent_id, after],
+             f"morale {morale.display(after)} on hero agent {agent_id} (died) [JARIN]")
+    hero_pool_clear(send, state, agent_id, row, "died")
+    if after != before:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.PROP_ENERGY_MAX, agent_id, e_max],
+             f"hero agent {agent_id} energy max {e_max} at morale {after}")
+    if ENERGY:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+             [GV_ENERGY_REGEN, agent_id, _f32(0.0)],
+             f"hero agent {agent_id} energy regeneration stops: dead")
+    if after != before:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.PROP_HEALTH_MAX, agent_id, h_max],
+             f"hero agent {agent_id} health max {h_max} at morale {after}")
+
+
+def hero_morale_experience(send, state, conn_id, gained):
+    """The kill's experience buys a hero's penalty back too (410.84 s: [29,
+    86] and [30, 86], each with its prop 42), per hero, its own bank."""
+    for aid, row in party_bodies(state):
+        if hero_body_id(row) is None:
+            continue
+        bank = state.setdefault("hero_morale_bank", {})
+        after, b, rec = morale.experience_credit(
+            hero_morale(state, aid), int(bank.get(aid, 0)), gained)
+        bank[aid] = b
+        if not rec:
+            continue
+        _e, h_max = hero_morale_apply(state, aid, row, after)
+        send(GAME_SMSG_AGENT_MORALE, [aid, after],
+             f"morale {morale.display(after)} on hero agent {aid} "
+             f"({rec}% back from experience) [JARIN]")
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.PROP_HEALTH_MAX, aid, h_max],
+             f"hero agent {aid} health max {h_max} at morale {after}")
+
+
+def hero_locks_release(send, state, target_id, conn_id):
+    """JARIN-Q5: the server clears a hero's lock on the wire when the locked
+    target dies -- 0x0063 [hero, 0], 0.57 s after the killing blow on the
+    tape; here in the kill's own tick."""
+    for _hid, _haid, _hdef in hero_slots():
+        cmd = (state.get("hero_cmd") or {}).get(_haid)
+        if cmd and cmd.get("lock") == target_id:
+            cmd["lock"] = None
+            send(GAME_SMSG_HERO_LOCK_TARGET_SET, [_haid, 0],
+                 f"HERO_LOCK_TARGET_SET(agent {_haid} -> cleared: target "
+                 f"{target_id} died) [JARIN]")
+
+
+def hero_character_block(state, haid, hid):
+    """JARIN-S: retail's hero load block -- the PLAYER's own character block
+    addressed to the hero's agent, in the tape's order (37.73 s, 87.21 s):
+    0x0037 points, 0x00B7 professions, 0x00DA the bar, prop 41 energy max,
+    prop 42 health max, 0x009C morale, prop 36 level, 0x00A6 profession,
+    0x003A attributes. (0x0065, 0x00A2 43 and 0x009A/0x009B ride there too
+    and are not modelled here.) Returns [(op, vals, label)] for `_seq`."""
+    out = []
+    _hprof = (agents.npc_template(HERO_BODY_NPC)["profession"]
+              if HERO_BODY else 1)
+    _hattr = attribute_state(state)
+    if HERO_ATTRIBUTES:
+        _havail, _htotal = 0, _hattr.rules.total_spent(HERO_ATTRIBUTES)
+    else:
+        _havail, _htotal = _hattr.available, _hattr.points_total
+    out.append((GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS, [haid, _havail, _htotal],
+                f"AGENT_ATTRIBUTE_POINTS(hero agent {haid}: {_havail} of {_htotal}) [JARIN rig]"))
+    out.append((GAME_SMSG_AGENT_PROFESSIONS, spawn_profession_values(_hprof, haid),
+                f"AGENT_PROFESSIONS(hero agent {haid}, prof {_hprof}) [JARIN rig]"))
+    if HERO_SKILLBAR:
+        # The hero's OWN bar (retail: [322, 382, 348, 1, 385, 346, 0, 2] on
+        # the panel); the player's SKILLBAR only when the hero has none.
+        _hskills = [int(sk[0]) for sk in (HERO_SKILLS or ())] or list(SKILLBAR)
+        _hskills = _hskills[:SKILLBAR_SLOTS]
+        _hskills += [0] * (SKILLBAR_SLOTS - len(_hskills))
+        out.append((GAME_SMSG_SKILLBAR_UPDATE,
+                    [haid, _hskills, SKILLBAR_PVP_MASKS, SKILLBAR_TRAILER],
+                    f"SKILLBAR_UPDATE(hero agent {haid}){_hskills} [JARIN rig]"))
+    _m = hero_morale(state, haid)
+    _hv = HERO_VITALS or (100, 30)
+    _e_max = int(morale.effective_max(_hv[1], _hv[1], _m))
+    _h_max = int(morale.effective_max(_hv[0], _hv[0], _m))
+    out.append((GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [agents.PROP_ENERGY_MAX, haid, _e_max],
+                f"energy max {_e_max} on hero agent {haid} [JARIN rig]"))
+    out.append((GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [agents.PROP_HEALTH_MAX, haid, _h_max],
+                f"health max {_h_max} on hero agent {haid} [JARIN rig]"))
+    out.append((GAME_SMSG_AGENT_MORALE, [haid, _m],
+                f"morale {morale.display(_m)} on hero agent {haid} [JARIN rig]"))
+    if HERO_LEVEL is not None:
+        out.append((GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [agents.PROP_LEVEL, haid, HERO_LEVEL],
+                    f"hero agent {haid} at level {HERO_LEVEL} [JARIN rig]"))
+    out.append((GAME_SMSG_AGENT_SET_PROFESSION,
+                agents.agent_set_profession(haid, int(_hprof)),
+                f"0x00A6 for hero agent {haid} (prof {_hprof}) [JARIN rig]"))
+    _hcols = attribute_columns(
+        ranks=sorted(HERO_ATTRIBUTES.items()) if HERO_ATTRIBUTES else None)
+    out.append((GAME_SMSG_AGENT_UPDATE_ATTRIBUTES, [haid, _hcols],
+                f"AGENT_UPDATE_ATTRIBUTES(hero agent {haid}, {len(_hcols) // 3} attrs) [JARIN rig]"))
+    return out
+
+
+def shrine_point(state):
+    """Where a wiped party stands up: the map row's `shrine_x/shrine_y/
+    shrine_plane` when content names one, else the instance's spawn (the
+    tape's shrine was 175 u from the Plains' spawn), else where the player
+    is."""
+    row = agents.WORLD.rows("map").get(str(int(state.get("map_id", -1) or -1)), {})
+    if row.get("shrine_x") is not None and row.get("shrine_y") is not None:
+        return (float(row["shrine_x"]), float(row["shrine_y"]),
+                int(row.get("shrine_plane", state.get("plane", 0)) or 0))
+    sp = state.get("spawn_point")
+    if sp:
+        return (float(sp[0]), float(sp[1]), int(sp[2]))
+    px, py = state.get("pos", (0.0, 0.0))
+    return (float(px), float(py), int(state.get("plane", 0) or 0))
+
+
+def wipe_to_shrine(send, state, conn_id):
+    """The party wipe, retail's 340.21 s frame: facing and position set for
+    the player (0x0025, 0x002C), every party body DELETED and RE-CREATED at
+    the shrine with its weapons re-declared (0x0021, 0x0020, 0x006D), then
+    everyone raised at full health with the maxima kept (52/55 = 1.0) and
+    the flags bytes 5 / 9. No 0x01D8 -- 0 of 2 retail wipes."""
+    sx, sy, spl = shrine_point(state)
+    send(GAME_SMSG_AGENT_MOVE_DIRECTION, [PLAYER_AGENT_ID, (1.0, 0.0), 1],
+         "the wipe: the player faces the shrine's way [JARIN]")
+    send(GAME_SMSG_AGENT_UPDATE_POSITION, [PLAYER_AGENT_ID, [sx, sy], spl],
+         f"the wipe: the player stands at the shrine ({sx:.0f},{sy:.0f}) "
+         f"plane {spl} [JARIN]")
+    state["pos"] = (sx, sy)
+    state["plane"] = spl
+    state["dest"] = None
+    for i, (aid, row) in enumerate(party_bodies(state)):
+        entry = remove_agent(send, state, aid,
+                             "the party wiped: re-created at the shrine", conn_id)
+        entry = dict(entry, pos=(sx + HERO_BODY_OFFSET[0], sy + HERO_BODY_OFFSET[1] * i),
+                     plane=spl, dead=False, health=float(entry["max_health"]),
+                     last_hit=0.0, casting=None, cast_lands_at=None,
+                     swing_lands_at=None, follow=None, facing_told=None,
+                     refill_due_at=None)
+        create_agent_world(send, state, aid, entry, "the shrine (the wipe)",
+                           conn_id=conn_id, send_definition=False)
+        wid = entry.get("weapon_item_id")
+        if wid is not None:
+            send(GAME_SMSG_NPC_UPDATE_WEAPONS, [aid, int(wid), 0],
+                 f"NPC_UPDATE_WEAPONS(hero agent {aid}: item {wid}, re-declared "
+                 f"at the shrine) [JARIN]")
+        revive_party_body(send, state, aid, state["agents"][aid], conn_id,
+                          why=" (the shrine)")
+    for _aid, _row in list(state.get("agents", {}).items()):
+        if isinstance(_row, dict):
+            _row["facing_told"] = None        # the player moved: revive_player's own note
+    revive_player(send, state, conn_id, why=" (the shrine)")
+    print(f"[c{conn_id}] THE PARTY WIPED: everyone stands at the shrine "
+          f"({sx:.0f},{sy:.0f}) [JARIN]", flush=True)
+
+
+def zone_carry_store(state):
+    """At a transfer: what the next instance inherits, by character uuid."""
+    if not ZONE_CARRY_ON:
+        return
+    key = state.get("char_uuid")
+    if not key:
+        return
+    ZONE_CARRY[key] = {
+        "morale": player_morale(state),
+        "morale_xp_bank": int(state.get("morale_xp_bank", 0)),
+        "hero_ai_mode": {aid: int(c.get("ai_mode", AI_MODE_FIGHT))
+                         for aid, c in (state.get("hero_cmd") or {}).items()},
+        "hero_morale": dict(state.get("hero_morale") or {}),
+    }
+
+
+def zone_carry_apply(state, conn_id):
+    """At the next instance's load: the hero's stance always (the tape's
+    aiMode 2), the death penalty only into a FIELD -- an outpost load
+    clears it (0x009C 100 for both at 651.62 s)."""
+    if not ZONE_CARRY_ON:
+        return
+    got = ZONE_CARRY.pop(state.get("char_uuid") or "", None)
+    if not got:
+        return
+    for aid, m in got["hero_ai_mode"].items():
+        hero_command(state, aid)["ai_mode"] = int(m)
+    if party_bodies_here(state):
+        state["morale"] = int(got["morale"])
+        state["morale_xp_bank"] = int(got["morale_xp_bank"])
+        state["hero_morale"] = dict(got["hero_morale"])
+        print(f"[c{conn_id}] ZONE: morale {got['morale']} and the hero stances "
+              f"carried into the field [JARIN]", flush=True)
+    else:
+        print(f"[c{conn_id}] ZONE: an outpost -- the death penalty is cleared "
+              f"(retail 0x009C 100); the hero stances carried [JARIN]", flush=True)
 
 
 def hero_command(state, agent_id):
@@ -18026,6 +18395,10 @@ def party_flag_point(state, agent_id, agent):
     pf = state.get("party_flag")
     if pf is None:
         return None
+    if len(party_bodies(state)) <= 1:
+        # JARIN: a lone hero walks to the party flag ITSELF -- the lead ended
+        # 0.0 u off it (463.51 s); the slot offsets are for a group.
+        return (pf[0], pf[1])
     return party_slot_point(state, agent.get("party_slot", 0),
                             origin=(pf[0], pf[1]))
 
@@ -18363,7 +18736,7 @@ def ally_attack_tick(send, state, conn_id):
             continue
         agent["last_swing"] = now
         face_player(send, state, agent_id, agent, conn_id, at=(tx, ty))
-        start_swing(send, agent_id, conn_id, target_id=tid)
+        start_swing(send, agent_id, conn_id, target_id=tid, state=state)
         agent["swing_lands_at"] = now + swing_windup(interval)
 
 
@@ -19906,7 +20279,7 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
                   "clock had already fired")
 
 
-def start_swing(send, agent_id, conn_id, target_id=PLAYER_AGENT_ID):
+def start_swing(send, agent_id, conn_id, target_id=PLAYER_AGENT_ID, state=None):
     """The opening half of an agent's swing: the animation, and nothing else.
 
     SLOT 1 IS THE AGENT SWINGING. hit_enemy's comment records how that was found
@@ -19917,6 +20290,7 @@ def start_swing(send, agent_id, conn_id, target_id=PLAYER_AGENT_ID):
     set that ever appears in slot 1 of ATTACK_STARTED, 11 to 0 against the rival
     reading (studies/enemy/PLAN.md 11.1).
     """
+    attack_speed_flush(send, state, agent_id)          # JARIN: with the start
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
          [agents.GV_ATTACK_STARTED, agent_id, target_id, 0],
          f"attack_started: agent {agent_id} swings at "
@@ -20060,7 +20434,9 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
     # finished marker first.
     if ENERGY:
         _now = time.time()
-        agent_adrenaline(agent).on_hit_landed(_now)   # SILENT: self-scoped, 9/9
+        agent_adrenaline(agent).on_hit_landed(_now)   # SILENT for a hostile: self-scoped, 9/9
+        hero_pool_gain(send, state, agent_id, agent, pools.STRIKE_UNITS,
+                       "hit landed")                         # a HERO's is on the wire (JARIN)
         # The gain reads the damage that LANDS -- WIKI puts the one-unit-per-1%
         # rule on health lost, and a fully converted hit loses none (a 0-unit
         # gain sends nothing and grants nothing, so the converted case costs
@@ -20183,6 +20559,11 @@ def land_skill(send, state, agent_id, agent, conn_id):
     slot = agent.get("casting")
     skills = agent.get("skills") or ()
     skill_id = skills[slot][0] if slot is not None and slot < len(skills) else 0
+    if slot is not None and slot < len(skills):
+        # JARIN: a hero's completion rides the skill family (0x00E5, 0x00E3).
+        hero_skill_messages(send, state, agent_id, agent, skill_id,
+                            skills[slot][2] if len(skills[slot]) > 2 else 0,
+                            time.time())
     # SLICE-H3: a RESURRECTION lands -- the finish, then the target stands
     # (retail: [60] -> 3.0 s -> [id, 0], F28). Nothing else of a cast applies.
     if skill_resurrects(skill_id):
@@ -20244,6 +20625,8 @@ def land_skill(send, state, agent_id, agent, conn_id):
             state, skill_id, _rank, _tid, bonus, conn_id, f"agent {agent_id}")
         if skill_clears_adrenaline(skill_id):
             agent_adrenaline(agent).clear()
+            hero_pool_clear(send, state, agent_id, agent,
+                            f"skill {skill_id} clears it")   # JARIN: 0x00D0 [hero]
         _res = land_swing(send, state, agent_id, agent, conn_id, bonus=bonus,
                           skill_id=skill_id, target_id=_tid)
         send_skill_visual(send, state, agent_id, skill_id, _tid, conn_id)
@@ -20423,6 +20806,25 @@ def player_revive_due(send, state, conn_id):
     player_pools(state)
     if not state["player_dead"]:
         return
+    bodies = party_bodies(state)
+    if bodies and WIPE_SHRINE:
+        # JARIN: with a party, retail's shape. A live party member that can
+        # resurrect raises the player (F28: the signet, 5 of 5; the hero's at
+        # 599.43 s) and no timer runs; when EVERY body is down -- or the live
+        # ones hold no resurrection, this server's placeholder so a session
+        # stays playable -- the wipe stands everyone up at the shrine
+        # WIPE_RESURRECT_AFTER seconds after the last death.
+        if any(not r.get("dead")
+               and any(skill_resurrects(sk[0]) for sk in (r.get("skills") or ()))
+               for _a, r in bodies):
+            return
+        last = max([state["player_died_at"]]
+                   + [float(r.get("died_at") or 0.0) for _a, r in bodies
+                      if r.get("dead")])
+        if time.time() - last < WIPE_RESURRECT_AFTER:
+            return
+        wipe_to_shrine(send, state, conn_id)
+        return
     if time.time() - state["player_died_at"] < PLAYER_REVIVE_AFTER:
         return
     revive_player(send, state, conn_id)
@@ -20467,6 +20869,12 @@ def revive_player(send, state, conn_id, health_frac=1.0, why=" (the timer)"):
     # and 1f says in as many words not to reorder on the strength of the reading.
     if REVIVE_REFILL_DEFER > 0.0:
         state["player_refill_due_at"] = time.time() + REVIVE_REFILL_DEFER
+        # JARIN: the flags byte still closes what this arm sends now; the
+        # deferred refills follow it (retail's order puts it last -- the
+        # non-deferred arm below keeps that).
+        send(GAME_SMSG_AGENT_UPDATE_FLAGS,
+             [PLAYER_AGENT_ID, AGENT_FLAGS_PLAYER_ALIVE],
+             f"flags {AGENT_FLAGS_PLAYER_ALIVE} on the risen player")
         print(f"[c{conn_id}] the player is back up "
               f"(refill deferred {REVIVE_REFILL_DEFER:.2f}s)", flush=True)
         return
@@ -20489,6 +20897,9 @@ def revive_player(send, state, conn_id, health_frac=1.0, why=" (the timer)"):
     # which carries the OBSERVED resurrect instant (52 = 1.0 and 43 = the rate,
     # alongside the 55 = 1.0 this path's health refill already mirrors).
     restore_player_energy(send, state, conn_id, "revived")
+    # JARIN: the rise closes with 0x0026 [player, 5] (3 of 3).
+    send(GAME_SMSG_AGENT_UPDATE_FLAGS, [PLAYER_AGENT_ID, AGENT_FLAGS_PLAYER_ALIVE],
+         f"flags {AGENT_FLAGS_PLAYER_ALIVE} on the risen player")
     print(f"[c{conn_id}] the player is back up", flush=True)
 
 
@@ -20856,6 +21267,32 @@ def send_attack_speed(send, agent_id, base, what, modifier=None):
          f"{modifier:.4g})")
 
 
+def _attack_speed_declare(send, state, agent_id, base, what, factor):
+    """SLICE-H13's resend, timed JARIN's way (ATTACK_SPEED_AT_START): the
+    tick records the changed pair and the agent's next attack start sends it
+    (attack_speed_flush) -- retail's 19 of 19. --attack-speed-at-change is
+    the tick-time send H13 shipped."""
+    if not ATTACK_SPEED_AT_START:
+        send_attack_speed(send, agent_id, base, what, modifier=factor)
+        return
+    state.setdefault("attack_speed_pending", {})[agent_id] = (
+        float(base), float(factor), what)
+
+
+def attack_speed_flush(send, state, agent_id):
+    """The pending 0x0035 for `agent_id`, in the instant of its attack start.
+    Returns whether one went out."""
+    if state is None:
+        return False
+    pend = state.get("attack_speed_pending") or {}
+    got = pend.pop(agent_id, None)
+    if got is None:
+        return False
+    base, factor, what = got
+    send_attack_speed(send, agent_id, base, what, modifier=factor)
+    return True
+
+
 def attack_speed_tick(send, state, conn_id):
     """SLICE-H13: re-declare an agent's 0x0035 pair when its open episodes
     change the attack DURATION factor -- the stance opening (0.67 under
@@ -20871,8 +21308,8 @@ def attack_speed_tick(send, state, conn_id):
         return
     f = attack_interval_factor(state, PLAYER_AGENT_ID)
     if abs(f - sent.get(PLAYER_AGENT_ID, 1.0)) > 1e-9:
-        send_attack_speed(send, PLAYER_AGENT_ID, WEAPON_ATTACK_SPEED,
-                          "player", modifier=f)
+        _attack_speed_declare(send, state, PLAYER_AGENT_ID, WEAPON_ATTACK_SPEED,
+                              "player", f)
         sent[PLAYER_AGENT_ID] = f
         print(f"[c{conn_id}] the player's attack-speed modifier is now "
               f"{f:.2f} ({WEAPON_ATTACK_SPEED * f:.4g}s a swing)"
@@ -20884,8 +21321,8 @@ def attack_speed_tick(send, state, conn_id):
         f = attack_interval_factor(state, aid)
         if abs(f - sent.get(aid, 1.0)) > 1e-9:
             base = float(row.get("attack_speed") or ENEMY_ATTACK_SPEED)
-            send_attack_speed(send, aid, base, row.get("name", "npc"),
-                              modifier=f)
+            _attack_speed_declare(send, state, aid, base,
+                                  row.get("name", "npc"), f)
             sent[aid] = f
             print(f"[c{conn_id}] agent {aid}'s attack-speed modifier is now "
                   f"{f:.2f} ({base * f:.4g}s a swing) [SLICE-H13]", flush=True)
@@ -21877,7 +22314,9 @@ def _handle_request_players(send, state, conn_id, stop, rec):
         _iname = (agents.npc_template(HERO_INFO_NAME)
                   ["enc_name"] if HERO_INFO_NAME else "")
         for _hid, _haid, _hdef in hero_slots():
-            if HERO_INFO:
+            if HERO_INFO and not (HERO_RIG_RETAIL and HERO_ACTIVATE):
+                # JARIN: retail sends NO 0x0074 (3 of 3 instances); the
+                # retail rig below sends the character block + 0x0072 instead.
                 # BACK IN THE DEFERRED UNIT. 35.6b tried it
                 # inline and the assert survived, so the
                 # 0x0074-vs-0x0072 inversion was real and was
@@ -21963,6 +22402,22 @@ def _handle_request_players(send, state, conn_id, stop, rec):
                 if (HERO_ACTIVATE_ID is not None
                     and _haid == HERO_AGENT_ID) else _hid,
                 _haid, HERO_INVENTORY, HERO_AI_MODE))
+    # JARIN-S, THE RETAIL RIG: the hero's character block
+    # (the player's own, addressed to the hero's agent) then
+    # HeroActivate, both BEFORE the player's create; the body
+    # after it; the party build LAST -- the tape's order in
+    # three instances. --hero-rig-legacy is every rig before.
+    _rig_retail = HERO_RIG_RETAIL and HERO_ACTIVATE
+    if _rig_retail:
+        for _hid, _haid, _hdef in hero_slots():
+            _seq.extend(hero_character_block(state, _haid, _hid))
+            _seq.append(agents.hero_activate(
+                HERO_ACTIVATE_ID
+                if (HERO_ACTIVATE_ID is not None
+                    and _haid == HERO_AGENT_ID) else _hid,
+                _haid, HERO_INVENTORY,
+                (hero_command(state, _haid)["ai_mode"]
+                 if PARTY_COMMANDS else HERO_AI_MODE)))
     # THE PARTY BUILD, and under HERO_PIPELINE_FIRST it is
     # DEFERRED past the pipeline below instead of leading
     # it -- constraint (3) of the squeeze recorded at
@@ -21975,7 +22430,7 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     _party = tuple(agents.party_build(
         1, PLAYER_NUMBER, inside_window=_inside)) + _after
     _party_deferred = ()
-    if HERO_PIPELINE_FIRST:
+    if HERO_PIPELINE_FIRST or _rig_retail:
         _party_deferred = _party
     else:
         _seq.extend(_party)
@@ -22057,6 +22512,7 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     # local, so a death path four thousand lines away had
     # no way to ask how big the character was.
     state["level"] = _ps_level
+    state["spawn_point"] = (float(pos[0]), float(pos[1]), int(cfg[2]))   # JARIN: the shrine's fallback
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
          [agents.PROP_LEVEL, PLAYER_AGENT_ID, _ps_level],
          f"level {_ps_level} on the player's AGENT")
@@ -22535,7 +22991,7 @@ def _handle_request_players(send, state, conn_id, stop, rec):
               [agents.PROP_LEVEL, _haid, HERO_LEVEL],
               f"level {HERO_LEVEL} on hero agent {_haid}")
     for _hid, _haid, _hdef in (hero_slots()
-                               if HERO_VITALS is not None
+                               if HERO_VITALS is not None and not _rig_retail
                                else ()):
         hsend(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
               [agents.PROP_HEALTH_MAX, _haid,
@@ -22566,6 +23022,7 @@ def _handle_request_players(send, state, conn_id, stop, rec):
         _hro = agents.npc_template(HERO_BODY_NPC)
         _wkey = party_weapon_item(_hro)               # SLICE-H7
         _hhp = float(HERO_VITALS[0]) if HERO_VITALS else 100.0
+        _hhp_eff = float(morale.effective_max(_hhp, _hhp, hero_morale(state, _haid)))
         # Fan them out rather than stacking: bodies sharing a
         # spot read as one body, and "nothing appeared" is the
         # failure this repo already paid for once.
@@ -22576,7 +23033,11 @@ def _handle_request_players(send, state, conn_id, stop, rec):
             {"pos": (_rx, _ry), "plane": cfg[2],
              # SLICE-H8: the party row's health (HERO_VITALS), level, ranks,
              # armour and weapon range -- see the constants' comment.
-             "health": _hhp, "max_health": _hhp,
+             "health": _hhp_eff, "max_health": _hhp_eff,
+             "base_max_health": _hhp,          # JARIN: the maxima scale with the hero's morale
+             "base_max_energy": float(HERO_VITALS[1]) if HERO_VITALS else 30.0,
+             "hero": _hid,                     # JARIN: the body IS a hero (effect list, pools, skill family)
+             "weapon_item_id": (HERO_WEAPON_ITEM_ID + _i) if _wkey is not None else None,
              "attributes": dict(HERO_ATTRIBUTES or {}),
              "armor_rating": HERO_ARMOR,
              "damage": (list(HERO_DAMAGE) if HERO_DAMAGE else None),
@@ -22630,7 +23091,7 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     # This is the message the arc spent two refuted
     # hypotheses looking for, and we already had it.
     for _hid, _haid, _hdef in (hero_slots()
-                               if HERO_ATTRIBS else ()):
+                               if HERO_ATTRIBS and not _rig_retail else ()):
         # 0x00B7 FIRST, and read the reason before moving
         # it. THERE ARE TWO PROFESSION STORES and this arc
         # conflated them for a day:
@@ -22700,7 +23161,7 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     # been sending for the player all along. Fourth time
     # this arc that the mechanism was already in the tree.
     for _hid, _haid, _hdef in (hero_slots()
-                               if HERO_SKILLBAR else ()):
+                               if HERO_SKILLBAR and not _rig_retail else ()):
         _hskills = list(SKILLBAR)[:SKILLBAR_SLOTS]
         _hskills += [0] * (SKILLBAR_SLOTS - len(_hskills))
         hsend(GAME_SMSG_SKILLBAR_UPDATE,
@@ -22727,7 +23188,7 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     # name the commander-binding trigger.
     for _hid, _haid, _hdef in (
             hero_slots()
-            if (HERO_ACTIVATE and not HERO_ACTIVATE_FIRST)
+            if (HERO_ACTIVATE and not HERO_ACTIVATE_FIRST and not _rig_retail)
             else ()):
         hsend(*agents.hero_activate(
             HERO_ACTIVATE_ID
@@ -22888,6 +23349,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             state["map_id"] = map_id
             state["world_id"] = world_id
             state["player_id"] = player_id
+            zone_carry_apply(state, conn_id)                   # JARIN
         print(f"[c{conn_id}] key exchange OK — ARC4 key {derived.hex()[:16]}…", flush=True)
         rec.event("key_exchange_ok", arc4_key=derived.hex())
 
@@ -23380,6 +23842,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # footing -- a stance ending this tick restores the
                         # client's modifier on the same tick.
                         attack_speed_tick(send, state, conn_id)
+                        hero_recharged_tick(send, state, conn_id)   # JARIN
                         # Degeneration AFTER the expiries, so a condition that
                         # ran out on this tick does not also charge for it.
                         degen_tick(send, state, conn_id)
@@ -27888,6 +28351,36 @@ def main():
         HEX_TRIGGERS = False
         print("[map] --no-hex-triggers: a hex that punishes attacks deals "
               "nothing (the pre-MANTID arm).", flush=True)
+    if a.attack_speed_at_change:
+        global ATTACK_SPEED_AT_START
+        ATTACK_SPEED_AT_START = False
+        print("[map] --attack-speed-at-change: the 0x0035 resend goes out at "
+              "the tick the stance changes (H13's shape); retail sends it with "
+              "the next attack start [JARIN revert]", flush=True)
+    if a.hero_rig_legacy:
+        global HERO_RIG_RETAIL
+        HERO_RIG_RETAIL = False
+        print("[map] --hero-rig-legacy: 0x0074 first, the hero's block after "
+              "its body, 0x0072 last -- every rig before JARIN (retail sends "
+              "no 0x0074 at all)", flush=True)
+    if a.hero_silent_pools:
+        global HERO_WIRE_POOLS
+        HERO_WIRE_POOLS = False
+        print("[map] --hero-silent-pools: no 0x00CF/0x00D0/0x00E3/0x00E5/0x00E6 "
+              "for a hero (retail: 107 / 7 / 48 / 35 on one tape) [JARIN revert]",
+              flush=True)
+    if a.no_wipe_shrine:
+        global WIPE_SHRINE
+        WIPE_SHRINE = False
+        print("[map] --no-wipe-shrine: the timer stands the player up where "
+              "it fell, the party where it lies (the pre-JARIN placeholder)",
+              flush=True)
+    if a.no_zone_carry:
+        global ZONE_CARRY_ON
+        ZONE_CARRY_ON = False
+        print("[map] --no-zone-carry: a zone forgets the death penalty and the "
+              "hero's stance (retail carries the stance; clears the penalty "
+              "in an outpost only)", flush=True)
     if a.no_attack_speed_sync:
         global ATTACK_SPEED_SYNC
         ATTACK_SPEED_SYNC = False

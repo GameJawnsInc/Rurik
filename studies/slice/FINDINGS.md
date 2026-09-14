@@ -2279,6 +2279,84 @@ cleared on an outpost load; (8) `0x0026` 8/9 on a body's death and rise; (9) the
 persisted into the next instance's `0x0072`. Left open: Frenzy's doubling (a player run), the
 hostile-target rule (n = 5), reason 1, the abeam offset, Healing Signet's shape.
 
+## SLICE-F40 — **JARIN-S: the hero tape's corrections, shipped — retail's rig without `0x0074`, the hero's pools and skill family on the wire, the resend with the start, the lock cleared at the kill, the wipe to the shrine, the zone carry**
+
+**The owner (2026-09-14):** *"go"*, to SLICE-F39's queue of nine. Shipped the same day, each
+behind a measured default with its pre-JARIN arm as the revert flag; the floors are the tape's
+(`20260914T005758`) and the corpus's where a count existed. **One thing measured after the fact
+first:** MANTID-S's `effect_list_visible` kept the effect list "for a hero, for want of a
+witness" by reading a `hero` key on the body row — **and no row ever carried that key**, so the
+branch had never fired. The tape witnessed the hero's list (24 applies); the body's create entry
+now carries `hero = <index>` and the branch is live. A shipped arm nobody could reach is the
+defect class `studies/method` names, from the other side.
+
+| # | correction | the wire it copies | flag |
+|---|---|---|---|
+| 1 | **The rig in retail's order.** `hero_character_block` — `0x0037`, `0x00B7`, `0x00DA` (the hero's OWN bar, not the player's), prop 41, prop 42, `0x009C`, prop 36, `0x00A6`, `0x003A` — then `0x0072` (with the carried aiMode), both queued AHEAD of the player's create; the body (a field) after it; the party build LAST; **no `0x0074`**. The four legacy sites (vitals, attribs, bar, the last `0x0072`) stand down under it | 37.73 s, 87.21 s, 651.62 s: three instances, one order, 0 `0x0074` | `--hero-rig-legacy` |
+| 2 | **A hero's family on the wire.** `hero_pool_gain` (`0x00CF [hero, 25]` per hit landed, `[hero, units]` per hit taken, BEFORE the damage word), `hero_pool_clear` (`0x00D0` at Final Thrust and at death), `hero_skill_messages` (`0x00E5 [hero, skill, 0, recharge]` then `0x00E3` at the completion) and `hero_recharged_tick` (`0x00E6` when the recharge runs out); nothing for a henchman or a hostile | 107 / 7 / 35 / 48 on the hero; 0 on eleven henchman bodies; the `0x00E3` "6 of 6 name the player" note corrected | `--hero-silent-pools` |
+| 3 | **The attack-speed resend rides the next start.** `attack_speed_tick` records the changed pair; `attack_speed_flush` sends it in the instant of the agent's next attack start (the player's swing and attack-skill sites, `start_swing`, the ally and hostile attack-skill announces); nothing at the apply, nothing at the close | 19 of 19 with a start; six out-of-combat applies sent nothing | `--attack-speed-at-change` |
+| 4 | **The lock is cleared at the kill.** `hero_locks_release` in `kill_agent`: `0x0063 [hero, 0]` and the order dropped | 443.85 s, 0.57 s after the killing Final Thrust | (with `--party-ignore-commands`) |
+| 5 | **A lone hero walks to the party flag itself.** `party_flag_point` returns the flag when the party has one body; the slot offsets stay for a group | the lead ended 0.0 u off the flag, 463.51 s | — |
+| 6 | **The wipe.** `player_revive_due` with a party: a live body that can resurrect means NO timer; everyone down (or the live ones without a resurrection — this server's placeholder, said so) means `wipe_to_shrine` `WIPE_RESURRECT_AFTER` = 11.4 s after the LAST death — `0x0025` and `0x002C` for the player, every body `0x0021` + `0x0020` + `0x006D` at the shrine (`shrine_x/y/plane` on the map row, else the instance's spawn), everyone raised at full health with the maxima kept, the flags bytes 5 and 9, no `0x01D8` | 340.21 s; the median of 10.0 / 12.2 / 12.8 / 10.6 s on four tapes | `--no-wipe-shrine` |
+| 7 | **The penalty clears on an outpost load.** `zone_carry_apply`: morale, its bank and the heroes' morale carried into a FIELD only | `0x009C [·, 100]` for both at 651.62 s after 71 / 72 in the field | `--no-zone-carry` |
+| 8 | **The flags bytes.** `0x0026 [player, 4]` closes `kill_player`'s tick, `[player, 5]` the rise; a body's rise `[body, 9]` (its death already sent 8); **and `kill_player`'s order is retail's** — status, the morale tick, the hold, `0x002D`, `0x00D0`, the flags — where the hold and the cancel had ridden between the status and the tick (`test_morale` §5 had been red on it) | 3 of 3 player deaths and rises; 250 body rises; MANTID + JARIN for the order | — |
+| 9 | **The stance persists.** `zone_carry_store` at the transfer, keyed by character uuid; the next instance's `0x0072` carries it | Avoid at 510.66 s, `[6, 324, 157, 2]` at 651.62 s | `--no-zone-carry` |
+
+**A hero's morale, per hero.** `hero_morale` / `hero_morale_apply` / `hero_death_tick` /
+`hero_morale_experience`: the hero's own −15 at its death (`0x009C [hero, 85]`, `0x00D0`, prop
+41, `0x00A2 [43, hero, 0]`, prop 42, in the tape's order), its own bank buying it back with the
+kill's XP, its maxima scaled from `base_max_health` / `base_max_energy` on the row (140 → 119 →
+101 on the tape); the load block declares them at the carried morale.
+
+**What the tape did to the corpus tests, and what each re-pin found** (the "corpus counts
+redden on confirming evidence" rule, six suites):
+
+- `adrenjoin.whose_agent` / `henchjoin.whose_agent`: property 41 is no longer unique on a hero
+  tape; the kind-5 create (the fourth word 5 on the observer, 9 on a body) breaks the tie.
+- `adrenjoin.scan` gains a third arm, **hero**: a `0x00CF`/`0x00D0`/`0x00D2` naming an agent
+  whose OWN `0x00DA` is adrenal. `test_adrenwire`: the census is 1028 / 37 / 59; **three 207s
+  above 25 (26, 29, 42)** — a landed hit and a hit taken summed into one tick on the hero, so the
+  25 ceiling holds per event, not per message; the sub-strike tail doubled (a 2-unit bite per
+  skale swing at 140 health); the spend skills gain the hero's 348 ×7, 382 ×7, 385 ×5; a 207
+  names an agent holding ONE of the connection's bars (the Ranger's had no adrenal skill, every
+  207 on that tape was the hero's).
+- `test_pools`: the Ranger under the penalty adds (3, 22) and (3, 19), the hero (2, 14) — the
+  base-scaling rule at n = 4; **the hero's `0x00A2 43` rides one message AHEAD of its prop 41**
+  in the block (3 of 3), the one orphan class; **skill 392 charged 14 of 15 — Expertise 1, WIKI's
+  4 % per rank, floored**, named by (capture, skill); **the hero's property-41 sequences carry
+  no leading 1** (the 1 is the observer's own); **the signet raise put the Ranger's energy at
+  5 of 19 = 25 %** (WIKI, Resurrection Signet), where every shrine or timer rise is 1.0; and the
+  (3, 19) rate is `f32(0.33 * 3 / 19)` with 0.33 in DOUBLE, one ulp under the oracle's f32-first
+  spelling — the two differ on six candidate pairs and every earlier witness happened to agree
+  with the oracle, so which spelling retail uses is now CONTESTED, one witness each way.
+- `test_skilldamage` §12: the caster 54's skill 222 on the Ranger and on the hero spans two death
+  penalties each (the maxima 140 → 119 → 99 / 101) and the hero's Frenzy — the join keys on the
+  target, not on its current maximum, so those two pairs are several values by construction; set
+  aside by name, a third would be a new fact.
+- `test_agentlife`'s two load-path locks: `party_bodies_here(state)` now has six sites (the
+  zone carry reads it); the town's `0x00A6` lock reads the load path and the block's labels are
+  spelled so it still finds the site it was written for.
+
+**Tests.** `test_mechanics` §7b rewritten for the start-time send (the tick records, the flush
+sends one, a second start nothing, the close nothing until the next chain, a body's rides
+`start_swing` ahead of its own start, both revert arms; floor 198 → 202). `test_agentlife` gains
+the JARIN-S section (floor 502 → 522): the family on a hero row and not a henchman's, the
+recharge once, the lock released at the kill, the lone hero's flag, the hero's death tick with
+its maxima at 85 %, the rise's flags byte, the signet pre-empting the timer, the wipe's fifteen
+messages and the placed bodies, the carry into a field and into a town, the block's order with
+and without a level, and a source lock on the rig. `test_guards` §6 counts the flags byte.
+`test_pools` 108 → 128, `test_adrenwire` 73, `test_skilldamage` 58, `test_morale` 62 (green
+again), and the untouched readers: effects 84, castcycle 51, killwindow 21, population 75,
+dispatch 45, cancelwalk 124, playerswing 176, castcancel 44, srclint 26.
+
+**Left, said so.** The signet's 25 % energy on the raised player (measured; `revive_player`
+still refills to full — a `restore_player_energy` fraction is the change). Frenzy's double
+damage (a player run). The hostile-target rule at n = 5. Whether the client draws Koss's
+recharge from the new family, tolerates the rig in retail's order (the heroes study's crash
+was under OUR order; retail's puts the block before `0x0072` and `0x0072` before the build,
+which satisfies both of `HERO_ACTIVATE_FIRST`'s constraints) and stands the party up at the
+shrine — the next loopback run, `--party slice`.
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:

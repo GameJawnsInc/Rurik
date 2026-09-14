@@ -163,7 +163,18 @@ def whose_agent(msgs):
     """
     seen = {int(v[2]) for _t, op, v in msgs
             if op == PROP_INT and len(v) > 2 and int(v[1]) == PROP_MAX_ENERGY}
-    return seen.pop() if len(seen) == 1 else None
+    if len(seen) == 1:
+        return seen.pop()
+    # JARIN (2026-09-14): a HERO gets property 41 too -- the player's own
+    # character block addressed to a second agent, 3 of 3 instances on
+    # 20260914T005758 -- so the rule above answers None on a hero tape. The
+    # tie-break is the kind-5 create: the observer's 0x0020 carries 5 in its
+    # fourth word where a party body's carries 9 (other PLAYERS in a town are
+    # kind 5 too, but they never receive property 41 on our stream).
+    fives = {int(v[1]) for _t, op, v in msgs
+             if op == 0x0020 and len(v) > 4 and int(v[4]) == 5}
+    both = seen & fives
+    return both.pop() if len(both) == 1 else None
 
 
 def adrenal_costs():
@@ -217,7 +228,11 @@ def scan(costs=None):
     live = vaultpath.require_dir("captures", "live",
                                  why="the adrenaline census")
     codec = Codec()
-    stats = {"armed": collections.Counter(), "dark": collections.Counter()}
+    stats = {"armed": collections.Counter(), "dark": collections.Counter(),
+             # JARIN (2026-09-14): a THIRD population -- a HERO's family, on
+             # its own agent, keyed by the hero's own 0x00DA (adrenal skills on
+             # it). 107 / 9 / 19 on 20260914T005758; a henchman's never.
+             "hero": collections.Counter()}
     rows, skipped, captures = [], [], 0
 
     for stamp in sorted(os.listdir(live)):
@@ -245,8 +260,25 @@ def scan(costs=None):
             s = stats[arm]
             s["connections"] += 1
             s["messages"] += len(msgs)
+            # JARIN: every OTHER agent this connection sent a bar to, and
+            # whether that bar is adrenal -- a hero's family is scoped to the
+            # hero, not to the observer.
+            other_bars = {}
+            for _t, op, v in msgs:
+                if op == SKILLBAR_UPDATE and len(v) > 2 and int(v[1]) != me:
+                    other_bars.setdefault(int(v[1]), set()).update(
+                        int(x) for x in v[2] if x)
+            hero_agents = {a for a, bar in other_bars.items()
+                           if any(costs.get(sk, 0) > 0 for sk in bar)}
+            if hero_agents:
+                stats["hero"]["connections"] += 1
 
             for _t, op, v in msgs:
+                if (op in (ADRENALINE_GAIN, ADRENALINE_CLEAR, ADRENALINE_SPEND)
+                        and int(v[1]) in hero_agents):
+                    stats["hero"][{ADRENALINE_GAIN: "gain", ADRENALINE_CLEAR: "clear",
+                                   ADRENALINE_SPEND: "spend"}[op]] += 1
+                    continue
                 if op == ADRENALINE_GAIN and int(v[1]) == me:
                     s["gain"] += 1
                     s["strike" if int(v[2]) == STRIKE_UNITS else "sub"] += 1

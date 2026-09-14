@@ -186,8 +186,8 @@ CORPUS_MESSAGES = 143408
 # the same constant meaning two things, green only because the corpus had not
 # grown since the morning. Both now read `agg["census"][...]`, the measured
 # number. If you need "all N of them", take N from the measurement.
-CENSUS = {SMSG_ADRENALINE_CHARGE: 918, SMSG_ADRENALINE_CLEAR: 27,
-          SMSG_ADRENALINE_SET: 0, SMSG_ADRENALINE_SPEND: 40}
+CENSUS = {SMSG_ADRENALINE_CHARGE: 1028, SMSG_ADRENALINE_CLEAR: 37,
+          SMSG_ADRENALINE_SET: 0, SMSG_ADRENALINE_SPEND: 59}   # JARIN: +107 / +10 / +19, the hero's
 
 # THE TWO EXACT CORPUS CLAIMS THAT ARE DELIBERATE, so the next session does not
 # quietly re-pin them. Both were confirmed size-sensitive on 2026-08-27 by
@@ -206,8 +206,14 @@ CENSUS = {SMSG_ADRENALINE_CHARGE: 918, SMSG_ADRENALINE_CLEAR: 27,
 # health lost, floored. NOTHING JOINS THE TAIL TO HEALTH TRAFFIC YET, so the 25s
 # are OBSERVED as a value and the reading of the tail is not a measurement.
 STRIKE_UNITS = 25
-STRIKE_COUNT = 886
-SUB_STRIKE = {3: 6, 4: 12, 5: 1, 6: 5, 7: 1, 8: 3, 11: 4}
+STRIKE_COUNT = 957      # JARIN: +71, the hero's landed hits
+SUB_STRIKE = {2: 8, 3: 9, 4: 29, 5: 2, 6: 5, 7: 1, 8: 3, 11: 4, 12: 1, 13: 1,
+              15: 2, 19: 2, 21: 1}   # JARIN: the hero's hits taken (2 per skale bite at 140)
+# JARIN: THREE 207s ABOVE 25, all the hero's -- a landed hit and a hit taken
+# in ONE tick, 25 + 1 / + 4 / + 17 (the caster's blow on a 140 pool). The
+# ceiling reading ("25 is the largest single event") holds per EVENT and
+# not per message; retail sums the tick.
+OVER_STRIKE = {26: 1, 29: 1, 42: 1}
 
 # THE BAR GATE, measured 2026-08-21 (12). Split the 58 usable connections on
 # whether the observing player's skillbar ever carried a skill with a non-zero
@@ -221,8 +227,11 @@ SUB_STRIKE = {3: 6, 4: 12, 5: 1, 6: 5, 7: 1, 8: 3, 11: 4}
 # which is this pair's own cross-check.
 ARMED_CONNECTIONS = 36
 DARK_CONNECTIONS = 22
-ARMED_FAMILY = {SMSG_ADRENALINE_CHARGE: 918, SMSG_ADRENALINE_CLEAR: 27,
+ARMED_FAMILY = {SMSG_ADRENALINE_CHARGE: 921, SMSG_ADRENALINE_CLEAR: 28,
                 SMSG_ADRENALINE_SPEND: 40}
+# JARIN: the HERO's own family (adrenjoin.scan's third arm), on one tape.
+HERO_FAMILY = {SMSG_ADRENALINE_CHARGE: 107, SMSG_ADRENALINE_CLEAR: 9,
+               SMSG_ADRENALINE_SPEND: 19}
 # The control that makes the dark zero mean something: those connections FOUGHT.
 DARK_HITS_LANDED = 45
 DARK_MELEE_FINISHED = 13
@@ -290,7 +299,7 @@ DISAGREEMENT_BAND = (0.5, 1.0)
 # a self-targeted adrenal skill (type_code 15, target 0, 80 units), chosen for
 # that plan precisely because it lands no hit. It broadened the model on arrival;
 # see ACTIVATION_FOLLOWER below.
-SPEND_SKILLS = {348: 1, 382: 20, 384: 11, 385: 8}
+SPEND_SKILLS = {348: 8, 382: 27, 384: 11, 385: 13}   # JARIN: +7 / +7 / +5, the hero's (0x00D2 [30, skill] on the tape)
 SELF_SCOPED_CONNECTIONS = 11
 
 # ---------------------------------------------------------------------------
@@ -412,11 +421,12 @@ def section_pin_consistency():
     change. It can only fail on that edit, which is the edit that matters.
     """
     print("\n2. the pinned constants agree with each other")
-    total = STRIKE_COUNT + sum(SUB_STRIKE.values())
+    total = STRIKE_COUNT + sum(SUB_STRIKE.values()) + sum(OVER_STRIKE.values())
     LEDGER.ok(total == CENSUS[SMSG_ADRENALINE_CHARGE],
-              f"the two 207 populations sum to the census total, {total}",
+              f"the three 207 populations sum to the census total, {total}",
               f"{STRIKE_COUNT} at exactly {STRIKE_UNITS} units plus "
-              f"{sum(SUB_STRIKE.values())} below it. NOT A MEASUREMENT -- a "
+              f"{sum(SUB_STRIKE.values())} below it and {sum(OVER_STRIKE.values())} "
+              f"above (JARIN). NOT A MEASUREMENT -- a "
               f"tripwire, so that half an edit goes red here instead of "
               f"passing §4 and §4b with two mutually inconsistent numbers")
     LEDGER.ok(sum(SPEND_SKILLS.values()) == CENSUS[SMSG_ADRENALINE_SPEND],
@@ -626,9 +636,10 @@ def section_populations(agg):
               f"as a value; that it is one strike per landed hit is the "
               f"reading, and it is the reading `pools.on_hit_landed` already "
               f"implements")
-    LEDGER.ok(amounts[STRIKE_UNITS] > 20 * tail_total,
+    LEDGER.ok(amounts[STRIKE_UNITS] > 10 * tail_total,
               f"and {STRIKE_UNITS} is the overwhelming mode, not merely the "
-              f"commonest",
+              f"commonest (10x: JARIN's melee hero took a 2-unit bite for every "
+              f"skale swing and doubled the tail on one tape)",
               f"{amounts[STRIKE_UNITS]} at 25 against {tail_total} below it. "
               f"THIS is the durable form of the count above: a tail that grew "
               f"to rival the strikes would mean the 1%-of-health rule fires far "
@@ -644,9 +655,9 @@ def section_populations(agg):
               f"measurement and the explanation is not")
 
     over = {a: n for a, n in amounts.items() if a > STRIKE_UNITS}
-    LEDGER.ok(not over,
+    LEDGER.ok(over == OVER_STRIKE,
               f"NO 207 exceeds {STRIKE_UNITS} units, in {sum(amounts.values())} "
-              f"of them",
+              f"of them, except the hero's three summed ticks {OVER_STRIKE} (JARIN)",
               f"{over}. The strike rule's own signature: 25 is a CEILING on "
               f"one message because it is the largest single event the rule "
               f"allows. A 50 would mean the server batches strikes, and the "
@@ -690,10 +701,12 @@ def section_self_scope(agg):
               f"{multi}. The ids 7/11/13/25 across the corpus are four "
               f"SESSIONS, not four agents -- which is the reading this check "
               f"refuted")
-    mismatched = [(s, a, b) for s, a, b in rows if a != b]
-    LEDGER.ok(not mismatched,
-              f"and that agent IS the connection's own SKILLBAR_UPDATE agent, "
-              f"{len(rows)} of {len(rows)}",
+    mismatched = [(s, a, b) for s, a, b in rows if not set(a) <= set(b)]
+    LEDGER.ok(not mismatched and any(len(b) > 1 for _s, _a, b in rows),
+              f"and that agent holds one of the connection's SKILLBAR_UPDATE bars, "
+              f"{len(rows)} of {len(rows)} -- the observer's, or a HERO's (JARIN: "
+              f"the Ranger's bar had no adrenal skill and every 207 on that tape "
+              f"named the hero, whose 0x00DA the same connection carries)",
               f"opcode {SMSG_SKILLBAR_UPDATE} carries the bar whose slots 207 "
               f"charges, so the two have to name the same agent or the client "
               f"would be filling a bar it was never sent. Mismatches: "
@@ -1249,9 +1262,13 @@ def section_bar_gate(agg):
     census = agg["census"]
     pairs = ((SMSG_ADRENALINE_CHARGE, "gain"), (SMSG_ADRENALINE_CLEAR, "clear"),
              (SMSG_ADRENALINE_SPEND, "spend"))
-    LEDGER.ok(all(armed[k] == census[op] for op, k in pairs),
-              f"and the armed side carries ALL of it: "
-              f"{armed['gain']}/{armed['clear']}/{armed['spend']}",
+    hero = stats["arms"]["hero"]
+    LEDGER.ok(all(armed[k] + hero[k] == census[op] for op, k in pairs)
+              and all(hero[k] == HERO_FAMILY[op] for op, k in pairs),
+              f"and the armed side and the HERO's carry ALL of it: "
+              f"{armed['gain']}+{hero['gain']}/{armed['clear']}+{hero['clear']}/"
+              f"{armed['spend']}+{hero['spend']} (JARIN: a hero's family is on its "
+              f"own agent, keyed by its own adrenal bar)",
               f"section 4's census reads "
               f"{ {hex(o): census[o] for o, _ in pairs} } over the whole corpus "
               f"and this counts per connection after a skillbar join -- TWO "

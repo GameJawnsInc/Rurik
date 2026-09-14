@@ -8057,6 +8057,14 @@ checked against the corpus before this was written:
 > re-creates the hero's body, no `0x01D8`; the penalty clears in an outpost. "Watch Yourself!"
 > is 348 and lands on both lists. Refuted: hostiles opened on the Warrior 3 of 5 (F29's
 > softest-first). Queued as **JARIN-S** (nine server corrections, listed in SLICE-F39).
+>
+> **JARIN-S SHIPPED the same day — [studies/slice/FINDINGS.md](studies/slice/FINDINGS.md)
+> SLICE-F40.** The rig in retail's order without `0x0074`; a hero's adrenaline, skill family and
+> morale on the wire; the attack-speed resend with the next start; the lock cleared at the kill;
+> the wipe to the shrine; the penalty cleared in an outpost, the stance carried; the flags bytes
+> and `kill_player`'s retail order (`test_morale` green again). Five revert flags. Six suites
+> re-pinned on the tape. Unobserved on a client: the rig in retail's order, Koss's recharge, the
+> shrine — the next loopback run with `--party slice`.
 
 Two properties worth naming while a tutorial capture is being planned, because both are
 frequent and neither is understood: **property 66** (202 sightings, the second most common

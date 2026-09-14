@@ -27,7 +27,7 @@ import agents       # noqa: E402
 import effects      # noqa: E402
 
 # Floor set from a real green run (39 checks, 2026-08-22; 99 checks, 2026-09-09 SKILLS-DW; 129 checks, 2026-09-10 SKILLS-BL; 153 checks, 2026-09-10 SKILLS-RC; 162 checks, 2026-09-10 SKILLS-MA).
-LEDGER = checks.Ledger("effect mechanics", floor=198)   # MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
+LEDGER = checks.Ledger("effect mechanics", floor=202)   # JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
 check = checks.adopt(LEDGER)
 
 FRENZY, RUSH, ROF, GLYPH, IGNITE, FAINT = 346, 319, 307, 200, 431, 135
@@ -178,52 +178,84 @@ check(bonus == 0.0,
 bonus, _sid = authsrv.swing_preparation_bonus(fresh_state(), bow, PLAYER)
 check(bonus == 0.0, "a bow with no preparation open: nothing")
 
-print("== 7b. SLICE-H13: the attack-speed pair follows the stance ==")
+print("== 7b. SLICE-H13 / JARIN: the attack-speed pair follows the stance, and rides the next start ==")
 # The server paced Frenzy's swings since 2026-08-22; the CLIENT animates to
-# the 0x0035 pair it holds (base x modifier, 0x007F837E). One resend per
-# change of the factor: open -> 0.67, close -> 1.0, nothing in between.
+# the 0x0035 pair it holds (base x modifier, 0x007F837E). H13: one resend per
+# change of the factor. JARIN (studies/slice F39): retail sends that resend
+# WITH the agent's next attack start -- 19 of 19 on the hero tape, never at
+# the stance's apply, nothing at its close (the 1.0 rides the next chain's
+# first start). So the tick RECORDS the change and the start SENDS it;
+# --attack-speed-at-change is H13's tick-time send.
 state = fresh_state()
 state["agents"] = {10: {"name": "bandit", "dead": False, "attack_speed": 1.33}}
 sent, send = collector()
-saved_sync = authsrv.ATTACK_SPEED_SYNC
+saved_sync, saved_start = authsrv.ATTACK_SPEED_SYNC, authsrv.ATTACK_SPEED_AT_START
 try:
     authsrv.ATTACK_SPEED_SYNC = True
+    authsrv.ATTACK_SPEED_AT_START = True
     authsrv.attack_speed_tick(send, state, 0)
-    check(not sent, "nothing open, nothing sent -- the load's declaration stands")
+    check(not sent and not authsrv.attack_speed_flush(send, state, PLAYER),
+          "nothing open, nothing sent and nothing pending -- the load's declaration stands")
     ep = open_ep(state, 346, rank=9, duration=8.0)                 # Frenzy
     authsrv.attack_speed_tick(send, state, 0)
     ws = authsrv.WEAPON_ATTACK_SPEED
-    check(len(sent) == 1
+    check(not sent and abs(state["attack_speed_pending"].get(PLAYER, (0, 0.0))[1] - 0.67) < 1e-6,
+          "Frenzy opens: the tick sends NOTHING and records 0.67 as pending -- "
+          "retail's six out-of-combat applies sent no 0x0035", f"sent={sent}")
+    flushed = authsrv.attack_speed_flush(send, state, PLAYER)
+    check(flushed and len(sent) == 1
           and sent[0][0] == authsrv.GAME_SMSG_AGENT_UPDATE_ATTACK_SPEED
           and sent[0][1] == [PLAYER, authsrv._f32(ws), authsrv._f32(0.67)],
-          "Frenzy opens: ONE 0x0035 [player, base, 0.67] -- the client's "
-          "modifier field (studies/enemy PLAN 6q: 0.67 = +33% IAS), the "
-          "base unchanged", f"sent={sent}")
+          "the next attack start flushes ONE 0x0035 [player, base, 0.67] -- the "
+          "client's modifier field (studies/enemy PLAN 6q: 0.67 = +33% IAS), the "
+          "base unchanged, in the start's own instant (19 of 19)", f"sent={sent}")
+    check(not authsrv.attack_speed_flush(send, state, PLAYER) and len(sent) == 1,
+          "a second start sends nothing more -- the pending pair was consumed")
     authsrv.attack_speed_tick(send, state, 0)
-    check(len(sent) == 1, "a second tick with the stance still open sends nothing")
+    check(len(sent) == 1 and PLAYER not in state["attack_speed_pending"],
+          "a second tick with the stance still open records nothing")
     state["effects"].close(ep["buff"])
     authsrv.attack_speed_tick(send, state, 0)
+    check(len(sent) == 1, "the stance closes: the tick sends nothing (retail sends "
+          "nothing at a close)")
+    authsrv.attack_speed_flush(send, state, PLAYER)
     check(len(sent) == 2
           and sent[1][1] == [PLAYER, authsrv._f32(ws), authsrv._f32(1.0)],
-          "the stance closes: ONE 0x0035 restoring modifier 1.0",
+          "...and the next chain's first start restores modifier 1.0 -- ONE 0x0035",
           f"sent={sent[1:]}")
-    # a BODY under a stance: its own base, its own modifier
+    # a BODY under a stance: its own base, its own modifier, riding ITS start
     sent.clear()
     bep = open_ep(state, 346, rank=0, duration=8.0, agent=10)
     authsrv.attack_speed_tick(send, state, 0)
-    check([(op, v) for op, v, _l in sent]
+    authsrv.start_swing(send, 10, 0, target_id=PLAYER, state=state)
+    check([(op, v) for op, v, _l in sent][:2]
           == [(authsrv.GAME_SMSG_AGENT_UPDATE_ATTACK_SPEED,
-               [10, authsrv._f32(1.33), authsrv._f32(0.67)])],
-          "a body under Frenzy: [body, its 1.33, 0.67]; the player, unchanged "
-          "at 1.0, is not re-declared", f"sent={sent}")
+               [10, authsrv._f32(1.33), authsrv._f32(0.67)]),
+              (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+               [authsrv.agents.GV_ATTACK_STARTED, 10, PLAYER, 0])]
+          and PLAYER not in state["attack_speed_pending"],
+          "a body under Frenzy: start_swing puts [body, its 1.33, 0.67] IMMEDIATELY "
+          "before its own attack start (the tape's instant), and the player, "
+          "unchanged at 1.0, is not re-declared", f"sent={sent}")
+    # THE REVERT ARM: --attack-speed-at-change is H13's shape, sent at the tick.
     state["effects"].close(bep["buff"])
     sent.clear()
-    authsrv.ATTACK_SPEED_SYNC = False
+    authsrv.ATTACK_SPEED_AT_START = False
     authsrv.attack_speed_tick(send, state, 0)
-    check(not sent, "REVERT ARM (--no-attack-speed-sync): the close is never "
-          "declared; the pre-H13 shape")
+    check([(op, v) for op, v, _l in sent]
+          == [(authsrv.GAME_SMSG_AGENT_UPDATE_ATTACK_SPEED,
+               [10, authsrv._f32(1.33), authsrv._f32(1.0)])]
+          and not state.get("attack_speed_pending"),
+          "REVERT ARM (--attack-speed-at-change): the close is declared AT THE TICK, "
+          "nothing pending -- SLICE-H13's shape", f"sent={sent}")
+    sent.clear()
+    authsrv.ATTACK_SPEED_SYNC = False
+    open_ep(state, 346, rank=0, duration=8.0, agent=10)
+    authsrv.attack_speed_tick(send, state, 0)
+    check(not sent, "REVERT ARM (--no-attack-speed-sync): nothing is ever "
+          "re-declared; the pre-H13 shape")
 finally:
-    authsrv.ATTACK_SPEED_SYNC = saved_sync
+    authsrv.ATTACK_SPEED_SYNC, authsrv.ATTACK_SPEED_AT_START = saved_sync, saved_start
 
 print("== 8. the movement lever: off by default, exact when on ==")
 state = fresh_state()

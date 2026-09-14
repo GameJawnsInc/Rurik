@@ -108,6 +108,9 @@ is to walk out rather than to guess again.
 gw-preservation's Explorable column. toolkit/clientscan/areatable.py.
 """
 
+# JARIN-S (2026-09-14): a map row MAY carry `shrine_x`, `shrine_y` and `shrine_plane`
+# -- where a wiped party stands up (`authsrv.wipe_to_shrine`, studies/slice F40). Absent,
+# the instance's spawn is used; the tape's shrine was 175 u from the Plains' spawn.
 [map.449]
 name = "Kamadan, Jewel of Istan"
 file_id = 0x345CC

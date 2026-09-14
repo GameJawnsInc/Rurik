@@ -4109,6 +4109,33 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   CONDITION's id" claim. `test_pools.py`: CANDIDATE_PIPS gains the Mesmer's (4, 27) / (4, 28)
   (30 = 20 + 10 under morale 85..88, the second base-vs-total datum) and the zero-pip set its
   death at (0, 27).
+  **JARIN-S (2026-09-14, studies/slice F40).** `toolkit/authsrv/test_mechanics.py` §7b REWRITTEN
+  (floor 198 -> 202): the attack-speed resend rides the next attack start -- the tick records the
+  changed pair and sends nothing, `attack_speed_flush` sends ONE 0x0035 in the start's instant, a
+  second start sends nothing, the close is declared by the next chain's first start, a body's rides
+  `start_swing` immediately before its own start, `--attack-speed-at-change` is H13's tick-time
+  send and `--no-attack-speed-sync` declares nothing. `toolkit/authsrv/test_agentlife.py` gains the
+  JARIN-S section (floor 502 -> 522): 0x00CF/0x00D0 for a hero row and never a henchman's (and
+  nothing under `--hero-silent-pools`); 0x00E5 then 0x00E3 at a hero cast's completion and 0x00E6
+  once when it recharges; the lock released on the wire at its target's death; a lone hero's party
+  flag point IS the flag, a group's the slot; the hero's death tick (status, 0x009C 85, 0x00D0, the
+  maxima at 85 %, the flags byte 8 last) and its rise (the maximum kept, 0x0026 9 last); a live
+  body holding a resurrection means no timer; the wipe after the last death (0x0025, 0x002C, the
+  body deleted and re-created with 0x006D, both raised, flags 9 and 5, no 0x01D8) against the
+  `--no-wipe-shrine` arm; the zone carry into a field and into a town and `--no-zone-carry`; the
+  hero's load block in the tape's order with and without a level; a SOURCE lock that the retail rig
+  sends no 0x0074, queues the block and 0x0072 ahead of the party build, defers the build, and
+  gates the four legacy sites. `test_guards.py` §6 counts the rise's flags byte. `test_morale.py`
+  §5 is GREEN again (kill_player's order was the defect). SIX corpus suites re-pinned on the tape:
+  `test_pools.py` (floor 108 -> 128: the Ranger's (3, 22)/(3, 19) and the hero's (2, 14); the hero's
+  0x00A2 43 one message ahead of its prop 41; skill 392 at Expertise 1 charging 14 of 15; the hero's
+  property-41 sequences without the leading 1; the signet raise's 25 % energy against every 1.0
+  shrine rise; the double-first spelling of the (3, 19) regen rate; 0x00D0 before the flags byte
+  in the death batch), `test_adrenwire.py` (73: the census 1028/37/59, three summed 207s above 25,
+  the hero's spend skills, a 207 naming ONE of the connection's bars, the armed side plus the
+  HERO arm carrying all of it -- `adrenjoin.scan`'s third arm and `whose_agent`'s kind-5 tie-break,
+  shared with `henchjoin`), `test_skilldamage.py` §12 (the two JARIN pairs that span a death
+  penalty set aside by name).
   **SLICE-H13 (2026-09-13).** `toolkit/authsrv/test_mechanics.py` §7b (floor 174 -> 181): the
   attack-speed pair follows the stance -- nothing open sends nothing; Frenzy opening on the player
   sends exactly ONE 0x0035 [player, base, 0.67] (the client's modifier field, the base unchanged);
