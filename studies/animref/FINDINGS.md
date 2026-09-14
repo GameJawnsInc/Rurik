@@ -4415,7 +4415,17 @@ the *identical* point `(-5915, 2079)` twenty minutes apart, with the player 790 
 player, not a chase. No retail hostile ever chased the player across a plane in these 21
 captures. *How retail's client climbs the stairs after you* is not in the tapes.
 
-### 42.5 The fix, derived — NOT shipped
+### 42.5 The fix, derived — SHIPPED 2026-09-05 as MOVECODE-1z-bz, and RUN-1zCA PASSED it on all four clauses
+
+**Status line added 2026-09-14, because this heading said "NOT shipped" for nine days after it
+was.** Both words below went in as `MOVECODE-1z-bz` (`studies/movecode/FINDINGS.md` §1z-bz —
+`_npc_plane` / `_npc_dest_plane` in `_npc_follow_tick`, the `test_agentlife` chase pin moved to
+"field 4 is the mover's current plane", `--no-npc-plane-track` reverts), and the run this
+section names as the one that scores it ran the same night: RUN-1zCA (§1z-ca, 2026-09-05 23:32,
+scripted, hands off, capture `authsrv-20260905T233210-c1`, the first tape with agenttap's plane
+column) — `(29, 0)` climbing at 11.88 s, `(29, 29)` on the stairs, `(0, 29)` descending, 24 follow
+orders onto plane-29-only ground against a registered floor of 5. What follows is the derivation
+as written before either existed, kept verbatim.
 
 Two words, two sources, both already in the tree:
 

@@ -4071,7 +4071,46 @@ MANIFEST_DONE = 2
 # flip. The client putting 888 there itself is strong evidence it is a legal
 # value for the field, not proof it tolerates receiving it from the wire at that
 # instant. A login to character select is the confirmation.
-MAP_ID_COUNT = 888
+#
+# AND THEN IT MOVED AGAIN, 2026-09-14. Build 38888 (2026-09-01, the first image
+# since 38797 whose SIZE changed) stores 897 at all five sites -- nine maps
+# added -- and `test_quests.py` §19b, which scans every vaulted client for the
+# store, went red on it exactly as designed. So the single literal above became
+# THIS TABLE: one row per vaulted build, each MEASURED by that scan (the five
+# `mov [reg+0x134], imm32` stores, and 877 as a bound found on none), and the
+# constant the server sends is the row for the build the client is. Which build
+# that is the wire does not say -- the auth handshake carries a protocol version,
+# not a build number; the portal sees `Gw/38888.0` in a User-Agent but is a
+# different process -- so it is `--client-build`, defaulting to the NEWEST row
+# because the owner's install is whatever ArenaNet serves today and 888 is now
+# a real map id on it. The runtime witness is the client's own mission mask:
+# `0x0092`'s width is `ceil(MAP_ID_COUNT / 32) * 4` bytes (its MsCliMsg.cpp:181
+# assert bounds it by MISSION_MASK_BYTES), MEASURED 116 on both 38888 tapes
+# (`20260913T210901` 10 of 10, `20260914T005758` 12 of 12) and 112 on both
+# older ones (11 of 11 each) -- so the handler below reddens the log when the
+# mask the client sends disagrees with the build the server was told.
+MAP_ID_COUNT_BY_BUILD = {
+    38519: 883,   # 2026-04-30
+    38797: 888,   # 2026-07-29, the pin
+    38833: 888,   # 2026-08-13
+    38849: 888,   # 2026-08-20
+    38888: 897,   # 2026-09-01
+}
+CLIENT_BUILD = max(MAP_ID_COUNT_BY_BUILD)          # rebound by --client-build
+MAP_ID_COUNT = MAP_ID_COUNT_BY_BUILD[CLIENT_BUILD]
+
+
+def mission_mask_bytes(map_count):
+    """The width of 0x0092's mask for a map count: one bit per id, whole dwords."""
+    return -(-map_count // 32) * 4
+
+
+def build_of_mission_mask(width):
+    """Which registered builds send a mask this wide -- the wire's own answer
+    to 'which build is this client', arriving one message too late to pick
+    the manifest sentinel but in time to say the flag was wrong."""
+    return sorted(b for b, n in MAP_ID_COUNT_BY_BUILD.items()
+                  if mission_mask_bytes(n) == width)
 
 # Where the world's facts live: content/maps.toml, loaded through toolkit/content.py.
 #
@@ -24716,6 +24755,25 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # the client, so the newest one supersedes rather than
                         # adds to its predecessor.
                         state["mission_mask"] = values[1]
+                        # THE BUILD WITNESS (2026-09-14). The mask is one bit
+                        # per map id, whole dwords, so its width is the
+                        # client's own MAP_ID_COUNT: 112 bytes on 38797..38849,
+                        # 116 on 38888 (MEASURED, 4 tapes, 44 of 44). The
+                        # server cannot read the build off the wire before the
+                        # manifest burst, so it trusts --client-build there;
+                        # this is where the client contradicts it, once per
+                        # connection, naming the builds the width fits.
+                        _mw = len(values[1]) if hasattr(values[1], "__len__") else None
+                        if (_mw is not None and _mw != mission_mask_bytes(MAP_ID_COUNT)
+                                and not state.get("mask_width_warned")):
+                            state["mask_width_warned"] = True
+                            print(f"[c{conn_id}] MISSION_MASK is {_mw} bytes; "
+                                  f"--client-build {CLIENT_BUILD} predicts "
+                                  f"{mission_mask_bytes(MAP_ID_COUNT)}. This "
+                                  f"width fits build(s) "
+                                  f"{build_of_mission_mask(_mw) or 'NONE REGISTERED'}"
+                                  f" -- the manifest's 'no map' sentinel "
+                                  f"{MAP_ID_COUNT} went out for the wrong build")
                     elif opcode == GAME_CMSG_UNNAMED_ACK_0079:
                         # Payload-free, so arrival is the whole content and a
                         # COUNTER is the only thing there is to store. That is the
@@ -27486,6 +27544,7 @@ def main():
     global UNLOCKED, UNLOCK_LABEL, SPAWN_PROFESSION, SECONDARY_BITS, PERSIST
     global DEATH_PENALTY_FORCED, ENEMY_HIT_FRACTION
     global PORTALS, TRANSFER_ALT        # read by the pre-warm before the flags
+    global CLIENT_BUILD, MAP_ID_COUNT, NO_MARKER_MAP   # --client-build
 
     # THE ARGPARSE BLOCK IS `build_parser()`, now in `serverargs.py`: 1,785 lines
     # lifted out of main() verbatim, no other change. The `global` lines stay HERE
@@ -27500,6 +27559,19 @@ def main():
                       GRANT_MIN_INTERVAL=GRANT_MIN_INTERVAL,
                       PROF_WARRIOR=PROF_WARRIOR, VAULT_DEFAULT=VAULT_DEFAULT)
     a = ap.parse_args()
+    if a.client_build is not None:
+        # The manifest's "no map" sentinel is the client's own map count and
+        # that count is per build (MAP_ID_COUNT_BY_BUILD). A build with no row
+        # is refused rather than guessed: sending 888 to a client that has 897
+        # names a real map, and the table's own comment says how a row is
+        # measured (test_quests.py sec. 19b's scan).
+        if a.client_build not in MAP_ID_COUNT_BY_BUILD:
+            ap.error(f"--client-build {a.client_build} has no MAP_ID_COUNT row; "
+                     f"registered: {sorted(MAP_ID_COUNT_BY_BUILD)}. Add the row "
+                     f"from test_quests.py sec. 19b's scan of that client")
+        CLIENT_BUILD = a.client_build
+        MAP_ID_COUNT = MAP_ID_COUNT_BY_BUILD[CLIENT_BUILD]
+        NO_MARKER_MAP = MAP_ID_COUNT
     if a.party:
         # SLICE-H2: THE PARTY AS CONTENT. The row names what the hero rig's
         # flags took one by one across studies/heroes and studies/pvpui; this

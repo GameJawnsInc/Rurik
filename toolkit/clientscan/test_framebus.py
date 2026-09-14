@@ -170,30 +170,70 @@ def section_label():
                     "against the pin -- there the constant was correct")
         return
 
-    build, path = have[-1]
-    text = run_cli("--exe", path)
-    head = text.split("band:")[0]
-    # The one line that carries the claim, for legible failure output.
-    said = next((ln.strip() for ln in head.splitlines() if "build" in ln),
-                "(no build line printed)")
-
-    check(path in head,
-          f"--exe {os.path.basename(os.path.dirname(path))}: the header names "
-          f"the file it was given", head.strip() or "(nothing printed)")
-    check(str(build.number) in head,
-          f"and reports build {build.number}, read from that file",
-          f"said: {said} -- this is the check the size-derived label fails: "
-          f"38833 and 38797 are the same number of bytes")
-    check(f"the pinned build {framebus.pinned.BUILD}" not in head
-          and f"build {framebus.pinned.BUILD}," not in head,
-          f"and does NOT call it build {framebus.pinned.BUILD}",
-          f"said: {said} -- NEGATIVE CONTROL: printing the right build "
-          f"while still claiming the pin somewhere is the same misreport")
-    check("NOT build" in head,
-          "and says out loud that these VAs were not measured on it",
-          f"said: {said} -- the rows below are 38797's offsets applied to "
-          f"another build's bytes, which is a fact about the OUTPUT and not "
-          f"just about the header")
+    # PER-BUILD TABLES (2026-09-14). A non-pin build WITH a table in
+    # `framebus.TABLES` gets its own rows and the header says whose; a build
+    # with none gets the pin's offsets and the loud warning this section was
+    # written for. Both branches run when the vault holds both kinds -- 38888
+    # (its own table) and 38519 (none) -- and each declares its skip by name
+    # when it does not. The first draft of the tables gave 38833 and 38849 no
+    # row because test_quests §20 had proven the QUEST family identical on
+    # them; the completion family was never in that proof and had moved, so
+    # the "match" line below is checked on the bytes, not the header.
+    tabled = [(b, p) for b, p in have if framebus.tables_for(b.number) is not None]
+    untabled = [(b, p) for b, p in have if framebus.tables_for(b.number) is None]
+    if not tabled:
+        LEDGER.skip("the own-table branch",
+                    "no vaulted non-pin build with a framebus table")
+    for build, path in tabled:
+        text = run_cli("--exe", path)
+        head = text.split("band:")[0]
+        said = next((ln.strip() for ln in head.splitlines() if "build" in ln),
+                    "(no build line printed)")
+        check(path in head,
+              f"--exe {os.path.basename(os.path.dirname(path))}: the header names "
+              f"the file it was given", head.strip() or "(nothing printed)")
+        check(str(build.number) in head,
+              f"and reports build {build.number}, read from that file",
+              f"said: {said} -- this is the check the size-derived label fails: "
+              f"38833 and 38797 are the same number of bytes")
+        check(f"the pinned build {framebus.pinned.BUILD}" not in head
+              and f"build {framebus.pinned.BUILD}," not in head,
+              f"and does NOT call it build {framebus.pinned.BUILD}",
+              f"said: {said} -- NEGATIVE CONTROL: printing the right build "
+              f"while still claiming the pin somewhere is the same misreport")
+        check("NOT build" in head
+              and f"build {build.number}'s own table, MEASURED on it" in head,
+              f"and says it is reading {build.number}'s OWN table",
+              f"said: {said}")
+        t = framebus.tables_for(build.number)
+        check(f"{len(t.quest_bodies)} of {len(t.quest_bodies)} bodies match" in text
+              and f"{len(t.completion_bodies)} of {len(t.completion_bodies)} "
+                  f"completion bodies match" in text,
+              f"and that table reproduces BOTH pairings on {build.number}'s bytes",
+              "\n".join(ln for ln in text.splitlines() if "match" in ln)
+              or "(no match line)")
+    if not untabled:
+        LEDGER.skip("the no-table branch",
+                    "every vaulted non-pin build has a framebus table; the "
+                    "warning branch needs an unmeasured build (38519) to fire on")
+    for build, path in untabled[:1]:
+        text = run_cli("--exe", path)
+        head = text.split("band:")[0]
+        said = next((ln.strip() for ln in head.splitlines() if "build" in ln),
+                    "(no build line printed)")
+        check(str(build.number) in head and "NO table was measured on it" in head,
+              f"--exe build {build.number}: says out loud that NO table was "
+              f"measured on it",
+              f"said: {said} -- the rows below are 38797's offsets applied to "
+              f"another build's bytes, which is a fact about the OUTPUT and not "
+              f"just about the header")
+        n_q = len(framebus.QUEST_BODIES)
+        check(f"{n_q} of {n_q} bodies match" not in text,
+              f"and the pin's offsets over {build.number}'s bytes do NOT "
+              f"reproduce the pairing -- the negative that makes the tabled "
+              f"matches above a measurement",
+              "\n".join(ln for ln in text.splitlines() if "match" in ln)
+              or "(no match line)")
 
     # POSITIVE CONTROL. Without this the three checks above are satisfied by a
     # tool that calls everything "not the pin", including the pin.

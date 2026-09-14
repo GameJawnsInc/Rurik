@@ -43,6 +43,17 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
     ap = argparse.ArgumentParser(description=doc,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", type=int, default=6112)
+    ap.add_argument("--client-build", type=int, default=None, metavar="N",
+                    help="The client build this server is serving (38888, "
+                         "38849, ...). Picks the manifest's 'no map' sentinel, "
+                         "which is that build's own map count "
+                         "(MAP_ID_COUNT_BY_BUILD: 888 through 38849, 897 from "
+                         "38888) -- the wire does not carry the build before "
+                         "the manifest burst. Default: the newest registered "
+                         "build, which is what the owner's install runs. The "
+                         "client's mission mask (0x0092) is the witness: its "
+                         "width is ceil(count/32)*4 and the server logs a "
+                         "disagreement once per connection.")
     ap.add_argument("--bind", default="127.0.0.1",
                     help="Loopback address to listen on. Any 127.x.y.z works "
                          "without setup on Windows; a second alias (127.0.0.2) "

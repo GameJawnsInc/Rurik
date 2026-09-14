@@ -7880,7 +7880,17 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   `completion_family()`. §1 runs on a bare machine — `framebus.py`
   is a fixed-byte-pattern tool and takes no disassembler — and §2 and §3 each
   declare a `LEDGER.skip` without the vault, which is why the floor is 16 and
-  not 27. ~4 s),
+  not 27. ~4 s. **Per-build tables (2026-09-14).** Build 38888 moved every VA in the
+  module, so `framebus.TABLES` carries one row per vaulted build — 38797, 38833, 38849,
+  38888 — and `tables_for()` answers None for a build nobody measured. §3 now runs EVERY
+  non-pin build through the CLI: a tabled build must print "its OWN table, MEASURED on it"
+  and reproduce BOTH pairings on its bytes (11 of 11, 4 of 4); an untabled one (38519) must
+  say "NO table was measured on it" and must NOT reproduce the quest pairing — the negative
+  that makes the tabled matches a measurement. The reason the older builds got rows at all
+  is in `studies/quests/FINDINGS.md` §11.3: the first draft gave 38833/38849 none, and the
+  CLI printed 1 of 4 completion bodies on 38833 — three of the four had moved on both interim
+  builds while every test stayed green, because §20's twelve sites were the quest family's.
+  Floor unchanged at 16; a vaulted run makes 40. ~15 s),
   `toolkit/clientscan/test_genericvalue.py` (the property-id switches, and that a
   moved build cannot be read as a map — `studies/crossbuild/PLAN.md` §6.
   `genericvalue.py`'s docstring claimed "a build that moves them fails loudly
@@ -9311,7 +9321,11 @@ the same-tick ALIAS**: the
   and `pinned.py` 8 → 12 (`PATCHED_TEXT` gaining the key-tap's cave and jump when
   the patched-digest set was added). The docstring's changelog names each, which
   is the format that makes a moved census a result rather than a surprise. No
-  vault, no client, no socket. Floor 49, ~2 s),
+  vault, no client, no socket. Floor 49, ~2 s. **294 across 23 files (2026-09-14):** +53 in
+  `framebus.py` (four builds' tables, now the largest block at 74) and +5 in
+  `authsrv/authsrv.py` (`MAP_ID_COUNT_BY_BUILD`'s build numbers — a build number is class (a)
+  by the rule the 64 row set), the split measured per file against a worktree at 88a0fd1d and
+  written into the check's own changelog),
   `toolkit/test_updatecheck.py` (**2026-09-10: the class-(a) census literal is no longer DUPLICATED here, floor 26 → 27.** It sat at 233 while the census reached 235 — `test_buildpins.py` moved on 09-08 and this side did not — the SECOND time that exact staleness has been paid for (the first, 86 against a census of 113, is recorded in the check's own changelog). The check's contract was only ever "the two agree", and its own string already admitted there is no second reading of the tree here: `updatecheck.capture()` calls the same `buildpins.scan()` over the same directory, so this was a spelling check on a human edit. The number is now READ from `test_buildpins.py`'s source (`len(live) == N`; it runs its checks at module level, so importing it would execute the whole file), with a companion check that the anchor still EXISTS — a version that silently found no number would pass vacuously, the failure mode the pair exists to refuse. Moving the census now takes one edit, in the instrument that owns it. Otherwise: the before/after update commands —
   `studies/crossbuild/PLAN.md` §11, and the one deliverable of that arc that
   expires if nobody runs it in time: an update is not schedulable and half the
@@ -9815,7 +9829,25 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   much smaller than "stable"), and 38519 became the control proving the equality is
   a measurement rather than a reader that never opened a file. A fourth vaulted
   build is covered with no edit. Needs the vault and two builds at or after the pin;
-  skips loudly otherwise. ~2 s, ~40 s with §20),
+  skips loudly otherwise. ~2 s, ~40 s with §20. **Build 38888 (2026-09-14), floor 117 → 130,
+  and this file went RED on it as designed — three checks, the day the build was registered.**
+  §19 now re-derives the map count PER BUILD through `areatable` on every vaulted client and
+  requires `MAP_ID_COUNT_BY_BUILD` (the server's new per-build table; `--client-build` picks the
+  row, default the newest) to match each — 883/888/888/888/897 — plus that every vaulted build
+  HAS a row and the default is the newest (a new snapshot without a row is the next 38888).
+  §19b's five-store scan scores each build against its OWN row, requires five stores on every
+  build and at least two distinct values across them (the sentinel MOVES with the table; 877
+  still on none). §19c pins the wire's witness: the mission mask's width is
+  `ceil(count/32)*4` — 112 for 888, 116 for 897, OBSERVED on four live tapes — and a 116-byte
+  mask names 38888 and only it. §20 carries a VA per build family and three claims where it had
+  one: (a) byte-identity within the 38797 family; (b) on 38888, identity at the relocated VAs
+  with address operands masked (rel32 after E8/E9, or a value inside the image's VA span read
+  from the PE headers — a literal bound was the first draft and stopped at `.text`, so Find's
+  `.data` operand went red), the raw-different set pinned to exactly the four address-carrying
+  sites, and the eight others matching UNMASKED as the control on the mask; then the frame-bus
+  pairing AND the completion family's on every build `framebus` has a table for, and the default
+  `--client-build` among them. 38519 stays the control: 0 of 12, no table, no pairing.
+  `studies/quests/FINDINGS.md` §11 is the write-up. ~90 s with §19/§20),
   `toolkit/test_provlint.py` (an ACCUMULATION TRIPWIRE on assert citations in prose,
   and the story of why it is only that is worth more than the file. `content.py`
   enforced the provenance gate's permitted side from the day it was written; the same

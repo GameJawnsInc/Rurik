@@ -54,7 +54,7 @@ import authsrv                                              # noqa: E402
 #
 # Adding quest rows only raises the count, so the floor stays valid; an
 # EMPTY table is caught by section 0 before the count matters.
-LEDGER = checks.Ledger("the quest table and its coded strings", floor=117)   # SLICE-B1 +6 (sec 21), B4 +5 (sec 22), B5 +9 (sec 23), the kill quest +8 (sec 24); from the green run
+LEDGER = checks.Ledger("the quest table and its coded strings", floor=130)   # SLICE-B1 +6 (sec 21), B4 +5 (sec 22), B5 +9 (sec 23), the kill quest +8 (sec 24); 117 -> 130 on 2026-09-14 when secs 19/19b/19c/20 went per build (38888); from the green run
 check = checks.adopt(LEDGER)
 
 # MEASURED, build 38797: UiCtlWebLink.cpp:576 asserts `challengeId < CHALLENGES`
@@ -573,74 +573,102 @@ def main():
         authsrv.QUEST_PROGRESS["objectives_done"].clear()
         authsrv.QUEST_PROGRESS["objectives_done"].update(saved[1])
 
-    print("\n19. 888 is re-derived, not trusted")
+    print("\n19. the map count is re-derived PER BUILD, not trusted")
+    # REWRITTEN 2026-09-14. Until then this section derived ONE number off the
+    # pinned image and checked the server's one literal against it -- and the
+    # literal was right for 38797 through 38849 and wrong for 38888, which
+    # stores 897 (nine maps added). §19b below is what caught it. The server's
+    # constant is now a TABLE, one row per vaulted build, and this section
+    # re-derives EVERY row through areatable's own selection rule: the base
+    # both locators agree on, then `extent` walking records until the pattern
+    # breaks. Two locators disagreeing is areatable's finding to report, not a
+    # number to pick a winner from here, so agreement is required per build.
+    #
+    # That makes two witnesses per row that do not share a method: this
+    # section reads the TABLE's length, §19b reads the client's own STORE of the
+    # sentinel (`mov [reg+0x134], imm32`, five sites). 883 / 888 / 888 / 888 /
+    # 897 on both, 2026-09-14.
+    derived = {}
     try:
         sys.path.insert(0, os.path.join(HERE, "clientscan"))
-        import areatable, srctree
+        import areatable, pinned as _pinned19, vaultpath as _vp19
         from gwpe import PE
-        pe = PE(srctree.default_exe())
-        # areatable's OWN selection rule, not a re-invention of it: the base is
-        # the VA both locators agree on, and only the structural one's first hit
-        # if they do not. Two methods disagreeing is the finding there, so the
-        # agreement is required here rather than worked around.
-        hits = areatable.locate_structural(pe)
-        code = areatable.locate_from_code(pe)
-        agreed = sorted({h["va"] for h in hits} & set(code))
-        assert agreed, ("areatable's two locators disagree on this image -- "
-                        "that is areatable's finding to report, not a number "
-                        "to pick a winner from here")
-        base_off = pe.rva_to_off(agreed[0] - pe.image_base)
-        # `extent` walks records until the pattern breaks: the same "888
-        # consecutive valid records" the CLI prints, reached by calling the
-        # module rather than by parsing its output.
-        n = areatable.extent(pe.data, base_off)
+        for b in _pinned19.BUILDS:
+            path = os.path.join(_vp19.vault_root(), "client", b.stamp, "Gw.exe")
+            if not os.path.exists(path):
+                continue
+            pe = PE(path)
+            hits = areatable.locate_structural(pe)
+            code = areatable.locate_from_code(pe)
+            agreed = sorted({h["va"] for h in hits} & set(code))
+            if not agreed:
+                LEDGER.skip(f"areatable on build {b.number}",
+                            "its two locators disagree on this image -- "
+                            "areatable's finding to report, not ours to pick from")
+                continue
+            base_off = pe.rva_to_off(agreed[0] - pe.image_base)
+            derived[b.number] = areatable.extent(pe.data, base_off)
     # SystemExit EXPLICITLY, and it is the whole reason this section could not
-    # skip. `pinned.find()` -- reached through `srctree.default_exe()` -- reports
-    # a missing build by raising SystemExit, which is a BaseException and sails
-    # straight through `except Exception`. MEASURED 2026-08-18: with no vault this
-    # section did not declare a skip, it killed the run at section 19 of 20, so
-    # the floor of 73 was unreachable even once the import was fixed. A skip that
-    # cannot be reached is the same defect as no skip at all.
+    # skip. `pinned.find()` reports a missing build by raising SystemExit, which
+    # is a BaseException and sails straight through `except Exception`.
+    # MEASURED 2026-08-18: with no vault this section did not declare a skip, it
+    # killed the run at section 19 of 20, so the floor was unreachable even
+    # once the import was fixed. A skip that cannot be reached is the same
+    # defect as no skip at all.
     except (Exception, SystemExit) as exc:                      # noqa: BLE001
-        LEDGER.skip("the no-marker sentinel against areatable",
-                    f"{type(exc).__name__}: {exc}")
-    else:
-        check(n == authsrv.NO_MARKER_MAP,
-              "areatable's map count IS the no-marker sentinel",
-              f"areatable says {n}, authsrv pins {authsrv.NO_MARKER_MAP}. "
-              f"FINDINGS 2.3 says derive it rather than pin it; the server path "
-              f"may not import a vault reader at startup, so it is pinned there "
-              f"and re-derived here")
-        # AND THE MANIFEST SENTINEL, which is the same quantity and was NOT
-        # covered here until 2026-08-27. MAP_ID_COUNT was 877 -- OpenTyria's
-        # enum end -- while this section re-derived 888 for NO_MARKER_MAP twenty
-        # lines away in the same file and stayed green the whole time, because it
-        # only ever scored one of the two names. 877 is a real map row
-        # (`Forsaken Tunnels: Level 2`), so the server's "no destination"
-        # sentinel named an actual dungeon on every login burst.
-        check(n == authsrv.MAP_ID_COUNT,
-              "and it is the MANIFEST sentinel too",
-              f"areatable says {n}, authsrv pins {authsrv.MAP_ID_COUNT}. This is "
-              f"the value the first MANIFEST_DONE carries as 'no map'; the "
-              f"client stores it at context+0x134 and writes 0x378 there itself "
-              f"in its own reset path")
-        check(authsrv.MAP_ID_COUNT == authsrv.NO_MARKER_MAP,
-              "the two names are ONE quantity, expressed once",
-              f"MAP_ID_COUNT {authsrv.MAP_ID_COUNT}, NO_MARKER_MAP "
-              f"{authsrv.NO_MARKER_MAP} -- two literals for 'one past the last "
-              f"map' is what let them drift apart for weeks. If a future build "
-              f"genuinely separates them, split them WITH a measurement rather "
-              f"than by editing one number")
+        derived = {}
+        LEDGER.skip("the map count against areatable", f"{type(exc).__name__}: {exc}")
+    if derived:
+        check(len(derived) >= 2, "at least two builds derive",
+              f"{sorted(derived)} -- with one, 'per build' has nothing to vary over")
+        wrong = {n: (v, authsrv.MAP_ID_COUNT_BY_BUILD.get(n))
+                 for n, v in derived.items()
+                 if authsrv.MAP_ID_COUNT_BY_BUILD.get(n) != v}
+        check(not wrong,
+              f"areatable's map count IS the table's row on every readable build "
+              f"({', '.join(f'{n}: {v}' for n, v in sorted(derived.items()))})",
+              f"derived vs pinned: {wrong}. FINDINGS 2.3 says derive it rather "
+              f"than pin it; the server path may not import a vault reader at "
+              f"startup, so it is pinned there and re-derived here")
+        check(all(n in authsrv.MAP_ID_COUNT_BY_BUILD for n in derived),
+              "and every vaulted build HAS a row",
+              f"missing: {sorted(set(derived) - set(authsrv.MAP_ID_COUNT_BY_BUILD))}"
+              f" -- a new snapshot with no row is the next 38888: the server "
+              f"would send the previous build's count to it")
+        check(authsrv.CLIENT_BUILD == max(derived),
+              f"the DEFAULT --client-build is the newest vaulted build "
+              f"({authsrv.CLIENT_BUILD})",
+              f"newest in the vault {max(derived)} -- the owner's install is "
+              f"whatever ArenaNet serves today, so a default that lags it sends "
+              f"the wrong sentinel to the client that is actually launched")
+    check(authsrv.MAP_ID_COUNT == authsrv.MAP_ID_COUNT_BY_BUILD[authsrv.CLIENT_BUILD],
+          "the constant the server SENDS is the default build's row",
+          f"MAP_ID_COUNT {authsrv.MAP_ID_COUNT}, row "
+          f"{authsrv.MAP_ID_COUNT_BY_BUILD[authsrv.CLIENT_BUILD]}")
+    # AND THE MANIFEST SENTINEL, which is the same quantity and was NOT covered
+    # here until 2026-08-27. MAP_ID_COUNT was 877 -- OpenTyria's enum end --
+    # while this section re-derived 888 for NO_MARKER_MAP twenty lines away in
+    # the same file and stayed green the whole time, because it only ever scored
+    # one of the two names. 877 is a real map row (`Forsaken Tunnels: Level 2`),
+    # so the server's "no destination" sentinel named an actual dungeon on every
+    # login burst.
+    check(authsrv.MAP_ID_COUNT == authsrv.NO_MARKER_MAP,
+          "the two names are ONE quantity, expressed once",
+          f"MAP_ID_COUNT {authsrv.MAP_ID_COUNT}, NO_MARKER_MAP "
+          f"{authsrv.NO_MARKER_MAP} -- two literals for 'one past the last "
+          f"map' is what let them drift apart for weeks. If a future build "
+          f"genuinely separates them, split them WITH a measurement rather "
+          f"than by editing one number")
 
     # 19b. THE SENTINEL MOVES WITH THE MAP TABLE, and 877 is nowhere.
     #
-    # Section 19 above proves our constant equals THIS build's map count. That
+    # Section 19 above proves each row equals THAT build's table length. That
     # alone does not show the field at context+0x134 IS the table's size -- any
     # number that happens to match once would pass it. This scans every vaulted
     # client for the store itself and reads the immediate out: five sites per
-    # build, every build, and the value tracks the table across a patch that
-    # added five maps. That is the field being the size rather than coinciding
-    # with it.
+    # build, every build, and the value tracks the table across two patches
+    # that added maps (883 -> 888 -> 897). That is the field being the size
+    # rather than coinciding with it.
     #
     # THE CONTROL IS THE HALF THAT MATTERS. The same scan looks for 877 as a
     # compare bound and must find it ZERO times on every build -- because 877 was
@@ -672,25 +700,24 @@ def main():
         check(len(seen) >= 3, "at least three builds are readable",
               f"{sorted(seen)} -- with fewer, 'it moves with the table' has no "
               f"span to move across")
-        current = {n: v for n, v in seen.items() if n >= 38797}
-        check(current and all(set(v[0]) == {authsrv.MAP_ID_COUNT}
-                              for v in current.values()),
-              f"every build from 38797 on stores {authsrv.MAP_ID_COUNT}, and "
-              f"only that",
-              "; ".join(f"{n}: {sorted(set(v[0]))} x{len(v[0])}"
-                        for n, v in sorted(current.items())))
-        old = {n: v for n, v in seen.items() if n < 38797}
-        if old:
-            check(all(set(v[0]) and set(v[0]) != {authsrv.MAP_ID_COUNT}
-                      for v in old.values()),
-                  "and an older build stores a DIFFERENT one",
-                  "; ".join(f"{n}: {sorted(set(v[0]))}"
-                            for n, v in sorted(old.items()))
-                  + " -- 38519 reads 883, five maps fewer. Without this the "
-                    "check above could be true of any constant in the image")
-        else:
-            LEDGER.skip("the older-build contrast",
-                        "no pre-38797 client in the vault to contrast against")
+        check(all(set(v[0]) == {authsrv.MAP_ID_COUNT_BY_BUILD.get(n)}
+                  for n, v in seen.items()),
+              "every build stores ITS OWN row's value, and only that",
+              "; ".join(f"{n}: {sorted(set(v[0]))} x{len(v[0])} (row "
+                        f"{authsrv.MAP_ID_COUNT_BY_BUILD.get(n)})"
+                        for n, v in sorted(seen.items())))
+        check(all(len(v[0]) == 5 for v in seen.values()),
+              "five stores per build, every build -- the same shape",
+              "; ".join(f"{n}: x{len(v[0])}" for n, v in sorted(seen.items()))
+              + " -- a build with a different count is a different store "
+                "layout and the scan needs re-reading, not the table")
+        distinct = {authsrv.MAP_ID_COUNT_BY_BUILD[n] for n in seen
+                    if n in authsrv.MAP_ID_COUNT_BY_BUILD}
+        check(len(distinct) >= 2,
+              "and the value is NOT a constant across builds",
+              f"{sorted(distinct)} -- 38519 reads 883, 38797..38849 888, 38888 "
+              f"897. Without this the check above could be true of any constant "
+              f"in the image")
         check(all(v[1] == 0 for v in seen.values()),
               "CONTROL: 877 is a bound on NO build",
               "877-as-a-bound counts "
@@ -700,6 +727,30 @@ def main():
                 "constant has a client witness after all and this whole section "
                 "needs re-reading")
 
+    # 19c. THE WIRE'S OWN WITNESS. The server cannot read the build off the
+    # wire before the manifest burst, so `--client-build` picks the sentinel
+    # and the client's mission mask (0x0092) is what contradicts it: one bit
+    # per map id in whole dwords. MEASURED on four live tapes, 2026-09-14
+    # (`cmsgstream`, game c2s): 20260913T210901 and 20260914T005758 (both
+    # 38888) 116 bytes, 10 of 10 and 12 of 12; 20260821T205552 and
+    # 20260824T074002 (38833/38849) 112 bytes, 11 of 11 each. The formula has
+    # no free parameter, which is why it is pinned to the tapes here rather
+    # than to itself.
+    check(authsrv.mission_mask_bytes(888) == 112
+          and authsrv.mission_mask_bytes(897) == 116,
+          "the mask width the tapes carry is ceil(count/32)*4: 112 for 888, "
+          "116 for 897",
+          f"{authsrv.mission_mask_bytes(888)}, {authsrv.mission_mask_bytes(897)}")
+    check(authsrv.build_of_mission_mask(116) == [38888]
+          and 38888 not in authsrv.build_of_mission_mask(112),
+          "so a 116-byte mask names 38888 and only 38888, and a 112-byte one "
+          "cannot",
+          f"116 -> {authsrv.build_of_mission_mask(116)}, "
+          f"112 -> {authsrv.build_of_mission_mask(112)}")
+    check(authsrv.build_of_mission_mask(120) == [],
+          "and a width no build sends names nobody rather than the nearest",
+          f"{authsrv.build_of_mission_mask(120)}")
+
     print("\n20. every cited site, re-checked on the build the owner RUNS")
     # WHY THIS SECTION EXISTS. FINDINGS 7.9's last bullet said every binary
     # claim in the arc was build 38797 and none had been re-checked against
@@ -708,24 +759,36 @@ def main():
     # instead, and it keeps measuring it: a third build lands in BUILDS and this
     # section covers it without an edit.
     #
-    # The sites are the arc's own citations, each with the length of the
-    # instruction it names. Byte-identical across builds is the strong form --
-    # it says the citation reads the same code, not merely that something lives
-    # at that address.
+    # AND IT WENT RED ON 2026-09-14, as designed: build 38888 is the first
+    # image since the pin whose size changed, and all twelve sites moved. Each
+    # site now carries a VA per BUILD FAMILY -- 38797's, which 38833 and 38849
+    # share byte for byte, and 38888's, MEASURED by a masked byte search from
+    # the pin's bytes (operands that are an absolute address or a rel32
+    # wildcarded) and then read back. Two claims replace the old one:
+    #   (a) within the 38797 family the sites are byte-IDENTICAL (the strong
+    #       form -- the same code, not merely something at that address);
+    #   (b) on 38888 they are identical once address OPERANDS are masked, and
+    #       the sites whose raw bytes differ are exactly the four that carry
+    #       an address: the memmove's rel32, the two `fld` of the +inf
+    #       constant (0x00948654 -> 0x0094966C), and Find's `mov edx, imm32`.
+    # The length of each site is the instruction it names.
+    F797, F888 = 38797, 38888
     SITES = [
-        (0x0080F7C2, 3, "2.2 imul edi, ecx, 0x34 (the log's 52-byte stride)"),
-        (0x0080F84D, 5, "2.2 the tail memmove"),
-        (0x0080F855, 6, "2.2 dec [ebx+0x534] (the log count)"),
-        (0x0080F85B, 7, "2.2 imul esi, [ebx+0x534], 0x34"),
-        (0x0080F20B, 6, "2.3 0x0049 writes charContext+0x528 (the ACTIVE quest)"),
-        (0x0080F574, 6, "2.3 0x0050 loads the +inf marker constant"),
-        (0x0080F600, 6, "2.3 ...and again"),
-        (0x0080F9CD, 6, "Q3  the description-filled gate on 0x0054"),
-        (0x0080DDA7, 5, "2.2 challengeSortArray.Find (ChCliApi:4237)"),
-        (0x00633D70, 8, "1.6 the frame-bus POST helper"),
-        (0x00633BD0, 8, "1.6 the frame-bus SUBSCRIBE helper"),
-        (0x00948654, 4, "2.3 the +inf constant itself, in .rdata"),
+        ({F797: 0x0080F7C2, F888: 0x0080FC22}, 3, "2.2 imul edi, ecx, 0x34 (the log's 52-byte stride)"),
+        ({F797: 0x0080F84D, F888: 0x0080FCAD}, 5, "2.2 the tail memmove"),
+        ({F797: 0x0080F855, F888: 0x0080FCB5}, 6, "2.2 dec [ebx+0x534] (the log count)"),
+        ({F797: 0x0080F85B, F888: 0x0080FCBB}, 7, "2.2 imul esi, [ebx+0x534], 0x34"),
+        ({F797: 0x0080F20B, F888: 0x0080F66B}, 6, "2.3 0x0049 writes charContext+0x528 (the ACTIVE quest)"),
+        ({F797: 0x0080F574, F888: 0x0080F9D4}, 6, "2.3 0x0050 loads the +inf marker constant"),
+        ({F797: 0x0080F600, F888: 0x0080FA60}, 6, "2.3 ...and again"),
+        ({F797: 0x0080F9CD, F888: 0x0080FE2D}, 6, "Q3  the description-filled gate on 0x0054"),
+        ({F797: 0x0080DDA7, F888: 0x0080E217}, 5, "2.2 challengeSortArray.Find (ChCliApi:4237; 4281 on 38888)"),
+        ({F797: 0x00633D70, F888: 0x006341A0}, 8, "1.6 the frame-bus POST helper"),
+        ({F797: 0x00633BD0, F888: 0x00634000}, 8, "1.6 the frame-bus SUBSCRIBE helper"),
+        ({F797: 0x00948654, F888: 0x0094966C}, 4, "2.3 the +inf constant itself, in .rdata"),
     ]
+    FAMILY = {38797: F797, 38833: F797, 38849: F797, 38888: F888}
+    ADDRESS_OPERAND_SITES = {0x0080F84D, 0x0080F574, 0x0080F600, 0x0080DDA7}
     try:
         sys.path.insert(0, os.path.join(HERE, "clientscan"))
         import framebus, pinned, vaultpath
@@ -738,15 +801,14 @@ def main():
         imgs = []
         LEDGER.skip("the cross-build site check", f"{type(exc).__name__}: {exc}")
     # THE SPLIT IS THE FINDING, and the first draft of this section did not have
-    # it. The vault holds THREE builds and the arc's citations hold on two of
-    # them: 38797 (the pin) and 38833 (what the owner's install runs). On 38519
-    # -- roughly ninety days older -- every one of these sites reads different
-    # bytes and the frame-bus scan finds NOTHING in any quest body. So the claim
-    # is not "these addresses are stable"; it is "they did not move across the
-    # 15-day 38797->38833 patch", which is a much smaller claim and the true one.
+    # it. On 38519 -- roughly ninety days older than the pin -- every one of
+    # these sites reads different bytes and the frame-bus scan finds NOTHING in
+    # any quest body. So the claim is not "these addresses are stable"; it is
+    # "they did not move across 38797 -> 38849, and moved by a measured amount
+    # on 38888", which is a much smaller claim and the true one.
     #
     # 38519 then does the job a synthetic control would do worse: it proves the
-    # equality above is a measurement rather than a tautology. A first draft
+    # equality below is a measurement rather than a tautology. A first draft
     # asserted identity across ALL vaulted builds and went red on exactly this,
     # which is the check reporting a fact rather than a defect.
     def window(im, va, n):
@@ -761,50 +823,138 @@ def main():
             return None
         return None if o is None else im.blob[o:o + n]
 
-    PIN = 38797
-    recent = [(n, im) for n, im in imgs if n >= PIN]
-    older = [(n, im) for n, im in imgs if n < PIN]
-    if len(recent) < 2:
-        LEDGER.skip("the cross-build site check",
-                    f"needs two builds at or after {PIN}; have "
-                    f"{[n for n, _ in recent]}")
-    else:
-        names = ", ".join(str(n) for n, _ in recent)
+    def va_span(*ims):
+        """[lowest section VA, highest section end) over the images given --
+        the address range an operand can point into, read from the PE headers
+        rather than typed. A literal bound was the first draft, and it stopped
+        at .text: Find's `mov edx, imm32` names a .data address above it and
+        went red as 'a different instruction'."""
+        lo = min(sva for im in ims for sva, _sz, _ro in im.sections)
+        hi = max(sva + sz for im in ims for sva, sz, _ro in im.sections)
+        return lo, hi
 
-        drift = [(va, what) for va, n, what in SITES
-                 if len({window(im, va, n) for _x, im in recent}) != 1
-                 or window(recent[0][1], va, n) is None]
+    def masked(bs, span):
+        """`bs` with every 4-byte address operand replaced by `????`: a rel32
+        after E8/E9, or a value inside `span` (the image's VA range). What is
+        left is the opcode and the non-address immediates, which is what 'the
+        same instruction' means across a relink."""
+        if bs is None:
+            return None
+        out = bytearray(bs)
+        i = 0
+        while i + 4 <= len(out):
+            v = struct.unpack_from("<I", bs, i)[0]
+            if (i and bs[i - 1] in (0xE8, 0xE9)) or span[0] <= v < span[1]:
+                out[i:i + 4] = b"????"
+                i += 4
+            else:
+                i += 1
+        return bytes(out)
+
+    PIN = 38797
+    by_num = dict(imgs)
+    fam797 = [(n, im) for n, im in imgs if FAMILY.get(n) == F797]
+    fam888 = [(n, im) for n, im in imgs if FAMILY.get(n) == F888]
+    older = [(n, im) for n, im in imgs if n < PIN]
+    if len(fam797) < 2:
+        LEDGER.skip("the 38797-family site check",
+                    f"needs two builds of the family; have {[n for n, _ in fam797]}")
+    else:
+        names = ", ".join(str(n) for n, _ in fam797)
+        drift = [(va[F797], what) for va, n, what in SITES
+                 if len({window(im, va[F797], n) for _x, im in fam797}) != 1
+                 or window(fam797[0][1], va[F797], n) is None]
         check(not drift,
-              f"all {len(SITES)} cited sites are byte-identical across {names}",
+              f"(a) all {len(SITES)} cited sites are byte-identical across {names}",
               f"DRIFTED: {[(hex(v), w) for v, w in drift]} -- a citation whose "
-              f"bytes differ between the pin and the build the owner RUNS is "
+              f"bytes differ between the pin and a build the owner ran is "
               f"reading different code than it was measured on, which is the "
               f"failure studies/pvpui/FINDINGS.md 4 and 15.0 each paid for once")
+    if not fam888 or PIN not in by_num:
+        LEDGER.skip("the 38888 site check",
+                    f"needs the pin and a 38888 image; have {sorted(by_num)}")
+    else:
+        pin_im = by_num[PIN]
+        for n888, im888 in fam888:
+            span = va_span(pin_im, im888)
+            diff = [(hex(va[F888]), what) for va, n, what in SITES
+                    if masked(window(pin_im, va[F797], n), span)
+                    != masked(window(im888, va[F888], n), span)]
+            check(not diff,
+                  f"(b) all {len(SITES)} sites read the SAME INSTRUCTION on "
+                  f"{n888} at their relocated VAs, address operands masked",
+                  f"differ: {diff} -- a relocated VA that lands on different "
+                  f"opcode bytes is not the site, it is a coincidence of the "
+                  f"search")
+            raw_differ = {va[F797] for va, n, what in SITES
+                          if window(pin_im, va[F797], n) != window(im888, va[F888], n)}
+            check(raw_differ == ADDRESS_OPERAND_SITES,
+                  "and the sites whose RAW bytes changed are exactly the four "
+                  "that carry an address operand",
+                  f"raw-different {sorted(hex(v) for v in raw_differ)} vs the "
+                  f"four with an address {sorted(hex(v) for v in ADDRESS_OPERAND_SITES)}"
+                  f" -- a fifth means an immediate changed, which is a claim "
+                  f"about the code and not about the relink")
+            unmasked_same = [what for va, n, what in SITES
+                             if va[F797] not in ADDRESS_OPERAND_SITES
+                             and window(pin_im, va[F797], n) == window(im888, va[F888], n)]
+            check(len(unmasked_same) == len(SITES) - len(ADDRESS_OPERAND_SITES),
+                  "CONTROL: the eight address-free sites match UNMASKED too, so "
+                  "the mask is not what makes (b) true",
+                  f"{len(unmasked_same)} of {len(SITES) - len(ADDRESS_OPERAND_SITES)}")
 
+    tabled = [(n, im) for n, im in imgs if framebus.tables_for(n) is not None]
+    if len(tabled) < 2:
+        LEDGER.skip("the frame-bus pairing per build",
+                    f"needs two builds with a framebus table; have {[n for n, _ in tabled]}")
+    else:
         want = {o: sorted(v) for o, v in framebus.QUEST_EXPECTED.items()}
         bad = {n: g for n, g in ((n, framebus.quest_family(im))
-                                 for n, im in recent) if g != want}
+                                 for n, im in tabled) if g != want}
         check(not bad,
-              f"and the frame-bus pairing holds on every one of them",
+              f"and the frame-bus pairing holds on every build with a table "
+              f"({', '.join(str(n) for n, _ in tabled)})",
               f"{bad} -- 11 of 11 bodies posting the recorded frame id is what "
               f"twelve names in overrides.json rest on, and it is worth knowing "
               f"on the build the owner actually runs, not only on the pin")
+        cwant = {o: sorted(v) for o, v in framebus.COMPLETION_EXPECTED.items()}
+        cbad = {n: g for n, g in ((n, framebus.completion_family(im))
+                                  for n, im in tabled) if g != cwant}
+        check(not cbad,
+              "and so does the completion family's -- which was NEVER in the "
+              "twelve sites and had moved on 38833 and 38849 unnoticed until "
+              "2026-09-14",
+              f"{cbad} -- 0x0096/0x0097/0x00FB sit 0x160 lower on 38833 and "
+              f"0x100 lower on 38849 than on the pin; framebus.TABLES carries "
+              f"each build's own bounds")
+        check(authsrv.CLIENT_BUILD in dict(tabled),
+              f"and the default --client-build ({authsrv.CLIENT_BUILD}) is one "
+              f"of them",
+              f"tabled: {[n for n, _ in tabled]} -- the build the server serves "
+              f"by default has to be one whose quest handlers were read")
 
     if not older:
         LEDGER.skip("the older-build control",
                     f"no vaulted build before {PIN} to drift against")
     else:
         num, im = older[0]
-        ref = recent[0][1] if recent else imgs[-1][1]
-        same = [hex(va) for va, n, _w in SITES
-                if window(im, va, n) is not None
-                and window(im, va, n) == window(ref, va, n)]
+        ref = by_num.get(PIN) or imgs[-1][1]
+        same = [hex(va[F797]) for va, n, _w in SITES
+                if window(im, va[F797], n) is not None
+                and window(im, va[F797], n) == window(ref, va[F797], n)]
         check(len(same) < len(SITES) // 2,
               f"CONTROL: on build {num} most of these sites read DIFFERENTLY",
               f"{len(same)} of {len(SITES)} still match ({same}). Build {num} is "
               f"~90 days older and everything moved; the frame-bus scan finds "
               f"nothing in any quest body there. Without this, 'byte-identical' "
               f"above could be true of a reader that never opened a file")
+        check(framebus.tables_for(num) is None
+              and framebus.quest_family(im) != {o: sorted(v) for o, v
+                                                 in framebus.QUEST_EXPECTED.items()},
+              f"and {num} has no framebus table, and the pin's VAs scanned over "
+              f"its bytes do NOT reproduce the pairing",
+              "a pairing that held on a build nobody measured would mean the "
+              "scan is not reading the bytes")
 
     print("\n21. SLICE-B1: the quest binds to a SPAWN ROW, not to a bare number")
     _row = authsrv.quest_rows()[1463]

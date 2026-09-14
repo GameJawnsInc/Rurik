@@ -49,6 +49,7 @@ disassembler -- because `CLAUDE.md`'s carve-out (1) is scoped to two named files
 and this is not one of them.
 """
 import argparse
+import collections
 import os
 import struct
 import sys
@@ -72,6 +73,75 @@ _UNREAD = object()
 POST = 0x00633D70
 SUBSCRIBE = 0x00633BD0
 
+# PER-BUILD TABLES, added 2026-09-14 when build 38888 -- the first image since
+# 38797 whose SIZE changed (10,483,904 -> 10,493,120) -- moved every VA below.
+# `test_quests.py` §20 went red on it (12 of 12 sites drifted, the frame-bus
+# scan found nothing in any quest body), which is that check doing its job.
+# The 38888 column was MEASURED by a masked byte search (operands that are an
+# absolute address or a rel32 wildcarded) from 38797's bytes into 38888's, and
+# then VERIFIED the only way that counts: the relocated bodies, scanned with the
+# relocated bus helper, post exactly QUEST_EXPECTED / COMPLETION_EXPECTED, 11 of
+# 11 and 4 of 4. The two families moved by different amounts -- the bus helpers
+# by +0x430, the quest bodies by +0x460, three of the four completion bodies by
+# +0x360 -- so there is no single delta to apply, and a caller that "adds the
+# offset" would be wrong on one of the three. Each body's prologue was matched
+# too (`push ebp; mov ebp, esp; sub esp, N` with N unchanged per body).
+#
+# 38833 AND 38849 HAVE ROWS TOO, and the first draft of this table did not give
+# them any: `test_quests.py` §20 proves the quest family's twelve sites
+# byte-identical to 38797 on both, and the draft read that as "the whole table
+# holds" -- then `framebus.py --exe <38833>` printed 1 of 4 completion bodies.
+# The completion family was never in §20's twelve, and it did move: 0x0096,
+# 0x0097 and 0x00FB sit 0x160 lower on 38833 and 0x100 lower on 38849 than on
+# the pin (0x006C's start held, its bytes did not). Each row below carries the
+# pin's quest bodies (proven) and its OWN completion bodies (measured the same
+# way as 38888's: the publisher's offset inside every body is unchanged -- 0x57,
+# 0x93, 0x38, 0x3E -- so the old lengths bound them). A build with no row gets
+# NO table: `tables_for` returns None and the caller says so, rather than
+# applying the pin's offsets to a stranger's bytes (the 38833 header bug, above).
+BuildTables = collections.namedtuple(
+    "BuildTables", "build post subscribe quest_bodies completion_bodies")
+
+_PIN_QUEST_BODIES = [
+    (0x0080F0A0, 0x0049), (0x0080F250, 0x004A), (0x0080F270, 0x004B),
+    (0x0080F290, 0x004C), (0x0080F3C0, 0x004D), (0x0080F470, 0x0050),
+    (0x0080F670, 0x004E), (0x0080F6F0, 0x0051), (0x0080F7A0, 0x0052),
+    (0x0080F8E0, 0x0053), (0x0080F990, 0x0054),
+]
+
+TABLES = {
+    38797: BuildTables(
+        38797, 0x00633D70, 0x00633BD0, _PIN_QUEST_BODIES,
+        [(0x00810AF0, 0x00810B61, 0x006C), (0x008123E0, 0x0081248D, 0x0096),
+         (0x00812490, 0x00812505, 0x0097), (0x00815260, 0x008152D4, 0x00FB)]),
+    38833: BuildTables(
+        38833, 0x00633D70, 0x00633BD0, _PIN_QUEST_BODIES,
+        [(0x00810AF0, 0x00810B61, 0x006C), (0x00812280, 0x0081232D, 0x0096),
+         (0x00812330, 0x008123A5, 0x0097), (0x00815100, 0x00815174, 0x00FB)]),
+    38849: BuildTables(
+        38849, 0x00633D70, 0x00633BD0, _PIN_QUEST_BODIES,
+        [(0x00810AF0, 0x00810B61, 0x006C), (0x008122E0, 0x0081238D, 0x0096),
+         (0x00812390, 0x00812405, 0x0097), (0x00815160, 0x008151D4, 0x00FB)]),
+    38888: BuildTables(
+        38888, 0x006341A0, 0x00634000,
+        [(0x0080F500, 0x0049), (0x0080F6B0, 0x004A), (0x0080F6D0, 0x004B),
+         (0x0080F6F0, 0x004C), (0x0080F820, 0x004D), (0x0080F8D0, 0x0050),
+         (0x0080FAD0, 0x004E), (0x0080FB50, 0x0051), (0x0080FC00, 0x0052),
+         (0x0080FD40, 0x0053), (0x0080FDF0, 0x0054)],
+        [(0x00810F50, 0x00810FC1, 0x006C), (0x00812740, 0x008127ED, 0x0096),
+         (0x008127F0, 0x00812865, 0x0097), (0x008155C0, 0x00815634, 0x00FB)]),
+}
+
+
+def tables_for(build):
+    """The table measured on `build`, or None for a build nobody has measured.
+    `None` (an image whose build could not be read -- the synthetic images
+    test_framebus §1 plants) gets the pin's table, because those tests plant
+    the pin's VAs."""
+    if build is None:
+        return TABLES[pinned.BUILD]
+    return TABLES.get(build)
+
 # Read the docstring before shrinking this.
 CALL_WINDOW = 48
 
@@ -83,12 +153,7 @@ QUEST_BAND = (0x1000014C, 0x10000160)
 # `studies/quests/FINDINGS.md` §2.1's handler bodies, sorted by VA so each body's
 # extent is [va, next va). 0x0054 is last and gets a bounded tail rather than an
 # open one -- its own publisher sits at 0x0080FA12, 0x82 in.
-QUEST_BODIES = [
-    (0x0080F0A0, 0x0049), (0x0080F250, 0x004A), (0x0080F270, 0x004B),
-    (0x0080F290, 0x004C), (0x0080F3C0, 0x004D), (0x0080F470, 0x0050),
-    (0x0080F670, 0x004E), (0x0080F6F0, 0x0051), (0x0080F7A0, 0x0052),
-    (0x0080F8E0, 0x0053), (0x0080F990, 0x0054),
-]
+QUEST_BODIES = TABLES[38797].quest_bodies      # the pin's; see TABLES for 38888
 QUEST_TAIL = 0x100
 
 # What the join says, so a caller can assert on it. This is the PREDICTION that
@@ -113,12 +178,7 @@ QUEST_EXPECTED = {
 # are, so each row carries an explicit end rather than borrowing its
 # neighbour's start. Two instruments agree on the pairing: msghandler's linear
 # disassembly and this module's own scan.
-COMPLETION_BODIES = [
-    (0x00810AF0, 0x00810B61, 0x006C),
-    (0x008123E0, 0x0081248D, 0x0096),
-    (0x00812490, 0x00812505, 0x0097),
-    (0x00815260, 0x008152D4, 0x00FB),
-]
+COMPLETION_BODIES = TABLES[38797].completion_bodies   # the pin's; see TABLES
 
 # The pairing, stated so a caller can assert on it. THE SWAP IS REAL AND
 # MEASURED: 0x0096 posts 0x10000158 and 0x0097 posts 0x10000157 -- frame-id
@@ -213,6 +273,11 @@ def publishes(img, lo, hi, band=QUEST_BAND):
     to a band you also SUBSCRIBE to would mean something quite different, and a
     scan that reported only 'found an id here' could not tell the two apart.
     """
+    # The bus helpers are per build (+0x430 on 38888). An image with no table
+    # keeps the pin's, so a caller scanning a stranger's bytes sees raw call
+    # targets rather than 'post' -- which is the honest reading of them.
+    t = tables_for(img.build)
+    post, subscribe = (t.post, t.subscribe) if t else (POST, SUBSCRIBE)
     a, b = img.offset(lo), img.offset(hi)
     span = img.blob[a:b]
     out = []
@@ -229,18 +294,25 @@ def publishes(img, lo, hi, band=QUEST_BAND):
                 call_va = lo + i + k
                 tgt = call_va + 5 + rel
                 break
-        kind = ("post" if tgt == POST else "subscribe" if tgt == SUBSCRIBE else
+        kind = ("post" if tgt == post else "subscribe" if tgt == subscribe else
                 "none" if tgt is None else f"{tgt:#010x}")
         out.append((imm, kind, lo + i, call_va))
     return out
 
 
 def quest_family(img=None):
-    """{opcode: [frame ids POSTED]} for the eleven quest handler bodies."""
+    """{opcode: [frame ids POSTED]} for the eleven quest handler bodies.
+
+    On a build with no table this returns every opcode EMPTY rather than
+    raising: 'nothing in the direct form' is what a scan of the pin's VAs
+    over a stranger's bytes measures, and test_quests §20's control (38519)
+    relies on the empty answer to prove the pairing is a measurement."""
     img = img or Image()
+    t = tables_for(img.build)
+    bodies = t.quest_bodies if t else QUEST_BODIES
     out = {}
-    for i, (va, op) in enumerate(QUEST_BODIES):
-        end = QUEST_BODIES[i + 1][0] if i + 1 < len(QUEST_BODIES) else va + QUEST_TAIL
+    for i, (va, op) in enumerate(bodies):
+        end = bodies[i + 1][0] if i + 1 < len(bodies) else va + QUEST_TAIL
         out[op] = sorted(f for f, kind, _p, _c in publishes(img, va, end)
                          if kind == "post")
     return out
@@ -249,9 +321,11 @@ def quest_family(img=None):
 def completion_family(img=None):
     """{opcode: [frame ids POSTED]} for the four completion-family bodies."""
     img = img or Image()
+    t = tables_for(img.build)
+    bodies = t.completion_bodies if t else COMPLETION_BODIES
     return {op: sorted(f for f, kind, _p, _c in publishes(img, lo, hi)
                        if kind == "post")
-            for lo, hi, op in COMPLETION_BODIES}
+            for lo, hi, op in bodies}
 
 
 def main():
@@ -272,12 +346,18 @@ def main():
     print(f"        ({why})")
     print(f"        build {build if build is not None else 'UNKNOWN'}, "
           f"{len(img.blob):,} bytes -- {how}")
-    if not img.is_pinned:
-        print(f"        ^^ this is NOT build {pinned.BUILD}. Every VA in this "
-              f"file was MEASURED on {pinned.BUILD} and addresses drift between "
-              f"builds by 0x20..0x160 per region,\n"
+    t = tables_for(build)
+    if t is None:
+        print(f"        ^^ this is NOT build {pinned.BUILD} and NO table was "
+              f"measured on it. Addresses drift between builds by 0x20..0x160 "
+              f"per region,\n"
               f"           so the rows below are not a reading of this client -- "
               f"they are {pinned.BUILD}'s offsets applied to someone else's bytes.")
+    elif not img.is_pinned:
+        print(f"        ^^ this is NOT build {pinned.BUILD}; the rows below use "
+              f"build {t.build}'s own table, MEASURED on it.")
+    bodies = t.quest_bodies if t else QUEST_BODIES
+    cbodies = t.completion_bodies if t else COMPLETION_BODIES
     print(f"band: {args.band[0]:#010x}..{args.band[1]:#010x}\n")
 
     if args.at:
@@ -292,7 +372,7 @@ def main():
     agree = 0
     print(f"{'opcode':8} {'body':>12}  posts        subscribers")
     print("-" * 100)
-    for va, op in QUEST_BODIES:
+    for va, op in bodies:
         ids = got[op]
         ok = ids == sorted(QUEST_EXPECTED[op])
         agree += ok
@@ -303,13 +383,13 @@ def main():
             print(f"{'':8} {'':12}  ^^ DISAGREES with QUEST_EXPECTED "
                   f"{[hex(x) for x in QUEST_EXPECTED[op]]}")
     print("-" * 100)
-    print(f"{agree} of {len(QUEST_BODIES)} bodies match the recorded pairing")
+    print(f"{agree} of {len(bodies)} bodies match the recorded pairing")
 
     cgot = completion_family(img)
     cagree = 0
     print(f"\ncompletion family (GmQuestComplete's other four publishers, §9.7)")
     print("-" * 100)
-    for lo, _hi, op in COMPLETION_BODIES:
+    for lo, _hi, op in cbodies:
         ids = cgot[op]
         ok = ids == sorted(COMPLETION_EXPECTED[op])
         cagree += ok
@@ -320,10 +400,10 @@ def main():
             print(f"{'':8} {'':12}  ^^ DISAGREES with COMPLETION_EXPECTED "
                   f"{[hex(x) for x in COMPLETION_EXPECTED[op]]}")
     print("-" * 100)
-    print(f"{cagree} of {len(COMPLETION_BODIES)} completion bodies match the "
+    print(f"{cagree} of {len(cbodies)} completion bodies match the "
           f"recorded pairing")
-    return 0 if (agree == len(QUEST_BODIES)
-                 and cagree == len(COMPLETION_BODIES)) else 1
+    return 0 if (agree == len(bodies)
+                 and cagree == len(cbodies)) else 1
 
 
 if __name__ == "__main__":

@@ -1779,3 +1779,92 @@ announcement → landing → the foe's first swing) as a `hexjoin.py`.
 **Labels.** Everything in §10 is OBSERVED on one tape (n = 1 per shape unless a count is
 given); the hex and the grant shapes are 5/5 and 3/3 within it. `WIKI` supplied the rank-0
 numbers (Empathy 10, Ether Feast 60) that the fractions resolved to.
+
+
+## 11. Build 38888 — the sentinel is 897, every quest VA moved, and the completion family had moved twice before unnoticed (2026-09-14)
+
+**Why this section exists.** Build 38888 (2026-09-01) is the first client since the pin whose
+image SIZE changed (10,483,904 → 10,493,120 bytes), and `toolkit/test_quests.py` §19b and §20
+went red on it the day it was registered — three checks, exactly the three that exist to catch
+a build moving under a citation. This section is the re-derivation those checks asked for. Every
+number below is MEASURED on the pristine 38888 image in the vault unless labelled.
+
+### 11.1 The "no map" sentinel: 888 → 897, on two witnesses that do not share a method
+
+| build | `mov [reg+0x134], imm32` (five sites, §19b's scan) | `areatable.extent` (§19's derivation) |
+|---|---|---|
+| 38519 | 883 ×5 | 883 |
+| 38797 | 888 ×5 | 888 |
+| 38833 | 888 ×5 | 888 |
+| 38849 | 888 ×5 | 888 |
+| **38888** | **897 ×5** | **897** |
+
+Nine maps added. 877 (OpenTyria's enum end) is a bound on none of the five, as before. The
+constant the server sends in the first `MANIFEST_DONE` is therefore **per build**:
+`MAP_ID_COUNT_BY_BUILD` in `authsrv.py`, keyed by build number, selected by `--client-build`
+and defaulting to the newest row — because the owner's install is whatever ArenaNet serves and
+**888 is a real map id on 38888**. The wire cannot pick the row for us before the burst (the auth
+handshake carries a protocol version, not a build; the portal sees `Gw/38888.0` in a User-Agent
+but is another process), so the runtime witness is the client's own **mission mask**: `0x0092`'s
+width is `ceil(count / 32) * 4` bytes, and the handler now logs once per connection when the
+width the client sends disagrees with the build the server was told. MEASURED on four live tapes
+(`cmsgstream`, game c2s): `20260913T210901` and `20260914T005758` (both 38888) **116 bytes, 10 of
+10 and 12 of 12**; `20260821T205552` and `20260824T074002` (38833/38849) **112, 11 of 11 each**.
+`schema/overrides.json` GAME_CMSG 146 had already recorded the width change; this is the row
+that makes the server act on it.
+
+### 11.2 The twelve cited sites, relocated
+
+Method: a masked byte search from the pin's bytes into 38888's — a 4-byte operand that is an
+absolute address inside the image's VA span, or a rel32 after `E8`/`E9`, wildcarded; everything
+else exact — then read back. Three families moved by three different amounts, so there is no
+single delta:
+
+| family | 38797 → 38888 | delta |
+|---|---|---|
+| the bus helpers (POST, SUBSCRIBE) | `0x00633D70` → `0x006341A0`, `0x00633BD0` → `0x00634000` | +0x430 |
+| the eleven quest handler bodies (§2.1) | `0x0080F0A0` → `0x0080F500` … `0x0080F990` → `0x0080FDF0` | +0x460 |
+| the `+inf` marker constant in `.rdata` (§2.3) | `0x00948654` → `0x0094966C` | +0x1018 |
+| `challengeSortArray.Find` (§2.2) | `0x0080DDA7` → `0x0080E217` | +0x470 |
+
+Of the twelve, the eight without an address operand match **unmasked** on 38888; the four that
+carry one differ only in it — the tail memmove's rel32, the two `fld` of the `+inf` constant, and
+Find's `mov edx, imm32` (`0x00A94D2C` → `0x00A9772C`). The assert line pushed beside Find moved
+too: **`ChCliApi:4237` on the pin is `ChCliApi:4281` on 38888** (`push 0x108D` → `push 0x10B9`),
+which is the kind of drift a line-number citation carries by nature and is recorded here so the
+next reader does not go looking for 4237. `0x0050`'s three payload stores before its bus post
+(the `CALL_WINDOW` lesson in `framebus.py`) now stage `0x381` == 897 at `0x0080FAA9`.
+
+**Verification, the only kind that counts:** the relocated bodies scanned with the relocated
+bus helper post exactly `QUEST_EXPECTED` — **11 of 11** — and the completion family **4 of 4**
+(`framebus.py --exe <38888>`). `test_quests.py` §20 now carries a VA per build family and three
+claims where it had one: byte-identity within the 38797 family, masked identity on 38888 with
+the raw-different set pinned to exactly those four sites, and the pairing on every build with a
+table. 38519 stays the control (0 of 12 match, no pairing).
+
+### 11.3 The completion family had moved on 38833 and 38849 — found by giving them no row
+
+`framebus.py`'s first per-build table gave 38833 and 38849 no row of their own, on the strength
+of §20's "byte-identical" — and `--exe <38833>` then printed **1 of 4 completion bodies**. §20's
+twelve sites are the QUEST family's; §9.7's four completion bodies were never among them, and
+three of the four had moved on both interim builds while every test stayed green:
+
+| body | 38797 | 38833 | 38849 | 38888 |
+|---|---|---|---|---|
+| `0x006C` | `0x00810AF0` | `0x00810AF0` | `0x00810AF0` | `0x00810F50` |
+| `0x0096` | `0x008123E0` | `0x00812280` | `0x008122E0` | `0x00812740` |
+| `0x0097` | `0x00812490` | `0x00812330` | `0x00812390` | `0x008127F0` |
+| `0x00FB` | `0x00815260` | `0x00815100` | `0x00815160` | `0x008155C0` |
+
+The publisher's offset inside every body is unchanged across all four builds (0x57, 0x93, 0x38,
+0x3E), so the pin's body lengths bound them. `framebus.TABLES` now carries one row per vaulted
+build, `tables_for()` returns None for a build nobody measured (38519) and the CLI says so, and
+`test_framebus.py` §3 runs every non-pin build through the CLI and requires **both** pairings
+to reproduce on its bytes. `test_buildpins` records the cost: 236 → 294 live constants, a 23rd
+file (`authsrv.py`'s five build numbers), the largest block now `framebus.py`'s 74.
+
+**Labels.** Every VA and count above is MEASURED (stdlib byte reads of the vaulted pristine
+images; the extractor is `framebus.py` plus `test_quests.py` §19/§19b/§20). The mask widths are
+OBSERVED on four live tapes. "888 is a real map id on 38888" is a consequence of the count and is
+not itself observed on a client — no run has sent 888 to a 38888 client and watched what the
+manifest does with it; the fix is fidelity, not a repaired symptom.
