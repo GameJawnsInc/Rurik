@@ -90,6 +90,10 @@ EXPECT = {
     # above holds harder: across 38797/38833/38849 the only thing that moves is
     # the immediate, and the in-range filter still lands on exactly one.
     "2026-08-20_21511009c460": dict(number=38849, va=0x004729E0, shapes=54),
+    # 38888, MEASURED 2026-09-13 off the pristine snapshot taken that evening: the
+    # image GREW by 9,216 bytes (the first size change since 38797) and the getter
+    # still sits at the same VA with the same 16 callers and the same 54 shapes.
+    "2026-09-01_44fbd68767a8": dict(number=38888, va=0x004729E0, shapes=54),
 }
 EXPECT_CALLERS = 16
 

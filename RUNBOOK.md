@@ -407,7 +407,10 @@ of `CLAUDE.md` is about, found by an operator following this file to set up a li
 
 Which live build to use is a question about the ACCOUNT's client, not about the vault:
 `run-live/2026-07-29_221c13772c7a` is **build 38797**, and as of 2026-08-21
-**`run-live/2026-08-20_21511009c460` is build 38849 and is the one to use**
+`run-live/2026-08-20_21511009c460` is build 38849, and as of 2026-09-13
+**`run-live/2026-09-01_44fbd68767a8` is build 38888 and is the one to use** (ArenaNet
+updated `C:\gw` on 2026-09-01; the driver refused the 38849 build against a service serving
+38888, which is the refusal working as designed)
 (`buildid.py --exe <path>`, which since 2026-08-17 reads the binary you hand it rather
 than the pin). **`run-live/2026-08-13_64fae3b1369b` no longer holds what its name says:**
 it was build 38833 until the updater rewrote it in place mid-run, and it now holds an
