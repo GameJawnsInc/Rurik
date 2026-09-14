@@ -6609,7 +6609,16 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   one left (40 landing); three with Deep Wound newest → the Deep Wound goes (pool
   −10 → 10 on its close), two remain, 114 sent, 90 landing; the player casting it
   at a foe lands on the player and cures the player's newest; the revert is a
-  flat 57 and no cure. Floor 153 → 162),
+  flat 57 and no cure. Floor 153 → 162. **§30 SLICE-H14 (2026-09-14, floor 202 → 209):**
+  Healing Signet costs its caster 40 armour WHILE it is used — `casting_armour_penalty`
+  reads `armour_while_casting` off the pending cast's row inside `[begin_at, e5_at)` and
+  adds it to the CAPPED rating (GWW's Anomaly order) at `land_swing` and the NPC cast. A
+  hostile swing inside the window is EXACTLY double the quiet swing at a pinned hit
+  location (`roll_hit_location` patched — it does not read `random.random`, and the first
+  draft saw four locations across six swings); a completed, a queued-not-begun and a
+  cancelled cast cost nothing; a row without the key costs nothing; `--no-casting-armour`
+  reverts; the penalty reads −40 off the row. WIKI only — no Healing Signet cast exists in
+  the live corpus (`studies/slice/FINDINGS.md` F41.2)),
   `toolkit/authsrv/test_pools.py` (**what a skill COSTS** — SKILLS-RC 2026-09-10:
   §10's enemy gate stands an idle ally beside the caster, because a lone hostile
   cannot cast Restore Condition at all; the energy question it asks is unchanged.

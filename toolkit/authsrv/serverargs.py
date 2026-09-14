@@ -1641,6 +1641,13 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "every three seconds. GWW: 'Remove all conditions "
                          "from target other ally. For each condition "
                          "removed, that ally is healed'.")
+    ap.add_argument("--no-casting-armour", action="store_true",
+                    help="SLICE-H14 revert: ignore a skill_effect row's "
+                         "`armour_while_casting` (Healing Signet's -40 armour "
+                         "for its 2 s activation, added to the taker's capped "
+                         "rating at the hostile swing and the NPC cast -- WIKI, "
+                         "GWW 'Healing Signet'; the live corpus holds no cast "
+                         "of it to measure against).")
     ap.add_argument("--no-blind", action="store_true",
                     help="SKILLS-BL REVERT: Blind (479) is an icon and every "
                          "swing under it lands -- the pre-2026-09-10 wire. "

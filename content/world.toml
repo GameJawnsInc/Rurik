@@ -141,12 +141,21 @@ read."""
 
 [skill_effect.1]
 scale_means = "Heal"
+# SLICE-H14 (2026-09-14): "You have -40 armor while using this skill" -- added
+# to the taker's CAPPED rating for the activation window (GWW's Anomaly: the
+# penalty applies after the armor cap, Cracked Armor and penetration).
+# WIKI only: the live corpus holds no Healing Signet cast (0 of 19 prop-60
+# announces name skill 1), so no retail hit was ever measured under it.
+armour_while_casting = -40
 [skill_effect.1.provenance]
 source = "wiki"
 page = 'GWW, "Healing Signet", {{Skill progression}}, rev. 2026-04-01'
 verified = """Client scale 82->172, args = 2. Wiki var1 `Heal` 82->172. Goes out
 on property 55 positive -- the health-GAIN direction, measured from the corpus
-(agents.GV_HEALTH_GAIN), not a negative damage."""
+(agents.GV_HEALTH_GAIN), not a negative damage. The -40 armour: GWW "Healing
+Signet" infobox `causes2 = Decreased Armor Rating`, description "You have -40
+armor while using this skill", Notes "-40 armor results in double damage from
+skills that are affected by armor rating", read 2026-09-14 via the browser."""
 
 [skill_effect.307]
 scale_means = "Maximum heal"

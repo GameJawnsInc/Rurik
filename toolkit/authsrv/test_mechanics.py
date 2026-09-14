@@ -16,6 +16,7 @@ Offline: fabricated state, a send collector, no vault and no client.
 """
 import os
 import sys
+import math
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -27,7 +28,7 @@ import agents       # noqa: E402
 import effects      # noqa: E402
 
 # Floor set from a real green run (39 checks, 2026-08-22; 99 checks, 2026-09-09 SKILLS-DW; 129 checks, 2026-09-10 SKILLS-BL; 153 checks, 2026-09-10 SKILLS-RC; 162 checks, 2026-09-10 SKILLS-MA).
-LEDGER = checks.Ledger("effect mechanics", floor=202)   # JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
+LEDGER = checks.Ledger("effect mechanics", floor=209)   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
 check = checks.adopt(LEDGER)
 
 FRENZY, RUSH, ROF, GLYPH, IGNITE, FAINT = 346, 319, 307, 200, 431, 135
@@ -1590,5 +1591,83 @@ finally:
     (authsrv.EFFECT_LIST_SELF_ONLY, authsrv.HEX_TRIGGERS, authsrv.ENERGY,
      authsrv.STATUS_WORD, authsrv.ARMOUR_TERM) = _m29[:5]
     authsrv.SKILLBAR[:] = _m29[5]
+
+print("\n== 30. SLICE-H14: Healing Signet costs its caster 40 armour WHILE it is "
+      "used -- a hostile swing landing inside the activation deals exactly "
+      "double, and nothing else does ==")
+# WIKI ONLY (GWW "Healing Signet": "-40 armor while using this skill"; Notes:
+# "results in double damage"; Anomaly: applied AFTER the armor cap). The live
+# corpus holds no cast of skill 1 (0 of 19 prop-60 announces), so 2 ** (40/40)
+# is the wiki's own arithmetic and not a measured ratio. The window is the
+# pending cast's [begin_at, e5_at): begun and not completed.
+_m30 = (authsrv.ARMOUR_TERM, authsrv.ENERGY, authsrv.BLIND,
+        authsrv.CASTING_ARMOUR, authsrv.roll_hit_location)
+try:
+    authsrv.ARMOUR_TERM = True
+    authsrv.ENERGY = False
+    authsrv.BLIND = False
+    authsrv.CASTING_ARMOUR = True
+    # ONE hit location for every swing: the ratio below is exactly 2 only if
+    # both swings strike the same rating, and roll_hit_location does not
+    # read random.random (the first draft pinned that and still saw gloves,
+    # body, boots and legs across six swings -- green only because the
+    # default set wears 45 everywhere).
+    _loc = authsrv.roll_hit_location()
+    authsrv.roll_hit_location = lambda: _loc
+    _ar = authsrv.player_armour_at(_loc, physical=True)
+    if _ar is None:
+        LEDGER.skip("section 30 (the default equipment gives no location rating)",
+                    "player_armour_at returned None")
+    else:
+        _foe = {"name": "hatcher", "dead": False, "pos": (0.0, 0.0)}
+
+        def _swing(pending=None):
+            sent, send = collector()
+            state = fresh_state()
+            if pending is not None:
+                state["pending_casts"] = pending
+            authsrv.land_swing(send, state, ENEMY, _foe, 0)
+            return 100.0 - state["player_health"]
+
+        _quiet = _swing()
+        _casting = _swing([{"skill_id": 1, "begin_at": 0.0, "e5_at": math.inf,
+                            "e5_sent": False}])
+        check(_quiet > 0 and abs(_casting / _quiet - 2.0) < 1e-9,
+              "a swing landing while Healing Signet is being used deals EXACTLY "
+              "double the quiet swing (2 ** (40 / 40))",
+              f"quiet {_quiet:.4f}, casting {_casting:.4f}, ratio "
+              f"{_casting / _quiet if _quiet else 'n/a'}")
+        check(abs(_swing([{"skill_id": 1, "begin_at": 0.0, "e5_at": 1.0,
+                           "e5_sent": True}]) - _quiet) < 1e-9,
+              "a COMPLETED cast (E5 sent) costs nothing -- the window closes "
+              "at completion")
+        check(abs(_swing([{"skill_id": 1, "begin_at": math.inf,
+                           "e5_at": math.inf, "e5_sent": False}]) - _quiet) < 1e-9,
+              "a QUEUED cast that has not begun costs nothing -- the window "
+              "opens at begin_at")
+        check(abs(_swing([{"skill_id": 1, "begin_at": 0.0, "e5_at": math.inf,
+                           "e5_sent": False, "cancelled": True}]) - _quiet) < 1e-9,
+              "a CANCELLED cast costs nothing")
+        check(abs(_swing([{"skill_id": 322, "begin_at": 0.0, "e5_at": math.inf,
+                           "e5_sent": False}]) - _quiet) < 1e-9,
+              "a skill whose row carries no armour_while_casting (Power Attack) "
+              "costs nothing -- the term is content, not a signet rule")
+        authsrv.CASTING_ARMOUR = False
+        check(abs(_swing([{"skill_id": 1, "begin_at": 0.0, "e5_at": math.inf,
+                           "e5_sent": False}]) - _quiet) < 1e-9,
+              "--no-casting-armour reverts to the quiet swing (the known-bad arm)")
+        authsrv.CASTING_ARMOUR = True
+        check(authsrv.casting_armour_penalty(
+                  {"pending_casts": [{"skill_id": 1, "begin_at": 0.0,
+                                      "e5_at": math.inf, "e5_sent": False}]},
+                  now=1.0) == -40.0,
+              "and the penalty itself reads -40 off the content row, added to "
+              "the CAPPED rating (the wiki's order), never folded into the "
+              "bonus combatmath caps")
+except agents.content.ContentError as exc:
+    LEDGER.skip("section 30 (needs the skill_effect rows)", str(exc))
+finally:
+    (authsrv.ARMOUR_TERM, authsrv.ENERGY, authsrv.BLIND,
+     authsrv.CASTING_ARMOUR, authsrv.roll_hit_location) = _m30
 
 sys.exit(LEDGER.verdict())

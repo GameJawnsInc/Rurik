@@ -10217,6 +10217,47 @@ def offhand_armour(physical=True):
     return float(rating) + float(bonus_armour(bonus))
 
 
+def casting_armour_penalty(state, now=None):
+    """The armour a skill costs its caster WHILE IT IS BEING USED -- Healing
+    Signet's -40 (SLICE-H14, 2026-09-14). Content: a skill_effect row's
+    `armour_while_casting`, read off the player's pending cast that has BEGUN
+    and not COMPLETED (begin_at <= now < e5_at, not cancelled) -- the
+    activation window, which is what "while using this skill" is.
+
+    WIKI ONLY, and said so: GWW "Healing Signet" (rev. read 2026-09-14) --
+    "You have -40 armor while using this skill", and its Anomaly note: the
+    penalty "is applied after the armor cap and the effects of Cracked Armor
+    and armor penetration". So it is ADDED to the location's capped rating at
+    the two sites that read one (land_swing, the NPC cast's spell armour),
+    never folded into the bonus that combatmath caps. The live corpus holds
+    NO Healing Signet cast at all (0 of 19 prop-60 announces name skill 1;
+    heroes retreat to use it), so there is no retail hit to measure the
+    doubling on; 2 ** (40 / 40) = 2 is the wiki's own "double damage" note.
+    Zero with no cast in flight, and for a row that carries no such key.
+    `--no-casting-armour` reverts."""
+    if not CASTING_ARMOUR:
+        return 0.0
+    pending = state.get("pending_casts")
+    if not pending:
+        return 0.0
+    now = time.time() if now is None else now
+    total = 0.0
+    for cast in list(pending):
+        if cast.get("cancelled") or cast.get("e5_sent"):
+            continue
+        if not (cast.get("begin_at", math.inf) <= now < cast.get("e5_at", -math.inf)):
+            continue
+        try:
+            total += float(skill_effect_row(cast["skill_id"]).get(
+                "armour_while_casting", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            continue
+    return total
+
+
+CASTING_ARMOUR = True             # --no-casting-armour reverts (SLICE-H14)
+
+
 def player_armour_at(location_key, physical=True):
     """Forwards to combatmath, reading EQUIP_ARMOUR here, at call time --
     plus the shield (SLICE-H9), on top of whatever the location wears."""
@@ -20479,6 +20520,9 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
         location = roll_hit_location()
         armour = player_armour_at(location, physical=True)
         if armour is not None:
+            # SLICE-H14: Healing Signet's -40 while it is being used, AFTER
+            # the capped rating (the wiki's own order; casting_armour_penalty).
+            armour += casting_armour_penalty(state)
             dealt *= armour_multiplier(armour)
     # SLICE-H8: a body with a WEAPON RANGE swings it through the player's
     # own formula at its own rank and level, against the location's armour;
@@ -20565,7 +20609,9 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
     print(f"[c{conn_id}] player hit by {agent_id}: "
           f"{state['player_health']:.0f}/{player_max_health(state):.0f}"
           + (f" (struck the {location.replace('warrior_', '')}, "
-             f"AR {player_armour_at(location):.0f})" if location else ""),
+             f"AR {armour if armour is not None else player_armour_at(location):.0f}"
+             f"{' while casting' if casting_armour_penalty(state) else ''})"
+             if location else ""),
           flush=True)
 
     if state["player_health"] <= 0.0:
@@ -20766,6 +20812,11 @@ def land_skill(send, state, agent_id, agent, conn_id):
     if damage is not None:
         base = float(damage[0])
         if spell_ar is not None:
+            # SLICE-H14: the taker's own casting penalty (Healing Signet's
+            # -40 while it is used), after the cap, when the taker is the
+            # player -- the only agent whose pending casts live on `state`.
+            if _tid == PLAYER_AGENT_ID:
+                spell_ar += casting_armour_penalty(state)
             base *= strike_multiplier(agent_strike_level(agent), spell_ar)
         dealt, conversion = taker_damage(state, _tid, base)
         if dealt > 0:
@@ -29635,6 +29686,11 @@ def main():
         print("NO CONDITION-HEAL RULE: Restore Condition is a flat self-heal "
               "again (--no-condition-heal-rule, the known-bad arm).",
               flush=True)
+    if a.no_casting_armour:
+        global CASTING_ARMOUR
+        CASTING_ARMOUR = False
+        print("NO CASTING ARMOUR: Healing Signet's -40 while it is used is "
+              "ignored (--no-casting-armour, the known-bad arm).", flush=True)
     if a.no_blind:
         global BLIND
         BLIND = False

@@ -2377,7 +2377,7 @@ back) with `--enemy --enemy-hit 0.02` so the fight in the corridor could not kil
 | `20260914T083127` | retail (F40 as shipped) | `run/2026-07-29` (38797) | **`Assertion: charHeroData` ChCliHero.cpp(199)** at the FIRST load, 08:32:12, in the `0x0072` handler (the dispatcher frame carries opcode 0x72) |
 | `20260914T084043` | retail + the block's two `0x0065 [hero, 0]` and its `0x00A2 43` | same | **the same assert** — those are not the creator |
 | `20260914T085004` | retail + **`0x0073 HERO_INFO`** ahead of the block | same | the town loaded, the portal fired, **then `pos.y <= worldDims.y1`** in the corridor's create handler — **not the rig**: this client's archive holds no corridor (the slice's authored map lives in `run/slice/Gw.dat`, build 38833; "NO NAVMESH" in the log), so the field had no terrain |
-| `20260914T085446` | retail + `0x0073` | **`run/slice`** (38833) | **PASS, three instances, no assert**: c1 the town (roster, no body), c2 the corridor (the body created, walking its slot), c3 the town again — the zone carry printed both ways |
+| `20260914T085446` | retail + `0x0073` | **`run/slice`** (~~38833~~ — a MIXED directory: its `Gw.exe` is **build 38797** by its own getter, `buildid.py --exe`; its `Gw.dat` is composed from the 38833 snapshot, `content/compose.toml` `dat_source`. Corrected 2026-09-14, quests §11.4 — the exe's build is what the server's manifest sentinel must match) | **PASS, three instances, no assert**: c1 the town (roster, no body), c2 the corridor (the body created, walking its slot), c3 the town again — the zone carry printed both ways |
 | `20260914T090247` | retail + `0x0073`, `--map 168 --party-no-fight --enemy-hit 0.5`, `attack:90` | `run/slice` | the raiders killed Tahlkora (her tick: `0x00F1`, `0x00D0`, the regen stop, flags 8) then the player (status, hold, `0x002D`, `0x00D0`, flags 4 — no penalty tick, the map charges none) — and **one second later the client LEFT on its own**: c2s `0x0008` (its orderly-exit message, 131 in the corpus at every zone) and the socket closed, the final frame loading Ascalon City. The wipe never ran on the wire |
 
 **What the corpus gave when asked properly.** Retail's town preamble carries, once per owned
@@ -2466,6 +2466,71 @@ pair at load. Which of the six is the shrine near (18527, 1372) cannot be read o
 **Corrections on the way.** `studies/heroes/FINDINGS.md` §11.3 carries the retail creator
 (`0x0073`); authsrv's "6 of 6 `0x00E3` name the player" and `effect_list_visible`'s "for want
 of a witness" say what JARIN witnessed.
+
+## SLICE-F41 — **the hero loop re-run after the sentinel change (green, every prediction met), and SLICE-H14: Healing Signet costs its caster 40 armour while it is used — WIKI only, the corpus has never seen the signet cast (2026-09-14)**
+
+### 41.1 The loop, as a regression run — harness `20260914T115833`
+
+Two things changed under the load path this morning (quests §11: the manifest's "no map"
+sentinel per build; §11.4: the harness passing `--client-build` itself), so F40.1's clean
+three-instance recipe was run again, agent-driven, predictions written first: `run/slice`,
+`--map 148 --party slice --area errand,corridor --enemy --enemy-hit 0.02`, F32's walk
+(`wait:6 S:2 wait:40 shot:1 wait:20 E:2.8 wait:12 shot:1 wait:15`, 97.8 s).
+
+| predicted | measured |
+|---|---|
+| three connections on one process, 148 → 168 → 148 | `[c1] MANIFEST_DONE[0, map 148]`, `[c2] … 168`, `[c3] … 148` |
+| the gamesrv banner reads the harness's flag | `[map] --client-build 38797 (given): the manifest's 'no map' sentinel is 888, the mission mask expected 112 bytes` |
+| the hero's record in every instance, a body in the field only | `HERO_INFO(hero 3, level 3, prof 3/0, skills [281, 276, 2])` on c1, c2 and c3; `WORLD_CREATE_AGENT(200) hero body` on **c2 only** |
+| the formation walk in the corridor | 6 × `walks to its slot` on c2; `walk4-shot.png`: Tahlkora with her staff beside the Warrior, the party panel reading `W3 Test Warrior / Mo3 Tahlkora` |
+| the zone carry printed both ways | `[c2] ZONE: morale 100 and the hero stances carried into the field`, `[c3] ZONE: an outpost -- the death penalty is cleared (retail 0x009C 100); the hero stances carried` |
+| no assert, no mask warning, nothing undecodable | `Gw.log` 0 asserts; 0 `MISSION_MASK is`; 0 undecodable |
+
+OBSERVED on our own client (build 38797) against our own server. Nothing here is a claim
+about retail; it is the claim that today's two load-path changes broke nothing the hero
+ladder had proven.
+
+**A label corrected on the way.** F40.1's table called `run/slice` "38833". It is a MIXED
+directory: the exe is **build 38797** by its own getter (`buildid.py --exe`), the archive is
+composed from the 38833 snapshot (`content/compose.toml` `dat_source`). The exe's build is
+the one the sentinel must match, and the table now says so.
+
+### 41.2 SLICE-H14 — the signet's armour, and why it is WIKI and nothing else
+
+**The owner's queue** (F39's "left open": Healing Signet's shape; `content/world.toml`'s
+"NOT modelled, said here: … Healing Signet's -40 armour"). GWW "Healing Signet" (read
+2026-09-14, browser): infobox `causes2 = Decreased Armor Rating`; "You have -40 armor while
+using this skill"; Notes: "-40 armor results in double damage from skills that are affected
+by armor rating"; Anomaly: "the armor penalty from this skill is applied after the armor
+cap and the effects of Cracked Armor and armor penetration".
+
+**Asked of the corpus first, and it has nothing.** Over every live game connection, `0x00A0`
+announces of skill 1 by property: **none** — prop 60 (the spell announce) names 2 (13×) and
+281 (6×) and never 1; prop 50 (the attack-skill announce) names 322 (52×) and never 1; the
+only `(·, 1)` pairs are property 38's attack-fail reason 1 (dodge, 39.8). Koss carried the
+signet on the JARIN tape and never used it in view of the wire — GWW's own note says heroes
+retreat from combat to use it. So there is **no retail hit landing under the penalty to
+measure a ratio on**; 2 is the wiki's arithmetic (2 ** (40 / 40)) and the label is WIKI.
+
+**Shipped.** `[skill_effect.1] armour_while_casting = -40` (content; provenance appended).
+`casting_armour_penalty(state)` sums that key over the player's pending casts that have
+BEGUN and not COMPLETED (`begin_at <= now < e5_at`, not cancelled, not `e5_sent`) — the
+activation window, which is what "while using" is — and is ADDED to the capped rating at
+the two sites that read one: `land_swing`'s location armour (the hostile's swing on the
+player) and the NPC cast's `spell_ar` when the taker is the player. Added after the cap
+because the wiki says so, never folded into the bonus `combatmath` caps. The hit log says
+`while casting` when it applied. `--no-casting-armour` reverts. Bodies (a hero using the
+signet) are NOT covered: their pending casts do not live on `state`, and no tape shows one.
+`test_mechanics` §30 (floor 202 → 209): the swing inside the window is exactly double the
+quiet swing at a pinned hit location; a completed, a queued-not-begun and a cancelled cast
+cost nothing; a row without the key (Power Attack) costs nothing; the revert arm; the
+penalty read off the row.
+
+**Labels.** 41.1 OBSERVED (ours). 41.2 WIKI for the rule and the number; the corpus census
+(0 of 19 prop-60 announces, 0 of 52 prop-50) is MEASURED; the implementation is a
+RECONSTRUCTION on the wiki's stated order. What would change it: any tape with a hit on a
+Healing Signet caster during the 2 s — the join is `hs_scan`'s shape, prop 60 → the next
+prop-55 loss on the caster inside 2.5 s, against the same cause's other hits.
 
 ## SLICE-F6 — what the desk cannot settle
 
