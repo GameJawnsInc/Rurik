@@ -536,7 +536,15 @@ def retail_tracks(stamp=None):
                                        "refused rather than guessed"))
                 continue
             aid = max(named[conn].items(), key=lambda kv: kv[1])[0]
+            # The server's own hard sets of the player (0x002C) flag the
+            # interval that spans them: that displacement is the server's,
+            # not the client's -- movesync.hard_sets has the JARIN shrine
+            # case that made this necessary. Rows stay aligned with the
+            # reports; `hard_step` refuses a flagged row; counted in
+            # `server_sets`, never silent.
+            sets = movesync.hard_sets(s2c, {conn: aid}).get(conn, [])
             rows = movesync.steps(R)
+            flagged = movesync.mark_server_sets(rows, sets)
             out.append({
                 "label": label, "origin": origin.LIVE, "build": None,
                 "reps": R, "accepted": [True] * len(R),
@@ -553,6 +561,7 @@ def retail_tracks(stamp=None):
                              if movesync.hard_step(r)],
                 "den": movesync.denominator(R),
                 "sent_0x2c": None, "sent_t": None,
+                "server_sets": flagged,
             })
     return out
 

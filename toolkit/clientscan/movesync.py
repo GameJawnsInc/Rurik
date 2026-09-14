@@ -229,6 +229,76 @@ PLAYER_AGENT = 1
 OP_MOVE_TO_POINT = 41       # s2c 0x0029
 OP_SET_HEADING = 61         # c2s 0x003D -- the client's position WHILE MOVING
 OP_CANCEL_REPORT = 71       # c2s 0x0047 -- the client's position at a STOP
+OP_UPDATE_POSITION = 44     # s2c 0x002C -- the server SETS an agent's position
+OP_ATTRIBUTE_POINTS = 55    # s2c 0x0037 -- retail sends it to the player's agent
+
+
+def named_players(s2c):
+    """{conn: the agent 0x0037 names most often on that connection}.
+
+    Retail sends 0x0037 to the player's own agent (resyncscore.retail_tracks
+    reads it the same way). A connection with none is absent here, and a
+    caller must REFUSE it rather than guess.
+    """
+    named = {}
+    for _t, conn, op, vals in s2c:
+        if op != OP_ATTRIBUTE_POINTS:
+            continue
+        if not isinstance(vals, (list, tuple)) or len(vals) < 2:
+            continue
+        a = vals[1]
+        if isinstance(a, int):
+            named.setdefault(conn, {})
+            named[conn][a] = named[conn].get(a, 0) + 1
+    return {conn: max(c.items(), key=lambda kv: kv[1])[0]
+            for conn, c in named.items()}
+
+
+def hard_sets(s2c, player_of):
+    """{conn: [(t, [x, y])]} of every 0x002C the server sent TO THAT
+    CONNECTION'S PLAYER AGENT -- a hard position set, the one thing on the
+    wire that moves the client's own copy without the client walking it.
+
+    2026-09-14, the JARIN tape (20260914T005758): the player died in the
+    Plains, retail set it to the resurrection shrine 10,121 u away with
+    0x002C at 340.21 s, and the client's next self-report (341.76 s) came
+    from the shrine -- 640.91 u/s over 15.8 s, the corpus's only retail
+    interval ever to clear the speed arm. That interval is not a report
+    the bar should judge: the displacement is the SERVER'S, said so on
+    the wire. `mark_server_sets` flags the row and `hard_step` refuses
+    the verdict on a flagged row -- the row is KEPT, aligned with its
+    reports, and counted by every caller; nothing is dropped. What this
+    is NOT is a threshold: a 0x002C between two reports 3 u apart flags
+    one row and changes no verdict.
+    """
+    out = {}
+    for t, conn, op, vals in s2c:
+        if op != OP_UPDATE_POSITION:
+            continue
+        if not isinstance(vals, (list, tuple)) or len(vals) < 3:
+            continue
+        aid = player_of.get(conn)
+        pos = vals[2]
+        if (aid is not None and vals[1] == aid
+                and isinstance(pos, (list, tuple)) and len(pos) >= 2):
+            out.setdefault(conn, []).append(
+                (t, [float(pos[0]), float(pos[1])]))
+    return out
+
+
+def mark_server_sets(rows, sets):
+    """Flag every interval that spans a server hard set of the reporting
+    agent: `row["server_set"] = (t, [x, y])` of the LAST set inside it.
+    Returns the flagged rows. Rows stay in place and in order, so an index
+    into `rows` still pairs with an index into the reports.
+    """
+    marked = []
+    for r in rows:
+        inside = [(t, pos) for t, pos in sets if r["t0"] < t < r["t"]]
+        if inside:
+            r["server_set"] = inside[-1]
+            marked.append(r)
+    return marked
 
 
 # --- REALFIX-T1: which clock the wire<->tap offset came from ----------------
@@ -584,12 +654,19 @@ def excess(row):
 def hard_step(row):
     """THE VERDICT, one interval at a time. TWO ARMS, and they do not overlap.
 
+    A row flagged by `mark_server_sets` -- the interval spans a 0x002C the
+    server sent to this agent -- is REFUSED, not judged: the displacement
+    is the server's own and the wire said so (2026-09-14, the JARIN
+    shrine; see `hard_sets`).
+
     At `dt >= HARD_JUMP_MIN_DT` the implied speed is a measurement and SPEED
     decides. BELOW it a speed is not a measurement -- so DISTANCE decides there,
     rather than the interval being discarded. Discarding was the hole: short dt
     is exactly where a resync's own pair of reports lands, so the old refusal
     was anti-correlated with the thing it was built to find.
     """
+    if row.get("server_set") is not None:
+        return False
     if row["dt"] >= HARD_JUMP_MIN_DT:
         return row["speed"] > HARD_JUMP_SPEED
     return row["dist"] >= HARD_JUMP_UNITS

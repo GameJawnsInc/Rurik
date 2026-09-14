@@ -166,7 +166,7 @@ PRESEARING_ZONES = 7208        # what the first run wrongly pulled in
 # serve-verdict checks, 84 before section 8's dry-run and spill checks, 56
 # before section 8 and the create branch, 35 before section 7 and the
 # compression checks, 25 before section 6.
-LEDGER = checks.Ledger("test_deploy", floor=250)
+LEDGER = checks.Ledger("test_deploy", floor=251)  # 2026-09-14: +1, the startup-call check (sec.6)
 check = checks.adopt(LEDGER)
 
 
@@ -356,14 +356,28 @@ def section6():
                  for n in ast.walk(main_fn))
     check(called, "and main() CALLS it -- a startup read that startup does not "
                   "run is the defect wearing a fix's name")
-    # NEGATIVE CONTROL: delete the call, keep the function.
+
+    # THE STARTUP CALL is the one whose argument is the served map (`a.map if
+    # known else FALLBACK_MAP_ID`, an IfExp). SLICE-B8 (64612de6, 2026-09-12)
+    # added a second call per PORTAL DESTINATION in the same block, so "main
+    # calls it at all" stayed green with the startup read deleted -- the
+    # negative control below has to look for the startup call specifically.
+    def startup_calls(fn):
+        return [n for n in ast.walk(fn)
+                if isinstance(n, ast.Call)
+                and getattr(n.func, "id", "") == "prewarm_pathmap"
+                and n.args and isinstance(n.args[0], ast.IfExp)]
+    check(len(startup_calls(main_fn)) == 1,
+          "and exactly one of those calls is the STARTUP read of the served "
+          "map (its argument is the `a.map if known else FALLBACK_MAP_ID` "
+          "IfExp); the others pre-warm portal destinations",
+          f"{len(startup_calls(main_fn))} startup call(s)")
+    # NEGATIVE CONTROL: delete the startup call, keep the function.
     gutted = src.replace("        prewarm_pathmap(a.map if known else "
                          "FALLBACK_MAP_ID)\n", "")
-    gutted_ok = gutted != src and not any(
-        isinstance(n, ast.Call) and getattr(n.func, "id", "") == "prewarm_pathmap"
-        for n in ast.walk(next(f for f in ast.walk(ast.parse(gutted))
-                               if isinstance(f, ast.FunctionDef)
-                               and f.name == "main")))
+    gutted_ok = gutted != src and not startup_calls(
+        next(f for f in ast.walk(ast.parse(gutted))
+             if isinstance(f, ast.FunctionDef) and f.name == "main"))
     check(gutted_ok,
           "and removing that one line makes the check go red while "
           "prewarm_pathmap still EXISTS and still reads correctly -- which is "

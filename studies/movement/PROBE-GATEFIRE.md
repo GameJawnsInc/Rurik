@@ -832,7 +832,7 @@ or §5 reddens.
 split that created `movefence.py` — it did not exist at `e2468e5`, and `movesync.py`'s
 digest moved with the cut and not with anything it prints. Measured at the split:
 `movetap.py` sha256 `44d87c2f4df8c95fcfe826e7e052950cb1098ab04ee440c6495ce053b1115953`,
-`movesync.py` sha256 `76b6b534e0c674e0f0cb533768a91c0b4953aca51834664056f370cda3f97ead` and
+`movesync.py` sha256 `9342f604e44c40d4e72d4f5aaa4721b750e38641b58d7c03295cc7490da020ea` (moved 2026-09-14: `hard_sets` / `mark_server_sets` added and `hard_step` refuses a row that spans a server 0x002C -- the JARIN shrine; every §6 block re-checked against the disk by `test_probedoc` at that commit and none had changed, the earlier digest was `76b6b534e0c674e0f0cb533768a91c0b4953aca51834664056f370cda3f97ead`) and
 `movefence.py` sha256 `08a1594a7c43246e72f52f66d15cb94ebbc2416284aa58d074dbf8883b5be9d1`. If
 any hash has moved, re-derive every block before quoting one — a printed sentence that
 changed upstream makes this whole section a description of code that no longer exists, which

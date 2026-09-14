@@ -2220,7 +2220,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   keeps its invariants, the arithmetic moves freely. Floor **44** against a green 44, and
   the first draft declared 36 against a body that could only produce 33 and was correctly
   called incomplete. ~25 s),
-  `toolkit/mapdata/test_deploy.py` (rung G's one command, `deploy.py`, which
+  `toolkit/mapdata/test_deploy.py` (**2026-09-14: §6's negative control re-aimed at the STARTUP call, floor 250 → 251.** SLICE-B8 (2026-09-12) added a second `prewarm_pathmap` call per portal destination in the same block, so gutting the startup line left main() still calling it and the control went red on a healthy tree; the positive check now asks for exactly one call whose argument is the `a.map if known else FALLBACK_MAP_ID` IfExp and the control guts that one. rung G's one command, `deploy.py`, which
   takes an area row in `content/areas.toml` from geometry to a map the retail
   client compiles. It is an ORCHESTRATOR -- nearly every line it runs belongs to
   a module with its own test -- so this file checks only what is true of the
@@ -3311,7 +3311,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   cursor (a sale frees its slot, the next buy reuses it) -- a cursor would call a
   20-slot bag full after twenty transactions on an empty one. Floor 27. No vault, no
   socket, no client. ~1 s),
-  `toolkit/authsrv/test_playerbags.py` (the player's nine containers, and **WHERE**
+  `toolkit/authsrv/test_playerbags.py` (**2026-09-14: the JARIN tape (20260914T005758) carried a TENTH bag and the one-set check went red -- it was a second INVENTORY KEY, the hero's, with one type-2 bag; `invcensus.bag_shapes` now groups by field 1 and returns the other keys' bags as a fifth element, the one-set claim is about the player's inventory, and a new check pins the hero's extra to exactly `[(2, 21, 9)]` (n = 3 connections, one tape); floor 18 → 19.** the player's nine containers, and **WHERE**
   the burst sends them. Until 2026-08-19 this server created ONE bag, and the
   symptom was not a missing grid but a missing PURCHASE: with a funded purse, a
   priced shop and Buy rendered ENABLED, an operator watched a click on Buy land
@@ -3670,7 +3670,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   and the file records WHY the default is off (the 0-of-6 number is a substring lock,
   so a later reader flipping the default has to delete the reason first). 104 → **110
   checks, floor 110**.
-  `toolkit/authsrv/test_d1lead.py` (REALFIX-A2's `--d1-lead` bundle, and since
+  `toolkit/authsrv/test_d1lead.py` (**2026-09-14: the watchdog-site lock re-pinned to the guard SLICE-C5 (2026-09-12) rewrote -- `and not state.get("player_dead")` -- so a corpse's lead chain is gated and the lock names it.** REALFIX-A2's `--d1-lead` bundle, and since
   2026-09-01 also **§R11: the grant-during-hold A/B lever.** SHIPPED suppressing and
   REFUTED by the very next run -- the default is back to granting and the suppression
   is now opt-in (`--suppress-grant-during-hold`). It removed the body relocation it
@@ -4383,7 +4383,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   [0, 37]; a claim of 5 refuses); ledger-skipped, never silent, without the
   archive. Floor 36 against a green run of 41 — exactly the 5-check
   real-mesh section of headroom. ~2 s with the archive),
-  `toolkit/authsrv/test_position_trust.py` (the position-trust policy: it may
+  `toolkit/authsrv/test_position_trust.py` (**2026-09-14: §8's one-send-site lock now distinguishes the POLICY site (vec2 a Name, `unit`) from the wipe's CONSTANT facing JARIN-S added (`(1.0, 0.0)` read off retail's shrine batch) -- two sites, one policy; the `unit` and `moving` checks read the policy site.** the position-trust policy: it may
   refuse a client-reported position, but it may never **latch**.
   **MOVECODE-1z-cr (2026-09-09) adds 15 fixture-free checks and moves both floors
   (227 → 242 bare, 235 → 250 full, each re-measured on a real run of its own
@@ -4938,7 +4938,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   coverage: condition inverted, every suite green); §16 is
   fixture-free like §14 and §15, so all 33 of its checks land in both. No
   client. ~2 s),
-  `toolkit/clientscan/test_movesync.py` (**2026-09-10: §21's row-count check re-aimed, floor 131 → 132.** It asserted the real `Recorder` writes `len(reports) + 1` float-stamped rows — "the reports plus the origin row `Recorder.__init__` emits" — and `Recorder` has written TWO float-stamped preamble rows since `8b64aa0f` (2026-09-01) put a `flags` row beside `origin`, so the arithmetic was one short from that day and the STAMP was never the problem. Re-aimed at what its own message says it is for, "anything less means rows are losing the stamp": it now counts the FILE, so a third preamble row cannot break it and dropping a stamp anywhere still reddens it — split in two so the decode half (every written row comes back as a report) is still checked, which the row count alone cannot see. Otherwise: SEPARATION -- the quantity that
+  `toolkit/clientscan/test_movesync.py` (**2026-09-14: §16 flags retail intervals that span a 0x002C to the player (movesync.hard_sets / mark_server_sets; hard_step refuses them) after the JARIN shrine set -- 10,124 u in 15.8 s, the corpus's first retail row over the speed arm -- and bounds each flagged row's next report by a run's reach from the set point, no slack term; floor 132 → 133.** **2026-09-10: §21's row-count check re-aimed, floor 131 → 132.** It asserted the real `Recorder` writes `len(reports) + 1` float-stamped rows — "the reports plus the origin row `Recorder.__init__` emits" — and `Recorder` has written TWO float-stamped preamble rows since `8b64aa0f` (2026-09-01) put a `flags` row beside `origin`, so the arithmetic was one short from that day and the STAMP was never the problem. Re-aimed at what its own message says it is for, "anything less means rows are losing the stamp": it now counts the FILE, so a third preamble row cannot break it and dropping a stamp anywhere still reddens it — split in two so the decode half (every written row comes back as a report) is still checked, which the row count alone cannot see. Otherwise: SEPARATION -- the quantity that
   actually predicts a warp, and the guard on the two instruments that reported
   the wrong one. `warpscan.py` scored a big client step against the points we
   had GRANTED and answered "NOT near any grant" for **10 of its 12** detections;
@@ -5410,7 +5410,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   **§21 also guards both modules' import lists** (`movetap.py` and
   `movesync.py`, asked of the syntax tree), a second witness beside movetap's
   own §3 so the guard cannot be deleted from one place quietly. No client. ~4 s),
-  `toolkit/clientscan/test_resyncscore.py` (WHAT WOULD THE 0x002C RESYNC HAVE
+  `toolkit/clientscan/test_resyncscore.py` (**2026-09-14: retail tracks carry `server_sets` (the same flag as test_movesync §16; the JARIN shrine was scored as retail's one hard jump), and §17's `70 < p50` bound widened to 50 -- p50 read 69.5 u whole-corpus against 80.9 u as of the August pin, a bound one unit above the median being a pin on the vault's size.** WHAT WOULD THE 0x002C RESYNC HAVE
   DONE -- the guard on `toolkit/clientscan/resyncscore.py`, which prices a
   server change nobody has made against captures already on disk. The proposal:
   `GAME_SMSG 0x002C AGENT_UPDATE_POSITION` is the one catalogued primitive whose
@@ -7388,7 +7388,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   an empty modifier list — which is the "renders and protects nothing" state the
   study named.
 
-  `toolkit/clientscan/test_itemmods.py` (**the item-modifier decode, who reads
+  `toolkit/clientscan/test_itemmods.py` (**2026-09-14: §7's skin key is (model, field 4) -- the Factions tutorial tape declared model 9528 with field 4 = 4 and attribute 17 where twenty earlier declarations carried 3 / 21; the one model that needed the second field is named in a new check; floor 37 → 38.** **the item-modifier decode, who reads
   a modifier, and the attribute bonus** — 37 checks, floor 37; this line read "28
   checks, floor 28" until 2026-08-27, when the file itself declared 37. **§10's
   attribute-bonus count is a FLOOR and was an equality until the same day, when it
@@ -9281,7 +9281,7 @@ the same-tick ALIAS**: the
   is NOT unique, 56 hits, which is why the signature anchors in the body and the
   −11 delta is verified after a match rather than searched for. Both floors were
   re-measured rather than incremented: 93 with capstone, 45 stdlib-only),
-  `toolkit/test_buildpins.py` (the build-coupled census — `studies/crossbuild/`
+  `toolkit/test_buildpins.py` (**2026-09-14 (later): 294 → 295, `CLIENT_BUILD = 38797` in authsrv.py, measured by census diff against a worktree at a8e9143a.** the build-coupled census — `studies/crossbuild/`
   `PLAN.md` §6, and the number that replaces `PLAN.md` §6:803's "ongoing":
   **68 live constants across 7 files**, against 360 prose citations and 133 test
   expectations. The one thing it must prove is that those three are told apart,
@@ -11786,7 +11786,7 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   and every one of them runs all 133 checks — an earlier pass had three that
   CRASHED the run at checks 46, 51 and 74 and scored 0, 0 and 7, which is why
   `Ran`, `state_of`, `health` and a defensive `row_bytes` exist. Floor 133),
-  `toolkit/harness/test_abrun.py` (A/B DIFFERENTIAL RUNS, THE MECHANICAL HALF —
+  `toolkit/harness/test_abrun.py` (**2026-09-14: `agent_attacks` follows SLICE-H3's print (`attacks <target_label>`: the player or a party body); LINES gained the party form and the differential row count follows `len(LINES)`; floor 120 → 122.** A/B DIFFERENTIAL RUNS, THE MECHANICAL HALF —
   no client, no vault, every fixture built in a tempdir: the gamesrv logs, the
   capture directories, the manifests, the archives. Section 0 is the log-line
   contract twice over: each counter must match the server's own format AND each

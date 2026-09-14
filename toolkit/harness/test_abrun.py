@@ -161,7 +161,7 @@ import test_overlay as TO                                      # noqa: E402
 # eager-exe sabotage at 1: what it breaks is not WHETHER the refusal fires but
 # whether it fires before a whole-file copy of a shared 4.2 GB archive, and
 # there is exactly one honest way to ask that.
-LEDGER = checks.Ledger("A/B differential runs", floor=120)
+LEDGER = checks.Ledger("A/B differential runs", floor=122)  # 2026-09-14: +2, the party-target line in LINES
 check = checks.adopt(LEDGER)
 
 
@@ -180,7 +180,10 @@ LINES = [
     ("[c3] agent 41 (Skale) casts skill 1234 (slot 2 of 8)", "agent_casts",
      ") casts skill "),
     ("[c3] agent 41 (Skale) attacks the player", "agent_attacks",
-     ") attacks the "),
+     ") attacks "),
+    # SLICE-H3: the same print, aimed at a party body through target_label().
+    ("[c3] agent 41 (Skale) attacks party agent 200 (Academy Monk)",
+     "agent_attacks", ") attacks "),
     ("[map] navmesh 0x287D3: 1 planes, 13 trapezoids", "navmesh",
      "[map] navmesh 0x"),
     ("[c3] area 'sculpt': 3 of 3 placed", "area_placed",
@@ -1220,9 +1223,10 @@ def section7(w, tmp):
     casts = [ln for ln in table if ln.strip().startswith("agent_casts")]
     read = [ln for ln in table if "log lines read" in ln]
     check(casts and casts[0].rstrip().endswith("+1")
-          and read and read[0].rstrip().endswith("+6"),
-          "with the difference in every row spelled out: the arm that saw one "
-          "line and the arm that saw seven differ by six, and by one cast",
+          and read and read[0].rstrip().endswith(f"+{len(lines) - 1}"),
+          f"with the difference in every row spelled out: the arm that saw "
+          f"one line and the arm that saw {len(lines)} differ by "
+          f"{len(lines) - 1}, and by one cast",
           f"{casts[:1]} {read[:1]}")
     check("normalised per second" in text and "hold, seconds" in text,
           "and it says, every time it prints, that neither arm's duration was "

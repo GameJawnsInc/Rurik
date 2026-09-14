@@ -75,7 +75,8 @@ def backpack_items():
 
 
 def bag_shapes():
-    """[(capture, connection, [(type, model, slots)], {backpack item ids})].
+    """[(capture, connection, [(type, model, slots)], {backpack item ids},
+        {other inventory key: [(type, model, slots)]})].
 
     THE EXTRACTOR BEHIND `authsrv.PLAYER_BAGS`, named there by path so the
     table is reproducible rather than asserted. Build 38833.
@@ -106,18 +107,36 @@ def bag_shapes():
                 raise SystemExit(f"{capture_dir} {connection} framed "
                                  f"{consumed}/{total} ({err})")
             shapes, items = [], {}
+            # 2026-09-14, the JARIN tape (20260914T005758): a HERO in the
+            # party brings a SECOND inventory key (field 1: 5 beside the
+            # player's 4, 200 beside 32, 157 beside 184) carrying one
+            # type-2 (equipped) bag, sent ~0.7 s after the player's nine.
+            # The player's set is the one on the key that owns the type-1
+            # Backpack; every other key's bags go to `extra`, keyed by
+            # inventory, so the nine-bag claim stays about ONE inventory.
+            by_inv = {}
             declared = {v[1] for _t, op, v in msgs
                         if op in (NAMED_ITEM, 0x015E) and len(v) > 1}
             for _t, op, v in msgs:
                 if op != CREATE_BAG or len(v) < 7:
                     continue
-                shapes.append((v[2], v[3], v[5]))
+                by_inv.setdefault(v[1], []).append((v[2], v[3], v[5]))
                 if v[6]:
                     items[(v[2], v[6])] = v[6] in declared
+            owner = [k for k, bags in by_inv.items()
+                     if any(b[0] == 1 for b in bags)]
+            if len(owner) == 1:
+                shapes = by_inv[owner[0]]
+                extra = {k: bags for k, bags in by_inv.items()
+                         if k != owner[0]}
+            else:
+                # No single Backpack-owning inventory: refuse to pick.
+                shapes = [b for bags in by_inv.values() for b in bags]
+                extra = {}
             if shapes:
                 out.append((info.get("capture")
                             or os.path.basename(capture_dir),
-                            connection, shapes, items))
+                            connection, shapes, items, extra))
     return out
 
 
@@ -126,14 +145,14 @@ def print_bag_shapes():
     rows = bag_shapes()
     if not rows:
         raise SystemExit("zero live connections carry bags: measured nothing.")
-    sets = collections.Counter(tuple(s) for _c, _n, s, _i in rows)
+    sets = collections.Counter(tuple(s) for _c, _n, s, _i, _x in rows)
     print(f"\n== bag SHAPES over {len(rows)} live connection(s): "
           f"{len(sets)} distinct set(s)")
     for shape, n in sets.most_common():
         print(f"   x{n}  {len(shape)} bags")
         for kind, model, slots in shape:
             print(f"        type {kind}  model {model:3d}  {slots:2d} slots")
-    nonzero = [(k, ok) for _c, _n, _s, items in rows for (k, _i), ok
+    nonzero = [(k, ok) for _c, _n, _s, items, _x in rows for (k, _i), ok
                in items.items()]
     print(f"   trailing item field: nonzero {len(nonzero)} time(s), "
           f"on bag type(s) {sorted({k for k, _ok in nonzero})}, "

@@ -1036,12 +1036,16 @@ def main():
           "leg whose ETA the watchdog then re-pins: the relocation R11 "
           "exists to prevent, reintroduced one line below the fix")
     check(src.count("_a2_watchdog(send, state, rec)") == 1
-          and src.count('if D1_LEAD and kind == "game":') == 1
+          # SLICE-C5 (c8359322, 2026-09-12): the gate gained `and not
+          # state.get("player_dead")` -- a corpse walked on its own lead
+          # chain, so the watchdog re-pins nothing for a dead player.
+          and src.count('if D1_LEAD and kind == "game" and not '
+                        'state.get("player_dead"):') == 1
           and src.count("[a2-watchdog]") == 2
           and src.count("A2 WATCHDOG-REPIN (") == 1,
-          "ONE watchdog call site, D1- and game-channel-gated, with ONE "
-          "speed send and ONE repin send (the [a2-watchdog] tag's second "
-          "appearance is the fire's own console line), labelled",
+          "ONE watchdog call site, D1-, game-channel- and live-player-gated, "
+          "with ONE speed send and ONE repin send (the [a2-watchdog] tag's "
+          "second appearance is the fire's own console line), labelled",
           "the watchdog is a grant on the shared clock riding the recv "
           "loop's quiet ticks; a second site or an auth-channel call is "
           "a send nobody audited")

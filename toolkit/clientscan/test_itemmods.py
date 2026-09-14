@@ -67,7 +67,7 @@ import pinned  # noqa: E402
 # 12 executed, and the ledger refused the run rather than passing it. Sections
 # 6 and 7 took it from 12 to 19 , sections 8-10 to 28, 11 to 30, and 12-14 to 37;
 # each time the number was read off the run rather than predicted.
-LEDGER = checks.Ledger("item modifiers", floor=37)
+LEDGER = checks.Ledger("item modifiers", floor=38)
 
 
 def main():
@@ -238,7 +238,7 @@ def main():
         import attribpoints
         n_attrs = attribtable.EXPECTED_COUNT
         cap = len(attribpoints.locate(attribpoints.Image(exe))["costs"])
-        pairs, models = [], {}
+        pairs, models, skins = [], {}, {}
         for stamp in sorted(os.listdir(live)):
             try:
                 got = cmsgstream.timed(stamp, "s2c", "game")
@@ -259,6 +259,11 @@ def main():
                     pairs.append((dd["arg"], dd["arg2"]))
                     if len(head) > 2:
                         models.setdefault(head[2], set()).add(dd["arg"])
+                        # 2026-09-14: field 4 (byte +0x21 of the item
+                        # record; semantics unnamed by any assert) is
+                        # part of the skin key -- see the check below.
+                        skins.setdefault((head[2], head[4] if len(head) > 4
+                                          else None), set()).add(dd["arg"])
         bad_a = [a for a, _r in pairs if a >= n_attrs]
         bad_r = [x for _a, x in pairs if not 1 <= x <= cap]
         LEDGER.ok(bool(pairs) and not bad_a,
@@ -275,15 +280,39 @@ def main():
                   f"extracted separately, and 570 chances for the two to "
                   f"disagree"
                   if not bad_r else f"OUTSIDE: {sorted(set(bad_r))[:12]}")
+        # THE SKIN KEY IS (model, field 4), MEASURED 2026-09-14. Until the
+        # Factions tutorial tape (20260913T210901) every model id carried
+        # one attribute. That tape declared model 9528 with field 4 = 4
+        # and attribute 17, where twenty earlier declarations of 9528 all
+        # carried field 4 = 3 and attribute 21 -- one model id, two
+        # attributes, separated exactly by the byte the builder stores
+        # at item+0x21 (schema/overrides.json 0x015E: "f4 semantics
+        # unnamed by any assert"). So the claim is kept at the key that
+        # holds it, and the ONE model that needed the second field to
+        # separate is named rather than tolerated: n = 1, RECONSTRUCTION
+        # that field 4 is a variant of the skin; OBSERVED that it splits.
         varies = [m for m, a in models.items() if len(a) > 1]
-        LEDGER.ok(len(models) > 20 and not varies,
-                  "the attribute is a property of the SKIN, not of the roll",
-                  f"{len(models)} distinct item model ids, and not one of them "
-                  f"ever carries two different attributes -- while 38 of them "
-                  f"carry several different ranks. That is what a weapon "
-                  f"requirement looks like and it is not what a coincidence "
-                  f"looks like"
-                  if not varies else f"MODELS WITH TWO ATTRIBUTES: {varies[:8]}")
+        skin_varies = [k for k, a in skins.items() if len(a) > 1]
+        LEDGER.ok(len(skins) > 20 and not skin_varies,
+                  "the attribute is a property of the SKIN (model id AND "
+                  "field 4), not of the roll",
+                  f"{len(skins)} distinct (model, field 4) keys, and not "
+                  f"one of them ever carries two different attributes -- "
+                  f"while 38 of them carry several different ranks. That "
+                  f"is what a weapon requirement looks like and it is not "
+                  f"what a coincidence looks like"
+                  if not skin_varies
+                  else f"SKINS WITH TWO ATTRIBUTES: {skin_varies[:8]}")
+        LEDGER.ok(varies == [9528]
+                  and {k for k in skins if k[0] == 9528} == {(9528, 3),
+                                                             (9528, 4)},
+                  "and exactly ONE model id needs field 4 to separate: 9528, "
+                  "field 4 = 3 (attribute 21) on Prophecies tapes and 4 "
+                  "(attribute 17) on the Factions tutorial",
+                  f"models with two attributes: {varies[:8]}; 9528's keys "
+                  f"{sorted(k for k in skins if k[0] == 9528)} -- a second "
+                  f"model here means field 4 is doing more than this "
+                  f"n = 1 has shown")
 
     print("\n8. the ATTRIBUTE BONUS: found by who resolves an attribute NAME")
     acc = itemmods.attribute_name_accessor(img)

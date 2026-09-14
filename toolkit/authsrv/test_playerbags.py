@@ -58,7 +58,7 @@ import agents  # noqa: E402
 import authsrv  # noqa: E402
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("player bags vs ArenaNet's own set", floor=18)
+LEDGER = checks.Ledger("player bags vs ArenaNet's own set", floor=19)
 
 # (type, model, slots), in retail's own send order. Duplicated here rather than
 # imported from authsrv so the check has two independent sides: if someone
@@ -160,13 +160,34 @@ def main():
         rows = []
         LEDGER.skip("1-4. the corpus sections", f"no live captures: {exc}")
     if rows:
-        sets = collections.Counter(tuple(s) for _c, _n, s, _i in rows)
+        sets = collections.Counter(tuple(s) for _c, _n, s, _i, _x in rows)
         LEDGER.ok(len(sets) == 1,
-                  "ArenaNet sends ONE bag set, not a per-character one",
+                  "ArenaNet sends ONE bag set on the PLAYER'S inventory, "
+                  "not a per-character one",
                   f"{len(sets)} distinct set(s) over {len(rows)} live "
                   f"connection(s). A second set here would mean the table "
                   f"below is a fact about one character, and every claim "
                   f"resting on it would be scoped to that character")
+        # 2026-09-14: the JARIN tape put a HERO in the party, and the
+        # server sent a SECOND inventory key with ONE type-2 (equipped)
+        # bag ~0.7 s after the player's nine -- on 3 of 3 of its
+        # connections and on 0 of the 65 hero-less ones. That is what a
+        # hero's equipment panel is on the wire; it is not a tenth
+        # player bag, and until this was split by inventory key it read
+        # as a second set and turned the check above red.
+        with_extra = [(c, n, x) for c, n, _s, _i, x in rows if x]
+        extra_sets = collections.Counter(
+            tuple(bags) for _c, _n, x in with_extra for bags in x.values())
+        LEDGER.ok(with_extra and all(len(x) == 1 for _c, _n, x in with_extra)
+                  and set(extra_sets) == {((2, 21, 9),)},
+                  "and a HERO in the party brings a second inventory key "
+                  "carrying exactly one type-2 (equipped) bag",
+                  f"{len(with_extra)} connection(s) with a second "
+                  f"inventory: {sorted({c for c, _n, _x in with_extra})}, "
+                  f"its bags {dict(extra_sets)} -- OBSERVED n = "
+                  f"{len(with_extra)}, one tape; a second hero would show "
+                  f"as a third key or a second bag here, and neither has "
+                  f"been seen")
         theirs = list(sets.most_common(1)[0][0])
         LEDGER.ok(theirs == list(RETAIL_SHAPES),
                   "and the set this file pins IS the corpus's",
@@ -178,7 +199,7 @@ def main():
                   f"bag IDS are ours, because retail's are arbitrary "
                   f"per-connection handles (8..16 on one connection, "
                   f"570/496/398.. on another)")
-        nonzero = [(kind, ok) for _c, _n, _s, items in rows
+        nonzero = [(kind, ok) for _c, _n, _s, items, _x in rows
                    for (kind, _i), ok in items.items()]
         LEDGER.ok(nonzero and {k for k, _ok in nonzero} == {1}
                   and all(ok for _k, ok in nonzero),

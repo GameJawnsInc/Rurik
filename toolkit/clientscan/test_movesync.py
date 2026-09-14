@@ -94,6 +94,7 @@ as a test missing from TESTS.md, and this repo has shipped it three times
   followed by a TypeError and one check that could never pass.
 """
 import ast
+import math
 import contextlib
 import io
 import json
@@ -153,8 +154,11 @@ import vaultpath  # noqa: E402
 # 2026-09-10: 131 -> 132. sec.21's "every row is float-stamped" check split in
 # two -- the row count (robust to a growing preamble) and the decode count (the
 # half that catches a decode regression); see the comment at that site.
+# 2026-09-14: 132 -> 133. sec.16 gained the server-set check: every retail
+# interval spanning a 0x002C to the player is shown, refused a verdict, and
+# bounded by a run's reach from the set point (the JARIN shrine). Vaulted only.
 LEDGER = checks.Ledger("separation: the quantity that actually predicts a warp",
-                       floor=132)
+                       floor=133)
 check = checks.adopt(LEDGER)
 
 MOVETAP = "movetap-20260819T171436.jsonl"
@@ -1227,12 +1231,16 @@ def main():
         LEDGER.skip("retail calibration",
                     f"the live corpus is not reachable here ({exc})")
     if cmsgstream is not None:
-        rows, reports = [], 0
+        rows, reports, cut_rows = [], 0, []
         for st in stamps:
             try:
                 msgs = cmsgstream.timed(st, "c2s", "game")
+                s2c = cmsgstream.timed(st, "s2c", "game")
             except Exception:
                 continue          # a stamp with no game wire is not a failure
+            # The server's hard sets of the player flag the interval that
+            # spans them (movesync.hard_sets: the JARIN shrine).
+            sets = movesync.hard_sets(s2c, movesync.named_players(s2c))
             byconn = {}
             for t, conn, op, vals in msgs:
                 if op not in (movesync.OP_SET_HEADING,
@@ -1251,7 +1259,11 @@ def main():
                 # next, which is a displacement across a map load.
                 byconn[conn].sort(key=lambda z: z[0])
                 reports += len(byconn[conn])
-                rows.extend(movesync.steps(byconn[conn]))
+                conn_rows = movesync.steps(byconn[conn])
+                for r in movesync.mark_server_sets(conn_rows,
+                                                   sets.get(conn, [])):
+                    cut_rows.append((st, conn, r))
+                rows.extend(conn_rows)
         check(reports > 2000 and len(rows) > 2000,
               f"the live corpus yields {reports} retail self-reports over "
               f"{len(rows)} intervals",
@@ -1259,10 +1271,43 @@ def main():
               f"over an empty corpus certifies the constant while measuring "
               f"nothing, which is precisely the shape this suite exists to "
               f"catch")
-        by_speed = [r for r in rows
+        # EVERY FLAGGED ROW IS SHOWN, and each has to be the server's
+        # displacement and not a walk hidden behind a 0x002C: after the set
+        # the client's NEXT report can be no farther from where the server
+        # put it than a run could carry it in the time between -- no slack
+        # term, RUN_SPEED and the wire's own timestamps only. A flagged row
+        # that fails this is a row the flag is hiding, and the check goes
+        # red rather than the corpus getting quieter.
+        def budget(r):
+            ts, P = r["server_set"]
+            walked = math.hypot(r["p"][0] - P[0], r["p"][1] - P[1])
+            return walked, movesync.RUN_SPEED * (r["t"] - ts)
+        over = [(st, c, r) for st, c, r in cut_rows
+                if budget(r)[0] > budget(r)[1]]
+        armed = [r for _s, _c, r in cut_rows
+                 if (r["dt"] >= movesync.HARD_JUMP_MIN_DT
+                     and r["speed"] > movesync.HARD_JUMP_SPEED)
+                 or (r["dt"] < movesync.HARD_JUMP_MIN_DT
+                     and r["dist"] >= movesync.HARD_JUMP_UNITS)]
+        check(cut_rows and not over and len(armed) >= 1,
+              f"{len(cut_rows)} interval(s) span a 0x002C hard set of the "
+              f"player and are refused a verdict; on every one the client's "
+              f"next report sits inside a run's reach of where the server "
+              f"put it, and {len(armed)} would otherwise have cleared an arm",
+              "; ".join(f"{st} {c[-20:]} {r['dist']:.0f} u / {r['dt']:.2f} s, "
+                        f"next report {budget(r)[0]:.0f} u from the set point "
+                        f"({budget(r)[1]:.0f} u budget)"
+                        for st, c, r in cut_rows)
+              + " -- the JARIN shrine (20260914T005758, 10,124 u in 15.8 s) is "
+              "the one that clears an arm; a flagged row whose next report "
+              "outran the budget would be a walk the flag is hiding")
+        # The flagged rows are refused a verdict (hard_step), so the arms are
+        # measured over the rows the bar actually judges.
+        judged = [r for r in rows if r.get("server_set") is None]
+        by_speed = [r for r in judged
                     if r["dt"] >= movesync.HARD_JUMP_MIN_DT
                     and r["speed"] > movesync.HARD_JUMP_SPEED]
-        by_dist = [r for r in rows
+        by_dist = [r for r in judged
                    if r["dt"] < movesync.HARD_JUMP_MIN_DT
                    and r["dist"] >= movesync.HARD_JUMP_UNITS]
         check(len(by_speed) == 0 and len(by_dist) == 0,
@@ -1270,14 +1315,14 @@ def main():
               f"{len(by_dist)} by distance)",
               f"a single retail row on either arm would mean the bar has "
               f"started counting the game, which is what killed the 300 u one")
-        slow = [r for r in rows if r["dt"] >= movesync.HARD_JUMP_MIN_DT]
+        slow = [r for r in judged if r["dt"] >= movesync.HARD_JUMP_MIN_DT]
         top_v = max((r["speed"] for r in slow), default=0.0)
         check(388.0 < top_v < movesync.HARD_JUMP_SPEED,
               f"retail's fastest believable interval is {top_v:.2f} u/s",
               f"{top_v:.2f} -- just over the 383.04 u/s boost base its own "
               f"wire declares, and {movesync.HARD_JUMP_SPEED - top_v:.1f} u/s "
               f"below the speed arm")
-        short = [r for r in rows if r["dt"] < movesync.HARD_JUMP_MIN_DT]
+        short = [r for r in judged if r["dt"] < movesync.HARD_JUMP_MIN_DT]
         top_d = max((r["dist"] for r in short), default=0.0)
         check(len(short) > 20 and top_d < 50.0,
               f"and BELOW the dt floor -- the only place the distance arm ever "

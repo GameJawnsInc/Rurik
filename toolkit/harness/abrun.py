@@ -202,9 +202,13 @@ COUNTERS = (
                        r"\(slot (\d+) of (\d+)\)$"),
             "an NPC started a cast (authsrv.py:5068)"),
     Counter("agent_attacks",
-            re.compile(r"^\[c(\d+)\] agent (\d+) \((.+?)\) attacks the "
-                       r"player$"),
-            "an NPC started swinging at the player (authsrv.py:5022)"),
+            # SLICE-H3 (05a8181c, 2026-09-13): the print names its target
+            # through target_label() -- "the player" or "party agent N
+            # (name)" -- so a hostile opening on a hero is counted too.
+            re.compile(r"^\[c(\d+)\] agent (\d+) \((.+?)\) attacks "
+                       r"(the player|party agent \d+ \(.+?\))$"),
+            "an NPC started swinging at the player or a party body "
+            "(authsrv.py:5022)"),
     Counter("navmesh", harnesslog.NAVMESH_RE,
             "the server loaded a map's pathing mesh (authsrv.py:2222)",
             fields=("map_file_id", "planes", "trapezoids")),

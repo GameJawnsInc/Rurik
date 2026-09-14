@@ -608,14 +608,32 @@ def main():
                 and call.args[0].id == "GAME_SMSG_AGENT_MOVE_DIRECTION"
                 and isinstance(call.args[1], ast.List)):
             move_dir_sends.append(call.args[1].elts)
-    check(len(move_dir_sends) == 1,
-          "there is exactly one AGENT_MOVE_DIRECTION send site",
-          f"{len(move_dir_sends)} -- a second one is a second policy, and the "
-          f"765x defect survived this long because nobody looked at the one")
-
     def vector_arg(payload):
         """The vec2 slot of an [agent, vec2, byte] payload, or None."""
         return payload[1] if len(payload) > 1 else None
+
+    # TWO sites since JARIN-S (b7a78a3a, 2026-09-14), and they are not two
+    # POLICIES: the heading answer sends the client's own vector back as a
+    # unit (the policy this section locks), and `wipe_to_shrine` sends the
+    # CONSTANT facing retail's shrine batch carries -- a literal read off the
+    # hero tape, never a client heading, so the 765x defect cannot live in
+    # it. The policy site is the one whose vec2 is a NAME; a second Name
+    # site would be a second policy again.
+    policy = [p for p in move_dir_sends
+              if isinstance(vector_arg(p), ast.Name)]
+    fixed = [p for p in move_dir_sends
+             if isinstance(vector_arg(p), ast.Tuple)
+             and all(isinstance(e, ast.Constant)
+                     for e in vector_arg(p).elts)]
+    check(len(policy) == 1 and len(move_dir_sends) == len(policy) + len(fixed)
+          and len(fixed) <= 1,
+          "there is exactly one AGENT_MOVE_DIRECTION POLICY site (a vec2 "
+          "NAME), and the only other is the wipe's CONSTANT facing",
+          f"{len(move_dir_sends)} site(s): {len(policy)} policy, "
+          f"{len(fixed)} constant -- a second policy site is a second "
+          f"policy, and the 765x defect survived this long because nobody "
+          f"looked at the one")
+    move_dir_sends = policy or move_dir_sends
 
     vec = vector_arg(move_dir_sends[0] if move_dir_sends else [])
     # THE MUTATION THIS LOCKS, stated as the thing it must NOT be. list(heading)

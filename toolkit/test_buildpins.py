@@ -193,8 +193,8 @@ check("buildpins.py" in " ".join(skipped),
 
 live = [r for r in rows if r["klass"] == BP.LIVE]
 files = {r["file"] for r in live}
-check(len(live) == 294,
-      "294 class-(a) occurrences -- the census",
+check(len(live) == 295,
+      "295 class-(a) occurrences -- the census",
       f"{len(live)}; if this moved, the plan's cost number moved with it. 68 "
       f"until genericvalue.py stopped storing its ten table addresses; 63 after; "
       f"64 once buildid.py gave the older build a NUMBER, since a build number "
@@ -275,7 +275,7 @@ for f, sym in (("clientscan/agentprobe.py", "RVA_ARRAY"),
 # state. msgshape.py's 25 is the largest remaining block.
 check(not [r for r in live if r["file"] == "clientscan/genericvalue.py"],
       "genericvalue.py contributes NOTHING to the census (was 27, then 0)",
-      "the switches are located through the message tables now; a live constant "
+      "the switches are located through the message tables now; a live constant  **295 the same afternoon (f3b5c0e2), +1 in authsrv/authsrv.py: `CLIENT_BUILD = 38797`, the pin the server serves by default -- MEASURED with this instrument against a worktree at a8e9143a (0 gone, 1 new, 0 changed), and a build NUMBER is itself a build-coupled constant, the same reason buildid.py's 64 counted.**"
       "reappearing here means something went back to being looked up")
 check(max(collections.Counter(r["file"] for r in live).values()) == 74,
       "and the largest remaining block is framebus.py's 74 (four builds' tables "

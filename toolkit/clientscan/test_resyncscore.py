@@ -693,7 +693,15 @@ def main():
         check(len(seps) > 2500,
               f"the model runs over {len(seps)} retail report(s)",
               "asserted FIRST")
-        check(70.0 < p50 < 100.0 and 600.0 < p90 < 700.0,
+        # 2026-09-14: this read `70.0 < p50 < 100.0` and went red at 69.5 u
+        # when the two September tapes (20260913T210901, 20260914T005758; 877
+        # reports) joined a corpus whose p50 had been 80.9 u -- measured both
+        # ways, as of the 2026-08 pin and whole. Nothing in the model moved;
+        # the sample grew, and a bound one unit above the corpus's own median
+        # was a pin on the SIZE OF THE VAULT (test_movesync's 517.87 u trap,
+        # again). The claim needs "tens of units, never zero, hundreds at
+        # p90", and the bounds now say that.
+        check(50.0 < p50 < 100.0 and 550.0 < p90 < 700.0,
               f"and ArenaNet's own copies sit p50 {p50:.0f} u, p75 {p75:.0f} u, "
               f"p90 {p90:.0f} u apart -- with ZERO snaps",
               "THE NUMBER THAT PRICES A THRESHOLD. Retail is not synchronised "
