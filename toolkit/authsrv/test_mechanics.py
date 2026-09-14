@@ -28,7 +28,7 @@ import agents       # noqa: E402
 import effects      # noqa: E402
 
 # Floor set from a real green run (39 checks, 2026-08-22; 99 checks, 2026-09-09 SKILLS-DW; 129 checks, 2026-09-10 SKILLS-BL; 153 checks, 2026-09-10 SKILLS-RC; 162 checks, 2026-09-10 SKILLS-MA).
-LEDGER = checks.Ledger("effect mechanics", floor=209)   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
+LEDGER = checks.Ledger("effect mechanics", floor=211)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
 check = checks.adopt(LEDGER)
 
 FRENZY, RUSH, ROF, GLYPH, IGNITE, FAINT = 346, 319, 307, 200, 431, 135
@@ -92,20 +92,46 @@ check(abs(both - 0.67 * 1.5) < 1e-9,
       "Frenzy + Faintheartedness compose: 0.67 x 1.5",
       f"factor={both}; the -50% row of the same table is 1.75 -> 2.625")
 
-print("== 3. taker_damage: doubling, then the conversion, in GWW's order ==")
+print("== 3. taker_damage: Frenzy's percent at the taker's Strength, then the "
+      "conversion, in GWW's order ==")
+# SLICE-H17 (2026-09-14): Frenzy is "take 175..125 % damage" at Strength on
+# the client's own 38888 row (content/world.toml), not the 2023 wiki's double
+# -- the WARRIOR-PRE tape refuted the double (slice FINDINGS F45). The expected
+# number is DERIVED here from the fixture's own Strength rank, the way the
+# server derives it, and the rank sweep below is what makes it falsifiable.
+STR = dict(agents.PLAYER_ATTRIBUTE_RANKS).get(17, 0)
+FRENZY_MULT = round(175 + (125 - 175) * STR / 15.0) / 100.0
 state = fresh_state()
 dealt, conv = authsrv.taker_damage(state, PLAYER, 13.0)
 check(dealt == 13.0 and conv is None, "no episodes: the hit passes untouched")
 open_ep(state, FRENZY)
 dealt, conv = authsrv.taker_damage(state, PLAYER, 13.0)
-check(dealt == 26.0 and conv is None,
-      "Frenzy alone: take double damage, no conversion")
+check(abs(dealt - 13.0 * FRENZY_MULT) < 1e-9 and conv is None,
+      f"Frenzy alone at Strength {STR}: x{FRENZY_MULT} (175..125 % on 38888), "
+      f"no conversion", f"dealt={dealt}")
+check(abs(dealt - 26.0) > 1e-9 or FRENZY_MULT == 2.0,
+      "and it is NOT the 2023 double (0 of 18 hits on the WARRIOR-PRE tape "
+      "sat where a double puts them)")
+_saved = agents.PLAYER_ATTRIBUTE_RANKS
+try:
+    sweep = {}
+    for r in (0, 3, 9, 15):
+        agents.PLAYER_ATTRIBUTE_RANKS = ((17, r),)
+        _s = fresh_state()
+        open_ep(_s, FRENZY)
+        sweep[r] = authsrv.taker_damage(_s, PLAYER, 100.0)[0]
+finally:
+    agents.PLAYER_ATTRIBUTE_RANKS = _saved
+check(sweep == {0: 175.0, 3: 165.0, 9: 145.0, 15: 125.0},
+      "the rank sweep: 175 at Strength 0, 165 at 3, 145 at 9, 125 at 15 -- "
+      "the client's own endpoints, interpolated and rounded its way",
+      f"{sweep}")
 rof = open_ep(state, ROF, rank=12)
 dealt, conv = authsrv.taker_damage(state, PLAYER, 67.0)
-check(conv is not None and dealt == 67.0
+check(conv is not None and abs(dealt - (67.0 * FRENZY_MULT - 67.0)) < 1e-9
       and conv["heal"] == 67.0 and conv["cap"] == 67.0,
-      "GWW's rank-12 example EXACTLY: 67 doubles to 134, cap 67 -- "
-      "67 reduced, 67 healed, 67 lands",
+      f"GWW's rank-12 example at the new number: 67 x{FRENZY_MULT} = "
+      f"{67.0 * FRENZY_MULT:.2f}, cap 67 -- 67 reduced, 67 healed, the rest lands",
       f"dealt={dealt} conv={conv}")
 state2 = fresh_state()
 open_ep(state2, ROF, rank=12)
@@ -308,8 +334,9 @@ try:
     state = fresh_state()
     open_ep(state, FRENZY)
     authsrv.land_swing(send, state, 10, enemy, 0)
-    check(abs((100.0 - state["player_health"]) - 2 * base) < 1e-9,
-          "under Frenzy the same swing takes exactly double",
+    check(abs((100.0 - state["player_health"]) - FRENZY_MULT * base) < 1e-9,
+          f"under Frenzy the same swing takes exactly x{FRENZY_MULT} "
+          f"(Strength {STR}, the 38888 row)",
           f"drop={100.0 - state['player_health']}")
 
     sent, send = collector()

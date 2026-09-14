@@ -6520,7 +6520,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   duration is greater than the remaining amount of time."* So a shorter
   re-application is a no-op in the table AND on the wire, and a longer one
   extends as REMOVE-then-APPLY; floor 74),
-  `toolkit/authsrv/test_mechanics.py` (**the episodes finally DO something** — the
+  `toolkit/authsrv/test_mechanics.py` (**2026-09-14 (night), SLICE-H17: §3's Frenzy checks derive the multiplier from the fixture's own Strength rank (175…125 % on the 38888 row, `damage_taken_percent`), sweep ranks 0/3/9/15 → 175/165/145/125, and assert it is NOT the 2023 double; floor 209 → 211.** **the episodes finally DO something** — the
   2026-08-22 layer over the substrate: Frenzy's attack speed and doubled damage,
   Reversal of Fortune's conversion, the glyph's discount live, the preparation
   bonus, the gated movement base. Its pins are numbers GWW itself publishes, so

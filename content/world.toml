@@ -285,12 +285,31 @@ player from the standing Hatcher's own bar once it has swung five times."""
 
 [skill_effect.346]
 scale_means = "Attack speed increase"
-damage_taken_multiplier = 2.0
+# SLICE-H17 (2026-09-14): the client's OWN row on build 38888 -- attribute 17
+# (Strength), bonus_scale 175 at rank 0 falling to 125 at rank 15 -- "you take
+# 175...125 % damage", replacing the 2023 wiki row's flat double
+# (`damage_taken_multiplier = 2.0`, which the WARRIOR-PRE tape REFUTED: 0 of
+# 18 hits inside the stance at the value a double predicts). Interpolated the
+# way skill_scale_value interpolates every other set, at the TAKER's rank in
+# the attribute (the player's from [player.attributes], a body's from its row).
+damage_taken_percent = [175, 125]
+damage_taken_attribute = 17
 [skill_effect.346.provenance]
-source = "wiki"
-page = 'GWW, "Frenzy", rev. 2023-02-17'
-verified = """NO {{Skill progression}} template on the page, and the client
-agrees: args = 0. The scale slot's 33 is the "attack 33% faster" of the
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38888
+verified = """s_skill row 346 on build 38888 (vault/run-live/2026-09-01_44fbd68767a8):
+attribute 17, bonus_scale0 175, bonus_scale15 125, scale 33/33, duration 8/8,
+skill_arguments 0 -- where build 38797 carried attribute 51 and bonus 0/0
+(skilltable.py --exe on both, diffed 2026-09-14). CORROBORATED on retail's wire
+the same night (studies/slice/FINDINGS.md SLICE-F45, tape 20260914T180058,
+the owner's pre-Searing Warrior): outside the stance a foe's swings read
+-0.02 / -0.03 of max health; inside, 0.05 x13 and 0.03 x4 -- a double would
+have put the 0.02 pool at 0.04 (0 of 18) and the 0.03 pool at 0.06 (1 of 18);
+175..125 % puts them at 0.03 and 0.05. The rank the tape ran at is UNREAD (no
+attribute message on it), so the percent is the client table's and the tape
+is the witness that it is NOT 200. The 2023 wiki row said: NO {{Skill
+progression}} template on the page, and the client (38797) agreed: args = 0. The scale slot's 33 is the "attack 33% faster" of the
 description and the duration slot's flat 8 is the real duration -- which is the
 row that shows the duration bit means SCALES rather than MEANINGFUL, since the
 server sends 8 s and the client draws an 8 s bar.

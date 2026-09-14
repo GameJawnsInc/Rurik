@@ -63,6 +63,25 @@ def blind_miss(state, agent_id, BLIND, BLIND_MISS_CHANCE):
     return random.random() < BLIND_MISS_CHANCE
 
 
+def taker_rank(state, agent_id, attribute):
+    """The taker's rank in `attribute`: the player's from [player.attributes]
+    (the player is NOT a row in state["agents"] -- SLICE-B7a's asymmetry is
+    the test here), a body's from its own `attributes` or its npc row's;
+    0 when it has none, which is a Warrior's honest rank in Smiting."""
+    rows = state.get("agents") or {}
+    if agent_id not in rows:
+        return int(dict(agents.PLAYER_ATTRIBUTE_RANKS).get(attribute, 0))
+    agent = rows[agent_id] or {}
+    ranks = agent.get("attributes")
+    if ranks is None:
+        ranks = (agent.get("npc") or {}).get("attributes")
+    if not ranks:
+        return 0
+    table = {int(a): int(r) for a, r in
+             (ranks.items() if isinstance(ranks, dict) else ranks)}
+    return table.get(attribute, 0)
+
+
 def taker_damage(state, agent_id, dealt):
     """(final_damage, conversion) after the taker's open episodes have spoken.
 
@@ -83,6 +102,18 @@ def taker_damage(state, agent_id, dealt):
         mult = row.get("damage_taken_multiplier")
         if mult is not None:
             dealt *= float(mult)
+        pct = row.get("damage_taken_percent")
+        if pct:
+            # SLICE-H17: "take lo..hi % damage" scaled at the TAKER's rank in
+            # the row's attribute (Frenzy: 175..125 at Strength on build
+            # 38888), rounded to a whole percent the way skill_scale_value
+            # rounds every client set. The taker's rank, not the episode's:
+            # a stance is self-cast so they coincide for the player, but a
+            # body's episode records the caster's rank in the SKILL's
+            # attribute, which on the pin (38797) is "none".
+            lo, hi = float(pct[0]), float(pct[1])
+            rank = taker_rank(state, agent_id, int(row.get("damage_taken_attribute", -1)))
+            dealt *= max(0.0, round(lo + (hi - lo) * rank / 15.0)) / 100.0
     for ep in table.on_agent(agent_id):
         try:
             row = agents.WORLD.get("skill_effect", str(ep["skill"]))

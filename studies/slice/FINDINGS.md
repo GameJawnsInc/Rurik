@@ -2286,7 +2286,7 @@ cleared on an outpost load; (8) `0x0026` 8/9 on a body's death and rise; (9) the
 persisted into the next instance's `0x0072`. Left open: Frenzy's doubling (a player run), the
 hostile-target rule (n = 5), reason 1, the abeam offset, Healing Signet's shape. *(2026-09-14:
 the hostile-target rule and the abeam offset closed in F40.2; reason 1 was "dodge" all along —
-skills §44.3, corrected in 39.8 above. Open: Frenzy's doubling, Healing Signet's shape. 2026-09-14 night: Healing Signet's shape shipped in F41; Frenzy's LOOPBACK half observed in F44 — retail's half still needs the owner's live run.)*
+skills §44.3, corrected in 39.8 above. Open: Frenzy's doubling, Healing Signet's shape. 2026-09-14 night: Healing Signet's shape shipped in F41; Frenzy's LOOPBACK half observed in F44; retail's half OBSERVED on the owner's live run in F45 — NOT a double, the 38888 row's 175…125 % at Strength, shipped as H17.)*
 
 ## SLICE-F40 — **JARIN-S: the hero tape's corrections, shipped — retail's rig without `0x0074`, the hero's pools and skill family on the wire, the resend with the start, the lock cleared at the kill, the wipe to the shrine, the zone carry**
 
@@ -2788,9 +2788,105 @@ floor 3 hits inside and 3 outside.
   exact ×2 of the same swing and the client draws it; the stance opens, holds 8.0 s, and
   expires on the client from our messages alone. The harness can now press any skill for the
   player in a scripted run.
-- **Still open, and only a live capture closes it**: whether RETAIL doubles — F39.3 stands.
+- ~~**Still open, and only a live capture closes it**: whether RETAIL doubles — F39.3 stands.~~
+  **Closed the same night, F45: it does not; 175…125 % at Strength, shipped as H17.**
   The recipe for the owner: Frenzy on the bar, one foe, hits before / inside / after, at human
   cadence; the same script as this section scores it.
 - **Labels.** 44.3 OBSERVED on our client against our server (build 38797, `run/slice`);
   44.1 OBSERVED (seven launches, one rig); the 2.0 itself is WIKI, unchanged; the chat-input
   focus is UNREAD.
+
+## SLICE-F45 — **WARRIOR-PRE, the owner's live run: retail's Frenzy is NOT a double (0 of 18 hits inside the stance where a double puts them; the client's own 38888 row says 175…125 % at Strength, shipped as SLICE-H17), Healing Signet's −40 armour holds on 5 of 5 hits inside the cast, the quest turn-in is on tape for the first time, and pre-Searing's death countdown is ONE copy 2.3–2.6 s after the kill (2026-09-14)**
+
+**The run.** `vault/captures/live/20260914T180058`, plan `vault/plans/warrior_presearing.txt`
+(sealed, sha `c8cd5bc9…`), 21 marks and 9 notes bound with 0.0 ms of two-clock drift, notes in
+the capture's `notes.txt`. The owner's pre-Searing Warrior ("Big Wariora", agent 31 on the
+field connection; bar `[346, 1]`), Ascalon City → Lakeside County, five game connections (the
+town, the field, and three map travels home). What the owner did that the plan did not say:
+the quest was one already in the log and was turned in DURING `zone` (note 2); the `baseline`
+fight ended in a death because the foe would have taken three minutes (note 3); the return
+was a map travel (note 9).
+
+### 45.1 Frenzy: the double is refuted, and the client's table was right
+
+Five stance episodes on the wire, every one opened by the client's `0x0046 [346, 0, 0, 0]` and
+answered `0x00E4` / `0x00E5 [346, 0, 4]` / `0x00E3` / `0x0042 [me, 346, 0, 3, 8.0]`, closed by
+`0x0044 [me, 3]` at 8.0 s — windows 357.6–365.6, 365.7–370.0 (cut by the death), 433.1–441.1,
+441.5–449.5, 451.5–459.5. Damage on the player is `0x00A3 [16 | 17, me, foe, −f]`, f rounded
+to a hundredth of max health:
+
+| | foe 80 | foe 81 |
+|---|---|---|
+| outside (prop 16) | 0.02 ×26, 0.03 ×30, 0.04 ×1, 0.05 ×2, 0.06 ×1 | 0.02 ×4, 0.03 ×8, 0.06, 0.08 |
+| outside crits (prop 17) | 0.05 ×12 | 0.05 ×2 |
+| inside the stance | **0.05 ×13, 0.03 ×4, 0.06 ×1** | **0.05 ×5, 0.12 ×1** |
+
+A double sends the 0.02 pool to 0.04 and the 0.03 pool to 0.06: **0 of 24 inside hits read
+0.04, and 0.06 appears once.** 175…125 % sends 0.02 → 0.03 and 0.03 → 0.05 — exactly the two
+values that fill the inside column (22 of 24). REFUTED: `damage_taken_multiplier = 2.0`
+(F39.3's INCONCLUSIVE is closed on the player, not the hero). What the tape cannot give is the
+rank: no attribute message (`0x003A`/`0x003B`) rides any of the five connections, so the
+percent the tape ran at is between 175 and 125 and the client table's Strength scaling is the
+witness for the shape. The 38888 row (`skilltable.py`, diffed against 38797): attribute 51 → 17,
+bonus 0/0 → 175/125, everything else equal; 145 of the table's rows moved between the two
+builds (114 in the corpus set), among them Sever Artery 4 → 3, Gash 6 → 5 and Final Thrust
+10 → 8 adrenaline with its scale 1 → 5 — content follow-ups, not shipped here.
+
+**Also on the tape, as F40 said:** `0x0035 [me, 1.75, 0.67]` rides the NEXT attack start after
+each press (358.89 with the `[4, me, foe]` start, 1.3 s after the 357.59 apply; 365.92), and
+the close `[me, 1.75, 1.0]` comes with the first start after the last expiry (472.43). Nothing
+at the press itself.
+
+**Shipped, SLICE-H17:** `[skill_effect.346]` is the client's own row — `damage_taken_percent =
+[175, 125]`, `damage_taken_attribute = 17`, `source = "client-table"`, build 38888 — and
+`episodemods.taker_damage` scales by the TAKER's rank in that attribute (`taker_rank`: the
+player's from `[player.attributes]`, the one row the player is not in `state["agents"]`; a
+body's from its own), rounded to a whole percent the way `skill_scale_value` rounds every set.
+The slice player (Strength 9) takes ×1.45 where it took ×2. `test_mechanics` §3 derives the
+number from the fixture's own rank and sweeps 0/3/9/15 → 175/165/145/125 (floor 209 → 211).
+
+### 45.2 Healing Signet under fire: −40 armour, 5 of 5
+
+Four casts (`0x0046 [1, 0, 0, 0]` → `0x00E4`, `0x00E5 [1, 0, 4]` exactly 2.0 s later, `0x00E3`,
+`0x00E6` 4 s on), each landing `0x00A3 [55, me, me, +0.82]`. **No `0x00A0` prop-60 announce for
+the signet** — the corpus's "0 of 19 prop-60 announces name skill 1" stays true because signets
+are not announced that way at all; the activation is the `0x00E4` family only. Hits that landed
+INSIDE a cast (between the press and the `0x00E5`): 0.04 and 0.06 (cast 1, from foes whose
+outside values were 0.02 / 0.03), 0.05 (cast 2), 0.05 (cast 3), 0.06 (cast 4) — every one at
+twice the outside pool, none inside the pool. n = 5, one character, one armour: H14's −40 is
+CORROBORATED on the wire. The heal 0.82 of max at every cast is the wiki's 82 at Tactics 0 if
+max health is 100 (prop 42 reads 100 at load), which the tape does not confirm independently.
+
+### 45.3 The turn-in, on tape for the first time
+
+Quest 54, on the FIELD connection at 290–293 s: `0x0039 [76]` (the interact) → `0x007E` /
+`0x0080` / `0x0081` (the dialog) + `0x009F [11, 76, 4]`; `0x003B [8402439]` (the option) → one
+batch: **`0x004A QUEST_REMOVE_AND_UNLIST [54]`, `0x004C QUEST_DESCRIPTION [54, …]`, `0x004D
+QUEST_SET_MARKER [54, pos, 0, 146]`, `0x0052 QUEST_REMOVE [54]` ×2, four server chat lines
+(`0x005D` + `0x005E [1, 10]`), the next dialog (`0x007E` ×2, `0x0080`, `0x0081`), `0x009C [me,
+100]`, `0x009F [11, 76, 5]` ×2, `[20, me, 7]`, `[22, 76, …]`, `0x00EE [0, 250]`, `0x00EE [10,
+0]`, `0x0140 [2, 25]`.** Then the giver offered the next quest (`0x0049 QUEST_ADD [62, …]`,
+`0x0051`, `0x0054`) and the client asked `0x0012 [62]`. **None of F16's five "completion
+family" opcodes (`0x004E`, `0x006C`, `0x0096`, `0x0097`, `0x00FB`) appears** — they were names
+guessed from the schema, and a quest hand-in is the remove pair plus the reward lines. F16's
+one measured guess held: experience rides `0x00EE [0, delta]` (+250). Ours sends the removes
+and the `0x00EE`; the `0x004A`, the `0x004C` re-send, the four chat lines, `0x00EE [10, 0]` and
+`0x0140 [2, 25]` (25 of something — gold, UNVERIFIED) are the gap, recorded in
+[studies/quests/FINDINGS.md](../quests/FINDINGS.md) §12.
+
+### 45.4 Two deaths: one countdown copy, 2.3–2.6 s after the kill
+
+`0x00F1 [me, 16]` at 369.95 → **one** `0x0180 [յ, 5, 0, 10000]` at 372.53 (+2.58 s) → `0x017E`
+at 382.52 (+9.99 s after the countdown) with `0x002C [me, (−10822, −13648), 54]` and `0x00F1
+[me, 0]`; the second death (569.23) the same shape at +2.29 / +10.00. F43's hero tape sent
+THREE copies 0.58 s after the death; pre-Searing sends ONE, two seconds later. Rise-at-expiry
+holds on both (10.00 s here to the hundredth). What the copy count keys on (party size? map?)
+stays UNREAD, now with a second data point.
+
+### 45.5 Labels
+
+45.1's refutation OBSERVED on retail's wire (24 inside hits, 2 foes, one character); the
+percent's shape is the 38888 client table (client-table) with the tape as the witness that it
+is not 200, and the rank is UNREAD. 45.2 OBSERVED, n = 5, CORROBORATES H14's WIKI row. 45.3
+OBSERVED, n = 1 hand-in. 45.4 OBSERVED, n = 2. The hero ladder's last open item (F39.3) is
+closed; what remains for Frenzy is our other bars' adrenaline rows against the new table.

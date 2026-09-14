@@ -1916,3 +1916,33 @@ winning so the known-bad arm stays runnable, `--serve` adding nothing. `test_har
 loopback observation of a rule measures us, not retail; retail's tolerance of a wrong sentinel
 is not a question this can ask. Arm A NOT RUN. The mask counts are from the gamesrv captures
 (`authsrv-20260914T111042/111144/111631-c1`).
+
+## 12. A quest hand-in on retail's wire, for the first time (2026-09-14, WARRIOR-PRE)
+
+`vault/captures/live/20260914T180058`, the field connection, quest 54 handed to its receiver
+(Devona) at 290–293 s — the first turn-in on any live tape (§10 and F16 had 0 of 22,524 s2c).
+The whole exchange, in order:
+
+1. `0x0039 INTERACT_AGENT [76]` → `0x007E`, `0x0080 NPC_DIALOG_TEXT`, `0x0081 NPC_DIALOG_SHOW
+   [76]`, `0x009F [11, 76, 4]` — the giver's dialog with the reward line.
+2. `0x003B NPC_SERVICE_SELECT [8402439]` — the reward option.
+3. One batch, 60 ms later: `0x004A QUEST_REMOVE_AND_UNLIST [54]`; `0x004C QUEST_DESCRIPTION [54,
+   text, text]` (a RE-SEND of the description after the removal); `0x004D QUEST_SET_MARKER [54,
+   (−7832, −15081), 0, 146]`; `0x0052 QUEST_REMOVE [54]` ×2; four server chat lines (`0x005D
+   CHAT_MESSAGE_CORE` each followed by `0x005E [1, 10]`); the giver's NEXT dialog (`0x007E` ×2,
+   `0x0080`, `0x0081 [76]`); `0x009C [player, 100]`; `0x009F [11, 76, 5]` ×2, `0x009F [20,
+   player, 7]`, `0x009F [22, 76, 909459641]`; **`0x00EE [0, 250]`** (the experience — F16's
+   guess, held) and `0x00EE [10, 0]`; `0x0140 [2, 25]`.
+4. 1.8 s on, the giver's follow-up quest: `0x0049 QUEST_ADD [62, (−11308, −6195), 0, 164, 32,
+   …, 146]`, `0x0051 QUEST_MOVE_MARKER [1462, …]`, `0x0054 QUEST_OBJECTIVES_UPDATE [1462, …]`,
+   the client's `0x0012 REQUEST_QUEST_INFO [62]`, `0x004C [62, …]`.
+
+**What this settles.** The "completion family" F16 named from the schema (`0x004E
+QUEST_COMPLETE_PANEL`, `0x006C`, `0x0096`, `0x0097`, `0x00FB`) is not what a hand-in sends: none
+appears. A hand-in is the REMOVE pair plus the reward lines. Our `grant_quest_reward` sends the
+two `0x0052` removes and `0x00EE [0, delta]` — the measured core. **The gap, for a session that
+wants the hand-in stock-faithful:** `0x004A` first, the `0x004C` re-send, the four chat lines
+(their string ids are on the tape), `0x00EE [10, 0]` (meaning UNREAD — a second reward kind?),
+`0x0140 [2, 25]` (25 of kind 2, gold is the guess, UNVERIFIED), and `0x009F` props 11/20/22 on
+the giver and the player (20 read 7 — the character's level is 7 if that is what prop 20 is).
+n = 1 hand-in; labels OBSERVED for the shape, UNVERIFIED for every meaning guessed above.
