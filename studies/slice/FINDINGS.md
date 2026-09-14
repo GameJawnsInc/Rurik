@@ -2832,6 +2832,20 @@ bonus 0/0 → 175/125, everything else equal; 145 of the table's rows moved betw
 builds (114 in the corpus set), among them Sever Artery 4 → 3, Gash 6 → 5 and Final Thrust
 10 → 8 adrenaline with its scale 1 → 5 — content follow-ups, not shipped here.
 
+**The rank, from the owner (2026-09-14, after the scoring): Big Wariora is Strength 0, so the
+stance was 175 %.** That turns the ranges above into a point, and the point says one more
+thing. Every one of the 112 hits on the player is an EXACT hundredth of max health (max
+distance from a hundredth 0.0 over the tape; `0x009F [42, me, 100]` at load), so the wire
+carries integer hit points over 100: outside the stance the foes hit for 2 and 3; inside, 2 ×
+1.75 = 3.5 arrived as **3** (four of four, never 4) and 3 × 1.75 = 5.25 as **5**. Retail
+TRUNCATES the multiplied damage to a whole point before it goes out; round-half-up would have
+sent 4, round-half-even would have sent 4. Our wire sends the float (a 2-point swing under
+Frenzy at Strength 0 goes out as 0.035 of max and the client draws −4), so **DAMAGE-INT — the
+integer truncation at the send — is registered as the next desk item**, not shipped here: it
+touches every damage path and the tests that pin fractional numbers, and it wants the corpus
+asked first whether every retail damage word is an integer over its taker's max (this tape: 112
+of 112).
+
 **Also on the tape, as F40 said:** `0x0035 [me, 1.75, 0.67]` rides the NEXT attack start after
 each press (358.89 with the `[4, me, foe]` start, 1.3 s after the 357.59 apply; 365.92), and
 the close `[me, 1.75, 1.0]` comes with the first start after the last expiry (472.43). Nothing
@@ -2887,6 +2901,7 @@ stays UNREAD, now with a second data point.
 
 45.1's refutation OBSERVED on retail's wire (24 inside hits, 2 foes, one character); the
 percent's shape is the 38888 client table (client-table) with the tape as the witness that it
-is not 200, and the rank is UNREAD. 45.2 OBSERVED, n = 5, CORROBORATES H14's WIKI row. 45.3
+is not 200; the rank is Strength 0 by the owner's word, which makes 175 % OBSERVED to the point
+(2 → 3, 3 → 5) and the truncation OBSERVED n = 4. 45.2 OBSERVED, n = 5, CORROBORATES H14's WIKI row. 45.3
 OBSERVED, n = 1 hand-in. 45.4 OBSERVED, n = 2. The hero ladder's last open item (F39.3) is
 closed; what remains for Frenzy is our other bars' adrenaline rows against the new table.
