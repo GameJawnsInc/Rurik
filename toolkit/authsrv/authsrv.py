@@ -11131,7 +11131,8 @@ ENEMY_FACING_EPSILON = 0.15            # radians (~8.6 deg) before re-announcing
 
 # AND IT CASTS. OBSERVED 2026-08-11, and the corpus answer was NOT the one this
 # server would have guessed: ArenaNet does not announce an NPC's skill on 0x00E3.
-# Every 0x00E3 in the whole live corpus -- 6 of 6 -- names the PLAYER, because
+# Every 0x00E3 in the whole live corpus -- 6 of 6 -- named the PLAYER (JARIN:
+# 48 more name the HERO, hero_skill_messages; a hostile's never), because
 # 0x00E3 is the confirmation of a cast the CLIENT initiated and the client says so
 # in its own log when the echo is wrong ("Pending skill %u copy %d not found").
 # An NPC's cast is not client-initiated and has nothing to confirm.
@@ -13792,7 +13793,7 @@ def energy_tick(send, state, conn_id):
                   f"{pools.ADRENALINE_TIMEOUT_S:.0f}s out of combat", flush=True)
 
 
-def restore_player_energy(send, state, conn_id, why):
+def restore_player_energy(send, state, conn_id, why, fraction=1.0):
     """The resurrect batch's energy half: a full refill and the rate back on.
 
     OBSERVED n=1 and it is one instant of capture `20260817T183756`: the death
@@ -13814,24 +13815,27 @@ def restore_player_energy(send, state, conn_id, why):
     # Guard before effect: the fraction is validated before the pool is filled
     # and before the first send, so a refusal leaves the server's book and the
     # wire in the same (un-restored) state rather than in two different ones.
-    gain = _fraction(1.0, agents.GV_ENERGY_GAIN, "refill the player's energy")
-    pool.refill()
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
-         [agents.GV_ENERGY_GAIN, PLAYER_AGENT_ID, gain],
-         f"energy refilled to {pool.maximum:.0f} ({why})")
-    # THE "+N" THE PLAYER SEES, and retail sends it right after the gain:
-    # int property 54 is a floating energy callout and writes no store --
-    # MEASURED 2026-08-22, static walk + `--probe prop54` (agents.py has the
-    # full account). The capture's value, 22, is the whole refilled pool, so
-    # the amount here is the maximum: the client zeroed its pool at the death
-    # and the 1.0 gain above hands all of it back.
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-         [agents.PROP_ENERGY_GAIN_CALLOUT, PLAYER_AGENT_ID,
-          int(pool.maximum)],
-         f"float a +{pool.maximum:.0f} energy callout ({why})")
+    # JARIN: the fraction is the RAISE's -- 1.0 at a shrine or on the timer
+    # (20260817T183756; the wipe's 340.21 s), 0.25 under a Resurrection Signet
+    # (602.45 s: [52, me, 5/19], then prop 54 = 5) -- and retail's order is
+    # the RATE first, then the gain, then the integer callout, then the
+    # health half the caller sends: [43], [8 = 0], [52], [54], [55], 0x0026.
+    # THE "+N" THE PLAYER SEES: int property 54 is a floating energy callout
+    # and writes no store (MEASURED 2026-08-22, `--probe prop54`); its amount
+    # is what the gain handed back -- the whole pool at 1.0, a quarter at the
+    # signet's (the tape's 5 of 19).
+    gain = _fraction(fraction, agents.GV_ENERGY_GAIN, "refill the player's energy")
+    pool.set_fraction(fraction) if fraction < 1.0 else pool.refill()
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
          [GV_ENERGY_REGEN, PLAYER_AGENT_ID, _f32(pool.rate)],
          f"energy regeneration back to {pool.pips} pip(s) ({why})")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+         [agents.GV_ENERGY_GAIN, PLAYER_AGENT_ID, gain],
+         f"energy set to {pool.current:.0f} of {pool.maximum:.0f} ({why})")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.PROP_ENERGY_GAIN_CALLOUT, PLAYER_AGENT_ID,
+          int(pool.current)],
+         f"float a +{pool.current:.0f} energy callout ({why})")
 
 
 # ------------------------------------ buying from a merchant: see merchant.py
@@ -15306,7 +15310,9 @@ def send_skill_visual(send, state, caster_id, skill_id, target_id, conn_id):
 
 def effect_list_visible(state, agent_id):
     """Does this agent's effect list go on the wire? The player's does (369 of
-    369 in the corpus); a hero's is kept for want of a witness; nobody else's."""
+    369 in the corpus) and a HERO's (JARIN: 24 applies on Koss, 20260914T005758
+    -- and the `hero` key this reads was never set on a row before JARIN-S, so
+    the branch had never fired); nobody else's."""
     if not EFFECT_LIST_SELF_ONLY or agent_id == PLAYER_AGENT_ID:
         return True
     row = state.get("agents", {}).get(agent_id) or {}
@@ -17968,17 +17974,30 @@ def party_dead_target(state, caster_id):
     return None
 
 
-def revive_party_body(send, state, tid, row, conn_id, health_frac=1.0, why=""):
+def revive_party_body(send, state, tid, row, conn_id, health_frac=1.0, why="",
+                      energy_frac=1.0):
     """Stand a party body up: the agent revive's own two operations (status,
     then the refill) with the resurrection's health fraction."""
     frac = _fraction(health_frac, agents.GV_HEALTH, "a resurrection's health")
     row["dead"] = False
     row["health"] = float(row["max_health"]) * health_frac
     row["last_hit"] = 0.0
+    _egain = None
     if ENERGY:
-        agent_energy(row).refill()
+        _pool = agent_energy(row)
+        _egain = _pool.set_fraction(energy_frac) if energy_frac < 1.0 else _pool.refill()
     send(GAME_SMSG_AGENT_UPDATE_STATUS, [tid, 0],
          f"resurrect party agent {tid}{why}")
+    if _egain is not None and HERO_WIRE_POOLS and hero_body_id(row) is not None:
+        # JARIN: a HERO's rise carries its energy like the player's -- the
+        # shrine's [43, 30, 0.039] and [52, 30, 1.0] at 340.21 s.
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+             [GV_ENERGY_REGEN, tid, _f32(_pool.rate)],
+             f"energy regeneration on hero agent {tid} ({why.strip() or 'raised'})")
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+             [agents.GV_ENERGY_GAIN, tid,
+              _fraction(_egain, agents.GV_ENERGY_GAIN, "a hero's energy at its rise")],
+             f"hero agent {tid} energy set to {_pool.current:.0f} of {_pool.maximum:.0f}")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
          [agents.PROP_HEALTH_MAX, tid, int(row["max_health"])],
          f"restore max health on party agent {tid}")
@@ -17999,13 +18018,16 @@ def resurrect_target(send, state, tid, conn_id, caster_id, skill_id):
     path, a party body through revive_party_body. Retail: Resurrection Signet
     [60] -> 3.0 s -> [id, 0] (F28)."""
     why = f" by agent {caster_id}'s skill {skill_id}"
+    # JARIN: the skill row's `resurrect_energy` (the signet's 0.25, WIKI and
+    # the tape's 5 of 19); a row without one raises with a full pool.
+    _ef = float((skill_effect_row(skill_id) or {}).get("resurrect_energy", 1.0))
     if tid == PLAYER_AGENT_ID:
         if state.get("player_dead"):
-            revive_player(send, state, conn_id, why=why)
+            revive_player(send, state, conn_id, why=why, energy_frac=_ef)
         return
     row = state.get("agents", {}).get(tid)
     if row is not None and row.get("dead"):
-        revive_party_body(send, state, tid, row, conn_id, why=why)
+        revive_party_body(send, state, tid, row, conn_id, why=why, energy_frac=_ef)
 
 
 def hero_body_id(row):
@@ -20857,7 +20879,8 @@ def player_revive_due(send, state, conn_id):
     revive_player(send, state, conn_id)
 
 
-def revive_player(send, state, conn_id, health_frac=1.0, why=" (the timer)"):
+def revive_player(send, state, conn_id, health_frac=1.0, why=" (the timer)",
+                  energy_frac=1.0):
     """Stand the player up -- player_revive_due's body since SLICE-H3, so a
     party member's resurrection (Resurrection Signet, 100% health) can call
     it too. The energy fraction is not modelled: restore_player_energy fills
@@ -20896,6 +20919,7 @@ def revive_player(send, state, conn_id, health_frac=1.0, why=" (the timer)"):
     # and 1f says in as many words not to reorder on the strength of the reading.
     if REVIVE_REFILL_DEFER > 0.0:
         state["player_refill_due_at"] = time.time() + REVIVE_REFILL_DEFER
+        state["player_refill_energy_frac"] = float(energy_frac)   # JARIN: the raise's fraction rides the deferral
         # JARIN: the flags byte still closes what this arm sends now; the
         # deferred refills follow it (retail's order puts it last -- the
         # non-deferred arm below keeps that).
@@ -20923,7 +20947,7 @@ def revive_player(send, state, conn_id, health_frac=1.0, why=" (the timer)"):
     # AND THE ENERGY HALF OF THE SAME BATCH -- see `restore_player_energy`,
     # which carries the OBSERVED resurrect instant (52 = 1.0 and 43 = the rate,
     # alongside the 55 = 1.0 this path's health refill already mirrors).
-    restore_player_energy(send, state, conn_id, "revived")
+    restore_player_energy(send, state, conn_id, "revived", fraction=energy_frac)
     # JARIN: the rise closes with 0x0026 [player, 5] (3 of 3).
     send(GAME_SMSG_AGENT_UPDATE_FLAGS, [PLAYER_AGENT_ID, AGENT_FLAGS_PLAYER_ALIVE],
          f"flags {AGENT_FLAGS_PLAYER_ALIVE} on the risen player")
@@ -20975,7 +20999,8 @@ def player_refill_due(send, state, conn_id):
     # The energy rides the DEFERRED batch when the experiment is armed, so the
     # two refills stay together whichever branch of 1f a run is testing --
     # splitting them would make the deferral a different experiment.
-    restore_player_energy(send, state, conn_id, "revived, deferred")
+    restore_player_energy(send, state, conn_id, "revived, deferred",
+                          fraction=float(state.pop("player_refill_energy_frac", 1.0)))
     print(f"[c{conn_id}] deferred refill sent", flush=True)
 
 

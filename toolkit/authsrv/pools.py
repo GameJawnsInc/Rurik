@@ -468,6 +468,18 @@ class EnergyPool:
         self.current = self.maximum
         return 1.0
 
+    def set_fraction(self, fraction):
+        """Set the pool to `fraction` of its maximum and return the property-52
+        value for it. JARIN (20260914T005758, 602.45 s): the hero's Resurrection
+        Signet stood the Ranger up at 0x00A2 [52, me, 0.2632] = 5 of its 19 --
+        WIKI's "25% Energy" -- where every shrine or timer rise is 1.0. A
+        fraction of 1.0 is `refill`."""
+        fraction = float(fraction)
+        if not 0.0 <= fraction <= 1.0:
+            raise ValueError(f"energy fraction {fraction} outside 0..1")
+        self.current = self.maximum * fraction
+        return fraction
+
 
 def damage_units(fraction_of_max_health):
     """Adrenaline units granted by taking `fraction_of_max_health` damage.

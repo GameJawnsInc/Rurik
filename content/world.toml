@@ -492,6 +492,7 @@ dates not retrieved (the pages refused the fetcher)."""
 # client's favour because it is the client we drive.
 [skill_effect.2]
 scale_means = "Resurrect"
+resurrect_energy = 0.25
 [skill_effect.2.provenance]
 source = "wiki"
 page = 'GWW, "Resurrection Signet" (the standing description; page not re-read on 2026-09-13)'
@@ -500,8 +501,11 @@ byte every one of the table's 11 resurrection skills carries (effects.py
 DEAD_ALLY_TARGET). Retail's own use: a party member's signet, [60, caster,
 corpse, 2] then [corpse, 0] 3.0 s later, five raises of one henchman in one
 fight and two of the observer (studies/slice F28, henchjoin.py --casts). The
-description's "100% Health and 25% Energy": the server raises with full health;
-the energy fraction is not modelled (the revive path refills). "Only recharges
+description's "100% Health and 25% Energy": the server raises with full health
+and, since JARIN-S (2026-09-14), `resurrect_energy` = 0.25 -- OBSERVED on
+20260914T005758 at 602.45 s, the hero's signet on the Ranger: 0x00A2 [52, me,
+0.2632] = 5 of a 19 maximum, then prop 54 = 5, where every shrine or timer
+rise in the corpus carries 1.0. "Only recharges
 when you gain a morale boost" is not modelled either -- the client table's
 recharge (0) is what the server uses, so the signet is ready every fight."""
 

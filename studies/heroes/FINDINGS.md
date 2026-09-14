@@ -789,6 +789,14 @@ here because the row named a hero index and a live agent with a non-zero id, whi
 
 ### 11.3 `0x0074` creates the `charHeroData` record — a single-variable proof
 
+> **CORRECTED 2026-09-14 (JARIN-S, [../slice/FINDINGS.md](../slice/FINDINGS.md) SLICE-F40.1).**
+> The proof below is right about OUR rig and wrong about retail's: retail sends `0x0074` **zero
+> times** in the whole live corpus and creates the record with **`0x0073 HERO_INFO`** — one per
+> owned hero in every instance's load, inside the player's own character block, `[hero index,
+> level, primary, secondary, u32, u32, the hero's own skills, 0, 0]` (41 sightings, every one
+> Koss). Sent in retail's order without it, the client asserted `charHeroData` at the first load
+> twice; with it ahead of the block, three instances ran clean. `0x0074` is the MERCENARY twin.
+
 §7.2's blocker "what creates the `charHeroData` record that `0x0072` gates on" was **NOT
 FOUND by any static route**: `ChCliHero` has two hero-indexed structures and no message could
 be traced into either. The trailing-`0x0072` diagnostic was designed for exactly this, with

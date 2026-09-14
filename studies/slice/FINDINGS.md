@@ -2411,6 +2411,53 @@ on a client; observing it needs a shrine gadget in the corridor (content, with i
 `0x010E` pair) and a server arm for `0x0008` that answers a defeated party's return with the
 transfer it asks for. Both are queued, neither is this arc's.
 
+### 40.2 Desk, after the client — the signet's energy, the joins with the hero counted, the shrine as a prop
+
+**The owner:** *"go more desk work."*
+
+**The raise's energy (shipped).** Retail's signet batch on the player (602.45 s): `0x009F [58,
+hero, 0]`, `0x00A0 [20, me, hero, 152]`, `0x00E7`/`0x00E3 [hero, 2, 0]`, `0x00F1 [me, 0]`,
+`0x00A2 [43, me, rate]`, `0x009F [8, me, 0]`, **`0x00A2 [52, me, 0.2632]` = 5 of the 19
+maximum**, `0x009F [54, me, 5]`, `0x00A2 [55, me, 1.0]`, `0x0026 [me, 5]` — WIKI's "100% Health
+and 25% Energy", where every shrine or timer rise in the corpus carries 1.0 (the wipe's own,
+340.21 s: `[43]`, `[8 = 0]`, `[52, 1.0]`, `[54, 22]`, `[55, 1.0]`). Shipped: `[skill_effect.2]`
+carries `resurrect_energy = 0.25`; `resurrect_target` threads it to `revive_player` /
+`revive_party_body`; `restore_player_energy` takes a fraction, sets the pool to it
+(`EnergyPool.set_fraction`), floats the callout at what was handed back, and sends **the rate
+before the gain** — retail's order, where ours had the rate last; the deferred-refill arm
+carries the fraction across its tick. A hero's rise now sends its `[43]` and `[52]` too (the
+shrine's `[43, 30, 0.039]`, `[52, 30, 1.0]`). `test_agentlife` +3 (floor 527).
+
+**The joins, re-run with the hero counted** (`henchjoin.party_of` now admits a `0x01C2` hero with
+its `0x00B7` profession; `whose_agent` breaks the property-41 tie):
+- `--fight`: **97 party opening starts, 82 followed the leader's inside 6 s, p50 0.52 s** (F30:
+  77 of 89, 0.50 s) — JARIN-P3 CORROBORATED at n = 97; the Warrior hero's chase names its foe
+  (`0x002A`, 25 of its 35), a level-3 Warrior's swing lands 3.6 % of the foe's maximum (n = 52).
+- `--hostile`: **76 opening starts; the lowest-base-armour set 62 of 76** (F29: 51 of 58),
+  the nearest of that set 52, last-hitter 20 — F29's rule survives the Ranger tape, which is
+  where its misses gather (the Ranger was T at rank 1 in 12); JARIN-P8's "REFUTED at n = 5"
+  is the tail of an 82 % rule, not a rival to it. `hostile_target` stands.
+- the formation: **Koss's leads end 187 u p50 from the Ranger, 150 ahead and 100 abeam** (n =
+  158), where the eleven henchmen sat −73…+66 along at ~100 abeam — a melee hero runs AHEAD
+  of a ranged leader. Cadence p50 0.58 s (F28 0.51), 2 halts against 193 leads (the two attack
+  reaches). JARIN-P16's abeam half, measured: the shape is F28's, the slot is not.
+
+**The shrine is a prop, not an agent.** The Plains' load carries no kind-3 create at all
+(kinds on the tape: 0 ×52, 1 ×6, 5, 8, 9 ×134); what it carries is **six props** — `0x0111
+[id, 0, 1|0]` + `0x010E [id, 16|9, 3]` for 54727, 63755, 49862, 62939, 64234, 47069 — and
+**one flipped to state 1 at load, `0x010E [63755, 1, 0]`**, the same shape as MANTID's gate
+opening (`[24771, 1, 0]`). The tutorial's props (six, `[id, 1, 1]` at 118.7 s, two back to 0
+at 310.1 s) share an id with the Plains (54727). A resurrection shrine is therefore a **prop
+in the map file** whose state the server flips, and the corridor's authored map has no prop
+table — which is why the client asked to leave on the wipe (40.1) and what a shrine for the
+corridor would take: a prop entry in the map (the presentation gap's territory), then the
+pair at load. Which of the six is the shrine near (18527, 1372) cannot be read off the wire;
+`0x0111`/`0x010E` carry no position. Recorded, not shipped.
+
+**Corrections on the way.** `studies/heroes/FINDINGS.md` §11.3 carries the retail creator
+(`0x0073`); authsrv's "6 of 6 `0x00E3` name the player" and `effect_list_visible`'s "for want
+of a witness" say what JARIN witnessed.
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:

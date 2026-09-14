@@ -8067,7 +8067,9 @@ checked against the corpus before this was written:
 > `charHeroData` twice until **`0x0073 HERO_INFO`** — retail's per-owned-hero record, 41 in the
 > corpus, never sent by this server — went ahead of the block; then three instances clean on
 > the slice client, the outpost roster reading "Mo3 Tahlkora". Still the owner's eye: the hero's
-> panel and recharge, the wipe on screen.
+> panel and recharge, the wipe on screen. **Desk after (F40.2):** the signet's 25 % energy on a
+> raise shipped; the party joins re-run with the hero counted hold F29/F30 and put a melee hero
+> 150 u AHEAD of a ranged leader; a resurrection shrine is a map prop, not an agent.
 
 Two properties worth naming while a tutorial capture is being planned, because both are
 frequent and neither is understood: **property 66** (202 sightings, the second most common

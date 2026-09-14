@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=524)   # JARIN-S +22 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=527)   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
 def section_weapon_damage():
@@ -6530,6 +6530,58 @@ def section_hold_plane():
                   "a party body's rise: status 0 first, the maximum KEPT at 85, "
                   "0x0026 [body, 9] last (retail 250 / the hero's 340.21 s)",
                   f"{[(hex(op), v) for op, v in sent]}")
+        # 6b. the raise's energy: the signet's 25 %, a shrine's or the timer's 100 %
+        _sv_en = authsrv.ENERGY
+        authsrv.ENERGY = True
+        import struct as _st
+        _asf = lambda x: float(x) if isinstance(x, float) else _st.unpack('<f', _st.pack('<I', int(x) & 0xFFFFFFFF))[0]
+        PFLT2 = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT
+        try:
+            st3b = _jw(player_dead=True, player_died_at=time.time() - 5.0)
+            authsrv.player_pools(st3b)
+            sent.clear()
+            authsrv.resurrect_target(send, st3b, authsrv.PLAYER_AGENT_ID, 0, HERO, 2)
+            if st3b.get("player_refill_due_at"):            # the deferred arm: the fraction rides the deferral
+                st3b["player_refill_due_at"] = time.time() - 0.01
+                authsrv.player_refill_due(send, st3b, 0)
+            _g = [v for op, v in sent if op == PFLT2 and v[0] == agents.GV_ENERGY_GAIN]
+            _c = [v for op, v in sent if op == PINT and v[0] == agents.PROP_ENERGY_GAIN_CALLOUT]
+            _mx = authsrv.player_energy(st3b).maximum
+            _ops = [op for op, _v in sent]
+            _rate_i = next(i for i, (op, v) in enumerate(sent) if op == PFLT2 and v[0] == authsrv.GV_ENERGY_REGEN)
+            _gain_i = next(i for i, (op, v) in enumerate(sent) if op == PFLT2 and v[0] == agents.GV_ENERGY_GAIN)
+            LEDGER.ok(len(_g) == 1 and abs(_asf(_g[0][2]) - 0.25) < 1e-6
+                      and _c and _c[0][2] == int(_mx * 0.25)
+                      and _rate_i < _gain_i
+                      and not st3b["player_dead"],
+                      "the signet raises the player at 25 % energy: [52, me, 0.25] and the "
+                      "callout prop 54 = a quarter of the maximum, the rate ahead of them, "
+                      "through the deferred arm too "
+                      "(the tape's 602.45 s: 5 of 19; content's resurrect_energy)",
+                      f"gain {_g}, callout {_c}, ops {[hex(o) for o in _ops]}")
+            st3c = _jw(player_dead=True, player_died_at=time.time() - 30.0)
+            authsrv.player_pools(st3c)
+            sent.clear()
+            authsrv.player_revive_due(send, st3c, 0)
+            if st3c.get("player_refill_due_at"):
+                st3c["player_refill_due_at"] = time.time() - 0.01
+                authsrv.player_refill_due(send, st3c, 0)
+            _g2 = [v for op, v in sent if op == PFLT2 and v[0] == agents.GV_ENERGY_GAIN]
+            LEDGER.ok(len(_g2) == 1 and abs(_asf(_g2[0][2]) - 1.0) < 1e-6,
+                      "the timer's rise (no party) refills to 1.0, as every shrine or timer "
+                      "rise in the corpus", f"{_g2}")
+            st3d = _jw(); st3d["agents"][HERO] = _koss(dead=True, died_at=time.time() - 5.0, health=0.0)
+            sent.clear()
+            authsrv.resurrect_target(send, st3d, HERO, 0, authsrv.PLAYER_AGENT_ID, 2)
+            _g3 = [v for op, v in sent if op == PFLT2 and v[0] == agents.GV_ENERGY_GAIN and v[1] == HERO]
+            LEDGER.ok(len(_g3) == 1 and abs(_asf(_g3[0][2]) - 0.25) < 1e-6
+                      and not st3d["agents"][HERO]["dead"]
+                      and any(op == PFLT2 and v[0] == authsrv.GV_ENERGY_REGEN and v[1] == HERO for op, v in sent),
+                      "a hero raised by the signet gets its energy on the wire too -- the rate "
+                      "and [52, hero, 0.25] (the shrine's [43, 30, ...] + [52, 30, 1.0] shape)",
+                      f"{_g3}")
+        finally:
+            authsrv.ENERGY = _sv_en
         # 7. the wipe -- and the signet that pre-empts it
         st4 = _jw(player_dead=True, player_died_at=time.time() - 20.0)
         st4["agents"][HERO] = _koss(skills=((2, 3.0, 0.0),), skill_ready=[0.0])

@@ -101,6 +101,13 @@ def party_of(merged):
     for _t, d, op, v in merged:
         if d == "s2c" and op == HENCH_ADD and len(v) > 5:
             added[int(v[2])] = (int(v[4]), int(v[5]))
+        # JARIN (2026-09-14): a HERO joins by 0x01C2 [party, member, agent,
+        # hero index, level]; its profession is its 0x00B7 (the block's).
+        if d == "s2c" and op == 0x01C2 and len(v) > 5:
+            prof = next((int(w[2]) for _tt, dd, oo, w in merged
+                         if dd == "s2c" and oo == 0x00B7 and len(w) > 2
+                         and int(w[1]) == int(v[3])), 0)
+            added[int(v[3])] = (prof, int(v[5]))
     created = {int(v[1]) for _t, d, op, v in merged
                if d == "s2c" and op == CREATE and len(v) > 1}
     return {a: pl for a, pl in added.items() if a in created}
