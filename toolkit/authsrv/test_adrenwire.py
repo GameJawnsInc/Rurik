@@ -441,6 +441,7 @@ def section_cost_column():
     If the bar were denominated in strikes -- the reading every displayed icon
     invites, because the icon shows `ceil(units/25)` -- then every cost in
     ArenaNet's own column would be a multiple of 25. Seven distinct ones are
+    (six once the 38888 overrides landed, SLICE-H17b)
     not. So 25 is the GAIN PER STRIKE and not the quantum of the bar, the pool
     has to be modelled in RAW UNITS (`pools.py` already is), and a server that
     compared four strikes against Battle Rage's 80 would leave the skill dark
@@ -458,7 +459,12 @@ def section_cost_column():
     off_grid = sorted(u for u in costs if u % STRIKE_UNITS)
     on_grid = sorted(u for u in costs if not u % STRIKE_UNITS)
 
-    LEDGER.ok(len(off_grid) >= 7 and sum(costs[u] for u in off_grid) >= 40,
+    # 2026-09-14 (SLICE-H17b): content/overrides/ carries fourteen 38888 rows; Final
+    # Thrust's 240 became 200 and Gash's 140 a 125, so the pin's seven off-grid
+    # costs over 40+ rows are six over 37 on the served table. The argument is
+    # unchanged -- one 80 refutes a strike-quantised bar -- and the floor follows
+    # the measurement, not the other way round.
+    LEDGER.ok(len(off_grid) >= 6 and sum(costs[u] for u in off_grid) >= 35,
               f"{len(off_grid)} distinct costs are NOT multiples of "
               f"{STRIKE_UNITS}, over {sum(costs[u] for u in off_grid)} rows",
               f"{off_grid} of {sorted(costs)}, across "

@@ -1,0 +1,341 @@
+# content/overrides/ -- rows verified INDIVIDUALLY on a NEWER build than the vault's bulk
+# table, merged LAST by toolkit/content.py (repo -> vault -> overrides), so a row here
+# wins over vault/content/skills.toml. Same provenance rules as every other row.
+#
+# SLICE-H17b, 2026-09-14 (the owner: "update the adrenaline costs from the 38888 table
+# too"). Build 38888 (the 2026-08-26 balance update, the client the owner plays live)
+# moved 15 skills' adrenaline against the pinned 38797 table -- 14 of them in the corpus
+# (the 15th, 3442, is not player-usable): the Warrior's axe and sword adrenal skills
+# down by one strike each (Sever Artery 4 -> 3, Gash 6 -> 5, Final Thrust 10 -> 8, Cyclone
+# Axe 8 -> 7, Executioner's 6 -> 5, Galrath 8 -> 7, ...) and three Paragon rows up. The
+# whole 38888 row is taken, not the one field, so a row here is one build's row and not a
+# hybrid: 385 also carries its scale 1 -> 5, 382 its bonus 5..25. Emitted by
+#   python toolkit/clientscan/skilltable.py --exe vault/client/2026-09-01_44fbd68767a8/Gw.exe --emit-content <tmp>
+# and the fourteen blocks copied verbatim (the emitter refuses an exe whose bytes match no
+# pristine hash, so the build stamp is measured, not typed). The loopback client the owner
+# plays (run/slice, build 38797) still DISPLAYS the old strike counts on its bar; the server
+# charges these. The remaining 130 rows that moved between the builds (recharge 47, scales
+# 43+32, energy 19, durations, activations) are NOT here -- the vault table stays 38797 for
+# them until the pin moves. studies/slice/FINDINGS.md SLICE-F45.1.
+
+[skills.336]
+activation = 0.0
+aftercast = 0.0
+recharge = 0
+energy = 0
+adrenaline = 7
+adrenaline_units = 175
+attribute = 18
+profession = 1
+type_code = 14
+target = 5
+skill_arguments = 2
+duration0 = 0
+duration15 = 0
+scale0 = 15
+scale15 = 45
+bonus_scale0 = 0
+bonus_scale15 = 0
+[skills.336.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38888
+
+[skills.340]
+activation = 0.0
+aftercast = 0.0
+recharge = 0
+energy = 0
+adrenaline = 5
+adrenaline_units = 125
+attribute = 18
+profession = 1
+type_code = 14
+target = 5
+skill_arguments = 0
+duration0 = 0
+duration15 = 0
+scale0 = 20
+scale15 = 20
+bonus_scale0 = 0
+bonus_scale15 = 0
+[skills.340.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38888
+
+[skills.382]
+activation = 0.0
+aftercast = 0.0
+recharge = 0
+energy = 0
+adrenaline = 3
+adrenaline_units = 75
+attribute = 20
+profession = 1
+type_code = 14
+target = 5
+skill_arguments = 4
+duration0 = 0
+duration15 = 0
+scale0 = 0
+scale15 = 0
+bonus_scale0 = 5
+bonus_scale15 = 25
+[skills.382.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38888
+
+[skills.383]
+activation = 0.0
+aftercast = 0.0
+recharge = 0
+energy = 0
+adrenaline = 7
+adrenaline_units = 175
+attribute = 20
+profession = 1
+type_code = 14
+target = 5
+skill_arguments = 2
+duration0 = 0
+duration15 = 0
+scale0 = 1
+scale15 = 40
+bonus_scale0 = 0
+bonus_scale15 = 0
+[skills.383.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38888
+
+[skills.384]
+activation = 0.0
+aftercast = 0.0
+recharge = 0
+energy = 0
+adrenaline = 5
+adrenaline_units = 125
+attribute = 20
+profession = 1
+type_code = 14
+target = 5
+skill_arguments = 6
+duration0 = 0
+duration15 = 0
+scale0 = 5
+scale15 = 20
+bonus_scale0 = 5
+bonus_scale15 = 20
+[skills.384.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38888
+
+[skills.385]
+activation = 0.0
+aftercast = 0.0
+recharge = 0
+energy = 0
+adrenaline = 8
+adrenaline_units = 200
+attribute = 20
+profession = 1
+type_code = 14
+target = 5
+skill_arguments = 2
+duration0 = 0
+duration15 = 0
+scale0 = 5
+scale15 = 40
+bonus_scale0 = 50
+bonus_scale15 = 50
+[skills.385.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38888
+
+[skills.892]
+activation = 0.0
+aftercast = 0.0
+recharge = 0
+energy = 0
+adrenaline = 4
+adrenaline_units = 100
+attribute = 20
+profession = 1
+type_code = 14
+target = 5
+skill_arguments = 6
+duration0 = 10
+duration15 = 10
+scale0 = 10
+scale15 = 40
+bonus_scale0 = 5
+bonus_scale15 = 5
+[skills.892.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38888
+
+[skills.907]
+activation = 0.0
+aftercast = 0.0
+recharge = 0
+energy = 0
+adrenaline = 7
+adrenaline_units = 175
+attribute = 20
+profession = 1
+type_code = 14
+target = 5
+skill_arguments = 2
+duration0 = 0
+duration15 = 0
+scale0 = 10
+scale15 = 40
+bonus_scale0 = 1
+bonus_scale15 = 5
+[skills.907.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38888
+
+[skills.1144]
+activation = 0.0
+aftercast = 0.0
+recharge = 0
+energy = 0
+adrenaline = 7
+adrenaline_units = 175
+attribute = 20
+profession = 1
+type_code = 14
+target = 5
+skill_arguments = 2
+duration0 = 0
+duration15 = 0
+scale0 = 1
+scale15 = 40
+bonus_scale0 = 0
+bonus_scale15 = 0
+[skills.1144.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38888
+
+[skills.1415]
+activation = 0.0
+aftercast = 0.0
+recharge = 0
+energy = 0
+adrenaline = 5
+adrenaline_units = 125
+attribute = 20
+profession = 1
+type_code = 14
+target = 5
+skill_arguments = 6
+duration0 = 0
+duration15 = 0
+scale0 = 5
+scale15 = 15
+bonus_scale0 = 10
+bonus_scale15 = 25
+[skills.1415.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38888
+
+[skills.1547]
+activation = 1.0
+aftercast = 0.0
+recharge = 0
+energy = 0
+adrenaline = 4
+adrenaline_units = 100
+attribute = 37
+profession = 9
+type_code = 14
+target = 5
+skill_arguments = 2
+duration0 = 0
+duration15 = 0
+scale0 = 10
+scale15 = 40
+bonus_scale0 = 0
+bonus_scale15 = 0
+[skills.1547.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38888
+
+[skills.1550]
+activation = 1.0
+aftercast = 0.0
+recharge = 1
+energy = 0
+adrenaline = 6
+adrenaline_units = 150
+attribute = 37
+profession = 9
+type_code = 14
+target = 5
+skill_arguments = 2
+duration0 = 0
+duration15 = 0
+scale0 = 10
+scale15 = 40
+bonus_scale0 = 0
+bonus_scale15 = 0
+[skills.1550.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38888
+
+[skills.1554]
+activation = 1.0
+aftercast = 0.75
+recharge = 0
+energy = 0
+adrenaline = 3
+adrenaline_units = 75
+attribute = 38
+profession = 9
+type_code = 27
+target = 0
+skill_arguments = 5
+duration0 = 10
+duration15 = 10
+scale0 = 0
+scale15 = 0
+bonus_scale0 = 5
+bonus_scale15 = 15
+[skills.1554.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38888
+
+[skills.1702]
+activation = 0.0
+aftercast = 0.0
+recharge = 1
+energy = 0
+adrenaline = 7
+adrenaline_units = 175
+attribute = 20
+profession = 1
+type_code = 14
+target = 5
+skill_arguments = 6
+duration0 = 0
+duration15 = 0
+scale0 = 1
+scale15 = 31
+bonus_scale0 = 1
+bonus_scale15 = 5
+[skills.1702.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38888

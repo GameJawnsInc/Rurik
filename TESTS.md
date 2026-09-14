@@ -6626,7 +6626,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   cancelled cast cost nothing; a row without the key costs nothing; `--no-casting-armour`
   reverts; the penalty reads −40 off the row. WIKI only — no Healing Signet cast exists in
   the live corpus (`studies/slice/FINDINGS.md` F41.2)),
-  `toolkit/authsrv/test_pools.py` (**what a skill COSTS** — SKILLS-RC 2026-09-10:
+  `toolkit/authsrv/test_pools.py` (**2026-09-14 (night), SLICE-H17b: Sever Artery's pool is 75 units (the 38888 row) — the bar's costs and the four-hit cap read it.** **what a skill COSTS** — SKILLS-RC 2026-09-10:
   §10's enemy gate stands an idle ally beside the caster, because a lone hostile
   cannot cast Restore Condition at all; the energy question it asks is unchanged.
   R4b's other half, where
@@ -6733,7 +6733,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   wrong (see `studies/skills` §37.5 for the session where exactly that shape of
   null nearly shipped from a different cause)
   (was 82 of 98 before §11)),
-  `toolkit/authsrv/test_adrenwire.py` (**adrenaline IS on the wire, and this is the
+  `toolkit/authsrv/test_adrenwire.py` (**2026-09-14 (night), SLICE-H17b: §3's off-grid census reads six distinct costs over 37 rows on the served table (the 38888 overrides moved Final Thrust's 240 and Gash's 140 onto the grid); the floor follows the measurement.** **adrenaline IS on the wire, and this is the
   file that stops us forgetting again**. Until 2026-08-21 `pools.py`'s header read
   *"ADRENALINE IS NOT ON THE WIRE AT ALL, and that is a finding rather than a gap"* and
   `authsrv.py` repeated it — a floor (nobody had looked) read as a ceiling, the same
@@ -9591,7 +9591,7 @@ the same-tick ALIAS**: the
   `leaked()` exists to ask. 78 checks against a floor of 76, the two `vault/state`
   ones declaring a skip; there is no bare-machine shape to floor separately, since
   `main()` opens with `require_dir("captures")`. ~3m),
-  `toolkit/test_content.py` (the content store, that its provenance and licence
+  `toolkit/test_content.py` (**2026-09-14 (night), SLICE-H17b: the `content/overrides/` layer — merged after the vault, wins over a bulk row of the same key, and without the directory the vault still wins; +2, floor 42 → 44.** the content store, that its provenance and licence
   refusals actually refuse -- and, since 2026-08-13, that the REAL `vault/content/`
   overlay loads, which is the one input this file never read. Every other check in it
   passes `vault_dir=""` or a temp dir, and the bare `content.load()` it opened with was

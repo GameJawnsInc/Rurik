@@ -48,6 +48,12 @@ hand-sized rows in the repo, bulk extraction in the vault.
   * `vault/content/*.toml` (gitignored) is for anything machine-extracted or bulk: the
     397-map table, ~1,300 skills, the area table. It is merged OVER the repo rows by
     key, so the vault can extend or correct without editing tracked files.
+  * `content/overrides/*.toml` (tracked) is merged LAST, over the vault: rows verified
+    individually on a NEWER build than the vault's bulk table (2026-09-14, SLICE-H17b:
+    fourteen skills whose adrenaline moved on 38888 while the vault's table is the pin's).
+    Without this layer a tracked row could never correct a bulk one -- the vault's
+    row-level `update` replaced it wholesale -- and the only way to take one build's
+    number was to regenerate the whole table on that build.
 
 The gate keeps its evidentiary value that way: "no extracted table was ever committed,
 prove it with one git command" stays literally true, which is the whole reason PLAN.md
@@ -358,9 +364,12 @@ class World:
         return {kind: len(rows) for kind, rows in sorted(self.tables.items())}
 
 
-def load(repo_dir=None, vault_dir=None, require_vault=False):
-    """Load every content table. Repo first, then the vault merged over it."""
+def load(repo_dir=None, vault_dir=None, require_vault=False, overrides_dir=None):
+    """Load every content table. Repo first, then the vault merged over it, then
+    the repo's `overrides/` merged over both (see WHERE ROWS LIVE)."""
     repo_dir = repo_dir or REPO_CONTENT
+    if overrides_dir is None:
+        overrides_dir = os.path.join(repo_dir, "overrides")
     if vault_dir is None:
         try:
             vault_dir = vaultpath.vault_path("content")
@@ -370,7 +379,8 @@ def load(repo_dir=None, vault_dir=None, require_vault=False):
         vault_dir = vaultpath.require_dir("content", why="content overlay")
 
     raw, sources = {}, []
-    for directory, label in ((repo_dir, "repo"), (vault_dir, "vault")):
+    for directory, label in ((repo_dir, "repo"), (vault_dir, "vault"),
+                             (overrides_dir, "overrides")):
         if not directory or not os.path.isdir(directory):
             continue
         files = sorted(f for f in os.listdir(directory) if f.endswith(".toml"))

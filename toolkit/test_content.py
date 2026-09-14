@@ -75,7 +75,7 @@ import content  # noqa: E402
 #   D  the vault dropped from load()'s dirs:     4 red, two synthetic and two here
 # C and D are caught by the synthetic checks too; A and B are caught by nothing else, and
 # A is the one that actually happened.
-LEDGER = checks.Ledger("content store", floor=42)
+LEDGER = checks.Ledger("content store", floor=44)  # 2026-09-14: +2, the overrides layer
 
 
 def write(dirpath, name, text):
@@ -514,6 +514,27 @@ def main():
     LEDGER.ok(merged_thing.get("c", {}) and merged_thing["c"]["value"] == 3,
               "and the vault may add rows the repo does not have",
               f"loaded keys: {sorted(merged_thing)}")
+
+    # --- the overrides layer (2026-09-14, SLICE-H17b) ----------------------------
+    # A tracked row that must beat a BULK row: fourteen skills whose adrenaline the
+    # 38888 client moved while vault/content/skills.toml is the pin's. Merged last.
+    with tempfile.TemporaryDirectory() as repo, tempfile.TemporaryDirectory() as vault:
+        write(repo, "a.toml", '[thing.b]\nvalue = 2\n[thing.b.provenance]\n'
+              'source = "measured"\nextractor = "toolkit/content.py"\n')
+        write(vault, "a.toml", '[thing.b]\nvalue = 22\n[thing.b.provenance]\n' + cap)
+        os.makedirs(os.path.join(repo, "overrides"))
+        write(os.path.join(repo, "overrides"), "b.toml",
+              '[thing.b]\nvalue = 222\n[thing.b.provenance]\nsource = "measured"\n'
+              'extractor = "toolkit/content.py"\n')
+        over = content.load(repo_dir=repo, vault_dir=vault).rows("thing")
+        alone = content.load(repo_dir=repo, vault_dir=vault,
+                             overrides_dir=os.path.join(repo, "no-such-dir")).rows("thing")
+    LEDGER.ok(over.get("b", {}) and over["b"]["value"] == 222,
+              "a tracked overrides/ row wins over the vault's bulk row of the same key",
+              f"{over.get('b')}")
+    LEDGER.ok(alone.get("b", {}) and alone["b"]["value"] == 22,
+              "and with no overrides directory the vault still wins -- the layer adds, "
+              "never reorders", f"{alone.get('b')}")
 
     # --- the REAL vault overlay, which nothing here loaded until 2026-08-13 ----
     # Every load above passes `vault_dir=""` or a temp dir, so the three checks above

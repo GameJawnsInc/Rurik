@@ -1101,8 +1101,11 @@ def section_adrenaline_glue():
             "pos": (10.0, 0.0), "skills": (), "attacks_back": False,
         }
         bar = authsrv.player_adrenaline(state)
-        LEDGER.ok(bar.costs == {382: 100, 317: 80, 318: 120, 319: 80},
-                  "the pools are built from the bar at the CLIENT's raw units",
+        # 2026-09-14 (SLICE-H17b): Sever Artery is 75 on the 38888 row that
+        # content/overrides/ now serves (3 strikes), where the pin's said 100.
+        LEDGER.ok(bar.costs == {382: 75, 317: 80, 318: 120, 319: 80},
+                  "the pools are built from the bar at the CLIENT's raw units "
+                  "(Sever Artery 75 on the 38888 overrides row)",
                   f"{bar.costs} -- not displayed x 25, which would demand 100 "
                   f"for Battle Rage (317) where GWW's own Notes say it "
                   f"'exactly requires 80 units of adrenaline (3 strikes and 5 "
@@ -1122,8 +1125,9 @@ def section_adrenaline_glue():
         for _ in range(4):
             state["agents"][7]["last_hit"] = 0.0     # skip the swing timer
             authsrv.hit_enemy(send, state, 7, 0)
-        LEDGER.ok(bar.units[382] == 100 and bar.units[317] == 80,
-                  "four landed WEAPON hits are four strikes: 100 units",
+        LEDGER.ok(bar.units[382] == 75 and bar.units[317] == 80,
+                  "four landed WEAPON hits are four strikes: 100 units, and each "
+                  "pool caps at its own cost -- 75 for Sever Artery since H17b",
                   f"{bar.units} -- WIKI: 25 units per successful weapon hit, "
                   f"and each pool caps at its own cost")
         LEDGER.ok(bar.charged(382) and not bar.charged(318),
