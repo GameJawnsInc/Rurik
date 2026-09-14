@@ -757,6 +757,44 @@ def party_hero_add(party_id, owner_player_number, agent_id, scan_key=0,
             f"agent {agent_id}, key {scan_key}, {unk_b})")
 
 
+def hero_info(hero_id, level, primary, secondary=0, d1=0, d2=0, skills=(),
+              b1=0, b2=0):
+    """GAME_SMSG 0x0073 / 115 -- HERO INFO, the per-hero record for a hero the
+    CHARACTER owns (0x0074 is its mercenary twin).
+
+    OBSERVED, JARIN-S 2026-09-14: retail sends one per owned hero in EVERY
+    instance's load, town and field alike, whether or not the hero is in the
+    party -- `[6, 3, 1, 0, 243282, 245053, [322, 382, 348, 1, 385, 2], 0, 0]`
+    on the three connections of 20260914T005758 (Koss, level 3, Warrior, no
+    secondary, an appearance pair, his own six skills) and the same record at
+    level 20 on 38 connections of the 2026-08 tapes, where no hero was ever
+    in a party and 0x0074 never appears (0 in the corpus). It sits inside the
+    player's own character block, after the morale and before 0x003A.
+
+    WHY IT IS LOAD-BEARING. Without it the retail rig -- the hero's block then
+    0x0072 -- asserted `charHeroData` (ChCliHero.cpp:199) in the 0x0072 handler
+    on the first load, harness runs 20260914T083127 and 20260914T084043 (the
+    second with retail's two 0x0065s and the regen added; neither creates the
+    record). 0x0074 created the record in every rig before (heroes 11.3) and
+    retail never sends it; this is the message that does on retail.
+
+    Wire, per the catalog: [u16 hero, u8 level, u8 primary, u8 secondary,
+    u32, u32, array32 (u16 count + count x u32) skills, u8, u8]. The two
+    dwords are read as the appearance pair by analogy with 0x0074's d1/d2
+    (a content row's file_id, model_id); the two trailing bytes are 0 on
+    every witness and unnamed. Returns (opcode, values, label)."""
+    if not HERO_UNUSED < hero_id < HEROES:
+        raise ValueError(
+            f"hero id {hero_id} outside 1..{HEROES - 1}: ChCliApi:4446 "
+            f"asserts `hero < HEROES` and :4447 `hero != HERO_UNUSED`")
+    sk = [int(x) for x in skills if int(x)][:8]
+    return (0x0073,
+            [int(hero_id), int(level), int(primary), int(secondary), int(d1),
+             int(d2), sk, int(b1), int(b2)],
+            f"HERO_INFO(hero {hero_id}, level {level}, prof {primary}/"
+            f"{secondary}, skills {sk}) [JARIN rig]")
+
+
 def mercenary_info(hero_id, b1=0, b2=0, b3=0, d1=0, d2=0, b4=0, b5=0,
                    d3=0, chunk=None, enc_name=""):
     """GAME_SMSG 0x0074 / 116 -- the per-hero DATA CACHE record.

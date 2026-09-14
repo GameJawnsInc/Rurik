@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=522)   # JARIN-S +20 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=524)   # JARIN-S +22 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
 def section_weapon_damage():
@@ -6445,6 +6445,11 @@ def section_hold_plane():
                   "henchman's is not, and a zero-unit gain sends nothing (retail: 107 "
                   "rows on the hero, 0 on eleven henchman bodies)", f"{sent}")
         sent.clear()
+        st["agents"][202] = _koss(skills=((281, 1.0, 2.0),), skill_ready=[0.0])
+        authsrv.hero_pool_gain(send, st, 202, st["agents"][202], 25, "t")
+        LEDGER.ok(sent == [], "a hero whose bar carries no adrenal skill charges "
+                  "nothing on the wire -- the dark rule, as for the player", f"{sent}")
+        sent.clear()
         authsrv.hero_pool_clear(send, st, HERO, st["agents"][HERO], "t")
         authsrv.hero_pool_clear(send, st, 201, st["agents"][201], "t")
         LEDGER.ok(sent == [(authsrv.AGENT_ADRENALINE_CLEAR, [HERO])],
@@ -6605,33 +6610,46 @@ def section_hold_plane():
         blk = authsrv.hero_character_block(_jw(), HERO, 6)
         bops = [op for op, _v, _l in blk]
         _bar = next(v for op, v, _l in blk if op == authsrv.GAME_SMSG_SKILLBAR_UPDATE)
+        U65, PFLT = authsrv.GAME_SMSG_HERO_UNNAMED_0065, authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT
         LEDGER.ok(bops == [authsrv.GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS,
                            authsrv.GAME_SMSG_AGENT_PROFESSIONS,
-                           authsrv.GAME_SMSG_SKILLBAR_UPDATE, PINT, PINT,
-                           authsrv.GAME_SMSG_AGENT_MORALE,
+                           authsrv.GAME_SMSG_SKILLBAR_UPDATE, U65, PFLT, PINT, PINT,
+                           authsrv.GAME_SMSG_AGENT_MORALE, U65,
                            authsrv.GAME_SMSG_AGENT_SET_PROFESSION,
                            authsrv.GAME_SMSG_AGENT_UPDATE_ATTRIBUTES]
                   and _bar[0] == HERO and _bar[1][:3] == [322, 385, 0]
-                  and (PINT, [agents.PROP_HEALTH_MAX, HERO, 140], blk[4][2]) == blk[4]
-                  and blk[5][1] == [HERO, 100],
+                  and blk[3][1] == [HERO, 0] and blk[4][1][:2] == [agents.GV_ENERGY_REGEN if hasattr(agents, "GV_ENERGY_REGEN") else 43, HERO]
+                  and (PINT, [agents.PROP_HEALTH_MAX, HERO, 140], blk[6][2]) == blk[6]
+                  and blk[7][1] == [HERO, 100],
                   "the hero's load block is the PLAYER's own, addressed to the hero: "
-                  "0x0037, 0x00B7, 0x00DA (the hero's OWN bar), prop 41, prop 42, "
-                  "0x009C, 0x00A6, 0x003A -- the tape's order at 37.73 s and 87.21 s",
+                  "0x0037, 0x00B7, 0x00DA (the hero's OWN bar), 0x0065 [hero, 0], the "
+                  "regen 0x00A2 43, prop 41, prop 42, 0x009C, 0x0065 again, 0x00A6, "
+                  "0x003A -- the tape's order at 37.73 s and 87.21 s",
                   f"{[hex(o) for o in bops]}, bar {_bar[1]}")
         authsrv.HERO_LEVEL = 3
         blk = authsrv.hero_character_block(_jw(), HERO, 6)
-        LEDGER.ok([op for op, _v, _l in blk][6:8] == [PINT, authsrv.GAME_SMSG_AGENT_SET_PROFESSION]
-                  and blk[6][1] == [agents.PROP_LEVEL, HERO, 3],
+        LEDGER.ok([op for op, _v, _l in blk][9:11] == [PINT, authsrv.GAME_SMSG_AGENT_SET_PROFESSION]
+                  and blk[9][1] == [agents.PROP_LEVEL, HERO, 3],
                   "...with prop 36 (the level) right before 0x00A6 when a level is set",
                   f"{[hex(op) for op, _v, _l in blk]}")
+        _hi = agents.hero_info(6, 3, 1, 0, 243282, 245053, [322, 382, 348, 1, 385, 346, 0, 2])
+        LEDGER.ok(_hi[0] == 0x0073
+                  and _hi[1] == [6, 3, 1, 0, 243282, 245053, [322, 382, 348, 1, 385, 346, 2], 0, 0]
+                  and len(Codec().encode("GAME_SMSG", 0x0073, _hi[1])) == 2 + 1 + 1 + 1 + 4 + 4 + 2 + 7 * 4 + 1 + 1 + 2,
+                  "0x0073 HERO_INFO encodes through the real codec: [hero, level, prof, "
+                  "sec, d1, d2, the hero's skills (zeros dropped, count-prefixed), 0, 0] "
+                  "-- retail's own row for Koss less the empty slot",
+                  f"{_hi[1]}")
         _src = inspect.getsource(authsrv)
         LEDGER.ok("if HERO_INFO and not (HERO_RIG_RETAIL and HERO_ACTIVATE):" in _src
-                  and _src.index("_seq.extend(hero_character_block(state, _haid, _hid))")
+                  and _src.index("_seq.append(agents.hero_info(")
+                  < _src.index("_seq.extend(hero_character_block(state, _haid, _hid))")
                   < _src.index("_party = tuple(agents.party_build(")
                   and "if HERO_PIPELINE_FIRST or _rig_retail:" in _src
                   and _src.count("and not _rig_retail") >= 4,
-                  "SOURCE: under the retail rig no 0x0074 goes out, the block and "
-                  "0x0072 are queued AHEAD of the party build, the build is deferred "
+                  "SOURCE: under the retail rig no 0x0074 goes out, 0x0073 HERO_INFO "
+                  "(the record's creator on retail) is queued ahead of the block, the "
+                  "block and 0x0072 AHEAD of the party build, the build is deferred "
                   "past the body, and the four legacy sites (vitals, attribs, bar, "
                   "the last 0x0072) stand down (--hero-rig-legacy is every rig before)",
                   f"{_src.count('and not _rig_retail')} legacy sites gated")

@@ -3866,6 +3866,19 @@ ATTACK_SPEED_AT_START = True   # False (--attack-speed-at-change): H13's tick-ti
 # the player's own character block, then 0x0072, then (a field) its items,
 # body and 0x006D, and the party build LAST (37.73 s, 87.21 s, 651.62 s).
 HERO_RIG_RETAIL = True         # False (--hero-rig-legacy): 0x0074 first, the block after the body.
+# HERO_RIG_0065: the two hero-only messages in retail's block this server had
+# never sent -- 0x0065 [hero, 0] right after the bar and again after the
+# morale, and 0x00A2 [43, hero, rate] between them (3 of 3 instances). The
+# harness run 20260914T083127 sent the block WITHOUT them and the 0x0072
+# handler asserted charHeroData (ChCliHero.cpp:199) on the first load; the
+# record 0x0072 looks up must be created by something in the block, and these
+# are the only members we had left out. A hypothesis under test, stated as one.
+HERO_RIG_0065 = True
+GAME_SMSG_HERO_UNNAMED_0065 = 0x0065   # [agent_id, byte]; catalog name null; hero-only on the tape
+# HERO_INFO, the message that CREATES the hero record on retail -- one per
+# owned hero in every load, inside the player's own block (agents.hero_info's
+# docstring has the witness and the two asserting runs without it).
+GAME_SMSG_HERO_INFO = 0x0073
 # HERO_WIRE_POOLS: a hero's adrenaline (0x00CF 107 rows, 0x00D0 7) and its
 # skill family (0x00E3 48, 0x00E5 35, 0x00E6) are on the wire like the
 # player's; a HENCHMAN's never are (0 on eleven henchman bodies).
@@ -18034,6 +18047,10 @@ def hero_pool_gain(send, state, agent_id, row, units, why):
     the pre-JARIN arm. A zero-unit gain sends nothing, as the player's."""
     if not HERO_WIRE_POOLS or hero_body_id(row) is None or int(units) <= 0:
         return
+    # The DARK rule holds for a hero as for the player (test_adrenwire 12):
+    # a bar with no adrenal skill on it charges nothing on the wire.
+    if not any(skill_cost(int(sk[0]))[1] > 0 for sk in (row.get("skills") or ())):
+        return
     send(AGENT_ADRENALINE_GAIN, [agent_id, int(units)],
          f"hero agent {agent_id} adrenaline +{int(units)} ({why}) [JARIN]")
 
@@ -18177,12 +18194,22 @@ def hero_character_block(state, haid, hid):
     _hv = HERO_VITALS or (100, 30)
     _e_max = int(morale.effective_max(_hv[1], _hv[1], _m))
     _h_max = int(morale.effective_max(_hv[0], _hv[0], _m))
+    if HERO_RIG_0065:
+        out.append((GAME_SMSG_HERO_UNNAMED_0065, [haid, 0],
+                    f"0x0065 [hero agent {haid}, 0] -- retail's, after the bar [JARIN rig]"))
+        out.append((GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+                    [GV_ENERGY_REGEN, haid,
+                     _f32(morale.regen_fraction(agents.PLAYER_FLOAT_43, agents.PLAYER_ENERGY, _e_max))],
+                    f"energy regeneration on hero agent {haid} [JARIN rig]"))
     out.append((GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [agents.PROP_ENERGY_MAX, haid, _e_max],
                 f"energy max {_e_max} on hero agent {haid} [JARIN rig]"))
     out.append((GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [agents.PROP_HEALTH_MAX, haid, _h_max],
                 f"health max {_h_max} on hero agent {haid} [JARIN rig]"))
     out.append((GAME_SMSG_AGENT_MORALE, [haid, _m],
                 f"morale {morale.display(_m)} on hero agent {haid} [JARIN rig]"))
+    if HERO_RIG_0065:
+        out.append((GAME_SMSG_HERO_UNNAMED_0065, [haid, 0],
+                    f"0x0065 [hero agent {haid}, 0] -- retail's, after the morale [JARIN rig]"))
     if HERO_LEVEL is not None:
         out.append((GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [agents.PROP_LEVEL, haid, HERO_LEVEL],
                     f"hero agent {haid} at level {HERO_LEVEL} [JARIN rig]"))
@@ -22409,7 +22436,15 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     # three instances. --hero-rig-legacy is every rig before.
     _rig_retail = HERO_RIG_RETAIL and HERO_ACTIVATE
     if _rig_retail:
+        _hap = HERO_APPEARANCE or (0, 0)
+        _hprof_info = (agents.npc_template(HERO_BODY_NPC)["profession"]
+                       if HERO_BODY else 1)
         for _hid, _haid, _hdef in hero_slots():
+            # 0x0073 HERO_INFO FIRST: the record 0x0072 looks up (JARIN-S;
+            # two harness runs asserted charHeroData without it).
+            _seq.append(agents.hero_info(
+                _hid, int(HERO_LEVEL or 1), int(_hprof_info), 0,
+                _hap[0], _hap[1], [int(sk[0]) for sk in (HERO_SKILLS or ())]))
             _seq.extend(hero_character_block(state, _haid, _hid))
             _seq.append(agents.hero_activate(
                 HERO_ACTIVATE_ID
