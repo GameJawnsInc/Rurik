@@ -332,6 +332,32 @@ BUILDS = (
                   "key-tap. 57 B vs pristine, dhbuild classifies `stock`. "
                   "vault/run-live/<stamp>/ and vault/client-patched-live/"),
           )),
+    # ArenaNet updated C:\gw on 2026-09-01 (PE timestamp 20:46 UTC); noticed
+    # 2026-09-13 when livesession.py refused to launch the 38849 live build at
+    # a service serving 38888 -- the refusal that exists so a stale live build
+    # does not self-update and lose its key-tap. Snapshotted the same evening
+    # (snapshot_client.py, MANIFEST verified byte-identical), both configurations
+    # rebuilt from C:\gw with the key-tap. The image GREW (10,493,120 B, the
+    # first size change since 38797), so no cross-build address may be assumed
+    # to hold; the PIN stays 38797 (below) and this row only lets the newest
+    # client be recognised. Byte diffs vs pristine measured 2026-09-13.
+    Build(stamp="2026-09-01_44fbd68767a8", number=38888, size=10_493_120,
+          pristine="44fbd68767a8d02b5dd4fb1a8a09b684a86b24716731327ee64905dd698fe124",
+          pristine_via=VIA_SNAPSHOT,
+          patched=(
+              PatchedCopy(
+                  "1f7d5ddfdd844dcd659e80e6624de0c3bc122bab8fddd93fd47e85fff1371a35",
+                  "loopback build -- OUR DH, updater off, multi-instance, key-tap. "
+                  "188 B in 9 runs vs pristine, dhbuild classifies `ours`. "
+                  "vault/run/<stamp>/ and vault/client-patched/; keyed by "
+                  "keys/rurik_dh_2026-09-01_44fbd68767a8.json"),
+              PatchedCopy(
+                  "453bbdaf62bfde3e272695a99f4a328b19978b74a01c0cd21ee1dd850293fced",
+                  "LIVE-CAPTURE build -- stock DH, updater LIVE, multi-instance, "
+                  "key-tap. 58 B in 6 runs vs pristine, dhbuild classifies `stock` "
+                  "against keys/dh_params_2026-09-01_44fbd68767a8.txt. "
+                  "vault/run-live/<stamp>/ and vault/client-patched-live/"),
+          )),
 )
 
 # THE PIN DOES NOT FOLLOW THE NEWEST BUILD, and this line used to read

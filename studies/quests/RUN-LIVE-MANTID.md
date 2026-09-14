@@ -172,10 +172,11 @@ with three heroes on the Isle of the Nameless) — each is its own runsheet.
 ```
 python toolkit/clientpatch/dhbuild.py
 python toolkit/harness/marks.py --check-plan C:\gd\Rurik\vault\plans\mantid_hatchlings.txt
-python toolkit/harness/livesession.py --account capture --exe C:\gd\Rurik\vault\run-live\<build>\Gw.exe --confirm --mode base --plan C:\gd\Rurik\vault\plans\mantid_hatchlings.txt
+python toolkit/harness/livesession.py --account capture --exe C:\gd\Rurik\vault\run-live\2026-09-01_44fbd68767a8\Gw.exe --confirm --mode base --minutes 90 --plan C:\gd\Rurik\vault\plans\mantid_hatchlings.txt
 ```
 
-The third line is elevated and is the owner's; the driver sends nothing and clicks nothing. It
+The build is 38888, rebuilt 2026-09-13 after the driver refused the stale 38849 copy. `--minutes` is a
+ceiling and the driver's default of 10 is too short for this quest. The third line is elevated and is the owner's; the driver sends nothing and clicks nothing. It
 prints the `marks.py` command for the second shell with the resolved capture directory —
 **copy it, do not retype it.** After the run, notes go in a separate `<ordinal><TAB><text>`
 file and are bound with `marks.py --bind`.
