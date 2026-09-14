@@ -1766,7 +1766,7 @@ client (`msgshape`). Filed as a follow-up, not fixed here.
 equipment `[agent, slot, item]`, 1), **`0x0135`/`0x0159`/`0x0168`** (ground item drop and
 pickup, 1 each), **`0x00A4`/`0x00A7`** (the foe's attack pre-/post-words), c2s **`0x003F`**
 (pickup `[agent, 0]`) and **`0x0030`** (equip `[item]`). Each needs its `overrides.json` row
-with this capture as the witness, under the SMSG naming method. The joins to promote:
+with this capture as the witness, under the SMSG naming method. **DONE 2026-09-13**: all fourteen rows are in `schema/overrides.json` (0x00D9 SKILLBAR_UPDATE_SKILL, 0x00DC SKILL_SET_COPIES, 0x010E PROP_SET_STATE, 0x0111 PROP_UPDATE_FLAGS, 0x0105 CINEMATIC_END, 0x006F AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT, 0x0135 ITEM_ASSIGN, 0x015A ITEM_SET_PROFESSION, 0x0168 ITEM_AGENT_DROP_SOURCE, 0x0159 ITEM_PICKED_UP, 0x00A4 AGENT_PROJECTILE_LAUNCHED, 0x00A7 AGENT_PROJECTILE_ARRIVED; c2s 0x003F PICKUP, 0x0030 EQUIP_ITEM), each `why` citing this capture, the wire time and the count, with the handler read; two corrections to the list above -- `0x010E`/`0x0111` address PROPS by prop id (Engine\Map\Props), not the gadget agent, and `0x00A4`/`0x00A7` are the ranged release and arrival for the player's wand as much as the foe's (68/68 paired by shot handle, arriving at the declared flight time within 21 ms). Pinned by `toolkit/authsrv/test_smsgnames3.py`. The joins to promote:
 `tut_census.py` (per-capture shape counts) → `questjoin.py`; the hex join of §10.6 (press →
 announcement → landing → the foe's first swing) as a `hexjoin.py`.
 

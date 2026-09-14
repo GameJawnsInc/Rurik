@@ -7044,6 +7044,29 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   MAP_MARKER and `0x00B0` stayed HELD — no ArenaNet naming string and no named
   consumer, recorded in studies/smsgnames §10 rather than promoted on inference.
   Needs `vault/captures/live/`, §1 runs bare; floor 9),
+  `toolkit/authsrv/test_smsgnames3.py` (**the fourteen names the MANTID capture
+  earned, 2026-09-13 — twelve GAME_SMSG and two GAME_CMSG that carried `name: null`
+  with readable shapes**, `vault/captures/live/20260913T210901`, the Factions tutorial
+  on build 38888. The binary-side claims — handler chains, the `hotKey < 8` and
+  `copies` asserts, the `+0x24` slot array 0x006F shares with 0x006E, the ItemTimer
+  0x0135 builds from f32 seconds × 1000.0, the kind-11/12 agent-view events — live
+  in each `schema/overrides.json` `why`; this pins what the tape can refute. The
+  headline is the projectile pair: every `0x00A7 AGENT_PROJECTILE_ARRIVED` answers
+  an outstanding `0x00A4 AGENT_PROJECTILE_LAUNCHED` on the same (agent, shot
+  handle) and lands at launch + field 4 read as f32 within 30 ms, 68 of 68 — an
+  invariant with no free parameter, and the player's own wand is a shooter, so
+  "the foe's attack words" was the wrong reading. `0x0168 ITEM_AGENT_DROP_SOURCE`'s
+  field 1 is the kind-4 agent created in the same frame 8/8 (19/19 corpus-wide;
+  field 2 stays CONTESTED and the row says so); `0x0135 ITEM_ASSIGN` names the
+  player for 600.0 s every time; `0x0159 ITEM_PICKED_UP`'s item is the one the last
+  c2s `0x003F PICKUP` targeted, with `0x013E` in the same frame; `0x00D9` writes a
+  hotKey slot < 8 beside a `0x00DC [skill, 1]`; prop ids (`0x010E`/`0x0111`) are
+  disjoint from agent ids and `0x0111` masks only bit 0; `0x015A`'s byte is 1..10
+  and the Mesmer's starter armour says 5; c2s `0x0030 EQUIP_ITEM` draws ONE `0x006F`
+  and no `0x006E`; `0x0105 CINEMATIC_END` arrives once, on the cinematic connection,
+  beside the `0x0099` transfer. Section 1 goes red if any of the fourteen is renamed
+  or grows a field claim. Needs the vault; skips declared when the capture is absent;
+  floor 42, ~15 s),
   `toolkit/authsrv/test_itemdetail.py` (**the five GAME_SMSG names of the 2026-08-22
   static pass — ITEM_LOW_DETAIL/ITEM_HIGH_DETAIL, the equip-set pair, and
   AGENT_SET_MODEL_SCALE — held to what a `.raw` can arbitrate**, so the corpus can take

@@ -418,7 +418,10 @@ def main():
     # GAME_CMSG had 194 layouts and zero names. Names live in overrides.json beside
     # the evidence, and are added only by a labelled run (studies/cmsg/FINDINGS.md).
     named = {0x0026: "ATTACK", 0x0039: "INTERACT", 0x0046: "USE_SKILL",
-             0x0064: "CHAT_SEND", 0x00C1: "TARGET_SELECT"}
+             0x0064: "CHAT_SEND", 0x00C1: "TARGET_SELECT",
+             # 2026-09-13, the MANTID capture: the pickup verb (arm 3 of the
+             # world-action switch) and the inventory double-click.
+             0x003F: "PICKUP", 0x0030: "EQUIP_ITEM"}
     got = {op: c.name_for("GAME_CMSG", op) for op in named}
     LEDGER.ok(got == named,
               "the client-to-server opcodes we have earned names for resolve",
