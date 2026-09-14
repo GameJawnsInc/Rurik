@@ -8021,6 +8021,17 @@ checked against the corpus before this was written:
 > penalty twice (morale §1), so those legs corroborate at level 1 → 2/3 rather than discover;
 > secondary profession selection is NOT in this quest and stays open. The corpus count per
 > shape is in the runsheet's §1 (skill grants 2, chest effect 0, party defeated 0, cinematic 0).
+>
+> **RUN AND SCORED the same evening (`20260913T210901`, build 38888, 20/20 steps, seals
+> agree) — [studies/quests/FINDINGS.md](studies/quests/FINDINGS.md) §10.** Quest 347 accept
+> → 18 objective updates (the count a code unit in the string) → `0x0052` ×2 + `0x004A`;
+> skill grants are `0x00DC` + `0x00D9` (a per-slot bar write) + `0x001C`; the scripted death
+> has no blow in front of it and raises no `PARTY_DEFEATED`; the penalty scales the BASE
+> energy (n=2) and the quest reward restores morale in-map; a hex is `0x00F1` bit 0x800 (no
+> `0x0042` on the tape) and Empathy's damage rides `0x00A3` prop 55 negative after a prop-42
+> declaration; gadgets are kind-3 agents with `0x0111`/`0x010E` state; the cinematic ends in
+> an instance transfer (`0x0105`); level 0 is the absence of prop 36. Left: schema names for
+> ten witnessed `name: null` rows, and c2s `0x0092`'s array cap (the Monastery c2s stops on it).
 
 Two properties worth naming while a tutorial capture is being planned, because both are
 frequent and neither is understood: **property 66** (202 sightings, the second most common

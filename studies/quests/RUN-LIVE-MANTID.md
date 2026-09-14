@@ -196,3 +196,36 @@ file and are bound with `marks.py --bind`.
 Each leg's verdict goes into `FINDINGS.md` here as a new section with the label it retires
 named; the schema's `name: null` rows that a leg names get their `overrides.json` entry with
 the capture as the witness.
+
+## 7. SCORED 2026-09-13 — capture `20260913T210901`
+
+Run the same evening on build 38888 (the driver had refused 38849 against a service serving
+38888; both builds were rebuilt first). 20 of 20 steps marked, seals AGREE, 5 keys tapped,
+four game channels, the Monastery channel's c2s stopping at a schema cap on `0x0092`.
+Verdicts, per prediction, with the wire in [FINDINGS.md](FINDINGS.md) §10:
+
+| id | verdict | in one line |
+|---|---|---|
+| P1 | REFUTED (first half) | the accept is `0x0049` ALONE; `0x0012` → `0x004C` came when the log was opened |
+| P2 | CONFIRMED | 18 `0x0054`, the count a `0x100\|n` code unit at position 21; the 18th kill is `0x004D` + `0x004C` |
+| P3 | CONFIRMED | `0x0052` ×2 then `0x004A`, 4 of 4 |
+| Q1 | answered | quest 347; the count is server-side, in the string |
+| P4 | half | `0x001C` ×2 (40, 26) yes; no `0x00DA` mid-map — the bar write is `0x00D9 [agent, slot, skill, 0]` + `0x00DC [skill, 1]` |
+| Q2 | answered | not `0x0082`; `0x00D9` |
+| P5 | CONFIRMED | the morale tick, a third time |
+| P6 | CONFIRMED | no blow in front of the scripted death |
+| P7 | REFUTED | no `0x01D8` though all three died |
+| P8 | CONFIRMED / second half REFUTED | maxima not restored at the rise; morale back to 100 at the QUEST REWARD, in-map |
+| — | new | the penalty scales the BASE energy (30 → 27, n=2 with the corpus's 25 → 22); +1 morale per third kill |
+| P9 | CONFIRMED | prop 37 = 2, prop 42 = 120, `0x0039` 5, `0x0038` 5, XP 2000, in one frame |
+| P10 | CONFIRMED | `0x000F` → `0x0036` + `0x0038`; rank 1 costs 1, rank 2 costs 2 |
+| P11 | order right, message wrong | `0x0161` before `0x013E`; the equip is c2s `0x0030` → `0x014B` + `0x006F [agent, slot, item]`, not `0x006E` |
+| P12 | CONFIRMED | no `0x006C`; the chest drops a ground item (a kind-4 agent) picked up with c2s `0x003F` |
+| P13 | REFUTED in form, CONFIRMED in substance | no `0x0042` on the tape; the hex is `0x00F1 [foe, 0x800]` + prop 6 + `0x00A0 [20, foe, me, 47]`; Empathy's damage is `0x00A3 [55, foe, me, −0.4]` after a prop-42 declaration (25) |
+| P14 | CONFIRMED | `0x00A3 [55, me, me, 0.68]` = 60 |
+| Q3 | answered | no flag word — a hex is a status BIT, not a `0x0042` |
+| Q4 | answered | gadgets are kind-3 agents; state is `0x0111` + `0x010E [id, state, n]`; the gate opening is `0x010E [24771, 1, 0]`; the shrine sent nothing |
+| Q5 | answered | `0x0105 []` once, ending the intro cinematic with an instance transfer (`0x0099` + `0x01A5`) |
+| P15 | half | looking sends nothing; the log open sends `0x0012` + `0x002B` |
+| P16 | wrong by two | one connection for the tutorial proper, but three before it |
+| — | new | level 0 is the ABSENCE of prop 36 — no hatchling ever received a level |

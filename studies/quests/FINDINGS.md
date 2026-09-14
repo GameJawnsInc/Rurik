@@ -1580,3 +1580,196 @@ cd <tree> && python toolkit/harness/session.py --keep-open --shots 1 --hold 120 
 cd <tree> && python toolkit/harness/session.py --keep-open --shots 1 --hold 90 --game-args '--probe completion_gates'
 cd <tree> && python toolkit/harness/session.py --keep-open --shots 1 --hold 60 --game-args '--probe completion_rewards'
 ```
+
+
+---
+
+## 10. MANTID — the Factions tutorial on a Mesmer, scored (capture `20260913T210901`)
+
+**Run 2026-09-13, owner-driven on the secondary account, build 38888, `game_mode: base`
+operator-declared, plan `mantid_hatchlings.txt` sealed (sha256 `e045fc7f…`, seals AGREE),
+20 of 20 steps marked (two repeats: `chest`, `gate`), 5 keys tapped, 942,177 wire bytes, four
+game channels.** The runsheet is [RUN-LIVE-MANTID.md](RUN-LIVE-MANTID.md); the scorers are
+this session's `mantid_score*.py` (scratch; the joins worth keeping are named in §10.9).
+Character: a new Mesmer "Jawnmez", created under capture; player agent **8** on the first two
+channels, **9** on the tutorial channel, **80** in the Monastery. Every number below is read
+off the decoded stream; the decoded value list carries the opcode at index 0.
+
+| channel | span (wire s) | messages | what |
+|---|---|---|---|
+| `65462` | 43.4–69.9 | 336 | character creation / select |
+| `60648` | 70.1–117.9 | 605 | Monastery Overlook, first entry: the intro cinematic, then an instance transfer |
+| `60877` | 118.1–913.7 | 7,163 | **the tutorial**, creation's second entry to Ludo, one connection |
+| `63677` | 914.0–936.4 | 911 | Shing Jea Monastery; s2c decodes to its last byte, **c2s stops at offset 31** (§10.8) |
+
+### 10.1 Leg A — the quest lifecycle. P1 REFUTED in its first half, P2 and P3 CONFIRMED, Q1 answered
+
+- **Quest id 347.** The accept (step `offer`, t=225.8): c2s `0x003B` twice (`8477443` then
+  `8477441`, the offer dialog's two codes) → **one `0x0049` and nothing else**:
+  `[347, (569, −1807), 0, 212, 0, str, str, str, 212]` — the marker rides inside the add.
+  **No `0x0054`, no `0x004C`, no `0x0051` in the accept batch** — §2.3's "unsolicited push" is
+  what an INSTANCE LOAD does, not what an accept does. The description came 5 s later, in
+  step `log`: **opening the quest log sent c2s `0x0012 [347]`** and drew `0x004C`. So P15's
+  "opening the log sends nothing" is REFUTED too, and §2.3's "the client asks in 4 of 4
+  accepts regardless" needs its qualifier: it asks when something needs the text.
+- **P2 CONFIRMED, and the count is IN the string.** 18 `0x0054 [347, str16]` on the
+  connection: the first at the gate (the objective switching to "Defeat 18 more"), then one
+  per kill. The 23-code-unit string is identical across all 18 except **code unit 21: `0x112`
+  → `0x111` → … → `0x101`** — the count is a `0x100 | n` literal embedded by the server
+  (MANTID-Q1: server-side, in the coded string, not a client template argument). Each `0x0054`
+  is paired with a `0x0051 [347, pos, 0, 212]`; from the sixth kill on the marker is
+  `[Infinity, Infinity]` — the compass target withdrawn once the hatchlings scatter. The
+  **18th kill sends no `0x0054`**: it sends `0x004D [347, (3226, 1864), 0, 212]` + `0x004C
+  [347, new description]` — the objective completing is a marker-move plus a re-description,
+  the same pair §2.4 saw 1.6 s before quest 82's turn-in.
+- **P3 CONFIRMED, 4 of 4 now.** Turn-in (t=736.185): c2s `0x003B [8477447]` → `0x0052 [347]`,
+  `0x0052 [347]`, `0x004A [347]`, in a 37-message frame (§10.4).
+- **Second quest, 247**, added at Ludo (t=911.6, flags 32) and **replayed on the Monastery
+  connection as `0x0050 [247, 32, …]` + `0x0053 [247, marker, 0, 242]`**, then the client's
+  `0x0012 [247]` → `0x004C` — the instance-load replay §2.3 describes, on a second map.
+  c2s `0x0013` (deselect) fired twice (t=711.2, 780.8) — the first two samples ever (§4.2 had
+  zero).
+
+### 10.2 Leg B — skills as rewards. P4 half right; Q2 answered by a message nobody predicted
+
+The grant batch (t=536.705, one frame): `0x00DC [40, 1]`, **`0x00D9 [9, 0, 40, 0]`**,
+`0x001C [40, 0]`, `0x00DC [26, 1]`, **`0x00D9 [9, 1, 26, 0]`**, `0x001C [26, 0]`. So a granted
+skill is three messages: `0x00DC [skill, 1]` (learned flag), **`0x00D9 [agent, slot, skill, 0]`
+— a per-slot bar write**, and `0x001C SKILL_UNLOCKED [skill, 0]`. **No `0x00DA` mid-map** (P4's
+re-declaration is refuted: `0x00DA` is the LOAD-time bar, sent `[40, 26, 2, 0…]` on the
+Monastery connection) and **no `0x0082`** (Q2: `EQUIP_TEMPORARY_SKILL` is not what a tutorial
+grant uses). The Resurrection Signet at the reward is the same shape without the unlock:
+`0x00DC [2, 1]` + `0x00D9 [9, 2, 2, 0]`, **no `0x001C` for 2** — it went to slot 3 with no
+"unlocked" word, which is what the owner's remark "created the mesmer without the skills
+unlocked" makes sense of: the account already had the signet. `0x00D9` and `0x00DC` carry
+`name: null` in the schema; §10.9 lists them for naming.
+
+### 10.3 Leg C — the scripted death. P5, P6, P8 CONFIRMED; P7 REFUTED; a base-vs-total datum
+
+- **P5.** t=436.950, one frame: `0x009C [9, 85]`, `0x00EE [10, −15]`, `0x009F [41, 9, 27]`,
+  `0x00A2 [43, 9, 0.05]`… then `[43, 9, 0.0]`, `0x009F [42, 9, 85]`, `0x00F1 [9, 0x10]`,
+  `0x009F [8, 9, 1]`, `0x002D [9]`, `0x0026 [9, 4]`. The morale study's tick, a third time.
+- **P6 CONFIRMED: no killing blow.** The 0.6 s before the tick holds one `0x001E` and nothing
+  else — no `0x00A7`, no `0x00A3`. A scripted kill is a bare status flip. Kisai (17) and Mai
+  (15) die 0.252 s later, `0x00F1 [·, 0x10]` + `0x0026 [·, 8]`, no blow either.
+- **P7 REFUTED: no `0x01D8 PARTY_DEFEATED`** though all three were down. The tutorial's
+  scripted wipe does not raise the "party defeated" screen; `0x01D8` stays 0 in the corpus.
+- **P8 CONFIRMED.** t=449.723: `0x00F1 [9, 0]`, prop 43 back, prop 8 → 0, `0x00A2 [52, 9,
+  1.0]`, `0x009F [54, 9, 27]` (the "+27" callout = the reduced maximum), `0x00A2 [55, 9, 1.0]`,
+  `0x0026 [9, 5]`; the henchmen rose 19 ms earlier with a `[55, ·, 1.0]` each. The maxima
+  stood at 85 / 27.
+- **THE BASE-VS-TOTAL DATUM the morale study wanted (§2.2 there, n=1 → n=2).** This
+  character's energy maximum was **30** at level 1 (`0x009F [41, 9, 30]` at entry, after a
+  `[41, 8, 20]` on the creation channel — 20 base + 10 from the starter armour). The penalty
+  took it to **27**: −3 = 15 % of the BASE 20, not of the total 30 (which would be 25.5).
+  The recovery agrees: +1 morale per third kill (kills 3, 6, 9, 12, 15 → 86…90, each with
+  `0x00EE [10, 1]` and prop 42 following 86…90), and prop 41 moved 27 → 28 only at morale 88
+  (0.88 × 20 + 10 = 27.6). **The quest reward then wiped the rest: `0x00EE [10, 10]`,
+  `0x009C [9, 100]`, props 41/42 back to 30/100** — in-map, before the level-up in the same
+  frame — so P8's "100 only on the Monastery connection" is REFUTED: a quest reward restores
+  morale.
+
+### 10.4 Leg D — the level-up from 1, and the attribute spend. P9 and P10 CONFIRMED exactly
+
+The reward frame (t=736.185, 37 messages) in order: `0x0052`, a chat `0x005D`/`0x005E` pair,
+the morale restore (§10.3), **`0x00EE [0, 2000]`**, `[14, 1]`, `[13, 1]`, `[9, 1]`, **`0x0039
+[9, 5]`, `0x0038 [9, 5]`, `0x009F [37, 9, 2]`, `0x009F [42, 9, 120]`**, three more chat pairs,
+the signet's `0x00DC`/`0x00D9`, `0x0052`, `0x004A`, then Ng's dialog re-arm (`0x009F [20, 9,
+7]`, `[22, 11, …]`, `[12, 11, 0]`, `0x0081 [11]`, `0x007A`, `0x009E`). Level 2, 120 health,
+5 total and 5 available attribute points: the unit-setup study's burst, from level 1 this
+time. The spend (step `spend`): c2s `0x000F [9, 0, 2]` → `0x0036 [9, 0]` + `0x0038 [9, 4]`;
+again → `0x0038 [9, 2]` — rank 1 costs 1, rank 2 costs 2, the wiki's cost table, on a
+roleplaying character for the first time. The Monastery load then declared `0x009F [36, 80,
+2]` and `[42, 80, 120]`.
+
+### 10.5 Leg E — the chest, the pickup, the equip. P11 right on order, wrong on the message; P12 CONFIRMED
+
+- The chest needed two interacts (c2s `0x0039 [11, 0]` at 159.7 and 186.1 — the operator's
+  repeat mark at 192.8 says the first click did nothing visible). **The weapon then appeared
+  as a ground item**: t=199.146, `0x0161 [40, model 93541, type 22, …]` (the item record),
+  `0x0135 [40, 9, 600.0f]`, `0x015A [40, 5]`, `0x0168 [21, 10]`, and **`0x0020` creating agent
+  21 of kind 4** at the chest's spot — an item agent. The pickup: c2s `TARGET_SELECT [21]` +
+  **c2s `0x003F [21, 0]`** (the pickup verb; `name: null`), then t=201.355: `0x009F [8, 9, 1]`,
+  `[39, 9, 21]`, a chat line, **`0x0159 [40, 9]`, `0x013E ITEM_ADD_TO_INVENTORY [1, 40, 2, 0]`**,
+  `0x0021 [21]` (the ground agent removed). Declared-before-added holds (P11's order).
+- **The equip is not `0x006E`.** c2s **`0x0030 [40]`** (equip verb, `name: null`) →
+  `0x014B ITEM_CHANGE_LOCATION [1, 40, 3, 0]` + **`0x006F [9, 0, 40]`** — a ONE-slot visual
+  update `[agent, slot, item]`, the nine-dword `0x006E` untouched. P11's message was wrong,
+  its id and order right.
+- **P12 CONFIRMED: no `0x006C`.** A tutorial chest is a container that drops a ground item;
+  `CHEST_REWARD_EFFECT` stays at 0 sightings and still means the mission-reward chest.
+
+### 10.6 Leg F — the Mesmer's hex and heal. P13 REFUTED in form and CONFIRMED in substance; P14 CONFIRMED
+
+**There is no `0x0042` on this tape at all** (0x0042/0x0043/0x0044: zero). Five Empathy casts
+(c2s `0x0046 [26, 0, target, 0]`) and six Ether Feasts, all resolved. What a hex on a foe is:
+
+- The cast: `0x00E4 [9, 26, 0]`, `0x00A2 [62, 9, −energy]`, **`0x00A0 [60, 9, target, 26]`**
+  (the cast announcement), prop 8 = 1, `0x0028 [9]`; **the landing 2.0 s later**: `0x00E5
+  [9, 26, 0, 10]` (recharge 10), prop 58, **`0x00A0 [20, target, 9, 47]`** (the hex's visual
+  on the FOE, source me), **`0x009F [6, target, 1]` then `[6, target, 4]`**, and **`0x00F1
+  [target, 0x800]`** — bit 11 of the status word is HEXED. Five of five casts, identical.
+- **Empathy's trigger damage** (P13's substance): the first time the hexed foe swings, retail
+  first **declares the foe's maximum, `0x009F [42, foe, 25]`**, then sends **`0x00A3 [55, foe,
+  9, −0.4]`** — the armour-ignoring channel, a NEGATIVE fraction, 0.4 × 25 = 10 = Empathy's
+  rank-0 damage, source the hexer. That is the unit-setup study's "health-max is a rare
+  mid-combat correction" explained: the server sends prop 42 exactly when a fraction on that
+  body has to resolve to a number. A hatchling's maximum is 25.
+- **P14 CONFIRMED.** Ether Feast: `0x00A3 [55, 9, 9, 0.68]` at 675.0, 700.9, 720.3 — 0.68 ×
+  88 = 60 = 3 × 20 at Inspiration 0; the foe's energy loss is invisible, as predicted. Heals
+  ride the TARGETED float `0x00A3` with source = self, not `0x00A2`.
+- Wand strikes: `0x00A3 [16, foe, 9, −frac]` after `0x00A7 [foe, n, 1]`; the enemy's attack
+  speed pair `0x0035 [foe, 1.75, 1.0]` is declared when a foe first swings (three sightings).
+
+### 10.7 Leg G — the gates, the shrine, the cinematic, the quiet controls
+
+- **MANTID-Q5, the cinematic: `0x0105 []` once**, at t=117.877 on the FIRST world connection,
+  in the same frame as `0x0022 [8, 1]`, `0x0099 [212, 0]` and then `0x01A5 [24 B, …, 212, 1,
+  …]` — an instance transfer; the client answered `0x0008` and reconnected 0.25 s later. So the
+  intro cinematic ENDS with a map transfer to a fresh instance of the same map 212, and the
+  player was **removed and re-created three times on the cinematic connection** (`0x0021 [8]`
+  at 73.9 and 76.9, re-created each time) — the camera cuts. `0x0101` never appeared. The
+  operator's `arrive` mark (74.4) fell inside the cinematic.
+- **MANTID-Q4: gadgets are agents of kind 3, and their state is `0x0111 [id, a, b]` +
+  `0x010E [id, state, n]`.** The cinematic frame creates three kind-3 agents (`0x0020 [3, 3545,
+  3, …]`, `[5, 3547, 3, …]`, `[6, 18, 3, …]`) each followed by its `0x0111`/`0x010E` pair. The
+  tutorial's gates: `0x010E [24771, 9, 3]` at 321.3 (declared), **`[24771, 1, 0]` at 391.2 —
+  step `gate2`, the gate opening**; `[54727, 16, 2]`/`[42127, 16, 2]` at 309.1 with `0x0111 [·,
+  0, 1]` a second later (the first gate); `[122, 16, 2]` at 385.2; `[64556, 16, 2]` at 621.2.
+  Both opcodes are `name: null`. **The shrine sent nothing** in its window beyond Ng's dialog
+  (`0x0080`/`0x0081`/`0x007E`) — its glow is either client-side or was already active.
+- **P15 half right.** Looking around (step `look`) sent only the heartbeat and the click on Ng.
+  Opening the log sent `0x0012` (§10.1) and a c2s **`0x002B COMPASS_DRAW [7, [589798]]`**.
+- **P16 wrong by two.** The tutorial itself was one connection from the second entry to Ludo;
+  but creation → Overlook → cinematic → transfer makes **three** channels before it.
+- **Level 0 is the ABSENCE of a level.** Prop 36 appears six times on the tutorial channel,
+  all value 1 (the player and the henchmen); **no hatchling ever received prop 36** — the
+  first hatchling (23) got `0x00F0`, `0x0020` (kind 9), `0x006D [23, 0, 0]`, and a `prop 42 =
+  1` right before its death. GWW's "level 0" is a body the server sends no level for.
+- The tutorial's still stretches are the control they were meant to be: the pre-kill steps
+  carry nothing but `0x001E`, the 5 s `0x000C`/`0x000D` pair, and Ng's dialog.
+
+### 10.8 A decoder fault this capture exposed, and what it costs
+
+The Monastery channel's **c2s** stream stops at offset 31 of 1,303 bytes: `array8 count 116
+exceeds declared cap 112` on **c2s `0x0092`**, the fifth client message after the map load
+(`0x0091`, `0x0088`, `0x0090`, `0x0012`, then `0x0092`). The s2c side decodes to its final
+byte (907 messages). Everything the operator SENT in the Monastery — Ludo's dialog, the
+logout — is undecoded until the schema's cap on `0x0092`'s array8 is re-derived from the
+client (`msgshape`). Filed as a follow-up, not fixed here.
+
+### 10.9 What this capture leaves for the schema, and the joins worth keeping
+
+`name: null` rows this run witnessed with a readable shape: **`0x00D9`** (bar slot write
+`[agent, slot, skill, 0]`, 3 sightings), **`0x00DC`** (`[skill, 1]`, 3), **`0x010E`/`0x0111`**
+(gadget state, 32/26), **`0x0105`** (cinematic end → transfer, 1), **`0x006F`** (one-slot
+equipment `[agent, slot, item]`, 1), **`0x0135`/`0x0159`/`0x0168`** (ground item drop and
+pickup, 1 each), **`0x00A4`/`0x00A7`** (the foe's attack pre-/post-words), c2s **`0x003F`**
+(pickup `[agent, 0]`) and **`0x0030`** (equip `[item]`). Each needs its `overrides.json` row
+with this capture as the witness, under the SMSG naming method. The joins to promote:
+`tut_census.py` (per-capture shape counts) → `questjoin.py`; the hex join of §10.6 (press →
+announcement → landing → the foe's first swing) as a `hexjoin.py`.
+
+**Labels.** Everything in §10 is OBSERVED on one tape (n = 1 per shape unless a count is
+given); the hex and the grant shapes are 5/5 and 3/3 within it. `WIKI` supplied the rank-0
+numbers (Empathy 10, Ether Feast 60) that the fractions resolved to.
