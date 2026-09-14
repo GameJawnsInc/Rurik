@@ -3466,7 +3466,14 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   player is already inside it so nothing divides by zero -- and that with NO mesh
   `interact_route` returns False, sends nothing, and the out-of-range interact is held
   alone with no 0x002B. `test_quests` §? pins the reward's TWO paragraph breaks (a blank
-  line, the owner's reading of stock).
+  line, the owner's reading of stock). **SLICE-F43 (2026-09-14), §7 +3, floor 527 → 530:**
+  the wipe sends `0x0180 INSTANCE_COUNTDOWN [0x575, 5, 0, 10000]` three times 0.58 s after
+  the LAST death and nothing else, once per wipe (a second tick re-sends nothing); the rise
+  comes at the countdown's expiry (`WIPE_RESURRECT_AFTER` 10.58 s, derived from the
+  countdown, no longer a pinned 11.4); and the shrine batch OPENS with `0x017E
+  INSTANCE_COUNTDOWN_STOP []` — retail's shape at 330.22 / 340.21 s on the hero tape.
+  Without the countdown our client left the instance on its own 9.8 s after the last death
+  (harness `20260914T090247`); with it the party stands up in the corridor (`140406`).
   `toolkit/authsrv/test_transfer.py` (SLICE-B8, the TRANSFER SENT BY US -- everything a
   zoning run would otherwise measure for the first time. A `[portal.*]` row fires only for a
   player who LEFT it (armed outside radius x 1.25, so an arrival point inside the circle

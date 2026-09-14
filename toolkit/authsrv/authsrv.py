@@ -2619,6 +2619,17 @@ GAME_SMSG_CHARACTER_UPDATE_INFO = 0x0030
 GAME_SMSG_INSTANCE_MANIFEST_PHASE = 0x0198
 GAME_SMSG_INSTANCE_MANIFEST_DONE = 0x0197
 GAME_SMSG_INSTANCE_LOAD_FINISH = 0x018E
+# [string16 label (ONE coded code unit), byte kind, dword, dword ms] -- the
+# client's countdown, INSTANCE_COUNTDOWN in overrides.json (studies/newopcodes).
+# SLICE-F43: retail's party wipe sends it 0.58 s after the last death, kind 5,
+# 10000 ms, and the shrine batch lands when it expires; without it our client
+# left the instance on its own 9.8 s after the last death (0x0008).
+GAME_SMSG_INSTANCE_COUNTDOWN = 0x0180
+# [] -- INSTANCE_COUNTDOWN_STOP (overrides.json, the client's own pairing with
+# 0x0180). Retail's shrine batch OPENS with it (340.21 s, 1 of 1), which is
+# what takes the "Time until resurrection" panel down; ours left it at 00:00
+# on harness 20260914T140406 until this was sent (SLICE-F43.4).
+GAME_SMSG_INSTANCE_COUNTDOWN_STOP = 0x017E
 
 # Nothing we sent ever put a body in the world. The client asks for everything it
 # knows to ask for, we answer all of it, and it stops at 100% because there is no
@@ -3889,7 +3900,24 @@ HERO_WIRE_POOLS = True         # False (--hero-silent-pools): the pre-JARIN sile
 # same for the observer). The delay is the median of the four: 10.0, 12.2,
 # 12.8, 10.6 s.
 WIPE_SHRINE = True             # False (--no-wipe-shrine): the timer stands the player up where it fell.
-WIPE_RESURRECT_AFTER = 11.4    # seconds from the last death to the shrine.
+# SLICE-F43 (2026-09-14): THE DELAY IS A COUNTDOWN THE CLIENT IS TOLD. On the
+# hero tape retail sent `0x0180 INSTANCE_COUNTDOWN ["յ", 5, 0, 10000]`
+# three times, 0.58 s after the last death, and the shrine batch landed at
+# +10.57 s -- the countdown's expiry. The four wipes' "10.0 / 12.2 / 12.8 /
+# 10.6" were never one number: the corpus's other countdowns of kind 5 carry
+# 12000 ms (4 of them, the 12.x wipes) and 10000 (7). Our client, told nothing,
+# LEFT the instance on its own 9.8 s after the last death (c2s 0x0008,
+# gamesrv 20260914T090314 -- 289.64 s -> 299.45 s, heartbeats only between),
+# before the old 11.4 s rise could reach it. So the wipe now sends the
+# countdown at WIPE_COUNTDOWN_AFTER and rises at its expiry; the label word is
+# the tape's own single code unit (a string reference, resolved by the client).
+# Three copies because the tape carries three for a two-member party; what
+# each copy addresses is UNREAD.
+WIPE_COUNTDOWN_AFTER = 0.58    # seconds from the last death to the countdown (the tape's 330.22 - 329.64)
+WIPE_COUNTDOWN_MS = 10000      # the countdown the wipe sends (the tape's; 12000 on the 12.x-second wipes)
+WIPE_COUNTDOWN_WORD = "\u0575"  # the label's one coded code unit (0x575) on all 7 ten-second countdowns
+WIPE_COUNTDOWN_COPIES = 3      # the tape's count, meaning UNREAD
+WIPE_RESURRECT_AFTER = WIPE_COUNTDOWN_AFTER + WIPE_COUNTDOWN_MS / 1000.0   # 10.58 s: the countdown's expiry
 # ZONE_CARRY_ON: the hero's aiMode persisted into the next instance's 0x0072
 # (Avoid clicked at 510.66 s, [6, 324, 157, 2] at 651.62 s); the death
 # penalty was CLEARED on the outpost load (0x009C 100 for both). State is per
@@ -18368,6 +18396,11 @@ def wipe_to_shrine(send, state, conn_id):
     everyone raised at full health with the maxima kept (52/55 = 1.0) and
     the flags bytes 5 / 9. No 0x01D8 -- 0 of 2 retail wipes."""
     sx, sy, spl = shrine_point(state)
+    # SLICE-F43.4: retail's batch OPENS with the countdown stop (340.21 s, 1 of
+    # 1) -- the "Time until resurrection" panel came down with it on retail
+    # and stayed at 00:00 on ours until this was sent.
+    send(GAME_SMSG_INSTANCE_COUNTDOWN_STOP, [],
+         "the wipe: the countdown stops (0x017E) [SLICE-F43]")
     send(GAME_SMSG_AGENT_MOVE_DIRECTION, [PLAYER_AGENT_ID, (1.0, 0.0), 1],
          "the wipe: the player faces the shrine's way [JARIN]")
     send(GAME_SMSG_AGENT_UPDATE_POSITION, [PLAYER_AGENT_ID, [sx, sy], spl],
@@ -20980,7 +21013,22 @@ def player_revive_due(send, state, conn_id):
         last = max([state["player_died_at"]]
                    + [float(r.get("died_at") or 0.0) for _a, r in bodies
                       if r.get("dead")])
-        if time.time() - last < WIPE_RESURRECT_AFTER:
+        now = time.time()
+        # SLICE-F43: the countdown FIRST, WIPE_COUNTDOWN_AFTER after the last
+        # death, once; the rise at its expiry. Without it the client left the
+        # instance on its own 9.8 s after the last death (0x0008).
+        if state.get("wipe_countdown_for") != last:
+            if now - last < WIPE_COUNTDOWN_AFTER:
+                return
+            for _i in range(WIPE_COUNTDOWN_COPIES):
+                send(GAME_SMSG_INSTANCE_COUNTDOWN,
+                     [WIPE_COUNTDOWN_WORD, 5, 0, int(WIPE_COUNTDOWN_MS)],
+                     f"INSTANCE_COUNTDOWN(the wipe: {WIPE_COUNTDOWN_MS} ms to "
+                     f"the shrine) [SLICE-F43]")
+            state["wipe_countdown_for"] = last
+            state["wipe_countdown_at"] = now
+            return
+        if now - state["wipe_countdown_at"] < WIPE_COUNTDOWN_MS / 1000.0:
             return
         wipe_to_shrine(send, state, conn_id)
         return

@@ -2461,7 +2461,13 @@ in the map file** whose state the server flips, and the corridor's authored map 
 table — which is why the client asked to leave on the wipe (40.1) and what a shrine for the
 corridor would take: a prop entry in the map (the presentation gap's territory), then the
 pair at load. Which of the six is the shrine near (18527, 1372) cannot be read off the wire;
-`0x0111`/`0x010E` carry no position. Recorded, not shipped.
+`0x0111`/`0x010E` carry no position. Recorded, not shipped. **Withdrawn as the wipe's blocker
+2026-09-14 (F43):** the client left because it was told no COUNTDOWN, not because the map had
+no shrine; told `0x0180 [0x575, 5, 0, 10000]` it waits and stands up in the corridor. And the
+shrine batch shows the gadgets as kind-3 AGENTS the server creates (`0x0020 [9, 34, 3, …]` at
+(18493, 1306) with `0x0111 [63755, 0, 0]` / `0x010E [63755, 1, 1]`, 60 u from the rise point),
+so a visible shrine is a server-created agent plus a class id the map's own tables resolve —
+not a props-chunk entry.
 
 **Corrections on the way.** `studies/heroes/FINDINGS.md` §11.3 carries the retail creator
 (`0x0073`); authsrv's "6 of 6 `0x00E3` name the player" and `effect_list_visible`'s "for want
@@ -2585,6 +2591,86 @@ OBSERVED on our client (38797) against our server. `0x10000039` as the create ev
 and is labelled as such. Nothing shipped: the ladder row moves to DONE and heroes §11.3 gets
 the line. Not read: what the two five-dword blocks in the record are (the wire's u32 pair and
 skills are the obvious candidates; the copy is from arguments, not from the message directly).
+
+## SLICE-F43 — **the wipe's leave was a missing COUNTDOWN, not a missing shrine: retail sends `0x0180 INSTANCE_COUNTDOWN [յ, 5, 0, 10000]` 0.58 s after the last death and rises at its expiry; shipped, and the party now stands up in the corridor with "Time until resurrection" on screen (2026-09-14)**
+
+**Where this started.** F40.1 read the client's `0x0008` after our corridor wipe as "a party that
+cannot be raised returns to its outpost", and F40.2 costed the fix as a shrine PROP in the
+authored map — the presentation gap's territory. Both were wrong in the same way: nobody had
+looked at the seconds between the last death and the leave.
+
+### 43.1 Ours, to the tenth: the client waited 9.8 s and left with nothing said to it
+
+Capture `gamesrv/authsrv-20260914T090314-c1` (F40.1's `090247` run): Tahlkora `KILL agent 200`
+at 274.52 s, the player's killing blow at 289.64 s, then **only heartbeats** (`CLIENT_PERF` /
+`LATENCY_REPORT` at 292.6 and 297.6) until the client's `0x0008` at **299.45 s — 9.81 s after
+the last death**. Our `wipe_to_shrine` was due at 11.4 s. So the shrine batch, had it been
+faithful to the byte, would still have arrived 1.6 s after the client had gone.
+
+### 43.2 Retail, to the tenth: a countdown at +0.58 s, the shrine batch at its expiry
+
+The hero tape (`20260914T005758`, the Plains connection): Koss `0x0026 [30, 8]` at 307.83 s;
+the player's death batch at **329.64 s** (`[8, 29, 1]`, 41/42, `0x002D [29]`, `0x0026 [29,
+4]`); at **330.22 s** — 0.58 s later — **three copies of `0x0180 [յ, 5, 0, 10000]`**; and at
+**340.21 s** — 10.57 s after the death, 9.99 s after the countdown — the shrine batch: `0x017E
+[]`, `0x00BA []` ×3, the gadgets re-created as kind-3 agents with their `0x0111`/`0x010E` pairs,
+the hostiles removed, the player and Koss hard-set to the shrine (`0x002C`), both raised. The
+client sent nothing but its heartbeat throughout.
+
+`0x0180`'s string field is ONE coded code unit, `0x575`, on all seven ten-second countdowns in
+the corpus; the other kinds the corpus holds are `[0x573, 5, 0, 12000]` ×4, `[0x576, 5, N,
+30000]` ×4, `[0x7b56, 5, 0, 60000]` ×2, `[0x56b, 4, 0, 180000]` and `[0x569, 4, 0, 0]` ×3 — the
+last at the 30-second ones' expiry, a clear. **And F40's "the delay is the median of 10.0 /
+12.2 / 12.8 / 10.6" was never one number:** the 12.x wipes are the `12000` countdowns. The rule
+is *rise when the countdown you sent expires*; which countdown a map gets is the server's.
+
+### 43.3 Shipped, and pressed on the client
+
+`GAME_SMSG_INSTANCE_COUNTDOWN = 0x0180`; `player_revive_due`'s wipe branch sends the countdown
+once, `WIPE_COUNTDOWN_AFTER` (0.58 s) after the last death — three copies, the tape's count,
+what each addresses UNREAD — and `wipe_to_shrine` fires at `WIPE_COUNTDOWN_MS` (10000) after
+it; `WIPE_RESURRECT_AFTER` is now that sum (10.58 s), not a pinned 11.4. The label word is the
+tape's code unit, committed as a string reference the client resolves. `test_agentlife` §7 (+2,
+floor 529): the countdown and nothing else at 5 s, once per wipe, the rise at its expiry.
+
+Harness `20260914T140406` (F40.1's recipe, `--enemy-hit 0.9`, the walk long enough for a
+level-3 Monk to die under her own Orison), predictions first — three countdowns 0.58 s after
+the last death, no `0x0008`, the party standing at 10.58 s:
+
+| t (s) | measured |
+|---|---|
+| 274.56 | `KILL agent 200` |
+| 293.78 | `KILL the player` |
+| 294.39 | `INSTANCE_COUNTDOWN(10000 ms)` ×3 — +0.61 s |
+| 304.41 | `the wipe: the player stands at the shrine (1536,1536)`, flags 9 / 5 — +10.63 s after the death, +10.02 after the countdown |
+| 393.68 | the only `0x0008`: the harness's own teardown, 89 s later |
+
+`walk4-shot.png`: both bodies standing, health 140, and a panel reading **"Time until
+resurrection: 00:00"** — the client drew the countdown from our message and counted it down.
+
+### 43.4 What this settles and what it leaves
+
+- **Settled:** the leave was the client's own rule for a death with no countdown told;
+  told one, it waits for the expiry. No shrine prop was needed for the party to stand up in
+  the authored corridor. F40.2's "what a shrine for the corridor would take" is withdrawn as
+  the blocker; it remains what a VISIBLE shrine would take.
+- **Residual, cosmetic — then shipped in the same pass:** the panel stayed at `00:00` after
+  the rise. Retail's batch opens with `0x017E []`, which `overrides.json` already names
+  **INSTANCE_COUNTDOWN_STOP** (the client's own pairing with `0x0180`), then `0x00BA []` ×3
+  (unnamed) before the re-instancing. `wipe_to_shrine` now sends the stop first
+  (`GAME_SMSG_INSTANCE_COUNTDOWN_STOP`, `test_agentlife` §7 +1). Its effect on the panel is
+  UNOBSERVED — the run above predates it; the corpus's kind-4 `[0x569, 4, 0, 0]` at the
+  30-second countdowns' expiry is the other candidate.
+- **The gadgets** (`0x0111`/`0x010E`): their workers live in `Map` (`Map.cpp:1195` pathArray,
+  `:2760` renderModels) and key on ids that recur across maps (54727 on the tutorial, Kamadan
+  and the Plains) — a class id resolved against the map's own tables, not an agent id; the
+  props chunk (`props.py`) carries no such id. A shrine that RENDERS is therefore still the
+  arc F40.2 costed; the wipe no longer needs it.
+
+**Labels.** 43.1 and 43.3 OBSERVED on our client against our server (build 38797, the slice
+archive); 43.2 OBSERVED on retail's wire (n = 1 wipe on this tape, the countdown shape n = 7
+across the corpus); "rise when the countdown expires" is CORROBORATED by the 12.x wipes
+matching the 12000 countdowns and by our client waiting exactly as long as we told it.
 
 ## SLICE-F6 — what the desk cannot settle
 

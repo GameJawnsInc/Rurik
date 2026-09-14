@@ -2529,7 +2529,7 @@
    "384": {
     "opcode": 384,
     "name": "INSTANCE_COUNTDOWN",
-    "why": "3 sightings -- the proposal said two and missed a byte-adjacent duplicate at 183756/52294 idx 1201 and 1202. SOURCED: worker 0x0084FC30 allocates a 0x10-byte object through the client's own debug allocator tagged with a literal source path, so the client names this subsystem itself. Name UPSTREAM at delta 0 in both lineages. studies/newopcodes/FINDINGS.md",
+    "why": "3 sightings -- the proposal said two and missed a byte-adjacent duplicate at 183756/52294 idx 1201 and 1202. SOURCED: worker 0x0084FC30 allocates a 0x10-byte object through the client's own debug allocator tagged with a literal source path, so the client names this subsystem itself. Name UPSTREAM at delta 0 in both lineages. studies/newopcodes/FINDINGS.md MEASURED 2026-09-14 (slice F43): wire [string16 label = ONE coded code unit, byte kind, dword, dword ms]. On the party wipe retail sends [0x575, 5, 0, 10000] three times 0.58 s after the last death and the shrine batch lands at the countdown's expiry (+9.99 s); the corpus's other shapes are [0x573, 5, 0, 12000] x4 (the 12.x-second wipes), [0x576, 5, N, 30000] x4, [0x7b56, 5, 0, 60000] x2, [0x56b, 4, 0, 180000] and [0x569, 4, 0, 0] x3 at a 30-second countdown's expiry (a clear). Our client, told no countdown after a wipe, LEFT the instance on its own 9.8 s after the last death (c2s 0x0008); told one, it drew 'Time until resurrection' and waited for the rise (harness 20260914T140406). The server sends it from player_revive_due's wipe branch.",
     "name_confidence": "high"
    },
    "405": {

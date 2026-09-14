@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=527)   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=530)   # SLICE-F43 +3 (the wipe countdown and its stop), from the green run   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
 def section_weapon_damage():
@@ -6591,13 +6591,28 @@ def section_hold_plane():
                   "a live party body holding a resurrection: NO timer -- the signet "
                   "raises the player (F28 5 of 5; the hero's at 599.43 s)", f"{sent}")
         st4["agents"][HERO]["skills"] = ((322, 0.0, 3.0),)
-        st4["agents"][HERO].update(dead=True, died_at=time.time() - 5.0)
+        st4["agents"][HERO].update(dead=True, died_at=time.time() - 0.2)
         authsrv.player_revive_due(send, st4, 0)
         LEDGER.ok(sent == [] and st4["player_dead"],
-                  "everyone down 5 s ago: not yet -- the shrine comes "
-                  f"{authsrv.WIPE_RESURRECT_AFTER} s after the LAST death (the tape's "
-                  "10.0 / 12.2 / 12.8 / 10.6)", f"{sent}")
-        st4["agents"][HERO]["died_at"] = time.time() - 20.0
+                  "everyone down 0.2 s ago: nothing yet -- the countdown goes out "
+                  f"{authsrv.WIPE_COUNTDOWN_AFTER} s after the LAST death (the tape's "
+                  "330.22 - 329.64)", f"{sent}")
+        st4["agents"][HERO]["died_at"] = time.time() - 5.0
+        authsrv.player_revive_due(send, st4, 0)
+        _cd = [v for op, v in sent if op == authsrv.GAME_SMSG_INSTANCE_COUNTDOWN]
+        LEDGER.ok(len(sent) == authsrv.WIPE_COUNTDOWN_COPIES == 3
+                  and all(v == ["յ", 5, 0, 10000] for v in _cd)
+                  and st4["player_dead"],
+                  "everyone down 5 s ago: THE COUNTDOWN and nothing else -- 0x0180 "
+                  "[the tape's one code unit 0x575, 5, 0, 10000 ms], three copies as "
+                  "the tape (SLICE-F43); the rise waits for its expiry",
+                  f"{[(hex(op), v) for op, v in sent]}")
+        sent.clear()
+        authsrv.player_revive_due(send, st4, 0)
+        LEDGER.ok(sent == [] and st4["player_dead"],
+                  "a second tick re-sends nothing -- one countdown per wipe",
+                  f"{sent}")
+        st4["wipe_countdown_at"] = time.time() - (authsrv.WIPE_COUNTDOWN_MS / 1000.0 + 0.5)
         authsrv.player_revive_due(send, st4, 0)
         ops = [op for op, _v in sent]
         _pos = st4["agents"][HERO]["pos"]
@@ -6618,6 +6633,11 @@ def section_hold_plane():
                   "with its weapons re-declared (0x0021, 0x0020, 0x006D), both rise "
                   "with the flags bytes 9 and 5, and no PARTY_DEFEATED",
                   f"{[hex(o) for o in ops]}, pos {st4['pos']}, hero {_pos}")
+        LEDGER.ok(ops and ops[0] == authsrv.GAME_SMSG_INSTANCE_COUNTDOWN_STOP
+                  and sent[0][1] == [] and ops.count(authsrv.GAME_SMSG_INSTANCE_COUNTDOWN_STOP) == 1,
+                  "and the batch OPENS with 0x017E INSTANCE_COUNTDOWN_STOP [] (retail's "
+                  "340.21 s, 1 of 1) -- what takes the 'Time until resurrection' panel "
+                  "down (SLICE-F43.4)", f"{[hex(o) for o in ops[:4]]}")
         authsrv.WIPE_SHRINE = False
         st5 = _jw(player_dead=True, player_died_at=time.time() - 20.0)
         st5["agents"][HERO] = _koss(dead=True, died_at=time.time() - 20.0)
