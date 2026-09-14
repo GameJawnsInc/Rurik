@@ -2109,7 +2109,7 @@ The Kamadan load, in order, one frame (37.73 s):
 ```
 0x0037 [708, 6, 10]   0x00B7 [708, 2, 0, 0]   0x00DA [708, bar]   0x009F [42, 708, 1]   0x009C [708, 100]   0x003A [708, attrs]   0x009F [42, 708, 140]      -- the PLAYER
 0x0037 [117, 6, 10]   0x00B7 [117, 1, 0, 0]   0x00DA [117, [322, 382, 348, 1, 385, 346, 0, 2]]   0x009F [42, 117, 140]   0x009C [117, 100]   0x003A [117, [20, 21, 2, 1, 2, 1]]   -- the HERO, the same block
-0x0072 [6, 117, 200, 0]                        -- HeroActivate (hero 6, agent, inventoryId, aiMode)
+0x0072 [6, 117, 200, 0]                        -- HeroActivate (hero 6 = Koss, the owner's word; agent, inventoryId, aiMode)
 0x009F [36, 708, 3]  0x009F [36, 117, 3]  0x00A6 [117, 1, 0]
 0x01D2 [86]  0x01CB [86, 72, 1]  0x01C2 [86, 72, 117, 6, 3]  0x01D3 [86]  0x01B2 [86, 1]   -- the party build
 ```
@@ -2125,7 +2125,7 @@ delivered at load exactly as heroes §15.1 found it accepted; opening the hero p
 `panel`) sent nothing beyond the town's c2s cadence (`0x0009` ×2 in 12.5 s, 10 in 50 s).
 **`0x0072`'s fields:** `inventoryId` 200 / 5 / 157 (per instance); **`aiMode` 0 / 0 / 2 — the
 return to Kamadan carries the last stance clicked in the field (Avoid, 510.66 s)**, so the mode
-persists across the zone. `0x01C2 [party, member, heroAgent, heroIndex, level]`: 6 and 3.
+persists across the zone. `0x01C2 [party, member, heroAgent, heroIndex, level]`: 6 and 3 — **hero index 6 is Koss** (the owner), which agrees with the catalogue's numbering that puts Tahlkora at 3 (`[party.slice]`).
 `0x0199 [member, map, explorable, …]`: `[72, 449, 0]`, `[1, 430, 1]`, `[90, 449, 0]` — the first
 word is the party-member number `0x01CB` also carries, not an agent.
 

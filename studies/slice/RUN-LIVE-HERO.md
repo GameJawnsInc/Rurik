@@ -213,7 +213,8 @@ game channels (Kamadan 449 → Plains of Jarin 430 → Kamadan), every direction
 last byte. The owner's three notes after the run: no F11 on the hero's Frenzy casts (joined by
 `0x0042 [hero, 346]` instead — 17 applies), the party flag placed before the hero flag (read in
 the order played), and the hero's Resurrection Signet was cast on the player. The single F11
-(427.5 s, during step `lock`, while the hero walked to the locked target) is unannotated. The
+(427.5 s, during step `lock`) was, per the owner afterwards, a note that Frenzy is not on the
+player's bar (*"i think ... but i forget exactly"*). The hero is Koss (index 6). The
 Ranger has no secondary profession, so step `frenzyme` was skipped with two F9s as written.
 The wire is in [FINDINGS.md](FINDINGS.md) SLICE-F39.
 
