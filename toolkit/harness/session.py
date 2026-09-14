@@ -434,6 +434,19 @@ def parse_walk(text):
                 raise SystemExit(f"walk step {spec!r}: attack wants an agent id")
             steps.append(("attack", str(agent_id), 0.0))
             continue
+        if head == "skill":
+            # skill:ID[,TARGET] -- press a skill for the player, mid-plan.
+            # A walk verb for the same reason attack: is one (frames and
+            # the episode overlap by construction), and NOT INPUT for the
+            # reason control.request_skill records: no scripted key press
+            # has reached the bar on this rig.
+            sid, _, tgt = arg.partition(",")
+            try:
+                sid, tgt = int(sid, 0), int(tgt or "0", 0)
+            except ValueError:
+                raise SystemExit(f"walk step {spec!r}: skill wants ID[,TARGET]")
+            steps.append(("skill", f"{sid},{tgt}", 0.0))
+            continue
         if head == "steer":
             parts = arg.split(",")
             if len(parts) != 3:
@@ -640,6 +653,11 @@ def walk_legs(proc, legs, outdir, warn=3.0, settle=1.5, shot_every=0.0):
             # happen. See harness/control.py request_attack.
             control.request_attack(int(key))
             did = 1.0
+        elif kind == "skill":
+            # NOT INPUT -- the third mailbox. See control.request_skill.
+            sid, _, tgt = key.partition(",")
+            control.request_skill(int(sid), int(tgt or 0))
+            did = 1.0
         elif kind == "hover":
             fx, fy = (float(p) for p in key.split(","))
             did = value if dc.hover(hwnd, proc.pid, fx, fy, value) else 0.0
@@ -762,6 +780,11 @@ def run_client(a, outdir):
                 # the swing, the armour term, the critical and the number the
                 # client draws are all real; the click is not.
                 control.request_attack(int(parts[2]))
+                delivered = True
+            elif kind == "skill":
+                # Third mailbox; see control.request_skill. Not a key.
+                sid, _, tgt = parts[2].partition(",")
+                control.request_skill(int(sid, 0), int(tgt or "0", 0))
                 delivered = True
             elif kind == "click":
                 fx, fy = (float(v) for v in parts[2].split(","))

@@ -64,7 +64,7 @@ import checks  # noqa: E402
 # measure, for the same two vault-dependent skips as before.
 # FLOOR: 141, MEASURED from a green run 2026-08-17 after section 10 gained
 # the camera-verb checks -- set from the run's own count, never arithmetic.
-LEDGER = checks.Ledger("harness", floor=165)   # 1z-cw: +2, the steer verb; 2026-09-14: +6, test_client_build
+LEDGER = checks.Ledger("harness", floor=170)   # 1z-cw: +2, the steer verb; 2026-09-14: +6, test_client_build; +5, the skill slot
 check = checks.adopt_named(LEDGER)
 
 
@@ -389,6 +389,20 @@ def test_interact_control():
     check("two requests before a read leave the LAST one, not a queue",
           control.take_interact() == 2)
     check("and nothing behind it", control.take_interact() is None)
+
+    # 2026-09-14: the skill slot, same contract, a (skill, target) pair.
+    check("the skill slot reads empty", control.take_skill() is None)
+    control.request_skill(346)
+    check("a skill press round-trips with target 0 by default",
+          control.take_skill() == (346, 0))
+    control.request_skill(322, 90)
+    check("and carries a target when given one",
+          control.take_skill() == (322, 90))
+    check("and is read-and-clear", control.take_skill() is None)
+    control.request_skill(1)
+    control.clear()
+    check("clear() drops a pending skill press too",
+          control.take_skill() is None)
 
     control.request_interact(7)
     control.clear()

@@ -60,6 +60,18 @@ SLOT = os.path.join(vault_path("harness-control"), "interact")
 # Separate slot rather than a shared one, because "talk to it" and "hit it" are
 # different orders and a run should not be able to fire one meaning the other.
 ATTACK_SLOT = os.path.join(vault_path("harness-control"), "attack")
+# A THIRD SLOT, for PRESSING A SKILL, added 2026-09-14 after seven harness
+# launches could not get a skill key to the bar: `key:6` / `vk:` / a held
+# `6:0.3` all reached the CLIENT (an Escape sent the same way produced a
+# 0x0028 cancel on the wire) and none produced a 0x0046 -- on run/slice and
+# on the 2026-07-29 build alike, the chat input sat open at world entry and
+# took the digit, and the one run where a key press ever did reach the bar
+# (20260822T114206, key:1) is not reproducible today. Same caveat as the two
+# above: the server runs handle_skill_press, the very arm 0x0046 lands in,
+# so the activation, the resource gate, the effect and every message the
+# client draws are real; the KEY PRESS is what did not happen, and with it
+# the client's own decision to send 0x0046.
+SKILL_SLOT = os.path.join(vault_path("harness-control"), "skill")
 
 
 def _ensure_dir():
@@ -93,6 +105,35 @@ def request_attack(agent_id):
     with open(tmp, "w", encoding="utf-8") as fh:
         fh.write(str(int(agent_id)))
     os.replace(tmp, ATTACK_SLOT)
+
+
+def request_skill(skill_id, target=0):
+    """Driver side: ask the server to PRESS `skill_id` for the player, at
+    `target` (0 = self / no target, the payload retail's client sends for a
+    stance -- 0x0046 [380, 0, 0, 0] on 20260913T185746)."""
+    _ensure_dir()
+    tmp = SKILL_SLOT + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(f"{int(skill_id)},{int(target)}")
+    os.replace(tmp, SKILL_SLOT)
+
+
+def take_skill():
+    """Server side: the pending (skill_id, target), or None. Read-and-clear."""
+    try:
+        with open(SKILL_SLOT, encoding="utf-8") as fh:
+            raw = fh.read().strip()
+    except FileNotFoundError:
+        return None
+    try:
+        os.remove(SKILL_SLOT)
+    except OSError:
+        pass
+    try:
+        a, _, b = raw.partition(",")
+        return int(a), int(b or 0)
+    except ValueError:
+        return None
 
 
 def take_attack():
@@ -141,7 +182,7 @@ def clear():
     session's first seconds, which is the kind of ghost that gets blamed on the
     protocol.
     """
-    for slot in (SLOT, ATTACK_SLOT):
+    for slot in (SLOT, ATTACK_SLOT, SKILL_SLOT):
         try:
             os.remove(slot)
         except OSError:

@@ -23991,6 +23991,39 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             print(f"[c{conn_id}] harness attack failed: "
                                   f"{type(exc).__name__}: {exc}", flush=True)
 
+                    try:
+                        pressed = control.take_skill()
+                    except OSError:
+                        pressed = None
+                    if pressed is not None:
+                        # Same mailbox family, third order (2026-09-14). The
+                        # payload is the one retail's client sends for a
+                        # self skill -- [0x8046, skill, copy 0, target, 0] --
+                        # handed to handle_skill_press, the arm 0x0046 lands
+                        # in, under the same dead-player guard the dispatch
+                        # arm applies. The KEY PRESS is what did not happen.
+                        _sk, _tg = pressed
+                        print(f"[c{conn_id}] HARNESS SKILL PRESS {_sk} at "
+                              f"{_tg} -- driven by the action script, NOT by "
+                              f"a key: handle_skill_press is the same arm "
+                              f"0x0046 lands in, so the activation, the gate "
+                              f"and every message are real; the press is "
+                              f"what did not happen.", flush=True)
+                        if state.get("player_dead"):
+                            print(f"[c{conn_id}] harness skill press "
+                                  f"dropped: the player is dead", flush=True)
+                        else:
+                            try:
+                                handle_skill_press(
+                                    [0x8000 | GAME_CMSG_USE_SKILL, _sk, 0,
+                                     _tg, 0],
+                                    send, state, conn_id, GAME_CMSG_USE_SKILL,
+                                    rec=rec)
+                            except Exception as exc:  # a probe must not die here
+                                print(f"[c{conn_id}] harness skill press "
+                                      f"failed: {type(exc).__name__}: {exc}",
+                                      flush=True)
+
                     # Anything the world owes on a timer goes here. Bodies get
                     # back up whether or not the player is moving, so this must
                     # be above the destination check that skips the rest.

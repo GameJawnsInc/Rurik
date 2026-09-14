@@ -68,7 +68,7 @@ Every one of these, in the order they were written:
   because it is stamped `validated_against_build 38797`, where 112 is correct),
   `toolkit/schema/test_catalog.py` (our message catalog vs. the client's own
   format tables — 477/477 GAME_SMSG agree field-for-field on build 38797),
-  `toolkit/harness/test_harness.py` (the one-command stack, the launch safety
+  `toolkit/harness/test_harness.py` (**2026-09-14 (night): the third control mailbox, `skill` — `request_skill` / `take_skill` round-trip a (skill, target) pair, default target 0, read-and-clear, dropped by `clear()`; +5, floor 165 → 170.** the one-command stack, the launch safety
   gate, the live capture tail, and the crash-dialog capture — which is the ONLY
   machine-readable evidence a client assert leaves: `Gw.log` does not record
   asserts, no dump file is written anywhere findable, and a ConnectionResetError

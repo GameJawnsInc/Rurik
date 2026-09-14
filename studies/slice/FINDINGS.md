@@ -2286,7 +2286,7 @@ cleared on an outpost load; (8) `0x0026` 8/9 on a body's death and rise; (9) the
 persisted into the next instance's `0x0072`. Left open: Frenzy's doubling (a player run), the
 hostile-target rule (n = 5), reason 1, the abeam offset, Healing Signet's shape. *(2026-09-14:
 the hostile-target rule and the abeam offset closed in F40.2; reason 1 was "dodge" all along —
-skills §44.3, corrected in 39.8 above. Open: Frenzy's doubling, Healing Signet's shape.)*
+skills §44.3, corrected in 39.8 above. Open: Frenzy's doubling, Healing Signet's shape. 2026-09-14 night: Healing Signet's shape shipped in F41; Frenzy's LOOPBACK half observed in F44 — retail's half still needs the owner's live run.)*
 
 ## SLICE-F40 — **JARIN-S: the hero tape's corrections, shipped — retail's rig without `0x0074`, the hero's pools and skill family on the wire, the resend with the start, the lock cleared at the kill, the wipe to the shrine, the zone carry**
 
@@ -2658,16 +2658,38 @@ resurrection: 00:00"** — the client drew the countdown from our message and co
   the rise. Retail's batch opens with `0x017E []`, which `overrides.json` already names
   **INSTANCE_COUNTDOWN_STOP** (the client's own pairing with `0x0180`), then `0x00BA []` ×3
   (unnamed) before the re-instancing. `wipe_to_shrine` now sends the stop first
-  (`GAME_SMSG_INSTANCE_COUNTDOWN_STOP`, `test_agentlife` §7 +1). Its effect on the panel is
+  (`GAME_SMSG_INSTANCE_COUNTDOWN_STOP`, `test_agentlife` §7 +1). ~~Its effect on the panel is
   UNOBSERVED — the run above predates it; the corpus's kind-4 `[0x569, 4, 0, 0]` at the
-  30-second countdowns' expiry is the other candidate.
+  30-second countdowns' expiry is the other candidate.~~ **OBSERVED the same night, §43.5:
+  the stop takes the panel down.**
+
+### 43.5 The stop, pressed on the client (2026-09-14, harness `20260914T155025`)
+
+The same recipe as 43.3, the only change the stop at the batch's head; predictions registered
+first (the 43.3 skeleton again; NO "Time until resurrection" panel on the post-rise shots; the
+stop sent once, first in the batch):
+
+| t (s) | measured |
+|---|---|
+| 253.48 | `KILL agent 200` |
+| 272.24 | `KILL the player` |
+| 272.85 | `INSTANCE_COUNTDOWN(10000 ms)` ×3 — +0.61 s |
+| 282.87 | `0x017E` first, then `0x002C` the shrine, the two raises — +10.63 s after the death, +10.02 after the countdown |
+| 385.91 | the only `0x0008`: the harness's own teardown, 103 s later |
+
+`walk4-shot.png` (~40 s after the rise) and `walk6-shot.png` (~65 s): both bodies standing at
+health 140, the party window's two rows, and **no countdown panel anywhere on the screen** —
+where 43.3's shot at the same step read "Time until resurrection: 00:00". So `0x017E` is what
+takes the panel down; the corpus's kind-4 `[0x569, 4, 0, 0]` clear is a different countdown's
+business (the 30-second ones) and is not needed here. Three of three predictions held. The
+residual is closed; H15 is OBSERVED in full.
 - **The gadgets** (`0x0111`/`0x010E`): their workers live in `Map` (`Map.cpp:1195` pathArray,
   `:2760` renderModels) and key on ids that recur across maps (54727 on the tutorial, Kamadan
   and the Plains) — a class id resolved against the map's own tables, not an agent id; the
   props chunk (`props.py`) carries no such id. A shrine that RENDERS is therefore still the
   arc F40.2 costed; the wipe no longer needs it.
 
-**Labels.** 43.1 and 43.3 OBSERVED on our client against our server (build 38797, the slice
+**Labels.** 43.1, 43.3 and 43.5 OBSERVED on our client against our server (build 38797, the slice
 archive); 43.2 OBSERVED on retail's wire (n = 1 wipe on this tape, the countdown shape n = 7
 across the corpus); "rise when the countdown expires" is CORROBORATED by the 12.x wipes
 matching the 12000 countdowns and by our client waiting exactly as long as we told it.
@@ -2685,3 +2707,90 @@ Carried so the next session does not re-read the same bytes hoping for more:
    is the right instrument for "does the client draw it" and no instrument at all for "is
    this what ArenaNet sends". Do not let a green loopback run get written up as the
    latter — that is `studies/method`'s standing weakness and this arc is not exempt.
+
+## SLICE-F44 — **Frenzy's doubling, the loopback half: our `damage_taken_multiplier` reaches the client as exactly 2.0× on 11 of 11 hits inside the stance, drawn as −3 against −1 — and the harness gained a `skill:` mailbox because no scripted key press reaches the bar (2026-09-14)**
+
+**What this can and cannot settle, said first.** F39.3's INCONCLUSIVE is about RETAIL — hits on
+Koss inside Frenzy on the JARIN tape (3 or 5 hp, n = 27) against two hits outside, which cannot
+separate a doubled 1–3 from a random 2–5. Only a live capture with the PLAYER using Frenzy can
+settle ArenaNet's rule, and that is the owner's hand at human cadence (F39: "a player Frenzy run
+can"). This section observes OUR rule (`content/world.toml` `[skill_effect.346]`
+`damage_taken_multiplier = 2.0`, WIKI) on a real client, which until today was
+`test_mechanics`-only.
+
+### 44.1 Seven launches that pressed nothing, and why
+
+Registered first: a lone level-1 Warrior (100 hp), the standing Hatcher at `--enemy-hit 0.03`
+then `0.01` with `--no-enemy-skills` (its default bar's skill 312 took 46 of 100 and killed the
+player before any press), Frenzy in slot 6 of the content bar, pressed twice.
+
+| launch | how the press was sent | what the client sent |
+|---|---|---|
+| `155829` | `--walk "6:0.3"` (a held key) | nothing — and the run was refused before it: `key:` is an action, not a walk step |
+| `160031` | `--walk "6:0.3"` | nothing |
+| `160328` | `--actions "42:key:6"` (press_vk, real scan code) | nothing — the player was dead at the press (killed at 38.5 s) |
+| `160607` | `key:6` ×2, `--enemy-hit 0.01` | nothing, player alive throughout |
+| `160919` | `vk:0x1B` then `key:6` ×2 | the Escape produced a `0x0028` cancel and a `0x0047` — keys DO reach the game — and the 6s still nothing |
+| `161346` | the 2026-07-29 build (whose `key:1` had produced a `0x0046` on 2026-08-22) | refused before launch: its archive's modification-in-progress bit was set; restored from `run-live/2026-09-01` per RUNBOOK's drift section (5 of 5 sampled MB identical) |
+| `161545` | the 2026-07-29 build, `key:6` ×2 | nothing |
+
+On every shot the chat window's input line reads "(Enter text here to chat)" from world entry
+onward, before any press (`155829`'s shot at `wait:8`), and on `161545` the press moved the
+chat tab to `# Team`. The digit goes to the chat UI, not the bar; what focuses the input at world
+entry on this rig is UNREAD (the 2026-08-22 run's shot shows the chat window in its expanded
+state with no input line, and that run is not reproducible today). Not pursued further: the
+question was Frenzy, not the harness's keyboard.
+
+### 44.2 The third mailbox: `skill:ID[,TARGET]`
+
+`toolkit/harness/control.py` gained `SKILL_SLOT` beside `interact` and `attack`, with the same
+contract and the same caveat: the server runs `handle_skill_press` — the very arm `0x0046`
+lands in — with the payload retail's client sends for a self skill (`[0x8046, skill, 0, target,
+0]`, the tape's `[380, 0, 0, 0]`), under the dispatch arm's own dead-player guard. Everything
+downstream is real: the resource gate, `0x00E4`/`0x00E3`, the recharge, the `0x0042` episode,
+the effect visual, the number the client draws. The KEY PRESS is what did not happen, and the
+gamesrv prints that every time it fires. A walk verb and an action, for the reason `attack:` is
+both. `test_harness` §mailbox +5 (floor 165 → 170).
+
+### 44.3 The run (harness `20260914T162115`), predictions first
+
+Q1 every swing outside the stance is `0.03 × armour_multiplier(location)` — a small set S;
+Q2 inside it EXACTLY 2 × a member of S and never a member of S; Q3 after expiry back to S;
+Q4 `0x0035 [player, base, 0.67]` at the open and `1.0` at the close; Q5 the player survives;
+floor 3 hits inside and 3 outside.
+
+| t (s) | measured |
+|---|---|
+| 25.27 … | Hatcher swings, `0x00A3 [16, 1, 10, −0.012968]` — the wire's own float, every hit |
+| 28.23 | `HARNESS SKILL PRESS 346` → `SKILL_ACTIVATED_BROADCAST(346 via USE_SKILL)`, energy −5, recharge 4 s, `0x0042 EFFECT_APPLY(stance 346, 8.0 s)`, effect visual 601, `0x00E3` |
+| 29.40 – 34.90 | five hits at `−0.025937` |
+| 36.23 | `0x0044 EFFECT_REMOVE(346, expired after 8.0 s)`; the next hit (36.28) is `−0.012968` again |
+| 54.87 – 62.92 | the second press, six hits at `−0.025937`, the expiry, back to `−0.012968` |
+
+- **Q1 held, with S a singleton**: a level-1 Warrior's five locations all read AR 45 (the log's
+  `struck the legs / boots / gloves / head / body, AR 45`), so every outside swing is the same
+  0.012968 of 100 — 44 of 44.
+- **Q2 held**: 11 of 11 hits inside the two windows are 0.025937, and 0.025937 / 0.012968 =
+  **2.000000**; none is in S.
+- **Q3 held**: the hit 50 ms after the expiry is back in S.
+- **Q4 REFUTED as written, and the prediction was the stale one**: no `0x0035` went out at either
+  open. F40's item (3) already moved the attack-speed resend to the NEXT ATTACK START (JARIN:
+  "Frenzy's resend rides the next swing"), and this player never swung. The prediction was
+  copied from H13's pre-JARIN shape; the code is right and the registration was wrong.
+- **Q5 held** (63 hp at the second shot). Floor met: 11 / 44.
+- **On screen** (`walk4-shot.png`, 2 s after the first press): Frenzy's icon in the effects bar,
+  **−3** over the player where the outside hits draw −1 — the client renders 2.594 as 3 and
+  1.297 as 1 from the fraction alone.
+
+### 44.4 What this settles and what it leaves
+
+- **Settled, OBSERVED on our client**: the taker's-episode multiplier reaches the wire as an
+  exact ×2 of the same swing and the client draws it; the stance opens, holds 8.0 s, and
+  expires on the client from our messages alone. The harness can now press any skill for the
+  player in a scripted run.
+- **Still open, and only a live capture closes it**: whether RETAIL doubles — F39.3 stands.
+  The recipe for the owner: Frenzy on the bar, one foe, hits before / inside / after, at human
+  cadence; the same script as this section scores it.
+- **Labels.** 44.3 OBSERVED on our client against our server (build 38797, `run/slice`);
+  44.1 OBSERVED (seven launches, one rig); the 2.0 itself is WIKI, unchanged; the chat-input
+  focus is UNREAD.
