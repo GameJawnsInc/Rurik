@@ -1,0 +1,37 @@
+$ python toolkit/clientpatch/test_cage.py
+
+  [PASS] an unrecognised binary is REFUSED  wrong size, unknown hash
+  [PASS] a path that does not exist is REFUSED
+  [PASS] the vaulted pristine client is identified as pristine  pristine
+  [PASS] the PRISTINE client is REFUSED as a launch target  it carries ArenaNet's DH parameters, not ours
+  [PASS] a path no firewall rule names reads as UNCAGED or undeterminable
+  [PASS] when the cage state cannot be determined, launching is REFUSED  undeterminable is not permission
+  [PASS] an UNCAGED patched client is REFUSED
+  [PASS] ALLOW-ONLY is REFUSED -- the block rule is the cage  an orphaned allow looks like cleanup and permits everything
+  [PASS] a client carrying OUR DH parameters is REFUSED at the real service  Stage A completes with the autofilled credential before Stage B fails
+  [PASS] and refused at a bare routable ADDRESS too, not just a hostname  the check is 'not 127/8', never a name match
+  [PASS] the LIVE-CAPTURE build is REFUSED at loopback  it carries ArenaNet's parameters and cannot key against us
+  [PASS] a CAGED live-capture build is REFUSED at the real service  the cage pins it to loopback, the one place it cannot work
+  note: the auto-updater is LIVE in Gw.exe (updater_killed=False).
+        Required for map streaming on a live run. The driver hashes the binary before and after so a self-patch cannot pass unnoticed.
+  [PASS] and an UNCAGED one is ALLOWED there -- the authorized case  a gate that refuses everything is not a gate, it is an outage
+  note: the auto-updater is LIVE in synthetic (updater_killed=False).
+        Required for map streaming on a live run. The driver hashes the binary before and after so a self-patch cannot pass unnoticed.
+  [PASS] a live-capture build with the updater LIVE is ALLOWED (map streaming)  the kill switch crashed a live run; a gate that blocks the only working configuration is an outage
+  note: the auto-updater is LIVE in synthetic (updater_killed=None).
+        Required for map streaming on a live run. The driver hashes the binary before and after so a self-patch cannot pass unnoticed.
+  [PASS] and so is one whose updater state cannot be determined  the updater is no longer a launch-gate question at all
+  [PASS] and the measurement that replaced the refusal exists  livesession.sha256 -- the driver hashes the exe before and after, so a self-patch mid-capture is detected rather than forbidden
+  [FAIL] every patched client on this machine is caged (8 found)  2026-09-01_44fbd68767a8=UNCAGED
+
+--- stderr ---
+REFUSING to launch C:\gd\Rurik\vault\run\2026-09-01_44fbd68767a8\Gw.exe
+  no firewall cage names this binary at all.
+  This client carries OUR Diffie-Hellman parameters (OUR parameters, keys/rurik_dh_2026-09-01_44fbd68767a8.json).
+  PLAN.md �6.2: a client carrying them must never reach the real service,
+  and it does not fail cleanly if it does -- Stage A completes first.
+  Cage every such client with, in an ELEVATED shell:
+      & toolkit\clientpatch\isolate_client.ps1
+  (no arguments: it enumerates every client under vault/run, which is
+  the fix for the single-hardcoded-path default that let one sit
+  uncaged for a day.)

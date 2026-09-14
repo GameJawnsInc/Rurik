@@ -540,8 +540,9 @@ def retail_tracks(stamp=None):
             # interval that spans them: that displacement is the server's,
             # not the client's -- movesync.hard_sets has the JARIN shrine
             # case that made this necessary. Rows stay aligned with the
-            # reports; `hard_step` refuses a flagged row; counted in
-            # `server_sets`, never silent.
+            # reports; a flagged row is skipped where hard_idx is built
+            # (below) and by fires() through it; counted in `server_sets`,
+            # never silent.
             sets = movesync.hard_sets(s2c, {conn: aid}).get(conn, [])
             rows = movesync.steps(R)
             flagged = movesync.mark_server_sets(rows, sets)
@@ -558,7 +559,8 @@ def retail_tracks(stamp=None):
                 "grants": sorted(G.get(aid, [])), "source": None,
                 "rows": rows,
                 "hard_idx": [k for k, r in enumerate(rows)
-                             if movesync.hard_step(r)],
+                             if r.get("server_set") is None
+                             and movesync.hard_step(r)],
                 "den": movesync.denominator(R),
                 "sent_0x2c": None, "sent_t": None,
                 "server_sets": flagged,
@@ -891,7 +893,9 @@ def fires(track, thresh=RESYNC_SEPARATION, cooldown=RESYNC_COOLDOWN,
             # bound is measuring the pre-existing harm, not this message's cost.
             # Those rows are kept and FLAGGED rather than dropped: dropping them
             # would quietly remove exactly the firings that matter most.
-            dirty = movesync.hard_step(track["rows"][i])
+            _row = track["rows"][i]
+            dirty = (_row.get("server_set") is None
+                     and movesync.hard_step(_row))
         else:
             nxt, dt_next, yank, dirty = None, float("nan"), stale, False
         # HOW LONG AFTER THE TRIGGER THE MESSAGE ACTUALLY LEAVES, measured from

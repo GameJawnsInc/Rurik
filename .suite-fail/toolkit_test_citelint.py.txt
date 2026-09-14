@@ -1,0 +1,81 @@
+$ python toolkit/test_citelint.py
+
+`citelint.py`, and the one document whose citations are ruled on rather than counted.
+==============================================================================
+
+1. what is and is not a citation
+--------------------------------
+  [PASS] reads '`movetap.py:3049`' as movetap.py:3049  got ('', 'movetap.py', '3049', None)
+  [PASS] reads '(`movetap.py:2688-2692`)' as movetap.py:2688-2692  got ('', 'movetap.py', '2688', '2692')
+  [PASS] reads 'see toolkit/authsrv/agents.py:118 for it' as agents.py:118  got ('toolkit/authsrv/', 'agents.py', '118', None)
+  [PASS] reads 'bare movesync.py:12 in prose' as movesync.py:12  got ('', 'movesync.py', '12', None)
+  [PASS] refuses 'Build: 38797' -- a colon-number pair that is not a location
+  [PASS] refuses '`a-movetap.py:12`' -- a hyphenated word ending in a module name
+  [PASS] refuses '`x.pyc:12`' -- not a .py file
+  [PASS] refuses 'run at 2026-08-29:14 today' -- a timestamp
+  [PASS] skips citations inside fenced code blocks
+
+2. when a backticked span is the citation's symbol
+--------------------------------------------------
+  [PASS] pairs across ` at `  ('fence_verdict', 'at')
+  [PASS] pairs across `, `
+  [PASS] pairs across a hard-wrapped newline
+  [PASS] an intervening citation is erased, so a citation LIST shares one symbol
+  [PASS] refuses to pair over a long gap  paired None
+  [PASS] refuses to pair over a full stop between them  paired None
+  [PASS] refuses to pair over punctuation survives the citation erasure  paired None
+
+3. the primary symbol of a backticked span
+------------------------------------------
+  [PASS] `movetap.fence_verdict(reach, flips)` -> 'fence_verdict' -- the module qualifier is stripped when it names the cited file  got 'fence_verdict'
+  [PASS] `os.path.getmtime(p)` -> 'os' -- and is NOT stripped when it does not  got 'os'
+  [PASS] `UNREAD_REFUSE_SHARE = 0.25` -> 'UNREAD_REFUSE_SHARE' -- an assignment yields its left side  got 'UNREAD_REFUSE_SHARE'
+  [PASS] `GATE1_ABOVE, GATE1_BELOW` -> 'GATE1_ABOVE' -- a list yields its first  got 'GATE1_ABOVE'
+  [PASS] `not fence_verdict(x)` -> 'fence_verdict' -- keywords are stepped over  got 'fence_verdict'
+  [PASS] `0x0056` -> None -- a hex literal is not the identifier `x0056`  got None
+  [PASS] `gwdat.py` -> None -- a bare file reference names no symbol  got None
+  [PASS] `toolkit/mapdata/deploy.py` -> None -- and neither does a path  got None
+
+4. resolution, one fixture per verdict
+--------------------------------------
+  [PASS] ok-symbol         -- the symbol is on the cited line  got [('citelint.py:116', 'ok-symbol')]
+  [PASS] ok-line           -- no symbol adjacent, and the line exists  got [('citelint.py:116', 'ok-line')]
+  [PASS] symbol-elsewhere  -- the symbol is in the file, on other lines  got [('citelint.py:119', 'symbol-elsewhere')]
+  [PASS] symbol-absent     -- the symbol is nowhere in that file  got [('citelint.py:5', 'symbol-absent')]
+  [PASS] out-of-range      -- the file is not that long  got [('citelint.py:1003', 'out-of-range')]
+  [PASS] not-in-repo       -- an upstream file, which is not ours to resolve  got [('PacketSniffer.py:41', 'not-in-repo')]
+  [PASS] ambiguous         -- two files share the basename, and this refuses to pick  got [('autoinject.py:10', 'ambiguous')]
+  [PASS] wrong-path        -- the path is wrong but the file exists elsewhere  got [('toolkit/nope/citelint.py:1', 'wrong-path')]
+  [PASS] a line RANGE passes when the symbol is inside it  got [('citelint.py:114-118', 'ok-symbol')]
+
+5. named citations that must resolve (the vacuity guard)
+--------------------------------------------------------
+  [PASS] movetap.py:1481 is ok-symbol (symbol 'SELFTEST_FLOOR')
+  [FAIL] movesync.py:1097 is ok-symbol (symbol 'SELFTEST_FLOOR')  got [('symbol-elsewhere', 'SELFTEST_FLOOR')] -- the SECOND citation in `(`SELFTEST_FLOOR` at `movetap.py:1481` and `movesync.py:1097`)`. It only resolves because `pair_symbol` erases an intervening citation instead of refusing the pairing, so this control is what stops that rule from being quietly removed. Was `:2759` until the fence section left `movesync.py` for `movefence.py` on 2026-09-11 and took 1,662 lines out from above it; like CONTROLS[0] this names the citation TEXT, so a stale one has zero hits and section 5 goes red
+  [PASS] test_movesync.py:125 is ok-line (symbol None)
+  [PASS] at least 2 citations resolve at the SYMBOL tier (got 20 of 31)
+
+6. PROBE-GATEFIRE.md: every citation resolves, or is a named historical one
+---------------------------------------------------------------------------
+  [FAIL] 31 citations in studies/movement/PROBE-GATEFIRE.md, 3 unexplained red  studies/movement/PROBE-GATEFIRE.md:445 movesync.py:1097 symbol-elsewhere -- `SELFTEST_FLOOR` is at toolkit/clientscan/movesync.py:1174(def), 1369, 1371, 1372 (+1 more); cited line reads: 'f"denominator does not contain.")'; studies/movement/PROBE-GATEFIRE.md:508 movesync.py:621 symbol-elsewhere -- `sorted` is at toolkit/clientscan/movesync.py:476, 567, 596, 691 (+7 more); cited line reads: ''; studies/movement/PROBE-GATEFIRE.md:1450 movesync.py:932 symbol-elsewhere -- `print_wire_only` is at toolkit/clientscan/movesync.py:1009(def), 1404; cited line reads: 'if r["dt"] > den["active_threshold"]],'
+  [PASS] and all 1 historical exemption(s) still fire
+
+7. moving one citation by one line reddens it, and names it
+-----------------------------------------------------------
+  [PASS] the scratch copy actually changed movetap.py:1481
+  [PASS] movetap.py:1481 -> movetap.py:1482 is caught as symbol-elsewhere  got [('movetap.py:1482', 'symbol-elsewhere')]
+  [PASS] the failure names the DOCUMENT  SCRATCH-studies/movement/PROBE-GATEFIRE.md:445 movetap.py:1482 `SELFTEST_FLOOR` is at toolkit/clientscan/movetap.py:1481(def), 1567, 1571; cited line reads: ''
+  [PASS] and the document LINE (445)  SCRATCH-studies/movement/PROBE-GATEFIRE.md:445 movetap.py:1482 `SELFTEST_FLOOR` is at toolkit/clientscan/movetap.py:1481(def), 1567, 1571; cited line reads: ''
+  [PASS] and the SYMBOL (`SELFTEST_FLOOR`)  SCRATCH-studies/movement/PROBE-GATEFIRE.md:445 movetap.py:1482 `SELFTEST_FLOOR` is at toolkit/clientscan/movetap.py:1481(def), 1567, 1571; cited line reads: ''
+  [PASS] and where the symbol really is (movetap.py:1481)  SCRATCH-studies/movement/PROBE-GATEFIRE.md:445 movetap.py:1482 `SELFTEST_FLOOR` is at toolkit/clientscan/movetap.py:1481(def), 1567, 1571; cited line reads: ''
+  [PASS] and names it as the DEFINITION, first (1481(def))  SCRATCH-studies/movement/PROBE-GATEFIRE.md:445 movetap.py:1482 `SELFTEST_FLOOR` is at toolkit/clientscan/movetap.py:1481(def), 1567, 1571; cited line reads: ''
+  [PASS] exactly one new red, not a cascade (5 vs 4 baseline)
+
+8. every other studies/ document: accumulation ceiling
+------------------------------------------------------
+  [PASS] the walk read 826 citations across 62 documents
+  [PASS] and studies/movement/PROBE-GATEFIRE.md is among them
+  [PASS] 176 red citations outside the pilot, ceiling 210
+     (baseline 142 on 2026-08-30; 31 in the pilot)
+
+2 CHECK(S) FAILED
