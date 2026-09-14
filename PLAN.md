@@ -8014,6 +8014,14 @@ checked against the corpus before this was written:
   arriving as rewards rather than at login.
 - **Cinematics.** The tutorial has cutscenes; whatever drives them is unread.
 
+> **DESIGNED 2026-09-13 — [studies/quests/RUN-LIVE-MANTID.md](studies/quests/RUN-LIVE-MANTID.md),
+> plan sealed at `vault/plans/mantid_hatchlings.txt` (20 steps, one F9 per Instructor Ng pause),
+> a Mesmer through *Mantid Hatchlings*.** Two items above expired before the run: a level
+> changing on one agent was OBSERVED 2026-08-19 (unit-setup, prop 37) and a death with its
+> penalty twice (morale §1), so those legs corroborate at level 1 → 2/3 rather than discover;
+> secondary profession selection is NOT in this quest and stays open. The corpus count per
+> shape is in the runsheet's §1 (skill grants 2, chest effect 0, party defeated 0, cinematic 0).
+
 Two properties worth naming while a tutorial capture is being planned, because both are
 frequent and neither is understood: **property 66** (202 sightings, the second most common
 int property, sent pre-create to NPCs) is past OpenTyria's enum and unnamed in every
