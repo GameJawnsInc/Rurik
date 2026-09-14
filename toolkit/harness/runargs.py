@@ -215,6 +215,33 @@ def resolve_enemy(game_args, enemy=False):
     return args + ["--no-enemy"]
 
 
+def resolve_client_build(game_args, build):
+    """Tell the gamesrv which client build it is about to serve.
+
+    The manifest's "no map" sentinel is the client's own map count and that
+    count is per build (`authsrv.MAP_ID_COUNT_BY_BUILD`: 888 through 38849,
+    897 from 38888); the wire does not carry the build before the burst, so
+    the server takes `--client-build`. The harness KNOWS the build -- it reads
+    it out of the exe it is about to launch (`buildid.read`, the same measured
+    number `select_run_exe` chooses by) -- so it says so, and the hand-driven
+    three-terminal loop is the only place the server's default is ever used.
+
+    MEASURED 2026-09-14 (harness 20260914T111021 / T111122): a 38797 client
+    served the 38888 row reached the map with the mask warning firing; served
+    its own row, no warning. The mismatch is a fidelity defect and not a
+    crash, which is why an explicit `--client-build` in the operator's own
+    flags WINS here rather than being refused -- the known-bad arm is a run
+    someone may want to repeat. `build` None (no exe resolved, `--serve`)
+    adds nothing and leaves the server's default in force.
+    """
+    args = list(game_args)
+    if "--client-build" in args or any(x.startswith("--client-build=") for x in args):
+        return args                     # explicit beats measured; never doubled
+    if build is None:
+        return args
+    return args + ["--client-build", str(int(build))]
+
+
 def warn_probe_without_enemy(game_args, enemy=False):
     """A probe in a world with no hostile is the silent no-op this rule risks.
 

@@ -64,7 +64,7 @@ import checks  # noqa: E402
 # measure, for the same two vault-dependent skips as before.
 # FLOOR: 141, MEASURED from a green run 2026-08-17 after section 10 gained
 # the camera-verb checks -- set from the run's own count, never arithmetic.
-LEDGER = checks.Ledger("harness", floor=159)   # 1z-cw: +2, the steer verb
+LEDGER = checks.Ledger("harness", floor=165)   # 1z-cw: +2, the steer verb; 2026-09-14: +6, test_client_build
 check = checks.adopt_named(LEDGER)
 
 
@@ -273,6 +273,40 @@ def test_enemy_default():
         game_args=session.resolve_enemy(["--map", "143"])))
     check("--no-enemy reaches the GAMESRV argv",
           "--no-enemy" in specs["gamesrv"])
+
+
+# ---------------------------------------------------------- client build ----
+
+def test_client_build():
+    """The gamesrv is told which client build it serves, from the exe's bytes.
+
+    Added 2026-09-14 after harness runs 20260914T111021 and T111122: the
+    server's manifest sentinel is per build (897 on 38888, 888 before), the
+    wire does not carry the build before the burst, and the harness reads the
+    build out of the exe anyway -- so it says so. The mismatch is a fidelity
+    defect, not a crash (the 38797 client served 897 reached the map, warning
+    logged), which is why an explicit flag WINS instead of being refused: the
+    known-bad arm is a run someone may want again.
+    """
+    check("the measured build is appended as --client-build N",
+          session.resolve_client_build([], 38797) == ["--client-build", "38797"])
+    check("and it survives alongside the caller's own flags, at the end",
+          session.resolve_client_build(["--map", "143", "--no-enemy"], 38888)
+          == ["--map", "143", "--no-enemy", "--client-build", "38888"])
+    check("an explicit --client-build wins and is not doubled (the known-bad arm)",
+          session.resolve_client_build(["--client-build", "38797"], 38888)
+          == ["--client-build", "38797"])
+    check("the = spelling counts as explicit too",
+          session.resolve_client_build(["--client-build=38797"], 38888)
+          == ["--client-build=38797"])
+    check("no build (--serve, no exe) adds nothing and leaves the server's default",
+          session.resolve_client_build(["--map", "143"], None) == ["--map", "143"])
+    specs = dict((n, a) for n, _h, _p, a in session.server_specs(
+        game_args=session.resolve_client_build([], 38797)))
+    check("--client-build reaches the GAMESRV argv and no other",
+          specs["gamesrv"][-2:] == ["--client-build", "38797"]
+          and "--client-build" not in specs["authsrv"]
+          and "--client-build" not in specs["webgate"])
     check("and neither the authsrv nor the webgate gets it",
           "--no-enemy" not in specs["authsrv"]
           and "--no-enemy" not in specs["webgate"])
@@ -610,6 +644,7 @@ if __name__ == "__main__":
     test_preflight_helpers()
     test_game_args()
     test_enemy_default()
+    test_client_build()
     test_served_maps()
     test_interact_control()
     test_crash_capture_always()

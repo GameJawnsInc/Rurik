@@ -635,12 +635,18 @@ def main():
               f"missing: {sorted(set(derived) - set(authsrv.MAP_ID_COUNT_BY_BUILD))}"
               f" -- a new snapshot with no row is the next 38888: the server "
               f"would send the previous build's count to it")
-        check(authsrv.CLIENT_BUILD == max(derived),
-              f"the DEFAULT --client-build is the newest vaulted build "
-              f"({authsrv.CLIENT_BUILD})",
-              f"newest in the vault {max(derived)} -- the owner's install is "
-              f"whatever ArenaNet serves today, so a default that lags it sends "
-              f"the wrong sentinel to the client that is actually launched")
+        # THE DEFAULT IS THE PIN, NOT THE NEWEST -- corrected the same day it
+        # was written. "Newest" reasoned from the owner's install, which this
+        # server never serves; what it serves is a loopback client, and every
+        # loopback run dir but one is the pin's generation (vault/run/slice is
+        # build 38797 by its own getter). Harness 20260914T111021/T111122
+        # measured both arms. The harness passes the exe's build itself
+        # (runargs.resolve_client_build); the default is for the hand loop.
+        check(authsrv.CLIENT_BUILD == _pinned19.BUILD
+              and authsrv.CLIENT_BUILD in derived,
+              f"the DEFAULT --client-build is the pin ({authsrv.CLIENT_BUILD}), "
+              f"the generation the loopback run dirs are cut from",
+              f"pin {_pinned19.BUILD}, derived builds {sorted(derived)}")
     check(authsrv.MAP_ID_COUNT == authsrv.MAP_ID_COUNT_BY_BUILD[authsrv.CLIENT_BUILD],
           "the constant the server SENDS is the default build's row",
           f"MAP_ID_COUNT {authsrv.MAP_ID_COUNT}, row "

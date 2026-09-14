@@ -4081,9 +4081,22 @@ MANIFEST_DONE = 2
 # constant the server sends is the row for the build the client is. Which build
 # that is the wire does not say -- the auth handshake carries a protocol version,
 # not a build number; the portal sees `Gw/38888.0` in a User-Agent but is a
-# different process -- so it is `--client-build`, defaulting to the NEWEST row
-# because the owner's install is whatever ArenaNet serves today and 888 is now
-# a real map id on it. The runtime witness is the client's own mission mask:
+# different process -- so it is `--client-build`, and the harness passes it from
+# the exe's own build getter (`runargs.resolve_client_build`, 2026-09-14).
+#
+# THE DEFAULT IS THE PIN, and it was "the newest row" for three hours. The
+# morning's reasoning -- "the owner's install is whatever ArenaNet serves, and
+# 888 is now a real map id on it" -- was about the install under C:\gw, which
+# this server never serves. What it serves is a LOOPBACK client, and every
+# loopback run directory but one is cut from the pin's generation, including
+# `vault/run/slice/` that the owner actually plays (build 38797 by its own
+# getter); the one 38888 loopback build has never been caged. Harness runs
+# 20260914T111021 (a 38797 client served 897: the mask warning fired, the map
+# still loaded) and T111122 (served 888 by the flag: no warning) are the
+# measurement. So the default follows what the hand-driven three-terminal loop
+# launches, the harness never relies on it, and the day a loopback build of a
+# newer generation is the one in use, the warning below names the right row
+# on the first connection. The runtime witness is the client's own mission mask:
 # `0x0092`'s width is `ceil(MAP_ID_COUNT / 32) * 4` bytes (its MsCliMsg.cpp:181
 # assert bounds it by MISSION_MASK_BYTES), MEASURED 116 on both 38888 tapes
 # (`20260913T210901` 10 of 10, `20260914T005758` 12 of 12) and 112 on both
@@ -4096,7 +4109,7 @@ MAP_ID_COUNT_BY_BUILD = {
     38849: 888,   # 2026-08-20
     38888: 897,   # 2026-09-01
 }
-CLIENT_BUILD = max(MAP_ID_COUNT_BY_BUILD)          # rebound by --client-build
+CLIENT_BUILD = 38797                               # the pin; rebound by --client-build
 MAP_ID_COUNT = MAP_ID_COUNT_BY_BUILD[CLIENT_BUILD]
 
 
@@ -27572,6 +27585,13 @@ def main():
         CLIENT_BUILD = a.client_build
         MAP_ID_COUNT = MAP_ID_COUNT_BY_BUILD[CLIENT_BUILD]
         NO_MARKER_MAP = MAP_ID_COUNT
+    # Said in the log either way, because a run's manifest line alone cannot
+    # tell "the harness passed the build" from "the default happened to match"
+    # (harness 20260914T111609 could not, which is why this line exists).
+    print(f"[map] --client-build {CLIENT_BUILD}"
+          f"{' (given)' if a.client_build is not None else ' (default: the pin)'}"
+          f": the manifest's 'no map' sentinel is {MAP_ID_COUNT}, the mission "
+          f"mask expected {mission_mask_bytes(MAP_ID_COUNT)} bytes")
     if a.party:
         # SLICE-H2: THE PARTY AS CONTENT. The row names what the hero rig's
         # flags took one by one across studies/heroes and studies/pvpui; this

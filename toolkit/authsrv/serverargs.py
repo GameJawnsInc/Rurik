@@ -49,11 +49,15 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "which is that build's own map count "
                          "(MAP_ID_COUNT_BY_BUILD: 888 through 38849, 897 from "
                          "38888) -- the wire does not carry the build before "
-                         "the manifest burst. Default: the newest registered "
-                         "build, which is what the owner's install runs. The "
-                         "client's mission mask (0x0092) is the witness: its "
-                         "width is ceil(count/32)*4 and the server logs a "
-                         "disagreement once per connection.")
+                         "the manifest burst. Default: the pin, 38797, which "
+                         "is the generation every loopback run directory but "
+                         "one is cut from (vault/run/slice included). The "
+                         "harness passes the launched exe's own build; only "
+                         "the hand-driven loop sees the default. The client's "
+                         "mission mask (0x0092) is the witness: its width is "
+                         "ceil(count/32)*4 and the server logs a disagreement "
+                         "once per connection (MEASURED 2026-09-14: a 38797 "
+                         "client served 897 still loads the map).")
     ap.add_argument("--bind", default="127.0.0.1",
                     help="Loopback address to listen on. Any 127.x.y.z works "
                          "without setup on Windows; a second alias (127.0.0.2) "

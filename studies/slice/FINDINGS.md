@@ -2261,8 +2261,15 @@ return step's "carried in" REFUTED; GWW says the same, now measured).
 Bow attack skills `0x00A0 [50, 29, foe, 394]` ×2, `[…, 392]` ×1; preparations and Troll Unguent
 as `0x0042 [29, 433, 0, slot, 24.0]`, `[29, 446, 0, ·, 13.0]`, `[29, 455, 0, ·, 8.0]`; the
 projectile bracket was not scored. **Word 38 `[38, 29, foe, 1]` three times** — reason 1 on the
-Ranger as target, beside F36's reason 0 (block) and 3 (miss): unnamed here, UNVERIFIED (the
-client's own string table has it). The walk step: 39 leads, cadence p50 0.61 s (p10 0.50, p90
+Ranger as target, beside F36's reason 0 (block) and 3 (miss). ~~unnamed here, UNVERIFIED (the
+client's own string table has it)~~ — **it was already named, four days before this was written:
+reason 1 is "dodge"**, string 473, OBSERVED from the client's kind-7 drain switch and the owner's
+archive in [../skills/FINDINGS.md](../skills/FINDINGS.md) §44.3 (the whole enum: 0 block, 1 dodge,
+2 fail, 3 miss, 4 obstructed, 5 stray; `agents.ATTACK_FAIL_REASONS` carries it). So three of the
+hostiles' swings at the Ranger came back as dodges; which mechanic produced them — the word
+names the outcome, not the cause — is not scored here and the server sends no reason 1 today.
+Corrected 2026-09-14 (a desk grep, no run). The walk step:
+39 leads, cadence p50 0.61 s (p10 0.50, p90
 1.06) against F28's 0.51; the abeam offset needs the player's reports joined and was not scored.
 
 ### What this settles, and what it queues (JARIN-S)
@@ -2277,7 +2284,9 @@ target's death; (5) no slot offset on the party flag for a lone hero; (6) the wi
 teleport, the body re-created, full health, penalty kept, no `0x01D8`; (7) the death penalty
 cleared on an outpost load; (8) `0x0026` 8/9 on a body's death and rise; (9) the hero's aiMode
 persisted into the next instance's `0x0072`. Left open: Frenzy's doubling (a player run), the
-hostile-target rule (n = 5), reason 1, the abeam offset, Healing Signet's shape.
+hostile-target rule (n = 5), reason 1, the abeam offset, Healing Signet's shape. *(2026-09-14:
+the hostile-target rule and the abeam offset closed in F40.2; reason 1 was "dodge" all along —
+skills §44.3, corrected in 39.8 above. Open: Frenzy's doubling, Healing Signet's shape.)*
 
 ## SLICE-F40 — **JARIN-S: the hero tape's corrections, shipped — retail's rig without `0x0074`, the hero's pools and skill family on the wire, the resend with the start, the lock cleared at the kill, the wipe to the shrine, the zone carry**
 

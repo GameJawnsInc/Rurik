@@ -104,6 +104,7 @@ import datcheck  # noqa: E402  -- toolkit/mapdata, the archive half of the gate
 from runargs import (  # noqa: F401,E402
     split_args, is_labelling, is_probing, prompts_operator,
     hold_implies_keep_open, resolve_enemy, warn_probe_without_enemy,
+    resolve_client_build,
     spawn_profession_args, persist_args, served_maps, server_specs,
     chain_hold, hop_aliases, chain_specs)
 
@@ -1064,6 +1065,18 @@ def main():
     if warning:
         print(warning)
     game_args = resolve_enemy(game_args, a.enemy)
+    # THE CLIENT'S BUILD, MEASURED, HANDED TO THE GAMESRV (2026-09-14). The
+    # exe is chosen below, after the stack is up; the build has to be known
+    # here, before the gamesrv's argv is fixed. So the same selection runs
+    # early -- `select_run_exe` is a 0.07 s read of the client's own build
+    # getter -- and nothing is launched from it. `--serve` runs no client and
+    # leaves the server's default in force.
+    client_build = None
+    if not a.serve:
+        exe_now = a.exe or dc.select_run_exe()[0]
+        if exe_now:
+            client_build = dc.buildid.read(exe_now)[0]
+    game_args = resolve_client_build(game_args, client_build)
     if a.tape_chain:
         game_args, hops, order, hosts = chain_specs(
             a.tape_chain, split_args(a.game_args), a.game_host, a.tape_chain_from)

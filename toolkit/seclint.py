@@ -42,7 +42,7 @@ and `studies/` is full of them.
 
 NOT COVERED BY `identlint.py`, which was the first thing checked before writing this.
 That module is the sibling tripwire for IDENTIFIER collisions and its token must be
-letter-led (`BARE = [A-Z]{1,2}-?\d{1,3}...`, so `GATEFIRE-C3`, `R-ISLE`, `C6`). A bare
+letter-led (`BARE = [A-Z]{1,2}-?\\d{1,3}...`, so `GATEFIRE-C3`, `R-ISLE`, `C6`). A bare
 `## 32.` matches none of its definers -- verified, all three heading shapes return None.
 The two tripwires are disjoint by construction: `identlint` guards the names an arc
 mints, this guards the numbers a document hands out.

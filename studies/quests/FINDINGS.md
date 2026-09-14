@@ -1868,3 +1868,51 @@ images; the extractor is `framebus.py` plus `test_quests.py` §19/§19b/§20). T
 OBSERVED on four live tapes. "888 is a real map id on 38888" is a consequence of the count and is
 not itself observed on a client — no run has sent 888 to a 38888 client and watched what the
 manifest does with it; the fix is fidelity, not a repaired symptom.
+
+### 11.4 The sentinel on a client — four harness runs, one refusal, and the default corrected the same day
+
+**Pre-registered, then run (2026-09-14, 11:10–11:18, `session.py --until map`, scripted, hands
+off).** The morning's change had never been seen by a client. Three arms were written down
+before the first launch:
+
+| arm | client | server | prediction |
+|---|---|---|---|
+| A | 38888 loopback (`vault/run/2026-09-01_44fbd68767a8`) | default (897) | manifest 897, no warning, spawn reached |
+| B | slice (`vault/run/slice`, **build 38797 by its own getter**) | default (897) | manifest 897, the mask warning FIRES naming the 112-byte builds, spawn still reached |
+| C | slice | `--game-args='--client-build 38797'` | manifest 888, no warning |
+
+| arm | harness dir | manifest | mask warning | spawn |
+|---|---|---|---|---|
+| A | — | — | — | **REFUSED before launch**: the 38888 loopback client has never been caged (`isolate_client.ps1`, an elevated shell — the owner's prompt) |
+| B | `20260914T111021` | `[2, map 897]` then `[0, map 148]` | **1** — `MISSION_MASK is 112 bytes; --client-build 38888 predicts 116. This width fits build(s) [38519, 38797, 38833, 38849]` | reached, 22.7 s |
+| C | `20260914T111122` | `[2, map 888]` | 0 (the mask arrived: 2 `0x0092` in the capture) | reached, 23.0 s |
+
+B and C matched their predictions on every clause. Two things they settle: the witness can go
+red and names the right family, and **a 38797 client served 897 loads the map** — the value is
+stored, not bounds-checked at the manifest, so the mismatch is a fidelity defect and not a
+crash. (Whether 888 on a 38888 client, the morning's worry, is equally inert is still
+UNOBSERVED — that is arm A, and it waits on the cage.)
+
+**What the run refuted: the default.** This morning's `CLIENT_BUILD = max(table)` reasoned
+from the owner's install, which this server never serves. What it serves is a loopback client,
+and every loopback run directory but one is cut from the pin's generation — including the
+slice directory the owner actually plays, which `buildid.read` puts at **38797**. The one 38888
+loopback build is the uncaged one. So the newest-row default was sending 897 to every hand-driven
+slice session (this morning's 08:59 and 09:03 captures, before the landing, show 888 going out;
+any afterwards would have shown 897 and the warning). **Corrected:** the default is the pin,
+38797; `test_quests.py` §19's "default is the newest" check became "default is the pin"; and the
+harness no longer relies on the default at all — `runargs.resolve_client_build` appends
+`--client-build N` to the gamesrv's flags from the launched exe's own build getter (the same
+measured number `select_run_exe` selects by), an explicit flag in the operator's `--game-args`
+winning so the known-bad arm stays runnable, `--serve` adding nothing. `test_harness`
+`test_client_build` (floor 159 → 165) pins it. The gamesrv now logs its row at startup:
+
+| arm | harness dir | the log's first `[map]` line | manifest |
+|---|---|---|---|
+| D | `20260914T111609` | (before the banner existed — 888 could not tell "passed" from "default matched") | `[2, map 888]` |
+| E | `20260914T111830` | `--client-build 38797 (given): the manifest's 'no map' sentinel is 888, the mission mask expected 112 bytes` — and the authsrv's own line says `(default: the pin)`, the `--game-args` asymmetry `test_harness` pins | `[2, map 888]`, 0 warnings |
+
+**Labels.** B, C, E OBSERVED on our own client (build 38797) against our own server — a
+loopback observation of a rule measures us, not retail; retail's tolerance of a wrong sentinel
+is not a question this can ask. Arm A NOT RUN. The mask counts are from the gamesrv captures
+(`authsrv-20260914T111042/111144/111631-c1`).

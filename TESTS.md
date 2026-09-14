@@ -194,7 +194,14 @@ Every one of these, in the order they were written:
   function that `main()` never called. The floor moved 108 → 136 against a
   measured 138: it had drifted 26 checks stale through five commits, which is
   the ledger's own defect class, caught by its own rule of measuring from a
-  green run),
+  green run. **`test_client_build` (2026-09-14, floor 159 → 165):** the gamesrv is
+  told which client build it serves, read out of the launched exe's own build getter
+  (`runargs.resolve_client_build`) — appended as `--client-build N`, at the end, to the
+  GAMESRV argv and no other; an explicit flag in the operator's `--game-args` wins and
+  is never doubled (the known-bad arm — a 38797 client served the 38888 row — is a run
+  someone may want again; harness 20260914T111021 measured it loading the map with the
+  mask warning logged); `--serve` / no exe adds nothing. `studies/quests/FINDINGS.md`
+  §11.4),
   `toolkit/harness/test_preflight_owner.py` (the `--replace` OWNERSHIP gate,
   added 2026-08-20 after the pre-flight's "is the listener python" test matched
   a PARALLEL session's live stack at ~23:00 and killed its webgate (pid 18520)
@@ -9847,7 +9854,11 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   sites, and the eight others matching UNMASKED as the control on the mask; then the frame-bus
   pairing AND the completion family's on every build `framebus` has a table for, and the default
   `--client-build` among them. 38519 stays the control: 0 of 12, no table, no pairing.
-  `studies/quests/FINDINGS.md` §11 is the write-up. ~90 s with §19/§20),
+  `studies/quests/FINDINGS.md` §11 is the write-up. ~90 s with §19/§20. **Same day,
+  corrected by the run (§11.4):** the "default is the newest vaulted build" check became
+  "default is the PIN" — the server serves loopback clients, every run directory but one is
+  the pin's generation (`vault/run/slice` is 38797 by its own getter), and the harness passes
+  the exe's build itself, so only the hand loop ever sees the default),
   `toolkit/test_provlint.py` (an ACCUMULATION TRIPWIRE on assert citations in prose,
   and the story of why it is only that is worth more than the file. `content.py`
   enforced the provenance gate's permitted side from the day it was written; the same
