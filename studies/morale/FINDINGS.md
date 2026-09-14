@@ -180,6 +180,16 @@ Dervish and Assassin. So base 20, total 25:
 25 + 20 * (85 - 100)/100  =  25 - 3  =  22             ✔ observed 22
 ```
 
+> **n=2 as of 2026-09-13 (MANTID, capture `20260913T210901`, studies/quests/FINDINGS.md
+> §10.3).** A level-1 Mesmer at **30** total (`[41, 8, 20]` on the creation channel, then
+> `[41, 9, 30]` at entry: 20 base + 10 armour) died to **27**. 30 × 0.85 = 25.5 dies; 20 × 0.85
+> + 10 = 27 lives. The recovery agrees at the other end: +1 morale on every third 25-XP kill
+> (75 XP per 1 %, §3's rule), prop 41 staying 27 through 86 and 87 and moving to 28 at 88
+> (0.88 × 20 + 10 = 27.6), and the 2,000-XP quest reward wiping the rest in one frame
+> (`0x00EE [10, 10]`, `0x009C [9, 100]`, props 41/42 back to 30/100) — a quest reward is
+> experience, and experience buys the penalty back. Base-scaling is CORROBORATED on two
+> characters of two professions; `test_pools.py`'s candidate pairs carry (4, 27) and (4, 28).
+
 **This is the observation that rules out the obvious wrong model.** Scaling the
 *total* gives `25 × 0.85 = 21.25`, which is not 22 and is not an integer — the
 naive reading would have had to invent a rounding rule to survive, and would

@@ -1656,7 +1656,7 @@ unlocked" makes sense of: the account already had the signet. `0x00D9` and `0x00
   scripted wipe does not raise the "party defeated" screen; `0x01D8` stays 0 in the corpus.
 - **P8 CONFIRMED.** t=449.723: `0x00F1 [9, 0]`, prop 43 back, prop 8 → 0, `0x00A2 [52, 9,
   1.0]`, `0x009F [54, 9, 27]` (the "+27" callout = the reduced maximum), `0x00A2 [55, 9, 1.0]`,
-  `0x0026 [9, 5]`; the henchmen rose 19 ms earlier with a `[55, ·, 1.0]` each. The maxima
+  `0x0026 [9, 5]`; Kisai and Mai rose 19 ms earlier with a `[55, ·, 1.0]` each. The maxima
   stood at 85 / 27.
 - **THE BASE-VS-TOTAL DATUM the morale study wanted (§2.2 there, n=1 → n=2).** This
   character's energy maximum was **30** at level 1 (`0x009F [41, 9, 30]` at entry, after a
@@ -1743,11 +1743,17 @@ roleplaying character for the first time. The Monastery load then declared `0x00
 - **P16 wrong by two.** The tutorial itself was one connection from the second entry to Ludo;
   but creation → Overlook → cinematic → transfer makes **three** channels before it.
 - **Level 0 is the ABSENCE of a level.** Prop 36 appears six times on the tutorial channel,
-  all value 1 (the player and the henchmen); **no hatchling ever received prop 36** — the
+  all value 1 (the player, Kisai and Mai); **no hatchling ever received prop 36** — the
   first hatchling (23) got `0x00F0`, `0x0020` (kind 9), `0x006D [23, 0, 0]`, and a `prop 42 =
   1` right before its death. GWW's "level 0" is a body the server sends no level for.
 - The tutorial's still stretches are the control they were meant to be: the pre-kill steps
   carry nothing but `0x001E`, the 5 s `0x000C`/`0x000D` pair, and Ng's dialog.
+- **Kisai and Mai were ALLIES, not party members** — the owner, 2026-09-13: they sat under the
+  party window's *Allies* heading, below the party list. So step `party`'s "LISTED (party
+  members)" is REFUTED as worded; their flags words (`0x0026 [·, 8]` at death, `[·, 9]` at the
+  rise) are an ally body's, and GWW's "henchman skill bars" describes their bars, not their
+  standing. The corpus rule §10.6 leans on is unchanged by this: no effect-list message ever
+  named them either way.
 
 ### 10.8 A decoder fault this capture exposed, and what it costs
 

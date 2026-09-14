@@ -2018,6 +2018,78 @@ not re-declared; the revert arm silent. **Unobserved on a client:** whether the 
 visibly quickens under Frenzy on the slice bar is the owner's eye; a live capture with Frenzy
 running on the secondary account would witness retail's own resend, or its absence.
 
+## SLICE-F38 — **MANTID-S: four corrections the Factions tutorial tape paid for — the effect list is the player's own, a hex has auras and can punish attacks, Ether Feast, and a skill granted mid-map**
+
+**The owner (2026-09-13):** *"go for it"*, to a plan of three server corrections from capture
+`20260913T210901` ([../quests/FINDINGS.md](../quests/FINDINGS.md) §10). Measured first, then
+shipped; every item carries its revert flag and its label.
+
+**1. The effect list is the player's own — MEASURED over the whole corpus, then shipped.** A
+census of every live connection (`fx_census.py`, 61 connections): **every `0x0042`, `0x0043`
+and `0x0044` ever sent names the observing player — 136 / 108 / 125, 0 of 369 on any other
+agent**; the tutorial tape holds none at all because the Mesmer wore nothing. A hex, condition
+or enchantment on anyone else reaches the client through the status word — `0x00F1` bit
+`0x800` for a hex (12 sightings on others), `0x02|bit` for a condition (312) — which
+`push_status` has sent since the Deep Wound arc. This server had been sending the player's
+icon-list messages to foes, henchmen and party bodies since the effects arc: traffic retail
+never produces. **Shipped:** one door, `effect_list_send`, through which all ten `0x0042`/
+`0x0044` sites now pass; it sends for the player, keeps sending for a HERO body (no hero tape
+exists, UNVERIFIED either way, and the H ladder was observed with the icons), and drops the
+rest with a count (`state["effect_list_suppressed"]`). `--effect-list-to-all` is the pre-MANTID
+arm. Seven checks in `test_mechanics` §16/§26/§28 and one in `test_skilldamage` had pinned the
+refuted shape (a `0x0044` on hostile 11, a `0x0042` on foe 10) and were rewritten to the
+measured one, each saying why; the player-side control was added beside the foe-side refusal.
+
+**2. A hex's auras — OBSERVED, content-gated.** Properties 6 and 7 are one client function
+with an on/off flag (SLICE-F5); the tape puts `[6, foe, 1]` and `[6, foe, 4]` in the batch
+that lands Empathy on a foe (5 of 5) and `[7, foe, 1]`, `[7, foe, 4]` in the batch that kills
+it. The ids index a table this repo does not read, so they live on the skill's row
+(`[skill_effect.26] auras = [1, 4]`) and are reused for nothing else ("observed context is
+part of the claim"): `aura_on` after the status word at apply, `aura_off` on the episode's
+removal whoever wears it (expiry is RECONSTRUCTION — only the death was witnessed).
+
+**3. A hex that punishes attacks, and the maximum declared before the fraction — OBSERVED.**
+Empathy's damage on the tape: the hexed foe's first swing drew `0x009F [42, foe, 25]` then
+`0x00A3 [55, foe, hexer, −0.40]` — the armour-ignoring channel, a NEGATIVE fraction, 0.4 × 25
+= 10 = the rank-0 scale — ahead of the foe's own `0x00A7`/`0x00A3` (3 of 3). **Shipped:**
+`triggers_on_attack = "Damage"` on a hex's row; `on_attack_triggers` at all three landing sites
+(`hit_enemy`, `land_swing`, `land_swing_on_body`) deals the episode's scale from its caster
+(episodes now remember `caster`) through `armour_ignoring_damage`, which declares the target's
+prop 42 immediately before the word and kills through the same doors a hit does; a foe that
+dies to its own swing's punishment never lands the swing. The declaration-before-fraction is
+what unit-setup's "health-max is a rare mid-combat correction" was. Empathy's `bonus` (the foe
+deals 1..15 less) is NOT modelled, said on the row. `--no-hex-triggers` reverts. **The corpus
+check `test_mechanics` §20 P1 ("55 positive in 99%+") is now 97%+**: the negatives are this.
+
+**4. Ether Feast, and a skill granted mid-map.** `[skill_effect.40]`: `scale_means = "Energy
+loss"` (a flat 3, bit clear) and `bonus_scale_means = "Heal per energy lost"` (20..65);
+`energy_feast` takes the loss off the body's own pool when one is modelled and heals the caster
+per point lost — `0x00A3 [55, me, me, +frac]`, the tape's 0.68 × 88 = 60 (3 of 3). A granted
+skill is `grant_skill`: `0x00DC SKILL_SET_COPIES [skill, 1]`, `0x00D9 SKILLBAR_UPDATE_SKILL
+[player, first empty slot, skill, 0]`, and `0x001C SKILL_UNLOCKED [skill, 0]` unless the
+account already knows it (the Resurrection Signet came without one) — the tape's batch, 3 of
+3; a full bar learns without equipping (RECONSTRUCTION). Quest rows take `reward_skills = [...]`,
+granted in the reward frame ahead of the experience. No shipped quest uses it yet; that is the
+operator's content.
+
+**What was already right, now corroborated at n=2.** The death penalty scales the BASE energy
+(30 → 27 on the Mesmer; `morale.effective_max` did this since 2026-08-22), experience buys it
+back at 75 XP per 1 % (+1 per third 25-XP kill on the tape), and a quest reward's experience
+runs through the same credit (`grant_quest_reward` → `morale_experience`): the tape's `0x00EE
+[10, 10]` at the 2,000-XP reward is that rule, not a new one. `test_pools` carries the Mesmer's
+(4, 27) / (4, 28) rows and its death at (0, 27).
+
+**Tests.** `test_mechanics` §29 (floor 181 → 198): no `0x0042` to a foe but the `0x800` word and
+the two auras, the auras off on a strip with no `0x0044`, the player's own `0x0042` unchanged,
+the revert arm; the hexed foe's swing punished `[42, foe, 100]` + `[55, foe, player, −0.10]`
+ahead of its hit, a foe at 5 dying to it with no hit landing, the revert arm; Ether Feast's
+`[55, me, me, 0.60]`; a grant's three messages, no `0x001C` on a known skill, a full bar, and a
+quest row's `reward_skills` ahead of the experience. `test_skilldamage` (57 → 58), `test_pools`
+(pairs), `test_agentlife` 502, `test_effects` 84, `test_guards` 41 green. **Unobserved on a
+client:** whether the foe's hex arrow and auras draw from the word alone (retail's client
+draws them from exactly this traffic, which is the argument), and the granted skill appearing
+in the bar mid-map.
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:

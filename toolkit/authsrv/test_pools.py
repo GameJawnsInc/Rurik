@@ -143,7 +143,12 @@ CANDIDATE_PIPS = ((2, 20), (3, 25), (3, 30), (4, 25), (4, 30),
                   # -> 22 and 20 * 0.85 = 17, and the quantum reproduces
                   # both exactly -- so the denominator is CURRENT max, not
                   # base max (studies/skills section 23).
-                  (4, 22), (2, 17))
+                  (4, 22), (2, 17),
+                  # MANTID (20260913T210901): a level-1 Mesmer at 30 = 20 base
+                  # + 10 armour, morale 85..87 -> 27 and 88 -> 28 (0.88 x 20 +
+                  # 10 = 27.6). THE SECOND DISCRIMINATING DATUM: 30 x 0.85 =
+                  # 25.5 dies, 20 x 0.85 + 10 = 27 lives. n=2 with (4, 22).
+                  (4, 27), (4, 28))
 
 # The SIX distinct nonzero property-43 f32s in the live corpus, with the count
 # and the joined pair each one resolved to. OBSERVED 2026-08-20 over 14 captures;
@@ -445,7 +450,8 @@ def section_corpus_oracle():
               f"has no reason to produce integers at all. Non-integers: "
               f"{non_integer[:3]}")
 
-    LEDGER.ok(set(seen) - {(0, 17), (0, 20), (0, 22), (0, 25), (0, 30)}
+    LEDGER.ok(set(seen) - {(0, 17), (0, 20), (0, 22), (0, 25), (0, 30),
+                           (0, 27)}   # MANTID: the Mesmer's death at 27
               <= set(CANDIDATE_PIPS),
               "and every pair is an armour row or a morale-scaled one",
               f"{sorted(k for k in seen if k[0])}. WIKI (GWW, 'Energy', rev. "

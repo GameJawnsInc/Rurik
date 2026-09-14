@@ -666,6 +666,14 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "owe one swing, opened within 0.5 s without the "
                          "re-test -- retail's halt-then-swing (5 of 5) on a "
                          "copy that lags the runner.")
+    ap.add_argument("--effect-list-to-all", action="store_true",
+                    help="THE REVERT ARM for MANTID: send 0x0042/0x0044 to "
+                         "every agent's effects, not only the player's -- "
+                         "retail sends them to nobody else (0 of 369).")
+    ap.add_argument("--no-hex-triggers", action="store_true",
+                    help="THE REVERT ARM for MANTID: a hex whose row says "
+                         "triggers_on_attack deals nothing when its wearer "
+                         "swings.")
     ap.add_argument("--no-attack-speed-sync", action="store_true",
                     help="THE REVERT ARM for SLICE-H13: never re-declare an "
                          "agent's 0x0035 attack-speed pair when a stance "

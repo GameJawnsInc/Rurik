@@ -517,7 +517,8 @@ class EffectTable:
                        and ep["type_code"] == int(type_code)),
                       key=lambda ep: ep["buff"])
 
-    def apply(self, agent_id, skill_id, rank, duration, now, type_code=0):
+    def apply(self, agent_id, skill_id, rank, duration, now, type_code=0,
+              caster=None):
         """Open an episode and return it, or REFRESH the one already there.
 
         Refuses a duration of zero or less: a zero-length episode would be
@@ -614,7 +615,7 @@ class EffectTable:
                 f"invent one.")
         buff = self._alloc()
         ep = {"buff": buff, "agent": agent_id, "skill": skill_id,
-              "type_code": int(type_code),
+              "type_code": int(type_code), "caster": caster,
               "rank": int(rank), "duration": float(duration),
               "applied_at": now, "expires_at": now + float(duration),
               "overlapping": any(e["agent"] == agent_id

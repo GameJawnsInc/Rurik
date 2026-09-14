@@ -1110,6 +1110,14 @@ GV_INSTANT_SKILL_ACTIVATED = 48
 # a claim about retail's traffic. The forwarder never clears the bit it sets,
 # so there may be no un-set on this path (SLICE-F1's last item).
 GV_GLOW = 29
+# MANTID (2026-09-13): properties 6 and 7 are ONE client function with an on/off
+# flag (studies/slice F5: push 1 / push 0 into 0x7DFAB0), and the Factions
+# tutorial tape put them where they belong -- 0x009F [6, foe, 1] and [6, foe, 4]
+# in the batch that lands a hex on a foe (5 of 5 Empathy casts), [7, foe, 1] and
+# [7, foe, 4] in the batch that kills it. The ids index a table this repo cannot
+# read, so they live on the skill's content row (`auras = [...]`) and NOT here.
+PROP_AURA_ON = 6
+PROP_AURA_OFF = 7
 GLOW_ROWS = 11
 # SLICE-F20: the release marker of a cast that NEVER BEGAN -- [45, agent, 0]
 # immediately before the bare E2, 4 of 4 pre-begin drops on the live wire

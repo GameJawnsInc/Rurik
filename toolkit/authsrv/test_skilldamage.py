@@ -46,7 +46,7 @@ import effects  # noqa: E402
 # a short run means a section stopped rather than passed.
 # SKILLS-HN +4 (44), SKILLS-FA +13 (57: 7 model + 6 corpus), each from its
 # green run. Section 12 needs the live corpus and declares a skip without it.
-LEDGER = checks.Ledger("skill damage", floor=57)
+LEDGER = checks.Ledger("skill damage", floor=58)   # MANTID-S +1: the player-side control beside the foe-side refusal
 check = LEDGER.ok
 
 
@@ -375,9 +375,22 @@ def main():
     state = {"agents": {10: dict(ag, health=100.0)}, "pos": (0.0, 0.0)}
     ep = authsrv.apply_condition(send, state, 10, 478, 9.0, 3, 0, 382)
     check(ep is not None and sent
+          and not [1 for op, _v, _w in sent if op == effects.OP_EFFECT_APPLY]
+          and sent[0][0] == authsrv.GAME_SMSG_AGENT_UPDATE_STATUS
+          and state.get("effect_list_suppressed") == 1,
+          "MANTID: on a FOE no 0x0042 goes out -- the status word carries the "
+          "condition (retail: 0 of 369 effect-list messages name anyone but "
+          "the player)", f"{[(hex(op), v) for op, v, _w in sent][:3]}")
+    sent = []
+    state = {"agents": {}, "pos": (0.0, 0.0), "player_health": 100.0}
+    authsrv.player_pools(state)
+    ep = authsrv.apply_condition(send, state, authsrv.PLAYER_AGENT_ID, 478,
+                                 9.0, 3, 0, 382)
+    check(ep is not None and sent
           and sent[0][0] == effects.OP_EFFECT_APPLY
           and sent[0][1][1] == 478,
-          "and it goes out as an ordinary 0x0042 naming the CONDITION's id",
+          "and on the PLAYER it goes out as an ordinary 0x0042 naming the "
+          "CONDITION's id",
           f"{sent[0][1] if sent else sent} -- not the inflicting skill's. "
           f"That is what retail carries: the corpus's six condition applies "
           f"name 480 and 481, never the skill that caused them")

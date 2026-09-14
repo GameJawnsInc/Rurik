@@ -417,6 +417,38 @@ icon are what this server models of the two; Crippled slows nothing here."""
 page = 'GWW, "Desperation Blow", {{Skill progression}}, rev. 2026-07-05'
 verified = "Client scale 10->40, args = 2 (scale). Wiki var1 `+ Damage` 10->40."
 
+# MANTID (2026-09-13): the two Mesmer skills the Factions tutorial grants, read off
+# capture 20260913T210901 (studies/quests/FINDINGS.md 10.6). Neither is on a shipped bar;
+# `--skills 26,40` puts them on the probe bar.
+[skill_effect.26]
+scale_means = "Damage on attack"
+bonus_scale_means = "Damage reduction"
+triggers_on_attack = "Damage"
+auras = [1, 4]
+[skill_effect.26.provenance]
+source = "wiki"
+page = 'GWW, "Empathy", {{Skill progression}}, read 2026-09-13'
+verified = "Client duration 5->15, scale 10->55, bonus 1->15, args = 7. Wiki: Duration 5->15, Damage 10->55, Damage reduction 1->15."
+note = """A Hex Spell (type 4). OBSERVED on the tutorial tape, 5 of 5 casts: the landing \
+puts 0x00A0 [20, foe, hexer, 47], properties 6 = 1 and 6 = 4 (`auras`), and status bit \
+0x800 on the FOE and NO 0x0042 on anyone; the hexed foe's first swing draws 0x009F [42, \
+foe, 25] then 0x00A3 [55, foe, hexer, -0.40] = 10 armour-ignoring at Domination 0, ahead \
+of its own hit (`triggers_on_attack`). The `bonus` -- the foe's attacks deal 1..15 less \
+-- is NOT modelled, said here. The aura ids index a client table this repo does not \
+read; they are Empathy's own, measured, and reused for nothing else."""
+
+[skill_effect.40]
+scale_means = "Energy loss"
+bonus_scale_means = "Heal per energy lost"
+[skill_effect.40.provenance]
+source = "wiki"
+page = 'GWW, "Ether Feast", {{Skill progression factored}}, read 2026-09-13'
+verified = "Client scale 3->3, bonus 20->65, args = 4 (bonus). Wiki: 3 Energy, Heal per energy lost 20->65, factor 3."
+note = """A Spell (type 5). OBSERVED on the tutorial tape, 3 of 3: the heal is 0x00A3 [55, \
+caster, caster, +0.68] = 60 at Inspiration 0 (3 x 20); the foe's energy loss is invisible \
+on the wire (no foe pool is ever sent). Here the loss comes off the body's own energy pool \
+when one is modelled and the heal is per point actually lost."""
+
 # The rest of the two bars, declared so "not damage" is a RECORDED FACT with a
 # citation rather than a silent default. The server models none of these.
 [skill_effect.276]

@@ -4089,6 +4089,26 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   carries no `weapon_item`; both messages encode through the real codec. Retail gives every
   body its weapons this way (3,016 non-party 0x006D across the live corpus, SLICE-F35).
 
+  **MANTID-S (2026-09-13, floor 181 -> 198).** `toolkit/authsrv/test_mechanics.py` §29: what
+  the Factions tutorial tape corrected (studies/slice F38). Empathy on a foe opens an episode
+  that remembers its caster, sends NO 0x0042 (retail: 0 of 369 effect-list messages name anyone
+  but the player), the status word 0x800, and the row's two auras [6, foe, 1] and [6, foe, 4];
+  a strip switches them off ([7, ...]) with no 0x0044; a hex on the PLAYER still goes out as
+  0x0042; the revert arm (`--effect-list-to-all`) sends it to the foe again. The hexed foe's
+  swing is punished [42, foe, 100] + [55, foe, player, -0.10] immediately before its own hit
+  (the tape's order), a foe at 5 dies to it and its hit never lands, and `--no-hex-triggers`
+  costs the swinger nothing. Ether Feast heals the caster [55, me, me, 0.60] = 60 on a 100
+  pool. A granted skill is 0x00DC, 0x00D9 [player, first empty slot, skill, 0], 0x001C; a
+  known skill gets no 0x001C; a full bar learns without equipping; a quest row's
+  `reward_skills` are granted ahead of the experience. SEVEN older checks were rewritten to the
+  measured shape -- section 16's Deep Wound batch on an agent (no 0x0042 in front), section 20
+  P1 (prop 55 positive in 97%+, the negatives being Empathy's trigger), and five in sections
+  26/28 that pinned a 0x0044 on hostile 11 (none goes out; the status word or the maximum
+  precedes the heal). `test_skilldamage.py` (floor 57 -> 58): a condition on foe 10 sends no
+  0x0042 -- the status word carries it -- and the player-side control keeps the "names the
+  CONDITION's id" claim. `test_pools.py`: CANDIDATE_PIPS gains the Mesmer's (4, 27) / (4, 28)
+  (30 = 20 + 10 under morale 85..88, the second base-vs-total datum) and the zero-pip set its
+  death at (0, 27).
   **SLICE-H13 (2026-09-13).** `toolkit/authsrv/test_mechanics.py` §7b (floor 174 -> 181): the
   attack-speed pair follows the stance -- nothing open sends nothing; Frenzy opening on the player
   sends exactly ONE 0x0035 [player, base, 0.67] (the client's modifier field, the base unchanged);

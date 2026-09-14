@@ -363,6 +363,12 @@ def grant_quest_reward(send, state, qid, row, conn_id):
     """
     xp = row.get("reward_experience")
     gold = row.get("reward_gold")
+    # MANTID: a quest may hand over skills -- the tutorial's reward carried the
+    # Resurrection Signet as SKILL_SET_COPIES + the per-slot bar write, in the
+    # same frame as the experience, before the two removes.
+    for sid in row.get("reward_skills") or ():
+        grant_skill(send, state, int(sid), conn_id,
+                    unlocked=int(sid) in state.get("skills_known", set()))
     if gold is not None:
         print(f"[c{conn_id}] quest {qid}: reward_gold = {gold} is NOT GRANTED "
               f"-- no gold message is identified in the corpus, and the offer "
@@ -3503,6 +3509,14 @@ ATTRIBUTE_POINTS_UNUSED_SEE_ATTRIBSPEND = None
 # in the wider corpus. If the bar stays empty, doubt the numbers before the shape.
 GAME_SMSG_PVP_UPDATE_UNLOCKED_SKILLS = 0x001D   # 29
 GAME_SMSG_SKILLBAR_UPDATE = 0x00DA              # 218
+# MANTID: a skill GRANTED mid-map is three messages, OBSERVED 3 of 3 on the
+# Factions tutorial tape (t=536.705 x2, 736.185): SKILL_SET_COPIES [skill, 1],
+# SKILLBAR_UPDATE_SKILL [agent, slot, skill, 0] (a per-slot bar write; the
+# load-time 0x00DA was NOT re-sent), and SKILL_UNLOCKED [skill, 0] only when
+# the account did not already hold it (the Resurrection Signet came without).
+GAME_SMSG_SKILLBAR_UPDATE_SKILL = 0x00D9        # 217
+GAME_SMSG_SKILL_SET_COPIES = 0x00DC             # 220
+GAME_SMSG_SKILL_UNLOCKED = 0x001C               # 28
 
 # ---- THE EFFECT CHANNEL, wired 2026-08-20 ---------------------------------
 #
@@ -3835,6 +3849,27 @@ MOVE_SPEED_EFFECTS = False
 # The tick below re-declares an agent's pair whenever its factor changes --
 # the stance opening, expiring, being replaced or cured -- and only then.
 ATTACK_SPEED_SYNC = True      # False (--no-attack-speed-sync): the pre-H13 arm, one declaration ever.
+# ---- MANTID: WHAT THE TUTORIAL TAPE CORRECTED (studies/slice F38) ----
+#
+# THE EFFECT LIST IS THE PLAYER'S OWN. Across all 61 live connections in the
+# corpus, every 0x0042 / 0x0043 / 0x0044 ever sent names the observing player
+# (136 / 108 / 125 of them, 0 of 369 on any other agent); the tutorial tape has
+# none at all because the Mesmer wore nothing. A hex, condition or enchantment
+# on a FOE reaches the client through the status word alone -- 0x00F1 bit
+# 0x800 for a hex (12 sightings on others), 0x02|bit for a condition (312) --
+# which push_status already sends. This server had been sending the player's
+# icon-list messages to foes and party bodies since the effects arc, traffic
+# retail never produces. Heroes have NO witness either way (no hero tape), so
+# they keep the messages; henchmen do not (the owner's own tapes carried
+# henchmen and never a 0x0042 for one).
+EFFECT_LIST_SELF_ONLY = True  # False (--effect-list-to-all): the pre-MANTID arm.
+# A HEX THAT PUNISHES ATTACKS. Empathy on the tape: the hexed foe's first swing
+# drew 0x009F [42, foe, 25] then 0x00A3 [55, foe, hexer, -0.40] -- the
+# armour-ignoring channel, a NEGATIVE fraction, 0.4 x 25 = the rank-0 damage --
+# ahead of the foe's own hit (3 of 3). The maximum is declared right before the
+# fraction on every one of them, which is what "health-max is a rare
+# mid-combat correction" (unit-setup) turns out to be.
+HEX_TRIGGERS = True           # False (--no-hex-triggers): a hex is an icon and a bit, nothing more.
 GAME_SMSG_AGENT_UPDATE_SPEED_BASE = 0x0027   # [agent, f32 maxSpeed] -- schema's earned name
 GAME_SMSG_UPDATE_UNLOCKED_SKILLS = 0x00DB       # 219
 
@@ -13201,6 +13236,8 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
         if SWING_HOLDS_WALK_GATE:
             action_hold(send, state, 1, f"the swing at {target_id}")
 
+    # MANTID: a hex on the ATTACKER punishes the swing before it lands.
+    on_attack_triggers(send, state, PLAYER_AGENT_ID, conn_id)
     agent["health"] = max(0.0, agent["health"] - dealt)
 
     # Property 16 on 0x00A3: prop, TARGET, cause, value -- target before cause,
@@ -13639,7 +13676,7 @@ def spend_glyph_charge(send, state, ep, conn_id, skill_id):
         return
     table = effect_table(state)
     table.close(ep["buff"])
-    send(GAME_SMSG_EFFECT_REMOVE, [ep["agent"], ep["buff"]],
+    effect_list_send(send, state, GAME_SMSG_EFFECT_REMOVE, [ep["agent"], ep["buff"]],
          f"EFFECT_REMOVE(buff {ep['buff']}, glyph {ep['skill']}, SPENT -- "
          f"{GLYPH_SPELL_CHARGES} spells used)")
     print(f"[c{conn_id}] glyph {ep['skill']} on agent {ep['agent']} is spent "
@@ -15206,6 +15243,162 @@ def send_skill_visual(send, state, caster_id, skill_id, target_id, conn_id):
              f"target of skill {skill_id}")
 
 
+def effect_list_visible(state, agent_id):
+    """Does this agent's effect list go on the wire? The player's does (369 of
+    369 in the corpus); a hero's is kept for want of a witness; nobody else's."""
+    if not EFFECT_LIST_SELF_ONLY or agent_id == PLAYER_AGENT_ID:
+        return True
+    row = state.get("agents", {}).get(agent_id) or {}
+    return bool(row.get("hero"))
+
+
+def effect_list_send(send, state, op, values, label):
+    """The ONE door for 0x0042 / 0x0044 (MANTID). Sends only for an agent whose
+    effect list the client is shown; counts the rest so a test can see them.
+    A REMOVE also switches the episode's auras off, whoever wears it -- retail
+    sent [7, foe, 1] and [7, foe, 4] when the hexed hatchling died."""
+    agent_id = values[0]
+    if op == GAME_SMSG_EFFECT_REMOVE:
+        aura_off(send, state, values[1])
+    if effect_list_visible(state, agent_id):
+        send(op, values, label)
+        return True
+    state["effect_list_suppressed"] = state.get("effect_list_suppressed", 0) + 1
+    return False
+
+
+def skill_effect_row(skill_id):
+    try:
+        return agents.WORLD.get("skill_effect", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return {}
+
+
+def aura_on(send, state, ep, conn_id):
+    """Properties 6 for each aura id the skill's content row names (OBSERVED for
+    Empathy: [6, foe, 1], [6, foe, 4], 5 of 5), remembered by buff for the off."""
+    ids = skill_effect_row(ep["skill"]).get("auras") or ()
+    if not ids:
+        return
+    for aura in ids:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.PROP_AURA_ON, ep["agent"], int(aura)],
+             f"aura {aura} on agent {ep['agent']} (skill {ep['skill']})")
+    state.setdefault("auras_by_buff", {})[ep["buff"]] = (ep["agent"], tuple(int(a) for a in ids))
+
+
+def aura_off(send, state, buff):
+    held = state.get("auras_by_buff", {}).pop(buff, None)
+    if not held:
+        return
+    agent_id, ids = held
+    for aura in ids:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.PROP_AURA_OFF, agent_id, int(aura)],
+             f"aura {aura} off agent {agent_id}")
+
+
+def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, what):
+    """Damage that ignores armour, on the channel retail uses for it: 0x00A3
+    [55, target, source, -fraction], the target's maximum declared FIRST
+    (3 of 3 on the tape). Kills through the same doors a hit does."""
+    amount = float(amount)
+    if amount <= 0.0:
+        return 0.0
+    if target_id == PLAYER_AGENT_ID:
+        player_pools(state)
+        if state.get("player_dead"):
+            return 0.0
+        pool = float(player_max_health(state))
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID, int(pool)],
+             f"maximum {int(pool)} declared ahead of {what}")
+        frac = _damage_fraction(amount, pool, agents.GV_ARMOR_IGNORING, what)
+        state["player_health"] = max(0.0, state["player_health"] - amount)
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+             [agents.GV_ARMOR_IGNORING, PLAYER_AGENT_ID, source_id, frac],
+             f"{what}: {amount:.0f} armour-ignoring to the player")
+        print(f"[c{conn_id}] {what}: {amount:.0f} to the player "
+              f"({state['player_health']:.0f}/{pool:.0f})", flush=True)
+        if state["player_health"] <= 0.0:
+            kill_player(send, state, conn_id, why=what)
+        return amount
+    agent = state.get("agents", {}).get(target_id)
+    if not agent or agent.get("dead"):
+        return 0.0
+    pool = float(agent["max_health"])
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.PROP_HEALTH_MAX, target_id, int(pool)],
+         f"maximum {int(pool)} declared ahead of {what}")
+    frac = _damage_fraction(amount, pool, agents.GV_ARMOR_IGNORING, what)
+    agent["health"] = max(0.0, float(agent["health"]) - amount)
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+         [agents.GV_ARMOR_IGNORING, target_id, source_id, frac],
+         f"{what}: {amount:.0f} armour-ignoring to agent {target_id}")
+    print(f"[c{conn_id}] {what}: {amount:.0f} to agent {target_id} "
+          f"({agent['health']:.0f}/{pool:.0f})", flush=True)
+    if agent["health"] <= 0.0:
+        kill_agent(send, state, target_id, agent, conn_id, time.time())
+    return amount
+
+
+def on_attack_triggers(send, state, attacker_id, conn_id):
+    """MANTID: every live hex on the ATTACKER whose row says
+    `triggers_on_attack = "Damage"` deals its scale, armour-ignoring, from the
+    hexer, as the swing lands -- Empathy's "whenever target foe attacks".
+    Returns the total dealt."""
+    if not HEX_TRIGGERS or not EFFECTS:
+        return 0.0
+    total = 0.0
+    for ep in list(effect_table(state).on_agent(attacker_id)):
+        row = skill_effect_row(ep["skill"])
+        if row.get("triggers_on_attack") != "Damage":
+            continue
+        try:
+            amount = skill_scale_value(ep["skill"], ep.get("rank", 0))
+        except Exception as exc:                                # noqa: BLE001
+            print(f"[c{conn_id}] hex {ep['skill']} triggers on attack but its "
+                  f"scale is unreadable: {exc}", flush=True)
+            continue
+        total += armour_ignoring_damage(
+            send, state, attacker_id, ep.get("caster") or PLAYER_AGENT_ID,
+            amount, conn_id, f"hex {ep['skill']} punishes the attack")
+    return total
+
+
+def grant_skill(send, state, skill_id, conn_id, slot=None, unlocked=False):
+    """MANTID: put a skill in the player's hands the way the tutorial did --
+    SKILL_SET_COPIES, the per-slot bar write, and SKILL_UNLOCKED unless the
+    account already held it. `slot` None = the first empty bar slot; a full
+    bar learns the skill without equipping it (RECONSTRUCTION: the tape's bar
+    had room every time). Returns the slot written, or None."""
+    skill_id = int(skill_id)
+    bar = SKILLBAR
+    send(GAME_SMSG_SKILL_SET_COPIES, [skill_id, 1],
+         f"SKILL_SET_COPIES(skill {skill_id})")
+    if slot is None:
+        empties = [i for i in range(SKILLBAR_SLOTS)
+                   if i >= len(bar) or not bar[i]]
+        slot = empties[0] if empties else None
+    if slot is not None:
+        while len(bar) <= slot:
+            bar.append(0)
+        bar[slot] = skill_id
+        send(GAME_SMSG_SKILLBAR_UPDATE_SKILL, [PLAYER_AGENT_ID, int(slot), skill_id, 0],
+             f"SKILLBAR_UPDATE_SKILL(slot {slot} <- skill {skill_id})")
+    else:
+        print(f"[c{conn_id}] skill {skill_id} granted with the bar full -- learned, "
+              f"not equipped", flush=True)
+    known = state.setdefault("skills_known", set())
+    if not unlocked and skill_id not in known:
+        send(GAME_SMSG_SKILL_UNLOCKED, [skill_id, 0],
+             f"SKILL_UNLOCKED(skill {skill_id})")
+    known.add(skill_id)
+    print(f"[c{conn_id}] skill {skill_id} granted"
+          + (f" into slot {slot}" if slot is not None else ""), flush=True)
+    return slot
+
+
 def apply_effect(send, state, caster_id, skill_id, rank, target_id, conn_id):
     """Open an episode for one cast, if the skill is one that opens episodes.
 
@@ -15252,14 +15445,14 @@ def apply_effect(send, state, caster_id, skill_id, rank, target_id, conn_id):
     # effect the server has already dropped.
     for old_ep in table.exclusive_on(wearer, row["type_code"]):
         table.close(old_ep["buff"])
-        send(GAME_SMSG_EFFECT_REMOVE, [old_ep["agent"], old_ep["buff"]],
+        effect_list_send(send, state, GAME_SMSG_EFFECT_REMOVE, [old_ep["agent"], old_ep["buff"]],
              f"EFFECT_REMOVE(buff {old_ep['buff']}, skill {old_ep['skill']}, "
              f"REPLACED by {family} {skill_id})")
         print(f"[c{conn_id}] {family} {skill_id} REPLACES "
               f"{old_ep['skill']} on agent {wearer} (one {family} at a time)",
               flush=True)
     ep = table.apply(wearer, skill_id, rank, duration, time.time(),
-                     type_code=row["type_code"])
+                     type_code=row["type_code"], caster=caster_id)
     # FIELD 3 IS THE RANK. Not the duration -- 96 of 96 non-condition applies
     # in the live corpus predict the wire's duration from
     # interp(duration0, duration15, field3), and skill 160 carries field3 = 15
@@ -15278,7 +15471,7 @@ def apply_effect(send, state, caster_id, skill_id, rank, target_id, conn_id):
     # no monster in the corpus does. See pick_skill, which says in its own
     # docstring that it is not a decision about AI.
     tag = " (OVERLAPPING -- the client will discard it)" if ep["overlapping"] else ""
-    send(GAME_SMSG_EFFECT_APPLY,
+    effect_list_send(send, state, GAME_SMSG_EFFECT_APPLY,
          [ep["agent"], skill_id, ep["rank"], ep["buff"],
           _f32(ep["duration"])],
          f"EFFECT_APPLY({family} {skill_id} on agent {ep['agent']}, "
@@ -15290,6 +15483,7 @@ def apply_effect(send, state, caster_id, skill_id, rank, target_id, conn_id):
     # enchantment 0x80, everything else on this path moves nothing and sends
     # nothing (effects.status_word).
     push_status(send, state, ep["agent"], conn_id)
+    aura_on(send, state, ep, conn_id)
     return ep
 
 
@@ -15306,7 +15500,7 @@ def strip_effects(send, state, agent_id, conn_id, why):
         return []
     gone = effect_table(state).strip_agent(agent_id)
     for ep in gone:
-        send(GAME_SMSG_EFFECT_REMOVE, [ep["agent"], ep["buff"]],
+        effect_list_send(send, state, GAME_SMSG_EFFECT_REMOVE, [ep["agent"], ep["buff"]],
              f"EFFECT_REMOVE(buff {ep['buff']}, skill {ep['skill']}, "
              f"STRIPPED: {why})")
     if agent_id == PLAYER_AGENT_ID:
@@ -15424,14 +15618,14 @@ def apply_condition(send, state, target_id, condition_id, seconds, rank,
                   f"stands, nothing sent", flush=True)
             return old_ep
         table.close(old_ep["buff"])
-        send(GAME_SMSG_EFFECT_REMOVE, [target_id, old_ep["buff"]],
+        effect_list_send(send, state, GAME_SMSG_EFFECT_REMOVE, [target_id, old_ep["buff"]],
              f"EFFECT_REMOVE(buff {old_ep['buff']}, {name}, EXTENDED from "
              f"{remaining:.1f}s to {seconds:.1f}s)")
         break
 
     ep = table.apply(target_id, condition_id, rank, seconds, now,
                      type_code=8)
-    send(GAME_SMSG_EFFECT_APPLY,
+    effect_list_send(send, state, GAME_SMSG_EFFECT_APPLY,
          [ep["agent"], condition_id, ep["rank"], ep["buff"],
           _f32(ep["duration"])],
          f"EFFECT_APPLY({name} on agent {ep['agent']}, buff {ep['buff']}, "
@@ -15888,7 +16082,7 @@ def remove_conditions(send, state, agent_id, conn_id, why, count=None):
         gone = gone[:max(0, int(count))]
     for ep in gone:
         table.close(ep["buff"])
-        send(GAME_SMSG_EFFECT_REMOVE, [ep["agent"], ep["buff"]],
+        effect_list_send(send, state, GAME_SMSG_EFFECT_REMOVE, [ep["agent"], ep["buff"]],
              f"EFFECT_REMOVE(buff {ep['buff']}, "
              f"{effects.CONDITION_SKILLS[ep['skill']]}, REMOVED: {why})")
     for ep in gone:
@@ -15900,6 +16094,40 @@ def remove_conditions(send, state, agent_id, conn_id, why, count=None):
         print(f"[c{conn_id}] removed {len(gone)} condition(s) from agent "
               f"{agent_id}: {why}", flush=True)
     return gone
+
+
+def energy_feast(send, state, skill_id, rank, caster_id, target_id, conn_id):
+    """MANTID: Ether Feast's shape -- the target loses up to `scale` energy and
+    the caster is healed `bonus` per point lost. The heal is OBSERVED (0x00A3
+    [55, me, me, 0.68] = 60 at Inspiration 0, 3 of 3 on the tape); the loss is
+    invisible on a foe (no foe pool is ever sent) and is taken from the body's
+    own pool here when one is modelled, else assumed in full (the tape's
+    hatchlings had no visible pool and the heal was the full 60 each time)."""
+    try:
+        # The energy is a FLAT constant with its bit clear (args = 4: only the
+        # bonus set is live) -- the H12 idiom, skill_flat_constant.
+        loss = float(skill_flat_constant(skill_id, "scale"))
+        per = float(skill_scale_value(skill_id, rank, which="bonus_scale"))
+    except Exception as exc:                                    # noqa: BLE001
+        print(f"[c{conn_id}] skill {skill_id}: energy feast unreadable: {exc}", flush=True)
+        return None
+    lost = loss
+    body = state.get("agents", {}).get(target_id) if target_id != PLAYER_AGENT_ID else None
+    if body is not None and ENERGY:
+        pool = agent_energy(body)
+        lost = min(loss, float(pool.current))
+        pool.current = max(0.0, float(pool.current) - lost)
+    elif target_id == PLAYER_AGENT_ID and ENERGY:
+        pool = player_energy(state)
+        lost = min(loss, float(pool.current))
+        pool.spend(lost)
+    amount = lost * per
+    print(f"[c{conn_id}] skill {skill_id} by agent {caster_id}: agent {target_id} "
+          f"loses {lost:.0f} energy, the caster is healed {amount:.0f}", flush=True)
+    healed_now = heal_agent(send, state, caster_id, caster_id, amount, conn_id,
+                            healing=True) if amount > 0 else 0.0
+    return {"recipient": caster_id, "removed": 0, "remaining": 0,
+            "healed": healed_now}
 
 
 def resolve_heal(send, state, skill_id, rank, caster_id, target_id, conn_id):
@@ -15920,6 +16148,8 @@ def resolve_heal(send, state, skill_id, rank, caster_id, target_id, conn_id):
         erow = agents.WORLD.get("skill_effect", str(skill_id))
     except Exception:                                          # noqa: BLE001
         erow = {}
+    if erow.get("scale_means") == "Energy loss" and erow.get("bonus_scale_means") == "Heal per energy lost":
+        return energy_feast(send, state, skill_id, rank, caster_id, target_id, conn_id)
     removes = erow.get("removes_conditions") if CONDITION_HEAL_RULE else None
     per_removed = (bool(erow.get("heal_per_condition_removed"))
                    if CONDITION_HEAL_RULE else False)
@@ -16106,7 +16336,7 @@ def end_on_skill_use(send, state, agent_id, skill_id, conn_id):
         if not row.get("ends_on_skill_use") or ep["skill"] == skill_id:
             continue
         table.close(ep["buff"])
-        send(GAME_SMSG_EFFECT_REMOVE, [ep["agent"], ep["buff"]],
+        effect_list_send(send, state, GAME_SMSG_EFFECT_REMOVE, [ep["agent"], ep["buff"]],
              f"EFFECT_REMOVE(buff {ep['buff']}, skill {ep['skill']}, ENDED by "
              f"using skill {skill_id})")
         print(f"[c{conn_id}] skill {ep['skill']} on agent {agent_id} ends: a "
@@ -16262,7 +16492,7 @@ def resolve_taker_conversion(send, state, conversion, conn_id):
     heal_agent(send, state, ep["agent"], ep["agent"], conversion["heal"],
                conn_id, healing=False)     # "gains that amount of Health"
     effect_table(state).close(ep["buff"])
-    send(GAME_SMSG_EFFECT_REMOVE, [ep["agent"], ep["buff"]],
+    effect_list_send(send, state, GAME_SMSG_EFFECT_REMOVE, [ep["agent"], ep["buff"]],
          f"EFFECT_REMOVE(buff {ep['buff']}, skill {ep['skill']}, CONVERTED "
          f"{conversion['reduced']:.0f} damage, healed "
          f"{conversion['heal']:.0f})")
@@ -16442,7 +16672,7 @@ def effect_tick(send, state, conn_id):
     now = time.time()
     for ep in table.due(now):
         table.close(ep["buff"])
-        send(GAME_SMSG_EFFECT_REMOVE, [ep["agent"], ep["buff"]],
+        effect_list_send(send, state, GAME_SMSG_EFFECT_REMOVE, [ep["agent"], ep["buff"]],
              f"EFFECT_REMOVE(buff {ep['buff']}, skill {ep['skill']}, "
              f"expired after {ep['duration']:.1f}s)")
         print(f"[c{conn_id}] effect {ep['skill']} on agent {ep['agent']} "
@@ -17614,6 +17844,8 @@ def land_swing_on_body(send, state, agent_id, agent, tid, conn_id, bonus=0.0,
         dealt = _ws
     dealt *= weakness_multiplier(state, agent_id)        # SLICE-H12
     dealt += float(bonus)
+    if on_attack_triggers(send, state, agent_id, conn_id) and agent.get("dead"):
+        return "landed"                                     # MANTID
     what = (("a party swing" if party else "an enemy swing") if skill_id is None
             else f"skill {skill_id}")
     frac = _damage_fraction(dealt, row["max_health"], agents.PROP_DAMAGE, what)
@@ -19789,6 +20021,11 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
     # SLICE-F24: an attack skill's "+ damage", after armour (hit_enemy's
     # order for the player), and its close is the attack trio's 46.
     dealt += float(bonus)
+    # MANTID: a hex on the swinger punishes the swing ahead of its hit
+    # (Empathy on the tape: [42, foe, 25] + [55, foe, hexer, -0.4], then the
+    # foe's own 0x00A7/0x00A3, 3 of 3).
+    if on_attack_triggers(send, state, agent_id, conn_id) and agent.get("dead"):
+        return "landed"
     dealt, conversion = taker_damage(state, PLAYER_AGENT_ID, dealt)
     frac = None
     if dealt > 0:
@@ -27640,6 +27877,17 @@ def main():
               "leaves reach (the enemy loop, attack_tick) and an attack skill's "
               "strike is released past reach (SLICE-C1) -- the pre-F21 arm; "
               "retail lands them all.", flush=True)
+    if a.effect_list_to_all:
+        global EFFECT_LIST_SELF_ONLY
+        EFFECT_LIST_SELF_ONLY = False
+        print("[map] --effect-list-to-all: 0x0042/0x0044 go to every agent -- "
+              "the pre-MANTID arm (retail: 0 of 369 on anyone but the player).",
+              flush=True)
+    if a.no_hex_triggers:
+        global HEX_TRIGGERS
+        HEX_TRIGGERS = False
+        print("[map] --no-hex-triggers: a hex that punishes attacks deals "
+              "nothing (the pre-MANTID arm).", flush=True)
     if a.no_attack_speed_sync:
         global ATTACK_SPEED_SYNC
         ATTACK_SPEED_SYNC = False

@@ -27,7 +27,7 @@ import agents       # noqa: E402
 import effects      # noqa: E402
 
 # Floor set from a real green run (39 checks, 2026-08-22; 99 checks, 2026-09-09 SKILLS-DW; 129 checks, 2026-09-10 SKILLS-BL; 153 checks, 2026-09-10 SKILLS-RC; 162 checks, 2026-09-10 SKILLS-MA).
-LEDGER = checks.Ledger("effect mechanics", floor=181)   # SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
+LEDGER = checks.Ledger("effect mechanics", floor=198)   # MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
 check = checks.adopt(LEDGER)
 
 FRENZY, RUSH, ROF, GLYPH, IGNITE, FAINT = 346, 319, 307, 200, 431, 135
@@ -524,10 +524,11 @@ sent, send = collector()
 state = dw_state(enemy=True)
 apply_dw(send, state, target=ENEMY)
 agent = state["agents"][ENEMY]
-check(shape(sent)[:3] == [(OP_APPLY, (ENEMY, DEEP_WOUND, 12)),
-                          (OP_STATUS, (ENEMY, 0x22)),
-                          (OP_INT, (agents.PROP_HEALTH_MAX, ENEMY, 80))],
-      "the same batch for an agent", f"got {shape(sent)[:3]}")
+check(shape(sent)[:2] == [(OP_STATUS, (ENEMY, 0x22)),
+                          (OP_INT, (agents.PROP_HEALTH_MAX, ENEMY, 80))]
+      and state.get("effect_list_suppressed") == 1,
+      "the same batch for an agent MINUS the 0x0042 (MANTID: retail sends a "
+      "foe's effect list to nobody, 0 of 369)", f"got {shape(sent)[:3]}")
 check(agent["max_health"] == 80.0 and agent["health"] == 80.0,
       "agent book: 80 of 80")
 agent["health"] = -10.0
@@ -615,8 +616,10 @@ try:
     import healjoin
     hs = healjoin.score(healjoin.census())
     check(hs["n"] >= 800, f"the live corpus holds property-55 gains (n={hs['n']})")
-    check(hs["positive"] >= 0.99 * hs["n"],
-          "P1: 55 is the health-GAIN direction, positive in 99%+",
+    check(hs["positive"] >= 0.97 * hs["n"],
+          "P1: 55 is the health-GAIN direction, positive in 97%+ (the "
+          "negatives are armour-ignoring DAMAGE: Empathy's trigger on "
+          "20260913T210901, MANTID)",
           f"{hs['positive']} of {hs['n']}")
     check(hs["within_known"] >= 0.85 * hs["n"],
           "P2: a heal's same-agent siblings are messages this server already "
@@ -930,10 +933,11 @@ try:
           and not state["effects"].on_agent(11),
           "ONE condition: it is removed and the ally is healed 58 (40 lands "
           "on a 60/100 pool)", f"out={out} health={state['agents'][11]['health']}")
-    check(len(removes(sent)) == 1 and len(heals(sent)) == 1
-          and ops.index(EFFECT_REMOVE) < ops.index(FLOAT_T),
-          "the wire: the 0x0044 removal BEFORE the 55 heal (the sentence's "
-          "own order -- RECONSTRUCTION, no retail 276 cast exists)",
+    check(not removes(sent) and len(heals(sent)) == 1
+          and ops.index(OP_STATUS) < ops.index(FLOAT_T),
+          "the wire: NO 0x0044 for a body (MANTID) -- its status word clears "
+          "BEFORE the 55 heal (the sentence's own order -- RECONSTRUCTION, "
+          "no retail 276 cast exists)",
           f"ops={[hex(o) for o in ops]}")
     check(heals(sent)[0][1] == 11 and heals(sent)[0][2] == 10,
           "the heal names the ally as taker and the caster as cause")
@@ -957,10 +961,11 @@ try:
           f"out={out} agent={state['agents'][11]}")
     maxes = [v for op, v, _l in sent if op == INT_NT
              and v[0] == agents.PROP_HEALTH_MAX]
-    check(len(removes(sent)) == 2 and len(maxes) == 1 and maxes[0][2] == 100
-          and ops.index(EFFECT_REMOVE) < ops.index(FLOAT_T),
-          "the wire: two 0x0044s, one 0x009F 42 = 100 restoring the maximum, "
-          "then the heal", f"sent={sent}")
+    ops = [op for op, _v, _l in sent]
+    check(not removes(sent) and len(maxes) == 1 and maxes[0][2] == 100
+          and ops.index(INT_NT) < ops.index(FLOAT_T),
+          "the wire: no 0x0044 for a body (MANTID); one 0x009F 42 = 100 "
+          "restoring the maximum, then the heal", f"sent={sent}")
 
     authsrv.CONDITION_HEAL_RULE = False
     sent, send = collector()
@@ -1142,11 +1147,11 @@ try:
     sent = tick(st)
     st["agents"][10]["cast_lands_at"] = time.time() - 1.0
     sent = tick(st)
-    check(len(removes(sent)) == 1 and len(heals(sent)) == 1
+    check(not removes(sent) and len(heals(sent)) == 1
           and heals(sent)[0][1] == 11 and st["agents"][11]["health"] == 100.0
           and not st["effects"].on_agent(11),
-          "a bleeding ally: the cast lands as one removal and one 58 heal on "
-          "the ALLY (50 -> 100), and the ally is cured", f"sent={sent}")
+          "a bleeding ally: the cast lands as one 58 heal on the ALLY (50 -> "
+          "100) with no 0x0044 (MANTID), and the ally is cured", f"sent={sent}")
 
     authsrv.CONDITION_HEAL_RULE = False
     st = world(1)
@@ -1191,7 +1196,7 @@ try:
     sent, send = collector()
     out = authsrv.resolve_heal(send, state, MA, 12, 10, 11, 0)
     check(out["removed"] == 1 and out["remaining"] == 0
-          and out["healed"] == 0.0 and len(removes(sent)) == 1
+          and out["healed"] == 0.0 and not removes(sent)
           and not heals(sent) and not state["effects"].on_agent(11)
           and state["agents"][11]["health"] == 60.0,
           "ONE condition: it is removed and NOTHING is healed -- none remains "
@@ -1213,9 +1218,8 @@ try:
           "Bleeding stays, and the one remaining heals 57 (40 lands on 60/100)",
           f"out={out} left={left}")
     ops = [op for op, _v, _l in sent]
-    check(len(removes(sent)) == 1 and len(heals(sent)) == 1
-          and ops.index(EFFECT_REMOVE) < ops.index(FLOAT_T),
-          "the wire: one 0x0044 (the Poison's buff) before the 55",
+    check(not removes(sent) and len(heals(sent)) == 1,
+          "the wire: no 0x0044 for a body (MANTID); the 55 heal alone",
           f"ops={[hex(o) for o in ops]}")
 
     sent, send = collector()
@@ -1398,5 +1402,161 @@ except agents.content.ContentError as exc:
     LEDGER.skip("section 28 (needs the vault's skill rows)", str(exc))
 finally:
     authsrv.HERO_SKILLS, authsrv.HERO_HEAL_AT = _b7c
+
+
+# -- 29. MANTID: what the Factions tutorial tape corrected (studies/slice F38).
+print("== 29. MANTID: the effect list is the player's own; a hex's auras; a hex "
+      "that punishes attacks; Ether Feast; a skill granted mid-map ==")
+EMPATHY, ETHER_FEAST = 26, 40
+_m29 = (authsrv.EFFECT_LIST_SELF_ONLY, authsrv.HEX_TRIGGERS, authsrv.ENERGY,
+        authsrv.STATUS_WORD, authsrv.ARMOUR_TERM, list(authsrv.SKILLBAR))
+try:
+    authsrv.EFFECT_LIST_SELF_ONLY, authsrv.HEX_TRIGGERS = True, True
+    authsrv.ENERGY, authsrv.STATUS_WORD, authsrv.ARMOUR_TERM = False, True, False
+    agents.WORLD.get("skills", str(EMPATHY))            # needs the vault overlay
+    # (a) Empathy on a FOE: no 0x0042, the status word, the two auras
+    state = two_hostiles()
+    authsrv.player_pools(state)
+    sent, send = collector()
+    ep = authsrv.apply_effect(send, state, PLAYER, EMPATHY, 0, 11, 0)
+    ops = [op for op, _v, _l in sent]
+    check(ep is not None and ep["caster"] == PLAYER and ep["agent"] == 11,
+          "Empathy by the player on foe 11 opens an episode that REMEMBERS "
+          "its caster", str(ep)[:120])
+    check(OP_APPLY not in ops and state.get("effect_list_suppressed") == 1,
+          "no 0x0042 goes to the foe (retail: 0 of 369 on anyone but the "
+          "player)", f"ops={[hex(o) for o in ops]}")
+    check([v for op, v, _l in sent if op == OP_STATUS] == [[11, 0x800]],
+          "the foe's status word carries the hex bit 0x800 (12 sightings on "
+          "others in the corpus)", f"{sent}")
+    check([tuple(v) for op, v, _l in sent if op == INT_NT and v[0] == agents.PROP_AURA_ON]
+          == [(6, 11, 1), (6, 11, 4)],
+          "and the row's two auras go on: [6, foe, 1], [6, foe, 4] -- the "
+          "tape's batch, 5 of 5", f"{sent}")
+    sent, send = collector()
+    authsrv.strip_effects(send, state, 11, 0, "the foe died")
+    check([tuple(v) for op, v, _l in sent if op == INT_NT and v[0] == agents.PROP_AURA_OFF]
+          == [(7, 11, 1), (7, 11, 4)]
+          and OP_REMOVE not in [op for op, _v, _l in sent],
+          "stripping the foe switches the auras OFF ([7, foe, 1], [7, foe, 4], "
+          "the death batch) and sends no 0x0044", f"{sent}")
+    # (a') the PLAYER's own list still goes out
+    sent, send = collector()
+    ep2 = authsrv.apply_effect(send, state, 10, EMPATHY, 0, PLAYER, 0)
+    check(ep2 is not None and [op for op, _v, _l in sent][0] == OP_APPLY
+          and sent[0][1][0] == PLAYER,
+          "a hex on the PLAYER goes out as 0x0042 as before", f"{sent[:1]}")
+    authsrv.strip_effects(send, state, PLAYER, 0, "clear")
+    # (a'') the revert arm
+    authsrv.EFFECT_LIST_SELF_ONLY = False
+    state = two_hostiles()
+    sent, send = collector()
+    authsrv.apply_effect(send, state, PLAYER, EMPATHY, 0, 11, 0)
+    check(OP_APPLY in [op for op, _v, _l in sent],
+          "REVERT ARM (--effect-list-to-all): the foe gets the 0x0042 again")
+    authsrv.EFFECT_LIST_SELF_ONLY = True
+    # (b) the hexed foe swings: the trigger lands ahead of its hit
+    state = two_hostiles()
+    authsrv.player_pools(state)
+    authsrv.apply_effect(send, state, PLAYER, EMPATHY, 0, 11, 0)
+    sent, send = collector()
+    res = authsrv.land_swing(send, state, 11, state["agents"][11], 0)
+    dmg = [(op, v) for op, v, _l in sent if op == FLOAT_T]
+    maxes = [v for op, v, _l in sent if op == INT_NT and v[0] == agents.PROP_HEALTH_MAX]
+    check(res == "landed" and len(dmg) == 2
+          and dmg[0][1] == [agents.GV_ARMOR_IGNORING, 11, PLAYER, authsrv._f32(-0.1)]
+          and dmg[1][1][0] == agents.PROP_DAMAGE and dmg[1][1][1] == PLAYER,
+          "the foe's swing: [55, foe, hexer, -0.10] (10 of its 100) BEFORE its "
+          "own [16, player, foe, ...] -- the tape's order, 3 of 3",
+          f"dmg={dmg} res={res}")
+    i42 = [i for i, (op, v, _l) in enumerate(sent)
+           if op == INT_NT and v[0] == agents.PROP_HEALTH_MAX]
+    i55 = [i for i, (op, v, _l) in enumerate(sent) if op == FLOAT_T]
+    check(i42 and i55 and i42[0] == i55[0] - 1
+          and sent[i42[0]][1] == [agents.PROP_HEALTH_MAX, 11, 100],
+          "and the foe's maximum is declared right before the fraction (3 of 3)",
+          f"{sent[:4]}")
+    check(state["agents"][11]["health"] == 50.0,
+          "the foe's own book: 60 -> 50", f"{state['agents'][11]['health']}")
+    # (b') the trigger can kill, and then the swing never lands
+    state = two_hostiles(h11=5.0)
+    authsrv.player_pools(state)
+    authsrv.apply_effect(send, state, PLAYER, EMPATHY, 0, 11, 0)
+    hp = state["player_health"]
+    sent, send = collector()
+    res = authsrv.land_swing(send, state, 11, state["agents"][11], 0)
+    check(state["agents"][11]["dead"] and state["player_health"] == hp
+          and not [1 for op, v, _l in sent if op == FLOAT_T and v[0] == agents.PROP_DAMAGE],
+          "a foe at 5 dies to its own swing's punishment and its hit never lands",
+          f"dead={state['agents'][11].get('dead')} hp={state['player_health']}")
+    # (b'') the revert arm
+    authsrv.HEX_TRIGGERS = False
+    state = two_hostiles()
+    authsrv.player_pools(state)
+    authsrv.apply_effect(send, state, PLAYER, EMPATHY, 0, 11, 0)
+    sent, send = collector()
+    authsrv.land_swing(send, state, 11, state["agents"][11], 0)
+    check(not [1 for op, v, _l in sent if op == FLOAT_T and v[0] == agents.GV_ARMOR_IGNORING]
+          and state["agents"][11]["health"] == 60.0,
+          "REVERT ARM (--no-hex-triggers): the hex is a bit and an icon, the "
+          "swing costs the swinger nothing")
+    authsrv.HEX_TRIGGERS = True
+    # (c) Ether Feast: the foe loses 3, the caster is healed 3 x 20
+    state = two_hostiles()
+    authsrv.player_pools(state)
+    state["player_health"] = 50.0
+    sent, send = collector()
+    out = authsrv.resolve_heal(send, state, ETHER_FEAST, 0, PLAYER, 11, 0)
+    check(out is not None and out["recipient"] == PLAYER
+          and out["healed"] == 50.0 and state["player_health"] == 100.0
+          and heals(sent) == [[agents.GV_HEALTH_GAIN, PLAYER, PLAYER, authsrv._f32(0.6)]],
+          "Ether Feast at Inspiration 0: [55, me, me, 0.60] = 60 on a 100 pool "
+          "(the tape's 0.68 x 88 = 60), 50 landing on 50/100",
+          f"out={out} heals={heals(sent)}")
+    # (d) a skill granted mid-map
+    authsrv.SKILLBAR[:] = [1, 2, 0, 0, 0, 0, 0, 0]
+    state = fresh_state()
+    sent, send = collector()
+    slot = authsrv.grant_skill(send, state, EMPATHY, 0)
+    check(slot == 2 and authsrv.SKILLBAR[2] == EMPATHY
+          and [(op, v) for op, v, _l in sent] == [
+              (authsrv.GAME_SMSG_SKILL_SET_COPIES, [EMPATHY, 1]),
+              (authsrv.GAME_SMSG_SKILLBAR_UPDATE_SKILL, [PLAYER, 2, EMPATHY, 0]),
+              (authsrv.GAME_SMSG_SKILL_UNLOCKED, [EMPATHY, 0])],
+          "a granted skill: 0x00DC [skill, 1], 0x00D9 [player, first empty "
+          "slot, skill, 0], 0x001C [skill, 0] -- the tape's batch, 3 of 3",
+          f"{sent}")
+    sent, send = collector()
+    authsrv.grant_skill(send, state, EMPATHY, 0)
+    check(authsrv.GAME_SMSG_SKILL_UNLOCKED not in [op for op, _v, _l in sent],
+          "granting a skill the account already knows sends no 0x001C (the "
+          "Resurrection Signet at the reward)", f"{sent}")
+    authsrv.SKILLBAR[:] = [1, 2, 3, 4, 5, 6, 7, 8]
+    sent, send = collector()
+    slot = authsrv.grant_skill(send, state, ETHER_FEAST, 0)
+    check(slot is None
+          and authsrv.GAME_SMSG_SKILLBAR_UPDATE_SKILL not in [op for op, _v, _l in sent]
+          and authsrv.SKILLBAR == [1, 2, 3, 4, 5, 6, 7, 8],
+          "a FULL bar learns the skill (0x00DC, 0x001C) and equips nothing "
+          "(RECONSTRUCTION: the tape's bar always had room)", f"{sent}")
+    authsrv.SKILLBAR[:] = [1, 2, 0, 0, 0, 0, 0, 0]
+    state = fresh_state()
+    authsrv.player_pools(state)
+    sent, send = collector()
+    authsrv.grant_quest_reward(send, state, "q", {"reward_experience": 100,
+                                                  "reward_skills": [ETHER_FEAST]}, 0)
+    ops = [op for op, _v, _l in sent]
+    check(authsrv.GAME_SMSG_SKILLBAR_UPDATE_SKILL in ops
+          and ops.index(authsrv.GAME_SMSG_SKILLBAR_UPDATE_SKILL)
+          < ops.index(authsrv.GAME_SMSG_AGENT_KILL_REWARD)
+          and authsrv.SKILLBAR[2] == ETHER_FEAST,
+          "a quest row's reward_skills are granted in the reward frame, ahead "
+          "of the experience", f"{[hex(o) for o in ops]}")
+except agents.content.ContentError as exc:
+    LEDGER.skip("section 29 (needs the vault's skill rows)", str(exc))
+finally:
+    (authsrv.EFFECT_LIST_SELF_ONLY, authsrv.HEX_TRIGGERS, authsrv.ENERGY,
+     authsrv.STATUS_WORD, authsrv.ARMOUR_TERM) = _m29[:5]
+    authsrv.SKILLBAR[:] = _m29[5]
 
 sys.exit(LEDGER.verdict())
