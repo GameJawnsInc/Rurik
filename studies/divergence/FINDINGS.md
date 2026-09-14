@@ -821,3 +821,93 @@ means anything.
 **Ours is also a narrower corpus in a way no rate corrects for**: 47 opcodes against
 148. Two of ArenaNet's sessions used three maps, quests, combat and two kills; ours is
 one map with one standing NPC.
+
+
+## D13 — the manifest family decoded to the request: `0x019F` names every reachable map's manifest hash, the "mission mask" acknowledges the names, `0x0093` asks for one map's manifest, and `0x0198`/`0x0196`/`0x0197 [3]` deliver it (2026-09-14)
+
+**Label:** OBSERVED (every count), RECONSTRUCTION for the word "manifest hash" (the
+function is unread; the behaviour is measured). Desk only: a scratch join over every live
+game connection (18 tapes, builds 38797 → 38888), `deepwoundjoin.sequence` for s2c and
+`cmsgstream` for c2s. Nothing here was run on a client.
+
+**Why it was asked.** `GAME_CMSG 0x0092 MISSION_MASK_REPORT`'s row (`schema/overrides.json`)
+had proven the mask's set bits equal the cumulative ids named by `GAME_SMSG 0x019F` (18 of
+18) and left two things open: what the per-map dword in `0x019F` means, and whether a set bit
+means "equal" or "received" — with the clue that the client sends `0x0093 [146]` while bit
+146 is already set. The quests arc's 38888 landing (quests §11) touched the mask's width and
+made the open item worth an afternoon.
+
+### D13.1 The list: `0x019F`, up to 16 × {word map, dword value}
+
+| measured | value |
+|---|---|
+| batches per instance load | 8–10, naming 113 (2026-08-07) → 137 → 147 → 158 (2026-09-14) ids |
+| ids named, whole corpus | 211 |
+| ids whose dword is identical across every session and both characters on one build | 193 |
+| ids whose dword changed with build 38888, and only then | 18 — nine pairs of neighbouring ids: 4/5/6, 176–179, 275/276, 359/360, 529/530, 537/538, 186, 52 |
+| ids whose dword alternates between two values across sessions on ONE build | 1 — map 787 (`0x93b94be3` ↔ `0x257096a6`) |
+| dwords shared by more than one id | 20 (e.g. 242 and 285 both `0xd5ece10c`; 243/366/834/874 one value) |
+
+Not progress: two characters of different professions three days apart carry the same
+dword for every id they share. Not the client's own `AreaInfo` record: no dword of the
+124-byte record equals it, neither does CRC32 of the record or of its first 0x68 bytes, and
+the 144 records whose bytes changed between 38849 and 38888 are not the 18 ids whose dword
+changed (overlap 1). A per-map value that is the same for everyone, moves with a client
+update for a few maps, and flips on a rotating map is a **content version** — and the reply
+below says which content.
+
+### D13.2 The mask, the request, the reply — one loop, measured on the cold-archive tape
+
+`20260817T183323` is the first session on a freshly assembled 38833 run directory: its
+`Gw.dat` had never fetched anything. That session sent **136** `0x0093 [map]` requests
+inside 9 s of the batches; every requested id was one `0x019F` had just named; the next
+session on the same directory (`183756`, 23 minutes later) sent **none**. Each request was
+answered, one for one (136 requests, 138 replies — the two extra are the unprompted pair
+below), by:
+
+```
+0x0198 [0]  0x0196 [1024 B]  0x0196 [363 B]  0x0198 [1]  0x0196 [1024 B]  0x0196 [110 B]  0x0197 [3, 242, 0xd5ece10c]
+```
+
+— PHASE brackets, BODY chunks (`array8 ≤ 1024`, binary: 5 of 40 leading bytes printable),
+and DONE with kind 3, the map, and **the same dword `0x019F` had named for that map** (188
+of 188 kind-3 replies carry a non-zero dword equal to the named one). So the dword is the
+key the client compares its archive against, and `0x0093` is "send me this map's manifest".
+Map 787 is the control the corpus supplies on its own: it was requested on **every** session
+whose dword differed from the previous session's, 4 of 4 flips (08-19, 08-21, 09-13, 09-14),
+and never otherwise.
+
+The unprompted pair at every instance load, 17 of 17: `0x0197 [2, 888, 0]` — kind 2 with the
+sentinel one past the last map (`MAP_ID_COUNT`, 897 on 38888) — then `0x0197 [0, <the map
+this connection loads>, 0]` (148 on the Ascalon tapes, 242/248/280 elsewhere, 17 of 17). Our
+server already sends exactly those two as `MANIFEST_DONE[2, 888]` and `MANIFEST_DONE[0,
+map]`; the sentinel row is the list-open, not a "no map" placeholder, which sharpens the
+`MAP_ID_COUNT` comment in `authsrv.py` (what the client does with the stored 888 is still
+unread).
+
+**So the mask.** A set bit means *the server has named this map's manifest hash to me* — the
+client's acknowledgement of `0x019F`, sent after each batch. It says nothing about completion
+or progress, and `0x0093 [146]` beside a set bit 146 is the client recording the naming and
+then fetching: not a contradiction.
+
+### D13.3 What this does NOT settle, said plainly
+
+- **The hash function.** Not CRC32 of the `AreaInfo` record. Probably a digest of the
+  manifest body; the body's layout is unread, so this stays RECONSTRUCTION.
+- **The 2026-09-13 session asked for 5 maps while 17 named dwords had changed since its
+  archive's last fetch.** 815/816 are new 38888 maps and 787 had flipped; 242 and 285 share
+  one dword. The run-live directory was copied from an install that had already played on
+  38888 for twelve days, so the 17 were presumably fetched there — consistent with the
+  cache living in `Gw.dat`, not proven. The model "ask when the archive lacks the hash" is
+  CORROBORATED by the cold directory (136 of 137), the warm one (0), and 787 (4 of 4); it is
+  not refuted by the 5, but the 5 are not predicted from the corpus alone.
+- **The body.** Our server sends the brackets and never a body (D3, unchanged) and has no
+  arm for `0x0093`. On loopback the assembled archives are warm and no request arrives
+  (0 in the 2026-09 gamesrv captures), so the gap costs nothing today; it becomes real
+  work the day a served map is missing from a run directory's archive. `test_dispatch`'s
+  `DROPPED_ON_PURPOSE` now carries the row.
+
+**Shipped:** `schema/overrides.json` rows — `0x019F MAP_MANIFEST_VERSIONS`, `GAME_CMSG 0x0093
+MAP_MANIFEST_REQUEST`, `0x0196 INSTANCE_MANIFEST_BODY`, `0x0197 INSTANCE_MANIFEST_DONE` (the
+three kinds), `0x0198 INSTANCE_MANIFEST_PHASE` — and the resolution appended to `0x0092`'s
+row. No server behaviour changed.

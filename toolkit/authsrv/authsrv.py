@@ -4072,6 +4072,13 @@ MANIFEST_DONE = 2
 # value for the field, not proof it tolerates receiving it from the wire at that
 # instant. A login to character select is the confirmation.
 #
+# WHAT THE SENTINEL ROW IS, MEASURED 2026-09-14 (studies/divergence D13): on
+# retail `0x0197 [2, 888, 0]` opens the per-map manifest list at every instance
+# load (17 of 17) and `[0, map, 0]` names the instance's own map; `[3, map,
+# hash]` then closes each answer to a GAME_CMSG 0x0093 request. So the row this
+# server sends first is the list-open with the one-past-the-end id, not a "no
+# destination" placeholder -- the same bytes, a sharper reading.
+#
 # AND THEN IT MOVED AGAIN, 2026-09-14. Build 38888 (2026-09-01, the first image
 # since 38797 whose SIZE changed) stores 897 at all five sites -- nine maps
 # added -- and `test_quests.py` §19b, which scans every vaulted client for the

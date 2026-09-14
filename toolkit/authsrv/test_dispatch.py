@@ -108,6 +108,17 @@ DROPPED_ON_PURPOSE = {
             "GlobalMemoryStatusEx. Every field is about the MACHINE and none is "
             "about the world, and ArenaNet's server sends nothing back. There is "
             "no state here for a game server to hold.",
+    0x0093: "MAP_MANIFEST_REQUEST (0 loopback arrivals in the 2026-09 gamesrv "
+            "captures; 136 on the one live tape with a cold archive) -- NAMED "
+            "2026-09-14 (divergence D13): the client asks for a map's download "
+            "manifest when its Gw.dat lacks the hash 0x019F named for it, and "
+            "retail answers with 0x0198 / 0x0196 bodies / 0x0197 [3, map, hash]. "
+            "Answering needs the manifest BODY (0x0196), whose layout is unread "
+            "and whose content is a file-id list this server does not compose -- "
+            "the same gap divergence D3 records for the bracket-without-body. "
+            "On loopback the assembled archives are warm and the request never "
+            "comes, so the drop costs nothing today; it becomes real work the "
+            "day a served map is missing from the run directory's archive.",
 # 0x000E ATTRIBUTE_DECREASE, 0x000F ATTRIBUTE_INCREASE and 0x0010
 # ATTRIBUTE_LOAD were here for one day. Their reason was "the blocker is not
 # knowledge but STATE: this server has no mutable per-character attribute model
