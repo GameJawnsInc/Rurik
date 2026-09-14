@@ -54,7 +54,18 @@ Every one of these, in the order they were written:
   which catches a message-level byte cache; and an astral character must count
   as TWO code units, which is a second bug the first one was hiding — `len(s)`
   counts Python characters, so a surrogate pair wrote a count two bytes short and
-  desynced the NEXT message. The check is on that next message),
+  desynced the NEXT message. The check is on that next message. **And since
+  2026-09-13 its `LAYOUT_FIXED` set has a FOURTH row, `GAME_CMSG 146`
+  MISSION_MASK_REPORT — the first client-to-server FIELD correction
+  `overrides.json` carries, and the first whose layout moved AFTER the name.**
+  Build 38888 raised the client's own `MISSION_MASK_BYTES` from 112 to 116
+  (MsCliMsg.cpp:181's compare `0x70` → `0x74`, SEND cmd `0x700b` → `0x740b`,
+  MISSIONS 888 → 897, `areatable.py` 897 records), and the first live tape of that
+  build stopped framing at byte 31 of 1,303 on `array8 count 116 exceeds declared
+  cap 112` — 160 of 160 earlier live samples are exactly 112. The exemption is the
+  strongest of the four on evidence (binary on two builds AND the wire, where its
+  SMSG twin rests on the binary alone), and `messages.json` deliberately keeps 112
+  because it is stamped `validated_against_build 38797`, where 112 is correct),
   `toolkit/schema/test_catalog.py` (our message catalog vs. the client's own
   format tables — 477/477 GAME_SMSG agree field-for-field on build 38797),
   `toolkit/harness/test_harness.py` (the one-command stack, the launch safety

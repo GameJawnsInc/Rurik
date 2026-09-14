@@ -9102,9 +9102,10 @@ GAME_CMSG_CANCEL_ACTION = 0x0028
 # server grows missions, targeting or a facing model. Storing is the whole
 # handler; the day one of these drives behaviour it needs its own study.
 #
-# 0x0092 MISSION_MASK_REPORT -- a 112-byte progress bitmask, one bit per mission
-#   id, bounded by the client's own MsCliMsg.cpp:181 assert
-#   `missionMaskBytes <= MISSION_MASK_BYTES`. MEASURED 2026-08-13 over the whole
+# 0x0092 MISSION_MASK_REPORT -- a progress bitmask, one bit per mission id, bounded
+#   by the client's own MsCliMsg.cpp:181 assert `missionMaskBytes <= MISSION_MASK_BYTES`:
+#   112 bytes through build 38849, 116 from build 38888 (MISSIONS 888 -> 897 spilled
+#   the mask into a 29th dword; schema/overrides.json GAME_CMSG 146 has the derivation). MEASURED 2026-08-13 over the whole
 #   loopback tree: 803 samples, 803 of them exactly 112 bytes, and 747 of 803
 #   entirely zero -- because nothing this server sends ever sets a bit. The 56
 #   non-zero ones are the interesting minority and were invisible until now.
@@ -23937,8 +23938,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         state["rotate_angle"] = _f32_of(values[1])
                         state["rotate_amount"] = _f32_of(values[2])
                     elif opcode == GAME_CMSG_MISSION_MASK_REPORT:
-                        # 112 bytes of mission progress, one bit per mission id,
-                        # bounded by the client's own MISSION_MASK_BYTES = 112.
+                        # Mission progress, one bit per mission id, bounded by the
+                        # client's own MISSION_MASK_BYTES: 112 bytes through build
+                        # 38849, 116 from 38888 (overrides.json GAME_CMSG 146).
                         # Stored whole: the bit MEANING is open (whether a set
                         # bit is "completed" or merely "the server named it") and
                         # a handler that reduced this to a summary would throw

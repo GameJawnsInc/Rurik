@@ -465,7 +465,22 @@ def main():
     # inside the area row's own footprint at >>5, against three shift rivals at 0/47.
     # This exemption is the one most likely to be retired by a capture rather than
     # waiting for one.
-    LAYOUT_FIXED = {("GAME_SMSG", "421"), ("GAME_SMSG", "146"), ("GAME_SMSG", "140")}
+    # GAME_CMSG 146 (MISSION_MASK_REPORT, 2026-09-13) is the FOURTH, and the first on
+    # the client-to-server side, and it differs from the three above in kind: the row
+    # was named on 2026-08-11 with its layout copied verbatim (array8[112]), and the
+    # LAYOUT moved LATER, when build 38888 raised the client's own MISSION_MASK_BYTES
+    # from 112 to 116 (MsCliMsg.cpp:181's compare 0x70 -> 0x74, SEND cmd 0x700b ->
+    # 0x740b, MISSIONS 888 -> 897) and the first live tape of that build stopped
+    # framing at byte 31 on `array8 count 116 exceeds declared cap 112`. So the
+    # principle this check guards -- a NAME moves nothing -- still holds for it: the
+    # field moved because the client did, and overrides.json's `why` carries the
+    # derivation from both images plus the wire. It is the STRONGEST of the four on
+    # evidence: witnessed in the binary on two builds AND on the wire (160 of 160
+    # earlier live samples at 112, the 38888 sample at 116), where 146's SMSG twin
+    # rests on the binary alone. messages.json keeps 112 on purpose -- it is stamped
+    # validated_against_build 38797, where 112 is correct.
+    LAYOUT_FIXED = {("GAME_SMSG", "421"), ("GAME_SMSG", "146"), ("GAME_SMSG", "140"),
+                    ("GAME_CMSG", "146")}
     all_base = json.load(open(os.path.join(repo, "schema", "messages.json"),
                               encoding="utf-8"))["channels"]
     all_over = json.load(open(os.path.join(repo, "schema", "overrides.json"),

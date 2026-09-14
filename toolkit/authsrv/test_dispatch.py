@@ -39,7 +39,8 @@ already NAMED from the client's own binary and ArenaNet's own wire:
                                0x0033 -- which does have one -- has been sent
                                ZERO times in all 17,770 messages since
                                2026-08-06
-    0x0092 MISSION_MASK_REPORT 803 arrivals, a 112-byte progress bitmask
+    0x0092 MISSION_MASK_REPORT 803 arrivals, a 112-byte progress bitmask (116
+                               from build 38888)
     0x00C1 TARGET_SELECT       363 arrivals, fully named
     0x0040 ROTATE_PLAYER       108 arrivals, fully named
 
@@ -652,7 +653,7 @@ def main():
     for op, why in ((0x0039, "INTERACT -- 3.2% of ArenaNet's own live c2s and "
                              "dropped entirely until 2026-08-13"),
                     (0x0092, "MISSION_MASK_REPORT -- 803 loopback arrivals of a "
-                             "112-byte bitmask, all discarded"),
+                             "112-byte bitmask (116 from build 38888), all discarded"),
                     (0x00C1, "TARGET_SELECT -- 363 arrivals, fully named in "
                              "overrides.json, all discarded"),
                     (0x0040, "ROTATE_PLAYER -- 108 arrivals, fully named, all "

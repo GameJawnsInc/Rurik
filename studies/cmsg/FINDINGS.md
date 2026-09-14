@@ -479,6 +479,25 @@ Two worth calling out for the *kind* of evidence:
   is `mission < MISSIONS` (MsCliMan.cpp:368) — so MISSIONS = 888. **Our own stdlib
   `areatable.py` independently reads exactly 888 AreaInfo records out of the same
   build.** Two instruments that know nothing about each other, agreeing on a number.
+  **ADDENDUM 2026-09-13 — build 38888 moved both numbers, and the wire noticed first.**
+  The first live tape of 38888 (`20260913T210901`, Shing Jea Monastery, conn `:63677`)
+  stopped framing its c2s stream at byte 31 of 1,303: `array8 count 116 exceeds
+  declared cap 112`, on a 120-byte 0x0092 with 0x0093 framing cleanly right after it.
+  160 c2s 0x0092 on every earlier live tape are exactly 112 bytes, so this is a client
+  change and not a decoder defect. OBSERVED on the pristine 38888 image, each with its
+  38797 control: the SEND descriptor reads `array8[116]` (cmd `0x740b`, was `0x700b`);
+  the MsCliMsg.cpp:181 compare is `cmp esi, 0x74` at 0x00852e98 (was `0x70` at
+  0x00852948); both MsCliMan.cpp `mission < MISSIONS` sites compare against `0x381` =
+  897 (was `0x378` = 888); and `areatable.py` reads exactly 897 records out of 38888
+  — the same two-instrument agreement, at the new number. RECONSTRUCTION:
+  `MISSION_MASK_BYTES = 4 * ceil(MISSIONS / 32)` reproduces both builds (28 dwords →
+  29), so the mask is dword-granular and nine new AreaInfo rows spilled it. The cap
+  is corrected in `schema/overrides.json` (GAME_CMSG 146, the first c2s FIELD
+  correction that file carries; `test_codec.py`'s `LAYOUT_FIXED` names it), not in
+  `messages.json`, which is stamped `validated_against_build 38797` where 112 is
+  right. After the change the 38888 channel frames to its last byte in both
+  directions. Cross-build note for [../crossbuild/FINDINGS.md](../crossbuild/FINDINGS.md):
+  this is the first constant a live tape refuted before a scanner did.
 - **`0x0047` vs `0x003E`** have a byte-identical layout (vec2 + u32), so only values
   tell them apart: `0x0047`'s vec2 is within 200 units of the player's own reported
   position **9/9**, `0x003E`'s **0/3**. A report and a destination are opposite
