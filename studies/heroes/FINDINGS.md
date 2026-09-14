@@ -814,6 +814,14 @@ H4 (0x0074 dropped): Assertion: charHeroData   P:\Code\Gw\Char\Cli\ChCliHero.cpp
 > CREATE keyed by the first field at `ctx+0x2c+0x584`" (§1.3) is not just a plausible reading
 > of the disassembly — it is the observed effect.
 
+> **ADDED 2026-09-14 (SLICE-F42, the H2d assert).** The record-add worker is `0x0081db20`
+> (`ChCliHero:245 heroData` on allocation), one caller `0x00811560`, which BOTH `0x0073`'s
+> receive stub (`0x0091e270`) and `0x0074`'s (`0x0091e2f0`) call with their fields; on a
+> record's FIRST creation it posts frame event **`0x10000039`** — the one event that makes the
+> Party Search Heroes tab (`PtSearchHeroList`) create the hero's child frame, whose absence
+> is the `heroFrame:160` assert on the tab's rebuild (`0x10000114`). An existing key logs and
+> returns without the event.
+
 *(Both asserts are quoted as the single-assert evidence for a specific claim, which the
 provenance gate permits; and a crash dialog is text the retail client shows any player who
 crashes, which CLAUDE.md names explicitly as not extraction. Nothing was sent to ArenaNet —

@@ -2532,6 +2532,60 @@ RECONSTRUCTION on the wiki's stated order. What would change it: any tape with a
 Healing Signet caster during the 2 s — the join is `hs_scan`'s shape, prop 60 → the next
 prop-55 loss on the caster inside 2.5 s, against the same cause's other hits.
 
+## SLICE-F42 — **H2d closed: the Party Search Heroes tab's frames are created by `0x0073 HERO_INFO`'s own worker, so JARIN-S had already fixed the assert — read statically, then pressed on the client (2026-09-14)**
+
+**The residual** (F29's H2c note, ladder row H2d): pressing **P** in an outpost asserted
+`heroFrame` (`PtSearchHeroList.cpp:160`) the moment a party hero row carried a profession —
+harness `20260913T094444` (bodiless, the pair sent) and `094740` (the body in town) — and the
+message that fills the tab's list was NOT FOUND.
+
+**Static, on the pin (38797), stdlib plus `codescan`/`msghandler` for the disassembly.** The
+three `:160` sites (`0x005688f3`, `0x00568d21`, `0x00568da9`, `asserts.py --file
+PtSearchHeroList`) are one child-frame lookup, `0x6176c0(list, id)`, in three places of one
+event dispatcher. Its jump table (`0x568e5c`/`0x568e70`, events `0x10000039 + i`) decodes to
+exactly three live cases:
+
+| event | case | what it does |
+|---|---|---|
+| `0x10000039` | `0x568d62` | **CREATES** the hero's child frame (`0x6175f0`, proc `0x571c20`) keyed by `*payload` |
+| `0x1000003b` | `0x568d85` | looks the frame up → `:160` if absent → UI message `0x59` (refresh) |
+| `0x10000114` (the party manager's rebuild, heroes §11) | `0x568dc9` → `0x568860` | walks every account-hero record (`0x80e2f0` → `charCtx[+0x2C]+0x584`, the `charHeroData` list) and looks each frame up → `:160` if any record has none |
+
+So the tab asserts whenever an account-hero RECORD exists whose CREATE event never reached it.
+Who posts `0x10000039`: one site in the image, `0x0081dc2e`, inside **`0x0081db20` — the
+record-add worker** (`HeroDataAdd`, heroes §11.3): look the key up in the list at
+`charCtx[+0x2C]+0x584` (`0x81d320`); if it exists, log and return (no event); else allocate
+(`0x81d6b0`, `ChCliHero:245 heroData`), fill the record from the arguments (two five-dword
+blocks among them), and `push 0x10000039; call 0x633d70`. Its one caller is `0x00811560`,
+which **both** `0x0073`'s receive stub (`0x0091e270`) and `0x0074`'s (`0x0091e2f0`) call with
+their fields as arguments (`msghandler.py 0x0073` / `0x0074`; the `0x0074` stub passes two
+zeros where `0x0073` passes fields 8/9). `0x1000003b` is posted twice, from the `0x0072`
+worker's region (`0x81d924`, `0x81dd0c` — the functions carrying `ChCliHero:199/245/291`).
+
+So the create event fires on a record's FIRST creation, through either message. That makes
+the 09-13 asserts a rig-order or key question rather than a missing-message one — that rig
+also reached this worker, through `0x0074` — and which of the two it was is UNREAD (candidates:
+the record's key, `0x0074`'s first field under `--hero-bytes`, disagreeing with the hero index
+the roster's rows carry, so the rebuild looked up frames by a key no create had used; or the
+record created after the window's dispatcher had already subscribed and rebuilt). What is
+read is enough for the row: with JARIN-S's `0x0073` ahead of the block, the record is created
+once, keyed by the hero index the roster uses, and the event posts.
+
+**Pressed, twice, the asserting runs' own recipe** (`run/slice`, `--map 148 --party slice
+--area errand,corridor`, `wait:10 P:0.3 …`), predictions first: no crash dialog, the window
+opens, the Heroes tab lists Tahlkora.
+
+| run | walk | result |
+|---|---|---|
+| `20260914T132429` | P, shot | Party Search opened on the Players tab; no crash dialog, `Gw.log` 0 asserts; `HERO_INFO(hero 3, level 3, prof 3/0, …)` on c1 |
+| `20260914T132608` | P, `click:0.387,0.450` (the Heroes tab), shot | **the Heroes tab reads "Mo3 Tahlkora (Added)"** with Add Hero / Kick / Close; no assert |
+
+OBSERVED on our client (38797) against our server. `0x10000039` as the create event and the
+`0x0073` chain are OBSERVED (static); "JARIN-S fixed it in passing" is the two readings agreeing
+and is labelled as such. Nothing shipped: the ladder row moves to DONE and heroes §11.3 gets
+the line. Not read: what the two five-dword blocks in the record are (the wire's u32 pair and
+skills are the obvious candidates; the copy is from arguments, not from the message directly).
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:
