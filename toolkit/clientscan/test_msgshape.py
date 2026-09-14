@@ -61,7 +61,9 @@ from gwpe import PE                                          # noqa: E402
 
 # floor re-measured 2026-08-14 from a real green run: 37 -> 44, build 38833 joining pinned.BUILDS.
 # 2026-08-19, again from a real green run: 44 -> 73, §4 joining.
-LEDGER = checks.Ledger("msgshape table derivation", floor=89)
+# 2026-08-29, 73 -> 89, 38849 joining; 2026-09-13, 89 -> 105, 38888 joining --
+# 16 per build, each figure read off the green run rather than added up.
+LEDGER = checks.Ledger("msgshape table derivation", floor=105)
 check = checks.adopt(LEDGER)
 
 # The routine's real entry prologue -- `push ebp / mov ebp,esp / sub esp,0x20 /
@@ -83,6 +85,14 @@ EXPECT_ENTRY = {
     # this is a third re-derivation that agreed rather than a number copied
     # down a column. The VA has now held across three consecutive builds.
     "2026-08-20_21511009c460": 0x007DE010,
+    # 38888, MEASURED 2026-09-13 from the pristine image with the same
+    # deriver: the anchor is still UNIQUE in .text (1 hit), the -0x22 delta
+    # still lands on an int3 boundary, and the VA MOVED -- +0x460 from the
+    # three builds before it. This is the first build since 38797 whose image
+    # grew (10,493,120 B, +9,216), and the function moved with it, which is the
+    # class-(c) expectation doing what it is for: a copied-down 0x007DE010 would
+    # have gone red here, and it did, by name, before this row existed.
+    "2026-09-01_44fbd68767a8": 0x007DE470,
 }
 
 
