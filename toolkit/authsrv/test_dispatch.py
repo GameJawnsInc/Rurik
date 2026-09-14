@@ -167,6 +167,22 @@ DROPPED_ON_PURPOSE = {
 # was built against. studies/chat/FINDINGS.md.
     0x0084: "CHAR_CREATE_SET_EQUIP_COLOR (0 loopback, 70 live) -- character "
             "creation, same as 0x0060.",
+    0x003F: "PICKUP (0 loopback, 3 live) -- arm 3 of the client's world-action "
+            "switch, sent with TARGET_SELECT on a kind-4 (item) agent. NAMED "
+            "2026-09-13 from the MANTID capture (20260913T210901) and dropped "
+            "the same day: this server never creates a kind-4 agent -- it has no "
+            "ground drop, so there is nothing to walk to and nothing to answer "
+            "with 0x0159 ITEM_PICKED_UP + 0x013E. The arm becomes real work the "
+            "day a drop exists, and its reply is measured: 0x002A move-to with "
+            "the target, then 0x0159 [item, agent], 0x013E [1, item, bag, slot], "
+            "0x0021 [agent]. schema/overrides.json GAME_CMSG 63.",
+    0x0030: "EQUIP_ITEM (0 loopback, 1 live) -- the inventory double-click. "
+            "NAMED 2026-09-13 from the same capture, n=1, and dropped because "
+            "this server dresses the body once at login (0x006E) and holds no "
+            "per-slot equip state to move: answering it means 0x014B "
+            "ITEM_CHANGE_LOCATION [1, item, 3, 0] + 0x006F [agent, slot, item] "
+            "for the item's slot, both measured on retail. Small arm, no state "
+            "for it yet. schema/overrides.json GAME_CMSG 48.",
 }
 
 
