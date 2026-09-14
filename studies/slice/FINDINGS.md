@@ -2357,6 +2357,60 @@ was under OUR order; retail's puts the block before `0x0072` and `0x0072` before
 which satisfies both of `HERO_ACTIVATE_FIRST`'s constraints) and stands the party up at the
 shrine — the next loopback run, `--party slice`.
 
+### 40.1 On the client, the same day — the rig asserted twice, `0x0073 HERO_INFO` is the record's creator, and the retail rig then ran three instances clean
+
+**The owner:** *"you drive the loopback."* Five harness runs, agent-driven, the slice party
+(`--party slice`, Tahlkora on the level-3 Warrior), F32's walk (Ascalon City → the corridor →
+back) with `--enemy --enemy-hit 0.02` so the fight in the corridor could not kill the leader.
+
+| run | rig | client | result |
+|---|---|---|---|
+| `20260914T083127` | retail (F40 as shipped) | `run/2026-07-29` (38797) | **`Assertion: charHeroData` ChCliHero.cpp(199)** at the FIRST load, 08:32:12, in the `0x0072` handler (the dispatcher frame carries opcode 0x72) |
+| `20260914T084043` | retail + the block's two `0x0065 [hero, 0]` and its `0x00A2 43` | same | **the same assert** — those are not the creator |
+| `20260914T085004` | retail + **`0x0073 HERO_INFO`** ahead of the block | same | the town loaded, the portal fired, **then `pos.y <= worldDims.y1`** in the corridor's create handler — **not the rig**: this client's archive holds no corridor (the slice's authored map lives in `run/slice/Gw.dat`, build 38833; "NO NAVMESH" in the log), so the field had no terrain |
+| `20260914T085446` | retail + `0x0073` | **`run/slice`** (38833) | **PASS, three instances, no assert**: c1 the town (roster, no body), c2 the corridor (the body created, walking its slot), c3 the town again — the zone carry printed both ways |
+| `20260914T090247` | retail + `0x0073`, `--map 168 --party-no-fight --enemy-hit 0.5`, `attack:90` | `run/slice` | the raiders killed Tahlkora (her tick: `0x00F1`, `0x00D0`, the regen stop, flags 8) then the player (status, hold, `0x002D`, `0x00D0`, flags 4 — no penalty tick, the map charges none) — and **one second later the client LEFT on its own**: c2s `0x0008` (its orderly-exit message, 131 in the corpus at every zone) and the socket closed, the final frame loading Ascalon City. The wipe never ran on the wire |
+
+**What the corpus gave when asked properly.** Retail's town preamble carries, once per owned
+hero in EVERY instance's load, `0x0073 [6, 3, 1, 0, 243282, 245053, [322, 382, 348, 1, 385, 2],
+0, 0]` — Koss's index, level 3, Warrior, no secondary, a dword pair, his own six skills (the bar
+less the account-unlocked Frenzy and the empty slot) — inside the player's own block after
+`0x009C` and before `0x003A`; **41 across the corpus, every one hero 6**, at level 20 on the
+2026-08 tapes (the same account's other character) where no hero was ever in a party and
+`0x0074` never appears. It is `0x0074 MERCENARY_INFO`'s twin for a hero the character owns —
+heroes §11.3's "what creates `charHeroData`" was answered `0x0074` under a rig that sent no
+`0x0073`; retail creates it with this. Named `HERO_INFO` in `overrides.json` (witness, both
+asserting runs), built by `agents.hero_info`, sent first in the retail rig. `HERO_RIG_0065`
+keeps the block's two `0x0065` and the regen because retail sends them; what they do is
+UNVERIFIED (the assert did not care).
+
+**What the clean run showed.** The roster in the outpost reads **"Mo3 Tahlkora"** with the
+commander button — the profession segment SLICE-H2c chased through the label builder now
+arrives with the block's `0x00B7`/`0x00A6` for the bodiless agent, which closes H2c's residual
+from the retail side. Koss's… Tahlkora's panel was not clicked (the crash heroes §15.3 named is
+untested under this rig); the hero cast nothing in the 40 s corridor window (the standing
+hostile did not reach the party), so the skill family on a client is still the owner's eye.
+
+**Two things the runs cost.** (1) A crashed client leaves the loopback archive's
+modification-in-progress bit set (`0x1C bit 0`) and the archive gate refuses the next launch;
+the documented remedy (RUNBOOK, the drift section) — copy the clean `run-live` archive over
+it — was applied and `dhbuild.py` re-audited. (2) The slice runs must pass `--exe
+C:/gd/Rurik/vault/run/slice/Gw.exe`; the harness's build-38797 default has no corridor, and a
+run that "zones" into a map the client cannot load asserts on the first create's bounds, which
+reads like a rig defect and is not.
+
+**The wipe, on the client, is the client's own defeat rule.** Retail's Plains wipe drew nothing
+from the client but its heartbeat and one selection in the 10.6 s before the shrine; ours sent
+`0x0008` a second after the last death and left. The difference is not the server's death batch
+(the hero's and the player's ticks went out in retail's order) but what the client knows about
+resurrection in the map: the Plains' load carried six gadgets with `0x0111`/`0x010E` states
+and MANTID's shrine was a gadget whose "glow" the tutorial narrates, while the corridor holds no
+shrine at all — and a party that cannot be raised returns to its outpost, which is what GW does.
+So `wipe_to_shrine` stands on the desk (`test_agentlife`'s fifteen messages) and is unobserved
+on a client; observing it needs a shrine gadget in the corridor (content, with its `0x0111`/
+`0x010E` pair) and a server arm for `0x0008` that answers a defeated party's return with the
+transfer it asks for. Both are queued, neither is this arc's.
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:

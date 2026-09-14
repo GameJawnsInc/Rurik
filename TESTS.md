@@ -4125,7 +4125,11 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   `--no-wipe-shrine` arm; the zone carry into a field and into a town and `--no-zone-carry`; the
   hero's load block in the tape's order with and without a level; a SOURCE lock that the retail rig
   sends no 0x0074, queues the block and 0x0072 ahead of the party build, defers the build, and
-  gates the four legacy sites. `test_guards.py` §6 counts the rise's flags byte. `test_morale.py`
+  gates the four legacy sites -- and, after the client asserted twice (F40.1), that
+  `agents.hero_info` (0x0073 HERO_INFO, retail's per-owned-hero record) encodes through the
+  real codec and is queued AHEAD of the block, that a hero whose bar has no adrenal skill
+  charges nothing (the dark rule), and the block's two 0x0065s and its regen (floor 522 ->
+  524). `test_guards.py` §6 counts the rise's flags byte. `test_morale.py`
   §5 is GREEN again (kill_player's order was the defect). SIX corpus suites re-pinned on the tape:
   `test_pools.py` (floor 108 -> 128: the Ranger's (3, 22)/(3, 19) and the hero's (2, 14); the hero's
   0x00A2 43 one message ahead of its prop 41; skill 392 at Expertise 1 charging 14 of 15; the hero's

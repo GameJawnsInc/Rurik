@@ -8063,8 +8063,11 @@ checked against the corpus before this was written:
 > morale on the wire; the attack-speed resend with the next start; the lock cleared at the kill;
 > the wipe to the shrine; the penalty cleared in an outpost, the stance carried; the flags bytes
 > and `kill_player`'s retail order (`test_morale` green again). Five revert flags. Six suites
-> re-pinned on the tape. Unobserved on a client: the rig in retail's order, Koss's recharge, the
-> shrine — the next loopback run with `--party slice`.
+> re-pinned on the tape. **ON THE CLIENT the same day (SLICE-F40.1):** the retail rig asserted
+> `charHeroData` twice until **`0x0073 HERO_INFO`** — retail's per-owned-hero record, 41 in the
+> corpus, never sent by this server — went ahead of the block; then three instances clean on
+> the slice client, the outpost roster reading "Mo3 Tahlkora". Still the owner's eye: the hero's
+> panel and recharge, the wipe on screen.
 
 Two properties worth naming while a tutorial capture is being planned, because both are
 frequent and neither is understood: **property 66** (202 sightings, the second most common
