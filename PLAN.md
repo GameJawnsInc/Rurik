@@ -8033,6 +8033,16 @@ checked against the corpus before this was written:
 > declaration; gadgets are kind-3 agents with `0x0111`/`0x010E` state; the cinematic ends in
 > an instance transfer (`0x0105`); level 0 is the absence of prop 36. Left: schema names for
 > ten witnessed `name: null` rows, and c2s `0x0092`'s array cap (the Monastery c2s stops on it).
+>
+> **DESIGNED 2026-09-14 — [studies/slice/RUN-LIVE-HERO.md](studies/slice/RUN-LIVE-HERO.md),
+> plan sealed at `vault/plans/hero_jarin.txt` (14 steps), a level-3 Ranger with a level-3
+> Warrior hero from Kamadan into the Plains of Jarin.** The first retail HERO on any tape:
+> `0x0074` / `0x01C2` / `0x0072` are 0 in the corpus, every `0x00DA` (64) names the observer,
+> no commander order was ever answered, all 81 retail `0x0035` are at 1.0 and no Nightfall map
+> is on any tape. Sixteen predictions and seven questions: the rig's order in a town and a
+> field, the bar's delivery, the commander echoes (`0x0062`/`0x0063`/`0x0066`), Frenzy's
+> `0x0035` resend (SLICE-F37's unwitnessed half), "Watch Yourself!" on the player's list only,
+> and whether hostiles open on the lower-armour Ranger (F29) rather than the party body (F28).
 
 Two properties worth naming while a tutorial capture is being planned, because both are
 frequent and neither is understood: **property 66** (202 sightings, the second most common
