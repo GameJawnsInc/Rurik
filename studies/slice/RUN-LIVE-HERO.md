@@ -205,3 +205,44 @@ and are bound with `marks.py --bind`.
 Each leg's verdict goes into [FINDINGS.md](FINDINGS.md) as a new SLICE-F section with the
 label it retires named; a refuted P7 retires H13's resend to its flag, a confirmed one
 upgrades it to OBSERVED.
+
+## 7. SCORED 2026-09-14 — capture `20260914T005758`
+
+Run the same night on build 38888. 14 of 14 steps marked, seals AGREE, 4 keys tapped, three
+game channels (Kamadan 449 → Plains of Jarin 430 → Kamadan), every direction decoded to the
+last byte. The owner's three notes after the run: no F11 on the hero's Frenzy casts (joined by
+`0x0042 [hero, 346]` instead — 17 applies), the party flag placed before the hero flag (read in
+the order played), and the hero's Resurrection Signet was cast on the player. The single F11
+(427.5 s, during step `lock`, while the hero walked to the locked target) is unannotated. The
+Ranger has no secondary profession, so step `frenzyme` was skipped with two F9s as written.
+The wire is in [FINDINGS.md](FINDINGS.md) SLICE-F39.
+
+| id | verdict | in one line |
+|---|---|---|
+| P1 | REFUTED in form, CONFIRMED in substance | **no `0x0074` on the tape**; `0x0072 [6, agent, inventoryId, aiMode]` comes BEFORE the party build; no body, items or `0x006D` for the hero in a town |
+| P2 | CONFIRMED | the field repeats the rig and adds `0x0161` ×2 → `0x0020` → `0x006D [hero, 778, 779]`, all before the build; `0x00A6`, `0x00B7`, `0x003A` on the hero's agent |
+| Q1 | answered | `0x0072` in 3 of 3 instances; inventoryId per instance (200 / 5 / 157); **aiMode persists across the zone** (2 = the last Avoid click) |
+| Q2 | answered | `0x00DA [hero, 8 ids, 8 zeros, 1]` at load, beside the player's; the panel open sends nothing |
+| Q3 | answered | Plains of Jarin = map 430, `0x0199 [member, 430, 1, …]`; Kamadan `[·, 449, 0, …]` |
+| P3 | CONFIRMED | the hero's start 3.0–3.5 s after the player's, on the player's target, 4 of 4 (a melee chase first) |
+| P4 | CONFIRMED | `[50, hero, foe, id]`; Sever Artery → `0x00F1 [foe, 0x3]` +0.35 s, 7 of 7; 0 `0x0042` on any foe |
+| P5 | ABORTED | the hero never cast Healing Signet |
+| Q4 | REFUTED lean | the hero's adrenaline IS on the wire: `0x00CF [hero, 25]` per hit, `[hero, 2]` per hit taken, `0x00D0 [hero]` at each Final Thrust |
+| P6 | half | "Watch Yourself!" is **348** (not 364); `0x0042 [player, 348, 1, ·, 10.0]` yes — AND `0x0042 [hero, 348, …]` in the same instant: the hero has an effect list |
+| P7 | CONFIRMED, shape corrected | `0x0035 [hero, 1.33, 0.67]` — 19 of 19 in the same instant as the hero's next attack start, never at the apply; no send at the close (1.0 rides the next chain) |
+| — | INCONCLUSIVE | Frenzy's double damage: 3/5 hp inside (n = 27), 3 and 2 outside (n = 2) |
+| P8 | REFUTED as stated; F29 CONTESTED | where both had hit it, hostiles opened on the Warrior 3 of 5, the Ranger 2 of 5; "last to hit" fits 4 of 5 |
+| P9 | CONFIRMED | `0x0015 [hero, mode]` → `0x0062 [hero, mode]`, 4 of 4, 30–50 ms |
+| P10 | CONFIRMED | Guard: first start after the hostile engaged; Avoid: 0 starts in 24.6 s under fire; Fight: the chase in the echo's instant |
+| P11 | CONFIRMED | `0x0016 [hero, 28]` → `0x0063 [hero, 28]`; the hero's next start on 28 with no player start |
+| Q5 | answered | **`0x0063 [hero, 0]` from the server 0.57 s after the kill** |
+| P12 | CONFIRMED | `0x001A`/`0x0066` and `0x001B`/`0x0067` pairs, 30–50 ms; the lead ends 0.0 u off either flag; the party flag carries NO slot offset for one hero |
+| Q6 | answered | the flag removal's c2s is the `(+inf, +inf)` form, both flags |
+| P13 | partial | bow attack skills are kind 50 (394, 392); the projectile bracket unscored; word 38 reason 1 ×3, unnamed |
+| P14 | SKIPPED correctly | no secondary profession |
+| P15 | CONFIRMED | `0x00A0 [60, hero, player, 2]` 0.63 s after the death, `0x00F1 [player, 0]` 3.0 s later |
+| Q7 | answered | a hero's death is the player's tick (status, `0x009C` −15, prop 42, prop 41, energy 0) plus `0x00D0` and its effect closes; `0x0026 [hero, 8]`, rise 9; **no `0x01D8` on the full wipe** |
+| — | new | a wipe → 10.6 s → both teleported to the shrine (`0x002C`, plane 19), the hero's body deleted and re-created, both at full health, maxima kept |
+| return | half REFUTED | the third connection has the roster and no body; **morale 100 for both** — the penalty is cleared in an outpost |
+| P16 | half | 39 leads at p50 0.61 s, 0 `0x002A` to the player, `0x0028` only at the reach; the abeam offset unscored |
+| — | new | the hero's casts ride `0x00E3`/`0x00E5`/`0x00E6` (48/35/1) — retail announces a hero's skills on the player's family |

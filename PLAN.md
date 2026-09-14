@@ -8043,6 +8043,20 @@ checked against the corpus before this was written:
 > field, the bar's delivery, the commander echoes (`0x0062`/`0x0063`/`0x0066`), Frenzy's
 > `0x0035` resend (SLICE-F37's unwitnessed half), "Watch Yourself!" on the player's list only,
 > and whether hostiles open on the lower-armour Ranger (F29) rather than the party body (F28).
+>
+> **RUN AND SCORED the same night (`20260914T005758`, 14/14 steps, seals agree) —
+> [studies/slice/FINDINGS.md](studies/slice/FINDINGS.md) SLICE-F39.** No `0x0074` on the
+> tape: the hero gets the player's own character block (`0x0037`/`0x00B7`/**`0x00DA`**/`0x009C`/
+> `0x003A`) then `0x0072 [6, agent, inventoryId, aiMode]` BEFORE the party build; a town has no
+> hero body, a field has one with its items and `0x006D`. The hero is a second player on the
+> wire — its own `0x0042` list, `0x00CF`/`0x00D0` adrenaline, `0x00E3`/`0x00E5` skill messages,
+> `0x009C` morale, the player's death tick. Frenzy's `0x0035 [hero, 1.33, 0.67]` resend is
+> retail's (19 of 19), riding the next attack start rather than the apply. Every commander order
+> is echoed (8 of 8, 30–50 ms); the server clears a lock at the kill; the flag walk ends 0.0 u
+> off either flag; the aiMode persists across the zone. A wipe teleports both to the shrine and
+> re-creates the hero's body, no `0x01D8`; the penalty clears in an outpost. "Watch Yourself!"
+> is 348 and lands on both lists. Refuted: hostiles opened on the Warrior 3 of 5 (F29's
+> softest-first). Queued as **JARIN-S** (nine server corrections, listed in SLICE-F39).
 
 Two properties worth naming while a tutorial capture is being planned, because both are
 frequent and neither is understood: **property 66** (202 sightings, the second most common

@@ -2090,6 +2090,195 @@ client:** whether the foe's hex arrow and auras draw from the word alone (retail
 draws them from exactly this traffic, which is the argument), and the granted skill appearing
 in the bar mid-map.
 
+## SLICE-F39 — **JARIN: the first retail hero on a tape — no `0x0074`, the hero is a second player on the wire, Frenzy's resend rides the next swing, and the commander's every order is echoed**
+
+OBSERVED, 2026-09-14, capture `20260914T005758` (build 38888, base, 14 of 14 plan steps, seals
+agree, 4 keys, three game connections: Kamadan 449 → **Plains of Jarin 430** → Kamadan). The
+plan is [RUN-LIVE-HERO.md](RUN-LIVE-HERO.md) (sha256 `5bbe6f31…`), scored in its §7. The owner
+after the run: *"i didn't press F11 for the hero Frenzy casts, though he did use it. i flipped the
+order of the party/hero flags (i did the party one first instead of second). for the resurrection
+signet, the hero used it on me."* Frenzy was joined by its `0x0042` instead of the marks; the flag
+steps are read in the order played. The Ranger is agent 708 / 29 / 544 and the hero 117 / 30 /
+324 across the three instances (agent ids are per instance, for the hero as for the player);
+scripts `jarin_score2–4.py` (scratch). One tape throughout; counts are this tape's.
+
+### 39.1 The rig — no `0x0074` in 3 of 3 instances, and the hero gets the player's own character block (JARIN-P1 refuted in form, P2 confirmed, Q1–Q3 answered)
+
+The Kamadan load, in order, one frame (37.73 s):
+
+```
+0x0037 [708, 6, 10]   0x00B7 [708, 2, 0, 0]   0x00DA [708, bar]   0x009F [42, 708, 1]   0x009C [708, 100]   0x003A [708, attrs]   0x009F [42, 708, 140]      -- the PLAYER
+0x0037 [117, 6, 10]   0x00B7 [117, 1, 0, 0]   0x00DA [117, [322, 382, 348, 1, 385, 346, 0, 2]]   0x009F [42, 117, 140]   0x009C [117, 100]   0x003A [117, [20, 21, 2, 1, 2, 1]]   -- the HERO, the same block
+0x0072 [6, 117, 200, 0]                        -- HeroActivate (hero 6, agent, inventoryId, aiMode)
+0x009F [36, 708, 3]  0x009F [36, 117, 3]  0x00A6 [117, 1, 0]
+0x01D2 [86]  0x01CB [86, 72, 1]  0x01C2 [86, 72, 117, 6, 3]  0x01D3 [86]  0x01B2 [86, 1]   -- the party build
+```
+
+**No `0x0074 MERCENARY_INFO` anywhere on the tape** — 0 in three instances. The heroes study's
+§14.5 order (`0x0074` first, `0x01C2` before `0x0072`) is ours, and its §11.3 proof that `0x0074`
+creates `charHeroData` was measured under that order; retail sends `0x0072` **before** the
+party build and never sends `0x0074`, so the record is created by `0x0072` itself or by the
+character block ahead of it (which, note, is the player's own five-message block addressed to the
+hero's agent: attribute points, professions, **the skill bar as `0x00DA [hero, 8 ids, 8 zeros,
+1]`**, maximum health, morale, attributes). JARIN-Q2 is answered by that line: the bar is
+delivered at load exactly as heroes §15.1 found it accepted; opening the hero panel (step
+`panel`) sent nothing beyond the town's c2s cadence (`0x0009` ×2 in 12.5 s, 10 in 50 s).
+**`0x0072`'s fields:** `inventoryId` 200 / 5 / 157 (per instance); **`aiMode` 0 / 0 / 2 — the
+return to Kamadan carries the last stance clicked in the field (Avoid, 510.66 s)**, so the mode
+persists across the zone. `0x01C2 [party, member, heroAgent, heroIndex, level]`: 6 and 3.
+`0x0199 [member, map, explorable, …]`: `[72, 449, 0]`, `[1, 430, 1]`, `[90, 449, 0]` — the first
+word is the party-member number `0x01CB` also carries, not an agent.
+
+**A town has no hero body (P1's second half CONFIRMED):** no `0x0020`, `0x0161` or `0x006D` for
+agent 117 in Kamadan (the town's item numbered 117 is agent 91's — a coincidence checked). **The
+field has one:** `0x0161` for items 778 and 779, then `0x0020 [30, …]`, then `0x006D [30, 778,
+779]` — F33's item-then-`0x006D` order, on a hero — all before the party build, in the same frame
+as the block.
+
+### 39.2 The hero is a second player on the wire, not a body
+
+Every per-player family the corpus had only ever shown on the observer is sent for the hero:
+
+| family | on the hero, this tape | what it corrects |
+|---|---|---|
+| effect list `0x0042`/`0x0044` | 24 applies, every close | F38's "the player's own" — `effect_list_visible`'s hero branch, kept "for want of a witness", is **OBSERVED** |
+| adrenaline `0x00CF [hero, units]` | 107 rows: 25 per landed hit, **2 per hit taken** (2 % of 140) | authsrv sends `0x00CF` for the player only |
+| adrenaline clear `0x00D0 [hero]` | 5 Final Thrusts + 2 deaths, 7 of 7 | same |
+| skill messages `0x00E3 [hero, skill, 0]` / `0x00E5 [hero, skill, 0, recharge]` / `0x00E6` | 48 / 35 / 1 | authsrv's "every `0x00E3` in the corpus, 6 of 6, names the PLAYER" — retail announces a hero's casts on the same family (the hero panel's recharge) |
+| morale `0x009C` | every tick on both: `[29, 100]` + `[30, 100]` at 238.18, 86 at 410.84, 87 at 534.48 | morale is per party member |
+| death tick | `0x00F1 [30, 0x10]`, `0x009C [30, 85]`, `0x00D0 [30]`, `0x0044` per effect, `0x009F [41, 30, 17]`, `0x00A2 [43, 30, 0]`, `0x009F [42, 30, 119]`, `0x0026 [30, 8]` | JARIN-Q7: the player's tick exactly, plus the adrenaline clear and the effect closes |
+| attack speed `0x0035` | 19 rows (§39.3) | — |
+
+The body's `0x0026` codes are 8 (death) and 9 (rise) against the player's 4 and 5 (morale study).
+
+### 39.3 Frenzy — retail resends `0x0035`, and it rides the next attack start (JARIN-P7 CONFIRMED, shape corrected)
+
+19 `0x0035` for the hero, **every one in the same instant as a `0x00A0` start by the hero**:
+mod 1.0 with the first start of a chain while unstanced (173.35, 197.46, 226.60, 298.47, 382.59,
+434.09, 511.72 — Power Attack each time), 0.67 with the first start of a chain while Frenzy was
+already open (403.25, a Sever Artery), and **0.67 with the first swing after the stance applied or
+re-applied** (176.16 after the apply at 175.50; 181.81 after the re-apply at 181.50; 12 of 12).
+**Never at the apply itself**: six applies out of combat (185.8, 212.2, 242.1, 395.7, 410.5,
+417.7) had no `0x0035` within 1.5 s, and the close sends nothing — the 1.0 comes with the next
+chain's first start. The pair is `[30, 1.33, 0.67]` — the sword's 1.33 base, the 33 % stance.
+The player's bow declared `[29, 2.475, 1.0]`, the hostiles `[x, 1.75, 1.0]`, each at its chain's
+first start. So SLICE-H13's resend is **OBSERVED in substance**: the client is told the modifier
+on the wire, per agent. **Its timing is ours**: `attack_speed_tick` sends at the change; retail
+sends at the next start. The client multiplies at animation time either way, so the drawn swing
+is the same; the measured shape is "with the start" (JARIN-S).
+
+**The AI's cadence:** Frenzy applied 17 times, re-applied every 4.3–6 s *inside* a fight
+(`0x0044 [30, slot]` + `0x0042 [30, 346, 0, slot, 8.0]` while the 8-s episode still ran) —
+pressed on recharge (4 s), not on expiry.
+
+**Double damage — INCONCLUSIVE, said so.** Hits on the hero inside Frenzy: 3 or 5 hp (n = 27,
+six skale); outside: 3 (foe 35, n = 1) and 2 (foe 28, n = 1). A doubled 2–3 would read 4–6; the
+5s fit and the 3s do not, and two outside hits cannot separate a random 2–5 from a doubled 1–3.
+A hero cannot be told to withhold the stance; a player Frenzy run can (P14 was skipped — the
+Ranger has no secondary, `0x00B7 [29, 2, 0, 0]`).
+
+### 39.4 "Watch Yourself!" is skill 348, and it lands on both lists (JARIN-P6 half)
+
+The hero's `0x00DA` is the owner's listing in the owner's order — Power Attack 322, Sever Artery
+382, **"Watch Yourself!" 348**, Healing Signet 1, Final Thrust 385, Frenzy 346, (empty),
+Resurrection Signet 2 — so the runsheet's UNVERIFIED 364 was wrong (364 is another Tactics
+shout). Seven shouts, each **two applies in one instant**: `0x0042 [29, 348, 1, slot, 10.0]`
+and `0x0042 [30, 348, 1, slot, 10.0]` — field 3 = 1 = the hero's Tactics rank (effects.py's rank
+reading, a fifth witness), duration 10.0 s, both closed by `0x0044` 10 s later; no status-word
+change on either. The player's list, yes; the hero's list **also** (§39.2).
+
+### 39.5 The hero fights (JARIN-P3, P4 CONFIRMED; P5 ABORTED; Q4 refuted; P8 REFUTED as stated)
+
+**Opening:** 3.0–3.5 s after the player's start, on the player's target, 4 of 4 player-opened
+fights — the melee body chases first (`0x002A [30, point, 0, 0, foe]`, 52 of 52 naming a hostile,
+0 naming the player; `0x0028 [30]` twice, both at the reach). F30's 0.50 s was a caster from
+where it stood. **Casts:** 322 ×11, 382 ×7, 385 ×5, 2 ×1 — **no Healing Signet** (P5's floor
+unmet). An attack skill is `0x00A0 [50, 30, foe, id]`; +0.56 s `0x00E5 [30, id, 0, recharge]`,
+`0x009F [46, 30, 0]`, `0x00CF [30, 25]`, `0x00E3 [30, id, 0]`. **Sever Artery → `0x00F1 [foe,
+0x3]` 0.35 s later, 7 of 7** (`0x83` on the caster 54, whose bit 0x80 was already up), and **0
+`0x0042` on any foe** (P4 ✓). **Final Thrust → `0x00D0 [30]`** 0.35 s later, 5 of 5 (JARIN-Q4
+refuted: the hero's adrenaline is on the wire, gain and clear).
+
+**Who the hostiles opened on** (each hostile's first start or cast on the party):
+
+| hostile | first on | who had hit it before (in order) |
+|---|---|---|
+| 35 | HERO | player 169.9, hero 173.4 |
+| 34 | HERO | player 194.0, hero 197.5 |
+| 26 | **RANGER** | player 223.6, hero 226.6 |
+| 54 (caster, Guard step) | RANGER (its hex) | nobody |
+| 44 (Avoid step) | RANGER | player only |
+| 40 | HERO | player 361.9, 400.5, hero 403.2 |
+| 28 (lock) | HERO | hero only |
+| 42 | RANGER | player 508.8, hero 511.7, player 512.1 |
+| 53 | RANGER | player only |
+
+Where both had hit it (5): the Warrior 3, the Ranger 2. F29's **lowest-base-armour** rule (51 of
+58 on the level-20 henchman tapes) predicts the Ranger 5 of 5 — **REFUTED here at n = 5**;
+"last to hit it" fits 4 of 5 (26 is the miss). F29's corpus had the softest class also the
+healer standing back; this pair separates armour from role. CONTESTED; `hostile_target` keeps
+F29's rule until a tape with more than five dual engagements decides it.
+
+### 39.6 The commander — every order echoed, obeyed, and one cleared by the server (JARIN-P9–P12 CONFIRMED; Q5, Q6 answered)
+
+| t | c2s | s2c echo | latency | what the hero did |
+|---|---|---|---|---|
+| 265.90 | `0x0015 [30, 1]` Guard | `0x0062 [30, 1]` | 30 ms | first start 2.3 s after the hostile's cast on the player (296.15 → 298.47) |
+| 355.34 | `0x0015 [30, 2]` Avoid | `0x0062 [30, 2]` | 50 ms | 0 starts in 24.6 s while 44 hit the player 8 times |
+| 379.93 | `0x0015 [30, 0]` Fight | `0x0062 [30, 0]` | 40 ms | `0x002A` chase **in the echo's instant** (379.97), Power Attack 2.6 s later |
+| 418.95 | `0x0016 [30, 28]` lock | `0x0063 [30, 28]` | 50 ms | 17 leads / 8.5 s to 28, Power Attack at 434.09 with no player start on 28 |
+| 443.85 | — | **`0x0063 [30, 0]`** | 0.57 s after the killing Final Thrust | **Q5: the server clears the lock on the wire at the kill** |
+| 461.96 | `0x001B [(x, y), 0]` party flag | `0x0067 [(x, y), 0]` | 50 ms | lead 1.5 s later ends **0.0 u** off the flag — no slot offset for a one-hero party |
+| 471.12 | `0x001B [(+inf, +inf), 0]` | `0x0067 [(+inf, +inf), 0]` | 40 ms | walk back begins in the echo's instant |
+| 483.42 | `0x001A [30, (x, y), 0]` hero flag | `0x0066 [30, (x, y), 0]` | 30 ms | lead 0.5 s later ends **0.0 u** off the flag |
+| 490.16 | `0x001A [30, (+inf, +inf), 0]` | `0x0066 [30, (+inf, +inf), 0]` | 50 ms | **Q6: the clear's c2s is the s2c's own form**; walk back in the instant |
+| 510.66 | `0x0015 [30, 2]` Avoid | `0x0062 [30, 2]` | 30 ms | persisted into the next instance's `0x0072` |
+
+pvpui 28's shapes, captured on our client, are retail's; the echoes ours sends are what retail
+sends, 8 of 8. **Ours differs in two places:** the lock is never cleared on the wire at the
+target's death, and `party_slot_point` gives the party flag a slot offset that retail does not
+apply to a lone hero (JARIN-S).
+
+### 39.7 The wipe, the shrine, the signet (JARIN-P15 CONFIRMED; Q7 answered; the return's morale refuted)
+
+Round one: the hero died at 307.83 (§39.2's tick), the player at 329.64 (`0x00A3 [17, 29, 54,
+−0.129]` the blow, then the morale tick, `0x002D [29]`, `0x0026 [29, 4]`). **10.6 s later, one
+frame (340.21):** `0x0025` facings and `0x002C` position sets on plane 19 for both (the shrine),
+**the hero's body deleted (`0x0021 [30]`) and re-created (`0x009A`, `0x009B`, prop 36, `0x00A6`,
+`0x00F0 [30, 16]`, `0x0020`, `0x006D [30, 778, 779]`)**, then both raised: `0x00F1 [·, 0]`,
+`0x00A2 [43, ·, 0.04]` energy, **`[52, ·, 1.0]` and `[55, ·, 1.0]` — full health**, the maxima
+kept at −15 %, `0x0026 [29, 5]` / `[30, 9]`. **No `0x01D8 PARTY_DEFEATED`** — the second retail
+wipe without it (MANTID's scripted one was the first); the code sends it 0 of 2 in PvE.
+Round two: the player died at 598.80 (morale 71); **the hero's Resurrection Signet `0x00A0 [60,
+30, 29, 2]` 0.63 s later, `0x00F1 [29, 0]` 3.0 s after it** with `0x00A0 [20, 29, 30, 152]` (the
+rise's prop-20 effect from the caster) — P15 as F28 measured on henchmen; the hero then died
+(609.25, morale 72) and its corpse was deleted at 625.19 as the player walked off. **Kamadan's
+load: `0x009C [·, 100]` for both** — the death penalty is cleared on entering an outpost (the
+return step's "carried in" REFUTED; GWW says the same, now measured).
+
+### 39.8 The player, and the formation (JARIN-P13 partial, P14 skipped, P16 half)
+
+Bow attack skills `0x00A0 [50, 29, foe, 394]` ×2, `[…, 392]` ×1; preparations and Troll Unguent
+as `0x0042 [29, 433, 0, slot, 24.0]`, `[29, 446, 0, ·, 13.0]`, `[29, 455, 0, ·, 8.0]`; the
+projectile bracket was not scored. **Word 38 `[38, 29, foe, 1]` three times** — reason 1 on the
+Ranger as target, beside F36's reason 0 (block) and 3 (miss): unnamed here, UNVERIFIED (the
+client's own string table has it). The walk step: 39 leads, cadence p50 0.61 s (p10 0.50, p90
+1.06) against F28's 0.51; the abeam offset needs the player's reports joined and was not scored.
+
+### What this settles, and what it queues (JARIN-S)
+
+Retail's hero is the player's own message set addressed to a second agent, plus `0x0072` and the
+party build; everything the heroes study authored blind is now either witnessed or refuted.
+Queued for a server arc, each with the wire above as its floor: (1) the rig in retail's order —
+the character block for the hero, `0x0072` before the build, **no `0x0074`** (heroes §11.3's
+proof re-run under the new order); (2) `0x00CF`/`0x00D0`/`0x00E3`/`0x00E5`/`0x00E6` for a hero;
+(3) `attack_speed_tick` deferred to the next attack start; (4) `0x0063 [hero, 0]` at the locked
+target's death; (5) no slot offset on the party flag for a lone hero; (6) the wipe → shrine
+teleport, the body re-created, full health, penalty kept, no `0x01D8`; (7) the death penalty
+cleared on an outpost load; (8) `0x0026` 8/9 on a body's death and rise; (9) the hero's aiMode
+persisted into the next instance's `0x0072`. Left open: Frenzy's doubling (a player run), the
+hostile-target rule (n = 5), reason 1, the abeam offset, Healing Signet's shape.
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:
