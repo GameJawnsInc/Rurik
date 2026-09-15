@@ -51,11 +51,12 @@ geometry-less heads of `vault/dat_study/Gw.dat`:
     a structural tell -- a floor, not a rule.
 
 So the archive-side kind is `skel`, and the label that answers "is this a
-creature I can see?" comes from OUTSIDE the archive: `content/npcs.toml`'s
-rows, which name a shell and its bodies because a capture did (0x0056 +
-0x0057), and which `shell_templates()` joins onto the catalog. A skeleton
-head with no row is honestly unknown -- shell nobody has spawned, or anim
-file -- and the viewer says so rather than picking.
+creature I can see?" comes from OUTSIDE the archive: the live tapes, inverted
+by `wireshells.py` (every 0x0056 + 0x0057 per connection: 105 shells, 215
+pairs from 19 tapes), with `content/npcs.toml`'s rows supplying the names a
+client run has already put on a nameplate (`shell_templates()`). A skeleton
+head no tape ever dressed is honestly unknown -- shell nobody has spawned, or
+anim file -- and the viewer says so rather than picking.
 
     The shortcut's failure mode is a geometry chunk that is NOT first, and
     the catalog would then file a model as a shell. `test_modelcatalog.py`

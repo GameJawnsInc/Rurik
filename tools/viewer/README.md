@@ -45,11 +45,16 @@ the 32 shells the wire has named as creatures are targets as well. The 311 FA1-o
 match the unitmodels study's ~312 anim-file class, and that is a floor, not a rule.
 
 So the catalog's kind is `model` or `skel`, and the label "this is a creature you can
-see" comes from `content/npcs.toml`, whose rows exist because a live capture paired that
-shell with those bodies. The Models tab marks such rows `SHELL of ...`, the third filter
-lists only them, and a skeleton head's right pane offers each wire-paired body to draw
-under it, with the pairing's source stated. A skeleton no row names is shown as unknown --
-an unspawned shell or an anim file -- rather than guessed.
+see" comes from the wire: `toolkit/mapdata/wireshells.py` inverts every keyed live tape
+(`0x0056` names a definition's shell, `0x0057` its bodies) into shell → bodies with every
+sighting's capture kept -- 105 shells, 212 bodies, 215 pairs from 19 tapes, rebuilt in
+~3 s when a tape is added. The Models tab marks such rows `SHELL · N bodies · M tapes`
+(plus a `content/npcs.toml` name where a client run has put one on a nameplate), the
+third filter lists only the 82 skeleton heads the tapes dressed, and a skeleton head's
+right pane lists its bodies most-seen first and draws the pick under it, with the
+pairing's source stated. A skeleton no tape ever dressed is shown as unknown -- an
+unspawned shell or an anim file -- rather than guessed. The hatcher shell (116228) is the
+generic human male skeleton: 36 bodies over 18 tapes, "Hatcher [Collector]" one of them.
 
 ## What a frame means
 
@@ -83,7 +88,7 @@ an unspawned shell or an anim file -- rather than guessed.
 `test_modelcatalog.py` covers the stdlib half in the suite. The window itself is not a
 suite test (PySide6 is not bare-machine), so `--smoke DIR` drives it by hand: every tab,
 the hatcher template join, the Kamadan map filter, the search and shell filters, a grab
-of the on-screen frame scored for coverage, and three offscreen thumbnails -- 17 steps,
+of the on-screen frame scored for coverage, and three offscreen thumbnails -- 18 steps,
 `[PASS]`/`[FAIL]` per line, non-zero exit on any failure. Run it before committing a
 viewer change; `--shot` renders one frame the same way for a look.
 

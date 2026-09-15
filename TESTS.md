@@ -12163,3 +12163,34 @@ head as a creature; the hatcher resolves closed and draws its body, the worm dra
 and a composited shell with NO body draws None -- the parade's white box, never
 invented; Kamadan's props chunk names >= 50 models (86, M4's count). Needs the study
 archive; sections 0-1 are bare-machine safe. 75 checks, floor 75. ~45 s)
+  `toolkit/mapdata/test_wireshells.py` (the WIRE-DERIVED SHELL INDEX, `wireshells.py`:
+which skeleton every keyed live tape dressed with which bodies, keyed per connection and
+stamped by the corpus. The archive never pairs a shell with a body -- `modelcatalog`
+records the two archive-side tells that were tried and refuted -- so the pairing comes
+from `0x0056` (the definition's shell) and `0x0057` (its bodies) in the owner's live
+tapes, and this is that corpus inverted. **The headline is the composited equivalence
+re-measured at corpus scale through the catalog**: every body the wire ever named must
+be a `model` head (212/212), every shell ever DRESSED by a 0x0057 must be geometry-less
+(82/82), every shell NEVER dressed must carry its own geometry (23/23), no id may be
+missing from the archive and no shell may have been dressed inconsistently -- each as
+N-of-N with disagreements printed BY ID, never a fraction. **The slot finding is pinned**:
+a definition index is not a global name -- 332 of 333 indices name one shell across every
+connection and 7809 names two ({141285, 16271}: a level-5 and a level-20 creature in two
+sessions), which is why sightings are keyed (capture, connection, definition) and why
+`npcdefs.read`'s pooled-by-index reading refuses the 19-tape corpus. Section 0 drives
+`collect_connection` on synthetic message lists: shell/bodies/creates/name ids per slot,
+a player create adds no slot, a byte-identical repeat inside one connection is accepted
+and a different one REFUSED, two different 0x0057 lists refused, the same index in two
+connections is two sightings, a created-never-declared slot is kept with shell None.
+Section 1: the Index's shell->bodies and body->shells inversions, `needs_body` True /
+False / None (dressed in one sighting and not another is a VALUE, not an average), the
+summary counts, the JSON round trip, `save()` refusing the working tree, `load()` refusing
+an index built over another corpus. Section 2 on the vault: >= 19 tapes with a decrypted
+channel and the >= 5 without NAMED in the stamp (the first build dropped that list and
+reported 0 skipped -- fixed and pinned); floors >= 73 connections / >= 1,900 declared
+sightings / >= 100 shells / >= 200 pairs / >= 200 bodies; every sighting declared; the
+hatcher shell dressed with >= 8 bodies (36), 116703 among them; the worm never dressed;
+and **content rows are a subset of the wire by construction, so every one of the 40
+(shell, body) pairs and 9 shell-only rows must appear in the index** -- a row the tapes
+no longer support would go red here. Needs the vault's live tapes and the study archive;
+sections 0-1 are bare-machine safe. 33 checks, floor 33. ~5 s)
