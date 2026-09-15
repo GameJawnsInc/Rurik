@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import checks  # noqa: E402
 import charstore  # noqa: E402
 
-led = checks.Ledger("charstore", floor=25)
+led = checks.Ledger("charstore", floor=50)
 base = tempfile.mkdtemp(prefix="charstore-test-")
 UUID = "11111111111111111111111111111111"
 
@@ -197,6 +197,173 @@ try:
     led.ok(not sent and st3.character_by_uuid(UUID)["xp"]
            == xp0 + 2 * authsrv.KILL_REWARD_VALUE,
            "no balthazar row: xp still accrues, no faction delta is invented")
+
+    # -- the skill library: two sets, account-wide and per-character --------
+    #
+    # WHAT THIS IS REALLY CHECKING. Retail keeps TWO libraries and this repo
+    # sent one bitmap to both messages until 2026-09-15. The checks below are
+    # built so that collapsing them back into one set REDDENS: the account and
+    # character lists are given deliberately DIFFERENT contents, including an
+    # id the character knows and the account has not unlocked, which is the
+    # shape OBSERVED on capture 20260817T231139 (character 21 ids, account 19,
+    # two of the character's in neither containment direction).
+    #
+    # The seed guard gets a negative control of its own, because the failure
+    # it prevents is silent: an absent list plus a one-id unlock would write a
+    # one-skill library over a 1,333-skill one and nothing would say so until
+    # a player opened the panel.
+
+    lib = charstore.Store.open("library@rurik.invalid", base=base)
+    lib.ensure_character(UUID, "Library Test", "")
+    lib.save()
+
+    led.ok(lib.account_unlocked_skills() is None
+           and lib.character_learned_skills(UUID) is None,
+           "an unauthored library reads as None, NOT as an empty list -- the "
+           "server falls back to --unlocks only on the None")
+
+    # The seed guard: no seed, no list created, nothing persisted.
+    led.ok(lib.unlock_account_skill(316) is None
+           and lib.account_unlocked_skills() is None,
+           "unlock with no seed REFUSES to create the account list, so a "
+           "quest reward cannot shrink a flag-driven library to one skill")
+    led.ok(lib.learn_character_skill(UUID, 316) is None
+           and lib.character_learned_skills(UUID) is None,
+           "learn with no seed refuses the same way for the character list")
+
+    # With a seed, the whole standing library is captured plus the new id.
+    led.ok(lib.unlock_account_skill(999, seed=[316, 317, 318]) is True
+           and lib.account_unlocked_skills() == [316, 317, 318, 999],
+           "a seeded unlock stores the STANDING library plus the new id")
+    led.ok(lib.unlock_account_skill(999, seed=[1]) is False
+           and lib.account_unlocked_skills() == [316, 317, 318, 999],
+           "re-unlocking an id the account holds is False and the seed is "
+           "ignored once a list exists")
+
+    # The character learns a DIFFERENT set, including one the account lacks.
+    lib.set_character_learned_skills(UUID, [316, 364])
+    led.ok(lib.character_learned_skills(UUID) == [316, 364],
+           "the character's learned list is authored independently")
+    acct_now = lib.account_unlocked_skills()
+    char_now = lib.character_learned_skills(UUID)
+    led.ok(364 in char_now and 364 not in acct_now,
+           "a character can know a skill the account never unlocked -- the "
+           "20260817T231139 shape, and the reason one bitmap cannot serve both")
+    led.ok(999 in acct_now and 999 not in char_now,
+           "...and the account can hold one the character has not learned, so "
+           "neither set contains the other")
+
+    # Independence: writing one must not touch the other.
+    lib.unlock_account_skill(400, seed=None)
+    led.ok(400 in lib.account_unlocked_skills()
+           and 400 not in lib.character_learned_skills(UUID),
+           "an account unlock does NOT learn the skill on the character")
+    lib.learn_character_skill(UUID, 401, seed=None)
+    led.ok(401 in lib.character_learned_skills(UUID)
+           and 401 not in lib.account_unlocked_skills(),
+           "a character learn does NOT unlock the skill account-wide")
+
+    # Both halves survive a round trip through disk.
+    reread = charstore.Store.open("library@rurik.invalid", base=base)
+    led.ok(reread.account_unlocked_skills() == lib.account_unlocked_skills()
+           and reread.character_learned_skills(UUID)
+           == lib.character_learned_skills(UUID),
+           "both libraries round-trip through disk unchanged")
+
+    # An EMPTY list is an authored answer and must not read back as absent.
+    lib.set_account_unlocked_skills([])
+    led.ok(charstore.Store.open("library@rurik.invalid", base=base)
+           .account_unlocked_skills() == [],
+           "an empty library is [] on reload, never None -- 'unlocked "
+           "nothing' and 'not authored' are different answers")
+
+    # -- what the store REFUSES ---------------------------------------------
+    for bad, why in (
+            ({"unlocked_skills": [0, 1]}, "skill id 0"),
+            ({"unlocked_skills": [1, 1]}, "a duplicate id"),
+            ({"unlocked_skills": [1, "2"]}, "a non-int id"),
+            ({"unlocked_skills": {"1": True}}, "a non-list"),
+    ):
+        broken = charstore._fresh("bad@rurik.invalid")
+        broken["account"].update(bad)
+        try:
+            charstore.validate(broken, "bad.json")
+            led.ok(False, f"the store must refuse {why} in the account library")
+        except ValueError:
+            led.ok(True, f"the store refuses {why} in the account library")
+
+    broken = charstore._fresh("bad@rurik.invalid")
+    broken["characters"][UUID] = {"name": "X", "level": 1, "xp": 0,
+                                  "skill_points": 0, "learned_skills": [0]}
+    try:
+        charstore.validate(broken, "bad.json")
+        led.ok(False, "the store must refuse skill id 0 in a learned list")
+    except ValueError:
+        led.ok(True, "the store refuses skill id 0 in a learned list too")
+
+    # -- the bitmap the wire actually carries -------------------------------
+    #
+    # A stored list has to pass the SAME crash gate the --unlocks flag passes,
+    # and the round trip is the check with no free parameter: ids in, bitmap
+    # out, the same ids back.
+    led.ok(authsrv.ids_from_words(authsrv.words_from_ids([1, 316, 3442]))
+           == [1, 316, 3442],
+           "a stored id list round-trips through the wire bitmap exactly")
+    try:
+        authsrv.words_from_ids([authsrv.SKILL_TABLE_ROWS])
+        led.ok(False, "an id past the build's skill table must be refused")
+    except SystemExit:
+        led.ok(True, "an id past the build's skill table is refused before it "
+                     "can assert ChCliSkill.cpp on the client")
+    led.ok(authsrv.words_from_ids([316])[316 // 32] == 1 << (316 % 32),
+           "the bitmap sets exactly the bit its id names")
+
+
+    # -- what the instance-load burst actually sends -------------------------
+    #
+    # The integration check, and it is built to REDDEN if the two libraries
+    # are ever collapsed back into one bitmap: the account and the character
+    # are given different lists, and the two resulting bitmaps must DIFFER.
+    # A check that only asserted "the account bitmap is right" would pass
+    # against a server that sent that same bitmap to both messages, which is
+    # exactly what this repo did until 2026-09-15.
+
+    flag_words = authsrv.words_from_ids([1, 2, 3])
+    two = charstore.Store.open("burst@rurik.invalid", base=base)
+    two.ensure_character(UUID, "Burst Test", "")
+    two.save()
+
+    aw, al, cw, cl = authsrv.skillunlock.resolve_library(
+        two, UUID, flag_words, "flagged")
+    led.ok(aw is flag_words and cw is flag_words
+           and "--unlocks" in al and "--unlocks" in cl,
+           "with neither list authored BOTH messages carry the --unlocks "
+           "bitmap -- the pre-store behaviour, unchanged")
+
+    two.set_account_unlocked_skills([316, 317, 999])
+    aw, al, cw, cl = authsrv.skillunlock.resolve_library(
+        two, UUID, flag_words, "flagged")
+    led.ok(authsrv.ids_from_words(aw) == [316, 317, 999] and cw is flag_words,
+           "authoring ONLY the account list moves 0x001D to the store and "
+           "leaves 0x00DB on the flag -- the halves fall back independently")
+
+    two.set_character_learned_skills(UUID, [316, 364])
+    aw, al, cw, cl = authsrv.skillunlock.resolve_library(
+        two, UUID, flag_words, "flagged")
+    led.ok(authsrv.ids_from_words(aw) == [316, 317, 999]
+           and authsrv.ids_from_words(cw) == [316, 364],
+           "with both authored, each message carries its OWN library")
+    led.ok(aw != cw,
+           "and the two bitmaps DIFFER -- a server that sent one set to both "
+           "messages would fail here, which is the point of the check")
+
+    two.set_account_unlocked_skills([])
+    aw, al, cw, cl = authsrv.skillunlock.resolve_library(
+        two, UUID, flag_words, "flagged")
+    led.ok(authsrv.ids_from_words(aw) == [] and "stored" in al,
+           "an authored-empty account library sends an EMPTY bitmap and does "
+           "NOT fall back to the flag")
+
 finally:
     shutil.rmtree(base, ignore_errors=True)
 

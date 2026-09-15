@@ -166,6 +166,100 @@ def refuse_skill_zero(words, spec):
     return words
 
 
+def words_from_ids(ids, why="ids"):
+    """An explicit id list -> the guarded 128-word bitmap.
+
+    THE SINGLE PLACE the two client-killing rules are enforced, which is why
+    it is a function rather than a loop inside `build_unlock_bitmap`: the
+    persisted skill library (charstore's account `unlocked_skills` and
+    per-character `learned_skills`) has to pass the SAME gate the --unlocks
+    flag passes, and a second copy of `sid >= SKILL_TABLE_ROWS` is a second
+    copy to forget to update when the build moves.
+
+    Ids <= 0 are SKIPPED rather than refused, preserving what the explicit
+    arm has always done; `refuse_skill_zero` is still the backstop, and
+    charstore refuses a stored 0 at load as well.
+    """
+    words = [0] * UNLOCK_WORDS
+    for sid in ids:
+        sid = int(sid)
+        if sid <= 0:
+            continue
+        w, b = divmod(sid, 32)
+        if w >= UNLOCK_WORDS:
+            raise SystemExit(f"skill id {sid} needs word {w}, past the "
+                             f"{UNLOCK_WORDS}-word message ({why})")
+        if sid >= SKILL_TABLE_ROWS:
+            raise SystemExit(
+                f"skill id {sid} is past the end of this build's skill table "
+                f"({SKILL_TABLE_ROWS} rows). Unlocking it asserts in the "
+                f"client's ChCliSkill.cpp the moment the Skills panel opens "
+                f"({why}).")
+        words[w] |= 1 << b
+    return refuse_skill_zero(words, why)
+
+
+def ids_from_words(words):
+    """The inverse of words_from_ids: a bitmap back to sorted skill ids.
+
+    Exists for the persisted library's SEED path. When the store holds no
+    list yet, the server has to hand the store the set that is currently in
+    force -- which it holds as a bitmap, not as ids -- so that the first
+    in-game unlock records the whole library rather than truncating it to
+    one skill. See charstore.Store.unlock_account_skill.
+    """
+    out = []
+    for wi, w in enumerate(words):
+        w = int(w)
+        b = 0
+        while w:
+            if w & 1:
+                out.append(wi * 32 + b)
+            w >>= 1
+            b += 1
+    return out
+
+
+def resolve_library(store, uuid_hex, fallback_words, fallback_label):
+    """The two libraries the instance-load burst sends, as wire bitmaps.
+
+    Returns (account_words, account_label, character_words, character_label).
+
+    THE TWO SETS ARE RETAIL'S, and this function exists so the choice between
+    store and flag is testable without standing up a connection -- it used to
+    be inline in handle_request_game_instance, where nothing could reach it.
+
+      * account -> 0x001D PVP_UPDATE_UNLOCKED_SKILLS. OBSERVED byte-identical
+        on every connection of one account across the live corpus, whichever
+        character and whichever map.
+      * character -> 0x00DB UPDATE_UNLOCKED_SKILLS. OBSERVED on capture
+        20260817T231139 as 21 ids where the same account's 0x001D carried 19,
+        two of them (364, 384) in no account set. Neither contains the other,
+        which is why one bitmap cannot serve both and why this returns two.
+
+    `store` is a charstore.Store or None; it is duck-typed on purpose so this
+    leaf does not import a sibling. Each half falls back INDEPENDENTLY: an
+    absent list means the operator has not authored that half and the
+    --unlocks flag still answers for it, which is what keeps every run that
+    predates the store byte-identical. An EMPTY list is an authored answer
+    and is sent as an empty bitmap.
+    """
+    acct_ids = None if store is None else store.account_unlocked_skills()
+    char_ids = (None if store is None
+                else store.character_learned_skills(uuid_hex))
+    if acct_ids is None:
+        acct_words, acct_label = fallback_words, f"{fallback_label}, --unlocks"
+    else:
+        acct_words = words_from_ids(acct_ids, "account unlocked_skills")
+        acct_label = f"{len(acct_ids)} stored, account-wide"
+    if char_ids is None:
+        char_words, char_label = fallback_words, f"{fallback_label}, --unlocks"
+    else:
+        char_words = words_from_ids(char_ids, "character learned_skills")
+        char_label = f"{len(char_ids)} stored, this character"
+    return acct_words, acct_label, char_words, char_label
+
+
 def build_unlock_bitmap(spec, SKILLBAR):
     """--unlocks: 'all', 'none', 'bar', or an explicit comma-separated id list."""
     if spec == "corpus":
@@ -174,22 +268,8 @@ def build_unlock_bitmap(spec, SKILLBAR):
     if spec == "all":
         return (refuse_skill_zero(unlock_all_words(), spec),
                 f"all ({SKILL_TABLE_ROWS - 1} real skills, ids 1..{SKILL_TABLE_ROWS - 1})")
-    words = [0] * UNLOCK_WORDS
     if spec == "none":
-        return words, "none"
+        return [0] * UNLOCK_WORDS, "none"
     ids = SKILLBAR if spec == "bar" else [int(s, 0) for s in spec.split(",")
                                           if s.strip() != ""]
-    for sid in ids:
-        if sid <= 0:
-            continue
-        w, b = divmod(sid, 32)
-        if w >= UNLOCK_WORDS:
-            raise SystemExit(f"skill id {sid} needs word {w}, past the "
-                             f"{UNLOCK_WORDS}-word message")
-        if sid >= SKILL_TABLE_ROWS:
-            raise SystemExit(
-                f"skill id {sid} is past the end of this build's skill table "
-                f"({SKILL_TABLE_ROWS} rows). Unlocking it asserts in the "
-                f"client's ChCliSkill.cpp the moment the Skills panel opens.")
-        words[w] |= 1 << b
-    return refuse_skill_zero(words, spec), ",".join(str(i) for i in ids)
+    return words_from_ids(ids, spec), ",".join(str(i) for i in ids)
