@@ -234,7 +234,8 @@ def test_enemy_default():
     """The harness defaults to a world with no hostile in it.
 
     Added 2026-08-12, after the standing hostile disrupted a SECOND unrelated
-    test. The chase gate is a real distance test against AGGRO_RANGE = 1200, but
+    test. The chase gate is a real distance test against AGGRO_RANGE (1200 then,
+    1012 since 2026-09-15 -- studies/monsterai 11), but
     content/world.toml puts the enemy 300 units from the player's arrival point
     with enabled = true, so it engages on every session in every map -- which is
     behaviourally a hard-coded attack even though the mechanism is not.

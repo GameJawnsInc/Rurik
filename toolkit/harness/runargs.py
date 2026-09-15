@@ -188,7 +188,8 @@ def resolve_enemy(game_args, enemy=False):
 
     IT IS NOT "PROGRAMMED TO ATTACK", and the difference decides the fix. The
     chase gate at `authsrv.py:1853` is a real distance test against
-    `AGGRO_RANGE = 1200.0`. What makes it unconditional is
+    `AGGRO_RANGE` (1200.0 when this was written; 1012.0 since 2026-09-15,
+    studies/monsterai 11). What makes it unconditional is
     `content/world.toml [spawn.test_enemy]`: `offset_x = 300.0` from the
     PLAYER'S ARRIVAL POINT, `enabled = true`. 300 is four times inside the
     aggro radius, in every map, on every session -- so the behaviour is

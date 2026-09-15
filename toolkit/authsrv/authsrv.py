@@ -10788,11 +10788,20 @@ MOVE_ENDS_CHAIN = True        # False (--move-keeps-target): sec.32's keep.
 # attack speed. Our Hatcher has one (0x0035, ENEMY_ATTACK_SPEED). This code is that
 # accident aimed on purpose.
 #
-# WHAT IS OURS RATHER THAN MEASURED: both numbers below, and the proximity rule.
-# Real Guild Wars aggro is a leash with a pull radius and a give-up distance, and
-# an NPC walks to its target; ours stands still and swings when the player is
-# close enough. Nothing here is a claim about retail.
-AGGRO_RANGE = 1200.0       # units. Ours. Inside ATTACK_RANGE so a fight is mutual.
+# WHAT IS OURS RATHER THAN MEASURED: ENEMY_HIT_FRACTION below and the proximity
+# rule. Real Guild Wars aggro is a leash with a pull radius and a give-up distance;
+# the leash and the give-up distance are still ours.
+#
+# AGGRO_RANGE: 1200 -> 1012 on 2026-09-15 (studies/monsterai/FINDINGS.md sec.11,
+# MONSTERAI-N3). CORROBORATED, not measured per creature: the wiki's Danger Zone
+# radius is 1012 (the compass circle the client draws); the one unprovoked retail
+# reaction in the live corpus with BOTH positions on the wire sits at 992 u with
+# the player running, bracket [992, 1105]; two more with the hostile dead-reckoned
+# along its patrol leg sit at 1,005 and 1,000. 1200 was outside all three, and it
+# was the owner's symptom: a hostile that noticed the player before the player saw
+# it cross the drawn circle. The leash reads this same constant and moved with it;
+# nothing has measured retail's leash (sec.9 Q8).
+AGGRO_RANGE = 1012.0       # units. WIKI 1012, OBSERVED n=1 [992, 1105]. Inside ATTACK_RANGE.
 ENEMY_HIT_FRACTION = 0.10  # of the PLAYER's maximum, so ~10 swings to drop them
 # ...and `--enemy-hit` overrides it for a run. This constant is OURS -- invented,
 # and the comment above has always said so -- which is what makes overriding it

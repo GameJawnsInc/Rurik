@@ -1802,7 +1802,10 @@ def section_npc_plane():
                   f"{st['agents'][10]['plane']}")
 
         # THE MESH CANNOT SAY -> the mover's plane, per 42.5, NOT -1 and not a guess.
-        st = _fresh_follow((0.0, 0.0), (600.0, 950.0), player_plane=29)
+        # (300, 950) is 996 u out: off-mesh (y > 900) and inside AGGRO_RANGE, which
+        # moved 1200 -> 1012 on 2026-09-15 (studies/monsterai 11) and left the old
+        # (600, 950) = 1,123 u point outside the notice radius, so no follow opened.
+        st = _fresh_follow((0.0, 0.0), (300.0, 950.0), player_plane=29)
         _follow_run(st, pm, seconds=0.05)
         fol = _last_follow(st)
         LEDGER.ok(fol is not None and fol[2] == 0 and fol[3] == 0,
@@ -3085,11 +3088,12 @@ def section_constants():
     PINNED = (
         ("ATTACK_RANGE", 1500.0, "OURS",
          "how far the PLAYER may reach. Nothing measured it"),
-        ("AGGRO_RANGE", 1200.0, "OURS",
-         "when a hostile notices, and its leash. GWW says the aggro bubble is "
-         "1012 and that named creatures differ in BOTH directions, so this is "
-         "not even the right SHAPE -- it should be per-creature "
-         "(studies/monsterai 4.2)"),
+        ("AGGRO_RANGE", 1012.0, "CORROBORATED",
+         "when a hostile notices, and its leash. 1200 -> 1012 on 2026-09-15: "
+         "the wiki's Danger Zone radius, and the one unprovoked retail "
+         "reaction with both positions on the wire brackets it at "
+         "[992, 1105] (studies/monsterai 11, MONSTERAI-N3). Still one global "
+         "number where GWW says per-creature (4.2); the LEASH half is still ours"),
         ("ENEMY_MELEE_RANGE", 150.0, "OURS",
          "the LEGACY arm's reach and stop (--legacy-npc-chase) since "
          "ANIMREF-RE 40; the default swings from enemy_reach() = "

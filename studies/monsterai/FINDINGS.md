@@ -1225,7 +1225,7 @@ Play the R1.5 tape of ArenaNet's own recorded monster behaviour into our client 
 | 4 | ~~Do monster spawn placements live in the Props chunk?~~ **ANSWERED 2026-08-11: no.** | *was:* one histogram | Every prop in all 349 maps resolves to a model file; **0** of them to any creature model id we can name. The client's Props subsystem has no actor vocabulary — interactive world objects are **gadget agents**, a disjoint subsystem. But **67% of the Props chunk is still unread** and is framed and walkable today. §3.10.1. |
 | 5 | Does the tick clock agree with the wire clock on the **existing** captures? | **One analyser run**, no new session. | The `0x001E` integral against the wire span, ≤50 ms. If red, every timed claim in the repo is suspect. |
 | 6 | Does windup scale with declared speed, or is it per-creature? | **One session** targeting a third declared speed, n≥8. | A creature at 1.33 or 2.475. Predicts windup in [0.43, 0.46] × its own declared base. |
-| 7 | Does unprovoked proximity aggro happen at all, and at what radius per creature? | **1–3 sessions**, the `approach` step, subjects that have not moved since create. | 10 point measurements across ≥3 types. **Refuted if** two creature types' brackets do not overlap — then it is a field, not a constant, as GWW says. **Also refuted if** a subject never reacts down to contact, in which case `AGGRO_RANGE` dies as a concept rather than being retuned. |
+| 7 | Does unprovoked proximity aggro happen at all, and at what radius per creature? **PARTLY ANSWERED 2026-09-15, §11: it happens, and the one observed radius is 992–1105 u; the wiki's 1012 sits inside it, ours (1200) does not.** | *was:* **1–3 sessions**, the `approach` step, subjects that have not moved since create. Still needed for n. | 10 point measurements across ≥3 types. **Refuted if** two creature types' brackets do not overlap — then it is a field, not a constant, as GWW says. **Also refuted if** a subject never reacts down to contact, in which case `AGGRO_RANGE` dies as a concept rather than being retuned. |
 | 8 | Leash: home, stop, or none — and anchored where? | **1–3 sessions**, the `retreat` step, aggroed by approach not by attack. | 6 disengagements across ≥2 types. All three outcomes are findings. |
 | 9 | Is ambient movement correlated with the player at all? | **Free** — a by-product of every control window. | Patrol destinations vs contemporaneous player position, clustered rather than merely catalogued. |
 | 10 | Absolute monster max health | **1–3 sessions**, if the character carries life-stealing skills. | Two skills of different published steal agreeing on 3 types GWW publishes. Would move HP off `PLAN.md` §1.7's server-only list. |
@@ -1272,6 +1272,160 @@ the script read index 3 — which is a constant `0` on all 63 instances. A vacuo
 from a field that is always zero is exactly the failure `checks.py` exists to catch, and
 nothing but the implausibility of the result caught it here. The layout in the table
 above was *measured* out of the corpus before the second attempt, not assumed.
+
+---
+
+## 11. The notice radius, mined off the wire (2026-09-15)
+
+**Identifiers.** `MONSTERAI-N<n>` — this section's facts. Word registered here per
+[studies/idents/CONVENTION.md](../idents/CONVENTION.md); the arc's `FINDINGS.md` takes
+the arc name. **Instrument:** [review/noticeradius.py](review/noticeradius.py), which
+prints every number below from the vault's live captures and refuses (exit 2) when it
+has nothing observed to report.
+
+**Why now.** The owner, 2026-09-15: *our aggro range is larger than the minimap
+indicator.* Ours is `AGGRO_RANGE = 1200`, invented; the compass circle is the wiki's
+1012. The question was whether the existing tapes — the two September Pre-Searing runs
+first — could put a measured number on retail's notice radius without a new session.
+The owner's second note, same day, reframes the provoked rows: *low-level creatures (or
+some flag more likely) are not aggroed by simply walking in range; you must attack them.*
+
+### MONSTERAI-N1 — the instrument, and the three things the first cut got wrong
+
+The chase is the message: a retail hostile chases with `0x002A` follows naming the
+player, whose point is the **server's copy of the player** (§40.2 of the animref study,
+45/45). So the notice event carries one of the two positions for free. The other is the
+hostile's, and it is a wire number only when the hostile is **parked** — no order since
+its `0x0020` create, or a `0x0029` leg that arrived at *its own* declared speed before
+the next order. Everything else is a reconstruction and is printed as one, in its own
+column, never pooled (§7.8's refusal stands; the four refuted range figures of §6 were
+exactly this estimate presented as a measurement).
+
+Three defects found by reading the rows, each of which would have produced a confident
+wrong number:
+
+1. **The notice instant is not the first follow.** On 6 of 11 fresh chases a `0x002B`
+   speed jump to 1.0 and one or two `0x0029` legs closing on the player precede the
+   first `0x002A` by 0.5–2.5 s. §40.2's *"nothing precedes the first follow, 7/7"* was
+   read on chases already at full speed; it does not hold for a patroller at 0.28–0.35.
+   The instrument now walks back from the first follow over that hostile's orders while
+   they are ≤ 2 s apart and, when the run contains the jump to 1.0, dates the notice to
+   the jump. **OBSERVED, and a correction to animref §40.2.**
+2. **A leg's start is not its predecessor's endpoint.** Patrol legs are re-issued
+   mid-leg (one hostile took 89 orders on one connection), so "parked at the last leg's
+   endpoint" needs every leg since the create to have arrived. The first cut tested
+   arrival at 288 u/s, the player's run speed; a patroller walks at 80–100. Both errors
+   called a mid-leg hostile parked.
+3. **The client's message layouts.** `0x0026 ATTACK` carries its target in field 1;
+   `0x0027`/`0x0046` carry a *skill id* in field 1 and the target in field 3
+   (studies/cmsg). The first cut read field 1 of a skill message as an agent id, and
+   skill 26 collided with agent 26. The combat-word slots are now pinned off the
+   2026-09-14 tape: `attack_started` is `[4, SOURCE, target, 0]`; the damage words
+   `16`/`17` are `[gv, TARGET, source, value]`.
+
+Two things the wire hands over that the first cut ignored: **the player's own attack-walk
+is a hostile-position instrument** — the server walks the player with `0x002A` follows
+naming the hostile, and each of those points is the server's copy of the hostile; and
+**the client's self-report silence is a position** — the movement arc's own result that
+displacement across any silence ≥ 2 s is exactly 0.0 u makes a stale `0x003D` an exact
+standing position.
+
+### MONSTERAI-N2 — the September tapes: zero observed, and why
+
+Over the three September captures (`20260913T210901`, `20260914T005758`,
+`20260914T180058`; 12 game connections, 6 with a derived player): **14 chases of the
+player by a kind-9 hostile, 7 of them fresh, 0 with both positions observed.**
+
+| row | def / lvl | map | class | what the wire says |
+|---|---|---|---|---|
+| agent 29 | 3972 / 0 | 212 | SWING | the player's `attack_started` 1.5 s before the reaction, from 1,510 u (standing); the hostile parked since create |
+| agent 19 | 3973 / 0 | 212 | **target switch** | followed agent 17 first, halted, then the player 2.0 s later — the one target switch in the corpus, N6 |
+| agent 26 | 4439 / 1 | 430 | SWING | hit 2.0 s before; recon 963 u; a 61-order patroller, mid-leg |
+| agent 42 | 4439 / 1 | 430 | SWING | hit 1.9 s before; recon 1,203 u; 89 orders, mid-leg |
+| agent 53 | 4431 / 2 | 430 | SWING | hit 1.3 s before; recon 531 u |
+| agent 80 | 1432 / 2 | 146 | CLICK | attack-clicked 6.3 s before, **no hit yet**, the player running in; speed jump + leg + follow; hostile mid-leg at 100 u/s — **recon 1,000 u** |
+| 7 re-follows | 4440 / 6 | 430 | — | one hostile re-following inside one fight, excluded |
+
+**OBSERVED.** The owner attacked first on every September chase but two, and on those two
+the hostile was mid-patrol. That is not a failure of the runs — neither plan asked for an
+approach step — it is the reason §7.2's `approach` step exists. The one number September
+yields is agent 80's **1,000 u**, a RECONSTRUCTION (the hostile's position dead-reckoned
+along its patrol leg at its declared 100 u/s; the player's self-report 0.1 s old).
+
+### MONSTERAI-N3 — the whole corpus: one observed radius, and it brackets the wiki's number
+
+Over all 23 live captures (75 game connections, 59 with a derived player): **22 chases,
+11 fresh, 1 with both positions observed.**
+
+| | n | value | label |
+|---|---|---|---|
+| **unprovoked, both positions on the wire** | **1** | **992 u, bracket [992, 1105]** — agent 160, def 140, level 20, map 280, `20260818T094648`: parked since its create (the re-create 11 s earlier reports the same position), the player running (self-report 0.3 s old, so +113 u); reaction = leg + leg + follow over 1.8 s | **OBSERVED** |
+| unprovoked, hostile dead-reckoned | 2 | **1,005 u** — agent 41, def 1346, level 2, map 146, `20260810T235916`: the player **standing 7.9 s** (exact), the hostile 9.9 s into a patrol leg at 100 u/s; reaction = speed jump + 2 legs + follow over 2.5 s. **1,000 u** — agent 80 (N2). | RECONSTRUCTION |
+| unprovoked, odd shape | 1 | 1,321 u — agent 103, def 137, level 20, map 280: `halt` then follow, no speed jump; listed, not pooled | RECONSTRUCTION, UNVERIFIED shape |
+| cast-provoked | 1 | agent 36, def 3965, map 238: a `0x0046` skill on it 1.0 s before the reaction; hostile anchored by the player's own attack-walk at 434–820 u | excluded — a cast start may itself aggro |
+| hit first (SWING) | 5 | defs 1346, 3972, 4431, 4439 ×2 | the passive population, N5 |
+
+**Reading.** Three unprovoked reactions from three creature definitions on two maps land
+at **992–1105 (observed), 1,005 and 1,000 (reconstructed)**. The wiki's Danger Zone
+radius, **1012**, sits inside the observed bracket and within 12 u of both
+reconstructions. Ours, **1200**, sits outside all three. The owner's symptom —
+*larger than the minimap indicator* — is the same fact seen from the client: retail
+reacts at the circle, ours 190 u before it. **CORROBORATED** at n = 1 + 2: a WIKI figure,
+an OBSERVED bracket that contains it, and two reconstructions that agree with it. It is
+not a per-creature measurement — §4.2's claim that the radius is a per-creature field is
+untouched, and §9 Q7's stopping rule (10 points, ≥ 3 types) is still the bar.
+
+**Shipped on that:** `AGGRO_RANGE` **1200 → 1012** in `authsrv.py`, the pin in
+`test_agentlife.py` `section_constants` moved with it and its label changed from OURS to
+CORROBORATED, with this section as the citation. The leash reads the same constant and
+moves with it; nothing has measured retail's leash (§9 Q8 stands).
+
+### MONSTERAI-N4 — what a reaction looks like on the wire
+
+Six of eleven fresh chases open with the same shape, none of it in §40.2:
+
+    0x002B [npc, 1.0]  +  0x0029 [npc, point]  (+ 0x0029)  +  0x002A [npc, copy-of-player, .., player]
+    ----------------- 0.5 to 2.5 s ---------------------->
+
+The speed jump and the first leg share a timestamp on every row that has them; the leg's
+point is on the way to the player, not the player (agent 41: 536 u then 269 u from the
+standing player, then the follow). A hostile already at 1.0 (create field 10 = 1.0, no
+`0x002B` ever) opens with legs alone (agent 160). **OBSERVED, 6/11.** Our server opens a
+chase with the follow alone (ANIMREF-RE 40.4); the retail shape for a *walking* hostile
+has a speed word and a leg in front of it. Not shipped — the leg's point is a router
+question, and the owner's symptom was the radius, not the opening.
+
+### MONSTERAI-N5 — the passive-creature note: zero exposure, not a null
+
+The owner's note predicts a class of hostile that lets the player stand inside the
+danger zone and reacts only when hit. The instrument measures it directly: the player's
+self-reports inside 1012 u of the hostile's track, continuously, before the reaction
+(`dwell<1012` on every row). **On all five SWING rows the dwell is 0.0 s over 0
+reports** — the owner struck from outside 1012 u (a bow or a spell; 1,510 u on agent 29)
+or at its edge, and no row has the player inside the circle unreacted-to. So the note is
+**neither confirmed nor refuted here**: the corpus never exposed a hostile to a standing
+player inside its circle without a hit. What exposes it is §7.2's `approach` step done
+once per creature type and ended by *standing still inside the circle for ten seconds
+before the first swing*. The per-definition table the tool prints is where the answer
+will land; today every definition has n ≤ 2.
+
+### MONSTERAI-N6 — one target switch, witnessed
+
+Agent 19 (def 3973, level 0, map 212, `20260913T210901`): `0x002A` naming agent 17 at
+713.731, `0x0028` at 714.217, `0x002A` naming the player at 715.722, `0x0028` 0.5 s
+later. A hostile that switched from one target to the player in 2.0 s, on the wire as a
+follow naming the new target — **OBSERVED, n=1**; what agent 17 was and why the switch
+happened is not read here. §9 Q12 ("does a hostile ever switch targets") moves from
+NOT FOUND to *yes, once, shape known*.
+
+### What this does not settle, in the order it would cost
+
+1. **Per-creature radius** — §9 Q7's bar (10 points, ≥ 3 types) is unmet at 1 + 2; the
+   `approach` step, standing at the trigger, is the only thing that adds observed rows.
+2. **Passive creatures** — N5; the same step, with a ten-second stand inside the circle.
+3. **Leash** — §9 Q8; the `retreat` step. The instrument already classifies chase ends
+   (halt vs. leg) and would take the anchor question with one more column.
+4. **The opening shape** — N4 is measured; whether to ship it is a router question.
 
 ---
 

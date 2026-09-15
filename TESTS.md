@@ -3342,7 +3342,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   cannot mean the detector is blind. Floor 16; sections 1-4 print a `skip`
   without the vault. No socket, no client. ~4 s),
   `toolkit/authsrv/test_movement_fidelity.py`,
-  `toolkit/authsrv/test_agentlife.py` (**2026-09-14 (late night), DAMAGE-INT: the party body's swing takes 11 off the foe at AR 35 — 11.7 truncated; floor 530 unchanged.** **SKILLS-HN (2026-09-09): `dmg_floats`
+  `toolkit/authsrv/test_agentlife.py` (**2026-09-15, MONSTERAI-N3: the `section_constants` pin for `AGGRO_RANGE` moves 1200 -> 1012 and its label OURS -> CORROBORATED (the wiki's Danger Zone radius, and the one unprovoked retail reaction with both positions on the wire brackets it at [992, 1105], `studies/monsterai/FINDINGS.md` 11); the ANIMREF-RE 42.5 off-mesh fixture point moves from (600, 950) = 1,123 u to (300, 950) = 996 u so the follow still opens inside the new radius -- the two checks that reddened were the fixture standing outside it, not the plane words; floor 530 unchanged.** **2026-09-14 (late night), DAMAGE-INT: the party body's swing takes 11 off the foe at AR 35 — 11.7 truncated; floor 530 unchanged.** **SKILLS-HN (2026-09-09): `dmg_floats`
   reads DAMAGE properties only** — it read every `0x00A3` float, which was fine
   while an overheal sent nothing; the enemy's Restore Condition on its own full
   pool now sends one positive 55 (retail does), and the cast section pins that
