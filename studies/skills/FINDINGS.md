@@ -6162,3 +6162,140 @@ conditions newest-first and takes the head.
   modelled; the row would need a `heal_if_removed` flag. Not on any bar here.
 * **Nothing casts 277** on this server today: it is on neither bar. The row is
   live the day it is.
+
+---
+
+# OBSERVED, 2026-09-15: the skill library is TWO sets, and the client keeps them in two different objects
+
+## 47. SKILLS-LIB — account-wide unlocks and per-character learned skills, separated
+
+Opened on the owner's ask ("set up the player's available skill library; in stock
+it's an account-wide listing, let's keep that"), and the first pass of it got the
+scope wrong in the useful direction: the corpus was asked whether one account-wide
+list was enough, and answered that retail keeps **two**. The owner's correction
+("i want stock behavior, so if we need account-wide and per-character then let's
+do that") is what this section builds.
+
+Until today this server sent **one** bitmap — whatever `--unlocks` produced — in
+**both** messages. That worked, and it modelled one library where the game has two.
+
+### 47.1 The corpus: the two messages disagree, and neither contains the other
+
+Measured with `toolkit/authsrv/livewire.py` over every `origin: live` capture,
+decoding both directions and refusing any connection whose byte accounting does
+not close.
+
+| Message | Scope | What the corpus shows |
+|---|---|---|
+| `0x001D` `PVP_UPDATE_UNLOCKED_SKILLS` | **account** | byte-identical on every connection of one account, whichever character, whichever map |
+| `0x00DB` `UPDATE_UNLOCKED_SKILLS` | **character** | varies per character on the same account |
+
+The decisive row is capture **`20260817T231139`**, where one connection carries
+both: the account set holds **19** ids and the character set holds **21**, of
+which **19 are shared and 2 are not** (`364`, `384`). So a character can know a
+skill the account has never unlocked, **neither set contains the other**, and one
+bitmap cannot stand in for both. OBSERVED.
+
+A second, independent witness for the same split sits in the write path. On the
+Factions tutorial (`20260913T210901`, port 60877) the two Mantid grants each went
+out as `0x00DC` + `0x00D9` + `0x001C`, while the quest reward's Resurrection
+Signet went out as `0x00DC` + `0x00D9` and **no `0x001C`** — the owner's account
+already held that skill. So:
+
+* **`0x00DC SKILL_SET_COPIES` is "this CHARACTER learns it"** and fires every time.
+* **`0x001C SKILL_UNLOCKED` is "this ACCOUNT unlocks it"** and fires only when the
+  id is new to the account.
+
+That is the same two-set model the load-time messages carry, seen from the delta
+side. The quests arc already recorded both halves of this observation (its §10.2)
+without naming the account/character split it implies.
+
+### 47.2 The client keeps them in two different objects — OBSERVED, static, 38797
+
+The wire split could have been a server-side bookkeeping detail that the client
+flattened. It is not. Traced on the pinned pristine build:
+
+```
+0x00817080:  call 0x47f660 / mov ecx,[eax+0x2c] / add ecx,0x710   <- 0x00DB's container
+0x00804840:  call 0x47f660 / mov ecx,[eax+0x28] / add ecx,0x124   <- 0x001D's container
+```
+
+Same TLS context getter, **different context member** — `+0x2C` is the character
+context, `+0x28` the account context — **and** a different displacement. `0x001D`'s
+handler `0x00804810` reaches an `AcctCliUnlock` object at `acctCtx[+0x28]+0xB4` and
+fills the container at its `+0x70`, layout `{data +0, alloc +4, wordCount +8}`;
+it broadcasts event `0x100000C4` where `0x00DB` broadcasts `0x1000005F`. Each
+writer has exactly one direct caller — its own handler — and neither touches the
+other's memory. **Two sets, in the client, not merely on the wire.**
+
+This also sharpens `studies/profession/RUNS.md` §10.2, which proved `0x00DB` owns
+`+0x710` by a single `add ecx,0x10`: the account container is a different object
+entirely, not a rival reading of the same one.
+
+### 47.3 The reader that makes the account set load-bearing, and it is not the panel
+
+Three UI sites read the account container, each asserting it non-null:
+`GmDeckBuilder` (`GmDeckBuilder.cpp:1275`), `GmSkTome` (`GmSkTome.cpp:125`) and
+`GmSkSlot` (`GmSkSlot.cpp:204` and `:206`). The load-bearing one is the last:
+
+> `unlockedSkills->BitTest(sourceSkillId)`
+> — `GmSkSlot.cpp:206`
+
+`GmSkSlot` is the **skill-slot equip/drag validator**, and it bit-tests the
+**account** set. Joined with §9 — which measured that unlock state does **not** gate
+whether a bar skill *draws* — this gives a delayed failure with a clean shape: a bar
+carrying a skill outside the account library **renders perfectly** and then asserts
+the moment the player drags that slot. The server now warns at load naming the
+offending ids rather than letting anyone meet it as a dialog.
+
+`GmDeckBuilder`'s refresh picks **which** set to enumerate at run time, from a
+per-player flag (`test al, 2` on a flags dword from `0x00815A80`): clear takes the
+account set, set takes the character set. **The flag's meaning is UNVERIFIED** —
+the same word is tested by `VnLearnSkill`, the trainer — and the obvious reading
+("is this a PvP character") is a guess this section does not make.
+
+### 47.4 What shipped
+
+Storage is the account store, because the library is account state living in the
+vault rather than world content: `content/*.toml` rows are facts about the world
+every operator shares, this is one person's account.
+
+* **`charstore.py`** — `account.unlocked_skills` and `characters[uuid].learned_skills`,
+  each an optional id list, validated at load (ints, `>= 1`, no duplicates) with
+  id 0 refused by name for the reason `refuse_skill_zero` exists.
+* **Absence is not emptiness**, and that is what keeps every pre-existing run
+  byte-identical: an absent list means "not authored" and `--unlocks` still answers
+  for that half; an empty list is an authored answer and is sent as an empty bitmap.
+  The two halves fall back **independently**.
+* **`skillunlock.resolve_library`** — the store-or-flag choice, lifted out of
+  `handle_request_game_instance` so a test can reach it; `words_from_ids` /
+  `ids_from_words` are the bitmap round trip, and `words_from_ids` is now the single
+  site enforcing both client-killing rules (id 0, id past the build's table), which
+  `build_unlock_bitmap` now calls rather than duplicating.
+* **`grant_skill`** persists both halves, gating `0x001C` on the **account** set per
+  §47.1 rather than on the per-connection set it used before.
+* **A seed guard, and it is the subtle part.** With no stored list the flag is in
+  force and may be sending 1,333 ids. Letting a quest reward create
+  `unlocked_skills = [40]` would replace that library with a one-skill one at the
+  next login, silently, discovered only when a player opened the panel. So the
+  mutators **refuse to create a list** from a bare id: the caller hands over the set
+  currently in force as a seed, and the stored list is that set plus the new id.
+* **`python toolkit/authsrv/charstore.py`** is the operator's read/write surface
+  (`--list`, `--show`, `--unlock`, `--lock`, `--learn`, `--unlearn`, `--set-*`),
+  and it says out loud when adding one id would CREATE a list where none existed.
+
+### 47.5 What this does NOT settle
+
+* **No client session has been run against a store-driven library.** Everything
+  above is the corpus, the disassembly and the test suite. The two bitmaps are
+  proven to differ in `test_charstore.py`; that a retail client *shows* the
+  difference — the picker listing the character set while the equip validator
+  honours the account set — is UNVERIFIED on screen.
+* **The `GmDeckBuilder` flag** (§47.3) is unread. Until it is, which set the deck
+  builder shows for a given character is a guess.
+* **Nothing writes either list from the client's side.** Skill trainers
+  (`VnLearnSkill`), tomes (`GmSkTome`, `0x006D TOME_UNLOCK_SKILL`) and capture
+  signets all exist in the client and none of them is answered here; a grant only
+  happens because a quest reward row says so.
+* **`0x00DC`'s copies field** is still 1 in every sighting, so "copies" above 1
+  remains UNVERIFIED.

@@ -4016,7 +4016,12 @@ UNLOCK_LABEL = "all"
 # authsrv attributes and main() calls build_unlock_bitmap by bare name.
 import skillunlock                                             # noqa: E402
 from skillunlock import (                                      # noqa: F401,E402
-    unlock_corpus_words, refuse_skill_zero)
+    unlock_corpus_words, refuse_skill_zero,
+    # The persisted skill library's two halves read these by bare name: the
+    # instance-load burst turns a stored id list into a bitmap, and
+    # grant_skill turns the flag's bitmap back into ids to seed the store.
+    # test_charstore.py reads both as authsrv attributes.
+    words_from_ids, ids_from_words)
 
 
 def build_unlock_bitmap(spec):
@@ -15658,10 +15663,44 @@ def grant_skill(send, state, skill_id, conn_id, slot=None, unlocked=False):
     else:
         print(f"[c{conn_id}] skill {skill_id} granted with the bar full -- learned, "
               f"not equipped", flush=True)
+    # THE GATE ON 0x001C IS THE ACCOUNT'S, NOT THE CHARACTER'S. OBSERVED,
+    # Factions tutorial 20260913T210901 port 60877: the two Mantid grants
+    # each sent 0x00DC + 0x00D9 + 0x001C, while the quest reward's
+    # Resurrection Signet sent 0x00DC + 0x00D9 and NO 0x001C -- the owner's
+    # account already held that skill on another character. So 0x00DC above
+    # is "this CHARACTER learns it" and fires every time; 0x001C is "this
+    # ACCOUNT unlocks it" and fires only when it is new to the account.
+    #
+    # Both halves persist under --persist, through the store's seeded
+    # mutators. The seed is what the client is being sent RIGHT NOW: with no
+    # stored list the --unlocks flag is in force, and handing the store just
+    # the new id would replace a 1,333-skill library with a 1-skill one at
+    # the next login. charstore.unlock_account_skill refuses to create a
+    # list without one for exactly that reason.
+    store = state.get("charstore_game")
+    uuid_hex = state.get("char_uuid", "")
+    seed = None if store is None else ids_from_words(UNLOCKED)
     known = state.setdefault("skills_known", set())
-    if not unlocked and skill_id not in known:
+    acct_ids = None if store is None else store.account_unlocked_skills()
+    # Read the account BEFORE the mutators below touch it.
+    new_to_account = (skill_id not in acct_ids if acct_ids is not None
+                      else skill_id not in known)
+    if store is not None:
+        learned = store.learn_character_skill(uuid_hex, skill_id, seed=seed)
+        if learned is None:
+            print(f"[c{conn_id}] skill {skill_id}: NOT persisted as learned "
+                  f"-- no store row for character "
+                  f"{uuid_hex or '?'}", flush=True)
+        elif learned:
+            print(f"[c{conn_id}] PERSIST: character learned skill "
+                  f"{skill_id}", flush=True)
+    if not unlocked and new_to_account:
         send(GAME_SMSG_SKILL_UNLOCKED, [skill_id, 0],
              f"SKILL_UNLOCKED(skill {skill_id})")
+        if store is not None and store.unlock_account_skill(
+                skill_id, seed=seed):
+            print(f"[c{conn_id}] PERSIST: account unlocked skill "
+                  f"{skill_id}", flush=True)
     known.add(skill_id)
     print(f"[c{conn_id}] skill {skill_id} granted"
           + (f" into slot {slot}" if slot is not None else ""), flush=True)
@@ -22946,16 +22985,53 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     # having that state already in hand is the ordering that
     # can work. If the bar draws, try upstream's order too:
     # a difference there is a real finding either way.
-    send(GAME_SMSG_PVP_UPDATE_UNLOCKED_SKILLS, [UNLOCKED],
-         f"PVP_UPDATE_UNLOCKED_SKILLS({UNLOCK_LABEL})")
-    send(GAME_SMSG_UPDATE_UNLOCKED_SKILLS, [UNLOCKED],
-         f"UPDATE_UNLOCKED_SKILLS({UNLOCK_LABEL})")
+    # THE SKILL LIBRARY IS TWO SETS, and they are retail's two, not ours.
+    # Until 2026-09-15 this server sent the SAME flag-built bitmap in both
+    # messages, which worked but modelled one library where the game has
+    # two. OBSERVED across the live corpus:
+    #   * 0x001D is the ACCOUNT's. It is byte-identical on every connection
+    #     of one account, whichever character and whichever map.
+    #   * 0x00DB is THIS CHARACTER's. On 20260817T231139 the character
+    #     carries 21 ids against the same account's 19, and TWO of them
+    #     (364, 384) are in no account set -- so a character can know a
+    #     skill the account never unlocked, and neither set contains the
+    #     other.
+    # Under --persist each comes from the store. An ABSENT list is not an
+    # empty one: it means the operator has not authored that half, and the
+    # --unlocks flag still answers for it, which is what keeps every run
+    # that predates the store byte-identical.
+    (_acct_words, _acct_label,
+     _char_words, _char_label) = skillunlock.resolve_library(
+        state.get("charstore_game"), state.get("char_uuid", ""),
+        UNLOCKED, UNLOCK_LABEL)
+    send(GAME_SMSG_PVP_UPDATE_UNLOCKED_SKILLS, [_acct_words],
+         f"PVP_UPDATE_UNLOCKED_SKILLS({_acct_label})")
+    send(GAME_SMSG_UPDATE_UNLOCKED_SKILLS, [_char_words],
+         f"UPDATE_UNLOCKED_SKILLS({_char_label})")
     skills = list(SKILLBAR)[:SKILLBAR_SLOTS]
     skills += [0] * (SKILLBAR_SLOTS - len(skills))
     send(GAME_SMSG_SKILLBAR_UPDATE,
          [PLAYER_AGENT_ID, skills, SKILLBAR_PVP_MASKS,
           SKILLBAR_TRAILER],
          f"SKILLBAR_UPDATE{skills}")
+    # A BAR SKILL OUTSIDE THE ACCOUNT LIBRARY IS A DELAYED CRASH, and the
+    # delay is why this warns rather than trusting the screen. OBSERVED
+    # (38797, static): GmSkSlot bit-tests the ACCOUNT container --
+    # `unlockedSkills->BitTest(sourceSkillId)` at 0x00542045, asserts
+    # GmSkSlot.cpp:204 and :206 -- and it reads acctCtx[+0x28]+0x124, NOT the
+    # character container 0x00DB fills. FINDINGS §9 already measured that
+    # unlock state does not gate DRAWING, so such a bar renders perfectly and
+    # then kills the client the first time the player drags that slot.
+    # A WARNING, NOT A REFUSAL: the bar is legitimately the server's to set
+    # regardless of the library (§9's whole point), and a probe rig may want
+    # exactly this state -- but nobody should meet it for the first time as
+    # an assert dialog.
+    _unbacked = [s for s in skills
+                 if s > 0 and not (_acct_words[s // 32] >> (s % 32) & 1)]
+    if _unbacked:
+        print(f"[c{conn_id}] WARNING: bar skills {_unbacked} are NOT in the "
+              f"account library ({_acct_label}). They will draw, but dragging "
+              f"one asserts GmSkSlot.cpp:206 on the client.", flush=True)
     # Why the character used to read Level 0: we never sent
     # this at all. Every other field stays zero -- only
     # field 9's effect has actually been observed, and
