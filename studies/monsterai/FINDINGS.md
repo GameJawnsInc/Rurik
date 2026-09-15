@@ -1226,7 +1226,7 @@ Play the R1.5 tape of ArenaNet's own recorded monster behaviour into our client 
 | 5 | Does the tick clock agree with the wire clock on the **existing** captures? | **One analyser run**, no new session. | The `0x001E` integral against the wire span, ≤50 ms. If red, every timed claim in the repo is suspect. |
 | 6 | Does windup scale with declared speed, or is it per-creature? | **One session** targeting a third declared speed, n≥8. | A creature at 1.33 or 2.475. Predicts windup in [0.43, 0.46] × its own declared base. |
 | 7 | Does unprovoked proximity aggro happen at all, and at what radius per creature? **PARTLY ANSWERED 2026-09-15, §11: it happens, and the one observed radius is 992–1105 u; the wiki's 1012 sits inside it, ours (1200) does not.** | *was:* **1–3 sessions**, the `approach` step, subjects that have not moved since create. Still needed for n. | 10 point measurements across ≥3 types. **Refuted if** two creature types' brackets do not overlap — then it is a field, not a constant, as GWW says. **Also refuted if** a subject never reacts down to contact, in which case `AGGRO_RANGE` dies as a concept rather than being retuned. |
-| 8 | Leash: home, stop, or none — and anchored where? | **1–3 sessions**, the `retreat` step, aggroed by approach not by attack. | 6 disengagements across ≥2 types. All three outcomes are findings. |
+| 8 | Leash: home, stop, or none — and anchored where? **PARTLY ANSWERED 2026-09-15, §11 N9: a standing creature goes HOME (3/3, 1,358–2,886 u), a patroller resumes the leg it abandoned (2/2, ~5,200 u).** | *was:* **1–3 sessions**, the `retreat` step, aggroed by approach not by attack. | 6 disengagements across ≥2 types. All three outcomes are findings. 5 of 6 done. |
 | 9 | Is ambient movement correlated with the player at all? | **Free** — a by-product of every control window. | Patrol destinations vs contemporaneous player position, clustered rather than merely catalogued. |
 | 10 | Absolute monster max health | **1–3 sessions**, if the character carries life-stealing skills. | Two skills of different published steal agreeing on 3 types GWW publishes. Would move HP off `PLAN.md` §1.7's server-only list. |
 | 11 | What are `band` and `anim`? | **One session**, the `narrate` step. | The operator saying in chat what they were looking at. |
@@ -1418,14 +1418,105 @@ follow naming the new target — **OBSERVED, n=1**; what agent 17 was and why th
 happened is not read here. §9 Q12 ("does a hostile ever switch targets") moves from
 NOT FOUND to *yes, once, shape known*.
 
+### MONSTERAI-N7 — the planned run, same day: the radius bracketed from BOTH sides, 887–1048 u
+
+The owner ran `vault/plans/aggro_presearing.txt` twice on 2026-09-15 (`20260915T155656`,
+`20260915T164906`; Lakeside County, map 146), on the creatures the zone offered: a level-5
+`mon1` (def 1397, three approaches, three retreats), a level-2 Skale Broodcaller (def
+1432, one approach and one retreat), and two believed-passive skale (defs 1431 and 1437,
+the ten-second stand then one hit). Every approach was keyboard-driven and every reaction
+came with the player STANDING (self-report 0.1–0.2 s old, a `0x0047` stop), which is what
+turns a row into a point.
+
+**The instrument had to move first, and the move is N1's fourth defect.** Keyed on the first
+`0x002A`, it filed the Broodcaller's notice as a re-follow: a caster does not follow at
+all — it jumps to 1.0, walks a `0x0029` leg to its range, halts and opens with
+`attack_started`; the follow came 19 s later when the player ran. An engagement is now the
+hostile's own **first act** (a follow it sends, or a combat word it sources), the burst is
+walked back from that. And the same tape hands over the **upper bound**: every `0x0047`
+stop the player held ≥ 2 s inside the lookback without a reaction is a distance at which
+that hostile did *not* notice. Both bounds from one tape, no free parameter.
+
+| def / lvl | approach | notice (lower) | longest unreacted stand (upper) | reaction |
+|---|---|---|---|---|
+| 1397 / 5 | 1 | **887 u, OBSERVED** (parked since create; player standing) | **1,048 u for 5 s** | leg + leg + follow over 2.0 s, then the swing |
+| 1397 / 5 | 2 | **879 u, OBSERVED** (parked at home after its return leg) | 2,438 u (recon) | same shape |
+| 1397 / 5 | 3 | **915 u, OBSERVED** (parked at home) | — | same shape, 0.05 s after the stop |
+| 1432 / 2 | 1 | 912 u, RECON (mid-patrol at 100 u/s) | 1,046 u for 5 s (recon) | `0x002B` 1.0 + leg + halt + `attack_started` at ~430 u: a caster's range, no follow |
+
+**OBSERVED.** The level-5 creature's radius is **in (915, 1048) u** — it ignored a player
+standing 5 s at 1,048 u and reacted within 0.16 s of a stop at 887 u, twice more at 879
+and 915 u. The Broodcaller's is in (912, 1046) u on reconstructed positions. Corpus-wide
+the strict population is now **n = 5 observed, 868–992 u** (def 4440 level 6 at 868;
+def 140 level 20 at 992–1105; def 1397 ×3), every one *below* the wiki's 1012, and the
+one two-sided observed bracket puts the wiki's number 36 u inside its top. `AGGRO_RANGE =
+1012` (N3) sits inside every bracket and is not moved; if retail's radius is one global
+number it lies in **(992, 1048)** and the next approach step on any creature that stops
+between those two settles it. The reaction latency to a stop — 0.16 s, 0.05 s — bounds
+the server's AI tick from above at well under a second.
+
+### MONSTERAI-N8 — the passive note CONFIRMED for two definitions
+
+The owner's note (*low-level creatures, or some flag, are not aggroed by walking in
+range*) has its first witnesses, and they are the two the owner picked as passive:
+
+| def / lvl | the stand before the hit | its reaction to the hit |
+|---|---|---|
+| 1431 / 1 (River Skale) | **27.5 s inside 1012 u; 5 s standing at 226 u** with no reaction | `attack_started` 1.2 s after the player's, no movement (adjacent) |
+| 1437 / 1 | **16 s standing at 583 u** with no reaction | `attack_started` 1.2 s after the player's |
+
+**OBSERVED** (the hostile positions reconstructed along patrol legs, but 226 u and 583 u
+are inside any radius in this document by a factor of two or more). Against them, def
+1397 at level 5 and def 1432 at level 2 reacted unprovoked at ~900 u, so **it is a flag,
+not a level**: a level-2 Broodcaller aggroes on proximity and a level-1 River Skale does
+not. Nothing on the wire names the flag — the `0x0056` definition record's `flags` field
+is the candidate (§3.7.1 read its bits as display to the client, which does not exclude
+the server reading the same word), and the four definitions above give two values of it
+to compare when someone looks.
+
+### MONSTERAI-N9 — the leash: a standing creature goes HOME, a patroller resumes its PATROL, and the two chase very different distances
+
+Five deliberate retreats (the `leash` step), all keyboard-driven, the player running
+straight away until the compass dot stopped following:
+
+| def / lvl | chase | gave up | then |
+|---|---|---|---|
+| 1397 / 5, retreat 1 | 3 follows + 5 `0x0029` legs, 22 s from the notice (fight included) | a leg 2,111 u from its notice point | legs at 2 s cadence back to its spawn: **HOME** |
+| 1397 / 5, retreat 2 | 15 follows, 13.7 s | a follow 2,886 u out | **HOME** |
+| 1397 / 5, retreat 3 | 4 follows + 4 legs, 10 s | a leg 1,358 u out | **HOME** |
+| 1432 / 2 (Broodcaller) | 29 follows, 33 s from the notice | a follow **5,168 u** out (recon) | a leg, `0x002B` back to 0.33, then the exact patrol leg it abandoned at the notice: **PATROL** |
+| 1431 / 1 (River Skale, after being hit) | 33 follows, 17.7 s | a follow 5,239 u out (recon) | `0x002B` 0.33 and legs: **PATROL** |
+
+**OBSERVED, n = 3 + 2.** The wiki's two sentences both hold: the standing creature *"can
+only be pulled a short distance"* — 1,358–2,886 u from its spawn — and *"this distance is
+longer if the group was patrolling"* — the two patrollers chased ~5,200 u and 14–18 s.
+The anchor is **home** for the stander (three returns to within 150 u of its create
+position) and **the abandoned patrol leg** for the patrollers (the Broodcaller resumed the
+exact `0x0029` point it had been walking to when it noticed). The owner's own read —
+*some enemies seem to have hardcoded leash ranges / chase time; the Bull had a much
+shorter return* — is what this table says, with the split falling on standing-vs-patrol
+rather than on the creature: the level-5 stander's three chases are 1,358 / 2,111 / 2,886
+u and 10 / 22 / 14 s, so neither its distance nor its time is one number. Chase-by-legs
+is real: retreat 1 was chased with `0x0029` legs whose points tracked the player, retreats
+2 and 3 with `0x002A` follows. **And the stander swings while chasing** — 8, 3 and 3
+`attack_started` inside its chases — which §40.2 said never happens (0 of 4 there); the
+difference is the player running away versus approaching.
+
+What the wiki says that this does not test: the speed-boost break rule, and per-party
+aggro retention. Both need a second body or a stance.
+
 ### What this does not settle, in the order it would cost
 
-1. **Per-creature radius** — §9 Q7's bar (10 points, ≥ 3 types) is unmet at 1 + 2; the
-   `approach` step, standing at the trigger, is the only thing that adds observed rows.
-2. **Passive creatures** — N5; the same step, with a ten-second stand inside the circle.
-3. **Leash** — §9 Q8; the `retreat` step. The instrument already classifies chase ends
-   (halt vs. leg) and would take the anchor question with one more column.
-4. **The opening shape** — N4 is measured; whether to ship it is a router question.
+1. **Per-creature radius** — §9 Q7's bar (10 points, ≥ 3 types) is at 5 observed points
+   over 3 definitions after N7; two more zones with different creatures reach it. The
+   global-number question is narrower still: one creature that stops the player between
+   992 and 1048 u.
+2. **The passive flag** — N8 has two passive and two aggressive definitions; the `0x0056`
+   `flags` word of those four is the desk check.
+3. **Leash** — N9 has the shape; a standing group and a patrolling group of the same
+   definition would separate the creature from the mode.
+4. **The opening shape** — N4 is measured; whether to ship it is a router question, and
+   the caster's shape (leg to range, halt, swing, no follow) joins it.
 
 ---
 
