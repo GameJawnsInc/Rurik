@@ -11147,7 +11147,7 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   comment that had called value 8 a single sighting from one capture's count.
   Proven red by setting the reward to the Wolf's contaminated 126. Floor 6, the
   vault-less §1),
-  `toolkit/authsrv/test_skilldamage.py` (**2026-09-14 (late night), DAMAGE-INT: Flare's 20 at AR 25 lands 36 — 36.68 truncated to whole points — on the wire and in the books; floor 58 unchanged.** **SKILLS-FA (2026-09-09) added §11–§12,
+  `toolkit/authsrv/test_skilldamage.py` (**2026-09-14 (late night), HEAL-INT: a 70.4 heal goes out as `0x3F333333` (0.70) and lands 70 — whole points, truncated after the Deep Wound cut; +1, floor 58 → 59.** **2026-09-14 (late night), DAMAGE-INT: Flare's 20 at AR 25 lands 36 — 36.68 truncated to whole points — on the wire and in the books; floor 58 unchanged.** **SKILLS-FA (2026-09-09) added §11–§12,
   floor 44 → 57**: an incoming `Fire damage` cast scales by the player's ONE
   elemental rating (25, not the physical 45 — the `+20 vs. physical` never reaches
   a spell), Flare's 20 at rank 0 lands as 36.68 = 20 × 2^((60−25)/40), Holy

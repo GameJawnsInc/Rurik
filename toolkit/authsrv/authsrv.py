@@ -16860,6 +16860,15 @@ def heal_agent(send, state, target_id, caster_id, amount, conn_id,
         amount = float(amount) - cut
         print(f"[c{conn_id}] heal on agent {target_id} cut by {cut:.1f} "
               f"(Deep Wound: -20% healing)", flush=True)
+    # HEAL-INT (2026-09-14): retail's heal word is a WHOLE number of points,
+    # the same shape as its damage word (DAMAGE-INT, `_whole_points`): 83 of
+    # the 85 property-55 words in the live corpus whose taker's maximum is on
+    # the wire are exact, the two that are not are the PvP tape's taker 7 at
+    # its moved maximum (43 and 67 over 455), and every taker with no
+    # maximum on the wire is whole over one denominator -- or two, where the
+    # maximum moved once (480 -> 408). Truncated AFTER the Deep Wound cut,
+    # once, and the books take the same number.
+    amount = _whole_points(float(amount))
     landed = max(0.0, min(float(amount), pool - before))
     if not OVERHEAL_NUMBER:
         # The known-bad arm: the pre-2026-09-09 rule, silent on a full pool
@@ -16869,7 +16878,7 @@ def heal_agent(send, state, target_id, caster_id, amount, conn_id,
                   f"OVERHEALS ({before:.0f}/{pool:.0f}) -- nothing sent "
                   f"(--no-overheal-number)", flush=True)
             return 0.0
-        wire = landed
+        wire = _whole_points(landed)    # HEAL-INT: the room may be fractional
     else:
         wire = min(float(amount), pool)
     frac = _fraction(wire / pool, agents.GV_HEALTH_GAIN,

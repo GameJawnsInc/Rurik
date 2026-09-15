@@ -47,7 +47,7 @@ import effects  # noqa: E402
 # a short run means a section stopped rather than passed.
 # SKILLS-HN +4 (44), SKILLS-FA +13 (57: 7 model + 6 corpus), each from its
 # green run. Section 12 needs the live corpus and declares a skip without it.
-LEDGER = checks.Ledger("skill damage", floor=58)   # MANTID-S +1: the player-side control beside the foe-side refusal
+LEDGER = checks.Ledger("skill damage", floor=59)  # 2026-09-14 HEAL-INT +1;   # MANTID-S +1: the player-side control beside the foe-side refusal
 check = LEDGER.ok
 
 
@@ -259,6 +259,25 @@ def main():
           f"asserts `fraction <= 1.0f` at CharPool.cpp:84 and that assert only "
           f"fires in the POSITIVE direction, so this is the first thing this "
           f"server sends that can actually reach it")
+    # HEAL-INT (2026-09-14): a fractional heal goes out and lands as WHOLE
+    # points, truncated -- retail's property-55 words are 83 of 85 exact over
+    # the taker's maximum, the same shape as its damage. 70.4 (an 88 under a
+    # Deep Wound's x0.8) is 70 on the wire (f32(0.70) = 0x3F333333) and 70 in
+    # the books; nothing rounds it to 71.
+    sent_i = []
+    send_i = lambda op, vals, label="", quiet=False: sent_i.append((op, vals, label))
+    state_i = {"player_health": 10.0, "player_energy": 50.0, "agents": {}}
+    landed_i = authsrv.heal_agent(send_i, state_i, authsrv.PLAYER_AGENT_ID,
+                                  authsrv.PLAYER_AGENT_ID, 70.4, 0)
+    heals_i = [v for op, v, _l in sent_i
+               if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
+               and v[0] == agents.GV_HEALTH_GAIN]
+    check(len(heals_i) == 1 and heals_i[0][3] == 0x3F333333
+          and landed_i == 70.0 and state_i["player_health"] == 80.0,
+          "a 70.4 heal is 70 on the wire (f32(0.70) = 0x3F333333) and 70 in the "
+          "books -- whole points, truncated (HEAL-INT)",
+          f"wire {[hex(v[3]) for v in heals_i]}, landed {landed_i}, health "
+          f"{state_i['player_health']}")
     # SKILLS-HN (studies/skills 42). This check used to pin the OPPOSITE --
     # "a heal on a FULL bar sends nothing at all ... overheal is silent in
     # retail too, no green number appears" -- and both halves were a
