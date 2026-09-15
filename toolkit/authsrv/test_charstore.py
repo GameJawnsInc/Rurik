@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import checks  # noqa: E402
 import charstore  # noqa: E402
 
-led = checks.Ledger("charstore", floor=50)
+led = checks.Ledger("charstore", floor=72)
 base = tempfile.mkdtemp(prefix="charstore-test-")
 UUID = "11111111111111111111111111111111"
 
@@ -363,6 +363,120 @@ try:
     led.ok(authsrv.ids_from_words(aw) == [] and "stored" in al,
            "an authored-empty account library sends an EMPTY bitmap and does "
            "NOT fall back to the flag")
+
+
+    # -- heroes: per-character builds, and the bar's own shape rules ---------
+    #
+    # Heroes hang off the CHARACTER (retail's scoping), and the bar is a
+    # different shape from a library: positional, eight wide, and 0 is a legal
+    # value meaning empty. The refusals below are what keeps those two from
+    # being validated by the same rule -- a 0 in a library sets bit 0 of a
+    # bitmap and asserts the client, a 0 in a bar is how retail spells an
+    # empty slot (Koss's own bar has one at index 6).
+
+    hs = charstore.Store.open("heroes@rurik.invalid", base=base)
+    hs.ensure_character(UUID, "Hero Owner", "")
+    hs.save()
+
+    led.ok(hs.heroes(UUID) == {} and hs.hero_row(UUID, 6) is None,
+           "a character with no authored heroes has none -- {} not None, "
+           "because unlike a library there is no absent-vs-empty question")
+
+    hs.set_hero_skills(UUID, 6, [322, 382, 348, 1, 385, 2])
+    hs.set_hero_skillbar(UUID, 6, [322, 382, 348, 1, 385, 346, 0, 2])
+    hs.set_hero_attributes(UUID, 6, [[20, 2], [21, 1]])
+    led.ok(hs.hero_row(UUID, 6)["skills"] == [1, 2, 322, 348, 382, 385],
+           "a hero's own skill list is stored sorted and de-duplicated")
+    led.ok(hs.hero_skillbar(UUID, 6) == [322, 382, 348, 1, 385, 346, 0, 2],
+           "the bar keeps its ORDER and its empty slot -- it is positional, "
+           "so sorting or compacting it would move every skill's hotkey")
+    led.ok(hs.hero_attributes(UUID, 6) == [[20, 2], [21, 1]],
+           "a hero's ranks are stored as [id, rank] pairs")
+
+    led.ok(hs.set_hero_bar_slot(UUID, 6, 6, 400)[6] == 400,
+           "one slot is writable the way 0x005C writes one slot")
+    led.ok(hs.set_hero_bar_slot(UUID, 6, 6, 0)[6] == 0,
+           "and writable back to empty")
+    led.ok(len(hs.set_hero_bar_slot(UUID, 9, 0, 322)) == 8,
+           "writing a slot on a hero with no bar creates eight slots -- safe "
+           "here where it was not for a library, because a bar is eight wide "
+           "whatever happens and there is no standing set to shrink")
+    try:
+        hs.set_hero_bar_slot(UUID, 6, 8, 322)
+        led.ok(False, "slot 8 must be refused")
+    except ValueError as exc:
+        led.ok("hotKey" in str(exc),
+               "slot 8 is refused, citing the client's own bound")
+
+    # Slot 6 was written to 400 and back to 0 above, so the bar is exactly
+    # what it started as -- INCLUDING 346 at slot 5, which is the id a
+    # positional-vs-sorted mistake moves. (The first version of this check
+    # expected 346 gone: the test was wrong, not the store.)
+    led.ok(charstore.Store.open("heroes@rurik.invalid", base=base)
+           .hero_skillbar(UUID, 6) == [322, 382, 348, 1, 385, 346, 0, 2],
+           "the hero's bar round-trips through disk with its slots in place")
+
+    # -- what the hero rows REFUSE ------------------------------------------
+    for mutate, why in (
+            (lambda h: h.update({"skillbar": [1, 2, 3, 4, 5, 6, 7, 8, 9]}),
+             "a ninth bar slot"),
+            (lambda h: h.update({"skillbar": [1, 1, 0, 0, 0, 0, 0, 0]}),
+             "the same skill in two slots"),
+            (lambda h: h.update({"skillbar": [-1, 0, 0, 0, 0, 0, 0, 0]}),
+             "a negative slot value"),
+            (lambda h: h.update({"skills": [0]}), "skill id 0 in a hero list"),
+            (lambda h: h.update({"attributes": [[20, 13]]}),
+             "a rank above the client's cap of 12"),
+            (lambda h: h.update({"attributes": [[99, 3]]}),
+             "an attribute id past the 51-row table"),
+            (lambda h: h.update({"attributes": [[20, 2], [20, 3]]}),
+             "the same attribute twice"),
+            (lambda h: h.update({"attribute_points": -1}),
+             "a negative point budget"),
+    ):
+        broken = charstore._fresh("bad@rurik.invalid")
+        hero = {}
+        mutate(hero)
+        broken["characters"][UUID] = {
+            "name": "X", "level": 1, "xp": 0, "skill_points": 0,
+            "heroes": {"6": hero}}
+        try:
+            charstore.validate(broken, "bad.json")
+            led.ok(False, f"the store must refuse {why}")
+        except ValueError:
+            led.ok(True, f"the store refuses {why}")
+
+    for hid in ("0", "40", "x"):
+        broken = charstore._fresh("bad@rurik.invalid")
+        broken["characters"][UUID] = {
+            "name": "X", "level": 1, "xp": 0, "skill_points": 0,
+            "heroes": {hid: {}}}
+        try:
+            charstore.validate(broken, "bad.json")
+            led.ok(False, f"hero index {hid!r} must be refused")
+        except ValueError:
+            led.ok(True, f"hero index {hid!r} is refused -- 0 is not a hero "
+                         f"and 40 is past s_heroClientData")
+
+    # A bar of 8 is legal; an EMPTY bar is legal (a hero with nothing equipped).
+    ok_store = charstore._fresh("ok@rurik.invalid")
+    ok_store["characters"][UUID] = {
+        "name": "X", "level": 1, "xp": 0, "skill_points": 0,
+        "heroes": {"6": {"skillbar": [0] * 8, "skills": [],
+                         "attributes": [], "attribute_points": 0}}}
+    charstore.validate(ok_store, "ok.json")
+    led.ok(True, "an all-empty bar, an empty skill list and a zero budget are "
+                 "all legal -- the refusals above are shape errors, not a ban "
+                 "on a hero who has nothing yet")
+
+    # The two mirrored client bounds must not drift from attribcolumns.py.
+    import attribcolumns  # noqa: E402
+    led.ok(charstore.CHAR_ATTRIBS == attribcolumns.CHAR_ATTRIBS
+           and charstore.ATTRIBUTE_RANK_MAX
+           == attribcolumns.ATTRIBUTE_RANK_MAX,
+           "charstore's mirrored attribute bounds still equal attribcolumns' "
+           "-- they are copied so charstore stays bare-machine loadable, and "
+           "a copy with nothing comparing it is where drift lives")
 
 finally:
     shutil.rmtree(base, ignore_errors=True)

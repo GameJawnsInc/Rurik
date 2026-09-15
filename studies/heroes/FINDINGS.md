@@ -615,10 +615,17 @@ replay, so any `0x01BF` we send is necessarily authored.
 5. ~~**What do `0x01BF`'s two trailing `u8`s mean?**~~ **PARTIALLY ANSWERED §10.2** — not
    what the roster row renders, which is the reading upstream's names invite. Purpose still
    NOT FOUND; the untested candidate is the outpost hiring UI.
-6. **Where do hero skill bars and ATTRIBUTES come from?** Still NOT FOUND — but §11.4
-   renames it: the client now asserts `attribState` (`ChCliAttrib.cpp:156`) as the next
-   gate, so the question is "what writes a hero's attribute record", and `0x0074`'s two
-   unexplained 5-dword groups are the shaped hypothesis to test first.
+6. ~~**Where do hero skill bars and ATTRIBUTES come from?** Still NOT FOUND~~
+   **ANSWERED 2026-09-15, §40.** The bar is `0x00DA` addressed to the hero's agent
+   (§15 found the message; §40 found what belongs *in* it) and the attributes are
+   `0x0037` + `0x003A` addressed the same way — neither is a new mechanism, and
+   `0x0074`'s 5-dword groups, the "shaped hypothesis to test first" below, are **not**
+   it (§12 had already refuted that and this is the second refutation). What §40 adds
+   is the SOURCE rather than the carrier: a hero's usable library is **(its own
+   `0x0073` field-7 skills) ∪ (the ACCOUNT's `0x001D` unlocks)**, measured on a single
+   retail frame, and its attribute budget follows the player's rule exactly (Koss: 6
+   unspent of 10 at level 3, priced to the client's own cost table with no free
+   parameter). Both now persist per character.
 7. **Retry the family under `--encstring`** — never done; it flipped six other opcodes.
 8. **A live capture at a henchman outpost** is the only source of OBSERVED ground truth for
    retail's send order and field values. Post-Searing Ascalon City, four level-3 henchmen
@@ -3321,3 +3328,143 @@ configurations. Both configurations were fully covered, so that comparison
 compared nothing and the inference is **withdrawn** — not refuted, unsupported.
 The direct check is free and has simply never been read: `_report` prints
 `tid` on every hit line, so any future run answers it by inspection.
+
+---
+
+# OBSERVED, 2026-09-15: the hero's library, bar and attributes — §8 question 6, answered
+
+## 40. HEROLIB — a hero draws on the ACCOUNT's unlocks, and the bar edit is `0x005C`
+
+§8's sixth open question reads *"Where do hero skill bars and ATTRIBUTES come
+from? Still NOT FOUND"*, and §4 called the bar "the sharpest negative". §15
+corrected half of that by finding `0x00DA` was agent-keyed all along. This
+section closes the rest: **the hero's library, the source of its bar and ranks,
+and the client-to-server message that changes a bar.**
+
+### 40.1 The union rule — OBSERVED, and the plausible wrong answer is checked
+
+One connection carries the whole thing. Capture **`20260914T005758`**, port
+`:51659`, one frame at t=37.725:
+
+```
+0x0073 HERO_INFO  hero_index=6 level=3 prof=1/0 skills=[322, 382, 348, 1, 385, 2]
+0x0072 HERO_ACTIVATE  [6, 117, 200, 0]
+0x00DA SKILLBAR   agent=708  bar=[394, 446, 2, 455, 433, 411, 436, 392]   <- the player
+0x00DA SKILLBAR   agent=117  bar=[322, 382, 348, 1, 385, 346, 0, 2]       <- the hero
+```
+
+The hero's bar holds **one id that is not his own: 346.** On that same
+connection 346 is **in the account's `0x001D` set** and **not in the character's
+`0x00DB` set**. So:
+
+> **A hero's usable library is (the hero's own skills) UNION (the ACCOUNT's
+> unlocks).** Not the character's learned set — which is the answer a reader
+> reaches for, since the hero belongs to the character.
+
+It is worth stating the other side too: the **player's** bar on
+`20260817T231139` holds 364 and 384, which are in the **character's** set and in
+**no** account set. The two bodies draw on different libraries, and each
+capture refutes the rule the other might have suggested.
+
+`0x0073 HERO_INFO` field 7 is therefore the hero's **own** half of that union
+and is **not the bar** — six ids against the bar's eight, missing 346 and the
+empty slot.
+
+### 40.2 A loose join gave a confident wrong answer on eight connections
+
+Recorded because the wrong answer looked stronger than the right one. The first
+census joined a bar to a hero by *"shares at least one skill id"*. On the eight
+connections of `20260817T231139` that labelled the **player's** bar as a hero's
+and reported the two extras as coming from the character set — **agreeing with
+itself all eight times.** The strict join (HERO_INFO's list must be a **subset**
+of the bar) finds a hero bar on three connections only, all corroborated by
+`0x0072 HERO_ACTIVATE` naming the same agent, and gives §31.1.
+
+Eight consistent readings of a bad join are one reading, counted eight times.
+Same shape as the arc's other aggregate traps.
+
+### 40.3 The attribute columns, re-confirmed by arithmetic with no free parameter
+
+`attribute_columns` already encodes `0x003A` as three parallel columns
+(ids | base | effective) — the shape that cost a session in 2026-08-15. The
+corpus supplies an independent check the repo did not have, because the point
+budget and the ranks are sent in **different messages** and have to agree:
+
+| Body | `0x003A` columns | ranks | cost from the client's own `s_attribPoints` | `0x0037` |
+|---|---|---|---|---|
+| Player, level 20 | `[17,20,21 \| 8,12,10 \| 8,13,10]` | 8, 12, 10 | 37 + 97 + 61 = **195** | 200 total, 5 available → **195** |
+| Koss, level 3 | `[20,21 \| 2,1 \| 2,1]` | 2, 1 | 3 + 1 = **4** | 10 total, 6 available → **4** |
+| Player, level 3 | `[23,25 \| 1,2 \| 1,2]` | 1, 2 | 1 + 3 = **4** | 10 total, 6 available → **4** |
+
+Costs read with `toolkit/clientscan/attribpoints.py` (build 38797,
+`[1,2,3,4,5,6,7,9,11,13,16,20]`), never from memory. Three witnesses, exact,
+**zero free parameters** — and the interleaved reading cannot produce any of
+them, since it would put rank 20 or 21 in a column the client bounds at 12.
+
+The second half is the one that matters for authoring: **a hero's budget works
+exactly like a player's.** Koss holds 6 unspent of 10 at level 3, the same as
+the level-3 player beside him. Our server was sending `(available=0,
+total=spent)` for a hero, which is a different statement — it says the hero has
+no points left and makes the panel's plus buttons dead.
+
+### 40.4 `0x005C` is the bar edit, and its own echo proves the field order
+
+`0x005C` occurs **twice** in the whole live corpus, and both times the server's
+answer settles the reading:
+
+| c2s | s2c, 33–36 ms later |
+|---|---|
+| `0x005C [59, 0, 348, 0]` | `0x00D9 SKILLBAR_UPDATE_SKILL [59, 0, 348, 0]` |
+| `0x005C [568, 5, 105, 0]` | `0x00D9 SKILLBAR_UPDATE_SKILL [568, 5, 105, 0]` |
+
+Byte-identical, same field order. So **`0x005C` is `[agent, slot, skill, u32]`**
+— the client-to-server half of `0x00D9` — and the transposed rival
+(`[agent, skill, slot]`) is refuted, because it could not produce that echo.
+n=2 is small; the echo is what carries the weight, not the count.
+
+It is **agent-keyed**, like everything else in this family, so the same message
+is what edits a hero's bar. The corpus has no hero-addressed instance — the
+operator used the hero for AI mode, lock-target and flags only — and that is
+**zero exposure, not a null.**
+
+### 40.5 What shipped
+
+* **`charstore`** — `characters[uuid].heroes[index]` with `skills`, `skillbar`,
+  `attributes` and `attribute_points`, plus the character's own `skillbar`.
+  A bar is validated by a different rule from a library: 0 is illegal in a
+  library and is the empty slot in a bar.
+* **`herolib`** (new leaf) — the union rule and the slot referee, which returns
+  a reason string and cites `GmSkSlot.cpp:206`, the equip validator a bad
+  library would put the client one drag away from.
+* **The three send paths** read the store when it has an answer and keep what
+  they sent before when it does not, so a default run is byte-identical.
+  `0x0073` field 7, the hero's `0x00DA`, and the hero's `0x0037`/`0x003A`.
+* **The hero's budget** now honours a stored `attribute_points`, so a hero can
+  hold unspent points. Without one the total stays "whatever the ranks cost",
+  because **inventing a level→points curve is exactly the kind of number this
+  repo keeps walking back** — the player's own budget is an authored content
+  row, not a derived one.
+* **`0x005C` is answered**, for the player and for a hero, validated against the
+  right library for that body, persisted, and echoed with `0x00D9`. A refusal
+  still answers, echoing the slot's unchanged contents, because the client has
+  already drawn the drag.
+* **`0x000E`/`0x000F` accept a hero agent.** They used to refuse every agent but
+  the player, with the reason *"the panel only ever spends the local player's
+  points"* — which nothing established.
+
+### 40.6 What this does NOT settle
+
+* **No client session has run against any of it.** Everything here is the
+  corpus, the client's own tables and the suite.
+* **Zero corpus exposure on the c2s hero paths.** All 32 attribute messages and
+  both bar edits name the player. That a retail client *sends* `0x005C` or
+  `0x000F` for a hero is inference from the messages being agent-keyed, not an
+  observation, and it is the single cheapest thing a run would settle.
+* **The duplicate-drag rule is UNVERIFIED.** Retail's UI is understood to swap
+  when a skill already on the bar is dragged onto it; the corpus has no such
+  capture, so the server logs the duplicate and does not model a swap.
+* **`0x0065 SKILLBAR_SLOT_FLAGS`** rides beside the hero's bar (twice, both
+  `[agent, 0]`) and is still unmodelled.
+* **`0x001B`** appeared in this census as an unnamed hero-family c2s message
+  carrying a position and a zero, with `(inf, inf)` clearing it — the
+  all-heroes sibling of `0x001A HERO_FLAG_PLACE`. Not named here.
