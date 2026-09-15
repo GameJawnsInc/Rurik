@@ -78,6 +78,18 @@ STORE_VERSION = 1
 # string16(8) admits 7 units on receive; template framing costs 3 of them.
 MAX_NAME_CHARS = 4
 FACTIONS = ("kurzick", "luxon", "balthazar", "imperial")
+# 0x00DA's array is eight wide; the client asserts
+# `hotKey < arrsize(hotKeyState->hotKey)` (ChCliSkill.cpp:681) past it.
+HERO_BAR_SLOTS = 8
+# s_heroClientData's row count (studies/heroes/FINDINGS.md 2). Index 0 is
+# not a hero, the same way skill id 0 is not a skill.
+MAX_HERO_INDEX = 39
+# Mirrored from attribcolumns.py rather than imported: that module pulls in
+# `agents` (the content store) and this one must stay loadable on a bare
+# machine with no content at all. Both cite the same client asserts, and
+# test_charstore checks the two agree so the copies cannot drift.
+CHAR_ATTRIBS = 51
+ATTRIBUTE_RANK_MAX = 12
 
 
 def store_dir():
@@ -137,6 +149,97 @@ def _validate_skill_ids(path, where, ids):
         _refuse(path, f"{where}: duplicate skill ids {dupes} -- the wire "
                       f"carries a BITMAP, so a duplicate is a silent no-op "
                       f"that makes the file disagree with what is sent")
+
+
+def _validate_hero_bar(path, where, bar):
+    """A hero's 8 slots. UNLIKE a library list, 0 is legal and means EMPTY.
+
+    The two shapes are validated separately on purpose. A library is a SET and
+    a 0 in it would set bit 0 of a bitmap, which asserts the client; a bar is a
+    POSITIONAL array of 8 slots where 0 is how retail spells an empty one --
+    OBSERVED, capture 20260914T005758: Koss's bar is
+    [322, 382, 348, 1, 385, 346, 0, 2], with slot 6 empty and slot 7 occupied,
+    so an empty slot is not merely trailing padding and cannot be dropped.
+    """
+    if not isinstance(bar, list):
+        _refuse(path, f"{where}: skillbar must be a list of slots, not "
+                      f"{type(bar).__name__}")
+    if len(bar) > HERO_BAR_SLOTS:
+        _refuse(path, f"{where}: {len(bar)} slots, the bar has "
+                      f"{HERO_BAR_SLOTS} -- 0x00DA's array is eight wide and "
+                      f"the client asserts `hotKey < arrsize(hotKeyState->"
+                      f"hotKey)` (ChCliSkill.cpp:681) on anything past it")
+    for sid in bar:
+        if isinstance(sid, bool) or not isinstance(sid, int):
+            _refuse(path, f"{where}: slot value {sid!r} is not an int")
+        if sid < 0:
+            _refuse(path, f"{where}: slot value {sid} is negative; 0 is the "
+                          f"empty slot and ids start at 1")
+    occupied = [s for s in bar if s]
+    if len(set(occupied)) != len(occupied):
+        _refuse(path, f"{where}: the same skill occupies two slots "
+                      f"{sorted({s for s in occupied if occupied.count(s) > 1})}"
+                      f" -- the client's own equip guard is "
+                      f"`targetSkill != sourceSkill` (ChCliSkill.cpp:515)")
+
+
+def _validate_rank_pairs(path, where, pairs):
+    if not all(isinstance(p, list) and len(p) == 2
+               and all(isinstance(v, int) and not isinstance(v, bool)
+                       for v in p) for p in pairs):
+        _refuse(path, f"{where}: attributes must be [attribute_id, rank] "
+                      f"int pairs")
+    for aid, rank in pairs:
+        if not 0 <= aid < CHAR_ATTRIBS:
+            _refuse(path, f"{where}: attribute id {aid} outside the client's "
+                          f"{CHAR_ATTRIBS}-row s_attrib table; its writer "
+                          f"asserts `attrib < arrsize(attribState->attrib)` "
+                          f"(ChCliAttrib.cpp:249)")
+        if not 0 <= rank <= ATTRIBUTE_RANK_MAX:
+            _refuse(path, f"{where}: rank {rank} for attribute {aid} is "
+                          f"outside 0..{ATTRIBUTE_RANK_MAX}; ArenaNet's own "
+                          f"cap is AcctTemplate:441 and CharData:202 bounds "
+                          f"the s_attribPoints lookup at 0..12")
+    ids = [a for a, _r in pairs]
+    if len(set(ids)) != len(ids):
+        _refuse(path, f"{where}: attribute {sorted({a for a in ids if ids.count(a) > 1})}"
+                      f" appears twice -- each 0x003A triple WRITES its slot, "
+                      f"so a duplicate silently means last-one-wins")
+
+
+def _validate_heroes(path, who, heroes):
+    """One character's heroes: index -> {skills, skillbar, attributes, ...}.
+
+    HEROES BELONG TO THE CHARACTER, not to the account, and that is retail's
+    scoping rather than a choice made here: each character owns its own copy
+    of a hero with its own build. The ACCOUNT's contribution is the unlock
+    library every hero draws on (see account unlocked_skills) -- OBSERVED,
+    capture 20260914T005758: Koss's bar carries 346, which is in the account's
+    0x001D set, absent from his own 0x0073 skill list, and absent from the
+    CHARACTER's 0x00DB set.
+    """
+    if not isinstance(heroes, dict):
+        _refuse(path, f"character {who}: heroes must be an object keyed by "
+                      f"hero index")
+    for hid, row in heroes.items():
+        if not str(hid).isdigit() or not 1 <= int(hid) <= MAX_HERO_INDEX:
+            _refuse(path, f"character {who}: hero index {hid!r} outside "
+                          f"1..{MAX_HERO_INDEX} (s_heroClientData's rows; "
+                          f"index 0 is not a hero)")
+        if not isinstance(row, dict):
+            _refuse(path, f"character {who}: hero {hid} must be an object")
+        where = f"character {who} hero {hid}"
+        if "skills" in row:
+            _validate_skill_ids(path, f"{where} skills", row["skills"])
+        if "skillbar" in row:
+            _validate_hero_bar(path, where, row["skillbar"])
+        if "attributes" in row:
+            _validate_rank_pairs(path, where, row["attributes"])
+        for key in ("level", "attribute_points"):
+            if key in row and (isinstance(row[key], bool)
+                               or not isinstance(row[key], int)
+                               or row[key] < 0):
+                _refuse(path, f"{where}: {key} must be a non-negative int")
 
 
 def validate(data, path):
@@ -218,6 +321,11 @@ def validate(data, path):
         if "learned_skills" in row:
             _validate_skill_ids(path, f"character {row['name']!r} "
                                       f"learned_skills", row["learned_skills"])
+        if "heroes" in row:
+            _validate_heroes(path, repr(row["name"]), row["heroes"])
+        if "skillbar" in row:
+            _validate_hero_bar(path, f"character {row['name']!r}",
+                               row["skillbar"])
         blob = row.get("settings_blob", "")
         if blob:
             try:
@@ -393,6 +501,136 @@ class Store:
         self.save()
         return True
 
+    # ---- the PLAYER's own eight slots ---------------------------------------
+    #
+    # Same shape as a hero's bar and validated by the same function, because
+    # 0x00DA and 0x005C are AGENT-keyed and do not care which body they name.
+    # What differs is the library each draws on: a player's bar may hold what
+    # the CHARACTER has learned, a hero's may not (herolib's docstring).
+
+    def character_skillbar(self, uuid_hex):
+        row = self.character_by_uuid(uuid_hex)
+        return None if row is None else row.get("skillbar")
+
+    def set_character_skillbar(self, uuid_hex, bar):
+        row = self.character_by_uuid(uuid_hex)
+        if row is None:
+            return None
+        bar = [int(s) for s in bar][:HERO_BAR_SLOTS]
+        bar += [0] * (HERO_BAR_SLOTS - len(bar))
+        row["skillbar"] = bar
+        self.save()
+        return bar
+
+    def set_character_bar_slot(self, uuid_hex, slot, skill_id):
+        row = self.character_by_uuid(uuid_hex)
+        if row is None:
+            return None
+        slot = int(slot)
+        if not 0 <= slot < HERO_BAR_SLOTS:
+            raise ValueError(
+                f"slot {slot} outside 0..{HERO_BAR_SLOTS - 1}; the client's "
+                f"own guard is `hotKey < arrsize(hotKeyState->hotKey)` "
+                f"(ChCliSkill.cpp:681)")
+        bar = list(row.get("skillbar") or [0] * HERO_BAR_SLOTS)
+        bar += [0] * (HERO_BAR_SLOTS - len(bar))
+        bar[slot] = int(skill_id)
+        row["skillbar"] = bar
+        self.save()
+        return bar
+
+    # ---- heroes: owned BY THE CHARACTER, drawing on the ACCOUNT's library ---
+    #
+    # Retail's scoping, not a choice made here. Each character owns its own
+    # copy of a hero with its own build, so these hang off the character row;
+    # what the ACCOUNT contributes is the unlock library every hero draws on.
+    # OBSERVED, capture 20260914T005758: Koss's bar carries 346, which is in
+    # the account's 0x001D set, absent from his own 0x0073 skill list, and
+    # absent from the CHARACTER's 0x00DB set -- so a hero's usable library is
+    # (his own skills) UNION (the account's unlocks), and NOT the character's
+    # learned set. herolib.hero_library is where that union is computed.
+
+    def heroes(self, uuid_hex):
+        """{hero_index: row} for one character, or {} -- never None.
+
+        Unlike the two skill libraries there is no absent-vs-empty question
+        here: a character with no authored heroes simply has none, and the
+        server's --hero flags still decide whether any are spawned at all.
+        """
+        row = self.character_by_uuid(uuid_hex)
+        return {} if row is None else dict(row.get("heroes") or {})
+
+    def hero_row(self, uuid_hex, hero_index):
+        return self.heroes(uuid_hex).get(str(int(hero_index)))
+
+    def ensure_hero(self, uuid_hex, hero_index):
+        """The hero's row, created empty if absent. Does NOT save."""
+        row = self.character_by_uuid(uuid_hex)
+        if row is None:
+            return None
+        return row.setdefault("heroes", {}).setdefault(
+            str(int(hero_index)), {})
+
+    def set_hero_skills(self, uuid_hex, hero_index, ids):
+        """The hero's OWN skill list -- 0x0073 HERO_INFO field 7."""
+        hero = self.ensure_hero(uuid_hex, hero_index)
+        if hero is None:
+            return None
+        hero["skills"] = sorted({int(s) for s in ids})
+        self.save()
+        return hero["skills"]
+
+    def hero_skillbar(self, uuid_hex, hero_index):
+        hero = self.hero_row(uuid_hex, hero_index)
+        return None if hero is None else hero.get("skillbar")
+
+    def set_hero_skillbar(self, uuid_hex, hero_index, bar):
+        """The hero's eight slots, 0 meaning empty. Padded to eight."""
+        hero = self.ensure_hero(uuid_hex, hero_index)
+        if hero is None:
+            return None
+        bar = [int(s) for s in bar][:HERO_BAR_SLOTS]
+        bar += [0] * (HERO_BAR_SLOTS - len(bar))
+        hero["skillbar"] = bar
+        self.save()
+        return bar
+
+    def set_hero_bar_slot(self, uuid_hex, hero_index, slot, skill_id):
+        """One slot, the way 0x005C writes one slot. Returns the whole bar.
+
+        The bar is created as eight empties if the hero has none, which is
+        SAFE here in a way the skill-library mutators were not: a bar is
+        positional and eight slots wide whatever happens, so there is no
+        standing set to shrink. The libraries needed a seed; this does not.
+        """
+        hero = self.ensure_hero(uuid_hex, hero_index)
+        if hero is None:
+            return None
+        slot = int(slot)
+        if not 0 <= slot < HERO_BAR_SLOTS:
+            raise ValueError(
+                f"slot {slot} outside 0..{HERO_BAR_SLOTS - 1}; the client's "
+                f"own guard is `hotKey < arrsize(hotKeyState->hotKey)` "
+                f"(ChCliSkill.cpp:681)")
+        bar = list(hero.get("skillbar") or [0] * HERO_BAR_SLOTS)
+        bar += [0] * (HERO_BAR_SLOTS - len(bar))
+        bar[slot] = int(skill_id)
+        hero["skillbar"] = bar
+        self.save()
+        return bar
+
+    def hero_attributes(self, uuid_hex, hero_index):
+        hero = self.hero_row(uuid_hex, hero_index)
+        return None if hero is None else hero.get("attributes")
+
+    def set_hero_attributes(self, uuid_hex, hero_index, pairs):
+        hero = self.ensure_hero(uuid_hex, hero_index)
+        if hero is None:
+            return None
+        hero["attributes"] = [[int(a), int(r)] for a, r in sorted(pairs)]
+        self.save()
+        return hero["attributes"]
+
 
 def find_character(uuid_hex, base=None):
     """(Store, row) for a character uuid, searching every account file.
@@ -430,6 +668,12 @@ def find_character(uuid_hex, base=None):
 # from flag-driven (all 1,333 corpus skills) to store-driven (just that one).
 # ---------------------------------------------------------------------------
 
+def uuid_hex_required(ap, uuid_hex):
+    if not uuid_hex:
+        ap.error("--character NAME is required for the bar and hero options")
+    return uuid_hex
+
+
 def _ids_arg(spec):
     return [int(s, 0) for s in str(spec).split(",") if s.strip() != ""]
 
@@ -454,6 +698,20 @@ def _main(argv=None):
                     help="remove ids from THIS CHARACTER's learned list")
     ap.add_argument("--set-learned",
                     help="replace THIS CHARACTER's learned list outright")
+    ap.add_argument("--hero", type=int, metavar="INDEX",
+                    help="hero index to author (requires --character)")
+    ap.add_argument("--hero-skills",
+                    help="replace the hero's OWN skill list (0x0073 field 7)")
+    ap.add_argument("--hero-bar",
+                    help="replace the hero's eight slots; 0 is an empty slot")
+    ap.add_argument("--hero-attributes", metavar="ID:RANK,...",
+                    help="replace the hero's attribute ranks")
+    ap.add_argument("--hero-points", type=int, metavar="N",
+                    help="the hero's LIFETIME attribute budget. Without one "
+                         "the hero's total is whatever its ranks already "
+                         "cost, so nothing is spendable; retail's level-3 "
+                         "Koss carries 10 against 4 spent")
+    ap.add_argument("--bar", help="replace the CHARACTER's own eight slots")
     a = ap.parse_args(argv)
 
     if a.list:
@@ -530,6 +788,28 @@ def _main(argv=None):
 
     # Always printed, mutation or not: the point of a write command is seeing
     # what the file now says. `--show` is the no-mutation spelling of it.
+    if a.bar is not None:
+        st.set_character_skillbar(uuid_hex_required(ap, uuid_hex), _ids_arg(a.bar))
+
+    if a.hero is not None:
+        uuid_hex_required(ap, uuid_hex)
+        if a.hero_skills is not None:
+            st.set_hero_skills(uuid_hex, a.hero, _ids_arg(a.hero_skills))
+        if a.hero_bar is not None:
+            st.set_hero_skillbar(uuid_hex, a.hero, _ids_arg(a.hero_bar))
+        if a.hero_attributes is not None:
+            st.set_hero_attributes(
+                uuid_hex, a.hero,
+                [[int(x.split(":")[0], 0), int(x.split(":")[1], 0)]
+                 for x in a.hero_attributes.split(",") if x.strip()])
+        if a.hero_points is not None:
+            hero = st.ensure_hero(uuid_hex, a.hero)
+            hero["attribute_points"] = int(a.hero_points)
+            st.save()
+    elif any(v is not None for v in (a.hero_skills, a.hero_bar,
+                                     a.hero_attributes, a.hero_points)):
+        ap.error("--hero INDEX is required for the --hero-* options")
+
     acct = st.account_unlocked_skills()
     unset = "NOT AUTHORED (--unlocks flag answers)"
     print(f"store: {st.path}")
@@ -538,6 +818,14 @@ def _main(argv=None):
         learned = st.character_learned_skills(u)
         print(f"  {row['name']} learned_skills: "
               f"{unset if learned is None else learned}")
+        bar = st.character_skillbar(u)
+        if bar is not None:
+            print(f"  {row['name']} skillbar: {bar}")
+        for hid, hero in sorted(st.heroes(u).items(), key=lambda kv: int(kv[0])):
+            print(f"  {row['name']} hero {hid}: "
+                  f"skills={hero.get('skills')} bar={hero.get('skillbar')} "
+                  f"attributes={hero.get('attributes')} "
+                  f"points={hero.get('attribute_points')}")
     return 0
 
 

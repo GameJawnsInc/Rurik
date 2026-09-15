@@ -2702,6 +2702,16 @@ GAME_CMSG_CLIENT_PERF_REPORT = 0x0009
 # proven with a closed call-graph walk and a positive control). 0x000E/0x000F
 # carry [agent, sequence, attribute]; the sequence is the handle of a prediction
 # the client has already drawn on screen.
+# 0x005C: the client writing ONE skill into ONE bar slot -- the c2s half of
+# 0x00D9. OBSERVED and CONFIRMED BY ITS OWN ECHO: retail answers
+# 0x005C [59, 0, 348, 0] with 0x00D9 SKILLBAR_UPDATE_SKILL [59, 0, 348, 0]
+# 36 ms later, byte-identical and in the same field order, and again at 33 ms
+# on a second capture ([568, 5, 105, 0]). n=2 in the whole live corpus, which
+# is small -- but the echo is a check with NO FREE PARAMETER: a transposed
+# reading ([agent, skill, slot]) could not produce it. The upstream name was
+# SKILLBAR_SKILL_SET and it is the one kept.
+# Captures 20260821T205552 :65135 and 20260824T074002 :61329.
+GAME_CMSG_SKILLBAR_SKILL_SET = 0x005C
 GAME_CMSG_ATTRIBUTE_DECREASE = 0x000E
 GAME_CMSG_ATTRIBUTE_INCREASE = 0x000F
 GAME_CMSG_ATTRIBUTE_LOAD = 0x0010
@@ -4015,6 +4025,9 @@ UNLOCK_LABEL = "all"
 # skillunlock.py. Re-exported here because test_agentlife.py reads all three as
 # authsrv attributes and main() calls build_unlock_bitmap by bare name.
 import skillunlock                                             # noqa: E402
+# The hero library's union rule and the bar-slot referee. Read by
+# hero_build below, by the 0x005C handler, and by test_herolib.py.
+import herolib                                                 # noqa: E402
 from skillunlock import (                                      # noqa: F401,E402
     unlock_corpus_words, refuse_skill_zero,
     # The persisted skill library's two halves read these by bare name: the
@@ -14210,6 +14223,167 @@ def send_attribute_reply(send, st, agent_id, sequence, attribute):
             if st.bonus_of(attribute) else "") + ")")
 
 
+def hero_attribute_state(state, hero_index):
+    """One hero's live, MUTABLE attribute state -- the player's object, per hero.
+
+    Held per CONNECTION in `state` for the same reason the player's is: two
+    clients must not share one build's points. The cost curve and the
+    attribute table are the player's -- they are the CLIENT's tables, not a
+    property of whose body it is -- and only the ranks, the budget and the
+    profession differ.
+
+    THE BUDGET IS WHAT MAKES SPENDING POSSIBLE AT ALL. With no stored
+    `attribute_points` the total is whatever the ranks already cost, so
+    `available` is 0 and every raise is refused for want of points -- which
+    is exactly the old behaviour and is correct for a hero nobody has given a
+    budget. Author `attribute_points` and the panel's plus buttons come alive.
+    Retail's own numbers for a level-3 Koss are 6 available of 10 total
+    against ranks 2 and 1, and the client's cost table prices those at
+    3 + 1 = 4 = 10 - 6 (capture 20260914T005758).
+    """
+    cache = state.setdefault("hero_attributes", {})
+    st = cache.get(hero_index)
+    if st is not None:
+        return st
+    player = attribute_state(state)          # for its rules tables only
+    _own, _bar, ranks, points = hero_build(state, hero_index)
+    ranks = dict(ranks) if ranks is not None else dict(HERO_ATTRIBUTES or {})
+    spent = player.rules.total_spent(ranks)
+    st = attribspend.AttributeState(
+        player.rules, ranks,
+        int(points) if points is not None else spent,
+        primary=(agents.npc_template(HERO_BODY_NPC)["profession"]
+                 if HERO_BODY else 1),
+        secondary=0)
+    cache[hero_index] = st
+    return st
+
+
+def persist_hero_attributes(state, hero_index, conn_id):
+    """Write one hero's ranks back to the store. No-op without a store."""
+    store = state.get("charstore_game")
+    if store is None:
+        return
+    st = state.get("hero_attributes", {}).get(hero_index)
+    if st is None:
+        return
+    store.set_hero_attributes(state.get("char_uuid", ""), hero_index,
+                              sorted(st.ranks.items()))
+    print(f"[c{conn_id}] PERSIST: hero {hero_index} attributes saved -- "
+          + ", ".join(f"{a}={r}" for a, r in sorted(st.ranks.items()))
+          + f", {st.available} of {st.points_total} unspent", flush=True)
+
+
+def hero_index_for_agent(agent_id):
+    """The hero index owning this agent id, or None if it is not a hero."""
+    for _hid, _haid, _hdef in hero_slots():
+        if _haid == agent_id:
+            return _hid
+    return None
+
+
+def player_usable_library(state):
+    """What the PLAYER may put in a slot: what this CHARACTER has learned,
+    plus what the ACCOUNT has unlocked.
+
+    DIFFERENT FROM A HERO'S, and the difference is measured rather than
+    reasoned: capture 20260817T231139 has the player's bar holding 364 and
+    384, which are in the character's 0x00DB set and in NO account set, while
+    capture 20260914T005758 has Koss's bar holding 346, which is in the
+    ACCOUNT set and not the character's. So the character's learned set feeds
+    the player's bar and the account's feeds a hero's. herolib.hero_library is
+    the other half of this pair.
+    """
+    store = state.get("charstore_game")
+    acct = None if store is None else store.account_unlocked_skills()
+    if acct is None:
+        acct = ids_from_words(UNLOCKED)
+    learned = (None if store is None
+               else store.character_learned_skills(state.get("char_uuid", "")))
+    if learned is None:
+        learned = ids_from_words(UNLOCKED)
+    return set(int(s) for s in acct) | set(int(s) for s in learned)
+
+
+def handle_skillbar_skill_set(values, send, state, conn_id, rec):
+    """Answer one GAME_CMSG 0x005C: write one skill into one bar slot.
+
+    Wire [agent_id, slot, skill_id, u32]. AGENT-KEYED, so the same message
+    edits the player's bar and a hero's; which body it names is the only
+    thing that changes where the write lands and which library referees it.
+
+    A REFUSAL STILL ANSWERS, the same rule handle_attribute_spend follows and
+    for the same reason: the client has ALREADY drawn the drag on its own bar
+    before this arrives, so silence leaves the two of us disagreeing with the
+    client believing itself. A refusal echoes the slot's UNCHANGED contents,
+    which is what corrects the picture.
+    """
+    if len(values) < 4:
+        print(f"[c{conn_id}] SKILLBAR SET refused: malformed request "
+              f"{values[1:]!r}", flush=True)
+        return
+    agent_id, slot, skill_id = int(values[1]), int(values[2]), int(values[3])
+    hero_index = hero_index_for_agent(agent_id)
+    is_player = agent_id == PLAYER_AGENT_ID
+    store = state.get("charstore_game")
+    uuid_hex = state.get("char_uuid", "")
+
+    if not is_player and hero_index is None:
+        print(f"[c{conn_id}] SKILLBAR SET refused: agent {agent_id} is "
+              f"neither this connection's player ({PLAYER_AGENT_ID}) nor any "
+              f"hero it owns {[h for h, _a, _d in hero_slots()]}", flush=True)
+        return
+
+    if is_player:
+        who = "player"
+        before = list(SKILLBAR)[:SKILLBAR_SLOTS]
+        library = player_usable_library(state)
+    else:
+        who = f"hero {hero_index}"
+        _own, _bar, _r, _p = hero_build(state, hero_index)
+        before = list(_bar) if _bar is not None else [
+            int(sk[0]) for sk in (HERO_SKILLS or ())]
+        library = hero_usable_library(state, hero_index, _own if _own is not None
+                                      else [int(sk[0]) for sk in (HERO_SKILLS or ())])
+    before += [0] * (SKILLBAR_SLOTS - len(before))
+
+    why = herolib.refuse_bar_slot(slot, skill_id, library)
+    if why is not None:
+        current = before[slot] if 0 <= slot < SKILLBAR_SLOTS else 0
+        print(f"[c{conn_id}] SKILLBAR SET REFUSED for {who}: {why} -- "
+              f"echoing slot {slot}'s unchanged skill {current} so the "
+              f"client's own drag is retired", flush=True)
+        if 0 <= slot < SKILLBAR_SLOTS:
+            send(GAME_SMSG_SKILLBAR_UPDATE_SKILL,
+                 [agent_id, slot, current, 0],
+                 f"SKILLBAR_UPDATE_SKILL({who} slot {slot} stays {current})")
+        rec.event("skillbar_set", agent=agent_id, slot=slot, skill=skill_id,
+                  refused=why)
+        return
+
+    dup = herolib.duplicate_of(before, slot, skill_id)
+    after = herolib.apply_bar_slot(before, slot, skill_id)
+    if is_player:
+        del SKILLBAR[:]
+        SKILLBAR.extend(after)
+        if store is not None:
+            store.set_character_bar_slot(uuid_hex, slot, skill_id)
+    elif store is not None:
+        store.set_hero_bar_slot(uuid_hex, hero_index, slot, skill_id)
+
+    send(GAME_SMSG_SKILLBAR_UPDATE_SKILL, [agent_id, slot, skill_id, 0],
+         f"SKILLBAR_UPDATE_SKILL({who} slot {slot} <- skill {skill_id})")
+    print(f"[c{conn_id}] SKILLBAR SET {who}: slot {slot} "
+          f"{before[slot]} -> {skill_id}"
+          + (f"  (skill {skill_id} ALSO sits in slot {dup}; retail's UI swaps "
+             f"rather than duplicating and we do not model that -- "
+             f"studies/heroes/FINDINGS.md)" if dup is not None else "")
+          + ("" if store is not None else "  [not persisted: no store]"),
+          flush=True)
+    rec.event("skillbar_set", agent=agent_id, slot=slot, skill=skill_id,
+              refused=None, bar=after)
+
+
 def handle_attribute_spend(values, send, state, conn_id, rec, raise_it):
     """Answer one GAME_CMSG 0x000F (raise) or 0x000E (lower).
 
@@ -14225,23 +14399,40 @@ def handle_attribute_spend(values, send, state, conn_id, rec, raise_it):
               flush=True)
         return
     agent_id, sequence, attribute = values[1], values[2], values[3]
-    st = attribute_state(state)
     verb = "raise" if raise_it else "lower"
-    if agent_id != PLAYER_AGENT_ID:
-        # The panel only ever spends the local player's points; anything else
-        # is a request about a character this connection does not own.
+    # AGENT-KEYED, AND A HERO IS A LEGAL SUBJECT. This used to refuse every
+    # agent but the player, with the reason "the panel only ever spends the
+    # local player's points" -- which is not something the corpus establishes.
+    # What the corpus actually holds is 32 c2s attribute messages, all naming
+    # the player, on tapes where the operator never opened a hero's attribute
+    # panel: ZERO EXPOSURE, not a null. The message carries an agent id and
+    # heroes carry the same agent-keyed attribState the player does
+    # (0x0037 creates it, 0x003A fills it, both addressed to the hero on
+    # retail's own tapes), so the honest arm is to answer for a hero we own
+    # and record that no capture has yet shown the client sending one.
+    hero_index = hero_index_for_agent(agent_id)
+    if agent_id == PLAYER_AGENT_ID:
+        st, who = attribute_state(state), "player"
+    elif hero_index is not None:
+        st, who = hero_attribute_state(state, hero_index), f"hero {hero_index}"
+    else:
         print(f"[c{conn_id}] ATTRIBUTE refused: {verb} for agent {agent_id}, "
-              f"not this connection's player ({PLAYER_AGENT_ID})", flush=True)
+              f"neither this connection's player ({PLAYER_AGENT_ID}) nor any "
+              f"hero it owns {[h for h, _a, _d in hero_slots()]}", flush=True)
         return
     before = st.rank_of(attribute)
     why = (st.refuse_increase(attribute) if raise_it
            else st.refuse_decrease(attribute))
     if why is None:
         (st.increase if raise_it else st.decrease)(attribute)
-        print(f"[c{conn_id}] ATTRIBUTE {verb}: {attribute} {before} -> "
-              f"{st.rank_of(attribute)}, {st.available} of {st.points_total} "
-              f"point(s) unspent (seq {sequence})", flush=True)
-        persist_attributes(state, conn_id)
+        print(f"[c{conn_id}] ATTRIBUTE {verb} ({who}): {attribute} {before} "
+              f"-> {st.rank_of(attribute)}, {st.available} of "
+              f"{st.points_total} point(s) unspent (seq {sequence})",
+              flush=True)
+        if hero_index is None:
+            persist_attributes(state, conn_id)
+        else:
+            persist_hero_attributes(state, hero_index, conn_id)
     else:
         print(f"[c{conn_id}] ATTRIBUTE {verb} REFUSED: {why} "
               f"(seq {sequence}) -- answering anyway so the client's own "
@@ -18445,6 +18636,44 @@ def hero_locks_release(send, state, target_id, conn_id):
                  f"{target_id} died) [JARIN]")
 
 
+def hero_build(state, hero_index):
+    """This character's stored build for one hero: (skills, bar, ranks, points).
+
+    Any element is None when the store has no answer, and the caller then
+    keeps whatever it sent before -- the same absence-is-not-emptiness rule
+    the two skill libraries follow, for the same reason: a default run with no
+    --persist must stay byte-identical to what the JARIN and SLICE rigs
+    measured.
+
+    HEROES HANG OFF THE CHARACTER, not the account (charstore._validate_heroes
+    says why), so this reads the character the connection is playing.
+    """
+    store = state.get("charstore_game")
+    if store is None:
+        return None, None, None, None
+    row = store.hero_row(state.get("char_uuid", ""), hero_index) or {}
+    ranks = row.get("attributes")
+    return (row.get("skills"), row.get("skillbar"),
+            ({int(a): int(r) for a, r in ranks} if ranks is not None else None),
+            row.get("attribute_points"))
+
+
+def hero_usable_library(state, hero_index, own_skills):
+    """What this hero may have in a slot: its own skills UNION the ACCOUNT's.
+
+    MEASURED, not taken from GWW -- see herolib's module docstring for the
+    capture that separates this from the plausible wrong answer (the
+    CHARACTER's learned set). When the account library is unauthored the
+    --unlocks flag is what the client actually holds, so those ids are what
+    gets counted; passing None there would refuse every equip.
+    """
+    store = state.get("charstore_game")
+    acct = None if store is None else store.account_unlocked_skills()
+    if acct is None:
+        acct = ids_from_words(UNLOCKED)
+    return herolib.hero_library(own_skills, acct)
+
+
 def hero_character_block(state, haid, hid):
     """JARIN-S: retail's hero load block -- the PLAYER's own character block
     addressed to the hero's agent, in the tape's order (37.73 s, 87.21 s):
@@ -18456,8 +18685,23 @@ def hero_character_block(state, haid, hid):
     _hprof = (agents.npc_template(HERO_BODY_NPC)["profession"]
               if HERO_BODY else 1)
     _hattr = attribute_state(state)
-    if HERO_ATTRIBUTES:
-        _havail, _htotal = 0, _hattr.rules.total_spent(HERO_ATTRIBUTES)
+    # --persist: this character's own stored build for this hero.
+    _hs_skills, _hs_bar, _hs_ranks, _hs_points = hero_build(state, hid)
+    _h_ranks = _hs_ranks if _hs_ranks is not None else HERO_ATTRIBUTES
+    if _h_ranks:
+        # THE BUDGET IS THE HERO'S OWN, and when the store names one the hero
+        # can have UNSPENT points -- which is what makes the panel's plus
+        # buttons live. Retail sends exactly that: 0x0037 [117, 6, 10] for a
+        # level-3 Koss holding ranks 2 and 1, and the client's own cost table
+        # prices those at 3 + 1 = 4 = 10 - 6 (capture 20260914T005758, and the
+        # same arithmetic closes on both players in the corpus, 195 of 200 at
+        # level 20). Without a stored total we keep the old answer -- spent as
+        # the total, nothing available -- because inventing a level->points
+        # curve is exactly the kind of number this repo keeps having to walk
+        # back; the player's own budget is an authored content row too.
+        _hspent = _hattr.rules.total_spent(_h_ranks)
+        _htotal = int(_hs_points) if _hs_points is not None else _hspent
+        _havail = _htotal - _hspent
     else:
         _havail, _htotal = _hattr.available, _hattr.points_total
     out.append((GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS, [haid, _havail, _htotal],
@@ -18467,7 +18711,9 @@ def hero_character_block(state, haid, hid):
     if HERO_SKILLBAR:
         # The hero's OWN bar (retail: [322, 382, 348, 1, 385, 346, 0, 2] on
         # the panel); the player's SKILLBAR only when the hero has none.
-        _hskills = [int(sk[0]) for sk in (HERO_SKILLS or ())] or list(SKILLBAR)
+        _hskills = (list(_hs_bar) if _hs_bar is not None
+                    else [int(sk[0]) for sk in (HERO_SKILLS or ())]
+                    or list(SKILLBAR))
         _hskills = _hskills[:SKILLBAR_SLOTS]
         _hskills += [0] * (SKILLBAR_SLOTS - len(_hskills))
         out.append((GAME_SMSG_SKILLBAR_UPDATE,
@@ -18500,7 +18746,7 @@ def hero_character_block(state, haid, hid):
                 agents.agent_set_profession(haid, int(_hprof)),
                 f"0x00A6 for hero agent {haid} (prof {_hprof}) [JARIN rig]"))
     _hcols = attribute_columns(
-        ranks=sorted(HERO_ATTRIBUTES.items()) if HERO_ATTRIBUTES else None)
+        ranks=sorted(_h_ranks.items()) if _h_ranks else None)
     out.append((GAME_SMSG_AGENT_UPDATE_ATTRIBUTES, [haid, _hcols],
                 f"AGENT_UPDATE_ATTRIBUTES(hero agent {haid}, {len(_hcols) // 3} attrs) [JARIN rig]"))
     return out
@@ -22772,9 +23018,19 @@ def _handle_request_players(send, state, conn_id, stop, rec):
         for _hid, _haid, _hdef in hero_slots():
             # 0x0073 HERO_INFO FIRST: the record 0x0072 looks up (JARIN-S;
             # two harness runs asserted charHeroData without it).
+            # FIELD 7 IS THE HERO'S OWN SKILL LIST, and it is NOT the bar:
+            # retail's Koss declares [322, 382, 348, 1, 385, 2] here while his
+            # 0x00DA carries [322, 382, 348, 1, 385, 346, 0, 2] -- the extra
+            # 346 is an ACCOUNT unlock, not one of his (capture
+            # 20260914T005758). So this is the hero's half of the union
+            # herolib.hero_library computes, and the store answers it when it
+            # has one.
+            _hi_skills, _, _, _ = hero_build(state, _hid)
             _seq.append(agents.hero_info(
                 _hid, int(HERO_LEVEL or 1), int(_hprof_info), 0,
-                _hap[0], _hap[1], [int(sk[0]) for sk in (HERO_SKILLS or ())]))
+                _hap[0], _hap[1],
+                list(_hi_skills) if _hi_skills is not None
+                else [int(sk[0]) for sk in (HERO_SKILLS or ())]))
             _seq.extend(hero_character_block(state, _haid, _hid))
             _seq.append(agents.hero_activate(
                 HERO_ACTIVATE_ID
@@ -23008,6 +23264,18 @@ def _handle_request_players(send, state, conn_id, stop, rec):
          f"PVP_UPDATE_UNLOCKED_SKILLS({_acct_label})")
     send(GAME_SMSG_UPDATE_UNLOCKED_SKILLS, [_char_words],
          f"UPDATE_UNLOCKED_SKILLS({_char_label})")
+    # The bar the client is about to draw. Under --persist a stored bar wins,
+    # so a slot the player dragged last session is still there this one --
+    # 0x005C writes it and this reads it back. SKILLBAR is rebound to match so
+    # every later reader (grant_skill's empty-slot search, the adrenaline
+    # pools) sees the same eight slots.
+    _bar_store = state.get("charstore_game")
+    _stored_bar = (None if _bar_store is None
+                   else _bar_store.character_skillbar(
+                       state.get("char_uuid", "")))
+    if _stored_bar is not None:
+        del SKILLBAR[:]
+        SKILLBAR.extend(int(s) for s in _stored_bar)
     skills = list(SKILLBAR)[:SKILLBAR_SLOTS]
     skills += [0] * (SKILLBAR_SLOTS - len(skills))
     send(GAME_SMSG_SKILLBAR_UPDATE,
@@ -23531,11 +23799,18 @@ def _handle_request_players(send, state, conn_id, stop, rec):
         # not modelled: nothing lets us spend a hero's
         # points, so there is no mutable state to hold.
         _hattr = attribute_state(state)
-        if HERO_ATTRIBUTES:
+        _, _, _hs_ranks, _hs_points = hero_build(state, _hid)
+        _h_ranks = _hs_ranks if _hs_ranks is not None else HERO_ATTRIBUTES
+        if _h_ranks:
             # SLICE-H8: the hero's OWN ranks and budget -- every point of
             # its level's allowance spent on the party row's ranks.
-            _hspent = _hattr.rules.total_spent(HERO_ATTRIBUTES)
-            _havail, _htotal = 0, _hspent
+            # A STORED attribute_points changes that: it lets the hero hold
+            # UNSPENT points, which is what retail sends (0x0037 [117, 6, 10])
+            # and what the panel's plus buttons need. See hero_character_block
+            # for the arithmetic that confirms the reading.
+            _hspent = _hattr.rules.total_spent(_h_ranks)
+            _htotal = int(_hs_points) if _hs_points is not None else _hspent
+            _havail = _htotal - _hspent
         else:
             _havail, _htotal = _hattr.available, _hattr.points_total
         hsend(GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS,
@@ -23547,7 +23822,7 @@ def _handle_request_players(send, state, conn_id, stop, rec):
              f"AGENT_PROFESSIONS(hero agent "
              f"{_haid}, prof {_hprof})")
         _hcols = attribute_columns(
-            ranks=sorted(HERO_ATTRIBUTES.items()) if HERO_ATTRIBUTES else None)
+            ranks=sorted(_h_ranks.items()) if _h_ranks else None)
         hsend(GAME_SMSG_AGENT_UPDATE_ATTRIBUTES,
              [_haid, _hcols],
              f"AGENT_UPDATE_ATTRIBUTES(hero agent "
@@ -23564,7 +23839,17 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     # this arc that the mechanism was already in the tree.
     for _hid, _haid, _hdef in (hero_slots()
                                if HERO_SKILLBAR and not _rig_retail else ()):
-        _hskills = list(SKILLBAR)[:SKILLBAR_SLOTS]
+        # THE STORE'S BAR FIRST. Without one this sends the PLAYER's bar to
+        # the hero, which is what this site has always done and is wrong on
+        # retail's own evidence -- Koss's bar and his owner's share nothing
+        # (capture 20260914T005758: [322, 382, ...] against [394, 446, ...]).
+        # It stays as the fallback rather than being fixed here because a
+        # default run has no hero build to send instead, and changing what an
+        # unconfigured run puts on the wire is a separate decision from
+        # honouring a stored one.
+        _, _hs_bar, _, _ = hero_build(state, _hid)
+        _hskills = list(_hs_bar) if _hs_bar is not None else list(SKILLBAR)
+        _hskills = _hskills[:SKILLBAR_SLOTS]
         _hskills += [0] * (SKILLBAR_SLOTS - len(_hskills))
         hsend(GAME_SMSG_SKILLBAR_UPDATE,
              [_haid, _hskills,
@@ -27495,6 +27780,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # The load bar reaches 100% without this and stops there.
                         send(GAME_SMSG_INSTANCE_LOAD_FINISH, [],
                              "INSTANCE_LOAD_FINISH")
+                    elif opcode == GAME_CMSG_SKILLBAR_SKILL_SET:
+                        handle_skillbar_skill_set(values, send, state,
+                                                  conn_id, rec)
                     elif opcode == GAME_CMSG_ATTRIBUTE_INCREASE:
                         handle_attribute_spend(values, send, state, conn_id,
                                                rec, raise_it=True)
