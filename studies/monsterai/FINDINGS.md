@@ -1505,14 +1505,44 @@ difference is the player running away versus approaching.
 What the wiki says that this does not test: the speed-boost break rule, and per-party
 aggro retention. Both need a second body or a stance.
 
+### MONSTERAI-N10 — the `0x0056` flags word is NOT the passive flag; the wire leaves only the level
+
+The desk check N8 asked for, over every `0x0056` in the live corpus (the record is
+`[definition, file_id, 0, scale, 0, flags, profession, level, name]`, npcdefs' layout):
+
+| def | behaviour (N7/N8) | file | flags | profession | level | scale word |
+|---|---|---|---|---|---|---|
+| 1431 River Skale | **passive** | 82023 | `0x0008` | 6 | **1** | `0x64000000` |
+| 1432 Skale Broodcaller | **aggressive** | 82023 | `0x0008` | 6 | **2** | `0x78000000` |
+| 1437 | **passive** | 141274 | `0x000C` | 2 | **1** | `0x64000000` |
+| 1397 | **aggressive** | 116295 | `0x0009` | 1 | **5** | `0x64000000` |
+
+**REFUTED.** The passive skale and the aggressive one are the same model, the same flags
+word, the same profession byte and the same 300 u/s base; their `0x0020` creates are
+identical field for field (kind 9, `mon1`, radius `0x41400000`). Only the level, the
+scale and the name string differ. Corpus-wide the flags field takes 29 distinct values
+and bit 3 is set on every one of these four, so no bit separates the pair. Whatever
+decides that a River Skale ignores a player at 226 u and a Broodcaller charges one at
+912 u is **not carried in the definition record** — it is server-only (§2's negative,
+again) or it is the level, which is what the owner guessed first: in these four rows
+**level 1 is passive and levels 2 and 5 are aggressive**, and the two other level-1
+`mon1` definitions in the corpus (4438, 4439) were only ever seen hit-first, consistent
+and unproven. One witness cuts the other way and is flagged rather than pooled: the
+tutorial's level-0 creatures (def 3973, token `ani\x8f`, `20260913T210901`) reacted
+unprovoked at 1,185–1,415 u, eight rows — a different token class, a quest instance,
+and a larger radius than anything `mon1` has shown. n = 4 + 8 across two classes is a
+hypothesis with numbers, not a rule.
+
 ### What this does not settle, in the order it would cost
 
 1. **Per-creature radius** — §9 Q7's bar (10 points, ≥ 3 types) is at 5 observed points
    over 3 definitions after N7; two more zones with different creatures reach it. The
    global-number question is narrower still: one creature that stops the player between
    992 and 1048 u.
-2. **The passive flag** — N8 has two passive and two aggressive definitions; the `0x0056`
-   `flags` word of those four is the desk check.
+2. **The passive rule** — N10 refuted the flags word; the level is what is left on the
+   wire. One `approach` on a level-1 `mon1` creature the player has never hit (4438 or
+   4439 in the JARIN zone, map 430) tests it directly: it should let the player stand
+   inside the circle. A level-2 or level-3 passive creature anywhere refutes it.
 3. **Leash** — N9 has the shape; a standing group and a patrolling group of the same
    definition would separate the creature from the mode.
 4. **The opening shape** — N4 is measured; whether to ship it is a router question, and
