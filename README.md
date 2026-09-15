@@ -1,5 +1,7 @@
 # Rurik
 
+https://github.com/user-attachments/assets/4168f905-7944-410b-960e-30099878fa12
+
 under development (v0.0.1 or something)
 
 it's a guild wars 1 server emulator + mod kit. 
