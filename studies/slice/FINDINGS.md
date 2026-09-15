@@ -3071,3 +3071,48 @@ sends no damage word, because what retail sends there is UNREAD (no full convers
 corpus). `test_mechanics` §9: a 0.5-point swing sends `[16, player, foe, 0x80000000]` and
 the pool stays 100 (+1, floor 212); `test_skilldamage`: Flare into a rating of 300 (1/64,
 0.31 → 0) sends −0.0 and takes nothing (+1, floor 60). Twelve damage-channel tests green.
+
+### 46.8 CONVWORD: the fully converted hit — the corpus cannot say, and the arm is shipped by analogy, labelled
+
+The owner: "do the fully converted hit one too". 46.7 had left the Reversal-of-Fortune arm
+alone on the claim that the corpus holds no full conversion. That claim had not been
+checked; it is now, two ways, with the prediction stated first (a prevention heal — a heal
+on the taker FIRED BY a hit — would show as a heal word on a taker under attack, with a
+damage word on the same tick or none):
+
+* **By the enchantment.** Every `0x0042 EFFECT_APPLY` in the 24 tapes, 177 of them, by
+  skill: 160 ×60, 364 ×43, 346 (Frenzy) ×22, 348 ×17, 480 ×7 and singles — **no 307**
+  (Reversal of Fortune) and none of its family. The player never carried one. Other
+  agents' enchantments do not ride `0x0042` at all, so this rules out only the player.
+* **By the heal.** All 813 positive property-55 words classified by what shares their tick:
+  **659 + 86** self-heals and **25 + 25** heals from another agent close a CAST (`0x009F
+  [58, healer, 0]` on the tick), and the remaining **18** are Healing Signet frames
+  (`0x00E5`). Zero heal words share a tick with a damage word on their taker. The
+  "aimed within 1.2 s" column — 86 + 25 + 6 heals on a taker that had a property-60
+  announcement pointed at it — is the HEALER'S own cast announcement (`[60, healer, taker]`),
+  not an attack, once read. Positive control: the search finds the 18 Healing Signet
+  self-heals of F45.2 under their own frame, and the two-heal ticks of the PvP tape
+  (`519.037 s`, agent 12 healed 0.29 and 0.076 by agent 9 on one cast close), so a
+  heal-on-a-hit would not have hidden from it.
+
+So: **no prevention heal exists in the corpus**, and retail's damage word for a converted hit
+is UNREAD in the strict sense — a negative with its control, not an absence of looking.
+
+**Shipped anyway, by analogy, and labelled.** 46.7's rule — a landed hit always gets its
+damage word, zero included — is OBSERVED for two mechanisms (an attacker whose plain swings
+deal nothing; a swing truncated under a point). A converted hit is a landed hit whose damage
+went somewhere else, and the server had TWO arms for one wire event: a word for every landed
+hit except the one Reversal of Fortune ate. It now has one: the enemy swing on the player
+and skill damage send the word unconditionally — the remainder when the cap left some, −0.0
+when it left none — AFTER the heal word ("healing occurs before damage", GWW). The skill
+site's early return now catches only a skill with no damage number. `test_mechanics` §9's
+pin FLIPS: it used to assert "NO damage message follows a fully converted swing" (a
+RECONSTRUCTION with no witness, now known to have had none) and asserts instead one −0.0
+word after the heal, and says in its own text that the witness is missing (floor 212
+unchanged; twelve damage-channel tests green). Label: the WORD for a converted hit is
+RECONSTRUCTION by analogy, UNVERIFIED on retail; the ORDER heal-then-damage is WIKI.
+
+**What settles it:** one live capture with a prevention enchantment on the bar and a hit
+taken under it — Reversal of Fortune (307) or any "the next time you take damage" skill —
+and then read the tick: heal word, and beside it a −0.0, a remainder, or nothing. Filed on
+the live-run queue, not a harness item: our own server cannot witness retail.

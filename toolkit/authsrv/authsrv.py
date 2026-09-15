@@ -20645,14 +20645,18 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
     # attacker on 20260819T132414 whose every plain swing (close: property 1)
     # dealt nothing while its attack skills (close: 46) hit 10/19/34, and
     # three on the MANTID tape from drones whose 1- and 2-point swings
-    # truncated to nothing (studies/slice/FINDINGS.md SLICE-F46.7). Only a
-    # CONVERSION keeps the word back: what retail sends for a fully converted
-    # hit is UNREAD, so that arm is left as it was.
-    if dealt > 0 or conversion is None:
-        frac = _damage_fraction(dealt, player_max_health(state),
-                                agents.PROP_DAMAGE,
-                                "an enemy swing" if skill_id is None
-                                else f"skill {skill_id}")
+    # truncated to nothing (studies/slice/FINDINGS.md SLICE-F46.7).
+    # CONVWORD (F46.8): a CONVERTED hit -- Reversal of Fortune eating some or
+    # all of it -- gets its word too, the remainder or -0.0. That is the same
+    # rule (a landed hit always gets its damage word) extended to a third
+    # mechanism BY ANALOGY, and it is labelled so: the corpus holds no
+    # prevention heal at all (813 of 813 heal words close a cast), so retail's
+    # word for a converted hit is UNREAD. One rule beats two arms, and the
+    # heal word still goes first ('healing occurs before damage', GWW).
+    frac = _damage_fraction(dealt, player_max_health(state),
+                            agents.PROP_DAMAGE,
+                            "an enemy swing" if skill_id is None
+                            else f"skill {skill_id}")
     if skill_id is None:
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.GV_MELEE_ATTACK_FINISHED, agent_id, 0],
@@ -20692,13 +20696,10 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
             pools.damage_units(dealt / float(agents.PLAYER_HEALTH)),
             _now, conn_id, f"{dealt:.0f} damage taken from agent {agent_id}")
     state["player_health"] = max(0.0, state["player_health"] - dealt)
-    if frac is not None:
-        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
-             [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id, frac],
-             f"damage {dealt:.0f} to the player")
-    else:
-        print(f"[c{conn_id}] the swing from agent {agent_id} was fully "
-              f"converted -- no damage message goes out", flush=True)
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+         [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id, frac],
+         f"damage {dealt:.0f} to the player"
+         + (" (converted)" if conversion is not None else ""))
     # ADRENALINE, both directions of the enemy's swing. WIKI: the swinger gets
     # a strike for a successful weapon hit; the player gets one unit per 1% of
     # MAXIMUM health lost, floored -- so a hit for under 1% grants nothing and,
@@ -20921,11 +20922,12 @@ def land_skill(send, state, agent_id, agent, conn_id):
             base *= strike_multiplier(agent_strike_level(agent), spell_ar)
         dealt, conversion = taker_damage(state, _tid, base)
         dealt = _whole_points(dealt)    # DAMAGE-INT: the books and the wire agree
-        if dealt > 0 or conversion is None:   # ZEROWORD: a graze is -0.0, see land_swing
-            frac = _damage_fraction(
-                dealt, (state["agents"][_tid]["max_health"] if _tbody
-                        else player_max_health(state)),
-                agents.PROP_DAMAGE, f"skill {skill_id}")
+        # ZEROWORD / CONVWORD: a graze is -0.0 and a converted hit is its
+        # remainder or -0.0 -- the word always goes out; see land_swing.
+        frac = _damage_fraction(
+            dealt, (state["agents"][_tid]["max_health"] if _tbody
+                    else player_max_health(state)),
+            agents.PROP_DAMAGE, f"skill {skill_id}")
     # THE FINISH ANNOUNCEMENT OPENS THE BATCH -- ANIMREF-R2's cleanest yield
     # (studies/animref/FINDINGS.md sec.9). Retail closes EVERY other-agent
     # cast episode with a property-58 batch, 58 leading (709/709 finished
@@ -20989,12 +20991,10 @@ def land_skill(send, state, agent_id, agent, conn_id):
     if conversion is not None:
         resolve_taker_conversion(send, state, conversion, conn_id)
     if frac is None:
-        # A fully converted hit, or a skill with no damage number at all.
-        # A damaging skill that TRUNCATED to nothing is not this: its frac is
-        # -0.0 and the word goes out (ZEROWORD).
+        # A skill with no damage number at all. A damaging skill that
+        # TRUNCATED to nothing (ZEROWORD) or was CONVERTED (CONVWORD) is not
+        # this: its frac is -0.0 or the remainder, and the word goes out.
         agent["casting"] = None
-        print(f"[c{conn_id}] skill {skill_id}'s hit was fully converted -- "
-              f"no damage message goes out", flush=True)
         return
     agent["casting"] = None
     if _tbody:

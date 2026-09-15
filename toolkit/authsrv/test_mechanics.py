@@ -376,10 +376,19 @@ try:
           and first_int[1][0] == agents.GV_MELEE_ATTACK_FINISHED,
           "MELEE_ATTACK_FINISHED still opens the batch -- the swing landed, "
           "its damage did not")
-    check(agents.PROP_DAMAGE not in
-          [v[0] for op, v, _l in sent
-           if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET],
-          "and NO damage message follows a fully converted swing")
+    # CONVWORD (2026-09-14, F46.8): the converted swing gets its damage word
+    # too, as -0.0, AFTER the heal -- one rule (a landed hit always gets its
+    # word) extended by analogy; the corpus holds no prevention heal to read
+    # it from, and this pin says so rather than pretending to a witness.
+    floats = [(v[0], v[3]) for op, v, _l in sent
+              if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET]
+    check(floats and [f for f in floats if f[0] == agents.PROP_DAMAGE] == [(agents.PROP_DAMAGE, 0x80000000)]
+          and [f[0] for f in floats].index(agents.GV_HEALTH_GAIN)
+          < [f[0] for f in floats].index(agents.PROP_DAMAGE),
+          "a fully converted swing sends ONE damage word, -0.0 (0x80000000), "
+          "after the heal word -- by analogy with retail's ten -0.0 words, "
+          "UNVERIFIED for a conversion (none in the corpus)",
+          f"floats={[(p, hex(x)) for p, x in floats]}")
 finally:
     authsrv.ARMOUR_TERM = saved_armour
     authsrv.ENERGY = saved_energy
