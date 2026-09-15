@@ -2,7 +2,9 @@
 
 Rurik contains no third-party code as a dependency — `toolkit/` is Python 3 standard
 library only, with the `capstone`/`pefile` carve-out in [CLAUDE.md](CLAUDE.md) for
-read-only client analysis. What it does contain is work **derived from** other people's
+read-only client analysis. Two consumers OUTSIDE `toolkit/` import a toolkit they do not
+derive from: `tools/blender/` runs inside Blender's `bpy`, and `tools/viewer/` is a
+PySide6 window (its notice is below). What it does contain is work **derived from** other people's
 reverse engineering: file-format layouts, constant tables, and algorithms.
 
 This file is where that is credited. It exists because one licence in this list
@@ -240,6 +242,24 @@ rows, not "some of the content".
 **Attribution:** Guild Wars Wiki contributors, wiki.guildwars.com. Each row names its
 page and the revision id it was read at, which is the attribution the licence asks for
 and also the thing that lets a reader check whether the page has moved under us since.
+
+---
+
+## Qt for Python (PySide6) — The Qt Company
+
+**Used by:** `tools/viewer/modelviewer.py` and its launcher `apps/modelviewer.pyw`, as
+the GUI and OpenGL widget toolkit. Nothing is derived from it: no code copied, no layout
+taken, no constant read out of it. Every archive fact the viewer draws comes from
+`toolkit/mapdata/modelcatalog.py`, which is standard-library Python and imports nothing
+from Qt.
+
+**Licence: LGPLv3** (Qt also offers a commercial licence). Used as a dynamically
+imported library from the machine's own installation, never vendored into this
+repository, never redistributed with it. The LGPL's obligations attach to distribution
+of the library or of works that incorporate it, and this project does neither: the
+viewer is a local, personal tool and `CLAUDE.md`'s rule is "local and personal only".
+Its derivation-register row is `PLAN.md` §6.1 (added 2026-09-14, in the same commit as
+the first import).
 
 ---
 
