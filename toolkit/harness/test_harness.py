@@ -64,7 +64,7 @@ import checks  # noqa: E402
 # measure, for the same two vault-dependent skips as before.
 # FLOOR: 141, MEASURED from a green run 2026-08-17 after section 10 gained
 # the camera-verb checks -- set from the run's own count, never arithmetic.
-LEDGER = checks.Ledger("harness", floor=170)   # 1z-cw: +2, the steer verb; 2026-09-14: +6, test_client_build; +5, the skill slot
+LEDGER = checks.Ledger("harness", floor=174)   # 1z-cw: +2, the steer verb; 2026-09-14: +6, test_client_build; +5, the skill slot; 2026-09-15: +4, dashed values
 check = checks.adopt_named(LEDGER)
 
 
@@ -277,6 +277,32 @@ def test_enemy_default():
 
 
 # ---------------------------------------------------------- client build ----
+
+def test_dashed_values():
+    """A single dashed flag reaches --game-args / --client-arg in the SPACE form.
+
+    2026-09-15: the owner ran the runbook's own example, `--game-args
+    "--explorable"`, and argparse died with 'expected one argument' -- a value
+    beginning with '-' is read as another option unless it contains a space, so
+    the two-flag string in every other example happened to work and the one-flag
+    string never had. The help text documented the = form; a documented trap is
+    still a trap. `dashed_values` rewrites the space form to the = form before
+    parsing, for exactly the options named and nothing else.
+    """
+    dv = session.dashed_values
+    opts = ("--game-args", "--client-arg")
+    check("a lone dashed value is joined to its option with =",
+          dv(["--enemy", "--game-args", "--explorable", "--keep-open"], opts)
+          == ["--enemy", "--game-args=--explorable", "--keep-open"])
+    check("a two-flag string and a client -perf are joined the same way",
+          dv(["--game-args", "--explorable --map 146", "--client-arg", "-perf"], opts)
+          == ["--game-args=--explorable --map 146", "--client-arg=-perf"])
+    check("a value that does not start with a dash is left alone",
+          dv(["--game-args", "probe", "--map"], opts) == ["--game-args", "probe", "--map"])
+    check("an option with nothing after it, and options not named, are untouched",
+          dv(["--game-args"], opts) == ["--game-args"]
+          and dv(["--account", "-x"], opts) == ["--account", "-x"])
+
 
 def test_client_build():
     """The gamesrv is told which client build it serves, from the exe's bytes.
@@ -659,6 +685,7 @@ if __name__ == "__main__":
     test_preflight_helpers()
     test_game_args()
     test_enemy_default()
+    test_dashed_values()
     test_client_build()
     test_served_maps()
     test_interact_control()

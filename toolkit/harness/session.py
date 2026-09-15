@@ -932,6 +932,25 @@ def run_client(a, outdir):
 
 # ------------------------------------------------------------------ main ----
 
+def dashed_values(argv, options):
+    """Rewrite `--opt -x` into `--opt=-x` for the options named, so a value that
+    begins with a dash parses as the VALUE. argparse refuses a lone dashed value
+    ('expected one argument') unless it contains a space, which made
+    `--game-args "--explorable"` die while `--game-args "--explorable --map 146"`
+    worked -- a trap the help text documented and the owner still fell into
+    (2026-09-15). The = form is what argparse accepts; this just writes it."""
+    out, i = [], 0
+    while i < len(argv):
+        tok = argv[i]
+        if tok in options and i + 1 < len(argv) and argv[i + 1].startswith("-"):
+            out.append(f"{tok}={argv[i + 1]}")
+            i += 2
+            continue
+        out.append(tok)
+        i += 1
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -1055,11 +1074,15 @@ def main():
                          "the game channel, so anything about the world lives "
                          "there; the authsrv gets none of it. Without this the "
                          "one-command loop could not run a probe at all. "
-                         "USE THE = FORM FOR A SINGLE FLAG: --game-args="
-                         "'--trace-move'. argparse reads a value starting with "
-                         "'-' as another option unless it contains a space, so "
-                         "two flags in one string happen to work and one flag "
-                         "alone dies with 'expected one argument'.")
+                         "A single flag works in either form (--game-args "
+                         "--explorable or --game-args=--explorable): argparse "
+                         "reads a value starting with '-' as another option "
+                         "unless it contains a space, so two flags in one "
+                         "string happened to work and one flag alone died with "
+                         "'expected one argument' -- until 2026-09-15, when the "
+                         "owner hit it on the runbook's own example; "
+                         "dashed_values() now rewrites the space form to the = "
+                         "form before parsing.")
     ap.add_argument("--client-arg", action="append", metavar="FLAG",
                     help="Extra flag for the CLIENT, repeatable -- the other "
                          "side of --game-args, which reaches only the server. "
@@ -1068,7 +1091,7 @@ def main():
                          "own. -perf draws triangles, fps and transfer rate in "
                          "the top-right corner. Flags that decide where the "
                          "client points are REFUSED.")
-    a = ap.parse_args()
+    a = ap.parse_args(dashed_values(sys.argv[1:], ("--game-args", "--client-arg")))
     hold_implies_keep_open(a)
 
     if not dc.is_loopback(a.auth_host):
