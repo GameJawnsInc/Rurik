@@ -12119,3 +12119,36 @@ Section 6 builds a synthetic worktree with git monkeypatched OUT and asserts the
 main checkout is still found by reading the `.git` gitfile, so the guard does not
 quietly weaken on a machine without git. Stdlib only, no vault fixture needed,
 bare-machine safe. 24 checks, floor 23. ~1 s)
+  `toolkit/mapdata/test_modelcatalog.py` (the MODEL CATALOG behind
+`tools/viewer/modelviewer.py` -- the stdlib half of the model browser, `modelcatalog.py`.
+**The headline is a shortcut that the test can refute**: the catalog classifies all
+21,535 flags-515 heads from their FIRST chunk header alone (`archive.magic`'s early
+stop, ~0.5 ms a head against ~34 ms for a full decode), on a 400-head measurement
+that a 0xFA0 geometry chunk is always first when present. Section 2 re-walks every
+50th head IN FULL through `ffna_chunks` and asserts the prefix verdict against the
+whole chunk list -- `kind == model` iff FA0 is anywhere in the file, 431/431 -- and
+compares every count read off the prefix (FA0 `num_models`/`collision_count`, FA1
+sequence/node counts and the COMPOSITED flag) with the same fields read from the full
+payload, so a wrong offset cannot agree with itself. Section 0 drives `classify_prefix`
+on bytes the test packs (model, composited shell, FA6-first shell with counts left
+None, non-ffna, a map's type 3, short payloads, a wrong FA1 version). Section 1 is the
+cache: JSON round trip of every record field, `save()` REFUSING a path inside the
+working tree and writing nothing, `load()` refusing a foreign format and unreadable
+JSON; 2b loads the vault cache, pins floors (>= 20,000 models, >= 700 shells, at most
+one problem head and it must be the known row-8316 non-ffna anomaly), and REFUSES a
+cache re-stamped from another archive state. **Section 3 checks the build against the
+archive's own bytes, not against `modelfile`**: the de-indexed corner positions and the
+carried UV set of every hatcher sub-model are re-derived by `struct.unpack_from` over
+the sub-model's interleaved `vertex_data` at the client's stride, gathered through its
+own index list (4/4 and 4/4). The diffuse pick must land where `studies/unitexport`
+sec 5 independently put it -- FA5 slot 1 (the "eraser") for the body, slot 2 (cutout)
+for the trim -- with those alpha classes; the worm's 20-node skeleton must agree with
+`Skeleton.anims()` on every base, link and keyed flag, and every keyed node base must
+lie inside the mesh box (18/18, unitexport sec 3's bind-pose fact re-measured); the
+shell builds no geometry, an 86-node COMPOSITED skeleton and 242 sequences; a body
+drawn with `skeleton_fid` names its source; prop 0x102DB's collision mesh comes out as
+six line corners a triangle. Section 4: `templates()` lists every npc row with a
+file_id (60), the hatcher resolves closed and draws its body, the worm draws itself,
+and a composited shell with NO body draws None -- the parade's white box, never
+invented; Kamadan's props chunk names >= 50 models (86, M4's count). Needs the study
+archive; sections 0-1 are bare-machine safe. 66 checks, floor 66. ~55 s)
