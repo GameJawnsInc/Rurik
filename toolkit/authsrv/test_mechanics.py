@@ -28,7 +28,7 @@ import agents       # noqa: E402
 import effects      # noqa: E402
 
 # Floor set from a real green run (39 checks, 2026-08-22; 99 checks, 2026-09-09 SKILLS-DW; 129 checks, 2026-09-10 SKILLS-BL; 153 checks, 2026-09-10 SKILLS-RC; 162 checks, 2026-09-10 SKILLS-MA).
-LEDGER = checks.Ledger("effect mechanics", floor=212)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
+LEDGER = checks.Ledger("effect mechanics", floor=214)  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
 check = checks.adopt(LEDGER)
 
 FRENZY, RUSH, ROF, GLYPH, IGNITE, FAINT = 346, 319, 307, 200, 431, 135
@@ -617,13 +617,43 @@ sent, send = collector()
 state = dw_state(enemy=True)
 apply_dw(send, state, target=ENEMY)
 agent = state["agents"][ENEMY]
-check(shape(sent)[:2] == [(OP_STATUS, (ENEMY, 0x22)),
-                          (OP_INT, (agents.PROP_HEALTH_MAX, ENEMY, 80))]
+# PVPMAX (2026-09-14, F46.10): a BODY's Deep Wound batch is the status word
+# alone -- retail declares another agent's moved maximum on the observer's
+# next landed hit (4 of 4 edges on the PvP tape, the 42 between the gain and
+# the damage word), and party hits carry none. This check used to pin the
+# 42 inside the batch, which was the PLAYER's isle shape copied to a foe.
+check(shape(sent)[:1] == [(OP_STATUS, (ENEMY, 0x22))]
+      and not [1 for op, v, _l in sent if op == OP_INT and v[0] == agents.PROP_HEALTH_MAX]
       and state.get("effect_list_suppressed") == 1,
-      "the same batch for an agent MINUS the 0x0042 (MANTID: retail sends a "
-      "foe's effect list to nobody, 0 of 369)", f"got {shape(sent)[:3]}")
+      "a foe's batch is the status word MINUS the 0x0042 (MANTID: retail sends a "
+      "foe's effect list to nobody, 0 of 369) and MINUS the maximum, which "
+      "rides the next hit (PVPMAX)", f"got {shape(sent)[:3]}")
 check(agent["max_health"] == 80.0 and agent["health"] == 80.0,
       "agent book: 80 of 80")
+_saved_swing = authsrv.PLAYER_SWING_DAMAGE
+authsrv.PLAYER_SWING_DAMAGE = (5, 5)
+try:
+    agent.update({"last_hit": 0.0, "pos": (0.0, 0.0)})
+    state["pos"] = (0.0, 0.0)
+    sent, send = collector()
+    authsrv.hit_enemy(send, state, ENEMY, 0)
+    ops1 = [(op, tuple(v[:3])) for op, v, _l in sent
+            if (op == OP_INT and v[0] == agents.PROP_HEALTH_MAX)
+            or (op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
+                and v[0] == agents.PROP_DAMAGE)]
+    check(ops1[:1] == [(OP_INT, (agents.PROP_HEALTH_MAX, ENEMY, 80))]
+          and len(ops1) == 2 and ops1[1][0] != OP_INT,
+          "the player's next landed hit declares [42, foe, 80] BEFORE its damage "
+          "word -- retail's tick order (close, gain, 42, word), 27 of 27",
+          f"got {ops1}")
+    agent["last_hit"] = 0.0
+    sent, send = collector()
+    authsrv.hit_enemy(send, state, ENEMY, 0)
+    check(not [1 for op, v, _l in sent if op == OP_INT and v[0] == agents.PROP_HEALTH_MAX],
+          "and the hit after that carries no 42 -- only the first, and the first "
+          "after a move (13 of the observer's 90 hits on the tape)")
+finally:
+    authsrv.PLAYER_SWING_DAMAGE = _saved_swing
 agent["health"] = -10.0
 sent, send = collector()
 authsrv.heal_agent(send, state, ENEMY, ENEMY, 5.0, 0)
@@ -1055,10 +1085,14 @@ try:
     maxes = [v for op, v, _l in sent if op == INT_NT
              and v[0] == agents.PROP_HEALTH_MAX]
     ops = [op for op, _v, _l in sent]
-    check(not removes(sent) and len(maxes) == 1 and maxes[0][2] == 100
-          and ops.index(INT_NT) < ops.index(FLOAT_T),
-          "the wire: no 0x0044 for a body (MANTID); one 0x009F 42 = 100 "
-          "restoring the maximum, then the heal", f"sent={sent}")
+    # PVPMAX (2026-09-14, F46.10): a BODY's restored maximum is not in this
+    # batch any more -- retail declares another agent's moved maximum on the
+    # observer's next landed hit (hit_enemy), 4 of 4 edges on the PvP tape.
+    check(not removes(sent) and not maxes and FLOAT_T in ops
+          and state["agents"][11].get("max_declared_on_hit", 0) is None,
+          "the wire: no 0x0044 for a body (MANTID); NO 0x009F 42 either -- the "
+          "restored maximum rides the player's next hit (PVPMAX) -- then the heal",
+          f"sent={sent}")
 
     authsrv.CONDITION_HEAL_RULE = False
     sent, send = collector()

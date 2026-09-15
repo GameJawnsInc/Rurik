@@ -13491,6 +13491,30 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     if ENERGY and swing:
         player_gains_adrenaline(send, state, pools.STRIKE_UNITS, now,
                                 conn_id, f"weapon hit on agent {target_id}")
+    # PVPMAX (2026-09-14, studies/slice/FINDINGS.md SLICE-F46.10): the TARGET's
+    # maximum rides the OBSERVER's own landed hit -- retail's first one (its
+    # first declaration), and the first after the maximum moved -- between
+    # the observer's gain (0x00CF)
+    # and the damage word, and no other hit carries it. OBSERVED on the PvP
+    # arena tape 20260817T231139, four connections: 27 of 27 explicit maxima
+    # for other agents share a tick with [16|17, agent, observer] and the
+    # observer's close; 13 of the observer's 90 hits on one connection carry
+    # one, exactly the first hits and the first hits after a Deep Wound edge
+    # or a rise; party members' hits on the same agents carry none. So a
+    # body's Deep Wound (deep_wound_open/close) no longer sends its 0x009F 42
+    # -- it marks the declaration stale and this site catches up on the next
+    # landed hit, 1.33 s later on the tape when the player was already
+    # swinging and 6-34 s when not. The player's OWN maximum keeps the isle
+    # shape (same batch as the status word).
+    # Ours declares a body's maximum at its CREATE already (a separate,
+    # measured decision), so a missing key counts as declared and only a
+    # MOVE -- deep_wound_open/close set the key to None -- fires this.
+    if agent.get("max_declared_on_hit", agent["max_health"]) != agent["max_health"]:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.PROP_HEALTH_MAX, target_id, int(agent["max_health"])],
+             f"maximum {int(agent['max_health'])} on agent {target_id}, "
+             f"declared on the player's hit")
+        agent["max_declared_on_hit"] = agent["max_health"]
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [prop, target_id, PLAYER_AGENT_ID, frac],
          f"{'CRITICAL' if critical else 'damage'} {dealt:.0f} "
@@ -16152,10 +16176,17 @@ def deep_wound_open(send, state, agent_id, conn_id):
         agent["max_health"] = float(agent["max_health"]) - reduction
         agent["health"] = float(agent["health"]) - reduction
         new_max, health = agent["max_health"], agent["health"]
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-         [agents.PROP_HEALTH_MAX, agent_id, int(new_max)],
-         f"Deep Wound: maximum health {int(new_max)} on agent {agent_id} "
-         f"(-{reduction})")
+    if agent_id == PLAYER_AGENT_ID:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.PROP_HEALTH_MAX, agent_id, int(new_max)],
+             f"Deep Wound: maximum health {int(new_max)} on agent {agent_id} "
+             f"(-{reduction})")
+    else:
+        # PVPMAX (F46.10): retail declares ANOTHER agent's moved maximum on
+        # the observer's next landed hit (hit_enemy), never in this batch --
+        # 4 of 4 Deep Wound edges on the PvP tape, the 42 riding the next hit
+        # 1.33 s later; the isle's same-batch shape is the PLAYER's own.
+        agent["max_declared_on_hit"] = None
     print(f"[c{conn_id}] Deep Wound on agent {agent_id}: maximum "
           f"{new_max + reduction:.0f} -> {new_max:.0f}, health now "
           f"{health:.0f}" + (" (BELOW ZERO: the next health loss kills, a "
@@ -16193,10 +16224,13 @@ def deep_wound_close(send, state, agent_id, conn_id, dead=False):
               f"book restored (+{reduction}), nothing sent -- the revive "
               f"carries the maximum", flush=True)
         return reduction
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-         [agents.PROP_HEALTH_MAX, agent_id, int(new_max)],
-         f"Deep Wound ends: maximum health {int(new_max)} on agent {agent_id} "
-         f"(+{reduction})")
+    if agent_id == PLAYER_AGENT_ID:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.PROP_HEALTH_MAX, agent_id, int(new_max)],
+             f"Deep Wound ends: maximum health {int(new_max)} on agent {agent_id} "
+             f"(+{reduction})")
+    else:
+        agent["max_declared_on_hit"] = None       # PVPMAX: the next hit declares it
     print(f"[c{conn_id}] Deep Wound off agent {agent_id}: maximum back to "
           f"{new_max:.0f}", flush=True)
     return reduction

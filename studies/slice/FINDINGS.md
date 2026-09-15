@@ -3158,3 +3158,56 @@ shots (treatment) with the control's "−6" on the same rig and framing.
 the last question about zero. It also settles what a fully converted hit will LOOK like under
 46.8's analogy: a blue heal number and a red "0" together, which is a visible claim a live
 capture with Reversal of Fortune can now confirm or refute by eye as well as by wire.
+
+### 46.10 PVPMAX: how a moved maximum reaches the observer — the status word moves it, and the explicit `0x009F 42` rides the observer's NEXT LANDED HIT (shipped)
+
+The owner: "do the PvP maximum channel one too". 46.2 had counted 36 damage words on
+`20260817T231139` that were whole only over the OTHER maximum their taker carried, and a
+`0x009F [42, 10, 483]` arriving 2 s AFTER three words already computed over 483. Read on the
+tape, prediction first (a max-health effect's edge in the agent's `0x00F1` status word moves
+the maximum at once; the explicit 42 follows late or not at all):
+
+**A false transition, caught before it became a finding.** A candidate list that held both
+555 and 444 flip-flopped on every word, because 444 = 0.8 × 555 exactly — a 20-point hit over
+555 is also a 16-point hit over 444. Re-fitted on the taker's two REAL maxima only, each word
+reads one of them or both, and only the unambiguous ones mark a transition.
+
+**The move itself is the status word.** Every real transition sits on a `0x00F1 [agent,
+word]` edge: bit `0x20` (Deep Wound, `effects.py`'s isle decode) set at 631.14 / 687.39 /
+756.07 / 543.28 s, and the next damage word on that taker is over 0.8× (480 → 384) or the
+capped −100 (555 → 455: 20 % is 111, the wiki's cap binds — `deep_wound_reduction` already
+had it from the wiki, now OBSERVED n = 4); the death that clears it (`0x10` set, then the
+rise) restores the full maximum; and one rise-with-death-penalty (agent 10, 451.91 s) put its
+next words over 483 = 555 − 72, which is 15 % of the 480 base — WIKI's death penalty, and the
+one shape here our server does not model for bodies (registered, not shipped).
+
+**The explicit maximum is a different message with a different trigger.** All 27 non-player
+`0x009F 42`s across the tape's four fighting connections share their tick with `[16|17,
+agent, OBSERVER]` and the observer's own close (`[1|46, observer, 0]`), in the order **close,
+`0x00CF` gain, `[42, agent, max]`, damage word** (632.47 s and 749.03 s printed in full); no
+c2s message precedes them (the "client asked" hypothesis refuted, 0 of 16 with a consistent
+request); and of the observer's 90 landed hits on one connection exactly 13 carry one —
+**the observer's first hit on the agent, and the observer's first hit after the maximum
+moved**, 4 of 4 Deep Wound edges (lag 1.31–1.33 s, one swing, when the player was already
+on it) and every rise that changed the maximum (6–34 s, whenever the player next landed
+one). Rises that left the maximum where it was (agents 9 and 10, no wound live at death)
+drew no 42 on the next hit. Party members' hits on the same agents carry none (taker 8's
+31/384 from agent 15 at 543.69 s, between the edge and the observer's 42). The player's OWN
+maximum is the isle shape — same batch as the status word (`effects.py`; `0x0037` names
+agent 25 there) — so the two rules are: **self, in the batch; others, on your next hit.**
+
+**Shipped:** `hit_enemy` declares `[42, target, max]` between the player's gain and the
+damage word when the target's maximum has moved since it was last declared
+(`max_declared_on_hit`; a missing key counts as declared, because ours declares a body's
+maximum at its create — a separate, measured decision — so retail's first-hit 42, its FIRST
+declaration, is not duplicated). `deep_wound_open` / `deep_wound_close` no longer send a
+body's 42 in the batch; they mark it stale, and the player's own keeps the isle batch.
+`test_mechanics` §16: a foe's Deep Wound batch is the status word alone, the player's next
+landed hit declares `[42, foe, 80]` before its damage word, the hit after it carries none
+(+2, floor 212 → 214); the condition-heal check on a body no longer expects the restored
+maximum in the heal batch. Twelve damage-channel tests green. Labels: the move OBSERVED
+(n = 4 wounds, 3 rises, 1 death-penalty rise); the trigger OBSERVED (27 of 27, and the 13-
+of-90 exclusion); the tick order OBSERVED (2 printed, 27 consistent); the death-penalty
+arithmetic WIKI-consistent, unmodelled for bodies. What the CLIENT does between the edge and
+the 42 — whether it scales the drawn number by a locally wounded maximum — is UNREAD and
+would take the ZERODRAW harness recipe with a Deep Wound on the foe.
