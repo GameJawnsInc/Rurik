@@ -1,4 +1,26 @@
-r"""The unlocked-skill bitmap -- which skills the account may equip.
+r"""The unlocked-skill bitmaps -- and there are TWO of them, on two scopes.
+
+THE FIRST LINE OF THIS FILE USED TO READ "which skills the account may
+equip", describing 0x00DB. That was wrong on both halves and is corrected
+here rather than left for the next reader to trip over (SKILLS-LIB,
+2026-09-15, studies/skills/FINDINGS.md §47):
+
+  * 0x00DB UPDATE_UNLOCKED_SKILLS is the CHARACTER's learned set, not the
+    account's. It fills charCtx[+0x2C]+0x710 and the Skills-and-Attributes
+    panel enumerates it.
+  * 0x001D PVP_UPDATE_UNLOCKED_SKILLS is the ACCOUNT's. It fills a separate
+    AcctCliUnlock container at acctCtx[+0x28]+0x124 -- different context
+    member, different displacement, its own event id -- and it is the one
+    GmSkSlot bit-tests when the player DRAGS a skill into a bar slot
+    (`unlockedSkills->BitTest(sourceSkillId)`, GmSkSlot.cpp:206). So the
+    account set is what gates EQUIPPING, while §9 measured that neither set
+    gates DRAWING.
+  * Neither contains the other. OBSERVED, capture 20260817T231139: 21
+    character ids against 19 account ids, two of the character's in no
+    account set.
+
+This module builds the bitmap for either scope; `resolve_library` is what
+chooses, per half, between the persisted store and the --unlocks flag.
 
 0x00DB (GAME_SMSG_UPDATE_UNLOCKED_SKILLS) carries 128 dwords of unlock bits, and
 everything in this file exists because two of those bits were wrong for months in
