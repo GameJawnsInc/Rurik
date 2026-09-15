@@ -2998,3 +2998,35 @@ OBSERVED n = 5 (F45.1); the intermediate rounding UNVERIFIED; the zero word's sh
 UNVERIFIED. The 36 non-integers are NOT a refutation — each is a whole number over a maximum
 its taker demonstrably carried — but they are the scan's limit, stated: "last declared
 maximum" is wrong by one declaration at least twice on that tape.
+
+### 46.6 HEAL-INT, the same night: the heal word is whole points too (shipped)
+
+The owner: "do the HEAL-INT one too". The heal side of the census, asked on its own before
+the edit (scratchpad `healint_corpus.py`; **prediction:** every positive property-55 word with a
+known maximum is whole over it outside the PvP tape's moved maxima, and every taker without
+one shares a denominator):
+
+| | words |
+|---|---|
+| positive property-55 words, 11 tapes | 813 |
+| taker's maximum on the wire / exact whole points | 85 / **83** |
+| taker's maximum not on the wire | 728 |
+| … whole over ONE denominator | 644 (480 ×218, 53 ×143, 555 ×92, 210, 169, 185, 48, 66, 427, 15 …) |
+| … whole over TWO (a maximum that moved once) | 84 — PvP takers 100 (480 → 408), 93 (480 → 561), 102 (480 → 408) |
+| words exactly 0.0 | 0 |
+| negative property-55 words (armour-ignoring damage) | 12, all whole (18 over 96; 10 over 25; two over an unknown maximum) |
+
+The two known-maximum outliers are taker 7 on the PvP tape at 687.55 s, 43 and 67 over the
+455 it carried while the scan held 555 — 46.2's limit, not a refutation. No heal word is zero,
+so whether a heal that truncates to nothing gets a word is UNREAD (none in the corpus).
+
+**Shipped:** `heal_agent` truncates the amount through `_whole_points` AFTER the Deep Wound
+cut and before the room is measured, so the wire, the number the client draws and the books
+carry the same whole number; the known-bad `--no-overheal-number` arm truncates what landed,
+since the room can be fractional. `test_skilldamage` §heal: a 70.4 (an 88 under Deep Wound's
+×0.8) goes out as `0x3F333333` (0.70) and lands 70 (+1, floor 58 → 59); `test_mechanics` 211,
+`test_agentlife` 530, `test_effects` 84, `test_guards` 45, `test_pools` 128, `test_castcycle` 51
+green. OBSERVED, n = 813 heals, and the rounding direction is CORROBORATED by the damage
+side only — no heal in the corpus sits on a half-point the way F45.1's 3.5 did, so truncation
+(rather than rounding) for HEALS is the damage rule applied by analogy: UNVERIFIED in
+direction, whole in magnitude.
