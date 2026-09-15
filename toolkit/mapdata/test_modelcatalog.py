@@ -35,6 +35,7 @@ the rest declare a LEDGER.skip without it (which fails the floor, as it
 should -- the suite runs where the vault is).
 """
 
+import collections
 import json
 import os
 import struct
@@ -52,7 +53,7 @@ import modelfile  # noqa: E402
 import skelfile  # noqa: E402
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("model catalog", floor=66)
+LEDGER = checks.Ledger("model catalog", floor=75)
 check = checks.adopt(LEDGER)
 
 HATCHER_BODY = 116703
@@ -95,15 +96,41 @@ def section0():
     check(c["num_models"] == 7 and c["collision_count"] == 3,
           "FA0 counts are read off the prefix", f"{c['num_models']}/{c['collision_count']}")
     c = mc.classify_prefix(_ffna(0xFA1, _fa1_payload(242, 86, 0x01)))
-    check(c["kind"] == mc.KIND_SHELL and c["composited"] is True
+    check(c["kind"] == mc.KIND_SKEL and c["composited"] is True
           and c["seq_count"] == 242 and c["node_count"] == 86,
           "an FA1-first file classifies as a COMPOSITED shell with its counts",
           repr({k: c[k] for k in ("composited", "seq_count", "node_count")}))
     c = mc.classify_prefix(_ffna(0xFA1, _fa1_payload(1, 2, 0x06)))
-    check(c["composited"] is False, "flag bit 0 clear reads as not composited")
+    check(c["composited"] is False and c["kind"] == mc.KIND_SKEL,
+          "an FA1-first file is a skeleton whatever the flag says (the flag "
+          "cannot tell a shell from an anim file -- module docstring)")
     c = mc.classify_prefix(_ffna(0xFA6, b"\0" * 32))
-    check(c["kind"] == mc.KIND_SHELL and c["seq_count"] is None,
-          "an FA6-first shell is a shell with counts left None, not guessed")
+    check(c["kind"] == mc.KIND_OTHER and c["seq_count"] is None and c["problem"]
+          and c["first_size"] == 32,
+          "an FA6-first head is UNRESOLVED by the first prefix and says why")
+    two = _ffna(0xFA6, b"\0" * 32) + struct.pack("<II", 0xFA1, 0x58) \
+        + _fa1_payload(30, 86, 0x01)
+    c2 = mc.classify_chain(two, mc.PAYLOAD_AT + 32)
+    check(c2["kind"] == mc.KIND_SKEL and c2["composited"] is True
+          and (c2["seq_count"], c2["node_count"]) == (30, 86),
+          "classify_chain reads the FA1 header past the sound list")
+    three = _ffna(0xFA6, b"\0" * 32) + struct.pack("<II", 0xFAE, 12) + b"\0" * 12 \
+        + struct.pack("<II", 0xFA1, 0x58) + _fa1_payload(3, 9, 0x01)
+    c2 = mc.classify_chain(three, mc.PAYLOAD_AT + 32)
+    check(c2["kind"] == mc.KIND_SKEL and (c2["seq_count"], c2["node_count"]) == (3, 9),
+          "...and past an FAE list too (FA6, FAE, FA1 -- 6 heads in the archive)")
+    late = _ffna(0xFA6, b"\0" * 32) + struct.pack("<II", 0xFA0, 0x54) + _fa0_payload(1, 0)
+    c2 = mc.classify_chain(late, mc.PAYLOAD_AT + 32)
+    check(c2["kind"] == mc.KIND_OTHER and "NOT first" in c2["problem"],
+          "a geometry chunk found LATE is reported as a refutation, never filed as a model")
+    long = _ffna(0xFA6, b"\0" * 8) + b"".join(struct.pack("<II", 0xFAE, 8) + b"\0" * 8
+                                                for _ in range(mc.MAX_CHAIN))
+    c2 = mc.classify_chain(long, mc.PAYLOAD_AT + 8)
+    check(c2["kind"] == mc.KIND_OTHER and "within" in c2["problem"],
+          f"a chain longer than MAX_CHAIN={mc.MAX_CHAIN} is a named problem")
+    c2 = mc.classify_chain(_ffna(0xFA6, b"\0" * 32), mc.PAYLOAD_AT + 32)
+    check(c2["problem"] and "ends before" in c2["problem"],
+          "a head that ends after its FA6 is a named problem")
     c = mc.classify_prefix(b"ATEX" + b"\0" * 40)
     check(c["problem"] is not None and c["kind"] == mc.KIND_OTHER,
           "a non-ffna prefix records a problem", c["problem"])
@@ -131,12 +158,12 @@ def section0():
 def section1():
     print("\n1. the catalog cache")
     recs = []
-    for row, kind in ((10, mc.KIND_MODEL), (11, mc.KIND_SHELL), (12, mc.KIND_OTHER)):
+    for row, kind in ((10, mc.KIND_MODEL), (11, mc.KIND_SKEL), (12, mc.KIND_OTHER)):
         r = mc.HeadRecord(row, [row * 100, row * 100 + 1], 4096)
         r.kind = kind
         r.first_chunk = 0xFA0 if kind == mc.KIND_MODEL else 0xFA1
         r.num_models = 2 if kind == mc.KIND_MODEL else None
-        r.composited = True if kind == mc.KIND_SHELL else None
+        r.composited = True if kind == mc.KIND_SKEL else None
         recs.append(r)
     stamp = {"archive": "synthetic", "size_on_disk": 1, "mft_offset": 2,
              "mft_size": 3, "row_count": 4, "block_size": 512,
@@ -147,9 +174,9 @@ def section1():
           "to_dict/from_dict round-trips every record field through JSON")
     check(back.by_fid[1101].row == 11 and back.by_row[10].kind == mc.KIND_MODEL,
           "every spelling of a row resolves through by_fid; by_row is keyed by row")
-    check(back.census() == {"model": 1, "shell": 1, "other": 1}
-          and len(back.models()) == 1 and len(back.shells()) == 1,
-          "census/models/shells partition the records", repr(back.census()))
+    check(back.census() == {"model": 1, "skel": 1, "other": 1}
+          and len(back.models()) == 1 and len(back.skeletons()) == 1,
+          "census/models/skeletons partition the records", repr(back.census()))
     check(recs[0].fid == 1000, "the reported id is the smallest plain spelling")
 
     inside = os.path.join(HERE, "should_never_exist.catalog.json")
@@ -199,6 +226,7 @@ def section2(ar):
           f"the sample is {len(rows)} heads (>= 400)", f"scan {time.time() - t0:.2f} s")
     kinds_ok = first_ok = fa0_ok = fa1_ok = 0
     fa0_n = fa1_n = 0
+    seen = collections.Counter()
     disagreements = []
     t0 = time.time()
     for rec in cat.records:
@@ -208,10 +236,21 @@ def section2(ar):
         walk = list(ffna_chunks(data))
         ids = [cid for cid, _, _ in walk]
         has_fa0 = modelfile.GEOMETRY_CHUNK in ids
-        if (rec.kind == mc.KIND_MODEL) == has_fa0:
+        fa1 = next(((off, size) for cid, off, size in walk
+                    if cid == skelfile.SKELETON_CHUNK), None)
+        h = skelfile.read_header(data[fa1[0]:fa1[0] + fa1[1]]) if fa1 else None
+        # THE EXPECTED KIND FROM THE WHOLE FILE, independent of any prefix
+        if has_fa0:
+            want = mc.KIND_MODEL
+        elif h is not None:
+            want = mc.KIND_SKEL
+        else:
+            want = mc.KIND_OTHER
+        seen[want] += 1
+        if rec.kind == want:
             kinds_ok += 1
         else:
-            disagreements.append((rec.row, rec.kind, [hex(i) for i in ids]))
+            disagreements.append((rec.row, rec.kind, want, [hex(i) for i in ids]))
         if rec.first_chunk == ids[0]:
             first_ok += 1
         cid, off, size = walk[0]
@@ -221,22 +260,29 @@ def section2(ar):
             cc = struct.unpack_from("<H", data, off + modelfile.COLLISION_COUNT_AT)[0]
             if (rec.num_models, rec.collision_count) == (nm, cc):
                 fa0_ok += 1
-        elif cid == skelfile.SKELETON_CHUNK:
+        elif h is not None:
+            # every non-model with an FA1 -- FA1-first AND FA6-first -- must
+            # carry the header's counts, the second read included
             fa1_n += 1
-            h = skelfile.read_header(data[off:off + size])
             if (rec.seq_count, rec.node_count, rec.composited) == (
                     h["n18"], h["n2C"], bool(h["flags"] & skelfile.FLAG_COMPOSITED)):
                 fa1_ok += 1
     n = len(cat.records)
     check(kinds_ok == n and not disagreements,
-          f"kind agrees with the FULL chunk list on {kinds_ok}/{n} heads "
-          f"(FA0 present <=> FA0 first)",
-          f"{time.time() - t0:.1f} s; disagreements: {disagreements[:3]}")
+          f"kind agrees with the FULL file on {kinds_ok}/{n} heads: model <=> FA0 "
+          f"present, skel <=> an FA1 and no FA0",
+          f"{time.time() - t0:.1f} s; {dict(seen)}; disagreements: {disagreements[:3]}")
+    flagged = sum(1 for r in cat.records if r.kind == mc.KIND_SKEL and r.composited)
+    check(seen[mc.KIND_SKEL] >= 6 and flagged == seen[mc.KIND_SKEL],
+          f"every skeleton head in the sample carries the COMPOSITED flag, "
+          f"{flagged}/{seen[mc.KIND_SKEL]} -- the flag means 'no geometry', so it "
+          f"cannot separate shells from anim files (module docstring)")
     check(first_ok == n, f"first chunk id agrees on {first_ok}/{n}")
     check(fa0_n >= 300 and fa0_ok == fa0_n,
           f"FA0 num_models/collision_count agree on {fa0_ok}/{fa0_n} (>= 300)")
-    check(fa1_n >= 3 and fa1_ok == fa1_n,
-          f"FA1 seq/node/composited agree on {fa1_ok}/{fa1_n} (>= 3)")
+    check(fa1_n >= 6 and fa1_ok == fa1_n,
+          f"FA1 seq/node/composited agree on {fa1_ok}/{fa1_n} skeleton heads (>= 6), "
+          f"the FA6-first ones included")
     both = sum(1 for r in cat.records if r.kind == mc.KIND_MODEL)
     check(both >= 0.9 * n, f"models are the bulk of the sample: {both}/{n}")
     return cat
@@ -250,21 +296,31 @@ def section2b(ar):
     check(cat.scanned_rows == len(mc.head_rows(ar)),
           f"the cache covers every head: {cat.scanned_rows}",
           f"{'fresh scan' if fresh else 'loaded'} in {time.time() - t0:.1f} s from {path}")
-    check(census.get("model", 0) >= 20000 and census.get("shell", 0) >= 700,
-          "floors: >= 20,000 models and >= 700 shells", repr(census))
+    check(census.get("model", 0) >= 20000 and census.get("skel", 0) >= 700,
+          "floors: >= 20,000 models and >= 700 skeleton heads", repr(census))
+    chained = [r for r in cat.skeletons() if r.first_chunk != skelfile.SKELETON_CHUNK]
+    check(len(chained) >= 300 and all(r.seq_count is not None for r in chained),
+          f"every one of the {len(chained)} skeleton heads whose FA1 is not first "
+          f"resolved its header through the chain (>= 300; FA6-first is half the class)")
     probs = [r for r in cat.records if r.problem]
     check(len(probs) <= 1 and all(r.row == 8316 for r in probs),
           "at most one head carries a problem, and it is the known row-8316 anomaly "
           "(unitmodels FINDINGS: a flags-515 head that is not an ffna file)",
           repr([(r.row, r.problem) for r in probs]))
     for fid, kind in ((HATCHER_BODY, mc.KIND_MODEL), (WORM, mc.KIND_MODEL),
-                      (HATCHER_SHELL, mc.KIND_SHELL)):
+                      (HATCHER_SHELL, mc.KIND_SKEL)):
         rec = cat.by_fid.get(fid)
         check(rec is not None and rec.kind == kind,
               f"anchor {fid} is catalogued as a {kind}")
     rec = cat.by_fid[HATCHER_SHELL]
-    check(rec.composited is None and rec.first_chunk == mc.SOUND_CHUNK,
-          "the hatcher shell is FA6-first, so its counts wait for build_view")
+    check(rec.first_chunk == mc.SOUND_CHUNK and rec.composited is True
+          and (rec.seq_count, rec.node_count) == (242, 86) and rec.problem is None,
+          "the hatcher shell is FA6-first and the chain resolves it: "
+          "composited, 242 sequences, 86 nodes, no problem left")
+    fae = [r for r in cat.skeletons() if r.first_chunk == mc.SOUND_CHUNK
+           and r.fids and cat.by_fid[r.fids[0]] is r and r.row in (18731, 136755, 150245, 150389)]
+    check(len(fae) == 4 and all(r.seq_count is not None for r in fae),
+          "the four FA6, FAE, FA1 heads the first cut could not read are resolved")
     check(cat.by_fid[HATCHER_BODY].num_models == 4
           and cat.by_fid[WORM].num_models == 3,
           "FA0 sub-model counts off the prefix: hatcher 4, worm 3")
@@ -405,6 +461,11 @@ def section4(ar, table):
     tm = mc.templates(world)
     check(len(tm) == len(rows) >= 50 and [t["key"] for t in tm] == sorted(rows),
           f"templates() lists every npc row with a file_id, sorted: {len(tm)}")
+    st = mc.shell_templates(world)
+    check(HATCHER_SHELL in st and {t["key"] for t in st[HATCHER_SHELL]} >= {"hatcher", "lieutenant_fisk"}
+          and sum(len(v) for v in st.values()) == len(tm),
+          f"shell_templates joins every row onto its shell: {len(st)} shells named by the wire, "
+          f"the hatcher shell by {len(st[HATCHER_SHELL])} rows")
     by = {t["key"]: t for t in tm}
     r = mc.resolve_template(ar, table, by["hatcher"])
     check(r["needs_body"] is True and r["closed"] and r["draw"] == HATCHER_BODY,
