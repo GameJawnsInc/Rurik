@@ -3030,3 +3030,44 @@ green. OBSERVED, n = 813 heals, and the rounding direction is CORROBORATED by th
 side only — no heal in the corpus sits on a half-point the way F45.1's 3.5 did, so truncation
 (rather than rounding) for HEALS is the damage rule applied by analogy: UNVERIFIED in
 direction, whole in magnitude.
+
+### 46.7 ZEROWORD: a hit that lands for nothing still gets its word, and the word is −0.0 (shipped)
+
+The owner: "do the 0.0 word one too". 46.2 counted ten damage words at exactly zero and
+asked what shape produces them before copying it. Read off the two tapes that carry them:
+
+* **The sign.** All ten are `0x80000000` — NEGATIVE zero, the damage convention's `−frac`
+  with a zero numerator. `_damage_fraction(0.7, 100)` already produces exactly that (§9 of
+  `test_guards` pinned it under DAMAGE-INT), so the wire shape was in place; what was
+  missing was sending it.
+* **`20260819T132414`, seven words, one attacker (agent 58).** Sixteen damage words from 58
+  on that connection: nine hits of 10, 19 or 34 points over a 140 maximum, seven of −0.0.
+  The split is exact and it is the CLOSE that tells them apart: every non-zero hit is
+  preceded by `0x009F [46, 58, 0]` (`GV_ATTACK_SKILL_FINISHED` — an attack skill's strike)
+  and every −0.0 by `0x009F [1, 58, 0]` (`GV_MELEE_ATTACK_FINISHED` — a plain swing).
+  Agent 58's plain swings deal nothing, seven of seven, and its skills carry all its damage;
+  what 58 IS (no level on the wire for it) is UNREAD. No heal word, no effect and no
+  attack-fail word sits on the −0.0 tick, so it is not a block, a dodge or a conversion:
+  the swing landed, for nothing, and got the trio's close plus a damage word of −0.0.
+* **`20260913T210901` (MANTID), three words, three drones (26, 24, 18).** Each drone's
+  other words on the level-1 characters are 1 and 2 points (`0.0115`/`0.023` over 87,
+  `0.01` over 100) and its third is −0.0 — a swing whose damage after armour fell under a
+  point and truncated to nothing (DAMAGE-INT's floor), still sent. Each rides the drone's
+  `0x00A7 [drone, 3, 1]` attack frame like its 1- and 2-point neighbours.
+
+So retail's rule, OBSERVED n = 10 on two tapes and two mechanisms: **a landed hit always gets
+its damage word, and zero is a value the word carries.** What the client DRAWS for −0.0 —
+a "0", or nothing — is UNREAD; it would take a harness run with the operator watching, and
+nothing here depends on it.
+
+**Shipped:** the two guarded sites — the enemy swing on the player and skill damage — send
+the word when the hit landed with no conversion open, zero included (`dealt > 0 or
+conversion is None`); the skill site's early return keys on "no fraction" rather than "no
+damage", so a damaging skill that truncated to nothing is no longer printed as "fully
+converted". The unguarded sites (`hit_enemy`, the body swing into `hurt_agent_row`,
+armour-ignoring damage) already sent whatever the fraction was. **Not shipped, on
+purpose:** the fully CONVERTED hit — a Reversal of Fortune that eats the whole swing — still
+sends no damage word, because what retail sends there is UNREAD (no full conversion in the
+corpus). `test_mechanics` §9: a 0.5-point swing sends `[16, player, foe, 0x80000000]` and
+the pool stays 100 (+1, floor 212); `test_skilldamage`: Flare into a rating of 300 (1/64,
+0.31 → 0) sends −0.0 and takes nothing (+1, floor 60). Twelve damage-channel tests green.

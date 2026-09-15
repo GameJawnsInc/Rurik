@@ -47,7 +47,7 @@ import effects  # noqa: E402
 # a short run means a section stopped rather than passed.
 # SKILLS-HN +4 (44), SKILLS-FA +13 (57: 7 model + 6 corpus), each from its
 # green run. Section 12 needs the live corpus and declares a skip without it.
-LEDGER = checks.Ledger("skill damage", floor=59)  # 2026-09-14 HEAL-INT +1;   # MANTID-S +1: the player-side control beside the foe-side refusal
+LEDGER = checks.Ledger("skill damage", floor=60)  # 2026-09-14 HEAL-INT +1, ZEROWORD +1;   # MANTID-S +1: the player-side control beside the foe-side refusal
 check = LEDGER.ok
 
 
@@ -483,6 +483,16 @@ def main():
 
     mult = authsrv.armour_multiplier(25.0)          # 2^((60-25)/40) = 1.834
     st, dmg = _cast(194)
+    # ZEROWORD (2026-09-14): the same Flare into a rating of 300 -- 2^((60-300)/40)
+    # = 1/64, so 20 becomes 0.31 and truncates to nothing -- still sends its
+    # damage word, as -0.0, and the pool does not move. Retail's -0.0 words
+    # are the witness (F46.7). Not "fully converted": no conversion is open.
+    st_z, dmg_z = _cast(194, spell_armour_for=lambda _sid: 300.0)
+    check(len(dmg_z) == 1 and dmg_z[0] == 0.0 and math.copysign(1.0, dmg_z[0]) < 0
+          and st_z["player_health"] == 100.0,
+          "Flare grazing to nothing still sends [16, player, caster, -0.0] and "
+          "takes nothing off the pool",
+          f"damage words {dmg_z}, health {st_z['player_health']}")
     want = math.floor(20.0 * mult)   # DAMAGE-INT: 36.68 goes out as 36 (truncated)
     check(len(dmg) == 1 and abs(dmg[0] + want / 100.0) < 1e-5   # f32 on the wire
           and abs(st["player_health"] - (100.0 - want)) < 1e-6,

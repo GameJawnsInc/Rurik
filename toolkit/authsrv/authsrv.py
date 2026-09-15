@@ -20639,7 +20639,16 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
     dealt, conversion = taker_damage(state, PLAYER_AGENT_ID, dealt)
     dealt = _whole_points(dealt)        # DAMAGE-INT: the books and the wire agree
     frac = None
-    if dealt > 0:
+    # ZEROWORD (2026-09-14): a swing that LANDED for nothing still gets its
+    # damage word, and the word is -0.0 (0x80000000). OBSERVED on retail: ten
+    # property-16 words in the live corpus are exactly -0.0 -- seven from one
+    # attacker on 20260819T132414 whose every plain swing (close: property 1)
+    # dealt nothing while its attack skills (close: 46) hit 10/19/34, and
+    # three on the MANTID tape from drones whose 1- and 2-point swings
+    # truncated to nothing (studies/slice/FINDINGS.md SLICE-F46.7). Only a
+    # CONVERSION keeps the word back: what retail sends for a fully converted
+    # hit is UNREAD, so that arm is left as it was.
+    if dealt > 0 or conversion is None:
         frac = _damage_fraction(dealt, player_max_health(state),
                                 agents.PROP_DAMAGE,
                                 "an enemy swing" if skill_id is None
@@ -20912,7 +20921,7 @@ def land_skill(send, state, agent_id, agent, conn_id):
             base *= strike_multiplier(agent_strike_level(agent), spell_ar)
         dealt, conversion = taker_damage(state, _tid, base)
         dealt = _whole_points(dealt)    # DAMAGE-INT: the books and the wire agree
-        if dealt > 0:
+        if dealt > 0 or conversion is None:   # ZEROWORD: a graze is -0.0, see land_swing
             frac = _damage_fraction(
                 dealt, (state["agents"][_tid]["max_health"] if _tbody
                         else player_max_health(state)),
@@ -20979,7 +20988,10 @@ def land_skill(send, state, agent_id, agent, conn_id):
         return
     if conversion is not None:
         resolve_taker_conversion(send, state, conversion, conn_id)
-    if dealt <= 0:
+    if frac is None:
+        # A fully converted hit, or a skill with no damage number at all.
+        # A damaging skill that TRUNCATED to nothing is not this: its frac is
+        # -0.0 and the word goes out (ZEROWORD).
         agent["casting"] = None
         print(f"[c{conn_id}] skill {skill_id}'s hit was fully converted -- "
               f"no damage message goes out", flush=True)

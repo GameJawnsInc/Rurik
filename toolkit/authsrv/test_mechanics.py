@@ -28,7 +28,7 @@ import agents       # noqa: E402
 import effects      # noqa: E402
 
 # Floor set from a real green run (39 checks, 2026-08-22; 99 checks, 2026-09-09 SKILLS-DW; 129 checks, 2026-09-10 SKILLS-BL; 153 checks, 2026-09-10 SKILLS-RC; 162 checks, 2026-09-10 SKILLS-MA).
-LEDGER = checks.Ledger("effect mechanics", floor=211)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
+LEDGER = checks.Ledger("effect mechanics", floor=212)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
 check = checks.adopt(LEDGER)
 
 FRENZY, RUSH, ROF, GLYPH, IGNITE, FAINT = 346, 319, 307, 200, 431, 135
@@ -342,6 +342,26 @@ try:
           f"(Strength {STR}, the 38888 row), truncated to whole points "
           f"({math.floor(FRENZY_MULT * base)} off a {base:.0f})",
           f"drop={100.0 - state['player_health']}")
+
+    # ZEROWORD (2026-09-14): a swing that lands for NOTHING still sends its
+    # damage word, as -0.0 -- ten such words on retail's wire (F46.7). A base
+    # of 0.5 truncates to 0 (DAMAGE-INT) and the pool does not move.
+    saved_hit = authsrv.ENEMY_HIT_FRACTION
+    authsrv.ENEMY_HIT_FRACTION = 0.005
+    try:
+        sent, send = collector()
+        state = fresh_state()
+        authsrv.land_swing(send, state, 10, enemy, 0)
+    finally:
+        authsrv.ENEMY_HIT_FRACTION = saved_hit
+    graze = [v for op, v, _l in sent
+             if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
+             and v[0] == agents.PROP_DAMAGE]
+    check(graze == [[agents.PROP_DAMAGE, PLAYER, 10, 0x80000000]]
+          and state["player_health"] == 100.0,
+          "a swing that truncates to nothing still sends [16, player, foe, -0.0] "
+          "(0x80000000) and takes nothing off the pool -- retail's ten -0.0 words",
+          f"damage words {graze}, health {state['player_health']}")
 
     sent, send = collector()
     state = fresh_state(health=60.0)

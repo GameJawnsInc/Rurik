@@ -6520,7 +6520,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   duration is greater than the remaining amount of time."* So a shorter
   re-application is a no-op in the table AND on the wire, and a longer one
   extends as REMOVE-then-APPLY; floor 74),
-  `toolkit/authsrv/test_mechanics.py` (**2026-09-14 (late night), DAMAGE-INT: §3's Frenzy swing is `floor(x1.45 × 10)` = 14 off the pool, and §30's Healing-Signet double reads `floor(2q) ∈ {2⌊q⌋, 2⌊q⌋ + 1}` — the identity, no free parameter; floor 211 unchanged.** **2026-09-14 (night), SLICE-H17: §3's Frenzy checks derive the multiplier from the fixture's own Strength rank (175…125 % on the 38888 row, `damage_taken_percent`), sweep ranks 0/3/9/15 → 175/165/145/125, and assert it is NOT the 2023 double; floor 209 → 211.** **the episodes finally DO something** — the
+  `toolkit/authsrv/test_mechanics.py` (**2026-09-14 (late night), ZEROWORD: §9 — a 0.5-point swing truncates to nothing and still sends `[16, player, foe, 0x80000000]` (−0.0) with the pool untouched, retail's ten −0.0 words being the witness; +1, floor 211 → 212.** **2026-09-14 (late night), DAMAGE-INT: §3's Frenzy swing is `floor(x1.45 × 10)` = 14 off the pool, and §30's Healing-Signet double reads `floor(2q) ∈ {2⌊q⌋, 2⌊q⌋ + 1}` — the identity, no free parameter; floor 211 unchanged.** **2026-09-14 (night), SLICE-H17: §3's Frenzy checks derive the multiplier from the fixture's own Strength rank (175…125 % on the 38888 row, `damage_taken_percent`), sweep ranks 0/3/9/15 → 175/165/145/125, and assert it is NOT the 2023 double; floor 209 → 211.** **the episodes finally DO something** — the
   2026-08-22 layer over the substrate: Frenzy's attack speed and doubled damage,
   Reversal of Fortune's conversion, the glyph's discount live, the preparation
   bonus, the gated movement base. Its pins are numbers GWW itself publishes, so
@@ -11147,7 +11147,7 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   comment that had called value 8 a single sighting from one capture's count.
   Proven red by setting the reward to the Wolf's contaminated 126. Floor 6, the
   vault-less §1),
-  `toolkit/authsrv/test_skilldamage.py` (**2026-09-14 (late night), HEAL-INT: a 70.4 heal goes out as `0x3F333333` (0.70) and lands 70 — whole points, truncated after the Deep Wound cut; +1, floor 58 → 59.** **2026-09-14 (late night), DAMAGE-INT: Flare's 20 at AR 25 lands 36 — 36.68 truncated to whole points — on the wire and in the books; floor 58 unchanged.** **SKILLS-FA (2026-09-09) added §11–§12,
+  `toolkit/authsrv/test_skilldamage.py` (**2026-09-14 (late night), ZEROWORD: Flare into a rating of 300 (1/64, 0.31 → 0) still sends its −0.0 damage word and takes nothing, and is NOT the "fully converted" early return; +1, floor 59 → 60.** **2026-09-14 (late night), HEAL-INT: a 70.4 heal goes out as `0x3F333333` (0.70) and lands 70 — whole points, truncated after the Deep Wound cut; +1, floor 58 → 59.** **2026-09-14 (late night), DAMAGE-INT: Flare's 20 at AR 25 lands 36 — 36.68 truncated to whole points — on the wire and in the books; floor 58 unchanged.** **SKILLS-FA (2026-09-09) added §11–§12,
   floor 44 → 57**: an incoming `Fire damage` cast scales by the player's ONE
   elemental rating (25, not the physical 45 — the `+20 vs. physical` never reaches
   a spell), Flare's 20 at rank 0 lands as 36.68 = 20 × 2^((60−25)/40), Holy
