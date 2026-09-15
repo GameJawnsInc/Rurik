@@ -3178,8 +3178,9 @@ word]` edge: bit `0x20` (Deep Wound, `effects.py`'s isle decode) set at 631.14 /
 capped −100 (555 → 455: 20 % is 111, the wiki's cap binds — `deep_wound_reduction` already
 had it from the wiki, now OBSERVED n = 4); the death that clears it (`0x10` set, then the
 rise) restores the full maximum; and one rise-with-death-penalty (agent 10, 451.91 s) put its
-next words over 483 = 555 − 72, which is 15 % of the 480 base — WIKI's death penalty, and the
-one shape here our server does not model for bodies (registered, not shipped).
+next words over 483 = 555 − 72, which is 15 % of the 480 base — `morale.py`'s own formula
+(`total + base × (morale − 100) / 100`) to the point, on a hostile body; see 46.11 for what
+that does and does not say about bodies.
 
 **The explicit maximum is a different message with a different trigger.** All 27 non-player
 `0x009F 42`s across the tape's four fighting connections share their tick with `[16|17,
@@ -3211,3 +3212,44 @@ of-90 exclusion); the tick order OBSERVED (2 printed, 27 consistent); the death-
 arithmetic WIKI-consistent, unmodelled for bodies. What the CLIENT does between the edge and
 the 42 — whether it scales the drawn number by a locally wounded maximum — is UNREAD and
 would take the ZERODRAW harness recipe with a Deep Wound on the foe.
+
+### 46.11 BODYDP: the death penalty on bodies — heroes get it on the wire and already do here; every other body gets NOTHING on the wire, and neither does ours (no change)
+
+The owner: "do the death penalty on bodies one too". 46.10 had filed it as "WIKI, unmodelled for
+bodies". Both halves of that were wrong in a useful direction, and the corpus says which
+bodies the observer is ever told about (prediction stated before the scan: retail sends
+`0x009C [agent, morale]` for every party member at its death, and re-declares its maximum at
+`×0.85` of base; a hostile PvP opponent's deaths carry none in a DP-free arena):
+
+* **The player's own** (control): `0x00EE [10, −15]` + `0x009C [me, 85]` + `[42, me, max −
+  15 % of base]` on the death tick, then +1 per morale tick — MANTID 100 → 85 → 86 … 89;
+  JARIN 140 → 119 → 120, second death 120 → 99 (`0x009C [29, 71]`); the isle 480 → 408.
+  Pre-Searing: two deaths, no `0x00EE`, no `0x009C`, the maximum stays 100 — `map_death_penalty`
+  already charges nothing there.
+* **A hero** (`20260914T005758`, agent 30): its OWN `0x009C [30, 85]` and `[42, 30, 119]` on ITS
+  death tick (307.83 s), +1 with the party's morale ticks (`[30, 86]`/120 at 410.8 s, `[30,
+  87]`/122 at 534.5 s), and its second death `[30, 72]`/101. This is the JARIN batch
+  `hero_died` already sends — `0x009C`, `0x00D0`, prop 41, `0x00A2 [43]`, prop 42 — and
+  `hero_morale_experience` already walks each hero's morale up with the player's. DONE before
+  this item was written, and now with the second death and the recovery ticks as witnesses.
+* **Every other party body:** on `20260817T231139` conn `54071` the observer's `0x01BF` party
+  is agents 12, 13, 14; **agent 12 died five times** (620.0 ×4 status words, 648.5) and the
+  observer received **no `0x009C` and no `0x009F 42` for it, ever** — 0 of 5. The eleven
+  henchman bodies across the corpus never die on tape, but their pools are never on the wire
+  either (`hero_body_id`'s "0 on eleven bodies"), so a henchman's death penalty is a fact the
+  server keeps to itself. Our server's `hero_died` returns early for a non-hero body and
+  sends nothing: **the faithful shape, unchanged.**
+* **Hostile bodies:** a hostile player's maximum moved by exactly `morale.py`'s formula once
+  (46.10's agent 10, −72 of 555 on a 480 base) — CORROBORATION of the base-scaled rule on a
+  third character, n = 1 — while on the other connection agents 7 and 8 died three times each
+  and were re-declared at 555 after every rise, and the observer's `0x00EE [10, 40]` at
+  634.75 s left its own maximum at 480. Two matches, two rules: WIKI names arenas without a
+  death penalty, and which of these two is which is UNREAD (the map ids are not on the
+  connection in a form this pass decoded). Nothing to model: this server has no hostile
+  player bodies.
+
+**Verdict: no code moves.** Heroes were done (JARIN), everyone else is silent on retail's
+wire and silent here. `morale.py`'s docstring gains the hostile-body corroboration. Labels:
+the hero's second death and recovery OBSERVED (n = 1 hero, 2 deaths, 3 ticks); the party
+member's silence OBSERVED (n = 5 deaths, 1 body); the henchman case NOT FOUND (no death in
+the corpus) and inferred from the pools' silence; the arena rule UNREAD.

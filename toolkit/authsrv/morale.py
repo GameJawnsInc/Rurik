@@ -30,6 +30,14 @@ between 22 and 21.25 on the one observation we have --
 game never shows, and it would have needed an invented rounding rule to look
 plausible while doing it. Evidence, both halves: `studies/morale/FINDINGS.md`.
 
+CORROBORATED on a third character, 2026-09-14 (studies/slice/FINDINGS.md
+SLICE-F46.11): a hostile level-20 body on the PvP arena tape 20260817T231139
+with 555 total rose from a death and its next damage words were whole points
+over 483 -- 555 + 480 * (85 - 100) / 100 exactly, the base scaled and the 75 of
+runes riding along; 555 * 0.85 = 472 is not on the wire. n = 1, and on the
+same tape two opponents in a different match kept 555 across three deaths
+each: WIKI names arenas without a penalty, and which one that was is UNREAD.
+
 Standard library only, and no import of the server: `test_morale.py` exercises
 every function here with no vault, no client and no socket.
 """
