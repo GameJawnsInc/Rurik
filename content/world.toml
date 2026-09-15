@@ -28,7 +28,11 @@ max_health = 100
 # armor_rating = 60
 # Placed relative to the player's arrival point rather than at an absolute coordinate,
 # because the player's arrival point differs per map and this enemy is meant to be
-# reachable in whichever one is loaded.
+# reachable in whichever one is loaded. The point (offset_x, offset_y) is tried FIRST;
+# if the navmesh refuses it, the eight compass points at that point's distance, then
+# the same eight at 1.5x. (Until 2026-09-15 only offset_x was read, as the ring's
+# radius, and offset_y did nothing.) To probe the notice radius, AGGRO_RANGE = 1012,
+# put the point a little outside it -- (300, -1200) is 1,237 u -- and walk in.
 offset_x = 300.0
 offset_y = 0.0
 enabled = true

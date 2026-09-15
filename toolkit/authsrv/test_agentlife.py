@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=530)   # SLICE-F43 +3 (the wipe countdown and its stop), from the green run   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=532)   # 2026-09-15 +2 (offset_y honoured); SLICE-F43 +3 (the wipe countdown and its stop), from the green run   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
 def section_weapon_damage():
@@ -4899,13 +4899,37 @@ def section_enemy_count():
                   "" if creates is None else f"{len(creates)} create(s)")
 
         authsrv.ENEMY_COUNT = 2
+        # Pinned at (300, 0) rather than read from world.toml: this check is about
+        # the RING, and with a non-zero offset_y in the content file (the owner's
+        # own probe placement, 2026-09-15) the first spot is the point itself.
+        saved_off = authsrv.ENEMY_OFFSET
+        authsrv.ENEMY_OFFSET = (300.0, 0.0)
         st = {}                                    # no navmesh: the plain offsets
         authsrv.spawn_enemy(_Send(), st, (0.0, 0.0, 0), 1)
+        authsrv.ENEMY_OFFSET = saved_off
         LEDGER.ok(sorted(st["agents"]) == [10, 11]
-                  and st["agents"][10]["pos"] == (authsrv.ENEMY_OFFSET[0], 0.0)
-                  and st["agents"][11]["pos"] == (0.0, authsrv.ENEMY_OFFSET[0]),
+                  and st["agents"][10]["pos"] == (300.0, 0.0)
+                  and st["agents"][11]["pos"] == (0.0, 300.0),
                   "without a navmesh the spots are the compass ring at the plain "
                   "offset, east then north", f"{[st['agents'][i]['pos'] for i in (10, 11)]}")
+        # 2026-09-15: offset_y is HONOURED. It was loaded into ENEMY_OFFSET and never
+        # read -- only offset_x, as the ring's radius -- so the owner's (300, -1200)
+        # spawned the hostile due east at 300. The exact point is now the first
+        # candidate and the ring sits at that point's distance.
+        saved_off = authsrv.ENEMY_OFFSET
+        try:
+            authsrv.ENEMY_OFFSET = (300.0, -1200.0)
+            st = {}
+            authsrv.spawn_enemy(_Send(), st, (0.0, 0.0, 0), 1)
+            import math as _m
+            LEDGER.ok(st["agents"][10]["pos"] == (300.0, -1200.0),
+                      "offset_y is honoured: the first spot IS (offset_x, offset_y)",
+                      f"{st['agents'][10]['pos']}")
+            LEDGER.ok(st["agents"][11]["pos"] == (_m.hypot(300.0, -1200.0), 0.0),
+                      "and the second is the ring's east point at that point's distance",
+                      f"{st['agents'][11]['pos']}")
+        finally:
+            authsrv.ENEMY_OFFSET = saved_off
         LEDGER.ok("--enemies" in open(authsrv.__file__, encoding="utf-8").read()
                   and "global ENEMY_COUNT" in open(authsrv.__file__, encoding="utf-8").read()
                   and authsrv.ENEMY_COUNT_MAX == 8,

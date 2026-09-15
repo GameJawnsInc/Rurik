@@ -81,16 +81,28 @@ def spawn_probe_warning(probe, spawn_set, spawn_out_of_band=False, *, PROF_WARRI
 
 
 def enemy_spots(state, ox, oy, n, *, ENEMY_OFFSET):
-    """`n` distinct spots near the player, walkable ones first -- the eight
-    compass points at ENEMY_OFFSET's distance, then the same eight at one and
-    a half times it. The plain offset when there is no navmesh (a normal
-    outcome: the archive is the player's own install). Never fewer than `n`
-    points: a spot the mesh refuses is still returned, last, and the spawn
-    line says so."""
-    d = ENEMY_OFFSET[0]
-    ring = [(d, 0), (0, d), (-d, 0), (0, -d), (d, d), (-d, d), (d, -d), (-d, -d)]
-    cands = [(ox + dx, oy + dy) for dx, dy in ring] + \
-            [(ox + 1.5 * dx, oy + 1.5 * dy) for dx, dy in ring]
+    """`n` distinct spots near the player, walkable ones first -- the exact
+    (offset_x, offset_y) point, then the eight compass points at that point's
+    distance, then the same eight at one and a half times it. The plain offset
+    when there is no navmesh (a normal outcome: the archive is the player's own
+    install). Never fewer than `n` points: a spot the mesh refuses is still
+    returned, last, and the spawn line says so.
+
+    THE OFFSET IS A POINT FIRST, THEN A DISTANCE. Until 2026-09-15 only offset_x
+    was read, as the ring's radius, and offset_y was loaded into ENEMY_OFFSET and
+    never looked at -- the owner set offset_y = -1000 to put the hostile just
+    outside the notice radius and it spawned due east at offset_x. With
+    offset_y == 0 the first candidate IS the ring's east point, so the behaviour
+    every earlier test pins is unchanged (duplicates are dropped)."""
+    dx0, dy0 = float(ENEMY_OFFSET[0]), float(ENEMY_OFFSET[1])
+    d = math.hypot(dx0, dy0)
+    ring = [(dx0, dy0), (d, 0), (0, d), (-d, 0), (0, -d),
+            (d, d), (-d, d), (d, -d), (-d, -d)]
+    cands = []
+    for dx, dy in ring + [(1.5 * x, 1.5 * y) for x, y in ring]:
+        c = (ox + dx, oy + dy)
+        if c not in cands:
+            cands.append(c)
     pm = state.get("pathmap")
     if pm is None:
         return cands[:n]
