@@ -3116,3 +3116,45 @@ RECONSTRUCTION by analogy, UNVERIFIED on retail; the ORDER heal-then-damage is W
 taken under it — Reversal of Fortune (307) or any "the next time you take damage" skill —
 and then read the tick: heal word, and beside it a −0.0, a remainder, or nothing. Filed on
 the live-run queue, not a harness item: our own server cannot witness retail.
+
+### 46.9 What the client draws for a −0.0 word: a red **0**, no sign (harness `20260914T231303` / `20260914T231524`)
+
+The owner: "do the −0.0 client draw one too if it's offline work". It is — the WORD is retail's
+(46.7), the DRAW is the client's, and the loopback client is the retail binary — so this was a
+harness question, not a live one, and 46.7 was wrong to file it beside the capture.
+
+**Static first, as far as it went.** The `0x00A3` handler at `0x00813040` runs TWO switches
+over the property id: the pool dispatcher at `0x00818210` (agentprops FINDINGS, the
+`fmul [ebp+0xc]` arm into `0x00921510`, which is pure CharPool arithmetic — clamp and store,
+no drawing) and a second, at `0x008130E2` (index bytes `0x0081328C`, arms `0x00813250`),
+whose arms hand the RAW wire float and the cause to per-kind view routines (`0x007DFB60` →
+`0x007F6E70`, which appends a kind-2 record `{cause +0x1C, value +0x20, pool +0x24, cause2
++0x28, flags +0x2C}` to the agent view via `0x007F5340`). The number is drawn from that
+record later, by a consumer the static pass did not reach; no zero test sits on the path
+read. RECONSTRUCTION from the disassembly, two calls deep, stopped there because the run
+answers the question outright.
+
+**The run, prediction first.** Two loopback sessions against our own server, the Hatcher
+swinging at a level-1 Warrior (AR 45, ×1.297) with `--no-enemy-skills`, six screenshots each
+at one-second spacing from 18 s (a swing every 1.375 s, so every shot sits inside a number's
+lifetime): **control** `--enemy-hit 0.05` — 5 × 1.297 = 6.48 → 6, the wire `−0.06`; **treatment**
+`--enemy-hit 0.005` — 0.65 → 0, the wire `0x80000000`. Predicted: the control draws a red
+"−6" on at least one shot (the positive control the colour-null rule demands); the treatment
+draws NOTHING. Refutation: a "0" or "−0" glyph where the control's number sits.
+
+| run | wire, every hit on the player | on screen |
+|---|---|---|
+| `20260914T231303` control | `[16, 1, 10, −0.06]` × 51 (`0xBD75C28F`) | **red "−6"** rising over the player (`w001-step2.png`); by the third shot the player is dead — 6 a swing, 17 swings |
+| `20260914T231524` treatment | `[16, 1, 10, −0.0]` × 66 (`0x80000000`) | **red "0"** rising over the player, NO minus sign (`w001-step2.png`, again at `w003-step6.png` with the hit flash); the orb reads 100 throughout |
+
+**Prediction REFUTED: the client draws the zero.** A −0.0 damage word puts a red "0" on the
+screen in the damage colour, exactly where a real hit's number goes, and drops the sign —
+`int(−0.0)` is 0 and the formatter prints the integer's sign, not the float's. So on retail a
+player under agent 58's swings (46.7) saw a stream of red zeros, and a level-1 character under
+the MANTID drones saw a "0" among the 1s and 2s. OBSERVED on the retail client binary, n = 2
+shots (treatment) with the control's "−6" on the same rig and framing.
+
+**What it changes:** nothing on the wire — 46.7 and 46.8 already send the word — and it closes
+the last question about zero. It also settles what a fully converted hit will LOOK like under
+46.8's analogy: a blue heal number and a red "0" together, which is a visible claim a live
+capture with Reversal of Fortune can now confirm or refute by eye as well as by wire.
