@@ -534,10 +534,11 @@ class GLView(QOpenGLWidget):
 # ---------------------------------------------------------------------------
 
 class CatalogModel(QAbstractListModel):
-    def __init__(self, records, thumbs, parent=None):
+    def __init__(self, records, thumbs, shells=None, parent=None):
         super().__init__(parent)
         self.records = records
         self.thumbs = thumbs
+        self.shells = shells or {}       # shell fid -> content templates naming it
         self.icons = {}
 
     def rowCount(self, parent=QModelIndex()):
@@ -551,12 +552,15 @@ class CatalogModel(QAbstractListModel):
                 what = (f"{rec.num_models} sub" if rec.num_models is not None else "?")
                 if rec.collision_count:
                     what += f", {rec.collision_count} coll"
-            elif rec.kind == mc.KIND_SHELL:
-                what = "shell"
+            elif rec.kind == mc.KIND_SKEL:
+                what = "skeleton"
                 if rec.seq_count is not None:
                     what += f", {rec.seq_count} seq, {rec.node_count} nodes"
-                if rec.composited:
-                    what += ", composited"
+                named = self.shells.get(rec.fid) if self.shells else None
+                if named:
+                    what += "  · SHELL of " + ", ".join(t["name"] for t in named[:2])
+                    if len(named) > 2:
+                        what += f" (+{len(named) - 2})"
             else:
                 what = rec.problem or "?"
             return f"{fid:>7}  0x{fid:05X}   {what}   {rec.size // 1024} KB"
@@ -628,8 +632,8 @@ class Viewer(QMainWindow):
         self.setStatusBar(self.status)
         c = catalog.census()
         self.status.showMessage(
-            f"{ar.path}  |  {c.get('model', 0)} models, {c.get('shell', 0)} shells, "
-            f"{c.get('other', 0)} other  |  catalog {catalog_path}")
+            f"{ar.path}  |  {c.get('model', 0)} models, {c.get('skel', 0)} skeletons "
+            f"(no geometry), {c.get('other', 0)} other  |  catalog {catalog_path}")
 
     # -- panels -------------------------------------------------------------
 
@@ -645,13 +649,15 @@ class Viewer(QMainWindow):
         self.search.setPlaceholderText("file id (dec or 0x..), row N, or text")
         self.search.textChanged.connect(self.refilter)
         self.kind = QComboBox()
-        self.kind.addItems(["Models", "Shells", "Models with collision",
-                            "Shells (composited)", "Everything"])
+        self.kind.addItems(["Models", "Skeletons (no geometry)",
+                            "Skeletons the wire names as creature shells",
+                            "Models with collision", "Everything"])
         self.kind.currentIndexChanged.connect(self.refilter)
         row.addWidget(self.search)
         row.addWidget(self.kind)
         lay.addLayout(row)
-        self.list_model = CatalogModel(self.catalog.models(), self.thumbs)
+        self.shell_rows = mc.shell_templates()
+        self.list_model = CatalogModel(self.catalog.models(), self.thumbs, self.shell_rows)
         self.list = QListView()
         self.list.setModel(self.list_model)
         self.list.setIconSize(QSize(64, 64))
@@ -712,6 +718,13 @@ class Viewer(QMainWindow):
         toggle("Skeleton (green bones, magenta nodes)", "skeleton", opt.skeleton)
         toggle("Honour alpha classes (cutout test, blend)", "alpha", opt.alpha)
         row = QHBoxLayout()
+        row.addWidget(QLabel("Skeleton head: draw a body the wire paired with it:"))
+        self.body_box = QComboBox()
+        self.body_box.addItem("(none -- skeleton only)")
+        self.body_box.currentIndexChanged.connect(self.on_body)
+        row.addWidget(self.body_box)
+        lay.addLayout(row)
+        row = QHBoxLayout()
         row.addWidget(QLabel("Texture on every surface:"))
         self.slot_box = QComboBox()
         self.slot_box.addItem("material diffuse (measured rule)")
@@ -761,11 +774,11 @@ class Viewer(QMainWindow):
         if which == 0:
             recs = cat.models()
         elif which == 1:
-            recs = cat.shells()
+            recs = cat.skeletons()
         elif which == 2:
-            recs = [r for r in cat.models() if r.collision_count]
+            recs = [r for r in cat.skeletons() if any(f in self.shell_rows for f in r.fids)]
         elif which == 3:
-            recs = [r for r in cat.shells() if r.composited]
+            recs = [r for r in cat.models() if r.collision_count]
         else:
             recs = list(cat.records)
         if self.map_filter is not None:
@@ -905,6 +918,21 @@ class Viewer(QMainWindow):
                 text += f"\n    ... {len(view.sequences) - 40} more"
         text += f"\n\n  built in {dt:.2f} s"
         self.info.setPlainText(text)
+        self.body_box.blockSignals(True)
+        while self.body_box.count() > 1:
+            self.body_box.removeItem(1)
+        if not view.submeshes and view.skeleton is not None and skeleton_fid is None:
+            bodies = {}
+            for t in self.shell_rows.get(fid, []):
+                if t["model_id"] is not None:
+                    bodies.setdefault(t["model_id"], []).append(t["name"])
+            for body, names in sorted(bodies.items()):
+                self.body_box.addItem(f"body {body}  ({', '.join(names[:3])})", body)
+            if not bodies:
+                self.body_box.addItem("(no content row names this skeleton as a shell "
+                                      "-- unknown: an unspawned shell or an anim file)")
+        self.body_box.setCurrentIndex(0)
+        self.body_box.blockSignals(False)
         self.slot_box.blockSignals(True)
         while self.slot_box.count() > 1:
             self.slot_box.removeItem(1)
@@ -915,6 +943,15 @@ class Viewer(QMainWindow):
         self.slot_box.blockSignals(False)
         self.status.showMessage(f"0x{fid:X} ({fid}): {view.vertices} v, {view.triangles} "
                                 f"tri, {len(view.textures)} texture(s) -- {dt:.2f} s")
+
+    def on_body(self, index):
+        body = self.body_box.itemData(index) if index > 0 else None
+        if body is None or self.current is None:
+            return
+        shell = self.current.fid
+        self.load(body, skeleton_fid=shell, header=(
+            f"BODY {body} drawn under skeleton {shell}: the pairing is the WIRE's "
+            f"(0x0056 + 0x0057 in a capture, via content/npcs.toml), not the archive's"))
 
     def on_slot(self, index):
         if index <= 0:
@@ -1152,12 +1189,31 @@ def smoke(win, app, out_dir):
     win.search.setText("")
     win.kind.setCurrentIndex(1)
     app.processEvents()
-    step(win.list_model.rowCount() == len(win.catalog.shells()),
-         f"the Shells filter lists {win.list_model.rowCount()} shells")
+    step(win.list_model.rowCount() == len(win.catalog.skeletons()),
+         f"the skeletons filter lists {win.list_model.rowCount()} geometry-less heads")
     win.list.setCurrentIndex(win.list_model.index(0))
     app.processEvents()
-    step(win.current is not None and not win.current.submeshes,
-         "a shell loads with no geometry and does not crash the draw")
+    step(win.current is not None and not win.current.submeshes
+         and win.current.composited is True,
+         "a skeleton head loads with no geometry, flagged composited, and draws")
+    win.kind.setCurrentIndex(2)
+    app.processEvents()
+    named = win.list_model.rowCount()
+    step(0 < named <= len(win.shell_rows),
+         f"the wire-named filter lists {named} shells content rows name (of "
+         f"{len(win.shell_rows)} shell ids in content)")
+    win.search.setText(str(116228))
+    app.processEvents()
+    win.list.setCurrentIndex(win.list_model.index(0))
+    app.processEvents()
+    step(win.current is not None and win.current.fid == 116228 and win.body_box.count() >= 3,
+         f"the hatcher shell offers {win.body_box.count() - 1} wire-paired bodies")
+    win.body_box.setCurrentIndex(1)
+    app.processEvents()
+    step(win.current is not None and win.current.submeshes
+         and win.current.skeleton_from == 116228,
+         f"picking one draws body {win.current.fid} under the shell's skeleton")
+    win.search.setText("")
     win.kind.setCurrentIndex(0)
     win.search.setText("0x1C7DF")
     app.processEvents()

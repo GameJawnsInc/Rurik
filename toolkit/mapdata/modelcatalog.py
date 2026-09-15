@@ -26,7 +26,36 @@ shell whose sound list precedes its skeleton). So `archive.magic(entry, n)`
 ~0.5 ms against ~34 ms for the full read: 0.22 s versus 13.6 s over the same
 400. The prefix is `PREFIX_BYTES` long: magic + type, one chunk header, and
 enough payload for FA0's `num_models`/`collision_count` or FA1's 0x58-byte
-header (sequence count, node count, the COMPOSITED flag).
+header (sequence count, node count, the COMPOSITED flag). An FA6-first head
+costs one more prefix read that reaches past its sound list to the FA1 header.
+
+THE KIND IS TWO-WAY, AND WHY IT IS NOT THREE. A head with no FA0 is either a
+creature SHELL -- a skeleton whose geometry the wire supplies as 0x0057 body
+ids per definition -- or an ANIM FILE, ArenaNet's word (`MdlBloat: unable to
+find anim file`) for a skeleton another model reaches through its FA8 link
+list for extra sequences. Both are worth telling apart in a browser, and this
+module tried to and could not, twice, MEASURED 2026-09-14 on all 759
+geometry-less heads of `vault/dat_study/Gw.dat`:
+
+  * `MODEL_SKELETON_FLAG_COMPOSITED` (FA1 header bit 0, MdlBuild:1556) does
+    not do it: it is set on 759 of 759. That is the unitmodels result read
+    the other way -- the flag is equivalent to "no FA0 chunk" on every FA1
+    in the archive (14,571/14,571), so it says "no geometry here", not "a
+    body will arrive".
+  * FA8 linkage does not do it either: 394 of the 759 are link targets of
+    another skeleton head (and every FA8 target in the population IS a
+    skeleton head: 394/394, 0 models, 0 non-heads), but 13 of the 32 shells
+    the live wire has named as creatures are targets too. Shells link to
+    shells. The 311 FA1-only heads (no FA6, no FA8) match the ~312 "anim
+    file" class unitmodels sec 2.3 counted, and that is the nearest thing to
+    a structural tell -- a floor, not a rule.
+
+So the archive-side kind is `skel`, and the label that answers "is this a
+creature I can see?" comes from OUTSIDE the archive: `content/npcs.toml`'s
+rows, which name a shell and its bodies because a capture did (0x0056 +
+0x0057), and which `shell_templates()` joins onto the catalog. A skeleton
+head with no row is honestly unknown -- shell nobody has spawned, or anim
+file -- and the viewer says so rather than picking.
 
     The shortcut's failure mode is a geometry chunk that is NOT first, and
     the catalog would then file a model as a shell. `test_modelcatalog.py`
@@ -118,10 +147,21 @@ PREFIX_BYTES = PAYLOAD_AT + 0x58
 SOUND_CHUNK = 0x00000FA6
 
 KIND_MODEL = "model"        # first chunk 0xFA0: the file carries geometry
-KIND_SHELL = "shell"        # first chunk 0xFA1 or 0xFA6: skeleton, no FA0
+KIND_SKEL = "skel"          # an FA1 skeleton and NO geometry: a creature shell
+                            #   whose body arrives on the wire (0x0057), or an
+                            #   anim file another model links to (FA8). The
+                            #   archive does not say which -- see the docstring.
 KIND_OTHER = "other"        # a head this classifier does not name
 
-FORMAT_VERSION = 1
+#: 2 (2026-09-14): the geometry-less kind renamed and the FA6/FAE-first heads
+#: resolved by a chained prefix read. A version-1 cache carries the old kind
+#: word, so it is refused and re-scanned.
+FORMAT_VERSION = 2
+
+#: How many chunk headers `scan` will chase before the FA1 on a head whose
+#: skeleton is not first. The archive needs two (FA6, FAE -> FA1); three is
+#: the margin, not a measurement.
+MAX_CHAIN = 3
 UP = (0.0, 0.0, -1.0)
 
 
@@ -199,13 +239,47 @@ def classify_prefix(prefix):
         else:
             out["problem"] = f"FA0 payload prefix is {len(body)} bytes"
     elif cid == SKELETON_CHUNK:
-        out["kind"] = KIND_SHELL
         _fa1_facts(body, out)
-    elif cid == SOUND_CHUNK:
-        # A shell whose FA6 precedes its FA1 (9 of the 400-head sample). The
-        # skeleton header is past the sound list, so its counts stay None
-        # here; `build_view` reads them when the file is opened.
-        out["kind"] = KIND_SHELL
+        out["kind"] = KIND_SKEL if out["problem"] is None else KIND_OTHER
+    else:
+        # A skeleton file whose sound (FA6) or FAE list precedes its FA1 --
+        # 2% of heads. The FA1 header sits past those lists, so `scan` reads a
+        # longer prefix and `classify_chain` walks the headers to it; until
+        # then the kind is unresolved and says so.
+        out["problem"] = (f"first chunk 0x{cid:X}: the FA1 header, if any, "
+                          f"is past it")
+    return out
+
+
+def classify_chain(prefix, at):
+    """Walk chunk headers from offset `at` to the FA1 and read its header. Pure.
+
+    For a head whose first chunk is not FA0/FA1 (FA6 or FAE lists come first
+    on 2% of heads). Returns the FA1 facts and `kind`, or a problem naming
+    where the walk stopped: a prefix that ends before the header, a chain
+    longer than `MAX_CHAIN`, or a geometry chunk found late (which would
+    refute the FA0-first measurement and is reported, never filed as a
+    model on the quiet).
+    """
+    out = {"kind": KIND_OTHER, "seq_count": None, "node_count": None,
+           "composited": None, "problem": None}
+    for _hop in range(MAX_CHAIN):
+        if len(prefix) < at + CHUNK_HEADER:
+            out["problem"] = (f"prefix of {len(prefix)} bytes ends before a "
+                              f"chunk header at {at}")
+            return out
+        cid, size = struct.unpack_from("<II", prefix, at)
+        if cid == SKELETON_CHUNK:
+            body = prefix[at + CHUNK_HEADER:at + CHUNK_HEADER + size]
+            _fa1_facts(body, out)
+            out["kind"] = KIND_SKEL if out["problem"] is None else KIND_OTHER
+            return out
+        if cid == GEOMETRY_CHUNK:
+            out["problem"] = (f"a geometry chunk at offset {at}, NOT first -- "
+                              f"refutes the FA0-first measurement; re-check")
+            return out
+        at += CHUNK_HEADER + size
+    out["problem"] = f"no FA1 within {MAX_CHAIN} chunks"
     return out
 
 
@@ -251,8 +325,14 @@ class Catalog:
     def models(self):
         return [r for r in self.records if r.kind == KIND_MODEL]
 
+    def skeletons(self):
+        """Every head with an FA1 skeleton and no geometry -- creature shells
+        AND anim files, which the archive does not tell apart (docstring)."""
+        return [r for r in self.records if r.kind == KIND_SKEL]
+
     def shells(self):
-        return [r for r in self.records if r.kind == KIND_SHELL]
+        """Kept as a name: the same population as `skeletons()`."""
+        return self.skeletons()
 
     def census(self):
         return dict(collections.Counter(r.kind for r in self.records))
@@ -296,6 +376,35 @@ def scan(ar, rows=None, progress=None):
             continue
         for k, v in classify_prefix(prefix).items():
             setattr(rec, k, v)
+        if rec.first_chunk not in (GEOMETRY_CHUNK, SKELETON_CHUNK, None) \
+                and rec.first_size is not None:
+            # chase the chain ONE chunk header at a time, each read sized
+            # exactly by the header before it. Not a single long read: the
+            # early-stopping decoder raises `backtrack >= produced` when asked
+            # for more bytes than the file decompresses to (rows 48660 and
+            # 151293, 9,322 and 4,455 bytes, against a 12 KB ask -- MEASURED
+            # 2026-09-14), so an over-long prefix turns two readable heads into
+            # problems. Each hop here re-decodes a few hundred bytes; the
+            # chunk table's own sizes guarantee every target is inside the file.
+            at0 = at = PAYLOAD_AT + rec.first_size
+            prefix2 = None
+            try:
+                for _hop in range(MAX_CHAIN):
+                    prefix2 = ar.magic(entry, at + CHUNK_HEADER)
+                    if len(prefix2) < at + CHUNK_HEADER:
+                        break
+                    cid, size = struct.unpack_from("<II", prefix2, at)
+                    if cid in (SKELETON_CHUNK, GEOMETRY_CHUNK):
+                        prefix2 = ar.magic(entry, at + CHUNK_HEADER + 0x58)
+                        break
+                    at += CHUNK_HEADER + size
+            except Exception as exc:                        # noqa: BLE001
+                rec.problem = f"{type(exc).__name__}: {exc}"
+                records.append(rec)
+                continue
+            at = at0
+            for k, v in classify_chain(prefix2, at).items():
+                setattr(rec, k, v)
         records.append(rec)
     if progress:
         progress(len(walk), len(walk))
@@ -713,6 +822,16 @@ def templates(world=None):
                                  if row.get("model_id") is not None else None),
                     "profession": row.get("profession"),
                     "level": row.get("level")})
+    return out
+
+
+def shell_templates(world=None):
+    """`{shell file id: [template dicts naming it]}` -- the wire's pairing of
+    a skeleton with its bodies, as `content/npcs.toml` carries it. The only
+    source that says a `skel` head is a creature shell (module docstring)."""
+    out = {}
+    for t in templates(world):
+        out.setdefault(t["file_id"], []).append(t)
     return out
 
 

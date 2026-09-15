@@ -12129,7 +12129,16 @@ that a 0xFA0 geometry chunk is always first when present. Section 2 re-walks eve
 whole chunk list -- `kind == model` iff FA0 is anywhere in the file, 431/431 -- and
 compares every count read off the prefix (FA0 `num_models`/`collision_count`, FA1
 sequence/node counts and the COMPOSITED flag) with the same fields read from the full
-payload, so a wrong offset cannot agree with itself. Section 0 drives `classify_prefix`
+payload, so a wrong offset cannot agree with itself. **The kind is two-way,
+`model`/`skel`, and the test carries the reason it is not three**: every skeleton head
+in the sample must carry the COMPOSITED flag (17/17), because the flag equals "no FA0"
+archive-wide and so cannot separate a creature shell from an anim file -- the first cut
+split on it and this check refuted that before it shipped. The 388 heads whose FA1 sits
+behind an FA6/FAE list are resolved by `classify_chain`, one chunk header a hop (a single
+long read made `archive.magic` raise `backtrack >= produced` on two small heads); the
+synthetic section drives the chain through FA6, FA6+FAE, a LATE geometry chunk (reported
+as a refutation, never filed as a model), a chain past `MAX_CHAIN`, and a truncated head,
+and 2b pins the four FA6,FAE,FA1 heads by row. Section 0 drives `classify_prefix`
 on bytes the test packs (model, composited shell, FA6-first shell with counts left
 None, non-ffna, a map's type 3, short payloads, a wrong FA1 version). Section 1 is the
 cache: JSON round trip of every record field, `save()` REFUSING a path inside the
@@ -12148,7 +12157,9 @@ lie inside the mesh box (18/18, unitexport sec 3's bind-pose fact re-measured); 
 shell builds no geometry, an 86-node COMPOSITED skeleton and 242 sequences; a body
 drawn with `skeleton_fid` names its source; prop 0x102DB's collision mesh comes out as
 six line corners a triangle. Section 4: `templates()` lists every npc row with a
-file_id (60), the hatcher resolves closed and draws its body, the worm draws itself,
+file_id (60), `shell_templates()` joins them onto 32 shell ids (the hatcher shell by 10
+rows) -- the WIRE's pairing of skeleton and body, the only source that names a `skel`
+head as a creature; the hatcher resolves closed and draws its body, the worm draws itself,
 and a composited shell with NO body draws None -- the parade's white box, never
 invented; Kamadan's props chunk names >= 50 models (86, M4's count). Needs the study
-archive; sections 0-1 are bare-machine safe. 66 checks, floor 66. ~55 s)
+archive; sections 0-1 are bare-machine safe. 75 checks, floor 75. ~45 s)

@@ -14,8 +14,8 @@ pythonw apps/modelviewer.pyw                            # double-click launcher
 python tools/viewer/modelviewer.py --smoke C:\scratch\out  # drive every panel once, exit
 ```
 
-Left: **Models** (search by id, hex or decimal; `row N`; filters for shells, collision,
-composited), **Templates** (`content/npcs.toml` rows, drawn as the client composes them:
+Left: **Models** (search by id, hex or decimal; `row N`; filters for skeletons, for the
+skeletons the wire names as creature shells, and for collision), **Templates** (`content/npcs.toml` rows, drawn as the client composes them:
 body mesh, shell skeleton), **Maps** (`content/maps.toml` rows; picking one lists only
 the props that map references). Right: toggles, a per-slot texture override, the info
 pane, export and screenshot. Drag orbits, right-drag pans, wheel zooms, double-click fits.
@@ -26,12 +26,30 @@ pane, export and screenshot. Drag orbits, right-drag pans, wheel zooms, double-c
 run on a bare machine. `tools/` is where consumers that cannot meet that live —
 `tools/blender/` for `bpy`, this directory for PySide6. The line is enforced by
 shape, not by promise: **every archive fact comes from `toolkit/mapdata/modelcatalog.py`**,
-which is stdlib, read-only, and tested in the suite (`test_modelcatalog.py`, 66 checks),
+which is stdlib, read-only, and tested in the suite (`test_modelcatalog.py`, 75 checks),
 and `modelviewer.py` holds no knowledge of any ArenaNet layout. If a picture looks wrong,
 the bug is in the catalog or a decoder under it; the viewer only draws arrays it is handed.
 
 PySide6 is LGPLv3, dynamic-linked, never vendored or redistributed; its row is in
 `PLAN.md` §6.1 and its credit in `THIRD-PARTY-NOTICES.md`.
+
+## Shells, anim files, and what the archive will not tell you
+
+A head with no geometry is one of two things: a **creature shell**, a skeleton whose body
+the wire supplies (`0x0056` names the shell, `0x0057` its bodies, per definition), or an
+**anim file**, a skeleton another model links to through its FA8 list for extra sequences.
+The archive does not say which. MEASURED 2026-09-14 on all 759 geometry-less heads: the
+`MODEL_SKELETON_FLAG_COMPOSITED` bit is set on 759 of 759 (it means "no FA0", full stop),
+and FA8 linkage fails too -- 394 heads are link targets of other skeleton heads, but 13 of
+the 32 shells the wire has named as creatures are targets as well. The 311 FA1-only heads
+match the unitmodels study's ~312 anim-file class, and that is a floor, not a rule.
+
+So the catalog's kind is `model` or `skel`, and the label "this is a creature you can
+see" comes from `content/npcs.toml`, whose rows exist because a live capture paired that
+shell with those bodies. The Models tab marks such rows `SHELL of ...`, the third filter
+lists only them, and a skeleton head's right pane offers each wire-paired body to draw
+under it, with the pairing's source stated. A skeleton no row names is shown as unknown --
+an unspawned shell or an anim file -- rather than guessed.
 
 ## What a frame means
 
@@ -65,7 +83,7 @@ PySide6 is LGPLv3, dynamic-linked, never vendored or redistributed; its row is i
 `test_modelcatalog.py` covers the stdlib half in the suite. The window itself is not a
 suite test (PySide6 is not bare-machine), so `--smoke DIR` drives it by hand: every tab,
 the hatcher template join, the Kamadan map filter, the search and shell filters, a grab
-of the on-screen frame scored for coverage, and three offscreen thumbnails -- 14 steps,
+of the on-screen frame scored for coverage, and three offscreen thumbnails -- 17 steps,
 `[PASS]`/`[FAIL]` per line, non-zero exit on any failure. Run it before committing a
 viewer change; `--shot` renders one frame the same way for a look.
 
