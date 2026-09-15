@@ -5397,7 +5397,9 @@ def section_hold_plane():
         dmg = [v for op, v, _l in sent if op == FLOAT_T and v[0] == 16]
         _hp = st["agents"][10]["health"]
         # the foe's own armour: a level-5 Warrior creature, 3*5+20 = 35
-        _want = 200.0 * authsrv.PARTY_HIT_FRACTION * authsrv.armour_multiplier(35.0)
+        # DAMAGE-INT (2026-09-14): whole points, truncated -- 11.7 lands as 11.
+        _want = math.floor(200.0 * authsrv.PARTY_HIT_FRACTION
+                           * authsrv.armour_multiplier(35.0))
         LEDGER.ok(fin == [[1, 200, 0]] and len(dmg) == 1 and dmg[0][1] == 10
                   and dmg[0][2] == 200 and abs((200.0 - _hp) - _want) < 1e-6
                   and st["agents"][10]["last_hit"] == 0.0,

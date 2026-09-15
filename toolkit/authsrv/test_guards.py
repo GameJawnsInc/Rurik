@@ -42,7 +42,7 @@ import checks  # noqa: E402
 # it -- a press opens a cycle and lands nothing -- and carries 5 checks where
 # it carried 3, plus section 11's new single-caller check. Nothing here is
 # conditional, so a short run means a section stopped rather than passed.
-LEDGER = checks.Ledger("guard contract", floor=41)
+LEDGER = checks.Ledger("guard contract", floor=45)  # 2026-09-14: +4, DAMAGE-INT
 check = LEDGER.ok
 
 
@@ -537,6 +537,24 @@ def section_overkill():
     check(authsrv._damage_fraction(30.0, 100.0, 16, "a scratch") ==
           0xBE99999A,
           "in-range damage is the plain fraction (f32(-0.3) = 0xBE99999A)")
+    # DAMAGE-INT (2026-09-14): retail's word is a WHOLE number of points,
+    # TRUNCATED -- the WARRIOR-PRE tape's 2 x 1.75 = 3.5 arrived as 3 (four of
+    # four, never 4) and 3 x 1.75 = 5.25 as 5. Literals, not authsrv._f32.
+    check(authsrv._damage_fraction(3.5, 100.0, 16, "Frenzy on a 2") ==
+          0xBCF5C28F,
+          "3.5 points go out as 3 (f32(-0.03) = 0xBCF5C28F), never 4",
+          "round-half-up and round-half-even both send 4; the tape says 3")
+    check(authsrv._damage_fraction(5.25, 100.0, 16, "Frenzy on a 3") ==
+          0xBD4CCCCD,
+          "5.25 points go out as 5 (f32(-0.05) = 0xBD4CCCCD)")
+    check(authsrv._damage_fraction(0.7, 100.0, 16, "a graze") ==
+          0x80000000,
+          "under a whole point truncates to ZERO (f32(-0.0)) -- retail's floor "
+          "is 0 (ten 0.0 words in the live corpus), not 1")
+    check(authsrv._whole_points(float("nan")) != authsrv._whole_points(float("nan"))
+          and authsrv._whole_points(-5.0) == -5.0,
+          "NaN and a negative pass through _whole_points untouched, so the "
+          "refusals below still see them")
 
     for bad_dealt, bad_max, why in ((-5.0, 100.0, "negative damage"),
                                     (float("nan"), 100.0, "NaN damage"),

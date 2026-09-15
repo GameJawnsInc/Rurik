@@ -334,9 +334,13 @@ try:
     state = fresh_state()
     open_ep(state, FRENZY)
     authsrv.land_swing(send, state, 10, enemy, 0)
-    check(abs((100.0 - state["player_health"]) - FRENZY_MULT * base) < 1e-9,
+    # DAMAGE-INT (2026-09-14): the wire and the books carry WHOLE points,
+    # truncated -- retail's 2 x 1.75 = 3.5 arrived as 3 on the WARRIOR-PRE
+    # tape -- so x1.45 on a 10 is 14, not 14.5.
+    check(abs((100.0 - state["player_health"]) - math.floor(FRENZY_MULT * base)) < 1e-9,
           f"under Frenzy the same swing takes exactly x{FRENZY_MULT} "
-          f"(Strength {STR}, the 38888 row)",
+          f"(Strength {STR}, the 38888 row), truncated to whole points "
+          f"({math.floor(FRENZY_MULT * base)} off a {base:.0f})",
           f"drop={100.0 - state['player_health']}")
 
     sent, send = collector()
@@ -1659,9 +1663,13 @@ try:
         _quiet = _swing()
         _casting = _swing([{"skill_id": 1, "begin_at": 0.0, "e5_at": math.inf,
                             "e5_sent": False}])
-        check(_quiet > 0 and abs(_casting / _quiet - 2.0) < 1e-9,
+        # DAMAGE-INT (2026-09-14): both numbers are truncated to whole points,
+        # and floor(2q) is 2*floor(q) or 2*floor(q) + 1 for every q >= 0 -- no
+        # free parameter, and a x2.0833 that is NOT a double (25 off a 12.5
+        # base shown as 12) is exactly what the quiet 12 / casting 25 reads.
+        check(_quiet > 0 and _casting in (2 * _quiet, 2 * _quiet + 1),
               "a swing landing while Healing Signet is being used deals EXACTLY "
-              "double the quiet swing (2 ** (40 / 40))",
+              "double the quiet swing (2 ** (40 / 40)), to the whole point",
               f"quiet {_quiet:.4f}, casting {_casting:.4f}, ratio "
               f"{_casting / _quiet if _quiet else 'n/a'}")
         check(abs(_swing([{"skill_id": 1, "begin_at": 0.0, "e5_at": 1.0,

@@ -1051,8 +1051,47 @@ from wirescalar import (  # noqa: F401,E402
 )
 
 
+def _whole_points(dealt):
+    """Damage as retail puts it on the wire: a WHOLE number of hit points, the
+    fraction TRUNCATED, never rounded. DAMAGE-INT, 2026-09-14.
+
+    OBSERVED on the WARRIOR-PRE tape (studies/slice/FINDINGS.md SLICE-F45.1,
+    live 20260914T180058): the owner's Strength-0 warrior under Frenzy (175 %)
+    took the foes' 2- and 3-point swings as 3 and 5 -- 3.5 and 5.25 truncated,
+    four of four never a 4, where round-half-up and round-half-even both send 4.
+    And the corpus agrees it is integers all the way down: over the 24 live
+    tapes, 1,632 of the 1,668 prop-16/17 damage words whose taker's maximum
+    is known (a 0x009F [42, taker, max] on the connection) are an exact whole
+    number of points over it, and the 36 that are not all sit on the one PvP
+    arena tape (20260817T231139) where the taker's maximum moves between 555
+    and 455 -- every one of them is a whole number over the OTHER maximum its
+    taker carried. The 475 words on takers with no maximum on the wire all
+    share one denominator per taker (555, 96, 100, 25, 140, 200, ...: a max
+    health each). Heals on prop 55 are the same shape, 93 of 95. Ten damage
+    words in the corpus are exactly 0.0 (seven from one attacker on
+    20260819T132414), so retail's floor is zero points, not one.
+
+    Ours sent the float: a 2-point swing under Frenzy at Strength 0 went out as
+    0.035 of max and the client drew -4 where retail's client draws -3. The
+    truncation is applied ONCE, to the final number -- every caller rounds its
+    books with the same value so the server's pool and the client's bar agree
+    to the point. Whether retail also rounds an intermediate (the armour-scaled
+    base before a stance multiplies it) is UNVERIFIED: the tape's 2 -> 3 and
+    3 -> 5 fit either. NaN and negatives pass through untouched so that
+    `_damage_fraction`'s refusals below still see them.
+    """
+    if dealt != dealt or dealt < 0.0:
+        return dealt
+    return float(math.floor(dealt))
+
+
 def _damage_fraction(dealt, pool_max, prop, what):
     """Damage in pool units, as the wire's fraction-of-max -- clamped to a kill.
+
+    WHOLE POINTS FIRST (DAMAGE-INT, 2026-09-14): `dealt` is truncated to an
+    integer through `_whole_points` before it becomes a fraction, because
+    that is what retail's word is (its docstring has the census). Callers
+    apply the same truncation to the number they take off the pool.
 
     OVERKILL IS A VALID GAME EVENT, and this is where the refuse-don't-clamp
     rule bends on purpose (studies/combat/PLAN.md, amendment C4): a decoded
@@ -1101,6 +1140,7 @@ def _damage_fraction(dealt, pool_max, prop, what):
         raise ValueError(
             f"refusing negative or NaN damage {dealt!r} ({what}): on the "
             f"damage property that is a heal, not an overkill")
+    dealt = _whole_points(dealt)
     frac = dealt / pool_max
     if frac > 1.0:
         frac = 1.0
@@ -13338,6 +13378,7 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
         if prep_bonus:
             dealt += prep_bonus
             label += f" +{prep_bonus:.0f} (preparation {prep_skill})"
+    dealt = _whole_points(dealt)        # DAMAGE-INT: the books and the wire agree
     prop = agents.GV_CRITICAL if critical else agents.PROP_DAMAGE
     frac = _damage_fraction(dealt, agent["max_health"], prop,
                             ("one critical" if critical else label)
@@ -15497,7 +15538,7 @@ def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, w
     """Damage that ignores armour, on the channel retail uses for it: 0x00A3
     [55, target, source, -fraction], the target's maximum declared FIRST
     (3 of 3 on the tape). Kills through the same doors a hit does."""
-    amount = float(amount)
+    amount = _whole_points(float(amount))   # DAMAGE-INT
     if amount <= 0.0:
         return 0.0
     if target_id == PLAYER_AGENT_ID:
@@ -18062,6 +18103,7 @@ def land_swing_on_body(send, state, agent_id, agent, tid, conn_id, bonus=0.0,
     dealt += float(bonus)
     if on_attack_triggers(send, state, agent_id, conn_id) and agent.get("dead"):
         return "landed"                                     # MANTID
+    dealt = _whole_points(dealt)        # DAMAGE-INT: the books and the wire agree
     what = (("a party swing" if party else "an enemy swing") if skill_id is None
             else f"skill {skill_id}")
     frac = _damage_fraction(dealt, row["max_health"], agents.PROP_DAMAGE, what)
@@ -20586,6 +20628,7 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
     if on_attack_triggers(send, state, agent_id, conn_id) and agent.get("dead"):
         return "landed"
     dealt, conversion = taker_damage(state, PLAYER_AGENT_ID, dealt)
+    dealt = _whole_points(dealt)        # DAMAGE-INT: the books and the wire agree
     frac = None
     if dealt > 0:
         frac = _damage_fraction(dealt, player_max_health(state),
@@ -20859,6 +20902,7 @@ def land_skill(send, state, agent_id, agent, conn_id):
                 spell_ar += casting_armour_penalty(state)
             base *= strike_multiplier(agent_strike_level(agent), spell_ar)
         dealt, conversion = taker_damage(state, _tid, base)
+        dealt = _whole_points(dealt)    # DAMAGE-INT: the books and the wire agree
         if dealt > 0:
             frac = _damage_fraction(
                 dealt, (state["agents"][_tid]["max_health"] if _tbody

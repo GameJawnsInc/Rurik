@@ -26,6 +26,7 @@ currently bite, and this file proves it rather than assuming it: no skill the
 server resolves lands on a .5 at any rank 0..15.
 """
 
+import math
 import os
 import struct
 import sys
@@ -463,10 +464,11 @@ def main():
 
     mult = authsrv.armour_multiplier(25.0)          # 2^((60-25)/40) = 1.834
     st, dmg = _cast(194)
-    want = 20.0 * mult
+    want = math.floor(20.0 * mult)   # DAMAGE-INT: 36.68 goes out as 36 (truncated)
     check(len(dmg) == 1 and abs(dmg[0] + want / 100.0) < 1e-5   # f32 on the wire
           and abs(st["player_health"] - (100.0 - want)) < 1e-6,
-          f"Flare's 20 lands as {want:.2f} against AR 25 -- the wiki's own "
+          f"Flare's 20 lands as {want} ({20.0 * mult:.2f} truncated to whole "
+          f"points, DAMAGE-INT) against AR 25 -- the wiki's own "
           f"multiplier, 2^((60-25)/40) = {mult:.4f}",
           f"sent {dmg}, health {st['player_health']}. Below the 60 baseline "
           f"the player takes MORE than the stated amount, which is what GWW "

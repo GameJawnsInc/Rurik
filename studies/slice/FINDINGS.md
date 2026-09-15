@@ -2844,7 +2844,7 @@ Frenzy at Strength 0 goes out as 0.035 of max and the client draws −4), so **D
 integer truncation at the send — is registered as the next desk item**, not shipped here: it
 touches every damage path and the tests that pin fractional numbers, and it wants the corpus
 asked first whether every retail damage word is an integer over its taker's max (this tape: 112
-of 112).
+of 112). **Asked and shipped the same night: SLICE-F46 / H18.**
 
 **Also on the tape, as F40 said:** `0x0035 [me, 1.75, 0.67]` rides the NEXT attack start after
 each press (358.89 with the `[4, me, foe]` start, 1.3 s after the 357.59 apply; 365.92), and
@@ -2905,3 +2905,96 @@ is not 200; the rank is Strength 0 by the owner's word, which makes 175 % OBSERV
 (2 → 3, 3 → 5) and the truncation OBSERVED n = 4. 45.2 OBSERVED, n = 5, CORROBORATES H14's WIKI row. 45.3
 OBSERVED, n = 1 hand-in. 45.4 OBSERVED, n = 2. The hero ladder's last open item (F39.3) is
 closed; what remains for Frenzy is our other bars' adrenaline rows against the new table.
+
+## SLICE-F46 — **DAMAGE-INT: retail's damage word is a WHOLE number of hit points, truncated — 1,632 of the 1,668 words across the live corpus whose taker's maximum is on the wire are exact, the 36 that are not all sit where the taker's maximum moved, and ten words are exactly 0.0; ours sent the float and now truncates once at the send with the books rounded the same (shipped as SLICE-H18, 2026-09-14)**
+
+### 46.1 The question, stated before the scan
+
+F45.1 closed with a registration: retail's 2 × 1.75 arrived as 3 (four of four, never 4) and
+3 × 1.75 as 5, so the multiplied damage is truncated to whole points — but that was one
+character on one tape at one maximum (100). Before touching every damage path the corpus was
+asked. **Prediction:** every `0x00A3` property-16 and -17 word whose taker's maximum is known
+(a `0x009F [42, taker, max]` earlier on the same connection) is a whole number of points over
+that maximum, 100 %; a taker with no maximum on the wire has all its words sharing ONE
+denominator ≤ 3000, and that denominator is a plausible max health. **Refutation:** a known-
+maximum word like 0.035 over 100 — 3.5 points — anywhere in the corpus. The float32 on the
+wire carries a fraction of 100..1000 to better than a thousandth of a point, so "integer" is
+|points − round(points)| < 0.01, and the check has no free parameter.
+
+### 46.2 The census (scratchpad `dmgint_corpus.py`, the 24 live tapes)
+
+| | words |
+|---|---|
+| damage words, property 16 / 17 | 2,143 (1,835 / 308) |
+| taker's maximum on the wire | 1,668 |
+| … exact whole points over it | **1,632** |
+| … not | 36 — every one on `20260817T231139` |
+| taker's maximum NOT on the wire | 475 — every taker fits one denominator |
+| words exactly 0.0 | 10 |
+| heal words, property 55 (known max / exact) | 825 (95 / 93) |
+
+One tape, `20260817T175358`, is skipped: the reader wants a file the directory does not have.
+
+**The 36.** All on the PvP-arena tape, takers 4, 7, 8 and 10, and every one of them is a whole
+number of points over the OTHER maximum its taker carried on that connection: taker 7's
+maximum is declared 555, 555, 555, 455, 555, 455 over the fight and its 0.1582418 is 88 over
+555 or **72 over 455**; taker 8's 0.0288288 under a declared 455 is **16 over 555**; taker 10's
+three words at 455.98–457.93 s are 81, 26 and 98 **over the 483** that `0x009F [42, 10, 483]`
+declares at 458.15 s; taker 8 on the third connection has 31 over the 384 declared 0.9 s
+later. So the maximum reaches the wire AFTER the words computed against it at least twice,
+and moves between 555 and 455 without a `0x009F 42` at all for taker 7 (the −100 is an
+enchantment's worth, not Deep Wound's −20 %, which would read 444). Which channel moves it in
+between is UNVERIFIED; that the words are whole points over it is not in doubt.
+
+**The 475 with no maximum on the wire** each fit one denominator, and the denominators are
+max healths: 555 (363 words — the PvP tape's other bodies), 96 (36), 100 (31), 25 (12), 140
+(7), 200 (7), 5, 70, 72, 6, 14, 90 (the pre-Searing bestiary's pools).
+
+**The ten zeros.** Seven are on `20260819T132414`, every one from attacker 58 and every one
+preceded by `0x009F [1, 58, 0]` on the same tick; the takers (217, 144, 137, 194) took whole-
+point hits from other agents seconds either side. Retail's floor is **zero** points, and a
+zero-point hit still gets its damage word. What attacker 58 was (a level-0 body? a pet?) is
+UNREAD.
+
+**Heals** are the same shape: 93 of 95 known-maximum property-55 words are whole points, and
+the two outliers are taker 7 on the PvP tape at 687.55 s — 43 and 67 points over the 455 it
+carried at that moment while the scan held 555.
+
+### 46.3 Truncation, not rounding, and once
+
+F45.1's four 3s and one 5 are the direction: round-half-up sends 4 for 3.5 and round-half-even
+sends 4; only truncation sends 3. Whether retail ALSO rounds an intermediate — the armour-
+scaled base before a stance multiplies it — is UNVERIFIED: outside the stance the foes hit for
+2 and 3, inside for 3 and 5, and trunc(2 × 1.75) = 3 = trunc(2.28 × 1.75) both fit. The server
+truncates ONCE, at the final number, which is the smallest change the tape derives.
+
+### 46.4 What shipped (SLICE-H18)
+
+`toolkit/authsrv/authsrv.py`: `_whole_points(dealt)` (floor for dealt ≥ 0; NaN and negatives
+pass through so `_damage_fraction`'s refusals still see them), applied inside
+`_damage_fraction` — the one function every property-16/17 send crosses — AND by each of its
+six callers to the number they take off the pool, so the server's books and the client's bar
+agree to the point: `hit_enemy`, both branches of `armour_ignoring_damage`, the body swing that
+feeds `hurt_agent_row`, the enemy swing on the player, and skill damage. Heals are NOT touched
+(integers on retail, 93 of 95, but a different path and a different commit — HEAL-INT is the
+registered follow-on). The `if dealt > 0` guards stand, so a hit that truncates to nothing
+sends NO word where retail sends a 0.0 in the one shape the corpus has (n = 10, one attacker);
+that shape is read before it is copied.
+
+Tests: `test_guards` §9 pins 3.5 → f32(−0.03) = `0xBCF5C28F`, 5.25 → `0xBD4CCCCD`, 0.7 →
+`0x80000000` (−0.0) and the NaN/negative pass-through as literals (+4, floor 41 → 45);
+`test_mechanics` §3's Frenzy swing is 14 off a 10 at ×1.45 (not 14.5) and §30's "exactly
+double" reads `floor(2q) ∈ {2⌊q⌋, 2⌊q⌋ + 1}` — no free parameter, and the quiet 12 / casting
+25 it sees is a 12.5 shown as 12; `test_skilldamage`'s Flare lands 36 (36.68 truncated);
+`test_agentlife`'s party swing takes 11 off the foe (11.7 truncated). 211 / 530 / 58 / 45
+green; `test_srclint` 26, `test_citelint` 50, `test_provlint` 19.
+
+### 46.5 Labels
+
+46.2 OBSERVED on retail's wire (n = 2,143 damage words, 825 heals, 24 tapes; the
+scratchpad script is the extractor and this section is its record). 46.3's direction
+OBSERVED n = 5 (F45.1); the intermediate rounding UNVERIFIED; the zero word's shape UNREAD
+(n = 10, one attacker); the channel that moves a PvP maximum between declarations
+UNVERIFIED. The 36 non-integers are NOT a refutation — each is a whole number over a maximum
+its taker demonstrably carried — but they are the scan's limit, stated: "last declared
+maximum" is wrong by one declaration at least twice on that tape.

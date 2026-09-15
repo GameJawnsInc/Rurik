@@ -3342,7 +3342,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   cannot mean the detector is blind. Floor 16; sections 1-4 print a `skip`
   without the vault. No socket, no client. ~4 s),
   `toolkit/authsrv/test_movement_fidelity.py`,
-  `toolkit/authsrv/test_agentlife.py` (**SKILLS-HN (2026-09-09): `dmg_floats`
+  `toolkit/authsrv/test_agentlife.py` (**2026-09-14 (late night), DAMAGE-INT: the party body's swing takes 11 off the foe at AR 35 — 11.7 truncated; floor 530 unchanged.** **SKILLS-HN (2026-09-09): `dmg_floats`
   reads DAMAGE properties only** — it read every `0x00A3` float, which was fine
   while an overheal sent nothing; the enemy's Restore Condition on its own full
   pool now sends one positive 55 (retail does), and the cast section pins that
@@ -6520,7 +6520,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   duration is greater than the remaining amount of time."* So a shorter
   re-application is a no-op in the table AND on the wire, and a longer one
   extends as REMOVE-then-APPLY; floor 74),
-  `toolkit/authsrv/test_mechanics.py` (**2026-09-14 (night), SLICE-H17: §3's Frenzy checks derive the multiplier from the fixture's own Strength rank (175…125 % on the 38888 row, `damage_taken_percent`), sweep ranks 0/3/9/15 → 175/165/145/125, and assert it is NOT the 2023 double; floor 209 → 211.** **the episodes finally DO something** — the
+  `toolkit/authsrv/test_mechanics.py` (**2026-09-14 (late night), DAMAGE-INT: §3's Frenzy swing is `floor(x1.45 × 10)` = 14 off the pool, and §30's Healing-Signet double reads `floor(2q) ∈ {2⌊q⌋, 2⌊q⌋ + 1}` — the identity, no free parameter; floor 211 unchanged.** **2026-09-14 (night), SLICE-H17: §3's Frenzy checks derive the multiplier from the fixture's own Strength rank (175…125 % on the 38888 row, `damage_taken_percent`), sweep ranks 0/3/9/15 → 175/165/145/125, and assert it is NOT the 2023 double; floor 209 → 211.** **the episodes finally DO something** — the
   2026-08-22 layer over the substrate: Frenzy's attack speed and doubled damage,
   Reversal of Fortune's conversion, the glyph's discount live, the preparation
   bonus, the gated movement base. Its pins are numbers GWW itself publishes, so
@@ -11147,7 +11147,7 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   comment that had called value 8 a single sighting from one capture's count.
   Proven red by setting the reward to the Wolf's contaminated 126. Floor 6, the
   vault-less §1),
-  `toolkit/authsrv/test_skilldamage.py` (**SKILLS-FA (2026-09-09) added §11–§12,
+  `toolkit/authsrv/test_skilldamage.py` (**2026-09-14 (late night), DAMAGE-INT: Flare's 20 at AR 25 lands 36 — 36.68 truncated to whole points — on the wire and in the books; floor 58 unchanged.** **SKILLS-FA (2026-09-09) added §11–§12,
   floor 44 → 57**: an incoming `Fire damage` cast scales by the player's ONE
   elemental rating (25, not the physical 45 — the `+20 vs. physical` never reaches
   a spell), Flare's 20 at rank 0 lands as 36.68 = 20 × 2^((60−25)/40), Holy
@@ -11232,7 +11232,7 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   and the controls are the two that a label-blind reading gets wrong:
   `Health degeneration` is a real variable in a live bonus slot and is not a
   condition, and an attack with no bonus slot inflicts nothing. Floor 25 → 40),
-  `toolkit/authsrv/test_guards.py` (the guard contract for combat's computed
+  `toolkit/authsrv/test_guards.py` (**2026-09-14 (late night), DAMAGE-INT / SLICE-H18: §9 pins the truncation to whole points as f32 literals — 3.5 → `0xBCF5C28F` (−0.03), 5.25 → `0xBD4CCCCD` (−0.05), 0.7 → `0x80000000` (−0.0, retail's floor is zero) — and `_whole_points`' NaN/negative pass-through; +4, floor 41 → 45.** the guard contract for combat's computed
   values: a `_fraction` refusal must land BEFORE any send or state change, not
   after — the client dies on `fraction <= 1.0f` at CharPool.cpp:84 with no
   server-side symptom, and on the connection thread an escaping ValueError
