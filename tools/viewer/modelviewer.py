@@ -58,6 +58,7 @@ for p in (os.path.join(ROOT, "toolkit"), os.path.join(ROOT, "toolkit", "mapdata"
         sys.path.insert(0, p)
 
 import modelcatalog as mc  # noqa: E402
+import wireshells as ws  # noqa: E402
 from archive import Archive, DEFAULT_DAT, file_id_table  # noqa: E402
 import vaultpath  # noqa: E402
 
@@ -538,7 +539,7 @@ class CatalogModel(QAbstractListModel):
         super().__init__(parent)
         self.records = records
         self.thumbs = thumbs
-        self.shells = shells or {}       # shell fid -> content templates naming it
+        self.shells = shells or {}       # shell fid -> the SHELL tag to show
         self.icons = {}
 
     def rowCount(self, parent=QModelIndex()):
@@ -556,11 +557,9 @@ class CatalogModel(QAbstractListModel):
                 what = "skeleton"
                 if rec.seq_count is not None:
                     what += f", {rec.seq_count} seq, {rec.node_count} nodes"
-                named = self.shells.get(rec.fid) if self.shells else None
-                if named:
-                    what += "  · SHELL of " + ", ".join(t["name"] for t in named[:2])
-                    if len(named) > 2:
-                        what += f" (+{len(named) - 2})"
+                tag = self.shells.get(rec.fid) if self.shells else None
+                if tag:
+                    what += "  · " + tag
             else:
                 what = rec.problem or "?"
             return f"{fid:>7}  0x{fid:05X}   {what}   {rec.size // 1024} KB"
@@ -657,7 +656,9 @@ class Viewer(QMainWindow):
         row.addWidget(self.kind)
         lay.addLayout(row)
         self.shell_rows = mc.shell_templates()
-        self.list_model = CatalogModel(self.catalog.models(), self.thumbs, self.shell_rows)
+        self.wire = self._open_wire()
+        self.shell_labels = self._shell_labels()
+        self.list_model = CatalogModel(self.catalog.models(), self.thumbs, self.shell_labels)
         self.list = QListView()
         self.list.setModel(self.list_model)
         self.list.setIconSize(QSize(64, 64))
@@ -692,6 +693,44 @@ class Viewer(QMainWindow):
         dock.setMinimumWidth(420)
         self.addDockWidget(Qt.LeftDockWidgetArea, dock)
         self.refilter()
+
+    def _open_wire(self):
+        """The wire-derived shell index, or None with the reason printed."""
+        try:
+            idx, path, fresh = ws.open_index()
+        except SystemExit as exc:                     # no live tapes in this vault
+            print(f"wire shell index unavailable: {exc}")
+            return None
+        s = idx.summary()
+        print(f"wire index: {'built' if fresh else 'loaded'} -- {s['shells']} shells, "
+              f"{s['pairs']} pairs, {s['captures']} tapes ({path})")
+        return idx
+
+    def _names_for(self, shell, body=None):
+        """Content-row names for a shell (or a shell+body pair): what a client
+        run has already put on a nameplate; [] when no row names it."""
+        out = []
+        for t in self.shell_rows.get(shell, []):
+            if body is None or t.get("model_id") == body:
+                out.append(t["name"])
+        return out
+
+    def _shell_labels(self):
+        """shell fid -> the list's `SHELL ...` tag, from the wire first."""
+        labels = {}
+        if self.wire is not None:
+            for fid, rec in self.wire.shells.items():
+                if rec.needs_body is False:
+                    continue                          # it draws itself; no tag needed
+                names = self._names_for(fid)
+                tag = f"SHELL · {len(rec.bodies)} bodies · {len(rec.captures)} tapes"
+                if names:
+                    tag += " · " + ", ".join(sorted(set(names))[:2])
+                labels[fid] = tag
+        for fid, rows in self.shell_rows.items():
+            if fid not in labels and any(t.get("model_id") is not None for t in rows):
+                labels[fid] = "SHELL of " + ", ".join(t["name"] for t in rows[:2])
+        return labels
 
     def _build_right(self):
         dock = QDockWidget("Model", self)
@@ -776,7 +815,7 @@ class Viewer(QMainWindow):
         elif which == 1:
             recs = cat.skeletons()
         elif which == 2:
-            recs = [r for r in cat.skeletons() if any(f in self.shell_rows for f in r.fids)]
+            recs = [r for r in cat.skeletons() if any(f in self.shell_labels for f in r.fids)]
         elif which == 3:
             recs = [r for r in cat.models() if r.collision_count]
         else:
@@ -922,15 +961,29 @@ class Viewer(QMainWindow):
         while self.body_box.count() > 1:
             self.body_box.removeItem(1)
         if not view.submeshes and view.skeleton is not None and skeleton_fid is None:
-            bodies = {}
-            for t in self.shell_rows.get(fid, []):
-                if t["model_id"] is not None:
-                    bodies.setdefault(t["model_id"], []).append(t["name"])
-            for body, names in sorted(bodies.items()):
-                self.body_box.addItem(f"body {body}  ({', '.join(names[:3])})", body)
-            if not bodies:
-                self.body_box.addItem("(no content row names this skeleton as a shell "
-                                      "-- unknown: an unspawned shell or an anim file)")
+            rec = self.wire.shells.get(fid) if self.wire is not None else None
+            if rec is not None:
+                # most-seen first; the count is how often the wire dressed
+                # this shell with that body, across how many tapes
+                for body, ss in sorted(rec.bodies.items(), key=lambda kv: -len(kv[1])):
+                    names = self._names_for(fid, body)
+                    caps = len({x["capture"] for x in ss})
+                    label = f"body {body}  · {len(ss)} sightings / {caps} tapes"
+                    if names:
+                        label += "  = " + ", ".join(sorted(set(names))[:2])
+                    self.body_box.addItem(label, body)
+                text += "\n\n" + rec.describe(lambda b: ", ".join(self._names_for(fid, b)))
+            else:
+                bodies = {}
+                for t in self.shell_rows.get(fid, []):
+                    if t["model_id"] is not None:
+                        bodies.setdefault(t["model_id"], []).append(t["name"])
+                for body, names in sorted(bodies.items()):
+                    self.body_box.addItem(f"body {body}  ({', '.join(names[:3])})", body)
+                if not bodies:
+                    self.body_box.addItem("(no tape ever dressed this skeleton -- unknown: "
+                                          "an unspawned shell or an anim file)")
+            self.info.setPlainText(text)
         self.body_box.setCurrentIndex(0)
         self.body_box.blockSignals(False)
         self.slot_box.blockSignals(True)
@@ -1199,15 +1252,22 @@ def smoke(win, app, out_dir):
     win.kind.setCurrentIndex(2)
     app.processEvents()
     named = win.list_model.rowCount()
-    step(0 < named <= len(win.shell_rows),
-         f"the wire-named filter lists {named} shells content rows name (of "
-         f"{len(win.shell_rows)} shell ids in content)")
+    dressed = sum(1 for r in win.wire.shells.values() if r.needs_body) if win.wire else 0
+    step(win.wire is not None and named == dressed >= 80,
+         f"the wire-named filter lists {named} skeleton heads the tapes dressed "
+         f"(index: {dressed} dressed shells)")
     win.search.setText(str(116228))
     app.processEvents()
     win.list.setCurrentIndex(win.list_model.index(0))
     app.processEvents()
-    step(win.current is not None and win.current.fid == 116228 and win.body_box.count() >= 3,
-         f"the hatcher shell offers {win.body_box.count() - 1} wire-paired bodies")
+    want = len(win.wire.shells[116228].bodies) if win.wire else 0
+    step(win.current is not None and win.current.fid == 116228
+         and win.body_box.count() - 1 == want >= 30,
+         f"the hatcher shell offers {win.body_box.count() - 1} wire-paired bodies "
+         f"(index says {want}), most-seen first")
+    step("Hatcher" in win.body_box.itemText(1) or any(
+        "Hatcher" in win.body_box.itemText(i) for i in range(1, win.body_box.count())),
+         "a content-named body carries its nameplate text in the picker")
     win.body_box.setCurrentIndex(1)
     app.processEvents()
     step(win.current is not None and win.current.submeshes
