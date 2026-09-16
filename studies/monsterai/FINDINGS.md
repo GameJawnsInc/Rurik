@@ -1547,6 +1547,71 @@ hypothesis with numbers, not a rule.
    definition would separate the creature from the mode.
 4. **The opening shape** — N4 is measured; whether to ship it is a router question, and
    the caster's shape (leg to range, halt, swing, no follow) joins it.
+## 12. RUN-AGGRO-JARIN — REGISTERED 2026-09-16, not yet run
+
+**Identifiers.** `MONSTERAI-J<n>` — this run's predictions and, once scored, its
+facts. Registered before launch so the predictions cannot be rationalised afterwards;
+the plan is `vault/plans/aggro_jarin.txt` (14 steps, sha256
+`3eca76cec33edf34c3b01ad7d925175beb94ba451c32f6c46dda393d1dac4d97` from
+`marks.py --check-plan`), sealed by `livesession.py --plan` at launch. Owner-driven, the
+secondary account's level-3 Ranger, Kamadan (449) into the Plains of Jarin (430), **no
+hero in the party** — a hero body is a second target a hostile can notice first (retail
+picks the softest, SLICE-F29), so every row it opens would be thrown out.
+
+**Why this zone.** §11's closing list names, in cost order, per-creature radius (Q7 at 5
+observed points over 3 definitions; bar 10 over ≥ 3), the passive rule (N10 left only
+the level, and named 4438/4439 — level-1 `mon1`, seen only hit-first — as the direct
+test), and the leash's creature-vs-mode split (N9's stander and patroller were different
+definitions). The Jarin tape `20260914T005758` already shows all four of the zone's
+definitions on `noticeradius.py`: **4438 and 4439 at level 1, 4431 at level 2, 4440 at
+level 6** (its one unprovoked row is the corpus's 868 u observed point). One zone, all
+three questions.
+
+**Positive control, run before registering.** `noticeradius.py --since 20260914T00`
+scores the existing Jarin tape: 17 engagements, 4 definitions, the 868 u row observed with
+the player standing — the instrument reads this map and these creatures. A null on the new
+tape is therefore about the run, not the reader.
+
+### 12.1 Predictions, stated before the launch
+
+| id | step(s) | prediction | refuted if |
+|---|---|---|---|
+| **MONSTERAI-J1** | `approach` on the level-6 kind, then the level-2 kind | each reacts while the player STANDS at a distance in **868–1048 u**, within 0.2 s of the stop; every stand held ≥ 3 s before that is an upper bound above the notice | a reaction outside the bracket with both positions observed; or no reaction down to contact (then `AGGRO_RANGE` dies as a concept, §9 Q7) |
+| **MONSTERAI-J1a** | any stand between 992 and 1048 u | narrows the global-number interval from one side | — (either outcome is a finding; the run may simply not produce such a stand) |
+| **MONSTERAI-J2** | `passive` on a never-hit level-1 creature, 10 s inside ~500 u | **no reaction during the stand**; the reaction comes ~1.2 s after the player's own swing, as N8 | it charges during the stand — the level rule is refuted for this definition; ALSO refuted if any level-2+ creature in J1 ignores a ≥ 10 s stand at ≤ 900 u |
+| **MONSTERAI-J3** | `leash` after each `approach` | a creature that was STANDING at the notice goes HOME after a chase < 3,000 u; one that was PATROLLING chases ~5,000 u and resumes the leg it abandoned | — (the shape is N9's; this row re-measures it on new definitions) |
+| **MONSTERAI-J3a** | the standing/patrolling pair of the SAME definition, if the zone offers one | the two go different ways — the split is the **mode** | both go the same way — the split is the **creature**, and N9's reading was a confound of definition with mode |
+
+### 12.2 The floor — what makes this run a null rather than a finding
+
+Pre-registered, so a thin tape is reported as thin and not scored anyway:
+
+* **J1 needs ≥ 2 notice rows with the player STANDING** (a `0x0047` stop ≤ 0.5 s old at the
+  notice instant) on ≥ 2 definitions. Fewer, and Q7's count moves by whatever it moves by;
+  no per-creature claim is made.
+* **J2 needs ≥ 1 ten-second stand inside 900 u of a level-1 creature with ZERO provocation
+  before it** — no click on it, no swing. A stand with a prior click is a CLICK row, and
+  N7's assumption that a click alone does not aggro is untested.
+* **J3 needs ≥ 2 retreats whose chase end and afterwards are on the tape** (the player
+  stood 15 s after the dot stopped). J3a needs its pair; if the zone offers no pair the row
+  is `not exposed`, not `refuted`.
+* **The control (`idle`) must show zero `0x002A` naming the player** over its ~45 s. If it
+  does not, no unprovoked row on this tape is unprovoked, and the run scores nothing on J1
+  or J2.
+
+Scoring is `noticeradius.py --since <stamp>` with the marks joined by ordinal; every
+number quoted afterwards comes from that tool's output on that tape, per §11 N1.
+
+### 12.3 How it is launched
+
+Exactly as the two `aggro_presearing.txt` runs and JARIN before it (RUNBOOK §"Capturing a
+live session"): the stock-DH, key-tapped live build `vault/run-live/2026-09-01_44fbd68767a8`
+(`dhbuild.py` 2026-09-16: `stock`, `updater=LIVE`, every build where it belongs), account
+`capture`, `--confirm --plan`, the marks shell started before login, F9/F10/F11 as the plan's
+header says. Human cadence, one client, no PvP, no trading.
+
+**Status: REGISTERED. Nothing below this line until the tape is scored.**
+
 
 ---
 
