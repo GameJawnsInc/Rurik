@@ -1050,3 +1050,67 @@ Two routes to a client exercise, in cost order:
 Neither was done tonight; the owner's minutes were spent. The fix's
 correctness rests on the unit replay of run A's exact order, which is the
 same order the corpus's 319 writes follow.
+
+## 17. The `0x8009` sender, found statically — and why the write is edit-independent (desk, `codescan`, no run)
+
+§16 left the settings write's trigger NOT FOUND: it lands at ~7 of 10 game-connection
+closes regardless of whether the connection carried an edit. Read out of the pinned
+38797 client (`vault/client/2026-07-29_221c13772c7a/Gw.exe`) with
+`toolkit/clientscan/codescan.py` — the disassembler carve-out (1), MEASUREMENT only:
+addresses, counts and control flow, no bytes copied.
+
+### 17.1 The serializer, and why the wire says `0x8009` — OBSERVED
+
+The auth outbound serializer is **`0x007DCB10`**. At `0x007DCBCF` it does
+`and eax, 0x8000` then `or ax, word ptr [esi]` — it ORs the **`AUTH_CMSG_MASK`
+(`0x8000`)** into the 16-bit opcode word. So the wire's `0x8009` is mask `0x8000`
+| opcode `9`, and `authsrv.py`'s own `AUTH_CMSG_MASK = 0x8000` is confirmed on the
+client side rather than assumed. `UPDATE_CHARACTER_SETTINGS` is auth opcode **9**
+(`authsrv.py:9566`; msgtable ch3 AUTH_CMSG, `studies/msgtable/FINDINGS.md`).
+
+### 17.2 TWO call sites stage opcode 9 into it — OBSERVED
+
+A three-level caller walk up from `0x007DCB10`, flagging any function whose body
+writes the immediate `9`, finds both inside the `GcAuthCmd` send family
+(`0x0049xxxx`, the block `protoscan.py` names `GcAuthCmdSend*`):
+
+| sender | payload | conn global | shape |
+|---|---|---|---|
+| **`0x00491E50`** | 3 dwords | `0xc034d4` | computes a **millisecond interval** first (`0x3E8`/rate, else `0x28`) — a **rate-driven / periodic** send |
+| **`0x00493010`** | 4 dwords | `0xc03524` | a leaf serializer; its only caller `0x00490930` is a **vtable thunk** reading object members `+0x20 / +0x28 / +0x2c / +0x54` and sending them — the **explicit field-serialize** path |
+
+Both are reached indirectly (a command/dispatch table; neither VA is stored as a
+plain word), which is why `§16` could not see them from the wire.
+
+### 17.3 Neither carries the 62-byte blob — OBSERVED, and it re-reads our own decode
+
+Both senders push ≤ 5 dwords. The 62-byte settings blob our server logs against
+`0x8009` is **not** this message's payload — it rides the separate
+`SETTING_UPDATE_CONTENT` (`0x8020`) upload that precedes it in every auth log
+(`0x8021` size, `0x8020` content, then `0x8009`). **`0x8009` is a small COMMIT**,
+not the blob carrier. Our `update_settings` handler is fed the buffered blob and
+happens to log its length beside the commit; the two are separate messages.
+
+### 17.4 Why the write is edit-independent — RECONSTRUCTION
+
+§16's census: the write is present at ~70% of closes and its presence does **not**
+depend on whether the connection carried a bar or attribute edit. Two senders of
+one opcode, **one of them rate-driven** (`0x00491E50`'s interval math), is exactly
+the shape that produces that: the commit fires on a **timer / lifecycle**, not only
+on an explicit settings change, so an edit is neither necessary nor sufficient. The
+edit-independence §16 measured and the two-site structure agree. Labelled
+RECONSTRUCTION because the timer's **condition** — what makes it ~70% rather than
+always — is not yet read.
+
+### 17.5 What this settles for §10's fix, and what is left
+
+**Settled:** the client sends `0x8009` from a periodic/lifecycle site independent of
+edits, so §10's stale-write hazard is **real on an ordinary session**, not an edge
+case that needs an edit to provoke — any connection close can carry the commit that
+made the auth roster save over the game process's state. The fix (reload-before-save
++ stale-write refusal) guards the case that actually occurs.
+
+**Left (desk, no run):** follow the vtable/dispatch to each sender's gate and read
+`0x00491E50`'s interval condition, to turn "~70%" into a rule and name which site
+fires at a close. That is the remaining step toward a one-shot client exercise of
+the guard; until then the guard rests on `test_charstore`'s replay of run A's order.
