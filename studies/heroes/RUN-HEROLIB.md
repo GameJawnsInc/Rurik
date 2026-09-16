@@ -1279,3 +1279,62 @@ changing a summary field on purpose.
 something in the summary during the session — the fields are appearance/status, so a
 visible change of that kind before zoning should make the compare fail and force the
 send. Not attempted here; it is the next run's design, not a claim.
+
+## 20. RUN-HEROLIB-G — force the dirty check to fail, and exercise §10's guard on a client
+
+**Registered before launch, 2026-09-16.** §19 found the gate: the summary is sent
+only when it differs from the baseline. Runs E and F produced no write because
+nothing had moved. This run moves it **from the server side**, which needs no equip
+path and no operator dexterity.
+
+### 20.1 The lever, and the reasoning behind it
+
+§19.2's compare is against the copy the client holds as "what the server has".
+Our server serves that baseline at login as the store's `settings_blob`
+(`CHARACTER_INFO`). That predicts the whole history of this arc:
+
+| run | stored blob vs. what the client computes | write? |
+|---|---|---|
+| A | stale (the store had not yet taken the client's own) | **yes** |
+| E, F | already equal — run A's write had stored it | no |
+
+So **altering one byte of the stored blob should restore run A's condition.**
+This is a prediction the earlier runs can refute: if the blob is not the baseline,
+the run comes back null and §19's model is wrong about *what* it compares against
+(the gate itself would still stand).
+
+### 20.2 The fixture
+
+`vault/state/characters/loopback_rurik.invalid.json`, backed up to
+`…json.pre-summary-test.bak`. One byte of `settings_blob` changed, **byte 59 of 62,
+`0x0b` → `0x0c`** — a value inside a trailing 5-byte group, never a length and
+never an id, because an invalid id is exactly what the client's own
+`Character summary item invalid` (`UiGame.cpp:618`) refuses. Length unchanged at
+62 bytes. Hero 3 untouched: ranks `[[13, 2], [16, 1]]`, budget 10.
+
+### 20.3 The gesture
+
+| step | the operator does |
+|---|---|
+| **G1** | one `+` on Tahlkora's Healing Prayers (13: 2 → 3, leaving 3 of 10) |
+| **G2** | walks through the corridor portal, as in run F |
+
+### 20.4 Predictions
+
+* **P1 — the lever works:** a `character_settings` event appears in the auth
+  capture (**this is the floor; without it the run is VOID for P2/P3 and refutes
+  §20.1's baseline model**).
+* **P2 — the guard holds:** game c2 serves hero 3 at rank **3**, **3 of 10** —
+  the edit survives a session that *did* carry the write.
+* **P3 — the instrument shows the join:** `authsrv.log` carries the settings
+  write's `[charstore] SAVE` with **no `STALE WRITE REFUSED`**, and its "mtime
+  before" equals the game save's "mtime after".
+* **Refuted if** c2 serves rank 2 / 6 of 10 with a settings write present (the
+  guard failed), or if a `STALE WRITE REFUSED` line appears (the reload did not
+  run first).
+
+### 20.5 Floor
+
+**L1** ≥ 1 `0x000F` for agent 200 persisted in c1. **L2** a `character_settings`
+event after L1. **L3** a game c2 serving hero 3's attributes. Scored from the wire
+and the logs after teardown. **Restore the backup afterwards either way.**
