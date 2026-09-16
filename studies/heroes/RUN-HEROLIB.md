@@ -1338,3 +1338,70 @@ never an id, because an invalid id is exactly what the client's own
 **L1** ≥ 1 `0x000F` for agent 200 persisted in c1. **L2** a `character_settings`
 event after L1. **L3** a game c2 serving hero 3's attributes. Scored from the wire
 and the logs after teardown. **Restore the backup afterwards either way.**
+
+## 21. Result — RUN-HEROLIB-G: **the lever WORKS, and §10's guard is EXERCISED ON A CLIENT for the first time — the edit survives the very sequence that lost run A's twelve**
+
+Harness dir `vault/captures/harness/20260916T002049`. Scored after teardown.
+`RUN VERDICT: FAIL` is the in-hold close again (§5.2's known retraction).
+
+### 21.1 The floor, all three met
+
+| | requirement | result |
+|---|---|---|
+| **L1** | a hero attribute change persisted in c1 | `gamesrv.log:203` `0x800f`; `:206` `hero 3 attributes saved -- 13=3, 16=1, 3 of 10 unspent` |
+| **L2** | a `character_settings` event **after** L1 | `authsrv.log:79` `character settings: req 8, 62B recorded and ACKED, PERSISTED` — **the first one since run A** |
+| **L3** | a game c2 serving hero 3's attributes | `gamesrv.log:311` `AGENT_ATTRIBUTE_POINTS(hero agent 200: 3 of 10)` |
+
+### 21.2 P1 CONFIRMED — one byte flipped the client from silent to sending
+
+Runs E and F, same rig and same gestures, produced **no** settings write. This run
+changed **one byte of the served `settings_blob`** and the write fired. That is a
+controlled pair: the only difference between F and G is that byte.
+
+### 21.3 P2 and P3 CONFIRMED — and the mtime join is exact
+
+```
+gamesrv.log:205  [charstore] SAVE ... in persist_hero_attributes
+                 -- mtime 04:21:13.676955Z -> 04:21:38.312819Z
+authsrv.log:78   [charstore] SAVE ... in handle
+                 -- mtime 04:21:38.312819Z -> 04:21:41.629055Z
+```
+
+The auth write's **"mtime before" equals the game write's "mtime after", to the
+nanosecond**. That is `update_settings()`'s reload adopting the game process's
+write before saving over it — the fix of §10 doing its job, visible in the
+instrument §6.5 asked for. **No `STALE WRITE REFUSED` line anywhere in the run.**
+
+And c2 served **3 of 10** with rank 13 = 3. The pre-fix behaviour is exactly known
+here: it served the seed, 6 of 10, which is what run A got. **This is the first
+time the guard has been exercised by a real client**, on the same sequence — game
+edit, settings write, reconnect — that lost run A's twelve edits.
+
+### 21.4 A refinement the run forced, and it corrects §20.1
+
+The blob the client sent back differs from the **original** stored blob in more
+than the byte that was flipped:
+
+| bytes 32–36 | byte 59 |
+|---|---|
+| stored (runs E, F, G baseline): `05 ed 00 00 dc` | `0b` (G served `0c`) |
+| what the client sent: `05 00 00 00 00` | `0b` |
+
+So the original blob **already disagreed with the client in four bytes** during
+runs E and F — and neither sent. Therefore **the served blob is not compared
+wholesale**, and §20.1's "the stored blob is the baseline" is too strong. What is
+supported: **a byte inside an item group is compared** (flipping one forced the
+send), while bytes 33–36 are not — they are plausibly volatile (a transaction or
+session value) that the client overwrites without comparing. Which is which is
+**NOT FOUND**; §19.2's gate itself is untouched, since it compares *fields*, and
+this says only which fields reach it.
+
+### 21.5 Housekeeping
+
+The store was restored from `…json.pre-summary-test.bak` and the backup removed,
+as §20.5 registered. That **also reverts this run's hero edit** (back to
+`[[13, 2], [16, 1]]`, 6 of 10) and restores the original blob — so the next
+session starts from the same fixture E and F used. The evidence for this run lives
+in the logs and captures, not in the store. Note for the next run: the restored
+blob is the one that did **not** trigger a write, so provoking one again needs the
+byte flip again.
