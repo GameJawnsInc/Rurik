@@ -3454,12 +3454,17 @@ operator used the hero for AI mode, lock-target and flags only — and that is
 
 ### 40.6 What this does NOT settle
 
-* **No client session has run against any of it.** Everything here is the
-  corpus, the client's own tables and the suite.
-* **Zero corpus exposure on the c2s hero paths.** All 32 attribute messages and
-  both bar edits name the player. That a retail client *sends* `0x005C` or
-  `0x000F` for a hero is inference from the messages being agent-keyed, not an
-  observation, and it is the single cheapest thing a run would settle.
+* ~~**No client session has run against any of it.**~~ **CLOSED the same day —
+  [RUN-HEROLIB.md](RUN-HEROLIB.md).** Two loopback runs on the pinned 38797
+  slice build. It cost one crash, of ours, and see §40.7.
+* ~~**Zero corpus exposure on the c2s hero paths.**~~ **CLOSED, both halves
+  CONFIRMED.** The client addresses the hero: `0x005C [200, 3, 284, 0]` on a
+  drag and `0x000F [200, 0, 13]` on an attribute `+`, agent 200 being the hero.
+  The named rival did not fire — no `0x0010` template apply. Our handlers
+  answered both (`0x00D9` echo; the `0x0036`/`0x0038`/`0x003B` triple) and both
+  persisted. **The point arithmetic closes on our own wire now, not just on one
+  retail frame:** ranks 2 and 1 cost 4 of 10, raising rank 2 → 3 costs 3, and
+  the server reported `3 of 10 unspent`.
 * **The duplicate-drag rule is UNVERIFIED.** Retail's UI is understood to swap
   when a skill already on the bar is dragged onto it; the corpus has no such
   capture, so the server logs the duplicate and does not model a swap.
@@ -3468,3 +3473,45 @@ operator used the hero for AI mode, lock-target and flags only — and that is
 * **`0x001B`** appeared in this census as an unnamed hero-family c2s message
   carrying a position and a zero, with `(inf, inf)` clearing it — the
   all-heroes sibling of `0x001A HERO_FLAG_PLACE`. Not named here.
+
+### 40.7 The run, and the crash it cost — `GmSkSlot.cpp:206` fired for real
+
+Full record: [RUN-HEROLIB.md](RUN-HEROLIB.md), registered before either client
+launched. The headline is §40.6's two closures. What belongs *here* is the
+crash, because it is §40.3 being proved the expensive way.
+
+**§40.3 predicted the shape of this failure and it happened on the first drag.**
+That section said a bar skill outside the account library "renders perfectly and
+then asserts the moment the player drags that slot", citing `GmSkSlot`'s
+`unlockedSkills->BitTest(sourceSkillId)`. On run `20260915T201538` the operator
+dragged a skill into a hero slot and the client died on exactly that assert,
+build 38797.
+
+**The empty container was ours.** Two sites send `0x001D`. The instance-load
+burst sent the real 1,333-bit bitmap at log line 151; the
+`CHAR_CREATION_REQUEST_ARMORS` arm sent `[[0] * 128]` at line 187 — **after** it
+— so the last word the client heard was "nothing is unlocked". One cause, two
+symptoms: the hero's picker listed only that hero's own three skills (the
+account half of §40.1's union was gone), and the drag asserted.
+
+The zeros carried a comment calling them *"correct for a level 1 character"*.
+That was written before anything was known to READ the account container, and
+§40.3 is what turned a harmless-looking default into a client-killer. **A second
+sender that disagrees with the first is not a conservative default; it is a race
+the later message always wins.**
+
+**A fact only the crash could have taught: the client asserts INSTEAD of
+sending.** That capture holds **zero** `0x005C` in 37 decoded c2s messages. So an
+under-populated account library does not yield a refused drag with a wire trail
+to debug — it yields a crash with no wire evidence at all. Any server that
+sends a partial `0x001D` inherits that failure mode.
+
+**Fixed, with a guard that can go red.** Both `0x001D` sites now take their words
+from `skillunlock.resolve_library`, so they cannot disagree; `hero_build` looks
+the store up itself rather than depending on load ordering (it had been reading
+`charstore_game` before the load opened it, so every hero send fell back to the
+party row and the hero went out with `0 of 10` points — dead `+` buttons, and
+the attribute half of the run would have been unanswerable). `test_agentlife`
+gains a source-level check that no `0x001D` site builds its payload from a
+literal; the negative control restores the old shape and reddens it, naming the
+line.

@@ -18649,6 +18649,26 @@ def hero_build(state, hero_index):
     says why), so this reads the character the connection is playing.
     """
     store = state.get("charstore_game")
+    if store is None and PERSIST:
+        # ORDER-INDEPENDENT ON PURPOSE, and it is a fix rather than a nicety.
+        # MEASURED, run 20260915T201538: the hero's character block is built
+        # BEFORE the instance-load opens the store (gamesrv log line 142 then
+        # 144), so every hero_build call at load read `charstore_game` as None
+        # and silently fell back to the party row. The hero went out with the
+        # content ranks (3 attributes, all ten points spent, `0 of 10`) while
+        # the store held the authored build (2 attributes, 6 of 10) -- and a
+        # hero with nothing unspent has dead `+` buttons, so the run could not
+        # even ask its question.
+        #
+        # Looking the store up here rather than hoisting the open is the
+        # smaller change: the load path's ordering is load-bearing for a dozen
+        # other things, and a getter that works whenever it is called cannot
+        # be re-broken by the next reordering. The result is cached in `state`
+        # for the same reason the load path caches it -- find_character scans
+        # the store directory, and this must not do that per hero per load.
+        store, _hb_row = charstore.find_character(state.get("char_uuid", ""))
+        if store is not None:
+            state["charstore_game"] = store
     if store is None:
         return None, None, None, None
     row = store.hero_row(state.get("char_uuid", ""), hero_index) or {}
@@ -27727,10 +27747,39 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # live and we were sending zero simulation ticks, and four
                         # fixes shipped together. Answering this is SUFFICIENT to
                         # get through the load; that it is NECESSARY is untested.
-                        # Nothing is unlocked: correct for a level 1 character,
-                        # and it keeps this from masking a later stall.
-                        send(GAME_SMSG_PVP_UPDATE_UNLOCKED_SKILLS, [[0] * 128],
-                             "PVP_UNLOCKED_SKILLS")
+                        # THESE ZEROS WIPED THE ACCOUNT LIBRARY AND CRASHED A
+                        # CLIENT. MEASURED, run 20260915T201538: this arm fires
+                        # AFTER the instance-load burst (log lines 151 then
+                        # 187), so the last word the client heard on its account
+                        # container was "nothing is unlocked" -- it overwrote
+                        # the 1,333-bit bitmap sent 36 lines earlier. Two
+                        # symptoms, one cause: the hero's skill panel listed
+                        # only the hero's OWN three skills, and dragging one
+                        # into an empty slot took the client down on
+                        #
+                        #     Assertion: unlockedSkills->BitTest(sourceSkillId)
+                        #     P:\Code\Gw\Ui\Game\GmSkSlot.cpp(206)
+                        #
+                        # which is exactly the equip validator FINDINGS §40.3
+                        # named, firing on an empty container.
+                        #
+                        # The old comment read "Nothing is unlocked: correct for
+                        # a level 1 character, and it keeps this from masking a
+                        # later stall." It was written before anything was known
+                        # to READ this container, and it is wrong twice over: a
+                        # level-1 character on this server has whatever
+                        # --unlocks says, and a second sender that disagrees
+                        # with the first is not a conservative default, it is a
+                        # race the later message always wins.
+                        #
+                        # ONE SOURCE. Same call the instance-load burst makes,
+                        # so the two can no longer disagree.
+                        (_pv_words, _pv_label,
+                         _, _) = skillunlock.resolve_library(
+                            state.get("charstore_game"),
+                            state.get("char_uuid", ""), UNLOCKED, UNLOCK_LABEL)
+                        send(GAME_SMSG_PVP_UPDATE_UNLOCKED_SKILLS, [_pv_words],
+                             f"PVP_UNLOCKED_SKILLS({_pv_label})")
                         # Heroes are all-ones in OpenTyria; kept verbatim rather
                         # than second-guessed.
                         send(GAME_SMSG_PVP_UPDATE_UNLOCKED_HEROES,

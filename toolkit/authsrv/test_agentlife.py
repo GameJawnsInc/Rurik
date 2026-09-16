@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=532)   # 2026-09-15 +2 (offset_y honoured); SLICE-F43 +3 (the wipe countdown and its stop), from the green run   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=534)   # 2026-09-15 (later) HEROLIB +2 (no 0x001D send site may zero the account library -- the GmSkSlot.cpp:206 crash of run 20260915T201538; the negative control restores the literal and reddens naming the line); 2026-09-15 +2 (offset_y honoured); SLICE-F43 +3 (the wipe countdown and its stop), from the green run   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
 def section_weapon_damage():
@@ -549,6 +549,7 @@ def main():
     section_probe_encoding()
     section_spawn_profession()
     section_unlock_bitmap()
+    section_unlock_never_zeroed()
     section_secondary_bits()
     section_party_of_one()
     return LEDGER.verdict()
@@ -4129,6 +4130,65 @@ def _codec():
                                      "..", "schema"))
     from codec import Codec
     return Codec()
+
+
+def section_unlock_never_zeroed():
+    """NO SENDER MAY ZERO THE ACCOUNT LIBRARY. A source-level check.
+
+    THE DEFECT THIS EXISTS FOR, measured on run 20260915T201538. Two sites sent
+    0x001D. The instance-load burst sent the real 1,333-bit bitmap; the
+    CHAR_CREATION_REQUEST_ARMORS arm sent `[[0] * 128]` and fired AFTER it, so
+    the client's account container ended up empty. The hero's skill panel then
+    listed only that hero's own three skills, and dragging one into an empty
+    slot took the client down on
+
+        Assertion: unlockedSkills->BitTest(sourceSkillId)
+        GmSkSlot.cpp:206
+
+    -- the equip validator FINDINGS §40.3 named, firing on an empty container.
+    One client session, and the zeros had been there for weeks behind a comment
+    calling them a conservative default.
+
+    A RUNTIME CHECK COULD NOT CATCH THIS. The two sends are correct
+    individually and wrong only in sequence, on a path that needs a real client
+    to walk. So the check is on the SOURCE: every 0x001D send site must take
+    its words from `resolve_library`, never from a literal. Reading the text is
+    the same idiom ~40 tests in this suite already use on this file.
+    """
+    import ast as _ast
+    import authsrv
+
+    with open(authsrv.__file__, encoding="utf-8") as f:
+        tree = _ast.parse(f.read())
+    literal_sends, resolved_sends = [], 0
+    for node in _ast.walk(tree):
+        if not isinstance(node, _ast.Call):
+            continue
+        fn = node.func
+        if not (isinstance(fn, _ast.Name) and fn.id in ("send", "hsend")):
+            continue
+        if not node.args:
+            continue
+        first = node.args[0]
+        name = getattr(first, "attr", getattr(first, "id", None))
+        if name != "GAME_SMSG_PVP_UPDATE_UNLOCKED_SKILLS":
+            continue
+        payload = node.args[1] if len(node.args) > 1 else None
+        text = _ast.dump(payload) if payload is not None else ""
+        # A literal list-of-lists payload is the shape that wiped it.
+        if "List(elts=[List(" in text or "BinOp" in text and "Constant(value=0)" in text:
+            literal_sends.append(getattr(node, "lineno", -1))
+        else:
+            resolved_sends += 1
+    LEDGER.ok(not literal_sends,
+              "no 0x001D send site builds its bitmap from a LITERAL",
+              f"lines {literal_sends} would overwrite the account library; "
+              f"GmSkSlot.cpp:206 asserts on an empty container")
+    LEDGER.ok(resolved_sends >= 2,
+              "and every 0x001D site takes its words from resolve_library",
+              f"{resolved_sends} site(s) -- a check that found ONE would pass "
+              f"against the pre-fix tree, where the load burst was already "
+              f"correct and the second sender was the defect")
 
 
 def section_unlock_bitmap():
