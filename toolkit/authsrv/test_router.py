@@ -513,9 +513,16 @@ def main():
                     encoding="utf-8").read()
     for pair in ("click_sweep", "arrival_carry", "cancel_answer",
                  "stop_answer", "family_rate_probe", "checksum_probe",
-                 "interact_walk", "move_speed_effects"):
+                 "interact_walk"):
         check(f"composition refuses --router with {pair.replace('_', '-')}",
               f"if router and {pair}" in comp_src)
+    # SLICE-F47 (2026-09-16): `move_speed_effects` LEFT this list. The gate's
+    # reason was that chain ETAs ran at DEFAULT_RUN_SPEED; router_next_due now
+    # reads the declared base, speed effects are on by default, and a refusal
+    # here would refuse the default configuration. The lock is inverted so a
+    # session that re-adds the gate reddens rather than silently refusing runs.
+    check("composition no longer refuses --router with move-speed effects",
+          "if router and move_speed_effects" not in comp_src)
     check("composition refuses --router with pc-spoof",
           "if router and pc_spoof is not None" in comp_src)
     check("the pre-send re-clip exists at the fine step, once",

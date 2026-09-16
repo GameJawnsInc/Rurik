@@ -3253,3 +3253,110 @@ wire and silent here. `morale.py`'s docstring gains the hostile-body corroborati
 the hero's second death and recovery OBSERVED (n = 1 hero, 2 deaths, 3 ticks); the party
 member's silence OBSERVED (n = 5 deaths, 1 body); the henchman case NOT FOUND (no death in
 the corpus) and inferred from the pools' silence; the arena rule UNREAD.
+
+## SLICE-F47 — **MOVESPEED: retail's speed word read off 501 rows — a 33 % boost is × 1.33, Crippled × 0.5 and it MULTIPLIES a boost (× 0.665, 21 of 21), two boosts cap at × 1.34 (8 of 8), and every episode change re-declares — shipped for both signs, on by default, with the movement composite reading the declared base (2026-09-16)**
+
+**The owner (2026-09-16):** *"let's do movespeed next, both positive and negative … 'Charge!'
+… or Windborne Speed … both are probably already on tape somewhere."* They were: 80 applies of
+the two, joined to their speed words, plus the Isle's Pin Down.
+
+### 47.1 What existed
+
+`speed_tick` (2026-08-22) declared the player's `0x0027` from a `"Movement speed increase"`
+row, behind `--move-speed-effects`, **off by default** because "every REALFIX fence and
+copy-model constant was measured at 288 u/s". Only Rush had a row. Shouts opened no episode
+(`effects.EFFECT_TYPES` is the five definitional types), so "Charge!" was an icon nowhere;
+Crippled was "not modelled" (F45's list); no body ever got a word; and `zeroleadcompose`
+refused `--router` beside the flag because the router's chain ETA divided by
+`DEFAULT_RUN_SPEED`. Two prior sessions' fear was correct and specific: **six** sites walked
+the player's model at 288 whatever the client had been told — the sync lerp
+(`_sync_position`), `router_next_due`, the arrival carry's ETA, `a2_leg_note`'s leg speed,
+`model_leg_speed`'s base, and the agtrack guard's `RUN_SPEED × age` budget — so a boosted
+body would have been modelled 25–33 % behind itself.
+
+### 47.2 The reader first: `speedwords.py`, six predictions, all held
+
+Every `0x0027 [agent, f32]` across the live corpus (**501 words, 17 captures**), joined to
+the same-agent `0x0042`/`0x0044`/`0x00F1` inside the 60 ms batch shoulder, ratioed against
+the agent's OWN base (the value its restores return to). Predictions in the module's
+docstring before the scan; `test_speedwords.py` pins them as exposure floors:
+
+| | prediction | result |
+|---|---|---|
+| P1 | 160 / 364 applied with nothing open → × 1.33 | **80 / 0** |
+| P2 | 481 Crippled applied with nothing open → × 0.5 | **2 / 0** (27 words at 144.0 in all) |
+| P3 | Crippled over a boost → × 0.665 = 1.33 × 0.5, MULTIPLICATIVE | **1 / 0 joined; 21 rows at × 0.665, 0 at the additive × 0.83** |
+| P4 | a second 33 % boost over an open one → × 1.34 | **8 / 0** (never × 1.33 unchanged, never × 1.77) |
+| P5 | the "Charge!" cure batch carries TWO words | **1 / 0** |
+| P6 | bases are 288 and 300 | **324 / 154 words** |
+
+The whole ratio table, against own base: × 0.34 (6, the MANTID tape, status 0xC00 — a
+−66 % source), × 0.5, × 0.665, × 0.8 (2), × 1.0, × 1.13 (3), × 1.25 (4, one joined to skill
+455 Storm Chaser), × 1.33, × 1.34, × 1.5 (5, one Lakeside body, no apply in batch — a
++50 % single source such as Dash), and 10 words of **0.0** (five Isle bodies at once, twice).
+
+**The batch order, verbatim** (`20260818T094648`, agent 25): Pin Down's impact is `0x00CF
+[25, 3]`, `0x0042 [25, 481, 13, 95, 13.0]`, `0x00F1 [25, 0x0A]`, `0x0027 [25, 144.0]` at
+t = 183.755; the operator's "Charge!" at 185.532 is `0x00E4`, `0x00E5`, `0x00A5`, `0x0042 [25,
+364, 10, 96, 10.0]`, **`0x0044 [25, 95]`**, `0x00F1 [25, 0]`, `0x00E3`, **`0x0027 191.52`,
+`0x0027 383.04`** — the shout's apply computed over the still-open Crippled, then the cure's
+restore; and Windborne over the open shout a second later is `0x0042 [25, 160, 15, 98,
+13.0]`, `0x00F1 [25, 0x80]`, `0x0027 385.92`. So retail recomputes and re-declares at every
+episode change, in the batch, behind the status word.
+
+### 47.3 The rules, and whose they are
+
+* **Boosts SUM and cap at +34.** WIKI (GWW "Speed boost", rev. 2020-05-09): "Speed boosts can
+  be stacked, but movement rate is capped at 34% faster than normal"; OBSERVED × 1.34 on 8 of
+  8 second-boost rows. A single source may exceed it (× 1.5 rows).
+* **Snares sum and cap at −50, a single source may exceed.** WIKI (GWW "Snare (tactic)",
+  rev. 2026-04-24); OBSERVED × 0.34 (n = 6). No content row declares a decrease yet, so the
+  arm runs on nothing today.
+* **Crippled × 0.5, multiplying the result.** WIKI (GWW "Crippled", rev. 2020-10-23: "you
+  move 50% slower"); OBSERVED, and this is the arithmetic the wire settles — × 0.665 on 21 of
+  21, × 0.83 on none.
+* **Boost × snare: multiplicative, per the WIKI** (GWW "Effect stacking", rev. 2026-09-07:
+  Flail with "Fall Back!" is 89.1 %). **CONTESTED by one body**, n = 3: a PvP body on
+  `20260817T231139` conn 50513 read × 0.8 in its create batch — beside two `0x006F` item
+  changes, which GWW "Bundle" (rev. 2018-05-08: "Some bundles … reduce movement speed") makes
+  a bundle pick-up — and took "Charge!" to × 1.13 = 1 + 0.33 − 0.20, additive. A bundle's
+  slow is not a skill snare and nothing here models one; the wiki's rule ships and the row
+  is on record. UNVERIFIED which of the two a skill snare over a boost would follow.
+* **A shout can open an episode when its row says so.** "Charge!" is a Shout (type 15),
+  outside `EFFECT_TYPES`; the corpus witnesses 47 applies of it. The content door
+  `effects.py`'s docstring reserved — `opens_episode = "shout"` on the `skill_effect` row —
+  now exists, read by `apply_effect`; the type list is unchanged and `test_effects` still
+  answers None for 364 by type. Its initial effect, `removes_condition = "Crippled"`, is
+  OBSERVED once (the Isle's episode ends 11.2 s early in the shout's own millisecond).
+* **The percent slot is the row's to name.** 160 / 364 / 319 carry it in the scale slot
+  (33 / 33 / 25, bit clear), Storm Chaser 455 in the BONUS slot (25, its scale 1..5 being the
+  energy gain) — `move_speed_terms` reads whichever slot the row names.
+
+### 47.4 Shipped
+
+* `episodemods.move_speed_terms` / `move_speed_factor` (the rules above; `move_speed_percent`
+  stays for its readers). `authsrv.push_speed` sends one `0x0027` per CHANGE for the player
+  and every body, from every site that opens or closes an episode — `apply_effect`,
+  `apply_condition`, `effect_tick`, `remove_conditions`, `strip_effects` — right behind
+  `push_status`, retail's slot; `speed_tick` is the per-tick backstop. Our cure batch is
+  `[0x0042 364, 0x0044, 0x00F1, 0x0027 383.04]`: retail's order with ONE word, since ours
+  computes the word after the cure rather than once either side of it.
+* **The composite reads the declared base.** The six sites of 47.1 read
+  `state["declared_speed_base"]`; `0x0027` to the player feeds `agtrack_guard.on_speed_base`
+  (both copies' +0x5C, a pure store on 0x002B's footing — RECONSTRUCTION on the timing); a
+  body's word feeds its own `_npc_model_emit`; the chase and the follow budget walk a body at
+  `npc_declared_speed` (a crippled hostile closes at half). The `--router` refusal is
+  retired with its reason, and `test_router`'s lock is inverted so a re-added gate reddens.
+* **On by default; `--no-move-speed-effects` is the revert arm** (icons that move nothing,
+  every body at 288, the pre-F47 shape).
+* Content: `[skill_effect.160]`, `[364]` (`opens_episode`, `removes_condition`), `[455]`,
+  and `[392]` Pin Down (`bonus_scale_means = "Crippled"`, 3→15 s), each with its GWW
+  revision and its wire witness.
+* Tests: `test_speedwords` (new, 12, floors on exposure), `test_mechanics` §8/§8b (214 → 228:
+  383.04, 385.92, 144.0 behind the status, 191.52 and the factor 0.665 asserted not 0.83, the
+  cure batch's order, the cap on the sum, a body's own word, the revert arm), `test_effects`
+  §4d/§5 now expecting Rush's word behind its apply and expiry.
+
+### 47.5 Live, on the client
+
+_(filled from RUN-MOVESPEED-1 / -2 below.)_

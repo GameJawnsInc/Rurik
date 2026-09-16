@@ -28,7 +28,7 @@ import agents       # noqa: E402
 import effects      # noqa: E402
 
 # Floor set from a real green run (39 checks, 2026-08-22; 99 checks, 2026-09-09 SKILLS-DW; 129 checks, 2026-09-10 SKILLS-BL; 153 checks, 2026-09-10 SKILLS-RC; 162 checks, 2026-09-10 SKILLS-MA).
-LEDGER = checks.Ledger("effect mechanics", floor=214)  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
+LEDGER = checks.Ledger("effect mechanics", floor=228)  # 2026-09-16: +14, SLICE-F47 sec.8b (movement speed on the wire), from the green run  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
 check = checks.adopt(LEDGER)
 
 FRENZY, RUSH, ROF, GLYPH, IGNITE, FAINT = 346, 319, 307, 200, 431, 135
@@ -284,7 +284,7 @@ try:
 finally:
     authsrv.ATTACK_SPEED_SYNC, authsrv.ATTACK_SPEED_AT_START = saved_sync, saved_start
 
-print("== 8. the movement lever: off by default, exact when on ==")
+print("== 8. the movement speed base: on by default (SLICE-F47), exact, one word per change ==")
 state = fresh_state()
 open_ep(state, RUSH, rank=12, duration=18.0)
 check(authsrv.move_speed_percent(state, PLAYER) == 25.0,
@@ -294,7 +294,7 @@ saved = authsrv.MOVE_SPEED_EFFECTS
 try:
     authsrv.MOVE_SPEED_EFFECTS = False
     authsrv.speed_tick(send, state, 0)
-    check(not sent, "OFF (the default): the tick declares nothing")
+    check(not sent, "OFF (--no-move-speed-effects, the revert arm): the tick declares nothing")
     authsrv.MOVE_SPEED_EFFECTS = True
     authsrv.speed_tick(send, state, 0)
     check(len(sent) == 1
@@ -310,6 +310,96 @@ try:
     check(len(sent) == 2 and sent[1][1] == [PLAYER, 288.0],
           "the stance ends: the base is RESTORED on the next tick",
           f"sent={sent}")
+finally:
+    authsrv.MOVE_SPEED_EFFECTS = saved
+
+print("== 8b. SLICE-F47: the retail arithmetic -- x1.33, x0.5, x0.665, the 34% cap, the cure ==")
+CHARGE, WINDBORNE, CRIPPLED_ID = 364, 160, effects.CONDITION_BY_NAME["Crippled"]
+saved = authsrv.MOVE_SPEED_EFFECTS
+try:
+    authsrv.MOVE_SPEED_EFFECTS = True
+    # Windborne Speed alone: retail's 288 -> 383.04 (51 applies).
+    state = fresh_state()
+    sent, send = collector()
+    open_ep(state, WINDBORNE, rank=15, duration=13.0)
+    authsrv.push_speed(send, state, PLAYER, 0)
+    check(len(sent) == 1 and abs(sent[0][1][1] - 383.04) < 1e-6,
+          "Windborne Speed open: 288 x 1.33 = 383.04 on the wire", f"sent={sent}")
+    # "Charge!" is a Shout and opens NOTHING by type; the content row's
+    # `opens_episode` is the door, and the episode carries the same 33.
+    row = agents.WORLD.get("skills", str(CHARGE))
+    check(effects.applies_effect(row) is None
+          and agents.WORLD.get("skill_effect", str(CHARGE)).get("opens_episode") == "shout",
+          "\"Charge!\" opens by its content row, not by its type (the type list is unchanged)")
+    open_ep(state, CHARGE, rank=10, duration=10.0, type_code=15)
+    authsrv.push_speed(send, state, PLAYER, 0)
+    check(len(sent) == 2 and abs(sent[1][1][1] - 385.92) < 1e-6,
+          "a second 33% boost over the first: 288 x 1.34 = 385.92 -- GWW's +34% cap, "
+          "retail's 8 of 8 (not x1.33, not x1.77)", f"sent={sent}")
+    # Crippled alone: 288 -> 144.0 (the Isle's Pin Down).
+    state = fresh_state()
+    sent, send = collector()
+    authsrv.apply_condition(send, state, PLAYER, CRIPPLED_ID, 13.0, 13, 0, by_skill=392)
+    ops = [op for op, _v, _l in sent]
+    check(ops.count(authsrv.GAME_SMSG_AGENT_UPDATE_SPEED_BASE) == 1
+          and sent[-1][1] == [PLAYER, 144.0]
+          and ops.index(authsrv.GAME_SMSG_AGENT_UPDATE_STATUS)
+          < ops.index(authsrv.GAME_SMSG_AGENT_UPDATE_SPEED_BASE),
+          "Crippled: [0x0042 481, 0x00F1, 0x0027 144.0] -- the word behind the status, "
+          "as on the Isle", f"ops={[hex(o) for o in ops]}")
+    check(abs(authsrv.move_speed_factor(state, PLAYER) - 0.5) < 1e-9,
+          "the factor is 0.5 exactly")
+    # Crippled OVER a boost: x0.665, multiplicative (21 of 21 retail rows; the
+    # additive 0.83 appears nowhere).
+    open_ep(state, WINDBORNE, rank=15, duration=13.0)
+    authsrv.push_speed(send, state, PLAYER, 0)
+    check(abs(sent[-1][1][1] - 191.52) < 1e-6,
+          "Windborne over Crippled: 288 x 1.33 x 0.5 = 191.52 (the Isle's own 191.52)",
+          f"last={sent[-1]}")
+    check(abs(authsrv.move_speed_factor(state, PLAYER) - 0.665) < 1e-9,
+          "the factor is 0.665, not the additive 0.83")
+    # "Charge!" cures Crippled (its initial effect) and boosts: the cast path.
+    state = fresh_state()
+    sent, send = collector()
+    authsrv.apply_condition(send, state, PLAYER, CRIPPLED_ID, 13.0, 13, 0, by_skill=392)
+    del sent[:]
+    ep = authsrv.apply_effect(send, state, PLAYER, CHARGE, 10, PLAYER, 0)
+    ops = [op for op, _v, _l in sent]
+    check(ep is not None and ep["skill"] == CHARGE and ep["duration"] == 10.0,
+          "\"Charge!\" at rank 10 opens a 10.0 s episode (retail: field3 10 -> 10.0, n=27)")
+    check(not any(e["skill"] == CRIPPLED_ID for e in state["effects"].on_agent(PLAYER)),
+          "and the Crippled episode is GONE -- 'Allies in earshot lose the Crippled condition'")
+    check(ops[:2] == [authsrv.GAME_SMSG_EFFECT_APPLY, authsrv.GAME_SMSG_EFFECT_REMOVE]
+          and sent[-1][0] == authsrv.GAME_SMSG_AGENT_UPDATE_SPEED_BASE
+          and abs(sent[-1][1][1] - 383.04) < 1e-6,
+          "the cure batch: [0x0042 364, 0x0044 crippled, 0x00F1, ..., 0x0027 383.04] -- "
+          "retail's order, one speed word", f"ops={[hex(o) for o in ops]}")
+    # The 34% cap is on the SUM, and a single source may exceed it.
+    state = fresh_state()
+    open_ep(state, RUSH, rank=12, duration=18.0)
+    open_ep(state, WINDBORNE, rank=15, duration=13.0)
+    check(abs(authsrv.move_speed_factor(state, PLAYER) - 1.34) < 1e-9,
+          "Rush 25 + Windborne 33 = 58, capped at 34")
+    # A body gets its own word, fed to its own client-side model.
+    state = fresh_state()
+    state["agents"][10] = {"name": "hatcher", "pos": (300.0, 0.0), "plane": 0,
+                           "max_health": 100.0, "health": 100.0}
+    sent, send = collector()
+    authsrv.apply_condition(send, state, 10, CRIPPLED_ID, 15.0, 0, 0, by_skill=323)
+    check(any(op == authsrv.GAME_SMSG_AGENT_UPDATE_SPEED_BASE and v == [10, 144.0]
+              for op, v, _l in sent),
+          "a crippled body is declared at 144.0 (retail: 27 such words, 281 of 473 "
+          "speed words target non-player agents)", f"sent={sent}")
+    check(abs(authsrv.npc_declared_speed(state, 10) - 144.0) < 1e-9
+          and abs(authsrv.npc_declared_speed(state, 11) - 288.0) < 1e-9,
+          "the chase reads the body's declared speed; an undeclared body walks at 288")
+    # The revert arm declares nothing on any path.
+    authsrv.MOVE_SPEED_EFFECTS = False
+    state = fresh_state()
+    sent, send = collector()
+    authsrv.apply_condition(send, state, PLAYER, CRIPPLED_ID, 13.0, 13, 0, by_skill=392)
+    check(not any(op == authsrv.GAME_SMSG_AGENT_UPDATE_SPEED_BASE for op, _v, _l in sent),
+          "--no-move-speed-effects: the condition opens, the status word goes, no 0x0027")
 finally:
     authsrv.MOVE_SPEED_EFFECTS = saved
 

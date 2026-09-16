@@ -430,17 +430,14 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                 "stale route within a second. The interact walk's own "
                 "banner already calls it broken; a chain makes it a "
                 "two-sender fight besides."), []
-    if router and move_speed_effects:
-        return ("--router and --move-speed-effects cannot run together "
-                "(review F7, 2026-08-26). Chain ETAs are computed at "
-                "DEFAULT_RUN_SPEED; an effect episode changes the client's "
-                "real speed mid-chain, so a snared client receives leg n+1 "
-                "MID-LEG and turns onto a straight line to the next "
-                "waypoint that no clip ever sampled -- corner-cutting "
-                "across unvetted ground, the F1 shape without the thin "
-                "wall. A boosted client parks at every waypoint instead, "
-                "which would read as the cadence model failing. Route or "
-                "dose speed; not both."), []
+    # `router and move_speed_effects` was a REFUSAL here from review F7
+    # (2026-08-26) until SLICE-F47 (2026-09-16): chain ETAs were computed at
+    # DEFAULT_RUN_SPEED, so a snared client received leg n+1 mid-leg and cut
+    # a corner no clip had sampled, and a boosted one parked at every
+    # waypoint. `router_next_due` now reads the DECLARED base
+    # (`state["declared_speed_base"]`, the 0x0027 the client was actually
+    # sent), which is the whole of the reason the gate existed; the two run
+    # together by default and `move_speed_effects` is accepted here unread.
     if cancel_answer and not zero_lead:
         return ("--cancel-answer requires --zero-lead. The CANCELWALK arms "
                 "are MODIFIERS on the zero-lead answer to the one report "

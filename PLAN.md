@@ -6059,7 +6059,11 @@ buff cannot — but every REALFIX fence, gate cut and copy-model constant was
 measured at 288 u/s, so declaring 360 under the movement composite is an
 unmeasured interaction with the most carefully measured mechanism in the repo.
 The lever exists, reconciles per tick (declare once, dedupe, restore on
-expiry), and waits for a movement-instrumented run.
+expiry), and waits for a movement-instrumented run. **AMENDED 2026-09-16
+(SLICE-F47): ON by default. The composite's five 288 u/s sites and the
+agtrack guard's budget now read the DECLARED base, the retail arithmetic is
+read off 501 speed words (`speedwords.py`), and the revert arm is
+`--no-move-speed-effects` — §8 of that date and studies/slice F47.**
 
 **NEXT, in cost order:** (1) a loopback run that WATCHES the new mechanics —
 Frenzy's faster swing cadence and doubled incoming numbers, RoF's converted
@@ -7176,7 +7180,9 @@ on `type_code` now — only type 14 rides a swing.
    (`--move-speed-effects`): the boost channel is `0x0027` (retail's 383.04
    witness), but every REALFIX fence was measured at 288 u/s, so declaring a
    faster base under the movement composite is an unmeasured interaction and
-   stays a deliberate lever.
+   stays a deliberate lever. **AMENDED 2026-09-16 (SLICE-F47): the lever is
+   now the default and the composite reads the declared base; the revert arm
+   is `--no-move-speed-effects`.**
 3. ~~**Does the client draw anything for a heal?** Property 55 is applied and
    unannotated. Worth one probe.~~ **CLOSED 2026-09-09 without a probe**
    (SKILLS-HN, §42): it draws a blue "+46", and did on 2026-08-20; the scan

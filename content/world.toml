@@ -628,6 +628,61 @@ a buff), but every REALFIX fence and copy-model constant was measured at
 288 u/s, so declaring a faster base inside the movement composite is
 UNMEASURED and stays a deliberate lever."""
 
+# SLICE-F47 (2026-09-16): the movement-speed rows. The percent sits in the slot
+# the row names -- `scale_means` for 160/364 (scale 33/33, bit clear), `bonus_scale_means`
+# for 455 (bonus 25/25, bit clear; its SCALE slot 1..5 is the energy gain). Every one is
+# also a wire witness: speedwords.py joins 51 Windborne and 29 "Charge!" applies to a
+# 0x0027 at base x 1.33, one Storm Chaser apply to x1.25 (studies/slice/FINDINGS.md F47).
+[skill_effect.160]
+scale_means = "Movement speed increase"
+[skill_effect.160.provenance]
+source = "wiki"
+page = 'GWW, "Windborne Speed", rev. 2024-05-16'
+verified = """args = 1 (duration 5->13 scales); the scale slot holds a constant 33 with
+its bit clear -- "target ally moves 33% faster". Duration CORROBORATED on the wire
+(studies/isle 2: rank 15 -> 13.0 s, the Master of Winds' own cast)."""
+
+[skill_effect.364]
+scale_means = "Movement speed increase"
+opens_episode = "shout"
+removes_condition = "Crippled"
+[skill_effect.364.provenance]
+source = "wiki"
+page = 'GWW, "Charge!", rev. 2026-04-16'
+verified = """Elite Shout, Tactics. "Allies in earshot lose the Crippled condition. For
+5...13 seconds, these allies move 33% faster." args = 1 (duration 5->13 scales); the
+scale slot holds a constant 33, bit clear. `opens_episode` is the content door
+effects.py's docstring reserved for a type that is not definitionally a timed effect:
+the corpus witnesses 47 applies of 364 on 0x0042 (bufflog), and the operator's own
+casts on the Isle close the lifecycle to the millisecond. `removes_condition` is the
+initial effect, OBSERVED once: the Isle's Crippled episode ends 11.2 s early in the
+same millisecond as a 364 apply (studies/isle 1). Earshot is not modelled: the shout
+lands on the caster alone (the loopback party is the player)."""
+
+[skill_effect.455]
+scale_means = "Energy gain"
+bonus_scale_means = "Movement speed increase"
+[skill_effect.455.provenance]
+source = "wiki"
+page = 'GWW, "Storm Chaser", rev. 2023-02-19'
+verified = """Stance, Wilderness Survival. "For 8...20 seconds, you move 25% faster, and
+you gain 1...5 Energy whenever you take elemental damage." args = 3 (duration and scale
+scale, bonus clear): scale 1->5 is the energy gain, bonus 25/25 the speed. The energy
+gain is not modelled. Wire witness: one apply on a hero body (20260914T005758, agent
+29) joined to 0x0027 360.0 = 288 x 1.25."""
+
+[skill_effect.392]
+bonus_scale_means = "Crippled"
+[skill_effect.392.provenance]
+source = "wiki"
+page = 'GWW, "Pin Down", rev. 2025-03-25'
+verified = """Bow Attack, Marksmanship. "If Pin Down hits, your target is Crippled for
+3...15 seconds." args = 4 (bonus only): bonus 3->15 is the Crippled duration, read by
+`skill_condition` the way Sever Artery's Bleeding is. Wire witness: the Isle's Master
+of Survival shot the operator once -- 0x00A0 [50, 103, 25, 392] at draw, 0x0042 [25,
+481, 13, 95, 13.0] and 0x0027 [25, 144.0] at impact (studies/isle 1, 20260818T094648
+t=183.755)."""
+
 [skill_effect.320]
 scale_means = "Crippled duration"
 [skill_effect.320.provenance]

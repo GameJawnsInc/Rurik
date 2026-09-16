@@ -103,12 +103,15 @@ table. So an episode needs a reason, and there are exactly two:
     skill names. That is one citation per type covering hundreds of skills,
     and the type column corroborates the target byte independently (see
     `SELF_TARGET`).
-  * OR A CONTENT ROW SAYS SO, per skill, the way `scale_means` does. None
-    exists yet, so Shout, Spell, Signet, Glyph, Skill and Attack apply nothing
-    -- including the two Shouts the corpus itself witnesses (348, 364). That is
-    deliberate. Two witnesses say a shout CAN open an episode; neither says
-    what any OTHER shout does, and party-wide shouts mean the target byte's 0
-    does not settle who receives it.
+  * OR A CONTENT ROW SAYS SO, per skill, the way `scale_means` does. That
+    door is `opens_episode` on the `skill_effect` row, read by
+    `authsrv.apply_effect` (SLICE-F47, 2026-09-16); "Charge!" (364) is its
+    first row, on 47 corpus applies. Every other Shout, Spell, Signet, Glyph,
+    Skill and Attack applies nothing -- including the corpus's other shout
+    witness (348). That is deliberate. Two witnesses say a shout CAN open an
+    episode; neither says what any OTHER shout does, and party-wide shouts
+    mean the target byte's 0 does not settle who receives it (364's row says
+    so: the shout lands on the caster alone here).
 
 Standard library only, no imports from authsrv: this module is a pure state
 machine plus arithmetic, so its tests need no socket and no client.

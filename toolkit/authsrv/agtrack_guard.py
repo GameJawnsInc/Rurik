@@ -289,7 +289,7 @@ class AgTrackGuard(object):
         if pos is None:
             pos = (float(x), float(y))
         self.async_dest = (float(x), float(y))
-        speed = RUN_SPEED * self.mirror.sync.move_speed
+        speed = self._run_speed() * self.mirror.sync.move_speed
         d = math.hypot(float(x) - pos[0], float(y) - pos[1])
         arrive = ms + max(int(d * 1000.0 / speed), 1) if speed > 0 else 0
         for m in (self.mirror, self.twin):
@@ -323,6 +323,18 @@ class AgTrackGuard(object):
         self.mirror.on_speed(move_speed, self._ms(now))
         self.twin.on_speed(move_speed, self._ms(now))
 
+    def on_speed_base(self, max_speed, now):
+        """0x0027 to the player (SLICE-F47): the declared base lands in both
+        copies' +0x5C, and every RUN_SPEED term below reads it from there --
+        a boosted body walks 383 u/s and the budget must say so, or the
+        freshness bound under-counts what it can have walked."""
+        self.mirror.on_speed_base(max_speed, self._ms(now))
+        self.twin.on_speed_base(max_speed, self._ms(now))
+
+    def _run_speed(self):
+        """The base the client was last told (0x0027), 288 until one is sent."""
+        return float(self.mirror.sync.max_speed)
+
     def tick(self, now):
         """Advance arrivals + the sweep + reader 2 on the server's own
         clock.  Returns an arrival's evaluation verdict if one fired --
@@ -343,7 +355,7 @@ class AgTrackGuard(object):
         if self.async_dest is None or self.client_pos_at is None:
             return self.client_pos
         dt = max(now - self.client_pos_at, 0.0)
-        speed = RUN_SPEED * self.mirror.sync.move_speed
+        speed = self._run_speed() * self.mirror.sync.move_speed
         dx = self.async_dest[0] - self.client_pos[0]
         dy = self.async_dest[1] - self.client_pos[1]
         d = math.hypot(dx, dy)
@@ -360,7 +372,7 @@ class AgTrackGuard(object):
             return None
         age = 0.0 if self.client_pos_at is None \
             else max(now - self.client_pos_at, 0.0)
-        return sep + RUN_SPEED * age + CLOCK_SKEW_U
+        return sep + self._run_speed() * age + CLOCK_SKEW_U
 
     def _judge(self, v, now):
         """One world's predicted verdict -> (code, why, budget)."""

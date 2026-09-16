@@ -224,35 +224,110 @@ def swing_preparation_bonus(state, weapon_row, agent_id, SCALE_MEANS_DAMAGE):
     return 0.0, None
 
 
-def move_speed_percent(state, agent_id):
-    """The LARGEST open movement-speed boost on this agent, in percent.
+# MOVEMENT SPEED (SLICE-F47, 2026-09-16). Three kinds of term, read off retail's
+# wire by speedwords.py (501 speed words, 17 captures) and GWW's published rules:
+#
+#   boosts   sum, capped at +34 -- "Speed boosts can be stacked, but movement
+#            rate is capped at 34% faster than normal" (WIKI, GWW "Speed
+#            boost", rev. 2020-05-09). OBSERVED: a second 33% boost over an open
+#            one reads x1.34, 8 of 8 (not x1.33, which a "largest applies" rule
+#            would send, and not x1.77). A SINGLE source may exceed the cap
+#            (Dash's +50%: five x1.5 rows on one Lakeside body).
+#   snares   sum, capped at -50 -- "capped at -50% slower than normal; however,
+#            a single skill that causes more than -50% ... can override the -50%
+#            cap" (WIKI, GWW "Snare (tactic)", rev. 2026-04-24). OBSERVED: six
+#            x0.34 rows (a -66% source) on the MANTID tape. No content row
+#            declares a decrease today, so this arm runs on nothing; it is here
+#            so the day one does, the rule is the game's.
+#   Crippled MULTIPLIES the result by 0.5 -- "you move 50% slower" (WIKI, GWW
+#            "Crippled", rev. 2020-10-23). OBSERVED, and this is the arithmetic
+#            the corpus settles: Crippled over a 33% boost reads x0.665 =
+#            1.33 x 0.5 on 21 of 21 such rows, and the additive x0.83 appears
+#            nowhere. Alone it is x0.5 (27 rows, 288 -> 144.0).
+#
+# BOOST x SNARE is the WIKI's multiplicative rule -- GWW "Effect stacking"
+# (rev. 2026-09-07): "Attack speed and movement speed stack multiplicatively.
+# For example, a character affected by Flail and 'Fall Back!' will have 89.1%
+# movement speed rather than 100%." CONTESTED by one row: a PvP body that read
+# x0.8 from its create batch (an 0x006F item change in the same batch -- GWW
+# "Bundle": "Some bundles ... reduce movement speed") took "Charge!" to x1.13 =
+# 1 + 0.33 - 0.20, additive, on 3 of 3. A bundle's slow is not a skill's, and
+# nothing here models a bundle, so the wiki's rule ships and the row is on
+# record (studies/slice/FINDINGS.md SLICE-F47).
+MOVE_SPEED_CAP_UP = 34.0
+MOVE_SPEED_CAP_DOWN = 50.0
+CRIPPLED_FACTOR = 0.5
+MOVE_SPEED_MEANS = {"Movement speed increase": +1, "Movement speed decrease": -1}
 
-    Largest rather than a product: GW speed boosts famously do not stack (the
-    strongest applies), and stances -- today's only carriers -- are exclusive
-    per type anyway, so the max and the product cannot differ against current
-    content. Recorded as max so the day two sources coexist, the modelled rule
-    is the game's rather than an accident of arithmetic.
+
+def _episode_percent(ep, which):
+    """The percent in the episode's `which` slot: flat, else the progression."""
+    try:
+        return float(skill_flat_constant(ep["skill"], which))
+    except ValueError:
+        return float(skill_scale_value(ep["skill"], ep.get("rank", 0), which))
+
+
+def move_speed_terms(state, agent_id):
+    """(boosts, snares, crippled): the open episodes' movement terms, in percent.
+
+    A row names the term in `scale_means` or `bonus_scale_means` (Storm Chaser's
+    25 sits in its BONUS slot; Rush's, "Charge!"'s and Windborne Speed's in the
+    scale slot), and the percent is read from THAT slot. Unreadable percents
+    modify nothing and say so. Crippled is the condition episode itself.
     """
     table = state.get("effects")
+    boosts, snares, crippled = [], [], False
     if not table:
-        return 0.0
-    best = 0.0
+        return boosts, snares, crippled
     for ep in table.on_agent(agent_id):
+        if ep["skill"] == effects.CONDITION_BY_NAME["Crippled"]:
+            crippled = True
+            continue
         try:
             row = agents.WORLD.get("skill_effect", str(ep["skill"]))
         except Exception:                                      # noqa: BLE001
             continue
-        if row.get("scale_means") != "Movement speed increase":
-            continue
-        try:
-            pct = skill_flat_constant(ep["skill"])
-        except ValueError:
+        for which, key in (("scale", "scale_means"), ("bonus_scale", "bonus_scale_means")):
+            sign = MOVE_SPEED_MEANS.get(row.get(key))
+            if sign is None:
+                continue
             try:
-                pct = skill_scale_value(ep["skill"], ep.get("rank", 0))
+                pct = _episode_percent(ep, which)
             except ValueError as ex:
-                print(f"[effects] {ep['skill']} names a speed boost with an "
-                      f"UNREADABLE percent, so the base stays: {ex}",
+                print(f"[effects] {ep['skill']} names a movement-speed change "
+                      f"with an UNREADABLE percent, so the base stays: {ex}",
                       flush=True)
                 continue
-        best = max(best, float(pct))
-    return best
+            (boosts if sign > 0 else snares).append(pct)
+    return boosts, snares, crippled
+
+
+def _capped(terms, cap):
+    total = sum(terms)
+    if total > cap and max(terms) <= cap:
+        return cap
+    return total
+
+
+def move_speed_factor(state, agent_id):
+    """What the agent's open episodes do to its declared 0x0027 base. 1.0 = nothing."""
+    boosts, snares, crippled = move_speed_terms(state, agent_id)
+    factor = 1.0
+    if boosts:
+        factor *= 1.0 + _capped(boosts, MOVE_SPEED_CAP_UP) / 100.0
+    if snares:
+        factor *= 1.0 - _capped(snares, MOVE_SPEED_CAP_DOWN) / 100.0
+    if crippled:
+        factor *= CRIPPLED_FACTOR
+    return factor
+
+
+def move_speed_percent(state, agent_id):
+    """The open BOOST total on this agent, capped, in percent (Rush: 25.0).
+
+    Kept for its readers (test_mechanics, the speed_tick banner); the full
+    factor with snares and Crippled is `move_speed_factor`.
+    """
+    boosts, _snares, _crippled = move_speed_terms(state, agent_id)
+    return _capped(boosts, MOVE_SPEED_CAP_UP) if boosts else 0.0
