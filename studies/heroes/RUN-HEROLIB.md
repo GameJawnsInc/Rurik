@@ -978,3 +978,75 @@ budget allows.
 `character_settings` event in the auth capture **after** K1 (the whole
 point; a run without it is run E again and VOID). **K3** a game c2 that
 sends hero 3's attributes. Scored after teardown.
+
+## 16. Result — RUN-HEROLIB-F: **P1 held across a real handoff, but K2 unmet AGAIN — the settings write did not fire, and the corpus says its trigger is neither the transfer nor an edit**
+
+Harness dir `vault/captures/harness/20260915T231050` (`RUN VERDICT: PASS`
+this time — the client was still up when the hold ended); auth capture
+`authsrv-20260915T231109-c1.jsonl`, game c1 `…231115-c1`, game c2
+`…231146-c2`. Scored after teardown.
+
+### 16.1 What happened
+
+| | evidence |
+|---|---|
+| **K1 met** | `gamesrv.log:203` `0x800e ATTRIBUTE_DECREASE`; `:205` `[charstore] SAVE … in persist_hero_attributes -- mtime 03:11:10Z -> 03:11:38Z`; `:206` `hero 3 attributes saved -- 13=2, 16=1, 6 of 10 unspent` |
+| the handoff | `:224` `GAME_SERVER_TRANSFER -> 127.0.0.33:6112, map 168` — the same portal as run A (`ascalon_to_corridor`, 148 → 168); c1's last event 03:11:45Z, c2's first 03:11:46Z |
+| **K2 NOT met** | the auth capture holds **no** `character_settings` event and `authsrv.log` no `character settings` line — only the login save's trace at `:51` |
+| **K3 met** | `:313` `AGENT_ATTRIBUTE_POINTS(hero agent 200: 6 of 10)` on c2; the operator saw 2 after the warp |
+
+**P1 held on a real game-channel handoff** — the edit survived the very
+boundary that lost run A's twelve — **but not because the fix ran**: no
+settings write fired, so nothing tried to overwrite it. By §15.4 the run is
+VOID for P2 and corroborates P1 only in the weak sense that the handoff
+alone does not lose an edit (which §10 already said).
+
+### 16.2 The trigger is NOT what §14 concluded — corpus, two censuses
+
+§14 read the 0-of-17 auth-channel re-entries as "the write rides the zone
+transfer". Run F took the same transfer as run A and got no write. So the
+question was put to every game connection with a wall clock (449), asking
+whether a `character_settings` event landed within 2 s of its close:
+
+| connection carried … | settings at close | no settings |
+|---|---|---|
+| no bar edit, no attribute edit | **318** | **129** |
+| a bar edit (`0x005C`/`0x005E`), no attribute edit | 0 | 4 |
+| an attribute edit, no bar edit | 0 | 2 (runs E, F) |
+| both | 1 (run A) | 0 |
+
+and, by how the connection ended:
+
+| close followed by another game connection ≤ 3 s (a transfer) | settings | no settings |
+|---|---|---|
+| | **29** | **16** |
+| **not followed (exit / kill)** | **290** | **119** |
+
+**OBSERVED:** the write lands at roughly **seven closes in ten, of either
+kind**, and its presence is independent of whether the connection carried an
+edit. It is not a dirty-flag push on the bar or the attributes, it is not
+transfer-specific, and it is not exit-specific. What decides it is **NOT
+FOUND** tonight. (The 0-of-17 in §14 stands as a fact about auth-channel
+re-entries; the inference drawn from it was too strong.)
+
+The 62-byte blob itself (`08 00 94 00 … 30 00 00 00 | 05 ed 00 00 | dc 5d
+00 0b 00 13 | 5b 00 0b 00 13 | 5c … | 5e … | 5a 00 0b 00 13`) has five
+5-byte groups with consecutive leading bytes `5a`–`5e`, which reads like a
+five-slot appearance record — armor pieces with a dye word — but that is a
+guess and is labelled so.
+
+### 16.3 Where this leaves §10's fix
+
+Exercised by `test_charstore` (the run-A replay) and by nothing else.
+Two routes to a client exercise, in cost order:
+
+* **Repeat run F until the write fires.** At ~70 % per close, two or three
+  five-minute runs. Cheap, but blind: a null is indistinguishable from bad
+  luck until the trigger is known.
+* **Find the sender.** The c2s framer for auth opcode `0x8009` in the
+  client, and what gates the call — a `codescan` desk item, no run. That
+  turns the 70 % into a rule and makes the next run a one-shot.
+
+Neither was done tonight; the owner's minutes were spent. The fix's
+correctness rests on the unit replay of run A's exact order, which is the
+same order the corpus's 319 writes follow.
