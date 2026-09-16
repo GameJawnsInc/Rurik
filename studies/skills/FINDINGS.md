@@ -6299,3 +6299,104 @@ every operator shares, this is one person's account.
   happens because a quest reward row says so.
 * **`0x00DC`'s copies field** is still 1 in every sighting, so "copies" above 1
   remains UNVERIFIED.
+
+---
+
+## 48. RUN-SKILLS-RB — REGISTERED 2026-09-16, not yet run: Reversal of Fortune and Blind on the Isle, three no-witness items in one eight-step owner-driven capture
+
+**Why now.** The owner exchanged Imperial for Balthazar faction on 2026-09-16 and is
+unlocking skills with it. Balthazar unlocks write the ACCOUNT set (§47.1, `0x001D`), which
+is the set §47.3 says gates equipping, and the secondary account's PvP Warrior (the rung-7
+and rung-8 character: level 20, 480 health, sword) can equip any unlocked Monk skill after a
+free secondary change at the Great Temple's Profession Changer. That puts a prevention
+enchantment on a body that can be hit, for the first time, and every open item below is one
+whose closing line already reads "an R0b runsheet line, not scheduled".
+
+Plan `vault/plans/skills_rof_blind.txt` (sha256 `7b001a77…` from `marks.py --check-plan`,
+8 steps), sealed by `livesession.py --plan` at launch. **Eight steps, three questions, one
+meaning for F11: "UNDER — it happened while the icon was on me."** The steps are bare
+actions; every prediction lives in the plan's header (the 8b/8c lesson, §7.8) and is
+restated here so the document carries it.
+
+### 48.1 The three questions, and where each is open
+
+| | open item | today's state | the step |
+|---|---|---|---|
+| Q1 | the account unlock on the wire | §47.5: nothing writes either list from the client side; priest, trainer and tome paths unanswered | `temple`: buy ONE unlock at the Priest of Balthazar with the tap running |
+| Q2 | Blind's miss rate under a live 479 | §44 P2 NO WITNESS; `missjoin.py` carries it, not tests it | `blind`: ~25 swings at the Student of Blind from inside its ring |
+| Q3 | the fully converted hit's damage word | slice F46.8: shipped by analogy, UNREAD on retail; the corpus holds no 307 and no prevention heal | `rof`: ~6 hits from the Master of Axes under Reversal of Fortune; `frenzy`: ~3 more with Frenzy also open |
+
+### 48.2 Why the Isle carries all three — WIKI, fetched 2026-09-16
+
+- WIKI (GWW, "Isle of the Nameless" §NPCs, raw fetched 2026-09-16): the **Student of Blind
+  is listed under Foes** (level 20 Warrior), with the Masters of Axes, Hammers, Lightning and
+  the rest; the practice Suits are foes too. So the Blind subject is attackable, and it
+  stands inside its own ring — a swinger inside it is re-blinded while it swings. Our own
+  rung-8 tape has its application: `0x0042` skill 479, duration **10.0** (`bufflog.py
+  --capture 20260821T152147`), and the Students apply on proximity without attacking (§7).
+- WIKI (GWW, "Student of Blind", raw fetched 2026-09-16): Zaishen Order, Warrior 20, one
+  skill (Healing Signet); "inflicts blindness (unmodified) on nearby players for 10 seconds".
+  Agrees with the tape's 10.0 — two witnesses of no shared ancestry.
+- WIKI (GWW, "Reversal of Fortune", raw fetched 2026-09-16): id **307**, Monk, Protection
+  Prayers, Enchantment Spell, 5 energy, ¼ s, 2 s recharge; *"For 8 seconds, the next time
+  target ally would take damage or life steal, that ally gains that amount of Health
+  instead, maximum 15…80"* (progression 15 at rank 0, 80 at 15). Notes: *"the healing
+  occurs before damage"*; at rank 12 it negates up to 134 (67 reduced, 67 healed). Acquired
+  from any Profession Changer including the Great Temple's, and — noted for a future
+  pre-Searing witness — from Halbrik in pre-Searing Ascalon City.
+- The foe Masters fight back (the Team Trials' opponents); the Students do not. That is what
+  puts a hit under the enchantment on the same island as the Blind ring.
+
+### 48.3 Predictions, stated before the launch
+
+- **RB-P1 (Q1):** the purchase is a c2s message whose opcode is READ from the batch, not
+  assumed; the reply carries a fresh `0x001D` with exactly ONE new bit and the character's
+  `0x00DB` unchanged. Refuted if `0x00DB` moves, or if `0x001D` is not re-sent (then the
+  account set is re-read only at the next load, and the `isle` step's load says which).
+- **RB-P2 (§47.3):** the Isle load's `0x001D` is byte-identical to the post-purchase set,
+  and the PvP character equips 307 with no refusal — the equip validator reads the account
+  set. A refused equip refutes §47.3.
+- **RB-P3 (Q2, §44 P2):** under a live 479, a swing close (property 1) is joined by
+  `[38, target, player, 3 = miss]` and NO damage in ≥ 90 % of closes, and the miss carries
+  no `0x00CF`. WIKI (GWW "Blind"): 90 %. Refuted if the two-sided 95 % binomial band on the
+  closes excludes 0.90; twenty closes separate 0.90 from 0.50 and from 1.00. The `unblind`
+  step is the same-tape control: zero `[38, …, 3]` on a practice Suit, every close with its
+  damage.
+- **RB-P4 (Q3, F46.8):** on the tick of a hit taken under an open 307: FIRST `[55, player,
+  +h]` with h = min(hit, cap), THEN the damage word — **−0.0** when hit ≤ cap, −(hit − cap)
+  when hit > cap — then `0x0044` stripping 307. F46.8's analogy predicts the −0.0; "no word
+  at all" or "a heal with no damage word" refutes it and rewrites the server's converted
+  arm. The cap is the tooltip number the owner F11-notes at `[PROT=8]` (WIKI ~50); rank 8
+  sits where an axe hit lands on EITHER side of it, so both arms come from one block.
+- **RB-P5 (the Frenzy arm):** with 346 also open, two candidates and the word pair decides:
+  (a) heal = min(2·hit, cap) with the remainder from the doubled hit; (b) heal = min(hit,
+  cap) with the remainder doubled. GWW "Order of damage modifiers" is cited after the tape
+  is read, not before.
+
+### 48.4 The floor
+
+Pre-registered, so a thin tape is reported thin: **≥ 20 swing closes under a live 479**
+(Q2); **≥ 3 hits under an open 307 with the heal word joined on the tick, of which ≥ 1 at
+hit ≤ cap and ≥ 1 at hit > cap**, or that arm reports "not exposed" (Q3); ≥ 2 hits under
+307 + 346 or "not exposed"; the `idle` control clean (zero 55, zero 38, zero `0x0042` on the
+player over ~30 s); the purchase on tape or "not exposed" (Q1). Abort a step — F9 on — if
+the Blind icon never appears inside the ring, the Master will not engage, or health falls
+under a third (walk away and Healing Signet; no death is needed for anything here).
+
+Scoring: `bufflog.py --capture <stamp>` (the 479 and 307 episodes), `missjoin.py --rows`
+(P2's band, which today prints NO WITNESS), `healjoin.py` (the 55 words and what shares
+their tick), joined by ordinal to `plan_marks.jsonl`; a `rofjoin.py` only if the hand read
+of the RoF ticks is not enough. Launched exactly as the aggro runs (RUNBOOK §"Capturing a
+live session"): the stock-DH key-tapped build `vault/run-live/2026-09-01_44fbd68767a8`
+(`dhbuild.py` 2026-09-16: `stock`, every build where it belongs), account `capture`,
+`--confirm --plan --minutes 30`, the marks shell before login. Human cadence, one client,
+the PvE Isle (map 280), no arena, no trading.
+
+**Before launch, outposts only:** secondary Monk at the Profession Changer; 307 and 346 on
+the bar with Healing Signet; Protection Prayers at rank 8 and the tooltip maximum noted;
+Balthazar faction in hand and Reversal of Fortune NOT yet bought if that can be helped — the
+`temple` step buys one unlock inside the run so the purchase is on tape (if it is already
+bought, any other single cheap skill serves Q1, named by F11-note).
+
+**Status: REGISTERED, not run.** Reviewed before sealing per the 2026-08-21 instruction; an
+edit to the plan re-runs `--check-plan` and replaces the sha above.
