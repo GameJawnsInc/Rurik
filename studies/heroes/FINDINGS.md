@@ -3481,12 +3481,21 @@ operator used the hero for AI mode, lock-target and flags only — and that is
   The server is never asked to hold one skill in two slots in ANY gesture, so
   `duplicate_of` stays a diagnostic. **But `0x005E` is UNHANDLED by this server**
   — the client swaps locally and we do nothing, so the two disagree about that
-  hero's bar. Its four fields are **CONFOUNDED** on the one sample (the target
-  slot index and the target skill id were both `2`); the better-supported
-  reading is *(targetSkill, targetCopy, sourceSkill, sourceCopy)*, after the
-  client's own `targetSkill != sourceSkill` / `sourceSkillCopy >= 0` guards, and
-  **no handler is being written until one more drag separates them.** See
-  [RUN-HEROLIB.md](RUN-HEROLIB.md) §7.3 for the one-drag experiment.
+  hero's bar.
+  **`0x005E` IS SKILL-KEYED AT BOTH ENDS — settled by RUN-HEROLIB-C**, whose
+  fixture put every bar id above 7 so no skill id could masquerade as a slot
+  index: `0x005E [200, 276, 0, 279, 0]`, both 276 and 279 being skills, with the
+  copy indices `0`. The slot-keyed rival predicted a `5` in field 1 and there is
+  none.
+  **WHICH field is the source and which the target is NOT settled**, and the two
+  samples are mutually inconsistent under any fixed labelling — each reading
+  requires one of the two reported drag directions to be inverted. Ordering by
+  slot and by bar position were both checked and fail too. The defect is in the
+  measurement, not the fixture: **drag direction was taken from recall rather
+  than from an artifact.** It is settled by reading the bar's resulting order
+  AFTER a swap instead of the gesture before it ([RUN-HEROLIB.md](RUN-HEROLIB.md)
+  §9.3). **No handler until then** — a swap arm that guesses direction writes the
+  bar backwards half the time.
 * **`0x0065 SKILLBAR_SLOT_FLAGS`** rides beside the hero's bar (twice, both
   `[agent, 0]`) and is still unmodelled.
 * **`0x001B`** appeared in this census as an unnamed hero-family c2s message

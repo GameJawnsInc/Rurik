@@ -426,3 +426,131 @@ It is now **fully answered**, and in two different ways depending on the gesture
 So the server is never asked to hold one skill in two slots, in any of the three
 gestures. `herolib.duplicate_of` remains a diagnostic with no case to model —
 but `0x005E` is a real gap in the server, and it is the arc's next item.
+
+---
+
+## 8. RUN-HEROLIB-C — the one drag that separates the two readings
+
+**Registered before launch.** §7.3 left `0x005E`'s field 1 confounded. This
+run's fixture is built so the confound cannot recur.
+
+### 8.1 Half of it is already decided, and saying so sharpens the prediction
+
+Run B's sample was `0x005E [200, 2, 0, 256, 0]`, from dragging slot **1**
+(holding skill **256**) onto slot **2** (holding skill **2**).
+
+**Field 3 is 256 while the source SLOT was 1.** Those differ, so field 3 is
+unambiguously a **skill id**, not a slot index. The source side of this message
+is already known to be skill-keyed. Only **field 1** is in doubt, and only
+because slot index 2 happened to hold skill id 2.
+
+So the real prediction is narrower than "(a) or (b)": given a skill-keyed
+source, a slot-keyed target would be an odd asymmetry.
+
+### 8.2 The fixture
+
+Hero bar seeded `[281, 276, 310, 284, 991, 279, 1685, 256]` — **every id above
+7**, so no skill id can collide with any slot index 0..7. Verified before the
+operator touches anything.
+
+### 8.3 The gesture, and the exact numbers each reading predicts
+
+**Drag slot 1 (skill 276) onto slot 5 (skill 279).**
+
+| reading | predicted `0x005E` payload |
+|---|---|
+| **(b) skill-keyed** — registered as the prediction | `[200, 279, 0, 276, 0]` |
+| (a) slot-keyed | `[200, 5, 0, 276, 0]` |
+
+Field 1 is `279` or `5`. There is no third possibility that leaves the message
+its declared four dwords, and no free parameter in either.
+
+**C1 (the prediction):** field 1 carries the **target skill id**, `279`.
+**C2:** fields 2 and 4 stay `0` — the copy indices of two singly-held skills.
+
+**Refuted if** field 1 is `5`, which makes the message target-slot-keyed and
+source-skill-keyed, and means a handler must resolve the two sides differently.
+That is precisely why no handler was written on run B.
+
+### 8.4 Exposure floor
+
+**G1: ≥ 1 `0x005E`.** Nothing else in this run matters. No `0x005E`, no answer,
+and the run is VOID rather than a null — a replace or a clear does not
+substitute.
+
+## 9. Result — RUN-HEROLIB-C: **the keying question is SETTLED, the field ORDER is not, and the two samples disagree**
+
+Capture `authsrv-20260915T210512-c1.jsonl`, scored after teardown. Fixture
+verified on the wire first: `[281, 276, 310, 284, 991, 279, 1685, 256]`, every
+id above 7. Exposure floor **G1 met** — one `0x005E`.
+
+```
+0x005E [200, 276, 0, 279, 0]
+```
+
+### 9.1 C1 CONFIRMED and C2 CONFIRMED — the message is SKILL-KEYED at both ends
+
+Field 1 is **276** and field 3 is **279**. Both are skill ids; slot indices run
+0..7 and the fixture guaranteed no id could masquerade as one. The slot-keyed
+reading (a) predicted a `5` in field 1 and there is none.
+
+**So `0x005E` names SKILLS, not slots, on both sides — the question §7.3 was
+built to answer.** Fields 2 and 4 are `0`, as predicted (C2), consistent with
+the copy indices of two singly-held skills.
+
+That is the result the run was for, and it is decisive.
+
+### 9.2 But the SOURCE/TARGET assignment is REFUTED in the form it was predicted, and the two samples are INCONSISTENT
+
+The registered prediction was field 1 = **target**, on the reasoning that run B's
+field 3 held the source. Lining the two samples up against their bars:
+
+| run | bar at the swap | slots dragged | payload | field 1 | field 3 |
+|---|---|---|---|---|---|
+| B | `[281, 256, 2, 284, 991, 279, 310, 1685]` | 1 → 2 (reported) | `[2, 0, 256, 0]` | `2` = slot **2**'s skill | `256` = slot **1**'s skill |
+| C | `[281, 276, 310, 284, 991, 279, 1685, 256]` | 1 → 5 (reported) | `[276, 0, 279, 0]` | `276` = slot **1**'s skill | `279` = slot **5**'s skill |
+
+**Under any fixed labelling these disagree.** If field 1 is the target, run B's
+drag went 1 → 2 and run C's went 5 → 1. If field 1 is the source, run B's went
+2 → 1 and run C's went 1 → 5. Each reading requires exactly one of the two
+reported drag directions to be inverted.
+
+Two other orderings were checked and both fail: **slot order** (run B puts the
+higher slot's skill first, run C the lower) and **bar position** (same thing).
+Nothing orders both samples consistently.
+
+**The honest conclusion: the direction is carried by one of these two fields, and
+which one is NOT determined by the data in hand.** The confound is no longer the
+fixture — it is that the drag direction is known only from a verbal report after
+the fact, and one of the two reports has to be inverted for the wire to make
+sense. That is not a criticism of the report; it is a measurement design that
+leaned on memory where it should have leaned on an artifact.
+
+### 9.3 What would settle it, and it does not need a new gesture
+
+The direction has to be recorded by something other than recall. Two options,
+either sufficient:
+
+* **Read the OUTCOME, not the input.** After one swap, have the operator report
+  the bar's resulting left-to-right order. The bar is fully occupied with
+  distinct ids, so the outcome names both ends unambiguously and the payload can
+  be joined to it. This needs no new run type — just the readout taken from the
+  screen after the drag rather than from the gesture before it.
+* **Make the two ends non-interchangeable.** A swap between a slot the server
+  can already distinguish — e.g. immediately after a `0x005C` write whose slot is
+  known — pins one end from our own log.
+
+**No handler is written on this.** The keying is settled and the direction is
+not, and a swap arm that guesses the direction writes the bar backwards half the
+time. The divergence stands: `0x005E` is still `UNHANDLED`, logged at line 206
+of this run's server log, so the client swapped locally and our copy of that
+hero's bar did not move.
+
+### 9.4 A smaller thing this run also settled
+
+Run B's `0x005C` replace **did persist**: the store's bar came into this run as
+`[281, 256, 2, ...]`, slot 1 still holding the replacement. So the
+store-loses-edits defect of §6.5 is **not** a blanket failure of every write —
+it lost the c1→c2 transition in run A specifically. That narrows the search for
+its writer, and is recorded here rather than folded into the §6.5 note because
+it is evidence, not a theory.
