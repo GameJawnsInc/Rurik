@@ -1225,7 +1225,7 @@ Play the R1.5 tape of ArenaNet's own recorded monster behaviour into our client 
 | 4 | ~~Do monster spawn placements live in the Props chunk?~~ **ANSWERED 2026-08-11: no.** | *was:* one histogram | Every prop in all 349 maps resolves to a model file; **0** of them to any creature model id we can name. The client's Props subsystem has no actor vocabulary — interactive world objects are **gadget agents**, a disjoint subsystem. But **67% of the Props chunk is still unread** and is framed and walkable today. §3.10.1. |
 | 5 | Does the tick clock agree with the wire clock on the **existing** captures? | **One analyser run**, no new session. | The `0x001E` integral against the wire span, ≤50 ms. If red, every timed claim in the repo is suspect. |
 | 6 | Does windup scale with declared speed, or is it per-creature? | **One session** targeting a third declared speed, n≥8. | A creature at 1.33 or 2.475. Predicts windup in [0.43, 0.46] × its own declared base. |
-| 7 | Does unprovoked proximity aggro happen at all, and at what radius per creature? **PARTLY ANSWERED 2026-09-15, §11: it happens, and the one observed radius is 992–1105 u; the wiki's 1012 sits inside it, ours (1200) does not.** | *was:* **1–3 sessions**, the `approach` step, subjects that have not moved since create. Still needed for n. | 10 point measurements across ≥3 types. **Refuted if** two creature types' brackets do not overlap — then it is a field, not a constant, as GWW says. **Also refuted if** a subject never reacts down to contact, in which case `AGGRO_RANGE` dies as a concept rather than being retuned. **§12 (2026-09-16): 0 new observed points; two RECON points at 1,008 / 1,020 u from a level-6 caster, and a caster is the wrong subject (its opener cannot separate notice from reach).** |
+| 7 | ~~Does unprovoked proximity aggro happen at all, and at what radius per creature?~~ **CLOSED 2026-09-16 by the owner's ruling (`PLAN.md` §7 Q18): it happens, and the radius is ONE GLOBAL NUMBER — the compass circle is a hardcoded visible mechanic, so it cannot differ per creature. The 10-point bar is retired unmet; three of the five points we had were one individual of a unique quest spawn (§14).** Originally: **PARTLY ANSWERED 2026-09-15, §11: it happens, and the one observed radius is 992–1105 u; the wiki's 1012 sits inside it, ours (1200) does not.** | *was:* **1–3 sessions**, the `approach` step, subjects that have not moved since create. Still needed for n. | 10 point measurements across ≥3 types. **Refuted if** two creature types' brackets do not overlap — then it is a field, not a constant, as GWW says. **Also refuted if** a subject never reacts down to contact, in which case `AGGRO_RANGE` dies as a concept rather than being retuned. **§12 (2026-09-16): 0 new observed points; two RECON points at 1,008 / 1,020 u from a level-6 caster, and a caster is the wrong subject (its opener cannot separate notice from reach).** |
 | 8 | Leash: home, stop, or none — and anchored where? **PARTLY ANSWERED 2026-09-15, §11 N9: a standing creature goes HOME (3/3, 1,358–2,886 u), a patroller resumes the leg it abandoned (2/2, ~5,200 u).** | *was:* **1–3 sessions**, the `retreat` step, aggroed by approach not by attack. | 6 disengagements across ≥2 types. All three outcomes are findings. 5 of 6 done. **§12: +3 hit-provoked level-1 patrollers at 4.4–5.4k u (the patrol arm, n = 5); the caster does not chase at all.** |
 | 9 | Is ambient movement correlated with the player at all? | **Free** — a by-product of every control window. | Patrol destinations vs contemporaneous player position, clustered rather than merely catalogued. |
 | 10 | Absolute monster max health | **1–3 sessions**, if the character carries life-stealing skills. | Two skills of different published steal agreeing on 3 types GWW publishes. Would move HP off `PLAN.md` §1.7's server-only list. |
@@ -1726,9 +1726,61 @@ comes from that tool. Launched exactly as §12's runs (RUNBOOK §"Capturing a li
 the stock-DH key-tapped build `vault/run-live/2026-09-01_44fbd68767a8`, account `capture`,
 `--confirm --plan`, the marks shell before login.
 
-**Status: REGISTERED. Nothing below this line until the tape is scored.**
+**Status: WITHDRAWN UNRUN, 2026-09-16.** The owner ruled the notice radius **global** the same day (`PLAN.md` §7 Q18): the compass circle is one hardcoded radius shown to the player, so a per-creature radius would make the game's own instrument lie. §9 Q7 is closed with it and this plan is not run. Two defects it carried, both caught by the owner reading it rather than by any check here: it named def 1397 "the level-5 Charr-type", **a name this repo invented** (§14), and it asked for **three** melee kinds in a zone whose census holds **two** profession-1 definitions, one of them level 0 — unsatisfiable as written. The lesson is §12's again, one level up: shortening a plan did not make it right, and the operator's knowledge of the zone is a check nothing in this repo can replace.
 
 
+
+---
+
+
+## 14. Definition 1397 is the Rogue Bull — the owner's identification, checked against the wire
+
+**The owner, 2026-09-16:** *"it's possible that the Char-type level 5 enemy is the Rogue
+Bull … it's a curious monster case — no patrol route, stands completely still, short leash
+range."* Recorded because the arc had been calling def 1397 by a name **this repo
+invented** — a session wrote "the level-5 Charr-type" into §13's first draft from nothing
+but a profession byte, which is precisely the labelling failure
+[studies/character/FINDINGS.md](../character/FINDINGS.md)'s vocabulary exists to prevent.
+
+**WIKI** (GWW, "Rogue Bull", fetched 2026-09-16): an animal of Presearing wildlife,
+`profession = w`, `level = 5, 24`, located in **Lakeside County**, carrying the elite
+**Bull's Charge**; a quest creature for *A Mesmer's Burden* that "will respawn until you
+kill him with the quest active, after which he will not return"; **80 health**, "unlike
+other level 5 creatures", with armour 120 against all seven damage types.
+
+**Six signatures, five of them ours, none contradicting:**
+
+| signature | wire / our tapes | GWW |
+|---|---|---|
+| level | **5**, the `0x0056` record | 5 (and a 24 variant) |
+| profession byte | **1** = Warrior (`meleecensus.py`) | `profession = w` |
+| map | **146**, Lakeside County | Lakeside County |
+| movement | **parked since create** on approach 1, **parked at home** on 2 and 3 — never a patrol leg (N7) | — (the owner: "no patrol route, stands completely still") |
+| leash | **HOME 3/3**, gave up 1,358 / 2,111 / 2,886 u out, while the two patrollers ran ~5,200 u (N9) | — (the owner: "short leash range") |
+| the owner said so at the time | N9 already quotes them, **2026-09-15, the day of the run**: *"the Bull had a much shorter return"* — written down before this identification was proposed | — |
+
+**The one check that would have been decisive is NOT AVAILABLE, and the absence is not
+evidence.** GWW's 80 health is a discriminating value — unusual for the level — but
+**def 1397 takes zero damage words anywhere in the corpus**: both approaches were
+unprovoked and both retreats were the player running away, so the owner never hit it.
+`PROP_HEALTH_MAX` appears **0 times** on either September tape (all props counted), so the
+maximum cannot be read directly either, and the fraction-solving route
+(SLICE-F46: a damage word is a whole number of hit points, so the maximum is the value that
+makes every fraction integral) has no fractions to solve. **One hit on this creature on any
+future tape settles it outright**, and it is the cheapest confirmation available — but
+nothing in this repo depends on the name.
+
+**CORROBORATED, not OBSERVED**: six agreeing signatures and no wire value unique to this
+creature. Labelled that way deliberately — the level, profession and map are shared with
+every other Rogue Bull-shaped thing the game might hold, and only the standing-plus-short-
+leash pair is distinctive.
+
+**Why it mattered for the arc.** It explains the anomaly N7 and N9 both recorded without
+naming: the one creature in the corpus that neither patrols nor roams, and whose leash is
+half the patrollers'. It is a **unique quest spawn** — one per map, respawning only until
+the quest kills it — which is why three of this arc's five observed radius points came from
+the same body, and why §13's plan would have found at most one of it (see §9 Q7's closure
+and `PLAN.md` §7 Q18).
 
 ---
 

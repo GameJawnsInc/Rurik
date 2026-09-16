@@ -1825,9 +1825,43 @@ scope; nothing in `toolkit/` changed, because nothing ever enforced this in code
 
 ---
 
+**Q18. Is retail's notice radius one global number, or per creature?**
+
+✅ **RULED 2026-09-16 — the owner: *"the aggro radius is global from what I know. it's
+hard coded as a circle in the minimap so I doubt it would differ from enemy to enemy —
+they specifically put aggro range in the game as a visible mechanic."*** The argument is
+design intent read off the interface, and it is the strongest kind available here: the
+compass circle is drawn at one radius for every map and every creature, so a per-creature
+radius would make the game's own instrument lie to the player. ArenaNet shipped aggro range
+as something the player *reads*, which is an argument no amount of our approaching settles
+better.
+
+**Our data does not contest it.** Every observed notice in the corpus falls in 868–1048 u
+across five definitions and three maps, and the wiki's 1012 sits inside every two-sided
+bracket ([studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md) §11 N7, §12.5).
+Nothing has ever measured two creatures whose brackets exclude each other — the refutation
+condition §13.1 registered, and it never fired.
+
+**What this closes, and what it saves.** `studies/monsterai/FINDINGS.md` §9 **Q7 is
+CLOSED** — it was costed at "1–3 sessions" and its bar (10 observed points over ≥ 3 types)
+is retired unmet, because the bar was measuring toward a question the design already
+answers. **RUN-AGGRO-LAKESIDE-2 is WITHDRAWN** (§13), unrun. `AGGRO_RANGE = 1012.0` stands
+as **one constant for every creature**, WIKI + CORROBORATED, and the server needs no
+per-row radius field.
+
+**A weakness in our own count, found while withdrawing the plan and worth recording.** The
+"5 observed points over 3 definitions" this arc quoted is thinner than it reads: **three of
+the five are the same individual** — agent 55 of the 2026-09-15 tape, approached three
+times — and that individual is a **unique quest creature** (§14), one per map. So the
+per-creature question had one clean point per definition and never had the population its
+own bar implied. The ruling closes it; the count should not be re-quoted as if it had been
+close to ten.
+
+---
+
 ## 8. Immediate next actions
 
-### ★ RUN-AGGRO-LAKESIDE-2 REGISTERED 2026-09-16 — **the third aggro capture, the shortest: six steps, one question (per-creature radius, §9 Q7), one meaning for F11** ([studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md) §13; plan `vault/plans/aggro_lakeside2.txt`, sha256 `9647db02…`). Owner-driven, Lakeside County (map 146); not yet run.
+### ❌ RUN-AGGRO-LAKESIDE-2 **WITHDRAWN UNRUN 2026-09-16** (§7 Q18: the owner ruled the radius global; the question it asked is closed). Registered earlier the same day: — **the third aggro capture, the shortest: six steps, one question (per-creature radius, §9 Q7), one meaning for F11** ([studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md) §13; plan `vault/plans/aggro_lakeside2.txt`, sha256 `9647db02…`). Owner-driven, Lakeside County (map 146); not yet run.
 * **Why short:** the fourteen-step Jarin plan was abandoned mid-run (§12), and Q7 is the only question still open on numbers (5 observed points over 3 definitions, bar 10 over ≥ 3). No leash steps (N9 settled), no passive steps (N8/§12.6 settled).
 * **Why melee only:** a caster opens from cast range and its notice cannot be told from it (§12.5). Lakeside's census names the confirmed aggressive anchor — def 1397, the level-5 Charr-type that reacted at 887/879/915 u — plus the level-0 Warrior 1442. Jarin's only Warrior is the passive 4431; the Isle is level-20 range NPCs.
 * **Prediction MONSTERAI-K1 on record:** each melee approach reacts while the player stands in 850–1050 u within 0.2 s of the stop; refuted if two types' brackets do not overlap, or a subject never reacts to contact. Floor: ≥ 3 standing notice rows on ≥ 2 definitions, a clean `idle` control; casters excluded not counted.
