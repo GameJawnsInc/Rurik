@@ -952,6 +952,15 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "nearest within it, and keeps the pick while it lives: "
                          "retail's own choice in 51 of 58 opening starts on a "
                          "party (studies/slice F29, henchjoin.py --hostile).")
+    ap.add_argument("--no-passive-hostiles", action="store_true",
+                    help="MONSTERAI-J REVERT: a row's `passive = true` is "
+                         "ignored -- every hostile notices on proximity, every "
+                         "run before 2026-09-16. By default a passive row stands "
+                         "until the player or a party body hits it, then it and "
+                         "its `group` fight: retail's four level-1 kinds and a "
+                         "level-2 Warrior let the player stand inside 170-950 u "
+                         "and reacted only to the swing (studies/monsterai/"
+                         "FINDINGS.md 12).")
     ap.add_argument("--party-body-in-outpost", action="store_true",
                     help="SLICE-H2b REVERT: create the party's world bodies "
                          "in a town as well. Stock shows a hero's model in a "

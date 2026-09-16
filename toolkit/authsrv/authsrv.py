@@ -9779,6 +9779,19 @@ PARTY_SLOTS = ((0.0, 110.0), (0.0, -110.0), (-110.0, 0.0), (-80.0, 110.0),
 # RECONSTRUCTION fitted to those 58, said so.
 HOSTILE_TARGETS_PARTY = True   # False (--hostile-target-player): the player only,
                                # every run before 2026-09-13.
+# MONSTERAI-J (2026-09-16, studies/monsterai/FINDINGS.md 12): a PASSIVE hostile
+# does not notice on proximity at all. It is a per-definition trait the wire
+# never carries (the definition record's flags word and level are both refuted
+# as its carrier, N10 and 12.6), so a content row says it -- `passive = true` --
+# and the tapes say which rows should: four level-1 definitions and a level-2
+# Warrior let the player stand or walk inside 170-950 u and sent no word; each
+# reacted 1.2-1.3 s after the player's swing (n = 3), and a body spawned with
+# one (`group = "..."` on both rows) joined 0.4 s behind without being hit
+# (n = 1). Until the hit: no pick, no chase, no swing, no cast. On a hit from
+# the player or a party body, the row and its group are PROVOKED and fight by
+# the H3 rule from then on. A row that says nothing behaves as it always did.
+PASSIVE_HOSTILES = True   # False (--no-passive-hostiles): every hostile notices on
+                          # proximity, every run before 2026-09-16.
 BASE_ARMOUR_BY_PROFESSION = {1: 80, 2: 70, 3: 60, 4: 60, 5: 60, 6: 60,
                              7: 70, 8: 60, 9: 80, 10: 70}
 SCALE_MEANS_RESURRECT = {"Resurrect"}
@@ -10263,6 +10276,7 @@ ENEMY_RESEND_DEFINITION = bool(_ENEMY.get("resend_definition", False))
 # rule as above: `entry` is a closed literal, so a key reaches it only by being
 # named here and in spawn_enemy.
 ENEMY_ATTACKS_BACK = bool(_ENEMY.get("attacks_back", True))
+ENEMY_PASSIVE = bool(_ENEMY.get("passive", False))        # MONSTERAI-J
 ENEMY_MAX_HEALTH = _ENEMY["max_health"]
 
 # CREATURE ARMOUR moved to combatmath.py (REFACTOR-A12), wiki banner and all.
@@ -13511,6 +13525,7 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     # MANTID: a hex on the ATTACKER punishes the swing before it lands.
     on_attack_triggers(send, state, PLAYER_AGENT_ID, conn_id)
     agent["health"] = max(0.0, agent["health"] - dealt)
+    provoke_hostile(state, target_id, PLAYER_AGENT_ID, conn_id)   # MONSTERAI-J
 
     # Property 16 on 0x00A3: prop, TARGET, cause, value -- target before cause,
     # and the value is a FRACTION of the target's maximum health. Both were
@@ -15893,6 +15908,7 @@ def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, w
          f"maximum {int(pool)} declared ahead of {what}")
     frac = _damage_fraction(amount, pool, agents.GV_ARMOR_IGNORING, what)
     agent["health"] = max(0.0, float(agent["health"]) - amount)
+    provoke_hostile(state, target_id, source_id, conn_id)         # MONSTERAI-J
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.GV_ARMOR_IGNORING, target_id, source_id, frac],
          f"{what}: {amount:.0f} armour-ignoring to agent {target_id}")
@@ -17684,6 +17700,12 @@ def enemy_attack_tick(send, state, conn_id):
             continue
         if agent.get("allegiance") != agents.ALLEGIANCE_HOSTILE:
             continue
+        if passive_unprovoked(agent):                    # MONSTERAI-J
+            agent["swinging"] = False
+            agent["swing_lands_at"] = None
+            agent["cast_lands_at"] = None
+            agent["casting"] = None
+            continue
         # SLICE-H3: THIS hostile's target (enemy_move_tick picks it), and a
         # corpse is not swung at -- the armed swing at a body that died in
         # the windup drops, as it always did for the player.
@@ -18349,10 +18371,58 @@ def target_label(state, tid):
     return f"party agent {tid} ({row.get('name', '?')})"
 
 
+def passive_unprovoked(agent):
+    """MONSTERAI-J: a passive hostile nobody has hit yet. It notices nothing."""
+    return bool(PASSIVE_HOSTILES and agent.get("passive")
+                and not agent.get("provoked"))
+
+
+def provoke_hostile(state, tid, attacker_id, conn_id):
+    """A hit from the player or a party body lands on hostile row `tid`: the
+    row and every live passive hostile sharing its `group` are PROVOKED -- they
+    pick, chase and swing by the H3 rule from now on, and the fallback chase
+    aims at the hitter (`target_was`). Returns the ids provoked; empty when
+    nothing changed (not passive, already provoked, the hitter is a hostile).
+    Retail (MONSTERAI 12.7): the hit creature swung 1.2-1.3 s after the
+    player's swing, its group-mate 0.4 s behind it, unhit."""
+    if not PASSIVE_HOSTILES:
+        return []
+    rows = state.get("agents", {})
+    row = rows.get(tid)
+    if row is None or row.get("allegiance") != agents.ALLEGIANCE_HOSTILE:
+        return []
+    if attacker_id != PLAYER_AGENT_ID:
+        src = rows.get(attacker_id)
+        if src is None or src.get("allegiance") != agents.ALLEGIANCE_PLAYER:
+            return []
+    group = row.get("group")
+    out = []
+    for aid, r in rows.items():
+        if aid != tid and (group is None or r.get("group") != group):
+            continue
+        if r.get("dead") or r.get("allegiance") != agents.ALLEGIANCE_HOSTILE:
+            continue
+        if not r.get("passive") or r.get("provoked"):
+            continue
+        r["provoked"] = True
+        r["target_was"] = attacker_id
+        out.append(aid)
+    if out:
+        print(f"[c{conn_id}] agent {attacker_id}'s hit PROVOKES "
+              + ", ".join(str(a) for a in out)
+              + (f" (group {group!r})" if group is not None and len(out) > 1
+                 else "")
+              + " -- passive until now (MONSTERAI-J)", flush=True)
+    return out
+
+
 def hostile_target(state, agent_id, agent, now):
     """SLICE-H3: who this hostile fights -- the current pick while it lives,
     else the softest live party body inside AGGRO_RANGE, nearest within the
     class, else None (nobody to fight). See HOSTILE_TARGETS_PARTY."""
+    if passive_unprovoked(agent):                       # MONSTERAI-J
+        agent["target"] = None
+        return None
     cur = agent.get("target")
     if cur is not None and target_dead(state, cur):
         agent["target_locked"] = False
@@ -18401,6 +18471,8 @@ def hurt_agent_row(send, state, attacker_id, tid, dealt, frac, conn_id, what):
     now = time.time()
     hostile = row.get("allegiance") == agents.ALLEGIANCE_HOSTILE
     row["health"] = max(0.0, row["health"] - dealt)
+    if hostile:
+        provoke_hostile(state, tid, attacker_id, conn_id)          # MONSTERAI-J
     if not hostile:
         row["last_hit"] = now
         if ENERGY:
@@ -19484,6 +19556,12 @@ def enemy_move_tick(send, state, conn_id, rec=None):
         if not _ally and agent.get("allegiance") != agents.ALLEGIANCE_HOSTILE:
             continue
         if agent.get("effects", 0) & agents.EFFECT_TRANSITION:
+            continue
+        if not _ally and passive_unprovoked(agent):
+            # MONSTERAI-J: a passive row stands until it is hit -- no pick,
+            # no chase, under either targeting arm.
+            agent["moving"] = False
+            agent["follow"] = None
             continue
         ax, ay = agent["pos"]
         _tid = PLAYER_AGENT_ID
@@ -22345,6 +22423,11 @@ def spawn_population(send, state, origin, conn_id, area=None):
             "effects": 0,
             "resend_definition": bool(row.get("resend_definition", False)),
             "attacks_back": bool(row.get("attacks_back", False)),
+            # MONSTERAI-J: a passive row notices nothing until it is hit, and
+            # its group joins on the hit. Both default to today's behaviour.
+            "passive": bool(row.get("passive", False)),
+            "group": row.get("group"),
+            "provoked": False,
             "skills": bar,
             "skill_ready": [0.0] * len(bar),
             "attributes": {int(a_): int(r_) for a_, r_ in
@@ -22439,6 +22522,8 @@ def _spawn_one_enemy(send, state, agent_id, x, y, plane, conn_id, n_of=(1, 1)):
         "effects": 0,
         "resend_definition": ENEMY_RESEND_DEFINITION,
         "attacks_back": ENEMY_ATTACKS_BACK,
+        "passive": ENEMY_PASSIVE, "group": _ENEMY.get("group"),  # MONSTERAI-J
+        "provoked": False,
         "skills": ENEMY_SKILLS,
         # Per-SLOT rather than per-id: a bar may legitimately carry the same skill
         # twice, and keying recharge by id would make the second copy share the
@@ -29455,6 +29540,12 @@ def main():
         print("[enemy] --hostile-target-player: every hostile fights the player "
               "only -- every run before SLICE-H3 (2026-09-13); retail's named a "
               "henchman 162 times to the observer's 13.", flush=True)
+    if a.no_passive_hostiles:
+        global PASSIVE_HOSTILES
+        PASSIVE_HOSTILES = False
+        print("[enemy] --no-passive-hostiles: `passive` rows notice on proximity "
+              "like every other hostile -- every run before MONSTERAI-J "
+              "(2026-09-16).", flush=True)
     if a.party_body_in_outpost:
         global PARTY_BODY_IN_OUTPOST
         PARTY_BODY_IN_OUTPOST = True
