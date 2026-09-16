@@ -561,8 +561,13 @@ def section_exclusive():
     second = authsrv.apply_effect(send, state, authsrv.PLAYER_AGENT_ID, 319, 12,
                                   None, 0)
     ops = [op for op, _v, _w in sent]
-    LEDGER.ok(ops == [effects.OP_EFFECT_REMOVE, effects.OP_EFFECT_APPLY],
-              "casting a second stance sends REMOVE then APPLY, in that order",
+    # SLICE-F48 (2026-09-16): Rush is a speed stance, so its apply is followed
+    # by the 0x0027 declaring 360 -- retail's own stance-apply shape (Storm
+    # Chaser: [0x0042 455, 0x0027 360.0]). The order under test is unchanged.
+    LEDGER.ok(ops == [effects.OP_EFFECT_REMOVE, effects.OP_EFFECT_APPLY,
+                      authsrv.GAME_SMSG_AGENT_UPDATE_SPEED_BASE],
+              "casting a second stance sends REMOVE then APPLY, in that order "
+              "(then the speed word Rush carries, SLICE-F48)",
               f"{[hex(o) for o in ops]} -- and the order matters: an apply "
               f"before the removal would have two stance icons on screen for "
               f"one frame, and the client discards a second apply anyway")
@@ -754,9 +759,14 @@ def section_wire():
     ep = authsrv.apply_effect(send, state, caster_id=authsrv.PLAYER_AGENT_ID,
                               skill_id=319, rank=12, target_id=None,
                               conn_id=0)
-    LEDGER.ok(ep is not None and len(sent) == 1
-              and sent[0][0] == effects.OP_EFFECT_APPLY,
-              "pressing Rush sends exactly one 0x0042", str(sent[:1])[:120])
+    # SLICE-F48: Rush's apply is followed by its 0x0027 (288 x 1.25 = 360);
+    # the 0x0042 is still exactly one, and first.
+    LEDGER.ok(ep is not None and len(sent) == 2
+              and sent[0][0] == effects.OP_EFFECT_APPLY
+              and sent[1][0] == authsrv.GAME_SMSG_AGENT_UPDATE_SPEED_BASE
+              and sent[1][1] == [authsrv.PLAYER_AGENT_ID, 360.0],
+              "pressing Rush sends exactly one 0x0042, then its 0x0027 360.0",
+              str(sent[:2])[:160])
     vals = sent[0][1]
     LEDGER.ok(vals[0] == authsrv.PLAYER_AGENT_ID and vals[1] == 319
               and vals[2] == 12,
@@ -781,9 +791,13 @@ def section_wire():
     for e in list(table.live.values()):
         e["expires_at"] = 0.0
     authsrv.effect_tick(send, state, conn_id=0)
-    LEDGER.ok(len(sent) == 2 and sent[1][0] == effects.OP_EFFECT_REMOVE
-              and sent[1][1] == [authsrv.PLAYER_AGENT_ID, ep["buff"]],
-              "and the tick closes it with 0x0044 [target, buff]",
+    # SLICE-F48: [0x0042, 0x0027 360] then the close [0x0044, 0x0027 288] --
+    # Windborne's expiry on the Isle is exactly that pair.
+    LEDGER.ok(len(sent) == 4 and sent[2][0] == effects.OP_EFFECT_REMOVE
+              and sent[2][1] == [authsrv.PLAYER_AGENT_ID, ep["buff"]]
+              and sent[3][0] == authsrv.GAME_SMSG_AGENT_UPDATE_SPEED_BASE
+              and sent[3][1] == [authsrv.PLAYER_AGENT_ID, 288.0],
+              "and the tick closes it with 0x0044 [target, buff], then restores 288.0",
               str(sent[1][:2]))
     LEDGER.ok(not table.live,
               "leaving no live episode behind",

@@ -4164,6 +4164,31 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   under Frenzy gets its own [body, 1.33, 0.67] with the player not re-declared; the revert arm
   (`--no-attack-speed-sync`) declares nothing. Section 7b sits between the preparation section
   and the movement lever's, whose shape it copies.
+  **SLICE-F48 (2026-09-16, floor 214 -> 228).** `toolkit/authsrv/test_mechanics.py` §8 relabelled
+  (the lever is ON by default; `--no-move-speed-effects` is the revert arm) and §8b added: the
+  retail arithmetic `speedwords.py` read off 501 speed words, each pinned on the wire --
+  Windborne Speed open sends 383.04 (288 × 1.33); "Charge!" opens by its content row's
+  `opens_episode` and NOT by type (`effects.applies_effect` still answers None for it); a second
+  33 % boost over an open one sends 385.92 (the +34 % cap on the SUM, retail 8 of 8); Crippled's
+  batch is [0x0042 481, 0x00F1, 0x0027 144.0] with the word BEHIND the status; Crippled over a
+  boost is 191.52 (× 0.665, multiplicative -- the factor is asserted not to be the additive
+  0.83); the "Charge!" cast path cures Crippled (`removes_condition`) and sends [0x0042, 0x0044,
+  0x00F1, 0x0027 383.04] in retail's order; Rush 25 + Windborne 33 caps at 34; a crippled BODY is
+  declared at 144.0 and `npc_declared_speed` reads it (an undeclared body answers 288); the revert
+  arm opens the condition and sends no 0x0027. `test_effects.py` §4d and §5 (three checks) now
+  expect the 0x0027 that Rush's apply and expiry carry, in retail's position behind the
+  apply/remove.
+
+- `toolkit/authsrv/test_speedwords.py` -- **SLICE-F48 (2026-09-16, floor 12).** The reader's
+  predictions over the live corpus, stated before the scan in `speedwords.py`'s docstring:
+  P1 a 33 % boost applied with nothing open is × 1.33 (80 / 0); P2 Crippled alone is × 0.5
+  (2 / 0); P3 Crippled over a boost is × 0.665, and P3b no row anywhere reads the additive
+  × 0.83 (21 / 0); P4 a second 33 % boost is × 1.34, GWW's cap (8 / 0); P5 the "Charge!" cure
+  batch carries two speed words (1 / 0); P6 bases are 288 and 300 (324 / 154 words). Floors are
+  on EXPOSURE from the first green run (501 words, 17 captures) so a corpus that lost its
+  witnesses reddens rather than letting `push_speed`'s numbers drift from retail's. Two
+  controls: no uncapped double boost (× 1.66 / × 1.77) anywhere, and every 160/364 apply not
+  over a snare reads × 1.33 or × 1.34 and nothing else. Reads the vault; skips loudly without it.
   **SLICE-B7c (2026-09-12).** `toolkit/authsrv/test_mechanics.py` §28 (floor 162 → 174,
   with B7a's four): a PARTY body casts a heal at the player. Eight checks, four of them
   arms: the policy picks the hurt player (who is not a row in `agents`, which is B7a's

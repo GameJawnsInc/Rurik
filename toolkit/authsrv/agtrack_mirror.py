@@ -854,6 +854,15 @@ class AgTrackMirror(object):
         The CURRENT leg keeps its baked velocity; only later bakes see it."""
         self.sync.move_speed = move_speed
 
+    def on_speed_base(self, max_speed, now_ms):
+        """0x0027: the maxSpeed store (+0x5C), the other factor of S. SLICE-F48:
+        read as a pure store on the same footing as 0x002B -- the bake at
+        0x005FE950 multiplies +0x5C by +0x60 when a LEG starts, so a leg in
+        flight keeps its velocity and the next bake walks at the new base.
+        RECONSTRUCTION on the timing (the store is decoded; that no handler
+        re-bakes on 0x0027 is inferred from 0x002B's shape, not read)."""
+        self.sync.max_speed = float(max_speed)
+
     def on_player_command(self, now_ms, pos, plane, sig, dest=None,
                           arrive_t=0):
         """A player movement command (click 0x003E / heading 0x003D / stop
