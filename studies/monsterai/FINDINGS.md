@@ -1680,6 +1680,54 @@ A second level-2 witness, weaker: agent 49 (same definition) was attack-ordered 
 * **`AGGRO_RANGE = 1012` stands.** Nothing observed moved; two reconstructed caster points at 1,008 and 1,020 u sit inside `(992, 1048)` and are recorded as such.
 * **The server item this run makes concrete — SHIPPED the same day (MONSTERAI-J):** a per-row passive trait for a hostile. `passive = true` on a spawn row: no proximity pick in `hostile_target`, no chase, no swing and no cast until the player or a party body lands a hit (`provoke_hostile`, called from the player's swing, a party body's hit and armour-ignoring damage); on the hit, the row and every passive row sharing its `group = "..."` are provoked, unhit, and fight by the H3 rule from then on, the fallback chase aimed at the hitter. `--no-passive-hostiles` reverts. `test_agentlife` `section_passive_hostiles`, +11 checks, floor 547. **OBSERVED on a loopback client the same afternoon** (harness `20260916T154731`, `--enemy-passive --enemies 2`): two passive Hatchers 300 u out sent nothing until the player's first swing landed, then the log reads `agent 1's hit PROVOKES 10, 11 (group 'test_enemy')`, the unhit one takes a speed word and a follow, and both swing. `attacks_back` is a different fact (whether a body swings at all) and is untouched. **The reaction latency is NOT a gap — re-measured from the right event (2026-09-16, later).** "1.2–1.3 s after the player's swing" counted from the player's `attack_started`; counted from the **hit landing** (the first damage word on the creature) the reply comes **0.44 / 0.39 / 0.15 / 0.00 s** later (1437, 1431, 4438, 4439 — n = 4, OBSERVED), and the group-mate 44 replied 0.39 s after the hit landed on 43 — the same band, not a separate lag. The 1.2 s was the swing's own flight (0.78 s on the Warrior's tapes, 1.2 s on the Ranger's bow). Ours replies on the tick after the landing, inside that band. Still unexposed: whether a hit from beyond `AGGRO_RANGE` draws the creature (every retail hit here landed under 200 u).
 * **The next plan, if there is one, is shorter.** Fourteen steps with F10 repeats was too many for one operator to track under fire; the owner said so. Eight steps, one question per zone, and the level read off the kind's name rather than a click.
+## 13. RUN-AGGRO-LAKESIDE-2 — REGISTERED 2026-09-16, not yet run
+
+The third aggro capture, and the shortest: **six steps, one question, one meaning for
+F11.** Plan `vault/plans/aggro_lakeside2.txt` (sha256 `9647db02…` from
+`marks.py --check-plan`), sealed by `livesession.py --plan` at launch. Owner-driven, the
+secondary account's pre-Searing character, Ascalon City into **Lakeside County (map 146)**
+— the zone the first aggro run used, so its creatures are known.
+
+**Why this shape.** §12's two plans each carried three questions and fourteen or eleven
+steps; the fourteen-step Jarin plan was abandoned mid-run (*"too complicated"*). §9 Q7 is
+the only one still open on numbers — the radius is 5 observed points over 3 definitions,
+the bar is 10 over ≥ 3 — so this plan asks **only** that. No leash steps (settled at n = 5,
+N9), no passive steps (settled, N8/§12.6).
+
+**Why melee only, and why Lakeside.** §12.5 is the lesson: a caster opens with a spell from
+its cast range, and its notice cannot be separated from that range, so the level-6
+Elementalist gave two reconstructed points and no clean one. A creature that **charges and
+swings** shows its notice as the instant it moves. Lakeside County's melee census (this
+session, `meleecensus.py` over the live corpus): the level-5 Charr-type **def 1397**, which
+reacted at 887 / 879 / 915 u on the first run (N7) — the confirmed aggressive anchor — plus
+the level-0 Warrior **def 1442** and others. Map 430 (Jarin) was rejected: its only Warrior,
+4431, is the passive one §12.6 refuted the level rule with. Map 280 (the Isle) is level-20
+range NPCs, wrong for a wild-notice measurement.
+
+### 13.1 Prediction, stated before the launch
+
+**MONSTERAI-K1:** each melee approach reacts while the player STANDS at a distance in
+**850–1050 u**, within 0.2 s of the stop; every stand held ≥ 3 s before the reaction is an
+upper bound above it. **Refuted if** two melee types' brackets do not overlap (the radius is
+a field, not one number); **also refuted if** a melee subject never reacts down to contact.
+A stand in **950–1050 u** that is answered or ignored is the most valuable row: that band is
+where the single-global-number question sits (N7 left it at `(992, 1048)`).
+
+### 13.2 The floor
+
+Pre-registered, so a thin tape is reported thin: **≥ 3 melee notice rows with the player
+standing, on ≥ 2 definitions**, or Q7's count moves by whatever it moves by and no
+per-creature claim is made. The `idle` control must show zero `0x002A` naming the player
+over its ~45 s, or no unprovoked row on the tape is unprovoked. A row on a caster (opens
+with a spell, no move toward the player before the word) is excluded, not counted.
+
+Scoring is `noticeradius.py --since <stamp>`, the marks joined by ordinal; every number
+comes from that tool. Launched exactly as §12's runs (RUNBOOK §"Capturing a live session"):
+the stock-DH key-tapped build `vault/run-live/2026-09-01_44fbd68767a8`, account `capture`,
+`--confirm --plan`, the marks shell before login.
+
+**Status: REGISTERED. Nothing below this line until the tape is scored.**
+
 
 
 ---
