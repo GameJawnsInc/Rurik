@@ -1225,8 +1225,8 @@ Play the R1.5 tape of ArenaNet's own recorded monster behaviour into our client 
 | 4 | ~~Do monster spawn placements live in the Props chunk?~~ **ANSWERED 2026-08-11: no.** | *was:* one histogram | Every prop in all 349 maps resolves to a model file; **0** of them to any creature model id we can name. The client's Props subsystem has no actor vocabulary — interactive world objects are **gadget agents**, a disjoint subsystem. But **67% of the Props chunk is still unread** and is framed and walkable today. §3.10.1. |
 | 5 | Does the tick clock agree with the wire clock on the **existing** captures? | **One analyser run**, no new session. | The `0x001E` integral against the wire span, ≤50 ms. If red, every timed claim in the repo is suspect. |
 | 6 | Does windup scale with declared speed, or is it per-creature? | **One session** targeting a third declared speed, n≥8. | A creature at 1.33 or 2.475. Predicts windup in [0.43, 0.46] × its own declared base. |
-| 7 | Does unprovoked proximity aggro happen at all, and at what radius per creature? **PARTLY ANSWERED 2026-09-15, §11: it happens, and the one observed radius is 992–1105 u; the wiki's 1012 sits inside it, ours (1200) does not.** | *was:* **1–3 sessions**, the `approach` step, subjects that have not moved since create. Still needed for n. | 10 point measurements across ≥3 types. **Refuted if** two creature types' brackets do not overlap — then it is a field, not a constant, as GWW says. **Also refuted if** a subject never reacts down to contact, in which case `AGGRO_RANGE` dies as a concept rather than being retuned. |
-| 8 | Leash: home, stop, or none — and anchored where? **PARTLY ANSWERED 2026-09-15, §11 N9: a standing creature goes HOME (3/3, 1,358–2,886 u), a patroller resumes the leg it abandoned (2/2, ~5,200 u).** | *was:* **1–3 sessions**, the `retreat` step, aggroed by approach not by attack. | 6 disengagements across ≥2 types. All three outcomes are findings. 5 of 6 done. |
+| 7 | Does unprovoked proximity aggro happen at all, and at what radius per creature? **PARTLY ANSWERED 2026-09-15, §11: it happens, and the one observed radius is 992–1105 u; the wiki's 1012 sits inside it, ours (1200) does not.** | *was:* **1–3 sessions**, the `approach` step, subjects that have not moved since create. Still needed for n. | 10 point measurements across ≥3 types. **Refuted if** two creature types' brackets do not overlap — then it is a field, not a constant, as GWW says. **Also refuted if** a subject never reacts down to contact, in which case `AGGRO_RANGE` dies as a concept rather than being retuned. **§12 (2026-09-16): 0 new observed points; two RECON points at 1,008 / 1,020 u from a level-6 caster, and a caster is the wrong subject (its opener cannot separate notice from reach).** |
+| 8 | Leash: home, stop, or none — and anchored where? **PARTLY ANSWERED 2026-09-15, §11 N9: a standing creature goes HOME (3/3, 1,358–2,886 u), a patroller resumes the leg it abandoned (2/2, ~5,200 u).** | *was:* **1–3 sessions**, the `retreat` step, aggroed by approach not by attack. | 6 disengagements across ≥2 types. All three outcomes are findings. 5 of 6 done. **§12: +3 hit-provoked level-1 patrollers at 4.4–5.4k u (the patrol arm, n = 5); the caster does not chase at all.** |
 | 9 | Is ambient movement correlated with the player at all? | **Free** — a by-product of every control window. | Patrol destinations vs contemporaneous player position, clustered rather than merely catalogued. |
 | 10 | Absolute monster max health | **1–3 sessions**, if the character carries life-stealing skills. | Two skills of different published steal agreeing on 3 types GWW publishes. Would move HP off `PLAN.md` §1.7's server-only list. |
 | 11 | What are `band` and `anim`? | **One session**, the `narrate` step. | The operator saying in chat what they were looking at. |
@@ -1542,7 +1542,7 @@ hypothesis with numbers, not a rule.
 2. **The passive rule** — N10 refuted the flags word; the level is what is left on the
    wire. One `approach` on a level-1 `mon1` creature the player has never hit (4438 or
    4439 in the JARIN zone, map 430) tests it directly: it should let the player stand
-   inside the circle. A level-2 or level-3 passive creature anywhere refutes it.
+   inside the circle. A level-2 or level-3 passive creature anywhere refutes it. **REFUTED 2026-09-16, §12.6: def 4431 at level 2 is passive; the trait is per definition and not on the wire.**
 3. **Leash** — N9 has the shape; a standing group and a patrolling group of the same
    definition would separate the creature from the mode.
 4. **The opening shape** — N4 is measured; whether to ship it is a router question, and
@@ -1610,7 +1610,76 @@ live session"): the stock-DH, key-tapped live build `vault/run-live/2026-09-01_4
 `capture`, `--confirm --plan`, the marks shell started before login, F9/F10/F11 as the plan's
 header says. Human cadence, one client, no PvP, no trading.
 
-**Status: REGISTERED. Nothing below this line until the tape is scored.**
+**Status: RAN 2026-09-16 15:03 (`20260916T150306`, plan sealed, sha matches, exe unchanged, 4 keys tapped), scored below.** The owner's notes are in the capture's `notes.txt` by ordinal; the operator's own summary was *"skipped everything except step 13, run got too complicated"* — steps 9–12 (the same-definition pair) were F9'd through at 582–597 s and are `not exposed`. Every number below is `noticeradius.py --since 20260916` or the same helpers on the field connection (`:56865`, 7,621 messages, player agent 29), joined to the marks by wire time.
+
+### 12.4 The floor, and where the run stood against it
+
+| floor | required | got | verdict |
+|---|---|---|---|
+| J1 standing notice rows | ≥ 2, on ≥ 2 definitions | **0** observed (the tool: *ZERO observed notice rows — zero exposure, not a null*) | **not met** — the level-6 kind is a ranged caster on patrol (§12.5); the level-2 kind never reacted (§12.6) |
+| J2 zero-provocation ten-second stand on a level-1 | ≥ 1 | **1** (def 4438, 11.0 s inside 1012 u, agent 43 closing to ~174 u, no click and no swing before) | **met** |
+| J3 retreats with their aftermath | ≥ 2 | 1 approach-provoked (the caster; it did not chase) + 3 hit-provoked (§12.7) | **not met as registered**; the hit-provoked three add to N9's patrol arm |
+| J3a same-definition pair | its pair | steps skipped | `not exposed` |
+| `idle` control | 0 follows naming the player | **0** over 205.8–239.0 s, no self-report in the window (the player did not move), c2s only 7 heartbeats | **clean** |
+| J0 (town) no hero on the field load | 0 × `0x0074`, 0 × `0x01C2` | field connection: 0 and 0 (`0x0073` HERO_INFO once — the account's record rides every load); the first town connection carried the `0x01C2` from before the hero was removed | **confirmed** |
+
+So J1 is a null on its own floor and J2 is a finding. What follows is what the tape says anyway, labelled.
+
+### 12.5 The level-6 kind is a ranged caster, and it opened twice at ~1,010 u — RECON, not pooled
+
+Def 4440's record on this tape is `[4440, file 243106, scale 0x64000000, flags 0x000C, profession 6, level 6]`: an **Elementalist**. Both engagements open with a damage word and no movement burst — it does not walk to the player, it casts — and both hostile positions are dead-reckoned because it was mid-patrol (17 moving orders since create; `where=UNRESOLVED`):
+
+| engagement | provocation | player | hostile at t_n | d |
+|---|---|---|---|---|
+| t = 299.3 s (owner's F11 "aggro time" at 297.1, standing since the 294.7 s stop) | CLICK — `0x0026` attack orders on it at 263.6 and 277.1 s (~2,400 and ~2,170 u out), no swing before its first word; the order did **not** wake it, it waited 22 s for the range to close | STANDING (report 4.6 s old) | RECON | **1,008 u** |
+| t = 366.5 s (the second `leash` repeat, the owner walked back in) | NONE | MOVING (0.8 s old) | RECON | **1,020 u** |
+
+Two reconstructed points inside `(992, 1048)`, the global-number interval N7 left. **Not pooled** (§7.8), and one more caveat that a caster adds: a ranged opener cannot separate *notice* from *reach* — a creature that had noticed earlier and waited for its cast range would look identical. A caster is the wrong subject for Q7 unless something else marks its notice (a turn, a speed word, a leg toward range: none preceded either damage word here).
+
+`0x0026` is the ATTACK order (arm 0 of the client's six-arm world-action switch, `schema/overrides.json`), not a selection — selection is `0x00C1`. The plan's "one click to read the level" produced five `0x0026` sends in step 3 alone (targets 40, 44, 43, 48, 48), so the owner was issuing attack orders and walking under the server's follow, and the first level-6 row and the 4439 row are CLICK-class for that reason. **Next plan: read the level off the target frame with a plain click and check the wire for `0x00C1`, or just let the owner name the kind.**
+
+### 12.6 A LEVEL-2 creature ignored the player at 948 u OBSERVED and at ~430 u — the level rule is REFUTED
+
+Def 4431's record: `[4431, file 207088, scale 0x64000000, flags 0x0008, profession 1, level 2]` — a Warrior, level 2, the same flags word as N10's aggressive level-2 Broodcaller. The owner's F11 "no aggro" at 426.9 s sits inside a stand at (6641, 7750) from the 426.3 s stop to 451.8 s (no self-report between — 25.5 s standing). Agent 101, created at 422.5 s 4,700 u west, walked patrol legs east at 0.35 (100 u/s):
+
+| t | agent 101 | player | d |
+|---|---|---|---|
+| 450.0–452.5 s | **OBSERVED** at its arrived leg endpoint (5923, 7132), standing | standing at (6641, 7750), 24 s into the stand | **948 u, 2.5 s** |
+| 452.5–459.5 s | the next leg to (7101, 6383), arrived at declared speed (OBSERVED at 458 s), interpolated between | walking south (fresh headings, 0.0–0.5 s old) | 764 → 605 → **429 u** (455 s) → 623 → 829 u |
+
+**No act on the player, ever** (`hostile_acts` empty; no follow, no speed jump, no combat word). 948 u standing-to-standing for 2.5 s is inside the wiki circle but above every observed notice so far (868–915 u), so by itself it only says the radius is not ≥ 948 for this kind. The 429 u pass settles it: no radius this repo has seen is under 868 u, N7's level-5 and N7's level-2 Broodcaller both charged at ~900, and a creature that lets a walking player cross 430 u of it without a word is **passive** under any reading. **J2's second clause fires: a level-2 creature is passive, so "level 1 is passive, level 2+ is aggressive" (N10's last candidate) is REFUTED.** 4431 at level 2 is passive; 1432 at level 2 charges. The trait is per definition and — with the flags word already refuted (N10; 4431 and 1432 share `0x0008`, 4440 and the passive 4438/4439 share `0x000C`) — **it is not carried on the wire at all.** Server-only, §2's negative once more; the observable is the stand.
+
+A second level-2 witness, weaker: agent 49 (same definition) was attack-ordered at 460.7 s from ~2,100 u, came to ~600 u (recon, both moving) at 470 s, and never reacted either.
+
+### 12.7 Level 1 — passive, CONFIRMED for 4438; consistent for 4439; and the group-mate joins on the hit
+
+| def / lvl / prof | the stand | its reaction | its group-mate |
+|---|---|---|---|
+| **4438** / 1 / Elementalist (agent 43) | the player stood from 477.4 s; **the creature walked its patrol to ~174 u (recon along an arrived leg) of the standing player; 11.0 s inside 1012 u over 3 reports**; F11 "nothing" at 484.1 s | `attack_started` at 487.5 s, **1.3 s after the player's swing** at 486.2 s (N8: 1.2 s, twice) | **agent 44, created with it at 257.5 s, attacked at 487.8 s** — 0.4 s after 43, with no hit on it; the instrument files it as `chain` (struck another hostile 0.2 s before) and the owner saw it: *"a second lvl 1 Stormseed Jacaranda also aggroed onto me when I hit"* |
+| **4439** / 1 / Mesmer (agent 42) | no stand — a keyboard walk-in from ~1,190 u (525.9 s) to ~164 u (537.5 s), 4.4 s inside 1012 u, an attack order at 522.8 s ignored for 13 s | `attack_started` at 537.1 s, **1.2 s after the swing** at 535.9 s | — |
+
+**OBSERVED, n = 1 + 1 (consistent).** 4438 meets J2's floor: 11 s inside the circle, the creature itself closing to under 200 u, zero provocation before the swing. 4439 is below the floor (the owner did not stand) but every piece is the same shape. With N8's 1431 and 1437 that is **four level-1 definitions passive and zero aggressive** — and §12.6's 4431 shows the same behaviour at level 2, so "passive" is a definition trait, not a level.
+
+**The chain is a new observed fact (n = 1):** a passive creature's group-mate engages when the group-mate is hit, 0.4 s behind, without being hit itself. `aggro_presearing.txt` warned of this from the wiki; this is the first tape that shows it, and it is the mechanism the next server item needs (§12.9).
+
+### 12.8 The chases — the caster does not chase; the passive patrollers chase 4.4–5.4k u after a hit
+
+| who | provoked by | chase | gave up | then |
+|---|---|---|---|---|
+| 4440 caster, engagement 1 | attack-order + proximity | 1 follow + 1 leg, **0.5 s** | 1,008 u from its notice point (recon) | halt, speed 0.35, patrol on (338 u from home) |
+| 4440 caster, engagement 2 | proximity | 0 follows + 3 legs, 7.2 s | 2,571 u (recon) | patrol on; the owner's F11 "it turned back" at 381.8 s |
+| 4438 agent 43 | the hit | 11 follows + 8 legs, 14.1 s | 4,408 u (recon) | **PATROL** — the leg it abandoned |
+| 4438 agent 44 | the chain | 20 follows + 5 legs, 14.1 s | 4,382 u (recon) | **PATROL** |
+| 4439 agent 42 | the hit | 33 follows + 1 leg, 25.6 s, 3 swings mid-chase | 5,439 u (recon) | leg at 0.35 (elsewhere, 1,309 u from home) |
+
+**RECON on the give-up distances (the hostile was in flight), OBSERVED on the shape.** The three level-1 patrollers chased 4.4–5.4k u and 14–26 s — N9's patrol arm again (the Broodcaller 5,168 u, the River Skale 5,239 u), now n = 5, every one a patroller. The caster is a different shape from everything before it: it holds its ground, loses range, and resumes its leg. J3 as registered (approach-provoked retreats, ≥ 2) is not met; J3a is `not exposed`.
+
+### 12.9 What this changes, and what it asks of the server
+
+* **§11's closing item 2 is closed the other way:** the level is not the passive flag. Passivity is a per-definition trait the wire never carries — the fourth definition-record field to be refuted as its carrier. The observable is a ten-second stand, once per definition, and that is how a content row learns it.
+* **`AGGRO_RANGE = 1012` stands.** Nothing observed moved; two reconstructed caster points at 1,008 and 1,020 u sit inside `(992, 1048)` and are recorded as such.
+* **The server item this run makes concrete (not shipped here):** a per-row passive trait for a hostile — no proximity pick in `hostile_target` until it is hit; on the hit, it and the bodies spawned with it engage the hitter (§12.7's chain, n = 1). `content/world.toml` already has `attacks_back`, which is a different fact (whether a body swings at all). What it needs first is a notion of a spawn *group*, which the rows do not carry.
+* **The next plan, if there is one, is shorter.** Fourteen steps with F10 repeats was too many for one operator to track under fire; the owner said so. Eight steps, one question per zone, and the level read off the kind's name rather than a click.
 
 
 ---
