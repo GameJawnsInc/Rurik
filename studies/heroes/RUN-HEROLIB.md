@@ -148,16 +148,63 @@ Verified on the wire **before** the operator was asked to touch anything:
 
 Then one drag and one `+` click. **No crash.**
 
-**P1 CONFIRMED.** `0x005C [200, 3, 284, 0]` — **the HERO's agent**, slot 3,
-skill 284. The client addresses the hero, exactly as the agent-keyed inference
-said it would. Our server answered `0x00D9 SKILLBAR_UPDATE_SKILL(hero 3 slot 3
-<- skill 284)` and the store now holds `skillbar: [281, 276, 2, 284, 0, 0, 0, 0]`.
+**CORRECTION TO THIS SECTION'S FIRST DRAFT.** It was scored while the run was
+still live and reported one drag and one click. The operator kept going, and the
+full run carries **twelve** build-editing messages. The counts below are the
+complete ones, re-scored from both connections after teardown. Scoring a live
+capture is the same defect as a partial suite run reported as a full one.
 
-**P2 CONFIRMED.** `0x000F [200, 0, 13]` — **the HERO's agent**, sequence 0,
-attribute 13 (Healing Prayers). The named rival did **not** fire: no `0x0010`
-template apply anywhere. Our server raised 13 from 2 to 3 and answered the full
-triple pvpui §32 specified — `0x0036` ack, `0x0038` points, `0x003B` attribute —
-and persisted the result.
+**P1 CONFIRMED, n = 7.** Every `0x005C` in the run names **agent 200, the hero**:
+
+| # | message | what it did |
+|---|---|---|
+| 1 | `[200, 3, 284, 0]` | slot 3 ← 284 |
+| 2 | `[200, 4, 279, 0]` | slot 4 ← 279 |
+| 3 | `[200, 5, 991, 0]` | slot 5 ← 991 |
+| 4 | `[200, 4, 0, 0]` | **slot 4 CLEARED** |
+| 5 | `[200, 6, 279, 0]` | slot 6 ← 279 |
+| 6 | `[200, 7, 310, 0]` | slot 7 ← 310 |
+| 7 | `[200, 4, 1685, 0]` | slot 4 ← 1685 |
+
+**Zero refusals.** Every id was inside the hero's library and every slot inside
+0..7, so `herolib.refuse_bar_slot` never fired — which is the outcome wanted,
+the library having been correct this time.
+
+**Two things this run answers that were not among the predictions.**
+
+* **A skill id of 0 CLEARS a slot, on the wire, from the client.** Message 4 is
+  the operator dragging a skill off the bar. `refuse_bar_slot` already treated 0
+  as always-legal on the strength of retail's own bars carrying an empty slot in
+  the middle; here the client *sends* one, unprompted. OBSERVED.
+* **A MOVE is a CLEAR followed by a SET — two messages, and the server never
+  sees a duplicate.** Messages 2, 4 and 5 are one gesture: 279 goes into slot 4,
+  then slot 4 is cleared, then 279 lands in slot 6. This is most of
+  [FINDINGS §40.6](FINDINGS.md)'s duplicate-drag item: the client does not ask
+  the server to hold one skill in two slots and does not ask for a swap. It
+  decomposes the move itself. What is still unseen is a drag onto an *occupied*
+  slot.
+
+**P2 CONFIRMED, n = 5, and BOTH DIRECTIONS.** `0x000F` ×2 and `0x000E` ×3, every
+one `[200, 0, 13]` — the hero's agent, sequence 0, Healing Prayers. The named
+rival did **not** fire: no `0x0010` template apply anywhere in the run. Our
+server answered each with the full triple pvpui §32 specified (`0x0036` ack,
+`0x0038` points, `0x003B` attribute) and persisted each.
+
+**The refund arithmetic closes in BOTH directions against the client's own cost
+table** — the strongest single result of the run, because a refund that priced
+the wrong rank would drift immediately and visibly:
+
+| # | change | cost/refund | unspent after |
+|---|---|---|---|
+| 1 | raise 2 → 3 | −3 | 3 of 10 |
+| 2 | lower 3 → 2 | +3 | 6 of 10 |
+| 3 | lower 2 → 1 | +2 | 8 of 10 |
+| 4 | lower 1 → 0 | +1 | 9 of 10 |
+| 5 | raise 0 → 1 | −1 | 8 of 10 |
+
+Every step is `s_attribPoints[rank]` exactly, and the balance returns to its
+start. A refund priced on the rank being *left* rather than the rank being
+*reached* would have shown up at step 2.
 
 **The budget arithmetic closes on the client's own cost table, with no free
 parameter.** Before: ranks 2 and 1, costing 3 + 1 = 4 of 10, so 6 available.
@@ -171,7 +218,27 @@ is 42 messages, 26 of them `0x0009` keepalives, plus the two edits and the load
 handshake. Nothing is attributable to opening the panel, which reproduces what
 the retail tape already showed.
 
-**P4 CONFIRMED.** Zero assertions, both edits accepted on screen, both persisted.
+**P4 CONFIRMED.** Zero assertions across all twelve edits, every one accepted on
+screen, every one persisted.
+
+**THE HARNESS SCORED THIS RUN `FAIL`, AND THAT IS NOT A CONTRADICTION — but it
+is recorded rather than explained away.** Its rule is that a client which dies
+during the hold retracts the verdict, and the operator closed the client while
+the hold still had ~420 s to run. The harness's own teardown lines say what
+happened:
+
+```
+client exited with code 0 during the hold
+no error dialog within 12s -- the client exited WITHOUT one, which is a clean
+exit rather than a silent crash
+RUN VERDICT RETRACTED: the run passed its checkpoints, then the client died
+during the hold.
+```
+
+Exit code 0, no dialog, and every edit is in the capture **before** the close.
+The retraction is a conservative default doing its job; it is not evidence
+against the twelve messages. Worth noting for the next run: a hold long enough
+that the operator closes the client inside it will always read `FAIL`.
 
 ### 5.3 What the run settles, and what it does not
 
@@ -188,10 +255,10 @@ are closed.
   instance of either message, and the exact *field* semantics beyond
   `[agent, slot, skill]` and `[agent, seq, attribute]` rest on the echo joins,
   not on ArenaNet's own answers.
-* **The duplicate-drag swap is still unverified.** Run 1's drag was a duplicate
-  (Restore Condition was already on the bar) and it crashed for an unrelated
-  reason, so the swap question was never reached. Run 2's drag was into an empty
-  slot with a skill not already on the bar.
+* **The duplicate-drag swap is MOSTLY answered, and not by a prediction.** A
+  move is a clear plus a set (§5.2), so the server never sees one skill in two
+  slots and is never asked to swap. What remains unseen is a drag onto an
+  **occupied** slot — every set in this run landed on an empty one.
 * **`0x005C`'s fourth field is still 0 in every sighting**, ours and retail's.
 * **One trailing unknown, unchanged:** `0x800d` is still unhandled, and `0x005C`
   prints as `0x805c ?` because the catalog carries no name for it — the name is

@@ -3458,16 +3458,23 @@ operator used the hero for AI mode, lock-target and flags only — and that is
   [RUN-HEROLIB.md](RUN-HEROLIB.md).** Two loopback runs on the pinned 38797
   slice build. It cost one crash, of ours, and see §40.7.
 * ~~**Zero corpus exposure on the c2s hero paths.**~~ **CLOSED, both halves
-  CONFIRMED.** The client addresses the hero: `0x005C [200, 3, 284, 0]` on a
-  drag and `0x000F [200, 0, 13]` on an attribute `+`, agent 200 being the hero.
-  The named rival did not fire — no `0x0010` template apply. Our handlers
-  answered both (`0x00D9` echo; the `0x0036`/`0x0038`/`0x003B` triple) and both
-  persisted. **The point arithmetic closes on our own wire now, not just on one
-  retail frame:** ranks 2 and 1 cost 4 of 10, raising rank 2 → 3 costs 3, and
-  the server reported `3 of 10 unspent`.
-* **The duplicate-drag rule is UNVERIFIED.** Retail's UI is understood to swap
-  when a skill already on the bar is dragged onto it; the corpus has no such
-  capture, so the server logs the duplicate and does not model a swap.
+  CONFIRMED, n = 7 bar edits and 5 attribute changes — every one naming agent
+  200, the hero.** `0x005C` ×7 (including a **clear**, `[200, 4, 0, 0]`) and
+  `0x000F` ×2 / `0x000E` ×3, all `[200, 0, 13]`. The named rival did not fire —
+  no `0x0010` template apply. Our handlers answered every one (`0x00D9` echo;
+  the `0x0036`/`0x0038`/`0x003B` triple), zero refusals, all persisted.
+  **The refund arithmetic closes in BOTH directions** against the client's own
+  `s_attribPoints`: −3, +3, +2, +1, −1 across five changes, the balance
+  returning exactly to where it started. A refund priced on the rank being LEFT
+  rather than REACHED would have drifted at the second step.
+* ~~**The duplicate-drag rule is UNVERIFIED.**~~ **MOSTLY ANSWERED by
+  RUN-HEROLIB, and not by a prediction: A MOVE IS A CLEAR PLUS A SET.** The
+  operator moved skill 279 from slot 4 to slot 6 and the client sent three
+  messages — `[200, 4, 279, 0]`, then `[200, 4, 0, 0]`, then `[200, 6, 279, 0]`.
+  It decomposes the move itself, so **the server is never asked to hold one
+  skill in two slots and never asked to swap**, and `duplicate_of` is a
+  diagnostic rather than a case to model. Still unseen: a drag onto an
+  **occupied** slot — every set in that run landed on an empty one.
 * **`0x0065 SKILLBAR_SLOT_FLAGS`** rides beside the hero's bar (twice, both
   `[agent, 0]`) and is still unmodelled.
 * **`0x001B`** appeared in this census as an unnamed hero-family c2s message
