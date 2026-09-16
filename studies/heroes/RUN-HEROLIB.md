@@ -670,3 +670,173 @@ is refused by name.
 `0x005E`'s field order (§9.3) is untouched: that needs the one drag with the
 bar's resulting order read off the screen. The `0x005E` handler is still not
 written, for the reason §9.3 gives.
+
+## 11. RUN-HEROLIB-D — the swap's direction, with the gesture PRE-REGISTERED and the outcome read off the screen
+
+**Registered 2026-09-15 (night, later), BEFORE the client is launched.** §9.3
+named the defect: the drag direction of runs B and C was taken from recall
+after the fact, and one of the two recollections has to be inverted for the
+wire to make sense. This run records the direction in the registration, has
+the operator perform exactly that gesture, and confirms the outcome on screen
+before the second gesture. Nothing is remembered afterwards.
+
+### 11.1 The question
+
+`0x005E [agent, skillA, copyA, skillB, copyB]` is skill-keyed at both ends
+(§9.1). Which end is the skill the operator **picked up** (the source) and
+which is the skill sitting in the slot it was **dropped on** (the target)?
+
+### 11.2 The rig
+
+Same as §8.2: the store still holds hero 3's bar
+`[281, 276, 310, 284, 991, 279, 1685, 256]` (verified on disk at registration,
+every id above 7), ranks `[[13, 2], [16, 1]]`, budget 10. Server
+`--party slice --persist --unlocks corpus`, the slice build under
+`vault/run/slice/`. The bar is verified **on the wire** (`0x00DA` for agent
+200) before the operator is asked to touch anything; a different bar aborts
+the run. This is also the first client run on §10's store guards: every save
+prints its trace line, and the transfer/exit settings write now reloads
+first.
+
+### 11.3 The gesture — two drags, both pre-registered, using only the two END slots
+
+The end slots are chosen so the operator never has to count: **leftmost** is
+slot 0 (skill **281**) and **rightmost** is slot 7 (skill **256**).
+
+| step | the operator does | the bar afterwards |
+|---|---|---|
+| **D1** | picks up the **LEFTMOST** slot and drops it on the **RIGHTMOST** slot | `[256, 276, 310, 284, 991, 279, 1685, 281]` |
+| readout | confirms on screen: *the icon that was leftmost is now rightmost* (yes/no) | |
+| **D2** | picks up the **LEFTMOST** slot again and drops it on the **RIGHTMOST** slot | back to the fixture `[281, …, 256]` |
+| readout | confirms on screen: *the bar looks as it did at the start* (yes/no) | |
+
+D1 and D2 are the same physical gesture on a bar whose two end skills have
+exchanged places, so the source and target **skills are swapped between the
+two messages**. That is the internal check with no free parameter: whichever
+reading is right, message 2 must be message 1 with its two skill ids
+exchanged.
+
+### 11.4 Predictions, registered
+
+| reading | D1 predicts | D2 predicts |
+|---|---|---|
+| **S — field 1 is the SOURCE (picked-up) skill, field 3 the TARGET** | `[200, 281, 0, 256, 0]` | `[200, 256, 0, 281, 0]` |
+| **T — field 1 is the TARGET, field 3 the SOURCE** | `[200, 256, 0, 281, 0]` | `[200, 281, 0, 256, 0]` |
+
+**Registered prediction: S.** Basis: run C is the better-controlled of the two
+samples (fixture verified on the wire, ids above 7, one gesture) and under S
+its reported 1 → 5 drag reads straight; under T run B's reported 1 → 2 reads
+straight instead. One of the two must be right, and this run picks between
+them with both directions fixed in advance. There is no third reading that
+leaves the message its four dwords with copy indices 0.
+
+**Refuted if** D1 produces the T row, or if D1 and D2 are not mirror images
+of each other (which would mean the gesture performed was not the one
+registered, and the run is VOID rather than a refutation).
+
+### 11.5 Exposure floor, and the abort
+
+| | requirement |
+|---|---|
+| **H1** | the fixture bar on the wire at load, exactly |
+| **H2** | **≥ 2** `0x005E` from agent 200, in order, the second the mirror of the first |
+| **H3** | both on-screen readouts answered *yes* |
+
+One `0x005E` with H3's first readout *yes* is half an answer and is reported
+as n = 1; zero is VOID. A *no* on either readout voids that message. **Scored
+from the wire after teardown**, never live (§5.2's correction).
+
+### 11.6 What ships on a clean result
+
+A `0x005E` handler: the store's hero bar (or the player's) has the two skills
+exchanged through the same referee `0x005C` uses, the edit is persisted, and
+the log names both slots. **What the server replies is NOT settled by this
+run** — the live corpus holds zero retail `0x005E`, so retail's reply, if
+any, is UNOBSERVED. The handler will reply with nothing beyond the store
+write, recorded as the open half, because the client has already swapped
+locally and a reconstructed echo is a guess.
+
+## 12. Result — RUN-HEROLIB-D: **S CONFIRMED — field 1 is the skill PICKED UP, field 3 the skill in the slot DROPPED ON; the two messages are exact mirror images**
+
+Harness dir `vault/captures/harness/20260915T224108`, game capture
+`gamesrv/authsrv-20260915T224140-c1.jsonl`, scored after teardown. The
+harness printed `RUN VERDICT: FAIL` because the operator closed the client
+inside the hold (exit code 0, no dialog — §5.2's known retraction, not
+evidence against anything below).
+
+### 12.1 The floor, all three met
+
+| | requirement | result |
+|---|---|---|
+| **H1** | the fixture bar on the wire at load | `0x00DA` for agent 200 at t = 3.264: `[281, 276, 310, 284, 991, 279, 1685, 256]` — exact |
+| **H2** | ≥ 2 `0x005E`, the second the mirror of the first | **two**, t = 87.779 and t = 95.253, 7.5 s apart |
+| **H3** | both on-screen readouts *yes* | operator: "D1 and D2 both yes" |
+
+### 12.2 The two messages, against the registered table
+
+```
+t=87.779  0x005E [200, 281, 0, 256, 0]     D1: leftmost (281) dropped on rightmost (256)
+t=95.253  0x005E [200, 256, 0, 281, 0]     D2: leftmost (now 256) dropped on rightmost (now 281)
+```
+
+| reading | D1 predicted | D1 observed | D2 predicted | D2 observed |
+|---|---|---|---|---|
+| **S** (registered) | `[281, 0, 256, 0]` | **`[281, 0, 256, 0]`** ✓ | `[256, 0, 281, 0]` | **`[256, 0, 281, 0]`** ✓ |
+| T | `[256, 0, 281, 0]` | ✗ | `[281, 0, 256, 0]` | ✗ |
+
+**S is confirmed on both drags and T is refuted on both.** Field 1 is the
+**source** — the skill the operator picked up — and field 3 is the
+**target** — the skill sitting in the slot it was dropped on. The mirror
+check holds exactly: message 2 is message 1 with its two skill ids
+exchanged, which is what the same gesture on the swapped bar must produce
+under either reading, so the gesture performed was the one registered.
+Copy indices `0` in both, as in every earlier sighting (n = 4 now).
+
+### 12.3 What this says about runs B and C
+
+Under S, run C's reported drag (slot 1 → slot 5, `[276, 0, 279, 0]`) reads
+straight, and run B's reported drag (slot 1 → slot 2, `[2, 0, 256, 0]`)
+must have been **slot 2 → slot 1**: the operator picked up skill 2 and
+dropped it on 256. That is the one inverted recollection §9.2 said had to
+exist, and it was the earlier, less-controlled run's. Nothing about the wire
+changes; only the label on run B's gesture does.
+
+### 12.4 Shipped
+
+* **`herolib.refuse_bar_swap` / `apply_bar_swap`** — reason-string referee
+  (same skill both ends → `ChCliSkill.cpp:515`; an id not on the bar; id 0;
+  a bar already holding an id twice) and the pure exchange, padded to eight.
+* **`authsrv.handle_skillbar_skill_swap`**, dispatched on
+  `GAME_CMSG_SKILLBAR_SKILL_SWAP = 0x005E`, agent-keyed like `0x005C`: the
+  player's `SKILLBAR` or the hero's stored bar has the two skills exchanged
+  and is persisted through `set_character_skillbar` /
+  `set_hero_skillbar`. **On success nothing is sent** — retail's reply is
+  UNOBSERVED (zero corpus sightings) and the client has already swapped
+  locally, so an echo would be a guess about a message retail may not send.
+  A **refusal still answers**: both slots are echoed unchanged through
+  `0x00D9`, the per-slot message the client is known to accept, so its local
+  swap is retired rather than left disagreeing.
+* `schema/overrides.json` names GAME_CMSG 94 **`SKILLBAR_SKILL_SWAP`**
+  (upstream's `SKILLBAR_SKILL_REPLACE` recorded as the prior name; a replace
+  from the picker is one `0x005C`).
+* `test_herolib` 24 → **33** (the run's own numbers: D1, D2 restores the
+  fixture, symmetry, the four refusals, padding); `test_charstore` 85 →
+  **91** (the real handler with a fake send on the player's bar: D1 lands
+  and persists, nothing sent, D2 restores, a refusal echoes the on-bar slot
+  unchanged and leaves the bar alone, a foreign agent is refused).
+
+### 12.5 This run was also §10's first client exercise
+
+`authsrv.log` line 51 carries the login save's new trace line
+(`[charstore] SAVE … by authsrv.py:22694 in handle_portal_login -- mtime
+01:05:09Z/1318B -> 02:41:33Z/1318B`). No settings write fired — the client
+was closed from inside the map, as in runs B and C — and no game-side save
+ran because `0x005E` was still unhandled when the run was made, so the
+stale-write guard was not exercised by this run. It will be by the next
+transfer.
+
+### 12.6 Still open
+
+* Retail's **reply** to `0x005E`, if any. Needs a live session in which the
+  owner swaps two hero-bar slots on the secondary account, at human cadence.
+* `0x0065 SKILLBAR_SLOT_FLAGS` and `0x001B` remain unmodelled (§40.6).

@@ -92,6 +92,50 @@ def apply_bar_slot(bar, slot, skill_id):
     return out
 
 
+def refuse_bar_swap(bar, source_skill, target_skill):
+    """Why this swap must not be honoured, or None if it may be.
+
+    0x005E [agent, sourceSkill, sourceCopy, targetSkill, targetCopy] --
+    SKILL-KEYED at both ends (RUN-HEROLIB-C), field 1 the skill the operator
+    PICKED UP and field 3 the skill in the slot it was DROPPED ON
+    (RUN-HEROLIB-D: two pre-registered drags on the two end slots gave
+    [281, 0, 256, 0] then [256, 0, 281, 0], exact mirror images, with the
+    outcome confirmed on screen before the second). A swap only rearranges
+    skills already on the bar, so the library is not consulted: both ids
+    passed refuse_bar_slot on their way in.
+    """
+    bar = [int(s) for s in (bar or ())]
+    src, tgt = int(source_skill), int(target_skill)
+    if src == tgt:
+        return (f"source and target are the same skill {src}; the client's "
+                f"own guard is `targetSkill != sourceSkill` "
+                f"(ChCliSkill.cpp:515)")
+    for label, sid in (("source", src), ("target", tgt)):
+        if sid <= 0:
+            return f"{label} skill id {sid} is not a skill; a swap names two"
+        n = bar.count(sid)
+        if n == 0:
+            return (f"{label} skill {sid} is not on this bar {bar}; a swap "
+                    f"exchanges two slots that are both occupied")
+        if n > 1:
+            return (f"{label} skill {sid} sits in {n} slots of {bar}; the "
+                    f"server never holds one skill twice, so this bar is "
+                    f"already wrong")
+    return None
+
+
+def apply_bar_swap(bar, source_skill, target_skill):
+    """The bar after exchanging the two skills' slots. Pure; no validation.
+
+    Returns a NEW list, padded to eight, like apply_bar_slot.
+    """
+    out = [int(s) for s in (bar or ())][:BAR_SLOTS]
+    out += [0] * (BAR_SLOTS - len(out))
+    i, j = out.index(int(source_skill)), out.index(int(target_skill))
+    out[i], out[j] = out[j], out[i]
+    return out
+
+
 def duplicate_of(bar, slot, skill_id):
     """Which OTHER slot already holds this skill, or None.
 

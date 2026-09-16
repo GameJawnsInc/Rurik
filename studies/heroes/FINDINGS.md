@@ -3487,15 +3487,20 @@ operator used the hero for AI mode, lock-target and flags only — and that is
   index: `0x005E [200, 276, 0, 279, 0]`, both 276 and 279 being skills, with the
   copy indices `0`. The slot-keyed rival predicted a `5` in field 1 and there is
   none.
-  **WHICH field is the source and which the target is NOT settled**, and the two
-  samples are mutually inconsistent under any fixed labelling — each reading
-  requires one of the two reported drag directions to be inverted. Ordering by
-  slot and by bar position were both checked and fail too. The defect is in the
-  measurement, not the fixture: **drag direction was taken from recall rather
-  than from an artifact.** It is settled by reading the bar's resulting order
-  AFTER a swap instead of the gesture before it ([RUN-HEROLIB.md](RUN-HEROLIB.md)
-  §9.3). **No handler until then** — a swap arm that guesses direction writes the
-  bar backwards half the time.
+  ~~**WHICH field is the source and which the target is NOT settled**~~ —
+  **SETTLED by RUN-HEROLIB-D ([RUN-HEROLIB.md](RUN-HEROLIB.md) §11–§12): field
+  1 is the skill PICKED UP, field 3 the skill in the slot DROPPED ON.** Runs B
+  and C had disagreed because their drag directions came from recall; D put
+  the direction in the registration (leftmost slot onto rightmost, twice) and
+  had the outcome confirmed on screen before the second drag. The wire gave
+  `[200, 281, 0, 256, 0]` then `[200, 256, 0, 281, 0]` — exact mirror images,
+  the internal check with no free parameter. Run B's recollection was the
+  inverted one (its drag was 2 → 1); run C's read straight. **The handler now
+  ships** (`handle_skillbar_skill_swap`, `herolib.refuse_bar_swap`): the bar is
+  swapped and persisted; on success NOTHING is sent, because retail's reply is
+  UNOBSERVED (zero corpus sightings) and the client has already swapped
+  locally; a refusal echoes both slots unchanged through `0x00D9`. Retail's
+  reply is the remaining open half.
 * **`0x0065 SKILLBAR_SLOT_FLAGS`** rides beside the hero's bar (twice, both
   `[agent, 0]`) and is still unmodelled.
 * **`0x001B`** appeared in this census as an unnamed hero-family c2s message

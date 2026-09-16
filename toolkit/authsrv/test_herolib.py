@@ -28,7 +28,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import checks  # noqa: E402
 import herolib  # noqa: E402
 
-led = checks.Ledger("herolib", floor=24)
+led = checks.Ledger("herolib", floor=33)
 
 # The capture's own numbers.
 KOSS_OWN = [322, 382, 348, 1, 385, 2]
@@ -109,5 +109,40 @@ led.ok(herolib.duplicate_of(KOSS_BAR, 6, 400) is None,
 led.ok(herolib.duplicate_of(KOSS_BAR, 1, 0) is None,
        "clearing a slot never reports a duplicate, though the bar holds "
        "another 0 at index 6 -- empties are not skills")
+
+# -- the swap, 0x005E (RUN-HEROLIB-D) ---------------------------------------
+# The run's own numbers: fixture [281, 276, 310, 284, 991, 279, 1685, 256],
+# D1 [281, 0, 256, 0] (leftmost picked up, dropped on rightmost), D2
+# [256, 0, 281, 0] (the same gesture on the swapped bar).
+FIX = [281, 276, 310, 284, 991, 279, 1685, 256]
+led.ok(herolib.refuse_bar_swap(FIX, 281, 256) is None,
+       "a swap of two skills both on the bar is allowed")
+d1 = herolib.apply_bar_swap(FIX, 281, 256)
+led.ok(d1 == [256, 276, 310, 284, 991, 279, 1685, 281] and FIX[0] == 281,
+       "D1 puts the leftmost skill rightmost and returns a NEW bar",
+       f"{d1}")
+d2 = herolib.apply_bar_swap(d1, 256, 281)
+led.ok(d2 == FIX,
+       "D2 (the mirror message) restores the fixture -- the run's own "
+       "internal check, with no free parameter")
+led.ok(herolib.apply_bar_swap(FIX, 256, 281) == d1,
+       "the swap is symmetric in its two ids: which end is source only "
+       "matters for naming, never for the resulting bar")
+why = herolib.refuse_bar_swap(FIX, 281, 281)
+led.ok(why is not None and "ChCliSkill.cpp:515" in why,
+       "source == target is refused citing the client's own guard")
+why = herolib.refuse_bar_swap(FIX, 281, 999)
+led.ok(why is not None and "not on this bar" in why,
+       "a target not on the bar is refused -- a swap exchanges two OCCUPIED "
+       "slots; a replace is 0x005C")
+led.ok(herolib.refuse_bar_swap(FIX, 0, 281) is not None,
+       "skill id 0 is refused as a swap end -- an empty slot is not a skill")
+led.ok(herolib.refuse_bar_swap([281, 281, 2, 0, 0, 0, 0, 0], 281, 2)
+       is not None,
+       "a bar already holding one skill twice is refused rather than guessed "
+       "at -- the server never holds a duplicate")
+led.ok(len(herolib.apply_bar_swap([5, 6], 5, 6)) == herolib.BAR_SLOTS
+       and herolib.apply_bar_swap([5, 6], 5, 6)[:2] == [6, 5],
+       "a short bar is padded to eight and the swap still lands")
 
 sys.exit(led.verdict())

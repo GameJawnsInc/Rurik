@@ -2712,6 +2712,17 @@ GAME_CMSG_CLIENT_PERF_REPORT = 0x0009
 # SKILLBAR_SKILL_SET and it is the one kept.
 # Captures 20260821T205552 :65135 and 20260824T074002 :61329.
 GAME_CMSG_SKILLBAR_SKILL_SET = 0x005C
+# 0x005E: the client SWAPPING two occupied bar slots -- one message, not two
+# 0x005C. FIRST OBSERVED ANYWHERE on RUN-HEROLIB-B (zero in the live corpus;
+# upstream named it SKILLBAR_SKILL_REPLACE). [agent, sourceSkill, sourceCopy,
+# targetSkill, targetCopy]: SKILL-keyed at both ends (RUN-HEROLIB-C, every
+# fixture id above 7), and field 1 is the skill the operator PICKED UP,
+# field 3 the one in the slot it was DROPPED ON (RUN-HEROLIB-D, 2026-09-15:
+# two pre-registered drags on the two END slots gave [281, 0, 256, 0] then
+# [256, 0, 281, 0], mirror images, outcome confirmed on screen between them).
+# The copy indices were 0 in all four sightings. Retail's REPLY is unobserved
+# -- studies/heroes/RUN-HEROLIB.md 12.
+GAME_CMSG_SKILLBAR_SKILL_SWAP = 0x005E
 GAME_CMSG_ATTRIBUTE_DECREASE = 0x000E
 GAME_CMSG_ATTRIBUTE_INCREASE = 0x000F
 GAME_CMSG_ATTRIBUTE_LOAD = 0x0010
@@ -14381,6 +14392,84 @@ def handle_skillbar_skill_set(values, send, state, conn_id, rec):
           + ("" if store is not None else "  [not persisted: no store]"),
           flush=True)
     rec.event("skillbar_set", agent=agent_id, slot=slot, skill=skill_id,
+              refused=None, bar=after)
+
+
+def handle_skillbar_skill_swap(values, send, state, conn_id, rec):
+    """Answer one GAME_CMSG 0x005E: exchange two occupied bar slots.
+
+    Wire [agent_id, sourceSkill, sourceCopy, targetSkill, targetCopy] --
+    SKILL-keyed, source = the skill picked up, target = the skill in the slot
+    dropped on (RUN-HEROLIB-C and -D; the constant's comment has the numbers).
+    Agent-keyed like 0x005C, so it edits the player's bar or a hero's.
+
+    ON SUCCESS NOTHING IS SENT. The client has already swapped locally, and
+    retail's reply to this message is UNOBSERVED (zero corpus sightings), so
+    an echo here would be a guess about a message retail may not send. The
+    store write is the whole answer. A REFUSAL still answers, as 0x005C's
+    does: it echoes BOTH slots' unchanged contents through 0x00D9, the one
+    per-slot message the client is known to accept, so the client's local
+    swap is retired rather than left disagreeing with us.
+    """
+    if len(values) < 6:
+        print(f"[c{conn_id}] SKILLBAR SWAP refused: malformed request "
+              f"{values[1:]!r}", flush=True)
+        return
+    agent_id = int(values[1])
+    src, src_copy, tgt, tgt_copy = (int(values[2]), int(values[3]),
+                                    int(values[4]), int(values[5]))
+    hero_index = hero_index_for_agent(agent_id)
+    is_player = agent_id == PLAYER_AGENT_ID
+    store = state.get("charstore_game")
+    uuid_hex = state.get("char_uuid", "")
+
+    if not is_player and hero_index is None:
+        print(f"[c{conn_id}] SKILLBAR SWAP refused: agent {agent_id} is "
+              f"neither this connection's player ({PLAYER_AGENT_ID}) nor any "
+              f"hero it owns {[h for h, _a, _d in hero_slots()]}", flush=True)
+        return
+
+    if is_player:
+        who = "player"
+        before = list(SKILLBAR)[:SKILLBAR_SLOTS]
+    else:
+        who = f"hero {hero_index}"
+        _own, _bar, _r, _p = hero_build(state, hero_index)
+        before = list(_bar) if _bar is not None else [
+            int(sk[0]) for sk in (HERO_SKILLS or ())]
+    before += [0] * (SKILLBAR_SLOTS - len(before))
+
+    why = herolib.refuse_bar_swap(before, src, tgt)
+    if why is not None:
+        print(f"[c{conn_id}] SKILLBAR SWAP REFUSED for {who}: {why} -- "
+              f"echoing both slots unchanged so the client's own swap is "
+              f"retired", flush=True)
+        for sid in (src, tgt):
+            if sid in before:
+                slot = before.index(sid)
+                send(GAME_SMSG_SKILLBAR_UPDATE_SKILL, [agent_id, slot, sid, 0],
+                     f"SKILLBAR_UPDATE_SKILL({who} slot {slot} stays {sid})")
+        rec.event("skillbar_swap", agent=agent_id, source=src, target=tgt,
+                  refused=why)
+        return
+
+    after = herolib.apply_bar_swap(before, src, tgt)
+    src_slot, tgt_slot = before.index(src), before.index(tgt)
+    if is_player:
+        del SKILLBAR[:]
+        SKILLBAR.extend(after)
+        if store is not None:
+            store.set_character_skillbar(uuid_hex, after)
+    elif store is not None:
+        store.set_hero_skillbar(uuid_hex, hero_index, after)
+
+    print(f"[c{conn_id}] SKILLBAR SWAP {who}: skill {src} slot {src_slot} <-> "
+          f"skill {tgt} slot {tgt_slot}; bar now {after}"
+          + (f"  (copy indices {src_copy}/{tgt_copy}, not modelled)"
+             if (src_copy or tgt_copy) else "")
+          + ("" if store is not None else "  [not persisted: no store]"),
+          flush=True)
+    rec.event("skillbar_swap", agent=agent_id, source=src, target=tgt,
               refused=None, bar=after)
 
 
@@ -27832,6 +27921,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                     elif opcode == GAME_CMSG_SKILLBAR_SKILL_SET:
                         handle_skillbar_skill_set(values, send, state,
                                                   conn_id, rec)
+                    elif opcode == GAME_CMSG_SKILLBAR_SKILL_SWAP:
+                        handle_skillbar_skill_swap(values, send, state,
+                                                   conn_id, rec)
                     elif opcode == GAME_CMSG_ATTRIBUTE_INCREASE:
                         handle_attribute_spend(values, send, state, conn_id,
                                                rec, raise_it=True)

@@ -1014,6 +1014,12 @@
     "name": "MAP_MANIFEST_REQUEST",
     "name_confidence": "high",
     "why": "MEASURED 2026-09-14 over every live game connection in the corpus (18 tapes, builds 38797..38888; scratch join over deepwoundjoin.sequence + cmsgstream, written up in studies/divergence/FINDINGS.md D13). Wire [word map_id]. Sent during the instance load after the 0x019F batches, once per map whose manifest the client lacks or holds under a different hash; answered one-for-one by the 0x0198 / 0x0196 / 0x0197 [3, map, hash] sequence (136 requests, 138 replies on 20260817T183323; every requested id was one 0x019F had just named). A cold run directory asks for nearly everything (136 of 137), the same directory's next session asks for nothing, and map 787 -- whose hash alternates between two values -- is asked for on every session whose hash differs from the last (4 of 4). Our server has no handler for it and never sends 0x0196 (divergence D3); on loopback the assembled archives are warm and the corpus of gamesrv captures carries no request at all, which is why the gap has never shown."
+   },
+   "94": {
+    "opcode": 94,
+    "name": "SKILLBAR_SKILL_SWAP",
+    "name_confidence": "high",
+    "why": "OBSERVED four times, all on our own server against the retail 38797 client (studies/heroes/RUN-HEROLIB.md 7, 9, 12); ZERO in the live corpus, so retail's REPLY is unobserved. Upstream named it SKILLBAR_SKILL_REPLACE; the gesture that sends it is a drag from one OCCUPIED bar slot onto another, i.e. a swap -- a replace from the picker is one 0x005C. [agent_id, sourceSkill, sourceCopy, targetSkill, targetCopy], 22 B. SKILL-keyed at both ends: RUN-HEROLIB-C put every bar id above 7 and got [200, 276, 0, 279, 0]. Field ORDER settled by RUN-HEROLIB-D (2026-09-15): two pre-registered drags of the leftmost slot onto the rightmost, with the outcome confirmed on screen before the second, gave [200, 281, 0, 256, 0] then [200, 256, 0, 281, 0] -- field 1 is the skill PICKED UP, field 3 the skill in the slot DROPPED ON, and the two are mirror images with no free parameter. Copy indices 0 in every sighting; the client's own guards are targetSkill != sourceSkill (ChCliSkill.cpp:515) and sourceSkillCopy >= 0 (:516). Agent-keyed like 0x005C (every sighting names the hero, agent 200)."
    }
   },
   "GAME_SMSG": {

@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import checks  # noqa: E402
 import charstore  # noqa: E402
 
-led = checks.Ledger("charstore", floor=85)
+led = checks.Ledger("charstore", floor=91)
 base = tempfile.mkdtemp(prefix="charstore-test-")
 UUID = "11111111111111111111111111111111"
 
@@ -491,6 +491,62 @@ try:
            "charstore's mirrored attribute bounds still equal attribcolumns' "
            "-- they are copied so charstore stays bare-machine loadable, and "
            "a copy with nothing comparing it is where drift lives")
+
+    # -- 0x005E, the swap handler, on the PLAYER's bar (RUN-HEROLIB-D) --------
+    #
+    # Driven the way the accrual is above: the real handler, a fake send, a
+    # scratch store. The hero path shares every line but the body lookup.
+    st_sw = charstore.Store.open("swap@rurik.invalid", base=base)
+    st_sw.ensure_character(UUID, "Test Warrior", "aa" * 37)
+    st_sw.set_character_skillbar(UUID, [281, 276, 310, 284, 991, 279, 1685, 256])
+    sw_state = {"charstore_game": st_sw, "char_uuid": UUID}
+    sw_sent = []
+
+    def sw_send(op, values, label=""):
+        sw_sent.append((op, list(values)))
+
+    class _Rec:
+        def event(self, *a, **k):
+            pass
+
+    _saved_bar = list(authsrv.SKILLBAR)
+    try:
+        del authsrv.SKILLBAR[:]
+        authsrv.SKILLBAR.extend([281, 276, 310, 284, 991, 279, 1685, 256])
+        P = authsrv.PLAYER_AGENT_ID
+        # D1 as the client sent it: [header, agent, 281, 0, 256, 0]
+        authsrv.handle_skillbar_skill_swap([0x5E, P, 281, 0, 256, 0], sw_send,
+                                           sw_state, 0, _Rec())
+        led.ok(list(authsrv.SKILLBAR) == [256, 276, 310, 284, 991, 279, 1685, 281],
+               "0x005E swaps the picked-up skill (field 1) with the skill in "
+               "the slot dropped on (field 3) -- RUN-HEROLIB-D's D1")
+        led.ok(charstore.Store.open("swap@rurik.invalid", base=base)
+               .character_skillbar(UUID)[0] == 256,
+               "and the swapped bar is persisted")
+        led.ok(sw_sent == [],
+               "a successful swap sends NOTHING -- retail's reply is "
+               "unobserved and the client has already swapped locally")
+        authsrv.handle_skillbar_skill_swap([0x5E, P, 256, 0, 281, 0], sw_send,
+                                           sw_state, 0, _Rec())
+        led.ok(list(authsrv.SKILLBAR) == [281, 276, 310, 284, 991, 279, 1685, 256],
+               "D2, the mirror message, restores the fixture")
+        # A refusal answers: both slots echoed unchanged through 0x00D9.
+        authsrv.handle_skillbar_skill_swap([0x5E, P, 281, 0, 4242, 0], sw_send,
+                                           sw_state, 0, _Rec())
+        led.ok(list(authsrv.SKILLBAR)[0] == 281 and sw_sent
+               == [(authsrv.GAME_SMSG_SKILLBAR_UPDATE_SKILL, [P, 0, 281, 0])],
+               "a swap naming a skill not on the bar is refused, the bar is "
+               "untouched, and the slot that IS on the bar is echoed unchanged",
+               f"sent {sw_sent}")
+        sw_sent.clear()
+        authsrv.handle_skillbar_skill_swap([0x5E, 777, 281, 0, 256, 0], sw_send,
+                                           sw_state, 0, _Rec())
+        led.ok(list(authsrv.SKILLBAR)[0] == 281 and sw_sent == [],
+               "an agent that is neither the player nor a hero is refused "
+               "without touching any bar")
+    finally:
+        del authsrv.SKILLBAR[:]
+        authsrv.SKILLBAR.extend(_saved_bar)
 
     # -- RUN-HEROLIB §10: two processes, one file, and the stale snapshot ----
     #
