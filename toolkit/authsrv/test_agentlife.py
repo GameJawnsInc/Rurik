@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=536)   # 2026-09-15 (probe-walk noise) +2 (the CONTROL is pinned to one name and captured: quiet prints nothing, the failure is named to the caller), from the green run; 2026-09-15 (later) HEROLIB +2 (no 0x001D send site may zero the account library -- the GmSkSlot.cpp:206 crash of run 20260915T201538; the negative control restores the literal and reddens naming the line); 2026-09-15 +2 (offset_y honoured); SLICE-F43 +3 (the wipe countdown and its stop), from the green run   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=547)   # 2026-09-15 (probe-walk noise) +2 (the CONTROL is pinned to one name and captured: quiet prints nothing, the failure is named to the caller), from the green run; 2026-09-15 (later) HEROLIB +2 (no 0x001D send site may zero the account library -- the GmSkSlot.cpp:206 crash of run 20260915T201538; the negative control restores the literal and reddens naming the line); 2026-09-15 +2 (offset_y honoured); SLICE-F43 +3 (the wipe countdown and its stop), from the green run   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
 def section_weapon_damage():
@@ -526,6 +526,7 @@ def main():
     section_pool_fraction()
     section_swing_back()
     section_hostile_heal_target()
+    section_passive_hostiles()
     section_chase()
     section_follow_router()
     section_npc_plane()
@@ -607,6 +608,124 @@ def _swings(state, n=1, gap=0.0):
             state, 1)
     return sent
 
+
+
+def section_passive_hostiles():
+    """MONSTERAI-J (2026-09-16): a PASSIVE hostile notices nothing until it is hit.
+
+    Retail, studies/monsterai/FINDINGS.md 12: four level-1 definitions and a
+    level-2 Warrior let the player stand or walk inside 170-950 u and sent no
+    word (n = 5 definitions, 12.6-12.7); each reacted 1.2-1.3 s after the
+    player's swing (n = 3); the body spawned with one joined 0.4 s behind it,
+    unhit (n = 1). The trait is per definition and not on the wire, so a row
+    says `passive = true` and `group = "..."`. Every check has the arm that makes
+    it mean something: the unhit row versus the hit one, the group-mate versus
+    the other group, the player's hit versus a hostile's, and the revert.
+    """
+    import authsrv
+    print("\n== MONSTERAI-J: a passive hostile stands until it is hit; its group "
+          "joins on the hit ==")
+    PLAYER = authsrv.PLAYER_AGENT_ID
+    INT_T = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+    FOLLOW = authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION
+    now = time.time()
+    _saved = authsrv.PASSIVE_HOSTILES
+    try:
+        authsrv.PASSIVE_HOSTILES = True
+        # 1-3. unhit: no pick, no chase at 200 u, no swing and no cast at 85 u.
+        st = _world(dist=200.0, passive=True, group="a", provoked=False)
+        tid = authsrv.hostile_target(st, 10, st["agents"][10], now)
+        LEDGER.ok(tid is None and st["agents"][10].get("target") is None,
+                  "an unhit passive row picks NOBODY at 200 u (retail: def 4431 "
+                  "stood 948 u off a standing player and walked past at 429 u)",
+                  f"target {tid}")
+        sent = _walk(st)
+        LEDGER.ok(not sent and not st["agents"][10].get("moving"),
+                  "and the move tick sends it nothing: no follow, no speed word",
+                  f"sent {sent}")
+        st2 = _world(dist=85.0, passive=True, group="a", provoked=False)
+        sent = _swings(st2)
+        LEDGER.ok(not sent,
+                  "inside its own reach (85 u) the attack tick sends nothing -- "
+                  "no attack_started, no cast (def 4438 let the player stand 11 s "
+                  "and closed to ~174 u itself)", f"sent {sent}")
+        # 4-5. the player's hit provokes it; then it picks, chases, swings.
+        st = _world(dist=200.0, passive=True, group="a", provoked=False)
+        st["agents"][10]["last_hit"] = 0.0
+        authsrv.hit_enemy(lambda op, vals, label="", quiet=False: None, st, 10, 1)
+        LEDGER.ok(st["agents"][10].get("provoked") is True
+                  and st["agents"][10].get("target_was") == PLAYER
+                  and st["agents"][10]["health"] < 100.0,
+                  "the player's swing LANDS and provokes it: `provoked`, and the "
+                  "fallback chase aims at the hitter",
+                  f"row {dict((k, st['agents'][10].get(k)) for k in ('provoked', 'target_was', 'health'))}")
+        tid = authsrv.hostile_target(st, 10, st["agents"][10], now)
+        sent = _walk(st)
+        fol = [v for op, v, _l in sent if op == FOLLOW]
+        LEDGER.ok(tid == PLAYER and len(fol) == 1,
+                  "provoked, it picks the player and the chase opens on the next "
+                  "tick (retail: attack_started 1.2-1.3 s after the player's swing)",
+                  f"target {tid}, follows {fol}")
+        # 6. the GROUP joins: the row spawned with it is provoked by the same hit,
+        # unhit; a passive row of ANOTHER group is not.
+        st = _world(dist=200.0, passive=True, group="a", provoked=False)
+        st["agents"][11] = dict(st["agents"][10], pos=(400.0, 0.0), health=100.0)
+        st["agents"][12] = dict(st["agents"][10], pos=(300.0, 0.0), health=100.0,
+                                group="b")
+        st["agents"][10]["last_hit"] = 0.0
+        authsrv.hit_enemy(lambda op, vals, label="", quiet=False: None, st, 10, 1)
+        LEDGER.ok(st["agents"][11].get("provoked") is True
+                  and st["agents"][11]["health"] == 100.0
+                  and not st["agents"][12].get("provoked"),
+                  "the hit on 10 provokes its group-mate 11 UNHIT (retail: the second "
+                  "Jacaranda 0.4 s behind, 12.7) and leaves group b's 12 standing",
+                  f"11 {st['agents'][11].get('provoked')}, 12 {st['agents'][12].get('provoked')}")
+        # 7. a PARTY body's hit provokes too (hurt_agent_row, SLICE-H4's path).
+        st = _world(dist=200.0, passive=True, group=None, provoked=False)
+        st["agents"][30] = {"name": "monk", "dead": False, "died_at": 0.0,
+                            "health": 100.0, "max_health": 100.0, "last_hit": 0.0,
+                            "pos": (100.0, 0.0), "plane": 0,
+                            "allegiance": agents.ALLEGIANCE_PLAYER, "effects": 0,
+                            "attack_speed": authsrv.ENEMY_ATTACK_SPEED,
+                            "attacks_back": False, "skills": (), "skill_ready": [],
+                            "npc": {"profession": 3, "level": 5}, "party_slot": 0}
+        authsrv.hurt_agent_row(lambda op, vals, label="", quiet=False: None,
+                               st, 30, 10, 5.0, 0.05, 1, "a party swing")
+        LEDGER.ok(st["agents"][10].get("provoked") is True
+                  and st["agents"][10].get("target_was") == 30,
+                  "a party body's hit provokes it and the fallback aims at that body",
+                  f"row {dict((k, st['agents'][10].get(k)) for k in ('provoked', 'target_was'))}")
+        # 8. armour-ignoring damage (a hex's trigger, MANTID) provokes.
+        st = _world(dist=200.0, passive=True, group=None, provoked=False)
+        authsrv.armour_ignoring_damage(lambda op, vals, label="", quiet=False: None,
+                                       st, 10, PLAYER, 5.0, 1, "a trigger")
+        LEDGER.ok(st["agents"][10].get("provoked") is True,
+                  "armour-ignoring damage from the player provokes it too",
+                  f"provoked {st['agents'][10].get('provoked')}")
+        # 9. a HOSTILE's hit does not: the source must be the party's.
+        st = _world(dist=200.0, passive=True, group="a", provoked=False)
+        st["agents"][12] = dict(st["agents"][10], pos=(300.0, 0.0), group="b")
+        got = authsrv.provoke_hostile(st, 10, 12, 1)
+        LEDGER.ok(got == [] and not st["agents"][10].get("provoked"),
+                  "a hit whose source is another HOSTILE provokes nothing",
+                  f"provoked {got}")
+        # 10. a row that says nothing is today's hostile: it picks at 200 u.
+        st = _world(dist=200.0)
+        tid = authsrv.hostile_target(st, 10, st["agents"][10], now)
+        LEDGER.ok(tid == PLAYER and not authsrv.passive_unprovoked(st["agents"][10]),
+                  "a row without `passive` notices on proximity exactly as before",
+                  f"target {tid}")
+        # 11. the revert arm: --no-passive-hostiles.
+        authsrv.PASSIVE_HOSTILES = False
+        st = _world(dist=200.0, passive=True, group="a", provoked=False)
+        tid = authsrv.hostile_target(st, 10, st["agents"][10], now)
+        got = authsrv.provoke_hostile(st, 10, PLAYER, 1)
+        LEDGER.ok(tid == PLAYER and got == [],
+                  "--no-passive-hostiles: the passive row picks at proximity like "
+                  "every run before 2026-09-16, and provoking is a no-op",
+                  f"target {tid}, provoked {got}")
+    finally:
+        authsrv.PASSIVE_HOSTILES = _saved
 
 
 def section_hostile_heal_target():
