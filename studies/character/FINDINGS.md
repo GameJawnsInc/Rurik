@@ -314,6 +314,21 @@ Two places, both now pinned:
 
 ### The settings word, and our [medium] annotations
 
+> **2026-09-16 — read from the client's own packer and unpacker (`0x009273B0` /
+> `0x009274D0`), [studies/heroes/RUN-HEROLIB.md](../heroes/RUN-HEROLIB.md) §22,
+> executable as `toolkit/authsrv/charsummary.py`.** Everything in this section
+> that was CORROBORATED across server lineages is now OBSERVED from the client,
+> with two changes: **`last_time_played` is REFUTED** — retail packs a
+> four-character multichar tag in bytes 4–7 (`'newb'`, `'tuto'`, `'op1'`, or the
+> source map's id in decimal; 184 live values, `summarycensus.py`) — and
+> `helm_status:2` is two separately-read bits (bit 14 from `CHAR_STATS_VIS(3)`,
+> bit 15 from the player entry's flags) of which the client's dirty check
+> compares only bit 15. The trailing dword and bits 18–31 of the packed word are
+> **unwritten by the packer and unread by the unpacker**, which is why every
+> server lineage below found `0xDD` there: the fill is the allocator's, not a
+> field's.
+
+
 The packed u16 after the appearance dword and guild-hall uuid —
 `campaign:4 | level:5 | is_pvp:1 | secondary_profession:4 | helm_status:2`
 (`GmChar.h:116-123`) — is corroborated by gw-preservation's encoder building

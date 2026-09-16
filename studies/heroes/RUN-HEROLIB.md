@@ -1379,6 +1379,8 @@ edit, settings write, reconnect — that lost run A's twelve edits.
 
 ### 21.4 A refinement the run forced, and it corrects §20.1
 
+> **CLOSED by §22 (2026-09-16).** The four bytes are positions the client's packer never writes and its unpacker never reads; byte 59 is `item[4].b`, which the dirty check compares. Nothing below is wrong, and "which is which" is now a byte map.
+
 The blob the client sent back differs from the **original** stored blob in more
 than the byte that was flipped:
 
@@ -1405,3 +1407,215 @@ session starts from the same fixture E and F used. The evidence for this run liv
 in the logs and captures, not in the store. Note for the next run: the restored
 blob is the one that did **not** trigger a write, so provoking one again needs the
 byte flip again.
+
+## 22. Which fields reach the dirty check — the summary's byte map, read from the packer (desk, `codescan`, no run)
+
+§21.4 left one thing open: the blob G's client sent back differed from the one we
+served in **five** bytes, and four of them had been served through runs E and F
+without provoking a send. "Which fields reach the gate" was NOT FOUND. It is now a
+byte map, and the four bytes are not fields.
+
+### 22.1 The chain, one level deeper than §19 — OBSERVED
+
+§19.1 stopped at "`0x00870D80` serializes the summary". That function copies the
+summary object at `0xC07000` into a 0x7C-byte struct on its stack and hands it to a
+packer; the packer is what puts bytes on the wire, and a second function is the
+unpacker that fills the summary from a served blob. All three read cold from the
+pinned build with `codescan.py --dis`, streams aligned from each prologue:
+
+```
+0x00870D80   serializer: summary -> struct S (0x7C bytes on its stack), then
+   0x0084D4E0  -> jmp 0x009273B0   the PACKER: S -> bytes in the caller's 0x100 buffer
+0x00870F90   summary <- served blob:
+   0x0084D4F0  -> jmp 0x009274D0   the UNPACKER: bytes -> S, then S -> summary
+   (a fresh record: this+0x30 <- 0x6e657762 'newb', this+8..0x14 <- 0, this+0x2C <- 0)
+0x008711E0   the GATE (§19.2), 17 stack args from the dispatcher, each one a
+             field of the summary the dispatcher has just re-read
+```
+
+**The packer, `0x009273B0`.** It reserves `0x25 + 5·count` bytes (`0x00741A90` is a
+grow-and-reserve on the output buffer, not a zeroing allocator — the reserved bytes
+hold whatever the buffer held) and writes, in order:
+
+| wire offset | width | written from | note |
+|---|---|---|---|
+| 0 | u16 | constant 8 | version |
+| 8 | u32 | S+0x00 | |
+| 0x1C | u32 | bit-merged, bits 0–17 | **read-modify-write**: `xor edx,[ebx+0x1c]; and edx,0xf; xor edx,[ebx+0x1c]` keeps the dword's other bits; seven more merges the same way |
+| 0xC..0x18 | 4×u32 | S+0x08..0x14 | |
+| 0x20 | u8 | S+0x18 | count |
+| 2 | u16 | S+0x5C | |
+| 4 | u32 | S+0x60 | |
+| 0x25+5i | u16, u16, u8 | S+0x1C+4i, S+0x30+4i, S+0x44+4i | one item, five bytes |
+
+**Never written: bytes 0x21–0x24, and bits 18–31 of the dword at 0x1C.** The packer
+has no instruction that stores to them; the read-modify-write on 0x1C carries the
+buffer's stale bits through.
+
+**The unpacker, `0x009274D0`.** Refuses fewer than 2 bytes; a version word above 8
+returns 0; a version below 8 goes through a converter (`0x005EAFA0`, descriptor table
+`0xBCB3D8`, not read here) which must yield 8; then zeroes S (0x7C bytes) and reads
+word 0, word 2, dword 4, dword 8, dwords 0xC..0x18, byte 0x20 (refuses count > 5 and
+a blob shorter than `0x25 + 5·count`), bits 0–17 of dword 0x1C (bit 16 through
+`movzx eax, word ptr [ebx+0x1e]; and eax, 1`), and the items. **Never read: bytes
+0x21–0x24 and bits 18–31.** So a served blob's residue in those positions cannot
+reach the summary object, and therefore cannot reach the gate.
+
+**The struct ↔ summary map**, from the serializer's copy-out and the unpacker's
+copy-in (`0x00871024`–`0x0087107C`), which is what joins a wire byte to a compared
+member:
+
+```
+S+0x00 <-> +0x00    S+0x58 <-> +0x28    S+0x64 <-> +0x34    S+0x70 <-> +0x44
+S+0x04 <-> +0x04    S+0x5C <-> +0x2C    S+0x68 <-> +0x38    S+0x74 <-> +0x40
+S+0x08..0x14 <-> +0x08..0x14            S+0x6C <-> +0x3C    S+0x78 <-> +0x48
+S+0x18 <-> +0x20 (count)   S+0x1C/0x30/0x44 + 4i <-> the 12-byte item entries at +0x18
+```
+
+**The gate's 17 arguments**, from the dispatcher's pushes (`0x004A8C87`–`0x004A8CC1`)
+and the compares at `0x008711F4`–`0x00871304`:
+
+| arg | dispatcher reads it from | compared against | in the blob |
+|---|---|---|---|
+| +0x08 | `0x00815FF0()` | +0x34 | flag bit 9 |
+| +0x0C | the in-map flag (`[ebp-0x5c]`) | — gates the next three | — |
+| +0x10 | the map id (`0x0084D9C0` = ctx+0x44+0x230) | +0x2C, **in map only** | bytes 2–3 |
+| +0x14 | `0x0084DCE0()` = ctx+0x44+0x384 | +0x30, **in map only** | bytes 4–7 |
+| +0x18 | 16 bytes from the guild module (`0x0083FC00`, or zero) | +0x08..0x14, **in map only** | bytes 12–27 |
+| +0x1C | the composite summary's first dword (`0x0082DCA0`, `CpsApi:460 summary`) | +0x00 | bytes 8–11 |
+| +0x20 | `0x00815CF0()` = player+0x688 | +0x04 | flag bits 0–3 |
+| +0x24 | the composite item count | +0x20 | byte 32 |
+| +0x28/2C/30 | the three per-item arrays | each item's a, b, c | bytes 37+5i.. |
+| +0x34 | `AvApi 0x007DF810`'s second out-value | +0x38 | flag bits 10–13 |
+| +0x38 | `0x0080D5E0(agent)` = agent-table entry +0x2C | +0x28 | flag bits 4–8 |
+| +0x3C | `0x00815EA0(3)`, `ChCliApi:5032 vis < CHAR_STATS_VIS` | **never compared** | flag bit 14 |
+| +0x40 | player entry +0x34, bit 0 | +0x40 | flag bit 15 |
+| +0x44 | ... bit 2 | +0x44 | flag bit 16 |
+| +0x48 | ... bit 1 | +0x48 | flag bit 17 |
+
+`+0x3C` is the one member the gate never reads: no `cmp` in `0x008711E0` touches
+`[esi+0x3c]`, while the update path stores it (`0x00871378`). The three in-map-only
+fields are neither compared nor stored when the flag is clear (`0x0087122C`,
+`0x0087131E`), and the position/guild block is additionally skipped for maps whose
+table flags carry `0x400` (`0x00871328`–`0x0087133F`).
+
+### 22.2 The byte map, with §21.4's five bytes placed on it
+
+| bytes | field | compared? |
+|---|---|---|
+| 0–1 | version 8 | (the unpacker's precondition) |
+| 2–3 | `last_outpost` | in map |
+| 4–7 | `tag` | in map |
+| 8–11 | `appearance` (profession nibble at bits 20–23, `UiGame:613`'s bound) | **yes** |
+| 12–27 | `guild_hall_id` | in map |
+| 28–31 | flags: `campaign`:4 · `level`:5 · `is_pvp`:1 · `secondary`:4 · `helm_shown`:1 · three player-flag bits · **14 unwritten bits** | yes, **except bit 14 and bits 18–31** |
+| 32 | `count` | **yes** |
+| **33–36** | **unwritten, unread** | **no — not a field** |
+| 37+5i | item i: u16 a, u16 b, u8 c | **yes, all three** |
+
+**§21.4's bytes:** 33–36 (`ed 00 00 dc` served, `00 00 00 00` sent) are the unwritten
+four; byte 59 is `item[4].b` (offset 37 + 5·4 + 2), compared in the loop at
+`0x008712DB`–`0x008712E5`. So E and F served a blob that differed from the client's
+own packing **only in positions the client never reads**, and G served one that
+differed in one compared field. Both outcomes follow; nothing about the gate was
+probabilistic. The whole map is executable: `toolkit/authsrv/charsummary.py`
+(`decode`, `encode`, `differing`, `compared_differing`), tested on the run's own two
+blobs by `test_charsummary.py` (50 checks).
+
+### 22.3 Reconciled with the upstream layout — and one upstream name REFUTED
+
+`studies/character/FINDINGS.md` already carried this record from three lineages
+(OpenTyria's `GmChar.h`, gw-preservation's encoder, sgwlpr) as
+`version:u16, last_outpost:u16, last_time_played:u32, appearance:u32,
+last_guild_hall_id[16], {campaign:4 | level:5 | is_pvp:1 | secondary:4 | helm_status:2},
+number_of_pieces:u8, trailing dword`. Against the packer:
+
+* **Agree, now OBSERVED from the client rather than CORROBORATED across servers:**
+  version, `last_outpost`, `appearance`, `last_guild_hall_id`, `campaign`, `level`,
+  `is_pvp` (bit 9 — the bit gw-preservation's encoder skips and GWCA's
+  `PreGameContext` reads), `secondary`, `number_of_pieces`, and the trailing dword
+  being unread — with the addition that it is **unwritten** too, which is why every
+  server lineage found it full of `0xDD`.
+* **Refined:** `helm_status:2` is two bits from two different reads — bit 14 from
+  `CHAR_STATS_VIS(3)`, bit 15 from the player entry's flags — and the gate compares
+  15 but not 14. Bits 16–17 are two more player-flag bits no lineage names.
+* **REFUTED — `last_time_played`.** The census below reads bytes 4–7 of retail's own
+  served blobs as four-character C multichar constants: `'op1'` ×55, `'newb'` ×22 (the
+  unpacker's own fresh-record default, `0x6e657762`), `'tuto'`, `'basi'`, `'vale'`,
+  `'plai'`, `'lake'`, and decimal map ids — `'0164'` ×15, `'0449'` ×15, `'0242'`,
+  `'0248'`, `'0148'`, `'0544'`, `'0281'` — each paired with `last_outpost` of the same
+  number. Not a time. What it names is RECONSTRUCTION (a spawn-point tag, with the
+  source map's id as the default text); that it is a tag is OBSERVED from 184 retail
+  values. `authsrv.py`'s literal comment is amended, its bytes are not.
+
+### 22.4 The census — every summary in the vault, ours and live apart
+
+`python toolkit/authsrv/summarycensus.py` (origin-gated by each capture's own
+`origin` record; the two are never pooled). Numbers, not bytes:
+
+| | ours, served (v8) | ours, client-sent | live, served | live, client-sent |
+|---|---|---|---|---|
+| summaries | 6 | 525 | 161 | 23 |
+| malformed | 0 | 0 | 0 | 0 |
+| lengths | 62 | 62 ×366, 37 ×147, 47 ×12 | 62 | 62 |
+| `level` | 3 | 1 ×451, 0 ×49, 3 ×19, 7 ×6 | 1 ×97, 3 ×31, 20 ×19, 2 ×14 | 20 ×8, 2 ×7, 1 ×6, 3 ×2 |
+| `(level, campaign, is_pvp)` | (3,0,0) | (1,0,0) ×451 … | (20,0,1) ×19 — every level-20 is campaign 0 and pvp | (20,0,1) ×8 |
+| `last_outpost` | 148 | 148 ×467, 143 ×40, 449, 165–167 | 164 ×70, 148 ×26, 242, 449, 248, 295, 544, 416 | 248 ×7, 148, 242, … |
+| `helm_shown` | 0 | 0 | **1 ×161** | 1 ×23 |
+| bytes 33–36 | `ed0000dc` | zero ×164, **251 more distinct** | `dddddddd` ×92, zero ×47, `148c0bdd` ×14, … | zero ×12, 10 others |
+| flag bits 18–31 | 0 | 0 ×340, **92 more distinct** | `0xdddc0000` ×92, 0 ×54, `0x0adc0000` ×14 | 0 ×21, 2 others |
+
+Four things this settles that the disassembly alone could not:
+
+1. **The unwritten positions are the only place residue appears.** 251 distinct
+   values of bytes 33–36 across our 525 client-sent blobs; every other byte position
+   takes a handful of values that mean something. Retail's server fills them with
+   `0xDD` (92 of 161) — and *only* them: the `0xdddc0000` in bits 18–31 is that fill
+   with bits 16–17 overwritten by the packer's merge, which is the read-modify-write
+   in §22.1 seen from the wire.
+2. **`level` is the level.** Retail serves 20 exactly for the owner's level-20
+   characters and 1–3 for the pre-Searing ones; our loopback character is 3 and the
+   blob says 3; the 49 zeros and 6 sevens in our client-sent set are harness runs
+   that spawned at those levels.
+3. **`last_outpost` is where the client packed.** All 184 retail values are outposts;
+   ours is 148, the loopback outpost.
+4. **The literal's version 6 is converted, not rejected.** 1,459 of our served
+   `CHARACTER_INFO`s carry the version-6 literal; every one of the 525 blobs a client
+   sent back is version 8. `charsummary.decode` refuses anything but 8 rather than
+   guess at the converter.
+
+Our own served-vs-sent pair exists in exactly one capture (G's): `differing` =
+`['unwritten', 'items']`, `compared_differing` = `['items']`. That is §21.4's
+observation reproduced by the map with no free parameter.
+
+### 22.5 What this closes, and what it does not
+
+* **§21.4 CLOSED.** "The served blob is not compared wholesale" was right for the
+  wrong reason: the blob *is* compared field by field, and the four bytes are not in
+  any field. §20.1's baseline model stands as written — the served blob IS the
+  baseline — with the unwritten positions excluded by construction.
+* **§10's guard, from the store's side:** the store round-tripping residue is
+  harmless (the unpacker never reads it) and `charstore` keeps serving the client's
+  blob verbatim; nothing changes there. A future run that wants the settings write on
+  demand has a cleaner lever than a byte flip: `charsummary.encode(...)` with any
+  compared field changed.
+* **NOT run:** the helm toggle. Bit 14 is uncompared, so toggling "show helmet" alone
+  should not send `UPDATE_CHARACTER_SETTINGS`; how retail persists that toggle is
+  another message or never — RECONSTRUCTION, and a one-gesture run would settle it.
+* **NOT read:** the version converter `0x005EAFA0`, and what `tag` is called in
+  ArenaNet's source.
+
+### 22.6 A correction to §19.1's address, found on the way
+
+§19.1 named the dispatcher `0x004A8A20` with three call sites (`0x004A6BAA`,
+`0x004A7CB8`, `0x004A8464`). Aligned from that address, the stream shows a function
+that ends at `0x004A8ACE` (`ret`, then a single `int3`) and **a second prologue at
+`0x004A8AD0`** — and it is the second function that holds the gate call, the
+serializer call and `UiGame:613`'s bound check. The three sites call the first, a
+UI-control creator (it posts message `0x10000148` and sets `0xC07070/74/78`); the
+summary dispatcher's direct callers are **two**, `0x004A6FE8` and `0x004A7836`
+(`codescan --xrefs`). §19's chain, gate and polarity are untouched — they were read
+from the right bytes — only the function's start and its caller count move.
+`studies/profession/MODDABLE.md` §5.1's row `0x004a8a20 3 UiGame character summary`
+carries the same off-by-one (its `func_start` walked past a single `int3`); amended
+there in place.

@@ -9548,15 +9548,22 @@ GM_ERROR_AUTH = 11
 # silently fails to pre-highlight a roster entry, with no error to notice.
 TEST_CHAR_UUID = bytes.fromhex("11111111111111111111111111111111")
 TEST_CHAR_NAME = "Test Warrior"
+# The byte map is charsummary.py, read out of the client's own packer and
+# unpacker (studies/heroes/RUN-HEROLIB.md section 22, 2026-09-16). Two of the
+# [medium] marks below are upgraded there: last_outpost is OBSERVED (every
+# served value in 184 vault summaries is an outpost, and the client packs the
+# map it is standing in), and the trailing dword is OBSERVED unwritten by the
+# packer and unread by the unpacker. The version-6 literal is accepted through
+# the client's converter; every blob a client sends back is version 8.
 TEST_CHAR_SETTINGS = bytes.fromhex(
     "0600"              # version 6
-    "9400"              # last_outpost 148, Ascalon City (pre-Searing)  [medium]
-    "00000000"          # last_time_played
+    "9400"              # last_outpost 148, Ascalon City (pre-Searing)
+    "00000000"          # upstream "last_time_played"; retail packs a 4-char tag here
     "00001000"          # appearance: profession Warrior at bit 20
     + "00" * 16 +       # last_guild_hall_id: none
     "11400000"          # campaign Prophecies, level 1, helm shown
     "00"                # number_of_pieces: no equipment  [medium]
-    "00000000")         # trailing dword, believed unread  [medium]
+    "00000000")         # trailing dword: unwritten and unread (section 22)
 assert len(TEST_CHAR_SETTINGS) == 37, len(TEST_CHAR_SETTINGS)
 
 AUTH_CMSG_NAMES = {

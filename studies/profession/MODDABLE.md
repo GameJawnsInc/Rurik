@@ -490,7 +490,7 @@ resolve to **34 distinct functions**, with one site unresolved (`0x00884517`, `U
 — no `int3` padding within `0x800` backwards). **173 direct `rel32` callers in total.**
 
 ```
-0x004a8a20   3   UiGame character summary (the nibble bound check) -- NEW
+0x004a8a20   3   UiGame character summary (the nibble bound check) -- NEW  [2026-09-16: the bound check is in the NEXT function, 0x004a8ad0, 2 callers; func_start walked past a single int3 -- RUN-HEROLIB.md section 22.6]
 0x004d90f0   3   the character-creation picker loop
 0x00510f10   1   GmSkTome                                          -- NEW
 0x0057a040   0   PvpItemList                                       -- NEW

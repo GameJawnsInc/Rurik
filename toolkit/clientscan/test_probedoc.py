@@ -303,7 +303,12 @@ def main():
     for src in FIX.PINNED_SOURCES:
         m = re.search(PIN_RE % re.escape(src), blob)
         with open(os.path.join(HERE, src), "rb") as fh:
-            real = hashlib.sha256(fh.read()).hexdigest()
+            # The pin is the LF blob -- what git stores and what the document
+            # was written against. A checkout here is CRLF (core.autocrlf), so
+            # hashing the raw bytes reddened this on every Windows tree while
+            # the source had not moved (SUITE 2026-09-16, PLAN.md section 8).
+            # Normalising the line endings hashes the CONTENT, not the tree.
+            real = hashlib.sha256(fh.read().replace(b"\r\n", b"\n")).hexdigest()
         if m is None:
             check(False, f"§6 pins a sha256 for {src}",
                   "no pin found -- the document's own staleness signal is gone")
