@@ -105,7 +105,7 @@ table. So an episode needs a reason, and there are exactly two:
     `SELF_TARGET`).
   * OR A CONTENT ROW SAYS SO, per skill, the way `scale_means` does. That
     door is `opens_episode` on the `skill_effect` row, read by
-    `authsrv.apply_effect` (SLICE-F47, 2026-09-16); "Charge!" (364) is its
+    `authsrv.apply_effect` (SLICE-F48, 2026-09-16); "Charge!" (364) is its
     first row, on 47 corpus applies. Every other Shout, Spell, Signet, Glyph,
     Skill and Attack applies nothing -- including the corpus's other shout
     witness (348). That is deliberate. Two witnesses say a shout CAN open an

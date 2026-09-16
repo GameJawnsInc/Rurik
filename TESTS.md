@@ -4164,7 +4164,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   under Frenzy gets its own [body, 1.33, 0.67] with the player not re-declared; the revert arm
   (`--no-attack-speed-sync`) declares nothing. Section 7b sits between the preparation section
   and the movement lever's, whose shape it copies.
-  **SLICE-F47 (2026-09-16, floor 214 -> 228).** `toolkit/authsrv/test_mechanics.py` §8 relabelled
+  **SLICE-F48 (2026-09-16, floor 214 -> 228).** `toolkit/authsrv/test_mechanics.py` §8 relabelled
   (the lever is ON by default; `--no-move-speed-effects` is the revert arm) and §8b added: the
   retail arithmetic `speedwords.py` read off 501 speed words, each pinned on the wire --
   Windborne Speed open sends 383.04 (288 × 1.33); "Charge!" opens by its content row's
@@ -4179,7 +4179,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   expect the 0x0027 that Rush's apply and expiry carry, in retail's position behind the
   apply/remove.
 
-- `toolkit/authsrv/test_speedwords.py` -- **SLICE-F47 (2026-09-16, floor 12).** The reader's
+- `toolkit/authsrv/test_speedwords.py` -- **SLICE-F48 (2026-09-16, floor 12).** The reader's
   predictions over the live corpus, stated before the scan in `speedwords.py`'s docstring:
   P1 a 33 % boost applied with nothing open is × 1.33 (80 / 0); P2 Crippled alone is × 0.5
   (2 / 0); P3 Crippled over a boost is × 0.665, and P3b no row anywhere reads the additive

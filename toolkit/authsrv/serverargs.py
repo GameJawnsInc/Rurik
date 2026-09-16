@@ -1433,7 +1433,7 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "--cancel-answer, --stop-answer, "
                          "--family-rate-probe, --checksum-probe, --pc-spoof, "
                          "--interact-walk; speed effects left the list with "
-                         "SLICE-F47, the chain ETA reads the declared base).")
+                         "SLICE-F48, the chain ETA reads the declared base).")
     ap.add_argument("--router-raw-leg", action="store_true",
                     help="MOVECODE-1z-v condition (a) OFF: the click-leg "
                          "record stays on the RAW click chord instead of "
@@ -1636,12 +1636,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "command line said otherwise. Use this to isolate "
                          "the swing channel from the cast channel.")
     ap.add_argument("--no-move-speed-effects", action="store_true",
-                    help="THE REVERT ARM for SLICE-F47: never declare a "
+                    help="THE REVERT ARM for SLICE-F48: never declare a "
                          "movement-speed base (GAME_SMSG 0x0027) from the "
                          "open episodes -- Rush, \"Charge!\", Windborne Speed "
                          "and Crippled become icons that move nothing, every "
                          "body walks at its create's 288 u/s, and the "
-                         "movement models read that constant (the pre-F47 "
+                         "movement models read that constant (the pre-F48 "
                          "shape, which was the default until 2026-09-16).")
     ap.add_argument("--no-deep-wound", action="store_true",
                     help="SKILLS-DW REVERT: Deep Wound (482) opens and closes "

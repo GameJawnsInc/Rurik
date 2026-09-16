@@ -3254,13 +3254,13 @@ the hero's second death and recovery OBSERVED (n = 1 hero, 2 deaths, 3 ticks); t
 member's silence OBSERVED (n = 5 deaths, 1 body); the henchman case NOT FOUND (no death in
 the corpus) and inferred from the pools' silence; the arena rule UNREAD.
 
-## SLICE-F47 — **MOVESPEED: retail's speed word read off 501 rows — a 33 % boost is × 1.33, Crippled × 0.5 and it MULTIPLIES a boost (× 0.665, 21 of 21), two boosts cap at × 1.34 (8 of 8), and every episode change re-declares — shipped for both signs, on by default, with the movement composite reading the declared base (2026-09-16)**
+## SLICE-F48 — **MOVESPEED: retail's speed word read off 501 rows — a 33 % boost is × 1.33, Crippled × 0.5 and it MULTIPLIES a boost (× 0.665, 21 of 21), two boosts cap at × 1.34 (8 of 8), and every episode change re-declares — shipped for both signs, on by default, with the movement composite reading the declared base (2026-09-16)**
 
 **The owner (2026-09-16):** *"let's do movespeed next, both positive and negative … 'Charge!'
 … or Windborne Speed … both are probably already on tape somewhere."* They were: 80 applies of
 the two, joined to their speed words, plus the Isle's Pin Down.
 
-### 47.1 What existed
+### 48.1 What existed
 
 `speed_tick` (2026-08-22) declared the player's `0x0027` from a `"Movement speed increase"`
 row, behind `--move-speed-effects`, **off by default** because "every REALFIX fence and
@@ -3274,7 +3274,7 @@ the player's model at 288 whatever the client had been told — the sync lerp
 `model_leg_speed`'s base, and the agtrack guard's `RUN_SPEED × age` budget — so a boosted
 body would have been modelled 25–33 % behind itself.
 
-### 47.2 The reader first: `speedwords.py`, six predictions, all held
+### 48.2 The reader first: `speedwords.py`, six predictions, all held
 
 Every `0x0027 [agent, f32]` across the live corpus (**501 words, 17 captures**), joined to
 the same-agent `0x0042`/`0x0044`/`0x00F1` inside the 60 ms batch shoulder, ratioed against
@@ -3304,7 +3304,7 @@ restore; and Windborne over the open shout a second later is `0x0042 [25, 160, 1
 13.0]`, `0x00F1 [25, 0x80]`, `0x0027 385.92`. So retail recomputes and re-declares at every
 episode change, in the batch, behind the status word.
 
-### 47.3 The rules, and whose they are
+### 48.3 The rules, and whose they are
 
 * **Boosts SUM and cap at +34.** WIKI (GWW "Speed boost", rev. 2020-05-09): "Speed boosts can
   be stacked, but movement rate is capped at 34% faster than normal"; OBSERVED × 1.34 on 8 of
@@ -3332,7 +3332,7 @@ episode change, in the batch, behind the status word.
   (33 / 33 / 25, bit clear), Storm Chaser 455 in the BONUS slot (25, its scale 1..5 being the
   energy gain) — `move_speed_terms` reads whichever slot the row names.
 
-### 47.4 Shipped
+### 48.4 Shipped
 
 * `episodemods.move_speed_terms` / `move_speed_factor` (the rules above; `move_speed_percent`
   stays for its readers). `authsrv.push_speed` sends one `0x0027` per CHANGE for the player
@@ -3341,14 +3341,14 @@ episode change, in the batch, behind the status word.
   `push_status`, retail's slot; `speed_tick` is the per-tick backstop. Our cure batch is
   `[0x0042 364, 0x0044, 0x00F1, 0x0027 383.04]`: retail's order with ONE word, since ours
   computes the word after the cure rather than once either side of it.
-* **The composite reads the declared base.** The six sites of 47.1 read
+* **The composite reads the declared base.** The six sites of 48.1 read
   `state["declared_speed_base"]`; `0x0027` to the player feeds `agtrack_guard.on_speed_base`
   (both copies' +0x5C, a pure store on 0x002B's footing — RECONSTRUCTION on the timing); a
   body's word feeds its own `_npc_model_emit`; the chase and the follow budget walk a body at
   `npc_declared_speed` (a crippled hostile closes at half). The `--router` refusal is
   retired with its reason, and `test_router`'s lock is inverted so a re-added gate reddens.
 * **On by default; `--no-move-speed-effects` is the revert arm** (icons that move nothing,
-  every body at 288, the pre-F47 shape).
+  every body at 288, the pre-F48 shape).
 * Content: `[skill_effect.160]`, `[364]` (`opens_episode`, `removes_condition`), `[455]`,
   and `[392]` Pin Down (`bonus_scale_means = "Crippled"`, 3→15 s), each with its GWW
   revision and its wire witness.
@@ -3357,7 +3357,7 @@ episode change, in the batch, behind the status word.
   cure batch's order, the cap on the sum, a body's own word, the revert arm), `test_effects`
   §4d/§5 now expecting Rush's word behind its apply and expiry.
 
-### 47.5 Live, on the client — RUN-MOVESPEED-1 / 1b (the boosts), agent-driven
+### 48.5 Live, on the client — RUN-MOVESPEED-1 / 1b (the boosts), agent-driven
 
 Loopback, Isle of the Nameless (map 280), `--skills 364,160`, predictions registered before
 launch (the session's `ms_runplan.md`; the suite green first, 208 of 212 with the three reds
@@ -3393,7 +3393,7 @@ retail's arithmetic to the byte; the client walking at the declared base OBSERVE
 intervals, ratio 1.29–1.33; 2 at 1.331–1.333); the composite holding OBSERVED (0 re-pins over
 2 boosted runs — a small n, and "nothing snapped" is a null on exposure, stated as such).
 
-### 47.6 Live, on the client — RUN-MOVESPEED-2 (the snare and the cure), agent-driven
+### 48.6 Live, on the client — RUN-MOVESPEED-2 (the snare and the cure), agent-driven
 
 Same map and bar, `--enemy --enemy-skills 392` (the standing Hatcher with Pin Down alone on
 its bar), `W:3 wait:12 W:4 skill:364 W:4`, hold 40 (harness `20260916T192119`, tape
@@ -3429,5 +3429,5 @@ OBSERVED (191.52, n = 1) and CORROBORATED against retail's 191.52 by constructio
 death-strip restore OBSERVED (4 of 4).
 
 **Open, for the next arc:** a skill SNARE row (a Water hex, a self-snare stance) to exercise
-the `Movement speed decrease` arm and settle 47.3's contested boost × snare rule on our own
+the `Movement speed decrease` arm and settle 48.3's contested boost × snare rule on our own
 client — Deep Freeze's −66 % single-source excess would answer both.

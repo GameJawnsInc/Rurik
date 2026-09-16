@@ -224,7 +224,7 @@ def swing_preparation_bonus(state, weapon_row, agent_id, SCALE_MEANS_DAMAGE):
     return 0.0, None
 
 
-# MOVEMENT SPEED (SLICE-F47, 2026-09-16). Three kinds of term, read off retail's
+# MOVEMENT SPEED (SLICE-F48, 2026-09-16). Three kinds of term, read off retail's
 # wire by speedwords.py (501 speed words, 17 captures) and GWW's published rules:
 #
 #   boosts   sum, capped at +34 -- "Speed boosts can be stacked, but movement
@@ -253,7 +253,7 @@ def swing_preparation_bonus(state, weapon_row, agent_id, SCALE_MEANS_DAMAGE):
 # "Bundle": "Some bundles ... reduce movement speed") took "Charge!" to x1.13 =
 # 1 + 0.33 - 0.20, additive, on 3 of 3. A bundle's slow is not a skill's, and
 # nothing here models a bundle, so the wiki's rule ships and the row is on
-# record (studies/slice/FINDINGS.md SLICE-F47).
+# record (studies/slice/FINDINGS.md SLICE-F48).
 MOVE_SPEED_CAP_UP = 34.0
 MOVE_SPEED_CAP_DOWN = 50.0
 CRIPPLED_FACTOR = 0.5

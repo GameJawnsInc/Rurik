@@ -431,7 +431,7 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                 "banner already calls it broken; a chain makes it a "
                 "two-sender fight besides."), []
     # `router and move_speed_effects` was a REFUSAL here from review F7
-    # (2026-08-26) until SLICE-F47 (2026-09-16): chain ETAs were computed at
+    # (2026-08-26) until SLICE-F48 (2026-09-16): chain ETAs were computed at
     # DEFAULT_RUN_SPEED, so a snared client received leg n+1 mid-leg and cut
     # a corner no clip had sampled, and a boosted one parked at every
     # waypoint. `router_next_due` now reads the DECLARED base

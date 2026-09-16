@@ -855,7 +855,7 @@ class AgTrackMirror(object):
         self.sync.move_speed = move_speed
 
     def on_speed_base(self, max_speed, now_ms):
-        """0x0027: the maxSpeed store (+0x5C), the other factor of S. SLICE-F47:
+        """0x0027: the maxSpeed store (+0x5C), the other factor of S. SLICE-F48:
         read as a pure store on the same footing as 0x002B -- the bake at
         0x005FE950 multiplies +0x5C by +0x60 when a LEG starts, so a leg in
         flight keeps its velocity and the next bake walks at the new base.

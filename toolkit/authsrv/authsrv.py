@@ -3888,7 +3888,7 @@ GLYPH_SPELL_CHARGES = 2
 # control for anything a run sees on the orb or the skill icons.
 ENERGY = True
 
-# MOVEMENT SPEED ON THE WIRE (SLICE-F47, 2026-09-16; OFF by default from
+# MOVEMENT SPEED ON THE WIRE (SLICE-F48, 2026-09-16; OFF by default from
 # 2026-08-22 until then). A speed modifier has exactly one wire channel:
 # GAME_SMSG 0x0027 AGENT_UPDATE_SPEED_BASE, the maxSpeed store at agent+0x5C
 # -- 0x002B cannot carry a buff (the client asserts its float into
@@ -5021,7 +5021,7 @@ def _sync_position(state, now):
     dist = math.hypot(dx, dy)
     if dist <= 0.0:
         return to
-    # SLICE-F47: at the DECLARED base (0x0027), which is what the client's own
+    # SLICE-F48: at the DECLARED base (0x0027), which is what the client's own
     # bake multiplies; 288 until a speed episode moved it.
     gone = (float(state.get("declared_speed_base") or DEFAULT_RUN_SPEED)
             * max(0.0, now - state.get("sync_at", now)))
@@ -5448,7 +5448,7 @@ def _agtrack_shadow_emit(state, opcode, values, rec, now=None):
             _agtrack_guard_call(state, "on_speed", float(values[1]), now)
         return
     if opcode == GAME_SMSG_AGENT_UPDATE_SPEED_BASE:
-        # SLICE-F47: the declared base lands in the mirror's +0x5C, so the
+        # SLICE-F48: the declared base lands in the mirror's +0x5C, so the
         # freshness budget and the click ETA walk at the boosted (or
         # crippled) speed the client was actually told.
         if len(values) >= 2:
@@ -7403,7 +7403,7 @@ def a2_leg_note(reported, dest, plane, mt, now, ray=None, clip_why=None,
     the plane the report named (`plane` is the wire's field 3).
     """
     rate = FAMILY_RATE.get(mt, 1.0)
-    # SLICE-F47: `base` is the DECLARED speed base (0x0027) the caller reads
+    # SLICE-F48: `base` is the DECLARED speed base (0x0027) the caller reads
     # out of state; 288.0 until a speed episode moved it.
     return {"x0": float(reported[0]), "y0": float(reported[1]),
             "dest": (float(dest[0]), float(dest[1])), "plane": plane,
@@ -7675,7 +7675,7 @@ def router_next_due(state):
         return None
     leg = math.hypot(chain["cur"][0] - chain["prev"][0],
                      chain["cur"][1] - chain["prev"][1])
-    # SLICE-F47: the leg completes at the DECLARED base -- the reason
+    # SLICE-F48: the leg completes at the DECLARED base -- the reason
     # zeroleadcompose refused --router beside speed effects until now.
     return chain["granted_at"] + leg / float(state.get("declared_speed_base")
                                              or DEFAULT_RUN_SPEED)
@@ -8498,7 +8498,7 @@ def arrival_carry_leg(state, now, dest):
         # to now+1, so the copy is AT the destination one millisecond later.
         return now + 0.001, d
     ms = max(1, int(d * 1000.0 / float(state.get("declared_speed_base")
-                                       or DEFAULT_RUN_SPEED)))   # SLICE-F47
+                                       or DEFAULT_RUN_SPEED)))   # SLICE-F48
     return now + ms / 1000.0, d
 
 
@@ -16072,7 +16072,7 @@ def apply_effect(send, state, caster_id, skill_id, rank, target_id, conn_id):
         # THE SECOND DOOR effects.py's docstring reserved: "OR A CONTENT ROW
         # SAYS SO, per skill". "Charge!" (364) is a Shout, not definitionally
         # a timed effect, and the corpus witnesses 47 applies of it on 0x0042
-        # (SLICE-F47); its row says `opens_episode = "shout"`. The row is the
+        # (SLICE-F48); its row says `opens_episode = "shout"`. The row is the
         # citation; the type list stays small.
         family = erow.get("opens_episode")
         if not family:
@@ -16144,7 +16144,7 @@ def apply_effect(send, state, caster_id, skill_id, rank, target_id, conn_id):
                           only=effects.CONDITION_BY_NAME[cure])
     # THE STATUS WORD RIDES BEHIND THE APPLY -- a hex sets 0x800, an
     # enchantment 0x80, everything else on this path moves nothing and sends
-    # nothing (effects.status_word). THEN THE SPEED BASE (SLICE-F47), which is
+    # nothing (effects.status_word). THEN THE SPEED BASE (SLICE-F48), which is
     # where retail puts it: [0x0042 160, 0x00F1 0x80, 0x0027 383.04].
     push_status(send, state, ep["agent"], conn_id)
     push_speed(send, state, ep["agent"], conn_id)
@@ -16184,7 +16184,7 @@ def strip_effects(send, state, agent_id, conn_id, why):
             state.setdefault("status_word", {})[agent_id] = effects.STATUS_DEAD
     elif gone:
         push_status(send, state, agent_id, conn_id)
-        push_speed(send, state, agent_id, conn_id)     # SLICE-F47
+        push_speed(send, state, agent_id, conn_id)     # SLICE-F48
     if gone:
         print(f"[c{conn_id}] stripped {len(gone)} effect(s) from agent "
               f"{agent_id}: {why}", flush=True)
@@ -16305,7 +16305,7 @@ def apply_condition(send, state, target_id, condition_id, seconds, rank,
     push_status(send, state, ep["agent"], conn_id)
     if condition_id == effects.CONDITION_BY_NAME["Deep Wound"]:
         deep_wound_open(send, state, ep["agent"], conn_id)
-    # AND THE SPEED IT HALVES (SLICE-F47): Crippled's batch is [0x0042 481,
+    # AND THE SPEED IT HALVES (SLICE-F48): Crippled's batch is [0x0042 481,
     # 0x00F1 0x0A, 0x0027 144.0] on the Isle, the word right behind the status.
     push_speed(send, state, ep["agent"], conn_id)
     # AND THE DEGENERATION IT CARRIES, if it carries any. Sent here rather than
@@ -16764,7 +16764,7 @@ def remove_conditions(send, state, agent_id, conn_id, why, count=None,
     if not EFFECTS:
         return []
     table = effect_table(state)
-    # `only` (SLICE-F47): one NAMED condition -- "Charge!"'s "lose the
+    # `only` (SLICE-F48): one NAMED condition -- "Charge!"'s "lose the
     # Crippled condition" -- rather than the newest `count`.
     gone = sorted((ep for ep in table.on_agent(agent_id)
                    if ep["skill"] in effects.CONDITION_SKILLS
@@ -16782,7 +16782,7 @@ def remove_conditions(send, state, agent_id, conn_id, why, count=None,
             deep_wound_close(send, state, agent_id, conn_id)
     if gone:
         push_status(send, state, agent_id, conn_id)
-        push_speed(send, state, agent_id, conn_id)     # SLICE-F47: a cure restores the base
+        push_speed(send, state, agent_id, conn_id)     # SLICE-F48: a cure restores the base
         push_regen(send, state, agent_id, conn_id)
         print(f"[c{conn_id}] removed {len(gone)} condition(s) from agent "
               f"{agent_id}: {why}", flush=True)
@@ -17201,7 +17201,7 @@ def resolve_taker_conversion(send, state, conversion, conn_id):
 # `authsrv.move_speed_percent` reads in test_castcycle.py and test_mechanics.py
 # bound in this module.
 from episodemods import (attack_interval_factor, move_speed_percent,  # noqa: F401,E402
-                         move_speed_factor)   # push_speed / speed_tick (SLICE-F47)
+                         move_speed_factor)   # push_speed / speed_tick (SLICE-F48)
 
 
 def swing_preparation_bonus(state, weapon_row, agent_id):
@@ -17232,7 +17232,7 @@ def npc_declared_speed(state, agent_id):
 def push_speed(send, state, agent_id, conn_id):
     """Declare this agent's 0x0027 base, if the open episodes changed it.
 
-    SLICE-F47. Called from every site that opens or closes an episode --
+    SLICE-F48. Called from every site that opens or closes an episode --
     apply_effect, apply_condition, effect_tick, remove_conditions,
     strip_effects -- right behind push_status, which is retail's own batch
     order: the Isle's Crippled apply is [0x0042 481, 0x00F1 0x0A, 0x0027
@@ -17269,7 +17269,7 @@ def push_speed(send, state, agent_id, conn_id):
             _npc_model_emit(row, GAME_SMSG_AGENT_UPDATE_SPEED_BASE,
                             [agent_id, desired], time.time())
     print(f"[c{conn_id}] {who}'s declared speed base is now {desired:.2f} u/s "
-          f"({tag}) [SLICE-F47]", flush=True)
+          f"({tag}) [SLICE-F48]", flush=True)
     return desired
 
 
@@ -17436,7 +17436,7 @@ def effect_tick(send, state, conn_id):
         push_status(send, state, ep["agent"], conn_id)
         if ep["skill"] == effects.CONDITION_BY_NAME["Deep Wound"]:
             deep_wound_close(send, state, ep["agent"], conn_id)
-        # The speed base back (SLICE-F47): Windborne's expiry is [0x0044,
+        # The speed base back (SLICE-F48): Windborne's expiry is [0x0044,
         # ..., 0x00F1 0, 0x0027 288.0] at apply + 13.0 s on the Isle.
         push_speed(send, state, ep["agent"], conn_id)
         # A condition running out is a rate change too, and it is the one a
@@ -19792,7 +19792,7 @@ def enemy_move_tick(send, state, conn_id, rec=None):
         elapsed = max(0.0, now - agent.get("moved_at", now))
         agent["moved_at"] = now
         step = min(ENEMY_MOVE_RATE * npc_declared_speed(state, agent_id) * elapsed,
-                   dist - ENEMY_MELEE_RANGE)     # SLICE-F47: a crippled body closes at half
+                   dist - ENEMY_MELEE_RANGE)     # SLICE-F48: a crippled body closes at half
         if step <= 0.0:
             continue
         nx = ax + (px - ax) / dist * step
@@ -20493,7 +20493,7 @@ def _npc_model_emit(agent, opcode, values, now):
     elif opcode == GAME_SMSG_AGENT_UPDATE_SPEED:
         sa.move_speed = float(values[1])
     elif opcode == GAME_SMSG_AGENT_UPDATE_SPEED_BASE:
-        sa.max_speed = float(values[1])     # SLICE-F47: +0x5C, a pure store
+        sa.max_speed = float(values[1])     # SLICE-F48: +0x5C, a pure store
     elif opcode == GAME_SMSG_AGENT_STOP_MOVING:
         p = sa.position(ms) or (sa.x78, sa.y78)
         sa.set_position(p[0], p[1], sa.plane if sa.plane is not None else 0, ms)
@@ -21109,7 +21109,7 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
                 _halt(f"parked, {dist:.0f} u from the player; the "
                       "half-second clock had already fired")
         return
-    budget = ENEMY_MOVE_RATE * npc_declared_speed(state, agent_id) * elapsed   # SLICE-F47
+    budget = ENEMY_MOVE_RATE * npc_declared_speed(state, agent_id) * elapsed   # SLICE-F48
     routed = False
     if NPC_FOLLOW_ROUTER and pm is not None and budget > 0.0 and dist > stop:
         # MOVECODE-1z-by. Returns the new straight-line distance, or leaves the
@@ -26094,7 +26094,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 state, (px + heading[0], py + heading[1]))
                             state["dest"], state["clipped"] = model_dest, blocked
                             # MOVECODE-1z-cu: the leg's own speed, beside its dest.
-                            state["dest_speed"] = model_leg_speed(moving, state.get("declared_speed_base"))  # SLICE-F47
+                            state["dest_speed"] = model_leg_speed(moving, state.get("declared_speed_base"))  # SLICE-F48
                             # MOVECODE-1z-cr: THE PHANTOM LEG, NAMED WHERE IT IS ARMED.
                             # This assignment is the whole of MOVECODE-1z-cp: the 20 Hz
                             # integrator (authsrv.py, "state[\"pos\"] = (px +") walks
@@ -30602,7 +30602,7 @@ def main():
         print("[map] --no-move-speed-effects: no 0x0027 is ever declared -- "
               "Rush, \"Charge!\", Windborne Speed and Crippled are icons that "
               "move nothing, every body walks at 288 u/s and the movement "
-              "models read that constant (the pre-SLICE-F47 arm).", flush=True)
+              "models read that constant (the pre-SLICE-F48 arm).", flush=True)
 
     if a.no_deep_wound:
         global DEEP_WOUND

@@ -628,11 +628,11 @@ a buff), but every REALFIX fence and copy-model constant was measured at
 288 u/s, so declaring a faster base inside the movement composite is
 UNMEASURED and stays a deliberate lever."""
 
-# SLICE-F47 (2026-09-16): the movement-speed rows. The percent sits in the slot
+# SLICE-F48 (2026-09-16): the movement-speed rows. The percent sits in the slot
 # the row names -- `scale_means` for 160/364 (scale 33/33, bit clear), `bonus_scale_means`
 # for 455 (bonus 25/25, bit clear; its SCALE slot 1..5 is the energy gain). Every one is
 # also a wire witness: speedwords.py joins 51 Windborne and 29 "Charge!" applies to a
-# 0x0027 at base x 1.33, one Storm Chaser apply to x1.25 (studies/slice/FINDINGS.md F47).
+# 0x0027 at base x 1.33, one Storm Chaser apply to x1.25 (studies/slice/FINDINGS.md F48).
 [skill_effect.160]
 scale_means = "Movement speed increase"
 [skill_effect.160.provenance]

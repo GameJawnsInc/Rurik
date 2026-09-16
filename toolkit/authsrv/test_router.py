@@ -516,7 +516,7 @@ def main():
                  "interact_walk"):
         check(f"composition refuses --router with {pair.replace('_', '-')}",
               f"if router and {pair}" in comp_src)
-    # SLICE-F47 (2026-09-16): `move_speed_effects` LEFT this list. The gate's
+    # SLICE-F48 (2026-09-16): `move_speed_effects` LEFT this list. The gate's
     # reason was that chain ETAs ran at DEFAULT_RUN_SPEED; router_next_due now
     # reads the declared base, speed effects are on by default, and a refusal
     # here would refuse the default configuration. The lock is inverted so a

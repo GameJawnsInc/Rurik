@@ -28,7 +28,7 @@ import agents       # noqa: E402
 import effects      # noqa: E402
 
 # Floor set from a real green run (39 checks, 2026-08-22; 99 checks, 2026-09-09 SKILLS-DW; 129 checks, 2026-09-10 SKILLS-BL; 153 checks, 2026-09-10 SKILLS-RC; 162 checks, 2026-09-10 SKILLS-MA).
-LEDGER = checks.Ledger("effect mechanics", floor=228)  # 2026-09-16: +14, SLICE-F47 sec.8b (movement speed on the wire), from the green run  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
+LEDGER = checks.Ledger("effect mechanics", floor=228)  # 2026-09-16: +14, SLICE-F48 sec.8b (movement speed on the wire), from the green run  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
 check = checks.adopt(LEDGER)
 
 FRENZY, RUSH, ROF, GLYPH, IGNITE, FAINT = 346, 319, 307, 200, 431, 135
@@ -284,7 +284,7 @@ try:
 finally:
     authsrv.ATTACK_SPEED_SYNC, authsrv.ATTACK_SPEED_AT_START = saved_sync, saved_start
 
-print("== 8. the movement speed base: on by default (SLICE-F47), exact, one word per change ==")
+print("== 8. the movement speed base: on by default (SLICE-F48), exact, one word per change ==")
 state = fresh_state()
 open_ep(state, RUSH, rank=12, duration=18.0)
 check(authsrv.move_speed_percent(state, PLAYER) == 25.0,
@@ -313,7 +313,7 @@ try:
 finally:
     authsrv.MOVE_SPEED_EFFECTS = saved
 
-print("== 8b. SLICE-F47: the retail arithmetic -- x1.33, x0.5, x0.665, the 34% cap, the cure ==")
+print("== 8b. SLICE-F48: the retail arithmetic -- x1.33, x0.5, x0.665, the 34% cap, the cure ==")
 CHARGE, WINDBORNE, CRIPPLED_ID = 364, 160, effects.CONDITION_BY_NAME["Crippled"]
 saved = authsrv.MOVE_SPEED_EFFECTS
 try:

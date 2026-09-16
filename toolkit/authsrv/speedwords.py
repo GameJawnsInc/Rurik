@@ -11,7 +11,7 @@ movement-speed modifier rides: 0x002B's float is asserted into [0.01, 1.0]
 `authsrv.push_speed`; this is its reader, written first, the way `bufflog.py`
 preceded `effects.py` and `deepwoundjoin.py` preceded the Deep Wound batch.
 
-THE PREDICTIONS, stated before the scan (studies/slice/FINDINGS.md SLICE-F47
+THE PREDICTIONS, stated before the scan (studies/slice/FINDINGS.md SLICE-F48
 carries the numbers the first run produced; a later corpus that stops agreeing
 goes red in test_speedwords.py rather than drifting):
 

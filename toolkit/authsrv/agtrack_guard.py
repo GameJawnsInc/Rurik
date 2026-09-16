@@ -324,7 +324,7 @@ class AgTrackGuard(object):
         self.twin.on_speed(move_speed, self._ms(now))
 
     def on_speed_base(self, max_speed, now):
-        """0x0027 to the player (SLICE-F47): the declared base lands in both
+        """0x0027 to the player (SLICE-F48): the declared base lands in both
         copies' +0x5C, and every RUN_SPEED term below reads it from there --
         a boosted body walks 383 u/s and the budget must say so, or the
         freshness bound under-counts what it can have walked."""
