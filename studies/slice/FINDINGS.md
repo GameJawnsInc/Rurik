@@ -2341,7 +2341,8 @@ redden on confirming evidence" rule, six suites):
 - `test_skilldamage` §12: the caster 54's skill 222 on the Ranger and on the hero spans two death
   penalties each (the maxima 140 → 119 → 99 / 101) and the hero's Frenzy — the join keys on the
   target, not on its current maximum, so those two pairs are several values by construction; set
-  aside by name, a third would be a new fact.
+  aside by name, a third would be a new fact. **(It came on 2026-09-16 and was the penalty
+  split alone — F47: both this and the 43-before-41 exemption are signatures now.)**
 - `test_agentlife`'s two load-path locks: `party_bodies_here(state)` now has six sites (the
   zone carry reads it); the town's `0x00A6` lock reads the load path and the block's labels are
   spelled so it still finds the site it was written for.
@@ -3253,3 +3254,91 @@ wire and silent here. `morale.py`'s docstring gains the hostile-body corroborati
 the hero's second death and recovery OBSERVED (n = 1 hero, 2 deaths, 3 ticks); the party
 member's silence OBSERVED (n = 5 deaths, 1 body); the henchman case NOT FOUND (no death in
 the corpus) and inferred from the pools' silence; the arena rule UNREAD.
+
+---
+
+## SLICE-F47 — **the Lakeside re-pin: the owner's aggro tape reddened two corpus locks on CONFIRMING evidence, and both exemptions are now signatures — the hero's 43-before-41 load block (4 of 4) and a death-penalty split that keeps 24 whole points across two maxima (2026-09-16)**
+
+**Desk and corpus. No client run; nothing on the server moves.** The owner's Lakeside aggro
+capture (`vault/captures/live/20260916T150306`, RUN-AGGRO-JARIN's successor, with Jarin in the
+party) joined the corpus and two suite tests went red on `main` at `ced757ee`:
+`test_pools` §2b (an unjoined property 43 the exemption list did not name) and
+`test_skilldamage` §12 P2 (a multi-valued cast pair the exemption list did not name). The
+"corpus counts redden on confirming evidence" rule says classify first: is the new row the
+phenomenon the exemption already names, or a mechanism? Both exemptions were written in one
+commit (`b7a78a3a`, JARIN-S, F40) from one tape, and both were NAME lists — a capture and an
+agent, a caster-skill-target string — which is the shape that reddens on the very next tape
+that confirms the claim. Both did.
+
+### 47.1 The hero's rate rides one message ahead of its maximum — 4 of 4, the same block
+
+The new orphan is agent 379 on the Lakeside town connection, at 0.760 s in the load block.
+Read beside JARIN's hero 117 (F40, 0.825 s) the two blocks are the same message for message:
+
+| offset | Lakeside `20260916T150306`, agent 379 | JARIN `20260914T005758`, agent 117 |
+|---|---|---|
+| 0 | `0x0037 [379, 6, 10]` | `0x0037 [117, 6, 10]` |
+| 2 | `0x00DA [379, [322, 382, 348, 1, 385, 346, 0, 2], …]` | the same bar |
+| 4 | **`0x00A2 [43, 379, 0x3D0A3D8A]`** — the rate | **`0x00A2 [43, 117, 0x3D0A3D8A]`** |
+| 5 | **`0x009F [41, 379, 20]`** — the maximum, NEXT | **`0x009F [41, 117, 20]`** |
+| 6 | `0x009F [42, 379, 140]` | `0x009F [42, 117, 140]` |
+
+Same hero, same bar, same rate bits, same order. Across the whole corpus every unjoined
+property 43 — JARIN's 30, 117, 324 and now 379 — has the one signature: **the very next
+message is that agent's own property 41, at the same timestamp** (scratchpad `sig43.py`,
+4 of 4, `dt = 0.0`). The player's own block never does this (Lakeside's observer 642: 41
+first). `_scan_corpus` now classifies each orphan by that signature and §2b asserts that
+no orphan falls outside it, with JARIN's three kept as the positive control — a fifth hero
+tape passes on the signature, a rate that is genuinely unjoined still reddens, and the
+assertion can no longer be satisfied by an empty orphan list. **OBSERVED (n = 4, two tapes,
+one hero); label unchanged from F40.**
+
+### 47.2 The death-penalty split, and it argues for F46
+
+The new multi-valued pair is caster 48's skill 222 onto agent 29 on the explorable
+connection, four hits:
+
+| t (s) | fraction on the wire | target's maximum at the hit | whole points |
+|---|---|---|---|
+| 299.334 | −0.17143 | 140 | **24** |
+| 306.598 | −0.17143 | 140 | **24** |
+| 312.595 | −0.17143 | 140 | **24** |
+| 366.460 | −0.20168 | 119 | **24** |
+
+One value in points; the fraction moved because the maximum did (140 × 0.85 = 119, the
+penalty). That is F46's claim — the word is whole points over the CURRENT maximum — landing
+on a pair the P2 lock was built to refuse, and it is exactly the case JARIN-S's comment
+predicted would be "a new fact": it is not one, it is the same fact with the second cause
+removed. So the exemption is a signature: `spellhitjoin.score` names a `penalty_split` — a
+multi-valued pair that is ONE value per target maximum across two or more maxima, every hit's
+maximum known — and P2 sets those aside by rule. A new check (+1, floor 60 → 61) then asserts
+that every such pair is one value in whole points, which is the check the new row can refute
+and the name list could not.
+
+**JARIN's two pairs do NOT pass the signature, and that is the honest reading of them.** The
+Ranger's pair (54 → 29) holds −0.17143 AND −0.16429 at the one maximum of 140 — 24 and 23
+points, cause unmeasured — and the hero's (54 → 30) holds −0.21311 AND −0.41803 at 122 —
+26 and 51, Frenzy's intake (F44, F45). F40's comment called both "several values by
+construction" of the penalty; the penalty is part of it and not all of it, so they stay
+named, and the test's comment now says why. The 23/24 on the Ranger is a one-point residual
+on one tape with no cause offered; it is a note, not a claim.
+
+### 47.3 Method, for the next one
+
+- `git log -L` on both checks → one commit, `b7a78a3a`, one tape. A name list written
+  from one tape reddens on the second; write the SIGNATURE the first time.
+- The census as of the previous pin (JARIN's 3 orphans, 2 pairs) against the census now
+  (4, 3): the delta is one row each, both from the new tape, both matching the named shape.
+- The whole-points view is NOT a clean corpus-wide invariant under `spellhitjoin`'s
+  maximum join: the RA tape's Mind Burn pair (14 → 8, `20260817T231139`) reads −0.04865 at
+  maxima 455 and 555, which is 22.1 and 27.0 points — the last-seen property 42 is not the
+  maximum that fraction was computed over. That is why the signature is "one value per
+  maximum", not "one value in points", and why the whole-points check is scoped to the
+  split pairs. Not chased here; F46.2's census counted its exceptions the same way.
+
+### 47.4 Labels
+
+The 43-before-41 order: **OBSERVED**, 4 of 4, one hero on two tapes. The penalty split at
+constant points: **OBSERVED**, n = 1 pair, 4 hits, two maxima. The RA pair's non-integer
+points: **NOTED**, unread. Nothing shipped on the server; two locks re-pinned, `test_pools`
+128 checks (floor 128), `test_skilldamage` 61 (floor 61), `test_srclint` green.

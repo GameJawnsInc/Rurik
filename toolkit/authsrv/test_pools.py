@@ -141,6 +141,12 @@ EXPERTISE_SPENDS = {("20260914T005758", 392): 14}
 # JARIN: the hero's 0x00A2 [43, hero, rate] rides one message AHEAD of its
 # property 41 in the load block (37.73 s, 87.21 s, 651.62 s: agents 117, 30,
 # 324) -- an order the player's own block does not use.
+# SLICE-F47 (2026-09-16): a fourth instance (20260916T150306, agent 379
+# -- the same hero, the same load block message for message) reddened this
+# while it was a NAME list, so the exemption is now the SIGNATURE and this set
+# is its positive control: an orphan is exempt when the very NEXT message is
+# its own agent's property 41 in the same batch (`_scan_corpus` classifies
+# each one; 4 of 4 across the corpus), and these three must still be found.
 HERO_43_FIRST = {("20260914T005758", 117), ("20260914T005758", 30),
                  ("20260914T005758", 324)}
 # JARIN: the HERO's property-41 sequences carry NO leading 1 -- (20,) in each
@@ -371,8 +377,17 @@ def _scan_corpus():
                     casts.append((i, t, agent, v[-1]))
                 elif op in FLOAT_OPS and prop == pools.GV_ENERGY_REGEN:
                     if agent not in emax:
+                        # The hero's load block: its prop 41 is the NEXT
+                        # message of the same batch (the signature, 4 of 4).
+                        nt, nop, nv = (msgs[i + 1] if i + 1 < len(msgs)
+                                       else (t, None, None))
+                        first = (nop in INT_OPS and nv[1] == PROP_ENERGY_MAX
+                                 and nv[2] == agent and abs(nt - t) < 1e-6)
                         totals["orphans"] += 1
                         totals.setdefault("orphan_rows", []).append((stamp, agent))
+                        if not first:
+                            totals.setdefault("true_orphans", []).append(
+                                (stamp, agent))
                     regen.append({"stamp": stamp, "agent": agent,
                                   "rate": bits_to_f32(v[-1]),
                                   "max": emax.get(agent)})
@@ -449,11 +464,17 @@ def section_corpus_oracle():
               "was written")
 
     print("\n2b. every regeneration rate, joined to its own agent's maximum")
-    LEDGER.ok(set(totals.get("orphan_rows", [])) <= HERO_43_FIRST
+    orphan_rows = set(totals.get("orphan_rows", []))
+    LEDGER.ok(not totals.get("true_orphans")
+              and HERO_43_FIRST <= orphan_rows
               and totals["orphans"] == len(totals.get("orphan_rows", [])),
               f"all {len(regen)} property-43 events join to a property-41 -- "
               f"except a HERO's load-time rate, which rides one message AHEAD "
-              f"of its prop 41 (JARIN, 3 of 3 instances: {sorted(set(totals.get('orphan_rows', [])))})",
+              f"of its prop 41 in the same batch (the SIGNATURE, "
+              f"{len(orphan_rows)} instances, JARIN's three among them: "
+              f"{sorted(orphan_rows)})",
+              f"unjoined rates OFF that signature: "
+              f"{totals.get('true_orphans', [])}. "
               "an unjoined rate would have to be dropped, and a check that "
               "silently drops its awkward rows is the check this repo keeps "
               "catching itself building")
