@@ -1197,3 +1197,85 @@ variable against 10 bytes fixed — separated them immediately. `CLAUDE.md` call
 this out: a number our own tool produced, cited as if the client had said it. The
 check that caught it was the cheapest one available and was skipped because the
 caller walk looked conclusive.
+
+## 19. What dispatches the settings command — a DIRTY CHECK on the character summary (desk, `codescan`, no run)
+
+§18 left the trigger not found and said only that it is not in the sender. It is one
+level up, and it is a comparison.
+
+### 19.1 The chain, end to end — OBSERVED
+
+```
+0x004A8A20   the dispatcher            (3 call sites: 0x004A6BAA, 0x004A7CB8, 0x004A8464)
+ 0x004A8CC2    call 0x008711E0         <- the GATE, thiscall on the object at 0xC07000
+ 0x004A8CC7    test eax, eax
+ 0x004A8CC9    je   0x004A8D1F         <- returns 0: SKIP, nothing is sent
+ 0x004A8CF0    call 0x00870D80         serialize the summary into a 0x100-byte buffer
+ 0x004A8D0B    call 0x0048E790         construct + dispatch the command
+   0x0048E790    vtable <- 0x00941354, alloc 0xA4, id 0x80000012
+                 cmp <len>, 0x40 ; store at +0x28 ; copy 0x14 bytes of the name
+   0x00490930    the vtable's send thunk  (slot +8 of the record)
+   0x00493010    5 slots {9, req_id, name_ptr, len, blob_ptr}
+   0x007DCB10    OR 0x8000 -> the wire's 0x8009
+```
+
+**The constructor is confirmed by the client's own words.** `0x0048E790` bounds the
+payload at `0x40` and, past it, reports
+
+```
+charSummaryBytes <= sizeof(trans->m_event.inCharacterData)
+P:\Code\Gw\Net\Cli\GcApi.cpp(4184)
+```
+
+`charSummaryBytes` and `inCharacterData` name the payload, `0x40` is
+`array8(64)`'s declared capacity and `0x14` the `string16`'s — §18's shape match,
+now corroborated by ArenaNet's own assert rather than by our arithmetic alone.
+
+### 19.2 The gate is a dirty check — OBSERVED, from its return polarity
+
+`0x008711E0` is `stdcall` (`ret 0x44` — 17 dwords) on the summary object at
+`0xC07000`. Its body is a chain of **21 compares** in its first `0x160` bytes,
+each `cmp <passed field>, <stored member>` with `jne` out of the chain, plus an
+element-wise loop over an array (`inc edi; add esi, 4; cmp edi, ebx; jb`). The two
+exits:
+
+| path | code | meaning |
+|---|---|---|
+| every field equal, loop ran to completion (`edi == ebx`) | `xor eax, eax; ret 0x44` | **0 — unchanged** |
+| any `jne` taken, or the loop cut short | falls to `0x0087131B`/`0x0087131E`, on to the update path | **nonzero — changed** |
+
+So the caller's `test eax, eax; je` means: **the client sends
+`UPDATE_CHARACTER_SETTINGS` only when the character summary DIFFERS from the one it
+last sent.** Unchanged summary, no message.
+
+### 19.3 This is why the write is edit-independent — and it closes §16's question
+
+§16 measured the write at ~7 of 10 closes with its presence **independent of whether
+the connection carried a bar or attribute edit**, and could not say why. It now has a
+mechanism: the compared fields are the **character summary** — the appearance/status
+record serialized at `0x00870D80` from `0xC07000`, bounded at 64 bytes — and a hero's
+skill bar and a hero's attribute ranks **are not among them**. An edit to either
+leaves every compared field equal, so it cannot cause the send; something unrelated
+changing the summary can, on any connection. Edit-independence is not a coincidence in
+the sampling, it is the gate's definition.
+
+**Labelled:** the chain, the assert, and the polarity are OBSERVED. That this
+mechanism *accounts for* ~70 % specifically is RECONSTRUCTION — predicting the rate
+would need to know which summary fields change per session, which is not measured.
+What is settled is the **shape**: a dirty check on a record that does not include the
+things this arc edits.
+
+### 19.4 What it means for §10's guard
+
+The settings write fires on a condition **the server cannot see and the operator does
+not control**, on any connection close where the summary happens to have moved. That
+is precisely the hazard §10's reload-before-save guard exists for: the auth process's
+stale snapshot can be flushed over the game process's edits at a moment unrelated to
+those edits. Runs E and F did not see it because the summary had not moved, not
+because the path is rare — and no run can be *scheduled* to provoke it without
+changing a summary field on purpose.
+
+**The cheap way to provoke it, for whoever exercises the guard on a client:** change
+something in the summary during the session — the fields are appearance/status, so a
+visible change of that kind before zoning should make the compare fail and force the
+send. Not attempted here; it is the next run's design, not a claim.
