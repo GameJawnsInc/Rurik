@@ -6349,9 +6349,16 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   so a snared create reports a reduced value: 9 of 2,931 creates over 2 of 189
   definitions, every one a snare fraction of the definition's own base (159: 288
   and 144; 114: 288 and 230.4), none above it. `move_speed` is now the base (max)
-  and `move_speed_reduced` the snare states; §7 pools ALL live captures, proves
-  `read()` no longer refuses, resolves **262 definitions vs the subset's 54**, and
-  pins 159/114 by name plus the base-is-the-max rule. Floor 32→40),
+  and `move_speed_reduced` the snare states; §7 pools ONE client build
+  (2026-08-13, six keyed captures), proves `read()` no longer refuses on a snare,
+  resolves **184 definitions vs the subset's 54**, and pins 159/114 by name plus
+  the base-is-the-max rule. It pools one build because a definition INDEX is not
+  a global name across builds: 2026-09-16 the whole-vault pool refuses on
+  definition 7809, a level-5 creature (shell 141285) in the 2026-07-29 build and
+  a level-20 one (shell 16271) in the 2026-09-01 build -- a real cross-build
+  content drift, asserted as such (both identities read), NOT the instantaneous
+  field-9 value. `capture_build`/`live_captures(build=)` scope the pool.
+  Floor 32→40→42),
   `toolkit/authsrv/test_agentroster.py` (the per-agent roster reader —
   `studies/isle/PLAN.md` rung 1: every WORLD_CREATE_AGENT **with its coordinates**,
   partitioned by class tag before any masking, because field 2's low 16 bits are a
@@ -11902,7 +11909,7 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   return paths), and ALL 13 scoreable retail-verbatim clicks
   reproduced as our one-leg case bit-identically (corpus-level counts are
   ≥-floors because the live corpus grows; bit-exact locks stay on the
-  anchor files). Floor 48 from the green run. ~15 s warm),
+  anchor files). 2026-09-16: section 2 also pins the TWO-CONTROLLED-AGENTS click (20260914T180058 conn 55087) -- its connection votes 206:6 vs 538:4 but 206 does not move until t=82s and the lone click at t=42.4 is answered bit-exact by 538 at +46ms; answering_agent() attributes a click the connection player never answered to the agent the server answered it with, when exactly one agent lands the clicked point within one RTT. That was the corpus's lone false no-answer. Floor 48 -> 50 from the green run. ~15 s warm),
   `toolkit/authsrv/test_router.py` (ROUTER-B2, the router click policy — **the
   DEFAULT since 2026-09-03, MOVECODE-1z-v; `--no-router` reverts** —
   the wiring's own checks, bare-machine (no vault, no client, no sockets;

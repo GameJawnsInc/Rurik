@@ -424,7 +424,38 @@ def to_toml(defs, mode="unrecorded"):
 
 # ---------------------------------------------------------------- cli
 
-def live_captures(names=None):
+def capture_build(capture_dir):
+    """The client build that PRODUCED this capture, as a short key, or None.
+
+    Read from the capture's own manifest.json, where livesession.py records the
+    exe it launched (the directory name carries the build's own datestamp+hash,
+    e.g. `2026-08-13_64fae3b1369b`) and the exe's sha256. The directory name is
+    the key because it is present even on the one July capture whose manifest
+    predates the sha field, and two captures of the same build share it exactly.
+
+    WHY THIS EXISTS. `read()` pools captures by definition INDEX, and a definition
+    index is not a global name across builds: definition 7809 is a level-5 creature
+    on shell 141285 in the 2026-07-29 build and a level-20 one on shell 16271 in
+    the 2026-09-01 build (MEASURED; `toolkit/mapdata/wireshells.py` keys sightings
+    per capture and connection for exactly this reason). The three-capture corpus
+    the pins were measured on was one build, so the drift never showed; over the
+    whole vault it does, and pooling across builds is the same category error as
+    pooling across origins -- a different dataset, not more of the same one.
+    """
+    path = os.path.join(capture_dir, "manifest.json")
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            manifest = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    exe = manifest.get("exe") or ""
+    key = os.path.basename(os.path.dirname(exe))
+    return key or (manifest.get("exe_sha256_before") or None)
+
+
+def live_captures(names=None, build=None):
     """Every live capture directory that has a decrypted game channel in it.
 
     Six live directories exist and only three carry decrypted game channels; the other
@@ -439,6 +470,12 @@ def live_captures(names=None):
     (studies/isle/PLAN.md gap 4). A name that selects nothing is REFUSED rather than
     silently contributing an empty corpus -- the vaultpath.require_dir rule, one level
     up.
+
+    `build` narrows to captures of one client build (see `capture_build`). It exists
+    because `read()` pools by definition index and an index drifts across builds
+    (definition 7809, 2026-09-16); a consumer that wants a large single-build pool
+    asks for one here rather than discovering the drift as a refusal. A build that
+    selects nothing is REFUSED, same as an unknown name.
     """
     root = vaultpath.require_dir("captures", "live",
                                  why="npcdefs compiles definitions out of live captures")
@@ -459,6 +496,15 @@ def live_captures(names=None):
                 f"{sorted(have)}. A selector that silently matches nothing turns "
                 f"every count behind it into a count of an empty corpus.")
         out = [have[n] for n in sorted(want)]
+    if build is not None:
+        kept = [p for p in out if capture_build(p) == build]
+        if not kept:
+            seen = sorted({capture_build(p) for p in out})
+            raise NpcDefsError(
+                f"no keyed live capture of build {build!r}; the vault holds builds "
+                f"{seen}. A build selector that matches nothing turns every count "
+                f"behind it into a count of an empty corpus.")
+        out = kept
     return out
 
 

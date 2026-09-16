@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # vault-dependent section declares its skips, so a run without the live captures lands
 # below the floor and goes RED -- which is the point, since a compiler checked against
 # nothing is the failure checks.py exists for.
-LEDGER = checks.Ledger("npcdefs: capture -> content rows", floor=40)
+LEDGER = checks.Ledger("npcdefs: capture -> content rows", floor=42)
 # floor 25 -> 32 on 2026-08-16, measured from the green run that added the
 # named-capture selection, the fourth-capture proof and the mode plumbing;
 # 32 -> 40 on 2026-08-22 with section 7 (field 9 is per-instance, the full
@@ -350,29 +350,64 @@ def main():
               "an unstamped health number is base or base x 0.8 forever")
 
     # ---- 7. field 9 is per-instance, and the full pool now READS -------------
-    print("\n7. the full live pool: field 9 is instantaneous, and read() no "
-          "longer refuses on a snare")
+    print("\n7. a large single-build pool: field 9 is instantaneous, and read() "
+          "no longer refuses on a snare")
+    # POOL ONE BUILD. read() pools by definition index, and an index is not a
+    # global name across client builds: pooling every live capture refuses on
+    # definition 7809, which is a level-5 creature (shell 141285) in the
+    # 2026-07-29 build and a level-20 one (shell 16271) in the 2026-09-01 build.
+    # That is a real cross-build content drift -- NOT a field-9 snare, and NOT
+    # something to average -- so §7's field-9 claim is proved within one build,
+    # where the index IS stable. The 2026-08-13 build is chosen because it is a
+    # six-capture pool that carries both of the field-9 snares this section pins;
+    # the cross-build drift itself is asserted just below.
+    POOL_BUILD = "2026-08-13_64fae3b1369b"
     all_caps = npcdefs.live_captures()
-    LEDGER.ok(len(all_caps) > len(caps),
-              "the vault holds more captures than the three keyed here",
-              f"{len(all_caps)} total vs {len(caps)} keyed -- the pool this "
-              f"section proves is readable")
-    # The headline: pooling EVERY live capture no longer raises. Before
-    # 2026-08-22 this refused on definition 159's second field-9 speed.
+    build_caps = npcdefs.live_captures(build=POOL_BUILD)
+    LEDGER.ok(len(build_caps) > len(caps) and len(all_caps) > len(build_caps),
+              "one build's pool is larger than the three keyed here and smaller "
+              "than the whole vault",
+              f"{len(build_caps)} in build {POOL_BUILD}, {len(caps)} keyed, "
+              f"{len(all_caps)} total")
+    # The headline: pooling one build no longer raises. Before 2026-08-22 this
+    # refused on definition 159's second field-9 speed.
     try:
-        pooled, _iv = npcdefs.read(all_caps)
+        pooled, _iv = npcdefs.read(build_caps)
         pooled_ok = True
     except npcdefs.NpcDefsError as exc:
         pooled, pooled_ok = {}, False
         print(f"   read() refused: {exc}")
     LEDGER.ok(pooled_ok,
-              "read() pools all live captures WITHOUT refusing on field 9",
+              "read() pools one build's captures WITHOUT refusing on field 9",
               "the fix: field 9 is instantaneous, so a second value is a snare, "
               "not a merge conflict")
     LEDGER.ok(len(pooled) > len(defs),
               "and the pool resolves far more definitions than the 3-capture "
               "subset -- what makes the downstream figures stop being "
               "3-capture numbers", f"{len(pooled)} vs {len(defs)}")
+    # THE CROSS-BUILD DRIFT, asserted rather than hit as a surprise: pooling the
+    # whole vault refuses, and it refuses on 7809's IDENTITY (file_id + level),
+    # which is drift, not a field-9 snare. Read each build's 7809 to name both.
+    try:
+        npcdefs.read(all_caps)
+        LEDGER.ok(False, "pooling every build refuses on 7809's cross-build drift",
+                  "it did not refuse")
+    except npcdefs.NpcDefsError as exc:
+        LEDGER.ok("7809" in str(exc) and "declared twice" in str(exc),
+                  "pooling every build refuses on 7809's cross-build drift -- an "
+                  "index is not a global name across builds",
+                  str(exc).splitlines()[0])
+    july = npcdefs.read(npcdefs.live_captures(build="2026-07-29_221c13772c7a"))[0]
+    sept = npcdefs.read(npcdefs.live_captures(build="2026-09-01_44fbd68767a8"))[0]
+    LEDGER.ok(7809 in july and 7809 in sept
+              and july[7809].payload[0] == 141285 and july[7809].payload[6] == 5
+              and sept[7809].payload[0] == 16271 and sept[7809].payload[6] == 20,
+              "7809 is a DIFFERENT creature per build: shell 141285 level 5 in "
+              "2026-07-29, shell 16271 level 20 in 2026-09-01 -- a real drift, "
+              "not the instantaneous field-9 value §7 is about",
+              f"july {july[7809].payload[0]}/{july[7809].payload[6]}, "
+              f"sept {sept[7809].payload[0]}/{sept[7809].payload[6]}"
+              if 7809 in july and 7809 in sept else "7809 missing")
     # The two definitions whose creates caught a snare, pinned by name.
     LEDGER.ok(159 in pooled and pooled[159].move_speed == 288.0
               and pooled[159].reduced_speeds == [144.0],

@@ -39,7 +39,7 @@ import archive                                                 # noqa: E402
 # Floor from the 2026-08-26 green run on the owner's machine (48 checks:
 # 28 synthetic + 11 census + 2 meshcheck + 7 scoring). The vault-dependent
 # sections skip loudly on a bare machine and the floor names the shortfall.
-LEDGER = checks.Ledger("routerbench", floor=48)
+LEDGER = checks.Ledger("routerbench", floor=50)
 check = checks.adopt_named(LEDGER)
 
 
@@ -254,6 +254,24 @@ def section2_census():
                  kinds.get("no-answer", 0) == 0, f"got {kinds}")
     check("the eight superseded chains found",
                  superseded >= 8, f"got {superseded}")
+    # The two-controlled-agents click (20260914T180058, conn 55087). Its
+    # connection votes 206:6 vs 538:4 for the player, but 206 does not move
+    # until t=82s and the click at t=42.4 is answered bit-exact by 538 at +46ms.
+    # answering_agent() attributes it to 538 by the server's own answer; before
+    # that fix it was the corpus's lone false no-answer. Pinned so a change to
+    # the fallback reddens with the reason rather than reopening the red.
+    two_agent = [r for r in rows
+                 if r["cap"] == "20260914T180058"
+                 and "55087" in r["conn"] and abs(r["t"] - 42.392) < 0.01]
+    check("the two-controlled-agents click is present", len(two_agent) == 1,
+                 f"got {len(two_agent)}")
+    if two_agent:
+        r = two_agent[0]
+        check("it is attributed to the answering agent 538, not the vote-winner "
+              "206, and reads verbatim",
+                     r["agent"] == 538 and r["kind"] == "verbatim"
+                     and r["first_dt"] is not None and r["first_dt"] <= rb.RTT_WINDOW,
+                     f"agent {r['agent']}, {r['kind']}, first_dt {r['first_dt']}")
     # The anchor chain, bit-exact.
     chain = [r for r in rows
              if r["conn"] == ANCHOR_63805[1] and abs(r["t"] - 1103.590) < 0.01]

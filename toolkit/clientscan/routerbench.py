@@ -304,6 +304,39 @@ def along_fraction(origin, click_pt, pt):
 # Section A: the committed retail census (the fidelity gate's subject)
 # ---------------------------------------------------------------------------
 
+def answering_agent(merged, player, click_t, click_pt):
+    """The agent to attribute this click to -- the connection's `player` by
+    default, but the server's own answer when `player` did not answer.
+
+    A click carries NO agent id (it is `[point]`, not `[agent, point]`), so the
+    census attributes it to the one player agent the connection voted for. That
+    is right on every connection with a single controlled avatar. It is WRONG on
+    a connection that controls two -- e.g. 20260914T180058, where the vote splits
+    206:6 vs 538:4, agent 206 does not move until t=82s, and the lone click at
+    t=42.4 is answered BIT-EXACT by agent 538 forty ms later. Forcing that click
+    onto 206 finds 206's next grant 40s away and scores a false `no-answer`.
+
+    The rule, used only as a fallback so no already-correct attribution moves:
+    if `player` has no grant within RTT_WINDOW of the click, and EXACTLY ONE
+    other agent has a grant in that window landing bit-exact on the click point,
+    that agent is the click's answerer. The server granting the clicked point to
+    an avatar within one RTT is what identifies the controlled avatar for this
+    click -- stronger evidence than the connection-wide vote, because it is about
+    this click. Ties (two agents both bit-exact in-window) fall back to `player`,
+    because then the server's answer does not disambiguate.
+    """
+    for t, pt, _pf, _ps in grant_rows(merged, player):
+        if click_t < t <= click_t + RTT_WINDOW:
+            return player                      # player answered; nothing to do
+    hits = set()
+    for t, d, op, v in merged:
+        if d != "s2c" or op != OP_GRANT:
+            continue
+        if click_t < t <= click_t + RTT_WINDOW and tuple(v[2]) == tuple(click_pt):
+            hits.add(v[1])
+    return next(iter(hits)) if len(hits) == 1 else player
+
+
 def census(root=None):
     """Every click in the LIVE corpus, classified.
 
@@ -336,7 +369,8 @@ def census(root=None):
             skipped.append((cap, gf, "no-player-attribution"))
             continue
         for ct, cpt, _cplane in clicks:
-            grants, end = chain_for_click(merged, agent, ct, cpt)
+            click_agent = answering_agent(merged, agent, ct, cpt)
+            grants, end = chain_for_click(merged, click_agent, ct, cpt)
             first = grants[0] if grants else None
             first_dt = None if first is None else first[0] - ct
             first_dist = None if first is None else dist(first[1], cpt)
@@ -352,7 +386,7 @@ def census(root=None):
                 and grants[-1][1] == (cpt[0], cpt[1]))
             rows.append({
                 "cap": cap, "conn": gf, "t": ct, "click": cpt,
-                "agent": agent, "first_dt": first_dt,
+                "agent": click_agent, "first_dt": first_dt,
                 "first_dist": first_dist, "kind": kind,
                 "n_grants": len(grants), "end": end,
                 "origin": None if pos is None else pos[0],
