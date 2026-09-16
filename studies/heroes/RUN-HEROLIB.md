@@ -885,3 +885,55 @@ that sends the hero's attributes. Any one missing makes the run VOID: in
 particular, a client closed from inside the map (J2 missing) is exactly
 run D's null and answers nothing here. Scored from the wire and the logs
 after teardown.
+
+## 14. Result — RUN-HEROLIB-E: **VOID on its own floor (J2), and the reason is a new fact: a character-select round trip does NOT send the settings write — only a zone transfer does**
+
+Harness dir `vault/captures/harness/20260915T225832`, auth capture
+`authsrv-20260915T225855-c1.jsonl`, scored after teardown (`RUN VERDICT:
+FAIL` is the hold's own expiry; the client was left open as asked).
+
+### 14.1 What happened, from the logs
+
+| | evidence |
+|---|---|
+| **J1 met** | `gamesrv.log:210` `0x800f ATTRIBUTE_INCREASE`; `:212` `[charstore] SAVE … by authsrv.py:14281 in persist_hero_attributes -- mtime 02:58:55Z/1318B -> 03:01:38Z/1318B`; `:213` `hero 3 attributes saved -- 13=3, 16=1, 3 of 10 unspent` |
+| **J2 NOT met** | `authsrv.log` carries **no** `character settings` line and the auth capture no `character_settings` event. The logout produced `player status -> 0 (Offline)` (`:79`), a second `REQUEST_GAME_INSTANCE` for the same map 148 (`:91`), and nothing else. |
+| **J3 met** | game c2 sent `AGENT_ATTRIBUTE_POINTS(hero agent 200: 3 of 10)` (`:308`) and the hero's `0x003A` (`:319`); the operator saw Healing Prayers at 3 |
+
+**P1's observation is real but proves nothing about §10's fix**: the edit
+survived because no settings write ever ran, so there was nothing to
+overwrite. By §13.4 the run is VOID for the question it registered.
+
+### 14.2 The fact it found instead — OBSERVED here, CORROBORATED by the corpus
+
+Run A's boundary was a **zone transfer on the game channel** — c1 handed off
+to `127.0.0.33` and its auth capture holds exactly **one**
+`game_instance_request`. This run's boundary was a **character-select round
+trip through the auth channel** — a second `game_instance_request`, same map.
+The settings write fired for the first and not the second.
+
+`scratch charselect_census.py` over every auth capture: **15 captures carry
+two or more `game_instance_request`s on one auth connection (17 gaps), and
+0 of 17 have a `character_settings` event between them** — 12 same-map,
+5 map-change. So `UPDATE_CHARACTER_SETTINGS` is sent on an in-game zone
+transfer and not on a re-entry from character select. (Consistent with §10.3's
+319-of-319 at a game boundary: those boundaries were all handoffs.)
+
+### 14.3 What this means for the fix, and the run that would test it
+
+§10's guards are still exercised only by `test_charstore`. The run that
+exercises them on a client is E with **E2 replaced by walking through a
+portal** — the slice corridor's own transfer (SLICE-H8 crosses it) — so the
+game channel hands off and the settings write fires after the edit. Same
+predictions, same floor with J2 read as "a `character_settings` event after
+J1". Registered as **RUN-HEROLIB-F** when there is a next five minutes; not
+run tonight.
+
+### 14.4 Also recorded
+
+The character-select round trip itself works against this server end to
+end: logout → `Offline` → character select → Play → a second instance
+request answered → c2 in the map, hero data served from the store. The
+first-cut instruction in §13.2 assumed the round trip would carry the write;
+the census says it never has, and that assumption is the kind §10.3 exists
+to replace with a count.
