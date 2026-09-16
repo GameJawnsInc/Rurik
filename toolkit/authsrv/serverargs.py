@@ -952,6 +952,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "nearest within it, and keeps the pick while it lives: "
                          "retail's own choice in 51 of 58 opening starts on a "
                          "party (studies/slice F29, henchjoin.py --hostile).")
+    ap.add_argument("--enemy-passive", action="store_true",
+                    help="MONSTERAI-J: spawn the standing hostile(s) with "
+                         "`passive = true` and one shared `group`, without "
+                         "editing content/world.toml -- the client check of the "
+                         "mechanism: they stand while the player stands beside "
+                         "them, and every one of them fights once one is hit.")
     ap.add_argument("--no-passive-hostiles", action="store_true",
                     help="MONSTERAI-J REVERT: a row's `passive = true` is "
                          "ignored -- every hostile notices on proximity, every "

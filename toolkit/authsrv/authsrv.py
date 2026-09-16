@@ -10277,6 +10277,7 @@ ENEMY_RESEND_DEFINITION = bool(_ENEMY.get("resend_definition", False))
 # named here and in spawn_enemy.
 ENEMY_ATTACKS_BACK = bool(_ENEMY.get("attacks_back", True))
 ENEMY_PASSIVE = bool(_ENEMY.get("passive", False))        # MONSTERAI-J
+ENEMY_GROUP = _ENEMY.get("group")                          # MONSTERAI-J
 ENEMY_MAX_HEALTH = _ENEMY["max_health"]
 
 # CREATURE ARMOUR moved to combatmath.py (REFACTOR-A12), wiki banner and all.
@@ -22522,7 +22523,7 @@ def _spawn_one_enemy(send, state, agent_id, x, y, plane, conn_id, n_of=(1, 1)):
         "effects": 0,
         "resend_definition": ENEMY_RESEND_DEFINITION,
         "attacks_back": ENEMY_ATTACKS_BACK,
-        "passive": ENEMY_PASSIVE, "group": _ENEMY.get("group"),  # MONSTERAI-J
+        "passive": ENEMY_PASSIVE, "group": ENEMY_GROUP,          # MONSTERAI-J
         "provoked": False,
         "skills": ENEMY_SKILLS,
         # Per-SLOT rather than per-id: a bar may legitimately carry the same skill
@@ -29540,6 +29541,12 @@ def main():
         print("[enemy] --hostile-target-player: every hostile fights the player "
               "only -- every run before SLICE-H3 (2026-09-13); retail's named a "
               "henchman 162 times to the observer's 13.", flush=True)
+    if a.enemy_passive:
+        global ENEMY_PASSIVE, ENEMY_GROUP
+        ENEMY_PASSIVE, ENEMY_GROUP = True, "test_enemy"
+        print("[enemy] --enemy-passive: the standing hostile(s) are PASSIVE, one "
+              "group -- they stand until hit, then all of them fight "
+              "(MONSTERAI-J).", flush=True)
     if a.no_passive_hostiles:
         global PASSIVE_HOSTILES
         PASSIVE_HOSTILES = False
