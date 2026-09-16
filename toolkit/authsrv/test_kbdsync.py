@@ -2399,9 +2399,13 @@ def main():
           "25i. the integrator reads dest_speed ONCE, where the flat literal was, "
           "and the literal is gone from the file",
           f"literal {SRC.count('DEFAULT_RUN_SPEED * TICK_SECONDS')}")
-    _i_arm = SRC.index('state["dest_speed"] = model_leg_speed(moving)')
+    # SLICE-F47 (2026-09-16): the arm passes the DECLARED base (0x0027) as the
+    # helper's second argument, so a boosted or crippled leg is modelled at
+    # the speed the client was told; the literal moved with it.
+    _ARM = 'state["dest_speed"] = model_leg_speed(moving, state.get("declared_speed_base"))'
+    _i_arm = SRC.index(_ARM)
     _i_dest = SRC.index('state["dest"], state["clipped"] = model_dest, blocked')
-    check(SRC.count('state["dest_speed"] = model_leg_speed(moving)') == 1
+    check(SRC.count(_ARM) == 1
           and 0 < _i_arm - _i_dest < 200
           and SRC.count("model_leg_speed(") == 2,
           "25j. the 0x003D arm writes the speed on the line after the dest it "

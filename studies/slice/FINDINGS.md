@@ -3357,6 +3357,77 @@ episode change, in the batch, behind the status word.
   cure batch's order, the cap on the sum, a body's own word, the revert arm), `test_effects`
   §4d/§5 now expecting Rush's word behind its apply and expiry.
 
-### 47.5 Live, on the client
+### 47.5 Live, on the client — RUN-MOVESPEED-1 / 1b (the boosts), agent-driven
 
-_(filled from RUN-MOVESPEED-1 / -2 below.)_
+Loopback, Isle of the Nameless (map 280), `--skills 364,160`, predictions registered before
+launch (the session's `ms_runplan.md`; the suite green first, 208 of 212 with the three reds
+classified — two corpus locks reddened by that morning's Lakeside capture on `main` too, one
+source lock of this branch's own, moved). Instrument: the gamesrv tape's decoded `0x003D`
+reports, which the client sends every ~512 u (1.4–1.8 s apart, not the 0.29 s the plan
+assumed), so a leg's speed is `distance / dt` between consecutive reports.
+
+* **RUN-1** (harness `20260916T191507`, tape `authsrv-20260916T191542-c1`; `W:5 skill:364
+  W:6 skill:160 W:6 wait:14 W:5`): the shout at t = 9.03 s — `EFFECT_APPLY(shout 364 …
+  8.0 s at rank 6)` (the loopback character's Tactics 6: GWW 5…13 → 8 ✓) then
+  `AGENT_UPDATE_SPEED_BASE(the player, 383.04 u/s, x1.33)` in the same batch; its expiry
+  at 19.27 s restored 288.00; Windborne at 21.52 s (rank 0 → 5.0 s ✓) declared 383.04 and
+  restored at 26.56. **P1 and P5 held; P2 (the cap) was UNEXPOSED** — the plan's W:6 leg
+  outlived the 8 s shout — and the body hit the Isle's east wall at 18 s (position frozen at
+  (−2699, −2411) from then on), so the Windborne legs never moved. Speeds: plain leg 288.1 /
+  287.9 / 286.0; boosted 372.8 / 379.4 / 377.1 / 367.5 (× 1.29–1.32).
+* **RUN-1b** (harness `20260916T191835`, tape `authsrv-20260916T191905-c1`; `W:3 skill:364
+  W:3 skill:160 W:3 wait:12 S:5`): **every prediction held.** 383.04 at the shout (9.03 s);
+  **385.92 (× 1.34) when Windborne landed inside it** (16.33 s) — the cap on the sum, and the
+  wire says so at once; **383.04 again when the shout expired under the enchantment**
+  (17.04 s); 288.00 restored at Windborne's end (21.37 s). Plain leg 288.0 / 288.0; boosted
+  370.5 / 378.5 / **383.9** / 370.7 / 377.3 / **383.4** — the two leg-ending intervals read
+  the declared 383.04 within 0.25 %, the four full 512 u intervals sit 1.2–3.3 % under it
+  (UNVERIFIED why; the plain legs read 288.0 exactly on the same instrument, so it is not
+  the instrument's floor); the closing backpedal 187.8 / 187.6 = 0.66 × 288 (the family rate
+  on the RESTORED base — at 383 it would read 253). **No `0x002C` of any kind in the run**;
+  RUN-1's one was the pre-existing cast-stop pin at the Windborne press (0.75 s activation
+  stops the body), not a snap. P3, P4 and P5 held on both runs.
+
+**Labels.** The declarations OBSERVED on our own wire (n = 8 words, 2 runs), matching
+retail's arithmetic to the byte; the client walking at the declared base OBSERVED (9 boosted
+intervals, ratio 1.29–1.33; 2 at 1.331–1.333); the composite holding OBSERVED (0 re-pins over
+2 boosted runs — a small n, and "nothing snapped" is a null on exposure, stated as such).
+
+### 47.6 Live, on the client — RUN-MOVESPEED-2 (the snare and the cure), agent-driven
+
+Same map and bar, `--enemy --enemy-skills 392` (the standing Hatcher with Pin Down alone on
+its bar), `W:3 wait:12 W:4 skill:364 W:4`, hold 40 (harness `20260916T192119`, tape
+`authsrv-20260916T192147-c1`). **P6, P7 and P8 all held**, and the run exposed a fourth
+thing the plan did not ask for:
+
+* **P6 — the inflict.** t = 2.02 s: `agent 10 strikes with skill 392` → `EFFECT_APPLY(Crippled
+  on agent 1, buff 1, 13.0 s, inflicted by skill 392)` (the Hatcher's rank 12: GWW 3…15 → 12.6
+  → 13 ✓, the Isle's own 13.0) → status word → **`AGENT_UPDATE_SPEED_BASE(the player,
+  144.00 u/s, x0.5)`**, retail's batch in retail's order.
+* **P7 — the client limps at half.** The crippled W:3 leg: two 0.5 s start-of-leg intervals at
+  109.0 / 112.3, then the clean 2.0 s interval **288.3 u in 2.002 s = 144.0 u/s exactly**.
+* **P8 — the cure.** t = 28.43 s, "Charge!" pressed while crippled: `EFFECT_APPLY(shout 364 …
+  8.0 s)`, `EFFECT_REMOVE(buff 1, Crippled, REMOVED: skill 364's initial effect)`, the status
+  word, **383.04** — one batch, and the next full interval reads **371.5 u/s** (× 1.29, the
+  same figure as the boost runs).
+* **The re-cripple under the shout, unplanned:** Pin Down landed again at 31.75 s inside the
+  shout and the wire said **191.52 (x0.665)** — the Isle's own number, produced by our
+  arithmetic on our own tape — and the 2.47 s interval straddling it reads 207.8 u/s, which is
+  0.22 s at 383.04 plus 2.25 s at 191.52 (208.5 predicted). At the shout's expiry (36.44 s) the
+  word fell to 144.00 with the condition still on.
+* **What the run also showed:** a crippled level-1 body cannot leave a Hatcher — the player
+  was killed at 12.68, 36.70, 58.35 and 79.98 s, each death STRIPPING the condition (288.00
+  restored in the death batch, as retail's strip does) and each revive being crippled again
+  within 0.6 s. That is the harness character's fragility (the `--enemy-hit` note in the
+  runbook), not this arc's; the cripple/cure/re-cripple cycle it produced is exactly the
+  exposure the plan wanted.
+
+**Labels.** Inflict, cure and re-cripple OBSERVED on our wire (11 words, 4 cripples, 1 cure,
+1 shout expiry under a condition); the client's crippled rate OBSERVED (one clean interval at
+144.0, two start-of-leg intervals at 109–112); the boost-over-cripple product on our wire
+OBSERVED (191.52, n = 1) and CORROBORATED against retail's 191.52 by construction. The
+death-strip restore OBSERVED (4 of 4).
+
+**Open, for the next arc:** a skill SNARE row (a Water hex, a self-snare stance) to exercise
+the `Movement speed decrease` arm and settle 47.3's contested boost × snare rule on our own
+client — Deep Freeze's −66 % single-source excess would answer both.

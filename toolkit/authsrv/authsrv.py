@@ -26094,8 +26094,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 state, (px + heading[0], py + heading[1]))
                             state["dest"], state["clipped"] = model_dest, blocked
                             # MOVECODE-1z-cu: the leg's own speed, beside its dest.
-                            state["dest_speed"] = model_leg_speed(
-                                moving, state.get("declared_speed_base"))   # SLICE-F47
+                            state["dest_speed"] = model_leg_speed(moving, state.get("declared_speed_base"))  # SLICE-F47
                             # MOVECODE-1z-cr: THE PHANTOM LEG, NAMED WHERE IT IS ARMED.
                             # This assignment is the whole of MOVECODE-1z-cp: the 20 Hz
                             # integrator (authsrv.py, "state[\"pos\"] = (px +") walks

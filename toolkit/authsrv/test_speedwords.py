@@ -26,7 +26,7 @@ def main():
     print("== 1. the census ==")
     try:
         vaultpath.require_dir("captures", "live", why="test_speedwords")
-    except Exception as ex:                                     # noqa: BLE001
+    except (Exception, SystemExit) as ex:     # require_dir raises SystemExit on a bare machine
         LEDGER.skip("the whole file", f"no live captures here ({ex})")
         return LEDGER.verdict()
     rows = speedwords.census()
