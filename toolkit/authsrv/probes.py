@@ -1144,12 +1144,23 @@ def check_encodable(quiet=False, counts=None):
     broken when the machine is merely bare.
 
     Pass a dict as `counts` to learn what actually happened -- it is filled with
-    `checked` / `skipped` / `failed`. The return value is still the failure count
-    alone, because four call sites in `test_agentlife.py` compare it to 0 and
-    two of those are sabotage arms. **A caller that only reads the return value
-    cannot tell "every probe encodes" from "no probe could be built":** both are
-    0. That is exactly the `test_codec.py` fixture-glob shape, so a caller on a
-    machine that might be bare should assert `counts["checked"] > 0` too.
+    `checked` / `skipped` / `failed` / `failures`. The return value is still the
+    failure count alone, because four call sites in `test_agentlife.py` compare
+    it to 0 and two of those are sabotage arms. **A caller that only reads the
+    return value cannot tell "every probe encodes" from "no probe could be
+    built":** both are 0. That is exactly the `test_codec.py` fixture-glob
+    shape, so a caller on a machine that might be bare should assert
+    `counts["checked"] > 0` too.
+
+    QUIET MEANS QUIET, FAILURES INCLUDED (2026-09-15). Until then the `[FAIL]`
+    line below printed regardless of the flag, and `test_agentlife.py`'s
+    CONTROL -- which monkeypatches `get()` to hand a deliberately malformed step
+    to this walk under `quiet=True` -- echoed it once per registered probe: 97
+    lines reading `[FAIL] <probe>: malformed -> ValueError: GAME_SMSG 0x0000
+    wants 1 values, got 0` in a green run, one per name in `names()`, none of
+    them a broken probe. A quiet caller still learns WHICH step failed: it is in
+    `counts["failures"]` as `(probe, label, "ExcType: message")`, which is what
+    the suite prints when the count is not zero.
     """
     import os
     import sys
@@ -1161,6 +1172,7 @@ def check_encodable(quiet=False, counts=None):
     bad = 0
     checked = 0
     skipped = []
+    failures = []
     for name in names():
         try:
             probe = get(name, 1)
@@ -1195,12 +1207,16 @@ def check_encodable(quiet=False, counts=None):
                           f"0x{step.opcode:04X}, {len(blob)}B")
             except Exception as exc:
                 bad += 1
-                print(f"  [FAIL] {name}: {step.label} -> "
-                      f"{type(exc).__name__}: {exc}")
+                failures.append((name, step.label,
+                                 f"{type(exc).__name__}: {exc}"))
+                if not quiet:
+                    print(f"  [FAIL] {name}: {step.label} -> "
+                          f"{type(exc).__name__}: {exc}")
     if counts is not None:
         counts["checked"] = checked
         counts["skipped"] = skipped
         counts["failed"] = bad
+        counts["failures"] = failures
     return bad
 
 

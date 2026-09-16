@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=534)   # 2026-09-15 (later) HEROLIB +2 (no 0x001D send site may zero the account library -- the GmSkSlot.cpp:206 crash of run 20260915T201538; the negative control restores the literal and reddens naming the line); 2026-09-15 +2 (offset_y honoured); SLICE-F43 +3 (the wipe countdown and its stop), from the green run   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=536)   # 2026-09-15 (probe-walk noise) +2 (the CONTROL is pinned to one name and captured: quiet prints nothing, the failure is named to the caller), from the green run; 2026-09-15 (later) HEROLIB +2 (no 0x001D send site may zero the account library -- the GmSkSlot.cpp:206 crash of run 20260915T201538; the negative control restores the literal and reddens naming the line); 2026-09-15 +2 (offset_y honoured); SLICE-F43 +3 (the wipe countdown and its stop), from the green run   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
 def section_weapon_damage():
@@ -3726,14 +3726,22 @@ def section_probe_encoding():
     from `probes.py`'s own `__main__`, so the suite never ran it and a broken
     probe would have been discovered by spending the run.
     """
+    import contextlib
+    import io
     import probes
     counts = {}
     failures = probes.check_encodable(quiet=True, counts=counts)
+    # `quiet=True` is honoured for failures too since 2026-09-15, so the NAMES of
+    # any broken step come from `counts` and are printed here, on the red line,
+    # rather than as loose `[FAIL]` lines above it.
     LEDGER.ok(failures == 0,
               "every step of every probe encodes",
               f"{failures} failures -- an unencodable step is only discovered "
               f"by launching a client, which is the most expensive way to find "
-              f"a typo in this repo")
+              f"a typo in this repo"
+              + ("".join(f"\n      {n}: {label} -> {why}"
+                         for n, label, why in counts["failures"])
+                 if failures else ""))
     # NOT REDUNDANT, and the reason is the same one `test_codec.py`'s fixture
     # glob taught: `failures == 0` is ALSO what a machine that could build no
     # probe at all reports. Some probes bind vault content while their steps are
@@ -3766,18 +3774,46 @@ def section_probe_encoding():
     # claim to send is exactly what this section exists to catch, and it is bytewise
     # identical to the refusal apart from the flag. Skipping on shape would have made
     # the check unable to fail for its own reason.
+    #
+    # PINNED TO ONE SYNTHETIC NAME, AND RUN WITH ITS OUTPUT CAPTURED (2026-09-15).
+    # Until then only `get` was patched, so the walk handed this one malformed step
+    # to every name in `probes.names()` -- and `check_encodable`'s `[FAIL]` print did
+    # not honour `quiet`, so a GREEN run carried 97 lines reading
+    # `[FAIL] <probe>: malformed -> ValueError: GAME_SMSG 0x0000 wants 1 values, got 0`,
+    # one per registered probe, none of them a broken probe: the label was this
+    # control's own. The walk above ran on the real registry BEFORE the patch, so its
+    # `checked=` count never included them; the lines were noise, not a verdict. The
+    # two checks after the control are the regression guards for exactly that shape.
     class _Probe:
         steps = [probes.Step(0.0, 0x0000, [], "malformed", "should be caught")]
-    saved = probes.get
+    saved_get, saved_names = probes.get, probes.names
+    ctl = {}
+    echoed = io.StringIO()
     try:
         probes.get = lambda name, n=1: _Probe()
-        caught = probes.check_encodable(quiet=True)
+        probes.names = lambda: ["control"]
+        with contextlib.redirect_stdout(echoed):
+            caught = probes.check_encodable(quiet=True, counts=ctl)
     finally:
-        probes.get = saved
+        probes.get, probes.names = saved_get, saved_names
     LEDGER.ok(caught > 0,
               "CONTROL: a valueless step that still claims to SEND is caught",
               f"{caught} failure(s) -- identical to the refusal but for the flag, so a "
               f"shape-based skip would have silently stopped catching broken probes")
+    LEDGER.ok(echoed.getvalue() == "",
+              "and under quiet=True the control's manufactured failure prints NOTHING "
+              "-- a green run carries no [FAIL]-tagged line",
+              f"{len(echoed.getvalue().splitlines())} line(s) echoed -- it was 97 "
+              f"until 2026-09-15, one per registered probe, from a print that "
+              f"ignored the flag")
+    LEDGER.ok(ctl.get("failures") == [("control", "malformed",
+                                       "ValueError: GAME_SMSG 0x0000 wants 1 "
+                                       "values, got 0")],
+              "and the failure is NAMED to the quiet caller, so silence costs no "
+              "diagnostic",
+              f"counts['failures']={ctl.get('failures')} -- probe, step label and "
+              f"the codec's own refusal; the red line above prints these when the "
+              f"count is not zero")
 
     section_planless_probe()
 
