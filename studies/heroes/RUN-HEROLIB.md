@@ -937,3 +937,44 @@ request answered → c2 in the map, hero data served from the store. The
 first-cut instruction in §13.2 assumed the round trip would carry the write;
 the census says it never has, and that assumption is the kind §10.3 exists
 to replace with a count.
+
+## 15. RUN-HEROLIB-F — §13's question with the boundary that actually carries the write: a PORTAL
+
+**Registered before launch, 2026-09-15 (night, last).** §14 showed the
+character-select round trip never sends `UPDATE_CHARACTER_SETTINGS`; the
+zone transfer does (run A, and §10.3's 319). So E2 becomes a walk through
+a portal.
+
+### 15.1 The rig
+
+Store as run E left it: hero 3 ranks `[[13, 3], [16, 1]]`, **3 of 10**
+unspent, bar unchanged. Same flags and build; `--hold 420` for the walk.
+
+### 15.2 The gesture
+
+| step | the operator does | exercises |
+|---|---|---|
+| **F1** | one **−** on Tahlkora's Healing Prayers (13: 3 → 2, refund +3 → **6 of 10**) | `0x000E` → `persist_hero_attributes` → a game-process `save()` |
+| **F2** | walks through a portal to another map | the game-channel handoff, the auth-channel settings write, game c2's fresh `Store` |
+
+A **minus** rather than a plus because 3 unspent cannot pay rank 4 (cost 4)
+and the client greys the plus out; the refund direction is the one the run's
+budget allows.
+
+### 15.3 Predictions
+
+* **P1 (the fix):** game c2 serves rank **2** and **6 of 10** for hero 3.
+  The pre-fix behaviour would put the on-disk seed back: rank 3, 3 of 10.
+* **P2 (the instrument):** `gamesrv.log` shows `[charstore] SAVE … in
+  persist_hero_attributes`; `authsrv.log` shows the settings write's own
+  `[charstore] SAVE …` with **no** `STALE WRITE REFUSED`, its "mtime before"
+  equal to the game save's "mtime after".
+* **Refuted if** c2 serves 3 / 3 of 10 with a `character_settings` event
+  present after F1; or if a `STALE WRITE REFUSED` line appears.
+
+### 15.4 Exposure floor
+
+**K1** ≥ 1 `0x000E` for agent 200 answered and persisted in c1. **K2** a
+`character_settings` event in the auth capture **after** K1 (the whole
+point; a run without it is run E again and VOID). **K3** a game c2 that
+sends hero 3's attributes. Scored after teardown.
