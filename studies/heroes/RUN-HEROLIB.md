@@ -1053,6 +1053,13 @@ same order the corpus's 319 writes follow.
 
 ## 17. The `0x8009` sender, found statically — and why the write is edit-independent (desk, `codescan`, no run)
 
+> **PARTLY REFUTED BY §18, 2026-09-15 (night, last). Read §18 first.** §17.2 named
+> two senders of "opcode 9"; **only `0x00493010` is `UPDATE_CHARACTER_SETTINGS`.**
+> `0x00491E50` is **`GAME_CMSG` 9, a different message on a different channel**, and
+> its interval is a **payload field, not a gate** — so §17.4's "a periodic sender
+> explains the edit-independence" is **WITHDRAWN**. §17.1 (the serializer and the
+> `0x8000` mask) and §17.3 (the blob rides `0x8020`) stand.
+
 §16 left the settings write's trigger NOT FOUND: it lands at ~7 of 10 game-connection
 closes regardless of whether the connection carried an edit. Read out of the pinned
 38797 client (`vault/client/2026-07-29_221c13772c7a/Gw.exe`) with
@@ -1114,3 +1121,79 @@ made the auth roster save over the game process's state. The fix (reload-before-
 `0x00491E50`'s interval condition, to turn "~70%" into a rule and name which site
 fires at a close. That is the remaining step toward a one-shot client exercise of
 the guard; until then the guard rests on `test_charstore`'s replay of run A's order.
+
+## 18. CORRECTION to §17 — the two "opcode 9" senders are on DIFFERENT CHANNELS, and the interval is a payload field, not a condition
+
+§17 was written from a caller walk that flagged any function staging the
+immediate `9`, and it did not check **which channel's** opcode 9 each one was.
+The declared shapes settle it, and they disagree with §17.
+
+### 18.1 The shapes decide it — OBSERVED, `schema/messages.json`
+
+| channel | opcode 9 | declared |
+|---|---|---|
+| **AUTH_CMSG** | `UPDATE_CHARACTER_SETTINGS` | `{dword, string16(20), array8(64)}`, **variable length**, unpack 118 |
+| **GAME_CMSG** | — | `{dword, dword}`, **fixed**, unpack **10** |
+
+The serializer takes `(conn, msgptr, slots)` where `slots` counts **struct
+dwords including the opcode**, so:
+
+* **`0x00493010` pushes 5 slots** = `{9, req_id, name_ptr, len, blob_ptr}`.
+  Its caller `0x00490930` is a `thiscall` thunk filling them from one object:
+  `[ecx+0x20]` (a value), `&[ecx+0x2c]` (an inline buffer), `[ecx+0x28]` (a
+  count), `&[ecx+0x54]` (a buffer). A dword, a string, and a counted array —
+  **AUTH_CMSG 9's declared shape. This is the settings sender.**
+* **`0x00491E50` pushes 3 slots** = `{9, interval, flag}` → wire 2 + 4 + 4 =
+  **10 bytes, exactly GAME_CMSG 9's declared size**, on a different connection
+  global (`0xc034d4`). **It is not the settings message at all.** It is the
+  `c2s 0x8009 ?` our own `gamesrv.log` prints as unknown on the GAME channel
+  (run E, `:207`) — the `0x8000` mask makes both channels' opcode 9 read
+  `0x8009` on the wire, which is what made them look like one message.
+
+### 18.2 The interval is a PAYLOAD FIELD — OBSERVED, and this is what was asked
+
+`0x00491E50` computes `1000 / f(4, 3)` (`0x00659DC0`), falling back to `0x28`
+when that returns 0, and stores the result **into the message body** at
+`[ebp-0xc]`; `0x00631AA0` is a two-instruction getter (`mov eax, [0xc1100c];
+ret`) whose result is normalised to 0/1 and stored at `[ebp-8]`. Then it sends,
+**unconditionally** — there is no branch between the computation and the send,
+and the function returns a constant 1.
+
+**So there is no interval condition.** A millisecond interval and a boolean are
+*what this message carries* (a client-side rate report on the game channel),
+not a rule about when anything is sent. §17.4 read the arithmetic as a gate; it
+is content.
+
+### 18.3 What actually decides the settings send — and it is not in the sender
+
+`0x00490930`'s address appears exactly once in the image, as an aligned word in
+`.rdata` at **`0x0094135C`**, inside a table of `.text` pointers with a **six-dword
+stride** whose other slots repeat across records (`0x00490AC0`, `0x00490660`).
+That is a per-command descriptor table for the `GcAuthCmd` family — the settings
+command's record begins at `0x00941354` and its third slot is the send thunk.
+
+So the send carries **no gate of its own**: it fires whenever that command object
+is dispatched. Whatever schedules the command is application-level and above this
+table. **The ~70 % of §16 remains NOT FOUND**, and it is now known not to live in
+the sender.
+
+### 18.4 What stands from §17, and what this costs
+
+**Stands:** the serializer `0x007DCB10` and its `and eax, 0x8000; or ax, [esi]`
+at `0x007DCBCF`, which confirms `AUTH_CMSG_MASK` from the client side (§17.1);
+and the blob riding `SETTING_UPDATE_CONTENT` with `0x8009` as a small commit
+(§17.3) — now *strengthened*, since the settings sender's own struct carries a
+pointer and a count rather than 62 bytes.
+
+**Withdrawn:** §17.4's reconstruction, and with it the claim that §10's hazard was
+shown to be "real on an ordinary session" *by that argument*. The hazard is still
+real — §16's census measured the write at ~7 of 10 closes **independent of
+edits**, which is a wire fact and needs no model of the sender — but §17 reached
+it through a function that turned out to be a different message.
+
+**Method note.** The walk flagged "a function that writes the immediate 9" and
+`§17` never asked *which table's* 9. One `schema/messages.json` lookup — 118 bytes
+variable against 10 bytes fixed — separated them immediately. `CLAUDE.md` calls
+this out: a number our own tool produced, cited as if the client had said it. The
+check that caught it was the cheapest one available and was skipped because the
+caller walk looked conclusive.
