@@ -263,3 +263,166 @@ are closed.
 * **One trailing unknown, unchanged:** `0x800d` is still unhandled, and `0x005C`
   prints as `0x805c ?` because the catalog carries no name for it — the name is
   ours, from the echo.
+
+---
+
+## 6. RUN-HEROLIB-B — the drag onto an OCCUPIED slot
+
+**Registered 2026-09-15 ~20:5x, BEFORE the client was launched.** §5 answered
+the empty-slot case and, unexpectedly, the move case. It left exactly one hole,
+and this run is aimed at it.
+
+### 6.1 The question
+
+Every set in run 2 landed on an **empty** slot, and the one move the operator
+made was decomposed by the client into a clear plus a set. So the server was
+never asked to put a skill where one already sat. Two distinct gestures remain
+unseen:
+
+* **B1 — from the PICKER onto an occupied slot.** Replace.
+* **B2 — from one occupied slot onto ANOTHER occupied slot.** Swap.
+
+### 6.2 The rig
+
+Same as §2, with the hero's bar seeded **fully occupied**:
+`[281, 276, 2, 284, 991, 279, 310, 1685]`. Every id is one the operator's own
+drags already carried last run, so none can be refused for library reasons and
+confound the readout.
+
+### 6.3 Predictions, registered
+
+| id | prediction |
+|---|---|
+| **B1** | ONE `0x005C [200, slot, newSkill, 0]`. The displaced skill is simply overwritten and gets no message of its own. |
+| **B2** | TWO `0x005C`, one per slot, carrying the exchanged ids — the swap done the same way the move was, by the client decomposing it. |
+| **B3** | No new opcode. In particular **`0x005E`** stays absent. |
+
+**The named rival, and it is a real one.** `0x005E` is UPSTREAM-named
+`SKILLBAR_SKILL_REPLACE` and has **zero** occurrences in the entire live corpus.
+A swap is exactly the gesture such an opcode would exist for. If B2 produces a
+`0x005E` instead of two `0x005C`, the upstream name is corroborated by its first
+observation and our handler is the wrong shape for swaps. That is the outcome
+worth most, and it is the one being watched for.
+
+A second rival for B2: the client may send **clear, set, set** (three messages)
+rather than two, reusing the decomposition §5.2 found. Distinguishable by count
+and by whether any message carries skill id 0.
+
+**What would refute.** B1 refuted by anything other than a single replace —
+including a clear-then-set pair, which would mean the client never overwrites in
+place. B3 refuted by any opcode not already in the `0x005C` family.
+
+### 6.4 Exposure floor, and the abort
+
+| | requirement |
+|---|---|
+| **F1** | **≥ 1** drag from the picker onto an **occupied** slot. |
+| **F2** | **≥ 1** drag from one **occupied** slot onto another **occupied** slot. |
+
+Either half alone is scorable; the other is then **VOID**, not a null. Both
+unmet means the run is aborted and answers nothing.
+
+**Scored from the WIRE, after teardown.** §5's first scoring was taken live and
+under-reported the run six-fold; this one is read only once the client is gone.
+The wire is also the right instrument for another reason recorded in §6.5: the
+store is currently losing edits, and the capture is immune to that.
+
+### 6.5 A defect this run does NOT fix, recorded before it starts
+
+**Run 2's twelve edits did not survive to the next connection.** The store was
+verified mid-run holding the edited bar and ranks; by the time connection c2
+opened at 20:34:09 the file held the **seeded** values again, and c2's hero
+block went out with them. One login, one roster save (at 20:26, before the
+edits), no kill accrual — so the auth-side writer is ruled out, and the game
+process is the only candidate left. **The culprit is not identified**, and
+guessing at it is how the last two sessions of this arc lost time. It needs its
+own instrument: a save-site trace that prints path and mtime on every write.
+
+It does not affect this run's question, which is answered from the wire.
+
+## 7. Result — RUN-HEROLIB-B: **B1 confirmed, B2 and B3 REFUTED, and `0x005E` exists**
+
+Capture `authsrv-20260915T204806-c1.jsonl`, scored after teardown. Bar seeded
+fully occupied and verified on the wire before the operator touched anything:
+`SKILLBAR_UPDATE(hero agent 200)[281, 276, 2, 284, 991, 279, 310, 1685]`.
+
+Two gestures: a drag from the picker onto occupied slot 1, then a drag of slot 1
+onto slot 2. **Both exposure conditions met.** Both messages name agent 200.
+
+### 7.1 B1 CONFIRMED — a replace is ONE `0x005C`
+
+```
+0x005C [200, 1, 256, 0]     slot 1: 276 -> 256
+```
+
+One message. The displaced skill (276) gets **no message of its own** — it is
+simply overwritten, exactly as predicted. Our handler wrote it and echoed
+`0x00D9`.
+
+### 7.2 B2 and B3 REFUTED — a SWAP is a single `0x005E`, and this is its FIRST OBSERVATION ANYWHERE
+
+The prediction was two `0x005C`. It is not:
+
+```
+0x005E [200, 2, 0, 256, 0]
+```
+
+**`0x005E` has ZERO occurrences in the entire live corpus** and this repo had
+never sent or received one. The registered rival was that a swap would be
+exactly the gesture such an opcode exists for. **It is**, and the upstream name
+`SKILLBAR_SKILL_REPLACE` is corroborated by its first sighting.
+
+B3 — "no new opcode, `0x005E` stays absent" — is refuted by the same message.
+Registering it as a named rival is what makes this a result rather than a
+surprise.
+
+**Our server has NO ARM for it.** The log reads
+`UNHANDLED GAME_CMSG 0x805e ? -- schema knows it, this server has no arm for it`.
+So the client swapped locally, the server did nothing, and **the two now
+disagree about that hero's bar** — the client-predicts/server-confirms split
+with the confirm missing. A live divergence, recorded rather than quietly left.
+
+### 7.3 The field reading is CONFOUNDED, and the confound is named rather than resolved
+
+Declared shape is `[agent_id, dword ×4]`, 22 B. Observed: `[200, 2, 0, 256, 0]`.
+
+The gesture was slot index **1** (holding skill 256) dragged onto slot index
+**2** (holding skill **2**). So the literal `2` in field 1 is **both** the target
+slot index and the target skill id, and the two readings cannot be separated on
+this sample:
+
+| reading | field 1 | field 2 | field 3 | field 4 |
+|---|---|---|---|---|
+| (a) slot-keyed | target **slot** 2 | 0 | source skill 256 | 0 |
+| (b) skill-keyed | target **skill** 2 | target copy 0 | source skill 256 | source copy 0 |
+
+**(b) is the better-supported one, and not because it looks neater.** The
+client's own guards on this store are named `targetSkill != sourceSkill`
+(`ChCliSkill.cpp:515`) and `sourceSkillCopy >= 0` (`:516`), and a slot entry
+holds `skillId` at `+0x0C` beside `skillCopy` at `+0x10` (pvpui §30.2). A
+four-field payload of *(targetSkill, targetCopy, sourceSkill, sourceCopy)* is
+precisely the shape those two asserts describe, and it explains both zeros.
+
+**It is still not settled, and no handler is being written on it.** Building a
+swap arm on a reading that one unlucky coincidence could have inverted is how
+this arc lost two evenings already.
+
+**The disambiguating run is one drag.** Swap two slots where the target slot
+index differs from the target skill id — e.g. drag any slot onto slot 4
+(holding 991) or slot 7 (holding 1685). Reading (a) puts the slot index in field
+1, reading (b) puts 991 or 1685 there. One message separates them with no free
+parameter.
+
+### 7.4 What this does to §40.6's duplicate-drag item
+
+It is now **fully answered**, and in two different ways depending on the gesture:
+
+* **Move to an EMPTY slot** — the client decomposes it into a clear plus a set,
+  two `0x005C` (§5.2).
+* **Replace an OCCUPIED slot from the picker** — one `0x005C`, the occupant
+  overwritten silently (§7.1).
+* **Swap two OCCUPIED slots** — one `0x005E` (§7.2).
+
+So the server is never asked to hold one skill in two slots, in any of the three
+gestures. `herolib.duplicate_of` remains a diagnostic with no case to model —
+but `0x005E` is a real gap in the server, and it is the arc's next item.

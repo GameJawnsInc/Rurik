@@ -3467,14 +3467,26 @@ operator used the hero for AI mode, lock-target and flags only — and that is
   `s_attribPoints`: −3, +3, +2, +1, −1 across five changes, the balance
   returning exactly to where it started. A refund priced on the rank being LEFT
   rather than REACHED would have drifted at the second step.
-* ~~**The duplicate-drag rule is UNVERIFIED.**~~ **MOSTLY ANSWERED by
-  RUN-HEROLIB, and not by a prediction: A MOVE IS A CLEAR PLUS A SET.** The
-  operator moved skill 279 from slot 4 to slot 6 and the client sent three
-  messages — `[200, 4, 279, 0]`, then `[200, 4, 0, 0]`, then `[200, 6, 279, 0]`.
-  It decomposes the move itself, so **the server is never asked to hold one
-  skill in two slots and never asked to swap**, and `duplicate_of` is a
-  diagnostic rather than a case to model. Still unseen: a drag onto an
-  **occupied** slot — every set in that run landed on an empty one.
+* ~~**The duplicate-drag rule is UNVERIFIED.**~~ **FULLY ANSWERED by RUN-HEROLIB
+  A and B — and the three gestures use three different wire shapes:**
+    * **Move to an EMPTY slot** — a clear plus a set, two `0x005C`
+      (`[200, 4, 279, 0]`, `[200, 4, 0, 0]`, `[200, 6, 279, 0]`).
+    * **Replace an OCCUPIED slot from the picker** — ONE `0x005C`; the occupant
+      is overwritten and gets no message of its own.
+    * **Swap two OCCUPIED slots** — ONE **`0x005E`**, and that is its **first
+      observation anywhere**: zero in the whole live corpus, never sent or
+      received by this repo. The upstream name `SKILLBAR_SKILL_REPLACE` is
+      corroborated by the sighting, and it was registered as a named rival
+      before the run rather than discovered by surprise.
+  The server is never asked to hold one skill in two slots in ANY gesture, so
+  `duplicate_of` stays a diagnostic. **But `0x005E` is UNHANDLED by this server**
+  — the client swaps locally and we do nothing, so the two disagree about that
+  hero's bar. Its four fields are **CONFOUNDED** on the one sample (the target
+  slot index and the target skill id were both `2`); the better-supported
+  reading is *(targetSkill, targetCopy, sourceSkill, sourceCopy)*, after the
+  client's own `targetSkill != sourceSkill` / `sourceSkillCopy >= 0` guards, and
+  **no handler is being written until one more drag separates them.** See
+  [RUN-HEROLIB.md](RUN-HEROLIB.md) §7.3 for the one-drag experiment.
 * **`0x0065 SKILLBAR_SLOT_FLAGS`** rides beside the hero's bar (twice, both
   `[agent, 0]`) and is still unmodelled.
 * **`0x001B`** appeared in this census as an unnamed hero-family c2s message
