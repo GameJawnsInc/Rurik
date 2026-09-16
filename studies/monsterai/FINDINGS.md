@@ -1157,7 +1157,7 @@ Scripted keystrokes or clicks against ArenaNet in any form, including a "gentle"
 1. ~~**Read the immediate at `0x0080dfae`** — the cardinality of `CHAR_AI_MODES`.~~ **DONE 2026-08-11, and it closed as UI.** 3, across five bound sites; two independent three-arm switches; `AI_MODE_ICONS` also 3; `CHAR_AI_MODE_AGGRESSIVE` = 0; and the modes resolve to **Fight / Guard / Avoid Combat**. Every step could have refuted the prediction and none did. §2.2.1.
 2. ~~**Read the remaining `Engine\Map\Path` modules**~~ **DONE 2026-08-11 — all 88 asserts, no steering.** A spatial query library: trapezoids, portals, barriers, flood fill. Movement policy STAYS in the impossible tier. Three corrections to §2.1's accounting and one new closure (`CompassAIControl.cpp` is in the Compass **UI** directory) in §2.1.1.
 3. ~~**Histogram Props-chunk model ids**~~ **DONE 2026-08-11 — no spawn table, and the question was malformed.** §3.10.1.
-4. **Run `msghandler.py` on opcode `0x0056`** — settles what the definition `flags` bits mean, from the client's own use.
+4. ~~**Run `msghandler.py` on opcode `0x0056`** — settles what the definition `flags` bits mean, from the client's own use.~~ **DONE 2026-08-11, §3.7.1 and §9 row 2** (noticed stale 2026-09-16): nine readers, every one a renderer or a panel; and §12.6 adds that the word does not carry passivity either.
 
 ---
 

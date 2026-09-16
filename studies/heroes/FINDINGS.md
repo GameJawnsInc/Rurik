@@ -626,7 +626,7 @@ replay, so any `0x01BF` we send is necessarily authored.
    retail frame, and its attribute budget follows the player's rule exactly (Koss: 6
    unspent of 10 at level 3, priced to the client's own cost table with no free
    parameter). Both now persist per character.
-7. **Retry the family under `--encstring`** — never done; it flipped six other opcodes.
+7. ~~**Retry the family under `--encstring`** — never done; it flipped six other opcodes.~~ **CLOSED §30.2** (noticed stale 2026-09-16): both name-bearing messages carried a real EncString — `0x01BF`'s from §10 on, `0x0074`'s in §30.2 — and the roster ignores both.
 8. **A live capture at a henchman outpost** is the only source of OBSERVED ground truth for
    retail's send order and field values. Post-Searing Ascalon City, four level-3 henchmen
    (§6) — that is the shopping list.
