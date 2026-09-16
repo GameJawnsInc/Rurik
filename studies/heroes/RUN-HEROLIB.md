@@ -840,3 +840,48 @@ transfer.
 * Retail's **reply** to `0x005E`, if any. Needs a live session in which the
   owner swaps two hero-bar slots on the secondary account, at human cadence.
 * `0x0065 SKILLBAR_SLOT_FLAGS` and `0x001B` remain unmodelled (§40.6).
+
+## 13. RUN-HEROLIB-E — does a game-side edit SURVIVE the transfer's settings write now? (§10's fix, on a client)
+
+**Registered before launch, 2026-09-15 (night, last).** §10 shipped on a
+unit test that replays run A's order on two `Store` objects. Run D did not
+exercise it: the client was closed from inside the map, so no
+`UPDATE_CHARACTER_SETTINGS` fired. This run makes the settings write fire
+after a persisted edit, the way run A lost its twelve.
+
+### 13.1 The rig
+
+Same store as §11.2: hero 3 bar `[281, 276, 310, 284, 991, 279, 1685, 256]`,
+ranks `[[13, 2], [16, 1]]`, 6 of 10 unspent (verified on disk at
+registration). Same server flags and build. `--hold 300`.
+
+### 13.2 The gesture
+
+| step | the operator does | what it exercises |
+|---|---|---|
+| **E1** | one `+` on Tahlkora's Healing Prayers (13: 2 → 3) | `0x000F` → `set_hero_attributes` → a game-process `save()` |
+| **E2** | returns to character select (logout from the menu) and presses Play again | the auth-channel settings write at the game boundary, then game c2's fresh `Store` |
+
+### 13.3 Predictions, registered
+
+* **P1 (the fix):** game c2's hero block carries rank **3** for attribute 13
+  and **3 of 10** unspent — the edit survived the boundary. The pre-fix
+  behaviour (run A's) would send the seed: rank 2, 6 of 10.
+* **P2 (the instrument):** `gamesrv.log` shows one `[charstore] SAVE … in
+  persist_hero_attributes`; `authsrv.log` shows the settings write's
+  `[charstore] SAVE … in handle_…` with **no** `STALE WRITE REFUSED` line,
+  its "mtime before" equal to the game save's "mtime after" (the reload
+  adopted the game's write before saving over it).
+* **Refuted if** c2 carries rank 2 / 6 of 10 with a settings write present
+  in the auth log. A `STALE WRITE REFUSED` line would mean the reload
+  did not run first — also a refutation of P2, and the loss it prevents
+  would then show as P1 still holding.
+
+### 13.4 Exposure floor
+
+**J1** ≥ 1 `0x000F` for agent 200 answered and persisted in c1. **J2** a
+`character_settings` event in the auth capture after J1. **J3** a game c2
+that sends the hero's attributes. Any one missing makes the run VOID: in
+particular, a client closed from inside the map (J2 missing) is exactly
+run D's null and answers nothing here. Scored from the wire and the logs
+after teardown.
