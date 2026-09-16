@@ -48,6 +48,28 @@ A FLAT FILE IS ENOUGH. One JSON per account under vault/state/characters/
 stays stdlib-only). Writes are atomic -- tmp then os.replace -- because a
 half-written store that half-loads is worse than either whole state.
 
+TWO PROCESSES WRITE ONE FILE, AND A STALE SNAPSHOT MUST NOT WIN (2026-09-15,
+studies/heroes/RUN-HEROLIB.md §10). The auth process opens a Store at login
+and holds it for the whole session; the game process opens its own at every
+instance load. The client sends UPDATE_CHARACTER_SETTINGS at exactly the
+moment a game connection ends -- 319 of 319 in the harness corpus sit within
+2 s of a game connection's edge, none mid-session -- and the auth arm
+persisted it by saving its login-time snapshot over the file. RUN-HEROLIB's
+twelve hero edits, on disk at 00:34:09Z, were gone at 00:34:09Z: the next
+game connection opened the file in the same second and read the seed. Three
+things guard it now:
+  * every save() prints one line naming the path, the caller and the
+    mtime before and after -- the instrument the study asked for;
+  * save() REFUSES, loudly, when the file changed since this object last
+    read or wrote it (StaleWrite is printed, not raised: a raise on the
+    game thread stops the world for the rest of the session, and the
+    refusal already loses nothing that is on disk);
+  * update_settings() re-reads the file before applying the blob, so the
+    auth roster's write is a read-modify-write of the freshest state.
+The mutators all save at once, so a Store holds unsaved data only between
+a caller's direct row edit and its save(); those callers are the game
+process's per-connection store, which is that process's only writer.
+
 TWO CRASH RULES ARE ENFORCED AT LOAD, NOT AT SEND (both MEASURED 2026-08-18,
 studies/character/RUNS.md §Run 2):
   * A title/rank display string rides a string16(8) wire field that admits
@@ -336,33 +358,122 @@ def validate(data, path):
     return data
 
 
-class Store:
-    """One account's persistent state. Load with open(); every write saves."""
+class StaleWrite(ValueError):
+    """A save() that would have overwritten another writer's data.
 
-    def __init__(self, path, data):
+    Constructed and PRINTED by save(), never raised by it (module docstring
+    says why); exposed so a caller that wants to raise can `raise` the
+    instance save() hands back through `last_stale`.
+    """
+
+
+# Every save prints `[charstore] SAVE ...`. The line is the instrument
+# RUN-HEROLIB §6.5 asked for -- path, caller, mtime before and after -- and
+# it is on by default because a store write is rare (a dozen per run) and
+# the one time it mattered nobody could say which process had written last.
+TRACE = True
+
+
+def _disk_sig(path):
+    """(mtime_ns, size) of the file on disk, or None if it does not exist."""
+    try:
+        st = os.stat(path)
+    except FileNotFoundError:
+        return None
+    return (st.st_mtime_ns, st.st_size)
+
+
+def _fmt_sig(sig):
+    if sig is None:
+        return "absent"
+    return time.strftime("%H:%M:%S", time.gmtime(sig[0] / 1e9)) \
+        + f".{(sig[0] // 1000) % 1000000:06d}Z/{sig[1]}B"
+
+
+def _caller():
+    """`file:line in func` of the first frame outside this module."""
+    here = os.path.abspath(__file__)
+    frame = sys._getframe(1)
+    while frame is not None:
+        fn = os.path.abspath(frame.f_code.co_filename)
+        if fn != here:
+            return (f"{os.path.basename(fn)}:{frame.f_lineno} "
+                    f"in {frame.f_code.co_name}")
+        frame = frame.f_back
+    return "?"
+
+
+def _read(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except json.JSONDecodeError as exc:
+        _refuse(path, f"corrupt JSON ({exc}); fix or delete it -- "
+                      f"defaults will not be silently substituted")
+    return validate(data, path)
+
+
+class Store:
+    """One account's persistent state. Load with open(); every write saves.
+
+    `sig` is what the file on disk looked like when this object last read
+    or wrote it; save() compares against it and refuses a stale overwrite.
+    """
+
+    def __init__(self, path, data, sig=None):
         self.path = path
         self.data = data
+        self._sig = sig if sig is not None else _disk_sig(path)
+        self.last_stale = None
 
     @classmethod
     def open(cls, email, base=None):
         path = path_for(email, base)
         if not os.path.exists(path):
-            return cls(path, _fresh(email))
-        try:
-            with open(path, encoding="utf-8") as f:
-                data = json.load(f)
-        except json.JSONDecodeError as exc:
-            _refuse(path, f"corrupt JSON ({exc}); fix or delete it -- "
-                          f"defaults will not be silently substituted")
-        return cls(path, validate(data, path))
+            return cls(path, _fresh(email), sig=None)
+        # The signature is taken BEFORE the read on purpose: a write that
+        # lands between the two makes the next save() refuse (a false stale,
+        # which loses nothing on disk) rather than pass (a missed one).
+        sig = _disk_sig(path)
+        return cls(path, _read(path), sig=sig)
+
+    def reload(self):
+        """Re-read the file if another writer changed it. True if it did.
+
+        Discards this object's unsaved edits -- see the module docstring for
+        why no live caller holds any across another process's write.
+        """
+        sig = _disk_sig(self.path)
+        if sig is None or sig == self._sig:
+            return False
+        self.data = _read(self.path)
+        self._sig = sig
+        return True
 
     def save(self):
+        """Write the file. True if written; False (and a loud line) if the
+        file changed under this object since it last read or wrote it."""
         validate(self.data, self.path)  # never persist what open() would refuse
+        caller = _caller()
+        before = _disk_sig(self.path)
+        if before != self._sig:
+            self.last_stale = StaleWrite(
+                f"charstore: STALE WRITE REFUSED -- {self.path} changed on "
+                f"disk since this Store read it (had {_fmt_sig(self._sig)}, "
+                f"disk now {_fmt_sig(before)}); another writer's data would "
+                f"have been overwritten by {caller}. Call reload() first.")
+            print(f"[charstore] {self.last_stale}", flush=True)
+            return False
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
         tmp = self.path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(self.data, f, indent=1, sort_keys=True)
         os.replace(tmp, self.path)
+        self._sig = _disk_sig(self.path)
+        if TRACE:
+            print(f"[charstore] SAVE {self.path} by {caller} -- mtime "
+                  f"{_fmt_sig(before)} -> {_fmt_sig(self._sig)}", flush=True)
+        return True
 
     def account(self):
         return self.data["account"]
@@ -395,7 +506,13 @@ class Store:
         Returns True if a row matched. The blob is the client's; it is not
         parsed here -- serving back exactly what the client saved is the one
         persistence behaviour that cannot invent anything.
+
+        READ-MODIFY-WRITE, because the caller is the auth process holding a
+        login-time snapshot and this message arrives when a game connection
+        has just closed (RUN-HEROLIB §10): without the reload, the write
+        put the seed back over a whole session's edits.
         """
+        self.reload()
         found = self.character_by_name(name)
         if found is None:
             return False
@@ -647,11 +764,13 @@ def find_character(uuid_hex, base=None):
     for fname in sorted(os.listdir(root)):
         if not fname.endswith(".json"):
             continue
-        with open(os.path.join(root, fname), encoding="utf-8") as f:
+        path = os.path.join(root, fname)
+        sig = _disk_sig(path)  # before the read, as Store.open does
+        with open(path, encoding="utf-8") as f:
             data = validate(json.load(f), fname)
         row = data["characters"].get(uuid_hex.lower())
         if row is not None:
-            return Store(os.path.join(root, fname), data), row
+            return Store(path, data, sig=sig), row
     return None, None
 
 

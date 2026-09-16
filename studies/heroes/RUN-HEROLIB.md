@@ -554,3 +554,119 @@ store-loses-edits defect of §6.5 is **not** a blanket failure of every write �
 it lost the c1→c2 transition in run A specifically. That narrows the search for
 its writer, and is recorded here rather than folded into the §6.5 note because
 it is evidence, not a theory.
+
+## 10. The lost edits of §6.5 — the writer IDENTIFIED, from the logs already on disk (desk, no run)
+
+§6.5 said the culprit was unidentified and that guessing was how this arc had
+lost two evenings, so this section is built the other way round: the run's own
+artifacts first, the mechanism second, the fix last, and each labelled.
+
+### 10.1 The timeline, to the second — OBSERVED
+
+Three files from run A (`vault/captures/harness/20260915T202552/` and the
+three channel captures its `report.json` names) put the write and the loss in
+the same second:
+
+| artifact | event | wall clock |
+|---|---|---|
+| `authsrv/authsrv-20260915T202612-c1.jsonl` line 18 | `login_ok` — the auth process opens its roster `Store` here, on the SEEDED file | 00:26:12Z |
+| `gamesrv/authsrv-20260915T202622-c1.jsonl` | the first game connection opens its own `Store` (log line 144, `PERSIST: sheet from …`); twelve edits go through it | 00:26:22Z → |
+| `gamesrv/authsrv-20260915T202622-c1.jsonl` last event | game c1 closes (`ping_summary`, t = 467.18) | **00:34:09Z** |
+| `authsrv/authsrv-20260915T202612-c1.jsonl` line 59 | `character_settings` — the client's `0x8009 UPDATE_CHARACTER_SETTINGS`, t = 476.91; **`authsrv.log` line 88: `character settings: req 9, 62B recorded and ACKED, PERSISTED`** | **00:34:09Z** |
+| `gamesrv/authsrv-20260915T203409-c2.jsonl` first event | game c2 opens, reads the file (log line 476), sends the seed | **00:34:09Z** |
+
+`report.json`'s endpoint table agrees: game c1 gone at t = 494.35, c2 open at
+494.39, on a different loopback alias (`127.0.0.33`) — a map transfer, not an
+exit. The auth connection (`127.0.0.1:6112`) stays open from t = 17.5 to 518.4,
+across the whole run.
+
+**The writer was in the log the whole time, at line 88.** §6.5 ruled the auth
+process out by counting its *roster* saves — "one roster save (at 20:26, before
+the edits)" — because that path prints `PERSIST:`. The settings arm prints
+`PERSISTED` on a different line, from a different call, and was not counted.
+Grep for the save sites, not for one print tag.
+
+### 10.2 The mechanism — OURS, read from `authsrv.py` and `charstore.py`
+
+* The auth process opens `state["charstore"]` at `login OK` (`authsrv.py`,
+  the `charstore.Store.open(...)` under `if PERSIST:` in the login arm) and
+  holds that object for the life of the auth connection.
+* The game process opens its own `Store` per game connection
+  (`charstore.find_character` in the instance-load burst, cached as
+  `state["charstore_game"]`), and every edit — `set_hero_bar_slot`,
+  `set_hero_attributes`, xp, kills, learned skills — saves through it.
+* `Store.save()` wrote **the whole file from `self.data`**. So the auth
+  process's `update_settings()` (the `UPDATE_CHARACTER_SETTINGS` arm) put the
+  login-time snapshot — the seed — back over the file, and c2 opened it 0.0 s
+  later.
+
+### 10.3 When the client sends that message — OBSERVED, corpus-wide
+
+`scratch settings_timing.py` over every capture with a wall clock (449 game
+captures, 3,476 auth captures, 319 `character_settings` events):
+
+| where the settings write sits | count |
+|---|---|
+| within 2 s of a game connection's first or last event | **319 of 319** |
+| strictly inside a game connection (> 2 s from both ends) | **0** |
+| in no game connection's window | 0 |
+| more than 5 s before the auth capture's own end (a transfer, not an exit) | 30 |
+
+So the client sends `0x8009` **exactly at a game-connection boundary** — map
+transfer or exit to character select — which is the one moment the game
+process's next `Store` is about to read the file. The overwrite and the read
+collide by construction, not by chance.
+
+**Runs B and C are the control, and they fit.** `20260915T204744` and
+`20260915T210446` carry **zero** settings writes: the operator closed the
+client from inside the map, the auth log ends in `ConnectionResetError`, and
+no `0x8009` was ever sent. Their edits persisted (§9.4). Run A is the only one
+of the three with a settings write, and the only one that lost its edits.
+
+### 10.4 Exposure — RECONSTRUCTION from the code, with the corpus as the count
+
+Every `--persist` session since the persistence arc (2026-08-18) in which the
+client transferred maps or exited to character select reverted **all** of the
+game process's edits since login: xp, kill accrual, attribute ranks, learned
+and unlocked skills, hero bars. 319 settings events is the exposure count in
+the corpus. No harness verdict checks persistence across a transfer, which is
+why a defect this shape survived a month of green runs.
+
+### 10.5 Shipped — the instrument §6.5 asked for, plus two guards
+
+`toolkit/authsrv/charstore.py`:
+
+* **Every `save()` prints one line** — `[charstore] SAVE <path> by
+  <file:line in func> -- mtime <before> -> <after>` — path, caller and
+  mtime, on by default (`charstore.TRACE`). A store write is rare; the one
+  time it mattered nobody could say which process had written last.
+* **A stale write is REFUSED.** A `Store` records the file's
+  `(mtime_ns, size)` when it reads or writes; `save()` compares, and if the
+  file changed underneath it prints `[charstore] charstore: STALE WRITE
+  REFUSED -- <path> changed on disk since this Store read it (had …, disk
+  now …); another writer's data would have been overwritten by <caller>.
+  Call reload() first.` and returns `False`. Printed, **not raised**: a
+  raise on the game thread stops the world for the rest of the session, and
+  the refusal already loses nothing that is on disk. `Store.reload()` adopts
+  the disk copy. The signature is taken *before* the read so a write landing
+  between stat and read produces a false stale (a refusal) rather than a
+  missed one; two writes of identical size inside one 100 ns NTFS tick would
+  still pass, which is stated rather than solved.
+* **`update_settings()` is a read-modify-write**: it reloads before applying
+  the blob, so the auth roster's write carries the freshest game-side state
+  and the client's blob lands beside it.
+
+`test_charstore.py` 72 → **85**, with the run replayed on two `Store`
+objects on one file in run A's order (login save → game edits → settings
+write → reopen): the edits survive and the blob lands. The negative control
+removes the `reload()` and reddens three checks — and shows the two guards
+are independent: with the reload gone the settings write is *refused* rather
+than applied, so the game's edits still survive; what is lost is only the
+blob. The pre-2026-09-15 shape (a snapshot saved blind after another writer)
+is refused by name.
+
+### 10.6 What this does NOT settle
+
+`0x005E`'s field order (§9.3) is untouched: that needs the one drag with the
+bar's resulting order read off the screen. The `0x005E` handler is still not
+written, for the reason §9.3 gives.

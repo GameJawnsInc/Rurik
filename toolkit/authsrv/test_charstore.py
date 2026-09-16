@@ -12,6 +12,9 @@ Everything runs against a temp directory passed as `base=`; the real vault is
 never touched, and no server is started.
 """
 
+import contextlib
+import io
+import json
 import os
 import shutil
 import sys
@@ -24,7 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import checks  # noqa: E402
 import charstore  # noqa: E402
 
-led = checks.Ledger("charstore", floor=72)
+led = checks.Ledger("charstore", floor=85)
 base = tempfile.mkdtemp(prefix="charstore-test-")
 UUID = "11111111111111111111111111111111"
 
@@ -101,7 +104,18 @@ try:
         led.ok(False, "corrupt JSON is refused")
     except ValueError as exc:
         led.ok("corrupt" in str(exc), "corrupt JSON is refused loudly")
-    st2.save()  # restore a good file
+    # The garbage above was written by something other than st2, so st2's
+    # snapshot is now stale and its save must NOT put it back on its own.
+    led.ok(st2.save() is False and st2.last_stale is not None,
+           "a save over a file another writer changed is REFUSED, not "
+           "applied -- the store never overwrites what it has not read")
+    with open(st2.path, encoding="utf-8") as f:
+        led.ok(f.read() == "{ not json",
+               "the refused save left the other writer's bytes untouched")
+    with open(st2.path, "w", encoding="utf-8") as f:   # restore a good file
+        json.dump(st2.data, f)
+    led.ok(st2.reload() is True and st2.save() is True,
+           "reload() adopts the disk and the next save goes through")
     good = charstore.Store.open("loopback@rurik.invalid", base=base)
     good.data["version"] = 2
     try:
@@ -477,6 +491,73 @@ try:
            "charstore's mirrored attribute bounds still equal attribcolumns' "
            "-- they are copied so charstore stays bare-machine loadable, and "
            "a copy with nothing comparing it is where drift lives")
+
+    # -- RUN-HEROLIB §10: two processes, one file, and the stale snapshot ----
+    #
+    # The auth process opens a Store at login and holds it; the game process
+    # opens its own at instance load and writes every edit through it; then
+    # the client's UPDATE_CHARACTER_SETTINGS arrives on the AUTH channel the
+    # instant the game connection closes. Replayed here with two Store
+    # objects on one file, in the run's order.
+    two = tempfile.mkdtemp(prefix="charstore-two-writers-")
+    try:
+        roster = charstore.Store.open("two@rurik.invalid", base=two)
+        roster.ensure_character(UUID, "Test Warrior", "aa" * 37)
+        roster.save()                                   # the login save
+        game, row = charstore.find_character(UUID, base=two)
+        led.ok(game is not None and game is not roster,
+               "the game process holds a second Store object on the file")
+        game.set_hero_bar_slot(UUID, 3, 3, 284)         # RUN-HEROLIB #1
+        game.set_hero_attributes(UUID, 3, [[13, 3], [16, 1]])
+        row["xp"] += 100
+        game.save()
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            hit = roster.update_settings("Test Warrior", bytes(range(62)))
+        led.ok(hit is True, "the settings write still matches its row")
+        after = charstore.Store.open("two@rurik.invalid", base=two)
+        hero = after.hero_row(UUID, 3)
+        led.ok(hero is not None and hero.get("skillbar", [0] * 8)[3] == 284
+               and hero.get("attributes") == [[13, 3], [16, 1]]
+               and after.character_by_uuid(UUID)["xp"] == 100,
+               "the auth roster's settings write PRESERVES the game "
+               "process's edits -- the c1->c2 loss of RUN-HEROLIB run A",
+               f"hero row now {hero}")
+        led.ok(after.character_by_uuid(UUID)["settings_blob"]
+               == bytes(range(62)).hex(),
+               "and the client's blob landed beside them")
+        led.ok("[charstore] SAVE " in buf.getvalue()
+               and "test_charstore.py" in buf.getvalue()
+               and "mtime" in buf.getvalue(),
+               "every save prints the trace line: path, caller and mtime",
+               buf.getvalue().strip().splitlines()[-1][:120])
+
+        # The negative control: the pre-fix shape (a snapshot saved without
+        # a reload) is exactly what save() now refuses.
+        stale = charstore.Store.open("two@rurik.invalid", base=two)
+        led.ok(game.set_hero_bar_slot(UUID, 3, 4, 279) is not None
+               and game.last_stale is not None,
+               "c1's own store is stale after the auth write and its save "
+               "is refused too -- c1 is closed by then in every real run")
+        game2, _ = charstore.find_character(UUID, base=two)   # c2's store
+        game2.set_hero_bar_slot(UUID, 3, 4, 279)        # RUN-HEROLIB #2
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            wrote = stale.save()
+        led.ok(wrote is False and "STALE WRITE REFUSED" in buf.getvalue(),
+               "a snapshot saved after another writer is refused with a "
+               "line naming the path and the caller",
+               buf.getvalue().strip()[:160])
+        led.ok(charstore.Store.open("two@rurik.invalid", base=two)
+               .hero_row(UUID, 3)["skillbar"][4] == 279,
+               "and the game edit it would have erased is still on disk")
+        led.ok(stale.reload() is True and stale.save() is True,
+               "after reload() the same object writes again")
+        led.ok(stale.reload() is False,
+               "reload() on an unchanged file is a no-op and says so")
+    finally:
+        shutil.rmtree(two, ignore_errors=True)
 
 finally:
     shutil.rmtree(base, ignore_errors=True)
