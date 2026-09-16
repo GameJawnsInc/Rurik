@@ -47,7 +47,7 @@ import effects  # noqa: E402
 # a short run means a section stopped rather than passed.
 # SKILLS-HN +4 (44), SKILLS-FA +13 (57: 7 model + 6 corpus), each from its
 # green run. Section 12 needs the live corpus and declares a skip without it.
-LEDGER = checks.Ledger("skill damage", floor=60)  # 2026-09-14 HEAL-INT +1, ZEROWORD +1;   # MANTID-S +1: the player-side control beside the foe-side refusal
+LEDGER = checks.Ledger("skill damage", floor=61)  # 2026-09-16 SLICE-F47 +1 (the penalty split in whole points); 2026-09-14 HEAL-INT +1, ZEROWORD +1;   # MANTID-S +1: the player-side control beside the foe-side refusal
 check = LEDGER.ok
 
 
@@ -539,16 +539,34 @@ def main():
     # on the target, not on the target's current maximum, so those two pairs
     # are several values by construction. Named, not widened: a third pair
     # is a new fact.
+    # SLICE-F47 (2026-09-16): the third pair came -- 20260916T150306,
+    # caster 48's skill 222 onto 29, maximum 140 -> 119 -- and it is the
+    # death-penalty split ALONE: 24 whole points at both maxima, 0.17143 x 3
+    # then 0.20168. So that signature is a rule in spellhitjoin.score
+    # (`penalty_split`: one value per maximum, several maxima) and the new
+    # pair passes by it. JARIN's two do NOT pass it and stay named: the
+    # Ranger's holds 23 AND 24 points at the one maximum of 140 (cause
+    # unmeasured), the hero's 26 AND 51 at 122 (Frenzy, F44/F45).
     PENALTY_SPLIT = {"54 222 29", "54 222 30"}
+    split = sc["penalty_split"]
     check(sc["pairs"] >= 10 and sc["pair_hits"] >= 60
-          and set(sc["multi_valued"]) <= PENALTY_SPLIT,
+          and set(sc["multi_valued"]) - set(split) <= PENALTY_SPLIT,
           "P2 every (caster, skill, target) pair with >= 3 hits is ONE value "
-          "(the two JARIN pairs that span a death penalty set aside by name)",
+          "per target maximum (a death-penalty split passes by SIGNATURE; the "
+          "two JARIN pairs that are several values INSIDE one maximum set "
+          "aside by name)",
           f"{sc['pairs']} pairs over {sc['pair_hits']} hits, skills "
-          f"{sc['skills']}, multi-valued {sc['multi_valued']} -- a 1-in-8 "
-          f"head roll on any armour difference leaves one bucket with "
-          f"probability (7/8)^n, 0.03% at n = 60; DoT ticks set aside "
-          f"{sc['ticks_set_aside']}")
+          f"{sc['skills']}, multi-valued {sc['multi_valued']}, of which split "
+          f"by a penalty {split} -- a 1-in-8 head roll on any armour "
+          f"difference leaves one bucket with probability (7/8)^n, 0.03% at "
+          f"n = 60; DoT ticks set aside {sc['ticks_set_aside']}")
+    points = {k: sorted({round(v * m) for m, vals in b.items() for v in vals})
+              for k, b in split.items()}
+    check(len(split) >= 1 and all(len(p) == 1 for p in points.values()),
+          "and every penalty-split pair is ONE value in WHOLE POINTS across "
+          "its maxima -- the fraction moved because the maximum did (F46)",
+          f"{points} -- LAKESIDE (20260916T150306): 48's 222 onto 29 is 24 "
+          f"points at a maximum of 140 (0.17143, 3 hits) and at 119 (0.20168)")
     two = sc["two_hit_two_valued"]
     check(len(two) <= 1 and all(k.startswith("10 186 12") for k in two),
           "and the pairs BELOW the floor with two values are the one named "
@@ -557,7 +575,8 @@ def main():
           f"the projectile 0.4 s after its 58, in one batch (43.5). A second "
           f"such pair is a new fact, not noise: read it before raising this")
     check(len(sc["onto_player"]) >= 1
-          and all(n >= 3 and (len(vals) == 1 or k in PENALTY_SPLIT)
+          and all(n >= 3 and (len(vals) == 1 or k in PENALTY_SPLIT
+                              or k in split)
                   for k, (n, vals) in sc["onto_player"].items()),
           "and the pairs onto the connection's OWN player are one value too "
           "(the JARIN penalty-split pair set aside by name)",

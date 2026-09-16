@@ -189,6 +189,21 @@ def score(rows):
     cp = pairs(rows, "cast", 3)
     named = {k: v for k, v in cp.items() if k[3] is not None}
     multi = {k: sorted(set(v)) for k, v in named.items() if len(set(v)) > 1}
+    # A multi-valued pair whose fraction moved WITH its target's maximum --
+    # one value per maximum, several across them -- is a DEATH-PENALTY SPLIT,
+    # not a second bucket: the word is points / max and a penalty moves the
+    # max (studies/slice F46). Named by signature (SLICE-F47 2026-09-16)
+    # so the next hero tape does not redden P2 on confirming evidence. A pair
+    # with a hit whose maximum was never seen does not qualify.
+    by_max = collections.defaultdict(lambda: collections.defaultdict(set))
+    for r in rows:
+        if r["kind"] == "cast" and not r["tick"] and r["skill"] is not None:
+            by_max[(r["capture"], r["connection"], r["cause"], r["skill"],
+                    r["target"])][r["maxhp"]].add(r["value"])
+    penalty_split = {k: {m: sorted(vs) for m, vs in by_max[k].items()}
+                     for k in multi
+                     if len(by_max[k]) > 1 and None not in by_max[k]
+                     and all(len(vs) == 1 for vs in by_max[k].values())}
     # Two hits, two values: below P2's floor, and named rather than dropped.
     # The corpus's one such pair is a MIXED batch -- Fireball's projectile
     # and Incendiary Bonds' hex-end payoff from the same caster landing on
@@ -213,6 +228,8 @@ def score(rows):
         "pairs": len(named),
         "pair_hits": sum(len(v) for v in named.values()),
         "multi_valued": {" ".join(map(str, k[2:])): v for k, v in multi.items()},
+        "penalty_split": {" ".join(map(str, k[2:])): v
+                          for k, v in penalty_split.items()},
         "two_hit_two_valued": {" ".join(map(str, k[2:])): v
                                for k, v in two.items()},
         "skills": sorted({k[3] for k in named}),
@@ -244,6 +261,8 @@ def main():
           f"multi-valued pairs: {len(sc['multi_valued'])} "
           f"{sc['multi_valued'] or ''}; two-hit two-valued pairs (below the "
           f"floor, named): {sc['two_hit_two_valued']}")
+    print(f"   of the multi-valued, split by a death penalty (one value per "
+          f"maximum): {sc['penalty_split'] or 'none'}")
     print(f"   onto the connection's own player: {sc['onto_player']}")
     print(f"P3 control: swing pairs with >= 10 hits {sc['swing_pairs']}, of "
           f"which >= 3 distinct values {sc['swing_pairs_3plus']} (min "
