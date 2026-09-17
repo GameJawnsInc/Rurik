@@ -812,7 +812,13 @@ try:
           "482's apply sets 0x20 (with 0x02 when no condition was live)",
           f"{ {hex(b) for b in newly(482)} }")
     check(newly(481) == {0x0A}, "481 sets 0x0A")
-    check(newly(483) == {0x42} and newly(484) == {0x42}, "483 and 484 set 0x42")
+    # RUN-SKILLS-RB2 (2026-09-17): Poison landed while Weakness was live, so
+    # the generic 0x02 was already set and 484 newly set 0x40 alone, twice --
+    # the same shape the 482 line above has carried since it was written.
+    check(newly(483) <= {0x42, 0x40} and newly(484) <= {0x42, 0x40}
+          and 0x42 in newly(484) | newly(483),
+          "483 and 484 set 0x40 (with 0x02 when no condition was live)",
+          f"483 { {hex(b) for b in newly(483)} } 484 { {hex(b) for b in newly(484)} }")
     check(newly(160) == {0x80} and sc["set"][160][0x80] >= 50,
           "the enchantment 160 sets 0x80, fifty-plus times")
     check(newly(179) == {0x800}, "the hex 179 sets 0x800")

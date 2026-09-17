@@ -196,8 +196,18 @@ def player_armour_at(location_key, physical, EQUIP_ARMOUR,
 
 
 def player_spell_armour(EQUIP_ARMOUR, ARMOR_RATING_MODIFIER,
-                        ARMOR_VS_TYPE_MODIFIER):
-    """The ONE rating an incoming armour-respecting spell resolves against.
+                        ARMOR_VS_TYPE_MODIFIER, location_key=None):
+    """The rating an incoming armour-respecting spell resolves against.
+
+    SKILLS-LR (2026-09-17, studies/skills 50): WITH A `location_key` IT IS
+    THAT PIECE'S -- a spell rolls a hit location like an attack. OBSERVED on
+    the owner's Isle tape 20260917T090355: head, hands and feet off, one
+    Lightning Orb from one caster lands for 101 (an armoured piece) and 286
+    (a bare one), 2^(60/40) apart, where five equal pieces gave 101 four
+    times of four. A location that wears nothing while others do is rated
+    0.0, which is what 286 / 101 says. Without a key this is the pre-LR
+    reading below, kept as `--no-spell-location-roll`'s arm and REFUTED as
+    a claim about retail.
 
     ELEMENTAL -- `physical=False`, so the pieces' `+20 vs. physical damage`
     does not reach a fire spell (WIKI, GWW "Damage calculation" sec. Example
@@ -223,6 +233,8 @@ def player_spell_armour(EQUIP_ARMOUR, ARMOR_RATING_MODIFIER,
             ratings[key] = ar
     if not ratings:
         return None
+    if location_key is not None:
+        return ratings.get(location_key, 0.0)
     if len(set(ratings.values())) > 1 and not _SPELL_ARMOUR_WARNED:
         _SPELL_ARMOUR_WARNED.append(True)
         print("SPELL ARMOUR: the five pieces disagree elementally "
@@ -239,7 +251,7 @@ _SPELL_ARMOUR_WARNED = []
 def spell_armour_for(skill_id, SPELL_ARMOUR, ARMOUR_TERM,
                      ARMOUR_RESPECTING_MEANS, SCALE_MEANS_DAMAGE,
                      EQUIP_ARMOUR, ARMOR_RATING_MODIFIER,
-                     ARMOR_VS_TYPE_MODIFIER):
+                     ARMOR_VS_TYPE_MODIFIER, SPELL_LOCATION_ROLL=False):
     """The rating an incoming cast of `skill_id` scales by, or None (unscaled).
 
     None means "deal the stated amount": the label is armour-ignoring, or
@@ -257,8 +269,9 @@ def spell_armour_for(skill_id, SPELL_ARMOUR, ARMOUR_TERM,
         return None
     if SCALE_MEANS_DAMAGE.get(row.get("scale_means")) != "standalone":
         return None
-    return player_spell_armour(EQUIP_ARMOUR, ARMOR_RATING_MODIFIER,
-                               ARMOR_VS_TYPE_MODIFIER)
+    return player_spell_armour(
+        EQUIP_ARMOUR, ARMOR_RATING_MODIFIER, ARMOR_VS_TYPE_MODIFIER,
+        location_key=roll_hit_location() if SPELL_LOCATION_ROLL else None)
 
 
 def bonus_armour(net):

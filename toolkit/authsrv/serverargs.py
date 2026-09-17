@@ -1612,6 +1612,14 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "The revert for SKILLS-FA (studies/skills 43); "
                          "--no-armour-term drops it too, along with the "
                          "swing's.")
+    ap.add_argument("--no-spell-location-roll", action="store_true",
+                    help="an incoming armour-respecting spell resolves "
+                         "against the CHEST's elemental rating instead of "
+                         "rolling a hit location like an attack. The revert "
+                         "for SKILLS-LR (studies/skills 50): retail rolls -- "
+                         "the owner's Isle tape 20260917T090355 has one "
+                         "Lightning Orb landing for 101 on an armoured piece "
+                         "and 286 on a bare one, 2^(60/40) apart.")
     ap.add_argument("--no-armour-term", action="store_true",
                     help="drop the armour exponent and criticals from the "
                          "player's swing, leaving the weapon's raw range. The "

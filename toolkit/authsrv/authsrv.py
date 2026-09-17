@@ -10437,7 +10437,8 @@ def spell_armour_for(skill_id):
                                        ARMOUR_RESPECTING_MEANS,
                                        SCALE_MEANS_DAMAGE, EQUIP_ARMOUR,
                                        ARMOR_RATING_MODIFIER,
-                                       ARMOR_VS_TYPE_MODIFIER)
+                                       ARMOR_VS_TYPE_MODIFIER,
+                                       SPELL_LOCATION_ROLL=SPELL_LOCATION_ROLL)
 
 
 def armour_multiplier(armour):
@@ -10538,6 +10539,13 @@ ARMOUR_TERM = True          # --no-armour-term is the control
 # `--no-spell-armour` restores "a cast deals its stated amount", and
 # `--no-armour-term` (the general control) drops it along with the swing's.
 SPELL_ARMOUR = True         # --no-spell-armour is the control
+# SKILLS-LR (2026-09-17, studies/skills 50): a spell ROLLS A HIT LOCATION like
+# an attack. SKILLS-FA shipped "one rating, the chest's" on a corpus where
+# every body wore five equal pieces (43.4 said so); RUN-SKILLS-RB2 stripped the
+# owner's head, hands and feet and one Lightning Orb landed for 101 and for
+# 286 -- 2^(60/40) apart, the bare-skin multiplier. OBSERVED, single rating
+# REFUTED. With five equal pieces the wire is byte-identical either way.
+SPELL_LOCATION_ROLL = True  # --no-spell-location-roll is the control (the chest's)
 ARMOUR_DIVISOR = 40.0
 # Weapon type -> the attribute it scales on. Hammer (item_type 15) scales on
 # Hammer Mastery (19). RETAIL PUTS THIS ON THE ITEM, in modifier identifier 633
@@ -30573,6 +30581,11 @@ def main():
         SPELL_ARMOUR = False
         print("NO SPELL ARMOUR: an incoming fire spell deals its stated "
               "amount, unscaled by the player's armour.")
+    if a.no_spell_location_roll:
+        global SPELL_LOCATION_ROLL
+        SPELL_LOCATION_ROLL = False
+        print("NO SPELL LOCATION ROLL: an incoming spell resolves against "
+              "the chest's elemental rating (the pre-SKILLS-LR arm).")
     if a.no_armour_term:
         global ARMOUR_TERM
         ARMOUR_TERM = False
