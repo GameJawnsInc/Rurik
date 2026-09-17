@@ -30,8 +30,8 @@ import agents  # noqa: E402
 import chain  # noqa: E402
 import checks  # noqa: E402
 
-# FLOOR 77, from the green run of 2026-09-17 on the machine with the vault.
-LEDGER = checks.Ledger("daggers and the attack chain", floor=77)
+# FLOOR 82, from the green run of 2026-09-17 on the machine with the vault.
+LEDGER = checks.Ledger("daggers and the attack chain", floor=82)
 check = LEDGER.ok
 
 PLAYER = 1
@@ -104,7 +104,7 @@ def section_content():
 def _saved(authsrv):
     return (authsrv.SPAWN_PROFESSION, authsrv.PLAYER_ENERGY_PIPS,
             agents.PLAYER_ENERGY, agents.PLAYER_FLOAT_43,
-            agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND,
+            agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, agents.PLAYER_ARMOUR,
             authsrv.PLAYER_SWING_DAMAGE, authsrv.WEAPON_ATTACK_SPEED,
             authsrv.ATTACK_INTERVAL, authsrv.PARTY_SKILLBAR,
             agents.PLAYER_LEVEL, agents.PLAYER_HEALTH,
@@ -114,7 +114,7 @@ def _saved(authsrv):
 def _restore(authsrv, saved):
     (authsrv.SPAWN_PROFESSION, authsrv.PLAYER_ENERGY_PIPS,
      agents.PLAYER_ENERGY, agents.PLAYER_FLOAT_43,
-     agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND,
+     agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, agents.PLAYER_ARMOUR,
      authsrv.PLAYER_SWING_DAMAGE, authsrv.WEAPON_ATTACK_SPEED,
      authsrv.ATTACK_INTERVAL, authsrv.PARTY_SKILLBAR,
      agents.PLAYER_LEVEL, agents.PLAYER_HEALTH,
@@ -682,6 +682,68 @@ def section_adjacent(have_fields):
         authsrv.skill_cost = saved_cost
 
 
+def section_armour():
+    import authsrv
+    import wearmap
+    print("\n10. the Assassin's own armour (DAGGERS, the bare body)")
+    rows = {k: agents.item_template(k) for k in
+            ("assassin_body", "assassin_boots", "assassin_legs",
+             "assassin_gloves", "assassin_head")}
+    check([r["item_type"] for r in rows.values()] == [7, 4, 19, 13, 16]
+          and [r["model_id"] for r in rows.values()] == [7249, 7248, 7252, 7250, 7251]
+          and all(r["flags"] == 0x20001006 for r in rows.values())
+          and all(authsrv.armour_of_piece(r)[0] == 10 for r in rows.values()),
+          "five rows off the owner's level-3 Assassin (20260819T132414): the "
+          "wire's types and models, the fixture's flags word, armour 10 each",
+          str([(r["item_type"], r["model_id"]) for r in rows.values()]))
+    refused = []
+    for (_i, _loc, slot), key in zip(authsrv.STARTER_ARMOUR, rows):
+        try:
+            wearmap.check_content_row(slot, rows[key])
+        except wearmap.WearError as exc:
+            refused.append((key, slot, str(exc)[:60]))
+    check(refused == [],
+          "and each passes wearmap's slot / type / composite check in its own "
+          "slot", str(refused))
+    saved = agents.PLAYER_ARMOUR
+    try:
+        agents.PLAYER_ARMOUR = None
+        base = (authsrv.player_armour_at("warrior_body"),
+                authsrv.player_spell_armour(),
+                [k for _i, k, _s in authsrv.worn_armour()])
+        authsrv.apply_party_character(
+            {"player_armour": list(rows)})
+        after = (authsrv.player_armour_at("warrior_body"),
+                 authsrv.player_spell_armour(),
+                 [k for _i, k, _s in authsrv.worn_armour()])
+        check(base == (45.0, 25.0, [k for _i, k, _s in authsrv.STARTER_ARMOUR])
+              and after == (10.0, 10.0, list(rows)),
+              "`player_armour` swaps the SET the five locations resolve to: "
+              "the fixture's chest 45 / spell 25 (the Warrior's 25 + 20 vs. "
+              "physical) becomes the Assassin's 10 / 10, and the equip sends "
+              "declare the Assassin's keys at the fixture's ids and slots",
+              f"base {base}, after {after}")
+        try:
+            authsrv.apply_party_character(
+                {"player_armour": ["assassin_head", "assassin_boots",
+                                   "assassin_legs", "assassin_gloves",
+                                   "assassin_body"]})
+            refused = False
+        except wearmap.WearError:
+            refused = True
+        check(refused and after[2] == [k for _i, k, _s in authsrv.worn_armour()],
+              "a set in the wrong slot order is refused at launch by wearmap "
+              "and the bound set is untouched")
+        try:
+            authsrv.apply_party_character({"player_armour": ["assassin_body"]})
+            refused = False
+        except ValueError:
+            refused = True
+        check(refused, "and four pieces are refused: five keys, in slot order")
+    finally:
+        agents.PLAYER_ARMOUR = saved
+
+
 def section_condition_slot(have_fields):
     import authsrv
     print("\n6. Jagged Strike's Bleeding sits in the SCALE slot")
@@ -712,6 +774,7 @@ def main():
         section_second_strike_and_crits(have_fields)
         section_retail(have_fields)
         section_adjacent(have_fields)
+        section_armour()
     finally:
         _restore(authsrv, saved)
     return LEDGER.verdict()

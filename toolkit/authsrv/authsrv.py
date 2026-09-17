@@ -2596,6 +2596,14 @@ for _iid, _armour_key, _armour_slot in STARTER_ARMOUR:
     wearmap.check_content_row(_armour_slot,
                               agents.item_template(_armour_key))
 del _iid, _armour_key, _armour_slot
+
+
+def worn_armour():
+    """STARTER_ARMOUR with the party row's pieces in place of the fixture's
+    (DAGGERS): the ids and the slots are the fixture's, the KEY each slot
+    declares is whatever agents.PLAYER_ARMOUR maps the location to."""
+    return tuple((iid, agents.worn_piece_key(key), slot)
+                 for iid, key, slot in STARTER_ARMOUR)
 # THE COSTUME, opt-in, and it is an INSTRUMENT rather than an outfit.
 # studies/playercomposite 9.2 read a costume-override path statically -- equip
 # slots 7/8 feed a registry keyed by file id, and at m_slotItemData build time
@@ -19815,6 +19823,21 @@ def apply_party_character(prow):
         agents.PLAYER_OFFHAND = agents.item_template(prow["player_offhand"])
         changed.append(f"offhand {prow['player_offhand']} "
                        f"(+{offhand_armour():.0f} armour)")
+    if prow.get("player_armour"):
+        # DAGGERS: five item keys in STARTER_ARMOUR's order (body, boots,
+        # legs, gloves, head), each validated against ITS slot the way the
+        # fixture's are at import -- a row that would land on the wrong body
+        # part dies here, at launch, not as a mis-render in the run.
+        keys = [str(k) for k in prow["player_armour"]]
+        if len(keys) != len(STARTER_ARMOUR):
+            raise ValueError(f"player_armour wants {len(STARTER_ARMOUR)} keys "
+                             f"(body, boots, legs, gloves, head), got {keys}")
+        for (_iid, loc, slot), key in zip(STARTER_ARMOUR, keys):
+            wearmap.check_content_row(slot, agents.item_template(key))
+        agents.PLAYER_ARMOUR = {loc: key for (_i, loc, _s), key
+                                in zip(STARTER_ARMOUR, keys)}
+        changed.append(f"armour {keys} (chest "
+                       f"{player_armour_at('warrior_body'):.0f})")
     if prow.get("player_skills"):
         PARTY_SKILLBAR = [int(s) for s in prow["player_skills"]]
         changed.append(f"bar {PARTY_SKILLBAR}")
@@ -25857,7 +25880,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # the BODY. Three messages, three different jobs --
                         # the distinction studies/character 2 is built on.
                         if EQUIP_ARMOUR:
-                            for item_id, key, slot in STARTER_ARMOUR:
+                            for item_id, key, slot in worn_armour():
                                 send(GAME_SMSG_CREATE_NAMED_ITEM,
                                      agents.named_item(
                                          item_id, armour_row(key, slot)),

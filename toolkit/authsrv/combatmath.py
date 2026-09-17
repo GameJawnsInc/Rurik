@@ -184,7 +184,7 @@ def player_armour_at(location_key, physical, EQUIP_ARMOUR,
     if not EQUIP_ARMOUR:
         return None
     try:
-        piece = agents.item_template(location_key)
+        piece = agents.item_template(agents.worn_piece_key(location_key))
     except Exception:                                     # noqa: BLE001
         return None
     got = armour_of_piece(piece, physical, ARMOR_RATING_MODIFIER,
