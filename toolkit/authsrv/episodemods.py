@@ -63,6 +63,38 @@ def blind_miss(state, agent_id, BLIND, BLIND_MISS_CHANCE):
     return random.random() < BLIND_MISS_CHANCE
 
 
+# SKILLS-WK (2026-09-17, studies/skills 51): WEAKNESS TAKES ONE OFF EVERY
+# ATTRIBUTE. WIKI (GWW "Weakness"): "all of your attributes are reduced by 1 ...
+# Attributes at rank 0 are not affected". OBSERVED on the owner's Isle tape
+# 20260917T090355: the Weakness apply's own batch re-declares every non-zero
+# attribute one lower (0x003B [agent, attr, base, effective - 1], right behind
+# the status word) and the removal's batch restores them; and a Mend Ailment
+# cast at Protection Prayers 8 under it healed 35, the rank-7 number, where
+# the tooltip said 40. The flag lives HERE because `taker_rank` needs it and a
+# leaf may not import its origin; `authsrv.main()` clears it for
+# --no-weakness-attributes.
+WEAKNESS_ATTRIBUTES = True
+
+
+def weakened(state, agent_id):
+    """True if a live Weakness (486) episode sits on the agent. Pure read."""
+    if not WEAKNESS_ATTRIBUTES:
+        return False
+    table = state.get("effects")
+    if not table:
+        return False
+    weak = effects.CONDITION_BY_NAME["Weakness"]
+    return any(ep["skill"] == weak for ep in table.on_agent(agent_id))
+
+
+def weakened_rank(state, agent_id, rank):
+    """The rank an agent's numbers scale at RIGHT NOW: one lower under Weakness,
+    never below zero, and a rank of 0 (or None) is untouched."""
+    if rank is None or rank <= 0 or not weakened(state, agent_id):
+        return rank
+    return rank - 1
+
+
 def taker_rank(state, agent_id, attribute):
     """The taker's rank in `attribute`: the player's from [player.attributes]
     (the player is NOT a row in state["agents"] -- SLICE-B7a's asymmetry is
@@ -70,7 +102,8 @@ def taker_rank(state, agent_id, attribute):
     0 when it has none, which is a Warrior's honest rank in Smiting."""
     rows = state.get("agents") or {}
     if agent_id not in rows:
-        return int(dict(agents.PLAYER_ATTRIBUTE_RANKS).get(attribute, 0))
+        return weakened_rank(state, agent_id, int(
+            dict(agents.PLAYER_ATTRIBUTE_RANKS).get(attribute, 0)))
     agent = rows[agent_id] or {}
     ranks = agent.get("attributes")
     if ranks is None:
@@ -79,7 +112,7 @@ def taker_rank(state, agent_id, attribute):
         return 0
     table = {int(a): int(r) for a, r in
              (ranks.items() if isinstance(ranks, dict) else ranks)}
-    return table.get(attribute, 0)
+    return weakened_rank(state, agent_id, table.get(attribute, 0))
 
 
 def taker_damage(state, agent_id, dealt):

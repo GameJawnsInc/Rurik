@@ -3692,7 +3692,9 @@ KNOCK_DOWN_SECONDS = 2.0      # WIKI, and the corpus's 3 of 3.
 BLOCK = True                  # False (--no-block): nothing blocks.
 # WEAKNESS (486): "you deal 66% less damage with attacks" -- WIKI (GWW
 # "Weakness", Game mechanics: the equipped WEAPON's base damage, not a
-# skill's bonus). The -1 to every attribute is NOT modelled. Modelled here
+# skill's bonus). The -1 to every attribute IS modelled since SKILLS-WK
+# (2026-09-17, studies/skills 51): `episodemods.weakened_rank` at every rank
+# read, `push_attributes` for the 0x003B batch retail sends. Modelled here
 # because Heavy Blow's knock-down and Desperation Blow's random condition
 # name it.
 WEAKNESS_DAMAGE_FACTOR = 0.34
@@ -13441,7 +13443,8 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     # the absence of every term Guild Wars puts around it (armour, attribute
     # rank, criticals). See weapon_damage_range.
     critical = False
-    rank = player_weapon_rank(state) if ARMOUR_TERM else None
+    rank = (weakened_rank(state, PLAYER_AGENT_ID, player_weapon_rank(state))
+            if ARMOUR_TERM else None)                      # SKILLS-WK
     armour = agent.get("armor_rating")
     if exact is not None:
         dealt = float(exact) + bonus_damage
@@ -13522,7 +13525,8 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
                  "melee_attack_finished")
         on_block(send, state, target_id, PLAYER_AGENT_ID, conn_id, label)
         if skill_id is not None and skill_knocks_down_if_blocked(skill_id):
-            _pun = skill_damage(skill_id, player_rank_for_skill(skill_id))
+            _pun = skill_damage(skill_id, weakened_rank(
+                state, PLAYER_AGENT_ID, player_rank_for_skill(skill_id)))
             if _pun:
                 hit_enemy(send, state, target_id, conn_id,
                           exact=float(_pun[0]), swing=False, skill_strike=True,
@@ -14791,7 +14795,8 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
     cost, glyph_ep, discount, units = 0, None, 0, 0
     pool = None
     if ENERGY:
-        rank = player_rank_for_skill(skill_id)
+        rank = weakened_rank(state, PLAYER_AGENT_ID,
+                             player_rank_for_skill(skill_id))      # SKILLS-WK
         cost, glyph_ep, discount = energy_cost_for(state, PLAYER_AGENT_ID,
                                                    skill_id, rank)
         units = skill_cost(skill_id)[1]
@@ -15571,7 +15576,8 @@ def cast_tick(send, state, conn_id):
             # only WHEN. hit_enemy re-reads the target from state, so a corpse,
             # a removed agent or a revived one is handled there rather than by
             # anything cached at press time.
-            rank = player_rank_for_skill(cast["skill_id"])
+            rank = weakened_rank(state, PLAYER_AGENT_ID,
+                                 player_rank_for_skill(cast["skill_id"]))  # SKILLS-WK
             target = cast.get("target")
             # WHAT A CAST DOES TO ITS TARGET DEPENDS ON THE SKILL'S TYPE, and
             # until 2026-08-20 it depended only on whether a target existed --
@@ -16156,6 +16162,7 @@ def apply_effect(send, state, caster_id, skill_id, rank, target_id, conn_id):
     # where retail puts it: [0x0042 160, 0x00F1 0x80, 0x0027 383.04].
     push_status(send, state, ep["agent"], conn_id)
     push_speed(send, state, ep["agent"], conn_id)
+    push_attributes(send, state, ep["agent"], conn_id)
     aura_on(send, state, ep, conn_id)
     return ep
 
@@ -16193,6 +16200,7 @@ def strip_effects(send, state, agent_id, conn_id, why):
     elif gone:
         push_status(send, state, agent_id, conn_id)
         push_speed(send, state, agent_id, conn_id)     # SLICE-F48
+        push_attributes(send, state, agent_id, conn_id)
     if gone:
         print(f"[c{conn_id}] stripped {len(gone)} effect(s) from agent "
               f"{agent_id}: {why}", flush=True)
@@ -16316,6 +16324,7 @@ def apply_condition(send, state, target_id, condition_id, seconds, rank,
     # AND THE SPEED IT HALVES (SLICE-F48): Crippled's batch is [0x0042 481,
     # 0x00F1 0x0A, 0x0027 144.0] on the Isle, the word right behind the status.
     push_speed(send, state, ep["agent"], conn_id)
+    push_attributes(send, state, ep["agent"], conn_id)
     # AND THE DEGENERATION IT CARRIES, if it carries any. Sent here rather than
     # from the tick because the corpus's mid-life property-44s fire when the
     # RATE CHANGES, and applying a condition is the change.
@@ -16791,6 +16800,7 @@ def remove_conditions(send, state, agent_id, conn_id, why, count=None,
     if gone:
         push_status(send, state, agent_id, conn_id)
         push_speed(send, state, agent_id, conn_id)     # SLICE-F48: a cure restores the base
+        push_attributes(send, state, agent_id, conn_id)
         push_regen(send, state, agent_id, conn_id)
         print(f"[c{conn_id}] removed {len(gone)} condition(s) from agent "
               f"{agent_id}: {why}", flush=True)
@@ -17044,6 +17054,51 @@ def end_on_skill_use(send, state, agent_id, skill_id, conn_id):
               f"skill was used ({skill_id}) [SLICE-H12]", flush=True)
 
 
+from episodemods import weakened, weakened_rank  # noqa: F401,E402  (SKILLS-WK; read by test_mechanics as authsrv.<name>)
+
+
+def push_attributes(send, state, agent_id, conn_id):
+    """Re-declare the player's attributes when Weakness lands or lifts.
+
+    SKILLS-WK. RETAIL'S BATCH (20260917T090355, 2 applies and 2 removals):
+    [0x0042 486, 0x009F 6, 0x00F1, 0x003B x every attribute with a base rank],
+    each `[agent, attribute, base, effective - 1]` -- the base is NOT moved,
+    only the effective -- and the removal's batch is the mirror, effective
+    restored. Called beside push_speed at every site that opens or closes an
+    episode, and from speed_tick, so no close path can leave the client
+    showing a rank the server stopped using. One burst per CHANGE.
+
+    The PLAYER only: the player's is the one attribute table this server
+    declares (0x003A / 0x003B); what retail tells an observer about another
+    agent's weakened ranks is unread.
+    """
+    if agent_id != PLAYER_AGENT_ID or not EFFECTS:
+        return None
+    weak = weakened(state, agent_id)
+    if bool(state.get("attributes_weakened")) == weak:
+        return None
+    try:
+        st = attribute_state(state)
+    except Exception:                                     # noqa: BLE001
+        return None
+    state["attributes_weakened"] = weak
+    sent = []
+    for attribute in sorted(st.ranks):
+        base = st.rank_of(attribute)
+        if base <= 0:
+            continue                # WIKI: rank 0 is not affected
+        effective = st.effective_of(attribute) - (1 if weak else 0)
+        send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTE,
+             [agent_id, attribute, base, effective],
+             f"AGENT_UPDATE_ATTRIBUTE(attr {attribute} = {base}, effective "
+             f"{effective}, " + ("WEAKENED" if weak else "restored") + ")")
+        sent.append((attribute, base, effective))
+    print(f"[c{conn_id}] the player's attributes are "
+          + ("WEAKENED by one" if weak else "restored") + f": {sent} "
+          f"[SKILLS-WK]", flush=True)
+    return sent
+
+
 def weakness_multiplier(state, agent_id):
     """WEAKNESS_DAMAGE_FACTOR while Weakness (486) is on the attacker, else 1."""
     return (WEAKNESS_DAMAGE_FACTOR
@@ -17295,10 +17350,12 @@ def speed_tick(send, state, conn_id):
     if not table or (not table.live and not state.get("declared_speed")):
         return
     push_speed(send, state, PLAYER_AGENT_ID, conn_id)
+    push_attributes(send, state, PLAYER_AGENT_ID, conn_id)
     for aid, row in list(state.get("agents", {}).items()):
         if row.get("dead"):
             continue
         push_speed(send, state, aid, conn_id)
+        push_attributes(send, state, aid, conn_id)
 
 
 def heal_agent(send, state, target_id, caster_id, amount, conn_id,
@@ -17447,6 +17504,7 @@ def effect_tick(send, state, conn_id):
         # The speed base back (SLICE-F48): Windborne's expiry is [0x0044,
         # ..., 0x00F1 0, 0x0027 288.0] at apply + 13.0 s on the Isle.
         push_speed(send, state, ep["agent"], conn_id)
+        push_attributes(send, state, ep["agent"], conn_id)
         # A condition running out is a rate change too, and it is the one a
         # server is most likely to forget: the icon goes and the arrows stay.
         push_regen(send, state, ep["agent"], conn_id)
@@ -21481,7 +21539,8 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # SLICE-H8: the caster's OWN rank in this skill's attribute when its row
     # carries `attributes`, else _rank -- and its own strike level
     # (3 x level) against the taker's spell armour below.
-    _rank = agent_skill_rank(agent, skill_id)
+    _rank = weakened_rank(state, agent_id,
+                          agent_skill_rank(agent, skill_id))      # SKILLS-WK
     # Tidiness, and NOTHING TODAY CAN OBSERVE IT -- said here rather than left to
     # look load-bearing. `casting` is read only from this function, which runs only
     # when `cast_lands_at` fires, which is only ever set alongside a fresh
@@ -30581,6 +30640,11 @@ def main():
         SPELL_ARMOUR = False
         print("NO SPELL ARMOUR: an incoming fire spell deals its stated "
               "amount, unscaled by the player's armour.")
+    if a.no_weakness_attributes:
+        episodemods.WEAKNESS_ATTRIBUTES = False
+        print("NO WEAKNESS ATTRIBUTES: Weakness cuts attack damage only; "
+              "ranks and the 0x003B batch are untouched (the pre-SKILLS-WK "
+              "arm).")
     if a.no_spell_location_roll:
         global SPELL_LOCATION_ROLL
         SPELL_LOCATION_ROLL = False

@@ -28,7 +28,7 @@ import agents       # noqa: E402
 import effects      # noqa: E402
 
 # Floor set from a real green run (39 checks, 2026-08-22; 99 checks, 2026-09-09 SKILLS-DW; 129 checks, 2026-09-10 SKILLS-BL; 153 checks, 2026-09-10 SKILLS-RC; 162 checks, 2026-09-10 SKILLS-MA).
-LEDGER = checks.Ledger("effect mechanics", floor=228)  # 2026-09-16: +14, SLICE-F48 sec.8b (movement speed on the wire), from the green run  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
+LEDGER = checks.Ledger("effect mechanics", floor=240)  # 2026-09-17: +12, SKILLS-WK sec.31-32 (Weakness takes one off every attribute), from the green run  # 2026-09-16: +14, SLICE-F48 sec.8b (movement speed on the wire), from the green run  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
 check = checks.adopt(LEDGER)
 
 FRENZY, RUSH, ROF, GLYPH, IGNITE, FAINT = 346, 319, 307, 200, 431, 135
@@ -1875,5 +1875,102 @@ except agents.content.ContentError as exc:
 finally:
     (authsrv.ARMOUR_TERM, authsrv.ENERGY, authsrv.BLIND,
      authsrv.CASTING_ARMOUR, authsrv.roll_hit_location) = _m30
+
+# ---------------------------------------------------------------------------
+# 31: SKILLS-WK, Weakness's attribute penalty (studies/skills/FINDINGS.md 51).
+print("== 31. SKILLS-WK: Weakness takes ONE off every attribute -- at every "
+      "rank read, and on the wire as retail's 0x003B batch ==")
+WEAK = effects.CONDITION_BY_NAME["Weakness"]
+ATTR = authsrv.GAME_SMSG_AGENT_UPDATE_ATTRIBUTE
+_m31 = authsrv.episodemods.WEAKNESS_ATTRIBUTES
+try:
+    state = fresh_state()
+    check(authsrv.weakened_rank(state, PLAYER, 8) == 8,
+          "no Weakness: a rank reads as it is")
+    open_ep(state, WEAK, duration=20.0, type_code=8)
+    check(authsrv.weakened_rank(state, PLAYER, 8) == 7
+          and authsrv.weakened_rank(state, PLAYER, 1) == 0,
+          "under Weakness a rank reads one lower (8 -> 7, 1 -> 0)",
+          "WIKI (GWW 'Weakness'): all attributes reduced by 1; OBSERVED as "
+          "the 35-point Mend Ailment at Protection Prayers 8 (RUN-SKILLS-RB2)")
+    check(authsrv.weakened_rank(state, PLAYER, 0) == 0
+          and authsrv.weakened_rank(state, PLAYER, None) is None,
+          "a rank of 0 is untouched, and so is 'no rank' (WIKI: rank 0 is "
+          "not affected)")
+    check(authsrv.weakened_rank(state, 10, 8) == 8,
+          "and it is the WEAKENED agent's ranks, not everyone's",
+          "agent 10 carries no Weakness")
+    # the number that opened this: 5..70 at rank 7, not 8
+    lo, hi = 5.0, 70.0
+    check(math.floor(lo + (hi - lo) * authsrv.weakened_rank(state, PLAYER, 8) / 15.0) == 35,
+          "Mend Ailment's 5..70 at the weakened rank is retail's 35, where "
+          "rank 8 gives the tooltip's 40",
+          f"rank 7 -> {lo + (hi - lo) * 7 / 15.0:.2f}, rank 8 -> "
+          f"{lo + (hi - lo) * 8 / 15.0:.2f}; the tape's word is 0.07292 x 480")
+
+    # the wire: apply through the real path, then the expiry
+    sent, send = collector()
+    state = fresh_state()
+    st = authsrv.attribute_state(state)
+    live_attrs = sorted(a for a in st.ranks if st.rank_of(a) > 0)
+    authsrv.apply_condition(send, state, PLAYER, WEAK, 20.0, 0, 0, by_skill=0)
+    ops = [op for op, _v, _l in sent]
+    rows = [v for op, v, _l in sent if op == ATTR]
+    check(live_attrs and [r[1] for r in rows] == live_attrs
+          and all(r[0] == PLAYER and r[2] == st.rank_of(r[1])
+                  and r[3] == st.effective_of(r[1]) - 1 for r in rows),
+          "the Weakness apply re-declares EVERY attribute with a base rank as "
+          "[player, attr, base, effective - 1] -- the base is not moved",
+          f"{rows} for attributes {live_attrs}")
+    check(OP_STATUS in ops and ATTR in ops
+          and ops.index(OP_STATUS) < ops.index(ATTR)
+          and ops.index(OP_APPLY) < ops.index(OP_STATUS),
+          "in retail's order: 0x0042, the status word, then the 0x003B rows",
+          f"{[hex(o) for o in ops]}")
+    sent, send = collector()
+    authsrv.apply_condition(send, state, PLAYER, WEAK, 5.0, 0, 0, by_skill=0)
+    check(not [v for op, v, _l in sent if op == ATTR],
+          "a shorter re-application sends no second batch (one burst per "
+          "CHANGE)")
+    sent, send = collector()
+    for ep in list(state["effects"].on_agent(PLAYER)):
+        ep["expires_at"] = 0.0
+    authsrv.effect_tick(send, state, 0)
+    rows = [v for op, v, _l in sent if op == ATTR]
+    check([r[1] for r in rows] == live_attrs
+          and all(r[3] == st.effective_of(r[1]) for r in rows),
+          "and its expiry restores them, one 0x003B per attribute at the full "
+          "effective rank", f"{rows}")
+
+    # the revert arm
+    authsrv.episodemods.WEAKNESS_ATTRIBUTES = False
+    sent, send = collector()
+    state = fresh_state()
+    authsrv.apply_condition(send, state, PLAYER, WEAK, 20.0, 0, 0, by_skill=0)
+    check(not [v for op, v, _l in sent if op == ATTR]
+          and authsrv.weakened_rank(state, PLAYER, 8) == 8,
+          "--no-weakness-attributes: no rank moves and no 0x003B is sent "
+          "(the pre-SKILLS-WK arm)")
+finally:
+    authsrv.episodemods.WEAKNESS_ATTRIBUTES = _m31
+
+print("== 32. the corpus: retail's Weakness batch (deepwoundjoin."
+      "weakness_attributes) ==")
+try:
+    import deepwoundjoin
+    wk = deepwoundjoin.score_weakness(deepwoundjoin.weakness_attributes())
+    check(wk["applies_declared"] >= 2 and wk["closes_declared"] >= 2,
+          "WK1 retail's Weakness apply AND removal carry 0x003B rows in their "
+          "own batch (the player's, on the owner's Isle tape)",
+          f"{wk} -- other agents' Weakness carries none, which is why these "
+          f"are floors and not 'every apply'")
+    check(wk["pairs"] >= 6 and wk["lifted_by_one"] == wk["pairs"]
+          and wk["same_base"] == wk["pairs"] and wk["zero_base_rows"] == 0,
+          "WK2 every attribute's effective at the removal is the apply's plus "
+          "ONE, the base is the same at both, and no rank-0 attribute rides",
+          f"{wk['lifted_by_one']} of {wk['pairs']} lifted by one, "
+          f"{wk['same_base']} same base")
+except (Exception, SystemExit) as exc:                           # noqa: BLE001
+    LEDGER.skip("section 32 (corpus)", f"{type(exc).__name__}: {exc}")
 
 sys.exit(LEDGER.verdict())
