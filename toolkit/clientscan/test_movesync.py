@@ -157,8 +157,12 @@ import vaultpath  # noqa: E402
 # 2026-09-14: 132 -> 133. sec.16 gained the server-set check: every retail
 # interval spanning a 0x002C to the player is shown, refused a verdict, and
 # bounded by a run's reach from the set point (the JARIN shrine). Vaulted only.
+# 2026-09-17: 133 -> 135, MEASURED with `RURIK_VAULT` at an empty directory (135,
+# the same 7 declared skips; 189 vaulted). sec.16 gained `late_stamp`'s two
+# corpus-free controls -- a late stamp named, a jump refused -- which run on a
+# bare machine; its split of the zero-on-both-arms claim is vaulted only.
 LEDGER = checks.Ledger("separation: the quantity that actually predicts a warp",
-                       floor=133)
+                       floor=135)
 check = checks.adopt(LEDGER)
 
 MOVETAP = "movetap-20260819T171436.jsonl"
@@ -1215,6 +1219,39 @@ def main():
               f"rows are small' is this file's own recorded trap")
 
     print("\n16. RETAIL, re-measured: zero on BOTH arms")
+    # THE PREDICATE'S OWN CONTROLS, corpus-free and FIRST: `late_stamp` excuses a
+    # retail row below, so it has to be shown refusing the thing it must never
+    # excuse. Same run, same 383 u/s, same cadence; one arm moves a STAMP 18 ms
+    # and the other adds 12 u of DISTANCE. Both clear the speed arm.
+    def _run(late=0.0, jump=0.0):
+        reps, x = [], 0.0
+        for i in range(7):
+            t = i * 0.35
+            if i == 3:
+                t += late
+            if i == 4:
+                x += jump
+            reps.append((t, [x, 0.0]))
+            x += 383.0 * 0.35
+        return movesync.steps(reps)
+    stamped, jumped = _run(late=0.018), _run(jump=12.0)
+    got = movesync.late_stamp(stamped, 3)
+    check(movesync.hard_step(stamped[3]) and got is not None
+          and abs(got["delta"] - 0.018) < 1e-6
+          and abs(got["pair_speed"] - 383.0) < 1e-6,
+          "CONTROL: a report stamped 18 ms late clears the speed arm and "
+          "`late_stamp` names it, delta recovered exactly",
+          f"{stamped[3]['speed']:.2f} u/s after {stamped[2]['speed']:.2f}; "
+          f"{got}")
+    check(movesync.hard_step(jumped[3])
+          and movesync.late_stamp(jumped, 3) is None
+          and movesync.late_stamp(stamped, 2) is None,
+          "KNOWN-BAD ARM: a 12 u displacement at the same speed clears the arm "
+          "too and is REFUSED, and so is the slow half of a late pair",
+          f"{jumped[3]['speed']:.2f} u/s with an ordinary predecessor "
+          f"({jumped[2]['speed']:.2f}) -- a jump adds distance and the pair's "
+          f"average rises past the flanks; a predicate that excused this would "
+          f"excuse the defect the bar exists for")
     # THE CALIBRATION ITSELF, and it is a claim about ArenaNet's client rather
     # than about ours. 520 u is only a bar because retail never clears it, and a
     # constant justified in a comment is justified nowhere. Read from the LIVE
@@ -1231,7 +1268,7 @@ def main():
         LEDGER.skip("retail calibration",
                     f"the live corpus is not reachable here ({exc})")
     if cmsgstream is not None:
-        rows, reports, cut_rows = [], 0, []
+        rows, reports, cut_rows, tracks = [], 0, [], []
         for st in stamps:
             try:
                 msgs = cmsgstream.timed(st, "c2s", "game")
@@ -1264,6 +1301,7 @@ def main():
                                                    sets.get(conn, [])):
                     cut_rows.append((st, conn, r))
                 rows.extend(conn_rows)
+                tracks.append((st, conn, conn_rows))
         check(reports > 2000 and len(rows) > 2000,
               f"the live corpus yields {reports} retail self-reports over "
               f"{len(rows)} intervals",
@@ -1310,18 +1348,67 @@ def main():
         by_dist = [r for r in judged
                    if r["dt"] < movesync.HARD_JUMP_MIN_DT
                    and r["dist"] >= movesync.HARD_JUMP_UNITS]
-        check(len(by_speed) == 0 and len(by_dist) == 0,
-              f"and ZERO of them clear either arm ({len(by_speed)} by speed, "
-              f"{len(by_dist)} by distance)",
+        # SPLIT 2026-09-17, and not lowered. This read `len(by_speed) == 0` and
+        # went red on ONE row of 20260916T213125 (t = 197.760, 402.28 u/s, 2.3
+        # over the arm). Re-scanned as of the pin the corpus is still zero and
+        # still tops out at 388.80, so nothing in the scorer moved; what arrived
+        # is a boosted zig-zag run whose shared report was stamped 18 ms late --
+        # 362.11 u/s then 402.28, 268.51 u over 0.701 s = 383.12 u/s, 0.08 off the
+        # declared 383.04 boost base, flanked by 382.16 and 382.60. `movesync.late_stamp`
+        # is the predicate and it has no free parameter: a displacement ADDS
+        # distance to one interval and a late stamp only moves time between
+        # two, so the pair's average must equal the run around it or the row is
+        # a jump. The claim is therefore two claims: every retail row over the
+        # speed arm is a late stamp, and nothing else clears either arm.
+        KNOWN_LATE = ("20260916T213125", 197.760)
+        late, unexplained = [], []
+        for st, conn, conn_rows in tracks:
+            for k, r in enumerate(conn_rows):
+                if (r.get("server_set") is not None
+                        or r["dt"] < movesync.HARD_JUMP_MIN_DT
+                        or not r["speed"] > movesync.HARD_JUMP_SPEED):
+                    continue
+                why = movesync.late_stamp(conn_rows, k)
+                (late if why else unexplained).append((st, conn, r, why))
+        check(len(late) + len(unexplained) == len(by_speed)
+              and not unexplained and len(by_dist) == 0,
+              f"and ZERO of them clear either arm as a DISPLACEMENT "
+              f"({len(unexplained)} by speed, {len(by_dist)} by distance)",
               f"a single retail row on either arm would mean the bar has "
-              f"started counting the game, which is what killed the 300 u one")
-        slow = [r for r in judged if r["dt"] >= movesync.HARD_JUMP_MIN_DT]
+              f"started counting the game, which is what killed the 300 u one. "
+              f"{len(by_speed)} row(s) read over {movesync.HARD_JUMP_SPEED:.0f} "
+              f"u/s and every one is a late stamp (next check); unexplained: "
+              + "; ".join(f"{st} t={r['t']:.3f} {r['speed']:.2f} u/s"
+                          for st, _c, r, _w in unexplained))
+        check(any(st == KNOWN_LATE[0] and abs(r["t"] - KNOWN_LATE[1]) < 0.01
+                  for st, _c, r, _w in late)
+              and all(w["delta"] <= movesync.LATE_STAMP_MAX
+                      for _s, _c, _r, w in late),
+              f"{len(late)} retail row(s) over the speed arm are ONE LATE STAMP "
+              f"each: a slow interval, then a fast one, and the pair restores "
+              f"the run's own speed",
+              "; ".join(f"{st} t={r['t']:.3f}: {r['speed']:.2f} u/s reads "
+                        f"{w['pair_speed']:.2f} over the pair (flanks "
+                        f"{', '.join(f'{v:.2f}' for v in w['around'])}), stamp "
+                        f"{w['delta'] * 1000:.0f} ms late"
+                        for st, _c, r, w in late)
+              + f" -- VACUITY GUARD: {KNOWN_LATE[0]} t={KNOWN_LATE[1]} must be "
+              f"among them, so a predicate that stopped seeing the row it was "
+              f"written for goes red rather than quiet. The bound is NPCTRACK's "
+              f"({movesync.LATE_STAMP_MAX * 1000:.0f} ms, studies/npctrack/"
+              f"RUN-R2.md). The instrument's verdict is NOT changed: `hard_step` "
+              f"still fires on this row, and whether our own tapes mint the same "
+              f"artifact is open (studies/movement)")
+        late_ids = {id(r) for _s, _c, r, _w in late}
+        slow = [r for r in judged if r["dt"] >= movesync.HARD_JUMP_MIN_DT
+                and id(r) not in late_ids]
         top_v = max((r["speed"] for r in slow), default=0.0)
         check(388.0 < top_v < movesync.HARD_JUMP_SPEED,
               f"retail's fastest believable interval is {top_v:.2f} u/s",
               f"{top_v:.2f} -- just over the 383.04 u/s boost base its own "
               f"wire declares, and {movesync.HARD_JUMP_SPEED - top_v:.1f} u/s "
-              f"below the speed arm")
+              f"below the speed arm. Late-stamp rows are excluded: their speed "
+              f"is the stamp's, not the client's")
         short = [r for r in judged if r["dt"] < movesync.HARD_JUMP_MIN_DT]
         top_d = max((r["dist"] for r in short), default=0.0)
         check(len(short) > 20 and top_d < 50.0,

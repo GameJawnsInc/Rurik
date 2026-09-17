@@ -424,7 +424,8 @@ measured on those 26 words.
 attribute `>= 51`. The non-stacking twin is deliberately not composable: **no
 capture of ours has ever carried a 542**, so its three prefix bits are unmeasured
 and inventing them is exactly the quiet guess this repo labels. NOT FOUND, and
-bounded — it needs one capture of a rune.
+bounded — it needs one capture of a rune. **SUPERSEDED 2026-09-17, §5.7: the capture
+arrived, and "zero exceptions" above has exactly one.**
 
 ### 5.5 What this does to pvpui §34.6
 
@@ -495,6 +496,46 @@ Two incidental confirmations in that same frame: the chevrons price off the BASE
 **27 unused points** — 200 lifetime minus the 173 those five ranks cost under
 `attribspend`'s cost model, to the point.
 
+### 5.7 The rune arrived: one batch of 95 upgrade components (2026-09-17) — OBSERVED
+
+`test_itemmods` went red on `main` in four places at once, and a per-tape scan puts three
+of the four on a single instant: at t = 108.082 s of `20260916T213125` (RUN-SKILLS-RB)
+retail sent **95 `0x0161` items of item type 8 in one batch**, and `20260917T090355` sent
+the same 95 again. 31 identifiers the corpus had never held are on those items and on
+nothing else. They read as upgrade components (INFERRED from their lines): 42 carry
+exactly one `542` word, one attribute each; what the other 53 are is unread beyond their
+identifiers. Every one of the 31 dispatches.
+
+**542's prefix is measured, which closes §5.4's NOT FOUND.** 84 words, `542, attribute, 1`:
+
+```
+0x21E81501  ->  id 542, attribute 21, +1, non-stacking     bits 31-30 = 0, bit 19 = 1
+```
+
+the same three bits as 543. The 42 attributes are **exactly** the 42 that `s_attrib` files
+under professions 1–10 (0–25 and 29–44) and none of the nine it files under no profession —
+a partition nothing in the word's decode looked at. Amount 1 indexes the handler's own grade
+table to `Minor` (§5.2). `attribute_bonus_word(attr, amount, stacking=False)` composes it
+and reproduces all 84. **The limit, stated:** this is the word on the RUNE ITEM. A 542 on a
+worn piece with the rune applied is still NOT OBSERVED, and the batch itself gives a reason
+not to assume: see the next paragraph.
+
+**"Constant per identifier" has one exception, and it is positional.** A component's words
+come in two groups split by a `614` word, and **all 250 words after a 614 carry bit 31**, 24
+identifiers' worth — they read as the payload the upgrade gives its host. `595` is the only
+identifier that appears on both sides of 614, so it is the only one ever seen with two
+prefixes: bit 31 set on 96 of 96 after a 614 and clear on 135 of 135 elsewhere. The other
+71 identifiers still hold one prefix each. §5.4's "zero exceptions" was true of 35
+identifiers on worn items; the claim is now the biconditional, and `test_itemmods` §10
+asserts it both ways. What bit 31 MEANS is INFERRED from position only.
+
+**And the fourth red was a different tape.** "Every attribute bonus is 543, attr 20, +1"
+(§5.3) was never about attribute 20; the corpus had one character. RUN-DAGGERS-1
+(`20260917T160915`) is a new Assassin, whose headpieces (item type 16, armour rating 70
+beside them) carry `543, 29, +1` and `543, 31, +1` — both in `s_attrib`'s profession-7 row.
+Same identifier, same amount, same item type: the §5.3 reading with a second profession.
+The test keys the non-Warrior attributes by capture, so a third character is named too.
+
 ## 6. The rest of the boundary
 
 Two limits from the original decode still stand. The `labels`/`templates` split the tool
@@ -537,9 +578,10 @@ the way is a renderer, not the loop. `test_itemmods.py` §6 pins the count at 21
 - **Authoring items that read correctly** — a server can now compose a modifier word for a
   stat it wants rather than copying an opaque literal out of a capture.
 
-- **Runes are one capture away** — 542 is the rune form and nothing in our corpus
-  carries one, so its three prefix bits are unmeasured and it is not composable (§5.4).
-  A single capture of a character wearing an attribute rune closes it.
+- **Runes: the ITEM is closed, the WORN form is one capture away** — 542 is the rune form,
+  84 of them arrived on 2026-09-16/17 (§5.7), its prefix is measured and it is composable.
+  What is still unmeasured is the word on a host piece with the rune applied; a single
+  capture of a character wearing an attribute rune closes that.
 
 `toolkit/clientscan/itemmods.py` (`--decode`, `--summary`, `--readers`, `--reads`,
 `--sites`, `--attributes`, `--attr-bonus`, `--emit-content`, `--all-builds`),

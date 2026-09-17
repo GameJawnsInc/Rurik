@@ -27,6 +27,45 @@ move back.
 
 ---
 
+### ✅ FOUR CORPUS REDS ON `main` CLOSED 2026-09-17 — **none was noise and none was the tape it was blamed on: three trace to RUN-SKILLS-RB (`20260916T213125`), and the rows settle the damage-taken adrenaline rule (SKILLS-AD), deliver the corpus's first runes, and name a late capture stamp** ([studies/skills/FINDINGS.md](studies/skills/FINDINGS.md) §53, [studies/itemmods/FINDINGS.md](studies/itemmods/FINDINGS.md) §5.7, [studies/movement/FINDINGS.md](studies/movement/FINDINGS.md) 2026-09-17)
+
+`test_adrenwire`, `test_itemmods`, `test_movesync` and `test_resyncscore` were red on
+`c5804355` and before the daggers merge. Each was located by a per-tape scan FIRST, and the
+working guesses were wrong for all four: `20260917T160915` (RUN-DAGGERS-1) and
+`20260917T124314` carry no `0x00CF` at all, the item-modifier vocabulary came from the
+Isle tapes and not the PvP Assassin, and both movement reds are one row of RB. As of the
+pin (every stamp before `20260916T213125`) all four are green to the digit, so nothing in
+a scorer moved.
+
+* **SKILLS-AD (adrenaline, `test_adrenwire` 73 → 77).** RB and RB2 (`20260917T090355`) are
+  the first tapes where an armed character stood and was hit: 32 armed damage rows became
+  90. **Ceil is refuted** — 1.25 % granted 1, 59.58 % granted 60, no `k` does both — and
+  round's interval closed to [1.0, 1.0054), so `pools.damage_units` is no longer
+  provisional. **The denominator is the CURRENT maximum**, 11 of 11 against 408 / 384 / 336,
+  the points/4.8 rival 0 of 11. **No cap at 25**: 30 ×3, 34, 60, 70, each one damage word.
+  **A hit converted to nothing still gets `0x00CF` carrying 0**, 7 of 7 — the test's
+  `if r["units"]` had filed those seven as ungranted, and its family solve divided by
+  their 0 %. 4b's shape claims now exclude the two named tapes, which are pinned whole.
+  Two server divergences RECORDED, not fixed (§8): the units divide by the base maximum,
+  and a zero gain is not sent.
+* **The rune arrived (`test_itemmods` 38 → 42).** One batch of 95 item-type-8 upgrade
+  components, twice. 542's prefix is measured on 84 words (bits 31–30 = 0, bit 19 = 1) over
+  exactly `s_attrib`'s 42 profession attributes, and `attribute_bonus_word(...,
+  stacking=False)` composes it — on the RUNE ITEM; the worn form is still unobserved.
+  "Constant per identifier" has one exception and it is positional: 595's bit 31 is set
+  after a 614 (96 of 96) and clear elsewhere (135 of 135). The fourth red WAS the daggers
+  tape: the Assassin's headpieces carry 543 +1 on attributes 29 and 31, keyed by capture.
+* **The late stamp (`test_movesync` 187 → 189, `test_resyncscore` 116 → 117).** Retail's one
+  firing of the 400 u/s arm is 362.11 then 402.28 u/s across one shared report — 383.12 over
+  the pair, flanks 382.16 / 382.60 — a capture stamp 18 ms late. `movesync.late_stamp` is
+  new and ANALYSIS ONLY: `hard_step` is untouched and no quoted count moved. Both tests
+  split the claim (zero displacements; every firing a late stamp, the 09-16 row required
+  among them), with a late stamp named and a 12 u jump refused as corpus-free controls.
+
+Run: the four, plus `test_pools`, `test_daggers` (they read `pools.py`), `test_checks`,
+`test_srclint`, `test_provlint`, `test_identlint`. The rest of the suite was NOT run. No
+client launched.
+
 ### ✅ DAGGERS-B8 LANDED 2026-09-17 — **Death Blossom hits the foes beside its target, in retail's batch order, with the client's own radius** ([studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md) F13)
 
 The owner noticed it on RUN-DAGGERS-1; the tape had it 28 of 28: `0x00A3 [55, neighbour,

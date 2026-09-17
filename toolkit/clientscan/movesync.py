@@ -1547,3 +1547,69 @@ def mark_server_sets(rows, sets):
             r["server_set"] = inside[-1]
             marked.append(r)
     return marked
+
+
+# --- 2026-09-17: one late capture stamp, told from a displacement -----------
+# At the END for the same reason as the block above: PROBE-GATEFIRE.md cites
+# this file by line number.
+# How late a capture stamp may trail the client. NOT measured here: it is the
+# NPCTRACK arc's bound (studies/npctrack/RUN-R2.md, "up to 67 ms after the
+# client has applied it"), reused for the one thing it is about -- the stamp.
+LATE_STAMP_MAX = 0.067
+# How closely the restored speed must agree with the run on either side of the
+# pair. The 2026-09-16 row's neighbours sit 382.16-383.33 u/s around a restored
+# 383.12, so 2 u/s is outside that scatter and far inside what a jump adds: J
+# units of real displacement raise the pair's average by J / (dt0 + dt1), which
+# over that row's 0.70 s makes anything past 1.4 u refuse.
+LATE_STAMP_TOL = 2.0
+
+
+def late_stamp(rows, k):
+    """Is speed-arm row `k` ONE LATE STAMP rather than a displacement?
+
+    ANALYSIS ONLY -- `hard_step` does not call this and no verdict moves.
+
+    A report stamped `delta` late LENGTHENS the interval that ends on it and
+    SHORTENS the one that starts on it, by the same `delta`: a slow row, then a
+    fast one, and the distance of neither changes. A displacement is the
+    opposite shape -- it ADDS distance to one interval and takes none from its
+    neighbour. So the pair's own average speed is the discriminator, and it has
+    no free parameter: for a late stamp it must be the speed of the run AROUND
+    the pair (rows k-2 and k+1), and for a jump it cannot be.
+
+    Stamps are only ever late, so the slow row is always the PREDECESSOR; a
+    fast row with a slow successor is not this and is refused.
+
+    Returns {"delta", "pair_speed", "around"} or None. None on: no predecessor,
+    a neighbour below the dt floor or spanning a server set, no flanking row to
+    compare against, a `delta` outside (0, LATE_STAMP_MAX], a pair average at or
+    over the arm, or one that disagrees with the flanks by LATE_STAMP_TOL.
+
+    FOUND 2026-09-17 on retail's own c2s (20260916T213125, t = 197.760): a
+    boosted zig-zag run reads 362.11 then 402.28 u/s across one shared report,
+    268.51 u in 0.701 s = 383.12 u/s -- 0.08 off the 383.04 boost base its wire
+    declares -- with the flanks at 382.16 and 382.60. delta = 18 ms.
+    """
+    if k < 1 or k >= len(rows):
+        return None
+    fast, slow = rows[k], rows[k - 1]
+    for r in (fast, slow):
+        if r["dt"] < HARD_JUMP_MIN_DT or r.get("server_set") is not None:
+            return None
+    if not fast["speed"] > HARD_JUMP_SPEED:
+        return None
+    pair_speed = (fast["dist"] + slow["dist"]) / (fast["dt"] + slow["dt"])
+    if pair_speed >= HARD_JUMP_SPEED or pair_speed <= 0:
+        return None
+    delta = fast["dist"] / pair_speed - fast["dt"]
+    if not 0.0 < delta <= LATE_STAMP_MAX:
+        return None
+    around = [rows[j]["speed"] for j in (k - 2, k + 1)
+              if 0 <= j < len(rows)
+              and rows[j]["dt"] >= HARD_JUMP_MIN_DT
+              and rows[j].get("server_set") is None]
+    if not around:
+        return None
+    if any(abs(pair_speed - v) > LATE_STAMP_TOL for v in around):
+        return None
+    return {"delta": delta, "pair_speed": pair_speed, "around": around}

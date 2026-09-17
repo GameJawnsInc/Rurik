@@ -6973,3 +6973,93 @@ integer here.)
   spirit's — what is left of the rank's 50 s, or a sentinel — not a cast onto the agent.
   A named exception by signature with its own refutable check (never more than the rank's
   duration unless exactly the sentinel). What decides 46-vs-10000 is unread, n = 3.
+
+## 53. SKILLS-AD — the damage-taken adrenaline rule, closed by two tapes made to be hit: ROUND is the only survivor, the denominator is the CURRENT maximum, there is no cap at 25, and a hit converted to nothing still gets a gain of 0 (2026-09-17)
+
+**Status: MINED, nothing run and nothing shipped.** `test_adrenwire` was red on `main`; this
+is what the red rows ARE. Both tapes already existed — RUN-SKILLS-RB (`20260916T213125`,
+§48) and RUN-SKILLS-RB2 (`20260917T090355`, §50) — and neither run was about adrenaline.
+They are the first tapes in the corpus where a character carrying adrenal skills stood and
+was hit, which is the sample §34 said it lacked. Extractor: `toolkit/authsrv/adrenjoin.py`,
+unchanged. Locks: `test_adrenwire` 4b and 12. `SKILLS-AD<n>` = a finding of this section.
+
+**Located first.** A per-tape scan of `0x00CF` amounts: every stamp before `20260916T213125`
+reproduces 4b's pinned multiset to the digit, so nothing drifted. `20260917T160915` and
+`20260917T124314` carry no `0x00CF` at all. RB contributes 48 gains (13 at 25, seven at 0)
+and RB2 26 (none at 25 — nobody swung — and six above it).
+
+### 53.1 SKILLS-AD1 — CEIL is refuted; ROUND is the only family left — OBSERVED, 90 of 90
+
+§34.C left two rounding families alive, `round(pct·k)` and `ceil(pct·k)`, and said one
+light hit taken by an armed character would separate them. Solving for the `k` interval
+over all 90 armed rows (32 old, 32 RB, 26 RB2):
+
+```
+floor(pct*k)   k in [1.280000, 1.012867)    EMPTY
+round(pct*k)   k in [1.000000, 1.005429)    survives, and holds k = 1
+ceil (pct*k)   k in [0.990210, 0.800000)    EMPTY
+```
+
+The two rows that close ceil: RB's 1.25 % hit (6 of 480) granted **1**, which ceil can only
+reach with `k <= 0.8`; RB2's 59.58 % hit granted **60**, which needs `k > 0.990`. Round's
+interval narrowed from `[1.0, 1.04)` and still contains 1 — the wire's own fraction,
+unscaled. `pools.damage_units` implements round and was labelled provisional; it is now
+right everywhere the corpus has looked, which is 0 % and 1.04 %..70.1 %. **Still NOT
+OBSERVED:** a hit in (0, 0.5 %), and an exact .5 (half-up vs half-even).
+
+### 53.2 SKILLS-AD2 — the denominator is the CURRENT maximum — OBSERVED, 11 of 11, rival 0 of 11
+
+Every armed percentage is a whole number of points of **that row's own** property 42, which
+now reads four maxima — 480, 408, 384, 336 (RB2's deaths took 480 to 408 to 336; what
+made RB's 384 is unread) — where §34 had one. At 480 "one unit per 1 % of maximum" and "one
+unit per 4.8 raw points" are the same number, and §34 said so. Against a moved maximum they
+are not:
+
+| maximum | points | units sent | round(% of current) | round(points / 4.8) |
+|---|---|---|---|---|
+| 408 | 286 | **70** | 70 | 60 |
+| 408 | 140 | **34** | 34 | 29 |
+| 336 | 101 (×3) | **30** | 30 | 21 |
+| 336 | 50 | **15** | 15 | 10 |
+| 336 | 45 | **13** | 13 | 9 |
+| 384 | 39 | **10** | 10 | 8 |
+| 384 | 31 | **8** | 8 | 6 |
+| 384 | 7, 6 | **2**, **2** | 2, 2 | 1, 1 |
+
+**Our server diverges here and it is recorded, not fixed:** both call sites compute
+`pools.damage_units(dealt / float(agents.PLAYER_HEALTH))` while the damage word beside them
+divides by `player_max_health(state)`. Under a death penalty or a Deep Wound the client is
+told one fraction and granted the units of another. Open in `PLAN.md` §8.
+
+### 53.3 SKILLS-AD3 — there is NO cap at 25 — OBSERVED, 6 of 6
+
+`test_adrenwire` 4b read "no 207 exceeds 25 … 25 is a CEILING on one message". That is the
+**strike** rule's ceiling stretched over the opcode. RB2 carries 30 ×3, 34, 60 and 70, each
+in an unambiguous batch of one damage word and one gain, each `round(pct)`: the 60 is one
+Lightning Orb on a stripped body (§50), 286 of 480. Nothing was summed — unlike JARIN's
+three hero ticks (26, 29, 42), which are a strike plus a hit taken.
+
+### 53.4 SKILLS-AD4 — a hit converted to NOTHING still gets its gain, and the gain carries 0 — OBSERVED, 7 of 7
+
+RB's seven fully converted hits (§48.7: heal, strip, then a damage word of `+0.0`) are each
+preceded by `0x00CF [25, 0]` in the gain's usual place in the batch. The seven zero-unit
+gains and the seven zero-damage words are the same seven rows. So the gain is not sent
+*because* something was gained: it rides every damage word to an adrenal bar and carries
+`round(pct)`. This is the same shape as SLICE-F46's "a landed hit always gets its word".
+
+`player_gains_adrenaline` returns on `units <= 0`, on the argument that such a message
+"does nothing and … retail has no reason to produce". Retail produces it. The client's
+arithmetic is unaffected (it adds 0 and, per `test_adrenwire` 13, repaints nothing), which
+is why this is a recorded divergence rather than a defect. **What is NOT known** is whether
+a zero gain re-arms retail's 25-second clear: every zero on RB sits inside a run of other
+gains, so the tape cannot say. That unknown is the reason it is not shipped. It also turns
+the (0, 0.5 %) prediction over: "no message" was round's prediction in §34.C; "a 207
+carrying 0" is what this makes likelier. INFERRED until a row lands there.
+
+### 53.5 What adrenjoin does not read — OBSERVED, 3 of 3, by hand
+
+Three of RB's 35 sub-25 gains have no property-16/17 word in their batch. All three ride a
+**property 55** word to the observer, `-0.0854167` (41 of 480), beside a `+` property-55 word
+to the source (it reads as a life steal; INFERRED) — and all three grant **9** = `round(8.54)`. So property 55 damage
+charges adrenaline too. `adrenjoin.DAMAGE_PROPS` does not include it, and must not be given
+it naively: it takes `abs()`, and a positive property-55 word to self is a heal.

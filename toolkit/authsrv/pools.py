@@ -548,6 +548,18 @@ def damage_units(fraction_of_max_health):
     character carrying an adrenal skill settles it -- a 0x00CF either arrives
     or it does not. `test_adrenwire` 12 pins all three intervals.
 
+    SETTLED 2026-09-17 (studies/skills 53, SKILLS-AD): CEIL IS DEAD and this
+    function's choice is no longer provisional. Two tapes made to be hit
+    (20260916T213125, 20260917T090355) took the armed rows from 32 to 90: a
+    1.25% hit granted 1 and a 59.58% hit granted 60, which no `k` reconciles
+    under ceil, and round's interval closed to [1.0, 1.0054). The same rows say
+    two things this function does NOT decide and its callers get wrong: the
+    fraction is of the CURRENT maximum (11 of 11 against a moved maximum; both
+    authsrv call sites pass `dealt / agents.PLAYER_HEALTH`), and a hit converted
+    to nothing still gets a 0x00CF carrying 0 (7 of 7; `player_gains_adrenaline`
+    sends nothing). Both are open in PLAN.md 8. There is no cap at 25 -- 60 and
+    70 are on the wire -- and none is applied here. Still unobserved: (0, 0.5%).
+
     A MODULE FUNCTION AND NOT A METHOD, because two callers need the same
     number for two different purposes and neither may compute it its own way:
     `on_damage_taken` grants it, and `authsrv.py` needs the identical integer
