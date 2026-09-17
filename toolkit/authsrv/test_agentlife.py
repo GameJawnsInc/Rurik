@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=547)   # 2026-09-15 (probe-walk noise) +2 (the CONTROL is pinned to one name and captured: quiet prints nothing, the failure is named to the caller), from the green run; 2026-09-15 (later) HEROLIB +2 (no 0x001D send site may zero the account library -- the GmSkSlot.cpp:206 crash of run 20260915T201538; the negative control restores the literal and reddens naming the line); 2026-09-15 +2 (offset_y honoured); SLICE-F43 +3 (the wipe countdown and its stop), from the green run   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=551)   # 2026-09-17 CAST-TARGET-DIED +4 (an ally cast whose target died lands on nothing), from the green run  # 2026-09-15 (probe-walk noise) +2 (the CONTROL is pinned to one name and captured: quiet prints nothing, the failure is named to the caller), from the green run; 2026-09-15 (later) HEROLIB +2 (no 0x001D send site may zero the account library -- the GmSkSlot.cpp:206 crash of run 20260915T201538; the negative control restores the literal and reddens naming the line); 2026-09-15 +2 (offset_y honoured); SLICE-F43 +3 (the wipe countdown and its stop), from the green run   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
 def section_weapon_damage():
@@ -527,6 +527,7 @@ def main():
     section_swing_back()
     section_hostile_heal_target()
     section_passive_hostiles()
+    section_cast_target_died()
     section_chase()
     section_follow_router()
     section_npc_plane()
@@ -608,6 +609,63 @@ def _swings(state, n=1, gap=0.0):
             state, 1)
     return sent
 
+
+
+def section_cast_target_died():
+    """The owner, 2026-09-17: "Restore Condition got cast on a dead bandit".
+
+    The PICK never chooses a corpse (`allies_of` filters the dead), but the
+    cast is a second long and the LANDING never re-asked. Both arms, through
+    the real `land_skill`: the living ally is what makes the dead one mean
+    something, and the pre-fix tree sent the dead arm's heal word at the
+    CASTER ([55, 10, 10, ...], `cast_recipient`'s fallback) and played
+    Restore Condition's visual on the body.
+    """
+    import authsrv
+    print("\nCAST-TARGET-DIED: an ally-target cast whose target died under it "
+          "lands on nothing")
+
+    def _land(skill, kill):
+        st = _world_ally()
+        me = st["agents"][10]
+        me["skills"], me["skill_ready"] = [(skill, 1.0, 2.0)], [0.0]
+        me["casting"], me["cast_target"] = 0, 11
+        if kill:
+            st["agents"][11].update(dead=True, health=0.0)
+        sent = []
+        authsrv.land_skill(
+            lambda op, vals, label="", quiet=False: sent.append((op, list(vals))),
+            st, 10, me, 1)
+        return sent, me
+
+    alive, _me = _land(281, False)
+    LEDGER.ok(any(op == 0x00A3 and v[:3] == [agents.GV_HEALTH_GAIN, 11, 10]
+                  for op, v in alive),
+              "the arm that can fail: Orison lands on a LIVING hurt ally as "
+              "[55, ally, caster, +h]", str([(hex(o), v) for o, v in alive]))
+    for skill, what in ((281, "Orison of Healing (target ally)"),
+                        (276, "Restore Condition (target OTHER ally)")):
+        dead, me = _land(skill, True)
+        LEDGER.ok([(op, v) for op, v in dead]
+                  == [(0x009F, [agents.GV_SKILL_FINISHED, 10, 0])]
+                  and me["casting"] is None,
+                  f"{what} whose target died during the cast: the caster's "
+                  f"close and NOTHING else -- no heal word on anybody, no "
+                  f"visual on the corpse -- and the caster is released",
+                  str([(hex(o), v) for o, v in dead]))
+    st = _world_ally()
+    me = st["agents"][10]
+    me["skills"], me["skill_ready"] = [(2, 3.0, 0.0)], [0.0]
+    me["casting"], me["cast_target"] = 0, 11
+    st["agents"][11].update(dead=True, health=0.0)
+    sent = []
+    authsrv.land_skill(
+        lambda op, vals, label="", quiet=False: sent.append((op, list(vals))),
+        st, 10, me, 1)
+    LEDGER.ok(not st["agents"][11]["dead"],
+              "and a RESURRECTION is untouched: a corpse is exactly what it "
+              "wants, and it still stands one up",
+              f"dead={st['agents'][11]['dead']}")
 
 
 def section_passive_hostiles():

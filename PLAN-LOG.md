@@ -27,6 +27,19 @@ move back.
 
 ---
 
+### ✅ CAST-TARGET-DIED 2026-09-17 — **an NPC's ally-target cast whose target died under it lands on nothing** (the owner: "Restore Condition got cast on a dead bandit ... definitely feels wrong")
+
+The PICK was never the fault — `allies_of` filters the dead — the LANDING was: a cast is a
+second long, `land_skill` never re-asked, and only a FOE-target cast passed through the
+tick's `target_dead` drop. Reproduced on `main` before the fix: Orison at a dead ally sent
+its heal word at the CASTER (`cast_recipient`'s fallback) and Restore Condition played
+its visual on the body. Now the cast ends — the caster's close, its recharge stands — and
+nothing lands; a resurrection returns earlier and is untouched. What retail sends for an
+NPC spell whose target dies under it is NOT OBSERVED; RECONSTRUCTION, said at the site.
+`test_agentlife.py` `section_cast_target_died`, 547 → 551. Same commit: `--enemy-health N`,
+a rig knob — the owner's hand-driven dagger run kills a 100-health target with one Death
+Blossom at rank 12 and cannot look at the third chain icon.
+
 ### ✅ DAGGERS on our own client 2026-09-17 — **two scripted loopback runs PASS; the dual floats two numbers, a critical draws the magenta +2; the chain icon was NOT on screen** ([studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md) §7)
 
 Harness `20260917T165523` (`--party daggers`) and `20260917T165940` (`--party daggers20`, a

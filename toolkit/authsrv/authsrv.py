@@ -21877,6 +21877,28 @@ def land_skill(send, state, agent_id, agent, conn_id):
         return
     # SLICE-H3: the cast's target may be a party body (a hostile's pick).
     _tid = agent.get("cast_target") or PLAYER_AGENT_ID
+    # THE TARGET DIED DURING THE CAST (the owner, 2026-09-17: "Restore
+    # Condition got cast on a dead bandit ... definitely feels wrong"). The
+    # PICK never chooses a corpse -- `allies_of` filters the dead -- but the
+    # cast is a second long, and nothing re-asked at the landing: the visual,
+    # the effect and the heal all resolved on a body the player had killed in
+    # between. A foe-target cast has always been dropped for this (the tick's
+    # own `target_dead` branch, before it reaches here); an ALLY-target one
+    # never passes through that branch, because its target is not the fight's.
+    # The cast ENDS -- the caster is released and its recharge stands, it did
+    # cast -- and nothing lands. What retail puts on the wire for a spell
+    # whose target dies under it is NOT OBSERVED for an NPC; the close we
+    # already send for every finished cast is the one message sent.
+    # RECONSTRUCTION. A resurrection is the exception by construction: it
+    # returned above, and a corpse is exactly what it wants.
+    if _tid != agent_id and target_dead(state, _tid):
+        agent["casting"] = None
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_SKILL_FINISHED, agent_id, 0],
+             f"agent {agent_id} finishes casting {skill_id} (its target died)")
+        print(f"[c{conn_id}] agent {agent_id}'s skill {skill_id} lands on "
+              f"NOTHING: agent {_tid} died during the cast", flush=True)
+        return
     _tbody = _tid != PLAYER_AGENT_ID and _tid in state.get("agents", {})
     # SLICE-H8: the caster's OWN rank in this skill's attribute when its row
     # carries `attributes`, else _rank -- and its own strike level
@@ -30994,6 +31016,13 @@ def main():
         WEAPON_GATE = False
         print("NO WEAPON GATE: an attack skill fires whatever the character "
               "holds (the pre-DAGGERS-B4 arm).")
+    if a.enemy_health is not None:
+        global ENEMY_MAX_HEALTH
+        if a.enemy_health < 1:
+            raise SystemExit("--enemy-health is a positive number of points")
+        ENEMY_MAX_HEALTH = int(a.enemy_health)
+        print(f"ENEMY HEALTH: the --enemy body has {ENEMY_MAX_HEALTH} points "
+              f"(a rig knob; the spawn row says 100).")
     if a.no_second_strike:
         global SECOND_STRIKE
         SECOND_STRIKE = False
