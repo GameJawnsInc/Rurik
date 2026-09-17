@@ -1633,6 +1633,10 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "+40 twice, and a 100-health target dies before the "
                          "chain's third icon can be looked at (DAGGERS, the "
                          "owner's hand-driven run, 2026-09-17).")
+    ap.add_argument("--no-area-damage", action="store_true",
+                    help="an attack skill's ADJACENT damage is not dealt: Death "
+                         "Blossom hits its target and nobody beside it. The "
+                         "revert for DAGGERS-B8 (studies/daggers F13).")
     ap.add_argument("--no-second-strike", action="store_true",
                     help="no double strike on a plain dagger swing, and a "
                          "dual attack strikes once. The revert for DAGGERS-B6 "
