@@ -699,6 +699,45 @@ verified = """No {{Skill progression}} template on the page at all, and the
 client agrees: args = 0, every set disabled. Two independent ways of saying
 this skill does not scale."""
 
+# DAGGERS-B2: the chain on [party.daggers]'s bar. The chain GRAMMAR (what each
+# counts as, what it must follow, that it wants daggers) is not here -- it is
+# the client's own `combo` / `combo_req` / `weapon_req` on the skills row.
+[skill_effect.782]
+scale_means = "Bleeding"
+[skill_effect.782.provenance]
+source = "wiki"
+page = 'GWW, "Jagged Strike", {{Skill progression}}, rev. 2026-06-24'
+verified = """Client: args = 2 (scale only), scale 5->20, bonus 0->0, Dagger Mastery,
+5 energy, recharge 2, activation 0.5. Wiki: one variable, `Bleeding duration` 5->20.
+The condition's seconds sit in the SCALE slot here where Sever Artery's sit in the
+bonus slot, which is why skill_condition reads either (DAGGERS-B2)."""
+
+[skill_effect.780]
+scale_means = "+ Damage"
+[skill_effect.780.provenance]
+source = "wiki"
+page = 'GWW, "Fox Fangs", {{Skill progression}}, rev. 2026-07-05'
+verified = """Client scale 10->35, args = 2. Wiki var1 `+ Damage` 10->35. "Cannot be
+blocked" is on the page and is NOT modelled."""
+
+[skill_effect.775]
+scale_means = "+ Damage"
+[skill_effect.775.provenance]
+source = "wiki"
+page = 'GWW, "Death Blossom", {{Skill progression}}, rev. 2026-07-05'
+verified = """Client scale 20->45, args = 2. Wiki var1 `+ Damage` 20->45 and var2
+`Damage (adjacent foes)` 20->45, the same endpoints. The adjacent-foe damage is NOT
+modelled; the +damage rides each of the dual's two strikes (WIKI "Dual attack": "the
+listed skill effect is applied twice, once for each strike")."""
+
+[skill_effect.781]
+scale_means = "+ Damage"
+[skill_effect.781.provenance]
+source = "wiki"
+page = 'GWW, "Moebius Strike", {{Skill progression}}, rev. 2026-07-05'
+verified = """Client scale 10->35, args = 2. Wiki var1 `+ Damage` 10->35. The recharge
+of every other attack skill below 50% health is on the page and is NOT modelled."""
+
 # ---------------------------------------------------------------- the player
 
 # The player's attribute ranks, as [attribute_id, rank] pairs.
@@ -1751,3 +1790,45 @@ adrenaline), Power Attack 322, Frenzy 346, Healing Signet 1, Resurrection Signet
 2, and (SLICE-H12) Bonetti's Defense 380 in the eighth slot -- a 75% block for \
 5..11 s that ends on a skill use and pays 5 energy a blocked melee attack. The sword \
 swings at 1.33 s (content [attack_speed.rates], WIKI) where the hammer swung at 1.75."""
+
+[party.daggers]
+hero = 3
+body = "academy_monk"
+skills = [281, 276, 2]
+level = 3
+health = 140
+energy = 30
+weapon = "staff"
+attributes = [[13, 3], [16, 2], [15, 1]]
+armor = 25
+damage = [3, 5]
+weapon_attribute = 13
+player_profession = 7
+player_energy = 25
+player_pips = 4
+player_level = 3
+player_health = 140
+player_attributes = [[29, 3], [35, 2]]
+player_points = 10
+player_weapon = "starter_daggers"
+player_skills = [782, 780, 775, 781, 783, 2]
+
+[party.daggers.provenance]
+source = "invented"
+note = """Ours (DAGGERS-B2/B3, 2026-09-17; studies/daggers/FINDINGS.md). The hero \
+half is [party.slice]'s, unchanged -- the Monk comes along. THE PLAYER is a \
+level-3 Assassin: `player_profession` 7, the pool 25 energy at 4 pips (WIKI, GWW \
+"Energy": base 20/2, Assassin +5/+2; CORROBORATED, the owner's own Assassin ran \
+property 43 at 0.0528 on a maximum of 25 on 20260817T183756, which is \
+wire_regen_rate(4, 25) -- pools.py), level 3 and health 140 as the slice's, ranks \
+Dagger Mastery (29) 3 and Critical Strikes (35) 2 = 6+3 = 9 of level 3's 10 points \
+(the owner's own level-3 Assassin on 20260819T132414 carried 29 at 2 and 30 at 1 \
+off 0x003A; this row spends on the two attributes the chain and the energy step \
+read), `player_weapon` the starter daggers ([item.starter_daggers]: one item in \
+the lead hand, no offhand -- retail's shape), and `player_skills` a whole chain: \
+Jagged Strike 782 (lead), Fox Fangs 780 (off-hand, follows a lead), Death Blossom \
+775 (dual, follows an off-hand), Moebius Strike 781 (off-hand, follows a DUAL), \
+Unsuspecting Strike 783 (a second lead, the one on the owner's tape), Resurrection \
+Signet 2. The chain grammar is the client's own (`combo`, `combo_req`). The \
+character still WEARS the base fixture's Warrior armour rows: what an Assassin \
+body draws under them is a client question no run has asked."""

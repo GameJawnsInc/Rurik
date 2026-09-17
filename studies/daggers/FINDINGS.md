@@ -24,8 +24,10 @@ wire shows the chain indicator message end to end. `0x005C`, which
 give a game meaning, is the combo icon on the target's health bar; and the single
 property-38 "reason 2" in the whole corpus, which [studies/skills](../skills/FINDINGS.md)
 §44.4 recorded as "a failed attack skill", failed **because it was an off-hand pressed on
-a target with no lead on it**. What the corpus cannot show is a dual attack landing, a
-double strike, or the Critical Strikes energy step — §5 is the capture that would.
+a target with no lead on it**. What that corpus could not show — a dual landing, a double
+strike, the Critical Strikes energy step, a re-lead — the owner captured the same day:
+**RUN-DAGGERS-1, §6**, which answered all five questions, refuted two of this document's
+own predictions, and turned up an attack skill's adjacent damage on the way.
 
 ---
 
@@ -159,12 +161,14 @@ skill on the same tape, it is not:
 |---|---|---|
 | at property 50 | `0x00A2 [62, me, -0.20]` — 5 of 25 energy | the same |
 | at the landing | `0x00E5 [me, 780, 0, 3]` | `0x00E5 [me, 780, 0, 3]` |
-| | `0x009F [46, me, 0]` | `0x005C [me, target, 2]` |
-| | **`0x00A0 [38, target, me, 2]`** | `0x00A3 [16, target, me, -0.1071]` |
-| | **`0x00E5 [me, 780, 0, 0]`** | — |
+| | `0x009F [46, me, 0]` | `0x009F [46, me, 0]` |
+| | **`0x00A0 [38, target, me, 2]`** | `0x005C [me, target, 2]` |
+| | **`0x00E5 [me, 780, 0, 0]`** | `0x00A3 [16, target, me, -0.1071]` |
 | | `0x00E3 [me, 780, 0]` | `0x00E3 [me, 780, 0]` |
 
-The energy IS debited, and the recharge (3 s, the table's own `recharge`) is started
+(The armed column's 46 was missing from this table's first cut: a `grep` pattern with a
+leading space dropped every `[46,` line. `chainjoin.py`'s census has it on 25 of 25 landed
+attack-skill hits.) The energy IS debited, and the recharge (3 s, the table's own `recharge`) is started
 **and zeroed in the same instant by a second `0x00E5` whose last field is 0**. The
 refused re-press was 0.4 s into skill 858's cast, not a recharge. → DAGGERS-Q3 is now a
 replication, and asks the same of a failed DUAL.
@@ -200,14 +204,14 @@ GWW, fetched 2026-09-17. All player-visible, so WIKI is strong here.
 | id | step | rests on |
 |---|---|---|
 | **DAGGERS-B1** ✅ 2026-09-17 | `skilltable.py`: read +0x14 and +0x24, emit `combo`, `combo_req`, `weapon_req`; `test_skilltable.py` locks §1's censuses and the 29-row join (ids only — no names in the repo). `content.py` needs no change (no per-field allowlist for kind `skills`). | F1-F3 |
-| **DAGGERS-B2** | A dagger item row (item_type 32, offhand empty), `WEAPON_TYPE_ATTRIBUTE` / `WEAPON_TYPE_RATE` entries, `PARTY_WEAPON_ITEMS["daggers"]` — a profession-7 party body cannot resolve a weapon today. | F4, F5 |
-| **DAGGERS-B3** | `player_profession` on the `[party.*]` row; today only `--spawn-profession`, unwired to the row's attributes and weapon. | audit |
-| **DAGGERS-B4** | Weapon gate on attack skills from `weapon_req`. What retail SENDS on a mismatch is unobserved — ship the refusal the server already uses (`0x00E2`) and label it RECONSTRUCTION. | F3 |
-| **DAGGERS-B5** | Chain state per (attacker, target): set on a chain skill's HIT, `0x005C` to the attacker only, clear at 15 s or death; unmet `combo_req` → F7's batch verbatim: energy debited, `0x00E5` recharge, 46, `[38, target, me, 2]`, `0x00E5` 0, `0x00E3`; no damage, no state. | F6, F7 |
-| **DAGGERS-B6** | Second strike: duals always, plain swings on the double-strike roll. Wire shape waits on Q1 / Q2. | §3 |
-| **DAGGERS-B7** | Critical Strikes: crit chance + energy on a critical hit. Wire shape waits on Q4. | §3 |
+| **DAGGERS-B2** ✅ 2026-09-17 | A dagger item row (item_type 32, offhand empty), `WEAPON_TYPE_ATTRIBUTE` / `WEAPON_TYPE_RATE` entries, `PARTY_WEAPON_ITEMS["daggers"]` — a profession-7 party body cannot resolve a weapon today. | F4, F5 |
+| **DAGGERS-B3** ✅ 2026-09-17 | `player_profession` on the `[party.*]` row; today only `--spawn-profession`, unwired to the row's attributes and weapon. | audit |
+| **DAGGERS-B4** ✅ 2026-09-17 | Weapon gate on attack skills from `weapon_req`. What retail SENDS on a mismatch is unobserved — ship the refusal the server already uses (`0x00E2`) and label it RECONSTRUCTION. | F3 |
+| **DAGGERS-B5** ✅ 2026-09-17 | Chain state per (attacker, target): set on a chain skill's HIT, `0x005C` to the attacker only, clear at 15 s or death; unmet `combo_req` → F7's batch verbatim: energy debited, `0x00E5` recharge, 46, `[38, target, me, 2]`, `0x00E5` 0, `0x00E3`; no damage, no state. | F6, F7 |
+| **DAGGERS-B6** ✅ 2026-09-17 | Second strike: duals always, plain swings on the double-strike roll. Wire shape waits on Q1 / Q2. | §3 |
+| **DAGGERS-B7** ✅ 2026-09-17 | Critical Strikes: crit chance + energy on a critical hit. Wire shape waits on Q4. | §3 |
 
-B1-B5 need no new capture. B6 and B7 do.
+B1-B5 needed no new capture; B6 and B7 were built the same evening on §6's shapes. `[party.daggers]` is the playable character: `--party daggers`. **DAGGERS-B8, open:** an attack skill's ADJACENT damage (F13) — Death Blossom's is decoded and not sent.
 
 ---
 
@@ -226,10 +230,83 @@ Dagger Mastery 12 (26 % double strike, ~1 swing in 4), Critical Strikes ≥ 8, a
 practice target that does not die inside the 15 s clock, which is the confound that cut
 six of seven lifetimes short in F6.
 
-**RUN-DAGGERS-1, staged 2026-09-17, not run.** `vault/plans/daggers_chain.txt` — eight
-steps, the predictions and their rivals pre-registered in the file's header, one meaning
-for F11 ("the chain icon on the target's bar just changed": the tape carries `0x005C`,
-only the operator sees what the client drew). Bar 782 / 780 / 775 / 781 and nothing else;
-Dagger Mastery 12, Critical Strikes 8. Its floor: ≥ 30 plain swings with ≥ 3 double, one
-landed dual with the target alive 16 s later, one re-lead pair, two cold presses each of
-780 and 775, three critical hits below full energy.
+---
+
+## 6. RUN-DAGGERS-1 — run and scored, 2026-09-17 (DAGGERS-F9..F13)
+
+Capture **`20260917T160915`**, connection 52569, the owner's new PvP Assassin on the Isle
+of the Nameless; plan `vault/plans/daggers_chain.txt` sealed and the seals AGREE. Dagger
+Mastery 12 and Critical Strikes 8 off `0x003A`, 25 energy at rate 0.0528 (4 pips), PvP
+Daggers 7-17 with no energy modifier (the owner's tooltip). The target was the **Master of
+Damage** rather than a Suit — it revives itself — with two 480-health neighbours inside
+adjacent range, which is what exposed F12. The owner's F11 marks are dense in step 3 and
+thin after it; nothing below leans on them. Every number is
+`python toolkit/authsrv/chainjoin.py --capture 20260917T160915`, pinned by
+`test_daggers.py` §8.
+
+### DAGGERS-F9 — the chain state: sent on a CHANGE, clocked from the LAST HIT. OBSERVED.
+
+24 × `0x005C`: seven 1s, seven 2s, seven 3s, three 0s. **Q5's prediction was REFUTED in
+half:** a second and a third lead on a target already at 1 (404.246, 412.539) sent **no**
+`0x005C` — the message goes out only when the state changes — **but each restarted the
+clock**: that target's 0 came **15.000 s after the third lead**, 31.442 s after the set.
+All three clears are 15.000 s after the last chain hit, to the millisecond, and the
+August tape's "15.66 s" is the same rule: its lead was 858, three projectiles, the last
+landing 0.66 s after the first (corpus-wide 4 of 4, 14.996-15.000). State 3 lasts the same
+15.000 s (2 of 2), and an off-hand that follows a dual puts the state back to 2.
+
+### DAGGERS-F10 — the dual strikes twice, half a second apart. OBSERVED, 7 of 7.
+
+Two batches. At the `0x00E5`: the recharge, 46, **the first damage word**. Then
+**0.487-0.504 s later**: `0x009F [47, me, 0]`, **the second word**, the adjacent words
+(F13), `0x005C [me, target, 3]`, `0x00E3`. **Q1's prediction was REFUTED in its detail:**
+the state rides the SECOND strike, behind its word — where a lead's and an off-hand's
+ride AHEAD of theirs. The rolls are independent (one dual is a plain word then a
+critical). `[47, me, 0]` opens the second strike on 11 of 11, landed or failed — property
+47 had no reading in this repo before today.
+
+A COLD dual (4 of 4): `0x00E5` recharge, 46, `[38, target, me, 2]`, `0x00E5` 0 — then
+0.499-0.510 s later `[47, me, 0]`, **a second `[38, target, me, 2]`**, `0x00E3`. WIKI's
+"Failed dual attacks still cause two attacks, but none will hit", on the wire. The cold
+off-hand replicated F7 8 of 8, its re-press accepted 0.36 s later: 12 cold presses, 12
+zeroed recharges, energy debited every time (the owner saw the bar drop and the word
+"fail").
+
+### DAGGERS-F11 — the double strike. OBSERVED, 16 of 64 plain swings.
+
+25 % at Dagger Mastery 12 (WIKI: 2 % + 2 % a rank = 26 %). The second damage word comes
+**0.500 s behind the first** (0.478-0.511), opened by **`0x009F [2, me, 0]`** (16 of 16;
+property 2 had no reading either). It has no bracket of its own — the close (1) rode the
+FIRST word, 16 of 16 — and **the next swing is not delayed**: start-to-start p50 1.320 s
+after a double against 1.329 s after a single. Independent rolls: 11 plain/plain, 4
+critical/plain, 1 critical/critical. Half a second is one number at one weapon speed;
+whether it scales with an attack-speed boost is n = 0.
+
+### DAGGERS-F12 — Critical Strikes pays on 0x00A3, and draws a callout. OBSERVED, 26 of 26.
+
+Every critical word of the observer's is preceded, in its own batch and in this order, by
+**`0x00A3 [52, me, me, +0.08]`** and **`0x00A0 [54, me, me, 2]`** — 2 energy of 25 at rank 8,
+WIKI's table. Q4 predicted the value and **got the opcode wrong**: the gain is on the
+float-TARGET message with the observer in both agent slots, not on `0x00A2` where a
+shrine's refill rides, and the first scoring pass reported "0 gains" because it looked
+there. 54 is the floating "+2" `agents.PROP_ENERGY_GAIN_CALLOUT` already named. It is sent
+with the pool full too (18 of 18 in the plain-swing minute, no skill pressed), so the server does not clamp the
+message, only the pool.
+
+### DAGGERS-F13 — an attack skill's ADJACENT damage is property 55. OBSERVED, 28 of 28.
+
+The owner noticed Death Blossom hitting the neighbours. On the wire: beside each of a
+landed dual's two words, **`0x00A3 [55, neighbour, me, -0.0833]`** to each of the two
+adjacent foes — 28 words over 7 duals. −0.0833 is **40 of 480**, and 40 is Death Blossom's
+20..45 at rank 12 exactly: the adjacent damage ignores armour, is never critical, and is
+identical on both strikes, where the target's own word varies with the roll. Property 55
+is the word this repo calls the heal; `test_mechanics.py` P1 ("positive in 97 %+") went
+red on these 28 and is now judged without this tape, with a P1b that says what this
+tape's negatives are. Not yet sent by the server — DAGGERS-B8.
+
+### What the run did not settle
+
+A lead that MISSES (does it set the state?), a first strike that misses ahead of a double
+or a dual's second, the attacker's own death, a chain opened with a non-dagger lead
+(2116), and the half second under an attack-speed boost are all n = 0. The server's
+answers to each are labelled RECONSTRUCTION at the call site.

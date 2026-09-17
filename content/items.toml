@@ -322,6 +322,44 @@ Starter Shield's 3 in place of the tape's 0. The slice archive binds file 176078
 fourth field, non-zero on retail's wire exactly where the character holds a \
 shield (14 of 56 sets in 20260817T231139), and 0x006E's position 1."""
 
+[item.starter_daggers]
+name = "starter daggers (the level-3 Assassin henchman's, retail wire; the range word the owner's own pair's)"
+file_id = 0x2AE90              # 175760
+item_type = 32                 # Daggers: the wire's number, OBSERVED (studies/daggers F4)
+dye_tint = 0
+dye_colors = 0
+materials = 0
+unk1 = 0
+flags = 0x22200100
+value = 0
+model_id = 7931
+quantity = 1
+enc_name = [0x2186]            # 8582, the generic name id every henchman weapon carries
+# Two modifier words, both retail's. The first is the damage-TYPE line (587 arg
+# 1, piercing -- the sword's is arg 2, slashing). The second is the damage
+# RANGE word (584): the henchman's pair reads arg 5 arg2 3 (3-5); this one is
+# the word the OWNER'S OWN daggers carried on the same tape, arg 3 arg2 1 --
+# 1-3, which is WIKI's Starter Daggers ("Piercing Dmg: 1-3") with nothing
+# composed. A pair of daggers is ONE item in the lead hand; the off hand is
+# empty on retail's wire (3 of 3 profession-7 bodies), so no offhand row exists.
+modifiers = [0x24B80100, 0xA4880301]
+
+[item.starter_daggers.provenance]
+source = "capture"
+capture = "20260819T132414"
+origin = "live"
+verified = """OBSERVED on ArenaNet's own wire (DAGGERS-B2, 2026-09-17): the level-3 \
+Assassin henchman's leadhand, named by its 0x006D [agent 30, item, 0] and declared \
+by the same connection's 0x0161 -- file 175760, type 32, flags 0x22200100, model \
+7931, name id 8582, the type word 0x24B80100, byte for byte; the same item on four \
+more connections of 20260817T183756 and this tape (agent 6). The range word \
+0xA4880301 is the one the OWNER'S character's own daggers carried in this tape's \
+0x0147 weapon set (file 0x80025E00, model 6387 -- a deferred-fetch file the run \
+archive is not asked to bind), and `itemmods.py --decode` reads it as 584 arg 3 \
+arg2 1; WIKI (GWW "Starter Daggers" Stats, rev. 2014-07-13) says 1-3. The run \
+archives bind file 175760 (archive.binds_plainly, row 76047 on run/slice and on \
+2026-09-01_44fbd68767a8; the sword's 76203 re-read beside it as the control)."""
+
 [item.backpack]
 name = "Backpack (the first item container)"
 file_id = 0x8001B536

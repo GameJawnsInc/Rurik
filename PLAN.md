@@ -1918,11 +1918,15 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 **Daggers** — [studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md)
 
-* **DAGGERS-B2..B5, buildable now.** The dagger item row, the profession knob on the party
-  row, the weapon gate (`weapon_req`, every profession) and the `0x005C` chain state with its
-  reason-2 failure need no new capture (daggers §4).
-* **DAGGERS-Q1..Q5, RUN-DAGGERS-1 staged.** A landed dual, a double strike, a failed dual,
-  the Critical Strikes energy step and a re-lead are all n = 0 in the corpus (daggers §5).
+* **DAGGERS, the loopback run.** `--party daggers` has never met a client: what an
+  Assassin body draws under the base fixture's Warrior armour rows, the chain icon, the
+  double strike and the floating +energy on OUR client are all unseen (daggers §6).
+* **DAGGERS-B8, adjacent damage.** Death Blossom's damage to adjacent foes is decoded
+  (property 55, −40/480, armour-ignoring, 28 of 28) and not sent; nor is any attack
+  skill's (daggers F13).
+* **DAGGERS, n = 0 on retail.** A lead that misses, a missed first strike ahead of a
+  second, the attacker's own death, a chain opened by 2116 with a sword, the half second
+  under an attack-speed boost (daggers §6, last paragraph).
 
 **Monster AI** — [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md)
 

@@ -841,13 +841,36 @@ except Exception as exc:                                     # noqa: BLE001
 print("== 20. the heal batch on retail's wire, and the overheal (healjoin) ==")
 try:
     import healjoin
-    hs = healjoin.score(healjoin.census())
+    _hrows = healjoin.census()
+    hs = healjoin.score(_hrows)
     check(hs["n"] >= 800, f"the live corpus holds property-55 gains (n={hs['n']})")
-    check(hs["positive"] >= 0.97 * hs["n"],
+    # RUN-DAGGERS-1 RE-PIN (2026-09-17). The owner's dagger tape 20260917T160915
+    # put 28 NEGATIVE 55s on the corpus in one afternoon -- Death Blossom's
+    # damage to the two foes ADJACENT to its target, [55, neighbour, observer,
+    # -40/480] on both strikes of all 7 landed duals (studies/daggers F12) --
+    # and "97%+ positive" fell to 95.9% on confirming evidence, not on a
+    # defect. So the claim is split rather than its floor lowered: P1 is
+    # judged on every OTHER tape, where it still holds, and P1b says what this
+    # tape's negatives ARE, exactly, so a stray one still reddens.
+    _DB_TAPE = "20260917T160915"
+    _h55 = [r for r in _hrows if r["prop"] == healjoin.PROP_HEAL]
+    _rest = [r for r in _h55 if r["capture"] != _DB_TAPE]
+    check(sum(1 for r in _rest if r["value"] > 0) >= 0.97 * len(_rest)
+          and len(_rest) >= 800,
           "P1: 55 is the health-GAIN direction, positive in 97%+ (the "
           "negatives are armour-ignoring DAMAGE: Empathy's trigger on "
-          "20260913T210901, MANTID)",
-          f"{hs['positive']} of {hs['n']}")
+          "20260913T210901, MANTID) -- judged without the dagger tape",
+          f"{sum(1 for r in _rest if r['value'] > 0)} of {len(_rest)}")
+    _db = [r for r in _h55 if r["capture"] == _DB_TAPE and r["value"] <= 0]
+    check(len(_db) == 28 and not any(r["self"] for r in _db)
+          and {round(r["value"], 4) for r in _db} == {-0.0833}
+          and len({r["target"] for r in _db}) == 2,
+          "P1b: the dagger tape's negatives are ONE thing -- 28 words of "
+          "-40/480 dealt by the observer onto two neighbours, never a self "
+          "word: an attack skill's ADJACENT damage rides 55, armour-ignoring, "
+          "where its target's rides 16/17",
+          f"n={len(_db)}, values { {round(r['value'], 4) for r in _db} }, "
+          f"targets { {r['target'] for r in _db} }")
     check(hs["within_known"] >= 0.85 * hs["n"],
           "P2: a heal's same-agent siblings are messages this server already "
           "sends (58, the 20/21 visuals, 8, 42, another 55) in 85%+ of batches "

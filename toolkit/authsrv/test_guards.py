@@ -654,7 +654,18 @@ def section_concurrency():
     # punishment (Irresistible Blow) lands the row's damage as an exact hit
     # from inside the blocked strike, same thread by construction; a
     # self-call adds no thread, so it is allowed here by name.
-    check(callers == {"_land_player_swing", "cast_tick", "hit_enemy"}
+    # DAGGERS-B6 (2026-09-17): two more, and the walk goes one level up for
+    # each exactly as it does for _land_player_swing. `dual_second_strike` is
+    # cast_tick's helper and nothing else's; `second_strike_tick` (a plain
+    # swing's double strike) is called from the world tick's own loop, beside
+    # attack_tick -- the one caller with no enclosing `def` the walk can name,
+    # so it is pinned by the line it sits on instead.
+    _tick_line = [l for l in src if "second_strike_tick(send, state, conn_id)" in l
+                  and not l.lstrip().startswith("def ")]
+    check(callers == {"_land_player_swing", "cast_tick", "hit_enemy",
+                      "dual_second_strike", "second_strike_tick"}
+          and callers_of("dual_second_strike") == {"cast_tick"}
+          and len(_tick_line) == 1 and "# DAGGERS-B6" in _tick_line[0]
           and callers_of("_land_player_swing") == {"attack_tick"},
           "hit_enemy is reached from the WORLD TICK ONLY",
           f"callers={sorted(callers)}, _land_player_swing's="

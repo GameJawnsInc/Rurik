@@ -27,6 +27,34 @@ move back.
 
 ---
 
+### ✅ DAGGERS-B2..B7 LANDED + RUN-DAGGERS-1 SCORED 2026-09-17 — **an Assassin with daggers plays a whole chain on our server; the owner's capture answered all five questions and refuted two predictions** ([studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md) §4, §6)
+
+`--party daggers`: profession 7 on 25 energy / 4 pips (the rate derived, 0.0528 — the
+owner's retail Assassin's), the starter daggers (ItemType 32, one item, the owner's own
+1-3 word), a bar that is a whole chain. **B4** an attack skill is held to `weapon_req`
+(bare `0x00E2`, RECONSTRUCTION; `--no-weapon-gate`). **B5** `chain.py` + `0x005C`: state
+per target, sent on a CHANGE, 15 s from the LAST chain hit, cleared at the target's death;
+an unmet `combo_req` is accepted and FAILS — energy, `0x00E5`, 46, `[38, target, me, 2]`,
+`0x00E5` 0, `0x00E3` (`--no-chain-state`). **RUN-DAGGERS-1** (`20260917T160915`, the
+owner's PvP Assassin on the Master of Damage, plan sealed, seals AGREE), scored by the new
+`chainjoin.py`: a re-lead sends nothing and restarts the clock (REFUTED: "a second state
+1"); the dual's state 3 rides its SECOND strike 0.5 s behind the first, opened by
+property 47 (REFUTED: "with the first word"); a cold dual sends two fail words (predicted);
+16 of 64 plain swings doubled, the second word 0.500 s behind the first behind property 2,
+the next swing not delayed; 26 of 26 criticals pay `0x00A3 [52, me, me, +0.08]` then
+`0x00A0 [54, me, me, 2]` (the value predicted, the OPCODE wrong — the first scoring pass
+read `0x00A2` and reported zero). **B6/B7** built on those shapes the same evening
+(`--no-second-strike`, `--no-critical-strikes`). Found on the way: Death Blossom's
+adjacent damage is property 55, −40/480, armour-ignoring, 28 of 28 — decoded, NOT sent
+(DAGGERS-B8, open). `test_daggers.py` 67 checks. The weapon gate reddened three fixtures
+that press a bow or sword skill with the hammer (gate off in their `main()`, said why);
+the tape reddened `test_pools` 2f and `test_mechanics` P1 on confirming evidence (each
+re-pinned with what the new rows ARE, not with a lower floor). NOT from this arc and red on
+`main` too: `test_adrenwire`, `test_itemmods`, `test_movesync`, `test_resyncscore` —
+corpus counts moved by the day's tapes. NOT RUN ON A CLIENT: what an Assassin body draws
+under the base fixture's Warrior armour rows, and the chain icon on our own client, are
+the next loopback run's questions.
+
 ### ✅ DAGGERS-B1 LANDED 2026-09-17 — **the skill record's chain fields and weapon mask are emitted** ([studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md) §1, §4)
 
 `skilltable.py` reads `combo_req` (+0x14) and `weapon_req` (+0x24) and emits them with

@@ -158,6 +158,12 @@ HERO_P41_SEQS = {(20,), (20, 17, 14)}
 # Energy"), and two 1/19 gains followed. The shrine rise (both agents at
 # 340.21 s) is 1.0, as the three earlier tapes' were.
 SIGNET_GAINS = {("20260914T005758", 29): (0.2631579041481018, 0.05263157933950424)}
+# RUN-DAGGERS-1 (2026-09-17): property 52 is ALSO what a critical hit pays a
+# character with Critical Strikes -- the owner's PvP Assassin (agent 25) at
+# rank 8 took f32(2 / 25) on 26 of its 26 criticals, on 0x00A3 as
+# [52, self, self, fraction] with a 0x00A0 [54, self, self, 2] behind it
+# (studies/daggers F11). Neither a rise nor a signet, so it is its own row.
+CRITICAL_GAINS = {("20260917T160915", 25): (0.07999999821186066,)}
 OP_MORALE = 0x009C          # [agent, morale]: 100 is none, 85 one death, ...
 # RB2 RE-PIN (2026-09-17): the owner died three times on 20260917T090355 and
 # the Warrior's maximum went 20 -> 17 -> 14 -> 11 at morale 85 / 70 / 55, pips
@@ -717,10 +723,12 @@ def section_corpus_oracle():
     LEDGER.ok(len(gains) >= 1
               and all(g["value"] == 1.0
                       or g["value"] in SIGNET_GAINS.get((g["stamp"], g["agent"]), ())
+                      or g["value"] in CRITICAL_GAINS.get((g["stamp"], g["agent"]), ())
                       for g in gains)
               and sum(1 for g in gains if g["value"] == 1.0) >= 5,
               f"property 52 appears {len(gains)} time(s): 1.0 at every shrine or "
-              f"timer rise, and 5/19 = 25 % at the one SIGNET raise (JARIN)",
+              f"timer rise, 5/19 = 25 % at the one SIGNET raise (JARIN), and 2/25 "
+              f"on each of an Assassin's criticals (RUN-DAGGERS-1)",
               f"{gains} -- a resurrect, in the batch where the death bit clears, "
               f"property 43 returns to the agent's rate and property 55 (the "
               f"health half) also carries exactly 1.0. n=1 is n=1: `refill` "
@@ -1984,6 +1992,13 @@ def section_refusal_silent():
 
 
 def main():
+    # DAGGERS-B4 (2026-09-17): this file presses Sever Artery (382, a SWORD attack: weapon_req 0x80)
+    # with the base fixture's HAMMER in hand, which the weapon gate now
+    # refuses. What is measured here is the cast cycle, not weapon
+    # legality -- that is test_daggers.py section 4 -- so the gate is off
+    # for this process, the same arm `--no-weapon-gate` gives a session.
+    import authsrv as _authsrv_gate
+    _authsrv_gate.WEAPON_GATE = False
     section_quantum()
     section_corpus_oracle()
     section_energy_pool()
