@@ -27,6 +27,22 @@ move back.
 
 ---
 
+### ✅ DAGGERS-B8 LANDED 2026-09-17 — **Death Blossom hits the foes beside its target, in retail's batch order, with the client's own radius** ([studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md) F13)
+
+The owner noticed it on RUN-DAGGERS-1; the tape had it 28 of 28: `0x00A3 [55, neighbour,
+me, -40/480]` beside each landed strike, armour-ignoring, never critical. Built the same
+day. The RADIUS is read, not typed — the skill record's f32 at +0x6C, whose four commonest
+values over the corpus are 156 / 240 / 312 / 1000 (`test_skilltable` §9, 56 → 57) and
+775's is 156; `skilltable.py` emits `aoe_range`, the vault table and the fourteen 38888
+override rows re-emitted, additions only. The AMOUNT fell out: the client's interpolator
+on 775's scale slot at rank 12 is 40. `strike_adjacent` runs behind each LANDED strike's
+word and ahead of the `0x005C` (the word, the 55s; `[47]`, the word, the 55s, the state);
+a failed dual reaches nobody; a body's maximum is declared only when it moved
+(`armour_ignoring_damage(declare_max="stale")`, the tape's one `[42]` per body). Opt-in
+per content row (`adjacent_damage = "scale"`); `--no-area-damage` the control.
+`test_daggers.py` §9, 67 → 76, on retail's own geometry (78 u, 94 u) plus a body past the
+radius, a corpse and an ally. NOT on a client yet.
+
 ### ✅ DAGGERS chain icon CONFIRMED on our client 2026-09-17 — **the owner, by hand: "confirmed on the health, the 3 icons, and the 15s fade"** ([studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md) §7)
 
 `--party daggers20 --enemy-health 2000`, the Hatcher clicked, lead / off-hand / dual off

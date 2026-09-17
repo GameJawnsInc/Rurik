@@ -211,7 +211,7 @@ GWW, fetched 2026-09-17. All player-visible, so WIKI is strong here.
 | **DAGGERS-B6** ✅ 2026-09-17 | Second strike: duals always, plain swings on the double-strike roll. Wire shape waits on Q1 / Q2. | §3 |
 | **DAGGERS-B7** ✅ 2026-09-17 | Critical Strikes: crit chance + energy on a critical hit. Wire shape waits on Q4. | §3 |
 
-B1-B5 needed no new capture; B6 and B7 were built the same evening on §6's shapes. `[party.daggers]` is the playable character: `--party daggers`. **DAGGERS-B8, open:** an attack skill's ADJACENT damage (F13) — Death Blossom's is decoded and not sent.
+B1-B5 needed no new capture; B6 and B7 were built the same evening on §6's shapes. `[party.daggers]` is the playable character: `--party daggers`. **DAGGERS-B8 ✅ 2026-09-17:** an attack skill's ADJACENT damage (F13), `--no-area-damage` the control.
 
 ---
 
@@ -302,7 +302,20 @@ adjacent foes — 28 words over 7 duals. −0.0833 is **40 of 480**, and 40 is D
 identical on both strikes, where the target's own word varies with the roll. Property 55
 is the word this repo calls the heal; `test_mechanics.py` P1 ("positive in 97 %+") went
 red on these 28 and is now judged without this tape, with a P1b that says what this
-tape's negatives are. Not yet sent by the server — DAGGERS-B8.
+tape's negatives are.
+
+**DAGGERS-B8, shipped 2026-09-17.** The RADIUS is the client's own: the skill record's
+f32 at **+0x6C** (`aoe_range`; the name is UPSTREAM, GWCA). Over the player corpus its four
+commonest values are **156, 240, 312 and 1000** — the game's adjacent / nearby / in the
+area / earshot radii (WIKI "Area of effect" quotes 240 and 1000 verbatim, and "Range" puts
+melee's 144 "slightly smaller than" adjacent) — and Death Blossom's is 156; the tape's two
+neighbours stood 78 u and 94 u from the target, inside it. The AMOUNT fell out rather than
+being typed: the client's interpolator on 775's scale slot at rank 12 is **40**, the tape's
+−40/480. The maximum: `[42, neighbour, 480]` rides ahead of the FIRST adjacent word on each
+body and none of the 13 after — hit_enemy's own "first hit declares" rule, which
+`armour_ignoring_damage` now takes as `declare_max="stale"`. Opt-in per content row
+(`adjacent_damage = "scale"`), because Cyclone Axe is "adjacent" too and is a different
+mechanic. The player's strike only; an NPC's cast is still single-target.
 
 ### What the run did not settle
 

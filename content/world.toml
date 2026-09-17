@@ -722,12 +722,16 @@ blocked" is on the page and is NOT modelled."""
 
 [skill_effect.775]
 scale_means = "+ Damage"
+adjacent_damage = "scale"
 [skill_effect.775.provenance]
 source = "wiki"
 page = 'GWW, "Death Blossom", {{Skill progression}}, rev. 2026-07-05'
 verified = """Client scale 20->45, args = 2. Wiki var1 `+ Damage` 20->45 and var2
-`Damage (adjacent foes)` 20->45, the same endpoints. The adjacent-foe damage is NOT
-modelled; the +damage rides each of the dual's two strikes (WIKI "Dual attack": "the
+`Damage (adjacent foes)` 20->45, the same endpoints -- ONE client slot for two wiki
+variables, so `adjacent_damage = "scale"` names the slot the adjacent foes take
+(DAGGERS-B8). OBSERVED, RUN-DAGGERS-1: 28 of 28 adjacent words are -40/480 at rank 12,
+armour-ignoring, on property 55, beside each landed strike. The RADIUS is the skills
+row's own `aoe_range` (156). The +damage rides each of the dual's two strikes (WIKI "Dual attack": "the
 listed skill effect is applied twice, once for each strike")."""
 
 [skill_effect.781]

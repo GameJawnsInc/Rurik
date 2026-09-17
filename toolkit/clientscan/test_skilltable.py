@@ -165,19 +165,20 @@ WEAPON_DAGGERS = 0x08
 MASTERY_BIT = {18: 0x01, 25: 0x02, 29: 0x08, 19: 0x10, 41: 0x20, 37: 0x40,
                20: 0x80}
 
-# FLOOR 56 = every check this file executes on a real client binary, counted
+# FLOOR 57 = every check this file executes on a real client binary, counted
 # from a green run on 2026-08-14 against Gw.exe: 3 structural (§1) + 4 corpus
 # (§2) + 5 wiki joins (§3: two adrenaline, one rival-rule refutation, and the
 # 15/25-energy pair) + 4 text-resolution (§4) + 2 build counts (§5) + 8
 # content-emitter checks (§6, added with --emit-content) + 8 scaling-window
 # checks (§7: 4 endpoint reproductions + 4 green-render-rule) + 12 wiki
 # third-witness checks (§8: 4 endpoint joins, 4 no-unlisted-green, 4 costs)
-# + 10 chain-and-weapon checks (§9, 2026-09-17, floor 46 -> 56). None of them is
+# + 10 chain-and-weapon checks (§9, 2026-09-17, floor 46 -> 56) + 1 AoE-radius
+# check (DAGGERS-B8, 56 -> 57). None of them is
 # conditional once the binary opens, so a run that reports fewer has lost a
 # section rather than passed -- which is exactly the failure §3 would hide,
 # since dropping the wiki join is what turns this file back into our decoder
 # agreeing with itself.
-LEDGER = checks.Ledger("skill table", floor=56)
+LEDGER = checks.Ledger("skill table", floor=57)
 check = checks.adopt(LEDGER)
 
 
@@ -475,6 +476,17 @@ def main():
     check(not bad and len(sin) >= 30,
           f"every Assassin chain ATTACK wants daggers and nothing else "
           f"(+0x24 == 0x08 on {len(sin)} rows)", str(bad[:5]))
+    # DAGGERS-B8: +0x6C is the area-of-effect radius. The value SET is what
+    # could refute it -- a wrong offset has no reason to land on the game's
+    # four named radii -- and 775's 156 is the one the dagger tape exercised.
+    import collections as _collections
+    radii = _collections.Counter(r["aoe_range"] for r in inc if r["aoe_range"])
+    top4 = {k for k, _n in radii.most_common(4)}
+    check(top4 == {156.0, 240.0, 312.0, 1000.0} and by_id[775]["aoe_range"] == 156.0,
+          "+0x6C is the AoE radius: its four commonest values are adjacent "
+          "156, nearby 240, in the area 312 and earshot 1000, and Death "
+          "Blossom's is 156", f"{radii.most_common(6)}, 775 -> "
+          f"{by_id[775]['aoe_range']}")
     check(by_id[2116]["weapon_req"] == 0xB9,
           "and the lone outsider opens a chain with any melee weapon",
           f"2116 +0x24 = {by_id[2116]['weapon_req']:#x}")
