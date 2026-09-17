@@ -129,6 +129,7 @@ import chatdefs  # noqa: E402
 import charstore  # noqa: E402
 import effects  # noqa: E402
 import pools  # noqa: E402
+import chain  # noqa: E402
 import wearmap  # noqa: E402
 import morale  # noqa: E402
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
@@ -3079,6 +3080,213 @@ def agent_health_fraction(state, target_id):
     row = state.get("agents", {}).get(target_id) or {}
     mx = float(row.get("max_health") or 0.0)
     return (float(row.get("health", mx)) / mx) if mx else 1.0
+
+
+# ---- DAGGERS-B4/B5: the weapon gate and the attack chain --------------------
+#
+# studies/daggers/FINDINGS.md. Both read the client's own skill record
+# (`weapon_req`, `combo`, `combo_req` -- skilltable.py emits them since
+# DAGGERS-B1); a skills table emitted before that carries none of the three
+# and both gates read 0 = "asks for nothing", which is every skill's behaviour
+# before today.
+#
+# s2c 0x005C [attacker, target, state] -- the chain icon on the target's
+# health bar, drawn for the attacker only. OBSERVED 15 times on retail's wire
+# (daggers F6); the handler and the 0..3 bound are studies/newopcodes'.
+GAME_SMSG_AGENT_COMBO_STATE = 0x005C
+# B4. No profession's attack skills were held to a weapon before this. WHAT
+# RETAIL SENDS on a mismatch is NOT OBSERVED (the client very likely never
+# sends the press): the answer is the bare release, the shape the press
+# handler's own comment prescribes for "a refusal we cannot name a reason
+# for". RECONSTRUCTION. --no-weapon-gate is the control.
+WEAPON_GATE = True
+# B5. --no-chain-state is the control: no 0x005C, and an off-hand or a dual
+# lands whatever it follows (the behaviour before today).
+CHAIN_STATE = True
+
+
+def skill_chain_fields(skill_id):
+    """(combo, combo_req, weapon_req) off the skills row; zeros when the row
+    or the fields are missing."""
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return 0, 0, 0
+    return (int(row.get("combo", 0)), int(row.get("combo_req", 0)),
+            int(row.get("weapon_req", 0)))
+
+
+def weapon_satisfies(skill_id):
+    """Does what the player HOLDS satisfy this skill's `weapon_req` mask?"""
+    req = skill_chain_fields(skill_id)[2]
+    if not req:
+        return True
+    held = agents.PLAYER_WEAPON if EQUIP_WEAPON else None
+    bit = WEAPON_TYPE_REQ_BIT.get(int((held or {}).get("item_type", -1)), 0)
+    return bool(req & bit)
+
+
+def player_chain(state):
+    table = state.get("chain")
+    if table is None:
+        table = state["chain"] = chain.ChainTable()
+    return table
+
+
+def chain_send(send, target_id, value, why):
+    send(GAME_SMSG_AGENT_COMBO_STATE, [PLAYER_AGENT_ID, target_id, value],
+         f"chain state on agent {target_id}: "
+         f"{chain.STATE_NAMES.get(value, value)} ({why})")
+
+
+def chain_clear(send, state, target_id, why):
+    """Take a target's icon down -- at its death, in the dead bit's own
+    instant (retail, 6 of 6)."""
+    if CHAIN_STATE and player_chain(state).clear(target_id):
+        chain_send(send, target_id, 0, why)
+
+
+def chain_clear_all(send, state, why):
+    """The ATTACKER died. WIKI (GWW "Dagger attack"): "The icon also
+    disappears if the user dies, and does not reappear if the user is
+    resurrected." The wire for it is NOT OBSERVED; a 0 per live icon is the
+    one message the client has for it. RECONSTRUCTION."""
+    if not CHAIN_STATE:
+        return
+    table = player_chain(state)
+    now = time.time()
+    for target_id in sorted(table.rows):
+        if table.state_on(target_id, now):
+            chain_send(send, target_id, 0, why)
+    table.rows.clear()
+
+
+def chain_tick(send, state, conn_id):
+    """The ~15 s clock: a 0 for every icon that ran out."""
+    if not CHAIN_STATE or not state.get("chain"):
+        return
+    table = player_chain(state)
+    for target_id in table.expired(time.time()):
+        table.clear(target_id)
+        chain_send(send, target_id, 0, f"{chain.CHAIN_SECONDS:.0f} s ran out")
+        print(f"[c{conn_id}] the chain on agent {target_id} ran out "
+              f"[DAGGERS-B5]", flush=True)
+
+
+# ---- DAGGERS-B6/B7: the second strike and Critical Strikes ------------------
+#
+# All OBSERVED on RUN-DAGGERS-1 (20260917T160915; studies/daggers F10-F12).
+# A DOUBLE STRIKE is a second damage word 0.500 s behind the first (0.478 ..
+# 0.511, n = 16), opened by 0x009F [2, player, 0], with no bracket of its own:
+# the close rode the first word and the next START comes at the usual 1.33 s
+# (p50 1.320 after a double against 1.329 after a single). 16 of 65 plain
+# swings doubled at Dagger Mastery 12 = 24.6 %; WIKI: 2 % + 2 % a rank = 26 %.
+# The two rolls are independent (11 plain/plain, 4 critical/plain, 1 both).
+# A DUAL's second strike is the same half second behind its first, opened by
+# [47, player, 0]; the 0x005C and the 0x00E3 wait for it; a FAILED dual sends
+# its second fail word there (4 of 4). --no-second-strike is the control.
+SECOND_STRIKE = True
+SECOND_STRIKE_S = 0.5
+DOUBLE_STRIKE_BASE = 0.02          # WIKI (GWW "Double strike"): inherent 2 %
+DOUBLE_STRIKE_PER_RANK = 0.02      # ... and 2 % a rank of Dagger Mastery
+ITEM_TYPE_DAGGERS = 32
+# CRITICAL STRIKES (attribute 35). +1 % critical chance a rank (WIKI, the
+# attribute's own description), and energy on a critical: 1 / 2 / 3 / 4 from
+# ranks 3 / 8 / 13 / 18 (WIKI's table) = (rank + 2) // 5. OBSERVED at rank 8:
+# 26 of 26 criticals carry +0.08 of a 25 maximum -- 2 energy -- as
+# 0x00A3 [52, player, player, fraction] then 0x00A0 [54, player, player, 2]
+# (the floating "+2"), in that order ahead of the critical's own word, and at
+# FULL energy too (18 of 18 in the plain-swing minute). --no-critical-strikes
+# is the control.
+CRITICAL_STRIKES = True
+ATTR_CRITICAL_STRIKES = 35
+
+
+def critical_strikes_rank(state):
+    try:
+        return int(attribute_state(state).effective_of(ATTR_CRITICAL_STRIKES))
+    except Exception:                                          # noqa: BLE001
+        return 0
+
+
+def critical_strikes_energy(rank):
+    return (int(rank) + 2) // 5
+
+
+def critical_energy_gain(send, state, conn_id):
+    """The energy a critical pays, on the wire ahead of the critical's word."""
+    if not (CRITICAL_STRIKES and ENERGY):
+        return
+    gain = critical_strikes_energy(critical_strikes_rank(state))
+    if gain <= 0:
+        return
+    pool = player_energy(state)
+    pool.tick(time.time())
+    pool.current = min(pool.maximum, pool.current + gain)
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+         [agents.GV_ENERGY_GAIN, PLAYER_AGENT_ID, PLAYER_AGENT_ID,
+          _fraction(gain / pool.maximum, agents.GV_ENERGY_GAIN,
+                    "Critical Strikes' energy")],
+         f"energy +{gain} of {pool.maximum:.0f}: a critical hit "
+         f"(Critical Strikes)")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+         [agents.PROP_ENERGY_GAIN_CALLOUT, PLAYER_AGENT_ID, PLAYER_AGENT_ID,
+          gain],
+         f"the floating +{gain}")
+
+
+def double_strike_chance(state):
+    """WIKI's rate, for a character holding daggers; 0 for anything else."""
+    held = agents.PLAYER_WEAPON if EQUIP_WEAPON else None
+    if int((held or {}).get("item_type", -1)) != ITEM_TYPE_DAGGERS:
+        return 0.0
+    rank = player_weapon_rank(state) or 0
+    return min(1.0, DOUBLE_STRIKE_BASE + DOUBLE_STRIKE_PER_RANK * rank)
+
+
+def second_strike_tick(send, state, conn_id):
+    """Land a plain swing's double strike when its half second is up."""
+    due = state.get("player_second_strike")
+    if due is None or time.time() < due["at"]:
+        return
+    state["player_second_strike"] = None
+    victim = state.get("agents", {}).get(due["target"])
+    if victim is None or victim.get("dead") or state.get("player_dead"):
+        return
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.GV_DOUBLE_STRIKE, PLAYER_AGENT_ID, 0],
+         f"double strike: the second dagger at agent {due['target']}")
+    hit_enemy(send, state, due["target"], conn_id, skill_strike=True,
+              label="the double strike")
+
+
+def dual_second_strike(send, state, cast, conn_id):
+    """A dual attack's SECOND strike, half a second behind its first."""
+    cast["second_done"] = True
+    info, target, sid = cast["second"], cast["target"], cast["skill_id"]
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.GV_DUAL_SECOND_STRIKE, PLAYER_AGENT_ID, 0],
+         f"skill {sid}: the dual's second strike")
+    if info["fails"]:
+        attack_fails(send, state, PLAYER_AGENT_ID, target,
+                     agents.ATTACK_FAIL_FAIL, conn_id,
+                     f"skill {sid}'s second strike -- a failed dual still "
+                     f"makes two attacks (WIKI; 4 of 4)")
+        return
+    victim = state.get("agents", {}).get(target)
+    res = None
+    if victim is not None and not victim.get("dead"):
+        res = hit_enemy(send, state, target, conn_id,
+                        bonus_damage=info["bonus"], skill_strike=True,
+                        label=f"skill {sid} strikes again", skill_id=sid)
+    # The state rides BEHIND this word (retail: [47], the word, the adjacent
+    # 55s, 0x005C, 0x00E3), where a lead's and an off-hand's ride ahead.
+    victim = state.get("agents", {}).get(target)
+    if CHAIN_STATE and (res == "landed" or info["first_landed"]) \
+            and victim is not None and not victim.get("dead"):
+        _st = player_chain(state).advance(target, chain.DUAL, time.time())
+        if _st is not None:
+            chain_send(send, target, _st, f"skill {sid} hit")
 
 
 def attack_skill_terms(state, skill_id, rank, target_id, bonus, conn_id, who):
@@ -9908,7 +10116,8 @@ HERO_WEAPON_ATTRIBUTE = None   # [party.KEY].weapon_attribute
 # 0x006D naming them (12 of 12 bodies), and the client draws the attack the
 # item's type says: a staff casts a bolt from range, an empty hand punches.
 # One item today, the retail Monk henchman's staff (content/items.toml).
-PARTY_WEAPON_ITEMS = {"staff": "caster_staff", "wand": "caster_staff"}
+PARTY_WEAPON_ITEMS = {"staff": "caster_staff", "wand": "caster_staff",
+                      "daggers": "starter_daggers"}      # DAGGERS-B2
 HERO_WEAPON_ITEM_ID = 210      # + the hero's slot; clear of the player's 1-10
 # SLICE-H11: a spawn row's `weapon_item` (a content item key) is declared and
 # named on the body at its create, retail's shape for EVERY body and not only
@@ -10560,9 +10769,16 @@ ARMOUR_DIVISOR = 40.0
 # Warrior henchman's own pair, F33: sword 27 in the leadhand, shield 24 in the
 # off); the attribute ids are the client's s_attrib table (18 Axe Mastery,
 # 19 Hammer Mastery, 20 Swordsmanship).
-WEAPON_TYPE_ATTRIBUTE = {15: 19, 27: 20, 2: 18}
+# DAGGERS-B2: daggers are item_type 32 -- OBSERVED, the three profession-7
+# bodies' leadhands on 20260819T132414 (studies/daggers F4) -- and scale on
+# Dagger Mastery, 29: the attribute every weapon_req = 0x08 attack carries.
+WEAPON_TYPE_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
 # ...and the attack_speed rates key each swings at (content [attack_speed.rates]).
-WEAPON_TYPE_RATE = {15: "hammer", 27: "sword", 2: "axe"}
+WEAPON_TYPE_RATE = {15: "hammer", 27: "sword", 2: "axe", 32: "daggers"}
+# DAGGERS-B4: item_type -> the bit a skill's `weapon_req` mask names it by
+# (the client's skill record +0x24; studies/daggers F3, the attribute column
+# the witness). A type with no row here satisfies no weapon requirement.
+WEAPON_TYPE_REQ_BIT = {2: 0x01, 32: 0x08, 15: 0x10, 27: 0x80}
 # The two modifier identifiers an armour piece carries. 572's argument is the
 # rating the tooltip prints as `Armor: N`; 527's is the `+N vs. <type>` line,
 # and identifier 4 beside it resolves to `vs. physical damage`. All three were
@@ -12905,7 +13121,13 @@ def _land_player_swing(send, state, conn_id, swing):
     the out-of-reach one are the same event, because retail judges reach at
     the start and not at the hit (7 of 7, 33 of 34)."""
     state["player_swing"] = None
-    hit_enemy(send, state, swing["target"], conn_id, armed=True)
+    _res = hit_enemy(send, state, swing["target"], conn_id, armed=True)
+    # DAGGERS-B6: both daggers may strike. Rolled on a swing that resolved
+    # (hit, miss or block -- what a miss does to it is n = 0 on retail).
+    if SECOND_STRIKE and _res is not None \
+            and random.random() < double_strike_chance(state):
+        state["player_second_strike"] = {"target": swing["target"],
+                                         "at": time.time() + SECOND_STRIKE_S}
     if LANDING_HOLD_RELEASE:
         action_hold(send, state, 0,
                     "the swing landed -- movement is legal now")
@@ -13319,6 +13541,9 @@ def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
     # an episode on the wire that our own reader scores as `open` for the
     # rest of the session.
     strip_effects(send, state, target_id, conn_id, "the agent died")
+    # DAGGERS-B5: and the attacker's chain icon comes down with it -- retail
+    # clears 0x005C in the dead bit's own instant, 6 of 6 (daggers F6).
+    chain_clear(send, state, target_id, "the target died")
     # THE ORDER IS ARENANET'S, read off the two uncontaminated kills in the
     # corpus (agent 278 t=23.202 and agent 40 t=23.511): status, then the
     # reward, then the flags byte. Same tick, same agent, all three.
@@ -13368,7 +13593,7 @@ def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
 
 def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
               exact=None, swing=True, label="one swing", armed=False,
-              skill_strike=False, skill_id=None):
+              skill_strike=False, skill_id=None, before_damage=None):
     """Land one swing on a hostile agent, if the swing timer allows it.
 
     `skill_strike` TRUE is an ATTACK SKILL's execution (ANIMREF-R6): a full
@@ -13450,7 +13675,8 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
         dealt = float(exact) + bonus_damage
     elif EQUIP_WEAPON and PLAYER_SWING_DAMAGE and rank is not None \
             and armour is not None:
-        critical = random.random() < critical_rate(rank)
+        critical = random.random() < critical_rate(rank) + (
+            0.01 * critical_strikes_rank(state) if CRITICAL_STRIKES else 0.0)
         dealt = swing_damage(rank, float(armour), PLAYER_SWING_DAMAGE,
                              critical=critical) + bonus_damage
     elif EQUIP_WEAPON and PLAYER_SWING_DAMAGE:
@@ -13617,6 +13843,14 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
              f"maximum {int(agent['max_health'])} on agent {target_id}, "
              f"declared on the player's hit")
         agent["max_declared_on_hit"] = agent["max_health"]
+    # DAGGERS-B5: what a LANDED hit puts on the wire just ahead of its damage
+    # word -- the chain state, retail's order (E5, 0x005C, the word, E3). A
+    # miss or a block returned above, so a chain skill that did not hit
+    # advances nothing, which is what "if it hits" says on every page.
+    if before_damage is not None:
+        before_damage()
+    if critical:
+        critical_energy_gain(send, state, conn_id)       # DAGGERS-B7
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [prop, target_id, PLAYER_AGENT_ID, frac],
          f"{'CRITICAL' if critical else 'damage'} {dealt:.0f} "
@@ -14764,6 +14998,20 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
     # authority on what the skill IS, and both opcodes land here.
     is_attack = _is_attack_skill(skill_id)
 
+    # ---- DAGGERS-B4: THE WEAPON GATE, ahead of the resource gate ---------
+    # The skill record's own mask against what the character holds: a dagger
+    # attack with a sword in hand begins nothing and costs nothing. The bare
+    # release, no chat line -- the refusal's sentence is not observed (see
+    # WEAPON_GATE).
+    if WEAPON_GATE and not weapon_satisfies(skill_id):
+        print(f"[c{conn_id}] REFUSED skill {skill_id}: its weapon_req "
+              f"{skill_chain_fields(skill_id)[2]:#04x} is not what the player "
+              f"holds (item_type "
+              f"{(agents.PLAYER_WEAPON or {}).get('item_type') if EQUIP_WEAPON else None}) "
+              f"[DAGGERS-B4]", flush=True)
+        refuse_press(send, skill_id, copy, conn_id)
+        return
+
     # ---- THE RESOURCE GATE, and it runs BEFORE the first send ------------
     #
     # A press this server cannot pay for produces NOTHING: no E4, no cast
@@ -15617,17 +15865,65 @@ def cast_tick(send, state, conn_id):
                     state, cast["skill_id"], rank, target, bonus, conn_id,
                     "the player")
                 _res = None
+                # DAGGERS-B5: THE CHAIN. An off-hand or a dual whose
+                # requirement the target's state does not meet is ACCEPTED and
+                # then FAILS -- retail's one witness, the owner's cold 780 on
+                # 20260819T132414 (daggers F7), read beside an armed press of
+                # the same skill: the energy was debited at the press, the
+                # 0x00E5 above carried the recharge, the close (46) went out,
+                # then [38, target, player, 2] and a SECOND 0x00E5 whose
+                # recharge is 0 -- WIKI's "failed attacks do not cause the
+                # skill to recharge", on the wire. No damage, no state, no
+                # condition, no knock-down.
+                _combo, _combo_req, _ = skill_chain_fields(cast["skill_id"])
+                _chain_now = (player_chain(state).state_on(target, now)
+                              if CHAIN_STATE else 0)
+                _chain_fails = CHAIN_STATE and not chain.requirement_met(
+                    _combo_req, _chain_now)
+                if _chain_fails:
+                    attack_fails(send, state, PLAYER_AGENT_ID, target,
+                                 agents.ATTACK_FAIL_FAIL, conn_id,
+                                 f"skill {cast['skill_id']} must follow "
+                                 f"{chain.requirement_name(_combo_req)}; the "
+                                 f"target carries "
+                                 f"{chain.STATE_NAMES[_chain_now]}")
+                    send(GAME_SMSG_SKILL_RECHARGE,
+                         [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"], 0],
+                         f"SKILL_RECHARGE(skill {cast['skill_id']}, 0s): a "
+                         f"failed chain step does not recharge")
+                    cast["recharge"], cast["recharge_s"] = 0, 0.0
+                    cast["e6_at"], cast["no_e6"] = now, True
+                    inflicted, _kd = None, False
+                    print(f"[c{conn_id}] skill {cast['skill_id']} FAILED on "
+                          f"agent {target}: it must follow "
+                          f"{chain.requirement_name(_combo_req)} and the "
+                          f"target carries {chain.STATE_NAMES[_chain_now]} "
+                          f"[DAGGERS-B5]", flush=True)
+
+                _dual = SECOND_STRIKE and _combo == chain.DUAL
+
+                def _chain_advance(_t=target, _c=_combo, _s=cast["skill_id"]):
+                    # Ahead of the damage word, where retail puts it
+                    # (E5, 0x005C, the word, E3 -- 255.343 on the same tape).
+                    _st = player_chain(state).advance(_t, _c, time.time())
+                    if _st is not None:
+                        chain_send(send, _t, _st, f"skill {_s} hit")
                 # ANIMREF-R6: the strike the windup announced, not a second
                 # swing. skill_strike lands weapon damage + adrenaline with
                 # no attack_started, no melee_attack_finished and no interval
                 # gate -- the windup WAS the interval, and the corpus batch
                 # carries neither swing bracket. The legacy arm keeps the old
                 # call: interval-gated, so a press mid-chain dealt nothing.
-                if ATTACK_FINISH_BATCH:
+                if _chain_fails:
+                    _res = "failed"
+                elif ATTACK_FINISH_BATCH:
                     _res = hit_enemy(send, state, target, conn_id,
                                      bonus_damage=bonus, skill_strike=True,
                                      label=f"skill {cast['skill_id']} strikes",
-                                     skill_id=cast["skill_id"])
+                                     skill_id=cast["skill_id"],
+                                     before_damage=(_chain_advance
+                                                    if CHAIN_STATE and _combo
+                                                    and not _dual else None))
                     # ANIMREF-R7b: the chain's next START comes one WINDUP
                     # after this execution -- LAW B, the 46->START gap's
                     # 0.749..0.783 cluster (21/38) against
@@ -15645,7 +15941,17 @@ def cast_tick(send, state, conn_id):
                 else:
                     _res = hit_enemy(send, state, target, conn_id,
                                      bonus_damage=bonus,
-                                     skill_id=cast["skill_id"])
+                                     skill_id=cast["skill_id"],
+                                     before_damage=(_chain_advance
+                                                    if CHAIN_STATE and _combo
+                                                    and not _dual else None))
+                if _dual:
+                    # DAGGERS-B6: the second strike, its state and the 0x00E3
+                    # all wait half a second (dual_second_strike).
+                    cast["second"] = {"fails": _chain_fails, "bonus": bonus,
+                                      "first_landed": _res == "landed"}
+                    cast["second_at"] = now + SECOND_STRIKE_S
+                    cast["e3_at"] = max(cast["e3_at"], cast["second_at"])
                 # SLICE-H12: the knock-down the strike carries (Hammer Bash;
                 # Heavy Blow on a weakened foe), on a LANDED hit and a live
                 # foe; then Desperation Blow's random condition; then its
@@ -15722,6 +16028,9 @@ def cast_tick(send, state, conn_id):
                             f"skill {cast['skill_id']} completes")
                 action_hold(send, state, 1,
                             f"the aftercast of skill {cast['skill_id']}")
+        if cast["e5_sent"] and cast.get("second_at") is not None \
+                and not cast.get("second_done") and now >= cast["second_at"]:
+            dual_second_strike(send, state, cast, conn_id)       # DAGGERS-B6
         if cast["e5_sent"] and not cast["e3_sent"] and now >= cast["e3_at"]:
             send(GAME_SMSG_SKILL_ACTIVATED,
                  [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"]],
@@ -15774,7 +16083,11 @@ def cast_tick(send, state, conn_id):
             # which only the recv thread sends (REV-2). So the recv loop
             # wakes at this instant (withheld_wake) and sends the release
             # and the replayed report together (withheld_replay_take).
-        if cast["e3_sent"] and now >= cast["e6_at"]:
+        if cast["e3_sent"] and cast.get("no_e6"):
+            # DAGGERS-B5: a failed chain step never began a recharge, and
+            # retail's batch ends at the 0x00E3 (daggers F7).
+            finished.append(cast)
+        elif cast["e3_sent"] and now >= cast["e6_at"]:
             send(GAME_SMSG_SKILL_RECHARGED,
                  [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"]],
                  f"SKILL_RECHARGED(skill {cast['skill_id']})")
@@ -16234,14 +16547,23 @@ def skill_condition(skill_id, rank):
         row = agents.WORLD.get("skill_effect", str(skill_id))
     except Exception:                                          # noqa: BLE001
         return None
-    condition = effects.condition_id(row.get("bonus_scale_means"))
-    if condition is None:
-        return None
-    try:
-        seconds = skill_scale_value(skill_id, rank, "bonus_scale")
-    except ValueError:
-        return None
-    return (condition, float(seconds)) if seconds else None
+    # DAGGERS-B2: the bonus slot first, then the SCALE slot -- Jagged Strike
+    # (782) has args = 2 and its one wiki variable, `Bleeding duration`, sits
+    # in scale 5..20. The refusal above still holds per slot: a slot whose bit
+    # is clear raises and is skipped, and a `scale_means` naming a condition
+    # is never damage (SCALE_MEANS_DAMAGE does not list one).
+    for means, slot in (("bonus_scale_means", "bonus_scale"),
+                        ("scale_means", "scale")):
+        condition = effects.condition_id(row.get(means))
+        if condition is None:
+            continue
+        try:
+            seconds = skill_scale_value(skill_id, rank, slot)
+        except ValueError:
+            continue
+        if seconds:
+            return (condition, float(seconds))
+    return None
 
 
 def apply_condition(send, state, target_id, condition_id, seconds, rank,
@@ -16343,6 +16665,7 @@ def kill_player(send, state, conn_id, why="took a killing blow"):
     """
     state["player_dead"], state["player_died_at"] = True, time.time()
     strip_effects(send, state, PLAYER_AGENT_ID, conn_id, "the player died")
+    chain_clear_all(send, state, "the player died")          # DAGGERS-B5
     state["attacking"] = None          # a corpse stops swinging back
     # AND STOPS WALKING (SLICE-F23: "I slid around after dying too"). The
     # keyboard lead chain re-granted leads to the corpse -- `KBD LEAD
@@ -19374,10 +19697,29 @@ def apply_party_character(prow):
     WEAPON_ATTACK_SPEED and ATTACK_INTERVAL (a sword's 1.33 against the
     hammer's 1.75), its type's attribute is what player_weapon_rank reads --
     and `player_skills` the bar `default_skillbar` hands out (--skills still
-    overrides)."""
+    overrides).
+
+    DAGGERS-B3: `player_profession` rebinds SPAWN_PROFESSION (--spawn-profession
+    is read later and still wins), and `player_energy` / `player_pips` the
+    pool that goes with it -- agents.PLAYER_ENERGY, PLAYER_ENERGY_PIPS and the
+    property-43 rate derived from the pair, never typed. WIKI (GWW "Energy"):
+    an Assassin is 25 energy and 4 pips, and the owner's own Assassin ran at
+    rate 0.0528 on a maximum of 25 on 20260817T183756 (pools.py), which IS
+    wire_regen_rate(4, 25)."""
     global PLAYER_SWING_DAMAGE, WEAPON_ATTACK_SPEED, ATTACK_INTERVAL
-    global PARTY_SKILLBAR
+    global PARTY_SKILLBAR, SPAWN_PROFESSION, PLAYER_ENERGY_PIPS
     changed = []
+    if prow.get("player_profession") is not None:
+        _prof = int(prow["player_profession"])
+        spawn_profession_values(_prof)          # the guard: raises on a bad id
+        SPAWN_PROFESSION = _prof
+        changed.append(f"profession {_prof}")
+    if prow.get("player_energy") is not None or prow.get("player_pips") is not None:
+        agents.PLAYER_ENERGY = int(prow.get("player_energy", agents.PLAYER_ENERGY))
+        PLAYER_ENERGY_PIPS = int(prow.get("player_pips", PLAYER_ENERGY_PIPS))
+        agents.PLAYER_FLOAT_43 = pools.wire_regen_rate(PLAYER_ENERGY_PIPS,
+                                                       agents.PLAYER_ENERGY)
+        changed.append(f"energy {agents.PLAYER_ENERGY} at {PLAYER_ENERGY_PIPS} pips")
     if prow.get("player_weapon"):
         agents.PLAYER_WEAPON = agents.item_template(prow["player_weapon"])
         PLAYER_SWING_DAMAGE = weapon_damage_range(agents.PLAYER_WEAPON)
@@ -24940,6 +25282,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # (E5/E3/E6), before the swings so a cast completing
                         # this tick is visible to everything after it.
                         cast_tick(send, state, conn_id)
+                        chain_tick(send, state, conn_id)     # DAGGERS-B5
+                        second_strike_tick(send, state, conn_id)  # DAGGERS-B6
                         # Expiries AFTER the casts, so an effect applied on
                         # this tick is never closed by the same tick that
                         # opened it -- `due` compares against a `now` taken
@@ -30645,6 +30989,26 @@ def main():
         print("NO WEAKNESS ATTRIBUTES: Weakness cuts attack damage only; "
               "ranks and the 0x003B batch are untouched (the pre-SKILLS-WK "
               "arm).")
+    if a.no_weapon_gate:
+        global WEAPON_GATE
+        WEAPON_GATE = False
+        print("NO WEAPON GATE: an attack skill fires whatever the character "
+              "holds (the pre-DAGGERS-B4 arm).")
+    if a.no_second_strike:
+        global SECOND_STRIKE
+        SECOND_STRIKE = False
+        print("NO SECOND STRIKE: no double strike on a plain dagger swing and "
+              "a dual attack strikes once (the pre-DAGGERS-B6 arm).")
+    if a.no_critical_strikes:
+        global CRITICAL_STRIKES
+        CRITICAL_STRIKES = False
+        print("NO CRITICAL STRIKES: attribute 35 adds no critical chance and "
+              "a critical pays no energy (the pre-DAGGERS-B7 arm).")
+    if a.no_chain_state:
+        global CHAIN_STATE
+        CHAIN_STATE = False
+        print("NO CHAIN STATE: no 0x005C and no combo_req judgement (the "
+              "pre-DAGGERS-B5 arm).")
     if a.no_spell_location_roll:
         global SPELL_LOCATION_ROLL
         SPELL_LOCATION_ROLL = False

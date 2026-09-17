@@ -1620,6 +1620,26 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "apply's own batch and restores them at its removal "
                          "(the owner's Isle tape 20260917T090355), and a "
                          "Mend Ailment cast under it healed at rank 7, not 8.")
+    ap.add_argument("--no-weapon-gate", action="store_true",
+                    help="an attack skill is NOT held to its `weapon_req` "
+                         "mask (the client's skill record +0x24) against the "
+                         "item the character holds. The revert for DAGGERS-B4 "
+                         "(studies/daggers F3): before it a dagger attack "
+                         "fired with a hammer in hand.")
+    ap.add_argument("--no-second-strike", action="store_true",
+                    help="no double strike on a plain dagger swing, and a "
+                         "dual attack strikes once. The revert for DAGGERS-B6 "
+                         "(RUN-DAGGERS-1, studies/daggers F10-F11).")
+    ap.add_argument("--no-critical-strikes", action="store_true",
+                    help="attribute 35 adds no critical chance and a critical "
+                         "pays no energy. The revert for DAGGERS-B7 "
+                         "(RUN-DAGGERS-1, studies/daggers F12).")
+    ap.add_argument("--no-chain-state", action="store_true",
+                    help="no Assassin chain: no 0x005C state on a lead / "
+                         "off-hand / dual hit, and a skill's `combo_req` is "
+                         "not judged, so an off-hand lands with no lead before "
+                         "it. The revert for DAGGERS-B5 (studies/daggers F6, "
+                         "F7).")
     ap.add_argument("--no-spell-location-roll", action="store_true",
                     help="an incoming armour-respecting spell resolves "
                          "against the CHEST's elemental rating instead of "

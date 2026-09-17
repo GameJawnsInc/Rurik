@@ -11238,6 +11238,42 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   comment that had called value 8 a single sighting from one capture's count.
   Proven red by setting the reward to the Wolf's contaminated 126. Floor 6, the
   vault-less §1),
+  `toolkit/authsrv/test_daggers.py` (**2026-09-17, DAGGERS-B2..B5 (studies/daggers): daggers
+  and the Assassin's attack chain.** The verbatim part is §5's FAILED-STEP BATCH, checked
+  against retail's own order off 20260819T132414 -- the owner's cold off-hand at 236.303
+  read beside an armed press of the same skill at 255.343: `0x00E5` with the recharge, the
+  close (46), `[38, target, player, 2]`, a SECOND `0x00E5` with recharge 0, `0x00E3`; no
+  damage word, no `0x005C`, no `0x00E6`, energy debited once, the re-press accepted at
+  once -- and a landed chain skill's `0x005C [player, target, state]` sits between its
+  `0x00E5` and its damage word. §1 is `chain.py`'s grammar with the rival bit order
+  refuted (0x01 follows a DUAL); §2 the item row (type 32, its own 584 word 1-3) and the
+  maps; §3 `[party.daggers]` -- profession 7, 25 energy at 4 pips, the property-43 rate
+  DERIVED and equal to the 0.0528 the owner's Assassin ran at on retail; §4 the weapon
+  gate with a HAMMER in hand as the arm that can fail, and `--no-weapon-gate`; §5 also
+  lead -> off-hand -> dual -> the off-hand that follows a dual -> dual with no failure,
+  a BLOCKED lead advancing nothing, the 15 s clock sending ONE 0, the 0 at the target's
+  death and none on a target with no icon, and `--no-chain-state`; §6 Jagged Strike's
+  Bleeding read from the SCALE slot. State 3, the re-lead and the attacker's-death clear
+  were RECONSTRUCTION for one afternoon: RUN-DAGGERS-1 (20260917T160915) REFUTED two of
+  them and the file now pins retail's shapes -- a re-lead sends NO `0x005C` and restarts
+  the clock; the DUAL strikes twice (`0x00E5`, 46, word; then `[47, player, 0]`, word,
+  `0x005C [.., 3]` BEHIND it, `0x00E3`), a cold dual fails twice; §7 the DOUBLE STRIKE
+  (`[2, player, 0]` and a second word with no bracket of its own, armed by the first and
+  landed once) and CRITICAL STRIKES (`0x00A3 [52, self, self, 2/max]` then `0x00A0 [54,
+  self, self, 2]` ahead of the critical's word, the pool 2 fuller), each with its revert
+  flag as the arm; §8 retail itself through `chainjoin.py`, pinned EXACTLY and BY TAPE
+  NAME so the next dagger capture cannot redden it: 24 x `0x005C`, every clear 15.000 s
+  after the last chain hit, 2 re-leads and 0 re-sends, 7 duals of two words with the
+  state on the second, 28 adjacent words of -40/480 on property 55, 12 cold presses all
+  zeroed, 16 of 64 plain swings doubled with the close on the FIRST word, 26 of 26
+  criticals paying in order. What stays RECONSTRUCTION is named in the docstring. §4-§8
+  need the vault's `skills` rows re-emitted since DAGGERS-B1 (and §8 the tape) and
+  declare a skip without them -- `test_srclint.py` caught this file's first skips as
+  one-argument landmines. Same commit: `test_castcycle.py`, `test_castcancel.py` and
+  `test_pools.py` press a BOW or SWORD attack with the base fixture's hammer and turn
+  `WEAPON_GATE` off in `main()`, saying why; `test_pools.py` 2f learns `CRITICAL_GAINS`
+  (2/25 on the dagger tape); `test_mechanics.py` §20 P1 is judged without the dagger
+  tape and P1b pins its 28 negatives as one thing. No socket, no client. 67 checks, ~25 s),
   `toolkit/authsrv/test_skilldamage.py` (**2026-09-17, SKILLS-LR (skills §50): a spell ROLLS A HIT LOCATION — §11 +3 (a lopsided set through the real `spell_armour_for` with the roll and the pieces pinned: a bare roll resolves against 0, a chest roll against the chest's; bare against the 60 baseline is 2^(60/40); `--no-spell-location-roll` restores the chest's) and §12b +1, the corpus lock through `spellhitjoin.location_buckets()` — some projectile group holds two whole-point buckets within 1.5 % of 2^(60/40) with ≥ 4 and ≥ 2 hits (the owner's `20260917T090355`: Lightning Orb 101 × 9 and 286 × 2); SKILLS-FA's single rating is REFUTED; floor 63 → 67.** **2026-09-16 (night), RUN-SKILLS-RB: §13, the converted hit's word on retail through `healjoin.conversions()` / `score_conversions()` — a conversion is a taker's own heal word beside a damage word onto it WITH the enchantment's `0x0044` on the tick (10 on the Isle tape; 20 coincident self-heals without a strip are reported, not pooled); P6: the zero is `+0.0` (7 of 7), never `−0.0` anywhere, the rest negative remainders (3), and the heal precedes the damage 10 of 10; +2, floor 61 → 63.** **2026-09-16, SLICE-F47 (the Lakeside re-pin): §12's P2 exemption is a SIGNATURE — `spellhitjoin.score` names a `penalty_split`, a multi-valued pair that is ONE value per target maximum across several maxima — because the third pair came (`20260916T150306`, caster 48's skill 222 onto 29, maximum 140 → 119) and it is the death-penalty split alone, 24 whole points at both maxima (0.17143 × 3, then 0.20168); +1 check that every penalty-split pair is one value in WHOLE POINTS (F46); JARIN's two pairs stay named because they are several values INSIDE one maximum (23 and 24 on the Ranger at 140, cause unmeasured; 26 and 51 on the hero at 122, Frenzy), which the signature correctly refuses; floor 60 → 61.** **2026-09-14 (late night), ZEROWORD: Flare into a rating of 300 (1/64, 0.31 → 0) still sends its −0.0 damage word and takes nothing, and is NOT the "fully converted" early return; +1, floor 59 → 60.** **2026-09-14 (late night), HEAL-INT: a 70.4 heal goes out as `0x3F333333` (0.70) and lands 70 — whole points, truncated after the Deep Wound cut; +1, floor 58 → 59.** **2026-09-14 (late night), DAMAGE-INT: Flare's 20 at AR 25 lands 36 — 36.68 truncated to whole points — on the wire and in the books; floor 58 unchanged.** **SKILLS-FA (2026-09-09) added §11–§12,
   floor 44 → 57**: an incoming `Fire damage` cast scales by the player's ONE
   elemental rating (25, not the physical 45 — the `+20 vs. physical` never reaches

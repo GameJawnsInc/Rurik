@@ -1135,6 +1135,13 @@ def named_item(item_id, item):
 # either alone -- but it is still not a wire OBSERVATION, and until one of
 # these visibly changes the client these stay UPSTREAM.
 GV_MELEE_ATTACK_FINISHED = 1
+# RUN-DAGGERS-1 (20260917T160915): what opens a SECOND strike's batch, half a
+# second behind the first. 0x009F [2, attacker, 0] ahead of a plain double
+# strike's second damage word (16 of 16), and [47, attacker, 0] ahead of a
+# dual attack's second strike, landed or failed (11 of 11). The NAMES are ours
+# -- no upstream names either id in this role.
+GV_DOUBLE_STRIKE = 2
+GV_DUAL_SECOND_STRIKE = 47
 GV_ATTACK_STOPPED = 3
 GV_DISABLED = 8
 GV_SKILL_DAMAGE = 10
@@ -1427,6 +1434,11 @@ GV_ATTACK_FAIL = 38
 ATTACK_FAIL_REASONS = {0: "block", 1: "dodge", 2: "fail", 3: "miss",
                        4: "obstructed", 5: "stray"}
 ATTACK_FAIL_MISS = 3
+# DAGGERS-B5: 2 is what retail sends when a chain step's requirement is not
+# met -- the corpus's only reason-2 is the owner's off-hand 780 pressed on a
+# target with no lead on it (studies/daggers F7; skills 44.4 had the word and
+# not the cause).
+ATTACK_FAIL_FAIL = 2
 ATTACK_FAIL_BLOCK = 0            # SLICE-H12: the client posts "block" for 0
 GV_EFFECT_ON_TARGET = 20
 GV_EFFECT_ON_AGENT = 21

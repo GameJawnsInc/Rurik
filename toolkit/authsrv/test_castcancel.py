@@ -770,6 +770,13 @@ def section_cancel_action_door():
 
 
 def main():
+    # DAGGERS-B4 (2026-09-17): this file presses Power Shot (394, a BOW attack: weapon_req 0x02)
+    # with the base fixture's HAMMER in hand, which the weapon gate now
+    # refuses. What is measured here is the cast cycle, not weapon
+    # legality -- that is test_daggers.py section 4 -- so the gate is off
+    # for this process, the same arm `--no-weapon-gate` gives a session.
+    import authsrv as _authsrv_gate
+    _authsrv_gate.WEAPON_GATE = False
     section_move_cancels()
     section_aftercast_uncancellable()
     section_attack_skills()
