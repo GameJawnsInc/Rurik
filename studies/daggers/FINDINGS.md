@@ -317,6 +317,14 @@ body and none of the 13 after — hit_enemy's own "first hit declares" rule, whi
 (`adjacent_damage = "scale"`), because Cyclone Axe is "adjacent" too and is a different
 mechanic. The player's strike only; an NPC's cast is still single-target.
 
+**On our own client, by the owner's hand, the same evening** (`--party daggers20 --enemies 3
+--enemy-cluster 90 --enemy-health 2000`; the first try, `--enemies 3` alone, splashed
+nobody — the ring puts neighbours 424 u and 600 u apart, which is what `--enemy-cluster`
+is for): "it hit the aoe, ordinary damage numbers." So a NEGATIVE property 55 from the
+player onto another body draws as an ordinary damage number on the client — the word
+this repo calls the heal is, negative, just damage to the eye. OBSERVED by the operator,
+no frame kept.
+
 ### What the run did not settle
 
 A lead that MISSES (does it set the state?), a first strike that misses ahead of a double
