@@ -27,6 +27,14 @@ move back.
 
 ---
 
+### ✅ DAGGERS-B8 CONFIRMED on our client 2026-09-17 — **the owner, by hand: "it hit the aoe, ordinary damage numbers"** ([studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md) F13)
+
+`--party daggers20 --enemies 3 --enemy-cluster 90 --enemy-health 2000`. Death Blossom's
+adjacent damage reaches the two clustered neighbours, and a negative property 55 from the
+player draws as an ordinary damage number. Operator observation, no frame kept. With this
+every DAGGERS build step (B1-B8) has been seen on a client; what is left in §8 is the
+Assassin armour rows, area damage beyond this one skill, and the n = 0 cases.
+
 ### ✅ `--enemy-cluster U` 2026-09-17 — **a rig knob: the owner's `--enemies 3` run splashed nobody, because the ring puts neighbours 424 u and 600 u apart**
 
 `population.enemy_spots` rings the PLAYER at the spawn offset, so no adjacent-range (156 u)
