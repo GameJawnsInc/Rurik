@@ -18,6 +18,7 @@ import os
 import sys
 import math
 import time
+import struct
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -28,7 +29,7 @@ import agents       # noqa: E402
 import effects      # noqa: E402
 
 # Floor set from a real green run (39 checks, 2026-08-22; 99 checks, 2026-09-09 SKILLS-DW; 129 checks, 2026-09-10 SKILLS-BL; 153 checks, 2026-09-10 SKILLS-RC; 162 checks, 2026-09-10 SKILLS-MA).
-LEDGER = checks.Ledger("effect mechanics", floor=240)  # 2026-09-17: +12, SKILLS-WK sec.31-32 (Weakness takes one off every attribute), from the green run  # 2026-09-16: +14, SLICE-F48 sec.8b (movement speed on the wire), from the green run  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
+LEDGER = checks.Ledger("effect mechanics", floor=245)  # 2026-09-17: +5, RUN-SKILLS-WKL sec.33 + WKL1-2 (a cast that lifts Weakness heals at the weakened rank), from the green run  # 2026-09-17: +12, SKILLS-WK sec.31-32 (Weakness takes one off every attribute), from the green run  # 2026-09-16: +14, SLICE-F48 sec.8b (movement speed on the wire), from the green run  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
 check = checks.adopt(LEDGER)
 
 FRENZY, RUSH, ROF, GLYPH, IGNITE, FAINT = 346, 319, 307, 200, 431, 135
@@ -811,7 +812,12 @@ try:
     check(newly(482) <= {0x22, 0x20} and sc["n"].get(482, 0) >= 2,
           "482's apply sets 0x20 (with 0x02 when no condition was live)",
           f"{ {hex(b) for b in newly(482)} }")
-    check(newly(481) == {0x0A}, "481 sets 0x0A")
+    # RUN-SKILLS-WKL (2026-09-17): Crippled landed while Blind was live, twice,
+    # so the generic 0x02 was already set and 481 newly set 0x08 alone -- the
+    # 482 and 484 lines' own shape. 0x0A stays REQUIRED as the positive control.
+    check(newly(481) <= {0x0A, 0x08} and 0x0A in newly(481),
+          "481 sets 0x08 (with 0x02 when no condition was live)",
+          f"{ {hex(b) for b in newly(481)} }")
     # RUN-SKILLS-RB2 (2026-09-17): Poison landed while Weakness was live, so
     # the generic 0x02 was already set and 484 newly set 0x40 alone, twice --
     # the same shape the 482 line above has carried since it was written.
@@ -1954,6 +1960,45 @@ try:
 finally:
     authsrv.episodemods.WEAKNESS_ATTRIBUTES = _m31
 
+# 33 (unit half): RUN-SKILLS-WKL -- a cast that removes Weakness ITSELF heals
+# at the WEAKENED rank, and the restores ride ahead of the heal word.
+print("== 33. RUN-SKILLS-WKL: Mend Ailment lifting Weakness heals at the rank "
+      "it was CAST at, the 0x003B restores ahead of the 55 word ==")
+_s33 = (authsrv.CONDITION_HEAL_RULE, authsrv.ENERGY)
+try:
+    authsrv.CONDITION_HEAL_RULE = True
+    authsrv.ENERGY = False
+    sent, send = collector()
+    state = fresh_state()
+    authsrv.apply_condition(send, state, PLAYER, 484, 5.0, 0, 0, by_skill=0)
+    time.sleep(0.01)
+    authsrv.apply_condition(send, state, PLAYER, WEAK, 20.0, 0, 0, by_skill=0)
+    rank = authsrv.weakened_rank(state, PLAYER, 8)      # read as the cast resolves
+    sent, send = collector()
+    out = authsrv.resolve_heal(send, state, 277, rank, PLAYER, PLAYER, 0)
+    left = [ep["skill"] for ep in state["effects"].on_agent(PLAYER)]
+    pool = authsrv.player_max_health(state)
+    words = heals(sent)
+    _f32_33 = lambda b: struct.unpack("<f", struct.pack("<I", int(b) & 0xFFFFFFFF))[0]  # noqa: E731
+    check(out["removed"] == 1 and left == [484] and len(words) == 1
+          and abs(_f32_33(words[0][-1]) * pool - 35.0) < 0.01,
+          "Poison then Weakness: WEAKNESS goes, Poison remains, and the one "
+          "heal is 35 -- the rank-7 number, retail's 5 of 5 (RUN-SKILLS-WKL)",
+          f"out={out} left={left} words={words} pool={pool}")
+    ops = [op for op, _v, _l in sent]
+    heal_at = next(k for k, (op, v, _l) in enumerate(sent)
+                   if op == FLOAT_T and v[0] == agents.GV_HEALTH_GAIN)
+    attr_at = [k for k, op in enumerate(ops) if op == ATTR]
+    check(OP_REMOVE in ops and attr_at
+          and ops.index(OP_REMOVE) < min(attr_at) and max(attr_at) < heal_at,
+          "in retail's order: 0x0044, the 0x003B restores, THEN the 55 word "
+          "-- the client already reads rank 8 when the rank-7 number lands",
+          f"{[hex(o) for o in ops]}")
+    check(authsrv.weakened_rank(state, PLAYER, 8) == 8,
+          "and after the cast the rank reads 8 again")
+finally:
+    authsrv.CONDITION_HEAL_RULE, authsrv.ENERGY = _s33
+
 print("== 32. the corpus: retail's Weakness batch (deepwoundjoin."
       "weakness_attributes) ==")
 try:
@@ -1970,6 +2015,24 @@ try:
           "ONE, the base is the same at both, and no rank-0 attribute rides",
           f"{wk['lifted_by_one']} of {wk['pairs']} lifted by one, "
           f"{wk['same_base']} same base")
+    lifts = [r for r in deepwoundjoin.weakness_lifts() if r["others"] >= 1]
+    known = [r for r in lifts if r["points"] is not None]
+    PROT = 15       # Protection Prayers, Mend Ailment's attribute
+
+    def _at(r, lift):
+        return r["others"] * authsrv.skill_heal(277, r["restored"][PROT] - lift)
+
+    check(len(known) >= 4 and all(PROT in r["restored"] for r in known)
+          and all(abs(r["points"] - _at(r, 1)) < 0.01 for r in known)
+          and not any(abs(r["points"] - _at(r, 0)) < 0.01 for r in known),
+          "WKL1 a cast that removes Weakness with other conditions remaining "
+          "heals per remaining at the WEAKENED rank -- one under the rank its "
+          "own batch restores -- and never at the restored one (RUN-SKILLS-"
+          "WKL: 3 x 35 and 2 x 70 at Protection 8, where the controls heal 40)",
+          f"{[(r['others'], r['restored'].get(PROT), r['points']) for r in known]}")
+    check(lifts and all(r["attrs_before_heal"] for r in lifts),
+          "WKL2 and every one carries its 0x003B restores AHEAD of the 55 word",
+          f"{len(lifts)} lifts")
 except (Exception, SystemExit) as exc:                           # noqa: BLE001
     LEDGER.skip("section 32 (corpus)", f"{type(exc).__name__}: {exc}")
 

@@ -267,6 +267,69 @@ def score_weakness(rows):
             "zero_base_rows": sum(1 for r in rows for x in r["attrs"] if x[1] == 0)}
 
 
+CONDITIONS = frozenset(range(478, 487)) | {2077}
+
+
+def weakness_lifts(codec=None):
+    """Every batch in the corpus that REMOVES Weakness and heals the same agent
+    -- a cast that lifts the penalty and heals by an attribute in one stroke
+    (RUN-SKILLS-WKL, studies/skills 52). A row: {"capture", "connection", "t",
+    "agent", "others" (conditions still live on the agent after the removal),
+    "points" (the 55 word in whole points of the running maximum, None with no
+    maximum on the wire), "restored" ({attribute: the effective rank the batch
+    restores}), "attrs_before_heal" (every 0x003B restore rides
+    AHEAD of the 55 word)}."""
+    import struct
+    import vaultpath
+    codec = codec or bufflog.Codec()
+    live = vaultpath.require_dir("captures", "live",
+                                 why="deepwoundjoin reads live captures")
+    out = []
+    for stamp in sorted(os.listdir(live)):
+        cap_dir = os.path.join(live, stamp)
+        if not os.path.isdir(cap_dir):
+            continue
+        for ch in tape.channel_files(cap_dir):
+            try:
+                seq = sequence(cap_dir, ch["connection"], codec)
+            except (bufflog.BuffLogError, tape.TapeError):
+                continue
+            buffs, hmax = {}, {}        # buff id -> (agent, skill); agent -> [42]
+            for i, t, op, v in seq:
+                if op == 0x009F and v[1] == 42:
+                    hmax[v[2]] = v[3]
+                elif op == OP_APPLY and v[2] in CONDITIONS:
+                    buffs[v[4]] = (v[1], v[2])
+                elif op == OP_REMOVE and v[2] in buffs:
+                    agent, skill = buffs.pop(v[2])
+                    if skill != WEAKNESS:
+                        continue
+                    batch = [(j, w) for j, tj, _o, w in seq[i:i + 14]
+                             if abs(tj - t) <= BATCH]
+                    heal = next(((j, w) for j, w in batch
+                                 if w[0] == 0x00A3 and w[1] == 55
+                                 and w[2] == agent and w[3] == agent), None)
+                    if heal is None:
+                        continue
+                    attrs = [j for j, w in batch
+                             if w[0] == OP_ATTRIBUTE and w[1] == agent]
+                    restored = {w[2]: w[4] for _j, w in batch
+                                if w[0] == OP_ATTRIBUTE and w[1] == agent}
+                    frac = struct.unpack(
+                        "<f", struct.pack("<I", heal[1][4] & 0xFFFFFFFF))[0]
+                    mx = hmax.get(agent)
+                    out.append({
+                        "capture": stamp, "connection": ch["connection"],
+                        "t": t, "agent": agent,
+                        "others": sum(1 for a, _s in buffs.values()
+                                      if a == agent),
+                        "points": None if not mx else round(frac * mx, 2),
+                        "restored": restored,
+                        "attrs_before_heal": bool(attrs)
+                        and max(attrs) < heal[0]})
+    return out
+
+
 def status_census(codec=None):
     """Which `0x00F1` bits each effect apply SETS, from retail's own wire.
 
