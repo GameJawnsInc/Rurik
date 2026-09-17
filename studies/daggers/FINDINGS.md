@@ -144,18 +144,33 @@ instant, no damage word. That is the corpus's only reason-2, which skills §44.4
 had and could not explain. Two armed presses connected (one advanced the state; one
 raced the target's death); two were refused `0x00E2`.
 
-**CONTESTED against WIKI, n = 1:** WIKI says a failed chain attack spends energy and
-"do[es] not cause the skill to recharge". The tape shows the `0x00E5` going out, and a
-second press 1.5 s later refused — consistent with a recharge running, but a refusal has
-other causes and the recharge message itself was not isolated. → DAGGERS-Q3.
+**The whole batch, and it agrees with WIKI after all (n = 1).** WIKI ("Dagger attack"): a
+failed chain attack uses "up the energy cost" and "Failed attacks do not cause the skill
+to recharge". The first draft of this section called that CONTESTED, because the close
+goes out and a re-press 1.5 s later was refused. Read against an armed press of the same
+skill on the same tape, it is not:
+
+| | unarmed, t = 236.134-236.303 | armed, t = 255.193-255.343 |
+|---|---|---|
+| at property 50 | `0x00A2 [62, me, -0.20]` — 5 of 25 energy | the same |
+| at the landing | `0x00E5 [me, 780, 0, 3]` | `0x00E5 [me, 780, 0, 3]` |
+| | `0x009F [46, me, 0]` | `0x005C [me, target, 2]` |
+| | **`0x00A0 [38, target, me, 2]`** | `0x00A3 [16, target, me, -0.1071]` |
+| | **`0x00E5 [me, 780, 0, 0]`** | — |
+| | `0x00E3 [me, 780, 0]` | `0x00E3 [me, 780, 0]` |
+
+The energy IS debited, and the recharge (3 s, the table's own `recharge`) is started
+**and zeroed in the same instant by a second `0x00E5` whose last field is 0**. The
+refused re-press was 0.4 s into skill 858's cast, not a recharge. → DAGGERS-Q3 is now a
+replication, and asks the same of a failed DUAL.
 
 ### DAGGERS-F8 — NOT FOUND in the corpus
 
 A dual attack by the observer (the only 1019 is a hostile's, and its target died 0.7 s
 later); two damage words from one dual; state 3; a double strike; the Critical Strikes
-energy step (the agent read property 41, which is MAX energy — it fires at load and never
-again — so "n = 0" there is a wrong-channel null, not a negative; re-read on the current-
-energy channel before the capture is scored).
+energy step — the gain channel is float property 52 on `0x00A2` (`pools.py`), it never
+fires on this tape, and it should not: the observer's one critical hit (property 17,
+t = 254.797) was struck with attribute 35 at rank 0, where WIKI gives 0 energy.
 
 ---
 
@@ -183,7 +198,7 @@ GWW, fetched 2026-09-17. All player-visible, so WIKI is strong here.
 | **DAGGERS-B2** | A dagger item row (item_type 32, offhand empty), `WEAPON_TYPE_ATTRIBUTE` / `WEAPON_TYPE_RATE` entries, `PARTY_WEAPON_ITEMS["daggers"]` — a profession-7 party body cannot resolve a weapon today. | F4, F5 |
 | **DAGGERS-B3** | `player_profession` on the `[party.*]` row; today only `--spawn-profession`, unwired to the row's attributes and weapon. | audit |
 | **DAGGERS-B4** | Weapon gate on attack skills from `weapon_req`. What retail SENDS on a mismatch is unobserved — ship the refusal the server already uses (`0x00E2`) and label it RECONSTRUCTION. | F3 |
-| **DAGGERS-B5** | Chain state per (attacker, target): set on a chain skill's HIT, `0x005C` to the attacker only, clear at 15 s or death; unmet `combo_req` → accept, property 50, close, `[38, target, me, 2]`, no damage. | F6, F7 |
+| **DAGGERS-B5** | Chain state per (attacker, target): set on a chain skill's HIT, `0x005C` to the attacker only, clear at 15 s or death; unmet `combo_req` → F7's batch verbatim: energy debited, `0x00E5` recharge, 46, `[38, target, me, 2]`, `0x00E5` 0, `0x00E3`; no damage, no state. | F6, F7 |
 | **DAGGERS-B6** | Second strike: duals always, plain swings on the double-strike roll. Wire shape waits on Q1 / Q2. | §3 |
 | **DAGGERS-B7** | Critical Strikes: crit chance + energy on a critical hit. Wire shape waits on Q4. | §3 |
 
@@ -197,7 +212,7 @@ B1-B5 need no new capture. B6 and B7 do.
 |---|---|---|
 | **DAGGERS-Q1** | A dual that lands: one property 50 and two damage words? how far apart? `0x005C` state 3, and when? | no observer dual, n = 0 |
 | **DAGGERS-Q2** | A double strike on a plain swing: two damage words in one windup? does the next swing still start at 1.33 s? | 34 swings at rank ≤ 2, n = 0 |
-| **DAGGERS-Q3** | A failed off-hand / dual: is energy debited, does the recharge start? (WIKI vs F7) | n = 1, recharge not isolated |
+| **DAGGERS-Q3** | A failed off-hand replicates F7's batch (energy debited, `0x00E5` recharge then `0x00E5` 0)? A failed DUAL: the same, and do its "two attacks" send two fail words? | n = 1 off-hand, n = 0 dual |
 | **DAGGERS-Q4** | The energy step on a critical hit: which message, which batch? | wrong channel read; rank 1 gives 0 energy anyway |
 | **DAGGERS-Q5** | A second lead on an armed target: a second `state = 1`? does the 15 s restart? Does state 3 persist 15 s, and does a lead after it go back to 1? | no target led twice |
 
@@ -205,3 +220,11 @@ The regime that answers all five is a **PvP Assassin on the Isle of the Nameless
 Dagger Mastery 12 (26 % double strike, ~1 swing in 4), Critical Strikes ≥ 8, against a
 practice target that does not die inside the 15 s clock, which is the confound that cut
 six of seven lifetimes short in F6.
+
+**RUN-DAGGERS-1, staged 2026-09-17, not run.** `vault/plans/daggers_chain.txt` — eight
+steps, the predictions and their rivals pre-registered in the file's header, one meaning
+for F11 ("the chain icon on the target's bar just changed": the tape carries `0x005C`,
+only the operator sees what the client drew). Bar 782 / 780 / 775 / 781 and nothing else;
+Dagger Mastery 12, Critical Strikes 8. Its floor: ≥ 30 plain swings with ≥ 3 double, one
+landed dual with the target alive 16 s later, one re-lead pair, two cold presses each of
+780 and 775, three critical hits below full energy.
