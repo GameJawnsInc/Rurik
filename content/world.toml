@@ -1832,3 +1832,29 @@ Unsuspecting Strike 783 (a second lead, the one on the owner's tape), Resurrecti
 Signet 2. The chain grammar is the client's own (`combo`, `combo_req`). The \
 character still WEARS the base fixture's Warrior armour rows: what an Assassin \
 body draws under them is a client question no run has asked."""
+
+[party.daggers20]
+hero = 3
+body = "academy_monk"
+skills = [281, 276, 2]
+level = 3
+health = 140
+energy = 30
+weapon = "staff"
+attributes = [[13, 3], [16, 2], [15, 1]]
+armor = 25
+damage = [3, 5]
+weapon_attribute = 13
+player_profession = 7
+player_energy = 25
+player_pips = 4
+player_level = 20
+player_health = 480
+player_attributes = [[29, 12], [35, 8]]
+player_points = 200
+player_weapon = "starter_daggers"
+player_skills = [782, 780, 775, 781, 783, 2]
+
+[party.daggers20.provenance]
+source = "invented"
+note = """Ours (DAGGERS, 2026-09-17). [party.daggers] with RUN-DAGGERS-1's ranks: level 20 (health 480, WIKI "Level"), Dagger Mastery 12 and Critical Strikes 8 -- what the owner's PvP Assassin carried on 20260917T160915 off 0x003A -- out of level 20's 200 points (97 + 37 spent). It exists to EXPOSE what rank 3 and rank 2 cannot on a short run: a double strike a swing in four (2 % + 2 % x 12) and 2 energy a critical. The weapon stays the starter daggers' 1-3 on purpose, so a 100-health practice target outlives a minute of it; the owner's 7-17 PvP pair is not a content row."""

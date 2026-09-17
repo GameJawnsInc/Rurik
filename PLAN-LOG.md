@@ -27,6 +27,18 @@ move back.
 
 ---
 
+### ✅ DAGGERS on our own client 2026-09-17 — **two scripted loopback runs PASS; the dual floats two numbers, a critical draws the magenta +2; the chain icon was NOT on screen** ([studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md) §7)
+
+Harness `20260917T165523` (`--party daggers`) and `20260917T165940` (`--party daggers20`, a
+new row: RUN-DAGGERS-1's ranks on the 1-3 starter daggers, so a minute of swings exposes
+what rank 3 cannot). Pin client, map 280, presses through the `skill:` mailbox. No assert,
+0 undecodable; the gamesrv logs carry every step. Seen: party panel A3, energy 25 at four
+pips, the client's own ✕ on unmet chain skills, Death Blossom's TWO stacked −26s, the
+magenta +2 with the energy sparkle on a critical (8 of 8), 3 double strikes in 19 swings.
+Not seen: the `0x005C` icon (it draws on the target display; the harness selects nothing —
+a hand-driven run's question) and any armour (the body is a bare Assassin; no Assassin
+armour rows exist). The first run's first chain hit a corpse the Monk hero had made.
+
 ### ✅ DAGGERS-B2..B7 LANDED + RUN-DAGGERS-1 SCORED 2026-09-17 — **an Assassin with daggers plays a whole chain on our server; the owner's capture answered all five questions and refuted two predictions** ([studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md) §4, §6)
 
 `--party daggers`: profession 7 on 25 energy / 4 pips (the rate derived, 0.0528 — the
