@@ -27,6 +27,14 @@ move back.
 
 ---
 
+### ✅ `--enemy-cluster U` 2026-09-17 — **a rig knob: the owner's `--enemies 3` run splashed nobody, because the ring puts neighbours 424 u and 600 u apart**
+
+`population.enemy_spots` rings the PLAYER at the spawn offset, so no adjacent-range (156 u)
+skill can reach a neighbour. `--enemy-cluster U` keeps the first body's spot and stands
+bodies 2..N on the compass points U units around IT (retail's stood 78 u and 94 u from the
+Master of Damage). Default unchanged. `test_daggers.py` §9 +1 (76 → 77): the ring's arm
+and the cluster's; `test_population.py` 75, untouched and green.
+
 ### ✅ FOUR CORPUS REDS ON `main` CLOSED 2026-09-17 — **none was noise and none was the tape it was blamed on: three trace to RUN-SKILLS-RB (`20260916T213125`), and the rows settle the damage-taken adrenaline rule (SKILLS-AD), deliver the corpus's first runes, and name a late capture stamp** ([studies/skills/FINDINGS.md](studies/skills/FINDINGS.md) §53, [studies/itemmods/FINDINGS.md](studies/itemmods/FINDINGS.md) §5.7, [studies/movement/FINDINGS.md](studies/movement/FINDINGS.md) 2026-09-17)
 
 `test_adrenwire`, `test_itemmods`, `test_movesync` and `test_resyncscore` were red on

@@ -30,8 +30,8 @@ import agents  # noqa: E402
 import chain  # noqa: E402
 import checks  # noqa: E402
 
-# FLOOR 76, from the green run of 2026-09-17 on the machine with the vault.
-LEDGER = checks.Ledger("daggers and the attack chain", floor=76)
+# FLOOR 77, from the green run of 2026-09-17 on the machine with the vault.
+LEDGER = checks.Ledger("daggers and the attack chain", floor=77)
 check = LEDGER.ok
 
 PLAYER = 1
@@ -571,7 +571,7 @@ def section_adjacent(have_fields):
     print("\n9. an attack skill's ADJACENT damage (DAGGERS-B8)")
     if not have_fields or authsrv.skill_adjacent_damage(DUAL, 12) is None:
         LEDGER.skip("section 9", "the skills rows carry no aoe_range (the vault "
-                    "table predates DAGGERS-B8) -- 8 checks")
+                    "table predates DAGGERS-B8) -- 9 checks")
         return
     check(authsrv.skill_adjacent_damage(DUAL, 12) == (40.0, 156.0),
           "Death Blossom at rank 12: 40 points inside 156 u -- the client's own "
@@ -596,6 +596,21 @@ def section_adjacent(have_fields):
             st["agents"][aid] = {**base, "pos": pos, "health": 480.0,
                                  "max_health": 480.0, **over}
         return st
+
+    # the rig: --enemies N alone rings the PLAYER, and no neighbour is in reach
+    import math
+    import population
+    ring = population.enemy_spots({}, 0.0, 0.0, 3, ENEMY_OFFSET=authsrv.ENEMY_OFFSET)
+    near = population.enemy_spots({}, 0.0, 0.0, 3, ENEMY_OFFSET=authsrv.ENEMY_OFFSET,
+                                  cluster=90.0)
+    check(all(math.dist(ring[0], c) > 156.0 for c in ring[1:])
+          and ring[0] == near[0] and len(set(near)) == 3
+          and all(math.dist(near[0], c) <= 156.0 for c in near[1:]),
+          "--enemies 3 alone puts every neighbour past 156 u (the owner's run "
+          "splashed nobody); --enemy-cluster 90 keeps the first body's spot and "
+          "stands the rest inside the radius",
+          f"ring {[round(math.dist(ring[0], c)) for c in ring[1:]]}, "
+          f"cluster {[round(math.dist(near[0], c)) for c in near[1:]]}")
 
     saved_cost = authsrv.skill_cost
     authsrv.skill_cost = lambda sid: (0, 0)
