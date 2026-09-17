@@ -923,6 +923,39 @@ def section_real_content():
           "for this skill", f"{e5}")
 
 
+def section_corpus_windup():
+    """RETAIL'S OWN SWINGS, under every attack-speed modifier it declares."""
+    print("\n11. the corpus: the windup is modifier * base / 2 - 0.1 s "
+          "(iaswindup W1-W3)")
+    try:
+        import iaswindup
+        sc = iaswindup.score(iaswindup.census())
+    except (Exception, SystemExit) as exc:                     # noqa: BLE001
+        # SystemExit on purpose: vaultpath.require_dir raises it by design,
+        # and it is not an Exception subclass (test_pools section 2 has the
+        # long form of why).
+        LEDGER.skip("11. the corpus windup (iaswindup)",
+                    f"no live corpus to read on this machine: {exc!r}")
+        return
+    rows = [(g["capture"], g["agent"], g["base"], g["modifier"], g["n"],
+             g["median"], g["err_a"], g["err_b"]) for g in sc["groups"]]
+    check(sc["w3"] and len(sc["groups"]) >= 4,
+          "W3 the exposure is real: >= 2 groups swing under a modifier other "
+          "than 1.0, on >= 2 bases (animref 17 had ZERO on 2026-08-31 -- the "
+          "Warrior tapes since are the change)",
+          f"{sc['modified_groups']} modified groups on bases "
+          f"{sc['modified_bases']}, {len(sc['groups'])} groups, "
+          f"{sc['swings']} swings")
+    check(sc["w1"],
+          "W1 every group's median windup is within 20 ms of candidate A, "
+          "modifier * base / 2 - 0.1 -- the law `attack_windup` ships",
+          f"{rows}")
+    check(sc["w2"],
+          "W2 and candidate B (no additive term) misses every group by more "
+          "than 50 ms -- the -0.1 is measured, not fitted",
+          f"err_b {[r[7] for r in rows]}")
+
+
 def main():
     section_press_shape()
     section_tick_order()
@@ -934,6 +967,7 @@ def main():
     section_order_pinned_when_inverted()
     section_queue_law()
     section_real_content()
+    section_corpus_windup()
     return LEDGER.verdict()
 
 
