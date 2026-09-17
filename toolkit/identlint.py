@@ -97,7 +97,10 @@ SKIP_DIRS = (".git", ".claude", "__pycache__", "vault", "node_modules", ".venv")
 # plus every study document. `RUNBOOK.md` is deliberately out, as it was there --
 # it mints its own F-namespace and references the R ladder without defining it, so
 # adding it would move the number without moving the defect.
-ROOT_DOCS = ("PLAN.md", "HANDOFF.md", "TESTS.md")
+# `PLAN-LOG.md` joined on 2026-09-17: it is `PLAN.md` section 8's entries, moved out
+# byte for byte, so it was always inside this corpus -- leaving it out would have
+# shrunk the measured set by a file rename (1107 sites -> 1106).
+ROOT_DOCS = ("PLAN.md", "PLAN-LOG.md", "HANDOFF.md", "TESTS.md")
 STUDY_DIR = "studies"
 
 

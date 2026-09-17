@@ -206,7 +206,17 @@ GRANDFATHERED = {
     # CLAUDE.md's refinement puts outside extraction entirely. 25 is the proportion
     # the 11-entry rows above already carry (reconstruction 11 -> 25, enemy/PLAN.md
     # 11 -> 25), not a new number.
-    "PLAN.md": 25,
+    #
+    # RE-AIMED 2026-09-17, when 8's 226 entries moved byte for byte to PLAN-LOG.md
+    # (PLAN.md was 1.4 MB and 79% of it was that section). The citations went with
+    # the text: 21 of the 23 are now in the log and PLAN.md keeps 3's two, which is
+    # under NEWCOMER_CEILING, so PLAN.md needs no row and the row follows the content
+    # it was measured on. The tree-wide total did not move (488 before and after) --
+    # a file rename is not a citation. 45 is the same proportion again (21 -> 45): the
+    # log is append-only and every arc that lands writes to it, so re-arming at 25 with
+    # 4 of headroom is the zero-headroom tripwire the paragraph above already tried.
+    # 21 across 226 entries is one citation per eleven entries, which is not a dump.
+    "PLAN-LOG.md": 45,
     # 12 on 2026-08-23, two over NEWCOMER_CEILING on the day the composite arc's
     # runtime half landed (9.11-9.20: the CpsBase layout, the slot permutation,
     # the five row-writing sites, the per-item refresh). The 12 are 10 DISTINCT

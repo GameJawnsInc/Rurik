@@ -215,7 +215,7 @@ def main():
     # repo's worktrees, each a full checkout of the same documents, and `provlint.py`
     # records what that did to its number -- green inside a worktree, red on `main`
     # at the same commit. This module cannot repeat that STRUCTURALLY: the walk
-    # enters only `studies/` plus three named root files, so a nested checkout is
+    # enters only `studies/` plus the named root files, so a nested checkout is
     # unreachable rather than skipped (`SKIP_DIRS` prunes nothing today; it is
     # future-proofing). A check on the skip list would therefore be one that cannot
     # fail -- so the check is on the corpus scope itself, and it goes red the day

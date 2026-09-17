@@ -9437,7 +9437,18 @@ the same-tick ALIAS**: the
   from "something moved" to anything reading the code. Asking the exception for
   its `.code` had passed. §4 refuses the baseline into any checkout of this repo,
   including the other one. Floor 26, ~60 s),
-  `toolkit/test_checks.py` (the check on the checker — see below),
+  `toolkit/test_checks.py` (the check on the checker — see below. **2026-09-17, the
+  PLAN-SPLIT, floor 14 → 17:** `PLAN.md` §8 is held to a BYTE CEILING (40,000) —
+  until that day §8 was 226 closed entries and 1,113 KB of a 1,402 KB file, because
+  every landing prepended an entry and nothing ever left; the entries moved byte for
+  byte to `PLAN-LOG.md`, and "write the landing in the log" is a wish unless §8 can
+  redden. Three checks: the section is FOUND and at least 500 bytes (a renamed
+  heading would otherwise pass the ceiling on nothing — the placeholder body reddened
+  this one during the split), it is under the ceiling (the pre-split file measures
+  1,113,422), and a CONTROL on synthetic text that the measurer stops at the next H2
+  and says None for an absent section. When it fires, MOVE entries to the log; raising
+  the number is how the 1.1 MB happened. `PLAN-LOG.md` also joined `TOP_DOCS`, so its
+  repo-relative links are checked like the other house documents'),
   `toolkit/test_run_suite.py` (the suite RUNNER, which did not exist until
   2026-08-13 — 66 test files and **0 scripts that ran them**, so every "the suite is
   green" in this repo's history was a human pasting paths into a shell, which is how
@@ -9944,7 +9955,11 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   "default is the PIN" — the server serves loopback clients, every run directory but one is
   the pin's generation (`vault/run/slice` is 38797 by its own getter), and the harness passes
   the exe's build itself, so only the hand loop ever sees the default),
-  `toolkit/test_provlint.py` (an ACCUMULATION TRIPWIRE on assert citations in prose,
+  `toolkit/test_provlint.py` (**2026-09-17, the PLAN-SPLIT: the `PLAN.md` row of
+  `GRANDFATHERED` followed its content to `PLAN-LOG.md` — 21 of the 23 citations
+  moved with §8's entries, `PLAN.md` keeps §3's two and needs no row, the tree-wide
+  total is 488 before and after, and the log's ceiling is 45 (21 → 45, the file's own
+  proportion).** An ACCUMULATION TRIPWIRE on assert citations in prose,
   and the story of why it is only that is worth more than the file. `content.py`
   enforced the provenance gate's permitted side from the day it was written; the same
   ruling's refusal of "verbatim assert expressions with their source path and line"
@@ -9973,7 +9988,10 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   `Build: 38797` is not a source location while `AgMsg:208` is; the upstream denylist
   is checked in the direction that can do damage, since `MapData` was on it for a
   draft on the strength of GWLP-R's `MapData.scala`. No vault, no socket, no client),
-  `toolkit/test_seclint.py` (an ACCUMULATION TRIPWIRE on SECTION-NUMBER collisions --
+  `toolkit/test_seclint.py` (**2026-09-17, the PLAN-SPLIT: the known `8.0` collision is
+  keyed to `PLAN-LOG.md` now — the two `### 8.0 Next` headings moved with §8's entries,
+  and STALE + NEW both fired on the rename, which is the pair of verdicts doing their
+  job.** An ACCUMULATION TRIPWIRE on SECTION-NUMBER collisions --
   two headings that both took "the next number", so every later `§N` citation is
   ambiguous. Written 2026-08-22 after `studies/skills/FINDINGS.md` did it TWICE: §26
   first, resolved as §26.12/§26.13, then `## 32.` for both the silent-extend probe and
@@ -10005,7 +10023,11 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   subjects (`Skills 32.8`, `Isle 8.6`, `§27.4`), and one of the 6 -- heroes §35.2 -- is a
   deliberate SUPERSEDED-BY banner above the heading it supersedes and must not be
   "fixed". No vault, no socket, no client. ~1 s),
-  `toolkit/test_identlint.py` (an ACCUMULATION TRIPWIRE on IDENTIFIER collisions, the
+  `toolkit/test_identlint.py` (**2026-09-17, the PLAN-SPLIT: `PLAN-LOG.md` joined
+  `identlint.ROOT_DOCS`, because it is `PLAN.md` §8's text and was always in the
+  corpus — without it the site count fell 1107 → 1106 on a file rename, and
+  `whichrung.py` stopped resolving into the entries.** An ACCUMULATION TRIPWIRE on
+  IDENTIFIER collisions, the
   same posture as `test_provlint.py` and chosen the same way. `studies/idents/HANDOFF.md`
   §3 decision 5 offered three shapes — a hard gate refusing any new token without an arc
   prefix, a tripwire that only reports GROWTH in the collision count, or documentation

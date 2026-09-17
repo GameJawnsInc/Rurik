@@ -10,6 +10,16 @@ single status authority, dated and stamped with a commit hash per rung. This fil
 `RUNBOOK.md` deliberately do not restate it — they did, they disagreed, and the newest
 of the three was 40 hours stale. `PLAN.md` §8 is the live next-actions list.
 
+**§8 holds what is OPEN; what LANDED goes in [PLAN-LOG.md](PLAN-LOG.md).** When an
+item runs, ships, is refuted or is withdrawn, write its entry at the top of the log and
+take its line out of §8 in the same commit. Until 2026-09-17 §8 *was* the log: 226
+closed entries, 1.1 MB, 79 % of a 1.4 MB `PLAN.md` that this file tells every session to
+read and that no reader could hold — `Read` stops at 2,000 lines of 12,110 and says
+nothing, so a cold session got the newest sixth and took it for the file. The entries
+moved byte for byte, so **a "`PLAN.md` §8" citation dated before that day resolves in
+the log**; do not sweep the studies to re-point them. Search the log, never read it
+end to end. `test_checks.py` holds §8 to a byte ceiling so it cannot drift back.
+
 ## Non-negotiable
 
 - **Provenance gate: zero ArenaNet bytes in the repo, ever.** No client files, no

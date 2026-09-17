@@ -30,7 +30,7 @@ def run(build):
 
 
 def main():
-    led = checks.Ledger("checks.py itself", floor=14)
+    led = checks.Ledger("checks.py itself", floor=17)
 
     # --- the rule that would have caught test_codec.py in 2026-08 ---------------
     def empty():
@@ -129,10 +129,63 @@ def main():
                "every commit hash PLAN.md §3 stamps a rung with resolves",
                ", ".join(bad_hashes) if bad_hashes else "")
 
+    # --- and section 8 stays a list of what is OPEN -------------------------------
+    # Until 2026-09-17 PLAN.md section 8 was 226 closed entries and 1,113 KB of a
+    # 1,402 KB file: every landing prepended an entry and nothing ever left, so the
+    # document CLAUDE.md tells each session to read had grown past what any reader
+    # holds (`Read` stops at 2,000 lines of 12,110, silently). The entries moved to
+    # PLAN-LOG.md. A rule that says "write the landing in the log" is a wish unless
+    # something reddens when the landing is written in section 8 instead, so: a byte
+    # ceiling. When this fires, MOVE closed entries to the log; raising the number
+    # is how the last 1.1 MB happened, one reasonable entry at a time.
+    size = plan_section_bytes(read_plan(), "8")
+    led.ok(size is not None and size >= SECTION8_FLOOR,
+           "PLAN.md section 8 is found and is not empty",
+           f"{size} bytes" if size is not None else "no `## 8.` heading -- a renamed "
+           "heading would make the ceiling below pass on nothing")
+    led.ok(size is not None and size <= SECTION8_CEILING,
+           f"and it is under {SECTION8_CEILING:,} bytes -- open items, not a log",
+           (f"{size:,} bytes" + ("; MOVE what has landed to PLAN-LOG.md, do not "
+                                 "raise the number" if size > SECTION8_CEILING else ""))
+           if size else "")
+    # CONTROL, both directions, on synthetic text so it cannot rot with the document:
+    # the measurer must see a bloated section 8 as bloated, and must stop at the next
+    # H2 rather than swallow it.
+    fat = ("## 7. Q\nq\n## 8. Immediate next actions\n" + "x" * 90000
+           + "\n## 9. Z\nz\n")
+    led.ok(plan_section_bytes(fat, "8") == 90001
+           and plan_section_bytes(fat, "8") > SECTION8_CEILING
+           and plan_section_bytes(fat, "9") == 2
+           and plan_section_bytes(fat, "6") is None,
+           "CONTROL: the measurer sizes one section, to the next H2, and says None "
+           "for a section that is not there")
+
     return led.verdict()
 
 
-TOP_DOCS = ("CLAUDE.md", "PLAN.md", "RUNBOOK.md", "HANDOFF.md", "TESTS.md")
+# Set from the real document on 2026-09-17, the day of the split, with room for
+# a busy week's open items -- NOT room for a changelog.
+SECTION8_CEILING = 40_000
+SECTION8_FLOOR = 500
+
+
+def read_plan():
+    path = os.path.join(repo_root(), "PLAN.md")
+    with open(path, encoding="utf-8") as fh:
+        return fh.read()
+
+
+def plan_section_bytes(text, number):
+    """UTF-8 bytes of `## <number>.`'s body, up to the next H2 or the end. None if absent."""
+    m = re.search(rf"^## {re.escape(number)}\.[^\n]*\n", text, re.M)
+    if not m:
+        return None
+    nxt = re.search(r"^## ", text[m.end():], re.M)
+    body = text[m.end():m.end() + nxt.start()] if nxt else text[m.end():]
+    return len(body.encode("utf-8"))
+
+
+TOP_DOCS = ("CLAUDE.md", "PLAN.md", "PLAN-LOG.md", "RUNBOOK.md", "HANDOFF.md", "TESTS.md")
 
 
 def broken_doc_links():
