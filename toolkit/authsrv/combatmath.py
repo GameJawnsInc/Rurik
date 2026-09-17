@@ -178,6 +178,47 @@ def armour_of_piece(item, physical, ARMOR_RATING_MODIFIER,
     return (float(rating), float(bonus or 0.0) if physical else 0.0)
 
 
+# ---- THE ENERGY THE ARMOUR GIVES (DAGGERS-F15) --------------------------------
+#
+# Two more identifiers on the pieces the owner's level-3 Assassin wore
+# (20260819T132414): 556 arg 5 on the chest, 558 arg 1 on the boots and on the
+# legs. Their tooltip lines resolve through text ids 2071 and 2072, which this
+# server does not read; what it CAN check is the arithmetic. WIKI (GWW
+# "Energy"): every profession starts from 20 energy and 2 pips, and the
+# Assassin's armour brings "+5 / +2" -- 20 + 5 and 2 + 1 + 1. The same
+# character ran property 43 at wire_regen_rate(4, 25) on retail. So 556 is
+# "+N energy" and 558 is "+N energy recovery", CORROBORATED by two arithmetic
+# coincidences that had no reason to hold. The Warrior fixture's pieces carry
+# neither word, and its 25 / 3 pool is the Ranger row (pools.py) -- typed in
+# before any of this was read, and left alone: the check below runs only for
+# a party row that names its armour.
+ENERGY_BASE, PIPS_BASE = 20, 2
+ENERGY_MODIFIER, ENERGY_REGEN_MODIFIER = 556, 558
+
+
+def armour_energy_bonus(keys):
+    """(energy, pips) the worn pieces add, summed over their 556 / 558 words.
+    None when the decoder is unavailable (a bare machine)."""
+    try:
+        sys.path.insert(0, os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "clientscan"))
+        import itemmods                                   # noqa: PLC0415
+    except Exception:                                     # noqa: BLE001
+        return None
+    energy = pips = 0
+    for key in keys:
+        for word in agents.item_template(key).get("modifiers", []):
+            d = itemmods.decode(word)
+            if d["skipped_high"] or d["skipped_bit18"]:
+                continue
+            if d["identifier"] == ENERGY_MODIFIER:
+                energy += int(d["arg"])
+            elif d["identifier"] == ENERGY_REGEN_MODIFIER:
+                pips += int(d["arg"])
+    return energy, pips
+
+
 def player_armour_at(location_key, physical, EQUIP_ARMOUR,
                      ARMOR_RATING_MODIFIER, ARMOR_VS_TYPE_MODIFIER):
     """The player's effective AR at one body location, or None if unarmoured."""

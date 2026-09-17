@@ -19838,6 +19838,22 @@ def apply_party_character(prow):
                                 in zip(STARTER_ARMOUR, keys)}
         changed.append(f"armour {keys} (chest "
                        f"{player_armour_at('warrior_body'):.0f})")
+        # DAGGERS-F15: the pool the ARMOUR gives against the pool the row
+        # TYPES. Said, not enforced: the typed pair still binds, and a row
+        # whose numbers disagree with its own pieces prints why.
+        _bonus = combatmath.armour_energy_bonus(keys)
+        if _bonus is not None:
+            _energy = combatmath.ENERGY_BASE + _bonus[0]
+            _pips = combatmath.PIPS_BASE + _bonus[1]
+            if (_energy, _pips) != (agents.PLAYER_ENERGY, PLAYER_ENERGY_PIPS):
+                print(f"PARTY: the armour gives {_energy} energy at {_pips} "
+                      f"pips ({combatmath.ENERGY_BASE} + {_bonus[0]}, "
+                      f"{combatmath.PIPS_BASE} + {_bonus[1]}) and the row "
+                      f"types {agents.PLAYER_ENERGY} at {PLAYER_ENERGY_PIPS} "
+                      f"-- the row wins; say why in its note [DAGGERS-F15]",
+                      flush=True)
+            else:
+                changed.append(f"pool {_energy}/{_pips} = the armour's")
     if prow.get("player_skills"):
         PARTY_SKILLBAR = [int(s) for s in prow["player_skills"]]
         changed.append(f"bar {PARTY_SKILLBAR}")
