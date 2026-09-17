@@ -1916,6 +1916,14 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   no longer the wipe's blocker. With it, R4a's other absences per §3: a spawn table and
   any behaviour beyond aggro, chase and swing.
 
+**Daggers** — [studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md)
+
+* **DAGGERS-B1..B5, buildable now.** The skill record's chain fields and weapon mask are
+  decoded but not emitted; the dagger item row, the profession knob, the weapon gate and the
+  `0x005C` chain state need no new capture (daggers §4).
+* **DAGGERS-Q1..Q5, the capture.** A landed dual, a double strike, a failed step's recharge,
+  the Critical Strikes energy step and a re-lead are all n = 0 in the corpus (daggers §5).
+
 **Monster AI** — [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md)
 
 * **MONSTERAI-J has no content rows.** `passive` and `group` are built and tested and
