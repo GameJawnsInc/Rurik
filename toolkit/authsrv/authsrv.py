@@ -21287,16 +21287,20 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
     # three on the MANTID tape from drones whose 1- and 2-point swings
     # truncated to nothing (studies/slice/FINDINGS.md SLICE-F46.7).
     # CONVWORD (F46.8): a CONVERTED hit -- Reversal of Fortune eating some or
-    # all of it -- gets its word too, the remainder or -0.0. That is the same
-    # rule (a landed hit always gets its damage word) extended to a third
-    # mechanism BY ANALOGY, and it is labelled so: the corpus holds no
-    # prevention heal at all (813 of 813 heal words close a cast), so retail's
-    # word for a converted hit is UNREAD. One rule beats two arms, and the
-    # heal word still goes first ('healing occurs before damage', GWW).
+    # all of it -- gets its word too, the remainder or a zero. That is the
+    # same rule (a landed hit always gets its damage word) extended to a
+    # third mechanism, and it was shipped BY ANALOGY on 2026-09-14 with -0.0
+    # for the zero. OBSERVED 2026-09-16 (RUN-SKILLS-RB, 20260916T213125,
+    # studies/skills/FINDINGS.md 48): retail's zero for a FULLY converted hit
+    # is +0.0 (0x00000000), 7 of 7, and the remainder is -(hit - cap), 3 of
+    # 3 -- the graze's -0.0 (0x80000000) is a different word. The heal goes
+    # first, 10 of 10 ('healing occurs before damage', GWW).
     frac = _damage_fraction(dealt, player_max_health(state),
                             agents.PROP_DAMAGE,
                             "an enemy swing" if skill_id is None
                             else f"skill {skill_id}")
+    if conversion is not None and dealt == 0:
+        frac = _f32(0.0)            # the converted zero is +0.0, not the graze's -0.0
     if skill_id is None:
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.GV_MELEE_ATTACK_FINISHED, agent_id, 0],
@@ -21563,11 +21567,13 @@ def land_skill(send, state, agent_id, agent, conn_id):
         dealt, conversion = taker_damage(state, _tid, base)
         dealt = _whole_points(dealt)    # DAMAGE-INT: the books and the wire agree
         # ZEROWORD / CONVWORD: a graze is -0.0 and a converted hit is its
-        # remainder or -0.0 -- the word always goes out; see land_swing.
+        # remainder or +0.0 -- the word always goes out; see land_swing.
         frac = _damage_fraction(
             dealt, (state["agents"][_tid]["max_health"] if _tbody
                     else player_max_health(state)),
             agents.PROP_DAMAGE, f"skill {skill_id}")
+        if conversion is not None and dealt == 0:
+            frac = _f32(0.0)        # RUN-SKILLS-RB: the converted zero is +0.0
     # THE FINISH ANNOUNCEMENT OPENS THE BATCH -- ANIMREF-R2's cleanest yield
     # (studies/animref/FINDINGS.md sec.9). Retail closes EVERY other-agent
     # cast episode with a property-58 batch, 58 leading (709/709 finished
@@ -21633,7 +21639,7 @@ def land_skill(send, state, agent_id, agent, conn_id):
     if frac is None:
         # A skill with no damage number at all. A damaging skill that
         # TRUNCATED to nothing (ZEROWORD) or was CONVERTED (CONVWORD) is not
-        # this: its frac is -0.0 or the remainder, and the word goes out.
+        # this: its frac is -0.0 / +0.0 or the remainder, and the word goes out.
         agent["casting"] = None
         return
     agent["casting"] = None

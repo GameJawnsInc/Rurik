@@ -133,13 +133,23 @@ def join(seq):
             if i in joined_hm:
                 continue
             agent, val = v[2], v[3]
-            # a prop-42 moving while a 482 episode is live on this agent is P4's
-            # counter-example; record it
-            for row in applies:
-                if row["agent"] == agent and row["t"] < t and any(
-                        c["agent"] == agent and c["t"] > t for c in closes):
-                    stray.append({"t": t, "agent": agent, "value": val})
-                    break
+            # a prop-42 MOVING while a 482 episode is live on this agent is P4's
+            # counter-example; record it. A re-declaration of the value already
+            # in force is not a move (RUN-SKILLS-RB 2026-09-16: a Reversal of
+            # Fortune trigger re-declares the taker's 42, 384 inside the wound),
+            # and "live" means THIS buff's apply..close, not any apply before
+            # and any close after.
+            moved = running.get(agent) is not None and val != running[agent]
+            if moved:
+                for row in applies:
+                    if row["agent"] != agent or row["t"] >= t:
+                        continue
+                    close_t = next((c["t"] for c in closes
+                                    if c["buff"] == row["buff"]), float("inf"))
+                    if t < close_t:
+                        stray.append({"t": t, "agent": agent, "value": val,
+                                      "was": running[agent]})
+                        break
             running[agent] = val
         elif op == OP_APPLY and v[2] == DEEP_WOUND:
             for row in applies:

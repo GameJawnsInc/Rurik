@@ -467,17 +467,19 @@ try:
           "MELEE_ATTACK_FINISHED still opens the batch -- the swing landed, "
           "its damage did not")
     # CONVWORD (2026-09-14, F46.8): the converted swing gets its damage word
-    # too, as -0.0, AFTER the heal -- one rule (a landed hit always gets its
-    # word) extended by analogy; the corpus holds no prevention heal to read
-    # it from, and this pin says so rather than pretending to a witness.
+    # too, AFTER the heal -- one rule (a landed hit always gets its word).
+    # Shipped by analogy as -0.0; OBSERVED 2026-09-16 (RUN-SKILLS-RB,
+    # 20260916T213125, skills FINDINGS 48): retail's word for a FULLY converted
+    # hit is +0.0 (0x00000000), 7 of 7, the remainder -(hit - cap), 3 of 3,
+    # and the heal precedes the damage 10 of 10. The graze keeps its -0.0.
     floats = [(v[0], v[3]) for op, v, _l in sent
               if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET]
-    check(floats and [f for f in floats if f[0] == agents.PROP_DAMAGE] == [(agents.PROP_DAMAGE, 0x80000000)]
+    check(floats and [f for f in floats if f[0] == agents.PROP_DAMAGE] == [(agents.PROP_DAMAGE, 0x00000000)]
           and [f[0] for f in floats].index(agents.GV_HEALTH_GAIN)
           < [f[0] for f in floats].index(agents.PROP_DAMAGE),
-          "a fully converted swing sends ONE damage word, -0.0 (0x80000000), "
-          "after the heal word -- by analogy with retail's ten -0.0 words, "
-          "UNVERIFIED for a conversion (none in the corpus)",
+          "a fully converted swing sends ONE damage word, +0.0 (0x00000000), "
+          "after the heal word -- retail's 7 of 7 under Reversal of Fortune "
+          "(RUN-SKILLS-RB), a different word from the graze's -0.0",
           f"floats={[(p, hex(x)) for p, x in floats]}")
 finally:
     authsrv.ARMOUR_TERM = saved_armour
@@ -866,8 +868,10 @@ except Exception as exc:                                     # noqa: BLE001
 
 # ---------------------------------------------------------------------------
 # 21-23: SKILLS-BL, Blind (studies/skills/FINDINGS.md 44; missjoin.py is the
-#        corpus read). The RATE is WIKI (GWW "Blind": 90%), the SHAPE is the
-#        client's own attack-fail word read out of its drain (agents.py).
+#        corpus read). The RATE was WIKI (GWW "Blind": 90%) until RUN-SKILLS-RB
+#        (2026-09-16, 20260916T213125) measured 27 misses of 30 blinded closes
+#        = 0.90 on retail; the SHAPE is the client's own attack-fail word read
+#        out of its drain (agents.py), and that tape carries it 27 times.
 print("== 21. SKILLS-BL: a blinded hostile's swing misses nine in ten, and the "
       "miss is [close, 0x00A0 [38, PLAYER, agent, 3]] ==")
 INT, INT_T = (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
@@ -892,8 +896,8 @@ check(BLIND_ID == 479 and agents.GV_ATTACK_FAIL == 38
       "479 is Blind (isle R4-2), 38 is the attack-fail word and reason 3 is "
       "the archive's 'miss' (string id 476 via the drain's table at 0x007FA574)")
 check(abs(authsrv.BLIND_MISS_CHANCE - 0.90) < 1e-12,
-      "the rate is the wiki's 90%, WIKI and not measured -- 0 of 1,042 "
-      "retail closes were swung blind (missjoin P2 NO WITNESS)")
+      "the rate is 0.90 -- the wiki's, and OBSERVED on retail: 27 misses of "
+      "30 blinded closes (RUN-SKILLS-RB, missjoin P2; band [0.735, 0.979])")
 
 saved = (authsrv.ARMOUR_TERM, authsrv.ENERGY, authsrv.BLIND,
          authsrv.random.random)
@@ -1052,8 +1056,8 @@ finally:
     (authsrv.ARMOUR_TERM, authsrv.ENERGY, authsrv.BLIND,
      authsrv.random.random, authsrv.SWING_HOLDS_WALK_GATE) = saved
 
-print("== 23. the corpus: retail's swings close WITH damage, no swing was ever "
-      "swung blind, and property 38 rides with none (missjoin) ==")
+print("== 23. the corpus: retail's swings close WITH damage, a blinded swing "
+      "misses nine in ten, and property 38 rides with no damage (missjoin) ==")
 try:
     import missjoin
     ms = missjoin.score(missjoin.census())
@@ -1061,15 +1065,21 @@ try:
           "at least 1,000 retail swing closes framed (measured 1,042)",
           f"closes={ms['closes']}")
     check(ms["p1"] and ms["p1_rate"] < 0.02,
-          "P1: an unblinded close carries its damage -- no-damage closes under "
-          "2% (measured 7 of 1,042 = 0.67%, and every one of the seven is a "
-          "dead or unreachable target, not a miss)",
-          f"rate={ms['p1_rate']}")
-    check(ms["blind"] == 0,
-          "P2 NO WITNESS, pinned: no retail swing close under a live 479. THE "
-          "DAY THIS GOES RED THE 90% CAN BE MEASURED -- move the rate from "
-          "WIKI to OBSERVED and retire this check",
-          f"blind closes={ms['blind']}")
+          "P1: an unblinded close carries its damage -- UNEXPLAINED no-damage "
+          "closes under 2% (measured 7 of 1,042 = 0.67%, every one a dead or "
+          "unreachable target; a close carrying the fail word is explained, "
+          "and the Student of Blind's 26 self-blinded misses ride there since "
+          "RUN-SKILLS-RB)",
+          f"rate={ms['p1_rate']} worded={ms['plain_miss_worded']}")
+    # RUN-SKILLS-RB (2026-09-16): the day came. 30 closes under a live 479 on
+    # 20260916T213125, 27 of them no-damage closes with [38, target, player,
+    # 3]; the rate is OBSERVED and the pin is a band, not a zero.
+    check(ms["blind"] >= 30 and ms["p2"] is True
+          and ms["p2_band"][0] > 0.5 and ms["p2_band"][1] >= 0.9,
+          "P2 OBSERVED: >= 30 retail closes under a live 479, and the "
+          "no-damage rate's band holds 0.90 and excludes 0.50 (27 of 30 on "
+          "RUN-SKILLS-RB; the band is the tool's own)",
+          f"blind closes={ms['blind']} rate={ms['p2_rate']} band={ms['p2_band']}")
     check(ms["fails"] >= 1 and ms["fail_reasons"].get(2, 0) >= 1,
           "property 38 is on retail's wire, reason 2 'fail' at least once "
           "(20260819T132414 [38, 217, 27, 2])", f"reasons={ms['fail_reasons']}")
@@ -1077,9 +1087,11 @@ try:
           "P5: no property 38 shares its batch with damage from that attacker "
           "onto that target -- the word and the number are exclusive",
           f"with damage={ms['fail_with_damage']}")
-    check(ms["fail_blind"] == 0 and 3 not in ms["fail_reasons"],
-          "and no witnessed 38 is a Blind miss (reason 3) -- so the miss's "
-          "own batch shape is RECONSTRUCTION by analogy with reason 2's",
+    check(ms["fail_blind"] >= 27 and ms["fail_reasons"].get(3, 0) >= 27,
+          "and the Blind miss IS on retail's wire: >= 27 property-38 words "
+          "with reason 3 'miss' from a blinded attacker (RUN-SKILLS-RB) -- "
+          "the batch shape [close, 38] this server sends is OBSERVED, not "
+          "reconstructed",
           f"reasons={ms['fail_reasons']} blind={ms['fail_blind']}")
 except Exception as exc:                                     # noqa: BLE001
     LEDGER.skip("section 23 (corpus)", f"{type(exc).__name__}: {exc}")

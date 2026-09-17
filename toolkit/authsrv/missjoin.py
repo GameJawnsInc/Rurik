@@ -221,7 +221,15 @@ def score(c):
     blind = [r for r in rows if r["blind"]]
     plain_miss = [r for r in plain if not r["landed"]]
     blind_miss = [r for r in blind if not r["landed"]]
-    p1_rate = len(plain_miss) / len(plain) if plain else None
+    # RUN-SKILLS-RB (2026-09-16): a no-damage close that carries the
+    # attack-fail word is EXPLAINED (a miss, a block, a dodge) and is not P1's
+    # subject -- the Student of Blind's own swings (an NPC blinded by its own
+    # ring, which 0x0042 never tells us) put 26 reason-3 closes into the
+    # baseline and took it from 0.7 % to 2.9 %. P1 counts the unexplained.
+    worded = [r for r in plain_miss
+              if any(s.lower().startswith("0x00a0:38") for s in r["siblings"])]
+    plain_unexplained = [r for r in plain_miss if r not in worded]
+    p1_rate = len(plain_unexplained) / len(plain) if plain else None
     p2_rate = len(blind_miss) / len(blind) if blind else None
     band = binomial_band(len(blind))
     # P3: sibling shapes, landed against not, unblinded and blinded alike.
@@ -244,6 +252,7 @@ def score(c):
     own_hit_gain = [r for r in own if r["landed"] and r["gain"]]
     return {
         "closes": len(rows), "plain": len(plain), "plain_miss": len(plain_miss),
+        "plain_miss_worded": len(worded),
         "p1_rate": p1_rate,
         "p1": p1_rate is not None and p1_rate < BASELINE_CEILING,
         "blind": len(blind), "blind_miss": len(blind_miss),

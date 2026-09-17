@@ -3113,6 +3113,8 @@ word after the heal, and says in its own text that the witness is missing (floor
 unchanged; twelve damage-channel tests green). Label: the WORD for a converted hit is
 RECONSTRUCTION by analogy, UNVERIFIED on retail; the ORDER heal-then-damage is WIKI.
 
+**SETTLED 2026-09-16 — RUN-SKILLS-RB, `20260916T213125`, [studies/skills/FINDINGS.md](../skills/FINDINGS.md) §48.7:** ten hits under Reversal of Fortune. Heal first (10 of 10), the enchantment stripped on the tick, then the damage word — the negative remainder when the cap left some (3), and **`+0.0` (`0x00000000`) when it left none (7)**. The analogy above had picked the graze's `−0.0`; retail spells the two zeros differently. Shipped the same day (`land_swing`/`land_skill`: `_f32(0.0)` on a conversion that left nothing; `test_mechanics` §9 flipped; `healjoin.conversions()` + `test_skilldamage` §13 lock it). The paragraph below is what settling it was going to take, kept as written.
+
 **What settles it:** one live capture with a prevention enchantment on the bar and a hit
 taken under it — Reversal of Fortune (307) or any "the next time you take damage" skill —
 and then read the tick: heal word, and beside it a −0.0, a remainder, or nothing. Filed on
