@@ -27,6 +27,14 @@ move back.
 
 ---
 
+### ✅ DAGGERS chain icon CONFIRMED on our client 2026-09-17 — **the owner, by hand: "confirmed on the health, the 3 icons, and the 15s fade"** ([studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md) §7)
+
+`--party daggers20 --enemy-health 2000`, the Hatcher clicked, lead / off-hand / dual off
+the bar. `0x005C` 1, 2 and 3 each draw their icon on the target display's health bar and
+the 15 s clear takes it down — the one thing the two scripted runs could not show, because
+the harness selects nothing. The silent re-lead was not reported either way. What is left
+of the arc in §8: Assassin armour rows, DAGGERS-B8 (adjacent damage), and the n = 0 cases.
+
 ### ✅ CAST-TARGET-DIED 2026-09-17 — **an NPC's ally-target cast whose target died under it lands on nothing** (the owner: "Restore Condition got cast on a dead bandit ... definitely feels wrong")
 
 The PICK was never the fault — `allies_of` filters the dead — the LANDING was: a cast is a
