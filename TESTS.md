@@ -10677,7 +10677,7 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   is_attack:` (gone since SLICE-C2) to the bare `if CAST_STOP:`, and its recv-loop attach-point
   census from 2+1 to the three qualified sites (C5 gated one on the player being alive, C2's
   replay continued the other's condition) -- both reddened unrun by that arc.
-  `toolkit/authsrv/test_castcycle.py` (the four-opcode cast cycle against
+  `toolkit/authsrv/test_castcycle.py` (**2026-09-17, SKILLS §49.1: §11, retail's own swing windup through `iaswindup.py` — W3 the exposure is real (≥ 2 groups under a modifier other than 1.0, on ≥ 2 bases: Frenzy's 0.67 on the two Warrior tapes), W1 every group median within 20 ms of `modifier × base / 2 − 0.1` (27 groups, worst 7 ms), W2 the no-additive-term candidate off by more than 50 ms everywhere; skips by name without the vault, so the BARE-MACHINE floor stays 49 (51 → 54 with the vault).** the four-opcode cast cycle against
   ArenaNet's own template — six complete cycles, two live captures, same order
   every time: E4 at the press, E5 at cast end carrying the recharge in whole
   seconds, E3 an aftercast later, E6 at E5+recharge to within 13.7 ms on all

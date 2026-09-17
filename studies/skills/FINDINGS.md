@@ -6560,3 +6560,91 @@ tapes). Shipped: the +0.0 word (server, two sites); P1's baseline by fail word;
 `deepwoundjoin`'s stray by signature; `healjoin.conversions()`. `test_mechanics` 228
 (floor 228, three checks rewritten), `test_skilldamage` 63 (floor 61 → 63),
 `test_agentlife` re-run for the join modules it reads.
+
+---
+
+## 49. RUN-SKILLS-RB2 — REGISTERED 2026-09-17, not yet run: Mend Ailment, a recast while live, and a lopsided armour set under a spell — and the attack-speed item dropped before registration because the corpus already held it
+
+The second skill-unlock capture, the same character and island as §48. Plan
+`vault/plans/skills_rb2.txt` (sha256 `7d9ec582…` from `marks.py --check-plan`, 8 steps),
+sealed by `livesession.py --plan` at launch. **Eight steps, one meaning for F11:
+"CAST-UNDER — I cast it while the icon(s) this step names were still up."** The owner will
+unlock Mend Ailment for it (on tape, step 1) and can remove armour pieces through the
+inventory, which is what makes the third question askable at all.
+
+### 49.1 Mined first: the attack-speed windup is already in the corpus — OBSERVED, no run
+
+Four items were candidates. The first — ANIMREF §17's "the IAS windup needs a live capture
+with a stance running" — was written on 2026-08-31 against 62 `0x0035` declarations, all
+modifier 1.0, **zero exposure**. The owner's Warrior tapes since changed the exposure and
+nobody re-asked. `toolkit/authsrv/iaswindup.py` asks (predictions W1–W3 in its header,
+stated before the numbers): 1,231 swings under a declared `0x0035`, 27 groups of ≥ 4, two
+of them under Frenzy's 0.67 on two different bases:
+
+| tape | agent | base | modifier | n | median windup | A `m·base/2 − 0.1` | B `m·base/2` |
+|---|---|---|---|---|---|---|---|
+| `20260914T005758` (JARIN's hero) | 30 | 1.33 | **0.67** | 41 | **0.346** | 0.346 | 0.446 |
+| `20260914T005758` | 30 | 1.33 | 1.00 | 4 | 0.558 | 0.565 | 0.665 |
+| `20260914T180058` (WARRIOR-PRE) | 31 | 1.75 | **0.67** | 8 | **0.483** | 0.486 | 0.586 |
+| `20260914T180058` | 31 | 1.75 | 1.00 | 10 | 0.778 | 0.775 | 0.875 |
+
+Every one of the 27 medians is within 7 ms of candidate A; candidate B misses every group
+by 0.09–0.11 s. **The −0.1 is measured, not fitted, and the modifier multiplies the base
+before the halving** — the law `attack_windup` has shipped since ANIMREF. `test_castcycle`
+§11 locks W1–W3 (skips by name without the vault; 51 → 54 with it, bare-machine floor 49
+unchanged). ANIMREF §17 and the two `PLAN.md` lines that called this "an R0b runsheet line"
+are closed by pointer. The item is NOT in the plan.
+
+### 49.2 The three questions that are in it
+
+| | open item | today's state | the step |
+|---|---|---|---|
+| Q1 | a condition-removal heal's shape, and Mend Ailment's two rules | §45.5: "no retail witness"; §46: desk + WIKI only, shipped | `mend`: Weakness, then Poison, then Mend Ailment twice |
+| Q2 | recasting an effect while it is live | §36: no witnessed deliberate extension; our REMOVE-then-APPLY neither confirmed nor refuted | `recast`: RoF ×3 at its recharge inside its 8 s; Frenzy ×2 |
+| Q3 | one elemental rating or a location roll — and which rating | §43.4: CORROBORATED, never OBSERVED against a lopsided set | `armoured` then `stripped`: the Master of Lightning, five pieces on, then head/hands/feet off |
+| — | the priest unlock, replicated | §48.9, n = 1 | `temple`: Mend Ailment bought on tape |
+
+WIKI, fetched 2026-09-17 (raw): **"Mend Ailment"** — id **277**, Monk, Protection Prayers,
+Spell, 5 energy, ¾ s, 5 s recharge; *"Remove one condition … from target ally. For each
+remaining Condition, that ally is healed for 5…70 Health"* (5 at rank 0, 70 at 15; ~39–40
+at 8). **"Master of Lightning"** — a foe, E/W 20, 15 Air Magic, bar: Lightning Javelin,
+Lightning Orb (PvE Isle only), Blinding Flash, two attunements, Aura of Restoration,
+Bonetti's Defense. Our own rung-8 tape has the Students' durations (`bufflog.py --capture
+20260821T152147`): Weakness **20.0**, Poison **5.0**, Blind/Bleeding/Crippled/Dazed 10.0 —
+which is why the plan takes Weakness first and Poison last, and avoids Dazed (it doubles
+the cast and a foe Student's swing would interrupt it).
+
+### 49.3 Predictions, stated before the launch
+
+- **RB2-P1 (the unlock, DERIVED from §48.9 — a replication):** `0x003B` up; one batch down
+  with `0x00EE [11, −cost]`, `0x001C [277, 0]`, `0x00DC [277, 1]`; no `0x001D`; the Isle
+  load's `0x00DB` carries bit 277.
+- **RB2-P2 (recast while live):** three candidates and the batch decides — (a) `0x0044`
+  old buff then `0x0042` new, REMOVE-then-APPLY, what this server sends; (b) a bare
+  `0x0042` with a new buff id, the old never removed; (c) nothing on the wire, the silent
+  refresh §48.6 found for a ring. Frenzy asks the same of a stance.
+- **RB2-P3 (Mend Ailment):** with Weakness (older) and Poison (newer) both live, the cast
+  sends `0x0044` for **Poison's** buff, then `[55, player, player, +h]` with **h = 1 × the
+  tooltip number**, removal BEFORE heal. The recast removes Weakness with nothing
+  remaining: `0x0044` and **no heal word**. Refuted if Weakness goes first, if the first
+  heal is 0 or 2×, or if the second cast heals.
+- **RB2-P4 (the rating):** in the `stripped` block each of the Master's spells is STILL one
+  value in whole points. Under a location roll, 3 of 8 rolls land on a bare piece (AR 0
+  against 80 — about ×4), and ten hits all missing them has probability (5/8)¹⁰ = 0.9 %.
+  **And which rating:** the value EQUALS the `armoured` block's if the rating is the
+  chest's (§43.6, what ships); one value but shifted means an average over pieces; two
+  buckets is a location roll and §43 reopens.
+
+### 49.4 The floor
+
+≥ 2 recasts of 307 while live and ≥ 1 of 346 (Q2); ≥ 1 Mend Ailment landing with both
+conditions up and ≥ 1 with one (Q1); ≥ 6 hits of ONE spell in `armoured` and ≥ 10 of the
+SAME spell in `stripped` (Q3), or that arm reports "not exposed"; the `idle` control
+clean; the purchase on tape. Abort a step — F9 on — if the Master will not cast, or health
+falls under a third. Scoring: `bufflog.py --capture`, `healjoin.py`, `spellhitjoin.py
+--pairs` split at the step-7 mark, all in whole points of the maximum at the hit (F46).
+Launched exactly as §48 (build `vault/run-live/2026-09-01_44fbd68767a8`, account `capture`,
+`--confirm --plan --minutes 30`).
+
+**Status: REGISTERED, not run.** An edit to the plan re-runs `--check-plan` and replaces
+the sha above.

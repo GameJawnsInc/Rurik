@@ -744,6 +744,8 @@ figure; the residue is the same single stray event.
 
 ## 17. The IAS windup question CANNOT be settled desk-only — the queue item is refuted, not deferred
 
+> **CLOSED FROM THE CORPUS 2026-09-17** — [studies/skills/FINDINGS.md](../skills/FINDINGS.md) §49.1, `toolkit/authsrv/iaswindup.py`. The zero exposure this section measured on 2026-08-31 stopped being true when the owner's Warrior tapes landed: 41 swings at base 1.33 and 8 at base 1.75 under Frenzy's 0.67 read 0.346 s and 0.483 s against candidate A's 0.346 and 0.486, and all 27 groups in the corpus sit within 7 ms of A while B misses by 0.1 s. **Candidate A is OBSERVED; no run is needed.** The section below is kept as written — its decode of the client math stands, and its "zero trials, not a null" was right on its date.
+
 **2026-08-31.** `PLAN.md` §8 carried this as a decode that "may fall to the
 client's `0x007F82C0` duration math, desk-only." It does not, and the two
 halves of the reason are each worth having.
