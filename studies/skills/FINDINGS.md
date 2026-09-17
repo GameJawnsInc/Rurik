@@ -6699,8 +6699,10 @@ refresh, is not how a CAST extends anything. `effects.EffectTable.open` has allo
 new id per apply and let the older episode expire on its own duration since 2026-08-20,
 and `exclusive_on` has closed a live stance before opening the next — so both shapes were
 already ours. §36.8's "unwitnessed either way, neither confirmed nor refuted" is now
-**CONFIRMED for both types**, and nothing ships. (Whether the client drew one RoF icon or
-several during the stack is an owner question; §36's loopback probe says one.)
+**CONFIRMED for both types**, and nothing ships. **The client drew ONE Reversal of Fortune
+icon throughout the stack** (the owner, on screen) — §36's loopback finding, that a repeat
+`0x0042` for a live (agent, skill) adds no second icon, holds on retail's own client against
+retail's own traffic.
 
 ### 49.8 The unlock, replicated — RB2-P1 CONFIRMED, n = 2
 
@@ -6747,9 +6749,13 @@ whole points of whichever maximum the target held makes it whole (F46).
 - **Armoured, the same spells are single-valued** (4 of 4, 3 of 3) — so §43's 68 of 68 was
   measuring equal armour, not the absence of a roll. §43.4's caveat was the whole story.
 - **One row is unexplained and named:** a Javelin for **45** at 530.80 s (flight 1.64 s, max
-  336). A piece rated about 8 above the others would do it and would hide from seven
-  armoured hits 13 % of the time; what the chest and legs actually read is an owner
-  question. n = 1; not a claim.
+  336). It reads as an effective +8 armour at that instant (50 × 2^(−6/40) = 45.06). A
+  differently rated PIECE is ruled out by the tape itself: every armour item it declares
+  (`0x0161`) carries the single modifier 572/80 — Armor 80, no insignia, no bonus line
+  — and the one other 572 on the tape is a shield (572/16) sitting in the inventory,
+  which the armoured block's bare-tooltip 101 and 50 say was not worn. The owner does not
+  recall the set, and nothing in the c2s stream between 517 s and 543 s is an equip. n = 1,
+  UNEXPLAINED, not a claim.
 
 **The single rating is REFUTED. Spells roll a hit location, as attacks do.** GWW's three
 "attack" sentences (§43.2) describe where players noticed it, not where it stops.
