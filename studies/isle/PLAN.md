@@ -1165,6 +1165,19 @@ met branch rather than an in-run reference — add one effective-13 block next t
 old draft (4..5, actually 3..5) that would have read an ordinary result as a refutation
 of both models.
 
+**Rung 8d, RECONCILED 2026-09-17: the re-cast half is CLOSED by another run and the
+bench half is still owed — do NOT run `isle_rung8d_recast_v2.txt` as staged.**
+`studies/skills` §49.7 (RUN-SKILLS-RB2, `20260917T090355`, this same Isle) read both
+recast shapes off a tape with other skills: a recast enchantment is a bare `0x0042` with
+a new buff id beside the old one, which closes on its own clock (3 of 3), and a recast
+stance is `0x0044` then `0x0042` in one batch (3 of 3). That is §36.8's question answered
+— the enchantment is the clean witness this rung wanted a shout for, since it carries no
+exclusivity rule — and both shapes were already ours. A recast SHOUT is still n = 0 and
+nothing waits on it (`effects.EFFECT_TYPES` does not time shouts). **What this rung
+still owes is the rank-13 bench block**, the "one cheap gap" in the paragraph above: one
+requirement-MET block at effective 13, ~80 s, as its own short plan or a line on the
+next Isle tape. The paragraph below is the record as written on 2026-08-22.
+
 **Rung 8d — the re-cast shape, ABORTED ONCE, re-staged (2026-08-21 → 08-22).**
 `studies/skills` §36.8 left one question open on this channel: what retail emits when a
 live CAST effect is deliberately re-applied — our REMOVE-then-APPLY is unwitnessed
