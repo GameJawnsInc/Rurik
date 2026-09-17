@@ -371,8 +371,21 @@ NOT SEEN by the scripted runs, and why:
   harness orders attacks without selecting the target client-side, so that bar was never
   on screen. `0x005C` reached the client and did no harm; whether the icon draws needs a
   hand-driven run with the target clicked — the owner's instrument.
-- **armour.** The character is a bare Assassin body: the base fixture's Warrior armour
-  rows draw nothing on it. An Assassin armour set is a content gap, not a wire one.
+- **armour.** The character was a bare Assassin body: the base fixture's Warrior armour
+  rows draw nothing on it. **Closed at the desk the same night (DAGGERS-F15):** the five
+  pieces the owner's own level-3 Assassin wore on 20260819T132414 are content rows
+  (`[item.assassin_*]`, every byte retail's: files 0x800003B0-B4, models 7248-7252, the
+  fixture's flags word, armour 10 each) and `[party.daggers]` / `[party.daggers20]` wear
+  them through a new `player_armour` row key, validated slot by slot through wearmap at
+  launch. The armour maths follows the set through one indirection
+  (`agents.worn_piece_key`): the level-3 Assassin's chest rates 10 where the Warrior
+  fixture's rated 45. NOT yet seen on a client. Two things fell out of the rows: the
+  chest carries modifier 556 arg 5 and the boots and legs 558 arg 1 each -- +5 energy
+  and +1 regen twice, which IS WIKI "Energy"'s Assassin row (+5 / +2 over the 20 / 2
+  base) and the 0.0528 rate that character ran at, so the profession's pool is the
+  ARMOUR's and `player_energy` / `player_pips` type in what the pieces would give (the
+  server does not read 556 / 558 yet); and the PvP set of 20260917T160915 shares four of
+  the five files and wears a different head (0x800004E1).
 - the first run's first chain was spent on a CORPSE — the Monk hero had killed the
   100-health target while the player plain-swung, the lead did not hit, and the off-hand
   behind it failed correctly. A press on a dead target is ACCEPTED here; what retail does

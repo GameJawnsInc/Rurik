@@ -1081,6 +1081,20 @@ STARTER_HAMMER = _row("item", "starter_hammer")
 # STARTER_HAMMER stays the hammer row the offline locks read.
 PLAYER_WEAPON = STARTER_HAMMER
 PLAYER_OFFHAND = None
+# DAGGERS (2026-09-17): what the character WEARS, as {location key: item key}
+# -- the location keys are the Warrior fixture's five names, which every
+# armour reader (combatmath.HIT_LOCATION_ODDS, the equip sends) is keyed by,
+# so a swapped set changes which ROW each location resolves to and nothing
+# else. None = the fixture's own five. Rebound by a [party.KEY] row's
+# `player_armour` (authsrv.apply_party_character), validated slot by slot
+# through wearmap on the way in.
+PLAYER_ARMOUR = None
+
+
+def worn_piece_key(location_key):
+    """The item key the character wears at `location_key` (a Warrior fixture
+    name): the party row's piece when one is bound, else the fixture's."""
+    return (PLAYER_ARMOUR or {}).get(location_key, location_key)
 
 
 def item_template(key):

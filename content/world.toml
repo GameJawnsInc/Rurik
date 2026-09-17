@@ -1815,6 +1815,7 @@ player_health = 140
 player_attributes = [[29, 3], [35, 2]]
 player_points = 10
 player_weapon = "starter_daggers"
+player_armour = ["assassin_body", "assassin_boots", "assassin_legs", "assassin_gloves", "assassin_head"]
 player_skills = [782, 780, 775, 781, 783, 2]
 
 [party.daggers.provenance]
@@ -1833,9 +1834,11 @@ the lead hand, no offhand -- retail's shape), and `player_skills` a whole chain:
 Jagged Strike 782 (lead), Fox Fangs 780 (off-hand, follows a lead), Death Blossom \
 775 (dual, follows an off-hand), Moebius Strike 781 (off-hand, follows a DUAL), \
 Unsuspecting Strike 783 (a second lead, the one on the owner's tape), Resurrection \
-Signet 2. The chain grammar is the client's own (`combo`, `combo_req`). The \
-character still WEARS the base fixture's Warrior armour rows: what an Assassin \
-body draws under them is a client question no run has asked."""
+Signet 2. The chain grammar is the client's own (`combo`, `combo_req`). \
+`player_armour` (2026-09-17, the same evening): the five [item.assassin_*] rows -- the \
+owner's own level-3 Assassin's pieces off 20260819T132414, armour 10 each -- in \
+STARTER_ARMOUR's slot order. Before it the character wore the fixture's Warrior rows \
+and the client drew a BARE Assassin body (studies/daggers section 7)."""
 
 [party.daggers20]
 hero = 3
@@ -1857,6 +1860,7 @@ player_health = 480
 player_attributes = [[29, 12], [35, 8]]
 player_points = 200
 player_weapon = "starter_daggers"
+player_armour = ["assassin_body", "assassin_boots", "assassin_legs", "assassin_gloves", "assassin_head"]
 player_skills = [782, 780, 775, 781, 783, 2]
 
 [party.daggers20.provenance]

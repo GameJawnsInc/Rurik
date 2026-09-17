@@ -1926,8 +1926,10 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 **Daggers** — [studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md)
 
-* **DAGGERS, the armour.** The Assassin body is bare on our client: no Assassin armour
-  rows exist, and the base fixture's Warrior rows draw nothing on it (daggers §7).
+* **DAGGERS, the armour on a client, and the energy lines.** The Assassin set is content
+  (`[item.assassin_*]`, `player_armour`) and unseen on a client; the pieces' 556 / 558
+  energy words are decoded and not read -- the profession's pool is still typed into the
+  party row (daggers F15).
 * **Area damage beyond Death Blossom.** DAGGERS-B8 sends ONE attack skill's adjacent damage,
   opt-in per row; `aoe_range` is now on every skills row (147 at 156, 103 at 240, 64 at
   312), and an NPC's cast is still single-target (`land_skill`) — spells, Cyclone Axe's

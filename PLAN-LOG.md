@@ -27,6 +27,21 @@ move back.
 
 ---
 
+### ✅ DAGGERS-F15 2026-09-17 — **the Assassin wears its own armour: five content rows off the owner's level-3 character, `player_armour` on the party row** ([studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md) §7)
+
+The bare body of the loopback runs. `[item.assassin_body/boots/legs/gloves/head]` are
+the pieces the observer wore on 20260819T132414 (its own 0x006E, declared by 0x0161):
+files 0x800003B0-B4, types 7/4/19/13/16, models 7248-7252, the Warrior fixture's flags
+word, armour 10 each; the PvP set of the dagger tape shares four files and a different
+head. `player_armour` (five keys in STARTER_ARMOUR's slot order) binds
+`agents.PLAYER_ARMOUR`, every reader follows it through `agents.worn_piece_key`
+(combatmath's one lookup; `worn_armour()` at the equip sends), and wearmap refuses a
+mis-slotted set at launch. Chest 45 → 10 for the level-3 Assassin. Found on the way: the
+chest's 556 arg 5 and the boots' and legs' 558 arg 1 are the +5 energy / +2 pips WIKI gives
+the profession — the pool is the armour's, and the server does not read those words yet.
+`test_daggers.py` §10, 77 → 82; `test_armour` 19 and `test_skilldamage` 67 untouched.
+NOT on a client.
+
 ### ✅ DAGGERS-B8 CONFIRMED on our client 2026-09-17 — **the owner, by hand: "it hit the aoe, ordinary damage numbers"** ([studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md) F13)
 
 `--party daggers20 --enemies 3 --enemy-cluster 90 --enemy-health 2000`. Death Blossom's

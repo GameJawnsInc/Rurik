@@ -360,6 +360,155 @@ arg2 1; WIKI (GWW "Starter Daggers" Stats, rev. 2014-07-13) says 1-3. The run \
 archives bind file 175760 (archive.binds_plainly, row 76047 on run/slice and on \
 2026-09-01_44fbd68767a8; the sword's 76203 re-read beside it as the control)."""
 
+# ---- DAGGERS: the starter ASSASSIN armour, the owner's own level-3 character's ----
+#
+# Five rows, every byte retail's: the pieces the observer WORE on 20260819T132414
+# (connection 52606), named by its own 0x006E [27, 639, 0, 640, 643, 641, 644, 642, 0, 0]
+# and declared by the same connection's 0x0161s. Same class of file id as the
+# Warrior fixture's (top bit set), same flags word 0x20001006, same slots (body 2,
+# boots 3, legs 4, gloves 5, head 6 -- position in the 0x006E). Armour 10 a piece
+# (572 arg 10). THE ENERGY LINES ARE WHERE THE PROFESSION'S POOL COMES FROM: the chest
+# carries 556 arg 5 and the boots and the legs 558 arg 1 each, and 20 + 5 energy with
+# 2 + 1 + 1 pips IS WIKI "Energy"'s Assassin row (+5 / +2) and the 0.0528 rate this
+# character ran at. The server does not yet READ those two identifiers -- [party.daggers]
+# types the pool in -- and that is the honest next step, named here so it is a decision.
+# Worn by a [party.KEY] row's `player_armour`; the base fixture stays the Warrior's.
+
+[item.assassin_body]
+name = "starter chest armour (Assassin, the owner's level-3 character; retail wire)"
+file_id = 0x800003B2
+item_type = 7               # ItemType_Body (the wire's)
+dye_tint = 11
+dye_colors = 3
+materials = 0
+unk1 = 0
+flags = 0x20001006
+value = 0
+model_id = 7249
+quantity = 1
+enc_name = [0x54A2]
+# 556 arg 5 (the tooltip's energy line: +5) and 572 arg 10 (Armor: 10).
+modifiers = [0x62C80500, 0xA3C80A00]
+
+[item.assassin_body.provenance]
+source = "capture"
+capture = "20260819T132414"
+origin = "live"
+verified = """OBSERVED on ArenaNet's own wire (DAGGERS, 2026-09-17): the observer's \
+own chest piece on 20260819T132414 connection 52606, worn per its 0x006E and declared \
+by 0x0161 -- file 0x800003B2, type 7, f4/f5 11/3, flags 0x20001006, model 7249, name id \
+0x54A2, the modifier words byte for byte. The owner's PvP Assassin of \
+20260917T160915 wears the SAME file in this slot (model and rating differ: a PvP \
+piece, armour 70), a second sighting of file-to-slot."""
+
+[item.assassin_boots]
+name = "starter feet armour (Assassin, the owner's level-3 character; retail wire)"
+file_id = 0x800003B1
+item_type = 4               # ItemType_Boots (the wire's)
+dye_tint = 11
+dye_colors = 3
+materials = 0
+unk1 = 0
+flags = 0x20001006
+value = 0
+model_id = 7248
+quantity = 1
+enc_name = [0x54A1]
+# 558 arg 1 (the energy-recovery line: +1) and 572 arg 10.
+modifiers = [0x62E80100, 0xA3C80A00]
+
+[item.assassin_boots.provenance]
+source = "capture"
+capture = "20260819T132414"
+origin = "live"
+verified = """OBSERVED on ArenaNet's own wire (DAGGERS, 2026-09-17): the observer's \
+own feet piece on 20260819T132414 connection 52606, worn per its 0x006E and declared \
+by 0x0161 -- file 0x800003B1, type 4, f4/f5 11/3, flags 0x20001006, model 7248, name id \
+0x54A1, the modifier words byte for byte. The owner's PvP Assassin of \
+20260917T160915 wears the SAME file in this slot (model and rating differ: a PvP \
+piece, armour 70), a second sighting of file-to-slot."""
+
+[item.assassin_legs]
+name = "starter legs armour (Assassin, the owner's level-3 character; retail wire)"
+file_id = 0x800003B4
+item_type = 19               # ItemType_Legs (the wire's)
+dye_tint = 11
+dye_colors = 3
+materials = 0
+unk1 = 0
+flags = 0x20001006
+value = 0
+model_id = 7252
+quantity = 1
+enc_name = [0x54A5]
+# 558 arg 1 (the energy-recovery line: +1) and 572 arg 10.
+modifiers = [0x62E80100, 0xA3C80A00]
+
+[item.assassin_legs.provenance]
+source = "capture"
+capture = "20260819T132414"
+origin = "live"
+verified = """OBSERVED on ArenaNet's own wire (DAGGERS, 2026-09-17): the observer's \
+own legs piece on 20260819T132414 connection 52606, worn per its 0x006E and declared \
+by 0x0161 -- file 0x800003B4, type 19, f4/f5 11/3, flags 0x20001006, model 7252, name id \
+0x54A5, the modifier words byte for byte. The owner's PvP Assassin of \
+20260917T160915 wears the SAME file in this slot (model and rating differ: a PvP \
+piece, armour 70), a second sighting of file-to-slot."""
+
+[item.assassin_gloves]
+name = "starter hands armour (Assassin, the owner's level-3 character; retail wire)"
+file_id = 0x800003B3
+item_type = 13               # ItemType_Gloves (the wire's)
+dye_tint = 11
+dye_colors = 3
+materials = 0
+unk1 = 0
+flags = 0x20001006
+value = 0
+model_id = 7250
+quantity = 1
+enc_name = [0x54A3]
+# 572 arg 10 alone.
+modifiers = [0xA3C80A00]
+
+[item.assassin_gloves.provenance]
+source = "capture"
+capture = "20260819T132414"
+origin = "live"
+verified = """OBSERVED on ArenaNet's own wire (DAGGERS, 2026-09-17): the observer's \
+own hands piece on 20260819T132414 connection 52606, worn per its 0x006E and declared \
+by 0x0161 -- file 0x800003B3, type 13, f4/f5 11/3, flags 0x20001006, model 7250, name id \
+0x54A3, the modifier words byte for byte. The owner's PvP Assassin of \
+20260917T160915 wears the SAME file in this slot (model and rating differ: a PvP \
+piece, armour 70), a second sighting of file-to-slot."""
+
+[item.assassin_head]
+name = "starter head armour (Assassin, the owner's level-3 character; retail wire)"
+file_id = 0x800003B0
+item_type = 16               # ItemType_Head (the wire's)
+dye_tint = 11
+dye_colors = 3
+materials = 0
+unk1 = 0
+flags = 0x20001006
+value = 0
+model_id = 7251
+quantity = 1
+enc_name = [0x54A4]
+# 572 arg 10 alone.
+modifiers = [0xA3C80A00]
+
+[item.assassin_head.provenance]
+source = "capture"
+capture = "20260819T132414"
+origin = "live"
+verified = """OBSERVED on ArenaNet's own wire (DAGGERS, 2026-09-17): the observer's \
+own head piece on 20260819T132414 connection 52606, worn per its 0x006E and declared \
+by 0x0161 -- file 0x800003B0, type 16, f4/f5 11/3, flags 0x20001006, model 7251, name id \
+0x54A4, the modifier words byte for byte. The owner's PvP Assassin of \
+20260917T160915 wears a DIFFERENT head file in this slot (0x800004E1, a PvP \
+mask); its other four PvP pieces share their PvE files."""
+
 [item.backpack]
 name = "Backpack (the first item container)"
 file_id = 0x8001B536
