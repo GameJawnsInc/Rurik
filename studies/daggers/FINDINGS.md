@@ -310,3 +310,42 @@ A lead that MISSES (does it set the state?), a first strike that misses ahead of
 or a dual's second, the attacker's own death, a chain opened with a non-dagger lead
 (2116), and the half second under an attack-speed boost are all n = 0. The server's
 answers to each are labelled RECONSTRUCTION at the call site.
+
+---
+
+## 7. On our own client — two scripted loopback runs, 2026-09-17 (DAGGERS-F14)
+
+Harness `20260917T165523` (`--party daggers`) and `20260917T165940` (`--party daggers20`:
+the retail run's ranks, Dagger Mastery 12 / Critical Strikes 8, on the same 1-3 daggers),
+pin client 38797, map 280, `--enemy --practice-target --explorable`, the presses through
+the harness's `skill:` mailbox (the real `handle_skill_press` arm, not a key). Both
+reached the map, ran their whole plan and closed with **no assert, no crash dialog and
+0 undecodable messages**; the gamesrv logs carry every step (checked BEFORE the frames).
+
+OBSERVED on the client:
+
+- the party panel reads **A3**, the energy bar **25 with four pips** — the profession knob
+  and its derived pool are what the client believes;
+- the bar's off-hand and dual icons carry the client's own small ✕ until a lead lands —
+  the client judges the chain for DISPLAY by itself, from its own skill record;
+- a landed Fox Fangs floats −16; a landed **Death Blossom floats TWO −26s, stacked**, with
+  the skill's flash and a dagger in the raised hand (`walk17-skill775,10.png`);
+- a critical draws a **magenta +2 over the player with the blue energy sparkle**
+  (`w021.png` of the second run): `0x00A3 [52, me, me, f]` + `0x00A0 [54, me, me, 2]`,
+  transcribed from retail, is what makes it. 8 criticals, 8 callouts, 3 double strikes
+  (`[2, me, 0]` + a word) in 19 swings, none of it disturbing the client;
+- the cold off-hand, the cold dual's two fail words, `0x005C` 1 → 2, the dual's `[47]`
+  batch and the `0x005C` 0 riding the target's death all went to a live client.
+
+NOT SEEN, and why:
+
+- **the chain icon itself.** It draws on the TARGET DISPLAY's health bar (WIKI), and the
+  harness orders attacks without selecting the target client-side, so that bar was never
+  on screen. `0x005C` reached the client and did no harm; whether the icon draws needs a
+  hand-driven run with the target clicked — the owner's instrument.
+- **armour.** The character is a bare Assassin body: the base fixture's Warrior armour
+  rows draw nothing on it. An Assassin armour set is a content gap, not a wire one.
+- the first run's first chain was spent on a CORPSE — the Monk hero had killed the
+  100-health target while the player plain-swung, the lead did not hit, and the off-hand
+  behind it failed correctly. A press on a dead target is ACCEPTED here; what retail does
+  with one is n = 0.
