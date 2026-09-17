@@ -206,6 +206,20 @@ def parse_record(data: bytes, base: int, skill_id: int) -> dict:
         "pve_only": bool(flags & FLAG_PVE_ONLY),
         "pvp_only": bool(flags & FLAG_PVP_ONLY),
         "not_playable": bool(flags & FLAG_NOT_PLAYABLE),
+        # THE CHAIN AND THE WEAPON (studies/daggers/FINDINGS.md F1-F3). The
+        # NAMES are UPSTREAM (GWCA Skill.h); the meanings are checked by
+        # test_skilltable section 8 against things that could refute them.
+        #   +0x14 combo_req  a BITMASK of what the skill must follow:
+        #                    0x01 a dual, 0x02 a lead, 0x04 an off-hand. NOT
+        #                    1 << (combo - 1): dual is bit 0. 0x10 sits on one
+        #                    row and is UNVERIFIED.
+        #   +0x24 weapon_req a weapon MASK: axe 0x01, bow 0x02, daggers 0x08,
+        #                    hammer 0x10, scythe 0x20, spear 0x40, sword 0x80;
+        #                    0xB9 is "any melee". 0 = no requirement.
+        #   +0x30 combo      what the skill COUNTS AS: 1 lead, 2 off-hand,
+        #                    3 dual (below).
+        "combo_req": u32(data, r + 0x14),
+        "weapon_req": u32(data, r + 0x24),
         "profession": data[r + 0x28],
         "attribute": data[r + 0x29],
         "title_track": u16(data, r + 0x2A),
@@ -322,10 +336,18 @@ def build_of(data: bytes):
 # Rage" Notes, "exactly requires 80 units", checked 2026-08-20. `parse_record()`
 # already decodes the raw total at +0x38 as `adrenaline_units`; this only adds
 # it to the emitted set.
+#
+# `combo`, `combo_req` and `weapon_req` were added 2026-09-17 (DAGGERS-B1). The
+# Assassin's chain is a server-side rule -- an off-hand pressed with no lead on
+# the target is ACCEPTED and then fails (studies/daggers F7) -- so the server
+# needs what each skill counts as and what it must follow; and `weapon_req` is
+# the only place the table says an attack skill wants a particular weapon,
+# which no profession's attack skills were being held to.
 CONTENT_FIELDS = ("activation", "aftercast", "recharge",
                   "energy", "adrenaline", "adrenaline_units",
                   "attribute", "profession",
                   "type_code", "target",
+                  "combo", "combo_req", "weapon_req",
                   "skill_arguments", "duration0", "duration15",
                   "scale0", "scale15", "bonus_scale0", "bonus_scale15")
 

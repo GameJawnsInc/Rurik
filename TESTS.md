@@ -7305,7 +7305,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   them went red on a FileNotFoundError rather than on a check, which is a control that
   proves nothing while looking like it proved everything. No vault, no socket, no
   client. ~1 s),
-  `toolkit/clientscan/test_skilltable.py` (client skill rows vs. the wiki),
+  `toolkit/clientscan/test_skilltable.py` (client skill rows vs. the wiki; section 9, DAGGERS-B1, is the Assassin chain and the weapon mask -- `combo_req` at +0x14 carries exactly the wiki's "must follow" bit on 20 rows and 0 on the 13 with no clause, the rival `1 << (combo - 1)` is refuted by all 20, `combo` at +0x30 is the wiki's Lead / Off-Hand / Dual type on 32 rows plus the four non-attacks that "count as" one, and a mastery skill's `weapon_req` always holds its own weapon's bit over 150 rows; the first draft of "every chain attack wants daggers" went red on 2116, which takes any melee weapon. 56 checks),
   `toolkit/clientscan/test_skillsentinel.py` (**the duration-slot sentinel
   `0x20000` is ENERGY UPKEEP, in ArenaNet's own word** — studies/skills §13
   left "what the enum means" NOT FOUND and §13.1 answered it. §1 pins the

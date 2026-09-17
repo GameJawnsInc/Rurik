@@ -27,6 +27,21 @@ move back.
 
 ---
 
+### ✅ DAGGERS-B1 LANDED 2026-09-17 — **the skill record's chain fields and weapon mask are emitted** ([studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md) §1, §4)
+
+`skilltable.py` reads `combo_req` (+0x14) and `weapon_req` (+0x24) and emits them with
+`combo` (+0x30), which it parsed and dropped. `test_skilltable.py` §9 (46 → 56 checks)
+joins 37 wiki pages by skill id: the must-follow bit on 20 rows, 0 on 13, the type on 32,
+the four "counts as" rows, the rival bit order refuted 20 of 20. The first draft of "every
+chain attack wants daggers" went RED on 2116 — a lead attack that takes any melee weapon,
+so a chain can be opened with a sword — and the claim is now the Assassin's own 32 rows.
+`vault/content/skills.toml` regenerated on the pin (1,333 rows, three added lines each,
+nothing else moved); the fourteen `content/overrides/skills_38888.toml` rows re-emitted on
+38888 the same way, because an override replaces its row wholesale and would otherwise
+have stripped `weapon_req` from exactly the axe and sword skills DAGGERS-B4 gates. Nothing
+consumes the fields yet. Same session: the arc's study, `0x005C` as the chain icon, the
+failed off-hand's batch, and RUN-DAGGERS-1 staged (`vault/plans/daggers_chain.txt`).
+
 ### ✅ R-ISLE rung 8d RECONCILED 2026-09-17 — **§3's row called the rung OPEN and mid-flight since 2026-08-22; its re-cast half had been closed that morning by a different run, and its bench half is still owed** (desk, no run; found by the PLAN-SPLIT sweep, [studies/plansplit/FINDINGS.md](studies/plansplit/FINDINGS.md) §4)
 * **8d was two things in one plan.** The re-cast shape (skills §36.8: "our REMOVE-then-APPLY is unwitnessed either way") and the rank-13 bench block, the requirement-MET in-run reference for rung 8's 3.098 divisor. The first run aborted on a bad skill pick and took both with it; `isle_rung8d_recast_v2.txt` re-staged both and never ran.
 * **The re-cast half: CLOSED by RUN-SKILLS-RB2** (skills §49.7, same Isle, other skills): a recast enchantment is a bare `0x0042` with a new buff id and the old instance closes on its own clock (3 of 3); a recast stance is `0x0044` then `0x0042` in one batch (3 of 3); both already ours. §49.7 says "CONFIRMED for both types" and §36.8 carries the pointer — but neither names rung 8d, so §3, `studies/isle/PLAN.md` and `studies/isle/HANDOFF.md` all still read "next is the re-run". A recast SHOUT stays n = 0 and nothing waits on it (`EFFECT_TYPES` does not time shouts).
