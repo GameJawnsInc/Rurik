@@ -150,6 +150,49 @@ def events(seq):
     return rows
 
 
+def conversions(codec=None):
+    """Every retail tick where a taker's own heal word rides with a damage word
+    onto that taker from ANOTHER agent -- a prevention enchantment firing
+    (Reversal of Fortune: heal, then the remainder or a zero). RUN-SKILLS-RB
+    (2026-09-16) put the first ten in the corpus; before it there were none
+    (F46.8's census). A row: {"capture", "connection", "t", "taker", "cause",
+    "heal", "damage" (f32), "damage_bits", "heal_first", "strip"} -- `strip`
+    is a 0x0044 on the taker in the same batch."""
+    codec = codec or bufflog.Codec()
+    live = vaultpath.require_dir("captures", "live",
+                                 why="healjoin reads live captures")
+    out = []
+    for stamp in sorted(os.listdir(live)):
+        cap_dir = os.path.join(live, stamp)
+        if not os.path.isdir(cap_dir):
+            continue
+        for ch in tape.channel_files(cap_dir):
+            try:
+                seq = deepwoundjoin.sequence(cap_dir, ch["connection"], codec)
+            except (bufflog.BuffLogError, tape.TapeError):
+                continue
+            for batch in batches(seq):
+                heals = [(k, v) for k, (_i, _t, op, v) in enumerate(batch)
+                         if op == OP_FLOAT_TARGET and v[1] == PROP_HEAL
+                         and v[2] == v[3] and _f32(v[4]) > 0]
+                for k, hv in heals:
+                    taker = hv[2]
+                    dmg = [(j, v) for j, (_i, _t, op, v) in enumerate(batch)
+                           if op == OP_FLOAT_TARGET and v[1] in PROP_DAMAGE
+                           and v[2] == taker and v[3] != taker]
+                    for j, dv in dmg:
+                        out.append({
+                            "capture": stamp, "connection": ch["connection"],
+                            "t": round(batch[k][1], 6), "taker": taker,
+                            "cause": dv[3], "heal": round(_f32(hv[4]), 6),
+                            "damage": _f32(dv[4]),
+                            "damage_bits": dv[4] & 0xFFFFFFFF,
+                            "heal_first": k < j,
+                            "strip": any(op == 0x0044 and v[1] == taker
+                                         for _i, _t, op, v in batch)})
+    return out
+
+
 def census(codec=None):
     """Every live capture, every game connection that frames whole."""
     codec = codec or bufflog.Codec()
@@ -208,11 +251,44 @@ def score(rows):
     }
 
 
+def score_conversions(rows):
+    """P6 (RUN-SKILLS-RB): the converted hit's word. Zero words are +0.0
+    (0x00000000) and never the graze's -0.0; the rest are negative remainders;
+    the heal precedes the damage; the enchantment strips on the tick."""
+    # The CONVERSION is the row with the enchantment's 0x0044 on the tick;
+    # a self-heal that merely lands in the same batch as a hit (a Healing
+    # Signet closing under fire, 20 such in the corpus before this) is
+    # COINCIDENT and reported beside it, not pooled.
+    conv = [r for r in rows if r["strip"]]
+    coin = [r for r in rows if not r["strip"]]
+    zeros = [r for r in conv if r["damage"] == 0.0]
+    return {
+        "n": len(conv),
+        "coincident": len(coin),
+        "zero_words": len(zeros),
+        "plus_zero": sum(1 for r in zeros if r["damage_bits"] == 0),
+        "minus_zero": sum(1 for r in zeros if r["damage_bits"] == 0x80000000),
+        "minus_zero_anywhere": sum(1 for r in rows if r["damage_bits"] == 0x80000000),
+        "remainders": sum(1 for r in conv if r["damage"] < 0),
+        "positive_damage": sum(1 for r in conv if r["damage"] > 0),
+        "heal_first": sum(1 for r in conv if r["heal_first"]),
+        "coincident_heal_first": sum(1 for r in coin if r["heal_first"]),
+        "captures": sorted({r["capture"] for r in conv}),
+    }
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
     rows = census()
+    cv = score_conversions(conversions())
+    print(f"P6 conversions (a taker's own heal beside a damage word onto it, "
+          f"the enchantment stripped on the tick): {cv['n']} -- zero words "
+          f"{cv['zero_words']} (+0.0 {cv['plus_zero']}, -0.0 {cv['minus_zero']}), "
+          f"remainders {cv['remainders']}, heal first {cv['heal_first']}; "
+          f"captures {cv['captures']}; coincident self-heals beside a hit, no "
+          f"strip: {cv['coincident']} (heal first {cv['coincident_heal_first']})")
     sc = score(rows)
     if args.json:
         print(json.dumps({"score": sc, "rows": rows}, indent=1))

@@ -5935,7 +5935,7 @@ one check that would replace it is a captured blinded swing (§44.6).
 
 ### 44.6 What it does NOT settle, and the one run that would
 
-* **The rate is unmeasured.** P2 NO WITNESS. The cheapest OBSERVED route is an
+* **The rate is unmeasured.** ~~P2 NO WITNESS.~~ **MEASURED 2026-09-16, §48.6: 27 misses of 30 blinded closes on retail, 0.90 exactly, band [0.735, 0.979] — OBSERVED, and the Student of Blind's own swings add 26 of 28.** The route below is the one that ran. It was an
   R0b runsheet line, not scheduled: the secondary account's character swinging
   at the Isle's *Student of Blind* (isle §7.2 puts 479 on the player there)
   for twenty swings — twenty closes under a live 479 against a 90 % binomial
@@ -6293,7 +6293,7 @@ every operator shares, this is one person's account.
   honours the account set — is UNVERIFIED on screen.
 * **The `GmDeckBuilder` flag** (§47.3) is unread. Until it is, which set the deck
   builder shows for a given character is a guess.
-* **Nothing writes either list from the client's side.** Skill trainers
+* **Nothing writes either list from the client's side.** **One path answered 2026-09-16, §48.9: a Priest of Balthazar purchase is `0x003B` up and `0x00EE` (faction −1000) + `0x001C [skill, 0]` + `0x00DC [skill, 1]` down — the quest-reward grant — with NO `0x001D` re-sent; the next `0x00DB` carries the bit.** Skill trainers
   (`VnLearnSkill`), tomes (`GmSkTome`, `0x006D TOME_UNLOCK_SKILL`) and capture
   signets all exist in the client and none of them is answered here; a grant only
   happens because a quest reward row says so.
@@ -6398,5 +6398,164 @@ Balthazar faction in hand and Reversal of Fortune NOT yet bought if that can be 
 `temple` step buys one unlock inside the run so the purchase is on tape (if it is already
 bought, any other single cheap skill serves Q1, named by F11-note).
 
-**Status: REGISTERED, not run.** Reviewed before sealing per the 2026-08-21 instruction; an
-edit to the plan re-runs `--check-plan` and replaces the sha above.
+**Status: RAN 2026-09-16 21:31 (`20260916T213125`, plan sealed, sha matches, exe unchanged,
+3 keys tapped), scored below.** Eight of eight steps advanced; eleven F11 notes — one at the
+purchase, one at the first blinded swing, six RoF hits, three Frenzy hits. The owner's
+setup: Protection Prayers 8 (RoF tooltip **50**), Strength 8 (Frenzy 148 %). Owner's note
+after the run: the Master of Axes carries Strip Enchantment, so several RoF casts were
+stripped without firing; every F11 in steps 6–7 is a real RoF hit. That matches the tape —
+13 casts of 307, 10 fired, and the strips are `0x0044` without a heal beside them.
+
+### 48.5 The floor, and where the run stood against it
+
+| floor | required | got | verdict |
+|---|---|---|---|
+| Q2 swing closes under a live 479 | ≥ 20 | **30** (221.5–261 s) | met |
+| Q3 hits under an open 307, heal joined on the tick | ≥ 3, ≥ 1 each side of the cap | **10** — 7 at or under the cap, 3 over it | met |
+| Frenzy arm, hits under 307 + 346 | ≥ 2 | **4** | met |
+| `idle` control (164.9–190.9 s) | 0 × 55, 0 × 38, 0 × `0x0042` on the player | 0 / 0 / 0 | clean |
+| Q1 the purchase on tape | on tape or "not exposed" | on tape at 124.4 s | met |
+
+Every number below comes from `bufflog.py --capture 20260916T213125`, `missjoin.py --rows`
+and `healjoin.py`'s new `conversions()` (P6), joined to `plan_marks.jsonl` by ordinal; the
+tick reads are scratchpad `rb_score.py`.
+
+### 48.6 Q2 — Blind misses 27 of 30, and the Student is blind too — OBSERVED
+
+**RB-P3 CONFIRMED.** One `0x0042 [player, 479, 0, buff, 10.0]` at 221.502 s as the Warrior
+stepped into the ring; **30 swing closes** (property 1) inside the episode; **27 carried
+`[38, 120, player, 3 = miss]` and no damage, 3 landed** (24, 24, 24 points with a 25-unit
+`0x00CF`). Rate **0.90**, Clopper–Pearson 95 % **[0.735, 0.979]**: holds the wiki's 0.90,
+excludes 0.50 (P < 10⁻⁵ at n = 30) and 1.00. `missjoin.py` P2 now reads *27 of 30, band
+[0.793, 1.000] → True* where it read NO WITNESS. The same-tape control (`unblind`, 10
+swings on a Suit): 0 fail words, 10 with damage. A missed swing granted NO adrenaline, 27
+of 27 (missjoin P4, first blinded witnesses). **The 90 % moves from WIKI to OBSERVED**
+(§44 P2), and the miss's batch shape `[close, 0x00A0 [38, target, attacker, 3]]` this
+server sends since SKILLS-BL is OBSERVED on retail 27 times, not reconstructed from reason 2.
+
+Three things the plan did not predict:
+
+- **The re-application is silent.** Bufflog shows ONE 479 apply and ONE `0x0044`, at
+  269.0 s — 47.5 s after the apply against a declared 10.0 — while the owner stood in the
+  ring for ~40 s. The ring refreshes the condition without a second `0x0042`; the
+  duration on the wire is the duration of ONE application, and an "open" 47 s episode is
+  a refreshed one. The rung-8 tape's n = 1 was the same thing. (The torches of §7 re-apply
+  visibly every ~2 s; the Students' rings do not.)
+- **The Student of Blind attacks, and it is blind.** Agent 120 swung at the player 28
+  times inside its ring — 26 closed with `[38, player, 120, 3]`, 2 landed (24 points). GWW
+  lists Healing Signet as its only skill, which is about its bar, not its auto-attack; the
+  plan's "does not attack" was §7's reading of the ring mechanism and is corrected here.
+  Its 26 of 28 = 0.93 is a second, independent blinded swinger at the wiki's rate — but
+  other agents' conditions never ride `0x0042` (F46.8), so `missjoin` cannot know it is
+  blind and had counted those 26 into P1's *unblinded* baseline (0.7 % → 2.9 %, red).
+  P1 now counts the UNEXPLAINED no-damage closes — those without a fail word — which is
+  what it was always about; a close with a 38 is a miss, a block or a dodge by name.
+- **Dodge is on the wire:** 7 `[38, …, 1 = dodge]` words on this tape (the client's own
+  reason name), none before it. Not read further here.
+
+### 48.7 Q3 — the converted hit: heal first, strip, then a POSITIVE zero — OBSERVED
+
+**RB-P4 CONFIRMED in shape, REFUTED in one bit.** All ten RoF hits (the F11-marked six in
+step 6 and four in step 7) close on one tick with the same batch, in wire order:
+
+```
+0x00A0 [20, player, cause, 546]      the trigger's effect id
+0x009F [42, player, max]             (4 of 10 — the first trigger after the max changed)
+0x00A3 [55, player, player, +heal]   heal = min(hit, cap), cap = 50 at PROT 8
+0x0044 [player, buff]                the enchantment stripped
+0x009F [7, player, 13] / [7, player, 18]
+0x00A3 [16, player, cause, word]     the damage word, LAST
+```
+
+| t (s) | step | heal (× 480 or × 384) | damage word | bits | reading |
+|---|---|---|---|---|---|
+| 397.162 | rof | 0.0292 = **14** | **+0.0** | `0x00000000` | full conversion |
+| 400.203 | rof | 0.0312 = 15 | +0.0 | `0x00000000` | full |
+| 402.881 | rof | 0.0208 = 10 | +0.0 | `0x00000000` | full |
+| 406.040 | rof | 0.0229 = 11 | +0.0 | `0x00000000` | full |
+| 408.693 | rof | 0.1042 = **50** | −0.01875 = **−9** | `0xBC99999A` | remainder: a 59-hit |
+| 415.645 | rof | 0.0156 × 384 = 6 | +0.0 | `0x00000000` | full, under Deep Wound |
+| 448.121 | frenzy | 0.0917 = 44 | +0.0 | `0x00000000` | full |
+| 451.822 | frenzy | 0.0208 = 10 | +0.0 | `0x00000000` | full |
+| 461.414 | frenzy | 0.1042 = 50 | −0.0396 = −19 | `0xBD222222` | remainder: 69 |
+| 491.821 | frenzy | 0.1042 × 384 = 40 | −0.0156 × 384 = −6 | `0xBC800000` | remainder |
+
+- **Heal before damage, 10 of 10** — WIKI's order, now on the wire. Heal = min(hit, cap)
+  with cap = the tooltip's 50: three remainders at exactly 50 (40 at the wounded 384 — the
+  heal word is a fraction of the CURRENT maximum, F46 again).
+- **The zero is `0x00000000`, +0.0 — not the graze's −0.0 (`0x80000000`).** Seven of
+  seven. F46.7's ten graze words are all `0x80000000`; retail spells the two zeros
+  differently, and the analogy F46.8 shipped had picked the wrong one. **Shipped:**
+  `land_swing` and `land_skill` send `+0.0` when a conversion left nothing
+  (`frac = _f32(0.0)`), the remainder otherwise; `test_mechanics` §9's CONVWORD pin flips
+  to `0x00000000` with the witness named; `healjoin.conversions()` / `score_conversions()`
+  is the corpus read and `test_skilldamage` §13 locks it (P6: n ≥ 10, zeros all +0.0,
+  never −0.0, heal first 10 of 10; floor 61 → 63). Whether the client draws a +0.0 word
+  — F46.9 showed a red **0** for −0.0 — is an owner question, asked below.
+- **The trigger re-declares the taker's maximum, 4 of 10** — 397.2 (480), 415.6 (384,
+  inside the Deep Wound), 448.1 (480), 491.8 (384): each is the first trigger after the
+  maximum last changed, which is F46.10's shape (a moved maximum rides the next landed
+  hit) seen from the taker's own side. Not pooled with F46.10; noted. It reddened
+  `test_mechanics` §19's "no other prop-42 moves inside a Deep Wound episode" because
+  `deepwoundjoin` counted a re-declaration of the SAME value as a move and joined any
+  earlier apply to any later close — both the test, fixed by signature (a stray is a
+  value that differs from the one in force, inside THIS buff's apply..close).
+- **Coincident self-heals are a different thing.** `healjoin.conversions()` finds 20 more
+  ticks in the corpus where a self-heal rides beside a hit (Healing Signets closing under
+  fire); none carries a `0x0044`, 13 of 20 have the heal first, and none is a zero. The
+  strip on the tick is the conversion's signature and the scorer keys on it.
+
+### 48.8 The Frenzy arm — both readings survive; labelled UNSEPARATED
+
+Four hits with 346 and 307 open: 44 and 10 fully converted, 69 and 46 (at 384) leaving
+remainders of 19 and 6 against a cap of 50 / 40. Under candidate (a) — heal = min(1.48 ·
+hit, cap), remainder from the frenzied hit — the 69 is a 46.6 base; under (b) — heal =
+min(hit, cap), the remainder × 1.48 — it is a 63 base with a 13-point remainder frenzied to
+19.2 → 19. Both fit every row because the base hit is not on the wire; the Master's plain
+hits ran 9–47 unfrenzied. **Not separable on this tape.** What would: a hit of KNOWN size
+under both (a fixed-damage source — a Torch, or the Master of Damage's stated numbers) or
+a remainder that only one reading can produce (a total under the cap with a remainder).
+The server keeps F45's order (Frenzy before the conversion, candidate (a)) as the shipped
+reading, labelled by analogy with GWW "Order of damage modifiers", unchanged.
+
+### 48.9 Q1 — the unlock is the quest-reward grant, not a bitmap re-send — OBSERVED
+
+**RB-P1 REFUTED in its specific form, and the shape is better than predicted.** The
+priest's purchase (skill **332**, the owner's "other cheap skill" — 307 was already in the
+account set at login) is one game-channel click, `0x003B [0x1000014C]` at 124.402 s, and
+the reply at 124.455 s is one batch:
+
+```
+0x00EE [11, 0xFFFFFC18]      = -1000: the faction balance moves
+0x001C [332, 0]
+0x00DC [332, 1]              the grant pair the MANTID quest reward used (quests §10)
+0x00CC [16]  0x0081 [37]  0x009F [12, 37, 0]
+```
+
+No `0x001D` was re-sent — not on the purchase, not on the Isle load (that connection
+carried `0x00DB` only). The character bitmap did move: `0x00DB` at the temple was the
+account set plus two bits (364, 384), and on the Isle it was that plus **332**. So on a
+PvP character the character set contains the account set (33 of 33 bits) and absorbs an
+unlock at the next load, and the account set is re-read at login, not pushed. **RB-P2
+holds** (307 was in both sets; the equip was never refused), with the note that on THIS
+character the two sets cannot disagree about 307, so §47.3's "the validator reads the
+account set" is still the disassembly's claim, not this tape's. §47.5's "nothing writes
+either list from the client's side" now has one path answered: the priest writes through
+`0x00DC`, and `0x001D` is not the message that carries it. Filed there.
+
+The auth channel's `0x0021 [5, 384]` / `0x0020 [5, blob]` pair at 131.71 s is the
+character-settings store (HEROLIB-STORE's dirty-check dispatch) firing on the map change
+after the bar edit at 105.2 s (`0x005C [.., 6, 346, 0]`, Frenzy into slot 6) — not the
+purchase. It arrived 41 ms before the Isle load's advance mark.
+
+### 48.10 Labels, and what changed
+
+Blind's miss rate **OBSERVED** (27 of 30, plus the Student's own 26 of 28); the miss's
+batch shape **OBSERVED** (27). The converted hit's word **OBSERVED**: +0.0 for a full
+conversion (7), the negative remainder otherwise (3), heal first (10 of 10), strip on
+the tick (10 of 10). The Frenzy arm **UNSEPARATED**. The unlock **OBSERVED** (n = 1):
+`0x00EE` + `0x001C`/`0x00DC`, no `0x001D`. The silent re-application **OBSERVED** (n = 2
+tapes). Shipped: the +0.0 word (server, two sites); P1's baseline by fail word;
+`deepwoundjoin`'s stray by signature; `healjoin.conversions()`. `test_mechanics` 228
+(floor 228, three checks rewritten), `test_skilldamage` 63 (floor 61 → 63),
+`test_agentlife` re-run for the join modules it reads.

@@ -47,7 +47,7 @@ import effects  # noqa: E402
 # a short run means a section stopped rather than passed.
 # SKILLS-HN +4 (44), SKILLS-FA +13 (57: 7 model + 6 corpus), each from its
 # green run. Section 12 needs the live corpus and declares a skip without it.
-LEDGER = checks.Ledger("skill damage", floor=61)  # 2026-09-16 SLICE-F47 +1 (the penalty split in whole points); 2026-09-14 HEAL-INT +1, ZEROWORD +1;   # MANTID-S +1: the player-side control beside the foe-side refusal
+LEDGER = checks.Ledger("skill damage", floor=63)  # 2026-09-16 RUN-SKILLS-RB +2 (section 13, the converted word); 2026-09-16 SLICE-F47 +1 (the penalty split in whole points); 2026-09-14 HEAL-INT +1, ZEROWORD +1;   # MANTID-S +1: the player-side control beside the foe-side refusal
 check = LEDGER.ok
 
 
@@ -592,6 +592,30 @@ def main():
           f"{sc['mind_burn_twins']} -- WIKI (GWW, \"Mind Burn\"): an "
           f"additional 15..60 if the caster has more Energy; the wire carries "
           f"it as a second identical packet, not a doubled one")
+
+    print("\n13. the corpus: the CONVERTED hit's word (healjoin P6, RUN-SKILLS-RB)")
+    # RUN-SKILLS-RB (2026-09-16, 20260916T213125): ten hits taken under
+    # Reversal of Fortune at a cap of 50 -- the first prevention heals in the
+    # corpus (F46.8 had counted zero). The zero is +0.0, never the graze's
+    # -0.0; the rest are negative remainders; the heal precedes the damage.
+    import healjoin
+    cv = healjoin.score_conversions(healjoin.conversions())
+    check(cv["n"] >= 10 and cv["zero_words"] >= 7 and cv["remainders"] >= 3
+          and cv["plus_zero"] == cv["zero_words"]
+          and cv["minus_zero_anywhere"] == 0 and cv["positive_damage"] == 0,
+          "P6 a fully converted hit's damage word is +0.0 (0x00000000) and a "
+          "partly converted one's is the negative remainder -- never -0.0, "
+          "on the conversions or on the coincident self-heals beside them",
+          f"{cv} -- floors 10 / 7 / 3 from the RB tape (a conversion is the "
+          f"row with the enchantment's 0x0044 on the tick; the coincident rows "
+          f"are Healing Signets closing under fire); a -0.0 here would mean "
+          f"retail spells the converted zero like the graze after all")
+    check(cv["n"] >= 10 and cv["heal_first"] == cv["n"],
+          "and the heal word precedes the damage word on every conversion tick",
+          f"heal first {cv['heal_first']} of {cv['n']} (the coincident rows: "
+          f"{cv['coincident_heal_first']} of {cv['coincident']}, which is not "
+          f"a claim) -- WIKI (GWW, \"Reversal of Fortune\" Notes): healing "
+          f"before damage")
 
     return LEDGER.verdict()
 
