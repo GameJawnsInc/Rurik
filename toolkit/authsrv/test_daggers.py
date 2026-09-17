@@ -30,8 +30,8 @@ import agents  # noqa: E402
 import chain  # noqa: E402
 import checks  # noqa: E402
 
-# FLOOR 82, from the green run of 2026-09-17 on the machine with the vault.
-LEDGER = checks.Ledger("daggers and the attack chain", floor=82)
+# FLOOR 83, from the green run of 2026-09-17 on the machine with the vault.
+LEDGER = checks.Ledger("daggers and the attack chain", floor=83)
 check = LEDGER.ok
 
 PLAYER = 1
@@ -740,6 +740,16 @@ def section_armour():
         except ValueError:
             refused = True
         check(refused, "and four pieces are refused: five keys, in slot order")
+        import combatmath
+        bonus = combatmath.armour_energy_bonus(list(rows))
+        check(bonus == (5, 2)
+              and (combatmath.ENERGY_BASE + 5, combatmath.PIPS_BASE + 2) == (25, 4)
+              and combatmath.armour_energy_bonus(
+                  [k for _i, k, _s in authsrv.STARTER_ARMOUR]) == (0, 0),
+              "the set's 556 / 558 words sum to +5 energy and +2 pips -- WIKI's "
+              "Assassin row over the 20 / 2 base, and the 25 / 4 the party row "
+              "types and the owner's character ran at; the Warrior fixture's "
+              "pieces carry neither word", str(bonus))
     finally:
         agents.PLAYER_ARMOUR = saved
 

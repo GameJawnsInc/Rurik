@@ -379,13 +379,20 @@ NOT SEEN by the scripted runs, and why:
   them through a new `player_armour` row key, validated slot by slot through wearmap at
   launch. The armour maths follows the set through one indirection
   (`agents.worn_piece_key`): the level-3 Assassin's chest rates 10 where the Warrior
-  fixture's rated 45. NOT yet seen on a client. Two things fell out of the rows: the
+  fixture's rated 45. **Seen on our client the same night** (harness `20260917T193532`,
+  `--party daggers20`): the five pieces declared with no error and the body draws
+  dressed — a green top, dark leggings, boots — where the earlier runs drew it bare
+  (`walk3-shot.png`; a scripted run, so the tooltip's `Armor: 10` is unread).
+  Two things fell out of the rows: the
   chest carries modifier 556 arg 5 and the boots and legs 558 arg 1 each -- +5 energy
   and +1 regen twice, which IS WIKI "Energy"'s Assassin row (+5 / +2 over the 20 / 2
   base) and the 0.0528 rate that character ran at, so the profession's pool is the
-  ARMOUR's and `player_energy` / `player_pips` type in what the pieces would give (the
-  server does not read 556 / 558 yet); and the PvP set of 20260917T160915 shares four of
-  the five files and wears a different head (0x800004E1).
+  ARMOUR's. `combatmath.armour_energy_bonus` now READS 556 / 558 off the worn set and
+  `apply_party_character` compares 20 / 2 + the sum with what the row types — the
+  `daggers` rows come out "pool 25/4 = the armour's", a disagreeing row prints why and
+  keeps its numbers (the Warrior fixture's 25 / 3 is the Ranger row, typed before any of
+  this was read, and its pieces carry neither word — left alone); and the PvP set of
+  20260917T160915 shares four of the five files and wears a different head (0x800004E1).
 - the first run's first chain was spent on a CORPSE — the Monk hero had killed the
   100-health target while the player plain-swung, the lead did not hit, and the off-hand
   behind it failed correctly. A press on a dead target is ACCEPTED here; what retail does

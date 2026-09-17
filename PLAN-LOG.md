@@ -27,6 +27,17 @@ move back.
 
 ---
 
+### ✅ DAGGERS armour SEEN + the energy words READ 2026-09-17 — **the Assassin draws dressed on our client; 556 / 558 on the worn set give the pool the party row types** ([studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md) §7)
+
+Harness `20260917T193532` (`--party daggers20`, a scripted look): the five `[item.assassin_*]`
+pieces declared with no error and the body draws dressed where the earlier runs drew it
+bare. `combatmath.armour_energy_bonus` sums identifier 556 (+N energy) and 558 (+N regen)
+over the worn set — (5, 2) for the Assassin's, (0, 0) for the Warrior fixture's — and
+`apply_party_character` checks 20 / 2 + the sum against the row's typed pool: the
+`daggers` rows come out "pool 25/4 = the armour's", a disagreeing row prints why and
+keeps its numbers. The base fixture's 25 / 3 (the Ranger row) is untouched. §8's armour
+line closes; `test_daggers.py` 82 → 83.
+
 ### ✅ DAGGERS-F15 2026-09-17 — **the Assassin wears its own armour: five content rows off the owner's level-3 character, `player_armour` on the party row** ([studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md) §7)
 
 The bare body of the loopback runs. `[item.assassin_body/boots/legs/gloves/head]` are
