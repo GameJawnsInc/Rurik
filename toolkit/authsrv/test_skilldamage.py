@@ -47,7 +47,7 @@ import effects  # noqa: E402
 # a short run means a section stopped rather than passed.
 # SKILLS-HN +4 (44), SKILLS-FA +13 (57: 7 model + 6 corpus), each from its
 # green run. Section 12 needs the live corpus and declares a skip without it.
-LEDGER = checks.Ledger("skill damage", floor=63)  # 2026-09-16 RUN-SKILLS-RB +2 (section 13, the converted word); 2026-09-16 SLICE-F47 +1 (the penalty split in whole points); 2026-09-14 HEAL-INT +1, ZEROWORD +1;   # MANTID-S +1: the player-side control beside the foe-side refusal
+LEDGER = checks.Ledger("skill damage", floor=67)  # 2026-09-17 SKILLS-LR +4 (the location roll: three unit, one corpus); 2026-09-16 RUN-SKILLS-RB +2 (section 13, the converted word); 2026-09-16 SLICE-F47 +1 (the penalty split in whole points); 2026-09-14 HEAL-INT +1, ZEROWORD +1;   # MANTID-S +1: the player-side control beside the foe-side refusal
 check = LEDGER.ok
 
 
@@ -451,6 +451,41 @@ def main():
           f"`+<number>` rides an armour-respecting swing -- 39.2's rule, "
           f"keyed on the LABEL and never on \"is it a skill\"")
 
+    # SKILLS-LR (2026-09-17, studies/skills 50): the spell ROLLS A LOCATION.
+    # A lopsided set -- chest and legs on, head hands and feet bare, the
+    # owner's RB2 body -- through the real `spell_armour_for`, with the roll
+    # and the pieces pinned.
+    cm = authsrv.combatmath
+    saved_lr = (cm.player_armour_at, cm.roll_hit_location,
+                authsrv.SPELL_LOCATION_ROLL)
+    lopsided = {"warrior_body": 25.0, "warrior_legs": 25.0}
+    try:
+        cm.player_armour_at = lambda key, physical, *_a: lopsided.get(key)
+        cm.roll_hit_location = lambda: "warrior_head"
+        bare = authsrv.spell_armour_for(194)
+        cm.roll_hit_location = lambda: "warrior_body"
+        chest = authsrv.spell_armour_for(194)
+        authsrv.SPELL_LOCATION_ROLL = False
+        cm.roll_hit_location = lambda: "warrior_head"
+        legacy = authsrv.spell_armour_for(194)
+    finally:
+        (cm.player_armour_at, cm.roll_hit_location,
+         authsrv.SPELL_LOCATION_ROLL) = saved_lr
+    check(bare == 0.0 and chest == 25.0,
+          "a spell rolls a hit location: a roll onto a BARE piece resolves "
+          "against 0, a roll onto the chest against the chest's rating",
+          f"head (bare) -> {bare}, chest -> {chest} -- OBSERVED on retail "
+          f"(RUN-SKILLS-RB2): one Lightning Orb, 101 armoured and 286 bare")
+    check(abs(authsrv.armour_multiplier(0.0) / authsrv.armour_multiplier(60.0)
+              - 2 ** 1.5) < 1e-9,
+          "and a bare piece against the 60 baseline is x2^(60/40) = 2.83 -- "
+          "the tape's 286 / 101 = 2.832",
+          f"{authsrv.armour_multiplier(0.0) / authsrv.armour_multiplier(60.0):.4f}")
+    check(legacy == 25.0,
+          "`--no-spell-location-roll` restores the chest's rating whatever "
+          "the roll (the revert arm, REFUTED as a claim about retail)",
+          f"roll=head, flag off -> {legacy}")
+
     # The cast itself, at rank 0 so Flare's 20 scales to 36.68 and does not
     # kill the 100-pool player (at rank 12 the 56 becomes 102.7, an overkill
     # the wire would carry as 1.0 -- the wiki's "below 60 takes MORE").
@@ -592,6 +627,30 @@ def main():
           f"{sc['mind_burn_twins']} -- WIKI (GWW, \"Mind Burn\"): an "
           f"additional 15..60 if the caster has more Energy; the wire carries "
           f"it as a second identical packet, not a doubled one")
+
+    print("\n12b. the corpus: a spell's LOCATION ROLL (spellhitjoin."
+          "location_buckets, RUN-SKILLS-RB2)")
+    # One caster's projectile spell onto one target, in whole points. With
+    # five equal pieces it is ONE bucket (P2's world); the RB2 tape took three
+    # pieces off and the same Lightning Orb fills TWO, 2^(60/40) apart.
+    lb = spellhitjoin.location_buckets(spellhitjoin.census())
+    witnesses = []
+    for k, pts in lb.items():
+        vals = sorted(pts)
+        for lo in vals:
+            for hi in vals:
+                if hi > lo and pts[lo] >= 4 and pts[hi] >= 2 \
+                        and abs(hi / lo - 2 ** 1.5) / 2 ** 1.5 <= 0.015:
+                    witnesses.append((" ".join(map(str, k[:1] + k[2:])),
+                                      lo, pts[lo], hi, pts[hi]))
+    check(len(witnesses) >= 1,
+          "SKILLS-LR a projectile spell from one caster onto one target lands "
+          "in TWO whole-point buckets 2^(60/40) apart -- an armoured piece and "
+          "a bare one; spells roll a hit location",
+          f"{witnesses} of {len(lb)} projectile groups -- 20260917T090355, "
+          f"Lightning Orb 229 from the Master of Lightning: 101 and 286. The "
+          f"single rating SKILLS-FA shipped (studies/skills 43) is REFUTED; "
+          f"43.4's caveat -- equal pieces cannot tell -- was the whole story")
 
     print("\n13. the corpus: the CONVERTED hit's word (healjoin P6, RUN-SKILLS-RB)")
     # RUN-SKILLS-RB (2026-09-16, 20260916T213125): ten hits taken under

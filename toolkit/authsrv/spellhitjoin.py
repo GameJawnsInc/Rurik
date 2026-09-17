@@ -182,6 +182,53 @@ def pairs(rows, kind="cast", min_hits=3):
     return {k: v for k, v in g.items() if len(v) >= min_hits}
 
 
+AGE_BAND = 0.25            # s; a projectile's flight is steady per (caster, skill)
+INTEGER_EPS = 0.06         # points; the word is whole points of SOME maximum
+
+
+def location_buckets(rows, min_hits=5):
+    """PROJECTILE spell hits (no 58 in the batch -- the cast closed before the
+    orb landed), per (capture, connection, cause, skill, target), as a Counter
+    of WHOLE POINTS. SKILLS-LR (RUN-SKILLS-RB2, 2026-09-17): this is where a
+    location roll shows, as two buckets 2^(dAR/40) apart.
+
+    Two filters, both measured on the RB2 tape. AGE: the caster's wand hits
+    share the announcement window, and a projectile's flight time is steady
+    (Lightning Orb 2.38-2.50 s, Javelin 1.57-1.77 s), so rows more than
+    AGE_BAND off the group's median age are another source. MAXIMUM: a killing
+    blow's batch carries the death penalty's new prop 42 AHEAD of the damage
+    word, so `maxhp` is one death stale there; the word is whole points of
+    SOME maximum this target held (F46), and the first that makes it whole
+    is taken, the current one tried first."""
+    g = collections.defaultdict(list)
+    for r in rows:
+        if r["kind"] == "none" and r["skill"] is not None \
+                and r["age"] is not None and r["maxhp"] is not None:
+            g[(r["capture"], r["connection"], r["cause"], r["skill"],
+               r["target"])].append(r)
+    held = collections.defaultdict(set)      # every maximum a target held
+    for r in rows:
+        if r["maxhp"] is not None:
+            held[(r["capture"], r["connection"], r["target"])].add(r["maxhp"])
+    out = {}
+    for k, rs in g.items():
+        ages = sorted(r["age"] for r in rs)
+        med = ages[len(ages) // 2]
+        maxima = sorted(held[(k[0], k[1], k[4])], reverse=True)
+        pts = collections.Counter()
+        for r in rs:
+            if abs(r["age"] - med) > AGE_BAND:
+                continue
+            for m in [r["maxhp"]] + [x for x in maxima if x != r["maxhp"]]:
+                p = -r["value"] * m
+                if abs(p - round(p)) <= INTEGER_EPS:
+                    pts[int(round(p))] += 1
+                    break
+        if sum(pts.values()) >= min_hits:
+            out[k] = dict(sorted(pts.items()))
+    return out
+
+
 def score(rows):
     """The numbers P1-P4 are judged on."""
     cast = [r for r in rows if r["kind"] == "cast"]

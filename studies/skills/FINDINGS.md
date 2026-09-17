@@ -3712,7 +3712,7 @@ duration. So retail **stacks** those; it does not extend them.
 - **Environmental / persistent-area:** retail refreshes silently and delays the
   `0x0044`. OBSERVED, 15 episodes. Our server has no analogue of this source type,
   so there is nothing here to copy or to fix.
-- **Cast or attack:** retail has **no witnessed case of a live effect being
+- **Cast or attack — WITNESSED 2026-09-17, §49.7:** a recast enchantment is a bare new `0x0042` with a new buff id beside the old one (which closes on its own clock, 3 of 3); a recast stance is `0x0044` then `0x0042` in one batch (3 of 3). Both are what this server already sends. The paragraph below is as written on 2026-08-21.** Retail had **no witnessed case of a live effect being
   deliberately extended at all.** Not silently, not by REMOVE-then-APPLY, not by a
   refreshing re-apply. The 15 overlaps are simultaneity, not extension. **Our
   REMOVE-then-APPLY is therefore unwitnessed either way — it is neither confirmed
@@ -5641,6 +5641,8 @@ heal number's question.
 
 ## 43. SKILLS-FA — the incoming fire spell's armour: ONE rating, elemental, no location roll — and the probe §39.6 registered could never have answered it
 
+> **"ONE rating, no location roll" is REFUTED — 2026-09-17, §50 (SKILLS-LR).** A body with its head, hands and feet bare took the same Lightning Orb for 101 and for 286, 2^(60/40) apart; armoured, 101 four times of four. §43.4's caveat — eight arena characters in equal pieces cannot tell — was the whole story. The elemental rating, the armour-ignoring labels and the multiplier below all STAND; only the "no roll" half falls, and `--no-spell-location-roll` keeps it as the revert arm.
+
 **Desk and corpus, 2026-09-09, pinned build 38797. No client run, and §43.1 says
 why one would have measured nothing.** Closes §39.5's "INCOMING is fixable" and
 §39.6's "the armour VALUE is unsettled". Shipped: `ARMOUR_RESPECTING_MEANS`,
@@ -6082,7 +6084,7 @@ to the caster's aim.
 
 ### 45.5 What it does NOT settle
 
-* **The wire shape of a cure** — removal-then-heal — has no retail witness
+* **The wire shape of a cure** — **WITNESSED 2026-09-17, §49.6: Mend Ailment, `0x0044` then the heal, 2 of 2, and no heal word when nothing remains.** It was: removal-then-heal — has no retail witness
   (§45.2). A live capture with any condition-removal heal (Mend Ailment, Mend
   Condition, Dismiss Condition are all common) would referee it; not scheduled.
 * **Mend Ailment's own rule** ("for each REMAINING condition") is a different
@@ -6646,5 +6648,133 @@ falls under a third. Scoring: `bufflog.py --capture`, `healjoin.py`, `spellhitjo
 Launched exactly as §48 (build `vault/run-live/2026-09-01_44fbd68767a8`, account `capture`,
 `--confirm --plan --minutes 30`).
 
-**Status: REGISTERED, not run.** An edit to the plan re-runs `--check-plan` and replaces
-the sha above.
+**Status: RAN 2026-09-17 09:03 (`20260917T090355`, plan sealed, sha matches, exe unchanged,
+3 keys tapped), scored below.** Eight of eight steps advanced, ten F11 notes. The owner's
+two notes from the `stripped` block, verbatim: *"i died at master of lightning, running
+back"* and *"died again. big damage lightning spells kill me fast if they hit a bare body
+part"* — which is RB2-P4's refutation, said by the operator before any scorer ran.
+
+### 49.5 The floor
+
+| floor | required | got | verdict |
+|---|---|---|---|
+| Q2 recasts while live | ≥ 2 of 307, ≥ 1 of 346 | **3 and 3**, every one F11-marked | met |
+| Q1 Mend Ailment with both conditions up, and with one | ≥ 1 each | **2 and 2** | met |
+| Q3 one spell, `armoured` / `stripped` | ≥ 6 / ≥ 10 | Lightning Orb **4 / 7**, Javelin **3 / 5** (two deaths cut the block) | not met as registered — and answered anyway: the refuting event needs one bare hit, and there are three |
+| `idle` control | 0 × 55, 0 × `0x0042`, 0 × `0x0044` from a cast | clean (the Isle's periodic 160 aside) | clean |
+| the purchase on tape | yes | yes, 77.12 s | met |
+
+### 49.6 Q1 — Mend Ailment: the most recent goes, the heal counts what remains — OBSERVED, 2 of 2
+
+Weakness (buff 112, 243.51 s) then Poison (buff 113, 244.21 s); the cast closes at 245.53 s
+in one batch: `0x0044 [player, 113]` — **Poison, the most recent** — then `[42, player,
+480]`, then `[55, player, player, +0.07292]` = **35 points**. The recast at 258.51 s:
+`0x0044 [player, 112]` and **no heal word at all**. The F10 round repeats it to the digit
+(274.63 s: Poison off, +35; 280.67 s: Weakness off, nothing). **RB2-P3 CONFIRMED on all
+four clauses**: most recent first, one heal per REMAINING condition, removal before heal,
+nothing at zero. §46's desk model and `heal_per_condition_remaining` stand as shipped, now
+OBSERVED; §45.5's "the wire shape of a cure has no retail witness" is closed.
+
+**And the 35 is a finding of its own.** The tooltip at Protection Prayers 8 is 40 (5…70).
+The heal is 35 because the condition that REMAINS is Weakness: WIKI (GWW, "Weakness", raw
+fetched 2026-09-17) — *"all of your attributes are reduced by 1"* — and 5 + 65 × 7 / 15 =
+35.33, truncated to 35 (F46). So the heal is resolved at the caster's attributes as they
+stand AFTER the removal and WITH the remaining condition's penalty. RECONSTRUCTION on the
+wiki's rule, fitting 2 of 2 to the point; our server does not model Weakness's attribute
+penalty at all, and that is the item this opens (PLAN §8).
+
+One shipped-test consequence: Poison landing while Weakness was live newly set status bit
+`0x40` alone (the generic `0x02` was already up), which reddened `test_mechanics` §19's
+"483 and 484 set 0x42". The test, widened exactly the way its 482 neighbour is written.
+
+### 49.7 Q2 — a recast while live: two shapes, by effect type, and the server already sends both — OBSERVED
+
+| effect | what the wire carried at each recast | n |
+|---|---|---|
+| Reversal of Fortune (enchantment) | a **bare `0x0042` with a NEW buff id**; the older instance is NOT removed and closes on its own clock — 53: 161.10 → 169.10, 54: 163.83 → 171.83, 55: 167.92 → 175.92, each **8.000 s** | 3 |
+| Frenzy (stance) | **`0x0044` then `0x0042` in one batch**, the freed buff id (53) handed straight back | 3 |
+
+Candidate (b) for the enchantment, candidate (a) for the stance; (c), the ring's silent
+refresh, is not how a CAST extends anything. `effects.EffectTable.open` has allocated a
+new id per apply and let the older episode expire on its own duration since 2026-08-20,
+and `exclusive_on` has closed a live stance before opening the next — so both shapes were
+already ours. §36.8's "unwitnessed either way, neither confirmed nor refuted" is now
+**CONFIRMED for both types**, and nothing ships. (Whether the client drew one RoF icon or
+several during the stack is an owner question; §36's loopback probe says one.)
+
+### 49.8 The unlock, replicated — RB2-P1 CONFIRMED, n = 2
+
+`0x003B` at 77.119 s; at 77.170 s one batch: `0x00EE [11, −1000]`, `0x001C [277, 0]`,
+`0x00DC [277, 1]`. No `0x001D` after it. The Isle load's `0x00DB` carries bit 277 (and
+332, last night's); and this session's LOGIN `0x001D` had 34 bits where last night's had
+33 — so the account set is re-read at login and that is when 332 reached it. §48.9's
+shape holds to the message.
+
+### 49.9 Q3 is its own section
+
+The armour blocks refute SKILLS-FA's single rating. Scored and shipped as §50.
+
+---
+
+## 50. SKILLS-LR — a spell ROLLS A HIT LOCATION: §43's single elemental rating is REFUTED by a lopsided body, exactly where §43.4 said it could be (2026-09-17)
+
+**One live tape, RUN-SKILLS-RB2's `armoured` and `stripped` blocks (`20260917T090355`), and
+a server change.** §43 shipped "ONE rating, elemental, no location roll" on 68 of 68
+single-valued Mind Burn hits, and §43.4 said plainly what that could not separate: eight
+arena characters in five equal pieces. The owner took the head, hands and feet off a PvP
+Warrior and stood in front of the Master of Lightning.
+
+### 50.1 The measurement — OBSERVED
+
+`spellhitjoin.location_buckets()` (new): projectile spell hits per (caster, skill, target)
+in whole points of the maximum at the hit. Two filters, both measured here — the caster's
+wand hits share the announcement window, so rows off the group's median flight time
+(Lightning Orb 2.38–2.50 s, Javelin 1.57–1.77 s) are dropped; and a killing blow's batch
+carries the death penalty's new `[42]` AHEAD of the damage word, so the word is read as
+whole points of whichever maximum the target held makes it whole (F46).
+
+| spell | `armoured` (five pieces) | `stripped` (chest + legs only) |
+|---|---|---|
+| Lightning Orb 229 (WIKI: 10…100, 25 % penetration) | **101 × 4** | **101 × 5, 286 × 2** |
+| Lightning Javelin 230 (WIKI: 15…50, 25 % penetration) | **50 × 3** | 50 × 3, **140 × 1**, 45 × 1 |
+
+- **286 / 101 = 2.832, and 2^(60/40) = 2.828.** A piece of AR 80 under 25 % penetration is
+  an effective 60 — the baseline, ×1.0, which is why the armoured Orb reads its tooltip —
+  and a bare piece is an effective 0. 140 / 50 = 2.80, the same step inside truncation.
+  Both 286s are the two deaths the owner noted.
+- **Bare hits 3 of 12** against the wiki's 3 of 8 for head + hands + feet: P(≤ 3 | 12,
+  0.375) = 0.28. Consistent; the odds themselves stay WIKI.
+- **Armoured, the same spells are single-valued** (4 of 4, 3 of 3) — so §43's 68 of 68 was
+  measuring equal armour, not the absence of a roll. §43.4's caveat was the whole story.
+- **One row is unexplained and named:** a Javelin for **45** at 530.80 s (flight 1.64 s, max
+  336). A piece rated about 8 above the others would do it and would hide from seven
+  armoured hits 13 % of the time; what the chest and legs actually read is an owner
+  question. n = 1; not a claim.
+
+**The single rating is REFUTED. Spells roll a hit location, as attacks do.** GWW's three
+"attack" sentences (§43.2) describe where players noticed it, not where it stops.
+
+### 50.2 Shipped
+
+- `combatmath.player_spell_armour(..., location_key=None)`: with a key it returns THAT
+  piece's elemental rating, and **0.0 for a location that wears nothing while others do**
+  (what 286 / 101 says). `spell_armour_for` rolls `roll_hit_location()` — the wiki's
+  3/2/1/1/1 of 8, already the swing's — under `SPELL_LOCATION_ROLL = True`.
+- **`--no-spell-location-roll`** restores the chest's rating: the revert arm, REFUTED as a
+  claim about retail. With five equal pieces (every set this server equips today) the two
+  arms are byte-identical on the wire; what changed is the claim and what a lopsided
+  content row will do.
+- `test_skilldamage` §11 (+3: a bare roll resolves against 0 and a chest roll against the
+  chest's; bare against baseline is 2^(60/40); the revert arm) and §12b (+1, the corpus
+  lock: some projectile group holds two whole-point buckets within 1.5 % of 2^(60/40), ≥ 4
+  and ≥ 2 hits — today Orb 101 × 9 / 286 × 2). Floor 63 → 67.
+
+### 50.3 Labels, and what §43 keeps
+
+The location roll for spells: **OBSERVED** (one caster, two spells, 3 bare hits of 12, one
+tape). The ODDS per location: WIKI, consistent. §43's other halves stand untouched: the
+rating is ELEMENTAL (`physical=False`), `Holy damage` and `+ Damage` ignore armour, the
+multiplier is the wiki's `2^((60 − AR)/40)` — the armoured Orb at exactly its tooltip is a
+fresh witness for that last one. §43.5's simultaneity argument (three bodies, one ratio,
+one tick) was an argument about a second SKILL in the batch and still reads correctly; it
+was never evidence against a roll on bodies in equal pieces.
