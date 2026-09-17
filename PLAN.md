@@ -1918,9 +1918,8 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 **Daggers** — [studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md)
 
-* **DAGGERS, the chain icon and the armour.** Two scripted loopback runs passed (daggers
-  §7) but could not show the `0x005C` icon — it draws on the target display, and the harness
-  selects nothing — and the Assassin body is bare: no Assassin armour rows exist.
+* **DAGGERS, the armour.** The Assassin body is bare on our client: no Assassin armour
+  rows exist, and the base fixture's Warrior rows draw nothing on it (daggers §7).
 * **DAGGERS-B8, adjacent damage.** Death Blossom's damage to adjacent foes is decoded
   (property 55, −40/480, armour-ignoring, 28 of 28) and not sent; nor is any attack
   skill's (daggers F13).

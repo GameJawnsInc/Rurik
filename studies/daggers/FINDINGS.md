@@ -337,7 +337,14 @@ OBSERVED on the client:
 - the cold off-hand, the cold dual's two fail words, `0x005C` 1 → 2, the dual's `[47]`
   batch and the `0x005C` 0 riding the target's death all went to a live client.
 
-NOT SEEN, and why:
+**THE CHAIN ICON, by the owner's hand, the same evening** (`--party daggers20
+--enemy-health 2000`, the target clicked, 1-2-3 on the bar): "confirmed on the health, the
+3 icons, and the 15s fade." So `0x005C` states 1, 2 and 3 each draw their icon on the target
+display's health bar of OUR client, and the server's 15 s clear takes it down. OBSERVED by
+the operator, no frame kept. NOT reported either way: the silent re-lead (a second lead
+changing nothing on screen while pushing the fade out).
+
+NOT SEEN by the scripted runs, and why:
 
 - **the chain icon itself.** It draws on the TARGET DISPLAY's health bar (WIKI), and the
   harness orders attacks without selecting the target client-side, so that bar was never
