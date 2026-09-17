@@ -1928,8 +1928,11 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 * **Area damage beyond Death Blossom.** DAGGERS-B8 sends ONE attack skill's adjacent damage,
   opt-in per row; `aoe_range` is now on every skills row (147 at 156, 103 at 240, 64 at
-  312), and an NPC's cast is still single-target (`land_skill`) — spells, Cyclone Axe's
-  per-foe attack and scatter are all unbuilt (daggers F13).
+  312), and an NPC's cast is still single-target (`land_skill`). The corpus holds the next
+  regime already: 73 multi-target instants of Fire Magic spells 186 / 185 / 179 / 197 on
+  `20260817T231139`, armour-respecting on property 16 with a value per target (daggers F13,
+  last paragraph) — an Elementalist arc's seed. Cyclone Axe's per-foe attack and scatter
+  are unmeasured.
 * **DAGGERS, n = 0 on retail.** A lead that misses, a missed first strike ahead of a
   second, the attacker's own death, a chain opened by 2116 with a sword, the half second
   under an attack-speed boost (daggers §6, last paragraph).
