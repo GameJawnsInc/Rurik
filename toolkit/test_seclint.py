@@ -65,10 +65,12 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # scanner no longer finds ALSO fails -- a stale line reads as coverage while covering
 # nothing, which is the defect `test_srclint.py` §7 checks in both directions too.
 KNOWN = {
-    ("PLAN.md", "8.0", 3): (
-        2, "two `### 8.0 Next, as of 2026-08-11` headings, L5334 annotated as a FROZEN "
-           "snapshot and L5492 not. PLAN.md is the status authority and its §3/§8 are "
-           "cited from everywhere; renumbering is the owner's call, not a lint's."),
+    ("PLAN-LOG.md", "8.0", 3): (
+        2, "two `### 8.0 Next, as of 2026-08-11` headings, L8765 annotated as a FROZEN "
+           "snapshot and L8926 not. They were PLAN.md §8's until 2026-09-17, when that "
+           "section moved to the log byte for byte; the log is append-only, so the "
+           "pair is recorded rather than renumbered -- an edit would break the move's "
+           "own verbatim claim."),
     ("studies/heroes/FINDINGS.md", "23", 2): (
         2, "append collision: `A FULL AUTHORED PARTY` and `The scan trigger, named` "
            "both took 23. The heroes arc is closed (PLAN.md §3), so nothing new cites "
@@ -225,8 +227,8 @@ def main():
 
     # CONTROLS. Each verdict above has only just been shown to be silent; show that
     # each one can also SPEAK, against the same real scan.
-    dropped = {k: v for k, v in KNOWN.items() if k != ("PLAN.md", "8.0", 3)}
-    LEDGER.ok(judge(found, dropped)[0] == [("PLAN.md", "8.0", 3)],
+    dropped = {k: v for k, v in KNOWN.items() if k != ("PLAN-LOG.md", "8.0", 3)}
+    LEDGER.ok(judge(found, dropped)[0] == [("PLAN-LOG.md", "8.0", 3)],
               "CONTROL: drop a known entry and NEW names exactly what it lost",
               "this is the verdict a genuinely new collision would trip")
     undercounted = dict(KNOWN)
