@@ -6861,3 +6861,53 @@ the arithmetic half is OBSERVED on one skill and carried to the others by the wi
   the rank it reads at each site, which for the player is the content rank. Unwitnessed.
 - **Heroes and other bodies** get the arithmetic and no wire; retail's word for them is
   unread (other agents' conditions never ride `0x0042` either — F46.8).
+
+---
+
+## 52. RUN-SKILLS-WKL — the Weakness LIFT: does a cast that removes Weakness heal at the rank before the lift, or after? REGISTERED, not yet run (2026-09-17)
+
+**One owner-driven live capture, the Isle of the Nameless, the RB2 character.** Plan:
+`vault/plans/skills_wkl.txt`, sha256 `c53ab93e861f…`, seven steps, F11 = ALL-UP. It is
+§51.3's first open item and nothing else.
+
+### 52.1 Mined first: zero exposures — OBSERVED
+
+Three Weakness episodes in the corpus (§51.1). Two ended under Mend Ailment with Weakness as
+the REMAINING condition and then alone; the August one ran out on its own. **No cast on any
+tape removes Weakness while another condition is live**, so the corpus cannot say, and the
+run is not a re-measurement of something on disk.
+
+What the corpus DID give the plan is the row. The owner's position at each ring's apply on
+`20260821T152147` and `20260917T090355` (c2s `0x003D`, the nearest send to each `0x0042`)
+puts the Students along one line in the order **Disease – Dazed – Weakness – Poison – Blind –
+Crippled – Burning – Bleeding**, 100–400 units apart, and RB2's Weakness→Poison applies
+landed 0.7 s apart. Ring durations OBSERVED: Weakness 20 s, Blind / Crippled / Dazed /
+Bleeding 10 s, Poison / Disease 5 s, Burning 3 s. Since Mend Ailment takes the most recent
+condition (§49.6), **the order the rings are walked in is the experiment**: RB2 walked
+Weakness→Poison; this run walks Poison→Weakness.
+
+### 52.2 Predictions, stated before the launch
+
+- **WKL-P1 (the question):** Poison then Weakness, Mend Ailment at once. The cast's batch
+  names WEAKNESS's buff in its `0x0044`, Poison remains, and the heal is **35** — the rank
+  read before the cast's own effects, which is what this server ships (RECONSTRUCTION).
+  **The rival is 40**, and it is not a straw man: the heal's count is demonstrably taken
+  after the removal (it counts what remains), so an engine reading the rank at that same
+  moment gives the un-weakened number. A 40 refutes the shipped read site.
+- **WKL-P2 (the wide arm):** Blind, Poison, Weakness last: **70** (or 35 if Poison's 5 s ran
+  out) against the rival's 80 (or 40). No multiple of 35 is a multiple of 40 below eight
+  conditions, so every outcome discriminates.
+- **WKL-P3 (positive control):** Blind then Crippled, no Weakness: the heal is **40**. It
+  shows the un-weakened number exists on the same day's wire, and it reads the rounding —
+  5 + 65 × 8/15 = 39.67, so a ROUNDED 40 against a truncated 39, which RB2's 35.33 could
+  not separate (`skillread.skill_scale_value` rounds, MEASURED from the client, combat 8c).
+- **WKL-P4 (replication):** RB2's own walk heals **35** again, with the four `0x003B` rows of
+  §51.1 in the apply's batch and their mirror at the second cast, which heals nothing.
+- Recorded, not predicted: whether the `0x003B` restores ride ahead of the `55` word.
+
+### 52.3 The floor and the abort
+
+≥ 2 casts whose batch removes Weakness's buff with ≥ 1 other condition live (the TAPE
+decides that; the F11 is the cross-check), ≥ 1 control heal, ≥ 1 replication heal, the idle
+control clean. Under two exposures the question is reported "not exposed", never scored as
+a null. Abort a step under a third health; nothing in the run hits hard.
