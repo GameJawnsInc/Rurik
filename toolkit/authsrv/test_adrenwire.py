@@ -86,6 +86,7 @@ written. Python 3 standard library only.
 """
 import collections
 import json
+import math
 import os
 import struct
 import sys
@@ -215,6 +216,39 @@ SUB_STRIKE = {2: 8, 3: 9, 4: 29, 5: 2, 6: 5, 7: 1, 8: 3, 11: 4, 12: 1, 13: 1,
 # not per message; retail sums the tick.
 OVER_STRIKE = {26: 1, 29: 1, 42: 1}
 
+# THE TWO HITS-TAKEN TAPES, 2026-09-16/17, NAMED AND PINNED WHOLE. 4b's four
+# claims were written over a corpus in which the owner mostly HIT things. These
+# two are Isle of the Nameless calibration runs built the other way round -- a
+# character carrying adrenal skills, standing still to be hit -- and between
+# them they reddened all four on the same morning. Re-scanned as of
+# the pin (every stamp before 20260916T213125) 4b is green to the digit, so the
+# corpus did not drift; these tapes SAY something, and what they say is below
+# and in studies/skills 53. Each tape's multiset is pinned EXACTLY, because a
+# tape does not grow; the rest of the corpus keeps the claims it had.
+#
+#   20260916T213125  RUN-SKILLS-RB (skills 48): Blind, Reversal of Fortune.
+#     SEVEN ZEROS. Each is a hit Reversal of Fortune converted to nothing: the
+#     damage word is +0.0 and the gain that precedes it carries 0. So "none
+#     carries 0 ... a zero would be a message with no effect" was wrong about
+#     retail: the 207 rides EVERY damage word to an adrenal bar and carries
+#     round(pct), which for nothing is nothing. The 1s are 1.04 % and 1.25 %
+#     hits -- the rows that kill ceil (section 12).
+#   20260917T090355  RUN-SKILLS-RB2 (skills 50): armour stripped, three deaths.
+#     NOT ONE 25 -- the owner never swung -- and SIX ABOVE 25: 30 x3, 34, 60
+#     and 70. "25 is a CEILING on one message" was a fact about strikes that
+#     4b had stretched over the whole opcode. A 60 is ONE Lightning Orb for
+#     286 of 480; the 70 is the same 286 against a maximum three deaths had
+#     taken to 408. The damage rule has no cap at 25 and reads the CURRENT
+#     maximum, both OBSERVED here for the first time.
+DAMAGE_TAPES = {
+    "20260916T213125": {0: 7, 1: 3, 2: 5, 4: 2, 5: 1, 6: 2, 7: 3, 8: 2, 9: 3,
+                        10: 3, 12: 1, 14: 1, 15: 1, 22: 1, 25: 13},
+    "20260917T090355": {2: 3, 3: 2, 6: 1, 10: 5, 13: 1, 15: 1, 18: 1, 21: 6,
+                        30: 3, 34: 1, 60: 1, 70: 1},
+}
+ZERO_GRANT_TAPE = "20260916T213125"
+ZERO_GRANTS = 7
+
 # THE BAR GATE, measured 2026-08-21 (12). Split the 58 usable connections on
 # whether the observing player's skillbar ever carried a skill with a non-zero
 # adrenaline cost, and the ENTIRE family lands on one side. These numbers are
@@ -257,8 +291,23 @@ ARMED_DAMAGE_TAKEN = 32
 # property 42 -- maximum health -- reads 480 on the same wire, and nothing in
 # the fraction arithmetic touched property 42. Two witnesses not fitted to each
 # other: a wrong denominator has no reason to produce 11 integers.
+#
+# RE-SHAPED 2026-09-17. `ks == ARMED_NUMERATORS` was an equality on the SET OF
+# DAMAGE VALUES THE OWNER HAS EVER TAKEN, which is a size of the vault: 58 new
+# armed rows took 11 numerators to 31 and every one is still an integer. The
+# claim is the integrality, per row, against THAT ROW'S OWN property 42 --
+# which now reads four different maxima (480, 408, 384, 336), so the witness
+# that was one number is four. The eleven are kept as a SUBSET: a scan that
+# lost the old tapes would lose them.
 ARMED_MAX_HEALTH = 480
 ARMED_NUMERATORS = [12, 13, 14, 15, 17, 24, 29, 30, 34, 39, 53]
+ARMED_MAX_HEALTHS = {480, 408, 384, 336}
+# The rows whose maximum is NOT 480, and the rival they refute. Until these
+# tapes "one max health cannot separate one unit per 1% of maximum from one
+# unit per 4.8 raw points" (12's own words). Eleven damaging rows against a
+# moved maximum do: round(pct of the CURRENT maximum) fits all of them and
+# round(points / 4.8) fits none.
+MOVED_MAX_ROWS = 11
 
 # THE RULE IS A FAMILY, NOT A CANDIDATE, and the corpus does not pin which
 # family. Fit `units == f(pct * k)` for each rounding f and solve for the k
@@ -269,9 +318,17 @@ ARMED_NUMERATORS = [12, 13, 14, 15, 17, 24, 29, 30, 34, 39, 53]
 # under ~0.5%, ceil grants one unit for any damage at all. `pools.damage_units`
 # implements round. Endpoints are exact rationals over the observed rows, so
 # this is arithmetic and not a fit with slack. studies/skills 34.C.
+#
+# CEIL DIED 2026-09-17, AND THIS IS THE ROW THE PARAGRAPH ABOVE ASKED FOR. RB's
+# 1.25 % hit granted 1 (ceil needs k <= 0.8) and RB2's 59.58 % hit granted 60
+# (ceil needs k > 0.990): no k does both, under ANY rescale. Round survives and
+# its interval closed from [1.0, 1.04) to [1.0, 1.0054), which is as near to
+# "k is 1, the wire's own fraction, unscaled" as 90 rows can say. The old two
+# intervals are kept as the OUTER bound: a family only ever narrows, so a round
+# interval that left the old one is a decoder change, not a finding.
 FAMILY_K = {"floor": None,                        # empty: lo >= hi
-            "round": (1.000000, 1.040000),
-            "ceil":  (0.905660, 0.960000)}
+            "round": (1.000000, 1.040000),        # the outer bound, 2026-08-21
+            "ceil":  None}                        # empty since 2026-09-17
 
 # THE NEAR MISS, and it is the whole reason the boundary is still open. The two
 # surviving families disagree only below ~1%. EXACTLY ONE damage event in the
@@ -523,6 +580,7 @@ def scan_corpus():
         "captures": 0, "connections": 0, "messages": 0,
         "census": collections.Counter(),
         "amounts": collections.Counter(),
+        "amounts_by_stamp": collections.defaultdict(collections.Counter),
         "spend_skills": collections.Counter(),
         "spend_copies": collections.Counter(),
         "self_scope": [],        # (stamp, agents_on_207, agents_on_218)
@@ -553,6 +611,7 @@ def scan_corpus():
                     agg["census"][op] += 1
                 if op == SMSG_ADRENALINE_CHARGE:
                     agg["amounts"][v[2]] += 1
+                    agg["amounts_by_stamp"][stamp][v[2]] += 1
                     on_207.add(v[1])
                 elif op == SMSG_ADRENALINE_SPEND:
                     agg["spend_skills"][v[2]] += 1
@@ -626,7 +685,14 @@ def section_census(agg):
 def section_populations(agg):
     """TWO POPULATIONS in 207's amount, and the strike rule's own signature."""
     print("\n4b. what a 207 carries: 25, or something under it")
-    amounts = agg["amounts"]
+    # THE STRIKE COUNT is over everything; the four SHAPE claims are over the
+    # corpus WITHOUT the two named hits-taken tapes, which are pinned whole by
+    # the last check of this section (DAMAGE_TAPES says what each one is).
+    everything = agg["amounts"]
+    amounts = collections.Counter()
+    for stamp, c in agg["amounts_by_stamp"].items():
+        if stamp not in DAMAGE_TAPES:
+            amounts.update(c)
     # THE COUNT IS A FLOOR AND THE DOMINANCE IS THE CLAIM. Every gain the
     # corpus has added since this was first pinned carried exactly 25, twice
     # over (886 -> 889 here, 631 -> 886 at the previous re-pin), so the
@@ -634,10 +700,10 @@ def section_populations(agg):
     # What cannot move without meaning something is the SHARE: the sub-25 tail
     # is a small ragged minority and 25 is the overwhelming mode.
     tail_total = sum(n for a, n in amounts.items() if a < STRIKE_UNITS)
-    LEDGER.ok(amounts[STRIKE_UNITS] >= STRIKE_COUNT,
-              f"at least {STRIKE_COUNT} of the {sum(amounts.values())} carry "
+    LEDGER.ok(everything[STRIKE_UNITS] >= STRIKE_COUNT,
+              f"at least {STRIKE_COUNT} of the {sum(everything.values())} carry "
               f"exactly {STRIKE_UNITS}",
-              f"{amounts[STRIKE_UNITS]} today. WIKI (GWW, 'Adrenaline', rev. "
+              f"{everything[STRIKE_UNITS]} today. WIKI (GWW, 'Adrenaline', rev. "
               f"2026-07-02): one successful weapon hit is 25 units. OBSERVED "
               f"as a value; that it is one strike per landed hit is the "
               f"reading, and it is the reading `pools.on_hit_landed` already "
@@ -646,10 +712,15 @@ def section_populations(agg):
               f"and {STRIKE_UNITS} is the overwhelming mode, not merely the "
               f"commonest (10x: JARIN's melee hero took a 2-unit bite for every "
               f"skale swing and doubled the tail on one tape)",
-              f"{amounts[STRIKE_UNITS]} at 25 against {tail_total} below it. "
+              f"{amounts[STRIKE_UNITS]} at 25 against {tail_total} below it, "
+              f"outside the {len(DAMAGE_TAPES)} hits-taken tapes. "
               f"THIS is the durable form of the count above: a tail that grew "
               f"to rival the strikes would mean the 1%-of-health rule fires far "
-              f"more often than a landed hit, and no re-pinning would hide it")
+              f"more often than a landed hit, and no re-pinning would hide it. "
+              f"(It is a fact about HOW THE OWNER PLAYS as much as about the "
+              f"wire, which is why a tape made to be hit is named out of it "
+              f"rather than allowed to drag a ratio: 20260917T090355 has 26 "
+              f"gains and not one 25, because nobody swung)")
     tail = {a: n for a, n in amounts.items() if a < STRIKE_UNITS}
     LEDGER.ok(tail == SUB_STRIKE,
               f"and {sum(tail.values())} carry less, as {dict(sorted(tail.items()))}",
@@ -664,15 +735,38 @@ def section_populations(agg):
     LEDGER.ok(over == OVER_STRIKE,
               f"NO 207 exceeds {STRIKE_UNITS} units, in {sum(amounts.values())} "
               f"of them, except the hero's three summed ticks {OVER_STRIKE} (JARIN)",
-              f"{over}. The strike rule's own signature: 25 is a CEILING on "
-              f"one message because it is the largest single event the rule "
-              f"allows. A 50 would mean the server batches strikes, and the "
-              f"whole per-hit model would be wrong")
+              f"{over}, outside the hits-taken tapes. The STRIKE rule's own "
+              f"signature: 25 is the largest single event THAT rule allows, "
+              f"and a 50 would mean the server batches strikes. CORRECTED "
+              f"2026-09-17: this used to say 25 caps the MESSAGE. It does not "
+              f"-- the damage rule has no cap, and one hit for 59.58 % of "
+              f"maximum health carries 60 (next check, and 12)")
     LEDGER.ok(0 not in amounts,
               "and none carries 0",
-              "207 is UNSIGNED throughout -- §9 reads the add and the clamp -- "
-              "so it cannot express a loss, and a zero would be a message with "
-              "no effect. Losses ride 208 and 210")
+              "outside the hits-taken tapes. 207 is UNSIGNED throughout -- §9 "
+              "reads the add and the clamp -- so it cannot express a loss. "
+              "Losses ride 208 and 210. CORRECTED 2026-09-17: this used to add "
+              "'a zero would be a message with no effect', as a reason retail "
+              "would never send one. Retail sends one for every hit Reversal "
+              "of Fortune converts to nothing (next check, and 12)")
+
+    named = {st: dict(agg["amounts_by_stamp"].get(st, {})) for st in DAMAGE_TAPES}
+    zeros = {st: c.get(0, 0) for st, c in named.items()}
+    LEDGER.ok(named == DAMAGE_TAPES
+              and zeros == {st: (ZERO_GRANTS if st == ZERO_GRANT_TAPE else 0)
+                            for st in DAMAGE_TAPES},
+              f"THE TWO HITS-TAKEN TAPES, pinned whole: {ZERO_GRANTS} zeros on "
+              f"{ZERO_GRANT_TAPE} and "
+              f"{sorted(a for a in named['20260917T090355'] if a > STRIKE_UNITS)} "
+              f"above {STRIKE_UNITS} on 20260917T090355",
+              f"{ {st: dict(sorted(c.items())) for st, c in named.items()} }. "
+              f"EXACT, because a tape does not grow. RB is the Reversal of "
+              f"Fortune run and RB2 the stripped-armour one (studies/skills 48, "
+              f"50): the zeros are fully converted hits, the 60 and the 70 are "
+              f"single Lightning Orbs, and section 12 joins every one of them "
+              f"to the damage word in its own batch. A THIRD tape with a zero "
+              f"or an over-25 reddens the two checks above, which is the "
+              f"point: name it, say what it is, and do not widen a constant")
 
 
 def section_self_scope(agg):
@@ -1306,8 +1400,12 @@ def section_bar_gate(agg):
     # under one name is how a grant share silently starts measuring a subset.
     armed_dmg = [r for r in rows if r["arm"] == "armed"]
     dark_dmg = [r for r in rows if r["arm"] == "dark"]
-    armed_gr = [r for r in armed_dmg if r["units"]]
-    dark_gr = [r for r in dark_dmg if r["units"]]
+    # `is not None`, NOT TRUTHINESS, since 2026-09-17: a gain of 0 units is a
+    # message that ARRIVED, and `if r["units"]` filed RB's seven zero grants
+    # with the rows that got nothing -- 83 of 90, a red on the very rows that
+    # prove every damage word is answered.
+    armed_gr = [r for r in armed_dmg if r["units"] is not None]
+    dark_gr = [r for r in dark_dmg if r["units"] is not None]
 
     LEDGER.ok(armed["damage_taken"] >= ARMED_DAMAGE_TAKEN
               and len(armed_dmg) == armed["damage_taken"]
@@ -1321,6 +1419,24 @@ def section_bar_gate(agg):
               f"them' true by shrinking the denominator, and `armed_gr` is "
               f"asserted non-empty because all() of nothing is this repo's own "
               f"recorded trap")
+
+    zero_units = [r for r in armed_dmg if r["units"] == 0]
+    zero_dmg = [r for r in armed_dmg if r["pct"] == 0.0]
+    LEDGER.ok(len(zero_units) >= ZERO_GRANTS and zero_units == zero_dmg
+              and {r["capture"] for r in zero_units} == {ZERO_GRANT_TAPE}
+              and all(math.copysign(1.0, r["value"]) > 0 for r in zero_units),
+              f"THE ZERO GRANT: {len(zero_units)} armed damage word(s) carry "
+              f"+0.0, and each one is answered by a 207 carrying 0",
+              f"{len(zero_dmg)} zero-damage rows, {len(zero_units)} zero-unit "
+              f"gains, THE SAME ROWS, all on {ZERO_GRANT_TAPE} -- Reversal of "
+              f"Fortune eating the whole hit (studies/skills 48.7: the "
+              f"converted zero is +0.0, 7 of 7). Retail does not skip the gain "
+              f"when there is nothing to gain. OUR SERVER DOES "
+              f"(`player_gains_adrenaline` returns on 0 units): a recorded "
+              f"divergence, harmless to the client's arithmetic (it adds 0) "
+              f"and open in PLAN.md 8. What a hit in (0, 0.5 %) sends is "
+              f"still NOT OBSERVED; this makes 'a 207 carrying 0' the "
+              f"prediction where it used to be 'no message'")
 
     LEDGER.ok(dark["damage_taken"] >= DARK_DAMAGE_TAKEN
               and len(dark_dmg) == dark["damage_taken"]
@@ -1339,37 +1455,88 @@ def section_bar_gate(agg):
     # between two numbers from the same fit and cannot go stale. What went was
     # `fits["n"] == ARMED_JOINED` and the third copy of 32 in ARMED_FITS["round"]
     # -- both frozen sizes of the vault, and the corpus doubling took them to 64.
+    damaging = sorted(r["pct"] for r in armed_dmg if r["pct"] > 0.0)
     LEDGER.ok(fits["n"] >= ARMED_JOINED and fits["n"] > 0
-              and fits["round"] == fits["n"],
+              and fits["round"] == fits["n"]
+              and fits["floor"] < fits["n"] and fits["ceil"] < fits["n"],
               f"re-fitted on the armed rows alone, round() fits "
               f"{fits['round']} of {fits['n']}",
               f"at least {ARMED_JOINED} rows, and round must fit ALL of "
               f"them; the pinned shape was {ARMED_FITS}. floor "
               f"{fits['floor']}, ceil {fits['ceil']} -- so the 2026-08-21 "
               f"correction from floor to round survives the stratification "
-              f"that killed the boundary claim. Note what it does NOT survive "
-              f"into: the armed rows run 2.50%..11.04% and there is no armed "
-              f"row below 2.5%, so the sub-1% boundary is still UNVERIFIED")
+              f"that killed the boundary claim, AND the two hits-taken tapes "
+              f"(2026-09-17: 58 rows, 58 fits). The damaging rows now run "
+              f"{damaging[0]:.2f}%..{damaging[-1]:.2f}% where they ran "
+              f"2.50%..11.04%; "
+              f"{sum(1 for x in damaging if x < 1.0)} sit under 1%, so what a "
+              f"hit in (0, 0.5%) sends is still NOT OBSERVED")
 
     armed_rows = [r for r in rows if r["arm"] == "armed" and not r["ambiguous"]]
-    pcts = sorted({r["pct"] for r in armed_rows})
-    ks = [round(p / 100.0 * ARMED_MAX_HEALTH) for p in pcts]
-    integral = all(abs(p / 100.0 * ARMED_MAX_HEALTH - k) < 1e-4
-                   for p, k in zip(pcts, ks))
+    # PER ROW, AGAINST THE ROW'S OWN PROPERTY 42 (`whose_max_health`, read off
+    # the same wire before the damage). Nothing in `pct` looked at it.
+    points = [(r, r["pct"] / 100.0 * r["max_health"]) for r in armed_rows
+              if r["max_health"]]
+    integral = (len(points) == len(armed_rows)
+                and all(abs(k - round(k)) < 1e-3 for _r, k in points))
+    healths = {r["max_health"] for r in armed_rows}
+    pcts = sorted({r["pct"] for r in armed_rows
+                   if r["max_health"] == ARMED_MAX_HEALTH})
+    ks = sorted({round(k) for r, k in points
+                 if r["max_health"] == ARMED_MAX_HEALTH})
     smaller = [h for h in range(1, ARMED_MAX_HEALTH)
                if all(abs(p / 100.0 * h - round(p / 100.0 * h)) < 1e-4
                       for p in pcts)]
-    LEDGER.ok(integral and ks == ARMED_NUMERATORS and not smaller,
-              f"NO FREE PARAMETER: all {len(pcts)} armed percentages are "
-              f"k/{ARMED_MAX_HEALTH}, k = {ks}",
-              f"expected {ARMED_NUMERATORS}, and no denominator below "
+    LEDGER.ok(integral and set(ARMED_NUMERATORS) <= set(ks) and not smaller
+              and healths >= ARMED_MAX_HEALTHS,
+              f"NO FREE PARAMETER: all {len(points)} armed percentages are "
+              f"whole points of that row's OWN maximum health, over "
+              f"{sorted(healths, reverse=True)}",
+              f"at {ARMED_MAX_HEALTH}: k = {ks}, which must contain the "
+              f"original {ARMED_NUMERATORS}, and no denominator below "
               f"{ARMED_MAX_HEALTH} works (found {smaller}). The observer's int "
-              f"property 42 reads {ARMED_MAX_HEALTH} on the same wire and none "
+              f"property 42 reads the maximum on the same wire and none "
               f"of this arithmetic looked at it, so the two are independent "
-              f"witnesses to the same maximum health. It is also the limit of "
-              f"what the corpus can say about the RULE: one max health cannot "
-              f"separate 'one unit per 1% of maximum' from 'one unit per "
-              f"{ARMED_MAX_HEALTH / 100.0} raw points'")
+              f"witnesses -- and since 2026-09-17 it is four maxima rather "
+              f"than one, which is what lets the next check say something the "
+              f"corpus could not")
+
+    # THE DENOMINATOR IS THE CURRENT MAXIMUM. Asked of the rows whose maximum
+    # had MOVED -- three deaths' worth of penalty on RB2 (480 -> 408 -> 336) and
+    # a 384 on RB -- because at 480 the two readings are the same number.
+    moved = [(r, k) for r, k in points
+             if r["max_health"] != ARMED_MAX_HEALTH and r["pct"] > 0.0]
+
+    def _round(x):
+        return int(math.floor(x + 0.5 + 1e-9))
+    of_current = [r for r, _k in moved if _round(r["pct"]) == r["units"]]
+    of_base = [r for r, k in moved
+               if _round(k / (ARMED_MAX_HEALTH / 100.0)) == r["units"]]
+    LEDGER.ok(len(moved) >= MOVED_MAX_ROWS and len(of_current) == len(moved)
+              and not of_base,
+              f"THE DENOMINATOR IS THE CURRENT MAXIMUM: {len(of_current)} of "
+              f"{len(moved)} rows against a moved maximum fit round(% of it), "
+              f"{len(of_base)} fit round(points / "
+              f"{ARMED_MAX_HEALTH / 100.0})",
+              f"{[(r['max_health'], round(k), r['units']) for r, k in moved]} "
+              f"as (maximum, points, units). 286 points is 60 units at 480 and "
+              f"70 at 408; 101 is 21 at 480 and 30 at 336. CLOSES the limit "
+              f"this section used to end on ('one max health cannot separate "
+              f"one unit per 1% of maximum from one unit per 4.8 raw points'). "
+              f"OUR SERVER DIVIDES BY THE BASE (`agents.PLAYER_HEALTH`, two "
+              f"sites in authsrv.py) while its damage word divides by "
+              f"`player_max_health(state)`: under a death penalty or a Deep "
+              f"Wound the two books part. Recorded, open in PLAN.md 8")
+
+    over = [r for r in armed_rows if (r["units"] or 0) > STRIKE_UNITS]
+    LEDGER.ok(len(over) >= 6 and all(_round(r["pct"]) == r["units"]
+                                     for r in over),
+              f"and the damage rule has NO CAP at {STRIKE_UNITS}: "
+              f"{sorted(r['units'] for r in over)} are each ONE damage word",
+              f"{[(r['capture'], round(r['pct'], 2), r['units']) for r in over]}"
+              f" -- unambiguous batches, one damage word and one gain apiece, "
+              f"so nothing was summed. 4b's 'no 207 exceeds 25' was the "
+              f"strike rule's ceiling read as the opcode's")
 
     # units == f(pct * k): solve each family for the k interval fitting all rows
     bands = {}
@@ -1377,26 +1544,37 @@ def section_bar_gate(agg):
         lo, hi = 0.0, float("inf")
         for r in armed_rows:
             u, pct = r["units"], r["pct"]
+            if pct == 0.0:
+                # A zero-damage row constrains no k: f(0 * k) is 0 for every k
+                # under all three rules, and its units ARE 0 (the zero-grant
+                # check above). Dividing by it was a ZeroDivisionError on
+                # 2026-09-17, the first day the corpus held one.
+                continue
             lo = max(lo, (u - half) / pct)
             hi = min(hi, (u + 1.0 - half) / pct)
         bands[name] = (lo, hi) if lo < hi else None
-    ok = (bands["floor"] is None
-          and all(bands[n] is not None
-                  and abs(bands[n][0] - FAMILY_K[n][0]) < 1e-5
-                  and abs(bands[n][1] - FAMILY_K[n][1]) < 1e-5
-                  for n in ("round", "ceil")))
+    rb = bands["round"]
+    ok = (bands["floor"] is None and bands["ceil"] is None
+          and rb is not None
+          and rb[0] <= 1.0 < rb[1]
+          and rb[0] >= FAMILY_K["round"][0] - 1e-5
+          and rb[1] <= FAMILY_K["round"][1] + 1e-5)
     LEDGER.ok(ok,
-              "the rule is a FAMILY: floor is empty under every rescale, "
-              "round and ceil both survive and disagree at the low end",
+              "the rule is ROUND: floor AND ceil are empty under every "
+              "rescale, and round's interval still holds k = 1",
               f"{ {n: (None if b is None else (round(b[0], 6), round(b[1], 6))) for n, b in bands.items()} } "
-              f"against {FAMILY_K}. Solving `units == f(pct*k)` for k over all "
-              f"{len(armed_rows)} rows: FLOOR IS EMPTY, which refutes GWW's "
-              f"'rounded down' AND the pre-mitigation-damage repair of it in "
-              f"one line, rather than merely fitting worse. The two survivors "
-              f"predict OPPOSITE things for a 1-point hit on this 480-health "
-              f"character -- ceil 1 unit, round no message at all -- so one "
-              f"light hit taken settles it. `pools.damage_units` implements "
-              f"round; nothing here says it is right")
+              f"inside the 2026-08-21 outer bound {FAMILY_K['round']}. Solving "
+              f"`units == f(pct*k)` for k over all {len(armed_rows)} rows: "
+              f"FLOOR IS EMPTY, which refutes GWW's 'rounded down' AND the "
+              f"pre-mitigation-damage repair of it in one line. CEIL IS EMPTY "
+              f"TOO since 2026-09-17 -- a 1.25% hit granted 1 (k <= 0.8) and a "
+              f"59.58% hit granted 60 (k > 0.990) -- so the survivor this "
+              f"section used to call provisional is the only one left, and "
+              f"k = 1 means the wire's own fraction, unscaled. "
+              f"`pools.damage_units` implements round; this now says it is "
+              f"right everywhere the corpus has looked, which is 0% and "
+              f"1.04%..70.1%. half-up vs half-even is still untouched: no "
+              f"row lands on .5")
 
     band = [r for r in rows if not r["ambiguous"]
             and DISAGREEMENT_BAND[0] <= r["pct"] < DISAGREEMENT_BAND[1]]
@@ -1406,10 +1584,14 @@ def section_bar_gate(agg):
               f"[{DISAGREEMENT_BAND[0]}%, {DISAGREEMENT_BAND[1]}%), and it is "
               f"DARK",
               f"{[(r['arm'], round(r['pct'], 9), r['capture']) for r in band]}. "
-              f"That band is the ONLY place round and ceil disagree, so this "
-              f"single row is what the whole question turns on -- and its "
-              f"observer's bar has no adrenal skill, so there was nothing to "
-              f"charge. Its value is {NEAR_MISS_PCT:.9f}%, from bits "
+              f"When this was written that band was the only place round and "
+              f"ceil disagreed and this row was what the question turned on; "
+              f"ceil has since died on rows ABOVE 1% (the family check), so "
+              f"what the band still guards is narrower -- no ARMED row has "
+              f"ever landed under 1%, and the first one that does says "
+              f"whether a sub-0.5% hit sends a 207 carrying 0 or nothing. "
+              f"Its observer's bar has no adrenal skill, so there was nothing "
+              f"to charge. Its value is {NEAR_MISS_PCT:.9f}%, from bits "
               f"0x{NEAR_MISS_BITS:08X}: at four decimals it prints as 1.0000, "
               f"which is exactly where the two rules AGREE. Three independent "
               f"readers printed it rounded and all three read past it")

@@ -630,9 +630,25 @@ ATTRIBUTE_BONUS_ITEMS_OWN = 644
 # as the ==3 skip). Across all 5,266 modifier words in the live corpus they
 # are CONSTANT PER IDENTIFIER -- 35 identifiers, zero exceptions -- so they
 # are a fixed prefix of the encoding rather than a payload. For 543 the whole
-# prefix is this, measured on 26 retail words and on nothing else. The same
-# number for 542 is NOT known: no capture of ours has ever carried one.
+# prefix is this, measured on 26 retail words and on nothing else.
+#
+# CORRECTED 2026-09-17, twice over, by one batch of 95 upgrade components
+# (item type 8) that retail sent on 20260916T213125 and again on
+# 20260917T090355 -- the first runes this corpus has held:
+#   * "CONSTANT PER IDENTIFIER" HAS ONE EXCEPTION, 595. On a component the
+#     words AFTER 614 are the upgrade's own payload and carry bit 31; 595 is
+#     the only identifier that appears on BOTH sides of 614, so it is the only
+#     one seen both ways -- bit 31 set on 96 of 96 after 614 and clear on 135
+#     of 135 elsewhere (all 250 words after a 614 carry it, 24 identifiers).
+#     Positional, not a payload. Every other identifier, 71 of them now,
+#     still holds one prefix.
+#   * 542's PREFIX IS MEASURED: bits 31-30 = 0, bit 19 = 1, the same three
+#     bits as 543, on 84 retail words (42 attributes, amount 1, twice).
+#     OBSERVED ON THE RUNE ITSELF. What a 542 looks like on a host armour
+#     piece with the rune applied is NOT OBSERVED -- the payload words of the
+#     insignia in the same batch carry bit 31, a rune's might too.
 STACKING_BONUS_WORD = 0x21F80000
+NONSTACKING_BONUS_WORD = 0x21E80000
 ATTRIBUTES = 51                                  # CHAR_ATTRIBS
 
 
@@ -711,13 +727,16 @@ def attribute_bonuses(words):
     return out
 
 
-def attribute_bonus_word(attribute: int, amount: int) -> int:
-    """The STACKING `<attribute> +N` word, as retail's headpieces encode it.
+def attribute_bonus_word(attribute: int, amount: int,
+                         stacking: bool = True) -> int:
+    """The `<attribute> +N` word: STACKING (543) as retail's headpieces encode
+    it, or NON-STACKING (542) as retail's RUNE ITEMS do.
 
-    Only the stacking form (543) is composable, because the three-bit prefix
-    the encoding needs was measured from ArenaNet's own words and we hold 26
-    of those for 543 and none for 542. Composing a 542 would mean inventing
-    three bits, which is exactly the kind of quiet guess this repo labels.
+    Until 2026-09-17 only the stacking form was composable, because the
+    three-bit prefix the encoding needs is measured from ArenaNet's own words
+    and we held none for 542 -- composing one would have meant inventing three
+    bits. 84 of them arrived (see NONSTACKING_BONUS_WORD), so it is composable
+    now, AS THE RUNE ITEM CARRIES IT. The word on a host piece is NOT OBSERVED.
     """
     if not 0 <= attribute < ATTRIBUTES:
         raise ValueError(f"attribute {attribute} is outside s_attrib "
@@ -726,7 +745,8 @@ def attribute_bonus_word(attribute: int, amount: int) -> int:
     if not 1 <= amount <= 0xFF:
         raise ValueError(f"amount {amount} does not fit the 8-bit field; "
                          f"1..3 also name Minor/Major/Superior")
-    return STACKING_BONUS_WORD | ((attribute & 0x3FF) << 8) | (amount & 0xFF)
+    base = STACKING_BONUS_WORD if stacking else NONSTACKING_BONUS_WORD
+    return base | ((attribute & 0x3FF) << 8) | (amount & 0xFF)
 
 
 def print_readers(img: Image, only=None):

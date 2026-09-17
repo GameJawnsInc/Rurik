@@ -67,7 +67,18 @@ import pinned  # noqa: E402
 # 12 executed, and the ledger refused the run rather than passing it. Sections
 # 6 and 7 took it from 12 to 19 , sections 8-10 to 28, 11 to 30, and 12-14 to 37;
 # each time the number was read off the run rather than predicted.
-LEDGER = checks.Ledger("item modifiers", floor=38)
+# 2026-09-17: 38 -> 42, read off the run: section 4's vocabulary split in two,
+# section 10 gained the rune's two checks and 595's positional one.
+LEDGER = checks.Ledger("item modifiers", floor=42)
+
+# 2026-09-17: the upgrade-component batch (20260916T213125, 20260917T090355).
+COMPONENT_TYPE = 8          # 0x0161's item type on all 95 of them -- OBSERVED
+COMPONENT_SPLIT_ID = 614    # the word the upgrade's own payload follows
+POSITIONAL_ID = 595         # the one identifier seen on both sides of it
+# s_attrib's professions 1-10, read by `attribtable.py --summary` on the pin.
+PROFESSION_ATTRIBUTES = list(range(0, 26)) + list(range(29, 45))
+# Stacking headpiece bonuses that are NOT the Warrior's 20, by capture.
+HEADPIECE_ATTRS = {"20260917T160915": {29, 31}}     # RUN-DAGGERS-1, Assassin
 
 
 def main():
@@ -146,6 +157,7 @@ def main():
     if live is not None:
         words = ids = 0
         distinct = set()
+        component_only = set()
         undispatched = []
         caps = 0
         for stamp in sorted(os.listdir(live)):
@@ -157,6 +169,8 @@ def main():
             for _t, _c, op, v in rows:
                 if op != 0x161 or not v or not isinstance(v[-1], list):
                     continue
+                head4 = [x for x in v if not isinstance(x, list)]
+                component = len(head4) > 3 and head4[3] == COMPONENT_TYPE
                 for entry in v[-1]:
                     w = entry[0] if isinstance(entry, (list, tuple)) else entry
                     if not isinstance(w, int):
@@ -166,7 +180,8 @@ def main():
                     if d["skipped_high"] or d["skipped_bit18"]:
                         continue
                     ids += 1
-                    distinct.add(d["identifier"])
+                    (component_only if component else distinct).add(
+                        d["identifier"])
                     if d["identifier"] not in vocab:
                         undispatched.append(d["identifier"])
         LEDGER.ok(words > 1000,
@@ -181,10 +196,30 @@ def main():
                   f"tables"
                   if not undispatched else
                   f"MISSED: {sorted(set(undispatched))[:20]}")
+        # SPLIT 2026-09-17, not raised. This read `len(distinct) < 60` over
+        # everything and went red at 72 -- on ONE BATCH. 20260916T213125 sent
+        # 95 upgrade components (item type 8; 42 of them one-attribute runes)
+        # in a single instant and 20260917T090355 sent the same 95 again; 31
+        # identifiers had never been seen before and ALL 31 are on those items.
+        # That is vocabulary, not noise: every one dispatches (the check above,
+        # which is the refutable one), and they arrive where a catalogue of
+        # upgrades would put them. So the enum is small TWICE -- what worn and
+        # carried items say, and what the component catalogue adds -- and the
+        # second set is asserted to be confined to components, which is the
+        # claim that would break if a wrong mask were spraying identifiers.
+        component_only -= distinct
         LEDGER.ok(len(distinct) < 60,
                   "and the wild vocabulary is SMALL, as a real enum should be",
-                  f"{len(distinct)} distinct identifiers over {ids} words; "
-                  f"random noise in a 10-bit field would show hundreds")
+                  f"{len(distinct)} distinct identifiers off upgrade "
+                  f"components over {ids} words; random noise in a 10-bit "
+                  f"field would show hundreds")
+        LEDGER.ok(0 < len(component_only) < 60,
+                  f"and upgrade components (item type {COMPONENT_TYPE}) add "
+                  f"{len(component_only)} identifiers seen NOWHERE else",
+                  f"{sorted(component_only)} -- the upgrade lines, the rune's "
+                  f"542 among them, first sent 2026-09-16 as one batch of 95 "
+                  f"items. {len(distinct) + len(component_only)} in all, of "
+                  f"157 the client dispatches")
 
     print("\n5. the tool refuses rather than inventing when the anchor is gone")
     class Broken(itemmods.Image):
@@ -366,8 +401,11 @@ def main():
     else:
         print("\n10. CORPUS: 543's real words, and the prefix the composer uses")
         bonus_words, kinds, with_armour = [], set(), 0
+        runes = []                   # (bonus, item type, the item's words)
         prefix = {}
         exceptions = []
+        positional = {True: set(), False: set()}   # 595 after 614? -> bit 31
+        attrs_by_stamp = {}
         for stamp in sorted(os.listdir(live)):
             try:
                 got = cmsgstream.timed(stamp, "s2c", "game")
@@ -380,16 +418,28 @@ def main():
                 ws = [e[0] if isinstance(e, (list, tuple)) else e
                       for e in v[-1]]
                 ws = [x for x in ws if isinstance(x, int)]
+                after_614 = False
                 for x in ws:
                     dd = itemmods.decode(x)
                     if dd["skipped_high"] or dd["skipped_bit18"]:
                         continue
                     key = ((x >> 30) & 3, (x >> 19) & 1)
+                    if dd["identifier"] == POSITIONAL_ID:
+                        # 595's bit 31 is POSITIONAL (see below): scored on
+                        # its own, and its other two bits still held constant.
+                        positional[after_614].add(x >> 31)
+                        key = ((x >> 30) & 1, key[1])
                     seen_pfx = prefix.setdefault(dd["identifier"], key)
                     if seen_pfx != key:
                         exceptions.append((dd["identifier"], seen_pfx, key))
+                    if dd["identifier"] == COMPONENT_SPLIT_ID:
+                        after_614 = True
                 for b in itemmods.attribute_bonuses(ws):
+                    if not b["stacking"]:
+                        runes.append((b, head[3] if len(head) > 3 else None, ws))
+                        continue
                     bonus_words.append((b, ws))
+                    attrs_by_stamp.setdefault(stamp, set()).add(b["attribute"])
                     if len(head) > 3:
                         kinds.add(head[3])
                     if any(itemmods.decode(x)["identifier"] == 572 for x in ws):
@@ -406,12 +456,31 @@ def main():
         # would otherwise pass this silently. So: the floor guards vacuity, the
         # `all()` carries the claim, and the count is REPORTED so a reader sees
         # the evidence grow.
-        sigs = {(b["identifier"], b["stacking"], b["attribute"], b["amount"])
+        # SPLIT BY WHOSE HEADPIECE, 2026-09-17. "Attr 20" was never the claim;
+        # it was the only character the corpus had. RUN-DAGGERS-1
+        # (20260917T160915) is a new Assassin, and its headpieces carry the same
+        # word on the Assassin's own attributes -- 29 and 31, both in s_attrib's
+        # profession-7 row -- at armour 70 instead of the Warrior's 80. Same
+        # identifier, same +1, same item type, armour rating beside it: the
+        # reading got a second profession. Keyed by capture so a THIRD
+        # character's tape reddens this and gets named too, rather than the
+        # attribute set quietly becoming "anything".
+        sigs = {(b["identifier"], b["stacking"], b["amount"])
                 for b, _ in bonus_words}
-        LEDGER.ok(len(bonus_words) >= 26 and sigs == {(543, True, 20, 1)},
-                  "every attribute bonus ArenaNet sent us is 543, attr 20, +1",
+        others = set().union(*[a for st, a in attrs_by_stamp.items()
+                               if st not in HEADPIECE_ATTRS] or [set()])
+        LEDGER.ok(len(bonus_words) >= 26 and sigs == {(543, True, 1)}
+                  and others == {20}
+                  and all(attrs_by_stamp.get(st) == want
+                          for st, want in HEADPIECE_ATTRS.items()),
+                  "every STACKING attribute bonus ArenaNet sent us is 543, +1, "
+                  "on the wearer's own attribute: 20 for the Warrior, 29 and "
+                  "31 for RUN-DAGGERS-1's Assassin",
                   f"{len(bonus_words)} of them, signatures {sorted(sigs)} "
-                  f"against a floor of 26; attribute 20 resolves "
+                  f"against a floor of 26; attributes "
+                  f"{ {st: sorted(a) for st, a in attrs_by_stamp.items() if st in HEADPIECE_ATTRS} } "
+                  f"on the named tape(s) and {sorted(others)} on every other. "
+                  f"Attribute 20 resolves "
                   f"through s_attrib to a Warrior weapon attribute -- on "
                   f"items that also carry an armour rating (572) and a "
                   f"'+20 vs. physical' (527). A headpiece, which is exactly "
@@ -429,14 +498,66 @@ def main():
                   "the composer reproduces each of those words exactly",
                   f"{len(bonus_words)} chances for a wrong prefix or a swapped "
                   f"field to show")
+        # THE NON-STACKING TWIN, 2026-09-17. This section's first check read
+        # "every attribute bonus is 543" and went red on 84 words that are not
+        # counterexamples to it: they are 542s, on RUNES, which studies/itemmods
+        # 7 had been waiting for ("one capture away"). Split by the identifier's
+        # own meaning -- the stacking claim above is untouched and still about
+        # headpieces; this is the rune's.
+        rune_sigs = {(b["identifier"], b["amount"], kind) for b, kind, _ in runes}
+        rune_attrs = sorted({b["attribute"] for b, _k, _w in runes})
+        LEDGER.ok(len(runes) >= 84
+                  and rune_sigs == {(542, 1, COMPONENT_TYPE)}
+                  and rune_attrs == PROFESSION_ATTRIBUTES
+                  and not any(itemmods.decode(x)["identifier"] == 572
+                              for _b, _k, ws in runes for x in ws),
+                  f"every NON-stacking bonus is 542, +1, on an upgrade "
+                  f"component (item type {COMPONENT_TYPE}) and never on armour",
+                  f"{len(runes)} of them over {len(rune_attrs)} attributes -- "
+                  f"EXACTLY the 42 that s_attrib files under professions 1-10 "
+                  f"(`attribtable.py --summary`: 0-25 and 29-44), and none of "
+                  f"the nine it files under no profession, which a wrong field "
+                  f"boundary has no reason to reproduce. Signatures "
+                  f"{sorted(rune_sigs)} -- amount 1 indexes the client's own "
+                  f"grade table to `Minor` (studies/itemmods 5.2), so these are "
+                  f"the minor runes, one per attribute, sent as one batch on "
+                  f"20260916T213125 and again on 20260917T090355. None carries "
+                  f"an armour rating: a 542 on a WORN piece is still NOT "
+                  f"OBSERVED")
+        LEDGER.ok(runes and all(
+                      itemmods.attribute_bonus_word(b["attribute"], b["amount"],
+                                                    stacking=False) == w
+                      for b, _k, ws in runes for w in ws
+                      if itemmods.decode(w)["identifier"] == 542),
+                  "and the composer reproduces each 542 word exactly",
+                  f"{len(runes)} chances, against a prefix that was "
+                  f"unmeasured until these words arrived: bits 31-30 = 0, bit "
+                  f"19 = 1, the same three as 543")
         LEDGER.ok(not exceptions and len(prefix) > 30,
                   "bits 31, 30 and 19 are CONSTANT per identifier",
                   f"{len(prefix)} identifiers over the whole corpus, 0 "
                   f"exceptions -- which is why they are a fixed prefix of the "
                   f"encoding and why the composer can carry them. A single "
                   f"identifier whose prefix varied would mean they are a "
-                  f"payload and the composer is wrong"
+                  f"payload and the composer is wrong. ({POSITIONAL_ID}'s bit "
+                  f"31 is scored by the next check; its bits 30 and 19 are in "
+                  f"this one)"
                   if not exceptions else f"VARIES: {exceptions[:6]}")
+        # 595, THE ONE EXCEPTION, and it is a rule rather than a payload. The
+        # check above read "0 exceptions" over everything and went red on 595
+        # alone. On an upgrade component the words after 614 are the upgrade's
+        # own payload and all of them carry bit 31; 595 is the only identifier
+        # that appears on BOTH sides of 614, so it is the only one ever seen
+        # both ways. Asserted as the biconditional, which one 595 with bit 31
+        # set before a 614 -- or clear after one -- refutes.
+        LEDGER.ok(positional[True] == {1} and positional[False] == {0},
+                  f"EXCEPT {POSITIONAL_ID}, whose bit 31 is POSITIONAL: set on "
+                  f"every one AFTER a {COMPONENT_SPLIT_ID} word, clear on "
+                  f"every other",
+                  f"after: {sorted(positional[True])}, elsewhere: "
+                  f"{sorted(positional[False])} -- both populations asserted "
+                  f"non-empty by the equality, so a corpus that lost the "
+                  f"component batch goes red here rather than vacuous")
 
     print("\n11. our own content: the declared bonus and the WORD agree")
     try:

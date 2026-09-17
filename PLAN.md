@@ -1912,6 +1912,14 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   a foe between its wound edge and its next maximum word. Named, not run.
 * **SLICE-F47**: the RA tape's Mind Burn pair reads non-integer points under the
   last-seen-maximum join; scoped out of the pool check rather than chased.
+* **SKILLS-AD2, the adrenaline denominator.** Retail's damage-taken gain is round(% of
+  the CURRENT maximum), 11 of 11 against a moved maximum; both `authsrv.py` call sites
+  pass `dealt / agents.PLAYER_HEALTH` beside a damage word that divides by
+  `player_max_health(state)`. A two-site fix, not made (skills §53.2).
+* **SKILLS-AD4, the zero gain.** A hit converted to nothing still gets `0x00CF` carrying
+  0 on retail, 7 of 7; `player_gains_adrenaline` sends nothing. Whether a zero re-arms
+  the 25 s clear is unread, which is why it is not shipped (skills §53.4). Also:
+  `adrenjoin` does not read property-55 damage, which charges too (§53.5).
 * **SLICE-F43, shrines and gadgets as server-created agents** — understood, not built;
   no longer the wipe's blocker. With it, R4a's other absences per §3: a spawn table and
   any behaviour beyond aggro, chase and swing.
@@ -1963,6 +1971,10 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 * **NPCTRACK**: two hostiles park in one body (Q10 — retail does too; a per-chaser
   bearing would be a reconstruction with no witness, so it is a lever for the owner's
   eye, not a defect); Q3 needs a wedge run with the tape; Q8 is an observation.
+* **Late stamps on OUR tapes.** Retail's one firing of the 400 u/s arm is an 18 ms
+  late capture stamp (`movesync.late_stamp`, analysis only, no verdict moved). Whether
+  our own boosted or short-cadence hard-jump counts include the same artifact is not
+  measured (movement FINDINGS, 2026-09-17).
 * **`movetap` cannot certify a capture under the harness** — 10–12 Hz against its own
   50 Hz floor (§1z-ag). Instrument debt; nulls taken that way do not count.
 * **RUN-R8** ([studies/movecode/RUN-R8.md](studies/movecode/RUN-R8.md)) is a
@@ -1970,6 +1982,12 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 * **The review's nine one-sentence documentation fixes** (§1z-bh) are still owed.
 * A real `D1_LEAD` default — `--no-d1-lead`, a composition-matrix value and a
   router × d1 rule — is "its own arc, if wanted" (§1z-bu). Not wanted so far.
+
+**Items** — [studies/itemmods/FINDINGS.md](studies/itemmods/FINDINGS.md)
+
+* **A 542 on a WORN piece.** The rune ITEM's word is measured and composable (§5.7); the
+  word on a host piece with the rune applied is not, and every payload word after a
+  component's 614 carries bit 31, so it may differ. One capture of a runed character.
 
 **Tools**
 
@@ -1984,8 +2002,10 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   the in-run reference the unmet-requirement divisor (3.098) has never had. It needs its
   own short plan or a line on the next Isle tape — not `isle_rung8d_recast_v2.txt`,
   whose re-cast steps RB2 made moot ([studies/isle/PLAN.md](studies/isle/PLAN.md), rung 8d).
-* **SKILLS-B1**: the sub-1 % adrenaline rounding boundary and the armed/dark gate want
-  two staged live captures; neither has run (skills §34.10).
+* **SKILLS-B1**: the armed/dark gate still wants its staged live capture (skills
+  §34.10). The rounding half is mostly answered without one — ceil is dead, round holds
+  k = 1 (skills §53.1) — and what is left of it is a hit in (0, 0.5 %): a `0x00CF`
+  carrying 0, or nothing.
 * **MORALE-Q5 and Q6**: morale BOOSTS have zero sightings on retail's wire, and the
   corpus holds no death followed by a zone, so what resets a penalty is WIKI only
   ([studies/morale/FINDINGS.md](studies/morale/FINDINGS.md)).

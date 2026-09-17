@@ -6191,3 +6191,39 @@ pathing line before claiming a match; both runs above were checked and clear.
 `--checksum-probe {wrong,model}` flag with its prediction printed at startup,
 and `toolkit/authsrv/test_poschecksum.py` (20 checks, floor 20, zero headroom)
 with its `TESTS.md` entry in the same commit.
+
+### 2026-09-17 — the speed arm's first retail firing is a LATE STAMP, and the arm is left alone
+
+`test_movesync` §16 and `test_resyncscore` §15 went red on `main` together: one retail
+interval over the 400 u/s arm, where the calibration said none. A per-connection scan puts
+it on `20260916T213125` (RUN-SKILLS-RB), c2s, t = 197.760: a boosted zig-zag run reading
+
+```
+382.16   362.11   402.28   382.60   u/s        268.51 u over 0.701 s = 383.12 u/s
+```
+
+— a slow interval, then a fast one, across one shared report, and the pair restores the
+run's own speed (the wire's declared boost base is 383.04). OBSERVED. **That shape is a
+stamp, not a displacement**: a report stamped δ late lengthens the interval that ends on it
+and shortens the one that starts on it by the same δ, and moves no distance; a jump ADDS
+distance to one interval and takes none from its neighbour. So the pair's average speed
+discriminates with no free parameter — it must equal the run either side, or the row is a
+jump. Here δ = 18 ms, inside NPCTRACK's 67 ms bound on how far a capture stamp trails the
+client (`studies/npctrack/RUN-R2.md`). Re-scanned as of the pin, the corpus is still zero
+on both arms and still tops out at 388.80 u/s.
+
+`movesync.late_stamp(rows, k)` is the predicate — ANALYSIS ONLY. `hard_step` does not call
+it and **no verdict moved**: the instrument still fires on that row, and every count quoted
+from it (61 → 64 hard rows over 961 captures, and the rest) stands. The two tests split
+their claim instead: every retail row over the speed arm is a late stamp (with the 09-16
+row required to be among them, so the predicate cannot go blind quietly), and nothing
+clears either arm as a displacement. Controls, corpus-free: an 18 ms late stamp on a
+383 u/s run is named with δ recovered exactly; a 12 u jump at the same speed clears the arm
+too and is refused.
+
+**OPEN, and it cuts the other way.** Nothing here says our own tapes are free of the same
+artifact. At the 288 u/s base a late stamp needs δ > 0.28·dt to clear 400, so at the
+~0.25 s cadence it needs ~70 ms and is out of reach — but at a boosted 383 it needs 4 %
+of dt, and at short dt anywhere it is cheap. A hard-jump count on a boosted or
+short-cadence capture of OURS may include late stamps. Not measured; `late_stamp` is the
+tool that would.

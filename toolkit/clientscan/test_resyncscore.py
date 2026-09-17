@@ -595,11 +595,38 @@ def main():
               f"{reports} retail self-report(s)",
               "asserted FIRST and before any zero is believed: a control over "
               "an empty corpus is the shape this suite exists to refuse")
-        check(hard == 0,
-              f"and retail scores {hard} hard jump(s) on movesync's two arms",
+        # SPLIT 2026-09-17, the same row as test_movesync 16 seen through the
+        # control. `hard == 0` went red on ONE interval of 20260916T213125
+        # (t = 197.760, 402.28 u/s): a capture stamp 18 ms late, which
+        # `movesync.late_stamp` tells from a displacement with no free
+        # parameter -- the slow interval before it and the fast one restore the
+        # run's own 383 u/s, and a jump cannot. So "retail never clears the
+        # bar" is kept as the claim it always was, about DISPLACEMENTS, and the
+        # stamp artifact is named rather than absorbed into a count.
+        late = [(t["label"], t["rows"][k],
+                 movesync.late_stamp(t["rows"], k))
+                for t in usable for k in t["hard_idx"]]
+        real = [x for x in late if x[2] is None]
+        late = [x for x in late if x[2] is not None]
+        check(hard == len(late) + len(real) and not real,
+              f"and retail scores {len(real)} hard jump(s) on movesync's two "
+              f"arms that are DISPLACEMENTS ({hard} firing(s), {len(late)} of "
+              f"them one late stamp)",
               "this is WHY it is the control -- ArenaNet's own client never "
               "clears the bar, so any firing on this corpus is the rule "
-              "reading the wire rather than the defect")
+              "reading the wire rather than the defect. Unexplained: "
+              + "; ".join(f"{st} t={r['t']:.3f} {r['speed']:.2f} u/s"
+                          for st, r, _w in real))
+        check(any(abs(r["t"] - 197.760) < 0.01 and abs(r["speed"] - 402.28) < 0.01
+                  for _st, r, _w in late),
+              f"VACUITY GUARD: the late stamp it was written for is among the "
+              f"{len(late)} it names",
+              "; ".join(f"{st} t={r['t']:.3f}: {r['speed']:.2f} u/s reads "
+                        f"{w['pair_speed']:.2f} over the pair, stamp "
+                        f"{w['delta'] * 1000:.0f} ms late"
+                        for st, r, w in late)
+              + " -- 20260916T213125's row. A predicate that stopped seeing it "
+              "would make the check above pass for the wrong reason")
         if paths:
             ship = R.track_from_capture(paths[R.SHIPPED])
             verdicts = {}
