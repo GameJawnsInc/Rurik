@@ -43,7 +43,8 @@ import checks  # noqa: E402
 import effects  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("the effect channel", floor=84)   # SLICE-F26 +1 (the death kills the lead in flight); SLICE-F25 +2 (0x002D in the death batch; the mirror stops); SLICE-F24 +1 (the death hold); SLICE-F23 +6 (the degen clock across quiet ticks; a corpse does not walk); from the green run
+RITUAL, RITUAL_SENTINEL = 22, 10000.0   # type_code; the range effect's "until you leave"
+LEDGER = checks.Ledger("the effect channel", floor=85)   # 2026-09-17: +1, the ritual range-effect exception (RB2 re-pin), from the green run #   # SLICE-F26 +1 (the death kills the lead in flight); SLICE-F25 +2 (0x002D in the death batch; the mirror stops); SLICE-F24 +1 (the death hold); SLICE-F23 +6 (the degen clock across quiet ticks; a corpse does not walk); from the green run
 
 
 
@@ -251,12 +252,14 @@ def section_corpus_oracle():
               f"that moved, and the numbers below would quietly get easier")
 
     hits = misses = conds = 0
-    worst = []
+    worst, rituals = [], []
     for a in applies:
         row = skilltable.parse_record(data, base, a["skill"])
         pred = effects.interp(row["duration0"], row["duration15"], a["field3"])
         if a["skill"] in bufflog.CONDITION_SKILLS:
             conds += 1
+        elif row.get("type_code") == RITUAL and abs(pred - a["duration"]) >= 1e-6:
+            rituals.append((a["skill"], a["field3"], a["duration"], pred))
         elif abs(pred - a["duration"]) < 1e-6:
             hits += 1
         else:
@@ -270,6 +273,22 @@ def section_corpus_oracle():
               f"The endpoints are the client's, the formula was measured for "
               f"the DAMAGE scale, and field3 and the duration are retail's "
               f"bytes -- nothing was fitted. Misses: {worst[:4]}")
+
+    # RB2 RE-PIN (2026-09-17): the owner ran through a Ranger spirit's range on
+    # 20260917T090355 and skill 475 (type_code 22, a ritual) rode 0x0042 at
+    # field3 7 with 46.0 once and 10000.0 twice, each removed seconds later as
+    # they left. That is a RANGE effect, not a cast onto the agent: its clock is
+    # the SPIRIT's -- what is left of the rank's 50 s, or a sentinel -- so it is
+    # a named exception like the conditions, by SIGNATURE, and this check
+    # exists so "excluded" cannot become "anything goes": never MORE than the
+    # rank's own duration unless it is exactly the sentinel.
+    LEDGER.ok(all(d == RITUAL_SENTINEL or 0.0 < d <= p
+                  for _s, _f, d, p in rituals),
+              f"a RITUAL's range effect carries the spirit's remaining life or "
+              f"the {RITUAL_SENTINEL:.0f} s sentinel, never more than its rank's "
+              f"duration ({len(rituals)} such applies, excluded above)",
+              f"{rituals[:4]} -- field3 still reads as the rank: 46.0 sits "
+              f"under interp(15, 90, 7) = 50")
 
     # The two rows that carry the refutation on their own.
     by_skill = {}

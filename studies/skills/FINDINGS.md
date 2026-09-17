@@ -6853,7 +6853,8 @@ the arithmetic half is OBSERVED on one skill and carried to the others by the wi
 
 ### 51.3 What it does not settle
 
-- **A cast that removes Weakness itself while another condition remains** — does the heal
+- **CLOSED by §52 (RUN-SKILLS-WKL): BEFORE, 5 of 5, and ours already did.** ~~A cast that
+  removes Weakness itself while another condition remains~~ — does the heal
   read the rank before or after the lift? Both Mend Ailment heals on the tape had Weakness
   as the REMAINING condition, so they cannot say. Ours reads the rank as the cast
   resolves, before its own effects: RECONSTRUCTION.
@@ -6864,7 +6865,7 @@ the arithmetic half is OBSERVED on one skill and carried to the others by the wi
 
 ---
 
-## 52. RUN-SKILLS-WKL — the Weakness LIFT: does a cast that removes Weakness heal at the rank before the lift, or after? REGISTERED, not yet run (2026-09-17)
+## 52. RUN-SKILLS-WKL — the Weakness LIFT: a cast that removes Weakness heals at the rank BEFORE the lift — RAN AND SCORED, 5 of 5, the shipped read site CONFIRMED (2026-09-17)
 
 **One owner-driven live capture, the Isle of the Nameless, the RB2 character.** Plan:
 `vault/plans/skills_wkl.txt`, sha256 `c53ab93e861f…`, seven steps, F11 = ALL-UP. It is
@@ -6911,3 +6912,64 @@ Weakness→Poison; this run walks Poison→Weakness.
 decides that; the F11 is the cross-check), ≥ 1 control heal, ≥ 1 replication heal, the idle
 control clean. Under two exposures the question is reported "not exposed", never scored as
 a null. Abort a step under a third health; nothing in the run hits hard.
+
+### 52.4 The run — `20260917T124314`, floor met on every arm
+
+Plan sha matched the seal; 18 marks, 6 notes, 0 refused. The idle control is clean (zero
+`55`, `0x0042`, `0x0044`, `0x003B` on the player; the only player rows are the `0x00F1`
+word's 0x80 bit toggling, which is not an effect). Maximum 480 throughout, so every heal
+word below is whole points of 480 (F46). Eight Mend Ailment heals:
+
+| walk | removed | remaining | heal word | points | |
+|---|---|---|---|---|---|
+| Blind → Crippled ×2 | Crippled | Blind | 0.083333 | **40** | WKL-P3 control |
+| Blind → Poison (the owner's mis-walk, step 3) | Poison | Blind | 0.083333 | **40** | a third control, unplanned |
+| Weakness → Poison | Poison | Weakness | 0.072917 | **35** | WKL-P4, RB2 replicated (n = 3 with RB2) |
+| **Poison → Weakness ×3** | **Weakness** | Poison | 0.072917 | **35** | **WKL-P1** |
+| **Blind → Poison → Weakness ×2** | **Weakness** | Blind, Poison | 0.145833 | **70** | **WKL-P2** |
+
+### 52.5 WKL-P1 / P2 CONFIRMED — the rank is read BEFORE the cast's own removal, 5 of 5 — OBSERVED
+
+Every cast whose batch names Weakness's buff in its `0x0044` healed **35 per remaining
+condition**, the rank-7 number; the rival's 40 / 80 appears zero times in five, against
+three 40s from the same bar minutes earlier. So the argued rival is REFUTED: the heal's
+COUNT is taken after the removal and its RANK before it — they are not read at the same
+moment. `resolve_heal` takes the rank its caller read as the cast resolved, which is this;
+§51.3's first item is closed and nothing ships.
+
+**The recorded order is the striking part.** All five lifting batches read
+
+```
+0x0044 [player, Weakness's buff]
+0x00F1 status
+0x003B x4                          the restores: [15,8,8] [17,8,8] [20,12,13] [21,1,1]
+0x00A3 [55, player, player, 35/480]
+```
+
+— the restores ride AHEAD of the heal word, so the client's Attributes panel already reads
+Protection 8 when the rank-7 number lands. Ours sends the same order (`remove_conditions`
+closes the episode and `push_attributes` fires there, then `heal_agent`); `test_mechanics`
+§33 pins it through the real path and WKL1–WKL2 pin the corpus. WKL1 is a SIGNATURE, not
+the number 35: points = remaining × Mend Ailment's scale at one under the Protection rank
+the batch's own `0x003B` restores, and never at the restored rank.
+
+### 52.6 WKL-P3 CONFIRMED, and it reads the rounding — OBSERVED 3 of 3
+
+The no-Weakness heals are **40**, not 39: 5 + 65 × 8/15 = 39.67 is ROUNDED, as
+`skillread.skill_scale_value` does (combat 8c, MEASURED from the client's interpolator).
+RB2's 35.33 could not separate round from truncate; this does. (The whole-points
+truncation of F46 is a different step — it acts on the final amount, which is already an
+integer here.)
+
+### 52.7 Two suite reds from the owner's tapes, both the tests
+
+- `test_mechanics` "481 sets 0x0A": Crippled landed while Blind was live, twice, so the
+  generic 0x02 was already set and 481 newly set 0x08 alone — the 482 and 484 lines' own
+  shape. Widened the same way, 0x0A kept REQUIRED as the positive control.
+- `test_effects` "non-condition applies predicted exactly": from RB2's tape, not this one
+  (the test was not in RB2's affected set — it should have been). Skill 475, a Ranger
+  ritual (type_code 22), rode `0x0042` onto the owner at field3 7 with 46.0 once and
+  10000.0 twice, each removed seconds later: a spirit's RANGE effect, whose clock is the
+  spirit's — what is left of the rank's 50 s, or a sentinel — not a cast onto the agent.
+  A named exception by signature with its own refutable check (never more than the rank's
+  duration unless exactly the sentinel). What decides 46-vs-10000 is unread, n = 3.
