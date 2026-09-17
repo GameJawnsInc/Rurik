@@ -136,18 +136,48 @@ WIKI_ENERGY_25 = {
     3013, 3009, 1592,
 }
 
-# FLOOR 46 = every check this file executes on a real client binary, counted
+# WIKI (GWW), fetched 2026-09-17 through the MediaWiki API and joined by the
+# infobox's own `id` -- studies/daggers/FINDINGS.md F1-F2. The concise
+# description's "Must follow a(n) ... attack" clause, as the BIT the client is
+# claimed to store at +0x14. Ids only; no skill name is carried here.
+WIKI_MUST_FOLLOW = {
+    0x01: (781, 1033, 1643),                                   # ... a dual
+    0x02: (780, 975, 988, 1021, 1022, 1987, 1988),             # ... a lead
+    0x04: (775, 776, 777, 976, 986, 1019, 1020, 1634, 1986, 2135),  # off-hand
+}
+# Chain skills whose page carries NO such clause: nine leads, and four off-hands
+# conditioned on a knockdown or an enchantment instead. (1636 is left out: its
+# word is 0x10, one row, UNVERIFIED.)
+WIKI_NO_CHAIN_CLAUSE = (779, 782, 783, 948, 1023, 1024, 1025, 1026, 1637,
+                        778, 989, 1635, 1990)
+# The infobox `type` (Lead / Off-Hand / Dual Attack) as the claimed +0x30 value,
+# plus the four NON-attacks whose description says "counts as a lead / an
+# off-hand attack" -- the refutable part, since nothing else marks them.
+WIKI_COMBO = {1: (779, 782, 783, 948, 1023, 1024, 1025, 1026, 1637),
+              2: (778, 780, 781, 976, 988, 989, 1021, 1022, 1635, 1636,
+                  1987, 1988, 1990),
+              3: (775, 776, 777, 975, 986, 1019, 1020, 1634, 1986, 2135)}
+WIKI_COUNTS_AS = {786: 1, 2116: 1, 974: 2, 1045: 2}
+PROF_ASSASSIN = 7
+WEAPON_DAGGERS = 0x08
+# attribute id -> the weapon bit its attack skills must carry. The attribute
+# column is the witness: it is decoded independently of +0x24.
+MASTERY_BIT = {18: 0x01, 25: 0x02, 29: 0x08, 19: 0x10, 41: 0x20, 37: 0x40,
+               20: 0x80}
+
+# FLOOR 56 = every check this file executes on a real client binary, counted
 # from a green run on 2026-08-14 against Gw.exe: 3 structural (§1) + 4 corpus
 # (§2) + 5 wiki joins (§3: two adrenaline, one rival-rule refutation, and the
 # 15/25-energy pair) + 4 text-resolution (§4) + 2 build counts (§5) + 8
 # content-emitter checks (§6, added with --emit-content) + 8 scaling-window
 # checks (§7: 4 endpoint reproductions + 4 green-render-rule) + 12 wiki
-# third-witness checks (§8: 4 endpoint joins, 4 no-unlisted-green, 4 costs). None of them is
+# third-witness checks (§8: 4 endpoint joins, 4 no-unlisted-green, 4 costs)
+# + 10 chain-and-weapon checks (§9, 2026-09-17, floor 46 -> 56). None of them is
 # conditional once the binary opens, so a run that reports fewer has lost a
 # section rather than passed -- which is exactly the failure §3 would hide,
 # since dropping the wiki join is what turns this file back into our decoder
 # agreeing with itself.
-LEDGER = checks.Ledger("skill table", floor=46)
+LEDGER = checks.Ledger("skill table", floor=56)
 check = checks.adopt(LEDGER)
 
 
@@ -401,6 +431,60 @@ def main():
               "; ".join(wrong) if wrong else
               f"energy={r['energy']}, adrenaline={r['adrenaline']}, "
               f"recharge={r['recharge']}")
+
+    print("\n9. the chain and the weapon mask (studies/daggers F1-F3)")
+    inc = [by_id[i] for i in corpus]
+    bad = [(bit, i, by_id[i]["combo_req"]) for bit, ids in WIKI_MUST_FOLLOW.items()
+           for i in ids if by_id[i]["combo_req"] != bit]
+    n = sum(len(v) for v in WIKI_MUST_FOLLOW.values())
+    check(not bad, f"+0x14 carries exactly the wiki's must-follow bit on all {n} rows",
+          f"MISMATCHES {bad[:5]}" if bad else "0x01 dual, 0x02 lead, 0x04 off-hand")
+    bad = [(i, by_id[i]["combo_req"]) for i in WIKI_NO_CHAIN_CLAUSE
+           if by_id[i]["combo_req"]]
+    check(not bad, f"and is 0 on the {len(WIKI_NO_CHAIN_CLAUSE)} chain skills "
+                   f"whose page has no such clause", str(bad[:5]) if bad else "")
+    # The obvious rival -- the bit is 1 << (required combo - 1) -- must be
+    # refutable, or the first check only proves we can read a u32.
+    need = {0x01: 3, 0x02: 1, 0x04: 2}
+    rival = [i for bit, ids in WIKI_MUST_FOLLOW.items() for i in ids
+             if by_id[i]["combo_req"] != 1 << (need[bit] - 1)]
+    check(len(rival) >= 10, "the rival rule 1 << (combo - 1) is refuted",
+          f"by {len(rival)} of {n} rows: dual is bit 0, not bit 2")
+    bad = [(i, by_id[i]["combo"], want) for want, ids in WIKI_COMBO.items()
+           for i in ids if by_id[i]["combo"] != want]
+    check(not bad, f"+0x30 is the wiki's Lead / Off-Hand / Dual type on all "
+                   f"{sum(len(v) for v in WIKI_COMBO.values())} attack rows",
+          str(bad[:5]) if bad else "")
+    bad = [(i, by_id[i]["combo"], want) for i, want in WIKI_COUNTS_AS.items()
+           if by_id[i]["combo"] != want]
+    check(not bad, "and the four NON-attacks the wiki says 'count as' a lead or "
+                   "an off-hand carry that value", str(bad) if bad else "")
+    stray = sorted(r["id"] for r in inc if r["combo"]
+                   and r["profession"] != PROF_ASSASSIN)
+    check(stray == [2116], "outside the Assassin the corpus holds exactly one "
+                           "chain row, the one the wiki names", str(stray))
+    stray = sorted(r["id"] for r in inc if r["combo_req"]
+                   and r["profession"] != PROF_ASSASSIN)
+    check(not stray, "and no must-follow word at all", str(stray[:5]))
+    # The first draft said "every chain attack" and went RED on 2116: the one
+    # lead attack outside the profession takes ANY melee weapon (0xB9), so a
+    # chain can be opened with a sword. The claim is the Assassin's own rows.
+    sin = [r for r in inc if r["combo"] and r["type_code"] == 14
+           and r["profession"] == PROF_ASSASSIN]
+    bad = sorted(r["id"] for r in sin if r["weapon_req"] != WEAPON_DAGGERS)
+    check(not bad and len(sin) >= 30,
+          f"every Assassin chain ATTACK wants daggers and nothing else "
+          f"(+0x24 == 0x08 on {len(sin)} rows)", str(bad[:5]))
+    check(by_id[2116]["weapon_req"] == 0xB9,
+          "and the lone outsider opens a chain with any melee weapon",
+          f"2116 +0x24 = {by_id[2116]['weapon_req']:#x}")
+    bad = sorted((r["id"], r["attribute"], r["weapon_req"]) for r in inc
+                 if r["weapon_req"] and r["attribute"] in MASTERY_BIT
+                 and not r["weapon_req"] & MASTERY_BIT[r["attribute"]])
+    held = sum(1 for r in inc if r["weapon_req"] and r["attribute"] in MASTERY_BIT)
+    check(not bad and held >= 100,
+          f"a weapon-mastery skill's mask always holds its own weapon's bit "
+          f"({held} rows over {len(MASTERY_BIT)} masteries)", str(bad[:5]))
 
     return LEDGER.verdict()
 

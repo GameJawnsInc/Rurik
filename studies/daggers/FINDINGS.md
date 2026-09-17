@@ -40,8 +40,9 @@ type-name switch — it is tail-called "with the weapon and combo fields, becaus
 attack's displayed name depends on the weapon and the chain slot".
 
 Numbers in this section came from a one-off census over all 3,443 rows restricted to
-`skilltable.player_corpus` (1,333 rows). **DAGGERS-B1 lands it in the extractor with a
-test; until then these counts are one run of an unreviewed script.**
+`skilltable.player_corpus` (1,333 rows). **DAGGERS-B1 landed them the same day:**
+`skilltable.py` emits all three, and `test_skilltable.py` §9 holds the joins below (and
+went red once, usefully — see F3's last line).
 
 ### DAGGERS-F1 — `combo` (+0x30, u8): what the skill counts as. CORROBORATED.
 
@@ -82,6 +83,10 @@ player row. Two Assassin rows with the word set were not joined (784 → `0x02`,
 | `0x80` | sword | 20 : 18 |
 | `0xB9` | any melee (axe, daggers, hammer, scythe, sword) | 29 rows over seven attributes |
 | `0x46` | any ranged; bit `0x04` is unwitnessed alone | 1 row |
+
+One chain attack does NOT want daggers: 2116, the profession-0 lead, carries `0xB9` — a
+chain can be opened with any melee weapon. The test's first draft claimed "every chain
+attack wants daggers" and this row refuted it; the claim holds for the Assassin's own 32.
 
 1,132 of 1,333 player rows carry 0. **The server has no weapon gate on an attack skill
 today** (the readiness audit found none in `authsrv.py`), so this is a gap for the
@@ -194,7 +199,7 @@ GWW, fetched 2026-09-17. All player-visible, so WIKI is strong here.
 
 | id | step | rests on |
 |---|---|---|
-| **DAGGERS-B1** | `skilltable.py`: read +0x14 and +0x24, emit `combo`, `combo_req`, `weapon_req`; `test_skilltable.py` locks §1's censuses and the 29-row join (ids only — no names in the repo). `content.py` needs no change (no per-field allowlist for kind `skills`). | F1-F3 |
+| **DAGGERS-B1** ✅ 2026-09-17 | `skilltable.py`: read +0x14 and +0x24, emit `combo`, `combo_req`, `weapon_req`; `test_skilltable.py` locks §1's censuses and the 29-row join (ids only — no names in the repo). `content.py` needs no change (no per-field allowlist for kind `skills`). | F1-F3 |
 | **DAGGERS-B2** | A dagger item row (item_type 32, offhand empty), `WEAPON_TYPE_ATTRIBUTE` / `WEAPON_TYPE_RATE` entries, `PARTY_WEAPON_ITEMS["daggers"]` — a profession-7 party body cannot resolve a weapon today. | F4, F5 |
 | **DAGGERS-B3** | `player_profession` on the `[party.*]` row; today only `--spawn-profession`, unwired to the row's attributes and weapon. | audit |
 | **DAGGERS-B4** | Weapon gate on attack skills from `weapon_req`. What retail SENDS on a mismatch is unobserved — ship the refusal the server already uses (`0x00E2`) and label it RECONSTRUCTION. | F3 |

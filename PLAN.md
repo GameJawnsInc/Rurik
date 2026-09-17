@@ -1918,10 +1918,10 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 **Daggers** — [studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md)
 
-* **DAGGERS-B1..B5, buildable now.** The skill record's chain fields and weapon mask are
-  decoded but not emitted; the dagger item row, the profession knob, the weapon gate and the
-  `0x005C` chain state need no new capture (daggers §4).
-* **DAGGERS-Q1..Q5, the capture.** A landed dual, a double strike, a failed step's recharge,
+* **DAGGERS-B2..B5, buildable now.** The dagger item row, the profession knob on the party
+  row, the weapon gate (`weapon_req`, every profession) and the `0x005C` chain state with its
+  reason-2 failure need no new capture (daggers §4).
+* **DAGGERS-Q1..Q5, RUN-DAGGERS-1 staged.** A landed dual, a double strike, a failed dual,
   the Critical Strikes energy step and a re-lead are all n = 0 in the corpus (daggers §5).
 
 **Monster AI** — [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md)
