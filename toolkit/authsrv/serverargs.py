@@ -1612,6 +1612,14 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "The revert for SKILLS-FA (studies/skills 43); "
                          "--no-armour-term drops it too, along with the "
                          "swing's.")
+    ap.add_argument("--no-weakness-attributes", action="store_true",
+                    help="Weakness cuts attack damage only: no rank is "
+                         "lowered and no 0x003B batch is sent. The revert for "
+                         "SKILLS-WK (studies/skills 51): retail re-declares "
+                         "every non-zero attribute one lower in the Weakness "
+                         "apply's own batch and restores them at its removal "
+                         "(the owner's Isle tape 20260917T090355), and a "
+                         "Mend Ailment cast under it healed at rank 7, not 8.")
     ap.add_argument("--no-spell-location-roll", action="store_true",
                     help="an incoming armour-respecting spell resolves "
                          "against the CHEST's elemental rating instead of "

@@ -158,6 +158,28 @@ HERO_P41_SEQS = {(20,), (20, 17, 14)}
 # Energy"), and two 1/19 gains followed. The shrine rise (both agents at
 # 340.21 s) is 1.0, as the three earlier tapes' were.
 SIGNET_GAINS = {("20260914T005758", 29): (0.2631579041481018, 0.05263157933950424)}
+OP_MORALE = 0x009C          # [agent, morale]: 100 is none, 85 one death, ...
+# RB2 RE-PIN (2026-09-17): the owner died three times on 20260917T090355 and
+# the Warrior's maximum went 20 -> 17 -> 14 -> 11 at morale 85 / 70 / 55, pips
+# unchanged -- the phenomenon the named morale rows below already are, arriving
+# as a pair nobody had named. So the exemption is the SIGNATURE, joined to the
+# row's OWN OBSERVED morale word: max == floor(20 * morale / 100) + the armour
+# bonus of a base row with the same pip count (or zero pips: the death itself).
+BASE_PIPS = ((2, 20), (3, 25), (3, 30), (4, 25), (4, 30))
+
+
+def morale_scaled(key, morales):
+    """Is (pips, max) a BASE row's pool under one of the observed morales?"""
+    pips, mx = key
+    for m in morales:
+        if m is None or m >= 100:
+            continue
+        for bp, bmax in BASE_PIPS:
+            if pips in (0, bp) and mx == (20 * m) // 100 + (bmax - 20):
+                return True
+    return False
+
+
 CANDIDATE_PIPS = ((2, 20), (3, 25), (3, 30), (4, 25), (4, 30),
                   # JARIN (20260914T005758): the level-3 Ranger under the
                   # penalty -- 20 * 0.85 + 5 = 22 at morale 85 and
@@ -364,7 +386,10 @@ def _scan_corpus():
             except Exception:                                  # noqa: BLE001
                 continue
             emax, casts, pending, seqs = {}, [], [], {}
+            morale = {}         # agent -> its latest 0x009C morale (RB2 re-pin)
             for i, (t, op, v) in enumerate(msgs):
+                if op == OP_MORALE and len(v) > 2:
+                    morale[v[1]] = v[2]
                 if op not in INT_OPS and op not in FLOAT_OPS:
                     continue
                 prop, agent = v[1], v[2]
@@ -390,7 +415,8 @@ def _scan_corpus():
                                 (stamp, agent))
                     regen.append({"stamp": stamp, "agent": agent,
                                   "rate": bits_to_f32(v[-1]),
-                                  "max": emax.get(agent)})
+                                  "max": emax.get(agent),
+                                  "morale": morale.get(agent)})
                 elif op in FLOAT_OPS and prop == pools.GV_ENERGY_SPENT:
                     pending.append((i, t, agent, bits_to_f32(v[-1]),
                                     emax.get(agent)))
@@ -480,10 +506,13 @@ def section_corpus_oracle():
               "catching itself building")
 
     quantum = f32(pools.PIP_ENERGY_PER_SECOND)
-    non_integer, seen = [], {}
+    non_integer, seen, seen_morale = [], {}, {}
     for r in regen:
         if r["max"] is None:
             continue
+        seen_morale.setdefault(
+            (int(round(r["rate"] * r["max"] / quantum)), r["max"]),
+            set()).add(r.get("morale"))
         pips = r["rate"] * r["max"] / quantum
         if abs(pips - round(pips)) > 1e-6:
             non_integer.append((r["stamp"], r["rate"], r["max"], pips))
@@ -498,11 +527,16 @@ def section_corpus_oracle():
               f"has no reason to produce integers at all. Non-integers: "
               f"{non_integer[:3]}")
 
-    LEDGER.ok(set(seen) - {(0, 17), (0, 20), (0, 22), (0, 25), (0, 30),
-                           (0, 27),   # MANTID: the Mesmer's death at 27
-                           (0, 19), (0, 14)}   # JARIN: the Ranger's second death, the hero's
-              <= set(CANDIDATE_PIPS),
-              "and every pair is an armour row or a morale-scaled one",
+    named = set(CANDIDATE_PIPS) | {(0, 17), (0, 20), (0, 22), (0, 25), (0, 30),
+                                   (0, 27),   # MANTID: the Mesmer's death at 27
+                                   (0, 19), (0, 14)}   # JARIN: the Ranger's second death, the hero's
+    by_signature = sorted(k for k in set(seen) - named
+                          if morale_scaled(k, seen_morale.get(k, ())))
+    LEDGER.ok(set(seen) - named <= set(by_signature),
+              "and every pair is an armour row or a morale-scaled one (named, "
+              "or by SIGNATURE against its own observed 0x009C morale)",
+              f"by signature: {by_signature} -- RB2's Warrior at morale 70 and "
+              f"55, 20 -> 14 -> 11 with 2 pips unchanged. "
               f"{sorted(k for k in seen if k[0])}. WIKI (GWW, 'Energy', rev. "
               f"2026-03-15): base 20/2, Warrior +0/+0, Ranger +1 pip/+5, "
               f"Dervish and Assassin +2/+5, casters +2/+10. (2,20) is a "

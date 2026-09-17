@@ -6680,8 +6680,9 @@ The heal is 35 because the condition that REMAINS is Weakness: WIKI (GWW, "Weakn
 fetched 2026-09-17) — *"all of your attributes are reduced by 1"* — and 5 + 65 × 7 / 15 =
 35.33, truncated to 35 (F46). So the heal is resolved at the caster's attributes as they
 stand AFTER the removal and WITH the remaining condition's penalty. RECONSTRUCTION on the
-wiki's rule, fitting 2 of 2 to the point; our server does not model Weakness's attribute
-penalty at all, and that is the item this opens (PLAN §8).
+wiki's rule, fitting 2 of 2 to the point. **Closed the same day as §51 (SKILLS-WK): the
+penalty is on retail's WIRE, in the condition's own batch, and the server now does both
+halves.**
 
 One shipped-test consequence: Poison landing while Weakness was live newly set status bit
 `0x40` alone (the generic `0x02` was already up), which reddened `test_mechanics` §19's
@@ -6784,3 +6785,79 @@ multiplier is the wiki's `2^((60 − AR)/40)` — the armoured Orb at exactly it
 fresh witness for that last one. §43.5's simultaneity argument (three bodies, one ratio,
 one tick) was an argument about a second SKILL in the batch and still reads correctly; it
 was never evidence against a roll on bodies in equal pieces.
+
+---
+
+## 51. SKILLS-WK — Weakness takes ONE off every attribute: retail says so on the wire, in the condition's own batch, and the server now does both halves (2026-09-17)
+
+**Desk, on two tapes already in the vault. No new run.** Opened by §49.6: a Mend Ailment
+cast at Protection Prayers 8 healed 35 where the tooltip said 40, and 35 is the rank-7
+number. This server modelled Weakness's attack cut (SLICE-H12, `WEAKNESS_DAMAGE_FACTOR`)
+and said in its own comment that the attribute half was not modelled.
+
+### 51.1 The capture was asked first, and it answers more than the question — OBSERVED
+
+The question was whether the penalty is server-side arithmetic only. It is not. The
+Weakness apply's own batch on `20260917T090355` (243.513 s), in wire order:
+
+```
+0x0042 [player, 486, 0, buff 112, 20.0]
+0x009F [6, player, 29]
+0x00F1 [player, 0x02]                     the status word
+0x003B [player, 15, 8, 7]                 Protection Prayers   base 8,  effective 7
+0x003B [player, 17, 8, 7]                 Strength             base 8,  effective 7
+0x003B [player, 20, 12, 12]               Swordsmanship        base 12, effective 12
+0x003B [player, 21, 1, 0]                 Tactics              base 1,  effective 0
+```
+
+and the removal's batch (258.510 s, Mend Ailment's second cast) is its mirror: `0x0044`,
+the status word, then `[15, 8, 8]`, `[17, 8, 8]`, `[20, 12, 13]`, `[21, 1, 1]`. `0x003B`
+is `AGENT_UPDATE_ATTRIBUTE [agent, attribute, base, effective]`, the message this server
+already sends for a spend. Four readings, all from the rows:
+
+- **The BASE is not moved; the EFFECTIVE is, by one.** Swordsmanship is the discriminating
+  row: base 12, effective 13 with the owner's +1, weakened to 12 — so the penalty comes off
+  the effective rank, after the item bonus.
+- **Every attribute with a base rank rides, and no rank-0 attribute does** — WIKI (GWW,
+  "Weakness", raw fetched 2026-09-17): *"all of your attributes are reduced by 1 …
+  Attributes at rank 0 are not affected"*. Zero rank-0 rows in 11 pairs.
+- **It rides the condition's own batch, right behind the status word**, at the apply and at
+  the removal — the position Deep Wound's `[42]` and Crippled's `0x0027` take (§41, F48).
+- **The rung-8 tape has it too.** `deepwoundjoin.weakness_attributes()` finds three Weakness
+  episodes in the corpus — two here, one on `20260821T152147` — and all three applies and
+  all three removals carry the rows: **11 attribute pairs, 11 lifted by exactly one at the
+  removal, 11 with the base unchanged.** It was on disk for four weeks; nobody had asked.
+
+And the consumer side, §49.6's datum: the heal resolved at the weakened rank, 5 + 65 × 7/15
+= 35.33 → **35**, on 2 of 2 casts. The wire half is **OBSERVED** (n = 3 episodes, 2 tapes);
+the arithmetic half is OBSERVED on one skill and carried to the others by the wiki's rule.
+
+### 51.2 Shipped
+
+- `episodemods.weakened(state, agent)` and `weakened_rank(state, agent, rank)` — one lower
+  under a live 486, never below zero, 0 and None untouched — with the flag
+  `WEAKNESS_ATTRIBUTES` in the leaf (a leaf may not import its origin, and `taker_rank`
+  needs it). Applied at every rank READ: the player's weapon rank at the swing, the attack
+  skill's bonus, the press, the cast resolution; a body's skill rank in `land_skill`; and
+  `taker_rank`, so a weakened Frenzy takes its percent at Strength − 1.
+- `push_attributes(send, state, agent, conn)` — the `0x003B` burst, `[player, attribute,
+  base, effective − 1]` for every attribute with a base rank, the mirror at the lift, one
+  burst per CHANGE. Called beside `push_speed` at all seven sites that open or close an
+  episode plus the tick, so no close path (expiry, cure, strip, death) can leave the
+  client showing a rank the server stopped using. The player only: what retail tells an
+  observer about ANOTHER agent's weakened ranks is unread.
+- **`--no-weakness-attributes`** is the revert arm: no rank moves, no `0x003B`.
+- `test_mechanics` §31 (10 checks: the rank rule and its three edges, the 35, the apply's
+  batch and its order, the silent re-application, the expiry's restore, the revert arm) and
+  §32 (2, the corpus lock WK1–WK2). Floor 228 → 240.
+
+### 51.3 What it does not settle
+
+- **A cast that removes Weakness itself while another condition remains** — does the heal
+  read the rank before or after the lift? Both Mend Ailment heals on the tape had Weakness
+  as the REMAINING condition, so they cannot say. Ours reads the rank as the cast
+  resolves, before its own effects: RECONSTRUCTION.
+- **A rank-0 attribute boosted by a rune** is untouched per the wiki; this server keys on
+  the rank it reads at each site, which for the player is the content rank. Unwitnessed.
+- **Heroes and other bodies** get the arithmetic and no wire; retail's word for them is
+  unread (other agents' conditions never ride `0x0042` either — F46.8).

@@ -198,6 +198,75 @@ def census(codec=None):
 CONDITION_IDS = (478, 479, 480, 481, 482, 483, 484, 485, 486, 2077)
 
 
+OP_ATTRIBUTE = 0x003B       # [agent, attribute, base, effective]
+WEAKNESS = 486
+
+
+def weakness_attributes(codec=None):
+    """Every Weakness apply and removal in the corpus, with the 0x003B rows of
+    its own batch. SKILLS-WK: retail re-declares the agent's attributes one
+    lower at the apply and restores them at the removal. A row: {"capture",
+    "connection", "t", "kind" (apply / close), "agent", "attrs":
+    [(attribute, base, effective)]}."""
+    import vaultpath
+    codec = codec or bufflog.Codec()
+    live = vaultpath.require_dir("captures", "live",
+                                 why="deepwoundjoin reads live captures")
+    out = []
+    for stamp in sorted(os.listdir(live)):
+        cap_dir = os.path.join(live, stamp)
+        if not os.path.isdir(cap_dir):
+            continue
+        for ch in tape.channel_files(cap_dir):
+            try:
+                seq = sequence(cap_dir, ch["connection"], codec)
+            except (bufflog.BuffLogError, tape.TapeError):
+                continue
+            buffs = {}
+            for i, t, op, v in seq:
+                kind = agent = None
+                if op == OP_APPLY and v[2] == WEAKNESS:
+                    buffs[v[4]] = v[1]
+                    kind, agent = "apply", v[1]
+                elif op == OP_REMOVE and v[2] in buffs:
+                    kind, agent = "close", buffs.pop(v[2])
+                if kind is None:
+                    continue
+                attrs = [(w[2], w[3], w[4]) for _j, tj, opj, w in seq[i:i + 12]
+                         if opj == OP_ATTRIBUTE and w[1] == agent
+                         and abs(tj - t) <= BATCH]
+                out.append({"capture": stamp, "connection": ch["connection"],
+                            "t": t, "kind": kind, "agent": agent,
+                            "attrs": attrs})
+    return out
+
+
+def score_weakness(rows):
+    """WK1: every apply and every close carries its 0x003B rows; WK2: for each
+    agent, each attribute's effective at the close is the apply's plus ONE and
+    the base is the same at both."""
+    applies = [r for r in rows if r["kind"] == "apply"]
+    closes = [r for r in rows if r["kind"] == "close"]
+    pairs = lifted = same_base = 0
+    for a in applies:
+        c = next((c for c in closes if c["capture"] == a["capture"]
+                  and c["connection"] == a["connection"]
+                  and c["agent"] == a["agent"] and c["t"] > a["t"]), None)
+        if c is None:
+            continue
+        ca = {x[0]: x for x in c["attrs"]}
+        for attr, base, eff in a["attrs"]:
+            if attr in ca:
+                pairs += 1
+                lifted += ca[attr][2] - eff == 1
+                same_base += ca[attr][1] == base
+    return {"applies": len(applies), "closes": len(closes),
+            "applies_declared": sum(1 for r in applies if r["attrs"]),
+            "closes_declared": sum(1 for r in closes if r["attrs"]),
+            "pairs": pairs, "lifted_by_one": lifted, "same_base": same_base,
+            "zero_base_rows": sum(1 for r in rows for x in r["attrs"] if x[1] == 0)}
+
+
 def status_census(codec=None):
     """Which `0x00F1` bits each effect apply SETS, from retail's own wire.
 
