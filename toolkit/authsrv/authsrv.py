@@ -22790,6 +22790,8 @@ def enemy_spot(state, ox, oy):
 # template is the rule sculpt_hostile already exercises). The ticks iterate
 # every agent already; nothing below this line changes for N == 1.
 ENEMY_COUNT = 1               # --enemies N, 1..8.
+ENEMY_CLUSTER = None          # --enemy-cluster U: bodies 2..N stand U units
+                              # around the FIRST, inside an adjacent skill's reach
 ENEMY_COUNT_MAX = 8
 
 
@@ -22798,7 +22800,8 @@ ENEMY_COUNT_MAX = 8
 # (10663) at call time -- test_agentlife.py:4309-4354 reads `authsrv.ENEMY_OFFSET`
 # around calls to it, and spawn_enemy below calls this by bare name.
 def enemy_spots(state, ox, oy, n):
-    return population.enemy_spots(state, ox, oy, n, ENEMY_OFFSET=ENEMY_OFFSET)
+    return population.enemy_spots(state, ox, oy, n, ENEMY_OFFSET=ENEMY_OFFSET,
+                                  cluster=ENEMY_CLUSTER)
 
 
 # ------------------------------------------------------- the area population
@@ -31106,6 +31109,13 @@ def main():
         ENEMY_MAX_HEALTH = int(a.enemy_health)
         print(f"ENEMY HEALTH: the --enemy body has {ENEMY_MAX_HEALTH} points "
               f"(a rig knob; the spawn row says 100).")
+    if a.enemy_cluster is not None:
+        global ENEMY_CLUSTER
+        if a.enemy_cluster <= 0:
+            raise SystemExit("--enemy-cluster is a positive distance in units")
+        ENEMY_CLUSTER = float(a.enemy_cluster)
+        print(f"ENEMY CLUSTER: hostiles 2..N stand {ENEMY_CLUSTER:.0f} u around "
+              f"the first (a rig knob; adjacent range is 156 u).")
     if a.no_area_damage:
         global AREA_DAMAGE
         AREA_DAMAGE = False

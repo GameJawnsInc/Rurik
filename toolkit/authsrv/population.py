@@ -80,7 +80,7 @@ def spawn_probe_warning(probe, spawn_set, spawn_out_of_band=False, *, PROF_WARRI
     return None
 
 
-def enemy_spots(state, ox, oy, n, *, ENEMY_OFFSET):
+def enemy_spots(state, ox, oy, n, *, ENEMY_OFFSET, cluster=None):
     """`n` distinct spots near the player, walkable ones first -- the exact
     (offset_x, offset_y) point, then the eight compass points at that point's
     distance, then the same eight at one and a half times it. The plain offset
@@ -93,7 +93,14 @@ def enemy_spots(state, ox, oy, n, *, ENEMY_OFFSET):
     never looked at -- the owner set offset_y = -1000 to put the hostile just
     outside the notice radius and it spawned due east at offset_x. With
     offset_y == 0 the first candidate IS the ring's east point, so the behaviour
-    every earlier test pins is unchanged (duplicates are dropped)."""
+    every earlier test pins is unchanged (duplicates are dropped).
+
+    `cluster` (DAGGERS-B8, --enemy-cluster U): the FIRST body keeps the spot the
+    rule above gives it and bodies 2..n stand on the compass points `cluster`
+    units AROUND IT, not around the player. The ring puts neighbours a whole
+    offset apart (300 u and up), which no adjacent-range (156 u) skill can
+    reach; the owner's run with --enemies 3 splashed nobody. Retail's own
+    bodies stood 78 u and 94 u from the Master of Damage."""
     dx0, dy0 = float(ENEMY_OFFSET[0]), float(ENEMY_OFFSET[1])
     d = math.hypot(dx0, dy0)
     ring = [(dx0, dy0), (d, 0), (0, d), (-d, 0), (0, -d),
@@ -104,6 +111,17 @@ def enemy_spots(state, ox, oy, n, *, ENEMY_OFFSET):
         if c not in cands:
             cands.append(c)
     pm = state.get("pathmap")
+    if cluster:
+        first = (cands if pm is None else
+                 ([c for c in cands if pm.walkable(c[0], c[1])] or cands))[0]
+        u = float(cluster)
+        near = [(first[0] + dx, first[1] + dy)
+                for dx, dy in ((u, 0), (0, u), (-u, 0), (0, -u),
+                               (u, u), (-u, u), (u, -u), (-u, -u))]
+        if pm is not None:
+            near = ([c for c in near if pm.walkable(c[0], c[1])]
+                    + [c for c in near if not pm.walkable(c[0], c[1])])
+        return ([first] + near)[:n]
     if pm is None:
         return cands[:n]
     good = [c for c in cands if pm.walkable(c[0], c[1])]

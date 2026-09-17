@@ -1633,6 +1633,13 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "+40 twice, and a 100-health target dies before the "
                          "chain's third icon can be looked at (DAGGERS, the "
                          "owner's hand-driven run, 2026-09-17).")
+    ap.add_argument("--enemy-cluster", type=float, default=None, metavar="UNITS",
+                    help="with --enemies N: hostiles 2..N stand UNITS around the "
+                         "FIRST one instead of on the ring around the player, "
+                         "whose neighbours are 300 u and more apart -- out of "
+                         "every adjacent-range (156 u) skill's reach. Retail's "
+                         "bodies stood 78 u and 94 u from the Master of Damage "
+                         "(DAGGERS-B8). A rig knob.")
     ap.add_argument("--no-area-damage", action="store_true",
                     help="an attack skill's ADJACENT damage is not dealt: Death "
                          "Blossom hits its target and nobody beside it. The "
