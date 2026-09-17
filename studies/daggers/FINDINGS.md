@@ -317,6 +317,19 @@ body and none of the 13 after — hit_enemy's own "first hit declares" rule, whi
 (`adjacent_damage = "scale"`), because Cyclone Axe is "adjacent" too and is a different
 mechanic. The player's strike only; an NPC's cast is still single-target.
 
+**Beyond Death Blossom — what the corpus already holds (a census, not a build).** One
+instant, one source, two or more damaged targets, over every live tape: 86 such instants,
+73 of them on the PvP arena tape `20260817T231139` and all from **Fire Magic spells** —
+186 (`aoe_range` 240, 31 instants of 2-4 targets), 185 (156, 25), 179 (a hex, 240, 9), 197
+(156, 4) — on **property 16 with a DIFFERENT value per target** (e.g. −0.1766 / −0.0883 /
+−0.1766 on three foes at one instant: one number over three maxima and three armours),
+where Death Blossom's 28 adjacent words are property 55 and identical. So an area SPELL
+is armour-respecting damage on the ordinary channel to everyone in the radius, and an
+attack skill's adjacent damage is armour-ignoring on 55: two mechanics, both with the
+radius on the skill row. 185 lands TWO words per target in the same instant (a two-packet
+spell). Whether target byte 16 (186, 197) is a ground-target is unread. That is an
+Elementalist arc's seed; nothing here builds it.
+
 **On our own client, by the owner's hand, the same evening** (`--party daggers20 --enemies 3
 --enemy-cluster 90 --enemy-health 2000`; the first try, `--enemies 3` alone, splashed
 nobody — the ring puts neighbours 424 u and 600 u apart, which is what `--enemy-cluster`
