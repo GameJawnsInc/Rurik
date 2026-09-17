@@ -6490,8 +6490,9 @@ step 6 and four in step 7) close on one tick with the same batch, in wire order:
   (`frac = _f32(0.0)`), the remainder otherwise; `test_mechanics` §9's CONVWORD pin flips
   to `0x00000000` with the witness named; `healjoin.conversions()` / `score_conversions()`
   is the corpus read and `test_skilldamage` §13 locks it (P6: n ≥ 10, zeros all +0.0,
-  never −0.0, heal first 10 of 10; floor 61 → 63). Whether the client draws a +0.0 word
-  — F46.9 showed a red **0** for −0.0 — is an owner question, asked below.
+  never −0.0, heal first 10 of 10; floor 61 → 63). **The client draws a 0 on the converted hits** —
+  the owner's on-screen observation after the run (OBSERVED, by eye, the same digit F46.9
+  measured for −0.0), so the two zero words are drawn alike and differ only in their bit.
 - **The trigger re-declares the taker's maximum, 4 of 10** — 397.2 (480), 415.6 (384,
   inside the Deep Wound), 448.1 (480), 491.8 (384): each is the first trigger after the
   maximum last changed, which is F46.10's shape (a moved maximum rides the next landed
