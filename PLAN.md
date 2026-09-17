@@ -1926,12 +1926,12 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 **Daggers** — [studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md)
 
-* **DAGGERS, the loopback run.** `--party daggers` has never met a client: what an
-  Assassin body draws under the base fixture's Warrior armour rows, the chain icon, the
-  double strike and the floating +energy on OUR client are all unseen (daggers §6).
-* **DAGGERS-B8, adjacent damage.** Death Blossom's damage to adjacent foes is decoded
-  (property 55, −40/480, armour-ignoring, 28 of 28) and not sent; nor is any attack
-  skill's (daggers F13).
+* **DAGGERS, the armour.** The Assassin body is bare on our client: no Assassin armour
+  rows exist, and the base fixture's Warrior rows draw nothing on it (daggers §7).
+* **Area damage beyond Death Blossom.** DAGGERS-B8 sends ONE attack skill's adjacent damage,
+  opt-in per row; `aoe_range` is now on every skills row (147 at 156, 103 at 240, 64 at
+  312), and an NPC's cast is still single-target (`land_skill`) — spells, Cyclone Axe's
+  per-foe attack and scatter are all unbuilt (daggers F13).
 * **DAGGERS, n = 0 on retail.** A lead that misses, a missed first strike ahead of a
   second, the attacker's own death, a chain opened by 2116 with a sword, the half second
   under an attack-speed boost (daggers §6, last paragraph).

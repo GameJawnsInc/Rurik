@@ -211,7 +211,7 @@ GWW, fetched 2026-09-17. All player-visible, so WIKI is strong here.
 | **DAGGERS-B6** ✅ 2026-09-17 | Second strike: duals always, plain swings on the double-strike roll. Wire shape waits on Q1 / Q2. | §3 |
 | **DAGGERS-B7** ✅ 2026-09-17 | Critical Strikes: crit chance + energy on a critical hit. Wire shape waits on Q4. | §3 |
 
-B1-B5 needed no new capture; B6 and B7 were built the same evening on §6's shapes. `[party.daggers]` is the playable character: `--party daggers`. **DAGGERS-B8, open:** an attack skill's ADJACENT damage (F13) — Death Blossom's is decoded and not sent.
+B1-B5 needed no new capture; B6 and B7 were built the same evening on §6's shapes. `[party.daggers]` is the playable character: `--party daggers`. **DAGGERS-B8 ✅ 2026-09-17:** an attack skill's ADJACENT damage (F13), `--no-area-damage` the control.
 
 ---
 
@@ -302,7 +302,20 @@ adjacent foes — 28 words over 7 duals. −0.0833 is **40 of 480**, and 40 is D
 identical on both strikes, where the target's own word varies with the roll. Property 55
 is the word this repo calls the heal; `test_mechanics.py` P1 ("positive in 97 %+") went
 red on these 28 and is now judged without this tape, with a P1b that says what this
-tape's negatives are. Not yet sent by the server — DAGGERS-B8.
+tape's negatives are.
+
+**DAGGERS-B8, shipped 2026-09-17.** The RADIUS is the client's own: the skill record's
+f32 at **+0x6C** (`aoe_range`; the name is UPSTREAM, GWCA). Over the player corpus its four
+commonest values are **156, 240, 312 and 1000** — the game's adjacent / nearby / in the
+area / earshot radii (WIKI "Area of effect" quotes 240 and 1000 verbatim, and "Range" puts
+melee's 144 "slightly smaller than" adjacent) — and Death Blossom's is 156; the tape's two
+neighbours stood 78 u and 94 u from the target, inside it. The AMOUNT fell out rather than
+being typed: the client's interpolator on 775's scale slot at rank 12 is **40**, the tape's
+−40/480. The maximum: `[42, neighbour, 480]` rides ahead of the FIRST adjacent word on each
+body and none of the 13 after — hit_enemy's own "first hit declares" rule, which
+`armour_ignoring_damage` now takes as `declare_max="stale"`. Opt-in per content row
+(`adjacent_damage = "scale"`), because Cyclone Axe is "adjacent" too and is a different
+mechanic. The player's strike only; an NPC's cast is still single-target.
 
 ### What the run did not settle
 
@@ -310,3 +323,49 @@ A lead that MISSES (does it set the state?), a first strike that misses ahead of
 or a dual's second, the attacker's own death, a chain opened with a non-dagger lead
 (2116), and the half second under an attack-speed boost are all n = 0. The server's
 answers to each are labelled RECONSTRUCTION at the call site.
+
+---
+
+## 7. On our own client — two scripted loopback runs, 2026-09-17 (DAGGERS-F14)
+
+Harness `20260917T165523` (`--party daggers`) and `20260917T165940` (`--party daggers20`:
+the retail run's ranks, Dagger Mastery 12 / Critical Strikes 8, on the same 1-3 daggers),
+pin client 38797, map 280, `--enemy --practice-target --explorable`, the presses through
+the harness's `skill:` mailbox (the real `handle_skill_press` arm, not a key). Both
+reached the map, ran their whole plan and closed with **no assert, no crash dialog and
+0 undecodable messages**; the gamesrv logs carry every step (checked BEFORE the frames).
+
+OBSERVED on the client:
+
+- the party panel reads **A3**, the energy bar **25 with four pips** — the profession knob
+  and its derived pool are what the client believes;
+- the bar's off-hand and dual icons carry the client's own small ✕ until a lead lands —
+  the client judges the chain for DISPLAY by itself, from its own skill record;
+- a landed Fox Fangs floats −16; a landed **Death Blossom floats TWO −26s, stacked**, with
+  the skill's flash and a dagger in the raised hand (`walk17-skill775,10.png`);
+- a critical draws a **magenta +2 over the player with the blue energy sparkle**
+  (`w021.png` of the second run): `0x00A3 [52, me, me, f]` + `0x00A0 [54, me, me, 2]`,
+  transcribed from retail, is what makes it. 8 criticals, 8 callouts, 3 double strikes
+  (`[2, me, 0]` + a word) in 19 swings, none of it disturbing the client;
+- the cold off-hand, the cold dual's two fail words, `0x005C` 1 → 2, the dual's `[47]`
+  batch and the `0x005C` 0 riding the target's death all went to a live client.
+
+**THE CHAIN ICON, by the owner's hand, the same evening** (`--party daggers20
+--enemy-health 2000`, the target clicked, 1-2-3 on the bar): "confirmed on the health, the
+3 icons, and the 15s fade." So `0x005C` states 1, 2 and 3 each draw their icon on the target
+display's health bar of OUR client, and the server's 15 s clear takes it down. OBSERVED by
+the operator, no frame kept. NOT reported either way: the silent re-lead (a second lead
+changing nothing on screen while pushing the fade out).
+
+NOT SEEN by the scripted runs, and why:
+
+- **the chain icon itself.** It draws on the TARGET DISPLAY's health bar (WIKI), and the
+  harness orders attacks without selecting the target client-side, so that bar was never
+  on screen. `0x005C` reached the client and did no harm; whether the icon draws needs a
+  hand-driven run with the target clicked — the owner's instrument.
+- **armour.** The character is a bare Assassin body: the base fixture's Warrior armour
+  rows draw nothing on it. An Assassin armour set is a content gap, not a wire one.
+- the first run's first chain was spent on a CORPSE — the Monk hero had killed the
+  100-health target while the player plain-swung, the lead did not hit, and the off-hand
+  behind it failed correctly. A press on a dead target is ACCEPTED here; what retail does
+  with one is n = 0.

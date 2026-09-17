@@ -66,6 +66,55 @@ Run: the four, plus `test_pools`, `test_daggers` (they read `pools.py`), `test_c
 `test_srclint`, `test_provlint`, `test_identlint`. The rest of the suite was NOT run. No
 client launched.
 
+### ✅ DAGGERS-B8 LANDED 2026-09-17 — **Death Blossom hits the foes beside its target, in retail's batch order, with the client's own radius** ([studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md) F13)
+
+The owner noticed it on RUN-DAGGERS-1; the tape had it 28 of 28: `0x00A3 [55, neighbour,
+me, -40/480]` beside each landed strike, armour-ignoring, never critical. Built the same
+day. The RADIUS is read, not typed — the skill record's f32 at +0x6C, whose four commonest
+values over the corpus are 156 / 240 / 312 / 1000 (`test_skilltable` §9, 56 → 57) and
+775's is 156; `skilltable.py` emits `aoe_range`, the vault table and the fourteen 38888
+override rows re-emitted, additions only. The AMOUNT fell out: the client's interpolator
+on 775's scale slot at rank 12 is 40. `strike_adjacent` runs behind each LANDED strike's
+word and ahead of the `0x005C` (the word, the 55s; `[47]`, the word, the 55s, the state);
+a failed dual reaches nobody; a body's maximum is declared only when it moved
+(`armour_ignoring_damage(declare_max="stale")`, the tape's one `[42]` per body). Opt-in
+per content row (`adjacent_damage = "scale"`); `--no-area-damage` the control.
+`test_daggers.py` §9, 67 → 76, on retail's own geometry (78 u, 94 u) plus a body past the
+radius, a corpse and an ally. NOT on a client yet.
+
+### ✅ DAGGERS chain icon CONFIRMED on our client 2026-09-17 — **the owner, by hand: "confirmed on the health, the 3 icons, and the 15s fade"** ([studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md) §7)
+
+`--party daggers20 --enemy-health 2000`, the Hatcher clicked, lead / off-hand / dual off
+the bar. `0x005C` 1, 2 and 3 each draw their icon on the target display's health bar and
+the 15 s clear takes it down — the one thing the two scripted runs could not show, because
+the harness selects nothing. The silent re-lead was not reported either way. What is left
+of the arc in §8: Assassin armour rows, DAGGERS-B8 (adjacent damage), and the n = 0 cases.
+
+### ✅ CAST-TARGET-DIED 2026-09-17 — **an NPC's ally-target cast whose target died under it lands on nothing** (the owner: "Restore Condition got cast on a dead bandit ... definitely feels wrong")
+
+The PICK was never the fault — `allies_of` filters the dead — the LANDING was: a cast is a
+second long, `land_skill` never re-asked, and only a FOE-target cast passed through the
+tick's `target_dead` drop. Reproduced on `main` before the fix: Orison at a dead ally sent
+its heal word at the CASTER (`cast_recipient`'s fallback) and Restore Condition played
+its visual on the body. Now the cast ends — the caster's close, its recharge stands — and
+nothing lands; a resurrection returns earlier and is untouched. What retail sends for an
+NPC spell whose target dies under it is NOT OBSERVED; RECONSTRUCTION, said at the site.
+`test_agentlife.py` `section_cast_target_died`, 547 → 551. Same commit: `--enemy-health N`,
+a rig knob — the owner's hand-driven dagger run kills a 100-health target with one Death
+Blossom at rank 12 and cannot look at the third chain icon.
+
+### ✅ DAGGERS on our own client 2026-09-17 — **two scripted loopback runs PASS; the dual floats two numbers, a critical draws the magenta +2; the chain icon was NOT on screen** ([studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md) §7)
+
+Harness `20260917T165523` (`--party daggers`) and `20260917T165940` (`--party daggers20`, a
+new row: RUN-DAGGERS-1's ranks on the 1-3 starter daggers, so a minute of swings exposes
+what rank 3 cannot). Pin client, map 280, presses through the `skill:` mailbox. No assert,
+0 undecodable; the gamesrv logs carry every step. Seen: party panel A3, energy 25 at four
+pips, the client's own ✕ on unmet chain skills, Death Blossom's TWO stacked −26s, the
+magenta +2 with the energy sparkle on a critical (8 of 8), 3 double strikes in 19 swings.
+Not seen: the `0x005C` icon (it draws on the target display; the harness selects nothing —
+a hand-driven run's question) and any armour (the body is a bare Assassin; no Assassin
+armour rows exist). The first run's first chain hit a corpse the Monk hero had made.
+
 ### ✅ DAGGERS-B2..B7 LANDED + RUN-DAGGERS-1 SCORED 2026-09-17 — **an Assassin with daggers plays a whole chain on our server; the owner's capture answered all five questions and refuted two predictions** ([studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md) §4, §6)
 
 `--party daggers`: profession 7 on 25 energy / 4 pips (the rate derived, 0.0528 — the

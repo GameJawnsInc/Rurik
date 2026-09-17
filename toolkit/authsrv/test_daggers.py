@@ -30,8 +30,8 @@ import agents  # noqa: E402
 import chain  # noqa: E402
 import checks  # noqa: E402
 
-# FLOOR 67, from the green run of 2026-09-17 on the machine with the vault.
-LEDGER = checks.Ledger("daggers and the attack chain", floor=67)
+# FLOOR 76, from the green run of 2026-09-17 on the machine with the vault.
+LEDGER = checks.Ledger("daggers and the attack chain", floor=76)
 check = LEDGER.ok
 
 PLAYER = 1
@@ -566,6 +566,107 @@ def section_retail(have_fields):
           "ahead of the word")
 
 
+def section_adjacent(have_fields):
+    import authsrv
+    print("\n9. an attack skill's ADJACENT damage (DAGGERS-B8)")
+    if not have_fields or authsrv.skill_adjacent_damage(DUAL, 12) is None:
+        LEDGER.skip("section 9", "the skills rows carry no aoe_range (the vault "
+                    "table predates DAGGERS-B8) -- 8 checks")
+        return
+    check(authsrv.skill_adjacent_damage(DUAL, 12) == (40.0, 156.0),
+          "Death Blossom at rank 12: 40 points inside 156 u -- the client's own "
+          "interpolator and its own aoe_range, and 40 is the -40/480 of all 28 "
+          "adjacent words on RUN-DAGGERS-1. Derived, not typed",
+          str(authsrv.skill_adjacent_damage(DUAL, 12)))
+    check(authsrv.skill_adjacent_damage(OFF, 12) is None
+          and authsrv.skill_adjacent_damage(LEAD, 12) is None,
+          "a skill whose row does not opt in deals none, whatever its radius")
+
+    def _crowd():
+        st = _world(authsrv)
+        base = st["agents"][FOE]
+        # retail's geometry: two bodies 78 u and 94 u from the target -- plus
+        # one past the radius, a corpse inside it, and an ally inside it.
+        for aid, pos, over in ((11, (50.0 + 78.0, 0.0), {}),
+                               (12, (50.0, 94.0), {}),
+                               (13, (50.0 + 200.0, 0.0), {}),
+                               (14, (50.0, -60.0), {"dead": True, "health": 0.0}),
+                               (15, (50.0, 60.0),
+                                {"allegiance": agents.ALLEGIANCE_PLAYER})):
+            st["agents"][aid] = {**base, "pos": pos, "health": 480.0,
+                                 "max_health": 480.0, **over}
+        return st
+
+    saved_cost = authsrv.skill_cost
+    authsrv.skill_cost = lambda sid: (0, 0)
+    try:
+        st = _crowd()
+        _land(authsrv, st, LEAD)
+        _land(authsrv, st, OFF)
+        sent = _land(authsrv, st, DUAL)
+        adj = [(i, v) for i, (o, v) in enumerate(sent)
+               if o == 0x00A3 and v[0] == agents.GV_ARMOR_IGNORING]
+        words = [i for i, (o, v) in enumerate(sent) if o == 0x00A3
+                 and v[0] in (agents.PROP_DAMAGE, agents.GV_CRITICAL)]
+        i_47 = _index(sent, lambda o, v: o == 0x009F
+                      and v == [agents.GV_DUAL_SECOND_STRIKE, PLAYER, 0])
+        i_c = _index(sent, lambda o, v: o == COMBO and v[2] == 3)
+        check([v[1] for _i, v in adj] == [11, 12, 11, 12]
+              and all(v[2] == PLAYER for _i, v in adj),
+              "the two bodies inside the radius each take a [55, body, player, "
+              "-f] on EACH strike -- four words; the far one, the corpse and "
+              "the ally take none", str([v[:3] for _i, v in adj]))
+        import struct
+        vals = {round(struct.unpack("<f", struct.pack("<I", v[3]))[0], 4)
+                for _i, v in adj}
+        rank3 = authsrv.skill_adjacent_damage(DUAL, 3)[0]
+        check(vals == {round(-rank3 / 480.0, 4)}
+              and st["agents"][11]["health"] == 480.0 - 2 * rank3
+              and st["agents"][13]["health"] == 480.0,
+              "every word is the skill's own number over the body's maximum, "
+              "identical on both strikes (armour-ignoring, never critical), and "
+              "the books agree", f"{vals}, body 11 at {st['agents'][11]['health']}")
+        check(len(words) == 2 and len(adj) == 4 and None not in (i_47, i_c)
+              and words[0] < adj[0][0] < adj[1][0] < i_47 < words[1]
+              < adj[2][0] < adj[3][0] < i_c,
+              "retail's order: the word, the 55s; then [47], the word, the 55s, "
+              "and the 0x005C behind them (316.425 / 316.929)",
+              f"{(words, [i for i, _v in adj], i_47, i_c)}")
+        maxima = [v for o, v in sent if o == 0x009F
+                  and v[0] == agents.PROP_HEALTH_MAX and v[1] in (11, 12)]
+        check(maxima == [],
+              "no maximum is re-declared for a body whose maximum never moved "
+              "(ours declares it at the create; retail's [42] rode the FIRST "
+              "adjacent word on each body and none of the 13 after)", str(maxima))
+        st["agents"][11]["max_declared_on_hit"] = None      # it moved
+        _land(authsrv, st, LEAD)
+        _land(authsrv, st, OFF)
+        sent = _land(authsrv, st, DUAL)
+        maxima = [v for o, v in sent if o == 0x009F
+                  and v[0] == agents.PROP_HEALTH_MAX and v[1] in (11, 12)]
+        check(maxima == [[agents.PROP_HEALTH_MAX, 11, 480]],
+              "a body whose maximum MOVED gets it declared once, ahead of its "
+              "first adjacent word, and not on the second strike", str(maxima))
+        # a cold dual reaches nobody
+        st = _crowd()
+        sent = _land(authsrv, st, DUAL)
+        check(not any(o == 0x00A3 and v[0] == agents.GV_ARMOR_IGNORING
+                      for o, v in sent) and st["agents"][11]["health"] == 480.0,
+              "a FAILED dual deals no adjacent damage ('if it hits')")
+        authsrv.AREA_DAMAGE = False
+        st = _crowd()
+        _land(authsrv, st, LEAD)
+        _land(authsrv, st, OFF)
+        sent = _land(authsrv, st, DUAL)
+        check(not any(o == 0x00A3 and v[0] == agents.GV_ARMOR_IGNORING
+                      for o, v in sent) and len(_damage_words(sent)) == 2,
+              "--no-area-damage: the dual still strikes twice and nobody "
+              "beside the target is touched (the arm before today)")
+    finally:
+        authsrv.AREA_DAMAGE = True
+        authsrv.skill_cost = saved_cost
+
+
 def section_condition_slot(have_fields):
     import authsrv
     print("\n6. Jagged Strike's Bleeding sits in the SCALE slot")
@@ -595,6 +696,7 @@ def main():
         section_condition_slot(have_fields)
         section_second_strike_and_crits(have_fields)
         section_retail(have_fields)
+        section_adjacent(have_fields)
     finally:
         _restore(authsrv, saved)
     return LEDGER.verdict()

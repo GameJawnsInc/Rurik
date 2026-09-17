@@ -1626,6 +1626,17 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "item the character holds. The revert for DAGGERS-B4 "
                          "(studies/daggers F3): before it a dagger attack "
                          "fired with a hammer in hand.")
+    ap.add_argument("--enemy-health", type=int, default=None, metavar="N",
+                    help="the --enemy body's maximum health, in place of the "
+                         "spawn row's 100. A rig knob, not a claim about any "
+                         "creature: a dual attack at Dagger Mastery 12 adds "
+                         "+40 twice, and a 100-health target dies before the "
+                         "chain's third icon can be looked at (DAGGERS, the "
+                         "owner's hand-driven run, 2026-09-17).")
+    ap.add_argument("--no-area-damage", action="store_true",
+                    help="an attack skill's ADJACENT damage is not dealt: Death "
+                         "Blossom hits its target and nobody beside it. The "
+                         "revert for DAGGERS-B8 (studies/daggers F13).")
     ap.add_argument("--no-second-strike", action="store_true",
                     help="no double strike on a plain dagger swing, and a "
                          "dual attack strikes once. The revert for DAGGERS-B6 "

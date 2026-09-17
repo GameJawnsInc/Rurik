@@ -3202,6 +3202,71 @@ CRITICAL_STRIKES = True
 ATTR_CRITICAL_STRIKES = 35
 
 
+# ---- DAGGERS-B8: an attack skill's ADJACENT damage ---------------------------
+#
+# OBSERVED on RUN-DAGGERS-1 (studies/daggers F13): beside EACH landed strike of
+# Death Blossom, 0x00A3 [55, neighbour, player, -40/480] to each of the two
+# foes standing 78 u and 94 u from its target -- 28 of 28, the skill's own
+# scale at rank 12, armour-ignoring, never critical, identical on both strikes
+# while the target's own word varied with the roll. Behind the target's word
+# and ahead of the 0x005C / 0x00E3. OPT-IN PER ROW (`adjacent_damage` names the
+# scale slot): Cyclone Axe is "adjacent" too and is a different mechanic, a
+# weapon attack on each foe, so the radius alone decides nothing. The RADIUS is
+# the client's own, the skills row's `aoe_range` (+0x6C). Measured centre to
+# centre from the TARGET, which is the only geometry the tape's 78 and 94 can
+# speak to; both are far inside 156. land_skill's "SINGLE TARGET, ALWAYS" is
+# still true of every NPC's cast -- this is the player's strike only.
+# --no-area-damage is the control.
+AREA_DAMAGE = True
+
+
+def skill_adjacent_damage(skill_id, rank):
+    """(points, radius) an attack skill deals to foes adjacent to its target,
+    or None: the row must opt in AND the skills row must carry a radius."""
+    slot = skill_effect_row(skill_id).get("adjacent_damage")
+    if not slot:
+        return None
+    try:
+        radius = float(agents.WORLD.get("skills", str(skill_id)).get("aoe_range", 0.0))
+        points = float(skill_scale_value(skill_id, rank, slot))
+    except Exception:                                          # noqa: BLE001
+        return None
+    return (points, radius) if points > 0 and radius > 0 else None
+
+
+def adjacent_foes(state, target_id, radius):
+    """Living hostile bodies within `radius` of the target, the target apart."""
+    table = state.get("agents", {})
+    centre = table.get(target_id)
+    if centre is None:
+        return []
+    cx, cy = float(centre["pos"][0]), float(centre["pos"][1])
+    out = []
+    for aid, row in table.items():
+        if aid == target_id or row.get("dead") \
+                or row.get("allegiance") != agents.ALLEGIANCE_HOSTILE:
+            continue
+        if math.hypot(float(row["pos"][0]) - cx, float(row["pos"][1]) - cy) <= radius:
+            out.append(aid)
+    return sorted(out)
+
+
+def strike_adjacent(send, state, skill_id, rank, target_id, conn_id):
+    """One landed strike's adjacent damage. Returns the ids it reached."""
+    if not AREA_DAMAGE:
+        return []
+    found = skill_adjacent_damage(skill_id, rank)
+    if found is None:
+        return []
+    points, radius = found
+    reached = adjacent_foes(state, target_id, radius)
+    for aid in reached:
+        armour_ignoring_damage(send, state, aid, PLAYER_AGENT_ID, points, conn_id,
+                               f"skill {skill_id}'s adjacent damage",
+                               declare_max="stale")
+    return reached
+
+
 def critical_strikes_rank(state):
     try:
         return int(attribute_state(state).effective_of(ATTR_CRITICAL_STRIKES))
@@ -3279,6 +3344,9 @@ def dual_second_strike(send, state, cast, conn_id):
         res = hit_enemy(send, state, target, conn_id,
                         bonus_damage=info["bonus"], skill_strike=True,
                         label=f"skill {sid} strikes again", skill_id=sid)
+        if res == "landed":
+            strike_adjacent(send, state, sid, info.get("rank", 0), target,
+                            conn_id)                          # DAGGERS-B8
     # The state rides BEHIND this word (retail: [47], the word, the adjacent
     # 55s, 0x005C, 0x00E3), where a lead's and an off-hand's ride ahead.
     victim = state.get("agents", {}).get(target)
@@ -15945,11 +16013,17 @@ def cast_tick(send, state, conn_id):
                                      before_damage=(_chain_advance
                                                     if CHAIN_STATE and _combo
                                                     and not _dual else None))
+                if _res == "landed":
+                    # DAGGERS-B8: behind the target's word, where retail puts
+                    # them (E5, 46, the word, the 55s -- 316.425).
+                    strike_adjacent(send, state, cast["skill_id"], rank,
+                                    target, conn_id)
                 if _dual:
                     # DAGGERS-B6: the second strike, its state and the 0x00E3
                     # all wait half a second (dual_second_strike).
                     cast["second"] = {"fails": _chain_fails, "bonus": bonus,
-                                      "first_landed": _res == "landed"}
+                                      "first_landed": _res == "landed",
+                                      "rank": rank}
                     cast["second_at"] = now + SECOND_STRIKE_S
                     cast["e3_at"] = max(cast["e3_at"], cast["second_at"])
                 # SLICE-H12: the knock-down the strike carries (Hammer Bash;
@@ -16231,10 +16305,16 @@ def aura_off(send, state, buff):
              f"aura {aura} off agent {agent_id}")
 
 
-def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, what):
+def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, what,
+                           declare_max="always"):
     """Damage that ignores armour, on the channel retail uses for it: 0x00A3
     [55, target, source, -fraction], the target's maximum declared FIRST
-    (3 of 3 on the tape). Kills through the same doors a hit does."""
+    (3 of 3 on the tape). Kills through the same doors a hit does.
+
+    `declare_max="stale"` (DAGGERS-B8) is hit_enemy's PVPMAX rule instead: a
+    BODY's maximum rides only the first word after it moved. RUN-DAGGERS-1's
+    adjacent words say so -- [42, neighbour, 480] sits ahead of the FIRST 55
+    on each of the two bodies and ahead of none of the 13 after it."""
     amount = _whole_points(float(amount))   # DAMAGE-INT
     if amount <= 0.0:
         return 0.0
@@ -16260,9 +16340,12 @@ def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, w
     if not agent or agent.get("dead"):
         return 0.0
     pool = float(agent["max_health"])
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-         [agents.PROP_HEALTH_MAX, target_id, int(pool)],
-         f"maximum {int(pool)} declared ahead of {what}")
+    if declare_max == "always" or agent.get(
+            "max_declared_on_hit", agent["max_health"]) != agent["max_health"]:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.PROP_HEALTH_MAX, target_id, int(pool)],
+             f"maximum {int(pool)} declared ahead of {what}")
+        agent["max_declared_on_hit"] = agent["max_health"]
     frac = _damage_fraction(amount, pool, agents.GV_ARMOR_IGNORING, what)
     agent["health"] = max(0.0, float(agent["health"]) - amount)
     provoke_hostile(state, target_id, source_id, conn_id)         # MONSTERAI-J
@@ -21877,6 +21960,28 @@ def land_skill(send, state, agent_id, agent, conn_id):
         return
     # SLICE-H3: the cast's target may be a party body (a hostile's pick).
     _tid = agent.get("cast_target") or PLAYER_AGENT_ID
+    # THE TARGET DIED DURING THE CAST (the owner, 2026-09-17: "Restore
+    # Condition got cast on a dead bandit ... definitely feels wrong"). The
+    # PICK never chooses a corpse -- `allies_of` filters the dead -- but the
+    # cast is a second long, and nothing re-asked at the landing: the visual,
+    # the effect and the heal all resolved on a body the player had killed in
+    # between. A foe-target cast has always been dropped for this (the tick's
+    # own `target_dead` branch, before it reaches here); an ALLY-target one
+    # never passes through that branch, because its target is not the fight's.
+    # The cast ENDS -- the caster is released and its recharge stands, it did
+    # cast -- and nothing lands. What retail puts on the wire for a spell
+    # whose target dies under it is NOT OBSERVED for an NPC; the close we
+    # already send for every finished cast is the one message sent.
+    # RECONSTRUCTION. A resurrection is the exception by construction: it
+    # returned above, and a corpse is exactly what it wants.
+    if _tid != agent_id and target_dead(state, _tid):
+        agent["casting"] = None
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_SKILL_FINISHED, agent_id, 0],
+             f"agent {agent_id} finishes casting {skill_id} (its target died)")
+        print(f"[c{conn_id}] agent {agent_id}'s skill {skill_id} lands on "
+              f"NOTHING: agent {_tid} died during the cast", flush=True)
+        return
     _tbody = _tid != PLAYER_AGENT_ID and _tid in state.get("agents", {})
     # SLICE-H8: the caster's OWN rank in this skill's attribute when its row
     # carries `attributes`, else _rank -- and its own strike level
@@ -30994,6 +31099,18 @@ def main():
         WEAPON_GATE = False
         print("NO WEAPON GATE: an attack skill fires whatever the character "
               "holds (the pre-DAGGERS-B4 arm).")
+    if a.enemy_health is not None:
+        global ENEMY_MAX_HEALTH
+        if a.enemy_health < 1:
+            raise SystemExit("--enemy-health is a positive number of points")
+        ENEMY_MAX_HEALTH = int(a.enemy_health)
+        print(f"ENEMY HEALTH: the --enemy body has {ENEMY_MAX_HEALTH} points "
+              f"(a rig knob; the spawn row says 100).")
+    if a.no_area_damage:
+        global AREA_DAMAGE
+        AREA_DAMAGE = False
+        print("NO AREA DAMAGE: an attack skill's adjacent damage is not dealt "
+              "(the pre-DAGGERS-B8 arm).")
     if a.no_second_strike:
         global SECOND_STRIKE
         SECOND_STRIKE = False

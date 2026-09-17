@@ -244,6 +244,15 @@ def parse_record(data: bytes, base: int, skill_id: int) -> dict:
         # needed, which is why the endpoints are carried rather than a
         # single "scales?" flag. +0x50 (h0050) stays named-unknown -- neither
         # upstream source names it and nothing here resolves it (NOT FOUND).
+        # +0x6C, f32: the radius of the skill's AREA OF EFFECT, 0 for none
+        # (DAGGERS-B8). UPSTREAM names it (GWCA `aoe_range`); the VALUES are the
+        # witness -- over the player corpus the four commonest are 156, 240,
+        # 312 and 1000, the game's adjacent / nearby / in-the-area / earshot
+        # radii (WIKI "Area of effect" quotes 240 and 1000 verbatim and puts
+        # melee's 144 "slightly smaller than" adjacent). Death Blossom (775)
+        # carries 156, and on RUN-DAGGERS-1 its adjacent damage reached the
+        # two bodies 78 u and 94 u from its target.
+        "aoe_range": round(f32(data, r + 0x6C), 2),
         "duration0": u32(data, r + 0x44),
         "duration15": u32(data, r + 0x48),
         "recharge": u32(data, r + 0x4C),
@@ -347,7 +356,7 @@ CONTENT_FIELDS = ("activation", "aftercast", "recharge",
                   "energy", "adrenaline", "adrenaline_units",
                   "attribute", "profession",
                   "type_code", "target",
-                  "combo", "combo_req", "weapon_req",
+                  "combo", "combo_req", "weapon_req", "aoe_range",
                   "skill_arguments", "duration0", "duration15",
                   "scale0", "scale15", "bonus_scale0", "bonus_scale15")
 
