@@ -11188,11 +11188,78 @@ def weapon_ranged(item):
             "range": by_class("range_by_609").get(klass, float(row["range"]))}
 
 
-def player_ranged():
-    """How the player's held weapon shoots, or None when it swings in melee."""
+# ---- WEAPONS-W2e (2026-09-18): A PREPARATION ON THE WIRE ---------------------
+#
+# Retail, OBSERVED on the owner's recurve under Kindle Arrows (20260914T005758,
+# one 24 s episode): every launch flies as the PREPARATION's projectile (343,
+# the type-19 record's own +0x88) with the arrow flag 0, where the same bow's
+# plain arrow is 143 / 1 before and after; a skill's own projectile (680) still
+# wins, with the preparation's flag and kind; the arrival's kind is the
+# preparation's element (5, fire) on 6 of 6; and each arrival lands the
+# arrow's word and then a SECOND word for the preparation's bonus (a constant
+# 3 at rank 0, 5 of 6), the impact visual [20, target, me, 344] (+0x84)
+# before each. WIKI (GWW "Kindle Arrows"): "your arrows deal fire damage and
+# hit for an additional 3...24 fire damage ... affected by armor rating and
+# dealt separately from the arrow damage" -- so the bonus takes the arrow's
+# armour term and is its own number, not folded into the arrow's as
+# hit_enemy did until today. --no-preparation-wire is that fold, with the
+# plain arrow.
+PREPARATION_WIRE = True          # --no-preparation-wire reverts
+
+
+def open_preparation(state, agent_id):
+    """(skill id, rank, its skill_effect row) of an open PREPARATION with a
+    damage-kind row on this agent, else (None, None, None)."""
+    table = (state or {}).get("effects")
+    if not table:
+        return None, None, None
+    for ep in table.on_agent(agent_id):
+        if effects.EFFECT_TYPES.get(int(ep.get("type_code", 0))) != "preparation":
+            continue
+        try:
+            row = agents.WORLD.get("skill_effect", str(ep["skill"]))
+        except Exception:                                      # noqa: BLE001
+            continue
+        if row.get("scale_means") in SCALE_MEANS_DAMAGE:
+            return int(ep["skill"]), int(ep.get("rank", 0)), row
+    return None, None, None
+
+
+def skill_impact_visual(skill_id):
+    """The impact visual a skill's arrow plays on its target (s_skill +0x84,
+    WEAPONS-C10 / W2e), or None for 2077 (the table's none) or no row."""
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return None
+    own = row.get("impact_visual")
+    if own is None or int(own) in (0, SKILL_NO_PROJECTILE):
+        return None
+    return int(own)
+
+
+def player_ranged(state=None):
+    """How the player's held weapon shoots, or None when it swings in melee.
+    With `state`, an open preparation's arrow, flag and kind replace the
+    weapon's (WEAPONS-W2e)."""
     if not EQUIP_WEAPON:
         return None
-    return weapon_ranged(agents.PLAYER_WEAPON)
+    how = weapon_ranged(agents.PLAYER_WEAPON)
+    if how is None or not PREPARATION_WIRE or state is None:
+        return how
+    if not (agents.PLAYER_WEAPON or {}).get("fires_arrows"):
+        return how
+    sid, _rank, row = open_preparation(state, PLAYER_AGENT_ID)
+    if sid is None:
+        return how
+    how = dict(how)
+    own = skill_projectile(sid)
+    if own is not None:
+        how["projectile"] = own
+        how["arrow"] = int(own in ARROW_PROJECTILES)
+    if row.get("damage_type") is not None:
+        how["damage_type"] = int(row["damage_type"])
+    return how
 
 
 # ---- WEAPONS-W6a (2026-09-18): HEROES AND HOSTILES SHOOT -------------------
@@ -13968,7 +14035,7 @@ def _land_player_swing(send, state, conn_id, swing):
     the out-of-reach one are the same event, because retail judges reach at
     the start and not at the hit (7 of 7, 33 of 34)."""
     state["player_swing"] = None
-    _how = player_ranged()
+    _how = player_ranged(state)                       # WEAPONS-W2e: the preparation's arrow
     if _how is not None:
         # WEAPONS-W2a: the windup RELEASES; projectile_tick lands the hit a
         # flight later. The hold ends here -- retail's [8, me, 0] rides the
@@ -14539,6 +14606,7 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     rank = (weakened_rank(state, PLAYER_AGENT_ID, player_weapon_rank(state))
             if ARMOUR_TERM else None)                      # SKILLS-WK
     armour = agent.get("armor_rating")
+    _prep_scale = 1.0                   # WEAPONS-W2e: the arrow's own armour term
     if exact is not None:
         dealt = float(exact) + bonus_damage
     elif EQUIP_WEAPON and PLAYER_SWING_DAMAGE and armour is not None \
@@ -14552,12 +14620,14 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
         dealt = swing_damage(0, float(armour), PLAYER_SWING_DAMAGE,
                              critical=critical,
                              strike_level=caster_strike_level(_lvl)) + bonus_damage
+        _prep_scale = strike_multiplier(caster_strike_level(_lvl), float(armour))
     elif EQUIP_WEAPON and PLAYER_SWING_DAMAGE and rank is not None \
             and armour is not None:
         critical = random.random() < critical_rate(rank) + (
             0.01 * critical_strikes_rank(state) if CRITICAL_STRIKES else 0.0)
         dealt = swing_damage(rank, float(armour), PLAYER_SWING_DAMAGE,
                              critical=critical) + bonus_damage
+        _prep_scale = strike_multiplier(attack_strength(rank), float(armour))
     elif EQUIP_WEAPON and PLAYER_SWING_DAMAGE:
         # No rank or no armour rating on the target: the weapon's raw range,
         # which is what this server did between 2026-08-20 and the armour term
@@ -14582,12 +14652,19 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     # swing_preparation_bonus for the gate and the named AoE gap. Folded into
     # the same damage number, not sent as a second one, exactly as an attack
     # skill's "+ Damage" is: one swing, one number on screen.
+    prep_points, prep_skill, prep_visual = 0.0, None, None
     if swing and exact is None:
         prep_bonus, prep_skill = swing_preparation_bonus(
             state, agents.PLAYER_WEAPON, PLAYER_AGENT_ID)
-        if prep_bonus:
+        if prep_bonus and not PREPARATION_WIRE:
             dealt += prep_bonus
             label += f" +{prep_bonus:.0f} (preparation {prep_skill})"
+        elif prep_bonus:
+            # WEAPONS-W2e: ITS OWN WORD, after the arrow's, through the same
+            # armour term the arrow took (WIKI: "affected by armor rating and
+            # dealt separately"); the impact visual before each word.
+            prep_points = _whole_points(prep_bonus * _prep_scale)
+            prep_visual = skill_impact_visual(prep_skill)
     dealt = _whole_points(dealt)        # DAMAGE-INT: the books and the wire agree
     prop = agents.GV_CRITICAL if critical else agents.PROP_DAMAGE
     frac = _damage_fraction(dealt, agent["max_health"], prop,
@@ -14735,10 +14812,26 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
         before_damage()
     if critical:
         critical_energy_gain(send, state, conn_id)       # DAGGERS-B7
+    if prep_visual is not None:                          # WEAPONS-W2e
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+             [agents.GV_EFFECT_ON_TARGET, target_id, PLAYER_AGENT_ID, prep_visual],
+             f"impact {prep_visual} of preparation {prep_skill} on agent {target_id}")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [prop, target_id, PLAYER_AGENT_ID, frac],
          f"{'CRITICAL' if critical else 'damage'} {dealt:.0f} "
          f"to agent {target_id}")
+    if prep_points > 0.0:                                # WEAPONS-W2e: the second word
+        agent["health"] = max(0.0, agent["health"] - prep_points)
+        if prep_visual is not None:
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+                 [agents.GV_EFFECT_ON_TARGET, target_id, PLAYER_AGENT_ID, prep_visual],
+                 f"impact {prep_visual} of preparation {prep_skill} on agent {target_id}")
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+             [agents.PROP_DAMAGE, target_id, PLAYER_AGENT_ID,
+              _damage_fraction(prep_points, agent["max_health"], agents.PROP_DAMAGE,
+                               f"preparation {prep_skill}'s +{prep_points:.0f}")],
+             f"damage {prep_points:.0f} to agent {target_id} (preparation "
+             f"{prep_skill}'s own word)")
     # And close the swing. Harmless if the client ignores it; without it the
     # attack has a beginning and no end. Skipped for a spell, which never
     # began one -- and for a skill strike, whose close is the property 46
@@ -16733,7 +16826,7 @@ def cast_tick(send, state, conn_id):
             # batch, 22 of 22, with the attack trio's close beside none of
             # them (studies/weapons section 13). A press with no target keeps
             # the close below: a whiffed action still ends.
-            _shot = player_ranged() if (cast["attack"] and target) else None
+            _shot = player_ranged(state) if (cast["attack"] and target) else None
             if cast["attack"] and ATTACK_FINISH_BATCH and _shot is None:
                 # ANIMREF-R6: 46 OPENS the execution batch, 40 of 40, and it
                 # goes out whether or not a hit lands below -- it closes the
@@ -32226,6 +32319,12 @@ def main():
         APPROACH_STOPS_AT_RANGE = False
         print("APPROACH: --legacy-ranged-approach -- a ranged press outside range "
               "walks to the melee disc [WEAPONS-W2b revert]", flush=True)
+    if a.no_preparation_wire:
+        global PREPARATION_WIRE
+        PREPARATION_WIRE = False
+        print("PREPARATION: --no-preparation-wire -- a preparation's bonus folds into "
+              "the arrow's one word and the plain arrow flies [WEAPONS-W2e revert]",
+              flush=True)
     if a.no_caster_level:
         global CASTER_LEVEL
         CASTER_LEVEL = False

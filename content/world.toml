@@ -205,6 +205,23 @@ attacks, allowing the fired arrows to cause additional effects", so the fire
 damage rides the next arrows rather than landing on cast. The server refuses to
 resolve damage for any episode-opening skill for exactly this reason."""
 
+[skill_effect.433]
+scale_means = "Fire damage"
+damage_type = 5                # WEAPONS-W2e: the 0x00A7 kind every arrow carried under it, 6 of 6
+[skill_effect.433.provenance]
+source = "wiki"
+page = 'GWW, "Kindle Arrows", {{Skill progression}}, rev. as fetched 2026-09-18'
+verified = """WIKI for the rule: "For 24 seconds, your arrows deal fire damage and hit for an \
+additional 3...24 fire damage", and its note "The additional fire damage from this skill is \
+affected by armor rating and dealt separately from the arrow damage". Client scale 3->24, \
+args = 2. OBSERVED on ArenaNet's own wire (20260914T005758, the owner's recurve, one \
+episode 512.1-536.1): every launch under it flies as 343 -- the skill record's own +0x88 -- \
+with field 7 = 0 where the same bow's plain arrow flies as 143 / 1 before and after; the \
+arrival's kind is 5 (fire) on 6 of 6 where the plain arrow's is 1; each arrival carries the \
+arrow's word and then a SECOND word of a constant 3 (the rank-0 scale) on 5 of 6, and the \
+[20, target, me, 344] impact (+0x84) before each word. `damage_type` is the wire's number; \
+which element each 587 id names beyond fire = 5 is not read here."""
+
 [skill_effect.200]
 scale_means = "Energy"
 energy_reduction0 = 10

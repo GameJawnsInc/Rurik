@@ -529,9 +529,9 @@ def main():
           f"{len(with_proj)} corpus skills name a projectile of their own, {n_attack} of them "
           f"attack skills -- a value SET a wrong offset has no reason to land on (build-specific; "
           f"a change here is a finding)")
-    check("projectile" in CONTENT_FIELDS and "impact_visual" not in CONTENT_FIELDS,
-          "the emitter carries `projectile` to the server's rows and keeps `impact_visual` "
-          "decoded-but-unsent (a lead, not a claim)")
+    check("projectile" in CONTENT_FIELDS and "impact_visual" in CONTENT_FIELDS,
+          "the emitter carries both `projectile` and `impact_visual` to the server's rows "
+          "(W2c reads the first, W2e the second)")
 
     return LEDGER.verdict()
 

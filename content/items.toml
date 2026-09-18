@@ -392,6 +392,7 @@ origin = "live"
 verified = """OBSERVED on ArenaNet's own wire (WEAPONS-W1, 2026-09-18): agent 29's leadhand on four connections of this tape (item 21), named by 0x006D and declared by the same connection's 0x0161 -- 22 declarations across the corpus, ONE distinct row. Binds in run/slice and run/2026-09-01_44fbd68767a8, MFT row 141853."""
 
 [item.starter_bow]
+fires_arrows = true            # WEAPONS-W2e: the preparation gate (swing_preparation_bonus); OBSERVED -- its launches carry 0x00A4 field 7 = 1
 name = "a bow (retail wire: an NPC body's on 20260819T132414, the one whose shots the census reads)"
 file_id = 0x24A4              # 9380
 item_type = 5
@@ -534,6 +535,7 @@ origin = "live"
 verified = """OBSERVED on ArenaNet's own wire (WEAPONS-W6a, 2026-09-18): the leadhand of agents 178, 112 and 144 on connection 62994 and 64 more bodies (20260810T235916 too), 67 declarations, ONE distinct row. The same words on models 3456 / 3458 / 3460 are the shooters weaponcensus.py reads at field 5 = 1, field 7 = 0 (agent 80 on 20260914T180058, 91 shots). MFT row 10662 in both run archives."""
 
 [item.hostile_bow]
+fires_arrows = true            # WEAPONS-W2e, as starter_bow: field 7 = 1 on its 143 launches
 name = "a hostile's bow (retail wire: 17 leadhands, the Factions tutorial's archers)"
 file_id = 0x1B51E              # 111902
 item_type = 28

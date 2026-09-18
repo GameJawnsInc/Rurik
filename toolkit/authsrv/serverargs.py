@@ -1670,6 +1670,11 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "leg at the weapon's range. The reach gate still opens the "
                          "swing at range; what this restores is the server's own "
                          "copy walking 1,400 u past it.")
+    ap.add_argument("--no-preparation-wire", action="store_true",
+                    help="WEAPONS-W2e REVERT: a preparation's bonus folds into the "
+                         "arrow's one word and the weapon's plain arrow flies -- the "
+                         "shape before 2026-09-18. Retail sends the preparation's own "
+                         "projectile, kind, impact visual and a second word.")
     ap.add_argument("--no-caster-level", action="store_true",
                     help="WEAPONS-W4c REVERT: a wand's or staff's hit is its raw "
                          "584 range with no level and no armour term -- the branch "

@@ -250,7 +250,7 @@ exposure floor and an abort written down.
 | WEAPONS-Q12 | Is ×1.2 already inside the isle study's PvP-weapon numbers? | desk, then RUN-3 |
 | WEAPONS-Q13 | The sword's short gap after a skill's hit (from DAGGERS §9) | desk, `timingjoin.py --swings` |
 | WEAPONS-Q14 | ~~Dual Shot's second arrow~~ **closed §18: two strike records, each its own roll and word; the 25 % is WIKI, unmeasured** | — |
-| WEAPONS-Q15 | A preparation's own word (Kindle Arrows: a second `0x00A3` per arrival, 4 of 5) and its substituted arrow (`+0x88` on a type-19 row) | desk, `weaponcensus.py --skill-shots` |
+| WEAPONS-Q15 | ~~A preparation's own word and its substituted arrow~~ **closed §19: shipped as W2e** | — |
 | WEAPONS-Q16 | What parks retail's client at range on an attack-follow — its own `0x0026` intent plus a client-side range (RECONSTRUCTION), since neither the hold nor the start does (§14) | RUN-WEAPONS-2 (an owner press), then `codescan` on the follow resolver |
 
 ## 8. What this plan refuses
@@ -528,8 +528,8 @@ reads 343, and every plain shot under it flew as 343 with kind 5 — and `+0x84`
 `[20, target, caster, id]` retail sends at the arrival (344 behind both 343s, 404 behind
 the Lightning pair, 855 behind 854; 2077 on every bow attack). `skilltable.py` decodes
 both; `projectile` is emitted to `vault/content/skills.toml` (1,333 rows re-emitted from
-the pinned build, one added line per row and nothing else moved), `impact_visual` is
-decoded and NOT sent — a lead, not a claim.
+the pinned build, one added line per row and nothing else moved); `impact_visual` was
+decoded and not sent until §19 emitted and sent it.
 
 **What shipped.** `skill_projectile(id)` reads the row's `+0x88` (None for 2077, 0, a row
 without the column, no row — a bare machine shoots the weapon's arrow, the honest fallback
@@ -792,3 +792,46 @@ with the tape's shape and two strike records; both handles closing and two words
 from an 8-point roll (the foe down 12); the condition once; Power Shot's one arrow at
 100 % plus its unscaled +10; a hostile archer's Dual Shot launching two and landing two on
 the player with the condition once. Floor 91 bare, 92 with the vault.
+
+## 19. WEAPONS-W2e — shipped 2026-09-18: a preparation on the wire
+
+**OBSERVED on the owner's recurve under Kindle Arrows** (`20260914T005758`, one 24 s
+episode, 512.1–536.1): every launch flies as the PREPARATION's projectile — 343, the
+type-19 record's own `+0x88` — with the arrow flag 0, where the same bow's plain arrow is
+143 / 1 before and after; a skill's own projectile (Power Shot's 680) still wins, with the
+preparation's flag and kind; the arrival's kind is 5 (fire) on 6 of 6 where the plain
+arrow's is 1; and each arrival lands the arrow's word and then a **second word** for the
+preparation's bonus — a constant 3, the rank-0 scale, on 5 of 6 — with the impact visual
+`[20, target, me, 344]` (`+0x84`) before each word. **WIKI** (GWW "Kindle Arrows", id
+433): "your arrows deal fire damage and hit for an additional 3...24 fire damage", and
+the note "affected by armor rating and dealt separately from the arrow damage" — the
+second word, through the arrow's own armour term.
+
+**What was wrong.** `swing_preparation_bonus` folded the bonus into the arrow's one
+number ("one swing, one number on screen"), and its gate — the weapon row's
+`fires_arrows` — was on no content row, so the preparation was inert on every bow.
+
+**What shipped.** `fires_arrows = true` on `starter_bow` and `hostile_bow`;
+`[skill_effect.433]` (a fire-damage preparation, `damage_type = 5` OBSERVED); the
+extractor emits `impact_visual` (+0x84) beside `projectile` (the vault rows re-emitted,
+one added line each); `open_preparation(state, agent)`; `skill_impact_visual(id)`;
+`player_ranged(state)` substitutes the preparation's projectile, a flag derived from it,
+and its kind, the weapon's speed and range untouched (`_land_player_swing` and the E5
+block pass the state); `hit_enemy` no longer folds: the arrow's word is the weapon's,
+then the impact, then the preparation's own word through the same armour term
+(`_prep_scale`, set per branch), the impact before each. `--no-preparation-wire` is the
+fold with the plain arrow. **On the client** (`20260918T180500`, Kindle Arrows cast then
+plain shots at a passive hostile from 800 u): the episode applied for 24 s at rank 0,
+every launch 343, every arrival `0x00A7` kind 5, impact 344, the arrow's word (6 / 9 / 6
+…), impact 344, the preparation's 2 (its 3 through the Hatcher's armour term); no assert.
+
+**Test.** `test_weapons` §12: the bows' gate and the wand without it; Kindle Arrows'
+row; `open_preparation`; the substitution with and without the episode and without a
+state; a skill's own projectile under it; a plain shot through the real loop — the 343 /
+0 launch, the arrival's kind 5, the arrow's 8 and the preparation's 3 as two words with the
+foe down 11, the impact before each word in the tape's order; the revert arm's one word
+of 11 with no impact; the flag. Floor 101 bare, 102 with the vault.
+
+**Not here.** Ignite Arrows' adjacency splash (named since the preparation landed); a
+preparation on a BODY's bow (`body_ranged` reads no episode); which element each `587`
+id names beyond fire = 5.

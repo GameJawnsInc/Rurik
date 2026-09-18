@@ -23,7 +23,7 @@ import agents  # noqa: E402
 import authsrv  # noqa: E402
 import combatmath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=91)   # the BARE-MACHINE number: 91 without the vault's full skills table (section 2 skips), 92 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91)
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=101)   # the BARE-MACHINE number: 101 without the vault's full skills table (section 2 skips), 102 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101)
 check = LEDGER.ok
 
 LEGACY_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
@@ -1031,6 +1031,116 @@ def section_dual_shot():
          authsrv.apply_condition, authsrv.weapon_satisfies) = saved
 
 
+def section_preparation_wire():
+    print("\n12. WEAPONS-W2e: a preparation on the wire")
+    KINDLE = 433
+    saved = (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+             authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,
+             authsrv.PREPARATION_WIRE, authsrv.skill_projectile, authsrv.skill_impact_visual,
+             authsrv.swing_preparation_bonus)
+    authsrv.skill_projectile = lambda sid: {KINDLE: 343, 394: 680}.get(sid)   # the vault rows' +0x88
+    authsrv.skill_impact_visual = lambda sid: 344 if sid == KINDLE else None   # and its +0x84
+    words = lambda batch: [v for op, v in batch if op == 0x00A3 and v[0] in (16, 17)]   # noqa: E731
+    impacts = lambda batch: [v for op, v in batch if op == 0x00A0 and v[0] == agents.GV_EFFECT_ON_TARGET]   # noqa: E731
+
+    def kindled(st):
+        authsrv.effect_table(st).apply(PLAYER, KINDLE, 0, 24.0, time.time(), type_code=19)
+        return st
+
+    try:
+        authsrv.apply_party_character({"player_weapon": "starter_bow"})
+        check(agents.item_template("starter_bow").get("fires_arrows") is True
+              and agents.item_template("hostile_bow").get("fires_arrows") is True
+              and not agents.item_template("starter_wand").get("fires_arrows"),
+              "the bows carry `fires_arrows` (the preparation gate the plan left off the "
+              "starter bow); a wand does not")
+        row = agents.WORLD.get("skill_effect", str(KINDLE))
+        check(row["scale_means"] == "Fire damage" and int(row["damage_type"]) == 5,
+              "Kindle Arrows' row: a fire-damage preparation whose arrows arrive as kind 5")
+        st = kindled({"agents": {}})
+        check(authsrv.open_preparation(st, PLAYER)[:2] == (KINDLE, 0)
+              and authsrv.open_preparation({"agents": {}}, PLAYER) == (None, None, None),
+              "open_preparation finds the episode on the player and nothing without one")
+        plain, under = authsrv.player_ranged({"agents": {}}), authsrv.player_ranged(st)
+        check((plain["projectile"], plain["arrow"], plain["damage_type"]) == (143, 1, 1)
+              and (under["projectile"], under["arrow"], under["damage_type"]) == (343, 0, 5)
+              and under["speed"] == plain["speed"] and under["range"] == plain["range"]
+              and authsrv.player_ranged() == plain,
+              "under Kindle Arrows the bow's shot flies as the preparation's 343 with flag 0 "
+              "and kind 5 -- the tape's launch and arrival -- speed and range the bow's; "
+              "without a state, or without the episode, the plain 143 / 1 / 1")
+        check(authsrv.skill_shot_how(under, 394)["projectile"] == 680
+              and authsrv.skill_shot_how(under, 394)["arrow"] == 0
+              and authsrv.skill_shot_how(under, 394)["damage_type"] == 5,
+              "a skill's own projectile still wins under it, with the preparation's flag and "
+              "kind (Power Shot's 680 / 0 / 5 on the tape)")
+
+        # one plain shot under Kindle Arrows, through the real loop
+        authsrv.swing_preparation_bonus = lambda state, w, a: (3.0, KINDLE)   # the rank-0 scale
+        authsrv.PLAYER_SWING_DAMAGE = (8, 8)
+        st, sent = kindled(_world(800.0)), []
+        del st["agents"][FOE]["armor_rating"]                # the raw branch: 8 and 3 exactly
+        send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+        authsrv.begin_attack(send, st, FOE, 1)
+        authsrv.attack_tick(send, st, 1)
+        st["player_swing"]["lands_at"] -= 30.0
+        sent.clear()
+        authsrv.attack_tick(send, st, 1)
+        launch = [v for op, v in sent if op == 0x00A4]
+        check(len(launch) == 1 and launch[0][4:] == [343, 1, 0],
+              "at the windup the launch carries 343 with flag 0", str(launch))
+        hp = st["agents"][FOE]["health"]
+        sent.clear()
+        for shot in st["player_projectiles"]:
+            shot["arrives_at"] -= 30.0
+        authsrv.projectile_tick(send, st, 1)
+        ops = [op for op, _v in sent]
+        w = words(sent)
+        check(ops[0] == 0x00A7 and sent[0][1] == [PLAYER, 1, 5]
+              and len(w) == 2 and w[0][0] == 16 and w[1][0] == 16
+              and abs(_f(w[0][3]) + 8.0 / 9000.0) < 1e-7
+              and abs(_f(w[1][3]) + 3.0 / 9000.0) < 1e-7
+              and hp - st["agents"][FOE]["health"] == 11.0,
+              "a flight later: 0x00A7 [me, 1, kind 5], then the arrow's word of 8 and a "
+              "SECOND word of the preparation's 3 -- dealt separately (WIKI), the foe down 11",
+              str([(hex(op), v) for op, v in sent]))
+        imp = impacts(sent)
+        seq = [(op, v[0] if op == 0x00A0 else None) for op, v in sent if op in (0x00A0, 0x00A3)]
+        check(len(imp) == 2 and all(v[1:] == [FOE, PLAYER, 344] for v in imp)
+              and [x for x in seq if x[0] == 0x00A3 or x[1] == agents.GV_EFFECT_ON_TARGET]
+              == [(0x00A0, 20), (0x00A3, None), (0x00A0, 20), (0x00A3, None)],
+              "the impact [20, foe, me, 344] rides BEFORE each word -- the tape's order")
+
+        authsrv.PREPARATION_WIRE = False
+        try:
+            st, sent = kindled(_world(800.0)), []
+            del st["agents"][FOE]["armor_rating"]
+            send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+            authsrv.begin_attack(send, st, FOE, 1)
+            authsrv.attack_tick(send, st, 1)
+            st["player_swing"]["lands_at"] -= 30.0
+            sent.clear()
+            authsrv.attack_tick(send, st, 1)
+            hp = st["agents"][FOE]["health"]
+            for shot in st["player_projectiles"]:
+                shot["arrives_at"] -= 30.0
+            authsrv.projectile_tick(send, st, 1)
+            check([v for op, v in sent if op == 0x00A4][0][4:] == [143, 1, 1]
+                  and len(words(sent)) == 1 and not impacts(sent)
+                  and hp - st["agents"][FOE]["health"] == 11.0,
+                  "--no-preparation-wire: the plain 143, ONE word of 11 (the fold), no impact "
+                  "-- the shape before today")
+        finally:
+            authsrv.PREPARATION_WIRE = True
+        src = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
+        check('"--no-preparation-wire"' in src, "--no-preparation-wire exists")
+    finally:
+        (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+         authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,
+         authsrv.PREPARATION_WIRE, authsrv.skill_projectile, authsrv.skill_impact_visual,
+         authsrv.swing_preparation_bonus) = saved
+
+
 def main():
     section_table()
     section_skills()
@@ -1043,6 +1153,7 @@ def main():
     section_weapon_energy()
     section_caster_level()
     section_dual_shot()
+    section_preparation_wire()
     return LEDGER.verdict()
 
 

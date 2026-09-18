@@ -7305,7 +7305,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   them went red on a FileNotFoundError rather than on a check, which is a control that
   proves nothing while looking like it proved everything. No vault, no socket, no
   client. ~1 s),
-  `toolkit/clientscan/test_skilltable.py` (client skill rows vs. the wiki; section 9, DAGGERS-B1, is the Assassin chain and the weapon mask -- `combo_req` at +0x14 carries exactly the wiki's "must follow" bit on 20 rows and 0 on the 13 with no clause, the rival `1 << (combo - 1)` is refuted by all 20, `combo` at +0x30 is the wiki's Lead / Off-Hand / Dual type on 32 rows plus the four non-attacks that "count as" one, and a mastery skill's `weapon_req` always holds its own weapon's bit over 150 rows; the first draft of "every chain attack wants daggers" went red on 2116, which takes any melee weapon; and +0x6C is the AoE radius -- its four commonest values are 156 / 240 / 312 / 1000 and Death Blossom's is 156, DAGGERS-B8. Section 10 (WEAPONS-C10, 2026-09-18) is the PROJECTILE and its IMPACT: +0x88 reads 680 on Pin Down, Power Shot, Dual Shot and Determined Shot (the projectile each launched on the wire, 12 of 12), 2077 -- the visual pair's own "none" -- on Poison Arrow and Needling Shot (whose launches carried the held bow's arrow), 854 / 343 / 403 / 405 on Dancing Daggers / Fireball / Lightning Orb / Lightning Javelin; +0x84 is the impact visual (344 behind the two 343s, 404 behind the Lightning pair, 855 behind 854, none on the bow attacks) and a preparation carries the arrow it substitutes (Kindle Arrows 343); the value set (30..400 corpus skills with a projectile, >= 4 of them attacks) and the emitter carrying `projectile` and keeping `impact_visual` unsent. 63 checks),
+  `toolkit/clientscan/test_skilltable.py` (client skill rows vs. the wiki; section 9, DAGGERS-B1, is the Assassin chain and the weapon mask -- `combo_req` at +0x14 carries exactly the wiki's "must follow" bit on 20 rows and 0 on the 13 with no clause, the rival `1 << (combo - 1)` is refuted by all 20, `combo` at +0x30 is the wiki's Lead / Off-Hand / Dual type on 32 rows plus the four non-attacks that "count as" one, and a mastery skill's `weapon_req` always holds its own weapon's bit over 150 rows; the first draft of "every chain attack wants daggers" went red on 2116, which takes any melee weapon; and +0x6C is the AoE radius -- its four commonest values are 156 / 240 / 312 / 1000 and Death Blossom's is 156, DAGGERS-B8. Section 10 (WEAPONS-C10, 2026-09-18) is the PROJECTILE and its IMPACT: +0x88 reads 680 on Pin Down, Power Shot, Dual Shot and Determined Shot (the projectile each launched on the wire, 12 of 12), 2077 -- the visual pair's own "none" -- on Poison Arrow and Needling Shot (whose launches carried the held bow's arrow), 854 / 343 / 403 / 405 on Dancing Daggers / Fireball / Lightning Orb / Lightning Javelin; +0x84 is the impact visual (344 behind the two 343s, 404 behind the Lightning pair, 855 behind 854, none on the bow attacks) and a preparation carries the arrow it substitutes (Kindle Arrows 343); the value set (30..400 corpus skills with a projectile, >= 4 of them attacks) and the emitter carrying both `projectile` and `impact_visual` (W2e). 63 checks),
   `toolkit/clientscan/test_skillsentinel.py` (**the duration-slot sentinel
   `0x20000` is ENERGY UPKEEP, in ArenaNet's own word** — studies/skills §13
   left "what the enum means" NOT FOUND and §13.1 answered it. §1 pins the
@@ -11360,7 +11360,15 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   with the first flagged; both handles closing and two words of 6 from an 8-point roll (the
   foe down 12); the condition once; Power Shot's one arrow at 100 % plus its unscaled +10; a
   hostile archer's Dual Shot launching two and landing two on the player with the condition
-  once. Floor 91 bare, 92 with the vault),
+  once. §12 (WEAPONS-W2e, 2026-09-18) is A PREPARATION ON THE WIRE: the bows carrying
+  `fires_arrows` and a wand not; Kindle Arrows' row (fire damage, kind 5);
+  `open_preparation` on the player's episode and nothing without one; `player_ranged(state)`
+  reading 343 / 0 / 5 under the episode and 143 / 1 / 1 without it or without a state, speed
+  and range the bow's; a skill's own 680 under it with the preparation's flag and kind; a
+  plain shot through the real loop launching 343 / 0, arriving as kind 5 with the arrow's 8
+  and the preparation's 3 as two words (the foe down 11) and the impact [20, foe, me, 344]
+  before each word in the tape's order; `--no-preparation-wire` giving the plain 143, one
+  word of 11 and no impact; the flag existing. Floor 101 bare, 102 with the vault),
   `toolkit/authsrv/test_weaponcensus.py` (**2026-09-18, WEAPONS-W0 (studies/weapons);
   WEAPONS-W2c added §1b and four corpus pins the same day: `skill_shots()` on the
   synthetic wire finds exactly three SKILL shots and no weapon shot among them -- the

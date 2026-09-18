@@ -304,8 +304,9 @@ def parse_record(data: bytes, base: int, skill_id: int) -> dict:
         #          404 behind both Lightning projectiles, 855 behind 854;
         #          2077 on every attack skill above (no impact of their own).
         # The ids index the same visual-component space as +0x78 / +0x7c and
-        # are carried opaque. The server reads `projectile` (emitted below);
-        # `impact_visual` is decoded and NOT yet sent (a lead, not a claim).
+        # are carried opaque. The server reads both (emitted below): the
+        # projectile since WEAPONS-W2c, the impact since W2e -- the
+        # [20, target, caster, id] a preparation's arrow carries at the arrival.
         "impact_visual": u32(data, r + 0x84),
         "projectile": u32(data, r + 0x88),
         "name_id": u32(data, r + 0x98),
@@ -385,7 +386,7 @@ CONTENT_FIELDS = ("activation", "aftercast", "recharge",
                   "combo", "combo_req", "weapon_req", "aoe_range",
                   "skill_arguments", "duration0", "duration15",
                   "scale0", "scale15", "bonus_scale0", "bonus_scale15",
-                  "projectile")                       # WEAPONS-C10, +0x88
+                  "projectile", "impact_visual")      # WEAPONS-C10, +0x88 / +0x84
 
 
 def emit_content(rows, ids, build, exe, out_path) -> int:

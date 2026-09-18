@@ -27,6 +27,26 @@ move back.
 
 ---
 
+### ✅ WEAPONS-W2e — 2026-09-18 — **a preparation on the wire: Kindle Arrows' own projectile, kind, impact visual and a second word for its bonus, where the server folded the bonus into the arrow's number behind a gate no row opened** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) §19)
+
+OBSERVED on the owner's recurve under Kindle Arrows (`20260914T005758`, one 24 s
+episode): every launch flies as the preparation's 343 (its record's `+0x88`) with flag 0
+where the plain arrow is 143 / 1; a skill's own 680 still wins with the preparation's flag
+and kind; the arrival's kind is 5 on 6 of 6; each arrival lands the arrow's word and a
+second word of a constant 3 (5 of 6) with the impact `[20, target, me, 344]` before each.
+WIKI (GWW "Kindle Arrows"): the bonus is "affected by armor rating and dealt separately
+from the arrow damage". Shipped: `fires_arrows` on the bows (the gate was on no row),
+`[skill_effect.433]` with `damage_type = 5`, `impact_visual` emitted beside `projectile`
+(vault rows re-emitted), `open_preparation`, `skill_impact_visual`, `player_ranged(state)`
+substituting projectile / flag / kind, `hit_enemy` sending the arrow's word, the impact and
+the preparation's own word through the arrow's armour term. `--no-preparation-wire`
+reverts. On the client (`20260918T180500`): the episode, every launch 343, every arrival
+kind 5 with impact, word, impact, word; no assert. `test_weapons` 92 → 102 (101 bare),
+`test_skilltable` 63, `test_mechanics` 246, `test_effects` 85, `test_content` 48,
+`test_playerswing` 191, `test_guards` 45, `test_castcycle` 54, `test_agentlife` 551.
+
+---
+
 ### ✅ WEAPONS-W2d — 2026-09-18 — **Dual Shot fires two arrows at one windup, each its own roll and word at 75 %; Q11 closed the same day (the wiki's critical formula is refuted by the isle's table)** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) §17–18)
 
 The shape is OBSERVED on eight Dual Shot windups by bodies on `20260817T231139`: two
