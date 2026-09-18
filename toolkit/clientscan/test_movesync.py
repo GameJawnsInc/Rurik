@@ -161,8 +161,12 @@ import vaultpath  # noqa: E402
 # the same 7 declared skips; 189 vaulted). sec.16 gained `late_stamp`'s two
 # corpus-free controls -- a late stamp named, a jump refused -- which run on a
 # bare machine; its split of the zero-on-both-arms claim is vaulted only.
+# 2026-09-18: 135 -> 140, MEASURED with `RURIK_VAULT` at an empty directory (140,
+# the same 7 declared skips; 194 vaulted). sec.21 gained RECORDER-D1's five
+# checks on the real `Recorder`: a write after close() is dropped and counted,
+# never raised. They need only a directory, so all five are in the bare floor.
 LEDGER = checks.Ledger("separation: the quantity that actually predicts a warp",
-                       floor=135)
+                       floor=140)
 check = checks.adopt(LEDGER)
 
 MOVETAP = "movetap-20260819T171436.jsonl"
@@ -2077,6 +2081,45 @@ def main():
                   "so its spread is the span rather than the 1.00 s a real run "
                   "reaches; the synthetic fixture above is where the full "
                   "defect shows, and 100x is deliberately far below it")
+
+            # RECORDER-D1 (studies/recorder/FINDINGS.md): a write that arrives
+            # AFTER close() is dropped and counted, never raised. handle()'s
+            # `finally` closes the recorder and then the socket while the world
+            # tick can still be mid-send on its own thread; a `sent` row in that
+            # window raised ValueError past the tick's `except OSError` and the
+            # thread died with a traceback in gamesrv.log -- 19 of 1,654 harness
+            # logs, the last two on 2026-09-18. Five checks, on the real class.
+            check(rec.dropped == 0,
+                  "the OPEN recorder dropped nothing over 200 rows -- the "
+                  "positive control: the guard is keyed on close(), not always on",
+                  f"dropped = {rec.dropped} with the file open")
+            rec.close()   # the handler's own call; idempotent over the two above
+            check(rec.closed,
+                  "`closed` answers True once close() has run -- the ask the "
+                  "labelled run makes before it starts",
+                  "the property reads meta.closed; a False here means the drop "
+                  "guard below is keyed on nothing")
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                got = rec.event("sent", seq=7, opcode=0x0026, label="x")
+                rec.frame("c2s", b"\x01\x02", b"\x03")
+            check(got is None and rec.dropped == 2,
+                  "an `event` and a `frame` after close() return without raising "
+                  f"and are COUNTED (dropped = {rec.dropped})",
+                  "this is the world tick's `sent` row in the teardown window; "
+                  "before today it raised ValueError past the tick's `except "
+                  "OSError` and the thread died with a traceback in gamesrv.log")
+            n_after = sum(1 for _l in open(live, encoding="utf-8") if _l.strip())
+            check(n_after == n_rows,
+                  f"and the file did not grow ({n_after} rows before and after)",
+                  "dropped means dropped: a row written to a reopened or a "
+                  "second file would be a capture the readers cannot find")
+            said = buf.getvalue()
+            check(said.count("capture closed") == 1 and "[c9]" in said
+                  and "`sent`" in said,
+                  "the first drop is said ONCE, naming the connection and the "
+                  "kind; the second is counted, not printed",
+                  f"printed {said!r}")
 
     # REALFIX-T2: the harness's leg table is the second clock, and it is
     # ANOTHER +/-0.5 s = +/-143 u on every leg-to-capture mapping.

@@ -27,6 +27,29 @@ move back.
 
 ---
 
+### ✅ RECORDER-D1 — 2026-09-18 — **the capture writer drops a write that arrives after `close()` instead of raising: the world tick's `sent` row in the teardown window killed the tick thread with a traceback in `gamesrv.log`** ([studies/recorder/FINDINGS.md](studies/recorder/FINDINGS.md))
+
+Seen on `20260918T170928` and `20260918T172315` (2 of that day's 19 harness runs), always
+after the client's own `ConnectionResetError`: `Exception in thread Thread-5 (world_tick)`
+… `ValueError: I/O operation on closed file` from `Recorder.event`. The mechanism is
+`handle()`'s `finally`, which closes the recorder and THEN the socket while the tick keeps
+sending on its own thread: a `sendall` that lands between the two closes succeeds, its
+`rec.event("sent")` hits the closed file, and `ValueError` is not the `OSError` the tick
+guards against. Corpus: 19 of 1,654 harness logs carry the line — 16 name `world_tick`
+(2026-08-13 onward), 3 name `_tape_then_labels` (2026-08-10, the case the `closed`
+property was added for). Fixed AT THE RECORDER, because that is how every other
+per-connection thread is torn down: `stop` is the server's event, nothing is joined, and
+the tape and label threads ask `rec.closed` — an ask that cannot protect a single write.
+`event` and `frame` now ask first, catch the one-line residual, count the drop
+(`rec.dropped`) and say the first one out loud; `closed` stays for a thread with a whole
+run to skip. The capture was never wrong — the row was not written before the fix either —
+so what changes is the log and a tick thread that now ends on the socket's `OSError` as
+designed. `handle()`, `send()` and `world_tick` untouched. `test_movesync` §21 gains five
+checks on the real class: 189 → 194 vaulted, floor 135 → 140 measured bare. `test_srclint`
+26, `test_checks` 17, `test_identlint` 28, `test_provlint` 19.
+
+---
+
 ### ✅ WEAPONS-W5 — 2026-09-18 — **a held staff's or focus's `556` energy joins the player's maximum energy** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) §15)
 
 The word is OBSERVED on retail's items (+5 / +10 / +3 / +4 over 56 foci, +9 / +10 on 483

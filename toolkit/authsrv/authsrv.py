@@ -24231,6 +24231,18 @@ class Recorder:
         self.raw = open(base + ".raw", "ab")
         self.t0 = time.perf_counter()
         self._frame_seq = itertools.count()
+        # RECORDER-D1 (studies/recorder/FINDINGS.md). Set BEFORE the first
+        # self.event below. A write that arrives after close() is dropped and
+        # counted here, never raised: handle()'s `finally` closes this recorder
+        # and THEN the socket, while the world tick (and a probe, and the tape
+        # player) can still be mid-send on a thread of its own, and a `sent`
+        # row landing in that window used to kill the ticking thread with
+        # `ValueError: I/O operation on closed file` -- 19 of 1,654 harness
+        # logs, the last two on 2026-09-18. Nothing joins those threads at
+        # teardown (`stop` is the server's event, not the connection's), so
+        # the recorder is where the race closes.
+        self.conn_id = conn_id
+        self.dropped = 0
         # FIRST record in the file, before any frame. This server IS our server, so it
         # can only ever produce OURS -- but stamping it is what lets a reader tell this
         # apart from a capture of ArenaNet's, which is the one artifact the project
@@ -24255,6 +24267,11 @@ class Recorder:
         self.event("flags", **capture_flags())
 
     def event(self, kind, **kw):
+        # RECORDER-D1: ask first, so the common case is explicit and no
+        # exception is manufactured to be caught.
+        if self.meta.closed:
+            self._drop(kind)
+            return
         kw["kind"] = kind
         kw["t"] = round(time.perf_counter() - self.t0, 6)
         kw["wall"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -24273,10 +24290,40 @@ class Recorder:
         # Loader side: `movesync.offset_detail`, which prefers this and prints
         # which estimator it used -- it never mixes the two.
         kw["wall_unix"] = time.time()
-        self.meta.write(json.dumps(kw) + "\n")
-        self.meta.flush()
+        line = json.dumps(kw) + "\n"
+        try:
+            self.meta.write(line)
+            self.meta.flush()
+        except ValueError:
+            # Closed between the ask above and the write: the same race, one
+            # line narrower, and the one place an ask cannot close it. Only
+            # the write is inside the try -- json.dumps has its own ValueError
+            # (a circular reference) and that one must still be heard.
+            self._drop(kind)
+
+    def _drop(self, kind):
+        """A write after close(): counted, and the FIRST one is said out loud.
+
+        One line, not one per event. The tick runs at 20 Hz and the window is
+        handle()'s `finally` between rec.close() and sock.close(), so what
+        follows the first is a handful of identical rows nobody wants twenty
+        lines about. `dropped` keeps the count for anyone who does.
+        """
+        self.dropped += 1
+        if self.dropped == 1:
+            print(f"[c{self.conn_id}] capture closed: a `{kind}` event arrived "
+                  f"after close() and was dropped, not written -- a thread "
+                  f"outlived the connection handler (further drops are "
+                  f"counted, not printed)", flush=True)
 
     def frame(self, direction, cipher: bytes, plain: bytes):
+        # RECORDER-D1. The ask alone suffices here: frame() has exactly one
+        # caller, the receive loop, which runs on the same thread that later
+        # calls close(), so nothing can close the files between this line and
+        # the writes below.
+        if self.closed:
+            self._drop("frame")
+            return
         # Numbered like the s2c `sent` events, but NOT because it has the same
         # defect. c2s has exactly ONE decrypt site -- the receive loop's
         # c2s.crypt -- on exactly one thread, which both decrypts and logs before
@@ -24309,6 +24356,13 @@ class Recorder:
         file. Asking is better than catching: a thread that discovers this can say
         what it is skipping and why, instead of dying on `I/O operation on closed
         file` and stacking a confusing traceback on top of the real failure.
+
+        RECORDER-D1 (2026-09-18): that is the right posture for a thread with a
+        whole run to skip, and it is HALF the defence. It cannot protect a
+        single write -- the handler can close between the ask and the write, and
+        the world tick's `sent` row did exactly that in 16 harness logs -- so
+        `event` and `frame` drop rather than raise after close(), and count what
+        they dropped in `dropped`.
         """
         return self.meta.closed
 
