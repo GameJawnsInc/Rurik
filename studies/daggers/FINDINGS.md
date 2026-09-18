@@ -491,7 +491,9 @@ resurrected" is the server having nothing to reappear. **The server's clear move
 rode ahead of the status; `kill_player` now sends it between `0x00F1 [me, 18]` and the
 morale tick (test_daggers §5 pins the index). Where retail strips the EFFECTS — after
 `[8, me, 1]`, between the morale tick and the maxima — is not where `kill_player` strips
-them (first); n = 1 with an effect up, and it is a death-batch item, not a daggers one.
+them (first); n = 1 with an effect up, and it is a death-batch item, not a daggers one
+— closed the same night as MORALE-Q8 (`studies/morale` §1.3: 11 of 12 deaths, the
+hold and the strips between the morale pair and the maxima; `kill_player` reordered).
 
 Two side readings off the same batches. **Death penalty scales the BASE pool and the
 armour's +5 rides on top**: maximum energy 25 → 22 → 19 → 16 → 13 and health 480 → 408

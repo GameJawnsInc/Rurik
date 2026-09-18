@@ -674,8 +674,13 @@ check(not state["deep_wound"] and authsrv.player_max_health(state) == 100.0,
 check(state["status_word"][PLAYER] == effects.STATUS_DEAD,
       "the status book records the death word the kill path sent itself")
 status_msgs = [v for op, v, _l in sent if op == OP_STATUS]
-check(status_msgs == [[PLAYER, agents.EFFECT_DEAD]],
-      "exactly ONE status message in the death batch, the measured 0x10",
+check(status_msgs == [[PLAYER, effects.STATUS_DEAD | effects.STATUS_CONDITION
+                       | effects.CONDITION_STATUS_BITS[DEEP_WOUND]],
+                      [PLAYER, agents.EFFECT_DEAD]],
+      "TWO status messages in the death batch when a condition is up: the "
+      "WHOLE word first (dead | condition | Deep Wound's bit), then 0x10 once "
+      "the strips are out -- retail 5 of 5 with Blind up: 18, then 16 "
+      "(MORALE-Q8, studies/morale 1.3); one message, 0x10, when nothing is up",
       f"got {status_msgs}")
 
 print("== 15. a second condition: the word is the whole word ==")

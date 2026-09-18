@@ -1934,9 +1934,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   last paragraph) — an Elementalist arc's seed. Cyclone Axe's per-foe attack and scatter
   are unmeasured.
 * **DAGGERS, after RUN-2** (daggers §8, last paragraph). A dual whose first strike
-  lands and whose second misses (is 3 sent?); the death batch's effect-strip position
-  (`kill_player` strips first, retail after `[8, me, 1]` — n = 1, a death-batch item);
-  property 10 on the victim (the foe's skill, 229 / 230 unread); the 7/8 swing
+  lands and whose second misses (is 3 sent?); property 10 on the victim (the foe's skill, 229 / 230 unread); the 7/8 swing
   sub-mode in both speed regimes. Sneak Attack with a sword is dropped (PvE-only).
 
 **Monster AI** — [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md)

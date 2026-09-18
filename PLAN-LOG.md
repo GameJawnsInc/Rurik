@@ -27,6 +27,18 @@ move back.
 
 ---
 
+### ✅ MORALE-Q8 — 2026-09-17 — **the death batch's order over all twelve player deaths on tape; `kill_player` reordered** ([studies/morale/FINDINGS.md](studies/morale/FINDINGS.md) §1.3)
+
+A census of every `0x00F1 [me, dead]` instant in the live corpus: eleven of twelve
+deaths send the status (the whole word — 18 with a condition up), the chain zeros, the
+morale pair, **the hold `[8, me, 1]`**, the effect strips and the word again as 16,
+THEN the maxima, `0x002D`, `0x0026`. The server stripped first of all and sent the hold
+after the maxima — the order the JARIN pass read off MANTID's batch, the one exception,
+and `test_morale.py` §5 pinned. `push_morale(..., between=)` is the seam; the hold and
+the strips ride inside it. `test_morale.py` 62 → 63 (re-pinned), `test_daggers.py` 88,
+`test_effects`, `test_kbdsync`, `test_playerswing`, `test_guards`, `test_agentlife`,
+`test_mechanics`, `test_pools` green. The daggers §8 line loses its death-batch item.
+
 ### ✅ RUN-DAGGERS-2 — run and scored 2026-09-17 — **a missed lead sets nothing, the attacker's death clears the icon on the wire behind the death bit, and the half second is 3/8 of the swing** ([studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md) §8, DAGGERS-F16..F19)
 
 Tape `20260917T224104`, the same PvP Assassin with Frenzy in slot 5, against the Master

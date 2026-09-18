@@ -110,6 +110,38 @@ equipment bonus is in play. The discriminating datum is still the first death's
 25 → 22 (§2.2), and it is still n=1. What the second death adds is the tick
 shape at n=2, the arithmetic at a 24× larger pool, and the level-20 endpoint.
 
+### 1.3 The batch's ORDER, over every player death on tape — MORALE-Q8, 2026-09-17
+
+Twelve player deaths in the live corpus, one instant each (the census script is scratch;
+the readings are the batches themselves). **Eleven of twelve share one order**, and
+`kill_player` now sends it:
+
+1. the killing blow (`0x00A7`, `0x00A0 [20, me, killer, 404]`, `0x009F [10, me, skill]`,
+   the damage word);
+2. **`0x00F1 [me, word]`** — the WHOLE status word: **18** (dead | condition) on every
+   death with a condition up (5 of 5, all Blind), 16 otherwise;
+3. any chain icon the corpse held: `0x005C [me, foe, 0]` (daggers F18, 3 of 3);
+4. `0x009C [me, morale]`, `0x00EE [10, −15]`;
+5. **the hold `0x009F [8, me, 1]`** — §1's table called this "the aftercast toggle rather
+   than anything to do with dying"; it is in all twelve batches, in this slot on eleven,
+   and the corpse's walk gate is what it is (SLICE-F24);
+6. the effect strips, when any were up: `0x0044 [me, instance]` each, `0x009F [7, me, 24]`,
+   then **`0x00F1 [me, 16]` again** (the condition bit gone) — 5 of 5;
+7. the maxima: `0x009F [41, me, E]`, `0x00A2 [43, me, 0.0]`, `0x009F [42, me, H]`;
+8. `0x002D [me]`, `0x0026 [me, 4]` last.
+
+The one exception is MANTID's (`20260913T210901` at 436.950, the level-1 Mesmer): the
+morale pair and the maxima AHEAD of the status, then the hold, then a second
+`[43, me, 0.0]`. The JARIN pass read that batch as the rule and wrote "the morale tick
+with the maxima, then the hold"; `test_morale.py` §5 pinned it and the server sent it
+until today. The server was ALSO stripping effects first of all, ahead of the status,
+which no batch does. `push_morale(..., between=)` is the one seam: `kill_player` passes
+its hold-and-strip, and a map that charges nothing sends the same messages in the same
+relative place (that no-penalty batch is still UNWITNESSED). Where the two `0x0044`s and
+the `[7, me, 24]` sit relative to the maxima varies on the one death with two effects up
+(`20260917T224104` at 446.688: one strip before the maxima, one after) — interleaving
+the server does not reproduce and nothing reads.
+
 ### 1.1 Why one sighting was enough even before the second
 
 n=1 is normally where this repo stops. Three things make this one carry:
@@ -463,6 +495,7 @@ Test: `toolkit/authsrv/test_morale.py`, catalogued in
 | MORALE-Q5 | Morale BOOSTS | zero sightings in the corpus. +10% is WIKI only, and the `[40, 110]` range is UPSTREAM (GWCA) |
 | MORALE-Q6 | Does DP survive a map change on the wire, and what resets it? | our corpus has no death followed by a zone. WIKI says an outpost resets it; the ATTR_SET at every login carries 100, which is consistent but is not the same claim |
 | ~~MORALE-Q7~~ | Does `0x00EE`'s delta update the client's stored morale without repainting? | **ANSWERED 2026-08-20 — yes, it writes.** Read out of the client's own memory: `66 → 53` on a `−13` and `53 → 60` on a `+7`, within one 0.5 s sample each, while `0x009C [player, 41]` moved that slot not at all. Two channels, two stores. RUNS.md §Run 2, §2.4 below |
+| ~~MORALE-Q8~~ | Where do the hold, the effect strips and the maxima sit in the death batch? | **ANSWERED 2026-09-17 — §1.3.** Status (the whole word, 18 with a condition up), chain zeros, morale pair, the HOLD, the strips and the word again as 16, THEN the maxima, `0x002D`, `0x0026`: 11 of 12 player deaths; MANTID's is the exception the old pin copied. `kill_player` reordered, `test_morale` §5 re-pinned |
 
 ## 7. The probe — RAN 2026-08-20, GREEN
 

@@ -49,7 +49,7 @@ from codec import Codec  # noqa: E402
 # when the refill is immediate and two when it is deferred. The floor is the
 # smaller of the two REAL runs rather than the larger, since a floor above what
 # a healthy run produces is a test that fails for being configured differently.
-LEDGER = checks.Ledger("morale and death penalty", floor=60)
+LEDGER = checks.Ledger("morale and death penalty", floor=63)
 
 # THE OBSERVATION, pinned as literals so this file states what it is testing
 # against rather than deriving it from the code under test. Capture
@@ -224,7 +224,13 @@ def main():
         LEDGER.ok(ops[2] == authsrv.GAME_SMSG_PLAYER_ATTR_UPDATE,
                   "then the delta, per player (0x00EE)",
                   f"{[hex(o) for o in ops]}")
-        LEDGER.ok(ops[3:6] == [authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+        LEDGER.ok(ops[3] == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+                  and list(sent[3][1]) == [8, authsrv.PLAYER_AGENT_ID, 1],
+                  "then the HOLD [8, me, 1] (MORALE-Q8: 11 of 12 player deaths "
+                  "on tape put it between the delta and the maxima; the one "
+                  "exception, MANTID's, is what this pin used to copy)",
+                  f"{[hex(o) for o in ops]} {sent[3][1]}")
+        LEDGER.ok(ops[4:7] == [authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
                                authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
                                authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT],
                   "then energy max, energy regen, health max -- the regen on "

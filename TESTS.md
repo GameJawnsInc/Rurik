@@ -11436,8 +11436,10 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   until 2026-08-20; §6 kills a player, stands them back up through BOTH revive
   configurations (the shipped one-tick defer and `RURIK_REVIVE_DEFER=0`) and
   reads the maximum that goes out. §5 asserts the death tick is ArenaNet's own
-  order — status bit, `0x009C` absolute morale, `0x00EE` delta, energy max,
-  energy regen, health max — with the delta carrying the wire's own
+  order — status bit, `0x009C` absolute morale, `0x00EE` delta, **the hold
+  `[8, me, 1]`** (MORALE-Q8: 11 of 12 player deaths on tape; the pin used to copy
+  MANTID's, the one exception), energy max, energy regen, health max — with the
+  delta carrying the wire's own
   `0xFFFFFFF1` rather than a sign convention of ours, and every message of it
   encoding through the codec. **§9 is the resurrection grace window** (GWW:
   "Dying shortly after resurrection (5 seconds in PvP, 14 in PvE)" never incurs

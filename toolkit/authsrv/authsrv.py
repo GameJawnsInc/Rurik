@@ -16768,7 +16768,6 @@ def kill_player(send, state, conn_id, why="took a killing blow"):
     three sites.
     """
     state["player_dead"], state["player_died_at"] = True, time.time()
-    strip_effects(send, state, PLAYER_AGENT_ID, conn_id, "the player died")
     state["attacking"] = None          # a corpse stops swinging back
     # AND STOPS WALKING (SLICE-F23: "I slid around after dying too"). The
     # keyboard lead chain re-granted leads to the corpse -- `KBD LEAD
@@ -16788,20 +16787,48 @@ def kill_player(send, state, conn_id, why="took a killing blow"):
     state["dest"] = None
     _approach_abandon(state)
     router_abandon(state, None, "death", time.time())
+    # MORALE-Q8: the word is the WHOLE word -- 18 (dead | condition) while a
+    # condition is still up, 16 otherwise (retail 5 of 5 / 7 of 7); the
+    # strips below re-send it as 16 once the bit is gone.
+    _word = (agent_status_word(state, PLAYER_AGENT_ID) if STATUS_WORD
+             else agents.EFFECT_DEAD)
     send(GAME_SMSG_AGENT_UPDATE_STATUS,
-         [PLAYER_AGENT_ID, agents.EFFECT_DEAD], f"KILL the player ({why})")
+         [PLAYER_AGENT_ID, _word], f"KILL the player ({why})")
+    if STATUS_WORD:
+        state.setdefault("status_word", {})[PLAYER_AGENT_ID] = _word
     # DAGGERS-F18: the chain icons the corpse held go out HERE, between the
     # death bit and the morale tick -- retail, 3 of 3 (RUN-DAGGERS-2,
     # 20260917T224104 at 367.057 / 408.587 / 446.688: the killing word,
     # 0x00F1 [me, 18], 0x005C [me, foe, 0], 0x009C, 0x00EE ...). The clear
     # used to ride ahead of the status; a 0 per live icon, none otherwise.
     chain_clear_all(send, state, "the player died")          # DAGGERS-B5
-    # JARIN: THE ORDER IS RETAIL'S, on two player deaths now (MANTID 436.9 s,
-    # JARIN 329.64 s): the status, then the morale tick (0x009C, 0x00EE, the
-    # maxima), then the hold [8, me, 1] and 0x002D, then the flags byte
-    # 0x0026 [me, 4] LAST. The hold and the cancel used to ride between the
-    # status and the tick, which test_morale section 5 had been red on.
-    pushed = death_penalty_due(send, state, conn_id)
+    # MORALE-Q8 (2026-09-17): THE ORDER IS RETAIL'S ON 11 OF 12 PLAYER DEATHS
+    # in the live corpus (studies/morale 1.3): the status, [the chain zeros],
+    # 0x009C, 0x00EE, the HOLD [8, me, 1], the effect strips (0x0044 each,
+    # then the status again as 16 once the condition bit is gone), THEN the
+    # maxima (41, 43 = 0.0, 42), 0x002D, 0x0026 LAST. The one exception is
+    # MANTID 436.9 s (the maxima ahead of the status), which the JARIN pass
+    # had generalised into "the morale tick with the maxima, then the hold";
+    # test_morale section 5 pinned that and is re-pinned. The hold and the
+    # strips ride INSIDE push_morale's batch through `between`; on a map that
+    # charges nothing they go out here, in the same relative place.
+    _done = {"between": False}
+
+    def _hold_and_strip():
+        _done["between"] = True
+        action_hold(send, state, 1, f"the player died ({why})")
+        strip_effects(send, state, PLAYER_AGENT_ID, conn_id, "the player died")
+        if STATUS_WORD:
+            _after = agent_status_word(state, PLAYER_AGENT_ID)
+            if _after != _word:
+                send(GAME_SMSG_AGENT_UPDATE_STATUS, [PLAYER_AGENT_ID, _after],
+                     "the corpse's word once its effects are gone (retail "
+                     "18 -> 16, 5 of 5)")
+                state.setdefault("status_word", {})[PLAYER_AGENT_ID] = _after
+
+    pushed = death_penalty_due(send, state, conn_id, between=_hold_and_strip)
+    if not _done["between"]:
+        _hold_and_strip()
     # THE DEATH BATCH'S OTHER HALF, OBSERVED: retail sends property 43 = 0.0
     # in the same instant the death bit goes up -- twice in the corpus, and
     # those two are exactly the events whose solved pip count is 0.0 where
@@ -16853,8 +16880,8 @@ def kill_player(send, state, conn_id, why="took a killing blow"):
     # corpse cannot take a step. Ours sent no hold, and the owner's corpse
     # "warped slightly" on its converging copies. 0x002D (unnamed in the
     # catalog) and the flags value 4 (ours sends 8, the four NPC deaths')
-    # are recorded, not sent.
-    action_hold(send, state, 1, f"the player died ({why})")
+    # are recorded, not sent. MORALE-Q8: the hold itself now goes out inside
+    # the morale batch above (`_hold_and_strip`), ahead of the maxima.
     # SLICE-F25: and the SYNC copy's walk is cancelled (0x002D, retail 3 of
     # 3 in this batch, behind the hold). The owner's corpse still "warped
     # slightly" with the hold alone: the hold gates the client's INPUT, but
@@ -18138,7 +18165,7 @@ def map_death_penalty(map_id):
     return bool(row.get("death_penalty", False))
 
 
-def push_morale(send, state, conn_id, new_value, why):
+def push_morale(send, state, conn_id, new_value, why, between=None):
     """Move the player's morale and put ArenaNet's own tick on the wire.
 
     THE SHAPE IS OBSERVED, off the one player death in the live corpus
@@ -18177,6 +18204,12 @@ def push_morale(send, state, conn_id, new_value, why):
     send(GAME_SMSG_PLAYER_ATTR_UPDATE,
          [PLAYER_ATTR_MORALE_ID, _u32(new_value - old)],
          f"morale delta {new_value - old:+d} ({why})")
+    # MORALE-Q8: what the caller puts BETWEEN the delta and the maxima --
+    # kill_player's hold and its effect strips, where retail has them on 11
+    # of 12 player deaths (studies/morale 1.3). A living morale change passes
+    # nothing.
+    if between is not None:
+        between()
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
          [agents.PROP_ENERGY_MAX, PLAYER_AGENT_ID, max_energy],
          f"maximum energy {max_energy} at morale {morale.display(new_value)}")
@@ -18225,7 +18258,7 @@ def push_morale(send, state, conn_id, new_value, why):
     return new_value
 
 
-def death_penalty_due(send, state, conn_id):
+def death_penalty_due(send, state, conn_id, between=None):
     """Charge the player for dying, if this map charges for it and it is not free.
 
     Called from `kill_player` only, and AFTER the death bit -- the corpus's own
@@ -18255,7 +18288,7 @@ def death_penalty_due(send, state, conn_id):
               f"{morale.display(before)} cap; nothing to charge", flush=True)
         return None                      # nothing went out; the caller's
                                          # standalone 43 = 0.0 still must
-    return push_morale(send, state, conn_id, after, "died")
+    return push_morale(send, state, conn_id, after, "died", between=between)
 
 
 def morale_experience(send, state, conn_id, gained):
