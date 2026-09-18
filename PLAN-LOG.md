@@ -27,6 +27,23 @@ move back.
 
 ---
 
+### ✅ SLICE-F51 — 2026-09-18 — **an attack skill's clock: a listed activation lands at its WINDUP (Jagged Strike 0.15 s, not 0.5), and the swing after a skill's hit opens one RECOVERY later** ([studies/slice/FINDINGS.md](studies/slice/FINDINGS.md) SLICE-F51)
+
+A side-by-side timing census (RUN-DAGGERS-2 beside our recorder) after F50. Retail lands
+the 0.5 s-activation dagger skills 0.147–0.151 s after the debit (n = 33), 0.063–0.078
+under Frenzy (n = 8), with the next press 0.499–0.502 s on: the windup law applied to the
+ACTIVATION, the attacker occupied for the activation. And the next swing opens
+`interval − windup` after a skill's hit (0.75–0.78 s on 1.33 s weapons, n = 19; 0.5445
+under Frenzy, n = 5) — LAW B's own 0.749..0.783 cluster, which had been written down as
+the fixture hammer's windup. `attack_skill_clock` at both scheduling sites;
+`--no-attack-activation-windup`, `--legacy-swing-restart-windup`; the chain icon's clock
+joined `combat_deadlines`. On the client (harness `20260918T112505`): 0.150 / 0.067,
+0.766, 15.000. The short-recovery mode (an eighth of the interval off; 25 % of dagger
+plain swings, daggers-only) is characterised and left open. `test_daggers.py` 88 → 95,
+`test_castcycle.py` 54 re-pinned twice, `test_playerswing` 191, `test_guards` 45,
+`test_castcancel` 44, `test_kbdsync`, `test_agentlife`, `test_mechanics`, `test_pools`,
+`test_effects`, `test_srclint` green.
+
 ### ✅ SLICE-F50 — 2026-09-18 — **combat one-shots fire at their instant: the world thread wakes early at a combat deadline; swings, landings and second strikes on retail's numbers, the world tick untouched** ([studies/slice/FINDINGS.md](studies/slice/FINDINGS.md) SLICE-F50)
 
 After F49 every combat event was still quantised to the 51 ms tick. `combat_sleep`

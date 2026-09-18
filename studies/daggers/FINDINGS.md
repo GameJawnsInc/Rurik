@@ -532,7 +532,11 @@ what the clock has passed — closed the next morning as SLICE-F49 (`studies/sli
 swing clock now carries its remainder (daggers 1.326–1.330 s on harness
 `20260918T081923`), and SLICE-F50 then woke the world thread at each combat instant:
 the double strike 0.501 s plain and 0.336 under Frenzy, the dual's second 0.335 / 0.336,
-the swing 1.330 and 0.891 (harness `20260918T100310`) — retail's numbers.
+the swing 1.330 and 0.891 (harness `20260918T100310`) — retail's numbers. SLICE-F51 then
+read two laws off these same tapes: a listed 0.5 s activation lands at its WINDUP, 0.15 s
+(0.0675 under Frenzy), and the swing after a skill opens one recovery later — and
+characterised the 7/8 mode (25 % of dagger plain swings, daggers-only, independent of
+doubles and criticals; unexplained, not modelled).
 
 ### What RUN-2 did not settle
 

@@ -3603,3 +3603,48 @@ where its "swing on arrival" reset fired as it repositioned; the log shows three
 re-arrivals this run against two in each earlier run, and the run BEFORE either change
 had a short of its own (1.277). Not attributable to the wake on n = 1; whether a
 re-arrival should swing at once is SLICE-H4's own question.
+
+## SLICE-F51 — **an attack skill's clock, two laws off the dagger tapes with no free parameter: a LISTED activation is the attack's duration and the hit is its WINDUP (Jagged Strike lands 0.15 s in, not 0.5), and after a skill's hit the next swing opens one RECOVERY later, not one windup — both shipped and measured on the client (2026-09-18)**
+
+**Found by** a side-by-side timing census — every timed quantity around the player's
+skills on RUN-DAGGERS-2 beside the same joins over our own recorder — after F50 had put
+the swings on retail's numbers. Recharges (2.000 / 3.000 / 4.000), the E3 riding the E5,
+and the dual's second were already right. Two rows were not.
+
+**(1) A listed activation is the attack's DURATION.** Jagged Strike (782) and Fox Fangs
+(780) list 0.5 s. Retail lands them **0.147–0.151 s** after the energy debit (n = 33 over
+both tapes; p50 0.150) and **0.063–0.078 s** under Frenzy (n = 8), and the earliest
+follow-up press begins **0.499–0.502 s** after the first (0.331 under Frenzy). ANIMREF-R1's
+windup law, half the duration less 0.1 s, applied to the ACTIVATION: `swing_windup(0.5)` =
+**0.15**, `swing_windup(0.5 × 0.67)` = **0.0675**, and the attacker is occupied for the
+activation itself, scaled the same way. OBSERVED, no free parameter. This server landed
+them AT 0.5 s — the press handler's own comment: "a LISTED activation still wins, per the
+wiki's reading — UPSTREAM, no corpus cycle exercises it yet." Now one does.
+
+**(2) After an attack skill's hit the next swing opens one RECOVERY later** —
+`interval − windup(interval)`. Daggers and swords (1.33–1.35 s): **0.75–0.78 s** (n = 19);
+under Frenzy 0.543–0.556 against 0.5445 (n = 5); a bow (2.48) 1.33 against 1.34 (n = 1).
+ANIMREF-R7b's LAW B had this as "one WINDUP later": its cluster, 0.749..0.783 (21 of 38),
+was measured on 1.33 s weapons — where the recovery is 0.77 — and was written down as
+`swing_windup(1.75)` = 0.775, the test fixture's hammer, a coincidence only a hammer
+satisfies. Our dagger Assassin opened it 0.565 s after the hit (0.346 under Frenzy),
+values retail never shows.
+
+**The second mode, characterised and NOT modelled.** Beside each full value sits one
+exactly an eighth of the weapon's interval shorter: 0.59–0.61 after a skill (about as
+often as the full mode, 13 of 31), 0.435 under Frenzy, and **25 % of the dagger
+character's plain swings** (35 of 138: 1.163 for 1.333, 0.78 for 0.891). It is
+independent of whether the swing doubled (23 % against 24 %) or crit, not periodic, and
+**daggers-only among plain swings** — 0 of 700+ sword and axe swings by three other
+characters, 0 of 21 hammer swings. A shortened recovery on a one-in-four roll is a
+description, not a mechanism; nothing here sends it.
+
+**Shipped.** `attack_skill_clock(state, activation)` gives (begin → E5, begin → free) and
+both scheduling sites read it (the press and the approach's arrival);
+`--no-attack-activation-windup` and `--legacy-swing-restart-windup` are the two controls,
+each tested as the arm before today. The 15 s chain icon joined `combat_deadlines`.
+
+**On the client** (harness `20260918T112505`, plain and Frenzy chains interleaved with
+plain swings): debit → E5 **0.150** for 782 and 780 and **0.067** under Frenzy (were
+0.500); Death Blossom 0.565 / 0.345; the next swing **0.766 s** behind a skill's hit
+(n = 1; was 0.565); the chain's 0 **15.000 s** behind the last hit (was 15.005).

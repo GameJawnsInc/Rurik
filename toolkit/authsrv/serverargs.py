@@ -1644,6 +1644,15 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                     help="an attack skill's ADJACENT damage is not dealt: Death "
                          "Blossom hits its target and nobody beside it. The "
                          "revert for DAGGERS-B8 (studies/daggers F13).")
+    ap.add_argument("--no-attack-activation-windup", action="store_true",
+                    help="an attack skill with a LISTED activation lands at "
+                         "that activation (Jagged Strike 0.5 s) instead of at "
+                         "the windup of it (0.15 s, retail n = 33). The revert "
+                         "for SLICE-F51 (1).")
+    ap.add_argument("--legacy-swing-restart-windup", action="store_true",
+                    help="after an attack skill's hit the next swing opens one "
+                         "windup later (ANIMREF-R7b) instead of one recovery, "
+                         "interval - windup. The revert for SLICE-F51 (2).")
     ap.add_argument("--no-combat-deadlines", action="store_true",
                     help="the world thread sleeps its whole tick, so a swing, "
                          "a landing, a cast phase and a second strike fire on "

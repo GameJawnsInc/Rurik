@@ -441,11 +441,14 @@ def section_attack_finish_batch():
         iv = authsrv.ATTACK_INTERVAL * authsrv.attack_interval_factor(
             state, authsrv.PLAYER_AGENT_ID)
         gap = (state.get("player_last_swing", 0.0) + iv) - _time.time()
-        check(abs(gap - authsrv.swing_windup(iv)) < 0.1,
-              "and the chain's next START is paced one windup out "
-              "(ANIMREF-R7b, LAW B) -- not reopened in the execution tick",
-              f"next START opens in {gap:.3f}s, windup is "
-              f"{authsrv.swing_windup(iv):.3f}s")
+        check(abs(gap - (iv - authsrv.swing_windup(iv))) < 0.1,
+              "and the chain's next START is paced one RECOVERY out -- the "
+              "interval less its windup (SLICE-F51: LAW B's 0.749..0.783 "
+              "cluster was measured on 1.33 s weapons, where that is 0.77; "
+              "daggers and swords 0.75-0.78, a bow 1.33) -- not reopened in "
+              "the execution tick and not one windup out",
+              f"next START opens in {gap:.3f}s, recovery is "
+              f"{iv - authsrv.swing_windup(iv):.3f}s")
 
         authsrv.ATTACK_FINISH_BATCH = False
         try:
@@ -641,11 +644,15 @@ def section_strike_approach():
               f"{[(hex(op), v) for op, v, _ in sent]}")
         check(cast["begun"] is True and cast["approach"] is None
               and state.get("approach") is None
-              and abs(cast["e5_at"] - (t_arr + 1.0)) < 0.2
+              and abs(cast["e5_at"] - (t_arr + authsrv.swing_windup(1.0))) < 0.1
               and abs(cast["e3_at"] - cast["e5_at"]) < 1e-9
-              and abs(cast["e6_at"] - (cast["e5_at"] + 3.0)) < 1e-9,
-              "and the entry now has its clock from the arrival: E5 an "
-              "activation on, E3 an aftercast after, E6 a recharge after",
+              and abs(cast["e6_at"] - (cast["e5_at"] + 3.0)) < 1e-9
+              and abs(state["cast_busy_until"] - (t_arr + 1.0)) < 0.1,
+              "and the entry now has its clock from the arrival: E5 the WINDUP "
+              "of its listed activation on (SLICE-F51: 0.4 s for this 1.0 s "
+              "fixture; retail lands a 0.5 s Jagged Strike at 0.15, n = 33), "
+              "the attacker occupied for the whole activation, E3 an "
+              "aftercast after the E5, E6 a recharge after",
               {k: round(cast[k] - t_arr, 3) for k in ("e5_at", "e3_at", "e6_at")})
 
         # the strike, a windup later, on a body 80 u out -- C1's gate passes

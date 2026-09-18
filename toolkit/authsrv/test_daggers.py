@@ -31,7 +31,7 @@ import chain  # noqa: E402
 import checks  # noqa: E402
 
 # FLOOR 83, from the green run of 2026-09-17 on the machine with the vault.
-LEDGER = checks.Ledger("daggers and the attack chain", floor=88)
+LEDGER = checks.Ledger("daggers and the attack chain", floor=95)
 check = LEDGER.ok
 
 PLAYER = 1
@@ -807,6 +807,77 @@ def section_condition_slot(have_fields):
           "condition is never damage")
 
 
+def section_skill_clock(have_fields):
+    """SLICE-F51: a listed activation is the attack's DURATION; the hit is its windup."""
+    import authsrv
+    print("\n11. an attack skill's clock (SLICE-F51, RUN-DAGGERS-1 and -2)")
+    if not have_fields:
+        LEDGER.skip("section 11", "no skills rows -- 7 checks")
+        return
+    clock = authsrv.attack_skill_clock
+    to_e5, free = clock({}, 0.5)
+    check(abs(to_e5 - 0.15) < 1e-9 and abs(free - 0.5) < 1e-9,
+          "a 0.5 s listed activation: the hit 0.15 s in (retail 0.147-0.151, "
+          "n = 33) and the attacker occupied the whole 0.5 (the earliest next "
+          "press 0.499-0.502 s on)", f"{to_e5} {free}")
+    _factor = authsrv.attack_interval_factor
+    authsrv.attack_interval_factor = lambda state, agent_id: 0.67
+    try:
+        to_e5, free = clock({}, 0.5)
+        check(abs(to_e5 - 0.0675) < 1e-9 and abs(free - 0.335) < 1e-9,
+              "under Frenzy both scale: 0.0675 and 0.335 (retail 0.063-0.078, "
+              "n = 8, and a next press 0.331 s on)", f"{to_e5} {free}")
+    finally:
+        authsrv.attack_interval_factor = _factor
+    to_e5, free = clock({}, 0.0)
+    check(abs(to_e5 - authsrv.swing_windup(authsrv.ATTACK_INTERVAL)) < 1e-9
+          and free is None,
+          "a weapon-time skill (Death Blossom) still rides the weapon's own windup")
+    authsrv.ATTACK_ACTIVATION_WINDUP = False
+    try:
+        check(clock({}, 0.5) == (0.5, None),
+              "--no-attack-activation-windup: the hit AT the activation, the "
+              "arm before today")
+    finally:
+        authsrv.ATTACK_ACTIVATION_WINDUP = True
+    saved_cost, saved_blocks = authsrv.skill_cost, authsrv.blocks
+    authsrv.skill_cost = lambda sid: (0, 0)
+    authsrv.blocks = lambda *a, **k: False
+    try:
+        st = _world(authsrv)
+        sent = []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))
+        t0 = time.time()
+        authsrv.handle_skill_press([0, LEAD, 0, FOE], send, st, 1,
+                                   authsrv.GAME_CMSG_ATTACK_SKILL)
+        cast = st["pending_casts"][0]
+        check(abs(cast["e5_at"] - t0 - 0.15) < 0.05
+              and abs(st["cast_busy_until"] - t0 - 0.5) < 0.05,
+              "through the real press: Jagged Strike's E5 0.15 s out and the "
+              "queue held to 0.5", f"e5 +{cast['e5_at'] - t0:.3f} "
+              f"busy +{st['cast_busy_until'] - t0:.3f}")
+        iv = authsrv.ATTACK_INTERVAL * authsrv.attack_interval_factor(st, PLAYER)
+        st = _world(authsrv)
+        _land(authsrv, st, LEAD)
+        gap = st["player_last_swing"] + iv - time.time()
+        check(abs(gap - (iv - authsrv.swing_windup(iv))) < 0.1,
+              "after the hit the next swing opens one RECOVERY later, interval "
+              "less windup (retail, daggers and swords: 0.75-0.78 s)",
+              f"{gap:.3f} against {iv - authsrv.swing_windup(iv):.3f}")
+        authsrv.SWING_RESTART_RECOVERY = False
+        try:
+            st = _world(authsrv)
+            _land(authsrv, st, LEAD)
+            gap = st["player_last_swing"] + iv - time.time()
+            check(abs(gap - authsrv.swing_windup(iv)) < 0.1,
+                  "--legacy-swing-restart-windup: one windup later, ANIMREF-R7b's arm",
+                  f"{gap:.3f} against {authsrv.swing_windup(iv):.3f}")
+        finally:
+            authsrv.SWING_RESTART_RECOVERY = True
+    finally:
+        authsrv.skill_cost, authsrv.blocks = saved_cost, saved_blocks
+
+
 def main():
     import authsrv
     section_grammar()
@@ -822,6 +893,7 @@ def main():
         section_retail(have_fields)
         section_adjacent(have_fields)
         section_armour()
+        section_skill_clock(have_fields)
     finally:
         _restore(authsrv, saved)
     return LEDGER.verdict()

@@ -3642,6 +3642,9 @@ def combat_deadlines(state):
         if not cast.get("e3_sent"):
             out.append(cast.get("e3_at"))
         out.append(cast.get("e6_at"))
+    for _row in (state.get("chain").rows.values()
+                 if state.get("chain") is not None else ()):
+        out.append(_row.get("until"))          # the 15.000 s icon (DAGGERS-F9)
     swing = state.get("player_swing")
     if swing:
         out.append(swing.get("lands_at"))
@@ -11524,6 +11527,40 @@ ATTACK_FINISH_BATCH = True    # False (--legacy-attack-finish): the old shape
 # behaviour, one A/B, not two independent defaults nobody can separate.
 MOVE_KEEPS_CHAIN = True       # False (--legacy-move-stops-chain): the old door
 CHAIN_RESTART_PACED = True    # False (--legacy-chain-restart): same-tick
+# SLICE-F51 (2026-09-18), two laws read off the dagger tapes (RUN-DAGGERS-1/-2)
+# with no free parameter, both the ANIMREF-R1 windup law applied where it had
+# not been:
+# (1) A LISTED ACTIVATION IS THE ATTACK'S DURATION, NOT ITS HIT INSTANT. Jagged
+#     Strike and Fox Fangs list 0.5 s; retail lands them 0.147-0.151 s after
+#     the debit (n = 33) and 0.063-0.078 under Frenzy (n = 8) -- swing_windup
+#     of 0.5 is 0.15 and of 0.5 x 0.67 is 0.0675 -- and the earliest next
+#     press begins 0.499-0.502 s after it (0.331 under Frenzy): the attacker
+#     is occupied for the activation. This server landed them AT 0.5 s ("a
+#     listed activation still wins ... UPSTREAM, no corpus cycle exercises it
+#     yet"). --no-attack-activation-windup is the control.
+# (2) AFTER AN ATTACK SKILL'S HIT THE NEXT SWING OPENS ONE RECOVERY LATER --
+#     interval - windup(interval) -- not one WINDUP later. Daggers and swords:
+#     0.75-0.78 s (the full mode; a second mode one eighth of the interval
+#     shorter, 0.59-0.61, about as often, unexplained and not modelled), a bow
+#     1.33 for 1.34. LAW B's own cluster, 0.749..0.783 (21 of 38), was measured
+#     on 1.33 s weapons where the recovery is 0.77 -- and was written down as
+#     swing_windup(1.75) = 0.775, the fixture's hammer, which only a hammer
+#     satisfies. --legacy-swing-restart-windup is the control.
+ATTACK_ACTIVATION_WINDUP = True
+SWING_RESTART_RECOVERY = True
+
+
+def attack_skill_clock(state, activation):
+    """(begin -> E5, begin -> free) seconds for the PLAYER's attack skill.
+
+    The second is None where the caller's own aftercast decides (a weapon-
+    time skill, or either control arm)."""
+    factor = attack_interval_factor(state, PLAYER_AGENT_ID)
+    if activation == 0.0 and ATTACK_E5_WINDUP:
+        return swing_windup(ATTACK_INTERVAL * factor), None
+    if activation > 0.0 and ATTACK_ACTIVATION_WINDUP:
+        return swing_windup(activation * factor), activation * factor
+    return activation, None
 
 # ANIMREF-RE §31, LAW A's decoded complement: freeze the swing clock while
 # the player's body is moving, so the next attack-started fires one interval
@@ -12597,9 +12634,10 @@ def attack_skill_arrives(state, cast, now):
     does; the press's estimate is replaced by the instant that happened.
     """
     act = float(cast.get("activation", 0.0))
-    if cast["attack"] and act == 0.0 and ATTACK_E5_WINDUP:
-        e5_at = now + swing_windup(
-            ATTACK_INTERVAL * attack_interval_factor(state, PLAYER_AGENT_ID))
+    _free = None
+    if cast["attack"]:
+        _to_e5, _free = attack_skill_clock(state, act)          # SLICE-F51
+        e5_at = now + _to_e5
     else:
         e5_at = now + act
     after = float(cast.get("aftercast", 0.0))
@@ -12608,7 +12646,7 @@ def attack_skill_arrives(state, cast, now):
     cast["e5_at"] = e5_at
     cast["e3_at"] = e5_at + after
     cast["e6_at"] = e5_at + float(cast.get("recharge_s", cast["recharge"]))
-    state["cast_busy_until"] = e5_at + after
+    state["cast_busy_until"] = max(e5_at + after, now + (_free or 0.0))
     return e5_at
 
 
@@ -15343,12 +15381,14 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
     # Wired for the measured case only (table activation 0.0); a LISTED
     # activation still wins, per the wiki's "activation replaces the weapon
     # time" reading -- UPSTREAM, no corpus cycle exercises it yet.
-    if is_attack and activation == 0.0 and ATTACK_E5_WINDUP:
-        e5_at = begin + swing_windup(
-            ATTACK_INTERVAL * attack_interval_factor(state, PLAYER_AGENT_ID))
+    _free = None
+    if is_attack:
+        _to_e5, _free = attack_skill_clock(state, activation)   # SLICE-F51
+        e5_at = begin + _to_e5
     else:
         e5_at = begin + activation
-    state["cast_busy_until"] = e5_at + aftercast
+    state["cast_busy_until"] = max(e5_at + aftercast,
+                                   begin + (_free or 0.0))
     # A QUEUED PRESS DEFERS ITS WHOLE BURST TAIL TO CAST-BEGIN. Measured
     # from both directions (studies/castmech 3b/3c): skill 105's debit and
     # animation ride 153's E3 instant -- the moment the caster freed -- on
@@ -16178,8 +16218,14 @@ def cast_tick(send, state, conn_id):
                     if CHAIN_RESTART_PACED:
                         _iv = ATTACK_INTERVAL * attack_interval_factor(
                             state, PLAYER_AGENT_ID)
+                        # SLICE-F51 (2): the next START is one RECOVERY
+                        # behind this hit (iv - windup), so the stamp is the
+                        # hit less a windup; the control keeps R7b's one
+                        # windup (the stamp a windup less an interval on).
                         state["player_last_swing"] = (
-                            now + swing_windup(_iv) - _iv)
+                            now - swing_windup(_iv)
+                            if SWING_RESTART_RECOVERY
+                            else now + swing_windup(_iv) - _iv)
                 else:
                     _res = hit_enemy(send, state, target, conn_id,
                                      bonus_damage=bonus,
@@ -31371,6 +31417,16 @@ def main():
         AREA_DAMAGE = False
         print("NO AREA DAMAGE: an attack skill's adjacent damage is not dealt "
               "(the pre-DAGGERS-B8 arm).")
+    if a.no_attack_activation_windup:
+        global ATTACK_ACTIVATION_WINDUP
+        ATTACK_ACTIVATION_WINDUP = False
+        print("NO ATTACK ACTIVATION WINDUP: an attack skill with a listed "
+              "activation lands AT that activation (the pre-SLICE-F51 arm).")
+    if a.legacy_swing_restart_windup:
+        global SWING_RESTART_RECOVERY
+        SWING_RESTART_RECOVERY = False
+        print("LEGACY SWING RESTART: after an attack skill's hit the next "
+              "swing opens one WINDUP later (ANIMREF-R7b), not one recovery.")
     if a.no_combat_deadlines:
         global COMBAT_DEADLINES
         COMBAT_DEADLINES = False
