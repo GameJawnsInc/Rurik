@@ -1946,7 +1946,8 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   pool, and a wand or staff scales on the character's LEVEL against armour (strike level
   3 × level, the wiki's rule and worked example; the owner's level-1 wand hits and a
   level-20 client run reproduced, 20 of 20 words), where it dealt its raw range at any
-  level against anything). Eleven player types and the hostile-only ranged
+  level against anything; and Dual Shot fires two arrows at one windup, each its own
+  roll at 75 % — the shape OBSERVED on eight pairs, the numbers WIKI). Eleven player types and the hostile-only ranged
   type are one content table with retail items, and EVERY holder of a bow, wand or staff
   shoots — the player, a party caster, a hostile archer: release at the windup, the hit
   distance ÷ speed later, from the weapon's range — a bow ATTACK SKILL releases at its
@@ -1959,10 +1960,9 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   range (RUN-WEAPONS-2) is the instrument; W3 (scythe's extra targets and small
   critical), W4's rest (`587` damage type against armour's `527`, no repo armour row carries
   one yet; `633` requirement has no reader), Q10 (the unmet requirement's 1/3, `636` on
-  foci), Q11 (the martial critical table against the wiki's formula), a staff's `570`
-  recharge word,
-  Q14 Dual Shot's second arrow, Q15 a preparation's own word and substituted arrow; no
-  content spawn row holds a ranged item yet. The spear stays melee until a tape names its
+  foci), a staff's `570` recharge word, Q15 a preparation's own word and substituted
+  arrow; a body's several-arrow skill lands each arrow unreduced; no content spawn row
+  holds a ranged item yet. The spear stays melee until a tape names its
   projectile.
   Captures wanted, one swing per weapon enough for the rate: RUN-WEAPONS-1A (scythe,
   spear, axe), 1B (five bows, staff, wand — predicts 1200 / 1600 / 2800 u/s), 2

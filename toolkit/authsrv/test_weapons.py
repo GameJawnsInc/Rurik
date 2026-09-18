@@ -23,7 +23,7 @@ import agents  # noqa: E402
 import authsrv  # noqa: E402
 import combatmath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=84)   # the BARE-MACHINE number: 84 without the vault's full skills table (section 2 skips), 85 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84)
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=91)   # the BARE-MACHINE number: 91 without the vault's full skills table (section 2 skips), 92 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91)
 check = LEDGER.ok
 
 LEGACY_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
@@ -923,6 +923,114 @@ def section_caster_level():
          authsrv.CASTER_LEVEL, authsrv.caster_critical_rate) = saved
 
 
+def section_dual_shot():
+    print("\n11. WEAPONS-W2d: Dual Shot's two arrows")
+    saved = (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+             authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,
+             authsrv.skill_timing, authsrv._is_attack_skill, authsrv.skill_cost,
+             authsrv.skill_projectile, authsrv.skill_damage, authsrv.attack_skill_terms,
+             authsrv.apply_condition, authsrv.weapon_satisfies)
+    words = lambda batch: [v for op, v in batch if op == 0x00A3 and v[0] in (16, 17)]   # noqa: E731
+    launches = lambda batch: [v for op, v in batch if op == 0x00A4]                     # noqa: E731
+    arrivals = lambda batch: [v for op, v in batch if op == 0x00A7]                     # noqa: E731
+    authsrv.skill_timing = lambda sid: (0.0, 0.0, 10.0)
+    authsrv._is_attack_skill = lambda sid: True
+    authsrv.skill_cost = lambda sid: (0, 0)
+    authsrv.weapon_satisfies = lambda sid: True
+    authsrv.skill_projectile = lambda sid: 680 if sid in (394, 396) else None
+    authsrv.skill_damage = lambda sid, rank: (10.0, "additive") if sid == 394 else None
+    COND = ("a condition", 5.0)
+    authsrv.attack_skill_terms = lambda state, sid, rank, tid, bonus, conn, who: (bonus, COND, False)
+    applied = []
+    authsrv.apply_condition = lambda send, state, tid, cond, dur, rank, conn, sid=None: \
+        applied.append((tid, cond, dur, sid))
+
+    def press_and_e5(distance, skill, rng=(8, 8)):
+        authsrv.apply_party_character({"player_weapon": "starter_bow"})
+        authsrv.PLAYER_SWING_DAMAGE = rng
+        st, sent = _world(distance), []
+        del st["agents"][FOE]["armor_rating"]          # the raw-range branch: the roll exactly
+        send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+        authsrv.handle_skill_press([0, skill, 0, FOE], send, st, 1, authsrv.GAME_CMSG_USE_SKILL)
+        sent.clear()
+        for cast in st["pending_casts"]:
+            for k in ("begin_at", "e5_at", "e3_at", "e6_at"):
+                cast[k] -= 30.0
+        authsrv.cast_tick(send, st, 1)
+        return st, send, sent
+
+    try:
+        check(authsrv.skill_arrows(396) == (2, 0.75) and authsrv.skill_arrows(394) == (1, 1.0)
+              and authsrv.skill_arrows(999999) == (1, 1.0),
+              "skill_arrows: Dual Shot's row says two arrows at 75 % (WIKI; the shape OBSERVED "
+              "on 8 pairs); every other skill one arrow at 100 %")
+        st, send, at_e5 = press_and_e5(800.0, 396)
+        la = launches(at_e5)
+        check(len(la) == 2 and [v[5] for v in la] == [1, 2] and la[0][4] == la[1][4] == 680
+              and la[0][1] == la[1][1] and la[0][3] == la[1][3]
+              and [op for op, _v in at_e5][:3] == [0x00E5, 0x00A4, 0x00A4]
+              and len(st["player_projectiles"]) == 2
+              and [s["strike"]["first"] for s in st["player_projectiles"]] == [True, False]
+              and all(s["strike"]["mult"] == 0.75 for s in st["player_projectiles"]),
+              "at Dual Shot's E5: TWO 0x00A4 in one instant, handles 1 and 2, the same 680 at "
+              "the same aim and flight -- the tape's shape -- each shot carrying the strike, "
+              "the first flagged as the one the condition rides", str(la))
+        hp = st["agents"][FOE]["health"]
+        at_e5.clear()
+        for shot in st["player_projectiles"]:
+            shot["arrives_at"] -= 30.0
+        authsrv.projectile_tick(send, st, 1)
+        ops = [op for op, _v in at_e5]
+        check(len(arrivals(at_e5)) == 2 and [v[1] for v in arrivals(at_e5)] == [1, 2]
+              and len(words(at_e5)) == 2 and hp - st["agents"][FOE]["health"] == 12.0
+              and ops[0] == 0x00A7 and not st["player_projectiles"],
+              "a flight later: both handles close and TWO words land, each 6 of an 8-point "
+              "roll (75 %), the foe down 12 -- each arrow its own roll and word",
+              str([(hex(op), v) for op, v in at_e5]))
+        check(applied == [(FOE, COND[0], COND[1], 396)],
+              "the skill's condition lands ONCE, with the first arrow, not per arrow",
+              str(applied))
+        applied.clear()
+        st, send, at_e5 = press_and_e5(800.0, 394)
+        hp = st["agents"][FOE]["health"]
+        at_e5.clear()
+        for shot in st["player_projectiles"]:
+            shot["arrives_at"] -= 30.0
+        authsrv.projectile_tick(send, st, 1)
+        check(len(launches(at_e5)) == 0 and len(words(at_e5)) == 1
+              and hp - st["agents"][FOE]["health"] == 18.0,
+              "the KNOWN-GOOD arm: Power Shot is ONE arrow at 100 % plus its +10 -- 18 of an "
+              "8-point roll, and the bonus is never scaled")
+        # a BODY's Dual Shot: two launches, two arrivals, two words on the player, one condition
+        applied.clear()
+        st = _body_world((600.0, 0.0), weapon_item="hostile_bow",
+                         skills=[[396, 0.0, 10.0]], skill_ready=[0.0], casting=0,
+                         cast_target=PLAYER, last_swing=time.time())
+        sent = []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+        authsrv.land_skill(send, st, FOE, st["agents"][FOE], 1)
+        la = launches(sent)
+        check(len(la) == 2 and [v[5] for v in la] == [1, 2] and la[0][4] == la[1][4] == 680
+              and len(st["body_projectiles"]) == 2,
+              "a hostile archer's Dual Shot at its windup: two 0x00A4, handles 1 and 2, 680")
+        health = st["player_health"]
+        sent.clear()
+        for shot in st["body_projectiles"]:
+            shot["arrives_at"] -= 30.0
+        authsrv.projectile_tick(send, st, 1)
+        hits = [v for op, v in sent if op == FLOAT_T and v[0] in (16, 17)]
+        check(len(arrivals(sent)) == 2 and len(hits) == 2 and st["player_health"] < health
+              and applied == [(PLAYER, COND[0], COND[1], 396)],
+              "and a flight later both arrows arrive and word the player, the condition once "
+              "-- at the FULL weapon number each (land_swing carries no factor; said)")
+    finally:
+        (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+         authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,
+         authsrv.skill_timing, authsrv._is_attack_skill, authsrv.skill_cost,
+         authsrv.skill_projectile, authsrv.skill_damage, authsrv.attack_skill_terms,
+         authsrv.apply_condition, authsrv.weapon_satisfies) = saved
+
+
 def main():
     section_table()
     section_skills()
@@ -934,6 +1042,7 @@ def main():
     section_approach()
     section_weapon_energy()
     section_caster_level()
+    section_dual_shot()
     return LEDGER.verdict()
 
 

@@ -246,10 +246,10 @@ exposure floor and an abort written down.
 | WEAPONS-Q8 | ~~Which message names the OBSERVER's own weapon type~~ **closed §9: `0x006E` (and `0x0147`)** | — |
 | WEAPONS-Q9 | ~~What `634` beside every `633` holds~~ **closed §9: the required weapon's damage range (max, min), in place of `584`** | — |
 | WEAPONS-Q10 | The unmet-requirement term — weapon, shield, focus | RUN-3 |
-| WEAPONS-Q11 | Does GWW's critical formula reproduce the five measured rates? | desk |
+| WEAPONS-Q11 | ~~Does GWW's critical formula reproduce the five measured rates?~~ **closed §17: NO — 8 / 9 / 11 / 13 / 14 % predicted against 6 / 16 / 19 / 24 / 34 % measured; the table stays the measurement** | — |
 | WEAPONS-Q12 | Is ×1.2 already inside the isle study's PvP-weapon numbers? | desk, then RUN-3 |
 | WEAPONS-Q13 | The sword's short gap after a skill's hit (from DAGGERS §9) | desk, `timingjoin.py --swings` |
-| WEAPONS-Q14 | Dual Shot's second arrow: one strike record or two, and how the 25 % rides each word | desk (8 pairs on `20260817T231139`), then a run |
+| WEAPONS-Q14 | ~~Dual Shot's second arrow~~ **closed §18: two strike records, each its own roll and word; the 25 % is WIKI, unmeasured** | — |
 | WEAPONS-Q15 | A preparation's own word (Kindle Arrows: a second `0x00A3` per arrival, 4 of 5) and its substituted arrow (`+0x88` on a type-19 row) | desk, `weaponcensus.py --skill-shots` |
 | WEAPONS-Q16 | What parks retail's client at range on an attack-follow — its own `0x0026` intent plus a client-side range (RECONSTRUCTION), since neither the hold nor the start does (§14) | RUN-WEAPONS-2 (an owner press), then `codescan` on the follow resolver |
 
@@ -728,6 +728,67 @@ mastery's 9 with a hammer keeping its mastery; the revert arm and its flag. Floo
 bare, 85 with the vault.
 
 **Still open here.** Q10 (the unmet requirement's 1/3 — the wiki's number, RUN-WEAPONS-3);
-Q11 (the martial critical table against the same formula); Q12 (×1.2 customisation: the
-one critical on the owner's tape, 9 of a 3–5 wand at level 1, is 8.5 with it and 7 without
-— n = 1); `587` against armour's `527` (no repo armour row carries one yet).
+Q12 (×1.2 customisation: the one critical on the owner's tape, 9 of a 3–5 wand at level 1,
+is 8.5 with it and 7 without — n = 1); `587` against armour's `527` (no repo armour row
+carries one yet). Q11 is §17.
+
+## 17. WEAPONS-Q11 — closed 2026-09-18 (desk): the wiki's critical formula is refuted by the isle's table
+
+GWW "Damage calculation" §Critical hits carries a chance formula attributed to Isaiah
+Cartwright's talk page:
+
+```
+chance = 0.05 × 2^((8·La + 4·Ws + 6·min(Ws, (La + 4) / 2) − 15·Ld − 100) / 40) × (1 − 0.01·Ws) + 0.01·Ws − WeaponCrit
+```
+
+`studies/isle` measured the rate on one level-20 body at one armour rating by a level-20
+Warrior (495 events over seven blocks, roughly seventy swings per rank):
+
+| rank | wiki, 20 vs 20 | measured (isle) | ratio |
+|---|---|---|---|
+| 8 | 8.3 % | 6.25 % | 0.75 |
+| 9 | 9.3 % | 15.69 % | 1.68 |
+| 11 | 11.5 % | 18.60 % | 1.62 |
+| 12 | 12.6 % | 23.68 % | 1.89 |
+| 13 | 13.6 % | 34.29 % | 2.52 |
+
+Not a constant factor and not the shape: the formula rises a point per rank where the
+table rises five. With a lower target level the formula's base term grows for every rank
+at once, so no `Ld` rescues it. **REFUTED as written; the five-point table stays the
+measurement and `critical_rate` its interpolation.** The formula's one surviving use is
+§16's caster critical, its weapon-skill-0 branch, where nothing has been measured — it is
+WIKI-only there, and at 0.08 % (20 vs 20) it is indistinguishable from none, which is what
+the plan's "very low" said.
+
+## 18. WEAPONS-W2d — shipped 2026-09-18: Dual Shot's two arrows
+
+**The shape, OBSERVED on eight windups by bodies on `20260817T231139`.** At the windup TWO
+`0x00A4` in one instant with consecutive handles (1 and 2, or 2 and 3 when a shot was still
+outstanding), one projectile (680), one aim and one flight; each arrow closed by its own
+`0x00A7` (together when the flights match, 20 ms apart when they differ by 2 ms) and
+**worded on its own** — one of a pair a critical (property 17) while the other is not —
+each with the Kindle Arrows word beside it (a constant −0.0072 of the target's pool, twice).
+Two independent strikes, then. **The numbers are WIKI**: GWW "Dual Shot" (id 396), "Shoot
+two arrows simultaneously at target foe. These arrows deal 25% less damage", and its note
+that bonus damage from conjures, preparations and weapon spells is not reduced — which is
+what the paired words show. The 25 % itself is unmeasured: those targets' pools are not
+broadcast on the tape, so no arrow's points could be read against a plain shot's.
+
+**What shipped.** `[skill_arrows.396]` in `content/world.toml` (`arrows = 2`, `damage_pct
+= 75`, provenance wiki + the tape's shape); `skill_arrows(id)` → (count, factor), (1, 1.0)
+for every skill without a row; `launch_player_skill_shot` launches `count` shots in one
+instant, each carrying the strike with `mult` and a `first` flag; `land_player_skill_shot`
+lands each through `hit_enemy(damage_mult=)`, which scales the WEAPON's number beside the
+weakness term and leaves the skill's bonus whole, and rides the adjacent damage, the
+knock-down and the skill's condition on the first arrow only; a body's `land_skill`
+launches as many, its strikes landing through `land_swing` at the full weapon number
+(`land_swing` carries no factor — the 75 % is the player's alone, said). On the client
+(`20260918T175321`, the bow at a passive hostile from 800 u, three presses): E5, two
+launches (handles 1 and 2, 0.500 s), E3 in one batch; two arrivals and two words per press
+(5 / 5, 6 / 5, …); no assert.
+
+**Test.** `test_weapons` §11: the row and the default; Dual Shot's E5 sending two launches
+with the tape's shape and two strike records; both handles closing and two words of 6
+from an 8-point roll (the foe down 12); the condition once; Power Shot's one arrow at
+100 % plus its unscaled +10; a hostile archer's Dual Shot launching two and landing two on
+the player with the condition once. Floor 91 bare, 92 with the vault.

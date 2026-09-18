@@ -27,6 +27,29 @@ move back.
 
 ---
 
+### ✅ WEAPONS-W2d — 2026-09-18 — **Dual Shot fires two arrows at one windup, each its own roll and word at 75 %; Q11 closed the same day (the wiki's critical formula is refuted by the isle's table)** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) §17–18)
+
+The shape is OBSERVED on eight Dual Shot windups by bodies on `20260817T231139`: two
+`0x00A4` in one instant with consecutive handles and one projectile, each arrow closed
+and worded on its own (one of a pair a critical while the other is not), the
+preparation's word beside each; the numbers are WIKI (GWW "Dual Shot": two arrows, 25 %
+less, bonus damage not reduced), the 25 % unmeasured because those targets' pools are not
+broadcast. Shipped: `[skill_arrows.396]`, `skill_arrows(id)`, `launch_player_skill_shot`
+launching `count` shots with the strike's `mult` and a `first` flag,
+`hit_enemy(damage_mult=)` scaling the weapon's number beside the weakness term and
+sparing the bonus, the condition and adjacent damage on the first arrow only; a body
+launches as many and lands each unreduced (said). On the client (`20260918T175321`):
+E5, two launches, E3 in one batch, two arrivals and two words per press, no assert.
+**Q11:** GWW's critical formula (Isaiah Cartwright's) predicts 8.3 / 9.3 / 11.5 / 12.6 /
+13.6 % at ranks 8 / 9 / 11 / 12 / 13 where the isle measured 6.3 / 15.7 / 18.6 / 23.7 /
+34.3 — not a factor, not the shape, no target level rescues it: refuted, the table stays
+the measurement; its one use is W4c's caster critical (weapon skill 0, WIKI-only,
+indistinguishable from none). `test_weapons` 85 → 92 (91 bare), `test_content` 48,
+`test_guards` 45, `test_castcycle` 54, `test_mechanics` 246, `test_playerswing` 191,
+`test_agentlife` 551.
+
+---
+
 ### ✅ WEAPONS-W4c — 2026-09-18 — **a wand or staff scales on the character's LEVEL against the target's armour (strike level 3 × level), where it dealt its raw range at any level against anything** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) §16)
 
 A caster weapon names no mastery, so `player_weapon_rank` was None and `hit_enemy` took

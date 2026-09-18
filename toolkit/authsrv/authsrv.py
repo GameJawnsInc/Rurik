@@ -11307,10 +11307,14 @@ def land_body_skill_shot(send, state, conn_id, shot, agent, strike):
     knock-down and the random condition on a landed hit, then the skill's
     own condition on a live target: land_skill's order, a flight later."""
     who, tid, sid = shot["shooter"], shot["target"], strike["skill_id"]
+    first = strike.get("first", True)
+    # WEAPONS-W2d: a body's several-arrow skill lands each arrow through
+    # land_swing at the FULL weapon number -- land_swing carries no damage
+    # factor, so the 75 % is the player's alone here; said, not hidden.
     _res = land_swing(_without_melee_close(send, who), state, who, agent,
                       conn_id, bonus=strike["bonus"], skill_id=sid,
                       target_id=tid)
-    if _res == "landed" and not target_dead(state, tid):
+    if _res == "landed" and first and not target_dead(state, tid):
         if strike["knock_down"]:
             knock_down(send, state, tid, conn_id, f"agent {who}'s skill {sid}",
                        skill_knock_down_seconds(sid))
@@ -11318,7 +11322,7 @@ def land_body_skill_shot(send, state, conn_id, shot, agent, strike):
         if _rc is not None:
             apply_condition(send, state, tid, _rc[0], _rc[1], strike["rank"],
                             conn_id, sid)
-    if strike["inflicted"] and not target_dead(state, tid):
+    if strike["inflicted"] and first and not target_dead(state, tid):
         apply_condition(send, state, tid, strike["inflicted"][0],
                         strike["inflicted"][1], strike["rank"], conn_id, sid)
     return _res
@@ -11433,19 +11437,38 @@ def skill_shot_how(how, skill_id):
     return how if own is None else dict(how, projectile=own)
 
 
+def skill_arrows(skill_id):
+    """(how many arrows the skill launches at one windup, each arrow's WEAPON
+    damage factor) -- a [skill_arrows] row (Dual Shot: 2 at 0.75, WIKI; the
+    shape OBSERVED on 8 pairs, WEAPONS-W2d), else (1, 1.0)."""
+    row = agents.WORLD.rows("skill_arrows").get(str(skill_id))
+    if not row:
+        return 1, 1.0
+    return max(1, int(row.get("arrows", 1))), float(row.get("damage_pct", 100)) / 100.0
+
+
 def launch_player_skill_shot(send, state, conn_id, cast, how, strike):
-    """The E5 of a RANGED attack skill: its projectile leaves, carrying the
-    strike it will land at the arrival. Returns "launched", or None when
-    there is nothing left to shoot at (a corpse -- the E5 still went out)."""
-    shot = launch_player_projectile(send, state, conn_id,
-                                    {"target": cast["target"]}, how)
-    if shot is None:
+    """The E5 of a RANGED attack skill: its projectile leaves -- every one of
+    them, for a skill that shoots several (WEAPONS-W2d: Dual Shot's two, in one
+    instant with consecutive handles, the tape's shape) -- each carrying the
+    strike it will land at the arrival, the skill's condition and its adjacent
+    damage riding the FIRST arrow only. Returns "launched", or None when there
+    is nothing left to shoot at (a corpse -- the E5 still went out)."""
+    count, mult = skill_arrows(cast["skill_id"])
+    launched = 0
+    for i in range(count):
+        shot = launch_player_projectile(send, state, conn_id,
+                                        {"target": cast["target"]}, how)
+        if shot is None:
+            break
+        shot["strike"] = dict(strike, mult=mult, first=(i == 0))
+        launched += 1
+    if not launched:
         return None
-    shot["strike"] = strike
-    print(f"[c{conn_id}] skill {cast['skill_id']} RELEASES projectile "
-          f"{how['projectile']} at agent {cast['target']}: the strike lands "
-          f"at the arrival, {shot['arrives_at'] - time.time():.3f} s away "
-          f"[WEAPONS-W2c]", flush=True)
+    print(f"[c{conn_id}] skill {cast['skill_id']} RELEASES "
+          f"{launched} x projectile {how['projectile']} at agent {cast['target']}"
+          f"{f' at {mult:.0%} weapon damage each' if mult != 1.0 else ''}: the "
+          f"strike lands at the arrival [WEAPONS-W2c]", flush=True)
     return "launched"
 
 
@@ -11456,11 +11479,13 @@ def land_player_skill_shot(send, state, conn_id, shot):
     the E5 block's order, a flight later. `hit_enemy` re-reads the target."""
     strike = shot["strike"]
     sid, rank, tid = strike["skill_id"], strike["rank"], shot["target"]
+    first = strike.get("first", True)
     _res = hit_enemy(send, state, tid, conn_id, bonus_damage=strike["bonus"],
                      skill_strike=True, projectile=True, skill_id=sid,
+                     damage_mult=strike.get("mult", 1.0),
                      label=f"skill {sid}'s arrow lands")
     victim = state.get("agents", {}).get(tid)
-    if _res == "landed":
+    if _res == "landed" and first:
         strike_adjacent(send, state, sid, rank, tid, conn_id)
         if victim and not victim.get("dead"):
             if strike["knock_down"]:
@@ -11471,7 +11496,7 @@ def land_player_skill_shot(send, state, conn_id, shot):
                 apply_condition(send, state, tid, _rc[0], _rc[1], rank,
                                 conn_id, sid)
     inflicted = strike["inflicted"]
-    if inflicted and victim and not victim.get("dead"):
+    if inflicted and first and victim and not victim.get("dead"):
         apply_condition(send, state, tid, inflicted[0], inflicted[1], rank,
                         conn_id, sid)
     return _res
@@ -14436,7 +14461,7 @@ def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
 def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
               exact=None, swing=True, label="one swing", armed=False,
               skill_strike=False, skill_id=None, before_damage=None,
-              projectile=False):
+              projectile=False, damage_mult=1.0):
     """Land one swing on a hostile agent, if the swing timer allows it.
 
     `skill_strike` TRUE is an ATTACK SKILL's execution (ANIMREF-R6): a full
@@ -14548,6 +14573,11 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
         _wk = weakness_multiplier(state, PLAYER_AGENT_ID)
         if _wk != 1.0:
             dealt = (dealt - bonus_damage) * _wk + bonus_damage
+    # WEAPONS-W2d: an arrow of a several-arrow skill deals its share of the
+    # WEAPON's number (Dual Shot's 75 %); the skill's bonus, like a
+    # preparation's, is not reduced (WIKI "Dual Shot" Notes).
+    if exact is None and swing and damage_mult != 1.0:
+        dealt = (dealt - bonus_damage) * float(damage_mult) + bonus_damage
     # A PREPARATION RIDES THE SWING, if the weapon fires arrows -- see
     # swing_preparation_bonus for the gate and the named AoE gap. Folded into
     # the same damage number, not sent as a second one, exactly as an attack
@@ -22991,13 +23021,17 @@ def land_skill(send, state, agent_id, agent, conn_id):
             # strike (bonus, knock-down, condition) rides the arrival in
             # body_projectile_tick; retail's body skill shots carry no 46
             # (0 of 129) and land a flight later, as the player's do.
-            _shot = launch_body_projectile(send, state, conn_id, agent_id,
-                                           agent, _tid,
-                                           skill_shot_how(_how, skill_id))
-            if _shot is not None:
+            _count, _mult = skill_arrows(skill_id)               # WEAPONS-W2d
+            for _i in range(_count):
+                _shot = launch_body_projectile(send, state, conn_id, agent_id,
+                                               agent, _tid,
+                                               skill_shot_how(_how, skill_id))
+                if _shot is None:
+                    break
                 _shot["strike"] = {"skill_id": skill_id, "rank": _rank,
                                    "bonus": bonus, "inflicted": inflicted,
-                                   "knock_down": _kd}
+                                   "knock_down": _kd, "mult": _mult,
+                                   "first": _i == 0}
             _res, inflicted = "launched", None
         else:
             _res = land_swing(send, state, agent_id, agent, conn_id, bonus=bonus,

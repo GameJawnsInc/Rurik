@@ -11353,8 +11353,14 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   20260807T143055 reproduced (5 at AL 3, 3-5 at AL 6, a 3-3 wand's 3); the staff in its
   listed range at 20; a level-3 body holding the caster staff landing 8 of a 20 against
   AL 60 where its rank-3 mastery gave 9, a hammer body keeping its mastery;
-  `--no-caster-level` restoring the raw range at any level and the flag existing. Floor
-  84 bare, 85 with the vault),
+  `--no-caster-level` restoring the raw range at any level and the flag existing. §11
+  (WEAPONS-W2d, 2026-09-18) is DUAL SHOT'S TWO ARROWS: `skill_arrows` reading the row's 2
+  at 75 % and (1, 1.0) for every other skill; Dual Shot's E5 sending TWO 0x00A4 in one
+  instant with handles 1 and 2, the same 680 at the same aim and flight, two strike records
+  with the first flagged; both handles closing and two words of 6 from an 8-point roll (the
+  foe down 12); the condition once; Power Shot's one arrow at 100 % plus its unscaled +10; a
+  hostile archer's Dual Shot launching two and landing two on the player with the condition
+  once. Floor 91 bare, 92 with the vault),
   `toolkit/authsrv/test_weaponcensus.py` (**2026-09-18, WEAPONS-W0 (studies/weapons);
   WEAPONS-W2c added §1b and four corpus pins the same day: `skill_shots()` on the
   synthetic wire finds exactly three SKILL shots and no weapon shot among them -- the

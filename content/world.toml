@@ -2074,3 +2074,26 @@ player_skills = [782, 780, 775, 781, 783, 2]
 [party.daggers20.provenance]
 source = "invented"
 note = """Ours (DAGGERS, 2026-09-17). [party.daggers] with RUN-DAGGERS-1's ranks: level 20 (health 480, WIKI "Level"), Dagger Mastery 12 and Critical Strikes 8 -- what the owner's PvP Assassin carried on 20260917T160915 off 0x003A -- out of level 20's 200 points (97 + 37 spent). It exists to EXPOSE what rank 3 and rank 2 cannot on a short run: a double strike a swing in four (2 % + 2 % x 12) and 2 energy a critical. The weapon stays the starter daggers' 1-3 on purpose, so a 100-health practice target outlives a minute of it; the owner's 7-17 PvP pair is not a content row."""
+
+# ---- WEAPONS-W2d (2026-09-18): skills that shoot MORE THAN ONE arrow ---------
+# One row per skill that launches several projectiles at one windup: how many,
+# and what each arrow's WEAPON damage is scaled by (the skill's bonus and a
+# preparation's word are not -- WIKI, and the tape's paired words agree). A
+# skill with no row shoots one arrow at 100 %.
+[skill_arrows.396]
+arrows = 2
+damage_pct = 75
+
+[skill_arrows.396.provenance]
+source = "wiki"
+page = 'GWW, "Dual Shot" (id 396), rev. as fetched 2026-09-18'
+verified = """WIKI for the two numbers: "Shoot two arrows simultaneously at target foe. \
+These arrows deal 25% less damage", with the note "Bonus damage (i.e. from Conjure \
+spells, Glass Arrows and certain weapon spells) is not reduced". OBSERVED for the SHAPE \
+on ArenaNet's own wire (weaponcensus.py --skill-shots; studies/weapons section 18): eight \
+Dual Shot windups by bodies on 20260817T231139 each launch TWO 0x00A4 in one instant with \
+consecutive handles (1 and 2, or 2 and 3 with a shot still outstanding) and one projectile \
+(680), each arrow closed by its own 0x00A7 and worded on its own (one of a pair a critical \
+while the other is not), each with the preparation's constant word beside it. The 25 % \
+itself is UNMEASURED: the targets' pools on that tape are not broadcast, so no arrow's \
+points could be read against a plain shot's."""
