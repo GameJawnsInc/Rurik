@@ -29,6 +29,10 @@ rule; agent 1 on ours):
   launch->word - flight  the hit's word against launch + the 0x00A4's own f32
                          flight time, SIGNED (retail: a few milliseconds)
   launch->arrival - flight   the same for the 0x00A7 that closes the launch's handle
+  E5->launch <skill>     a SKILL shot (WEAPONS-W2c): the observer's 0x00A4 within SAME
+                         of its own 0x00E5 -- retail's is the E5's own batch, 0.000
+  skill launch->word - flight, skill launch->arrival - flight
+                         the two flight rows for that launch
   double gap             0x009F [2, me, 0] behind the word before it
   dual gap               0x009F [47, me, 0] behind its skill's 0x00E5
   debit->E5 <skill>      the energy debit (0x00A2 property 62) to the landing
@@ -206,13 +210,29 @@ def census(s2c, me, ias=()):
     fails = [t for t, op, v in s2c if op == PINT_T and v[1] == 38 and v[3] == me]
     skill_ts = [t for t, op, v in s2c if op in (E3, E4, E5) and v[1] == me]
     arrivals = [(t, v[2]) for t, op, v in s2c if op == ARRIVE and v[1] == me]
+    e5_launch = [(t, v[2]) for t, op, v in s2c if op == E5 and v[1] == me]
     for t, op, v in s2c:
         if op != LAUNCH or v[1] != me:
+            continue
+        flight = _f32(v[4])
+        # WEAPONS-W2c: a launch riding the observer's own E5 is a SKILL shot --
+        # scored on its own rows, never as a swing's.
+        own = [(x, sid) for x, sid in e5_launch if abs(t - x) <= SAME]
+        if own:
+            x, sid = own[0]
+            rows[f"E5->launch {sid} {tag(t)}"].append(t - x)
+            hit = [w for w in words + fails if t <= w < t + flight + 0.25]
+            if hit:
+                rows[f"skill launch->word - flight {sid} {tag(t)}"].append(
+                    min(hit, key=lambda w: abs(w - t - flight)) - t - flight)
+            closed = [a for a, h in arrivals if h == v[6] and t <= a < t + flight + 0.25]
+            if closed:
+                rows[f"skill launch->arrival - flight {tag(t)}"].append(
+                    closed[0] - t - flight)
             continue
         before = [x for x in starts if 0.0 <= t - x < 3.0]
         if not before or any(before[-1] < k <= t for k in skill_ts):
             continue
-        flight = _f32(v[4])
         rows[f"swing start->launch {tag(before[-1])}"].append(t - before[-1])
         hit = [w for w in words + fails if t <= w < t + flight + 0.25]
         if hit:

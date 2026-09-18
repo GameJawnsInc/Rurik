@@ -7305,7 +7305,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   them went red on a FileNotFoundError rather than on a check, which is a control that
   proves nothing while looking like it proved everything. No vault, no socket, no
   client. ~1 s),
-  `toolkit/clientscan/test_skilltable.py` (client skill rows vs. the wiki; section 9, DAGGERS-B1, is the Assassin chain and the weapon mask -- `combo_req` at +0x14 carries exactly the wiki's "must follow" bit on 20 rows and 0 on the 13 with no clause, the rival `1 << (combo - 1)` is refuted by all 20, `combo` at +0x30 is the wiki's Lead / Off-Hand / Dual type on 32 rows plus the four non-attacks that "count as" one, and a mastery skill's `weapon_req` always holds its own weapon's bit over 150 rows; the first draft of "every chain attack wants daggers" went red on 2116, which takes any melee weapon; and +0x6C is the AoE radius -- its four commonest values are 156 / 240 / 312 / 1000 and Death Blossom's is 156, DAGGERS-B8. 57 checks),
+  `toolkit/clientscan/test_skilltable.py` (client skill rows vs. the wiki; section 9, DAGGERS-B1, is the Assassin chain and the weapon mask -- `combo_req` at +0x14 carries exactly the wiki's "must follow" bit on 20 rows and 0 on the 13 with no clause, the rival `1 << (combo - 1)` is refuted by all 20, `combo` at +0x30 is the wiki's Lead / Off-Hand / Dual type on 32 rows plus the four non-attacks that "count as" one, and a mastery skill's `weapon_req` always holds its own weapon's bit over 150 rows; the first draft of "every chain attack wants daggers" went red on 2116, which takes any melee weapon; and +0x6C is the AoE radius -- its four commonest values are 156 / 240 / 312 / 1000 and Death Blossom's is 156, DAGGERS-B8. Section 10 (WEAPONS-C10, 2026-09-18) is the PROJECTILE and its IMPACT: +0x88 reads 680 on Pin Down, Power Shot, Dual Shot and Determined Shot (the projectile each launched on the wire, 12 of 12), 2077 -- the visual pair's own "none" -- on Poison Arrow and Needling Shot (whose launches carried the held bow's arrow), 854 / 343 / 403 / 405 on Dancing Daggers / Fireball / Lightning Orb / Lightning Javelin; +0x84 is the impact visual (344 behind the two 343s, 404 behind the Lightning pair, 855 behind 854, none on the bow attacks) and a preparation carries the arrow it substitutes (Kindle Arrows 343); the value set (30..400 corpus skills with a projectile, >= 4 of them attacks) and the emitter carrying `projectile` and keeping `impact_visual` unsent. 63 checks),
   `toolkit/clientscan/test_skillsentinel.py` (**the duration-slot sentinel
   `0x20000` is ENERGY UPKEEP, in ArenaNet's own word** — studies/skills §13
   left "what the enum means" NOT FOUND and §13.1 answered it. §1 pins the
@@ -11308,8 +11308,44 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   the staff's damage type; handles per SHOOTER, arrivals as combat deadlines, shots at
   a body dead in flight closed and landing nothing, `--no-projectiles` reverting
   bodies, and §1 re-pinned: type 28 is a row a HOSTILE holds and the player loader
-  refuses. Floor 43 bare, 44 with the vault),
-  `toolkit/authsrv/test_weaponcensus.py` (**2026-09-18, WEAPONS-W0 (studies/weapons):
+  refuses. §7 (WEAPONS-W2c, 2026-09-18) is ATTACK SKILLS SHOOTING, with the stubs
+  test_castcycle's attack sections use so the press and the tick run bare
+  (`_is_attack_skill`, `skill_timing`, `skill_cost`, `weapon_satisfies`, a stubbed
+  `skill_damage` of +10, an `attack_skill_terms` returning a sentinel condition, and an
+  `apply_condition` that records its calls): the real `skill_projectile` on injected rows
+  (Power Shot's 680; None for 2077, for 0, for a row without the column, for no row),
+  `skill_shot_how` swapping in the skill's projectile and nothing else; then through the
+  real press and cast tick with the bow at 800 u -- the press announces [50, me, foe, 394]
+  and launches nothing; at the E5 0x00E5, ONE 0x00A4 [me, the target's position, 0, 0.5 s,
+  the SKILL's 680, handle 1, the BOW's flag 1], 0x00E3, with NO 46, no word, no damage and
+  no condition; the shot carrying its strike (skill, bonus, condition) and its arrival a
+  combat deadline; a flight later 0x00A7 [me, 1, kind 1] FIRST then ONE word for 5 + 10
+  with the foe's health down exactly that, no property 1, no 46, the condition applied
+  THERE and the handle spent; Poison Arrow (no +0x88) releasing the bow's 143; a target
+  dead in flight closed with nothing landing and nothing inflicted; the KNOWN-GOOD arm (a
+  sword's press strikes at the E5 with its 46, its word and its condition, launching
+  nothing); a hostile archer's Power Shot through `land_skill` -- ONE 0x00A4 [it, the
+  player's position, 0, 0.5 s at 1200, 680, 1, 1], no 46, no word, its strike on the shot
+  -- and a flight later 0x00A7 FIRST, the word on the player, NO [1] and NO [46], the
+  condition landing there; the hammer control closing with [46, it, 0] and launching
+  nothing; `--no-projectiles` restoring the E5 strike with its 46. Floor 59 bare, 60 with
+  the vault),
+  `toolkit/authsrv/test_weaponcensus.py` (**2026-09-18, WEAPONS-W0 (studies/weapons);
+  WEAPONS-W2c added §1b and four corpus pins the same day: `skill_shots()` on the
+  synthetic wire finds exactly three SKILL shots and no weapon shot among them -- the
+  player's E4-then-launch, the player's Power Shot in its E5 batch (E5->launch 0,
+  projectile 680 with the bow's flag 1 / kind 1, closed, the word at launch + flight, no
+  46, the held type and its 617 beside) and the archer's announced one (launched one
+  2.475 s windup after its [50], closed, no 46) -- while the archer's three plain shots
+  stay weapon shots in `shooters()`, the two censuses partitioning its launches; on the
+  corpus (skipped bare): >= 151 skill shots every one closed and NONE with a 46 within 50
+  ms of the launch, bow attack skills launching ONE projectile each (Pin Down, Power Shot,
+  Dual Shot, Determined Shot 680; Poison Arrow and Needling Shot the held bow's own 143 /
+  343), WEAPONS-C10's two instruments -- the skill table's +0x88 naming the launched
+  projectile on >= 140 skill shots and disagreeing on none -- and the clocks: a player's
+  bow skill launching IN its E5 batch (5 of 5 within 20 ms), a body's one windup after its
+  announcement (median 1.1375 +- 0.01 over >= 40). Floor 20 bare, 38 with the vault.**
+  The original entry:
   `weaponcensus.py`, what every body on a retail tape HOLDS and how it attacks with it.**
   `0x006D` / `0x006E` hands joined to `0x0161` item rows, to `0x0035`'s attack duration,
   to swing starts and to `0x00A4` / `0x00A7` launches, per body and never in aggregate.

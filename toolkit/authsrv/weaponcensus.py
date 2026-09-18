@@ -4,6 +4,7 @@
     python toolkit/authsrv/weaponcensus.py --capture 20260914T005758
     python toolkit/authsrv/weaponcensus.py --shooters          # one row per ranged attacker
     python toolkit/authsrv/weaponcensus.py --attackers         # one row per attacker
+    python toolkit/authsrv/weaponcensus.py --skill-shots       # one row per SKILL shot
 
 THE HOLE THIS FILLS (studies/weapons/PLAN.md, WEAPONS-W0). The server wires four
 weapon types and took every other type's numbers from the wiki. The tapes already
@@ -44,6 +45,12 @@ Five questions, each answered per body and never in aggregate:
   skill's (0x00E3 / 0x00E4 / 0x00E5, or the 0x00A0 property 50 / 60 a hostile's skill
   announces itself by) -- a spell's projectile (field 5 in the hundreds) and a bow
   attack skill's arrow are different objects and are counted apart.
+  SKILL SHOTS  the complement (WEAPONS-W2c): a launch whose shooter's latest event is
+             a skill's -- a player's 0x00E5 (its launch rides the E5's own batch) or
+             a body's announcement -- joined to the skill id, the projectile, the
+             arrow flag, the arrival's kind, whether a 46 sits beside the launch
+             (retail: never), and the event-to-launch delay (a body's is the
+             weapon's windup)
 
 Nothing here knows a right answer; the test pins what the tapes said.
 
@@ -276,6 +283,60 @@ def shooters(s2c):
     return [r for r in table.values() if r["shots"]]
 
 
+def skill_shots(s2c):
+    """One row per SKILL shot (WEAPONS-W2c): a launch whose shooter's latest event
+    inside SHOT_WINDOW is a skill's -- a player's 0x00E4 / 0x00E5, or a body's
+    [50 | 60, shooter, target, skill] announcement -- rather than a plain [4] start.
+    The complement of shooters(). `event_to_launch` is measured from that event;
+    `close46` says whether a [46, shooter, 0] sits within 50 ms of the launch."""
+    items, hands = items_of(s2c), hands_timeline(s2c)
+    players = {v[1] for _t, op, v in s2c if op == PLAYER_HANDS and len(v) > 3}
+    events = collections.defaultdict(list)       # agent -> [(t, kind, skill)]
+    arrivals = collections.defaultdict(list)     # agent -> [(t, handle, kind)]
+    words = collections.defaultdict(list)        # source -> [t]
+    closes = collections.defaultdict(list)       # agent -> [t] of a 46
+    for t, op, v in s2c:
+        if op == PINT_T and len(v) > 4 and v[1] == START:
+            events[v[2]].append((t, "start", None))
+        elif op == PINT_T and len(v) > 4 and v[1] in ANNOUNCED:
+            events[v[2]].append((t, f"announce{v[1]}", v[4]))
+        elif op in (E4, E5) and len(v) > 2:
+            events[v[1]].append((t, "E4" if op == E4 else "E5", v[2]))
+        elif op == ARRIVE and len(v) > 3:
+            arrivals[v[1]].append((t, v[2], v[3]))
+        elif op == PFLOAT_T and len(v) > 4 and v[1] in WORDS:
+            words[v[3]].append(t)
+        elif op == PINT and len(v) > 2 and v[1] == 46:
+            closes[v[2]].append(t)
+    rows = []
+    for t, op, v in s2c:
+        if op != LAUNCH or len(v) < 8:
+            continue
+        agent = v[1]
+        before = [e for e in events.get(agent, ()) if 0.0 <= t - e[0] < SHOT_WINDOW]
+        if not before or before[-1][1] == "start":
+            continue                                  # a weapon shot: shooters()
+        ev_t, kind, skill = before[-1]
+        held = held_at(hands, agent, t)
+        lead = held[0] if held else None
+        flight = _f32(v[4])
+        closing = [k for a, h, k in arrivals.get(agent, ())
+                   if h == v[6] and t <= a < t + flight + 0.25]
+        hit = [w for w in words.get(agent, ()) if t <= w < t + flight + 0.25]
+        rows.append({
+            "agent": agent, "player": agent in players, "skill": skill,
+            "event": kind, "event_to_launch": t - ev_t,
+            "type": None if lead is None else held_type(items, lead),
+            "w617": ((word_of(items, lead, PROJECTILE) or (None, None))[1]
+                     if lead is not None else None),
+            "projectile": v[5], "arrow": v[7], "handle": v[6], "flight": flight,
+            "kind": closing[0] if closing else None, "closed": bool(closing),
+            "word_error": ((min(hit, key=lambda w: abs(w - t - flight)) - t - flight)
+                           if hit else None),
+            "close46": any(abs(c - t) < 0.05 for c in closes.get(agent, ()))})
+    return rows
+
+
 def arrival_verdict(row):
     """How a shooter's 0x00A7 third field compares with its weapon's 587 word."""
     if row["w587"] is None:
@@ -311,7 +372,7 @@ def corpus(stamp=None):
     """Everything the CLI prints, as one dict -- what test_weaponcensus pins."""
     lead, off = collections.Counter(), collections.Counter()
     words = collections.defaultdict(lambda: collections.defaultdict(collections.Counter))
-    att, sho = [], []
+    att, sho, ssh = [], [], []
     spd = collections.defaultdict(collections.Counter)      # (type, 609) -> base
     for name, gf, s2c in connections(stamp):
         for r in speeds(s2c):
@@ -326,15 +387,18 @@ def corpus(stamp=None):
             att.append(dict(r, capture=name, conn=gf))
         for r in shooters(s2c):
             sho.append(dict(r, capture=name, conn=gf))
+        for r in skill_shots(s2c):
+            ssh.append(dict(r, capture=name, conn=gf))
     return {"lead": lead, "off": off, "words": words, "attackers": att,
-            "shooters": sho, "speeds": spd}
+            "shooters": sho, "speeds": spd, "skill_shots": ssh}
 
 
 def _p50(xs):
     return statistics.median(xs) if xs else None
 
 
-def report(c, show_attackers=False, show_shooters=False, out=sys.stdout):
+def report(c, show_attackers=False, show_shooters=False, out=sys.stdout,
+           show_skill_shots=False):
     p = lambda *a: print(*a, file=out)                          # noqa: E731
     p("LEADHAND item types (bodies):", sorted(c["lead"].items(), key=lambda kv: -kv[1]))
     p("OFFHAND  item types (bodies):", sorted(c["off"].items(), key=lambda kv: -kv[1]))
@@ -389,6 +453,31 @@ def report(c, show_attackers=False, show_shooters=False, out=sys.stdout):
               f"field7 {dict(r['field7'])} start->launch {_p50(r['start_to_launch']):.3f} "
               f"flight {min(r['flight']):.3f}..{max(r['flight']):.3f}  "
               f"{projectile_verdict(r)}")
+    ss = c.get("skill_shots") or []
+    p(f"\nSKILL SHOTS: {len(ss)} (a launch behind a skill's E5 / announcement, not a swing "
+      f"start; WEAPONS-W2c);  closed by 0x00A7: {sum(r['closed'] for r in ss)};  "
+      f"a 46 within 50 ms of the launch: {sum(r['close46'] for r in ss)}")
+    by = collections.Counter((r["player"], r["type"], r["skill"], r["projectile"],
+                              r["arrow"], r["kind"]) for r in ss)
+    for k, n in sorted(by.items(), key=lambda kv: (-kv[1], str(kv[0]))):
+        p(f"  {n:4d}  {'player' if k[0] else 'body  '} type {k[1]} skill {k[2]} "
+          f"projectile {k[3]} arrow {k[4]} kind {k[5]}")
+    delays = collections.defaultdict(list)
+    for r in ss:
+        delays[(r["player"], r["skill"], r["event"])].append(r["event_to_launch"])
+    for k, xs in sorted(delays.items(), key=lambda kv: (-len(kv[1]), str(kv[0]))):
+        p(f"  {'player' if k[0] else 'body  '} skill {k[1]} {k[2]}->launch: n {len(xs)}  "
+          f"p50 {_p50(xs):.4f}  min {min(xs):.3f}  max {max(xs):.3f}")
+    errs = [r["word_error"] for r in ss if r["word_error"] is not None]
+    if errs:
+        p(f"  launch + flight vs the word: n {len(errs)}  p50 |err| "
+          f"{_p50([abs(e) for e in errs]) * 1000:.1f} ms")
+    if show_skill_shots:
+        for r in ss:
+            p(f"     {r['capture']} agent {r['agent']:5d} {'player' if r['player'] else 'body'} "
+              f"type {r['type']} skill {r['skill']} {r['event']} +{r['event_to_launch']:.3f} "
+              f"projectile {r['projectile']} arrow {r['arrow']} handle {r['handle']} "
+              f"flight {r['flight']:.3f} kind {r['kind']} 46 {r['close46']}")
 
 
 def main(argv=None):
@@ -396,8 +485,9 @@ def main(argv=None):
     ap.add_argument("--capture", help="one live capture's stamp (default: all)")
     ap.add_argument("--attackers", action="store_true", help="one row per attacker")
     ap.add_argument("--shooters", action="store_true", help="one row per ranged attacker")
+    ap.add_argument("--skill-shots", action="store_true", help="one row per SKILL shot")
     a = ap.parse_args(argv)
-    report(corpus(a.capture), a.attackers, a.shooters)
+    report(corpus(a.capture), a.attackers, a.shooters, show_skill_shots=a.skill_shots)
     return 0
 
 

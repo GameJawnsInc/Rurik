@@ -37,7 +37,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
-from skilltable import (  # noqa: E402
+from skilltable import (NO_PROJECTILE, CONTENT_FIELDS,   # noqa: E402
     RECORD_SIZE, build_of, decode_energy, displayed_adrenaline, emit_content,
     locate_table, parse_record, player_corpus,
 )
@@ -178,7 +178,7 @@ MASTERY_BIT = {18: 0x01, 25: 0x02, 29: 0x08, 19: 0x10, 41: 0x20, 37: 0x40,
 # section rather than passed -- which is exactly the failure §3 would hide,
 # since dropping the wiki join is what turns this file back into our decoder
 # agreeing with itself.
-LEDGER = checks.Ledger("skill table", floor=57)
+LEDGER = checks.Ledger("skill table", floor=63)   # + 6 projectile / impact checks (section 10, WEAPONS-C10, 2026-09-18, 57 -> 63)
 check = checks.adopt(LEDGER)
 
 
@@ -497,6 +497,41 @@ def main():
     check(not bad and held >= 100,
           f"a weapon-mastery skill's mask always holds its own weapon's bit "
           f"({held} rows over {len(MASTERY_BIT)} masteries)", str(bad[:5]))
+
+    print("\n10. the projectile and its impact (+0x88, +0x84; WEAPONS-C10)")
+    # Named by the WIRE: the live corpus's skill shots (weaponcensus.py
+    # --skill-shots, 151 launches) name the projectile every skill launched,
+    # and exactly this dword reproduces them. Pinned as LITERALS -- the wire
+    # and the table must both move for these to change.
+    check(all(by_id[sid]["projectile"] == 680 for sid in (392, 394, 396, 402)),
+          "+0x88 reads 680 on Pin Down, Power Shot, Dual Shot and Determined Shot -- "
+          "the projectile each launched on the wire (12 of 12 launches)",
+          str({sid: by_id[sid]["projectile"] for sid in (392, 394, 396, 402)}))
+    check(by_id[404]["projectile"] == NO_PROJECTILE == 2077
+          and by_id[1197]["projectile"] == NO_PROJECTILE,
+          "and 2077 -- the visual pair's own 'none' -- on Poison Arrow and Needling Shot, "
+          "whose launches carried the held bow's arrow (143, or 343 under Kindle Arrows)")
+    check(by_id[858]["projectile"] == 854 and by_id[186]["projectile"] == 343
+          and by_id[229]["projectile"] == 403 and by_id[230]["projectile"] == 405,
+          "the spells agree too: Dancing Daggers 854, Fireball 343, Lightning Orb 403, "
+          "Lightning Javelin 405 -- each the 0x00A4 field 5 its caster launched")
+    check(by_id[433]["projectile"] == 343 and by_id[433]["impact_visual"] == 344
+          and by_id[186]["impact_visual"] == 344 and by_id[229]["impact_visual"] == 404
+          and by_id[858]["impact_visual"] == 855
+          and all(by_id[sid]["impact_visual"] == NO_PROJECTILE for sid in (392, 394, 404)),
+          "+0x84 is the IMPACT visual: 344 behind Kindle Arrows' and Fireball's 343 (the "
+          "[20, target, caster, 344] retail sends at every arrival), 404 behind the Lightning "
+          "pair, 855 behind 854, and none on the bow attacks; a preparation carries the arrow "
+          "it SUBSTITUTES (Kindle Arrows 343)")
+    with_proj = [r["id"] for r in inc if r["projectile"] != NO_PROJECTILE]
+    n_attack = sum(1 for r in inc if r["projectile"] != NO_PROJECTILE and r["type_code"] == 14)
+    check(30 <= len(with_proj) <= 400 and n_attack >= 4,
+          f"{len(with_proj)} corpus skills name a projectile of their own, {n_attack} of them "
+          f"attack skills -- a value SET a wrong offset has no reason to land on (build-specific; "
+          f"a change here is a finding)")
+    check("projectile" in CONTENT_FIELDS and "impact_visual" not in CONTENT_FIELDS,
+          "the emitter carries `projectile` to the server's rows and keeps `impact_visual` "
+          "decoded-but-unsent (a lead, not a claim)")
 
     return LEDGER.verdict()
 

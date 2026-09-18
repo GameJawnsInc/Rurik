@@ -49,6 +49,7 @@ import pinned  # noqa: E402
 find_exe = pinned.find
 
 RECORD_SIZE = 0xA4  # 164
+NO_PROJECTILE = 2077  # +0x88 (and the visual slots): the table's own "none"
 
 # Flag bits at +0x10 that we rely on.
 FLAG_OVERCAST_VALID = 0x00000001
@@ -282,6 +283,31 @@ def parse_record(data: bytes, base: int, skill_id: int) -> dict:
         # read; nothing here interprets them, they are carried as opaque ids.
         "visual_caster": u32(data, r + 0x78),
         "visual_recipient": u32(data, r + 0x7C),
+        # THE PROJECTILE AND ITS IMPACT (+0x88, +0x84), WEAPONS-C10 (2026-09-18).
+        # Named by the WIRE the same way the visual pair was: 0x00A4 field 5
+        # (the projectile a body launches) joined to the skill the launch
+        # belongs to -- a player's 0x00E5 in the same instant, or a body's
+        # [50 | 60, body, target, skill] announcement one windup before --
+        # over every skill shot in the live corpus (151 launches by 12
+        # skills, weaponcensus.py --skill-shots):
+        #   +0x88  the PROJECTILE the skill launches: 680 on Pin Down, Power
+        #          Shot, Dual Shot and Determined Shot (each launched 680,
+        #          12 of 12 launches), 854 on Dancing Daggers, 343 on Fireball,
+        #          403 / 405 on Lightning Orb / Javelin; 2077 -- the table's
+        #          "none", the visual pair's own default -- on Poison Arrow
+        #          and Needling Shot, whose launches carry the held BOW's own
+        #          arrow (143, or 343 under Kindle Arrows). A preparation
+        #          carries the arrow it SUBSTITUTES: Kindle Arrows reads 343,
+        #          and every plain shot under it flew as 343.
+        #   +0x84  the IMPACT visual: property 20 [target, caster, id] at the
+        #          arrival -- 344 behind Fireball's and Kindle Arrows' 343,
+        #          404 behind both Lightning projectiles, 855 behind 854;
+        #          2077 on every attack skill above (no impact of their own).
+        # The ids index the same visual-component space as +0x78 / +0x7c and
+        # are carried opaque. The server reads `projectile` (emitted below);
+        # `impact_visual` is decoded and NOT yet sent (a lead, not a claim).
+        "impact_visual": u32(data, r + 0x84),
+        "projectile": u32(data, r + 0x88),
         "name_id": u32(data, r + 0x98),
         "concise_id": u32(data, r + 0x9C),
         "description_id": u32(data, r + 0xA0),
@@ -358,7 +384,8 @@ CONTENT_FIELDS = ("activation", "aftercast", "recharge",
                   "type_code", "target",
                   "combo", "combo_req", "weapon_req", "aoe_range",
                   "skill_arguments", "duration0", "duration15",
-                  "scale0", "scale15", "bonus_scale0", "bonus_scale15")
+                  "scale0", "scale15", "bonus_scale0", "bonus_scale15",
+                  "projectile")                       # WEAPONS-C10, +0x88
 
 
 def emit_content(rows, ids, build, exe, out_path) -> int:

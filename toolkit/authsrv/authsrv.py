@@ -11262,12 +11262,15 @@ def land_or_launch(send, state, agent_id, agent, conn_id, tid):
 
 
 def _without_melee_close(send, agent_id):
-    """`send`, less the one message a SHOT does not carry: land_swing's
-    [GV_MELEE_ATTACK_FINISHED, shooter, 0]. One filter rather than a flag
+    """`send`, less the close a SHOT does not carry: land_swing's
+    [GV_MELEE_ATTACK_FINISHED, shooter, 0] for a plain swing, and its
+    [GV_ATTACK_SKILL_FINISHED, shooter, 0] for an attack skill's (WEAPONS-W2c:
+    0 of 129 body skill shots carry a 46). One filter rather than a flag
     threaded through six send sites across two landing functions."""
     def filtered(op, vals, label="", **kw):
-        if (op == GAME_SMSG_AGENT_PROPERTY_UPDATE_INT and list(vals[:2])
-                == [agents.GV_MELEE_ATTACK_FINISHED, agent_id]):
+        if (op == GAME_SMSG_AGENT_PROPERTY_UPDATE_INT and list(vals[:2]) in
+                ([agents.GV_MELEE_ATTACK_FINISHED, agent_id],
+                 [agents.GV_ATTACK_SKILL_FINISHED, agent_id])):
             return None
         return send(op, vals, label, **kw)
     return filtered
@@ -11289,8 +11292,36 @@ def body_projectile_tick(send, state, conn_id):
         agent = state.get("agents", {}).get(shot["shooter"])
         if agent is None or target_dead(state, shot["target"]):
             continue
-        land_swing(_without_melee_close(send, shot["shooter"]), state,
-                   shot["shooter"], agent, conn_id, target_id=shot["target"])
+        strike = shot.get("strike")                            # WEAPONS-W2c
+        if strike is None:
+            land_swing(_without_melee_close(send, shot["shooter"]), state,
+                       shot["shooter"], agent, conn_id, target_id=shot["target"])
+            continue
+        land_body_skill_shot(send, state, conn_id, shot, agent, strike)
+
+
+def land_body_skill_shot(send, state, conn_id, shot, agent, strike):
+    """A BODY's attack-skill arrow arrives (WEAPONS-W2c): the skill's strike
+    through land_swing -- the bonus after armour, its 46 filtered out beside
+    melee's close (retail's body skill shots carry neither) -- then the
+    knock-down and the random condition on a landed hit, then the skill's
+    own condition on a live target: land_skill's order, a flight later."""
+    who, tid, sid = shot["shooter"], shot["target"], strike["skill_id"]
+    _res = land_swing(_without_melee_close(send, who), state, who, agent,
+                      conn_id, bonus=strike["bonus"], skill_id=sid,
+                      target_id=tid)
+    if _res == "landed" and not target_dead(state, tid):
+        if strike["knock_down"]:
+            knock_down(send, state, tid, conn_id, f"agent {who}'s skill {sid}",
+                       skill_knock_down_seconds(sid))
+        _rc = skill_random_condition(sid)
+        if _rc is not None:
+            apply_condition(send, state, tid, _rc[0], _rc[1], strike["rank"],
+                            conn_id, sid)
+    if strike["inflicted"] and not target_dead(state, tid):
+        apply_condition(send, state, tid, strike["inflicted"][0],
+                        strike["inflicted"][1], strike["rank"], conn_id, sid)
+    return _res
 
 
 def launch_player_projectile(send, state, conn_id, swing, how):
@@ -11332,8 +11363,118 @@ def projectile_tick(send, state, conn_id):
         victim = state.get("agents", {}).get(shot["target"])
         if victim is None or victim.get("dead") or state.get("player_dead"):
             continue
+        if shot.get("strike") is not None:                     # WEAPONS-W2c
+            land_player_skill_shot(send, state, conn_id, shot)
+            continue
         hit_enemy(send, state, shot["target"], conn_id, armed=True,
                   projectile=True, label="the shot")
+
+
+# ---- WEAPONS-W2c (2026-09-18): ATTACK SKILLS SHOOT ---------------------------
+#
+# A bow ATTACK SKILL landed through the cast path at its E5 with nothing in
+# the air -- the word at the windup from wherever the character stood, as
+# every weapon did before W2a. Retail's shape, OBSERVED on every skill shot
+# in the live corpus (weaponcensus.py --skill-shots: 22 by players, 129 by
+# bodies; studies/weapons section 13):
+#
+#   the player   0x00E5 [me, skill, copy, recharge]      -- one batch, 22 of 22
+#                0x00A4 [me, aim, 0, flight, PROJECTILE, handle, arrow]
+#                0x00E3 [me, skill, copy, 0]
+#                ... and NO 46: the attack trio's close rides no ranged
+#                skill's E5 (0 of 22), where melee's carries it 40 of 40
+#   a body       [50, body, target, skill] ... swing_windup(interval) later
+#                the 0x00A4, no 46 (0 of 129)
+#   both         +flight: 0x00A7 [shooter, handle, kind], the word(s)
+#
+# WHICH PROJECTILE is the skill's own when it has one: the s_skill record's
+# +0x88 (WEAPONS-C10, skilltable.py) -- 680 on Pin Down, Power Shot, Dual
+# Shot and Determined Shot, each of which launched 680 on the wire (12 of
+# 12); 2077, the table's "none", on Poison Arrow and Needling Shot, whose
+# launches carried the held bow's own arrow (10 of 10). The arrow FLAG, the
+# arrival's KIND, the speed and the range stay the WEAPON's: Power Shot's 680
+# flies with flag 1 / kind 1 from a plain bow and flag 0 / kind 5 under
+# Kindle Arrows, exactly as the plain arrow does on the same tape.
+#
+# The strike -- the roll, the "+ Damage", the adjacent damage, the
+# knock-down, the skill's condition -- rides the ARRIVAL, through the same
+# hit_enemy call the E5 made, with `projectile=True` (no property 1). What
+# stays at the E5: the recharge, the on-body visual, the effect, the heal,
+# the adrenaline wipe, the self knock-down and the chain's restart stamp
+# (retail's next plain start is one recovery behind the E5, 20260914T005758).
+#
+# NOT MODELLED, said here: Dual Shot's SECOND arrow (retail launches two at
+# one windup, handles 1 and 2 -- 8 pairs on 20260817T231139); a preparation's
+# substituted arrow and its own word (Kindle Arrows: 343 / kind 5 and a
+# second 0x00A3 at every arrival, 4 of 5); +0x84's impact visual. A skill
+# whose row is absent (a bare machine) shoots the weapon's arrow -- the
+# honest fallback, as skill_timing's zeros are. --no-projectiles reverts.
+SKILL_NO_PROJECTILE = 2077       # skilltable.NO_PROJECTILE: the table's "none"
+
+
+def skill_projectile(skill_id):
+    """The projectile a SKILL launches (s_skill +0x88, WEAPONS-C10), or None
+    when the row reads 2077 -- the weapon's own arrow flies -- or is absent."""
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return None
+    own = row.get("projectile")
+    if own is None or int(own) in (0, SKILL_NO_PROJECTILE):
+        return None
+    return int(own)
+
+
+def skill_shot_how(how, skill_id):
+    """`how` (weapon_ranged's dict) with the skill's own projectile in place
+    of the weapon's when its row names one; flag, kind, speed and range stay
+    the weapon's (retail, 12 of 12 launches of 680)."""
+    own = skill_projectile(skill_id)
+    return how if own is None else dict(how, projectile=own)
+
+
+def launch_player_skill_shot(send, state, conn_id, cast, how, strike):
+    """The E5 of a RANGED attack skill: its projectile leaves, carrying the
+    strike it will land at the arrival. Returns "launched", or None when
+    there is nothing left to shoot at (a corpse -- the E5 still went out)."""
+    shot = launch_player_projectile(send, state, conn_id,
+                                    {"target": cast["target"]}, how)
+    if shot is None:
+        return None
+    shot["strike"] = strike
+    print(f"[c{conn_id}] skill {cast['skill_id']} RELEASES projectile "
+          f"{how['projectile']} at agent {cast['target']}: the strike lands "
+          f"at the arrival, {shot['arrives_at'] - time.time():.3f} s away "
+          f"[WEAPONS-W2c]", flush=True)
+    return "launched"
+
+
+def land_player_skill_shot(send, state, conn_id, shot):
+    """A skill's arrow arrives: the strike the E5 announced -- the roll with
+    the skill's bonus, then on a landed hit the adjacent damage, the
+    knock-down and the random condition, then the skill's own condition --
+    the E5 block's order, a flight later. `hit_enemy` re-reads the target."""
+    strike = shot["strike"]
+    sid, rank, tid = strike["skill_id"], strike["rank"], shot["target"]
+    _res = hit_enemy(send, state, tid, conn_id, bonus_damage=strike["bonus"],
+                     skill_strike=True, projectile=True, skill_id=sid,
+                     label=f"skill {sid}'s arrow lands")
+    victim = state.get("agents", {}).get(tid)
+    if _res == "landed":
+        strike_adjacent(send, state, sid, rank, tid, conn_id)
+        if victim and not victim.get("dead"):
+            if strike["knock_down"]:
+                knock_down(send, state, tid, conn_id, f"skill {sid}",
+                           skill_knock_down_seconds(sid))
+            _rc = skill_random_condition(sid)
+            if _rc is not None:
+                apply_condition(send, state, tid, _rc[0], _rc[1], rank,
+                                conn_id, sid)
+    inflicted = strike["inflicted"]
+    if inflicted and victim and not victim.get("dead"):
+        apply_condition(send, state, tid, inflicted[0], inflicted[1], rank,
+                        conn_id, sid)
+    return _res
 # The two modifier identifiers an armour piece carries. 572's argument is the
 # rating the tooltip prints as `Armor: N`; 527's is the `+N vs. <type>` line,
 # and identifier 4 beside it resolves to `vs. physical damage`. All three were
@@ -16457,7 +16598,14 @@ def cast_tick(send, state, conn_id):
             # resolves on its own terms, and a skill with nothing to resolve
             # does nothing to the target at all.
             found = skill_damage(cast["skill_id"], rank)
-            if cast["attack"] and ATTACK_FINISH_BATCH:
+            # WEAPONS-W2c: a RANGED weapon's attack skill RELEASES at its E5
+            # and lands a flight later, and its E5 batch carries NO 46 --
+            # retail's bow skill shots are 0x00E5, 0x00A4, 0x00E3 in one
+            # batch, 22 of 22, with the attack trio's close beside none of
+            # them (studies/weapons section 13). A press with no target keeps
+            # the close below: a whiffed action still ends.
+            _shot = player_ranged() if (cast["attack"] and target) else None
+            if cast["attack"] and ATTACK_FINISH_BATCH and _shot is None:
                 # ANIMREF-R6: 46 OPENS the execution batch, 40 of 40, and it
                 # goes out whether or not a hit lands below -- it closes the
                 # PLAYER's action, and a whiffed skill's action still ends.
@@ -16533,13 +16681,27 @@ def cast_tick(send, state, conn_id):
                 if _chain_fails:
                     _res = "failed"
                 elif ATTACK_FINISH_BATCH:
-                    _res = hit_enemy(send, state, target, conn_id,
-                                     bonus_damage=bonus, skill_strike=True,
-                                     label=f"skill {cast['skill_id']} strikes",
-                                     skill_id=cast["skill_id"],
-                                     before_damage=(_chain_advance
-                                                    if CHAIN_STATE and _combo
-                                                    and not _dual else None))
+                    if _shot is not None:
+                        # WEAPONS-W2c: the arrow leaves now -- the skill's
+                        # own projectile when its row names one, else the
+                        # weapon's -- and the strike (roll, bonus, adjacent
+                        # damage, knock-down, condition) rides the arrival.
+                        # The chain's restart stamp below stays the E5's.
+                        _res = launch_player_skill_shot(
+                            send, state, conn_id, cast,
+                            skill_shot_how(_shot, cast["skill_id"]),
+                            {"skill_id": cast["skill_id"], "rank": rank,
+                             "bonus": bonus, "inflicted": inflicted,
+                             "knock_down": _kd})
+                        inflicted = None
+                    else:
+                        _res = hit_enemy(send, state, target, conn_id,
+                                         bonus_damage=bonus, skill_strike=True,
+                                         label=f"skill {cast['skill_id']} strikes",
+                                         skill_id=cast["skill_id"],
+                                         before_damage=(_chain_advance
+                                                        if CHAIN_STATE and _combo
+                                                        and not _dual else None))
                     # ANIMREF-R7b: the chain's next START comes one WINDUP
                     # after this execution -- LAW B, the 46->START gap's
                     # 0.749..0.783 cluster (21/38) against
@@ -22674,8 +22836,24 @@ def land_skill(send, state, agent_id, agent, conn_id):
             agent_adrenaline(agent).clear()
             hero_pool_clear(send, state, agent_id, agent,
                             f"skill {skill_id} clears it")   # JARIN: 0x00D0 [hero]
-        _res = land_swing(send, state, agent_id, agent, conn_id, bonus=bonus,
-                          skill_id=skill_id, target_id=_tid)
+        _how = body_ranged(agent)                              # WEAPONS-W2c
+        if _how is not None:
+            # A RANGED body's attack skill releases at its windup -- the
+            # skill's own projectile when its row names one -- and its
+            # strike (bonus, knock-down, condition) rides the arrival in
+            # body_projectile_tick; retail's body skill shots carry no 46
+            # (0 of 129) and land a flight later, as the player's do.
+            _shot = launch_body_projectile(send, state, conn_id, agent_id,
+                                           agent, _tid,
+                                           skill_shot_how(_how, skill_id))
+            if _shot is not None:
+                _shot["strike"] = {"skill_id": skill_id, "rank": _rank,
+                                   "bonus": bonus, "inflicted": inflicted,
+                                   "knock_down": _kd}
+            _res, inflicted = "launched", None
+        else:
+            _res = land_swing(send, state, agent_id, agent, conn_id, bonus=bonus,
+                              skill_id=skill_id, target_id=_tid)
         send_skill_visual(send, state, agent_id, skill_id, _tid, conn_id)
         apply_effect(send, state, agent_id, skill_id, _rank,
                      _tid, conn_id)

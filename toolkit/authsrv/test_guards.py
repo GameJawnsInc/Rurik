@@ -678,18 +678,29 @@ def section_concurrency():
     _shot_line = [l for l in src if "projectile_tick(send, state, conn_id)" in l
                   and "body_projectile_tick" not in l
                   and not l.lstrip().startswith("def ")]
+    # WEAPONS-W2c (2026-09-18): an attack skill's arrow lands its strike in
+    # `land_player_skill_shot`, projectile_tick's helper and nobody else's, and
+    # leaves from `launch_player_skill_shot`, cast_tick's helper -- the walk
+    # goes one level up for each, as it does for _land_player_swing. A body's
+    # skill shot leaves from land_skill through launch_body_projectile and
+    # lands in `land_body_skill_shot`, body_projectile_tick's helper: the same
+    # tick sites, no new one.
     check(callers == {"_land_player_swing", "cast_tick", "hit_enemy",
                       "dual_second_strike", "second_strike_tick",
-                      "projectile_tick"}
+                      "projectile_tick", "land_player_skill_shot"}
+          and callers_of("land_player_skill_shot") == {"projectile_tick"}
+          and callers_of("launch_player_skill_shot") == {"cast_tick"}
           and callers_of("dual_second_strike") == {"cast_tick"}
           and len(_tick_line) == 2
           and sum("# DAGGERS-B6" in l for l in _tick_line) == 1
           and len(_shot_line) == 2
           and sum("# WEAPONS-W2a" in l for l in _shot_line) == 1
-          and callers_of("launch_player_projectile") == {"_land_player_swing"}
+          and callers_of("launch_player_projectile") == {"_land_player_swing",
+                                                         "launch_player_skill_shot"}
           and callers_of("body_projectile_tick") == {"projectile_tick"}
+          and callers_of("land_body_skill_shot") == {"body_projectile_tick"}
           and callers_of("land_or_launch") == {"enemy_attack_tick", "ally_attack_tick"}
-          and callers_of("launch_body_projectile") == {"land_or_launch"}
+          and callers_of("launch_body_projectile") == {"land_or_launch", "land_skill"}
           and callers_of("combat_pass") == {"combat_sleep"}
           and callers_of("combat_sleep") == {"handle"}
           and callers_of("_land_player_swing") == {"attack_tick"},

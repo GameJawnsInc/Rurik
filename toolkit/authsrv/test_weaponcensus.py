@@ -9,6 +9,7 @@ studies/weapons/PLAN.md section 3 was written from, pinned as floors and signatu
 printed, on a bare machine.
 """
 import os
+import statistics
 import struct
 import sys
 
@@ -19,7 +20,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 import checks  # noqa: E402
 import weaponcensus as wc  # noqa: E402
 
-LEDGER = checks.Ledger("weaponcensus: held weapon types, swings and shots", floor=16)   # the BARE-MACHINE number: 16 without the vault (section 2 skips), 30 with it; from green runs
+LEDGER = checks.Ledger("weaponcensus: held weapon types, swings and shots", floor=20)   # the BARE-MACHINE number: 20 without the vault (section 2 skips), 38 with it; from green runs (WEAPONS-W2c: 16 -> 20)
 check = LEDGER.ok
 
 ME, WANDER, ARCHER, LIAR, FOE = 7, 51, 50, 52, 9
@@ -72,6 +73,17 @@ def wire():
     s.append((20.0, wc.PINT_T, [wc.PINT_T, wc.START, ME, FOE, 0]))
     s.append((20.1, wc.E4, [wc.E4, ME, 343, 0]))
     s.append((21.0, wc.LAUNCH, [wc.LAUNCH, ME, (1.0, 2.0), 0, f32(0.3), 343, 99, 0]))
+    # WEAPONS-W2c: a player's Power Shot -- E5, launch, E3 in ONE instant -- and a
+    # body's announced one, its launch a bow windup later; neither carries a 46
+    s.append((30.0, wc.E5, [wc.E5, ME, 394, 0, 3]))
+    s.append((30.0, wc.LAUNCH, [wc.LAUNCH, ME, (1.0, 2.0), 0, f32(0.25), 680, 1, 1]))
+    s.append((30.0, wc.E3, [wc.E3, ME, 394, 0]))
+    s.append((30.25, wc.ARRIVE, [wc.ARRIVE, ME, 1, 1]))
+    s.append((30.25, wc.PFLOAT_T, [wc.PFLOAT_T, 16, FOE, ME, f32(-0.05)]))
+    s.append((40.0, wc.PINT_T, [wc.PINT_T, 50, ARCHER, ME, 394]))
+    s.append((41.1375, wc.LAUNCH, [wc.LAUNCH, ARCHER, (1.0, 2.0), 0, f32(0.3), 680, 1, 1]))
+    s.append((41.4375, wc.ARRIVE, [wc.ARRIVE, ARCHER, 1, 1]))
+    s.append((41.4375, wc.PFLOAT_T, [wc.PFLOAT_T, 16, ME, ARCHER, f32(-0.05)]))
     # a swing either side of the swap: the gap is neither weapon's
     s.append((49.5, wc.PINT_T, [wc.PINT_T, wc.START, ME, FOE, 0]))
     for t0 in (50.5, 51.833, 53.166, 54.499):                # the sword, 1.333 s
@@ -165,6 +177,33 @@ def section_synthetic():
           "the wand's 5) -- and a wand answering 9 is a MISMATCH")
 
 
+def section_skill_shots():
+    print("\n1b. WEAPONS-W2c: skill shots on the synthetic wire")
+    rows = wc.skill_shots(wire())
+    by = {(r["agent"], r["skill"]): r for r in rows}
+    check(len(rows) == 3 and set(by) == {(ME, 343), (ME, 394), (ARCHER, 394)},
+          "three SKILL shots and no weapon shot among them: the player's E4-then-launch "
+          "(343), the player's Power Shot in its E5 batch and the archer's announced one",
+          str(sorted(by)))
+    me = by[(ME, 394)]
+    check(me["player"] and me["event"] == "E5" and near(me["event_to_launch"], 0.0)
+          and me["projectile"] == 680 and me["arrow"] == 1 and me["kind"] == 1
+          and me["closed"] and near(me["word_error"], 0.0) and not me["close46"]
+          and me["type"] == 5 and me["w617"] == 143,
+          "the player's: E5->launch 0, projectile 680 with the BOW's flag 1 and kind 1, "
+          "closed, the word at launch + flight, no 46, the held type and its own 617 beside")
+    ar = by[(ARCHER, 394)]
+    check(not ar["player"] and ar["event"] == "announce50"
+          and near(ar["event_to_launch"], 1.1375) and ar["projectile"] == 680
+          and ar["closed"] and not ar["close46"] and ar["type"] == 28,
+          "the archer's: announced by [50], launched one 2.475 s windup later, closed, no 46")
+    check(all(r["agent"] != ARCHER or r["skill"] == 394 for r in rows)
+          and len([r for r in wc.shooters(wire()) if r["agent"] == ARCHER]) == 1
+          and sum(r["shots"] for r in wc.shooters(wire()) if r["agent"] == ARCHER) == 3,
+          "and the archer's three plain shots stay WEAPON shots in shooters(): the two "
+          "censuses partition its launches")
+
+
 def section_vault():
     print("\n2. the vault: the live corpus, floors and signatures")
     try:
@@ -173,7 +212,7 @@ def section_vault():
         c = None
         print(f"   (corpus unreadable: {exc!r})")
     if not c or not c["shooters"]:
-        LEDGER.skip("section 2", "no live corpus -- 14 checks")
+        LEDGER.skip("section 2", "no live corpus -- 18 checks")
         return
     check({2, 5, 15, 22, 26, 27, 32, 35, 36}.issubset(c["lead"]) and {1, 28}.issubset(c["lead"])
           and {12, 24}.issubset(c["off"]),
@@ -240,10 +279,51 @@ def section_vault():
           "WEAPONS-Q8: players join through 0x006E -- the sword tapes read type 27 at "
           "1.330, and both bow attackers 2.476",
           f"{len(players)} sword players, bows {[round(r['mode'], 3) for r in bows]}")
+    _skill_shot_pins(c)                                      # WEAPONS-W2c / C10
+
+
+def _skill_shot_pins(c):
+    """WEAPONS-W2c / C10: the corpus's skill shots against the skill table."""
+    ss = c["skill_shots"]
+    bows = [r for r in ss if r["type"] == 5]
+    check(len(ss) >= 151 and all(r["closed"] for r in ss) and not any(r["close46"] for r in ss),
+          f"{len(ss)} skill shots (floor 151), every one closed by its 0x00A7 and NONE with "
+          f"a 46 within 50 ms of the launch -- the attack trio's close rides no ranged skill")
+    proj = {}
+    for r in bows:
+        proj.setdefault(r["skill"], set()).add(r["projectile"])
+    check(proj.get(392) == {680} and proj.get(394) == {680} and proj.get(396) == {680}
+          and proj.get(402) == {680} and proj.get(404) == {143, 343} and proj.get(1197) == {143},
+          "bow attack skills launch ONE projectile each: Pin Down, Power Shot, Dual Shot and "
+          "Determined Shot 680; Poison Arrow and Needling Shot the held bow's own arrow "
+          "(143, or 343 under Kindle Arrows)", str({k: sorted(v) for k, v in proj.items()}))
+    import agents                                               # noqa: PLC0415
+    agree, disagree = 0, []
+    for r in ss:
+        try:
+            own = int(agents.WORLD.get("skills", str(r["skill"])).get("projectile", -1))
+        except Exception:                                       # noqa: BLE001
+            continue
+        if own == r["projectile"] or (own == 2077 and r["projectile"] in (143, 343)):
+            agree += 1
+        else:
+            disagree.append((r["skill"], own, r["projectile"]))
+    check(agree >= 140 and not disagree,
+          f"WEAPONS-C10, two instruments: the skill table's +0x88 names the launched projectile "
+          f"on {agree} skill shots (2077 = the weapon's arrow), disagreeing on none",
+          str(disagree[:5]))
+    e5 = [r["event_to_launch"] for r in ss if r["player"] and r["type"] == 5]
+    ann = [r["event_to_launch"] for r in bows if not r["player"] and r["skill"] in (392, 394, 396, 402, 404)]
+    check(len(e5) >= 5 and max(e5) < 0.02 and len(ann) >= 40
+          and abs(statistics.median(ann) - 1.1375) < 0.01 and min(ann) > 1.10 and max(ann) < 1.16,
+          f"a player's bow skill launches IN its E5 batch ({len(e5)} of {len(e5)} within 20 ms); a "
+          f"body's one windup after its announcement (median {statistics.median(ann):.4f} of "
+          f"{len(ann)}, swing_windup(2.475) = 1.1375)")
 
 
 def main():
     section_synthetic()
+    section_skill_shots()
     section_vault()
     return LEDGER.verdict()
 

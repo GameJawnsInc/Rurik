@@ -248,6 +248,8 @@ exposure floor and an abort written down.
 | WEAPONS-Q11 | Does GWW's critical formula reproduce the five measured rates? | desk |
 | WEAPONS-Q12 | Is ×1.2 already inside the isle study's PvP-weapon numbers? | desk, then RUN-3 |
 | WEAPONS-Q13 | The sword's short gap after a skill's hit (from DAGGERS §9) | desk, `timingjoin.py --swings` |
+| WEAPONS-Q14 | Dual Shot's second arrow: one strike record or two, and how the 25 % rides each word | desk (8 pairs on `20260817T231139`), then a run |
+| WEAPONS-Q15 | A preparation's own word (Kindle Arrows: a second `0x00A3` per arrival, 4 of 5) and its substituted arrow (`+0x88` on a type-19 row) | desk, `weaponcensus.py --skill-shots` |
 
 ## 8. What this plan refuses
 
@@ -481,5 +483,109 @@ reads 1.750) — not because the shot clock is off. No assert: item type 28 had 
 
 **Still open here.** No content spawn row holds a ranged item yet (the mechanism is
 content-ready: `weapon_item = "hostile_bow"`). A ranged hostile still CASTS from
-wherever it stands. The hostile repeat-delay classes (WEAPONS-C5) are unmodelled. A bow
-attack skill, for the player or a body, still lands through the cast path with no arrow.
+wherever it stands. The hostile repeat-delay classes (WEAPONS-C5) are unmodelled. ~~A bow
+attack skill, for the player or a body, still lands through the cast path with no arrow~~
+— §13, WEAPONS-W2c.
+
+## 13. WEAPONS-W2c — shipped 2026-09-18: attack skills shoot
+
+**The wire shape, OBSERVED on every skill shot in the live corpus** —
+`weaponcensus.py --skill-shots`, the complement of the weapon-shot census: a launch whose
+shooter's latest event is a skill's (a player's `0x00E5`, a body's `[50 | 60]`
+announcement) rather than a `[4]` start. 151 launches by 12 skills, every one closed by
+its `0x00A7`, the word at launch + flight (p50 |err| 4.4 ms, n = 150), and **not one with
+a 46 within 50 ms of the launch** — the attack trio's close that melee's E5 carries 40 of
+40 rides no ranged skill's, player or body. A player's bow skill is **`0x00E5`, `0x00A4`,
+`0x00E3` in one batch** (E5→launch 0.000 on 5 of 5 bow skill shots; the E3 rides the E5
+because a bow attack skill's aftercast is 0); a body's launch comes **one bow windup after
+its announcement** (announce→launch median 1.137 over 44 bow skill shots by hostiles and
+henchmen, against `swing_windup(2.475)` = 1.1375). Per skill, one projectile:
+
+| Skill (the client's own text) | shots | `0x00A4` field 5 | flag / kind |
+|---|---|---|---|
+| 392 Pin Down | 2 | 680 | the bow's (1 / 1 plain; 0 / 5 under Kindle Arrows) |
+| 394 Power Shot | 14 | 680 | the bow's |
+| 396 Dual Shot | 16 | 680, TWO launches per windup (handles 1 and 2) | the bow's |
+| 402 Determined Shot | 8 | 680 | the bow's |
+| 404 Poison Arrow | 9 | 143, or 343 under Kindle Arrows | the bow's |
+| 1197 Needling Shot | 7 | 143 | the bow's |
+
+The arrow flag, the arrival's kind, the speed and the range follow the WEAPON, not the
+skill: Power Shot's 680 flies with flag 1 / kind 1 from a plain bow and flag 0 / kind 5
+under Kindle Arrows on the same tape (`20260914T005758`), exactly as the plain arrow does.
+
+**WEAPONS-C10 — the skill record's `+0x88` is the projectile it launches, `+0x84` its
+impact visual. OBSERVED, two instruments.** Named by the wire the way ANIMREF-R8 named the
+visual pair: the twelve (skill → projectile) pairs above and the spells' — Dancing Daggers
+854, Fireball 343, Lightning Orb 403, Lightning Javelin 405 — are reproduced by exactly
+that dword, and the two skills that shoot the weapon's own arrow read **2077**, the
+table's "none" (the visual slots' own default). `test_weaponcensus` joins the two
+instruments over the corpus: the table names the launched projectile on 150 skill shots
+and disagrees on none. A preparation carries the arrow it SUBSTITUTES — Kindle Arrows
+reads 343, and every plain shot under it flew as 343 with kind 5 — and `+0x84` is the
+`[20, target, caster, id]` retail sends at the arrival (344 behind both 343s, 404 behind
+the Lightning pair, 855 behind 854; 2077 on every bow attack). `skilltable.py` decodes
+both; `projectile` is emitted to `vault/content/skills.toml` (1,333 rows re-emitted from
+the pinned build, one added line per row and nothing else moved), `impact_visual` is
+decoded and NOT sent — a lead, not a claim.
+
+**What shipped.** `skill_projectile(id)` reads the row's `+0x88` (None for 2077, 0, a row
+without the column, no row — a bare machine shoots the weapon's arrow, the honest fallback
+`skill_timing`'s zeros already are); `skill_shot_how(how, id)` swaps the skill's
+projectile into `weapon_ranged`'s dict and nothing else. **The player:** at the E5 of an
+attack skill with a ranged weapon in hand the 46 is NOT sent and, in place of the strike,
+`launch_player_skill_shot` sends the `0x00A4` (the E5 batch is `0x00E5`, `0x00A4`,
+`0x00E3`, retail's order) with the strike — the skill, its rank, its "+ Damage", its
+condition, its knock-down — riding the shot record; `projectile_tick` hands such a shot
+to `land_player_skill_shot`: `0x00A7` first, then `hit_enemy(skill_strike=True,
+projectile=True)` (the roll plus the bonus as ONE word, no property 1), then on a landed
+hit the adjacent damage, the knock-down and the random condition, then the skill's
+condition on a live target — the E5 block's order, a flight later. The recharge, the
+on-body visual, the effect, the heal, the adrenaline wipe, the self knock-down and the
+chain's restart stamp stay at the E5 (retail's next plain start is one recovery behind
+the E5). **A body:** `land_skill`'s attack branch, when `body_ranged(agent)` is not None,
+launches through `launch_body_projectile` with the strike on the record;
+`body_projectile_tick` hands it to `land_body_skill_shot` (`land_swing` with the bonus,
+its 46 filtered out beside melee's close — `_without_melee_close` drops both — then the
+knock-down, the random condition and the skill's condition). A sword's press, a hammer's
+body, `--no-projectiles`: the E5 strike with its 46, unchanged (the known-good arm).
+
+**On the client**, scored by `timingjoin.py` beside the retail bow tape:
+
+| Row | Retail `20260914T005758` (player, recurve, Kindle Arrows up) | Ours, the player's bow at a passive hostile from 800 u (`20260918T152121`) |
+|---|---|---|
+| E5→launch 394 / 392 | 0.000 / 0.000 | 0.000 / 0.005 |
+| E5→E3 394 / 392 | 0.000 / 0.000 | 0.001 / 0.005 |
+| skill launch→word − flight | −0.002 (−0.017 .. 0.001), n = 3 | +0.001, n = 4 (394, 404, 402, 392) |
+| skill launch→arrival − flight | −0.002, n = 3 | 0.000 (0.000 .. 0.001), n = 4 |
+
+Power Shot at 800 u flew 0.500 s (680, handle 1, flag 1) and landed 5 on a 20,000-health
+target; the three that followed flew 0.050 s because the passive hostile, once hit, ran
+in — the flight is the distance's, per shot. Pin Down's Crippled landed at the ARRIVAL,
+not at the E5. **The 46's absence leaves no movement lock:** the `W:2` leg after the last
+E5 produced two `MOVE_SET_HEADING` reports the server answered — the client walks on a
+held key straight after a ranged skill's E5, which is the fear the melee comment's "8+
+second movement lock" recorded, refuted for the ranged case. No assert.
+
+A body's, scored the same way over our recorder (`weaponcensus.skill_shots` on the
+capture): a hostile archer (`hostile_bow`, type 28, 1.75 s) with Power Shot on its bar at
+the standing player from 700 u (`20260918T152408`) — **10 Power Shots, announce→launch
+0.775 (0.758 .. 0.776; its own weapon's `swing_windup(1.75)` = 0.775), projectile 680 with
+the type's flag 1 / kind 1, flight 0.583 (700 ÷ 1200), every launch closed, the word at
+launch + flight (max |err| 0.9 ms), no 46**, with 17 plain 143 shots at the same 0.775
+between them; the archer shot from where it stood. Retail's bodies with a type-5 bow read
+1.137 for the same row because their weapon is the 2.475 s one — the clock is the held
+weapon's, which W6a already established for plain shots.
+
+**Not modelled, said here rather than discovered.** Dual Shot's SECOND arrow (retail
+launches two at one windup, handles 1 and 2 — 8 pairs on `20260817T231139`); a
+preparation's substituted arrow and its own word (under Kindle Arrows every arrival, plain
+or skill, carries a second `0x00A3` of a constant −0.03, 4 of 5 — `swing_preparation_bonus`
+folds it into one number, which retail does not); `+0x84`'s impact visual; the handle
+retail gave the Kindle-tape skill shots (2 with nothing outstanding — ours counts from 1).
+One census row is unexplained: a body's launch of 343 attributed to "skill 2" behind a
+`[60]` announcement at +0.000 (n = 1; its latest event was probably not its own).
+
+**Still open here.** W2b (a press outside range walks to melee distance); no content spawn
+row holds a ranged item; a ranged hostile still casts from wherever it stands; the
+hostile repeat-delay classes.

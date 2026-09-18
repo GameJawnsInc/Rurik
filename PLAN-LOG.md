@@ -27,6 +27,46 @@ move back.
 
 ---
 
+### ✅ WEAPONS-W2c — 2026-09-18 — **attack skills shoot: a bow attack skill releases at its E5 with the skill's own projectile, the strike lands a flight later, and no 46 is sent — for the player and for bodies** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) §13)
+
+Retail's ranged attack skill is `0x00E5`, `0x00A4`, `0x00E3` in one batch and nothing else:
+`weaponcensus.py --skill-shots` (new, the complement of the weapon-shot census) finds 151
+skill shots on the live corpus by 12 skills, every one closed, the word at launch + flight,
+and NOT ONE with a 46 beside the launch — the close melee's E5 carries 40 of 40 rides no
+ranged skill's, player or body (0 of 22, 0 of 129). A body's launch comes one windup after
+its `[50]` announcement (median 1.137 over 44, `swing_windup(2.475)` = 1.1375). One
+projectile per skill: 680 on Pin Down, Power Shot, Dual Shot and Determined Shot; the held
+bow's own arrow on Poison Arrow and Needling Shot; flag, kind, speed and range the WEAPON's.
+**WEAPONS-C10: the skill record's `+0x88` IS that projectile** (2077 = none, the visual
+slots' own default; a preparation carries the arrow it substitutes — Kindle Arrows 343) and
+`+0x84` the impact visual retail sends as `[20, target, caster, id]` at the arrival: named
+by the wire as ANIMREF-R8 named the visual pair, 12 of 12 pairs reproduced, and the two
+instruments joined over the corpus agree on 150 skill shots and disagree on none.
+`skilltable.py` decodes both and emits `projectile` (`vault/content/skills.toml`
+re-emitted from the pinned build: one added line per row). Shipped: `skill_projectile`,
+`skill_shot_how`; the player's E5 sends no 46 when a ranged weapon is in hand and
+`launch_player_skill_shot` in place of the strike, `land_player_skill_shot` landing it at
+the arrival (the roll plus the bonus as ONE word, no property 1, then adjacent damage,
+knock-down, the random and the skill's condition); a body's `land_skill` launches through
+`launch_body_projectile` and `land_body_skill_shot` lands it with `land_swing`, its 46
+filtered beside melee's close. A sword's press, a hammer's body and `--no-projectiles`
+keep the E5 strike with its 46. `timingjoin.py` gains the skill-shot rows. On the client:
+the player's four bow skills at a passive hostile from 800 u (`20260918T152121`) —
+E5→launch 0.000 (392: 0.005), E5→E3 0.001–0.005, word at launch + flight +0.001 on 4 of
+4 (retail −0.002 .. 0.001), Pin Down's Crippled at the ARRIVAL, and two `MOVE_SET_HEADING`
+reports on a held key right after the last E5: the missing 46 leaves no movement lock; a
+hostile archer's Power Shot at the player from 700 u (`20260918T152408`) — 10 shots at
+0.775 after the announcement (its type-28 weapon's windup), 680 / flag 1 / kind 1, flight
+0.583, every launch closed, max word error 0.9 ms, no 46, from where it stood. No assert.
+Not modelled, named: Dual Shot's second arrow (Q14), a preparation's own word and
+substituted arrow (Q15), the impact visual. `test_weapons` 44 → 60 (59 bare),
+`test_weaponcensus` 30 → 38 (20 bare), `test_skilltable` 57 → 63, `test_guards` 45
+re-pinned (three helpers on the same tick sites), `test_timingjoin` 22, `test_castcycle`
+54, `test_playerswing` 191, `test_mechanics` 246, `test_agentlife` 551, `test_srclint` 26,
+`test_identlint` 28, `test_provlint` 19, `test_checks` 17.
+
+---
+
 ### ✅ WEAPONS-W6a — 2026-09-18 — **heroes and hostiles shoot: any body holding a ranged item releases its projectile at the windup and lands it a flight later, from its weapon's range** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) §12)
 
 Retail's body shots are the player's four messages exactly and carry no property 1 (read

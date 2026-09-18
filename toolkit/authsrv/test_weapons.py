@@ -22,7 +22,7 @@ import agents  # noqa: E402
 import authsrv  # noqa: E402
 import combatmath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=43)   # the BARE-MACHINE number: 43 without the vault's full skills table (section 2 skips), 44 with it; from green runs
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=59)   # the BARE-MACHINE number: 59 without the vault's full skills table (section 2 skips), 60 with it; from green runs (WEAPONS-W2c: 43 -> 59)
 check = LEDGER.ok
 
 LEGACY_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
@@ -476,6 +476,218 @@ def section_bodies():
     check('"--enemy-weapon"' in src, "--enemy-weapon exists: the fixture hostile holds an item")
 
 
+def section_skill_shots():
+    print("\n7. WEAPONS-W2c: attack skills shoot")
+    saved = (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+             authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,
+             authsrv.skill_timing, authsrv._is_attack_skill, authsrv.skill_cost,
+             authsrv.skill_projectile, authsrv.skill_damage, authsrv.attack_skill_terms,
+             authsrv.apply_condition, authsrv.weapon_satisfies)
+    words = lambda batch: [v for op, v in batch if op == 0x00A3 and v[0] in (16, 17)]   # noqa: E731
+    close = lambda batch, who, prop: [v for op, v in batch if op == 0x009F              # noqa: E731
+                                      and v[:2] == [prop, who]]
+    launches = lambda batch: [v for op, v in batch if op == 0x00A4]                     # noqa: E731
+
+    # THE PURE READER, against a table the test controls: the real
+    # skill_projectile on injected rows (a bare machine has no skills table).
+    tables = agents.WORLD.tables
+    had, kept = "skills" in tables, tables.get("skills")
+    tables["skills"] = {"394": {"projectile": 680}, "404": {"projectile": 2077},
+                        "7": {}, "8": {"projectile": 0}}
+    try:
+        got = [authsrv.skill_projectile(k) for k in (394, 404, 7, 8, 999)]
+    finally:
+        if had:
+            tables["skills"] = kept
+        else:
+            del tables["skills"]
+    check(got == [680, None, None, None, None] and authsrv.SKILL_NO_PROJECTILE == 2077,
+          "skill_projectile reads the row's +0x88 (Power Shot's 680) and answers None for "
+          "2077 -- the table's own 'none' -- for 0, for a row without the column and for no "
+          "row at all", str(got))
+    authsrv.skill_projectile = lambda sid: 680 if sid == 394 else None   # the table's answer, pinned by test_skilltable
+    check(authsrv.skill_shot_how({"projectile": 143, "arrow": 1, "damage_type": 1}, 394)
+          == {"projectile": 680, "arrow": 1, "damage_type": 1}
+          and authsrv.skill_shot_how({"projectile": 143, "arrow": 1, "damage_type": 1}, 404)
+          == {"projectile": 143, "arrow": 1, "damage_type": 1},
+          "skill_shot_how swaps in the SKILL's projectile and nothing else -- the arrow "
+          "flag and the kind stay the weapon's (retail: 680 with flag 1 / kind 1 from a "
+          "plain bow, 12 of 12); a skill with no projectile of its own shoots the arrow")
+
+    # the stubs test_castcycle's attack sections use, so the press and the tick run bare
+    authsrv.skill_timing = lambda sid: (0.0, 0.0, 3.0)
+    authsrv._is_attack_skill = lambda sid: True
+    authsrv.skill_cost = lambda sid: (0, 0)
+    authsrv.weapon_satisfies = lambda sid: True    # the gate (DAGGERS-B4) is test_daggers' business
+    authsrv.skill_damage = lambda sid, rank: (10.0, "additive")
+    COND = ("a condition", 5.0)
+    authsrv.attack_skill_terms = lambda state, sid, rank, tid, bonus, conn, who: (bonus, COND, False)
+    applied = []
+    authsrv.apply_condition = lambda send, state, tid, cond, dur, rank, conn, sid=None: \
+        applied.append((tid, cond, dur, sid))
+
+    def press_and_e5(distance, skill=394, armour=True):
+        authsrv.apply_party_character({"player_weapon": "starter_bow"})
+        authsrv.PLAYER_SWING_DAMAGE = (5, 5)       # after the loader, which sets the bow's
+        st, sent = _world(distance), []
+        if not armour:
+            del st["agents"][FOE]["armor_rating"]      # the raw-range branch: 5 + bonus, no roll
+        send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+        authsrv.handle_skill_press([0, skill, 0, FOE], send, st, 1,
+                                   authsrv.GAME_CMSG_USE_SKILL)
+        pressed = list(sent)
+        sent.clear()
+        for cast in st["pending_casts"]:
+            for k in ("begin_at", "e5_at", "e3_at", "e6_at"):
+                cast[k] -= 30.0
+        authsrv.cast_tick(send, st, 1)
+        return st, send, sent, pressed
+
+    try:
+        authsrv.PLAYER_SWING_DAMAGE = (5, 5)
+        st, send, at_e5, pressed = press_and_e5(800.0, armour=False)
+        ops = [op for op, _v in at_e5]
+        launch = launches(at_e5)
+        check([v for op, v in pressed if op == 0x00A0 and v[0] == agents.GV_ATTACK_SKILL_ACTIVATED]
+              == [[agents.GV_ATTACK_SKILL_ACTIVATED, PLAYER, FOE, 394]]
+              and not launches(pressed),
+              "the press: the attack skill announces itself [50, me, foe, 394] and nothing "
+              "leaves yet", str([(hex(op), v) for op, v in pressed]))
+        check(ops[:2] == [0x00E5, 0x00A4] and 0x00E3 in ops and len(launch) == 1
+              and launch[0][0] == PLAYER and list(launch[0][1]) == [800.0, 0.0]
+              and abs(_f(launch[0][3]) - 0.5) < 1e-6 and launch[0][4:] == [680, 1, 1],
+              "at the E5: 0x00E5, then ONE 0x00A4 [me, the target's position, 0, 0.5 s at "
+              "1600 u/s, the SKILL's 680, handle 1, the BOW's arrow flag 1], then 0x00E3 -- "
+              "retail's one batch, 22 of 22", str([(hex(op), v) for op, v in at_e5]))
+        check(not close(at_e5, PLAYER, agents.GV_ATTACK_SKILL_FINISHED)
+              and not words(at_e5) and st["agents"][FOE]["health"] == 9000.0
+              and not applied,
+              "and NO 46, no word, no damage and no condition at the E5 -- retail's ranged "
+              "attack skill carries no close (0 of 22) and lands nothing there")
+        shot = st["player_projectiles"][0]
+        check(shot["strike"]["skill_id"] == 394 and shot["strike"]["bonus"] == 10.0
+              and shot["strike"]["inflicted"] == COND
+              and shot["arrives_at"] in authsrv.combat_deadlines(st),
+              "the shot carries the strike it will land -- the skill, its + Damage, its "
+              "condition -- and its arrival is a combat DEADLINE")
+        e5 = [v for op, v in at_e5 if op == 0x00E5]
+        check(e5 == [[PLAYER, 394, 0, 3]]
+              and [v for op, v in at_e5 if op == 0x00E3] == [[PLAYER, 394, 0]],
+              "the recharge and the E3 are the E5's (aftercast 0), as before")
+        at_e5.clear()
+        shot["arrives_at"] -= 30.0
+        authsrv.projectile_tick(send, st, 1)
+        at_arrival = list(at_e5)
+        ops = [op for op, _v in at_arrival]
+        check(ops[0] == 0x00A7 and at_arrival[0][1] == [PLAYER, 1, 1]
+              and len(words(at_arrival)) == 1 and words(at_arrival)[0][1:3] == [FOE, PLAYER]
+              and st["agents"][FOE]["health"] == 9000.0 - 15.0,
+              "a flight later: 0x00A7 [me, handle 1, kind 1] FIRST, then the strike's ONE "
+              "word -- the weapon's 5 plus the skill's 10, one number as on the E5 path",
+              str([(hex(op), v) for op, v in at_arrival]))
+        check(not close(at_arrival, PLAYER, agents.GV_MELEE_ATTACK_FINISHED)
+              and not close(at_arrival, PLAYER, agents.GV_ATTACK_SKILL_FINISHED)
+              and applied == [(FOE, COND[0], COND[1], 394)] and not st["player_projectiles"],
+              "no property 1 and no 46 at the arrival either; the skill's condition lands "
+              "THERE, on the live target, and the handle is spent", str(applied))
+
+        # a skill with no projectile of its own shoots the bow's arrow
+        applied.clear()
+        st, send, at_e5, _p = press_and_e5(400.0, skill=404)
+        check(launches(at_e5) and launches(at_e5)[0][4:] == [143, 1, 1]
+              and abs(_f(launches(at_e5)[0][3]) - 0.25) < 1e-6,
+              "Poison Arrow (no +0x88 of its own) releases the BOW's 143 -- retail 10 of 10")
+
+        # a target dead in flight: closed, nothing lands, no condition
+        applied.clear()
+        st, send, at_e5, _p = press_and_e5(800.0)
+        st["agents"][FOE]["dead"] = True
+        at_e5.clear()
+        for shot in st["player_projectiles"]:
+            shot["arrives_at"] -= 30.0
+        authsrv.projectile_tick(send, st, 1)
+        check([op for op, _v in at_e5] == [0x00A7] and not applied,
+              "an arrow whose target died in flight is CLOSED, lands nothing and inflicts "
+              "nothing")
+
+        # a MELEE weapon's attack skill is untouched: the strike at the E5 with its 46
+        applied.clear()
+        authsrv.apply_party_character({"player_weapon": "starter_sword"})
+        authsrv.PLAYER_SWING_DAMAGE = (5, 5)
+        st, sent = _world(100.0), []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+        authsrv.handle_skill_press([0, 394, 0, FOE], send, st, 1, authsrv.GAME_CMSG_USE_SKILL)
+        sent.clear()
+        for cast in st["pending_casts"]:
+            for k in ("begin_at", "e5_at", "e3_at", "e6_at"):
+                cast[k] -= 30.0
+        authsrv.cast_tick(send, st, 1)
+        check(len(close(sent, PLAYER, agents.GV_ATTACK_SKILL_FINISHED)) == 1
+              and len(words(sent)) == 1 and not launches(sent) and len(applied) == 1
+              and not st.get("player_projectiles"),
+              "the KNOWN-GOOD arm: the same press with a SWORD strikes at the E5 -- 46, the "
+              "word, the condition -- and launches nothing")
+
+        # a BODY's attack skill with a bow in its hands: through land_skill
+        applied.clear()
+        st = _body_world((600.0, 0.0), weapon_item="hostile_bow",
+                         skills=[[394, 0.0, 3.0]], skill_ready=[0.0], casting=0,
+                         cast_target=PLAYER, last_swing=time.time())
+        sent = []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+        authsrv.land_skill(send, st, FOE, st["agents"][FOE], 1)
+        launch = launches(sent)
+        check(len(launch) == 1 and launch[0][0] == FOE and list(launch[0][1]) == [0.0, 0.0]
+              and abs(_f(launch[0][3]) - 0.5) < 1e-6 and launch[0][4:] == [680, 1, 1]
+              and not close(sent, FOE, agents.GV_ATTACK_SKILL_FINISHED)
+              and not [v for op, v in sent if op == FLOAT_T] and not applied
+              and st["body_projectiles"][0]["strike"]["skill_id"] == 394,
+              "a hostile ARCHER's Power Shot at its windup: ONE 0x00A4 [it, the player's "
+              "position, 0, 0.5 s at 1200 u/s, 680, handle 1, arrow 1], no 46, no word, no "
+              "condition -- the strike rides the shot", str([(hex(op), v) for op, v in sent]))
+        health = st["player_health"]
+        sent.clear()
+        for shot in st["body_projectiles"]:
+            shot["arrives_at"] -= 30.0
+        authsrv.projectile_tick(send, st, 1)
+        hits = [v for op, v in sent if op == FLOAT_T and v[0] in (16, 17)]
+        check(sent and sent[0] == (0x00A7, [FOE, 1, 1]) and len(hits) == 1
+              and hits[0][1:3] == [PLAYER, FOE] and st["player_health"] < health
+              and not close(sent, FOE, agents.GV_MELEE_ATTACK_FINISHED)
+              and not close(sent, FOE, agents.GV_ATTACK_SKILL_FINISHED)
+              and applied == [(PLAYER, COND[0], COND[1], 394)] and not st["body_projectiles"],
+              "a flight later: 0x00A7 [it, 1, kind 1] FIRST, the word on the player, NO [1] "
+              "and NO [46] (both closes filtered out of a shot), the condition landing there",
+              str([(hex(op), v) for op, v in sent]))
+        applied.clear()
+        melee = _body_world((60.0, 0.0), weapon_item="starter_hammer",
+                            skills=[[394, 0.0, 3.0]], skill_ready=[0.0], casting=0,
+                            cast_target=PLAYER, last_swing=time.time())
+        sent.clear()
+        authsrv.land_skill(send, melee, FOE, melee["agents"][FOE], 1)
+        check(len(close(sent, FOE, agents.GV_ATTACK_SKILL_FINISHED)) == 1
+              and not launches(sent) and len(applied) == 1,
+              "the control: the same skill with a HAMMER closes with [46, it, 0] at the "
+              "windup and launches nothing")
+
+        authsrv.RANGED_DELIVERY = False
+        try:
+            applied.clear()
+            st, send, at_e5, _p = press_and_e5(100.0)
+            check(not launches(at_e5) and len(close(at_e5, PLAYER, agents.GV_ATTACK_SKILL_FINISHED)) == 1
+                  and len(words(at_e5)) == 1 and len(applied) == 1,
+                  "--no-projectiles: the bow's Power Shot strikes at the E5 with its 46 -- "
+                  "the arm before today")
+        finally:
+            authsrv.RANGED_DELIVERY = True
+    finally:
+        (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+         authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,
+         authsrv.skill_timing, authsrv._is_attack_skill, authsrv.skill_cost,
+         authsrv.skill_projectile, authsrv.skill_damage, authsrv.attack_skill_terms,
+         authsrv.apply_condition, authsrv.weapon_satisfies) = saved
+
+
 def main():
     section_table()
     section_skills()
@@ -483,6 +695,7 @@ def main():
     section_character()
     section_ranged()
     section_bodies()
+    section_skill_shots()
     return LEDGER.verdict()
 
 
