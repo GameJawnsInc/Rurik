@@ -3637,7 +3637,9 @@ character's plain swings** (35 of 138: 1.163 for 1.333, 0.78 for 0.891). It is
 independent of whether the swing doubled (23 % against 24 %) or crit, not periodic, and
 **daggers-only among plain swings** — 0 of 700+ sword and axe swings by three other
 characters, 0 of 21 hammer swings. A shortened recovery on a one-in-four roll is a
-description, not a mechanism; nothing here sends it.
+description, not a mechanism; nothing here sends it. **SOLVED the same day — DAGGERS-F20
+(`studies/daggers` §9): a swing that WILL double strike opens an eighth early, 31 of 32
+against 0 of 109.** The sword's short gap after a skill (9 of 21) is not that and stays open.
 
 **Shipped.** `attack_skill_clock(state, activation)` gives (begin → E5, begin → free) and
 both scheduling sites read it (the press and the approach's arrival);

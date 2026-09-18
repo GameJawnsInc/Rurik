@@ -11265,7 +11265,10 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   reads 0.15 s for Jagged Strike, a third of a second for the boosted double strike and
   0.891 s for the boosted swing, and our newest recorder capture decodes as agent 1
   (ours announces the HERO's property 41 first, so adrenjoin's observer rule would name
-  the wrong agent). Floor 12 bare, 17 with the vault),
+  the wrong agent). The swing row is split by whether the NEXT swing doubles
+  (DAGGERS-F20: retail's two rows differ by an eighth, 0.891 / 0.781) and an interval
+  that straddles an attack-speed episode's edge is neither regime's. Floor 13 bare, 19
+  with the vault),
   `toolkit/authsrv/test_daggers.py` (**2026-09-17, DAGGERS-B2..B5 (studies/daggers): daggers
   and the Assassin's attack chain.** The verbatim part is §5's FAILED-STEP BATCH, checked
   against retail's own order off 20260819T132414 -- the owner's cold off-hand at 236.303
@@ -11322,7 +11325,13 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   activation hits 0.15 s in and occupies the attacker 0.5 (0.0675 / 0.335 under a 0.67
   factor), a weapon-time skill rides the weapon's windup, the real press schedules
   Jagged Strike's E5 at +0.150 with the queue held to +0.500, the swing after a hit
-  opens one recovery later, and both controls restore the arms before. 95 checks, ~30 s),
+  opens one recovery later, and both controls restore the arms before. §12 (DAGGERS-F20)
+  is the EARLY DOUBLE: a swing that will double is due at 7/8 of the interval and the
+  roll is HELD across the gate's ticks; through the real loop the swing opens carrying
+  its roll, the landing arms the second strike from the RECORD (the chance set to 0 in
+  between and it still doubles; a record that rolled a single arms nothing at chance
+  1), the gate opens a doubling swing 7/8 of an interval on and refuses a single's, and
+  `--no-double-strike-early` restores the landing roll. 103 checks, ~30 s),
   `toolkit/authsrv/test_skilldamage.py` (**2026-09-17, SKILLS-LR (skills §50): a spell ROLLS A HIT LOCATION — §11 +3 (a lopsided set through the real `spell_armour_for` with the roll and the pieces pinned: a bare roll resolves against 0, a chest roll against the chest's; bare against the 60 baseline is 2^(60/40); `--no-spell-location-roll` restores the chest's) and §12b +1, the corpus lock through `spellhitjoin.location_buckets()` — some projectile group holds two whole-point buckets within 1.5 % of 2^(60/40) with ≥ 4 and ≥ 2 hits (the owner's `20260917T090355`: Lightning Orb 101 × 9 and 286 × 2); SKILLS-FA's single rating is REFUTED; floor 63 → 67.** **2026-09-16 (night), RUN-SKILLS-RB: §13, the converted hit's word on retail through `healjoin.conversions()` / `score_conversions()` — a conversion is a taker's own heal word beside a damage word onto it WITH the enchantment's `0x0044` on the tick (10 on the Isle tape; 20 coincident self-heals without a strip are reported, not pooled); P6: the zero is `+0.0` (7 of 7), never `−0.0` anywhere, the rest negative remainders (3), and the heal precedes the damage 10 of 10; +2, floor 61 → 63.** **2026-09-16, SLICE-F47 (the Lakeside re-pin): §12's P2 exemption is a SIGNATURE — `spellhitjoin.score` names a `penalty_split`, a multi-valued pair that is ONE value per target maximum across several maxima — because the third pair came (`20260916T150306`, caster 48's skill 222 onto 29, maximum 140 → 119) and it is the death-penalty split alone, 24 whole points at both maxima (0.17143 × 3, then 0.20168); +1 check that every penalty-split pair is one value in WHOLE POINTS (F46); JARIN's two pairs stay named because they are several values INSIDE one maximum (23 and 24 on the Ranger at 140, cause unmeasured; 26 and 51 on the hero at 122, Frenzy), which the signature correctly refuses; floor 60 → 61.** **2026-09-14 (late night), ZEROWORD: Flare into a rating of 300 (1/64, 0.31 → 0) still sends its −0.0 damage word and takes nothing, and is NOT the "fully converted" early return; +1, floor 59 → 60.** **2026-09-14 (late night), HEAL-INT: a 70.4 heal goes out as `0x3F333333` (0.70) and lands 70 — whole points, truncated after the Deep Wound cut; +1, floor 58 → 59.** **2026-09-14 (late night), DAMAGE-INT: Flare's 20 at AR 25 lands 36 — 36.68 truncated to whole points — on the wire and in the books; floor 58 unchanged.** **SKILLS-FA (2026-09-09) added §11–§12,
   floor 44 → 57**: an incoming `Fire damage` cast scales by the player's ONE
   elemental rating (25, not the physical 45 — the `+20 vs. physical` never reaches

@@ -16,7 +16,10 @@ THE ROWS, all s2c, all on one connection's own clock, all about the OBSERVER
 (the agent whose self-scoped property 41 opens the connection -- adrenjoin's
 rule; agent 1 on ours):
 
-  swing start->start     consecutive 0x00A0 [4, me, T, 0] with no skill between
+  swing start->start     consecutive 0x00A0 [4, me, T, 0] with no skill between,
+                         split by whether the NEXT swing double strikes -- a
+                         doubling swing opens an eighth of the interval early
+                         (DAGGERS-F20), so the two rows differ by that eighth
   swing start->word      a start to the observer's next damage word (0x00A3
                          property 16 / 17) or fail word (0x00A0 property 38)
   double gap             0x009F [2, me, 0] behind the word before it
@@ -179,9 +182,12 @@ def census(s2c, me, ias=()):
     tag = lambda t: "boosted" if any(a <= t < b for a, b in windows) else "plain"
     rows = collections.defaultdict(list)
     sw = swings(s2c, me, ias)
-    for r in sw:
-        if r["to_next"] is not None and r["after_skill"] is None:
-            rows[f"swing start->start {tag(r['t'])}"].append(r["to_next"])
+    for i, r in enumerate(sw):
+        if r["to_next"] is not None and r["after_skill"] is None                 and tag(r["t"]) == tag(r["t"] + r["to_next"]):
+            # an interval that STRADDLES an episode's edge is neither regime's
+            into = (", the next DOUBLES"
+                    if i + 1 < len(sw) and sw[i + 1]["doubled"] else "")
+            rows[f"swing start->start {tag(r['t'])}{into}"].append(r["to_next"])
         if r["to_word"] is not None:
             rows[f"swing start->word {tag(r['t'])}"].append(r["to_word"])
     starts = [r["t"] for r in sw]

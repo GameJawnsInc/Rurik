@@ -27,6 +27,25 @@ move back.
 
 ---
 
+### ✅ DAGGERS-F20 — 2026-09-18 — **the "7/8 mode" solved: the double strike is decided before the swing opens, and a swing that will double opens one eighth of the interval early** ([studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md) §9)
+
+Two studies had left a quarter of the dagger character's swing intervals unexplained
+(1.163 s for 1.333). `timingjoin.py --swings` ruled out the swing itself, its critical, its
+double, the serial order, every message the server sends about the attacker and everything
+the client sent; the rate followed Dagger Mastery (0 short in 15 at rank ≤ 3). The untested
+neighbour was the NEXT swing: **31 of 32 short intervals precede a doubling swing, 0 of 109
+full ones do**, the doubling swing itself is ordinary, and the same holds after a skill's
+hit (8 of 8). The server rolled at the landing; it now rolls before the swing opens
+(`double_strike_pending`, held until that swing opens, riding its record to the landing)
+and takes an eighth off the gate (`swing_interval_due`); `--no-double-strike-early` is the
+control. On the client (harness `20260918T115930`, 13 doubles in 80 swings): 1.163–1.164
+and 0.780 into a double, 1.330 / 0.891 into a single, 0 of 63 the other way.
+`timingjoin.py` splits its swing row by whether the next swing doubles and drops intervals
+that straddle an episode's edge. `test_daggers.py` 95 → 103, `test_timingjoin.py` 17 → 19
+(13 bare); `test_playerswing` 191, `test_guards` 45, `test_castcycle` 54, `test_castcancel`
+44, `test_kbdsync` 236, `test_agentlife` 551, `test_mechanics` 246, `test_pools` 128,
+`test_srclint` 26 green.
+
 ### ✅ `timingjoin.py` — 2026-09-18 — **the side-by-side timing census that found SLICE-F49, F50 and F51, landed as a tool** (`toolkit/authsrv/timingjoin.py`, `test_timingjoin.py`)
 
 One retail tape and one of OUR recorder captures (`vault/captures/gamesrv`, written by

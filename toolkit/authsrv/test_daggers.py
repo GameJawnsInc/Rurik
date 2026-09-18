@@ -31,7 +31,7 @@ import chain  # noqa: E402
 import checks  # noqa: E402
 
 # FLOOR 83, from the green run of 2026-09-17 on the machine with the vault.
-LEDGER = checks.Ledger("daggers and the attack chain", floor=95)
+LEDGER = checks.Ledger("daggers and the attack chain", floor=103)
 check = LEDGER.ok
 
 PLAYER = 1
@@ -878,6 +878,85 @@ def section_skill_clock(have_fields):
         authsrv.skill_cost, authsrv.blocks = saved_cost, saved_blocks
 
 
+def section_early_double(have_fields):
+    """DAGGERS-F20: the double strike is decided BEFORE the swing opens, and a
+    swing that will double opens one eighth of the interval early."""
+    import authsrv
+    print("\n12. a doubling swing opens an eighth early (DAGGERS-F20, retail 31 of 32)")
+    if not have_fields:
+        LEDGER.skip("section 12", "no skills rows -- 8 checks")
+        return
+    saved = authsrv.double_strike_chance
+    sent = []
+    send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))
+    starts = lambda: [v for op, v in sent if op == 0x00A0
+                      and v[:2] == [agents.GV_ATTACK_STARTED, PLAYER]]
+    try:
+        authsrv.double_strike_chance = lambda state: 1.0
+        st = _world(authsrv)
+        due = authsrv.swing_interval_due(st, 1.333)
+        check(abs(due - 1.333 * 7 / 8) < 1e-9 and st["player_double_roll"] is True
+              and abs(authsrv.swing_interval_due(st, 1.333) - due) < 1e-9,
+              "a swing that WILL double is due at 7/8 of the interval (1.163 for "
+              "1.333, 0.78 for 0.891 on retail) -- and the roll is HELD, not re-rolled "
+              "on every tick of the gate", f"{due:.4f}")
+        authsrv.double_strike_chance = lambda state: 0.0
+        st = _world(authsrv)
+        check(authsrv.swing_interval_due(st, 1.333) == 1.333
+              and st["player_double_roll"] is False,
+              "one that will not is due a full interval on (retail 0 of 109 full "
+              "intervals precede a double)")
+
+        # through the real loop: the roll rides the swing's own record to its landing
+        authsrv.double_strike_chance = lambda state: 1.0
+        st = _world(authsrv)
+        authsrv.begin_attack(send, st, FOE, 1)
+        authsrv.attack_tick(send, st, 1)
+        swing = st.get("player_swing")
+        check(len(starts()) == 1 and swing is not None and swing.get("doubles") is True
+              and st.get("player_double_roll") is None,
+              "the swing OPENS carrying its roll, and the next gate rolls afresh",
+              str(swing))
+        authsrv.double_strike_chance = lambda state: 0.0      # the landing must not re-roll
+        authsrv._land_player_swing(send, st, 1, dict(swing))
+        check(st.get("player_second_strike") is not None,
+              "at the landing the second strike is armed from the RECORD -- the "
+              "chance has since gone to 0 and it still doubles")
+        st["player_second_strike"] = None
+        authsrv.double_strike_chance = lambda state: 1.0
+        authsrv._land_player_swing(send, st, 1, dict(swing, doubles=False))
+        check(st.get("player_second_strike") is None,
+              "and a record that rolled a single arms nothing, whatever the chance is now")
+
+        # the gate itself: 7/8 of an interval after the last start
+        iv = authsrv.ATTACK_INTERVAL * authsrv.attack_interval_factor(st, PLAYER)
+        for roll, want in ((True, 2), (False, 1)):
+            st = _world(authsrv)
+            sent.clear()
+            authsrv.begin_attack(send, st, FOE, 1)
+            authsrv.attack_tick(send, st, 1)                  # the first swing opens
+            st["player_swing"] = None                         # ... and has landed
+            st["player_double_roll"] = roll
+            st["player_last_swing"] = time.time() - (iv * 7 / 8 + 0.02)
+            authsrv.attack_tick(send, st, 1)
+            check(len(starts()) == want,
+                  ("7/8 of an interval on, a DOUBLING swing opens" if roll
+                   else "and a single's does not -- it waits the full interval"),
+                  f"starts {len(starts())}")
+
+        authsrv.DOUBLE_STRIKE_EARLY = False
+        try:
+            st = _world(authsrv)
+            check(authsrv.swing_interval_due(st, 1.333) == 1.333
+                  and "player_double_roll" not in st,
+                  "--no-double-strike-early: a full interval always and no held "
+                  "roll -- the landing rolls, the arm before today")
+        finally:
+            authsrv.DOUBLE_STRIKE_EARLY = True
+    finally:
+        authsrv.double_strike_chance = saved
+
+
 def main():
     import authsrv
     section_grammar()
@@ -894,6 +973,7 @@ def main():
         section_adjacent(have_fields)
         section_armour()
         section_skill_clock(have_fields)
+        section_early_double(have_fields)
     finally:
         _restore(authsrv, saved)
     return LEDGER.verdict()

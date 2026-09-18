@@ -548,3 +548,41 @@ sub-mode. A lead that is BLOCKED (reason 0) rather than missed was not exposed �
 Bonetti's Defense never went up in the two minutes; the miss is the same fail-word
 family and the server treats them alike.
 
+## 9. The "7/8 mode", solved 2026-09-18 (DAGGERS-F20)
+
+### DAGGERS-F20 — the double strike is decided BEFORE the swing opens, and a swing that will double opens one eighth of the interval early. OBSERVED, 31 of 32 against 0 of 109.
+
+§6 and §8 both left it open: a quarter of this character's plain swing intervals were
+1.163 s where the weapon's is 1.333 (0.78 for 0.891 under Frenzy), and SLICE-F51 had found
+the same eighth missing after some skills. What it is NOT, each measured on both tapes
+with `timingjoin.py --swings`: not a property of the swing it shortens (that swing doubled
+23 % of the time against 24 %, crit 20 % against 28 %); not serially correlated (a short
+follows a short 6 of 31 times, a full 25 of 105); not anything the server says about the
+attacker inside the interval (29 message kinds, none differing by more than 0.09); not
+anything the CLIENT sent (c2s inside short intervals 6 %, inside full ones 5 %); and the
+hit lands at the same fraction of the interval either way (0.418 against 0.415). It is
+daggers-only among plain swings — 0 of 700+ sword and axe swings by three other
+characters, 0 of 21 hammer swings — and it follows Dagger Mastery: the August tape's
+wielders at rank ≤ 3 show **0 short in 15** clean intervals (1.3 % likely at a fixed 25 %).
+
+The test nobody had run was the NEXT swing. **31 of 32 short intervals are followed by a
+swing that double strikes; 0 of 109 full intervals are.** The doubling swing is otherwise
+ordinary — its word 0.564 s after its own start (0.346 boosted; singles 0.565 / 0.346),
+the interval after it a full one (1.329 / 0.892) — and after a skill's hit the same holds:
+8 of 8 doubling swings open 0.60 s on, 20 of 20 full gaps (0.765) are singles. So retail
+rolls the double strike before the swing starts and advances that swing by an eighth of
+the (boosted) interval; a double strike is cheaper in time than two swings by more than
+the second hit alone. The three short-and-single gaps after a skill, and SLICE-F51's short
+mode on SWORDS after a skill (9 of 21), are NOT this and stay open.
+
+**Shipped.** The server rolled the double at the LANDING, so nothing could open early.
+`double_strike_pending(state)` rolls once and holds the answer until the next swing opens;
+`swing_interval_due` takes an eighth off the gate (and off `combat_deadlines`' due
+instant) when it is true; the roll rides the swing's own record to its landing, where the
+second strike is armed from the RECORD (a record without one — a direct caller, the
+control — rolls there as before). `--no-double-strike-early` is the control.
+
+**On our client** (harness `20260918T115930`, 80 swings, 13 doubles, scored by
+`timingjoin.py`): every interval into a doubling swing **1.163–1.164 s** plain and
+**0.780** under Frenzy (retail p50 1.164 / 0.781), every interval into a single 1.330 /
+0.891; 0 of 63 full intervals precede a double.

@@ -1644,6 +1644,11 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                     help="an attack skill's ADJACENT damage is not dealt: Death "
                          "Blossom hits its target and nobody beside it. The "
                          "revert for DAGGERS-B8 (studies/daggers F13).")
+    ap.add_argument("--no-double-strike-early", action="store_true",
+                    help="roll a dagger double strike at the swing's LANDING and "
+                         "open that swing a full interval on, instead of rolling "
+                         "before it opens and opening it an eighth of the interval "
+                         "early (retail 31 of 32). The revert for DAGGERS-F20.")
     ap.add_argument("--no-attack-activation-windup", action="store_true",
                     help="an attack skill with a LISTED activation lands at "
                          "that activation (Jagged Strike 0.5 s) instead of at "

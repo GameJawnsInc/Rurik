@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 import checks  # noqa: E402
 import timingjoin as tj  # noqa: E402
 
-LEDGER = checks.Ledger("timingjoin: every timed quantity, retail beside ours", floor=12)   # the BARE-MACHINE number: 12 without the vault (section 2 skips twice), 17 with it; from green runs
+LEDGER = checks.Ledger("timingjoin: every timed quantity, retail beside ours", floor=13)   # the BARE-MACHINE number: 13 without the vault (section 2 skips twice), 19 with it; from green runs
 check = LEDGER.ok
 
 ME, FOE, FRENZY, LEAD = 7, 9, 346, 782
@@ -33,12 +33,14 @@ def wire():
     s = [(0.0, tj.PINT, [0x9F, 41, ME, 25])]
     start = lambda t: s.append((t, tj.PINT_T, [0xA0, 4, ME, FOE, 0]))
     word = lambda t, p=16: s.append((t, tj.PFLOAT_T, [0xA3, p, FOE, ME, f32(-0.05)]))
-    # three plain swings 1.333 apart; the second crits, the third doubles 0.5 s on
-    for i, t in enumerate((1.0, 2.333, 3.666)):
+    # three plain swings; the second crits; the third DOUBLES 0.5 s on, so it
+    # opens an eighth of the interval early (DAGGERS-F20: 1.1664 for 1.333)
+    third = 2.333 + 1.333 * 7 / 8
+    for i, t in enumerate((1.0, 2.333, third)):
         start(t)
         word(t + 0.565, 17 if i == 1 else 16)
-    s.append((3.666 + 0.565 + 0.5, tj.PINT, [0x9F, 2, ME, 0]))
-    word(3.666 + 0.565 + 0.5)
+    s.append((third + 0.565 + 0.5, tj.PINT, [0x9F, 2, ME, 0]))
+    word(third + 0.565 + 0.5)
     # a lead: debit, E5 0.15 s on with E3 beside it, recharge 2, chain set then cleared
     s.append((6.0, tj.PFLOAT, [0xA2, 62, ME, f32(-0.2)]))
     s.append((6.15, tj.E5, [0xE5, ME, LEAD, 0, 2]))
@@ -73,9 +75,13 @@ def section_synthetic():
     s2c = wire()
     check(tj.observer_of(s2c) == ME, "the observer is the agent whose property 41 opens the wire")
     rows = tj.census(s2c, ME, {FRENZY})
-    check(near(rows.get("swing start->start plain"), [1.333, 1.333]),
+    check(near(rows.get("swing start->start plain"), [1.333]),
           "plain swings: start to start, the pair split by a skill left out",
           str(rows.get("swing start->start plain")))
+    check(near(rows.get("swing start->start plain, the next DOUBLES"), [1.333 * 7 / 8]),
+          "and the interval INTO a doubling swing has its own row -- an eighth "
+          "shorter on retail (DAGGERS-F20)",
+          str(rows.get("swing start->start plain, the next DOUBLES")))
     check(near(rows.get("swing start->start boosted"), [0.891]),
           "and the boosted pair lands in its own row -- inside the 0x0042's episode",
           str(rows.get("swing start->start boosted")))
@@ -113,7 +119,7 @@ def section_vault():
         loaded = []
         print(f"   (retail unreadable: {exc!r})")
     if not loaded:
-        LEDGER.skip("section 2 retail", "no live tape 20260917T224104 -- 3 checks")
+        LEDGER.skip("section 2 retail", "no live tape 20260917T224104 -- 4 checks")
     else:
         rows = {}
         for _label, s2c, me in loaded:
@@ -129,6 +135,11 @@ def section_vault():
         check(len(rows.get("swing start->start boosted", ())) >= 20
               and abs(p50("swing start->start boosted") - 0.891) < 0.01,
               "and the boosted swing 0.891 s, n >= 20", str(p50("swing start->start boosted")))
+        into = rows.get("swing start->start boosted, the next DOUBLES", [])
+        check(len(into) >= 8 and abs(p50("swing start->start boosted, the next DOUBLES")
+                                     - 0.891 * 7 / 8) < 0.015,
+              "and the interval INTO a doubling swing is 7/8 of it (DAGGERS-F20)",
+              f"n={len(into)} p50 {p50('swing start->start boosted, the next DOUBLES')}")
     path = None
     try:
         path = tj.newest_ours()

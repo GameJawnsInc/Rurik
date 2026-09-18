@@ -1934,10 +1934,10 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   last paragraph) — an Elementalist arc's seed. Cyclone Axe's per-foe attack and scatter
   are unmeasured.
 * **DAGGERS, after RUN-2** (daggers §8, last paragraph). A dual whose first strike
-  lands and whose second misses (is 3 sent?); property 10 on the victim (the foe's skill, 229 / 230 unread); the SHORT
-  RECOVERY mode, one eighth of the interval off (SLICE-F51: 25 % of dagger plain swings
-  and ~40 % of swings after a skill; daggers-only among plain swings, independent of
-  doubles and criticals — a description with no mechanism). Sneak Attack with a sword is dropped (PvE-only).
+  lands and whose second misses (is 3 sent?); property 10 on the victim (the foe's skill, 229 / 230 unread); the short gap
+  after a skill's hit on SWORDS (9 of 21, an eighth of the interval off) and the three
+  short-and-single dagger ones — not DAGGERS-F20's early double, which explains the
+  rest. Sneak Attack with a sword is dropped (PvE-only).
 
 **Monster AI** — [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md)
 

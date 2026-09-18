@@ -3220,6 +3220,38 @@ def second_strike_due(state, now):
                if SWING_CLOCK_CARRY and not COMBAT_DEADLINES else 0.0))
 DOUBLE_STRIKE_BASE = 0.02          # WIKI (GWW "Double strike"): inherent 2 %
 DOUBLE_STRIKE_PER_RANK = 0.02      # ... and 2 % a rank of Dagger Mastery
+# DAGGERS-F20 (2026-09-18): THE DOUBLE STRIKE IS DECIDED BEFORE THE SWING OPENS,
+# AND A SWING THAT WILL DOUBLE OPENS ONE EIGHTH OF THE INTERVAL EARLY. The "7/8
+# mode" two studies had left open: on RUN-DAGGERS-1 and -2, 31 of 32 short
+# start-to-start intervals (1.163 for 1.333, 0.78 for 0.891) are followed by a
+# swing that doubles, and 0 of 109 full ones are; the doubling swing itself is
+# ordinary (its word 0.564 / 0.346 s after its own start, the next interval
+# full); after a skill's hit the same (8 of 8 doubling swings open 0.60 s on,
+# 20 of 20 full gaps are singles); and the August tape's low-rank wielders show
+# 0 short in 15 -- the rate is the double-strike chance, 26 % at rank 12. This
+# server rolled at the LANDING, so the early start had nothing to read.
+# --no-double-strike-early is the control (the landing roll, no early start).
+DOUBLE_STRIKE_EARLY = True
+DOUBLE_STRIKE_EARLY_FRACTION = 1.0 / 8.0
+
+
+def double_strike_pending(state):
+    """Whether the player's NEXT swing doubles -- rolled once, held until that
+    swing opens (`attack_tick` pops it into the swing's own record)."""
+    if not (SECOND_STRIKE and DOUBLE_STRIKE_EARLY):
+        return False
+    if state.get("player_double_roll") is None:
+        state["player_double_roll"] = (random.random()
+                                       < double_strike_chance(state))
+    return bool(state["player_double_roll"])
+
+
+def swing_interval_due(state, interval):
+    """The start-to-start gate for the player's next swing: the interval, less
+    an eighth of it when that swing is going to double strike."""
+    if double_strike_pending(state):
+        return interval * (1.0 - DOUBLE_STRIKE_EARLY_FRACTION)
+    return interval
 ITEM_TYPE_DAGGERS = 32
 # CRITICAL STRIKES (attribute 35). +1 % critical chance a rank (WIKI, the
 # attribute's own description), and energy on a critical: 1 / 2 / 3 / 4 from
@@ -3650,8 +3682,9 @@ def combat_deadlines(state):
         out.append(swing.get("lands_at"))
     elif (state.get("attacking") is not None and not state.get("player_dead")
           and state.get("player_last_swing")):
-        out.append(state["player_last_swing"] + ATTACK_INTERVAL
-                   * attack_interval_factor(state, PLAYER_AGENT_ID))
+        out.append(state["player_last_swing"] + swing_interval_due(
+            state, ATTACK_INTERVAL
+            * attack_interval_factor(state, PLAYER_AGENT_ID)))   # DAGGERS-F20
     for agent_id, agent in list((state.get("agents") or {}).items()):
         if agent.get("dead"):
             continue
@@ -13403,8 +13436,12 @@ def _land_player_swing(send, state, conn_id, swing):
     _res = hit_enemy(send, state, swing["target"], conn_id, armed=True)
     # DAGGERS-B6: both daggers may strike. Rolled on a swing that resolved
     # (hit, miss or block -- what a miss does to it is n = 0 on retail).
-    if SECOND_STRIKE and _res is not None \
-            and random.random() < double_strike_chance(state):
+    # DAGGERS-F20: the roll was made before this swing OPENED and rides its
+    # record; a record without one (a direct caller, the control arm) rolls
+    # here, as B6 did.
+    _doubles = (swing["doubles"] if "doubles" in swing
+                else random.random() < double_strike_chance(state))
+    if SECOND_STRIKE and _res is not None and _doubles:
         state["player_second_strike"] = {"target": swing["target"],
                                          "at": second_strike_due(state, time.time())}
     if LANDING_HOLD_RELEASE:
@@ -13761,14 +13798,15 @@ def attack_tick(send, state, conn_id, rec=None):
         _press_refused(state, rec, conn_id, "moving", latch=latch,
                        latch_age=(None if at is None else round(now - at, 3)))
         return
-    if now - state.get("player_last_swing", 0.0) < interval:
+    _due = swing_interval_due(state, interval)               # DAGGERS-F20
+    if now - state.get("player_last_swing", 0.0) < _due:
         _press_refused(state, rec, conn_id, "interval",
                        remaining=round(
-                           interval - (now - state.get("player_last_swing", 0.0)),
+                           _due - (now - state.get("player_last_swing", 0.0)),
                            3))
         return
     state["player_last_swing"] = swing_clock_stamp(
-        state.get("player_last_swing", 0.0), interval, now)      # SLICE-F49
+        state.get("player_last_swing", 0.0), _due, now)          # SLICE-F49
     attack_speed_flush(send, state, PLAYER_AGENT_ID)   # JARIN: with the start
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
          [agents.GV_ATTACK_STARTED, PLAYER_AGENT_ID, target_id, 0],
@@ -13788,6 +13826,10 @@ def attack_tick(send, state, conn_id, rec=None):
     state["player_swing"] = {"target": target_id,
                              "armed_at": now,
                              "lands_at": now + swing_windup(interval)}
+    if SECOND_STRIKE and DOUBLE_STRIKE_EARLY:
+        # the roll this swing opened on is ITS double; the next gate re-rolls
+        state["player_swing"]["doubles"] = bool(
+            state.pop("player_double_roll", False))
 
 
 
@@ -31417,6 +31459,12 @@ def main():
         AREA_DAMAGE = False
         print("NO AREA DAMAGE: an attack skill's adjacent damage is not dealt "
               "(the pre-DAGGERS-B8 arm).")
+    if a.no_double_strike_early:
+        global DOUBLE_STRIKE_EARLY
+        DOUBLE_STRIKE_EARLY = False
+        print("NO EARLY DOUBLE STRIKE: the double strike is rolled at the "
+              "landing and its swing opens a full interval on (the "
+              "pre-DAGGERS-F20 arm).")
     if a.no_attack_activation_windup:
         global ATTACK_ACTIVATION_WINDUP
         ATTACK_ACTIVATION_WINDUP = False
