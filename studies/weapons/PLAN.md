@@ -146,7 +146,7 @@ is: **never calibrate a weapon's clock on a hostile.**
 | identity | three dicts keyed on item type, four rows each (`WEAPON_TYPE_ATTRIBUTE` / `_RATE` / `_REQ_BIT`, :11052); `PARTY_WEAPON_BY_PROFESSION` (:10366) names shortbow, spear, scythe with nothing behind them; item rows for hammer, sword, shield, staff, daggers only | nine types have no row; three tables must be one |
 | clock | right for whatever key it is given (SLICE-F49..F51, DAGGERS-F20); `[attack_speed.rates]` has all 13 keys, `source = "wiki"` | the bow, spear and scythe rows are unmeasured; the player can only hold four of the keys |
 | delivery | melee reach 144 (`ATTACK_REACH`); party casters swing from `PARTY_RANGED_REACH` 1248 with **no projectile**; `0x00A4` / `0x00A7` named in the schema and never sent | the whole ranged half of the game |
-| damage | `swing_damage` — item's `584` range, mastery rank with threshold, measured five-point critical table, critical = max at armour −20 | 633 never read, no unmet term (by decision, isle), ×1.2 not shipped (by decision), `587` unread, caster weapons would scale on a mastery they do not have |
+| damage | `swing_damage` — item's `584` range, mastery rank with threshold, measured five-point critical table, critical = max at armour −20; **since §16 a wand or staff scales on the character's level (strike level 3 × level, the wiki's no-skill critical)** | 633 never read, no unmet term (by decision, isle), ×1.2 not shipped (by decision), `587` unread |
 | own rule | daggers complete | scythe targets and critical, hornbow penetration, staff recharge |
 | off-hand | shield `572` armour added at every location; `holds_shield` gates block skills | focus and staff `556` energy unread; unmet shield / focus values |
 | presentation | `0x0161` + `0x006D` / `0x006E` / `0x0147` sent for the five rows | an item row per type, from the owner's own tapes (numbers and ids; names by id) |
@@ -676,3 +676,58 @@ its flag. Floor 74 bare, 75 with the vault.
 **Still open here.** Q10 (the unmet requirement: `636` on foci, `633` on staves);
 `570 (16..17, 1)` on staves beside GWW's "halves skill recharge 10–20 %" has no reader;
 the shield's `572` armour is W4's with `587`.
+
+## 16. WEAPONS-W4c — shipped 2026-09-18: a wand or staff scales on the character's level
+
+**What was wrong.** A wand or staff names no mastery (W1 kept the two caster rows out of
+the attribute dict), so `player_weapon_rank` returned None and `hit_enemy` fell to the
+raw-range branch: the weapon's `584` with no armour term, no level and no critical — a
+level-1 character's 3–5 wand landed 3–5 on anything, a level-20 character's on a
+100-armour target too.
+
+**The rule is WIKI, explicit, with its own worked example.** GWW "Damage calculation"
+§Caster Weapons: "the damage they deal only scales up with your character level, as
+there is no Mastery for these two weapon types. A level 20 player meeting the listed
+requirement will deal the listed base damage" — and the page's wand example, 6 × 1.20 ×
+2^((3 × 10 − 60) / 40) at level 10, puts the strike level at **3 × level**, the skill
+curve `agent_strike_level` already gives bodies' spells. The critical is the same page's
+chance formula (Isaiah Cartwright's) with a weapon skill of 0: 0.05 × 2^((8 La − 15 Ld −
+100) / 40), 0.8 % at level 1 against level 1, 0.08 % at 20 against 20 — the plan's "very
+low", not the martial table measured from rank 8.
+
+**Checked, as §5 asked, against the owner's own wand.** Not on `20260913T210901` — that
+character's hands read empty on the wire and its ten 3–5-point hits are unarmed, and the
+level-13 character with a 3–5 wand landed nothing — but on `20260807T143055`: player 31 at
+level 1 with a 3–5 wand (`584 (5, 3)`, `587` 7) landed **5 on a level-1 creature and 3, 4,
+4, 4, 4 on a level-2 one**. With strike level 3 and the creature armour the server already
+derives (3 × level: 3 and 6), the rule gives 3–5 and 2.9–4.8: every hit reproduced. So does
+the old rank-0 rule after rounding, so the six hits are **CONSISTENT, not discriminating**;
+what discriminates is the level-20 case, where the raw branch's 3–5 against any armour was
+plainly not retail. The henchmen's staves on `20260817T231139` (level 20, 11–22) land
+10–26 on level-20 bodies — strike level 60 under either rule, the rank and the level
+coinciding at 20 for a rank-12 mastery.
+
+**What shipped.** `combatmath.swing_damage` takes `strike_level=` and uses it in place
+of `attack_strength(rank, level)` when given; `caster_weapon(item)` is a row with `rate`
+wand or staff; `caster_strike_level(level)` = 3 × level; `caster_critical_rate(La, Ld)`
+the wiki's; `hit_enemy` takes the caster branch ahead of the rank branch when the held
+weapon is one, at the character's level (`state["level"]`, else the party row's) against
+the target's armour; a BODY holding a wand or staff (`body_swing_damage`) swings at its
+own `agent_strike_level` — the party Monk's staff at level 3 lands 8 of a 20-point roll
+against 60 armour where its rank-3 mastery gave 9. `--no-caster-level` reverts. **On
+the client** (`20260918T173810`, a level-20 character with the 3–5 wand and the focus at
+a level-1 practice target, 300 u): the twenty words are **8 × 9, 11 × 6 and 13 × 5** — the
+three values a 3, 4 or 5 roll gives at strike level 60 against 3 armour (× 2.69), and
+nothing else; the Monk's staff beside it 3, 4 and 6 at its strike level 9. No assert.
+
+**Test.** `test_weapons` §10: which items are caster weapons; the critical's two values
+and its missing-level default; the strike level handed straight to `swing_damage`; the
+wand through the real `hit_enemy` at 20 / 10 / 20-vs-100 (5, 3, 2); the owner's level-1
+hits reproduced; the staff in the listed range at 20; the level-3 body's 8 against the
+mastery's 9 with a hammer keeping its mastery; the revert arm and its flag. Floor 84
+bare, 85 with the vault.
+
+**Still open here.** Q10 (the unmet requirement's 1/3 — the wiki's number, RUN-WEAPONS-3);
+Q11 (the martial critical table against the same formula); Q12 (×1.2 customisation: the
+one critical on the owner's tape, 9 of a 3–5 wand at level 1, is 8.5 with it and 7 without
+— n = 1); `587` against armour's `527` (no repo armour row carries one yet).

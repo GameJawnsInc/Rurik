@@ -27,6 +27,27 @@ move back.
 
 ---
 
+### ✅ WEAPONS-W4c — 2026-09-18 — **a wand or staff scales on the character's LEVEL against the target's armour (strike level 3 × level), where it dealt its raw range at any level against anything** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) §16)
+
+A caster weapon names no mastery, so `player_weapon_rank` was None and `hit_enemy` took
+the raw-range branch: no armour, no level, no critical. WIKI (GWW "Damage calculation"
+§Caster Weapons, with its own wand example at level 10) puts the strike level at 3 ×
+level, the skill curve; the critical is the same page's no-skill chance (0.8 % at 1 vs 1,
+0.08 % at 20 vs 20). Checked as the plan asked against the owner's wand — on
+`20260807T143055`, not the tutorial tape (that character was unarmed): level 1, a 3–5
+wand, 5 on a level-1 creature and 3 / 4 / 4 / 4 / 4 on a level-2 one, every hit
+reproduced with the server's own creature armour (CONSISTENT, not discriminating: rank 0
+rounds to the same); the henchmen's level-20 staves land 10–26 with 11–22, strike level 60
+either way. Shipped: `swing_damage(strike_level=)`, `caster_weapon`, `caster_strike_level`,
+`caster_critical_rate`, the caster branch in `hit_enemy` ahead of the rank branch, a body
+holding one swinging at its own `agent_strike_level`. `--no-caster-level` reverts. On the
+client (`20260918T173810`, level 20, the 3–5 wand at a level-1 practice target): 8 × 9,
+11 × 6, 13 × 5 — exactly the three values rolls of 3, 4 and 5 give at strike level 60
+against 3 armour, 20 of 20; the Monk's staff beside it 3 / 4 / 6 at strike level 9. No
+assert. `test_weapons` 75 → 85 (84 bare), `test_mechanics` 246, `test_skilldamage` 67,
+`test_daggers` 103, `test_playerswing` 191, `test_guards` 45, `test_population` 75,
+`test_armour` 19, `test_agentlife` 551.
+
 ### ✅ RECORDER-D1 — 2026-09-18 — **the capture writer drops a write that arrives after `close()` instead of raising: the world tick's `sent` row in the teardown window killed the tick thread with a traceback in `gamesrv.log`** ([studies/recorder/FINDINGS.md](studies/recorder/FINDINGS.md))
 
 Seen on `20260918T170928` and `20260918T172315` (2 of that day's 19 harness runs), always

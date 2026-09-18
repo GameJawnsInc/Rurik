@@ -426,7 +426,7 @@ def critical_rate(rank, CRITICAL_RATE_BY_RANK):
 
 
 def swing_damage(rank, armour, damage_range, level=20, critical=False,
-                 mult=1.0, roll=None, *, ARMOUR_DIVISOR,
+                 mult=1.0, roll=None, strike_level=None, *, ARMOUR_DIVISOR,
                  CRITICAL_ARMOUR_REDUCTION):
     """One swing in health points, armour and criticals included.
 
@@ -440,5 +440,8 @@ def swing_damage(rank, armour, damage_range, level=20, critical=False,
         armour = armour - CRITICAL_ARMOUR_REDUCTION
     elif roll is None:
         roll = float(random.randint(lo, hi))
-    sl = attack_strength(rank, level)
+    # WEAPONS-W4c: a caller that knows the strike level hands it in (a wand or
+    # staff: 3 x the character's level, no mastery); everyone else's is the
+    # weapon attribute's, with the level threshold.
+    sl = attack_strength(rank, level) if strike_level is None else float(strike_level)
     return max(0.0, round(roll * mult * 2.0 ** ((sl - armour) / ARMOUR_DIVISOR)))

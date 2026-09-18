@@ -23,7 +23,7 @@ import agents  # noqa: E402
 import authsrv  # noqa: E402
 import combatmath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=74)   # the BARE-MACHINE number: 74 without the vault's full skills table (section 2 skips), 75 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74)
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=84)   # the BARE-MACHINE number: 84 without the vault's full skills table (section 2 skips), 85 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84)
 check = LEDGER.ok
 
 LEGACY_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
@@ -826,6 +826,103 @@ def section_weapon_energy():
          authsrv.WEAPON_ENERGY) = saved
 
 
+def _foe(armour, level=None):
+    row = {"name": "t", "dead": False, "died_at": 0.0, "health": 9000.0,
+           "max_health": 9000.0, "last_hit": 0.0, "pos": (100.0, 0.0), "plane": 0,
+           "armor_rating": float(armour), "allegiance": agents.ALLEGIANCE_HOSTILE,
+           "effects": 0, "attacks_back": False, "skills": (), "skill_ready": []}
+    if level is not None:
+        row["npc"] = {"level": level, "profession": 2}
+    return row
+
+
+def _dealt(level, armour, weapon="starter_wand", rng=(5, 5)):
+    """One armed wand hit through the real hit_enemy at `level` against `armour`."""
+    authsrv.apply_party_character({"player_weapon": weapon})
+    authsrv.PLAYER_SWING_DAMAGE = rng
+    st = {"agents": {FOE: _foe(armour)}, "pos": (0.0, 0.0), "level": level}
+    hp = st["agents"][FOE]["health"]
+    authsrv.hit_enemy(lambda *a, **k: None, st, FOE, 1, armed=True)
+    return hp - st["agents"][FOE]["health"]
+
+
+def section_caster_level():
+    print("\n10. WEAPONS-W4c: a wand or staff scales on the character's level")
+    saved = (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+             authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,
+             authsrv.CASTER_LEVEL, authsrv.caster_critical_rate)
+    try:
+        check(authsrv.caster_weapon(agents.item_template("starter_wand"))
+              and authsrv.caster_weapon(agents.item_template("caster_staff"))
+              and not authsrv.caster_weapon(agents.item_template("starter_sword"))
+              and not authsrv.caster_weapon(agents.item_template("starter_bow"))
+              and not authsrv.caster_weapon(agents.item_template("starter_focus"))
+              and not authsrv.caster_weapon(None),
+              "a wand and a staff are caster weapons (rows with no mastery); a sword, a bow, "
+              "a focus and empty hands are not")
+        c11, c2020 = authsrv.caster_critical_rate(1, 1), authsrv.caster_critical_rate(20, 20)
+        check(abs(c11 - 0.05 * 2 ** ((8 - 15 - 100) / 40)) < 1e-9 and c11 < 0.01
+              and abs(c2020 - 0.05 * 2 ** (-6)) < 1e-9 and c2020 < 0.001
+              and authsrv.caster_critical_rate(None, None) == c2020,
+              "the caster critical is GWW's no-skill chance: 0.8 % at level 1 vs 1, 0.08 % at "
+              "20 vs 20 (the plan's 'very low'), a missing level read as 20",
+              f"{c11:.4f}, {c2020:.5f}")
+        check(authsrv.caster_strike_level(20) == 60.0 and authsrv.caster_strike_level(1) == 3.0
+              and combatmath.swing_damage(0, 60.0, (5, 5), roll=5.0, strike_level=60.0,
+                                          ARMOUR_DIVISOR=40.0, CRITICAL_ARMOUR_REDUCTION=20.0)
+              == 5.0
+              and combatmath.swing_damage(0, 60.0, (5, 5), roll=5.0, strike_level=30.0,
+                                          ARMOUR_DIVISOR=40.0, CRITICAL_ARMOUR_REDUCTION=20.0)
+              == 3.0
+              and combatmath.swing_damage(12, 60.0, (5, 5), roll=5.0,
+                                          ARMOUR_DIVISOR=40.0, CRITICAL_ARMOUR_REDUCTION=20.0)
+              == 5.0,
+              "strike level 3 x level handed straight to swing_damage: 60 at level 20 is the "
+              "listed damage against 60 armour, 30 at level 10 is 3 of a 5; without it the "
+              "attribute's own strike level as before")
+        authsrv.caster_critical_rate = lambda a, d: 0.0        # the roll, not the rule
+        check(_dealt(20, 60.0) == 5.0 and _dealt(10, 60.0) == 3.0 and _dealt(20, 100.0) == 2.0,
+              "through the real hit_enemy with a wand: 5 at level 20 vs AL 60 (the listed "
+              "damage, WIKI's 'a level 20 player ... will deal the listed base damage'), 3 at "
+              "level 10, 2 against AL 100 -- the armour term a wand never had")
+        check(_dealt(1, 3.0) == 5.0 and _dealt(1, 6.0) in (4.0, 5.0)
+              and _dealt(1, 3.0, rng=(3, 3)) == 3.0,
+              "the owner's plain wand hits (20260807T143055, level 1, a 3-5 wand): 5 on a level-1 "
+              "creature (AL 3) and 3-5 on a level-2 one (AL 6) -- reproduced; CONSISTENT, not "
+              "discriminating (the rank-0 rule rounds to the same)")
+        check(11.0 <= _dealt(20, 60.0, weapon="caster_staff", rng=(11, 22)) <= 22.0,
+              "the henchman's 11-22 staff in the player's hands at level 20 vs AL 60 lands in "
+              "its listed range (the henchmen's own 10-26 on 20260817T231139)")
+        # a body: the party Monk's staff swings on ITS level
+        monk = {"name": "monk", "weapon_item": "caster_staff", "damage": [20, 20],
+                "npc": {"profession": 3, "level": 3}, "attributes": [[13, 3]],
+                "weapon_attribute": 13}
+        with_level = authsrv.body_swing_damage(monk, 60.0)
+        authsrv.CASTER_LEVEL = False
+        legacy = authsrv.body_swing_damage(monk, 60.0)
+        authsrv.CASTER_LEVEL = True
+        check(with_level == 8.0 and legacy == 9.0,
+              "a level-3 body holding the caster staff swings at strike level 9 (3 x 3): a "
+              "20-point roll lands 8 against AL 60, where its rank-3 mastery gave 9 -- the "
+              "same rule, the body's own level", f"{with_level} vs {legacy}")
+        hammer = dict(monk, weapon_item="starter_hammer")
+        check(authsrv.body_swing_damage(hammer, 60.0) == 9.0,
+              "and a body with a HAMMER keeps its mastery's strike level")
+        authsrv.CASTER_LEVEL = False
+        try:
+            check(_dealt(10, 60.0) == 5.0 and _dealt(20, 100.0) == 5.0,
+                  "--no-caster-level: the raw range at any level and any armour -- the branch "
+                  "before today")
+        finally:
+            authsrv.CASTER_LEVEL = True
+        src = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
+        check('"--no-caster-level"' in src, "--no-caster-level exists")
+    finally:
+        (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+         authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,
+         authsrv.CASTER_LEVEL, authsrv.caster_critical_rate) = saved
+
+
 def main():
     section_table()
     section_skills()
@@ -836,6 +933,7 @@ def main():
     section_skill_shots()
     section_approach()
     section_weapon_energy()
+    section_caster_level()
     return LEDGER.verdict()
 
 

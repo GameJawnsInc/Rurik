@@ -1942,8 +1942,11 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 **Weapons** — [studies/weapons/PLAN.md](studies/weapons/PLAN.md)
 
 * **Every weapon type, accurately** (plan 2026-09-18; W0's first half, W1, W2a, W6a,
-  W2c, W2b's server half and W5 landed — a held staff's or focus's `556` joins the
-  pool, the rule WIKI because no observing player ever held one). Eleven player types and the hostile-only ranged
+  W2c, W2b's server half, W5 and W4c landed — a held staff's or focus's `556` joins the
+  pool, and a wand or staff scales on the character's LEVEL against armour (strike level
+  3 × level, the wiki's rule and worked example; the owner's level-1 wand hits and a
+  level-20 client run reproduced, 20 of 20 words), where it dealt its raw range at any
+  level against anything). Eleven player types and the hostile-only ranged
   type are one content table with retail items, and EVERY holder of a bow, wand or staff
   shoots — the player, a party caster, a hostile archer: release at the windup, the hit
   distance ÷ speed later, from the weapon's range — a bow ATTACK SKILL releases at its
@@ -1954,8 +1957,10 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   is the server mailbox, so the client never arms its own attack-follow and walks on
   through the start; retail's parks itself with no message; an OWNER press from beyond
   range (RUN-WEAPONS-2) is the instrument; W3 (scythe's extra targets and small
-  critical), W4 (`587` damage type and `633` requirement have no reader; caster weapons
-  by level), Q10 (the unmet requirement, `636` on foci), a staff's `570` recharge word,
+  critical), W4's rest (`587` damage type against armour's `527`, no repo armour row carries
+  one yet; `633` requirement has no reader), Q10 (the unmet requirement's 1/3, `636` on
+  foci), Q11 (the martial critical table against the wiki's formula), a staff's `570`
+  recharge word,
   Q14 Dual Shot's second arrow, Q15 a preparation's own word and substituted arrow; no
   content spawn row holds a ranged item yet. The spear stays melee until a tape names its
   projectile.

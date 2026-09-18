@@ -1670,6 +1670,11 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "leg at the weapon's range. The reach gate still opens the "
                          "swing at range; what this restores is the server's own "
                          "copy walking 1,400 u past it.")
+    ap.add_argument("--no-caster-level", action="store_true",
+                    help="WEAPONS-W4c REVERT: a wand's or staff's hit is its raw "
+                         "584 range with no level and no armour term -- the branch "
+                         "every run before 2026-09-18 took, because a caster weapon "
+                         "names no mastery and the rank branch needs one.")
     ap.add_argument("--no-weapon-energy", action="store_true",
                     help="WEAPONS-W5 REVERT: a held staff's or focus's 556 energy word "
                          "adds nothing to the player's maximum energy -- the pool "

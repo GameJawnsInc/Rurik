@@ -11343,7 +11343,18 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   the seeded pool's maximum and its property-43 rate over the larger pool; -15 % morale
   scaling the innate 20 and leaving the +5 whole; a row holding both summing (the loader's
   own rule, stated not endorsed); `--no-weapon-energy` restoring the row's pool and the
-  flag existing. Floor 74 bare, 75 with the vault),
+  flag existing. §10 (WEAPONS-W4c, 2026-09-18) is A WAND OR STAFF SCALING ON LEVEL:
+  `caster_weapon` true for the wand and the staff and false for a sword, a bow, a focus
+  and empty hands; `caster_critical_rate` the wiki's no-skill chance (0.8 % at 1 vs 1,
+  0.08 % at 20 vs 20, a missing level read as 20); `strike_level=` handed straight to
+  `combatmath.swing_damage` (60 -> the listed 5 against 60 armour, 30 -> 3, and the
+  attribute's own strike level without it); the wand through the real `hit_enemy` (5 at
+  level 20 vs AL 60, 3 at level 10, 2 against AL 100); the owner's level-1 hits on
+  20260807T143055 reproduced (5 at AL 3, 3-5 at AL 6, a 3-3 wand's 3); the staff in its
+  listed range at 20; a level-3 body holding the caster staff landing 8 of a 20 against
+  AL 60 where its rank-3 mastery gave 9, a hammer body keeping its mastery;
+  `--no-caster-level` restoring the raw range at any level and the flag existing. Floor
+  84 bare, 85 with the vault),
   `toolkit/authsrv/test_weaponcensus.py` (**2026-09-18, WEAPONS-W0 (studies/weapons);
   WEAPONS-W2c added §1b and four corpus pins the same day: `skill_shots()` on the
   synthetic wire finds exactly three SKILL shots and no weapon shot among them -- the

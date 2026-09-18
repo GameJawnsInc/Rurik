@@ -11523,12 +11523,60 @@ def critical_rate(rank):
 
 
 def swing_damage(rank, armour, damage_range, level=20, critical=False,
-                 mult=1.0, roll=None):
+                 mult=1.0, roll=None, strike_level=None):
     """Forwards to combatmath with the two constants that stay above."""
     return combatmath.swing_damage(
         rank, armour, damage_range, level=level, critical=critical,
-        mult=mult, roll=roll, ARMOUR_DIVISOR=ARMOUR_DIVISOR,
+        mult=mult, roll=roll, strike_level=strike_level,
+        ARMOUR_DIVISOR=ARMOUR_DIVISOR,
         CRITICAL_ARMOUR_REDUCTION=CRITICAL_ARMOUR_REDUCTION)
+
+
+# ---- WEAPONS-W4c (2026-09-18): CASTER WEAPONS SCALE ON LEVEL ----------------
+#
+# A wand or staff names no mastery (W1 kept the two caster rows OUT of the
+# attribute dict), so player_weapon_rank returned None and hit_enemy fell to
+# the RAW-RANGE branch: the weapon's 584 with no armour term, no level, no
+# critical. WIKI (GWW "Damage calculation", section Caster Weapons): "the
+# damage they deal only scales up with your character level, as there is no
+# Mastery for these two weapon types. A level 20 player meeting the listed
+# requirement will deal the listed base damage" -- and the page's own wand
+# example, 6 x 1.20 x 2^((3 x 10 - 60) / 40) at level 10, puts the strike
+# level at 3 x LEVEL: the skill curve, the same agent_strike_level bodies'
+# spells already use. Checked, as the plan asked, against the owner's plain
+# wand hits (20260807T143055, level 1, a 3-5 wand): 5 on a level-1 creature
+# (AL 3 by creature_armor_rating), 3 / 4 / 4 / 4 / 4 on a level-2 one (AL 6) --
+# the rule reproduces every one; so does the old rank-0 rule after rounding,
+# so the six hits are CONSISTENT, not discriminating. The henchmen's staves
+# at level 20 (20260817T231139) land 10-26 with 11-22 against level-20 bodies,
+# which is strike level 60 under either rule. The wiki is explicit; the tape
+# does not refuse it; --no-caster-level is the arm before today.
+#
+# The critical: GWW's own chance formula (Isaiah Cartwright's, on the same
+# page) with a weapon skill of 0 -- 0.05 x 2^((8 La - 15 Ld - 100) / 40) --
+# 0.8 % at level 1 vs 1, 0.08 % at 20 vs 20: the plan's "very low", not the
+# martial table measured at rank 8+. The unmet requirement (1/3 damage) is
+# Q10's, unread here as everywhere.
+CASTER_LEVEL = True              # --no-caster-level reverts
+
+
+def caster_weapon(item):
+    """Is this item a wand or a staff -- a weapon whose [weapon_type] row has
+    no mastery? (Their rows read `rate = "wand"` / `"staff"`.)"""
+    row = WEAPON_TYPE_ROW.get(int((item or {}).get("item_type", -1)))
+    return bool(row) and row.get("rate") in ("wand", "staff")
+
+
+def caster_strike_level(level):
+    """3 x the character's level -- the skill curve (WIKI)."""
+    return 3.0 * float(level)
+
+
+def caster_critical_rate(level_a, level_d):
+    """GWW's critical chance with no weapon skill: 0.05 x 2^((8 La - 15 Ld -
+    100) / 40), clamped to [0, 1]."""
+    la, ld = float(level_a or 20), float(level_d or 20)
+    return max(0.0, min(1.0, 0.05 * 2.0 ** ((8.0 * la - 15.0 * ld - 100.0) / 40.0)))
 
 
 def player_weapon_rank(state):
@@ -14468,6 +14516,17 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     armour = agent.get("armor_rating")
     if exact is not None:
         dealt = float(exact) + bonus_damage
+    elif EQUIP_WEAPON and PLAYER_SWING_DAMAGE and armour is not None \
+            and ARMOUR_TERM and CASTER_LEVEL and caster_weapon(agents.PLAYER_WEAPON):
+        # WEAPONS-W4c: a wand or staff scales on the character's LEVEL --
+        # strike level 3 x level against the target's armour, the critical
+        # the wiki's no-skill chance; a Weakness on the swinger has no rank
+        # to cut, and cuts the number below as it does every weapon's.
+        _lvl = int(state.get("level") or agents.PLAYER_LEVEL)
+        critical = random.random() < caster_critical_rate(_lvl, agent_level(agent))
+        dealt = swing_damage(0, float(armour), PLAYER_SWING_DAMAGE,
+                             critical=critical,
+                             strike_level=caster_strike_level(_lvl)) + bonus_damage
     elif EQUIP_WEAPON and PLAYER_SWING_DAMAGE and rank is not None \
             and armour is not None:
         critical = random.random() < critical_rate(rank) + (
@@ -20789,8 +20848,17 @@ def body_swing_damage(agent, armour):
     rng = agent_weapon_range(agent)
     if rng is None or armour is None:
         return None
+    # WEAPONS-W4c: a body holding a wand or staff swings on its LEVEL (the
+    # skill strike level it already casts at), not on a mastery it lacks.
+    _sl = None
+    if CASTER_LEVEL and agent.get("weapon_item"):
+        try:
+            if caster_weapon(agents.item_template(agent["weapon_item"])):
+                _sl = agent_strike_level(agent)
+        except Exception:                                  # noqa: BLE001
+            _sl = None
     return swing_damage(agent_swing_rank(agent), float(armour), rng,
-                        level=agent_level(agent) or 20)
+                        level=agent_level(agent) or 20, strike_level=_sl)
 
 
 def party_weapon_item(npc):
@@ -32124,6 +32192,11 @@ def main():
         APPROACH_STOPS_AT_RANGE = False
         print("APPROACH: --legacy-ranged-approach -- a ranged press outside range "
               "walks to the melee disc [WEAPONS-W2b revert]", flush=True)
+    if a.no_caster_level:
+        global CASTER_LEVEL
+        CASTER_LEVEL = False
+        print("DAMAGE: --no-caster-level -- a wand or staff deals its raw range with "
+              "no level and no armour term [WEAPONS-W4c revert]", flush=True)
     if a.no_weapon_energy:
         global WEAPON_ENERGY
         WEAPON_ENERGY = False
