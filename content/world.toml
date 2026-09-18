@@ -1049,6 +1049,16 @@ rate = "longbow"
 delivery = "projectile"
 projectile = 143              # 0x00A4 field 5 for a bow with no 617 word (24 of 26); a 617 wins
 arrow = 1                     # 0x00A4 field 7: 1 on 117 of 119 arrows
+# WEAPONS-W2a. The ONE bow speed measured is 2800 u/s, the owner's 609 = 3 bow (4 of 5
+# plain mutual shots and 6 of 6 skill shots on 20260914T005758) -- by WIKI's flight-time ratios the recurve, so its
+# range is WIKI's recurve 1273. The default row is the OTHER 2.475 s class (609 = 1, the
+# longbow by elimination): WIKI's range 1498 and a RECONSTRUCTED 1600 u/s (WIKI's 0.59 s
+# at 1004 u is 1700; the tape's speeds are round -- 1200 / 1600 / 2800). RUN-WEAPONS-1B
+# and -2 replace both.
+range = 1498
+projectile_speed = 1600
+speed_by_609 = [[3, 2800]]
+range_by_609 = [[3, 1273]]
 
 [weapon_type.bow.provenance]
 source = "capture"
@@ -1064,6 +1074,8 @@ req_bit = 0x00
 rate = "wand"
 delivery = "projectile"
 arrow = 0                     # 0x00A4 field 7: 0 on 353 of 353 wand and staff bolts
+range = 1248                  # WIKI "Range": casting range, which a wand shares
+projectile_speed = 1600       # OBSERVED: 11 of 15 mutual shots by a staff or wand holder
 
 [weapon_type.wand.provenance]
 source = "capture"
@@ -1079,6 +1091,8 @@ req_bit = 0x00
 rate = "staff"
 delivery = "projectile"
 arrow = 0
+range = 1248                  # WIKI "Range": casting range
+projectile_speed = 1600       # OBSERVED: 11 of 15 mutual shots by a staff or wand holder
 
 [weapon_type.staff.provenance]
 source = "capture"

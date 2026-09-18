@@ -367,3 +367,68 @@ rank is None and the swing takes the raw-range fallback `hit_enemy` already had 
 damage-by-level for caster weapons is W4), `587` still has no reader, a party caster keeps
 the staff until W2 gives it a projectile, and `starter_bow` does not carry `fires_arrows`
 (the gate `swing_preparation_bonus` reads) until its arrows exist.
+
+## 11. WEAPONS-W2a — shipped 2026-09-18: the player's ranged delivery
+
+Two more desk findings first, both off `weaponcensus.py` and both needed to send the
+messages honestly.
+
+**WEAPONS-C8 — projectile speed is a round number per weapon class. OBSERVED, by
+mutual-shot geometry.** `0x00A4` carries the TARGET's position, so when two bodies shoot
+each other the shooter's own position is the aim point of the latest shot AT it; distance
+÷ the message's flight time, 80 shots: **1200 u/s** for the hostile-only type 28 (23 of
+27, arrows and bolts alike), **1600** for a staff or wand holder (11 of 15), **2800** for
+the owner's bow (`609` = 3: 4 of 5 plain shots within 100 of it, and its attack skills'
+six arrows at 2779–2813). Flight
+is distance over a constant, not a constant time (staff: intercept +0.002 s, slope
+1/1593). Speed follows the WEAPON, not the projectile id — arrow 143 flies at 1200 from a
+type 28 and 2800 from the bow. By GWW's flight-time ratios 2800 is the recurve, which
+makes `609` = 3 the recurve and `609` = 1 the longbow by elimination (RECONSTRUCTION);
+GWW's own times at 1004 u imply 1140 / 1700 / 2510 u/s for its three arrow classes — near
+the tape's round 1200 / 1600 / 2800 without matching them, so RUN-WEAPONS-1B's prediction
+is stated as round numbers: flatbow 1200, shortbow / longbow / hornbow 1600, recurve 2800.
+
+**WEAPONS-C9 — `0x00A7`'s third field is the weapon's `587` damage type. OBSERVED, 61 of
+61 weapon shooters.** `schema/overrides.json` has it as "a per-attacker constant paired
+with the launch's field 5"; it is the held item's own `587` argument — 1 behind every
+arrow, and 6 / 3 / 7 / 11 / 5 / 8 / 4 behind projectiles 0 / 1 / 2 / 3 / 4 / 5 / 6 because
+those are the damage types the items carrying those `617` words carry. The two
+mismatches in the census are a bow attack skill's arrow (projectile 343, kind 5) leaking
+through the weapon-shot filter. The launch's handle counts the shooter's OUTSTANDING
+projectiles from 1 (1 / 2 / 3 on 390 / 169 / 58 launches). A shot carries no property 1
+(melee's close) and retail's movement hold ends at or a quarter second after the
+RELEASE, never at the hit (3 shots read on `20260914T005758`).
+
+**What shipped.** `player_ranged()` reads how the held weapon shoots — the item's `617`
+else the type row's default, the row's `arrow`, the item's `587`, and `projectile_speed` /
+`range` (a bow's `speed_by_609` / `range_by_609` per class) — and is None for a melee
+type, with the feature off, or when no projectile id is known (**the spear stays on the
+melee path until a tape names its projectile**). At the windup `_land_player_swing`
+calls `launch_player_projectile`: `0x00A4 [me, the target's position, 0, distance ÷
+speed, projectile, handle, arrow]`, the hold released there; `projectile_tick` — beside
+`second_strike_tick` on both tick sites, its arrivals in `combat_deadlines` — sends
+`0x00A7 [me, handle, damage type]` and then lands the hit through `hit_enemy(...,
+projectile=True)`, which skips property 1. A target that died in flight is still closed
+and lands nothing. `attack_reach()` returns the weapon's range, so a press inside it
+opens the shot where the character stands. `--no-projectiles` is the control;
+`--enemy-offset X,Y` stands the hostile at range for the harness.
+
+**On the client**, scored by `timingjoin.py` beside retail:
+
+| Row | Retail bow `20260914T005758` | Ours, bow from 900 u (`20260918T132541`) | Retail wand `20260913T210901` | Ours, wand from 700 u (`20260918T132736`) |
+|---|---|---|---|---|
+| swing start→start | 2.476 | 2.475 × 17 | 1.749 | 1.750 × 21 |
+| swing start→launch | 1.138 (1.119–1.157) | 1.138 × 17 | 0.776 (0.762–0.791) | 0.775 × 21 |
+| launch→word − flight | −0.000 (±0.020) | +0.001 | 0.000 (±0.018) | +0.001 |
+| launch→arrival − flight | −0.000 | 0.000 | 0.000 | 0.000 |
+
+The character stands at range with the arrow nocked and never walks in; no assert; the
+wand's bolt (projectile 0, arrow 0) and a focus in the off hand are accepted.
+
+**Named follow-ups, not oversights.** W2b: a press OUTSIDE range still walks the body to
+melee distance (the follow ends at the client's own stop disc; stopping at range is a
+movement change). A bow ATTACK SKILL still lands through the cast path with no arrow.
+Heroes and hostiles still "swing" from `PARTY_RANGED_REACH` with no projectile (W6).
+`timingjoin.py`'s `swing start->word` window is 1.5 s, which a long shot outlives (retail
+7 of 12, ours 0 of 17 at 900 u) — the ranged rows are the instrument for shots. Ranges
+are WIKI until RUN-WEAPONS-2.

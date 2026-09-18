@@ -27,6 +27,28 @@ move back.
 
 ---
 
+### ✅ WEAPONS-W2a — 2026-09-18 — **the player's ranged delivery: the windup releases the weapon's projectile, the hit lands distance ÷ speed later, the press opens from the weapon's range** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) §11)
+
+Two desk findings made the messages honest: **projectile speed is a round number per
+weapon class** (mutual-shot geometry, 80 shots: 1200 u/s hostile type 28, 1600 staff or
+wand, 2800 the owner's `609` = 3 bow, plain shots and skill shots alike) and **`0x00A7`'s third field is the held weapon's
+`587` damage type** (61 of 61 weapon shooters; the schema had "a per-attacker constant");
+the launch's handle counts outstanding projectiles from 1. `player_ranged()`,
+`launch_player_projectile` (from `_land_player_swing`, hold released at the release),
+`projectile_tick` on both tick sites with its arrivals in `combat_deadlines`,
+`hit_enemy(projectile=True)` (no property 1), `attack_reach()` returning the weapon's
+range; the spear stays on the melee path until a tape names its projectile.
+`--no-projectiles` is the control, `--enemy-offset X,Y` the harness's range. On the
+client (`20260918T132541`, bow from 900 u; `20260918T132736`, wand + focus from 700 u):
+start→launch 1.138 × 17 and 0.775 × 21 (retail 1.138 / 0.776), launch→word − flight
++0.001 (retail 0.000 ± 0.02), every launch closed, no walk-in, no assert.
+`test_weapons.py` 20 → 33 (32 bare), `test_weaponcensus.py` 28 → 30 (16 bare),
+`test_guards` 45 re-pinned (`projectile_tick` a sixth caller of `hit_enemy`, two tick
+lines), `test_playerswing` 191, `test_daggers` 103, `test_castcycle` 54, `test_castcancel`
+44, `test_kbdsync` 236, `test_agentlife` 551, `test_mechanics` 246, `test_pools` 128,
+`test_effects` 85, `test_morale` 63, `test_content` 48, `test_srclint` 26,
+`test_identlint` 28, `test_provlint` 19, `test_checks` 17 green.
+
 ### ✅ WEAPONS-W1 — 2026-09-18 — **one weapon table, a row and a retail item per type; the bow, scythe and spear are in the player's hands on the client** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) §10)
 
 `[weapon_type.*]` in `content/world.toml` (eleven rows, each number read off retail's wire

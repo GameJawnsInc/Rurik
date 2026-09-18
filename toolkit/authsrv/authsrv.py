@@ -3662,6 +3662,8 @@ def combat_deadlines(state):
     second = state.get("player_second_strike")
     if second:
         out.append(second["at"])
+    for shot in state.get("player_projectiles") or ():       # WEAPONS-W2a
+        out.append(shot["arrives_at"])
     for cast in state.get("pending_casts") or ():
         if cast.get("cancelled"):
             continue
@@ -3702,6 +3704,7 @@ def combat_pass(send, state, conn_id, rec=None):
     cast_tick(send, state, conn_id)
     chain_tick(send, state, conn_id)
     second_strike_tick(send, state, conn_id)
+    projectile_tick(send, state, conn_id)
     attack_tick(send, state, conn_id, rec)
     enemy_attack_tick(send, state, conn_id)
     ally_cast_tick(send, state, conn_id)
@@ -11092,6 +11095,128 @@ def weapon_type_tables(rows=None):
 # record +0x24; studies/daggers F3). A type with no bit satisfies no requirement.
 (WEAPON_TYPE_ROW, WEAPON_TYPE_ATTRIBUTE,
  WEAPON_TYPE_RATE, WEAPON_TYPE_REQ_BIT) = weapon_type_tables()
+
+
+# ---- WEAPONS-W2a (2026-09-18): THE PLAYER'S RANGED DELIVERY ----------------
+#
+# Until today every weapon landed its word at the swing's windup, from melee
+# reach -- a bow's 1.138 s "hit" where retail only RELEASES the arrow and lands
+# it 0.04-0.95 s later (timingjoin, harness 20260918T130414 beside retail's
+# 20260914T005758). Retail's shape, per shot, OBSERVED over 466 weapon shots
+# (weaponcensus.py; studies/weapons sections 3, 9 and 11):
+#
+#   +0.000          0x00A0 [4, shooter, target, 0]   the swing opens, as melee's
+#   +swing_windup   0x00A4 [shooter, the TARGET's position, 0, f32 flight,
+#                           projectile, handle, arrow]
+#   +flight         0x00A7 [shooter, handle, the weapon's 587 damage type]
+#                   0x00A3 the word -- the same instant, 0x00A7 first
+#
+# `projectile` is the held item's own 617 argument (37 of 37 shooters), else the
+# type row's default (a bow with no 617 shoots 143, 24 of 26); `arrow` is 1 for
+# an arrow and 0 for a wand or staff bolt; `handle` counts the shooter's
+# outstanding projectiles from 1 (1 / 2 / 3 on 390 / 169 / 58 launches); the
+# arrival's third field is the weapon's damage type for every (projectile,
+# value) pair in the corpus (143 -> 1, 0 -> 6, 1 -> 3, 4 -> 5, 5 -> 8, 6 -> 4,
+# 2 -> 7, 3 -> 11 -- each the 587 the item carrying that 617 carries). No
+# property 1 closes a shot (melee's GV_MELEE_ATTACK_FINISHED is absent, 3 of 3
+# read; `projectile=True` tells hit_enemy so), and the movement hold ends at or
+# just after the RELEASE, not at the hit.
+#
+# FLIGHT = distance / the type's speed. The speeds are round numbers on the
+# tape (mutual-shot geometry, 80 shots): 1200 u/s for the hostile-only type 28,
+# 1600 for a staff or wand (11 of 15), 2800 for the owner's bow (609 = 3: 4 of 5
+# plain shots, 6 of 6 skill shots). A type row carries `projectile_speed` and `range`, and a bow's
+# `speed_by_609` / `range_by_609` override per class; what is WIKI there says so.
+#
+# NOT IN W2a, and each is a named follow-up rather than an oversight: the
+# APPROACH still walks to melee distance when the press is out of range (W2b:
+# stop at range); a bow ATTACK SKILL still lands through the cast path with no
+# arrow; heroes and hostiles still "swing" (W6); stray / obstructed / dodged
+# and height need line of sight. A type whose projectile id is unmeasured (the
+# spear: n = 0 on tape) stays on the melee path, said out loud at launch.
+# --no-projectiles is the control: the windup landing, every run before today.
+RANGED_DELIVERY = True
+GAME_SMSG_AGENT_PROJECTILE_LAUNCHED = 0x00A4
+GAME_SMSG_AGENT_PROJECTILE_ARRIVED = 0x00A7
+ITEM_WORD_PROJECTILE, ITEM_WORD_BOW_CLASS, ITEM_WORD_DAMAGE_TYPE = 617, 609, 587
+
+
+def item_word(item, identifier):
+    """(arg, arg2) of the first `identifier` word on a content item, or None --
+    the client walker's own layout (bits 29-20 / 17-8 / 7-0, skips honoured)."""
+    for word in (item or {}).get("modifiers", ()):
+        w = int(word) & 0xFFFFFFFF
+        if (w >> 30) & 3 == 3 or (w >> 18) & 1:
+            continue
+        if (w >> 20) & 0x3FF == identifier:
+            return (w >> 8) & 0x3FF, w & 0xFF
+    return None
+
+
+def player_ranged():
+    """How the player's held weapon shoots, or None when it swings in melee.
+
+    {projectile, arrow, damage_type, speed, range} -- None unless the feature is
+    on, a weapon is equipped, its [weapon_type] row says `projectile`, AND a
+    projectile id is known (the item's 617, else the row's default)."""
+    if not (RANGED_DELIVERY and EQUIP_WEAPON and agents.PLAYER_WEAPON):
+        return None
+    row = WEAPON_TYPE_ROW.get(int(agents.PLAYER_WEAPON.get("item_type", -1)))
+    if not row or row.get("delivery") != "projectile":
+        return None
+    own = item_word(agents.PLAYER_WEAPON, ITEM_WORD_PROJECTILE)
+    projectile = own[1] if own is not None else row.get("projectile")
+    if projectile is None or not row.get("projectile_speed") or not row.get("range"):
+        return None
+    klass = (item_word(agents.PLAYER_WEAPON, ITEM_WORD_BOW_CLASS) or (None,))[0]
+    by_class = lambda field: dict((int(k), float(v)) for k, v in row.get(field, ()))
+    kind = item_word(agents.PLAYER_WEAPON, ITEM_WORD_DAMAGE_TYPE)
+    return {"projectile": int(projectile), "arrow": int(row.get("arrow", 0)),
+            "damage_type": int(kind[0]) if kind else 0,
+            "speed": by_class("speed_by_609").get(klass, float(row["projectile_speed"])),
+            "range": by_class("range_by_609").get(klass, float(row["range"]))}
+
+
+def launch_player_projectile(send, state, conn_id, swing, how):
+    """The windup of a RANGED swing: the projectile leaves. Returns the flight
+    record, or None when there is nothing left to shoot at."""
+    victim = state.get("agents", {}).get(swing["target"])
+    if victim is None or victim.get("dead"):
+        return None
+    now = time.time()
+    px, py = _reach_frame(state, now)
+    tx, ty = float(victim["pos"][0]), float(victim["pos"][1])
+    flight = math.hypot(tx - px, ty - py) / how["speed"]
+    flying = state.setdefault("player_projectiles", [])
+    shot = {"target": swing["target"], "arrives_at": now + flight,
+            "handle": len(flying) + 1, "damage_type": how["damage_type"]}
+    flying.append(shot)
+    send(GAME_SMSG_AGENT_PROJECTILE_LAUNCHED,
+         [PLAYER_AGENT_ID, [tx, ty], 0, _f32(flight), how["projectile"],
+          shot["handle"], how["arrow"]],
+         f"projectile {how['projectile']} at agent {swing['target']}: "
+         f"{flight:.3f} s in the air (handle {shot['handle']})")
+    return shot
+
+
+def projectile_tick(send, state, conn_id):
+    """Land every one of the player's projectiles whose flight is up: the
+    arrival that closes its handle, then the hit -- retail's order."""
+    flying = state.get("player_projectiles")
+    if not flying:
+        return
+    now = time.time()
+    for shot in [s for s in flying if now >= s["arrives_at"]]:
+        flying.remove(shot)
+        send(GAME_SMSG_AGENT_PROJECTILE_ARRIVED,
+             [PLAYER_AGENT_ID, shot["handle"], shot["damage_type"]],
+             f"projectile (handle {shot['handle']}) arrives at agent "
+             f"{shot['target']}")
+        victim = state.get("agents", {}).get(shot["target"])
+        if victim is None or victim.get("dead") or state.get("player_dead"):
+            continue
+        hit_enemy(send, state, shot["target"], conn_id, armed=True,
+                  projectile=True, label="the shot")
 # The two modifier identifiers an armour piece carries. 572's argument is the
 # rating the tooltip prints as `Armor: N`; 527's is the `+N vs. <type>` line,
 # and identifier 4 beside it resolves to `vs. physical damage`. All three were
@@ -13070,6 +13195,9 @@ def attack_reach():
     144 u under --attack-approach, the old 1500 u otherwise (ANIMREF-RE 38;
     the two ship together because a reach with no approach is a dead
     press)."""
+    how = player_ranged()                  # WEAPONS-W2a: a ranged weapon's own range
+    if how is not None and ATTACK_APPROACH:
+        return how["range"]
     return ATTACK_REACH if ATTACK_APPROACH else ATTACK_RANGE
 
 
@@ -13469,6 +13597,16 @@ def _land_player_swing(send, state, conn_id, swing):
     the out-of-reach one are the same event, because retail judges reach at
     the start and not at the hit (7 of 7, 33 of 34)."""
     state["player_swing"] = None
+    _how = player_ranged()
+    if _how is not None:
+        # WEAPONS-W2a: the windup RELEASES; projectile_tick lands the hit a
+        # flight later. The hold ends here -- retail's [8, me, 0] rides the
+        # release or follows it by a quarter second, never the hit.
+        launch_player_projectile(send, state, conn_id, swing, _how)
+        if LANDING_HOLD_RELEASE:
+            action_hold(send, state, 0,
+                        "the shot is away -- movement is legal now")
+        return
     _res = hit_enemy(send, state, swing["target"], conn_id, armed=True)
     # DAGGERS-B6: both daggers may strike. Rolled on a swing that resolved
     # (hit, miss or block -- what a miss does to it is n = 0 on retail).
@@ -13951,7 +14089,8 @@ def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
 
 def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
               exact=None, swing=True, label="one swing", armed=False,
-              skill_strike=False, skill_id=None, before_damage=None):
+              skill_strike=False, skill_id=None, before_damage=None,
+              projectile=False):
     """Land one swing on a hostile agent, if the swing timer allows it.
 
     `skill_strike` TRUE is an ATTACK SKILL's execution (ANIMREF-R6): a full
@@ -14082,7 +14221,7 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
                  f"attack_started: player swings at {target_id}")
             if SWING_HOLDS_WALK_GATE:
                 action_hold(send, state, 1, f"the swing at {target_id}")
-        if not skill_strike:
+        if not skill_strike and not projectile:      # WEAPONS-W2a: no prop 1 on a shot
             send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
                  [agents.GV_MELEE_ATTACK_FINISHED, PLAYER_AGENT_ID, 0],
                  "melee_attack_finished")
@@ -14103,7 +14242,7 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
                  f"attack_started: player swings at {target_id}")
             if SWING_HOLDS_WALK_GATE:
                 action_hold(send, state, 1, f"the swing at {target_id}")
-        if not skill_strike:
+        if not skill_strike and not projectile:      # WEAPONS-W2a
             send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
                  [agents.GV_MELEE_ATTACK_FINISHED, PLAYER_AGENT_ID, 0],
                  "melee_attack_finished")
@@ -14217,7 +14356,7 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     # attack has a beginning and no end. Skipped for a spell, which never
     # began one -- and for a skill strike, whose close is the property 46
     # its caller already sent (the corpus batch carries no prop 1, 40/40).
-    if swing and not skill_strike:
+    if swing and not skill_strike and not projectile:     # WEAPONS-W2a
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.GV_MELEE_ATTACK_FINISHED, PLAYER_AGENT_ID, 0],
              "melee_attack_finished")
@@ -25773,6 +25912,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         cast_tick(send, state, conn_id)
                         chain_tick(send, state, conn_id)     # DAGGERS-B5
                         second_strike_tick(send, state, conn_id)  # DAGGERS-B6
+                        projectile_tick(send, state, conn_id)     # WEAPONS-W2a
                         # Expiries AFTER the casts, so an effect applied on
                         # this tick is never closed by the same tick that
                         # opened it -- `due` compares against a `now` taken
@@ -31508,6 +31648,20 @@ def main():
         AREA_DAMAGE = False
         print("NO AREA DAMAGE: an attack skill's adjacent damage is not dealt "
               "(the pre-DAGGERS-B8 arm).")
+    if a.enemy_offset:
+        global ENEMY_OFFSET
+        try:
+            _ox, _oy = (float(v) for v in a.enemy_offset.split(","))
+        except ValueError:
+            raise SystemExit(f"--enemy-offset {a.enemy_offset!r}: want X,Y in units")
+        ENEMY_OFFSET = (_ox, _oy)
+        print(f"ENEMY OFFSET: the first hostile stands ({_ox:.0f}, {_oy:.0f}) u from "
+              f"the player's spawn [WEAPONS-W2a]", flush=True)
+    if a.no_projectiles:
+        global RANGED_DELIVERY
+        RANGED_DELIVERY = False
+        print("NO PROJECTILES: a ranged weapon lands its word at the windup from "
+              "melee reach (the pre-WEAPONS-W2a arm).")
     if a.no_double_strike_early:
         global DOUBLE_STRIKE_EARLY
         DOUBLE_STRIKE_EARLY = False

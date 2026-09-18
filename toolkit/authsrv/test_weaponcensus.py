@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 import checks  # noqa: E402
 import weaponcensus as wc  # noqa: E402
 
-LEDGER = checks.Ledger("weaponcensus: held weapon types, swings and shots", floor=15)   # the BARE-MACHINE number: 15 without the vault (section 2 skips), 28 with it; from green runs
+LEDGER = checks.Ledger("weaponcensus: held weapon types, swings and shots", floor=16)   # the BARE-MACHINE number: 16 without the vault (section 2 skips), 30 with it; from green runs
 check = LEDGER.ok
 
 ME, WANDER, ARCHER, LIAR, FOE = 7, 51, 50, 52, 9
@@ -61,7 +61,8 @@ def wire():
         s.append((t0 + windup, wc.LAUNCH, [wc.LAUNCH, agent, (1.0, 2.0), 0, f32(flight),
                                            f5, handle[0], f7]))
         if arrive:
-            s.append((t0 + windup + flight, wc.ARRIVE, [wc.ARRIVE, agent, handle[0], 1]))
+            s.append((t0 + windup + flight, wc.ARRIVE,
+                      [wc.ARRIVE, agent, handle[0], 1 if f7 else 5]))
         s.append((t0 + windup + flight, wc.PFLOAT_T,
                   [wc.PFLOAT_T, 16, target, agent, f32(-0.05)]))
 
@@ -157,6 +158,11 @@ def section_synthetic():
           str([wc.projectile_verdict(sho[a]) for a in (ME, WANDER, ARCHER, LIAR)]))
     check(sho[LIAR]["closed"] == 0 and sho[ARCHER]["field7"] == {1: 3} and sho[WANDER]["field7"] == {0: 5},
           "an unclosed launch is counted unclosed; field 7 rides beside field 5")
+    check([wc.arrival_verdict(sho[a]) for a in (ME, WANDER, ARCHER)]
+          == ["kind == 587", "kind == 587", "kind == 587"]
+          and wc.arrival_verdict(dict(sho[WANDER], arrival_kind={9: 5})) == "MISMATCH",
+          "0x00A7's third field against the held weapon's 587 damage type (the bow's 1, "
+          "the wand's 5) -- and a wand answering 9 is a MISMATCH")
 
 
 def section_vault():
@@ -167,7 +173,7 @@ def section_vault():
         c = None
         print(f"   (corpus unreadable: {exc!r})")
     if not c or not c["shooters"]:
-        LEDGER.skip("section 2", "no live corpus -- 13 checks")
+        LEDGER.skip("section 2", "no live corpus -- 14 checks")
         return
     check({2, 5, 15, 22, 26, 27, 32, 35, 36}.issubset(c["lead"]) and {1, 28}.issubset(c["lead"])
           and {12, 24}.issubset(c["off"]),
@@ -204,6 +210,11 @@ def section_vault():
     check(match >= 35 and miss <= 0.05 * (match + miss),
           "WEAPONS-C3: 0x00A4 field 5 is the held weapon's own 617 argument",
           f"{match} match, {miss} mismatch")
+    kinds = [wc.arrival_verdict(r) for r in sho]
+    k_ok, k_bad = kinds.count("kind == 587"), kinds.count("MISMATCH")
+    check(k_ok >= 50 and k_bad <= 0.05 * (k_ok + k_bad),
+          "WEAPONS-C9: 0x00A7's third field is the held weapon's 587 damage type",
+          f"{k_ok} match, {k_bad} mismatch")
     bare = [r for r in sho if r["w617"] is None and r["type"] in (5, 28)]
     arrows = [r for r in bare if set(r["field5"]) == {143}]
     check(len(bare) >= 20 and len(arrows) >= 0.9 * len(bare),

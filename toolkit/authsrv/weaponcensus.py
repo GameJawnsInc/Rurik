@@ -24,7 +24,8 @@ name every body's weapon and nobody had joined the two halves:
   0x00A0 [4, agent, target, 0]        a swing (or a shot) starts
   0x00A4 [shooter, aim, u16, flight, PROJECTILE, handle, arrow]
                                       the projectile leaves
-  0x00A7 [shooter, handle, k]         ... and arrives
+  0x00A7 [shooter, handle, KIND]      ... and arrives; KIND is the held weapon's
+                                      587 damage type (WEAPONS-C9)
   0x00A3 [16 | 17, target, source, -x]  the hit's word
 
 Five questions, each answered per body and never in aggregate:
@@ -191,8 +192,8 @@ def _events(s2c):
             skills[v[1]].append(t)
         elif op == LAUNCH and len(v) > 7:
             launches[v[1]].append((t, v))
-        elif op == ARRIVE and len(v) > 2:
-            arrivals[v[1]].append((t, v[2]))
+        elif op == ARRIVE and len(v) > 3:
+            arrivals[v[1]].append((t, v[2], v[3]))
         elif op == PFLOAT_T and len(v) > 4 and v[1] in WORDS:
             words[v[3]].append(t)
     return starts, skills, launches, arrivals, words
@@ -242,6 +243,8 @@ def shooters(s2c):
                 "type": None if lead is None else held_type(items, lead),
                 "w617": (word_of(items, lead, PROJECTILE) or (None, None))[1],
                 "w609": (word_of(items, lead, 609) or (None, None))[0],
+                "w587": (word_of(items, lead, DAMAGE_TYPE) or (None, None))[0],
+                "arrival_kind": collections.Counter(),
                 "field5": collections.Counter(), "field7": collections.Counter(),
                 "start_to_launch": [], "flight": [], "word_error": [],
                 "closed": 0, "shots": 0}
@@ -265,10 +268,19 @@ def shooters(s2c):
             if hit:
                 row["word_error"].append(min(hit, key=lambda w: abs(w - t - flight))
                                          - t - flight)
-            if any(h == v[6] and t <= a < t + flight + 0.25
-                   for a, h in arrivals.get(agent, ())):
+            closing = [k for a, h, k in arrivals.get(agent, ())
+                       if h == v[6] and t <= a < t + flight + 0.25]
+            if closing:
                 row["closed"] += 1
+                row["arrival_kind"][closing[0]] += 1
     return [r for r in table.values() if r["shots"]]
+
+
+def arrival_verdict(row):
+    """How a shooter's 0x00A7 third field compares with its weapon's 587 word."""
+    if row["w587"] is None:
+        return "weapon has no 587" if row["type"] is not None else "no weapon row"
+    return "kind == 587" if set(row["arrival_kind"]) == {row["w587"]} else "MISMATCH"
 
 
 def projectile_verdict(row):
@@ -350,6 +362,8 @@ def report(c, show_attackers=False, show_shooters=False, out=sys.stdout):
     p(f"\nSHOOTERS: {len(c['shooters'])}, "
       f"{sum(r['shots'] for r in c['shooters'])} weapon shots;  0x00A4 field 5 vs the "
       f"held weapon's 617: {dict(verdicts)}")
+    kinds = collections.Counter(arrival_verdict(r) for r in c["shooters"])
+    p(f"  0x00A7 field 3 vs the held weapon's 587 damage type: {dict(kinds)}")
     windups = collections.defaultdict(list)
     for r in c["shooters"]:
         windups[round(_p50(r["start_to_launch"]), 2)].extend(r["start_to_launch"])

@@ -1654,6 +1654,17 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                     help="an attack skill's ADJACENT damage is not dealt: Death "
                          "Blossom hits its target and nobody beside it. The "
                          "revert for DAGGERS-B8 (studies/daggers F13).")
+    ap.add_argument("--enemy-offset", default=None, metavar="X,Y",
+                    help="WEAPONS-W2a: where the first hostile stands relative to the "
+                         "player's spawn, in units, over content [enemy] offset_x / "
+                         "offset_y (300, 0) -- so a ranged weapon can be shot from range.")
+    ap.add_argument("--no-projectiles", action="store_true",
+                    help="land a bow's, wand's or staff's word at the swing's WINDUP "
+                         "from melee reach, with no 0x00A4 / 0x00A7 -- every run "
+                         "before WEAPONS-W2a. By default the windup releases the "
+                         "weapon's projectile (its 617 word, else the type's default), "
+                         "the hit lands distance / speed later, and the press opens "
+                         "from the weapon's range.")
     ap.add_argument("--no-double-strike-early", action="store_true",
                     help="roll a dagger double strike at the swing's LANDING and "
                          "open that swing a full interval on, instead of rolling "

@@ -668,11 +668,21 @@ def section_concurrency():
     # walk names its enclosing `handle`) in place of the tick's time.sleep:
     # the same THREAD by construction, so F10's guarantee is unchanged. The
     # pin is two tick lines, one of them the B6 line, and that call chain.
+    # WEAPONS-W2a (2026-09-18): one more, the same shape as B6's. A ranged swing's
+    # hit lands in `projectile_tick` a flight after `_land_player_swing` released
+    # it; that tick sits beside second_strike_tick on BOTH sites (the world tick's
+    # own loop and combat_pass) and nowhere else, pinned by its two lines.
+    _shot_line = [l for l in src if "projectile_tick(send, state, conn_id)" in l
+                  and not l.lstrip().startswith("def ")]
     check(callers == {"_land_player_swing", "cast_tick", "hit_enemy",
-                      "dual_second_strike", "second_strike_tick"}
+                      "dual_second_strike", "second_strike_tick",
+                      "projectile_tick"}
           and callers_of("dual_second_strike") == {"cast_tick"}
           and len(_tick_line) == 2
           and sum("# DAGGERS-B6" in l for l in _tick_line) == 1
+          and len(_shot_line) == 2
+          and sum("# WEAPONS-W2a" in l for l in _shot_line) == 1
+          and callers_of("launch_player_projectile") == {"_land_player_swing"}
           and callers_of("combat_pass") == {"combat_sleep"}
           and callers_of("combat_sleep") == {"handle"}
           and callers_of("_land_player_swing") == {"attack_tick"},

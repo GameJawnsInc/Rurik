@@ -11288,7 +11288,16 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   item, the bow's missing 617 against the table's default 143. §4: the character the
   server builds around each weapon -- its interval and range, a two-handed bow emptying
   the off hand a sword kept, a spear holding a shield, a wand naming no mastery -- with
-  the globals restored. Floor 19 bare, 20 with the vault),
+  the globals restored. §5 (WEAPONS-W2a) is RANGED DELIVERY through the real swing
+  loop with a recording send: how each ranged weapon shoots (the bow's default 143,
+  the wand's and staff's own 617, each with its 587), the spear / sword / scythe on the
+  melee path, a bow's 609 class picking the measured 2800 u/s, the press opening from
+  the weapon's range, ONE 0x00A4 at the windup with nothing landing there, 0x00A7
+  FIRST and then the hit's batch a flight later with no property 1, a raised movement
+  hold ending at the release, a wand's bolt, two shots in the air taking handles 1 and
+  2 with both arrivals in combat_deadlines, a target that died in flight closed and
+  landing nothing, and `--no-projectiles` restoring the windup landing from melee
+  reach. Floor 32 bare, 33 with the vault),
   `toolkit/authsrv/test_weaponcensus.py` (**2026-09-18, WEAPONS-W0 (studies/weapons):
   `weaponcensus.py`, what every body on a retail tape HOLDS and how it attacks with it.**
   `0x006D` / `0x006E` hands joined to `0x0161` item rows, to `0x0035`'s attack duration,
@@ -11308,7 +11317,9 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   / wand (two measurements, no literal) and 2.475 for both bows, field 5 == 617 with
   <= 5 % mismatches, a 617-less bow shooting 143, the launch at `swing_windup` (0.775
   and 1.1375), launch + flight against the word, and the sword and bow PLAYERS joined
-  through 0x006E. Floor 15 bare, 28 with the vault),
+  through 0x006E; WEAPONS-C9 added 0x00A7's third field against the held weapon's 587
+  damage type (the verdict CAN say MISMATCH; <= 5 % in the corpus). Floor 16 bare, 30
+  with the vault),
   `toolkit/authsrv/test_daggers.py` (**2026-09-17, DAGGERS-B2..B5 (studies/daggers): daggers
   and the Assassin's attack chain.** The verbatim part is §5's FAILED-STEP BATCH, checked
   against retail's own order off 20260819T132414 -- the owner's cold off-hand at 236.303
