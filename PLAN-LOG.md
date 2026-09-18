@@ -27,6 +27,26 @@ move back.
 
 ---
 
+### ✅ WEAPONS-W0 (first half) — 2026-09-18 — **`weaponcensus.py`: what every body on a retail tape holds and how it attacks with it; retail SENDS each weapon's duration, `634` is a required weapon's range, `617` is the projectile** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) §9)
+
+The weapons plan's scratch censuses landed as a tool with a test, and landing them moved
+four of its questions. **`0x0035`'s base duration joined to the held item type** reads
+1.33 for swords, axes and daggers, 1.75 for hammers, staves and wands, 2.475 for both
+bows that attack — six `[attack_speed.rates]` rows are now OBSERVED (the test compares
+the two measurements key by key) and one swing per weapon is enough for the captures.
+**`634 (max, min)` is the damage range of a weapon with a `633` requirement** — an exact
+partition with `584` over every weapon-typed item in the corpus (shields `572` ↔ `635`,
+foci `556` ↔ `636`), and this server reads `584` only. **`0x00A4` field 5 is the held
+weapon's `617` argument, 37 of 37** — the plan's one mismatch was a reused agent id under
+a last-wins dict; hands are a timeline now — and a bow with no `617` shoots 143; that
+names the word [studies/itemmods](studies/itemmods/FINDINGS.md) §4.3 left UNVERIFIED.
+**A player's hands arrive in `0x006E`**, so the 19 player attackers join their weapons.
+`timingjoin.py` gains `swing start->launch`, `launch->word - flight` and
+`launch->arrival - flight` (retail's 2.475 s bow: 1.1380 s, n = 12). No server code
+changed. `test_weaponcensus.py` 28 (15 bare), `test_timingjoin.py` 19 → 22 (15 bare),
+`test_content`, `test_srclint` 26, `test_identlint` 28, `test_provlint` 19,
+`test_checks` 17 green.
+
 ### ✅ DAGGERS-F20 — 2026-09-18 — **the "7/8 mode" solved: the double strike is decided before the swing opens, and a swing that will double opens one eighth of the interval early** ([studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md) §9)
 
 Two studies had left a quarter of the dagger character's swing intervals unexplained

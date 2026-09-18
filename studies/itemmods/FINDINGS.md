@@ -256,6 +256,12 @@ only primaries ever required are two Warrior rows.
 
 ### 4.3 617 is read by NOTHING, and that is the finding
 
+> **NAMED 2026-09-18 — [studies/weapons](../weapons/PLAN.md) WEAPONS-C3 / §9.** The client
+> never reads it because the SERVER does: `617`'s `arg2` is the projectile the server names
+> in `0x00A4` AGENT_PROJECTILE_LAUNCHED field 5 — 37 of 37 shooters across the corpus shoot
+> exactly their held weapon's `617`, and a bow with no `617` shoots 143. Everything below
+> stands as measured; only the "UNVERIFIED, not named" label is superseded.
+
 Same scan, opposite answer. Across **all three builds**: no literal compare in `.text`
 in either encoding, no accessor call site that asks for it, no whole-word compare, and
 no identifier table in `.rdata` that contains it (the three `.rdata` hits for the

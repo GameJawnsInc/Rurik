@@ -980,7 +980,12 @@ reproduces the wiki's published IAS table exactly for three weapon classes and t
 modifiers -- 1.33/1.5/1.75 against 0.67 and 0.75 give 0.8911/1.005/1.1725 and \
 0.9975/1.125/1.3125, six for six to four decimals. GWCA's Agent.h:181-182 \
 independently names the same two offsets weapon_attack_speed and \
-attack_speed_modifier and gives 1.33 for axe/sword/daggers, agreeing on both."""
+attack_speed_modifier and gives 1.33 for axe/sword/daggers, agreeing on both. \
+OBSERVED 2026-09-18 (studies/weapons WEAPONS-C6): retail's own 0x0035 base duration, \
+joined to the item type the body held, reads 1.33 for sword / axe / daggers, 1.75 for \
+hammer / staff / wand and 2.475 for both bows that attack, and nothing else -- \
+toolkit/authsrv/test_weaponcensus.py compares the two key by key. scythe, spear, \
+flatbow, shortbow and hornbow are still the wiki's alone."""
 note = """
 WIKI (GWW, "Attack speed", section "Attack durations and effect of IAS and DAS", read
 2026-08-06), whose table says outright "These are the exact values used by the game".

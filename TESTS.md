@@ -11267,8 +11267,31 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   (ours announces the HERO's property 41 first, so adrenjoin's observer rule would name
   the wrong agent). The swing row is split by whether the NEXT swing doubles
   (DAGGERS-F20: retail's two rows differ by an eighth, 0.891 / 0.781) and an interval
-  that straddles an attack-speed episode's edge is neither regime's. Floor 13 bare, 19
-  with the vault),
+  that straddles an attack-speed episode's edge is neither regime's. WEAPONS-W0 added
+  the RANGED rows -- a swing's start to its 0x00A4 (a skill's launch and another
+  shooter's left out), and launch + the message's own flight against the word and
+  against the 0x00A7, signed -- with retail's 2.475 s bow on 20260914T005758 reading
+  1.1375 s (its own skip without the vault). Floor 15 bare, 22 with the vault),
+  `toolkit/authsrv/test_weaponcensus.py` (**2026-09-18, WEAPONS-W0 (studies/weapons):
+  `weaponcensus.py`, what every body on a retail tape HOLDS and how it attacks with it.**
+  `0x006D` / `0x006E` hands joined to `0x0161` item rows, to `0x0035`'s attack duration,
+  to swing starts and to `0x00A4` / `0x00A7` launches, per body and never in aggregate.
+  §1 is a synthetic wire with every answer known by construction -- an item's type, model
+  and words (633 requirement, 609, 617), a word the client's own walker skips (bit 18,
+  bits 31-30) left out and the local decode agreeing with `clientscan/itemmods`, hands as
+  a TIMELINE across a player's weapon swap, `0x0035` joined to the type held when it was
+  sent, attackers as (body, weapon) pairs with the mode of a hostile's mixed gaps, a
+  weapon shot as a launch behind a SWING start -- plus what must NOT happen: a skill's
+  projectile counted as a shot, a gap straddling the swap scored, a body holding
+  projectile 2 and shooting 5 called a match (the verdict CAN say MISMATCH), an unclosed
+  launch counted closed. §2, SKIPPED and printed without the vault, pins the corpus as
+  floors and signatures: the nine player weapon types plus the hostile-only 1 and 28 in
+  leadhands, one 633 attribute per martial type, a five-valued 609 on bows, retail's
+  0x0035 base equal to `[attack_speed.rates]` for sword / axe / daggers / hammer / staff
+  / wand (two measurements, no literal) and 2.475 for both bows, field 5 == 617 with
+  <= 5 % mismatches, a 617-less bow shooting 143, the launch at `swing_windup` (0.775
+  and 1.1375), launch + flight against the word, and the sword and bow PLAYERS joined
+  through 0x006E. Floor 15 bare, 28 with the vault),
   `toolkit/authsrv/test_daggers.py` (**2026-09-17, DAGGERS-B2..B5 (studies/daggers): daggers
   and the Assassin's attack chain.** The verbatim part is §5's FAILED-STEP BATCH, checked
   against retail's own order off 20260819T132414 -- the owner's cold off-hand at 236.303

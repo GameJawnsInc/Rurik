@@ -174,6 +174,9 @@ OBSERVED across all 13 corpus samples:
   Implied projectile speed is per-weapon/creature (the NPC's one shot: 706.2 u /
   0.5885 s = 1200.0 u/s dead round; player shots ~2700-2900 u/s).
 - `v[5]` as a skill id: **REFUTED** (a Necromancer id on a Ranger's auto-shots);
+  **NAMED 2026-09-18, [studies/weapons](../weapons/PLAN.md) §9: it is the held weapon's
+  `617` modifier argument — the projectile — 37 of 37 shooters, and `v[7]` is 1 on
+  arrows, 0 on wand and staff bolts.** The sentence below is kept as written.
   reads like a per-shot correlation handle. `v[7]`: 0 in the wand session, 1 in the
   bow session — CONTESTED between weapon-class flag and per-session constant, and
   it is exactly what one melee comparison shot in the Isle session discriminates.

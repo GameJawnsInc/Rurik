@@ -235,15 +235,15 @@ exposure floor and an abort written down.
 
 | Id | Question | Instrument |
 |---|---|---|
-| WEAPONS-Q1 | `0x00A4` field 5 is the item's `617` argument (33 of 34, §3) — what decides it when the weapon has no `617`, and the two arrows with field 7 = 0 | desk, W0 |
-| WEAPONS-Q2 | Which `609` value is which bow class? | desk (interval + flight), then RUN-1B |
+| WEAPONS-Q1 | ~~`0x00A4` field 5 vs the item's `617`~~ **closed §9: 37 of 37; no `617` → 143.** Left: the two arrows with field 7 = 0 | desk |
+| WEAPONS-Q2 | Which `609` value is which bow class? **Narrowed §9: 1 and 3 are the two 2.475 s classes** | RUN-1B (`0x0035` alone) |
 | WEAPONS-Q3 | Projectile speed per class — is flight distance ÷ a constant, and does the arc change it? | desk where positions are known, RUN-1B |
 | WEAPONS-Q4 | Range per type in units, and what height does to it | RUN-2 |
 | WEAPONS-Q5 | Scythe: duration, how extra targets appear on the wire, the critical's size | RUN-1A |
 | WEAPONS-Q6 | Spear: duration, projectile id, arrow flag, with and without a shield | RUN-1A |
 | WEAPONS-Q7 | A hostile's repeat delay (1.75 / 1.90 / 1.985 / 2.125) | monsterai, desk |
-| WEAPONS-Q8 | Which message names the OBSERVER's own weapon type | desk, W0 |
-| WEAPONS-Q9 | What `634` beside every `633` holds | desk, W0 (itemmods method: read it off a tooltip) |
+| WEAPONS-Q8 | ~~Which message names the OBSERVER's own weapon type~~ **closed §9: `0x006E` (and `0x0147`)** | — |
+| WEAPONS-Q9 | ~~What `634` beside every `633` holds~~ **closed §9: the required weapon's damage range (max, min), in place of `584`** | — |
 | WEAPONS-Q10 | The unmet-requirement term — weapon, shield, focus | RUN-3 |
 | WEAPONS-Q11 | Does GWW's critical formula reproduce the five measured rates? | desk |
 | WEAPONS-Q12 | Is ×1.2 already inside the isle study's PvP-weapon numbers? | desk, then RUN-3 |
@@ -258,3 +258,64 @@ exposure floor and an abort written down.
   for a tape.
 - **No bulk item dump.** Item rows are built one per type from the owner's own tapes, by
   id, under the provenance gate's measurement rule.
+
+## 9. WEAPONS-W0, first half — run 2026-09-18 (desk; no client, no server change)
+
+`toolkit/authsrv/weaponcensus.py` + `test_weaponcensus.py` land §3's scratch censuses as
+a tool (five questions per body: types, speeds, attackers, shooters, projectile), and
+`timingjoin.py` gains the ranged rows (`swing start->launch`, `launch->word - flight`,
+`launch->arrival - flight`) so W2 has its side-by-side column before it is built. Landing
+the census moved four of §7's questions and corrected one of §3's numbers.
+
+**WEAPONS-C6 — retail SENDS each body's attack duration, so the rates need no stopwatch.
+OBSERVED.** `0x0035 [agent, f32 base, f32 modifier]` goes out at a body's attack start
+(JARIN's 19 of 19), and joined to what the body held at that instant it reads: sword
+**1.33** ×41, axe 1.33, daggers 1.33 ×22, hammer **1.75** ×9, staff 1.75 ×17, wand 1.75,
+the hostile type 28 1.75 ×42, bow **2.475** ×10 — and nothing else for any of them; the
+modifier is 1.0 or 0.67 on 153 of 153. `test_weaponcensus.py` compares that measurement
+with `[attack_speed.rates]` key by key (two measurements, no literal), so six of the
+table's rows are now OBSERVED and the wiki is their second witness, not their source.
+Still WIKI-only: scythe, spear, flatbow / shortbow 2.025, hornbow 2.7, and which of
+longbow / recurve is which. **Consequence for §6: ONE swing per weapon is enough to read
+its duration** — the 20-swing steps are for the windup and the interval's spread, not
+for the rate. (The "find the table in the client" half of W0 is withdrawn: the client
+holds no such table — `studies/combat/PLAN.md` §17d via `studies/castmech`: duration is `modifier × base`, both
+handed to it by this message.)
+
+**WEAPONS-C7 — `634` is the damage range of a weapon WITH a requirement (WEAPONS-Q9,
+closed). OBSERVED, an exact partition.** Over every weapon-typed item declared in the
+corpus: an item carries `633` **if and only if** it carries `634`, and then it carries
+no `584` — axe 28 / 27, bow 99 / 32, hammer 14 / 58, wand 29 / 41, sword 233 / 229,
+daggers 10 / 18, spear 2 / 3 (with-requirement / plain-`584`), not one item in both
+columns. `634 (max, min)` is the same shape as `584`: requirement-9 daggers
+read `(17, 7)`, GWW's 7–17. Shields partition the same way on `572` ↔ `635` (171 / 273)
+and foci on `556` ↔ `636` (56 / 19); the client renders `635` through the `Armor: N`
+template and `636` through a three-string template of its own, and renders nothing for `634` (the range line
+is drawn by the weapon path, not the generic walker). **This server reads `584` only**
+(`combatmath.weapon_damage_range`), so a retail-shaped weapon with a requirement would
+read as having no range at all — W1's item rows and W4's reader both need `634`.
+
+**WEAPONS-C3, corrected — 37 of 37, not 33 of 34.** The one mismatch was the census: a
+last-wins `{agent: hands}` dict gave a REUSED agent id its later body's weapon. Hands are
+now a timeline (`hands_timeline` / `held_at`), which a weapon swap needs anyway, and
+every shooter whose held weapon carries a `617` shoots exactly that number in `0x00A4`
+field 5 — 37 shooters, 0 mismatches, 466 weapon shots, every launch closed by its
+`0x00A7` handle, launch + flight against the word p50 4.4 ms. A bow with NO `617` word
+shoots **143** (24 of 26; the other two are a skill's projectile leaking through the
+weapon-shot filter, left visible rather than tuned away). That closes
+[studies/itemmods](../itemmods/FINDINGS.md) §4.3's "read by NOTHING in the client,
+UNVERIFIED, deliberately not named": the client never reads `617` because the SERVER
+does — it is the projectile the server names in `0x00A4`, which is also why it is a
+property of the item's model, 71 of 71.
+
+**WEAPONS-Q8, closed — a player's hands are `0x006E`, not `0x006D`.** `0x006E [agent,
+leadhand, offhand, five armour pieces]` names a PLAYER body's two items (the observer's
+own `0x0147 [stream, slot, leadhand, offhand]` names the same pair); `0x006D` is every
+NPC's. With both read, the 19 player attackers that §3 had as "no weapon row" join:
+760+ sword gaps at type 27, the dagger tapes at 32, the hammer at 15, both bows at 5.
+
+**WEAPONS-Q2, narrowed.** The two bows that attack carry `609` = 1 (a hostile's) and
+`609` = 3 (the owner's Ranger, item 772 on `20260914T005758`), and both are told 2.475
+and cycle at 2.476 — so classes 1 and 3 are the longbow and the recurve in some order,
+and 0 / 2 / 4 are the flatbow, shortbow and hornbow. RUN-WEAPONS-1B settles the rest from
+`0x0035` alone.

@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 import checks  # noqa: E402
 import timingjoin as tj  # noqa: E402
 
-LEDGER = checks.Ledger("timingjoin: every timed quantity, retail beside ours", floor=13)   # the BARE-MACHINE number: 13 without the vault (section 2 skips twice), 19 with it; from green runs
+LEDGER = checks.Ledger("timingjoin: every timed quantity, retail beside ours", floor=15)   # the BARE-MACHINE number: 15 without the vault (section 2 skips three times), 22 with it; from green runs
 check = LEDGER.ok
 
 ME, FOE, FRENZY, LEAD = 7, 9, 346, 782
@@ -65,6 +65,22 @@ def wire():
     return s
 
 
+def ranged_wire():
+    """A bow: three shots 2.475 s apart, released at 1.1375 s, 0.4 s in the air; then a
+    bow ATTACK SKILL whose launch must not be read as a swing's."""
+    s = [(0.0, tj.PINT, [0x9F, 41, ME, 25])]
+    for n, t in enumerate((1.0, 3.475, 5.95)):
+        s.append((t, tj.PINT_T, [0xA0, 4, ME, FOE, 0]))
+        s.append((t + 1.1375, tj.LAUNCH, [0xA4, ME, (1.0, 2.0), 0, f32(0.4), 143, n + 1, 1]))
+        s.append((t + 1.5375, tj.ARRIVE, [0xA7, ME, n + 1, 1]))
+        s.append((t + 1.5385, tj.PFLOAT_T, [0xA3, 16, FOE, ME, f32(-0.05)]))
+    s.append((20.0, tj.PINT_T, [0xA0, 4, ME, FOE, 0]))
+    s.append((20.1, tj.E4, [0xE4, ME, 394, 0]))
+    s.append((21.0, tj.LAUNCH, [0xA4, ME, (1.0, 2.0), 0, f32(0.3), 343, 9, 0]))
+    s.append((2.0, tj.LAUNCH, [0xA4, 55, (1.0, 2.0), 0, f32(0.3), 143, 1, 1]))   # somebody else's
+    return sorted(s, key=lambda r: r[0])
+
+
 def near(xs, want, tol=1e-6):
     return xs is not None and len(xs) == len(want) and all(
         abs(a - b) < tol for a, b in zip(sorted(xs), sorted(want)))
@@ -109,6 +125,14 @@ def section_synthetic():
           and sw[0]["after_skill"] is None and sw[4]["after_skill"] is None,
           "and how long after a SKILL's landing it opened -- a stance's E5 does not count")
     check(sw[4]["boosted"] and not sw[0]["boosted"], "boosted is the episode, not a constant")
+    ranged = tj.census(ranged_wire(), ME, {FRENZY})
+    check(near(ranged.get("swing start->launch plain"), [1.1375] * 3),
+          "a RANGED swing: start to its 0x00A4 -- the skill's launch and another "
+          "shooter's are left out (WEAPONS-C1)", str(ranged.get("swing start->launch plain")))
+    check(near(ranged.get("launch->word - flight plain"), [0.001] * 3, tol=1e-4)
+          and near(ranged.get("launch->arrival - flight plain"), [0.0] * 3, tol=1e-4),
+          "launch + the message's own flight against the word and against the 0x00A7, signed",
+          str(ranged.get("launch->word - flight plain")))
 
 
 def section_vault():
@@ -140,6 +164,24 @@ def section_vault():
                                      - 0.891 * 7 / 8) < 0.015,
               "and the interval INTO a doubling swing is 7/8 of it (DAGGERS-F20)",
               f"n={len(into)} p50 {p50('swing start->start boosted, the next DOUBLES')}")
+    try:
+        bow = tj.load_retail("20260914T005758")
+    except Exception as exc:                                    # noqa: BLE001
+        bow = []
+        print(f"   (retail bow tape unreadable: {exc!r})")
+    if not bow:
+        LEDGER.skip("section 2 retail bow", "no live tape 20260914T005758 -- 1 check")
+    else:
+        got = {}
+        for _label, s2c, me in bow:
+            for k, xs in tj.census(s2c, me, tj.ias_skills() or {FRENZY}).items():
+                got.setdefault(k, []).extend(xs)
+        s2l = sorted(got.get("swing start->launch plain", []))
+        err = sorted(abs(e) for e in got.get("launch->word - flight plain", []))
+        check(len(s2l) >= 8 and abs(s2l[len(s2l) // 2] - 1.1375) < 0.005
+              and err and err[len(err) // 2] < 0.015,
+              "retail's 2.475 s bow releases at 1.1375 s and the word lands at launch + "
+              "flight (WEAPONS-C1)", f"n {len(s2l)} p50 {s2l[len(s2l) // 2] if s2l else None}")
     path = None
     try:
         path = tj.newest_ours()

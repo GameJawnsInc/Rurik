@@ -22,6 +22,13 @@ rule; agent 1 on ours):
                          (DAGGERS-F20), so the two rows differ by that eighth
   swing start->word      a start to the observer's next damage word (0x00A3
                          property 16 / 17) or fail word (0x00A0 property 38)
+  swing start->launch    a RANGED swing's start to its 0x00A4 (WEAPONS-C1: retail
+                         releases at the swing's windup -- 0.775 s on a 1.75 s
+                         weapon, 1.1375 on a 2.475 s bow); a launch with a skill
+                         between it and the start is the skill's, and is left out
+  launch->word - flight  the hit's word against launch + the 0x00A4's own f32
+                         flight time, SIGNED (retail: a few milliseconds)
+  launch->arrival - flight   the same for the 0x00A7 that closes the launch's handle
   double gap             0x009F [2, me, 0] behind the word before it
   dual gap               0x009F [47, me, 0] behind its skill's 0x00E5
   debit->E5 <skill>      the energy debit (0x00A2 property 62) to the landing
@@ -53,7 +60,8 @@ if HERE not in sys.path:
 import livewire  # noqa: E402
 
 DAGGER_TAPES = ("20260917T160915", "20260917T224104")
-E3, E5, E6 = 0x00E3, 0x00E5, 0x00E6
+E3, E4, E5, E6 = 0x00E3, 0x00E4, 0x00E5, 0x00E6
+LAUNCH, ARRIVE = 0x00A4, 0x00A7
 PINT, PINT_T, PFLOAT, PFLOAT_T = 0x009F, 0x00A0, 0x00A2, 0x00A3
 COMBO, APPLY, REMOVE = 0x005C, 0x0042, 0x0044
 SAME = 0.02
@@ -193,6 +201,27 @@ def census(s2c, me, ias=()):
     starts = [r["t"] for r in sw]
     words = [t for t, op, v in s2c
              if op == PFLOAT_T and v[1] in (16, 17) and v[3] == me and _f32(v[4]) <= 0]
+    # WEAPONS-W0: the ranged half. A launch belongs to the latest swing start
+    # behind it unless one of the observer's SKILL messages sits between them.
+    fails = [t for t, op, v in s2c if op == PINT_T and v[1] == 38 and v[3] == me]
+    skill_ts = [t for t, op, v in s2c if op in (E3, E4, E5) and v[1] == me]
+    arrivals = [(t, v[2]) for t, op, v in s2c if op == ARRIVE and v[1] == me]
+    for t, op, v in s2c:
+        if op != LAUNCH or v[1] != me:
+            continue
+        before = [x for x in starts if 0.0 <= t - x < 3.0]
+        if not before or any(before[-1] < k <= t for k in skill_ts):
+            continue
+        flight = _f32(v[4])
+        rows[f"swing start->launch {tag(before[-1])}"].append(t - before[-1])
+        hit = [w for w in words + fails if t <= w < t + flight + 0.25]
+        if hit:
+            rows[f"launch->word - flight {tag(before[-1])}"].append(
+                min(hit, key=lambda w: abs(w - t - flight)) - t - flight)
+        closed = [a for a, h in arrivals if h == v[6] and t <= a < t + flight + 0.25]
+        if closed:
+            rows[f"launch->arrival - flight {tag(before[-1])}"].append(
+                closed[0] - t - flight)
     for t, op, v in s2c:
         if op == PINT and v[2] == me and v[1] == 2:
             prev = [w for w in words if w < t - SAME]
