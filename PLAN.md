@@ -1941,15 +1941,17 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 **Weapons** — [studies/weapons/PLAN.md](studies/weapons/PLAN.md)
 
-* **Every weapon type, accurately** (plan 2026-09-18; W0's first half landed, no server
-  code yet). Four melee types are wired; nothing is ranged, nothing has a range, `587`
-  damage type and `633` requirement have no reader, a focus gives no energy, and a
-  required weapon's range (`634`) is unread. Next: WEAPONS-W1 (one weapon table, an
-  item row and a `[party.<weapon>20]` per type, `634` beside `584`), then W2 (ranged
-  delivery: `0x00A4` at the windup with the weapon's `617`, `0x00A7` and the hit at
-  launch + flight; `timingjoin.py` already has the rows). Captures wanted, one swing
-  per weapon now enough for the rate: RUN-WEAPONS-1A (scythe, spear, axe), 1B (five
-  bows, staff, wand), 2 (range).
+* **Every weapon type, accurately** (plan 2026-09-18; W0's first half and W1 landed).
+  Eleven types are one content table with a retail item each, and the bow, scythe and
+  spear swing at their own interval in the player's hands on the client. Still true:
+  nothing is RANGED (a bow lands its word at the 1.138 s windup from melee reach, where
+  retail releases an arrow that lands 1.347 s in), `587` damage type and `633`
+  requirement have no reader, a focus or staff gives no energy. Next: WEAPONS-W2
+  (ranged delivery: `0x00A4` at the windup with the weapon's `617` or the type's
+  default, `0x00A7` and the hit at launch + flight, a range per type;
+  `timingjoin.py` already has the rows), then W3 (scythe's extra targets), W4, W5.
+  Captures wanted, one swing per weapon enough for the rate: RUN-WEAPONS-1A (scythe,
+  spear, axe), 1B (five bows, staff, wand), 2 (range).
 
 **Monster AI** — [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md)
 

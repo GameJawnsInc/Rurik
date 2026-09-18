@@ -319,3 +319,51 @@ NPC's. With both read, the 19 player attackers that §3 had as "no weapon row" j
 and cycle at 2.476 — so classes 1 and 3 are the longbow and the recurve in some order,
 and 0 / 2 / 4 are the flatbow, shortbow and hornbow. RUN-WEAPONS-1B settles the rest from
 `0x0035` alone.
+
+## 10. WEAPONS-W1 — shipped 2026-09-18: one weapon table, a row and an item per type
+
+**The table.** `[weapon_type.<key>]` in `content/world.toml`, eleven rows (axe, sword,
+daggers, hammer, scythe, spear, bow, wand, staff, shield, focus): item type, hands,
+attribute, `weapon_req` bit, `[attack_speed.rates]` key, delivery, and for the bow the
+default projectile 143 and arrow flag 1 — each row `source = "capture"` with what is NOT
+measured said in the row (the scythe's and the spear's 1.5 s are WIKI; type 35's name is
+UPSTREAM). `authsrv.weapon_type_tables()` builds `WEAPON_TYPE_ROW` and the three dicts
+that were four-row literals (`WEAPON_TYPE_ATTRIBUTE` / `_RATE` / `_REQ_BIT`) from it and
+REFUSES two rows on one item type or a rate that is no rates key. The known-good arm is
+pinned: the four melee rows read exactly what the literals said. The req bits were
+checked against something that could refute them — for every type, most skill rows whose
+`weapon_req` is exactly its bit carry its attribute (axe 19 of 19, hammer 22 of 22,
+scythe 13 of 13, spear 19 of 22, daggers 26 of 32, sword 18 of 21, bow 29 of 42), and for
+the bow and the spear that attribute is ALSO the one `633` names on the items themselves.
+The hostile-only types 1 and 28 are deliberately not rows.
+
+**The items.** Six retail `0x0161` rows off the owner's tapes, one per type this server
+could not hold — `starter_axe` (8–28), `starter_bow` (5–9, `609` = 1, no `617`),
+`starter_wand` (3–5, `617` = 0), `starter_scythe` (4–7), `starter_spear` (5–7),
+`starter_focus` (energy +5) — each named by the `0x006D` of the body that held it, each
+ONE distinct row across every declaration in the corpus, each carrying the generic name
+id 8582 and a file both run archives bind (`archive.binds_plainly`).
+`combatmath.weapon_damage_range` reads `634` beside `584` (WEAPONS-C7), so a
+retail-shaped weapon with a requirement has a range.
+
+**In the player's hands.** `--player-weapon ITEM` / `--player-offhand ITEM` put any item
+row in the character's hands, with or without a `--party`; the item's TYPE picks the
+attribute, the interval and the req bit, and a two-handed type empties the off hand
+(retail names offhand 0 beside every bow, hammer, staff and dagger pair).
+`PARTY_WEAPON_ITEMS` resolves the axe, scythe, spear and the five bow keys.
+
+**On the client** (three bounded harness runs, scored off our recorder with
+`timingjoin.py`): the bow (`20260918T130414`) — the client draws the bow stance and
+crosses out the dagger bar itself, 17 of 17 swings 2.475–2.476 s apart (retail 2.476);
+the scythe (`20260918T130610`) — in the hand and swinging, 23 of 23 at 1.500 s, the word
+at 0.650–0.651; the spear (`20260918T130729`) — 23 of 23 at 1.500, word at 0.650. No
+assert in any log: item types 5, 35 and 36 had never been sent by this server. The
+side-by-side also states W2's job in one row: retail's bow RELEASES at 1.138 s and the
+word lands 1.347 s after the start; ours lands the word AT 1.138 with no launch, from
+melee reach.
+
+Not in W1, by design: no per-type damage rule changed (a wand names no mastery, so its
+rank is None and the swing takes the raw-range fallback `hit_enemy` already had — WIKI's
+damage-by-level for caster weapons is W4), `587` still has no reader, a party caster keeps
+the staff until W2 gives it a projectile, and `starter_bow` does not carry `fires_arrows`
+(the gate `swing_preparation_bonus` reads) until its arrows exist.

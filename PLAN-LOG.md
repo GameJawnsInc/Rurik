@@ -27,6 +27,27 @@ move back.
 
 ---
 
+### ✅ WEAPONS-W1 — 2026-09-18 — **one weapon table, a row and a retail item per type; the bow, scythe and spear are in the player's hands on the client** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) §10)
+
+`[weapon_type.*]` in `content/world.toml` (eleven rows, each number read off retail's wire
+by `weaponcensus.py`) replaces three four-row literals in `authsrv.py`;
+`weapon_type_tables()` builds `WEAPON_TYPE_ROW` / `_ATTRIBUTE` / `_RATE` / `_REQ_BIT` from
+it and refuses a shared item type or an unknown rate. The four melee rows read exactly
+what the literals said; the req bits agree with the skill table's own attribute column
+for all seven types. Six retail item rows (`starter_axe`, `_bow`, `_wand`, `_scythe`,
+`_spear`, `_focus`), each one distinct `0x0161` across the corpus with a file both run
+archives bind. `weapon_damage_range` reads `634` beside `584`. `--player-weapon` /
+`--player-offhand` hold any item row; a two-handed type empties the off hand. On the
+client (harness `20260918T130414` / `130610` / `130729`): the bow 2.475 s × 17 of 17 with
+the dagger bar crossed out by the client itself, the scythe and the spear 1.500 s × 23 of
+23 with the word at 0.650, no assert. `test_weapons.py` 20 (19 bare), `test_daggers` 103
+(one pin re-aimed at the four rows it owns), `test_agentlife` 551, `test_playerswing` 191,
+`test_guards` 45, `test_mechanics` 246, `test_castcycle` 54, `test_itemdetail` 19,
+`test_armour` 19, `test_playerbags` 19, `test_population` 75, `test_skilldamage` 67,
+`test_wearmap` 40, `test_content` 48, `test_bareimport` 8, `test_weaponcensus` 28,
+`test_timingjoin` 22, `test_srclint` 26, `test_identlint` 28, `test_provlint` 19,
+`test_checks` 17 green.
+
 ### ✅ WEAPONS-W0 (first half) — 2026-09-18 — **`weaponcensus.py`: what every body on a retail tape holds and how it attacks with it; retail SENDS each weapon's duration, `634` is a required weapon's range, `617` is the projectile** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) §9)
 
 The weapons plan's scratch censuses landed as a tool with a test, and landing them moved

@@ -11272,6 +11272,23 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   shooter's left out), and launch + the message's own flight against the word and
   against the 0x00A7, signed -- with retail's 2.475 s bow on 20260914T005758 reading
   1.1375 s (its own skip without the vault). Floor 15 bare, 22 with the vault),
+  `toolkit/authsrv/test_weapons.py` (**2026-09-18, WEAPONS-W1 (studies/weapons): one weapon
+  table, a row and an item per type.** `authsrv.py`'s three item-type dicts (attribute,
+  rates key, `weapon_req` bit) are built from content `[weapon_type.*]` now. §1 holds the
+  KNOWN-GOOD arm -- hammer, sword, axe and daggers read exactly what the literals said --
+  then the table's own shape: one row per item type, the hostile-only types 1 and 28
+  absent, every req bit a single distinct bit summing to the mask's seven named bits,
+  every rate a rates key (1.33 / 1.75 / 2.475 the numbers retail's 0x0035 sent, 1.5
+  WIKI's), a caster weapon OUT of the attribute and bit dicts so `.get()` means what it
+  meant, delivery and hands per type, and the loader REFUSING a shared item type or an
+  unknown rate. §2, SKIPPED and printed without the vault's full skills table: for every
+  type most skill rows whose `weapon_req` is exactly its bit carry its attribute. §3: the
+  six new retail item rows, each weapon's own 584 range, a required weapon's 634 reading
+  the same 15-28 as the 584 form (WEAPONS-C7), every party weapon class resolving to an
+  item, the bow's missing 617 against the table's default 143. §4: the character the
+  server builds around each weapon -- its interval and range, a two-handed bow emptying
+  the off hand a sword kept, a spear holding a shield, a wand naming no mastery -- with
+  the globals restored. Floor 19 bare, 20 with the vault),
   `toolkit/authsrv/test_weaponcensus.py` (**2026-09-18, WEAPONS-W0 (studies/weapons):
   `weaponcensus.py`, what every body on a retail tape HOLDS and how it attacks with it.**
   `0x006D` / `0x006E` hands joined to `0x0161` item rows, to `0x0035`'s attack duration,

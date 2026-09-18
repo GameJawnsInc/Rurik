@@ -374,8 +374,17 @@ def armour_multiplier(armour, ARMOUR_DIVISOR):
 # in clientscan and imports `pinned`, and the server must keep working on a
 # machine with no client and no vault -- so a failure here falls back to
 # HIT_FRACTION, which is what this server did until today.
+# WEAPONS-C7 (2026-09-18): a weapon WITH a 633 requirement carries its range as
+# 634 (max, min) and NO 584 -- an exact partition over every weapon-typed item in
+# the live corpus (sword 233 / 229, bow 99 / 32 ..., not one item in both). This
+# reader knew 584 only, so a retail-shaped required weapon read as rangeless.
+# The UNMET case is still unmodelled by decision (studies/isle; WEAPONS-Q10).
+DAMAGE_RANGE_REQUIRED = 634
+
+
 def weapon_damage_range(item):
-    """(min, max) health points from an item's own 584 modifier word, or None."""
+    """(min, max) health points from an item's own 584 (or, on a weapon with a
+    requirement, 634) modifier word, or None."""
     try:
         sys.path.insert(0, os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -387,7 +396,7 @@ def weapon_damage_range(item):
         d = itemmods.decode(word)
         if d["skipped_high"] or d["skipped_bit18"]:
             continue
-        if d["identifier"] == itemmods.DAMAGE_RANGE:
+        if d["identifier"] in (itemmods.DAMAGE_RANGE, DAMAGE_RANGE_REQUIRED):
             lo, hi = d["arg2"], d["arg"]
             return (lo, hi) if lo <= hi else (hi, lo)
     return None

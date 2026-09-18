@@ -10395,6 +10395,13 @@ HERO_WEAPON_ATTRIBUTE = None   # [party.KEY].weapon_attribute
 # One item today, the retail Monk henchman's staff (content/items.toml).
 PARTY_WEAPON_ITEMS = {"staff": "caster_staff", "wand": "caster_staff",
                       "daggers": "starter_daggers"}      # DAGGERS-B2
+# WEAPONS-W1: the classes whose retail item row landed 2026-09-18. "wand" stays
+# the staff above until W2 -- a party caster's swing is one code path today and
+# its item is what the client animates; the wand row is the PLAYER's for now.
+PARTY_WEAPON_ITEMS.update({"axe": "starter_axe", "scythe": "starter_scythe",
+                           "spear": "starter_spear", "shortbow": "starter_bow",
+                           "flatbow": "starter_bow", "longbow": "starter_bow",
+                           "recurve": "starter_bow", "hornbow": "starter_bow"})
 HERO_WEAPON_ITEM_ID = 210      # + the hero's slot; clear of the player's 1-10
 # SLICE-H11: a spawn row's `weapon_item` (a content item key) is declared and
 # named on the body at its create, retail's shape for EVERY body and not only
@@ -11049,13 +11056,42 @@ ARMOUR_DIVISOR = 40.0
 # DAGGERS-B2: daggers are item_type 32 -- OBSERVED, the three profession-7
 # bodies' leadhands on 20260819T132414 (studies/daggers F4) -- and scale on
 # Dagger Mastery, 29: the attribute every weapon_req = 0x08 attack carries.
-WEAPON_TYPE_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
-# ...and the attack_speed rates key each swings at (content [attack_speed.rates]).
-WEAPON_TYPE_RATE = {15: "hammer", 27: "sword", 2: "axe", 32: "daggers"}
-# DAGGERS-B4: item_type -> the bit a skill's `weapon_req` mask names it by
-# (the client's skill record +0x24; studies/daggers F3, the attribute column
-# the witness). A type with no row here satisfies no weapon requirement.
-WEAPON_TYPE_REQ_BIT = {2: 0x01, 32: 0x08, 15: 0x10, 27: 0x80}
+# WEAPONS-W1 (2026-09-18): THE THREE TABLES ARE ONE CONTENT TABLE NOW --
+# [weapon_type.*] in content/world.toml, a row per type a player can hold, each
+# number read off retail's wire by weaponcensus.py (studies/weapons sections 3
+# and 9). They were literals here with four rows each (hammer, sword, axe,
+# daggers), so the next weapon was an edit in three places; the four rows read
+# exactly what the literals said (test_weapons pins it) and the bow, scythe,
+# spear, wand and staff are rows beside them. `attribute` 0 (a caster weapon:
+# no mastery, WIKI damage by level) and `req_bit` 0 (no skill names the type)
+# stay OUT of the dicts, so `.get()` keeps meaning what it meant.
+def weapon_type_tables(rows=None):
+    """(by item type: row, attribute, rates key, weapon_req bit) off content."""
+    by_type, attribute, rate, bit = {}, {}, {}, {}
+    for key, row in (agents.WORLD.rows("weapon_type") if rows is None else rows).items():
+        typ = int(row["item_type"])
+        if typ in by_type:
+            raise SystemExit(f"[weapon_type.{key}]: item_type {typ} is already "
+                             f"[weapon_type.{by_type[typ]['key']}]'s")
+        by_type[typ] = dict(row, key=str(key))
+        if int(row.get("attribute", 0)):
+            attribute[typ] = int(row["attribute"])
+        if row.get("rate"):
+            if row["rate"] not in agents.ATTACK_SPEED:
+                raise SystemExit(f"[weapon_type.{key}]: rate {row['rate']!r} is not "
+                                 f"an [attack_speed.rates] key")
+            rate[typ] = str(row["rate"])
+        if int(row.get("req_bit", 0)):
+            bit[typ] = int(row["req_bit"])
+    return by_type, attribute, rate, bit
+
+
+# ...the type's whole row (hands, delivery, projectile -- WEAPONS-W2 reads it),
+# the attribute a swing scales on, the attack_speed rates key it swings at, and
+# DAGGERS-B4's bit a skill's `weapon_req` mask names it by (the client's skill
+# record +0x24; studies/daggers F3). A type with no bit satisfies no requirement.
+(WEAPON_TYPE_ROW, WEAPON_TYPE_ATTRIBUTE,
+ WEAPON_TYPE_RATE, WEAPON_TYPE_REQ_BIT) = weapon_type_tables()
 # The two modifier identifiers an armour piece carries. 572's argument is the
 # rating the tooltip prints as `Armor: N`; 527's is the `+N vs. <type>` line,
 # and identifier 4 beside it resolves to `vs. physical damage`. All three were
@@ -20112,6 +20148,13 @@ def apply_party_character(prow):
             WEAPON_ATTACK_SPEED = ATTACK_INTERVAL = float(agents.ATTACK_SPEED[_rate])
         changed.append(f"weapon {prow['player_weapon']} ({PLAYER_SWING_DAMAGE}, "
                        f"{WEAPON_ATTACK_SPEED} s)")
+        # WEAPONS-W1: a TWO-HANDED weapon empties the off hand -- retail's wire,
+        # 20 of 20 dagger holdings and every bow, hammer and staff in the corpus
+        # name offhand 0. A row's own player_offhand below still wins.
+        _wrow = WEAPON_TYPE_ROW.get(int(agents.PLAYER_WEAPON.get("item_type", -1)))
+        if _wrow and _wrow.get("hands") == "two" and agents.PLAYER_OFFHAND:
+            agents.PLAYER_OFFHAND = None
+            changed.append("off hand emptied (two-handed)")
     if prow.get("player_offhand"):
         agents.PLAYER_OFFHAND = agents.item_template(prow["player_offhand"])
         changed.append(f"offhand {prow['player_offhand']} "
@@ -29457,6 +29500,12 @@ def main():
         if _pc:
             print(f"PARTY {a.party!r}: the player's character -- "
                   f"{', '.join(_pc)} [SLICE-H8]", flush=True)
+    if a.player_weapon or a.player_offhand:
+        # WEAPONS-W1: any content item in the player's hands, with or without a
+        # --party -- the harness's way to hold each weapon type in turn.
+        _pw = apply_party_character({"player_weapon": a.player_weapon,
+                                     "player_offhand": a.player_offhand})
+        print(f"PLAYER WEAPON: {', '.join(_pw)} [WEAPONS-W1]", flush=True)
         if not a.party_no_commander:
             a.hero_activate = True
             a.hero_char = True

@@ -360,6 +360,150 @@ arg2 1; WIKI (GWW "Starter Daggers" Stats, rev. 2014-07-13) says 1-3. The run \
 archives bind file 175760 (archive.binds_plainly, row 76047 on run/slice and on \
 2026-09-01_44fbd68767a8; the sword's 76203 re-read beside it as the control)."""
 
+# ---- WEAPONS-W1: one retail item per weapon type this server did not hold ----
+#
+# Six rows, every byte retail's: each is a 0x0161 off the owner's own tapes, named by the
+# 0x006D of the body that held it, carrying the generic henchman name id 8582 and a file
+# the run archives bind (archive.binds_plainly, both run/slice and the newest build's).
+# The extraction is toolkit/authsrv/weaponcensus.py's join; the type's attribute, swing
+# interval and weapon_req bit come from [weapon_type.*] in content/world.toml, never from
+# these rows. `python toolkit/authsrv/authsrv.py --player-weapon starter_bow` holds one.
+
+[item.starter_axe]
+name = "an axe (retail wire: an NPC body's on 20260817T231139)"
+file_id = 0x49C45              # 302149
+item_type = 2
+dye_tint = 0
+dye_colors = 0
+materials = 0
+unk1 = 0
+flags = 0x22000100
+value = 0
+model_id = 26886
+quantity = 1
+enc_name = [0x2186]            # 8582, the generic name id every henchman weapon carries
+# 587 arg 2 (slashing) and 584 arg 28 arg2 8 -- an 8-28 axe with no requirement.
+modifiers = [0x24B80200, 0xA4881C08]
+
+[item.starter_axe.provenance]
+source = "capture"
+capture = "20260817T231139"
+origin = "live"
+verified = """OBSERVED on ArenaNet's own wire (WEAPONS-W1, 2026-09-18): agent 29's leadhand on four connections of this tape (item 21), named by 0x006D and declared by the same connection's 0x0161 -- 22 declarations across the corpus, ONE distinct row. Binds in run/slice and run/2026-09-01_44fbd68767a8, MFT row 141853."""
+
+[item.starter_bow]
+name = "a bow (retail wire: an NPC body's on 20260819T132414, the one whose shots the census reads)"
+file_id = 0x24A4              # 9380
+item_type = 5
+dye_tint = 0
+dye_colors = 0
+materials = 0
+unk1 = 0
+flags = 0x22200100
+value = 0
+model_id = 7940
+quantity = 1
+enc_name = [0x2186]            # 8582, the generic name id every henchman weapon carries
+# 609 arg 1 (one of the two 2.475 s bow classes, WEAPONS-C6), 587 arg 1 (piercing), 584
+# arg 9 arg2 5 -- a 5-9 bow. NO 617 word: a bow without one shoots projectile 143.
+modifiers = [0x26180100, 0x24B80100, 0xA4880905]
+
+[item.starter_bow.provenance]
+source = "capture"
+capture = "20260819T132414"
+origin = "live"
+verified = """OBSERVED on ArenaNet's own wire (WEAPONS-W1, 2026-09-18): agent 28's leadhand on connection 52606 (item 645) -- the body whose shots weaponcensus.py reads at start->launch 1.136 s, field 5 = 143, field 7 = 1 -- and agent 4's on three more connections; 5 declarations, one distinct row. MFT row 8436 in both run archives."""
+
+[item.starter_wand]
+name = "a wand (retail wire: an NPC body's on four tapes)"
+file_id = 0x16D68              # 93544
+item_type = 22
+dye_tint = 0
+dye_colors = 0
+materials = 0
+unk1 = 0
+flags = 0x22000100
+value = 0
+model_id = 3496
+quantity = 1
+enc_name = [0x2186]            # 8582, the generic name id every henchman weapon carries
+# 587 arg 6 (a damage type this server does not read yet), 617 arg2 0 (the projectile
+# 0x00A4 field 5 will carry, WEAPONS-C3) and 584 arg 5 arg2 3 -- a 3-5 wand.
+modifiers = [0x24B80600, 0x26980000, 0xA4880503]
+
+[item.starter_wand.provenance]
+source = "capture"
+capture = "20260914T180058"
+origin = "live"
+verified = """OBSERVED on ArenaNet's own wire (WEAPONS-W1, 2026-09-18): the leadhand of agents 98, 101 and 57 on four tapes (20260807T143055 .. 20260915T164906), 5 declarations, one distinct row. MFT row 10490 in both run archives."""
+
+[item.starter_scythe]
+name = "a scythe (retail wire: agent 1's on 20260914T005758)"
+file_id = 0x32480              # 205952
+item_type = 35
+dye_tint = 0
+dye_colors = 0
+materials = 0
+unk1 = 0
+flags = 0x22200100
+value = 0
+model_id = 18161
+quantity = 1
+enc_name = [0x2186]            # 8582, the generic name id every henchman weapon carries
+# 587 arg 11, 556 arg 5 (energy +5 -- unread on a weapon until WEAPONS-W5) and 584 arg 7
+# arg2 4 -- a 4-7 scythe. Item type 35's NAME is UPSTREAM (GWCA ItemType).
+modifiers = [0x24B80B00, 0x62C80500, 0xA4880704]
+
+[item.starter_scythe.provenance]
+source = "capture"
+capture = "20260914T005758"
+origin = "live"
+verified = """OBSERVED on ArenaNet's own wire (WEAPONS-W1, 2026-09-18): agent 1's leadhand on two connections of this tape and one of 20260916T150306 (items 193 / 192), 3 declarations, one distinct row. MFT row 14687 in both run archives. Never swung in front of the recorder -- RUN-WEAPONS-1A."""
+
+[item.starter_spear]
+name = "a spear (retail wire: agent 2's on 20260914T005758)"
+file_id = 0x32488              # 205960
+item_type = 36
+dye_tint = 0
+dye_colors = 0
+materials = 0
+unk1 = 0
+flags = 0x22000100
+value = 0
+model_id = 18163
+quantity = 1
+enc_name = [0x2186]            # 8582, the generic name id every henchman weapon carries
+# 587 arg 1 (piercing), 556 arg 5 (energy +5, unread) and 584 arg 7 arg2 5 -- a 5-7 spear.
+modifiers = [0x24B80100, 0x62C80500, 0xA4880705]
+
+[item.starter_spear.provenance]
+source = "capture"
+capture = "20260914T005758"
+origin = "live"
+verified = """OBSERVED on ArenaNet's own wire (WEAPONS-W1, 2026-09-18): agent 2's leadhand on two connections of this tape and one of 20260916T150306 (items 195 / 194), 3 declarations, one distinct row. MFT row 14693 in both run archives. Never thrown in front of the recorder -- RUN-WEAPONS-1A."""
+
+[item.starter_focus]
+name = "a focus (retail wire: sixteen NPC off hands)"
+file_id = 0x1553D              # 87357
+item_type = 12
+dye_tint = 0
+dye_colors = 0
+materials = 0
+unk1 = 0
+flags = 0x20000100
+value = 0
+model_id = 30941
+quantity = 1
+enc_name = [0x2186]            # 8582, the generic name id every henchman weapon carries
+# One word: 556 arg 5 -- energy +5, no requirement (WEAPONS-C7's plain column).
+modifiers = [0x62C80500]
+
+[item.starter_focus.provenance]
+source = "capture"
+capture = "20260914T005758"
+origin = "live"
+verified = """OBSERVED on ArenaNet's own wire (WEAPONS-W1, 2026-09-18): the OFFHAND of four bodies on connection 51659 (agents 91, 329, 418, 616) and twelve more, 16 declarations, one distinct row. MFT row 10340 in both run archives."""
+
 # ---- DAGGERS: the starter ASSASSIN armour, the owner's own level-3 character's ----
 #
 # Five rows, every byte retail's: the pieces the observer WORE on 20260819T132414

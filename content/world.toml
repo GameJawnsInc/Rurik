@@ -946,6 +946,174 @@ studies/skills/FINDINGS.md section 23. The pip count 3 rides with max 25 as a
 pair; change either only together.
 """
 
+# ------------------------------------------------- weapon types (WEAPONS-W1)
+#
+# One row per weapon type a PLAYER can hold, keyed by the word this server calls it.
+# `item_type` is the wire's number in 0x0161; `attribute` the mastery a swing scales on
+# (0 = none: caster weapons scale on level, off-hand items do not swing); `req_bit` the
+# bit a skill row's `weapon_req` mask names the type by; `rate` the [attack_speed.rates]
+# key; `delivery` melee / projectile / none. Every number below was read off ArenaNet's
+# own wire by toolkit/authsrv/weaponcensus.py (studies/weapons/PLAN.md sections 3 and 9);
+# what is NOT measured is said per row. Item types 1 and 28 are hostile-only and are
+# deliberately absent: a player never holds one.
+[weapon_type.axe]
+item_type = 2
+hands = "one"
+attribute = 18
+req_bit = 0x01
+rate = "axe"
+delivery = "melee"
+
+[weapon_type.axe.provenance]
+source = "capture"
+capture = "20260817T231139"
+origin = "live"
+verified = """OBSERVED, weaponcensus.py over the live corpus 2026-09-18 (WEAPONS-C2 / C6 / C7): item type 2 in 55 leadhands; 633's attribute is 18 on 28 of 28 required axes; every weapon_req = 0x01 skill row carries attribute 18 (19 of 19); 0x0035 base 1.33 while held."""
+
+[weapon_type.sword]
+item_type = 27
+hands = "one"
+attribute = 20
+req_bit = 0x80
+rate = "sword"
+delivery = "melee"
+
+[weapon_type.sword.provenance]
+source = "capture"
+capture = "20260818T132739"
+origin = "live"
+verified = """OBSERVED, weaponcensus.py over the live corpus 2026-09-18 (WEAPONS-C2 / C6 / C7): item type 27 in 453 leadhands; 633's attribute is 20 on every required sword; weapon_req = 0x80 skill rows carry attribute 20 (18 of 21, the rest 21 and 17 -- the two attributes 633 names on shields); 0x0035 base 1.33 x41 while held."""
+
+[weapon_type.daggers]
+item_type = 32
+hands = "two"
+attribute = 29
+req_bit = 0x08
+rate = "daggers"
+delivery = "melee"
+
+[weapon_type.daggers.provenance]
+source = "capture"
+capture = "20260917T160915"
+origin = "live"
+verified = """OBSERVED, weaponcensus.py over the live corpus 2026-09-18 (WEAPONS-C2 / C6 / C7): item type 32 in 20 leadhands, the off hand EMPTY on every one (a pair is one item); 633's attribute is 29; weapon_req = 0x08 rows carry 29 (26 of 32); 0x0035 base 1.33 x22."""
+
+[weapon_type.hammer]
+item_type = 15
+hands = "two"
+attribute = 19
+req_bit = 0x10
+rate = "hammer"
+delivery = "melee"
+
+[weapon_type.hammer.provenance]
+source = "capture"
+capture = "20260915T155656"
+origin = "live"
+verified = """OBSERVED, weaponcensus.py over the live corpus 2026-09-18 (WEAPONS-C2 / C6 / C7): item type 15 in 57 leadhands; 633's attribute is 19; weapon_req = 0x10 rows carry 19 (22 of 22); 0x0035 base 1.75 x9 while held."""
+
+[weapon_type.scythe]
+item_type = 35
+hands = "two"
+attribute = 41
+req_bit = 0x20
+rate = "scythe"
+delivery = "melee"
+
+[weapon_type.scythe.provenance]
+source = "capture"
+capture = "20260914T005758"
+origin = "live"
+verified = """OBSERVED, weaponcensus.py over the live corpus 2026-09-18 (WEAPONS-C2 / C6 / C7): item type 35 in 10 leadhands, never swung on tape. The NAME of type 35 is UPSTREAM (GWCA ItemType) and so is the 1.5 s rate (WIKI); attribute 41 is every weapon_req = 0x20 skill row's (13 of 13) -- no required scythe is in the corpus to carry a 633. RUN-WEAPONS-1A."""
+
+[weapon_type.spear]
+item_type = 36
+hands = "one"
+attribute = 37
+req_bit = 0x40
+rate = "spear"
+delivery = "projectile"
+
+[weapon_type.spear.provenance]
+source = "capture"
+capture = "20260914T005758"
+origin = "live"
+verified = """OBSERVED, weaponcensus.py over the live corpus 2026-09-18 (WEAPONS-C2 / C6 / C7): item type 36 in 16 leadhands, never thrown on tape. 633's attribute is 37 on both required spears and weapon_req = 0x40 rows carry 37 (19 of 22) -- two witnesses for the type's identity; the 1.5 s rate is WIKI, and its projectile and arrow flag are unmeasured, so the row names none. RUN-WEAPONS-1A."""
+
+[weapon_type.bow]
+item_type = 5
+hands = "two"
+attribute = 25
+req_bit = 0x02
+rate = "longbow"
+delivery = "projectile"
+projectile = 143              # 0x00A4 field 5 for a bow with no 617 word (24 of 26); a 617 wins
+arrow = 1                     # 0x00A4 field 7: 1 on 117 of 119 arrows
+
+[weapon_type.bow.provenance]
+source = "capture"
+capture = "20260914T005758"
+origin = "live"
+verified = """OBSERVED, weaponcensus.py over the live corpus 2026-09-18 (WEAPONS-C2 / C6 / C7): item type 5 in 124 leadhands; 633's attribute is 25 on 99 of 99 required bows; weapon_req = 0x02 rows carry 25 (29 of 42, the rest attributes 51, 23 and 24). `rate` is the ONE bow duration retail has sent (0x0035 base 2.475 x10, 609 classes 1 and 3); classes 0 / 2 / 4 are the flatbow, shortbow and hornbow in an order RUN-WEAPONS-1B settles, and until then every bow here is a 2.475."""
+
+[weapon_type.wand]
+item_type = 22
+hands = "one"
+attribute = 0
+req_bit = 0x00
+rate = "wand"
+delivery = "projectile"
+arrow = 0                     # 0x00A4 field 7: 0 on 353 of 353 wand and staff bolts
+
+[weapon_type.wand.provenance]
+source = "capture"
+capture = "20260913T210901"
+origin = "live"
+verified = """OBSERVED, weaponcensus.py over the live corpus 2026-09-18 (WEAPONS-C2 / C6 / C7): item type 22 in 66 leadhands; 0x0035 base 1.75 while held; the projectile is the item's own 617 argument (0-6), field 5 == 617 on every wand and staff shooter. No mastery: 633 names a CASTER attribute (17 distinct pairs) that gates the 634 range, and no weapon_req bit names a wand."""
+
+[weapon_type.staff]
+item_type = 26
+hands = "two"
+attribute = 0
+req_bit = 0x00
+rate = "staff"
+delivery = "projectile"
+arrow = 0
+
+[weapon_type.staff.provenance]
+source = "capture"
+capture = "20260817T231139"
+origin = "live"
+verified = """OBSERVED, weaponcensus.py over the live corpus 2026-09-18 (WEAPONS-C2 / C6 / C7): item type 26 in 612 leadhands; 0x0035 base 1.75 x17 while held; projectile = the item's 617 (0-6). 556 energy on 530 and 570 (16..17, 1) on 491 of them -- unread by this server (WEAPONS-W5)."""
+
+[weapon_type.shield]
+item_type = 24
+hands = "off"
+attribute = 0
+req_bit = 0x00
+rate = ""
+delivery = "none"
+
+[weapon_type.shield.provenance]
+source = "capture"
+capture = "20260817T231139"
+origin = "live"
+verified = """OBSERVED, weaponcensus.py over the live corpus 2026-09-18 (WEAPONS-C2 / C6 / C7): item type 24 in 419 offhands, never a leadhand; 572 armour (no requirement) or 633 + 635 (requirement in 17 or 21, armour when met) -- an exact partition, 171 / 273 items."""
+
+[weapon_type.focus]
+item_type = 12
+hands = "off"
+attribute = 0
+req_bit = 0x00
+rate = ""
+delivery = "none"
+
+[weapon_type.focus.provenance]
+source = "capture"
+capture = "20260914T005758"
+origin = "live"
+verified = """OBSERVED, weaponcensus.py over the live corpus 2026-09-18 (WEAPONS-C2 / C6 / C7): item type 12 in 67 offhands; 556 energy (no requirement) or 633 + 636 -- 56 / 19 items. The NAME is UPSTREAM (GWCA ItemType); the energy word is the witness."""
+
 # ------------------------------------------------- weapon and creature swing rates
 #
 # One row per weapon class. The client multiplies this by an attack-speed MODIFIER at

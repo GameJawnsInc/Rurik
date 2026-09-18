@@ -85,7 +85,11 @@ def section_content():
           and authsrv.WEAPON_TYPE_RATE.get(32) == "daggers"
           and float(agents.ATTACK_SPEED["daggers"]) == 1.33,
           "daggers swing at Dagger Mastery (29), 1.33 s apart")
-    check(authsrv.WEAPON_TYPE_REQ_BIT == {2: 0x01, 32: 0x08, 15: 0x10, 27: 0x80},
+    # WEAPONS-W1 (2026-09-18): the table is content [weapon_type.*] now and holds
+    # the bow, scythe and spear too -- the four rows this arc wired must read as
+    # they did, and the WHOLE table is test_weapons.py's.
+    check({t: b for t, b in authsrv.WEAPON_TYPE_REQ_BIT.items() if t in (2, 32, 15, 27)}
+          == {2: 0x01, 32: 0x08, 15: 0x10, 27: 0x80},
           "item_type -> weapon_req bit: axe, daggers, hammer, sword",
           str(authsrv.WEAPON_TYPE_REQ_BIT))
     key = authsrv.PARTY_WEAPON_ITEMS.get(

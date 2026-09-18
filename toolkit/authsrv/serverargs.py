@@ -939,6 +939,16 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "a hostile that opened on the party; a caster swings "
                          "from casting range, a melee body chases (studies/"
                          "slice F30, henchjoin.py --fight).")
+    ap.add_argument("--player-weapon", default=None, metavar="ITEM",
+                    help="WEAPONS-W1: the content item key (content/items.toml) the "
+                         "player holds -- starter_axe, starter_bow, starter_scythe, "
+                         "starter_spear, starter_wand, caster_staff ... -- over the "
+                         "[party.KEY] row's. Its item type picks the attribute, the "
+                         "swing interval and the weapon_req bit ([weapon_type.*]); a "
+                         "two-handed type empties the off hand.")
+    ap.add_argument("--player-offhand", default=None, metavar="ITEM",
+                    help="WEAPONS-W1: the content item key in the player's off hand "
+                         "(starter_shield, starter_focus).")
     ap.add_argument("--hero-weapon", default=None, metavar="KEY",
                     help="SLICE-H4: the party body's weapon, an attack_speed "
                          "rates key (staff, sword, ...) -- its swing interval. "
