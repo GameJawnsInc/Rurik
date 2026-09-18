@@ -13468,6 +13468,46 @@ def follow_stop_radius(target=None):
     return BOUNDING_RADIUS + r_t + FOLLOW_STOP_PAD
 
 
+# ---- WEAPONS-W2b (2026-09-18): THE APPROACH ENDS AT THE WEAPON'S RANGE ---
+#
+# A press OUTSIDE range with a bow in hand walked the body to the MELEE disc:
+# the follow leg's stop point, the integrator's `dest`, the follow record's
+# eta and the skill press's busy estimate were all `follow_stop_radius` (80 u),
+# while the reach gate opened the swing at `attack_reach()` (the range, since
+# W2a) as soon as the client's frame crossed it -- so the swing opened at
+# range and the server's own copy kept walking 1,400 u past it.
+#
+# Retail, OBSERVED on the four clean ranged approaches the live corpus holds
+# (a press, no report of any kind, then the start -- 20260914T005758 at 221.5
+# and 581.6, 20260810T235916 at 90.2, 20260807T143055 at 81.7): the 0x002A
+# follow as for melee (the target's own position, re-issued every 0.5 s
+# while it moves), the start one to five seconds later, and the start's own
+# batch carries [8, me, 1] -- the walk-gate hold -- 4 of 4, which is what
+# parks the client at range: no stop message precedes the start, and the one
+# case with no operator input for a swing after it (90.2: the second launch
+# 2.5 s on, the distance shrinking by the target's own approach and nothing
+# more) shows the body standing where the start left it. WHERE the leg ends
+# is the weapon's range as this server reads it (attack_reach(): WIKI until
+# RUN-WEAPONS-2); retail's first launches after those approaches read 1,007
+# and 1,284 u for a bow the wiki puts at 1,273, both against a target that
+# walked during the windup, so they bound nothing tighter. No inset: the leg
+# ends AT range and the gate's strict `>` lets the swing open there.
+APPROACH_STOPS_AT_RANGE = True      # --legacy-ranged-approach reverts to the disc
+
+
+def approach_stop(target=None):
+    """Where the PLAYER's approach ends, centre to centre: the melee disc
+    (follow_stop_radius) for a melee weapon, the held weapon's RANGE for a
+    ranged one (WEAPONS-W2b) -- never less than the disc."""
+    disc = follow_stop_radius(target)
+    if not APPROACH_STOPS_AT_RANGE:
+        return disc
+    how = player_ranged()
+    if how is None:
+        return disc
+    return max(disc, float(how["range"]))
+
+
 def enemy_reach():
     """How close a hostile must stand to swing, and beyond which it re-chases,
     centre to centre.
@@ -13600,7 +13640,7 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
     px, py = _reach_frame(state, now)
     px, py = float(px), float(py)
     dist = math.hypot(tx - px, ty - py)
-    stop = follow_stop_radius(agent)
+    stop = approach_stop(agent)                       # WEAPONS-W2b: the range for a bow
     run = max(dist - stop, 0.0)
     f = run / dist if dist > 0.0 else 0.0
     stop_point = (px + (tx - px) * f, py + (ty - py) * f)
@@ -13806,7 +13846,7 @@ def approach_tick(send, state, conn_id, target_id, agent, now, rec=None):
     px, py = _reach_frame(state, now)
     tx, ty = agent["pos"]
     dist = math.hypot(float(tx) - float(px), float(ty) - float(py))
-    stop = follow_stop_radius(agent)
+    stop = approach_stop(agent)                       # WEAPONS-W2b
     if ap is not None:
         moved = math.hypot(float(tx) - ap["told"][0],
                            float(ty) - ap["told"][1])
@@ -15907,7 +15947,7 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
                 # The busy window is an ESTIMATE until the arrival writes it
                 # (attack_skill_arrives): the leg at the declared speed, then
                 # the windup and the aftercast the entry would have had.
-                _run = max(_d - follow_stop_radius(_ag), 0.0)
+                _run = max(_d - approach_stop(_ag), 0.0)      # WEAPONS-W2b
                 _spd = float(state.get("declared_speed_base")
                              or DEFAULT_RUN_SPEED)
                 state["cast_busy_until"] = (now + _run / _spd
@@ -31985,6 +32025,11 @@ def main():
         ENEMY_OFFSET = (_ox, _oy)
         print(f"ENEMY OFFSET: the first hostile stands ({_ox:.0f}, {_oy:.0f}) u from "
               f"the player's spawn [WEAPONS-W2a]", flush=True)
+    if a.legacy_ranged_approach:
+        global APPROACH_STOPS_AT_RANGE
+        APPROACH_STOPS_AT_RANGE = False
+        print("APPROACH: --legacy-ranged-approach -- a ranged press outside range "
+              "walks to the melee disc [WEAPONS-W2b revert]", flush=True)
     if a.no_projectiles:
         global RANGED_DELIVERY
         RANGED_DELIVERY = False

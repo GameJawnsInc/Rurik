@@ -27,6 +27,33 @@ move back.
 
 ---
 
+### ✅ WEAPONS-W2b — 2026-09-18 — **the server's half: a press outside a ranged weapon's range walks the copy to the RANGE and opens the swing there; the client's own stop is Q16, RUN-WEAPONS-2's** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) §14)
+
+Measured on the client first, the old arm: a bow's press on a frozen practice target
+1,800 u away (`20260918T170801`, `--legacy-ranged-approach`) sent retail's `0x002A` and
+then walked the server's own copy to the 80 u disc — the leg's stop, the integrator's
+`dest`, the follow's eta and the skill press's busy estimate were all `follow_stop_radius`
+— so the first swing waited 6 s and its arrow flew 0.045 s from 72 u. Retail's four clean
+ranged approaches: the melee follow exactly, the start 1–5 s later with `[8, me, 1]` and no
+movement message (4 of 4), the body standing afterwards in the one case with no operator
+input; no range-sized property on the player anywhere. Shipped: `approach_stop` (the disc
+for melee, the weapon's range for ranged, never less than the disc) at all five sites; the
+wire unchanged. On the client (`20260918T170928`): "swing at 1498 u in 1.05 s", the start
+at 1.05 s, the first arrow 1.14 s later. What the client then did — walked on through the
+start, the hold and the release at the run speed (flights 0.726, 0.281, 0.045 s) — is the
+harness's limit, not the server's: its `attack:` step is the server mailbox, the client
+never sent its own `0x0026` and never armed its own attack-follow, where a client-side
+range check would live (RECONSTRUCTION; the start itself is refuted as the parker). Q16,
+and RUN-WEAPONS-2 (an owner press per weapon, already the range capture) answers both.
+Two voided runs on the way: `20260918T161923` walked the character into the
+Ascalon-to-Lakeside portal 500 u north of the spawn (the offset's exact point was off
+the mesh and the ring's north point was taken) — the south-east diagonal is on the mesh
+with a clear line. `test_weapons` 60 → 68 (66 bare), `test_castcycle` 54,
+`test_playerswing` 191, `test_guards` 45, `test_kbdsync` 236, `test_mechanics` 246,
+`test_agentlife` 551.
+
+---
+
 ### ✅ WEAPONS-W2c — 2026-09-18 — **attack skills shoot: a bow attack skill releases at its E5 with the skill's own projectile, the strike lands a flight later, and no 46 is sent — for the player and for bodies** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) §13)
 
 Retail's ranged attack skill is `0x00E5`, `0x00A4`, `0x00E3` in one batch and nothing else:

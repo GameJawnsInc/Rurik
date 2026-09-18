@@ -1663,6 +1663,13 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                     help="WEAPONS-W2a: where the first hostile stands relative to the "
                          "player's spawn, in units, over content [enemy] offset_x / "
                          "offset_y (300, 0) -- so a ranged weapon can be shot from range.")
+    ap.add_argument("--legacy-ranged-approach", action="store_true",
+                    help="WEAPONS-W2b REVERT: a press outside a RANGED weapon's "
+                         "range walks the body to the melee disc (80 u) as every "
+                         "run before 2026-09-18 did, instead of ending the follow "
+                         "leg at the weapon's range. The reach gate still opens the "
+                         "swing at range; what this restores is the server's own "
+                         "copy walking 1,400 u past it.")
     ap.add_argument("--no-projectiles", action="store_true",
                     help="land a bow's, wand's or staff's word at the swing's WINDUP "
                          "from melee reach, with no 0x00A4 / 0x00A7 -- every run "

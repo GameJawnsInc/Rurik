@@ -11328,8 +11328,15 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   player's position, 0, 0.5 s at 1200, 680, 1, 1], no 46, no word, its strike on the shot
   -- and a flight later 0x00A7 FIRST, the word on the player, NO [1] and NO [46], the
   condition landing there; the hammer control closing with [46, it, 0] and launching
-  nothing; `--no-projectiles` restoring the E5 strike with its 46. Floor 59 bare, 60 with
-  the vault),
+  nothing; `--no-projectiles` restoring the E5 strike with its 46. §8 (WEAPONS-W2b,
+  2026-09-18) is THE APPROACH ENDING AT THE WEAPON'S RANGE: `approach_stop` reading the
+  bow's 1498 (its attack_reach) and a sword's 80 u disc, never less than the disc; a
+  press from 2000 u through the real `_approach_send` sending the SAME 0x002A [me, the
+  target's own position, plane, plane, target] as before while the leg, the integrator's
+  `dest` and the follow's eta end 1498 u short (x = 502, where 80 u short was x = 1920);
+  `approach_tick` calling the follow over at the leg's end with the reach gate open; the
+  sword's leg still ending at the disc; `--legacy-ranged-approach` walking the bow to the
+  disc and the flag existing. Floor 66 bare, 67 with the vault),
   `toolkit/authsrv/test_weaponcensus.py` (**2026-09-18, WEAPONS-W0 (studies/weapons);
   WEAPONS-W2c added §1b and four corpus pins the same day: `skill_shots()` on the
   synthetic wire finds exactly three SKILL shots and no weapon shot among them -- the

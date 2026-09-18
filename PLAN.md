@@ -1941,14 +1941,18 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 **Weapons** — [studies/weapons/PLAN.md](studies/weapons/PLAN.md)
 
-* **Every weapon type, accurately** (plan 2026-09-18; W0's first half, W1, W2a, W6a
-  and W2c landed). Eleven player types and the hostile-only ranged type are one content
-  table with retail items, and EVERY holder of a bow, wand or staff shoots — the player,
-  a party caster, a hostile archer: release at the windup, the hit distance ÷ speed
-  later, from the weapon's range — and a bow ATTACK SKILL releases at its E5 with the
-  skill's own projectile (the skill record's `+0x88`, WEAPONS-C10), its strike a flight
-  later, no 46, row for row retail's on the client. Open: WEAPONS-W2b (a player's press
-  OUTSIDE range still walks to melee distance), W3 (scythe's extra targets and small
+* **Every weapon type, accurately** (plan 2026-09-18; W0's first half, W1, W2a, W6a,
+  W2c and W2b's server half landed). Eleven player types and the hostile-only ranged
+  type are one content table with retail items, and EVERY holder of a bow, wand or staff
+  shoots — the player, a party caster, a hostile archer: release at the windup, the hit
+  distance ÷ speed later, from the weapon's range — a bow ATTACK SKILL releases at its
+  E5 with the skill's own projectile (the skill record's `+0x88`, WEAPONS-C10), its
+  strike a flight later, no 46, and a press OUTSIDE range walks the server's copy to the
+  weapon's RANGE and opens the swing there (the old arm shot from 72 u), row for row
+  retail's on the client. Open: **Q16, W2b's client half** — the harness's attack step
+  is the server mailbox, so the client never arms its own attack-follow and walks on
+  through the start; retail's parks itself with no message; an OWNER press from beyond
+  range (RUN-WEAPONS-2) is the instrument; W3 (scythe's extra targets and small
   critical), W4 (`587` damage type and `633` requirement have no reader; caster weapons
   by level), W5 (a focus or staff gives no energy), Q14 Dual Shot's second arrow, Q15 a
   preparation's own word and substituted arrow; no content spawn row holds a ranged

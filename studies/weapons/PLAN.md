@@ -228,7 +228,7 @@ exposure floor and an abort written down.
 |---|---|---|---|
 | **RUN-WEAPONS-1A** martial | axe · scythe on ONE suit · scythe on the three adjacent suits · spear · spear + shield | Q5, Q6, the 1.5 s clock, scythe wire shape and critical, the spear's projectile and flag | scythe and spear start→start 1.500, word / launch at 0.650; spear `0x00A4` field 7 = 1 |
 | **RUN-WEAPONS-1B** bows and casters | shortbow · flatbow · longbow · recurve · hornbow · staff · wand, all from the same marked spot | Q2 (609 ↔ class), Q3 (speed per class — same distance, five flights), the 2.025 and 2.7 clocks | start→launch 0.9125 / 1.1375 / 1.250 / 0.775; flight ratios 0.59 : 0.88 : 0.59 : 0.40 : 0.59 |
-| **RUN-WEAPONS-2** range | per weapon: stand far, press attack once, let the character walk in; repeat uphill if the Isle allows | Q4 — the distance from shooter to the aim point at the FIRST launch is the range, no free parameter | 1004 / 1498 / 1498 / 1273 / 1273; 1248 staff and wand; 1004 spear |
+| **RUN-WEAPONS-2** range | per weapon: stand far, press attack once, let the character walk in; repeat uphill if the Isle allows | Q4 — the distance from shooter to the aim point at the FIRST launch is the range, no free parameter; **and Q16 (W2b's client half): does the character STOP at range on its own press, and do the flights hold across swings** | 1004 / 1498 / 1498 / 1273 / 1273; 1248 staff and wand; 1004 spear; the body stands after the first start |
 | **RUN-WEAPONS-3** damage (later, needs the right attributes) | met vs unmet requirement on one weapon; a scythe's criticals; hornbow vs longbow on the 100-armour suit | Q10, Q5's critical, W4's penetration | written when W4 opens |
 
 ## 7. Open questions
@@ -250,6 +250,7 @@ exposure floor and an abort written down.
 | WEAPONS-Q13 | The sword's short gap after a skill's hit (from DAGGERS §9) | desk, `timingjoin.py --swings` |
 | WEAPONS-Q14 | Dual Shot's second arrow: one strike record or two, and how the 25 % rides each word | desk (8 pairs on `20260817T231139`), then a run |
 | WEAPONS-Q15 | A preparation's own word (Kindle Arrows: a second `0x00A3` per arrival, 4 of 5) and its substituted arrow (`+0x88` on a type-19 row) | desk, `weaponcensus.py --skill-shots` |
+| WEAPONS-Q16 | What parks retail's client at range on an attack-follow — its own `0x0026` intent plus a client-side range (RECONSTRUCTION), since neither the hold nor the start does (§14) | RUN-WEAPONS-2 (an owner press), then `codescan` on the follow resolver |
 
 ## 8. What this plan refuses
 
@@ -586,6 +587,58 @@ retail gave the Kindle-tape skill shots (2 with nothing outstanding — ours cou
 One census row is unexplained: a body's launch of 343 attributed to "skill 2" behind a
 `[60]` announcement at +0.000 (n = 1; its latest event was probably not its own).
 
-**Still open here.** W2b (a press outside range walks to melee distance); no content spawn
-row holds a ranged item; a ranged hostile still casts from wherever it stands; the
-hostile repeat-delay classes.
+**Still open here.** ~~W2b (a press outside range walks to melee distance)~~ — §14, the
+server's half; no content spawn row holds a ranged item; a ranged hostile still casts
+from wherever it stands; the hostile repeat-delay classes.
+
+## 14. WEAPONS-W2b — shipped 2026-09-18 (the server's half): the approach ends at the weapon's range
+
+**What was wrong, measured on the client first.** Under the arm every run before today
+used, a bow's press on a hostile 1,800 u away sent retail's `0x002A` follow, and then
+the SERVER walked its own copy to the 80 u melee disc — the leg's stop point, the
+integrator's `dest`, the follow's eta and the skill press's busy estimate were all
+`follow_stop_radius` — and the swing waited for that arrival: `20260918T170801`
+(`--legacy-ranged-approach`, a frozen practice target south-east of the spawn, on the
+mesh with a clear line) opened the first swing 6 s after the press and its first arrow
+flew **0.045 s — 72 u**. The reach gate had read the range since W2a; the leg had not.
+
+**Retail, OBSERVED on the four clean ranged approaches the corpus holds** (a press, no
+report of any kind, then the start — `20260914T005758` at 221.5 and 581.6,
+`20260810T235916` at 90.2, `20260807T143055` at 81.7): the follow is the melee one
+exactly (the target's own position, re-issued every 0.5 s while it moves), the start comes
+1–5 s later, its batch carries the walk-gate hold `[8, me, 1]` 4 of 4 and **no movement
+message precedes or accompanies it**; the one case with no operator input for a whole
+swing after the start (90.2) has the second launch 2.5 s on with the distance shrunk by
+the target's own approach and nothing more — the body stood where the start left it.
+No property on the player carries a range-sized value anywhere on those tapes (scanned:
+every int and f32 property in 600–1,700 beside the `0x006E` weapon swaps; only property
+21's energy), so the client is not told its range — it knows it.
+
+**What shipped.** `approach_stop(target)`: the melee disc for a melee weapon, the held
+weapon's range (`player_ranged()["range"]`, = `attack_reach()`) for a ranged one, never
+less than the disc; `_approach_send`'s stop point, the integrator's `dest`, the follow's
+eta, `approach_tick`'s arrival test and the skill press's busy estimate all read it. The
+wire is unchanged: the same `0x002A` with the target's own position. On the client
+(`20260918T170928`, the same target): the follow says "swing at 1498 u in 1.05 s", the
+start opens at 1.05 s, the first arrow leaves 1.14 s later — the arm the plan asked for,
+against the 6 s and 72 u of the run before it. `--legacy-ranged-approach` reverts.
+
+**What the client did, and why that is not this rung's to fix.** The first arrow's
+flight was 0.726 s — 1,162 u at 1,600 u/s — and the next 0.281 s, then 0.045: the body
+walked on through the start, the hold and the release at exactly the run speed (336 u in
+the 1.1375 s windup, 712 u over the next 2.475 s) to the disc. So `[8, me, 1]` does not
+park a client that is on a `0x002A` follow, and retail's client parks itself with no
+message. The harness cannot exercise what does it: its `attack:` step is the server
+mailbox (`begin_attack` from the action script — the log says so), so the client never
+sent its own `0x0026` and never armed its own attack-follow, which is where a client-side
+range check would live (RECONSTRUCTION; the alternative, that the client parks on its
+attack start, is refuted by this run — our start is retail's start). **The client's
+half is RUN-WEAPONS-2's**, which was already the range capture: the owner presses attack
+on a hostile beyond range with each weapon and lets the character walk in; where it stops
+is both the range (Q4) and this question (Q16). Until then, under the harness a ranged
+approach shows the body walking through the shot, and a person at the keyboard should
+see it stop.
+
+**Test.** `test_weapons` §8 (68 checks): the stop for a bow and a sword, the follow bit
+for bit as before, the leg / `dest` / eta ending 1,498 u short, the arrival ending the
+follow with the gate open, the sword's disc unchanged, the revert arm and its flag.

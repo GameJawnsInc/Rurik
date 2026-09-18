@@ -8,6 +8,7 @@ the skill table's own weapon_req -> attribute column, the rates table, the item 
 modifier words, and the character the server actually builds when it is handed each
 weapon. No vault: everything here is content and code.
 """
+import math
 import os
 import struct
 import sys
@@ -22,7 +23,7 @@ import agents  # noqa: E402
 import authsrv  # noqa: E402
 import combatmath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=59)   # the BARE-MACHINE number: 59 without the vault's full skills table (section 2 skips), 60 with it; from green runs (WEAPONS-W2c: 43 -> 59)
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=66)   # the BARE-MACHINE number: 66 without the vault's full skills table (section 2 skips), 67 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66)
 check = LEDGER.ok
 
 LEGACY_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
@@ -688,6 +689,79 @@ def section_skill_shots():
          authsrv.apply_condition, authsrv.weapon_satisfies) = saved
 
 
+def section_approach():
+    print("\n8. WEAPONS-W2b: the approach ends at the weapon's range")
+    saved = (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+             authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,
+             authsrv.APPROACH_STOPS_AT_RANGE)
+    follows = lambda batch: [v for op, v in batch if op == 0x002A]                  # noqa: E731
+    try:
+        authsrv.apply_party_character({"player_weapon": "starter_bow"})
+        bow = authsrv.approach_stop({})
+        authsrv.apply_party_character({"player_weapon": "starter_sword"})
+        sword = authsrv.approach_stop({})
+        check(bow == 1498.0 and sword == authsrv.follow_stop_radius({}) == 80.0,
+              "approach_stop: the bow's RANGE (1498, its attack_reach), a sword's the melee "
+              "disc (80) -- never less than the disc", f"bow {bow}, sword {sword}")
+
+        # a press from 2000 u with the bow: the follow leg ends at range
+        authsrv.apply_party_character({"player_weapon": "starter_bow"})
+        st, sent = _world(2000.0), []
+        st["approach"] = None
+        send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+        now = time.time()
+        authsrv._approach_send(send, st, 1, FOE, st["agents"][FOE], now)
+        fol = follows(sent)
+        ap, leg = st.get("approach"), st.get("click_leg")
+        check(len(fol) == 1 and fol[0][0] == PLAYER and list(fol[0][1]) == [2000.0, 0.0]
+              and fol[0][4] == FOE,
+              "the wire is unchanged: ONE 0x002A [me, the TARGET's own position, plane, plane, "
+              "target] -- retail's follow, bit for bit as for melee", str(fol))
+        check(ap is not None and leg is not None
+              and abs(leg["dest"][0] - 502.0) < 1e-6 and abs(leg["dest"][1]) < 1e-6
+              and abs(st["dest"][0] - 502.0) < 1e-6
+              and abs((leg["eta"] - now) - 502.0 / leg["speed"]) < 1e-6,
+              "but the LEG ends 1498 u short of the target -- at x = 502, the integrator's "
+              "dest and the follow's eta with it -- where it ended 80 u short before today",
+              f"leg dest {leg['dest'] if leg else None}, state dest {st.get('dest')}")
+        # arrival: the copy walked to the leg's end; approach_tick calls it arrived
+        st["pos"] = (502.0, 0.0)
+        st["last_report"] = (502.0, 0.0, True, now)
+        st["click_moving_at"] = None
+        st["approach"]["eta"] = now - 1.0
+        st["approach"]["t0"] = None
+        check(authsrv.approach_tick(send, st, 1, FOE, st["agents"][FOE], time.time()) is False
+              and st.get("approach") is None,
+              "at the leg's end the follow is OVER and the reach gate may open the swing "
+              "(1498 u out is not > attack_reach)")
+        check(not (math.hypot(2000.0 - 502.0, 0.0) > authsrv.attack_reach()),
+              "-- and it does: the gate's strict > lets a body AT range shoot")
+
+        # the sword's press from 2000 u: the disc, as before
+        authsrv.apply_party_character({"player_weapon": "starter_sword"})
+        st, sent = _world(2000.0), []
+        authsrv._approach_send(send, st, 1, FOE, st["agents"][FOE], time.time())
+        leg = st.get("click_leg")
+        check(leg is not None and abs(leg["dest"][0] - 1920.0) < 1e-6,
+              "the KNOWN-GOOD arm: a sword's leg still ends at the 80 u disc (x = 1920)")
+
+        # the revert arm: the bow's leg to the disc
+        authsrv.APPROACH_STOPS_AT_RANGE = False
+        authsrv.apply_party_character({"player_weapon": "starter_bow"})
+        st, sent = _world(2000.0), []
+        authsrv._approach_send(send, st, 1, FOE, st["agents"][FOE], time.time())
+        leg = st.get("click_leg")
+        check(authsrv.approach_stop({}) == 80.0 and leg is not None
+              and abs(leg["dest"][0] - 1920.0) < 1e-6,
+              "--legacy-ranged-approach: the bow's leg walks to the disc -- the arm before today")
+        src = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
+        check('"--legacy-ranged-approach"' in src, "--legacy-ranged-approach exists")
+    finally:
+        (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+         authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,
+         authsrv.APPROACH_STOPS_AT_RANGE) = saved
+
+
 def main():
     section_table()
     section_skills()
@@ -696,6 +770,7 @@ def main():
     section_ranged()
     section_bodies()
     section_skill_shots()
+    section_approach()
     return LEDGER.verdict()
 
 
