@@ -23,7 +23,7 @@ import agents  # noqa: E402
 import authsrv  # noqa: E402
 import combatmath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=101)   # the BARE-MACHINE number: 101 without the vault's full skills table (section 2 skips), 102 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101)
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=105)   # the BARE-MACHINE number: 105 without the vault's full skills table (section 2 skips), 106 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105)
 check = LEDGER.ok
 
 LEGACY_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
@@ -1141,6 +1141,80 @@ def section_preparation_wire():
          authsrv.swing_preparation_bonus) = saved
 
 
+def section_body_parity():
+    print("\n13. WEAPONS-W2f: a body's preparation and its arrow factor")
+    KINDLE = 433
+    saved = (authsrv.PREPARATION_WIRE, authsrv.skill_projectile, authsrv.skill_impact_visual,
+             authsrv.swing_preparation_bonus, authsrv.ARMOUR_TERM)
+    authsrv.skill_projectile = lambda sid: {KINDLE: 343, 396: 680}.get(sid)
+    authsrv.skill_impact_visual = lambda sid: 344 if sid == KINDLE else None
+    authsrv.swing_preparation_bonus = lambda state, w, a: (3.0, KINDLE) if state.get("effects") and state["effects"].on_agent(a) else (0.0, None)
+    words = lambda batch: [v for op, v in batch if op == FLOAT_T and v[0] in (16, 17)]           # noqa: E731
+    impacts = lambda batch: [v for op, v in batch if op == INT_T and v[0] == agents.GV_EFFECT_ON_TARGET]   # noqa: E731
+    try:
+        st = _body_world((600.0, 0.0), weapon_item="hostile_bow", swinging=True,
+                         swing_lands_at=time.time() - 0.01, last_swing=time.time())
+        plain = authsrv.body_ranged(st["agents"][FOE], st, FOE)
+        authsrv.effect_table(st).apply(FOE, KINDLE, 0, 24.0, time.time(), type_code=19)
+        under = authsrv.body_ranged(st["agents"][FOE], st, FOE)
+        check((plain["projectile"], plain["arrow"], plain["damage_type"]) == (143, 1, 1)
+              and (under["projectile"], under["arrow"], under["damage_type"]) == (343, 0, 5)
+              and authsrv.body_ranged(st["agents"][FOE]) == plain,
+              "a hostile archer under Kindle Arrows shoots 343 / 0 / 5 (retail's rangers on "
+              "20260817T231139: 343 / 0 / 5 on every arrow under it), the plain 143 / 1 / 1 "
+              "without the episode or without a state")
+        sent = []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+        authsrv.enemy_attack_tick(send, st, 1)
+        launch = [v for op, v in sent if op == 0x00A4]
+        check(len(launch) == 1 and launch[0][4:] == [343, 1, 0],
+              "through the real tick its windup launches 343 with flag 0", str(launch))
+        health = st["player_health"]
+        sent.clear()
+        for shot in st["body_projectiles"]:
+            shot["arrives_at"] -= 30.0
+        authsrv.projectile_tick(send, st, 1)
+        w, imp = words(sent), impacts(sent)
+        seq = [(op, v[0]) for op, v in sent if (op == INT_T and v[0] == agents.GV_EFFECT_ON_TARGET) or op == FLOAT_T]
+        check(sent[0] == (0x00A7, [FOE, 1, 5]) and len(w) == 2 and w[1][1:3] == [PLAYER, FOE]
+              and len(imp) == 2 and all(v[1:] == [PLAYER, FOE, 344] for v in imp)
+              and [x[0] for x in seq] == [INT_T, FLOAT_T, INT_T, FLOAT_T]
+              and health - st["player_health"] > 0,
+              "a flight later: 0x00A7 kind 5, then impact 344, the arrow's word, impact 344 and "
+              "the preparation's own word on the player -- W2e's shape from a body",
+              str([(hex(op), v) for op, v in sent]))
+        # the arrow factor: Dual Shot's two arrows at 75 % of the plain hit. A fixed
+        # 40-point row and no armour term, so the only roll is the body's own
+        # strike level against the baseline 60 -- the same on both fixtures.
+        authsrv.ARMOUR_TERM = False
+        base = _body_world((600.0, 0.0), weapon_item="hostile_bow", damage=[40, 40],
+                           swinging=True, swing_lands_at=time.time() - 0.01,
+                           last_swing=time.time())
+        sent = []
+        authsrv.enemy_attack_tick(send, base, 1)
+        for shot in base["body_projectiles"]:
+            shot["arrives_at"] -= 30.0
+        authsrv.projectile_tick(send, base, 1)
+        plain_hit = 480.0 - base["player_health"]
+        dual = _body_world((600.0, 0.0), weapon_item="hostile_bow", damage=[40, 40],
+                           skills=[[396, 0.0, 10.0]], skill_ready=[0.0], casting=0,
+                           cast_target=PLAYER, last_swing=time.time())
+        sent = []
+        authsrv.land_skill(send, dual, FOE, dual["agents"][FOE], 1)
+        for shot in dual["body_projectiles"]:
+            shot["arrives_at"] -= 30.0
+        authsrv.projectile_tick(send, dual, 1)
+        per_arrow = (480.0 - dual["player_health"]) / 2.0
+        check(plain_hit >= 10.0 and per_arrow == float(int(plain_hit * 0.75))
+              and per_arrow < plain_hit and len(words(sent)) == 2,
+              f"a body's Dual Shot lands each arrow at 75 % of the weapon's number through "
+              f"land_swing's factor -- {per_arrow:.0f} a piece against a plain {plain_hit:.0f} "
+              f"(the level-5 archer's own rank), two words -- W2d's body gap closed")
+    finally:
+        (authsrv.PREPARATION_WIRE, authsrv.skill_projectile, authsrv.skill_impact_visual,
+         authsrv.swing_preparation_bonus, authsrv.ARMOUR_TERM) = saved
+
+
 def main():
     section_table()
     section_skills()
@@ -1154,6 +1228,7 @@ def main():
     section_caster_level()
     section_dual_shot()
     section_preparation_wire()
+    section_body_parity()
     return LEDGER.verdict()
 
 

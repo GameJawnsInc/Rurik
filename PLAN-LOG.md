@@ -27,6 +27,12 @@ move back.
 
 ---
 
+### ✅ WEAPONS-W2f — 2026-09-18 — **the body side of Dual Shot and preparations; and Q16 measured (retail's client stops to shoot at range, ours walks a follow to melee) and left open, two client arms withdrawn** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) §20)
+
+W2f: `body_ranged(agent, state, agent_id)` reads a body's own open preparation (a hostile ranger under Kindle Arrows launches 343 / 0 / 5, retail's own on `20260817T231139`); `body_preparation_word` lands its second word with the impact through `land_swing`; `land_swing` gains `mult` so a body's Dual Shot lands each arrow at 75 % (W2d's body gap). No assert on the client. **Q16, measured:** the harness drives the client's OWN `0x0026` (Escape, Tab, Space, unlike the `attack:` mailbox), so Q16 was testable — and it is a movement gap, not a weapon one. Retail keeps shooting from a large distance that shrinks slowly (2044 → 1327 u; 1066 → 601 u); ours walks 1163 → 451 → 67 u to the melee disc and stays, because the client walks a `0x002A` follow to `r + r + 56` regardless of weapon. The walk-gate hold froze the draw animation while the follow slid the body (the owner: "a weird sliding movement ... instead of stopping to shoot"); a bare `0x0028` removed the slide but not the stored follow. BOTH withdrawn: the stop retail obeys clears the follow (`0x0029` / `0x002C`) at range, a MOVECODE-side change scored against retail's successive flights, left open rather than guessed a third time. W2b's server half (the server copy stops at range) is unaffected. `test_weapons` 102 → 106 (105 bare), swingcensus taught that a ranged swing resolves at its LAUNCH (test_playerswing's silent-drop ceiling 1.6 %), `test_mechanics` 246, `test_guards` 45, `test_castcycle` 54, `test_effects` 85, `test_daggers` 103, `test_agentlife` 551, `test_kbdsync` 236, `test_population` 75.
+
+---
+
 ### ✅ WEAPONS-W2e — 2026-09-18 — **a preparation on the wire: Kindle Arrows' own projectile, kind, impact visual and a second word for its bonus, where the server folded the bonus into the arrow's number behind a gate no row opened** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) §19)
 
 OBSERVED on the owner's recurve under Kindle Arrows (`20260914T005758`, one 24 s

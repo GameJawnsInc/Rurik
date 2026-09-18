@@ -11279,16 +11279,53 @@ def player_ranged(state=None):
 # body (a staff's 1248 is the number PARTY_RANGED_REACH already was), and for a
 # hostile both the attack gate and the chase's park distance (`stop_at`, the
 # SLICE-B7b argument), so an archer halts at range instead of running in.
-def body_ranged(agent):
+def body_ranged(agent, state=None, agent_id=None):
     """How the item a BODY holds shoots, or None (no item, a melee item, or the
-    feature off). Never raises: a row naming a missing item swings."""
+    feature off). Never raises: a row naming a missing item swings. With
+    `state` and the body's id, an open PREPARATION on it substitutes its
+    projectile, flag and kind (WEAPONS-W2f -- retail's hostile rangers under
+    Kindle Arrows launch 343 / 0 / 5 exactly as the player does)."""
     key = (agent or {}).get("weapon_item")
     if not key:
         return None
     try:
-        return weapon_ranged(agents.item_template(key))
+        item = agents.item_template(key)
+        how = weapon_ranged(item)
     except Exception:                                          # noqa: BLE001
         return None
+    if (how is None or not PREPARATION_WIRE or state is None or agent_id is None
+            or not item.get("fires_arrows")):
+        return how
+    sid, _rank, row = open_preparation(state, agent_id)
+    if sid is None:
+        return how
+    how = dict(how)
+    own = skill_projectile(sid)
+    if own is not None:
+        how["projectile"] = own
+        how["arrow"] = int(own in ARROW_PROJECTILES)
+    if row.get("damage_type") is not None:
+        how["damage_type"] = int(row["damage_type"])
+    return how
+
+
+def body_preparation_word(state, agent, agent_id, armour_mult):
+    """(points, skill, impact visual) of the preparation's OWN word a body's
+    arrow lands beside the arrow's -- W2e's second word, the body's
+    (WEAPONS-W2f) -- or (0, None, None)."""
+    if not PREPARATION_WIRE:
+        return 0.0, None, None
+    key = (agent or {}).get("weapon_item")
+    if not key:
+        return 0.0, None, None
+    try:
+        item = agents.item_template(key)
+    except Exception:                                          # noqa: BLE001
+        return 0.0, None, None
+    bonus, sid = swing_preparation_bonus(state, item, agent_id)
+    if not bonus:
+        return 0.0, None, None
+    return _whole_points(float(bonus) * float(armour_mult)), sid, skill_impact_visual(sid)
 
 
 def body_reach(agent):
@@ -11322,7 +11359,7 @@ def land_or_launch(send, state, agent_id, agent, conn_id, tid):
     """A body's swing reaches its windup: a MELEE weapon lands (land_swing), a
     ranged one releases its projectile. The one call all three landing sites
     make -- the hostile's late-hit branch, its in-reach branch, the ally's."""
-    how = body_ranged(agent)
+    how = body_ranged(agent, state, agent_id)                 # WEAPONS-W2f
     if how is not None:
         return launch_body_projectile(send, state, conn_id, agent_id, agent, tid, how)
     return land_swing(send, state, agent_id, agent, conn_id, target_id=tid)
@@ -11375,12 +11412,11 @@ def land_body_skill_shot(send, state, conn_id, shot, agent, strike):
     own condition on a live target: land_skill's order, a flight later."""
     who, tid, sid = shot["shooter"], shot["target"], strike["skill_id"]
     first = strike.get("first", True)
-    # WEAPONS-W2d: a body's several-arrow skill lands each arrow through
-    # land_swing at the FULL weapon number -- land_swing carries no damage
-    # factor, so the 75 % is the player's alone here; said, not hidden.
+    # WEAPONS-W2f: each arrow of a several-arrow skill lands its share of the
+    # weapon's number (Dual Shot's 75 %) through land_swing's `mult`.
     _res = land_swing(_without_melee_close(send, who), state, who, agent,
                       conn_id, bonus=strike["bonus"], skill_id=sid,
-                      target_id=tid)
+                      target_id=tid, mult=strike.get("mult", 1.0))
     if _res == "landed" and first and not target_dead(state, tid):
         if strike["knock_down"]:
             knock_down(send, state, tid, conn_id, f"agent {who}'s skill {sid}",
@@ -20105,7 +20141,7 @@ hurt_party_body = hurt_agent_row          # SLICE-H3's name for the party half
 
 
 def land_swing_on_body(send, state, agent_id, agent, tid, conn_id, bonus=0.0,
-                       skill_id=None):
+                       skill_id=None, mult=1.0):
     """land_swing's closing half aimed at an AGENT ROW: a hostile's swing at
     a party body (SLICE-H3, ENEMY_HIT_FRACTION) or a party body's swing at a
     hostile (SLICE-H4, PARTY_HIT_FRACTION -- retail's level-20 Monk landed
@@ -20150,7 +20186,11 @@ def land_swing_on_body(send, state, agent_id, agent, tid, conn_id, bonus=0.0,
     if _ws is not None:
         dealt = _ws
     dealt *= weakness_multiplier(state, agent_id)        # SLICE-H12
+    dealt *= float(mult)                 # WEAPONS-W2f
     dealt += float(bonus)
+    _prep_pts, _prep_sid, _prep_vis = body_preparation_word(
+        state, agent, agent_id,
+        armour_multiplier(float(armour)) if (ARMOUR_TERM and armour is not None) else 1.0)
     if on_attack_triggers(send, state, agent_id, conn_id) and agent.get("dead"):
         return "landed"                                     # MANTID
     dealt = _whole_points(dealt)        # DAMAGE-INT: the books and the wire agree
@@ -20166,7 +20206,20 @@ def land_swing_on_body(send, state, agent_id, agent, tid, conn_id, bonus=0.0,
              [agents.GV_ATTACK_SKILL_FINISHED, agent_id, 0],
              f"attack_skill_finished: agent {agent_id}'s skill {skill_id} "
              f"strikes party agent {tid} (+{bonus:.0f})")
+    if _prep_vis is not None:                            # WEAPONS-W2f
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+             [agents.GV_EFFECT_ON_TARGET, tid, agent_id, _prep_vis],
+             f"impact {_prep_vis} of agent {agent_id}'s preparation {_prep_sid} on agent {tid}")
     hurt_agent_row(send, state, agent_id, tid, dealt, frac, conn_id, what)
+    if _prep_pts > 0.0 and not target_dead(state, tid):  # WEAPONS-W2f: the second word
+        if _prep_vis is not None:
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+                 [agents.GV_EFFECT_ON_TARGET, tid, agent_id, _prep_vis],
+                 f"impact {_prep_vis} of agent {agent_id}'s preparation {_prep_sid} on agent {tid}")
+        hurt_agent_row(send, state, agent_id, tid, _prep_pts,
+                       _damage_fraction(_prep_pts, row["max_health"], agents.PROP_DAMAGE,
+                                        f"agent {agent_id}'s preparation {_prep_sid}"),
+                       conn_id, f"agent {agent_id}'s preparation {_prep_sid}'s own word")
     return "landed"
 
 
@@ -22735,7 +22788,7 @@ def start_swing(send, agent_id, conn_id, target_id=PLAYER_AGENT_ID, state=None):
 
 
 def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
-               skill_id=None, target_id=PLAYER_AGENT_ID):
+               skill_id=None, target_id=PLAYER_AGENT_ID, mult=1.0):
     """The closing half: the swing connects, `swing_windup(interval)` seconds later.
 
     THE ORDER IS ARENANET'S, and it is the opposite of hit_enemy's. OBSERVED in
@@ -22754,7 +22807,8 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
     if target_id != PLAYER_AGENT_ID:
         # SLICE-H3: the swing was at a party body.
         return land_swing_on_body(send, state, agent_id, agent, target_id,
-                                  conn_id, bonus=bonus, skill_id=skill_id)
+                                  conn_id, bonus=bonus, skill_id=skill_id,
+                                  mult=mult)
     # A CORPSE IS NOT SWUNG AT, and this guard was missing until 2026-08-20.
     # The tick-side caller checks, so nothing on the wire was ever wrong -- but
     # `land_swing` called directly re-killed the body and re-sent the effects
@@ -22827,6 +22881,13 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
     if _ws is not None:
         dealt = _ws
     dealt *= weakness_multiplier(state, agent_id)        # SLICE-H12
+    dealt *= float(mult)                 # WEAPONS-W2f: a several-arrow skill's share
+    # WEAPONS-W2f: the body's preparation, its own word after the arrow's,
+    # through the armour term the arrow took (the baseline one; the body's
+    # strike level is not re-derived here -- said, not hidden).
+    _prep_pts, _prep_sid, _prep_vis = body_preparation_word(
+        state, agent, agent_id,
+        armour_multiplier(armour) if (ARMOUR_TERM and armour is not None) else 1.0)
     # THE TAKER'S OWN EPISODES SPEAK LAST -- Frenzy's doubling, then a
     # conversion (Reversal of Fortune), per GWW's modifier order. Decided
     # here, before the first send, so the guard below sees the number that
@@ -22904,10 +22965,26 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
             pools.damage_units(dealt / float(agents.PLAYER_HEALTH)),
             _now, conn_id, f"{dealt:.0f} damage taken from agent {agent_id}")
     state["player_health"] = max(0.0, state["player_health"] - dealt)
+    if _prep_vis is not None:                            # WEAPONS-W2f
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+             [agents.GV_EFFECT_ON_TARGET, PLAYER_AGENT_ID, agent_id, _prep_vis],
+             f"impact {_prep_vis} of agent {agent_id}'s preparation {_prep_sid} on the player")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id, frac],
          f"damage {dealt:.0f} to the player"
          + (" (converted)" if conversion is not None else ""))
+    if _prep_pts > 0.0:                                  # WEAPONS-W2f: the second word
+        state["player_health"] = max(0.0, state["player_health"] - _prep_pts)
+        if _prep_vis is not None:
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+                 [agents.GV_EFFECT_ON_TARGET, PLAYER_AGENT_ID, agent_id, _prep_vis],
+                 f"impact {_prep_vis} of agent {agent_id}'s preparation {_prep_sid} on the player")
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+             [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id,
+              _damage_fraction(_prep_pts, player_max_health(state), agents.PROP_DAMAGE,
+                               f"agent {agent_id}'s preparation {_prep_sid}")],
+             f"damage {_prep_pts:.0f} to the player (agent {agent_id}'s preparation "
+             f"{_prep_sid}'s own word)")
     # ADRENALINE, both directions of the enemy's swing. WIKI: the swinger gets
     # a strike for a successful weapon hit; the player gets one unit per 1% of
     # MAXIMUM health lost, floored -- so a hit for under 1% grants nothing and,
@@ -23107,7 +23184,7 @@ def land_skill(send, state, agent_id, agent, conn_id):
             agent_adrenaline(agent).clear()
             hero_pool_clear(send, state, agent_id, agent,
                             f"skill {skill_id} clears it")   # JARIN: 0x00D0 [hero]
-        _how = body_ranged(agent)                              # WEAPONS-W2c
+        _how = body_ranged(agent, state, agent_id)             # WEAPONS-W2c / W2f
         if _how is not None:
             # A RANGED body's attack skill releases at its windup -- the
             # skill's own projectile when its row names one -- and its

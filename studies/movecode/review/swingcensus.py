@@ -58,9 +58,16 @@ _FOLLOW = re.compile(r"FOLLOW(?: re-path)?: agent \d+ -> player at "
 
 
 def _landed(label):
+    # WEAPONS-W2a/W2b (2026-09-18): a RANGED swing resolves at its LAUNCH --
+    # "projectile N at agent T: F s in the air (handle H)" at the windup -- and
+    # its word lands a flight later, past this census's 1.6 s window (a bow
+    # from 900 u: 1.1375 + 0.5625 = 1.70 s). Without this line the W2a run's
+    # 18 shots read as 18 silent drops and test_playerswing section 13 went red
+    # on the instrument, not the server.
     return ("weapon hit on agent" in label
             or (label.startswith("damage") and "to agent" in label)
-            or label.startswith("CRITICAL"))
+            or label.startswith("CRITICAL")
+            or ("in the air (handle" in label and label.startswith("projectile")))
 
 
 def swings(rows):

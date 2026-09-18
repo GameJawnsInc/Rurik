@@ -1949,7 +1949,11 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   level against anything; Dual Shot fires two arrows at one windup, each its own
   roll at 75 % — the shape OBSERVED on eight pairs, the numbers WIKI; and a preparation
   is on the wire — Kindle Arrows' own 343, its kind, its impact and its own second word,
-  OBSERVED on the owner's recurve). Eleven player types and the hostile-only ranged
+  OBSERVED on the owner's recurve; and W2f gives bodies the same preparation and arrow
+  factor). Q16 is MEASURED and open (§20): the client walks a follow to the melee disc
+  regardless of weapon, so a ranged press still closes to melee on the client even
+  though the server's copy stops at range — a MOVECODE-side clear-the-follow change, not
+  a weapon one. Eleven player types and the hostile-only ranged
   type are one content table with retail items, and EVERY holder of a bow, wand or staff
   shoots — the player, a party caster, a hostile archer: release at the windup, the hit
   distance ÷ speed later, from the weapon's range — a bow ATTACK SKILL releases at its
@@ -1962,11 +1966,11 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   range (RUN-WEAPONS-2) is the instrument; W3 (scythe's extra targets and small
   critical), W4's rest (`587` damage type against armour's `527`, no repo armour row carries
   one yet; `633` requirement has no reader), Q10 (the unmet requirement's 1/3, `636` on
-  foci), a staff's `570` recharge word, a preparation on a BODY's bow, Ignite Arrows'
-  splash; a body's several-arrow skill lands each arrow unreduced; no content spawn row
-  holds a ranged item yet. Every remaining rung of the arc needs the owner (Q16,
-  RUN-WEAPONS-1A / 1B / 2 / 3) or a content decision (spawn rows). The spear stays melee until a tape names its
-  projectile.
+  foci), a staff's `570` recharge word, Ignite Arrows' splash; no content spawn row
+  holds a ranged item yet. Q16 (the client walking a ranged follow to melee, MEASURED
+  §20) is a MOVECODE-side clear-the-follow change; the rest of the arc needs the owner
+  (RUN-WEAPONS-1A / 1B / 2 / 3) or a content decision (spawn rows). The spear stays melee
+  until a tape names its projectile.
   Captures wanted, one swing per weapon enough for the rate: RUN-WEAPONS-1A (scythe,
   spear, axe), 1B (five bows, staff, wand — predicts 1200 / 1600 / 2800 u/s), 2
   (range: every range here is WIKI or reconstructed).

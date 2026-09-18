@@ -251,7 +251,7 @@ exposure floor and an abort written down.
 | WEAPONS-Q13 | The sword's short gap after a skill's hit (from DAGGERS §9) | desk, `timingjoin.py --swings` |
 | WEAPONS-Q14 | ~~Dual Shot's second arrow~~ **closed §18: two strike records, each its own roll and word; the 25 % is WIKI, unmeasured** | — |
 | WEAPONS-Q15 | ~~A preparation's own word and its substituted arrow~~ **closed §19: shipped as W2e** | — |
-| WEAPONS-Q16 | What parks retail's client at range on an attack-follow — its own `0x0026` intent plus a client-side range (RECONSTRUCTION), since neither the hold nor the start does (§14) | RUN-WEAPONS-2 (an owner press), then `codescan` on the follow resolver |
+| WEAPONS-Q16 | What parks retail's client at range on an attack-follow. **Measured §20: the client walks a `0x002A` to the melee disc regardless of weapon; the hold and the `0x0028` both fail to stop it; retail must clear the stored follow at range (`0x0029` / `0x002C`).** Still OPEN — a MOVECODE-side change | the follow re-issued to the range point, scored against retail's successive flights |
 
 ## 8. What this plan refuses
 
@@ -833,5 +833,45 @@ foe down 11, the impact before each word in the tape's order; the revert arm's o
 of 11 with no impact; the flag. Floor 101 bare, 102 with the vault.
 
 **Not here.** Ignite Arrows' adjacency splash (named since the preparation landed); a
-preparation on a BODY's bow (`body_ranged` reads no episode); which element each `587`
-id names beyond fire = 5.
+preparation on a BODY's bow (`body_ranged` reads no episode) — §20; which element each
+`587` id names beyond fire = 5.
+
+## 20. WEAPONS-W2f — shipped 2026-09-18: the body side of W2d and W2e; and Q16 measured, still open
+
+**W2f closes two body gaps W2d and W2e left named.** `body_ranged(agent, state, agent_id)`
+now reads the body's own open preparation, so a hostile ranger under Kindle Arrows launches
+343 / 0 / 5 exactly as retail's do (`20260817T231139`: 343 / 0 / 5 on every arrow of the
+16 shots by bow bodies under a preparation there). `body_preparation_word` lands the
+preparation's own second word after the arrow's, with the impact visual, through
+`land_swing` (its target the player or a body). `land_swing` gains a `mult`, so a body's
+Dual Shot lands each arrow at 75 % of the weapon's number — W2d had noted the body case
+landed at the full number. On the client (`20260918T180529`, a hostile bow ranger under a
+scripted preparation) the arrivals carry kind 5, the impact and the two words; no assert.
+
+**WEAPONS-Q16, measured and still open: retail's client stops to shoot; ours walks in.**
+The harness CAN drive the client's own attack order — `Escape`, `Tab`, `Space` produce a
+real `0x0026` (`20260918T184537`, `185402`, `190124`) where the `attack:` mailbox does
+not. So Q16 was measurable after all, and what it shows is a movement gap, not a weapon
+one. Retail's body, after the approach, keeps shooting from a LARGE distance that shrinks
+only slightly (`20260807T143055`: two shots 2044 → 1327 u; `20260810T235916`: 1066 → 601 u)
+— it stops near where the follow ended and fires. **Ours walks all the way in**: run L's
+successive flights are 1163 → 451 → 67 → 67 u — the body closes to the melee disc over
+three shots and stays. The cause is the client's own resolver: given a `0x002A` follow that
+names a target (which W2b's server sends, correctly, to the target's own position), the
+client walks it to the melee disc `r + r + 56` regardless of the weapon, and nothing in our
+start batch stops it there. Two arms were tried against the live client and BOTH failed to
+stop it, so both were withdrawn:
+  * the walk-gate hold (`[8, me, 1]` at the start) froze the draw animation while the
+    follow kept translating — the owner watching `185402` saw "a weird sliding movement
+    when the attack animation starts instead of stopping to shoot";
+  * a bare `0x0028 [me]` at the start (retail carries one on 6 of 6 first-after-follow
+    ranged starts) removed the slide but did NOT clear the stored follow — the body walked
+    in with a normal run animation, 1163 → 67 u again (`190124`).
+So the stop retail's client obeys is not the hold and not the `0x0028`: it must be a message
+that CLEARS the stored follow (`agent+0x98`) at range — a `0x0029` heading or a `0x002C`
+placement, per the movement arc's own decode ("a `0x0029` after a `0x002A` clears the
+follow", approach_tick's docstring). Reproducing it needs the follow re-issued to the
+RANGE point rather than the target, or a clear at arrival, and scored against retail's own
+successive flights — the MOVECODE arc's instruments, not this one's. Left OPEN, with the
+gap and the two dead ends recorded rather than a third guess shipped. W2b's server half
+(the server's own copy stops at range) stands and is unaffected.

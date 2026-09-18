@@ -11368,7 +11368,13 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   plain shot through the real loop launching 343 / 0, arriving as kind 5 with the arrow's 8
   and the preparation's 3 as two words (the foe down 11) and the impact [20, foe, me, 344]
   before each word in the tape's order; `--no-preparation-wire` giving the plain 143, one
-  word of 11 and no impact; the flag existing. Floor 101 bare, 102 with the vault),
+  word of 11 and no impact; the flag existing. §13 (WEAPONS-W2f, 2026-09-18) is THE BODY
+  SIDE: a hostile archer under Kindle Arrows shooting 343 / 0 / 5 (the plain 143 / 1 / 1
+  without the episode or a state), its windup launching 343 / 0 through the real tick, a
+  flight later 0x00A7 kind 5 then the impact, the arrow's word, the impact and the
+  preparation's own word on the player; a body's Dual Shot landing each arrow at 75 % of
+  the weapon's number through `land_swing`'s factor (W2d's body gap) with two words. Floor
+  105 bare, 106 with the vault),
   `toolkit/authsrv/test_weaponcensus.py` (**2026-09-18, WEAPONS-W0 (studies/weapons);
   WEAPONS-W2c added §1b and four corpus pins the same day: `skill_shots()` on the
   synthetic wire finds exactly three SKILL shots and no weapon shot among them -- the
