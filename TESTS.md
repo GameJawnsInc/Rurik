@@ -11336,7 +11336,14 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   `dest` and the follow's eta end 1498 u short (x = 502, where 80 u short was x = 1920);
   `approach_tick` calling the follow over at the leg's end with the reach gate open; the
   sword's leg still ending at the disc; `--legacy-ranged-approach` walking the bow to the
-  disc and the flag existing. Floor 66 bare, 67 with the vault),
+  disc and the flag existing. §9 (WEAPONS-W5, 2026-09-18) is A STAFF'S OR A FOCUS'S
+  ENERGY: `weapon_energy_bonus` reading the retail focus's +5 in the off hand, the
+  henchman's staff's +10 in the lead and nothing off a sword and shield; `player_max_energy`
+  the row's pool plus the word, and the row's pool alone without one, the row untouched;
+  the seeded pool's maximum and its property-43 rate over the larger pool; -15 % morale
+  scaling the innate 20 and leaving the +5 whole; a row holding both summing (the loader's
+  own rule, stated not endorsed); `--no-weapon-energy` restoring the row's pool and the
+  flag existing. Floor 74 bare, 75 with the vault),
   `toolkit/authsrv/test_weaponcensus.py` (**2026-09-18, WEAPONS-W0 (studies/weapons);
   WEAPONS-W2c added §1b and four corpus pins the same day: `skill_shots()` on the
   synthetic wire finds exactly three SKILL shots and no weapon shot among them -- the

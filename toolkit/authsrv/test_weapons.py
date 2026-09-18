@@ -23,7 +23,7 @@ import agents  # noqa: E402
 import authsrv  # noqa: E402
 import combatmath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=66)   # the BARE-MACHINE number: 66 without the vault's full skills table (section 2 skips), 67 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66)
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=74)   # the BARE-MACHINE number: 74 without the vault's full skills table (section 2 skips), 75 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74)
 check = LEDGER.ok
 
 LEGACY_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
@@ -762,6 +762,70 @@ def section_approach():
          authsrv.APPROACH_STOPS_AT_RANGE) = saved
 
 
+def section_weapon_energy():
+    print("\n9. WEAPONS-W5: a staff's or a focus's energy")
+    import morale  # noqa: PLC0415
+    saved = (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+             authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE, authsrv.WEAPON_ENERGY)
+    try:
+        base = agents.PLAYER_ENERGY
+        authsrv.apply_party_character({"player_weapon": "starter_wand",
+                                       "player_offhand": "starter_focus"})
+        focus = authsrv.weapon_energy_bonus()
+        st = {}
+        authsrv.player_pools(st)
+        with_focus = authsrv.player_max_energy(st)
+        pool = authsrv.player_energy(st)
+        authsrv.apply_party_character({"player_weapon": "caster_staff"})
+        staff = authsrv.weapon_energy_bonus()
+        authsrv.apply_party_character({"player_weapon": "starter_sword",
+                                       "player_offhand": "starter_shield"})
+        sword = authsrv.weapon_energy_bonus()
+        st_s = {}
+        authsrv.player_pools(st_s)
+        plain = authsrv.player_max_energy(st_s)
+        check(focus == 5 and staff == 10 and sword == 0,
+              "the held set's 556: the retail focus +5 in the off hand, the henchman's staff "
+              "+10 in the lead, a sword and shield nothing (the words OBSERVED on the items; "
+              "the rule WIKI's)", f"focus {focus}, staff {staff}, sword {sword}")
+        check(with_focus == base + 5 and plain == base and base == agents.PLAYER_ENERGY,
+              "player_max_energy is the row's typed pool plus the held set's word at neutral "
+              "morale, and the row's pool alone without one -- the row itself untouched",
+              f"{with_focus} vs {plain}, row {base}")
+        check(pool.maximum == float(base + 5)
+              and abs(pool.rate - authsrv.pools.wire_regen_rate(authsrv.PLAYER_ENERGY_PIPS,
+                                                                  base + 5)) < 1e-9,
+              "the pool the player is seeded with carries it, and the f32 regen rate "
+              "(property 43) is the pips over the LARGER pool -- what the client integrates")
+        authsrv.apply_party_character({"player_weapon": "starter_wand",
+                                       "player_offhand": "starter_focus"})
+        check(authsrv.player_max_energy({"morale": 85})
+              == int(morale.effective_max(base + 5, morale.BASE_ENERGY, 85))
+              and authsrv.player_max_energy({"morale": 85}) < with_focus,
+              "at -15 % morale the focus rides like a rune: effective_max scales the innate "
+              "20 and leaves the +5 whole")
+        authsrv.apply_party_character({"player_weapon": "caster_staff",
+                                       "player_offhand": "starter_focus"})
+        check(authsrv.weapon_energy_bonus() == 15 and agents.PLAYER_OFFHAND is not None,
+              "a row naming BOTH a staff and a focus keeps both (the loader's own rule: a "
+              "row's off hand wins over the two-handed emptying) and the words sum -- "
+              "stated, not endorsed: retail lets no one hold both")
+        authsrv.WEAPON_ENERGY = False
+        try:
+            authsrv.apply_party_character({"player_weapon": "starter_wand",
+                                           "player_offhand": "starter_focus"})
+            check(authsrv.weapon_energy_bonus() == 0 and authsrv.player_max_energy({}) == base,
+                  "--no-weapon-energy: the row's pool alone -- the arm before today")
+        finally:
+            authsrv.WEAPON_ENERGY = True
+        src = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
+        check('"--no-weapon-energy"' in src, "--no-weapon-energy exists")
+    finally:
+        (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+         authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,
+         authsrv.WEAPON_ENERGY) = saved
+
+
 def main():
     section_table()
     section_skills()
@@ -771,6 +835,7 @@ def main():
     section_bodies()
     section_skill_shots()
     section_approach()
+    section_weapon_energy()
     return LEDGER.verdict()
 
 

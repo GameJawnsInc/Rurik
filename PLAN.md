@@ -1942,7 +1942,8 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 **Weapons** — [studies/weapons/PLAN.md](studies/weapons/PLAN.md)
 
 * **Every weapon type, accurately** (plan 2026-09-18; W0's first half, W1, W2a, W6a,
-  W2c and W2b's server half landed). Eleven player types and the hostile-only ranged
+  W2c, W2b's server half and W5 landed — a held staff's or focus's `556` joins the
+  pool, the rule WIKI because no observing player ever held one). Eleven player types and the hostile-only ranged
   type are one content table with retail items, and EVERY holder of a bow, wand or staff
   shoots — the player, a party caster, a hostile archer: release at the windup, the hit
   distance ÷ speed later, from the weapon's range — a bow ATTACK SKILL releases at its
@@ -1954,9 +1955,10 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   through the start; retail's parks itself with no message; an OWNER press from beyond
   range (RUN-WEAPONS-2) is the instrument; W3 (scythe's extra targets and small
   critical), W4 (`587` damage type and `633` requirement have no reader; caster weapons
-  by level), W5 (a focus or staff gives no energy), Q14 Dual Shot's second arrow, Q15 a
-  preparation's own word and substituted arrow; no content spawn row holds a ranged
-  item yet. The spear stays melee until a tape names its projectile.
+  by level), Q10 (the unmet requirement, `636` on foci), a staff's `570` recharge word,
+  Q14 Dual Shot's second arrow, Q15 a preparation's own word and substituted arrow; no
+  content spawn row holds a ranged item yet. The spear stays melee until a tape names its
+  projectile.
   Captures wanted, one swing per weapon enough for the rate: RUN-WEAPONS-1A (scythe,
   spear, axe), 1B (five bows, staff, wand — predicts 1200 / 1600 / 2800 u/s), 2
   (range: every range here is WIKI or reconstructed).

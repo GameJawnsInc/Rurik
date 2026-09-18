@@ -27,6 +27,22 @@ move back.
 
 ---
 
+### ✅ WEAPONS-W5 — 2026-09-18 — **a held staff's or focus's `556` energy joins the player's maximum energy** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) §15)
+
+The word is OBSERVED on retail's items (+5 / +10 / +3 / +4 over 56 foci, +9 / +10 on 483
+of 535 staves; the requirement-gated `636` form is Q10's and not read), the rule is
+WIKI's, and the split is stated: no observing player on any live tape ever held a focus
+or a staff (52 `0x006E` swaps: leads 5 / 15 / 22 / 27 / 32, off hands 24 or none), so
+retail's property 41 with one in hand is unobserved; what retail does send — 41 at load,
+the f32 rate in 43 — is what `player_max_energy` feeds. `weapon_energy_bonus()` sums the
+lead's and the off hand's `556`; `player_max_energy` adds it to the row's typed pool
+before `morale.effective_max`, which scales the innate 20 only (a rune's treatment). On
+the client (`20260918T172315`): "PLAYER energy = 30" beside the row's 25, no assert. `--no-weapon-energy`
+reverts. `test_weapons` 68 → 75 (74 bare), `test_pools` 128, `test_morale` 63,
+`test_effects` 85, `test_castcycle` 54.
+
+---
+
 ### ✅ WEAPONS-W2b — 2026-09-18 — **the server's half: a press outside a ranged weapon's range walks the copy to the RANGE and opens the swing there; the client's own stop is Q16, RUN-WEAPONS-2's** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) §14)
 
 Measured on the client first, the old arm: a bow's press on a frozen practice target

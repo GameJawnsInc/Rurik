@@ -20,7 +20,8 @@ that answers it. `RUN-WEAPONS-<n>` = an owner-driven live capture. Convention:
 
 The server knows four weapon types (hammer, sword, axe, daggers) and they are all melee;
 a caster hero "swings" a staff at 1,248 units with no projectile, nothing has a range, a
-weapon's damage type has no reader, and a focus gives no energy. The dagger arc showed
+weapon's damage type has no reader, and a focus gives no energy (a focus gives its `556`
+since §15; the rest of that sentence still stands where §4's rows say so). The dagger arc showed
 what closing one type costs and what it buys, and it left two instruments
 (`timingjoin.py`, the recorder) and two laws with no free parameter (the hit is half the
 duration less 0.1 s; the next swing opens one recovery later). This plan's bet is that
@@ -642,3 +643,36 @@ see it stop.
 **Test.** `test_weapons` §8 (68 checks): the stop for a bow and a sword, the follow bit
 for bit as before, the leg / `dest` / eta ending 1,498 u short, the arrival ending the
 follow with the gate open, the sword's disc unchanged, the revert arm and its flag.
+
+## 15. WEAPONS-W5 — shipped 2026-09-18: a staff's or a focus's energy
+
+**The word is OBSERVED, the rule is WIKI, and the split is stated.** On retail's items
+the energy word is `556 (N, 0)`: +5 / +10 / +3 / +4 over 56 foci and +9 / +10 on 483 of
+535 staves (the requirement-gated form is `636 (N, 6)` on 19 foci — WEAPONS-Q10's unmet
+term, NOT read); a wand, a sword and a shield carry none. **No observing player on any
+live tape ever held a focus or a staff** — the scan of every `0x006E` (52 swaps across
+the corpus) shows leads of type 5, 15, 22, 27 and 32 and off hands of type 24 or none —
+so what retail puts in property 41 with one in hand is UNOBSERVED, and the rule that
+`556` raises maximum energy is GWW's ("Focus item", "Staff"). What retail IS seen to send
+is property 41 at instance load (97 in the corpus) and the f32 regen rate in property 43
+that a larger pool lowers — the two sends `player_max_energy` already feeds.
+
+**What shipped.** `weapon_energy_bonus()` sums the `556` argument on the lead item and
+the off hand; `player_max_energy` adds it to the party row's typed pool before
+`morale.effective_max`, which scales only the innate 20 — the focus rides like a rune.
+The party row's `player_energy` stays the number the armour agrees with (DAGGERS-F15);
+the row itself is untouched. `apply_party_character` prints the term. A row naming both
+a staff and a focus keeps both by the loader's own rule (the row's off hand wins) and the
+words sum — stated, not endorsed. `--no-weapon-energy` reverts. On the client
+(`20260918T172315`, a wand and the retail focus): "PLAYER energy = 30" at spawn beside the
+row's 25, no assert; the bar the client draws from that number is unread.
+
+**Test.** `test_weapons` §9: the focus +5, the staff +10, a sword and shield 0;
+`player_max_energy` the row's pool plus the word and the row's pool alone without one;
+the seeded pool's maximum and its property-43 rate over the larger pool; −15 % morale
+scaling the innate 20 and leaving the +5 whole; both held summing; the revert arm and
+its flag. Floor 74 bare, 75 with the vault.
+
+**Still open here.** Q10 (the unmet requirement: `636` on foci, `633` on staves);
+`570 (16..17, 1)` on staves beside GWW's "halves skill recharge 10–20 %" has no reader;
+the shield's `572` armour is W4's with `587`.

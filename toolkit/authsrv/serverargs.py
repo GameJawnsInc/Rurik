@@ -1670,6 +1670,11 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "leg at the weapon's range. The reach gate still opens the "
                          "swing at range; what this restores is the server's own "
                          "copy walking 1,400 u past it.")
+    ap.add_argument("--no-weapon-energy", action="store_true",
+                    help="WEAPONS-W5 REVERT: a held staff's or focus's 556 energy word "
+                         "adds nothing to the player's maximum energy -- the pool "
+                         "every run before 2026-09-18 had. The party row's typed "
+                         "player_energy stays either way.")
     ap.add_argument("--no-projectiles", action="store_true",
                     help="land a bow's, wand's or staff's word at the swing's WINDUP "
                          "from melee reach, with no 0x00A4 / 0x00A7 -- every run "

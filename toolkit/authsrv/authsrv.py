@@ -18873,10 +18873,46 @@ def player_max_health(state):
             - float((state.get("deep_wound") or {}).get(PLAYER_AGENT_ID, 0)))
 
 
+# ---- WEAPONS-W5 (2026-09-18): A STAFF'S OR A FOCUS'S ENERGY -----------------
+#
+# "A focus gives no energy" (studies/weapons section 4). The word is on the
+# items and OBSERVED on retail's wire -- 556 (energy, no requirement) reads
+# +5 / +10 / +3 / +4 on 56 foci and +9 / +10 on 483 of 535 staves; the
+# requirement-gated form is 636 on foci, NOT read here (the unmet term is
+# WEAPONS-Q10, RUN-WEAPONS-3) -- and the RULE is the wiki's (GWW "Focus item",
+# "Staff": "Energy +N" raises maximum energy), because no observing player on
+# any live tape ever held a focus or a staff (leads: bows, hammers, wands,
+# swords, daggers; off hands: shields or none), so retail's property 41 with
+# one in hand is UNOBSERVED. What retail does send is property 41 at instance
+# load (97 in the corpus), which is the send `player_max_energy` feeds, and the
+# f32 regen rate (property 43) that a larger pool lowers -- both follow.
+# The party row's `player_energy` stays the typed pool the armour agrees with
+# (DAGGERS-F15); the held set's word is added on top, and morale scales the
+# innate base only, the way effective_max treats a rune. --no-weapon-energy
+# is the control: the pool every run before today had.
+WEAPON_ENERGY = True             # --no-weapon-energy reverts
+
+
+def weapon_energy_bonus():
+    """The energy the HELD set adds: the 556 word on the lead item (a staff)
+    and on the off hand (a focus) -- 0 with the feature off, nothing held, or
+    no 556 on either (a wand, a sword, a shield carry none)."""
+    if not (WEAPON_ENERGY and EQUIP_WEAPON):
+        return 0
+    total = 0
+    for item in (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND):
+        found = item_word(item, combatmath.ENERGY_MODIFIER)
+        if found is not None:
+            total += int(found[0])
+    return total
+
+
 def player_max_energy(state):
-    """Maximum energy, ditto. Base energy is the innate 20; armour rides free."""
-    return int(morale.effective_max(agents.PLAYER_ENERGY, morale.BASE_ENERGY,
-                                    player_morale(state)))
+    """Maximum energy, ditto. Base energy is the innate 20; armour rides free
+    (typed into the party row); a held staff's or focus's 556 rides on top
+    (WEAPONS-W5), scaled by morale the way a rune is -- not at all."""
+    return int(morale.effective_max(agents.PLAYER_ENERGY + weapon_energy_bonus(),
+                                    morale.BASE_ENERGY, player_morale(state)))
 
 
 def map_death_penalty(map_id):
@@ -20654,6 +20690,10 @@ def apply_party_character(prow):
                       flush=True)
             else:
                 changed.append(f"pool {_energy}/{_pips} = the armour's")
+    _we = weapon_energy_bonus()                              # WEAPONS-W5
+    if _we:
+        changed.append(f"energy +{_we} from the held staff / focus (556) -> "
+                       f"{agents.PLAYER_ENERGY + _we} at neutral morale [WEAPONS-W5]")
     if prow.get("player_skills"):
         PARTY_SKILLBAR = [int(s) for s in prow["player_skills"]]
         changed.append(f"bar {PARTY_SKILLBAR}")
@@ -32030,6 +32070,11 @@ def main():
         APPROACH_STOPS_AT_RANGE = False
         print("APPROACH: --legacy-ranged-approach -- a ranged press outside range "
               "walks to the melee disc [WEAPONS-W2b revert]", flush=True)
+    if a.no_weapon_energy:
+        global WEAPON_ENERGY
+        WEAPON_ENERGY = False
+        print("ENERGY: --no-weapon-energy -- a held staff or focus adds nothing to "
+              "the pool [WEAPONS-W5 revert]", flush=True)
     if a.no_projectiles:
         global RANGED_DELIVERY
         RANGED_DELIVERY = False
