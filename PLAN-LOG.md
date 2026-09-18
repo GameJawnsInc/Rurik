@@ -27,6 +27,28 @@ move back.
 
 ---
 
+### ✅ WEAPONS-W6a — 2026-09-18 — **heroes and hostiles shoot: any body holding a ranged item releases its projectile at the windup and lands it a flight later, from its weapon's range** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) §12)
+
+Retail's body shots are the player's four messages exactly and carry no property 1 (read
+on a type-28 hostile and a henchman's staff; 58 of 65 weapon shooters in the corpus are
+bodies). `weapon_ranged(item)` / `body_ranged(agent)` read what a body HOLDS
+(`weapon_item`); `land_or_launch` replaces the three body landing sites;
+`body_projectile_tick` (inside `projectile_tick`, no new tick site) sends `0x00A7` and
+lands through `land_swing` with melee's close filtered out; `party_reach` and a hostile's
+attack gate and chase park distance read the weapon's range. The hostile-only item type
+28 becomes `[weapon_type.hostile_ranged]` (1.75 s OBSERVED 42 of 42, 1200 u/s OBSERVED,
+range RECONSTRUCTED 1248 from a 1234 u maximum over 305 shots, arrow flag derived) with
+two retail items, `hostile_bow` and `hostile_bolt`; the player loader refuses them.
+`--enemy-weapon ITEM` arms the fixture hostile. On the client: the party Monk's staff 27
+shots at 0.775–0.776 s (harness `20260918T140939`), a hostile archer 12 shots at 0.775 s
+from 700 u without walking in (`20260918T141119`), word at launch + flight, every launch
+closed, no assert. `test_weapons.py` 33 → 44 (43 bare), `test_guards` 45 re-pinned (the
+two-line pin kept off `body_projectile_tick`, three new call-chain pins),
+`test_agentlife` 551, `test_playerswing` 191, `test_mechanics` 246, `test_daggers` 103,
+`test_castcycle` 54, `test_population` 75, `test_morale` 63, `test_effects` 85,
+`test_content` 48, `test_srclint` 26, `test_identlint` 28, `test_provlint` 19,
+`test_checks` 17 green.
+
 ### ✅ WEAPONS-W2a — 2026-09-18 — **the player's ranged delivery: the windup releases the weapon's projectile, the hit lands distance ÷ speed later, the press opens from the weapon's range** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) §11)
 
 Two desk findings made the messages honest: **projectile speed is a round number per

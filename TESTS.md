@@ -11297,7 +11297,18 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   hold ending at the release, a wand's bolt, two shots in the air taking handles 1 and
   2 with both arrivals in combat_deadlines, a target that died in flight closed and
   landing nothing, and `--no-projectiles` restoring the windup landing from melee
-  reach. Floor 32 bare, 33 with the vault),
+  reach. §6 (WEAPONS-W6a) is BODIES: what a body holds decides (a type-28 bow's
+  arrow with its DERIVED flag, its bolt-thrower's projectile 1 / kind 3, a hammer and
+  a missing item swinging), an archer's reach its range and a party caster's staff the
+  1248 PARTY_RANGED_REACH already was; through the real enemy_attack_tick a hostile
+  archer's windup sends ONE 0x00A4 at the player's position and lands nothing, and a
+  flight later 0x00A7 FIRST, the word on the player and NO [1, it, 0] -- with the
+  control (a hammer closes with [1, it, 0] and launches nothing); through
+  ally_attack_tick a party caster's STAFF releases its 617 and lands on the foe with
+  the staff's damage type; handles per SHOOTER, arrivals as combat deadlines, shots at
+  a body dead in flight closed and landing nothing, `--no-projectiles` reverting
+  bodies, and §1 re-pinned: type 28 is a row a HOSTILE holds and the player loader
+  refuses. Floor 43 bare, 44 with the vault),
   `toolkit/authsrv/test_weaponcensus.py` (**2026-09-18, WEAPONS-W0 (studies/weapons):
   `weaponcensus.py`, what every body on a retail tape HOLDS and how it attacks with it.**
   `0x006D` / `0x006E` hands joined to `0x0161` item rows, to `0x0035`'s attack duration,

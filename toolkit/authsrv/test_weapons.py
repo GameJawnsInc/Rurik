@@ -11,6 +11,7 @@ weapon. No vault: everything here is content and code.
 import os
 import struct
 import sys
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -21,7 +22,7 @@ import agents  # noqa: E402
 import authsrv  # noqa: E402
 import combatmath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=32)   # the BARE-MACHINE number: 32 without the vault's full skills table (section 2 skips), 33 with it; from green runs
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=43)   # the BARE-MACHINE number: 43 without the vault's full skills table (section 2 skips), 44 with it; from green runs
 check = LEDGER.ok
 
 LEGACY_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
@@ -45,8 +46,16 @@ def section_table():
     check(set(authsrv.WEAPON_TYPE_ROW) == {int(r["item_type"]) for r in rows.values()}
           and len(authsrv.WEAPON_TYPE_ROW) == len(rows) >= 11,
           "one row per item type, none shared", str(sorted(authsrv.WEAPON_TYPE_ROW)))
-    check(1 not in authsrv.WEAPON_TYPE_ROW and 28 not in authsrv.WEAPON_TYPE_ROW,
-          "the hostile-only types 1 and 28 are NOT player weapon rows (WEAPONS-C2)")
+    refused = False
+    try:
+        authsrv.apply_party_character({"player_weapon": "hostile_bow"})
+    except SystemExit:
+        refused = True
+    check(1 not in authsrv.WEAPON_TYPE_ROW
+          and authsrv.WEAPON_TYPE_ROW[28].get("holder") == "hostile" and refused
+          and [t for t, r in authsrv.WEAPON_TYPE_ROW.items() if r.get("holder")] == [28],
+          "the hostile-only types (WEAPONS-C2): 1 is no row at all, 28 is a row a HOSTILE "
+          "holds (WEAPONS-W6a) and the player loader REFUSES an item of it")
     bits = list(authsrv.WEAPON_TYPE_REQ_BIT.values())
     check(len(set(bits)) == len(bits) and all(b and b & (b - 1) == 0 for b in bits)
           and sum(bits) == 0xFB,
@@ -56,7 +65,7 @@ def section_table():
               for t in authsrv.WEAPON_TYPE_RATE)
           and {t: agents.ATTACK_SPEED[k] for t, k in authsrv.WEAPON_TYPE_RATE.items()}
           == {2: 1.33, 27: 1.33, 32: 1.33, 15: 1.75, 22: 1.75, 26: 1.75,
-              35: 1.5, 36: 1.5, 5: 2.475},
+              35: 1.5, 36: 1.5, 5: 2.475, 28: 1.75},
           "every rate is an [attack_speed.rates] key -- 1.33 / 1.75 / 2.475 are the numbers "
           "retail's 0x0035 sent while the type was held (test_weaponcensus), 1.5 is WIKI's")
     check(22 not in authsrv.WEAPON_TYPE_ATTRIBUTE and 26 not in authsrv.WEAPON_TYPE_ATTRIBUTE
@@ -66,9 +75,10 @@ def section_table():
     by_delivery = {}
     for typ, row in authsrv.WEAPON_TYPE_ROW.items():
         by_delivery.setdefault(row["delivery"], set()).add(typ)
-    check(by_delivery == {"melee": {2, 27, 32, 15, 35}, "projectile": {36, 5, 22, 26},
+    check(by_delivery == {"melee": {2, 27, 32, 15, 35}, "projectile": {36, 5, 22, 26, 28},
                           "none": {24, 12}},
-          "delivery: five melee types, four projectile types, two off-hand items",
+          "delivery: five melee types, five projectile types (the hostile's among them), "
+          "two off-hand items",
           str(by_delivery))
     hands = {t: r["hands"] for t, r in authsrv.WEAPON_TYPE_ROW.items()}
     check({t for t, h in hands.items() if h == "two"} == {32, 15, 35, 5, 26}
@@ -318,12 +328,161 @@ def section_ranged():
          authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE) = saved
 
 
+HERO, INT, INT_T, FLOAT_T = 200, 0x009F, 0x00A0, 0x00A3
+
+
+def _body_world(hostile_pos, **hostile):
+    """A player at the origin, one hostile (agent 10) and one party caster (200)."""
+    foe = {"name": "archer", "dead": False, "died_at": 0.0, "health": 200.0,
+           "max_health": 200.0, "last_hit": 0.0, "pos": hostile_pos, "plane": 0,
+           "allegiance": agents.ALLEGIANCE_HOSTILE, "attack_speed": 1.75,
+           "effects": 0, "attacks_back": True, "skills": (), "skill_ready": [],
+           "npc": {"profession": 2, "level": 5}}
+    foe.update(hostile)
+    monk = {"name": "monk", "dead": False, "died_at": 0.0, "health": 100.0,
+            "max_health": 100.0, "last_hit": 0.0, "pos": (0.0, 110.0), "plane": 0,
+            "allegiance": agents.ALLEGIANCE_PLAYER, "effects": 0, "attack_speed": 1.75,
+            "attacks_back": False, "skills": (), "skill_ready": [],
+            "npc": {"profession": 3, "level": 5}, "party_slot": 0,
+            "weapon_item": "caster_staff"}
+    return {"agents": {FOE: foe, HERO: monk}, "pos": (0.0, 0.0),
+            "player_health": 480.0, "player_dead": False}
+
+
+def section_bodies():
+    print("\n6. WEAPONS-W6a: heroes and hostiles shoot")
+    sent = []
+    send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+    melee_close = lambda batch, who: [v for op, v in batch if op == INT              # noqa: E731
+                                      and v[:2] == [agents.GV_MELEE_ATTACK_FINISHED, who]]
+    hows = {k: authsrv.body_ranged({"weapon_item": k})
+            for k in ("hostile_bow", "hostile_bolt", "caster_staff", "starter_hammer")}
+    check((hows["hostile_bow"]["projectile"], hows["hostile_bow"]["arrow"],
+           hows["hostile_bow"]["damage_type"], hows["hostile_bow"]["speed"]) == (143, 1, 1, 1200.0)
+          and (hows["hostile_bolt"]["projectile"], hows["hostile_bolt"]["arrow"],
+               hows["hostile_bolt"]["damage_type"]) == (1, 0, 3)
+          and hows["starter_hammer"] is None and authsrv.body_ranged({}) is None
+          and authsrv.body_ranged({"weapon_item": "no_such_item"}) is None,
+          "what a body HOLDS decides: a type-28 bow shoots arrow 143 (flag DERIVED, 1), its "
+          "bolt-thrower projectile 1 (flag 0, kind 3 -- retail's pair, 145 of 145), both at "
+          "1200 u/s; a hammer, empty hands and a missing item row swing", str(hows["hostile_bow"]))
+    check(authsrv.body_reach({"weapon_item": "hostile_bow"}) == 1248.0
+          and authsrv.body_reach({"weapon_item": "starter_hammer"}) == authsrv.enemy_reach()
+          and authsrv.party_reach({"weapon_item": "caster_staff", "npc": {"profession": 3}})
+          == authsrv.PARTY_RANGED_REACH == 1248.0,
+          "an archer's reach is its range, a hammer's the melee disc; a party caster's staff "
+          "reads 1248 -- the number PARTY_RANGED_REACH already was, so its stance is unmoved")
+
+    # a HOSTILE archer 600 u out, its swing at the windup, through the real tick
+    st = _body_world((600.0, 0.0), weapon_item="hostile_bow", swinging=True,
+                     swing_lands_at=time.time() - 0.01, last_swing=time.time())
+    authsrv.enemy_attack_tick(send, st, 1)
+    launch = [v for op, v in sent if op == 0x00A4]
+    check(len(launch) == 1 and launch[0][0] == FOE and list(launch[0][1]) == [0.0, 0.0]
+          and abs(_f(launch[0][3]) - 0.5) < 1e-6 and launch[0][4:] == [143, 1, 1]
+          and not [v for op, v in sent if op == FLOAT_T],
+          "a hostile archer's windup from 600 u: ONE 0x00A4 [it, the PLAYER's position, 0, "
+          "0.5 s at 1200 u/s, 143, handle 1, arrow 1] and nothing lands", str(launch))
+    health = st["player_health"]
+    sent.clear()
+    for shot in st["body_projectiles"]:
+        shot["arrives_at"] -= 30.0
+    authsrv.projectile_tick(send, st, 1)
+    words = [v for op, v in sent if op == FLOAT_T and v[0] in (16, 17)]
+    check(sent and sent[0] == (0x00A7, [FOE, 1, 1]) and len(words) == 1
+          and words[0][1:3] == [authsrv.PLAYER_AGENT_ID, FOE] and not melee_close(sent, FOE)
+          and authsrv.player_pools(st) is not None and not st["body_projectiles"],
+          "a flight later: 0x00A7 [it, handle 1, damage type 1] FIRST, the word on the player, "
+          "and NO [1, it, 0] -- land_swing's melee close is filtered out of a shot",
+          str([(hex(op), v) for op, v in sent]))
+    sent.clear()
+    melee = _body_world((60.0, 0.0), weapon_item="starter_hammer", swinging=True,
+                        swing_lands_at=time.time() - 0.01, last_swing=time.time())
+    authsrv.enemy_attack_tick(send, melee, 1)
+    check(len(melee_close(sent, FOE)) == 1 and not [v for op, v in sent if op in (0x00A4, 0x00A7)],
+          "the control: the same tick with a HAMMER in the hand closes with [1, it, 0] and "
+          "launches nothing")
+
+    # a PARTY CASTER with its staff, at the leader's target from its slot
+    st = _body_world((300.0, 0.0))
+    now = time.time()
+    authsrv.leader_engaged(st, FOE, now, "swing")
+    sent.clear()
+    saved_pf = authsrv.PARTY_FIGHTS
+    authsrv.PARTY_FIGHTS = True
+    try:
+        authsrv.ally_attack_tick(send, st, 1)
+        opened = [v for op, v in sent if op == INT_T and v[0] == 4]
+        st["agents"][HERO]["swing_lands_at"] = time.time() - 0.01
+        sent.clear()
+        authsrv.ally_attack_tick(send, st, 1)
+        bolt = [v for op, v in sent if op == 0x00A4]
+        check(opened == [[4, HERO, FOE, 0]] and len(bolt) == 1 and bolt[0][0] == HERO
+              and list(bolt[0][1]) == [300.0, 0.0] and bolt[0][4:] == [5, 1, 0]
+              and not [v for op, v in sent if op == FLOAT_T],
+              "the party caster opens [4, body, foe, 0] from its slot and, at the windup, its "
+              "STAFF releases projectile 5 (its 617), arrow 0 -- where it used to land a word "
+              "with nothing in the air", str(bolt))
+        hp = st["agents"][FOE]["health"]
+        sent.clear()
+        for shot in st["body_projectiles"]:
+            shot["arrives_at"] -= 30.0
+        authsrv.projectile_tick(send, st, 1)
+        check(sent and sent[0] == (0x00A7, [HERO, 1, 8])
+              and len([v for op, v in sent if op == FLOAT_T and v[1:3] == [FOE, HERO]]) == 1
+              and not melee_close(sent, HERO) and st["agents"][FOE]["health"] < hp,
+              "and lands it a flight later: 0x00A7 [body, 1, the staff's damage type 8], the "
+              "word on the foe, no melee close, the foe's health down",
+              str([(hex(op), v) for op, v in sent]))
+    finally:
+        authsrv.PARTY_FIGHTS = saved_pf
+
+    # handles are per SHOOTER; a target dead in flight is closed and unhurt
+    st = _body_world((600.0, 0.0), weapon_item="hostile_bolt")
+    sent.clear()
+    for who in (FOE, FOE, HERO):
+        authsrv.launch_body_projectile(send, st, 1, who, st["agents"][who],
+                                       HERO if who == FOE else FOE,
+                                       authsrv.body_ranged(st["agents"][who]))
+    check([(v[0], v[5]) for op, v in sent if op == 0x00A4] == [(FOE, 1), (FOE, 2), (HERO, 1)]
+          and all(s["arrives_at"] in authsrv.combat_deadlines(st)
+                  for s in st["body_projectiles"]),
+          "handles count each SHOOTER's own outstanding shots, and every arrival is a "
+          "combat deadline")
+    st["agents"][HERO]["dead"] = True
+    hp = st["agents"][HERO]["health"]
+    sent.clear()
+    for shot in st["body_projectiles"]:
+        shot["arrives_at"] -= 30.0
+    authsrv.projectile_tick(send, st, 1)
+    check([op for op, _v in sent].count(0x00A7) == 3 and st["agents"][HERO]["health"] == hp,
+          "every shot is CLOSED, and the two at a body that died in flight land nothing")
+
+    authsrv.RANGED_DELIVERY = False
+    try:
+        off = _body_world((60.0, 0.0), weapon_item="hostile_bow", swinging=True,
+                          swing_lands_at=time.time() - 0.01, last_swing=time.time())
+        sent.clear()
+        authsrv.enemy_attack_tick(send, off, 1)
+        check(authsrv.body_ranged(off["agents"][FOE]) is None
+              and authsrv.body_reach(off["agents"][FOE]) == authsrv.enemy_reach()
+              and len(melee_close(sent, FOE)) == 1
+              and not [v for op, v in sent if op in (0x00A4, 0x00A7)],
+              "--no-projectiles: the archer swings from the melee disc and closes with "
+              "[1, it, 0] -- the arm before today")
+    finally:
+        authsrv.RANGED_DELIVERY = True
+    src = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
+    check('"--enemy-weapon"' in src, "--enemy-weapon exists: the fixture hostile holds an item")
+
+
 def main():
     section_table()
     section_skills()
     section_items()
     section_character()
     section_ranged()
+    section_bodies()
     return LEDGER.verdict()
 
 

@@ -432,3 +432,54 @@ Heroes and hostiles still "swing" from `PARTY_RANGED_REACH` with no projectile (
 `timingjoin.py`'s `swing start->word` window is 1.5 s, which a long shot outlives (retail
 7 of 12, ours 0 of 17 at 900 u) — the ranged rows are the instrument for shots. Ranges
 are WIKI until RUN-WEAPONS-2.
+
+## 12. WEAPONS-W6a — shipped 2026-09-18: heroes and hostiles shoot
+
+**The shape is the player's, read off bodies' own shots.** Retail's hostile and henchman
+shots are the four messages of §11 exactly — the start, `0x00A4` at the windup, `0x00A7
+[shooter, handle, its weapon's 587]` and the word a flight later — and **no property 1**:
+the `[finished, damage]` pair `land_swing` sends is melee's (read on `20260914T180058`
+agent 81, a type-28 bolt-thrower, and `20260817T231139` agent 14, a henchman's staff;
+58 of the corpus's 65 weapon shooters are bodies). The hostile-only item type 28 is ONE
+file (111902) across all 278 holdings; its holders are told 1.75 s by `0x0035` (42 of 42),
+its projectiles fly at 1200 u/s (WEAPONS-C8), and flight × 1200 over all 305 of its shots
+tops out at 1234 u (p99 1146) — so its range is **RECONSTRUCTED as 1248**, the casting
+range just above that maximum.
+
+**What shipped.** `weapon_ranged(item)` is the generic reader (`player_ranged()` wraps
+it); `body_ranged(agent)` reads what a body HOLDS — `agent["weapon_item"]`, the content
+item its `0x006D` names: a party caster's staff, a spawn row's weapon, `--enemy-weapon
+ITEM` for the fixture hostile. `land_or_launch` is the one call all three body landing
+sites make (the hostile's late-hit branch, its in-reach branch, the ally's): a melee item
+lands through `land_swing` as before, a ranged one calls `launch_body_projectile`
+(handles count each SHOOTER's own outstanding shots). `body_projectile_tick` — the first
+line of `projectile_tick`, so no new tick site — sends `0x00A7` and lands the hit through
+`land_swing` with melee's close filtered out of the send (`_without_melee_close`: one
+filter, not a flag through six send sites that tests pin as text). Reach: `party_reach`
+returns a ranged body's range (a staff's 1248 IS the old `PARTY_RANGED_REACH`, so a
+caster's stance is unmoved); a ranged hostile's attack gate reads `body_reach` and its
+chase parks at range through `_npc_follow_tick`'s existing `stop_at` — 1248 u is outside
+the 1012 u notice radius, so an archer that notices you shoots from where it stands.
+`[weapon_type.hostile_ranged]` (type 28, `holder = "hostile"`, arrow flag DERIVED from
+the projectile because the type shoots both) and two retail items, `hostile_bow` (no
+`617`: arrow 143) and `hostile_bolt` (`617` = 1, kind 3 — retail's pair, 145 of 145);
+the player loader REFUSES an item of a hostile-only type. `--no-projectiles` reverts
+bodies too.
+
+**On the client**, scored by `timingjoin.py --observer`:
+
+| | start→launch | launch→word − flight | launch→arrival − flight | n |
+|---|---|---|---|---|
+| retail, 1.75 s weapons (census) | 0.775 | 0.000 ± 0.02 | 0.000 | 432 |
+| ours, the party Monk's staff at the leader's target (`20260918T140939`) | 0.775–0.776 | 0.000 | 0.000 | 27 |
+| ours, a hostile archer at the player from 700 u (`20260918T141119`) | 0.775 | +0.001 | 0.000 | 12 |
+
+The Monk's swings are 1.750 s apart; the archer halts at 700 u and never walks in. Its
+start-to-start gaps are 1.75–3.3 s because the fixture hostile's default BAR casts
+between shots (the log interleaves its three skills with the starts; the shortest gap
+reads 1.750) — not because the shot clock is off. No assert: item type 28 had never been sent by this server.
+
+**Still open here.** No content spawn row holds a ranged item yet (the mechanism is
+content-ready: `weapon_item = "hostile_bow"`). A ranged hostile still CASTS from
+wherever it stands. The hostile repeat-delay classes (WEAPONS-C5) are unmodelled. A bow
+attack skill, for the player or a body, still lands through the cast path with no arrow.

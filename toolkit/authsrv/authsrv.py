@@ -3664,6 +3664,8 @@ def combat_deadlines(state):
         out.append(second["at"])
     for shot in state.get("player_projectiles") or ():       # WEAPONS-W2a
         out.append(shot["arrives_at"])
+    for shot in state.get("body_projectiles") or ():         # WEAPONS-W6a
+        out.append(shot["arrives_at"])
     for cast in state.get("pending_casts") or ():
         if cast.get("cancelled"):
             continue
@@ -11153,28 +11155,142 @@ def item_word(item, identifier):
     return None
 
 
-def player_ranged():
-    """How the player's held weapon shoots, or None when it swings in melee.
+ARROW_PROJECTILES = (143, 144)     # 0x00A4 field 7 is 1 behind these (117 of 119) and
+                                   # 0 behind every bolt (353 of 353): a row that does
+                                   # not state `arrow` -- the hostile type 28, which
+                                   # shoots both -- derives it from the projectile
+
+
+def weapon_ranged(item):
+    """How an ITEM shoots, or None when it swings in melee.
 
     {projectile, arrow, damage_type, speed, range} -- None unless the feature is
-    on, a weapon is equipped, its [weapon_type] row says `projectile`, AND a
-    projectile id is known (the item's 617, else the row's default)."""
-    if not (RANGED_DELIVERY and EQUIP_WEAPON and agents.PLAYER_WEAPON):
+    on, the item's [weapon_type] row says `projectile`, AND a projectile id is
+    known (the item's own 617, else the row's default)."""
+    if not (RANGED_DELIVERY and item):
         return None
-    row = WEAPON_TYPE_ROW.get(int(agents.PLAYER_WEAPON.get("item_type", -1)))
+    row = WEAPON_TYPE_ROW.get(int(item.get("item_type", -1)))
     if not row or row.get("delivery") != "projectile":
         return None
-    own = item_word(agents.PLAYER_WEAPON, ITEM_WORD_PROJECTILE)
+    own = item_word(item, ITEM_WORD_PROJECTILE)
     projectile = own[1] if own is not None else row.get("projectile")
     if projectile is None or not row.get("projectile_speed") or not row.get("range"):
         return None
-    klass = (item_word(agents.PLAYER_WEAPON, ITEM_WORD_BOW_CLASS) or (None,))[0]
+    klass = (item_word(item, ITEM_WORD_BOW_CLASS) or (None,))[0]
     by_class = lambda field: dict((int(k), float(v)) for k, v in row.get(field, ()))
-    kind = item_word(agents.PLAYER_WEAPON, ITEM_WORD_DAMAGE_TYPE)
-    return {"projectile": int(projectile), "arrow": int(row.get("arrow", 0)),
+    kind = item_word(item, ITEM_WORD_DAMAGE_TYPE)
+    arrow = row.get("arrow")
+    return {"projectile": int(projectile),
+            "arrow": int(arrow if arrow is not None
+                         else int(projectile) in ARROW_PROJECTILES),
             "damage_type": int(kind[0]) if kind else 0,
             "speed": by_class("speed_by_609").get(klass, float(row["projectile_speed"])),
             "range": by_class("range_by_609").get(klass, float(row["range"]))}
+
+
+def player_ranged():
+    """How the player's held weapon shoots, or None when it swings in melee."""
+    if not EQUIP_WEAPON:
+        return None
+    return weapon_ranged(agents.PLAYER_WEAPON)
+
+
+# ---- WEAPONS-W6a (2026-09-18): HEROES AND HOSTILES SHOOT -------------------
+#
+# The same four messages from any body. Retail's hostile and henchman shots
+# are the player's shape exactly (weaponcensus: 466 weapon shots by 65 shooters,
+# 58 of them bodies): the swing's start, 0x00A4 at swing_windup(its duration),
+# 0x00A7 [shooter, handle, its weapon's 587] and the word a flight later, and
+# NO property 1 -- the [finished, damage] pair land_swing sends is MELEE's
+# (read on 20260914T180058 agent 81 and 20260817T231139 agent 14). What a body
+# shoots with is what it HOLDS: `agent["weapon_item"]`, the content item its
+# 0x006D names -- a party caster's staff (SLICE-H7), a spawn row's weapon
+# (SLICE-H11), --enemy-weapon for the fixture hostile. Until today a party
+# caster "swung" its staff from PARTY_RANGED_REACH with no bolt in the air.
+#
+# REACH: a ranged body opens from its weapon's range -- party_reach for a party
+# body (a staff's 1248 is the number PARTY_RANGED_REACH already was), and for a
+# hostile both the attack gate and the chase's park distance (`stop_at`, the
+# SLICE-B7b argument), so an archer halts at range instead of running in.
+def body_ranged(agent):
+    """How the item a BODY holds shoots, or None (no item, a melee item, or the
+    feature off). Never raises: a row naming a missing item swings."""
+    key = (agent or {}).get("weapon_item")
+    if not key:
+        return None
+    try:
+        return weapon_ranged(agents.item_template(key))
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
+def body_reach(agent):
+    """A hostile's swing reach: its ranged weapon's range, else enemy_reach()."""
+    how = body_ranged(agent)
+    return how["range"] if how is not None else enemy_reach()
+
+
+def launch_body_projectile(send, state, conn_id, agent_id, agent, tid, how):
+    """A BODY's ranged swing reaches its windup: the projectile leaves."""
+    if target_dead(state, tid):
+        return None
+    now = time.time()
+    tx, ty = target_pos(state, tid)
+    ax, ay = agent["pos"]
+    flight = math.hypot(float(tx) - float(ax), float(ty) - float(ay)) / how["speed"]
+    flying = state.setdefault("body_projectiles", [])
+    shot = {"shooter": agent_id, "target": tid, "arrives_at": now + flight,
+            "handle": 1 + sum(1 for s in flying if s["shooter"] == agent_id),
+            "damage_type": how["damage_type"]}
+    flying.append(shot)
+    send(GAME_SMSG_AGENT_PROJECTILE_LAUNCHED,
+         [agent_id, [float(tx), float(ty)], 0, _f32(flight), how["projectile"],
+          shot["handle"], how["arrow"]],
+         f"agent {agent_id}: projectile {how['projectile']} at "
+         f"{target_label(state, tid)}, {flight:.3f} s in the air")
+    return shot
+
+
+def land_or_launch(send, state, agent_id, agent, conn_id, tid):
+    """A body's swing reaches its windup: a MELEE weapon lands (land_swing), a
+    ranged one releases its projectile. The one call all three landing sites
+    make -- the hostile's late-hit branch, its in-reach branch, the ally's."""
+    how = body_ranged(agent)
+    if how is not None:
+        return launch_body_projectile(send, state, conn_id, agent_id, agent, tid, how)
+    return land_swing(send, state, agent_id, agent, conn_id, target_id=tid)
+
+
+def _without_melee_close(send, agent_id):
+    """`send`, less the one message a SHOT does not carry: land_swing's
+    [GV_MELEE_ATTACK_FINISHED, shooter, 0]. One filter rather than a flag
+    threaded through six send sites across two landing functions."""
+    def filtered(op, vals, label="", **kw):
+        if (op == GAME_SMSG_AGENT_PROPERTY_UPDATE_INT and list(vals[:2])
+                == [agents.GV_MELEE_ATTACK_FINISHED, agent_id]):
+            return None
+        return send(op, vals, label, **kw)
+    return filtered
+
+
+def body_projectile_tick(send, state, conn_id):
+    """Land every body's projectile whose flight is up: 0x00A7, then the hit
+    through land_swing with melee's close filtered out."""
+    flying = state.get("body_projectiles")
+    if not flying:
+        return
+    now = time.time()
+    for shot in [s for s in flying if now >= s["arrives_at"]]:
+        flying.remove(shot)
+        send(GAME_SMSG_AGENT_PROJECTILE_ARRIVED,
+             [shot["shooter"], shot["handle"], shot["damage_type"]],
+             f"agent {shot['shooter']}'s projectile (handle {shot['handle']}) "
+             f"arrives")
+        agent = state.get("agents", {}).get(shot["shooter"])
+        if agent is None or target_dead(state, shot["target"]):
+            continue
+        land_swing(_without_melee_close(send, shot["shooter"]), state,
+                   shot["shooter"], agent, conn_id, target_id=shot["target"])
 
 
 def launch_player_projectile(send, state, conn_id, swing, how):
@@ -11202,6 +11318,7 @@ def launch_player_projectile(send, state, conn_id, swing, how):
 def projectile_tick(send, state, conn_id):
     """Land every one of the player's projectiles whose flight is up: the
     arrival that closes its handle, then the hit -- retail's order."""
+    body_projectile_tick(send, state, conn_id)               # WEAPONS-W6a
     flying = state.get("player_projectiles")
     if not flying:
         return
@@ -18810,8 +18927,7 @@ def enemy_attack_tick(send, state, conn_id):
             if _armed is not None:
                 if now >= _armed:
                     agent["swing_lands_at"] = None
-                    land_swing(send, state, agent_id, agent, conn_id,
-                               target_id=_tid)
+                    land_or_launch(send, state, agent_id, agent, conn_id, _tid)
                 continue
             # SLICE-F25: AND A CAST IN FLIGHT LANDS TOO. The owner, after F24:
             # "sometimes the enemy Power Attack or Sever Artery shows up on
@@ -18847,7 +18963,7 @@ def enemy_attack_tick(send, state, conn_id):
                  and agent.get("follow") is None)
         if _owed_at is not None and not _owed:
             agent["swing_owed_at"] = None            # expired, or re-following
-        if not _owed and (math.hypot(ax - px, ay - py) > enemy_reach()
+        if not _owed and (math.hypot(ax - px, ay - py) > body_reach(agent)
                           or (NPC_FOLLOW and agent.get("follow") is not None)):
             agent["swinging"] = False
             agent["swing_lands_at"] = None
@@ -18891,7 +19007,7 @@ def enemy_attack_tick(send, state, conn_id):
         if due is not None:
             if now >= due:
                 agent["swing_lands_at"] = None
-                land_swing(send, state, agent_id, agent, conn_id, target_id=_tid)
+                land_or_launch(send, state, agent_id, agent, conn_id, _tid)
             continue
 
         # A SKILL GOES FIRST when the bar has one ready. WHICH one is pick_skill's
@@ -20231,6 +20347,9 @@ def party_melee(agent):
 
 
 def party_reach(agent):
+    how = body_ranged(agent)                                  # WEAPONS-W6a
+    if how is not None and not party_melee(agent):
+        return how["range"]
     return enemy_reach() if party_melee(agent) else PARTY_RANGED_REACH
 
 
@@ -20291,6 +20410,10 @@ def apply_party_character(prow):
         # 20 of 20 dagger holdings and every bow, hammer and staff in the corpus
         # name offhand 0. A row's own player_offhand below still wins.
         _wrow = WEAPON_TYPE_ROW.get(int(agents.PLAYER_WEAPON.get("item_type", -1)))
+        if _wrow and _wrow.get("holder") == "hostile":
+            raise SystemExit(f"player_weapon {prow['player_weapon']!r} is item type "
+                             f"{_wrow['item_type']}, which only a hostile holds on "
+                             f"retail's wire (WEAPONS-C2)")
         if _wrow and _wrow.get("hands") == "two" and agents.PLAYER_OFFHAND:
             agents.PLAYER_OFFHAND = None
             changed.append("off hand emptied (two-handed)")
@@ -20580,8 +20703,7 @@ def ally_attack_tick(send, state, conn_id):
         if due is not None:
             if now >= due:
                 agent["swing_lands_at"] = None
-                land_swing(send, state, agent_id, agent, conn_id,
-                           target_id=tid)
+                land_or_launch(send, state, agent_id, agent, conn_id, tid)
             continue
         if agent.get("cast_lands_at") is not None:
             continue                          # a cast in flight beats it
@@ -20702,6 +20824,9 @@ def enemy_move_tick(send, state, conn_id, rec=None):
         if NPC_FOLLOW:
             _tgt = (tx, ty)
             _stop = HERO_FOLLOW_STOP if _ally else None
+            if not _ally and body_ranged(agent) is not None:
+                # WEAPONS-W6a: an archer halts at its range, not at the disc.
+                _stop = body_ranged(agent)["range"]
             _slot = False
             _leash = HERO_FOLLOW_LEASH if _ally else None
             _ft = (party_fight_target(state, agent_id, agent, now)
@@ -23635,6 +23760,9 @@ def spawn_population(send, state, origin, conn_id, area=None):
     return placed
 
 
+ENEMY_WEAPON_ITEM = None       # --enemy-weapon ITEM: what the fixture hostile holds
+
+
 def spawn_enemy(send, state, origin, conn_id):
     """Put one hostile body in the map, using only packets we have proven.
 
@@ -23685,7 +23813,13 @@ def _spawn_one_enemy(send, state, agent_id, x, y, plane, conn_id, n_of=(1, 1)):
         # twice, and keying recharge by id would make the second copy share the
         # first's cooldown.
         "skill_ready": [0.0] * len(ENEMY_SKILLS),
+        "weapon_item": ENEMY_WEAPON_ITEM,                     # WEAPONS-W6a
     }
+    if ENEMY_WEAPON_ITEM:
+        _erow = WEAPON_TYPE_ROW.get(int(agents.item_template(
+            ENEMY_WEAPON_ITEM).get("item_type", -1))) or {}
+        if _erow.get("rate") in agents.ATTACK_SPEED:
+            entry["attack_speed"] = float(agents.ATTACK_SPEED[_erow["rate"]])
     if ENEMY_BURROWS:
         entry.update({
             "burrow_phase": BURROW_EMERGING,
@@ -23698,6 +23832,16 @@ def _spawn_one_enemy(send, state, agent_id, x, y, plane, conn_id, n_of=(1, 1)):
     create_agent_world(send, state, agent_id, entry,
                        "burrowing hostile" if ENEMY_BURROWS else "hostile",
                        conn_id=conn_id)
+    if ENEMY_WEAPON_ITEM:
+        # WEAPONS-W6a: the spawn row's own shape (SLICE-H11) for the fixture --
+        # 0x0161 for the item, then 0x006D [agent, leadhand, 0].
+        _wid = SPAWN_WEAPON_ITEM_ID + int(agent_id)
+        send(GAME_SMSG_CREATE_NAMED_ITEM,
+             agents.named_item(_wid, agents.item_template(ENEMY_WEAPON_ITEM)),
+             f"CREATE_NAMED_ITEM({ENEMY_WEAPON_ITEM}, item {_wid}, agent {agent_id})")
+        send(GAME_SMSG_NPC_UPDATE_WEAPONS, [int(agent_id), _wid, 0],
+             f"NPC_UPDATE_WEAPONS(agent {agent_id}: leadhand = item {_wid}, "
+             f"{ENEMY_WEAPON_ITEM}) [WEAPONS-W6a]")
     # NOT SENT, and the reason is worth keeping. 0x002F is ldufr's
     # AGENT_UPDATE_ALLEGIANCE, and it looked like the way to set the byte GWCA
     # documents at AgentLiving+h01B1 -- the one whose values are named
@@ -31648,6 +31792,12 @@ def main():
         AREA_DAMAGE = False
         print("NO AREA DAMAGE: an attack skill's adjacent damage is not dealt "
               "(the pre-DAGGERS-B8 arm).")
+    if a.enemy_weapon:
+        global ENEMY_WEAPON_ITEM
+        agents.item_template(a.enemy_weapon)          # a bad key dies here, at launch
+        ENEMY_WEAPON_ITEM = a.enemy_weapon
+        print(f"ENEMY WEAPON: the fixture hostile holds {a.enemy_weapon!r} "
+              f"[WEAPONS-W6a]", flush=True)
     if a.enemy_offset:
         global ENEMY_OFFSET
         try:

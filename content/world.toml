@@ -954,8 +954,9 @@ pair; change either only together.
 # bit a skill row's `weapon_req` mask names the type by; `rate` the [attack_speed.rates]
 # key; `delivery` melee / projectile / none. Every number below was read off ArenaNet's
 # own wire by toolkit/authsrv/weaponcensus.py (studies/weapons/PLAN.md sections 3 and 9);
-# what is NOT measured is said per row. Item types 1 and 28 are hostile-only and are
-# deliberately absent: a player never holds one.
+# what is NOT measured is said per row. Item types 1 and 28 are hostile-only: type 1 (a
+# zero-damage prop) is deliberately absent, and type 28's row carries `holder =
+# "hostile"`, which the player loader refuses (WEAPONS-W6a).
 [weapon_type.axe]
 item_type = 2
 hands = "one"
@@ -1127,6 +1128,26 @@ source = "capture"
 capture = "20260914T005758"
 origin = "live"
 verified = """OBSERVED, weaponcensus.py over the live corpus 2026-09-18 (WEAPONS-C2 / C6 / C7): item type 12 in 67 offhands; 556 energy (no requirement) or 633 + 636 -- 56 / 19 items. The NAME is UPSTREAM (GWCA ItemType); the energy word is the witness."""
+
+[weapon_type.hostile_ranged]
+item_type = 28
+hands = "npc"                 # a body's, never a player's: no hand slot to reason about
+holder = "hostile"            # WEAPONS-C2: the player loader REFUSES this type
+attribute = 0
+req_bit = 0x00
+rate = "staff"                # 1.75: retail's 0x0035 base while a type 28 is held, 42 of 42
+delivery = "projectile"
+projectile = 143              # a type 28 with no 617 shoots the arrow (20 of 21); `arrow` is
+                              # DERIVED from the projectile for this type -- it shoots both
+range = 1248                  # RECONSTRUCTION: flight x 1200 over all 305 type-28 shots tops
+                              # out at 1234 u (p99 1146); 1248 is the casting range above it
+projectile_speed = 1200       # OBSERVED: 23 of 27 mutual shots (WEAPONS-C8)
+
+[weapon_type.hostile_ranged.provenance]
+source = "capture"
+capture = "20260914T180058"
+origin = "live"
+verified = """OBSERVED, weaponcensus.py over the live corpus 2026-09-18 (WEAPONS-C2 / C6 / C8): item type 28 in 278 leadhands, NEVER a player's -- every one shares one file, carries no 633 requirement, a 609 of 0 or 1 (223 of them) and, on 171, a 617. Both arrows (143, arrow flag 1) and bolts (617's 0 / 1 / 6, flag 0) leave it, at 1200 u/s either way. Its holders are told 1.75 s and repeat at 1.75 / 1.90 / 1.985 / 2.125 (AI pacing, WEAPONS-C5 -- not modelled). The type's NAME is not known; `hostile_ranged` is ours."""
 
 # ------------------------------------------------- weapon and creature swing rates
 #

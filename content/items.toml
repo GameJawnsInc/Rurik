@@ -504,6 +504,58 @@ capture = "20260914T005758"
 origin = "live"
 verified = """OBSERVED on ArenaNet's own wire (WEAPONS-W1, 2026-09-18): the OFFHAND of four bodies on connection 51659 (agents 91, 329, 418, 616) and twelve more, 16 declarations, one distinct row. MFT row 10340 in both run archives."""
 
+# ---- WEAPONS-W6a: what a ranged HOSTILE holds (item type 28, hostile-only) ----
+#
+# Two rows, every byte retail's. All 278 type-28 holdings in the corpus share ONE file
+# (111902) and the generic name id 8582; what differs is the model and the words. The
+# player loader refuses both (the type row's `holder`).
+
+[item.hostile_bolt]
+name = "a hostile's bolt-thrower (retail wire: 67 leadhands across four tapes)"
+file_id = 0x1B51E              # 111902
+item_type = 28
+dye_tint = 0
+dye_colors = 0
+materials = 0
+unk1 = 0
+flags = 0x20000100
+value = 0
+model_id = 3454
+quantity = 1
+enc_name = [0x2186]            # 8582
+# 609 arg 0, 587 arg 3, 617 arg2 1 (the projectile -- and retail's 0x00A7 answers 3 behind
+# it, 145 of 145), 584 arg 5 arg2 3 -- a 3-5 weapon.
+modifiers = [0x26180000, 0x24B80300, 0x26980001, 0xA4880503]
+
+[item.hostile_bolt.provenance]
+source = "capture"
+capture = "20260807T143055"
+origin = "live"
+verified = """OBSERVED on ArenaNet's own wire (WEAPONS-W6a, 2026-09-18): the leadhand of agents 178, 112 and 144 on connection 62994 and 64 more bodies (20260810T235916 too), 67 declarations, ONE distinct row. The same words on models 3456 / 3458 / 3460 are the shooters weaponcensus.py reads at field 5 = 1, field 7 = 0 (agent 80 on 20260914T180058, 91 shots). MFT row 10662 in both run archives."""
+
+[item.hostile_bow]
+name = "a hostile's bow (retail wire: 17 leadhands, the Factions tutorial's archers)"
+file_id = 0x1B51E              # 111902
+item_type = 28
+dye_tint = 0
+dye_colors = 0
+materials = 0
+unk1 = 0
+flags = 0x20000100
+value = 0
+model_id = 15013
+quantity = 1
+enc_name = [0x2186]            # 8582
+# 609 arg 0, 587 arg 1 (piercing), 584 arg 3 arg2 1 -- a 1-3 weapon with NO 617: it shoots
+# the arrow, projectile 143 with the arrow flag, 1200 u/s.
+modifiers = [0x26180000, 0x24B80100, 0xA4880301]
+
+[item.hostile_bow.provenance]
+source = "capture"
+capture = "20260913T210901"
+origin = "live"
+verified = """OBSERVED on ArenaNet's own wire (WEAPONS-W6a, 2026-09-18): agent 18's leadhand on connection 60877 (item 35) and agents 18 / 19 / 20 on 20260817T180610, 17 declarations, one distinct row. The MANTID tape's type-28 archers (agents 18-36) are the shooters weaponcensus.py reads at field 5 = 143, field 7 = 1, 0x00A7 answering 1. MFT row 10662 in both run archives."""
+
 # ---- DAGGERS: the starter ASSASSIN armour, the owner's own level-3 character's ----
 #
 # Five rows, every byte retail's: the pieces the observer WORE on 20260819T132414

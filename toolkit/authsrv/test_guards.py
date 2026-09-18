@@ -672,7 +672,11 @@ def section_concurrency():
     # hit lands in `projectile_tick` a flight after `_land_player_swing` released
     # it; that tick sits beside second_strike_tick on BOTH sites (the world tick's
     # own loop and combat_pass) and nowhere else, pinned by its two lines.
+    # WEAPONS-W6a: bodies' shots land in `body_projectile_tick`, which is
+    # projectile_tick's FIRST line and nobody else's call -- so it adds no tick
+    # site, and its name is kept out of the two-line pin it would otherwise match.
     _shot_line = [l for l in src if "projectile_tick(send, state, conn_id)" in l
+                  and "body_projectile_tick" not in l
                   and not l.lstrip().startswith("def ")]
     check(callers == {"_land_player_swing", "cast_tick", "hit_enemy",
                       "dual_second_strike", "second_strike_tick",
@@ -683,6 +687,9 @@ def section_concurrency():
           and len(_shot_line) == 2
           and sum("# WEAPONS-W2a" in l for l in _shot_line) == 1
           and callers_of("launch_player_projectile") == {"_land_player_swing"}
+          and callers_of("body_projectile_tick") == {"projectile_tick"}
+          and callers_of("land_or_launch") == {"enemy_attack_tick", "ally_attack_tick"}
+          and callers_of("launch_body_projectile") == {"land_or_launch"}
           and callers_of("combat_pass") == {"combat_sleep"}
           and callers_of("combat_sleep") == {"handle"}
           and callers_of("_land_player_swing") == {"attack_tick"},

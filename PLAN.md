@@ -1941,18 +1941,19 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 **Weapons** — [studies/weapons/PLAN.md](studies/weapons/PLAN.md)
 
-* **Every weapon type, accurately** (plan 2026-09-18; W0's first half, W1 and W2a landed).
-  Eleven types are one content table with a retail item each, and the PLAYER's bow,
-  wand and staff shoot: release at the windup, the hit distance ÷ speed later, the
-  press opening from the weapon's range — row for row retail's on the client. Open:
-  WEAPONS-W2b (a press OUTSIDE range still walks to melee distance; a bow attack
-  skill still lands with no arrow), W6 (heroes and hostiles still "swing" from 1,248 u
-  with no projectile), W3 (scythe's extra targets and small critical), W4 (`587`
-  damage type and `633` requirement have no reader; caster weapons by level), W5 (a
-  focus or staff gives no energy). The spear stays melee until a tape names its
-  projectile. Captures wanted, one swing per weapon enough for the rate:
-  RUN-WEAPONS-1A (scythe, spear, axe), 1B (five bows, staff, wand — predicts 1200 /
-  1600 / 2800 u/s), 2 (range: every range here is still WIKI).
+* **Every weapon type, accurately** (plan 2026-09-18; W0's first half, W1, W2a and W6a
+  landed). Eleven player types and the hostile-only ranged type are one content table
+  with retail items, and EVERY holder of a bow, wand or staff shoots — the player, a
+  party caster, a hostile archer: release at the windup, the hit distance ÷ speed
+  later, from the weapon's range, row for row retail's on the client. Open:
+  WEAPONS-W2b (a player's press OUTSIDE range still walks to melee distance; a bow
+  attack skill lands with no arrow, for anyone), W3 (scythe's extra targets and small
+  critical), W4 (`587` damage type and `633` requirement have no reader; caster
+  weapons by level), W5 (a focus or staff gives no energy); no content spawn row holds
+  a ranged item yet. The spear stays melee until a tape names its projectile.
+  Captures wanted, one swing per weapon enough for the rate: RUN-WEAPONS-1A (scythe,
+  spear, axe), 1B (five bows, staff, wand — predicts 1200 / 1600 / 2800 u/s), 2
+  (range: every range here is WIKI or reconstructed).
 
 **Monster AI** — [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md)
 
