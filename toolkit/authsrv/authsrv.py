@@ -3213,8 +3213,11 @@ def second_strike_seconds(state):
 def second_strike_due(state, now):
     """When the second strike fires: its instant, less half a tick under
     SLICE-F49 so the tick that lands it is the NEAREST one, not the next."""
+    # SLICE-F50: with the deadline wake it fires AT its instant, and the half
+    # tick would make it 25 ms early; the rounding is the no-deadlines arm's.
     return (now + second_strike_seconds(state)
-            - (TICK_SECONDS / 2.0 if SWING_CLOCK_CARRY else 0.0))
+            - (TICK_SECONDS / 2.0
+               if SWING_CLOCK_CARRY and not COMBAT_DEADLINES else 0.0))
 DOUBLE_STRIKE_BASE = 0.02          # WIKI (GWW "Double strike"): inherent 2 %
 DOUBLE_STRIKE_PER_RANK = 0.02      # ... and 2 % a rank of Dagger Mastery
 ITEM_TYPE_DAGGERS = 32
@@ -3601,6 +3604,115 @@ def swing_clock_stamp(last, interval, now):
     if SWING_CLOCK_CARRY and last and 0.0 <= now - due < SWING_CARRY_WINDOW:
         return due
     return now
+
+
+# SLICE-F50 (2026-09-18): COMBAT ONE-SHOTS FIRE AT THEIR INSTANT, NOT AT THE
+# NEXT WORLD TICK. After SLICE-F49 the swing RATE was right and every single
+# event was still quantised to the 51 ms tick: a second strike is armed on a
+# tick and lands a whole number of ticks later (0.510 / 0.357 s measured
+# against retail's 0.499 / 0.334), a swing opens on the first tick past its
+# due instant (26 and 27 ticks alternating where retail is 1.326-1.335), and
+# the same for a landing and a cast phase. The world tick is NOT made finer --
+# it also paces movement, the 0x001E clock and a dozen tuned things -- the
+# world THREAD wakes early instead: it sleeps its tick in slices, and when a
+# combat deadline falls inside the tick it wakes at that instant and runs the
+# combat timers alone, in the tick's own order. Every timer already compares
+# against absolute time, so an extra call with nothing due does nothing.
+# --no-combat-deadlines is the control (plain time.sleep(TICK_SECONDS)).
+COMBAT_DEADLINES = True
+COMBAT_SLICE = 0.010           # s: re-read the deadlines this often (the recv
+                               # thread arms casts while this one sleeps)
+
+
+def combat_deadlines(state):
+    """Every wall-clock instant a combat one-shot is waiting on."""
+    out = []
+    second = state.get("player_second_strike")
+    if second:
+        out.append(second["at"])
+    for cast in state.get("pending_casts") or ():
+        if cast.get("cancelled"):
+            continue
+        if not cast.get("begun", True):
+            out.append(cast.get("begin_at"))
+        if not cast.get("e5_sent"):
+            out.append(cast.get("e5_at"))
+        if cast.get("second_at") is not None and not cast.get("second_done"):
+            out.append(cast["second_at"])
+        if not cast.get("e3_sent"):
+            out.append(cast.get("e3_at"))
+        out.append(cast.get("e6_at"))
+    swing = state.get("player_swing")
+    if swing:
+        out.append(swing.get("lands_at"))
+    elif (state.get("attacking") is not None and not state.get("player_dead")
+          and state.get("player_last_swing")):
+        out.append(state["player_last_swing"] + ATTACK_INTERVAL
+                   * attack_interval_factor(state, PLAYER_AGENT_ID))
+    for agent_id, agent in list((state.get("agents") or {}).items()):
+        if agent.get("dead"):
+            continue
+        out.append(agent.get("swing_lands_at"))
+        out.append(agent.get("cast_lands_at"))
+        if agent.get("last_swing"):
+            out.append(agent["last_swing"]
+                       + (agent.get("attack_speed") or ENEMY_ATTACK_SPEED)
+                       * attack_interval_factor(state, agent_id))
+    return [float(d) for d in out if d]
+
+
+def combat_pass(send, state, conn_id, rec=None):
+    """The combat timers alone, in the world tick's own order."""
+    cast_tick(send, state, conn_id)
+    chain_tick(send, state, conn_id)
+    second_strike_tick(send, state, conn_id)
+    attack_tick(send, state, conn_id, rec)
+    enemy_attack_tick(send, state, conn_id)
+    ally_cast_tick(send, state, conn_id)
+    ally_attack_tick(send, state, conn_id)
+
+
+def combat_sleep(send, state, conn_id, rec=None, tick=None):
+    """Sleep one world tick, waking at any combat deadline inside it.
+
+    Returns the number of early passes run, or None when the socket closed.
+    A deadline at or before `combat_served_at` was already offered to the
+    timers (by the regular tick or an earlier pass) and is NOT re-served: a
+    swing that is due but refused -- out of reach, moving -- would otherwise
+    spin this loop. FUSED: a fault in an early pass is printed once and the
+    rest of the session sleeps plainly; the regular tick still runs the timers.
+    """
+    tick = TICK_SECONDS if tick is None else tick
+    end = time.time() + tick
+    passes = 0
+    while COMBAT_DEADLINES and not state.get("combat_deadlines_fused"):
+        now = time.time()
+        if now >= end:
+            break
+        served = state.get("combat_served_at", 0.0)
+        due = [d for d in combat_deadlines(state) if served < d < end]
+        nxt = min(due) if due else None
+        if nxt is None or nxt - now > COMBAT_SLICE:
+            time.sleep(min(COMBAT_SLICE, end - now))
+            continue
+        if nxt > now:
+            time.sleep(nxt - now)
+        state["combat_served_at"] = max(nxt, time.time())
+        try:
+            combat_pass(send, state, conn_id, rec)
+        except OSError:
+            return None
+        except Exception as exc:                                # noqa: BLE001
+            state["combat_deadlines_fused"] = True
+            print(f"[c{conn_id}] COMBAT DEADLINES FUSED: an early pass raised "
+                  f"{exc!r}; the world tick alone runs the timers from here "
+                  f"[SLICE-F50]", flush=True)
+            break
+        passes += 1
+    rest = end - time.time()
+    if rest > 0:
+        time.sleep(rest)
+    return passes
 # MEASURED, not chosen: ArenaNet's cadence is 5.000 s, 75 of 76 gaps inside
 # 100 ms across three tapes (studies/smsg, and studies/divergence D4). 0x000C
 # and 0x000D are the ONLY periodic messages in the whole corpus -- the
@@ -25368,7 +25480,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                 """
                 prev_tick = time.perf_counter()
                 while not stop.is_set():
-                    time.sleep(TICK_SECONDS)
+                    # SLICE-F50: one tick of sleep, waking early at a combat
+                    # deadline to run the combat timers alone.
+                    if combat_sleep(send, state, conn_id, rec) is None:
+                        return
+                    # Everything due up to here is the regular pass's below.
+                    state["combat_served_at"] = time.time()
                     # The AgTrack guard's clock: arrivals + the keep-alive
                     # sweep every tick; the standing re-pin answer sampled at
                     # 2 Hz, transitions recorded, and a DUE re-pin FIRED
@@ -31254,6 +31371,12 @@ def main():
         AREA_DAMAGE = False
         print("NO AREA DAMAGE: an attack skill's adjacent damage is not dealt "
               "(the pre-DAGGERS-B8 arm).")
+    if a.no_combat_deadlines:
+        global COMBAT_DEADLINES
+        COMBAT_DEADLINES = False
+        print("NO COMBAT DEADLINES: the world thread sleeps its whole tick and "
+              "every combat one-shot fires on the 51 ms grid (the "
+              "pre-SLICE-F50 arm).")
     if a.no_swing_clock_carry:
         global SWING_CLOCK_CARRY
         SWING_CLOCK_CARRY = False

@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=183)   # SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
+LEDGER = checks.Ledger("player swing windup", floor=191)   # SLICE-F50 +8 (the deadline wake: served at its instant, never twice, the revert, the fuse); SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -1810,11 +1810,16 @@ def section_press_ends_kbd_latch():
           f"starts {len(starts(sent))}")
 
     # 11j. the call sites hand the recorder over: source pins.
-    check(src.count("attack_tick(send, state, conn_id, rec)") == 1
+    # SLICE-F50: TWO sites now -- the world tick and combat_pass, the early
+    # wake -- and the pin is that BOTH hand the recorder over and none does not.
+    check(src.count("attack_tick(send, state, conn_id, rec)") == 2
+          and not [l for l in src.splitlines()
+                   if l.strip() == "attack_tick(send, state, conn_id)"]
           and src.count("begin_attack(send, state, foe, conn_id, rec=rec)") == 1
           and src.count("begin_attack(send, state, values[1], conn_id, rec=rec)") == 1,
-          "the world tick, the harness control slot and the 0x0026 arm all "
-          "pass the recorder, so no press path can be silent by omission",
+          "the world tick, the early combat pass, the harness control slot and "
+          "the 0x0026 arm all pass the recorder, so no press path can be silent "
+          "by omission",
           "source pin")
     check(src.count('state["attack_press_at"] = now') == 1
           and src.count('state.get("attack_press_at")') == 1,
@@ -2302,12 +2307,76 @@ def section_swing_clock_carry():
                   "and a second strike is due at its instant")
     finally:
         authsrv.SWING_CLOCK_CARRY = True
-    LEDGER.ok(abs(authsrv.second_strike_due({}, 10.0)
-                  - (10.5 - authsrv.TICK_SECONDS / 2.0)) < 1e-9,
+    authsrv.COMBAT_DEADLINES = False        # SLICE-F50 owns the default arm
+    _half = authsrv.second_strike_due({}, 10.0)
+    authsrv.COMBAT_DEADLINES = True
+    LEDGER.ok(abs(_half - (10.5 - authsrv.TICK_SECONDS / 2.0)) < 1e-9,
               "with the carry on it is due half a tick EARLY, so the tick that "
               "lands it is the NEAREST one -- armed on a tick, 0.5 s is 10 ticks "
               "(0.510) and 0.335 s is 7 (0.357) either way, which is what harness "
               "20260918T081923 measured; 0.375 s would move from 8 ticks to 7")
+
+
+def section_combat_deadlines():
+    """SLICE-F50: the world thread wakes at a combat deadline."""
+    import authsrv
+    print("\n14. combat one-shots fire at their instant (SLICE-F50)")
+    now = _tt.time()
+    st = {"player_second_strike": {"target": 10, "at": now + 0.2},
+          "player_swing": {"target": 10, "lands_at": now + 0.3},
+          "pending_casts": [{"begun": True, "e5_sent": False, "e5_at": now + 0.4,
+                             "e3_sent": False, "e3_at": now + 0.6, "e6_at": now + 0.9},
+                            {"cancelled": True, "e5_at": now + 0.05}],
+          "agents": {10: {"dead": False, "swing_lands_at": now + 0.7},
+                     11: {"dead": True, "swing_lands_at": now + 0.01}}}
+    got = sorted(round(d - now, 2) for d in authsrv.combat_deadlines(st))
+    LEDGER.ok(got == [0.2, 0.3, 0.4, 0.6, 0.7, 0.9],
+              "the deadlines: the second strike, the swing's landing, a cast's "
+              "unsent phases, a live NPC's landing -- not a cancelled cast's, "
+              "not a corpse's", str(got))
+    calls, saved = [], authsrv.combat_pass
+    authsrv.combat_pass = lambda send, state, conn_id, rec=None: calls.append(_tt.time())
+    try:
+        t0 = _tt.time()
+        st = {"player_second_strike": {"target": 10, "at": t0 + 0.020}}
+        n = authsrv.combat_sleep(None, st, 1, tick=0.051)
+        took = _tt.time() - t0
+        LEDGER.ok(n == 1 and len(calls) == 1 and abs(calls[0] - (t0 + 0.020)) < 0.012,
+                  "a second strike due 20 ms into the tick is served AT its "
+                  "instant (within the sleep's own error), once",
+                  f"passes {n}, off by {calls and round(calls[0] - t0 - 0.020, 4)}")
+        LEDGER.ok(0.045 < took < 0.090, "and the tick still lasts a tick",
+                  f"{took:.4f}")
+        calls.clear()
+        n = authsrv.combat_sleep(None, st, 1, tick=0.051)
+        LEDGER.ok(n == 0 and not calls,
+                  "a deadline already SERVED is not served again -- a due swing "
+                  "that the timer refuses cannot spin the loop", f"passes {n}")
+        calls.clear()
+        authsrv.COMBAT_DEADLINES = False
+        st = {"player_second_strike": {"target": 10, "at": _tt.time() + 0.020}}
+        n = authsrv.combat_sleep(None, st, 1, tick=0.051)
+        LEDGER.ok(n == 0 and not calls,
+                  "--no-combat-deadlines: the plain sleep, no early pass")
+        LEDGER.ok(abs(authsrv.second_strike_due({}, 10.0)
+                      - (10.5 - authsrv.TICK_SECONDS / 2.0)) < 1e-9,
+                  "and only THAT arm rounds a second strike to the nearest tick")
+        authsrv.COMBAT_DEADLINES = True
+        LEDGER.ok(abs(authsrv.second_strike_due({}, 10.0) - 10.5) < 1e-9,
+                  "with the wake on, a second strike is due at its instant")
+
+        def boom(send, state, conn_id, rec=None):
+            raise RuntimeError("an early pass that faults")
+        authsrv.combat_pass = boom
+        st = {"player_second_strike": {"target": 10, "at": _tt.time() + 0.010}}
+        n = authsrv.combat_sleep(None, st, 1, tick=0.051)
+        LEDGER.ok(st.get("combat_deadlines_fused") is True
+                  and authsrv.combat_sleep(None, st, 1, tick=0.02) == 0,
+                  "FUSED: a faulting early pass is printed once and the session "
+                  "sleeps plainly from there", f"passes {n}")
+    finally:
+        authsrv.combat_pass = saved
+        authsrv.COMBAT_DEADLINES = True
 
 
 def main():
@@ -2329,6 +2398,7 @@ def main():
     section_no_target_charge()
     section_reach_frame()
     section_swing_clock_carry()
+    section_combat_deadlines()
     print("\n12. an in-flight swing DROP writes a row and prints (SWINGCANCEL)")
     # RUN-1zCG session 8: 4 of the operator's 7 "full animation, no damage"
     # swings left NO row anywhere. `_press_refused` returns early once the

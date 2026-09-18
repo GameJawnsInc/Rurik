@@ -530,7 +530,9 @@ residuals are the TICK's, not the factor's: every interval here sits 10–45 ms 
 retail's (1.376 against 1.326–1.335; 0.510 against 0.499) because a 50 ms tick pays out
 what the clock has passed — closed the next morning as SLICE-F49 (`studies/slice`): the
 swing clock now carries its remainder (daggers 1.326–1.330 s on harness
-`20260918T081923`), and the second strike stays on whole ticks, 0.510 / 0.357 s.
+`20260918T081923`), and SLICE-F50 then woke the world thread at each combat instant:
+the double strike 0.501 s plain and 0.336 under Frenzy, the dual's second 0.335 / 0.336,
+the swing 1.330 and 0.891 (harness `20260918T100310`) — retail's numbers.
 
 ### What RUN-2 did not settle
 

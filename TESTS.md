@@ -10524,6 +10524,14 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   grid alternates 26 and 27 ticks for a mean of 1.333 (a hammer's 1.75), with
   `--no-swing-clock-carry` run as the KNOWN-BAD arm (27 ticks every time, the 1.377 s
   harness 20260917T232539 measured), and the second strike due half a tick early.
+  §14 (SLICE-F50, floor 183 -> 191): the DEADLINE WAKE -- `combat_deadlines` lists the
+  second strike, a swing's landing, a cast's unsent phases and a live NPC's landing (not
+  a cancelled cast's, not a corpse's); `combat_sleep` serves one 20 ms into the tick AT
+  its instant, once, the tick still lasting a tick; a served deadline is never served
+  again; `--no-combat-deadlines` is the plain sleep and the only arm that rounds a second
+  strike to the nearest tick; a faulting early pass FUSES. Its recorder pin now counts
+  two `attack_tick` sites, neither without `rec`, and `test_guards.py` §9 pins
+  `combat_pass` <- `combat_sleep` <- `handle`, the world thread by construction.
   `test_playerswing.py` §3 (floor 173 -> 176): the
   dead-target arm still drops silently, the walk-out arm LANDS (damage sent, health down),
   and `--no-late-hit` restores the drop; its reach-telemetry section now pins the survival

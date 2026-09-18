@@ -27,6 +27,23 @@ move back.
 
 ---
 
+### ✅ SLICE-F50 — 2026-09-18 — **combat one-shots fire at their instant: the world thread wakes early at a combat deadline; swings, landings and second strikes on retail's numbers, the world tick untouched** ([studies/slice/FINDINGS.md](studies/slice/FINDINGS.md) SLICE-F50)
+
+After F49 every combat event was still quantised to the 51 ms tick. `combat_sleep`
+replaces the world loop's `time.sleep`: it sleeps the tick in slices and, when
+`combat_deadlines(state)` holds an instant inside it, wakes there and runs the seven
+combat timers alone (`combat_pass`) — read first for any cadence assumption, and they
+have none. Served deadlines are never re-served; a fault fuses it; `--no-combat-deadlines`
+reverts. On the client (harness `20260918T100310`): dagger swings 1.330 × 17 of 17 and
+0.891 under Frenzy, the double strike 0.501 / 0.336, the dual's second 0.335 / 0.336,
+start → word 0.565 / 0.346, the hero's hammer 1.750 — retail's 1.326–1.335, 0.891,
+0.499 / 0.334, 0.564 / 0.346. The windup law (half the interval less 0.1 s) is confirmed
+under Frenzy for free: 0.3465 predicted, 0.346 on retail (n = 72). `test_playerswing.py`
+183 → 191; `test_guards.py` re-pinned (two tick lines, `combat_pass` ← `combat_sleep` ←
+`handle`); `test_daggers` 88, `test_castcycle` 54, `test_castcancel` 44, `test_kbdsync`
+236, `test_agentlife` 551, `test_mechanics` 246, `test_pools` 128, `test_effects` 85,
+`test_morale` 63, `test_srclint` 26 green.
+
 ### ✅ SLICE-F49 — 2026-09-18 — **the swing clock carries its remainder: every attacker was 2–3 % slow on the 51 ms tick; fixed and measured on the client** ([studies/slice/FINDINGS.md](studies/slice/FINDINGS.md) SLICE-F49)
 
 Scoring a loopback dagger run off our own recorder (harness `20260917T232539`) showed the

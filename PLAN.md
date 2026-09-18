@@ -1935,9 +1935,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   are unmeasured.
 * **DAGGERS, after RUN-2** (daggers §8, last paragraph). A dual whose first strike
   lands and whose second misses (is 3 sent?); property 10 on the victim (the foe's skill, 229 / 230 unread); the 7/8 swing
-  sub-mode in both speed regimes; a second strike lands on whole 51 ms ticks (0.510 /
-  0.357 s against retail's 0.499 / 0.334 — SLICE-F49: a finer tick, not a better
-  rounding). Sneak Attack with a sword is dropped (PvE-only).
+  sub-mode in both speed regimes. Sneak Attack with a sword is dropped (PvE-only).
 
 **Monster AI** — [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md)
 

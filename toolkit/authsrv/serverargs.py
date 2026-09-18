@@ -1644,6 +1644,11 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                     help="an attack skill's ADJACENT damage is not dealt: Death "
                          "Blossom hits its target and nobody beside it. The "
                          "revert for DAGGERS-B8 (studies/daggers F13).")
+    ap.add_argument("--no-combat-deadlines", action="store_true",
+                    help="the world thread sleeps its whole tick, so a swing, "
+                         "a landing, a cast phase and a second strike fire on "
+                         "the 51 ms grid instead of at their instant (a second "
+                         "strike 0.510 s for 0.5). The revert for SLICE-F50.")
     ap.add_argument("--no-swing-clock-carry", action="store_true",
                     help="stamp a swing clock with the tick that opened the "
                          "swing (every interval rounds UP to the tick grid: "

@@ -662,10 +662,19 @@ def section_concurrency():
     # so it is pinned by the line it sits on instead.
     _tick_line = [l for l in src if "second_strike_tick(send, state, conn_id)" in l
                   and not l.lstrip().startswith("def ")]
+    # SLICE-F50 (2026-09-18): a SECOND site for every combat timer --
+    # `combat_pass`, the early wake. It is `combat_sleep`'s helper and nothing
+    # else's, and `combat_sleep` is called from the world tick's own loop (the
+    # walk names its enclosing `handle`) in place of the tick's time.sleep:
+    # the same THREAD by construction, so F10's guarantee is unchanged. The
+    # pin is two tick lines, one of them the B6 line, and that call chain.
     check(callers == {"_land_player_swing", "cast_tick", "hit_enemy",
                       "dual_second_strike", "second_strike_tick"}
           and callers_of("dual_second_strike") == {"cast_tick"}
-          and len(_tick_line) == 1 and "# DAGGERS-B6" in _tick_line[0]
+          and len(_tick_line) == 2
+          and sum("# DAGGERS-B6" in l for l in _tick_line) == 1
+          and callers_of("combat_pass") == {"combat_sleep"}
+          and callers_of("combat_sleep") == {"handle"}
           and callers_of("_land_player_swing") == {"attack_tick"},
           "hit_enemy is reached from the WORLD TICK ONLY",
           f"callers={sorted(callers)}, _land_player_swing's="

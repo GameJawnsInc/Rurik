@@ -3557,3 +3557,49 @@ strike is armed ON a tick, so its delay is a whole number of ticks either way, a
 (0.375 s under a 25 % boost: 7 ticks, not 8). A finer second strike needs a finer tick,
 not a better rounding — recorded, not chased. Swing LANDINGS (`lands_at = now + windup`)
 are one-shots off the real start and were left alone for the same reason.
+
+## SLICE-F50 — **combat one-shots fire at their instant: the world thread wakes early at a combat deadline and runs the combat timers alone — swings, landings, cast phases and second strikes now sit on retail's numbers to the millisecond, with the world tick untouched (2026-09-18)**
+
+**What F49 left.** The swing RATE was right and every single event was still quantised
+to the 51 ms tick: 26 and 27 ticks alternating where retail is 1.326–1.335, and a second
+strike — armed on a tick, so always a whole number of ticks — at 0.510 / 0.357 s against
+0.499 / 0.334. The owner's call: fix it.
+
+**Why not a finer tick.** The world tick also paces movement integration, the `0x001E`
+simulation clock, the keep-alive and a dozen tuned behaviours whose tests assume it. The
+combat timers do not: `attack_tick`, `cast_tick`, `second_strike_tick`, `chain_tick`,
+`enemy_attack_tick`, `ally_cast_tick` and `ally_attack_tick` were READ for a cadence
+assumption and have none — each compares absolute time and does nothing when nothing is
+due. So the tick stays and the THREAD wakes early: `combat_sleep` replaces the loop's
+`time.sleep(TICK_SECONDS)`, sleeps the tick in 10 ms slices (the recv thread arms casts
+while it sleeps), and when `combat_deadlines(state)` — the second strike, a swing's
+landing or its next due start, a cast's unsent phases, an NPC's landing or due swing —
+holds an instant inside the tick, it sleeps to that instant and runs `combat_pass`, the
+seven timers in the tick's own order. A deadline already offered to the timers
+(`combat_served_at`) is never re-served, so a due swing the timer REFUSES (out of reach,
+moving) cannot spin the loop; a fault in an early pass fuses the feature for the session
+and the regular tick carries on. Same thread as the world tick by construction, so
+SLICE-F10's guarantee stands (`test_guards.py` pins the call chain). F49's half-tick
+rounding of the second strike now belongs to the `--no-combat-deadlines` arm only.
+
+**On the client** (harness `20260918T100310`, the same script as F49's two runs; scored
+off our own recorder; the fuse never tripped; the world tick still 51.0 ms p50):
+
+| | retail (RUN-DAGGERS-2) | before F49 | after F49 | **after F50** |
+|---|---|---|---|---|
+| dagger swing, plain | 1.326–1.335 | 1.376–1.379 | 1.326–1.330 / 1.379 | **1.330 × 17 of 17** |
+| dagger swing, Frenzy | 0.877–0.910 (p50 0.891) | 0.919–0.926 | 0.868 / 0.919 | **0.891–0.892** |
+| double strike, plain / Frenzy | 0.499 / 0.320–0.339 | 0.510 / 0.357 | 0.510 / — | **0.501 / 0.336** |
+| dual's second, Frenzy | 0.333–0.342 | 0.358–0.359 | 0.357–0.358 | **0.335–0.336** |
+| start → damage word, plain / Frenzy | p50 0.564 / 0.346 | — | — | **0.565–0.566 / 0.346** |
+| hero's hammer | (an NPC's mean 1.7495) | 1.786 | mean 1.756 | **1.749–1.750** |
+
+The last-but-one row is a free confirmation of a law nobody had checked there:
+ANIMREF-R1's windup, half the interval less 0.1 s, gives 0.5665 and **0.3465** — and
+retail under Frenzy reads 0.346 (n = 72). OBSERVED, no free parameter.
+
+**Seen, not explained.** The hero's series carries two short intervals (0.852, 1.073 s)
+where its "swing on arrival" reset fired as it repositioned; the log shows three
+re-arrivals this run against two in each earlier run, and the run BEFORE either change
+had a short of its own (1.277). Not attributable to the wake on n = 1; whether a
+re-arrival should swing at once is SLICE-H4's own question.
