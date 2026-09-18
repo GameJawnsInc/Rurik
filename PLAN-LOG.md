@@ -55,7 +55,10 @@ the swing (3/8), not a constant. Server: `second_strike_seconds(state)` = 0.5 ×
 the status. Side: death penalty scales the base pool with the armour's +5 riding
 (22 / 19 / 16 / 13; 408 / 336 / 264 / 192) — `morale.py`'s model, n = 1 → 4; Critical
 Strikes pays 2 over the CURRENT maximum (2/22, 2/19). `test_daggers.py` 83 → 88;
-`test_pools.py` re-pinned with the new rows (CRITICAL_GAINS, CANDIDATE_PIPS).
+`test_pools.py` re-pinned with the new rows (CRITICAL_GAINS, CANDIDATE_PIPS). Seen on our
+client the same night (harness `20260917T232539`): the second strike 0.510 s plain and
+0.358 s under Frenzy, the swing 1.376 → 0.92 s — scaled, with the tick's +10–45 ms on
+every interval (an open pacing line in §8).
 
 ### ✅ DAGGERS armour SEEN + the energy words READ 2026-09-17 — **the Assassin draws dressed on our client; 556 / 558 on the worn set give the pool the party row types** ([studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md) §7)
 

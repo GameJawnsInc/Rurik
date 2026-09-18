@@ -519,6 +519,18 @@ plain); no mechanism is claimed for it. **Server:** `second_strike_seconds(state
 0.5 × `attack_interval_factor`, read at both arming sites (the double strike's and the
 dual's); the test pins 0.5 unboosted and 0.335 under a 0.67 factor and locks the sites.
 
+**On our own client the same night** (harness `20260917T232539`, recorder capture
+`authsrv-20260917T232611-c1`; `--party daggers20` with Frenzy in slot 5, a 5000-health
+practice target; scored off OUR wire by the same joins): plain swings 1.376–1.379 s
+start-to-start and the double strike's second word 0.510 s behind the first (2 of 2);
+under Frenzy, swings 0.919–0.926 s, the double's second word 0.357–0.358 s (4 of 4) and
+the dual's 0.358 / 0.359 s (2 of 2). The delay scales — 0.358 / 0.510 = 0.70 against
+retail's 0.334 / 0.499 = 0.67 — so the shipped change is seen on the client. Two
+residuals are the TICK's, not the factor's: every interval here sits 10–45 ms above
+retail's (1.376 against 1.326–1.335; 0.510 against 0.499) because a 50 ms tick pays out
+what the clock has passed, and it is noted in §8 as an open pacing item rather than
+chased here.
+
 ### What RUN-2 did not settle
 
 A dual whose first strike LANDS and whose second misses (is 3 sent?); Sneak Attack with
