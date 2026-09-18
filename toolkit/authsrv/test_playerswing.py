@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=176)   # SLICE-F21 +3 (the armed swing lands past reach; the revert arm); from the green run
+LEDGER = checks.Ledger("player swing windup", floor=183)   # SLICE-F49 +7 (the carried swing clock, its known-bad arm, the second strike's nearest tick); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -2263,6 +2263,53 @@ def section_reach_frame():
           f"{src.count('_reach_frame(state')} call sites")
 
 
+def section_swing_clock_carry():
+    """SLICE-F49: the start-to-start clock carries its remainder."""
+    import authsrv
+    print("\n13. the swing clock carries its remainder (SLICE-F49)")
+    stamp = authsrv.swing_clock_stamp
+    LEDGER.ok(abs(stamp(100.0, 1.333, 101.35) - 101.333) < 1e-9,
+              "a swing opened 17 ms past due is stamped at the instant it was DUE")
+    LEDGER.ok(stamp(100.0, 1.333, 101.6) == 101.6 and stamp(0.0, 1.333, 50.0) == 50.0,
+              "one opened LATE (out of reach, a cast between) or FIRST restarts from now")
+
+    def simulate(interval, n=200, tick=0.051):
+        last, t, starts = 0.0, 0.0, []
+        while len(starts) < n:
+            t += tick
+            if t - last < interval:
+                continue
+            last = stamp(last, interval, t)
+            starts.append(t)
+        gaps = [b - a for a, b in zip(starts, starts[1:])]
+        return sum(gaps) / len(gaps), {round(g / tick) for g in gaps}
+
+    mean, ticks = simulate(1.333)
+    LEDGER.ok(abs(mean - 1.333) < 0.002 and ticks == {26, 27},
+              "daggers on a 51 ms tick: 26 and 27 ticks alternate, MEAN 1.333 "
+              "(retail 1.326-1.335)", f"{mean:.4f} {sorted(ticks)}")
+    mean, ticks = simulate(1.75)
+    LEDGER.ok(abs(mean - 1.75) < 0.002, "and a hammer's mean is 1.75",
+              f"{mean:.4f} {sorted(ticks)}")
+    authsrv.SWING_CLOCK_CARRY = False
+    try:
+        mean, ticks = simulate(1.333)
+        LEDGER.ok(abs(mean - 1.377) < 0.002 and ticks == {27},
+                  "--no-swing-clock-carry, the KNOWN-BAD arm: every interval is 27 "
+                  "ticks, 1.377 s -- what harness 20260917T232539 measured "
+                  "(1.376-1.379)", f"{mean:.4f} {sorted(ticks)}")
+        LEDGER.ok(abs(authsrv.second_strike_due({}, 10.0) - 10.5) < 1e-9,
+                  "and a second strike is due at its instant")
+    finally:
+        authsrv.SWING_CLOCK_CARRY = True
+    LEDGER.ok(abs(authsrv.second_strike_due({}, 10.0)
+                  - (10.5 - authsrv.TICK_SECONDS / 2.0)) < 1e-9,
+              "with the carry on it is due half a tick EARLY, so the tick that "
+              "lands it is the NEAREST one -- armed on a tick, 0.5 s is 10 ticks "
+              "(0.510) and 0.335 s is 7 (0.357) either way, which is what harness "
+              "20260918T081923 measured; 0.375 s would move from 8 ticks to 7")
+
+
 def main():
     section_two_phases()
     section_start_to_start()
@@ -2281,6 +2328,7 @@ def main():
     section_still_streak()
     section_no_target_charge()
     section_reach_frame()
+    section_swing_clock_carry()
     print("\n12. an in-flight swing DROP writes a row and prints (SWINGCANCEL)")
     # RUN-1zCG session 8: 4 of the operator's 7 "full animation, no damage"
     # swings left NO row anywhere. `_press_refused` returns early once the

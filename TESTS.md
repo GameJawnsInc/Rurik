@@ -10519,7 +10519,12 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   **SLICE-F21 / C3 (2026-09-12): an armed swing lands wherever the target went.** Measured on
   the live corpus (`latehitjoin.py`: 7 of 7 hostile swings at a running player, 33 of 34
   player swings and 11 of 11 attack-skill strikes on a moving target landed; reach is judged
-  at the start, never at the landing). `test_playerswing.py` §3 (floor 173 -> 176): the
+  at the start, never at the landing). `test_playerswing.py` §13 (SLICE-F49, floor 176 ->
+  183): the swing clock CARRIES its remainder -- `swing_clock_stamp` on a simulated 51 ms
+  grid alternates 26 and 27 ticks for a mean of 1.333 (a hammer's 1.75), with
+  `--no-swing-clock-carry` run as the KNOWN-BAD arm (27 ticks every time, the 1.377 s
+  harness 20260917T232539 measured), and the second strike due half a tick early.
+  `test_playerswing.py` §3 (floor 173 -> 176): the
   dead-target arm still drops silently, the walk-out arm LANDS (damage sent, health down),
   and `--no-late-hit` restores the drop; its reach-telemetry section now pins the survival
   (no drop, no swing_verdict row, the landing from 400 u when due) under the default and

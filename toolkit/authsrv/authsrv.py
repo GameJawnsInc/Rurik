@@ -3208,6 +3208,13 @@ def second_strike_seconds(state):
     swing (3/8), not a constant; the constant was Q9's refuted prediction.
     """
     return SECOND_STRIKE_S * attack_interval_factor(state, PLAYER_AGENT_ID)
+
+
+def second_strike_due(state, now):
+    """When the second strike fires: its instant, less half a tick under
+    SLICE-F49 so the tick that lands it is the NEAREST one, not the next."""
+    return (now + second_strike_seconds(state)
+            - (TICK_SECONDS / 2.0 if SWING_CLOCK_CARRY else 0.0))
 DOUBLE_STRIKE_BASE = 0.02          # WIKI (GWW "Double strike"): inherent 2 %
 DOUBLE_STRIKE_PER_RANK = 0.02      # ... and 2 % a rank of Dagger Mastery
 ITEM_TYPE_DAGGERS = 32
@@ -3561,6 +3568,39 @@ DEFAULT_RUN_SPEED = 288.0  # Guild Wars' base movement speed
 # AGENT_UPDATE_DESTINATION rather than MOVE_TO_POINT), a fast tick buys
 # smoothness cheaply -- this is loopback, and 20 Hz of one small message is free.
 TICK_SECONDS = 0.05
+
+
+# SLICE-F49 (2026-09-18): THE SWING CLOCK CARRIES ITS REMAINDER. A start-to-
+# start clock stamped with the TICK that opened the swing rounds every interval
+# UP to the tick grid and never gives the remainder back: harness
+# 20260917T232539 ran the player's daggers at 1.376-1.379 s (27 ticks of 51 ms
+# against 1.333), Frenzy's at 0.919-0.926 (0.893), and the hero's hammer at
+# 1.786 (35 ticks against 1.75) -- every attacker on this server 2-3 % slow,
+# where retail's own intervals centre on the nominal (RUN-DAGGERS-2: 1.326-
+# 1.335 plain, 0.877-0.910 boosted). The stamp is now the instant the swing was
+# DUE when it opened within two ticks of that, so the quantisation averages out
+# (26 and 27 ticks alternate, mean 1.333) and a swing that opened late -- out
+# of reach, a fresh chain, a cast in between -- still restarts from now.
+# MEASURED on harness 20260918T081923: daggers 1.326-1.330, Frenzy's 0.868 /
+# 0.919 alternating, the hero's hammer mean 1.756 (was 1.786). The same flag
+# fires a second strike at the tick NEAREST its instant rather than the first
+# one past it -- and that moved NOTHING in that run, for a reason worth
+# keeping: a second strike is armed ON a tick, so its delay is a whole number
+# of ticks either way, and 10 (0.510 s) and 7 (0.357 s) already ARE the
+# nearest to 0.5 and 0.335. The rule only bites at other factors (0.375 s
+# under a 25 % boost: 7 ticks, not 8). A finer second strike needs a finer
+# tick, not a better rounding.
+# --no-swing-clock-carry is the control.
+SWING_CLOCK_CARRY = True
+SWING_CARRY_WINDOW = 2 * TICK_SECONDS
+
+
+def swing_clock_stamp(last, interval, now):
+    """What a start-to-start swing clock records for a swing opened at `now`."""
+    due = float(last or 0.0) + interval
+    if SWING_CLOCK_CARRY and last and 0.0 <= now - due < SWING_CARRY_WINDOW:
+        return due
+    return now
 # MEASURED, not chosen: ArenaNet's cadence is 5.000 s, 75 of 76 gaps inside
 # 100 ms across three tapes (studies/smsg, and studies/divergence D4). 0x000C
 # and 0x000D are the ONLY periodic messages in the whole corpus -- the
@@ -13216,7 +13256,7 @@ def _land_player_swing(send, state, conn_id, swing):
     if SECOND_STRIKE and _res is not None \
             and random.random() < double_strike_chance(state):
         state["player_second_strike"] = {"target": swing["target"],
-                                         "at": time.time() + second_strike_seconds(state)}
+                                         "at": second_strike_due(state, time.time())}
     if LANDING_HOLD_RELEASE:
         action_hold(send, state, 0,
                     "the swing landed -- movement is legal now")
@@ -13577,7 +13617,8 @@ def attack_tick(send, state, conn_id, rec=None):
                            interval - (now - state.get("player_last_swing", 0.0)),
                            3))
         return
-    state["player_last_swing"] = now
+    state["player_last_swing"] = swing_clock_stamp(
+        state.get("player_last_swing", 0.0), interval, now)      # SLICE-F49
     attack_speed_flush(send, state, PLAYER_AGENT_ID)   # JARIN: with the start
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
          [agents.GV_ATTACK_STARTED, PLAYER_AGENT_ID, target_id, 0],
@@ -16045,7 +16086,7 @@ def cast_tick(send, state, conn_id):
                     cast["second"] = {"fails": _chain_fails, "bonus": bonus,
                                       "first_landed": _res == "landed",
                                       "rank": rank}
-                    cast["second_at"] = now + second_strike_seconds(state)
+                    cast["second_at"] = second_strike_due(state, now)
                     cast["e3_at"] = max(cast["e3_at"], cast["second_at"])
                 # SLICE-H12: the knock-down the strike carries (Hammer Bash;
                 # Heavy Blow on a weakened foe), on a LANDED hit and a live
@@ -18663,7 +18704,8 @@ def enemy_attack_tick(send, state, conn_id):
 
         if now - agent.get("last_swing", 0.0) < interval:
             continue
-        agent["last_swing"] = now
+        agent["last_swing"] = swing_clock_stamp(
+            agent.get("last_swing", 0.0), interval, now)         # SLICE-F49
         # Turn first, then swing. An agent that lands a hit with its back to you
         # is the one thing here a person would call broken without being told.
         #
@@ -20180,7 +20222,8 @@ def ally_attack_tick(send, state, conn_id):
                   flush=True)
         if now - agent.get("last_swing", 0.0) < interval:
             continue
-        agent["last_swing"] = now
+        agent["last_swing"] = swing_clock_stamp(
+            agent.get("last_swing", 0.0), interval, now)         # SLICE-F49
         face_player(send, state, agent_id, agent, conn_id, at=(tx, ty))
         start_swing(send, agent_id, conn_id, target_id=tid, state=state)
         agent["swing_lands_at"] = now + swing_windup(interval)
@@ -31211,6 +31254,12 @@ def main():
         AREA_DAMAGE = False
         print("NO AREA DAMAGE: an attack skill's adjacent damage is not dealt "
               "(the pre-DAGGERS-B8 arm).")
+    if a.no_swing_clock_carry:
+        global SWING_CLOCK_CARRY
+        SWING_CLOCK_CARRY = False
+        print("NO SWING CLOCK CARRY: a swing clock is stamped with the tick "
+              "that opened it and a second strike fires at the first tick "
+              "past its instant (the pre-SLICE-F49 arm).")
     if a.no_second_strike:
         global SECOND_STRIKE
         SECOND_STRIKE = False

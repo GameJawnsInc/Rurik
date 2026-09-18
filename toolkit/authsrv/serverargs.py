@@ -1644,6 +1644,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                     help="an attack skill's ADJACENT damage is not dealt: Death "
                          "Blossom hits its target and nobody beside it. The "
                          "revert for DAGGERS-B8 (studies/daggers F13).")
+    ap.add_argument("--no-swing-clock-carry", action="store_true",
+                    help="stamp a swing clock with the tick that opened the "
+                         "swing (every interval rounds UP to the tick grid: "
+                         "daggers 1.377 s for 1.333) and fire a second strike "
+                         "at the first tick past its instant. The revert for "
+                         "SLICE-F49 (harness 20260917T232539).")
     ap.add_argument("--no-second-strike", action="store_true",
                     help="no double strike on a plain dagger swing, and a "
                          "dual attack strikes once. The revert for DAGGERS-B6 "

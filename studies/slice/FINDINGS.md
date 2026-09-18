@@ -3522,3 +3522,38 @@ death-strip restore OBSERVED (4 of 4).
 **Open, for the next arc:** a skill SNARE row (a Water hex, a self-snare stance) to exercise
 the `Movement speed decrease` arm and settle 48.3's contested boost × snare rule on our own
 client — Deep Freeze's −66 % single-source excess would answer both.
+
+## SLICE-F49 — **the swing clock carries its remainder: every attacker on this server was 2–3 % slow, because a start-to-start clock stamped with the tick that opened the swing rounds each interval UP to the 51 ms grid — fixed for the player, enemies and allies, measured on the client (2026-09-18)**
+
+**Found by** scoring a loopback dagger run off our own recorder the way RUN-DAGGERS-2 was
+scored off retail (daggers §8 F19). Harness `20260917T232539`: the player's daggers
+**1.376–1.379 s** start-to-start (27 ticks of 51 ms) against a nominal 1.333, Frenzy's
+0.919–0.926 against 0.893, the Monk hero's hammer **1.786** (35 ticks) against 1.75.
+Retail centres on the nominal — RUN-DAGGERS-2's player 1.326–1.335 plain and 0.877–0.910
+boosted, and an NPC hammer on the hero tape `20260914T005758` (agent 42, n = 11)
+1.742–1.756, mean **1.7495**. OBSERVED both sides; the cause is READ, not inferred:
+`attack_tick` gated on `now - last < interval` and then stamped `last = now`, the tick
+that happened to open the swing, so the remainder past the due instant was thrown away
+every swing (`enemy_attack_tick` and `ally_attack_tick` the same).
+
+**The fix** is one function, `swing_clock_stamp(last, interval, now)`: a swing that opens
+within two ticks of being due is stamped at the instant it was DUE; one that opens late
+(out of reach, a fresh chain, a cast in between) still restarts from now. The
+quantisation then averages out — 26 and 27 ticks alternate, mean 1.333.
+`--no-swing-clock-carry` is the control, and `test_playerswing.py` §13 runs it as the
+KNOWN-BAD arm first: on a 51 ms grid it produces 27 ticks every time, 1.377 s, which is
+the number the harness measured.
+
+**On the client** (harness `20260918T081923`, the same script): daggers **1.326–1.330**
+(one 1.379 in 17), Frenzy's alternating **0.868 / 0.919**, the hero's hammer mean
+**1.756** over 35 swings. The per-swing spread is still the tick's (±25 ms where retail
+shows ±5); the rate is right.
+
+**What it did NOT move, and why.** The same flag fires a second strike at the tick
+nearest its instant instead of the first one past it, and the double strike still lands
+0.510 s behind the first and the dual's second 0.357 s (retail 0.499 / 0.334). A second
+strike is armed ON a tick, so its delay is a whole number of ticks either way, and 10 and
+7 ticks already are the nearest to 0.5 and 0.335 s; the rule only bites at other factors
+(0.375 s under a 25 % boost: 7 ticks, not 8). A finer second strike needs a finer tick,
+not a better rounding — recorded, not chased. Swing LANDINGS (`lands_at = now + windup`)
+are one-shots off the real start and were left alone for the same reason.

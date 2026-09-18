@@ -479,7 +479,7 @@ def section_second_strike_and_crits(have_fields):
         finally:
             authsrv.attack_interval_factor = _factor
         _src = open(authsrv.__file__, encoding="utf-8").read()
-        check(_src.count("+ second_strike_seconds(state)") == 2
+        check(_src.count("second_strike_due(state, ") == 3
               and "+ SECOND_STRIKE_S" not in _src,
               "both arming sites (the double strike's and the dual's) read the "
               "scaled delay and neither adds the bare constant")

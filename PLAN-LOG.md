@@ -27,6 +27,22 @@ move back.
 
 ---
 
+### ✅ SLICE-F49 — 2026-09-18 — **the swing clock carries its remainder: every attacker was 2–3 % slow on the 51 ms tick; fixed and measured on the client** ([studies/slice/FINDINGS.md](studies/slice/FINDINGS.md) SLICE-F49)
+
+Scoring a loopback dagger run off our own recorder (harness `20260917T232539`) showed the
+player's daggers at 1.376–1.379 s for 1.333, Frenzy's at 0.92 for 0.893 and the hero's
+hammer at 1.786 for 1.75: `attack_tick` and the two NPC ticks stamped the swing clock
+with the tick that opened the swing, so every interval rounded UP to the grid. Retail
+centres on nominal (the player 1.326–1.335; an NPC hammer mean 1.7495).
+`swing_clock_stamp` stamps the DUE instant when the swing opened within two ticks of it;
+`--no-swing-clock-carry` reverts. On the client (`20260918T081923`): daggers 1.326–1.330,
+Frenzy 0.868 / 0.919 alternating, the hammer mean 1.756. The second strike's
+nearest-tick rule moved nothing — armed on a tick, 0.5 s is 10 ticks and 0.335 s is 7
+either way — and is recorded as the tick's resolution. `test_playerswing.py` 176 → 183
+(the known-bad arm reproduces the measured 1.377), `test_daggers` 88, `test_castcancel`
+44, `test_castcycle` 54, `test_guards` 45, `test_agentlife` 551, `test_mechanics` 246,
+`test_pools` 128 green.
+
 ### ✅ MORALE-Q8 — 2026-09-17 — **the death batch's order over all twelve player deaths on tape; `kill_player` reordered** ([studies/morale/FINDINGS.md](studies/morale/FINDINGS.md) §1.3)
 
 A census of every `0x00F1 [me, dead]` instant in the live corpus: eleven of twelve
