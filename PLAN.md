@@ -1939,6 +1939,17 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   short-and-single dagger ones — not DAGGERS-F20's early double, which explains the
   rest. Sneak Attack with a sword is dropped (PvE-only).
 
+**Weapons** — [studies/weapons/PLAN.md](studies/weapons/PLAN.md)
+
+* **Every weapon type, accurately** (plan opened 2026-09-18, nothing built). Four melee
+  types are wired; nothing is ranged, nothing has a range, `587` damage type and `633`
+  requirement have no reader, a focus gives no energy. The tapes already hold most of the
+  table (the launch is the windup, 0.775 / 1.1375 s; `0x00A4` field 5 is the weapon's `617`
+  word, 33 of 34 shooters; item types 5 / 22 / 35 / 36 / 12 and the hostile-only 1 / 28).
+  Next: WEAPONS-W0 (land the census, re-source `[attack_speed.rates]` from the client),
+  W1 (one weapon table), W2 (ranged delivery, `0x00A4` / `0x00A7`). Captures wanted:
+  RUN-WEAPONS-1A (scythe, spear, axe), 1B (five bows, staff, wand), 2 (range).
+
 **Monster AI** — [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md)
 
 * **MONSTERAI-J has no content rows.** `passive` and `group` are built and tested and
