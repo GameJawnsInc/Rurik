@@ -3195,6 +3195,19 @@ def chain_tick(send, state, conn_id):
 # its second fail word there (4 of 4). --no-second-strike is the control.
 SECOND_STRIKE = True
 SECOND_STRIKE_S = 0.5
+
+
+def second_strike_seconds(state):
+    """The second dagger's delay behind the first, SCALED with the swing.
+
+    RUN-DAGGERS-2 (20260917T224104, studies/daggers F19): under Frenzy the
+    double strike's second word came 0.320-0.339 s behind the first (16 of
+    16) and the dual's 0.333-0.342 (4 of 4), against 0.499 / 0.494-0.497
+    unboosted on the same tape -- 0.5 x 0.67, the same factor that took
+    the swing from 1.33 to 0.891 s. The half second is a FRACTION of the
+    swing (3/8), not a constant; the constant was Q9's refuted prediction.
+    """
+    return SECOND_STRIKE_S * attack_interval_factor(state, PLAYER_AGENT_ID)
 DOUBLE_STRIKE_BASE = 0.02          # WIKI (GWW "Double strike"): inherent 2 %
 DOUBLE_STRIKE_PER_RANK = 0.02      # ... and 2 % a rank of Dagger Mastery
 ITEM_TYPE_DAGGERS = 32
@@ -13203,7 +13216,7 @@ def _land_player_swing(send, state, conn_id, swing):
     if SECOND_STRIKE and _res is not None \
             and random.random() < double_strike_chance(state):
         state["player_second_strike"] = {"target": swing["target"],
-                                         "at": time.time() + SECOND_STRIKE_S}
+                                         "at": time.time() + second_strike_seconds(state)}
     if LANDING_HOLD_RELEASE:
         action_hold(send, state, 0,
                     "the swing landed -- movement is legal now")
@@ -16032,7 +16045,7 @@ def cast_tick(send, state, conn_id):
                     cast["second"] = {"fails": _chain_fails, "bonus": bonus,
                                       "first_landed": _res == "landed",
                                       "rank": rank}
-                    cast["second_at"] = now + SECOND_STRIKE_S
+                    cast["second_at"] = now + second_strike_seconds(state)
                     cast["e3_at"] = max(cast["e3_at"], cast["second_at"])
                 # SLICE-H12: the knock-down the strike carries (Hammer Bash;
                 # Heavy Blow on a weakened foe), on a LANDED hit and a live
@@ -16756,7 +16769,6 @@ def kill_player(send, state, conn_id, why="took a killing blow"):
     """
     state["player_dead"], state["player_died_at"] = True, time.time()
     strip_effects(send, state, PLAYER_AGENT_ID, conn_id, "the player died")
-    chain_clear_all(send, state, "the player died")          # DAGGERS-B5
     state["attacking"] = None          # a corpse stops swinging back
     # AND STOPS WALKING (SLICE-F23: "I slid around after dying too"). The
     # keyboard lead chain re-granted leads to the corpse -- `KBD LEAD
@@ -16778,6 +16790,12 @@ def kill_player(send, state, conn_id, why="took a killing blow"):
     router_abandon(state, None, "death", time.time())
     send(GAME_SMSG_AGENT_UPDATE_STATUS,
          [PLAYER_AGENT_ID, agents.EFFECT_DEAD], f"KILL the player ({why})")
+    # DAGGERS-F18: the chain icons the corpse held go out HERE, between the
+    # death bit and the morale tick -- retail, 3 of 3 (RUN-DAGGERS-2,
+    # 20260917T224104 at 367.057 / 408.587 / 446.688: the killing word,
+    # 0x00F1 [me, 18], 0x005C [me, foe, 0], 0x009C, 0x00EE ...). The clear
+    # used to ride ahead of the status; a 0 per live icon, none otherwise.
+    chain_clear_all(send, state, "the player died")          # DAGGERS-B5
     # JARIN: THE ORDER IS RETAIL'S, on two player deaths now (MANTID 436.9 s,
     # JARIN 329.64 s): the status, then the morale tick (0x009C, 0x00EE, the
     # maxima), then the hold [8, me, 1] and 0x002D, then the flags byte

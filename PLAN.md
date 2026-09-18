@@ -1933,10 +1933,11 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   `20260817T231139`, armour-respecting on property 16 with a value per target (daggers F13,
   last paragraph) — an Elementalist arc's seed. Cyclone Axe's per-foe attack and scatter
   are unmeasured.
-* **DAGGERS, n = 0 on retail.** A lead that misses, a missed first strike ahead of a
-  second, the attacker's own death, a chain opened by 2116 with a sword, the half second
-  under an attack-speed boost (daggers §6, last paragraph). **RUN-DAGGERS-2 registered**
-  (daggers §5, Q6–Q9; `vault/plans/daggers_n0.txt`, Master of Lightning) — awaiting the run.
+* **DAGGERS, after RUN-2** (daggers §8, last paragraph). A dual whose first strike
+  lands and whose second misses (is 3 sent?); the death batch's effect-strip position
+  (`kill_player` strips first, retail after `[8, me, 1]` — n = 1, a death-batch item);
+  property 10 on the victim (the foe's skill, 229 / 230 unread); the 7/8 swing
+  sub-mode in both speed regimes. Sneak Attack with a sword is dropped (PvE-only).
 
 **Monster AI** — [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md)
 

@@ -31,7 +31,7 @@ import chain  # noqa: E402
 import checks  # noqa: E402
 
 # FLOOR 83, from the green run of 2026-09-17 on the machine with the vault.
-LEDGER = checks.Ledger("daggers and the attack chain", floor=83)
+LEDGER = checks.Ledger("daggers and the attack chain", floor=88)
 check = LEDGER.ok
 
 PLAYER = 1
@@ -397,6 +397,25 @@ def section_chain(have_fields):
                            reward=False)
         check(COMBO not in [op for op, _ in sent],
               "and a target with no icon draws no 0x005C at its death")
+        # ---- the ATTACKER's death (DAGGERS-F18, RUN-DAGGERS-2) ------------
+        st = _world(authsrv)
+        st.update({"map_id": 146, "level": 1})
+        authsrv.player_pools(st)
+        _land(authsrv, st, LEAD)
+        sent.clear()
+        authsrv.kill_player(send, st, 1, "the Master of Lightning")
+        _status = _index(sent, lambda o, v: o == authsrv.GAME_SMSG_AGENT_UPDATE_STATUS
+                         and v[:1] == [PLAYER])
+        _zero = _index(sent, lambda o, v: o == COMBO and v == [PLAYER, FOE, 0])
+        check(_status is not None and _zero is not None and _zero == _status + 1,
+              "the PLAYER dies with an icon live on the foe: [me, foe, 0] rides "
+              "the death batch right behind the death bit (retail 3 of 3: the "
+              "word, 0x00F1 [me, 18], 0x005C 0, then the morale tick)",
+              str([(hex(o), v) for o, v in sent[:6]]))
+        sent.clear()
+        authsrv.kill_player(send, st, 1, "again")
+        check(COMBO not in [op for op, _ in sent],
+              "and a corpse with no icon out draws no 0x005C")
 
         # ---- the revert ----------------------------------------------------
         authsrv.CHAIN_STATE = False
@@ -446,6 +465,24 @@ def section_second_strike_and_crits(have_fields):
               and st.get("player_second_strike") is not None,
               "the first dagger lands one word and ARMS the second -- nothing "
               "more goes out until its half second is up")
+        _armed = st["player_second_strike"]["at"] - time.time()
+        check(0.45 < _armed <= 0.5 + 1e-6
+              and abs(authsrv.second_strike_seconds(st) - 0.5) < 1e-9,
+              "half a second unboosted (retail 0.499, 0.499; the dual's 0.494-0.497)")
+        _factor = authsrv.attack_interval_factor
+        authsrv.attack_interval_factor = lambda state, agent_id: 0.67
+        try:
+            check(abs(authsrv.second_strike_seconds(st) - 0.335) < 1e-9,
+                  "and 0.335 under Frenzy: the delay SCALES with the swing "
+                  "(RUN-DAGGERS-2: doubles 0.320-0.339 x16, duals 0.333-0.342 x4, "
+                  "swings 0.891 = 1.33 x 0.67) -- Q9's constant was the refuted arm")
+        finally:
+            authsrv.attack_interval_factor = _factor
+        _src = open(authsrv.__file__, encoding="utf-8").read()
+        check(_src.count("+ second_strike_seconds(state)") == 2
+              and "+ SECOND_STRIKE_S" not in _src,
+              "both arming sites (the double strike's and the dual's) read the "
+              "scaled delay and neither adds the bare constant")
         st["player_second_strike"]["at"] -= authsrv.SECOND_STRIKE_S
         authsrv.second_strike_tick(send, st, 1)
         tail = sent[len(first):]

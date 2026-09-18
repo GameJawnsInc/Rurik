@@ -27,6 +27,24 @@ move back.
 
 ---
 
+### ✅ RUN-DAGGERS-2 — run and scored 2026-09-17 — **a missed lead sets nothing, the attacker's death clears the icon on the wire behind the death bit, and the half second is 3/8 of the swing** ([studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md) §8, DAGGERS-F16..F19)
+
+Tape `20260917T224104`, the same PvP Assassin with Frenzy in slot 5, against the Master
+of Lightning (blinds, kills; four deaths). Q6 CONFIRMED: a lead that misses sends no
+`0x005C`, keeps its recharge, and the off-hand behind it fails with F7's batch (n = 1 +
+3 controls). Q7 half: a dual whose first strike misses still rolls its second at the
+scaled gap and 3 rides the landed second; first-lands-second-misses is still n = 0.
+Q8 CONFIRMED 3 of 3: `0x00F1 [me, 18]`, then `0x005C [me, foe, 0]`, then the morale
+tick — the rival (the client clears its own icon) refuted; a cold off-hand after the
+resurrection fails, 1 of 1. **Q9 REFUTED**: under Frenzy the swing is 0.891 s and the
+second strike 0.320–0.342 s (20 of 20) against 0.5 plain — the delay is a FRACTION of
+the swing (3/8), not a constant. Server: `second_strike_seconds(state)` = 0.5 ×
+`attack_interval_factor` at both arming sites; `kill_player`'s chain clear moved behind
+the status. Side: death penalty scales the base pool with the armour's +5 riding
+(22 / 19 / 16 / 13; 408 / 336 / 264 / 192) — `morale.py`'s model, n = 1 → 4; Critical
+Strikes pays 2 over the CURRENT maximum (2/22, 2/19). `test_daggers.py` 83 → 88;
+`test_pools.py` re-pinned with the new rows (CRITICAL_GAINS, CANDIDATE_PIPS).
+
 ### ✅ DAGGERS armour SEEN + the energy words READ 2026-09-17 — **the Assassin draws dressed on our client; 556 / 558 on the worn set give the pool the party row types** ([studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md) §7)
 
 Harness `20260917T193532` (`--party daggers20`, a scripted look): the five `[item.assassin_*]`

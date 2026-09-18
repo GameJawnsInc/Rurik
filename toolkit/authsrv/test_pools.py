@@ -163,7 +163,13 @@ SIGNET_GAINS = {("20260914T005758", 29): (0.2631579041481018, 0.0526315793395042
 # rank 8 took f32(2 / 25) on 26 of its 26 criticals, on 0x00A3 as
 # [52, self, self, fraction] with a 0x00A0 [54, self, self, 2] behind it
 # (studies/daggers F11). Neither a rise nor a signet, so it is its own row.
-CRITICAL_GAINS = {("20260917T160915", 25): (0.07999999821186066,)}
+CRITICAL_GAINS = {("20260917T160915", 25): (0.07999999821186066,),
+                  # RUN-DAGGERS-2: the same Assassin at morale 85 and 70
+                  # -- 2 / 22 and 2 / 19, the CURRENT maximum under the
+                  # penalty (studies/daggers F18).
+                  ("20260917T224104", 25): (0.07999999821186066,
+                                            0.09090909361839294,
+                                            0.10526315867900848)}
 OP_MORALE = 0x009C          # [agent, morale]: 100 is none, 85 one death, ...
 # RB2 RE-PIN (2026-09-17): the owner died three times on 20260917T090355 and
 # the Warrior's maximum went 20 -> 17 -> 14 -> 11 at morale 85 / 70 / 55, pips
@@ -201,6 +207,12 @@ CANDIDATE_PIPS = ((2, 20), (3, 25), (3, 30), (4, 25), (4, 30),
                   # both exactly -- so the denominator is CURRENT max, not
                   # base max (studies/skills section 23).
                   (4, 22), (2, 17),
+                  # RUN-DAGGERS-2 (20260917T224104): the Assassin died
+                  # four times to the Master of Lightning -- 22, 19, 16,
+                  # 13 at morale 85 / 70 / 55 / 40, 20 x m + 5 armour,
+                  # 4 pips unchanged (studies/daggers F18). Base-scaling,
+                  # n = 4 on ONE character in ONE session.
+                  (4, 19), (4, 16), (4, 13),
                   # MANTID (20260913T210901): a level-1 Mesmer at 30 = 20 base
                   # + 10 armour, morale 85..87 -> 27 and 88 -> 28 (0.88 x 20 +
                   # 10 = 27.6). THE SECOND DISCRIMINATING DATUM: 30 x 0.85 =
@@ -728,7 +740,8 @@ def section_corpus_oracle():
               and sum(1 for g in gains if g["value"] == 1.0) >= 5,
               f"property 52 appears {len(gains)} time(s): 1.0 at every shrine or "
               f"timer rise, 5/19 = 25 % at the one SIGNET raise (JARIN), and 2/25 "
-              f"on each of an Assassin's criticals (RUN-DAGGERS-1)",
+              f"(2/22, 2/19 under the penalty) on each of an Assassin's criticals "
+              f"(RUN-DAGGERS-1 and -2)",
               f"{gains} -- a resurrect, in the batch where the death bit clears, "
               f"property 43 returns to the agent's rate and property 55 (the "
               f"health half) also carries exactly 1.0. n=1 is n=1: `refill` "

@@ -431,3 +431,99 @@ NOT SEEN by the scripted runs, and why:
   100-health target while the player plain-swung, the lead did not hit, and the off-hand
   behind it failed correctly. A press on a dead target is ACCEPTED here; what retail does
   with one is n = 0.
+
+## 8. RUN-DAGGERS-2 — run and scored, 2026-09-17 (DAGGERS-F16..F19)
+
+Live tape `20260917T224104`, the isle connection (`62557`), observer agent 25 — the same
+PvP Assassin (Dagger Mastery 12, Critical Strikes 8) with **Frenzy (346) in slot 5**.
+22 marks over the 8 sealed steps (`plan_seal.json`, sha256 `41b9031a…`), 8 F11s. The
+owner used the **Master of Damage** (agent 70, agents 71 / 72 beside it) for steps 1–4
+instead of the Suits, and the **Master of Lightning** (agent 117) for 5–7, and died to
+him four times (367.057, 408.587, 446.688, 490.829). Owner's notes: the third F11 of the
+control was Death Blossom catching the neighbours (property-55 words on 70 and 71 — the
+same accident B8 was built on); step 3 was restarted twice; no F11 was pressed at the
+deaths. Scored with `chainjoin.py --capture 20260917T224104` and a per-step timeline
+(the timeline and Frenzy census scripts are scratch; the numbers below are theirs).
+
+**Against the seal:** Q6 CONFIRMED (n = 1 miss, three landed pairs as its control);
+Q7 half — the second roll after a missed first CONFIRMED, the state-3 discriminator
+still n = 0; Q8 CONFIRMED 3 of 3 and 1 of 1 after the resurrection, the rival ("the
+client clears its own icon") REFUTED; **Q9 REFUTED — the rival stands**, the half
+second scales with the swing. The server changed twice (F18, F19).
+
+### DAGGERS-F16 — a lead that does not land sets nothing. OBSERVED, n = 1 (+ 3 controls).
+
+349.147, blinded: `0x00E5 [me, 782, 0, 2]`, `[46, me, 0]`, **`[38, 117, me, 3]`** (a
+miss), `0x00E3` — **no `0x005C`**, the recharge KEPT (no second `0x00E5`, and the 2 s
+`0x00E6` follows at 351.141: a miss is not a fail), the 5 energy debited. The Fox Fangs
+pressed 0.55 s behind it: F7's batch to the byte — `0x00E5` recharge 3, 46,
+`[38, 117, me, 2]`, `0x00E5` 0, `0x00E3`. The three pairs whose lead landed (357.240,
+395.754, 442.328) set 1 and then 2 as in RUN-1. A blinded PLAIN swing closes and then
+misses — `[1, me, 0]` then `[38, 117, me, 3]` (433.145, 434.310), the close riding a
+miss exactly as `hit_enemy`'s Blind path already sends it. The server was already right
+(the chain advances inside a LANDED hit only); the label moves from RECONSTRUCTION to
+OBSERVED.
+
+### DAGGERS-F17 — a dual whose FIRST strike misses still rolls its second. OBSERVED, n = 1.
+
+443.448, Frenzy up: `0x00E5 [me, 775, 0, 2]`, 46, `[38, 117, me, 3]` — then **0.334 s**
+later `[47, me, 0]`, a landed word (−0.1208), **`0x005C [me, 117, 3]`**, `0x00E3`. The
+rolls are independent of each other for a miss as F10 found them for a critical, and
+state 3 was set with the landed SECOND. The discriminating case — first lands, second
+misses — did not occur (n = 0 still); `dual_second_strike` sets 3 if EITHER landed, which
+both rivals predict here, and the Moebius readout was never reached (the owner died
+2.9 s later, F18). No property-55 words on either strike: nothing stood adjacent to him.
+
+### DAGGERS-F18 — the attacker's death clears the icon ON THE WIRE, behind the death bit. OBSERVED, 3 of 3.
+
+The death batch, one instant, the same order three times (367.057 / 408.587 / 446.688):
+`0x00A7 [117, 1, 4]`, `0x00A0 [20, me, 117, 404]`, `[10, me, 229]` (property 10 = the
+foe's skill that hit, 229 / 230 on every hit he landed — which two Air Magic skills those
+are is UNREAD), the killing word `[16, me, 117, −x]`, **`0x00F1 [me, 18]`**,
+**`0x005C [me, 117, 0]`**, `0x009C [me, 85 / 70 / 55]`, `0x00EE`, `[8, me, 1]`,
+`0x0044 [me, n]` (effect removals; on the third death Frenzy was up), `[7, me, 24]`,
+`0x00F1 [me, 16]`, `[41, me, max energy]`, `[43, me, 0.0]`, `[42, me, max health]`,
+`0x002D`, `0x0026 [me, 4]`. The icons were 9.303, 12.329 and 2.906 s old — nowhere near
+the 15 s clock — so the 0 is the death's, and the rival (nothing sent, the client clears
+its own icon) is refuted. After the resurrection a cold Fox Fangs on him (480.154) failed
+with reason 2 and a zeroed recharge, 1 of 1: WIKI's "does not reappear if the user is
+resurrected" is the server having nothing to reappear. **The server's clear moved**: it
+rode ahead of the status; `kill_player` now sends it between `0x00F1 [me, 18]` and the
+morale tick (test_daggers §5 pins the index). Where retail strips the EFFECTS — after
+`[8, me, 1]`, between the morale tick and the maxima — is not where `kill_player` strips
+them (first); n = 1 with an effect up, and it is a death-batch item, not a daggers one.
+
+Two side readings off the same batches. **Death penalty scales the BASE pool and the
+armour's +5 rides on top**: maximum energy 25 → 22 → 19 → 16 → 13 and health 480 → 408
+→ 336 → 264 → 192 at morale 85 / 70 / 55 / 40 — `20 × m + 5` and `480 × m`, which is
+`morale.py`'s model (`effective_max`), CORROBORATED 4 of 4 on one character where it
+had n = 1. And Critical Strikes pays 2 over the CURRENT maximum: `[52, me, me, 2/22]`
+and `2/19` after the first and second deaths (F12's 2/25 before them), with the
+`[54, me, me, 2]` unchanged — `test_pools` 2f carries both rows.
+
+### DAGGERS-F19 — the half second is a FRACTION of the swing. OBSERVED, 16 + 4 of 20.
+
+Under Frenzy (`0x0042 [me, 346, 0, instance, f32 8.0]` at the press, `0x00E6 [346, 0]`
+4.0 s later) the plain swing went from 1.33 s to **0.891 s** start-to-start (65 boosted
+intervals: 51 at 0.877–0.910, 14 at 0.762–0.796; 15 plain ones: 12 at 1.326–1.335,
+3 at 1.11–1.165) — 1.333 × 0.67, `attack_interval_factor`'s number. And the second
+strike moved WITH it: the double strike's second word **0.320–0.339 s** behind the first
+(16 of 16 boosted) against 0.499 / 0.499 plain on the same tape, the dual's
+**0.333–0.342** (4 of 4: 254.750, 264.403, 300.545, 443.448) against 0.494 / 0.497.
+0.334 / 0.891 = 0.375 = 0.5 / 1.333: the delay is **3/8 of the swing**, and Q9's
+prediction (a constant) is refuted. 18 doubles in 81 swings (22 %, WIKI 26 at rank 12).
+A sub-mode at ~7/8 of the interval sits in BOTH regimes (14 of 65 boosted, 3 of 15
+plain); no mechanism is claimed for it. **Server:** `second_strike_seconds(state)` =
+0.5 × `attack_interval_factor`, read at both arming sites (the double strike's and the
+dual's); the test pins 0.5 unboosted and 0.335 under a 0.67 factor and locks the sites.
+
+### What RUN-2 did not settle
+
+A dual whose first strike LANDS and whose second misses (is 3 sent?); Sneak Attack with
+a sword (2116 is PvE-only and not on this account — dropped, not deferred); where the
+death batch strips effects relative to the morale tick (`kill_player` strips first,
+retail after `[8, me, 1]` — n = 1); what property 10 on the victim names; the 7/8 swing
+sub-mode. A lead that is BLOCKED (reason 0) rather than missed was not exposed —
+Bonetti's Defense never went up in the two minutes; the miss is the same fail-word
+family and the server treats them alike.
+
