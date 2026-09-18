@@ -27,6 +27,19 @@ move back.
 
 ---
 
+### ✅ `timingjoin.py` — 2026-09-18 — **the side-by-side timing census that found SLICE-F49, F50 and F51, landed as a tool** (`toolkit/authsrv/timingjoin.py`, `test_timingjoin.py`)
+
+One retail tape and one of OUR recorder captures (`vault/captures/gamesrv`, written by
+every harness run), decoded through the same codec and run through the same joins: swing
+start to start and start to word, the double and dual gaps, a skill's debit → E5 → E3 →
+E6, the landing to the next swing, the chain icon's clock, an effect's episode — each
+split plain / boosted by the attack-speed episode itself. A wrong server timer is a row
+whose columns disagree; the tool knows no right answer. `--swings` prints one row per
+swing (critical, doubled, seconds since a skill) for the interval studies; `--observer`
+reads a hero's clock on our side (ours announces the hero's property 41 first, so the
+observer rule would name the wrong agent). `test_timingjoin.py`: a synthetic wire with
+every answer known by construction, then the vault; floor 12 bare, 17 with it.
+
 ### ✅ SLICE-F51 — 2026-09-18 — **an attack skill's clock: a listed activation lands at its WINDUP (Jagged Strike 0.15 s, not 0.5), and the swing after a skill's hit opens one RECOVERY later** ([studies/slice/FINDINGS.md](studies/slice/FINDINGS.md) SLICE-F51)
 
 A side-by-side timing census (RUN-DAGGERS-2 beside our recorder) after F50. Retail lands

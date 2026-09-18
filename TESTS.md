@@ -11251,6 +11251,21 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   comment that had called value 8 a single sighting from one capture's count.
   Proven red by setting the reward to the Wolf's contaminated 126. Floor 6, the
   vault-less §1),
+  `toolkit/authsrv/test_timingjoin.py` (**2026-09-18, SLICE-F49..F51's instrument:
+  `timingjoin.py`, every timed quantity around an attacker with a RETAIL tape and one of
+  OUR recorder captures decoded through the same codec and run through the same joins,
+  side by side.** A wrong server timer shows as a row whose two columns disagree; the
+  tool knows no right answer. §1 is a synthetic wire with every answer known by
+  construction -- swing start to start and start to word in both regimes, the double
+  strike's gap, a skill's debit -> E5 -> E3 -> E6, the landing to the next swing, the
+  chain icon's 15 s, an effect's episode -- plus what must NOT be scored: another
+  agent's swing, a pair of starts split by a skill, an attack-speed STANCE as a skill
+  landing; and the per-swing rows (critical, doubled, seconds since a skill) the
+  interval studies read. §2, SKIPPED and printed without the vault: RUN-DAGGERS-2 still
+  reads 0.15 s for Jagged Strike, a third of a second for the boosted double strike and
+  0.891 s for the boosted swing, and our newest recorder capture decodes as agent 1
+  (ours announces the HERO's property 41 first, so adrenjoin's observer rule would name
+  the wrong agent). Floor 12 bare, 17 with the vault),
   `toolkit/authsrv/test_daggers.py` (**2026-09-17, DAGGERS-B2..B5 (studies/daggers): daggers
   and the Assassin's attack chain.** The verbatim part is §5's FAILED-STEP BATCH, checked
   against retail's own order off 20260819T132414 -- the owner's cold off-hand at 236.303
