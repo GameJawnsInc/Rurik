@@ -1935,7 +1935,8 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   are unmeasured.
 * **DAGGERS, n = 0 on retail.** A lead that misses, a missed first strike ahead of a
   second, the attacker's own death, a chain opened by 2116 with a sword, the half second
-  under an attack-speed boost (daggers §6, last paragraph).
+  under an attack-speed boost (daggers §6, last paragraph). **RUN-DAGGERS-2 registered**
+  (daggers §5, Q6–Q9; `vault/plans/daggers_n0.txt`, Master of Lightning) — awaiting the run.
 
 **Monster AI** — [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md)
 

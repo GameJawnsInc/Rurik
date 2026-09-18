@@ -230,6 +230,27 @@ Dagger Mastery 12 (26 % double strike, ~1 swing in 4), Critical Strikes ≥ 8, a
 practice target that does not die inside the 15 s clock, which is the confound that cut
 six of seven lifetimes short in F6.
 
+### RUN-DAGGERS-2 — registered 2026-09-17, NOT YET RUN (DAGGERS-Q6..Q9)
+
+Q1–Q5 were answered by RUN-DAGGERS-1 (§6). What it left is what a foe that FIGHTS BACK
+does to the chain; the plan is `vault/plans/daggers_n0.txt` (sha256 `41b9031a…`, eight
+steps, F11 = "the icon changed" as before), against the **Master of Lightning** (E/W 20;
+WIKI bar per `studies/skills` §49: Lightning Javelin, Lightning Orb, Blinding Flash, two
+attunements, Aura of Restoration, Bonetti's Defense — he blinds, he blocks, he kills).
+Sneak Attack (2116) is dropped: PvE-only, not on the account. The server's answer to each
+is RECONSTRUCTION at the call site and is the prediction here.
+
+| id | question | prediction | rival |
+|---|---|---|---|
+| **DAGGERS-Q6** | A lead whose word is `[38, T, me, 0/1/3]` (block / dodge / miss): is `0x005C` sent? does the off-hand behind it land? | no `0x005C`; the off-hand fails with F7's batch, reason 2 | the state is set at the PRESS; the off-hand lands |
+| **DAGGERS-Q7** | A dual whose first strike is blocked: does `[47, me, 0]` and a second roll still follow at 0.5 s? is state 3 sent if only one strike lands? | yes, independent rolls (F10); state 3 only when the SECOND lands (it rides the second word) | either strike landing sets 3 |
+| **DAGGERS-Q8** | The attacker's own death with an icon live on the foe; a cold off-hand after resurrection | `[me, T, 0]` in the death batch; the cold off-hand fails | nothing sent, the client clears its own icon, the clock runs out; or the off-hand lands |
+| **DAGGERS-Q9** | Under an attack-speed boost (slot 5, if the account has Flurry / Frenzy): the double strike's and the dual's second word | still 0.500 s behind the first, a constant | scales with the swing, ~0.33–0.37 s |
+
+Floor: ≥ 3 leads that did not land with an off-hand pressed behind each, and ≥ 2 that
+did; ≥ 1 death with an icon live; ≥ 20 boosted swings with ≥ 2 doubles or Q9 is "not
+exposed"; ≥ 1 cold press after resurrection. Scored by `chainjoin.py --capture`.
+
 ---
 
 ## 6. RUN-DAGGERS-1 — run and scored, 2026-09-17 (DAGGERS-F9..F13)
