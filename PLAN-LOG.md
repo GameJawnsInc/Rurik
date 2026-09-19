@@ -25,6 +25,27 @@ names it, the way §1z-da was corrected by §1z-db, never by editing it.
 `test_srclint.py` holds `PLAN.md` §8 to a size ceiling so the log cannot quietly
 move back.
 
+
+---
+
+### WEAPONS-W3, WEAPONS-W8 and the spear's throw -- 2026-09-19 -- **the owner-free rungs RUN-1A unlocked: the spear throws, a scythe hits up to two more with a 2^0.125 critical, modifier 585 is the customisation word and WEAPONS-Q12 closes; W9 registered** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) §26)
+
+The spear's row gains its measured projectile, flag and speed class and WIKI's range
+(the tape says only >= 755), and `weapon_ranged()` needed nothing else. WEAPONS-W3:
+`scythe_extras` / `scythe_extra_hit` give up to two living hostiles inside 80 u of the
+target and 180 u of the attacker their own roll, critical, gain, first-hit maximum and
+word, sent before the target's -- retail's 29-of-29 order; the 80 is r + r + the def pad,
+a reading inside the tape's [78, 94) bracket, and `--no-scythe-extras` reverts; the
+scythe's row carries `critical_armour_reduction = 5` and `swing_damage` takes the term per
+held type. WEAPONS-W8: a corpus scan finds modifier 585 at arg 120 on 85 items, all but
+one the owner's own weapons, the isle study's sword among them -- the item that study
+recorded as "Damage +20% ... customized" and fitted on the customised 18..26 range -- so
+585 is the customisation word (CORROBORATED, two sources) and `weapon_damage_range`
+scales the range's ends by it; Q12's answer is YES and it is CLOSED. W9 (the weapon-set
+switch, c2s `0x0032`) is registered: our server fills set 0 only, so there is nothing to
+switch to before a content decision. `test_weapons.py` gains sections 15-17 (floor
+114 -> 129); the full suite's count is in the commit.
+
 ---
 
 ### RUN-WEAPONS-1A -- 2026-09-19 -- **run and scored: the martial clocks hold, the scythe's extras are same-instant words with a target-side term of [78, 94) u, the spear parks at 755 u** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) §25)

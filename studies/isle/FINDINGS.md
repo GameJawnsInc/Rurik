@@ -1870,3 +1870,12 @@ non-cancelling step** acquired during its map-load phase, so that figure's
 honest bar is **±0.22 s** — quote it as ~10.0 s, not to the millisecond.
 (The n=2 disagreement with 12.168 s was already 2.1 s, so rung 9's
 "measure, do not assume" stands unchanged.)
+
+**A third step connection, 2026-09-19.** RUN-WEAPONS-1A's outpost connection
+(`20260919T103604` conn `:58638`, the PvP-equipment session, 50 Hz ticks) takes
+ONE wire stall of 2.58 s at 119 s — 48 ticks arriving in a burst — and closes at
+**+75.9 ms**, its 2,322 ms envelope being that stall and nothing else. Transport,
+not clock: the same capture's Isle connection (`:56576`, 2 Hz, 404 s) closes at
+−2.3 ms with a 301 ms envelope, and every clock in `studies/weapons/PLAN.md` §25
+was read there. `test_tickclock.py` pins the third by identity beside the other
+two, so a fourth still goes red.

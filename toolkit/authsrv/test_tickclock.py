@@ -15,7 +15,13 @@ and pins what the 2026-08-23 sweep found:
   * exactly TWO connections carry non-cancelling steps, both in
     `20260817T183756` (the Shing Jea armour capture): +219 ms and -110 ms,
     acquired in their map-load phase and flat after. They are pinned by
-    IDENTITY so a third joining them goes red;
+    IDENTITY so a third joining them goes red -- and on 2026-09-19 one did:
+    RUN-WEAPONS-1A's outpost connection (`20260919T103604` `:58638`, the
+    PvP-equipment session, 50 Hz) takes ONE 2.58 s wire stall at 119 s, 48
+    ticks arriving in a burst, and closes at +75.9 ms. That is transport,
+    not clock: the same capture's Isle connection (`:56576`, 2 Hz, 404 s)
+    closes at -2.3 ms. It is pinned by identity like the other two, with
+    its 2,322 ms envelope named, so a FOURTH still goes red;
   * the per-connection ENVELOPE (max |residual|) is the wire-timestamp error
     bar a timed claim from that connection inherits. The claim-bearing
     connections are pinned: the 120.499 s revive and the 30 s respawn ride
@@ -35,13 +41,15 @@ sys.path.insert(0, os.path.join(os.path.dirname(HERE), "schema"))
 import checks           # noqa: E402
 import behaviourrun     # noqa: E402
 
-# Floor set from a real green run (14 checks, 2026-08-23).
-LEDGER = checks.Ledger("tick clock vs wire clock", floor=14)
+# Floor set from a real green run (14 checks, 2026-08-23; 15 since the third step, 2026-09-19).
+LEDGER = checks.Ledger("tick clock vs wire clock", floor=15)
 check = checks.adopt(LEDGER)
 
 # The two known step connections, by identity (stamp, client port).
 STEP_UP = ("20260817T183756", ":52294->")     # +219 ms, 2 Hz town ticks
 STEP_DOWN = ("20260817T183756", ":58389->")   # -110 ms
+STEP_STALL = ("20260919T103604", ":58638->")  # +76 ms after one 2.58 s stall at 119 s (2026-09-19)
+KNOWN_STEPS = (STEP_UP, STEP_DOWN, STEP_STALL)
 
 try:
     rows = list(behaviourrun.corpus_tick_sweep())
@@ -93,9 +101,10 @@ loose = [(s, c, r) for s, c, r in meas
 check(len(meas) - len(loose) >= 52,
       ">= 52 connections end within the tight 50 ms bound",
       f"{len(meas) - len(loose)}/{len(meas)}")
-ids = {(s, STEP_UP[1] in c or STEP_DOWN[1] in c) for s, c, _r in loose}
-check(all(s == "20260817T183756" and hit for s, hit in ids) and len(loose) == 2,
-      "the ONLY connections beyond 50 ms are the two known 20260817T183756 "
+ids = {(s, any(s == ks and kp in c for ks, kp in KNOWN_STEPS)) for s, c, _r in loose}
+check(all(hit for _s, hit in ids) and len(loose) == 3,
+      "the ONLY connections beyond 50 ms are the three known steps -- two on "
+      "20260817T183756 and RUN-1A's stalled outpost connection -- "
       "steps -- pinned by identity, so a third appearing goes red",
       f"loose: {[(s, c[:22], round(r['final_ms'], 1)) for s, c, r in loose]}")
 
@@ -113,6 +122,14 @@ check(abs(up["final_ms"] - 219.1) < 1.0 and abs(down["final_ms"] + 109.5) < 1.0,
       "the two steps are the measured ones (+219.1 / -109.5 ms) -- fixed "
       "files, so a moved value means the DECODE moved",
       f"up={up['final_ms']:+.1f} down={down['final_ms']:+.1f}")
+stall = one(*STEP_STALL)
+check(abs(stall["final_ms"] - 75.9) < 1.0 and stall["mode_ms"] == 20
+      and abs(stall["envelope_ms"] - 2322.0) < 2.0,
+      "the third step is the measured one: +75.9 ms left by one 2.58 s wire "
+      "stall on a 50 Hz connection, whose envelope (2,322 ms) is that stall and "
+      "nothing else -- a fixed file, so a moved value means the DECODE moved",
+      f"final={stall['final_ms']:+.1f} mode={stall['mode_ms']} "
+      f"envelope={stall['envelope_ms']:.0f}")
 check(up["mode_ms"] == 500,
       "the +219 connection ticks at 2 Hz (modal payload 500 ms) -- a town "
       "cadence, where jitter averages away slowest",
@@ -145,10 +162,12 @@ check(up["envelope_ms"] >= 200.0,
       "error bar is +/- 0.22 s, recorded in studies/isle 10 (the n=2 "
       "disagreement of 2.1 s already dwarfed it)",
       f"envelope {up['envelope_ms']:.1f} ms")
-worst_env = max(r["envelope_ms"] for _s, _c, r in meas)
+worst_env = max(r["envelope_ms"] for s, c, r in meas
+                if not (s == STEP_STALL[0] and STEP_STALL[1] in c))
 check(worst_env <= 800.0,
-      "no envelope anywhere exceeds 800 ms (worst measured: a 750 ms "
-      "transient on the -110 step connection)",
+      "no envelope OTHER than the stalled connection's exceeds 800 ms (worst "
+      "measured: a 750 ms transient on the -110 step connection; RUN-1A's Isle "
+      "connection, where every section-25 clock was read, sits at 301 ms)",
       f"worst {worst_env:.1f} ms")
 
 print("== 6. the legacy two-capture bound still holds through this path ==")

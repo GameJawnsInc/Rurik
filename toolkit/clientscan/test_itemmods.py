@@ -78,7 +78,14 @@ POSITIONAL_ID = 595         # the one identifier seen on both sides of it
 # s_attrib's professions 1-10, read by `attribtable.py --summary` on the pin.
 PROFESSION_ATTRIBUTES = list(range(0, 26)) + list(range(29, 45))
 # Stacking headpiece bonuses that are NOT the Warrior's 20, by capture.
-HEADPIECE_ATTRS = {"20260917T160915": {29, 31}}     # RUN-DAGGERS-1, Assassin
+# Keyed by capture: a tape whose headpieces carry an attribute the row for it does
+# not list reddens the check and gets NAMED here, never absorbed into "anything".
+# 20260917T224104 is RUN-DAGGERS-2, the SAME Assassin (Shadow Arts only that
+# session, 2 words); it landed the evening the pin above was written and reddened
+# this file from then until 2026-09-19, when RUN-WEAPONS-1A's full-suite run found
+# it. RUN-WEAPONS-1A itself (20260919T103604) adds only the Warrior's own attr 20.
+HEADPIECE_ATTRS = {"20260917T160915": {29, 31},     # RUN-DAGGERS-1, Assassin
+                   "20260917T224104": {31}}         # RUN-DAGGERS-2, the same Assassin
 
 
 def main():
