@@ -28,6 +28,19 @@ move back.
 
 ---
 
+### Identifier `573` -- 2026-09-19 -- **"Armor: N (depends on level)": a hero's level-scaled armour piece, read**
+
+[studies/weapons/PLAN.md](studies/weapons/PLAN.md) §33. The word sits on twenty corpus items
+and nothing else -- one five-piece Warrior hero set, every piece `(573, 80, 23)` then `(4, 527
+20)`, on the JARIN and aggro tapes. Its tooltip handler draws `Armor: N` from a level in the
+walker context and `Armor: 23-80` without one, then `depends on level`: arg2 the level-1
+rating, arg the level-20 one. WIKI (GWW "Hero armor"): a hero's rating by profession and level,
+Warrior 23..80, three a level -- the line between the pair's ends, which is the isle's creature
+formula 3 x level + 20 exactly. Ships `combatmath.level_scaled_rating` and 573 as a rating
+word in `armour_of_piece` at the wearer's level (`player_level_of(state)`); our heroes rate
+by the formula already and wear no pieces on the wire, so nothing moves until a content row
+carries the word. `test_weapons` §19 gains three checks (floor 195 -> 198, a vault run 205).
+
 ### WEAPONS-Q2 + the hornbow's 10 % -- 2026-09-19 -- **the client's own bow-class names close Q2 at the desk; a bow swings at its class's rate and a hornbow penetrates 10 %**
 
 [studies/weapons/PLAN.md](studies/weapons/PLAN.md) §32. The `609` tooltip handler

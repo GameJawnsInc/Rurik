@@ -23,7 +23,7 @@ import agents  # noqa: E402
 import authsrv  # noqa: E402
 import combatmath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=195)   # the BARE-MACHINE number: 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=198)   # the BARE-MACHINE number: 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
 check = LEDGER.ok
 
 LEGACY_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
@@ -2068,6 +2068,42 @@ def section_damage_type_and_requirement():
               and authsrv.requirement_banner({"modifiers": []}) is None,
               "the banner names the type dealt and the requirement, MET or UNMET with the "
               "penalty; nothing for an item with no words", f"{b_axe} | {b_req} | {b_met}")
+        # ---- identifier 573, "Armor: N (depends on level)" -- a hero's piece
+        # (2026-09-19, studies/weapons/PLAN.md 33): (573, high, low) rates
+        # the line from `low` at level 1 to `high` at level 20 -- the wiki's
+        # hero-armour rows, and the isle's 3 x level + bonus
+        hero_w = {"modifiers": [_mod(573, 80, 23), _mod(4, 0), _mod(527, 20)]}   # the corpus's set
+        hero_r = {"modifiers": [_mod(573, 70, 13)]}
+        hero_c = {"modifiers": [_mod(573, 60, 3)]}
+        check(all(cm.level_scaled_rating(23, 80, L) == 3 * L + 20 for L in range(1, 21))
+              and all(cm.level_scaled_rating(13, 70, L) == 3 * L + 10 for L in range(1, 21))
+              and all(cm.level_scaled_rating(3, 60, L) == 3 * L for L in range(1, 21))
+              and cm.level_scaled_rating(23, 80, 0) == 23 and cm.level_scaled_rating(23, 80, 25) == 80
+              and cm.level_scaled_rating(23, 80, None) == 23,
+              "a 573 pair rates the line from its low end at level 1 to its high end at 20 -- "
+              "the wiki's three hero-armour rows (23..80, 13..70, 3..60) are 3 x level + 20 / "
+              "10 / 0 at every level, the isle's creature formula; clamped to 1..20; no "
+              "level reads the low end")
+        check(authsrv.armour_of_piece(hero_w, 2, level=1) == (23.0, 20.0)
+              and authsrv.armour_of_piece(hero_w, 2, level=5) == (35.0, 20.0)
+              and authsrv.armour_of_piece(hero_w, 2, level=20) == (80.0, 20.0)
+              and authsrv.armour_of_piece(hero_w, 5, level=20) == (80.0, 0.0)
+              and authsrv.armour_of_piece(hero_r, 2, level=10) == (40.0, 0.0)
+              and authsrv.armour_of_piece(hero_c, 2, level=10) == (30.0, 0.0),
+              "the corpus's hero set [573 (80, 23), 4, 527 20] reads 23 / 35 / 80 at levels 1 / "
+              "5 / 20 with its +20 vs. physical still counting for a slashing hit and not a fire "
+              "one; a ranger's and a caster's pair read their own rows")
+        agents.item_template = (lambda key, _it=item: hero_w if key == "warrior_body" else _it(key))
+        agents.PLAYER_OFFHAND = None
+        at7 = authsrv.player_armour_at("warrior_body", 2, {"level": 7})
+        at20 = authsrv.player_armour_at("warrior_body", 2, {"level": 20})
+        seed = authsrv.player_armour_at("warrior_body", 2)
+        agents.item_template = item
+        check(at7 == 41.0 + 20.0 and at20 == 80.0 + 20.0
+              and seed == 3 * int(agents.PLAYER_LEVEL) + 20 + 20.0,
+              "through player_armour_at the connection's level rates the chest -- 61 at level "
+              "7, 100 at 20 -- and without a state the character's seed level does",
+              f"{at7} / {at20} / {seed} at seed level {agents.PLAYER_LEVEL}")
     finally:
         (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
          authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,

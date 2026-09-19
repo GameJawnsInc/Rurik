@@ -1984,7 +1984,9 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   range (RUN-WEAPONS-2) is the instrument; ~~W3~~ (shipped 2026-09-19,
   `studies/weapons/PLAN.md` §26: the scythe's extras and its 2^0.125 critical), ~~W4's rest~~ shipped 2026-09-19 (§30: `587` against the pieces'
   `527` under its condition word, the `633` reader with `634` / `635` / `636`, the isle's 3.098
-  unmet divisor; left of W4: identifier `573` on four corpus pieces, a spell's own type;
+  unmet divisor; left of W4: a spell's own type and the base penetration sources (Strength's 1 % per
+  rank, Penetrating Attack); ~~identifier `573`~~ read 2026-09-19, §33 -- a hero's level-scaled
+  armour, the wire's (80, 23) the wiki's Warrior row and the isle's 3 x level + 20;
   ~~the hornbow's 10 %~~ and ~~Q2~~ closed 2026-09-19, §32: the client's own 609 handler names
   the classes -- 0 shortbow, 1 longbow, 2 flatbow, 3 recurve, 4 hornbow, 1 and 3 the corpus's
   2.475 s pair -- so a bow now swings at its class's rate and a hornbow takes 10 % off the

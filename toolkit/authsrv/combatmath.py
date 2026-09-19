@@ -149,11 +149,13 @@ BONUS_ARMOUR_CAP = 25.0
 
 
 def armour_of_piece(item, damage_type, ARMOR_RATING_MODIFIER,
-                    ARMOR_VS_TYPE_MODIFIER, met=True):
+                    ARMOR_VS_TYPE_MODIFIER, met=True, level=None):
     """(rating, vs-type bonus) from a piece's own modifier words, or None.
 
     Identifier 572's argument is the rating -- or 635's on a REQUIRED shield
     when `met`, and the wiki's 8 / 5 when not (the WEAPONS-W4 block below) --
+    or 573's LEVEL-SCALED pair (arg the level-20 rating, arg2 the level-1
+    one; `level` is the wearer's, the module's block below) --
     and each 527's is a `+N vs. <condition>` line that counts only when the
     SPECIAL word right before it admits `damage_type`: an id from the
     client's fourteen (content/world.toml [damage_type.table]) or a class
@@ -184,6 +186,8 @@ def armour_of_piece(item, damage_type, ARMOR_RATING_MODIFIER,
             continue
         if ident == ARMOR_RATING_MODIFIER:
             rating = float(d["arg"])
+        elif ident == LEVEL_SCALED_ARMOUR:
+            rating = level_scaled_rating(d["arg2"], d["arg"], level)
         elif ident == SHIELD_ARMOUR_REQUIRED:
             rating = (float(d["arg"]) if met
                       else UNMET_SHIELD_ARMOUR[int(d["arg"]) >= 16])
@@ -237,9 +241,10 @@ def armour_energy_bonus(keys):
 
 
 def player_armour_at(location_key, damage_type, EQUIP_ARMOUR,
-                     ARMOR_RATING_MODIFIER, ARMOR_VS_TYPE_MODIFIER):
+                     ARMOR_RATING_MODIFIER, ARMOR_VS_TYPE_MODIFIER, level=None):
     """The player's effective AR at one body location against `damage_type`
-    (an id or a class name -- armour_of_piece), or None if unarmoured."""
+    (an id or a class name -- armour_of_piece), or None if unarmoured;
+    `level` is the wearer's, for a 573 piece."""
     if not EQUIP_ARMOUR:
         return None
     try:
@@ -247,7 +252,7 @@ def player_armour_at(location_key, damage_type, EQUIP_ARMOUR,
     except Exception:                                     # noqa: BLE001
         return None
     got = armour_of_piece(piece, damage_type, ARMOR_RATING_MODIFIER,
-                          ARMOR_VS_TYPE_MODIFIER)
+                          ARMOR_VS_TYPE_MODIFIER, level=level)
     if got is None:
         return None
     rating, bonus = got
@@ -689,3 +694,47 @@ def is_spell_type(type_code):
 def halved_recharge(seconds):
     """Half of a whole-second recharge, to the nearest second, .5 up."""
     return int(float(seconds) / 2.0 + 0.5)
+
+
+# ---- IDENTIFIER 573 (2026-09-19): "Armor: N (depends on level)" -- A HERO'S PIECE
+#
+# THE WORD, OBSERVED: 573 sits on twenty corpus pieces and nothing else -- one
+# five-piece set (types 4 / 7 / 13 / 16 / 19, models 17977..17980 and 19012),
+# always (573, 80, 23) followed by (4, 527 20), created into inventory key 5
+# behind 0x015A ITEM_SET_PROFESSION [.., item, 1] on the JARIN hero tape
+# (20260914T005758, three connections) and the aggro tape (20260916T150306):
+# the Warrior hero's armour. Its tooltip handler (0x009240F4): with a level in
+# the walker context (+0x24) it draws 2438 `Armor: N` with
+# N = arg2 + (arg - arg2) * X / 10, else 2440 `Armor: N-N` with arg2..arg,
+# and appends 51163 `depends on level`; so arg2 is the LOW rating and arg the
+# HIGH one. What X is (the tooltip's caller) is unread; the SERVER's rule is
+# the wiki's and needs no X.
+#
+# WIKI (GWW "Hero armor" sec. Armor rating, read 2026-09-19): a hero's rating
+# "is dependent solely on their profession and level" -- Warrior / Paragon 23
+# at level 1 to 80 at 20, Ranger / Assassin / Dervish 13 to 70, the casters 3
+# to 60, three per level -- and GWW "Hero": "It is set at an armor rating
+# suitable for the hero's level and automatically increases ... with the hero
+# level". (80, 23) IS the Warrior row's two ends, and the rating at level L is
+# the straight line between them, low + (high - low) * (L - 1) / 19 -- which
+# for every corpus pair is 3 * L + 20, the creature formula
+# `creature_armor_rating` already uses (3 * level + a profession bonus of 20 /
+# 10 / 0 -- the wiki's three rows again). CORROBORATED three ways; the client
+# has no reader for 573 outside the tooltip (itemmods --reads 573), so the
+# server is where the number lives. Our heroes rate by creature_armor_rating
+# and wear no pieces on the wire; this reader makes a content row that carries
+# the tape's word rate the same way, at the wearer's level, clamped to 1..20.
+LEVEL_SCALED_ARMOUR = 573
+HERO_LEVEL_MIN, HERO_LEVEL_MAX = 1, 20
+
+
+def level_scaled_rating(low, high, level):
+    """A 573 piece's rating at `level`: the line from `low` at level 1 to
+    `high` at level 20 (the wiki's hero-armour rows are exactly that line).
+    No level: the low end, said nowhere better than here -- a caller that
+    knows the wearer passes it."""
+    lo, hi = float(low), float(high)
+    if level is None:
+        return lo
+    lvl = min(max(int(level), HERO_LEVEL_MIN), HERO_LEVEL_MAX)
+    return lo + (hi - lo) * (lvl - HERO_LEVEL_MIN) / float(HERO_LEVEL_MAX - HERO_LEVEL_MIN)
