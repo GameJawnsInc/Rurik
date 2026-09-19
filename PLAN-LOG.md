@@ -28,6 +28,31 @@ move back.
 
 ---
 
+### WEAPONS-W4, the rest -- 2026-09-19 -- **the damage type against the vs-type armour, and the `633` requirement with the isle's unmet divisor**
+
+[studies/weapons/PLAN.md](studies/weapons/PLAN.md) §30. The enum is the client's own:
+`587`'s argument, `0x00A7`'s kind and the `vs. %str1% damage` condition index one
+fourteen-entry table (`s_charDamage`, ConstChar.cpp) -- 0 Blunt, 1 Piercing, 2 Slashing, 3 Cold,
+4 Lightning, 5 Fire, 6 Chaos, 7 Dark, 8 Holy, 9 Nature, 10 Sacrifice, 11 Earth, 12 Generic, 13 a
+second Dark, 14 the accessor's "no type" -- resolved from the two name tables and CORROBORATED
+on 3,857 corpus items (bows / daggers / spears 1, hammers 0, swords and axes 2, wands and
+staves the elements). A `527 Armor +N` line is qualified by the SPECIAL word before it, 4 `vs.
+physical` (345 pieces) or 3 `vs. elemental` (55), the corpus's only shapes on a worn piece;
+the client has no reader for 527, so the rule is the wiki's over the client's ids
+(`content/world.toml [damage_type.table]` client-table, `[damage_type.classes]` wiki).
+`armour_of_piece(item, damage_type, met)` replaces the `physical` boolean; `land_swing` reads
+the location against the swinger's own item's 587; a spell stays elemental. `633 {attribute,
+rank}` is read: `player_weapon_rank` takes the item's attribute first; unmet, a weapon's damage
+divides by **3.098** -- the isle's rank ladder (studies/isle 9.2, one hammer at ranks 5-8, 235
+events, 3 and 10/3 excluded; a divisor is one of two parameterisations that ladder admits,
+RUN-3 separates them) -- a required shield's `635` falls to 8 / 5 and a required focus's `636`
+to +3 (WIKI, GWW "Requirement"). `--no-typed-armour` and `--no-unmet-requirement` revert.
+Tests: `test_weapons` section 19 (23 checks, floor 155 -> 177, a vault run 180: the tables read
+back from the pinned client; the pieces against every class; the isle ladder reproduced within
+3 % with its bands; the shield, the focus, the body, the banner); the combat, armour, content
+and lint suites green (§30 lists them). Left of W4: the hornbow's 10 % behind Q2, identifier
+`573`, a spell's own type.
+
 ### WEAPONS-W9 -- 2026-09-19 -- **the desk close: `0x0152` exchanges two items' locations, and the item family's first field is the `0x0144` inventory key**
 
 [studies/weapons/PLAN.md](studies/weapons/PLAN.md) §29. Two of §28's four opens were the

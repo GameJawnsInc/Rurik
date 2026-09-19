@@ -1982,9 +1982,12 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   is the server mailbox, so the client never arms its own attack-follow and walks on
   through the start; retail's parks itself with no message; an OWNER press from beyond
   range (RUN-WEAPONS-2) is the instrument; ~~W3~~ (shipped 2026-09-19,
-  `studies/weapons/PLAN.md` §26: the scythe's extras and its 2^0.125 critical), W4's rest (`587` damage type against armour's `527`, no repo armour row carries
-  one yet; `633` requirement has no reader), Q10 (the unmet requirement's 1/3, `636` on
-  foci), a staff's `570` recharge word, ~~Ignite Arrows' splash~~ (section 24: it explodes on the target and on every
+  `studies/weapons/PLAN.md` §26: the scythe's extras and its 2^0.125 critical), ~~W4's rest~~ shipped 2026-09-19 (§30: `587` against the pieces'
+  `527` under its condition word, the `633` reader with `634` / `635` / `636`, the isle's 3.098
+  unmet divisor; left of W4: the hornbow's 10 % behind Q2, identifier `573` on four corpus
+  pieces, a spell's own type), ~~Q10~~ (the weapon's unmet term is the isle's, §30; the shield's
+  and focus's are WIKI; RUN-3 separates divisor from strike-level drop), a staff's `570`
+  recharge word, ~~Ignite Arrows' splash~~ (section 24: it explodes on the target and on every
   foe inside the client's own 156 u radius, armour-respecting, and fires even when
   the arrow misses or is blocked); no content spawn row
   holds a ranged item yet. Q16 (the client walking a ranged follow to melee, MEASURED,
