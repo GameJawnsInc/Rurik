@@ -3330,6 +3330,85 @@ def strike_adjacent(send, state, skill_id, rank, target_id, conn_id):
     return reached
 
 
+def preparation_splash(send, state, prep_skill, prep_bonus, target_id, conn_id,
+                       rank, visual):
+    """Ignite Arrows (431): a preparation whose damage is "to target and all
+    adjacent foes" lands it on the neighbours too. Returns the ids reached.
+
+    WIKI (GWW, "Ignite Arrows", id 431, {{Skill progression}} `Fire damage`
+    3..18, fetched 2026-09-18): "For 24 seconds, your arrows explode on
+    contact, dealing 3...18 fire damage to target and all adjacent foes."
+    The radius is the CLIENT'S OWN -- the skills row's `aoe_range`, 156 on
+    431 (and on 434 Choking Gas), the same field and the same number
+    `skill_adjacent_damage` already reads for Death Blossom (DAGGERS-B8).
+    The opt-in is the skill_effect row's `adjacent_damage`, that rung's own
+    convention, so a preparation with no row splashes nothing.
+
+    ARMOUR-RESPECTING, and that is why this does not reuse `strike_adjacent`:
+    that helper is Death Blossom's and calls `armour_ignoring_damage`, where
+    this skill's note says "will deal armor-respecting fire damage to all foes
+    in an area adjacent to the landing area of each shot arrow". Each
+    neighbour therefore takes the bonus through ITS OWN armour term, not the
+    target's -- `strike_multiplier(attack_strength(rank), that foe's armour)`,
+    the same term the arrow and the on-target word take against theirs.
+
+    NOT MODELLED, named rather than guessed: the page also says the explosion
+    "occurs ... before the arrow itself hits", where W2e's OBSERVED order for a
+    preparation's word (Kindle Arrows on 20260914T005758, 6 of 6) is the
+    arrow's word FIRST and the preparation's second. With no Ignite Arrows
+    anywhere in the live corpus -- 0 launches of projectile 735, 0 applies of
+    431, 0 impacts of 734 -- the observed shape of the one preparation retail
+    did send is the better evidence than a page's ordering claim, so the order
+    here is W2e's. Which element `587` names beyond fire = 5 is still unread.
+    """
+    if not PREPARATION_SPLASH or not AREA_DAMAGE or prep_skill is None:
+        return []
+    if prep_bonus <= 0.0:
+        return []
+    if not skill_effect_row(prep_skill).get("adjacent_damage"):
+        return []
+    try:
+        radius = float(agents.WORLD.get("skills", str(prep_skill))
+                       .get("aoe_range", 0.0))
+    except Exception:                                          # noqa: BLE001
+        return []
+    if radius <= 0.0:
+        return []
+    reached = []
+    for aid in adjacent_foes(state, target_id, radius):
+        foe = state.get("agents", {}).get(aid)
+        if foe is None:
+            continue
+        arm = foe.get("armor_rating")
+        scale = (strike_multiplier(attack_strength(rank), float(arm))
+                 if rank is not None and arm is not None and ARMOUR_TERM
+                 else 1.0)
+        points = _whole_points(prep_bonus * scale)
+        if points <= 0.0:
+            continue
+        foe["health"] = max(0.0, foe["health"] - points)
+        if visual is not None:
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+                 [agents.GV_EFFECT_ON_TARGET, aid, PLAYER_AGENT_ID, visual],
+                 f"impact {visual} of preparation {prep_skill} on agent {aid} "
+                 f"(the splash)")
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+             [agents.PROP_DAMAGE, aid, PLAYER_AGENT_ID,
+              _damage_fraction(points, foe["max_health"], agents.PROP_DAMAGE,
+                               f"preparation {prep_skill}'s splash "
+                               f"+{points:.0f}")],
+             f"damage {points:.0f} to agent {aid} (preparation {prep_skill}'s "
+             f"splash on a foe adjacent to {target_id})")
+        reached.append(aid)
+        if foe["health"] <= 0.0:
+            kill_agent(send, state, aid, foe, conn_id, time.time())
+    if reached:
+        print(f"[c{conn_id}] preparation {prep_skill} splashed "
+              f"{len(reached)} foe(s) adjacent to agent {target_id}: "
+              f"{reached} [WEAPONS-W7]", flush=True)
+    return reached
+
+
 def critical_strikes_rank(state):
     try:
         return int(attribute_state(state).effective_of(ATTR_CRITICAL_STRIKES))
@@ -11204,7 +11283,8 @@ def weapon_ranged(item):
 # armour term and is its own number, not folded into the arrow's as
 # hit_enemy did until today. --no-preparation-wire is that fold, with the
 # plain arrow.
-PREPARATION_WIRE = True          # --no-preparation-wire reverts
+PREPARATION_WIRE = True
+PREPARATION_SPLASH = True     # --no-preparation-splash reverts (WEAPONS-W7)          # --no-preparation-wire reverts
 
 
 def open_preparation(state, agent_id):
@@ -14688,7 +14768,7 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     # swing_preparation_bonus for the gate and the named AoE gap. Folded into
     # the same damage number, not sent as a second one, exactly as an attack
     # skill's "+ Damage" is: one swing, one number on screen.
-    prep_points, prep_skill, prep_visual = 0.0, None, None
+    prep_points, prep_skill, prep_visual, _prep_raw = 0.0, None, None, 0.0
     if swing and exact is None:
         prep_bonus, prep_skill = swing_preparation_bonus(
             state, agents.PLAYER_WEAPON, PLAYER_AGENT_ID)
@@ -14701,6 +14781,8 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
             # dealt separately"); the impact visual before each word.
             prep_points = _whole_points(prep_bonus * _prep_scale)
             prep_visual = skill_impact_visual(prep_skill)
+            _prep_raw = float(prep_bonus)   # WEAPONS-W7: the splash re-scales
+                                            # this against each foe's OWN armour
     dealt = _whole_points(dealt)        # DAMAGE-INT: the books and the wire agree
     prop = agents.GV_CRITICAL if critical else agents.PROP_DAMAGE
     frac = _damage_fraction(dealt, agent["max_health"], prop,
@@ -14727,6 +14809,13 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
                  "melee_attack_finished")
         attack_fails(send, state, PLAYER_AGENT_ID, target_id,
                      agents.ATTACK_FAIL_MISS, conn_id, "Blind")
+        # WEAPONS-W7: THE EXPLOSION HAPPENS ANYWAY. WIKI (GWW, "Ignite
+        # Arrows" section Notes): "The explosion occurs regardless of whether
+        # the arrow actually hits its target (even if it misses, strays or is
+        # blocked)." The bonus was computed above this branch, so the splash
+        # is reachable from here without moving anything.
+        preparation_splash(send, state, prep_skill, _prep_raw, target_id,
+                           conn_id, rank, prep_visual)
         print(f"[c{conn_id}] the player swung BLIND at agent {target_id} "
               f"and missed ({label})", flush=True)
         return "missed"
@@ -14746,6 +14835,9 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
             send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
                  [agents.GV_MELEE_ATTACK_FINISHED, PLAYER_AGENT_ID, 0],
                  "melee_attack_finished")
+        # WEAPONS-W7: as the miss -- the page names a BLOCK in the same breath.
+        preparation_splash(send, state, prep_skill, _prep_raw, target_id,
+                           conn_id, rank, prep_visual)
         on_block(send, state, target_id, PLAYER_AGENT_ID, conn_id, label)
         if skill_id is not None and skill_knocks_down_if_blocked(skill_id):
             _pun = skill_damage(skill_id, weakened_rank(
@@ -14868,6 +14960,9 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
                                f"preparation {prep_skill}'s +{prep_points:.0f}")],
              f"damage {prep_points:.0f} to agent {target_id} (preparation "
              f"{prep_skill}'s own word)")
+        # WEAPONS-W7: and the same damage on every ADJACENT foe.
+        preparation_splash(send, state, prep_skill, _prep_raw, target_id,
+                           conn_id, rank, prep_visual)
     # And close the swing. Harmless if the client ignores it; without it the
     # attack has a beginning and no end. Skipped for a spell, which never
     # began one -- and for a skill strike, whose close is the property 46
@@ -32396,6 +32491,12 @@ def main():
         APPROACH_STOPS_AT_RANGE = False
         print("APPROACH: --legacy-ranged-approach -- a ranged press outside range "
               "walks to the melee disc [WEAPONS-W2b revert]", flush=True)
+    if a.no_preparation_splash:
+        global PREPARATION_SPLASH
+        PREPARATION_SPLASH = False
+        print("PREPARATION: --no-preparation-splash -- a preparation's damage lands on "
+              "its target only, never on the foes adjacent to it [WEAPONS-W7 revert]",
+              flush=True)
     if a.no_preparation_wire:
         global PREPARATION_WIRE
         PREPARATION_WIRE = False

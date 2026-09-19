@@ -23,7 +23,7 @@ import agents  # noqa: E402
 import authsrv  # noqa: E402
 import combatmath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=105)   # the BARE-MACHINE number: 105 without the vault's full skills table (section 2 skips), 106 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105)
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=114)   # the BARE-MACHINE number: 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
 check = LEDGER.ok
 
 LEGACY_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
@@ -1222,6 +1222,122 @@ def section_body_parity():
          authsrv.swing_preparation_bonus, authsrv.ARMOUR_TERM) = saved
 
 
+def section_splash():
+    print("\n14. WEAPONS-W7: Ignite Arrows' adjacency splash")
+    IGNITE, KINDLE = 431, 433
+    NEAR, FAR = 11, 12
+    saved = (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+             authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,
+             authsrv.PREPARATION_SPLASH, authsrv.swing_preparation_bonus,
+             authsrv.skill_impact_visual, authsrv.blind_miss)
+    words = lambda batch: [v for op, v in batch                                    # noqa: E731
+                           if op == FLOAT_T and v[0] in (16, 17, 55)]
+
+    def world(extra_at=None):
+        """The suit at 600 u, a NEAR foe beside it and a FAR one well outside 156."""
+        st = _world(600.0)
+        base = st["agents"][FOE]
+        st["agents"][FOE]["pos"] = (600.0, 0.0)
+        for aid, pos in ((NEAR, (600.0, 100.0)), (FAR, (600.0, 900.0))):
+            row = dict(base)
+            row["pos"] = pos
+            row["health"] = row["max_health"] = 500.0
+            st["agents"][aid] = row
+        return st
+
+    try:
+        authsrv.apply_party_character({"player_weapon": "starter_bow"})
+        authsrv.PLAYER_SWING_DAMAGE = (5, 5)
+        # the row and the radius come from content and the CLIENT's own table
+        row = agents.WORLD.get("skill_effect", str(IGNITE))
+        radius = float(agents.WORLD.get("skills", str(IGNITE)).get("aoe_range", 0.0))
+        check(row.get("adjacent_damage") == "scale" and row.get("damage_type") is None
+              and radius == 156.0,
+              "Ignite Arrows' row opts into the splash and carries NO damage_type -- the "
+              "arrow keeps the weapon's kind (GWW: 'Unlike Kindle Arrows, the damage type "
+              "of the arrows is not converted to fire') -- and the radius is the client's "
+              f"own aoe_range, 156", f"row {dict(row)}, radius {radius}")
+        check(agents.WORLD.get("skill_effect", str(KINDLE)).get("adjacent_damage") is None,
+              "and Kindle Arrows does NOT opt in -- its page says target only, so the "
+              "splash is one skill's, not every preparation's")
+
+        # a landed hit under Ignite Arrows: the target's two words, then the NEAR foe
+        authsrv.swing_preparation_bonus = lambda st_, w, a: (10.0, IGNITE)
+        authsrv.skill_impact_visual = lambda sid: 734 if sid == IGNITE else None
+        st, sent = world(), []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+        near0, far0 = st["agents"][NEAR]["health"], st["agents"][FAR]["health"]
+        authsrv.hit_enemy(send, st, FOE, 1)
+        hit_ids = [v[1] for v in words(sent)]
+        check(FOE in hit_ids and NEAR in hit_ids and FAR not in hit_ids
+              and st["agents"][NEAR]["health"] < near0
+              and st["agents"][FAR]["health"] == far0,
+              "a landed arrow words the target AND the foe 100 u from it, and never the "
+              "one 900 u away -- the client's own 156 u radius", str(hit_ids))
+        splash = [v for op, v in sent if op == INT_T
+                  and v[0] == agents.GV_EFFECT_ON_TARGET and v[1] == NEAR]
+        check(len(splash) == 1 and splash[0][3] == 734,
+              "the splash carries the preparation's own impact visual (734, the record's "
+              "+0x84) before its word", str(splash))
+
+        # ARMOUR-RESPECTING, and against the NEIGHBOUR's own armour, not the target's
+        st = world()
+        st["agents"][NEAR]["armor_rating"] = 0.0
+        st["agents"][FOE]["armor_rating"] = 60.0
+        soft0 = st["agents"][NEAR]["health"]
+        sent = []
+        authsrv.hit_enemy(send, st, FOE, 1)
+        soft_taken = soft0 - st["agents"][NEAR]["health"]
+        st2 = world()
+        st2["agents"][NEAR]["armor_rating"] = 120.0
+        hard0 = st2["agents"][NEAR]["health"]
+        sent = []
+        authsrv.hit_enemy(send, st2, FOE, 1)
+        hard_taken = hard0 - st2["agents"][NEAR]["health"]
+        check(soft_taken > hard_taken > 0.0,
+              f"and it RESPECTS ARMOUR through the neighbour's OWN rating -- {soft_taken:.0f} "
+              f"on a bare foe against {hard_taken:.0f} on a 120-armour one beside the same "
+              f"target (GWW: 'armor-respecting fire damage') -- where Death Blossom's "
+              f"adjacent damage ignores armour entirely")
+
+        # THE MISS: the explosion happens anyway (GWW)
+        authsrv.blind_miss = lambda st_, a: True
+        st, sent = world(), []
+        near0 = st["agents"][NEAR]["health"]
+        res = authsrv.hit_enemy(send, st, FOE, 1)
+        check(res == "missed" and st["agents"][NEAR]["health"] < near0
+              and not [v for v in words(sent) if v[1] == FOE],
+              "a BLIND MISS still splashes: the target takes nothing and the adjacent foe "
+              "is worded anyway -- GWW: 'The explosion occurs regardless of whether the "
+              "arrow actually hits its target (even if it misses, strays or is blocked)'")
+        authsrv.blind_miss = saved[8]
+
+        # the revert arm, and Kindle Arrows as the known-good control
+        authsrv.PREPARATION_SPLASH = False
+        st, sent = world(), []
+        near0 = st["agents"][NEAR]["health"]
+        authsrv.hit_enemy(send, st, FOE, 1)
+        check(st["agents"][NEAR]["health"] == near0
+              and [v[1] for v in words(sent)] .count(FOE) >= 1,
+              "--no-preparation-splash: the target still takes both words and the adjacent "
+              "foe takes nothing")
+        authsrv.PREPARATION_SPLASH = True
+        authsrv.swing_preparation_bonus = lambda st_, w, a: (10.0, KINDLE)
+        st, sent = world(), []
+        near0 = st["agents"][NEAR]["health"]
+        authsrv.hit_enemy(send, st, FOE, 1)
+        check(st["agents"][NEAR]["health"] == near0,
+              "the KNOWN-GOOD arm: under Kindle Arrows, which does not opt in, the same "
+              "shot splashes nobody")
+        src = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
+        check('"--no-preparation-splash"' in src, "--no-preparation-splash exists")
+    finally:
+        (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+         authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,
+         authsrv.PREPARATION_SPLASH, authsrv.swing_preparation_bonus,
+         authsrv.skill_impact_visual, authsrv.blind_miss) = saved
+
+
 def main():
     section_table()
     section_skills()
@@ -1236,6 +1352,7 @@ def main():
     section_dual_shot()
     section_preparation_wire()
     section_body_parity()
+    section_splash()
     return LEDGER.verdict()
 
 

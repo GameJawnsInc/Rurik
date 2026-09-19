@@ -832,9 +832,74 @@ state; a skill's own projectile under it; a plain shot through the real loop —
 foe down 11, the impact before each word in the tape's order; the revert arm's one word
 of 11 with no impact; the flag. Floor 101 bare, 102 with the vault.
 
-**Not here.** Ignite Arrows' adjacency splash (named since the preparation landed); a
+**Not here.** ~~Ignite Arrows' adjacency splash~~ — §24; a
 preparation on a BODY's bow (`body_ranged` reads no episode) — §20; which element each
 `587` id names beyond fire = 5.
+
+
+## 24. WEAPONS-W7 -- shipped 2026-09-18: Ignite Arrows explodes, on the target and on every foe adjacent to it
+
+The gap `episodemods.swing_preparation_bonus` has named in its own docstring since the
+preparation landed -- *"KNOWN GAP, named: Ignite Arrows' damage is 'to target and all
+adjacent foes' -- the adjacency splash is not modelled, only the on-target bonus"* -- is
+closed. It is the last rung of this arc that needed neither the owner nor a content
+decision.
+
+**The skill, resolved from the client rather than guessed.** `skilltable.py` on build 38797,
+with the names resolved through `textrec.TextIndex`, reads **431 = Ignite Arrows**:
+`type_code` 19 (preparation), attribute 24 (Wilderness Survival), projectile (`+0x88`)
+**735**, impact visual (`+0x84`) **734**, and `aoe_range` **156** -- the same field and the
+same number Death Blossom's adjacent damage already reads (DAGGERS-B8). Only two
+preparations in the whole table carry a radius: 431 and 434 (Choking Gas).
+
+**WIKI for the rule and the numbers** (GWW "Ignite Arrows", id 431, fetched 2026-09-18):
+*"Preparation. For 24 seconds, your arrows explode on contact, dealing 3...18 fire damage to
+target and all adjacent foes"*, `causes1 = Fire Damage`, and `{{Skill progression}}` var1
+`Fire damage` 3 -> 18, which is the client record's own `scale0` 3 / `scale15` 18. Three of
+its Notes are the behaviour, and all three shipped:
+
+* *"will deal **armor-respecting** fire damage to all foes in an area adjacent to the landing
+  area of each shot arrow"*;
+* *"The explosion occurs **regardless of whether the arrow actually hits** its target (even if
+  it misses, strays or is blocked)"*;
+* *"**Multiple-arrow attacks** (Dual Shot, Forked Arrow, Triple Shot and Incendiary Arrows)
+  will trigger an explosion for each arrow"* -- which W2d's per-arrow strikes already give,
+  free, because each arrow runs the landing path on its own.
+
+**NOT OBSERVED, and the row says so.** The live corpus holds **0** launches of projectile
+735, **0** applies of 431 and **0** impacts of 734. So the numbers are WIKI, the shape is the
+CLIENT's own table, and the WIRE shape is W2e's -- measured on the one preparation retail did
+send (Kindle Arrows, `20260914T005758`). This is W2d's provenance pattern exactly: the shape
+observed elsewhere, the numbers from the page.
+
+**What shipped.** `preparation_splash(...)`, beside the other adjacent-damage machinery: the
+opt-in is the `skill_effect` row's `adjacent_damage` (that rung's own convention, so a
+preparation with no row splashes nothing -- Kindle Arrows does not), the radius is the
+skills row's `aoe_range`, and each neighbour takes the bonus **through ITS OWN armour term**,
+`strike_multiplier(attack_strength(rank), that foe's armour)`. That is why it does not reuse
+`strike_adjacent`, which is Death Blossom's and calls `armour_ignoring_damage`: this page
+says armor-respecting and that one's measured wire is armour-ignoring, so the two are
+different mechanics wearing the same word. Called from three places, which is what the
+"regardless of whether the arrow hits" note costs: the landed hit, the blind miss and the
+block. `[skill_effect.431]` gains `adjacent_damage = "scale"` and deliberately **no**
+`damage_type` -- *"Unlike Kindle Arrows, the damage type of the arrows is not converted to
+fire"*, so the arrow keeps the weapon's kind and only the explosion is fire, while the
+projectile is still substituted to the record's own 735.
+`--no-preparation-splash` reverts.
+
+**On the client** (`20260918T214133`, the bow under Ignite Arrows at three hostiles clustered
+90 u apart, the middle one targeted): every launch flies as **735**; the target takes the
+arrow's word, then impact **734** and the preparation's own word; then impact 734 and a word
+on agent **11** and on agent **12**, both named as the splash, twice over two volleys. No
+assert.
+
+**Not modelled, named rather than guessed.** The page also says the explosion occurs
+*"before the arrow itself hits"*, where W2e OBSERVED the arrow's word first and the
+preparation's second, 6 of 6, on the only preparation retail has sent us. An observation
+outranks an ordering claim, so the order here is W2e's and the page's is recorded, not
+followed. Choking Gas (434) carries the same 156 radius and is a different effect
+(interruption, not damage) -- untouched. Which element each `587` id names beyond fire = 5
+is still unread.
 
 ## 20. WEAPONS-W2f — shipped 2026-09-18: the body side of W2d and W2e; and Q16 measured, still open
 

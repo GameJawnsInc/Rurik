@@ -195,15 +195,41 @@ Degeneration went live 2026-08-20 with the condition join."""
 
 [skill_effect.431]
 scale_means = "Fire damage"
+adjacent_damage = "scale"      # WEAPONS-W7: "to target and all adjacent foes"; the RADIUS
+                               # is the client's own skills row, aoe_range = 156
+# NO `damage_type`, and that is the whole difference from Kindle Arrows (433) below: this
+# skill does NOT convert the arrow's own damage type, which its page says outright, so the
+# arrow keeps the weapon's kind and only the EXPLOSION is fire. The projectile IS still
+# substituted -- the skill record's own +0x88 is 735, its +0x84 impact visual 734.
 [skill_effect.431.provenance]
 source = "wiki"
-page = 'GWW, "Ignite Arrows", {{Skill progression}}, rev. 2024-12-05'
+page = 'GWW, "Ignite Arrows", id 431, infobox + {{Skill progression}}, fetched 2026-09-18'
 verified = """Client scale 3->18, args = 2. Wiki var1 `Fire damage` 3->18 -- the
 SAME LABEL as Flare's, and it does not mean the same thing. This is a
 Preparation: WIKI (GWW, "Preparation") "preparations generally alter bow
 attacks, allowing the fired arrows to cause additional effects", so the fire
 damage rides the next arrows rather than landing on cast. The server refuses to
-resolve damage for any episode-opening skill for exactly this reason."""
+resolve damage for any episode-opening skill for exactly this reason.
+EXTENDED 2026-09-18 by WEAPONS-W7, the splash this row's damage was always
+half of. WIKI, the page re-fetched that day: "For 24 seconds, your arrows
+explode on contact, dealing 3...18 fire damage to target and all adjacent
+foes", with `causes1 = Fire Damage`. Its Notes carry the three behaviours
+shipped: "will deal armor-respecting fire damage to all foes in an area
+adjacent to the landing area of each shot arrow"; "The explosion occurs
+regardless of whether the arrow actually hits its target (even if it misses,
+strays or is blocked)"; and "Multiple-arrow attacks (Dual Shot, Forked Arrow,
+Triple Shot and Incendiary Arrows) will trigger an explosion for each arrow",
+which W2d's per-arrow strikes already give. CLIENT-TABLE for the shape
+(skilltable.py, build 38797): 431 is type_code 19, attribute 24, projectile
+(+0x88) 735, impact_visual (+0x84) 734 and aoe_range 156 -- the same field and
+the same 156 Death Blossom's adjacent damage already reads (DAGGERS-B8). NOT
+OBSERVED on any wire: the live corpus holds 0 launches of projectile 735, 0
+applies of 431 and 0 impacts of 734, so the WIRE SHAPE is W2e's, measured on
+the one preparation retail did send (Kindle Arrows, 20260914T005758). The
+page's "before the arrow itself hits" is NOT modelled -- W2e observed the
+arrow's word first and the preparation's second, 6 of 6, and an observation
+outranks an ordering claim. `damage_type` stays absent: "Unlike Kindle Arrows,
+the damage type of the arrows is not converted to fire"."""
 
 [skill_effect.433]
 scale_means = "Fire damage"

@@ -1670,6 +1670,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "leg at the weapon's range. The reach gate still opens the "
                          "swing at range; what this restores is the server's own "
                          "copy walking 1,400 u past it.")
+    ap.add_argument("--no-preparation-splash", action="store_true",
+                    help="WEAPONS-W7 REVERT: a preparation's own damage lands on the "
+                         "arrow's target only. Ignite Arrows (431) is 'to target and all "
+                         "adjacent foes' (GWW), at the client's own aoe_range of 156, and "
+                         "it fires even when the arrow misses or is blocked; this turns "
+                         "all of that off and leaves W2e's on-target word alone.")
     ap.add_argument("--no-preparation-wire", action="store_true",
                     help="WEAPONS-W2e REVERT: a preparation's bonus folds into the "
                          "arrow's one word and the weapon's plain arrow flies -- the "

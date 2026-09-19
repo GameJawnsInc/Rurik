@@ -11374,11 +11374,20 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   flight later 0x00A7 kind 5 then the impact, the arrow's word, the impact and the
   preparation's own word on the player; a body's Dual Shot landing each arrow at 75 % of
   the weapon's number through `land_swing`'s factor (W2d's body gap) with two words. Floor
-  105 bare, 106 with the vault. Section 11's body block PINS the archer's `damage`
+  114 bare, 115 with the vault. Section 11's body block PINS the archer's `damage`
   (2026-09-18, the Q16 desk check): with `hostile_bow`'s own 1-3 roll, Dual Shot's
   0.75 and a level-5 archer's strike 15 against armour 45, only a roll of 3 survived
   `_whole_points`, so both arrows landed ZERO on (2/3)^2 of runs and the
-  health-decreased clause went red 3 times in 6 on a roll the check is not about),
+  health-decreased clause went red 3 times in 6 on a roll the check is not about.
+  Section 14 (WEAPONS-W7, 2026-09-18) is IGNITE ARROWS' SPLASH: the row opting in with
+  `adjacent_damage` and carrying no `damage_type`, beside a radius of 156 read from the
+  CLIENT's own skills table; a landed arrow wording the target and the foe 100 u away but
+  never the one at 900 u; the splash's own impact visual 734 before each word; the damage
+  RESPECTING each neighbour's own armour (10 points on a bare foe against 1 on a
+  120-armour one beside the same target, where Death Blossom's adjacent damage ignores
+  armour); a BLIND MISS still splashing while the target takes nothing; and two control
+  arms -- `--no-preparation-splash`, and Kindle Arrows, which does not opt in, splashing
+  nobody),
   `toolkit/authsrv/test_weaponcensus.py` (**2026-09-18, WEAPONS-W0 (studies/weapons);
   WEAPONS-W2c added §1b and four corpus pins the same day: `skill_shots()` on the
   synthetic wire finds exactly three SKILL shots and no weapon shot among them -- the

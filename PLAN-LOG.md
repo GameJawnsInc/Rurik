@@ -27,6 +27,52 @@ move back.
 
 ---
 
+### WEAPONS-W7 -- 2026-09-18 -- **Ignite Arrows explodes: the preparation's damage lands on every foe adjacent to the arrow's target, armour-respecting, and even when the arrow misses** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) section 24)
+
+Closes the gap `episodemods.swing_preparation_bonus` has named in its own docstring since
+preparations landed, and it is the last rung of this arc needing neither the owner nor a
+content decision.
+
+**The skill, from the client.** `skilltable.py` on build 38797 with names resolved through
+`textrec.TextIndex` reads **431 = Ignite Arrows**: type_code 19, attribute 24, projectile
+(+0x88) **735**, impact visual (+0x84) **734**, `aoe_range` **156** -- the same field and
+number Death Blossom's adjacent damage already reads. Only 431 and 434 (Choking Gas) carry a
+radius among preparations.
+
+**WIKI for the rule and numbers** (GWW "Ignite Arrows", id 431, fetched 2026-09-18): "your
+arrows explode on contact, dealing 3...18 fire damage to target and all adjacent foes",
+`causes1 = Fire Damage`, progression 3 -> 18 = the record's own scale0/scale15. Three Notes
+are the behaviour and all three shipped: the splash is **armor-respecting**; it "occurs
+regardless of whether the arrow actually hits its target (even if it misses, strays or is
+blocked)"; and multiple-arrow attacks "trigger an explosion for each arrow", which W2d's
+per-arrow strikes already give.
+
+**NOT OBSERVED and the row says so:** 0 launches of projectile 735, 0 applies of 431 and 0
+impacts of 734 in the whole live corpus, so the wire shape is W2e's, measured on the one
+preparation retail did send (Kindle Arrows, `20260914T005758`).
+
+**Shipped.** `preparation_splash(...)`: opt-in via the `skill_effect` row's
+`adjacent_damage`, radius from the skills row's `aoe_range`, and each neighbour taking the
+bonus **through its own armour term** -- which is why it does not reuse `strike_adjacent`,
+Death Blossom's helper, whose measured wire is armour-IGNORING. Called from the landed hit,
+the blind miss and the block. `[skill_effect.431]` gains `adjacent_damage = "scale"` and
+deliberately no `damage_type` ("Unlike Kindle Arrows, the damage type of the arrows is not
+converted to fire"), so the arrow keeps the weapon's kind and only the explosion is fire.
+`--no-preparation-splash` reverts.
+
+**On the client** (`20260918T214133`, the bow under Ignite Arrows at three hostiles clustered
+90 u apart): every launch 735; the target's arrow word, impact 734, the preparation's word;
+then impact 734 and a word on agents 11 and 12, named as the splash, over two volleys. No
+assert. **Not modelled, named:** the page's "before the arrow itself hits", where W2e
+observed the opposite order 6 of 6 -- an observation outranks an ordering claim.
+
+`test_weapons` 105 -> 115 (114 bare), `test_content` 48, `test_mechanics` 246,
+`test_effects` 85, `test_playerswing` 191, `test_daggers` 103, `test_skilldamage` 67,
+`test_guards` 45, `test_agentlife` 551, `test_castcycle` 54, `test_srclint` 26,
+`test_checks` 17, `test_identlint` 28, `test_provlint` 19.
+
+---
+
 ### WEAPONS-W2g -- 2026-09-18 -- **tried, REGRESSED on the client and WITHDRAWN; and section 22.4's "owner choice" RETRACTED -- what we have is faithful** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) section 23)
 
 The operator answered section 22.4 with "faithfulness". Acting on that turned both its

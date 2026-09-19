@@ -1988,7 +1988,9 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   range (RUN-WEAPONS-2) is the instrument; W3 (scythe's extra targets and small
   critical), W4's rest (`587` damage type against armour's `527`, no repo armour row carries
   one yet; `633` requirement has no reader), Q10 (the unmet requirement's 1/3, `636` on
-  foci), a staff's `570` recharge word, Ignite Arrows' splash; no content spawn row
+  foci), a staff's `570` recharge word, ~~Ignite Arrows' splash~~ (section 24: it explodes on the target and on every
+  foe inside the client's own 156 u radius, armour-respecting, and fires even when
+  the arrow misses or is blocked); no content spawn row
   holds a ranged item yet. Q16 (the client walking a ranged follow to melee, MEASURED,
   its server-side arms EXHAUSTED
   §20) is a MOVECODE-side clear-the-follow change; the rest of the arc needs the owner
