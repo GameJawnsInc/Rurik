@@ -23,7 +23,7 @@ import agents  # noqa: E402
 import authsrv  # noqa: E402
 import combatmath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=150)   # the BARE-MACHINE number: 150 = 129 + 21 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=151)   # the BARE-MACHINE number: 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
 check = LEDGER.ok
 
 LEGACY_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
@@ -1601,7 +1601,44 @@ def section_weapon_sets():
         check(agents.PLAYER_WEAPON["item_type"] == 2 and agents.PLAYER_OFFHAND is None
               and authsrv.ATTACK_INTERVAL == rate(2) and st["weapon_set"] == 0,
               "and the axe is back, no off hand, the axe's interval")
+
+        # RUN-W9-2 (2026-09-19): a BASE change re-declares the 0x0035 (base,
+        # modifier) pair, and retail TIMES IT TO THE NEXT ATTACK START, not to
+        # the switch batch -- OBSERVED on RUN-1A (20260919T103604, agent 25):
+        # the axe->scythe switch at t=303.4 is answered by 0x0035 [25, 1.5, 1.0]
+        # at the observer's next swing t=323.5, spear+shield->axe at 590.7 by
+        # [25, 1.33, 1.0] at 597.0, and the two SAME-base switches sent none
+        # (2 of 2 each way). So the switch batch carries NO 0x0035; the pending
+        # is armed and `attack_speed_flush` sends it at the start.
+        st2 = {"agents": {}, "pos": (0.0, 0.0), "player_health": 480.0,
+               "weapon_set": 0}
+        authsrv.apply_party_character({"player_weapon": "starter_axe"})   # 1.33
+
+        def batch_then_flush(kk):
+            del sent[:]
+            authsrv.select_weapon_set(send, st2, kk, 1)
+            in_batch = [(op, v) for op, v in sent if op == 0x0035]
+            del sent[:]
+            authsrv.attack_speed_flush(send, st2, P)
+            at_start = [(op, v) for op, v in sent if op == 0x0035]
+            return in_batch, at_start
+
+        ib1, f1 = batch_then_flush(1)     # axe 1.33 -> scythe 1.5: base change
+        ib2, f2 = batch_then_flush(2)     # scythe 1.5 -> spear 1.5: same base
+        ib0, f0 = batch_then_flush(0)     # spear 1.5 -> axe 1.33: base change
+        A133, A150, A10 = authsrv._f32(1.33), authsrv._f32(1.5), authsrv._f32(1.0)
+        check(ib1 == [] and ib2 == [] and ib0 == []
+              and f1 == [(0x0035, [P, A150, A10])]
+              and f2 == []
+              and f0 == [(0x0035, [P, A133, A10])],
+              "RUN-W9-2: the switch batch carries no 0x0035; a base-changing "
+              "switch arms it for the NEXT start (axe->scythe 1.5, ->axe 1.33) "
+              "and a same-base switch arms nothing -- retail's 2/2 each way",
+              f"in-batch {ib1}/{ib2}/{ib0}, at-start {f1}/{f2}/{f0}")
+
         # nothing on a same-set press or an empty set
+        st["weapon_set"] = 0
+        authsrv.apply_party_character({"player_weapon": "starter_axe"})
         check(switch(0) == [] and st["weapon_set"] == 0,
               "a press on the ACTIVE set sends nothing (NOT OBSERVED on retail; the smaller claim)")
         authsrv.WEAPON_SETS[2] = None
