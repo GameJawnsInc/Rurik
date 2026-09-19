@@ -2218,3 +2218,58 @@ table on build 38797 -- the wiki lists it, the client does not name it -- so it 
 On the live corpus the only 527 conditions are 4 (345 armour pieces) and 3 (55), and the \
 armour term itself is server-side, so no tape can show the grouping; this row is the claim \
 the server makes and the first typed hit on a +N vs. elemental piece would test."""
+
+
+# ---- WEAPONS-Q2 (2026-09-19): THE BOW CLASSES, the client's own names ----------
+#
+# Identifier 609's argument on a type-5 bow is its class. The client's 609
+# tooltip handler (0x00924F71) reads the word on item type 5 only and indexes a
+# five-entry string table by it (`itemmods.py --bow-classes`); the ids resolve
+# (textrec.py) to Shortbow / Longbow / Flatbow / Recurve Bow / Hornbow. WEAPONS-C6
+# had the two 2.475 s classes as 1 and 3 with the rest unordered; this names them.
+[bow_class.table]
+name_ids = [69416, 69417, 69418, 69419, 69420]
+labels = ["shortbow", "longbow", "flatbow", "recurve", "hornbow"]
+
+[bow_class.table.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/itemmods.py"
+build = 38797
+verified = """OBSERVED on build 38797 (vault/client/2026-07-29_221c13772c7a), 2026-09-19: \
+`itemmods.py --bow-classes` locates the table (VA 0x00BCAAEC) from the 609 handler's own \
+shape -- `cmp dword [esi+0x20], 5` then `push dword [ebx*4+0xBCAAEC]` -- and textrec.py \
+resolves 69416 'Shortbow', 69417 'Longbow', 69418 'Flatbow', 69419 'Recurve Bow', 69420 \
+'Hornbow' (the line's template 69415 is 'Two-handed %str1%'). CORROBORATED on the live \
+corpus: the only bow durations retail has sent are 0x0035 base 2.475 on 609 classes 1 and 3 \
+(WEAPONS-C6, x10), and 1 and 3 are the Longbow and the Recurve Bow -- the wiki's two 2.475 s \
+classes -- a check this table could have failed. Kept in a row of its own so the wiki's \
+per-class numbers below can be refuted without touching the names."""
+
+# The wiki's per-class numbers: the attack rate ([attack_speed.rates] keys, whose
+# own row cites GWW "Attack speed" and is corroborated for three classes) and the
+# hornbow's bonus armour penetration. GWW "Hornbow": "Hornbows also have an
+# extra 10% armor penetration"; GWW "Armor penetration": a bonus AP that stacks
+# on top of the largest base AP; GWW "Armor calculation" step 3: the armour is
+# multiplied by (1 - penetration) and rounded, before the Special step where a
+# critical's -20 is taken. WIKI, unmeasured: no observing player held a hornbow
+# on any tape (the owner's bow is the 609 = 3 recurve; RUN-WEAPONS-1B holds the
+# five).
+[bow_class.rules]
+rates = ["shortbow", "longbow", "flatbow", "recurve", "hornbow"]
+armour_penetration = [0.0, 0.0, 0.0, 0.0, 0.10]
+
+[bow_class.rules.provenance]
+source = "wiki"
+page = """GWW "Hornbow" (read 2026-09-19): "Hornbows also have an extra 10% armor penetration"; \
+its statistics table: 2.7 seconds, "10% armor penetration". GWW "Armor penetration": bonus \
+armour penetration "does stack (adding them together) and add[s] to the largest base armor \
+penetration"; "Hornbows have an additional 10% AP on their attacks". GWW "Armor calculation" \
+sec. Step 3: "[Armor Rating] = [Armor Level] x (1 - [Armor Penetration])", the worked examples \
+rounding 60.75 to 61 and 98.25 to 98, the Special step (a critical) after it."""
+verified = """WIKI. The rates are the keys of [attack_speed.rates], indexed by the class the \
+client's own table names (shortbow / flatbow 2.025, longbow / recurve 2.475, hornbow 2.7); \
+the corpus corroborates 2.475 for classes 1 and 3 and has never sent a 0x0035 base for a \
+class 0, 2 or 4 bow. The penetration is applied as the wiki's step 3 -- the target's rating \
+times 0.9, to the nearest whole number (a .5 up, ours), before the critical's 20 comes off \
+-- and is UNMEASURED: no observing player held a hornbow on any tape. The anomaly the wiki \
+records ("sometimes it subtracts slightly more") is not modelled."""

@@ -28,6 +28,24 @@ move back.
 
 ---
 
+### WEAPONS-Q2 + the hornbow's 10 % -- 2026-09-19 -- **the client's own bow-class names close Q2 at the desk; a bow swings at its class's rate and a hornbow penetrates 10 %**
+
+[studies/weapons/PLAN.md](studies/weapons/PLAN.md) §32. The `609` tooltip handler
+(`0x00924F71`) reads the word on item type 5 only and indexes a five-entry string table by
+its argument; the ids resolve to 0 Shortbow, 1 Longbow, 2 Flatbow, 3 Recurve Bow, 4 Hornbow
+(OBSERVED), and the corpus's two 2.475 s classes (1 and 3, WEAPONS-C6) are the Longbow and the
+Recurve -- a check that could have failed. `itemmods.py --bow-classes` extracts it;
+`content/world.toml [bow_class.table]` carries it and `[bow_class.rules]` the wiki's rates
+(2.025 / 2.475 / 2.025 / 2.475 / 2.7) and the hornbow's 0.10. Ships: `weapon_rate_key` gives a
+type-5 bow its class's rate at the character's door and the hostile's entry (a type-28 NPC
+bow keeps 1.75); `penetrated_armour` is GWW "Armor calculation" step 3 -- the rating times
+0.9 to the nearest whole number, before the critical's 20 -- at `hit_enemy`, the scythe's
+extras, the preparation splash, `land_swing` and a body's swing on a body; the banner names
+the class; `--no-bow-classes` reverts. Unmeasured: no observer held a hornbow, shortbow or
+flatbow on any tape; RUN-1B's five clocks and a hornbow on the 100-armour suit measure it.
+Tests: `test_weapons` 21 (10 checks, floor 186 -> 195, a vault run 202) and
+`clientscan/test_itemmods` 15 (floor 42 -> 43); the combat, content and lint suites green.
+
 ### WEAPONS-W5b -- 2026-09-19 -- **a staff's `570`: "Halves skill recharge of spells", rolled at the completion**
 
 [studies/weapons/PLAN.md](studies/weapons/PLAN.md) §31. The word sits on 518 corpus staves and

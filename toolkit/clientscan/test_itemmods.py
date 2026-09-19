@@ -69,7 +69,7 @@ import pinned  # noqa: E402
 # each time the number was read off the run rather than predicted.
 # 2026-09-17: 38 -> 42, read off the run: section 4's vocabulary split in two,
 # section 10 gained the rune's two checks and 595's positional one.
-LEDGER = checks.Ledger("item modifiers", floor=42)
+LEDGER = checks.Ledger("item modifiers", floor=43)   # 2026-09-19: 42 -> 43, section 15 (the 609 bow-class table)
 
 # 2026-09-17: the upgrade-component batch (20260916T213125, 20260917T090355).
 COMPONENT_TYPE = 8          # 0x0161's item type on all 95 of them -- OBSERVED
@@ -715,6 +715,17 @@ def main():
                   f"deterministic, and this is the field that does not"
                   if split_file else
                   "file id determines it too, so the model result says nothing")
+
+    print("\n15. the 609 bow-class name table (WEAPONS-Q2, 2026-09-19)")
+    bc = itemmods.bow_class_table(img)
+    LEDGER.ok(bc["handler"] == img.u32(at["generic_table"] + (609 - itemmods.GENERIC_FIRST) * 4)
+              and bc["name_ids"] == [69416, 69417, 69418, 69419, 69420]
+              and len(set(bc["name_ids"])) == 5,
+              "the 609 handler opens with the bow-only guard and indexes five distinct "
+              "string ids by the word's argument -- Shortbow, Longbow, Flatbow, Recurve "
+              "Bow, Hornbow on the pin (textrec.py); content/world.toml [bow_class.table] "
+              "carries them",
+              f"handler {bc['handler']:#010x} table {bc['table']:#010x} {bc['name_ids']}")
 
     return LEDGER.verdict()
 

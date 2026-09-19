@@ -3623,7 +3623,7 @@ def scythe_extra_hit(send, state, aid, conn_id, rank, bonus_damage, damage_mult,
     through ITS armour, then retail's per-hit batch -- the gain, the first-hit
     maximum, the word (WEAPONS-W3). Returns the points dealt."""
     foe = state["agents"][aid]
-    armour = foe.get("armor_rating")
+    armour = penetrated_armour(foe.get("armor_rating"), agents.PLAYER_WEAPON)  # Q2 (0 for a scythe)
     critical = False
     if PLAYER_SWING_DAMAGE and rank is not None and armour is not None:
         critical = random.random() < critical_rate(rank) + (
@@ -3732,7 +3732,7 @@ def preparation_splash(send, state, prep_skill, prep_bonus, target_id, conn_id,
         foe = state.get("agents", {}).get(aid)
         if foe is None:
             continue
-        arm = foe.get("armor_rating")
+        arm = penetrated_armour(foe.get("armor_rating"), agents.PLAYER_WEAPON)  # Q2
         scale = (strike_multiplier(attack_strength(rank), float(arm))
                  if rank is not None and arm is not None and ARMOUR_TERM
                  else 1.0)
@@ -12339,6 +12339,16 @@ def requirement_banner(item, what="weapon", state=None):
                          f", {penalty}{'' if UNMET_REQUIREMENT else ' -- OFF'})")
     for chance in combatmath.half_recharge_chances((item,)):     # WEAPONS-W5b
         parts.append(f"halves spell recharge at {chance} %")
+    _bk = bow_class(item)                                        # WEAPONS-Q2
+    if _bk is not None:
+        _rk = weapon_rate_key(item)
+        _clause = f"a {bow_class_label(item)} (609 = {_bk})"
+        if _rk in agents.ATTACK_SPEED:
+            _clause += f" at {float(agents.ATTACK_SPEED[_rk])} s"
+        _pen = weapon_armour_penetration(item)
+        if _pen > 0.0:
+            _clause += f", +{_pen * 100:.0f} % armour penetration"
+        parts.append(_clause)
     return (f"{what}: " + ", ".join(parts) + " [WEAPONS-W4]") if parts else None
 
 
@@ -12373,6 +12383,78 @@ def body_weapon_items(agent):
         return (agents.item_template(key),)
     except Exception:                                     # noqa: BLE001
         return ()
+# ---- WEAPONS-Q2 / THE HORNBOW'S 10 % (2026-09-19): THE BOW CLASSES ------------
+#
+# Q2 closed at the desk: the client's own 609 handler indexes a five-name table
+# by the word's argument (itemmods.py --bow-classes; content/world.toml
+# [bow_class.table]) -- 0 shortbow, 1 longbow, 2 flatbow, 3 recurve, 4 hornbow --
+# and the corpus's two 2.475 s classes (1 and 3) are the longbow and the recurve.
+# [bow_class.rules] is the wiki's half: the class's [attack_speed.rates] key and
+# the hornbow's +10 % armour penetration (GWW "Hornbow"; "Armor calculation"
+# step 3: the rating times (1 - p), rounded, BEFORE the critical's 20 comes off).
+# The handler reads 609 on item type 5 only, so a type-28 NPC bow keeps its
+# type row's 1.75 whatever 609 it carries (retail tells its holders 1.75).
+BOW_CLASSES = True           # --no-bow-classes reverts: the type row's rate, no penetration
+ITEM_TYPE_BOW = 5
+
+
+def bow_class(item):
+    """The 609 class of a TYPE-5 bow (0..4), else None."""
+    if int((item or {}).get("item_type", -1)) != ITEM_TYPE_BOW:
+        return None
+    w = item_word(item, ITEM_WORD_BOW_CLASS)
+    if w is None or not 0 <= int(w[0]) < 5:
+        return None
+    return int(w[0])
+
+
+def bow_class_label(item):
+    k = bow_class(item)
+    if k is None:
+        return None
+    try:
+        return str(agents.WORLD.get("bow_class", "table")["labels"][k])
+    except Exception:                                     # noqa: BLE001
+        return f"class {k}"
+
+
+def weapon_rate_key(item):
+    """The [attack_speed.rates] key an item swings at: a bow's CLASS rate
+    (WEAPONS-Q2), else its type row's."""
+    k = bow_class(item) if BOW_CLASSES else None
+    if k is not None:
+        try:
+            key = str(agents.WORLD.get("bow_class", "rules")["rates"][k])
+            if key in agents.ATTACK_SPEED:
+                return key
+        except Exception:                                 # noqa: BLE001
+            pass
+    return WEAPON_TYPE_RATE.get(int((item or {}).get("item_type", -1)))
+
+
+def weapon_armour_penetration(item):
+    """The fraction of the target's armour a hit with `item` ignores -- the
+    hornbow's 0.10, 0.0 for everything else (WIKI, GWW "Hornbow")."""
+    k = bow_class(item) if BOW_CLASSES else None
+    if k is None:
+        return 0.0
+    try:
+        return float(agents.WORLD.get("bow_class", "rules")["armour_penetration"][k])
+    except Exception:                                     # noqa: BLE001
+        return 0.0
+
+
+def penetrated_armour(armour, item):
+    """WIKI (GWW "Armor calculation" step 3): the rating times (1 - p), to the
+    nearest whole number (a .5 up, ours). The critical's 20 and a casting
+    penalty are step 4 and come off AFTER, which is where swing_damage and
+    land_swing already take them. None stays None; p = 0 leaves it alone."""
+    if armour is None:
+        return None
+    p = weapon_armour_penetration(item)
+    if p <= 0.0:
+        return armour
+    return float(int(float(armour) * (1.0 - p) + 0.5))
 # HIT_COOLDOWN was here and is gone: it dated from when a click dealt a hit
 # directly, and nothing has read it since the swing moved onto ATTACK_INTERVAL.
 # A second, unused rate constant sitting beside the real one is exactly the
@@ -15288,7 +15370,8 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     critical = False
     rank = (weakened_rank(state, PLAYER_AGENT_ID, player_weapon_rank(state))
             if ARMOUR_TERM else None)                      # SKILLS-WK
-    armour = agent.get("armor_rating")
+    # WEAPONS-Q2: the hornbow's 10 % comes off the rating first (wiki step 3)
+    armour = penetrated_armour(agent.get("armor_rating"), agents.PLAYER_WEAPON)
     _prep_scale = 1.0                   # WEAPONS-W2e: the arrow's own armour term
     if exact is not None:
         dealt = float(exact) + bonus_damage
@@ -20917,6 +21000,7 @@ def land_swing_on_body(send, state, agent_id, agent, tid, conn_id, bonus=0.0,
     armour = row.get("armor_rating")
     if armour is None:
         armour = creature_armor_rating(row.get("npc") or {})
+    armour = penetrated_armour(armour, (body_weapon_items(agent) or (None,))[0])  # Q2
     if ARMOUR_TERM and armour is not None:
         dealt *= armour_multiplier(float(armour))
     # SLICE-H8: the attacker's own weapon range, when it has one.
@@ -21613,7 +21697,7 @@ def apply_party_character(prow, record_set0=True):
     if prow.get("player_weapon"):
         agents.PLAYER_WEAPON = agents.item_template(prow["player_weapon"])
         PLAYER_SWING_DAMAGE = weapon_damage_range(agents.PLAYER_WEAPON)
-        _rate = WEAPON_TYPE_RATE.get(int(agents.PLAYER_WEAPON.get("item_type", -1)))
+        _rate = weapon_rate_key(agents.PLAYER_WEAPON)             # WEAPONS-Q2: a bow's class
         if _rate and _rate in agents.ATTACK_SPEED:
             WEAPON_ATTACK_SPEED = ATTACK_INTERVAL = float(agents.ATTACK_SPEED[_rate])
         changed.append(f"weapon {prow['player_weapon']} ({PLAYER_SWING_DAMAGE}, "
@@ -23628,6 +23712,8 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
         # does not meet it); a body with no item stays the physical reading.
         armour = player_armour_at(location, damage_type=body_damage_type(agent),
                                   state=state)
+        # WEAPONS-Q2: a body's hornbow takes its 10 % off the rating first
+        armour = penetrated_armour(armour, (body_weapon_items(agent) or (None,))[0])
         if armour is not None:
             # SLICE-H14: Healing Signet's -40 while it is being used, AFTER
             # the capped rating (the wiki's own order; casting_armour_penalty).
@@ -25113,10 +25199,9 @@ def _spawn_one_enemy(send, state, agent_id, x, y, plane, conn_id, n_of=(1, 1)):
         "weapon_item": ENEMY_WEAPON_ITEM,                     # WEAPONS-W6a
     }
     if ENEMY_WEAPON_ITEM:
-        _erow = WEAPON_TYPE_ROW.get(int(agents.item_template(
-            ENEMY_WEAPON_ITEM).get("item_type", -1))) or {}
-        if _erow.get("rate") in agents.ATTACK_SPEED:
-            entry["attack_speed"] = float(agents.ATTACK_SPEED[_erow["rate"]])
+        _erk = weapon_rate_key(agents.item_template(ENEMY_WEAPON_ITEM))   # WEAPONS-Q2
+        if _erk in agents.ATTACK_SPEED:
+            entry["attack_speed"] = float(agents.ATTACK_SPEED[_erk])
     if ENEMY_BURROWS:
         entry.update({
             "burrow_phase": BURROW_EMERGING,
@@ -33227,6 +33312,12 @@ def main():
         print("RECHARGE: --no-half-recharge -- a held staff's 570 never halves a "
               "spell's recharge; every 0x00E5 carries the table's seconds "
               "[WEAPONS-W5b revert]", flush=True)
+    if a.no_bow_classes:
+        global BOW_CLASSES
+        BOW_CLASSES = False
+        print("BOWS: --no-bow-classes -- every type-5 bow swings at the type row's "
+              "2.475 whatever its 609 says, and no hornbow penetrates armour "
+              "[WEAPONS-Q2 revert]", flush=True)
     if a.no_projectiles:
         global RANGED_DELIVERY
         RANGED_DELIVERY = False

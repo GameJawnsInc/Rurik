@@ -1984,8 +1984,11 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   range (RUN-WEAPONS-2) is the instrument; ~~W3~~ (shipped 2026-09-19,
   `studies/weapons/PLAN.md` §26: the scythe's extras and its 2^0.125 critical), ~~W4's rest~~ shipped 2026-09-19 (§30: `587` against the pieces'
   `527` under its condition word, the `633` reader with `634` / `635` / `636`, the isle's 3.098
-  unmet divisor; left of W4: the hornbow's 10 % behind Q2, identifier `573` on four corpus
-  pieces, a spell's own type), ~~Q10~~ (the weapon's unmet term is the isle's, §30; the shield's
+  unmet divisor; left of W4: identifier `573` on four corpus pieces, a spell's own type;
+  ~~the hornbow's 10 %~~ and ~~Q2~~ closed 2026-09-19, §32: the client's own 609 handler names
+  the classes -- 0 shortbow, 1 longbow, 2 flatbow, 3 recurve, 4 hornbow, 1 and 3 the corpus's
+  2.475 s pair -- so a bow now swings at its class's rate and a hornbow takes 10 % off the
+  target's rating, WIKI, `--no-bow-classes` reverts), ~~Q10~~ (the weapon's unmet term is the isle's, §30; the shield's
   and focus's are WIKI; RUN-3 separates divisor from strike-level drop), ~~a staff's `570`
   recharge word~~ (shipped 2026-09-19, §31: a 20 % roll at a spell's completion halves its
   recharge to the nearest second on the player's and a hero's `0x00E5`; WIKI, unwitnessed on
