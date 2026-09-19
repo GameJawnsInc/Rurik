@@ -1593,3 +1593,56 @@ reply to a same-set or an empty-set press; whether a switch that moves the maxim
 43 on retail (needs a set holding a 556 item on a live tape -- the owner's own staff or focus
 would do); what the client does with `0x0152` (the two items exchanging slots is the reading);
 and the first field of the item family, 116 / 241 / 1 per instance, which ours sends as 1.
+
+## 28. RUN-W9-2 -- run and scored 2026-09-19: the swing after a switch, and the 0x0035 the switch owed
+
+**The question, pre-registered.** §27 shipped W9 and left "a swing after a switch, watched" open,
+on the assumption §26.5's `ATTACK_SPEED_AT_START` already covered a base change. It did not, and
+the run's job was to find out. Predictions, written before the launch: **P1** on our recorder,
+start-to-start ~1.33 s before the switch (axe), ~1.75 s after (hammer); **P2** a `0x0035 [1, 1.75,
+1.0]` rides the FIRST swing start after the switch, none before it; **P3** the client draws the
+hammer after the switch, no assert.
+
+**Retail's own answer was already on the 1A tape, and it is the mechanism.** The explorable
+connection's four switches are axe(1.33) -> scythe(1.5) -> spear(1.5) -> spear+shield(1.5) ->
+axe(1.33). Scanning it for `0x0035` to the observer (agent 25): three sends, and their timing is
+the finding. `[25, 1.33, 1.0]` at t=263 (the spawn/first swing, axe); `[25, 1.5, 1.0]` at t=323.5
+-- **twenty seconds after** the axe->scythe switch at t=303.4, i.e. at the observer's next swing,
+not in the switch batch; `[25, 1.33, 1.0]` at t=597.0, **six seconds after** the spear+shield->axe
+switch at t=590.7. The two SAME-base switches (scythe->spear, spear->spear+shield) sent **nothing**.
+So retail re-declares the `(base, 1.0)` pair at the NEXT ATTACK START after a base change, 2 of 2
+each way, and never for a same-base switch -- exactly `ATTACK_SPEED_AT_START`, but keyed on the
+weapon's base, which §26.5's rule (the STANCE factor) never armed.
+
+**The gap in our server, and the fix.** `select_weapon_set` changed `WEAPON_ATTACK_SPEED` /
+`ATTACK_INTERVAL` through `apply_party_character` but never armed `attack_speed_pending`; only
+`attack_speed_tick` (a stance factor change) did. So the server swung at the new interval while the
+client, never sent a new `0x0035`, kept animating the old base -- the silent split the pair exists
+to close. Fixed: when the base changes, `select_weapon_set` calls `_attack_speed_declare` with the
+current stance factor, and `attack_speed_flush` sends it at the next start (the same door JARIN's
+stance change uses). A same-base switch arms nothing.
+
+**On our recorder (`authsrv-20260919T160117`, from harness `20260919T160048`; `--enemy
+--practice-target --explorable --enemy-health 4000 --player-weapon starter_axe --weapon-set
+1=starter_hammer`, `attack:10` then F2 then `attack:10`, hands off).** Start-to-start: six gaps of
+**1.330** s (axe), then twelve of **1.750** s (hammer) -- P1, to the millisecond, no jitter. The
+switch's `SET_ACTIVE_WEAPON_SET` is at t=35.769 and carries no `0x0035`; the pair `[weapon set 1,
+1.75, 1.0]` goes out at t=36.442, which IS the first post-switch `attack_started` -- P2, the pair
+rode the start and not the batch, +0.673 s after the switch (retail's was +20 s / +6 s because the
+operator waited). The first hammer swing already used 1.75 (the last axe swing was t=34.692; the
+gap to 36.442 is 1.75).
+
+**On the client (harness `20260919T160048`).** The body swung the axe at the Hatcher before the
+switch (`2-attack.png`) and the hammer after it (`4-attack.png`, the hammer head at the right hand);
+no assert, no access violation, no disconnect through the whole chain -- the reset in the log is the
+harness teardown. P3.
+
+**Tests.** `test_weapons.py` §18 gains the RUN-W9-2 check (floor 150 -> 151, a vault run 153): the
+switch batch carries no `0x0035`, a base-changing switch (axe->scythe 1.5, ->axe 1.33) arms the
+pair for the next start, a same-base switch arms nothing -- retail's 2/2 each way. `test_mechanics`
+246, `test_playerswing` 191, `test_guards` 45, `test_agentlife` 551, `test_dispatch` 45 green.
+
+**W9 open list, now.** The same-set / empty-set replies (NOT OBSERVED, our smaller claim stands);
+`0x0152`'s client effect; the item family's first field (116 / 241 / 1 per instance, ours 1);
+whether retail re-sends 41 / 43 on a switch that moves the MAXIMUM ENERGY -- still INFERRED, no 556
+item was in any 1A set. RUN-W9-2 itself is closed.

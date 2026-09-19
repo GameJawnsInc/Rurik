@@ -2754,11 +2754,26 @@ def select_weapon_set(send, state, k, conn_id):
     s = WEAPON_SETS[k]
     player_pools(state)
     old_max_energy = player_max_energy(state)
+    old_base = WEAPON_ATTACK_SPEED
     agents.PLAYER_OFFHAND = None
     changed = apply_party_character({"player_weapon": s["lead"],
                                      "player_offhand": s.get("off")},
                                     record_set0=False)
     state["weapon_set"] = k
+    # RUN-W9-2 (2026-09-19): a base CHANGE re-declares the 0x0035 pair, and
+    # retail times it to the NEXT ATTACK START, not to this batch -- OBSERVED
+    # on RUN-1A (20260919T103604, agent 25): the axe->scythe switch at t=303.4
+    # is answered by 0x0035 [25, 1.5, 1.0] at t=323.5, the observer's next
+    # swing, and spear+shield->axe at 590.7 by [25, 1.33, 1.0] at 597.0; the
+    # two SAME-base switches (scythe->spear, spear->spear+shield) sent none, 2
+    # of 2 each way. So this arms the pending the way a stance change does
+    # (attack_speed_tick) and `attack_speed_flush` sends it at the start. A
+    # same-base switch arms nothing, as retail's do not. The MODIFIER is the
+    # current stance factor, unchanged by a weapon swap.
+    if WEAPON_ATTACK_SPEED != old_base:
+        _attack_speed_declare(send, state, PLAYER_AGENT_ID, WEAPON_ATTACK_SPEED,
+                              f"weapon set {k}",
+                              attack_interval_factor(state, PLAYER_AGENT_ID))
     # A held staff's or focus's 556 rides the maximum (WEAPONS-W5), so a set
     # whose energy word differs moves the pool -- and the client integrates
     # its orb from the maximum and the rate it was last told (test_pools 2a),

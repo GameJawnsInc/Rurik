@@ -1994,9 +1994,13 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   spear throws since §26 (143, flag 1, the 1600 class); ~~Q12~~ closed there (585 is the
   customisation word, W8 reads it); ~~W9, the weapon-set switch~~ shipped 2026-09-19 (§27:
   c2s `0x0032` answered with retail's one batch, `--weapon-set N=ITEM[+OFFHAND]`, F1-F4 on the
-  client) -- open after it: RUN-W9-2 (a swing after a switch, watched), retail's reply to a
-  same-set or empty-set press, and whether a switch that moves the maximum energy re-sends
-  41 / 43 on retail (INFERRED from the morale path; needs a 556 item in a set on a live tape).
+  client) -- ~~RUN-W9-2~~ ran 2026-09-19 (§28: a base-changing switch owed a `0x0035`, retail
+  sends it at the NEXT attack start not in the batch -- 2 of 2 base changes on the 1A tape, 2 of
+  2 same-base sent none -- and `select_weapon_set` now arms it; on the client the axe -> hammer
+  swing ran 1.33 -> 1.75 s with the pair riding the first post-switch start). Open after W9:
+  retail's reply to a same-set or empty-set press, `0x0152`'s client effect, and whether a switch
+  that moves the maximum energy re-sends 41 / 43 on retail (INFERRED; needs a 556 item in a set on
+  a live tape).
   Captures wanted: 1B (five bows, staff, wand — predicts 1200 / 1600 / 2800 u/s), 2
   (range: every range here is WIKI or reconstructed, and 1A's spear PARKED at 0.75 × the
   wiki's number, §25.4 — the run must separate park from range).

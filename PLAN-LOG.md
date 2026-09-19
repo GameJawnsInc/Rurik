@@ -28,6 +28,25 @@ move back.
 
 ---
 
+### RUN-W9-2 -- 2026-09-19 -- **the swing after a weapon-set switch: a base change owes a `0x0035`, and retail times it to the next attack START**
+
+[studies/weapons/PLAN.md](studies/weapons/PLAN.md) §28. The 1A tape (`20260919T103604`, agent
+25) settles the mechanism: retail re-declares the `0x0035 [agent, base, 1.0]` pair at the
+observer's NEXT SWING after a base-changing switch, not in the switch batch -- axe->scythe by
+`[25, 1.5, 1.0]` 20 s later, spear+shield->axe by `[25, 1.33, 1.0]` 6 s later, and the two
+same-base switches (scythe->spear, spear->spear+shield) sent nothing, 2 of 2 each way -- exactly
+`ATTACK_SPEED_AT_START` but keyed on the weapon's base, which §26.5's stance-factor rule never
+armed. Our `select_weapon_set` changed the interval and never armed `attack_speed_pending`, so
+the client kept animating the old speed; fixed by arming the pending on a base change (the same
+door `attack_speed_tick` uses), `attack_speed_flush` sending it at the start. RUN
+(`authsrv-20260919T160117` / harness `20260919T160048`, axe set 0 / hammer set 1, `attack:10`,
+F2, `attack:10`, hands off): start-to-start six gaps of 1.330 s then twelve of 1.750 s; the
+`SET_ACTIVE_WEAPON_SET` at t=35.769 carried no `0x0035` and the pair `[1, 1.75, 1.0]` rode the
+first post-switch swing at t=36.442; on the client the body drew the hammer, no assert. Test:
+`test_weapons` §18 (floor 150 -> 151), `test_mechanics` / `test_playerswing` / `test_guards` /
+`test_agentlife` / `test_dispatch` green. RUN-W9-2 closed; the same-set / empty-set replies,
+`0x0152`'s client effect and the 41 / 43 re-send stay open.
+
 ### WEAPONS-W9 -- 2026-09-19 -- **the weapon-set switch: c2s `0x0032` answered with retail's one batch, sets 1-3 filled by `--weapon-set`, F1-F4 reproduced on the client**
 
 [studies/weapons/PLAN.md](studies/weapons/PLAN.md) §27. Read off RUN-WEAPONS-1A
