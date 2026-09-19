@@ -634,3 +634,58 @@ def requirement_met(item, rank_of):
     have = (rank_of.get(attribute, 0) if hasattr(rank_of, "get")
             else rank_of(attribute))
     return have is not None and int(have) >= rank
+
+
+# ---- WEAPONS-W5b (2026-09-19): A STAFF'S 570 -- "HALVES SKILL RECHARGE OF SPELLS"
+#
+# THE WORD, OBSERVED: identifier 570 sits on 518 of the corpus's staves and on
+# nothing else (aw_570census, 96 connections) -- (arg, arg2) = (16, 1) x333,
+# (17, 1) x104, (15, 1) x53, (14, 1) x18, (10, 1) x8, (20, 0) x2 -- and the
+# tooltip handler (0x009260A2) renders `arg` through 2439 `%str1%: %num1%%%`
+# under 2376 `Chance` and the line 2432 `Halves %str1% of spells` with 2392
+# `skill recharge`: "Halves skill recharge of spells (Chance: 16%)". `arg2`
+# only picks a display-record variant (both read the same), unread further.
+# GWW "Staff": "Halves skill recharge of spells (Chance: 10...20%)", an
+# inherent property of nearly every staff -- the corpus's 10..20.
+#
+# THE RULE IS WIKI, and NO tape can witness it: no observing player and no
+# hero ever cast a spell holding a staff (the JARIN hero held a sword; the
+# players' leads were wands, bows, hammers, swords, daggers). GWW "HSR" (read
+# 2026-09-19): it "affects only spells"; a staff's inherent one maxes at 20 %,
+# an inscription's at 10 %, a wand's or focus's attribute-specific one at
+# 20 %; "capped at 50%, i.e. the skill recharge time ... can only be halved at
+# best". GWW "Recharge time": the recharge "is calculated as the skill
+# finishes activating"; "effects that alter recharge time round to the
+# nearest second". So: rolled at the completion, on a spell, each 570 held its
+# own trigger, any success a halving, the halved value rounded to the nearest
+# whole second (a .5 rounds UP -- RECONSTRUCTION, the wiki does not say which
+# way). "Spell" is the client's own type column (studies/skills 35.3, the
+# namer's words): 4 Hex Spell, 5 Spell, 6 Enchantment Spell, 9 Well Spell, 11
+# Ward Spell, 24 Item Spell, 25 Weapon Spell -- GWW "Skill type" lists exactly
+# those six subtypes under Spell. The attribute-specific wand / focus form is
+# not on any corpus item and is not modelled; the generic inscription would
+# be a 570 on a non-staff and reads the same way here.
+HALF_RECHARGE_MODIFIER = 570
+SPELL_TYPE_CODES_HSR = frozenset({4, 5, 6, 9, 11, 24, 25})
+
+
+def half_recharge_chances(items):
+    """The chance (percent) of every 570 word among `items`, in order."""
+    out = []
+    for item in items:
+        for ident, arg, _a2 in item_words(item):
+            if ident == HALF_RECHARGE_MODIFIER:
+                out.append(int(arg))
+    return out
+
+
+def is_spell_type(type_code):
+    try:
+        return int(type_code) in SPELL_TYPE_CODES_HSR
+    except (TypeError, ValueError):
+        return False
+
+
+def halved_recharge(seconds):
+    """Half of a whole-second recharge, to the nearest second, .5 up."""
+    return int(float(seconds) / 2.0 + 0.5)

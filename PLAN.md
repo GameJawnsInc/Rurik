@@ -1986,8 +1986,10 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   `527` under its condition word, the `633` reader with `634` / `635` / `636`, the isle's 3.098
   unmet divisor; left of W4: the hornbow's 10 % behind Q2, identifier `573` on four corpus
   pieces, a spell's own type), ~~Q10~~ (the weapon's unmet term is the isle's, §30; the shield's
-  and focus's are WIKI; RUN-3 separates divisor from strike-level drop), a staff's `570`
-  recharge word, ~~Ignite Arrows' splash~~ (section 24: it explodes on the target and on every
+  and focus's are WIKI; RUN-3 separates divisor from strike-level drop), ~~a staff's `570`
+  recharge word~~ (shipped 2026-09-19, §31: a 20 % roll at a spell's completion halves its
+  recharge to the nearest second on the player's and a hero's `0x00E5`; WIKI, unwitnessed on
+  any tape -- RUN-1B's staff should cast one 5 s spell ten times), ~~Ignite Arrows' splash~~ (section 24: it explodes on the target and on every
   foe inside the client's own 156 u radius, armour-respecting, and fires even when
   the arrow misses or is blocked); no content spawn row
   holds a ranged item yet. Q16 (the client walking a ranged follow to melee, MEASURED,

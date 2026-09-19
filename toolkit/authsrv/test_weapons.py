@@ -23,7 +23,7 @@ import agents  # noqa: E402
 import authsrv  # noqa: E402
 import combatmath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=177)   # the BARE-MACHINE number: 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=186)   # the BARE-MACHINE number: 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
 check = LEDGER.ok
 
 LEGACY_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
@@ -2074,6 +2074,123 @@ def section_damage_type_and_requirement():
          authsrv.TYPED_ARMOUR, authsrv.UNMET_REQUIREMENT, agents.item_template) = saved
 
 
+def section_half_recharge():
+    print("\n20. WEAPONS-W5b: a staff's 570 -- halves a spell's recharge at the completion")
+    cm = combatmath
+    saved = (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+             authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,
+             authsrv.HALF_RECHARGE, authsrv.half_recharge_roll)
+    try:
+        item = agents.item_template
+        hsr = item("hsr_staff")
+        check(cm.item_words(hsr)[:4] == cm.item_words(item("caster_staff"))
+              and cm.item_words(hsr)[4] == (570, 20, 1)
+              and (int(hsr["modifiers"][4]) >> 19) & 1 == 1
+              and cm.half_recharge_chances((hsr,)) == [20]
+              and cm.half_recharge_chances((item("caster_staff"), item("starter_wand"),
+                                            item("starter_focus"), None)) == []
+              and cm.half_recharge_chances((hsr, hsr)) == [20, 20],
+              "hsr_staff is the henchman's staff plus one 570 (arg 20, arg2 1, bit 19 -- the "
+              "corpus's encoding); the reader lists one chance per 570 held and none for the "
+              "corpus's other caster items")
+        check([cm.halved_recharge(s) for s in (0, 1, 2, 3, 4, 5, 8, 12, 20, 45)]
+              == [0, 1, 1, 2, 2, 3, 4, 6, 10, 23],
+              "half a whole-second recharge to the nearest second, a .5 rounding UP: 5 -> 3, "
+              "3 -> 2, 45 -> 23, 1 -> 1 (WIKI 'round to the nearest second'; the .5 is ours)")
+        check(all(cm.is_spell_type(c) for c in (4, 5, 6, 9, 11, 24, 25))
+              and not any(cm.is_spell_type(c) for c in (3, 7, 8, 10, 12, 14, 15, 16, 19, 22))
+              and not cm.is_spell_type(None),
+              "the spell types are the client namer's own seven -- hex, spell, enchantment, "
+              "well, ward, item and weapon spell -- and a stance, signet, condition, glyph, "
+              "attack, shout, preparation or ritual is not one")
+        # the roll, rigged
+        r = authsrv.half_recharge_roll
+        check(r((hsr,), 83, rng=lambda: 0.199) == (True, [20])
+              and r((hsr,), 83, rng=lambda: 0.20) == (False, [20])
+              and r((hsr,), 1, rng=lambda: 0.0) == (False, [20])
+              and r((item("caster_staff"),), 83, rng=lambda: 0.0) == (False, [])
+              and r((), 83, rng=lambda: 0.0) == (False, []),
+              "the roll: under 20 % halves a spell (83, type 5), at or over it does not; a "
+              "signet (1) never; a staff with no 570 or empty hands never")
+        draws = iter([0.5, 0.1])
+        check(r((hsr, hsr), 83, rng=lambda: next(draws)) == (True, [20, 20]),
+              "two 570s are two triggers: the second succeeding halves when the first missed "
+              "(the cap is a halving, so one success is the whole effect)")
+        authsrv.HALF_RECHARGE = False
+        check(r((hsr,), 83, rng=lambda: 0.0) == (False, [20]),
+              "--no-half-recharge: never, the chances still read")
+        authsrv.HALF_RECHARGE = True
+        # through the real press -> completion: the E5's integer and the E6 clock
+        try:
+            row = agents.WORLD.get("skills", "83")
+            ok_row = (int(row["type_code"]) == 5 and int(row["recharge"]) == 5
+                      and int(row["energy"]) <= 10)
+        except Exception:                                                  # noqa: BLE001
+            ok_row = False
+        if not ok_row:
+            LEDGER.skip("section 20", "skill 83's row (a 5 s self spell) is absent -- 3 checks")
+        else:
+            P = authsrv.PLAYER_AGENT_ID
+
+            def press_spell(force):
+                authsrv.half_recharge_roll = (
+                    lambda items, sid, rng=None, _o=r: _o(items, sid, rng=lambda: force))
+                authsrv.apply_party_character({"player_weapon": "hsr_staff"})
+                st, sent = _world(300.0), []
+                send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+                authsrv.handle_skill_press([0, 83, 0, P], send, st, 1,
+                                           authsrv.GAME_CMSG_USE_SKILL)
+                sent.clear()
+                casts = st.get("pending_casts") or []
+                for cast in casts:
+                    for k in ("begin_at", "e5_at", "e3_at", "e6_at"):
+                        cast[k] -= float(cast.get("activation", 1.0)) + 0.05
+                authsrv.cast_tick(send, st, 1)
+                e5 = [v for op, v in sent if op == 0x00E5]
+                cast = casts[0] if casts else {}
+                return e5, cast
+
+            e5_h, cast_h = press_spell(0.0)                 # the roll succeeds
+            e5_t, cast_t = press_spell(0.99)                # the roll misses
+            check(e5_h == [[P, 83, 0, 3]] and cast_h.get("recharge") == 3
+                  and abs(cast_h["e6_at"] - cast_h["e5_at"] - 3.0) < 1e-6,
+                  "a spell completing under a 570 that triggers: the 0x00E5 carries 3 where "
+                  "the table says 5, and the E6 clock is 3 s past the E5", f"{e5_h} / {cast_h}")
+            check(e5_t == [[P, 83, 0, 5]] and cast_t.get("recharge") == 5
+                  and abs(cast_t["e6_at"] - cast_t["e5_at"] - 5.0) < 1e-6,
+                  "and one whose roll misses carries the table's 5 with the E6 5 s out",
+                  f"{e5_t}")
+            authsrv.HALF_RECHARGE = False
+            e5_off, _c = press_spell(0.0)
+            authsrv.HALF_RECHARGE = True
+            check(e5_off == [[P, 83, 0, 5]],
+                  "--no-half-recharge: the table's 5 even when the roll would have hit")
+        authsrv.half_recharge_roll = r
+        # a body: its staff's roll rides its own 0x00E5 through cast_recharge
+        body = {"weapon_item": "hsr_staff"}
+        check(authsrv.body_weapon_items(body) == (hsr,)
+              and authsrv.body_weapon_items({}) == ()
+              and authsrv.body_weapon_items({"weapon_item": "no_such"}) == ()
+              and r(authsrv.body_weapon_items(body), 83, rng=lambda: 0.0) == (True, [20]),
+              "a body holding hsr_staff rolls the same 20 %; a body with nothing or an "
+              "unknown key never")
+        src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+        sargs = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
+        check('agent.pop("cast_recharge",' in src
+              and 'agent["cast_recharge"] = recharge' in src
+              and "cast[\"e6_at\"] = cast[\"e5_at\"] + cast[\"recharge_s\"]" in src
+              and '"--no-half-recharge"' in sargs,
+              "the body's halved value is stashed at its start and popped into its 0x00E5; "
+              "the player's E6 clock moves with the halving; the revert flag exists")
+        check("halves spell recharge at 20 %" in (authsrv.requirement_banner(hsr) or "")
+              and "halves" not in (authsrv.requirement_banner(item("caster_staff")) or ""),
+              "the launch banner names the chance, and says nothing for a staff without one")
+    finally:
+        (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+         authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,
+         authsrv.HALF_RECHARGE, authsrv.half_recharge_roll) = saved
+
+
 def main():
     section_table()
     section_skills()
@@ -2094,6 +2211,7 @@ def main():
     section_customisation()
     section_weapon_sets()
     section_damage_type_and_requirement()
+    section_half_recharge()
     return LEDGER.verdict()
 
 

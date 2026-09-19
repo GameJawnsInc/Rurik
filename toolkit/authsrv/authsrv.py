@@ -12337,7 +12337,42 @@ def requirement_banner(item, what="weapon", state=None):
                        f"damage / {combatmath.UNMET_REQUIREMENT_DIVISOR}")
             parts.append(f"requires attribute {req[0]} at {req[1]}: UNMET (rank {have}"
                          f", {penalty}{'' if UNMET_REQUIREMENT else ' -- OFF'})")
+    for chance in combatmath.half_recharge_chances((item,)):     # WEAPONS-W5b
+        parts.append(f"halves spell recharge at {chance} %")
     return (f"{what}: " + ", ".join(parts) + " [WEAPONS-W4]") if parts else None
+
+
+# ---- WEAPONS-W5b (2026-09-19): THE 570 ROLL -- the rule is combatmath's block
+HALF_RECHARGE = True         # --no-half-recharge reverts: the table's recharge, always
+
+
+def half_recharge_roll(items, skill_id, rng=None):
+    """Does a held 570 halve this cast's recharge? Every 570 among `items`
+    rolls at its own chance (a staff's inherent one, an inscription's --
+    each its own trigger, the total capped at a halving); a non-spell never;
+    nothing with the feature off. Returns (halved, [chances])."""
+    chances = combatmath.half_recharge_chances(items)
+    if not chances or not HALF_RECHARGE:
+        return False, chances
+    try:
+        code = int(agents.WORLD.get("skills", str(skill_id))["type_code"])
+    except Exception:                                     # noqa: BLE001
+        return False, chances
+    if not combatmath.is_spell_type(code):
+        return False, chances
+    draw = rng if rng is not None else random.random
+    return any(draw() < c / 100.0 for c in chances), chances
+
+
+def body_weapon_items(agent):
+    """The content item a body holds, as a one-tuple, or () -- for the roll."""
+    key = (agent or {}).get("weapon_item")
+    if not key:
+        return ()
+    try:
+        return (agents.item_template(key),)
+    except Exception:                                     # noqa: BLE001
+        return ()
 # HIT_COOLDOWN was here and is gone: it dated from when a click dealt a hit
 # directly, and nothing has read it since the swing moved onto ATTACK_INTERVAL.
 # A second, unused rate constant sitting beside the real one is exactly the
@@ -17448,6 +17483,27 @@ def cast_tick(send, state, conn_id):
                     print(f"[c{conn_id}] skill {cast['skill_id']}: {_why}; "
                           f"released as a cancel", flush=True)
                     continue
+            # WEAPONS-W5b: a held staff's 570 ("Halves skill recharge of
+            # spells (Chance: N%)") rolls HERE, at the completion -- WIKI (GWW
+            # "Recharge time"): the recharge "is calculated as the skill
+            # finishes activating", an altered one rounds "to the nearest
+            # second", and HSR "affects only spells" (GWW "HSR"). The halved
+            # integer rides this 0x00E5, the client's only source for the
+            # sweep, and the E6 clock moves with it. No tape can witness it
+            # -- no observing player or hero ever cast holding a staff
+            # (studies/weapons 31); the rule is combatmath's W5b block.
+            if cast["recharge"] > 0 and not cast.get("no_e6"):
+                _hsr, _hch = half_recharge_roll(
+                    ((agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND)
+                     if EQUIP_WEAPON else ()), cast["skill_id"])
+                if _hsr:
+                    _was = cast["recharge"]
+                    cast["recharge"] = combatmath.halved_recharge(_was)
+                    cast["recharge_s"] = float(cast["recharge"])
+                    cast["e6_at"] = cast["e5_at"] + cast["recharge_s"]
+                    print(f"[c{conn_id}] skill {cast['skill_id']}: recharge "
+                          f"{_was} -> {cast['recharge']} s, a held item's 570 "
+                          f"(chance {_hch} %) [WEAPONS-W5b]", flush=True)
             send(GAME_SMSG_SKILL_RECHARGE,
                  [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"],
                   cast["recharge"]],
@@ -20559,6 +20615,19 @@ def ally_cast_tick(send, state, conn_id):
                      * attack_interval_factor(state, agent_id))
         if _atk and now - agent.get("last_swing", 0.0) < _interval:
             continue
+        # WEAPONS-W5b: a body's staff 570, rolled at its START (a body never
+        # swaps mid-cast, so the start and the completion read the same item;
+        # the player's rolls at the completion, where the wiki computes it);
+        # the halved value rides the hero's own 0x00E5 through cast_recharge.
+        if recharge > 0:
+            _hsr, _hch = half_recharge_roll(body_weapon_items(agent), skill_id)
+            if _hsr:
+                _was = recharge
+                recharge = float(combatmath.halved_recharge(recharge))
+                print(f"[body] agent {agent_id} skill {skill_id}: recharge "
+                      f"{_was:.0f} -> {recharge:.0f} s, its staff's 570 (chance "
+                      f"{_hch} %) [WEAPONS-W5b]", flush=True)
+        agent["cast_recharge"] = recharge
         agent["cast_target"] = target
         agent["skill_ready"][slot] = now + recharge
         agent["last_slot"] = slot
@@ -23791,7 +23860,8 @@ def land_skill(send, state, agent_id, agent, conn_id):
     if slot is not None and slot < len(skills):
         # JARIN: a hero's completion rides the skill family (0x00E5, 0x00E3).
         hero_skill_messages(send, state, agent_id, agent, skill_id,
-                            skills[slot][2] if len(skills[slot]) > 2 else 0,
+                            agent.pop("cast_recharge",          # WEAPONS-W5b
+                                      skills[slot][2] if len(skills[slot]) > 2 else 0),
                             time.time())
     # SLICE-H3: a RESURRECTION lands -- the finish, then the target stands
     # (retail: [60] -> 3.0 s -> [id, 0], F28). Nothing else of a cast applies.
@@ -33151,6 +33221,12 @@ def main():
         print("DAMAGE: --no-unmet-requirement -- an item's 633 is read and printed "
               "and costs nothing: a weapon deals its met damage, a shield and a "
               "focus give their met values [WEAPONS-W4 revert]", flush=True)
+    if a.no_half_recharge:
+        global HALF_RECHARGE
+        HALF_RECHARGE = False
+        print("RECHARGE: --no-half-recharge -- a held staff's 570 never halves a "
+              "spell's recharge; every 0x00E5 carries the table's seconds "
+              "[WEAPONS-W5b revert]", flush=True)
     if a.no_projectiles:
         global RANGED_DELIVERY
         RANGED_DELIVERY = False
