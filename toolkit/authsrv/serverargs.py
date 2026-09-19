@@ -1670,6 +1670,11 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "leg at the weapon's range. The reach gate still opens the "
                          "swing at range; what this restores is the server's own "
                          "copy walking 1,400 u past it.")
+    ap.add_argument("--no-scythe-extras", action="store_true",
+                    help="WEAPONS-W3 REVERT: a scythe swing lands on its target only. "
+                         "Retail's scythe hits up to two more bodies inside ~80 u of the "
+                         "target and 180 u of the attacker, each its own roll and critical, "
+                         "their words written before the target's (RUN-WEAPONS-1A).")
     ap.add_argument("--no-preparation-splash", action="store_true",
                     help="WEAPONS-W7 REVERT: a preparation's own damage lands on the "
                          "arrow's target only. Ignite Arrows (431) is 'to target and all "

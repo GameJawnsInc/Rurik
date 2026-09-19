@@ -193,7 +193,7 @@ hostiles stop "swinging" from 1,248 units and shoot. Deliberately NOT in W2: str
 obstructed, dodged, and height — they need line of sight and a moving-target model, and
 get their own package once the straight shot is right. Control flag: `--no-projectiles`.
 
-**WEAPONS-W3 — melee completions.** The axe row and item. The scythe: up to two more
+**WEAPONS-W3 — melee completions. SHIPPED 2026-09-19 (section 26.2): the scythe's extras and its 2^(5/40) critical, on the terms RUN-1A measured.** The axe row and item. The scythe: up to two more
 foes in melee range of the target and within 180 of the player, each hit rolled and
 worded on its own (wire shape is Q5 — one start and how many `[1]` / 46 / words), and its
 critical at 2^(5/40) if Q5 confirms GWW. The sword's short gap after a skill's hit
@@ -254,7 +254,7 @@ exposure floor and an abort written down.
 | WEAPONS-Q9 | ~~What `634` beside every `633` holds~~ **closed §9: the required weapon's damage range (max, min), in place of `584`** | — |
 | WEAPONS-Q10 | The unmet-requirement term — weapon, shield, focus | RUN-3 |
 | WEAPONS-Q11 | ~~Does GWW's critical formula reproduce the five measured rates?~~ **closed §17: NO — 8 / 9 / 11 / 13 / 14 % predicted against 6 / 16 / 19 / 24 / 34 % measured; the table stays the measurement** | — |
-| WEAPONS-Q12 | Is ×1.2 already inside the isle study's PvP-weapon numbers? | desk, then RUN-3 — candidate from section 25.5: every PvP-made weapon carries modifier (585, 120, 0) and no NPC item does; if 585 is the customisation word the desk half is a grep |
+| WEAPONS-Q12 | Is ×1.2 already inside the isle study's PvP-weapon numbers? | **CLOSED, section 26.3** (2026-09-19): YES — the isle's own sword carries (585, 120, 0), its tooltip read +20 % and its fit was the customised 18..26 range; 585 is the customisation word, CORROBORATED over 85 corpus items; WEAPONS-W8 reads it |
 | WEAPONS-Q13 | The sword's short gap after a skill's hit (from DAGGERS §9) | desk, `timingjoin.py --swings` |
 | WEAPONS-Q14 | ~~Dual Shot's second arrow~~ **closed §18: two strike records, each its own roll and word; the 25 % is WIKI, unmeasured** | — |
 | WEAPONS-Q15 | ~~A preparation's own word and its substituted arrow~~ **closed §19: shipped as W2e** | — |
@@ -1249,6 +1249,12 @@ run), 168 words in all, 54 launches each closed by its `0x00A7`. The 8 starts wi
 word are swings cut by the operator moving or re-targeting (7 in block 3) and the last
 start of block 6, cut by the end.
 
+The wire-timestamp bar these instants inherit (`test_tickclock.py`'s convention): the
+Isle connection's tick residual closes at -2.3 ms over 404 s with a 301 ms envelope at
+one point (160 s, during the walk to the suits) -- below every p50 quoted here by an
+order of magnitude. The outpost connection of the same capture is the corpus's third
+step connection (one 2.58 s stall, +75.9 ms after it); no clock was read there.
+
 Block 4's launch delay alternates 0.635 / 0.651 while its start->start alternates
 1.515 / 1.486: the launches sit on an exact 1.500 s grid (492.385, 493.885, 495.385, ...)
 and the wobble is in the start message's wire time, not in the windup. Block 5's starts
@@ -1406,3 +1412,96 @@ the melee blocks; the player's Windborne Speed (`0x0042` skill 160, `0x0027` at 
 * the critical's size to better than one sample -- RUN-3's scythe block;
 * the spear's range against its park distance -- RUN-2's design, section 25.4;
 * the meaning of `0x0086`'s kind numbers, of `0x008C`, and of modifier 585.
+
+## 26. After RUN-1A, the owner-free rungs -- 2026-09-19: the spear throws, WEAPONS-W3 ships the scythe's extras and small critical, WEAPONS-W8 reads the customisation word, Q12 closes, W9 is registered
+
+Everything below is what section 25's tape unlocked without another capture. Nothing
+here touches the items that still wait for one (the scythe's cap, the critical to more
+than one sample, the spear's range against its park).
+
+### 26.1 The spear throws -- W2a's last row
+
+`[weapon_type.spear]` gains `projectile = 143`, `arrow = 1`, `projectile_speed = 1600`
+and `range = 1004`, each argued in the row: 143 and 1 are 54 of 54 on the tape; 1600 is
+the class the corpus measured with error-cancelling geometry, taken over the tape's
+1594 because a ~3 u offset between the client's report of its own stop and the
+server's body is the whole gap; 1004 is WIKI's, because the tape says only >= 755
+(section 25.4). `weapon_ranged()` needed nothing else -- the row was the gate -- so the
+press now opens from 1004 u, the windup releases a `0x00A4 [143, handle, 1]`, and the
+`0x00A7` closes it with kind 1. `test_weapons.py` section 15 throws one from 755 u
+through the real loop and reads the flight at 755 / 1600. The W2a comment that named
+the spear as the type "whose projectile id is unmeasured" now says when that stopped.
+
+### 26.2 WEAPONS-W3 -- the scythe's extra targets and its 2^0.125 critical
+
+**Extras.** `scythe_extras(state, target, attacker_pos)` picks up to
+`SCYTHE_EXTRA_MAX` = 2 living hostiles that stand inside `scythe_extra_reach()` of the
+target AND `SCYTHE_EXTRA_ATTACKER_REACH` = 180 u of the attacker, nearest the target
+first. `scythe_extra_reach()` is r + r + the client's def pad = **80 u** with our radii
+-- the disc the follow parks on, read as the wiki's "in melee range of the target". That
+is a RECONSTRUCTION placed inside the tape's OBSERVED bracket of [78, 94) (section
+25.3), and the constant is a function rather than a literal so a narrower bracket
+moves one line. `scythe_extra_hit()` gives each extra its own roll, its own critical,
+its own armour term, its own `0x00CF` gain, its first-hit maximum and its word, and
+`hit_enemy` runs them BEFORE the target's own gain and word -- retail's order, 29 of 29.
+`--no-scythe-extras` reverts. Player-side only: a body's scythe extras are named in
+the constants' comment and not built, and bodies roll no criticals here to begin with.
+Also named, not modelled: a block or a blind miss on an extra.
+
+**The critical.** `[weapon_type.scythe]` carries `critical_armour_reduction = 5`;
+`weapon_critical_reduction(item)` reads it (20, the root-two term, for every row that
+says nothing) and `swing_damage` takes it per call, so a scythe's critical is
+2^(5/40) = x1.09 where every other weapon's is 2^(20/40) = x1.41. The mechanism is the
+one combatmath already had -- a critical is the maximum roll against the target's
+armour less a constant -- with the constant made the type's. Section 25.3's bound
+(1.0 < c < 1.40 from one critical, no free parameter) is what admits 5 and refuses 20.
+
+**Tests**, `test_weapons.py` section 16, nine checks: 78 u hit and 94 u missed with
+both inside 180 of the player and the extra's word first; a gain ahead of each word;
+179 u hit and 186 u missed at the attacker's edge; three candidates give two words, the
+nearest to the target; a sword in the same geometry hits one body; the revert flag;
+the two multipliers 1.091 and 1.414 on a maximum roll; and a forced critical's
+scythe-to-sword ratio 2^(-15/40) through the primary hit.
+
+### 26.3 WEAPONS-W8 -- the customisation word, and WEAPONS-Q12 CLOSED
+
+A corpus scan for modifier 585 (this run's scratch, `weaponcensus.items_of` over the
+29 live captures): **85 items carry it, every one at arg 120**, and all but one are the
+owner's own weapons -- in an own weapon set or a player's `0x006E`; no hostile's item
+has it. Among them is the isle study's sword (item 205 on the `20260821` tapes), and
+[studies/isle/FINDINGS.md](../isle/FINDINGS.md) records that item's own tooltip as
+*"Damage +20% ... customized"* and its damage fit as *"an integer roll over the
+customized range 18..26"*. Two witnesses that do not share a source -- the client's
+tooltip text as the operator read it, and the corpus distribution -- so **CORROBORATED:
+585 is the customisation word and its arg the percentage.** Not OBSERVED from the
+binary: `clientscan/itemmods.py` does not name the identifier.
+
+**Q12's desk half is YES.** The isle's numbers were taken on a customised weapon, its
+formula was fitted on the x1.2 range, and the study's own scope statement already says
+"for a customized martial weapon". Any table that quotes the isle's damage numbers
+quotes the customised ones. CLOSED.
+
+**Shipped:** `combatmath.weapon_damage_range()` scales the range's two ends by
+arg / 100, integer floor (15-22 with 585 = 120 reads 18-26, the isle's own fit), when an
+item carries the word. No repo item does, so nothing the server deals changes today;
+an operator's item row that carries it will. `test_weapons.py` section 17, three checks.
+
+### 26.4 WEAPONS-W9 -- registered, not started: the weapon-set switch
+
+Section 25.5 read the switch off the wire for the first time: c2s `0x0032 [set]`,
+answered by `0x0148 [1, set]`, `0x0152 [1, old, new]` per changed hand, `0x014B` when a
+shield enters or leaves a set, and `0x006F [agent, hand, item]` per hand -- never a
+fresh `0x006E`. Our server fills weapon set 0 only and has no handler for `0x0032`.
+There is nothing to switch to until the player's other sets hold items, which is a
+content decision (the operator's own items, the mod-platform framing) ahead of a wire
+rung. Registered so the shape is not re-derived; not costed.
+
+### 26.5 Also checked, nothing to do
+
+* `0x0035`: our server already declares the (base, modifier) pair on a CHANGE, at the
+  next attack start (`ATTACK_SPEED_AT_START`, JARIN-S) -- the rule section 25.1
+  confirmed on the corpus. A weapon swap that keeps the base sends nothing, as retail's
+  scythe-to-spear swap sent nothing.
+* The launch's aim point on a 4.5 u circle about the target's centre (section 25.2):
+  recorded, not built. One tape, one static target; a second target with a different
+  body would say whether 4.5 is a constant or a radius.

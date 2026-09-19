@@ -23,7 +23,7 @@ import agents  # noqa: E402
 import authsrv  # noqa: E402
 import combatmath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=114)   # the BARE-MACHINE number: 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=129)   # the BARE-MACHINE number: 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
 check = LEDGER.ok
 
 LEGACY_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
@@ -245,10 +245,12 @@ def section_ranged():
               "how each ranged weapon shoots: the bow's DEFAULT 143 (it carries no 617), the "
               "wand's and the staff's own 617, each with its own 587 damage type -- the staff's "
               "(5, 8) is a pair retail's 0x00A4 / 0x00A7 carry together", str(hows["starter_bow"]))
-        check(hows["starter_spear"] is None and hows["starter_sword"] is None
-              and hows["starter_scythe"] is None,
-              "a sword and a scythe swing; the SPEAR stays on the melee path until a tape "
-              "names its projectile (n = 0) -- no mechanism ahead of its wire shape")
+        check(hows["starter_sword"] is None and hows["starter_scythe"] is None
+              and hows["starter_spear"] == {"projectile": 143, "arrow": 1, "damage_type": 1,
+                                            "speed": 1600.0, "range": 1004.0},
+              "a sword and a scythe swing; the SPEAR shoots since RUN-WEAPONS-1A named its "
+              "projectile (143 / flag 1 / 1594 u/s, 54 of 54) -- section 15 has the throw",
+              str(hows["starter_spear"]))
         recurve = dict(agents.item_template("starter_bow"))
         recurve["modifiers"] = [0x26180300 if (w >> 20) & 0x3FF == 609 else w
                                 for w in recurve["modifiers"]]
@@ -1338,6 +1340,184 @@ def section_splash():
          authsrv.skill_impact_visual, authsrv.blind_miss) = saved
 
 
+
+def section_spear():
+    print("\n15. RUN-WEAPONS-1A: the spear shoots -- projectile 143, flag 1, its 587, the 1600 class")
+    saved = (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+             authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE)
+    try:
+        authsrv.apply_party_character({"player_weapon": "starter_spear"})
+        how = authsrv.player_ranged()
+        check(how == {"projectile": 143, "arrow": 1, "damage_type": 1,
+                      "speed": 1600.0, "range": 1004.0},
+              "the spear's row shoots: the type's own 143 (its item carries no 617), the arrow "
+              "flag, piercing, the 1600 class (1594 measured), WIKI's 1004 (the tape says "
+              ">= 755) -- RUN-WEAPONS-1A, 54 of 54", str(how))
+        st, at_windup, at_arrival = _one_shot("starter_spear", 755.0)
+        launches = [v for op, v in at_windup if op == 0x00A4]
+        flight = _f(launches[0][3]) if launches else None
+        check(len(launches) == 1 and launches[0][4:] == [143, 1, 1] and flight is not None
+              and abs(flight - 755.0 / 1600.0) < 0.002,
+              "one 0x00A4 at the windup with [143, handle 1, arrow 1] and a flight of "
+              "755 / 1600 s -- retail threw from 755 u with a 0.4735 s flight",
+              f"{launches} flight {flight}")
+        arrivals = [v for op, v in at_arrival if op == 0x00A7]
+        words = [v for op, v in at_arrival if op == FLOAT_T and v[0] in (16, 17)]
+        check(len(arrivals) == 1 and arrivals[0][1:] == [1, 1] and len(words) == 1
+              and at_arrival and at_arrival[0][0] == 0x00A7,
+              "the arrival closes handle 1 with kind 1 -- the spear's 587, WEAPONS-C9 on a "
+              "spear -- FIRST, then the word", f"{arrivals} {words}")
+    finally:
+        (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+         authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE) = saved
+
+
+def section_scythe():
+    print("\n16. WEAPONS-W3: the scythe's extra targets, and its smaller critical")
+    NEAR, FAR, EDGE_IN, EDGE_OUT, A, B = 21, 22, 23, 24, 26, 27
+    saved = (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+             authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,
+             authsrv.SCYTHE_EXTRA_TARGETS, authsrv.critical_rate,
+             authsrv.player_weapon_rank, authsrv.blind_miss, authsrv.blocks)
+    words = lambda batch: [v for op, v in batch                                    # noqa: E731
+                           if op == FLOAT_T and v[0] in (16, 17)]
+    sent = []
+    send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+
+    def world(distance, foes):
+        """The target `distance` u from the player along +x; `foes` = {id: pos} beside it."""
+        st = _world(distance)
+        base = st["agents"][FOE]
+        for aid, pos in foes.items():
+            row = dict(base)
+            row["pos"] = pos
+            row["health"] = row["max_health"] = 500.0
+            st["agents"][aid] = row
+        return st
+
+    def arm(weapon, rng=(10, 10)):
+        authsrv.apply_party_character({"player_weapon": weapon})
+        authsrv.PLAYER_SWING_DAMAGE = rng
+
+    try:
+        authsrv.blind_miss = lambda st_, a: False
+        authsrv.blocks = lambda st_, t: False
+        authsrv.critical_rate = lambda r: 0.0
+        arm("starter_scythe")
+        check(authsrv.scythe_extra_reach() == 80.0 and authsrv.SCYTHE_EXTRA_ATTACKER_REACH == 180.0
+              and authsrv.SCYTHE_EXTRA_MAX == 2,
+              "the two terms, said out loud: 80 u from the TARGET (r + r + the def pad, inside "
+              "the tape's [78, 94) bracket) and 180 u from the attacker (hit at 182, missed at "
+              "186); at most two extras (WIKI, untested on tape)")
+        # geometry 1: 78 u from the target is hit, 94 u is not -- both inside 180 u of the player
+        st = world(60.0, {NEAR: (138.0, 0.0), FAR: (60.0, 94.0)})
+        del sent[:]
+        authsrv.hit_enemy(send, st, FOE, 1)
+        ids = [v[1] for v in words(sent)]
+        check(ids == [NEAR, FOE] and st["agents"][FAR]["health"] == 500.0
+              and st["agents"][NEAR]["health"] < 500.0,
+              "a scythe swing words the foe 78 u from the target BEFORE the target and never "
+              "the foe 94 u from it, though both stand inside 180 u of the player -- retail's "
+              "29-of-29 order and its 17-swing null on the 94 u suit", str(ids))
+        gains = [i for i, (op, v) in enumerate(sent) if op == 0x00CF]
+        widx = [i for i, (op, v) in enumerate(sent) if op == FLOAT_T and v[0] in (16, 17)]
+        check(len(gains) == 2 and len(widx) == 2 and gains[0] < widx[0] < gains[1] < widx[1],
+              "each hit carries its own 0x00CF gain ahead of its word -- the extra's pair, then "
+              "the target's (retail: 168 gains for 139 swings + 29 extras)",
+              f"gains at {gains}, words at {widx}")
+        # geometry 2: the attacker term at its edge -- 179 u hit, 186 u missed, both ~70 u from the target
+        st = world(110.0, {EDGE_IN: (179.0, 0.0), EDGE_OUT: (186.0, 0.0)})
+        del sent[:]
+        authsrv.hit_enemy(send, st, FOE, 1)
+        ids = [v[1] for v in words(sent)]
+        check(ids == [EDGE_IN, FOE],
+              "the attacker term at its edge: a foe 179 u from the player is hit and one 186 u "
+              "away is not, both inside 80 u of the target", str(ids))
+        # the cap: three candidates, two words, the two nearest the target
+        st = world(60.0, {NEAR: (138.0, 0.0), A: (60.0, 70.0), B: (60.0, -75.0)})
+        del sent[:]
+        authsrv.hit_enemy(send, st, FOE, 1)
+        ids = [v[1] for v in words(sent)]
+        check(len(ids) == 3 and set(ids[:2]) == {A, B} and ids[2] == FOE
+              and st["agents"][NEAR]["health"] == 500.0,
+              "at most two extras, the two nearest the target (WIKI's cap; the tape never had "
+              "three candidates, so this is the one unmeasured term)", str(ids))
+        # a sword in the same geometry words the target alone
+        arm("starter_sword")
+        st = world(60.0, {NEAR: (138.0, 0.0)})
+        del sent[:]
+        authsrv.hit_enemy(send, st, FOE, 1)
+        check([v[1] for v in words(sent)] == [FOE],
+              "a sword in the same geometry words the target alone")
+        # the revert flag
+        arm("starter_scythe")
+        authsrv.SCYTHE_EXTRA_TARGETS = False
+        st = world(60.0, {NEAR: (138.0, 0.0)})
+        del sent[:]
+        authsrv.hit_enemy(send, st, FOE, 1)
+        check([v[1] for v in words(sent)] == [FOE],
+              "--no-scythe-extras: the target alone")
+        authsrv.SCYTHE_EXTRA_TARGETS = True
+        # the critical: the type's own armour term
+        check(authsrv.weapon_critical_reduction(agents.item_template("starter_scythe")) == 5.0
+              and authsrv.weapon_critical_reduction(agents.item_template("starter_sword")) == 20.0
+              and authsrv.weapon_critical_reduction(None) == 20.0,
+              "a scythe's critical takes 5 armour off the target, every other weapon's 20, "
+              "and no weapon reads as 20")
+        kw = dict(ARMOUR_DIVISOR=40.0)
+        plain = combatmath.swing_damage(9, 60.0, (400, 400), roll=400.0,
+                                        CRITICAL_ARMOUR_REDUCTION=20.0, **kw)
+        c5 = combatmath.swing_damage(9, 60.0, (400, 400), critical=True,
+                                     CRITICAL_ARMOUR_REDUCTION=5.0, **kw)
+        c20 = combatmath.swing_damage(9, 60.0, (400, 400), critical=True,
+                                      CRITICAL_ARMOUR_REDUCTION=20.0, **kw)
+        check(abs(c5 / plain - 2 ** 0.125) < 0.01 and abs(c20 / plain - 2 ** 0.5) < 0.01,
+              f"on the maximum roll the two terms are x{c5 / plain:.3f} and x{c20 / plain:.3f} "
+              "-- 2^0.125 and 2^0.5; the tape's one scythe critical (6 points against a plain "
+              "ceiling of 5) excludes root two")
+        # and the primary hit reads it: force every swing critical on the same target and range
+        authsrv.critical_rate = lambda r: 1.0
+        authsrv.player_weapon_rank = lambda st_: 9
+
+        def taken(weapon):
+            arm(weapon, (40, 40))
+            st = world(60.0, {})
+            del sent[:]
+            h0 = st["agents"][FOE]["health"]
+            authsrv.hit_enemy(send, st, FOE, 1)
+            return h0 - st["agents"][FOE]["health"], [v[0] for v in words(sent)]
+
+        sc, sc_props = taken("starter_scythe")
+        sw, sw_props = taken("starter_sword")
+        check(sc_props == [17] and sw_props == [17] and 0 < sc < sw
+              and abs(sc / sw - 2 ** (-15.0 / 40.0)) < 0.06,
+              f"a forced critical: the scythe's {sc:.0f} against the sword's {sw:.0f} on the same "
+              "target, rank and range, the ratio 2^(-15/40) -- the primary hit reads the type's term")
+    finally:
+        (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+         authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,
+         authsrv.SCYTHE_EXTRA_TARGETS, authsrv.critical_rate,
+         authsrv.player_weapon_rank, authsrv.blind_miss, authsrv.blocks) = saved
+
+
+def section_customisation():
+    print("\n17. WEAPONS-W8: the customisation word (585) scales the range")
+    W584 = 0xA488160F     # 584: 15-22, the isle sword's own range
+    W585 = 0xA4987800     # 585 arg 120: the word on every one of the owner's PvP weapons (85 items)
+    plain = combatmath.weapon_damage_range({"modifiers": [W584]})
+    custom = combatmath.weapon_damage_range({"modifiers": [W584, W585]})
+    check(plain == (15, 22) and custom == (18, 26),
+          "a 15-22 range with (585, 120) reads 18-26 -- the isle study's own fit ('an integer "
+          "roll over the customized range 18..26'); without the word, 15-22", f"{plain} {custom}")
+    check(combatmath.weapon_damage_range({"modifiers": [W585, W584]}) == (18, 26)
+          and combatmath.weapon_damage_range({"modifiers": [W584, 0xA4986400]}) == (15, 22)
+          and combatmath.weapon_damage_range({"modifiers": [W585]}) is None,
+          "word order does not matter, a 585 of 100 changes nothing, and the word alone is no range")
+    check(all(combatmath.weapon_damage_range(agents.item_template(k)) is not None
+              and 585 not in [(w >> 20) & 0x3FF for w in agents.item_template(k)["modifiers"]]
+              for k in ("starter_axe", "starter_scythe", "starter_spear", "starter_sword")),
+          "no repo item carries the word, so every party weapon's range is what it was")
+
 def main():
     section_table()
     section_skills()
@@ -1353,6 +1533,9 @@ def main():
     section_preparation_wire()
     section_body_parity()
     section_splash()
+    section_spear()
+    section_scythe()
+    section_customisation()
     return LEDGER.verdict()
 
 

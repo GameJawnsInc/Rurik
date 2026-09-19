@@ -392,14 +392,38 @@ def weapon_damage_range(item):
         import itemmods                                   # noqa: PLC0415
     except Exception:                                     # noqa: BLE001
         return None
+    rng, percent = None, None
     for word in (item or {}).get("modifiers", []):
         d = itemmods.decode(word)
         if d["skipped_high"] or d["skipped_bit18"]:
             continue
-        if d["identifier"] in (itemmods.DAMAGE_RANGE, DAMAGE_RANGE_REQUIRED):
+        if d["identifier"] in (itemmods.DAMAGE_RANGE, DAMAGE_RANGE_REQUIRED) and rng is None:
             lo, hi = d["arg2"], d["arg"]
-            return (lo, hi) if lo <= hi else (hi, lo)
-    return None
+            rng = (lo, hi) if lo <= hi else (hi, lo)
+        elif d["identifier"] == CUSTOMISED:
+            percent = d["arg"]
+    if rng is None:
+        return None
+    if percent:
+        # WEAPONS-W8: the customisation word scales the RANGE, integer ends --
+        # the isle's "Damage +20%" sword rolled 18..26 on a 15-22 range.
+        rng = (int(rng[0] * percent // 100), int(rng[1] * percent // 100))
+    return rng
+
+
+# WEAPONS-W8 (2026-09-19): modifier 585 is the CUSTOMISATION word, its arg the
+# percentage (120 = "Damage +20%"). CORROBORATED by two witnesses that do not
+# share a source: (1) studies/isle/FINDINGS.md records the operator's PvP Sword
+# as `Damage +20%, customized` from its own tooltip, and the corpus's copy of
+# that item (205 on the 20260821 tapes) carries (585, 120, 0); (2) across all 29
+# live captures 85 items carry the word, every one at 120, and all but one are
+# the owner's own weapons (own weapon set or a player's 0x006E) -- no hostile's
+# item has it (RUN-WEAPONS-1A, studies/weapons/PLAN.md section 26). The client's
+# own parser (clientscan/itemmods.py) does not name it, so this is not OBSERVED
+# from the binary. The isle study's fit ("an integer roll over the customized
+# range 18..26 reproduces ... exactly") is what fixes the arithmetic to the
+# range's ends rather than to the final number.
+CUSTOMISED = 585
 
 
 def attack_strength(rank, level=20):

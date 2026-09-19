@@ -3314,6 +3314,95 @@ def adjacent_foes(state, target_id, radius):
     return sorted(out)
 
 
+def scythe_extra_reach():
+    """How far from the TARGET a scythe's extra may stand: the contact disc the
+    follow parks on, r + r + the client's def pad = 80 u with our radii. The
+    tape brackets the term at [78, 94) (WEAPONS-W3); this is a reading inside it."""
+    return 2.0 * BOUNDING_RADIUS + FOLLOW_STOP_PAD
+
+
+def scythe_held(item=None):
+    """Whether the player's held weapon is a scythe (item type 35)."""
+    item = agents.PLAYER_WEAPON if item is None else item
+    return bool(EQUIP_WEAPON and item
+                and int(item.get("item_type", -1)) == SCYTHE_ITEM_TYPE)
+
+
+def scythe_extras(state, target_id, attacker_pos):
+    """The bodies a scythe swing at `target_id` also hits -- living hostiles
+    inside scythe_extra_reach() of the target AND SCYTHE_EXTRA_ATTACKER_REACH
+    of the attacker, nearest to the target first, at most SCYTHE_EXTRA_MAX."""
+    if not SCYTHE_EXTRA_TARGETS:
+        return []
+    table = state.get("agents", {})
+    centre = table.get(target_id)
+    if centre is None or attacker_pos is None:
+        return []
+    cx, cy = float(centre["pos"][0]), float(centre["pos"][1])
+    ax, ay = float(attacker_pos[0]), float(attacker_pos[1])
+    reach = scythe_extra_reach()
+    found = []
+    for aid, row in table.items():
+        if aid == target_id or row.get("dead") \
+                or row.get("allegiance") != agents.ALLEGIANCE_HOSTILE:
+            continue
+        px, py = float(row["pos"][0]), float(row["pos"][1])
+        d_target = math.hypot(px - cx, py - cy)
+        if d_target > reach or math.hypot(px - ax, py - ay) > SCYTHE_EXTRA_ATTACKER_REACH:
+            continue
+        found.append((d_target, aid))
+    return [aid for _d, aid in sorted(found)[:SCYTHE_EXTRA_MAX]]
+
+
+def scythe_extra_hit(send, state, aid, conn_id, rank, bonus_damage, damage_mult,
+                     now, label):
+    """One EXTRA hit of a scythe swing on body `aid`: its own roll and critical
+    through ITS armour, then retail's per-hit batch -- the gain, the first-hit
+    maximum, the word (WEAPONS-W3). Returns the points dealt."""
+    foe = state["agents"][aid]
+    armour = foe.get("armor_rating")
+    critical = False
+    if PLAYER_SWING_DAMAGE and rank is not None and armour is not None:
+        critical = random.random() < critical_rate(rank) + (
+            0.01 * critical_strikes_rank(state) if CRITICAL_STRIKES else 0.0)
+        dealt = swing_damage(rank, float(armour), PLAYER_SWING_DAMAGE,
+                             critical=critical,
+                             critical_armour_reduction=weapon_critical_reduction(
+                                 agents.PLAYER_WEAPON))
+    elif PLAYER_SWING_DAMAGE:
+        lo, hi = PLAYER_SWING_DAMAGE
+        dealt = float(random.randint(lo, hi))
+    else:
+        dealt = foe["max_health"] * HIT_FRACTION
+    dealt = dealt * weakness_multiplier(state, PLAYER_AGENT_ID) * float(damage_mult)
+    dealt = _whole_points(dealt + bonus_damage)
+    foe["health"] = max(0.0, foe["health"] - dealt)
+    provoke_hostile(state, aid, PLAYER_AGENT_ID, conn_id)
+    if ENERGY:
+        player_gains_adrenaline(send, state, pools.STRIKE_UNITS, now, conn_id,
+                                f"the scythe's extra hit on agent {aid}")
+    if foe.get("max_declared_on_hit", foe["max_health"]) != foe["max_health"]:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.PROP_HEALTH_MAX, aid, int(foe["max_health"])],
+             f"maximum {int(foe['max_health'])} on agent {aid}, declared on the "
+             f"scythe's extra hit")
+        foe["max_declared_on_hit"] = foe["max_health"]
+    if critical:
+        critical_energy_gain(send, state, conn_id)
+    prop = agents.GV_CRITICAL if critical else agents.PROP_DAMAGE
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+         [prop, aid, PLAYER_AGENT_ID,
+          _damage_fraction(dealt, foe["max_health"], prop,
+                           f"the scythe's extra hit ({label})")],
+         f"{'CRITICAL' if critical else 'damage'} {dealt:.0f} to agent {aid} "
+         f"(the scythe's extra target)")
+    if ENERGY:
+        agent_adrenaline(foe).on_damage_taken(dealt / float(foe["max_health"]), now)
+    if foe["health"] <= 0.0:
+        kill_agent(send, state, aid, foe, conn_id, now)
+    return dealt
+
+
 def strike_adjacent(send, state, skill_id, rank, target_id, conn_id):
     """One landed strike's adjacent damage. Returns the ids it reached."""
     if not AREA_DAMAGE:
@@ -11213,8 +11302,10 @@ def weapon_type_tables(rows=None):
 # APPROACH still walks to melee distance when the press is out of range (W2b:
 # stop at range); a bow ATTACK SKILL still lands through the cast path with no
 # arrow; heroes and hostiles still "swing" (W6); stray / obstructed / dodged
-# and height need line of sight. A type whose projectile id is unmeasured (the
-# spear: n = 0 on tape) stays on the melee path, said out loud at launch.
+# and height need line of sight. A type whose projectile id is unmeasured
+# stays on the melee path, said out loud at launch -- the spear WAS one (n = 0
+# on tape) until RUN-WEAPONS-1A read 143 / flag 1 / 1594 u/s off 54 throws
+# (2026-09-19, studies/weapons/PLAN.md section 25.2); its row shoots now.
 # --no-projectiles is the control: the windup landing, every run before today.
 RANGED_DELIVERY = True
 GAME_SMSG_AGENT_PROJECTILE_LAUNCHED = 0x00A4
@@ -11285,6 +11376,39 @@ def weapon_ranged(item):
 # plain arrow.
 PREPARATION_WIRE = True
 PREPARATION_SPLASH = True     # --no-preparation-splash reverts (WEAPONS-W7)          # --no-preparation-wire reverts
+
+# ---- WEAPONS-W3 (2026-09-19): A SCYTHE HITS UP TO TWO MORE ------------------
+#
+# Retail, OBSERVED on RUN-WEAPONS-1A (20260919T103604, studies/weapons/PLAN.md
+# section 25.3; 40 swings with two suits beside the target, 29 of them landing
+# on two bodies): an extra target is a SECOND damage word in the swing's own
+# instant, written BEFORE the target's, and it is its own hit -- its own roll
+# (the pairs 5/2 and 2/5 both occur), its own critical (the block's one
+# critical sat on the extra while the target took a plain 3), its own 0x00CF
+# gain and its own first-hit maximum. The batch retail sends at the windup is
+#   [1, me, 0]  then per hit  [0x00CF]  [42, body, max] (first hit)  [16|17, body, me, x]
+# extras first, the target last. Who qualifies, per swing, from the client's
+# own position reports against the suits' fixed positions:
+#   * within ~180 u of the ATTACKER -- hit at 181 and 182, missed at 186;
+#   * within a small disc of the TARGET -- a suit 78 u from it was hit every
+#     time, one 94 u from it NEVER (17 swings inside 180 u of the player, at
+#     4 to 101 degrees off the swing line, 55 to 176 u away), so the term is
+#     in [78, 94) centre to centre and is NOT the 166 u "adjacent" band. The
+#     wiki's words are "in melee range of the target"; the disc the follow
+#     parks on -- r + r + the client's def pad, 80 u with our radii -- sits
+#     inside the bracket and is the reading taken here (RECONSTRUCTION
+#     inside an OBSERVED bracket; a third distance would narrow it);
+#   * an ARC rule is refuted (72 at 21 degrees and 165 u: missed; 71 at 66
+#     degrees: hit).
+# The CAP of two extras is WIKI ("up to two additional foes") and untested:
+# the tape never had three candidates. NOT modelled: a block or a blind miss
+# on an extra (each hit is its own in the game; ours would need a fail word
+# per extra and nothing on tape shows one), and a BODY's scythe (bodies do not
+# roll criticals here either) -- both named, neither guessed.
+SCYTHE_EXTRA_TARGETS = True   # --no-scythe-extras reverts (WEAPONS-W3)
+SCYTHE_EXTRA_MAX = 2          # WIKI; the tape could not test it
+SCYTHE_EXTRA_ATTACKER_REACH = 180.0   # u from the attacker, centre to centre. OBSERVED at its edge.
+SCYTHE_ITEM_TYPE = 35
 
 
 def open_preparation(state, agent_id):
@@ -11731,13 +11855,26 @@ def critical_rate(rank):
 
 
 def swing_damage(rank, armour, damage_range, level=20, critical=False,
-                 mult=1.0, roll=None, strike_level=None):
-    """Forwards to combatmath with the two constants that stay above."""
+                 mult=1.0, roll=None, strike_level=None,
+                 critical_armour_reduction=None):
+    """Forwards to combatmath with the two constants that stay above -- or, for
+    a critical, with the held type's own armour term (WEAPONS-W3: a scythe's 5)."""
     return combatmath.swing_damage(
         rank, armour, damage_range, level=level, critical=critical,
         mult=mult, roll=roll, strike_level=strike_level,
         ARMOUR_DIVISOR=ARMOUR_DIVISOR,
-        CRITICAL_ARMOUR_REDUCTION=CRITICAL_ARMOUR_REDUCTION)
+        CRITICAL_ARMOUR_REDUCTION=(CRITICAL_ARMOUR_REDUCTION
+                                   if critical_armour_reduction is None
+                                   else float(critical_armour_reduction)))
+
+
+def weapon_critical_reduction(item):
+    """The armour a critical takes off the target for the type `item` is: the
+    [weapon_type] row's `critical_armour_reduction`, else the 20 every other
+    weapon takes (2^(20/40) = the root-two critical). The scythe's row says 5
+    (RUN-WEAPONS-1A bounded its multiplier below 1.40; WIKI 2^0.125)."""
+    row = WEAPON_TYPE_ROW.get(int((item or {}).get("item_type", -1))) or {}
+    return float(row.get("critical_armour_reduction", CRITICAL_ARMOUR_REDUCTION))
 
 
 # ---- WEAPONS-W4c (2026-09-18): CASTER WEAPONS SCALE ON LEVEL ----------------
@@ -14742,7 +14879,9 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
         critical = random.random() < critical_rate(rank) + (
             0.01 * critical_strikes_rank(state) if CRITICAL_STRIKES else 0.0)
         dealt = swing_damage(rank, float(armour), PLAYER_SWING_DAMAGE,
-                             critical=critical) + bonus_damage
+                             critical=critical,
+                             critical_armour_reduction=weapon_critical_reduction(
+                                 agents.PLAYER_WEAPON)) + bonus_damage
         _prep_scale = strike_multiplier(attack_strength(rank), float(armour))
     elif EQUIP_WEAPON and PLAYER_SWING_DAMAGE:
         # No rank or no armour rating on the target: the weapon's raw range,
@@ -14883,6 +15022,12 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     on_attack_triggers(send, state, PLAYER_AGENT_ID, conn_id)
     agent["health"] = max(0.0, agent["health"] - dealt)
     provoke_hostile(state, target_id, PLAYER_AGENT_ID, conn_id)   # MONSTERAI-J
+    # WEAPONS-W3: A SCYTHE'S EXTRA TARGETS, each its own hit and each BEFORE the
+    # target's gain and word -- retail's batch order, 29 of 29 (see the constants).
+    if swing and exact is None and not projectile and scythe_held():
+        for _aid in scythe_extras(state, target_id, state.get("pos")):
+            scythe_extra_hit(send, state, _aid, conn_id, rank, bonus_damage,
+                             damage_mult, now, label)
 
     # Property 16 on 0x00A3: prop, TARGET, cause, value -- target before cause,
     # and the value is a FRACTION of the target's maximum health. Both were
@@ -32497,6 +32642,11 @@ def main():
         print("PREPARATION: --no-preparation-splash -- a preparation's damage lands on "
               "its target only, never on the foes adjacent to it [WEAPONS-W7 revert]",
               flush=True)
+    if a.no_scythe_extras:
+        global SCYTHE_EXTRA_TARGETS
+        SCYTHE_EXTRA_TARGETS = False
+        print("SCYTHE: --no-scythe-extras -- a scythe swing lands on its target only "
+              "[WEAPONS-W3 revert]", flush=True)
     if a.no_preparation_wire:
         global PREPARATION_WIRE
         PREPARATION_WIRE = False

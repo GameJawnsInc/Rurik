@@ -6276,8 +6276,13 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   (max |residual|) is the wire-timestamp error bar a timed claim inherits, and the
   claim-bearing connections are pinned — the 120.499 s revive and 30 s respawn ride
   ≤ 100 ms envelopes (claims stand at ±0.08 s), while the 10.044 s player revive rides
-  the +219 ms step (bar ±0.22 s, now quoted as ~10.0 s in studies/isle §10). Needs
-  `vault/captures/live/`, skips whole if absent; floor 14),
+  the +219 ms step (bar ±0.22 s, now quoted as ~10.0 s in studies/isle §10). A THIRD
+  step joined on 2026-09-19 -- RUN-WEAPONS-1A's outpost connection (`20260919T103604`
+  `:58638`, 50 Hz), +75.9 ms after ONE 2.58 s wire stall at 119 s, its 2,322 ms envelope
+  being that stall -- pinned by identity beside the other two with its own value check,
+  and the 800 ms envelope ceiling now excludes that one connection by name (the same
+  capture's Isle connection, where every section-25 clock was read, sits at 301 ms).
+  Needs `vault/captures/live/`, skips whole if absent; floor 15),
   `toolkit/authsrv/test_labelrun.py` (the labelled input run, which names GAME_CMSG
   opcodes from what a human was told to do: a message lands in exactly one step's
   window, instance-load traffic is never folded into step 1, and a dirty idle CONTROL
@@ -7586,7 +7591,10 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   The floor was 12 because 14 was declared, 12 executed, and the ledger refused
   the run — the guard doing its job on the file that documents it. It went to 19,
   then 28, then 30, then 37, each time read off the green run rather than
-  predicted.
+  predicted. The headpiece pin is keyed by capture: RUN-DAGGERS-2
+  (`20260917T224104`, the same Assassin, Shadow Arts only) reddened it from the
+  evening it landed until 2026-09-19, when RUN-WEAPONS-1A's full-suite run found it and
+  named the tape; RUN-WEAPONS-1A's own tape adds only the Warrior's attribute 20.
 
   `toolkit/clientscan/test_attribpoints.py` (`s_attribPoints`, its `arrsize`,
   and the **14 it replaces**. A loopback session on build 38833 died on
@@ -11314,8 +11322,8 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   the off hand a sword kept, a spear holding a shield, a wand naming no mastery -- with
   the globals restored. §5 (WEAPONS-W2a) is RANGED DELIVERY through the real swing
   loop with a recording send: how each ranged weapon shoots (the bow's default 143,
-  the wand's and staff's own 617, each with its 587), the spear / sword / scythe on the
-  melee path, a bow's 609 class picking the measured 2800 u/s, the press opening from
+  the wand's and staff's own 617, each with its 587), the sword and scythe on the melee path (the spear
+  shoots since RUN-1A, §15), a bow's 609 class picking the measured 2800 u/s, the press opening from
   the weapon's range, ONE 0x00A4 at the windup with nothing landing there, 0x00A7
   FIRST and then the hit's batch a flight later with no property 1, a raised movement
   hold ending at the release, a wand's bolt, two shots in the air taking handles 1 and
@@ -11411,7 +11419,18 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   120-armour one beside the same target, where Death Blossom's adjacent damage ignores
   armour); a BLIND MISS still splashing while the target takes nothing; and two control
   arms -- `--no-preparation-splash`, and Kindle Arrows, which does not opt in, splashing
-  nobody),
+  nobody); §15 (RUN-WEAPONS-1A, 2026-09-19): the spear's throw from 755 u -- its row shoots (143 /
+  1 / piercing / the 1600 class / WIKI's 1004), ONE 0x00A4 [143, 1, 1] at the windup with a
+  755 / 1600 flight, the 0x00A7 kind 1 FIRST and then the word. §16 (WEAPONS-W3): the
+  scythe's extras and critical -- the two terms said out loud (80 u of the target, 180 of
+  the attacker, at most two), a foe 78 u from the target hit and one 94 u from it missed
+  with the extra's word BEFORE the target's, a 0x00CF ahead of each word, 179 u hit and
+  186 u missed at the attacker's edge, three candidates giving the two nearest, a sword in
+  the same geometry hitting one body, `--no-scythe-extras`, the two multipliers 1.091 /
+  1.414 on a maximum roll, and a forced critical's scythe-to-sword ratio 2^(-15/40)
+  through the primary hit. §17 (WEAPONS-W8): modifier 585 scales the range -- 15-22 with
+  (585, 120) reads 18-26, order-free, a 100 changes nothing, no repo item carries it.
+  Floor 129 (114 + 15)),
   `toolkit/authsrv/test_weaponcensus.py` (**2026-09-18, WEAPONS-W0 (studies/weapons);
   WEAPONS-W2c added §1b and four corpus pins the same day: `skill_shots()` on the
   synthetic wire finds exactly three SKILL shots and no weapon shot among them -- the

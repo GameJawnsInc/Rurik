@@ -1063,12 +1063,18 @@ attribute = 41
 req_bit = 0x20
 rate = "scythe"
 delivery = "melee"
+# WEAPONS-W3 (RUN-WEAPONS-1A, capture 20260919T103604, studies/weapons/PLAN.md section 25.3):
+# a scythe's critical takes 5 armour off the target instead of every other weapon's 20 --
+# 2^(5/40) = 2^0.125 = x1.09 against 2^(20/40) = x1.41. WIKI ("Scythe") names the x2^0.125;
+# the tape BOUNDS it: one critical of 6 points on a body whose plain hits top out at 5 puts the
+# multiplier in 1.0 < c < 1.40, which excludes 20 (>= 7 points) and fits 5. One sample.
+critical_armour_reduction = 5
 
 [weapon_type.scythe.provenance]
 source = "capture"
 capture = "20260914T005758"
 origin = "live"
-verified = """OBSERVED, weaponcensus.py over the live corpus 2026-09-18 (WEAPONS-C2 / C6 / C7): item type 35 in 10 leadhands, never swung on tape. The NAME of type 35 is UPSTREAM (GWCA ItemType) and so is the 1.5 s rate (WIKI); attribute 41 is every weapon_req = 0x20 skill row's (13 of 13) -- no required scythe is in the corpus to carry a 633. RUN-WEAPONS-1A."""
+verified = """OBSERVED, weaponcensus.py over the live corpus 2026-09-18 (WEAPONS-C2 / C6 / C7): item type 35 in 10 leadhands, never swung on tape until RUN-WEAPONS-1A (20260919T103604, live): 84 scythe hits by the observer, 1.500 s, one critical bounding the multiplier below x1.40 -- critical_armour_reduction above. The NAME of type 35 is UPSTREAM (GWCA ItemType) and so is the 1.5 s rate (WIKI); attribute 41 is every weapon_req = 0x20 skill row's (13 of 13) -- no required scythe is in the corpus to carry a 633. RUN-WEAPONS-1A."""
 
 [weapon_type.spear]
 item_type = 36
@@ -1077,12 +1083,24 @@ attribute = 37
 req_bit = 0x40
 rate = "spear"
 delivery = "projectile"
+# RUN-WEAPONS-1A (capture 20260919T103604, studies/weapons/PLAN.md section 25.2): 54 throws,
+# with and without a shield, identical in every field below.
+projectile = 143              # 0x00A4 field 5, 54 of 54; the spear item carries NO 617 word, so this is the type's own
+arrow = 1                     # 0x00A4 field 7: 1 on 54 of 54
+# SPEED: flight 0.4705-0.4761 s over 750-759 u from the client's own stop report -- 1594 u/s, one
+# number to the unit across all 54. The corpus's other speeds are round (1200 / 1600 / 2800, mutual-shot
+# geometry that cancels a position offset) and a ~3 u offset between the client's report of its own
+# stop and the server's body is the whole gap, so the 1600 CLASS is the row's number, not 1594.
+# RANGE is WIKI's 1004 -- the client PARKED the walk-in at 755 u (0.75 x 1004) and threw from there,
+# so the tape says only >= 755; RUN-WEAPONS-2 separates the park from the range (section 25.4).
+range = 1004
+projectile_speed = 1600
 
 [weapon_type.spear.provenance]
 source = "capture"
 capture = "20260914T005758"
 origin = "live"
-verified = """OBSERVED, weaponcensus.py over the live corpus 2026-09-18 (WEAPONS-C2 / C6 / C7): item type 36 in 16 leadhands, never thrown on tape. 633's attribute is 37 on both required spears and weapon_req = 0x40 rows carry 37 (19 of 22) -- two witnesses for the type's identity; the 1.5 s rate is WIKI, and its projectile and arrow flag are unmeasured, so the row names none. RUN-WEAPONS-1A."""
+verified = """OBSERVED, weaponcensus.py over the live corpus 2026-09-18 (WEAPONS-C2 / C6 / C7): item type 36 in 16 leadhands, never thrown on tape until RUN-WEAPONS-1A (20260919T103604, live): 54 throws by the observer, projectile 143 / flag 1 / 0x00A7 kind 1 on all 54, 1594 u/s -- the projectile, arrow and speed fields above. 633's attribute is 37 on both required spears and weapon_req = 0x40 rows carry 37 (19 of 22) -- two witnesses for the type's identity; the 1.5 s rate is WIKI, and its projectile and arrow flag are unmeasured, so the row names none. RUN-WEAPONS-1A."""
 
 [weapon_type.bow]
 item_type = 5
