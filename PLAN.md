@@ -1964,10 +1964,18 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   inputs is a weapon, so a follow parks at the melee disc whatever is held -- retail's
   client and ours alike -- and Q16's premise is refuted. `0x0028`'s handler never writes
   the followed-agent field, which is why all three arms failed; only `0x0029` clears it,
-  and retail sends one to park a shooter 0 of 306 follows. What is left is an OWNER
-  CHOICE (section 22.4): revert W2b's server stop, which is the faithful option, or send a
-  `0x0029` at range, which makes server and client agree at the cost of a message retail
-  does not send. Nothing shipped either way.** Eleven player types and the hostile-only ranged
+  and retail sends one to park a shooter 0 of 306 follows. **Section 22.4's "owner choice"
+  is RETRACTED by section 23: the operator asked for faithfulness, both options were
+  built or costed, and both are wrong -- reverting loses the range opening retail has,
+  and the `0x0029` sends a message retail never sends. WHAT WE HAVE IS FAITHFUL: the
+  wire is retail's bit for bit, the swing opens at the weapon's range (retail's first
+  launch after a follow reaches 1,284 u on a 1,273 u recurve), and the body finishing at
+  the melee disc is the client's own arithmetic. W2g (the leg moved to the disc) was
+  built, tested at 115 checks, REGRESSED on the client -- first shot 1.17 s -> 6.03 s,
+  every arrow at 80 u -- and is WITHDRAWN: the leg's END is what the reach gate reads,
+  so the leg at the range is the mechanism that opens the swing there. One internal
+  inaccuracy remains (`state["pos"]` parks at the range while the body walks on) and it
+  is a MOVECODE change to `_reach_frame`'s sourcing, not a weapons rung.** Eleven player types and the hostile-only ranged
   type are one content table with retail items, and EVERY holder of a bow, wand or staff
   shoots — the player, a party caster, a hostile archer: release at the windup, the hit
   distance ÷ speed later, from the weapon's range — a bow ATTACK SKILL releases at its

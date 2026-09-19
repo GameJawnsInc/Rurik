@@ -27,6 +27,47 @@ move back.
 
 ---
 
+### WEAPONS-W2g -- 2026-09-18 -- **tried, REGRESSED on the client and WITHDRAWN; and section 22.4's "owner choice" RETRACTED -- what we have is faithful** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) section 23)
+
+The operator answered section 22.4 with "faithfulness". Acting on that turned both its
+options over and found the section wrong: **neither is right and there is no choice to make.**
+
+**Built.** 22.1 proved the client's park threshold has no weapon term, and
+`_approach_send`'s own comment (1z-dm) says the leg must end where the client's resolver
+stops the body -- which since W2b it did not, for a bow. W2g split `approach_leg_stop()`
+(the disc) from `approach_stop()` (the range), behind `--ranged-leg-at-range`. Clean at 115
+checks.
+
+**Regressed.** On the client (`20260918T205234`, and `20260918T205759` after moving the
+approach's eta to the gate as well) the first swing after the press went from **1.17 s to
+6.03 s** and every arrow flew at **0.050 s (80 u)** instead of 0.727 -> 0.282 -> 0.050 --
+the pre-W2b shape W2b exists to fix.
+
+**Why, and this is the keeper.** The swing opens at `attack_tick`'s reach gate, which reads
+`_reach_frame`, and that **does not track the body continuously through a follow**: the
+report arm is skipped while the click latch is set, the mirror gives nothing, and it falls
+through to `state["pos"]`, which barely moves (the run's own leg row: `model_moved: 36.0`
+over a 6 s walk; the swing opens at 134.70 against the leg's halt at 134.72). **So the LEG'S
+END is the event that tells this server the body may shoot**, and W2b's leg at the weapon's
+range is the mechanism that opens the swing at range at all, not an incidental conflation.
+WITHDRAWN; nothing on `main`.
+
+**Retracted.** 22.4 option 1 (revert W2b) would put the gate back at the disc and lose a
+range opening retail demonstrably has -- its first launch after a follow reaches 1,284 u on
+a 1,273 u recurve (`20260914T005758` 584.263, cross-checked to 1,283 u against the aim point
+and the player's own report; the flight-as-distance model validates to ~10 u across the
+corpus). Option 2 would send a message retail sends 0 of 306 times. **What we have is
+faithful:** retail's wire bit for bit, the swing opening at the weapon's range, and a body
+that finishes at the melee disc because the client's own arithmetic puts it there.
+
+One internal inaccuracy remains and it is **not** a faithfulness question: `state["pos"]`
+parks at the range point while the body walks on to the disc, uncorrected because the client
+reports nothing during a follow. Ending it needs a server body position that tracks the
+client continuously instead of jumping at leg ends -- a MOVECODE change to `_reach_frame`'s
+sourcing, with W2g's split waiting behind it. Registered, not started. No code changed.
+
+---
+
 ### WEAPONS-Q16 -- 2026-09-18 -- **CLOSED at the mechanism: the client's follow-park threshold has NO weapon term, so nothing parks a client at range on a follow; Q16's premise is refuted** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) section 22)
 
 Section 21 named the next step as reading the resolver rather than sending it a fourth
