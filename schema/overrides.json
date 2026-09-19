@@ -1020,6 +1020,12 @@
     "name": "SKILLBAR_SKILL_SWAP",
     "name_confidence": "high",
     "why": "OBSERVED four times, all on our own server against the retail 38797 client (studies/heroes/RUN-HEROLIB.md 7, 9, 12); ZERO in the live corpus, so retail's REPLY is unobserved. Upstream named it SKILLBAR_SKILL_REPLACE; the gesture that sends it is a drag from one OCCUPIED bar slot onto another, i.e. a swap -- a replace from the picker is one 0x005C. [agent_id, sourceSkill, sourceCopy, targetSkill, targetCopy], 22 B. SKILL-keyed at both ends: RUN-HEROLIB-C put every bar id above 7 and got [200, 276, 0, 279, 0]. Field ORDER settled by RUN-HEROLIB-D (2026-09-15): two pre-registered drags of the leftmost slot onto the rightmost, with the outcome confirmed on screen before the second, gave [200, 281, 0, 256, 0] then [200, 256, 0, 281, 0] -- field 1 is the skill PICKED UP, field 3 the skill in the slot DROPPED ON, and the two are mirror images with no free parameter. Copy indices 0 in every sighting; the client's own guards are targetSkill != sourceSkill (ChCliSkill.cpp:515) and sourceSkillCopy >= 0 (:516). Agent-keyed like 0x005C (every sighting names the hero, agent 200)."
+   },
+   "50": {
+    "opcode": 50,
+    "name": "SELECT_WEAPON_SET",
+    "name_confidence": "high",
+    "why": "OBSERVED on ArenaNet's wire and reproduced by a labelled run against our own server. field1=set u8 (0..3). Widths per messages.json [byte], 3 B. WITNESS vault/captures/live/20260919T103604 (RUN-WEAPONS-1A, Isle of the Nameless, agent 25, four sets from its own 0x0147 rows: axe 212; scythe 209; spear 210; spear 208 + shield 207): c2s [1] at t=303.379, [2] at 486.664, [3] at 529.958, [0] at 590.704 -- the operator's narrated set swaps -- each answered 40-46 ms later by ONE batch: 0x0148 ITEM_SET_ACTIVE_EQUIP_SET [1, set] naming the SAME set, 0x0152 [1, old lead, new lead], 0x014B ITEM_CHANGE_LOCATION for a shield entering (bag 3 slot 1) or leaving (back to bag 2 slot 1) the hands, and 0x006F AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT per changed hand; never a fresh 0x006E. 4 of 4, the set byte matching the reply's every time, on no other of the 29 captures. LABELLED RUN vault/captures/harness/20260919T152451 (our server, --weapon-set 1..3 filled, hands off): F2, F3, F4, F1 pressed by the harness (vk 0x71/0x72/0x73/0x70) produced c2s 0x0032 [1], [2], [3], [0] in that order and nothing else -- the key IS the message. Dispatched: authsrv.select_weapon_set (WEAPONS-W9, studies/weapons/PLAN.md 27)."
    }
   },
   "GAME_SMSG": {
@@ -3358,6 +3364,12 @@
     "name": "INSTANCE_MANIFEST_PHASE",
     "name_confidence": "high",
     "why": "MEASURED 2026-09-14 over every live game connection in the corpus (18 tapes, builds 38797..38888; scratch join over deepwoundjoin.sequence + cmsgstream, written up in studies/divergence/FINDINGS.md D13). Wire [byte phase]: 0 and 1 alternating around 0x0196 bodies (159 on the 136-request tape), and the two the server sends unprompted at every load ahead of 0x0197 [2, 888, 0] -- authsrv's GAME_SMSG_INSTANCE_MANIFEST_PHASE."
+   },
+   "338": {
+    "opcode": 338,
+    "name": "ITEM_SWAP_EQUIPPED",
+    "name_confidence": "medium",
+    "why": "OBSERVED, from the consequence chain of a weapon-set switch; the handler was not read. Fields [inventory key u16, item id u32, item id u32] per messages.json, 12 B. WITNESS vault/captures/live/20260919T103604 (RUN-WEAPONS-1A, agent 25): sent in every one of the four replies to c2s 0x0032 SELECT_WEAPON_SET, between 0x0148 ITEM_SET_ACTIVE_EQUIP_SET and the 0x006F hand writes -- [1, 212, 209] (axe out, scythe in), [1, 209, 210], [1, 210, 208], [1, 208, 212] -- field 2 the lead item LEAVING the hands and field 3 the one ENTERING, 4 of 4, with no 0x013E or 0x014B for either lead (the off hand's move is a separate 0x014B). Medium: n=4 on one tape, the client-side effect (the two items exchanging bag slots is the reading) unread, and the name is that reading. Nowhere else in the 29-capture corpus. Sent by authsrv.select_weapon_set (WEAPONS-W9)."
    }
   }
  }

@@ -1992,7 +1992,11 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   §20) is a MOVECODE-side clear-the-follow change; the rest of the arc needs the owner
   (RUN-WEAPONS-1B / 2 / 3; 1A ran 2026-09-19) or a content decision (spawn rows). The
   spear throws since §26 (143, flag 1, the 1600 class); ~~Q12~~ closed there (585 is the
-  customisation word, W8 reads it); W9, the weapon-set switch, is registered, not started.
+  customisation word, W8 reads it); ~~W9, the weapon-set switch~~ shipped 2026-09-19 (§27:
+  c2s `0x0032` answered with retail's one batch, `--weapon-set N=ITEM[+OFFHAND]`, F1-F4 on the
+  client) -- open after it: RUN-W9-2 (a swing after a switch, watched), retail's reply to a
+  same-set or empty-set press, and whether a switch that moves the maximum energy re-sends
+  41 / 43 on retail (INFERRED from the morale path; needs a 556 item in a set on a live tape).
   Captures wanted: 1B (five bows, staff, wand — predicts 1200 / 1600 / 2800 u/s), 2
   (range: every range here is WIKI or reconstructed, and 1A's spear PARKED at 0.75 × the
   wiki's number, §25.4 — the run must separate park from range).

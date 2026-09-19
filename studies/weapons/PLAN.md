@@ -1505,3 +1505,91 @@ rung. Registered so the shape is not re-derived; not costed.
 * The launch's aim point on a 4.5 u circle about the target's centre (section 25.2):
   recorded, not built. One tape, one static target; a second target with a different
   body would say whether 4.5 is a constant or a radius.
+
+## 27. WEAPONS-W9 SHIPPED -- 2026-09-19: the weapon-set switch, read off the 1A tape and reproduced on the client
+
+**What retail does, OBSERVED (`20260919T103604`, the explorable connection, agent 25; scratch
+`aw_w9tape` over `livewire.decode_conn`).** At the map load every set's item is declared with
+`0x0161` and MOVED (`0x013E [1, item, bag, slot]`): the inactive ones into the backpack (bag 2,
+slots 0..6 in creation order -- 206 at 0, the shield 207 at 1, 208 at 2, 209 at 3, 210 at 4,
+211 at 6), the active lead 212 into the equipped bag (bag 3) slot 0 beside the armour at 2/3/4;
+then the four `0x0147 [1, set, lead, off]` rows name the sets (212, 0), (209, 0), (210, 0),
+(208, 207). `0x0148 [1, 0]` precedes the creates. The switch is c2s **`0x0032 [set]`**, and its
+reply is ONE batch 40-46 ms later, 4 of 4, a DIFF of the hands:
+
+| press | reply, in order |
+|---|---|
+| `[1]` axe 212 -> scythe 209 | `0x0148 [1, 1]`, `0x0152 [1, 212, 209]`, `0x006F [25, 0, 209]` |
+| `[2]` scythe -> spear 210 | `0x0148 [1, 2]`, `0x0152 [1, 209, 210]`, `0x006F [25, 0, 210]` |
+| `[3]` spear -> spear 208 + shield 207 | `0x0148 [1, 3]`, `0x014B [1, 207, 3, 1]`, `0x0152 [1, 210, 208]`, `0x006F [25, 0, 208]`, `0x006F [25, 1, 207]` |
+| `[0]` spear + shield -> axe 212 | `0x0148 [1, 0]`, `0x014B [1, 207, 2, 1]`, `0x0152 [1, 208, 212]`, `0x006F [25, 1, 0]`, `0x006F [25, 0, 212]` |
+
+So: the active set first; a shield ENTERING the hands is a `0x014B ITEM_CHANGE_LOCATION` into
+the equipped bag's slot 1, a shield LEAVING is one back to the backpack slot it was CREATED in;
+`0x0152` carries the lead LEAVING and the lead ENTERING (named `ITEM_SWAP_EQUIPPED` in
+`schema/overrides.json`, medium: the client-side effect is unread); and `0x006F` writes one hand
+each -- an EMPTIED off hand first, then the lead, then a FILLED off hand. No `0x013E` for either
+lead, no fresh `0x006E`, no `0x006D`. In the PvP-equipment outpost (map 248) the same press is
+answered by `0x0148 [241, set]` plus `0x014B [241, item, 136, slot]` per made weapon and no
+`0x0152` / `0x006F` -- the sets were being FILLED from the panel there, not swapped; the first
+field is the instance's inventory key (116 / 241 / 1), which our wire has always sent as 1.
+
+**What ships.** `--weapon-set N=ITEM[+OFFHAND]` (repeatable, N in 1..3; a party row's
+`player_weapon_sets = [[N, ITEM, OFFHAND], ...]` goes through the same `configure_weapon_sets`)
+fills sets 1-3 with content items -- validated at launch as `--player-weapon` is (a hostile-only
+type refused, a two-handed lead's off hand dropped). Item ids 11/12, 13/14, 15/16 for the three
+sets' (lead, off), clear of the player's 1-10 and the hero bodies' 210+. `declare_weapon_sets`
+at the create: each inactive item `0x0161` then `0x013E` into the backpack (bag 2) at slots in
+declaration order, before the `0x0147` rows, which now name every set's items
+(`weapon_set_items`). The dispatch arm for `GAME_CMSG_SELECT_WEAPON_SET = 0x0032` calls
+`select_weapon_set`, which sends retail's batch above with our ids and then re-aims the server's
+own hands through `apply_party_character` -- the swing range, the interval, the off hand's
+armour and the attribute follow, and the `0x0035` pair goes out at the next attack start if the
+base moved (section 26.5's rule). Two additions retail's tape could not show: (1) set 0's shield
+(item 10) is given a backpack slot so it has somewhere to go when set 0 leaves the hands --
+RECONSTRUCTION, retail's 207 went back to the slot it was created in and ours is created in the
+equipped bag; (2) a set whose 556 energy word differs re-declares the maximum (property 41) and
+the rescaled regeneration (43), the morale path's shape -- INFERRED: retail's 1A weapons carried
+no 556 (PvP-made, empty mods) so no switch on any tape moved a maximum, and our `starter_scythe`
+/ `starter_spear` rows (retail NPC items) carry +5. A same-set press and an empty set send
+nothing, NOT OBSERVED either way (the log names both).
+
+**On the client, OBSERVED (harness `20260919T152451`, then `20260919T153354` with the energy
+words; `--player-weapon starter_axe --weapon-set 1=starter_scythe --weapon-set 2=starter_spear
+--weapon-set 3=starter_spear+starter_shield`, actions `0:play 25:vk:0x71 5:vk:0x72 5:vk:0x73
+5:vk:0x70`, hands off).** F2, F3, F4, F1 through `keybd_event` each produced a c2s `0x0032`
+carrying 1, 2, 3, 0 -- the F-keys reach the client's binding where the digit keys of
+`control.py`'s note never reached the skill bar -- and each was answered by our batch (3 / 3 /
+5 / 5 messages, the tape's order). The client's own weapon-set widget (bottom right) highlighted
+F2, F3, F4, F1 in turn with the scythe, spear, shield and axe icons it had drawn from the
+create's `0x0147` rows, and the body drew the scythe, the spear, the spear with the shield on the
+left arm, and the axe (frames `2-vk.png` .. `5-vk.png`, cropped at 3x); no assert, no
+disconnect through all four; the reset in the log is the harness's own teardown after the hold.
+The energy orb is the re-declaration's own witness: on the first run (no 41 / 43 in the batch)
+it read 25 through every frame while the server's pool stood at 30 -- exactly the silent split
+the re-send exists to close -- and on the rerun it read **30, 30, 30, 25** after F2, F3, F4, F1,
+the client's own integer from our property 41.
+`0x0032` is now named `SELECT_WEAPON_SET` (high) in `schema/overrides.json` on the tape's 4 of 4
+plus this labelled run.
+
+**Also fixed on the way, since W1 (2026-09-18, `e544b0d4`).** The party block's commander-rig
+tail (`hero_activate` .. the `PARTY ... commander rig ON` banner) sat under the `--player-weapon`
+branch, so `--player-weapon` WITHOUT `--party` died at launch on an unbound `_pbody`, and
+`--party` without a weapon flag skipped the rig. Every W1/W3 run passed both flags, which is why
+neither showed; the first W9 launch (`--player-weapon` alone) found it.
+
+**Tests.** `test_weapons.py` section 18 (21 checks, floor 129 -> 150): the four tape batches
+with our ids, the server's hands after each (type 35 / 36 / 24 on the arm / 2, the interval per
+type), the create's declarations and backpack slots, set 0's shield leaving and returning, the
+energy words on a moved maximum and their absence on an unmoved one, the same-set and empty-set
+nulls, five launch refusals, the two-handed drop, the party-row door, and the dispatch arm and
+flag as source. `test_dispatch` 45, `test_cmsgnames` 16, `test_codec` 29, `test_smsgnames` 15,
+`test_itemdetail` 19, `test_transfer` 28, `test_agentlife` 551, `test_srclint` 26,
+`test_provlint` 19 green.
+
+**Open after W9.** RUN-W9-2, a swing after a switch on the client (the `0x0035` pair at the next
+start and the new interval on screen -- covered by JARIN-S's tests, not yet watched); retail's
+reply to a same-set or an empty-set press; whether a switch that moves the maximum re-sends 41 /
+43 on retail (needs a set holding a 556 item on a live tape -- the owner's own staff or focus
+would do); what the client does with `0x0152` (the two items exchanging slots is the reading);
+and the first field of the item family, 116 / 241 / 1 per instance, which ours sends as 1.

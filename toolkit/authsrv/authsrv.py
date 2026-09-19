@@ -1215,6 +1215,17 @@ GAME_SMSG_INSTANCE_LOAD_SPAWN_POINT = 0x0195
 GAME_SMSG_READY_FOR_MAP_SPAWN = 0x01AB
 GAME_SMSG_ITEM_WEAPON_SET = 0x0147
 GAME_SMSG_ITEM_SET_ACTIVE_WEAPON_SET = 0x0148
+# WEAPONS-W9 (2026-09-19), the three answers to a weapon-set switch, named from
+# RUN-WEAPONS-1A's four switches (studies/weapons/PLAN.md 27; no upstream name
+# for any of them). [1, item, bag, slot]: an off hand moved between the
+# backpack and the equipped bag's slot 1 -- and, in the PvP-equipment outpost,
+# a made weapon placed into a set. [1, old lead, new lead]: the lead weapons
+# change places. 0x006F [agent, hand, item]: ONE hand of the 0x006E array
+# (studies/newopcodes 0x006F) -- hand 0 lead, 1 off, an item of 0 for an
+# emptied hand.
+GAME_SMSG_ITEM_CHANGE_LOCATION = 0x014B
+GAME_SMSG_ITEM_SWAP_EQUIPPED = 0x0152
+GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT = 0x006F
 GAME_SMSG_CREATE_NAMED_ITEM = 0x0161
 GAME_SMSG_INVENTORY_CREATE_BAG = 0x013F
 GAME_SMSG_ITEM_MOVED_TO_LOCATION = 0x013E
@@ -2547,6 +2558,230 @@ OFFHAND_ITEM_ID = 10
 # Give the character a weapon at all. --no-weapon turns it off so the "naked
 # character cannot attack" reading can be re-tested rather than remembered.
 EQUIP_WEAPON = True
+
+# ---- WEAPONS-W9 (2026-09-19): THE PLAYER'S OTHER WEAPON SETS, AND THE SWITCH --
+#
+# Retail keeps four sets. On RUN-WEAPONS-1A (20260919T103604, agent 25) the map
+# load declared every set's item with 0x0161 and moved the INACTIVE ones into
+# the backpack (0x013E [1, item, 2, slot], slots 0..6 in creation order) and
+# the active lead into the equipped bag's slot 0, then named the sets with
+# four 0x0147 [1, set, lead, off]. The switch is c2s 0x0032 [set], answered
+# 40-46 ms later by ONE batch, 4 of 4 -- a DIFF of the hands, not a re-send:
+#
+#     0x0148 [1, set]                             the active set
+#     0x014B [1, old off, 2, its backpack slot]   a shield LEAVING the hands
+#     0x014B [1, new off, equipped bag, 1]        a shield ENTERING them
+#     0x0152 [1, old lead, new lead]              the lead weapons change places
+#     0x006F [agent, 1, 0]                        an EMPTIED off hand, first
+#     0x006F [agent, 0, new lead]                 the lead hand
+#     0x006F [agent, 1, new off]                  a FILLED off hand, last
+#
+# and never a fresh 0x006E or 0x006D (studies/weapons/PLAN.md 25.5 and 27).
+# Our ids: set 0 is WEAPON_ITEM_ID / OFFHAND_ITEM_ID as before; sets 1-3 take
+# the pairs below, clear of the player's 1-10 and the hero bodies' 210+.
+WEAPON_SET_ITEM_IDS = ((11, 12), (13, 14), (15, 16))   # (lead, off) of sets 1, 2, 3
+BACKPACK_BAG_ID = 2                                    # PLAYER_BAGS' first row
+# WEAPON_SETS[k] is None (empty) or {"lead": key, "off": key or None}. Set 0 is
+# written by apply_party_character from whatever fills it (a party row,
+# --player-weapon); the default is the starter hammer the create hands out.
+WEAPON_SETS = [{"lead": "starter_hammer", "off": None}, None, None, None]
+# A backpack slot per set item, in declaration order -- retail's tape put its
+# 206..211 at slots 0..6 in creation order. Set 0's OFF HAND gets one too: it
+# starts in the equipped bag and needs somewhere to go when its set leaves the
+# hands. RECONSTRUCTION -- retail's 207 went back to the slot it was CREATED
+# in, and set 0's shield on our wire is created in the equipped bag.
+WEAPON_SET_BACKPACK_SLOTS = {}
+
+
+def configure_weapon_sets(specs):
+    """WEAPONS-W9: fill sets 1-3 from `N=ITEM[+OFFHAND]` strings (the
+    `--weapon-set` flag, repeatable) or `[N, ITEM, OFFHAND]` rows (a party
+    row's `player_weapon_sets`). Validated at launch the way the row's own
+    weapon is: a hostile-only type is refused, a two-handed lead drops its
+    off hand (WEAPONS-W1). Returns the change list for the launch banner."""
+    changed = []
+    for spec in specs:
+        if isinstance(spec, str):
+            n_s, _, rest = spec.partition("=")
+            lead, _, off = rest.partition("+")
+        else:
+            n_s, lead, off = (list(spec) + [None, None, None])[:3]
+        try:
+            n = int(n_s)
+        except (TypeError, ValueError):
+            raise SystemExit(f"--weapon-set wants N=ITEM[+OFFHAND] with N in "
+                             f"1..3, got {spec!r}")
+        if n not in (1, 2, 3):
+            raise SystemExit(f"--weapon-set {spec!r}: set {n} is not 1, 2 or 3 "
+                             f"(set 0 is --player-weapon)")
+        lead = (str(lead) if lead else "").strip() or None
+        off = (str(off) if off else "").strip() or None
+        if not lead:
+            raise SystemExit(f"--weapon-set {spec!r}: a set needs a lead item")
+        tpl = agents.item_template(lead)              # raises on an unknown key
+        _wrow = WEAPON_TYPE_ROW.get(int(tpl.get("item_type", -1)))
+        if _wrow and _wrow.get("holder") == "hostile":
+            raise SystemExit(f"--weapon-set {spec!r}: {lead!r} is item type "
+                             f"{_wrow['item_type']}, which only a hostile holds "
+                             f"on retail's wire (WEAPONS-C2)")
+        if off:
+            agents.item_template(off)
+            if _wrow and _wrow.get("hands") == "two":
+                changed.append(f"set {n}: off hand {off!r} dropped "
+                               f"({lead!r} is two-handed)")
+                off = None
+        WEAPON_SETS[n] = {"lead": lead, "off": off}
+        changed.append(f"set {n}: {lead}" + (f" + {off}" if off else ""))
+    _assign_backpack_slots()
+    return changed
+
+
+def _assign_backpack_slots():
+    WEAPON_SET_BACKPACK_SLOTS.clear()
+    slot = 0
+    if WEAPON_SETS[0] and WEAPON_SETS[0].get("off"):
+        WEAPON_SET_BACKPACK_SLOTS[OFFHAND_ITEM_ID] = slot
+        slot += 1
+    for k in (1, 2, 3):
+        s = WEAPON_SETS[k]
+        if not s:
+            continue
+        lead_id, off_id = WEAPON_SET_ITEM_IDS[k - 1]
+        WEAPON_SET_BACKPACK_SLOTS[lead_id] = slot
+        slot += 1
+        if s.get("off"):
+            WEAPON_SET_BACKPACK_SLOTS[off_id] = slot
+            slot += 1
+
+
+def weapon_set_items(k):
+    """(lead item id, off item id) of set `k`; 0 for an empty hand. Set 0 reads
+    its RECORD, not the live off-hand global -- while another set is in the
+    hands that global is the other set's, and the shield has to come back."""
+    if k == 0:
+        lead = WEAPON_ITEM_ID if EQUIP_WEAPON else 0
+        off = OFFHAND_ITEM_ID if (lead and WEAPON_SETS[0]
+                                  and WEAPON_SETS[0].get("off")) else 0
+        return lead, off
+    s = WEAPON_SETS[k]
+    if not s:
+        return 0, 0
+    lead_id, off_id = WEAPON_SET_ITEM_IDS[k - 1]
+    return lead_id, (off_id if s.get("off") else 0)
+
+
+def declare_weapon_sets(send):
+    """The create: every INACTIVE set's items, declared and put in the
+    backpack -- retail's shape at 1A's map load. Set 0's are declared by the
+    create itself, into the equipped bag."""
+    if not EQUIP_WEAPON:
+        return
+    _assign_backpack_slots()
+    for k in (1, 2, 3):
+        s = WEAPON_SETS[k]
+        if not s:
+            continue
+        lead_id, off_id = WEAPON_SET_ITEM_IDS[k - 1]
+        for item_id, key, what in ((lead_id, s["lead"], "lead"),
+                                   (off_id, s.get("off"), "off hand")):
+            if not key:
+                continue
+            slot = WEAPON_SET_BACKPACK_SLOTS[item_id]
+            send(GAME_SMSG_CREATE_NAMED_ITEM,
+                 agents.named_item(item_id, agents.item_template(key)),
+                 f"CREATE_NAMED_ITEM(set {k} {what}: {key}) [WEAPONS-W9]")
+            send(GAME_SMSG_ITEM_MOVED_TO_LOCATION,
+                 [1, item_id, BACKPACK_BAG_ID, slot],
+                 f"ITEM_MOVED_TO_LOCATION(set {k} {what} -> backpack {slot}) "
+                 f"[WEAPONS-W9]")
+
+
+def select_weapon_set(send, state, k, conn_id):
+    """c2s 0x0032 [set]: the switch, answered as retail's one batch (the
+    header comment above) and mirrored into the server's own hands through
+    `apply_party_character` -- the swing range, the interval, the off hand's
+    armour and the attribute all follow, and the 0x0035 pair goes out at the
+    next attack start if the base moved (section 26.5's rule)."""
+    old = int(state.get("weapon_set", 0))
+    k = int(k)
+    if k not in (0, 1, 2, 3):
+        print(f"[c{conn_id}] weapon set {k}: no such set (0..3) -- nothing sent",
+              flush=True)
+        return []
+    if k == old:
+        print(f"[c{conn_id}] weapon set {k} is already active -- nothing sent "
+              f"(retail's reply to a same-set press is NOT OBSERVED) [WEAPONS-W9]",
+              flush=True)
+        return []
+    if k != 0 and not WEAPON_SETS[k]:
+        print(f"[c{conn_id}] weapon set {k} is EMPTY -- nothing sent (retail's "
+              f"reply to an empty set is NOT OBSERVED; fill it with --weapon-set "
+              f"{k}=ITEM) [WEAPONS-W9]", flush=True)
+        return []
+    old_lead, old_off = weapon_set_items(old)
+    new_lead, new_off = weapon_set_items(k)
+    out = []
+
+    def _send(op, vals, why):
+        out.append((op, list(vals)))
+        send(op, vals, why)
+
+    _send(GAME_SMSG_ITEM_SET_ACTIVE_WEAPON_SET, [1, k],
+          f"SET_ACTIVE_WEAPON_SET({k}) [WEAPONS-W9]")
+    if old_off and old_off != new_off:
+        _send(GAME_SMSG_ITEM_CHANGE_LOCATION,
+              [1, old_off, BACKPACK_BAG_ID, WEAPON_SET_BACKPACK_SLOTS.get(old_off, 0)],
+              f"ITEM_CHANGE_LOCATION(off hand {old_off} -> backpack) [WEAPONS-W9]")
+    if new_off and new_off != old_off:
+        _send(GAME_SMSG_ITEM_CHANGE_LOCATION,
+              [1, new_off, EQUIPPED_BAG_ID, EQUIPPED_SLOT_OFFHAND],
+              f"ITEM_CHANGE_LOCATION(off hand {new_off} -> equipped 1) [WEAPONS-W9]")
+    if old_lead != new_lead:
+        _send(GAME_SMSG_ITEM_SWAP_EQUIPPED, [1, old_lead, new_lead],
+              f"ITEM_SWAP_EQUIPPED({old_lead} -> {new_lead}) [WEAPONS-W9]")
+    if old_off and not new_off:
+        _send(GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT, [PLAYER_AGENT_ID, EQUIPPED_SLOT_OFFHAND, 0],
+              "AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT(off hand emptied) [WEAPONS-W9]")
+    if old_lead != new_lead:
+        _send(GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT, [PLAYER_AGENT_ID, EQUIPPED_SLOT_WEAPON, new_lead],
+              f"AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT(lead hand = item {new_lead}) [WEAPONS-W9]")
+    if new_off and new_off != old_off:
+        _send(GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT, [PLAYER_AGENT_ID, EQUIPPED_SLOT_OFFHAND, new_off],
+              f"AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT(off hand = item {new_off}) [WEAPONS-W9]")
+    # The server's own hands: the same door a party row's weapon comes
+    # through, so nothing that reads the weapon can be left pointing at the
+    # old one. The off hand is cleared FIRST because the door only sets it.
+    s = WEAPON_SETS[k]
+    player_pools(state)
+    old_max_energy = player_max_energy(state)
+    agents.PLAYER_OFFHAND = None
+    changed = apply_party_character({"player_weapon": s["lead"],
+                                     "player_offhand": s.get("off")},
+                                    record_set0=False)
+    state["weapon_set"] = k
+    # A held staff's or focus's 556 rides the maximum (WEAPONS-W5), so a set
+    # whose energy word differs moves the pool -- and the client integrates
+    # its orb from the maximum and the rate it was last told (test_pools 2a),
+    # so both go out again, the morale path's shape: property 41, then 43
+    # rescaled to the new pool. INFERRED: retail's 1A weapons carried no 556,
+    # so no switch on any tape moved a maximum; the re-send on a moved
+    # maximum is OBSERVED for the death penalty (1, 25, 22 on 20260817T183756).
+    new_max_energy = player_max_energy(state)
+    if new_max_energy != old_max_energy:
+        _send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+              [agents.PROP_ENERGY_MAX, PLAYER_AGENT_ID, new_max_energy],
+              f"maximum energy {old_max_energy} -> {new_max_energy} with set {k} "
+              f"[WEAPONS-W9]")
+        if ENERGY:
+            player_energy(state).set_maximum(new_max_energy)
+        _send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+              [agents.PROP_ENERGY_REGEN, PLAYER_AGENT_ID,
+               _f32(morale.regen_fraction(agents.PLAYER_FLOAT_43,
+                                          agents.PLAYER_ENERGY, new_max_energy))],
+              "energy regeneration, rescaled to the new pool [WEAPONS-W9]")
+    print(f"[c{conn_id}] weapon set {old} -> {k}: {', '.join(changed)}; "
+          f"{len(out)} messages [WEAPONS-W9]", flush=True)
+    return out
 # Seconds between swings for the weapon we actually hand out, which is a
 # hammer. WIKI (GWW, "Attack speed"), and the client agrees -- see
 # agents.ATTACK_SPEED for the six-for-six cross-check. This is the value that
@@ -10025,6 +10260,10 @@ GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED = 0x0047
 # payload: the message carries no information beyond "cancel what I am
 # doing".
 GAME_CMSG_CANCEL_ACTION = 0x0028
+# WEAPONS-W9: [set] -- F1-F4 or the panel picked a weapon set. First seen on
+# RUN-WEAPONS-1A (20260919T103604, four presses, none on any earlier tape);
+# the reply is one batch 40-46 ms later, `select_weapon_set`.
+GAME_CMSG_SELECT_WEAPON_SET = 0x0032
 
 # THE THREE PURE-INBOUND ONES. Each is fully named in `schema/overrides.json`
 # with the client-side evidence beside it, each is among the largest single
@@ -21101,7 +21340,7 @@ def party_attack_speed(npc):
     return float(agents.ATTACK_SPEED.get(key, ENEMY_ATTACK_SPEED))
 
 
-def apply_party_character(prow):
+def apply_party_character(prow, record_set0=True):
     """SLICE-H8: a [party.KEY] row's `player_level`, `player_health`,
     `player_attributes` and `player_points` rebind the character the session
     spawns -- the agents globals every consumer reads at call time -- so the
@@ -21145,6 +21384,9 @@ def apply_party_character(prow):
             WEAPON_ATTACK_SPEED = ATTACK_INTERVAL = float(agents.ATTACK_SPEED[_rate])
         changed.append(f"weapon {prow['player_weapon']} ({PLAYER_SWING_DAMAGE}, "
                        f"{WEAPON_ATTACK_SPEED} s)")
+        if record_set0:                                   # WEAPONS-W9: set 0's record
+            WEAPON_SETS[0] = {"lead": str(prow["player_weapon"]),
+                              "off": (WEAPON_SETS[0] or {}).get("off")}
         # WEAPONS-W1: a TWO-HANDED weapon empties the off hand -- retail's wire,
         # 20 of 20 dagger holdings and every bow, hammer and staff in the corpus
         # name offhand 0. A row's own player_offhand below still wins.
@@ -21156,10 +21398,17 @@ def apply_party_character(prow):
         if _wrow and _wrow.get("hands") == "two" and agents.PLAYER_OFFHAND:
             agents.PLAYER_OFFHAND = None
             changed.append("off hand emptied (two-handed)")
+            if record_set0:
+                WEAPON_SETS[0]["off"] = None
     if prow.get("player_offhand"):
         agents.PLAYER_OFFHAND = agents.item_template(prow["player_offhand"])
         changed.append(f"offhand {prow['player_offhand']} "
                        f"(+{offhand_armour():.0f} armour)")
+        if record_set0:
+            WEAPON_SETS[0]["off"] = str(prow["player_offhand"])
+    if prow.get("player_weapon_sets"):
+        # WEAPONS-W9: a row's other sets, [[N, ITEM, OFFHAND], ...].
+        changed.extend(configure_weapon_sets(prow["player_weapon_sets"]))
     if prow.get("player_armour"):
         # DAGGERS: five item keys in STARTER_ARMOUR's order (body, boots,
         # legs, gloves, head), each validated against ITS slot the way the
@@ -27370,6 +27619,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                  [1, OFFHAND_ITEM_ID, EQUIPPED_BAG_ID,
                                   EQUIPPED_SLOT_OFFHAND],
                                  "ITEM_MOVED_TO_LOCATION(offhand -> equipped 1)")
+                        # WEAPONS-W9: the other sets' items, declared and
+                        # put in the backpack -- retail's shape at the 1A
+                        # map load (every set's item created, the inactive
+                        # ones moved to bag 2, before the 0x0147 rows).
+                        declare_weapon_sets(send)
                         # THE ARMOUR. Declared and put in the equipped
                         # bag at the slots retail's own 0x006F writes name.
                         # CREATE_NAMED_ITEM only declares the bytes;
@@ -27418,16 +27672,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # Slot 0 is the active set (SET_ACTIVE_WEAPON_SET
                             # above selects it). leadhand is the main hand; a
                             # hammer is two-handed, so offhand stays empty.
-                            lead = (WEAPON_ITEM_ID
-                                    if EQUIP_WEAPON and slot == 0 else 0)
                             # SLICE-H9: the fourth field is the OFFHAND --
                             # UPSTREAM's field order (GmInventory.c), and on
                             # retail's wire it is non-zero on exactly the
                             # connections whose character carries a shield
                             # (the owner's own: 14 of 56 sets in
                             # 20260817T231139, 0 of 12 in 20260817T180610).
-                            off = (OFFHAND_ITEM_ID if lead and agents.PLAYER_OFFHAND
-                                   else 0)
+                            # WEAPONS-W9: sets 1-3 name their own items when
+                            # --weapon-set filled them, else 0 / 0 as before.
+                            lead, off = weapon_set_items(slot)
                             send(GAME_SMSG_ITEM_WEAPON_SET, [1, slot, lead, off],
                                  f"WEAPON_SET[{slot}]"
                                  + (f" leadhand={lead}" if lead else "")
@@ -27793,6 +28046,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # there is nothing to read; the request is the
                         # message.
                         cancel_action(send, state, conn_id)
+                    elif opcode == GAME_CMSG_SELECT_WEAPON_SET:
+                        # WEAPONS-W9: F1-F4 (or the panel) picked a weapon
+                        # set; [set] is the whole payload, and the reply is
+                        # one batch that diffs the hands.
+                        select_weapon_set(send, state, int(values[1]), conn_id)
                     elif (opcode in (GAME_CMSG_TURN_TO_DIRECTION,
                                      GAME_CMSG_MOVE_TO_COORD)
                           and state.get("player_dead")):
@@ -30640,12 +30898,12 @@ def main():
         if _pc:
             print(f"PARTY {a.party!r}: the player's character -- "
                   f"{', '.join(_pc)} [SLICE-H8]", flush=True)
-    if a.player_weapon or a.player_offhand:
-        # WEAPONS-W1: any content item in the player's hands, with or without a
-        # --party -- the harness's way to hold each weapon type in turn.
-        _pw = apply_party_character({"player_weapon": a.player_weapon,
-                                     "player_offhand": a.player_offhand})
-        print(f"PLAYER WEAPON: {', '.join(_pw)} [WEAPONS-W1]", flush=True)
+        # The commander rig and the banner are the PARTY block's tail. From
+        # WEAPONS-W1 (2026-09-18) to 2026-09-19 they sat under the
+        # `--player-weapon` branch below, so `--player-weapon` WITHOUT a party
+        # died on an unbound `_pbody`, and `--party` without a weapon flag
+        # skipped the rig -- every W1/W3 run passed both flags, which is why
+        # neither showed. Found by the first W9 harness launch.
         if not a.party_no_commander:
             a.hero_activate = True
             a.hero_char = True
@@ -30659,6 +30917,16 @@ def main():
               f"{list(_prow['skills'])}), commander rig "
               f"{'OFF' if a.party_no_commander else 'ON'} [SLICE-H2]",
               flush=True)
+    if a.player_weapon or a.player_offhand:
+        # WEAPONS-W1: any content item in the player's hands, with or without a
+        # --party -- the harness's way to hold each weapon type in turn.
+        _pw = apply_party_character({"player_weapon": a.player_weapon,
+                                     "player_offhand": a.player_offhand})
+        print(f"PLAYER WEAPON: {', '.join(_pw)} [WEAPONS-W1]", flush=True)
+    if a.weapon_set:
+        # WEAPONS-W9: sets 1-3, after set 0 so the backpack slots see it.
+        _ws = configure_weapon_sets(a.weapon_set)
+        print(f"WEAPON SETS: {'; '.join(_ws)} [WEAPONS-W9]", flush=True)
 
     # WHERE THIS SERVER MAY WRITE ITS CAPTURES (the audit's sec 9 item 3: an output path from the command line used to be written wherever it pointed).
     # Every connection thread writes ciphertext and session metadata under

@@ -949,6 +949,14 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
     ap.add_argument("--player-offhand", default=None, metavar="ITEM",
                     help="WEAPONS-W1: the content item key in the player's off hand "
                          "(starter_shield, starter_focus).")
+    ap.add_argument("--weapon-set", action="append", default=None,
+                    metavar="N=ITEM[+OFFHAND]",
+                    help="WEAPONS-W9: fill weapon set N (1-3) with a content item "
+                         "key, optionally with an off hand -- e.g. --weapon-set "
+                         "1=starter_scythe --weapon-set 3=starter_spear+"
+                         "starter_shield. Set 0 is --player-weapon. The client "
+                         "switches with F1-F4 (c2s 0x0032) and is answered with "
+                         "retail's one batch (studies/weapons/PLAN.md 27).")
     ap.add_argument("--hero-weapon", default=None, metavar="KEY",
                     help="SLICE-H4: the party body's weapon, an attack_speed "
                          "rates key (staff, sword, ...) -- its swing interval. "

@@ -23,7 +23,7 @@ import agents  # noqa: E402
 import authsrv  # noqa: E402
 import combatmath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=129)   # the BARE-MACHINE number: 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=150)   # the BARE-MACHINE number: 150 = 129 + 21 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
 check = LEDGER.ok
 
 LEGACY_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
@@ -1518,6 +1518,141 @@ def section_customisation():
               for k in ("starter_axe", "starter_scythe", "starter_spear", "starter_sword")),
           "no repo item carries the word, so every party weapon's range is what it was")
 
+def section_weapon_sets():
+    print("\n18. WEAPONS-W9: the weapon-set switch -- retail's one batch, from the 1A tape")
+    saved = (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+             authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,
+             list(authsrv.WEAPON_SETS), dict(authsrv.WEAPON_SET_BACKPACK_SLOTS))
+    sent = []
+    send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+    P = authsrv.PLAYER_AGENT_ID
+    rate = lambda t: float(agents.ATTACK_SPEED[authsrv.WEAPON_TYPE_RATE[t]])       # noqa: E731
+    try:
+        # the 1A observer's four sets: axe; scythe; spear; spear + shield
+        authsrv.WEAPON_SETS[:] = [{"lead": "starter_hammer", "off": None}, None, None, None]
+        authsrv.apply_party_character({"player_weapon": "starter_axe"})
+        changed = authsrv.configure_weapon_sets(["1=starter_scythe", "2=starter_spear",
+                                                  "3=starter_spear+starter_shield"])
+        check(authsrv.WEAPON_SETS[0] == {"lead": "starter_axe", "off": None}
+              and authsrv.WEAPON_SETS[3] == {"lead": "starter_spear", "off": "starter_shield"}
+              and len(changed) == 3,
+              "three --weapon-set flags fill sets 1-3, and set 0 is the --player-weapon row's",
+              str(authsrv.WEAPON_SETS))
+        check([authsrv.weapon_set_items(k) for k in range(4)]
+              == [(1, 0), (11, 0), (13, 0), (15, 16)],
+              "the ids: set 0 is item 1; sets 1-3 take 11/12, 13/14, 15/16 (the tape's 212; "
+              "209; 210; 208 + 207)")
+        # the create: every inactive item declared and put in the backpack
+        del sent[:]
+        authsrv.declare_weapon_sets(send)
+        ops = [op for op, _ in sent]
+        moves = [v for op, v in sent if op == authsrv.GAME_SMSG_ITEM_MOVED_TO_LOCATION]
+        check(ops == [0x0161, 0x013E] * 4
+              and moves == [[1, 11, 2, 0], [1, 13, 2, 1], [1, 15, 2, 2], [1, 16, 2, 3]],
+              "the create declares the four inactive items and moves each into the backpack "
+              "(bag 2) at slots 0..3 in order -- retail's 206..211 at 0..6, creation order",
+              str(moves))
+        # the switches, as the tape's four batches
+        st = {"agents": {}, "pos": (0.0, 0.0), "player_health": 480.0}
+
+        def switch(k):
+            del sent[:]
+            authsrv.select_weapon_set(send, st, k, 1)
+            return list(sent)
+
+        # the energy words: our scythe and spear rows carry a 556 (+5); retail's
+        # 1A weapons carried none, so the re-declaration is INFERRED from the
+        # morale path (property 41 then the rescaled 43, test_pools 2b)
+        def energy(maximum):
+            rate = authsrv._f32(authsrv.morale.regen_fraction(
+                agents.PLAYER_FLOAT_43, agents.PLAYER_ENERGY, maximum))
+            return [(0x009F, [41, P, maximum]), (0x00A2, [43, P, rate])]
+
+        E25, E30 = agents.PLAYER_ENERGY, agents.PLAYER_ENERGY + 5
+        b1 = switch(1)
+        check(b1 == [(0x0148, [1, 1]), (0x0152, [1, 1, 11]), (0x006F, [P, 0, 11])] + energy(E30),
+              "0 -> 1 (axe -> scythe): 0x0148, the lead swap 0x0152 [1, old, new], one 0x006F "
+              "for hand 0 -- the tape's [1,1] / [1,212,209] / [25,0,209] -- then, because OUR "
+              "scythe row carries a +5 energy word, the maximum re-declared (41) with its "
+              "rescaled regeneration (43)", str(b1))
+        check(agents.PLAYER_WEAPON["item_type"] == 35 and agents.PLAYER_OFFHAND is None
+              and authsrv.ATTACK_INTERVAL == rate(35) and st["weapon_set"] == 1,
+              "and the server's hands follow: a scythe (type 35), no off hand, its own interval",
+              f"{authsrv.ATTACK_INTERVAL} against {rate(35)}")
+        b2 = switch(2)
+        check(b2 == [(0x0148, [1, 2]), (0x0152, [1, 11, 13]), (0x006F, [P, 0, 13])],
+              "1 -> 2 (scythe -> spear): the same three, and NO energy words -- both rows "
+              "carry the same +5, so the maximum did not move", str(b2))
+        b3 = switch(3)
+        check(b3 == [(0x0148, [1, 3]), (0x014B, [1, 16, 1, 1]), (0x0152, [1, 13, 15]),
+                     (0x006F, [P, 0, 15]), (0x006F, [P, 1, 16])],
+              "2 -> 3 (spear -> spear + shield): the shield's 0x014B into the equipped bag's "
+              "slot 1 BEFORE the lead swap, then hand 0, then hand 1 -- the tape's "
+              "[1,207,3,1] / [1,210,208] / [25,0,208] / [25,1,207]", str(b3))
+        check(agents.PLAYER_OFFHAND is not None and agents.PLAYER_OFFHAND["item_type"] == 24
+              and agents.PLAYER_WEAPON["item_type"] == 36,
+              "a spear in hand and the shield on the arm")
+        b0 = switch(0)
+        check(b0 == [(0x0148, [1, 0]), (0x014B, [1, 16, 2, 3]), (0x0152, [1, 15, 1]),
+                     (0x006F, [P, 1, 0]), (0x006F, [P, 0, 1])] + energy(E25),
+              "3 -> 0 (spear + shield -> axe): the shield back to ITS backpack slot, the swap, "
+              "the EMPTIED off hand first, then hand 0 -- the tape's [1,207,2,1] / "
+              "[1,208,212] / [25,1,0] / [25,0,212] -- then the maximum back to 25", str(b0))
+        check(agents.PLAYER_WEAPON["item_type"] == 2 and agents.PLAYER_OFFHAND is None
+              and authsrv.ATTACK_INTERVAL == rate(2) and st["weapon_set"] == 0,
+              "and the axe is back, no off hand, the axe's interval")
+        # nothing on a same-set press or an empty set
+        check(switch(0) == [] and st["weapon_set"] == 0,
+              "a press on the ACTIVE set sends nothing (NOT OBSERVED on retail; the smaller claim)")
+        authsrv.WEAPON_SETS[2] = None
+        check(switch(2) == [] and st["weapon_set"] == 0,
+              "a press on an EMPTY set sends nothing (NOT OBSERVED; the log names --weapon-set)")
+        # set 0 with a shield: the shield gets a backpack slot and comes BACK
+        authsrv.WEAPON_SETS[:] = [{"lead": "starter_hammer", "off": None}, None, None, None]
+        authsrv.apply_party_character({"player_weapon": "starter_sword",
+                                       "player_offhand": "starter_shield"})
+        authsrv.configure_weapon_sets(["1=starter_scythe"])
+        st = {"agents": {}, "pos": (0.0, 0.0), "player_health": 480.0}
+        b1 = switch(1)
+        b0 = switch(0)
+        check(b1 == [(0x0148, [1, 1]), (0x014B, [1, 10, 2, 0]), (0x0152, [1, 1, 11]),
+                     (0x006F, [P, 1, 0]), (0x006F, [P, 0, 11])] + energy(E30)
+              and b0 == [(0x0148, [1, 0]), (0x014B, [1, 10, 1, 1]), (0x0152, [1, 11, 1]),
+                         (0x006F, [P, 0, 1]), (0x006F, [P, 1, 10])] + energy(E25)
+              and agents.PLAYER_OFFHAND is not None,
+              "a sword-and-shield set 0 against a scythe: the shield (item 10) leaves to "
+              "backpack slot 0 and comes back to equipped slot 1, and the server's off hand "
+              "is restored with it (RECONSTRUCTION: set 0's shield was never in the backpack)",
+              f"{b1} / {b0}")
+        # the flag's refusals
+        for bad in ("4=starter_axe", "1=hostile_bow", "x=starter_axe", "1=", "1=no_such_item"):
+            try:
+                authsrv.configure_weapon_sets([bad])
+                ok = False
+            except (SystemExit, Exception):                                    # noqa: BLE001
+                ok = True
+            check(ok, f"--weapon-set {bad!r} is refused at launch")
+        authsrv.configure_weapon_sets(["2=starter_bow+starter_shield"])
+        check(authsrv.WEAPON_SETS[2] == {"lead": "starter_bow", "off": None},
+              "a two-handed lead drops its off hand at configure time (WEAPONS-W1's rule)")
+        row = authsrv.apply_party_character({"player_weapon_sets": [[3, "starter_spear", "starter_shield"]]})
+        check(authsrv.WEAPON_SETS[3] == {"lead": "starter_spear", "off": "starter_shield"}
+              and any("set 3" in c for c in row),
+              "a party row's player_weapon_sets fills a set through the same door")
+        src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+        sargs = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
+        check("elif opcode == GAME_CMSG_SELECT_WEAPON_SET:" in src
+              and "select_weapon_set(send, state, int(values[1]), conn_id)" in src
+              and '"--weapon-set"' in sargs and "configure_weapon_sets(a.weapon_set)" in src,
+              "the dispatch arm for c2s 0x0032 and the --weapon-set flag exist")
+    finally:
+        (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+         authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE) = saved[:5]
+        authsrv.WEAPON_SETS[:] = saved[5]
+        authsrv.WEAPON_SET_BACKPACK_SLOTS.clear()
+        authsrv.WEAPON_SET_BACKPACK_SLOTS.update(saved[6])
+
+
 def main():
     section_table()
     section_skills()
@@ -1536,6 +1671,7 @@ def main():
     section_spear()
     section_scythe()
     section_customisation()
+    section_weapon_sets()
     return LEDGER.verdict()
 
 
