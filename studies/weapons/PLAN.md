@@ -218,6 +218,13 @@ with C5 as its seed (Q7), not tuned here.
 
 ## 6. Captures — only what the corpus cannot hold
 
+> **The runsheet is [RUNSHEET.md](RUNSHEET.md)** (2026-09-18): the four runs written
+> out step by step, with the live build verified, the sealed plans already in
+> `vault/plans/weapons_1a..3.txt`, an F11 meaning, an exposure floor and an abort per
+> run, and the scoring commands. **RUN-2 no longer carries Q16** — §22 answered it
+> from the client's own code. This section stays the table; that file is what you
+> execute.
+
 Anyone can wield any weapon, and timing, launch, flight, projectile and range do not
 depend on meeting a requirement — so **one PvP character on the Isle of the Nameless
 covers every clock in two sittings**, with weapons from the PvP equipment panel. House
@@ -229,7 +236,7 @@ exposure floor and an abort written down.
 |---|---|---|---|
 | **RUN-WEAPONS-1A** martial | axe · scythe on ONE suit · scythe on the three adjacent suits · spear · spear + shield | Q5, Q6, the 1.5 s clock, scythe wire shape and critical, the spear's projectile and flag | scythe and spear start→start 1.500, word / launch at 0.650; spear `0x00A4` field 7 = 1 |
 | **RUN-WEAPONS-1B** bows and casters | shortbow · flatbow · longbow · recurve · hornbow · staff · wand, all from the same marked spot | Q2 (609 ↔ class), Q3 (speed per class — same distance, five flights), the 2.025 and 2.7 clocks | start→launch 0.9125 / 1.1375 / 1.250 / 0.775; flight ratios 0.59 : 0.88 : 0.59 : 0.40 : 0.59 |
-| **RUN-WEAPONS-2** range | per weapon: stand far, press attack once, let the character walk in; repeat uphill if the Isle allows | Q4 — the distance from shooter to the aim point at the FIRST launch is the range, no free parameter; **and Q16 (W2b's client half): does the character STOP at range on its own press, and do the flights hold across swings** | 1004 / 1498 / 1498 / 1273 / 1273; 1248 staff and wand; 1004 spear; the body stands after the first start |
+| **RUN-WEAPONS-2** range | per weapon: stand far, press attack once, let the character walk in; repeat uphill if the Isle allows | Q4 — the distance from shooter to the aim point at the FIRST launch is the range, no free parameter. ~~Q16~~ is **no longer this run's**: §22 answered it from the client's own code (the park threshold has no weapon term), so spend no steps on it | 1004 / 1498 / 1498 / 1273 / 1273; 1248 staff and wand; 1004 spear; the body stands after the first start |
 | **RUN-WEAPONS-3** damage (later, needs the right attributes) | met vs unmet requirement on one weapon; a scythe's criticals; hornbow vs longbow on the 100-armour suit | Q10, Q5's critical, W4's penetration | written when W4 opens |
 
 ## 7. Open questions
