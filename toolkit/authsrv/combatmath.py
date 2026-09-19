@@ -148,14 +148,21 @@ BONUS_ARMOUR_CAP = 25.0
 # sources -- the wire, the damage-multiplier table, and this categorisation.
 
 
-def armour_of_piece(item, physical, ARMOR_RATING_MODIFIER,
-                    ARMOR_VS_TYPE_MODIFIER):
-    """(rating, vs_physical_bonus) from a piece's own modifier words, or None.
+def armour_of_piece(item, damage_type, ARMOR_RATING_MODIFIER,
+                    ARMOR_VS_TYPE_MODIFIER, met=True):
+    """(rating, vs-type bonus) from a piece's own modifier words, or None.
 
-    Identifier 572's argument is the rating and 527's is the "+N vs. <type>"
-    bonus, whose type comes from the companion word -- identifier 4 resolves to
-    the string `vs. physical damage` (studies/itemmods 2). Lazy import and
-    fail-soft, the same shape as weapon_damage_range.
+    Identifier 572's argument is the rating -- or 635's on a REQUIRED shield
+    when `met`, and the wiki's 8 / 5 when not (the WEAPONS-W4 block below) --
+    and each 527's is a `+N vs. <condition>` line that counts only when the
+    SPECIAL word right before it admits `damage_type`: an id from the
+    client's fourteen (content/world.toml [damage_type.table]) or a class
+    name, "physical" / "elemental" / "other". Identifier 4 is `vs. physical
+    damage`, 3 `vs. elemental damage`, 5 `vs. <the named type> damage`
+    (studies/itemmods 2; the corpus's pieces carry 4 or 3 and nothing else,
+    400 of 400). WEAPONS-W4 (2026-09-19): this used to take a `physical`
+    boolean and read every 527 as "vs. physical". Lazy import and fail-soft,
+    the same shape as weapon_damage_range.
     """
     try:
         sys.path.insert(0, os.path.join(
@@ -164,18 +171,28 @@ def armour_of_piece(item, physical, ARMOR_RATING_MODIFIER,
         import itemmods                                   # noqa: PLC0415
     except Exception:                                     # noqa: BLE001
         return None
-    rating = bonus = None
+    rating = None
+    bonus = 0.0
+    pending = None
     for word in (item or {}).get("modifiers", []):
         d = itemmods.decode(word)
         if d["skipped_high"] or d["skipped_bit18"]:
             continue
-        if d["identifier"] == ARMOR_RATING_MODIFIER:
-            rating = d["arg"]
-        elif d["identifier"] == ARMOR_VS_TYPE_MODIFIER:
-            bonus = d["arg"]
+        ident = d["identifier"]
+        if ident in CONDITION_IDENTIFIERS:
+            pending = (ident, d["arg"], d["arg2"])       # qualifies the NEXT line
+            continue
+        if ident == ARMOR_RATING_MODIFIER:
+            rating = float(d["arg"])
+        elif ident == SHIELD_ARMOUR_REQUIRED:
+            rating = (float(d["arg"]) if met
+                      else UNMET_SHIELD_ARMOUR[int(d["arg"]) >= 16])
+        elif ident == ARMOR_VS_TYPE_MODIFIER and condition_applies(pending, damage_type):
+            bonus += float(d["arg"])
+        pending = None
     if rating is None:
         return None
-    return (float(rating), float(bonus or 0.0) if physical else 0.0)
+    return (rating, bonus)
 
 
 # ---- THE ENERGY THE ARMOUR GIVES (DAGGERS-F15) --------------------------------
@@ -219,16 +236,17 @@ def armour_energy_bonus(keys):
     return energy, pips
 
 
-def player_armour_at(location_key, physical, EQUIP_ARMOUR,
+def player_armour_at(location_key, damage_type, EQUIP_ARMOUR,
                      ARMOR_RATING_MODIFIER, ARMOR_VS_TYPE_MODIFIER):
-    """The player's effective AR at one body location, or None if unarmoured."""
+    """The player's effective AR at one body location against `damage_type`
+    (an id or a class name -- armour_of_piece), or None if unarmoured."""
     if not EQUIP_ARMOUR:
         return None
     try:
         piece = agents.item_template(agents.worn_piece_key(location_key))
     except Exception:                                     # noqa: BLE001
         return None
-    got = armour_of_piece(piece, physical, ARMOR_RATING_MODIFIER,
+    got = armour_of_piece(piece, damage_type, ARMOR_RATING_MODIFIER,
                           ARMOR_VS_TYPE_MODIFIER)
     if got is None:
         return None
@@ -250,8 +268,9 @@ def player_spell_armour(EQUIP_ARMOUR, ARMOR_RATING_MODIFIER,
     reading below, kept as `--no-spell-location-roll`'s arm and REFUTED as
     a claim about retail.
 
-    ELEMENTAL -- `physical=False`, so the pieces' `+20 vs. physical damage`
-    does not reach a fire spell (WIKI, GWW "Damage calculation" sec. Example
+    ELEMENTAL -- damage_type "elemental", so the pieces' `+20 vs. physical
+    damage` does not reach a fire spell (a `+N vs. elemental` would, since
+    WEAPONS-W4) (WIKI, GWW "Damage calculation" sec. Example
     of armor effect: the Elementalist's `+10 vs. Elemental` counts against a
     physical attack for nothing, and the Warrior's +20 vs. physical the same
     way for a spell). Today every piece this server equips reads 25 elemental
@@ -267,7 +286,7 @@ def player_spell_armour(EQUIP_ARMOUR, ARMOR_RATING_MODIFIER,
     """
     ratings = {}
     for key, _w in HIT_LOCATION_ODDS:
-        ar = player_armour_at(key, False, EQUIP_ARMOUR,
+        ar = player_armour_at(key, "elemental", EQUIP_ARMOUR,
                               ARMOR_RATING_MODIFIER,
                               ARMOR_VS_TYPE_MODIFIER)
         if ar is not None:
@@ -469,3 +488,149 @@ def swing_damage(rank, armour, damage_range, level=20, critical=False,
     # weapon attribute's, with the level threshold.
     sl = attack_strength(rank, level) if strike_level is None else float(strike_level)
     return max(0.0, round(roll * mult * 2.0 ** ((sl - armour) / ARMOUR_DIVISOR)))
+
+
+# ---- WEAPONS-W4 (2026-09-19): THE DAMAGE TYPE, THE vs-TYPE ARMOUR, THE REQUIREMENT
+#
+# THE ENUM IS THE CLIENT'S OWN. Identifier 587's argument, 0x00A7's kind field
+# and the `vs. %str1% damage` condition (special identifier 5) index ONE
+# fourteen-entry table, `s_charDamage` (ConstChar.cpp, `damage <
+# arrsize(s_charDamage)`), through accessors guarded by `< 14`; the item
+# accessor's default with no 587 word is 14 (0x008451C6). content/world.toml's
+# [damage_type.table] carries the string ids (0 Blunt, 1 Piercing, 2 Slashing,
+# 3 Cold, 4 Lightning, 5 Fire, 6 Chaos, 7 Dark, 8 Holy, 9 Nature, 10 Sacrifice,
+# 11 Earth, 12 Generic, 13 = 7 again) and [damage_type.classes] the wiki's
+# grouping -- physical 0 / 1 / 2, elemental 3 / 4 / 5 / 11, the rest neither.
+# OBSERVED on the corpus (3,857 items over 96 connections): bows, daggers and
+# spears carry 1, hammers 0, swords and axes 2 (18 swords 5), wands and staves
+# 3..8 and 11; no item carries 9, 10, 12 or 13.
+#
+# A 527 `Armor +N` line is qualified by the SPECIAL word right BEFORE it --
+# (572, 4, 527) on 345 pieces and (572, 3, 527) on 55, the corpus's only two
+# shapes on a worn piece: 4 renders "vs. physical damage" (string 2480), 3
+# "vs. elemental damage" (2477), 5 "vs. %str1% damage" with the type's name
+# (2476; on no item in the corpus), and 9..20 are situational ("while
+# attacking", "while in a Stance", ...) and are NOT modelled: a 527 under one
+# of those adds nothing here, said once. The rule that a bonus counts against
+# the types its condition names is the wiki's (GWW "Damage type", "Armor
+# rating"); the client has no reader for 527 (itemmods --reads 527: the
+# tooltip only), so the server is the only place it can be true or false.
+#
+# THE REQUIREMENT is identifier 633 {attribute, rank} (studies/itemmods 5). A
+# required weapon carries its range as 634, a required shield its armour as
+# 635 and a required focus its energy as 636 -- an exact partition on the
+# corpus (weapons 634 only; 286 shields 635 only; 20 foci 636 only; 510 staves
+# 556 + 634, the energy ungated). UNMET: the weapon's damage divides by 3.098
+# -- OBSERVED on the isle's rank ladder (studies/isle/FINDINGS.md 9.2: one
+# hammer at ranks 5..8, 235 events, per-block divisors 3.073..3.133, the
+# naive 3 and 10/3 both excluded). A divisor on the rank-appropriate damage is
+# ONE of the two parameterisations that ladder admits (the other a strike-level
+# drop); both give those four numbers, RUN-WEAPONS-3 separates them, and the
+# number ships because it reproduces four independent blocks within 1.1 %
+# where the wiki's "approximately two-thirds" is the same claim with fewer
+# digits. A shield's armour falls to 8 (a 16-armour shield) or 5 (below 16)
+# and a focus's energy to +3 -- WIKI (GWW "Requirement" sec. Drawbacks, read
+# 2026-09-19), the not-randomly-generated arm of each rule, because every item
+# this server hands out is made, never dropped.
+DAMAGE_TYPE_MODIFIER = 587
+VS_ELEMENTAL, VS_PHYSICAL, VS_NAMED_TYPE = 3, 4, 5
+CONDITION_IDENTIFIERS = frozenset(range(1, 21))
+REQUIREMENT_MODIFIER = 633
+SHIELD_ARMOUR_REQUIRED = 635
+ENERGY_REQUIRED = 636
+DAMAGE_TYPE_NONE = 14
+UNMET_REQUIREMENT_DIVISOR = 3.098
+UNMET_SHIELD_ARMOUR = {True: 8.0, False: 5.0}      # rating >= 16 -> 8, else 5
+UNMET_FOCUS_ENERGY = 3
+_CONDITION_WARNED = []
+
+
+def word_fields(word):
+    """(identifier, arg, arg2) of one modifier word by the client walker's own
+    layout (bits 29-20 / 17-8 / 7-0), or None for a word it skips (bits 31-30
+    == 3, or bit 18) -- pure arithmetic, so it works on a bare machine."""
+    w = int(word) & 0xFFFFFFFF
+    if (w >> 30) & 3 == 3 or (w >> 18) & 1:
+        return None
+    return (w >> 20) & 0x3FF, (w >> 8) & 0x3FF, w & 0xFF
+
+
+def item_words(item):
+    return [f for f in map(word_fields, (item or {}).get("modifiers", ())) if f]
+
+
+def item_damage_type(item):
+    """The 587 argument, or None when the item carries no type line."""
+    for ident, arg, _a2 in item_words(item):
+        if ident == DAMAGE_TYPE_MODIFIER:
+            return int(arg)
+    return None
+
+
+def damage_class(damage_type):
+    """'physical' / 'elemental' / 'other' for a type id; a class name passes
+    through; None for no type (None, or the accessor's 14)."""
+    if damage_type in ("physical", "elemental", "other"):
+        return damage_type
+    if damage_type is None or int(damage_type) == DAMAGE_TYPE_NONE:
+        return None
+    classes = agents.WORLD.get("damage_type", "classes")
+    d = int(damage_type)
+    if d in classes["physical"]:
+        return "physical"
+    if d in classes["elemental"]:
+        return "elemental"
+    return "other"
+
+
+def damage_type_label(damage_type):
+    """A one-word tag for a banner: the class name, or the table's label."""
+    if damage_type in ("physical", "elemental", "other"):
+        return damage_type
+    if damage_type is None or int(damage_type) == DAMAGE_TYPE_NONE:
+        return "untyped"
+    labels = agents.WORLD.get("damage_type", "table")["labels"]
+    d = int(damage_type)
+    return labels[d] if 0 <= d < len(labels) else f"type {d}"
+
+
+def condition_applies(condition, damage_type):
+    """Does a 527's condition word admit this damage type? No condition: yes.
+    4 / 3: the wiki's class. 5: that one named type. A situational condition
+    (9..20): no, and said once per identifier."""
+    if condition is None:
+        return True
+    ident, arg, _a2 = condition
+    cls = damage_class(damage_type)
+    if ident == VS_PHYSICAL:
+        return cls == "physical"
+    if ident == VS_ELEMENTAL:
+        return cls == "elemental"
+    if ident == VS_NAMED_TYPE:
+        return (damage_type is not None and not isinstance(damage_type, str)
+                and int(damage_type) == int(arg))
+    if ident not in _CONDITION_WARNED:
+        _CONDITION_WARNED.append(ident)
+        print(f"ARMOUR: a +N line under condition identifier {ident} (situational) "
+              f"is not modelled and adds nothing [WEAPONS-W4]", flush=True)
+    return False
+
+
+def weapon_requirement(item):
+    """(attribute, rank) from the item's 633 word, or None."""
+    for ident, arg, arg2 in item_words(item):
+        if ident == REQUIREMENT_MODIFIER:
+            return int(arg), int(arg2)
+    return None
+
+
+def requirement_met(item, rank_of):
+    """True when the item has no 633 or the rank in its attribute reaches the
+    requirement; `rank_of` is a mapping {attribute: rank} or a callable."""
+    req = weapon_requirement(item)
+    if req is None:
+        return True
+    attribute, rank = req
+    have = (rank_of.get(attribute, 0) if hasattr(rank_of, "get")
+            else rank_of(attribute))
+    return have is not None and int(have) >= rank

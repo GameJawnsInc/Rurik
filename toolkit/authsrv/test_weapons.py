@@ -23,7 +23,7 @@ import agents  # noqa: E402
 import authsrv  # noqa: E402
 import combatmath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=155)   # the BARE-MACHINE number: 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=177)   # the BARE-MACHINE number: 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
 check = LEDGER.ok
 
 LEGACY_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
@@ -1822,6 +1822,258 @@ def section_weapon_sets():
         authsrv.WEAPON_SET_BACKPACK_SLOTS.update(saved[6])
 
 
+def _mod(ident, arg, arg2=0):
+    """Compose one modifier word by the client walker's own layout."""
+    return (ident << 20) | (arg << 8) | arg2
+
+
+def section_damage_type_and_requirement():
+    print("\n19. WEAPONS-W4: the damage type against the vs-type armour, and the 633 requirement")
+    cm = combatmath
+    saved = (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+             authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,
+             authsrv.TYPED_ARMOUR, authsrv.UNMET_REQUIREMENT, agents.item_template)
+    try:
+        # the enum: the client's fourteen, the wiki's two classes
+        table = agents.WORLD.get("damage_type", "table")
+        classes = agents.WORLD.get("damage_type", "classes")
+        check(len(table["name_ids"]) == 14 and len(table["adjective_ids"]) == 14
+              and len(table["labels"]) == 14 and table["none"] == 14
+              and table["name_ids"][0] == 2014 and table["name_ids"][5] == 2020
+              and table["name_ids"][11] == 2018 and table["name_ids"][13] == table["name_ids"][7]
+              and table["adjective_ids"][13] == table["adjective_ids"][7],
+              "content carries the client's fourteen-entry s_charDamage tables (names 2014.., "
+              "adjectives 2001..), index 13 duplicating 7 in both, and 14 as 'no type'")
+        check([cm.damage_class(i) for i in (0, 1, 2)] == ["physical"] * 3
+              and [cm.damage_class(i) for i in (3, 4, 5, 11)] == ["elemental"] * 4
+              and [cm.damage_class(i) for i in (6, 7, 8, 9, 10, 12)] == ["other"] * 6
+              and cm.damage_class(14) is None and cm.damage_class(None) is None
+              and cm.damage_class("elemental") == "elemental"
+              and sorted(classes["physical"]) == [0, 1, 2]
+              and sorted(classes["elemental"]) == [3, 4, 5, 11],
+              "blunt / piercing / slashing are physical, cold / lightning / fire / earth "
+              "elemental, chaos / dark / holy / nature / sacrifice / generic neither, 14 and "
+              "None untyped (WIKI's grouping over the client's ids)")
+        check(cm.damage_type_label(0) == "blunt" and cm.damage_type_label(2) == "slashing"
+              and cm.damage_type_label(11) == "earth" and cm.damage_type_label(14) == "untyped"
+              and cm.damage_type_label("physical") == "physical",
+              "the one-word labels resolve by id")
+        # the vault: the tables against the pinned client itself
+        try:
+            sys.path.insert(0, os.path.join(os.path.dirname(HERE), "clientscan"))
+            import itemmods, pinned                                       # noqa: PLC0415
+            img = itemmods.Image(pinned.find()[0])
+            names = [img.u32(0x00A38624 + 4 * i) for i in range(14)]
+            adjs = [img.u32(0x00A385CC + 4 * i) for i in range(14)]
+        except (Exception, SystemExit) as e:                               # noqa: BLE001
+            names = adjs = None                    # pinned.find exits on a bare machine
+            LEDGER.skip("section 19", f"the pinned client is absent ({type(e).__name__}) -- 1 check")
+        if names is not None:
+            check(names == list(table["name_ids"]) and adjs == list(table["adjective_ids"]),
+                  "and the two tables read back from the pinned client (VA 0x00A38624 and "
+                  "0x00A385CC) byte for byte -- a re-extraction that could disagree",
+                  f"{names} / {adjs}")
+        # what our items deal
+        item = agents.item_template
+        check(cm.item_damage_type(item("starter_axe")) == 2
+              and cm.item_damage_type(item("starter_bow")) == 1
+              and cm.item_damage_type(item("starter_hammer")) == 0
+              and cm.item_damage_type(item("starter_spear")) == 1
+              and cm.item_damage_type(item("hostile_bow")) == 1
+              and cm.damage_class(cm.item_damage_type(item("starter_wand"))) in ("elemental", "other")
+              and cm.item_damage_type({"modifiers": []}) is None,
+              "the 587 reader: axe slashing, bow / spear / hostile bow piercing, hammer blunt, "
+              "the wand an element or chaos, an item with no type line None")
+        # the pieces, typed
+        body = item("warrior_body")
+        check(cm.item_words(body) == [(572, 25, 0), (4, 0, 0), (527, 20, 0)]
+              and authsrv.armour_of_piece(body, 2) == (25.0, 20.0)
+              and authsrv.armour_of_piece(body, "physical") == (25.0, 20.0)
+              and authsrv.armour_of_piece(body, 5) == (25.0, 0.0)
+              and authsrv.armour_of_piece(body, 6) == (25.0, 0.0)
+              and authsrv.armour_of_piece(body, None) == (25.0, 0.0)
+              and authsrv.armour_of_piece(body, physical=False) == (25.0, 0.0),
+              "the warrior body [572 25, 4, 527 20]: +20 against slashing (2) and 'physical', "
+              "nothing against fire (5), chaos (6), an untyped hit or the old physical=False")
+        elem = {"modifiers": [_mod(572, 25), _mod(3, 0), _mod(527, 10)]}
+        named = {"modifiers": [_mod(572, 25), _mod(5, 5), _mod(527, 10)]}
+        situ = {"modifiers": [_mod(572, 25), _mod(9, 0), _mod(527, 10)]}
+        plain = {"modifiers": [_mod(572, 25), _mod(527, 10)]}
+        both = {"modifiers": [_mod(572, 25), _mod(4, 0), _mod(527, 20), _mod(3, 0), _mod(527, 10)]}
+        check(authsrv.armour_of_piece(elem, 5) == (25.0, 10.0)
+              and authsrv.armour_of_piece(elem, 3) == (25.0, 10.0)
+              and authsrv.armour_of_piece(elem, 2) == (25.0, 0.0)
+              and authsrv.armour_of_piece(elem, 6) == (25.0, 0.0),
+              "a [572, 3, 527 10] piece (+10 vs. elemental, the corpus's 55): counts against "
+              "fire and cold, not slashing, not chaos")
+        check(authsrv.armour_of_piece(named, 5) == (25.0, 10.0)
+              and authsrv.armour_of_piece(named, 3) == (25.0, 0.0)
+              and authsrv.armour_of_piece(named, "elemental") == (25.0, 0.0),
+              "a [572, 5 arg 5, 527 10] piece (+10 vs. fire, the named form, on no corpus item): "
+              "fire only -- not cold, and not a bare class")
+        check(authsrv.armour_of_piece(situ, 2) == (25.0, 0.0)
+              and authsrv.armour_of_piece(situ, 5) == (25.0, 0.0)
+              and authsrv.armour_of_piece(plain, 2) == (25.0, 10.0)
+              and authsrv.armour_of_piece(plain, 5) == (25.0, 10.0)
+              and authsrv.armour_of_piece(both, 2) == (25.0, 20.0)
+              and authsrv.armour_of_piece(both, 5) == (25.0, 10.0),
+              "a situational condition (9, 'while attacking') adds nothing to anything -- not "
+              "modelled, said once; an unconditioned 527 counts against everything; two "
+              "conditioned lines each answer their own type")
+        # through the location reader and the body's item
+        state = {"agents": {}, "pos": (0.0, 0.0), "player_health": 480.0}
+        authsrv.apply_party_character({"player_weapon": "starter_axe"})
+        agents.PLAYER_OFFHAND = None
+        chest_phys = authsrv.player_armour_at("warrior_body", 2, state)
+        chest_cold = authsrv.player_armour_at("warrior_body", 3, state)
+        check(chest_phys == 45.0 and chest_cold == 25.0
+              and authsrv.player_armour_at("warrior_body") == 45.0
+              and authsrv.player_spell_armour() == 25.0,
+              "the chest reads 45 against a slashing hit and 25 against a cold one; the default "
+              "is physical and a spell is elemental, as before",
+              f"{chest_phys} / {chest_cold}")
+        wand_type = cm.item_damage_type(item("starter_wand"))
+        check(authsrv.body_damage_type({"weapon_item": "starter_wand"}) == wand_type
+              and authsrv.body_damage_type({"weapon_item": "hostile_bow"}) == 1
+              and authsrv.body_damage_type({}) == "physical"
+              and authsrv.body_damage_type({"weapon_item": "no_such_item"}) == "physical",
+              "land_swing's type is the body's own item's 587 -- a wand's element, a bow's "
+              "piercing -- and 'physical' for a creature with no item or an unknown one")
+        authsrv.TYPED_ARMOUR = False
+        check(authsrv.body_damage_type({"weapon_item": "starter_wand"}) == "physical",
+              "--no-typed-armour: every body deals 'physical' (the pre-W4 reading)")
+        authsrv.TYPED_ARMOUR = True
+        src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+        sargs = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
+        check("player_armour_at(location, damage_type=body_damage_type(agent)," in src
+              and '"--no-typed-armour"' in sargs and '"--no-unmet-requirement"' in sargs,
+              "land_swing reads the armour against the body's type, and both revert flags exist")
+        # the requirement: 633 {attribute, rank}
+        req_hammer = dict(item("starter_hammer"))
+        req_hammer["modifiers"] = [_mod(587, 0), _mod(634, 22, 15), _mod(633, 19, 9)]
+        check(cm.weapon_requirement(item("starter_axe")) is None
+              and cm.weapon_requirement(req_hammer) == (19, 9)
+              and cm.requirement_met(item("starter_axe"), {}) is True
+              and cm.requirement_met(req_hammer, {19: 9}) is True
+              and cm.requirement_met(req_hammer, {19: 8}) is False
+              and cm.requirement_met(req_hammer, {}) is False
+              and cm.requirement_met(req_hammer, lambda a: 12 if a == 19 else 0) is True
+              and cm.weapon_damage_range(req_hammer) == (15, 22),
+              "633 reads (attribute 19, rank 9) on a made hammer; met at 9 and above, unmet "
+              "below or with no rank; a callable rank works; the 634 range reads as before")
+        # the player's rank in the ITEM's attribute, and the divisor
+        req_sword = dict(item("starter_sword"))
+        req_sword["modifiers"] = [_mod(587, 2), _mod(634, 22, 15), _mod(633, 17, 9)]
+        plain_sword = dict(req_sword, modifiers=[_mod(587, 2), _mod(584, 22, 15)])
+        agents.PLAYER_WEAPON = req_sword
+        r17 = authsrv.player_rank_of(17)
+        via_633 = authsrv.player_weapon_rank({})
+        agents.PLAYER_WEAPON = plain_sword
+        r20 = authsrv.player_rank_of(20)
+        via_table = authsrv.player_weapon_rank({})
+        check(via_633 == r17 and via_table == r20 and r17 != r20,
+              "player_weapon_rank reads the item's 633 attribute first (a sword requiring "
+              "Strength 17 swings on the Strength rank), and the type table (Swordsmanship "
+              "20) for an item with none", f"{via_633} = {r17} / {via_table} = {r20}")
+        agents.PLAYER_WEAPON = req_hammer                  # Hammer Mastery 19 at 9
+        r19 = authsrv.player_rank_of(19)
+        div = cm.UNMET_REQUIREMENT_DIVISOR
+        check(abs(div - 3.098) < 1e-9
+              and authsrv.player_requirement_factor(None, rank=8) == 1.0 / div
+              and authsrv.player_requirement_factor(None, rank=9) == 1.0
+              and authsrv.player_requirement_factor(None) == (1.0 if r19 >= 9 else 1.0 / div)
+              and authsrv.player_requirement_met(req_hammer, None, rank=3) is False
+              and authsrv.player_requirement_met(req_hammer, None, rank=9) is True,
+              "the unmet factor is 1 / 3.098 (the isle's divisor) below the requirement and 1 "
+              "at or above it, on the rank handed in (the Weakness-cut one at a hit site)")
+        authsrv.UNMET_REQUIREMENT = False
+        check(authsrv.player_requirement_factor(None, rank=1) == 1.0
+              and authsrv.body_requirement_factor({"weapon_item": "starter_axe"}) == 1.0,
+              "--no-unmet-requirement: the factor is 1 whatever the rank")
+        authsrv.UNMET_REQUIREMENT = True
+        # the isle's rank ladder, reproduced through swing_damage with the divisor
+        # as the multiplier (studies/isle/FINDINGS.md 9.1-9.2: a 15-22 hammer,
+        # customised x1.2, AR 60, ranks 5..8 -- means 3.864 / 4.296 / 4.637 /
+        # 5.093 and bands 3..5 / 4..5 / 4..5 / 4..6)
+        observed = {5: 3.864, 6: 4.296, 7: 4.637, 8: 5.093}
+        bands = {5: {3, 4, 5}, 8: {4, 5, 6}}
+        means, sets = {}, {}
+        for r in (5, 6, 7, 8):
+            vals = [cm.swing_damage(r, 60.0, (15, 22), roll=float(x), mult=1.2 / div,
+                                    ARMOUR_DIVISOR=40.0, CRITICAL_ARMOUR_REDUCTION=20.0)
+                    for x in range(15, 23)]
+            means[r] = sum(vals) / len(vals)
+            sets[r] = set(vals)
+        check(all(abs(means[r] / observed[r] - 1.0) < 0.03 for r in observed)
+              and sets[5] == bands[5] and sets[8] == bands[8],
+              "the isle's rank ladder reproduced: the divisor on the rank-appropriate damage "
+              "puts every block's mean within 3 % of the observed 3.864 / 4.296 / 4.637 / "
+              "5.093, with rank 5's band 3..5 (its eleven 3s) and rank 8's 4..6 (its twenty 6s)",
+              f"{ {r: round(m, 3) for r, m in means.items()} } bands {sets[5]} / {sets[8]}")
+        # a body under the same rule
+        agents.item_template = lambda key, _it=item: req_hammer if key == "req_hammer" else _it(key)
+        low = {"weapon_item": "req_hammer", "attributes": [[19, 3]]}
+        high = {"weapon_item": "req_hammer", "attributes": [[19, 12]]}
+        check(authsrv.body_requirement_factor(low) == 1.0 / div
+              and authsrv.body_requirement_factor(high) == 1.0
+              and authsrv.body_requirement_factor({"weapon_item": "starter_axe"}) == 1.0
+              and authsrv.body_requirement_factor({}) == 1.0,
+              "a body swinging a hammer it lacks the rank for divides too; met, unrequired "
+              "or unarmed bodies do not")
+        agents.item_template = item
+        # a required shield: 635 in full when met, the wiki's 8 / 5 when not
+        shield16 = {"item_type": 24, "modifiers": [_mod(633, 17, 9), _mod(635, 16)]}
+        shield12 = {"item_type": 24, "modifiers": [_mod(633, 17, 9), _mod(635, 12)]}
+        check(authsrv.armour_of_piece(shield16, 2, met=True) == (16.0, 0.0)
+              and authsrv.armour_of_piece(shield16, 2, met=False) == (8.0, 0.0)
+              and authsrv.armour_of_piece(shield12, 2, met=False) == (5.0, 0.0)
+              and authsrv.armour_of_piece(item("starter_shield"), 2) is not None,
+              "a required shield's 635 is its armour when met; unmet, 8 for a 16-armour "
+              "shield and 5 below it (WIKI, GWW 'Requirement'); a plain 572 shield as before")
+        agents.PLAYER_OFFHAND = shield16
+        agents.PLAYER_WEAPON = item("starter_sword")
+        r17 = authsrv.player_rank_of(17)
+        off_now = authsrv.offhand_armour("physical")
+        authsrv.UNMET_REQUIREMENT = False
+        off_off = authsrv.offhand_armour("physical")
+        authsrv.UNMET_REQUIREMENT = True
+        check(off_now == (16.0 if r17 >= 9 else 8.0) and off_off == 16.0,
+              "the held shield's contribution follows the character's Strength rank against "
+              "its 633, and --no-unmet-requirement gives the full 16",
+              f"rank 17 = {r17}: {off_now} / {off_off}")
+        # a required focus: 636 in full when met, +3 when not
+        focus = {"item_type": 12, "modifiers": [_mod(633, 5, 8), _mod(636, 12)]}
+        agents.PLAYER_OFFHAND = focus
+        r5 = authsrv.player_rank_of(5)
+        e_now = authsrv.weapon_energy_bonus()
+        authsrv.UNMET_REQUIREMENT = False
+        e_off = authsrv.weapon_energy_bonus()
+        authsrv.UNMET_REQUIREMENT = True
+        agents.PLAYER_OFFHAND = item("starter_focus")
+        e_plain = authsrv.weapon_energy_bonus()
+        check(e_now == (12 if r5 >= 8 else 3) and e_off == 12 and e_plain == 5,
+              "a required focus's 636 is its energy when met and +3 when not (WIKI); the "
+              "revert gives the full 12; a plain 556 focus still gives its 5 (WEAPONS-W5)",
+              f"rank 5 = {r5}: {e_now} / {e_off} / {e_plain}")
+        # the launch banner
+        agents.PLAYER_OFFHAND = None
+        b_axe = authsrv.requirement_banner(item("starter_axe"))
+        b_req = authsrv.requirement_banner(req_hammer)
+        b_met = authsrv.requirement_banner(req_sword if r17 >= 9 else
+                                           dict(req_sword, modifiers=[_mod(587, 2), _mod(633, 17, 0)]))
+        check(b_axe == "weapon: deals slashing [WEAPONS-W4]"
+              and "deals blunt" in b_req and "requires attribute 19 at 9" in b_req
+              and ("UNMET" in b_req) == (r19 < 9)
+              and "MET" in b_met and "UNMET" not in b_met
+              and authsrv.requirement_banner({"modifiers": []}) is None,
+              "the banner names the type dealt and the requirement, MET or UNMET with the "
+              "penalty; nothing for an item with no words", f"{b_axe} | {b_req} | {b_met}")
+    finally:
+        (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+         authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,
+         authsrv.TYPED_ARMOUR, authsrv.UNMET_REQUIREMENT, agents.item_template) = saved
+
+
 def main():
     section_table()
     section_skills()
@@ -1841,6 +2093,7 @@ def main():
     section_scythe()
     section_customisation()
     section_weapon_sets()
+    section_damage_type_and_requirement()
     return LEDGER.verdict()
 
 

@@ -2158,3 +2158,63 @@ consecutive handles (1 and 2, or 2 and 3 with a shot still outstanding) and one 
 while the other is not), each with the preparation's constant word beside it. The 25 % \
 itself is UNMEASURED: the targets' pools on that tape are not broadcast, so no arrow's \
 points could be read against a plain shot's."""
+
+
+# ---- WEAPONS-W4 (2026-09-19): THE DAMAGE-TYPE ENUM, the client's own ------------
+#
+# Identifier 587's argument, 0x00A7's kind field and the `vs. %str1% damage`
+# condition (special identifier 5) all index ONE fourteen-entry table in the
+# client, `s_charDamage` (ConstChar.cpp: `damage < arrsize(s_charDamage)`),
+# through two accessors guarded by the same `cmp esi, 0xe`: 0x005AABA0 returns
+# the type NAME's string id (the tooltip's "Damage" line, template 2443; the
+# vs-type condition) and 0x005AAB70 the ADJECTIVE's (the range line: "Blunt
+# Dmg: 3-5"). The item accessor's default when an item carries no 587 is 14
+# (ItCliApi, 0x008451C6: push 0xe), so 14 is "no type". Index 13 duplicates 7
+# in both tables (why: UNVERIFIED -- studies/isle B2 read the same duplicate).
+# `labels` are one-word tags for banners and logs; the strings themselves
+# resolve at run time from the ids (textrec.py).
+[damage_type.table]
+name_ids = [2014, 2015, 2016, 2017, 2019, 2020, 2021, 2022, 2023, 2025, 2026, 2018, 2024, 2022]
+adjective_ids = [2001, 2002, 2003, 2004, 2006, 2007, 2008, 2009, 2010, 2012, 2013, 2005, 2011, 2009]
+labels = ["blunt", "piercing", "slashing", "cold", "lightning", "fire", "chaos", "dark", "holy", "nature", "sacrifice", "earth", "generic", "dark"]
+none = 14
+
+[damage_type.table.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/consttable.py"
+build = 38797
+verified = """OBSERVED on build 38797 (vault/client/2026-07-29_221c13772c7a), 2026-09-19. \
+consttable.py extracts the adjective table as s_charDamage (14 x 4 at file 0x6375CC, \
+VA 0x00A385CC; studies/isle/FINDINGS.md B2 read the same fourteen). The NAME table is \
+its sibling at VA 0x00A38624, reached from the 587 tooltip handler (0x00924B79: `push \
+[esi+0x10]; call 0x5AABA0`) and from special identifier 5's handler (0x00923C51), read \
+with codescan.py --dis and resolved with textrec.py: 2014 Blunt, 2015 Piercing, 2016 \
+Slashing, 2017 Cold, 2019 Lightning, 2020 Fire, 2021 Chaos, 2022 Dark, 2023 Holy, 2025 \
+Nature, 2026 Sacrifice, 2018 Earth, 2024 Generic; the adjectives 2001 Blunt .. 2013 \
+Sacrificial, 2005 Ebon, 2011 Magical. CORROBORATED on the live corpus (aw_w4census over \
+96 connections, 3,857 items): bows, daggers and spears carry 587 = 1, hammers 0, swords \
+and axes 2 (18 swords 5, fiery), wands and staves 3 / 4 / 5 / 6 / 7 / 8 / 11, NPC ranged \
+weapons 0..6 -- and no item carries 9, 10, 12 or 13. Kindle Arrows' arrows carried kind 5 \
+(WEAPONS-W2e), which this table reads as Fire."""
+
+# The wiki's grouping of the fourteen: which types a `vs. physical damage` line
+# (special identifier 4) and a `vs. elemental damage` line (3) count against.
+# Chaos, dark, holy and the rest are neither (GWW lists them beside the two
+# classes, not under either). The client has no reader for 527 at all
+# (itemmods.py --reads 527: the tooltip only), so the grouping cannot be read
+# out of it; a capture could still refute it, which is why it is its own row.
+[damage_type.classes]
+physical = [0, 1, 2]
+elemental = [3, 4, 5, 11]
+
+[damage_type.classes.provenance]
+source = "wiki"
+page = """GWW "Damage type", section "Damage types", read 2026-09-19: Elemental damage = \
+Cold, Earth, Fire, Lightning; Physical damage = Blunt, Piercing, Slashing; Chaos, Dark, \
+Holy and Shadow listed beside them under neither."""
+verified = """WIKI. The ids are [damage_type.table]'s (0 Blunt, 1 Piercing, 2 Slashing; 3 Cold, \
+4 Lightning, 5 Fire, 11 Earth). Shadow damage has no entry in the client's fourteen-name \
+table on build 38797 -- the wiki lists it, the client does not name it -- so it is not here. \
+On the live corpus the only 527 conditions are 4 (345 armour pieces) and 3 (55), and the \
+armour term itself is server-side, so no tape can show the grouping; this row is the claim \
+the server makes and the first typed hit on a +N vs. elemental piece would test."""

@@ -1699,6 +1699,18 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "584 range with no level and no armour term -- the branch "
                          "every run before 2026-09-18 took, because a caster weapon "
                          "names no mastery and the rank branch needs one.")
+    ap.add_argument("--no-typed-armour", action="store_true",
+                    help="WEAPONS-W4 REVERT: the player's armour reads every attack "
+                         "as PHYSICAL and every spell as elemental, whatever the "
+                         "attacker's item deals (its 587 word) -- the reading every "
+                         "run before 2026-09-19 made. With it on, a hostile bow "
+                         "whose 587 reads 3 (cold) is not met by the pieces' "
+                         "+20 vs. physical.")
+    ap.add_argument("--no-unmet-requirement", action="store_true",
+                    help="WEAPONS-W4 REVERT: an item's 633 requirement is read and "
+                         "printed at launch and costs nothing -- a weapon whose "
+                         "requirement the character lacks deals its met damage "
+                         "(no / 3.098), a shield its full 635, a focus its full 636.")
     ap.add_argument("--no-weapon-energy", action="store_true",
                     help="WEAPONS-W5 REVERT: a held staff's or focus's 556 energy word "
                          "adds nothing to the player's maximum energy -- the pool "

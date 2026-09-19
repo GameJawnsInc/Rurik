@@ -3630,6 +3630,7 @@ def scythe_extra_hit(send, state, aid, conn_id, rank, bonus_damage, damage_mult,
             0.01 * critical_strikes_rank(state) if CRITICAL_STRIKES else 0.0)
         dealt = swing_damage(rank, float(armour), PLAYER_SWING_DAMAGE,
                              critical=critical,
+                             mult=player_requirement_factor(state, rank),   # W4
                              critical_armour_reduction=weapon_critical_reduction(
                                  agents.PLAYER_WEAPON))
     elif PLAYER_SWING_DAMAGE:
@@ -11287,20 +11288,28 @@ from combatmath import (  # noqa: F401,E402
 )
 
 
-def armour_of_piece(item, physical=True):
-    """Forwards to combatmath, filling in the two modifier identifiers."""
-    return combatmath.armour_of_piece(item, physical, ARMOR_RATING_MODIFIER,
-                                      ARMOR_VS_TYPE_MODIFIER)
+def armour_of_piece(item, damage_type="physical", met=True, physical=None):
+    """Forwards to combatmath, filling in the two modifier identifiers.
+    WEAPONS-W4: `damage_type` is the incoming type (an id from the client's
+    fourteen, or "physical" / "elemental" / "other"); `met` whether a
+    required shield's 635 counts in full; the old `physical=` boolean still
+    means "physical" / "elemental"."""
+    if physical is not None:
+        damage_type = "physical" if physical else "elemental"
+    return combatmath.armour_of_piece(item, damage_type, ARMOR_RATING_MODIFIER,
+                                      ARMOR_VS_TYPE_MODIFIER, met=met)
 
 
-def offhand_armour(physical=True):
-    """SLICE-H9: the shield's own rating, from its 572 word, added to EVERY
-    location -- WIKI (GWW "Shield"): "an off-hand weapon that provides a bonus
-    to a character's overall armor rating". 0.0 with no offhand, no weapon, or
-    no rating word on the piece."""
+def offhand_armour(damage_type="physical", state=None):
+    """SLICE-H9: the shield's own rating, from its 572 word -- or its 635 when
+    its 633 requirement is met, the wiki's 8 / 5 when not (WEAPONS-W4) --
+    added to EVERY location -- WIKI (GWW "Shield"): "an off-hand weapon that
+    provides a bonus to a character's overall armor rating". 0.0 with no
+    offhand, no weapon, or no rating word on the piece."""
     if not EQUIP_WEAPON or not agents.PLAYER_OFFHAND:
         return 0.0
-    got = armour_of_piece(agents.PLAYER_OFFHAND, physical)
+    met = (not UNMET_REQUIREMENT) or player_requirement_met(agents.PLAYER_OFFHAND, state)
+    got = armour_of_piece(agents.PLAYER_OFFHAND, damage_type, met=met)
     if got is None:
         return 0.0
     rating, bonus = got
@@ -11348,13 +11357,20 @@ def casting_armour_penalty(state, now=None):
 CASTING_ARMOUR = True             # --no-casting-armour reverts (SLICE-H14)
 
 
-def player_armour_at(location_key, physical=True):
+def player_armour_at(location_key, damage_type="physical", state=None,
+                     physical=None):
     """Forwards to combatmath, reading EQUIP_ARMOUR here, at call time --
-    plus the shield (SLICE-H9), on top of whatever the location wears."""
-    got = combatmath.player_armour_at(location_key, physical, EQUIP_ARMOUR,
+    plus the shield (SLICE-H9), on top of whatever the location wears.
+    WEAPONS-W4: against `damage_type` -- the pieces' `+N vs. physical` and
+    `+N vs. elemental` lines count only for the types they name. The old
+    `physical=` boolean is still taken (True = "physical", False =
+    "elemental"), the two readings it always meant."""
+    if physical is not None:
+        damage_type = "physical" if physical else "elemental"
+    got = combatmath.player_armour_at(location_key, damage_type, EQUIP_ARMOUR,
                                       ARMOR_RATING_MODIFIER,
                                       ARMOR_VS_TYPE_MODIFIER)
-    return None if got is None else got + offhand_armour(physical)
+    return None if got is None else got + offhand_armour(damage_type, state)
 
 
 def player_spell_armour():
@@ -11363,7 +11379,7 @@ def player_spell_armour():
     line, if it ever carries one, does not."""
     got = combatmath.player_spell_armour(EQUIP_ARMOUR, ARMOR_RATING_MODIFIER,
                                          ARMOR_VS_TYPE_MODIFIER)
-    return None if got is None else got + offhand_armour(physical=False)
+    return None if got is None else got + offhand_armour("elemental")
 
 
 def spell_armour_for(skill_id):
@@ -12202,7 +12218,13 @@ def player_weapon_rank(state):
     Returns None when there is no state to read, so a probe rig with no
     attribute model falls back rather than asserting.
     """
-    attribute = WEAPON_TYPE_ATTRIBUTE.get(
+    # WEAPONS-W4 (2026-09-19): retail puts the attribute ON THE ITEM, in its
+    # 633 {attribute, rank} word -- read it first (a required sword names 20
+    # on 242 of 242 corpus swords; a wand or staff names a CASTER attribute
+    # the type table cannot know); the type table stands in for an item with
+    # no requirement, as before.
+    _req = combatmath.weapon_requirement(agents.PLAYER_WEAPON)
+    attribute = _req[0] if _req is not None else WEAPON_TYPE_ATTRIBUTE.get(
         (agents.PLAYER_WEAPON or {}).get("item_type"))
     if attribute is None:
         return None
@@ -12210,6 +12232,112 @@ def player_weapon_rank(state):
         return attribute_state(state).effective_of(attribute)
     except Exception:                                     # noqa: BLE001
         return None
+
+
+# ---- WEAPONS-W4 (2026-09-19): THE REQUIREMENT, AND THE TYPE A BODY DEALS ----
+#
+# The words, the enum and the numbers are combatmath's (its W4 block); these
+# are the server's bindings -- who holds what, at which rank, against what.
+TYPED_ARMOUR = True          # --no-typed-armour reverts: every attack is physical
+UNMET_REQUIREMENT = True     # --no-unmet-requirement reverts: read and printed, no penalty
+
+
+def player_rank_of(attribute, state=None):
+    """The player's EFFECTIVE rank in `attribute`: the connection's live
+    state when there is one, else the seed ranks plus the equipped bonuses
+    (the launch banner runs before any connection exists)."""
+    if state is not None:
+        try:
+            return int(attribute_state(state).effective_of(int(attribute)))
+        except Exception:                                 # noqa: BLE001
+            pass
+    base = {int(a): int(r) for a, r in agents.PLAYER_ATTRIBUTE_RANKS}
+    try:
+        bonus = equipped_attribute_bonuses() or {}
+    except Exception:                                     # noqa: BLE001
+        bonus = {}
+    return base.get(int(attribute), 0) + int(bonus.get(int(attribute), 0))
+
+
+def player_requirement_met(item, state=None, rank=None):
+    """Does the player meet `item`'s 633? True with no requirement. `rank`,
+    when given, is the rank already in hand for the item's attribute -- at a
+    hit site the Weakness-cut one (WIKI, GWW "Requirement": Weakness can
+    unmeet a requirement "until the condition ... expires")."""
+    req = combatmath.weapon_requirement(item)
+    if req is None:
+        return True
+    have = rank if rank is not None else player_rank_of(req[0], state)
+    return have is not None and int(have) >= req[1]
+
+
+def player_requirement_factor(state, rank=None):
+    """1.0, or 1 / 3.098 when the held weapon's requirement is unmet (the
+    isle's divisor, combatmath.UNMET_REQUIREMENT_DIVISOR); 1.0 with the
+    feature off or nothing held."""
+    if not (UNMET_REQUIREMENT and EQUIP_WEAPON and agents.PLAYER_WEAPON):
+        return 1.0
+    if player_requirement_met(agents.PLAYER_WEAPON, state, rank):
+        return 1.0
+    return 1.0 / combatmath.UNMET_REQUIREMENT_DIVISOR
+
+
+def body_requirement_factor(agent):
+    """The same divisor for a body swinging a required weapon it lacks the
+    rank for -- its own `attributes` against the item's 633."""
+    if not UNMET_REQUIREMENT:
+        return 1.0
+    key = (agent or {}).get("weapon_item")
+    if not key:
+        return 1.0
+    try:
+        item = agents.item_template(key)
+    except Exception:                                     # noqa: BLE001
+        return 1.0
+    if combatmath.requirement_met(item, agent_attributes(agent)):
+        return 1.0
+    return 1.0 / combatmath.UNMET_REQUIREMENT_DIVISOR
+
+
+def body_damage_type(agent):
+    """The 587 type of what a body swings or shoots, for the player's typed
+    armour -- else "physical", the reading land_swing always made for a
+    creature with no item. "physical" for everything with the feature off."""
+    if not TYPED_ARMOUR:
+        return "physical"
+    key = (agent or {}).get("weapon_item")
+    if key:
+        try:
+            dt = combatmath.item_damage_type(agents.item_template(key))
+        except Exception:                                 # noqa: BLE001
+            dt = None
+        if dt is not None:
+            return dt
+    return "physical"
+
+
+def requirement_banner(item, what="weapon", state=None):
+    """One launch-banner clause: the type a weapon deals, and the item's
+    633 with whether the character meets it. None when there is nothing to say."""
+    if not item:
+        return None
+    parts = []
+    dt = combatmath.item_damage_type(item)
+    if dt is not None and what == "weapon":
+        parts.append(f"deals {combatmath.damage_type_label(dt)}")
+    req = combatmath.weapon_requirement(item)
+    if req is not None:
+        have = player_rank_of(req[0], state)
+        if have >= req[1]:
+            parts.append(f"requires attribute {req[0]} at {req[1]}: MET (rank {have})")
+        else:
+            _type = int((item or {}).get("item_type", -1))
+            penalty = ("armour 8 / 5" if _type == 24 else
+                       "energy +3" if _type == 12 else
+                       f"damage / {combatmath.UNMET_REQUIREMENT_DIVISOR}")
+            parts.append(f"requires attribute {req[0]} at {req[1]}: UNMET (rank {have}"
+                         f", {penalty}{'' if UNMET_REQUIREMENT else ' -- OFF'})")
+    return (f"{what}: " + ", ".join(parts) + " [WEAPONS-W4]") if parts else None
 # HIT_COOLDOWN was here and is gone: it dated from when a click dealt a hit
 # directly, and nothing has read it since the swing moved onto ATTACK_INTERVAL.
 # A second, unused rate constant sitting beside the real one is exactly the
@@ -15139,6 +15267,7 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
         critical = random.random() < caster_critical_rate(_lvl, agent_level(agent))
         dealt = swing_damage(0, float(armour), PLAYER_SWING_DAMAGE,
                              critical=critical,
+                             mult=player_requirement_factor(state, rank),   # W4
                              strike_level=caster_strike_level(_lvl)) + bonus_damage
         _prep_scale = strike_multiplier(caster_strike_level(_lvl), float(armour))
     elif EQUIP_WEAPON and PLAYER_SWING_DAMAGE and rank is not None \
@@ -15147,6 +15276,7 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
             0.01 * critical_strikes_rank(state) if CRITICAL_STRIKES else 0.0)
         dealt = swing_damage(rank, float(armour), PLAYER_SWING_DAMAGE,
                              critical=critical,
+                             mult=player_requirement_factor(state, rank),   # W4
                              critical_armour_reduction=weapon_critical_reduction(
                                  agents.PLAYER_WEAPON)) + bonus_damage
         _prep_scale = strike_multiplier(attack_strength(rank), float(armour))
@@ -19644,10 +19774,12 @@ def player_max_health(state):
 WEAPON_ENERGY = True             # --no-weapon-energy reverts
 
 
-def weapon_energy_bonus():
+def weapon_energy_bonus(state=None):
     """The energy the HELD set adds: the 556 word on the lead item (a staff)
     and on the off hand (a focus) -- 0 with the feature off, nothing held, or
-    no 556 on either (a wand, a sword, a shield carry none)."""
+    no 556 on either (a wand, a sword, a shield carry none). WEAPONS-W4: a
+    REQUIRED focus carries 636 instead (20 of 20 on the corpus), in full when
+    its 633 is met and the wiki's +3 when not."""
     if not (WEAPON_ENERGY and EQUIP_WEAPON):
         return 0
     total = 0
@@ -19655,6 +19787,11 @@ def weapon_energy_bonus():
         found = item_word(item, combatmath.ENERGY_MODIFIER)
         if found is not None:
             total += int(found[0])
+            continue
+        gated = item_word(item, combatmath.ENERGY_REQUIRED)
+        if gated is not None:
+            met = (not UNMET_REQUIREMENT) or player_requirement_met(item, state)
+            total += int(gated[0]) if met else combatmath.UNMET_FOCUS_ENERGY
     return total
 
 
@@ -19662,7 +19799,7 @@ def player_max_energy(state):
     """Maximum energy, ditto. Base energy is the innate 20; armour rides free
     (typed into the party row); a held staff's or focus's 556 rides on top
     (WEAPONS-W5), scaled by morale the way a rune is -- not at all."""
-    return int(morale.effective_max(agents.PLAYER_ENERGY + weapon_energy_bonus(),
+    return int(morale.effective_max(agents.PLAYER_ENERGY + weapon_energy_bonus(state),
                                     morale.BASE_ENERGY, player_morale(state)))
 
 
@@ -21412,6 +21549,9 @@ def apply_party_character(prow, record_set0=True):
             WEAPON_ATTACK_SPEED = ATTACK_INTERVAL = float(agents.ATTACK_SPEED[_rate])
         changed.append(f"weapon {prow['player_weapon']} ({PLAYER_SWING_DAMAGE}, "
                        f"{WEAPON_ATTACK_SPEED} s)")
+        _rb = requirement_banner(agents.PLAYER_WEAPON, "weapon")   # WEAPONS-W4
+        if _rb:
+            changed.append(_rb)
         if record_set0:                                   # WEAPONS-W9: set 0's record
             WEAPON_SETS[0] = {"lead": str(prow["player_weapon"]),
                               "off": (WEAPON_SETS[0] or {}).get("off")}
@@ -21432,6 +21572,9 @@ def apply_party_character(prow, record_set0=True):
         agents.PLAYER_OFFHAND = agents.item_template(prow["player_offhand"])
         changed.append(f"offhand {prow['player_offhand']} "
                        f"(+{offhand_armour():.0f} armour)")
+        _rb = requirement_banner(agents.PLAYER_OFFHAND, "off hand")   # WEAPONS-W4
+        if _rb:
+            changed.append(_rb)
         if record_set0:
             WEAPON_SETS[0]["off"] = str(prow["player_offhand"])
     if prow.get("player_weapon_sets"):
@@ -21577,7 +21720,8 @@ def body_swing_damage(agent, armour):
         except Exception:                                  # noqa: BLE001
             _sl = None
     return swing_damage(agent_swing_rank(agent), float(armour), rng,
-                        level=agent_level(agent) or 20, strike_level=_sl)
+                        level=agent_level(agent) or 20, strike_level=_sl,
+                        mult=body_requirement_factor(agent))          # WEAPONS-W4
 
 
 def party_weapon_item(npc):
@@ -23410,7 +23554,11 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
     armour = None
     if ARMOUR_TERM:
         location = roll_hit_location()
-        armour = player_armour_at(location, physical=True)
+        # WEAPONS-W4: against the TYPE the body's own item deals (its 587 --
+        # a hostile bow reading 3 is cold, and the pieces' +20 vs. physical
+        # does not meet it); a body with no item stays the physical reading.
+        armour = player_armour_at(location, damage_type=body_damage_type(agent),
+                                  state=state)
         if armour is not None:
             # SLICE-H14: Healing Signet's -40 while it is being used, AFTER
             # the capped rating (the wiki's own order; casting_armour_penalty).
@@ -32991,6 +33139,18 @@ def main():
         WEAPON_ENERGY = False
         print("ENERGY: --no-weapon-energy -- a held staff or focus adds nothing to "
               "the pool [WEAPONS-W5 revert]", flush=True)
+    if a.no_typed_armour:
+        global TYPED_ARMOUR
+        TYPED_ARMOUR = False
+        print("ARMOUR: --no-typed-armour -- every attack on the player reads as "
+              "physical, a spell as elemental, whatever the item's 587 says "
+              "[WEAPONS-W4 revert]", flush=True)
+    if a.no_unmet_requirement:
+        global UNMET_REQUIREMENT
+        UNMET_REQUIREMENT = False
+        print("DAMAGE: --no-unmet-requirement -- an item's 633 is read and printed "
+              "and costs nothing: a weapon deals its met damage, a shield and a "
+              "focus give their met values [WEAPONS-W4 revert]", flush=True)
     if a.no_projectiles:
         global RANGED_DELIVERY
         RANGED_DELIVERY = False

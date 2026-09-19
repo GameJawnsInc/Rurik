@@ -200,7 +200,7 @@ critical at 2^(5/40) if Q5 confirms GWW. The sword's short gap after a skill's h
 (inherited from the dagger arc, 9 of 21) is tested here with `--swings` on the two sword
 tapes — cross-tab the neighbours first.
 
-**WEAPONS-W4 — damage by type.** Decode `633` and carry it on item rows; the unmet term
+**WEAPONS-W4 — damage by type. The rest SHIPPED 2026-09-19, section 30 (W4c was section 16, Q11 section 17, W8 section 26.3); the hornbow's 10 % waits on Q2.** Decode `633` and carry it on item rows; the unmet term
 (Q10) is measured before it is modelled — the isle study's refusal stands until then.
 Caster weapons scale on level with no mastery (GWW) — checked against the owner's wand
 words on `20260913T210901` before shipping. `587` gets its reader: damage type against
@@ -252,7 +252,7 @@ exposure floor and an abort written down.
 | WEAPONS-Q7 | A hostile's repeat delay (1.75 / 1.90 / 1.985 / 2.125) | monsterai, desk |
 | WEAPONS-Q8 | ~~Which message names the OBSERVER's own weapon type~~ **closed §9: `0x006E` (and `0x0147`)** | — |
 | WEAPONS-Q9 | ~~What `634` beside every `633` holds~~ **closed §9: the required weapon's damage range (max, min), in place of `584`** | — |
-| WEAPONS-Q10 | The unmet-requirement term — weapon, shield, focus | RUN-3 |
+| WEAPONS-Q10 | The unmet-requirement term — weapon, shield, focus. **SHIPPED as W4's rest, section 30** (2026-09-19): the weapon's is the isle's measured divisor 3.098 (OBSERVED, one hammer at ranks 5–8, studies/isle 9.2), the shield's 8 / 5 and the focus's +3 are WIKI; what RUN-3 still owes is the divisor-vs-strike-level-drop split and a second weapon | RUN-3 |
 | WEAPONS-Q11 | ~~Does GWW's critical formula reproduce the five measured rates?~~ **closed §17: NO — 8 / 9 / 11 / 13 / 14 % predicted against 6 / 16 / 19 / 24 / 34 % measured; the table stays the measurement** | — |
 | WEAPONS-Q12 | Is ×1.2 already inside the isle study's PvP-weapon numbers? | **CLOSED, section 26.3** (2026-09-19): YES — the isle's own sword carries (585, 120, 0), its tooltip read +20 % and its fit was the customised 18..26 range; 585 is the customisation word, CORROBORATED over 85 corpus items; WEAPONS-W8 reads it |
 | WEAPONS-Q13 | The sword's short gap after a skill's hit (from DAGGERS §9) | desk, `timingjoin.py --swings` |
@@ -1706,3 +1706,115 @@ first; and the control that reverses the two moves and trips `ItCliInv:105`. `te
 a press on the ACTIVE set and to a press on an EMPTY set (ours send nothing, NOT OBSERVED either
 way), and whether a switch that moves the maximum energy re-sends 41 / 43 (INFERRED from the morale
 path; a staff in a set does it, and 1B already holds a staff). Nothing else in W9 is open.
+
+## 30. WEAPONS-W4, the rest -- shipped 2026-09-19: the damage type against the vs-type armour, and the `633` requirement
+
+**What §4's W4 still owed after W4c (§16), Q11 (§17) and W8 (§26.3):** `587` had no reader
+and every attack on the player counted as physical against the pieces' `+20 vs. physical
+damage`; `633` had no reader, so a required weapon swung at its met damage whatever the rank
+and a required shield or focus read as having no armour or energy at all (the `635` / `636`
+half of WEAPONS-C7's partition). Both are read now. Desk, from the client and the corpus; no
+client run -- nothing client-visible changes but the numbers in the damage words and a line
+in the launch banner.
+
+**The enum is the client's own, OBSERVED.** `587`'s argument, `0x00A7`'s kind field and the
+`vs. %str1% damage` condition all index one fourteen-entry table, `s_charDamage`
+(ConstChar.cpp, `damage < arrsize(s_charDamage)`), through two accessors guarded by the same
+`cmp esi, 0xe`: `0x005AABA0` returns the type NAME's string id (the tooltip's `Damage` line,
+template 2443, from the 587 handler at `0x00924B79`; special identifier 5's handler at
+`0x00923C51`) and `0x005AAB70` the ADJECTIVE's (the range line, `Blunt Dmg: 3-5`; the table
+studies/isle B2 read). Resolved with `textrec.py`: 0 Blunt, 1 Piercing, 2 Slashing, 3 Cold, 4
+Lightning, 5 Fire, 6 Chaos, 7 Dark, 8 Holy, 9 Nature, 10 Sacrifice, 11 Earth, 12 Generic, 13 a
+second Dark (the duplicate B2 saw; why, UNVERIFIED); the item accessor's default with no 587 is
+14 (`0x008451C6`, `push 0xe`), "no type". CORROBORATED on the corpus (`aw_w4census`, 96
+connections, 3,857 items): bows, daggers and spears carry 1, hammers 0, swords and axes 2 (18
+swords 5, fiery), wands and staves 3 / 4 / 5 / 6 / 7 / 8 / 11, NPC ranged weapons 0..6 -- and no
+item anywhere carries 9, 10, 12 or 13. Kindle Arrows' kind 5 (W2e) reads as Fire. The table is
+`content/world.toml [damage_type.table]` (client-table, `consttable.py`, build 38797) and the
+wiki's grouping `[damage_type.classes]` -- physical 0 / 1 / 2, elemental 3 / 4 / 5 / 11, the
+rest neither (WIKI, GWW "Damage type"; Shadow damage is on the wiki's list and not in the
+client's fourteen). `test_weapons` 19 reads both tables back from the pinned client.
+
+**A `527` line's condition is the SPECIAL word right before it, OBSERVED.** The twenty special
+identifiers (1..20) are the tooltip's condition suffixes, resolved from their own templates:
+1 `Requires %num1% %str1%`, 3 `vs. elemental damage`, 4 `vs. physical damage`, 5 `vs. %str1%
+damage` (a named type), 8 `vs. %str1%` (a creature kind), 9 `while attacking`, 10 `while
+activating skills`, 12 `while holding an item`, 13 `while using a Preparation`, 14 `while
+%str1% is below %num1%`, 17 `while in a Stance`, 18 `while your pet is alive`, 19 `while
+affected by a Shout, Echo, or Chant`, 20 `while not affected by [an] %str1%`. On every worn
+piece in the corpus the shape is `(572, 4, 527)` (345) or `(572, 3, 527)` (55): the rating,
+the condition, then the `+N` it qualifies -- our own pieces' `[572 25, 4, 527 20]` is the
+first shape. The named form (5) sits on no item; the situational ones sit only on type-8
+upgrade components (`(603, 576, 614, 7, 11, 595, 527)` and kin, where which lines an `11`
+scopes is unread). The client has NO reader for 527 (`itemmods --reads 527`: the tooltip
+walker only), so the armour rule is the server's alone and the wiki's: a `+N` counts against
+the types its condition names (GWW "Damage type", "Armor rating").
+
+**What ships, armour.** `combatmath.armour_of_piece(item, damage_type, ..., met=True)`
+replaces the `physical` boolean: `damage_type` is an id from the fourteen or a class name, a
+condition word pends for the line after it, 4 admits the physical class, 3 the elemental
+one, 5 that one type, 9..20 nothing (not modelled, said once per identifier). `player_armour_at(location, damage_type, state)`,
+`offhand_armour(damage_type, state)`, and `land_swing` reads the location against
+`body_damage_type(agent)` -- the swinger's own item's 587, "physical" for a creature with no
+item (the reading land_swing always made). A spell stays "elemental": the skill records'
+damage types are not extracted, so a fire spell and a physical-damage skill read alike
+(left). `--no-typed-armour` reverts to every-attack-physical. On our pieces nothing changes for
+a sword, an axe, a bow, a hammer, a spear or daggers (all physical); a wand's or staff's
+element and a chaos or dark wand now miss the +20, and a `+N vs. elemental` piece, the day
+one is worn, meets fire and cold and not a sword.
+
+**What ships, the requirement.** `combatmath.weapon_requirement(item)` reads `633`
+`{attribute, rank}`; `requirement_met(item, ranks)`; `player_weapon_rank` takes the item's
+633 attribute FIRST and the type table only for an item with none -- a required sword names 20
+on 242 of 242 corpus swords, a required wand or staff a caster attribute the type table cannot
+know; `player_rank_of(attribute, state)` gives the effective rank from the connection's live
+state or, at launch, the seed ranks plus the equipped bonuses. Then: a weapon's damage divides
+by **3.098** when the requirement is unmet -- `mult = 1 / 3.098` into `swing_damage` at the
+three player sites (the rank branch, the caster branch, the scythe's extras) and at
+`body_swing_damage` for a body holding a required item it lacks the rank for; a required
+shield's `635` is its armour when met and 8 (a 16-armour shield) or 5 (below 16) when not; a
+required focus's `636` is its energy when met and +3 when not (`weapon_energy_bonus(state)`).
+The hit sites hand in the Weakness-cut rank (WIKI, GWW "Requirement": Weakness can unmeet a
+requirement until it expires). The launch banner gains `weapon: deals slashing, requires
+attribute 19 at 9: MET (rank 12)` / `UNMET (rank 3, damage / 3.098)`. `--no-unmet-requirement`
+reads and prints and costs nothing.
+
+**Where the numbers come from, and how far to trust them.** The divisor is the isle's rank
+ladder (studies/isle/FINDINGS.md 9.1-9.2, capture `20260821T163511`): one hammer at ranks 5 /
+6 / 7 / 8, 235 events, per-block divisors 3.133 / 3.073 / 3.105 / 3.082, mean 3.098; the naive 3
+and the 10/3 both excluded, the wiki's "approximately two-thirds" the same claim with fewer
+digits. OBSERVED -- with the caveat that study wrote: a divisor on the rank-appropriate damage
+is ONE of the two parameterisations the ladder admits, the other a strike-level drop, and
+both give those four numbers; RUN-WEAPONS-3 separates them and measures a second weapon.
+`test_weapons` 19 reproduces the ladder through `swing_damage` with the divisor as the
+multiplier: every block's mean within 3 % of the observed 3.864 / 4.296 / 4.637 / 5.093, rank
+5's band 3..5 (its eleven 3s) and rank 8's 4..6 (its twenty 6s). The shield's and focus's
+unmet values are WIKI (GWW "Requirement" sec. Drawbacks, read 2026-09-19), the
+not-randomly-generated arm of each rule because every item this server hands out is made, and
+no tape shows either (no observing player held a required shield or focus). The vs-type rule is
+WIKI over the client's own tables; no tape shows a typed hit on a `+N vs. elemental` piece
+either, and the first would test the grouping row.
+
+**Tests.** `test_weapons.py` gains section 19 (23 checks, floor 155 -> 177; a vault run 180,
+the pinned-client read-back being the one vault-only check): the two tables and the classes,
+the read-back, the 587 reader on our items, the warrior body against slashing / fire / chaos /
+untyped / the old `physical=False`, the elemental, named, situational, unconditioned and
+two-line pieces, the chest at 45 vs 25, `body_damage_type`, the revert flag, the source lock on
+land_swing's site and both flags, the 633 reader and `requirement_met`, `player_weapon_rank`
+via 633 then the table, the factor on the rank handed in, the revert, the isle ladder, a
+body's factor, a required shield at 16 / 8 / 5, the held shield through the Strength rank, a
+required focus at 12 / 3 and a plain one at 5, and the banner. The old `physical=` keyword is
+still taken (True = "physical", False = "elemental") -- `test_agentlife`, `test_mechanics`
+and `test_skilldamage` pin it. `test_content` 48, `test_mechanics` 246, `test_skilldamage`
+67, `test_pools` 132, `test_playerswing` 191, `test_guards` 45, `test_agentlife` 551,
+`test_adrenwire` 77, `test_weaponcensus` 38, `test_itemdetail` 19, `test_labelrun` 32,
+`test_dispatch` 45, `clientscan/test_itemmods` 42, `test_srclint` 26 (it caught a
+`SystemExit` the read-back's fallback would not have caught on a bare machine), `test_checks`
+17, `test_provlint` 19, `test_citelint` 50, `test_bareimport` 8, `test_derivlint` 32 green.
+
+**Left of W4, named.** The hornbow's 10 % armour penetration (WIKI, GWW "Hornbow") waits on
+Q2 -- which `609` class is the hornbow is RUN-1B's; identifier `573` (an `Armor: N` variant
+with a condition string, on 4 corpus pieces x 5 slots) is unread and such a piece reads as
+unarmoured; a spell's own damage type (the skill record's) is not extracted, so spells stay
+"elemental"; the scoping of a situational condition over a type-8 upgrade component's lines;
+and Q10's split, above. Q10 leaves §7's table as SHIPPED with RUN-3 still owed.
