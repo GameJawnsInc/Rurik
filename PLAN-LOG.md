@@ -28,6 +28,32 @@ move back.
 
 ---
 
+### SKILLS-AD2 + SKILLS-AD4 -- 2026-09-19 -- **the damage-taken adrenaline gain divides by the CURRENT maximum at three sites, and a zero gain goes out**
+
+Studies/skills §53 was MINED on 2026-09-17 and nothing shipped; this ships it
+([studies/skills/FINDINGS.md](studies/skills/FINDINGS.md) §53.6). AD2: `land_swing`'s
+enemy-swing site and `land_skill`'s hostile-skill site passed `dealt /
+agents.PLAYER_HEALTH` to `pools.damage_units` beside a damage word dividing by
+`player_max_health(state)`; both now divide by the current maximum (retail: 11 of 11
+armed rows over 480 / 408 / 384 / 336, the points/4.8 rival 0 of 11), so a death
+penalty or a Deep Wound no longer tells the client one fraction and grants another.
+The THIRD site is new: `armour_ignoring_damage`'s player branch sends the gain ahead of
+its property-55 word -- RB's three life steals (skill 258, 41 of 480) each carry `0x00CF
+[25, 9]` = round(8.54) ahead of BOTH 55 words, 3 of 3 (§53.5), OBSERVED for a life
+steal and INFERRED for any other 55 word at the player. AD4: `player_gains_adrenaline`
+sends `[player, 0]` for a zero -- RB's seven fully converted hits, 7 of 7 -- and skips
+the grant, so the pool's 25 s combat clock is exactly where it was (the clock half is
+NOT OBSERVED and stays in §8). `adrenjoin.is_damage_to` files a NEGATIVE 55 at the
+observer as a damage row, and the census reads 93 armed rows, 93 granted, round 93 of
+93. Tests: `test_pools.py` §11d (the zero, its untouched clock, the 11 % control) and
+§11d2 (a Deep Wound at 100 -> 80; the 55 site and an enemy swing each grant round of
+the word they ride with), floor 128 -> 132; `test_adrenwire.py` green at 77 with the
+three rows joined; `test_agentlife`, `test_guards`, `test_playerswing`,
+`test_mechanics`, `test_skilldamage`, `test_weapons` green. Not touched: a hero's zero
+gain (`hero_pool_gain` still returns on 0), and the `[42, max]` this server declares
+ahead of EVERY 55 word to the player, which RB's three batches do not carry (0 of 3 --
+noted, not this rung).
+
 ### WEAPONS-W3, WEAPONS-W8 and the spear's throw -- 2026-09-19 -- **the owner-free rungs RUN-1A unlocked: the spear throws, a scythe hits up to two more with a 2^0.125 critical, modifier 585 is the customisation word and WEAPONS-Q12 closes; W9 registered** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) §26)
 
 The spear's row gains its measured projectile, flag and speed class and WIKI's range

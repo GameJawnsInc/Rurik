@@ -7037,10 +7037,12 @@ are not:
 | 384 | 31 | **8** | 8 | 6 |
 | 384 | 7, 6 | **2**, **2** | 2, 2 | 1, 1 |
 
-**Our server diverges here and it is recorded, not fixed:** both call sites compute
+~~**Our server diverges here and it is recorded, not fixed:** both call sites compute
 `pools.damage_units(dealt / float(agents.PLAYER_HEALTH))` while the damage word beside them
 divides by `player_max_health(state)`. Under a death penalty or a Deep Wound the client is
-told one fraction and granted the units of another. Open in `PLAN.md` §8.
+told one fraction and granted the units of another. Open in `PLAN.md` §8.~~ **FIXED
+2026-09-19, §53.6** — three sites divide by the current maximum. (The 384: it is 480 × 0.8
+exactly, the size of a Deep Wound's reduction; arithmetic, not a read of the tape.)
 
 ### 53.3 SKILLS-AD3 — there is NO cap at 25 — OBSERVED, 6 of 6
 
@@ -7063,7 +7065,8 @@ gains and the seven zero-damage words are the same seven rows. So the gain is no
 arithmetic is unaffected (it adds 0 and, per `test_adrenwire` 13, repaints nothing), which
 is why this is a recorded divergence rather than a defect. **What is NOT known** is whether
 a zero gain re-arms retail's 25-second clear: every zero on RB sits inside a run of other
-gains, so the tape cannot say. That unknown is the reason it is not shipped. It also turns
+gains, so the tape cannot say. ~~That unknown is the reason it is not shipped.~~ (Shipped
+2026-09-19 with the clock left untouched, §53.6.) It also turns
 the (0, 0.5 %) prediction over: "no message" was round's prediction in §34.C; "a 207
 carrying 0" is what this makes likelier. INFERRED until a row lands there.
 
@@ -7074,3 +7077,65 @@ Three of RB's 35 sub-25 gains have no property-16/17 word in their batch. All th
 to the source (it reads as a life steal; INFERRED) — and all three grant **9** = `round(8.54)`. So property 55 damage
 charges adrenaline too. `adrenjoin.DAMAGE_PROPS` does not include it, and must not be given
 it naively: it takes `abs()`, and a positive property-55 word to self is a heal.
+
+### 53.6 SHIPPED 2026-09-19 — AD2 at three sites, AD4's zero on the wire, the 55 rows in the census; what stays INFERRED
+
+**AD2, the denominator.** `land_swing`'s enemy-swing site and `land_skill`'s hostile-skill
+site now pass `dealt / player_max_health(state)` to `pools.damage_units` — the same number
+the damage word beside each divides by. A **third site** did not exist before: retail's
+gain rides property-55 damage too (§53.5), and `armour_ignoring_damage`'s player branch
+now sends it, one message ahead of the 55 word. The batch on RB, re-read for this rung
+(`aw_prop55` scratch over `tape.decode_all`, all three rows identical in shape):
+
+```
+0x009F [58, 104, 0]              the caster's skill-finished
+0x00A0 [20, 25, 104, 258]        the cast named at the observer
+0x0044 / 0x009F [7, ...]         (the animation and the health-loss int)
+0x00CF [25, 9]                   the GAIN, round(41/480 = 8.54 %)
+0x00A3 [55, 104, 104, +0.0854]   the steal's heal to the source
+0x009F [10, 25, 143]
+0x00A3 [55, 25, 104, -0.0854]    the damage word at the observer
+0x001E [...]
+```
+
+So the gain precedes BOTH 55 words, 3 of 3 — the same gain-then-damage adjacency as
+property 16's modal batch (test_adrenwire 7). Labels: **OBSERVED** for a hostile life
+steal at the player; **INFERRED** for any other 55 word at the player (a hex punishing the
+player's attack, a foe's adjacent damage), by AD4's mechanism — a gain rides every damage
+word to an adrenal bar.
+
+**AD4, the zero.** `player_gains_adrenaline` now sends `0x00CF [player, 0]` when
+`damage_units` rounds to 0 — the seven converted hits (7 of 7) — and skips `grant`, so no
+slot moves and the pool's `_last_combat` is not marked. **The clock half is the smaller
+claim and is INFERRED, not measured**: retail's 25 s clears are measured from the last 207
+on the wire (15 of 15), but every zero on RB sits inside a run of non-zero gains, so
+whether a zero alone re-arms the clear has no witness. Left in `PLAN.md` §8. The sub-0.5 %
+band sends a zero by the same code path; no armed row has ever landed there
+(test_adrenwire's near miss is dark), so that is the prediction test_pools §11d states,
+not a measurement.
+
+**The census.** `adrenjoin.is_damage_to` files a property-55 word as a damage row only when
+it names the observer as TARGET and its value is NEGATIVE — 55 is signed where 16/17 are
+not, and the same batch carries the steal's `+` word to the source. With it the armed
+population is **93 rows, 93 granted, round 93 of 93** (was 90); the three new rows are the
+`9`s. `hits_landed` still counts 16/17 only: a 55 is not a weapon hit.
+
+**Tests.** `test_pools.py` §11d (the zero goes out; it moves no slot and marks no clock;
+the 11 % control grants and marks it) and §11d2 (a Deep Wound on the player, 100 → 80,
+and 2 points where the two rules give 3 against 2: the 55 site and an enemy swing each
+grant round of the damage word they ride with, the gain one message ahead), floor 128 →
+132. `test_adrenwire.py` green at 77 with the joined rows; `test_agentlife`, `test_guards`,
+`test_playerswing`, `test_mechanics`, `test_skilldamage`, `test_weapons` green.
+
+**Not touched, and named so nobody re-derives them.** (1) `hero_pool_gain` still returns on
+0 units — JARIN's tape has no converted hit on the hero, so the hero's zero is unread either
+way. (2) This server declares `[42, max]` ahead of EVERY 55 word to the player
+(`declare_max="always"`); RB's three player batches carry no 42 (0 of 3; the "declared
+first, 3 of 3" in that function's docstring was measured on BODIES on the daggers tape). A
+divergence spotted in passing, one rung's worth on its own. (3) The DARK-bar ruling
+(§34.10) is unchanged: the zero goes to any bar, as every other gain does.
+
+**What would refute this section.** A retail `0x00D0` clear landing 25.00 s after a zero
+`0x00CF` with no non-zero gain between → the clock half is wrong and `grant`'s mark belongs
+on the zero too. An armed hit in (0, 0.5 %) with no 207 in its batch → the band prediction
+is wrong and the zero is specific to conversion.

@@ -15362,12 +15362,25 @@ def player_gains_adrenaline(send, state, units, now, conn_id, why):
     caller that did `pool.grant(...)` and `send(...)` separately is one edit
     away from them being two.
 
-    A ZERO-UNIT GAIN SENDS NOTHING and grants nothing. `on_damage_taken`
-    already no-ops on a sub-1% hit -- WIKI is explicit that zero damage "does
-    not count as being in combat" -- and the wire has to match: an 0x00CF with
-    units 0 leaves the client's `something gained` flag (`mov edi,1` at
-    0x008219EC) clear and repaints nothing, so it is a message that does
-    nothing and that retail has no reason to produce.
+    A ZERO-UNIT GAIN GOES OUT AND GRANTS NOTHING (SKILLS-AD4, 2026-09-19).
+    This paragraph used to say the opposite -- "a message that does nothing
+    and that retail has no reason to produce" -- and retail produces it:
+    RUN-SKILLS-RB's seven fully converted hits (Reversal of Fortune eating
+    the whole blow, a damage word of +0.0) are each preceded by `0x00CF [25,
+    0]` in the gain's usual place, 7 of 7 (studies/skills/FINDINGS.md 53.4),
+    and every one of the 93 armed damage words in the corpus has its gain
+    (test_adrenwire 12). So the gain is not sent BECAUSE something was
+    gained: it rides every damage word to an adrenal bar and carries
+    round(pct), zero included -- the same shape as SLICE-F46's "a landed hit
+    always gets its word". The client adds 0 and repaints nothing (`mov
+    edi,1` at 0x008219EC stays clear; test_adrenwire 13), so the only thing
+    the zero changes is the wire's shape. WHAT THE ZERO DOES TO THE 25-SECOND
+    CLOCK IS NOT OBSERVED -- every zero on RB sits inside a run of other
+    gains -- so a zero here does NOT mark the pool's combat clock: `grant`
+    is skipped, the clock is exactly where it was before AD4 shipped, and
+    the label on that half is INFERRED (studies/skills 53.6). A hit in
+    (0, 0.5 %) sends a zero too, by the same mechanism; that band has no
+    armed row in the corpus and the prediction is stated in test_pools 11d.
 
     A GAIN THAT EVERY SLOT REFUSED STILL GOES OUT, though -- full pools,
     everything recharging. The client's handler is a no-op in exactly those
@@ -15399,9 +15412,12 @@ def player_gains_adrenaline(send, state, units, now, conn_id, why):
     two rules -- the Warrior, explorable, adrenal skills OFF the bar, landing
     hits -- and test_adrenwire 12 pins the numbers it would move.
     """
-    if not ENERGY or units <= 0:
+    if not ENERGY or units < 0:
         return
-    player_adrenaline(state).grant(units, now)
+    if units > 0:
+        # A zero skips the grant AND the combat-clock mark inside it -- the
+        # INFERRED half of AD4, see the docstring.
+        player_adrenaline(state).grant(units, now)
     send(AGENT_ADRENALINE_GAIN, [PLAYER_AGENT_ID, int(units)],
          f"adrenaline +{int(units)} ({why})")
 
@@ -17542,6 +17558,16 @@ def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, w
              f"maximum {int(pool)} declared ahead of {what}")
         frac = _damage_fraction(amount, pool, agents.GV_ARMOR_IGNORING, what)
         state["player_health"] = max(0.0, state["player_health"] - amount)
+        if ENERGY:
+            # SKILLS-AD (studies/skills 53.5, shipped 53.6): property-55
+            # damage charges adrenaline too -- RB's three life steals at the
+            # observer (skill 258, 41 of 480) each carry `0x00CF [25, 9]` =
+            # round(8.54) AHEAD of both 55 words, 3 of 3. OBSERVED for a
+            # life steal; INFERRED for any other 55 word (a hex punishing the
+            # player's attack, adjacent damage), by the mechanism AD4 states.
+            player_gains_adrenaline(
+                send, state, pools.damage_units(amount / pool), time.time(),
+                conn_id, f"{amount:.0f} armour-ignoring damage taken ({what})")
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
              [agents.GV_ARMOR_IGNORING, PLAYER_AGENT_ID, source_id, frac],
              f"{what}: {amount:.0f} armour-ignoring to the player")
@@ -23197,12 +23223,16 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
         hero_pool_gain(send, state, agent_id, agent, pools.STRIKE_UNITS,
                        "hit landed")                         # a HERO's is on the wire (JARIN)
         # The gain reads the damage that LANDS -- WIKI puts the one-unit-per-1%
-        # rule on health lost, and a fully converted hit loses none (a 0-unit
-        # gain sends nothing and grants nothing, so the converted case costs
-        # no extra branch here).
+        # rule on health lost -- as a fraction of the CURRENT maximum, the
+        # same number the damage word below divides by (SKILLS-AD2: 11 of 11
+        # armed rows over four maxima, 480/408/384/336, and the points/4.8
+        # rival 0 of 11; this used to divide by agents.PLAYER_HEALTH, so under
+        # a death penalty or a Deep Wound the client was told one fraction and
+        # granted the units of another). A fully converted hit sends a gain of
+        # 0 (AD4; the zero branch is inside the sender).
         player_gains_adrenaline(
             send, state,
-            pools.damage_units(dealt / float(agents.PLAYER_HEALTH)),
+            pools.damage_units(dealt / player_max_health(state)),
             _now, conn_id, f"{dealt:.0f} damage taken from agent {agent_id}")
     state["player_health"] = max(0.0, state["player_health"] - dealt)
     if _prep_vis is not None:                            # WEAPONS-W2f
@@ -23581,9 +23611,11 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # reason). Damage taken is damage taken, whatever delivered it -- WIKI puts
     # the one-unit-per-1% rule on damage and not on attacks.
     if ENERGY:
+        # SKILLS-AD2: the CURRENT maximum, as land_swing's site and as the
+        # damage word's own denominator.
         player_gains_adrenaline(
             send, state,
-            pools.damage_units(dealt / float(agents.PLAYER_HEALTH)),
+            pools.damage_units(dealt / player_max_health(state)),
             time.time(), conn_id, f"{dealt:.0f} damage taken from skill "
                                   f"{skill_id}")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
