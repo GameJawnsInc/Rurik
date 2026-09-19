@@ -805,6 +805,43 @@ def print_readers(img: Image, only=None):
     return r
 
 
+# ---- WEAPONS-Q2 (2026-09-19): THE BOW-CLASS NAME TABLE behind identifier 609
+#
+# The 609 tooltip handler (0x00924F71 on build 38797) opens with
+# `cmp dword [esi+0x20], 5` -- the word is read on item type 5, a bow, only --
+# then `push dword [ebx*4 + TABLE]` with ebx = the word's argument, and formats
+# 69415 `Two-handed %str1%` with that string. TABLE is five string ids, the
+# client's own names for the classes; on the pin they resolve (textrec.py) to
+# 0 Shortbow, 1 Longbow, 2 Flatbow, 3 Recurve Bow, 4 Hornbow. That closes
+# WEAPONS-Q2 (which 609 value is which bow) at the desk, and the corpus's two
+# 2.475 s classes (1 and 3, WEAPONS-C6) land on Longbow and Recurve -- a check
+# that could have failed. content/world.toml [bow_class.table] carries the ids.
+BOW_CLASS_ID = 609
+BOW_CLASS_COUNT = 5
+_CMP_ITEM_TYPE_BOW = b"\x83\x7e\x20\x05"      # cmp dword [esi+0x20], 5
+_PUSH_TABLE_EBX4 = b"\xff\x34\x9d"            # push dword [ebx*4 + disp32]
+
+
+def bow_class_table(img: Image):
+    """{handler, table, name_ids}: the five string ids the 609 handler indexes
+    by the word's argument. Located from the handler's own shape and refused
+    when the shape is not there, so a build that moved it says so."""
+    at = locate(img)
+    handler = img.u32(at["generic_table"] + (BOW_CLASS_ID - GENERIC_FIRST) * 4)
+    off = img.off(handler)
+    if img.data[off:off + 4] != _CMP_ITEM_TYPE_BOW:
+        raise NotFound(f"the 609 handler at {handler:#010x} does not open with "
+                       f"`cmp dword [esi+0x20], 5` -- the bow-only guard this "
+                       f"table is located from")
+    j = img.data.find(_PUSH_TABLE_EBX4, off, off + 0x20)
+    if j < 0:
+        raise NotFound(f"no `push dword [ebx*4+disp32]` within 0x20 bytes of "
+                       f"the 609 handler at {handler:#010x}")
+    table = struct.unpack_from("<I", img.data, j + 3)[0]
+    return {"handler": handler, "table": table,
+            "name_ids": [img.u32(table + 4 * i) for i in range(BOW_CLASS_COUNT)]}
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -830,6 +867,10 @@ def main(argv=None) -> int:
                          "NAME, and which of them are bonuses")
     ap.add_argument("--attr-bonus", metavar="ATTR,AMOUNT", default=None,
                     help="compose the stacking attribute-bonus word, e.g. 20,1")
+    ap.add_argument("--bow-classes", action="store_true",
+                    help="the five string ids the 609 (bow class) tooltip handler "
+                         "indexes by the word's argument -- the client's own names "
+                         "for the classes (WEAPONS-Q2)")
     ap.add_argument("--all-builds", action="store_true")
     a = ap.parse_args(argv)
 
@@ -873,6 +914,13 @@ def main(argv=None) -> int:
             w = attribute_bonus_word(at_, am)
             print(json.dumps({"word": f"{w:#010x}", "decoded": decode(w),
                               "bonuses": attribute_bonuses([w])}, indent=1))
+            continue
+
+        if a.bow_classes:
+            bc = bow_class_table(img)
+            print(json.dumps({"handler": f"{bc['handler']:#010x}",
+                              "table": f"{bc['table']:#010x}",
+                              "name_ids": bc["name_ids"]}, indent=1))
             continue
 
         if a.attributes:

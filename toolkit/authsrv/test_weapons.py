@@ -23,7 +23,7 @@ import agents  # noqa: E402
 import authsrv  # noqa: E402
 import combatmath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=186)   # the BARE-MACHINE number: 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=195)   # the BARE-MACHINE number: 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
 check = LEDGER.ok
 
 LEGACY_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
@@ -2191,6 +2191,130 @@ def section_half_recharge():
          authsrv.HALF_RECHARGE, authsrv.half_recharge_roll) = saved
 
 
+def section_bow_classes():
+    print("\n21. WEAPONS-Q2 and the hornbow's 10 %: the client's own bow-class names, the class rate, the penetration")
+    saved = (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+             authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,
+             authsrv.BOW_CLASSES, agents.item_template, authsrv.critical_rate)
+    try:
+        item = agents.item_template
+        table = agents.WORLD.get("bow_class", "table")
+        rules = agents.WORLD.get("bow_class", "rules")
+        check(list(table["name_ids"]) == [69416, 69417, 69418, 69419, 69420]
+              and list(table["labels"]) == ["shortbow", "longbow", "flatbow", "recurve", "hornbow"]
+              and list(rules["rates"]) == ["shortbow", "longbow", "flatbow", "recurve", "hornbow"]
+              and all(k in agents.ATTACK_SPEED for k in rules["rates"])
+              and [agents.ATTACK_SPEED[k] for k in rules["rates"]] == [2.025, 2.475, 2.025, 2.475, 2.7]
+              and list(rules["armour_penetration"]) == [0.0, 0.0, 0.0, 0.0, 0.10],
+              "content: the five class names (0 shortbow, 1 longbow, 2 flatbow, 3 recurve, 4 "
+              "hornbow), their rates 2.025 / 2.475 / 2.025 / 2.475 / 2.7 and the hornbow's 0.10 "
+              "-- the corpus's two 2.475 classes (1 and 3) ARE the longbow and the recurve")
+        try:
+            sys.path.insert(0, os.path.join(os.path.dirname(HERE), "clientscan"))
+            import itemmods, pinned                                       # noqa: PLC0415
+            bc = itemmods.bow_class_table(itemmods.Image(pinned.find()[0]))
+        except (Exception, SystemExit) as e:                               # noqa: BLE001
+            bc = None
+            LEDGER.skip("section 21", f"the pinned client is absent ({type(e).__name__}) -- 1 check")
+        if bc is not None:
+            check(bc["name_ids"] == list(table["name_ids"]) and bc["table"] == 0x00BCAAEC
+                  and bc["handler"] == 0x00924F71,
+                  "and the extractor reads the same five ids back from the pinned client's 609 "
+                  "handler (0x00924F71, table 0x00BCAAEC)", str(bc))
+        sb = item("starter_bow")
+        plain = [m for m in sb["modifiers"] if (int(m) >> 20) & 0x3FF != 609]
+
+        def bow(klass):
+            return dict(sb, modifiers=plain + [(609 << 20) | (klass << 8)])
+
+        horn, flat = bow(4), bow(2)
+        check(authsrv.bow_class(sb) == 1 and authsrv.bow_class(item("hostile_bow")) is None
+              and [authsrv.bow_class(bow(k)) for k in range(5)] == [0, 1, 2, 3, 4]
+              and authsrv.bow_class(bow(7)) is None
+              and authsrv.bow_class(dict(sb, modifiers=plain)) is None
+              and authsrv.bow_class(item("starter_axe")) is None,
+              "the reader: starter_bow is class 1 (a longbow); the type-28 hostile bow has NO class "
+              "(the handler reads 609 on type 5 only); classes 0..4 read; a 7, a bow with no 609 "
+              "and an axe read None")
+        check([authsrv.bow_class_label(bow(k)) for k in range(5)]
+              == ["shortbow", "longbow", "flatbow", "recurve", "hornbow"]
+              and [agents.ATTACK_SPEED[authsrv.weapon_rate_key(bow(k))] for k in range(5)]
+              == [2.025, 2.475, 2.025, 2.475, 2.7]
+              and authsrv.weapon_rate_key(item("starter_axe")) == "axe"
+              and authsrv.weapon_rate_key(item("hostile_bow")) == authsrv.WEAPON_TYPE_RATE[28],
+              "the labels and the class rate per 609; an axe and the type-28 bow keep their type "
+              "row's key")
+        agents.item_template = (lambda key, _it=item: horn if key == "test_hornbow"
+                                else flat if key == "test_flatbow" else _it(key))
+        authsrv.apply_party_character({"player_weapon": "test_hornbow"})
+        i_horn = authsrv.ATTACK_INTERVAL
+        authsrv.apply_party_character({"player_weapon": "test_flatbow"})
+        i_flat = authsrv.ATTACK_INTERVAL
+        authsrv.apply_party_character({"player_weapon": "starter_bow"})
+        i_long = authsrv.ATTACK_INTERVAL
+        check((i_horn, i_flat, i_long) == (2.7, 2.025, 2.475),
+              "the character's interval follows the held bow's class: 2.7 with a hornbow, 2.025 "
+              "with a flatbow, 2.475 with the starter longbow as before",
+              f"{i_horn} / {i_flat} / {i_long}")
+        check(authsrv.weapon_armour_penetration(horn) == 0.10
+              and all(authsrv.weapon_armour_penetration(bow(k)) == 0.0 for k in range(4))
+              and authsrv.weapon_armour_penetration(item("starter_axe")) == 0.0
+              and [authsrv.penetrated_armour(a, horn) for a in (60.0, 45.0, 81.0, 100.0, 0.0)]
+              == [54.0, 41.0, 73.0, 90.0, 0.0]
+              and authsrv.penetrated_armour(60.0, sb) == 60.0
+              and authsrv.penetrated_armour(None, horn) is None,
+              "the hornbow ignores 10 % of the rating -- 60 -> 54, 45 -> 41 (40.5 up), 81 -> 73, "
+              "100 -> 90 (the wiki's step 3, rounded) -- and no other class or weapon any")
+        # through the real hit_enemy: a hornbow against a longbow on the same target
+        authsrv.critical_rate = lambda rank: 0.0            # the roll, not the rule
+
+        def dealt(key, armour=60.0, roll=(20, 20)):
+            authsrv.apply_party_character({"player_weapon": key})
+            authsrv.PLAYER_SWING_DAMAGE = roll
+            st = {"agents": {FOE: _foe(armour)}, "pos": (0.0, 0.0)}
+            hp = st["agents"][FOE]["health"]
+            rank = authsrv.player_weapon_rank(st) or 0
+            authsrv.hit_enemy(lambda *a, **k: None, st, FOE, 1, armed=True)
+            return hp - st["agents"][FOE]["health"], rank
+
+        d_horn, r1 = dealt("test_hornbow")
+        d_long, r2 = dealt("starter_bow")
+        sl = combatmath.attack_strength(r1)
+        want_horn = max(0.0, round(20.0 * 2.0 ** ((sl - 54.0) / 40.0)))
+        want_long = max(0.0, round(20.0 * 2.0 ** ((sl - 60.0) / 40.0)))
+        check(r1 == r2 and d_horn == want_horn and d_long == want_long and d_horn > d_long,
+              "a 20-roll hornbow hit on AR 60 lands as if the target wore 54 and out-deals the "
+              "longbow's same roll at 60, through the real hit_enemy at the character's own "
+              "Marksmanship rank", f"rank {r1}: hornbow {d_horn} (want {want_horn}), "
+              f"longbow {d_long} (want {want_long})")
+        authsrv.BOW_CLASSES = False
+        check(authsrv.weapon_rate_key(horn) == "longbow"
+              and authsrv.weapon_armour_penetration(horn) == 0.0
+              and authsrv.penetrated_armour(60.0, horn) == 60.0
+              and dealt("test_hornbow")[0] == want_long,
+              "--no-bow-classes: every bow is the type row's 2.475 and no hornbow penetrates -- "
+              "the pre-Q2 reading")
+        authsrv.BOW_CLASSES = True
+        src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+        sargs = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
+        check('armour = penetrated_armour(agent.get("armor_rating"), agents.PLAYER_WEAPON)' in src
+              and "armour = penetrated_armour(armour, (body_weapon_items(agent) or (None,))[0])" in src
+              and 'arm = penetrated_armour(foe.get("armor_rating"), agents.PLAYER_WEAPON)' in src
+              and "_rate = weapon_rate_key(agents.PLAYER_WEAPON)" in src
+              and '"--no-bow-classes"' in sargs,
+              "the penetration sits at hit_enemy's rating read, at a body's swing on the player "
+              "and on a body, and at the preparation splash; the rate at the character's door; "
+              "the revert flag exists")
+        check("a hornbow (609 = 4) at 2.7 s, +10 % armour penetration" in (authsrv.requirement_banner(horn) or "")
+              and "a longbow (609 = 1) at 2.475 s" in (authsrv.requirement_banner(sb) or "")
+              and "penetration" not in (authsrv.requirement_banner(sb) or ""),
+              "the launch banner names the class, its rate and the hornbow's penetration")
+    finally:
+        (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+         authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,
+         authsrv.BOW_CLASSES, agents.item_template, authsrv.critical_rate) = saved
+
+
 def main():
     section_table()
     section_skills()
@@ -2212,6 +2336,7 @@ def main():
     section_weapon_sets()
     section_damage_type_and_requirement()
     section_half_recharge()
+    section_bow_classes()
     return LEDGER.verdict()
 
 

@@ -235,7 +235,7 @@ exposure floor and an abort written down.
 | Run | Steps (each: equip, F11, 20 plain swings on a Master of Damage suit from one spot, F11) | Answers | Sealed predictions |
 |---|---|---|---|
 | **RUN-WEAPONS-1A** martial | axe · scythe on ONE suit · scythe with TWO suits adjacent to the target (3 foes hit, the weapon's maximum -- corrected 2026-09-18, this row said three adjacent, which is four) · spear · spear + shield | Q5, Q6, the 1.5 s clock, scythe wire shape and critical, the spear's projectile and flag | scythe and spear start→start 1.500, word / launch at 0.650; spear `0x00A4` field 7 = 1 — **RUN 2026-09-19, capture `20260919T103604`, scored in section 25: every prediction held; the scythe's target-side term measured at [78, 94) u, the spear parked at 755 u** |
-| **RUN-WEAPONS-1B** bows and casters | shortbow · flatbow · longbow · recurve · hornbow · staff · wand, all from the same marked spot · **then W9's three presses (§29), the staff in a set: the ACTIVE set's key; an EMPTY set's key; a switch INTO the staff's set from a weapon with no 556 word** | Q2 (609 ↔ class), Q3 (speed per class — same distance, five flights), the 2.025 and 2.7 clocks; W9's same-set and empty-set replies and the 41 / 43 on a moved maximum | start→launch 0.9125 / 1.1375 / 1.250 / 0.775; flight ratios 0.59 : 0.88 : 0.59 : 0.40 : 0.59; same-set and empty-set presses answered by NOTHING (the smaller claim); the staff switch's batch carries property 41 then 43 |
+| **RUN-WEAPONS-1B** bows and casters | shortbow · flatbow · longbow · recurve · hornbow · staff · wand, all from the same marked spot · **then W9's three presses (§29), the staff in a set: the ACTIVE set's key; an EMPTY set's key; a switch INTO the staff's set from a weapon with no 556 word** | ~~Q2~~ (closed at the desk, §32 -- the five clocks now check the wiki's rates against the client's named classes), Q3 (speed per class — same distance, five flights), the 2.025 and 2.7 clocks, the hornbow's 10 % against the 100-armour suit; W9's same-set and empty-set replies and the 41 / 43 on a moved maximum | start→launch 0.9125 / 1.1375 / 1.250 / 0.775; flight ratios 0.59 : 0.88 : 0.59 : 0.40 : 0.59; same-set and empty-set presses answered by NOTHING (the smaller claim); the staff switch's batch carries property 41 then 43 |
 | **RUN-WEAPONS-2** range | per weapon: stand far, press attack once, let the character walk in; repeat uphill if the Isle allows | Q4 — the distance from shooter to the aim point at the FIRST launch is the range, no free parameter. ~~Q16~~ is **no longer this run's**: §22 answered it from the client's own code (the park threshold has no weapon term), so spend no steps on it | 1004 / 1498 / 1498 / 1273 / 1273; 1248 staff and wand; 1004 spear; the body stands after the first start |
 | **RUN-WEAPONS-3** damage (later, needs the right attributes) | met vs unmet requirement on one weapon; a scythe's criticals; hornbow vs longbow on the 100-armour suit | Q10, Q5's critical, W4's penetration | written when W4 opens |
 
@@ -244,7 +244,7 @@ exposure floor and an abort written down.
 | Id | Question | Instrument |
 |---|---|---|
 | WEAPONS-Q1 | ~~`0x00A4` field 5 vs the item's `617`~~ **closed §9: 37 of 37; no `617` → 143.** Left: the two arrows with field 7 = 0 | desk |
-| WEAPONS-Q2 | Which `609` value is which bow class? **Narrowed §9: 1 and 3 are the two 2.475 s classes** | RUN-1B (`0x0035` alone) |
+| WEAPONS-Q2 | Which `609` value is which bow class? **Narrowed §9: 1 and 3 are the two 2.475 s classes. CLOSED at the desk, section 32 (2026-09-19): the client's own 609 handler indexes a five-name table -- 0 Shortbow, 1 Longbow, 2 Flatbow, 3 Recurve Bow, 4 Hornbow -- and 1 and 3 ARE the two 2.475 s classes** | closed; RUN-1B now measures the clocks, not the mapping |
 | WEAPONS-Q3 | Projectile speed per class — is flight distance ÷ a constant, and does the arc change it? | desk where positions are known, RUN-1B |
 | WEAPONS-Q4 | Range per type in units, and what height does to it | RUN-2 — **read section 25.4 first**: the spear's walk-in parked at 755 u = 0.75 x the wiki's 1004, so RUN-2 must separate the park from the range (one press from the Isle's marked shortbow spot does it) |
 | WEAPONS-Q5 | Scythe: duration, how extra targets appear on the wire, the critical's size | **ANSWERED, section 25.3** (2026-09-19): 1.500 s, word at 0.650; an extra is a second word in the same instant, written BEFORE the target's, with its own roll and its own critical; attacker term 180 u confirmed at its edge (hit at 182, missed at 186); target term [78, 94) u centre-to-centre, NOT the 166 u "adjacent"; critical 1.0 < c < 1.40 from one sample, x2^0.5 refuted, x2^0.125 consistent; the cap untested |
@@ -1893,3 +1893,64 @@ finding of the census, outside this rung: on `20260917T160915` / `224104` the ob
 775 and 780 (table recharge 2 and 3) were sent with recharge 0, and on `20260916T213125`
 skill 1 with 24 where the table says 4 -- three recharges retail sent that are not the client
 table's, unexplained here and worth a SLICE look.
+
+## 32. WEAPONS-Q2 CLOSED at the desk, and the hornbow's 10 % shipped -- 2026-09-19: the client's own bow-class names
+
+**Q2 asked which `609` value is which bow class, and named RUN-1B as the instrument (five
+bows, five `0x0035` bases).** The client had the answer in a string table. The `609`
+tooltip handler (`0x00924F71` on build 38797) opens with `cmp dword [esi+0x20], 5` -- the word
+is read on item type 5, a bow, and on nothing else -- then `push dword [ebx*4 + 0xBCAAEC]`
+with ebx the word's argument, and formats 69415 `Two-handed %str1%` with that string. The
+table's five ids resolve through `textrec.py`: **69416 Shortbow, 69417 Longbow, 69418
+Flatbow, 69419 Recurve Bow, 69420 Hornbow** -- so 609 = 0 shortbow, 1 longbow, 2 flatbow, 3
+recurve, 4 hornbow. OBSERVED, the client's own words. **And the corpus agrees where it can:**
+WEAPONS-C6's only bow durations are `0x0035` base 2.475 on classes 1 and 3 (x10), and 1 and 3
+are the Longbow and the Recurve Bow, the wiki's two 2.475 s classes -- a check this table
+could have failed. `itemmods.py --bow-classes` is the extractor (located from the handler's
+own shape, refused on a build where the shape moved); `content/world.toml [bow_class.table]`
+carries the ids and labels; `[bow_class.rules]` is the wiki's half in a row of its own.
+
+**What the class buys, and ships.** (1) **The rate.** `weapon_rate_key(item)` gives a type-5
+bow its CLASS's `[attack_speed.rates]` key -- shortbow / flatbow 2.025, longbow / recurve
+2.475, hornbow 2.7 (WIKI, the rates row's own provenance; corroborated for 1 and 3) -- at
+the character's door (`apply_party_character`) and at the hostile's entry (`--enemy-weapon`),
+where every bow used to be the type row's 2.475. A type-28 NPC bow keeps its 1.75: the
+handler reads 609 on type 5 only, and retail tells type 28's holders 1.75 (C8). (2) **The
+hornbow's 10 %.** WIKI (GWW "Hornbow": "an extra 10% armor penetration"; "Armor penetration":
+a BONUS penetration that stacks on the largest base one; "Armor calculation" step 3: the
+rating times (1 - p), rounded, then the Special step where a critical's 20 comes off).
+`weapon_armour_penetration(item)` is the class row's 0.10 for a hornbow and 0.0 for anything
+else; `penetrated_armour(armour, item)` is the wiki's step 3 to the nearest whole number (a
+.5 up, ours: 45 -> 41) and sits at every site that reads a target's rating for a hit --
+`hit_enemy` (the player's swing, arrow and skill shot alike), the scythe's extras and the
+preparation splash (both 0 for their weapons), `land_swing` (a body's hornbow against the
+player, BEFORE the casting penalty) and a body's swing on a body. The critical's 20 and
+Healing Signet's 40 stay where they were, after it. No base penetration is modelled yet
+(Strength's 1 % per rank on attack skills, Penetrating Attack's 10 % -- WIKI, named, not
+built), so the hornbow's is the whole term today. (3) The launch banner names the class:
+`a hornbow (609 = 4) at 2.7 s, +10 % armour penetration`. `--no-bow-classes` reverts both.
+
+**Unmeasured, and said.** No observing player held a hornbow, a shortbow or a flatbow on any
+tape (the owner's bow is the 609 = 3 recurve; the corpus's bows in an observer's hands are
+classes 1 and 3), so the three rates and the penetration are the wiki's; RUN-WEAPONS-1B
+measures the five clocks (§6) and, with a hornbow on the Master of Damage suits, the 10 %
+against the 100-armour suit (a 20-roll at rank 12: 10 on the 60 suit either way, 6 against 100
+for a longbow, 7 for a hornbow). The wiki's own anomaly ("sometimes it subtracts slightly
+more") is not modelled. Q3 (the projectile speed per class) and the ranges per class are
+unchanged: `speed_by_609` / `range_by_609` on the bow row still carry the one measured class.
+
+**Tests.** `test_weapons.py` section 21 (10 checks, floor 186 -> 195; a vault run 202, the
+extractor read-back the one vault-only check): the two content rows; the read-back from the
+pinned client (handler `0x00924F71`, table `0x00BCAAEC`); the reader on starter_bow (1), the
+type-28 bow (None), classes 0..4, a 7, no 609, an axe; the labels and rates per class; the
+character's interval with a made hornbow (2.7), flatbow (2.025) and the starter longbow
+(2.475); the penetration table 60 -> 54, 45 -> 41, 81 -> 73, 100 -> 90 and none for the rest;
+through the real `hit_enemy` a 20-roll hornbow on AR 60 lands as on 54 and out-deals the
+longbow's same roll; the revert; the source locks on the five sites, the door and the flag;
+the banner. `clientscan/test_itemmods.py` section 15 (floor 42 -> 43): the extractor's handler
+is the generic table's 609 entry and its five ids are distinct and the pin's. `test_mechanics`
+246, `test_playerswing` 191, `test_skilldamage` 67, `test_pools` 132, `test_guards` 45,
+`test_agentlife` 551, `test_dispatch` 45, `test_labelrun` 32, `test_castcycle` 54,
+`test_daggers` 103, `test_weaponcensus` 38, `test_content` 48, `test_bareimport` 8,
+`test_srclint` 26, `test_checks` 17, `test_provlint` 19, `test_derivlint` 32, `test_citelint`
+50 green.
