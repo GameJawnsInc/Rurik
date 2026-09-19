@@ -64,8 +64,42 @@ Same shape every time. Two shells, both elevated.
 the sha256 into `manifest.json`, and prints the exact marker command for shell B.
 
 ```bash
-python toolkit/harness/livesession.py --account capture --exe C:\gd\Rurik\vault\run-live\2026-09-01_44fbd68767a8\Gw.exe --confirm --mode base --plan C:\gd\Rurik\vault\plans\weapons_1a.txt
+The four commands, ready to paste, one per run and in this order.
+
+RUN-WEAPONS-1A, the martial clocks, the scythe's extra targets and the spear:
+
+```bash
+python toolkit/harness/livesession.py --account capture --exe C:\gd\Rurik\vault\run-live\2026-09-01_44fbd68767a8\Gw.exe --confirm --mode base --minutes 30 --plan C:\gd\Rurik\vault\plans\weapons_1a.txt
 ```
+
+RUN-WEAPONS-1B, the bow classes and the caster clocks:
+
+```bash
+python toolkit/harness/livesession.py --account capture --exe C:\gd\Rurik\vault\run-live\2026-09-01_44fbd68767a8\Gw.exe --confirm --mode base --minutes 30 --plan C:\gd\Rurik\vault\plans\weapons_1b.txt
+```
+
+RUN-WEAPONS-2, range per weapon type:
+
+```bash
+python toolkit/harness/livesession.py --account capture --exe C:\gd\Rurik\vault\run-live\2026-09-01_44fbd68767a8\Gw.exe --confirm --mode base --minutes 25 --plan C:\gd\Rurik\vault\plans\weapons_2.txt
+```
+
+RUN-WEAPONS-3, the damage terms:
+
+```bash
+python toolkit/harness/livesession.py --account capture --exe C:\gd\Rurik\vault\run-live\2026-09-01_44fbd68767a8\Gw.exe --confirm --mode base --minutes 35 --plan C:\gd\Rurik\vault\plans\weapons_3.txt
+```
+
+**`--mode base` is settled by evidence rather than copied.** The flag is REQUIRED
+and deliberately has no default: Reforged changes enemy health and armour by about
+20 %, and a capture that did not stamp its mode can never be graded afterwards. All
+**26** stamped live captures in the vault record `mode=base`, so that is this
+account's mode. If the account has changed since, fix the flag before you run,
+because nothing downstream can repair it.
+
+**`--minutes` is a CEILING, not a duration.** Ctrl-C ends the run at any point and
+still assembles and scrubs in full, so a generous ceiling costs nothing while a
+tight one can truncate the last block.
 
 **Shell B — the marker.** Copy the command the driver printed. Do not retype it:
 a different file with the same name seals nothing and the mismatch is only
