@@ -1571,6 +1571,17 @@ One inconsistency worth recording: the panel's own eight-slot strip along its to
 rendered **empty** while the action bar below it was full. That widget filters by
 unlock state and disagrees with the bar it is supposed to mirror.
 
+> **Corroborated from the binary, 2026-09-19:
+> [studies/templates/FINDINGS.md](../templates/FINDINGS.md) §5.** The template
+> window's decoder (`0x0091CB90`) makes calls to exactly five functions in its
+> whole body — the bit reader and three const-table getters — and neither it nor
+> its closure reaches the thread-context getter, with a control that does. So
+> "unlock state does not gate display" is now measured statically as well as on a
+> live client, from a different path. What that decoder *does* gate on is a
+> per-skill **loadable** byte (`s_skill + 0x33 == 1`) and profession membership,
+> neither of which is account state; §47.3's `GmSkSlot` equip validator remains
+> the one place the account unlock set is load-bearing.
+
 **A free side effect: unlocking a skill names it.** The panel prints the resolved
 name, cost and attribute for every unlocked id, which is a way to identify skills
 without decoding a single text record. Four ids were named this way, and the

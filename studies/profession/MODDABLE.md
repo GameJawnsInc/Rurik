@@ -857,6 +857,13 @@ Guild Wars that serialises a profession id to disk and to another player.**
 asserts — and then calls the profession-name accessor. That is the primary/secondary pair, in
 the function that formats **skill templates**.
 
+> **CORRECTED 2026-09-19, [studies/templates/FINDINGS.md](../templates/FINDINGS.md) §1.**
+> `0x0058A790` formats the template window's **label** — the "⟨name⟩'s Skills and
+> Attributes" line, through the coded-string builder at `0x007C9410`. It is not the
+> codec. The codec is `AcctTemplate.cpp`, `0x0091CB90`–`0x0091D2C1`. The paragraph's
+> point stands and its address is one module out; the bullet below was answered by
+> reading the right one.
+
 Two consequences:
 
 - **The census counts functions, not profession arguments.** §2.2 sizes stubs by argument
@@ -894,7 +901,7 @@ These are results.
 
 | Question | Status | What would answer it |
 |---|---|---|
-| **Does the skill-template codec's profession field have its own width?** | **NOT FOUND — never asked, and it is a serialisation ceiling that leaves the machine** | Read the template encoder reached from `0x0058A790`. Offline. This caps custom professions independently of §1 |
+| **Does the skill-template codec's profession field have its own width?** | **CLOSED 2026-09-19 — yes, and it is not a ceiling.** The field is **4, 6, 8 or 10 bits, chosen per code** from a 2-bit selector (`w = sel*2 + 4`, `0x0091CDB5`), so a profession id up to **1023** serialises — far past `CHAR_PROFESSIONS` = 11. The encoder's own bound is `AcctTemplate:406 bitCountEncoding < 4` | Answered by reading `0x0091CD50`, not `0x0058A790` (see §8a's correction): [studies/templates/FINDINGS.md](../templates/FINDINGS.md) §2, with `toolkit/skilltemplate.py` and a round trip of a real client-produced code behind it |
 | **Can a custom profession be taken as a SECONDARY?** | **NOT FOUND — secondary professions are undesigned (§8a)** | Re-run §5.1's walk-back counting bound-check sites per function, not functions |
 | **Does anything build the `0x0059` dword client-side?** | **UNMEASURED — and it decides whether the picker ceiling is 16 or 256** | `--xrefs` on the packer `0x0091D430` and its thunk `0x008153B4`. If nothing reaches it, say so as a MEASURED result; if something does, professions created through the picker cap at 16 |
 | **Which of the 19 `0x33` sites are BOUND checks and which are SENTINEL comparisons?** | **UNMEASURED — and it is the number a stub generator needs** | Classify each; offline, minutes |

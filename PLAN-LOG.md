@@ -27,6 +27,64 @@ move back.
 
 ---
 
+### TEMPLATES-F1..F6 -- 2026-09-19 -- **the skill-template codec, read: the format, the loadable byte, the encode/decode asymmetry, and the PvP-area gate** ([studies/templates/FINDINGS.md](studies/templates/FINDINGS.md))
+
+Opened on a public forum post making five falsifiable claims about the "Load from Skills
+Template" window, with two codes the client itself had produced. **All five confirmed**,
+and the arc closes `studies/profession/MODDABLE.md` §9's standing NOT FOUND on the way.
+
+**MODDABLE's question, answered.** The profession field is **4, 6, 8 or 10 bits, chosen
+per code** from a 2-bit selector (`w = sel*2 + 4`), so an id up to **1023** serialises --
+not a byte, and not a ceiling on a custom profession. Its bound is
+`AcctTemplate:406 bitCountEncoding < 4`. MODDABLE pointed at `0x0058A790` as "the
+function that formats skill templates"; that formats the window's **label**, and the
+codec is `AcctTemplate.cpp` at `0x0091CB90`-`0x0091D2C1`. Corrected in place.
+
+**The mechanism, and it is an asymmetry.** `0x0091CD50`, the field writer, calls exactly
+**two** functions in its whole body -- `bsr` and the bit writer -- so it cannot look a
+skill up and cannot filter. `0x0091CB90`, the field reader, is also the **validator**: it
+AND-s eleven clauses into one boolean and the caller gets no reason, which is why the
+window just goes empty. **So the client hands you a code it will not read back**, which
+is the "temporary skills copy out empty" claim, exactly.
+
+**The loadable byte.** `s_skill[id] + 0x33 == 1` is tested at exactly **three** sites in
+38797 -- the decoder per slot, `AcctCliTemplate` zeroing a stored template's offending
+slots one at a time, and the picker's enumerator. Census: family 1 is **1333** rows and
+**zero of the 177 `pvp_only` rows are in it**, so a PvP version can never pass. This also
+upgrades `skilltable.player_corpus` from UPSTREAM to the client's own rule -- and shows
+its `not pvp_only` conjunct removes nothing, so the two terms are not two witnesses.
+
+**No unlock state anywhere in the decode**, with controls: the decoder's body makes five
+calls (bit reader plus three const-table getters), and neither closure reaches the
+context getter while a 1187-function control does. That corroborates
+`studies/skills/FINDINGS.md` §9's live measurement from the binary side.
+
+**The PvP display rule.** `s_skill + 0x2C` is the twin pointer and 13 sites inline the
+same helper in **two polarities** -- PvE->PvP and PvP->PvE. TemplatesSummary uses the
+first, gated by **`(AreaInfo.flags & 0x40000) || AreaInfo.type == 4`**: 137 maps carry the
+flag, **17 have type 4 and all seventeen are guild halls** (the poster's parenthetical is
+a separate branch, which is why it surprised him). Independent corroboration we already
+had and had not read: `studies/isle/PLAN.md` records Isle of the Nameless at
+`flags 0x420000` and its PvP twin at `0x40000`, and the wiki says the PvP one converts
+all skills. Also hardcoded: 411 <-> 3068 (Charm Animal / Charm Animal (Codex)) on Codex
+Arena and the fourteen random arenas, a pair with no `linked_id` to ride.
+
+**The check that could have failed.** A 22-character code ArenaNet's client produced
+re-encodes to itself **character for character** through a format transcribed from the
+disassembly -- pinning field order, three width rules, bit order, alphabet and
+byte-padding at once. Its sibling code decodes cleanly but declares a wider-than-minimal
+skill field and cannot round-trip; asserted as an inequality rather than skipped, and
+left open as TEMPLATES-Q3 rather than explained away.
+
+**Shipped:** `toolkit/skilltemplate.py` (format and validator, stdlib, table lookups
+injected so the format half runs bare) and `toolkit/test_skilltemplate.py` (51 checks
+with the vault, 35 without, floor 35, TESTS.md entry in this commit). Tests run:
+`test_skilltemplate` (51 / 35 bare), `test_srclint` (26), `test_skilltable` (63),
+`test_attribtable` (29) -- the last two because this commit edits `skilltable.py`'s
+docstring. The full suite was NOT run, per the house rule.
+
+---
+
 ### RUN-WEAPONS-1A -- 2026-09-19 -- **run and scored: the martial clocks hold, the scythe's extras are same-instant words with a target-side term of [78, 94) u, the spear parks at 755 u** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) §25)
 
 Capture `20260919T103604`, sealed plan, seals AGREE, exe unchanged. Every sealed
