@@ -11288,16 +11288,27 @@ from combatmath import (  # noqa: F401,E402
 )
 
 
-def armour_of_piece(item, damage_type="physical", met=True, physical=None):
+def armour_of_piece(item, damage_type="physical", met=True, physical=None,
+                    level=None):
     """Forwards to combatmath, filling in the two modifier identifiers.
     WEAPONS-W4: `damage_type` is the incoming type (an id from the client's
     fourteen, or "physical" / "elemental" / "other"); `met` whether a
     required shield's 635 counts in full; the old `physical=` boolean still
-    means "physical" / "elemental"."""
+    means "physical" / "elemental"; `level` is the wearer's, for a 573
+    piece (a hero's level-scaled rating)."""
     if physical is not None:
         damage_type = "physical" if physical else "elemental"
     return combatmath.armour_of_piece(item, damage_type, ARMOR_RATING_MODIFIER,
-                                      ARMOR_VS_TYPE_MODIFIER, met=met)
+                                      ARMOR_VS_TYPE_MODIFIER, met=met, level=level)
+
+
+def player_level_of(state=None):
+    """The player's level for a level-scaled piece: the connection's, else
+    the character's seed."""
+    try:
+        return int((state or {}).get("level") or agents.PLAYER_LEVEL)
+    except (TypeError, ValueError):
+        return int(agents.PLAYER_LEVEL)
 
 
 def offhand_armour(damage_type="physical", state=None):
@@ -11309,7 +11320,8 @@ def offhand_armour(damage_type="physical", state=None):
     if not EQUIP_WEAPON or not agents.PLAYER_OFFHAND:
         return 0.0
     met = (not UNMET_REQUIREMENT) or player_requirement_met(agents.PLAYER_OFFHAND, state)
-    got = armour_of_piece(agents.PLAYER_OFFHAND, damage_type, met=met)
+    got = armour_of_piece(agents.PLAYER_OFFHAND, damage_type, met=met,
+                          level=player_level_of(state))
     if got is None:
         return 0.0
     rating, bonus = got
@@ -11369,7 +11381,8 @@ def player_armour_at(location_key, damage_type="physical", state=None,
         damage_type = "physical" if physical else "elemental"
     got = combatmath.player_armour_at(location_key, damage_type, EQUIP_ARMOUR,
                                       ARMOR_RATING_MODIFIER,
-                                      ARMOR_VS_TYPE_MODIFIER)
+                                      ARMOR_VS_TYPE_MODIFIER,
+                                      level=player_level_of(state))   # a 573 piece
     return None if got is None else got + offhand_armour(damage_type, state)
 
 

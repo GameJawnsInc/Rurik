@@ -1954,3 +1954,51 @@ is the generic table's 609 entry and its five ids are distinct and the pin's. `t
 `test_daggers` 103, `test_weaponcensus` 38, `test_content` 48, `test_bareimport` 8,
 `test_srclint` 26, `test_checks` 17, `test_provlint` 19, `test_derivlint` 32, `test_citelint`
 50 green.
+
+## 33. Identifier `573` read -- 2026-09-19: "Armor: N (depends on level)", a hero's level-scaled piece
+
+**What §30 left.** `573` sat on "four corpus pieces x five slots", unread, and a piece carrying
+it read as unarmoured. Read now: the word, its handler, its wearer and the wiki agree.
+
+**The word, OBSERVED.** Twenty items across the corpus and nothing else: one five-piece set
+(types 4 / 7 / 13 / 16 / 19, models 17977..17980 and 19012), every piece `(573, 80, 23)` then
+`(4, 527 20)` -- the headpiece with a `644` ("Item's attribute +1", the wiki's hero
+headpiece) in front -- created into inventory key 5 behind `0x015A ITEM_SET_PROFESSION [..,
+item, 1]` (a Warrior) and moved into its bag 18, on the JARIN hero tape (`20260914T005758`,
+three connections) and the aggro tape (`20260916T150306`): **the Warrior hero's armour**. The
+tooltip handler (`0x009240F4`) draws it from the walker context's level slot (`+0x24`): with a
+level, 2438 `Armor: N` where N = arg2 + (arg - arg2) x X / 10; without one, 2440 `Armor: N-N`
+with arg2..arg; then 51163 `depends on level` -- so arg2 is the LOW rating and arg the HIGH.
+What X is (the caller's tenths) is unread; the server's rule below needs no X. The client has
+no reader for 573 outside the tooltip (`itemmods --reads 573`): the number lives on the server.
+
+**The rule, WIKI and CORROBORATED three ways.** GWW "Hero armor" sec. Armor rating (read
+2026-09-19): a hero's rating "is dependent solely on their profession and level" -- Warrior /
+Paragon 23 at level 1 to 80 at 20, Ranger / Assassin / Dervish 13 to 70, the casters 3 to 60,
+three a level; GWW "Hero": "set at an armor rating suitable for the hero's level and
+automatically increases in armor rating with the hero level". `(80, 23)` is the Warrior row's
+two ends. The rating at level L is the line between them, low + (high - low) x (L - 1) / 19,
+which for every wiki row is 3 x L + 20 / 10 / 0 -- the creature formula
+`combatmath.creature_armor_rating` already uses (3 x level + a profession bonus of 20 / 10 /
+0, the same three rows), the isle's WIKI source and the hero's tape's endpoints agreeing.
+
+**What ships.** `combatmath.LEVEL_SCALED_ARMOUR = 573`, `level_scaled_rating(low, high, level)`
+(the line, level clamped to 1..20; no level reads the low end), `armour_of_piece(...,
+level=)` reading 573 as the rating beside 572 and 635, `player_armour_at(..., level=)` and the
+server's `player_level_of(state)` (the connection's level, else the character's seed) at the
+location and off-hand readers. Our heroes rate by `creature_armor_rating` and wear no pieces
+on the wire, so nothing changes for them; the reader is what lets a content row carry the
+tape's word -- a hero set declared with `573` would rate itself at the wearer's level. No
+content row carries one yet.
+
+**Tests.** `test_weapons.py` §19 gains three checks (floor 195 -> 198; a vault run 205): the
+line reproduces the wiki's three rows at every level 1..20 and the isle's formula, clamps and
+defaults; the corpus's set reads 23 / 35 / 80 at levels 1 / 5 / 20 with its +20 vs. physical
+counting for a slashing hit and not a fire one; through `player_armour_at` a level-7
+connection reads 61 and a level-20 one 100, no state the seed level. `test_mechanics` 246,
+`test_skilldamage` 67, `test_pools` 132, `test_guards` 45, `test_agentlife` 551,
+`test_playerswing` 191, `test_srclint` 26, `test_checks` 17, `test_bareimport` 8 green.
+
+**Left.** The tooltip's X (what the caller feeds `+0x24`; the low-end reading at level 1 and
+the high at 20 say it is (L - 1) x 10 / 19 or the caller clamps -- unread, and nothing here
+depends on it).

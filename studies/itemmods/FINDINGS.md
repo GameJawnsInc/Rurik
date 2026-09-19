@@ -84,6 +84,7 @@ vocabulary is recoverable without guessing at any of it:
 | 584 | 2382 `Dmg`, 2441 `%str2% %str1%: %num1%-%num2%` | the damage RANGE — **`arg` is the max, `arg2` the min**, read off `Blunt Dmg: 3-5` on screen (§5.6) |
 | 587 | 2380 `Damage`, 2443 `%str2% %str1%` | the damage TYPE line |
 | 570 | 2376 `Chance`, 2392 `skill recharge`, 2432 `Halves %str1% of spells` | **Halves skill recharge of spells** |
+| 573 | 2372 `Armor`, 2438 `%str1%: %num1%` / 2440 `%str1%: %num1%-%num2%`, 51163 `depends on level` | **Armor: 23-80 (depends on level)** -- a hero's level-scaled piece, arg the level-20 rating and arg2 the level-1 one (studies/weapons/PLAN.md 33, 2026-09-19) |
 | 556 / 558 | 2071 `Energy` / 2072 `Energy recovery` | the energy lines |
 
 Those are Guild Wars item stats, in the game's own phrasing. The ids are what the tool
