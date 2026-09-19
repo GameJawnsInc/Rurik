@@ -1997,10 +1997,12 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   client) -- ~~RUN-W9-2~~ ran 2026-09-19 (§28: a base-changing switch owed a `0x0035`, retail
   sends it at the NEXT attack start not in the batch -- 2 of 2 base changes on the 1A tape, 2 of
   2 same-base sent none -- and `select_weapon_set` now arms it; on the client the axe -> hammer
-  swing ran 1.33 -> 1.75 s with the pair riding the first post-switch start). Open after W9:
-  retail's reply to a same-set or empty-set press, `0x0152`'s client effect, and whether a switch
-  that moves the maximum energy re-sends 41 / 43 on retail (INFERRED; needs a 556 item in a set on
-  a live tape).
+  swing ran 1.33 -> 1.75 s with the pair riding the first post-switch start); ~~`0x0152`'s client
+  effect and the item family's first field~~ closed at the desk 2026-09-19 (§29: the handler
+  EXCHANGES the two items' bag and slot, renamed `ITEM_SWAP_LOCATIONS`; the first field is the
+  `0x0144` inventory key). Open after W9, all on ONE live tape and written into RUN-1B's steps:
+  retail's reply to a same-set and to an empty-set press, and whether a switch that moves the
+  maximum energy re-sends 41 / 43 (INFERRED; a staff in a set does it).
   Captures wanted: 1B (five bows, staff, wand — predicts 1200 / 1600 / 2800 u/s), 2
   (range: every range here is WIKI or reconstructed, and 1A's spear PARKED at 0.75 × the
   wiki's number, §25.4 — the run must separate park from range).

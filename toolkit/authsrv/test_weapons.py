@@ -23,7 +23,7 @@ import agents  # noqa: E402
 import authsrv  # noqa: E402
 import combatmath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=151)   # the BARE-MACHINE number: 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=155)   # the BARE-MACHINE number: 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
 check = LEDGER.ok
 
 LEGACY_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
@@ -1661,6 +1661,138 @@ def section_weapon_sets():
               "backpack slot 0 and comes back to equipped slot 1, and the server's off hand "
               "is restored with it (RECONSTRUCTION: set 0's shield was never in the backpack)",
               f"{b1} / {b0}")
+        # ---- the desk close, 2026-09-19 (studies/weapons/PLAN.md 29): the
+        # CLIENT'S reading of the batch, as a model of ItCliInv's own asserts.
+        # 0x0152's handler (0x00846840) resolves both items by id and the
+        # inventory by the FIRST field (ItCliApi:2253 item1 / :2254 item2 /
+        # :2257 inventory) and calls the swap worker 0x84b020: both items must
+        # be IN a bag (ItCliInv:687/688 item->IsInInventory()), both are
+        # REMOVED (0x84aeb0, :621/622 bag->GetItem(slot) == item) and each is
+        # ADDED at the other's old (bag, slot) (0x849ea0, :105
+        # !bagParent->GetItem(slot) -- the slot must be EMPTY). 0x013E is the
+        # add worker alone; 0x014B is remove-if-in-a-bag then add. The model
+        # IS those asserts, so a batch that would crash the client reddens here
+        # -- and the last check proves the model can go red.
+        EQ, BP = authsrv.EQUIPPED_BAG_ID, authsrv.BACKPACK_BAG_ID
+
+        class ClientBags:
+            def __init__(self):
+                self.at, self.where = {}, {}     # (bag, slot) -> item; item -> (bag, slot)
+
+            def add(self, item, bag, slot):
+                if (bag, slot) in self.at:
+                    raise AssertionError(f"ItCliInv:105 !bagParent->GetItem(slot): "
+                                         f"{(bag, slot)} holds {self.at[(bag, slot)]}, "
+                                         f"adding {item}")
+                self.at[(bag, slot)] = item
+                self.where[item] = (bag, slot)
+
+            def remove(self, item):
+                if item not in self.where:
+                    raise AssertionError(f"ItCliInv:621 bag: item {item} is in no bag")
+                del self.at[self.where.pop(item)]
+
+            def feed(self, msgs):
+                for op, v in msgs:
+                    if op == 0x013E:
+                        self.add(v[1], v[2], v[3])
+                    elif op == 0x014B:
+                        if v[1] in self.where:
+                            self.remove(v[1])
+                        self.add(v[1], v[2], v[3])
+                    elif op == 0x0152:
+                        a, b = v[1], v[2]
+                        if a not in self.where or b not in self.where:
+                            raise AssertionError(f"ItCliInv:687/688 IsInInventory: {a} / {b}")
+                        pa, pb = self.where[a], self.where[b]
+                        self.remove(a)
+                        self.remove(b)
+                        self.add(a, *pb)
+                        self.add(b, *pa)
+                return self
+
+            def hands(self):
+                return (self.at.get((EQ, 0), 0), self.at.get((EQ, 1), 0))
+
+        def client_after(sets, weapon, offhand=None):
+            """The create as the client files it: set 0 into the equipped bag
+            (authsrv's ITEM_MOVED_TO_LOCATION(weapon -> equipped 0) and
+            (offhand -> equipped 1)), then declare_weapon_sets' moves."""
+            authsrv.WEAPON_SETS[:] = [{"lead": "starter_hammer", "off": None}, None, None, None]
+            authsrv.apply_party_character({"player_weapon": weapon, "player_offhand": offhand})
+            authsrv.configure_weapon_sets(sets)
+            cb = ClientBags()
+            cb.add(authsrv.WEAPON_ITEM_ID, EQ, 0)
+            if offhand:
+                cb.add(authsrv.OFFHAND_ITEM_ID, EQ, 1)
+            del sent[:]
+            authsrv.declare_weapon_sets(send)
+            return cb.feed(sent)
+
+        def cycle(cb, ks):
+            hands_ok, crash = [], None
+            try:
+                for kk in ks:
+                    cb.feed(switch(kk))
+                    hands_ok.append(cb.hands() == authsrv.weapon_set_items(kk))
+            except AssertionError as e:                                        # noqa: BLE001
+                crash = str(e)
+            return hands_ok, crash
+
+        st = {"agents": {}, "pos": (0.0, 0.0), "player_health": 480.0}
+        cb = client_after(["1=starter_scythe", "2=starter_spear",
+                           "3=starter_spear+starter_shield"], "starter_axe")
+        created = dict(cb.where)
+        ok1, crash1 = cycle(cb, (1, 2, 3, 0))
+        check(crash1 is None and ok1 == [True] * 4
+              and cb.where[15] == created[11] and cb.where[11] == created[13]
+              and cb.where[13] == created[15] and cb.where[1] == (EQ, 0)
+              and cb.where[16] == created[16] and created[16] == (BP, 3),
+              "the client's swap ROTATES the leads: after one 0->1->2->3->0 cycle each "
+              "inactive lead sits in the NEXT set's created slot (15 at 11's, 11 at 13's, 13 "
+              "at 15's), the axe is back in the hands and the shield in ITS created slot -- "
+              "why the server names no lead's slot after the create",
+              f"{crash1} / {ok1} / {cb.where} from {created}")
+        ok2, crash2 = cycle(cb, (1, 2, 3, 0, 3, 1, 0))
+        check(crash2 is None and ok2 == [True] * 7,
+              "a second cycle and a scramble (3 -> 1 -> 0) trip none of the client's asserts "
+              "(ItCliInv:105 empty slot, :621 in a bag, :687/688 both in inventory), and the "
+              "equipped bag holds exactly the active set's items after every switch",
+              f"{crash2} / {ok2}")
+        # a shield at BOTH ends: set 0 sword + shield (item 10) against set 3
+        # spear + shield (item 16) -- one batch moves one shield OUT and one IN,
+        # and the add worker's empty-slot assert is why the leaving one is first
+        cb = client_after(["1=starter_scythe", "3=starter_spear+starter_shield"],
+                          "starter_sword", "starter_shield")
+        st = {"agents": {}, "pos": (0.0, 0.0), "player_health": 480.0}
+        b3 = switch(3)
+        moves = [v for op, v in b3 if op == 0x014B]
+        try:
+            cb.feed(b3)
+            cb3_ok, crash3 = cb.hands() == (15, 16), None
+            cb.feed(switch(0))
+            cb0_ok = cb.hands() == (1, 10) and cb.where[16] == (BP, 3)
+        except AssertionError as e:                                            # noqa: BLE001
+            cb3_ok, cb0_ok, crash3 = False, False, str(e)
+        check(crash3 is None and cb3_ok and cb0_ok
+              and moves == [[1, 10, BP, 0], [1, 16, EQ, 1]],
+              "a shield at both ends (sword + shield -> spear + shield -> back): the leaving "
+              "shield's 0x014B (10 -> backpack 0) precedes the entering one's (16 -> equipped 1) "
+              "and the model accepts both batches -- the hands read (15, 16) then (1, 10), the "
+              "second shield back in its created slot",
+              f"{crash3} / {moves} / {cb.where}")
+        # the control: the same two moves the other way round would put 16 into
+        # equipped slot 1 while 10 still holds it -- the client's ItCliInv:105
+        cbx = client_after(["3=starter_spear+starter_shield"], "starter_sword", "starter_shield")
+        try:
+            cbx.feed([(0x014B, [1, 16, EQ, 1]), (0x014B, [1, 10, BP, 0])])
+            tripped = None
+        except AssertionError as e:                                            # noqa: BLE001
+            tripped = str(e)
+        check(tripped is not None and "ItCliInv:105" in tripped,
+              "and the model can go red: the entering shield sent FIRST trips the empty-slot "
+              "assert (ItCliInv:105) -- the order above is a client constraint, not taste",
+              str(tripped))
         # the flag's refusals
         for bad in ("4=starter_axe", "1=hostile_bow", "x=starter_axe", "1=", "1=no_such_item"):
             try:

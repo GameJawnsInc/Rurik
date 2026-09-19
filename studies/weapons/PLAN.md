@@ -235,7 +235,7 @@ exposure floor and an abort written down.
 | Run | Steps (each: equip, F11, 20 plain swings on a Master of Damage suit from one spot, F11) | Answers | Sealed predictions |
 |---|---|---|---|
 | **RUN-WEAPONS-1A** martial | axe · scythe on ONE suit · scythe with TWO suits adjacent to the target (3 foes hit, the weapon's maximum -- corrected 2026-09-18, this row said three adjacent, which is four) · spear · spear + shield | Q5, Q6, the 1.5 s clock, scythe wire shape and critical, the spear's projectile and flag | scythe and spear start→start 1.500, word / launch at 0.650; spear `0x00A4` field 7 = 1 — **RUN 2026-09-19, capture `20260919T103604`, scored in section 25: every prediction held; the scythe's target-side term measured at [78, 94) u, the spear parked at 755 u** |
-| **RUN-WEAPONS-1B** bows and casters | shortbow · flatbow · longbow · recurve · hornbow · staff · wand, all from the same marked spot | Q2 (609 ↔ class), Q3 (speed per class — same distance, five flights), the 2.025 and 2.7 clocks | start→launch 0.9125 / 1.1375 / 1.250 / 0.775; flight ratios 0.59 : 0.88 : 0.59 : 0.40 : 0.59 |
+| **RUN-WEAPONS-1B** bows and casters | shortbow · flatbow · longbow · recurve · hornbow · staff · wand, all from the same marked spot · **then W9's three presses (§29), the staff in a set: the ACTIVE set's key; an EMPTY set's key; a switch INTO the staff's set from a weapon with no 556 word** | Q2 (609 ↔ class), Q3 (speed per class — same distance, five flights), the 2.025 and 2.7 clocks; W9's same-set and empty-set replies and the 41 / 43 on a moved maximum | start→launch 0.9125 / 1.1375 / 1.250 / 0.775; flight ratios 0.59 : 0.88 : 0.59 : 0.40 : 0.59; same-set and empty-set presses answered by NOTHING (the smaller claim); the staff switch's batch carries property 41 then 43 |
 | **RUN-WEAPONS-2** range | per weapon: stand far, press attack once, let the character walk in; repeat uphill if the Isle allows | Q4 — the distance from shooter to the aim point at the FIRST launch is the range, no free parameter. ~~Q16~~ is **no longer this run's**: §22 answered it from the client's own code (the park threshold has no weapon term), so spend no steps on it | 1004 / 1498 / 1498 / 1273 / 1273; 1248 staff and wand; 1004 spear; the body stands after the first start |
 | **RUN-WEAPONS-3** damage (later, needs the right attributes) | met vs unmet requirement on one weapon; a scythe's criticals; hornbow vs longbow on the 100-armour suit | Q10, Q5's critical, W4's penetration | written when W4 opens |
 
@@ -1646,3 +1646,63 @@ pair for the next start, a same-base switch arms nothing -- retail's 2/2 each wa
 `0x0152`'s client effect; the item family's first field (116 / 241 / 1 per instance, ours 1);
 whether retail re-sends 41 / 43 on a switch that moves the MAXIMUM ENERGY -- still INFERRED, no 556
 item was in any 1A set. RUN-W9-2 itself is closed.
+
+## 29. WEAPONS-W9, the desk close -- 2026-09-19: what the client does with `0x0152`, and the item family's first field
+
+**Two of §28's four opens were the client's to answer, not a tape's, and its handlers answer
+both.** Read on the pinned pristine build 38797 with `msghandler.py 0x0152 --follow --annotate
+--depth 2` (and `0x0148` beside it); the workers are ItCliInv's and their asserts name them.
+
+**`0x0152`, OBSERVED (binary).** Handler `0x00846840`: fields 2 and 3 are item ids indexing the
+item array (`ctx+0xB8`, bound `ctx+0xC0`; a miss asserts `ItCliApi.cpp:2253 item1` / `:2254
+item2`); field 1 is hashed into the inventory table at `ctx+0xD4` (`:2257 inventory`); then
+`inventory->Swap(item1, item2)` at `0x0084B020`, all ItCliInv.cpp: both must be in a bag (`:687
+item1->IsInInventory()`, `:688 item2->IsInInventory()`), both are REMOVED from their bag and slot
+(`0x84aeb0`, `:621 bag`, `:622 bag->GetItem(slot) == item` -- the remove worker `0x014B` uses), and
+each is ADDED at the OTHER's former bag and slot (`0x849ea0`, `:104 bagParent`, `:105
+!bagParent->GetItem(slot)` -- the add worker `0x013E` uses, the destination asserted EMPTY). That is
+the whole effect: **the two items exchange locations.** A hand changes only as a consequence -- the
+add and remove workers fire the hands-changed refresh (`0x84b270`, `0x84a690`) whenever the touched
+bag is type 2 (the equipped bag) and the slot is 0 or 1, the same refresh a `0x014B` into the
+equipped bag fires. One more rule, read to its asserts only: when either item sits in a type-4 bag
+(a storage pane, on our wire and retail's), the OTHER item -- the one about to land there -- is
+first stripped from every equip set it belongs to (`0x84a3a0`, `ItCliInv.cpp:348 !(setMask &
+~ITEM_EQUIP_SET_MASK)`, `:375 set < ITEM_PLAYER_EQUIP_SETS`): a weapon swapped into storage leaves
+the sets. Nothing in the handler is about the hands, so §27's `ITEM_SWAP_EQUIPPED` (medium) named
+the wire's context, not the mechanism. Renamed **`ITEM_SWAP_LOCATIONS`** (high) in
+`schema/overrides.json`, beside `ITEM_CHANGE_LOCATION` and `ITEM_ADD_TO_INVENTORY`, and
+`authsrv.py`'s constant with it. Widths `[u16, u32, u32]` per `msgshape` agree with messages.json.
+
+**Two consequences for our sender, both now tested.** (1) **The leads rotate.** After our `0x0152
+[1, old, new]` the old lead sits in the backpack slot the new one came from, so after one
+0 -> 1 -> 2 -> 3 -> 0 cycle every inactive lead is in the NEXT set's created slot (15 at 11's, 11 at
+13's, 13 at 15's on our ids). The server keeps no lead-slot state and must never name a lead's slot
+from its create; only a shield's `0x014B` names a slot, and a shield's created slot is never taken
+by anything else, so it is always free to return to. (2) **A leaving shield goes first.** Because the
+add worker asserts the destination EMPTY, a batch that moves one shield OUT of the hands and another
+IN must send the leaving `0x014B` before the entering one. `select_weapon_set` already did, in the
+tape's order; it is now a constraint with a test, and the test's control feeds the two moves
+reversed and watches the model trip `ItCliInv:105`.
+
+**The first field, CLOSED by the catalog.** 116 / 241 / 1 per instance is the inventory key that
+`0x0144 ITEM_STREAM_CREATE` registers (overrides 324, read 2026-08-18: `ItCliApi:2010
+!inventory`, a key declared once), and the key `0x0147`, `0x0148`, `0x013E`, `0x014B` and `0x0152`
+all hash to find their inventory (`0x8445a0` over `ctx+0xD4`; a miss is `ItCliApi:2257`'s
+assert). It is a per-connection handle, not a character id -- `authsrv.py`'s
+`PLAYER_INVENTORY_KEY = 1` comment already said so for the gold messages. Ours is 1 because we
+register 1. Nothing to change.
+
+**Tests.** `test_weapons.py` §18 gains four checks (floor 151 -> 155; a vault run 157): a model of
+the three ItCliInv asserts fed the create and the batches -- the rotation after one cycle; two more
+cycles and a scramble (3 -> 1 -> 0) with the equipped bag checked against `weapon_set_items` after
+every switch; a shield at both ends (sword + shield against spear + shield) with the leaving move
+first; and the control that reverses the two moves and trips `ItCliInv:105`. `test_smsgnames` 26 /
+9 / 42, `schema/test_smsgnames` 15, `test_catalog` 13, `test_codec` 29, `test_msgmix` 56,
+`test_dispatch` 45, `test_itemdetail` 19, `test_transfer` 28, `test_smsgsweep` 118,
+`test_cmsgnames` 16, `test_agentlife` 551, `test_guards` 45, `test_pools` 132, `test_mechanics`
+246, `test_playerswing` 191, `test_labelrun` 32 green.
+
+**What is left of W9 -- all on ONE live tape, written into RUN-1B's steps (§6).** Retail's reply to
+a press on the ACTIVE set and to a press on an EMPTY set (ours send nothing, NOT OBSERVED either
+way), and whether a switch that moves the maximum energy re-sends 41 / 43 (INFERRED from the morale
+path; a staff in a set does it, and 1B already holds a staff). Nothing else in W9 is open.

@@ -1224,7 +1224,12 @@ GAME_SMSG_ITEM_SET_ACTIVE_WEAPON_SET = 0x0148
 # (studies/newopcodes 0x006F) -- hand 0 lead, 1 off, an item of 0 for an
 # emptied hand.
 GAME_SMSG_ITEM_CHANGE_LOCATION = 0x014B
-GAME_SMSG_ITEM_SWAP_EQUIPPED = 0x0152
+# 0x0152 [inventory key, item, item]: the client's handler (0x00846840) has
+# the two items EXCHANGE bag and slot -- ItCliInv's swap worker removes both
+# (ItCliInv:621) and adds each at the other's old place (ItCliInv:105, the
+# slot asserted EMPTY); nothing in it is equipped-specific, so the W9 name
+# ITEM_SWAP_EQUIPPED was too narrow (studies/weapons/PLAN.md 29, 2026-09-19).
+GAME_SMSG_ITEM_SWAP_LOCATIONS = 0x0152
 GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT = 0x006F
 GAME_SMSG_CREATE_NAMED_ITEM = 0x0161
 GAME_SMSG_INVENTORY_CREATE_BAG = 0x013F
@@ -2577,6 +2582,14 @@ EQUIP_WEAPON = True
 #     0x006F [agent, 1, new off]                  a FILLED off hand, last
 #
 # and never a fresh 0x006E or 0x006D (studies/weapons/PLAN.md 25.5 and 27).
+# What the client DOES with it (section 29, read off the handlers): 0x0152
+# swaps the two items' (bag, slot) -- so the old lead lands in the backpack
+# slot the new lead came from, and after a 0->1->2->3->0 cycle every inactive
+# lead sits one set's slot on. This server therefore never names a lead's
+# slot after the create; only a SHIELD's move (0x014B) names one, and its
+# created slot is never taken by anything else. The add worker asserts the
+# destination slot EMPTY (ItCliInv:105), which fixes one order below: a
+# shield LEAVING the hands goes out before one ENTERING them.
 # Our ids: set 0 is WEAPON_ITEM_ID / OFFHAND_ITEM_ID as before; sets 1-3 take
 # the pairs below, clear of the player's 1-10 and the hero bodies' 210+.
 WEAPON_SET_ITEM_IDS = ((11, 12), (13, 14), (15, 16))   # (lead, off) of sets 1, 2, 3
@@ -2737,8 +2750,8 @@ def select_weapon_set(send, state, k, conn_id):
               [1, new_off, EQUIPPED_BAG_ID, EQUIPPED_SLOT_OFFHAND],
               f"ITEM_CHANGE_LOCATION(off hand {new_off} -> equipped 1) [WEAPONS-W9]")
     if old_lead != new_lead:
-        _send(GAME_SMSG_ITEM_SWAP_EQUIPPED, [1, old_lead, new_lead],
-              f"ITEM_SWAP_EQUIPPED({old_lead} -> {new_lead}) [WEAPONS-W9]")
+        _send(GAME_SMSG_ITEM_SWAP_LOCATIONS, [1, old_lead, new_lead],
+              f"ITEM_SWAP_LOCATIONS({old_lead} <-> {new_lead}) [WEAPONS-W9]")
     if old_off and not new_off:
         _send(GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT, [PLAYER_AGENT_ID, EQUIPPED_SLOT_OFFHAND, 0],
               "AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT(off hand emptied) [WEAPONS-W9]")
