@@ -27,6 +27,61 @@ move back.
 
 ---
 
+### WEAPONS-Q16 desk check -- 2026-09-18 -- **the last server-side arm spent and WITHDRAWN, two rival mechanisms refuted, a positive control found for the `0x0028`; and a 44 %-flaky check in `test_weapons` section 11 fixed** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) section 21)
+
+The plan asked for a desk check before a third client arm at Q16. It ran and **shipped no
+server change**, which is the result.
+
+**(a) The two arms TOGETHER also fail.** Section 20 withdrew the walk-gate hold and the bare
+`0x0028` after each failed alone; what was left was that retail's start batch needs BOTH,
+which is what it carries (7 of 7 clean ranged first-after-follow starts). Built behind
+`--no-ranged-follow-stop`, driven by the client's OWN `0x0026` (Escape / Tab / Space),
+against a FROZEN practice target 1,800 u out (`20260918T201027`, recorder
+`authsrv-20260918T201057-c1`): the batch went out in retail's order -- `0x00A0 [4, 1, 10, 0]`,
+`0x009F [8, 1, 1]`, `0x0028 [1]` at 129.847 -- **and the body walked in exactly as before**,
+flights 0.727 -> 0.282 -> 0.050 -> 0.050 s against a target that never moved and an aim
+point fixed at (11099, 6804). All three arms are now spent; WITHDRAWN, nothing on `main`.
+
+**(b) REFUTED: no range word is missing from our bow.** An item's modifiers carry the
+DAMAGE range (`584 (max, min)`, `634` with a requirement) and the damage TYPE (`587`); no
+identifier in studies/itemmods' 157-slot dispatch is an attack reach. Retail's bows and ours
+decode to the same families (retail `20260807T143055` item 469 = 609 / 587 / 617 / 584;
+ours = 609 / 587 / 584). What names a bow to the client is the item TYPE byte, which we send.
+
+**(c) REFUTED: the follow's destination is not the difference.** Retail aims it at the
+target, as W2b does: `20260810T235916` 91.955 and 93.500 send `0x002A [31, (5670, -4379),
+0, 0, 43]`, the target's own position with the target in field 5. Re-aiming ours at a range
+point would DIVERGE from retail's wire rather than match it.
+
+**(d) THE POSITIVE CONTROL.** Retail's `0x0028` is not inert. On `20260914T005758` the
+observer is walking under its own steering (a `0x003D` every ~0.5 s, each answered by a
+`0x0029`), presses attack at 508.731, and the server answers with a bare `0x0028` at
+508.767 and nothing else -- after which the body shoots three times from ONE distance
+(launches 513.233 / 515.725 / 518.700, flights 0.210 / 0.215 / 0.215, flat). So the stop
+HALTS A SELF-STEERED WALK and leaves a stored follow alone, which is the narrower and more
+useful statement.
+
+So the wire we send around a ranged press is now byte-for-byte retail's and the client still
+walks ours to the disc: the stopping distance is decided inside the client's follow
+resolver, and the next step is a `codescan` of that resolver's stop-distance compare
+(`r + r + 56` beside the weapon's reach) -- **a MOVECODE rung, not a weapons one, and
+explicitly not a fourth message.**
+
+**Also fixed**, found re-running the suite: `test_weapons` section 11's body Dual Shot check
+was failing about 44 % of runs on `f44e7343`'s own tree (measured 3 of 6; 0 of 8 after).
+`hostile_bow` rolls 1-3, Dual Shot scales by 0.75, and a level-5 archer's strike 15 against
+armour 45 leaves only a roll of 3 surviving `_whole_points` -- so both arrows landed ZERO on
+(2/3)^2 of runs and the health-decreased clause went red on a roll the check is not about.
+The body's `damage` is pinned to [20, 20] for that block; the two arrivals, the two words and
+the single condition are unchanged. `test_weapons` 106 (105 bare), `test_srclint` 26,
+`test_checks` 17, `test_identlint` 28, `test_provlint` 19; the ten suites naming the sites
+the withdrawn arm touched were green before the withdrawal (`test_playerswing` 191,
+`test_kbdsync` 236, `test_castcancel` 44, `test_castcycle` 54, `test_d1lead` 118,
+`test_effects` 85, `test_guards` 45, `test_mechanics` 246, `test_daggers` 103,
+`test_agentlife` 551).
+
+---
+
 ### ✅ WEAPONS-W2f — 2026-09-18 — **the body side of Dual Shot and preparations; and Q16 measured (retail's client stops to shoot at range, ours walks a follow to melee) and left open, two client arms withdrawn** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) §20)
 
 W2f: `body_ranged(agent, state, agent_id)` reads a body's own open preparation (a hostile ranger under Kindle Arrows launches 343 / 0 / 5, retail's own on `20260817T231139`); `body_preparation_word` lands its second word with the impact through `land_swing`; `land_swing` gains `mult` so a body's Dual Shot lands each arrow at 75 % (W2d's body gap). No assert on the client. **Q16, measured:** the harness drives the client's OWN `0x0026` (Escape, Tab, Space, unlike the `attack:` mailbox), so Q16 was testable — and it is a movement gap, not a weapon one. Retail keeps shooting from a large distance that shrinks slowly (2044 → 1327 u; 1066 → 601 u); ours walks 1163 → 451 → 67 u to the melee disc and stays, because the client walks a `0x002A` follow to `r + r + 56` regardless of weapon. The walk-gate hold froze the draw animation while the follow slid the body (the owner: "a weird sliding movement ... instead of stopping to shoot"); a bare `0x0028` removed the slide but not the stored follow. BOTH withdrawn: the stop retail obeys clears the follow (`0x0029` / `0x002C`) at range, a MOVECODE-side change scored against retail's successive flights, left open rather than guessed a third time. W2b's server half (the server copy stops at range) is unaffected. `test_weapons` 102 → 106 (105 bare), swingcensus taught that a ranged swing resolves at its LAUNCH (test_playerswing's silent-drop ceiling 1.6 %), `test_mechanics` 246, `test_guards` 45, `test_castcycle` 54, `test_effects` 85, `test_daggers` 103, `test_agentlife` 551, `test_kbdsync` 236, `test_population` 75.

@@ -1003,7 +1003,14 @@ def section_dual_shot():
               "8-point roll, and the bonus is never scaled")
         # a BODY's Dual Shot: two launches, two arrivals, two words on the player, one condition
         applied.clear()
-        st = _body_world((600.0, 0.0), weapon_item="hostile_bow",
+        # The body's damage is PINNED here, and that is a fix rather than a
+        # convenience: with hostile_bow's own 1-3 roll, Dual Shot's 0.75 and the
+        # level-5 archer's strike 15 against armour 45, only a roll of 3 survives
+        # `_whole_points` -- so both arrows landed ZERO on (2/3)^2 = 44 % of runs
+        # and this check failed on about half of them (measured 3 of 6 on
+        # f44e7343's own tree, 2026-09-18). The roll is not what the check is
+        # about; the two arrivals, the two words and the single condition are.
+        st = _body_world((600.0, 0.0), weapon_item="hostile_bow", damage=[20, 20],
                          skills=[[396, 0.0, 10.0]], skill_ready=[0.0], casting=0,
                          cast_target=PLAYER, last_swing=time.time())
         sent = []

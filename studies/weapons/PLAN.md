@@ -251,7 +251,7 @@ exposure floor and an abort written down.
 | WEAPONS-Q13 | The sword's short gap after a skill's hit (from DAGGERS §9) | desk, `timingjoin.py --swings` |
 | WEAPONS-Q14 | ~~Dual Shot's second arrow~~ **closed §18: two strike records, each its own roll and word; the 25 % is WIKI, unmeasured** | — |
 | WEAPONS-Q15 | ~~A preparation's own word and its substituted arrow~~ **closed §19: shipped as W2e** | — |
-| WEAPONS-Q16 | What parks retail's client at range on an attack-follow. **Measured §20: the client walks a `0x002A` to the melee disc regardless of weapon; the hold and the `0x0028` both fail to stop it; retail must clear the stored follow at range (`0x0029` / `0x002C`).** Still OPEN — a MOVECODE-side change | the follow re-issued to the range point, scored against retail's successive flights |
+| WEAPONS-Q16 | What parks retail's client at range on an attack-follow. **§20 + §21: ALL THREE server-side arms are spent — the hold, the `0x0028`, and both together (`20260918T201027`: flights 0.727 → 0.050 against a frozen target) — and the wire we send is now byte-for-byte retail's. Two rivals refuted: no item modifier carries a reach (§21b), and retail's follow aims at the TARGET as ours does (§21c). Positive control: the `0x0028` DOES halt a self-steered walk (§21d), so it is scoped, not inert.** Still OPEN, and now squarely a MOVECODE rung | `codescan` the follow resolver's stop-distance compare (`r + r + 56` beside the weapon's reach) — NOT a fourth message |
 
 ## 8. What this plan refuses
 
@@ -875,3 +875,71 @@ RANGE point rather than the target, or a clear at arrival, and scored against re
 successive flights — the MOVECODE arc's instruments, not this one's. Left OPEN, with the
 gap and the two dead ends recorded rather than a third guess shipped. W2b's server half
 (the server's own copy stops at range) stands and is unaffected.
+
+## 21. WEAPONS-Q16, the desk check — 2026-09-18: the server-side arms are EXHAUSTED, two rival mechanisms are refuted, and the `0x0028` gets a positive control
+
+The plan's next action for Q16 was a desk check before a third client arm. It ran, it
+shipped nothing, and what it bought is four results — three of them negative, which is the
+point of running it rather than guessing again.
+
+**(a) The two arms TOGETHER also fail. OBSERVED, on the live client.** §20 withdrew the
+walk-gate hold and the bare `0x0028` after each failed alone. The remaining possibility was
+that retail's start batch needs BOTH — which is what it carries (§20's census: 7 of 7 clean
+ranged first-after-follow starts carry the hold *and* the stop). Built behind
+`--no-ranged-follow-stop`, driven by the client's OWN `0x0026` (`--actions "0:play
+40:vk:0x1B 42:vk:0x09 44:vk:0x20"`), against a **frozen** practice target 1,800 u out
+(harness `20260918T201027`, recorder `authsrv-20260918T201057-c1`): the start batch went out
+as retail's — `0x00A0 [4, 1, 10, 0]`, `0x009F [8, 1, 1]`, `0x0028 [1]` in that order at
+129.847 — **and the body walked in exactly as before.** Successive flights **0.727 → 0.282 →
+0.050 → 0.050 s**, against a target that never moved and an aim point fixed at
+`(11099, 6804)`, so the flight is a faithful monotone proxy for the shooter's distance here:
+the body closed to the melee disc over three shots and held. **All three server-side arms
+are now spent** — hold alone (`20260918T185402`), stop alone (`20260918T190124`), both
+(`20260918T201027`) — and not one of them stops the client walking a stored `0x002A`.
+WITHDRAWN with the other two; nothing from this arm is on `main`.
+
+**(b) REFUTED: the client is not missing a range word on our bow.** The rival worth
+checking before touching movement was that retail's client stops at range because retail's
+bow *item record* carries a reach our items omit. It does not, and the decode was already
+in the repo: an item's modifier words carry the **damage** range (`584 (max, min)`, `634`
+for a weapon with a requirement — WEAPONS-C7) and the damage TYPE (`587`), and no
+identifier in [studies/itemmods](../itemmods/FINDINGS.md)'s 157-slot dispatch is an attack
+REACH. Decoded side by side, retail's bows and ours carry the same families and nothing
+else: retail `20260807T143055` item 469 = `609 / 587 / 617 / 584`, `20260914T005758` items
+161 and 164 = `587 / 617 / 586 / 588`; our `starter_bow` = `609 / 587 / 584`,
+`hostile_bow` = `609 / 587 / 584`. What names the weapon to the client is the item's TYPE
+byte (wire field 3, the builder's `+0x20`), and ours already sends 5 for a bow. **There is
+no missing word to add.**
+
+**(c) REFUTED: the follow's destination is not the difference.** The other rival was that
+retail aims the follow at a point short of the target. It aims at the target, exactly as
+W2b already does: `20260810T235916` sends `0x002A [31, (5670, -4379), 0, 0, 43]` at 91.955
+and again at 93.500 — the target agent 43's own position, the target in field 5 — and
+`20260914T005758` 221.581 the same shape at agent 26. **So re-aiming our follow at a range
+point would DIVERGE from retail's wire, not match it**, and is refused on those grounds
+rather than left as an untried idea.
+
+**(d) ★ THE POSITIVE CONTROL, and the sharpest thing this check found: retail's `0x0028`
+DOES halt a walk — a KEYBOARD walk — and the body then holds its distance and shoots.**
+On `20260914T005758` the observer is walking under its own steering (a `0x003D` report every
+~0.5 s, each answered by a `0x0029` heading), presses attack at **508.731**, and the server
+answers with a bare **`0x0028` at 508.767** and nothing else. The body then shoots **three
+times from one distance** — launches at 513.233 / 515.725 / 518.700 with flights **0.210 /
+0.215 / 0.215**, flat — while the target sits still. So the stop is **not inert**: the
+client's handler ends a walk it is steering itself. What it demonstrably cannot do is end a
+**stored follow**, which is what our case is. That is a control §20 did not have, and it
+converts "the `0x0028` does nothing" into the much narrower and more useful **"the `0x0028`
+halts a self-steered walk and leaves `agent+0x98` alone"** — consistent with the movement
+arc's decode that `0x0029` hardcodes `+0x98 = 0` and `0x002A` supplies it
+([studies/movecode](../movecode/FINDINGS.md) §2.2, 1z-al).
+
+**Where that leaves Q16, stated as narrowly as the evidence allows.** The wire our server
+sends around a ranged press is now byte-for-byte retail's — the follow, its destination,
+its followed-agent field, and the start batch's hold and stop. The client nevertheless
+walks ours to the disc. So the stopping distance is decided **inside the client's follow
+resolver**, from state the wire does not carry, and the next step is to read that resolver
+rather than to send it another message: `codescan` for what the resolver compares the
+remaining distance against, with `r + r + 56` (1z-al's measured melee park) as the known
+value and the weapon's reach as the thing to find beside it. **That is a MOVECODE rung, not
+a weapons one**, and Q16 stays open there. Neither a fourth message nor a re-aimed follow
+should be tried before that read.
