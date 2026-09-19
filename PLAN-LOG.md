@@ -43,7 +43,7 @@ codec is `AcctTemplate.cpp` at `0x0091CB90`-`0x0091D2C1`. Corrected in place.
 **The mechanism, and it is an asymmetry.** `0x0091CD50`, the field writer, calls exactly
 **two** functions in its whole body -- `bsr` and the bit writer -- so it cannot look a
 skill up and cannot filter. `0x0091CB90`, the field reader, is also the **validator**: it
-AND-s eleven clauses into one boolean and the caller gets no reason, which is why the
+AND-s twelve clauses into one boolean and the caller gets no reason, which is why the
 window just goes empty. **So the client hands you a code it will not read back**, which
 is the "temporary skills copy out empty" claim, exactly.
 
