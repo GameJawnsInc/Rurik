@@ -28,6 +28,57 @@ move back.
 
 ---
 
+### WEAPONS-W9 -- 2026-09-19 -- **the weapon-set switch: c2s `0x0032` answered with retail's one batch, sets 1-3 filled by `--weapon-set`, F1-F4 reproduced on the client**
+
+[studies/weapons/PLAN.md](studies/weapons/PLAN.md) §27. Read off RUN-WEAPONS-1A
+(`20260919T103604`, four presses, 4 of 4): the reply to `0x0032 [set]` is `0x0148 [1, set]`,
+a `0x014B ITEM_CHANGE_LOCATION` for a shield entering (equipped bag, slot 1) or leaving (back
+to the backpack slot it was created in), `0x0152 [1, old lead, new lead]` (named
+`ITEM_SWAP_EQUIPPED`, medium), and `0x006F` per changed hand -- an emptied off hand first,
+the lead, a filled off hand last; never a fresh `0x006E`. At the map load every inactive
+set's item is created and moved into the backpack before the `0x0147` rows. Ships:
+`--weapon-set N=ITEM[+OFFHAND]` / a party row's `player_weapon_sets` (`configure_weapon_sets`,
+validated as `--player-weapon` is), `declare_weapon_sets` at the create, `weapon_set_items`
+in the `0x0147` loop, the `GAME_CMSG_SELECT_WEAPON_SET` arm and `select_weapon_set`, which
+sends the batch with our ids (11/12, 13/14, 15/16) and re-aims the server's hands through
+`apply_party_character`; a set whose 556 word differs re-declares 41 and the rescaled 43
+(INFERRED from the morale path -- no retail switch moved a maximum). On the client (harness
+`20260919T152451` and the rerun with the energy words): F2/F3/F4/F1 via `keybd_event` each
+sent `0x0032` with 1/2/3/0, the widget highlighted the set, the body drew scythe, spear,
+spear + shield, axe; no assert. `0x0032` named `SELECT_WEAPON_SET` (high) in
+`schema/overrides.json`. Fixed in passing: W1's party-block tail under the `--player-weapon`
+branch (`--player-weapon` alone died at launch on `_pbody`; `--party` alone skipped the
+commander rig). `test_weapons` 18 (floor 129 -> 150); `test_dispatch`, `test_cmsgnames`,
+`test_codec`, `test_smsgnames`, `test_itemdetail`, `test_transfer`, `test_agentlife`,
+`test_srclint`, `test_provlint` green. Open: RUN-W9-2 (a swing after a switch, watched), the
+same-set / empty-set replies, the 41 / 43 re-send on retail, `0x0152`'s client effect.
+
+### SKILLS-AD2 + SKILLS-AD4 -- 2026-09-19 -- **the damage-taken adrenaline gain divides by the CURRENT maximum at three sites, and a zero gain goes out**
+
+Studies/skills §53 was MINED on 2026-09-17 and nothing shipped; this ships it
+([studies/skills/FINDINGS.md](studies/skills/FINDINGS.md) §53.6). AD2: `land_swing`'s
+enemy-swing site and `land_skill`'s hostile-skill site passed `dealt /
+agents.PLAYER_HEALTH` to `pools.damage_units` beside a damage word dividing by
+`player_max_health(state)`; both now divide by the current maximum (retail: 11 of 11
+armed rows over 480 / 408 / 384 / 336, the points/4.8 rival 0 of 11), so a death
+penalty or a Deep Wound no longer tells the client one fraction and grants another.
+The THIRD site is new: `armour_ignoring_damage`'s player branch sends the gain ahead of
+its property-55 word -- RB's three life steals (skill 258, 41 of 480) each carry `0x00CF
+[25, 9]` = round(8.54) ahead of BOTH 55 words, 3 of 3 (§53.5), OBSERVED for a life
+steal and INFERRED for any other 55 word at the player. AD4: `player_gains_adrenaline`
+sends `[player, 0]` for a zero -- RB's seven fully converted hits, 7 of 7 -- and skips
+the grant, so the pool's 25 s combat clock is exactly where it was (the clock half is
+NOT OBSERVED and stays in §8). `adrenjoin.is_damage_to` files a NEGATIVE 55 at the
+observer as a damage row, and the census reads 93 armed rows, 93 granted, round 93 of
+93. Tests: `test_pools.py` §11d (the zero, its untouched clock, the 11 % control) and
+§11d2 (a Deep Wound at 100 -> 80; the 55 site and an enemy swing each grant round of
+the word they ride with), floor 128 -> 132; `test_adrenwire.py` green at 77 with the
+three rows joined; `test_agentlife`, `test_guards`, `test_playerswing`,
+`test_mechanics`, `test_skilldamage`, `test_weapons` green. Not touched: a hero's zero
+gain (`hero_pool_gain` still returns on 0), and the `[42, max]` this server declares
+ahead of EVERY 55 word to the player, which RB's three batches do not carry (0 of 3 --
+noted, not this rung).
+
 ### WEAPONS-W3, WEAPONS-W8 and the spear's throw -- 2026-09-19 -- **the owner-free rungs RUN-1A unlocked: the spear throws, a scythe hits up to two more with a 2^0.125 critical, modifier 585 is the customisation word and WEAPONS-Q12 closes; W9 registered** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) §26)
 
 The spear's row gains its measured projectile, flag and speed class and WIKI's range

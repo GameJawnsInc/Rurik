@@ -1431,10 +1431,10 @@ def section_bar_gate(agg):
               f"gains, THE SAME ROWS, all on {ZERO_GRANT_TAPE} -- Reversal of "
               f"Fortune eating the whole hit (studies/skills 48.7: the "
               f"converted zero is +0.0, 7 of 7). Retail does not skip the gain "
-              f"when there is nothing to gain. OUR SERVER DOES "
-              f"(`player_gains_adrenaline` returns on 0 units): a recorded "
-              f"divergence, harmless to the client's arithmetic (it adds 0) "
-              f"and open in PLAN.md 8. What a hit in (0, 0.5 %) sends is "
+              f"when there is nothing to gain, and since SKILLS-AD4 shipped "
+              f"(2026-09-19) neither does `player_gains_adrenaline` -- the "
+              f"zero goes out and skips the grant and the clock mark "
+              f"(test_pools 11d). What a hit in (0, 0.5 %) sends is "
               f"still NOT OBSERVED; this makes 'a 207 carrying 0' the "
               f"prediction where it used to be 'no message'")
 

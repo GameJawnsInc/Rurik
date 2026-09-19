@@ -82,7 +82,28 @@ PROP_MAX_ENERGY = 41        # SELF-SCOPED -- see whose_agent below
 PROP_MAX_HEALTH = 42        # re-sent on change -- see whose_max_health below
 PROP_MELEE_FINISHED = 1
 DAMAGE_PROPS = (16, 17)     # both carry a negative fraction of max health
+# PROPERTY 55 CHARGES TOO (studies/skills 53.5, read in 2026-09-19): RB's
+# three life steals at the observer -- `[55, me, source, -0.0854167]`, 41 of
+# 480 -- each carry `0x00CF [me, 9]` = round(8.54) in their batch, ahead of
+# both 55 words. But 55 is SIGNED where 16/17 are not: the same batch holds a
+# `[55, source, source, +0.0854167]` (the steal's heal), and a positive 55 to
+# the OBSERVER is a heal to self. So a 55 word is a damage row only when it
+# names the observer as target AND its value is negative; `abs()` downstream
+# is then safe because the sign has already been read.
+LIFE_DRAIN_PROP = 55
 STRIKE_UNITS = 25
+
+
+def is_damage_to(op, v, me):
+    """A damage word whose TARGET is `me`: 16/17 at me, or a NEGATIVE 55 at me."""
+    if op not in DAMAGE_OPS or int(v[2]) != me:
+        return False
+    prop = int(v[1])
+    if prop in DAMAGE_PROPS:
+        return True
+    if prop == LIFE_DRAIN_PROP:
+        return f32(v[4] if op == PROP_FLOAT_TARGET else v[3]) < 0.0
+    return False
 
 # DAMAGE ARRIVES ON BOTH FLOAT CHANNELS, and the sourceless one is easy to miss
 # because it is rare: 0x00A3 carries 63 damage events at the observer and 0x00A2
@@ -286,11 +307,13 @@ def scan(costs=None):
                     s["clear"] += 1
                 elif op == ADRENALINE_SPEND and int(v[1]) == me:
                     s["spend"] += 1
-                elif op in DAMAGE_OPS and int(v[1]) in DAMAGE_PROPS:
-                    if int(v[2]) == me:
+                elif op in DAMAGE_OPS and int(v[1]) in DAMAGE_PROPS + (LIFE_DRAIN_PROP,):
+                    if is_damage_to(op, v, me):
                         s["damage_taken"] += 1
                     # only 0x00A3 names a source, so only it can say who landed
-                    if op == PROP_FLOAT_TARGET and int(v[3]) == me:
+                    # -- and a 55 is not a weapon hit, so it is not one here
+                    if (op == PROP_FLOAT_TARGET and int(v[3]) == me
+                            and int(v[1]) in DAMAGE_PROPS):
                         s["hits_landed"] += 1
                 elif (op == PROP_INT and len(v) > 2
                         and int(v[1]) == PROP_MELEE_FINISHED and int(v[2]) == me):
@@ -307,8 +330,7 @@ def scan(costs=None):
                         int(v[3]) if op == PROP_FLOAT_TARGET else None,
                         f32(v[4] if op == PROP_FLOAT_TARGET else v[3]))
                        for i, op, v in items
-                       if op in DAMAGE_OPS and int(v[1]) in DAMAGE_PROPS
-                       and int(v[2]) == me]
+                       if is_damage_to(op, v, me)]
                 sub = [(i, int(v[2])) for i, op, v in items
                        if op == ADRENALINE_GAIN and int(v[1]) == me
                        and int(v[2]) != STRIKE_UNITS]

@@ -1912,14 +1912,10 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   a foe between its wound edge and its next maximum word. Named, not run.
 * **SLICE-F47**: the RA tape's Mind Burn pair reads non-integer points under the
   last-seen-maximum join; scoped out of the pool check rather than chased.
-* **SKILLS-AD2, the adrenaline denominator.** Retail's damage-taken gain is round(% of
-  the CURRENT maximum), 11 of 11 against a moved maximum; both `authsrv.py` call sites
-  pass `dealt / agents.PLAYER_HEALTH` beside a damage word that divides by
-  `player_max_health(state)`. A two-site fix, not made (skills §53.2).
-* **SKILLS-AD4, the zero gain.** A hit converted to nothing still gets `0x00CF` carrying
-  0 on retail, 7 of 7; `player_gains_adrenaline` sends nothing. Whether a zero re-arms
-  the 25 s clear is unread, which is why it is not shipped (skills §53.4). Also:
-  `adrenjoin` does not read property-55 damage, which charges too (§53.5).
+* **SKILLS-AD4's clock half.** The zero gain ships (skills §53.6) without marking the
+  25 s combat clock; whether retail's clear counts from a zero `0x00CF` is NOT OBSERVED
+  (every zero on RB sits inside a run of other gains). A hero's zero gain is still not
+  sent (`hero_pool_gain`), unread on JARIN's tape either way.
 * **SLICE-F43, shrines and gadgets as server-created agents** — understood, not built;
   no longer the wipe's blocker. With it, R4a's other absences per §3: a spawn table and
   any behaviour beyond aggro, chase and swing.
@@ -1996,7 +1992,11 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   §20) is a MOVECODE-side clear-the-follow change; the rest of the arc needs the owner
   (RUN-WEAPONS-1B / 2 / 3; 1A ran 2026-09-19) or a content decision (spawn rows). The
   spear throws since §26 (143, flag 1, the 1600 class); ~~Q12~~ closed there (585 is the
-  customisation word, W8 reads it); W9, the weapon-set switch, is registered, not started.
+  customisation word, W8 reads it); ~~W9, the weapon-set switch~~ shipped 2026-09-19 (§27:
+  c2s `0x0032` answered with retail's one batch, `--weapon-set N=ITEM[+OFFHAND]`, F1-F4 on the
+  client) -- open after it: RUN-W9-2 (a swing after a switch, watched), retail's reply to a
+  same-set or empty-set press, and whether a switch that moves the maximum energy re-sends
+  41 / 43 on retail (INFERRED from the morale path; needs a 556 item in a set on a live tape).
   Captures wanted: 1B (five bows, staff, wand — predicts 1200 / 1600 / 2800 u/s), 2
   (range: every range here is WIKI or reconstructed, and 1A's spear PARKED at 0.75 × the
   wiki's number, §25.4 — the run must separate park from range).
