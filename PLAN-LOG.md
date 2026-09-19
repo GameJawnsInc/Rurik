@@ -28,6 +28,27 @@ move back.
 
 ---
 
+### WEAPONS-W9 -- 2026-09-19 -- **the desk close: `0x0152` exchanges two items' locations, and the item family's first field is the `0x0144` inventory key**
+
+[studies/weapons/PLAN.md](studies/weapons/PLAN.md) §29. Two of §28's four opens were the
+client's to answer. `0x0152`'s handler (`0x00846840`, build 38797) resolves both items by id
+(`ItCliApi:2253` / `:2254`) and the inventory by the FIRST field (`:2257`), then ItCliInv's swap
+worker requires both in a bag (`:687` / `:688`), removes both (`:621` / `:622`) and adds each at the
+other's former bag and slot (`:105`, the destination asserted EMPTY) -- the two items exchange
+locations and nothing else is written; a hand changes only as the equipped bag's refresh. Nothing
+in it is equipped-specific, so `ITEM_SWAP_EQUIPPED` (medium) is retired for **`ITEM_SWAP_LOCATIONS`**
+(high) in `schema/overrides.json` and `authsrv.py`. Two consequences, tested: the leads ROTATE
+through the backpack slots (after one 0->1->2->3->0 cycle each inactive lead sits in the next
+set's created slot), so the server never names a lead's slot after the create; and a shield
+leaving the hands must precede one entering, because the add worker asserts the slot empty. The
+first field is the per-connection inventory key `0x0144 ITEM_STREAM_CREATE` registers (overrides
+324), which every item message hashes to find its inventory; ours is 1 because we register 1.
+Tests: `test_weapons` §18 gains four checks (a model of the three ItCliInv asserts fed the create
+and the batches, with a control that reverses two moves and trips `ItCliInv:105`; floor 151 -> 155,
+a vault run 157); the catalog-coupled and authsrv-lock tests green (§29 lists them). Left of W9,
+all on ONE live tape and now in RUN-1B's steps: the same-set and empty-set replies, and the
+41 / 43 on a switch that moves the maximum energy.
+
 ### RUN-W9-2 -- 2026-09-19 -- **the swing after a weapon-set switch: a base change owes a `0x0035`, and retail times it to the next attack START**
 
 [studies/weapons/PLAN.md](studies/weapons/PLAN.md) §28. The 1A tape (`20260919T103604`, agent
