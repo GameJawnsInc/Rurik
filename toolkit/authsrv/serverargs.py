@@ -1711,6 +1711,11 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "printed at launch and costs nothing -- a weapon whose "
                          "requirement the character lacks deals its met damage "
                          "(no / 3.098), a shield its full 635, a focus its full 636.")
+    ap.add_argument("--no-half-recharge", action="store_true",
+                    help="WEAPONS-W5b REVERT: a held staff's 570 word ('Halves skill "
+                         "recharge of spells (Chance: N%%)') never rolls; every "
+                         "spell's 0x00E5 carries the client table's recharge -- the "
+                         "wire every run before 2026-09-19 had.")
     ap.add_argument("--no-weapon-energy", action="store_true",
                     help="WEAPONS-W5 REVERT: a held staff's or focus's 556 energy word "
                          "adds nothing to the player's maximum energy -- the pool "

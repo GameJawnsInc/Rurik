@@ -858,3 +858,36 @@ capture = "20260817T231139"
 origin = "live"
 verified = "16 declares across eight live captures (20260817T231139, 20260818T094648, 20260818T132739, 20260821T152147, 20260821T155022, 20260821T163511, 20260821T184758, 20260821T205552) and 16 wears, every one of them in equip slot 8. file_id, item_type, dye_tint, dye_colors, materials, unk1 and value are identical in all sixteen; flags is the only variable and takes 0x20001006 (13) or 0x20001007 (3), differing in bit 0 alone, so the modal value is carried. Record 2817 resolves to composite type 19 through cpsdata, which is wire type 45's OTHER record type (test_wearmap 4 pins both), and 19 maps to component 1 through the exe's own s_components"
 note = "model_id, quantity, enc_name and modifiers are OURS and unmeasured -- retail declares this item low-detail (0x015E). This row exists to test a DIFFERENT COMPONENT rather than a different run: costume_head is type 17 -> component 2, the hair-replace head our armour piece 93 also occupies, while this is type 19 -> component 1, which NO armour slot holds (our five cover components 3, 5, 2, 6 and 4). See studies/playercomposite 9.10's 'still unmeasured'."
+
+# ---- WEAPONS-W5b (2026-09-19): a staff carrying the 570 word, for the roll ----
+[item.hsr_staff]
+name = "a made staff with Halves skill recharge of spells (Chance: 20%) -- the henchman's four words plus one 570"
+file_id = 0x1B5D1              # 112081, the henchman Monk's staff (caster_staff above)
+item_type = 26                 # ItemType_Staff
+dye_tint = 0
+dye_colors = 0
+materials = 0
+unk1 = 0
+flags = 0x22200100
+value = 0
+model_id = 6462
+quantity = 1
+enc_name = [0x2186]
+# caster_staff's four words verbatim, then 570 arg 20 arg2 1 -- COMPOSED, in
+# the corpus's own encoding: the 518 corpus staves carry it as 0x23A81001 /
+# 0x23A81101 / 0x23A80F01 (arg 16 / 17 / 15, arg2 1, bit 19 set, the fixed
+# per-identifier prefix), and this is the same word at arg 20, the maximum
+# GWW "Staff" gives ("Chance: 10...20%"). Decode with itemmods.py --decode.
+modifiers = [0x24B80800, 0x26980005, 0x62C80A00, 0xA488160B, 0x23A81401]
+
+[item.hsr_staff.provenance]
+source = "invented"
+verified = """OURS, and says so: a test and harness item. The four leading words are the \
+retail henchman Monk's (caster_staff, capture 20260817T231139, item 20); the fifth is \
+identifier 570 composed at arg 20 in the encoding every corpus 570 uses (bits 31-30 = 0, bit \
+19 set, arg2 = 1 on 516 of 518). The client renders such a word from its own tooltip handler \
+(0x009260A2: 'Halves skill recharge of spells (Chance: 20%)'); what the SERVER does with it \
+is studies/weapons/PLAN.md section 31 -- a 20 % roll at each spell's completion, WIKI. No \
+retail-made staff in the corpus carries 20 with arg2 1 (the two at (20, 0) are the \
+no-requirement shape); the number is the wiki's maximum, chosen so a harness run shows the \
+halving in a few casts."""

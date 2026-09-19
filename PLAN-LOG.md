@@ -28,6 +28,26 @@ move back.
 
 ---
 
+### WEAPONS-W5b -- 2026-09-19 -- **a staff's `570`: "Halves skill recharge of spells", rolled at the completion**
+
+[studies/weapons/PLAN.md](studies/weapons/PLAN.md) §31. The word sits on 518 corpus staves and
+nothing else -- (16, 1) x333, (17, 1) x104, (15, 1) x53, (14, 1) x18, (10, 1) x8, (20, 0) x2 --
+and its tooltip handler renders the argument as the chance ("Halves skill recharge of spells
+(Chance: 16%)"; GWW "Staff": inherent, 10...20 %). No tape can witness the halving: no observing
+player and no hero ever cast holding a staff. The rule is WIKI (GWW "HSR", "Recharge time"):
+spells only, computed as the skill finishes activating, rounded to the nearest second, halved at
+best; "spell" is the client namer's seven type codes (4 / 5 / 6 / 9 / 11 / 24 / 25). Ships:
+`half_recharge_roll` over the held items at the player's E5 branch (the halved integer rides the
+`0x00E5`, the E6 clock re-based on the E5), at a body's cast start (stashed as `cast_recharge`,
+popped into the hero's own `0x00E5`); `halved_recharge` = nearest second, .5 up (ours);
+`--no-half-recharge`; a made `hsr_staff` (the henchman's four words plus one 570 at arg 20 in the
+corpus's encoding) for the harness; the banner names the chance. Tests: `test_weapons` section
+20 (12 checks, floor 177 -> 186, a vault run 192: the reader, the rounding, the seven spell
+types, the rigged roll, the revert, the real press -> `0x00E5 [me, 83, 0, 3]` for a 5 s spell,
+a body, the source locks, the banner); the cast, combat, content and lint suites green. Left:
+the .5 and the two-trigger union are ours; RUN-1B's staff casting one 5 s spell ten times
+measures the chance and the rounding at once.
+
 ### WEAPONS-W4, the rest -- 2026-09-19 -- **the damage type against the vs-type armour, and the `633` requirement with the isle's unmet divisor**
 
 [studies/weapons/PLAN.md](studies/weapons/PLAN.md) §30. The enum is the client's own:

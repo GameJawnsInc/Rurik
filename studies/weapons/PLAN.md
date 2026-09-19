@@ -682,7 +682,8 @@ its flag. Floor 74 bare, 75 with the vault.
 
 **Still open here.** Q10 (the unmet requirement: `636` on foci, `633` on staves);
 `570 (16..17, 1)` on staves beside GWW's "halves skill recharge 10–20 %" has no reader;
-the shield's `572` armour is W4's with `587`.
+the shield's `572` armour is W4's with `587`. **All three closed since (2026-09-19): Q10
+and `587` in section 30, `570` in section 31.**
 
 ## 16. WEAPONS-W4c — shipped 2026-09-18: a wand or staff scales on the character's level
 
@@ -1818,3 +1819,77 @@ with a condition string, on 4 corpus pieces x 5 slots) is unread and such a piec
 unarmoured; a spell's own damage type (the skill record's) is not extracted, so spells stay
 "elemental"; the scoping of a situational condition over a type-8 upgrade component's lines;
 and Q10's split, above. Q10 leaves §7's table as SHIPPED with RUN-3 still owed.
+
+## 31. WEAPONS-W5b -- shipped 2026-09-19: a staff's `570`, "Halves skill recharge of spells", rolled at the completion
+
+**What was open.** §15 (W5) read the staff's `556` energy and left its other inherent word
+unread: `570 (16..17, 1)` beside GWW's "halves skill recharge 10-20 %". Read now, on the
+corpus, the client and the wiki; no client run -- the wire's shape is unchanged (the `0x00E5`
+integer), only its value on the casts the roll wins.
+
+**The word, OBSERVED.** `570` sits on **518 staves and on nothing else** across the corpus's 96
+connections (`aw_570census`): (arg, arg2) = (16, 1) x333, (17, 1) x104, (15, 1) x53, (14, 1)
+x18, (10, 1) x8, (20, 0) x2; the leading word of the requirement-shape `(570, 633, 587, 617,
+556, 634)` (508 items) and of the plain shape `(570, 587, 617, 556, 584)` (8), never preceded by
+a condition word. The tooltip handler (`0x009260A2`) renders `arg` through 2439 `%str1%:
+%num1%%%` under 2376 `Chance` and the line 2432 `Halves %str1% of spells` with 2392 `skill
+recharge` -- "Halves skill recharge of spells (Chance: 16%)"; `arg2` only picks a
+display-record variant (both branches format the same strings; unread further). GWW "Staff"
+lists the property as inherent: "Halves skill recharge of spells (Chance: 10...20%)", the
+corpus's 10..20. The attribute-specific wand / focus form ("Halves skill recharge of Domination
+Magic spells") is on no corpus item and is not modelled.
+
+**The rule is WIKI, and no tape can witness it.** Two censuses: no observing player ever cast
+holding a staff (their leads were wands, bows, hammers, swords and daggers), and the one hero
+whose `0x00E5`s ride the wire (JARIN's, `20260914T005758` agent 30, 35 of them) held a sword
+and shield. So the mechanism is GWW's -- "HSR" (read 2026-09-19): it "affects only spells";
+an inherent staff mod maxes at 20 %, an inscription at 10 %, a wand's or focus's
+attribute-specific one at 20 %; "capped at 50%, i.e. the skill recharge time ... can only be
+halved at best" -- and "Recharge time": the recharge "is calculated as the skill finishes
+activating", and "effects that alter recharge time round to the nearest second". "Spell" is
+the client's own type column (studies/skills 35.3, the namer's words): 4 Hex Spell, 5 Spell,
+6 Enchantment Spell, 9 Well Spell, 11 Ward Spell, 24 Item Spell, 25 Weapon Spell -- GWW
+"Skill type" lists exactly those six subtypes under Spell. What is ours: a .5 rounds UP (5 -> 3;
+the wiki does not say which way), and two 570s are two independent triggers whose union is
+one halving (the cap).
+
+**What ships.** `combatmath.half_recharge_chances(items)` (one percent per 570 held),
+`is_spell_type`, `halved_recharge(seconds)` = the nearest whole second, .5 up;
+`authsrv.half_recharge_roll(items, skill_id)` rolls every chance for a spell and never for
+anything else; `HALF_RECHARGE` / `--no-half-recharge`. **The player:** the roll is in
+`cast_tick`'s E5 branch, at the completion, over the held lead and off hand; on a win
+`cast["recharge"]` becomes the halved integer (what the `0x00E5` carries -- the client's only
+source for the sweep), `recharge_s` with it, and the E6 clock is re-based on the E5 instant, so
+the `0x00E6` comes when the halved recharge runs out. A cast that failed a chain step (recharge
+0, `no_e6`) is never rolled. **A body:** rolled at its cast's START -- a body never swaps
+mid-cast, so start and completion read the same item -- over its `weapon_item`; the halved
+value goes into `skill_ready` and is stashed as `cast_recharge`, which the hero's own
+`0x00E5` pops at the completion (`hero_skill_messages`). **Content:** `hsr_staff` -- the
+henchman's staff (caster_staff's four words) plus one composed 570 at arg 20 in the corpus's
+own encoding (`0x23A81401`; the 518 carry `0x23A81001` / `0x23A81101` / `0x23A80F01`), source
+`invented` and saying so; `--player-weapon hsr_staff` is the harness's way in, and its
+tooltip is the client's own rendering of the word. The launch banner reads `weapon: deals
+holy, halves spell recharge at 20 %`.
+
+**Tests.** `test_weapons.py` section 20 (12 checks, floor 177 -> 186; a vault run 192, the
+three press checks wanting skill 83's row): the item's words and the reader; the rounding
+table; the seven spell types against ten non-spells; the roll rigged under, at and over the
+chance, on a signet, with no 570, with empty hands, with two 570s and one miss; the revert;
+through the real press and `cast_tick` -- a 5 s self spell (83) completing under a winning
+roll sends `0x00E5 [me, 83, 0, 3]` with the E6 clock 3 s past the E5, a missing roll sends 5
+with 5 s, and the revert sends 5 on a winning roll; a body's items and roll; the source lock on
+the stash / pop and the E6 re-base; the banner. `test_castcycle` 54, `test_castcancel` 44,
+`test_daggers` 103, `test_pools` 132, `test_agentlife` 551, `test_playerswing` 191,
+`test_mechanics` 246, `test_skilldamage` 67, `test_guards` 45, `test_dispatch` 45,
+`test_labelrun` 32, `test_content` 48, `clientscan/test_itemmods` 42, `test_srclint` 26,
+`test_checks` 17, `test_provlint` 19, `test_derivlint` 32, `test_citelint` 50 green.
+
+**Left, named.** The .5 rounding and the two-trigger union are ours; the first live tape with a
+staff in an observing caster's hands (RUN-WEAPONS-1B holds a staff and a wand, and the sealed
+plan should add ten casts of one 5 s spell) measures the chance and the rounding at once --
+a 5 s spell under a 20 % staff sends 3 about one cast in five. The attribute-specific wand /
+focus form and "Halves casting time" (its neighbour on the same items) are not read. A side
+finding of the census, outside this rung: on `20260917T160915` / `224104` the observer's skills
+775 and 780 (table recharge 2 and 3) were sent with recharge 0, and on `20260916T213125`
+skill 1 with 24 where the table says 4 -- three recharges retail sent that are not the client
+table's, unexplained here and worth a SLICE look.
