@@ -121,17 +121,27 @@ marker read.
 the critical's size) and WEAPONS-Q6 (spear: duration, projectile id, arrow flag,
 with and without a shield).
 
-**Where.** Isle of the Nameless, the Master of Damage suits. Pick one spot, stand
-on it for every block, and do not drift — the flight and distance questions in
-RUN-1B depend on the same habit and it is worth building here.
+**Where.** Isle of the Nameless, the Master of Damage suits. **This run has no
+single spot, and an earlier draft of this file wrongly asked for one** — it mixes
+melee weapons with the spear, and no spot is both inside a scythe's 144 u reach
+and a sensible distance for a 1004 u spear. So:
 
-**F11 means: "I am on the mark and this block starts now."** Nothing else.
+* **the axe and scythe blocks** are swung from melee, wherever the suits put you.
+  Nothing in Q5 or Q6 depends on the distance: the clock is `start → start`, and
+  a melee swing has no flight to time.
+* **the spear blocks** are thrown from the RANGED MARK that RUN-1B uses (§3) —
+  roughly 700–800 u out. That is the only part of this run where distance enters
+  a number, because the spear has a flight.
+
+**F11 means: "this block starts now."** Nothing else.
 
 **The eight steps** (`vault/plans/weapons_1a.txt`):
 
 1. axe, no off-hand — 20 plain swings on one suit
 2. scythe — 20 plain swings on **one** suit
-3. scythe — 20 plain swings positioned so **three** suits are adjacent to the target
+3. scythe — 20 plain swings positioned so **two other suits are adjacent to your
+   target** and all three are inside 180 u of you (that is the maximum the weapon
+   hits: three foes total, not four — see the prediction below)
 4. spear, no off-hand — 20 plain swings
 5. spear **+ shield** — 20 plain swings
 6. axe again, 10 swings — the repeat that catches a drifting clock
@@ -141,8 +151,24 @@ RUN-1B depend on the same habit and it is worth building here.
 **Sealed predictions.** Scythe and spear `start → start` **1.500 s**; the word or
 launch at **0.650 s** after the start; the spear's `0x00A4` field 7 = **1**; the
 scythe's extra targets arrive as additional damage words in the same instant as
-the target's, not as separate swings; the scythe's critical is **×2^0.125**, not
-the ×2^0.5 every other weapon takes (WIKI, and the reason this run exists).
+the target's, not as separate swings; the scythe's critical is **×2^0.125** (1.09),
+not the ×2^0.5 (1.41) every other weapon takes.
+
+**The scythe hits THREE foes, not four**, and the step above is written to
+saturate that exactly. WIKI (GWW "Scythe", fetched 2026-09-18): *"They have an
+inherent ability to strike up to three enemies: up to two additional foes in melee
+range of the target and within 180 gwinches of the player."* Two conditions, and
+both must hold — the extras are adjacent to **the target**, and within 180 u of
+**you**. So the swing should produce **three damage words**, and the run is
+correctly set up with two suits beside your target.
+
+**What this arrangement CANNOT answer, said out loud:** with exactly two extras
+available, "hits every adjacent foe" and "hits at most two" predict the same three
+words, so this run measures that the extras exist and what they look like on the
+wire — which is Q5 — but it does **not** test the cap. If you can ever stand where
+**three or more** suits are adjacent to one target and inside 180 u of you, that
+block is worth taking as an extra step: three extras appearing would refute the
+cap, two would confirm it.
 
 **Exposure floor.** At least **15 landed swings in every block** and a `0x0035`
 for each equip. Below that the block is a null, not a measurement.
@@ -158,9 +184,23 @@ cannot tell which suit you are targeting. Say so in the notes and redo the block
 (projectile speed per class — the same distance, so five flights are directly
 comparable).
 
-**Where.** The same Isle spot, and **the same spot for all seven weapons** — this
-is the whole run. Q3 is distance ÷ flight, so a step sideways between blocks is
-the free parameter that ruins it.
+**Where.** One spot for all seven weapons, and here the instruction is real — Q3
+is distance ÷ flight, so a step sideways between blocks changes the flight for two
+reasons at once and separates neither.
+
+**The spot has one constraint: it must be inside the SHORTEST range you will use,
+which is the shortbow's.** The wiki puts that at 1004 u and the other six at 1248
+to 1498, so a spot every weapon can shoot from is a spot inside ~1004. **Stand at
+roughly 700–800 u, not at 1000** — the ranges in the prediction below are WIKI
+priors that RUN-2 exists to test, so standing near the predicted edge risks a
+shortbow that simply refuses to fire because the real number is lower.
+
+**If you cannot hold one spot, the run is still good.** The capture carries the
+`0x00A4` aim point and your own position reports, and flight × speed was checked
+against that geometry on existing tapes and agreed to within about 10 u. So a
+moved mark is noise to subtract afterwards rather than a lost run. Note it and
+carry on; the mark is there to remove a dependency, not because the arithmetic
+collapses without it.
 
 **F11 means: "I am on the mark."** Tap it at the start of every block.
 
@@ -178,8 +218,8 @@ number is the interesting result.
 **Exposure floor.** At least **5 launches per weapon** from the mark. Fewer than 3
 in any block and that class is unmeasured.
 
-**Abort** on the same conditions as 1A, plus: if you move between blocks, mark it
-and treat the run as two runs rather than pretending the spot held.
+**Abort** on the same conditions as 1A. Moving between blocks is **not** an abort —
+note it and keep going, per the paragraph above.
 
 ---
 
