@@ -1986,7 +1986,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   is the server mailbox, so the client never arms its own attack-follow and walks on
   through the start; retail's parks itself with no message; an OWNER press from beyond
   range (RUN-WEAPONS-2) is the instrument; W3 (scythe's extra targets and small
-  critical), W4's rest (`587` damage type against armour's `527`, no repo armour row carries
+  critical -- its tape is in, `studies/weapons/PLAN.md` §25), W4's rest (`587` damage type against armour's `527`, no repo armour row carries
   one yet; `633` requirement has no reader), Q10 (the unmet requirement's 1/3, `636` on
   foci), a staff's `570` recharge word, ~~Ignite Arrows' splash~~ (section 24: it explodes on the target and on every
   foe inside the client's own 156 u radius, armour-respecting, and fires even when
@@ -1994,11 +1994,11 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   holds a ranged item yet. Q16 (the client walking a ranged follow to melee, MEASURED,
   its server-side arms EXHAUSTED
   §20) is a MOVECODE-side clear-the-follow change; the rest of the arc needs the owner
-  (RUN-WEAPONS-1A / 1B / 2 / 3) or a content decision (spawn rows). The spear stays melee
-  until a tape names its projectile.
-  Captures wanted, one swing per weapon enough for the rate: RUN-WEAPONS-1A (scythe,
-  spear, axe), 1B (five bows, staff, wand — predicts 1200 / 1600 / 2800 u/s), 2
-  (range: every range here is WIKI or reconstructed).
+  (RUN-WEAPONS-1B / 2 / 3; 1A ran 2026-09-19) or a content decision (spawn rows). The
+  spear's tape names its projectile (143, flag 1, 1594 u/s), so it can leave melee.
+  Captures wanted: 1B (five bows, staff, wand — predicts 1200 / 1600 / 2800 u/s), 2
+  (range: every range here is WIKI or reconstructed, and 1A's spear PARKED at 0.75 × the
+  wiki's number, §25.4 — the run must separate park from range).
 
 **Monster AI** — [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md)
 

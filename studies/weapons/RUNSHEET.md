@@ -117,6 +117,10 @@ marker read.
 
 ## 2. RUN-WEAPONS-1A — the martial clocks, the scythe's extra targets, the spear
 
+**RUN 2026-09-19 — capture `20260919T103604`, plan seals AGREE, scored in
+[PLAN.md](PLAN.md) §25. Done; every prediction below held, and two things it found
+change how §4 reads — see the note there.**
+
 **Answers** WEAPONS-Q5 (scythe: duration, how extra targets appear on the wire,
 the critical's size) and WEAPONS-Q6 (spear: duration, projectile id, arrow flag,
 with and without a shield).
@@ -171,7 +175,9 @@ block is worth taking as an extra step: three extras appearing would refute the
 cap, two would confirm it.
 
 **Exposure floor.** At least **15 landed swings in every block** and a `0x0035`
-for each equip. Below that the block is a null, not a measurement.
+for each CHANGE of attack duration — not for each equip: retail sends it only when the
+(base, modifier) pair differs from the last one sent, so the scythe→spear swap sends
+none (§25.1). Below that the block is a null, not a measurement.
 
 **Abort** if a suit dies or despawns, if anything else attacks you, or if you
 cannot tell which suit you are targeting. Say so in the notes and redo the block.
@@ -251,6 +257,17 @@ launch. A weapon that shot before you finished walking was not out of range —
 back up and redo it.
 
 **Abort** if anything interrupts the walk-in, and redo that weapon.
+
+**Read this before scoring the walk-ins (added 2026-09-19, from RUN-1A, §25.4).** The
+spear's walk-in parked the character at **755 u** from the target and it threw from
+there — 0.75 × the wiki's 1004, or 1004 − 250. So the walk-in measures where the
+client PARKS, which is the range only if the client parks at its range, and this run
+cannot tell. Take one extra press that can: the Isle's range-marker bodies stand at a
+bow's maximum range from a marked firing spot. **Stand on the shortbow's mark, press
+attack on the Short Bow Target, and tap F11.** A shot with no walk says park = range;
+a walk of ~250 u first says the client keeps a margin, and its size is the walk. The
+seven walk-ins then read either way: the bows separate a multiplicative margin
+(longbow park ~1,123) from an additive one (~1,248).
 
 ---
 

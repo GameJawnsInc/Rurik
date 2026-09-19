@@ -27,6 +27,29 @@ move back.
 
 ---
 
+### RUN-WEAPONS-1A -- 2026-09-19 -- **run and scored: the martial clocks hold, the scythe's extras are same-instant words with a target-side term of [78, 94) u, the spear parks at 755 u** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) §25)
+
+Capture `20260919T103604`, sealed plan, seals AGREE, exe unchanged. Every sealed
+prediction held: scythe and spear start->start 1.500, axe 1.330; word or launch at 0.650;
+spear `0x00A4` field 7 = 1, projectile 143 by type (no 617 word), `0x00A7` kind = its 587,
+1594 u/s, the shield changing nothing. **WEAPONS-Q5 and Q6 ANSWERED.** Beyond the
+predictions: an extra target's word lands in the target's instant and BEFORE its word with
+its own roll and critical; the 180 u attacker term is confirmed at its edge (hit at 182 u,
+missed at 186); the target-side term is NOT "adjacent" -- a suit 94 u from the target was
+never hit in 17 qualifying swings while one at 78 u always was; one scythe critical bounds
+its multiplier to 1.0 < c < 1.40, refuting x2^0.5 and fitting the wiki's x2^0.125;
+`0x0035` is sent on a CHANGE of (base, modifier) only, never per equip; the weapon-set
+switch is c2s `0x0032` (first on any tape) answered by `0x0148` / `0x0152` / `0x014B` /
+`0x006F`, never a fresh `0x006E` -- which `weaponcensus.py` had ignored, filing a
+four-weapon session under its first weapon (fixed; `test_weaponcensus.py` green, 38).
+The spear's walk-in parked at 755 u = 0.75 x the wiki's 1004: RUN-2's "distance at the
+first launch" measures the park, and the runsheet now asks for the one press that
+separates park from range. Open: the scythe's cap, the critical to more than one sample,
+the spear's range proper, `0x0086`'s kinds, `0x008C`, modifier 585 (= 120 on every
+PvP-made weapon, a Q12 candidate).
+
+---
+
 ### WEAPONS-W7 -- 2026-09-18 -- **Ignite Arrows explodes: the preparation's damage lands on every foe adjacent to the arrow's target, armour-respecting, and even when the arrow misses** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) section 24)
 
 Closes the gap `episodemods.swing_preparation_bonus` has named in its own docstring since

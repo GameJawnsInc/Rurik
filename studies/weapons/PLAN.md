@@ -234,7 +234,7 @@ exposure floor and an abort written down.
 
 | Run | Steps (each: equip, F11, 20 plain swings on a Master of Damage suit from one spot, F11) | Answers | Sealed predictions |
 |---|---|---|---|
-| **RUN-WEAPONS-1A** martial | axe · scythe on ONE suit · scythe with TWO suits adjacent to the target (3 foes hit, the weapon's maximum -- corrected 2026-09-18, this row said three adjacent, which is four) · spear · spear + shield | Q5, Q6, the 1.5 s clock, scythe wire shape and critical, the spear's projectile and flag | scythe and spear start→start 1.500, word / launch at 0.650; spear `0x00A4` field 7 = 1 |
+| **RUN-WEAPONS-1A** martial | axe · scythe on ONE suit · scythe with TWO suits adjacent to the target (3 foes hit, the weapon's maximum -- corrected 2026-09-18, this row said three adjacent, which is four) · spear · spear + shield | Q5, Q6, the 1.5 s clock, scythe wire shape and critical, the spear's projectile and flag | scythe and spear start→start 1.500, word / launch at 0.650; spear `0x00A4` field 7 = 1 — **RUN 2026-09-19, capture `20260919T103604`, scored in section 25: every prediction held; the scythe's target-side term measured at [78, 94) u, the spear parked at 755 u** |
 | **RUN-WEAPONS-1B** bows and casters | shortbow · flatbow · longbow · recurve · hornbow · staff · wand, all from the same marked spot | Q2 (609 ↔ class), Q3 (speed per class — same distance, five flights), the 2.025 and 2.7 clocks | start→launch 0.9125 / 1.1375 / 1.250 / 0.775; flight ratios 0.59 : 0.88 : 0.59 : 0.40 : 0.59 |
 | **RUN-WEAPONS-2** range | per weapon: stand far, press attack once, let the character walk in; repeat uphill if the Isle allows | Q4 — the distance from shooter to the aim point at the FIRST launch is the range, no free parameter. ~~Q16~~ is **no longer this run's**: §22 answered it from the client's own code (the park threshold has no weapon term), so spend no steps on it | 1004 / 1498 / 1498 / 1273 / 1273; 1248 staff and wand; 1004 spear; the body stands after the first start |
 | **RUN-WEAPONS-3** damage (later, needs the right attributes) | met vs unmet requirement on one weapon; a scythe's criticals; hornbow vs longbow on the 100-armour suit | Q10, Q5's critical, W4's penetration | written when W4 opens |
@@ -246,15 +246,15 @@ exposure floor and an abort written down.
 | WEAPONS-Q1 | ~~`0x00A4` field 5 vs the item's `617`~~ **closed §9: 37 of 37; no `617` → 143.** Left: the two arrows with field 7 = 0 | desk |
 | WEAPONS-Q2 | Which `609` value is which bow class? **Narrowed §9: 1 and 3 are the two 2.475 s classes** | RUN-1B (`0x0035` alone) |
 | WEAPONS-Q3 | Projectile speed per class — is flight distance ÷ a constant, and does the arc change it? | desk where positions are known, RUN-1B |
-| WEAPONS-Q4 | Range per type in units, and what height does to it | RUN-2 |
-| WEAPONS-Q5 | Scythe: duration, how extra targets appear on the wire, the critical's size | RUN-1A |
-| WEAPONS-Q6 | Spear: duration, projectile id, arrow flag, with and without a shield | RUN-1A |
+| WEAPONS-Q4 | Range per type in units, and what height does to it | RUN-2 — **read section 25.4 first**: the spear's walk-in parked at 755 u = 0.75 x the wiki's 1004, so RUN-2 must separate the park from the range (one press from the Isle's marked shortbow spot does it) |
+| WEAPONS-Q5 | Scythe: duration, how extra targets appear on the wire, the critical's size | **ANSWERED, section 25.3** (2026-09-19): 1.500 s, word at 0.650; an extra is a second word in the same instant, written BEFORE the target's, with its own roll and its own critical; attacker term 180 u confirmed at its edge (hit at 182, missed at 186); target term [78, 94) u centre-to-centre, NOT the 166 u "adjacent"; critical 1.0 < c < 1.40 from one sample, x2^0.5 refuted, x2^0.125 consistent; the cap untested |
+| WEAPONS-Q6 | Spear: duration, projectile id, arrow flag, with and without a shield | **ANSWERED, section 25.2** (2026-09-19): 1.500 s, launch at 0.650; projectile 143 by type (the item has no 617), flag 1, `0x00A7` kind 1 = its 587, 1594 u/s; the shield changes nothing |
 | WEAPONS-Q7 | A hostile's repeat delay (1.75 / 1.90 / 1.985 / 2.125) | monsterai, desk |
 | WEAPONS-Q8 | ~~Which message names the OBSERVER's own weapon type~~ **closed §9: `0x006E` (and `0x0147`)** | — |
 | WEAPONS-Q9 | ~~What `634` beside every `633` holds~~ **closed §9: the required weapon's damage range (max, min), in place of `584`** | — |
 | WEAPONS-Q10 | The unmet-requirement term — weapon, shield, focus | RUN-3 |
 | WEAPONS-Q11 | ~~Does GWW's critical formula reproduce the five measured rates?~~ **closed §17: NO — 8 / 9 / 11 / 13 / 14 % predicted against 6 / 16 / 19 / 24 / 34 % measured; the table stays the measurement** | — |
-| WEAPONS-Q12 | Is ×1.2 already inside the isle study's PvP-weapon numbers? | desk, then RUN-3 |
+| WEAPONS-Q12 | Is ×1.2 already inside the isle study's PvP-weapon numbers? | desk, then RUN-3 — candidate from section 25.5: every PvP-made weapon carries modifier (585, 120, 0) and no NPC item does; if 585 is the customisation word the desk half is a grep |
 | WEAPONS-Q13 | The sword's short gap after a skill's hit (from DAGGERS §9) | desk, `timingjoin.py --swings` |
 | WEAPONS-Q14 | ~~Dual Shot's second arrow~~ **closed §18: two strike records, each its own roll and word; the 25 % is WIKI, unmeasured** | — |
 | WEAPONS-Q15 | ~~A preparation's own word and its substituted arrow~~ **closed §19: shipped as W2e** | — |
@@ -1203,3 +1203,206 @@ waiting behind it**, not a weapons rung. Registered here, not started, and nothi
 until it is.
 
 
+
+## 25. RUN-WEAPONS-1A -- run and scored 2026-09-19: the martial clocks, the scythe's extras and the spear
+
+Capture `20260919T103604`, Isle of the Nameless (map 280), plan `weapons_1a.txt` sealed
+and `plan_seals = agree`, exe unchanged across the run, 4 of 4 connections decrypted.
+Tools: `weaponcensus.py --capture 20260919T103604 --shooters --attackers`,
+`timingjoin.py --capture 20260919T103604 --swings`, and scratch scripts over
+`livewire.decode_conn` for the per-swing geometry; every number below re-derives from
+the tape.
+
+The observer is agent 25. Its four weapon sets, from its own `0x0147` at the map load:
+set 0 axe (item 212, type 2, 6-28 slashing, requirement Axe Mastery 9), set 1 scythe
+(209, type 35, 9-41 slashing, Scythe Mastery 9), set 2 spear (210, type 36, 14-27
+piercing, Spear Mastery 9), set 3 spear (208) + shield (207, type 24, armour 16,
+Tactics 9). Bodies: the Master of Damage, agent 70 at (-2000, 3233), 590 max health;
+his suits 71 at (-2073, 3261) and 72 at (-1954, 3315), definition 1067 both, 480 max
+health, never moving; the Master of Healing 67, 480 max health, a wanderer that stood
+still through its block. Every damage word on the tape is a whole number of points over
+the target's max health (SLICE: whole points, truncated) -- agent 70's words are k/590,
+the others' k/480.
+
+Operator notes, as given: PvP equipment made for the run, no mods or inscriptions; the
+single-target scythe block was done on the Master of Healing because no single-target
+angle existed at the Master of Damage; only two bodies could ever be hit there; before
+the spear blocks the operator paused attacking, swapped sets, walked out beyond range
+and pressed attack once so the character walked itself into range; and in the
+multi-target block the operator moved all around looking for a three-target angle,
+some swings hitting one body, none hitting three.
+
+### 25.1 Exposure, per block
+
+| block | starts | landed | extras | criticals | start->start p50 | start->word / launch p50 |
+|---|---|---|---|---|---|---|
+| 1 axe, one suit (70) | 20 | 20 | -- | 0 | 1.330 | word 0.566 |
+| 2 scythe, one body (67) | 22 | 22 | 0 | 0 | 1.500 | word 0.650 |
+| 3 scythe, two suits beside 70 | 40 | 33 | 29 | 1 | 1.500 between moves | word 0.650 |
+| 4 spear, no off-hand (70) | 24 | 24 | -- | 0 | 1.500 | launch 0.636 (see below), word 1.114 |
+| 5 spear + shield (70) | 30 | 30 | -- | 2 | 1.500 | launch 0.650, word 1.125 |
+| 6 axe again (70) | 11 | 10 | -- | 0 | 1.330 | word 0.565 |
+
+Every floor met (>= 15 landed per block). 147 starts, 139 landed swings, 29 extra words,
+**0 fail words** (property 38 never appears -- nothing was blocked, dodged or missed all
+run), 168 words in all, 54 launches each closed by its `0x00A7`. The 8 starts without a
+word are swings cut by the operator moving or re-targeting (7 in block 3) and the last
+start of block 6, cut by the end.
+
+Block 4's launch delay alternates 0.635 / 0.651 while its start->start alternates
+1.515 / 1.486: the launches sit on an exact 1.500 s grid (492.385, 493.885, 495.385, ...)
+and the wobble is in the start message's wire time, not in the windup. Block 5's starts
+sit on the grid and read 0.650.
+
+**The one floor that was mis-specified: "a `0x0035` for each equip".** Retail sent three
+for five equips -- 1.33 at the first axe swing, 1.50 at the first scythe swing, 1.33 at
+the axe's return -- and NONE at the scythe->spear change (1.50 -> 1.50) or at the
+spear->spear+shield change. Across the 29-capture corpus every attacker with a constant
+weapon carries exactly one `0x0035` however many swings it makes, and the one body with
+19 (agent 30 on `20260914T005758`) alternates its modifier 1.00 / 0.67 over a constant
+base. OBSERVED: **`0x0035` is sent at a swing start when the (base, modifier) pair
+differs from the last one sent, and not otherwise.** Our server should send it on
+change; a per-swing send is a visible divergence.
+
+### 25.2 WEAPONS-Q6, the spear -- ANSWERED
+
+Duration **1.500 s** start->start (n 24 + 30, p50 1.500 in both blocks). Launch at the
+windup, **0.650 s** after the start (block 5 p50 0.6503; block 4's 0.636 is the
+artefact above). `0x00A4` field 5 (projectile) = **143** on all 54 -- the spear items
+carry NO 617 word, so 143 is the type's default rather than an item word, and it is the
+same 143 a bow without a 617 word fires (`test_weaponcensus.py` pins that: 24 of 26).
+Field 7 (the arrow flag) = **1** on all 54, as predicted. `0x00A7` kind = **1**, the
+spear's 587 (piercing) -- WEAPONS-C9 holds for a spear. Flight 0.4705-0.4761 s over
+750-759 u from the client's own stop position: **1594 u/s**, one number to the unit
+across all 54 (distance against flight correlates at 1.000 with a 0.5 ms intercept) --
+the 1600 u/s class, the 6 u/s shortfall being the client's report of its own stop
+against the server's body. Launch + flight lands the word to 4.3 ms p50. **The shield
+changes nothing:** clock, windup, projectile, flag, kind and flight are identical with
+and without it; the census's two spear rows differ only by the spear's item id. The
+launch's aim point is not the target's centre: all 54 lie exactly 4.5 u from
+(-2000, 3233) at varying angles -- a point on a 4.5 u circle about it.
+
+### 25.3 WEAPONS-Q5, the scythe -- ANSWERED, with one term measured against the wiki
+
+Duration **1.500 s** (block 2: 22 gaps, 1.496-1.503); word at **0.650** (p50 0.6495).
+`0x0035` base 1.50 at the first swing.
+
+**How extras appear on the wire.** An extra is a second damage word in the SAME instant
+as the target's -- the same wire time to the millisecond on all 29 -- and it is written
+BEFORE the target's word, 29 of 29. Extras are their own hits: each rolls its own damage
+(the pairs 71 = 5 / 70 = 2 and 71 = 2 / 70 = 5 both occur, so it is not one roll scaled
+twice) and its own critical (the block's one critical, at 431.023, is on the extra 71
+while the target 70 took a plain 3). No separate swing, no `0x009F`, nothing else.
+
+**Who is an extra.** The operator's reading is exact: 29 swings hit two bodies, 4 hit
+one, 7 hit nothing (moving), none hit three. Per-swing geometry from the client's own
+position reports (`0x0047` / `0x003D`) against the suits' fixed positions:
+
+* **the attacker term, ~180 u, CONFIRMED at its edge.** Suit 71 (78 u from the target)
+  is hit at 181 and 182 u from the player and missed at 186 u -- two hits and two misses
+  bracket the wiki's 180 to the precision of the position reports, a few units.
+* **the target term is NOT "adjacent".** Suit 72 stands 94 u from the target's centre
+  and was never hit: in 17 swings it was inside 180 u of the player (at 55, 63, 70, 73,
+  74, 78, 79, 84 u ...), at 4, 7, 11, 21 and 27 degrees off the line to the target as well
+  as at 50-100, while 71 at 78 u from the target was hit in every one of those swings.
+  Nothing but the distance to the target separates the two suits: same definition, same
+  health, same plane, same allegiance (72 was hit directly when targeted at 427.4). So the
+  target-side term lies in **[78, 94) u centre-to-centre** for these bodies. The wiki's
+  "in melee range of the target" is consistent only if melee range means a disc of that
+  order -- our own melee disc is 80 u -- and not the 166 u "adjacent" band. An arc rule
+  is refuted outright (72 at 21 degrees and 165 u from the player, missed; 71 at 66
+  degrees, hit). Height was not measured; the three suits share plane 0.
+* **the cap is untested**, as the runsheet said it would be: with 72 excluded by
+  geometry there were never three candidates. To test it the two extras must BOTH stand
+  within ~80 u of the target.
+
+**The critical's size.** One scythe critical, and it is enough for one bound: 6 points on
+suit 71, whose plain hits in the same block top out at 5 points, four times over. A
+plain 5 means 41 x f >= 5 (no roll exceeds 41), so a x2^0.5 critical on the maximum
+roll would read >= 7.07, i.e. 7 or more points; a x1 critical would read at most 5. The
+observed 6 gives **1.0 < c < 1.40**: the ordinary x2^0.5 (1.414) is refuted by a hair and
+the x2^0.125 (1.091) the wiki gives scythes is consistent (it predicts 6 whenever
+41 x f >= 5.50). Premises, stated: a critical is the maximum roll times c (GWW "Critical
+hit"), truncation to whole points (SLICE), and one armour factor f for every hit on 71 in
+the block (all are extras by the same weapon at unchanged attributes). One sample; RUN-3's
+met-requirement scythe block will multiply it. The spear's two criticals (5 points
+against a plain ceiling of 4 on agent 70) fit x1.09 and x1.41 alike and decide nothing.
+
+Critical rates, for what a low rank gives: scythe 1 of 84 hits, spear 2 of 54, axe 0 of
+30. The PvP character's ranks were not set for the run -- the words are 1-5 points on
+9-41 and 14-27 weapons -- so these are the unmet-requirement floor, not the table
+section 17 interpolates.
+
+### 25.4 The walk-in -- a first data point for Q4 / Q16, and a warning about how RUN-2 reads
+
+The spear's approach is on the tape as section 14 said retail's is: c2s `0x0026 [70, 0]`
+at 490.184 from ~1,330 u out, the server's `0x002A` follow carrying the target's own
+position at 490.235, no movement message after it except an s2c `0x0028 [25]` at 489.849
+and again in the start's own instant (section 22: that handler writes no destination
+and parks nothing), and the swing start at 491.744 with the body parked at
+(-1949.85, 2480.04) by the client's own report (`0x0047`, unchanged from 527.6 to
+590.0) -- **754.6 u from the target's centre, 751.5 u from the first aim point.** The
+spear + shield block was pressed from the same spot at 541.586 and fired 53 ms later.
+
+That number is the instrument RUN-2 relies on, and it does not read the way the runsheet
+assumed. WIKI says 1004 for a spear; the client parked at **755 = 0.75 x 1004 to within
+2 u**, and also 1004 - 250. Either the spear's range is ~755 and the wiki is wrong, or
+retail's client parks INSIDE its range by a margin -- in which case "distance at the
+first launch" measures the park and not the range for every weapon in RUN-2. The two
+margins separate on the bows: multiplicative puts the longbow's park at 1,123 and the
+shortbow's at 753, additive at 1,248 and 754. And the Isle offers a free discriminator
+that RUN-2 should take in one press: its range-marker bodies stand at a bow's maximum
+range from a marked firing spot (`agentroster.py`'s reason to exist). Stand on the mark,
+press attack on the Short Bow Target with the shortbow: a shot with no walk says park =
+range; a walk of ~250 u first says the margin is real and measures it. Until then this
+tape says the spear's range is >= 755 u and its park is 755 u, and Q4's spear row stays
+open.
+
+### 25.5 The wire around the run -- the operator's note 1 answered, and a census defect fixed
+
+**The weapon-set switch, first time on any tape.** c2s **`0x0032 [byte set]`** appears in
+no other capture of the 29 (corpus census, this run's scratch). Its answer, one batch
+40-50 ms later: `0x0148 [1, set]` (the active set), `0x0152 [1, old item, new item]` for
+a hand whose item changed, `0x014B [1, item, 136, slot]` when a shield enters or leaves a
+set, and **`0x006F [agent, hand, item]`** per hand that changed -- hand 0 lead, 1 off, an
+item of 0 for an emptied off-hand. **No fresh `0x006E`**: the player's `0x006E` is sent
+once at the create and never again. Before each swap the operator's "stop attacking" is
+c2s `0x0028 []`, 4 of 4.
+
+That last fact was a defect in `weaponcensus.py`: its hands timeline read `0x006D` /
+`0x006E` only, so every swing of this four-weapon session was filed under the axe, the
+spear's `0x00A7` was scored a MISMATCH against the axe's 587, and the SPEEDS table joined
+1.50 to type 2. Fixed this run: the timeline now folds `0x006F` slots 0 and 1 (2-7 are
+armour; 12 hand-slot messages in the corpus, 6 of them this tape, 1 on a body with no
+prior `0x006E`, which starts from empty hands). After the fix the tape reads type 2 at
+1.330 x29, type 35 at 1.500 x46, type 36 at 1.500 x52 across two spear items,
+`kind == 587` 2 of 2, and `test_weaponcensus.py` is green at 38 checks with no pin moved.
+
+**PvP equipment, in the outpost connection (map 248).** c2s `0x0085 [241]` opens the
+panel and is answered by `0x015C [241, seven 7-field rows]`; each creation is c2s
+**`0x0086 [241, kind, [mods], 9, flag, 0]`** -- kinds 110, 322, 325, 146, 325 in the
+order made, the mods array EMPTY because none were chosen, 9 the requirement's rank,
+flag 1 on the one that is an off-hand -- answered by `0x015D [new item id, displaced
+item id or 0]`. These four opcodes also appear on `20260917T160915` (the daggers tape),
+so they are not first sightings; the empty mods array is. Mapping kind -> weapon is by
+creation order only (110 first; the axe was set 0) and stays UNVERIFIED until a tape
+makes one weapon at a time; the weapon sets' truth is the map-load `0x0147` above.
+
+**Modifier 585 = 120, a candidate for Q12.** All three created weapons and no NPC's
+item carry the word (585, 120, 0). Every PvP-panel item is customised to its maker
+(WIKI, "PvP equipment"), and customisation is +20 % damage. RECONSTRUCTION, unverified:
+585 is the customisation word and 120 its percentage. If it holds, the x1.2 is inside
+every number the isle study took with PvP weapons, and Q12's desk half is answered by
+grepping that study's item words for 585. Not pinned; nothing reads it.
+
+**Also on the tape, unread:** s2c `0x008C [140, 21|22, 23..25, 1]` eight times through
+the melee blocks; the player's Windborne Speed (`0x0042` skill 160, `0x0027` at 383.04 =
+288 x 1.33) applied four times, which is why the walk-in ran at 383 u/s.
+
+### 25.6 What this run leaves open
+
+* the scythe's cap (three candidates never existed) and the exact target-side term (a
+  bracket of [78, 94) u from two suits; a third distance would narrow it);
+* the critical's size to better than one sample -- RUN-3's scythe block;
+* the spear's range against its park distance -- RUN-2's design, section 25.4;
+* the meaning of `0x0086`'s kind numbers, of `0x008C`, and of modifier 585.

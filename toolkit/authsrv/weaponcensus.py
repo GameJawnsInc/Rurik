@@ -16,6 +16,13 @@ name every body's weapon and nobody had joined the two halves:
                                       the same for a PLAYER's body -- WEAPONS-Q8; the
                                       observer's own 0x0147 weapon set names the same
                                       two items
+  0x006F [agent, slot, item]          ONE slot changes -- a weapon-set switch (c2s 0x0032)
+                                      is answered by this, never by a fresh 0x006E: slot 0
+                                      is the leadhand, 1 the offhand, 2-7 armour (RUN-
+                                      WEAPONS-1A, 2026-09-19: four swaps, six of these,
+                                      one 0x006E at the create). Until that tape the
+                                      timeline ignored it and filed every swing of a
+                                      four-weapon session under the first weapon.
   0x0161 [item, file, TYPE, ..., model, ..., [words]]
                                       that item's type and its modifier words
   0x0035 [agent, f32 base, f32 modifier]
@@ -69,6 +76,7 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 ITEM, HANDS, PLAYER_HANDS, SPEED = 0x0161, 0x006D, 0x006E, 0x0035
+HAND_SLOT = 0x006F               # [agent, slot, item]; slots 0 / 1 are the hands
 PINT, PINT_T, PFLOAT_T = 0x009F, 0x00A0, 0x00A3
 LAUNCH, ARRIVE = 0x00A4, 0x00A7
 E3, E4, E5 = 0x00E3, 0x00E4, 0x00E5
@@ -112,12 +120,19 @@ def items_of(s2c):
 
 def hands_timeline(s2c):
     """{agent: [(t, leadhand item, offhand item)]} in wire order -- 0x006D for an NPC,
-    0x006E for a player. A timeline, not a last-wins dict: a player swaps weapons."""
+    0x006E for a player, and 0x006F for ONE hand changing: a weapon-set switch sends
+    only the slot that changed, so without it a player's swaps never reach the timeline
+    (RUN-WEAPONS-1A). A timeline, not a last-wins dict: a player swaps weapons."""
     out = collections.defaultdict(list)
     for t, op, v in s2c:
         if op in (HANDS, PLAYER_HANDS) and len(v) > 3:
             if not out[v[1]] or out[v[1]][-1][1:] != (v[2], v[3]):
                 out[v[1]].append((t, v[2], v[3]))
+        elif op == HAND_SLOT and len(v) > 3 and v[2] in (0, 1):
+            lead, off = out[v[1]][-1][1:] if out[v[1]] else (0, 0)
+            held = (v[3], off) if v[2] == 0 else (lead, v[3])
+            if not out[v[1]] or out[v[1]][-1][1:] != held:
+                out[v[1]].append((t,) + held)
     return out
 
 
