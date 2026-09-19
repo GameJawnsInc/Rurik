@@ -251,7 +251,7 @@ exposure floor and an abort written down.
 | WEAPONS-Q13 | The sword's short gap after a skill's hit (from DAGGERS §9) | desk, `timingjoin.py --swings` |
 | WEAPONS-Q14 | ~~Dual Shot's second arrow~~ **closed §18: two strike records, each its own roll and word; the 25 % is WIKI, unmeasured** | — |
 | WEAPONS-Q15 | ~~A preparation's own word and its substituted arrow~~ **closed §19: shipped as W2e** | — |
-| WEAPONS-Q16 | What parks retail's client at range on an attack-follow. **§20 + §21: ALL THREE server-side arms are spent — the hold, the `0x0028`, and both together (`20260918T201027`: flights 0.727 → 0.050 against a frozen target) — and the wire we send is now byte-for-byte retail's. Two rivals refuted: no item modifier carries a reach (§21b), and retail's follow aims at the TARGET as ours does (§21c). Positive control: the `0x0028` DOES halt a self-steered walk (§21d), so it is scoped, not inert.** Still OPEN, and now squarely a MOVECODE rung | `codescan` the follow resolver's stop-distance compare (`r + r + 56` beside the weapon's reach) — NOT a fourth message |
+| WEAPONS-Q16 | What parks retail's client at range on an attack-follow. **CLOSED at the mechanism, section 22: the threshold `0x005FED20` is `(r1 + r2 + TABLE[kind])^2` and its inputs are six agent fields, NONE a weapon -- so a follow parks at the melee disc whatever is held, retail's client and ours alike, and Q16's premise is refuted. `0x0028`'s handler never writes `+0x98`, which is why all three arms failed; only `0x0029` clears it, and retail sends one to park a shooter 0 of 306 follows.** What remains is an OWNER CHOICE, not a bug | answered; section 22.4 is the choice |
 
 ## 8. What this plan refuses
 
@@ -943,3 +943,111 @@ remaining distance against, with `r + r + 56` (1z-al's measured melee park) as t
 value and the weapon's reach as the thing to find beside it. **That is a MOVECODE rung, not
 a weapons one**, and Q16 stays open there. Neither a fourth message nor a re-aimed follow
 should be tried before that read.
+
+**That read is done -- section 22, the same day. It closes Q16's mechanism: the threshold has
+no weapon term, so the answer is that NOTHING parks a client at range on a follow.**
+
+## 22. WEAPONS-Q16 -- CLOSED at the mechanism, 2026-09-18: the client's follow-park threshold has NO weapon term, and only `0x0029` can end a follow
+
+Section 21 left Q16 with the server-side arms spent and named the next step: read the
+resolver rather than send it a fourth message. That read is done, on the pinned pristine
+client (build 38797), and it answers the question outright.
+
+### 22.1 The threshold, decoded -- `0x005FED20`, three returns and not a weapon among them
+
+The park arm inside the avoidance solver (`0x006011F0`) compares a squared distance against
+a value returned by `call 0x005FED20` (`0x006017AB`), and parks when the distance is inside
+it. The local the distance lives in is `[ebp-0x84]`, computed at `0x006015C7..0x00601611` as
+`dx*dx + dy*dy` from the two agents' `+0xB0`/`+0xB4` -- a **squared** separation, which is
+why the callee returns a **squared** threshold. `0x005FED20` is short enough to read whole:
+
+| gate | return |
+|---|---|
+| `[ecx+0x1C] != [edx+0x1C]` (`0x005FEDAB`) | `(a.+0xD0 + b.+0xD0)^2` |
+| same `+0x1C`, and **either agent's `+0x98` names the other** (`0x005FED41`, `0x005FED4C`) -> `0x005FED82` | `(a.+0xD0 + b.+0xD0 + TABLE[+0x1C])^2` |
+| same `+0x1C`, same nonzero `+0xE8`, **neither follows the other** (`0x005FED65`) | `(2 * f(a.+0xEC, b.+0xEC))^2` |
+
+`TABLE` is `arg0[+0x1C * 3 * 4 + 0x20]` (`0x005FED91 lea ecx,[esi+esi*2]`,
+`0x005FED95 fadd [eax+ecx*4+0x20]`), a per-kind spacing row off the world context.
+**That middle row is `r + r + 56`** -- the rule 1z-al measured from the outside, now read
+from the inside, and **it is selected PRECISELY BECAUSE `+0x98` names the other agent.**
+
+> **OBSERVED. The whole function's inputs are `+0x1C`, `+0xE8`, `+0x98`, `+0x10`, `+0xD0`
+> and `+0xEC`. There is no weapon, no item, no reach and no range anywhere in it.** A
+> `0x002A` attack-follow therefore parks a body at the melee disc **whatever it is holding**
+> -- a bow, a wand and a sword are the same to this code. The client cannot stop at a
+> weapon's range on a follow, because it has no notion of a weapon's range here.
+
+**`+0xD0` is the collision radius, and this closes MOVECODE's registered-not-started item**
+("read the agents' collision radii from the client -- the `r + r + 56` rule is already
+decoded; the radius field is not", 1z-dd.6). `--field 0xD0 --in AgAgent`: **8 reads, 0
+stores**, every one an `fld`/`fadd` of a float, four of them the two sums above. The name is
+a RECONSTRUCTION from its role; the OBSERVED fact is the arithmetic.
+
+### 22.2 Why all three of our arms failed, from the handlers rather than from the runs
+
+* **`0x0028`'s handler `0x005FD7D0`** resolves both world copies and calls the halt
+  `0x00602540` on each, then `0x00603990` on `+0x94`. **It never writes `+0x98`.** So a stop
+  halts the body and leaves the follow intact, and the movement update it re-runs re-drives
+  the body along it. That is the hold arm, the stop arm and both-together, explained without
+  reference to any of the three runs.
+* **`0x0029`'s handler `0x005FD890`** bounds-checks the point (`0x005FCEC0`), builds it on
+  the stack, and **pushes a literal `0` (`0x005FD906`) into the shared setter's followed-agent
+  slot.** It is the only message that clears `+0x98`, confirming 1z-al.2 from the other side.
+
+**So the fourth message was never going to exist.** No amount of `0x0028` ends a follow;
+only a `0x0029` does, and a `0x0029` is a *move order*, not a stop.
+
+### 22.3 What retail does with that, and the correction it forces on section 21
+
+Census over the whole live corpus -- every `0x002A` naming a target on the observer, and what
+reaches the observer before its next swing start (`q16_followend`):
+
+| what ends the observer's attack-follow | n |
+|---|---|
+| nothing | 131 |
+| a `0x0029` | 106 |
+| a `0x0028` only | 69 |
+| **total** | **306** |
+
+The 106 look at first like retail parking the shooter, and they are not: read the rows and
+essentially all of them are a `0x0025` + `0x0029` pair answering the player's **own** `0x003D`
+report -- the owner took the controls, and clearing the follow is a *side effect* of steering.
+**Retail never sends a `0x0029` to park a ranged attacker at its range.**
+
+**And section 21's (a) must be re-read, because the instrument was not what it looked like.**
+Our runs' flight times are computed by `launch_player_projectile` from `_reach_frame` -- the
+server's **dead-reckoned mirror of the CLIENT's body**, which models what the client will do
+with the wire we sent. The wire is a follow to the target (W2b deliberately left it so), so
+the mirror walks to the melee disc, and `0.727 -> 0.282 -> 0.050` at the bow's 1600 u/s is
+`1163 -> 451 -> 80 u`. **80 u is `r + r + 56` exactly.** The flights were never an independent
+measurement of the client; they are our server correctly predicting the client obeying
+22.1. The three arms' failure stands (the client walks in), but the number that showed it is
+the mirror's, and it agrees with the binary rather than corroborating it separately.
+
+### 22.4 The verdict, and the one thing that is now the owner's
+
+**Q16's premise is refuted.** It asked what parks retail's client at range on an attack-follow.
+Nothing does: given a follow that runs to completion, every client walks to the melee disc
+regardless of weapon, retail's and ours alike, and the cases that looked like retail holding
+at range are presses made from **inside** range by a player who had walked itself there under
+its own steering (§21d's positive control is one: a press at 508.731 answered by a bare stop,
+no follow involved, then three shots from one distance).
+
+What is left is not a bug but **a divergence W2b created and a choice about it.** W2b stops
+the SERVER's copy at the weapon's range while the wire keeps the client walking to the disc,
+so the two disagree about where the body stands. Two ways to end that, and it is the
+operator's call because they trade different things:
+
+1. **Revert W2b's server stop** -- the server walks with the client to the disc. Fully
+   faithful to retail's wire and to the client's own code, and a ranged press from out of
+   range closes to melee, which is what retail does.
+2. **Send a `0x0029` at the body's own point when the approach reaches range** -- the one
+   message that clears `+0x98` (22.2), so the client parks where the server already thinks
+   it is. It makes server and client agree and gives the behaviour a bow player expects,
+   **at the cost of a message retail does not send here** (0 of 306 follows).
+
+Recorded, not chosen: (1) is the faithful one and (2) is the one that looks right, and this
+repo's rule is faithfulness, so **(1) is the default unless the owner asks for (2)**. Nothing
+is shipped either way; W2b's server half stays as it is until that is answered.
+

@@ -1959,8 +1959,15 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   the disc exactly as with neither message) and refuted two rivals -- no item
   modifier is an attack REACH, and retail's follow aims at the TARGET as ours does --
   so the wire is now byte-for-byte retail's and the stopping distance is decided
-  inside the client's own resolver. Next is a `codescan` of that resolver, a MOVECODE
-  rung, not a weapon one and not a fourth message. Eleven player types and the hostile-only ranged
+  client's resolver. **That codescan ran the same day and CLOSED Q16's mechanism (section
+  22): the client's park threshold is `(r1 + r2 + TABLE[kind])^2` and NOT ONE of its six
+  inputs is a weapon, so a follow parks at the melee disc whatever is held -- retail's
+  client and ours alike -- and Q16's premise is refuted. `0x0028`'s handler never writes
+  the followed-agent field, which is why all three arms failed; only `0x0029` clears it,
+  and retail sends one to park a shooter 0 of 306 follows. What is left is an OWNER
+  CHOICE (section 22.4): revert W2b's server stop, which is the faithful option, or send a
+  `0x0029` at range, which makes server and client agree at the cost of a message retail
+  does not send. Nothing shipped either way.** Eleven player types and the hostile-only ranged
   type are one content table with retail items, and EVERY holder of a bow, wand or staff
   shoots — the player, a party caster, a hostile archer: release at the windup, the hit
   distance ÷ speed later, from the weapon's range — a bow ATTACK SKILL releases at its

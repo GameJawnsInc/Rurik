@@ -27,6 +27,51 @@ move back.
 
 ---
 
+### WEAPONS-Q16 -- 2026-09-18 -- **CLOSED at the mechanism: the client's follow-park threshold has NO weapon term, so nothing parks a client at range on a follow; Q16's premise is refuted** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) section 22)
+
+Section 21 named the next step as reading the resolver rather than sending it a fourth
+message. The read is done, on the pinned pristine client (38797).
+
+**The threshold, `0x005FED20`, whole.** The park arm in the avoidance solver `0x006011F0`
+compares a squared separation (`[ebp-0x84]`, built at `0x006015C7..0x00601611` from the two
+agents' `+0xB0`/`+0xB4`) against this callee's squared return. Three returns: different
+`+0x1C` gives `(a.+0xD0 + b.+0xD0)^2`; **either agent's `+0x98` naming the other** gives
+`(a.+0xD0 + b.+0xD0 + TABLE[+0x1C])^2`, which is the `r + r + 56` rule 1z-al measured from
+outside, selected precisely BECAUSE one follows the other; neither following gives
+`(2 * f(+0xEC, +0xEC))^2`. **Its inputs are `+0x1C`, `+0xE8`, `+0x98`, `+0x10`, `+0xD0`,
+`+0xEC` -- no weapon, no item, no reach.** So a `0x002A` attack-follow parks a body at the
+melee disc whatever it holds; a bow, a wand and a sword are the same to this code.
+`+0xD0` is the collision radius (8 reads, 0 stores in AgAgent, every one a float load or
+add), which also closes MOVECODE 1z-dd.6's registered-not-started "the radius field is not
+read".
+
+**Why all three arms failed, from the handlers.** `0x0028`'s handler `0x005FD7D0` halts both
+copies via `0x00602540` and **never writes `+0x98`**, so the follow survives the halt and the
+re-run movement update re-drives the body. `0x0029`'s handler `0x005FD890` pushes a literal 0
+into the setter's followed-agent slot (`0x005FD906`) and is the only message that clears it.
+A fourth message was never going to exist.
+
+**Retail, whole corpus** (every `0x002A` naming a target on the observer): 131 ended by
+nothing, 106 by a `0x0029`, 69 by a `0x0028` only, of 306. The 106 are a `0x0025`+`0x0029`
+pair answering the player's OWN `0x003D` -- steering, with the clear as a side effect.
+**Retail parks a ranged attacker with a `0x0029` 0 times.**
+
+**A correction to section 21's own instrument.** Our runs' flights come from
+`launch_player_projectile` via `_reach_frame`, the server's dead-reckoned mirror of the
+CLIENT, which models the wire we sent -- a follow to the target. So `0.727 -> 0.282 -> 0.050`
+at 1600 u/s is `1163 -> 451 -> 80 u`, and 80 u is `r + r + 56` exactly: the server correctly
+predicting the client obeying the threshold above, not an independent measurement of it.
+
+**Verdict.** Q16's premise is refuted -- nothing parks a client at range on a follow, and the
+cases that looked like retail holding range are presses made from INSIDE range by a
+self-steered player. What remains is not a bug but a divergence W2b created and **an owner
+choice** (section 22.4): revert W2b's server stop so the server walks with the client, which
+is faithful; or send a `0x0029` at range so the client parks where the server already thinks
+it is, which looks right but sends a message retail does not. **(1) is the default under this
+repo's faithfulness rule and nothing is shipped either way.** No code changed in this entry.
+
+---
+
 ### WEAPONS-Q16 desk check -- 2026-09-18 -- **the last server-side arm spent and WITHDRAWN, two rival mechanisms refuted, a positive control found for the `0x0028`; and a 44 %-flaky check in `test_weapons` section 11 fixed** ([studies/weapons/PLAN.md](studies/weapons/PLAN.md) section 21)
 
 The plan asked for a desk check before a third client arm at Q16. It ran and **shipped no
