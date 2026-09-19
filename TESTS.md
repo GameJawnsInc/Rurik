@@ -7394,6 +7394,30 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   existing two-name precedent rather than dumping 42; the emitter itself writes
   **no** authored text, committing `name_string_id` for run-time resolution,
   and a check asserts no string leaks into the rows),
+  `toolkit/test_skilltemplate.py` (**the skill-template code** — the base64 build
+  string players paste at each other — and the client's own rule for accepting one.
+  51 checks with the vault, **35 without and a declared skip**, floor **35**.
+  `studies/templates/FINDINGS.md` transcribes `AcctTemplate.cpp`'s encoder
+  (`0x0091CD50`) and decoder (`0x0091CB90`) out of build 38797, and a transcription
+  is worth what can refute it, so **§2 is the whole file's weight-bearing check: a
+  22-character code that ArenaNet's client produced re-encodes to itself, character
+  for character.** That single identity pins the field order, all three width rules,
+  the bit order, the alphabet and the byte-padding at once — get any one wrong and
+  the string differs, and it is the only input here we did not manufacture. §1 is
+  labelled as the weaker sibling on purpose (our encoder agreeing with our decoder
+  proves nothing about the client) and exists to catch regressions. §5 runs the
+  decoder's validity conjunction against the real `s_skill`/`s_attrib` tables one
+  clause at a time, **and its control comes first and PASSES** — a Warrior bar built
+  out of the tables rather than typed in, without which a validator that refused
+  everything would score full marks on the failures; the clause that only a careful
+  validator gets right is 5d, where a *primary* attribute must belong to the
+  *primary* profession and pair-membership alone would accept both orders, so both
+  orders are asserted. §6 is the arc's headline as an observable: a bar of monster
+  skills encodes without complaint and would then be blanked, because the encoder
+  calls exactly two functions and neither is the skill-row getter. **One known gap is
+  asserted rather than skipped** — the second real code decodes cleanly but declares
+  a skill field wider than minimal, so it cannot round-trip (FINDINGS §7.2); the test
+  asserts the inequality, so it cannot quietly become true),
   `toolkit/authsrv/test_armour.py` (**the armour RATING** — 19 checks with the vault,
   15 without, floor **15**; it read "16 checks, floor 16" until 2026-08-27. **§2 now
   scores `probes.py`'s item ids against the server's minted set, and it went RED on

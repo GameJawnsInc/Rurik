@@ -322,6 +322,23 @@ def player_corpus(rows: list[dict]) -> list[int]:
     clear. The table is broader than the skill corpus -- it also holds weapon
     modifiers and other non-player definitions -- so a nonzero name id is not
     membership.
+
+    OBSERVED 2026-09-19, and it upgrades this rule from UPSTREAM to the
+    client's own (studies/templates/FINDINGS.md section 4): `+0x33 == 1` is
+    tested at exactly three sites in build 38797, and each one is a place
+    where a skill has to be player-loadable --
+      0x0091CCF8  the skill-template DECODER, per slot
+      0x008076DF  AcctCliTemplate reading a stored template, zeroing the slot
+      0x00816E19  the skill picker's enumerator
+    So the 1333 rows this returns are the 1333 the client itself will let a
+    player hold.
+
+    AND THE SECOND CONJUNCT DOES NOTHING, which is worth saying rather than
+    leaving as a comfortable redundancy: all 177 `pvp_only` rows are in family
+    **0**, so `not pvp_only` removes zero rows on this build. It is kept
+    because it is cheap and would catch a build where that stops being true --
+    but the two terms are not two witnesses, and a reader must not count them
+    as agreeing about anything.
     """
     return [r["id"] for r in rows
             if r["equip_family"] == 1 and not r["pvp_only"]]
