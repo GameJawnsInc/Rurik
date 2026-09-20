@@ -85,6 +85,7 @@ vocabulary is recoverable without guessing at any of it:
 | 587 | 2380 `Damage`, 2443 `%str2% %str1%` | the damage TYPE line |
 | 570 | 2376 `Chance`, 2392 `skill recharge`, 2432 `Halves %str1% of spells` | **Halves skill recharge of spells** |
 | 573 | 2372 `Armor`, 2438 `%str1%: %num1%` / 2440 `%str1%: %num1%-%num2%`, 51163 `depends on level` | **Armor: 23-80 (depends on level)** -- a hero's level-scaled piece, arg the level-20 rating and arg2 the level-1 one (studies/weapons/PLAN.md 33, 2026-09-19) |
+| 574 | 2373 `Armor penetration` | **Armor penetration +20% (Chance: 20%)** -- the Sundering upgrade's word (WIKI, GWW "Sundering"; the handler's number strings unread); on NO corpus item; unread by the server -- the bonus tier's open item (studies/weapons/PLAN.md 35, 2026-09-19) |
 | 556 / 558 | 2071 `Energy` / 2072 `Energy recovery` | the energy lines |
 
 Those are Guild Wars item stats, in the game's own phrasing. The ids are what the tool

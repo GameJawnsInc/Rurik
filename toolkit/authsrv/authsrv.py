@@ -3207,7 +3207,10 @@ def spawn_profession_values(profession=None, agent_id=None):
 SCALE_MEANS_DAMAGE = {
     "Holy damage": "standalone",
     "Fire damage": "standalone",
-    "+ Damage": "additive",
+    "Lightning damage": "standalone",   # studies/weapons 35: Lightning Orb's and
+    "Cold damage": "standalone",        # Javelin's rows (the wire's own kinds,
+    "Earth damage": "standalone",       # section 34); the other two elemental
+    "+ Damage": "additive",             # labels join beside them (WIKI, "Damage")
 }
 
 # WHICH OF THOSE LABELS RESPECTS THE TAKER'S ARMOUR. The rule is the DAMAGE
@@ -3624,12 +3627,14 @@ def scythe_extras(state, target_id, attacker_pos):
 
 
 def scythe_extra_hit(send, state, aid, conn_id, rank, bonus_damage, damage_mult,
-                     now, label):
+                     now, label, base=0.0):
     """One EXTRA hit of a scythe swing on body `aid`: its own roll and critical
     through ITS armour, then retail's per-hit batch -- the gain, the first-hit
-    maximum, the word (WEAPONS-W3). Returns the points dealt."""
+    maximum, the word (WEAPONS-W3). `base` is the swing's base penetration
+    (an attack skill's, studies/weapons 35). Returns the points dealt."""
     foe = state["agents"][aid]
-    armour = penetrated_armour(foe.get("armor_rating"), agents.PLAYER_WEAPON)  # Q2 (0 for a scythe)
+    armour = penetrated_armour(foe.get("armor_rating"), agents.PLAYER_WEAPON,
+                               base=base)                 # Q2 (0 for a scythe) + 35
     critical = False
     if PLAYER_SWING_DAMAGE and rank is not None and armour is not None:
         critical = random.random() < critical_rate(rank) + (
@@ -11405,8 +11410,12 @@ def spell_armour_for(skill_id):
     """Forwards to combatmath with all four armour flags read at call time --
     and the spell's OWN type (spell_damage_type), "elemental" when none is
     read: the pieces' `+N vs. physical` never meets a fire spell, a `+N vs.
-    elemental` would, and a holy or chaos spell meets neither."""
-    return combatmath.spell_armour_for(skill_id, SPELL_ARMOUR, ARMOUR_TERM,
+    elemental` would, and a holy or chaos spell meets neither. Then the
+    spell's OWN base penetration comes off (studies/weapons 35: an Air Magic
+    lightning spell's 25 % -- Lightning Orb onto 80 lands as onto 60, the
+    tape's 101 / 286), BEFORE the taker's casting penalty the call site adds
+    (the wiki's step 4)."""
+    got = combatmath.spell_armour_for(skill_id, SPELL_ARMOUR, ARMOUR_TERM,
                                        ARMOUR_RESPECTING_MEANS,
                                        SCALE_MEANS_DAMAGE, EQUIP_ARMOUR,
                                        ARMOR_RATING_MODIFIER,
@@ -11415,6 +11424,7 @@ def spell_armour_for(skill_id):
                                        damage_type=(spell_damage_type(skill_id)
                                                     if spell_damage_type(skill_id) is not None
                                                     else "elemental"))
+    return penetrated_armour(got, None, base=skill_base_penetration(skill_id))
 
 
 def armour_multiplier(armour):
@@ -12493,17 +12503,124 @@ def weapon_armour_penetration(item):
         return 0.0
 
 
-def penetrated_armour(armour, item):
+def penetrated_armour(armour, item, base=0.0):
     """WIKI (GWW "Armor calculation" step 3): the rating times (1 - p), to the
-    nearest whole number (a .5 up, ours). The critical's 20 and a casting
+    nearest whole number (a .5 up, ours). `p` is the hit's BASE penetration
+    (`base` -- an attack skill's own or Strength's 1 % a rank, the LARGER:
+    player_base_penetration / body_base_penetration / skill_base_penetration,
+    studies/weapons 35) plus the held item's BONUS on top of it (the hornbow's
+    10 %; combatmath.armour_penetration). The critical's 20 and a casting
     penalty are step 4 and come off AFTER, which is where swing_damage and
     land_swing already take them. None stays None; p = 0 leaves it alone."""
-    if armour is None:
+    return combatmath.penetrated_rating(
+        armour, combatmath.armour_penetration([base], [weapon_armour_penetration(item)]))
+
+
+# ---- BASE ARMOUR PENETRATION (2026-09-19, studies/weapons/PLAN.md 35) --------
+#
+# The rule (the largest base source, the bonuses on top), the client's own
+# slot and the wire's one witness are combatmath's block; these are the
+# bindings -- which skill, whose Strength, at which site. The numbers are
+# content/world.toml's [armour_penetration.rules] and the skill_effect rows.
+BASE_PENETRATION = True      # --no-base-penetration reverts: the hornbow's bonus is the whole term
+
+
+def _penetration_rules():
+    try:
+        return agents.WORLD.get("armour_penetration", "rules")
+    except Exception:                                     # noqa: BLE001
+        return {}
+
+
+def skill_base_penetration(skill_id):
+    """The base penetration a skill carries of its OWN, as a fraction: its
+    row's "Armor penetration %" -- the client's bonus slot with equal
+    endpoints (10 on Penetrating / Sundering Attack, 20 on Penetrating Blow /
+    Chop, 25 on Spear of Lightning) -- else the Air Magic rule (an attribute-8
+    spell whose own type is lightning: 0.25, OBSERVED on Lightning Orb), else
+    0.0. 0.0 with the feature off or no skill."""
+    if not BASE_PENETRATION or skill_id is None:
+        return 0.0
+    try:
+        row = agents.WORLD.get("skill_effect", str(skill_id))
+    except Exception:                                     # noqa: BLE001
+        row = {}
+    if row.get("bonus_scale_means") == combatmath.BASE_PENETRATION_MEANS:
+        try:
+            srow = agents.WORLD.get("skills", str(skill_id))
+            lo, hi = int(srow["bonus_scale0"]), int(srow["bonus_scale15"])
+            if lo == hi:
+                return lo / 100.0
+        except Exception:                                 # noqa: BLE001
+            pass
+    rules = _penetration_rules()
+    try:
+        srow = agents.WORLD.get("skills", str(skill_id))
+        if int(srow.get("attribute", -1)) == int(rules["air_magic_attribute"]) \
+                and not _is_attack_skill(skill_id) \
+                and spell_damage_type(skill_id) == int(rules["air_magic_damage_type"]):
+            return float(rules["air_magic"])
+    except Exception:                                     # noqa: BLE001
+        pass
+    return 0.0
+
+
+def strength_base_penetration(rank, skill_id):
+    """Strength's 1 % a rank on an ATTACK SKILL (WIKI, GWW "Strength"): 0.0 on
+    a plain swing, a spell, a pet attack, or with the feature off."""
+    if not BASE_PENETRATION or skill_id is None or not _is_attack_skill(skill_id):
+        return 0.0
+    return combatmath.strength_penetration(
+        rank, float(_penetration_rules().get("strength_per_rank", 0.0)))
+
+
+def player_base_penetration(state, skill_id):
+    """The player's base penetration on THIS hit: the skill's own or
+    Strength's, whichever is larger (never their sum); 0.0 for a plain
+    swing. The rank is the effective one, so a Weakness on the swinger cuts
+    it as it cuts every attribute (SKILLS-WK)."""
+    if not BASE_PENETRATION or skill_id is None:
+        return 0.0
+    rules = _penetration_rules()
+    rank = 0
+    if "strength_attribute" in rules and _is_attack_skill(skill_id):
+        rank = player_rank_of(int(rules["strength_attribute"]), state) or 0
+    return combatmath.armour_penetration(
+        [skill_base_penetration(skill_id), strength_base_penetration(rank, skill_id)])
+
+
+def body_base_penetration(agent, skill_id):
+    """A body's, from its own `attributes` (agent_attributes): a corridor
+    raider at Strength 2 ignores 2 % with its Power Attack, a body with no
+    ranks nothing beyond the skill's own."""
+    if not BASE_PENETRATION or skill_id is None:
+        return 0.0
+    rules = _penetration_rules()
+    rank = 0
+    if "strength_attribute" in rules and _is_attack_skill(skill_id):
+        rank = agent_attributes(agent).get(int(rules["strength_attribute"]), 0)
+    return combatmath.armour_penetration(
+        [skill_base_penetration(skill_id), strength_base_penetration(rank, skill_id)])
+
+
+def strength_banner(state=None):
+    """One clause for the character's door: the Strength rank and what it
+    buys an attack skill; None at rank 0 or with the feature off."""
+    if not BASE_PENETRATION:
         return None
-    p = weapon_armour_penetration(item)
-    if p <= 0.0:
-        return armour
-    return float(int(float(armour) * (1.0 - p) + 0.5))
+    rules = _penetration_rules()
+    if "strength_attribute" not in rules:
+        return None
+    try:
+        rank = int(player_rank_of(int(rules["strength_attribute"]), state) or 0)
+    except Exception:                                     # noqa: BLE001
+        return None
+    if rank <= 0:
+        return None
+    p = combatmath.strength_penetration(rank, float(rules.get("strength_per_rank", 0.0)))
+    return (f"Strength {rank}: an attack skill ignores {p * 100:.0f} % of the target's "
+            f"armour (the larger of that and the skill's own; a hornbow's 10 % on top) "
+            f"[studies/weapons 35]")
 # HIT_COOLDOWN was here and is gone: it dated from when a click dealt a hit
 # directly, and nothing has read it since the swing moved onto ATTACK_INTERVAL.
 # A second, unused rate constant sitting beside the real one is exactly the
@@ -15420,7 +15537,10 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     rank = (weakened_rank(state, PLAYER_AGENT_ID, player_weapon_rank(state))
             if ARMOUR_TERM else None)                      # SKILLS-WK
     # WEAPONS-Q2: the hornbow's 10 % comes off the rating first (wiki step 3)
-    armour = penetrated_armour(agent.get("armor_rating"), agents.PLAYER_WEAPON)
+    # -- on top of the hit's BASE penetration (studies/weapons 35): an attack
+    # skill's own or Strength's 1 % a rank, the larger; a plain swing's is 0.
+    armour = penetrated_armour(agent.get("armor_rating"), agents.PLAYER_WEAPON,
+                               base=player_base_penetration(state, skill_id))
     _prep_scale = 1.0                   # WEAPONS-W2e: the arrow's own armour term
     if exact is not None:
         dealt = float(exact) + bonus_damage
@@ -15591,7 +15711,8 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     if swing and exact is None and not projectile and scythe_held():
         for _aid in scythe_extras(state, target_id, state.get("pos")):
             scythe_extra_hit(send, state, _aid, conn_id, rank, bonus_damage,
-                             damage_mult, now, label)
+                             damage_mult, now, label,
+                             base=player_base_penetration(state, skill_id))
 
     # Property 16 on 0x00A3: prop, TARGET, cause, value -- target before cause,
     # and the value is a FRACTION of the target's maximum health. Both were
@@ -21049,7 +21170,8 @@ def land_swing_on_body(send, state, agent_id, agent, tid, conn_id, bonus=0.0,
     armour = row.get("armor_rating")
     if armour is None:
         armour = creature_armor_rating(row.get("npc") or {})
-    armour = penetrated_armour(armour, (body_weapon_items(agent) or (None,))[0])  # Q2
+    armour = penetrated_armour(armour, (body_weapon_items(agent) or (None,))[0],
+                               base=body_base_penetration(agent, skill_id))  # Q2 + 35
     if ARMOUR_TERM and armour is not None:
         dealt *= armour_multiplier(float(armour))
     # SLICE-H8: the attacker's own weapon range, when it has one.
@@ -21754,6 +21876,9 @@ def apply_party_character(prow, record_set0=True):
         _rb = requirement_banner(agents.PLAYER_WEAPON, "weapon")   # WEAPONS-W4
         if _rb:
             changed.append(_rb)
+        _sb = strength_banner()                                    # studies/weapons 35
+        if _sb:
+            changed.append(_sb)
         if record_set0:                                   # WEAPONS-W9: set 0's record
             WEAPON_SETS[0] = {"lead": str(prow["player_weapon"]),
                               "off": (WEAPON_SETS[0] or {}).get("off")}
@@ -23761,8 +23886,11 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
         # does not meet it); a body with no item stays the physical reading.
         armour = player_armour_at(location, damage_type=body_damage_type(agent),
                                   state=state)
-        # WEAPONS-Q2: a body's hornbow takes its 10 % off the rating first
-        armour = penetrated_armour(armour, (body_weapon_items(agent) or (None,))[0])
+        # WEAPONS-Q2: a body's hornbow takes its 10 % off the rating first --
+        # on top of its skill's base penetration (studies/weapons 35): the
+        # skill's own or the body's Strength, a plain swing's 0.
+        armour = penetrated_armour(armour, (body_weapon_items(agent) or (None,))[0],
+                                   base=body_base_penetration(agent, skill_id))
         if armour is not None:
             # SLICE-H14: Healing Signet's -40 while it is being used, AFTER
             # the capped rating (the wiki's own order; casting_armour_penalty).
@@ -33373,6 +33501,13 @@ def main():
         print("SPELLS: --no-spell-own-type -- every incoming spell reads as elemental "
               "against the armour and a spell's projectile carries the held weapon's "
               "kind [studies/weapons 34 revert]", flush=True)
+    if a.no_base_penetration:
+        global BASE_PENETRATION
+        BASE_PENETRATION = False
+        print("PENETRATION: --no-base-penetration -- no attack skill and no Strength "
+              "rank ignores any of the target's armour, and an incoming Air Magic "
+              "spell meets the full rating; the hornbow's 10 % stays "
+              "[studies/weapons 35 revert]", flush=True)
     if a.no_projectiles:
         global RANGED_DELIVERY
         RANGED_DELIVERY = False

@@ -235,7 +235,7 @@ exposure floor and an abort written down.
 | Run | Steps (each: equip, F11, 20 plain swings on a Master of Damage suit from one spot, F11) | Answers | Sealed predictions |
 |---|---|---|---|
 | **RUN-WEAPONS-1A** martial | axe · scythe on ONE suit · scythe with TWO suits adjacent to the target (3 foes hit, the weapon's maximum -- corrected 2026-09-18, this row said three adjacent, which is four) · spear · spear + shield | Q5, Q6, the 1.5 s clock, scythe wire shape and critical, the spear's projectile and flag | scythe and spear start→start 1.500, word / launch at 0.650; spear `0x00A4` field 7 = 1 — **RUN 2026-09-19, capture `20260919T103604`, scored in section 25: every prediction held; the scythe's target-side term measured at [78, 94) u, the spear parked at 755 u** |
-| **RUN-WEAPONS-1B** bows and casters | shortbow · flatbow · longbow · recurve · hornbow · staff · wand, all from the same marked spot · **then W9's three presses (§29), the staff in a set: the ACTIVE set's key; an EMPTY set's key; a switch INTO the staff's set from a weapon with no 556 word** | ~~Q2~~ (closed at the desk, §32 -- the five clocks now check the wiki's rates against the client's named classes), Q3 (speed per class — same distance, five flights), the 2.025 and 2.7 clocks, the hornbow's 10 % against the 100-armour suit; W9's same-set and empty-set replies and the 41 / 43 on a moved maximum | start→launch 0.9125 / 1.1375 / 1.250 / 0.775; flight ratios 0.59 : 0.88 : 0.59 : 0.40 : 0.59; same-set and empty-set presses answered by NOTHING (the smaller claim); the staff switch's batch carries property 41 then 43 |
+| **RUN-WEAPONS-1B** bows and casters | shortbow · flatbow · longbow · recurve · hornbow · staff · wand, all from the same marked spot · **then W9's three presses (§29), the staff in a set: the ACTIVE set's key; an EMPTY set's key; a switch INTO the staff's set from a weapon with no 556 word** | ~~Q2~~ (closed at the desk, §32 -- the five clocks now check the wiki's rates against the client's named classes), Q3 (speed per class — same distance, five flights), the 2.025 and 2.7 clocks, the hornbow's 10 % against the 100-armour suit; **Strength's 1 % a rank (§35: twenty Power Attacks at the character's Strength on the 60-suit -- at Strength 9 a 15-22 sword's ceiling 22 reads 23)**; W9's same-set and empty-set replies and the 41 / 43 on a moved maximum | start→launch 0.9125 / 1.1375 / 1.250 / 0.775; flight ratios 0.59 : 0.88 : 0.59 : 0.40 : 0.59; same-set and empty-set presses answered by NOTHING (the smaller claim); the staff switch's batch carries property 41 then 43 |
 | **RUN-WEAPONS-2** range | per weapon: stand far, press attack once, let the character walk in; repeat uphill if the Isle allows | Q4 — the distance from shooter to the aim point at the FIRST launch is the range, no free parameter. ~~Q16~~ is **no longer this run's**: §22 answered it from the client's own code (the park threshold has no weapon term), so spend no steps on it | 1004 / 1498 / 1498 / 1273 / 1273; 1248 staff and wand; 1004 spear; the body stands after the first start |
 | **RUN-WEAPONS-3** damage (later, needs the right attributes) | met vs unmet requirement on one weapon; a scythe's criticals; hornbow vs longbow on the 100-armour suit | Q10, Q5's critical, W4's penetration | written when W4 opens |
 
@@ -2061,3 +2061,94 @@ the E5 -- W2's spell half, not started); the rows for the four wire-measured spe
 229 / 230 / 858 have no `skill_effect` row, so their types live in this section and the
 provenance of `[damage_type.table]`, not in content, until a row is written for them); the
 base penetration sources (§32).
+
+## 35. The base penetration sources -- 2026-09-19: the client's own slot, the wiki's two tiers, one wire witness
+
+**What §32 left.** The hornbow's 10 % was the whole penetration term; the base sources --
+Strength's 1 % per rank on attack skills, Penetrating Attack's own -- were WIKI, named and
+unbuilt. Read now, from three places, one of them the tape.
+
+**The rule, WIKI.** GWW "Armor penetration": two tiers. *Base* penetration is "the
+non-stackable, fixed amount of penetration listed in a skill's description"; with more than one
+source "only the highest value is used". Its table: Strength 1 % per rank "when using attack
+skills"; Air Magic spells 25 %, "each one that deals lightning damage"; Penetrating Blow / Chop
+20 %; Penetrating / Sundering Attack 10 %; Spear of Lightning 25 %; the Ritualist's Cruel Was
+Daoshen (10), Destructive Was Glaive (20) and Sundering Weapon (10). *Bonus* penetration ("armor
+penetration +20%") "does stack (adding them together) and add[s] to the largest base": the
+hornbow's 10 %, a Sundering upgrade's 20 % at a 10-20 % chance, Judge's Insight's +20 %,
+Warrior's Might. GWW "Strength": each rank 1 % on attack skills "that don't already have a
+higher amount" -- Penetrating Attack "can still be affected with 11 or more Strength"; "does
+not apply to pet attacks". GWW "Armor calculation" step 3: the rating × (1 − p), rounded (its
+own examples 60.75 → 61, 98.25 → 98), the Special step (a critical, Healing Signet) after it.
+The wiki's own anomaly ("sometimes it subtracts slightly more") stays unmodelled.
+
+**The client's own slot, CORROBORATED.** The scan that found no damage-type column (§34)
+found this one. The 164-byte record's bonus slot (`+0x64` / `+0x68`) holds the wiki's
+percentage with EQUAL endpoints on every skill the table names: 398 / 1191 hold 10 / 10 (args
+= 2, bit clear), 339 / 1136 hold 20 / 20, 1551 holds 25 / 25 (bit set -- formatted into its
+description), 1218 / 1732 / 2148 hold 10 / 20 / 10, the PvP copies the same: eight of eight
+against the page's table, and the same on all five client snapshots in the vault (2026-04-30 ..
+2026-09-01) while 339 / 1136's SCALE moved 5..20 → 10..25 with the 2026-09-01 build (the
+page's current number; the pinned 38797 reads the older). The slot is a general hidden-constant
+slot (Final Thrust's 50 is a health threshold, Distracting Shot's 20 is seconds), so the content
+row names its meaning -- `bonus_scale_means = "Armor penetration %"`, the Final Thrust pattern.
+The Air spells do NOT carry theirs -- Lightning Orb's slot holds 1800, Javelin's 1..10,
+Lightning Strike's and Chain Lightning's 0 (Lightning Hammer's and Invoke Lightning's do hold
+25) -- so that tier is the wiki's attribute rule, keyed on the skill's attribute (8) and its own
+type (§34's lightning).
+
+**The wire's one witness, OBSERVED (Air Magic).** studies/skills §50.1 already had it and
+did not name it as a penetration measurement: Lightning Orb onto a PvP Warrior's five 80-armour
+pieces lands exactly its tooltip (101 × 9) and 2^(60/40) of it bare (286 × 2) -- an effective
+60 from 80, which is 80 × 0.75 and nothing else; Javelin 50 / 140, the same step inside
+truncation. Nothing more anywhere: `aw_apcensus` over every live connection joined the
+player's attack-skill announces (`0x00A0` prop 50 and the `0x00E3` ack) to the damage words
+its cause landed and to the player's Strength (`0x003B`). **Strength's term is UNWITNESSED:**
+no live tape lands a Warrior's attack skill on a target of known rating -- the isle's
+engagement blocks were plain swings (0 casts in any block), the RB2 Warrior at Strength 8
+pressed none at a foe, JARIN's Power Attacks (× 11) hit creatures of unknown rating with no
+`0x003B` on the tape; none of the five penetration skills was ever announced by a player; the
+Assassin's dagger attacks at the Master of Damage (775 / 780 / 782, `20260917T160915` /
+`T224104`) carry no Strength.
+
+**What ships.** `combatmath.armour_penetration(base, bonus)` -- the largest of the base tier
+plus the sum of the bonus tier -- `strength_penetration(rank)`, `penetrated_rating(armour, p)`
+(the wiki's step 3; a .5 up is ours). Content: `[armour_penetration.rules]` (Strength 17 at
+0.01 a rank, Air Magic 8 at 0.25 on damage type 4), rows 398 / 1191 / 339 / 1136 / 1551 (`+
+Damage` with the slot's label) and rows 229 / 230 (`Lightning damage`, `damage_type = 4`, the
+wire's kind from §34 -- so §34's "rows for the four wire-measured spells" is half closed; 186 /
+858 stay). `authsrv.skill_base_penetration(skill_id)` (the row's slot, else the Air Magic rule),
+`strength_base_penetration(rank, skill_id)` (attack skills only), `player_base_penetration
+(state, skill_id)` and `body_base_penetration(agent, skill_id)` (the larger of the two, never
+the sum; the EFFECTIVE Strength, so a Weakness on the swinger cuts it as it cuts every rank).
+`penetrated_armour(armour, item, base=)` composes the tiers at every rating read: the player's
+hit (a plain swing 0; Power Attack at the seed's Strength 9 lands on AR 60 as on 55; Penetrating
+Blow as on 48, its own 20 beating the 9; Penetrating Attack as on 54 with a longbow and 48 with
+a hornbow, the 10 % plus the bow's 10 %), the scythe's extras, a body's swing on the player and
+on a body (a corridor raider at Strength 2: 2 %), and the incoming spell -- `spell_armour_for`
+takes the spell's own base off BEFORE the taker's casting penalty (wiki step 4): an Orb onto the
+pieces' 25 meets 19, onto retail's 80 the tape's 60. `SCALE_MEANS_DAMAGE` gains the three
+elemental labels beside "Fire damage" so a body's Orb deals its scale. The character's door
+names the rank (`Strength 9: an attack skill ignores 9 % of the target's armour ...`).
+`--no-base-penetration` reverts (the hornbow's bonus stays).
+
+**Tests.** `test_weapons.py` section 23 (11 checks, floor 203 → 208; a vault run 222 -- the six
+that read the skills table are vault-only): the rules row and the labels on the seven rows; the
+tiers (Chop's 20 over Strength 9, Strength 11 over Penetrating Attack's 10 -- the page's own
+sentence -- never their sum, the bonus on top); the wiki's worked examples 61 / 98, 80 → 60,
+and the tape's arithmetic (101 = the tooltip because 60 IS the baseline, 286 / 101 = 2^(60/40)
+within 1.5 %); the composition; the skills' numbers; the slot read back from the table; through
+the real `hit_enemy` at Strength 9 on AR 60: 60 / 55 / 48 / 54 / 48; the revert; the bodies; the
+incoming Orb and Javelin at 19; the source locks on the five sites, the door and the flag.
+`test_skilldamage` 67, `test_mechanics` 246, `test_pools` 132, `test_agentlife` 551,
+`test_playerswing` 191, `test_daggers` 103, `test_effects` 85, `test_content`, `test_srclint`
+green.
+
+**Left, and named.** The BONUS side beyond the hornbow: the client's item word **574 `Armor
+penetration`** (handler `0x009241AB`, text 2373 -- the Sundering upgrade's "+N % (Chance: M %)")
+sits on no corpus item, and Judge's Insight (267) has no row; neither is modelled. Not modelled
+either: the Ritualist's ashes (a bundle), Spear of Lightning's line AoE and type conversion,
+Javelin's interrupt and line, the wiki's "slightly more" anomaly. RUN-WEAPONS-1B can witness
+Strength's term with one attack-skill block on the 60-suit: at Strength 9 a 15-22 sword's
+ceiling 22 reads 23 under Power Attack (22 × 2^(5/40) = 23.99, truncated) where 22 is the ceiling
+without it -- twenty presses, the maximum is the measurement; written into 1B's row (§6).

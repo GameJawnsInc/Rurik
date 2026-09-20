@@ -23,7 +23,7 @@ import agents  # noqa: E402
 import authsrv  # noqa: E402
 import combatmath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=203)   # the BARE-MACHINE number: 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=208)   # the BARE-MACHINE number: 208 = 203 + 5 (section 23, base armour penetration, 2026-09-19; a vault run gives 222 -- the six checks that read the skills table are vault-only); before that 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
 check = LEDGER.ok
 
 LEGACY_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
@@ -2333,8 +2333,8 @@ def section_bow_classes():
         authsrv.BOW_CLASSES = True
         src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
         sargs = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
-        check('armour = penetrated_armour(agent.get("armor_rating"), agents.PLAYER_WEAPON)' in src
-              and "armour = penetrated_armour(armour, (body_weapon_items(agent) or (None,))[0])" in src
+        check('armour = penetrated_armour(agent.get("armor_rating"), agents.PLAYER_WEAPON,' in src
+              and "armour = penetrated_armour(armour, (body_weapon_items(agent) or (None,))[0]," in src
               and 'arm = penetrated_armour(foe.get("armor_rating"), agents.PLAYER_WEAPON)' in src
               and "_rate = weapon_rate_key(agents.PLAYER_WEAPON)" in src
               and '"--no-bow-classes"' in sargs,
@@ -2428,6 +2428,183 @@ def section_spell_own_type():
          authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE, authsrv.SPELL_OWN_TYPE) = saved
 
 
+def section_base_penetration():
+    print("\n23. base armour penetration: the largest base source, the bonus on top, at every site")
+    cm = combatmath
+    saved = (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+             authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,
+             authsrv.BASE_PENETRATION, agents.item_template, authsrv.critical_rate)
+
+    def close(a, b):
+        return abs(float(a) - float(b)) < 1e-9
+
+    try:
+        rules = agents.WORLD.get("armour_penetration", "rules")
+        check(int(rules["strength_attribute"]) == 17 and close(rules["strength_per_rank"], 0.01)
+              and int(rules["air_magic_attribute"]) == 8 and int(rules["air_magic_damage_type"]) == 4
+              and close(rules["air_magic"], 0.25)
+              and cm.BASE_PENETRATION_MEANS == "Armor penetration %"
+              and authsrv.SCALE_MEANS_DAMAGE.get("Lightning damage") == "standalone"
+              and "Lightning damage" in authsrv.ARMOUR_RESPECTING_MEANS
+              and all(agents.WORLD.get("skill_effect", str(s)).get("bonus_scale_means")
+                      == "Armor penetration %" for s in (398, 1191, 339, 1136, 1551))
+              and int(agents.WORLD.get("skill_effect", "229")["damage_type"]) == 4
+              and agents.WORLD.get("skill_effect", "230")["scale_means"] == "Lightning damage",
+              "content: the rules row -- Strength (17) 1 % a rank, Air Magic (8) 25 % on a "
+              "lightning (4) spell -- and the slot's label on the five attack skills' rows; "
+              "'Lightning damage' is a standalone damage label that respects armour; the Orb's "
+              "and the Javelin's rows carry the wire's lightning")
+        check(close(cm.armour_penetration([0.09, 0.20], [0.10]), 0.30)
+              and close(cm.armour_penetration([0.11, 0.10]), 0.11)
+              and close(cm.armour_penetration([0.09, 0.10]), 0.10)
+              and close(cm.armour_penetration([], [0.10]), 0.10)
+              and close(cm.armour_penetration([0.0, None], []), 0.0)
+              and close(cm.armour_penetration(), 0.0)
+              and close(cm.strength_penetration(9), 0.09) and cm.strength_penetration(0) == 0.0
+              and cm.strength_penetration(None) == 0.0 and close(cm.strength_penetration(20), 0.20),
+              "the wiki's tiers: the LARGEST base (Penetrating Chop's 20 over Strength 9's 9; "
+              "Strength 11 over Penetrating Attack's 10, the page's own sentence; 10 over 9), "
+              "never their sum, plus every bonus (the hornbow's 10 on top); 1 % a Strength rank")
+        check([cm.penetrated_rating(a, p) for a, p in
+               ((81, 0.25), (131, 0.25), (80, 0.25), (100, 0.10), (60, 0.09), (60, 0.0), (45, 0.20))]
+              == [61.0, 98.0, 60.0, 90.0, 55.0, 60, 36.0]
+              and cm.penetrated_rating(None, 0.25) is None
+              and close(100.0 * 2.0 ** ((60.0 - cm.penetrated_rating(80, 0.25)) / 40.0), 100.0)
+              and abs(2.0 ** (60.0 / 40.0) - 286.0 / 101.0) < 0.015,
+              "the wiki's step 3: 81 x 0.75 -> 61 and 131 x 0.75 -> 98 (its own worked examples), "
+              "80 -> 60 under an Orb, 100 -> 90, 60 -> 55 at Strength 9 (54.6 up), p = 0 untouched, "
+              "None None -- and the tape's Orb: onto 80 it reads its tooltip because 60 IS the "
+              "baseline, and 286 / 101 bare is 2^(60/40) within 1.5 % (studies/skills 50.1)")
+        item = agents.item_template
+        sb = item("starter_bow")
+        plain = [m for m in sb["modifiers"] if (int(m) >> 20) & 0x3FF != 609]
+        horn = dict(sb, modifiers=plain + [(609 << 20) | (4 << 8)])
+        agents.item_template = (lambda key, _it=item: horn if key == "test_hornbow" else _it(key))
+        check(authsrv.penetrated_armour(60.0, None, base=0.09) == 55.0
+              and authsrv.penetrated_armour(60.0, horn, base=0.10) == 48.0
+              and authsrv.penetrated_armour(60.0, sb, base=0.10) == 54.0
+              and authsrv.penetrated_armour(60.0, horn) == 54.0
+              and authsrv.penetrated_armour(60.0, None) == 60.0
+              and authsrv.penetrated_armour(None, None, base=0.2) is None
+              and authsrv.skill_base_penetration(99999) == 0.0
+              and authsrv.skill_base_penetration(None) == 0.0
+              and authsrv.strength_base_penetration(9, None) == 0.0
+              and authsrv.player_base_penetration({}, None) == 0.0
+              and authsrv.body_base_penetration({}, None) == 0.0,
+              "penetrated_armour composes the tiers: a 9 % base alone 60 -> 55, a 10 % base under a "
+              "hornbow 48 (the bonus stacks), under a longbow 54, the hornbow alone 54 as before, "
+              "nothing 60, None None; no skill, an unknown skill and a plain swing carry no base")
+        # the skills' own numbers and the client's slot -- the vault's skills table
+        try:
+            _ = agents.WORLD.get("skills", "398")["bonus_scale0"]
+            have_table = True
+        except Exception:                                                  # noqa: BLE001
+            have_table = False
+            LEDGER.skip("section 23", "the vault's skills table is absent -- 6 checks (the "
+                        "skills' own numbers, the slot, the hits, the revert, the bodies, the "
+                        "incoming Orb)")
+        if have_table:
+            got = {s: authsrv.skill_base_penetration(s)
+                   for s in (398, 1191, 339, 1136, 1551, 229, 230, 322, 194, 336, 433)}
+            check(got == {398: 0.10, 1191: 0.10, 339: 0.20, 1136: 0.20, 1551: 0.25,
+                          229: 0.25, 230: 0.25, 322: 0.0, 194: 0.0, 336: 0.0, 433: 0.0},
+                  "a skill's own base: Penetrating / Sundering Attack 10 %, Penetrating Blow / "
+                  "Chop 20 %, Spear of Lightning 25 %, Lightning Orb and Javelin 25 % (the Air "
+                  "Magic rule on their lightning type); Power Attack, Flare, Executioner's Strike "
+                  "and Kindle Arrows (fire) none", str(got))
+
+            def slot(s):
+                r = agents.WORLD.get("skills", str(s))
+                return (int(r["bonus_scale0"]), int(r["bonus_scale15"]), int(r["skill_arguments"]))
+
+            check({s: slot(s) for s in (398, 1191, 339, 1136, 1551)}
+                  == {398: (10, 10, 2), 1191: (10, 10, 2), 339: (20, 20, 2), 1136: (20, 20, 2),
+                      1551: (25, 25, 6)}
+                  and slot(229)[0] == 1800 and int(agents.WORLD.get("skills", "229")["attribute"]) == 8
+                  and int(agents.WORLD.get("skills", "230")["attribute"]) == 8,
+                  "and the client's own record holds the wiki's number in the bonus slot with equal "
+                  "endpoints on five of five (bit clear on the four, set on the spear's), and NOT "
+                  "on Lightning Orb (1800) -- its 25 % is the attribute (8) rule")
+            # through the real hit_enemy at the seed's Strength 9
+            authsrv.critical_rate = lambda rank: 0.0
+
+            def dealt(key, skill_id=None, armour=60.0, roll=(20, 20)):
+                authsrv.apply_party_character({"player_weapon": key})
+                authsrv.PLAYER_SWING_DAMAGE = roll
+                st = {"agents": {FOE: _foe(armour)}, "pos": (0.0, 0.0)}
+                hp = st["agents"][FOE]["health"]
+                rank = authsrv.player_weapon_rank(st) or 0
+                authsrv.hit_enemy(lambda *a, **k: None, st, FOE, 1, armed=True,
+                                  skill_strike=skill_id is not None, skill_id=skill_id)
+                return hp - st["agents"][FOE]["health"], rank
+
+            s9 = authsrv.player_rank_of(17)
+            d_plain, r = dealt("starter_bow")
+            d_power, _ = dealt("starter_bow", 322)
+            d_blow, _ = dealt("starter_bow", 339)
+            d_pen_long, _ = dealt("starter_bow", 398)
+            d_pen_horn, _ = dealt("test_hornbow", 398)
+            sl = combatmath.attack_strength(r)
+
+            def want(ar):
+                return max(0.0, round(20.0 * 2.0 ** ((sl - ar) / 40.0)))
+
+            check(s9 == 9 and d_plain == want(60.0) and d_power == want(55.0)
+                  and d_blow == want(48.0) and d_pen_long == want(54.0) and d_pen_horn == want(48.0)
+                  and d_power > d_plain and d_blow > d_power,
+                  "through the real hit_enemy at the seed's Strength 9 on AR 60: a plain swing lands "
+                  "as on 60, Power Attack as on 55 (Strength's 9 %), Penetrating Blow as on 48 (its "
+                  "own 20 % beats the 9), Penetrating Attack as on 54 with a longbow and 48 with a "
+                  "hornbow (its 10 % plus the bow's 10 %)",
+                  f"rank {r}: plain {d_plain} / power {d_power} / blow {d_blow} / pen {d_pen_long} / "
+                  f"pen+horn {d_pen_horn}; want {want(60.0)} / {want(55.0)} / {want(48.0)} / "
+                  f"{want(54.0)} / {want(48.0)}")
+            authsrv.BASE_PENETRATION = False
+            d_power_off, _ = dealt("starter_bow", 322)
+            d_pen_horn_off, _ = dealt("test_hornbow", 398)
+            off = (authsrv.skill_base_penetration(339), authsrv.player_base_penetration({}, 322),
+                   authsrv.body_base_penetration({"attributes": [[17, 8]]}, 322),
+                   authsrv.spell_armour_for(229), authsrv.strength_banner())
+            authsrv.BASE_PENETRATION = True
+            check(d_power_off == want(60.0) and d_pen_horn_off == want(54.0)
+                  and off == (0.0, 0.0, 0.0, 25.0, None),
+                  "--no-base-penetration: Power Attack lands as on 60 and Penetrating Attack under "
+                  "a hornbow as on 54 (the bonus alone, the pre-35 reading); every base reads 0, "
+                  "an Orb meets the full rating, no banner", str(off))
+            check(close(authsrv.body_base_penetration({"attributes": [[17, 8]]}, 322), 0.08)
+                  and close(authsrv.body_base_penetration({"npc": {"attributes": [[17, 2]]}}, 322), 0.02)
+                  and authsrv.body_base_penetration({}, 322) == 0.0
+                  and close(authsrv.body_base_penetration({"attributes": [[17, 8]]}, 339), 0.20)
+                  and authsrv.body_base_penetration({"attributes": [[17, 8]]}, 194) == 0.0
+                  and close(authsrv.body_base_penetration({"attributes": [[17, 8]]}, 229), 0.25),
+                  "a body's base: its own Strength 8 gives its Power Attack 8 %, a raider row's 2 "
+                  "gives 2 %, no ranks 0; Penetrating Blow's 20 beats the 8; a Flare none and an "
+                  "Orb the attribute's 25 whatever the ranks")
+            check(authsrv.spell_armour_for(229) == 19.0 and authsrv.spell_armour_for(230) == 19.0
+                  and authsrv.spell_armour_for(194) == 25.0
+                  and authsrv.skill_damage(229, 12)[1] == "standalone"
+                  and "Strength 9: an attack skill ignores 9 %" in (authsrv.strength_banner() or ""),
+                  "an incoming Lightning Orb or Javelin resolves against the pieces' 25 as 19 "
+                  "(25 x 0.75 = 18.75, up), Flare against 25 as before; the Orb's row deals its "
+                  "scale standalone; the door names the Strength rank",
+                  f"{authsrv.spell_armour_for(229)} / {authsrv.strength_banner()}")
+        # the source locks
+        src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+        sargs = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
+        check(src.count("base=player_base_penetration(state, skill_id))") == 2
+              and src.count("base=body_base_penetration(agent, skill_id))") == 2
+              and "return penetrated_armour(got, None, base=skill_base_penetration(skill_id))" in src
+              and "_sb = strength_banner()" in src
+              and '"--no-base-penetration"' in sargs,
+              "the base rides every rating read: the player's hit and the scythe's extras, a body's "
+              "swing on the player and on a body, the incoming spell; the door's clause; the revert "
+              "flag exists")
+    finally:
+        (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+         authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,
+         authsrv.BASE_PENETRATION, agents.item_template, authsrv.critical_rate) = saved
+
+
 def main():
     section_table()
     section_skills()
@@ -2451,6 +2628,7 @@ def main():
     section_half_recharge()
     section_bow_classes()
     section_spell_own_type()
+    section_base_penetration()
     return LEDGER.verdict()
 
 

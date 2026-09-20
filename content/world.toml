@@ -2280,3 +2280,144 @@ class 0, 2 or 4 bow. The penetration is applied as the wiki's step 3 -- the targ
 times 0.9, to the nearest whole number (a .5 up, ours), before the critical's 20 comes off \
 -- and is UNMEASURED: no observing player held a hornbow on any tape. The anomaly the wiki \
 records ("sometimes it subtracts slightly more") is not modelled."""
+
+
+# ---- BASE ARMOUR PENETRATION (2026-09-19, studies/weapons/PLAN.md 35) -----------------
+# The two tiers (the largest BASE source, every BONUS on top), read by
+# combatmath.armour_penetration; the hornbow's bonus is [bow_class.rules]'s.
+[armour_penetration.rules]
+strength_attribute = 17        # Strength, the client's s_attrib id (attribtable.py, build 38797)
+strength_per_rank = 0.01       # 1 % a rank, on ATTACK SKILLS only (never a plain swing or a pet)
+air_magic_attribute = 8        # Air Magic's id (attribtable.py; Lightning Orb 229's `attribute`)
+air_magic_damage_type = 4      # lightning, [damage_type.table]
+air_magic = 0.25               # every Air Magic spell that deals lightning damage
+
+[armour_penetration.rules.provenance]
+source = "wiki"
+page = """GWW "Armor penetration" (read 2026-09-19): base penetration is "the non-stackable, \
+fixed amount of penetration listed in a skill's description ... If there is more than one \
+source, only the highest value is used"; its table: Strength "1% per rank -- When using attack \
+skills", Air Magic spells "25% -- Each one that deals lightning damage", Penetrating Blow / \
+Chop 20%, Penetrating / Sundering Attack 10%, Spear of Lightning 25%; bonus penetration "does \
+stack (adding them together) and add[s] to the largest base armor penetration". GWW "Strength": \
+"each point of Strength gives you 1% armor penetration" on attack skills "that don't already \
+have a higher amount" -- Penetrating Attack "can still be affected with 11 or more Strength"; \
+"does not apply to pet attacks". GWW "Armor calculation" step 3: the rating x (1 - p), rounded \
+(its examples 60.75 -> 61, 98.25 -> 98), the Special step (a critical) after it."""
+verified = """WIKI for every number; the attribute ids are the client's own (attribtable.py, the \
+ids [player.attributes] and the hero rows use; Air Magic 8 is 229's `attribute` in the skills \
+table). Air Magic's 25 % is OBSERVED once on the wire (studies/skills 50.1, 20260917T090355): \
+Lightning Orb onto a PvP Warrior's five 80-armour pieces reads exactly its tooltip (101 x 9) and \
+2^(60/40) of it bare (286 x 2) -- an effective 60 from 80, which is 80 x 0.75; Lightning \
+Javelin 50 x 6 / 140 x 1 the same step. Strength's term is UNWITNESSED: no live tape lands a \
+Warrior's attack skill on a target of known rating (the isle's engagement blocks were plain \
+swings, 0 casts; the RB2 Warrior at Strength 8 pressed none at a foe; the JARIN Warrior's \
+Power Attacks hit creatures of unknown rating with no 0x003B on the tape). The per-skill \
+numbers are corroborated by the client's own record slot (the skill_effect rows below)."""
+
+# The five attack skills whose penetration the client's own record carries: the s_skill
+# bonus slot holds the wiki's percentage with EQUAL endpoints (the bit-clear constant
+# shape skill_flat_constant reads for Rush's 25 and Final Thrust's 50; Spear of Lightning's
+# has the bit set and the same equal endpoints), on every client snapshot in the vault.
+[skill_effect.398]
+scale_means = "+ Damage"
+bonus_scale_means = "Armor penetration %"
+[skill_effect.398.provenance]
+source = "wiki"
+page = 'GWW, "Penetrating Attack", {{Skill infobox}} + {{Skill progression}}, read 2026-09-19'
+verified = """studies/weapons/PLAN.md 35. Wiki: "Bow Attack. If Penetrating Attack hits, you \
+strike for +5...25 damage and this attack has 10% armor penetration"; var1 `+ Damage` 5->25; \
+`causes1 = Armor Penetration`. Client (build 38797): id 398, type_code 14, attribute 25 \
+(Marksmanship), 10 energy, 3/4 s activation, 4 s recharge, scale 5->25 with args = 2, and the \
+bonus slot 10 / 10 with its bit CLEAR -- the wiki's 10 sitting in the record (the same on the \
+2026-04-30 .. 2026-09-01 snapshots), read by skill_base_penetration as the attack's BASE \
+penetration; Strength's 1 % a rank replaces it only above 10 (WIKI). Never announced by a \
+player on any live tape."""
+
+[skill_effect.1191]
+scale_means = "+ Damage"
+bonus_scale_means = "Armor penetration %"
+[skill_effect.1191.provenance]
+source = "wiki"
+page = 'GWW, "Sundering Attack", {{Skill infobox}} + {{Skill progression}}, read 2026-09-19'
+verified = """Penetrating Attack's duplicate (the page's own `special = Duplicate`): "Bow Attack. \
+If Sundering Attack hits, you strike for +5...25 damage and this attack has 10% armor \
+penetration". Client (38797): id 1191, type_code 14, attribute 25, 10 energy, 3/4 s, 4 s \
+recharge, scale 5->25 args = 2, bonus 10 / 10 bit clear. Never announced on any live tape."""
+
+[skill_effect.339]
+scale_means = "+ Damage"
+bonus_scale_means = "Armor penetration %"
+[skill_effect.339.provenance]
+source = "wiki"
+page = 'GWW, "Penetrating Blow", {{Skill infobox}} + {{Skill progression}}, read 2026-09-19'
+verified = """Wiki: "Axe Attack. If this attack hits, you strike for +10...25 damage. This axe \
+attack has 20% armor penetration"; var1 `+ Damage` 10->25; 5 adrenaline ("exactly 120 units \
+... 4 strikes and 20 units"). Client (38797): id 339, type_code 14, attribute 18 (Axe Mastery), \
+adrenaline 120 units, scale 5->20 with args = 2 -- the pinned build's endpoints sit 5 below \
+the page's at both ends, and the 2026-09-01 snapshot reads the page's 10->25: the scale moved \
+with a later build, the server deals the build it runs (skill_scale_value); the bonus slot \
+20 / 20 bit clear on every snapshot -- the wiki's 20. Never announced on any live tape."""
+
+[skill_effect.1136]
+scale_means = "+ Damage"
+bonus_scale_means = "Armor penetration %"
+[skill_effect.1136.provenance]
+source = "wiki"
+page = 'GWW, "Penetrating Chop", {{Skill infobox}} + {{Skill progression}}, read 2026-09-19'
+verified = """Penetrating Blow's duplicate: "Axe Attack. If this attack hits, you strike for \
++10...25 damage. This axe attack has 20% armor penetration"; 120 adrenaline units. Client \
+(38797): id 1136, type_code 14, attribute 18, scale 5->20 args = 2 (10->25 on the 2026-09-01 \
+snapshot, as 339's), bonus 20 / 20 bit clear on every snapshot. Never announced on any tape."""
+
+[skill_effect.1551]
+scale_means = "+ Damage"
+bonus_scale_means = "Armor penetration %"
+[skill_effect.1551.provenance]
+source = "wiki"
+page = 'GWW, "Spear of Lightning", {{Skill infobox}} + {{Skill progression}}, read 2026-09-19'
+verified = """Wiki: "Spear Attack. Strikes all foes between you and your target. If this attack \
+hits, it deals +10...20 lightning damage. This attack has 25% armor penetration"; var1 \
+`+ Lightning damage` 10->20. Client (38797): id 1551, type_code 14, attribute 37 (Spear \
+Mastery), 5 energy, 6 s recharge, scale 8->20 with args = 6 (10->20 on the 2026-09-01 \
+snapshot), the bonus slot 25 / 25 with its bit SET -- equal endpoints, the same number at \
+every rank, formatted into the description. NOT modelled, said here: the line-shaped AoE \
+("strikes all foes between you and your target") and the attack's conversion to lightning \
+(the page's Notes: the whole attack deals lightning; an attack skill's shot keeps the \
+weapon's kind on this server, section 34) -- the bonus lands as `+ Damage`."""
+
+# The two Air Magic spells the wire measured (section 34's kinds, studies/skills 50.1's
+# armour) -- their 25 % is the [armour_penetration.rules] attribute rule, keyed on the
+# skills table's attribute 8 and this row's own type; the record's bonus slot does NOT
+# carry it (229's holds 1800, 230's 1..10).
+[skill_effect.229]
+scale_means = "Lightning damage"
+damage_type = 4                # lightning ([damage_type.table]): the 0x00A7 kind on 27 of 27 arrivals (section 34)
+[skill_effect.229.provenance]
+source = "wiki"
+page = 'GWW, "Lightning Orb", {{Skill infobox}} + {{Skill progression}}, read 2026-09-19'
+verified = """studies/weapons/PLAN.md 34-35. Wiki: "Spell. Send out a Lightning Orb that strikes \
+target foe for 10...100 lightning damage. This spell has 25% armor penetration"; var1 \
+`Lightning damage` 10->100; the page's own ids 229 (and 562, monster only). Client (38797): id \
+229, type_code 5, attribute 8 (Air Magic), 15 energy (10 on the 2026-09-01 snapshot, the \
+page's), 2 s activation, 5 s recharge, scale 10->100 args = 2, projectile 403, impact 404. \
+OBSERVED on the wire: its projectile arrives as kind 4 under an earth staff, a fire staff and \
+a lightning wand (27 of 27, section 34); onto a PvP Warrior's 80-armour pieces it lands exactly \
+its tooltip and 2^(60/40) of that bare (studies/skills 50.1, 20260917T090355: 101 x 9, 286 x \
+2) -- the 25 % (80 -> 60) and the elemental rating both. No shipped bar carries it; the row \
+is what lets a body's cast deal it and resolve against the taker's penetrated rating."""
+
+[skill_effect.230]
+scale_means = "Lightning damage"
+damage_type = 4                # lightning: the 0x00A7 kind on 15 of 15 arrivals (section 34)
+[skill_effect.230.provenance]
+source = "wiki"
+page = 'GWW, "Lightning Javelin", {{Skill infobox}} + {{Skill progression}}, read 2026-09-19'
+verified = """Wiki: "Spell. Send out a Lightning Javelin that strikes for 15...50 lightning \
+damage if it hits. Lightning Javelin interrupts attacking foes. This spell has 25% armor \
+penetration and strikes all foes between you and your target"; var1 `Lightning damage` \
+15->50; `aoe = linear`. Client (38797): id 230, type_code 5, attribute 8, 5 energy, 1 s \
+activation, 5 s recharge, scale 15->50 args = 2, aoe_range 100 (the line), projectile 405, \
+the bonus slot 1->10 (unnamed here). OBSERVED: kind 4 on 15 of 15 arrivals (section 34); onto \
+the same Warrior 50 x 6 armoured and 140 x 1 bare, 2^(60/40) inside truncation (50.1). NOT \
+modelled, said here: the interrupt and the line AoE -- one target, its damage."""

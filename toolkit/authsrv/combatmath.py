@@ -797,3 +797,62 @@ def spell_damage_type_of(row):
         if got is not None:
             return got
     return None
+
+
+# ---- BASE ARMOUR PENETRATION (2026-09-19, studies/weapons/PLAN.md 35) ----------
+#
+# WIKI (GWW "Armor penetration"): two tiers. BASE penetration is "the
+# non-stackable, fixed amount of penetration listed in a skill's description";
+# with more than one source "only the highest value is used". Its sources:
+# Strength, "1% per rank -- When using attack skills" (GWW "Strength": on
+# attack skills "that don't already have a higher amount" -- Penetrating
+# Attack "can still be affected with 11 or more Strength"; never a pet attack,
+# never a plain swing); Air Magic spells, "25% -- Each one that deals
+# lightning damage"; Penetrating Blow / Chop 20 %; Penetrating / Sundering
+# Attack 10 %; Spear of Lightning 25 %; the Ritualist's held ashes and
+# Sundering Weapon. BONUS penetration ("armor penetration +20%") "does stack
+# (adding them together) and add[s] to the largest base": the hornbow's 10 %
+# ([bow_class.rules]), a Sundering upgrade's 20 % at its chance, Judge's
+# Insight's 20 %. GWW "Armor calculation" step 3: the rating times (1 - p),
+# rounded -- its own examples 81 x 0.75 = 60.75 -> 61 and 131 x 0.75 = 98.25
+# -> 98 -- then the Special step (a critical's 20, Healing Signet's 40) after.
+#
+# THE CLIENT'S OWN SLOT carries the per-skill numbers: the s_skill record's
+# bonus slot holds the wiki's percentage with equal endpoints on 398 and 1191
+# (10 / 10, bit clear), 339 and 1136 (20 / 20, bit clear), 1551 (25 / 25, bit
+# set), 1218 / 1732 / 2148 (10 / 20 / 10) and the PvP copies -- CORROBORATED,
+# the record and the page agreeing on eight of eight, on every snapshot in
+# the vault (the scale endpoints of 339 / 1136 moved 5..20 -> 10..25 with the
+# 2026-09-01 build; the slot did not). The Air spells do NOT carry theirs
+# (Lightning Orb's slot holds 1800, Lightning Strike's 0): that tier is the
+# attribute rule, OBSERVED once on the wire -- Lightning Orb onto a PvP
+# Warrior's five 80-armour pieces reads exactly its tooltip and 2^(60/40) of
+# it bare (studies/skills 50.1: 101 x 9, 286 x 2), an effective 60 from 80.
+# STRENGTH'S TERM IS UNWITNESSED: no live tape lands a Warrior's attack skill
+# on a target of known rating (the isle's engagement blocks were plain swings,
+# 0 casts; the RB2 Warrior at Strength 8 pressed none at a foe), and none of
+# the five penetration skills was ever announced by a player.
+BASE_PENETRATION_MEANS = "Armor penetration %"   # the bonus_scale_means naming the slot
+
+
+def armour_penetration(base=(), bonus=()):
+    """The fraction of the rating a hit ignores: the LARGEST base source plus
+    every bonus source (WIKI). An empty tier is 0; None entries are 0."""
+    b = max([0.0] + [float(x) for x in base if x])
+    return b + sum(float(x) for x in bonus if x)
+
+
+def strength_penetration(rank, per_rank=0.01):
+    """Strength's base penetration at `rank` on an attack skill: 1 % a rank."""
+    return max(0, int(rank or 0)) * float(per_rank)
+
+
+def penetrated_rating(armour, penetration):
+    """The wiki's step 3: the rating times (1 - p), to the nearest whole
+    number (a .5 up, ours). None stays None; p <= 0 leaves it alone."""
+    if armour is None:
+        return None
+    p = float(penetration or 0.0)
+    if p <= 0.0:
+        return armour
+    return float(int(float(armour) * (1.0 - p) + 0.5))
