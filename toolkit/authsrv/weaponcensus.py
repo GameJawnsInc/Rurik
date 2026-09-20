@@ -66,6 +66,7 @@ without a vault; the CLI needs the live corpus.
 """
 import argparse
 import collections
+import math
 import os
 import statistics
 import struct
@@ -350,6 +351,51 @@ def skill_shots(s2c):
                            if hit else None),
             "close46": any(abs(c - t) < 0.05 for c in closes.get(agent, ()))})
     return rows
+
+
+OWN_POSITION = 0x0029            # [agent, (x, y), ..]: a body's own move-to point
+MOVE_TO = 0x002A                 # [agent, (x, y), 0, 0, TARGET]: a walk to where TARGET stands
+MOVED = (0x0020, 0x0028, 0x002B)  # a spawn, a halt, a speed change: the agent's own motion
+
+
+def spell_speeds(s2c):
+    """One row per SPELL shot (studies/weapons 36): the aim's distance from the
+    shooter over the launch's own flight is the projectile's speed. The
+    shooter's position is its latest own 0x0029 point, or the destination of
+    a 0x002A walking somebody to it (the owner's own position on a tape that
+    carries no 0x0029 for the player) -- and it HOLDS until the shooter's own
+    next movement message (a 0x002A of its own, a halt, a speed change), which
+    is what lets a standing caster's position stay good for a minute (the
+    Master of Lightning's, 40..130 s old) while a walker's goes stale the
+    instant it walks. A shot with no position is reported with speed None."""
+    rows = {}
+    for r in skill_shots(s2c):
+        rows[(r["agent"], r["handle"], round(r["flight"], 6))] = r
+    pos, out, seen = {}, [], set()
+    for t, op, v in s2c:
+        if op == OWN_POSITION and len(v) > 2 and isinstance(v[2], (tuple, list)):
+            pos[v[1]] = (t, tuple(v[2]), "own")
+        elif op == MOVE_TO and len(v) > 5 and isinstance(v[2], (tuple, list)):
+            pos[v[5]] = (t, tuple(v[2]), "walked-to")
+            pos.pop(v[1], None)                          # the walker itself is off
+        elif op in MOVED and len(v) > 1 and isinstance(v[1], int):
+            pos.pop(v[1], None)
+        elif op == LAUNCH and len(v) > 7:
+            key = (v[1], v[6], round(_f32(v[4]), 6))
+            r = rows.get(key)
+            if r is None or key in seen or r["skill"] is None:
+                continue
+            seen.add(key)
+            p = pos.get(v[1])
+            row = {"agent": v[1], "skill": r["skill"], "projectile": r["projectile"],
+                   "flight": r["flight"], "distance": None, "speed": None,
+                   "position": None, "position_age": None}
+            if p is not None and r["flight"] > 0.02:
+                d = math.hypot(v[2][0] - p[1][0], v[2][1] - p[1][1])
+                row.update(distance=d, speed=d / r["flight"], position=p[2],
+                           position_age=t - p[0])
+            out.append(row)
+    return out
 
 
 def arrival_verdict(row):

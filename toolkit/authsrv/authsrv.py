@@ -4107,6 +4107,8 @@ def combat_deadlines(state):
         out.append(second["at"])
     for shot in state.get("player_projectiles") or ():       # WEAPONS-W2a
         out.append(shot["arrives_at"])
+    for q in state.get("player_spell_queue") or ():          # studies/weapons 36
+        out.append(q["launch_at"])
     for shot in state.get("body_projectiles") or ():         # WEAPONS-W6a
         out.append(shot["arrives_at"])
     for cast in state.get("pending_casts") or ():
@@ -11979,6 +11981,7 @@ def projectile_tick(send, state, conn_id):
     """Land every one of the player's projectiles whose flight is up: the
     arrival that closes its handle, then the hit -- retail's order."""
     body_projectile_tick(send, state, conn_id)               # WEAPONS-W6a
+    spell_queue_tick(send, state, conn_id)                   # studies/weapons 36
     flying = state.get("player_projectiles")
     if not flying:
         return
@@ -11994,6 +11997,9 @@ def projectile_tick(send, state, conn_id):
             continue
         if shot.get("strike") is not None:                     # WEAPONS-W2c
             land_player_skill_shot(send, state, conn_id, shot)
+            continue
+        if shot.get("spell") is not None:                      # studies/weapons 36
+            land_player_spell_shot(send, state, conn_id, shot)
             continue
         hit_enemy(send, state, shot["target"], conn_id, armed=True,
                   projectile=True, label="the shot")
@@ -12149,6 +12155,171 @@ def land_player_skill_shot(send, state, conn_id, shot):
         apply_condition(send, state, tid, inflicted[0], inflicted[1], rank,
                         conn_id, sid)
     return _res
+
+
+# ---- A PLAYER'S SPELL PROJECTILE (2026-09-20, studies/weapons/PLAN.md 36) -----
+#
+# W2's spell half. A projectile SPELL launches at the cast's completion and
+# lands a flight later -- retail's shape, OBSERVED on every spell shot in the
+# live corpus (weaponcensus.skill_shots: 17 by the player, 77 by bodies):
+#
+#   the player   0x00E5 [me, skill, copy, recharge]      -- ONE batch, 17 of 17
+#                [58, me, 0]                             (Dancing Daggers, the
+#                0x00A4 [me, aim, 0, flight, PROJECTILE, handle, 0]   corpus's
+#                [8, me, 0], [8, me, 1]                   only player spell shots)
+#                ... a spell of several projectiles sends the next ones a
+#                third of a second apart, each behind a [20, target, me,
+#                IMPACT] (4 of 4); the 0x00E3 at the aftercast, as ever
+#   a body       [60, body, target, skill] ... the activation later:
+#                [55, the energy], [58, body, 0], the 0x00A4 (77 of 77)
+#   both         +flight: 0x00A7 [shooter, handle, THE SPELL'S OWN KIND],
+#                then [20, target, shooter, IMPACT] (the record's +0x84),
+#                then the word -- an Orb onto the owner (11 of 11), the
+#                Daggers (15 of 17); a dagger reaching an aim its target has
+#                left draws a ground 0x00A1 there and no word (2 of 17).
+#
+# WHICH PROJECTILE: the skill record's +0x88 (skill_projectile), as for an
+# attack skill -- 343 Flare / Fireball, 403 Orb, 405 Javelin, 854 Daggers;
+# 2077 for a spell with none (Lightning Strike, Mind Burn), which lands at
+# the E5 as before. THE SPEED is the spell's -- a round number per projectile
+# as a weapon's is per class (WEAPONS-C8): the aim's distance over the
+# launch's own flight wherever the shooter's position is known (its own
+# 0x0029, or a follower's 0x002A destination, held until the shooter's own
+# next movement; weaponcensus.spell_speeds) -- 1800 u/s for 343 (17 of 23
+# positioned Fireballs exact; the rest three degenerate 1 u shots and three
+# walking casters) and 403 (13 of 13), 1200 for 405 (9 of 9) and 854 (2 of
+# 2: the owner's own daggers, 572 and 660 u in 0.476 and 0.550 s). The client's
+# bonus slot on these rows (1800 on 194 / 186 / 229 / 858) is NOT the speed:
+# the Daggers fly at 1200. content/world.toml [spell_projectile.speed]; a
+# projectile no tape has timed has no speed and its spell lands at the E5.
+#
+# What rides the arrival: the spell's own damage (hit_enemy's `exact`, the
+# standalone amount the E5 dealt until today), the impact visual ahead of
+# the word, and for a spell that "counts as a lead attack" (Dancing Daggers:
+# the client's combo 1) the chain's advance on the FIRST landed projectile
+# -- the 0x005C between the visual and the word, 5 of 5 first landings.
+# What stays at the E5: the recharge, the 58, the effect, the heal, the hold
+# pulse, the aftercast E3. NOT MODELLED, said here: the dodge (a projectile
+# reaching an aim its target has left misses; the arrows do not model it
+# either), a BODY's spell projectile (its completion still lands the damage
+# in the batch, the wire's 77 say otherwise -- W6's spell half), Fireball's
+# ground visuals and splash, the Javelin's line. --no-spell-projectiles
+# reverts (a spell lands at the E5); --no-projectiles reverts every one.
+SPELL_PROJECTILES = True
+
+
+def spell_projectile_speed(projectile):
+    """u/s for a SPELL's projectile id ([spell_projectile.speed]), or None
+    for one no tape has timed."""
+    try:
+        got = agents.WORLD.get("spell_projectile", "speed").get(str(int(projectile)))
+    except Exception:                                     # noqa: BLE001
+        return None
+    return float(got) if got else None
+
+
+def spell_projectiles(skill_id):
+    """(how many projectiles the spell sends, the interval between them):
+    the row's `projectiles` / `projectile_interval` (Dancing Daggers: 3, a
+    third of a second apart, OBSERVED), else (1, 0.0)."""
+    row = skill_effect_row(skill_id)
+    n = max(1, int(row.get("projectiles", 1) or 1))
+    return n, (float(row.get("projectile_interval", 0.0) or 0.0) if n > 1 else 0.0)
+
+
+def spell_shot_how(skill_id):
+    """How a projectile SPELL flies: its own projectile, arrow flag 0 (94 of
+    94), its own type as the arrival's kind (section 34; 14, the client's
+    "no type", when its row names none), the projectile's timed speed. None
+    for a spell with no projectile or no timed speed, for an attack skill,
+    or with the feature off."""
+    if not (SPELL_PROJECTILES and RANGED_DELIVERY):
+        return None
+    own = skill_projectile(skill_id)
+    if own is None or _is_attack_skill(skill_id):
+        return None
+    speed = spell_projectile_speed(own)
+    if speed is None:
+        return None
+    dt = spell_damage_type(skill_id)
+    return {"projectile": own, "arrow": 0, "speed": speed, "range": None,
+            "damage_type": int(dt) if dt is not None else combatmath.DAMAGE_TYPE_NONE}
+
+
+def launch_player_spell_shot(send, state, conn_id, cast, how, amount, rank):
+    """The E5 of a projectile SPELL: the first projectile leaves now, in the
+    E5's batch; the rest are queued an interval apart (spell_queue_tick);
+    each carries the spell's damage to land at its arrival. Returns
+    "launched", or None when there is nothing left to shoot at."""
+    sid, target = cast["skill_id"], cast["target"]
+    count, interval = spell_projectiles(sid)
+    spell = {"skill_id": sid, "rank": rank, "amount": float(amount),
+             "visual": skill_impact_visual(sid)}
+    shot = launch_player_projectile(send, state, conn_id, {"target": target}, how)
+    if shot is None:
+        return None
+    shot["spell"] = dict(spell, first=True)
+    now = time.time()
+    queue = state.setdefault("player_spell_queue", [])
+    for i in range(1, count):
+        queue.append({"launch_at": now + i * interval, "target": target,
+                      "how": how, "spell": dict(spell, first=False)})
+    print(f"[c{conn_id}] skill {sid} SENDS {count} x projectile {how['projectile']} "
+          f"at agent {target} at {how['speed']:.0f} u/s: the damage lands at the "
+          f"arrival [studies/weapons 36]", flush=True)
+    return "launched"
+
+
+def spell_queue_tick(send, state, conn_id):
+    """Send every queued projectile whose instant is up -- behind a [20,
+    target, me, IMPACT] (retail's shape for the second and third dagger,
+    4 of 4). A dead target, or a dead player, drops the rest."""
+    queue = state.get("player_spell_queue")
+    if not queue:
+        return
+    now = time.time()
+    for item in [q for q in queue if now >= q["launch_at"]]:
+        queue.remove(item)
+        victim = state.get("agents", {}).get(item["target"])
+        if victim is None or victim.get("dead") or state.get("player_dead"):
+            continue
+        vis = item["spell"].get("visual")
+        if vis is not None:
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+                 [agents.GV_EFFECT_ON_TARGET, item["target"], PLAYER_AGENT_ID, int(vis)],
+                 f"skill {item['spell']['skill_id']}'s next projectile: its {vis} "
+                 f"on agent {item['target']}")
+        shot = launch_player_projectile(send, state, conn_id,
+                                        {"target": item["target"]}, item["how"])
+        if shot is not None:
+            shot["spell"] = item["spell"]
+
+
+def land_player_spell_shot(send, state, conn_id, shot):
+    """A spell's projectile arrives (its 0x00A7 went out): the impact visual
+    [20, target, me, +0x84], then -- on a lead-counting spell's FIRST
+    landing -- the chain's 0x005C, then the word (hit_enemy's `exact`, the
+    amount the E5 computed). Returns hit_enemy's verdict."""
+    spell, tid = shot["spell"], shot["target"]
+    sid = spell["skill_id"]
+    vis = spell.get("visual")
+    if vis is not None:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+             [agents.GV_EFFECT_ON_TARGET, tid, PLAYER_AGENT_ID, int(vis)],
+             f"skill {sid}'s impact ({vis}) on agent {tid}")
+    before = None
+    combo = skill_chain_fields(sid)[0]
+    if spell.get("first") and CHAIN_STATE and combo:
+        def before(_t=tid, _c=combo, _s=sid):
+            _st = player_chain(state).advance(_t, _c, time.time())
+            if _st is not None:
+                chain_send(send, _t, _st, f"skill {_s} lands")
+    # `armed`: the landing is not a swing and takes no swing-interval gate --
+    # three daggers land inside 0.7 s on the tape (the E5's own exact hit
+    # kept the gate, and keeps it on the revert arm).
+    return hit_enemy(send, state, tid, conn_id, exact=spell["amount"], swing=False,
+                     armed=True, projectile=True,
+                     label=f"skill {sid}'s projectile lands", before_damage=before)
 # The two modifier identifiers an armour piece carries. 572's argument is the
 # rating the tooltip prints as `Armor: N`; 527's is the `+N vs. <type>` line,
 # and identifier 4 beside it resolves to `vs. physical damage`. All three were
@@ -17982,9 +18153,16 @@ def cast_tick(send, state, conn_id):
                                f"skill {cast['skill_id']} (its own price)",
                                skill_knock_down_seconds(cast["skill_id"]))
             elif target and found and found[1] == "standalone":
-                hit_enemy(send, state, target, conn_id, exact=float(found[0]),
-                          swing=False,
-                          label=f"skill {cast['skill_id']}")
+                # studies/weapons 36: a projectile SPELL's damage rides its
+                # projectile's arrival (the 0x00A4 goes out here, in the E5's
+                # batch -- Dancing Daggers 17 of 17); one with no projectile,
+                # or none a tape has timed, lands here as before.
+                _how = spell_shot_how(cast["skill_id"])
+                if _how is None or launch_player_spell_shot(
+                        send, state, conn_id, cast, _how, found[0], rank) is None:
+                    hit_enemy(send, state, target, conn_id, exact=float(found[0]),
+                              swing=False,
+                              label=f"skill {cast['skill_id']}")
             # AND THE EFFECT, at the same instant as the damage and for the
             # same reason: E5 is the cast COMPLETING, so it is when a stance
             # goes on, not when the key was pressed. A skill can do both --
@@ -33501,6 +33679,12 @@ def main():
         print("SPELLS: --no-spell-own-type -- every incoming spell reads as elemental "
               "against the armour and a spell's projectile carries the held weapon's "
               "kind [studies/weapons 34 revert]", flush=True)
+    if a.no_spell_projectiles:
+        global SPELL_PROJECTILES
+        SPELL_PROJECTILES = False
+        print("SPELLS: --no-spell-projectiles -- a projectile spell lands its damage "
+              "at the E5 with nothing in the air, the reading every run before "
+              "2026-09-20 made [studies/weapons 36 revert]", flush=True)
     if a.no_base_penetration:
         global BASE_PENETRATION
         BASE_PENETRATION = False

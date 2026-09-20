@@ -2421,3 +2421,60 @@ activation, 5 s recharge, scale 15->50 args = 2, aoe_range 100 (the line), proje
 the bonus slot 1->10 (unnamed here). OBSERVED: kind 4 on 15 of 15 arrivals (section 34); onto \
 the same Warrior 50 x 6 armoured and 140 x 1 bare, 2^(60/40) inside truncation (50.1). NOT \
 modelled, said here: the interrupt and the line AoE -- one target, its damage."""
+
+
+# ---- A PLAYER'S SPELL PROJECTILE (2026-09-20, studies/weapons/PLAN.md 36) -----------
+# The speed of a SPELL's projectile, by the s_skill +0x88 id the launch carries -- a
+# round number per projectile, as a weapon's is per class (WEAPONS-C8), the aim's
+# distance over the launch's own flight (weaponcensus.spell_speeds).
+[spell_projectile.speed]
+343 = 1800                     # Flare's and Fireball's (194 / 186): 17 of 23 positioned shots exact
+403 = 1800                     # Lightning Orb's (229): 13 of 13
+405 = 1200                     # Lightning Javelin's (230): 9 of 9
+854 = 1200                     # Dancing Daggers' (858): 2 of 2, the owner's own casts
+
+[spell_projectile.speed.provenance]
+source = "capture"
+capture = "20260819T132414"
+origin = "live"
+verified = """OBSERVED, weaponcensus.spell_speeds over the live corpus 2026-09-20 (studies/weapons/PLAN.md \
+36). A shot's speed is the 0x00A4 aim's distance from the shooter's position over the message's \
+own f32 flight; the position is the shooter's latest own 0x0029 point or the destination of a \
+0x002A walking somebody to it, and it holds until the shooter's own next movement message (a \
+standing caster's is good for a minute; a walker's goes stale as it walks). Fireball (343) on \
+20260817T231139: 1800 on 17 of 23 positioned shots, at 85..1166 u -- the six others are three \
+degenerate 1 u self-aimed shots and three walking casters (1588 / 1677 / 1179 off positions 2..13 \
+s old). Lightning Orb (403): 1800 on 13 of 13 -- the Master of Lightning's four on 20260917T090355 \
+(732..893 u off his own point, 40..130 s old, standing) and nine on 20260917T224104 (65..470 u). \
+Lightning Javelin (405): 1200 on 9 of 9 (the same two tapes, 63..909 u). Dancing Daggers (854), \
+the owner's own casts on 20260819T132414: agent 36 walked to (18373.8, -3595.3) where the caster \
+stood; daggers 2 and 3 aimed 571.6 and 660.5 u away and flew 0.476 and 0.550 s -- 1200 both. \
+Flare (194) itself was never cast on a live tape: 343 is its record's projectile and Fireball's, \
+and the id's speed is taken as the projectile's -- the one RECONSTRUCTION in the table. The \
+client's bonus slot on these rows (1800 on 194 / 186 / 229 / 858) is NOT the speed: the Daggers \
+fly at 1200 with 1800 in theirs."""
+
+# Dancing Daggers -- the corpus's only spell projectile cast BY THE PLAYER (17 launches on
+# 20260819T132414 and 20260817T183756), and so the witness for the whole shape of section 36.
+[skill_effect.858]
+scale_means = "Earth damage"
+damage_type = 11               # earth ([damage_type.table]): the 0x00A7 kind on 17 of 17 arrivals (section 34)
+projectiles = 3                # "Send out three Dancing Daggers": three launches a cast, 5 of 5 whole casts
+projectile_interval = 0.333    # a third of a second apart: 0.328 / 0.339 and 0.328 / 0.331 s on the tape
+[skill_effect.858.provenance]
+source = "wiki"
+page = 'GWW, "Dancing Daggers", {{Skill infobox}} + {{Skill progression}}, read 2026-09-20'
+verified = """Wiki: "Spell. Send out three Dancing Daggers at target foe, each striking for \
+5...35 earth damage if they hit. Dancing Daggers has half the normal range. This skill counts as \
+a lead attack"; var1 `Earth damage` 5->35; 5 energy, 1 s activation, 5 s recharge; Notes: "a \
+bell sound once per projectile". Client (38797): id 858, type_code 5, attribute 30 (Deadly \
+Arts), combo 1 (the lead), projectile 854, impact_visual 855, scale 5->35 args = 2. OBSERVED on \
+the owner's own casts (20260819T132414, 5 casts; 20260817T183756, 1): the E5 batch carries the \
+first 0x00A4 [me, aim, 0, flight, 854, handle, 0] behind the E5 and the 58, ahead of the hold \
+pulse; the second and third follow a third of a second apart, each behind a [20, target, me, \
+855]; every arrival is 0x00A7 [me, handle, 11] then [20, target, me, 855] then the word (three \
+words of one amount a cast); the chain's 0x005C [me, target, 1] rides the FIRST landed dagger \
+between its visual and its word (5 of 5); a dagger reaching an aim its target had left drew a \
+ground 0x00A1 [aim, 0, me, 855, 0, 0] and no word (2 of 17). Each dagger deals the scale at the \
+arrival (hit_enemy's exact, not armour-scaled on the player's side -- the standing gap). NOT \
+modelled, said here: the half range and the dodge."""

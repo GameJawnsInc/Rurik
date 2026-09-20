@@ -1984,9 +1984,14 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   range (RUN-WEAPONS-2) is the instrument; ~~W3~~ (shipped 2026-09-19,
   `studies/weapons/PLAN.md` §26: the scythe's extras and its 2^0.125 critical), ~~W4's rest~~ shipped 2026-09-19 (§30: `587` against the pieces'
   `527` under its condition word, the `633` reader with `634` / `635` / `636`, the isle's 3.098
-  unmet divisor; left of W4: a player's spell PROJECTILE (W2's spell half: a Flare lands at the E5
-  with no `0x00A4`) and the BONUS penetration sources beyond the hornbow (the client's item word 574
-  `Armor penetration`, the Sundering upgrade, on no corpus item; Judge's Insight 267);
+  unmet divisor; left of W4: a BODY's spell projectile (W6's spell half: 77 body shots on tape,
+  a body's completion still lands the damage in its batch) and the BONUS penetration sources
+  beyond the hornbow (the client's item word 574 `Armor penetration`, the Sundering upgrade, on
+  no corpus item; Judge's Insight 267); ~~a player's spell projectile~~ shipped 2026-09-20, §36
+  -- the E5 batch launches the record's projectile (Dancing Daggers 17 of 17, the corpus's only
+  player-cast projectile spell), the arrival is `0x00A7` / the impact visual / the word, a
+  spell of several sends them a third of a second apart, speeds a round number per projectile
+  (343 / 403 at 1800, 405 / 854 at 1200, OBSERVED 41 of 47), `--no-spell-projectiles`;
   ~~the base penetration sources~~ shipped 2026-09-19, §35 -- the client's own bonus slot holds the
   wiki's 10 / 20 / 25 on the five attack skills (CORROBORATED, every snapshot), Strength's 1 % a
   rank rides attack skills only (WIKI, UNWITNESSED -- 1B's new block), Air Magic's 25 % is the
