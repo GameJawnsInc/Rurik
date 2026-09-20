@@ -260,8 +260,12 @@ def player_armour_at(location_key, damage_type, EQUIP_ARMOUR,
 
 
 def player_spell_armour(EQUIP_ARMOUR, ARMOR_RATING_MODIFIER,
-                        ARMOR_VS_TYPE_MODIFIER, location_key=None):
-    """The rating an incoming armour-respecting spell resolves against.
+                        ARMOR_VS_TYPE_MODIFIER, location_key=None,
+                        damage_type="elemental"):
+    """The rating an incoming armour-respecting spell resolves against --
+    against `damage_type`, the spell's OWN (a type id from the client's
+    fourteen, or a class name; "elemental" for a spell with no type read,
+    the reading every run before 2026-09-19 made for all of them).
 
     SKILLS-LR (2026-09-17, studies/skills 50): WITH A `location_key` IT IS
     THAT PIECE'S -- a spell rolls a hit location like an attack. OBSERVED on
@@ -291,7 +295,7 @@ def player_spell_armour(EQUIP_ARMOUR, ARMOR_RATING_MODIFIER,
     """
     ratings = {}
     for key, _w in HIT_LOCATION_ODDS:
-        ar = player_armour_at(key, "elemental", EQUIP_ARMOUR,
+        ar = player_armour_at(key, damage_type, EQUIP_ARMOUR,
                               ARMOR_RATING_MODIFIER,
                               ARMOR_VS_TYPE_MODIFIER)
         if ar is not None:
@@ -316,7 +320,8 @@ _SPELL_ARMOUR_WARNED = []
 def spell_armour_for(skill_id, SPELL_ARMOUR, ARMOUR_TERM,
                      ARMOUR_RESPECTING_MEANS, SCALE_MEANS_DAMAGE,
                      EQUIP_ARMOUR, ARMOR_RATING_MODIFIER,
-                     ARMOR_VS_TYPE_MODIFIER, SPELL_LOCATION_ROLL=False):
+                     ARMOR_VS_TYPE_MODIFIER, SPELL_LOCATION_ROLL=False,
+                     damage_type="elemental"):
     """The rating an incoming cast of `skill_id` scales by, or None (unscaled).
 
     None means "deal the stated amount": the label is armour-ignoring, or
@@ -336,7 +341,8 @@ def spell_armour_for(skill_id, SPELL_ARMOUR, ARMOUR_TERM,
         return None
     return player_spell_armour(
         EQUIP_ARMOUR, ARMOR_RATING_MODIFIER, ARMOR_VS_TYPE_MODIFIER,
-        location_key=roll_hit_location() if SPELL_LOCATION_ROLL else None)
+        location_key=roll_hit_location() if SPELL_LOCATION_ROLL else None,
+        damage_type=damage_type)
 
 
 def bonus_armour(net):
@@ -738,3 +744,56 @@ def level_scaled_rating(low, high, level):
         return lo
     lvl = min(max(int(level), HERO_LEVEL_MIN), HERO_LEVEL_MAX)
     return lo + (hi - lo) * (lvl - HERO_LEVEL_MIN) / float(HERO_LEVEL_MAX - HERO_LEVEL_MIN)
+
+
+# ---- A SPELL'S OWN DAMAGE TYPE (2026-09-19, studies/weapons/PLAN.md 34) ---------
+#
+# THE CLIENT HAS NO COLUMN FOR IT. Over all 41 dword columns of the 164-byte
+# s_skill record (3,443 named rows) only three range inside the enum's 0..14 --
+# +0x08 the campaign, +0x14 the chain mask, +0x58 the argument count -- and
+# each is already named; the type sits in the authored description ("deals
+# 15...63 fire damage") and nowhere structured. THE WIRE CARRIES IT: a spell's
+# projectile arrives (0x00A7, third field) as the SPELL's type, not the held
+# weapon's -- Lightning Orb 229 as 4 under an earth staff (587 = 11,
+# 20260917T090355, x11), a fire staff (5, 20260917T224104, x11) and a lightning
+# wand (x5); Lightning Javelin 230 as 4 under the same two staves (x15);
+# Dancing Daggers 858 as 11 (earth) with a hammer (587 = 0, x3) or daggers (1,
+# x14) in hand; Fireball 186 as 5 (x35) -- 79 of 79, the held type ruled out
+# on 54 (aw_spellkinds3 over the corpus). So the SOURCE for a skill's type is
+# its content row: `skill_effect.<id>.damage_type` when a row carries the id,
+# else the wiki's own label in `scale_means` / `bonus_scale_means` ("Fire
+# damage" -> the [damage_type.table] label "fire" -> 5; "+ Holy damage" -> 8),
+# else None. Whether typed damage RESPECTS armour is a separate, per-row fact
+# (ARMOUR_RESPECTING_MEANS in authsrv; GWW "Armor-ignoring damage": "This
+# property is independent of damage type" -- shadow, most holy and typeless
+# skill damage ignore it, elemental spells respect it).
+def damage_type_from_label(label):
+    """The type id a wiki scale label names -- "Fire damage" 5, "+ Holy damage"
+    8, "Cold damage" 3 -- or None for a label that is not "<type> damage"."""
+    if not isinstance(label, str):
+        return None
+    word = label.strip().lower()
+    if word.startswith("+"):
+        word = word[1:].strip()
+    if not word.endswith(" damage"):
+        return None
+    word = word[:-len(" damage")].strip()
+    try:
+        labels = list(agents.WORLD.get("damage_type", "table")["labels"])
+    except Exception:                                     # noqa: BLE001
+        return None
+    return labels.index(word) if word in labels else None
+
+
+def spell_damage_type_of(row):
+    """A skill_effect row's own type: its `damage_type`, else the type its
+    scale label names, else the bonus label's, else None."""
+    if not row:
+        return None
+    if row.get("damage_type") is not None:
+        return int(row["damage_type"])
+    for key in ("scale_means", "bonus_scale_means"):
+        got = damage_type_from_label(row.get(key))
+        if got is not None:
+            return got
+    return None

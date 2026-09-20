@@ -1984,8 +1984,12 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   range (RUN-WEAPONS-2) is the instrument; ~~W3~~ (shipped 2026-09-19,
   `studies/weapons/PLAN.md` §26: the scythe's extras and its 2^0.125 critical), ~~W4's rest~~ shipped 2026-09-19 (§30: `587` against the pieces'
   `527` under its condition word, the `633` reader with `634` / `635` / `636`, the isle's 3.098
-  unmet divisor; left of W4: a spell's own type and the base penetration sources (Strength's 1 % per
-  rank, Penetrating Attack); ~~identifier `573`~~ read 2026-09-19, §33 -- a hero's level-scaled
+  unmet divisor; left of W4: the base penetration sources (Strength's 1 % per rank, Penetrating Attack)
+  and a player's spell PROJECTILE (W2's spell half: a Flare lands at the E5 with no `0x00A4`);
+  ~~a spell's own type~~ read 2026-09-19, §34 -- no client column (all 41 checked), the wire
+  carries it (Orb arrives as lightning under an earth staff, Dancing Daggers as earth with
+  daggers, 79 of 79), the row's wiki label names it (`damage_type` on 194 / 312 / 252; Flare
+  meets the pieces' elemental rating, a physical spell would meet their +20); ~~identifier `573`~~ read 2026-09-19, §33 -- a hero's level-scaled
   armour, the wire's (80, 23) the wiki's Warrior row and the isle's 3 x level + 20;
   ~~the hornbow's 10 %~~ and ~~Q2~~ closed 2026-09-19, §32: the client's own 609 handler names
   the classes -- 0 shortbow, 1 longbow, 2 flatbow, 3 recurve, 4 hornbow, 1 and 3 the corpus's

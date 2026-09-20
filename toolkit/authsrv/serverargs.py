@@ -1711,6 +1711,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "printed at launch and costs nothing -- a weapon whose "
                          "requirement the character lacks deals its met damage "
                          "(no / 3.098), a shield its full 635, a focus its full 636.")
+    ap.add_argument("--no-spell-own-type", action="store_true",
+                    help="studies/weapons 34 REVERT: an incoming spell reads as "
+                         "elemental against the player's armour whatever its row's "
+                         "type, and a spell's projectile carries the held weapon's "
+                         "kind in its 0x00A7 -- the reading every run before "
+                         "2026-09-19 made.")
     ap.add_argument("--no-bow-classes", action="store_true",
                     help="WEAPONS-Q2 REVERT: a type-5 bow's 609 class is ignored -- every "
                          "bow swings at the type row's 2.475 s and no hornbow takes "
