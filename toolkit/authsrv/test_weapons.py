@@ -9,6 +9,7 @@ modifier words, and the character the server actually builds when it is handed e
 weapon. No vault: everything here is content and code.
 """
 import math
+import collections
 import os
 import struct
 import sys
@@ -23,7 +24,7 @@ import agents  # noqa: E402
 import authsrv  # noqa: E402
 import combatmath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=208)   # the BARE-MACHINE number: 208 = 203 + 5 (section 23, base armour penetration, 2026-09-19; a vault run gives 222 -- the six checks that read the skills table are vault-only); before that 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=219)   # the BARE-MACHINE number: 219 = 208 + 11 (section 24, a player's spell projectile, 2026-09-20; a vault run gives 234 -- the tapes' speeds are the one vault-only check); before that 208 = 203 + 5 (section 23, base armour penetration, 2026-09-19; a vault run gives 222 -- the six checks that read the skills table are vault-only); before that 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
 check = LEDGER.ok
 
 LEGACY_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
@@ -2605,6 +2606,223 @@ def section_base_penetration():
          authsrv.BASE_PENETRATION, agents.item_template, authsrv.critical_rate) = saved
 
 
+def section_spell_projectiles():
+    print("\n24. a player's spell projectile: the E5 launches it, the arrival lands the damage")
+    saved = (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+             authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,
+             authsrv.skill_timing, authsrv._is_attack_skill, authsrv.skill_cost,
+             authsrv.skill_projectile, authsrv.skill_damage, authsrv.skill_impact_visual,
+             authsrv.skill_chain_fields, authsrv.SPELL_PROJECTILES, authsrv.RANGED_DELIVERY,
+             authsrv.weapon_satisfies)
+    words = lambda batch: [v for op, v in batch if op == 0x00A3 and v[0] in (16, 17)]   # noqa: E731
+    launches = lambda batch: [v for op, v in batch if op == 0x00A4]                     # noqa: E731
+    visuals = lambda batch: [v for op, v in batch if op == 0x00A0 and v[0] == agents.GV_EFFECT_ON_TARGET]  # noqa: E731
+    try:
+        speeds = agents.WORLD.get("spell_projectile", "speed")
+        check({k: int(v) for k, v in speeds.items()} == {"343": 1800, "403": 1800, "405": 1200, "854": 1200}
+              and authsrv.spell_projectile_speed(343) == 1800.0
+              and authsrv.spell_projectile_speed(854) == 1200.0
+              and authsrv.spell_projectile_speed(680) is None
+              and authsrv.spell_projectile_speed(2077) is None,
+              "content: the four timed spell projectiles -- 343 (Flare / Fireball) and 403 (Orb) at "
+              "1800 u/s, 405 (Javelin) and 854 (Daggers) at 1200; an arrow's id and the table's "
+              "none have no spell speed")
+        row = agents.WORLD.get("skill_effect", "858")
+        check(row["scale_means"] == "Earth damage" and int(row["damage_type"]) == 11
+              and int(row["projectiles"]) == 3 and abs(float(row["projectile_interval"]) - 0.333) < 1e-9
+              and authsrv.spell_projectiles(858) == (3, 0.333)
+              and authsrv.spell_projectiles(194) == (1, 0.0)
+              and authsrv.spell_projectiles(99999) == (1, 0.0),
+              "Dancing Daggers' row: earth (11), three projectiles a third of a second apart; "
+              "Flare sends one, an unknown skill one")
+        # the pure reader on injected rows (a bare machine has no skills table)
+        tables = agents.WORLD.tables
+        had, kept = "skills" in tables, tables.get("skills")
+        tables["skills"] = {"194": {"projectile": 343, "impact_visual": 344, "type_code": 5},
+                            "858": {"projectile": 854, "impact_visual": 855, "type_code": 5, "combo": 1},
+                            "222": {"projectile": 2077, "impact_visual": 2077, "type_code": 4},
+                            "394": {"projectile": 680, "impact_visual": 2077, "type_code": 14},
+                            "2": {"projectile": 500, "impact_visual": 2077, "type_code": 5}}
+        try:
+            hows = {s: authsrv.spell_shot_how(s) for s in (194, 858, 222, 394, 2, 99999)}
+            authsrv.SPELL_PROJECTILES = False
+            off = authsrv.spell_shot_how(194)
+            authsrv.SPELL_PROJECTILES = True
+            authsrv.RANGED_DELIVERY = False
+            off2 = authsrv.spell_shot_how(194)
+            authsrv.RANGED_DELIVERY = True
+        finally:
+            if had:
+                tables["skills"] = kept
+            else:
+                del tables["skills"]
+        check(hows[194] == {"projectile": 343, "arrow": 0, "speed": 1800.0, "range": None, "damage_type": 5}
+              and hows[858] == {"projectile": 854, "arrow": 0, "speed": 1200.0, "range": None, "damage_type": 11}
+              and hows[222] is None and hows[394] is None and hows[2] is None and hows[99999] is None
+              and off is None and off2 is None,
+              "spell_shot_how: Flare flies its 343 at 1800 with flag 0 and its own fire (5) as the "
+              "kind, the Daggers their 854 at 1200 as earth (11); Lightning Strike (2077), an attack "
+              "skill, a projectile no tape has timed and an unknown skill fly nothing; nor does "
+              "anything under --no-spell-projectiles or --no-projectiles", str(hows))
+
+        # through the real press, E5 and arrival
+        authsrv.skill_timing = lambda sid: (1.0, 0.75, 0.0)
+        authsrv._is_attack_skill = lambda sid: False
+        authsrv.skill_cost = lambda sid: (0, 0)
+        authsrv.weapon_satisfies = lambda sid: True
+        authsrv.skill_damage = lambda sid, rank: (20.0, "standalone")
+        authsrv.skill_projectile = lambda sid: {194: 343, 858: 854}.get(sid)
+        authsrv.skill_impact_visual = lambda sid: {194: 344, 858: 855}.get(sid)
+        authsrv.skill_chain_fields = lambda sid: (1, 0, 0) if sid == 858 else (0, 0, 0)
+
+        def press_and_e5(distance, skill):
+            authsrv.apply_party_character({"player_weapon": "starter_wand"})
+            st, sent = _world(distance), []
+            send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+            authsrv.handle_skill_press([0, skill, 0, FOE], send, st, 1,
+                                       authsrv.GAME_CMSG_USE_SKILL)
+            sent.clear()
+            for cast in st["pending_casts"]:
+                for k in ("begin_at", "e5_at", "e3_at", "e6_at"):
+                    cast[k] -= 30.0
+            authsrv.cast_tick(send, st, 1)
+            return st, send, sent
+
+        st, send, at_e5 = press_and_e5(900.0, 194)
+        ops = [op for op, _v in at_e5]
+        launch = launches(at_e5)
+        i_e5, i_58 = ops.index(0x00E5), [i for i, (op, v) in enumerate(at_e5)
+                                           if op == 0x009F and v[:2] == [58, PLAYER]]
+        i_a4 = ops.index(0x00A4) if 0x00A4 in ops else -1
+        holds = [v for op, v in at_e5 if op == 0x009F and v[:2] == [8, PLAYER]]
+        check(len(launch) == 1 and launch[0][0] == PLAYER and list(launch[0][1]) == [900.0, 0.0]
+              and abs(_f(launch[0][3]) - 0.5) < 1e-6 and launch[0][4:] == [343, 1, 0]
+              and i_58 and i_e5 < i_58[0] < i_a4
+              and holds and ops.index(0x009F, i_a4) > i_a4
+              and [h[2] for h in holds][-2:] == [0, 1],
+              "Flare's E5: 0x00E5, then [58, me, 0], then ONE 0x00A4 [me, the target's position, 0, "
+              "0.5 s at 1800 u/s, 343, handle 1, flag 0], then the hold pulse [8 -> 0], [8 -> 1] -- "
+              "retail's one batch (Dancing Daggers, 17 of 17)", str([(hex(op), v) for op, v in at_e5]))
+        shot = st["player_projectiles"][0]
+        check(not words(at_e5) and not visuals(at_e5) and st["agents"][FOE]["health"] == 9000.0
+              and shot["spell"] == {"skill_id": 194, "rank": shot["spell"]["rank"], "amount": 20.0,
+                                    "visual": 344, "first": True}
+              and shot["damage_type"] == 5 and shot["arrives_at"] in authsrv.combat_deadlines(st)
+              and not st.get("player_spell_queue"),
+              "and no word, no visual and no damage at the E5: the shot carries the spell's 20 and "
+              "its impact 344 to the arrival, flies as fire, is a combat DEADLINE, and Flare "
+              "queues nothing behind it")
+        at_e5.clear()
+        shot["arrives_at"] -= 30.0
+        authsrv.projectile_tick(send, st, 1)
+        arr = list(at_e5)
+        ops = [op for op, _v in arr]
+        check(ops[:3] == [0x00A7, 0x00A0, 0x00A3] and arr[0][1] == [PLAYER, 1, 5]
+              and arr[1][1] == [agents.GV_EFFECT_ON_TARGET, FOE, PLAYER, 344]
+              and words(arr)[0][1:3] == [FOE, PLAYER]
+              and st["agents"][FOE]["health"] == 9000.0 - 20.0 and not st["player_projectiles"],
+              "a flight later: 0x00A7 [me, handle 1, kind 5 -- the SPELL's fire] first, then "
+              "[20, foe, me, 344] (the record's impact), then the ONE word for the spell's 20 -- "
+              "the Orb's shape onto the owner (11 of 11) and the Daggers' (15 of 17); the handle "
+              "is spent", str([(hex(op), v) for op, v in arr]))
+
+        # Dancing Daggers: three projectiles, a third of a second apart, the chain on the first
+        st, send, at_e5 = press_and_e5(600.0, 858)
+        launch = launches(at_e5)
+        queue = st.get("player_spell_queue") or []
+        e5_t = launch and st["player_projectiles"][0]["arrives_at"] - 0.5
+        check(len(launch) == 1 and launch[0][4:] == [854, 1, 0] and abs(_f(launch[0][3]) - 0.5) < 1e-6
+              and not visuals(at_e5) and len(queue) == 2
+              and all(q["spell"]["first"] is False and q["target"] == FOE for q in queue)
+              and abs((queue[1]["launch_at"] - queue[0]["launch_at"]) - 0.333) < 1e-6
+              and all(q["launch_at"] in authsrv.combat_deadlines(st) for q in queue),
+              "the Daggers' E5 batch launches ONE 854 (0.5 s at 1200 u/s, flag 0, no visual) and "
+              "queues two more a third of a second apart, each a combat deadline")
+        at_e5.clear()
+        for q in queue:
+            q["launch_at"] -= 30.0
+        authsrv.projectile_tick(send, st, 1)
+        later = list(at_e5)
+        ops = [op for op, _v in later]
+        check(ops == [0x00A0, 0x00A4, 0x00A0, 0x00A4]
+              and visuals(later) == [[agents.GV_EFFECT_ON_TARGET, FOE, PLAYER, 855]] * 2
+              and [v[5] for v in launches(later)] == [2, 3]
+              and all(v[4:] == [854, h, 0] for v, h in zip(launches(later), (2, 3)))
+              and not words(later) and not st.get("player_spell_queue"),
+              "the second and third dagger each leave behind a [20, foe, me, 855] (4 of 4 on the "
+              "tape), handles 2 and 3, nothing landing yet", str([(hex(op), v) for op, v in later]))
+        at_e5.clear()
+        for s in st["player_projectiles"]:
+            s["arrives_at"] -= 30.0
+        authsrv.projectile_tick(send, st, 1)
+        arr = list(at_e5)
+        ops = [op for op, _v in arr]
+        combos = [v for op, v in arr if op == authsrv.GAME_SMSG_AGENT_COMBO_STATE]
+        i_combo = ops.index(authsrv.GAME_SMSG_AGENT_COMBO_STATE) if combos else -1
+        check(ops == [0x00A7, 0x00A0, authsrv.GAME_SMSG_AGENT_COMBO_STATE, 0x00A3,
+                      0x00A7, 0x00A0, 0x00A3, 0x00A7, 0x00A0, 0x00A3]
+              and [v[2] for op, v in arr if op == 0x00A7] == [11, 11, 11]
+              and combos == [[PLAYER, FOE, 1]] and i_combo == 2
+              and len(words(arr)) == 3 and len({tuple(w) for w in words(arr)}) == 1
+              and st["agents"][FOE]["health"] == 9000.0 - 60.0,
+              "three arrivals, each 0x00A7 [me, handle, 11 -- earth] then [20, foe, me, 855] then "
+              "the word, three words of one amount; the chain's 0x005C [me, foe, lead] rides the "
+              "FIRST landing between its visual and its word and no other (5 of 5)",
+              str([(hex(op), v) for op, v in arr]))
+
+        # the revert: the E5 lands the damage with nothing in the air
+        authsrv.SPELL_PROJECTILES = False
+        st, send, at_e5 = press_and_e5(900.0, 194)
+        authsrv.SPELL_PROJECTILES = True
+        check(not launches(at_e5) and len(words(at_e5)) == 1
+              and st["agents"][FOE]["health"] == 9000.0 - 20.0 and not st.get("player_projectiles"),
+              "--no-spell-projectiles: Flare's word rides the E5 batch and nothing flies -- the "
+              "reading every run before 2026-09-20 made")
+        src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+        sargs = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
+        check('if shot.get("spell") is not None:' in src
+              and "spell_queue_tick(send, state, conn_id)" in src
+              and "launch_player_spell_shot(" in src
+              and 'out.append(q["launch_at"])' in src
+              and '"--no-spell-projectiles"' in sargs,
+              "the source: the arrival lands a spell's shot, the tick sends the queue, the E5 "
+              "launches, a queued launch is a deadline, the revert flag exists")
+        # the tapes: the speeds the table carries, re-derived
+        try:
+            sys.path.insert(0, HERE)
+            import weaponcensus as wc                                     # noqa: PLC0415
+            got = collections.defaultdict(list)
+            for stamp in ("20260819T132414", "20260917T090355", "20260917T224104",
+                          "20260817T231139"):
+                for _name, _gf, s2c in wc.connections(stamp):
+                    for r in wc.spell_speeds(s2c):
+                        if r["speed"] is not None and r["distance"] >= 50.0:
+                            got[r["projectile"]].append(round(r["speed"]))
+        except (Exception, SystemExit) as e:                               # noqa: BLE001
+            got = None
+            LEDGER.skip("section 24", f"the four tapes are absent ({type(e).__name__}) -- 1 check")
+        if got is not None:
+            want = {343: 1800, 403: 1800, 405: 1200, 854: 1200}
+            exact = {p: sum(1 for s in got.get(p, []) if abs(s - w) <= 0.02 * w)
+                     for p, w in want.items()}
+            n = {p: len(got.get(p, [])) for p in want}
+            check(exact[854] == n[854] >= 2 and exact[403] == n[403] >= 10
+                  and exact[405] == n[405] >= 8 and exact[343] >= 15
+                  and exact[343] >= 0.7 * n[343],
+                  "and the tapes say so, through the extractor: every positioned Dancing Daggers "
+                  "launch (at least two), every Orb (at least ten) and every Javelin (at least "
+                  "eight) flies within 2 % of the table's speed, and Fireball's does on at least "
+                  "fifteen and seven in ten (the rest are walking casters' stale positions)",
+                  f"exact {exact} of {n}")
+    finally:
+        (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+         authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,
+         authsrv.skill_timing, authsrv._is_attack_skill, authsrv.skill_cost,
+         authsrv.skill_projectile, authsrv.skill_damage, authsrv.skill_impact_visual,
+         authsrv.skill_chain_fields, authsrv.SPELL_PROJECTILES, authsrv.RANGED_DELIVERY,
+         authsrv.weapon_satisfies) = saved
+
+
 def main():
     section_table()
     section_skills()
@@ -2629,6 +2847,7 @@ def main():
     section_bow_classes()
     section_spell_own_type()
     section_base_penetration()
+    section_spell_projectiles()
     return LEDGER.verdict()
 
 

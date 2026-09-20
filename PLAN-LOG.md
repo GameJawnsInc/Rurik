@@ -28,6 +28,24 @@ move back.
 
 ---
 
+### A player's spell projectile -- 2026-09-20 -- **W2's spell half: the E5 launches it, the arrival lands it**
+
+[studies/weapons/PLAN.md](studies/weapons/PLAN.md) §36. OBSERVED on every spell shot in the
+live corpus (94: 17 by the player, all Dancing Daggers; 77 by bodies): the E5 batch carries
+the first `0x00A4` behind the 58 and ahead of the hold pulse, a spell of several sends the
+rest a third of a second apart each behind a `[20, target, me, impact]`, every arrival is
+`0x00A7` [me, handle, the spell's own kind] / the impact visual / the word, the chain's
+`0x005C` rides a lead-counting spell's first landing, and a projectile reaching an aim its
+target has left draws a ground `0x00A1` and no word. The speed is a round number per
+projectile, the aim's distance over the launch's own flight with the shooter's position held
+until its own next movement (`weaponcensus.spell_speeds`): 1800 u/s for Fireball's and Flare's
+343 (17 of 23) and the Orb's 403 (13 of 13), 1200 for the Javelin's 405 (9 of 9) and the
+Daggers' 854 (2 of 2) -- the client's 1800 slot is not a speed. Ships `spell_shot_how`,
+`launch_player_spell_shot`, `spell_queue_tick`, `land_player_spell_shot`, the
+`[spell_projectile.speed]` table, Dancing Daggers' row (earth, three projectiles at 0.333 s),
+`--no-spell-projectiles`. A body's spell projectile stays open (W6's spell half). Tests:
+`test_weapons` 24 (12 checks, floor 208 → 219, a vault run 234).
+
 ### The base penetration sources -- 2026-09-19 -- **the client's own slot, the wiki's two tiers, one wire witness**
 
 [studies/weapons/PLAN.md](studies/weapons/PLAN.md) §35. WIKI: base penetration is the LARGEST

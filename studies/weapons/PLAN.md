@@ -235,7 +235,7 @@ exposure floor and an abort written down.
 | Run | Steps (each: equip, F11, 20 plain swings on a Master of Damage suit from one spot, F11) | Answers | Sealed predictions |
 |---|---|---|---|
 | **RUN-WEAPONS-1A** martial | axe · scythe on ONE suit · scythe with TWO suits adjacent to the target (3 foes hit, the weapon's maximum -- corrected 2026-09-18, this row said three adjacent, which is four) · spear · spear + shield | Q5, Q6, the 1.5 s clock, scythe wire shape and critical, the spear's projectile and flag | scythe and spear start→start 1.500, word / launch at 0.650; spear `0x00A4` field 7 = 1 — **RUN 2026-09-19, capture `20260919T103604`, scored in section 25: every prediction held; the scythe's target-side term measured at [78, 94) u, the spear parked at 755 u** |
-| **RUN-WEAPONS-1B** bows and casters | shortbow · flatbow · longbow · recurve · hornbow · staff · wand, all from the same marked spot · **then W9's three presses (§29), the staff in a set: the ACTIVE set's key; an EMPTY set's key; a switch INTO the staff's set from a weapon with no 556 word** | ~~Q2~~ (closed at the desk, §32 -- the five clocks now check the wiki's rates against the client's named classes), Q3 (speed per class — same distance, five flights), the 2.025 and 2.7 clocks, the hornbow's 10 % against the 100-armour suit; **Strength's 1 % a rank (§35: twenty Power Attacks at the character's Strength on the 60-suit -- at Strength 9 a 15-22 sword's ceiling 22 reads 23)**; W9's same-set and empty-set replies and the 41 / 43 on a moved maximum | start→launch 0.9125 / 1.1375 / 1.250 / 0.775; flight ratios 0.59 : 0.88 : 0.59 : 0.40 : 0.59; same-set and empty-set presses answered by NOTHING (the smaller claim); the staff switch's batch carries property 41 then 43 |
+| **RUN-WEAPONS-1B** bows and casters | shortbow · flatbow · longbow · recurve · hornbow · staff · wand, all from the same marked spot · **then W9's three presses (§29), the staff in a set: the ACTIVE set's key; an EMPTY set's key; a switch INTO the staff's set from a weapon with no 556 word** | ~~Q2~~ (closed at the desk, §32 -- the five clocks now check the wiki's rates against the client's named classes), Q3 (speed per class — same distance, five flights), the 2.025 and 2.7 clocks, the hornbow's 10 % against the 100-armour suit; **Strength's 1 % a rank (§35: twenty Power Attacks at the character's Strength on the 60-suit -- at Strength 9 a 15-22 sword's ceiling 22 reads 23)**; **one Flare at the suit from the wand (§36: `0x00A4` 343 at 1800 u/s in the E5 batch, the word at the arrival)**; W9's same-set and empty-set replies and the 41 / 43 on a moved maximum | start→launch 0.9125 / 1.1375 / 1.250 / 0.775; flight ratios 0.59 : 0.88 : 0.59 : 0.40 : 0.59; same-set and empty-set presses answered by NOTHING (the smaller claim); the staff switch's batch carries property 41 then 43 |
 | **RUN-WEAPONS-2** range | per weapon: stand far, press attack once, let the character walk in; repeat uphill if the Isle allows | Q4 — the distance from shooter to the aim point at the FIRST launch is the range, no free parameter. ~~Q16~~ is **no longer this run's**: §22 answered it from the client's own code (the park threshold has no weapon term), so spend no steps on it | 1004 / 1498 / 1498 / 1273 / 1273; 1248 staff and wand; 1004 spear; the body stands after the first start |
 | **RUN-WEAPONS-3** damage (later, needs the right attributes) | met vs unmet requirement on one weapon; a scythe's criticals; hornbow vs longbow on the 100-armour suit | Q10, Q5's critical, W4's penetration | written when W4 opens |
 
@@ -2152,3 +2152,92 @@ Javelin's interrupt and line, the wiki's "slightly more" anomaly. RUN-WEAPONS-1B
 Strength's term with one attack-skill block on the 60-suit: at Strength 9 a 15-22 sword's
 ceiling 22 reads 23 under Power Attack (22 × 2^(5/40) = 23.99, truncated) where 22 is the ceiling
 without it -- twenty presses, the maximum is the measurement; written into 1B's row (§6).
+
+## 36. A player's spell projectile -- 2026-09-20: W2's spell half -- the E5 launches it, the arrival lands it
+
+**What W2 left.** A projectile spell -- Flare, Lightning Orb, Dancing Daggers -- landed its
+damage at the E5 with nothing in the air, while retail sends a `0x00A4` at the cast's completion
+and the word a flight later. §13 shipped the attack-skill half on 2026-09-18; §34 named the
+spell half open.
+
+**The shape, OBSERVED.** `weaponcensus.skill_shots` over the live corpus: 94 spell shots, 17 by
+the player and 77 by bodies. The player's are all Dancing Daggers -- the corpus's only
+player-cast projectile spell (`20260819T132414` × 14 over five casts, `20260817T183756` × 3) --
+and every one of them reads the same:
+
+- **The E5 batch carries the first launch.** `0x00E5 [me, 858, 0, 5]`, `[58, me, 0]`, then
+  `0x00A4 [me, aim, 0, flight, 854, handle, 0]`, then the hold pulse `[8, me, 0]`, `[8, me, 1]`
+  -- one batch, 5 of 5 casts; no visual and no word in it.
+- **The rest follow a third of a second apart**, each behind a `[20, target, me, 855]`:
+  +0.328 and +0.667 s, +0.328 and +0.659 s after the E5 (4 of 4 later daggers). The `0x00E3`
+  comes at the aftercast (+0.760), as ever.
+- **Every arrival** is `0x00A7 [me, handle, 11]` -- earth, the spell's own type (§34) -- then
+  `[20, target, me, 855]` (the record's `+0x84` impact visual), then the word; the chain's
+  `0x005C [me, target, 1]` ("counts as a lead attack": the client's `combo` 1) rides the FIRST
+  landed dagger between its visual and its word, 5 of 5, and no other.
+- **A dagger reaching an aim its target has left misses:** `0x00A7` then a ground
+  `0x00A1 [aim, 0, me, 855, 0, 0]` and no word (2 of 17). The aim is the target's position at
+  the launch (the wiki: a trajectory "leading" the target, dodgeable by a change of direction).
+
+A body's spell shot is the same shape from the announcement side: `[60, body, target, skill]`
+at the cast start, then at the activation (Fireball +1.487..1.52 s, Orb +2.0, Javelin +1.0)
+one batch of `[55, the energy]`, `[58, body, 0]`, the `0x00A4` (77 of 77, `arrow` 0 on all
+94); the arrival `0x00A7 [body, handle, the spell's kind]`, `[20, target, body, impact]`
+(404 for the Orb, 344 for Fireball), the word -- the Master of Lightning's Orb onto the owner,
+11 of 11. Fireball's AoE adds two ground `0x00A1` at the aim (344 with the caster, 333 without)
+and a word + `[20]` per foe reached, word first.
+
+**The speed, OBSERVED, a round number per projectile.** `weaponcensus.spell_speeds` (new): the
+`0x00A4` aim's distance from the shooter over the launch's own f32 flight, the shooter's
+position its latest own `0x0029` point or the destination of a `0x002A` walking somebody to
+it, held until the shooter's own next movement message (a standing caster's is good for a
+minute; a walker's goes stale as it walks -- a one-second cutoff, tried first, threw away the
+Master of Lightning's four standing Orbs and kept 65 u walk-ups). Fireball's 343: **1800 u/s**
+on 17 of 23 positioned shots at 85..1166 u (the six others are three degenerate 1 u self-aimed
+shots and three walking casters' stale positions: 1588 / 1677 / 1179). Lightning Orb's 403:
+**1800** on 13 of 13 (the Master's four at 732..893 u off his own point 40..130 s old, and
+nine on `20260917T224104`). Lightning Javelin's 405: **1200** on 9 of 9. Dancing Daggers' 854:
+**1200** on 2 of 2 -- the owner's own casts, agent 36 walked to (18373.8, −3595.3) where the
+caster stood, daggers 2 and 3 aimed 571.6 and 660.5 u away and flew 0.476 and 0.550 s. The
+client's bonus slot on these rows (1800 on 194 / 186 / 229 / 858, the value §35 met while
+reading the penetration slot) is **not** the speed: the Daggers fly at 1200 with 1800 in
+theirs. Flare (194) was never cast on a live tape; 343 is its record's projectile and
+Fireball's, and the id's speed is taken as the projectile's -- the table's one RECONSTRUCTION.
+`content/world.toml [spell_projectile.speed]`, `source = "capture"`.
+
+**What ships.** `authsrv.spell_shot_how(skill_id)` -- the record's `+0x88` projectile, flag 0,
+the spell's own type as the arrival's kind (14 when its row names none), the table's speed;
+None for a spell with no projectile (Lightning Strike, Mind Burn: they land at the E5 as
+before), for one no tape has timed, for an attack skill, under `--no-spell-projectiles` or
+`--no-projectiles`. In the E5 block the standalone branch launches instead of landing:
+`launch_player_spell_shot` sends the first `0x00A4` in the E5's batch (behind the 58, ahead of
+the hold pulse) and queues the rest an interval apart (`spell_projectiles`: the row's
+`projectiles` / `projectile_interval` -- Dancing Daggers 3 at 0.333, its new `skill_effect`
+row, which also carries `Earth damage` / `damage_type = 11`); `spell_queue_tick` (from
+`projectile_tick`) sends a queued one behind its `[20, target, me, impact]`; `combat_deadlines`
+wakes for a queued launch; `land_player_spell_shot` at the arrival sends the impact visual,
+advances the chain on a lead-counting spell's first landing (`0x005C` between the visual and
+the word), then lands the spell's own amount through `hit_enemy(exact=…, armed=True)` -- armed
+because a landing takes no swing-interval gate (three daggers land inside 0.7 s; the E5's own
+exact hit kept the gate and keeps it on the revert arm). `weaponcensus.spell_speeds` is the
+extractor. `--no-spell-projectiles` reverts.
+
+**Tests.** `test_weapons.py` section 24 (12 checks, floor 208 → 219; a vault run 234 -- the
+tapes' speeds are the one vault-only check): the speed table and Dancing Daggers' row;
+`spell_shot_how` on injected rows (Flare 343 / 1800 / fire, the Daggers 854 / 1200 / earth;
+nothing for Lightning Strike, an attack skill, an untimed projectile, an unknown skill, or
+either flag); through the real press, E5 and `projectile_tick`: Flare's E5 batch is E5, 58,
+ONE `0x00A4` [me, the target's position, 0, 0.5 s at 1800, 343, handle 1, flag 0], the hold
+pulse -- no word, no visual, the shot a deadline; the arrival `0x00A7 [me, 1, 5]`, `[20, foe,
+me, 344]`, the one word; the Daggers' E5 launches one and queues two 0.333 s apart, the two
+leave behind their `[20, foe, me, 855]` with handles 2 and 3, the three arrivals each `0x00A7`
+[me, h, 11] / visual / word with the chain's `0x005C` on the first only; the revert; the source
+locks; and the tapes through the extractor -- every positioned Daggers, Orb and Javelin launch
+within 2 % of the table, Fireball's on at least fifteen and seven in ten.
+
+**Left.** A BODY's spell projectile (W6's spell half: 77 body shots on tape; a body's
+completion still lands the damage in its batch); the dodge (a projectile reaching an aim its
+target has left -- the arrows do not model it either); Fireball's splash and ground visuals;
+the Javelin's line; a Flare cast by the owner on a tape -- RUN-WEAPONS-1B's wand can cast one
+at the suit (§6): predicts `0x00A4 343` at 1800 u/s in the E5 batch and the word at the
+arrival.

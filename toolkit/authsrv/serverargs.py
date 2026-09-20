@@ -1717,6 +1717,11 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "type, and a spell's projectile carries the held weapon's "
                          "kind in its 0x00A7 -- the reading every run before "
                          "2026-09-19 made.")
+    ap.add_argument("--no-spell-projectiles", action="store_true",
+                    help="studies/weapons 36 REVERT: a projectile SPELL (Flare, Lightning "
+                         "Orb, Dancing Daggers) lands its damage at the E5 with no 0x00A4 in "
+                         "the air -- the reading every run before 2026-09-20 made. "
+                         "--no-projectiles reverts every projectile, the arrows too.")
     ap.add_argument("--no-base-penetration", action="store_true",
                     help="studies/weapons 35 REVERT: no base armour penetration -- an "
                          "attack skill's own (Penetrating Attack's 10 %%, Penetrating "

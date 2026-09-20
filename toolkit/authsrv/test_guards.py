@@ -684,19 +684,29 @@ def section_concurrency():
     # goes one level up for each, as it does for _land_player_swing. A body's
     # skill shot leaves from land_skill through launch_body_projectile and
     # lands in `land_body_skill_shot`, body_projectile_tick's helper: the same
-    # tick sites, no new one.
+    # tick sites, no new one. studies/weapons 36 (2026-09-20): a SPELL's
+    # projectile lands in `land_player_spell_shot`, projectile_tick's helper,
+    # leaves from `launch_player_spell_shot`, cast_tick's helper, and its
+    # queued fellows from `spell_queue_tick`, projectile_tick's -- the same
+    # two tick sites again.
     check(callers == {"_land_player_swing", "cast_tick", "hit_enemy",
                       "dual_second_strike", "second_strike_tick",
-                      "projectile_tick", "land_player_skill_shot"}
+                      "projectile_tick", "land_player_skill_shot",
+                      "land_player_spell_shot"}
           and callers_of("land_player_skill_shot") == {"projectile_tick"}
           and callers_of("launch_player_skill_shot") == {"cast_tick"}
+          and callers_of("land_player_spell_shot") == {"projectile_tick"}
+          and callers_of("launch_player_spell_shot") == {"cast_tick"}
+          and callers_of("spell_queue_tick") == {"projectile_tick"}
           and callers_of("dual_second_strike") == {"cast_tick"}
           and len(_tick_line) == 2
           and sum("# DAGGERS-B6" in l for l in _tick_line) == 1
           and len(_shot_line) == 2
           and sum("# WEAPONS-W2a" in l for l in _shot_line) == 1
           and callers_of("launch_player_projectile") == {"_land_player_swing",
-                                                         "launch_player_skill_shot"}
+                                                         "launch_player_skill_shot",
+                                                         "launch_player_spell_shot",
+                                                         "spell_queue_tick"}
           and callers_of("body_projectile_tick") == {"projectile_tick"}
           and callers_of("land_body_skill_shot") == {"body_projectile_tick"}
           and callers_of("land_or_launch") == {"enemy_attack_tick", "ally_attack_tick"}
