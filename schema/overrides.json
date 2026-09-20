@@ -1995,6 +1995,12 @@
     "name_confidence": "medium",
     "why": "OBSERVED. Integer-property update carrying a second agent (the cause/source). Same worker 0x008128f0 as 0x009F; the source-agent slot 0x009F zeroes is filled from field3. field1=property id; field2=target agent; field3=cause/source agent; field4=int value. Matches the name test_agentlife.py pins. Refuter CONFIRMED. studies/smsgnames."
    },
+   "161": {
+    "opcode": 161,
+    "name": "EFFECT_AT_POINT",
+    "name_confidence": "medium",
+    "why": "OBSERVED on the wire, the handler unread (hence medium). The schema's shape is vec2, word, agent_id, word, byte, byte: field 1 a world POINT, field 3 an agent or 0, field 4 an effect id -- a visual drawn on the ground at a point, with or without an owning agent. Three witnesses (studies/weapons/PLAN.md 36 and 38): every Fireball arrival on 20260817T231139 (35 of 35) carries [aim, 0, 0, 333, 0, 0] at the launch's aim point -- the burst's explosion -- and, when the ball did not connect with its target (21 of 35), [aim, 0, CASTER, 344, 0, 0] with the skill's +0x84 impact id; a Dancing Dagger that reached an aim its target had left drew [aim, 0, caster, 855, 0, 0] and no word (2 of 17 on 20260819T132414); the arena on 20260917T090355 carries [(7856, -1950), 53, 0, 769, 0, 0] with a non-zero second field, so field 2 is not always 0 and is unread. The server sends it since 2026-09-20 (send_ground_visual) for a burst's explosion and a missed impact."
+   },
    "162": {
     "opcode": 162,
     "table": "GAME_SMSG_0162",

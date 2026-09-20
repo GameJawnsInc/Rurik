@@ -692,12 +692,16 @@ def section_concurrency():
     # projectile lands in `land_player_spell_shot`, projectile_tick's helper,
     # leaves from `launch_player_spell_shot`, cast_tick's helper, and its
     # queued fellows from `spell_queue_tick`, projectile_tick's -- the same
-    # two tick sites again.
+    # two tick sites again. Section 38: a burst lands through
+    # `land_player_spell_area`, land_player_spell_shot's helper (and a body's
+    # through land_body_spell_shot's), one level further down the same walk.
     check(callers == {"_land_player_swing", "cast_tick", "hit_enemy",
                       "dual_second_strike", "second_strike_tick",
                       "projectile_tick", "land_player_skill_shot",
-                      "land_player_spell_shot"}
+                      "land_player_spell_shot", "land_player_spell_area"}
           and callers_of("land_player_skill_shot") == {"projectile_tick"}
+          and callers_of("land_player_spell_area") == {"land_player_spell_shot"}
+          and callers_of("land_body_spell_area") == {"land_body_spell_shot"}
           and callers_of("launch_player_skill_shot") == {"cast_tick"}
           and callers_of("land_player_spell_shot") == {"projectile_tick"}
           and callers_of("launch_player_spell_shot") == {"cast_tick"}
