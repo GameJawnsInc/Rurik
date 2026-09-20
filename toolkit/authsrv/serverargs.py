@@ -1717,6 +1717,11 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "type, and a spell's projectile carries the held weapon's "
                          "kind in its 0x00A7 -- the reading every run before "
                          "2026-09-19 made.")
+    ap.add_argument("--no-spell-areas", action="store_true",
+                    help="studies/weapons 38 REVERT: a burst spell (Fireball, the record's "
+                         "target byte 16) lands on its one target with no explosion at the "
+                         "aim and no word for the foes around it -- the reading every run "
+                         "before 2026-09-20 made.")
     ap.add_argument("--no-spell-projectiles", action="store_true",
                     help="studies/weapons 36 / 37 REVERT: a projectile SPELL (Flare, "
                          "Lightning Orb, Dancing Daggers) lands its damage at the E5 (the "

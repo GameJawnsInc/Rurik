@@ -2478,3 +2478,29 @@ between its visual and its word (5 of 5); a dagger reaching an aim its target ha
 ground 0x00A1 [aim, 0, me, 855, 0, 0] and no word (2 of 17). Each dagger deals the scale at the \
 arrival (hit_enemy's exact, not armour-scaled on the player's side -- the standing gap). NOT \
 modelled, said here: the half range and the dodge."""
+
+
+# Fireball -- the corpus's burst spell (35 arrivals on 20260817T231139): the record's target
+# byte 16 and aoe_range 240 make it a burst at the aim (authsrv.spell_area); the row carries
+# the explosion's ground visual, which sits in no column of the record.
+[skill_effect.186]
+scale_means = "Fire damage"
+damage_type = 5                # fire ([damage_type.table]): the 0x00A7 kind on 35 of 35 arrivals (section 34)
+area_visual = 333              # 0x00A1 [aim, 0, 0, 333, 0, 0] at every arrival, 35 of 35 (section 38)
+[skill_effect.186.provenance]
+source = "wiki"
+page = 'GWW, "Fireball", {{Skill infobox}} + {{Skill progression}}, read 2026-09-20'
+verified = """studies/weapons/PLAN.md 38. Wiki: "Spell. Send out a ball of fire that strikes \
+target foe and all nearby foes for 7...112 fire damage"; var1 `Fire damage` 7->112; `aoe = \
+nearby` (GWW "Area of effect": nearby is 252 gwinches, with fifteen named skills at 240). \
+Client (38797): id 186, type_code 5, attribute 10 (Fire Magic), 10 energy, 3/2 s activation, 7 \
+s recharge, scale 7->112 args = 2, TARGET BYTE 16 and aoe_range 240 (the client's own radius, \
+what the server bursts over -- 12 under the wiki's nearby), projectile 343, impact 344, caster \
+visual 332 (+0x78). OBSERVED on the wire (20260817T231139, four casters, 35 arrivals): 0x00A7 \
+[caster, handle, 5]; the impact 344 on the target ([20, target, caster, 344], 14 of 35) or on \
+the ground at the aim (0x00A1 [aim, 0, caster, 344, 0, 0], 21 of 35); the explosion 0x00A1 \
+[aim, 0, 0, 333, 0, 0] on 35 of 35 -- 333 is in no column of the 164-byte record (the caster \
+visual is 332, the impact 344), so this row carries it; then per foe inside the area (1 to 4 a \
+burst, the announced target among them 31 of 35) the word then [20, foe, caster, 344]. NOT \
+modelled, said here: the finer hit test that decides target-or-ground (ours: the target is \
+'hit' when it stands inside the area), the scatter."""

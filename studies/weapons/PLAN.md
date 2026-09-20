@@ -2291,3 +2291,63 @@ and every Javelin 1.0 s. `test_guards`' caller walk gains the three body-side he
 **Left.** Fireball's splash (35 of the 77 are Fireballs, each reaching one to three foes with
 its two ground visuals); the dodge for every projectile; the `[55]` energy word a body's
 completion carries; the bonus penetration tier (item word 574).
+
+## 38. Fireball's splash -- 2026-09-20: a burst at the aim -- the explosion, then a word and an impact per foe
+
+**What §37 left.** A body's Fireball flew and landed on ONE target; the tape's 35 Fireball
+arrivals each reach one to four foes with two ground visuals at the aim.
+
+**The record marks a burst.** The `s_skill` target byte is 16 on 34 rows, every one with an
+`aoe_range` -- Fireball's 240, the wiki's "nearby" (GWW "Area of effect": nearby is 252
+gwinches, fifteen named skills at 240; the client's own column is what the server bursts
+over, 12 under the wiki's word). Flare's 156 is its Overcast adjacency and its byte is 5: one
+target. So `spell_area(skill_id)` is the radius when the byte is 16, else None.
+
+**The shape, OBSERVED (35 of 35, `20260817T231139`, four casters).** `0x00A7 [caster, handle,
+5]`; then the IMPACT (`+0x84`, 344) -- `[20, target, caster, 344]` when the ball connected with
+its target (14 of 35), else on the GROUND at the aim, `0x00A1 [aim, 0, caster, 344, 0, 0]` (21
+of 35: the target had moved; the Daggers' miss in §36 draws the same); then the EXPLOSION,
+`0x00A1 [aim, 0, 0, 333, 0, 0]` (35 of 35 -- 333 sits in no column of the 164-byte record,
+whose caster visual is 332 and impact 344, so the row carries it as `area_visual`, capture);
+then, per foe inside the radius of the aim (1 foe on 15 arrivals, 2 on 11, 3 on 8, 4 on 1; the
+announced target among them 31 of 35), the word then `[20, foe, caster, 344]` -- word FIRST
+here, where a single-target spell's visual precedes its word (§36 / §37). Each foe's number is
+its own: three different fractions in one burst on the tape. `0x00A1` (`GAME_SMSG_0161` in the
+schema: vec2, word, agent, word, byte, byte) is the client's effect-at-a-point message; this
+server had never sent one.
+
+**What ships.** Both launchers remember the AIM (the target's position at the launch);
+`foes_within(state, caster, point, radius)` (a hostile's foes are the player, first, and the
+party's bodies; the player's or a party body's are the hostiles; the dead and the caster
+never); `send_ground_visual` (`0x00A1`); `land_body_spell_area` -- every foe's terms first
+(refusable, nothing sent), then the `0x00A7`, the impact on the target when it stands inside
+the area else on the ground at the aim (RECONSTRUCTION: the tape's hit test is finer), the
+explosion, then per foe its word (the player through its pool, a body through
+`hurt_agent_row`) and its `[20]`; `land_player_spell_area` the same through `hit_enemy`'s
+`exact` per hostile. Fireball's `skill_effect` row (`Fire damage`, type 5, `area_visual` 333)
+lets the player's and a body's Fireball deal at all. `--no-spell-areas` reverts to one target.
+NOT MODELLED, said here: the finer target-or-ground test, the scatter (a single-packet burst
+causes none, WIKI), a foe's movement between the launch and the arrival (the rows are read
+as they stand at the arrival), a moving target's lead.
+
+**Tests.** `test_weapons.py` section 26 (9 checks, floor 228 → 237; a vault run 254 -- the
+tape's bursts are the one vault-only check): the row and the reader (Fireball 240, Flare and
+the Orb one target, the flag); `foes_within` on a mixed field (the player and the monk 110 u
+off, not the body 400 u off; the hostiles beside the archer, not the far or the dead one, never
+the caster; a dead player unreached); through the real `land_skill` and `projectile_tick` a
+hostile's Fireball at the player bursts as `0x00A7` / the impact on the player / the explosion
+at the aim / the player's word and `[20]` / the monk's word and `[20]`, each its own number,
+the far body untouched; with the player 600 u from the aim the impact goes on the GROUND with
+the caster's id and only the monk is worded; the player's own Fireball through the press and
+the E5 bursts over the target and the hostile 50 u beside it, 60 each, the far one untouched;
+the revert is the Orb's single-target shape; the source locks; and the tape: every fire
+arrival with an explosion draws the 333 with no agent, the impact on the ground with the
+caster's id on at least fifteen and on the target on at least ten, and every worded foe gets
+its `[20]`.
+
+**Left.** The finer hit test (target or ground -- 14 / 21 on the tape) and the dodge it
+implies, for every projectile; the scatter; the `[55]` energy word; the bonus penetration
+tier (item word 574). Of the 34 target-16 rows only Fireball and 193 (Phoenix) are
+projectiles; the other 32 are point-blank bursts at the target with no flight
+(Aftershock, Shock...), which land through the completion's single-target path today and
+would take the same `foes_within` at the target's position -- a rung of its own.

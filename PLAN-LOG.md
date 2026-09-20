@@ -28,6 +28,19 @@ move back.
 
 ---
 
+### Fireball's splash -- 2026-09-20 -- **a burst at the aim: the explosion, then a word and an impact per foe**
+
+[studies/weapons/PLAN.md](studies/weapons/PLAN.md) §38. The record's target byte 16 and
+`aoe_range` (Fireball 240, the wiki's "nearby") mark a burst; OBSERVED on all 35 Fireball
+arrivals: `0x00A7`, the impact 344 on the target (14) or on the ground at the aim (21), the
+explosion `0x00A1 [aim, 0, 0, 333]` (333 is in no record column; the row carries it), then per
+foe inside the radius the word then `[20, foe, caster, 344]` -- one to four foes a burst, each
+its own number, the announced target among them 31 of 35. Ships `spell_area`, `foes_within`,
+`send_ground_visual` (the server's first `0x00A1`), `land_body_spell_area` (every foe's terms
+before the `0x00A7`) and `land_player_spell_area`, both launchers remembering the aim,
+Fireball's `skill_effect` row, `--no-spell-areas`. The finer target-or-ground test and the
+dodge stay open. Tests: `test_weapons` 26 (9 checks, floor 228 → 237, a vault run 254).
+
 ### A body's spell projectile -- 2026-09-20 -- **W6's spell half: the completion launches it, the arrival lands it**
 
 [studies/weapons/PLAN.md](studies/weapons/PLAN.md) §37. OBSERVED on all 77 body spell shots in

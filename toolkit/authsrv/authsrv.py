@@ -11871,7 +11871,8 @@ def launch_body_projectile(send, state, conn_id, agent_id, agent, tid, how):
     flying = state.setdefault("body_projectiles", [])
     shot = {"shooter": agent_id, "target": tid, "arrives_at": now + flight,
             "handle": 1 + sum(1 for s in flying if s["shooter"] == agent_id),
-            "damage_type": how["damage_type"]}
+            "damage_type": how["damage_type"],
+            "aim": (float(tx), float(ty))}                     # studies/weapons 38
     flying.append(shot)
     send(GAME_SMSG_AGENT_PROJECTILE_LAUNCHED,
          [agent_id, [float(tx), float(ty)], 0, _f32(flight), how["projectile"],
@@ -12113,6 +12114,9 @@ def land_body_spell_shot(send, state, conn_id, shot):
     who, tid, spell = shot["shooter"], shot["target"], shot["spell"]
     sid = spell["skill_id"]
     agent = state.get("agents", {}).get(who)
+    radius = spell_area(sid)
+    if radius is not None and agent is not None and shot.get("aim") is not None:
+        return land_body_spell_area(send, state, conn_id, shot, agent, radius)   # 38
     alive = agent is not None and not target_dead(state, tid)
     tbody = tid != PLAYER_AGENT_ID and tid in state.get("agents", {})
     terms = (body_spell_terms(state, agent, sid, spell["amount"], tid, tbody)
@@ -12149,7 +12153,8 @@ def launch_player_projectile(send, state, conn_id, swing, how):
     flight = math.hypot(tx - px, ty - py) / how["speed"]
     flying = state.setdefault("player_projectiles", [])
     shot = {"target": swing["target"], "arrives_at": now + flight,
-            "handle": len(flying) + 1, "damage_type": how["damage_type"]}
+            "handle": len(flying) + 1, "damage_type": how["damage_type"],
+            "aim": (tx, ty)}                                   # studies/weapons 38
     flying.append(shot)
     send(GAME_SMSG_AGENT_PROJECTILE_LAUNCHED,
          [PLAYER_AGENT_ID, [tx, ty], 0, _f32(flight), how["projectile"],
@@ -12485,6 +12490,9 @@ def land_player_spell_shot(send, state, conn_id, shot):
     spell, tid = shot["spell"], shot["target"]
     sid = spell["skill_id"]
     vis = spell.get("visual")
+    radius = spell_area(sid)
+    if radius is not None and shot.get("aim") is not None:    # studies/weapons 38
+        return land_player_spell_area(send, state, conn_id, shot, radius)
     if vis is not None:
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
              [agents.GV_EFFECT_ON_TARGET, tid, PLAYER_AGENT_ID, int(vis)],
@@ -12502,6 +12510,170 @@ def land_player_spell_shot(send, state, conn_id, shot):
     return hit_enemy(send, state, tid, conn_id, exact=spell["amount"], swing=False,
                      armed=True, projectile=True,
                      label=f"skill {sid}'s projectile lands", before_damage=before)
+
+
+# ---- FIREBALL'S SPLASH: A PROJECTILE SPELL'S AREA (2026-09-20, studies/weapons 38)
+#
+# OBSERVED on all 35 Fireball arrivals in the live corpus (20260817T231139,
+# four casters). The record's target byte is 16 ("target foe and the foes
+# around it": 34 rows, every one with an aoe_range -- Fireball's 240, the
+# wiki's "nearby"; Flare's 156 is its Overcast adjacency and its byte is 5)
+# and the arrival explodes AT THE AIM, the target's position at the launch:
+#
+#   0x00A7 [caster, handle, 5]
+#   then the IMPACT (+0x84, 344): [20, target, caster, 344] when the ball
+#        connected with its target (14 of 35), else on the GROUND at the aim,
+#        0x00A1 [aim, 0, caster, 344, 0, 0] (21 of 35 -- the target had moved;
+#        the Daggers' miss draws the same, section 36)
+#   then the EXPLOSION, 0x00A1 [aim, 0, 0, 333, 0, 0] (35 of 35; 333 is in no
+#        column of the record -- the row carries it, `area_visual`, capture)
+#   then, per foe inside the radius of the aim (1 to 4 a burst, the announced
+#        target among them 31 of 35): the word, then [20, foe, caster, 344]
+#        -- word FIRST here, where a single-target spell's visual precedes
+#        its word.
+#
+# The per-foe number is each taker's own: its armour against the spell's
+# type, its own episodes, its own maximum (three different fractions in one
+# burst on the tape). NOT MODELLED, said here: the finer hit test that puts
+# the impact on the target or on the ground (ours: on the target when it is
+# inside the area -- RECONSTRUCTION), the scatter (monsters fleeing an area
+# damage-over-time; a single-packet burst does not cause it, WIKI), a moving
+# foe's position between the launch and the arrival (the tick reads the rows
+# as they stand at the arrival). --no-spell-areas reverts: one target.
+GAME_SMSG_EFFECT_AT_POINT = 0x00A1   # [point, 0, agent, effect, 0, 0]: a visual on the
+                                     # ground -- the aim's explosion, a missed impact
+AREA_TARGET_BYTE = 16                # the record's target byte for a burst at the target
+SPELL_AREAS = True                   # --no-spell-areas reverts: one target, as before
+
+
+def spell_area(skill_id):
+    """The radius a projectile spell explodes over: the record's `aoe_range`
+    when its target byte is 16 (Fireball 240), else None (one target)."""
+    if not SPELL_AREAS:
+        return None
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return None
+    if int(row.get("target", -1)) != AREA_TARGET_BYTE:
+        return None
+    radius = float(row.get("aoe_range", 0.0) or 0.0)
+    return radius if radius > 0.0 else None
+
+
+def spell_area_visual(skill_id):
+    """The ground visual a burst draws at the aim (the row's `area_visual`:
+    Fireball's 333, OBSERVED 35 of 35), or None."""
+    v = skill_effect_row(skill_id).get("area_visual")
+    return int(v) if v is not None else None
+
+
+def send_ground_visual(send, point, agent_id, visual, why):
+    send(GAME_SMSG_EFFECT_AT_POINT,
+         [[float(point[0]), float(point[1])], 0, int(agent_id), int(visual), 0, 0], why)
+
+
+def foes_within(state, caster_id, point, radius):
+    """Living FOES of `caster_id` inside `radius` of `point`: for a hostile
+    caster the player (first) and the party's bodies, for the player or a
+    party body the hostiles. The caster itself never."""
+    table = state.get("agents", {})
+    hostile = (caster_id != PLAYER_AGENT_ID
+               and (table.get(caster_id) or {}).get("allegiance") == agents.ALLEGIANCE_HOSTILE)
+    px, py = float(point[0]), float(point[1])
+    out = []
+    if hostile:
+        if not state.get("player_dead"):
+            x, y = target_pos(state, PLAYER_AGENT_ID)
+            if math.hypot(float(x) - px, float(y) - py) <= radius:
+                out.append(PLAYER_AGENT_ID)
+        want = agents.ALLEGIANCE_PLAYER
+    else:
+        want = agents.ALLEGIANCE_HOSTILE
+    for aid, row in sorted(table.items(), key=lambda kv: int(kv[0])):
+        if aid == caster_id or not isinstance(row, dict) or row.get("dead") \
+                or row.get("allegiance") != want:
+            continue
+        if math.hypot(float(row["pos"][0]) - px, float(row["pos"][1]) - py) <= radius:
+            out.append(aid)
+    return out
+
+
+def send_area_impact(send, state, shot, caster_id, foes, visual, sid):
+    """The impact on the target when the burst reached it, else on the ground
+    at the aim; then the explosion at the aim."""
+    tid, aim = shot["target"], shot["aim"]
+    if visual is not None:
+        if tid in foes:
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+                 [agents.GV_EFFECT_ON_TARGET, tid, caster_id, int(visual)],
+                 f"skill {sid}'s impact ({visual}) on {target_label(state, tid)}")
+        else:
+            send_ground_visual(send, aim, caster_id, visual,
+                               f"skill {sid}'s impact ({visual}) on the ground at the aim -- "
+                               f"{target_label(state, tid)} was not there")
+    area_vis = spell_area_visual(sid)
+    if area_vis is not None:
+        send_ground_visual(send, aim, 0, area_vis, f"skill {sid}'s burst ({area_vis}) at the aim")
+
+
+def land_player_spell_area(send, state, conn_id, shot, radius):
+    """The player's burst spell arrives (its 0x00A7 went out): the impact,
+    the explosion, then per hostile inside the radius of the aim its own word
+    (hit_enemy's `exact`) and its [20, foe, me, impact]."""
+    spell, sid = shot["spell"], shot["spell"]["skill_id"]
+    vis = spell.get("visual")
+    foes = foes_within(state, PLAYER_AGENT_ID, shot["aim"], radius)
+    send_area_impact(send, state, shot, PLAYER_AGENT_ID, foes, vis, sid)
+    landed = 0
+    for foe in foes:
+        res = hit_enemy(send, state, foe, conn_id, exact=spell["amount"], swing=False,
+                        armed=True, projectile=True,
+                        label=f"skill {sid}'s burst reaches agent {foe}")
+        if res == "landed":
+            landed += 1
+        if vis is not None and res == "landed":
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+                 [agents.GV_EFFECT_ON_TARGET, foe, PLAYER_AGENT_ID, int(vis)],
+                 f"skill {sid}'s impact ({vis}) on agent {foe}")
+    print(f"[c{conn_id}] skill {sid} bursts over {len(foes)} foe(s) within {radius:.0f} u "
+          f"of the aim ({landed} landed) [studies/weapons 38]", flush=True)
+    return "landed" if landed else None
+
+
+def land_body_spell_area(send, state, conn_id, shot, agent, radius):
+    """A body's burst spell arrives: every foe's terms first (refusable),
+    then the 0x00A7, the impact, the explosion, then per foe its word and its
+    [20, foe, caster, impact] -- the player through its pool, a body through
+    hurt_agent_row."""
+    who, spell = shot["shooter"], shot["spell"]
+    sid, vis = spell["skill_id"], spell.get("visual")
+    foes = foes_within(state, who, shot["aim"], radius)
+    table = state.get("agents", {})
+    terms = {}
+    for foe in foes:
+        tbody = foe != PLAYER_AGENT_ID and foe in table
+        terms[foe] = body_spell_terms(state, agent, sid, spell["amount"], foe, tbody)
+    send(GAME_SMSG_AGENT_PROJECTILE_ARRIVED,
+         [who, shot["handle"], shot["damage_type"]],
+         f"agent {who}'s projectile (handle {shot['handle']}) arrives")
+    send_area_impact(send, state, shot, who, foes, vis, sid)
+    for foe in foes:
+        dealt, conversion, frac, spell_ar = terms[foe]
+        tbody = foe != PLAYER_AGENT_ID and foe in table
+        if conversion is not None:
+            resolve_taker_conversion(send, state, conversion, conn_id)
+        if frac is None:
+            continue
+        body_spell_word(send, state, who, sid, foe, tbody, dealt, frac, spell_ar,
+                        spell["amount"], conn_id)
+        if vis is not None:
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+                 [agents.GV_EFFECT_ON_TARGET, foe, who, int(vis)],
+                 f"agent {who}'s skill {sid}: its impact ({vis}) on {target_label(state, foe)}")
+    print(f"[c{conn_id}] agent {who}'s skill {sid} bursts over {len(foes)} foe(s) within "
+          f"{radius:.0f} u of the aim [studies/weapons 38]", flush=True)
+    return "landed" if foes else None
 # The two modifier identifiers an armour piece carries. 572's argument is the
 # rating the tooltip prints as `Armor: N`; 527's is the `+N vs. <type>` line,
 # and identifier 4 beside it resolves to `vs. physical damage`. All three were
@@ -33831,6 +34003,12 @@ def main():
         print("SPELLS: --no-spell-own-type -- every incoming spell reads as elemental "
               "against the armour and a spell's projectile carries the held weapon's "
               "kind [studies/weapons 34 revert]", flush=True)
+    if a.no_spell_areas:
+        global SPELL_AREAS
+        SPELL_AREAS = False
+        print("SPELLS: --no-spell-areas -- a burst spell (Fireball) lands on its one "
+              "target and draws no explosion, the reading every run before 2026-09-20 "
+              "made [studies/weapons 38 revert]", flush=True)
     if a.no_spell_projectiles:
         global SPELL_PROJECTILES
         SPELL_PROJECTILES = False
