@@ -5423,7 +5423,7 @@ def section_hold_plane():
     LEDGER.ok(_src.count("AGENT_SET_PROFESSION(hero agent") == 1
               and _src.index("if HERO_BODY and not party_bodies_here(state)",
                              _pro - 800) < _pro
-              and _pro < _src.index("level {HERO_LEVEL} on hero agent"),
+              and _pro < _src.index("level {_hlv} on hero agent"),   # SANDBOX-B3: per hero
               "a town sends 0x00A6 for the bodiless hero agent, gated on "
               "party_bodies_here being False, ahead of its prop-36 level "
               "(the pair's retail order)", "site order in the load path")
@@ -6077,9 +6077,13 @@ def section_hold_plane():
               f"{_msg[:12]}")
     LEDGER.ok(authsrv.party_weapon_item({"profession": 3}) == "caster_staff"
               and authsrv.party_weapon_item({"profession": 6}) == "caster_staff"
-              and authsrv.party_weapon_item({"profession": 1}) is None,
-              "a Monk or Elementalist body holds the staff; a Warrior body holds "
-              "nothing yet (its sword and shield are on the tape, not extracted)",
+              and authsrv.party_weapon_item({"profession": 1}) == "starter_sword"
+              and authsrv.party_weapon_item({"profession": 1}, "hammer") == "starter_hammer"
+              and authsrv.party_weapon_item({"profession": 3}, "sword") == "starter_sword",
+              "a Monk or Elementalist body holds the staff; a Warrior body holds the "
+              "starter sword (SANDBOX-B3: the row landed at SLICE-H9 and the table was "
+              "told 2026-09-20 -- it said `None` until then and the body punched); a "
+              "row's own weapon class wins over the profession's",
               f"monk {authsrv.party_weapon_item({'profession': 3})}, warrior "
               f"{authsrv.party_weapon_item({'profession': 1})}")
     _src = inspect.getsource(authsrv)

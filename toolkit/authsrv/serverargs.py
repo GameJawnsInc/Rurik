@@ -227,6 +227,15 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "experiment and are announced loudly; the appearance "
                          "nibble stays at the default on purpose, being "
                          "different bound-checked storage.")
+    ap.add_argument("--spawn-secondary", type=int, default=None, metavar="N",
+                    help="SANDBOX-B4: the SECONDARY profession the spawn burst's "
+                         "0x00B7 and the player's 0x00A6 carry (default 0, none "
+                         "-- every session before 2026-09-20). 1..10, never the "
+                         "primary (GmDeckBuilder:2321). The harness forwards it "
+                         "to the authsrv beside --spawn-profession. A [party.KEY] "
+                         "row's `player_secondary` sets it too; this flag wins. "
+                         "What the client DRAWS for the pair is SANDBOX-U1 "
+                         "(studies/sandbox/PLAN.md), unrun.")
     ap.add_argument("--click-echo", action="store_true",
                     help="MOVECODE-K2. When a click is refused for STALENESS "
                          "(geo-stale) -- which during click-moving is "

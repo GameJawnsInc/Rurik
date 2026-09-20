@@ -267,12 +267,18 @@ def spawn_profession_args(game_args):
     which is the asymmetry `server_specs` documents at length.
     """
     args = list(game_args)
-    for i, tok in enumerate(args):
-        if tok == "--spawn-profession" and i + 1 < len(args):
-            return ["--spawn-profession", args[i + 1]]
-        if tok.startswith("--spawn-profession="):
-            return [tok]
-    return []
+    out = []
+    # SANDBOX-B4: the secondary rides with it -- the roster blob and the
+    # avatar's pair are one fact on two channels, same as the primary.
+    for flag in ("--spawn-profession", "--spawn-secondary"):
+        for i, tok in enumerate(args):
+            if tok == flag and i + 1 < len(args):
+                out += [flag, args[i + 1]]
+                break
+            if tok.startswith(flag + "="):
+                out.append(tok)
+                break
+    return out
 
 
 def persist_args(game_args):

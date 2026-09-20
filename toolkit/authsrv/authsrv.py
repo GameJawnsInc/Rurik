@@ -3169,6 +3169,14 @@ def char_settings_for(profession, settings=None):
 # load, so a custom id must never go there -- and a mismatch (nibble 1, byte N)
 # is exactly the condition run 2 already measured as survivable.
 SPAWN_PROFESSION = PROF_WARRIOR
+# SANDBOX-B4 (2026-09-20): the player's SECONDARY, 0 = none, which is what
+# every session before today sent (agent_set_profession's own default). Set by
+# a [party.KEY] row's `player_secondary` or --spawn-secondary; carried on the
+# burst's 0x00B7 and the player's own 0x00A6, and into attribute_state so the
+# secondary's attributes are spendable. Across 387 live samples the secondary
+# is non-zero about half the time (agents.agent_set_profession), so the wire
+# shape is retail's; what our client DRAWS for it is SANDBOX-U1, unrun.
+SPAWN_SECONDARY = 0
 
 
 def spawn_profession_values(profession=None, agent_id=None):
@@ -3187,8 +3195,11 @@ def spawn_profession_values(profession=None, agent_id=None):
     unchanged.
     """
     p = SPAWN_PROFESSION if profession is None else profession
+    # SANDBOX-B4: the player's own pair carries SPAWN_SECONDARY; a hero's
+    # secondary stays 0 (not modelled).
+    s = SPAWN_SECONDARY if agent_id is None else 0
     return agents.agent_set_profession(
-        PLAYER_AGENT_ID if agent_id is None else agent_id, p, 0,
+        PLAYER_AGENT_ID if agent_id is None else agent_id, p, s,
         custom=p > agents.CHAR_PROFESSIONS - 1) + [0]
 
 
@@ -10781,6 +10792,116 @@ SCALE_MEANS_RESURRECT = {"Resurrect"}
 # the cured case SLICE-F10 proved. Activation and recharge are the client's
 # own row (1.0 s / 2 s; 0.75 s / 2 s). `--hero-skills` still overrides.
 HERO_SKILLS = ((281, 1.0, 2.0), (276, 0.75, 2.0))
+# ---- SANDBOX-B3 (2026-09-20): PER-HERO ROWS ------------------------------
+#
+# A [party.KEY] row may carry `heroes`, a list of tables ([[party.KEY.heroes]]),
+# one per hero, each with its OWN body, profession, bar, level, vitals, ranks,
+# weapon, armour and damage. Until today every one of those was a single
+# global -- HERO_BODY_NPC, HERO_SKILLS, HERO_LEVEL, HERO_VITALS, HERO_ATTRIBUTES,
+# HERO_ARMOR, HERO_DAMAGE, HERO_WEAPON_ATTRIBUTE, HERO_WEAPON -- and `--hero
+# 1,2,3` gave three heroes one body and one bar. HERO_ROWS is {hero index:
+# that table}; every reader below asks these functions and falls back to the
+# global, so a row with no `heroes` list, and every launch before today, is
+# byte-identical. The orchestrator (toolkit/harness/sandbox.py) is what writes
+# such rows; studies/sandbox/PLAN.md.
+HERO_ROWS = {}
+HERO_ROW_BARS = {}             # hero index -> ((id, activation, recharge), ...)
+
+
+def hero_row(hid):
+    return HERO_ROWS.get(int(hid)) or {}
+
+
+def hero_body_key(hid):
+    return hero_row(hid).get("body") or HERO_BODY_NPC
+
+
+def hero_body_row(hid):
+    return agents.npc_template(hero_body_key(hid))
+
+
+def hero_profession(hid):
+    """The pair's primary for one hero: the row's own `profession`, else its
+    body template's byte, else 1 (a hero with no body, the JARIN rig)."""
+    r = hero_row(hid)
+    if r.get("profession") is not None:
+        return int(r["profession"])
+    return int(hero_body_row(hid)["profession"]) if HERO_BODY else 1
+
+
+def hero_bar(hid):
+    """((id, activation, recharge), ...): the row's own bar (timing from the
+    client's table, as --hero-skills), else HERO_SKILLS."""
+    r = hero_row(hid)
+    if r.get("skills") is None:
+        return tuple(HERO_SKILLS or ())
+    key = int(hid)
+    if key not in HERO_ROW_BARS:
+        bar = []
+        for sid in r["skills"]:
+            act, _after, rech = skill_timing(int(sid))
+            bar.append((int(sid), act, float(rech)))
+        HERO_ROW_BARS[key] = tuple(bar)
+    return HERO_ROW_BARS[key]
+
+
+def hero_bar_ids(hid):
+    return [int(sk[0]) for sk in hero_bar(hid)]
+
+
+def hero_level(hid):
+    r = hero_row(hid)
+    return int(r["level"]) if r.get("level") is not None else HERO_LEVEL
+
+
+def hero_vitals(hid):
+    """(health, energy) or None, as HERO_VITALS."""
+    r = hero_row(hid)
+    if r.get("health") is None and r.get("energy") is None:
+        return HERO_VITALS
+    base = HERO_VITALS or (100, 30)
+    return (int(r.get("health", base[0])), int(r.get("energy", base[1])))
+
+
+def hero_attributes(hid):
+    r = hero_row(hid)
+    if r.get("attributes"):
+        return {int(a): int(k) for a, k in r["attributes"]}
+    return HERO_ATTRIBUTES
+
+
+def hero_armor(hid):
+    r = hero_row(hid)
+    return float(r["armor"]) if r.get("armor") is not None else HERO_ARMOR
+
+
+def hero_damage(hid):
+    r = hero_row(hid)
+    return ((float(r["damage"][0]), float(r["damage"][1])) if r.get("damage")
+            else HERO_DAMAGE)
+
+
+def hero_weapon_attribute(hid):
+    r = hero_row(hid)
+    return (int(r["weapon_attribute"]) if r.get("weapon_attribute") is not None
+            else HERO_WEAPON_ATTRIBUTE)
+
+
+def hero_weapon(hid):
+    """The attack_speed rates key this hero swings at, or None for the
+    profession's (party_attack_speed / party_weapon_item)."""
+    return hero_row(hid).get("weapon") or HERO_WEAPON
+
+
+def hero_appearance(hid):
+    """(file_id, model_id) for 0x0073's appearance pair: the row's own body
+    when it names one, else the --hero-appearance / party-body pair."""
+    if hero_row(hid).get("body"):
+        b = hero_body_row(hid)
+        return (int(b["file_id"]), int(b.get("model_id", 0)))
+    return HERO_APPEARANCE or (0, 0)
+
+
 # ---- SLICE-H4: THE PARTY FIGHTS (studies/slice F30, henchjoin.py --fight) --
 #
 # Read off retail's own henchmen, 89 opening starts by a party body: 77 came
@@ -10858,6 +10979,11 @@ PARTY_WEAPON_ITEMS.update({"axe": "starter_axe", "scythe": "starter_scythe",
                            "spear": "starter_spear", "shortbow": "starter_bow",
                            "flatbow": "starter_bow", "longbow": "starter_bow",
                            "recurve": "starter_bow", "hornbow": "starter_bow"})
+# SANDBOX-B3: the sword and the hammer. Their item rows landed with SLICE-H9
+# and SLICE-H11 (the slice's player and its raiders hold them) and this table
+# was never told, so a Warrior party body -- PARTY_WEAPON_BY_PROFESSION[1] is
+# "sword" -- held nothing and the client drew its swing as a punch (SLICE-H7).
+PARTY_WEAPON_ITEMS.update({"sword": "starter_sword", "hammer": "starter_hammer"})
 HERO_WEAPON_ITEM_ID = 210      # + the hero's slot; clear of the player's 1-10
 # SLICE-H11: a spawn row's `weapon_item` (a content item key) is declared and
 # named on the body at its create, retail's shape for EVERY body and not only
@@ -17163,11 +17289,11 @@ def attribute_state(state):
         int(agents.PLAYER_ATTRIBUTE_POINTS),
         bonuses=equipped_attribute_bonuses(),
         primary=SPAWN_PROFESSION,
-        # This server spawns with NO secondary (agent_set_profession's own
-        # default), so every spendable attribute belongs to the primary. The
-        # day a secondary exists, pass it here and the is_primary rule starts
-        # refusing the other profession's primary attribute on its own.
-        secondary=0)
+        # SANDBOX-B4: the secondary, when a row or --spawn-secondary gives one
+        # (0 before 2026-09-20). With it the is_primary rule refuses the other
+        # profession's primary attribute on its own and its other attributes
+        # become spendable.
+        secondary=SPAWN_SECONDARY)
     state["attributes"] = st
     return st
 
@@ -17281,13 +17407,12 @@ def hero_attribute_state(state, hero_index):
         return st
     player = attribute_state(state)          # for its rules tables only
     _own, _bar, ranks, points = hero_build(state, hero_index)
-    ranks = dict(ranks) if ranks is not None else dict(HERO_ATTRIBUTES or {})
+    ranks = dict(ranks) if ranks is not None else dict(hero_attributes(hero_index) or {})
     spent = player.rules.total_spent(ranks)
     st = attribspend.AttributeState(
         player.rules, ranks,
         int(points) if points is not None else spent,
-        primary=(agents.npc_template(HERO_BODY_NPC)["profession"]
-                 if HERO_BODY else 1),
+        primary=hero_profession(hero_index),        # SANDBOX-B3: this hero's own
         secondary=0)
     cache[hero_index] = st
     return st
@@ -17375,10 +17500,9 @@ def handle_skillbar_skill_set(values, send, state, conn_id, rec):
     else:
         who = f"hero {hero_index}"
         _own, _bar, _r, _p = hero_build(state, hero_index)
-        before = list(_bar) if _bar is not None else [
-            int(sk[0]) for sk in (HERO_SKILLS or ())]
+        before = list(_bar) if _bar is not None else hero_bar_ids(hero_index)
         library = hero_usable_library(state, hero_index, _own if _own is not None
-                                      else [int(sk[0]) for sk in (HERO_SKILLS or ())])
+                                      else hero_bar_ids(hero_index))
     before += [0] * (SKILLBAR_SLOTS - len(before))
 
     why = herolib.refuse_bar_slot(slot, skill_id, library)
@@ -17458,8 +17582,7 @@ def handle_skillbar_skill_swap(values, send, state, conn_id, rec):
     else:
         who = f"hero {hero_index}"
         _own, _bar, _r, _p = hero_build(state, hero_index)
-        before = list(_bar) if _bar is not None else [
-            int(sk[0]) for sk in (HERO_SKILLS or ())]
+        before = list(_bar) if _bar is not None else hero_bar_ids(hero_index)
     before += [0] * (SKILLBAR_SLOTS - len(before))
 
     why = herolib.refuse_bar_swap(before, src, tgt)
@@ -22302,12 +22425,11 @@ def hero_character_block(state, haid, hid):
     0x003A attributes. (0x0065, 0x00A2 43 and 0x009A/0x009B ride there too
     and are not modelled here.) Returns [(op, vals, label)] for `_seq`."""
     out = []
-    _hprof = (agents.npc_template(HERO_BODY_NPC)["profession"]
-              if HERO_BODY else 1)
+    _hprof = hero_profession(hid)                       # SANDBOX-B3: per hero
     _hattr = attribute_state(state)
     # --persist: this character's own stored build for this hero.
     _hs_skills, _hs_bar, _hs_ranks, _hs_points = hero_build(state, hid)
-    _h_ranks = _hs_ranks if _hs_ranks is not None else HERO_ATTRIBUTES
+    _h_ranks = _hs_ranks if _hs_ranks is not None else hero_attributes(hid)
     if _h_ranks:
         # THE BUDGET IS THE HERO'S OWN, and when the store names one the hero
         # can have UNSPENT points -- which is what makes the panel's plus
@@ -22332,7 +22454,7 @@ def hero_character_block(state, haid, hid):
         # The hero's OWN bar (retail: [322, 382, 348, 1, 385, 346, 0, 2] on
         # the panel); the player's SKILLBAR only when the hero has none.
         _hskills = (list(_hs_bar) if _hs_bar is not None
-                    else [int(sk[0]) for sk in (HERO_SKILLS or ())]
+                    else hero_bar_ids(hid)              # SANDBOX-B3: per hero
                     or list(SKILLBAR))
         _hskills = _hskills[:SKILLBAR_SLOTS]
         _hskills += [0] * (SKILLBAR_SLOTS - len(_hskills))
@@ -22340,7 +22462,7 @@ def hero_character_block(state, haid, hid):
                     [haid, _hskills, SKILLBAR_PVP_MASKS, SKILLBAR_TRAILER],
                     f"SKILLBAR_UPDATE(hero agent {haid}){_hskills} [JARIN rig]"))
     _m = hero_morale(state, haid)
-    _hv = HERO_VITALS or (100, 30)
+    _hv = hero_vitals(hid) or (100, 30)                 # SANDBOX-B3: per hero
     _e_max = int(morale.effective_max(_hv[1], _hv[1], _m))
     _h_max = int(morale.effective_max(_hv[0], _hv[0], _m))
     if HERO_RIG_0065:
@@ -22359,9 +22481,9 @@ def hero_character_block(state, haid, hid):
     if HERO_RIG_0065:
         out.append((GAME_SMSG_HERO_UNNAMED_0065, [haid, 0],
                     f"0x0065 [hero agent {haid}, 0] -- retail's, after the morale [JARIN rig]"))
-    if HERO_LEVEL is not None:
-        out.append((GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [agents.PROP_LEVEL, haid, HERO_LEVEL],
-                    f"hero agent {haid} at level {HERO_LEVEL} [JARIN rig]"))
+    if hero_level(hid) is not None:                     # SANDBOX-B3: per hero
+        out.append((GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [agents.PROP_LEVEL, haid, hero_level(hid)],
+                    f"hero agent {haid} at level {hero_level(hid)} [JARIN rig]"))
     out.append((GAME_SMSG_AGENT_SET_PROFESSION,
                 agents.agent_set_profession(haid, int(_hprof)),
                 f"0x00A6 for hero agent {haid} (prof {_hprof}) [JARIN rig]"))
@@ -22605,11 +22727,12 @@ def party_reach(agent):
     return enemy_reach() if party_melee(agent) else PARTY_RANGED_REACH
 
 
-def party_attack_speed(npc):
-    """The interval a party body swings at: HERO_WEAPON's rate when set
+def party_attack_speed(npc, weapon=None):
+    """The interval a party body swings at: this hero's own weapon key when
+    the row names one (SANDBOX-B3, `weapon`), else HERO_WEAPON's rate when set
     (--hero-weapon / [party.KEY].weapon), else the profession's weapon
     (PARTY_WEAPON_BY_PROFESSION), else ENEMY_ATTACK_SPEED."""
-    key = HERO_WEAPON or PARTY_WEAPON_BY_PROFESSION.get(
+    key = weapon or HERO_WEAPON or PARTY_WEAPON_BY_PROFESSION.get(
         (npc or {}).get("profession"))
     return float(agents.ATTACK_SPEED.get(key, ENEMY_ATTACK_SPEED))
 
@@ -22637,13 +22760,20 @@ def apply_party_character(prow, record_set0=True):
     rate 0.0528 on a maximum of 25 on 20260817T183756 (pools.py), which IS
     wire_regen_rate(4, 25)."""
     global PLAYER_SWING_DAMAGE, WEAPON_ATTACK_SPEED, ATTACK_INTERVAL
-    global PARTY_SKILLBAR, SPAWN_PROFESSION, PLAYER_ENERGY_PIPS
+    global PARTY_SKILLBAR, SPAWN_PROFESSION, PLAYER_ENERGY_PIPS, SPAWN_SECONDARY
     changed = []
     if prow.get("player_profession") is not None:
         _prof = int(prow["player_profession"])
         spawn_profession_values(_prof)          # the guard: raises on a bad id
         SPAWN_PROFESSION = _prof
         changed.append(f"profession {_prof}")
+    if prow.get("player_secondary") is not None:
+        # SANDBOX-B4: the pair's second half, through the same guard (0..10,
+        # never the primary -- GmDeckBuilder:2321).
+        _sec = int(prow["player_secondary"])
+        agents.agent_set_profession(PLAYER_AGENT_ID, SPAWN_PROFESSION, _sec)
+        SPAWN_SECONDARY = _sec
+        changed.append(f"secondary {_sec}")
     if prow.get("player_energy") is not None or prow.get("player_pips") is not None:
         agents.PLAYER_ENERGY = int(prow.get("player_energy", agents.PLAYER_ENERGY))
         PLAYER_ENERGY_PIPS = int(prow.get("player_pips", PLAYER_ENERGY_PIPS))
@@ -22836,12 +22966,11 @@ def body_swing_damage(agent, armour):
                         mult=body_requirement_factor(agent))          # WEAPONS-W4
 
 
-def party_weapon_item(npc):
+def party_weapon_item(npc, weapon=None):
     """The content item key a party body holds (PARTY_WEAPON_ITEMS by its
-    weapon class -- HERO_WEAPON, else the profession's), or None when the
-    class has no item row yet (a Warrior's sword and shield are on the tape
-    but not extracted)."""
-    key = HERO_WEAPON or PARTY_WEAPON_BY_PROFESSION.get(
+    weapon class -- this hero's own `weapon` (SANDBOX-B3), else HERO_WEAPON,
+    else the profession's), or None when the class has no item row yet."""
+    key = weapon or HERO_WEAPON or PARTY_WEAPON_BY_PROFESSION.get(
         (npc or {}).get("profession"))
     return PARTY_WEAPON_ITEMS.get(key)
 
@@ -26900,10 +27029,9 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     # three instances. --hero-rig-legacy is every rig before.
     _rig_retail = HERO_RIG_RETAIL and HERO_ACTIVATE
     if _rig_retail:
-        _hap = HERO_APPEARANCE or (0, 0)
-        _hprof_info = (agents.npc_template(HERO_BODY_NPC)["profession"]
-                       if HERO_BODY else 1)
         for _hid, _haid, _hdef in hero_slots():
+            _hap = hero_appearance(_hid)                # SANDBOX-B3: per hero
+            _hprof_info = hero_profession(_hid)
             # 0x0073 HERO_INFO FIRST: the record 0x0072 looks up (JARIN-S;
             # two harness runs asserted charHeroData without it).
             # FIELD 7 IS THE HERO'S OWN SKILL LIST, and it is NOT the bar:
@@ -26915,10 +27043,10 @@ def _handle_request_players(send, state, conn_id, stop, rec):
             # has one.
             _hi_skills, _, _, _ = hero_build(state, _hid)
             _seq.append(agents.hero_info(
-                _hid, int(HERO_LEVEL or 1), int(_hprof_info), 0,
+                _hid, int(hero_level(_hid) or 1), int(_hprof_info), 0,
                 _hap[0], _hap[1],
                 list(_hi_skills) if _hi_skills is not None
-                else [int(sk[0]) for sk in (HERO_SKILLS or ())]))
+                else hero_bar_ids(_hid)))               # SANDBOX-B3: per hero
             _seq.extend(hero_character_block(state, _haid, _hid))
             _seq.append(agents.hero_activate(
                 HERO_ACTIVATE_ID
@@ -27107,10 +27235,10 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     # studies/profession/RESKIN.md s14.
     send(GAME_SMSG_AGENT_SET_PROFESSION,
          agents.agent_set_profession(
-             PLAYER_AGENT_ID, SPAWN_PROFESSION, 0,
+             PLAYER_AGENT_ID, SPAWN_PROFESSION, SPAWN_SECONDARY,   # SANDBOX-B4
              custom=SPAWN_PROFESSION
              > agents.CHAR_PROFESSIONS - 1),
-         f"AGENT_SET_PROFESSION(player, {SPAWN_PROFESSION})")
+         f"AGENT_SET_PROFESSION(player, {SPAWN_PROFESSION}/{SPAWN_SECONDARY})")
     # STRICTLY AFTER the 0x00B7 above, which CREATES the
     # per-agent record 0x00B6 writes into. Reversed, the
     # client drops it with no error (RUNS.md §13).
@@ -27536,30 +27664,35 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     for _hid, _haid, _hdef in (hero_slots()
                                if HERO_BODY and not party_bodies_here(state)
                                else ()):
-        _hp = agents.npc_template(HERO_BODY_NPC).get("profession")
+        _hp = hero_profession(_hid)                     # SANDBOX-B3: per hero
         if _hp:
             hsend(GAME_SMSG_AGENT_SET_PROFESSION,
                   agents.agent_set_profession(_haid, int(_hp)),
                   f"AGENT_SET_PROFESSION(hero agent {_haid}, {_hp}) -- no "
                   f"body in a town; the summary record the roster reads")
-    for _hid, _haid, _hdef in (hero_slots()
-                               if HERO_LEVEL is not None
-                               else ()):
+    for _hid, _haid, _hdef in hero_slots():
+        _hlv = hero_level(_hid)                          # SANDBOX-B3: per hero
+        if _hlv is None:
+            continue
         hsend(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-              [agents.PROP_LEVEL, _haid, HERO_LEVEL],
-              f"level {HERO_LEVEL} on hero agent {_haid}")
+              [agents.PROP_LEVEL, _haid, _hlv],
+              f"level {_hlv} on hero agent {_haid}")
     for _hid, _haid, _hdef in (hero_slots()
-                               if HERO_VITALS is not None and not _rig_retail
+                               if (HERO_VITALS is not None or HERO_ROWS)
+                               and not _rig_retail
                                else ()):
+        _hvt = hero_vitals(_hid)                         # SANDBOX-B3: per hero
+        if _hvt is None:
+            continue
         hsend(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
               [agents.PROP_HEALTH_MAX, _haid,
-               HERO_VITALS[0]],
-              f"health max {HERO_VITALS[0]} on hero "
+               _hvt[0]],
+              f"health max {_hvt[0]} on hero "
               f"agent {_haid}")
         hsend(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
               [agents.PROP_ENERGY_MAX, _haid,
-               HERO_VITALS[1]],
-              f"energy max {HERO_VITALS[1]} on hero "
+               _hvt[1]],
+              f"energy max {_hvt[1]} on hero "
               f"agent {_haid}")
     # The hero's body, at HERO_AGENT_ID. MANDATORY for the
     # commander binding rather than optional like the
@@ -27577,9 +27710,10 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     for _i, (_hid, _haid, _hdef) in (
             enumerate(hero_slots())
             if HERO_BODY and party_bodies_here(state) else ()):
-        _hro = agents.npc_template(HERO_BODY_NPC)
-        _wkey = party_weapon_item(_hro)               # SLICE-H7
-        _hhp = float(HERO_VITALS[0]) if HERO_VITALS else 100.0
+        _hro = hero_body_row(_hid)                     # SANDBOX-B3: per hero
+        _hvt = hero_vitals(_hid)
+        _wkey = party_weapon_item(_hro, hero_weapon(_hid))   # SLICE-H7
+        _hhp = float(_hvt[0]) if _hvt else 100.0
         _hhp_eff = float(morale.effective_max(_hhp, _hhp, hero_morale(state, _haid)))
         # Fan them out rather than stacking: bodies sharing a
         # spot read as one body, and "nothing appeared" is the
@@ -27593,28 +27727,28 @@ def _handle_request_players(send, state, conn_id, stop, rec):
              # armour and weapon range -- see the constants' comment.
              "health": _hhp_eff, "max_health": _hhp_eff,
              "base_max_health": _hhp,          # JARIN: the maxima scale with the hero's morale
-             "base_max_energy": float(HERO_VITALS[1]) if HERO_VITALS else 30.0,
+             "base_max_energy": float(_hvt[1]) if _hvt else 30.0,
              "hero": _hid,                     # JARIN: the body IS a hero (effect list, pools, skill family)
              "weapon_item_id": (HERO_WEAPON_ITEM_ID + _i) if _wkey is not None else None,
-             "attributes": dict(HERO_ATTRIBUTES or {}),
-             "armor_rating": HERO_ARMOR,
-             "damage": (list(HERO_DAMAGE) if HERO_DAMAGE else None),
-             "weapon_attribute": HERO_WEAPON_ATTRIBUTE,
+             "attributes": dict(hero_attributes(_hid) or {}),      # SANDBOX-B3: per hero
+             "armor_rating": hero_armor(_hid),
+             "damage": (list(hero_damage(_hid)) if hero_damage(_hid) else None),
+             "weapon_attribute": hero_weapon_attribute(_hid),
              "weapon_item": _wkey,
              # SLICE-B7b: `.get` -- see the henchman body above. This is the
              # site that actually raised: --hero-body-npc def_1486 (the parade's
              # Academy Monk) killed instance bring-up with KeyError: 'name' while
              # the run reported PASS, and the hero follow it was launched to test
              # measured nothing because no body ever existed.
-             "dead": False, "name": _hro.get("name") or str(HERO_BODY_NPC),
-             "npc": dict(_hro, level=int(HERO_LEVEL or _hro.get("level") or 0)),
+             "dead": False, "name": _hro.get("name") or str(hero_body_key(_hid)),
+             "npc": dict(_hro, level=int(hero_level(_hid) or _hro.get("level") or 0)),
              "definition": _hdef,
              "party_slot": _i,                  # SLICE-H2: its formation slot
              "allegiance": agents.ALLEGIANCE_PLAYER,
              "effects": 0,
              # SLICE-H4: its own weapon's interval (a Monk's staff, 1.75 --
              # retail's Monk henchman swung 1.91 s apart p50).
-             "attack_speed": party_attack_speed(_hro),
+             "attack_speed": party_attack_speed(_hro, hero_weapon(_hid)),
              "resend_definition": True,
              "attacks_back": False,
              # SLICE-B7c: the party body's bar, empty until --hero-skills.
@@ -27622,8 +27756,8 @@ def _handle_request_players(send, state, conn_id, stop, rec):
              # carry the same skill twice and keying recharge by id would make
              # the second copy share the first's cooldown (spawn_enemy's own
              # comment, same reason).
-             "skills": HERO_SKILLS,
-             "skill_ready": [0.0] * len(HERO_SKILLS)},
+             "skills": hero_bar(_hid),                             # SANDBOX-B3: per hero
+             "skill_ready": [0.0] * len(hero_bar(_hid))},
             f"hero body (hero {_hid})", conn_id=conn_id)
         # SLICE-H7: WHAT THE BODY HOLDS -- retail's create batch for a
         # henchman body is 0x0020, then 0x0161 per weapon, then 0x006D
@@ -27676,8 +27810,7 @@ def _handle_request_players(send, state, conn_id, stop, rec):
         # Sending 0x00B7 first for the hero reproduced
         # that assert on 2026-08-16, which is the repo's
         # own recorded knowledge re-earning itself.
-        _hprof = (agents.npc_template(HERO_BODY_NPC)
-                  ["profession"] if HERO_BODY else 1)
+        _hprof = hero_profession(_hid)                  # SANDBOX-B3: per hero
         # The hero gets the same budget as the player,
         # because it is sent the player's own default
         # ranks two lines below (attribute_columns() with
@@ -27688,7 +27821,7 @@ def _handle_request_players(send, state, conn_id, stop, rec):
         # points, so there is no mutable state to hold.
         _hattr = attribute_state(state)
         _, _, _hs_ranks, _hs_points = hero_build(state, _hid)
-        _h_ranks = _hs_ranks if _hs_ranks is not None else HERO_ATTRIBUTES
+        _h_ranks = _hs_ranks if _hs_ranks is not None else hero_attributes(_hid)
         if _h_ranks:
             # SLICE-H8: the hero's OWN ranks and budget -- every point of
             # its level's allowance spent on the party row's ranks.
@@ -32108,6 +32241,7 @@ def main():
     # handle_request_game_instance free of plumbing it would only ever use once.
     global GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING, SKILLBAR
     global UNLOCKED, UNLOCK_LABEL, SPAWN_PROFESSION, SECONDARY_BITS, PERSIST
+    global SPAWN_SECONDARY                                    # SANDBOX-B4
     global DEATH_PENALTY_FORCED, ENEMY_HIT_FRACTION
     global PORTALS, TRANSFER_ALT        # read by the pre-warm before the flags
     global CLIENT_BUILD, MAP_ID_COUNT, NO_MARKER_MAP   # --client-build
@@ -32154,28 +32288,62 @@ def main():
         # file_id/model_id -- pvpui 28.13 -- and the pipeline order heroes 38
         # measured) is on unless --party-no-commander.
         _prow = agents.WORLD.get("party", a.party)
-        _pbody = agents.npc_template(_prow["body"])
-        _ph = _prow["hero"]
-        a.hero = (",".join(str(h) for h in _ph) if isinstance(_ph, list)
-                  else str(_ph))
-        a.hero_body = True
-        a.hero_body_npc = _prow["body"]
-        a.hero_skills = ",".join(str(s) for s in _prow["skills"])
-        a.hero_level = int(_prow.get("level", _pbody.get("level", 1)))
-        a.hero_vitals = (f"{int(_prow.get('health', 100))},"
-                         f"{int(_prow.get('energy', 30))}")
-        if _prow.get("weapon") and not a.hero_weapon:
-            a.hero_weapon = str(_prow["weapon"])       # SLICE-H4
-        # SLICE-H8: the row's ranks, armour and weapon range.
-        global HERO_ATTRIBUTES, HERO_ARMOR, HERO_DAMAGE, HERO_WEAPON_ATTRIBUTE
-        if _prow.get("attributes"):
-            HERO_ATTRIBUTES = {int(_a): int(_r) for _a, _r in _prow["attributes"]}
-        if _prow.get("armor") is not None:
-            HERO_ARMOR = float(_prow["armor"])
-        if _prow.get("damage"):
-            HERO_DAMAGE = (float(_prow["damage"][0]), float(_prow["damage"][1]))
-        if _prow.get("weapon_attribute") is not None:
-            HERO_WEAPON_ATTRIBUTE = int(_prow["weapon_attribute"])
+        # SANDBOX-B3: a row with a `heroes` list ([[party.KEY.heroes]]) gives
+        # EACH hero its own body, bar, level, vitals, ranks, weapon and
+        # profession through HERO_ROWS and the hero_*() readers; the
+        # single-hero fields below are then the FIRST hero's, for the sites
+        # that still read a global. A row without the list is the SLICE-H2
+        # shape, unchanged. An EMPTY list is a party of the player alone.
+        global HERO_ROWS
+        _pheroes = _prow.get("heroes")
+        if _pheroes is not None:
+            _pheroes = [dict(h) for h in _pheroes]
+            if len(_pheroes) > 7:
+                raise SystemExit(f"--party {a.party!r}: {len(_pheroes)} heroes; "
+                                 f"the client's cap is 7 (PtPlayer:332)")
+            for _i, _h in enumerate(_pheroes, 1):
+                for _need in ("hero", "body"):
+                    if _h.get(_need) is None:
+                        raise SystemExit(f"--party {a.party!r}: hero {_i} has no "
+                                         f"`{_need}`; each [[heroes]] table names "
+                                         f"its catalogue index and its body")
+                agents.npc_template(_h["body"])          # refuse an unknown body HERE
+            HERO_ROWS = {int(_h["hero"]): _h for _h in _pheroes}
+            if len(HERO_ROWS) != len(_pheroes):
+                raise SystemExit(f"--party {a.party!r}: a hero index repeats; each "
+                                 f"0x0074 record is keyed by it")
+            _ph = [int(_h["hero"]) for _h in _pheroes]
+            _first = _pheroes[0] if _pheroes else None
+        else:
+            _ph = _prow["hero"]
+            _first = _prow
+        if _first is not None:
+            _pbody = agents.npc_template(_first["body"])
+            a.hero = (",".join(str(h) for h in _ph) if isinstance(_ph, list)
+                      else str(_ph))
+            a.hero_body = True
+            a.hero_body_npc = _first["body"]
+            a.hero_skills = ",".join(str(s) for s in _first["skills"])
+            a.hero_level = int(_first.get("level", _pbody.get("level", 1)))
+            a.hero_vitals = (f"{int(_first.get('health', 100))},"
+                             f"{int(_first.get('energy', 30))}")
+        if _pheroes is None:
+            # The single-hero row's optional fields become the globals. With a
+            # heroes list they stay unset on purpose: a per-hero reader falls
+            # back to the global only when its own row lacks the field, and
+            # the first hero's weapon or ranks are not the second's.
+            if _prow.get("weapon") and not a.hero_weapon:
+                a.hero_weapon = str(_prow["weapon"])       # SLICE-H4
+            # SLICE-H8: the row's ranks, armour and weapon range.
+            global HERO_ATTRIBUTES, HERO_ARMOR, HERO_DAMAGE, HERO_WEAPON_ATTRIBUTE
+            if _prow.get("attributes"):
+                HERO_ATTRIBUTES = {int(_a): int(_r) for _a, _r in _prow["attributes"]}
+            if _prow.get("armor") is not None:
+                HERO_ARMOR = float(_prow["armor"])
+            if _prow.get("damage"):
+                HERO_DAMAGE = (float(_prow["damage"][0]), float(_prow["damage"][1]))
+            if _prow.get("weapon_attribute") is not None:
+                HERO_WEAPON_ATTRIBUTE = int(_prow["weapon_attribute"])
         _pc = apply_party_character(_prow)
         if _pc:
             print(f"PARTY {a.party!r}: the player's character -- "
@@ -32186,7 +32354,7 @@ def main():
         # died on an unbound `_pbody`, and `--party` without a weapon flag
         # skipped the rig -- every W1/W3 run passed both flags, which is why
         # neither showed. Found by the first W9 harness launch.
-        if not a.party_no_commander:
+        if not a.party_no_commander and _first is not None:
             a.hero_activate = True
             a.hero_char = True
             a.hero_inventory = 2
@@ -32194,11 +32362,25 @@ def main():
             a.hero_appearance = (f"{int(_pbody['file_id'])},"
                                  f"{int(_pbody.get('model_id', 0))}")
             a.hero_pipeline_first = True
-        print(f"PARTY {a.party!r}: hero {a.hero} in the body of "
-              f"{_prow['body']!r} (level {a.hero_level}, bar "
-              f"{list(_prow['skills'])}), commander rig "
-              f"{'OFF' if a.party_no_commander else 'ON'} [SLICE-H2]",
-              flush=True)
+        if _first is None:
+            print(f"PARTY {a.party!r}: NO heroes -- the player alone; the "
+                  f"character's own fields still apply [SANDBOX-B3]", flush=True)
+        elif HERO_ROWS:
+            for _h in _pheroes:
+                print(f"PARTY {a.party!r}: hero {_h['hero']} (profession "
+                      f"{hero_profession(_h['hero'])}) "
+                      f"in the body of {_h['body']!r} (level "
+                      f"{_h.get('level', '?')}, bar {list(_h.get('skills', ()))}, "
+                      f"weapon {_h.get('weapon') or 'the profession\'s'}) "
+                      f"[SANDBOX-B3]", flush=True)
+            print(f"PARTY {a.party!r}: {len(_pheroes)} hero(es), commander rig "
+                  f"{'OFF' if a.party_no_commander else 'ON'} [SLICE-H2]", flush=True)
+        else:
+            print(f"PARTY {a.party!r}: hero {a.hero} in the body of "
+                  f"{_prow['body']!r} (level {a.hero_level}, bar "
+                  f"{list(_prow['skills'])}), commander rig "
+                  f"{'OFF' if a.party_no_commander else 'ON'} [SLICE-H2]",
+                  flush=True)
     if a.player_weapon or a.player_offhand:
         # WEAPONS-W1: any content item in the player's hands, with or without a
         # --party -- the harness's way to hold each weapon type in turn.
@@ -34637,6 +34819,8 @@ def main():
                   f"is wrong and the chunk is load-bearing.")
         if HERO_BODY:
             agents.npc_template(HERO_BODY_NPC)
+            for _rh in HERO_IDS:                        # SANDBOX-B3: each row's body
+                hero_body_row(_rh)
         print(f"HERO: {len(HERO_IDS)} hero(es) {HERO_IDS} at agents "
               f"{[HERO_AGENT_ID + i for i in range(len(HERO_IDS))]}; "
               f"inside the build window; 0x0074 first={HERO_INFO}; "
@@ -34777,6 +34961,18 @@ def main():
                 if SPAWN_PROFESSION > agents.CHAR_PROFESSIONS - 1
                 else "in band, non-default")
         print(f"SPAWN PROFESSION: {SPAWN_PROFESSION} ({band})")
+    if a.spawn_secondary is not None:
+        # SANDBOX-B4. After --spawn-profession so the pair is checked as the
+        # pair the burst will carry.
+        try:
+            agents.agent_set_profession(PLAYER_AGENT_ID, SPAWN_PROFESSION,
+                                        a.spawn_secondary)
+        except ValueError as ex:
+            raise SystemExit(f"--spawn-secondary: {ex}")
+        SPAWN_SECONDARY = a.spawn_secondary
+        print(f"SPAWN SECONDARY: {SPAWN_SECONDARY} -- the pair "
+              f"{SPAWN_PROFESSION}/{SPAWN_SECONDARY} rides 0x00B7 and 0x00A6; "
+              f"what the client draws for it is SANDBOX-U1")
     PERSIST = a.persist
     if PERSIST:
         print(f"PERSIST: character store armed -- {charstore.store_dir()}")
