@@ -2002,3 +2002,62 @@ connection reads 61 and a level-20 one 100, no state the seed level. `test_mecha
 **Left.** The tooltip's X (what the caller feeds `+0x24`; the low-end reading at level 1 and
 the high at 20 say it is (L - 1) x 10 / 19 or the caller clamps -- unread, and nothing here
 depends on it).
+
+## 34. A spell's own damage type -- 2026-09-19: no client column, the wire carries it, the content row names it
+
+**What §30 left.** Every incoming armour-respecting spell read as "elemental" against the
+player's typed armour, and a spell's projectile would have carried the held weapon's kind.
+Both because nothing read a spell's type. Read now; three sources, one of them a negative.
+
+**The client has no column for it -- a check that could have found one.** Over all 41 dword
+columns of the 164-byte `s_skill` record (3,443 named rows), only three range inside the
+enum's 0..14 and each is already named: `+0x08` the campaign, `+0x14` the chain mask, `+0x58`
+the argument count. The type sits in the authored description ("deals 15...63 fire damage")
+and nowhere structured, so the client-table route (`skilltable.py --emit-content`) cannot
+carry it. NOT FOUND, and said as a scan rather than an absence.
+
+**The wire carries it, OBSERVED.** A spell's projectile arrives (`0x00A7`, third field) as the
+SPELL's type, not the caster's weapon's: Lightning Orb (229) as 4 under an earth staff (587 =
+11, `20260917T090355`, x11), under a fire staff (5, `20260917T224104`, x11) and under a
+lightning wand (`20260913T210901`, x5); Lightning Javelin (230) as 4 under the same earth and
+fire staves (x15); Dancing Daggers (858) as 11, earth, with a hammer (587 = 0, `20260817T183756`,
+x3) or daggers (1, `20260819T132414`, x14) in hand; Fireball (186) as 5 under a fire staff
+(`20260817T231139`, x35). 79 of 79, the held type ruled out on 54 of them. An attack skill's
+shot keeps the weapon's kind (WEAPONS-C10: Power Shot 1 or 5 under Kindle Arrows) -- the two
+families differ exactly where the wiki's "damage type" says they should.
+
+**The content row names it.** The source for a skill's type on this server is its
+`skill_effect` row: `damage_type` (the client's enum, `[damage_type.table]`) when the row
+carries the key, else the wiki's own scale label -- `combatmath.damage_type_from_label`:
+"Fire damage" -> the table's "fire" -> 5, "+ Holy damage" -> 8, "Cold damage" -> 3 -- from
+`scale_means` then `bonus_scale_means`, else None. Rows 194 (Flare, 5), 312 (Holy Strike, 8)
+and 252 (Banish, 8) now carry the key beside 433's (Kindle Arrows, W2e). Whether typed damage
+RESPECTS armour stays a separate per-row fact -- `ARMOUR_RESPECTING_MEANS`, now the four
+elemental labels (WIKI, GWW "Armor rating": "most spells dealing elemental damage"; "Armor-
+ignoring damage": the property "is independent of damage type", shadow, most holy and
+typeless skill damage ignore it) -- no row carries the three new labels yet.
+
+**What ships.** `authsrv.spell_damage_type(skill_id)`; `spell_armour_for` resolves an incoming
+spell against its OWN type through `player_spell_armour(..., damage_type=)` -- a fire spell
+meets 25 on the warrior pieces as before, a physical-damage spell would meet their +20, a holy
+or chaos one neither -- "elemental" when no type is read (the old reading, kept as the
+default); `skill_shot_how` gives a SPELL's shot its own type as the `0x00A7` kind beside its
+own projectile, an attack skill the weapon's. On this server only an attack skill launches a
+projectile at its completion (`_shot = player_ranged(state) if (cast["attack"] and target)`
+-- a player's Flare lands at the E5 with no `0x00A4`, which is its own open item, WEAPONS-W2's
+spell half), so the kind reaches the wire today through a body's skill shot;
+`--no-spell-own-type` reverts both halves.
+
+**Tests.** `test_weapons.py` section 22 (6 checks, floor 198 -> 203; a vault run 211, the
+tape the one vault-only check): the label table; the four rows and two Nones; the shot's kind
+for a spell, an attack skill and the revert; the armour a spell of each class meets (25 / 45 /
+25) and the respecting set; the source locks (the E5 gate, the flag, Flare's key); and the
+wire's witness -- on `20260819T132414` every Dancing Daggers arrival (14) carries kind 11 with
+daggers in the caster's hand. `test_skilldamage` 67, `test_pools` 132, `test_agentlife` 551,
+`test_mechanics` 246, `test_content` 48, `test_srclint` 26 green.
+
+**Left.** A player's spell projectile (the `0x00A4` a Flare or an Orb launches on retail at
+the E5 -- W2's spell half, not started); the rows for the four wire-measured spells (186 /
+229 / 230 / 858 have no `skill_effect` row, so their types live in this section and the
+provenance of `[damage_type.table]`, not in content, until a row is written for them); the
+base penetration sources (§32).

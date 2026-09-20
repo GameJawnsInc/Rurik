@@ -28,6 +28,23 @@ move back.
 
 ---
 
+### A spell's own damage type -- 2026-09-19 -- **no client column, the wire carries it, the row's wiki label names it**
+
+[studies/weapons/PLAN.md](studies/weapons/PLAN.md) §34. Over all 41 dword columns of the
+164-byte skill record only three range inside the enum's span and each is already named, so
+the client carries no type (NOT FOUND, as a scan). The wire does: a spell's projectile arrives
+as the SPELL's type -- Lightning Orb as 4 under an earth staff and a fire staff, Lightning
+Javelin the same, Dancing Daggers as 11 with a hammer or daggers in hand, Fireball as 5 -- 79 of
+79, the held type ruled out on 54; an attack skill's shot keeps the weapon's. The source on this
+server is the `skill_effect` row: `damage_type` when carried, else the wiki's scale label
+(`damage_type_from_label`: "Fire damage" 5, "+ Holy damage" 8); rows 194 / 312 / 252 gain the
+key. Ships `spell_damage_type`, `spell_armour_for` against the spell's own type ("elemental"
+when none), `skill_shot_how` giving a spell's shot its own kind (an attack skill the weapon's),
+`ARMOUR_RESPECTING_MEANS` widened to the four elemental labels, `--no-spell-own-type`. A
+player's spells launch no projectile yet (only attack skills do), so the kind reaches the wire
+through a body's shot. Tests: `test_weapons` 22 (6 checks, floor 198 -> 203, a vault run 211:
+the Dancing Daggers tape pins 14 arrivals at kind 11 with daggers held).
+
 ### Identifier `573` -- 2026-09-19 -- **"Armor: N (depends on level)": a hero's level-scaled armour piece, read**
 
 [studies/weapons/PLAN.md](studies/weapons/PLAN.md) §33. The word sits on twenty corpus items

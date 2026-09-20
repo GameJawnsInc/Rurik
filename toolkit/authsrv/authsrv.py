@@ -3226,7 +3226,13 @@ SCALE_MEANS_DAMAGE = {
 # on every pair (spellhitjoin.py P2), where a 1-in-8 head roll over that many
 # hits would have shown a second bucket unless all eight sets were uniform.
 # The swing path keeps its roll (that one IS wiki's rule for attacks).
-ARMOUR_RESPECTING_MEANS = frozenset({"Fire damage"})
+# 2026-09-19 (studies/weapons 34): the other three elemental labels join --
+# WIKI (GWW "Armor rating": "most spells dealing elemental damage" respect
+# it; "Armor-ignoring damage": the property "is independent of damage type",
+# shadow, most holy and typeless skill damage ignore it). No row carries the
+# three new labels yet; the day one does it is armour-respecting by default.
+ARMOUR_RESPECTING_MEANS = frozenset({"Fire damage", "Cold damage",
+                                     "Lightning damage", "Earth damage"})
 
 # The healing labels, and they are a different DIRECTION rather than a negative
 # damage: they go out on property 55, positive, which the corpus identifies as
@@ -11396,13 +11402,19 @@ def player_spell_armour():
 
 
 def spell_armour_for(skill_id):
-    """Forwards to combatmath with all four armour flags read at call time."""
+    """Forwards to combatmath with all four armour flags read at call time --
+    and the spell's OWN type (spell_damage_type), "elemental" when none is
+    read: the pieces' `+N vs. physical` never meets a fire spell, a `+N vs.
+    elemental` would, and a holy or chaos spell meets neither."""
     return combatmath.spell_armour_for(skill_id, SPELL_ARMOUR, ARMOUR_TERM,
                                        ARMOUR_RESPECTING_MEANS,
                                        SCALE_MEANS_DAMAGE, EQUIP_ARMOUR,
                                        ARMOR_RATING_MODIFIER,
                                        ARMOR_VS_TYPE_MODIFIER,
-                                       SPELL_LOCATION_ROLL=SPELL_LOCATION_ROLL)
+                                       SPELL_LOCATION_ROLL=SPELL_LOCATION_ROLL,
+                                       damage_type=(spell_damage_type(skill_id)
+                                                    if spell_damage_type(skill_id) is not None
+                                                    else "elemental"))
 
 
 def armour_multiplier(armour):
@@ -12032,12 +12044,36 @@ def skill_projectile(skill_id):
     return int(own)
 
 
+# ---- A SPELL'S OWN DAMAGE TYPE (2026-09-19): the rule is combatmath's block
+SPELL_OWN_TYPE = True        # --no-spell-own-type reverts: every spell "elemental",
+                             # a spell's projectile the held weapon's kind
+
+
+def spell_damage_type(skill_id):
+    """The type a skill's own row names (combatmath.spell_damage_type_of), or
+    None; None with the feature off."""
+    if not SPELL_OWN_TYPE:
+        return None
+    try:
+        return combatmath.spell_damage_type_of(skill_effect_row(skill_id))
+    except Exception:                                     # noqa: BLE001
+        return None
+
+
 def skill_shot_how(how, skill_id):
     """`how` (weapon_ranged's dict) with the skill's own projectile in place
-    of the weapon's when its row names one; flag, kind, speed and range stay
+    of the weapon's when its row names one -- and, for a SPELL, its own
+    damage type as the 0x00A7 kind (the wire's: Lightning Orb arrives as
+    lightning under an earth staff, Dancing Daggers as earth with daggers in
+    hand, 79 of 79); an attack skill keeps the weapon's. Flag, speed and range stay
     the weapon's (retail, 12 of 12 launches of 680)."""
     own = skill_projectile(skill_id)
-    return how if own is None else dict(how, projectile=own)
+    out = how if own is None else dict(how, projectile=own)
+    if not _is_attack_skill(skill_id):
+        dt = spell_damage_type(skill_id)
+        if dt is not None:
+            out = dict(out, damage_type=dt)
+    return out
 
 
 def skill_arrows(skill_id):
@@ -33331,6 +33367,12 @@ def main():
         print("BOWS: --no-bow-classes -- every type-5 bow swings at the type row's "
               "2.475 whatever its 609 says, and no hornbow penetrates armour "
               "[WEAPONS-Q2 revert]", flush=True)
+    if a.no_spell_own_type:
+        global SPELL_OWN_TYPE
+        SPELL_OWN_TYPE = False
+        print("SPELLS: --no-spell-own-type -- every incoming spell reads as elemental "
+              "against the armour and a spell's projectile carries the held weapon's "
+              "kind [studies/weapons 34 revert]", flush=True)
     if a.no_projectiles:
         global RANGED_DELIVERY
         RANGED_DELIVERY = False

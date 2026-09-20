@@ -135,6 +135,9 @@ the cycle is testable without it.
 
 [skill_effect.194]
 scale_means = "Fire damage"
+damage_type = 5                # fire, the client's enum ([damage_type.table]); 2026-09-19, the
+                               # label's own word -- a spell's projectile carries its type
+                               # (Fireball 186 arrives as 5 on 20260817T231139, 35 of 35)
 [skill_effect.194.provenance]
 source = "wiki"
 page = 'GWW, "Flare", {{Skill progression}}, rev. as fetched 2026-08-20'
@@ -372,6 +375,9 @@ taken into account after Frenzy")."""
 
 [skill_effect.312]
 scale_means = "Holy damage"
+damage_type = 8                # holy ([damage_type.table]); the skill's damage ignores armour
+                               # (GWW "Armor-ignoring damage": most holy skill damage), so the
+                               # type only names it -- 2026-09-19
 bonus_scale_means = "+ Holy damage"
 [skill_effect.312.provenance]
 source = "wiki"
@@ -603,6 +609,7 @@ the same bare-heal semantics."""
 
 [skill_effect.252]
 scale_means = "Holy damage"
+damage_type = 8                # holy ([damage_type.table]), as Holy Strike's -- 2026-09-19
 [skill_effect.252.provenance]
 source = "wiki"
 page = 'GWW, "Banish", {{Skill progression}}, rev. 2026-08-26 (raw wikitext read 2026-09-12)'

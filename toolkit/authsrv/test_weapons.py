@@ -23,7 +23,7 @@ import agents  # noqa: E402
 import authsrv  # noqa: E402
 import combatmath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=198)   # the BARE-MACHINE number: 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=203)   # the BARE-MACHINE number: 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
 check = LEDGER.ok
 
 LEGACY_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
@@ -2351,6 +2351,83 @@ def section_bow_classes():
          authsrv.BOW_CLASSES, agents.item_template, authsrv.critical_rate) = saved
 
 
+def section_spell_own_type():
+    print("\n22. a spell's own damage type: the row's label, the armour it meets, the kind its projectile carries")
+    cm = combatmath
+    saved = (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+             authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE, authsrv.SPELL_OWN_TYPE)
+    try:
+        check([cm.damage_type_from_label(l) for l in
+               ("Fire damage", "+ Holy damage", "Cold damage", "Lightning damage",
+                "Earth damage", "Dark damage", "+ Damage", "Heal", "physical damage", None)]
+              == [5, 8, 3, 4, 11, 7, None, None, None, None],
+              "a wiki scale label names the client's type: 'Fire damage' 5, '+ Holy damage' 8, "
+              "'Cold damage' 3, 'Lightning damage' 4, 'Earth damage' 11, 'Dark damage' 7; "
+              "'+ Damage', 'Heal', a class word and None name nothing")
+        check([authsrv.spell_damage_type(s) for s in (194, 312, 252, 433, 394, 99999)]
+              == [5, 8, 8, 5, None, None],
+              "Flare's row reads fire (5), Holy Strike's and Banish's holy (8), Kindle Arrows' "
+              "own key fire (5); an attack skill with no label and an unknown id read None")
+        authsrv.SPELL_OWN_TYPE = False
+        off_194 = authsrv.spell_damage_type(194)
+        authsrv.SPELL_OWN_TYPE = True
+        how = {"projectile": 1, "arrow": 0, "damage_type": 6, "speed": 1600.0, "range": 1248.0}
+        spell_how = authsrv.skill_shot_how(how, 194)
+        attack_how = authsrv.skill_shot_how(dict(how, projectile=143), 394)
+        authsrv.SPELL_OWN_TYPE = False
+        off_how = authsrv.skill_shot_how(how, 194)
+        authsrv.SPELL_OWN_TYPE = True
+        check(off_194 is None and spell_how["damage_type"] == 5 and spell_how["projectile"] == 343
+              and attack_how["damage_type"] == 6 and attack_how["projectile"] == 680
+              and off_how["damage_type"] == 6,
+              "a spell's shot carries ITS type as the 0x00A7 kind (Flare 5 over a chaos wand's 6) "
+              "beside its own projectile; an attack skill keeps the weapon's kind (Power Shot "
+              "over the same wand: 6, its own 680); --no-spell-own-type keeps the weapon's",
+              f"{spell_how} / {attack_how} / {off_how}")
+        authsrv.apply_party_character({"player_weapon": "starter_wand"})
+        agents.PLAYER_OFFHAND = None
+        elem = combatmath.player_spell_armour(authsrv.EQUIP_ARMOUR, 572, 527)
+        phys = combatmath.player_spell_armour(authsrv.EQUIP_ARMOUR, 572, 527, damage_type=2)
+        holy = combatmath.player_spell_armour(authsrv.EQUIP_ARMOUR, 572, 527, damage_type=8)
+        check(elem == 25.0 and phys == 45.0 and holy == 25.0
+              and authsrv.spell_armour_for(194) == 25.0 and authsrv.player_spell_armour() == 25.0
+              and authsrv.ARMOUR_RESPECTING_MEANS == frozenset({"Fire damage", "Cold damage",
+                                                               "Lightning damage", "Earth damage"})
+              and "Holy damage" not in authsrv.ARMOUR_RESPECTING_MEANS,
+              "against the pieces' +20 vs. physical an elemental or holy spell meets 25 and a "
+              "physical-damage one 45; Flare resolves at 25 as before; the four elemental labels "
+              "respect armour and holy skill damage does not", f"{elem} / {phys} / {holy}")
+        src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+        sargs = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
+        check('_shot = player_ranged(state) if (cast["attack"] and target) else None' in src
+              and '"--no-spell-own-type"' in sargs
+              and int(agents.WORLD.get("skill_effect", "194")["damage_type"]) == 5,
+              "the player's own spells land at the E5 with no projectile (only an attack skill "
+              "launches one -- the kind reaches the wire through a body's shot today); the revert "
+              "flag exists; Flare's content row carries the key")
+        # the wire's witness: Dancing Daggers arrives as EARTH with daggers in hand
+        try:
+            sys.path.insert(0, HERE)
+            import weaponcensus as wc                                     # noqa: PLC0415
+            kinds, types = [], set()
+            for _name, _gf, s2c in wc.connections("20260819T132414"):
+                for r in wc.skill_shots(s2c):
+                    if r["skill"] == 858:
+                        kinds.append(r.get("kind"))
+                        types.add(r["type"])
+        except (Exception, SystemExit) as e:                               # noqa: BLE001
+            kinds = None
+            LEDGER.skip("section 22", f"capture 20260819T132414 is absent ({type(e).__name__}) -- 1 check")
+        if kinds is not None:
+            check(len(kinds) >= 10 and set(kinds) == {11} and types == {32},
+                  "and the tape says so: on 20260819T132414 every Dancing Daggers arrival "
+                  "carries kind 11 (earth) with daggers (type 32, piercing) in the caster's hand "
+                  "-- the spell's type, not the weapon's", f"{len(kinds)} arrivals {set(kinds)} held {types}")
+    finally:
+        (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+         authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE, authsrv.SPELL_OWN_TYPE) = saved
+
+
 def main():
     section_table()
     section_skills()
@@ -2373,6 +2450,7 @@ def main():
     section_damage_type_and_requirement()
     section_half_recharge()
     section_bow_classes()
+    section_spell_own_type()
     return LEDGER.verdict()
 
 
