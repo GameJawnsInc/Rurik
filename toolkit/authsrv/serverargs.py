@@ -1717,6 +1717,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "type, and a spell's projectile carries the held weapon's "
                          "kind in its 0x00A7 -- the reading every run before "
                          "2026-09-19 made.")
+    ap.add_argument("--no-base-penetration", action="store_true",
+                    help="studies/weapons 35 REVERT: no base armour penetration -- an "
+                         "attack skill's own (Penetrating Attack's 10 %%, Penetrating "
+                         "Blow's 20 %%), Strength's 1 %% a rank on attack skills and an "
+                         "Air Magic lightning spell's 25 %% all read as 0; the hornbow's "
+                         "bonus 10 %% stays -- the reading every run before 2026-09-19 made.")
     ap.add_argument("--no-bow-classes", action="store_true",
                     help="WEAPONS-Q2 REVERT: a type-5 bow's 609 class is ignored -- every "
                          "bow swings at the type row's 2.475 s and no hornbow takes "

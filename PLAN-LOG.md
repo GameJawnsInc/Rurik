@@ -28,6 +28,26 @@ move back.
 
 ---
 
+### The base penetration sources -- 2026-09-19 -- **the client's own slot, the wiki's two tiers, one wire witness**
+
+[studies/weapons/PLAN.md](studies/weapons/PLAN.md) §35. WIKI: base penetration is the LARGEST
+of its sources (Strength 1 % a rank on attack skills only; Air Magic lightning spells 25 %;
+Penetrating Blow / Chop 20 %; Penetrating / Sundering Attack 10 %; Spear of Lightning 25 %),
+bonus penetration (the hornbow's 10 %, a Sundering upgrade, Judge's Insight) stacks on top; the
+rating × (1 − p), rounded, before the critical. CORROBORATED by the client: the skill record's
+bonus slot holds the wiki's number with equal endpoints on the five attack skills and the three
+Ritualist skills (eight of eight, every snapshot in the vault) -- the row names the slot
+(`bonus_scale_means = "Armor penetration %"`); the Air spells' slots do not (Orb's holds 1800),
+so that tier is the attribute rule. OBSERVED once: Lightning Orb onto retail's 80-armour pieces
+reads its tooltip and 2^(60/40) bare -- an effective 60 from 80 (studies/skills 50.1). Strength's
+term is UNWITNESSED (no tape lands a Warrior's attack skill on a known rating; 1B gains a
+block). Ships `combatmath.armour_penetration` / `penetrated_rating`, `[armour_penetration.rules]`,
+rows 398 / 1191 / 339 / 1136 / 1551 and 229 / 230, `skill_base_penetration`,
+`player_base_penetration`, `body_base_penetration`, `penetrated_armour(..., base=)` at every rating
+read (the player's hit, the scythe's extras, a body's swing, the incoming spell), the door's
+Strength clause, `--no-base-penetration`. Tests: `test_weapons` 23 (11 checks, floor 203 → 208,
+a vault run 222).
+
 ### A spell's own damage type -- 2026-09-19 -- **no client column, the wire carries it, the row's wiki label names it**
 
 [studies/weapons/PLAN.md](studies/weapons/PLAN.md) §34. Over all 41 dword columns of the
