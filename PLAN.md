@@ -1984,11 +1984,14 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   range (RUN-WEAPONS-2) is the instrument; ~~W3~~ (shipped 2026-09-19,
   `studies/weapons/PLAN.md` §26: the scythe's extras and its 2^0.125 critical), ~~W4's rest~~ shipped 2026-09-19 (§30: `587` against the pieces'
   `527` under its condition word, the `633` reader with `634` / `635` / `636`, the isle's 3.098
-  unmet divisor; left of W4: the dodge for every projectile (the tape's finer hit test: Fireball's
-  impact on the target 14 of 35, on the ground 21), the 32 point-blank bursts the record's target
-  byte 16 also marks (Aftershock, Shock: no flight, `foes_within` at the target), and the BONUS
-  penetration sources beyond the hornbow (the client's item word 574 `Armor penetration`, the
-  Sundering upgrade, on no corpus item; Judge's Insight 267); ~~Fireball's splash~~ shipped
+  unmet divisor; left of W4: the 32 point-blank bursts the record's target byte 16 also marks
+  (Aftershock, Shock: no flight, `foes_within` at the target), line of sight (*Obstructed* /
+  *Stray*), and the BONUS penetration sources beyond the hornbow (the client's item word 574
+  `Armor penetration`, the Sundering upgrade, on no corpus item; Judge's Insight 267); ~~the
+  finer hit test~~ shipped 2026-09-20, §39 -- the aim leads the target's velocity (WIKI), a
+  target off the aim by more than 24 u at the arrival dodges: an arrow draws `[38, target,
+  attacker, 1]` behind its `0x00A7` (7 of 7 on retail), a spell its impact on the ground; the
+  two numbers are ours, RUN-1B's Orb block measures them; `--no-dodge`; ~~Fireball's splash~~ shipped
   2026-09-20, §38 -- the record's target byte 16 and `aoe_range` 240 make a burst at the aim: the
   impact, the explosion `0x00A1` 333 (35 of 35), then a word and a `[20]` per foe inside the
   radius, each its own number; `--no-spell-areas`; ~~a BODY's spell projectile~~ shipped 2026-09-20, §37 -- the

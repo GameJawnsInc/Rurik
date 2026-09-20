@@ -24,7 +24,7 @@ import agents  # noqa: E402
 import authsrv  # noqa: E402
 import combatmath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=237)   # the BARE-MACHINE number: 237 = 228 + 9 (section 26, Fireball's splash, 2026-09-20; a vault run gives 254 -- the tape's bursts are the one vault-only check); before that 228 = 219 + 9 (section 25, a body's spell projectile, 2026-09-20; a vault run gives 244 -- the tape's activations are the one vault-only check); before that 219 = 208 + 11 (section 24, a player's spell projectile, 2026-09-20; a vault run gives 234 -- the tapes' speeds are the one vault-only check); before that 208 = 203 + 5 (section 23, base armour penetration, 2026-09-19; a vault run gives 222 -- the six checks that read the skills table are vault-only); before that 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=251)   # the BARE-MACHINE number: 251 = 237 + 14 (section 27, the hit test, 2026-09-20; a vault run gives 269 -- the corpus's dodge words are the one vault-only check); before that 237 = 228 + 9 (section 26, Fireball's splash, 2026-09-20; a vault run gives 254 -- the tape's bursts are the one vault-only check); before that 228 = 219 + 9 (section 25, a body's spell projectile, 2026-09-20; a vault run gives 244 -- the tape's activations are the one vault-only check); before that 219 = 208 + 11 (section 24, a player's spell projectile, 2026-09-20; a vault run gives 234 -- the tapes' speeds are the one vault-only check); before that 208 = 203 + 5 (section 23, base armour penetration, 2026-09-19; a vault run gives 222 -- the six checks that read the skills table are vault-only); before that 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
 check = LEDGER.ok
 
 LEGACY_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
@@ -3143,7 +3143,7 @@ def section_spell_areas():
               "explosion, the monk untouched")
         src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
         sargs = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
-        check("return land_player_spell_area(send, state, conn_id, shot, radius)" in src
+        check("return land_player_spell_area(send, state, conn_id, shot, radius, connected)" in src
               and "return land_body_spell_area(send, state, conn_id, shot, agent, radius)" in src
               and src.count('"aim": (') == 2 and '"--no-spell-areas"' in sargs,
               "the source: both landings branch to the area on a burst spell, both launchers "
@@ -3195,6 +3195,253 @@ def section_spell_areas():
          authsrv.PLAYER_SWING_DAMAGE) = saved
 
 
+def section_dodge():
+    print("\n27. the hit test: the aim leads the target, a target off the aim at the arrival dodges")
+    saved = (authsrv.DODGE, agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+             authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE, authsrv.critical_rate)
+    A1, FAIL = authsrv.GAME_SMSG_EFFECT_AT_POINT, agents.GV_ATTACK_FAIL
+    words = lambda batch: [v for op, v in batch if op == 0x00A3 and v[0] in (16, 17)]   # noqa: E731
+    launches = lambda batch: [v for op, v in batch if op == 0x00A4]                     # noqa: E731
+    fails = lambda batch: [v for op, v in batch if op == 0x00A0 and v[0] == FAIL]       # noqa: E731
+    grounds = lambda batch: [v for op, v in batch if op == A1]                          # noqa: E731
+    try:
+        check(authsrv.DODGE_TOLERANCE == 24.0 and authsrv.DODGE_TOLERANCE == 2.0 * authsrv.BOUNDING_RADIUS
+              and authsrv.VELOCITY_WINDOW == 0.25 and agents.ATTACK_FAIL_DODGE == 1
+              and agents.ATTACK_FAIL_REASONS[1] == "dodge",
+              "the numbers: the tolerance is rA + rB (twice the 12 u body radius every 0x0020 "
+              "carries), the velocity window a quarter second, and reason 1 is the client's own "
+              "'dodge'")
+        led = authsrv.led_aim((0.0, 0.0), (600.0, 0.0), (0.0, 288.0), 1800.0)
+        t1 = math.hypot(600.0, 288.0 * 600.0 / 1800.0) / 1800.0
+        authsrv.DODGE = False
+        off = authsrv.led_aim((0.0, 0.0), (600.0, 0.0), (0.0, 288.0), 1800.0)
+        authsrv.DODGE = True
+        check(abs(led[0] - 600.0) < 1e-9 and abs(led[1] - 288.0 * t1) < 1e-6
+              and authsrv.led_aim((0.0, 0.0), (600.0, 0.0), (0.0, 0.0), 1800.0) == (600.0, 0.0)
+              and authsrv.led_aim((0.0, 0.0), (600.0, 0.0), (0.0, 288.0), 0) == (600.0, 0.0)
+              and off == (600.0, 0.0),
+              "led_aim: a target 600 u off walking across at 288 u/s is aimed 97 u ahead (the "
+              "flight refined once against the led point, WIKI); a stander where it stands; no "
+              "speed, or --no-dodge, the position", f"{led} (t1 {t1:.4f}) / off {off}")
+        st = {"agents": {FOE: {"pos": (600.0, 0.0)}}, "pos": (0.0, 0.0)}
+        authsrv.track_velocities(st, 100.0)
+        st["agents"][FOE]["pos"], st["pos"] = (600.0, 72.0), (28.8, 0.0)
+        authsrv.track_velocities(st, 100.1)                      # inside the window: no read
+        early = authsrv.target_velocity(st, FOE)
+        authsrv.track_velocities(st, 100.25)
+        v_foe, v_me = authsrv.target_velocity(st, FOE), authsrv.target_velocity(st, PLAYER)
+        authsrv.track_velocities(st, 102.0)                      # a stale gap: unknown
+        stale = authsrv.target_velocity(st, FOE)
+        authsrv.DODGE = False
+        off_v = authsrv.target_velocity(st, PLAYER)
+        authsrv.DODGE = True
+        check(early == (0.0, 0.0) and all(abs(a - b) < 1e-6 for a, b in zip(v_foe, (0.0, 288.0)))
+              and all(abs(a - b) < 1e-6 for a, b in zip(v_me, (115.2, 0.0)))
+              and stale == (0.0, 0.0) and authsrv.target_velocity(st, 999) == (0.0, 0.0)
+              and off_v == (0.0, 0.0),
+              "track_velocities: a finite difference over the quarter-second window for every "
+              "body and the player (72 u in 0.25 s reads 288 u/s), nothing inside the window, "
+              "nothing across a stale gap, nothing for an unknown id or with the feature off")
+        st["agents"][FOE]["pos"] = (600.0, 0.0)
+        c = [authsrv.projectile_connects(st, {"target": FOE, "aim": aim})
+             for aim in ((600.0, 0.0), (620.0, 0.0), (600.0, 24.0), (630.0, 0.0), (600.0, -25.0))]
+        authsrv.DODGE = False
+        c_off = authsrv.projectile_connects(st, {"target": FOE, "aim": (900.0, 0.0)})
+        authsrv.DODGE = True
+        check(c == [True, True, True, False, False] and c_off
+              and authsrv.projectile_connects(st, {"target": FOE}),
+              "projectile_connects: the target within 24 u of the aim is hit (0, 20, 24), 25 or "
+              "30 u off dodges; --no-dodge or a shot with no aim always connects")
+
+        # through the real launch and tick: the player's arrow at a walking hostile
+        authsrv.critical_rate = lambda rank: 0.0
+        authsrv.apply_party_character({"player_weapon": "starter_bow"})
+        authsrv.PLAYER_SWING_DAMAGE = (5, 5)
+        how = authsrv.weapon_ranged(agents.PLAYER_WEAPON)
+
+        def walking_world(vel):
+            st = _world(600.0)
+            st["_vel_trail"] = {FOE: {"t": time.time(), "pos": (600.0, 0.0), "vel": vel}}
+            sent = []
+            send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+            return st, sent, send
+
+        st, sent, send = walking_world((0.0, 288.0))
+        shot = authsrv.launch_player_projectile(send, st, 1, {"target": FOE}, how)
+        want = authsrv.led_aim((0.0, 0.0), (600.0, 0.0), (0.0, 288.0), how["speed"])
+        aim = list(launches(sent)[0][1])
+        check(abs(aim[0] - want[0]) < 1e-6 and abs(aim[1] - want[1]) < 1e-6 and aim[1] > 100.0
+              and tuple(shot["aim"]) == (aim[0], aim[1])
+              and abs(_f(launches(sent)[0][3]) - math.hypot(*want) / how["speed"]) < 1e-6,
+              "a real launch at a hostile walking across at 288 u/s: the 0x00A4's aim is the led "
+              "point (over 100 u ahead of where it stands), the flight is to THAT point, and the "
+              "shot remembers it", f"aim {aim} want {want}")
+        st["agents"][FOE]["pos"] = (want[0], want[1] + 10.0)   # it kept walking: at the led point
+        sent.clear()
+        shot["arrives_at"] -= 30.0
+        authsrv.projectile_tick(send, st, 1)
+        check([op for op, _v in sent][0] == 0x00A7 and len(words(sent)) == 1 and not fails(sent)
+              and st["agents"][FOE]["health"] < 9000.0,
+              "the hostile kept its course and stands 10 u from the led point at the arrival: "
+              "0x00A7 then the word -- a straight walker is hit (WIKI)")
+        st, sent, send = walking_world((0.0, 288.0))
+        shot = authsrv.launch_player_projectile(send, st, 1, {"target": FOE}, how)
+        st["agents"][FOE]["pos"] = (shot["aim"][0] + 60.0, shot["aim"][1])   # it turned
+        sent.clear()
+        shot["arrives_at"] -= 30.0
+        authsrv.projectile_tick(send, st, 1)
+        check([op for op, _v in sent] == [0x00A7, 0x00A0] and sent[1][1] == [FAIL, FOE, PLAYER, 1]
+              and not words(sent) and st["agents"][FOE]["health"] == 9000.0
+              and not st["player_projectiles"],
+              "it turned and stands 60 u off the aim: 0x00A7 then [38, foe, me, 1] -- the dodge "
+              "word behind the arrival (retail, 7 of 7) -- no word, no damage, the handle spent",
+              str([(hex(op), v) for op, v in sent]))
+        authsrv.DODGE = False
+        st, sent, send = walking_world((0.0, 288.0))
+        shot = authsrv.launch_player_projectile(send, st, 1, {"target": FOE}, how)
+        aim_off = list(launches(sent)[0][1])
+        st["agents"][FOE]["pos"] = (660.0, 0.0)
+        sent.clear()
+        shot["arrives_at"] -= 30.0
+        authsrv.projectile_tick(send, st, 1)
+        authsrv.DODGE = True
+        check(aim_off == [600.0, 0.0] and len(words(sent)) == 1 and not fails(sent),
+              "--no-dodge: no lead (the aim is where the walker stands) and the shot connects "
+              "60 u away -- the reading every run before 2026-09-20 made")
+
+        # a body's arrow at the player
+        st = _body_world((600.0, 0.0), weapon_item="hostile_bow")
+        sent = []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+        how_b = authsrv.body_ranged(st["agents"][FOE])
+        shot = authsrv.launch_body_projectile(send, st, 1, FOE, st["agents"][FOE], PLAYER, how_b)
+        health = st["player_health"]
+        st["pos"] = (60.0, 0.0)                                   # the player stepped off
+        sent.clear()
+        shot["arrives_at"] -= 30.0
+        authsrv.projectile_tick(send, st, 1)
+        check(list(shot["aim"]) == [0.0, 0.0] and [op for op, _v in sent] == [0x00A7, 0x00A0]
+              and sent[1][1] == [FAIL, PLAYER, FOE, 1] and st["player_health"] == health,
+              "a hostile archer's arrow at the standing player, who stepped 60 u off before it "
+              "arrived: 0x00A7 then [38, me, it, 1], no word, no damage",
+              str([(hex(op), v) for op, v in sent]))
+        st = _body_world((600.0, 0.0), weapon_item="hostile_bow")
+        st["_vel_trail"] = {PLAYER: {"t": time.time(), "pos": (0.0, 0.0), "vel": (288.0, 0.0)}}
+        sent.clear()
+        shot = authsrv.launch_body_projectile(send, st, 1, FOE, st["agents"][FOE], PLAYER, how_b)
+        want = authsrv.led_aim((600.0, 0.0), (0.0, 0.0), (288.0, 0.0), how_b["speed"])
+        st["pos"] = (want[0] + 8.0, 0.0)                          # kept walking toward it
+        health = st["player_health"]
+        sent.clear()
+        shot["arrives_at"] -= 30.0
+        authsrv.projectile_tick(send, st, 1)
+        check(abs(shot["aim"][0] - want[0]) < 1e-6 and want[0] > 60.0 and not fails(sent)
+              and len(words(sent)) == 1 and st["player_health"] < health,
+              "the player walking toward the archer at 288 u/s: the aim leads it (the flight "
+              "shortened by the approach) and the arrow lands where the player arrives",
+              f"aim {shot['aim']} want {want}")
+
+        # a spell that misses: the impact on the ground, no word
+        st, sent, send = walking_world((0.0, 0.0))
+        how_s = {"projectile": 343, "arrow": 0, "speed": 1800.0, "range": None, "damage_type": 5}
+        shot = authsrv.launch_player_projectile(send, st, 1, {"target": FOE}, how_s)
+        shot["spell"] = {"skill_id": 194, "rank": 0, "amount": 20.0, "visual": 344, "first": True}
+        st["agents"][FOE]["pos"] = (700.0, 0.0)
+        sent.clear()
+        shot["arrives_at"] -= 30.0
+        authsrv.projectile_tick(send, st, 1)
+        check([op for op, _v in sent] == [0x00A7, A1] and sent[0][1] == [PLAYER, 1, 5]
+              and sent[1][1] == [[600.0, 0.0], 0, PLAYER, 344, 0, 0] and not words(sent)
+              and st["agents"][FOE]["health"] == 9000.0,
+              "the player's Flare at a hostile that moved 100 u off the aim: 0x00A7 [me, 1, 5] "
+              "then 0x00A1 [aim, 0, me, 344, 0, 0] -- the impact on the ground -- and no word "
+              "(the Daggers' miss on retail, 2 of 17)", str([(hex(op), v) for op, v in sent]))
+        st = _body_world((900.0, 0.0))
+        sent = []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+        how_o = {"projectile": 403, "arrow": 0, "speed": 1800.0, "range": None, "damage_type": 4}
+        shot = authsrv.launch_body_projectile(send, st, 1, FOE, st["agents"][FOE], PLAYER, how_o)
+        shot["spell"] = {"skill_id": 229, "rank": 12, "amount": 60.0, "visual": 404, "first": True}
+        st["pos"] = (0.0, 80.0)
+        health = st["player_health"]
+        sent.clear()
+        shot["arrives_at"] -= 30.0
+        authsrv.projectile_tick(send, st, 1)
+        check([op for op, _v in sent] == [0x00A7, A1] and sent[0][1] == [FOE, 1, 4]
+              and sent[1][1] == [[0.0, 0.0], 0, FOE, 404, 0, 0] and st["player_health"] == health,
+              "a body's Orb at the player, who stepped 80 u off: 0x00A7 [it, 1, 4] then the "
+              "impact on the ground at the aim with the caster's id, no word, no damage",
+              str([(hex(op), v) for op, v in sent]))
+
+        # a burst that misses its target but reaches it: the ground impact AND the word
+        tables = agents.WORLD.tables
+        had, kept = "skills" in tables, tables.get("skills")
+        tables["skills"] = {"186": {"target": 16, "aoe_range": 240.0, "projectile": 343,
+                                    "impact_visual": 344, "type_code": 5, "attribute": 10}}
+        try:
+            st = _body_world((900.0, 0.0))
+            sent.clear()
+            shot = authsrv.launch_body_projectile(send, st, 1, FOE, st["agents"][FOE], PLAYER, how_s)
+            shot["spell"] = {"skill_id": 186, "rank": 12, "amount": 60.0, "visual": 344, "first": True}
+            st["pos"] = (0.0, 100.0)                              # off the aim, inside the area
+            health = st["player_health"]
+            sent.clear()
+            shot["arrives_at"] -= 30.0
+            authsrv.projectile_tick(send, st, 1)
+        finally:
+            if had:
+                tables["skills"] = kept
+            else:
+                del tables["skills"]
+        arr = [(op, v) for op, v in sent if op != authsrv.AGENT_ADRENALINE_GAIN]
+        check([op for op, _v in arr][:3] == [0x00A7, A1, A1]
+              and grounds(arr) == [[[0.0, 0.0], 0, FOE, 344, 0, 0], [[0.0, 0.0], 0, 0, 333, 0, 0]]
+              and [w[1] for w in words(arr)] == [PLAYER, HERO] and st["player_health"] < health,
+              "a Fireball whose target stepped 100 u off the aim but stands inside the area: the "
+              "impact on the ground with the caster's id, the explosion, and the player's word "
+              "all the same -- the tape's shape on 17 of 21 ground impacts",
+              str([(hex(op), v) for op, v in arr]))
+        src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+        sargs = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
+        check(src.count("target_velocity(state, ") >= 2 and src.count("agents.ATTACK_FAIL_DODGE") == 2
+              and "track_velocities(state)" in src
+              and src.count("projectile_connects(state, shot)") - src.count("def projectile_connects(") == 4
+              and '"--no-dodge"' in sargs,
+              "the source: both launchers lead, both ticks test the connect and send the dodge "
+              "word, the two spell landings and the area test it, the world tick keeps the "
+              "velocities, the revert flag exists")
+        # the corpus: every dodge word rides its attacker's arrival
+        try:
+            sys.path.insert(0, HERE)
+            import weaponcensus as wc                                     # noqa: PLC0415
+            with_a7, without, r3_with = 0, 0, 0
+            for _name, _gf, s2c in wc.connections():
+                arrivals = set()
+                for t_, op, v in s2c:
+                    if op == 0x00A7 and len(v) > 3:
+                        arrivals.add((round(t_, 4), v[1]))
+                for t_, op, v in s2c:
+                    if op == 0x00A0 and len(v) > 4 and v[1] == FAIL:
+                        rode = (round(t_, 4), v[3]) in arrivals
+                        if v[4] == 1:
+                            with_a7 += rode
+                            without += not rode
+                        elif v[4] == 3:
+                            r3_with += rode
+        except (Exception, SystemExit) as e:                               # noqa: BLE001
+            with_a7 = None
+            LEDGER.skip("section 27", f"the live corpus is absent ({type(e).__name__}) -- 1 check")
+        if with_a7 is not None:
+            check(with_a7 >= 7 and without == 0 and r3_with == 0,
+                  "and the corpus says so: every reason-1 attack-fail word on the live tapes rides "
+                  "a 0x00A7 of its attacker in the same instant (at least seven, none without), and "
+                  "no reason-3 (a swing's miss) does", f"dodge with A7 {with_a7}, without {without}, "
+                  f"miss with A7 {r3_with}")
+    finally:
+        (authsrv.DODGE, agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+         authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE, authsrv.critical_rate) = saved
+
+
 def main():
     section_table()
     section_skills()
@@ -3222,6 +3469,7 @@ def main():
     section_spell_projectiles()
     section_body_spell_projectiles()
     section_spell_areas()
+    section_dodge()
     return LEDGER.verdict()
 
 
