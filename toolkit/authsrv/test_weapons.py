@@ -24,7 +24,7 @@ import agents  # noqa: E402
 import authsrv  # noqa: E402
 import combatmath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=251)   # the BARE-MACHINE number: 251 = 237 + 14 (section 27, the hit test, 2026-09-20; a vault run gives 269 -- the corpus's dodge words are the one vault-only check); before that 237 = 228 + 9 (section 26, Fireball's splash, 2026-09-20; a vault run gives 254 -- the tape's bursts are the one vault-only check); before that 228 = 219 + 9 (section 25, a body's spell projectile, 2026-09-20; a vault run gives 244 -- the tape's activations are the one vault-only check); before that 219 = 208 + 11 (section 24, a player's spell projectile, 2026-09-20; a vault run gives 234 -- the tapes' speeds are the one vault-only check); before that 208 = 203 + 5 (section 23, base armour penetration, 2026-09-19; a vault run gives 222 -- the six checks that read the skills table are vault-only); before that 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=257)   # the BARE-MACHINE number: 257 = 251 + 6 (section 28, a point-blank burst, 2026-09-20; a vault run gives 276 -- the corpus's target-16 announces are the one vault-only check); before that 251 = 237 + 14 (section 27, the hit test, 2026-09-20; a vault run gives 269 -- the corpus's dodge words are the one vault-only check); before that 237 = 228 + 9 (section 26, Fireball's splash, 2026-09-20; a vault run gives 254 -- the tape's bursts are the one vault-only check); before that 228 = 219 + 9 (section 25, a body's spell projectile, 2026-09-20; a vault run gives 244 -- the tape's activations are the one vault-only check); before that 219 = 208 + 11 (section 24, a player's spell projectile, 2026-09-20; a vault run gives 234 -- the tapes' speeds are the one vault-only check); before that 208 = 203 + 5 (section 23, base armour penetration, 2026-09-19; a vault run gives 222 -- the six checks that read the skills table are vault-only); before that 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
 check = LEDGER.ok
 
 LEGACY_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
@@ -3442,6 +3442,185 @@ def section_dodge():
          authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE, authsrv.critical_rate) = saved
 
 
+def section_bursts():
+    print("\n28. a point-blank burst: no flight -- every foe around the target, at the completion")
+    saved = (authsrv.skill_damage, authsrv._is_attack_skill, authsrv.skill_projectile,
+             authsrv.skill_impact_visual, authsrv.SPELL_AREAS, authsrv.skill_timing,
+             authsrv.skill_cost, authsrv.weapon_satisfies, agents.PLAYER_WEAPON,
+             agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL, authsrv.WEAPON_ATTACK_SPEED,
+             authsrv.PLAYER_SWING_DAMAGE)
+    words = lambda batch: [v for op, v in batch if op == 0x00A3 and v[0] in (16, 17)]   # noqa: E731
+    launches = lambda batch: [v for op, v in batch if op == 0x00A4]                     # noqa: E731
+    visuals = lambda batch: [v for op, v in batch if op == 0x00A0 and v[0] == agents.GV_EFFECT_ON_TARGET]  # noqa: E731
+
+    def pairs(batch):
+        """(kind, agent) for every word and impact visual, in wire order."""
+        out = []
+        for op, v in batch:
+            if op == 0x00A3 and v[0] in (16, 17):
+                out.append(("w", v[1]))
+            elif op == 0x00A0 and v[0] == agents.GV_EFFECT_ON_TARGET:
+                out.append(("v", v[1]))
+        return out
+
+    tables = agents.WORLD.tables
+    had, kept = "skills" in tables, tables.get("skills")
+    tables["skills"] = {"170": {"activation": 3.0, "aftercast": 0.75, "recharge": 15, "energy": 25,
+                                "adrenaline": 0, "adrenaline_units": 0, "attribute": 9,
+                                "profession": 6, "type_code": 5, "target": 16, "combo": 0,
+                                "combo_req": 0, "weapon_req": 0, "aoe_range": 240.0,
+                                "skill_arguments": 2, "duration0": 0, "duration15": 0,
+                                "scale0": 26, "scale15": 100, "bonus_scale0": 0,
+                                "bonus_scale15": 0, "projectile": 2077, "impact_visual": 304},
+                        "187": {"type_code": 5, "target": 16, "aoe_range": 156.0, "projectile": 2077,
+                                "duration0": 0, "duration15": 0, "attribute": 10},
+                        "186": {"type_code": 5, "target": 16, "aoe_range": 240.0, "projectile": 343,
+                                "duration0": 0, "duration15": 0, "attribute": 10},
+                        "197": {"type_code": 5, "target": 16, "aoe_range": 156.0, "projectile": 2077,
+                                "duration0": 10, "duration15": 10, "attribute": 10},
+                        "52": {"type_code": 4, "target": 16, "aoe_range": 240.0, "projectile": 2077,
+                               "duration0": 1, "duration15": 10, "attribute": 2},
+                        "194": {"type_code": 5, "target": 5, "aoe_range": 156.0, "projectile": 343,
+                                "duration0": 0, "duration15": 0, "attribute": 10}}
+    try:
+        authsrv.skill_projectile = lambda sid: 343 if sid in (186, 194) else None
+        got = {s: authsrv.spell_burst(s) for s in (170, 187, 186, 197, 52, 194, 99999)}
+        authsrv.SPELL_AREAS = False
+        off = authsrv.spell_burst(170)
+        authsrv.SPELL_AREAS = True
+        check(got == {170: 240.0, 187: 156.0, 186: None, 197: None, 52: None, 194: None, 99999: None}
+              and off is None and authsrv.SPELL_TYPE_CODE == 5,
+              "spell_burst: Earthquake (target byte 16, no projectile, no duration) bursts over 240 "
+              "and Meteor over 156; Fireball flies instead, Fire Storm lasts (an area over time), "
+              "Panic is a hex, Flare is one target, an unknown skill none; --no-spell-areas none",
+              str(got))
+        row = agents.WORLD.get("skill_effect", "170")
+        check(row["scale_means"] == "Earth damage" and int(row["damage_type"]) == 11
+              and row["knocks_down"] is True and authsrv.skill_knocks_down(170)
+              and authsrv.spell_damage_type(170) == 11,
+              "Earthquake's row: earth damage (11) that knocks down -- the page's own words")
+
+        # the player's Earthquake at a hostile with a second one 50 u beside it
+        authsrv._is_attack_skill = lambda sid: False
+        authsrv.skill_damage = lambda sid, rank: (60.0, "standalone")
+        authsrv.skill_impact_visual = lambda sid: 304
+        authsrv.skill_timing = lambda sid: (3.0, 0.75, 0.0)
+        authsrv.skill_cost = lambda sid: (0, 0)
+        authsrv.weapon_satisfies = lambda sid: True
+        authsrv.apply_party_character({"player_weapon": "starter_wand"})
+        st, sent = _world(600.0), []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+        st["agents"][11] = dict(st["agents"][FOE], pos=(650.0, 0.0))
+        st["agents"][12] = dict(st["agents"][FOE], pos=(1000.0, 0.0))
+        authsrv.handle_skill_press([0, 170, 0, FOE], send, st, 1, authsrv.GAME_CMSG_USE_SKILL)
+        sent.clear()
+        for cast in st["pending_casts"]:
+            for k in ("begin_at", "e5_at", "e3_at", "e6_at"):
+                cast[k] -= 30.0
+        authsrv.cast_tick(send, st, 1)
+        check([op for op, _v in sent][0] == 0x00E5 and not launches(sent)
+              and pairs(sent) == [("w", FOE), ("v", FOE), ("w", 11), ("v", 11)]
+              and visuals(sent) == [[agents.GV_EFFECT_ON_TARGET, FOE, PLAYER, 304],
+                                    [agents.GV_EFFECT_ON_TARGET, 11, PLAYER, 304]]
+              and st["agents"][FOE]["health"] == 9000.0 - 60.0
+              and st["agents"][11]["health"] == 9000.0 - 60.0
+              and st["agents"][12]["health"] == 9000.0
+              and authsrv.knocked_down(st, FOE) and authsrv.knocked_down(st, 11)
+              and not authsrv.knocked_down(st, 12),
+              "the player's Earthquake at the E5, nothing in the air: a word then [20, foe, me, "
+              "304] for the target and for the hostile 50 u beside it, word first (the Fireball "
+              "arrival's per-foe shape), 60 each, both knocked down; the one 400 u off untouched",
+              str([(hex(op), v) for op, v in sent]))
+
+        # a hostile's Earthquake at the player, the monk 110 u off
+        st = _body_world((900.0, 0.0), skills=[[170, 0.0, 15.0]], skill_ready=[0.0],
+                         casting=0, cast_target=PLAYER)
+        st["agents"][300] = dict(st["agents"][HERO], pos=(0.0, 400.0))
+        sent = []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+        health, monk_hp = st["player_health"], st["agents"][HERO]["health"]
+        authsrv.land_skill(send, st, FOE, st["agents"][FOE], 1)
+        ar = authsrv.spell_armour_for(170)
+        want = authsrv._whole_points(60.0 * authsrv.strike_multiplier(
+            authsrv.agent_strike_level(st["agents"][FOE]), ar))
+        check(sent[0][1][:2] == [58, FOE] and not launches(sent)
+              and pairs(sent) == [("w", PLAYER), ("v", PLAYER), ("w", HERO), ("v", HERO)]
+              and visuals(sent) == [[agents.GV_EFFECT_ON_TARGET, PLAYER, FOE, 304],
+                                    [agents.GV_EFFECT_ON_TARGET, HERO, FOE, 304]]
+              and ar == 25.0 and st["player_health"] == health - want
+              and st["agents"][HERO]["health"] < monk_hp and st["agents"][300]["health"] == monk_hp
+              and authsrv.knocked_down(st, PLAYER) and authsrv.knocked_down(st, HERO)
+              and st["agents"][FOE]["casting"] is None,
+              "a hostile's Earthquake completes: [58, it, 0], then the player's word (60 against the "
+              "pieces' 25 at its strike level) and [20, me, it, 304], then the monk's word and its "
+              "[20], both knocked down; the body 400 u off untouched; the caster released",
+              str([(hex(op), v) for op, v in sent]))
+
+        # the revert: one target, no visual, no knock-down
+        authsrv.SPELL_AREAS = False
+        st, sent = _world(600.0), []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+        st["agents"][11] = dict(st["agents"][FOE], pos=(650.0, 0.0))
+        authsrv.handle_skill_press([0, 170, 0, FOE], send, st, 1, authsrv.GAME_CMSG_USE_SKILL)
+        sent.clear()
+        for cast in st["pending_casts"]:
+            for k in ("begin_at", "e5_at", "e3_at", "e6_at"):
+                cast[k] -= 30.0
+        authsrv.cast_tick(send, st, 1)
+        authsrv.SPELL_AREAS = True
+        check(pairs(sent) == [("w", FOE)] and st["agents"][11]["health"] == 9000.0
+              and not authsrv.knocked_down(st, FOE),
+              "--no-spell-areas: Earthquake lands one word on its target, nothing on the hostile "
+              "beside it, no impact visual and no knock-down -- the reading every run before "
+              "2026-09-20 made")
+        src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+        check('_burst = spell_burst(cast["skill_id"]) if _how is None else None' in src
+              and "burst_player_spell(send, state, conn_id, cast, found[0], rank," in src
+              and "burst_body_spell(send, state, conn_id, agent_id, skill_id, _burst_terms," in src
+              and "if inflicted and _burst_terms is None and not target_dead(state, _tid):" in src
+              and "_burst_terms.append((_foe, _fbody, body_spell_terms(" in src,
+              "the source: the E5 and the completion both branch to the burst, a body's every "
+              "foe's terms are computed before its 58, and the burst hands out the condition itself")
+        # the corpus: no single-packet burst was ever cast; Fire Storm (an area over time) was
+        if had and kept:
+            t16 = {int(k) for k, r in kept.items() if r.get("target") == 16
+                   and int(r.get("projectile") or 2077) in (0, 2077)}     # the ones with no flight
+            try:
+                sys.path.insert(0, HERE)
+                import weaponcensus as wc                                     # noqa: PLC0415
+                seen = collections.Counter()
+                for _name, _gf, s2c in wc.connections():
+                    player = next((v[1] for _t, op, v in s2c if op == 0x00E3), None)
+                    for _t, op, v in s2c:
+                        if op == 0x00A0 and len(v) > 4 and v[1] == 60 and v[4] in t16:
+                            seen[v[4]] += 1
+                        elif op == 0x00E5 and len(v) > 2 and v[1] == player and v[2] in t16:
+                            seen[v[2]] += 1
+            except (Exception, SystemExit) as e:                               # noqa: BLE001
+                seen = None
+                LEDGER.skip("section 28", f"the live corpus is absent ({type(e).__name__}) -- 1 check")
+            if seen is not None:
+                check(set(seen) == {197} and seen[197] >= 15 and len(t16) >= 30,
+                      "and the corpus has NO witness: of the record's target-16 skills with no "
+                      "projectile (at least thirty) the only one ever announced on a live tape is "
+                      "Fire Storm (at least "
+                      "fifteen), an area over time -- the day a burst appears this reddens and its "
+                      "shape gets checked", str(dict(seen)))
+        else:
+            LEDGER.skip("section 28", "the vault's skills table is absent -- 1 check (the corpus's "
+                        "target-16 announces)")
+    finally:
+        if had:
+            tables["skills"] = kept
+        else:
+            del tables["skills"]
+        (authsrv.skill_damage, authsrv._is_attack_skill, authsrv.skill_projectile,
+         authsrv.skill_impact_visual, authsrv.SPELL_AREAS, authsrv.skill_timing,
+         authsrv.skill_cost, authsrv.weapon_satisfies, agents.PLAYER_WEAPON,
+         agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL, authsrv.WEAPON_ATTACK_SPEED,
+         authsrv.PLAYER_SWING_DAMAGE) = saved
+
+
 def main():
     section_table()
     section_skills()
@@ -3470,6 +3649,7 @@ def main():
     section_body_spell_projectiles()
     section_spell_areas()
     section_dodge()
+    section_bursts()
     return LEDGER.verdict()
 
 

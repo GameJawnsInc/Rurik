@@ -12805,6 +12805,121 @@ def projectile_connects(state, shot):
     x, y = target_pos(state, shot["target"])
     ax, ay = shot["aim"]
     return math.hypot(float(x) - float(ax), float(y) - float(ay)) <= DODGE_TOLERANCE
+
+
+# ---- A POINT-BLANK BURST: no flight, every foe around the target (2026-09-20, studies/weapons 40)
+#
+# The record's target byte 16 marks 34 rows (section 38): two projectiles
+# (Fireball, Phoenix -- section 38's flight and burst), seven hexes on an
+# area (Panic, Suffering...), fifteen areas over TIME (Fire Storm, Meteor
+# Shower, Churning Earth...: a duration in the record, ticking at a point --
+# the corpus's only target-16 casts, Fire Storm x17 on 20260817T231139, are
+# these, and they are a mechanism of their own with a ground effect and a
+# scatter, NOT this), and ten SINGLE-PACKET bursts -- a spell (type 5) with
+# no projectile and no duration: Earthquake / Dragon's Stomp (240), Meteor
+# (156), Rodgort's Invocation (240), Searing Flames, Ravenous Gaze, Feast of
+# Corruption, Plague Sending, Enfeebling Blood, Desecrate / Defile
+# Enchantments. WIKI (GWW "Earthquake": "You invoke an Earthquake at target
+# foe's location. All foes near this location are knocked down and are
+# struck for 26...100 earth damage"; "Point blank area of effect": "a small
+# area of effect from the location of the user or a target, which does not
+# persist over time"). NOT ONE was cast on any live tape (NOT FOUND, as a
+# census over every target-16 announce), so the wire shape is Fireball's
+# arrival without the flight (RECONSTRUCTION): the 58 (a body) or the E5
+# (the player), then per foe inside the radius of the TARGET's position the
+# word then [20, foe, caster, +0x84 impact], the skill's condition and its
+# knock-down on each; a foe's number is its own. RUN-WEAPONS-1B's Suits stand
+# 150 u apart: an Earthquake at the middle one predicts three words. The
+# same radius, the same foes_within and the same flag as section 38
+# (--no-spell-areas: one target).
+SPELL_TYPE_CODE = 5          # the record's type byte for a Spell (a hex is 4, an attack 14)
+
+
+def spell_burst(skill_id):
+    """The radius a SINGLE-PACKET burst covers at its target's position: the
+    record's `aoe_range` when the target byte is 16, the row a spell with no
+    projectile and no duration -- else None (a projectile burst flies, an
+    area over time and an area hex stay one target here)."""
+    if not SPELL_AREAS:
+        return None
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return None
+    if int(row.get("target", -1)) != AREA_TARGET_BYTE \
+            or int(row.get("type_code", -1)) != SPELL_TYPE_CODE:
+        return None
+    if skill_projectile(skill_id) is not None:
+        return None
+    if int(row.get("duration0", 0) or 0) or int(row.get("duration15", 0) or 0):
+        return None
+    radius = float(row.get("aoe_range", 0.0) or 0.0)
+    return radius if radius > 0.0 else None
+
+
+def burst_player_spell(send, state, conn_id, cast, amount, rank, radius):
+    """The player's burst at the E5: every hostile within `radius` of the
+    target's position takes the spell's amount (hit_enemy's `exact`) then
+    its [20, foe, me, impact] -- word first, the Fireball arrival's per-foe
+    shape -- then the skill's knock-down and its condition on each landed,
+    living foe. Returns the foes reached."""
+    sid, target = cast["skill_id"], cast["target"]
+    foes = foes_within(state, PLAYER_AGENT_ID, target_pos(state, target), radius)
+    vis = skill_impact_visual(sid)
+    inflicted = skill_condition(sid, rank)
+    kd = skill_knocks_down(sid)
+    landed = 0
+    for foe in foes:
+        res = hit_enemy(send, state, foe, conn_id, exact=float(amount), swing=False,
+                        armed=True, label=f"skill {sid} bursts on agent {foe}")
+        if res != "landed":
+            continue
+        landed += 1
+        if vis is not None:
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+                 [agents.GV_EFFECT_ON_TARGET, foe, PLAYER_AGENT_ID, int(vis)],
+                 f"skill {sid}'s impact ({vis}) on agent {foe}")
+        victim = state.get("agents", {}).get(foe)
+        if victim is None or victim.get("dead"):
+            continue
+        if kd:
+            knock_down(send, state, foe, conn_id, f"skill {sid}",
+                       skill_knock_down_seconds(sid))
+        if inflicted:
+            apply_condition(send, state, foe, inflicted[0], inflicted[1], rank,
+                            conn_id, sid)
+    print(f"[c{conn_id}] skill {sid} bursts over {len(foes)} foe(s) within {radius:.0f} u "
+          f"of agent {target} ({landed} landed) [studies/weapons 40]", flush=True)
+    return foes
+
+
+def burst_body_spell(send, state, conn_id, who, sid, terms, amount, rank, inflicted):
+    """A body's burst at its completion (the 58 went out; the terms were
+    computed before it): per foe its word, its [20, foe, caster, impact],
+    the knock-down and the condition."""
+    vis = skill_impact_visual(sid)
+    kd = skill_knocks_down(sid)
+    for foe, tbody, (dealt, conversion, frac, spell_ar) in terms:
+        if conversion is not None:
+            resolve_taker_conversion(send, state, conversion, conn_id)
+        if frac is None:
+            continue
+        body_spell_word(send, state, who, sid, foe, tbody, dealt, frac, spell_ar,
+                        amount, conn_id)
+        if vis is not None:
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+                 [agents.GV_EFFECT_ON_TARGET, foe, who, int(vis)],
+                 f"agent {who}'s skill {sid}: its impact ({vis}) on {target_label(state, foe)}")
+        if target_dead(state, foe):
+            continue
+        if kd:
+            knock_down(send, state, foe, conn_id, f"agent {who}'s skill {sid}",
+                       skill_knock_down_seconds(sid))
+        if inflicted:
+            apply_condition(send, state, foe, inflicted[0], inflicted[1], rank,
+                            conn_id, sid)
+    print(f"[c{conn_id}] agent {who}'s skill {sid} bursts over {len(terms)} foe(s) "
+          f"[studies/weapons 40]", flush=True)
 # The two modifier identifiers an armour piece carries. 572's argument is the
 # rating the tooltip prints as `Armor: N`; 527's is the `+N vs. <type>` line,
 # and identifier 4 beside it resolves to `vs. physical damage`. All three were
@@ -18641,9 +18756,16 @@ def cast_tick(send, state, conn_id):
                 # studies/weapons 36: a projectile SPELL's damage rides its
                 # projectile's arrival (the 0x00A4 goes out here, in the E5's
                 # batch -- Dancing Daggers 17 of 17); one with no projectile,
-                # or none a tape has timed, lands here as before.
+                # or none a tape has timed, lands here as before -- on ONE
+                # target, or (studies/weapons 40) on every foe inside a
+                # single-packet burst's radius of the target's position.
                 _how = spell_shot_how(cast["skill_id"])
-                if _how is None or launch_player_spell_shot(
+                _burst = spell_burst(cast["skill_id"]) if _how is None else None
+                if _burst is not None:
+                    burst_player_spell(send, state, conn_id, cast, found[0], rank,
+                                       _burst)
+                    inflicted = None          # each foe took its own inside
+                elif _how is None or launch_player_spell_shot(
                         send, state, conn_id, cast, _how, found[0], rank) is None:
                     hit_enemy(send, state, target, conn_id, exact=float(found[0]),
                               swing=False,
@@ -24930,6 +25052,13 @@ def land_skill(send, state, agent_id, agent, conn_id):
     _spell_how = (spell_shot_how(skill_id)
                   if damage is not None and damage[1] == "standalone"
                   and _tid != agent_id else None)
+    # studies/weapons 40: a single-packet BURST (Earthquake) reaches every
+    # foe inside its radius of the target's position -- each foe's terms
+    # here, before the 58 (the refusal contract), the words at the end.
+    _burst = (spell_burst(skill_id)
+              if damage is not None and damage[1] == "standalone"
+              and _spell_how is None and _tid != agent_id else None)
+    _burst_terms = None
     # THE PLAYER'S ARMOUR, for the labels that respect it (SKILLS-FA). One
     # elemental rating, no location roll -- `player_spell_armour` says why
     # -- applied BEFORE the taker's own episodes, which is GWW's order (the
@@ -24938,7 +25067,14 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # calculation" sec. Damage modifiers). 39.5 left this unfixed for a
     # fortnight because the VALUE was unsettled; 43 settled the shape. The
     # terms are body_spell_terms' since section 37 (the arrival's, too).
-    if damage is not None and _spell_how is None:
+    if damage is not None and _spell_how is None and _burst is not None:
+        _table = state.get("agents", {})
+        _burst_terms = []
+        for _foe in foes_within(state, agent_id, target_pos(state, _tid), _burst):
+            _fbody = _foe != PLAYER_AGENT_ID and _foe in _table
+            _burst_terms.append((_foe, _fbody, body_spell_terms(
+                state, agent, skill_id, damage[0], _foe, _fbody)))
+    elif damage is not None and _spell_how is None:
         dealt, conversion, frac, spell_ar = body_spell_terms(
             state, agent, skill_id, damage[0], _tid, _tbody)
     # THE FINISH ANNOUNCEMENT OPENS THE BATCH -- ANIMREF-R2's cleanest yield
@@ -24982,7 +25118,7 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # the pips are three pixels; with it the player's own HUD shows the arrows,
     # which is what closes `studies/isle` B4's one UNVERIFIED clause.
     inflicted = skill_condition(skill_id, _rank)
-    if inflicted and not target_dead(state, _tid):
+    if inflicted and _burst_terms is None and not target_dead(state, _tid):
         apply_condition(send, state, _tid, inflicted[0],
                         inflicted[1], _rank, conn_id, skill_id)
 
@@ -25007,6 +25143,11 @@ def land_skill(send, state, agent_id, agent, conn_id):
             print(f"[c{conn_id}] agent {agent_id} cast skill {skill_id}: no "
                   f"modelled effect (its scale is not damage -- see "
                   f"content/world.toml skill_effect)", flush=True)
+        return
+    if _burst_terms is not None:                              # studies/weapons 40
+        agent["casting"] = None
+        burst_body_spell(send, state, conn_id, agent_id, skill_id, _burst_terms,
+                         damage[0], _rank, inflicted)
         return
     if conversion is not None:
         resolve_taker_conversion(send, state, conversion, conn_id)
@@ -34143,9 +34284,9 @@ def main():
     if a.no_spell_areas:
         global SPELL_AREAS
         SPELL_AREAS = False
-        print("SPELLS: --no-spell-areas -- a burst spell (Fireball) lands on its one "
-              "target and draws no explosion, the reading every run before 2026-09-20 "
-              "made [studies/weapons 38 revert]", flush=True)
+        print("SPELLS: --no-spell-areas -- a burst spell (Fireball, Earthquake) lands on "
+              "its one target and draws no explosion, the reading every run before "
+              "2026-09-20 made [studies/weapons 38 / 40 revert]", flush=True)
     if a.no_spell_projectiles:
         global SPELL_PROJECTILES
         SPELL_PROJECTILES = False

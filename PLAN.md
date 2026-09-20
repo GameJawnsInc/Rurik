@@ -1984,10 +1984,16 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   range (RUN-WEAPONS-2) is the instrument; ~~W3~~ (shipped 2026-09-19,
   `studies/weapons/PLAN.md` §26: the scythe's extras and its 2^0.125 critical), ~~W4's rest~~ shipped 2026-09-19 (§30: `587` against the pieces'
   `527` under its condition word, the `633` reader with `634` / `635` / `636`, the isle's 3.098
-  unmet divisor; left of W4: the 32 point-blank bursts the record's target byte 16 also marks
-  (Aftershock, Shock: no flight, `foes_within` at the target), line of sight (*Obstructed* /
-  *Stray*), and the BONUS penetration sources beyond the hornbow (the client's item word 574
-  `Armor penetration`, the Sundering upgrade, on no corpus item; Judge's Insight 267); ~~the
+  unmet divisor; left of W4: the fifteen AREAS OVER TIME the record's target byte 16 also
+  marks (Fire Storm's seventeen casts on `20260817T231139` are the witness: a ground `0x00A1`
+  350 at the completion, ticks once a second with no 58, the scatter) and its seven area
+  hexes, line of sight (*Obstructed* / *Stray*), and the BONUS penetration sources beyond the
+  hornbow (the client's item word 574 `Armor penetration`, the Sundering upgrade, on no corpus
+  item; Judge's Insight 267); ~~the point-blank bursts~~ shipped 2026-09-20, §40 -- the ten
+  single-packet bursts (target byte 16, no projectile, no duration: Earthquake, Meteor,
+  Rodgort's...) reach every foe inside the record's radius of the target's position at the
+  completion, each its word, `[20]`, condition and knock-down (RECONSTRUCTION: Fireball's
+  arrival without the flight; never cast on a tape, the lock says so); Earthquake's row; ~~the
   finer hit test~~ shipped 2026-09-20, §39 -- the aim leads the target's velocity (WIKI), a
   target off the aim by more than 24 u at the arrival dodges: an arrow draws `[38, target,
   attacker, 1]` behind its `0x00A7` (7 of 7 on retail), a spell its impact on the ground; the

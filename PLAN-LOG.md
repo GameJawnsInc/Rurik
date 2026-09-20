@@ -28,6 +28,20 @@ move back.
 
 ---
 
+### A point-blank burst -- 2026-09-20 -- **no flight: every foe around the target, at the completion**
+
+[studies/weapons/PLAN.md](studies/weapons/PLAN.md) §40. The 32 target-byte-16 rows without a
+projectile split by the record into seven area hexes, fifteen areas over time and ten
+single-packet bursts (a spell, no projectile, no duration). Over every live tape the only
+target-16 skill ever announced is Fire Storm (17, an area over time), so a burst's wire shape
+is RECONSTRUCTION -- Fireball's arrival without the flight: per foe inside the radius of the
+target's position the word then `[20, foe, caster, impact]`, the condition and the knock-down
+on each. Ships `spell_burst`, `burst_player_spell` at the E5, `burst_body_spell` at a body's
+completion (every foe's terms before the 58), Earthquake's row (earth, knocks down), under
+`--no-spell-areas`. The areas over time and the area hexes stay open, named. Tests:
+`test_weapons` 28 (6 checks, floor 251 → 257, a vault run 276; the corpus lock reddens the day
+a burst appears on a tape).
+
 ### The hit test -- 2026-09-20 -- **the aim leads the target; a target off the aim at the arrival dodges**
 
 [studies/weapons/PLAN.md](studies/weapons/PLAN.md) §39. WIKI: a projectile's trajectory

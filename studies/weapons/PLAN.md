@@ -235,7 +235,7 @@ exposure floor and an abort written down.
 | Run | Steps (each: equip, F11, 20 plain swings on a Master of Damage suit from one spot, F11) | Answers | Sealed predictions |
 |---|---|---|---|
 | **RUN-WEAPONS-1A** martial | axe · scythe on ONE suit · scythe with TWO suits adjacent to the target (3 foes hit, the weapon's maximum -- corrected 2026-09-18, this row said three adjacent, which is four) · spear · spear + shield | Q5, Q6, the 1.5 s clock, scythe wire shape and critical, the spear's projectile and flag | scythe and spear start→start 1.500, word / launch at 0.650; spear `0x00A4` field 7 = 1 — **RUN 2026-09-19, capture `20260919T103604`, scored in section 25: every prediction held; the scythe's target-side term measured at [78, 94) u, the spear parked at 755 u** |
-| **RUN-WEAPONS-1B** bows and casters | shortbow · flatbow · longbow · recurve · hornbow · staff · wand, all from the same marked spot · **then W9's three presses (§29), the staff in a set: the ACTIVE set's key; an EMPTY set's key; a switch INTO the staff's set from a weapon with no 556 word** | ~~Q2~~ (closed at the desk, §32 -- the five clocks now check the wiki's rates against the client's named classes), Q3 (speed per class — same distance, five flights), the 2.025 and 2.7 clocks, the hornbow's 10 % against the 100-armour suit; **Strength's 1 % a rank (§35: twenty Power Attacks at the character's Strength on the 60-suit -- at Strength 9 a 15-22 sword's ceiling 22 reads 23)**; **one Flare at the suit from the wand (§36: `0x00A4` 343 at 1800 u/s in the E5 batch, the word at the arrival)**; **the Orb block (§39): five Orbs taken standing, five walking straight across at run speed, five sidestepping at each launch -- the lead and the dodge tolerance**; W9's same-set and empty-set replies and the 41 / 43 on a moved maximum | start→launch 0.9125 / 1.1375 / 1.250 / 0.775; flight ratios 0.59 : 0.88 : 0.59 : 0.40 : 0.59; same-set and empty-set presses answered by NOTHING (the smaller claim); the staff switch's batch carries property 41 then 43 |
+| **RUN-WEAPONS-1B** bows and casters | shortbow · flatbow · longbow · recurve · hornbow · staff · wand, all from the same marked spot · **then W9's three presses (§29), the staff in a set: the ACTIVE set's key; an EMPTY set's key; a switch INTO the staff's set from a weapon with no 556 word** | ~~Q2~~ (closed at the desk, §32 -- the five clocks now check the wiki's rates against the client's named classes), Q3 (speed per class — same distance, five flights), the 2.025 and 2.7 clocks, the hornbow's 10 % against the 100-armour suit; **Strength's 1 % a rank (§35: twenty Power Attacks at the character's Strength on the 60-suit -- at Strength 9 a 15-22 sword's ceiling 22 reads 23)**; **one Flare at the suit from the wand (§36: `0x00A4` 343 at 1800 u/s in the E5 batch, the word at the arrival)**; **the Orb block (§39): five Orbs taken standing, five walking straight across at run speed, five sidestepping at each launch -- the lead and the dodge tolerance**; **a hero's Earthquake at the middle Suit (§40: `[58]` then a word and a `[20, suit, hero, 304]` per Suit within 240 u)**; W9's same-set and empty-set replies and the 41 / 43 on a moved maximum | start→launch 0.9125 / 1.1375 / 1.250 / 0.775; flight ratios 0.59 : 0.88 : 0.59 : 0.40 : 0.59; same-set and empty-set presses answered by NOTHING (the smaller claim); the staff switch's batch carries property 41 then 43 |
 | **RUN-WEAPONS-2** range | per weapon: stand far, press attack once, let the character walk in; repeat uphill if the Isle allows | Q4 — the distance from shooter to the aim point at the FIRST launch is the range, no free parameter. ~~Q16~~ is **no longer this run's**: §22 answered it from the client's own code (the park threshold has no weapon term), so spend no steps on it | 1004 / 1498 / 1498 / 1273 / 1273; 1248 staff and wand; 1004 spear; the body stands after the first start |
 | **RUN-WEAPONS-3** damage (later, needs the right attributes) | met vs unmet requirement on one weapon; a scythe's criticals; hornbow vs longbow on the 100-armour suit | Q10, Q5's critical, W4's penetration | written when W4 opens |
 
@@ -2429,3 +2429,68 @@ largest that hit, the client's own move-to coordinates giving the position). The
 **Left.** *Obstructed* and *Stray* (line of sight); the lead's own error on a body whose
 model steers between samples; the `[55]` energy word; the bonus penetration tier (item word
 574).
+
+## 40. A point-blank burst -- 2026-09-20: no flight -- every foe around the target, at the completion
+
+**What §38 left.** The record's target byte 16 marks 34 rows; two fly (Fireball, Phoenix --
+§38's flight and burst). The other 32 landed on one target.
+
+**What the 32 are, by the record.** Seven are HEXES on an area (type 4: Panic 52, Soothing
+Images 56, Suffering 108, Shadow of Fear 136, Rust 204, Ice Spikes 211, Deep Freeze 234).
+Fifteen are areas over TIME -- a duration in the record, ticking at a point: Chaos Storm 77,
+Eruption 167, Meteor Shower 192, Searing Heat 196, Fire Storm 197, Maelstrom 215, Ray of
+Judgment 830, Churning Earth 844, Spirit Rift 910, Unsteady Ground 1083, Breath of Fire 1094,
+Sandstorm 1372, Savannah Heat 1380, Snow Storm 2222. Ten are SINGLE-PACKET bursts -- a spell
+(type 5) with no projectile and no duration: Desecrate Enchantments 112, Enfeebling Blood 118,
+Plague Sending 149, Feast of Corruption 151, Earthquake 170 (240), Meteor 187 (156),
+Rodgort's Invocation 189 (240), Ravenous Gaze 862, Searing Flames 884, Defile Enchantments
+1070, Dragon's Stomp 1086 (240). WIKI (GWW "Point blank area of effect"): "a small area of
+effect from the location of the user or a target, which does not persist over time"; GWW
+"Earthquake": "You invoke an Earthquake at target foe's location. All foes near this location
+are knocked down and are struck for 26...100 earth damage."
+
+**The corpus has no witness, and says so.** Over every live tape, every prop-60 announce and
+every owner's E5 of a target-16 skill: **Fire Storm, 17 casts, and nothing else** -- an area
+over time (its completion batch is `[55 the energy]`, `[58, caster, 0]`, a ground `0x00A1
+[point, 0, 0, 350, 0, 0]`, and then ticks once a second at the point with no 58 of their own,
+spellhitjoin's "tick" rows). That is a mechanism of its own -- a lasting area with a ground
+effect and the scatter it causes (WIKI "Area of effect") -- and NOT built here. A
+single-packet burst was never cast on retail in front of this project, so its wire shape is
+**RECONSTRUCTION: Fireball's arrival without the flight** (§38): the 58 (a body) or the E5
+(the player), then per foe inside the radius of the TARGET's position the word then `[20,
+foe, caster, impact]`, the skill's condition and its knock-down on each. Test §28 locks the
+absence: the day a burst appears on a tape the lock reddens and the shape gets checked.
+
+**What ships.** `spell_burst(skill_id)` -- the record's `aoe_range` when the target byte is
+16, the type byte 5, no projectile and no duration; else None (a projectile burst flies, an
+area over time and an area hex stay one target). The player's E5 standalone branch bursts
+through `burst_player_spell` (every hostile within the radius of the target's position:
+`hit_enemy`'s `exact`, the impact `[20]`, the knock-down and the condition on each landed,
+living foe; the block's own condition then stands down). A body's `land_skill` computes every
+foe's terms BEFORE its 58 (the refusal contract) and hands the words out at the end through
+`burst_body_spell` (the player through its pool, a body through `hurt_agent_row`, each with
+its `[20]`, its knock-down and its condition). Earthquake's `skill_effect` row (`Earth damage`,
+type 11, `knocks_down`) is the server's one usable burst, on both sides. The same
+`foes_within`, the same flag: `--no-spell-areas` reverts to one target. NOT MODELLED, said
+here: the fifteen areas over time and the seven area hexes; Earthquake's overcast; line of
+sight.
+
+**Tests.** `test_weapons.py` section 28 (6 checks, floor 251 → 257; a vault run 276 -- the
+corpus's target-16 announces are the one vault-only check): `spell_burst` on injected rows
+(Earthquake 240, Meteor 156; Fireball flies, Fire Storm lasts, Panic is a hex, Flare is one
+target, the flag); Earthquake's row; through the real press and E5 the player's Earthquake at
+a hostile with a second one 50 u beside it lands a word then a `[20, foe, me, 304]` on each,
+60 each, both knocked down, the one 400 u off untouched, nothing in the air; through the real
+`land_skill` a hostile's Earthquake at the player lands `[58, it, 0]` then the player's word
+(against the pieces' 25 at its strike level) and `[20]`, the monk's word and `[20]`, both
+knocked down, the far body untouched; the revert lands one word with no visual and no
+knock-down; the source locks; and the corpus: of the record's target-16 skills the only one
+ever announced on a live tape is Fire Storm.
+
+**RUN-WEAPONS-1B (§6).** The Suits stand ~150 u apart in a row: a hero with Earthquake
+casting at the middle Suit predicts `[58, hero, 0]` then a word and a `[20, suit, hero, 304]`
+per Suit within 240 u (three), word first -- the burst's shape on retail, at last.
+
+**Left.** The areas over time (Fire Storm's seventeen casts are the witness: the ground
+effect 350, the once-a-second ticks, the scatter); the area hexes; line of sight; the `[55]`
+energy word; the bonus penetration tier (item word 574).
