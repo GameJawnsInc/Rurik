@@ -28,6 +28,39 @@ move back.
 
 ---
 
+### SANDBOX-B1..B5 -- 2026-09-20 -- **the run orchestrator: the slice as a configurable practice sandbox**
+
+[studies/sandbox/PLAN.md](studies/sandbox/PLAN.md). The owner: "another UI app … take the
+vertical slice and make it configurable … which heroes spawn into the party and their
+professions … up to 4 enemies per group, including the boss … their profession(s) … which
+skills are unlocked for them and their heroes." Every knob was already content with one
+value, so the arc is a spec, a compiler and a window, plus the two plainest server
+generalisations. **B1** `toolkit/content.py` takes `RURIK_CONTENT_EXTRA` (directories merged
+last, after `overrides/`) so one launch carries rows the tree does not (`test_content` +2,
+floor 46). **B2** `toolkit/harness/sandbox.py`: a spec (the player's pair, level, bar, ranks,
+unlocks; up to seven heroes; up to four groups of four, one the boss) → a `[party.sandbox]`
+row with `[[heroes]]` tables and `[spawn.sandbox_*]` rows (the boss keyed `corridor_boss`
+for the quest's kill objective), groups evenly spaced from y 3900 to the boss at 10400,
+members 480 u apart, agent ids from 110 and one definition per template from 60, clear of
+the errand rows and the party's reserve; the flags `--map 148 --party sandbox --area
+errand,sandbox --unlocks … --spawn-profession`; `session.py --replace --keep-open` on the
+slice archive with `RURIK_DAT`. Refuses a bar skill outside the pair, an unknown body, an
+eighth hero, a fifth member, the boss anywhere but last, ranks over the level's WIKI budget
+(`test_sandbox`, 88). **B3** `[[party.KEY.heroes]]`: `HERO_ROWS` and a `hero_*()` reader per
+field (body, profession, bar, level, vitals, ranks, armour, damage, weapon attribute, weapon,
+appearance), every "the hero" site now asking for *this* hero and falling back to the
+single-hero globals; `PARTY_WEAPON_ITEMS` gains `sword` and `hammer` (their rows landed at
+SLICE-H9/H11, the table was never told, a Warrior body punched). **B4** `player_secondary` /
+`--spawn-secondary` on `0x00B7`, the player's `0x00A6` and `attribute_state`; forwarded to
+the authsrv beside the primary. **B5** `tools/orchestrator/orchestrator.py` +
+`apps/orchestrator.pyw`: Player / Heroes / Enemies / Run over one spec, every name resolved
+from the owner's archive at open (skill names off the client's own table's string ids),
+compile shown before launch, the harness streamed; `--smoke` drives every panel (20 of 20).
+The server accepted a generated overlay at startup with no client: the party row, its hero
+table, seven spawn rows, the hero rig. Two `test_agentlife` locks moved with the code (the
+level print's variable; a Warrior body now holds a sword). Open: B6, the owner's run, and
+U1–U4 on the client, predictions registered.
+
 ### A point-blank burst -- 2026-09-20 -- **no flight: every foe around the target, at the completion**
 
 [studies/weapons/PLAN.md](studies/weapons/PLAN.md) §40. The 32 target-byte-16 rows without a

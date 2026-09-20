@@ -54,6 +54,11 @@ hand-sized rows in the repo, bulk extraction in the vault.
     Without this layer a tracked row could never correct a bulk one -- the vault's
     row-level `update` replaced it wholesale -- and the only way to take one build's
     number was to regenerate the whole table on that build.
+  * `RURIK_CONTENT_EXTRA` (os.pathsep-separated directories, unset by default) is
+    merged LAST of all, for rows that belong to ONE RUN rather than to this machine:
+    the orchestrator's generated party and spawn rows (SANDBOX-B1, 2026-09-20,
+    `toolkit/harness/sandbox.py`). The vault overlay is read by every process on the
+    machine, so a per-launch row there would leak into the next unrelated run.
 
 The gate keeps its evidentiary value that way: "no extracted table was ever committed,
 prove it with one git command" stays literally true, which is the whole reason PLAN.md
@@ -364,9 +369,25 @@ class World:
         return {kind: len(rows) for kind, rows in sorted(self.tables.items())}
 
 
-def load(repo_dir=None, vault_dir=None, require_vault=False, overrides_dir=None):
+def extra_dirs_from_env(env=None):
+    """The directories `RURIK_CONTENT_EXTRA` names, in order, or [].
+
+    SANDBOX-B1 (2026-09-20): a RUN may carry rows the tree does not -- the
+    orchestrator writes a `[party.sandbox]` row and its `[spawn.sandbox_*]`
+    rows for one launch -- and the vault overlay is the wrong place for them,
+    because every process on this machine reads it. So a launch names its own
+    directory (os.pathsep-separated for several), merged LAST, after
+    `overrides/`. An empty or unset variable is exactly the old load.
+    """
+    raw = (os.environ if env is None else env).get("RURIK_CONTENT_EXTRA", "")
+    return [d for d in raw.split(os.pathsep) if d.strip()]
+
+
+def load(repo_dir=None, vault_dir=None, require_vault=False, overrides_dir=None,
+         extra_dirs=None):
     """Load every content table. Repo first, then the vault merged over it, then
-    the repo's `overrides/` merged over both (see WHERE ROWS LIVE)."""
+    the repo's `overrides/` merged over both (see WHERE ROWS LIVE), then any
+    `extra_dirs` (default: `RURIK_CONTENT_EXTRA`, see extra_dirs_from_env)."""
     repo_dir = repo_dir or REPO_CONTENT
     if overrides_dir is None:
         overrides_dir = os.path.join(repo_dir, "overrides")
@@ -377,10 +398,13 @@ def load(repo_dir=None, vault_dir=None, require_vault=False, overrides_dir=None)
             vault_dir = None
     if require_vault:
         vault_dir = vaultpath.require_dir("content", why="content overlay")
+    if extra_dirs is None:
+        extra_dirs = extra_dirs_from_env()
 
     raw, sources = {}, []
     for directory, label in ((repo_dir, "repo"), (vault_dir, "vault"),
-                             (overrides_dir, "overrides")):
+                             (overrides_dir, "overrides"),
+                             *((d, "extra") for d in extra_dirs)):
         if not directory or not os.path.isdir(directory):
             continue
         files = sorted(f for f in os.listdir(directory) if f.endswith(".toml"))

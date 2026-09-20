@@ -326,6 +326,6 @@ tool produced, later cited as if the client had said it.
 | `content/*.toml` | The world: maps, NPCs, items, spawns. One row per fact, each carrying its own provenance. Loaded by `toolkit/content.py`; the server holds no content literals. Bulk extraction goes to `vault/content/` and is merged over these. |
 | `toolkit/clientscan/`, `toolkit/clientpatch/` | Read-only client analysis; patching and the firewall cage |
 | `toolkit/mapdata/` | `Gw.dat` reader, planner (`datplan`), writer (`datwrite`), textures (`atex`, `dxt1`) |
-| `tools/`, `apps/` | Consumers OUTSIDE the stdlib rule, holding no archive knowledge of their own: `tools/blender/` (`bpy` importers/exporters), `tools/viewer/` (the PySide6 model viewer over `toolkit/mapdata/modelcatalog.py`), `apps/*.pyw` launchers |
+| `tools/`, `apps/` | Consumers OUTSIDE the stdlib rule, holding no archive knowledge of their own: `tools/blender/` (`bpy` importers/exporters), `tools/viewer/` (the PySide6 model viewer over `toolkit/mapdata/modelcatalog.py`), `tools/orchestrator/` (the PySide6 run orchestrator over `toolkit/harness/sandbox.py`: the slice as a practice sandbox), `apps/*.pyw` launchers |
 | `studies/` | Per-arc research, labelled by confidence |
 | `vault/` | Gitignored. Snapshots, keys, captures, prior-art mirrors. Client builds are filed by whose DH they carry: `client-patched/`+`run/` ours, loopback-only; `client-patched-live/`+`run-live/` stock, live-only |

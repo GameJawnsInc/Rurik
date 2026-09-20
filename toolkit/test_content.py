@@ -75,7 +75,7 @@ import content  # noqa: E402
 #   D  the vault dropped from load()'s dirs:     4 red, two synthetic and two here
 # C and D are caught by the synthetic checks too; A and B are caught by nothing else, and
 # A is the one that actually happened.
-LEDGER = checks.Ledger("content store", floor=44)  # 2026-09-14: +2, the overrides layer
+LEDGER = checks.Ledger("content store", floor=46)  # 2026-09-14: +2, the overrides layer; 2026-09-20: +2, RURIK_CONTENT_EXTRA (SANDBOX-B1)
 
 
 def write(dirpath, name, text):
@@ -670,6 +670,41 @@ def main():
         raised = True
     LEDGER.ok(raised, "asking for a row that does not exist raises rather than "
                       "returning None for something downstream to misread")
+
+    # --- SANDBOX-B1: a per-RUN directory, merged last of all --------------------
+    # The orchestrator hands the server rows for one launch through
+    # RURIK_CONTENT_EXTRA. The order is the point: it must win over the repo's
+    # own overrides/ (the layer that wins over the vault), or a run could not
+    # change a row the tree has corrected, and an unset variable must be the
+    # old load exactly.
+    with tempfile.TemporaryDirectory() as tmp:
+        repo, over, extra = (os.path.join(tmp, d) for d in ("repo", "over", "extra"))
+        for d in (repo, over, extra):
+            os.makedirs(d)
+        row = '[thing.a]\nvalue = %d\n' + GOOD_PROV
+        write(repo, "t.toml", row % 1)
+        write(over, "t.toml", row % 2)
+        write(extra, "t.toml", row % 3)
+        w_over = content.load(repo_dir=repo, vault_dir="", overrides_dir=over,
+                              extra_dirs=[])
+        w_extra = content.load(repo_dir=repo, vault_dir="", overrides_dir=over,
+                               extra_dirs=[extra])
+        w_env = content.load(repo_dir=repo, vault_dir="", overrides_dir=over,
+                             extra_dirs=content.extra_dirs_from_env(
+                                 {"RURIK_CONTENT_EXTRA": extra}))
+        LEDGER.ok(w_over.get("thing", "a")["value"] == 2 and
+                  w_extra.get("thing", "a")["value"] == 3 and
+                  w_env.get("thing", "a")["value"] == 3,
+                  "an extra directory (explicit, or named by RURIK_CONTENT_EXTRA) is "
+                  "merged LAST and wins over overrides/",
+                  (w_over.get("thing", "a")["value"], w_extra.get("thing", "a")["value"],
+                   w_env.get("thing", "a")["value"]))
+        LEDGER.ok(content.extra_dirs_from_env({}) == [] and
+                  content.extra_dirs_from_env({"RURIK_CONTENT_EXTRA": ""}) == [] and
+                  any(s.startswith("extra:") for s in w_extra.sources) and
+                  not any(s.startswith("extra:") for s in w_over.sources),
+                  "unset or empty is no extra layer at all, and a loaded one is named "
+                  "in the world's sources", w_extra.sources[-1])
 
     return LEDGER.verdict()
 
