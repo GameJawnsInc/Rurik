@@ -2504,3 +2504,25 @@ visual is 332, the impact 344), so this row carries it; then per foe inside the 
 burst, the announced target among them 31 of 35) the word then [20, foe, caster, 344]. NOT \
 modelled, said here: the finer hit test that decides target-or-ground (ours: the target is \
 'hit' when it stands inside the area), the scatter."""
+
+
+# Earthquake -- a single-packet BURST at the target's position (the record's target byte 16,
+# aoe_range 240, no projectile, no duration; authsrv.spell_burst): the server's one usable
+# point-blank burst, on both sides (section 40).
+[skill_effect.170]
+scale_means = "Earth damage"
+damage_type = 11               # earth ([damage_type.table]), the page's own word
+knocks_down = true             # "All foes near this location are knocked down" -- each foe reached
+[skill_effect.170.provenance]
+source = "wiki"
+page = 'GWW, "Earthquake", {{Skill infobox}} + {{Skill progression}}, read 2026-09-20'
+verified = """studies/weapons/PLAN.md 40. Wiki: "Spell. You invoke an Earthquake at target foe's \
+location. All foes near this location are knocked down and are struck for 26...100 earth \
+damage"; var1 `Earth damage` 26->100; `aoe = nearby`, 25 energy, 3 s activation, 15 s recharge, \
+overcast 10. Client (38797): id 170, type_code 5, attribute 9 (Earth Magic), TARGET BYTE 16, \
+aoe_range 240 (the client's own nearby, section 38), projectile 2077 (none), impact_visual 304, \
+duration 0 / 0, scale 26->100 args = 2. NEVER cast on any live tape -- the corpus's only \
+target-16 casts are Fire Storm's seventeen, an area over time -- so the burst's wire shape is \
+Fireball's arrival without the flight (RECONSTRUCTION): per foe inside 240 u of the target the \
+word then [20, foe, caster, 304], the knock-down on each. NOT modelled, said here: the overcast \
+(exhaustion), the burst on a foe out of the caster's line of sight."""
