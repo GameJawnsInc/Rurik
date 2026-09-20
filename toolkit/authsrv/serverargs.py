@@ -1717,6 +1717,14 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "type, and a spell's projectile carries the held weapon's "
                          "kind in its 0x00A7 -- the reading every run before "
                          "2026-09-19 made.")
+    ap.add_argument("--no-dodge", action="store_true",
+                    help="studies/weapons 39 REVERT: no lead and no dodge -- a projectile is "
+                         "aimed at the target's position at the launch and connects at its "
+                         "arrival wherever the target went (the reading every run before "
+                         "2026-09-20 made). With it on, the aim leads the target's velocity "
+                         "(WIKI) and a target that is not within 24 u of the aim at the "
+                         "arrival dodges: an arrow draws [38, target, attacker, 1], a spell "
+                         "its impact on the ground.")
     ap.add_argument("--no-spell-areas", action="store_true",
                     help="studies/weapons 38 REVERT: a burst spell (Fireball, the record's "
                          "target byte 16) lands on its one target with no explosion at the "

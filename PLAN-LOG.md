@@ -28,6 +28,21 @@ move back.
 
 ---
 
+### The hit test -- 2026-09-20 -- **the aim leads the target; a target off the aim at the arrival dodges**
+
+[studies/weapons/PLAN.md](studies/weapons/PLAN.md) §39. WIKI: a projectile's trajectory
+leads the target's velocity at the launch and is dodged by a change of speed or direction
+after it (GWW "Projectile", "Line of sight"). OBSERVED shapes: every reason-1 attack-fail
+word in the live corpus rides its attacker's `0x00A7` (7 of 7; the 57 reason-3 are swings);
+a spell's miss draws its impact on the ground at the aim; a burst still explodes and words
+its area. The geometry is unmeasurable from the tapes (the course-change reading refuted; the
+position samples too coarse), so the two numbers are ours and said so: `led_aim` in both
+launchers, `projectile_connects` at the arrival within `DODGE_TOLERANCE` = 24 u (rA + rB),
+velocities from a quarter-second trail the world tick keeps; a dodged arrow sends `[38,
+target, attacker, 1]` and nothing else, a dodged spell its ground impact. RUN-1B gains the
+Orb block that measures both. `--no-dodge` reverts. Tests: `test_weapons` 27 (14 checks,
+floor 237 → 251, a vault run 269).
+
 ### Fireball's splash -- 2026-09-20 -- **a burst at the aim: the explosion, then a word and an impact per foe**
 
 [studies/weapons/PLAN.md](studies/weapons/PLAN.md) §38. The record's target byte 16 and

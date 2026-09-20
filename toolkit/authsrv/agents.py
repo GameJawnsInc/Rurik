@@ -1448,6 +1448,11 @@ GV_ATTACK_FAIL = 38
 ATTACK_FAIL_REASONS = {0: "block", 1: "dodge", 2: "fail", 3: "miss",
                        4: "obstructed", 5: "stray"}
 ATTACK_FAIL_MISS = 3
+# studies/weapons 39: 1 is what retail sends when a PROJECTILE reaches its
+# aim and the target is not there -- every reason-1 word in the live corpus
+# rides a 0x00A7 of its attacker in the same instant (7 of 7), and no
+# reason-3 does (0 of 57: those are the Blind tape's swings).
+ATTACK_FAIL_DODGE = 1
 # DAGGERS-B5: 2 is what retail sends when a chain step's requirement is not
 # met -- the corpus's only reason-2 is the owner's off-hand 780 pressed on a
 # target with no lead on it (studies/daggers F7; skills 44.4 had the word and

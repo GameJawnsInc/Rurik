@@ -11865,8 +11865,9 @@ def launch_body_projectile(send, state, conn_id, agent_id, agent, tid, how):
     if target_dead(state, tid):
         return None
     now = time.time()
-    tx, ty = target_pos(state, tid)
     ax, ay = agent["pos"]
+    tx, ty = led_aim((float(ax), float(ay)), target_pos(state, tid),
+                     target_velocity(state, tid), how["speed"])     # studies/weapons 39
     flight = math.hypot(float(tx) - float(ax), float(ty) - float(ay)) / how["speed"]
     flying = state.setdefault("body_projectiles", [])
     shot = {"shooter": agent_id, "target": tid, "arrives_at": now + flight,
@@ -11928,6 +11929,11 @@ def body_projectile_tick(send, state, conn_id):
              f"arrives")
         agent = state.get("agents", {}).get(shot["shooter"])
         if agent is None or target_dead(state, shot["target"]):
+            continue
+        if not projectile_connects(state, shot):               # studies/weapons 39
+            attack_fails(send, state, shot["shooter"], shot["target"],
+                         agents.ATTACK_FAIL_DODGE, conn_id,
+                         "the shot reached its aim and the target was not there")
             continue
         strike = shot.get("strike")                            # WEAPONS-W2c
         if strike is None:
@@ -12118,15 +12124,22 @@ def land_body_spell_shot(send, state, conn_id, shot):
     if radius is not None and agent is not None and shot.get("aim") is not None:
         return land_body_spell_area(send, state, conn_id, shot, agent, radius)   # 38
     alive = agent is not None and not target_dead(state, tid)
+    connected = alive and projectile_connects(state, shot)      # studies/weapons 39
     tbody = tid != PLAYER_AGENT_ID and tid in state.get("agents", {})
     terms = (body_spell_terms(state, agent, sid, spell["amount"], tid, tbody)
-             if alive else None)
+             if connected else None)
     send(GAME_SMSG_AGENT_PROJECTILE_ARRIVED,
          [who, shot["handle"], shot["damage_type"]],
          f"agent {who}'s projectile (handle {shot['handle']}) arrives")
-    if terms is None:
-        return None
     vis = spell.get("visual")
+    if terms is None:
+        if alive and vis is not None and shot.get("aim") is not None:
+            # the miss: the impact on the ground at the aim, no word (the
+            # Daggers on retail, 2 of 17)
+            send_ground_visual(send, shot["aim"], who, vis,
+                               f"agent {who}'s skill {sid}: its impact ({vis}) on the "
+                               f"ground at the aim -- {target_label(state, tid)} was not there")
+        return None
     if vis is not None:
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
              [agents.GV_EFFECT_ON_TARGET, tid, who, int(vis)],
@@ -12149,7 +12162,8 @@ def launch_player_projectile(send, state, conn_id, swing, how):
         return None
     now = time.time()
     px, py = _reach_frame(state, now)
-    tx, ty = float(victim["pos"][0]), float(victim["pos"][1])
+    tx, ty = led_aim((px, py), (float(victim["pos"][0]), float(victim["pos"][1])),
+                     target_velocity(state, swing["target"]), how["speed"])   # 39
     flight = math.hypot(tx - px, ty - py) / how["speed"]
     flying = state.setdefault("player_projectiles", [])
     shot = {"target": swing["target"], "arrives_at": now + flight,
@@ -12167,6 +12181,7 @@ def launch_player_projectile(send, state, conn_id, swing, how):
 def projectile_tick(send, state, conn_id):
     """Land every one of the player's projectiles whose flight is up: the
     arrival that closes its handle, then the hit -- retail's order."""
+    track_velocities(state)                                  # studies/weapons 39
     body_projectile_tick(send, state, conn_id)               # WEAPONS-W6a
     spell_queue_tick(send, state, conn_id)                   # studies/weapons 36
     flying = state.get("player_projectiles")
@@ -12182,11 +12197,20 @@ def projectile_tick(send, state, conn_id):
         victim = state.get("agents", {}).get(shot["target"])
         if victim is None or victim.get("dead") or state.get("player_dead"):
             continue
+        connected = projectile_connects(state, shot)            # studies/weapons 39
+        if shot.get("spell") is not None:                      # studies/weapons 36
+            land_player_spell_shot(send, state, conn_id, shot, connected)
+            continue
+        if not connected:
+            # the dodge: the attack-fail word with reason 1 behind the
+            # 0x00A7 (retail, 7 of 7), and nothing else -- no strike, no
+            # gain, no condition
+            attack_fails(send, state, PLAYER_AGENT_ID, shot["target"],
+                         agents.ATTACK_FAIL_DODGE, conn_id,
+                         "the shot reached its aim and the target was not there")
+            continue
         if shot.get("strike") is not None:                     # WEAPONS-W2c
             land_player_skill_shot(send, state, conn_id, shot)
-            continue
-        if shot.get("spell") is not None:                      # studies/weapons 36
-            land_player_spell_shot(send, state, conn_id, shot)
             continue
         hit_enemy(send, state, shot["target"], conn_id, armed=True,
                   projectile=True, label="the shot")
@@ -12482,17 +12506,24 @@ def spell_queue_tick(send, state, conn_id):
             shot["spell"] = item["spell"]
 
 
-def land_player_spell_shot(send, state, conn_id, shot):
+def land_player_spell_shot(send, state, conn_id, shot, connected=True):
     """A spell's projectile arrives (its 0x00A7 went out): the impact visual
     [20, target, me, +0x84], then -- on a lead-counting spell's FIRST
     landing -- the chain's 0x005C, then the word (hit_enemy's `exact`, the
-    amount the E5 computed). Returns hit_enemy's verdict."""
+    amount the E5 computed). Returns hit_enemy's verdict. Not `connected`
+    (studies/weapons 39): the impact on the ground at the aim, no word."""
     spell, tid = shot["spell"], shot["target"]
     sid = spell["skill_id"]
     vis = spell.get("visual")
     radius = spell_area(sid)
     if radius is not None and shot.get("aim") is not None:    # studies/weapons 38
-        return land_player_spell_area(send, state, conn_id, shot, radius)
+        return land_player_spell_area(send, state, conn_id, shot, radius, connected)
+    if not connected:
+        if vis is not None and shot.get("aim") is not None:
+            send_ground_visual(send, shot["aim"], PLAYER_AGENT_ID, vis,
+                               f"skill {sid}'s impact ({vis}) on the ground at the aim -- "
+                               f"agent {tid} was not there")
+        return None
     if vis is not None:
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
              [agents.GV_EFFECT_ON_TARGET, tid, PLAYER_AGENT_ID, int(vis)],
@@ -12599,12 +12630,13 @@ def foes_within(state, caster_id, point, radius):
     return out
 
 
-def send_area_impact(send, state, shot, caster_id, foes, visual, sid):
-    """The impact on the target when the burst reached it, else on the ground
-    at the aim; then the explosion at the aim."""
+def send_area_impact(send, state, shot, caster_id, foes, visual, sid, direct):
+    """The impact on the target when the burst reached it (`direct`: the
+    connect test, studies/weapons 39), else on the ground at the aim; then
+    the explosion at the aim."""
     tid, aim = shot["target"], shot["aim"]
     if visual is not None:
-        if tid in foes:
+        if direct:
             send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
                  [agents.GV_EFFECT_ON_TARGET, tid, caster_id, int(visual)],
                  f"skill {sid}'s impact ({visual}) on {target_label(state, tid)}")
@@ -12617,14 +12649,14 @@ def send_area_impact(send, state, shot, caster_id, foes, visual, sid):
         send_ground_visual(send, aim, 0, area_vis, f"skill {sid}'s burst ({area_vis}) at the aim")
 
 
-def land_player_spell_area(send, state, conn_id, shot, radius):
+def land_player_spell_area(send, state, conn_id, shot, radius, connected=True):
     """The player's burst spell arrives (its 0x00A7 went out): the impact,
     the explosion, then per hostile inside the radius of the aim its own word
     (hit_enemy's `exact`) and its [20, foe, me, impact]."""
     spell, sid = shot["spell"], shot["spell"]["skill_id"]
     vis = spell.get("visual")
     foes = foes_within(state, PLAYER_AGENT_ID, shot["aim"], radius)
-    send_area_impact(send, state, shot, PLAYER_AGENT_ID, foes, vis, sid)
+    send_area_impact(send, state, shot, PLAYER_AGENT_ID, foes, vis, sid, connected)
     landed = 0
     for foe in foes:
         res = hit_enemy(send, state, foe, conn_id, exact=spell["amount"], swing=False,
@@ -12648,6 +12680,7 @@ def land_body_spell_area(send, state, conn_id, shot, agent, radius):
     hurt_agent_row."""
     who, spell = shot["shooter"], shot["spell"]
     sid, vis = spell["skill_id"], spell.get("visual")
+    connected = projectile_connects(state, shot)                # studies/weapons 39
     foes = foes_within(state, who, shot["aim"], radius)
     table = state.get("agents", {})
     terms = {}
@@ -12657,7 +12690,7 @@ def land_body_spell_area(send, state, conn_id, shot, agent, radius):
     send(GAME_SMSG_AGENT_PROJECTILE_ARRIVED,
          [who, shot["handle"], shot["damage_type"]],
          f"agent {who}'s projectile (handle {shot['handle']}) arrives")
-    send_area_impact(send, state, shot, who, foes, vis, sid)
+    send_area_impact(send, state, shot, who, foes, vis, sid, connected)
     for foe in foes:
         dealt, conversion, frac, spell_ar = terms[foe]
         tbody = foe != PLAYER_AGENT_ID and foe in table
@@ -12674,6 +12707,104 @@ def land_body_spell_area(send, state, conn_id, shot, agent, radius):
     print(f"[c{conn_id}] agent {who}'s skill {sid} bursts over {len(foes)} foe(s) within "
           f"{radius:.0f} u of the aim [studies/weapons 38]", flush=True)
     return "landed" if foes else None
+
+
+# ---- THE HIT TEST: THE LEAD AND THE DODGE (2026-09-20, studies/weapons 39) ----
+#
+# WIKI (GWW "Projectile"): "A projectile's trajectory is calculated based on
+# the location and velocity of the target at the time of fire, automatically
+# 'leading' targets. Projectiles can be dodged by changing speed or direction
+# after they are fired." The SHAPES are OBSERVED: an arrow that reaches its
+# aim and finds no target draws the attack-fail word with reason 1 behind its
+# 0x00A7 and no word (every reason-1 in the live corpus rides an arrival, 7
+# of 7, on four tapes; the Blind tape's 57 reason-3 words ride swings); a
+# spell draws its impact on the ground at the aim and no word (the Daggers,
+# 2 of 17); a burst still explodes and words whoever stands in its area
+# (Fireball, 21 of 35 impacts on the ground, 31 of 35 announced targets
+# worded). The GEOMETRY is NOT measurable from the tapes: the nearest
+# position samples sit up to a third of a second from the arrival, a walker
+# covers tens of units in that, and direct hits read 0..104 u from the aim
+# where misses read 0..140; a "course change in flight" reading is REFUTED
+# outright (7 misses with none, 12 hits with one). So the mechanism is the
+# wiki's and the two numbers are ours, said so: the AIM leads the target by
+# its velocity at the launch (the flight refined once), and at the arrival
+# the projectile CONNECTS when the target stands within DODGE_TOLERANCE of
+# the aim -- rA + rB, the two body radii the client's own follow-stop adds
+# (BOUNDING_RADIUS, 12 u, what every 0x0020 carries), 24 u -- else it is
+# dodged. A body's velocity is a finite difference over VELOCITY_WINDOW of
+# its own model position (the trail the world tick keeps); a stander's is 0,
+# so a standing target is aimed at where it stands and hit there, as every
+# test before today assumed. RUN-WEAPONS-1B's Orb block measures both
+# numbers (studies/weapons 39). --no-dodge reverts: the aim is the target's
+# position and every projectile connects.
+DODGE = True
+DODGE_TOLERANCE = 24.0       # u: rA + rB -- twice BOUNDING_RADIUS (12.0, the follow-stop
+                             # block below; test_weapons 27 locks the relation). RECONSTRUCTION
+VELOCITY_WINDOW = 0.25                     # s: the trail's sampling span
+
+
+def track_velocities(state, now=None):
+    """Keep every agent's (and the player's) velocity as a finite difference
+    of its model position over VELOCITY_WINDOW -- called once a world tick.
+    A gap longer than four windows (a body that stood still, or a fresh
+    spawn) reads 0."""
+    now = time.time() if now is None else now
+    trail = state.setdefault("_vel_trail", {})
+    rows = state.get("agents", {})
+    ids = [PLAYER_AGENT_ID] + [a for a, r in rows.items()
+                               if isinstance(r, dict) and r.get("pos") is not None]
+    for aid in ids:
+        p = target_pos(state, aid)
+        pos = (float(p[0]), float(p[1]))
+        rec = trail.get(aid)
+        if rec is None:
+            trail[aid] = {"t": now, "pos": pos, "vel": (0.0, 0.0)}
+            continue
+        dt = now - rec["t"]
+        if dt < VELOCITY_WINDOW:
+            continue
+        vel = (0.0, 0.0)
+        if dt <= 4.0 * VELOCITY_WINDOW:
+            vel = ((pos[0] - rec["pos"][0]) / dt, (pos[1] - rec["pos"][1]) / dt)
+        trail[aid] = {"t": now, "pos": pos, "vel": vel}
+    for gone in [a for a in trail if a != PLAYER_AGENT_ID and a not in rows]:
+        del trail[gone]
+
+
+def target_velocity(state, tid):
+    """(vx, vy) u/s the trail last read for `tid`, (0, 0) unknown or with the
+    feature off."""
+    if not DODGE:
+        return (0.0, 0.0)
+    rec = (state.get("_vel_trail") or {}).get(tid)
+    return tuple(rec["vel"]) if rec else (0.0, 0.0)
+
+
+def led_aim(shooter, target, velocity, speed):
+    """Where a projectile launched now at `speed` is aimed: the target's
+    position plus its velocity times the flight, the flight refined once
+    against the led point (WIKI: the trajectory leads the target). A target
+    at rest, or the feature off, is aimed at where it stands."""
+    tx, ty = float(target[0]), float(target[1])
+    vx, vy = (float(velocity[0]), float(velocity[1])) if DODGE else (0.0, 0.0)
+    if (vx == 0.0 and vy == 0.0) or not speed:
+        return tx, ty
+    sx, sy = float(shooter[0]), float(shooter[1])
+    t0 = math.hypot(tx - sx, ty - sy) / float(speed)
+    ax, ay = tx + vx * t0, ty + vy * t0
+    t1 = math.hypot(ax - sx, ay - sy) / float(speed)
+    return tx + vx * t1, ty + vy * t1
+
+
+def projectile_connects(state, shot):
+    """Does a projectile that has reached its aim find its target there --
+    within DODGE_TOLERANCE of the aim? Always, with the feature off or no
+    aim on record."""
+    if not DODGE or shot.get("aim") is None:
+        return True
+    x, y = target_pos(state, shot["target"])
+    ax, ay = shot["aim"]
+    return math.hypot(float(x) - float(ax), float(y) - float(ay)) <= DODGE_TOLERANCE
 # The two modifier identifiers an armour piece carries. 572's argument is the
 # rating the tooltip prints as `Armor: N`; 527's is the `+N vs. <type>` line,
 # and identifier 4 beside it resolves to `vs. physical damage`. All three were
@@ -34003,6 +34134,12 @@ def main():
         print("SPELLS: --no-spell-own-type -- every incoming spell reads as elemental "
               "against the armour and a spell's projectile carries the held weapon's "
               "kind [studies/weapons 34 revert]", flush=True)
+    if a.no_dodge:
+        global DODGE
+        DODGE = False
+        print("PROJECTILES: --no-dodge -- the aim is the target's position at the "
+              "launch and every projectile connects at its arrival, the reading "
+              "every run before 2026-09-20 made [studies/weapons 39 revert]", flush=True)
     if a.no_spell_areas:
         global SPELL_AREAS
         SPELL_AREAS = False

@@ -235,7 +235,7 @@ exposure floor and an abort written down.
 | Run | Steps (each: equip, F11, 20 plain swings on a Master of Damage suit from one spot, F11) | Answers | Sealed predictions |
 |---|---|---|---|
 | **RUN-WEAPONS-1A** martial | axe · scythe on ONE suit · scythe with TWO suits adjacent to the target (3 foes hit, the weapon's maximum -- corrected 2026-09-18, this row said three adjacent, which is four) · spear · spear + shield | Q5, Q6, the 1.5 s clock, scythe wire shape and critical, the spear's projectile and flag | scythe and spear start→start 1.500, word / launch at 0.650; spear `0x00A4` field 7 = 1 — **RUN 2026-09-19, capture `20260919T103604`, scored in section 25: every prediction held; the scythe's target-side term measured at [78, 94) u, the spear parked at 755 u** |
-| **RUN-WEAPONS-1B** bows and casters | shortbow · flatbow · longbow · recurve · hornbow · staff · wand, all from the same marked spot · **then W9's three presses (§29), the staff in a set: the ACTIVE set's key; an EMPTY set's key; a switch INTO the staff's set from a weapon with no 556 word** | ~~Q2~~ (closed at the desk, §32 -- the five clocks now check the wiki's rates against the client's named classes), Q3 (speed per class — same distance, five flights), the 2.025 and 2.7 clocks, the hornbow's 10 % against the 100-armour suit; **Strength's 1 % a rank (§35: twenty Power Attacks at the character's Strength on the 60-suit -- at Strength 9 a 15-22 sword's ceiling 22 reads 23)**; **one Flare at the suit from the wand (§36: `0x00A4` 343 at 1800 u/s in the E5 batch, the word at the arrival)**; W9's same-set and empty-set replies and the 41 / 43 on a moved maximum | start→launch 0.9125 / 1.1375 / 1.250 / 0.775; flight ratios 0.59 : 0.88 : 0.59 : 0.40 : 0.59; same-set and empty-set presses answered by NOTHING (the smaller claim); the staff switch's batch carries property 41 then 43 |
+| **RUN-WEAPONS-1B** bows and casters | shortbow · flatbow · longbow · recurve · hornbow · staff · wand, all from the same marked spot · **then W9's three presses (§29), the staff in a set: the ACTIVE set's key; an EMPTY set's key; a switch INTO the staff's set from a weapon with no 556 word** | ~~Q2~~ (closed at the desk, §32 -- the five clocks now check the wiki's rates against the client's named classes), Q3 (speed per class — same distance, five flights), the 2.025 and 2.7 clocks, the hornbow's 10 % against the 100-armour suit; **Strength's 1 % a rank (§35: twenty Power Attacks at the character's Strength on the 60-suit -- at Strength 9 a 15-22 sword's ceiling 22 reads 23)**; **one Flare at the suit from the wand (§36: `0x00A4` 343 at 1800 u/s in the E5 batch, the word at the arrival)**; **the Orb block (§39): five Orbs taken standing, five walking straight across at run speed, five sidestepping at each launch -- the lead and the dodge tolerance**; W9's same-set and empty-set replies and the 41 / 43 on a moved maximum | start→launch 0.9125 / 1.1375 / 1.250 / 0.775; flight ratios 0.59 : 0.88 : 0.59 : 0.40 : 0.59; same-set and empty-set presses answered by NOTHING (the smaller claim); the staff switch's batch carries property 41 then 43 |
 | **RUN-WEAPONS-2** range | per weapon: stand far, press attack once, let the character walk in; repeat uphill if the Isle allows | Q4 — the distance from shooter to the aim point at the FIRST launch is the range, no free parameter. ~~Q16~~ is **no longer this run's**: §22 answered it from the client's own code (the park threshold has no weapon term), so spend no steps on it | 1004 / 1498 / 1498 / 1273 / 1273; 1248 staff and wand; 1004 spear; the body stands after the first start |
 | **RUN-WEAPONS-3** damage (later, needs the right attributes) | met vs unmet requirement on one weapon; a scythe's criticals; hornbow vs longbow on the 100-armour suit | Q10, Q5's critical, W4's penetration | written when W4 opens |
 
@@ -2351,3 +2351,81 @@ tier (item word 574). Of the 34 target-16 rows only Fireball and 193 (Phoenix) a
 projectiles; the other 32 are point-blank bursts at the target with no flight
 (Aftershock, Shock...), which land through the completion's single-target path today and
 would take the same `foes_within` at the target's position -- a rung of its own.
+
+## 39. The hit test -- 2026-09-20: the aim leads the target, a target off the aim at the arrival dodges
+
+**What §36-§38 left.** Every projectile connected wherever its target had gone; retail's
+impacts land on the target or on the ground, and an arrow that finds nobody draws a word.
+
+**The mechanism, WIKI.** GWW "Projectile": "A projectile's trajectory is calculated based on
+the location and velocity of the target at the time of fire, automatically 'leading'
+targets. Projectiles can be dodged by changing speed or direction after they are fired."
+GWW "Line of sight": *Dodge* -- "if the target kites (changes direction), causing the
+projectile to land in the place where the target would have been"; beside *Obstructed* (a
+barrier at the launch) and *Stray* (the target moving toward an obstructed place), neither
+modelled; and the practice ground it names is the Isle's Master of Lightning, RUN-1B's caster.
+
+**The shapes, OBSERVED.** An arrow that reaches its aim and finds no target draws the
+attack-fail word with reason 1 behind its `0x00A7`, and nothing else: every reason-1 word in
+the live corpus rides a `0x00A7` of its attacker in the same instant -- 7 of 7, on four tapes
+(`20260913T210901`, `20260914T005758` ×3, `20260914T180058`, `20260921T172025` ×2) -- and none
+of the 57 reason-3 words does (the Blind tape's swings). A spell draws its impact on the
+ground at the aim, `0x00A1 [aim, 0, caster, impact]`, and no word (the Daggers, 2 of 17,
+§36). A burst still explodes and words whoever stands in its area (Fireball: 21 of 35 impacts
+on the ground, 31 of 35 announced targets worded, §38).
+
+**The geometry is NOT measurable from the tapes, and two readings were tried.** (1) "A course
+change in flight" -- a movement message for the target between the launch and the arrival
+(its own `0x0029`, a walk to it, a halt, a speed change; the owner's `0x003E` / `0x0047`)
+against the outcome: REFUTED outright. Fireball: 7 misses with no such message and 5 hits
+with one; the Daggers: 7 hits with one; a following body steers silently, so the messages
+never were the motion. (2) The target's distance from the aim at the arrival, off the
+nearest position sample (a walk-to destination naming it, or the owner's own stop position)
+within a third of a second: direct hits read 0..104 u and misses 0..140 -- a walker covers 86
+u in that third of a second, so the samples cannot bracket a tolerance of tens of units. The
+two numbers below are therefore OURS, said so, and RUN-1B measures them.
+
+**What ships.** `track_velocities` (the world tick keeps every body's and the player's
+velocity as a finite difference of its model position over `VELOCITY_WINDOW` = 0.25 s; a
+stander reads 0, a stale gap 0); `led_aim(shooter, target, velocity, speed)` -- the target's
+position plus its velocity times the flight, the flight refined once against the led point --
+in both launchers, so the `0x00A4`'s aim IS the led point (a stander is aimed at where it
+stands, and hit there, as every test before today assumed); `projectile_connects(state,
+shot)` at the arrival -- the target within `DODGE_TOLERANCE` of the aim, 24 u = rA + rB, the
+two body radii the client's own follow-stop adds (`BOUNDING_RADIUS`, 12 u, what every
+`0x0020` carries; RECONSTRUCTION as the hit radius). Not connected: the player's or a body's
+arrow, plain or a skill's, sends `[38, target, attacker, 1]` (`agents.ATTACK_FAIL_DODGE`)
+behind the `0x00A7` and nothing else -- no strike, no gain, no condition; a single-target
+spell sends its impact on the ground at the aim and no word; a burst's impact goes on the
+ground and its area words stand (`send_area_impact` takes the connect test's verdict, not
+"inside the area", §38 corrected). `--no-dodge` reverts: the aim is the target's position,
+every projectile connects.
+
+**Tests.** `test_weapons.py` section 27 (14 checks, floor 237 → 251; a vault run 269 -- the
+corpus's dodge words are the one vault-only check): the numbers; `led_aim` (a target 600 u
+off walking across at 288 u/s aimed 97 u ahead; a stander, no speed, the flag); the trail (72
+u in a quarter second reads 288 u/s, nothing inside the window, across a stale gap, for an
+unknown id, or off); `projectile_connects` (0 / 20 / 24 u hit, 25 / 30 dodge, the flag, no
+aim); through the real launch and tick: the player's arrow at a walking hostile aims at the
+led point and the flight runs to it, the hostile that kept its course is hit 10 u from the
+led point, the one that turned 60 u off draws `0x00A7` then `[38, foe, me, 1]` and no word,
+`--no-dodge` neither leads nor misses; a hostile archer's arrow at the player who stepped 60 u
+off draws `[38, me, it, 1]`, and at the player walking toward it leads the flight and lands
+where the player arrives; the player's Flare at a hostile 100 u off the aim draws
+`0x00A1 [aim, 0, me, 344]` and no word, a body's Orb at the player 80 u off the same with the
+caster's id; a Fireball whose target stepped 100 u off but stands inside the area draws the
+ground impact, the explosion and the player's word; the source locks; the corpus: every
+reason-1 word rides its attacker's `0x00A7` (at least seven, none without) and no reason-3.
+
+**RUN-WEAPONS-1B, the Orb block (§6).** Stand in the Master of Lightning's range and take
+five Orbs standing (predicts five `[20, me, him, 404]` impacts, the aim = the stop position);
+then walk a straight line across his front at run speed under five more (predicts the aim
+ahead of the position at the launch by 288 u/s × the flight -- the LEAD -- and five impacts on
+the body); then sidestep at each launch under five more (predicts `0x00A1 [aim, 0, him, 404]`
+on the ground and no word; the tolerance brackets from the smallest step that missed and the
+largest that hit, the client's own move-to coordinates giving the position). The Javelin
+(1200 u/s, a longer flight) sharpens the lead's reading.
+
+**Left.** *Obstructed* and *Stray* (line of sight); the lead's own error on a body whose
+model steers between samples; the `[55]` energy word; the bonus penetration tier (item word
+574).
