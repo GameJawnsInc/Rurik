@@ -6171,8 +6171,13 @@ def section_hold_plane():
                                 casting=0, cast_target=1)
         st["player_health"] = 100.0
         sent = []
-        authsrv.land_skill(lambda op, vals, label="", quiet=False: sent.append((op, vals)),
-                           st, 10, st["agents"][10], 1)
+        _send = lambda op, vals, label="", quiet=False: sent.append((op, vals))   # noqa: E731
+        authsrv.land_skill(_send, st, 10, st["agents"][10], 1)
+        # studies/weapons 37 (2026-09-20): Flare's 343 leaves at the completion
+        # and its word lands a flight later, the terms computed then
+        for _shot in st.get("body_projectiles") or ():
+            _shot["arrives_at"] -= 30.0
+        authsrv.projectile_tick(_send, st, 1)
         dealt = 100.0 - st["player_health"]
         LEDGER.ok(12.0 < dealt < 16.0
                   and authsrv.skill_damage(252, authsrv.agent_skill_rank(st["agents"][10], 252))[0] == 22,

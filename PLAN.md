@@ -1984,10 +1984,14 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   range (RUN-WEAPONS-2) is the instrument; ~~W3~~ (shipped 2026-09-19,
   `studies/weapons/PLAN.md` §26: the scythe's extras and its 2^0.125 critical), ~~W4's rest~~ shipped 2026-09-19 (§30: `587` against the pieces'
   `527` under its condition word, the `633` reader with `634` / `635` / `636`, the isle's 3.098
-  unmet divisor; left of W4: a BODY's spell projectile (W6's spell half: 77 body shots on tape,
-  a body's completion still lands the damage in its batch) and the BONUS penetration sources
-  beyond the hornbow (the client's item word 574 `Armor penetration`, the Sundering upgrade, on
-  no corpus item; Judge's Insight 267); ~~a player's spell projectile~~ shipped 2026-09-20, §36
+  unmet divisor; left of W4: Fireball's splash (a body's spell lands on ONE target; 35 of the
+  corpus's 77 body spell shots are Fireballs reaching one to three foes with two ground
+  `0x00A1`), the dodge for every projectile, and the BONUS penetration sources beyond the
+  hornbow (the client's item word 574 `Armor penetration`, the Sundering upgrade, on no corpus
+  item; Judge's Insight 267); ~~a BODY's spell projectile~~ shipped 2026-09-20, §37 -- the
+  completion batch launches behind the 58 (75 of 77 launches at the client's own activation),
+  the terms are computed at the arrival against the taker as it stands then, `0x00A7` / the
+  impact visual / the word (the Master's Orb onto the owner 11 of 11); ~~a player's spell projectile~~ shipped 2026-09-20, §36
   -- the E5 batch launches the record's projectile (Dancing Daggers 17 of 17, the corpus's only
   player-cast projectile spell), the arrival is `0x00A7` / the impact visual / the word, a
   spell of several sends them a third of a second apart, speeds a round number per projectile

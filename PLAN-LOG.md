@@ -28,6 +28,21 @@ move back.
 
 ---
 
+### A body's spell projectile -- 2026-09-20 -- **W6's spell half: the completion launches it, the arrival lands it**
+
+[studies/weapons/PLAN.md](studies/weapons/PLAN.md) §37. OBSERVED on all 77 body spell shots in
+the live corpus: the launch sits at the client's own activation (75 of 77 within 50 ms --
+Fireball 1.5 s, the Orb 2.0, the Javelin 1.0) in one batch with the 58, and the arrival is
+`0x00A7` [body, handle, the spell's kind] / the impact visual / the word (the Master of
+Lightning's Orb onto the owner, 11 of 11). `land_skill` now sends its 58 and the caster's
+visual, launches (`launch_body_spell_shot`; a several-projectile spell queues the rest), keeps
+the effect, the condition and the heal at the completion, and lands the word at the arrival
+(`land_body_spell_shot`) with the terms computed against the taker as it stands then, before
+the `0x00A7` -- the terms and the word factored out of `land_skill` (`body_spell_terms`,
+`body_spell_word`) so both paths share one computation. `--no-spell-projectiles` reverts both
+halves. Fireball's splash stays open. Tests: `test_weapons` 25 (9 checks, floor 219 → 228, a
+vault run 244); `test_guards`' caller walk gains the body-side helpers.
+
 ### A player's spell projectile -- 2026-09-20 -- **W2's spell half: the E5 launches it, the arrival lands it**
 
 [studies/weapons/PLAN.md](studies/weapons/PLAN.md) §36. OBSERVED on every spell shot in the

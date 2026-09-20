@@ -2241,3 +2241,53 @@ target has left -- the arrows do not model it either); Fireball's splash and gro
 the Javelin's line; a Flare cast by the owner on a tape -- RUN-WEAPONS-1B's wand can cast one
 at the suit (§6): predicts `0x00A4 343` at 1800 u/s in the E5 batch and the word at the
 arrival.
+
+## 37. A body's spell projectile -- 2026-09-20: W6's spell half -- the completion launches it, the arrival lands it
+
+**What §36 left.** The player's projectile spells fly; a body's Fireball, Orb or Javelin still
+landed its word in the completion batch, against the wire's 77 body shots.
+
+**The shape, OBSERVED (77 of 77).** `[60, body, target, skill]` at the cast start; at the
+client's own activation -- 75 of 77 launches within 50 ms of it: Fireball's 1.5 s (35 of 35),
+the Orb's 2.0 s (26 of 27), the Javelin's 1.0 s (14 of 15; the two outliers a mid-cast
+re-announce at 1.019 and a 0.5) -- one batch of `[55, the energy]`, `[58, body, 0]` and the
+`0x00A4 [body, aim, 0, flight, PROJECTILE, handle, 0]`; a flight later `0x00A7 [body, handle,
+the spell's kind]`, `[20, target, body, IMPACT]` (404 for the Orb, 344 for Fireball), the
+word -- the Master of Lightning's Orb onto the owner, 11 of 11 on `20260917T090355`. Fireball's
+AoE adds two ground `0x00A1` at the aim (344 with the caster, 333 without) and a word +
+`[20]` per foe reached. No body cast a several-projectile spell on any tape.
+
+**What ships.** `land_skill` computes nothing for a projectile spell at the completion: it
+sends its 58 and the caster's visual, then `launch_body_spell_shot` (the first `0x00A4` in
+that batch, the rest queued through `body_spell_queue_tick` an interval apart, each behind
+its `[20, target, body, impact]` -- the player's shape, RECONSTRUCTION for a body), then the
+effect, the condition and the heal as ever, and the ordinary exit. The word rides the flight:
+`land_body_spell_shot`, from `body_projectile_tick`, computes the terms against the taker AS
+IT STANDS AT THE ARRIVAL -- its armour against the spell's own type and penetration (§34 /
+§35), its casting penalty, the caster's strike level, its own episodes, the whole-point word
+-- BEFORE the `0x00A7` goes out (the refusal contract: nothing on the wire behind a refused
+fraction), then `0x00A7`, the impact visual, the player's adrenaline gain, the word; a
+target dead in flight gets the `0x00A7` and nothing else. The terms and the word are factored
+out of `land_skill` into `body_spell_terms` / `body_spell_word` so the completion path and the
+arrival share one computation; `--no-spell-projectiles` reverts both halves. A hostile's Orb
+now lands the spell's 60 against the pieces' 19 (the 25 % came off) at the caster's strike
+level, a flight later, exactly the number the completion dealt before -- only the instant and
+the batch moved. NOT MODELLED, said here: Fireball's splash and ground visuals (a body's spell
+lands on ONE target, as `land_skill` always has), the dodge, a body's energy word (`[55]`) at
+the completion.
+
+**Tests.** `test_weapons.py` section 25 (9 checks, floor 219 → 228; a vault run 244): through
+the real `land_skill` and `projectile_tick` -- a hostile's Orb completes as `[58, it, 0]` then
+ONE `0x00A4` [it, the player's position, 0, 0.5 s at 1800, 403, handle 1, flag 0], no word, no
+visual, the caster released, the shot a deadline carrying the spell's 60 as lightning; the
+arrival `0x00A7 [it, 1, 4]`, `[20, me, it, 404]`, the word for 60 against 19 at the caster's
+strike level; a body's Daggers complete with one 854 and two queued a third of a second apart,
+the two behind their `[20, me, it, 855]`, three arrivals each `0x00A7 [it, h, 11]` / visual /
+word against 25; a target dead in flight is closed and takes nothing; the revert lands the
+word behind the 58; Mind Burn (no projectile) lands at the completion as ever; the source
+locks; and the tape -- every Orb launch on `20260917T090355` leaves 2.0 s after its announce
+and every Javelin 1.0 s. `test_guards`' caller walk gains the three body-side helpers.
+
+**Left.** Fireball's splash (35 of the 77 are Fireballs, each reaching one to three foes with
+its two ground visuals); the dodge for every projectile; the `[55]` energy word a body's
+completion carries; the bonus penetration tier (item word 574).
