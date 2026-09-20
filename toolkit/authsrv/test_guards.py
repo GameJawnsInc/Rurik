@@ -28,6 +28,7 @@ checks below assert the DESIRED contract and therefore went red on that tree.
 
 import io
 import contextlib
+import re
 import os
 import sys
 import time
@@ -636,9 +637,12 @@ def section_concurrency():
     src = inspect.getsource(authsrv).splitlines()
 
     def callers_of(name):
+        # a WHOLE name: `spell_queue_tick(` must not match inside
+        # `body_spell_queue_tick(` (studies/weapons 37 added the latter)
         found = set()
+        pat = re.compile(r"(?<![A-Za-z0-9_])" + re.escape(name) + r"\(")
         for i, line in enumerate(src):
-            if f"{name}(" in line and not line.lstrip().startswith("def "):
+            if pat.search(line) and not line.lstrip().startswith("def "):
                 for j in range(i, -1, -1):
                     if src[j].startswith("def "):
                         found.add(src[j].split("(")[0][4:])
@@ -710,7 +714,12 @@ def section_concurrency():
           and callers_of("body_projectile_tick") == {"projectile_tick"}
           and callers_of("land_body_skill_shot") == {"body_projectile_tick"}
           and callers_of("land_or_launch") == {"enemy_attack_tick", "ally_attack_tick"}
-          and callers_of("launch_body_projectile") == {"land_or_launch", "land_skill"}
+          and callers_of("launch_body_projectile") == {"land_or_launch", "land_skill",
+                                                       "launch_body_spell_shot",
+                                                       "body_spell_queue_tick"}
+          and callers_of("launch_body_spell_shot") == {"land_skill"}
+          and callers_of("body_spell_queue_tick") == {"body_projectile_tick"}
+          and callers_of("land_body_spell_shot") == {"body_projectile_tick"}
           and callers_of("combat_pass") == {"combat_sleep"}
           and callers_of("combat_sleep") == {"handle"}
           and callers_of("_land_player_swing") == {"attack_tick"},

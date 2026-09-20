@@ -502,9 +502,14 @@ def main():
             for k, v in flags.items():
                 setattr(authsrv, k, v)
             authsrv.ENEMY_SKILL_RANK = 0
-            authsrv.land_skill(
-                lambda op, vals, label="", quiet=False: out.append((op, vals, label)),
-                st, 10, ag, 0)
+            _send = lambda op, vals, label="", quiet=False: out.append((op, vals, label))   # noqa: E731
+            authsrv.land_skill(_send, st, 10, ag, 0)
+            # studies/weapons 37 (2026-09-20): a projectile spell's word rides
+            # the flight -- Flare's 343 leaves at the completion and lands a
+            # flight later, its terms computed THEN, under the same flags.
+            for _shot in st.get("body_projectiles") or ():
+                _shot["arrives_at"] -= 30.0
+            authsrv.projectile_tick(_send, st, 0)
         finally:
             for k, v in saved.items():
                 setattr(authsrv, k, v)

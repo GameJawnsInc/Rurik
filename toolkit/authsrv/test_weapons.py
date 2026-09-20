@@ -24,7 +24,7 @@ import agents  # noqa: E402
 import authsrv  # noqa: E402
 import combatmath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=219)   # the BARE-MACHINE number: 219 = 208 + 11 (section 24, a player's spell projectile, 2026-09-20; a vault run gives 234 -- the tapes' speeds are the one vault-only check); before that 208 = 203 + 5 (section 23, base armour penetration, 2026-09-19; a vault run gives 222 -- the six checks that read the skills table are vault-only); before that 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=228)   # the BARE-MACHINE number: 228 = 219 + 9 (section 25, a body's spell projectile, 2026-09-20; a vault run gives 244 -- the tape's activations are the one vault-only check); before that 219 = 208 + 11 (section 24, a player's spell projectile, 2026-09-20; a vault run gives 234 -- the tapes' speeds are the one vault-only check); before that 208 = 203 + 5 (section 23, base armour penetration, 2026-09-19; a vault run gives 222 -- the six checks that read the skills table are vault-only); before that 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
 check = LEDGER.ok
 
 LEGACY_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
@@ -2823,6 +2823,153 @@ def section_spell_projectiles():
          authsrv.weapon_satisfies) = saved
 
 
+def section_body_spell_projectiles():
+    print("\n25. a body's spell projectile: the completion launches it, the arrival lands it")
+    saved = (authsrv.skill_damage, authsrv._is_attack_skill, authsrv.skill_projectile,
+             authsrv.skill_impact_visual, authsrv.SPELL_PROJECTILES)
+    words = lambda batch: [v for op, v in batch if op == 0x00A3 and v[0] in (16, 17)]   # noqa: E731
+    launches = lambda batch: [v for op, v in batch if op == 0x00A4]                     # noqa: E731
+    visuals = lambda batch: [v for op, v in batch if op == 0x00A0 and v[0] == agents.GV_EFFECT_ON_TARGET]  # noqa: E731
+    try:
+        authsrv._is_attack_skill = lambda sid: False
+        authsrv.skill_damage = lambda sid, rank: (60.0, "standalone")
+        authsrv.skill_projectile = lambda sid: {229: 403, 858: 854}.get(sid)
+        authsrv.skill_impact_visual = lambda sid: {229: 404, 858: 855}.get(sid)
+
+        def cast(distance, skill):
+            st = _body_world((float(distance), 0.0), skills=[[skill, 0.0, 5.0]],
+                             skill_ready=[0.0], casting=0, cast_target=PLAYER)
+            sent = []
+            send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+            health = st["player_health"]
+            authsrv.land_skill(send, st, FOE, st["agents"][FOE], 1)
+            return st, send, sent, health
+
+        st, send, sent, health = cast(900.0, 229)
+        ops = [op for op, _v in sent]
+        launch = launches(sent)
+        check(sent and sent[0][1][:2] == [58, FOE] and len(launch) == 1 and launch[0][0] == FOE
+              and list(launch[0][1]) == [0.0, 0.0] and abs(_f(launch[0][3]) - 0.5) < 1e-6
+              and launch[0][4:] == [403, 1, 0] and not words(sent) and not visuals(sent)
+              and st["player_health"] == health and st["agents"][FOE]["casting"] is None
+              and st["body_projectiles"][0]["spell"]["amount"] == 60.0
+              and st["body_projectiles"][0]["damage_type"] == 4
+              and st["body_projectiles"][0]["arrives_at"] in authsrv.combat_deadlines(st)
+              and not st.get("body_spell_queue"),
+              "a hostile's Lightning Orb completes: [58, it, 0] first, then ONE 0x00A4 [it, the "
+              "player's position, 0, 0.5 s at 1800 u/s, 403, handle 1, flag 0] -- no word, no "
+              "visual, no damage yet; the caster is released; the shot carries the spell's 60 and "
+              "flies as lightning (4), a combat deadline", str([(hex(op), v) for op, v in sent]))
+        sent.clear()
+        st["body_projectiles"][0]["arrives_at"] -= 30.0
+        authsrv.projectile_tick(send, st, 1)
+        arr = list(sent)
+        ops = [op for op, _v in arr if op != authsrv.AGENT_ADRENALINE_GAIN]   # the gain precedes the word (SKILLS-AD2)
+        ar = authsrv.spell_armour_for(229)
+        want = authsrv._whole_points(60.0 * authsrv.strike_multiplier(
+            authsrv.agent_strike_level(st["agents"][FOE]), ar))
+        check(ops[:3] == [0x00A7, 0x00A0, 0x00A3] and arr[0][1] == [FOE, 1, 4]
+              and arr[1][1] == [agents.GV_EFFECT_ON_TARGET, PLAYER, FOE, 404]
+              and words(arr)[0][1:3] == [PLAYER, FOE] and ar == 19.0
+              and st["player_health"] == health - want and want > 0 and not st["body_projectiles"],
+              "a flight later: 0x00A7 [it, 1, 4 -- the Orb's lightning] first, then [20, me, it, "
+              "404] (the record's impact), then the word -- the Master of Lightning's shape onto the "
+              "owner (11 of 11); the amount is the spell's 60 against the pieces' 19 (the 25 % came "
+              "off, section 35) at the caster's strike level, computed at the arrival",
+              f"{[(hex(op), v) for op, v in arr]} want {want}")
+
+        # a body's Dancing Daggers: three, a third of a second apart, each behind its visual
+        st, send, sent, health = cast(600.0, 858)
+        launch = launches(sent)
+        queue = st.get("body_spell_queue") or []
+        check(len(launch) == 1 and launch[0][4:] == [854, 1, 0] and abs(_f(launch[0][3]) - 0.5) < 1e-6
+              and not visuals(sent) and len(queue) == 2
+              and all(q["shooter"] == FOE and q["target"] == PLAYER and q["spell"]["first"] is False
+                      for q in queue)
+              and abs((queue[1]["launch_at"] - queue[0]["launch_at"]) - 0.333) < 1e-6
+              and all(q["launch_at"] in authsrv.combat_deadlines(st) for q in queue),
+              "a body's Daggers complete with ONE 854 (0.5 s at 1200, flag 0) and two queued a "
+              "third of a second apart, each a combat deadline")
+        sent.clear()
+        for q in queue:
+            q["launch_at"] -= 30.0
+        authsrv.projectile_tick(send, st, 1)
+        later = list(sent)
+        check([op for op, _v in later] == [0x00A0, 0x00A4, 0x00A0, 0x00A4]
+              and visuals(later) == [[agents.GV_EFFECT_ON_TARGET, PLAYER, FOE, 855]] * 2
+              and [v[5] for v in launches(later)] == [2, 3] and not words(later)
+              and not st.get("body_spell_queue"),
+              "the second and third leave behind their [20, me, it, 855] with handles 2 and 3 "
+              "(the player's shape, section 36; no body cast one on any tape)",
+              str([(hex(op), v) for op, v in later]))
+        sent.clear()
+        for s in st["body_projectiles"]:
+            s["arrives_at"] -= 30.0
+        authsrv.projectile_tick(send, st, 1)
+        arr = list(sent)
+        ar858 = authsrv.spell_armour_for(858)
+        want858 = authsrv._whole_points(60.0 * authsrv.strike_multiplier(
+            authsrv.agent_strike_level(st["agents"][FOE]), ar858))
+        check([op for op, _v in arr if op != authsrv.AGENT_ADRENALINE_GAIN] == [0x00A7, 0x00A0, 0x00A3] * 3
+              and [v[2] for op, v in arr if op == 0x00A7] == [11, 11, 11]
+              and len(words(arr)) == 3 and len({tuple(w) for w in words(arr)}) == 1
+              and ar858 == 25.0 and st["player_health"] == health - 3 * want858,
+              "three arrivals, each 0x00A7 [it, h, 11 -- earth] / [20, me, it, 855] / the word, "
+              "three words of one amount against the pieces' 25 (earth respects armour, no "
+              "penetration)", f"{[(hex(op), v) for op, v in arr]} want {want858}")
+
+        # a target dead in flight: the 0x00A7 and nothing else
+        st, send, sent, health = cast(900.0, 229)
+        sent.clear()
+        st["player_dead"] = True
+        st["body_projectiles"][0]["arrives_at"] -= 30.0
+        authsrv.projectile_tick(send, st, 1)
+        check([op for op, _v in sent] == [0x00A7] and st["player_health"] == health,
+              "an Orb whose target died in flight is CLOSED and lands nothing")
+
+        # the revert, and the control
+        authsrv.SPELL_PROJECTILES = False
+        st, send, sent, health = cast(900.0, 229)
+        authsrv.SPELL_PROJECTILES = True
+        check(not launches(sent) and len(words(sent)) == 1 and sent[0][1][:2] == [58, FOE]
+              and st["player_health"] < health and not st.get("body_projectiles"),
+              "--no-spell-projectiles: the body's completion lands the word behind its 58 with "
+              "nothing in the air -- the reading every run before 2026-09-20 made")
+        st, send, sent, health = cast(900.0, 185)
+        check(not launches(sent) and len(words(sent)) == 1 and st["player_health"] < health,
+              "the control: Mind Burn (no projectile of its own) lands at the completion as ever")
+        src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+        check('if shot.get("spell") is not None:                      # studies/weapons 37' in src
+              and "body_spell_queue_tick(send, state, conn_id)" in src
+              and "launch_body_spell_shot(send, state, conn_id, agent_id, agent, _tid," in src
+              and 'out.append(q["launch_at"])' in src
+              and src.count("body_spell_terms(") >= 3 and src.count("body_spell_word(") >= 3,
+              "the source: the tick lands a body's spell shot and sends its queue, the completion "
+              "launches, a queued launch is a deadline, the terms and the word are shared between "
+              "the completion and the arrival")
+        # the tapes: a body's launch sits at the client's own activation
+        try:
+            sys.path.insert(0, HERE)
+            import weaponcensus as wc                                     # noqa: PLC0415
+            at = collections.defaultdict(list)
+            for _name, _gf, s2c in wc.connections("20260917T090355"):
+                for r in wc.skill_shots(s2c):
+                    if r["skill"] in (229, 230) and r["event"] == "announce60":
+                        at[r["skill"]].append(r["event_to_launch"])
+        except (Exception, SystemExit) as e:                               # noqa: BLE001
+            at = None
+            LEDGER.skip("section 25", f"capture 20260917T090355 is absent ({type(e).__name__}) -- 1 check")
+        if at is not None:
+            check(len(at[229]) >= 10 and all(abs(x - 2.0) <= 0.05 for x in at[229])
+                  and len(at[230]) >= 8 and all(abs(x - 1.0) <= 0.05 for x in at[230]),
+                  "and the tape says so: every Lightning Orb launch on 20260917T090355 (at least "
+                  "ten) leaves 2.0 s after its announce and every Javelin (at least eight) 1.0 s "
+                  "-- the client's own activations, the completion instant", str(dict(at)))
+    finally:
+        (authsrv.skill_damage, authsrv._is_attack_skill, authsrv.skill_projectile,
+         authsrv.skill_impact_visual, authsrv.SPELL_PROJECTILES) = saved
+
+
 def main():
     section_table()
     section_skills()
@@ -2848,6 +2995,7 @@ def main():
     section_spell_own_type()
     section_base_penetration()
     section_spell_projectiles()
+    section_body_spell_projectiles()
     return LEDGER.verdict()
 
 

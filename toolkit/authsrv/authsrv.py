@@ -4109,6 +4109,8 @@ def combat_deadlines(state):
         out.append(shot["arrives_at"])
     for q in state.get("player_spell_queue") or ():          # studies/weapons 36
         out.append(q["launch_at"])
+    for q in state.get("body_spell_queue") or ():            # studies/weapons 37
+        out.append(q["launch_at"])
     for shot in state.get("body_projectiles") or ():         # WEAPONS-W6a
         out.append(shot["arrives_at"])
     for cast in state.get("pending_casts") or ():
@@ -11906,13 +11908,19 @@ def _without_melee_close(send, agent_id):
 
 def body_projectile_tick(send, state, conn_id):
     """Land every body's projectile whose flight is up: 0x00A7, then the hit
-    through land_swing with melee's close filtered out."""
+    through land_swing with melee's close filtered out -- or, for a SPELL's
+    (studies/weapons 37), its own landing, which sends the 0x00A7 itself
+    behind the refusable terms."""
+    body_spell_queue_tick(send, state, conn_id)              # studies/weapons 37
     flying = state.get("body_projectiles")
     if not flying:
         return
     now = time.time()
     for shot in [s for s in flying if now >= s["arrives_at"]]:
         flying.remove(shot)
+        if shot.get("spell") is not None:                      # studies/weapons 37
+            land_body_spell_shot(send, state, conn_id, shot)
+            continue
         send(GAME_SMSG_AGENT_PROJECTILE_ARRIVED,
              [shot["shooter"], shot["handle"], shot["damage_type"]],
              f"agent {shot['shooter']}'s projectile (handle {shot['handle']}) "
@@ -11953,6 +11961,180 @@ def land_body_skill_shot(send, state, conn_id, shot, agent, strike):
         apply_condition(send, state, tid, strike["inflicted"][0],
                         strike["inflicted"][1], strike["rank"], conn_id, sid)
     return _res
+
+
+# ---- A BODY'S SPELL PROJECTILE (2026-09-20, studies/weapons/PLAN.md 37) ------
+#
+# W6's spell half, the body side of section 36. OBSERVED on every body spell
+# shot in the live corpus (77: Fireball 35, Lightning Orb 27, Javelin 15):
+# the announce [60, body, target, skill] at the cast start; at the client's
+# own activation (75 of 77 launches within 50 ms of it: Fireball 1.5, Orb
+# 2.0, Javelin 1.0 s) one batch of [55, the energy], [58, body, 0] and the
+# 0x00A4 [body, aim, 0, flight, PROJECTILE, handle, 0]; a flight later 0x00A7
+# [body, handle, THE SPELL'S KIND], [20, target, body, IMPACT], the word --
+# the Master of Lightning's Orb onto the owner, 11 of 11. So land_skill's
+# completion sends its 58 and the caster's visual, LAUNCHES instead of
+# computing the word, and keeps the effect, the condition and the heal
+# there; the terms (the taker's spell armour, its casting penalty, the
+# caster's strike level, the taker's episodes, the whole-point word) are
+# computed at the ARRIVAL against the taker as it stands then, before the
+# 0x00A7 goes out (the refusal contract: nothing on the wire behind a refused
+# fraction), then the 0x00A7, the impact visual and the word. A spell of
+# several projectiles queues the rest as the player's does. The same speed
+# table, the same kind, the same flag (--no-spell-projectiles reverts both
+# halves). NOT MODELLED, said here: Fireball's splash and its two ground
+# 0x00A1 at the aim (a body's spell here lands on ONE target, as land_skill
+# always has), the dodge, a body's energy word ([55]) at the completion.
+def body_spell_terms(state, agent, skill_id, amount, tid, tbody):
+    """(dealt, conversion, frac, spell_ar) for a body's spell of `amount`
+    landing on `tid` NOW -- the taker's armour against the spell's own type
+    and penetration, its casting penalty when it is the player, the caster's
+    strike level, then the taker's own episodes (Frenzy, a conversion) and
+    the whole-point word (DAMAGE-INT). Refusable: _damage_fraction raises
+    on an invalid fraction, so a caller sends nothing before calling."""
+    spell_ar = spell_armour_for(skill_id)
+    base = float(amount)
+    if spell_ar is not None:
+        # SLICE-H14: the taker's own casting penalty (Healing Signet's -40
+        # while it is used), after the cap, when the taker is the player --
+        # the only agent whose pending casts live on `state`.
+        if tid == PLAYER_AGENT_ID:
+            spell_ar += casting_armour_penalty(state)
+        base *= strike_multiplier(agent_strike_level(agent), spell_ar)
+    dealt, conversion = taker_damage(state, tid, base)
+    dealt = _whole_points(dealt)        # DAMAGE-INT: the books and the wire agree
+    # ZEROWORD / CONVWORD: a graze is -0.0 and a converted hit is its
+    # remainder or +0.0 -- the word always goes out; see land_swing.
+    frac = _damage_fraction(
+        dealt, (state["agents"][tid]["max_health"] if tbody
+                else player_max_health(state)),
+        agents.PROP_DAMAGE, f"skill {skill_id}")
+    if conversion is not None and dealt == 0:
+        frac = _f32(0.0)            # RUN-SKILLS-RB: the converted zero is +0.0
+    return dealt, conversion, frac, spell_ar
+
+
+def body_spell_word(send, state, agent_id, skill_id, tid, tbody, dealt, frac,
+                    spell_ar, amount, conn_id):
+    """The word of a body's spell on `tid` and its bookkeeping: a party body
+    or a hostile through hurt_agent_row (SLICE-H3 / H4), the player through
+    its pool -- the gain ahead of the damage, the word, the death."""
+    if tbody:
+        # SLICE-H3: the spell was at a party body; SLICE-H4: or a party
+        # body's spell at a hostile -- the row's allegiance decides the
+        # reward inside.
+        hurt_agent_row(send, state, agent_id, tid, dealt, frac, conn_id,
+                       f"skill {skill_id}")
+        return
+    state["player_health"] = max(0.0, state["player_health"] - dealt)
+    # THE GAIN PRECEDES THE DAMAGE (see hit_enemy for the census). No strike
+    # for the caster: that half of the rule says WEAPON hit, and a cast is not
+    # one (`land_skill` sends no MELEE_ATTACK_FINISHED for exactly that
+    # reason). Damage taken is damage taken, whatever delivered it -- WIKI puts
+    # the one-unit-per-1% rule on damage and not on attacks.
+    if ENERGY:
+        # SKILLS-AD2: the CURRENT maximum, as land_swing's site and as the
+        # damage word's own denominator.
+        player_gains_adrenaline(
+            send, state,
+            pools.damage_units(dealt / player_max_health(state)),
+            time.time(), conn_id, f"{dealt:.0f} damage taken from skill "
+                                  f"{skill_id}")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+         [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id, frac],
+         f"skill {skill_id} deals {dealt:.0f} to the player")
+
+    print(f"[c{conn_id}] player hit by skill {skill_id}: "
+          f"{state['player_health']:.0f}/{player_max_health(state):.0f}"
+          + (f" ({amount} against AR {spell_ar:.0f} elemental)"
+             if spell_ar is not None else ""), flush=True)
+
+    if state["player_health"] <= 0.0:
+        kill_player(send, state, conn_id)
+        print(f"[c{conn_id}] THE PLAYER IS DEAD -- back up in "
+              f"{PLAYER_REVIVE_AFTER:.0f}s", flush=True)
+
+
+def launch_body_spell_shot(send, state, conn_id, agent_id, agent, tid, skill_id,
+                           how, amount, rank):
+    """A body's projectile SPELL completes: the first projectile leaves now,
+    in the completion's batch behind the 58; the rest are queued an interval
+    apart (body_spell_queue_tick); each carries the spell's amount to land at
+    its arrival. Returns "launched", or None when the target is a corpse."""
+    count, interval = spell_projectiles(skill_id)
+    spell = {"skill_id": skill_id, "rank": rank, "amount": float(amount),
+             "visual": skill_impact_visual(skill_id)}
+    shot = launch_body_projectile(send, state, conn_id, agent_id, agent, tid, how)
+    if shot is None:
+        return None
+    shot["spell"] = dict(spell, first=True)
+    now = time.time()
+    queue = state.setdefault("body_spell_queue", [])
+    for i in range(1, count):
+        queue.append({"launch_at": now + i * interval, "shooter": agent_id,
+                      "target": tid, "how": how, "spell": dict(spell, first=False)})
+    print(f"[c{conn_id}] agent {agent_id}'s skill {skill_id} SENDS {count} x projectile "
+          f"{how['projectile']} at {target_label(state, tid)} at {how['speed']:.0f} u/s: "
+          f"the word lands at the arrival [studies/weapons 37]", flush=True)
+    return "launched"
+
+
+def body_spell_queue_tick(send, state, conn_id):
+    """Send every queued body projectile whose instant is up, behind its
+    [20, target, body, IMPACT] (the player's shape, section 36; no body cast
+    a several-projectile spell on any tape -- RECONSTRUCTION by symmetry)."""
+    queue = state.get("body_spell_queue")
+    if not queue:
+        return
+    now = time.time()
+    for item in [q for q in queue if now >= q["launch_at"]]:
+        queue.remove(item)
+        agent = state.get("agents", {}).get(item["shooter"])
+        if agent is None or agent.get("dead") or target_dead(state, item["target"]):
+            continue
+        vis = item["spell"].get("visual")
+        if vis is not None:
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+                 [agents.GV_EFFECT_ON_TARGET, item["target"], item["shooter"], int(vis)],
+                 f"agent {item['shooter']}'s skill {item['spell']['skill_id']}: its next "
+                 f"projectile's {vis} on {target_label(state, item['target'])}")
+        shot = launch_body_projectile(send, state, conn_id, item["shooter"], agent,
+                                      item["target"], item["how"])
+        if shot is not None:
+            shot["spell"] = item["spell"]
+
+
+def land_body_spell_shot(send, state, conn_id, shot):
+    """A body's spell projectile arrives: the terms first (refusable, nothing
+    sent yet), then 0x00A7 [body, handle, the spell's kind], then [20,
+    target, body, IMPACT], then the word -- retail's order onto the owner,
+    11 of 11. A corpse, or a dead caster, gets the 0x00A7 and nothing else."""
+    player_pools(state)
+    who, tid, spell = shot["shooter"], shot["target"], shot["spell"]
+    sid = spell["skill_id"]
+    agent = state.get("agents", {}).get(who)
+    alive = agent is not None and not target_dead(state, tid)
+    tbody = tid != PLAYER_AGENT_ID and tid in state.get("agents", {})
+    terms = (body_spell_terms(state, agent, sid, spell["amount"], tid, tbody)
+             if alive else None)
+    send(GAME_SMSG_AGENT_PROJECTILE_ARRIVED,
+         [who, shot["handle"], shot["damage_type"]],
+         f"agent {who}'s projectile (handle {shot['handle']}) arrives")
+    if terms is None:
+        return None
+    vis = spell.get("visual")
+    if vis is not None:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+             [agents.GV_EFFECT_ON_TARGET, tid, who, int(vis)],
+             f"agent {who}'s skill {sid}: its impact ({vis}) on {target_label(state, tid)}")
+    dealt, conversion, frac, spell_ar = terms
+    if conversion is not None:
+        resolve_taker_conversion(send, state, conversion, conn_id)
+    if frac is None:
+        return None
+    body_spell_word(send, state, who, sid, tid, tbody, dealt, frac, spell_ar,
+                    spell["amount"], conn_id)
+    return "landed"
 
 
 def launch_player_projectile(send, state, conn_id, swing, how):
@@ -12201,10 +12383,10 @@ def land_player_skill_shot(send, state, conn_id, shot):
 # What stays at the E5: the recharge, the 58, the effect, the heal, the hold
 # pulse, the aftercast E3. NOT MODELLED, said here: the dodge (a projectile
 # reaching an aim its target has left misses; the arrows do not model it
-# either), a BODY's spell projectile (its completion still lands the damage
-# in the batch, the wire's 77 say otherwise -- W6's spell half), Fireball's
-# ground visuals and splash, the Javelin's line. --no-spell-projectiles
-# reverts (a spell lands at the E5); --no-projectiles reverts every one.
+# either), Fireball's ground visuals and splash, the Javelin's line. A
+# BODY's spell projectile is section 37's block (land_body_spell_shot).
+# --no-spell-projectiles reverts both halves (a spell lands at the E5 / the
+# completion); --no-projectiles reverts every projectile.
 SPELL_PROJECTILES = True
 
 
@@ -24436,34 +24618,26 @@ def land_skill(send, state, agent_id, agent, conn_id):
         resolve_heal(send, state, skill_id, _rank, agent_id,
                      agent.get("cast_target"), conn_id)
         return
-    dealt, conversion, frac = 0.0, None, None
+    dealt, conversion, frac, spell_ar = 0.0, None, None, None
+    # studies/weapons 37: a projectile SPELL's word rides the flight -- its
+    # terms are computed at the ARRIVAL against the taker as it stands then
+    # (land_body_spell_shot), and the launch follows the 58 and the visual
+    # below; a spell with no projectile, or none a tape has timed, lands
+    # here as it always has.
+    _spell_how = (spell_shot_how(skill_id)
+                  if damage is not None and damage[1] == "standalone"
+                  and _tid != agent_id else None)
     # THE PLAYER'S ARMOUR, for the labels that respect it (SKILLS-FA). One
     # elemental rating, no location roll -- `player_spell_armour` says why
     # -- applied BEFORE the taker's own episodes, which is GWW's order (the
     # armour exponent is part of the damage calculation; Frenzy's doubling
     # and a conversion are "taken into account at the end", "Damage
     # calculation" sec. Damage modifiers). 39.5 left this unfixed for a
-    # fortnight because the VALUE was unsettled; 43 settled the shape.
-    spell_ar = spell_armour_for(skill_id) if damage is not None else None
-    if damage is not None:
-        base = float(damage[0])
-        if spell_ar is not None:
-            # SLICE-H14: the taker's own casting penalty (Healing Signet's
-            # -40 while it is used), after the cap, when the taker is the
-            # player -- the only agent whose pending casts live on `state`.
-            if _tid == PLAYER_AGENT_ID:
-                spell_ar += casting_armour_penalty(state)
-            base *= strike_multiplier(agent_strike_level(agent), spell_ar)
-        dealt, conversion = taker_damage(state, _tid, base)
-        dealt = _whole_points(dealt)    # DAMAGE-INT: the books and the wire agree
-        # ZEROWORD / CONVWORD: a graze is -0.0 and a converted hit is its
-        # remainder or +0.0 -- the word always goes out; see land_swing.
-        frac = _damage_fraction(
-            dealt, (state["agents"][_tid]["max_health"] if _tbody
-                    else player_max_health(state)),
-            agents.PROP_DAMAGE, f"skill {skill_id}")
-        if conversion is not None and dealt == 0:
-            frac = _f32(0.0)        # RUN-SKILLS-RB: the converted zero is +0.0
+    # fortnight because the VALUE was unsettled; 43 settled the shape. The
+    # terms are body_spell_terms' since section 37 (the arrival's, too).
+    if damage is not None and _spell_how is None:
+        dealt, conversion, frac, spell_ar = body_spell_terms(
+            state, agent, skill_id, damage[0], _tid, _tbody)
     # THE FINISH ANNOUNCEMENT OPENS THE BATCH -- ANIMREF-R2's cleanest yield
     # (studies/animref/FINDINGS.md sec.9). Retail closes EVERY other-agent
     # cast episode with a property-58 batch, 58 leading (709/709 finished
@@ -24481,6 +24655,13 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # other half: property 20 naming the player as the recipient.
     send_skill_visual(send, state, agent_id, skill_id,
                       agent.get("cast_target") or PLAYER_AGENT_ID, conn_id)
+    if _spell_how is not None:
+        # studies/weapons 37: the 0x00A4 behind the 58 and the caster's
+        # visual, ahead of the effect -- retail's completion batch (77 of
+        # 77); the word rides the flight, `frac` stays None and the exit
+        # below is the ordinary one.
+        launch_body_spell_shot(send, state, conn_id, agent_id, agent, _tid,
+                               skill_id, _spell_how, float(damage[0]), _rank)
     # THE EFFECT NEXT, and the order is load-bearing rather than stylistic.
     # The one skill on this bar that opens an episode is Scourge Sacrifice
     # (253, a Hex), and it is one of the three the damage exit below turns
@@ -24533,40 +24714,11 @@ def land_skill(send, state, agent_id, agent, conn_id):
         agent["casting"] = None
         return
     agent["casting"] = None
-    if _tbody:
-        # SLICE-H3: the spell was at a party body; SLICE-H4: or a party
-        # body's spell at a hostile -- the row's allegiance decides the
-        # reward inside.
-        hurt_agent_row(send, state, agent_id, _tid, dealt, frac, conn_id,
-                       f"skill {skill_id}")
-        return
-    state["player_health"] = max(0.0, state["player_health"] - dealt)
-    # THE GAIN PRECEDES THE DAMAGE (see hit_enemy for the census). No strike
-    # for the caster: that half of the rule says WEAPON hit, and a cast is not
-    # one (`land_skill` sends no MELEE_ATTACK_FINISHED for exactly that
-    # reason). Damage taken is damage taken, whatever delivered it -- WIKI puts
-    # the one-unit-per-1% rule on damage and not on attacks.
-    if ENERGY:
-        # SKILLS-AD2: the CURRENT maximum, as land_swing's site and as the
-        # damage word's own denominator.
-        player_gains_adrenaline(
-            send, state,
-            pools.damage_units(dealt / player_max_health(state)),
-            time.time(), conn_id, f"{dealt:.0f} damage taken from skill "
-                                  f"{skill_id}")
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
-         [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id, frac],
-         f"skill {skill_id} deals {dealt:.0f} to the player")
-
-    print(f"[c{conn_id}] player hit by skill {skill_id}: "
-          f"{state['player_health']:.0f}/{player_max_health(state):.0f}"
-          + (f" ({damage[0]} against AR {spell_ar:.0f} elemental)"
-             if spell_ar is not None else ""), flush=True)
-
-    if state["player_health"] <= 0.0:
-        kill_player(send, state, conn_id)
-        print(f"[c{conn_id}] THE PLAYER IS DEAD -- back up in "
-              f"{PLAYER_REVIVE_AFTER:.0f}s", flush=True)
+    # The word and its bookkeeping -- a party body or a hostile through
+    # hurt_agent_row, the player through its pool -- are body_spell_word's
+    # since section 37, shared with the projectile's arrival.
+    body_spell_word(send, state, agent_id, skill_id, _tid, _tbody, dealt, frac,
+                    spell_ar, damage[0], conn_id)
 
 
 def player_revive_due(send, state, conn_id):
@@ -33683,8 +33835,9 @@ def main():
         global SPELL_PROJECTILES
         SPELL_PROJECTILES = False
         print("SPELLS: --no-spell-projectiles -- a projectile spell lands its damage "
-              "at the E5 with nothing in the air, the reading every run before "
-              "2026-09-20 made [studies/weapons 36 revert]", flush=True)
+              "at the E5 (the player's) or the completion (a body's) with nothing "
+              "in the air, the reading every run before 2026-09-20 made "
+              "[studies/weapons 36 / 37 revert]", flush=True)
     if a.no_base_penetration:
         global BASE_PENETRATION
         BASE_PENETRATION = False
