@@ -16,15 +16,24 @@ the owner's own archive through `toolkit/clientscan/textrec.py`. This file
 holds widgets. If a run is wrong, the question is for the compiler.
 
 WHAT THE WINDOW IS. Four tabs over one spec:
-  Player   the profession pair, the level, the bar, the ranks, the hands, the
-           account library (which skills are UNLOCKED -- 0x001D; a hero's own
-           library is its bar plus this, herolib.hero_library)
-  Heroes   up to seven, each a catalogue row (its name from the archive), a
-           profession, a body, a level, a bar, ranks and a weapon class
-  Enemies  up to four groups of up to four hostiles, one of them the boss
+  Skills   the ACCOUNT library -- which skills are unlocked, account-wide
+           (0x001D). The character's own bar and every hero's draw on it;
+           a hero's usable library is its own list plus this
+           (herolib.hero_library).
+  Party    the character to play (profession pair, level, hands) and which
+           heroes are unlocked -- each with a profession and a body. Bars
+           and attribute ranks are NOT here (2026-09-22, the owner): the
+           in-game Skills and Attributes panels set them, for the character
+           and for each hero, and `--persist` keeps what they set from one
+           run to the next.
+  Enemies  up to four groups of up to four hostiles, one of them the boss,
+           each with its bar and ranks (a filterable picker for these is the
+           next step, SANDBOX-N1)
   Run      the spec's name; save and load; COMPILE (the overlay and the
-           command, shown before anything runs); LAUNCH, which starts the
-           harness on the slice archive and streams its output here
+           command, shown before anything runs, with what the character
+           store already holds); LAUNCH, which starts the harness on the
+           slice archive and streams its output here; RESET, which clears
+           the stored character so the next login starts clean
 The operator plays; closing the game client ends the run and the stack.
 
 NAMES. Skill names come off the pinned client's own skill table (the record's
@@ -42,7 +51,8 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 for p in (os.path.join(ROOT, "toolkit"), os.path.join(ROOT, "toolkit", "harness"),
-          os.path.join(ROOT, "toolkit", "clientscan"), os.path.join(ROOT, "toolkit", "mapdata")):
+          os.path.join(ROOT, "toolkit", "clientscan"), os.path.join(ROOT, "toolkit", "mapdata"),
+          os.path.join(ROOT, "toolkit", "authsrv")):
     if p not in sys.path:
         sys.path.insert(0, p)
 
@@ -54,10 +64,11 @@ try:
     from PySide6.QtCore import Qt, QProcess, QProcessEnvironment, QTimer
     from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QCompleter,
                                    QFileDialog, QFormLayout, QGroupBox, QHBoxLayout,
-                                   QLabel, QLineEdit, QListWidget, QListWidgetItem,
-                                   QMainWindow, QMessageBox, QPlainTextEdit, QPushButton,
-                                   QScrollArea, QSpinBox, QDoubleSpinBox, QTabWidget,
-                                   QVBoxLayout, QWidget)
+                                   QHeaderView, QLabel, QLineEdit, QListWidget,
+                                   QListWidgetItem, QMainWindow, QMessageBox,
+                                   QPlainTextEdit, QPushButton, QScrollArea, QSpinBox,
+                                   QDoubleSpinBox, QTableWidget, QTableWidgetItem,
+                                   QTabWidget, QVBoxLayout, QWidget)
 except ImportError as exc:                                  # pragma: no cover
     sys.exit(f"the run orchestrator needs PySide6 (py -m pip install PySide6): {exc}")
 
@@ -103,6 +114,10 @@ class Names:
                 text = ix.get(int(r.get("name_string_id", 0) or 0))
                 if text:
                     self.attr[int(k)] = text
+
+    def skill_profession(self, sid):
+        row = self.world.rows("skills").get(str(sid)) or {}
+        return int(row.get("profession", 0) or 0)
 
     def skill_label(self, sid):
         row = self.world.rows("skills").get(str(sid)) or {}
@@ -168,7 +183,7 @@ def skill_choices(names, professions, empty=True):
 
 
 class Bar(QWidget):
-    """Eight skill slots."""
+    """Eight skill slots (the Enemies tab's; the party's bars are in-game)."""
 
     def __init__(self, names, parent=None):
         super().__init__(parent)
@@ -197,7 +212,8 @@ class Bar(QWidget):
 
 
 class Ranks(QWidget):
-    """One spin box per attribute of the given professions, with the budget."""
+    """One spin box per attribute of the given professions, with the budget
+    (the Enemies tab's; the party's ranks are in-game)."""
 
     def __init__(self, names, parent=None):
         super().__init__(parent)
@@ -275,15 +291,135 @@ def set_combo(combo, value):
             return
 
 
-# ---------------------------------------------------------------- Player
+def template_choices(world, bodies_only=True):
+    out = []
+    for key, name, prof, level, has_body in sandbox.templates(world):
+        if bodies_only and not has_body:
+            continue
+        label = f"{name or key}  [{sandbox.ABBREV.get(prof, '-')} L{level}]"
+        if not name:
+            label += "  (unwatched)"
+        out.append((label, key))
+    out.sort(key=lambda p: (not p[0][0].isupper(), p[0].lower()))
+    return out
 
-class PlayerTab(QWidget):
+
+# ---------------------------------------------------------------- Skills
+
+class SkillsTab(QWidget):
+    """The ACCOUNT library: every player-usable skill, ticked = unlocked."""
+
     def __init__(self, names, parent=None):
         super().__init__(parent)
         self.names = names
+        outer = QVBoxLayout(self)
+        outer.addWidget(QLabel("Unlocked skills, ACCOUNT-wide (0x001D). The character's bar "
+                               "and every hero's bar are filled in-game from these; a hero "
+                               "may also use its own list. * = a skill this server models "
+                               "beyond its icon."))
+        row = QHBoxLayout()
+        self.filter = QLineEdit()
+        self.filter.setPlaceholderText("filter by name, id or attribute")
+        self.prof = QComboBox()
+        self.prof.addItem("every profession", 0)
+        for pid, name in sandbox.PROFESSIONS.items():
+            self.prof.addItem(f"{name} ({sandbox.ABBREV[pid]})", pid)
+        self.prof.addItem("common (no profession)", -1)
+        self.modelled_only = QCheckBox("modelled only")
+        row.addWidget(self.filter, 2)
+        row.addWidget(self.prof, 1)
+        row.addWidget(self.modelled_only)
+        outer.addLayout(row)
+        row2 = QHBoxLayout()
+        self.all_b = QPushButton("unlock all shown")
+        self.none_b = QPushButton("lock all shown")
+        self.party_b = QPushButton("the party's professions")
+        self.count = QLabel("")
+        for b in (self.all_b, self.none_b, self.party_b):
+            row2.addWidget(b)
+        row2.addWidget(self.count)
+        row2.addStretch(1)
+        outer.addLayout(row2)
+        self.list = QListWidget()
+        outer.addWidget(self.list, 1)
+        self.party_professions = set()
+        every = sorted(int(k) for k in names.world.rows("skills"))
+        for sid in sorted(every, key=lambda s: names.skill_label(s).lower()):
+            it = QListWidgetItem(names.skill_label(sid))
+            it.setData(Qt.UserRole, sid)
+            it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
+            it.setCheckState(Qt.Checked)
+            self.list.addItem(it)
+        self.filter.textChanged.connect(self._filter)
+        self.prof.currentIndexChanged.connect(self._filter)
+        self.modelled_only.toggled.connect(self._filter)
+        self.all_b.clicked.connect(lambda: self._set_shown(True))
+        self.none_b.clicked.connect(lambda: self._set_shown(False))
+        self.party_b.clicked.connect(self.unlock_party)
+        self.list.itemChanged.connect(lambda _it: self._count())
+        self._filter()
+
+    def _items(self):
+        return [self.list.item(i) for i in range(self.list.count())]
+
+    def _filter(self, *_a):
+        text = self.filter.text().lower()
+        prof = int(self.prof.currentData() or 0)
+        only = self.modelled_only.isChecked()
+        for it in self._items():
+            sid = int(it.data(Qt.UserRole))
+            sp = self.names.skill_profession(sid)
+            hide = ((text and text not in it.text().lower())
+                    or (prof > 0 and sp != prof) or (prof == -1 and sp != 0)
+                    or (only and sid not in self.names.modelled))
+            it.setHidden(bool(hide))
+        self._count()
+
+    def _count(self):
+        n = sum(1 for it in self._items() if it.checkState() == Qt.Checked)
+        self.count.setText(f"{n} of {self.list.count()} unlocked")
+
+    def _set_shown(self, on):
+        for it in self._items():
+            if not it.isHidden():
+                it.setCheckState(Qt.Checked if on else Qt.Unchecked)
+
+    def set_party_professions(self, profs):
+        self.party_professions = set(int(p) for p in profs if p)
+
+    def unlock_party(self):
+        want = self.party_professions | {0}
+        for it in self._items():
+            sp = self.names.skill_profession(int(it.data(Qt.UserRole)))
+            it.setCheckState(Qt.Checked if sp in want else Qt.Unchecked)
+
+    def ids(self):
+        return sorted(int(it.data(Qt.UserRole)) for it in self._items()
+                      if it.checkState() == Qt.Checked)
+
+    def set_ids(self, ids):
+        want = set(int(s) for s in ids)
+        for it in self._items():
+            it.setCheckState(Qt.Checked if int(it.data(Qt.UserRole)) in want else Qt.Unchecked)
+        self._count()
+
+
+# ---------------------------------------------------------------- Party
+
+class PartyTab(QWidget):
+    """The character, and which heroes are unlocked (each with a profession
+    and a body). No bars, no ranks: those are the in-game panels' job."""
+
+    COLS = ("unlocked", "hero", "profession", "body", "level")
+
+    def __init__(self, names, on_change, parent=None):
+        super().__init__(parent)
+        self.names = names
+        self.on_change = on_change
         world = names.world
         outer = QVBoxLayout(self)
-        form = QFormLayout()
+        box = QGroupBox("the character")
+        form = QFormLayout(box)
         self.primary = profession_picker()
         self.secondary = profession_picker(none=True)
         self.level = QSpinBox()
@@ -302,251 +438,117 @@ class PlayerTab(QWidget):
         form.addRow("level", self.level)
         form.addRow("weapon", self.weapon)
         form.addRow("off hand", self.offhand)
-        outer.addLayout(form)
-        outer.addWidget(QLabel("skill bar (* = a skill this server models beyond its icon)"))
-        self.bar = Bar(names)
-        outer.addWidget(self.bar)
-        box = QGroupBox("attribute ranks")
-        self.ranks = Ranks(names)
-        QVBoxLayout(box).addWidget(self.ranks)
+        form.addRow("", QLabel("bar and attribute ranks: the in-game K and skill panels; "
+                               "--persist keeps them. The level sets the points and health."))
         outer.addWidget(box)
-        ub = QGroupBox("account library: skills UNLOCKED for the character and the heroes "
-                       "(a bar skill outside it draws, then asserts the client on a drag)")
-        ul = QVBoxLayout(ub)
-        row = QHBoxLayout()
-        self.unlock_filter = QLineEdit()
-        self.unlock_filter.setPlaceholderText("filter")
-        all_b, none_b = QPushButton("all"), QPushButton("none")
-        row.addWidget(self.unlock_filter)
-        row.addWidget(all_b)
-        row.addWidget(none_b)
-        ul.addLayout(row)
-        self.unlocks = QListWidget()
-        ul.addWidget(self.unlocks)
-        outer.addWidget(ub)
-        all_b.clicked.connect(lambda: self._check_all(True))
-        none_b.clicked.connect(lambda: self._check_all(False))
-        self.unlock_filter.textChanged.connect(self._filter)
-        self.primary.currentIndexChanged.connect(self.refresh)
-        self.secondary.currentIndexChanged.connect(self.refresh)
-        self.level.valueChanged.connect(self.ranks.set_level)
-        self.hero_professions = set()
-        self.refresh()
-
-    def professions(self):
-        return (int(self.primary.currentData()), int(self.secondary.currentData() or 0))
-
-    def refresh(self):
-        prim, sec = self.professions()
-        self.bar.set_professions((prim, sec))
-        self.ranks.set_professions((prim, sec), self.level.value())
-        self.refresh_unlocks()
-
-    def refresh_unlocks(self):
-        prim, sec = self.professions()
-        profs = {prim, sec} | set(self.hero_professions)
-        checked = {int(it.data(Qt.UserRole)) for it in self._items() if it.checkState() == Qt.Checked}
-        was_empty = self.unlocks.count() == 0
-        self.unlocks.clear()
-        for label, sid in skill_choices(self.names, profs, empty=False):
-            it = QListWidgetItem(label)
-            it.setData(Qt.UserRole, sid)
-            it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
-            it.setCheckState(Qt.Checked if (was_empty or sid in checked) else Qt.Unchecked)
-            self.unlocks.addItem(it)
-        self._filter(self.unlock_filter.text())
-
-    def set_hero_professions(self, profs):
-        self.hero_professions = set(int(p) for p in profs if p)
-        self.refresh_unlocks()
-
-    def _items(self):
-        return [self.unlocks.item(i) for i in range(self.unlocks.count())]
-
-    def _check_all(self, on):
-        for it in self._items():
-            if not it.isHidden():
-                it.setCheckState(Qt.Checked if on else Qt.Unchecked)
-
-    def _filter(self, text):
-        text = (text or "").lower()
-        for it in self._items():
-            it.setHidden(bool(text) and text not in it.text().lower())
-
-    def to_spec(self):
-        prim, sec = self.professions()
-        unl = [int(it.data(Qt.UserRole)) for it in self._items() if it.checkState() == Qt.Checked]
-        return {"profession": prim, "secondary": sec, "level": self.level.value(),
-                "skills": self.bar.values(), "attributes": self.ranks.ranks(),
-                "weapon": self.weapon.value() or None, "offhand": self.offhand.value() or None,
-                "unlocks": unl}
-
-    def from_spec(self, p):
-        set_combo(self.primary, int(p.get("profession", 1)))
-        set_combo(self.secondary, int(p.get("secondary", 0)))
-        self.level.setValue(int(p.get("level", 3)))
-        self.refresh()
-        self.bar.set_values(p.get("skills"))
-        self.ranks.set_ranks(p.get("attributes"))
-        prim = int(p.get("profession", 1))
-        w, o = sandbox.PLAYER_ITEMS_BY_PROFESSION.get(prim, ("starter_sword", "starter_shield"))
-        self.weapon.set_value(p.get("weapon") or w)
-        self.offhand.set_value(p.get("offhand") or o or "")
-        if p.get("unlocks"):
-            want = set(int(s) for s in p["unlocks"])
-            for it in self._items():
-                it.setCheckState(Qt.Checked if int(it.data(Qt.UserRole)) in want else Qt.Unchecked)
-
-
-# ---------------------------------------------------------------- Heroes
-
-def template_choices(world, bodies_only=True):
-    out = []
-    for key, name, prof, level, has_body in sandbox.templates(world):
-        if bodies_only and not has_body:
-            continue
-        label = f"{name or key}  [{sandbox.ABBREV.get(prof, '-')} L{level}]"
-        if not name:
-            label += "  (unwatched)"
-        out.append((label, key))
-    out.sort(key=lambda p: (not p[0][0].isupper(), p[0].lower()))
-    return out
-
-
-class HeroEditor(QGroupBox):
-    def __init__(self, names, on_remove, on_change, parent=None):
-        super().__init__("hero", parent)
-        self.names = names
-        self.on_change = on_change
-        outer = QVBoxLayout(self)
-        form = QFormLayout()
-        self.catalogue = Picker()
-        cat = names.heroes or [(i, 0) for i in range(1, sandbox.HERO_INDEX_MAX + 1)]
-        self.catalogue.set_choices([(names.hero_label(i), i) for i, _n in cat])
-        self.profession = profession_picker()
-        self.body = Picker()
-        self.body.set_choices(template_choices(names.world))
-        self.level = QSpinBox()
-        self.level.setRange(1, sandbox.LEVEL_MAX)
-        self.level.setValue(3)
-        self.weapon = Picker()
-        rates = sorted((names.world.rows("attack_speed").get("rates") or {}))
-        self.weapon.set_choices([("(the profession's)", "")] + [(k, k) for k in rates])
-        form.addRow("hero", self.catalogue)
-        form.addRow("profession", self.profession)
-        form.addRow("body", self.body)
-        form.addRow("level", self.level)
-        form.addRow("weapon class", self.weapon)
-        outer.addLayout(form)
-        outer.addWidget(QLabel("skill bar"))
-        self.bar = Bar(names)
-        outer.addWidget(self.bar)
-        self.ranks = Ranks(names)
-        outer.addWidget(self.ranks)
-        rm = QPushButton("remove this hero")
-        rm.clicked.connect(lambda: on_remove(self))
-        outer.addWidget(rm)
-        self.profession.currentIndexChanged.connect(self._prof)
-        self.level.valueChanged.connect(self.ranks.set_level)
-        self.body.currentIndexChanged.connect(self._body)
-        self._prof()
-
-    def _prof(self):
-        prof = int(self.profession.currentData())
-        self.bar.set_professions((prof,))
-        self.ranks.set_professions((prof,), self.level.value())
-        self.setTitle(f"hero -- {sandbox.PROFESSIONS[prof]}")
-        self.on_change()
-
-    def _body(self):
-        # A body carries a profession byte; offer it as the default, never force it.
-        row = self.names.world.rows("npc").get(self.body.value()) or {}
-        if row.get("profession") in sandbox.PROFESSIONS and not getattr(self, "_touched", False):
-            set_combo(self.profession, int(row["profession"]))
-
-    def to_spec(self):
-        return {"hero": int(self.catalogue.value()), "profession": int(self.profession.currentData()),
-                "body": self.body.value(), "level": self.level.value(),
-                "skills": [s for s in self.bar.values()],
-                "attributes": self.ranks.ranks(), "weapon": self.weapon.value() or None}
-
-    def from_spec(self, h):
-        self.body.set_value(h.get("body"))
-        self._touched = True
-        prof = int(h.get("profession") or (self.names.world.rows("npc").get(h.get("body")) or {}).get("profession") or 1)
-        set_combo(self.profession, prof)
-        self.catalogue.set_value(int(h.get("hero", 1)))
-        self.level.setValue(int(h.get("level", 3)))
-        self._prof()
-        self.bar.set_values(h.get("skills"))
-        self.ranks.set_ranks(h.get("attributes"))
-        self.weapon.set_value(h.get("weapon") or "")
-
-
-class HeroesTab(QWidget):
-    def __init__(self, names, on_change, parent=None):
-        super().__init__(parent)
-        self.names = names
-        self.on_change = on_change
-        outer = QVBoxLayout(self)
-        top = QHBoxLayout()
-        self.add = QPushButton("add a hero")
-        self.add.clicked.connect(lambda: self.add_hero())
+        hb = QGroupBox("the heroes -- tick to unlock (they join the party); up to 7")
+        hl = QVBoxLayout(hb)
         self.count = QLabel("")
-        top.addWidget(self.add)
-        top.addWidget(self.count)
-        top.addStretch(1)
-        outer.addLayout(top)
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        self.inner = QWidget()
-        self.lay = QVBoxLayout(self.inner)
-        self.lay.addStretch(1)
-        scroll.setWidget(self.inner)
-        outer.addWidget(scroll)
-        self.editors = []
+        hl.addWidget(self.count)
+        self.table = QTableWidget(0, len(self.COLS))
+        self.table.setHorizontalHeaderLabels(self.COLS)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.table.verticalHeader().setVisible(False)
+        hl.addWidget(self.table, 1)
+        outer.addWidget(hb, 1)
+        self.rows = {}                         # hero index -> (check, prof, body, level)
+        cat = names.heroes or [(i, 0) for i in range(1, sandbox.HERO_INDEX_MAX + 1)]
+        bodies = template_choices(world)
+        for idx, _nid in cat:
+            r = self.table.rowCount()
+            self.table.insertRow(r)
+            chk = QCheckBox()
+            prof = profession_picker()
+            body = Picker()
+            body.set_choices(bodies)
+            body.set_value("hatcher")
+            lvl = QSpinBox()
+            lvl.setRange(1, sandbox.LEVEL_MAX)
+            lvl.setValue(3)
+            name = QTableWidgetItem(names.hero_label(idx))
+            name.setFlags(name.flags() & ~Qt.ItemIsEditable)
+            self.table.setCellWidget(r, 0, chk)
+            self.table.setItem(r, 1, name)
+            self.table.setCellWidget(r, 2, prof)
+            self.table.setCellWidget(r, 3, body)
+            self.table.setCellWidget(r, 4, lvl)
+            chk.toggled.connect(lambda on, i=idx: self._toggled(i, on))
+            prof.currentIndexChanged.connect(lambda _i, i=idx: self._prof_changed(i))
+            body.currentIndexChanged.connect(lambda _i, i=idx: self._body_changed(i))
+            self.rows[idx] = (chk, prof, body, lvl)
+        self.primary.currentIndexChanged.connect(lambda _i: self.on_change())
+        self.secondary.currentIndexChanged.connect(lambda _i: self.on_change())
         self._count()
 
-    def add_hero(self, spec=None):
-        if len(self.editors) >= sandbox.HEROES_MAX:
-            return None
-        ed = HeroEditor(self.names, self.remove, self.on_change)
-        if spec:
-            ed.from_spec(spec)
-        else:
-            used = {e.catalogue.value() for e in self.editors}
-            for i in range(ed.catalogue.count()):
-                if ed.catalogue.itemData(i) not in used:
-                    ed.catalogue.setCurrentIndex(i)
-                    break
-        self.lay.insertWidget(self.lay.count() - 1, ed)
-        self.editors.append(ed)
-        self._count()
-        self.on_change()
-        return ed
+    def unlocked(self):
+        return [i for i, (chk, _p, _b, _l) in self.rows.items() if chk.isChecked()]
 
-    def remove(self, ed):
-        self.editors.remove(ed)
-        ed.setParent(None)
-        ed.deleteLater()
+    def _toggled(self, idx, on):
+        if on and len(self.unlocked()) > sandbox.HEROES_MAX:
+            self.rows[idx][0].setChecked(False)
+            self.count.setText(f"the client's cap is {sandbox.HEROES_MAX} heroes "
+                               f"(PtPlayer:332) -- unlock one fewer first")
+            return
         self._count()
         self.on_change()
 
     def _count(self):
-        self.count.setText(f"{len(self.editors)} of {sandbox.HEROES_MAX}")
-        self.add.setEnabled(len(self.editors) < sandbox.HEROES_MAX)
+        self.count.setText(f"{len(self.unlocked())} of {sandbox.HEROES_MAX} unlocked")
+
+    def _prof_changed(self, idx):
+        if self.rows[idx][0].isChecked():
+            self.on_change()
+
+    def _body_changed(self, idx):
+        # A body carries a profession byte; offer it as the default, never force it.
+        chk, prof, body, _l = self.rows[idx]
+        row = self.names.world.rows("npc").get(body.value()) or {}
+        if row.get("profession") in sandbox.PROFESSIONS and not getattr(body, "_touched", False):
+            set_combo(prof, int(row["profession"]))
 
     def professions(self):
-        return [int(e.profession.currentData()) for e in self.editors]
+        return (int(self.primary.currentData()), int(self.secondary.currentData() or 0))
 
-    def to_spec(self):
-        return [e.to_spec() for e in self.editors]
+    def hero_professions(self):
+        return [int(self.rows[i][1].currentData()) for i in self.unlocked()]
 
-    def from_spec(self, heroes):
-        for e in list(self.editors):
-            self.remove(e)
+    def player_spec(self):
+        prim, sec = self.professions()
+        return {"profession": prim, "secondary": sec, "level": self.level.value(),
+                "weapon": self.weapon.value() or None, "offhand": self.offhand.value() or None}
+
+    def heroes_spec(self):
+        out = []
+        for idx in self.unlocked():
+            chk, prof, body, lvl = self.rows[idx]
+            out.append({"hero": idx, "profession": int(prof.currentData()),
+                        "body": body.value(), "level": lvl.value()})
+        return out
+
+    def from_spec(self, player, heroes):
+        set_combo(self.primary, int(player.get("profession", 1)))
+        set_combo(self.secondary, int(player.get("secondary", 0)))
+        self.level.setValue(int(player.get("level", 3)))
+        prim = int(player.get("profession", 1))
+        w, o = sandbox.PLAYER_ITEMS_BY_PROFESSION.get(prim, ("starter_sword", "starter_shield"))
+        self.weapon.set_value(player.get("weapon") or w)
+        self.offhand.set_value(player.get("offhand") or o or "")
+        for idx, (chk, _p, _b, _l) in self.rows.items():
+            chk.setChecked(False)
         for h in heroes or []:
-            self.add_hero(h)
+            idx = int(h.get("hero", 0))
+            if idx not in self.rows:
+                continue
+            chk, prof, body, lvl = self.rows[idx]
+            body.set_value(h.get("body") or "hatcher")
+            body._touched = True
+            hp = int(h.get("profession") or
+                     (self.names.world.rows("npc").get(h.get("body")) or {}).get("profession") or 1)
+            set_combo(prof, hp)
+            lvl.setValue(int(h.get("level", 3)))
+            chk.setChecked(True)
+        self._count()
+        self.on_change()
 
 
 # ---------------------------------------------------------------- Enemies
@@ -780,8 +782,10 @@ class RunTab(QWidget):
         self.compile_b = QPushButton("COMPILE")
         self.launch_b = QPushButton("LAUNCH")
         self.stop_b = QPushButton("stop")
+        self.reset_b = QPushButton("reset the stored character")
         self.stop_b.setEnabled(False)
-        for b in (self.save_b, self.load_b, self.example_b, self.compile_b, self.launch_b, self.stop_b):
+        for b in (self.save_b, self.load_b, self.example_b, self.compile_b, self.launch_b,
+                  self.stop_b, self.reset_b):
             row.addWidget(b)
         outer.addLayout(row)
         self.status = QLabel("")
@@ -790,7 +794,8 @@ class RunTab(QWidget):
         self.summary = QPlainTextEdit()
         self.summary.setReadOnly(True)
         self.summary.setMaximumBlockCount(4000)
-        outer.addWidget(QLabel("compiled: what the server is told (then the overlay)"))
+        outer.addWidget(QLabel("compiled: what the server is told, what the store already "
+                               "holds, then the overlay"))
         outer.addWidget(self.summary, 1)
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
@@ -803,6 +808,7 @@ class RunTab(QWidget):
         self.compile_b.clicked.connect(self.compile)
         self.launch_b.clicked.connect(self.launch)
         self.stop_b.clicked.connect(self.stop)
+        self.reset_b.clicked.connect(self.reset)
         self.proc = None
         self.compiled = None
 
@@ -838,9 +844,10 @@ class RunTab(QWidget):
         self.compiled = None
         try:
             exe, dat = sandbox.run_paths()
+            missing = None
         except sandbox.SpecError as exc:
             exe, dat = "(no slice run directory)", "(no slice run directory)"
-            self.status.setText(str(exc))
+            missing = str(exc)
         try:
             self.compiled = sandbox.compile_spec(spec, self.window.world, self.specs_dir(),
                                                  exe=exe, dat=dat,
@@ -853,8 +860,10 @@ class RunTab(QWidget):
         lines += ["", "command: " + " ".join(self.compiled["command"]), "",
                   "--- overlay ---", self.compiled["overlay"]]
         self.summary.setPlainText("\n".join(lines))
-        if not self.status.text().startswith("no slice"):
-            self.status.setText(f"compiled; the overlay goes to {self.compiled['overlay_path']}")
+        self.status.setText(missing or
+                            f"compiled; the overlay goes to {self.compiled['overlay_path']}"
+                            + (f"; {len(self.compiled['store_warnings'])} note(s) about the "
+                               f"stored character above" if self.compiled["store_warnings"] else ""))
         return self.compiled
 
     def launch(self):
@@ -904,6 +913,22 @@ class RunTab(QWidget):
             self.status.setText("killed the harness; its servers are stopped by --replace "
                                 "on the next launch if any survived")
 
+    def reset(self, confirm=True):
+        path = sandbox.store_path()
+        if not path or not os.path.isfile(path):
+            self.status.setText("no stored character to reset")
+            return False
+        if confirm:
+            ok = QMessageBox.question(
+                self, "reset the stored character",
+                f"Delete {path}?\n\nThe next login starts a fresh character: an empty bar, "
+                f"every attribute point unspent, no hero builds. The spec is untouched.")
+            if ok != QMessageBox.Yes:
+                return False
+        removed = sandbox.reset_store()
+        self.status.setText(f"removed {removed}; the next login re-seeds the character")
+        return True
+
 
 # ---------------------------------------------------------------- the window
 
@@ -914,30 +939,38 @@ class Window(QMainWindow):
         self.setWindowTitle("Rurik run orchestrator")
         self.resize(1280, 860)
         self.tabs = QTabWidget()
-        self.player = PlayerTab(names)
-        self.heroes = HeroesTab(names, self._heroes_changed)
+        self.skills = SkillsTab(names)
+        self.party = PartyTab(names, self._party_changed)
         self.enemies = EnemiesTab(names)
         self.run = RunTab(self)
-        self.tabs.addTab(self.player, "Player")
-        self.tabs.addTab(self.heroes, "Heroes")
+        self.tabs.addTab(self.skills, "Skills")
+        self.tabs.addTab(self.party, "Party")
         self.tabs.addTab(self.enemies, "Enemies")
         self.tabs.addTab(self.run, "Run")
         self.setCentralWidget(self.tabs)
         msg = names.why or "names resolved from the owner's archive"
         self.statusBar().showMessage(msg)
 
-    def _heroes_changed(self):
-        self.player.set_hero_professions(self.heroes.professions())
+    def _party_changed(self):
+        prim, sec = self.party.professions()
+        self.skills.set_party_professions({prim, sec} | set(self.party.hero_professions()))
 
     def to_spec(self):
         return {"name": self.run.name.text().strip() or "sandbox",
-                "player": self.player.to_spec(), "heroes": self.heroes.to_spec(),
+                "unlocks": self.skills.ids(),
+                "player": self.party.player_spec(), "heroes": self.party.heroes_spec(),
                 "groups": self.enemies.to_spec()}
 
     def from_spec(self, spec):
         self.run.name.setText(str(spec.get("name") or "sandbox"))
-        self.heroes.from_spec(spec.get("heroes"))
-        self.player.from_spec(spec.get("player") or {})
+        self.party.from_spec(spec.get("player") or {}, spec.get("heroes"))
+        unl = spec.get("unlocks")
+        if unl is None:
+            unl = (spec.get("player") or {}).get("unlocks")
+        if unl is not None:
+            self.skills.set_ids(unl)
+        else:
+            self.skills.set_ids(int(k) for k in self.world.rows("skills"))
         self.enemies.from_spec(spec.get("groups"))
 
 
@@ -965,63 +998,80 @@ def smoke(win, app, out_dir):
     app.processEvents()
     spec = win.to_spec()
     check(spec["player"]["profession"] == 1 and spec["player"]["level"] == 3,
-          "the slice loads into the Player tab")
-    check(spec["player"]["skills"][:3] == [382, 384, 385], "the bar round-trips")
-    check(spec["player"]["attributes"] == [[17, 2], [20, 3], [21, 1]] or
-          sorted(spec["player"]["attributes"]) == [[17, 2], [20, 3], [21, 1]],
-          f"the ranks round-trip ({spec['player']['attributes']})")
+          "the slice loads into the Party tab")
+    check("skills" not in spec["player"] and "attributes" not in spec["player"],
+          "the character carries NO bar and NO ranks (the in-game panels' job)")
     check(len(spec["heroes"]) == 1 and spec["heroes"][0]["hero"] == 3
-          and spec["heroes"][0]["profession"] == 3, "the Monk hero loads")
+          and spec["heroes"][0]["profession"] == 3 and spec["heroes"][0]["body"] == "academy_monk"
+          and "skills" not in spec["heroes"][0], "the Monk hero is unlocked with its body, no bar")
     check(len(spec["groups"]) == 3 and spec["groups"][2]["members"][0].get("boss"),
           "three groups, the boss last")
-    for i, tab in enumerate((win.player, win.heroes, win.enemies, win.run)):
+    n_all = win.skills.list.count()
+    check(n_all >= 1000 and len(spec["unlocks"]) == n_all,
+          f"the Skills tab lists every player-usable skill ({n_all}), all unlocked by default")
+    for i, tab in enumerate((win.skills, win.party, win.enemies, win.run)):
         win.tabs.setCurrentIndex(i)
         app.processEvents()
-    # every knob the ask names, changed at once
-    set_combo(win.player.secondary, 3)
+    # the Skills tab: filter, lock, the party's professions
+    win.skills.prof.setCurrentIndex(3)              # Monk
     app.processEvents()
-    check(any(win.player.bar.slots[0].itemData(i) == 281 for i in range(win.player.bar.slots[0].count())),
-          "a Monk secondary offers Monk skills on the bar")
-    ed = win.heroes.add_hero()
-    check(ed is not None and len(win.heroes.editors) == 2, "a second hero is added")
-    set_combo(ed.profession, 1)
-    ed.body.set_value("bandit_raider")
+    shown = [it for it in win.skills._items() if not it.isHidden()]
+    check(shown and all(win.names.skill_profession(int(it.data(Qt.UserRole))) == 3 for it in shown),
+          f"filtering by Monk shows Monk skills only ({len(shown)})")
+    win.skills.none_b.click()
+    check(all(it.checkState() == Qt.Unchecked for it in shown), "lock all shown locks them")
+    win.skills.prof.setCurrentIndex(0)
+    win.skills.party_b.click()
+    ids = set(win.skills.ids())
+    check(ids and all(win.names.skill_profession(s) in {0, 1, 3} for s in ids)
+          and any(win.names.skill_profession(s) == 3 for s in ids),
+          "'the party's professions' unlocks Warrior, Monk and common skills only")
+    # the Party tab: a secondary, a second hero, the cap
+    set_combo(win.party.secondary, 6)
     app.processEvents()
-    check(1 in win.player.hero_professions, "the account library follows the heroes' professions")
+    check(6 in win.skills.party_professions, "the secondary reaches the Skills tab's party set")
+    chk6, prof6, body6, _l = win.party.rows[6]
+    chk6.setChecked(True)
+    set_combo(prof6, 1)
+    body6.set_value("bandit_raider")
+    check(len(win.party.unlocked()) == 2 and win.to_spec()["heroes"][1]["profession"] == 1,
+          "a second hero (index 6) unlocked as a Warrior in the raider's body")
+    for idx in (1, 2, 4, 5, 7, 8):
+        win.party.rows[idx][0].setChecked(True)
+    check(len(win.party.unlocked()) == 7 and not win.party.rows[8][0].isChecked(),
+          "the eighth hero is refused (the client's cap of 7)")
+    for idx in (1, 2, 4, 5, 7):
+        win.party.rows[idx][0].setChecked(False)
+    # the Enemies tab
     g = win.enemies.groups[0]
     g.add_member()
     g.add_member()
     check(len(g.members) == 4 and not g.add.isEnabled(), "a group fills to four and the add stops")
-    win.enemies.add_group()
-    check(len(win.enemies.groups) == 4 and not win.enemies.add.isEnabled(),
-          "a fourth group and the add stops")
-    win.enemies.remove(win.enemies.groups[-1])
-    for _ in range(6):
-        win.heroes.add_hero()
-    check(len(win.heroes.editors) == 7 and not win.heroes.add.isEnabled(), "seven heroes cap")
-    for e in list(win.heroes.editors[2:]):
-        win.heroes.remove(e)
     compiled = win.run.compile()
     check(compiled is not None, "the changed spec COMPILES")
     if compiled:
-        check("--spawn-secondary 3" in " ".join(compiled["args"]), "the secondary reaches the flags")
-        check(len(compiled["party_row"]["heroes"]) == 2, "two hero rows in the party row")
+        args = " ".join(compiled["args"])
+        check("--spawn-secondary 6" in args and "--persist" in args,
+              "the secondary and --persist reach the flags")
+        check(len(compiled["party_row"]["heroes"]) == 2 and
+              compiled["party_row"]["heroes"][1]["points"] == 10 and
+              compiled["party_row"]["heroes"][1]["skills"] == [],
+              "two hero rows, each with an empty bar and the level's points budget")
+        check(compiled["party_row"]["player_skills"] == [] and
+              compiled["party_row"]["player_attributes"] == [],
+              "the character's bar and ranks are written EMPTY for the panels")
         check(len(compiled["spawn_rows"]) == 7, f"seven hostiles ({len(compiled['spawn_rows'])})")
     path = win.run.save(os.path.join(out_dir, "smoke_spec.toml"))
     check(path and os.path.isfile(path), "the spec saves")
     if path:
         back = sandbox.load_spec(path)
-        check(back["player"]["secondary"] == 3 and len(back["heroes"]) == 2, "and loads back")
+        check(back["player"]["secondary"] == 6 and len(back["heroes"]) == 2
+              and len(back["unlocks"]) == len(ids), "and loads back with its unlocks")
     win.run.name.setText("smoke-bad")
-    set_combo(win.player.secondary, 0)
-    app.processEvents()
-    check(not win.player.bar.slots[0].set_value(281),
-          "with the secondary gone the bar no longer OFFERS a Monk skill (the window's "
-          "own gate, ahead of the compiler's)")
-    win.player.level.setValue(1)
-    check(win.run.compile() is None and "spend" in win.run.summary.toPlainText(),
-          "level 1 with level-3 ranks is REFUSED at compile, and the reason is shown")
-    win.player.level.setValue(3)
+    win.enemies.groups[0].members[0].boss.setChecked(True)
+    check(win.run.compile() is None and "bosses" in win.run.summary.toPlainText(),
+          "two bosses are REFUSED at compile, and the reason is shown")
+    win.enemies.groups[0].members[0].boss.setChecked(False)
     shot = os.path.join(out_dir, "smoke_screen.png")
     win.grab().save(shot)
     check(os.path.isfile(shot), f"screenshot {shot}")
