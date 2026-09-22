@@ -28,6 +28,32 @@ move back.
 
 ---
 
+### SANDBOX-B7 -- 2026-09-22 -- **the in-game panels own the bars and the ranks; Skills and Party tabs**
+
+[studies/sandbox/PLAN.md](studies/sandbox/PLAN.md) §2 B7, §4 F3. The owner: "first tab
+should be Skills, and it's unlocked skills account wide; second tab should be Party …
+remove all the attribute and skill defs, they can be managed through the in-game
+interface … we're gonna need a working player and hero Skill and Attribute panel
+adjustments + skill slotting." What already stood (F3): `0x005C`/`0x005E` and
+`0x000F`/`0x000E` agent-keyed, refereed and persisted for the character AND every hero,
+the swap's field order and the hero raise both observed on a client (RUN-HEROLIB). What
+was missing, shipped: a hero's BODY cast the row's bar while its panel drew the store's
+(`hero_cast_bar` at the create, `sync_hero_body_bar` after an edit); a hero with no ranks
+had no points budget (`points` on the hero row, `hero_points`); an authored EMPTY bar or
+rank list read as "no field" and fell through to the fixture's hammer bar and 173-point
+ranks, or to the PLAYER's bar on a hero's panel (`is not None`, `hero_bar_authored`); the
+store's seed level overrode the row's (`PLAYER_LEVEL_AUTHORED`, the store follows); the run
+never passed `--persist` (always now; `persist = false` reverts). The window: **Skills**
+(every player-usable skill, filterable by name/profession/modelled, all/none/the party's)
+and **Party** (pair, level, hands; the 39 catalogue heroes with an unlock tick, a
+profession, a body, a level; the cap of 7 enforced) replace Player/Heroes; Enemies stays;
+Run compiles with the store's warnings (a stored bar skill outside the unlocks, of another
+profession, a foreign rank, a hero's stored bar that wins) and can reset the stored
+character. `test_sandbox` 88 → 107; `test_agentlife` 551, `test_charstore` 91 green; the
+smoke 21 of 21. A bare spec (no bars, no ranks) started one gamesrv clean: `bar EMPTY`,
+`ranks NONE`, the hero row with its points. Next: N1 (a filterable picker for the Enemies
+tab), N2 (hero add/kick in-game). Open on the client: U5.
+
 ### SANDBOX-B1..B5 -- 2026-09-20 -- **the run orchestrator: the slice as a configurable practice sandbox**
 
 [studies/sandbox/PLAN.md](studies/sandbox/PLAN.md). The owner: "another UI app … take the

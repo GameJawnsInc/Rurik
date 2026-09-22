@@ -33,7 +33,7 @@ import checks   # noqa: E402
 import content  # noqa: E402
 import sandbox  # noqa: E402
 
-led = checks.Ledger("sandbox", floor=88)      # from the green run, 2026-09-20
+led = checks.Ledger("sandbox", floor=107)     # 88 from the green run 2026-09-20; +19 SANDBOX-B7 (2026-09-22)
 
 
 # ---------------------------------------------------------------- the fixture
@@ -404,6 +404,85 @@ with tempfile.TemporaryDirectory() as tmp:
     except sandbox.SpecError as exc:
         led.ok("at least the boss" in str(exc), "compile_spec raises SpecError listing "
                "the problems", str(exc)[:80])
+
+# ---------------------------------------------------------------- 3b. SANDBOX-B7: the in-game panels own the bars and ranks
+bare = spec(player={"profession": 3, "secondary": 1, "level": 5},
+            heroes=[{"hero": 6, "profession": 1, "body": "bandit_raider", "level": 4}])
+led.ok(problems(bare) == [], "a spec with no bars and no ranks anywhere validates", problems(bare))
+brow = sandbox.party_row(bare, WORLD)
+led.ok(brow["player_skills"] == [] and brow["player_attributes"] == [] and
+       brow["player_points"] == 20,
+       "the character's bar and ranks are written EMPTY (an answer, not an absence) with the "
+       "level's whole budget unspent -- the in-game panels fill them", brow)
+bh = brow["heroes"][0]
+led.ok(bh["skills"] == [] and bh["attributes"] == [] and bh["points"] == 15,
+       "a hero row carries an empty bar, no ranks and `points` = its level's budget (15 at "
+       "level 4), so its panel's plus buttons are live", bh)
+bargs = sandbox.game_args(bare, WORLD)
+led.ok("--persist" in bargs,
+       "--persist is always passed: the store keeps what the panels set")
+led.ok("--persist" not in sandbox.game_args(dict(bare, persist=False), WORLD),
+       "...unless the spec says persist = false")
+led.ok(set(sandbox.unlocks_for(bare, WORLD)) == {"1", "2", "322", "382", "323", "281", "276", "252"}
+       or set(sandbox.unlocks_for(bare, WORLD)) == {1, 2, 322, 382, 323, 281, 276, 252},
+       "with no unlocks named the account library is the party's professions' skills",
+       sandbox.unlocks_for(bare, WORLD))
+led.ok(sandbox.unlocks_for(dict(bare, unlocks=[170, 1]), WORLD) == [1, 170],
+       "a top-level `unlocks` (the Skills tab) is the account library verbatim, whatever "
+       "the professions -- account-wide means account-wide")
+led.ok(sandbox.unlocks_for(dict(bare, player=dict(bare["player"], skills=[281, 322]),
+                                unlocks=[1]), WORLD) == [1, 281, 322],
+       "...plus any bar id the spec still names")
+led.ok(sandbox.party_professions(bare, WORLD) == {1, 3},
+       "party_professions: the pair and the heroes'")
+txt = sandbox.spec_toml(dict(bare, unlocks=[1, 2]))
+led.ok(tomllib.loads(txt)["unlocks"] == [1, 2] and "skills" not in tomllib.loads(txt)["player"],
+       "spec_toml writes a top-level unlocks and no bar keys the spec lacks")
+
+# the store: read, warned about, reset -- on a temp file, never the vault's
+with tempfile.TemporaryDirectory() as tmp:
+    import json
+    stpath = os.path.join(tmp, "loopback_rurik.invalid.json")
+    with open(stpath, "w", encoding="utf-8") as fh:
+        json.dump({"email": "loopback@rurik.invalid", "version": 1,
+                   "account": {"factions": {}},
+                   "characters": {"1111": {"name": "Test Warrior", "level": 3,
+                                           "skillbar": [382, 170, 0, 0, 0, 0, 0, 0],
+                                           "attributes": [[13, 2], [17, 1]],
+                                           "heroes": {"3": {"skillbar": [281, 0, 0, 0, 0, 0, 0, 0],
+                                                            "attributes": [[13, 1]],
+                                                            "attribute_points": 10}}}}}, fh)
+    real_path = sandbox.store_path
+    sandbox.store_path = lambda email=None: stpath
+    try:
+        st = sandbox.store_state()
+        led.ok(st and st["characters"]["Test Warrior"]["skillbar"][:2] == [382, 170]
+               and st["characters"]["Test Warrior"]["heroes"][3]["attribute_points"] == 10
+               and st["account_unlocked"] is None,
+               "store_state reads the character's bar, ranks and hero rows, and an absent "
+               "account library as None", st)
+        warn = sandbox.store_warnings(spec(unlocks=[382, 281]), WORLD, st)
+        led.ok(any("[170]" in w and "outside this run's unlocks" in w for w in warn),
+               "a stored bar skill outside the unlocks is warned about (it asserts on a drag)",
+               warn)
+        led.ok(any("[170]" in w and "profession this character is not" in w for w in warn),
+               "...and one of a profession the character is not")
+        led.ok(any("attributes [13]" in w for w in warn),
+               "a stored rank in another profession's attribute is warned about")
+        led.ok(any("hero 3 keeps its stored bar [281]" in w for w in warn),
+               "a party hero's stored bar is said to win over the spec")
+        led.ok(sandbox.store_warnings(spec(), WORLD, None) == [],
+               "no store, no warnings")
+        c = sandbox.compile_spec(spec(unlocks=[382]), WORLD, tmp, exe="x", dat="y", store=st)
+        led.ok(c["store_warnings"] and any("STORE:" in ln for ln in sandbox.summary(c)),
+               "compile_spec carries the store's warnings into the summary")
+        led.ok(sandbox.compile_spec(spec(), WORLD, tmp, exe="x", dat="y", store={})["store_warnings"] == [],
+               "...and an empty store passed in means none")
+        removed = sandbox.reset_store()
+        led.ok(removed == stpath and not os.path.exists(stpath) and sandbox.reset_store() is None,
+               "reset_store removes the file once and answers None the second time")
+    finally:
+        sandbox.store_path = real_path
 
 # ---------------------------------------------------------------- 4. the example against the TRACKED rows
 try:

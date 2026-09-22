@@ -574,10 +574,13 @@ def hero_table(h, world, fallback_level):
         wattr = int(h["attributes"][0][0])
     return {
         "hero": int(h["hero"]), "profession": prof, "body": body,
+        # An absent bar or rank list is an EMPTY one, on purpose: the in-game
+        # panels fill them and --persist keeps what they wrote (SANDBOX-B7).
         "skills": _ints(h.get("skills")), "level": level,
         "health": int(h.get("health", morale.base_health(level))),
         "energy": int(h.get("energy", energy)), "weapon": wkey,
         "attributes": [[int(a), int(r)] for a, r in (h.get("attributes") or [])],
+        "points": int(h.get("points", points_for_level(level))),
         "armor": float(h.get("armor", HERO_ARMOR_DEFAULT)),
         "damage": [int(damage[0]), int(damage[1])] if damage else None,
         "weapon_attribute": int(wattr) if wattr is not None else None,
@@ -605,7 +608,10 @@ def party_row(spec, world):
         "player_weapon": player.get("weapon", weapon),
         "player_offhand": player.get("offhand", offhand) or None,
         "player_armour": player.get("armour") or PLAYER_ARMOUR_BY_PROFESSION.get(prim),
-        "player_skills": _ints(player.get("skills")) or None,
+        # Always written, empty included: an empty bar is the panel's to fill
+        # and empty ranks are every point unspent (SANDBOX-B7); the server
+        # keeps the fixture's only when the field is ABSENT.
+        "player_skills": _ints(player.get("skills")),
     }
     # The single-hero fields carry the FIRST hero, so a server that predates
     # per-hero rows (or a site that still reads the globals) sees a sane party.
@@ -700,9 +706,8 @@ def overlay_text(spec, world):
     return "\n".join(lines)
 
 
-def game_args(spec, world):
-    """The gamesrv's flags. `--map` and `--area` are the harness's too
-    (session.served_maps, the pre-flight)."""
+def party_professions(spec, world):
+    """The character's pair and every hero's profession."""
     player = spec.get("player") or {}
     prim = int(player.get("profession", 1))
     sec = int(player.get("secondary", 0))
@@ -711,18 +716,144 @@ def game_args(spec, world):
         hp = h.get("profession") or (_rows(world, "npc").get(h.get("body")) or {}).get("profession")
         if hp:
             profs.add(int(hp))
-    unlocks = set(_ints(player.get("unlocks")) or default_unlocks(world, profs))
+    return profs
+
+
+def unlocks_for(spec, world):
+    """The ACCOUNT library this run sends as --unlocks (0x001D): the spec's
+    top-level `unlocks` (the window's Skills tab), else `player.unlocks`,
+    else every skill of the party's professions; the bars' own ids always."""
+    player = spec.get("player") or {}
+    given = spec.get("unlocks")
+    if given is None:
+        given = player.get("unlocks")
+    unlocks = set(_ints(given)) if given is not None else set(
+        default_unlocks(world, party_professions(spec, world)))
     unlocks |= set(s for s in _ints(player.get("skills")) if s)
     for h in spec.get("heroes") or []:
         unlocks |= set(s for s in _ints(h.get("skills")) if s)
+    return sorted(unlocks)
+
+
+def game_args(spec, world):
+    """The gamesrv's flags. `--map` and `--area` are the harness's too
+    (session.served_maps, the pre-flight). `--persist` always: the bars and
+    ranks are the in-game panels' to set, and the character store is what
+    keeps them from one run to the next (SANDBOX-B7)."""
+    player = spec.get("player") or {}
+    prim = int(player.get("profession", 1))
+    sec = int(player.get("secondary", 0))
+    unlocks = unlocks_for(spec, world)
     args = ["--map", str(TOWN_MAP), "--party", PARTY_KEY,
             "--area", f"{TOWN_AREA},{AREA_KEY}",
             "--spawn-profession", str(prim)]
     if sec:
         args += ["--spawn-secondary", str(sec)]
     if unlocks:
-        args += ["--unlocks", ",".join(str(s) for s in sorted(unlocks))]
+        args += ["--unlocks", ",".join(str(s) for s in unlocks)]
+    if spec.get("persist", True):
+        args.append("--persist")
     return args
+
+
+# ---------------------------------------------------------------- the store
+
+def store_email():
+    """The loopback run's account, which names the character store file."""
+    try:
+        import accounts                       # toolkit/harness/accounts.py
+        return accounts.synthetic()["email"]
+    except Exception:                         # noqa: BLE001
+        return None
+
+
+def store_path(email=None):
+    try:
+        import charstore                      # toolkit/authsrv/charstore.py
+        return charstore.path_for(email or store_email())
+    except Exception:                         # noqa: BLE001
+        return None
+
+
+def store_state(email=None):
+    """What the character store holds for the loopback account, or None:
+    {"path", "account_unlocked", "characters": {name: {"level", "skillbar",
+    "attributes", "heroes": {index: {"skillbar", "attributes",
+    "attribute_points"}}}}}. Read-only, stdlib (json)."""
+    import json
+    path = store_path(email)
+    if not path or not os.path.isfile(path):
+        return None
+    with open(path, encoding="utf-8") as fh:
+        data = json.load(fh)
+    chars = {}
+    for _uuid, row in (data.get("characters") or {}).items():
+        chars[str(row.get("name", _uuid))] = {
+            "level": row.get("level"), "skillbar": row.get("skillbar"),
+            "attributes": row.get("attributes"),
+            "heroes": {int(k): {"skillbar": v.get("skillbar"),
+                                "attributes": v.get("attributes"),
+                                "attribute_points": v.get("attribute_points")}
+                       for k, v in (row.get("heroes") or {}).items()}}
+    return {"path": path,
+            "account_unlocked": (data.get("account") or {}).get("unlocked_skills"),
+            "characters": chars}
+
+
+def store_warnings(spec, world, st):
+    """What a previous run's edits mean for THIS spec, as lines. The store
+    wins at load under --persist, so a bar or a rank it holds outlives the
+    spec that first wrote them."""
+    if not st:
+        return []
+    out = []
+    unlocks = set(unlocks_for(spec, world))
+    if st.get("account_unlocked") is not None:
+        out.append(f"the store holds an ACCOUNT library of {len(st['account_unlocked'])} "
+                   f"skills, which wins over the Skills tab's --unlocks (charstore.py "
+                   f"--set-unlocked, or reset the store)")
+    # The CHARACTER's own pair: a hero's profession makes nothing spendable
+    # or slottable for the character.
+    player = spec.get("player") or {}
+    profs = {int(player.get("profession", 1))}
+    if int(player.get("secondary", 0)):
+        profs.add(int(player["secondary"]))
+    rules = attribute_rules(world)
+    party = {int(h["hero"]) for h in spec.get("heroes") or [] if h.get("hero") is not None}
+    for name, c in st["characters"].items():
+        bar = [s for s in (c.get("skillbar") or []) if s]
+        unbacked = [s for s in bar if s not in unlocks]
+        if unbacked:
+            out.append(f"{name}'s stored bar carries {unbacked}, outside this run's "
+                       f"unlocks: they draw, and dragging one asserts the client")
+        if bar:
+            foreign = [s for s in bar if skill_owned(world, s, profs) is False]
+            if foreign:
+                out.append(f"{name}'s stored bar carries {foreign}, skills of a profession "
+                           f"this character is not")
+        if rules and c.get("attributes"):
+            off = [a for a, _r in c["attributes"]
+                   if rules.attributes.get(int(a), {}).get("profession") not in profs]
+            if off:
+                out.append(f"{name}'s stored ranks include attributes {off} of another "
+                           f"profession; the panel will carry them")
+        for idx, h in (c.get("heroes") or {}).items():
+            if idx in party and h.get("skillbar"):
+                out.append(f"hero {idx} keeps its stored bar {[s for s in h['skillbar'] if s]} "
+                           f"(the store wins over the spec)")
+    return out
+
+
+def reset_store(email=None):
+    """Delete the loopback account's store file so the next login re-seeds
+    it: a fresh character, no bars, no ranks, no hero builds. Returns the
+    path removed, or None when there was none. The vault's own scratch
+    state, never anything under the tree."""
+    path = store_path(email)
+    if path and os.path.isfile(path):
+        os.remove(path)
+        return path
+    return None
 
 
 def run_paths(vault_root=None):
@@ -749,11 +880,13 @@ def launch_command(args, exe, hold=None, warn=3, replace=True):
     return cmd
 
 
-def compile_spec(spec, world, out_dir, exe=None, dat=None, hold=None):
+def compile_spec(spec, world, out_dir, exe=None, dat=None, hold=None, store=None):
     """Everything a launch needs, or SpecError. Writes nothing.
 
-    Returns {"name", "overlay_dir", "overlay_path", "overlay", "args",
-             "command", "env", "spawn_rows", "party_row", "problems"}."""
+    `store` is a store_state() result to warn against (default: the loopback
+    account's, read now; pass {} for none). Returns {"name", "overlay_dir",
+    "overlay_path", "overlay", "args", "command", "env", "spawn_rows",
+    "party_row", "notes", "store_warnings"}."""
     problems = validate(spec, world)
     if problems:
         raise SpecError("the spec cannot run:\n  - " + "\n  - ".join(problems))
@@ -767,15 +900,24 @@ def compile_spec(spec, world, out_dir, exe=None, dat=None, hold=None):
     if exe is None or dat is None:
         exe, dat = run_paths()
     env = {"RURIK_DAT": dat, "RURIK_CONTENT_EXTRA": overlay_dir}
+    try:
+        st = store_state() if store is None else store
+    except Exception as exc:                  # noqa: BLE001
+        st = None
+        store_notes = [f"the character store could not be read ({exc})"]
+    else:
+        store_notes = []
     return {
         "name": name, "overlay_dir": overlay_dir,
         "overlay_path": os.path.join(overlay_dir, "world.toml"),
         "overlay": overlay_text(spec, world), "args": args,
         "command": launch_command(args, exe, hold=hold), "env": env,
         "spawn_rows": rows, "party_row": party_row(spec, world),
-        "notes": [] if has_skill_table(world) else
-                 ["no skills table (vault/content/skills.toml): skill ownership and "
-                  "timing were NOT checked; every activation and recharge is 0"],
+        "notes": ([] if has_skill_table(world) else
+                  ["no skills table (vault/content/skills.toml): skill ownership and "
+                   "timing were NOT checked; every activation and recharge is 0"])
+                 + store_notes,
+        "store_warnings": store_warnings(spec, world, st),
     }
 
 
@@ -812,6 +954,7 @@ def summary(compiled):
     out.append("  gamesrv: " + " ".join(compiled["args"]))
     out.append("  env: " + ", ".join(f"{k}={v}" for k, v in compiled["env"].items()))
     out += [f"  NOTE: {n}" for n in compiled.get("notes", [])]
+    out += [f"  STORE: {n}" for n in compiled.get("store_warnings", [])]
     return out
 
 
@@ -861,7 +1004,12 @@ def spec_toml(spec, header=None):
     Keys whose value is None are left out."""
     lines = list(header or ["# A sandbox spec. Run with",
                             "#   python toolkit/harness/sandbox.py --spec this.toml --launch"])
-    lines += [f"name = {_toml(spec.get('name') or 'sandbox')}", "", "[player]"]
+    lines += [f"name = {_toml(spec.get('name') or 'sandbox')}"]
+    if spec.get("unlocks") is not None:
+        lines.append(f"unlocks = {_toml(_ints(spec['unlocks']))}")
+    if spec.get("persist") is not None:
+        lines.append(f"persist = {_toml(bool(spec['persist']))}")
+    lines += ["", "[player]"]
     for k, v in (spec.get("player") or {}).items():
         if v is not None:
             lines.append(f"{k} = {_toml(v)}")

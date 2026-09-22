@@ -808,14 +808,17 @@ way out and `SCRUB-MANIFEST.json` names every file affected — this applies to 
 pythonw apps/orchestrator.pyw
 ```
 
-Player / Heroes / Enemies / Run: the character's profession pair, level, bar, ranks
-and unlocks; up to seven heroes each with its own body, profession, bar and ranks; up
-to four hostile groups of up to four, one the boss. **Compile** shows the overlay and
-the command; **Launch** runs the usual harness on the slice archive with the overlay
-merged in for that launch only, and closing the game client ends the run. The same
-run without the window is `python toolkit/harness/sandbox.py --spec X.toml --launch`
-(`--example` prints the slice as a spec). Needs `vault/run/slice/` (SLICE-B9's
-`compose.py --name slice --build`). [tools/orchestrator/README.md](tools/orchestrator/README.md).
+Skills / Party / Enemies / Run: the account's unlocked skills; the character's
+profession pair, level and hands and which heroes are unlocked (each a profession,
+a body, a level); up to four hostile groups of up to four, one the boss. Bars and
+attribute ranks for the character and the heroes are set IN GAME and kept by
+`--persist`, which a sandbox run always passes. **Compile** shows the overlay, the
+command and what the stored character already holds; **Launch** runs the usual
+harness on the slice archive with the overlay merged in for that launch only, and
+closing the game client ends the run. The same run without the window is
+`python toolkit/harness/sandbox.py --spec X.toml --launch` (`--example` prints the
+slice as a spec). Needs `vault/run/slice/` (SLICE-B9's `compose.py --name slice
+--build`). [tools/orchestrator/README.md](tools/orchestrator/README.md).
 
 ## Where the pieces live
 

@@ -1,11 +1,20 @@
 # `tools/orchestrator/` — the run orchestrator
 
-A window that turns the vertical slice into a practice sandbox: pick the character's
-profession pair, level, bar and ranks; the heroes (up to seven, each its own body,
-profession, bar and ranks); the hostile groups (up to four of up to four, one the boss);
-which skills are unlocked; then press **Launch**. The quest is the slice's own — Fisk in
-Ascalon City, the west portal into the corridor, the groups, the boss, the portal back,
-the turn-in — and everything else is yours to change.
+A window that turns the vertical slice into a practice sandbox. **Skills**: which skills
+are unlocked, account-wide. **Party**: the character to play (profession pair, level,
+hands) and which heroes are unlocked, each with a profession, a body and a level.
+**Enemies**: up to four groups of up to four hostiles, one the boss, each with its bar and
+ranks. **Run**: compile, launch, reset. Then press **Launch**. The quest is the slice's own
+— Fisk in Ascalon City, the west portal into the corridor, the groups, the boss, the
+portal back, the turn-in — and everything else is yours to change.
+
+**Bars and attribute ranks for the character and the heroes are set IN GAME**, on the
+Skills panel (K), the attribute panel and each hero's own panel, exactly as on retail:
+the server answers every slot write, swap, raise and lower for the character and for
+each hero, and `--persist` (always on for a sandbox run) keeps what you set from one run
+to the next in `vault/state/characters/`. A new spec starts the character with an empty
+bar and every point unspent, and each hero the same with its level's points. **Reset the
+stored character** on the Run tab wipes that state; the spec is untouched.
 
 ```
 python tools/orchestrator/orchestrator.py                  # the window, the slice loaded
@@ -73,6 +82,13 @@ LGPLv3, dynamic-linked, never vendored; its row is in `PLAN.md` §6.1 and its cr
 ## Open on the client
 
 What the retail client draws for a non-zero secondary on the player's own profession pair,
-and whether two heroes with different bodies both render and follow, are SANDBOX-U1 and U2
+whether two heroes with different bodies both render and follow, and whether a character
+and a hero built entirely in-game keep their build across a run, are SANDBOX-U1, U2 and U5
 in [studies/sandbox/PLAN.md](../../studies/sandbox/PLAN.md), with their predictions
 written before the run.
+
+## Next
+
+A filterable skill and attribute picker for the Enemies tab (SANDBOX-N1), and adding or
+kicking heroes from the in-game party panel (SANDBOX-N2, whose client message is not yet
+found).

@@ -12617,4 +12617,17 @@ row and passed as `--spawn-secondary`; an empty hero list; an Assassin's default
 the Assassin armour, 25 / 4 -- OBSERVED on the owner's wire). Section 4 against the TRACKED
 rows: the example validates, and merged over the tree its `corridor_boss` REPLACES the
 slice's while the slice's other rows keep area `corridor`, so `--area errand,sandbox` serves
-the sandbox alone. No vault, no client, no server. 88 checks, floor 88. ~1 s)
+the sandbox alone. **Section 3b (2026-09-22, SANDBOX-B7, +19, floor 88 → 107):** a spec with
+no bars and no ranks anywhere validates; the character's bar and ranks are written EMPTY
+(an answer the server honours, not an absence) with the level's whole budget; a hero row
+carries an empty bar, no ranks and `points` = its level's budget; `--persist` is always
+passed and `persist = false` withholds it; with no unlocks named the account library is the
+party's professions', a top-level `unlocks` is taken verbatim plus any bar id the spec still
+names; `spec_toml` writes the top-level unlocks; and the STORE, on a temp file with
+`store_path` patched: `store_state` reads the character's bar, ranks and hero rows and an
+absent account library as None, `store_warnings` names a stored bar skill outside the run's
+unlocks (it asserts on a drag) and one of a profession the character is not, a stored rank
+in another profession's attribute, and a party hero's stored bar that wins over the spec;
+no store means no warnings; `compile_spec` carries them into the summary and an empty
+store passed in means none; `reset_store` removes the file once and answers None after.
+No vault, no client, no server. 107 checks, floor 107. ~1 s)

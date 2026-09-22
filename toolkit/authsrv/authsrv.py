@@ -3177,6 +3177,10 @@ SPAWN_PROFESSION = PROF_WARRIOR
 # is non-zero about half the time (agents.agent_set_profession), so the wire
 # shape is retail's; what our client DRAWS for it is SANDBOX-U1, unrun.
 SPAWN_SECONDARY = 0
+# SANDBOX-B7: True once a [party.KEY] row has named `player_level`. Under
+# --persist the store's seed level then FOLLOWS the row (the instance-load
+# seed site says why) instead of overriding it.
+PLAYER_LEVEL_AUTHORED = False
 
 
 def spawn_profession_values(profession=None, agent_id=None):
@@ -10849,6 +10853,68 @@ def hero_bar_ids(hid):
     return [int(sk[0]) for sk in hero_bar(hid)]
 
 
+def hero_bar_authored(hid):
+    """True when this hero's row SAYS what its bar is -- an empty list
+    included. The difference matters at the wire: a hero with no authored
+    bar at all draws the player's SKILLBAR on its panel (the JARIN rig's
+    fallback), while a hero whose row says `skills = []` has an EMPTY bar
+    that the in-game panel fills (SANDBOX-B7)."""
+    return hero_row(hid).get("skills") is not None
+
+
+def hero_points(hid):
+    """The hero's attribute-point BUDGET from its row (`points`), or None.
+
+    Without a stored `attribute_points` the budget was whatever the ranks
+    already cost, so a hero authored with no ranks had 0 available and dead
+    plus buttons (hero_attribute_state's own comment). A sandbox hero starts
+    with no ranks on purpose -- the panel is where they are spent -- so its
+    row carries the level's budget (SANDBOX-B7; sandbox.points_for_level)."""
+    r = hero_row(hid)
+    return int(r["points"]) if r.get("points") is not None else None
+
+
+def bar_triples(ids):
+    """[(id, activation, recharge), ...] for a bar's ids, timing from the
+    client's table (as --hero-skills and hero_bar), empties dropped."""
+    out = []
+    for sid in ids or ():
+        sid = int(sid)
+        if sid <= 0:
+            continue
+        act, _after, rech = skill_timing(sid)
+        out.append((sid, act, float(rech)))
+    return tuple(out)
+
+
+def hero_cast_bar(state, hid):
+    """What this hero's BODY casts: the STORED bar when --persist holds one
+    (the panel's bar and the body's bar are then one thing), else the row's.
+
+    SANDBOX-B7. Until 2026-09-22 the body was created with the ROW's bar
+    while the panel drew the STORE's -- an in-game edit changed what the
+    hero showed and never what it cast, on that session or the next."""
+    _own, stored, _r, _p = hero_build(state, hid)
+    if stored is not None:
+        return bar_triples(stored)
+    return tuple(hero_bar(hid))
+
+
+def sync_hero_body_bar(state, agent_id, bar_ids, conn_id):
+    """After an in-game edit of a hero's bar: the BODY casts the new bar
+    from now on. Recharges reset to ready -- said, because retail's rule
+    for an edited slot's cooldown is UNOBSERVED (SANDBOX-B7)."""
+    row = (state.get("agents") or {}).get(agent_id)
+    if row is None:
+        return False
+    row["skills"] = bar_triples(bar_ids)
+    row["skill_ready"] = [0.0] * len(row["skills"])
+    print(f"[c{conn_id}] hero agent {agent_id} now casts "
+          f"{[s[0] for s in row['skills']]} (its edited bar; recharges reset) "
+          f"[SANDBOX-B7]", flush=True)
+    return True
+
+
 def hero_level(hid):
     r = hero_row(hid)
     return int(r["level"]) if r.get("level") is not None else HERO_LEVEL
@@ -17409,6 +17475,8 @@ def hero_attribute_state(state, hero_index):
     _own, _bar, ranks, points = hero_build(state, hero_index)
     ranks = dict(ranks) if ranks is not None else dict(hero_attributes(hero_index) or {})
     spent = player.rules.total_spent(ranks)
+    if points is None:
+        points = hero_points(hero_index)                # SANDBOX-B7: the row's budget
     st = attribspend.AttributeState(
         player.rules, ranks,
         int(points) if points is not None else spent,
@@ -17526,8 +17594,10 @@ def handle_skillbar_skill_set(values, send, state, conn_id, rec):
         SKILLBAR.extend(after)
         if store is not None:
             store.set_character_bar_slot(uuid_hex, slot, skill_id)
-    elif store is not None:
-        store.set_hero_bar_slot(uuid_hex, hero_index, slot, skill_id)
+    else:
+        if store is not None:
+            store.set_hero_bar_slot(uuid_hex, hero_index, slot, skill_id)
+        sync_hero_body_bar(state, agent_id, after, conn_id)   # SANDBOX-B7
 
     send(GAME_SMSG_SKILLBAR_UPDATE_SKILL, [agent_id, slot, skill_id, 0],
          f"SKILLBAR_UPDATE_SKILL({who} slot {slot} <- skill {skill_id})")
@@ -17606,8 +17676,10 @@ def handle_skillbar_skill_swap(values, send, state, conn_id, rec):
         SKILLBAR.extend(after)
         if store is not None:
             store.set_character_skillbar(uuid_hex, after)
-    elif store is not None:
-        store.set_hero_skillbar(uuid_hex, hero_index, after)
+    else:
+        if store is not None:
+            store.set_hero_skillbar(uuid_hex, hero_index, after)
+        sync_hero_body_bar(state, agent_id, after, conn_id)   # SANDBOX-B7
 
     print(f"[c{conn_id}] SKILLBAR SWAP {who}: skill {src} slot {src_slot} <-> "
           f"skill {tgt} slot {tgt_slot}; bar now {after}"
@@ -22442,8 +22514,14 @@ def hero_character_block(state, haid, hid):
         # curve is exactly the kind of number this repo keeps having to walk
         # back; the player's own budget is an authored content row too.
         _hspent = _hattr.rules.total_spent(_h_ranks)
-        _htotal = int(_hs_points) if _hs_points is not None else _hspent
+        _htotal = (int(_hs_points) if _hs_points is not None
+                   else hero_points(hid) if hero_points(hid) is not None   # SANDBOX-B7
+                   else _hspent)
         _havail = _htotal - _hspent
+    elif hero_points(hid) is not None:
+        # SANDBOX-B7: no ranks anywhere, a budget on the row -- the whole
+        # budget is unspent, for the panel.
+        _havail = _htotal = hero_points(hid)
     else:
         _havail, _htotal = _hattr.available, _hattr.points_total
     out.append((GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS, [haid, _havail, _htotal],
@@ -22455,7 +22533,8 @@ def hero_character_block(state, haid, hid):
         # the panel); the player's SKILLBAR only when the hero has none.
         _hskills = (list(_hs_bar) if _hs_bar is not None
                     else hero_bar_ids(hid)              # SANDBOX-B3: per hero
-                    or list(SKILLBAR))
+                    if hero_bar_authored(hid)           # SANDBOX-B7: an authored empty bar stays empty
+                    else hero_bar_ids(hid) or list(SKILLBAR))
         _hskills = _hskills[:SKILLBAR_SLOTS]
         _hskills += [0] * (SKILLBAR_SLOTS - len(_hskills))
         out.append((GAME_SMSG_SKILLBAR_UPDATE,
@@ -22761,6 +22840,7 @@ def apply_party_character(prow, record_set0=True):
     wire_regen_rate(4, 25)."""
     global PLAYER_SWING_DAMAGE, WEAPON_ATTACK_SPEED, ATTACK_INTERVAL
     global PARTY_SKILLBAR, SPAWN_PROFESSION, PLAYER_ENERGY_PIPS, SPAWN_SECONDARY
+    global PLAYER_LEVEL_AUTHORED
     changed = []
     if prow.get("player_profession") is not None:
         _prof = int(prow["player_profession"])
@@ -22857,19 +22937,27 @@ def apply_party_character(prow, record_set0=True):
     if _we:
         changed.append(f"energy +{_we} from the held staff / focus (556) -> "
                        f"{agents.PLAYER_ENERGY + _we} at neutral morale [WEAPONS-W5]")
-    if prow.get("player_skills"):
+    if prow.get("player_skills") is not None:
+        # SANDBOX-B7: an EMPTY list is an answer -- a bar the in-game panel
+        # fills -- and is not the same as no field (the fixture's bar).
         PARTY_SKILLBAR = [int(s) for s in prow["player_skills"]]
-        changed.append(f"bar {PARTY_SKILLBAR}")
+        changed.append(f"bar {PARTY_SKILLBAR}" if PARTY_SKILLBAR else
+                       "bar EMPTY (the panel fills it)")
     if prow.get("player_level") is not None:
         agents.PLAYER_LEVEL = int(prow["player_level"])
+        PLAYER_LEVEL_AUTHORED = True          # SANDBOX-B7: the row's level wins over the store's
         changed.append(f"level {agents.PLAYER_LEVEL}")
     if prow.get("player_health") is not None:
         agents.PLAYER_HEALTH = int(prow["player_health"])
         changed.append(f"health {agents.PLAYER_HEALTH}")
-    if prow.get("player_attributes"):
+    if prow.get("player_attributes") is not None:
+        # SANDBOX-B7: an EMPTY list means NO ranks -- every point unspent,
+        # for the panel -- where no field keeps the fixture's ranks.
         agents.PLAYER_ATTRIBUTE_RANKS = tuple(
             (int(a), int(r)) for a, r in prow["player_attributes"])
-        changed.append(f"ranks {list(agents.PLAYER_ATTRIBUTE_RANKS)}")
+        changed.append(f"ranks {list(agents.PLAYER_ATTRIBUTE_RANKS)}"
+                       if agents.PLAYER_ATTRIBUTE_RANKS else
+                       "ranks NONE (every point unspent, for the panel)")
     if prow.get("player_points") is not None:
         agents.PLAYER_ATTRIBUTE_POINTS = int(prow["player_points"])
         changed.append(f"points {agents.PLAYER_ATTRIBUTE_POINTS}")
@@ -27143,6 +27231,18 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     # ([player.defaults].level, 3 in the slice); START_LEVEL stays the
     # fixture default every offline state without a "level" key reads.
     _ps_level = (_ps_row or {}).get("level", agents.PLAYER_LEVEL)
+    if PLAYER_LEVEL_AUTHORED and _ps_row is not None \
+            and int(_ps_row.get("level", -1)) != int(agents.PLAYER_LEVEL):
+        # SANDBOX-B7: a [party.KEY] row's `player_level` is the SPEC's knob
+        # and nothing in play changes a level (xp accrues, levels do not),
+        # so the store's seed follows the row rather than overriding it --
+        # the sheet, the roster and the row's own points budget then agree.
+        print(f"[c{conn_id}] PERSIST: the store's level "
+              f"{_ps_row.get('level')} follows the party row's "
+              f"{agents.PLAYER_LEVEL} [SANDBOX-B7]", flush=True)
+        _ps_row["level"] = int(agents.PLAYER_LEVEL)
+        _ps_store.save()
+        _ps_level = int(agents.PLAYER_LEVEL)
     # ...and in the state, because morale needs it: the
     # penalty scales BASE health, which is 100 + 20 per
     # level and nothing else. It used to live only in this
@@ -27756,8 +27856,10 @@ def _handle_request_players(send, state, conn_id, stop, rec):
              # carry the same skill twice and keying recharge by id would make
              # the second copy share the first's cooldown (spawn_enemy's own
              # comment, same reason).
-             "skills": hero_bar(_hid),                             # SANDBOX-B3: per hero
-             "skill_ready": [0.0] * len(hero_bar(_hid))},
+             # SANDBOX-B7: the STORED bar when --persist holds one, else the
+             # row's -- the body casts what the panel shows.
+             "skills": hero_cast_bar(state, _hid),
+             "skill_ready": [0.0] * len(hero_cast_bar(state, _hid))},
             f"hero body (hero {_hid})", conn_id=conn_id)
         # SLICE-H7: WHAT THE BODY HOLDS -- retail's create batch for a
         # henchman body is 0x0020, then 0x0161 per weapon, then 0x006D
@@ -27869,7 +27971,9 @@ def _handle_request_players(send, state, conn_id, stop, rec):
         # unconfigured run puts on the wire is a separate decision from
         # honouring a stored one.
         _, _hs_bar, _, _ = hero_build(state, _hid)
-        _hskills = list(_hs_bar) if _hs_bar is not None else list(SKILLBAR)
+        _hskills = (list(_hs_bar) if _hs_bar is not None
+                    else hero_bar_ids(_hid) if hero_bar_authored(_hid)   # SANDBOX-B7
+                    else list(SKILLBAR))
         _hskills = _hskills[:SKILLBAR_SLOTS]
         _hskills += [0] * (SKILLBAR_SLOTS - len(_hskills))
         hsend(GAME_SMSG_SKILLBAR_UPDATE,
