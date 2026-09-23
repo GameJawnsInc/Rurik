@@ -1952,12 +1952,13 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "row carrying tier = \"label\" (vault/content/"
                          "skill_labels.toml, generated from the client's own "
                          "description templates by skilldesc.py --emit-labels; "
-                         "59 plain SERVED skills on 38797) is removed before "
+                         "the file's header says how many) is removed before "
                          "any consumer reads it, so skill_damage, skill_heal, "
-                         "skill_condition and the episode terms see the hand "
-                         "rows alone -- the server as it was until 2026-09-23 "
-                         "(SKILLS-LT, studies/skills 55). The control for "
-                         "anything a run attributes to a label-tier number.")
+                         "skill_condition and the episode terms see the HAND "
+                         "rows alone -- including the 54.8 hand fixes of "
+                         "2026-09-23 (Hamstring's Crippled), which are not the "
+                         "tier's (SKILLS-LT, studies/skills 55). The control "
+                         "for anything a run attributes to a label-tier number.")
     ap.add_argument("--player-max-always", action="store_true",
                     help="declare the player's property 42 before EVERY "
                          "armour-ignoring damage word at the player, as until "

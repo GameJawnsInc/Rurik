@@ -33,7 +33,7 @@ import checks   # noqa: E402
 import content  # noqa: E402
 import sandbox  # noqa: E402
 
-led = checks.Ledger("sandbox", floor=109)     # 88 from the green run 2026-09-20; +19 SANDBOX-B7 (2026-09-22); +2 SKILLS-LT sec.5, the hand / label split (2026-09-23)
+led = checks.Ledger("sandbox", floor=111)     # 88 from the green run 2026-09-20; +19 SANDBOX-B7 (2026-09-22); +2 SKILLS-LT sec.5, the hand / label split (2026-09-23); +2 the fix pass (one LABEL_TIER, gamesrv_args)
 
 
 # ---------------------------------------------------------------- the fixture
@@ -522,5 +522,13 @@ led.ok(sandbox.skill_tiers(TIERED) == {1: "hand", 281: "hand", 322: "hand", 784:
        and sandbox.modelled_skills(WORLD) == [1, 281, 322] and sandbox.label_skills(WORLD) == [],
        "skill_tiers names each row's grade; a world with no label rows has the old modelled set and "
        "an empty label set")
+led.ok(sandbox.LABEL_TIER is content.LABEL_TIER,
+       "one definition of the tier string: sandbox reads content.LABEL_TIER (ENG-11)")
+_ctl = sandbox.game_args({"player": {"profession": 1}, "gamesrv_args": ["--no-skill-labels"]}, WORLD)
+_plain = sandbox.game_args({"player": {"profession": 1}}, WORLD)
+led.ok(_ctl[-1] == "--no-skill-labels" and _ctl[:-1] == _plain and "--no-skill-labels" not in _plain,
+       "gamesrv_args passes a flag through to the gamesrv, LAST -- the label tier's control arm "
+       "(skills 55.5's runsheet: --no-skill-labels) -- and adds nothing by default (ENG-8)",
+       (_ctl, _plain))
 
 sys.exit(led.verdict())

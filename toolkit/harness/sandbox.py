@@ -267,7 +267,7 @@ def default_unlocks(world, professions):
                   if int(r.get("profession", 0)) in want)
 
 
-LABEL_TIER = "label"       # content.LABEL_TIER; a literal so this leaf stays stdlib-only
+LABEL_TIER = content.LABEL_TIER    # one definition; `import content` is above
 
 
 def skill_tiers(world):
@@ -771,6 +771,10 @@ def game_args(spec, world):
         args += ["--unlocks", ",".join(str(s) for s in unlocks)]
     if spec.get("persist", True):
         args.append("--persist")
+    # SKILLS-LT: `gamesrv_args = ["--no-skill-labels"]` is how a spec runs the
+    # label tier's CONTROL arm (studies/skills 55.5's runsheet); any gamesrv
+    # flag passes through, last, so it can override the fixed ones above.
+    args += [str(x) for x in (spec.get("gamesrv_args") or [])]
     return args
 
 

@@ -75,7 +75,7 @@ import content  # noqa: E402
 #   D  the vault dropped from load()'s dirs:     4 red, two synthetic and two here
 # C and D are caught by the synthetic checks too; A and B are caught by nothing else, and
 # A is the one that actually happened.
-LEDGER = checks.Ledger("content store", floor=50)  # 2026-09-23: +4, the label tier sits UNDER the hand rows (SKILLS-LT); 2026-09-14: +2, the overrides layer; 2026-09-20: +2, RURIK_CONTENT_EXTRA (SANDBOX-B1)
+LEDGER = checks.Ledger("content store", floor=52)  # 2026-09-23: +4, the label tier sits UNDER the hand rows (SKILLS-LT), +1 the closed tier set (ENG-6) -- 52 from the bare run (RURIK_VAULT at an empty dir), 55 with the vault; 2026-09-14: +2, the overrides layer; 2026-09-20: +2, RURIK_CONTENT_EXTRA (SANDBOX-B1)
 
 
 def write(dirpath, name, text):
@@ -563,6 +563,24 @@ def main():
               and content._merge(base, over)["thing"]["a"]["value"] == 1,
               "KNOWN-BAD ARM: the plain update this merge was until 2026-09-23 lets the "
               "label row win; the tier-aware merge keeps the hand row")
+    # ENG-6: the tier is a CLOSED set. `_merge` compares the string exactly, so a
+    # near-miss spelling would load as a HAND row and beat the real one.
+    refused = {}
+    for spelling in ("Label", "labels", "label "):
+        with tempfile.TemporaryDirectory() as repo, tempfile.TemporaryDirectory() as vault:
+            write(repo, "a.toml", '[thing.a]\nvalue = 1\n' + GOOD_PROV)
+            write(vault, "labels.toml", LAB.replace('tier = "label"', f'tier = "{spelling}"', 1))
+            try:
+                content.load(repo_dir=repo, vault_dir=vault,
+                             overrides_dir=os.path.join(repo, "no-such-dir"), extra_dirs=[])
+                refused[spelling] = None
+            except content.ContentError as exc:
+                refused[spelling] = str(exc)
+    LEDGER.ok(all(r and "not one of" in r and repr(s) in r for s, r in refused.items()),
+              "KNOWN-BAD ARM (ENG-6): a near-miss tier spelling ('Label', 'labels', 'label ') is "
+              "REFUSED at load, naming the spelling and the closed set -- it would otherwise have "
+              "replaced the hand row and survived --no-skill-labels",
+              {s: (r or "LOADED")[:60] for s, r in refused.items()})
 
     LEDGER.ok(alone.get("b", {}) and alone["b"]["value"] == 22,
               "and with no overrides directory the vault still wins -- the layer adds, "

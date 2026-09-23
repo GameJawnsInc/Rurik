@@ -68,7 +68,7 @@ the spec on disk carries ids. A machine with no client shows ids and says why in
 bar. A `*` after a skill marks one this server models beyond its icon from a HAND
 `[skill_effect.*]` row; `~label` marks a **label-only** skill (SKILLS-LT, 2026-09-23): it acts
 too, but through a label parsed from the client's own description template
-(`vault/content/skill_labels.toml`, 59 rows on 38797) rather than a hand-verified row, and the
+(`vault/content/skill_labels.toml`, 47 rows on 38797; the file's header says how many) rather than a hand-verified row, and the
 server's log says so at every cast; `--no-skill-labels` on the gamesrv drops them. The rest
 draw and time correctly and do nothing.
 

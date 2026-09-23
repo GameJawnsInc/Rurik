@@ -1021,6 +1021,26 @@ def smoke(win, app, out_dir):
     for i, tab in enumerate((win.skills, win.party, win.enemies, win.run)):
         win.tabs.setCurrentIndex(i)
         app.processEvents()
+    # the Skills tab's GRADES (SKILLS-LT): a hand row is ` *`, a label-tier row
+    # ` ~label`, and the "modelled only" filter keeps both and nothing else.
+    listed = {int(it.data(Qt.UserRole)) for it in win.skills._items()}
+    hand_ids, label_ids = win.names.modelled & listed, win.names.labelled & listed
+    if hand_ids and label_ids:
+        h0, l0 = sorted(hand_ids)[0], sorted(label_ids)[0]
+        check(win.names.skill_label(h0).endswith(" *") and win.names.skill_label(l0).endswith(" ~label")
+              and not win.names.skill_label(l0).endswith(" *"),
+              f"a hand row ({h0}) is marked ' *', a label-tier row ({l0}) ' ~label' and never ' *'")
+        win.skills.modelled_only.setChecked(True)
+        app.processEvents()
+        shown_ids = {int(it.data(Qt.UserRole)) for it in win.skills._items() if not it.isHidden()}
+        check(shown_ids == hand_ids | label_ids,
+              f"'modelled only' shows the hand rows and the label rows and nothing else "
+              f"({len(hand_ids)} + {len(label_ids)})")
+        win.skills.modelled_only.setChecked(False)
+        app.processEvents()
+    else:
+        print(f"  [skip] the grade marks: hand {len(hand_ids)} / label {len(label_ids)} rows listed "
+              f"-- the vault overlay (skilldesc.py --emit-labels) is what puts label rows here")
     # the Skills tab: filter, lock, the party's professions
     win.skills.prof.setCurrentIndex(3)              # Monk
     app.processEvents()

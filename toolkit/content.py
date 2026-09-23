@@ -69,7 +69,10 @@ hand-sized rows in the repo, bulk extraction in the vault.
     lowest layer) and the label row in the vault (above it). `_merge` enforces it;
     `test_content.py` proves it with the plain-merge known-bad arm. The emitter also
     skips hand-row ids, but the load rule is the guarantee. `World.drop_tier` is how
-    `--no-skill-labels` makes the server forget the tier entirely.
+    `--no-skill-labels` makes the server forget the tier entirely. The tier values are
+    a CLOSED set (`TIERS`): a `tier` outside it is refused at load, because the rule
+    compares the string exactly and a near-miss would load as a hand row
+    (`_check_tier`). A client-table row with NO tier is a hand row (world.toml's 346).
 
 The gate keeps its evidentiary value that way: "no extracted table was ever committed,
 prove it with one git command" stays literally true, which is the whole reason PLAN.md
@@ -189,6 +192,15 @@ RULE_1_1 = ('PLAN.md section 1.1: gw-preservation and Py4GW_Reforged "carry no l
 # The generated tier (WHERE ROWS LIVE, last bullet). A row whose body says
 # `tier = "label"` is machine-derived from a parse and sits UNDER every hand row.
 LABEL_TIER = "label"
+# The CLOSED set of tier values a row may carry. `_merge` and `drop_tier` compare
+# the string exactly, so a near-miss spelling ("Label", "labels", "label ") would
+# load as a HAND row: it would replace the real hand row, survive --no-skill-labels
+# and grade "modelled" (reviewer ENG-6). Refused at load instead.
+TIERS = frozenset({LABEL_TIER})
+# (A client-table skill_effect row with NO tier is a legitimate HAND row -- world.toml's
+# 346 measures its number from the client's table and is hand-placed -- so the other
+# direction, "an extracted row must carry a tier", is NOT a rule; the emitter's own
+# checker guarantees its rows carry one.)
 
 
 class ContentError(Exception):
@@ -289,6 +301,19 @@ def _need(kind, key, prov, field, why):
             f"{why}")
 
 
+def _check_tier(kind, key, row, prov):
+    """A `tier`, when present, is one of TIERS or the row is refused. The tier rule
+    in `_merge` compares the string exactly, so a row that misses the comparison
+    would be promoted to a hand row by silence (ENG-6)."""
+    tier = row.get("tier")
+    if tier is not None and tier not in TIERS:
+        raise ContentError(
+            f"{kind} row {key!r} carries tier {tier!r}, which is not one of "
+            f"{sorted(TIERS)}. A row whose tier misses the exact spelling would load as "
+            f"a HAND row -- replacing the real one, surviving --no-skill-labels and grading "
+            f"\"modelled\" -- so the set is closed and a near-miss is refused, not promoted.")
+
+
 def _check_extracted(kind, key, prov):
     """Conditions 1 and 2 of the owner's 2026-08-11 ruling, enforced from the row.
 
@@ -355,7 +380,8 @@ def _merge(base, overlay, tier_aware=True):
         if isinstance(rows, dict) and isinstance(out.get(section), dict):
             merged = dict(out[section])
             for key, row in rows.items():
-                if tier_aware and _is_label_row(row) and key in merged                         and not _is_label_row(merged[key]):
+                if (tier_aware and _is_label_row(row) and key in merged
+                        and not _is_label_row(merged[key])):
                     continue
                 merged[key] = row
             out[section] = merged
@@ -466,6 +492,7 @@ def load(repo_dir=None, vault_dir=None, require_vault=False, overrides_dir=None,
             if not isinstance(row, dict):
                 continue
             prov = _check_provenance(kind, key, row)
+            _check_tier(kind, key, row, prov)
             body = {k: v for k, v in row.items() if k != "provenance"}
             out[key] = Row(body, kind, key, prov)
         tables[kind] = out

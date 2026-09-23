@@ -3262,16 +3262,16 @@ SCALE_MEANS_HEAL = {"Heal", "Maximum heal", "Healing"}
 # THE LABEL TIER (SKILLS-LT, 2026-09-23, studies/skills 55; DESKWORK-D4 step 4).
 # vault/content/skill_labels.toml carries `tier = "label"` skill_effect rows
 # that toolkit/clientscan/skilldesc.py --emit-labels generates from the
-# client's own description templates -- 59 plain SERVED skills on build 38797
-# -- loaded UNDER the hand rows (content.py's tier rule: a label row never
-# replaces a row without that tier). They resolve through the SAME readers a
-# hand row does -- skill_damage, skill_heal, skill_condition, the episode
-# terms -- and there is no second path; what differs is that the per-cast log
-# names the tier (`_label_tier_note`), because a number that came from a
-# parsed label must read as one and not as hand-verified (the fidelity
+# client's own description templates -- the plain SERVED skills the step-4
+# gate passes (the file's own header says how many; 47 on build 38797 after
+# the fix pass) -- loaded UNDER the hand rows (content.py's tier rule: a label
+# row never replaces a row without that tier). They resolve through the SAME
+# readers a hand row does -- skill_damage, skill_heal, skill_condition, the
+# episode terms -- and there is no second path; what differs is that the
+# per-cast log names the tier (`_label_tier_note`), because a number that came
+# from a parsed label must read as one and not as hand-verified (the fidelity
 # judge's condition on step 4). --no-skill-labels drops the tier at startup
-# (World.drop_tier): this server exactly as it was before that date.
-SKILL_LABELS = True
+# (World.drop_tier, in main(), before the listener): the hand rows alone.
 
 
 def skill_label_tier(skill_id):
@@ -35200,12 +35200,10 @@ def main():
               flush=True)
 
     if a.no_skill_labels:
-        global SKILL_LABELS
-        SKILL_LABELS = False
         _gone = agents.WORLD.drop_tier("skill_effect", agents.content.LABEL_TIER)
         print(f"NO SKILL LABELS: {len(_gone)} label-tier skill_effect row(s) dropped "
               f"(vault/content/skill_labels.toml, SKILLS-LT) -- the consumers see the "
-              f"hand rows only, as until 2026-09-23.", flush=True)
+              f"hand rows only (the 54.8 hand fixes included).", flush=True)
 
     if a.player_max_always:
         global PLAYER_MAX_ALWAYS

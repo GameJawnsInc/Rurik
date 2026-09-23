@@ -711,46 +711,108 @@ def main():
     # loaded: a bare machine, or one that has not regenerated it.
     lab = {k: r for k, r in agents.WORLD.rows("skill_effect").items()
            if r.get("tier") == "label"}
-    if "187" not in lab or "784" not in lab:
-        LEDGER.skip("14. the label tier (5 checks)",
+    if "187" not in lab or "220" not in lab:
+        LEDGER.skip("14. the label tier (12 checks)",
                     "skill_labels.toml not loaded -- `python toolkit/clientscan/"
                     "skilldesc.py --emit-labels` regenerates it into vault/content/")
     else:
+        import contextlib
+        import io
         check(authsrv.skill_damage(187, 0) == (7, "standalone")
               and authsrv.skill_damage(187, 15) == (112, "standalone"),
               "a label-tier fire spell (187: scale 7..112 at str1, a Spell aimed at "
               "the burst's byte 16) resolves through skill_damage at both ends of "
               "the ladder -- the record's own numbers",
               (authsrv.skill_damage(187, 0), authsrv.skill_damage(187, 15)))
-        check(authsrv.skill_condition(784, 0) == (484, 5.0)
-              and authsrv.skill_condition(784, 15) == (484, 20.0),
-              "a label-tier Poison (784: scale 5..20 at str1, a foe Spell) resolves "
-              "through skill_condition's second slot: 484 for 5 s at rank 0, 20 s "
-              "at rank 15",
-              (authsrv.skill_condition(784, 0), authsrv.skill_condition(784, 15)))
+        check(authsrv.skill_condition(220, 0) == (479, 3.0)
+              and authsrv.skill_condition(220, 15) == (479, 8.0),
+              "a label-tier Blind (220: bonus 3..8 at str2, a foe Spell) resolves "
+              "through skill_condition's first slot: 479 for 3 s at rank 0, 8 s "
+              "at rank 15 (784 was this example until the fix pass excluded it: "
+              "its chain requirement has no gate on a Spell)",
+              (authsrv.skill_condition(220, 0), authsrv.skill_condition(220, 15)))
         check(lab["187"]["tier"] == "label" and "AREA_BURST" in lab["187"]["tier_detail"]
               and lab["187"].provenance["source"] == "client-table"
               and lab["187"].provenance["build"] == 38797
-              and lab["784"]["tier_detail"] == ["TARGET_FOE"],
+              and lab["220"]["tier_detail"] == ["TARGET_FOE"],
               "the rows say what they are: tier label, 187's area is spell_burst's "
-              "(AREA_BURST), 784 reaches its one target; client-table provenance, "
-              "build 38797", (dict(lab["187"]), dict(lab["784"])))
+              "(AREA_BURST), 220 reaches its one target; client-table provenance, "
+              "build 38797", (dict(lab["187"]), dict(lab["220"])))
         check(authsrv.skill_label_tier(187) == list(lab["187"]["tier_detail"])
               and authsrv.skill_label_tier(312) is None
               and authsrv.skill_label_tier(999999) is None,
               "skill_label_tier -- what the per-cast log prints -- returns the label row's "
               "detail, None for a hand row (Holy Strike) and None for no row")
+        # ENG-5: the per-cast line itself, and its two call sites in the source.
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            authsrv._label_tier_note(187, 7, "the player's")
+            authsrv._label_tier_note(312, 7, "the player's")
+        out = buf.getvalue()
+        check(out.startswith("[c7] the player's skill 187 resolves through a LABEL-tier row (")
+              and "AREA_BURST" in out and "not hand-verified" in out and "--no-skill-labels" in out
+              and out.count("\n") == 1 and "312" not in out,
+              "_label_tier_note prints ONE line for a label-tier skill naming the tier "
+              "and its detail, and nothing for a hand row (Holy Strike)", out)
+        src = open(authsrv.__file__, encoding="utf-8").read()
+        check(src.count('_label_tier_note(cast["skill_id"], conn_id, "the player\'s")') == 1
+              and src.count('_label_tier_note(skill_id, conn_id, f"agent {agent_id}\'s")') == 1,
+              "SOURCE LOCK: the note is called at the player's E5 and at a body's landing, "
+              "once each")
+        # ENG-4 / LT-R11: the revert flag's WIRING -- it parses, and main() drops the
+        # tier before the listener opens (an early WORLD read would otherwise see it).
+        import serverargs
+        ap = serverargs.build_parser(
+            doc="x", GAME_SRV_HOST=authsrv.GAME_SRV_HOST, GAME_SRV_PORT=authsrv.GAME_SRV_PORT,
+            HOST_FIELD_ENCODING=authsrv.HOST_FIELD_ENCODING, TEST_SKILLBAR=authsrv.TEST_SKILLBAR,
+            GRANT_MIN_INTERVAL=authsrv.GRANT_MIN_INTERVAL, PROF_WARRIOR=authsrv.PROF_WARRIOR,
+            VAULT_DEFAULT=authsrv.VAULT_DEFAULT)
+        i_main = src.index("\ndef main():")
+        i_flag = src.index("    if a.no_skill_labels:", i_main)
+        i_drop = src.index('drop_tier("skill_effect", agents.content.LABEL_TIER)', i_flag)
+        i_listen = src.index("srv.listen(", i_main)
+        check(ap.parse_args([]).no_skill_labels is False
+              and ap.parse_args(["--no-skill-labels"]).no_skill_labels is True
+              and i_main < i_flag < i_drop < i_listen and i_drop - i_flag < 200
+              and "SKILL_LABELS" not in src.replace("NO SKILL LABELS", ""),
+              "--no-skill-labels parses (default off), and main()'s block calls "
+              "World.drop_tier(skill_effect, LABEL_TIER) BEFORE srv.listen; no dead "
+              "SKILL_LABELS global is left to look load-bearing")
+        # ENG-2 / LT-R7: the AREA_BURST mark agrees with the server's OWN predicate,
+        # row by row -- spell_burst's radius AND a standalone damage to burst with
+        # (118's area Weakness has the radius and no damage: one target here).
+        lab_ids = sorted(int(k) for k in lab)
+
+        def _bursts(sid):
+            d = authsrv.skill_damage(sid, 0)
+            return authsrv.spell_burst(sid) is not None and bool(d) and d[1] == "standalone"
+        disagree = [s for s in lab_ids if ("AREA_BURST" in lab[str(s)]["tier_detail"]) != _bursts(s)]
+        check(disagree == [] and authsrv.spell_burst(192) is None and authsrv.spell_burst(197) is None
+              and authsrv.spell_burst(187) == 156.0 and "AREA_BURST" not in lab["192"]["tier_detail"]
+              and "DURATION_UNMODELLED" in lab["192"]["tier_detail"],
+              f"AREA_BURST agrees with spell_burst + a standalone damage on all {len(lab_ids)} "
+              f"label rows; the areas over time 192 and 197 are refused by the server (a "
+              f"duration) and marked ONE_TARGET + DURATION_UNMODELLED", disagree)
+        # LT-R4: no shipped row carries a chain requirement the E5 gate would not test.
+        chained = [s for s in lab_ids
+                   if authsrv.skill_chain_fields(s)[1] and not authsrv._is_attack_skill(s)]
+        check(chained == [] and authsrv.skill_chain_fields(784)[1] == 2
+              and not authsrv._is_attack_skill(784) and "784" not in lab,
+              "no label row is a non-attack with combo_req (the chain gate at the E5 runs "
+              "inside _is_attack_skill); 784 -- combo_req 2, a Spell -- is out", chained)
         gone = agents.WORLD.drop_tier("skill_effect", "label")
         try:
             check(authsrv.skill_damage(187, 15) is None
-                  and authsrv.skill_condition(784, 15) is None and len(gone) >= 50,
+                  and authsrv.skill_condition(220, 15) is None and len(gone) >= 40,
                   f"with the tier DROPPED (--no-skill-labels) both resolve to nothing "
-                  f"-- the server before 2026-09-23; {len(gone)} rows gone",
-                  (authsrv.skill_damage(187, 15), authsrv.skill_condition(784, 15)))
+                  f"-- the hand rows alone; {len(gone)} rows gone",
+                  (authsrv.skill_damage(187, 15), authsrv.skill_condition(220, 15)))
             check(authsrv.skill_damage(312, 15) is not None
-                  and authsrv.skill_condition(382, 15) is not None,
-                  "and the hand rows are untouched by the drop: Holy Strike and Sever "
-                  "Artery still resolve")
+                  and authsrv.skill_condition(382, 15) is not None
+                  and authsrv.skill_condition(320, 15) == (481, 15.0),
+                  "and the hand rows are untouched by the drop: Holy Strike, Sever "
+                  "Artery and Hamstring's 54.8 fix (Crippled 15 s) still resolve -- the "
+                  "flag reverts the TIER, not the hand fixes of the same day")
         finally:
             agents.WORLD.tables["skill_effect"].update(gone)
         check(authsrv.skill_damage(187, 15) == (112, "standalone"),
