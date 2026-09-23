@@ -3259,6 +3259,38 @@ ARMOUR_RESPECTING_MEANS = frozenset({"Fire damage", "Cold damage",
 # `Maximum heal` on Reversal of Fortune.
 SCALE_MEANS_HEAL = {"Heal", "Maximum heal", "Healing"}
 
+# THE LABEL TIER (SKILLS-LT, 2026-09-23, studies/skills 55; DESKWORK-D4 step 4).
+# vault/content/skill_labels.toml carries `tier = "label"` skill_effect rows
+# that toolkit/clientscan/skilldesc.py --emit-labels generates from the
+# client's own description templates -- 59 plain SERVED skills on build 38797
+# -- loaded UNDER the hand rows (content.py's tier rule: a label row never
+# replaces a row without that tier). They resolve through the SAME readers a
+# hand row does -- skill_damage, skill_heal, skill_condition, the episode
+# terms -- and there is no second path; what differs is that the per-cast log
+# names the tier (`_label_tier_note`), because a number that came from a
+# parsed label must read as one and not as hand-verified (the fidelity
+# judge's condition on step 4). --no-skill-labels drops the tier at startup
+# (World.drop_tier): this server exactly as it was before that date.
+SKILL_LABELS = True
+
+
+def skill_label_tier(skill_id):
+    """The `tier_detail` list of a LABEL-tier skill_effect row, or None for a
+    hand row or no row at all."""
+    row = skill_effect_row(skill_id)
+    if row.get("tier") != agents.content.LABEL_TIER:
+        return None
+    return list(row.get("tier_detail") or ())
+
+
+def _label_tier_note(skill_id, conn_id, who):
+    detail = skill_label_tier(skill_id)
+    if detail is not None:
+        print(f"[c{conn_id}] {who} skill {skill_id} resolves through a LABEL-tier "
+              f"row ({' '.join(detail) or 'plain'}) -- parsed from the client's "
+              f"template, not hand-verified; --no-skill-labels drops it [SKILLS-LT]",
+              flush=True)
+
 # A LABEL DOES NOT SAY *WHEN*, and this is the trap that would have shipped
 # without the type column. `Ignite Arrows` has GWW variable `Fire damage` 3..18
 # -- the same label as Flare's -- and it is a PREPARATION: WIKI (GWW,
@@ -19002,6 +19034,7 @@ def cast_tick(send, state, conn_id):
             # attack, and it is where "+ Damage" belongs. Everything else
             # resolves on its own terms, and a skill with nothing to resolve
             # does nothing to the target at all.
+            _label_tier_note(cast["skill_id"], conn_id, "the player's")   # SKILLS-LT
             found = skill_damage(cast["skill_id"], rank)
             # WEAPONS-W2c: a RANGED weapon's attack skill RELEASES at its E5
             # and lands a flight later, and its E5 batch carries NO 46 --
@@ -25580,6 +25613,7 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # `casting`. Removing this line breaks no check, and that was verified by
     # removing it. It stays because a stale slot index is a bad thing to leave
     # lying around for the next person who reads `casting` from somewhere else.
+    _label_tier_note(skill_id, conn_id, f"agent {agent_id}'s")             # SKILLS-LT
     # THE DAMAGE IS THE CLIENT'S OWN NUMBER SINCE 2026-08-15. It was
     # `PLAYER_HEALTH * ENEMY_SKILL_FRACTION` -- a flat quarter of the player's
     # maximum for every skill on the bar, admitted invention. Now it is the
@@ -35164,6 +35198,14 @@ def main():
               "skill's damage word at the player, as this server sent until "
               "2026-09-22 (retail: 92 of 92, self-scoped; skillcast 16.6's note).",
               flush=True)
+
+    if a.no_skill_labels:
+        global SKILL_LABELS
+        SKILL_LABELS = False
+        _gone = agents.WORLD.drop_tier("skill_effect", agents.content.LABEL_TIER)
+        print(f"NO SKILL LABELS: {len(_gone)} label-tier skill_effect row(s) dropped "
+              f"(vault/content/skill_labels.toml, SKILLS-LT) -- the consumers see the "
+              f"hand rows only, as until 2026-09-23.", flush=True)
 
     if a.player_max_always:
         global PLAYER_MAX_ALWAYS

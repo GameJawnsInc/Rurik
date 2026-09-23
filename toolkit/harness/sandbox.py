@@ -267,10 +267,28 @@ def default_unlocks(world, professions):
                   if int(r.get("profession", 0)) in want)
 
 
+LABEL_TIER = "label"       # content.LABEL_TIER; a literal so this leaf stays stdlib-only
+
+
+def skill_tiers(world):
+    """{id: "hand" | "label"} for every [skill_effect.*] row: hand-verified, or
+    generated from the client's description templates (SKILLS-LT, the tier
+    field on the row)."""
+    return {int(k): (LABEL_TIER if r.get("tier") == LABEL_TIER else "hand")
+            for k, r in _rows(world, "skill_effect").items()}
+
+
 def modelled_skills(world):
-    """Ids with a [skill_effect.*] row: the ones this server resolves beyond
-    their icon (studies/skills)."""
-    return sorted(int(k) for k in _rows(world, "skill_effect"))
+    """Ids with a HAND [skill_effect.*] row: the ones this server resolves beyond
+    their icon from a hand-verified row (studies/skills). The label tier is
+    `label_skills`: those act too, through a parsed label, and the grade must
+    say so rather than read as modelled (deskwork D4 step 4's condition)."""
+    return sorted(k for k, t in skill_tiers(world).items() if t == "hand")
+
+
+def label_skills(world):
+    """Ids whose only [skill_effect.*] row is a tier = "label" one (SKILLS-LT)."""
+    return sorted(k for k, t in skill_tiers(world).items() if t == LABEL_TIER)
 
 
 def templates(world):

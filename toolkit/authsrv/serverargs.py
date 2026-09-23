@@ -1947,6 +1947,17 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "own hits), and the client stores it as the skill "
                          "the next damage number belongs to (skillcast 16.6 "
                          "and its 2026-09-22 note).")
+    ap.add_argument("--no-skill-labels", action="store_true",
+                    help="drop the LABEL tier at startup: every skill_effect "
+                         "row carrying tier = \"label\" (vault/content/"
+                         "skill_labels.toml, generated from the client's own "
+                         "description templates by skilldesc.py --emit-labels; "
+                         "59 plain SERVED skills on 38797) is removed before "
+                         "any consumer reads it, so skill_damage, skill_heal, "
+                         "skill_condition and the episode terms see the hand "
+                         "rows alone -- the server as it was until 2026-09-23 "
+                         "(SKILLS-LT, studies/skills 55). The control for "
+                         "anything a run attributes to a label-tier number.")
     ap.add_argument("--player-max-always", action="store_true",
                     help="declare the player's property 42 before EVERY "
                          "armour-ignoring damage word at the player, as until "

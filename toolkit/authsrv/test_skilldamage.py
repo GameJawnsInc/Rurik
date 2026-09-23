@@ -735,6 +735,11 @@ def main():
               "the rows say what they are: tier label, 187's area is spell_burst's "
               "(AREA_BURST), 784 reaches its one target; client-table provenance, "
               "build 38797", (dict(lab["187"]), dict(lab["784"])))
+        check(authsrv.skill_label_tier(187) == list(lab["187"]["tier_detail"])
+              and authsrv.skill_label_tier(312) is None
+              and authsrv.skill_label_tier(999999) is None,
+              "skill_label_tier -- what the per-cast log prints -- returns the label row's "
+              "detail, None for a hand row (Holy Strike) and None for no row")
         gone = agents.WORLD.drop_tier("skill_effect", "label")
         try:
             check(authsrv.skill_damage(187, 15) is None

@@ -123,7 +123,9 @@ class Names:
         row = self.world.rows("skills").get(str(sid)) or {}
         prof = sandbox.ABBREV.get(int(row.get("profession", 0) or 0), "-")
         attr = self.attr.get(int(row.get("attribute", -1)), "")
-        mark = " *" if sid in self.modelled else ""
+        # `*` a hand row; `~label` a label-tier row (SKILLS-LT): acts through a
+        # parsed label and must not read as modelled (deskwork D4 step 4).
+        mark = " *" if sid in self.modelled else (" ~label" if sid in self.labelled else "")
         return f"{self.skill.get(sid, f'skill {sid}')}  [{sid} {prof}{(' ' + attr) if attr else ''}]{mark}"
 
     def hero_label(self, idx):
@@ -137,6 +139,12 @@ class Names:
         if not hasattr(self, "_modelled"):
             self._modelled = set(sandbox.modelled_skills(self.world))
         return self._modelled
+
+    @property
+    def labelled(self):
+        if not hasattr(self, "_labelled"):
+            self._labelled = set(sandbox.label_skills(self.world))
+        return self._labelled
 
 
 # ---------------------------------------------------------------- pieces
@@ -325,7 +333,7 @@ class SkillsTab(QWidget):
         for pid, name in sandbox.PROFESSIONS.items():
             self.prof.addItem(f"{name} ({sandbox.ABBREV[pid]})", pid)
         self.prof.addItem("common (no profession)", -1)
-        self.modelled_only = QCheckBox("modelled only")
+        self.modelled_only = QCheckBox("modelled only (* hand, ~label)")
         row.addWidget(self.filter, 2)
         row.addWidget(self.prof, 1)
         row.addWidget(self.modelled_only)
@@ -371,7 +379,8 @@ class SkillsTab(QWidget):
             sp = self.names.skill_profession(sid)
             hide = ((text and text not in it.text().lower())
                     or (prof > 0 and sp != prof) or (prof == -1 and sp != 0)
-                    or (only and sid not in self.names.modelled))
+                    or (only and sid not in self.names.modelled
+                        and sid not in self.names.labelled))
             it.setHidden(bool(hide))
         self._count()
 
