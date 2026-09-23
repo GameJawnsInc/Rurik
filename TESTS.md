@@ -6909,16 +6909,27 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   `ally_cast_tick` on a two-slot spell bar and reads `skill_ready[slot]` back — the operand
   — asserting it lands at now + activation + recharge (completion + recharge) with the flag
   on and at now + recharge (the START anchor, the known-bad arm) with it off, at both cast
-  sites. §2 is `rechargeprobe`'s verdict over the live corpus (declared a skip without the
-  vault and the client tables): the floor holds (≥ 4 skills with ≥ 5 completed pairs); the
-  six spells 185/186/179/286/222/230 are completion-anchored (min start-to-start at recharge
-  + activation, min completion-to-next at the recharge) and completion is the majority anchor
-  of the discriminating skills; 229 (Lightning Orb) is the named divergence — a sub-recharge
-  completion-to-next gap (one clear at ~3.25 s), consistent with a staff HSR proc or a
-  start-anchor for that skill alone, OBSERVED and not fitted away; the corpus recycles agent
-  ids (2,238 creates) and the six stay completion-anchored with the ids pooled too (the
-  anchor is not an artifact of the re-create split); every connection's build has a table in
-  the vault, over ≥ 2 builds. 15 checks, floor 8 (the sender). Read-only on the vault),
+  sites; and (the fix pass) the re-create SPLIT on a synthetic sequence — one id created,
+  a cast of 186, its completion, a remove, a re-create under the same id and a second 186
+  1 s later: pooled, `gaps_of` reads one body's 2.5 s cycle with a 1.0 s completion-to-next
+  against a 7 s recharge (the known-bad arm, the manufactured sub-recharge pair); split, no
+  pair (the route's acceptance (c)). §2 is `rechargeprobe`'s verdict over the live corpus
+  (declared a skip without the vault and the client tables): the floor holds (≥ 4 skills
+  with ≥ 5 completed pairs); the six spells 185/186/179/286/222/230 are completion-anchored
+  (min start-to-start at recharge + activation, min completion-to-next at the recharge);
+  the RE-STATED P2 holds (completion the majority anchor of the discriminating skills) and
+  P2 AS WRITTEN is recorded FAILED (229 start-like, four skills above both anchors — goes
+  red the day every skill lines up); 229 (Lightning Orb) is the named divergence — a
+  sub-recharge completion-to-next gap (one clear at ~3.25 s), consistent with a staff HSR
+  proc or a start-anchor for that skill alone, OBSERVED and not fitted away; the split drops
+  the pairs that cross a re-create (227 split vs 233 pooled — a `gaps_of` that ignores
+  `split` reddens this; the first cut compared `recycled_creates` across the arms, which
+  the split does not touch, and stayed green under that mutation); P3 AS WRITTEN is
+  recorded FAILED (229's two gaps survive the split and the pooled arm shows exactly the
+  same two — the arms do not differ, so 229 is not a recycled-id artifact); the six stay
+  completion-anchored with the ids pooled too; every connection's build has a table in the
+  vault, over ≥ 2 builds. 19 checks, floor 10 (the sender's 8 + the synthetic split's 2; 15 /
+  8 before the fix pass). Read-only on the vault),
   `toolkit/authsrv/test_adrenreplay.py` (**2026-09-22, DESKWORK-D5 step 6 — the per-bar
   adrenaline simulation animref §19 asked for, scored press by press against retail's
   accept / refuse.** `adrenreplay.py` replays the client's own slot rules (skills §26.2:

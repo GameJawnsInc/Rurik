@@ -18,9 +18,12 @@ agent other than the connection's own player, grouped per (connection, caster
 INCARNATION, skill); the GAPS between consecutive announcements of one group. The table
 gives activation and recharge for that skill ON THE CONNECTION'S OWN BUILD (the client's
 VERSION frame names it; the vault's exe of that build supplies the row through
-`clientscan/skilltable.py` -- 47 recharges moved between 38797 and 38888, so the pinned
-bulk table is not enough). A body that re-casts the moment it may shows the anchor as the
-group's MINIMUM gap:
+`clientscan/skilltable.py` -- over the 3,443 ids the 38797 and 38888 tables share, 49
+recharges and 11 activations differ, so the pinned bulk table is not enough in general.
+None of the seven discriminating skills below moves on any of the five vault builds, so
+here the per-build read is hygiene, not a result; the first cut wrote "47", uncounted --
+fix pass, D5B-R9). A body that re-casts the moment it may shows the anchor as the group's
+MINIMUM gap:
 
     recharge from the START       ->  min gap ~ recharge
     recharge from the COMPLETION  ->  min gap ~ recharge + activation
@@ -42,10 +45,35 @@ THE PREDICTIONS, stated before the numbers (the survey's: DESKWORK-D5 step 4):
       (so the two anchors are separable), the minimum gap sits within TOL of
       recharge + activation and NOT within TOL of recharge alone. The survey: 8 of 9
       skills on recharge + activation (186 8.51, 179 8.00, 230 6.00, 222 5.99).
+      AS WRITTEN, FAILED (fix pass 2026-09-23, D5B-R4 / ENG-6 -- the first cut scored
+      a "majority" rule that no prediction named and did not say so): of the 11 skills
+      at the floor, 229 sits at recharge start-to-start and at recharge - activation
+      completion-to-next (START-like), and 160 / 197 / 220 / 1097 sit ABOVE both
+      anchors -- the AI's own wait, which the minimum cannot see past. RE-STATED, not
+      fitted: over the DISCRIMINATING skills (at the floor, separable, on one anchor
+      or the other), completion is the anchor when it is the clear majority (at least
+      FLOOR_SKILLS of them and more than twice the start-anchored). Both verdicts
+      are printed; `p2_as_written` is the registered one. Four of the six
+      completion-anchored skills (179, 185, 186, 286) come from ONE capture
+      (20260817T231139); 222 and 230 from two others each.
   P3  THE SPLIT WORKS: with recycled ids pooled, at least one gap is SHORTER than the
       skill's recharge; with the split, none is (a sub-recharge gap after the split
       would refute the table, the split or the announcement's meaning, and is named).
       The survey's suspect: skill 229's 5.25 against 7.0.
+      AS WRITTEN, FAILED (fix pass, D5B-R3 / ENG-2 -- the first cut's log said "the
+      split works"): the split half FAILS -- 229's two sub-recharge gaps survive the
+      split -- and the pooled half holds only TRIVIALLY, on those same two: both arms
+      give {229: [4.497, 3.251]}, so the arms do NOT DIFFER on sub-recharge gaps,
+      which is what P3 required; they differ by six pairs (160: 56 -> 60, 222: 10 ->
+      12) and no minimum moves. Both 229 casters were created ONCE (agent 85 on
+      20260917T090355, agent 117 on 20260917T224104), so the survey's recycled-id
+      explanation of 229 is REFUTED: its short gaps are real, on singly-created
+      bodies (the named divergence). On THIS corpus the split is not load-bearing;
+      that it works at all is shown on a SYNTHETIC re-created id in test_recharge
+      (one id, a cast, a remove, a re-create, the same skill 1 s later: pooled reads a
+      sub-recharge pair, split reads none), the route's acceptance (c).
+      `p3_as_written` is printed per arm: FALSE on the split arm, TRUE (trivially) on
+      the pooled one -- the same set on both is the failure.
   P4  THE BUILD: every connection's build is read from the client's own VERSION frame;
       a connection whose build has no exe in the vault is EXCLUDED and counted, never
       scored against another build's table.
@@ -102,7 +130,11 @@ def gaps_of(seq, player, split=True):
     incarnation: {"gap": B - A (start to start), "done": B - the caster's first
     [58, caster, 0] after A (completion to the next start), or None when no 58
     came before B -- that first cast was cancelled or interrupted ([59] counted
-    in "stopped") and STARTED NO RECHARGE, so the pair is not a cycle}.
+    in "stopped"), so the pair is NOT A CYCLE and is set aside. Whether such a
+    cast started a recharge is UNVERIFIED (fix pass, D5B-R11): all 11 uncompleted
+    pairs' next-cast gaps are 7.00 s or more, which cannot separate "no recharge
+    started" from "started"; the player's interrupted cast DOES recharge
+    (castmech 4), a body's is on no tape}.
 
     With `split`, the caster key is (agent, incarnation) where the incarnation
     counts the agent's 0x0020 creates so far; a pair never crosses one.
@@ -334,14 +366,20 @@ def score(c):
                      for k, v in on_start.items()},
         "neither": {k: (v["min"], v["min_done"], v["recharge"], v["activation"], v["n"])
                     for k, v in neither.items()},
-        # THE VERDICT, stated as it is rather than as a single boolean: the
-        # discriminating skills (separable, at the floor, not AI-wait-bound)
-        # split into completion-anchored and start-anchored. COMPLETION is the
-        # anchor when it is the clear majority of the discriminating skills.
+        # P2 AS REGISTERED: every separable skill at the floor on completion and
+        # none on start or above both. FALSE on this corpus (229 start-like, four
+        # AI-wait-bound) -- printed beside the re-statement, never in its place.
+        "p2_as_written": bool(separable) and len(on_completion) == len(separable),
+        # THE RE-STATEMENT (docstring P2): the discriminating skills (separable,
+        # at the floor, not AI-wait-bound) split into completion-anchored and
+        # start-anchored. COMPLETION is the anchor when it is the clear majority.
         "discriminating": sorted(set(on_completion) | set(on_start)),
         "p2_completion_majority": (len(on_completion) >= FLOOR_SKILLS
                                    and len(on_completion) > 2 * len(on_start)),
         "sub_recharge": sub_recharge,
+        # P3 AS REGISTERED, per arm: the split arm shows NO sub-recharge gap; the
+        # pooled arm shows SOME. FALSE on both arms of this corpus (229's two).
+        "p3_as_written": (not sub_recharge) if c["split"] else bool(sub_recharge),
         "per_skill": ps,
     }
 
@@ -374,11 +412,15 @@ def main():
     print(f"   COMPLETION-anchored {sc['on_completion']}")
     print(f"   START-anchored {sc['on_start']}")
     print(f"   neither (the AI's wait above both) {sc['neither']}")
-    print(f"   -> COMPLETION is the majority anchor of the discriminating skills "
+    print(f"   P2 AS WRITTEN (every separable skill at the floor completion-anchored): "
+          f"{'HOLDS' if sc['p2_as_written'] else 'FAILS'} ({len(sc['on_completion'])} of "
+          f"{len(sc['separable'])})")
+    print(f"   -> RE-STATED: COMPLETION is the majority anchor of the discriminating skills "
           f"{sc['discriminating']}: {'HOLDS' if sc['p2_completion_majority'] else 'FAILS'} "
           f"({len(sc['on_completion'])} completion vs {len(sc['on_start'])} start)")
     print(f"P3 completion-to-next gaps SHORTER than the recharge: {sc['sub_recharge'] or 'none'}"
-          + ("  (split ON: predicted none)" if sc["split"] else "  (split OFF: predicted some)"))
+          + ("  (split ON: predicted none)" if sc["split"] else "  (split OFF: predicted some)")
+          + f" -> P3 AS WRITTEN {'HOLDS' if sc['p3_as_written'] else 'FAILS'} on this arm")
     print("per skill (over completed pairs; table activation + recharge on the builds):")
     for k, v in sorted(sc["per_skill"].items(), key=lambda kv: -kv[1]["n"]):
         if v["n"] == 0:

@@ -2779,6 +2779,9 @@ different channel.
   it off) but there is no bar and no selection.
 - **No energy, no interrupt, no aftercast.** The table carries `energy`,
   `aftercast` and `adrenaline` for every skill and none of them are read.
+  **(2026-09-23: the interrupt half fell — DESKWORK-D5 step 2, `authsrv.interrupt_player`
+  / `interrupt_body`, castmech §4; and the NPC recharge anchor moved to the cast's
+  completion, step 4, `rechargeprobe.py`.)**
 - **The effect is damage and nothing else.** Skill 276's real effect is not
   modelled; it deals a flat fraction like a harder swing.
 

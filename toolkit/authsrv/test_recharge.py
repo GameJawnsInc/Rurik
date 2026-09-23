@@ -13,9 +13,19 @@ activation + recharge`; `--no-npc-recharge-from-completion` is the start-anchore
   `ally_cast_tick` and reads `skill_ready[slot]` back -- the operand, not the
   predicate -- against both flag arms; a hostile with a two-slot bar so the arm is
   not the round-robin default. The known-bad arm is `--no-npc-recharge-from-completion`.
-  Section 2 (the corpus, declared a skip without the vault) is `rechargeprobe`'s own
-  verdict: the floor, the six completion-anchored skills, the 229 divergence named, the
-  re-create split, the build coverage.
+  It also proves the re-create SPLIT on a synthetic sequence (the route's acceptance
+  (c)): one id, a cast, a remove, a re-create, the same skill 1 s later -- pooled reads
+  a sub-recharge pair, split reads none. Section 2 (the corpus, declared a skip without
+  the vault) is `rechargeprobe`'s own verdict: the floor, the six completion-anchored
+  skills, the 229 divergence named, P2 and P3 AS WRITTEN recorded FAILED (the
+  re-statement is what the anchor rests on), the split changing the corpus's pair count
+  (and nothing else), the build coverage.
+
+THE FIX PASS (2026-09-23, D5B-R3 / ENG-2): the first cut's "the split is not a no-op"
+check compared `recycled_creates` across the two arms -- a counter the split does not
+touch -- and stayed green with the split disabled. Replaced by the synthetic sequence
+above and by the pair-count difference (227 split vs 233 pooled), either of which reddens
+when `gaps_of` ignores `split`.
 """
 import os
 import sys
@@ -33,16 +43,18 @@ import agents                                                  # noqa: E402
 import authsrv                                                 # noqa: E402
 import vaultpath                                               # noqa: E402
 
-# Floor from the green run of 2026-09-23: section 1 (the sender, 8). Section 2 is a
-# declared skip without the vault.
-LEDGER = checks.Ledger("NPC recharge from completion", floor=8)
+# Floor from the green run of 2026-09-23 (fix pass): section 1 (the sender, 8, plus
+# the synthetic split, 2 = 10). Section 2 is a declared skip without the vault.
+LEDGER = checks.Ledger("NPC recharge from completion", floor=10)
 check = checks.adopt(LEDGER)
 
 INT_T = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
 # Two spells so the arm is a real pick, not slot 0 by default; activation != recharge
-# and both > 0 so the two anchors are separable. (id, activation, recharge)
-SPELL_A = (185, 1.0, 5.0)     # Lightning Strike: completion anchor 6.0, start 5.0
-SPELL_B = (186, 1.5, 7.0)     # Lightning Surge
+# and both > 0 so the two anchors are separable. (id, activation, recharge) -- the
+# table rows of two corpus spells (185: 1.0 / 5, completion anchor 6.0, start 5.0;
+# 186: 1.5 / 7). Named by id only: the first cut's name comments were wrong (D5B-R7).
+SPELL_A = (185, 1.0, 5.0)
+SPELL_B = (186, 1.5, 7.0)
 
 
 def _hostile(bar):
@@ -164,6 +176,36 @@ def section_sender():
             check(False, "the party body started a cast (known-bad arm)", f"{got}")
     finally:
         authsrv.NPC_RECHARGE_FROM_COMPLETION = saved
+    # THE SPLIT ON A SYNTHETIC RE-CREATED ID (the route's acceptance (c); no vault):
+    # agent 7 is created, casts skill 186 (act 1.5 / rec 7), completes it, is removed,
+    # is re-created under the same id and casts 186 again 1 s after the first cast's
+    # completion. Pooled, that reads as one body's 2.5 s cycle against a 7 s recharge;
+    # split at the create, the two casts are two bodies and no pair exists.
+    import rechargeprobe
+    A0 = rechargeprobe.OP_INT_TARGET
+    A1 = rechargeprobe.OP_INT
+    seq = [(0, 10.0, rechargeprobe.OP_CREATE, [0x20, 7, 0, 0]),
+           (1, 12.0, A0, [0xA0, 60, 7, 1, 186]),          # cast 186 at the player (1)
+           (2, 13.5, A1, [0x9F, 58, 7, 0]),               # its completion
+           (3, 13.6, rechargeprobe.OP_REMOVE, [0x21, 7]),
+           (4, 14.0, rechargeprobe.OP_CREATE, [0x20, 7, 0, 0]),   # a NEW body, same id
+           (5, 14.5, A0, [0xA0, 60, 7, 1, 186]),          # 1.0 s after the completion
+           (6, 16.0, A1, [0x9F, 58, 7, 0])]
+    pooled, rec_p, n_p = rechargeprobe.gaps_of(seq, player=1, split=False)
+    split, rec_s, n_s = rechargeprobe.gaps_of(seq, player=1, split=True)
+    p_pairs = pooled.get((7, 186), [])
+    check(n_p == 2 and rec_p == 1 and len(p_pairs) == 1
+          and p_pairs[0]["done"] is not None and p_pairs[0]["done"] < 7.0 - rechargeprobe.TOL
+          and abs(p_pairs[0]["gap"] - 2.5) < 1e-6,
+          "KNOWN-BAD ARM (pooled): a re-created id's two casts read as ONE body's 2.5 s "
+          "cycle -- a completion-to-next gap of 1.0 s against a 7 s recharge, the "
+          "sub-recharge pair a recycled id manufactures",
+          f"pairs {p_pairs}, recycled {rec_p}, announcements {n_p}")
+    check(n_s == 2 and rec_s == 1 and split.get((7, 186), []) == [],
+          "the SPLIT at the create: the two casts are two bodies, no pair -- the "
+          "manufactured gap is gone (the split works; on the live corpus it moves six "
+          "pairs and no minimum, and 229's short gaps are on singly-created bodies)",
+          f"pairs {split.get((7, 186))}, recycled {rec_s}, announcements {n_s}")
 
 
 def section_corpus():
@@ -188,22 +230,39 @@ def section_corpus():
           "the recharge",
           f"completion-anchored: {sorted(on_comp)}")
     check(sc["p2_completion_majority"],
-          "COMPLETION is the majority anchor of the discriminating skills",
+          "RE-STATED P2: COMPLETION is the majority anchor of the discriminating skills",
           f"{len(sc['on_completion'])} completion vs {len(sc['on_start'])} start "
           f"({sc['discriminating']})")
+    check(sc["p2_as_written"] is False and len(sc["neither"]) >= 1,
+          "P2 AS WRITTEN is recorded FAILED on this corpus (229 start-like, four skills "
+          "above both anchors) -- the verdict rests on the disclosed re-statement, not on "
+          "the registered wording (goes red the day every skill lines up, which would "
+          "retire the re-statement)",
+          f"p2_as_written {sc['p2_as_written']}, neither {sorted(sc['neither'])}")
     check(229 in {int(str(k).split("@")[0]) for k in sc["on_start"]}
           and 229 in {int(k) for k in sc["sub_recharge"]},
           "229 (Lightning Orb) is the named divergence: it shows a sub-recharge "
           "completion-to-next gap (one clear at ~3.25 s), consistent with a staff HSR proc "
           "or a start-anchor for that skill alone -- OBSERVED, small n, not fitted away",
           f"on_start {sorted(sc['on_start'])}, sub_recharge {sc['sub_recharge']}")
-    # the re-create split: pooling recycled ids does not manufacture a start-to-start
-    # gap that the split removes below the recharge for any of the six.
+    # THE RE-CREATE SPLIT ON THE CORPUS (fix pass): the split CHANGES the pair count
+    # (it drops the pairs that cross a create -- 227 split vs 233 pooled) and nothing
+    # else -- P3 as written FAILED on both arms: both read 229's two sub-recharge gaps,
+    # so the survey's recycled-id explanation of 229 is refuted, and the six's anchor
+    # is not an artifact of the split. `gaps_of` ignoring `split` reddens the first.
     pooled = rechargeprobe.score(rechargeprobe.census(split=False))
-    check(sc["recycled_creates"] > 0 and pooled["recycled_creates"] == sc["recycled_creates"],
-          "the corpus recycles agent ids (the split is not a no-op), and the count is the "
-          "same whether or not the keys are split",
-          f"recycled creates {sc['recycled_creates']}")
+    check(sc["recycled_creates"] > 0 and pooled["pairs"] > sc["pairs"],
+          "the split drops the pairs that cross a re-create: fewer completed pairs split "
+          "than pooled (the corpus recycles ids; a `gaps_of` that ignores `split` reddens this)",
+          f"pairs split {sc['pairs']} vs pooled {pooled['pairs']}, recycled creates "
+          f"{sc['recycled_creates']}")
+    check(sc["p3_as_written"] is False
+          and sc["sub_recharge"] == pooled["sub_recharge"] and set(sc["sub_recharge"]) == {229},
+          "P3 AS WRITTEN is recorded FAILED: 229's two sub-recharge gaps survive the split "
+          "(its half fails) and the pooled arm shows exactly the same two, so the arms do not "
+          "DIFFER as P3 required -- 229's are on singly-created bodies, not recycled ids (the "
+          "survey's explanation of 229 refuted)",
+          f"split {sc['sub_recharge']} pooled {pooled['sub_recharge']}")
     check(six <= {int(str(k).split("@")[0]) for k in pooled["on_completion"]},
           "the six stay completion-anchored with recycled ids pooled too -- their anchor "
           "is not an artifact of the split",

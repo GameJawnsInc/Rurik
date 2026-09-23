@@ -4904,23 +4904,29 @@ INTERRUPTS = True
 # every `0x00A0 [60, caster, target, skill]` per (connection, caster INCARNATION,
 # skill) -- split at each `0x0020` create so a recycled id cannot manufacture a short
 # gap -- against the table on the connection's OWN build (read from the vault's exe;
-# 47 recharges moved 38797 -> 38888). The tightest-binding gaps -- when the AI re-cast
-# as fast as it could -- OBSERVED: SIX spells re-cast at recharge + activation from the
-# start (185 6.24/5.25, 186 8.51/7.00, 179 8.00/6.98, 286 4.01/3.25, 222 5.99/4.99,
-# 230 6.00/5.00; start-to-start / completion-to-next against recharge + activation and
-# recharge), which is COMPLETION-anchored: the recharge runs from the cast end (the
-# `0x009F [58]`, at start + activation), not the start. Four more skills (160, 197,
-# 220, 1097) re-cast far above either anchor -- the AI's own wait, which the recharge
-# never gates. The lone exception is 229 (Lightning Orb): most of its pairs sit at
-# recharge + activation like the six, but 2 of 24 (on two bodies) re-cast a touch
-# before completion + recharge -- one clearly (3.25 s after a 5 s-recharge cast's
-# completion, 20260917T224104 t=406.517), consistent with a staff's 20 % HSR proc
-# (WEAPONS-W5b) or a start-anchor for that skill alone; OBSERVED, n small, left as a
-# named divergence rather than fitted. So the anchor is COMPLETION: arm skill_ready
-# at now + activation + recharge. Attack skills (activation 0 in the table; their
-# completion is the strike windup) are UNCHANGED by this -- no attack-skill recharge
-# cadence was measured. --no-npc-recharge-from-completion is the pre-2026-09-23 arm
-# (start + recharge), which casts ~20 % too fast for a 1 s / 5 s spell.
+# 49 of the 3,443 shared ids differ in recharge between 38797 and 38888, none of the
+# seven skills below). The tightest-binding gaps -- when the AI re-cast as fast as it
+# could -- OBSERVED: SIX spells re-cast at recharge + activation from the start (185
+# 6.24/5.25, 186 8.51/7.00, 179 8.00/6.98, 286 4.01/3.25, 222 5.99/4.99, 230
+# 6.00/5.00; start-to-start / completion-to-next against recharge + activation and
+# recharge; four of the six from one capture, 20260817T231139), which is
+# COMPLETION-anchored: the recharge runs from the cast end (the `0x009F [58]`, at
+# start + activation), not the start. Four more skills (160, 197, 220, 1097) re-cast
+# far above either anchor -- the AI's own wait, which the recharge never gates. The
+# lone exception is 229 (Lightning Orb): most of its pairs sit at recharge +
+# activation like the six, but 2 of 24 (on two singly-created bodies -- not recycled
+# ids) re-cast a touch before completion + recharge -- one clearly (3.25 s after a
+# 5 s-recharge cast's completion, 20260917T224104 t=406.517), consistent with a
+# staff's 20 % HSR proc (WEAPONS-W5b) or a start-anchor for that skill alone;
+# OBSERVED, n small, left as a named divergence rather than fitted. So the probe's P2
+# AS WRITTEN ("every separable skill") FAILED and the verdict is its disclosed
+# re-statement: completion is the anchor of 6 of the 7 discriminating skills. Arm
+# skill_ready at now + activation + recharge. An attack skill with a table activation
+# of 0 (its completion is the strike windup) is UNCHANGED by this; one carrying a
+# listed activation gets it added, as its cast_lands_at does -- no attack-skill
+# recharge cadence was measured. --no-npc-recharge-from-completion is the
+# pre-2026-09-23 arm (start + recharge), which casts ~20 % too fast for a 1 s / 5 s
+# spell.
 NPC_RECHARGE_FROM_COMPLETION = True
 
 
@@ -22207,8 +22213,10 @@ def enemy_attack_tick(send, state, conn_id):
                     agent_adrenaline(agent).use(skill_id)
                 agent_energy(agent).spend(_cost)
             # DESKWORK-D5 step 4: the recharge runs from the cast's COMPLETION
-            # (start + activation), not its start -- armed here at the start so
-            # an interrupted or aborted cast still holds the slot on recharge.
+            # (start + activation), not its start -- armed here at the start, so
+            # an interrupted or aborted cast still holds the slot on recharge:
+            # RECONSTRUCTION (no NPC's interrupted cast is on tape; the player's
+            # does recharge, castmech 4; interrupt_body re-arms the slot itself).
             agent["skill_ready"][slot] = now + recharge + npc_recharge_anchor(activation)
             agent["last_slot"] = slot          # the round-robin cursor
             agent["casting"] = slot
@@ -35566,7 +35574,7 @@ def main():
         print("NPC RECHARGE FROM START: an NPC's per-slot recharge is armed at "
               "the cast's start, not its completion, as this server did until "
               "2026-09-23 (retail: recharge + activation, rechargeprobe.py -- a "
-              "hostile casts ~20%% too fast for a 1 s / 5 s spell with this flag).",
+              "hostile casts ~20% too fast for a 1 s / 5 s spell with this flag).",
               flush=True)
 
     if a.player_max_always:
