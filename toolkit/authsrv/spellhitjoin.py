@@ -46,6 +46,7 @@ Standard library only; reads the vault through `vaultpath`; refuses a tape
 that does not frame whole (`deepwoundjoin.sequence`).
 """
 import argparse
+import bisect
 import collections
 import json
 import os
@@ -56,9 +57,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 
+import adrenjoin        # noqa: E402
 import bufflog          # noqa: E402
 import deepwoundjoin    # noqa: E402
 import healjoin         # noqa: E402
+import livewire         # noqa: E402
 import tape             # noqa: E402
 import vaultpath        # noqa: E402
 
@@ -139,16 +142,76 @@ def events(seq):
     return rows
 
 
-def player_of(seq):
-    """The connection's own agent: the first 0x00E3 (the player's cast ack)."""
-    for _i, _t, op, v in seq:
-        if op == OP_SKILL_ACTIVATED:
-            return v[1]
-    return None
+# WHOSE CONNECTION IT IS (2026-09-23). This used to be "the agent of the FIRST
+# 0x00E3", and on the one tape with a hero (20260914T005758, conn 56011) that
+# ack is the HERO's: agent 30 (a kind-9 create) holds 48 of the 54 -- 346, 322,
+# 382, 348, 385, one 2 -- and the player, agent 29 (the kind-5 create, whose acks
+# answer all 18 c2s presses: 392, 394, 433, 446, 455), holds 6. On 69 more connections the
+# player never cast, so there was no 0x00E3 and the old rule named NOBODY while
+# property 41 named the observer. Every consumer's "own" split was scored on that
+# (studies/skills 43.8). The observer is now `adrenjoin.whose_agent` -- property
+# 41, self-scoped, with the JARIN kind-5 tie-break -- cross-checked against the
+# agent whose 0x00E3 / 0x00E2 answers the connection's own c2s presses; the two
+# disagreeing is REFUSED (no player named), never settled by picking one.
+# `shoutjoin.observer_of` (branch desk-d5c) is the same rule on a merged stream.
+OP_SKILL_RELEASED = 0x00E2
+OP_CMSG_PRESS = (0x0027, 0x0046)   # c2s: attack-skill and cast presses
+PRESS_ANSWER_S = 0.3       # s; the observer's E3 / E2 answering its own press
 
 
-def census(codec=None):
-    """Every live capture, every game connection that frames whole."""
+def c2s_of(cap_dir, conn_file):
+    """[(t, opcode)] of the client's own requests, on the capture clock, or []."""
+    _conn, events, err = livewire.build_events(cap_dir, conn_file, "c2s")
+    if err is not None or not events:
+        return []
+    msgs, _receipt = tape.decode_all(events, livewire._get_codec(),
+                                     channel="GAME_CMSG", mask=livewire.CMSG_MASK,
+                                     strict=False)
+    return [(t, op) for t, op, _v in msgs]
+
+
+def observer_of(seq, c2s=()):
+    """(player, press_agent, why): the connection's own agent by two rules.
+
+    Property 41 (`adrenjoin.whose_agent`, NO fallback) and the landslide vote of
+    the agent whose `0x00E3` / `0x00E2` is the next answer inside PRESS_ANSWER_S
+    after each c2s press in `c2s` ([(t, opcode)] on `seq`'s clock, `c2s_of`).
+    Both, when both answer, must agree; `why` is None when a player is named and
+    says which case it is when not ("no observer: ..." -- neither rule answers;
+    "observer rules disagree: ..." -- the REFUSAL). A press answered later than
+    the window casts no vote (a walk into range first); it does not refute.
+    """
+    s2c = [(t, op, v) for _i, t, op, v in seq]
+    by_41 = adrenjoin.whose_agent(s2c)
+    answers = [(t, int(v[1])) for t, op, v in s2c
+               if op in (OP_SKILL_ACTIVATED, OP_SKILL_RELEASED) and len(v) > 1]
+    times = [t for t, _a in answers]
+    votes = collections.Counter()
+    for t, op in c2s:
+        if op not in OP_CMSG_PRESS:
+            continue
+        i = bisect.bisect_left(times, t)
+        if i < len(answers) and answers[i][0] - t <= PRESS_ANSWER_S:
+            votes[answers[i][1]] += 1
+    by_press = votes.most_common(1)[0][0] if votes else None
+    if by_41 is None and by_press is None:
+        return None, None, "no observer: no property 41 and no answered press"
+    if by_41 is not None and by_press is not None and by_41 != by_press:
+        return None, by_press, (f"observer rules disagree: property 41 says {by_41}, "
+                                f"the answered presses say {by_press} ({dict(votes)})")
+    return (by_41 if by_41 is not None else by_press), by_press, None
+
+
+def player_of(seq, c2s=()):
+    """The connection's own agent, or None when `observer_of` names nobody."""
+    return observer_of(seq, c2s)[0]
+
+
+def census(codec=None, unnamed=None):
+    """Every live capture, every game connection that frames whole. A
+    connection whose player `observer_of` cannot name keeps its rows (player
+    None) and, when `unnamed` is a list, is appended to it as (capture,
+    connection, why)."""
     codec = codec or bufflog.Codec()
     live = vaultpath.require_dir("captures", "live",
                                  why="spellhitjoin reads live captures")
@@ -162,7 +225,9 @@ def census(codec=None):
                 seq = deepwoundjoin.sequence(cap_dir, ch["connection"], codec)
             except (bufflog.BuffLogError, tape.TapeError):
                 continue
-            player = player_of(seq)
+            player, _press, why = observer_of(seq, c2s_of(cap_dir, ch["file"]))
+            if player is None and unnamed is not None:
+                unnamed.append((stamp, ch["connection"], why))
             for row in events(seq):
                 row.update(capture=stamp, connection=ch["connection"],
                            player=player)
@@ -295,11 +360,17 @@ def main():
     ap.add_argument("--pairs", action="store_true",
                     help="print every (caster, skill, target) pair's values")
     args = ap.parse_args()
-    rows = census()
+    unnamed = []
+    rows = census(unnamed=unnamed)
     sc = score(rows)
     if args.json:
-        print(json.dumps({"score": sc, "rows": rows}, indent=1))
+        print(json.dumps({"score": sc, "rows": rows, "unnamed": unnamed}, indent=1))
         return
+    refused = [u for u in unnamed if u[2].startswith("observer rules disagree")]
+    print(f"connections whose player is named by nobody: {len(unnamed) - len(refused)}; "
+          f"REFUSED (property 41 and the answered presses disagree): {len(refused)}")
+    for stamp, conn, why in refused:
+        print(f"   {stamp} {conn}: {why}")
     print(f"cast damage events {sc['n_cast']}: announced by a property-60 "
           f"inside {ANNOUNCE_WINDOW:.0f} s {sc['announced']} (P1); DoT ticks "
           f"set aside {sc['ticks_set_aside']}")

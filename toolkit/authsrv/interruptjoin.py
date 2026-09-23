@@ -90,7 +90,6 @@ if PARENT not in sys.path:
 import bufflog          # noqa: E402
 import deepwoundjoin    # noqa: E402
 import healjoin         # noqa: E402
-import livewire         # noqa: E402
 import spellhitjoin     # noqa: E402
 import tape             # noqa: E402
 import vaultpath        # noqa: E402
@@ -127,17 +126,6 @@ WITNESSES = (("20260916T213125", "57894", 484.333, "cast"),
 
 def _f32(bits):
     return struct.unpack("<f", struct.pack("<I", bits & 0xFFFFFFFF))[0]
-
-
-def _c2s(cap_dir, conn_file):
-    """[(t, opcode)] of the client's own requests, on the capture clock, or []."""
-    _conn, events, err = livewire.build_events(cap_dir, conn_file, "c2s")
-    if err is not None or not events:
-        return []
-    msgs, _receipt = tape.decode_all(events, livewire._get_codec(),
-                                     channel="GAME_CMSG", mask=livewire.CMSG_MASK,
-                                     strict=False)
-    return [(t, op) for t, op, _v in msgs]
 
 
 def rows_of(seq, player, c2s=()):
@@ -266,7 +254,7 @@ def census(codec=None):
     live = vaultpath.require_dir("captures", "live",
                                  why="interruptjoin reads live captures")
     out = {"stops": [], "thirty_fives": [], "connections": 0, "refused": [],
-           "p10": 0, "p63": 0}
+           "unnamed": [], "p10": 0, "p63": 0}
     for stamp in sorted(os.listdir(live)):
         cap_dir = os.path.join(live, stamp)
         if not os.path.isdir(cap_dir):
@@ -278,12 +266,19 @@ def census(codec=None):
                 out["refused"].append((stamp, ch["connection"], str(exc)[:80]))
                 continue
             out["connections"] += 1
-            player = spellhitjoin.player_of(seq)
+            # The observer by property 41, cross-checked against the answered
+            # presses (spellhitjoin.observer_of). The first-0x00E3 rule this
+            # replaced named the HERO on 20260914T005758 conn 56011 and nobody
+            # on 69 connections; the own / other split moved (skills 43.8).
+            c2s = spellhitjoin.c2s_of(cap_dir, ch["file"])
+            player, _press, why = spellhitjoin.observer_of(seq, c2s)
+            if player is None:
+                out["unnamed"].append((stamp, ch["connection"], why))
             out["p10"] += sum(1 for _i, _t, op, v in seq
                               if op == OP_INT and len(v) > 3 and v[1] == PROP_SKILL_DAMAGE)
             out["p63"] += sum(1 for _i, _t, op, v in seq
                               if op == OP_FLOAT and len(v) > 3 and v[1] == PROP_KNOCKED_DOWN)
-            stops, tfs = rows_of(seq, player, _c2s(cap_dir, ch["file"]))
+            stops, tfs = rows_of(seq, player, c2s)
             port = ch["connection"].split("->")[0].rsplit(":", 1)[-1]
             for r in stops + tfs:
                 r.update(capture=stamp, connection=ch["connection"], port=port,
@@ -311,6 +306,11 @@ def score(c):
     return {
         "connections": c["connections"],
         "refused": len(c["refused"]),
+        # A connection whose observer nobody names keeps its stops (the
+        # denominators are corpus-wide); a DISAGREEMENT is the refusal.
+        "unnamed": len(c.get("unnamed", ())),
+        "observer_refused": sum(1 for u in c.get("unnamed", ())
+                                if u[2].startswith("observer rules disagree")),
         "n59": by_prop.get(PROP_SKILL_STOPPED, 0),
         "n49": by_prop.get(PROP_ATTACK_SKILL_STOPPED, 0),
         "n3": by_prop.get(PROP_ATTACK_STOPPED, 0),
@@ -389,7 +389,9 @@ def main():
         print(json.dumps({"score": sc, "stops": c["stops"],
                           "thirty_fives": c["thirty_fives"]}, indent=1, default=str))
         return
-    print(f"connections framed whole {sc['connections']} (refused {sc['refused']})")
+    print(f"connections framed whole {sc['connections']} (refused {sc['refused']}); "
+          f"observer named by nobody on {sc['unnamed']}, REFUSED (property 41 and the "
+          f"answered presses disagree) on {sc['observer_refused']}")
     print(f"P1 denominators: [59] {sc['n59']} (expect {EXPECT_59}), [49] {sc['n49']} "
           f"(expect {EXPECT_49}), [3] {sc['n3']}, [35] {sc['n35']} (expect {EXPECT_35}), "
           f"[63] {sc['n63']}, [10] {sc['n10']} -> {'HOLDS' if sc['p1'] else 'FAILS'}")

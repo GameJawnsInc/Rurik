@@ -259,7 +259,19 @@ def census(codec=None, split=True):
                 continue
             builds[build] += 1
             table = table_for(build, exe_by_build)
-            player = spellhitjoin.player_of(seq)
+            # "Other agents" needs the observer: property 41, cross-checked against
+            # the answered presses (spellhitjoin.observer_of). The first-0x00E3 rule
+            # took the JARIN HERO for the player (20260914T005758 conn 56011) and so
+            # left the hero's one announcement out: 346 -> 347, no pair moves
+            # (skills 43.8). Where the two rules DISAGREE the connection is excluded
+            # -- its other agents are undefined. Where neither answers (the corpus's
+            # one: 20260807T133758 conn 54560, 88 messages, no announcement) nothing
+            # is excluded, as before.
+            player, _press, why = spellhitjoin.observer_of(
+                seq, spellhitjoin.c2s_of(cap_dir, ch["file"]))
+            if why is not None and why.startswith("observer rules disagree"):
+                excluded.append((stamp, ch["connection"], "observer-refused", why[:60]))
+                continue
             gaps, recycled, n_ann = gaps_of(seq, player, split=split)
             recycled_total += recycled
             n_ann_total += n_ann

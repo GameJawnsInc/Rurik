@@ -47,7 +47,7 @@ import effects  # noqa: E402
 # a short run means a section stopped rather than passed.
 # SKILLS-HN +4 (44), SKILLS-FA +13 (57: 7 model + 6 corpus), each from its
 # green run. Section 12 needs the live corpus and declares a skip without it.
-LEDGER = checks.Ledger("skill damage", floor=68)  # 2026-09-23 SKILLS-LT +1 (sec.3: Hamstring inflicts through the bonus slot); 2026-09-17 SKILLS-LR +4 (the location roll: three unit, one corpus); 2026-09-16 RUN-SKILLS-RB +2 (section 13, the converted word); 2026-09-16 SLICE-F47 +1 (the penalty split in whole points); 2026-09-14 HEAL-INT +1, ZEROWORD +1;   # MANTID-S +1: the player-side control beside the foe-side refusal
+LEDGER = checks.Ledger("skill damage", floor=74)  # 2026-09-23 SKILLS-OB +6 (sec.11b: whose connection it is, four bare; sec.12: the JARIN player, the pair onto it); 2026-09-23 SKILLS-LT +1 (sec.3: Hamstring inflicts through the bonus slot); 2026-09-17 SKILLS-LR +4 (the location roll: three unit, one corpus); 2026-09-16 RUN-SKILLS-RB +2 (section 13, the converted word); 2026-09-16 SLICE-F47 +1 (the penalty split in whole points); 2026-09-14 HEAL-INT +1, ZEROWORD +1;   # MANTID-S +1: the player-side control beside the foe-side refusal
 check = LEDGER.ok
 
 
@@ -578,18 +578,84 @@ def main():
           "term ON",
           f"sent {dmg} -- armour-ignoring by type, untouched by this default")
 
+    print("\n11b. whose connection it is: spellhitjoin.observer_of (bare "
+          "machine, studies/skills 43.8)")
+    # The JARIN hero tape's shape (20260914T005758 conn 56011): the player 29
+    # is the kind-5 create, the hero 30 the kind-9 one, both get property 41,
+    # and the hero's 0x00E3 comes FIRST. The first-0x00E3 rule named 30; every
+    # consumer's "own" split (interruptjoin, missjoin, rechargeprobe, this
+    # file's section 12) was scored on it.
+    import spellhitjoin
+    E3, E2, P9F = 0x00E3, 0x00E2, 0x009F
+    jarin = [(0, 1.0, 0x0020, [0x20, 29, 0, 0, 5]),
+             (1, 1.1, 0x0020, [0x20, 30, 0, 0, 9]),
+             (2, 1.2, P9F, [P9F, 41, 29, 1]), (3, 1.3, P9F, [P9F, 41, 30, 1]),
+             (4, 2.0, E3, [E3, 30, 346, 0]),          # the hero's, first
+             (5, 3.03, E3, [E3, 29, 392, 0]),         # answers the press at 3.0
+             (6, 4.0, E3, [E3, 30, 322, 0]),
+             (7, 5.04, E2, [E2, 29, 394, 0])]         # answers the press at 5.0
+    presses = [(3.0, 0x0046), (5.0, 0x0027)]
+    first_e3 = next(v[1] for _i, _t, op, v in jarin if op == E3)
+    got = spellhitjoin.observer_of(jarin, presses)
+    check(first_e3 == 30 and got == (29, 29, None),
+          "the player of a hero tape is the property-41 agent with the kind-5 "
+          "create, and the agent answering the connection's own presses agrees "
+          "-- NOT the agent of the first 0x00E3, which is the hero's (the "
+          "known-bad arm, run on the same fixture)",
+          f"first 0x00E3's agent {first_e3}; observer_of -> {got}")
+    solo = [r for r in jarin if not (r[2] == P9F and r[3][2] == 30)]
+    swapped = [(i, t, op, [v[0], 30] + v[2:] if op in (E3, E2) and v[1] == 29
+                else ([v[0], 29] + v[2:] if op in (E3, E2) else v))
+               for i, t, op, v in solo]
+    got = spellhitjoin.observer_of(swapped, presses)
+    check(got[0] is None and got[1] == 30
+          and got[2].startswith("observer rules disagree")
+          and "29" in got[2] and "30" in got[2],
+          "the two rules DISAGREEING is refused -- no player named, the reason "
+          "names both answers -- never settled by picking one",
+          f"property 41 on 29 alone, the presses answered by 30: {got}")
+    no41 = [r for r in jarin if r[2] != P9F]
+    got_press = spellhitjoin.observer_of(no41, presses)
+    got_none = spellhitjoin.observer_of(no41, ())
+    check(got_press == (29, 29, None) and got_none[0] is None
+          and got_none[2].startswith("no observer")
+          and spellhitjoin.player_of(jarin) == 29,
+          "the fallbacks: no property 41 -> the answered presses name the "
+          "player; neither -> None, said so; property 41 alone (no c2s given) "
+          "still names the player on a hero tape",
+          f"no 41 + presses {got_press}; no 41, no presses {got_none}; "
+          f"player_of(jarin) {spellhitjoin.player_of(jarin)}")
+    late = [(i, t + (0.7 if op == E3 and v[1] == 29 else 0.0), op, v)
+            for i, t, op, v in jarin if not (op == E2)]
+    got = spellhitjoin.observer_of(late, presses)
+    check(got == (29, None, None),
+          f"an answer later than {spellhitjoin.PRESS_ANSWER_S} s casts no vote "
+          "(a press that walks into range first); it does not refute property 41",
+          f"the E3 0.73 s after its press: {got}")
+
     print("\n12. the corpus: one caster, one skill, one target is ONE value "
           "(spellhitjoin)")
     # P1-P4 in spellhitjoin's own words. A location roll on a set whose
     # pieces differ would put a second bucket on some pair; none has one.
     # FLOORS, not exact values -- the live corpus grows.
+    unnamed = []
     try:
-        import spellhitjoin
-        sc = spellhitjoin.score(spellhitjoin.census())
-    except Exception as exc:                              # noqa: BLE001
+        rows = spellhitjoin.census(unnamed=unnamed)
+        sc = spellhitjoin.score(rows)
+    except (Exception, SystemExit) as exc:                # noqa: BLE001  (require_dir exits)
         LEDGER.skip("12. the corpus (spellhitjoin)",
                     f"no live corpus to read on this machine: {exc!r}")
         return LEDGER.verdict()
+    hero_tape = {r["player"] for r in rows if r["capture"] == "20260914T005758"
+                 and r["connection"].split("->")[0].endswith(":56011")}
+    refused = [u for u in unnamed if u[2].startswith("observer rules disagree")]
+    check(hero_tape == {29} and not refused,
+          "the census names the JARIN tape's player 29 (the kind-5 create whose "
+          "acks answer every press), not the hero 30 whose ack comes first; no "
+          "connection in the corpus has its two rules disagreeing",
+          f"players on 20260914T005758 conn 56011: {hero_tape}; refused "
+          f"{refused}; named by nobody {len(unnamed)} (the corpus's one is a "
+          f"stub with no property 41 and no press)")
     check(sc["n_cast"] >= 100 and sc["announced"] >= 0.95 * sc["n_cast"],
           "P1 cast damage is announced by a property-60 from its cause",
           f"{sc['announced']} of {sc['n_cast']} inside 4 s (floor 100, 95%)")
@@ -642,6 +708,16 @@ def main():
           "(the JARIN penalty-split pair set aside by name)",
           f"{sc['onto_player']} -- the player is the one body whose armour "
           f"this server models")
+    # 2026-09-23 (skills 43.8): until the observer rule was corrected, the JARIN
+    # pair "onto the player" was the HERO's (54 -> 30, Frenzy's 26 and 51 at
+    # 122) and LAKESIDE's (48 -> 29) was on no player at all -- its connection
+    # has no 0x00E3. Both pass the check above, so it could not see the swap.
+    check("54 222 29" in sc["onto_player"] and "54 222 30" not in sc["onto_player"]
+          and "48 222 29" in sc["onto_player"],
+          "and the JARIN pair onto the connection's own player is the RANGER's "
+          "(54 -> 29), not the hero's (54 -> 30); LAKESIDE's 48 -> 29 is the "
+          "player's too",
+          f"{sorted(sc['onto_player'])}")
     check(sc["swing_pairs"] >= 5 and sc["swing_pairs_3plus"] == sc["swing_pairs"],
           "P3 CONTROL: every swing pair with >= 10 hits shows >= 3 values",
           f"{sc['swing_pairs_3plus']} of {sc['swing_pairs']} (min distinct "
@@ -658,7 +734,7 @@ def main():
     # One caster's projectile spell onto one target, in whole points. With
     # five equal pieces it is ONE bucket (P2's world); the RB2 tape took three
     # pieces off and the same Lightning Orb fills TWO, 2^(60/40) apart.
-    lb = spellhitjoin.location_buckets(spellhitjoin.census())
+    lb = spellhitjoin.location_buckets(rows)
     witnesses = []
     for k, pts in lb.items():
         vals = sorted(pts)

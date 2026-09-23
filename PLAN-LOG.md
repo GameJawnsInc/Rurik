@@ -28,6 +28,52 @@ move back.
 
 ---
 
+### SKILLS-OB -- 2026-09-23 -- **whose connection it is: `spellhitjoin.player_of` took the first `0x00E3`, named the JARIN HERO as the player and named NOBODY on 69 connections; four readers inherited it; the rule is property 41 cross-checked against the answered presses, a disagreement refused; the published own/other numbers re-derived**
+
+**Desk work, no client launched; nothing written to the vault.** [studies/skills/FINDINGS.md](studies/skills/FINDINGS.md)
+§43.8 is the record. `player_of` named the agent of the connection's FIRST `0x00E3`; on
+`20260914T005758` conn `56011` that is the hero (agent 30, kind-9 create, 48 of the 54 acks)
+while the player is 29 (the only kind-5 create, a property-41 agent, and the answer to all 18
+c2s presses). **Measured first, all 96 live connections:** the old rule agrees with property
+41 on 25, names a different agent on 1 (that one), names nobody on **69** where property 41
+names the observer (the player never cast), and both are silent on 1 (a stub). The press vote
+speaks on 19 connections and agrees with property 41 on 19 of 19; **no connection disagrees**.
+**Shipped** (`toolkit/authsrv/spellhitjoin.py`): `observer_of(seq, c2s)` = `adrenjoin.whose_agent`
+(property 41 + the JARIN kind-5 tie-break) cross-checked against the next `0x00E3` / `0x00E2`
+inside 0.3 s of each c2s `0x0027` / `0x0046` (`c2s_of`); disagreeing → no player, the reason
+counted by every reader; `player_of` delegates. `interruptjoin`, `missjoin`, `rechargeprobe`
+pass their c2s (`interruptjoin._c2s` folded into `spellhitjoin.c2s_of`); `rechargeprobe`
+excludes a refused connection. It is branch `desk-d5c`'s `shoutjoin.observer_of` (§56.8 there,
+unmerged) on a sequence instead of a merged stream.
+
+**Corrects** (every verdict is player-independent and holds; the counts move):
+(1) the **DESKWORK-D5 fix-pass** entry below, item (5): "209 of the 283 stops are addressed to
+agents OTHER than the observer (`[3]` 60 / 177, `[49]` 3 / 9, `[59]` 11 / 23 …) and of the
+observer's own 74 only 2 sit within 0.5 s of a c2s `0x0028`" → **198 of 283; `[3]` 72 / 165,
+`[49]` 3 / 9, `[59]` 10 / 24; of the observer's own 85, 3** (on `56011` the hero's three stops
+were the "observer's"; two more connections had no player); (2) the **DESKWORK-D5 step 4**
+entry: "346 other-agent announcements" → **347** (the hero's one, skill 2; no pair or minimum
+moves, the six completion-anchored spells stand); (3) skills §44.2's "the player's own 399
+swings all carried damage" → **865**, all with damage (P4 still unscorable there; noted in
+place). `missjoin` P4 on today's corpus: own misses 30 → 29, with a gain 2 → 1 — the withdrawn
+one is the hero's. `spellhitjoin`'s pairs onto the player: the hero's `54 222 30` out, the
+Ranger's `54 222 29` and LAKESIDE's `48 222 29` in; §43.3's published RA row (agent 11) is
+unchanged. castmech §4 / animref D5 ("both `[35]` at the observer") are unchanged — both
+witness connections name 25 under either rule.
+
+**Tests:** `test_skilldamage` §11b (new, bare machine, 4: the JARIN shape with the known-bad
+arm on the same fixture, the refusal, the fallbacks, the 0.3 s window) and §12 +2 (the census
+names 29 on `56011` and refuses nothing; the pair onto the player is `54 222 29`, never
+`54 222 30`), floor 68 → 74, 86 checks with the overlay; `test_interrupt` §2 +1 (the dated
+own/other split above; on `56011` a stop is the observer's exactly when it names 29), 39
+checks, floor 28 unchanged. **All seven red with `observer_of` swapped back to the old rule.**
+Green on this tree: `test_skilldamage` (86), `test_interrupt` (39), `test_mechanics` (246, §23
+reads `missjoin`), `test_recharge` (19). **Open:** when `desk-d5c` merges, the observer rule
+exists twice (`shoutjoin.observer_of` on a merged stream, `spellhitjoin.observer_of` on a
+sequence) — make one delegate to the other in that merge.
+
+---
+
 ### SKILLS-LT fix pass / DESKWORK-D4 step 4 -- 2026-09-23 -- **the label tier re-cut on review: 47 rows, not 59; nine refuted rows out, each refutation now a gate rule with a known-bad arm; 36 of 47 marked; `--no-skill-labels` wired and tested**
 
 Two reviewers read the first pass. The evidence refuter read all 59 shipped templates at run

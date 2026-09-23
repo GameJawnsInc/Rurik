@@ -187,7 +187,7 @@ def census(codec=None):
     codec = codec or bufflog.Codec()
     live = vaultpath.require_dir("captures", "live",
                                  why="missjoin reads live captures")
-    out = {"closes": [], "fails": []}
+    out = {"closes": [], "fails": [], "unnamed": []}
     for stamp in sorted(os.listdir(live)):
         cap_dir = os.path.join(live, stamp)
         if not os.path.isdir(cap_dir):
@@ -198,7 +198,14 @@ def census(codec=None):
                 windows = blind_windows(cap_dir, ch["connection"], codec)
             except (bufflog.BuffLogError, tape.TapeError):
                 continue
-            player = spellhitjoin.player_of(seq)
+            # The observer by property 41, cross-checked against the answered
+            # presses: the first-0x00E3 rule named the JARIN HERO on
+            # 20260914T005758 conn 56011 (its missed swing with a gain was "own")
+            # and nobody on 69 connections (skills 43.8, 44.2's 399 -> 865).
+            player, _press, why = spellhitjoin.observer_of(
+                seq, spellhitjoin.c2s_of(cap_dir, ch["file"]))
+            if player is None:
+                out["unnamed"].append((stamp, ch["connection"], why))
             for key, fn in (("closes", closes), ("fails", fails)):
                 for row in fn(seq, windows, player):
                     row.update(capture=stamp, connection=ch["connection"])
@@ -269,6 +276,9 @@ def score(c):
         "own_hit_gain": len(own_hit_gain),
         "own_miss": len(own_miss), "own_miss_gain": len(own_miss_gain),
         "p4": len(own_miss_gain) == 0 if own_miss else None,
+        "unnamed": len(c.get("unnamed", ())),
+        "observer_refused": sum(1 for u in c.get("unnamed", ())
+                                if u[2].startswith("observer rules disagree")),
         "fails": len(fail_rows),
         "fail_reasons": dict(collections.Counter(r["reason"] for r in fail_rows)),
         "fail_with_damage": sum(1 for r in fail_rows if r["damage"]),
@@ -313,7 +323,8 @@ def main():
                   f"{'self' if r['self'] else '    '} gain={r['gain']}  "
                   f"[{' '.join(r['siblings'])}]")
         print()
-    print(f"swing closes {s['closes']}  (own {s['own']})")
+    print(f"swing closes {s['closes']}  (own {s['own']}; observer named by nobody on "
+          f"{s['unnamed']} connections, REFUSED on {s['observer_refused']})")
     print(f"P1 unblinded: {s['plain_miss']} of {s['plain']} no-damage closes"
           f" = {s['p1_rate'] if s['p1_rate'] is None else round(s['p1_rate'], 4)}"
           f"  (< {BASELINE_CEILING})  -> {s['p1']}")
