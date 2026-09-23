@@ -706,13 +706,17 @@ def section_concurrency():
     # through land_body_spell_shot's), one level further down the same walk.
     # Section 40: a point-blank burst lands through `burst_player_spell`,
     # cast_tick's helper (a body's through `burst_body_spell`, land_skill's).
+    # SKILLS-LU (skills 56): the CASTER-centred area lands through
+    # `burst_player_caster_area`, cast_tick's helper -- the same tick site.
     check(callers == {"_land_player_swing", "cast_tick", "hit_enemy",
                       "dual_second_strike", "second_strike_tick",
                       "projectile_tick", "land_player_skill_shot",
                       "land_player_spell_shot", "land_player_spell_area",
-                      "burst_player_spell"}
+                      "burst_player_spell", "burst_player_caster_area"}
           and callers_of("land_player_skill_shot") == {"projectile_tick"}
           and callers_of("burst_player_spell") == {"cast_tick"}
+          and callers_of("burst_player_caster_area") == {"cast_tick"}
+          and callers_of("body_caster_area_condition") == {"land_skill"}
           and callers_of("burst_body_spell") == {"land_skill"}
           and callers_of("land_player_spell_area") == {"land_player_spell_shot"}
           and callers_of("land_body_spell_area") == {"land_body_spell_shot"}

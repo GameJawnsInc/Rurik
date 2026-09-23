@@ -13502,6 +13502,190 @@ def burst_body_spell(send, state, conn_id, who, sid, terms, amount, rank, inflic
                             conn_id, sid)
     print(f"[c{conn_id}] agent {who}'s skill {sid} bursts over {len(terms)} foe(s) "
           f"[studies/weapons 40]", flush=True)
+
+
+# ---- SKILLS-LU: THE CASTER-CENTRED AREA (2026-09-23, studies/skills 56; the
+# first of DESKWORK-D4's per-skill residue consumers) --------------------------
+#
+# `spell_burst` above centres on the TARGET -- the record's byte 16, "target
+# foe and the foes around it". The step-4 gate (skills 55.2) EXCLUDED every
+# at-cast damage or condition whose target byte is 0 with area wording --
+# "All adjacent foes are struck", "All nearby foes", "All foes in the area"
+# -- because the one-target path acts on the SELECTED agent at any range
+# while retail acts on the foes around the CASTER. This is that arm: the
+# record's byte 0 (SELF, the byte `cast_recipient` places on the caster), a
+# Spell, no projectile of its own, and the record's OWN `aoe_range` (156
+# adjacent, 240 nearby, 312 in the area -- the same field and the same three
+# values `spell_burst` and `skill_adjacent_damage` read; no new constant),
+# measured from the caster's position. Per foe inside: the word, then
+# [20, foe, caster, impact], then the condition -- burst_player_spell's shape
+# with the centre moved. A duration on the record (1113's 5 s of ticks, 840's
+# flat 10) is NOT modelled: one tick, at the cast, and the label row says so
+# (DURATION_UNMODELLED). RECONSTRUCTION: the live corpus holds no cast of a
+# byte-0 area Spell to read the shape from (skills 56.1).
+#
+# --no-caster-areas reverts -- and the revert is NOT the one-target path. A
+# byte-0 area row then lands on NOBODY, which is exactly what the gate's
+# exclusion did until today, because landing it on the selected target at
+# any range is the over-application the gate refused (`caster_area_row` is
+# the flag-free predicate; `caster_area` the flag-gated radius).
+CASTER_AREAS = True
+SELF_TARGET_BYTE = effects.SELF_TARGET     # 0: the record's byte for "the caster"
+
+
+def caster_area_row(skill_id):
+    """Is this skill's RECORD a caster-centred area: byte 0, a Spell, an
+    aoe_range, no projectile of its own? Flag-free -- what the revert must
+    still recognise, so it can refuse the one-target path."""
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return False
+    if int(row.get("target", -1)) != SELF_TARGET_BYTE \
+            or int(row.get("type_code", -1)) != SPELL_TYPE_CODE:
+        return False
+    if skill_projectile(skill_id) is not None:
+        return False
+    return float(row.get("aoe_range", 0.0) or 0.0) > 0.0
+
+
+def caster_area(skill_id):
+    """The radius a caster-centred Spell covers from the CASTER's position
+    (the record's `aoe_range`), or None: not such a record, or the flag."""
+    if not CASTER_AREAS or not caster_area_row(skill_id):
+        return None
+    row = agents.WORLD.get("skills", str(skill_id))
+    return float(row.get("aoe_range", 0.0) or 0.0)
+
+
+def burst_player_caster_area(send, state, conn_id, cast, found, inflicted, rank, radius):
+    """The player's caster-centred area at the E5: every hostile within
+    `radius` of the PLAYER's position takes the spell's standalone amount
+    (when the row has one) then its [20, foe, me, impact], then the skill's
+    condition (when it has one) -- burst_player_spell's per-foe shape with
+    the centre moved to the caster. Returns the foes reached."""
+    sid = cast["skill_id"]
+    foes = foes_within(state, PLAYER_AGENT_ID, target_pos(state, PLAYER_AGENT_ID), radius)
+    vis = skill_impact_visual(sid)
+    amount = float(found[0]) if found and found[1] == "standalone" else None
+    landed = 0
+    for foe in foes:
+        if amount is not None:
+            res = hit_enemy(send, state, foe, conn_id, exact=amount, swing=False,
+                            armed=True, label=f"skill {sid} bursts from the caster on agent {foe}")
+            if res != "landed":
+                continue
+            landed += 1
+        if vis is not None:
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+                 [agents.GV_EFFECT_ON_TARGET, foe, PLAYER_AGENT_ID, int(vis)],
+                 f"skill {sid}'s impact ({vis}) on agent {foe}")
+        victim = state.get("agents", {}).get(foe)
+        if victim is None or victim.get("dead"):
+            continue
+        if inflicted:
+            apply_condition(send, state, foe, inflicted[0], inflicted[1], rank,
+                            conn_id, sid)
+    print(f"[c{conn_id}] skill {sid} bursts over {len(foes)} foe(s) within {radius:.0f} u "
+          f"of the CASTER ({landed} landed{', condition on each' if inflicted else ''}) "
+          f"[SKILLS-LU]", flush=True)
+    return foes
+
+
+def body_caster_area_condition(send, state, conn_id, agent_id, skill_id, inflicted,
+                               rank, radius):
+    """A body's caster-centred CONDITION-only area (840's shape: no damage
+    number, a condition on every foe around the caster). Returns the foes."""
+    foes = foes_within(state, agent_id, target_pos(state, agent_id), radius)
+    vis = skill_impact_visual(skill_id)
+    for foe in foes:
+        if vis is not None:
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+                 [agents.GV_EFFECT_ON_TARGET, foe, agent_id, int(vis)],
+                 f"agent {agent_id}'s skill {skill_id}: its impact ({vis}) on "
+                 f"{target_label(state, foe)}")
+        if not target_dead(state, foe):
+            apply_condition(send, state, foe, inflicted[0], inflicted[1], rank,
+                            conn_id, skill_id)
+    print(f"[c{conn_id}] agent {agent_id}'s skill {skill_id} puts its condition on "
+          f"{len(foes)} foe(s) within {radius:.0f} u of the caster [SKILLS-LU]", flush=True)
+    return foes
+
+
+# ---- SKILLS-LU: THE CASTER-CENTRED PARTY HEAL (the second consumer) ----------
+#
+# The gate's HEAL_RECIPIENT_CLASS (skills 55.2) held back the byte-0 heals
+# whose text names a CLASS of recipients, because `cast_recipient` places a
+# byte-0 heal on the caster and nobody else. This arm heals the class: the
+# CASTER and every living ally of the caster (`allies_of`: the party for the
+# player or a party body, the same-allegiance others for a hostile) within
+# the record's own `aoe_range` of the caster -- 5000 u on both rows that
+# ship (287, 2221), the record's word for "the entire party". Which byte-0
+# class heals INCLUDE the caster is the gate's decision, made per row
+# against the template's own digest (skilldesc.CLASS_HEAL_READINGS): 1262
+# excludes the caster and 943 heals only the relieved, and neither ships.
+# RECONSTRUCTION: no party heal in the live corpus (skills 56.2).
+# --no-party-heals reverts to the caster alone -- a SUBSET of the right
+# recipients, never a wrong one, which is why this revert differs from the
+# area's.
+PARTY_HEALS = True
+
+
+def party_heal_radius(skill_id):
+    """The radius a byte-0 heal reaches its caster's allies within (the
+    record's `aoe_range`), or None: not a byte-0 Spell with a radius and a
+    heal label, or the flag."""
+    if not PARTY_HEALS:
+        return None
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+        erow = agents.WORLD.get("skill_effect", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return None
+    if int(row.get("target", -1)) != SELF_TARGET_BYTE \
+            or int(row.get("type_code", -1)) != SPELL_TYPE_CODE \
+            or erow.get("scale_means") not in SCALE_MEANS_HEAL:
+        return None
+    radius = float(row.get("aoe_range", 0.0) or 0.0)
+    return radius if radius > 0.0 else None
+
+
+def party_within(state, caster_id, radius):
+    """The caster (living) and its living allies within `radius` of the
+    caster's position, caster first, the rest by id."""
+    out = []
+    if not target_dead(state, caster_id):
+        out.append(caster_id)
+    cx, cy = target_pos(state, caster_id)
+    for aid in sorted(allies_of(state, caster_id), key=int):
+        if aid == caster_id:
+            continue
+        x, y = target_pos(state, aid)
+        if math.hypot(float(x) - float(cx), float(y) - float(cy)) <= radius:
+            out.append(aid)
+    return out
+
+
+# ---- SKILLS-LU: THE NON-ATTACK CHAIN GATE (the third consumer) ---------------
+#
+# DAGGERS-B5's chain gate at the E5 runs inside `if target and
+# _is_attack_skill(...)`, so a Spell or a Skill carrying `combo_req` ("must
+# follow a lead / off-hand / dual": 784, 973, 1033) landed whatever the chain
+# said, and the gate excluded them (CHAIN_REQUIREMENT). This arm judges the
+# same requirement against the same chain state (`player_chain`) for every
+# other type at the player's E5, and FAILS it the way the attack fails: the
+# fail word, a zero recharge, nothing lands. The fail SHAPE for a non-attack
+# is RECONSTRUCTION -- retail's one witness (daggers F7) is an off-hand
+# attack; WIKI (GWW, "Off-hand attack"): "failed attacks do not cause the
+# skill to recharge", read as the family's rule. And a non-attack that
+# "counts as an off-hand attack" (974's `combo`) ADVANCES the chain when its
+# condition lands on a living target, ahead of the condition's own messages
+# (the attack's order: E5, 0x005C, the word). A BODY's chain requirement is
+# not judged -- bodies carry no chain table, for attacks either (pre-existing).
+# --no-nonattack-chain-gate reverts both halves.
+NONATTACK_CHAIN_GATE = True
+
+
 # The two modifier identifiers an armour piece carries. 572's argument is the
 # rating the tooltip prints as `Armor: N`; 527's is the `+N vs. <type>` line,
 # and identifier 4 beside it resolves to `vs. physical damage`. All three were
@@ -19556,7 +19740,56 @@ def cast_tick(send, state, conn_id):
             # A CONDITION, if the skill inflicts one and the target lives --
             # read here; an attack skill's terms below may gate it (SLICE-H10).
             inflicted = skill_condition(cast["skill_id"], rank)
-            if target and _is_attack_skill(cast["skill_id"]):
+            # SKILLS-LU (C): a NON-attack's chain requirement, judged against
+            # the same chain state the attack branch below reads. On a fail
+            # the attack's shape (RECONSTRUCTION for this family, the
+            # NONATTACK_CHAIN_GATE banner): the fail word, a zero recharge,
+            # and nothing below lands -- no damage, no condition, no effect,
+            # no heal.
+            _na_fail, _na_combo, _na_req = False, 0, 0
+            if target and not _is_attack_skill(cast["skill_id"]):
+                _na_combo, _na_req, _ = skill_chain_fields(cast["skill_id"])
+            if _na_req and NONATTACK_CHAIN_GATE and CHAIN_STATE:
+                _na_now = player_chain(state).state_on(target, now)
+                if not chain.requirement_met(_na_req, _na_now):
+                    _na_fail = True
+                    attack_fails(send, state, PLAYER_AGENT_ID, target,
+                                 agents.ATTACK_FAIL_FAIL, conn_id,
+                                 f"skill {cast['skill_id']} must follow "
+                                 f"{chain.requirement_name(_na_req)}; the "
+                                 f"target carries {chain.STATE_NAMES[_na_now]} "
+                                 f"[SKILLS-LU]")
+                    send(GAME_SMSG_SKILL_RECHARGE,
+                         [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"], 0],
+                         f"SKILL_RECHARGE(skill {cast['skill_id']}, 0s): a "
+                         f"failed chain step does not recharge (a non-attack)")
+                    cast["recharge"], cast["recharge_s"] = 0, 0.0
+                    cast["e6_at"], cast["no_e6"] = now, True
+                    found, inflicted = None, None
+                    print(f"[c{conn_id}] skill {cast['skill_id']} FAILED on "
+                          f"agent {target}: a non-attack that must follow "
+                          f"{chain.requirement_name(_na_req)}, and the target "
+                          f"carries {chain.STATE_NAMES[_na_now]} [SKILLS-LU]",
+                          flush=True)
+            # SKILLS-LU (A): a CASTER-centred area -- the record's byte 0 with
+            # a radius -- bursts from the player's own position over every
+            # hostile inside it, damage and condition alike; the selected
+            # target is not read at all. Under --no-caster-areas it lands on
+            # NOBODY (the gate's exclusion), never on the selected target.
+            _carea_row = caster_area_row(cast["skill_id"]) and not _na_fail
+            if _carea_row and ((found and found[1] == "standalone") or inflicted):
+                _carea = caster_area(cast["skill_id"])
+                if _carea is not None:
+                    burst_player_caster_area(send, state, conn_id, cast, found,
+                                             inflicted, rank, _carea)
+                else:
+                    print(f"[c{conn_id}] skill {cast['skill_id']} is a "
+                          f"caster-centred area and --no-caster-areas is set: it "
+                          f"lands on NOBODY (the selected target at any range is "
+                          f"the over-application the gate refused) [SKILLS-LU]",
+                          flush=True)
+                inflicted = None              # each foe took its own inside
+            elif target and _is_attack_skill(cast["skill_id"]):
                 bonus = float(found[0]) if found and found[1] == "additive" \
                     else 0.0
                 # SLICE-H10: Gash's Bleeding gate, Final Thrust's half-health
@@ -19721,8 +19954,9 @@ def cast_tick(send, state, conn_id):
             # nothing here assumes damage and an effect are alternatives --
             # and `apply_effect` returns None for the skills that do neither,
             # which is most of them.
-            apply_effect(send, state, PLAYER_AGENT_ID, cast["skill_id"],
-                         rank, target, conn_id)
+            if not _na_fail:                                    # SKILLS-LU (C)
+                apply_effect(send, state, PLAYER_AGENT_ID, cast["skill_id"],
+                             rank, target, conn_id)
             # AND THE HEAL, the other direction the same cast can resolve. A
             # skill is not restricted to one of the three -- damage, effect,
             # heal are asked independently and most skills answer None to all
@@ -19754,13 +19988,25 @@ def cast_tick(send, state, conn_id):
             if inflicted and target:
                 victim = state.get("agents", {}).get(target)
                 if victim and not victim.get("dead"):
+                    if _na_combo and NONATTACK_CHAIN_GATE and CHAIN_STATE:
+                        # SKILLS-LU (C): "counts as an off-hand attack" on a
+                        # non-attack (974): the chain moves as its condition
+                        # lands, ahead of the condition's own messages -- the
+                        # attack's order (E5, 0x005C, the word). RECONSTRUCTION.
+                        _na_st = player_chain(state).advance(target, _na_combo,
+                                                             time.time())
+                        if _na_st is not None:
+                            chain_send(send, target, _na_st,
+                                       f"skill {cast['skill_id']} lands, a "
+                                       f"non-attack chain step [SKILLS-LU]")
                     apply_condition(send, state, target, inflicted[0],
                                     inflicted[1], rank, conn_id,
                                     cast["skill_id"])
             # SKILLS-RC: the heal, the cure and the recipient's legality in
             # one place, shared with the enemy's cast (resolve_heal).
-            resolve_heal(send, state, cast["skill_id"], rank,
-                         PLAYER_AGENT_ID, target, conn_id)
+            if not _na_fail:                                    # SKILLS-LU (C)
+                resolve_heal(send, state, cast["skill_id"], rank,
+                             PLAYER_AGENT_ID, target, conn_id)
             # THE HOLD PULSE CLOSES THE E5 INSTANT for a non-attack cast:
             # [8 -> 0] then [8 -> 1] at the batch's end, after the
             # target-facing properties, 4 of 4 spell E5s -- the cast
@@ -21035,6 +21281,23 @@ def resolve_heal(send, state, skill_id, rank, caster_id, target_id, conn_id):
                   f"legal recipient (target other ally; aimed at {target_id})"
                   f" -- nothing resolves", flush=True)
             return None
+        # SKILLS-LU (B): a byte-0 heal with a radius reaches the CASTER and
+        # every living ally within it (party_heal_radius, the PARTY_HEALS
+        # banner); --no-party-heals leaves `recipient` = the caster alone.
+        # A cure rides no label row, so the party arm is the plain heal.
+        _party_r = party_heal_radius(skill_id) if healed and not removes else None
+        if _party_r is not None:
+            _who = party_within(state, caster_id, _party_r)
+            _total = 0.0
+            for _rid in _who:
+                _total += heal_agent(send, state, _rid, caster_id, float(healed),
+                                     conn_id)
+            print(f"[c{conn_id}] skill {skill_id} by agent {caster_id} heals "
+                  f"{len(_who)} party member(s) within {_party_r:.0f} u of the "
+                  f"caster for {float(healed):.0f} each ({_total:.0f} landed) "
+                  f"[SKILLS-LU]", flush=True)
+            return {"recipient": caster_id, "recipients": _who, "removed": 0,
+                    "remaining": 0, "healed": _total}
     else:
         try:
             srow = agents.WORLD.get("skills", str(skill_id))
@@ -26554,6 +26817,17 @@ def land_skill(send, state, agent_id, agent, conn_id):
               if damage is not None and damage[1] == "standalone"
               and _spell_how is None and _tid != agent_id else None)
     _burst_terms = None
+    # SKILLS-LU (A): a CASTER-centred area -- the record's byte 0 with a
+    # radius -- bursts from the caster's own position (the terms below, the
+    # emission through burst_body_spell); under --no-caster-areas the row
+    # lands on NOBODY, never on _tid at any range (the gate's refusal).
+    _carea_row = caster_area_row(skill_id)
+    _carea = caster_area(skill_id) if _carea_row else None
+    if _carea_row and _carea is None and damage is not None:
+        print(f"[c{conn_id}] agent {agent_id}'s skill {skill_id} is a caster-centred "
+              f"area and --no-caster-areas is set: its damage lands on NOBODY "
+              f"[SKILLS-LU]", flush=True)
+        damage = None
     # THE PLAYER'S ARMOUR, for the labels that respect it (SKILLS-FA). One
     # elemental rating, no location roll -- `player_spell_armour` says why
     # -- applied BEFORE the taker's own episodes, which is GWW's order (the
@@ -26566,6 +26840,15 @@ def land_skill(send, state, agent_id, agent, conn_id):
         _table = state.get("agents", {})
         _burst_terms = []
         for _foe in foes_within(state, agent_id, target_pos(state, _tid), _burst):
+            _fbody = _foe != PLAYER_AGENT_ID and _foe in _table
+            _burst_terms.append((_foe, _fbody, body_spell_terms(
+                state, agent, skill_id, damage[0], _foe, _fbody)))
+    elif damage is not None and _spell_how is None and _carea is not None \
+            and damage[1] == "standalone":
+        # SKILLS-LU (A): the same terms, the centre moved to the CASTER
+        _table = state.get("agents", {})
+        _burst_terms = []
+        for _foe in foes_within(state, agent_id, target_pos(state, agent_id), _carea):
             _fbody = _foe != PLAYER_AGENT_ID and _foe in _table
             _burst_terms.append((_foe, _fbody, body_spell_terms(
                 state, agent, skill_id, damage[0], _foe, _fbody)))
@@ -26613,7 +26896,18 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # the pips are three pixels; with it the player's own HUD shows the arrows,
     # which is what closes `studies/isle` B4's one UNVERIFIED clause.
     inflicted = skill_condition(skill_id, _rank)
-    if inflicted and _burst_terms is None and not target_dead(state, _tid):
+    if inflicted and _carea_row and _burst_terms is None:
+        # SKILLS-LU (A): a condition-only caster area (840): on every foe
+        # around the CASTER -- or on nobody under --no-caster-areas; never
+        # on _tid, which is the over-application the gate refused.
+        if _carea is not None:
+            body_caster_area_condition(send, state, conn_id, agent_id, skill_id,
+                                       inflicted, _rank, _carea)
+        else:
+            print(f"[c{conn_id}] agent {agent_id}'s skill {skill_id} is a caster-centred "
+                  f"area and --no-caster-areas is set: its condition lands on NOBODY "
+                  f"[SKILLS-LU]", flush=True)
+    elif inflicted and _burst_terms is None and not target_dead(state, _tid):
         apply_condition(send, state, _tid, inflicted[0],
                         inflicted[1], _rank, conn_id, skill_id)
 
@@ -36041,6 +36335,24 @@ def main():
         print(f"NO SKILL LABELS: {len(_gone)} label-tier skill_effect row(s) dropped "
               f"(vault/content/skill_labels.toml, SKILLS-LT) -- the consumers see the "
               f"hand rows only (the 54.8 hand fixes included).", flush=True)
+    # SKILLS-LU (studies/skills 56): the first residue consumers, one revert each.
+    if a.no_caster_areas:
+        global CASTER_AREAS
+        CASTER_AREAS = False
+        print("NO CASTER AREAS: a byte-0 area Spell (183, 188, 840, 1113, 2212) lands on "
+              "NOBODY -- the gate's exclusion until 2026-09-23 -- never on the selected "
+              "target [SKILLS-LU]", flush=True)
+    if a.no_party_heals:
+        global PARTY_HEALS
+        PARTY_HEALS = False
+        print("NO PARTY HEALS: a byte-0 heal with a radius (287, 2221) heals the caster "
+              "alone, as every byte-0 heal did until 2026-09-23 [SKILLS-LU]", flush=True)
+    if a.no_nonattack_chain_gate:
+        global NONATTACK_CHAIN_GATE
+        NONATTACK_CHAIN_GATE = False
+        print("NO NON-ATTACK CHAIN GATE: a Spell's or a Skill's combo_req is not judged "
+              "at the E5 and a non-attack 'counts as an off-hand attack' moves nothing "
+              "(the pre-2026-09-23 arm) [SKILLS-LU]", flush=True)
 
     if a.player_max_always:
         global PLAYER_MAX_ALWAYS

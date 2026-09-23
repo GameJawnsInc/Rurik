@@ -45,6 +45,7 @@ and Gw.dat and declare one skip without them. Nothing here quotes a template.
 import collections
 import os
 import sys
+from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -61,7 +62,7 @@ from skilldesc import Label, SLOT_FIELD, shifted, referee_slot   # noqa: E402
 # 61 checks, 1 declared skip ("2. the corpus"), rc=0 -- the mandatory core per
 # checks.py (2026-09-23, SKILLS-LT: +21 in section 1b, the label tier's gate on
 # synthetic rows; 40 on 2026-09-22). A whole green run with the vault is 124.
-LEDGER = checks.Ledger("skill description templates", floor=72)   # 72 from the bare run of 2026-09-23 (the fix pass: +11 in 1b); 138 with the vault
+LEDGER = checks.Ledger("skill description templates", floor=77)   # 77 from the bare run of 2026-09-23 (SKILLS-LU: +5 in 1b; the fix pass before it: +11); 146 with the vault
 check = checks.adopt(LEDGER)
 
 
@@ -361,16 +362,87 @@ check(G(pct, srec(4), set())[0] == LT.EXCL_PERCENT_SLOT and G(heal, srec(4), set
 chain = srow(15, 5, [(1, Label.CONDITION_DURATION, "Poison", AP, 5, 20)], ["TARGET_FOE"])
 r_chain = srec(5)
 r_chain["combo_req"] = 2
-check(G(chain, r_chain, set())[0] == LT.EXCL_CHAIN_REQUIREMENT
-      and G(dict(chain, type_code=14), dict(r_chain, type_code=14), set())[0] is None,
-      "combo_req on a NON-attack type is EXCLUDED -- the E5 chain gate (DAGGERS-B5) runs inside "
-      "_is_attack_skill, so 784 973 1033 would land whatever the chain says; the same requirement "
-      "on an attack ships, because there the gate exists")
+why_c, det_c, _f, _v = G(chain, r_chain, set())
+check(why_c is None and LT.DETAIL_CHAIN_GATED in det_c
+      and LT.DETAIL_CHAIN_GATED not in G(dict(chain, type_code=14), dict(r_chain, type_code=14), set())[1]
+      and LT.DETAIL_CHAIN_GATED not in G(chain, srec(5), set())[1],
+      "SKILLS-LU: combo_req on a NON-attack type SHIPS marked CHAIN_GATED -- the player's E5 judges "
+      "it now (784 973 1033; until 2026-09-23 the gate excluded them as CHAIN_REQUIREMENT); the "
+      "same requirement on an attack carries no mark (the attack gate is DAGGERS-B5's), nor does a "
+      "row with combo_req 0", (why_c, det_c))
 step = srow(16, 10, [(1, Label.CONDITION_DURATION, "Crippled", AP, 5, 20)], ["TARGET_FOE"])
 r_step = srec(5, tc=10)
 r_step["combo"] = 2
-check(LT.DETAIL_CHAIN_STEP_NOT_ADVANCED in G(step, r_step, set())[1],
-      "'counts as an off-hand attack' on a non-attack ships MARKED: the chain never advances (974)")
+step_dmg = srow(16, 10, [(1, Label.EARTH_DAMAGE, "", AP, 5, 20)], ["TARGET_FOE"])
+check(LT.DETAIL_CHAIN_STEP_ADVANCES in G(step, r_step, set())[1]
+      and LT.DETAIL_CHAIN_STEP_NOT_ADVANCED not in G(step, r_step, set())[1]
+      and LT.DETAIL_CHAIN_STEP_NOT_ADVANCED in G(step_dmg, r_step, set())[1]
+      and LT.DETAIL_CHAIN_STEP_ADVANCES not in G(step_dmg, r_step, set())[1],
+      "'counts as an off-hand attack' on a non-attack WITH a condition ships marked CHAIN_STEP_ADVANCES "
+      "(974: the chain moves as the condition lands, SKILLS-LU); with damage alone it is still "
+      "CHAIN_STEP_NOT_ADVANCED -- the advance rides the condition's landing")
+# SKILLS-LU (A): the caster-centred area -- byte 0, a Spell, a radius, no projectile, foe-area words
+c_area = srow(30, 5, [(1, Label.FIRE_DAMAGE, "", AP, 30, 135)], ["ALL_FOES", "AREA_ADJACENT"])
+r_c = srec(0)
+r_c["aoe_range"] = 156.0
+why_a, det_a, f_a, _v = G(c_area, r_c, set())
+c_cond = srow(31, 5, [(1, Label.CONDITION_DURATION, "Poison", AP, 5, 15)], ["ALL_FOES", "AREA_ADJACENT"])
+r_cd = srec(0, args=3, s=(5, 15), d=(10, 10))
+r_cd["aoe_range"] = 156.0
+why_b, det_b, f_b, _v = G(c_cond, r_cd, set())
+r_noradius = dict(r_c, aoe_range=0.0)
+r_proj = dict(r_c, projectile=199)
+c_nowords = srow(32, 5, [(1, Label.FIRE_DAMAGE, "", AP, 30, 135)], [])
+c_signet = srow(33, 7, [(1, Label.FIRE_DAMAGE, "", AP, 30, 135)], ["ALL_FOES", "AREA_ADJACENT"])
+check(why_a is None and f_a == {"scale_means": "Fire damage"} and LT.DETAIL_AREA_CASTER in det_a
+      and LT.DETAIL_AREA_ONE_TARGET not in det_a and LT.DETAIL_AREA_BURST not in det_a
+      and why_b is None and f_b == {"scale_means": "Poison"} and LT.DETAIL_AREA_CASTER in det_b
+      and LT.DETAIL_DURATION_UNMODELLED in det_b,
+      "SKILLS-LU: a byte-0 Spell with a radius and 'all adjacent foes' SHIPS marked AREA_CASTER -- "
+      "authsrv.caster_area bursts from the caster (183's fire, 840's Poison; 840's flat 10 s is "
+      "marked DURATION_UNMODELLED beside it); until 2026-09-23 both were RECIPIENT_NOT_A_FOE",
+      (why_a, det_a, why_b, det_b))
+check(G(c_area, r_noradius, set())[0] == LT.EXCL_RECIPIENT_NOT_A_FOE
+      and G(c_area, r_proj, set())[0] == LT.EXCL_RECIPIENT_NOT_A_FOE
+      and G(c_nowords, r_c, set())[0] == LT.EXCL_RECIPIENT_NOT_A_FOE
+      and G(c_signet, dict(r_c, type_code=7), set())[0] == LT.EXCL_RECIPIENT_NOT_A_FOE
+      and G(dict(c_area, flags=["ALL_FOES", "AREA_ADJACENT", "UNMODELLED_CLASS"]), r_c, set())[0]
+      == LT.EXCL_UNMODELLED_CLASS,
+      "KNOWN-BAD ARMS: the same byte-0 row with NO radius (1364's self Bleeding), with a projectile "
+      "of its own, with no area words, or on a Signet stays RECIPIENT_NOT_A_FOE -- the caster arm "
+      "is a Spell with a radius and foe-area words, nothing looser; a corpse-centred one (97) falls "
+      "to UNMODELLED_CLASS")
+# SKILLS-LU (B): the party heal -- byte 0, a Spell, a radius, party words AND a read INCLUDES_CASTER
+# template whose sha256[:16] matches (CLASS_HEAL_READINGS); the synthetic row borrows 287's reading
+p_heal = srow(287, 5, [(1, Label.HEAL, "", AP, 30, 75)], ["ALL_ALLIES"])
+p_heal["template_sha16"] = LT.CLASS_HEAL_READINGS[287][1]
+r_p = srec(0, s=(30, 75))
+r_p["aoe_range"] = 5000.0
+why_p, det_p, f_p, _v = G(p_heal, r_p, set())
+p_wrongsha = dict(p_heal, template_sha16="0" * 16)
+p_unread = dict(p_heal, id=289)
+p_cond = dict(p_heal, id=943, template_sha16=LT.CLASS_HEAL_READINGS[943][1])
+p_excl = dict(p_heal, id=1262, template_sha16=LT.CLASS_HEAL_READINGS[1262][1], flags=["AREA_ADJACENT"])
+check(why_p is None and f_p == {"scale_means": "Heal"} and LT.DETAIL_HEAL_PARTY in det_p
+      and LT.DETAIL_AREA_ONE_TARGET not in det_p,
+      "SKILLS-LU: a byte-0 party heal whose template a person read as INCLUDES_CASTER (287, the "
+      "digest matching) SHIPS marked HEAL_PARTY -- authsrv.party_heal_radius heals the caster and "
+      "its allies within the record's radius", (why_p, det_p))
+check(G(p_wrongsha, r_p, set())[0] == LT.EXCL_HEAL_RECIPIENT_CLASS
+      and G(p_unread, r_p, set())[0] == LT.EXCL_HEAL_RECIPIENT_CLASS
+      and G(p_cond, r_p, set())[0] == LT.EXCL_HEAL_RECIPIENT_CLASS
+      and G(p_excl, dict(r_p, aoe_range=156.0), set())[0] == LT.EXCL_HEAL_RECIPIENT_CLASS
+      and G(p_heal, dict(r_p, aoe_range=0.0), set())[0] == LT.EXCL_HEAL_RECIPIENT_CLASS,
+      "KNOWN-BAD ARMS: the same row with a DIFFERENT template digest (the text changed: the reading "
+      "is void), an id nobody read, 943's CONDITIONED reading, 1262's EXCLUDES_CASTER reading, or no "
+      "radius each stay HEAL_RECIPIENT_CLASS -- Refuse to guess, per row")
+check(LT.template_sha16("abc") == LT.template_sha16("abc") and LT.template_sha16("abc") != LT.template_sha16("abd")
+      and len(LT.template_sha16("")) == 16 and LT.template_sha16(None) == LT.template_sha16("")
+      and all(len(v[1]) == 16 and v[0] in (LT.CLASS_HEAL_INCLUDES_CASTER, LT.CLASS_HEAL_EXCLUDES_CASTER,
+                                            LT.CLASS_HEAL_CONDITIONED) for v in LT.CLASS_HEAL_READINGS.values())
+      and sorted(LT.CLASS_HEAL_READINGS) == [287, 943, 1262, 2221],
+      "template_sha16 is a 16-hex measurement of one template, sensitive to one character; the "
+      "readings register holds the four class heals of 55.2, each an enum and a digest")
 uncls = srow(17, 5, [(1, Label.HEAL, "", AP, 60, 92)], ["UNMODELLED_CLASS"])
 check(G(uncls, srec(0), set())[0] == LT.EXCL_UNMODELLED_CLASS,
       "a recipient class or prerequisite the server has no object for is EXCLUDED: the spirits "
@@ -381,10 +453,10 @@ check(G(cls, srec(0), set())[0] == LT.EXCL_HEAL_RECIPIENT_CLASS
       and G(party, srec(0), set())[0] == LT.EXCL_HEAL_RECIPIENT_CLASS
       and G(heal, srec(0), set())[0] is None
       and G(party, srec(3), set())[0] is None and LT.DETAIL_AREA_ONE_TARGET in G(party, srec(3), set())[1],
-      "a SELF-targeted heal on a CLASS of recipients is EXCLUDED (1262 excludes the caster, 943 "
-      "heals only the members relieved of Burning; 287 and 2221 include the caster and fall to the "
-      "same rule -- the parse cannot tell them apart); a plain self heal ships, and a party heal "
-      "aimed at an ally (byte 3) ships marked ONE_TARGET")
+      "a SELF-targeted heal on a CLASS of recipients is EXCLUDED unless a person read its template "
+      "(1262 excludes the caster, 943 heals only the members relieved of Burning; an UNREAD row "
+      "falls to the same rule -- the parse cannot tell them apart); a plain self heal ships, and a "
+      "party heal aimed at an ally (byte 3) ships marked ONE_TARGET")
 r_dur = srec(16, d=(9, 9))
 r_proj = srec(16)
 r_proj["projectile"] = 199
@@ -422,6 +494,8 @@ check("CLAUSE_KNOCKDOWN" in rf("the foe is knocked down") and "CLAUSE_SHADOW_STE
       and "CLAUSE_ALSO_CASTER" in rf("you and that ally are healed")
       and "CLAUSE_DOUBLE_DAMAGE" in rf("you take double damage") and "CLAUSE_DISABLE" in rf("your skills are disabled")
       and "CLAUSE_CAST_SPEED" in rf("casts spells 33% slower") and "SPEED_MOVE" in rf("moves, attacks, and casts 25% slower")
+      and "CLAUSE_REMOVAL" in rf("all party members are relieved of burning") and "CLAUSE_REVEAL" in rf("hidden objects are revealed")
+      and "CLAUSE_ALSO_CASTER" in rf("you and all adjacent foes are poisoned") and "CLAUSE_REVEAL" in LT.DETAILS
       and not rf("target foe is struck for 30 fire damage") & (LT.CLAUSE_FLAGS | {"UNMODELLED_CLASS", "AREA_NEAR", "SPEED_MOVE"})
       and not (LT.CLAUSE_FLAGS | {"UNMODELLED_CLASS", "AREA_NEAR", "SPEED_MOVE"}) & LT.COMPOUND_FLAGS,
       "the fix pass's flags on OUR OWN phrases: each raised where its wording is, quiet on 'easily "
@@ -750,39 +824,66 @@ if records is not None:
     check(tally.get("DURATION_ONLY") == 41
           and by_reason.get("CONDITION_ON_EPISODE") == [113, 435, 926, 1041, 1997, 2136]
           and by_reason.get("PET_ATTACK") == [441]
-          and by_reason.get("RECIPIENT_NOT_A_FOE") == [97, 183, 188, 769, 770, 840, 917, 1113, 1364, 1468, 2212]
+          and by_reason.get("RECIPIENT_NOT_A_FOE") == [769, 770, 917, 1364, 1468]
           and by_reason.get("RECIPIENT_NOT_AN_ALLY") == [918, 1032, 1354],
           "THE EXCLUSIONS, client-side: 41 duration-only; 6 conditions an episode inflicts later "
-          "(113, 435, 926, 1041, 1997, 2136); the pet attack 441; 11 at-cast damages / conditions "
-          "whose target byte is self, ally or unresolved (97 183 188 769 770 840 917 1113 1364 "
-          "1468 2212); 3 heals byte 1 would hand to the selected agent (918 1032 1354)", by_reason)
+          "(113, 435, 926, 1041, 1997, 2136); the pet attack 441; 5 at-cast damages / conditions "
+          "whose target byte is unresolved (769 917 1468), another ally (770) or self with no area "
+          "words and no radius (1364) -- SKILLS-LU moved 183 188 840 1113 2212 to the caster arm "
+          "and 97 to UNMODELLED_CLASS; 3 heals byte 1 would hand to the selected agent (918 1032 "
+          "1354)", by_reason)
     check(by_reason.get("PERCENT_SLOT") == [292]
-          and by_reason.get("CHAIN_REQUIREMENT") == [784, 973, 1033]
-          and by_reason.get("UNMODELLED_CLASS") == [96, 106, 2051, 2100]
-          and by_reason.get("HEAL_RECIPIENT_CLASS") == [287, 943, 1262, 2221]
+          and "CHAIN_REQUIREMENT" not in by_reason
+          and by_reason.get("UNMODELLED_CLASS") == [96, 97, 106, 2051, 2100]
+          and by_reason.get("HEAL_RECIPIENT_CLASS") == [943, 1262]
           and "SELF_CONFLICT" not in by_reason,
-          "THE FIX PASS's EXCLUSIONS (reviewers LT-R1..R6, R10): 292's percent slot; the chain "
-          "requirements 784 973 1033 carry on non-attack types; 96's corpse, 106's fleshiness, the "
-          "spirits of 2051 and 2100; the four self-targeted heals on a class -- 1262 excludes the "
-          "caster, 943 heals only the relieved, 287 and 2221 fall to the same rule", by_reason)
-    check(len(lrows) == 131 - n_hand_plain - 74 and len(lrows) + len(excluded) == 131,
-          f"THE SET: {len(lrows)} label-tier rows = 131 plain - {n_hand_plain} hand - 74 excluded "
-          f"(47 on 2026-09-23 after the fix pass; 59 before it); nothing shrinks silently",
-          (len(lrows), len(excluded)))
+          "THE FIX PASS's EXCLUSIONS after SKILLS-LU (skills 56): 292's percent slot; NO chain "
+          "requirement (784 973 1033 ship CHAIN_GATED); 96's corpse, 97's corpse-centred area, 106's "
+          "fleshiness, the spirits of 2051 and 2100; the two class heals a person read as NOT "
+          "including the caster -- 1262 excludes it, 943 heals only the relieved (287 and 2221 ship "
+          "HEAL_PARTY)", by_reason)
+    check(len(lrows) == 131 - n_hand_plain - 64 and len(lrows) + len(excluded) == 131,
+          f"THE SET: {len(lrows)} label-tier rows = 131 plain - {n_hand_plain} hand - 64 excluded "
+          f"(57 on 2026-09-23 after SKILLS-LU's three consumers; 47 after the fix pass, 59 before "
+          f"it); nothing shrinks silently", (len(lrows), len(excluded)))
     check(not (set(lrows) & hand_ids) and skilldesc.check_label_rows(lrows, rep, hand_ids, records) == [],
           "no emitted row keys a hand-row id, and the set passes its own checker (records included)")
     arms = {}
-    for sid, want in ((292, "percent slot"), (96, "recipient class"), (784, "chain requirement")):
+    for sid, want in ((292, "percent slot"), (96, "recipient class")):
         why, det, fields, ver = skilldesc.build_label_row(rep["rows"][sid], records[sid], hand_ids)
         forced_rows = {sid: {"fields": fields or {"scale_means": "Heal"}, "type_code": rep["rows"][sid]["type_code"],
                              "tier": "label", "tier_detail": det, "verified": ver}}
         arms[sid] = (why, skilldesc.check_label_rows(forced_rows, rep, hand_ids, records), want)
     check(arms[292][0] == "PERCENT_SLOT" and arms[96][0] == "UNMODELLED_CLASS"
-          and arms[784][0] == "CHAIN_REQUIREMENT"
           and all(len(f) == 1 and want in f[0] and str(sid) in f[0] for sid, (_w, f, want) in arms.items()),
-          "KNOWN-BAD ARMS (the fix pass): 292, 96 and 784 forced through the gate are each the ONE "
-          "fault the checker names -- a percent slot, a recipient class, a chain requirement",
+          "KNOWN-BAD ARMS (the fix pass): 292 and 96 forced through the gate are each the ONE "
+          "fault the checker names -- a percent slot, a recipient class",
           {s: a[1] for s, a in arms.items()})
+    # SKILLS-LU: the three consumers' rows carry their marks; each mark STRIPPED is the one fault
+    stripped = {}
+    for sid, mark, want in ((784, "CHAIN_GATED", "chain requirement"),
+                            (183, "AREA_CASTER", "caster-centred area"),
+                            (287, "HEAL_PARTY", "INCLUDES_CASTER")):
+        r = dict(lrows[sid])
+        r["tier_detail"] = [d for d in r["tier_detail"] if d != mark]
+        stripped[sid] = (mark in lrows[sid]["tier_detail"],
+                         skilldesc.check_label_rows({sid: r}, rep, hand_ids, records), want)
+    check(all(had and len(f) == 1 and want in f[0] and str(sid) in f[0]
+              for sid, (had, f, want) in stripped.items()),
+          "KNOWN-BAD ARMS (SKILLS-LU): 784, 183 and 287 ship WITH their consumer's mark, and each "
+          "with the mark stripped is the ONE fault the checker names -- a chain requirement with no "
+          "gate, a byte-0 damage outside the caster arm, a class heal without its reading",
+          {s: a[1] for s, a in stripped.items()})
+    r97 = dict(lrows[183], tier_detail=["ALL_FOES", "AREA_NEARBY", "AREA_CASTER"])
+    f97 = skilldesc.check_label_rows({97: r97}, rep, hand_ids, records)
+    r1262 = {"fields": {"scale_means": "Heal"}, "type_code": 5, "tier": "label",
+             "tier_detail": ["AREA_ADJACENT", "HEAL_PARTY"], "verified": [{"slot": 1}]}
+    f1262 = skilldesc.check_label_rows({1262: r1262}, rep, hand_ids, records)
+    check(len(f97) == 1 and "recipient class" in f97[0]
+          and len(f1262) == 1 and "INCLUDES_CASTER" in f1262[0],
+          "KNOWN-BAD ARMS (SKILLS-LU): 97 forced in with the AREA_CASTER mark is still named for its "
+          "corpse (the class fault); 1262 forced in with HEAL_PARTY is named for its EXCLUDES_CASTER "
+          "reading", (f97, f1262))
     forced = None
     for sid in cond:
         why, det, fields, ver = skilldesc.build_label_row(rep["rows"][sid], records[sid], hand_ids)
@@ -798,28 +899,37 @@ if records is not None:
           f"KNOWN-BAD ARM: a conditional SERVED row ({forced}) forced through the gate is the one "
           f"fault the checker names", faults)
     dt = collections.Counter(d for r in lrows.values() for d in r["tier_detail"] if d in skilldesc.DETAILS)
-    check(dt == {"AREA_BURST": 3, "AREA_ONE_TARGET": 20, "CONDITION_BIT_CLEAR_REFUSED": 1,
-                 "DURATION_UNMODELLED": 7, "CONDITION_UNNUMBERED": 1, "LITERAL_DROPPED": 5,
-                 "CHAIN_STEP_NOT_ADVANCED": 1, "CLAUSE_MOVE_SPEED": 1, "CLAUSE_KNOCKDOWN": 6,
-                 "CLAUSE_SHADOW_STEP": 4, "CLAUSE_INTERRUPT": 2, "CLAUSE_REMOVAL": 2,
-                 "CLAUSE_ALSO_CASTER": 2, "CLAUSE_DISABLE": 1, "CLAUSE_DOUBLE_DAMAGE": 1,
-                 "CLAUSE_CAST_SPEED": 1, "CLAUSE_RANGE": 4},
-          "UNDER-APPLIED, counted: 3 bursts spell_burst covers (187 189 1086), 20 area wordings the "
-          "server reaches one recipient of, 1 bit-clear condition (167), 7 non-episode durations the "
-          "at-cast path never runs (the areas over time 167 192 197 among them), 228's unnumbered "
-          "Cracked Armor, 5 literal constants (25 % penetration), 974's chain step, and the dropped "
-          "clauses by kind: 6 knock-downs, 4 shadow steps, 2 interrupts, 2 removals, 2 'you and', a "
-          "disable, a double damage, 1996's cast and move slows, 4 half ranges", dict(dt))
+    check(dt == {"AREA_BURST": 3, "AREA_CASTER": 5, "HEAL_PARTY": 2, "CHAIN_GATED": 3,
+                 "CHAIN_STEP_ADVANCES": 1, "AREA_ONE_TARGET": 21, "CONDITION_BIT_CLEAR_REFUSED": 2,
+                 "INDETERMINATE_SLOT": 1, "DURATION_UNMODELLED": 10, "CONDITION_UNNUMBERED": 2,
+                 "LITERAL_DROPPED": 5, "CLAUSE_MOVE_SPEED": 1, "CLAUSE_KNOCKDOWN": 7,
+                 "CLAUSE_SHADOW_STEP": 4, "CLAUSE_INTERRUPT": 2, "CLAUSE_REMOVAL": 3,
+                 "CLAUSE_ALSO_CASTER": 3, "CLAUSE_DISABLE": 1, "CLAUSE_DOUBLE_DAMAGE": 1,
+                 "CLAUSE_CAST_SPEED": 1, "CLAUSE_RANGE": 4, "CLAUSE_REVEAL": 1},
+          "MARKED, counted: 3 bursts spell_burst covers (187 189 1086), 5 caster-centred areas "
+          "(183 188 840 1113 2212), 2 party heals (287 2221), 3 chain-gated non-attacks (784 973 "
+          "1033), 974's chain step now ADVANCING, 21 area wordings the server reaches one recipient "
+          "of (973's adjacent Blind joined), 2 bit-clear conditions (167, 1033's Deep Wound -- also "
+          "the 1 INDETERMINATE slot), 10 non-episode durations the at-cast path never runs (840 1033 "
+          "1113 joined 167 192 197 and the rest), 2 unnumbered conditions (228's Cracked Armor, "
+          "2221's Burning), 5 literal constants, and the dropped clauses by kind: 7 knock-downs "
+          "(784 joined), 4 shadow steps, 2 interrupts, 3 removals (2221's 'relieved of'), 3 'you "
+          "and' (840's 'you and all'), a disable, a double damage, 1996's cast and move slows, 4 half "
+          "ranges, 2212's compass reveal", dict(dt))
     under = sorted(s for s in lrows if set(lrows[s]["tier_detail"]) & set(skilldesc.DETAILS))
-    check(len(under) == 36
+    check(len(under) == 46
           and sorted(set(lrows) - set(under)) == [117, 191, 220, 286, 293, 959, 1043, 1120, 1404, 1686, 1762]
           and [s for s in sorted(lrows) if "AREA_BURST" in lrows[s]["tier_detail"]] == [187, 189, 1086]
+          and [s for s in sorted(lrows) if "AREA_CASTER" in lrows[s]["tier_detail"]] == [183, 188, 840, 1113, 2212]
+          and [s for s in sorted(lrows) if "HEAL_PARTY" in lrows[s]["tier_detail"]] == [287, 2221]
+          and [s for s in sorted(lrows) if "CHAIN_GATED" in lrows[s]["tier_detail"]] == [784, 973, 1033]
           and {"AREA_ONE_TARGET", "DURATION_UNMODELLED"} <= set(lrows[192]["tier_detail"])
           and {"AREA_ONE_TARGET", "DURATION_UNMODELLED"} <= set(lrows[197]["tier_detail"]),
-          "36 of 47 rows carry an under-application mark; the eleven without one are single-clause "
-          "templates (a foe's condition or damage, a target ally's heal, a stance's speeds); "
-          "AREA_BURST is exactly 187 189 1086, and the areas over time 192 and 197 that spell_burst "
-          "refuses say ONE_TARGET + DURATION_UNMODELLED (ENG-2, LT-R7)", sorted(set(lrows) - set(under)))
+          "46 of 57 rows carry a mark; the eleven without one are the same single-clause templates "
+          "as before SKILLS-LU (every new row rides a consumer that is named); AREA_BURST is exactly "
+          "187 189 1086, AREA_CASTER 183 188 840 1113 2212, HEAL_PARTY 287 2221, CHAIN_GATED 784 973 "
+          "1033; the areas over time 192 and 197 that spell_burst refuses say ONE_TARGET + "
+          "DURATION_UNMODELLED (ENG-2, LT-R7)", sorted(set(lrows) - set(under)))
     check(lrows[187]["fields"] == {"scale_means": "Fire damage"} and "AREA_BURST" in lrows[187]["tier_detail"]
           and lrows[220]["fields"] == {"bonus_scale_means": "Blind"}
           and lrows[831]["fields"] == {"scale_means": "Attack speed increase",
@@ -831,10 +941,38 @@ if records is not None:
           and {"AREA_NEAR", "AREA_ONE_TARGET", "CONDITION_BIT_CLEAR_REFUSED", "DURATION_UNMODELLED"}
           <= set(lrows[167]["tier_detail"])
           and {"CLAUSE_MOVE_SPEED", "CLAUSE_CAST_SPEED"} <= set(lrows[1996]["tier_detail"])
-          and "CHAIN_STEP_NOT_ADVANCED" in lrows[974]["tier_detail"],
+          and "CHAIN_STEP_ADVANCES" in lrows[974]["tier_detail"]
+          and "CHAIN_STEP_NOT_ADVANCED" not in lrows[974]["tier_detail"],
           "spot rows: 187 fire (burst), 220 Blind at str2, 831 both speeds + its double damage named, "
           "434 a preparation's +damage, 3425's +holy is the additive '+ Damage', 167 earth + a "
-          "bit-clear Blind over an area near a location for 5 s, 1996's dropped slows, 974's chain step")
+          "bit-clear Blind over an area near a location for 5 s, 1996's dropped slows, 974's chain "
+          "step ADVANCES (SKILLS-LU)")
+    # SKILLS-LU's rows, read off the corpus: the record each consumer keys on
+    check(lrows[183]["fields"] == {"scale_means": "Fire damage"} and lrows[183]["type_code"] == 5
+          and records[183]["target"] == 0 and records[183]["aoe_range"] == 156.0
+          and lrows[840]["fields"] == {"scale_means": "Poison"}
+          and {"AREA_CASTER", "DURATION_UNMODELLED", "CLAUSE_ALSO_CASTER"} <= set(lrows[840]["tier_detail"])
+          and records[840]["duration0"] == 10
+          and {"AREA_CASTER", "CLAUSE_REVEAL"} <= set(lrows[2212]["tier_detail"]) and records[2212]["aoe_range"] == 312.0
+          and lrows[287]["fields"] == {"scale_means": "Heal"} and records[287]["aoe_range"] == 5000.0
+          and records[2221]["aoe_range"] == 5000.0
+          and {"HEAL_PARTY", "CLAUSE_REMOVAL", "CONDITION_UNNUMBERED"} <= set(lrows[2221]["tier_detail"])
+          and lrows[784]["fields"] == {"scale_means": "Poison"} and records[784]["combo_req"] == 2
+          and {"CHAIN_GATED", "CLAUSE_KNOCKDOWN"} <= set(lrows[784]["tier_detail"])
+          and records[973]["combo_req"] == 4 and {"CHAIN_GATED", "AREA_ONE_TARGET"} <= set(lrows[973]["tier_detail"])
+          and records[1033]["combo_req"] == 1 and lrows[1033]["type_code"] == 10
+          and {"CHAIN_GATED", "INDETERMINATE_SLOT", "CONDITION_BIT_CLEAR_REFUSED"} <= set(lrows[1033]["tier_detail"])
+          and records[974]["combo"] == 2
+          and rep["rows"][287]["template_sha16"] == skilldesc.CLASS_HEAL_READINGS[287][1]
+          and rep["rows"][2221]["template_sha16"] == skilldesc.CLASS_HEAL_READINGS[2221][1]
+          and rep["rows"][943]["template_sha16"] == skilldesc.CLASS_HEAL_READINGS[943][1]
+          and rep["rows"][1262]["template_sha16"] == skilldesc.CLASS_HEAL_READINGS[1262][1],
+          "SKILLS-LU's rows against the records: 183 fire from a byte-0 Spell over 156; 840's Poison "
+          "with its flat 10 s and its 'you and' marked; 2212 over 312 with its compass clause marked; "
+          "287 and 2221 heal over 5000 (2221's cure of Burning marked twice); 784 must follow a lead "
+          "(2), 973 an off-hand (4), 1033 a dual (1) -- each CHAIN_GATED; 974 counts as an off-hand "
+          "(combo 2); and the four class-heal READINGS still match their templates' digests on this "
+          "build (a changed template voids the reading and the row falls back to the exclusion)")
     types = collections.Counter(r["type_code"] for r in lrows.values())
     check(set(types) <= {3, 4, 5, 7, 10, 14, 19} and types[5] >= 20,
           "the shipped types: Stances, Hexes, Spells (20+), Signets, Skills, attacks, a Preparation "
@@ -878,13 +1016,21 @@ if records is not None:
               and all(g2[s] == grades[s] for s in records if s not in lab),
               "the census grades a label row 'label-only', never 'modelled', and nothing else moves",
               dict(c2))
-        disk = skilldesc.default_labels_path()
+        # The overlay on disk must equal a fresh emit. DEFAULT: the vault's own file --
+        # the one every server on this machine loads. On a BRANCH whose gate has moved
+        # (SKILLS-LU) the vault is stale until the merge regenerates it, so the check may
+        # be pointed at an explicit emit with RURIK_SKILL_LABELS=<path>; it names which
+        # file it read, and the default stays the vault, never a branch's scratch copy.
+        explicit = os.environ.get("RURIK_SKILL_LABELS", "").strip()
+        disk = Path(explicit) if explicit else skilldesc.default_labels_path()
+        where = "RURIK_SKILL_LABELS" if explicit else "the vault"
         if disk.is_file():
             check(disk.read_bytes() == b1,
-                  f"the overlay ON DISK ({disk}) is byte-identical to a fresh emit -- regenerated, "
-                  f"not hand-edited")
+                  f"the overlay ON DISK ({where}: {disk}) is byte-identical to a fresh emit -- "
+                  f"regenerated, not hand-edited; a mismatch means `python toolkit/clientscan/"
+                  f"skilldesc.py --emit-labels` is owed (at the merge, into the vault)")
         else:
-            LEDGER.skip("the vault overlay on disk (1 check)",
+            LEDGER.skip("the overlay on disk (1 check)",
                         f"{disk} absent -- `python toolkit/clientscan/skilldesc.py --emit-labels`")
     ix.close()
 
