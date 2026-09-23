@@ -28,6 +28,44 @@ move back.
 
 ---
 
+### DESKWORK-D1 (steps 1-2) -- 2026-09-22 -- **the c2s send-site census, and the hero kick it found**
+
+[studies/deskwork/PLAN.md](studies/deskwork/PLAN.md) §3 DESKWORK-D1;
+[studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md) §D1. Two things landed, one commit
+each; the remaining D1 steps (retail c2s triage, the add, the hero skill toggle, travel,
+inventory) stay open in §8.1.
+
+**Step 2, the census.** `toolkit/clientscan/sendsites.py` enumerates every c2s send site
+in the client with NO disassembler (`gwpe` + `asserts` + `buildid`, bare-machine, so it
+re-runs after any ArenaNet build). It finds the two channel framers by a masked prologue
+signature and reads each call site's opcode from the `C7 45 YY <imm32>` store within 64
+bytes before, tied to the pushed buffer slot for confidence. MEASURED on 38797 and 38888:
+**214 sites, 40 (auth framer, GcAuthCmd) + 174 (game framer, CharMsg)**; the framers' two
+VAs swapped order between the builds, which is why a hardcoded "second framer" would have
+censused the wrong channel. Five anchors pinned per build (`0x0040`, `0x0016`, `0x00B1`,
+`0x001E`, `0x001F`). The route's 38797 wrapper for `0x0016` (`0x0091FD60`) is **refuted** —
+that VA stores opcode `0x17`; the true `0x0016` wrapper is `0x0091FD00` (the route
+conflated the 38833 address). Known-bad arm: a wrong framer VA yields zero rows.
+`test_sendsites.py` pins the framers, the counts, the anchors per build and the known-bad
+arm (floor 35). Commit `49a3ef01`.
+
+**Step 1, the kick.** c2s `0x001F` HERO_KICK is **OBSERVED n=1** (`20260916T150306`
+`:62321`, `c2s 0x001F [6]` at t=158.676 → the teardown batch at 158.718: `0x0075 [379]`,
+`0x01C3 [28, 68, 379]`, `0x00F8 [379]`, `0x003E [379]`, `0x00B0 [68, 1]`, `0x0145 [96]`).
+Named `HERO_KICK` in `schema/overrides.json` (medium). The server now handles it
+(`handle_hero_kick`): it drops the hero from the party set, despawns its body, sends
+retail's own batch in retail's order with OUR ids, and under `--persist` writes the kick to
+the character store (`charstore.set_hero_kicked` / `kicked_heroes`) so the next zone-in
+sends `0x0073` for the hero (still owned) but no `0x0072`/`0x01C2` — the acceptance the
+tape's own next two loads show. Behind `--no-hero-kick` (default ON: OBSERVED and tested).
+`test_herokick.py` replays the batch in byte order with a known-bad permutation arm, drives
+the real handler with a fake send and a scratch store, and pins the persist-across-zone
+asymmetry (floor 29). This corrects `studies/heroes` §3.3's "c2s direction NOT FOUND" (the
+kick is found; the add `0x001E` stays static-only) and §8.1's SANDBOX-N2 line. **Client
+confirmation (one loopback click) is still owed** — the wire and persist are proven offline.
+
+---
+
 ### SANDBOX-B7 -- 2026-09-22 -- **the in-game panels own the bars and the ranks; Skills and Party tabs**
 
 [studies/sandbox/PLAN.md](studies/sandbox/PLAN.md) §2 B7, §4 F3. The owner: "first tab

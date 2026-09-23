@@ -1894,9 +1894,10 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 **Desk routes the owner took, 2026-09-22** — [studies/deskwork/PLAN.md](studies/deskwork/PLAN.md) §3
 
-* **DESKWORK-D1**: the c2s send-site census, SANDBOX-N2's hero kick armed from retail's
-  one batch and the add from its ChCliApi wrapper, then retail's unhandled c2s triaged,
-  the hero skill toggle, travel and inventory.
+* **DESKWORK-D1**: steps 1–2 landed (PLAN-LOG) — the bare-machine c2s send-site census
+  over both framers (`sendsites.py`, 214 sites) and SANDBOX-N2's hero kick armed from
+  retail's one batch (c2s `0x001F`). **Open**: retail's unhandled c2s triaged, the add
+  from its ChCliApi wrapper (c2s `0x001E`), the hero skill toggle, travel and inventory.
 * **DESKWORK-D5**: the combat rules retail's tapes on disk already settle — the adrenaline
   gate (SKILLS-B1's gate half), interrupts, property 10 and the `[42]`/`[55]` residue, NPC
   recharge from completion, party-wide shouts, the adrenaline replay, the refusal ids.
@@ -2131,8 +2132,12 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   entirely in-game from empty bars and unspent points keep the build across a run) —
   predictions in §3 there.
 * **SANDBOX-N1**: a filterable skill and attribute picker for the Enemies tab (the
-  owner, 2026-09-22), then **N2**: adding and kicking heroes from the in-game party
-  panel, whose client message is NOT FOUND (heroes §3.3).
+  owner, 2026-09-22), then **N2**: adding heroes from the in-game party panel. The
+  **kick shipped** (DESKWORK-D1 step 1, PLAN-LOG): c2s `0x001F` HERO_KICK is
+  OBSERVED with retail's own teardown batch and is handled behind `--no-hero-kick`,
+  holding across a zone under `--persist`. The **add is next** — c2s `0x001E`, static
+  only (its wrapper `0x0091FF00`; no retail tape carries it). Both need a
+  final loopback click to confirm.
 * **SANDBOX: `ENERGY_BY_PROFESSION` is WIKI recalled, unread** — eight of ten rows in
   `toolkit/harness/sandbox.py` want GWW "Energy" read back before they are quoted as
   facts; the window shows them as editable defaults.

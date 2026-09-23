@@ -6322,6 +6322,25 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   NEW list (an in-place write made the before/after log print the same value twice);
   and the duplicate report ignores empties, since two 0 slots are not two copies of a
   skill. Floor 24, set from a real green run.), **2026-09-15 (night, last), RUN-HEROLIB-D -- the swap.** `refuse_bar_swap` and `apply_bar_swap` are checked on the run's OWN numbers: fixture [281, 276, 310, 284, 991, 279, 1685, 256], D1 [281, 0, 256, 0] puts the leftmost skill rightmost and returns a new bar, D2 [256, 0, 281, 0] restores the fixture (the run's mirror check, no free parameter), the exchange is symmetric in its two ids, and the four refusals name their reason -- same skill both ends citing ChCliSkill.cpp:515, an id not on the bar (a swap exchanges two OCCUPIED slots; a replace is 0x005C), id 0, and a bar already holding an id twice. Floor 24 -> 33.
+  `toolkit/authsrv/test_herokick.py` (**2026-09-22, SANDBOX-N2 / DESKWORK-D1: the
+  hero kick, c2s 0x001F HERO_KICK**, `studies/cmsg/FINDINGS.md` §D1. Not in
+  `test_herolib.py` because that module is bare-machine (no server import) and the
+  kick handler needs the server; this drives the real `handle_hero_kick` with a fake
+  send and a scratch store, like `test_charstore.py`'s 0x005E swap. §1 replays the
+  pure `hero_kick_batch` through the codec and pins retail's byte order (0x0075,
+  0x01C3, 0x00F8, 0x003E, 0x00B0, 0x0145; OBSERVED 20260916T150306 :62321 t=158.718),
+  with a KNOWN-BAD reversed-order arm that must not match and each message round-trips
+  through the GAME_SMSG catalog. §2 drives the handler: it emits the six-message batch
+  in order with OUR ids (agent 200, owner PLAYER_NUMBER, party 1, inventory
+  HERO_INVENTORY), drops the hero from the party set and despawns its body; refusal
+  arms (an unowned index, an already-kicked hero) send NOTHING (the known-bad is a
+  double teardown), and the multi-hero size counts the party that remains. §3 is the
+  acceptance: a kick on a --persist store writes the character's `kicked_heroes`,
+  survives a reopen, and a fresh connection seeds it back so `hero_slots()` still OWNS
+  the hero (its 0x0073 HERO_INFO goes out) while `party_hero_slots()` EXCLUDES it (no
+  0x0072/0x01C2) -- exactly the tape's next two loads. The control: with --persist OFF
+  the batch still goes out but the store is untouched; and the store REFUSES a
+  `kicked_heroes` list holding index 0. Floor 29.),
   `toolkit/authsrv/test_charstore.py` (the §6 persistence layer against a scratch
   vault, no server started: round-trips, the client's settings blob served back
   verbatim, and ensure-never-overwrites — the disease persistence exists to cure is

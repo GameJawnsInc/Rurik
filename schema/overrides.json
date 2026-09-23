@@ -346,6 +346,25 @@
    }
   },
   "GAME_CMSG": {
+   "31": {
+    "opcode": 31,
+    "table": "GAME_CMSG_0031",
+    "declared_unpack_size": 4,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 31
+     },
+     {
+      "type": "word",
+      "length": 0
+     }
+    ],
+    "name": "HERO_KICK",
+    "name_confidence": "medium",
+    "why": "OBSERVED n=1 -- the hero-kick button. Capture 20260916T150306 connection 10.0.0.210:62321: c2s 0x001F [6] at t=158.676 (payload = the hero index, here 6 = Koss, who loaded into the party via 0x0072 [6, 379, 96, 2] and 0x01C2 [28, 68, 379, 6, 3]), answered 42 ms later at t=158.718 by the teardown batch 0x0075 [379], 0x01C3 [28, 68, 379], 0x00F8 [379], 0x003E [379], 0x00B0 [68, 1], 0x0145 [96] -- agent 379, owner player 68, party 28, inventory 96. The kick holds across a zone: the tape's next two loads send 0x0073 for hero 6 (owned) but no 0x0072/0x01C2 (not in the party). Our own client emits it too, unhandled until now (vault/captures/gamesrv/authsrv-20260913T093718-c1.jsonl, 0x001F [3]/[40]). Send wrapper 0x0091FF30 on 38797 (send-site census, studies/cmsg/FINDINGS.md D1). The mirror c2s 0x001E is hero ADD (wrapper 0x0091FF00, static only -- no retail tape carries it). Named medium: mechanism OBSERVED, n=1."
+   },
    "144": {
     "opcode": 144,
     "table": "GAME_CMSG_0144",

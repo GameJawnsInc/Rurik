@@ -4915,6 +4915,26 @@ GAME_SMSG_HERO_UNNAMED_0065 = 0x0065   # [agent_id, byte]; catalog name null; he
 # owned hero in every load, inside the player's own block (agents.hero_info's
 # docstring has the witness and the two asserting runs without it).
 GAME_SMSG_HERO_INFO = 0x0073
+# SANDBOX-N2, the hero-kick teardown batch (studies/cmsg/FINDINGS.md D1).
+# OBSERVED n=1 on capture 20260916T150306 :62321 at t=158.718, in this order,
+# as the reply to c2s 0x001F HERO_KICK. Opcode numbers are MEASURED; the names
+# are the batch's roles, medium/low, and the schema does not (yet) carry them.
+# 0x0075 [agent] leads the batch -- role low, named for its slot in it.
+GAME_SMSG_HERO_UNLINK = 0x0075
+# 0x01C3 [party, owner, agent] -- the roster-remove mirror of 0x01C2
+# PARTY_HERO_ADD: RECV table 0x00bcb788, the SAME table 0x01C2 uses
+# (agents.party_hero_add's docstring), so this is medium-high.
+GAME_SMSG_PARTY_HERO_REMOVE = 0x01C3
+# 0x00F8 [agent] -- the despawn sweep (studies/pvpui/FINDINGS.md 31.3,
+# skillcast 1004: it clears the agent's entry from seven per-agent containers).
+GAME_SMSG_AGENT_DESPAWN_SWEEP = 0x00F8
+# 0x003E [agent] -- AGENT_VIEW_UNLINK (schema/overrides.json GAME_SMSG 62:
+# binary-search-deletes the agent from the by-id view list and detaches its
+# mission-map view). Distinct channel from GAME_CMSG_MOVE_TO_COORD == 0x003E.
+GAME_SMSG_AGENT_VIEW_UNLINK = 0x003E
+# 0x0145 [inventory_id] -- destroys the hero's inventory container (the 0x013E/
+# 0x0144 group that filled it at load; smsgsweep groups 0x0145 with inventory).
+GAME_SMSG_INVENTORY_REMOVE_BAG = 0x0145
 # HERO_WIRE_POOLS: a hero's adrenaline (0x00CF 107 rows, 0x00D0 7) and its
 # skill family (0x00E3 48, 0x00E5 35, 0x00E6) are on the wire like the
 # player's; a HENCHMAN's never are (0 on eleven henchman bodies).
@@ -10003,6 +10023,12 @@ GAME_CMSG_HERO_AI_MODE = 0x0015
 # 0x0016 is the lock, [heroAgent, targetAgent], CONFIRMED live 2026-08-19 --
 # and its own zero form [heroAgent, 0] is the toggle-OFF, also captured.
 GAME_CMSG_HERO_LOCK_TARGET = 0x0016
+# The party panel's KICK button, [hero_index]. OBSERVED n=1 (SANDBOX-N2,
+# studies/cmsg/FINDINGS.md D1): 20260916T150306 :62321, c2s 0x001F [6] at
+# t=158.676 -> the teardown batch above at 158.718. Our own client sends it too
+# (authsrv-20260913T093718-c1, 0x001F [3]/[40], unhandled until now). The mirror
+# c2s 0x001E is hero ADD, static-only (no retail tape carries it); next step.
+GAME_CMSG_HERO_KICK = 0x001F
 # 0x0017 is NOT the unlock. It was named HERO_UNLOCK_TARGET on 2026-08-19 by
 # reading it as "the other branch of the crosshair", and the name was
 # RETRACTED the same day (pvpui 28.11): the branch is chosen by a getter
@@ -10674,6 +10700,48 @@ def hero_slots():
     """
     return [(h, HERO_AGENT_ID + i, HERO_DEFINITION + i)
             for i, h in enumerate(HERO_IDS)]
+
+
+def kicked_heroes_set(state):
+    """SANDBOX-N2: the hero indices kicked from the party this session.
+
+    Per CONNECTION (on `state`), so one client's kick does not touch another's,
+    and seeded ONCE from the character store under --persist so the kick holds
+    across a zone change (the tape's next loads send 0x0073 for the kicked hero
+    but no 0x0072/0x01C2). Order-independent like `hero_build`: it opens the
+    store itself if the load path has not yet, because the load ordering is
+    load-bearing for a dozen other things and a getter that works whenever it is
+    called cannot be re-broken by the next reordering. With --persist off it is
+    an empty set and never touches the store, so a default run is byte-identical.
+    """
+    s = state.get("kicked_heroes")
+    if s is not None:
+        return s
+    store = state.get("charstore_game")
+    if store is None and PERSIST:
+        store, _row = charstore.find_character(state.get("char_uuid", ""))
+        if store is not None:
+            state["charstore_game"] = store
+    s = (set(int(h) for h in store.kicked_heroes(state.get("char_uuid", "")))
+         if store is not None else set())
+    state["kicked_heroes"] = s
+    return s
+
+
+def hero_kicked(state, hero_index):
+    """SANDBOX-N2: has this hero been kicked from the party this session?"""
+    return int(hero_index) in kicked_heroes_set(state)
+
+
+def party_hero_slots(state):
+    """hero_slots() minus any kicked hero -- the PARTY membership.
+
+    hero_slots() is every OWNED hero (0x0073 HERO_INFO goes to all of them, so a
+    kicked hero can still be re-added); this is the subset that is in the party
+    and so gets the body, the activation (0x0072) and the roster row (0x01C2).
+    """
+    return [(h, a, d) for (h, a, d) in hero_slots()
+            if not hero_kicked(state, h)]
 HERO_DEFINITION = 10
 HERO_BODY = False
 # THESE THREE NEED A MODULE-LEVEL DEFAULT AND IT IS NOT DECORATION. They were
@@ -11081,6 +11149,11 @@ SPAWN_WEAPON_ITEM_ID = 300
 PARTY_COMMANDS = True          # False (--party-ignore-commands): the clicks
                                # are echoed and change nothing -- every run
                                # before 2026-09-13.
+HERO_KICK_ENABLED = True       # False (--no-hero-kick): c2s 0x001F is ignored,
+                               # the pre-SANDBOX-N2 behaviour. Default ON because
+                               # the kick is OBSERVED with retail's own teardown
+                               # batch (studies/cmsg/FINDINGS.md D1) and tested
+                               # (test_herokick.py).
 AI_MODE_FIGHT, AI_MODE_GUARD, AI_MODE_AVOID = 0, 1, 2   # 0x0015's byte (pvpui 28.5)
 AI_MODE_NAMES = {0: "Fight", 1: "Guard", 2: "Avoid Combat"}
 SPIRIT_RANGE = 2512.0          # u -- WIKI (GWW "Range"): binding rituals /
@@ -22764,6 +22837,78 @@ def handle_hero_command(values, send, state, conn_id, opcode):
                   f"[SLICE-H5]", flush=True)
 
 
+def hero_kick_batch(agent_id, player_number, party_id, inventory_id, party_size):
+    """SANDBOX-N2: retail's hero-kick teardown, in retail's order.
+
+    OBSERVED n=1 (studies/cmsg/FINDINGS.md D1): 20260916T150306 :62321, the reply
+    to c2s 0x001F [6] at t=158.718 was 0x0075 [379], 0x01C3 [28, 68, 379],
+    0x00F8 [379], 0x003E [379], 0x00B0 [68, 1], 0x0145 [96] -- there 379 the hero
+    agent, 68 the owner player, 28 the party, 96 the hero inventory. PURE, so the
+    byte order is replayable in a test (test_herokick.py) and this function is
+    the one place the order lives. Returns [(opcode, values, label)].
+    """
+    aid = int(agent_id)
+    return [
+        (GAME_SMSG_HERO_UNLINK, [aid],
+         f"HERO_UNLINK(agent {aid})"),
+        (GAME_SMSG_PARTY_HERO_REMOVE,
+         [int(party_id), int(player_number), aid],
+         f"PARTY_HERO_REMOVE(party {party_id}, owner {player_number}, "
+         f"agent {aid})"),
+        (GAME_SMSG_AGENT_DESPAWN_SWEEP, [aid],
+         f"AGENT_DESPAWN_SWEEP(agent {aid})"),
+        (GAME_SMSG_AGENT_VIEW_UNLINK, [aid],
+         f"AGENT_VIEW_UNLINK(agent {aid})"),
+        (GAME_SMSG_PLAYER_PARTY_SIZE,
+         agents.player_party_size(int(player_number), int(party_size)),
+         f"PLAYER_PARTY_SIZE({party_size}) -- the party after the kick"),
+        (GAME_SMSG_INVENTORY_REMOVE_BAG, [int(inventory_id)],
+         f"INVENTORY_REMOVE_BAG(bag {inventory_id})"),
+    ]
+
+
+def handle_hero_kick(values, send, state, conn_id):
+    """GAME_CMSG 0x001F HERO_KICK: the party panel's kick button (SANDBOX-N2).
+
+    OBSERVED n=1 (studies/cmsg/FINDINGS.md D1). values[0] is the header word;
+    values[1] is the hero INDEX. The hero must be one this run owns and not
+    already kicked; then the retail teardown batch goes out with OUR ids, the
+    hero is dropped from the party (its body despawned if it has one), and under
+    --persist the kick is written to the store so the next zone-in re-sends
+    0x0073 for the hero but not 0x0072/0x01C2. RECONSTRUCTION where a value has
+    no single-hero witness: the post-kick party size counts the remaining party.
+    """
+    hid = int(values[1])
+    slot = next(((h, a, d) for (h, a, d) in hero_slots() if h == hid), None)
+    if slot is None:
+        print(f"[c{conn_id}] HERO_KICK({hid}) ignored: not an owned hero of "
+              f"this run {[h for h, _a, _d in hero_slots()]} [SANDBOX-N2]",
+              flush=True)
+        return
+    if hero_kicked(state, hid):
+        print(f"[c{conn_id}] HERO_KICK({hid}) ignored: already kicked "
+              f"[SANDBOX-N2]", flush=True)
+        return
+    _hid, _haid, _hdef = slot
+    kicked_heroes_set(state).add(hid)
+    # Despawn its world body if it has one (a town hero has none). Popped rather
+    # than routed through remove_agent, because the teardown below is 0x00F8 +
+    # 0x003E, not the 0x0021 WORLD_REMOVE_AGENT the retail kick does NOT send.
+    if _haid in state.get("agents", {}):
+        state["agents"].pop(_haid, None)
+    party_size = (1 + (1 if HENCHMAN is not None else 0)
+                  + len(party_hero_slots(state)))
+    for op, vals, label in hero_kick_batch(_haid, PLAYER_NUMBER, 1,
+                                           HERO_INVENTORY, party_size):
+        send(op, vals, label)
+    if PERSIST and state.get("charstore_game") is not None:
+        state["charstore_game"].set_hero_kicked(state.get("char_uuid", ""), hid)
+        print(f"[c{conn_id}] PERSIST: hero {hid} kicked -- held across zones",
+              flush=True)
+    print(f"[c{conn_id}] HERO_KICK: hero {hid} (agent {_haid}) removed from the "
+          f"party; size now {party_size} [SANDBOX-N2]", flush=True)
+
+
 def party_flag_point(state, agent_id, agent):
     """Where a party body is FLAGGED to stand, or None: its own hero flag
     first, else the party flag at its own slot offset (the party moves "as a
@@ -27022,6 +27167,8 @@ def _handle_request_players(send, state, conn_id, stop, rec):
         _iname = (agents.npc_template(HERO_INFO_NAME)
                   ["enc_name"] if HERO_INFO_NAME else "")
         for _hid, _haid, _hdef in hero_slots():
+            if hero_kicked(state, _hid):
+                continue                                    # SANDBOX-N2: kicked -> no 0x0074, no 0x01C2 roster row
             if HERO_INFO and not (HERO_RIG_RETAIL and HERO_ACTIVATE):
                 # JARIN: retail sends NO 0x0074 (3 of 3 instances); the
                 # retail rig below sends the character block + 0x0072 instead.
@@ -27104,7 +27251,7 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     # HERO_ACTIVATE_FIRST's comment for the refuted
     # prediction that opened this.
     if HERO_ACTIVATE and HERO_ACTIVATE_FIRST:
-        for _hid, _haid, _hdef in hero_slots():
+        for _hid, _haid, _hdef in party_hero_slots(state):   # SANDBOX-N2: kicked heroes are not activated
             _seq.append(agents.hero_activate(
                 HERO_ACTIVATE_ID
                 if (HERO_ACTIVATE_ID is not None
@@ -27135,6 +27282,8 @@ def _handle_request_players(send, state, conn_id, stop, rec):
                 _hap[0], _hap[1],
                 list(_hi_skills) if _hi_skills is not None
                 else hero_bar_ids(_hid)))               # SANDBOX-B3: per hero
+            if hero_kicked(state, _hid):
+                continue                                # SANDBOX-N2: owned (0x0073 sent) but kicked -> no character block, no 0x0072
             _seq.extend(hero_character_block(state, _haid, _hid))
             _seq.append(agents.hero_activate(
                 HERO_ACTIVATE_ID
@@ -27761,7 +27910,7 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     # 0x0074 leading bytes were the rival and a run refuted them (F28).
     # Before the level, as retail orders the pair (smsg: 0x00A6 -> 0x009F,
     # 130 of 130).
-    for _hid, _haid, _hdef in (hero_slots()
+    for _hid, _haid, _hdef in (party_hero_slots(state)   # SANDBOX-N2: not a kicked hero
                                if HERO_BODY and not party_bodies_here(state)
                                else ()):
         _hp = hero_profession(_hid)                     # SANDBOX-B3: per hero
@@ -27770,14 +27919,14 @@ def _handle_request_players(send, state, conn_id, stop, rec):
                   agents.agent_set_profession(_haid, int(_hp)),
                   f"AGENT_SET_PROFESSION(hero agent {_haid}, {_hp}) -- no "
                   f"body in a town; the summary record the roster reads")
-    for _hid, _haid, _hdef in hero_slots():
+    for _hid, _haid, _hdef in party_hero_slots(state):   # SANDBOX-N2: not a kicked hero
         _hlv = hero_level(_hid)                          # SANDBOX-B3: per hero
         if _hlv is None:
             continue
         hsend(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
               [agents.PROP_LEVEL, _haid, _hlv],
               f"level {_hlv} on hero agent {_haid}")
-    for _hid, _haid, _hdef in (hero_slots()
+    for _hid, _haid, _hdef in (party_hero_slots(state)   # SANDBOX-N2: not a kicked hero
                                if (HERO_VITALS is not None or HERO_ROWS)
                                and not _rig_retail
                                else ()):
@@ -27808,7 +27957,7 @@ def _handle_request_players(send, state, conn_id, stop, rec):
               f"a field only); roster, activation, level and vitals still "
               f"go out [SLICE-H2b]", flush=True)
     for _i, (_hid, _haid, _hdef) in (
-            enumerate(hero_slots())
+            enumerate(party_hero_slots(state))         # SANDBOX-N2: a kicked hero gets no body
             if HERO_BODY and party_bodies_here(state) else ()):
         _hro = hero_body_row(_hid)                     # SANDBOX-B3: per hero
         _hvt = hero_vitals(_hid)
@@ -27884,7 +28033,7 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     # which is why a hero can have one at all.
     # This is the message the arc spent two refuted
     # hypotheses looking for, and we already had it.
-    for _hid, _haid, _hdef in (hero_slots()
+    for _hid, _haid, _hdef in (party_hero_slots(state)   # SANDBOX-N2: not a kicked hero
                                if HERO_ATTRIBS and not _rig_retail else ()):
         # 0x00B7 FIRST, and read the reason before moving
         # it. THERE ARE TWO PROFESSION STORES and this arc
@@ -27960,7 +28109,7 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     # shapes, and this is a RECV message this server has
     # been sending for the player all along. Fourth time
     # this arc that the mechanism was already in the tree.
-    for _hid, _haid, _hdef in (hero_slots()
+    for _hid, _haid, _hdef in (party_hero_slots(state)   # SANDBOX-N2: not a kicked hero
                                if HERO_SKILLBAR and not _rig_retail else ()):
         # THE STORE'S BAR FIRST. Without one this sends the PLAYER's bar to
         # the hero, which is what this site has always done and is wrong on
@@ -27986,7 +28135,7 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     # the commander panel. One message per hero slot; the
     # value is retail's modal 100<<24 and lands at
     # record+0x30, whatever that field turns out to mean.
-    for _hid, _haid, _hdef in (hero_slots()
+    for _hid, _haid, _hdef in (party_hero_slots(state)   # SANDBOX-N2: not a kicked hero
                                if HERO_CHAR else ()):
         hsend(GAME_SMSG_CHAR_TABLE_VALUE,
               [_haid, 100 << 24],
@@ -27999,7 +28148,7 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     # and an EARLY assert (before this line) would itself
     # name the commander-binding trigger.
     for _hid, _haid, _hdef in (
-            hero_slots()
+            party_hero_slots(state)                      # SANDBOX-N2: not a kicked hero
             if (HERO_ACTIVATE and not HERO_ACTIVATE_FIRST and not _rig_retail)
             else ()):
         hsend(*agents.hero_activate(
@@ -29558,6 +29707,14 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # rig cannot make it fire, and the clear is 0x0016
                         # [hero, 0], which the handler takes.
                         handle_hero_command(values, send, state, conn_id, opcode)
+                    elif opcode == GAME_CMSG_HERO_KICK:
+                        # SANDBOX-N2: the party panel's kick button. OBSERVED
+                        # n=1 with retail's teardown batch (studies/cmsg D1).
+                        if HERO_KICK_ENABLED:
+                            handle_hero_kick(values, send, state, conn_id)
+                        else:
+                            print(f"[c{conn_id}] HERO_KICK ignored "
+                                  f"(--no-hero-kick) [SANDBOX-N2]", flush=True)
                     elif opcode == GAME_CMSG_CANCEL_ACTION:
                         # The one door that reaches a held cast -- the client
                         # sends no movement while casting, only this (the
@@ -33532,6 +33689,11 @@ def main():
         print("[party] --party-ignore-commands: the commander's stance, lock "
               "and flags are echoed and change nothing -- every run before "
               "SLICE-H5 (2026-09-13).", flush=True)
+    if a.no_hero_kick:
+        global HERO_KICK_ENABLED
+        HERO_KICK_ENABLED = False
+        print("[party] --no-hero-kick: c2s 0x001F is ignored -- the pre-N2 "
+              "behaviour (the kick button did nothing).", flush=True)
     if a.party_no_fight:
         global PARTY_FIGHTS
         PARTY_FIGHTS = False

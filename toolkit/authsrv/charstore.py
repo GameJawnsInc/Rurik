@@ -345,6 +345,14 @@ def validate(data, path):
                                       f"learned_skills", row["learned_skills"])
         if "heroes" in row:
             _validate_heroes(path, repr(row["name"]), row["heroes"])
+        if "kicked_heroes" in row:
+            kk = row["kicked_heroes"]
+            if not isinstance(kk, list) or not all(
+                    isinstance(h, int) and 1 <= h <= MAX_HERO_INDEX
+                    for h in kk):
+                _refuse(path, f"character {row['name']!r}: kicked_heroes must "
+                              f"be a list of hero indices 1..{MAX_HERO_INDEX} "
+                              f"(SANDBOX-N2; index 0 is not a hero)")
         if "skillbar" in row:
             _validate_hero_bar(path, f"character {row['name']!r}",
                                row["skillbar"])
@@ -747,6 +755,33 @@ class Store:
         hero["attributes"] = [[int(a), int(r)] for a, r in sorted(pairs)]
         self.save()
         return hero["attributes"]
+
+    # ---- kicked heroes: owned but not in the party (SANDBOX-N2) ----------
+    # A kicked hero stays OWNED -- retail keeps sending its 0x0073 HERO_INFO in
+    # every load -- but leaves the party, so it is not activated (0x0072) and
+    # gets no roster row (0x01C2). OBSERVED on 20260916T150306: after the kick
+    # of hero 6, the tape's next two loads carry 0x0073 for hero 6 and neither
+    # 0x0072 nor 0x01C2 (studies/cmsg/FINDINGS.md D1). Persisted here so the kick
+    # holds across a zone. This is a CHARACTER-scoped set, like heroes, because
+    # party membership is the character's, not the account's.
+    def kicked_heroes(self, uuid_hex):
+        """The hero indices this character has kicked -- [] when none."""
+        row = self.character_by_uuid(uuid_hex)
+        return list(row.get("kicked_heroes") or []) if row is not None else []
+
+    def set_hero_kicked(self, uuid_hex, hero_index, kicked=True):
+        """Add (or, kicked=False, remove) a hero from the kicked set; saves."""
+        row = self.character_by_uuid(uuid_hex)
+        if row is None:
+            return None
+        have = set(int(h) for h in (row.get("kicked_heroes") or []))
+        if kicked:
+            have.add(int(hero_index))
+        else:
+            have.discard(int(hero_index))
+        row["kicked_heroes"] = sorted(have)
+        self.save()
+        return row["kicked_heroes"]
 
 
 def find_character(uuid_hex, base=None):
