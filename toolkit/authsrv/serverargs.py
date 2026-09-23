@@ -837,9 +837,10 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "OBSERVED on every load cell of all 96 live connections) "
                          "with the 0x006E/0x006F visuals read through the bag->visual "
                          "permutation, so the visual array is byte-identical either "
-                         "way. A stored equipped cell that is not the piece's type's "
-                         "is dropped from the store with a log line under either "
-                         "arm, never reinterpreted.")
+                         "way; the cell is keyed by the piece's worn LOCATION, so two "
+                         "pieces never share one. A stored equipped cell that is not "
+                         "the dress's is dropped from the store with a log line under "
+                         "either arm, never reinterpreted.")
     ap.add_argument("--no-item-move-by-id", action="store_true",
                     help="THE REVERT ARM for c2s 0x0072 ITEM_MOVE_BY_ID (the owner's "
                          "confirmation pass, 2026-09-23): ignore a drag between two "
@@ -851,9 +852,13 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "[key, occupant, item] (the occupied-slot equip's shape; "
                          "the client's swap handler is not equipped-specific), the "
                          "cells persisted under --persist. Refused with nothing sent: "
-                         "an unknown item, an undeclared bag, a slot past the bag, "
-                         "the item's own cell, a RESERVED cell, an equipped-bag "
-                         "destination that is not the item's type's slot.")
+                         "an unknown item, an undeclared bag, a slot past the bag, a "
+                         "STORAGE bag (types 4/5: no tape carries a move into one, "
+                         "and the client's set strip there is unmodelled), the "
+                         "item's own cell, an EMPTY RESERVED cell (a worn off hand's "
+                         "return cell), an equipped-bag destination that is not the "
+                         "item's type's slot. The item store is the only map of the "
+                         "bags -- a merchant purchase is registered in it too.")
     ap.add_argument("--hero-skill-toggle-per-bit", action="store_true",
                     help="THE ALTERNATIVE REPLY for DESKWORK-D1 step 6: answer a "
                          "suppress click with 0x0064 [agent, slot, value] -- one bit "

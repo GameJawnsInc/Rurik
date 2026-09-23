@@ -31882,10 +31882,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         declare_weapon_sets(send, state)
                         # THE ARMOUR. Declared and put in the equipped
                         # bag at RETAIL'S bag cells (body 2, legs 3, head 4,
-                        # boots 5, gloves 6 -- the type's, item_layout_defaults;
-                        # the owner's confirmation pass), NOT at the 0x006E
-                        # positions STARTER_ARMOUR's third column names: the
-                        # paper doll draws each bag slot at a fixed row.
+                        # boots 5, gloves 6 -- keyed by the piece's worn
+                        # LOCATION, equipped_bag_slot / item_layout_defaults;
+                        # the owner's confirmation pass and its fix, ENG-1),
+                        # NOT at the 0x006E positions STARTER_ARMOUR's third
+                        # column names: the paper doll draws each bag slot at
+                        # a fixed row.
                         # CREATE_NAMED_ITEM only declares the bytes;
                         # ITEM_MOVED_TO_LOCATION is what makes the paper doll
                         # draw a piece, and 0x006E below is what puts it on
@@ -31897,8 +31899,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                      agents.named_item(
                                          item_id, armour_row(key, slot)),
                                      f"CREATE_NAMED_ITEM({key})")
-                                _bag_slot = equipped_bag_slot(
-                                    armour_row(key, slot).get("item_type"), slot)
+                                _bag_slot = equipped_bag_slot(slot)   # by LOCATION (ENG-1)
                                 _cell = item_cell(state, item_id, EQUIPPED_BAG_ID, _bag_slot)
                                 send(GAME_SMSG_ITEM_MOVED_TO_LOCATION,
                                      [1, item_id] + _cell,

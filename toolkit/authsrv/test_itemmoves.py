@@ -113,7 +113,7 @@ import charstore                                             # noqa: E402
 import itemstore                                             # noqa: E402
 import authsrv                                               # noqa: E402
 
-led = checks.Ledger("inventory moves (DESKWORK-D1 step 8)", floor=158)   # 2026-09-23, from the green run with RURIK_VAULT pointed at an empty directory: the bare-machine core (78 -> 102 at the fix pass -> 137 at the owner's confirmation pass -> 158 at its fix pass); §1b's 17 and §1c's 8 ride the vault (183 vaulted)
+led = checks.Ledger("inventory moves (DESKWORK-D1 step 8)", floor=159)   # 2026-09-23, from the green run with RURIK_VAULT pointed at an empty directory: the bare-machine core (78 -> 102 at the fix pass -> 137 at the owner's confirmation pass -> 159 at its fix pass); §1b's 17 and §1c's 8 ride the vault (184 vaulted)
 
 CHG, SWAP, VIS = 0x014B, 0x0152, 0x006F
 MOVE, EQUIP = authsrv.GAME_CMSG_ITEM_MOVE, authsrv.GAME_CMSG_EQUIP_ITEM
@@ -1299,6 +1299,14 @@ try:
            and "dress_cell_label(" in dws and "equipped {slot}" not in handle_src,
            "LOCK: every 0x013E placement label (five in the dress, one in declare_weapon_sets) is "
            "built from the SENT cell by dress_cell_label, and the constant-slot label is gone")
+    led.ok(handle_src.count("equipped_bag_slot(") == 1
+           and "_bag_slot = equipped_bag_slot(slot)" in handle_src
+           and "equipped_bag_slot(\n" not in handle_src
+           and "item_cell(state, item_id, EQUIPPED_BAG_ID, _bag_slot)" in handle_src,
+           "LOCK: the DRESS's one armour placement calls equipped_bag_slot(slot) -- the one-argument, "
+           "location-keyed form -- and feeds it to item_cell (the fix pass's first cut left the dress "
+           "on the old two-argument call, a TypeError on every real connection that no test drove; "
+           "ENG-1)")
     ild = ast.get_source_segment(SRC, _func(TREE, "item_layout_defaults"))
     hm_src = ast.get_source_segment(SRC, _func(TREE, "handle_item_move"))
     he_src = ast.get_source_segment(SRC, _func(TREE, "handle_equip_item"))

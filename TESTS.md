@@ -6567,8 +6567,8 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   a bare `0x014B` into a FILLED cell); §1c is scored over the connections that decode
   closed (ENG-8); locks for `equipped_bag_slot`'s one argument, `OFF_HAND_ITEM_IDS`,
   `storage_bag_ids()`, the wrapper's `place` / `avoid` and the commit's two merchant
-  rules. Floor 78 -> 102 -> 137 -> 158 from the green run with `RURIK_VAULT` pointed at
-  an empty directory (the bare-machine core; §1b's 17 and §1c's 8 ride the vault, 183
+  rules. Floor 78 -> 102 -> 137 -> 159 from the green run with `RURIK_VAULT` pointed at
+  an empty directory (the bare-machine core; §1b's 17 and §1c's 8 ride the vault, 184
   vaulted), ~13 s),
   `toolkit/authsrv/test_labelrun.py` (the labelled input run, which names GAME_CMSG
   opcodes from what a human was told to do: a message lands in exactly one step's
