@@ -28,6 +28,41 @@ move back.
 
 ---
 
+### DESKWORK-D1 (fix pass) -- 2026-09-22 -- **the census's channel and window corrected; the kick's 0x0145 and body guarded; the revert reverts**
+
+Corrects the entry below it (DESKWORK-D1 steps 1-2, same day), after two reviewers
+re-derived every claim from the bytes and the tapes. [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md)
+§DESKWORK-D1 (the section was renamed from §D1; its opening CORRECTED paragraph is the
+record). **Three claims of the first cut were false and are withdrawn:** (1) the 40-site
+framer `0x007DCB10` is not "the AUTH channel" — it is the `(conn, buf, ndwords)` calling
+convention, called with the GAME connection at three sites (`0x0009`, 2,687 c2s on the
+live wire; `0x0092`, 305; a static `0x0008`), so the census now names each row's CHANNEL
+from its own connection argument (175 game / 35 auth / 4 unknown, per build) and scopes
+the anchors by channel; (2) the framers' VAs did not swap order between 38797 and 38888;
+(3) the 7 "register-thunk" sites had opcodes 80–348 bytes before their calls (or a static
+buffer) — the window is now the containing function and all 214 sites resolve, confident.
+The CLI refuses a zero-row or not-two-framers result with exit 2. **The kick's defaults
+were unsafe:** `0x0145` went out unconditionally, on the default rig with key 0 (the
+measured `smsgsweep` crash, ItCliApi:2024) and in a multi-hero party against the ONE key
+every remaining hero still named; it now goes out only for a declared key no other party
+hero names. A hero WITH a body (UNOBSERVED — the retail witness was an outpost with no
+`0x0020` for the hero) now leaves through `remove_agent` (`0x0021`, RECONSTRUCTION) and
+its `hero_cmd` is cleared; `hero_locks_release`/`handle_hero_command` read the party.
+`--no-hero-kick` now reads no stored kick (it left a saved kick in force), and
+**`--reset-hero-kicks`** is the un-kick until the ADD ships (the sandbox always passes
+`--persist`; `sandbox.store_state` shows `kicked_heroes`). `test_herokick.py` (floor 29 →
+52) compares the batch to the tape's own 35 plaintext bytes with a rotated known-bad,
+drives the default/bags/body/two-hero/revert/reset arms, and locks the load path, the
+dispatch arm and `main()` with syntax-tree checks each carrying a source mutation that
+reddens it (the first cut's acceptance survived every mutation green, and its known-bad
+`reversed(order) != ORDER` could not fail). `test_sendsites.py` (35 → 85) identifies the
+snapshots with `buildid`, pins the channels, the far stores, the lengths and both
+refusals. The loopback witness is relabelled: `0x001F [3]` corroborates the hero index,
+`[40]` is UNEXPLAINED, the button press is RECONSTRUCTION. Named as a follow-up in §8.1:
+the load path's `0x00B0` under-counts heroes (retail's load sent `[68, 2]` with one hero).
+
+---
+
 ### DESKWORK-D1 (steps 1-2) -- 2026-09-22 -- **the c2s send-site census, and the hero kick it found**
 
 [studies/deskwork/PLAN.md](studies/deskwork/PLAN.md) §3 DESKWORK-D1;

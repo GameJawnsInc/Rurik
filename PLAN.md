@@ -2133,11 +2133,18 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   predictions in §3 there.
 * **SANDBOX-N1**: a filterable skill and attribute picker for the Enemies tab (the
   owner, 2026-09-22), then **N2**: adding heroes from the in-game party panel. The
-  **kick shipped** (DESKWORK-D1 step 1, PLAN-LOG): c2s `0x001F` HERO_KICK is
-  OBSERVED with retail's own teardown batch and is handled behind `--no-hero-kick`,
-  holding across a zone under `--persist`. The **add is next** — c2s `0x001E`, static
-  only (its wrapper `0x0091FF00`; no retail tape carries it). Both need a
-  final loopback click to confirm.
+  **kick shipped** (DESKWORK-D1 step 1 + fix pass, PLAN-LOG): c2s `0x001F` HERO_KICK
+  is OBSERVED with retail's own teardown batch and is handled behind `--no-hero-kick`,
+  holding across a zone under `--persist`; `--reset-hero-kicks` is the un-kick until
+  the add lands (a kick of a hero WITH a body is UNOBSERVED and handled as
+  RECONSTRUCTION). The **add is next** — c2s `0x001E`, static only (its wrapper
+  `0x0091FF00`; no retail tape carries it). Both need a final loopback click to
+  confirm.
+* **SANDBOX-N2 follow-up, the load path's party size**: `_handle_request_players`
+  sends `0x00B0 [player, 1 + henchman]` without counting heroes, while retail's load on
+  `20260916T150306` sent `[68, 2]` with one hero and the kick now sends the count WITH
+  heroes (OBSERVED). Fix the under-count with the add, and re-check `test_agentlife`'s
+  hero-rig pins.
 * **SANDBOX: `ENERGY_BY_PROFESSION` is WIKI recalled, unread** — eight of ten rows in
   `toolkit/harness/sandbox.py` want GWW "Energy" read back before they are quoted as
   facts; the window shows them as editable defaults.

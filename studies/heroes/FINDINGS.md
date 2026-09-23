@@ -268,12 +268,17 @@ answered 42 ms later by retail's teardown batch `0x0075 [379]`, `0x01C3 [28, 68,
 [379]` (AGENT_VIEW_UNLINK), `0x00B0 [68, 1]` (party size), `0x0145 [96]` (the hero's
 inventory container). It **holds across a zone**: the tape's next two loads send
 `0x0073` for hero 6 (still owned) but no `0x0072`/`0x01C2` (not in the party). Our own
-client emits it too (`authsrv-20260913T093718-c1`, `0x001F` unhandled until now). Send
-wrapper `0x0091FF30` on 38797 (`studies/cmsg/FINDINGS.md` §D1, the send-site census).
-This is the FIRST c2s hero *command* that removes party state, found the same way the
-stance was — by capturing rather than reading. The ADD (`0x001E`, wrapper
-`0x0091FF00`) is static only, no retail tape carries it, and stays NOT FOUND on the
-wire. Hiring (the outpost UI request for a fresh hero) also remains NOT FOUND.
+client emits it too (`authsrv-20260913T093718-c1`, `0x001F` unhandled until now): its
+`[3]` names that run's one hero, a second witness that the field is the hero index; a
+later `[40]` names no hero and is UNEXPLAINED, and that the operator pressed the button
+is RECONSTRUCTION (the capture records no click). The retail witness was an outpost and
+its hero had no body, so a kick of a hero WITH a body — or in a field at all — is
+UNOBSERVED. Send wrapper `0x0091FF30` on 38797 (`studies/cmsg/FINDINGS.md`
+§DESKWORK-D1, the send-site census). This is the FIRST c2s hero *command* that removes
+party state, found the same way the stance was — by capturing rather than reading. The
+ADD (`0x001E`, wrapper `0x0091FF00`) is static only, no retail tape carries it, and
+stays NOT FOUND on the wire. Hiring (the outpost UI request for a fresh hero) also
+remains NOT FOUND.
 
 ---
 
