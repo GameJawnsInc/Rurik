@@ -75,7 +75,7 @@ import content  # noqa: E402
 #   D  the vault dropped from load()'s dirs:     4 red, two synthetic and two here
 # C and D are caught by the synthetic checks too; A and B are caught by nothing else, and
 # A is the one that actually happened.
-LEDGER = checks.Ledger("content store", floor=52)  # 2026-09-23: +4, the label tier sits UNDER the hand rows (SKILLS-LT), +1 the closed tier set (ENG-6) -- 52 from the bare run (RURIK_VAULT at an empty dir), 55 with the vault; 2026-09-14: +2, the overrides layer; 2026-09-20: +2, RURIK_CONTENT_EXTRA (SANDBOX-B1)
+LEDGER = checks.Ledger("content store", floor=55)  # 2026-09-23 (SKILLS-LU fix pass): +3, a label row's marks are a closed set (ENG-D4C-2) -- 55 from the bare run (RURIK_VAULT at an empty dir), 58 with the vault; earlier that day: +4, the label tier sits UNDER the hand rows (SKILLS-LT), +1 the closed tier set (ENG-6); 2026-09-14: +2, the overrides layer; 2026-09-20: +2, RURIK_CONTENT_EXTRA (SANDBOX-B1)
 
 
 def write(dirpath, name, text):
@@ -581,6 +581,41 @@ def main():
               "REFUSED at load, naming the spelling and the closed set -- it would otherwise have "
               "replaced the hand row and survived --no-skill-labels",
               {s: (r or "LOADED")[:60] for s, r in refused.items()})
+    # SKILLS-LU's fix pass (ENG-D4C-2): a label row's MARKS are a closed set too. The vault
+    # is machine-wide, so a regenerated overlay reaches a tree whose server lacks the
+    # consumer a new mark names; that tree must DROP the row (the pre-consumer state), not
+    # serve it through the one-target path. Known marks load; an unknown one drops the row
+    # and names it in World.dropped; a hand row is never read for this.
+    MARKED = ('[thing.k]\nvalue = 3\ntier = "label"\ntier_detail = ["AREA_CASTER", "CLAUSE_KNOCKDOWN"]\n'
+              '[thing.k.provenance]\nsource = "client-table"\nextractor = "toolkit/content.py"\n'
+              'build = 38797\n'
+              '[thing.u]\nvalue = 4\ntier = "label"\ntier_detail = ["AREA_CASTER", "AREA_ORBITAL"]\n'
+              '[thing.u.provenance]\nsource = "client-table"\nextractor = "toolkit/content.py"\n'
+              'build = 38797\n')
+    with tempfile.TemporaryDirectory() as repo, tempfile.TemporaryDirectory() as vault:
+        write(repo, "a.toml", '[thing.h]\nvalue = 1\ntier_detail = ["AREA_ORBITAL"]\n'
+              + GOOD_PROV.replace("thing.a.", "thing.h."))
+        write(vault, "labels.toml", MARKED)
+        w = content.load(repo_dir=repo, vault_dir=vault,
+                         overrides_dir=os.path.join(repo, "no-such-dir"), extra_dirs=[])
+        LEDGER.ok(w.get("thing", "k")["value"] == 3 and "u" not in w.rows("thing")
+                  and len(w.dropped) == 1 and w.dropped[0].startswith("thing u:")
+                  and "AREA_ORBITAL" in w.dropped[0] and "AREA_CASTER" not in w.dropped[0]
+                  and "DROPPED" in w.dropped[0],
+                  "a label row whose tier_detail is all KNOWN marks loads; one carrying a mark "
+                  "outside content.LABEL_DETAILS_KNOWN is DROPPED at load and World.dropped names "
+                  "the row and the unknown token only", w.dropped)
+        LEDGER.ok(w.get("thing", "h")["value"] == 1 and w.get("thing", "h")["tier_detail"] == ["AREA_ORBITAL"],
+                  "a HAND row (no tier) is never read for its marks -- the closed set is the label "
+                  "tier's (a hand row's fields are its author's)")
+    LEDGER.ok("AREA_CASTER" in content.LABEL_DETAILS_KNOWN and "HEAL_PARTY" in content.LABEL_DETAILS_KNOWN
+              and "CHAIN_GATED" in content.LABEL_DETAILS_KNOWN and "AREA_ORBITAL" not in content.LABEL_DETAILS_KNOWN
+              and content._unknown_label_details({"tier": "label", "tier_detail": ["CHAIN_GATED", "X"]}) == ["X"]
+              and content._unknown_label_details({"tier_detail": ["X"]}) == []
+              and content._unknown_label_details({"tier": "label"}) == [],
+              "LABEL_DETAILS_KNOWN holds the three SKILLS-LU consumer marks (and skilldesc's whole "
+              "tier_detail vocabulary -- test_skilldesc pins the equality); _unknown_label_details "
+              "names the strangers on a label row, nothing on a hand row or a row with no marks")
 
     LEDGER.ok(alone.get("b", {}) and alone["b"]["value"] == 22,
               "and with no overrides directory the vault still wins -- the layer adds, "

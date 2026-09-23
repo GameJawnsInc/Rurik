@@ -395,6 +395,9 @@ FLAG_CLAUSE_ALSO_CASTER = "CLAUSE_ALSO_CASTER"
 FLAG_CLAUSE_CAST_SPEED = "CLAUSE_CAST_SPEED"
 FLAG_CLAUSE_RANGE = "CLAUSE_RANGE"       # "half the normal range": the arrow flies the weapon's here
 FLAG_SPEED_MOVE = "SPEED_MOVE"
+# SKILLS-LU (2026-09-23, the first residue consumers, skills 59): a compass /
+# hidden-object clause a combat consumer never reads (2212's second sentence).
+FLAG_CLAUSE_REVEAL = "CLAUSE_REVEAL"
 FLAG_PATTERNS = (
     (FLAG_IF, r"\bif\b"),
     (FLAG_FOR_EACH, r"\bfor (each|every)\b|\bper\b"),
@@ -427,11 +430,15 @@ FLAG_PATTERNS = (
     (FLAG_CLAUSE_INTERRUPT, r"\binterrupts?\b|(?<!easily )\binterrupted\b"),
     (FLAG_CLAUSE_DOUBLE_DAMAGE, r"\bdouble damage\b"),
     (FLAG_CLAUSE_DISABLE, r"\bdisabled\b"),
-    (FLAG_CLAUSE_REMOVAL, r"\b(remove|lose)s? (one|all|\d+) (condition|hex|enchantment)"),
-    (FLAG_CLAUSE_ALSO_CASTER, r"\byou and (target|that)\b"),
+    # SKILLS-LU: "relieved of <condition>" is a cure too (2221, 943), and "you
+    # and all adjacent foes" (840) puts the caster in the class beside a target
+    (FLAG_CLAUSE_REMOVAL, r"\b(remove|lose)s? (one|all|\d+) (condition|hex|enchantment)"
+                          r"|\brelieved of\b"),
+    (FLAG_CLAUSE_ALSO_CASTER, r"\byou and (target|that|all)\b"),
     (FLAG_CLAUSE_CAST_SPEED, r"\bcasts? (spells? )?[^.]{0,24}?\b(slower|faster)\b"),
     (FLAG_CLAUSE_RANGE, r"\bhalf (the normal |its normal )?range\b|\b(shorter|longer|reduced|increased) range\b"),
     (FLAG_SPEED_MOVE, r"\bmoves?\b[^.]{0,40}?\b(slower|faster)\b"),
+    (FLAG_CLAUSE_REVEAL, r"\bhidden objects?\b|\bare revealed\b"),
 )
 FLAGS = tuple(f for f, _ in FLAG_PATTERNS)
 AREA_FLAGS = frozenset({FLAG_AREA_ADJACENT, FLAG_AREA_NEARBY,
@@ -939,7 +946,11 @@ def analyse(records, texts, hand=None, mapping=None):
         # Cracked Armor) or a heal's own condition (943) -- the gate decides
         named = sorted({CONDITION_WORDS[w] for w in _CONDITION_RE.findall(norm.lower())})
         row = {"id": sid, "type_code": int(rec["type_code"]), "slots": [], "flags": sorted(fl),
-               "conditions_named": named}
+               "conditions_named": named,
+               # SKILLS-LU: a per-row measurement of the template (sha256[:16] of
+               # the raw text), so a reading recorded against one template
+               # (CLASS_HEAL_READINGS) is void the day the text changes
+               "template_sha16": template_sha16(text)}
         labels_at = collections.defaultdict(set)
         for n, label, _detail in slots:
             labels_at[n].add(label)
@@ -1209,11 +1220,76 @@ DETAIL_CONDITION_UNNUMBERED = "CONDITION_UNNUMBERED"   # a condition the text na
 DETAIL_LITERAL_DROPPED = "LITERAL_DROPPED"             # a constant printed in the text (25% armor penetration) that no field reads
 DETAIL_CHAIN_STEP_NOT_ADVANCED = "CHAIN_STEP_NOT_ADVANCED"   # "counts as an off-hand attack" on a non-attack: the chain never advances
 DETAIL_CLAUSE_MOVE_SPEED = "CLAUSE_MOVE_SPEED"         # a move-speed clause with no MOVE_SPEED label (1996)
+# SKILLS-LU (2026-09-23, skills 59): the first residue consumers, each named
+# on the rows it covers -- like AREA_BURST, a mark that says which machinery
+# the row rides, not an under-application.
+DETAIL_AREA_CASTER = "AREA_CASTER"            # authsrv.caster_area: byte 0, a Spell, a radius, no projectile -- bursts from the CASTER (a duration beside it is marked DURATION_UNMODELLED)
+DETAIL_HEAL_PARTY = "HEAL_PARTY"              # authsrv.party_heal_radius: the caster and its allies within the record's radius (a byte-0 class heal read INCLUDES_CASTER)
+DETAIL_CHAIN_GATED = "CHAIN_GATED"            # combo_req on a non-attack: judged at the PLAYER's E5; a BODY's cast lands on NOBODY (no body chain: unmet by construction, retail's bodies meet it -- less)
+DETAIL_CHAIN_STEP_ADVANCES = "CHAIN_STEP_ADVANCES"     # "counts as an off-hand attack" on a non-attack WITH a condition: the chain moves as it lands
 DETAILS = (DETAIL_AREA_BURST, DETAIL_AREA_ONE_TARGET, DETAIL_INDETERMINATE,
            DETAIL_CONDITION_BIT_CLEAR, DETAIL_SECOND_CONDITION, DETAIL_DURATION_UNMODELLED,
            DETAIL_CONDITION_UNNUMBERED, DETAIL_LITERAL_DROPPED, DETAIL_CHAIN_STEP_NOT_ADVANCED,
-           DETAIL_CLAUSE_MOVE_SPEED) + tuple(sorted(CLAUSE_FLAGS))
+           DETAIL_CLAUSE_MOVE_SPEED, DETAIL_AREA_CASTER, DETAIL_HEAL_PARTY, DETAIL_CHAIN_GATED,
+           DETAIL_CHAIN_STEP_ADVANCES) + tuple(sorted(CLAUSE_FLAGS))
 AREA_WORDING = AREA_FLAGS | {FLAG_ALL_FOES, FLAG_ALL_ALLIES, FLAG_TOUCH}
+CASTER_AREA_WORDING = AREA_FLAGS | {FLAG_ALL_FOES}    # the foe-area words a byte-0 Spell bursts on
+
+
+def label_detail_vocabulary():
+    """Every token a label row's `tier_detail` may carry: DETAILS, the area
+    wordings and the two target flags (build_label_row's `detail`).
+    `content.LABEL_DETAILS_KNOWN` is this set COPIED -- the server path cannot
+    import clientscan -- and test_skilldesc pins the two equal, so a new mark
+    lands in both files in one commit and an older tree DROPS the rows that
+    carry it instead of serving them through the one-target path (SKILLS-LU's
+    fix pass, skills 59.7)."""
+    return frozenset(DETAILS) | AREA_WORDING | {FLAG_TARGET_FOE, FLAG_TARGET_ALLY}
+
+# SKILLS-LU: a byte-0 heal whose text names a CLASS of recipients (HEAL_RECIPIENT_CLASS)
+# ships through the party-heal arm ONLY when a person has read its template and
+# recorded that the caster is IN the class -- the same reading 55.7's reviewers
+# made, now written down as an enum against the template's own sha256[:16]
+# (`template_sha16`), so the reading is void the day the text changes. What
+# is carried is the id, the enum and the digest -- not the sentence. Read
+# 2026-09-23, build 38797: 287 and 2221 read as the whole party, caster
+# included; 943 conditions its heal on the cure (CONDITIONED -- a heal the
+# parse cannot condition); 1262 says the caster is left out (EXCLUDES_CASTER).
+CLASS_HEAL_INCLUDES_CASTER = "INCLUDES_CASTER"
+CLASS_HEAL_EXCLUDES_CASTER = "EXCLUDES_CASTER"
+CLASS_HEAL_CONDITIONED = "CONDITIONED"
+CLASS_HEAL_READINGS = {
+    287: (CLASS_HEAL_INCLUDES_CASTER, "64570281eff651c1"),
+    2221: (CLASS_HEAL_INCLUDES_CASTER, "abbac77598c8f14d"),
+    943: (CLASS_HEAL_CONDITIONED, "4e744102324e3d09"),
+    1262: (CLASS_HEAL_EXCLUDES_CASTER, "b9577dda9c8da1fe"),
+}
+
+
+def _radius(rec):
+    return float(rec.get("aoe_range", 0) or 0)
+
+
+def _own_projectile(rec):
+    return int(rec.get("projectile", skilltable.NO_PROJECTILE) or 0) not in (0, skilltable.NO_PROJECTILE)
+
+
+def caster_area_record(rec, tc, target, flags):
+    """authsrv.caster_area_row's predicate plus the wording: the record's byte 0,
+    a Spell, a radius, no projectile of its own, and foe-area words."""
+    return (target == SELF_TARGET_BYTE and tc == SPELL_TYPE and _radius(rec) > 0
+            and not _own_projectile(rec) and bool(flags & CASTER_AREA_WORDING))
+
+
+def party_heal_record(sid, row, rec, tc, target, flags):
+    """authsrv.party_heal_radius's predicate plus the wording AND the reading:
+    byte 0, a Spell, a radius, party words, and a recorded INCLUDES_CASTER
+    reading of THIS template (its sha256[:16] must match)."""
+    reading = CLASS_HEAL_READINGS.get(int(sid))
+    return (target == SELF_TARGET_BYTE and tc == SPELL_TYPE and _radius(rec) > 0
+            and FLAG_ALL_ALLIES in flags and reading is not None
+            and reading[0] == CLASS_HEAL_INCLUDES_CASTER
+            and reading[1] == row.get("template_sha16"))
 
 # EVERY string the overlay may contain. `text_leak()` is the tripwire: a
 # description word reaching the vault would be a string outside this set.
@@ -1299,31 +1375,40 @@ def build_label_row(row, rec, hand_ids, self_conflict_ids=frozenset()):
     if tc == PET_ATTACK_TYPE:
         return EXCL_PET_ATTACK, [], {}, verified
     # DAGGERS-B5's chain gate -- "must follow a lead / off-hand / dual" fails the
-    # press when the target's chain state does not meet it -- runs inside
-    # `if target and _is_attack_skill(...)`. A non-attack carrying `combo_req`
-    # (784's Spell, 973's Spell, 1033's Skill) has no gate at the E5, so its
-    # condition and its standalone damage would land whatever the chain says.
-    if int(rec.get("combo_req", 0) or 0) and tc != ATTACK_TYPE:
-        return EXCL_CHAIN_REQUIREMENT, [], {}, verified
+    # press when the target's chain state does not meet it -- ran inside
+    # `if target and _is_attack_skill(...)` alone until 2026-09-23, so a
+    # non-attack carrying `combo_req` (784's Spell, 973's Spell, 1033's Skill)
+    # was EXCLUDED (CHAIN_REQUIREMENT). SKILLS-LU: the player's E5 now judges
+    # every type's requirement (authsrv NONATTACK_CHAIN_GATE), so the row
+    # ships marked CHAIN_GATED; the constant stays for the checker's arm.
+    chain_gated = bool(int(rec.get("combo_req", 0) or 0)) and tc != ATTACK_TYPE
     at_cast_on_foe = bool(conditions) or any(
         l[0] in DAMAGE_LABELS and not episode for l in labels)
-    if at_cast_on_foe and target not in FOE_TARGET_BYTES:
+    # SKILLS-LU: a byte-0 Spell with a radius and foe-area words rides the
+    # CASTER-centred arm (authsrv.caster_area) instead of the one-target path
+    # -- 183 188 840 1113 2212; a byte-0 row with no area words or no radius
+    # (1364's self Bleeding and its rider) still has no consumer.
+    caster_area = at_cast_on_foe and caster_area_record(rec, tc, target, flags)
+    if at_cast_on_foe and target not in FOE_TARGET_BYTES and not caster_area:
         return EXCL_RECIPIENT_NOT_A_FOE, [], {}, verified
     if heals and target not in HEAL_TARGET_BYTES:
         return EXCL_RECIPIENT_NOT_AN_ALLY, [], {}, verified
     # a recipient class or a prerequisite the server has no object for: the
     # spirits 2051 and 2100 heal, 96's corpse, 106's fleshiness (against a
     # non-fleshy target retail inflicts nothing; here every target is flesh).
-    # After the target-byte rules, so a row both refuse keeps its byte reason.
+    # After the target-byte rules, so a row both refuse keeps its byte reason
+    # (97's corpse-centred Poison falls here now that byte 0 has an arm).
     if FLAG_UNMODELLED_CLASS in flags:
         return EXCL_UNMODELLED_CLASS, [], {}, verified
     # a SELF-targeted heal whose text names a CLASS of recipients -- adjacent
     # creatures, the party -- reaches the caster here and nobody else, and the
     # text is what says whether the caster is in the class: 1262 excludes the
     # caster outright, 943 heals only the members relieved of Burning, 287 and
-    # 2221 include the caster. The parse cannot tell these apart, so none ships
-    # (Refuse to guess); a caster-centred party heal is the residue for all four.
-    if heals and target == SELF_TARGET_BYTE and flags & AREA_WORDING:
+    # 2221 include the caster. The parse cannot tell these apart; SKILLS-LU: a
+    # PERSON read each (CLASS_HEAL_READINGS, pinned to the template's digest),
+    # and a party heal read INCLUDES_CASTER rides authsrv.party_heal_radius.
+    party_heal = bool(heals) and party_heal_record(sid, row, rec, tc, target, flags)
+    if heals and target == SELF_TARGET_BYTE and flags & AREA_WORDING and not party_heal:
         return EXCL_HEAL_RECIPIENT_CLASS, [], {}, verified
     # shipped: name what the server does LESS of
     detail = sorted(f for f in flags if f in AREA_WORDING or f in (FLAG_TARGET_FOE, FLAG_TARGET_ALLY))
@@ -1333,9 +1418,12 @@ def build_label_row(row, rec, hand_ids, self_conflict_ids=frozenset()):
         # authsrv.spell_burst's WHOLE predicate (mirrored -- the tool cannot
         # import the server): byte 16, a Spell, no projectile of its own, no
         # duration. An area over time (192, 197) is one target here, once.
-        own_projectile = int(rec.get("projectile", skilltable.NO_PROJECTILE) or 0)
-        if (tc == SPELL_TYPE and target == AREA_BURST_TARGET_BYTE and standalone
-                and own_projectile in (0, skilltable.NO_PROJECTILE) and not timed):
+        if caster_area:
+            detail.append(DETAIL_AREA_CASTER)
+        elif party_heal:
+            detail.append(DETAIL_HEAL_PARTY)
+        elif (tc == SPELL_TYPE and target == AREA_BURST_TARGET_BYTE and standalone
+                and not _own_projectile(rec) and not timed):
             detail.append(DETAIL_AREA_BURST)
         else:
             detail.append(DETAIL_AREA_ONE_TARGET)
@@ -1352,8 +1440,13 @@ def build_label_row(row, rec, hand_ids, self_conflict_ids=frozenset()):
         detail.append(DETAIL_CONDITION_UNNUMBERED)
     if FLAG_LITERAL_PERCENT in flags:
         detail.append(DETAIL_LITERAL_DROPPED)
+    if chain_gated:
+        detail.append(DETAIL_CHAIN_GATED)
     if int(rec.get("combo", 0) or 0) and tc != ATTACK_TYPE:
-        detail.append(DETAIL_CHAIN_STEP_NOT_ADVANCED)
+        # SKILLS-LU: the non-attack chain step advances as the CONDITION lands
+        # (974); a `combo` row with no condition still moves nothing
+        detail.append(DETAIL_CHAIN_STEP_ADVANCES if conditions
+                      else DETAIL_CHAIN_STEP_NOT_ADVANCED)
     if FLAG_SPEED_MOVE in flags and not any(l[0] in MOVE_SPEED_LABELS for l in labels):
         detail.append(DETAIL_CLAUSE_MOVE_SPEED)
     detail.extend(sorted(flags & CLAUSE_FLAGS))
@@ -1412,8 +1505,31 @@ def check_label_rows(rows, report, hand_ids, records=None):
             out.append(f"{sid}: names a recipient class the server does not model")
         if records is not None and sid in records:
             rec = records[sid]
-            if int(rec.get("combo_req", 0) or 0) and int(rep["type_code"]) != ATTACK_TYPE:
-                out.append(f"{sid}: chain requirement {rec['combo_req']} on a non-attack type")
+            det = set(r.get("tier_detail") or ())
+            means = set((r.get("fields") or {}).values())
+            # SKILLS-LU: each residue consumer's row must carry its mark AND
+            # satisfy the server-side predicate the mark stands for
+            if int(rec.get("combo_req", 0) or 0) and int(rep["type_code"]) != ATTACK_TYPE \
+                    and DETAIL_CHAIN_GATED not in det:
+                out.append(f"{sid}: chain requirement {rec['combo_req']} on a non-attack type "
+                           f"without the CHAIN_GATED mark")
+            tgt = int(rec.get("target", -1))
+            import effects
+            episode = int(rep["type_code"]) in effects.EFFECT_TYPES   # 434's +damage rides its arrows
+            foe_means = (means & {MEANS_OF[l] for l in DAMAGE_LABELS}) or (means & set(CONDITION_NAMES))
+            if tgt == SELF_TARGET_BYTE and foe_means and not episode and (
+                    DETAIL_AREA_CASTER not in det or _radius(rec) <= 0
+                    or int(rep["type_code"]) != SPELL_TYPE or _own_projectile(rec)):
+                out.append(f"{sid}: a byte-0 damage or condition outside the caster-centred "
+                           f"area (AREA_CASTER on a Spell with a radius and no projectile)")
+            if tgt == SELF_TARGET_BYTE and MEANS_OF[Label.HEAL] in means \
+                    and set(rep["flags"]) & AREA_WORDING:
+                reading = CLASS_HEAL_READINGS.get(int(sid))
+                if DETAIL_HEAL_PARTY not in det or reading is None \
+                        or reading[0] != CLASS_HEAL_INCLUDES_CASTER \
+                        or reading[1] != rep.get("template_sha16") or _radius(rec) <= 0:
+                    out.append(f"{sid}: a byte-0 class heal without a matching INCLUDES_CASTER "
+                               f"reading of its template (HEAL_PARTY)")
         if r.get("tier") != LABEL_TIER:
             out.append(f"{sid}: tier {r.get('tier')!r}")
         if not r.get("fields"):
@@ -1469,6 +1585,14 @@ def _toml_value(v):
     if isinstance(v, dict):
         return "{" + ", ".join(f"{k} = {_toml_value(x)}" for k, x in v.items()) + "}"
     raise TypeError(type(v))
+
+
+def template_sha16(text):
+    """sha256[:16] of ONE raw template -- the per-row form of `template_digest`
+    (SKILLS-LU): what `CLASS_HEAL_READINGS` pins a human reading to. A hash of
+    a sentence is a measurement of it, not a copy."""
+    import hashlib
+    return hashlib.sha256((text or "").encode("utf-8")).hexdigest()[:16]
 
 
 def template_digest(texts):

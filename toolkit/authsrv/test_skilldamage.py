@@ -869,13 +869,20 @@ def main():
               f"AREA_BURST agrees with spell_burst + a standalone damage on all {len(lab_ids)} "
               f"label rows; the areas over time 192 and 197 are refused by the server (a "
               f"duration) and marked ONE_TARGET + DURATION_UNMODELLED", disagree)
-        # LT-R4: no shipped row carries a chain requirement the E5 gate would not test.
+        # LT-R4 / SKILLS-LU: a shipped non-attack with a chain requirement carries the
+        # CHAIN_GATED mark -- the player's E5 judges it (NONATTACK_CHAIN_GATE) -- and
+        # 784 (combo_req 2, a Spell) is such a row once the overlay is regenerated
+        # (skills 59); on the 2026-09-23 overlay before that it is simply absent.
         chained = [s for s in lab_ids
                    if authsrv.skill_chain_fields(s)[1] and not authsrv._is_attack_skill(s)]
-        check(chained == [] and authsrv.skill_chain_fields(784)[1] == 2
-              and not authsrv._is_attack_skill(784) and "784" not in lab,
-              "no label row is a non-attack with combo_req (the chain gate at the E5 runs "
-              "inside _is_attack_skill); 784 -- combo_req 2, a Spell -- is out", chained)
+        unmarked = [s for s in chained if "CHAIN_GATED" not in lab[str(s)]["tier_detail"]]
+        check(unmarked == [] and authsrv.skill_chain_fields(784)[1] == 2
+              and not authsrv._is_attack_skill(784)
+              and ("784" not in lab or "CHAIN_GATED" in lab["784"]["tier_detail"])
+              and authsrv.NONATTACK_CHAIN_GATE is True,
+              f"every label row that is a non-attack with combo_req ({len(chained)} loaded) "
+              f"carries CHAIN_GATED, the mark of the E5's non-attack chain gate; 784 -- "
+              f"combo_req 2, a Spell -- carries it when present", (chained, unmarked))
         gone = agents.WORLD.drop_tier("skill_effect", "label")
         try:
             check(authsrv.skill_damage(187, 15) is None

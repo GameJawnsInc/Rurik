@@ -2096,6 +2096,45 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "2026-09-23 (Hamstring's Crippled), which are not the "
                          "tier's (SKILLS-LT, studies/skills 55). The control "
                          "for anything a run attributes to a label-tier number.")
+    # SKILLS-LU (2026-09-23, studies/skills 59; DESKWORK-D4's per-skill residue):
+    # the first three consumers the step-4 gate was waiting on, one flag each.
+    ap.add_argument("--no-caster-areas", action="store_true",
+                    help="drop the CASTER-CENTRED area: a Spell whose record's "
+                         "target byte is 0 and which carries an aoe_range (\"all "
+                         "adjacent / nearby foes\", \"all foes in the area\": 183, "
+                         "188, 840, 1113, 2212 as label rows) then lands on NOBODY "
+                         "-- what the gate's exclusion did until 2026-09-23 -- and "
+                         "never on the selected target at any range, which is the "
+                         "over-application the gate refused. The default bursts "
+                         "over the record's own radius from the CASTER's position, "
+                         "the shape spell_burst gives a byte-16 Spell at its target "
+                         "(RECONSTRUCTION: no capture of one was read).")
+    ap.add_argument("--no-party-heals", action="store_true",
+                    help="drop the CASTER-CENTRED party heal: a byte-0 heal with an "
+                         "aoe_range (287, 2221 as label rows, whose templates a person "
+                         "read as the whole party, caster included) heals the CASTER "
+                         "alone through cast_recipient, as every byte-0 heal did until "
+                         "2026-09-23 -- a subset of the right recipients, never a wrong "
+                         "one. The default heals the caster and every living ally "
+                         "within the record's aoe_range (5000 u on both rows) of the "
+                         "caster; a hostile's allies are its spawn group when it has "
+                         "one. --no-condition-heal-rule turns this arm off as well "
+                         "(it lives inside that rule's recipient branch).")
+    ap.add_argument("--no-nonattack-chain-gate", action="store_true",
+                    help="the player's E5 judges a NON-attack skill's combo_req "
+                         "(\"must follow a lead / off-hand / dual\": 784, 973, 1033 "
+                         "as label rows) against the target's chain state and FAILS "
+                         "it the way DAGGERS-B5 fails an off-hand attack (the fail "
+                         "word, a zero recharge; RECONSTRUCTION -- retail's one "
+                         "witness is an attack); a BODY's cast of such a row lands "
+                         "on NOBODY (bodies carry no chain); and a non-attack that "
+                         "\"counts as an off-hand attack\" (974) advances the chain "
+                         "when its condition lands. This flag is the gate's "
+                         "EXCLUSION, the server until 2026-09-23: such a row lands "
+                         "on NOBODY for the player and for a body, and 974 moves "
+                         "nothing. The ungated landing (the row landing with no "
+                         "chain) is the over-application the exclusion refused and "
+                         "no flag produces it.")
     ap.add_argument("--player-max-always", action="store_true",
                     help="declare the player's property 42 before EVERY "
                          "armour-ignoring damage word at the player, as until "
