@@ -7143,13 +7143,18 @@ is wrong and the zero is specific to conversion.
 ## 54. SKILLS-DT — the description templates: `%str1%` is the SCALE slot, `%str2%` the BONUS slot, `%str3%` the DURATION slot; a referee over all 1,333 rows finds 0 slot conflicts and 1 hand-row conflict; and the coverage census — 54 modelled, 419 episodes, 815 nothing (2026-09-22)
 
 **Status: MEASURED, and shipped as a tool with its lock; nothing is served from it, no
-overlay is emitted, the server is untouched.** DESKWORK-D4 steps 1–3 and the DESKWORK-Q7
-census ([studies/deskwork/PLAN.md](../deskwork/PLAN.md) §3 D4, §4 Q7). Extractor:
+overlay is emitted, the server is untouched. The route's own step-3 gate FAILED: 341 of
+the 1,265 slot-bearing rows (27 %) have every slot read by a server consumer (§54.4).**
+DESKWORK-D4 steps 1–3 and the DESKWORK-Q7 census
+([studies/deskwork/PLAN.md](../deskwork/PLAN.md) §3 D4, §4 Q7). Extractor:
 `toolkit/clientscan/skilldesc.py` (`--mapping`, `--referee`, `--census`, `--hand`,
 `--shift N` for the known-bad arm, `--row ID`). Lock: `toolkit/clientscan/test_skilldesc.py`,
-69 checks with the vault, floor 29 bare. Build 38797, snapshot
-`vault/client/2026-07-29_221c13772c7a`, the archive beside it. `SKILLS-DT<n>` = a finding
-of this section. Convention: [studies/idents/CONVENTION.md](../idents/CONVENTION.md).
+85 checks with the vault, floor 40 bare. Build 38797, snapshot
+`vault/client/2026-07-29_221c13772c7a`, the archive beside it. Reviewed the day it landed
+(two reviewers, findings D4-R1..R12 and ENG-1..12) and corrected the same day; §54.9 lists
+what changed, because the first version of this section overstated the served tier by a
+factor of 1.7. `SKILLS-DT<n>` = a finding of this section. Convention:
+[studies/idents/CONVENTION.md](../idents/CONVENTION.md).
 
 **Provenance, stated once.** A description is ArenaNet's authored text. This section quotes
 none of it: what it carries is skill ids, slot indices, the record's own numbers (already in
@@ -7164,36 +7169,47 @@ window only from `--row` and `--residue`, as a tool over the owner's install, th
 which is key-for-key the 1,333 of `vault/content/skills.toml` — **1,265 rows carry a
 `%strN%` placeholder, 0 are unreadable; str1 1,090, str2 582, str3 685; 2,357 occurrences.**
 The operator judge's and the orchestrator's counts, to the row. Two things neither probe
-counted: **`%%` is the escaped literal percent sign** (424 rows — the "66%%" the survey saw
-is Deep Freeze's constant printed as text), and the other markup is small: `[s]` the plural
-(940), `<c=@SkillDull>…</c>` (10), `[pl:"…"]` (16). Thirty-three templates use one index
-twice (the same number printed twice); no two corpus rows share a template.
+counted: **`%%` is the escaped literal percent sign** (424 occurrences in 372 rows — 250 of
+them right after a slot, the spelling `%strN%%%` for a slotted percent; the "66%%" the survey
+saw is Deep Freeze's constant printed as text; 166 rows print a literal digit-percent), and
+the other markup is small: `[s]` the plural (940 occurrences in 822 rows),
+`<c=@SkillDull>…</c>` (10), `[pl:"…"]` (16 in 13 rows). Thirty-three templates use one
+index twice (the same number printed twice); no two corpus rows share a `description_id`,
+though 29 groups of rows carry identical text.
 
 ### 54.2 SKILLS-DT2 — which slot is which field: MEASURED, and the natural order is WRONG
 
 |  | field | offset | witness rows (id: endpoints, `skill_arguments`) |
 |---|---|---|---|
-| `%str1%` | **scale** | `+0x5C`/`+0x60` | Power Attack 322: 10..40, args = scale only, its ONE slot · Defy Pain 318: 90..300 · "To the Limit!" 316: 10..60 · Deep Freeze 234: 10..85 |
+| `%str1%` | **scale** | `+0x5C`/`+0x60` | Power Attack 322: 10..40, args = scale only, its ONE slot · Defy Pain 318: 90..300 · "To the Limit!" 316: 10..60 · Deep Freeze 234: 10..85 (a consistency row, not wiki-pinned) |
 | `%str2%` | **bonus_scale** | `+0x64`/`+0x68` | Sever Artery 382: 5..25, args = bonus only, its ONE slot · Faintheartedness 135: 0..3 · Defy Pain 318: 1..10 · "To the Limit!" 316: 1..6 |
 | `%str3%` | **duration** | `+0x44`/`+0x48` | Faintheartedness 135: 3..16 · Rush 319: 8..20 · Defy Pain 318: 20/20 · "To the Limit!" 316: 10..20 |
 
-Every witness is a row whose slot is already pinned to the wiki by `content/world.toml`'s
-hand rows or by §4's table, and each lands on the field the wiki named. The reading the
-route text half-assumed — str1 = duration — would have Power Attack print its 0-second
-duration as its damage.
+Every witness but Deep Freeze is a row whose slot is already pinned to the wiki by
+`content/world.toml`'s hand rows or by §4's table, and each lands on the field the wiki
+named; Deep Freeze (234) is in neither and is listed as a consistency row (args = scale
+only, one slot, str1). The route text assumed no order and warned about "seconds"; the order
+a reader WOULD assume — str1 = duration, the natural one — would have Power Attack print its
+0-second duration as its damage.
 
 **The theorem the artifact can refute (OBSERVED, all 1,333 rows).** Under this mapping,
-**0 of the 2,357 slot occurrences point at a field that is empty** (bit clear, 0/0), **0
-reach a duration sentinel** (≥ `0x10000`, §13), and every index is 1..3. The verdicts:
-1,698 `AGREE_PROGRESSION` (bit set, endpoints differ), 481 `AGREE_FLAT` (equal, non-zero:
-a constant the client prints), 141 `INDETERMINATE` (§54.3). **The known-bad arm**: shift
-the mapping one field along and 729 slots land on empty fields and 12 on sentinels; shift
-it two (the natural order) and it is 730 and 24; every one of the 66 comparable hand slots
-becomes a `MAPPING_CONFLICT`; and the count of enabled progressions no slot shows rises
-from **21** to 858 / 832. Three signals, one direction.
+**0 of the 2,357 slot occurrences point at a 0/0 field — whatever its bit says**, **0 reach
+a duration sentinel** (≥ `0x10000`, §13), and every index is 1..3. The verdicts, over the
+2,320 distinct (row, index) slots: 1,698 `AGREE_PROGRESSION` (bit set, endpoints differ),
+481 `AGREE_FLAT` (equal, non-zero: a constant the client prints), 141 `INDETERMINATE`
+(§54.3). **The known-bad arm**: shift the mapping one field along and 762 distinct slots
+land on 0/0 fields (33 of them bit-set) and 12 on sentinels; shift it two (the natural
+order) and it is 763 and 24; the hand rows' 51 AGREE (§54.5) collapse to 3 and 2, read from
+the templates; and the count of enabled progressions no slot shows rises from **21** to
+858 / 832. Three signals, one direction. **The theorem's reach, stated as a standing
+weakness**: it can refute a slot only where some OTHER field of the same row is 0/0 — 1,264
+of the 2,320 distinct slots; on the other 1,056 it is blind, and the label distribution is
+the witness there (356 of those 359 str3 slots carry a time label; the three exceptions,
+199 / 1950 / 2093, number a count or an energy cap stored in the duration field, which is a
+use of the field, not a mapping violation).
 
 **"seconds" is not the duration slot's word**, which is why the mapping is per index and
-never inferred from the words: of 872 "second" slots, 682 are str3, **141 are str2 and 82
+never inferred from the words: of 905 "second" slots, 682 are str3, **141 are str2 and 82
 are str1** — a condition's duration lives in the bonus slot (Sever Artery's Bleeding 5..25)
 or the scale slot (Jagged Strike's, `world.toml` 782). The survey's warning holds exactly.
 
@@ -7217,59 +7233,99 @@ tooltip of one such skill read at two attribute ranks. Not a desk question.
 
 ### 54.4 SKILLS-DT4 — the label vocabulary, and the route's own fail condition measured
 
-Our enum (`skilldesc.Label`, 52 values) reads the words around each slot after the markup is
-normalised: five elemental damages, `PLUS_DAMAGE` / `DAMAGE` / `DAMAGE_REDUCTION`, `HEAL` /
-`MAX_HEALTH` / `HEALTH_REGEN` / `HEALTH_DEGEN` / `LIFE_STEAL`, `ENERGY` / `ENERGY_LOSS`,
-`MOVE_SPEED_UP/DOWN`, `ATTACK_SPEED_UP/DOWN`, `ARMOR`, `ARMOR_PENETRATION`, `DURATION`,
-`CONDITION_DURATION` with the condition as detail, `DISABLE_DURATION`, `LIFETIME`, `LEVEL`,
-`COUNT`, `CHANCE`, `PERCENT`, … and `UNPARSED`. **Every one of the 2,357 slots receives a
-label: 0 `UNPARSED` rows.** By index the corpus reads as expected — str3 is `DURATION` 577
-times, `CONDITION_DURATION` 38, `LIFETIME` 46; str1 is `PLUS_DAMAGE` 156, `HEAL` 107,
-`DAMAGE` 84, `LEVEL` 64, the five elements 25–36 each; str2 is `CONDITION_DURATION` 121,
-`ENERGY` 61, `DAMAGE` 57, `HEAL` 46. All ten conditions are numbered somewhere (Bleeding 35,
-Burning 27, Crippled 26, Weakness 26, Blind 25, Deep Wound 25, Cracked Armor 17, Dazed 14,
-Poison 14, Disease 7).
+Our enum (`skilldesc.Label`, 50 values including `UNPARSED`) reads the words around each
+slot after the markup is normalised: five elemental damages, `PLUS_DAMAGE` / `DAMAGE` /
+`DAMAGE_REDUCTION`, `HEAL` / `MAX_HEALTH` / `HEALTH_REGEN` / `HEALTH_DEGEN` / `LIFE_STEAL`,
+`ENERGY` / `ENERGY_LOSS`, `MOVE_SPEED_UP/DOWN`, `ATTACK_SPEED_UP/DOWN`, `RATE_PERCENT` (a
+recharge, an expiry or adrenaline "N % faster" — not a body), `ARMOR`, `ARMOR_PENETRATION`,
+`DURATION`, `CONDITION_DURATION` with the condition as detail, `DISABLE_DURATION`,
+`LIFETIME`, `LEVEL`, `COUNT`, `CHANCE`, `PERCENT`, … and `UNPARSED`. **Every one of the
+2,357 slots receives a label: 0 `UNPARSED` rows** — with the caveat that ~150 of them land
+in the catch-alls (`COUNT` 62, `PERCENT` 32, `HEALTH` 27, `SECONDS` 16, `REDUCTION` 3), so
+"100 % labelled" is a statement about OUR enum's reach and not about precision. Precision
+was audited after review: every `MOVE_SPEED_*` slot now follows a movement verb (25 of 73
+did not and were recharge / expiry rates; they are `RATE_PERCENT`: recharge 23, expiry 8,
+adrenaline 2) and every `HEALTH_PERCENT` names health (4 of 20 were energy or damage
+shares). By index the corpus reads as expected — str3 is `DURATION` 578 times,
+`CONDITION_DURATION` 37, `LIFETIME` 46; str1 is `PLUS_DAMAGE` 156, `HEAL` 107, `DAMAGE` 84,
+`LEVEL` 64, the five elements 25–36 each; str2 is `CONDITION_DURATION` 126, `ENERGY` 62,
+`DAMAGE` 57, `HEAL` 47. All ten conditions are numbered somewhere (Bleeding 35, Burning 27,
+Crippled 26, Weakness 26, Blind 25, Deep Wound 25, Cracked Armor 17, Dazed 14, Poison 14,
+Disease 7). Eighteen templates give one index two different labels (476's str3 is
+`DURATION` and `LIFETIME`; 951's str1 is a speed up and a speed down); `analyse()` lists
+them as the classifier disagreeing with itself, never fitted.
 
-**Two tiers, and the tier is a fact about consumers, not a hope.** `SERVED` labels are those
-a `skill_effect` row carrying them is acted on by today (authsrv `SCALE_MEANS_DAMAGE`,
-`SCALE_MEANS_HEAL`, the movement / attack-speed means, `Armor penetration %`, `Health
-threshold %`, `Energy` / `Energy loss`, the ten condition names via `effects.condition_id`;
-`DURATION` is served by the episode machinery and therefore only on `EFFECT_TYPES` rows).
-`RECOGNISED` is parsed with no consumer. Per row:
+**Two tiers, and the tier is a fact about CONSUMERS — per (label, slot INDEX, type_code),
+not per label.** Every server reader of a `skill_effect` label reads ONE field, and most
+read it on one family of types (`skilldesc.CONSUMERS`, read off the sites 2026-09-22):
+`skill_damage` and `skill_heal` read `scale_means` at cast — str1, on a type outside
+`effects.EFFECT_TYPES` (the one episode reader of a damage label is the preparation's arrow
+bonus, type 19); `skill_condition` reads `bonus_scale_means` then `scale_means` on any type
+and never the duration field; armour penetration is `bonus_scale_means` alone; the movement
+means are read off OPEN EPISODES from either slot and attack speed from `scale_means` on an
+open episode; `Energy` is `glyph_energy_amount`'s, reached only from a Glyph's episode;
+`DURATION` is the episode machinery's, str3 on `EFFECT_TYPES`. Two labels a reader mentions
+are NOT consumers of the label: `Energy loss` acts only as the Energy Feast pair with
+`Heal per energy lost`, and `Health threshold %` reads a flat bonus below which an attack's
+`+ Damage` doubles — a shape the parse cannot tell from a share of health (none of the 21
+`HEALTH_PERCENT` slots is it). So a heal numbered by `%str2%`, a Hex's cold damage at
+`%str1%`, an energy gain on a Spell: labelled, and read by nothing. `SERVED` is the row
+whose every slot has its reader; `RECOGNISED` is labelled with at least one slot no reader
+takes. Per row:
 
 | tier | rows | of slot-bearing |
 |---|---|---|
-| SERVED — every slot in the server's current vocabulary | **583** | **46 %** |
-| RECOGNISED — every slot labelled, at least one unserved | 682 | 54 % |
+| SERVED — every slot read by a consumer for its label, index and type | **341** | **27 %** |
+| RECOGNISED — every slot labelled, at least one with no reader | 924 | 73 % |
 | UNPARSED | 0 | 0 |
 | no slot | 68 | — |
 
-**The route's fail condition — "fewer than half of the slot-bearing templates land in the
-server's label vocabulary" — is, on the served tier, NOT met: 46 %.** Read the other half
-before concluding anything: 100 % land in OUR vocabulary, and the 682 recognised rows are
-held out by a short list of labels with no consumer, counted per row — **a duration on a
-non-episode type 191** (a Shout's, a Signet's or a Spell's "for N seconds", which opens no
-episode today), **untyped `DAMAGE` 134** (`SCALE_MEANS_DAMAGE` has the five elements and
-`+ Damage`, not the armour-ignoring plain "N damage" GWW's "Damage" article describes),
-`LEVEL` 64, `COUNT` 62, `LIFETIME` 46, `PERCENT` 41, `DISABLE_DURATION` 34, `LIFE_STEAL` 33,
-`HEALTH_DEGEN` 32, `ARMOR` 30, `HEALTH_REGEN` 28, `ADRENALINE` 23, `DAMAGE_REDUCTION` 22.
-So the residue is not per-skill work: two consumers (untyped damage; an episode for the
-non-episode families with a numbered duration) would move ~325 rows, and the next six
-another ~250. That is D4 step 4's and step 6's business, gated by `type_code` as the route
-says ("A LABEL DOES NOT SAY WHEN"), and it is not done here.
+**The route's own step-3 gate — "FAILS if fewer than half the slot-bearing templates land
+in the server's label vocabulary" — FAILED: 27 %.** The first version of this section
+tiered by label alone, counted 583 rows (46 %) and called it a near-miss; the reviewers
+(D4-R1, ENG-1) re-tiered against what each consumer reads and it is 341 — not near. The
+route's stated consequence is that "the label route is refuted for the residue and coverage
+is per-skill work", and the measurement supports it more than the first version admitted:
+the 924 recognised rows are held out by **91 distinct (label, slot, reason) keys**, the
+largest being **a duration on a non-episode type 186** (a Shout's, a Signet's or a Spell's
+"for N seconds", which opens no episode today), **untyped `DAMAGE` at str1 84**
+(`SCALE_MEANS_DAMAGE` has the five elements and `+ Damage`, not the armour-ignoring plain
+"N damage" GWW's "Damage" article describes), `ENERGY` at str2 61 and at str1 on a non-glyph
+49, `DAMAGE` at str2 57, `HEAL` at str2 47 and on an episode type 28, `LEVEL` 64, `LIFETIME`
+46, `CONDITION_DURATION` at str3 35, `PLUS_DAMAGE` at str2 34. 564 of the 924 have a single
+blocker, spread across those keys.
+
+**A PROPOSAL, labelled as one, for the owner and not a finding:** two consumers — the plain
+untyped damage, and a duration episode for the non-episode families — would move the rows
+whose EVERY blocker is one of those two, and that is **115 rows, not the ~325 the first
+version estimated** by adding per-label counts (341 → 456, 36 %; still under the gate). The
+next six single-blocker consumers (`ENERGY` at str2, `ENERGY` on non-glyphs, `DAMAGE` at
+str2, `HEAL` at str2, `CONDITION_DURATION` at str3, `PLUS_DAMAGE` at str2) would move another
+~130. Whether that is worth building before the residue is treated per skill is the owner's
+call, and step 4 (an overlay from the SERVED tier) waits on it — the D4 bullet in `PLAN.md`
+§8.1 says so.
 
 **The row classifier** (an enum of flags per row, exporting no text): IF 468, WHEN 241,
-FOR_EACH 117, WHILE 94, EXCEPTION 23, CHANCE 68; area wording — ADJACENT 138, NEARBY 94,
-IN_THE_AREA 53, EARSHOT 84, TOUCH 35; ALL_FOES 172, ALL_ALLIES 83, TARGET_FOE 404,
-TARGET_ALLY 152. D6's "all foes in this area" rows are the 53 + 172.
+FOR_EACH 117, WHILE 94, EXCEPTION 23, CHANCE 68, LITERAL_PERCENT 166; area wording —
+ADJACENT 138, NEARBY 94, IN_THE_AREA 53, EARSHOT 84, TOUCH 35; ALL_FOES 172, ALL_ALLIES 83,
+TARGET_FOE 404, TARGET_ALLY 152. D6's "all foes in this area" rows are the union of
+IN_THE_AREA and ALL_FOES: 204 (21 carry both). LITERAL_PERCENT's first pattern matched the
+`1%` closing `%str1%` and was up on all 1,278 slot-bearing rows — a flag that could not stay
+down, caught in the fix pass and by neither reviewer.
 
 ### 54.5 SKILLS-DT5 — the 54 hand rows as the second witness, and what they got wrong
 
-`referee_hand_row` compares the label parsed at str1 against `scale_means` and at str2
-against `bonus_scale_means`, by family (`skilldesc.HAND_FAMILY`; "Heal" / "Healing" /
-"Maximum heal" are one family, "+ Damage" accepts "+N ⟨element⟩ damage" because Spear of
-Lightning 1551's own `verified` text records the wiki variable as `+ Lightning damage`).
-**51 AGREE, 1 CONFLICT, 2 NOT COMPARABLE ("Resurrect", "none"), 14 NO_SLOT.**
+`referee_hand_row` takes the FIELD a hand row names (`scale_means` = the scale field), the
+index the mapping gives that field, and compares the hand label with the label parsed at
+that index, by family (`skilldesc.HAND_FAMILY`; "Heal" / "Healing" / "Maximum heal" are one
+family, "+ Damage" accepts "+N ⟨element⟩ damage" because Spear of Lightning 1551's own
+`verified` text records the wiki variable as `+ Lightning damage`).
+**51 AGREE, 1 CONFLICT, 2 NOT COMPARABLE ("Resurrect", "none"), 14 NO_SLOT.** Because the
+verdict is read from the template, this is the second witness for §54.2's mapping that the
+known-bad arm can fail — under `shifted()` the 51 AGREE become 3 (shift 2: 2), the rest
+NO_SLOT and CONFLICT. (The first version short-circuited to a `MAPPING_CONFLICT` computed
+from the mapping alone and counted "66 of 66" as evidence; that check could not fail on
+data — D4-R4 / ENG-3.)
 
 - **The conflict is real: Battle Rage 317, `scale_means = "Duration"`.** Its scale slot is a
   flat 33 with the bit clear, numbered by `%str1%` as its movement speed (`MOVE_SPEED_UP`);
@@ -7284,7 +7340,9 @@ Lightning 1551's own `verified` text records the wiki variable as `+ Lightning d
   `scale_means`. And "Crippled duration" is not in `effects.CONDITION_BY_NAME` ("Crippled"
   is), so `skill_condition` finds no condition on either slot. Two fixes owed to
   `content/world.toml` — `bonus_scale_means = "Crippled"` — with `test_skilldamage` /
-  `test_mechanics` as the lock; NOT done in this pass (content and server untouched by
+  `test_mechanics` as the lock; `test_skilldamage.py:102-111` pins the current labels of
+  253 and 320 by name and `test_skilldesc` pins 317 as the one conflict, so all three move
+  in the same commit as the rows; NOT done in this pass (content and server untouched by
   design). Listed here, not fitted around.
 - **The 14 NO_SLOT rows are the flat-constant pattern, and the text proves it**: 12 of the
   14 named slots are bit-clear or bit-set FLAT values that appear as a literal number in the
@@ -7317,7 +7375,9 @@ all three counts.
 ### 54.7 SKILLS-DT7 — the coverage census (DESKWORK-Q7): what the server resolves today
 
 Grades, computable from `content.load()` + `effects` alone (`skilldesc.census`): **modelled**
-= a `skill_effect` row (acts beyond its icon; today's `sandbox.modelled_skills`);
+= carries a `skill_effect` row (today's `sandbox.modelled_skills`; it does NOT mean "acts" —
+at least four of the 54 act on nothing through their row: 320's label is outside the
+condition vocabulary, 317's and 253's `Duration` is compared by nothing, 321's is `none`);
 **episode-only** = `type_code` in `effects.EFFECT_TYPES` and `resolve_duration` resolves at
 rank 12 (icon, timer, expiry — no numbers); **episode-refused** = in `EFFECT_TYPES` but the
 duration refuses (§12/§13 shapes); **nothing** = the cast and its animation. The sandbox's
@@ -7326,45 +7386,52 @@ client's own (§35), resolved at run time.
 
 | type | client's word | rows | modelled | episode | ep-refused | nothing | with slot | SERVED | RECOG |
 |---|---|---|---|---|---|---|---|---|---|
-| 3 | Stance | 76 | 5 | 69 | 2 | 0 | 74 | 35 | 39 |
-| 4 | Hex Spell | 151 | 3 | 139 | 9 | 0 | 151 | 68 | 83 |
-| 5 | Spell | 287 | 11 | 0 | 0 | **276** | 267 | 160 | 107 |
-| 6 | Enchantment Spell | 227 | 3 | 192 | 32 | 0 | 219 | 106 | 113 |
-| 7 | Signet | 66 | 2 | 0 | 0 | 64 | 55 | 23 | 32 |
+| 3 | Stance | 76 | 5 | 69 | 2 | 0 | 74 | 30 | 44 |
+| 4 | Hex Spell | 151 | 3 | 139 | 9 | 0 | 151 | 34 | 117 |
+| 5 | Spell | 287 | 11 | 0 | 0 | **276** | 267 | 102 | 165 |
+| 6 | Enchantment Spell | 227 | 3 | 192 | 32 | 0 | 219 | 40 | 179 |
+| 7 | Signet | 66 | 2 | 0 | 0 | 64 | 55 | 9 | 46 |
 | 9 | Well Spell | 8 | 0 | 0 | 0 | 8 | 8 | 0 | 8 |
-| 10 | Skill | 55 | 1 | 0 | 0 | 54 | 49 | 15 | 34 |
+| 10 | Skill | 55 | 1 | 0 | 0 | 54 | 49 | 6 | 43 |
 | 11 | Ward Spell | 12 | 0 | 0 | 0 | 12 | 12 | 0 | 12 |
-| 12 | Glyph | 10 | 1 | 8 | 1 | 0 | 9 | 3 | 6 |
-| 14 | (weapon attacks; §35) | 199 | **23** | 0 | 0 | 176 | 182 | 138 | 44 |
-| 15 | Shout | 52 | 2 | 0 | 0 | 50 | 49 | 5 | 44 |
+| 12 | Glyph | 10 | 1 | 8 | 1 | 0 | 9 | 1 | 8 |
+| 14 | (weapon attacks; §35) | 199 | **23** | 0 | 0 | 176 | 182 | 98 | 84 |
+| 15 | Shout | 52 | 2 | 0 | 0 | 50 | 49 | 1 | 48 |
 | 16 | Skill (PvE) | 21 | 1 | 0 | 0 | 20 | 21 | 0 | 21 |
-| 19 | Preparation | 14 | 2 | 11 | 1 | 0 | 14 | 13 | 1 |
-| 20 | Pet Attack | 14 | 0 | 0 | 0 | 14 | 14 | 12 | 2 |
-| 21 | Trap | 12 | 0 | 0 | 0 | 12 | 12 | 5 | 7 |
+| 19 | Preparation | 14 | 2 | 11 | 1 | 0 | 14 | 10 | 4 |
+| 20 | Pet Attack | 14 | 0 | 0 | 0 | 14 | 14 | 6 | 8 |
+| 21 | Trap | 12 | 0 | 0 | 0 | 12 | 12 | 4 | 8 |
 | 22 | (global skill; §35) | 49 | 0 | 0 | 0 | 49 | 49 | 0 | 49 |
 | 24 | Item Spell | 17 | 0 | 0 | 0 | 17 | 17 | 0 | 17 |
 | 25 | Weapon Spell | 22 | 0 | 0 | 0 | 22 | 22 | 0 | 22 |
 | 26 | Form | 8 | 0 | 0 | 0 | 8 | 8 | 0 | 8 |
 | 27 | Chant | 21 | 0 | 0 | 0 | 21 | 21 | 0 | 21 |
 | 28 | Echo | 12 | 0 | 0 | 0 | 12 | 12 | 0 | 12 |
-| **all** | | **1,333** | **54** | **419** | **45** | **815** | **1,265** | **583** | **682** |
+| **all** | | **1,333** | **54** | **419** | **45** | **815** | **1,265** | **341** | **924** |
 
-Read it as the route asked: **1,333 rows; 54 act; 419 more show an icon and a timer with
-no numbers behind them; 45 would open an episode and refuse its duration; 815 do nothing
-past the cast.** The 583 SERVED rows are where a label overlay (step 4) could act with the
-consumers that exist — 160 Spells, 138 attacks, 106 enchantments, 68 hexes, 35 stances — and
-the by-type column says which consumer each family is waiting on: type 22 / 24–28 wait on
-step 6's effect types (0 served, 0 episodes), Signets and Shouts on a non-episode duration.
-The survey's estimate "300–400 skills act" after step 4 is consistent with 583 minus the
-type-gating step 4 must apply.
+Read it as the route asked: **1,333 rows; 54 carry a row (at least 4 of them inert); 419
+more show an icon and a timer with no numbers behind them; 45 would open an episode and
+refuse its duration; 815 do nothing past the cast.** The 341 SERVED rows are where a label
+overlay (step 4) could act with the consumers that exist — 102 Spells, 98 attacks, 40
+enchantments, 34 hexes, 30 stances — and the by-type column says which consumer each family
+waits on: type 22 / 24–28 wait on step 6's effect types (0 served, 0 episodes), Signets and
+Shouts on a non-episode duration, the enchantments and hexes mostly on a reader for a heal
+or a damage that rides an episode. The survey's estimate "300–400 skills act" after step 4
+is reachable only at its floor and only if every served row were emitted: 54 + 341 = 395
+before step 4's own type gate ("A LABEL DOES NOT SAY WHEN") removes any.
 
 ### 54.8 What this refutes or changes in the route, and what is next
 
-- **Refuted: the natural slot order and "seconds ⇒ duration".** Both were half-assumed by
-  the route's step 1 text; §54.2 measures the mapping and the test's known-bad arm reddens
-  on the natural order.
-- **Changed: the fail condition is a near-miss (46 %) on the SERVED tier and a pass (100 %)
-  on the label tier**, and the gap is a dozen consumers, not per-skill work (§54.4).
+- **Refuted: the natural slot order.** The route text assumed no order and warned about
+  "seconds" (a warning §54.2 quantifies: 141 str2 and 82 str1 "second" slots); the order a
+  reader would assume is refuted by the theorem's known-bad arm (763 slots on 0/0 fields).
+- **The step-3 gate FAILED, at 27 %** (§54.4). The route's consequence — the label route is
+  refuted for the residue, coverage is per-skill work — stands on the measurement: 91
+  blocking keys, and the two largest consumers would move 115 rows. §54.4 carries a
+  separate, labelled PROPOSAL (bulk consumers first) for the owner; step 4 waits on that
+  decision. (The first version called the gate "a near-miss (46 %) on the served tier and a
+  pass (100 %) on the label tier"; the 100 % is our enum's reach, ~150 slots of it
+  catch-alls, and the 46 % was a label-only count — §54.9.)
 - **Changed: the licence lines.** `PLAN.md` §1's table row and A6 said gw-skilldata is MIT;
   the critic said GFDL / CC BY-NC-SA. From primary sources (the repository's `LICENSE`,
   GitHub's licence API, SPDX `MIT`; its README's own "Licensing" section) BOTH are right
@@ -7374,15 +7441,46 @@ type-gating step 4 must apply.
   §6.1 row owed.
 - **Owed to content, next pass (not this one):** Hamstring 320 → `bonus_scale_means =
   "Crippled"`; Battle Rage 317 and Scourge Sacrifice 253 → drop `scale_means = "Duration"`
-  (inert today). Each with `test_skilldamage` / `test_mechanics` re-run.
+  (inert today). Each with `test_skilldamage` (its :102-111 pins move in the same commit)
+  and `test_mechanics` re-run, and `test_skilldesc`'s pin of 317 as the one conflict.
 - **Open, client run:** the 141 INDETERMINATE slots (§54.3) — one tooltip at two ranks.
-- **Next in the route:** step 4, the overlay — `vault/content/skill_labels.toml` from the
-  SERVED tier, gated by `type_code`, `tier = 'label'`, merged UNDER the 54 hand rows; then
-  the two bulk consumers §54.4 names.
+- **Next in the route, CONDITIONAL on the owner's answer to the gate:** step 4, the overlay
+  — `vault/content/skill_labels.toml` from the SERVED tier (341 rows, per label / index /
+  type), `tier = 'label'`, merged UNDER the 54 hand rows — or the per-skill residue the
+  route's own text prescribes on a failed gate.
 
 **What would refute this section.** A client tooltip printing a `%str1%` number that is not
 the row's scale slot at that rank (the mapping is wrong); a slot occurrence under the
-measured mapping landing on a 0/0 bit-clear field on a later build (the theorem is
-build-specific and `test_skilldesc` will say so); a hand row's `verified` text naming a slot
-the parser contradicts where the parser is right on inspection (the family table is wrong,
-not the row).
+measured mapping landing on a 0/0 field on a later build (the theorem is build-specific and
+`test_skilldesc` will say so); a hand row's `verified` text naming a slot the parser
+contradicts where the parser is right on inspection (the family table is wrong, not the
+row); a consumer site reading a field `skilldesc.CONSUMERS` does not list (the tier is
+stale — the table names each site so a reader can check it against the source).
+
+### 54.9 SKILLS-DT8 — what the same-day review corrected
+
+Two reviewers (an evidence refuter re-deriving every number from the snapshot, and an
+engineering reviewer breaking the test's arms in memory) read the first version; the fix
+pass took every finding whose evidence held, and none failed to reproduce. What changed, so
+a reader of the first commit (`5ec8e1d5`) knows what not to trust: **(a)** the served tier
+was per label and said 583 / 46 %; per (label, index, type) it is 341 / 27 % and the gate
+FAILED (D4-R1, ENG-1); **(b)** the hand-row known-bad arm returned `MAPPING_CONFLICT` from
+the mapping alone — a check that could not fail — and now reads the template (51 AGREE → 3)
+(D4-R4, ENG-3); **(c)** a bit-set 0/0 field was graded `AGREE_FLAT` against the docstring,
+hiding 33 empty-field landings per arm (D4-R5, ENG-8); **(d)** the literal-check fixture in
+the test was Rush's whole template after normalisation, and two classifier phrases were
+verbatim fragments — all replaced with our own sentences (D4-R2, ENG-11); **(e)** "N % faster"
+with no movement verb was a movement speed (25 slots, 13 of the rows SERVED) and "N % of
+that …" a health share — now `RATE_PERCENT`, and only health names `HEALTH_PERCENT` (ENG-2,
+D4-R8); **(f)** the test skipped its corpus section on any exception and passed a simulated
+loader defect at the bare floor — it skips on `pinned.find`'s refusal alone (ENG-4);
+**(g)** numbers: 905 "second" slots not 872, 50 enum values not 52, `%%` 424 occurrences in
+372 rows, IN_THE_AREA ∪ ALL_FOES 204 not 53 + 172, Deep Freeze not wiki-pinned, the
+theorem's reach 1,264 of 2,320, the "~325 rows" two consumers would move is 115 (D4-R7 /
+R9 / R10 / R11 / R12, ENG-5); **(h)** the census's "54 act" is "54 carry a row, at least 4
+inert" (D4-R6); **(i)** same-index self-conflicts (18) and unreadable descriptions (0) are
+counted, `census` catches `EffectError` only (ENG-9, ENG-10); **(j)** the content-side pins
+in the test are derived from the rows loaded (ENG-7) and the served bound sits below the
+half-mark (ENG-6). Found in the fix pass and by neither review: `LITERAL_PERCENT` was raised
+on every slot-bearing row (§54.4), and `normalise()` let a slot's closing `%` pair with the
+escape after it — harmless on this corpus by ArenaNet's spelling alone (§54.1), fenced now.

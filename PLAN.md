@@ -1906,11 +1906,15 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   SKILLS-DT; PLAN-LOG): the probe reproduced, the slot mapping measured (str1 scale, str2
   bonus, str3 duration — the natural order refuted), the parser + referee shipped with 0
   slot conflicts and 1 real hand-row conflict, the Q7 census written (54 / 419 / 815).
-  **Open:** step 4, the `skill_labels.toml` overlay from the SERVED tier, gated by
-  `type_code`, `tier = 'label'`, merged UNDER the 54 hand rows; the two bulk consumers
-  §54.4 names (untyped damage; a duration on a non-episode type); three hand rows to fix
-  (Hamstring 320's slot, 317's and 253's inert "Duration"); step 6, the timed effect
-  types; and the 141 INDETERMINATE slots wait on a client tooltip run (§54.3).
+  **The route's own step-3 gate FAILED**: 341 of 1,265 slot-bearing rows (27 %) have every
+  slot read by a server consumer for its label, index and type (§54.4). **Owner's call
+  before step 4 emits anything**: (a) the route's own consequence — the label route is
+  refuted for the residue, coverage is per-skill work — or (b) §54.4's proposal, two bulk
+  consumers first (untyped damage; a duration episode for the non-episode families), which
+  move 115 rows (341 → 456, still under the gate). **Open either way:** three hand rows to
+  fix (Hamstring 320's slot, 317's and 253's inert "Duration"; `test_skilldamage.py:102-111`
+  moves with them); step 6, the timed effect types; the 141 INDETERMINATE slots wait on a
+  client tooltip run (§54.3).
 
 **Skills and the slice** — [studies/skills/FINDINGS.md](studies/skills/FINDINGS.md),
 [studies/slice/FINDINGS.md](studies/slice/FINDINGS.md)
