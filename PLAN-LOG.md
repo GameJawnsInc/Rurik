@@ -80,6 +80,19 @@ id is 1988, not 1964, and the pass-3 summary's "never on any wire" is withdrawn.
 `test_chatdefs` §7 catches `SystemExit` (it died bare — a regression from `main`); the
 authsrv flag renamed `REFUSAL_REASON_IDS`; the gate's comment names the label.
 
+**Mend Condition (§58).** The row's provenance cited §46.3's paraphrase, which quotes
+nothing from the page (§46.1's quote is Mend Ailment's). The page is now read — **WIKI (GWW,
+"Mend Condition", rev. 2023-02-19)**: energy 5, activation ¾, recharge 2, target other
+allies, remove one condition and IF one is removed heal 5…70 — and the client's own
+description template is cited beside it (`skilldesc.py --row 275`: the scale slot
+AGREE_PROGRESSION 5/70 as HEAL; CLAUSE_REMOVAL, IF, TARGET_ALLY). Labels unchanged: the
+shape CORROBORATED by page and template, the wire RECONSTRUCTION. No code change.
+
+**Counts the pass-3 entry below did not name** (a review finding): its affected sweep was
+123 of 124 green (7,938 runner-counted checks + 218 in three tests with declared skips),
+`test_handshake` NOT RUN — port 6112 held by another session. This pass's own sweep is
+named in its last commit.
+
 ---
 
 ### DESKWORK-D5 pass 3 (steps 5, 7, 3d) -- 2026-09-23 -- **party-wide shouts OBSERVED and shipped (a shout reaches every living ally inside the client's own `aoe_range`, 1000 u; 23 foreign applies on retail's wire, 0 of 8 foe shouts; the announce is property 48, not 60); the refusal block as a table of 60 ids and our labels behind a DEFAULT-OFF flag, the weapon gate its one consumer; Mend Condition's heal-if-removed shape**

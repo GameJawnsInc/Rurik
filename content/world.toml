@@ -577,15 +577,23 @@ removes_conditions = 1
 heal_if_removed = true
 [skill_effect.275.provenance]
 source = "wiki"
-page = 'GWW, "Mend Condition", as recorded in studies/skills 46.3 (2026-09-10; page not re-read 2026-09-23)'
-verified = """Client row 275: scale 5->70 (57 at rank 12), energy 5, activation 0.75,
-recharge 2, target byte 4 = other ally (effects.OTHER_ALLY_TARGET; the caster is NOT a
-legal target, unlike Mend Ailment's byte 3). The mechanic is the one skills 46.3
-recorded from GWW on 2026-09-10 -- "removes one condition; if a condition was removed,
-heals" -- a flat heal gated on the removal, neither per-removed (276) nor per-remaining
-(277). Which condition goes: the newest (GWW "Cover", the rule remove_conditions
-already honours). RECONSTRUCTION on the wire: no retail cure has been captured
-(46.3 stands); the numbers are the client's own row. studies/skills 58."""
+page = 'GWW, "Mend Condition", rev. 2023-02-19'
+verified = """The page read through the browser on 2026-09-23 (the fix pass: the first
+record cited skills 46.3's paraphrase, which quotes nothing from this page -- 46.1's
+quote is Mend Ailment's). GWW: Spell, Monk, Protection Prayers, energy 5, activation 3/4,
+recharge 2, target "other allies" (concise text: "Cannot self-target."); "Remove one
+condition (...) from target other ally. If a condition is removed, that ally is healed
+for 5...70 Health." Client row 275: scale 5->70 (57 at rank 12), energy 5, activation
+0.75, recharge 2, target byte 4 = other ally (effects.OTHER_ALLY_TARGET; the caster is
+NOT a legal target, unlike Mend Ailment's byte 3) -- every number agrees with the page.
+The client's own description template is the LOCAL witness for the mechanic
+(toolkit/clientscan/skilldesc.py --row 275: str1 is the scale slot, AGREE_PROGRESSION
+5/70, labelled HEAL; flags CLAUSE_REMOVAL, IF, TARGET_ALLY; hand row scale_means =
+Healing AGREE): a flat heal inside an IF clause on the removal, neither per-removed (276)
+nor per-remaining (277). Which condition goes: the newest (GWW "Cover", the rule
+remove_conditions already honours). RECONSTRUCTION on the wire: no retail cast of 275
+has been captured (46.3 stands); the numbers are the client's own row. studies/skills
+58."""
 
 # SLICE-B3 (2026-09-12): the slice's monk bar. Both rows below carry a
 # DISAGREEMENT this file had not met before: the client's endpoints and the

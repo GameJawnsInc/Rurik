@@ -8264,3 +8264,16 @@ two shapes. `test_mechanics` §34: the no-condition CONTROL heals nothing (a fla
 there is the revert arm), one condition → removed and 57 once, two → the newest goes and
 still 57 once, aimed at the caster → no legal recipient, the revert arm heals without
 curing. **RECONSTRUCTION on the wire** (§46.3 stands: no retail cure has been captured).
+
+**Fix pass (2026-09-23): the witness named.** Both reviewers found the row's provenance
+pointing at a source that does not quote it — §46.3 paraphrases 275 and §46.1's GWW quote
+is Mend Ailment's. Two witnesses now stand where the paraphrase stood. **WIKI (GWW, "Mend
+Condition", rev. 2023-02-19, read through the browser)**: Spell, Monk / Protection
+Prayers, energy 5, activation ¾, recharge 2, target "other allies" ("Cannot self-target."),
+and the description's two sentences — remove one condition from target other ally; **if a
+condition is removed**, that ally is healed for 5…70 — every number the client's row
+carries. **The client's own description template** (`skilldesc.py --row 275`): `str1` is
+the scale slot at AGREE_PROGRESSION 5/70 labelled HEAL, the flags CLAUSE_REMOVAL, IF and
+TARGET_ALLY, the hand row's `scale_means = Healing` AGREE — the same mechanic, from the
+client the server drives. The row's `page` now names the revision; the mechanic's label is
+unchanged (the heal shape CORROBORATED by page and template; the wire RECONSTRUCTION).
