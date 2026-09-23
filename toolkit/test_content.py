@@ -75,7 +75,7 @@ import content  # noqa: E402
 #   D  the vault dropped from load()'s dirs:     4 red, two synthetic and two here
 # C and D are caught by the synthetic checks too; A and B are caught by nothing else, and
 # A is the one that actually happened.
-LEDGER = checks.Ledger("content store", floor=46)  # 2026-09-14: +2, the overrides layer; 2026-09-20: +2, RURIK_CONTENT_EXTRA (SANDBOX-B1)
+LEDGER = checks.Ledger("content store", floor=50)  # 2026-09-23: +4, the label tier sits UNDER the hand rows (SKILLS-LT); 2026-09-14: +2, the overrides layer; 2026-09-20: +2, RURIK_CONTENT_EXTRA (SANDBOX-B1)
 
 
 def write(dirpath, name, text):
@@ -532,6 +532,38 @@ def main():
     LEDGER.ok(over.get("b", {}) and over["b"]["value"] == 222,
               "a tracked overrides/ row wins over the vault's bulk row of the same key",
               f"{over.get('b')}")
+    # --- the label tier sits UNDER everything (2026-09-23, SKILLS-LT) ---------------
+    # A generated `tier = "label"` row (skilldesc.py --emit-labels, in the vault)
+    # must lose to a hand row even though the vault is merged OVER the repo. The
+    # rule is by TIER, not by layer; the known-bad arm is the plain update this
+    # merge was until today.
+    LAB = ('[thing.a]\nvalue = 99\ntier = "label"\n[thing.a.provenance]\n'
+           'source = "client-table"\nextractor = "toolkit/content.py"\nbuild = 38797\n'
+           '[thing.z]\nvalue = 7\ntier = "label"\n[thing.z.provenance]\n'
+           'source = "client-table"\nextractor = "toolkit/content.py"\nbuild = 38797\n')
+    with tempfile.TemporaryDirectory() as repo, tempfile.TemporaryDirectory() as vault:
+        write(repo, "a.toml", '[thing.a]\nvalue = 1\n' + GOOD_PROV)
+        write(vault, "labels.toml", LAB)
+        w = content.load(repo_dir=repo, vault_dir=vault,
+                         overrides_dir=os.path.join(repo, "no-such-dir"), extra_dirs=[])
+        LEDGER.ok(w.get("thing", "a")["value"] == 1 and "tier" not in w.get("thing", "a"),
+                  "a tier = \"label\" row keyed on a hand row's id LOSES, although the vault "
+                  "layer is merged over the repo", dict(w.get("thing", "a")))
+        LEDGER.ok(w.get("thing", "z")["value"] == 7 and w.get("thing", "z")["tier"] == "label"
+                  and w.get("thing", "z").provenance["build"] == 38797,
+                  "and a label row with no hand row loads, carrying its tier and its "
+                  "client-table provenance")
+        gone = w.drop_tier("thing", content.LABEL_TIER)
+        LEDGER.ok(list(gone) == ["z"] and "z" not in w.rows("thing") and "a" in w.rows("thing"),
+                  "drop_tier removes exactly the label rows and hands them back "
+                  "(--no-skill-labels' lever)", (list(gone), sorted(w.rows("thing"))))
+    base = {"thing": {"a": {"value": 1}}}
+    over = {"thing": {"a": {"value": 99, "tier": "label"}}}
+    LEDGER.ok(content._merge(base, over, tier_aware=False)["thing"]["a"]["value"] == 99
+              and content._merge(base, over)["thing"]["a"]["value"] == 1,
+              "KNOWN-BAD ARM: the plain update this merge was until 2026-09-23 lets the "
+              "label row win; the tier-aware merge keeps the hand row")
+
     LEDGER.ok(alone.get("b", {}) and alone["b"]["value"] == 22,
               "and with no overrides directory the vault still wins -- the layer adds, "
               "never reorders", f"{alone.get('b')}")

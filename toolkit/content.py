@@ -59,6 +59,17 @@ hand-sized rows in the repo, bulk extraction in the vault.
     the orchestrator's generated party and spawn rows (SANDBOX-B1, 2026-09-20,
     `toolkit/harness/sandbox.py`). The vault overlay is read by every process on the
     machine, so a per-launch row there would leak into the next unrelated run.
+  * THE LABEL TIER SITS UNDER EVERYTHING (2026-09-23, SKILLS-LT, DESKWORK-D4 step 4).
+    A row carrying `tier = "label"` -- `vault/content/skill_labels.toml`, the
+    `skill_effect` rows `toolkit/clientscan/skilldesc.py --emit-labels` generates from
+    the client's own description templates -- NEVER replaces a row without that tier,
+    whichever layer either came from. The layer order above says "later wins"; this
+    is the one exception, and it is by TIER rather than by layer because a generated
+    row must lose to a hand-verified one even when the hand row is in the repo (the
+    lowest layer) and the label row in the vault (above it). `_merge` enforces it;
+    `test_content.py` proves it with the plain-merge known-bad arm. The emitter also
+    skips hand-row ids, but the load rule is the guarantee. `World.drop_tier` is how
+    `--no-skill-labels` makes the server forget the tier entirely.
 
 The gate keeps its evidentiary value that way: "no extracted table was ever committed,
 prove it with one git command" stays literally true, which is the whole reason PLAN.md
@@ -174,6 +185,10 @@ NEEDS_PAGE = {"wiki"}
 RULE_1_1 = ('PLAN.md section 1.1: gw-preservation and Py4GW_Reforged "carry no license '
             'at all, which means all rights reserved: read them, learn from them, cite '
             'them -- never copy from them."')
+
+# The generated tier (WHERE ROWS LIVE, last bullet). A row whose body says
+# `tier = "label"` is machine-derived from a parse and sits UNDER every hand row.
+LABEL_TIER = "label"
 
 
 class ContentError(Exception):
@@ -325,13 +340,24 @@ def _load_file(path):
             raise ContentError(f"{path}: {exc}") from exc
 
 
-def _merge(base, overlay):
-    """Overlay wins per top-level key. Used to let the vault extend the repo."""
+def _is_label_row(row):
+    return isinstance(row, dict) and row.get("tier") == LABEL_TIER
+
+
+def _merge(base, overlay, tier_aware=True):
+    """Overlay wins per top-level key -- EXCEPT a `tier = "label"` row, which never
+    replaces a row without that tier (WHERE ROWS LIVE, last bullet). Used to let
+    the vault extend the repo. `tier_aware=False` is the plain update this was
+    until 2026-09-23, kept as test_content's known-bad arm: under it a generated
+    row keyed on a hand row's id would win."""
     out = dict(base)
     for section, rows in overlay.items():
         if isinstance(rows, dict) and isinstance(out.get(section), dict):
             merged = dict(out[section])
-            merged.update(rows)
+            for key, row in rows.items():
+                if tier_aware and _is_label_row(row) and key in merged                         and not _is_label_row(merged[key]):
+                    continue
+                merged[key] = row
             out[section] = merged
         else:
             out[section] = rows
@@ -367,6 +393,17 @@ class World:
 
     def census(self):
         return {kind: len(rows) for kind, rows in sorted(self.tables.items())}
+
+    def drop_tier(self, kind, tier):
+        """Remove every `kind` row whose body says `tier = <tier>`, in place, and
+        return them ({key: Row}) so a caller can put them back. `--no-skill-labels`
+        (authsrv) drops the label tier this way: the consumers then see exactly the
+        hand rows, which is the server as it was before 2026-09-23."""
+        table = self.tables.get(kind, {})
+        gone = {k: r for k, r in table.items() if r.get("tier") == tier}
+        for k in gone:
+            del table[k]
+        return gone
 
 
 def extra_dirs_from_env(env=None):

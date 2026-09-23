@@ -701,6 +701,57 @@ def main():
           f"a claim) -- WIKI (GWW, \"Reversal of Fortune\" Notes): healing "
           f"before damage")
 
+    print("\n14. the LABEL tier through the SAME consumers (SKILLS-LT, DESKWORK-D4 step 4)")
+    # vault/content/skill_labels.toml -- `python toolkit/clientscan/skilldesc.py
+    # --emit-labels` -- carries a `tier = "label"` skill_effect row per plain
+    # SERVED skill (studies/skills 55). No second path: skill_damage and
+    # skill_condition read the row exactly as they read a hand row, and
+    # `World.drop_tier` (what --no-skill-labels does at startup) leaves the
+    # server as it was before 2026-09-23. Skipped where the overlay is not
+    # loaded: a bare machine, or one that has not regenerated it.
+    lab = {k: r for k, r in agents.WORLD.rows("skill_effect").items()
+           if r.get("tier") == "label"}
+    if "187" not in lab or "784" not in lab:
+        LEDGER.skip("14. the label tier (5 checks)",
+                    "skill_labels.toml not loaded -- `python toolkit/clientscan/"
+                    "skilldesc.py --emit-labels` regenerates it into vault/content/")
+    else:
+        check(authsrv.skill_damage(187, 0) == (7, "standalone")
+              and authsrv.skill_damage(187, 15) == (112, "standalone"),
+              "a label-tier fire spell (187: scale 7..112 at str1, a Spell aimed at "
+              "the burst's byte 16) resolves through skill_damage at both ends of "
+              "the ladder -- the record's own numbers",
+              (authsrv.skill_damage(187, 0), authsrv.skill_damage(187, 15)))
+        check(authsrv.skill_condition(784, 0) == (484, 5.0)
+              and authsrv.skill_condition(784, 15) == (484, 20.0),
+              "a label-tier Poison (784: scale 5..20 at str1, a foe Spell) resolves "
+              "through skill_condition's second slot: 484 for 5 s at rank 0, 20 s "
+              "at rank 15",
+              (authsrv.skill_condition(784, 0), authsrv.skill_condition(784, 15)))
+        check(lab["187"]["tier"] == "label" and "AREA_BURST" in lab["187"]["tier_detail"]
+              and lab["187"].provenance["source"] == "client-table"
+              and lab["187"].provenance["build"] == 38797
+              and lab["784"]["tier_detail"] == ["TARGET_FOE"],
+              "the rows say what they are: tier label, 187's area is spell_burst's "
+              "(AREA_BURST), 784 reaches its one target; client-table provenance, "
+              "build 38797", (dict(lab["187"]), dict(lab["784"])))
+        gone = agents.WORLD.drop_tier("skill_effect", "label")
+        try:
+            check(authsrv.skill_damage(187, 15) is None
+                  and authsrv.skill_condition(784, 15) is None and len(gone) >= 50,
+                  f"with the tier DROPPED (--no-skill-labels) both resolve to nothing "
+                  f"-- the server before 2026-09-23; {len(gone)} rows gone",
+                  (authsrv.skill_damage(187, 15), authsrv.skill_condition(784, 15)))
+            check(authsrv.skill_damage(312, 15) is not None
+                  and authsrv.skill_condition(382, 15) is not None,
+                  "and the hand rows are untouched by the drop: Holy Strike and Sever "
+                  "Artery still resolve")
+        finally:
+            agents.WORLD.tables["skill_effect"].update(gone)
+        check(authsrv.skill_damage(187, 15) == (112, "standalone"),
+              "restored: the label row resolves again (the drop is a removal, not a "
+              "rewrite)")
+
     return LEDGER.verdict()
 
 
