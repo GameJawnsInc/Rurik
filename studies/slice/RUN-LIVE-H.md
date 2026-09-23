@@ -111,6 +111,11 @@ step is marked and the report says ABORTED.
 
 ### Leg F — the dark bar (already sealed as `vault/plans/adren_gate.txt`, 2026-08-22, never run; folded in)
 
+> **MOOT since 2026-09-22 (DESKWORK-D5 step 1, skills §34.11).** Gate A — retail's
+> adrenaline family is gated on the current bar — was settled at the desk from
+> tapes already on disk, and `adren_gate.txt` is WITHDRAWN UNRUN (PLAN-LOG). This
+> leg no longer needs a live run; kept for the record.
+
 **Remove EVERY adrenal skill from the bar** — energy skills and signets only, check it twice —
 re-enter, **land fifteen weapon hits.** Then put ONE adrenal skill back, re-enter, land three.
 

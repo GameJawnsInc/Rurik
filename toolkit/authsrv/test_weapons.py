@@ -2868,8 +2868,13 @@ def section_body_spell_projectiles():
         ar = authsrv.spell_armour_for(229)
         want = authsrv._whole_points(60.0 * authsrv.strike_multiplier(
             authsrv.agent_strike_level(st["agents"][FOE]), ar))
-        check(ops[:3] == [0x00A7, 0x00A0, 0x00A3] and arr[0][1] == [FOE, 1, 4]
+        # DESKWORK-D5 3(b) (2026-09-22): [10, me, 229] between the impact and
+        # the word -- retail's Orb-onto-the-owner batch carries it (0xA7, 0xA0,
+        # 0xCF, [10], [16]; the 92 property-10 words all name the observer).
+        check(ops[:4] == [0x00A7, 0x00A0, 0x009F, 0x00A3] and arr[0][1] == [FOE, 1, 4]
               and arr[1][1] == [agents.GV_EFFECT_ON_TARGET, PLAYER, FOE, 404]
+              and [v for op, v in arr if op == 0x009F and v[0] == agents.GV_SKILL_DAMAGE]
+              == [[agents.GV_SKILL_DAMAGE, PLAYER, 229]]
               and words(arr)[0][1:3] == [PLAYER, FOE] and ar == 19.0
               and st["player_health"] == health - want and want > 0 and not st["body_projectiles"],
               "a flight later: 0x00A7 [it, 1, 4 -- the Orb's lightning] first, then [20, me, it, "
@@ -2910,7 +2915,9 @@ def section_body_spell_projectiles():
         ar858 = authsrv.spell_armour_for(858)
         want858 = authsrv._whole_points(60.0 * authsrv.strike_multiplier(
             authsrv.agent_strike_level(st["agents"][FOE]), ar858))
-        check([op for op, _v in arr if op != authsrv.AGENT_ADRENALINE_GAIN] == [0x00A7, 0x00A0, 0x00A3] * 3
+        # DESKWORK-D5 3(b): each word at the player carries its [10, me, 858]
+        check([op for op, _v in arr if op != authsrv.AGENT_ADRENALINE_GAIN]
+              == [0x00A7, 0x00A0, 0x009F, 0x00A3] * 3
               and [v[2] for op, v in arr if op == 0x00A7] == [11, 11, 11]
               and len(words(arr)) == 3 and len({tuple(w) for w in words(arr)}) == 1
               and ar858 == 25.0 and st["player_health"] == health - 3 * want858,
@@ -3055,10 +3062,14 @@ def section_spell_areas():
         ar = authsrv.spell_armour_for(186)
         want_me = authsrv._whole_points(60.0 * authsrv.strike_multiplier(
             authsrv.agent_strike_level(st["agents"][FOE]), ar))
+        # DESKWORK-D5 3(b): the PLAYER's word is preceded by [10, me, 186]; the
+        # monk's is not -- property 10 is self-scoped on retail (92 of 92 at
+        # the observer), so a hero's word carries none.
         check(ops[:3] == [0x00A7, 0x00A0, A1] and arr[0][1] == [FOE, 1, 5]
               and arr[1][1] == [agents.GV_EFFECT_ON_TARGET, PLAYER, FOE, 344]
               and arr[2][1] == [[0.0, 0.0], 0, 0, 333, 0, 0]
-              and ops[3:] == [0x00A3, 0x00A0, 0x00A3, 0x00A0]
+              and ops[3:] == [0x009F, 0x00A3, 0x00A0, 0x00A3, 0x00A0]
+              and arr[3][1] == [agents.GV_SKILL_DAMAGE, PLAYER, 186]
               and [w[1] for w in words(arr)] == [PLAYER, HERO]
               and visuals(arr)[1:] == [[agents.GV_EFFECT_ON_TARGET, PLAYER, FOE, 344],
                                        [agents.GV_EFFECT_ON_TARGET, HERO, FOE, 344]]
@@ -3137,10 +3148,10 @@ def section_spell_areas():
         authsrv.projectile_tick(send, st, 1)
         authsrv.SPELL_AREAS = True
         arr = [(op, v) for op, v in sent if op != authsrv.AGENT_ADRENALINE_GAIN]
-        check([op for op, _v in arr] == [0x00A7, 0x00A0, 0x00A3] and not grounds(arr)
+        check([op for op, _v in arr] == [0x00A7, 0x00A0, 0x009F, 0x00A3] and not grounds(arr)
               and [w[1] for w in words(arr)] == [PLAYER] and st["agents"][HERO]["health"] == 100.0,
-              "--no-spell-areas: the Orb's single-target shape -- the impact, one word, no "
-              "explosion, the monk untouched")
+              "--no-spell-areas: the Orb's single-target shape -- the impact, [10, me, 186], one "
+              "word, no explosion, the monk untouched")
         src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
         sargs = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
         check("return land_player_spell_area(send, state, conn_id, shot, radius, connected)" in src

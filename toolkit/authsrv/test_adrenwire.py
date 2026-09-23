@@ -270,6 +270,22 @@ HERO_FAMILY = {SMSG_ADRENALINE_CHARGE: 107, SMSG_ADRENALINE_CLEAR: 9,
 DARK_HITS_LANDED = 45
 DARK_MELEE_FINISHED = 13
 DARK_DAMAGE_TAKEN = 32
+# THE CONFOUND BROKEN (2026-09-22, DESKWORK-D5 step 1, skills 34.11), read
+# per connection off 0x00B7 (primary/secondary), property 36 (level), and the
+# two libraries. FLOORS from `adrenjoin --by-connection` on 2026-09-22: four
+# dark connections whose character is a Warrior -- primary 1 at level 1 on
+# 20260914T180058 / 20260915T155656 / 20260915T164906 (18 + 17 + 1 hits) and
+# secondary 1 at level 20 on 20260917T224104 (127) -- 163 landed hits, 0 of
+# the family (the A/W's OTHER fighting tape, 20260917T160915, reads 7/0: no
+# secondary yet, so it is a dark Assassin there and counts below, not here);
+# fourteen dark connections with a landed hit whose account library (0x001D,
+# once per session, so read per capture) or character library (0x00DB) holds
+# an adrenal skill -- 0 of the family; eleven player deaths on dark
+# connections, 0 clears.
+DARK_WARRIOR_FIGHTS = 4
+DARK_WARRIOR_HITS = 163
+DARK_LEARNED_FIGHTS = 14
+DARK_DEATHS = 11
 # And the rounding rule, re-fitted on the armed rows alone -- the population
 # that is not selected on the outcome AND not contaminated by the gate.
 #
@@ -1320,12 +1336,19 @@ def section_bar_gate(agg):
     hit; retail granted none. So the silence is a gate and not an absence of
     combat, which is exactly what a quiet capture would look like.
 
-    THE GATE'S VARIABLE IS CONFOUNDED AND THIS DOES NOT PRETEND OTHERWISE.
-    Every dark connection is also a non-Warrior character, so "the bar carries
-    an adrenal skill" and "the profession uses adrenaline" fit all 58
-    connections identically. What is asserted is the SPLIT, which is observed;
-    which side of the confound causes it is not, and the sender implements
-    neither (see `authsrv.player_gains_adrenaline`).
+    THE GATE'S VARIABLE WAS CONFOUNDED UNTIL 2026-09-14, AND THE CORPUS
+    SEPARATED IT WITHOUT THE STAGED RUN. On 2026-08-21 every dark connection
+    was also a non-Warrior, so "the bar carries an adrenal skill" and "the
+    profession uses adrenaline" fit all 58 connections identically and the
+    sender implemented neither. The owner's later sessions put a level-1
+    Warrior on the bar [346, 1] (Frenzy, Healing Signet -- both cost 0) and a
+    level-20 A/W on a dagger bar into the dark population, fighting, silent;
+    and the fidelity judge's third rival -- "the character's LEARNED set holds
+    an adrenal skill" -- is read off 0x001D / 0x00DB on the same connections
+    and is silent too. The tail of this section pins all of that from
+    `adrenjoin.by_connection()`, and since 2026-09-22
+    `authsrv.player_gains_adrenaline` reads the CURRENT bar (studies/skills
+    34.11; `--no-adren-bar-gate` is the pre-gate arm, exercised here).
     """
     print("\n12. the family is dark for a bar with no adrenal skill on it")
     import adrenjoin
@@ -1616,6 +1639,147 @@ def section_bar_gate(agg):
               f"Identifying the observer by 'the agent a 207 names' would "
               f"delete the ENTIRE dark population from the denominator -- the "
               f"outcome-selection defect one level down")
+
+    # ---- THE CONFOUND, BROKEN (2026-09-22; skills 34.11) -------------------
+    # `by_connection` is a SECOND walk of the corpus with its own counters, so
+    # its arm sizes and family totals must reproduce `scan()`'s before anything
+    # it says about professions is believed.
+    conns = adrenjoin.by_connection()
+    dark_c = [r for r in conns if r["arm"] == "dark"]
+    armed_c = [r for r in conns if r["arm"] == "armed"]
+    LEDGER.ok(len(dark_c) == dark["connections"]
+              and len(armed_c) == armed["connections"]
+              and sum(r["gain"] for r in dark_c) == 0
+              and sum(r["clear"] for r in dark_c) == 0
+              and sum(r["spend"] for r in dark_c) == 0
+              and sum(r["hits_landed"] for r in dark_c) == dark["hits_landed"]
+              and sum(r["gain"] for r in armed_c) == armed["gain"],
+              f"the per-connection walk reproduces the split: "
+              f"{len(armed_c)} armed / {len(dark_c)} dark, dark family 0/0/0",
+              f"scan() says {armed['connections']}/{dark['connections']} with "
+              f"{dark['hits_landed']} dark hits and {armed['gain']} armed "
+              f"gains; two walks with separate counters must agree before the "
+              f"profession columns below mean anything")
+
+    # GATE B ("the profession uses adrenaline") REFUTED at level 1 AND 20.
+    # The profession is 0x00B7's own primary/secondary for the observer's agent
+    # (cross-checked against the 0x0059 appearance nibble, 0 disagreements),
+    # never inferred from the bar's skills -- which is how 34.5 read it.
+    dark_w = [r for r in dark_c if 1 in (r["profession"], r["secondary"])
+              and r["hits_landed"]]
+    prof_joined = [r for r in conns if r["profession_59"] is not None
+                   and r["profession"] is not None]
+    LEDGER.ok(len(dark_w) >= DARK_WARRIOR_FIGHTS
+              and sum(r["hits_landed"] for r in dark_w) >= DARK_WARRIOR_HITS
+              and all(r["gain"] == r["clear"] == r["spend"] == 0 for r in dark_w)
+              and any(r["profession"] == 1 and r["level"] == 1 for r in dark_w)
+              and any(r["secondary"] == 1 and r["level"] == 20 for r in dark_w)
+              and prof_joined
+              and all(r["profession_59"] == r["profession"] for r in prof_joined),
+              f"GATE B REFUTED: {len(dark_w)} dark connections whose character "
+              f"IS a Warrior landed {sum(r['hits_landed'] for r in dark_w)} "
+              f"hits and got none of the family",
+              f"{[(r['capture'], r['profession'], r['secondary'], r['level'], r['hits_landed'], r['gain']) for r in dark_w]}"
+              f" as (capture, primary, secondary, level, hits, gains). A primary "
+              f"Warrior at level 1 and a secondary Warrior at level 20 both "
+              f"silent, so neither 'profession' nor 'level' is the variable; "
+              f"0x00B7 and the 0x0059 nibble agree on all {len(prof_joined)} "
+              f"connections that carry both. The corner with no witness is a "
+              f"PRIMARY Warrior above level 1 on a dark bar -- said in 34.11")
+
+    # THE THIRD RIVAL ("the LEARNED set holds an adrenal skill") REFUTED. The
+    # account set rides once per session (read per capture) and the character
+    # set rides every map connection; both are bitmaps, decoded to ids and
+    # joined to content's adrenaline_units. The A/W's CHARACTER library holds
+    # 348/382/385 on both of its fighting connections.
+    def _learned(r):
+        acct = (r["account_adrenal"] if r["account_n"] is not None
+                else r["account_adrenal_capture"])
+        return bool(acct) or bool(r["character_adrenal"])
+    learned = [r for r in dark_c if r["hits_landed"] and _learned(r)]
+    char_lib = [r for r in learned if r["character_adrenal"]]
+    LEDGER.ok(len(learned) >= DARK_LEARNED_FIGHTS
+              and all(r["gain"] == 0 for r in learned)
+              and len(char_lib) >= 2
+              and all(r["gain"] == 0 and r["hits_landed"] >= 100 for r in char_lib),
+              f"THE THIRD RIVAL REFUTED: {len(learned)} dark connections with a "
+              f"landed hit have an adrenal skill in a LEARNED set and got no "
+              f"gain; {len(char_lib)} of them in the CHARACTER library itself",
+              f"character-library witnesses "
+              f"{[(r['capture'], r['character_adrenal'], r['hits_landed']) for r in char_lib]}"
+              f"; the account library carries an adrenal skill on every "
+              f"capture, so the account half is refuted on all of them. The "
+              f"two sets are different objects in the client (skills 47.2), "
+              f"so both had to be read")
+
+    # WHAT IS NOT OBSERVED, pinned so the gate's caveat stays honest: no
+    # connection flips its bar's armed-ness mid-connection, no hit lands
+    # before the observer's first own 0x00DA, and no family message ever
+    # arrives while the bar is dark. The first tape that breaks any of these
+    # is the dark-to-armed transition witness the gate says it lacks.
+    LEDGER.ok(not any(r["flips"] for r in conns)
+              and sum(r["hits_before_bar"] for r in conns) == 0
+              and sum(r["family_dark"] + r["family_before_bar"] for r in conns) == 0,
+              "the dark-to-armed TRANSITION is UNOBSERVED: 0 mid-connection "
+              "flips, 0 hits before the bar, 0 family messages while dark",
+              f"over {len(conns)} connections. `bar_holds_adrenal` reads the "
+              f"bar at gain time, so a mid-fight drag arms the sender on the "
+              f"next hit -- the smaller claim, said at the call site")
+
+    # AND THE CLEAR IS GATED TOO: retail's dark connections hold player deaths
+    # and not one 0x00D0, which is what puts the gate on `kill_player`'s clear.
+    dark_deaths = sum(r["deaths"] for r in dark_c)
+    LEDGER.ok(dark_deaths >= DARK_DEATHS
+              and sum(r["clear"] for r in dark_c) == 0,
+              f"{dark_deaths} player deaths on dark connections, 0 clears",
+              f"the 0x0026 [me, 4] death flag against 0x00D0 naming the "
+              f"observer. On the ARMED side the death clear is not so simple: "
+              f"of four armed player deaths, three carry a 0x00D0 (a pool that "
+              f"held charge, 20260917T090355) and one does not (20260821T152147 "
+              f"conn 63150, an armed bar that landed 0 hits -- empty pool). So "
+              f"the dark silence is OBSERVED (11/11) but the armed clear's "
+              f"CAUSE -- the bar, or charge held -- is CONTESTED at n=1 "
+              f"(skills 34.11.4); this check locks only the dark half")
+
+    # THE SANDBOX CHECK the acceptance names: our own sender, the corpus's own
+    # dark Warrior bar, a landed hit -- no 0x00CF; the revert flag is the
+    # known-bad arm; an armed bar is the positive control. `hit_enemy` is the
+    # site the 25-unit strike rides (test_pools 11).
+    import authsrv
+    import agents
+    _saved = (list(authsrv.SKILLBAR), authsrv.ADREN_BAR_GATE)
+    try:
+        def _hit(bar, gate):
+            authsrv.SKILLBAR, authsrv.ADREN_BAR_GATE = list(bar), gate
+            sent = []
+            send = lambda op, vals, why="": sent.append((op, vals))    # noqa: E731
+            st = {"agents": {}, "pos": (0.0, 0.0),
+                  "player_health": float(agents.PLAYER_HEALTH)}
+            st["agents"][7] = {
+                "name": "a target", "dead": False, "last_hit": 0.0,
+                "health": 100.0, "max_health": 100.0, "armor_rating": 60,
+                "pos": (10.0, 0.0), "skills": ((382, 0.0, 0.0),),
+                "attacks_back": False}
+            authsrv.hit_enemy(send, st, 7, 0)
+            words = [v for op, v in sent
+                     if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
+                     and v[0] in (16, 17) and v[1] == 7]
+            gains = [v for op, v in sent if op == authsrv.AGENT_ADRENALINE_GAIN]
+            return words, gains
+        dw, dg = _hit([346, 1], True)
+        bw, bg = _hit([346, 1], False)
+        aw, ag = _hit([382, 317, 318, 319], True)
+        LEDGER.ok(dw and dg == []
+                  and bw and bg == [[authsrv.PLAYER_AGENT_ID, 25]]
+                  and aw and ag == [[authsrv.PLAYER_AGENT_ID, 25]],
+                  "OUR SENDER: a landed hit from the dark bar [346, 1] sends no "
+                  "207; --no-adren-bar-gate sends it; an armed bar sends it",
+                  f"dark {dg} ({len(dw)} damage word), gate off {bg}, armed "
+                  f"{ag}. The damage word is asserted present each time so a "
+                  f"miss cannot pass as silence; the gate reads SKILLBAR at the "
+                  f"gain, which the 0x005C handler rewrites in place")
+    finally:
+        authsrv.SKILLBAR, authsrv.ADREN_BAR_GATE = _saved
 
 
 def section_repaint_gate(img):

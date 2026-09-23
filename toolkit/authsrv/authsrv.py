@@ -4842,6 +4842,41 @@ GLYPH_SPELL_CHARGES = 2
 # control for anything a run sees on the orb or the skill icons.
 ENERGY = True
 
+# THE BAR GATE ON THE ADRENALINE FAMILY (SKILLS-B1's gate half, shipped
+# 2026-09-22 as DESKWORK-D5 step 1; studies/skills/FINDINGS.md 34.11). Retail
+# sends a player whose CURRENT bar holds no adrenal skill NONE of 0x00CF /
+# 0x00D0 / 0x00D2 -- 49 dark connections, 367 landed hits, 210 completed melee
+# attacks, 11 deaths, 0 messages -- and since 2026-09-14 the corpus separates
+# that from "the profession does not use adrenaline" (a level-1 Warrior on
+# [346, 1] and a level-20 A/W, both dark, both silent) and from "the learned
+# set holds an adrenal skill" (the account library carries three on every
+# capture; the A/W's character library too; silent). `--no-adren-bar-gate` is
+# the pre-2026-09-22 arm: the family goes out to a dark bar as it did before.
+ADREN_BAR_GATE = True
+
+# THE SKILL-DAMAGE WORD, property 10 (DESKWORK-D5 step 3(b), 2026-09-22;
+# studies/skillcast/FINDINGS.md 16.6 for the client, skillcast 16.6's 2026-09-22
+# note for the wire). The client stores property 10's value at charContext+0x640 and the
+# next damage number consumes and clears it -- the skill the number belongs
+# to. ON THE WIRE IT IS SELF-SCOPED: all 92 in the live corpus name the
+# OBSERVER as the victim, each immediately followed by a damage word to the
+# observer (16: 82, 17: 7, 55: 3), and not one of the observer's own skill hits
+# on a foe carries one (0 of 45 accepted attack-skill presses on the PvP tape).
+# So it goes out when a SKILL damages the PLAYER, between the player's own
+# gain and the word, and never for the player's hits. `GV_SKILL_DAMAGE` was
+# defined 2026-08-06 and never sent until today. --no-skill-damage-word reverts.
+SKILL_DAMAGE_WORD = True
+
+# THE PLAYER'S OWN MAXIMUM BEFORE A DAMAGE WORD (DESKWORK-D5 step 3(a)). Retail
+# never puts the OBSERVER's property 42 immediately ahead of a damage word at
+# the observer: 0 of 401 16/17 words and 0 of 3 armour-ignoring 55 words. The
+# observer's 42 rides the Deep Wound's own open/close batches (the maximum
+# moving, 480 <-> 384 on 20260916T213125) and sits ahead of SOME heal words
+# (13 of 47 positive 55s; which is open). `armour_ignoring_damage`'s player
+# branch declared it before EVERY 55 word; now only when the maximum differs
+# from the last value declared. --player-max-always is the pre-2026-09-22 arm.
+PLAYER_MAX_ALWAYS = False
+
 # MOVEMENT SPEED ON THE WIRE (SLICE-F48, 2026-09-16; OFF by default from
 # 2026-08-22 until then). A speed modifier has exactly one wire channel:
 # GAME_SMSG 0x0027 AGENT_UPDATE_SPEED_BASE, the maxSpeed store at agent+0x5C
@@ -12239,6 +12274,10 @@ def body_spell_word(send, state, agent_id, skill_id, tid, tbody, dealt, frac,
             pools.damage_units(dealt / player_max_health(state)),
             time.time(), conn_id, f"{dealt:.0f} damage taken from skill "
                                   f"{skill_id}")
+    # DESKWORK-D5 3(b): [10, player, skill] between the gain and the word --
+    # retail's batch for a spell at the observer is 0xA7, 0xA0, (0xCF,) [10],
+    # [16], 16 + 10 + 9 of the 92 (adrenjoin's order census).
+    skill_damage_word(send, skill_id, f"a body's skill {skill_id} at the player")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id, frac],
          f"skill {skill_id} deals {dealt:.0f} to the player")
@@ -17001,6 +17040,54 @@ def agent_adrenaline(agent):
     return pool
 
 
+def skill_damage_word(send, skill_id, why):
+    """0x009F [10, PLAYER, skill] -- the skill the player's next damage number
+    belongs to (skillcast 16.6: the client stores it at charContext+0x640 and
+    the 16/17/18 and 55/56 bodies consume and clear it). Sent IMMEDIATELY
+    before the word, after the player's own gain, on every SKILL that damages
+    the player: OBSERVED 92 of 92 on the live corpus, all at the observer.
+    Never for the player's own hits (0 of 45); never for a plain swing."""
+    if not SKILL_DAMAGE_WORD or not skill_id:
+        return
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.GV_SKILL_DAMAGE, PLAYER_AGENT_ID, int(skill_id)],
+         f"skill {int(skill_id)} is the damage's skill ({why})")
+
+
+def declare_player_max(send, state, why, force=False):
+    """The player's property 42, sent when it DIFFERS from the last value this
+    server declared (retail: 0 of 401 damage words and 0 of 3 armour-ignoring
+    words at the observer have it immediately ahead; it rides the Deep Wound
+    batches where the maximum moves). `force` is the create and the
+    morale/restore sites, which declare unconditionally and seed the tracker;
+    --player-max-always forces every site."""
+    pool = int(player_max_health(state))
+    if force or PLAYER_MAX_ALWAYS or state.get("player_max_declared") != pool:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID, pool], why)
+        state["player_max_declared"] = pool
+    return pool
+
+
+def bar_holds_adrenal(bar=None):
+    """Does this bar carry ANY skill with a non-zero adrenaline cost?
+
+    THE CURRENT bar, read at call time: `SKILLBAR` is rebound at --skills and
+    from the store at the instance load, and rewritten in place by the 0x005C
+    handler on an in-game slot edit (SANDBOX-B7), so a bar frozen at def time
+    or cached in `state` would gate on what the bar WAS. `player_adrenaline`
+    already rebuilds the pools on the same read for the same reason.
+
+    A ROWLESS SKILL READS AS ZERO-COST, so a bar of skills with no content row
+    reads DARK and the family is withheld -- a bare-machine path (`skill_cost`
+    returns (0, 0) and says so once). In a real session the vault overlay is
+    loaded and every bar skill has its row; this is noted rather than guarded
+    because "no row" is already the loud direction (skill_cost announces it).
+    """
+    slots = SKILLBAR if bar is None else bar
+    return any(skill_cost(int(s))[1] > 0 for s in slots if s)
+
+
 def player_gains_adrenaline(send, state, units, now, conn_id, why):
     """Grant `units` to the player's pools AND tell the client, from one call.
 
@@ -17048,19 +17135,46 @@ def player_gains_adrenaline(send, state, units, now, conn_id, why):
     cannot hold it, clears included, so the clock argument above does not even
     arise there: no gain, no clock, nothing to keep honest.
 
-    NOT IMPLEMENTED, AND THAT IS A RULING RATHER THAN AN OVERSIGHT. The gate's
-    variable is CONFOUNDED -- every dark connection is also a non-Warrior, so
-    "the bar carries an adrenal skill" and "the profession uses adrenaline" fit
-    all 58 connections identically and the corpus cannot separate them. Gating
-    on either would be picking a side on no evidence. The two errors are also
-    symmetric and both invisible: the charge worker clears EDI before its slot
-    loop, sets it only where a slot is written, and `test edi,edi` / `je` at
-    0x008219F8 jumps past the UI event, so a 207 no slot accepted repaints
-    nothing and arms no timer (test_adrenwire 13). One capture separates the
-    two rules -- the Warrior, explorable, adrenal skills OFF the bar, landing
-    hits -- and test_adrenwire 12 pins the numbers it would move.
+    IMPLEMENTED 2026-09-22 (DESKWORK-D5 step 1; studies/skills/FINDINGS.md
+    34.11), AND THE PARAGRAPH THAT USED TO STAND HERE SAID WHY IT WAS NOT.
+    The gate's variable was CONFOUNDED on 2026-08-21 -- every dark connection
+    was also a non-Warrior -- and the ruling was to implement neither rule.
+    The corpus has since separated them without the staged live run: a
+    level-1 primary Warrior (0x00B7 1/0) on the bar [346, 1] landed 18 + 17 +
+    1 hits on three connections and a level-20 A/W (7/1) landed 127 on
+    20260917T224104 conn 62557, all dark, all silent -- 0 of the family over
+    163 hits, 11 deaths on dark connections with 0 clears -- while a primary
+    Warrior at level 20 (0x00B7 1/0) on the same account gains on every hit.
+    So "the profession uses adrenaline" is REFUTED at level 1 (primary) and at
+    level 20 (secondary), and "the LEARNED set holds an adrenal skill" is
+    REFUTED too: the account library carries 348/382/385 on every capture and
+    the A/W's character library carries them as well (its OTHER fighting tape,
+    20260917T160915 conn 52569, reads 0x00B7 7/0 -- a dark Assassin with no
+    secondary yet, 127 hits, 0 gains -- and belongs with the learned-set
+    refutation, not the dark-Warrior count of 4). Gate A -- THE CURRENT BAR --
+    is the one rule left standing across all 95 connections (49 dark with 0 of
+    the family over 367 hits, 46 armed; `adrenjoin.py --by-connection`).
+
+    WHAT IS STILL NOT OBSERVED, said here because the gate reads it: the
+    dark-to-armed TRANSITION. No connection in the corpus flips its bar's
+    armed-ness mid-connection (0 of 95; the bar is edited in outposts), so
+    what retail sends on the first hit after an adrenal skill is dragged onto
+    a dark bar in an explorable is UNOBSERVED. This reads the bar at gain
+    time, so a bar that turns armed mid-fight starts sending on its next hit
+    -- the smaller claim, and `--no-adren-bar-gate` is the pre-gate arm. The
+    grant is skipped with the send: a dark bar has no pool to fill
+    (`AdrenalinePool` keeps only slots with a cost) and `tick` wipes only a
+    bar that had charge, so no 25 s clear can arise from a dark bar either
+    way. The two errors this used to weigh are still both invisible on the
+    client (test_adrenwire 13); what changed is that one of them is now
+    retail's wire and the other is not.
     """
     if not ENERGY or units < 0:
+        return
+    if ADREN_BAR_GATE and not bar_holds_adrenal():
+        # Retail's silence to a dark bar, gains AND the AD4 zero alike: the
+        # zero rides a damage word TO AN ADRENAL BAR (53.4), never to a dark one
+        # (312 dark damage words, 0 messages). OBSERVED.
         return
     if units > 0:
         # A zero skips the grant AND the combat-clock mark inside it -- the
@@ -18984,6 +19098,13 @@ def cast_tick(send, state, conn_id):
             # the death: the pool and 0x00D0 together, ONE call's worth.
             if ENERGY and skill_clears_adrenaline(cast["skill_id"]):
                 player_adrenaline(state).clear()
+                # NOT BEHIND SKILLS-B1's BAR GATE (34.11), on purpose: a
+                # completing `clears_adrenaline` skill is an adrenal skill cast
+                # FROM the bar, so the bar is armed by construction and the
+                # gate would be redundant here. It was briefly guarded, and
+                # test_agentlife's Final Thrust fixture -- which stubs
+                # `skill_cost` to (0, 0) to measure the double, not the price
+                # -- showed the guard reading the stub, not the bar.
                 send(AGENT_ADRENALINE_CLEAR, [PLAYER_AGENT_ID],
                      f"adrenaline cleared: skill {cast['skill_id']} "
                      f"(the row's clears_adrenaline)")
@@ -19222,15 +19343,20 @@ def aura_off(send, state, buff):
 
 
 def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, what,
-                           declare_max="always"):
+                           declare_max="always", skill_id=None):
     """Damage that ignores armour, on the channel retail uses for it: 0x00A3
-    [55, target, source, -fraction], the target's maximum declared FIRST
-    (3 of 3 on the tape). Kills through the same doors a hit does.
+    [55, target, source, -fraction]. Kills through the same doors a hit does.
 
-    `declare_max="stale"` (DAGGERS-B8) is hit_enemy's PVPMAX rule instead: a
-    BODY's maximum rides only the first word after it moved. RUN-DAGGERS-1's
-    adjacent words say so -- [42, neighbour, 480] sits ahead of the FIRST 55
-    on each of the two bodies and ahead of none of the 13 after it."""
+    THE MAXIMUM (property 42) IS DECLARED ONLY WHEN IT MOVED (DESKWORK-D5 3(a)):
+    the PLAYER branch goes through `declare_player_max`, which sends the 42 only
+    when the current maximum differs from the last one declared -- retail puts
+    it ahead of a damage word at the observer 0 of 3 (armour-ignoring) / 0 of
+    401 (16/17). It used to declare FIRST before every 55 here, "3 of 3 on the
+    tape", but those three were a FOE's maximum ahead of Empathy's word, kept on
+    the body branch. A BODY's rule is `declare_max`: "always" declares each time,
+    "stale" (DAGGERS-B8) is hit_enemy's PVPMAX -- the first word after it moved.
+    RUN-DAGGERS-1's adjacent words say so -- [42, neighbour, 480] sits ahead of
+    the FIRST 55 on each of the two bodies and ahead of none of the 13 after."""
     amount = _whole_points(float(amount))   # DAMAGE-INT
     if amount <= 0.0:
         return 0.0
@@ -19238,10 +19364,13 @@ def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, w
         player_pools(state)
         if state.get("player_dead"):
             return 0.0
-        pool = float(player_max_health(state))
-        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-             [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID, int(pool)],
-             f"maximum {int(pool)} declared ahead of {what}")
+        # DESKWORK-D5 3(a): the player's own 42 only when it MOVED since the
+        # last declaration (retail: 0 of 3 immediately before a 55 at the
+        # observer, 0 of 401 before a 16/17). It used to go out before every
+        # 55 word here, "3 of 3 on the tape" -- those three were a FOE's
+        # maximum ahead of Empathy's word, not the observer's.
+        pool = float(declare_player_max(send, state,
+                                        f"maximum declared ahead of {what}"))
         frac = _damage_fraction(amount, pool, agents.GV_ARMOR_IGNORING, what)
         state["player_health"] = max(0.0, state["player_health"] - amount)
         if ENERGY:
@@ -19254,6 +19383,14 @@ def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, w
             player_gains_adrenaline(
                 send, state, pools.damage_units(amount / pool), time.time(),
                 conn_id, f"{amount:.0f} armour-ignoring damage taken ({what})")
+        # 3(b): the skill the word belongs to, when the caller knows it. On a
+        # hex-triggered 55 (Empathy punishing the player's attack) this is
+        # INFERRED from the every-skill-damage rule (skill completions at the
+        # observer carry [10] 35 of 35 -- attack skills 18/18, spells 17/17):
+        # the 3 corpus property-10 words that precede a 55 are all skill 143
+        # LIFE STEALS (a hostile spell), not hex punishments, so the hex case
+        # itself has no direct witness.
+        skill_damage_word(send, skill_id, what)
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
              [agents.GV_ARMOR_IGNORING, PLAYER_AGENT_ID, source_id, frac],
              f"{what}: {amount:.0f} armour-ignoring to the player")
@@ -19305,7 +19442,8 @@ def on_attack_triggers(send, state, attacker_id, conn_id):
             continue
         total += armour_ignoring_damage(
             send, state, attacker_id, ep.get("caster") or PLAYER_AGENT_ID,
-            amount, conn_id, f"hex {ep['skill']} punishes the attack")
+            amount, conn_id, f"hex {ep['skill']} punishes the attack",
+            skill_id=ep["skill"])                       # 3(b): the word's skill
     return total
 
 
@@ -19823,8 +19961,21 @@ def kill_player(send, state, conn_id, why="took a killing blow"):
     # decided and `content/maps.toml` is where it is written down.
     if ENERGY:
         player_adrenaline(state).clear()
-        send(AGENT_ADRENALINE_CLEAR, [PLAYER_AGENT_ID],
-             f"adrenaline cleared: the player died ({why})")
+        # SKILLS-B1's gate (34.11): a dark bar gets no 0x00D0 at death either
+        # -- 11 player deaths on dark connections, 0 clears, OBSERVED. The book
+        # clears regardless (it holds nothing on a dark bar anyway).
+        # ONE ARMED-EMPTY DIVERGENCE, CONTESTED (n=1; 34.11.4): the corpus's
+        # four armed player deaths are 3 with a 0x00D0 (a pool that held charge,
+        # 20260917T090355) and 1 without (20260917T224104... no: 20260821T152147
+        # conn 63150, an armed bar that landed 0 hits, empty pool, no clear).
+        # So "clear only when the pool held charge" fits all 15 deaths where
+        # "clear when the bar is armed" fits 14 -- but on a single distinguishing
+        # witness. This gate still clears on an armed-EMPTY death (a 0x00D0 that
+        # one witness did not send); the charge rule is an OPEN lead, not shipped
+        # on n=1 ("a negative needs a positive control").
+        if not ADREN_BAR_GATE or bar_holds_adrenal():
+            send(AGENT_ADRENALINE_CLEAR, [PLAYER_AGENT_ID],
+                 f"adrenaline cleared: the player died ({why})")
     # JARIN: the flags byte closes the death tick -- 0x0026 [player, 4],
     # 3 of 3 player deaths in the corpus (the morale study's tick).
     send(GAME_SMSG_AGENT_UPDATE_FLAGS, [PLAYER_AGENT_ID, AGENT_FLAGS_PLAYER_DEAD],
@@ -19971,6 +20122,10 @@ def deep_wound_open(send, state, agent_id, conn_id):
              [agents.PROP_HEALTH_MAX, agent_id, int(new_max)],
              f"Deep Wound: maximum health {int(new_max)} on agent {agent_id} "
              f"(-{reduction})")
+        # 3(a): this IS the moved-maximum declaration, so the tracker follows
+        # it -- otherwise the next armour-ignoring word re-declares the same 42
+        # ahead of its damage word, the exact case retail shows 0 of 3 (ENG-1).
+        state["player_max_declared"] = int(new_max)
     else:
         # PVPMAX (F46.10): retail declares ANOTHER agent's moved maximum on
         # the observer's next landed hit (hit_enemy), never in this batch --
@@ -20019,6 +20174,7 @@ def deep_wound_close(send, state, agent_id, conn_id, dead=False):
              [agents.PROP_HEALTH_MAX, agent_id, int(new_max)],
              f"Deep Wound ends: maximum health {int(new_max)} on agent {agent_id} "
              f"(+{reduction})")
+        state["player_max_declared"] = int(new_max)   # 3(a): the tracker follows
     else:
         agent["max_declared_on_hit"] = None       # PVPMAX: the next hit declares it
     print(f"[c{conn_id}] Deep Wound off agent {agent_id}: maximum back to "
@@ -21192,6 +21348,7 @@ def push_morale(send, state, conn_id, new_value, why, between=None):
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
          [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID, max_health],
          f"maximum health {max_health} at morale {morale.display(new_value)}")
+    state["player_max_declared"] = int(max_health)      # 3(a): the tracker
     # A SHRINKING POOL CANNOT RAISE THE BAR, and the client would not be the one
     # to notice: our own bookkeeping is what decides when the player dies, so a
     # current health left above the new maximum would make the next fraction we
@@ -22313,11 +22470,19 @@ def hero_pool_gain(send, state, agent_id, row, units, why):
     """JARIN: a hero's adrenaline is on the wire like the player's -- 0x00CF
     [hero, 25] per hit landed, [hero, units] per hit taken (107 rows on the
     tape); a henchman's never (0 on eleven bodies). --hero-silent-pools is
-    the pre-JARIN arm. A zero-unit gain sends nothing, as the player's."""
+    the pre-JARIN arm. A zero-unit gain sends nothing here; the PLAYER's has
+    sent the zero since AD4 (2026-09-19), and whether a hero's does is
+    DESKWORK-D5 3(e), open."""
     if not HERO_WIRE_POOLS or hero_body_id(row) is None or int(units) <= 0:
         return
     # The DARK rule holds for a hero as for the player (test_adrenwire 12):
-    # a bar with no adrenal skill on it charges nothing on the wire.
+    # a bar with no adrenal skill on it charges nothing on the wire. THIS GATE
+    # PREDATES THE PLAYER'S (JARIN, 2026-09-14) and reads the row's CURRENT bar
+    # -- sync_hero_body_bar rewrites row["skills"] on an in-game edit (B7) --
+    # so the SKILLS-WK defect class ran the other way here: the rule reached
+    # the hero and not the player until 2026-09-22 (skills 34.11). Kept
+    # unconditional: it is the pre-2026-09-22 behaviour, so the revert flag
+    # does not touch it.
     if not any(skill_cost(int(sk[0]))[1] > 0 for sk in (row.get("skills") or ())):
         return
     send(AGENT_ADRENALINE_GAIN, [agent_id, int(units)],
@@ -22325,8 +22490,20 @@ def hero_pool_gain(send, state, agent_id, row, units, why):
 
 
 def hero_pool_clear(send, state, agent_id, row, why):
-    """0x00D0 [hero]: at each Final Thrust (5 of 5) and at its death (2 of 2)."""
+    """0x00D0 [hero]: at each Final Thrust (5 of 5) and at its death (2 of 2).
+
+    THE DARK HALF IS UNOBSERVED FOR A HERO and said so: every hero on tape
+    carries the same armed bar (4 of 4, 20260914T005758 and 20260916T150306),
+    so no capture shows a dark-bar hero dying. The player's rule is OBSERVED
+    (11 deaths on dark connections, 0 clears) and the hero's GAIN already
+    follows the player's bar rule, so the clear follows it too under the same
+    flag -- RECONSTRUCTION by the rule that already gates its gain, the
+    smaller claim being silence. --no-adren-bar-gate is the arm that sends.
+    """
     if not HERO_WIRE_POOLS or hero_body_id(row) is None:
+        return
+    if ADREN_BAR_GATE and not any(
+            skill_cost(int(sk[0]))[1] > 0 for sk in (row.get("skills") or ())):
         return
     send(AGENT_ADRENALINE_CLEAR, [agent_id],
          f"hero agent {agent_id} adrenaline cleared ({why}) [JARIN]")
@@ -24998,6 +25175,10 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
              [agents.GV_EFFECT_ON_TARGET, PLAYER_AGENT_ID, agent_id, _prep_vis],
              f"impact {_prep_vis} of agent {agent_id}'s preparation {_prep_sid} on the player")
+    # DESKWORK-D5 3(b): an ATTACK SKILL's hit on the player names its skill
+    # ahead of the word (322 / 327 / 340 / 341 among the corpus's 92); a plain
+    # swing (skill_id None) never does.
+    skill_damage_word(send, skill_id, f"agent {agent_id}'s attack skill at the player")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id, frac],
          f"damage {dealt:.0f} to the player"
@@ -25512,6 +25693,7 @@ def revive_player(send, state, conn_id, health_frac=1.0, why=" (the timer)",
          [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID,
           int(player_max_health(state))],
          "restore the player's maximum")
+    state["player_max_declared"] = int(player_max_health(state))   # 3(a)
     # Property 34 SETS the pool to fraction x maximum (studies/agentprops 1e), so
     # 1.0 is a full bar and not a doubled one. The client's own death path zeroes
     # the pools, so clearing the bit alone returns a body at nothing.
@@ -25567,6 +25749,7 @@ def player_refill_due(send, state, conn_id):
          [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID,
           int(player_max_health(state))],
          "restore the player's maximum (deferred)")
+    state["player_max_declared"] = int(player_max_health(state))   # 3(a)
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.GV_HEALTH, PLAYER_AGENT_ID, PLAYER_AGENT_ID, frac],
          "refill the player's bar (deferred)")
@@ -27553,6 +27736,7 @@ def _handle_request_players(send, state, conn_id, stop, rec):
          [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID,
           _health_max],
          f"PLAYER health = {_health_max}")
+    state["player_max_declared"] = int(_health_max)     # 3(a): seeds the tracker
     # The value field is a dword carrying IEEE float bits,
     # same as the damage path above. The purpose is no
     # longer unknown -- energy regeneration as a fraction
@@ -34722,6 +34906,31 @@ def main():
         print("NO ENERGY: skills are free, nothing is deducted, no property 62 "
               "goes out, and no adrenaline is tracked or sent (0x00CF, 0x00D0 "
               "and 0x00D2 all stay off the wire).")
+
+    if a.no_skill_damage_word:
+        global SKILL_DAMAGE_WORD
+        SKILL_DAMAGE_WORD = False
+        print("NO SKILL-DAMAGE WORD: no 0x009F [10, player, skill] ahead of a "
+              "skill's damage word at the player, as this server sent until "
+              "2026-09-22 (retail: 92 of 92, self-scoped; skillcast 16.6's note).",
+              flush=True)
+
+    if a.player_max_always:
+        global PLAYER_MAX_ALWAYS
+        PLAYER_MAX_ALWAYS = True
+        print("PLAYER MAX ALWAYS: the player's property 42 goes out before every "
+              "armour-ignoring word, as until 2026-09-22 (retail: never immediately "
+              "ahead of a damage word at the observer, 0 of 3 / 0 of 401).",
+              flush=True)
+
+    if a.no_adren_bar_gate:
+        global ADREN_BAR_GATE
+        ADREN_BAR_GATE = False
+        print("NO ADRENALINE BAR GATE: 0x00CF (the AD4 zero included) and the "
+              "death's 0x00D0 go out to a bar with no adrenal skill on it, "
+              "as this server did before 2026-09-22 -- the known-bad arm; "
+              "retail sends a dark bar none of the family (skills 34.11).",
+              flush=True)
 
     if a.no_armour:
         global EQUIP_ARMOUR

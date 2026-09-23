@@ -355,15 +355,24 @@ def section_land_skill():
     vis = [(op, v) for op, v, _ in sent
            if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
            and v[0] == authsrv.agents.GV_EFFECT_ON_TARGET]
-    check(len(sent) == 4 and agent["casting"] is None
+    # 5 since DESKWORK-D5 3(b) (2026-09-22): the skill-damage word [10, me,
+    # skill] sits between the gain and the damage -- retail's own order for
+    # a spell at the observer (0xA7, 0xA0, 0xCF, [10], [16]; 92 of 92 name
+    # the observer, skillcast 16.6's note).
+    check(len(sent) == 5 and agent["casting"] is None
           and sent[0][0] == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
           and sent[0][1][0] == authsrv.agents.GV_SKILL_FINISHED
           and vis == [(authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
                        [authsrv.agents.GV_EFFECT_ON_TARGET,
                         authsrv.PLAYER_AGENT_ID, 10, 556])]
-          and sent[2][0] == authsrv.AGENT_ADRENALINE_GAIN,
+          and sent[2][0] == authsrv.AGENT_ADRENALINE_GAIN
+          and sent[3][0] == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+          and sent[3][1][:2] == [authsrv.agents.GV_SKILL_DAMAGE,
+                                 authsrv.PLAYER_AGENT_ID]
+          and sent[4][0] == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
           "control: in-range lands the skill and clears the slot -- 58 "
-          "leading, then the on-body visual, then gain and damage",
+          "leading, then the on-body visual, then gain, the skill-damage "
+          "word [10, me, skill] and the damage",
           f"{[op for op, _, _ in sent]}, visual={vis}, "
           f"casting={agent['casting']}")
 

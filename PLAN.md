@@ -1899,9 +1899,14 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 * **DESKWORK-D1**: the c2s send-site census, SANDBOX-N2's hero kick armed from retail's
   one batch and the add from its ChCliApi wrapper, then retail's unhandled c2s triaged,
   the hero skill toggle, travel and inventory.
-* **DESKWORK-D5**: the combat rules retail's tapes on disk already settle — the adrenaline
-  gate (SKILLS-B1's gate half), interrupts, property 10 and the `[42]`/`[55]` residue, NPC
-  recharge from completion, party-wide shouts, the adrenaline replay, the refusal ids.
+* **DESKWORK-D5**: the combat rules retail's tapes on disk already settle. LANDED
+  2026-09-22: the adrenaline gate (SKILLS-B1's gate half, skills §34.11); property 10
+  and the `[42]` residue (§16.6, self-scoped; `[42]` only when the maximum moved); the
+  adrenaline replay (ANIMREF §19, a second refusal gate named). Still OPEN: interrupts,
+  NPC recharge from completion, party-wide shouts, the refusal ids; 3(d) Mend Condition;
+  3(e) a hero's zero gain; the `[62]` energy word (read, own-party-scoped, not shipped);
+  the second refusal gate's variable; the armed-EMPTY death clear (a one-witness
+  divergence, skills §34.11.4).
 * **DESKWORK-D4**: skill coverage in bulk. **Steps 1–3 LANDED 2026-09-22** (skills §54,
   SKILLS-DT; PLAN-LOG): the probe reproduced, the slot mapping measured (str1 scale, str2
   bonus, str3 duration — the natural order refuted), the parser + referee shipped with 0
@@ -1955,7 +1960,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   last paragraph) — an Elementalist arc's seed. Cyclone Axe's per-foe attack and scatter
   are unmeasured.
 * **DAGGERS, after RUN-2** (daggers §8, last paragraph). A dual whose first strike
-  lands and whose second misses (is 3 sent?); property 10 on the victim (the foe's skill, 229 / 230 unread); the short gap
+  lands and whose second misses (is 3 sent?); ~~property 10 on the victim~~ (decoded, skillcast §16.6, and SENT since 2026-09-22: `[10, me, skill]` ahead of a skill's word at the observer, self-scoped 92 of 92; 229 / 230 are Lightning Orb / Javelin); the short gap
   after a skill's hit on SWORDS (9 of 21, an eighth of the interval off) and the three
   short-and-single dagger ones — not DAGGERS-F20's early double, which explains the
   rest. Sneak Attack with a sword is dropped (PvE-only).
@@ -2160,10 +2165,9 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   the in-run reference the unmet-requirement divisor (3.098) has never had. It needs its
   own short plan or a line on the next Isle tape — not `isle_rung8d_recast_v2.txt`,
   whose re-cast steps RB2 made moot ([studies/isle/PLAN.md](studies/isle/PLAN.md), rung 8d).
-* **SKILLS-B1**: the armed/dark gate still wants its staged live capture (skills
-  §34.10). The rounding half is mostly answered without one — ceil is dead, round holds
-  k = 1 (skills §53.1) — and what is left of it is a hit in (0, 0.5 %): a `0x00CF`
-  carrying 0, or nothing.
+* **SKILLS-B1**, the rounding half only (the gate half closed at the desk 2026-09-22,
+  skills §34.11): ceil is dead, round holds k = 1 (skills §53.1), and what is left is a
+  hit in (0, 0.5 %): a `0x00CF` carrying 0, or nothing.
 * **MORALE-Q5 and Q6**: morale BOOSTS have zero sightings on retail's wire, and the
   corpus holds no death followed by a zone, so what resets a penalty is WIKI only
   ([studies/morale/FINDINGS.md](studies/morale/FINDINGS.md)).
@@ -2198,5 +2202,7 @@ the log alone.
   §7.4–7.5): 3 of the 34 CHANGED screens have been read and named; `0x0191` has no
   usable run.
 * **ANIMREF's desk queue** ([studies/animref/FINDINGS.md](studies/animref/FINDINGS.md)):
-  §19's per-bar adrenaline simulation with cross-drain; §15's movement-start gate;
-  §16's visual ids are wired and their appearance is the owner's verdict to give.
+  §19's second refusal gate — 20 of 39 reason-1960 refusals arrive with the client-rule
+  slot exactly at cost (`adrenreplay.py`, 2026-09-22; the simulation is built, the
+  variable is not found); §15's movement-start gate; §16's visual ids are wired and
+  their appearance is the owner's verdict to give.
