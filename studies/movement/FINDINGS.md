@@ -6227,3 +6227,70 @@ artifact. At the 288 u/s base a late stamp needs δ > 0.28·dt to clear 400, so 
 of dt, and at short dt anywhere it is cheap. A hard-jump count on a boosted or
 short-cadence capture of OURS may include late stamps. Not measured; `late_stamp` is the
 tool that would.
+
+### 2026-09-23 — REALFIX-L1 RE-SCORED under the corrected clock bound: P2's p50 miss is DECIDED, its p90 sits AT the bound
+
+**What is re-scored, and why now.** L1's registered separation claim (REALFIX.md, the P2
+block: *"Separation (movetap-measured, SYNC vs the client's report): P0 arm p50 ≥ 800 u;
+P2 arm p50 ≤ 150 u and p90 ≤ 520 u"*) came in at **267.5 / 523.0** on arm B, and
+§"2026-08-21 — REALFIX-L1 FIRST RUN" recorded the misses as **UNDECIDABLE-leaning-miss**
+because `offset_from_stamps` "resolves the movetap↔wire clock to a 1.00 s spread, worth
+up to ~288 u on any single pairing". That premise was wrong (REALFIX.md §5, T1's note
+"SETTLED 2026-09-23 (latest)"). A spread near 1 s is the TIGHT case, and the offset's
+error bound is 1 s + one coarse-clock tick − spread. On these two captures that is
+**+15.848 ms** (arm B, `20260821T082631`) and **+15.705 ms** (arm A, `20260821T081744`),
+one-sided above the max-estimator. That entry, and the "L1 FIRST RUN IS VOID" entry
+after it, stand as written.
+
+**The prediction, written before any of this ran** (kept verbatim with its outcome in
+`toolkit/clientscan/test_truncbound.py`'s docstring). (1) The published figures
+reproduce first. (2) Arm B's p50 stays within ±15 u of 267.5 across the bound, so the
+p50 miss is decided. (3) Arm B's p90 straddles 520 under nearest-sample pairing, now
+because of the movetap sample phase rather than the clock. (4) Arm A's p50 ≥ 800 holds.
+(5) No offset in the bound mints a hard row. **All five held.**
+
+**How.** `movesync.pair` and `score`, the shipped pairing and statistic, run at 401
+offsets across `[offset, offset + bound]`. The same 68 reports are then scored again
+with the SYNC copy (`live`, equal to `sync_at` on 2,041 of 2,042 samples) linearly
+interpolated to each report's own instant. That removes the nearest-sample phase: arm B's
+movetap ran at 9.5 Hz, samples 105 ms apart, up to ~30 u of travel. The interpolated
+sweep also extends 6 ms earlier, REALFIX §2.2's transport term, since a report is the
+client's position when it was *sent*. OBSERVED, `ours`, all of it:
+
+| arm B (P2), bound +15.848 ms | p50 | p90 | p90 over 520 at |
+|---|---|---|---|
+| as published (nearest sample, the max-estimator) | 267.5 | 523.0 | — |
+| nearest sample, every offset in `[0, +bound]` | **267.5–267.5** | **515.8–523.0** | 254 of 401 offsets |
+| interpolated, every offset in `[−6 ms, +bound]` | **256.1–262.4** | **514.4–518.6** | **0 of 401** |
+| *the old reading: offset anywhere in `[0, +1 s)`* | *83.8–267.5* | *240.6–523.0* | — |
+
+- **P2 p50 ≤ 150 u — MISSED, and DECIDED.** At least 106 u over at every offset the
+  bound admits, by either pairing. The old reading's row shows why the record could not
+  decide it: with a whole second of slack, the same statistic reaches 83.8 u. With the
+  real ≤ 16 ms, it cannot move. The record's own attribution of the miss is untouched
+  here: 1.8 s keyboard report cadence against a 0.3 s calibration, separations at chord
+  scale, the pre-registered benign signature.
+- **P2 p90 ≤ 520 u — AT THE BOUND, leaning met; undecided at the instrument's
+  resolution, and no longer because of the clock.** The published 523.0 is the
+  nearest-sample value at the bound's low edge. Across the bound, nearest-sample p90 sits
+  over 520 at 254 of 401 offsets. With the sample phase removed it is under 520 at
+  every offset, transport included, but only by 1.4–5.6 u. The interpolation's own
+  error, leave-one-out at double spacing near the paired reports, is p50 0.55 u and
+  p90 7.6 u (n 323), so it can cover that margin. At the max-estimator's offset,
+  five of the 68 interpolated separations exceed 520, at 520.2–524.6 u. "Missed by 3 u" was a sample-phase
+  artifact more than a finding, and "met by 3 u" would be the same mistake from the
+  other side.
+- **P0 p50 ≥ 800 u — MET, unchanged.** 4,402.4 u at every offset in arm A's bound: a
+  parked copy does not move with the clock.
+- **No offset from −6 ms to the bound mints a hard row** on arm B. The displacement
+  falsifier (p50 > 520 u refutes lag-on-polyline) still cannot fire.
+
+**What this does not change.** L1 is still VOID as a P2 verdict on harm: the operator
+saw arm B warp, and the run's blind budget and geometry confound stand (entry above).
+This re-score is only about the separation claim, which that entry kept. It measures the
+SYNC copy, as registered. Round 6's point, that the operator watches the rendered copy,
+concerns a different quantity. The 16× arm contrast stands too, and is now clock-exact
+rather than "dwarfing" a 288 u systematic. Reproducible: `test_truncbound.py` §4 pins
+the reproduction, both sweeps, the old-reading control and the leave-one-out figure.
+With the bound patched back to the old reading (bound = spread), its p50 and p90 checks
+go red.

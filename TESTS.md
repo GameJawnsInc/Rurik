@@ -5435,7 +5435,21 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   **§21 also guards both modules' import lists** (`movetap.py` and
   `movesync.py`, asked of the syntax tree), a second witness beside movetap's
   own §3 so the guard cannot be deleted from one place quietly. No client. ~4 s),
-  `toolkit/clientscan/test_truncbound.py` (**THE TRUNCATED CLOCK OFFSET'S ERROR IS
+  `toolkit/clientscan/test_truncbound.py` (**2026-09-23, later: §4 re-scores
+  REALFIX-L1's registered separation bounds across the corrected clock bound.**
+  The published figures reproduce first (arm A 63 / 4402.4 / 6287.3 / 6811.4, arm B
+  68 / 267.5 / 523.0 / 530.5), then arm B is swept through `movesync.pair` and
+  `score` at 401 offsets in `[0, +bound]`, and with movetap interpolated to each
+  report's instant over `[-6 ms, +bound]` (REALFIX 2.2's transport term). P2 p50 <=
+  150 is MISSED and DECIDED: 267.5 u nearest, 256.1-262.4 u interpolated. KNOWN-BAD,
+  the old reading: with the offset anywhere in the whole second the p50 reaches
+  83.8 u and crosses 150. P2 p90 <= 520 sits AT the bound: 515.8-523.0 u nearest,
+  over 520 at 254 of 401 offsets; 514.4-518.6 u interpolated, over at 0. The margin
+  is checked to be smaller than the interpolation's leave-one-out p90 error, 7.6 u at
+  double spacing. No hard row at any offset; arm A's p50 >= 800 met, unmoved. With the
+  bound patched back to the old reading (bound = spread), the p50 and p90 checks go
+  red. 25 -> 31 vaulted; floor 11 unchanged (§4 needs the vault).** THE TRUNCATED
+  CLOCK OFFSET'S ERROR IS
   1 s + ONE TICK − SPREAD, NOT THE SPREAD, scored against the float stamp.** Added
   2026-09-23. Before REALFIX-T1 a capture's `wall` was truncated to the second, and
   `movesync.offset_line` printed the max-estimator's spread as "residual 1.000 s =
@@ -5466,7 +5480,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   float stamp. Block 12's capture needs no split and prints `bound +16.095 ms =
   4.64 u`. One row lifted 1.3 s is refused and does NOT split. Against the shipped
   code a mean estimator reddens 7 checks, a bound without the tick 6, the old label
-  4. Floor 11, measured bare (2 declared skips); 25 with the vault. No client. ~80 s,
+  4. Floor 11, measured bare (2 declared skips); 31 with the vault. No client. ~80 s,
   most of it loading ~1,560 captures),
   `toolkit/clientscan/test_resyncscore.py` (**2026-09-17: §15's "retail scores 0 hard jumps" is the same late-stamp row as test_movesync §16 seen through the control — split the same way (zero firings that are displacements; every firing a `movesync.late_stamp`, the 09-16 row required among them). 116 → 117 checks, floor 50 unchanged.** **2026-09-14: retail tracks carry `server_sets` (the same flag as test_movesync §16, skipped where `hard_idx` is built and in `fires()`; the JARIN shrine was scored as retail's one hard jump), and §17's `70 < p50` bound widened to 50 -- p50 read 69.5 u whole-corpus against 80.9 u as of the August pin, a bound one unit above the median being a pin on the vault's size.** WHAT WOULD THE 0x002C RESYNC HAVE
   DONE -- the guard on `toolkit/clientscan/resyncscore.py`, which prices a
