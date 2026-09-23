@@ -56,8 +56,8 @@ import authsrv                                                 # noqa: E402
 import vaultpath                                               # noqa: E402
 
 # Floor from the green run of 2026-09-23: section 1 alone (the fixture-less sender,
-# 28 of the 38 after the fix pass; 21 of 30 before it). Section 2 (the tape, 10) is
-# declared a skip without the vault. The first cut declared 22 from a guess and the
+# 28 of the 39 after the observer fix; 28 of 38 after the fix pass; 21 of 30 before
+# it). Section 2 (the tape, 11) is declared a skip without the vault. The first cut declared 22 from a guess and the
 # count came back 21 -- set from the run, both times.
 LEDGER = checks.Ledger("the interrupt on the wire", floor=28)
 check = checks.adopt(LEDGER)
@@ -499,6 +499,25 @@ def section_corpus():
           "at the victim is the hold release [8, victim, 0] (no stop or bar message ahead of "
           "it) and the run is contiguous",
           f"{[(r['capture'], r['own'], r['run_opens_family'], r['run_contiguous']) for r in tfs]}")
+    # The own / other split, on the corrected observer (studies/skills 43.8): the
+    # first-0x00E3 rule this reader used named the JARIN HERO as the player of
+    # 20260914T005758 conn 56011 and nobody on 69 connections, and the fix pass's
+    # published split was 60/177, 3/9, 11/23 (own 74). Dated, like the [35] count.
+    dated_stops = [r for r in c["stops"] if r["capture"] <= "20260923T235959"]
+    split = {p: (sum(1 for r in dated_stops if r["prop"] == p and r["own"]),
+                 sum(1 for r in dated_stops if r["prop"] == p and not r["own"]))
+             for p in sorted({r["prop"] for r in dated_stops})}
+    jarin = [r for r in c["stops"] if r["capture"] == "20260914T005758"
+             and r["port"] == "56011"]
+    check(split == {3: (72, 165), 49: (3, 9), 59: (10, 24)}
+          and sc["observer_refused"] == 0
+          and jarin and all(r["own"] == (r["agent"] == 29) for r in jarin),
+          "the stops on the OBSERVER, per property, as of 2026-09-23: [3] 72 / 165, "
+          "[49] 3 / 9, [59] 10 / 24 (own 85 of 283); on the JARIN tape a stop is the "
+          "observer's exactly when it names 29, never the hero 30; no connection "
+          "refused",
+          f"{split}; refused {sc['observer_refused']}; JARIN stops "
+          f"{[(r['prop'], r['agent'], r['own']) for r in jarin]}")
     check(sc["p5"] and sc["knockdown_with_35"] == 0,
           "P5 as registered: no batch holds a [63] and a [35] on one agent (a real "
           "predicate now; the first cut's ended in `or True`)",

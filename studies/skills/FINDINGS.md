@@ -5999,6 +5999,82 @@ answer. The shape: **CORROBORATED** single elemental rating (§43.4's caveat is
 the residual). OUTGOING (`hit_enemy(exact=…)`) is unchanged and still blocked on a
 creature armour value that no channel carries.
 
+### 43.8 SKILLS-OB — whose connection it is: the instrument's player rule was wrong, and four readers inherited it (2026-09-23)
+
+**Desk work, no client launched.** `spellhitjoin.player_of` named the connection's own
+agent as the agent of the FIRST `0x00E3` (SKILL_ACTIVATED), and `interruptjoin`,
+`missjoin` and `rechargeprobe` all took their player from it. On the one tape with a hero,
+`20260914T005758` conn `56011`, that first ack is the **hero's**: agent 30, a kind-9
+create, holds 48 of the 54 acks (346 × 17, 322 × 11, 382 × 7, 348 × 7, 385 × 5, 2 × 1).
+The player is agent **29**: the only kind-5 create, a property-41 agent (the hero gets
+property 41 too — JARIN's "character block addressed to a second agent"), the owner of the
+other 6 acks (394 × 2, 392, 433, 446, 455), and the agent whose `0x00E3` / `0x00E2` is the
+next answer after **all 18** of the connection's c2s presses (`0x0027` / `0x0046`; 14
+inside 0.3 s, 4 at 1.2–2.0 s). The corrected rule was already in the tree:
+`adrenjoin.whose_agent` (property 41, self-scoped, §26.13's correction of the first-`0x0059`
+rule, with the JARIN kind-5 tie-break). Branch `desk-d5c`'s `shoutjoin.observer_of`
+(§56.8 there, not yet merged) cross-checks it against the press answers; this section is
+the same rule applied to the older readers.
+
+**Measured first, over all 96 live connections** (every one frames whole):
+
+| the first-`0x00E3` rule against property 41 | connections |
+|---|---|
+| names the same agent | 25 |
+| names a **different** agent | **1** — `20260914T005758` / `56011`: 30 (the hero) for 29 |
+| names **nobody** (no `0x00E3`: the player never cast) while property 41 names the observer | **69** |
+| neither answers | 1 — `20260807T133758` / `54560`, an 88-message stub with no property 41, no press, no announcement |
+
+So the defect was two defects: a wrong agent on the hero tape, and a silent `None` on 69
+connections that every consumer read as "no stop, swing or pair here is the player's".
+The press vote agrees wherever it speaks: 26 connections carry presses (321), 159 are
+answered inside 0.3 s on 19 connections, and all 19 votes are unanimous and equal to
+property 41's agent. The rest are answered later (0.33–5.3 s — a press that walks into
+range first), always by the same agent. **No connection has the two rules disagreeing.**
+
+**The rule now** (`toolkit/authsrv/spellhitjoin.py`): `observer_of(seq, c2s)` returns
+`(player, press_agent, why)` — property 41 cross-checked against the press vote (the next
+`0x00E3` / `0x00E2` inside `PRESS_ANSWER_S` = 0.3 s after each c2s press, `c2s_of` reading
+the client's own requests on the capture clock); the two disagreeing is **refused** (no
+player named, the reason naming both, counted by every consumer), never settled by picking
+one; neither answering names nobody and says so. `player_of` delegates. All four readers
+pass their c2s; `rechargeprobe` excludes a refused connection (its "other agents" are
+undefined), the others keep its rows with no player.
+
+**What moved, re-derived on the corrected rule** (old → corrected; every verdict — P1–P4
+here, `interruptjoin` P1–P5, `missjoin` P1/P2/P5, `rechargeprobe` P1–P3 and every
+per-skill minimum — is player-independent and does not move):
+
+| reader | the number | first-`0x00E3` rule | corrected | published where |
+|---|---|---|---|---|
+| `spellhitjoin` | §43.3's pair onto the connection's own player | 4 of 4 at 0.06042 (agent 11, RA) | **unchanged** — both rules name 11 there | §43.3 |
+| `spellhitjoin` | pairs onto the connection's own player | `10 185 11`, `117 230 25`, **`54 222 30`** — the HERO's Frenzy pair (26 and 51 at 122, slice F47.2) | `10 185 11`, `117 230 25`, **`54 222 29`** (the Ranger's: 23 and 24 at 140, and hits at two later maxima) and **`48 222 29`** (LAKESIDE's penalty split, on a connection with no `0x00E3`) | `test_skilldamage` §12 only; the check passed both ways, so it could not see the swap |
+| `interruptjoin` | stops on the observer / on another, per property | `[3]` 60 / 177, `[49]` 3 / 9, `[59]` 11 / 23 — own 74, 209 of 283 on others | `[3]` **72 / 165**, `[49]` 3 / 9, `[59]` **10 / 24** — own **85**, **198** of 283 on others | PLAN-LOG, the DESKWORK-D5 fix-pass entry, item (5) |
+| `interruptjoin` | the observer's own cancels within 0.5 s of a c2s `0x0028` | 2 of 74 | **3 of 85** | same |
+| `missjoin` | §44.2's "the player's own 399 swings all carried damage" (the §44 corpus, to 2026-09-10) | 399 | **865**, all with damage — 466 more on four connections that swung and never cast (`20260818T132739` 55252 / 65119 / 64640, `20260821T163511` 61106); P4 still cannot be scored on that corpus | §44.2 |
+| `missjoin` | P4 on today's corpus (own swings / own no-damage / with a gain) | 663 / 30 / **2** | 1187 / 29 / **1** — the withdrawn one is the JARIN hero's missed swing, which the old rule called the player's | unpublished; §48.6's 27 of 27 is on `20260916T213125` and unchanged |
+| `rechargeprobe` | other agents' announcements | 346 | **347** — the hero's one (skill 2) is an other agent's now; the player 29 announces nothing on that connection, so none of the player's casts was ever pooled; no pair, no minimum moves | PLAN-LOG, the DESKWORK-D5 step-4 entry |
+| castmech §4 / animref D5 | "both `[35]` at the observer" | 25 on both witness connections | **unchanged** | castmech §4, animref D5 |
+
+Where the stops moved: on `56011` the hero's `[3]` × 2 and `[59]` × 1 were the "observer's"
+and the player's five `[3]` another agent's; `20260821T163511` 61106 (+1 `[3]`) and
+`20260919T103604` 56576 (+8 `[3]`) had no player at all.
+
+**Labels.** The observer rule: **OBSERVED** — property 41 is self-scoped on the wire, the
+press answer is the client's own request met by its own ack, and the two agree 19 of 19
+where both speak. The re-derived counts: **OBSERVED**, the same instruments on the
+corrected operand. **Locks:** `test_skilldamage` §11b (bare machine: the JARIN shape with
+the known-bad arm on the same fixture, the refusal, the fallbacks, the window) and §12 (the
+census names 29 on `56011`; the pair onto the player is `54 222 29`, never `54 222 30`);
+`test_interrupt` §2 (the dated split above, and on `56011` a stop is the observer's exactly
+when it names 29). All seven are red with `observer_of` swapped back to the old rule.
+
+**Method, for the next one.** A rule that answers `None` is a rule that answers — every
+consumer here read it as "not the player" and scored on. The hero tape made the wrong
+answer visible; the 69 silent ones were only found by counting the rule against a second
+one on every connection, which is the check to run before trusting any "whose agent is
+this" helper.
+
 ---
 
 ## 44. SKILLS-BL — Blind: the miss is the client's own attack-fail word, the rate is the wiki's, and the corpus holds no blinded swing to measure it on (2026-09-10)
@@ -6045,7 +6121,10 @@ dead or unreachable target rather than a miss: four are two swingers (29 and
 `0x009F 45` or a re-`4` beside them, one is a swinger yielding to a cast. **P2
 has NO WITNESS**: not one of the 1,042 closes was swung blind, so the 90 % is
 WIKI and stays WIKI until a blinded swing is captured (§44.6). The player's own
-399 swings all carried damage (P4 cannot be scored).
+399 swings all carried damage (P4 cannot be scored). **(Corrected 2026-09-23,
+§43.8: 865, all with damage. The 399 was taken on `spellhitjoin.player_of`'s
+first-`0x00E3` rule, which named no player on four connections where the
+player swung 466 times and never cast. P4 still cannot be scored here.)**
 
 **P3 — the miss word by histogram — named nothing**, and that was the useful
 null. So the swing was censused from the other end: for all **1,332** attack
