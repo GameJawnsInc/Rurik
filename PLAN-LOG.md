@@ -28,6 +28,27 @@ move back.
 
 ---
 
+### DESKWORK client confirmation -- 2026-09-23 -- **24 loopback launches, every prediction held: kick, add, suppress, move, equip, swap, the label tier, the caster-centred area, party shouts and the player interrupt work on our own client; two defects found (the paper doll's armour order, the unanswered bag-to-bag drag c2s `0x0072`)**
+
+[studies/deskwork/CONFIRM-2026-09-23.md](studies/deskwork/CONFIRM-2026-09-23.md) is the
+record: each case's run folder, its A/B arm and the owner's answers. 15 harness-driven runs
+(the label tier A-D, shouts A/B, interrupts A/B, suppress-in-a-fight A/B, kick/add R1-R5,
+the stored-cell inventory arms 3/4) and 9 owner-driven (the suppress click on/off, the
+inventory move/equip/swap/drag arms). What it confirms is that the client ACCEPTS and DRAWS
+what the server sends -- the hero add, the suppress reply and a body interrupt stay
+RECONSTRUCTIONs of retail. Found: the equipped bag is dressed in the visual array's
+numbering, so the paper doll reads legs, chest, head, feet, arms (retail: head, chest,
+arms, legs, feet); a drag between two cells of one bag sends c2s `0x0072` [item, bag,
+slot], on no retail tape and unanswered; a restored cell's `0x013E` log label is stale
+(the bytes are right). Both defects are being fixed on `desk-inv`. PLAN.md 8.1's
+DESKWORK-D1, D4 and D5 bullets lose the confirmations this session made. A sandbox stack
+from 2026-09-22 was still listening on 6112/6601 with pre-merge code; the first run's
+`--replace` cleared it.
+
+---
+
+---
+
 ### REALFIX-L1 re-scored -- 2026-09-23 -- **P2's separation p50 miss is DECIDED (267.5 u at every offset the corrected clock bound admits), its p90 sits AT the 520 u bound, leaning met**
 
 This entry corrects the REALFIX-L1 FIRST RUN entry further below (append-only: that
