@@ -2037,23 +2037,30 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "(RECONSTRUCTION: no capture of one was read).")
     ap.add_argument("--no-party-heals", action="store_true",
                     help="drop the CASTER-CENTRED party heal: a byte-0 heal with an "
-                         "aoe_range (287, 2221 as label rows: \"heal entire party\") "
-                         "heals the CASTER alone through cast_recipient, as every "
-                         "byte-0 heal did until 2026-09-23 -- a subset of the "
-                         "right recipients, never a wrong one. The default heals "
-                         "the caster and every living ally within the record's "
-                         "aoe_range (5000 u on both rows) of the caster.")
+                         "aoe_range (287, 2221 as label rows, whose templates a person "
+                         "read as the whole party, caster included) heals the CASTER "
+                         "alone through cast_recipient, as every byte-0 heal did until "
+                         "2026-09-23 -- a subset of the right recipients, never a wrong "
+                         "one. The default heals the caster and every living ally "
+                         "within the record's aoe_range (5000 u on both rows) of the "
+                         "caster; a hostile's allies are its spawn group when it has "
+                         "one. --no-condition-heal-rule turns this arm off as well "
+                         "(it lives inside that rule's recipient branch).")
     ap.add_argument("--no-nonattack-chain-gate", action="store_true",
                     help="the player's E5 judges a NON-attack skill's combo_req "
                          "(\"must follow a lead / off-hand / dual\": 784, 973, 1033 "
                          "as label rows) against the target's chain state and FAILS "
                          "it the way DAGGERS-B5 fails an off-hand attack (the fail "
                          "word, a zero recharge; RECONSTRUCTION -- retail's one "
-                         "witness is an attack), and a non-attack that \"counts as "
-                         "an off-hand attack\" (974) advances the chain when its "
-                         "condition lands. This flag reverts both: the skill lands "
-                         "whatever the chain says and moves nothing, which is what "
-                         "the gate's exclusion protected against until 2026-09-23.")
+                         "witness is an attack); a BODY's cast of such a row lands "
+                         "on NOBODY (bodies carry no chain); and a non-attack that "
+                         "\"counts as an off-hand attack\" (974) advances the chain "
+                         "when its condition lands. This flag is the gate's "
+                         "EXCLUSION, the server until 2026-09-23: such a row lands "
+                         "on NOBODY for the player and for a body, and 974 moves "
+                         "nothing. The ungated landing (the row landing with no "
+                         "chain) is the over-application the exclusion refused and "
+                         "no flag produces it.")
     ap.add_argument("--player-max-always", action="store_true",
                     help="declare the player's property 42 before EVERY "
                          "armour-ignoring damage word at the player, as until "

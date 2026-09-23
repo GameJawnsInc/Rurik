@@ -494,8 +494,9 @@ check("CLAUSE_KNOCKDOWN" in rf("the foe is knocked down") and "CLAUSE_SHADOW_STE
       and "CLAUSE_ALSO_CASTER" in rf("you and that ally are healed")
       and "CLAUSE_DOUBLE_DAMAGE" in rf("you take double damage") and "CLAUSE_DISABLE" in rf("your skills are disabled")
       and "CLAUSE_CAST_SPEED" in rf("casts spells 33% slower") and "SPEED_MOVE" in rf("moves, attacks, and casts 25% slower")
-      and "CLAUSE_REMOVAL" in rf("all party members are relieved of burning") and "CLAUSE_REVEAL" in rf("hidden objects are revealed")
-      and "CLAUSE_ALSO_CASTER" in rf("you and all adjacent foes are poisoned") and "CLAUSE_REVEAL" in LT.DETAILS
+      and "CLAUSE_REMOVAL" in rf("the allies are relieved of bleeding") and "CLAUSE_REVEAL" in rf("any hidden objects show up")
+      and "CLAUSE_REVEAL" in rf("secret doors are revealed")
+      and "CLAUSE_ALSO_CASTER" in rf("you and all nearby foes are dazed") and "CLAUSE_REVEAL" in LT.DETAILS
       and not rf("target foe is struck for 30 fire damage") & (LT.CLAUSE_FLAGS | {"UNMODELLED_CLASS", "AREA_NEAR", "SPEED_MOVE"})
       and not (LT.CLAUSE_FLAGS | {"UNMODELLED_CLASS", "AREA_NEAR", "SPEED_MOVE"}) & LT.COMPOUND_FLAGS,
       "the fix pass's flags on OUR OWN phrases: each raised where its wording is, quiet on 'easily "
@@ -1029,6 +1030,12 @@ if records is not None:
                   f"the overlay ON DISK ({where}: {disk}) is byte-identical to a fresh emit -- "
                   f"regenerated, not hand-edited; a mismatch means `python toolkit/clientscan/"
                   f"skilldesc.py --emit-labels` is owed (at the merge, into the vault)")
+        elif explicit:
+            # the fix pass (ENG-D4C-9): a mistyped explicit path is a FAIL, not a
+            # declared skip -- the skip is for the vault's file being absent only
+            check(False, f"RURIK_SKILL_LABELS names {disk}, which is not a file -- the explicit "
+                         f"path exists to make the on-disk check bite on a branch, so its "
+                         f"absence is a failure, never a skip")
         else:
             LEDGER.skip("the overlay on disk (1 check)",
                         f"{disk} absent -- `python toolkit/clientscan/skilldesc.py --emit-labels`")

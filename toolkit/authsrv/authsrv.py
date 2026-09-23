@@ -13509,8 +13509,8 @@ def burst_body_spell(send, state, conn_id, who, sid, terms, amount, rank, inflic
 #
 # `spell_burst` above centres on the TARGET -- the record's byte 16, "target
 # foe and the foes around it". The step-4 gate (skills 55.2) EXCLUDED every
-# at-cast damage or condition whose target byte is 0 with area wording --
-# "All adjacent foes are struck", "All nearby foes", "All foes in the area"
+# at-cast damage or condition whose target byte is 0 with area wording (the
+# adjacent / nearby / in-the-area phrasings, skilldesc.CASTER_AREA_WORDING)
 # -- because the one-target path acts on the SELECTED agent at any range
 # while retail acts on the foes around the CASTER. This is that arm: the
 # record's byte 0 (SELF, the byte `cast_recipient` places on the caster), a
@@ -13521,9 +13521,10 @@ def burst_body_spell(send, state, conn_id, who, sid, terms, amount, rank, inflic
 # [20, foe, caster, impact], then the condition -- burst_player_spell's shape
 # with the centre moved. A duration on the record (1113's 5 s of ticks, 840's
 # flat 10) is NOT modelled: one tick, at the cast, and the label row says so
-# (DURATION_UNMODELLED). RECONSTRUCTION: no capture of a byte-0 area Spell's
-# cast was read for this arm -- the corpus was not searched for one (skills
-# 56.1 names the search as owed).
+# (DURATION_UNMODELLED). RECONSTRUCTION: the live corpus was searched
+# 2026-09-23 (the fix pass, skills 56.7; 96 connections) and holds NO cast of
+# 183 / 188 / 840 / 1113 / 2212 by anyone -- NOT FOUND, so the arm rests on
+# the record alone (an `aoe_range`-radius `foes_within` at the caster).
 #
 # --no-caster-areas reverts -- and the revert is NOT the one-target path. A
 # byte-0 area row then lands on NOBODY, which is exactly what the gate's
@@ -13568,6 +13569,7 @@ def burst_player_caster_area(send, state, conn_id, cast, found, inflicted, rank,
     sid = cast["skill_id"]
     foes = foes_within(state, PLAYER_AGENT_ID, target_pos(state, PLAYER_AGENT_ID), radius)
     vis = skill_impact_visual(sid)
+    kd = skill_knocks_down(sid)          # the fix pass: burst_player_spell's term, latent
     amount = float(found[0]) if found and found[1] == "standalone" else None
     landed = 0
     for foe in foes:
@@ -13584,6 +13586,12 @@ def burst_player_caster_area(send, state, conn_id, cast, found, inflicted, rank,
         victim = state.get("agents", {}).get(foe)
         if victim is None or victim.get("dead"):
             continue
+        if kd:
+            # the row's `knocks_down` (a hand-row field; no AREA_CASTER label
+            # row carries one) on each landed, living foe -- the body's arm
+            # (burst_body_spell) already did, so the two arms agree
+            knock_down(send, state, foe, conn_id, f"skill {sid}",
+                       skill_knock_down_seconds(sid))
         if inflicted:
             apply_condition(send, state, foe, inflicted[0], inflicted[1], rank,
                             conn_id, sid)
@@ -13619,17 +13627,27 @@ def body_caster_area_condition(send, state, conn_id, agent_id, skill_id, inflict
 # whose text names a CLASS of recipients, because `cast_recipient` places a
 # byte-0 heal on the caster and nobody else. This arm heals the class: the
 # CASTER and every living ally of the caster (`allies_of`: the party for the
-# player or a party body, the same-allegiance others for a hostile) within
-# the record's own `aoe_range` of the caster -- 5000 u on both rows that
-# ship (287, 2221), the record's word for "the entire party". Which byte-0
-# class heals INCLUDE the caster is the gate's decision, made per row
-# against the template's own digest (skilldesc.CLASS_HEAL_READINGS): 1262
-# excludes the caster and 943 heals only the relieved, and neither ships.
-# RECONSTRUCTION: no capture of a party heal was read for this arm -- the
-# corpus was not searched for one (skills 56.2 names the search as owed).
+# player or a party body; for a HOSTILE its spawn `group` when the row carries
+# one, else its allegiance) within the record's own `aoe_range` of the caster
+# -- 5000 u on both rows that ship (287, 2221), the record's word for "the
+# entire party". Which byte-0 class heals INCLUDE the caster is the gate's
+# decision, made per row against the template's own digest
+# (skilldesc.CLASS_HEAL_READINGS): 1262 excludes the caster and 943 heals
+# only the relieved, and neither ships.
+# RECONSTRUCTION: the live corpus was searched 2026-09-23 (the fix pass, skills
+# 56.7) and holds NO cast of 287 or 2221 by anyone -- NOT FOUND, so the arm
+# rests on the record and the reading alone. A HOSTILE's party is UNVERIFIED
+# here: MONSTERAI-J's `group` (the spawn's own, the provocation's unit) is the
+# nearest thing the server has to a monster party, and the reading is the
+# NARROWER one (a group is a subset of an allegiance) -- with two groups
+# inside 5000 u (the sandbox spaces them 2,100 u apart) the allegiance
+# reading healed the other group for one commit.
 # --no-party-heals reverts to the caster alone -- a SUBSET of the right
 # recipients, never a wrong one, which is why this revert differs from the
-# area's.
+# area's. The party arm sits inside resolve_heal's CONDITION_HEAL_RULE branch
+# (the recipient rule it extends), so --no-condition-heal-rule turns it off
+# too: `effect_recipient` then hands a byte-0 heal to the caster alone --
+# the same subset, stated rather than discovered.
 PARTY_HEALS = True
 
 
@@ -13654,13 +13672,19 @@ def party_heal_radius(skill_id):
 
 def party_within(state, caster_id, radius):
     """The caster (living) and its living allies within `radius` of the
-    caster's position, caster first, the rest by id."""
+    caster's position, caster first, the rest by id. A hostile caster whose
+    row carries a spawn `group` counts its GROUP as its party (the banner:
+    UNVERIFIED, the narrower reading); one with no group, its allegiance."""
     out = []
     if not target_dead(state, caster_id):
         out.append(caster_id)
     cx, cy = target_pos(state, caster_id)
+    me = state.get("agents", {}).get(caster_id) or {}
+    group = me.get("group") if me.get("allegiance") == agents.ALLEGIANCE_HOSTILE else None
     for aid in sorted(allies_of(state, caster_id), key=int):
         if aid == caster_id:
+            continue
+        if group is not None and (state.get("agents", {}).get(aid) or {}).get("group") != group:
             continue
         x, y = target_pos(state, aid)
         if math.hypot(float(x) - float(cx), float(y) - float(cy)) <= radius:
@@ -13679,12 +13703,30 @@ def party_within(state, caster_id, radius):
 # fail word, a zero recharge, nothing lands. The fail SHAPE for a non-attack
 # is RECONSTRUCTION -- retail's one witness (daggers F7) is an off-hand
 # attack; WIKI (GWW, "Off-hand attack"): "failed attacks do not cause the
-# skill to recharge", read as the family's rule. And a non-attack that
+# skill to recharge", read as the family's rule. It reads the RECORD's
+# `combo_req`, so a non-attack with a requirement and no effect row (1643)
+# fails unchained too -- less, and the family's rule. And a non-attack that
 # "counts as an off-hand attack" (974's `combo`) ADVANCES the chain when its
 # condition lands on a living target, ahead of the condition's own messages
-# (the attack's order: E5, 0x005C, the word). A BODY's chain requirement is
-# not judged -- bodies carry no chain table, for attacks either (pre-existing).
-# --no-nonattack-chain-gate reverts both halves.
+# (the attack's order: E5, 0x005C, the word).
+#
+# A BODY's cast of such a row lands on NOBODY (the fix pass, skills 56.7):
+# bodies carry no chain table, so the requirement is UNMET by construction,
+# and landing the row unjudged was the over-application the gate's
+# CHAIN_REQUIREMENT exclusion refused (a hero or a hostile put 784's Poison on
+# its target with no lead for one commit). Retail's bodies DO meet it -- TAPE,
+# OBSERVED n=5: every live 784 (20260819T132414 x3, 20260913T210901 x2) is a
+# body's, 0.41..1.37 s after the same body's own 782 (a lead) on the same
+# target -- so NOBODY is an under-application, stated; the body arm that
+# judges a body's own chain is the residue. (A body's ATTACK with a
+# requirement -- the hand rows 775 780 781 -- still lands unjudged:
+# pre-existing, DAGGERS-B5's scope, untouched here.)
+# --no-nonattack-chain-gate is the gate's EXCLUSION, not the ungated landing:
+# under it a non-attack `combo_req` row lands on NOBODY for the player and
+# for a body alike -- the server until 2026-09-23, when no such row shipped
+# -- and 974's step moves nothing (its Crippled still lands: the row shipped
+# before this arm, marked CHAIN_STEP_NOT_ADVANCED). The ungated landing is
+# reachable by no flag, on purpose: --no-caster-areas made the same choice.
 NONATTACK_CHAIN_GATE = True
 
 
@@ -19749,9 +19791,28 @@ def cast_tick(send, state, conn_id):
             # and nothing below lands -- no damage, no condition, no effect,
             # no heal.
             _na_fail, _na_combo, _na_req = False, 0, 0
-            if target and not _is_attack_skill(cast["skill_id"]):
+            if not _is_attack_skill(cast["skill_id"]):
                 _na_combo, _na_req, _ = skill_chain_fields(cast["skill_id"])
-            if _na_req and NONATTACK_CHAIN_GATE and CHAIN_STATE:
+            if _na_req and not NONATTACK_CHAIN_GATE:
+                # --no-nonattack-chain-gate: the gate's EXCLUSION (the banner)
+                # -- the row lands on NOBODY, no fail word, never the ungated
+                # landing the exclusion refused.
+                _na_fail = True
+                found, inflicted = None, None
+                print(f"[c{conn_id}] skill {cast['skill_id']} must follow "
+                      f"{chain.requirement_name(_na_req)} and --no-nonattack-chain-gate "
+                      f"is set: it lands on NOBODY (the gate's exclusion until "
+                      f"2026-09-23) [SKILLS-LU]", flush=True)
+            elif _na_req and CHAIN_STATE and not target:
+                # no target to judge against or to draw the fail word beside:
+                # the requirement is unmet, nothing lands (all four such rows
+                # are byte 5, so the client sends a target; stated, not reached)
+                _na_fail = True
+                found, inflicted = None, None
+                print(f"[c{conn_id}] skill {cast['skill_id']} must follow "
+                      f"{chain.requirement_name(_na_req)} and names no target: "
+                      f"nothing lands [SKILLS-LU]", flush=True)
+            elif _na_req and CHAIN_STATE:
                 _na_now = player_chain(state).state_on(target, now)
                 if not chain.requirement_met(_na_req, _na_now):
                     _na_fail = True
@@ -26802,6 +26863,27 @@ def land_skill(send, state, agent_id, agent, conn_id):
                             inflicted[1], _rank, conn_id, skill_id)
         resolve_heal(send, state, skill_id, _rank, agent_id,
                      agent.get("cast_target"), conn_id)
+        return
+    # SKILLS-LU (C), the fix pass: a BODY's NON-attack with a chain requirement
+    # lands on NOBODY -- bodies carry no chain table, so `combo_req` is unmet
+    # by construction, and the gate's CHAIN_REQUIREMENT exclusion was exactly
+    # the refusal to land it unjudged (the NONATTACK_CHAIN_GATE banner: retail's
+    # bodies meet it, 5 of 5 live 784s after their own 782 lead -- so this is
+    # LESS, stated). The same under the flag (the gate's exclusion). The cast
+    # still closes: the 58 is the caster's, not the target's.
+    _na_body_req = 0 if _is_attack_skill(skill_id) else skill_chain_fields(skill_id)[1]
+    if _na_body_req:
+        agent["casting"] = None
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_SKILL_FINISHED, agent_id, 0],
+             f"agent {agent_id} finishes casting {skill_id}")
+        print(f"[c{conn_id}] agent {agent_id}'s skill {skill_id} must follow "
+              f"{chain.requirement_name(_na_body_req)} and a body carries no chain: it "
+              f"lands on NOBODY ("
+              + ("the requirement is unmet by construction; retail's bodies meet it -- "
+                 "the body chain is the residue" if NONATTACK_CHAIN_GATE
+                 else "--no-nonattack-chain-gate, the gate's exclusion")
+              + ") [SKILLS-LU]", flush=True)
         return
     dealt, conversion, frac, spell_ar = 0.0, None, None, None
     # studies/weapons 37: a projectile SPELL's word rides the flight -- its
@@ -36352,9 +36434,10 @@ def main():
     if a.no_nonattack_chain_gate:
         global NONATTACK_CHAIN_GATE
         NONATTACK_CHAIN_GATE = False
-        print("NO NON-ATTACK CHAIN GATE: a Spell's or a Skill's combo_req is not judged "
-              "at the E5 and a non-attack 'counts as an off-hand attack' moves nothing "
-              "(the pre-2026-09-23 arm) [SKILLS-LU]", flush=True)
+        print("NO NON-ATTACK CHAIN GATE: a Spell or a Skill with a combo_req (784, 973, "
+              "1033) lands on NOBODY -- the gate's exclusion until 2026-09-23, for the "
+              "player and for a body -- and a non-attack 'counts as an off-hand attack' "
+              "(974) moves nothing [SKILLS-LU]", flush=True)
 
     if a.player_max_always:
         global PLAYER_MAX_ALWAYS

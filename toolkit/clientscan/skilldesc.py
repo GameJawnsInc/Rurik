@@ -1225,7 +1225,7 @@ DETAIL_CLAUSE_MOVE_SPEED = "CLAUSE_MOVE_SPEED"         # a move-speed clause wit
 # the row rides, not an under-application.
 DETAIL_AREA_CASTER = "AREA_CASTER"            # authsrv.caster_area: byte 0, a Spell, a radius, no projectile -- bursts from the CASTER (a duration beside it is marked DURATION_UNMODELLED)
 DETAIL_HEAL_PARTY = "HEAL_PARTY"              # authsrv.party_heal_radius: the caster and its allies within the record's radius (a byte-0 class heal read INCLUDES_CASTER)
-DETAIL_CHAIN_GATED = "CHAIN_GATED"            # combo_req on a non-attack: judged at the PLAYER's E5 (a body's is not -- bodies carry no chain, for attacks either)
+DETAIL_CHAIN_GATED = "CHAIN_GATED"            # combo_req on a non-attack: judged at the PLAYER's E5; a BODY's cast lands on NOBODY (no body chain: unmet by construction, retail's bodies meet it -- less)
 DETAIL_CHAIN_STEP_ADVANCES = "CHAIN_STEP_ADVANCES"     # "counts as an off-hand attack" on a non-attack WITH a condition: the chain moves as it lands
 DETAILS = (DETAIL_AREA_BURST, DETAIL_AREA_ONE_TARGET, DETAIL_INDETERMINATE,
            DETAIL_CONDITION_BIT_CLEAR, DETAIL_SECOND_CONDITION, DETAIL_DURATION_UNMODELLED,
@@ -1239,11 +1239,11 @@ CASTER_AREA_WORDING = AREA_FLAGS | {FLAG_ALL_FOES}    # the foe-area words a byt
 # ships through the party-heal arm ONLY when a person has read its template and
 # recorded that the caster is IN the class -- the same reading 55.7's reviewers
 # made, now written down as an enum against the template's own sha256[:16]
-# (`template_sha16`), so the reading is void the day the text changes and no
-# word of the text is carried. 287 "heal entire party" and 2221 "all party
-# members ... are healed" include the caster; 943 heals only the members
-# relieved of Burning (CONDITIONED -- a heal the parse cannot condition); 1262
-# says the caster is not healed (EXCLUDES_CASTER). Read 2026-09-23, build 38797.
+# (`template_sha16`), so the reading is void the day the text changes. What
+# is carried is the id, the enum and the digest -- not the sentence. Read
+# 2026-09-23, build 38797: 287 and 2221 read as the whole party, caster
+# included; 943 conditions its heal on the cure (CONDITIONED -- a heal the
+# parse cannot condition); 1262 says the caster is left out (EXCLUDES_CASTER).
 CLASS_HEAL_INCLUDES_CASTER = "INCLUDES_CASTER"
 CLASS_HEAL_EXCLUDES_CASTER = "EXCLUDES_CASTER"
 CLASS_HEAL_CONDITIONED = "CONDITIONED"

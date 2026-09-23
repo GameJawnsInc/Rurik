@@ -20,9 +20,16 @@ reaches nobody). Section 5 reads the LOADED label overlay -- the vault's, or
 RURIK_CONTENT_EXTRA's -- and checks each row's mark against the server's own
 predicate, the way test_skilldamage 14 checks AREA_BURST against spell_burst;
 it declares a skip on an overlay with none of the three marks (the vault
-before the SKILLS-LU regeneration).
+before the SKILLS-LU regeneration). The fix pass (skills 56.7) added: a BODY's
+cast of a chain-gated row lands on NOBODY (the reviewers' blocker: a hero put
+784's Poison on its target with no lead), --no-nonattack-chain-gate is the
+gate's EXCLUSION (NOBODY) rather than the ungated landing, a hostile's party
+is its spawn GROUP, the player's caster area knocks down as the body's does,
+a failed step skips a heal and an effect ON THE WIRE, and 5b reads the HAND
+rows through the same predicates (a hand row a consumer would silently
+re-route is named).
 
-NOT bare-capable in section 5 only; sections 1-4 need no vault.
+NOT bare-capable in section 5b only; sections 1-5a need no vault.
 """
 import contextlib
 import io
@@ -42,7 +49,12 @@ import effects  # noqa: E402
 # FLOOR 30, from the green run of 2026-09-23 (SKILLS-LU): 8 (A, player) + 6 (A,
 # body) + 7 (B) + 8 (C) + 1 (the flags) -- section 5b declares a skip without a
 # regenerated overlay and adds 3 with one (33 under RURIK_CONTENT_EXTRA).
-LEDGER = checks.Ledger("label consumers", floor=30)
+# The fix pass of the same day (skills 56.7): +10 -> FLOOR 40 from the bare run (the
+# knock-down arm, the hostile group, the flag's NOBODY arm, the heal and stance guards,
+# a hero's and a hostile's chain-gated casts + the flag on the body path + the positive
+# control, 5a's two hand-row sweeps; 1643's record is a declared skip on a bare machine);
+# 41 with the vault's skills table, 44 with the marks loaded.
+LEDGER = checks.Ledger("label consumers", floor=40)
 check = LEDGER.ok
 
 PLAYER = authsrv.PLAYER_AGENT_ID
@@ -51,8 +63,10 @@ HERO, HERO2 = 200, 201               # party bodies: 110 u off, 6000 u off
 POISON = effects.CONDITION_BY_NAME["Poison"]
 CRIPPLED = effects.CONDITION_BY_NAME["Crippled"]
 
-# ---- synthetic rows: the shapes of 183 / 840 / 287 / 784 / 974 / a plain self heal
+# ---- synthetic rows: the shapes of 183 / 840 / 287 / 784 / 974 / a plain self heal,
+# and (the fix pass) 1033's damage shape, a chained self heal, a chained stance
 S_FIRE, S_POISON, S_PARTY, S_CHAIN, S_STEP, S_SELF = 900001, 900002, 900003, 900004, 900005, 900006
+S_CHAINDMG, S_CHAINHEAL, S_CHAINSTANCE = 900007, 900008, 900009
 
 
 def _skill(target, tc=5, aoe=0.0, s=(30, 30), args=2, d=(0, 0), combo=0, combo_req=0):
@@ -71,6 +85,9 @@ SKILLS = {
     str(S_CHAIN): _skill(5, s=(5, 5), combo_req=2),                      # 784's: must follow a lead
     str(S_STEP): _skill(5, tc=10, s=(5, 5), combo=2),                    # 974's: counts as an off-hand
     str(S_SELF): _skill(0, aoe=0.0, s=(40, 40)),                         # a plain self heal (control)
+    str(S_CHAINDMG): _skill(5, tc=10, s=(25, 25), combo_req=1),          # 1033's: a dual, earth damage
+    str(S_CHAINHEAL): _skill(0, aoe=0.0, s=(40, 40), combo_req=2),       # a self heal that must follow a lead
+    str(S_CHAINSTANCE): _skill(0, tc=3, s=(0, 0), d=(5, 5), combo_req=2),  # a stance that must follow a lead
 }
 EFFECTS = {
     str(S_FIRE): {"scale_means": "Fire damage", "tier": "label", "tier_detail": ["AREA_CASTER"]},
@@ -79,6 +96,8 @@ EFFECTS = {
     str(S_CHAIN): {"scale_means": "Poison", "tier": "label", "tier_detail": ["CHAIN_GATED"]},
     str(S_STEP): {"scale_means": "Crippled", "tier": "label", "tier_detail": ["CHAIN_STEP_ADVANCES"]},
     str(S_SELF): {"scale_means": "Heal", "tier": "label", "tier_detail": []},
+    str(S_CHAINDMG): {"scale_means": "Earth damage", "tier": "label", "tier_detail": ["CHAIN_GATED"]},
+    str(S_CHAINHEAL): {"scale_means": "Heal", "tier": "label", "tier_detail": ["CHAIN_GATED"]},
 }
 
 
@@ -165,6 +184,19 @@ def main():
         check("bursts over 2 foe(s) within 156 u of the CASTER (2 landed) [SKILLS-LU]" in log
               and "resolves through a LABEL-tier row (AREA_CASTER)" in log,
               "the log names the caster-centred burst and the label tier", log[-400:])
+        # the fix pass (ENG-D4C-5): the row's knock-down rides the player's burst as it
+        # rides the body's (burst_body_spell) -- latent (no AREA_CASTER label row knocks
+        # down), pinned so the two arms cannot drift apart
+        tables["skill_effect"][str(S_FIRE)]["knocks_down"] = True
+        st, (sent, send) = _world(), _sender()
+        _press_and_land(st, send, S_FIRE, FAR)
+        del tables["skill_effect"][str(S_FIRE)]["knocks_down"]
+        kds = [v for op, v in sent if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT and v[0] == 63]
+        check([k[1] for k in kds] == [FOE, FOE2] and all(k[2] > 0 for k in kds)
+              and st["agents"][FOE].get("knocked_until", 0) > time.time()
+              and not st["agents"][FAR].get("knocked_until"),
+              "a caster-area row carrying `knocks_down` knocks down EACH landed, living foe inside "
+              "([63, foe, s] x2, the burst_player_spell shape) and not the far selected one", kds)
         st, (sent, send) = _world(), _sender()
         st["pos"] = (5000.0, 5000.0)                       # the caster far from everyone
         log = _press_and_land(st, send, S_FIRE, FOE)
@@ -286,7 +318,28 @@ def main():
               and authsrv.party_within(st, FOE, 5000.0) == [FOE, FOE2, FAR],
               "party_within: the caster first, then its living allies inside the radius by id -- the "
               "player's party (the monk at 110 u; not the one 6 km off), a hero's (itself, then the "
-              "player), a 50 u radius the caster alone, a hostile's the other hostiles")
+              "player), a 50 u radius the caster alone, a hostile's WITHOUT a group the other hostiles")
+        # the fix pass (LU-R2 / ENG-D4C-6): a hostile's party is its spawn GROUP when it has
+        # one -- two groups inside 5000 u must not heal each other (the sandbox spaces
+        # groups 2,100 u apart); UNVERIFIED as retail's rule, the narrower reading
+        st = _world()
+        for aid, g, hp in ((FOE, "a", 500.0), (FOE2, "a", 500.0), (FAR, "b", 500.0)):
+            st["agents"][aid]["group"] = g
+            st["agents"][aid]["health"] = hp
+        st["agents"][HERO]["group"] = "a"                   # a party body's group is NOT read
+        sent, send = _sender()
+        with contextlib.redirect_stdout(io.StringIO()):
+            out = authsrv.resolve_heal(send, st, S_PARTY, 0, FOE, PLAYER, 1)
+        check(authsrv.party_within(st, FOE, 5000.0) == [FOE, FOE2]
+              and authsrv.party_within(st, FAR, 5000.0) == [FAR]
+              and authsrv.party_within(st, HERO, 5000.0) == [HERO, PLAYER]
+              and out["recipients"] == [FOE, FOE2] and st["agents"][FOE]["health"] == 540.0
+              and st["agents"][FOE2]["health"] == 540.0 and st["agents"][FAR]["health"] == 500.0
+              and st["player_health"] == 50.0 and st["agents"][HERO]["health"] == 100.0,
+              "a HOSTILE of group 'a' casting the party heal heals itself and its group-mate 140 u off "
+              "and NOT the group-'b' hostile 400 u off (inside the radius); group 'b' alone heals "
+              "itself alone; a party body's `group` is not read (allegiance is the party marker)",
+              (out, {a: st["agents"][a]["health"] for a in (FOE, FOE2, FAR)}))
         st, (sent, send) = _world(), _sender()
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
@@ -350,14 +403,105 @@ def main():
         log = _press_and_land(st, send, S_CHAIN, FOE)
         check(not _conditioned(st, FOE, POISON) and "FAILED" in log,
               "the chain state is PER TARGET: a lead on the other hostile does not satisfy this one")
+        # the fix pass (LU-R3): the flag is the gate's EXCLUSION -- NOBODY, no fail word --
+        # never the ungated landing (which the exclusion existed to refuse); a lead on the
+        # target changes nothing under the flag
         authsrv.NONATTACK_CHAIN_GATE = False
         st, (sent, send) = _world(), _sender()
         log = _press_and_land(st, send, S_CHAIN, FOE)
+        st2, (sent2, send2) = _world(), _sender()
+        authsrv.player_chain(st2).advance(FOE, authsrv.chain.LEAD, time.time())
+        log2 = _press_and_land(st2, send2, S_CHAIN, FOE)
         authsrv.NONATTACK_CHAIN_GATE = True
+        fails = [v for op, v in sent + sent2 if op == 0x00A0 and v[0] == agents.GV_ATTACK_FAIL]
+        e5s = [v for op, v in sent if op == authsrv.GAME_SMSG_SKILL_RECHARGE]
+        check(fails == [] and not _conditioned(st, FOE, POISON) and not _conditioned(st2, FOE, POISON)
+              and "lands on NOBODY (the gate's exclusion until 2026-09-23)" in log
+              and "lands on NOBODY" in log2 and len(e5s) == 1 and "FAILED" not in log,
+              "--no-nonattack-chain-gate: the row lands on NOBODY -- no Poison, no fail word, ONE E5 "
+              "(the cast's own, its recharge kept) -- with or without a lead on the target: the "
+              "gate's exclusion, the server until 2026-09-23, never the ungated landing", (log[-200:],))
+        # the fix pass (ENG-D4C-3): a failed step skips a HEAL and an EFFECT on the wire, not
+        # just in a source count -- a self heal and a stance that must follow a lead
+        st, (sent, send) = _world(), _sender()
+        log = _press_and_land(st, send, S_CHAINHEAL, FOE)
+        heals = [v for op, v in sent if op == 0x00A3 and v[0] == agents.GV_HEALTH_GAIN]
+        st2, (sent2, send2) = _world(), _sender()
+        authsrv.player_chain(st2).advance(FOE, authsrv.chain.LEAD, time.time())
+        log2 = _press_and_land(st2, send2, S_CHAINHEAL, FOE)
+        heals2 = [v for op, v in sent2 if op == 0x00A3 and v[0] == agents.GV_HEALTH_GAIN]
+        check(heals == [] and st["player_health"] == 50.0 and "FAILED on agent 10" in log
+              and [h[1] for h in heals2] == [PLAYER] and st2["player_health"] == 90.0 and "FAILED" not in log2,
+              "a SELF HEAL that must follow a lead: no lead -> the fail word and NO heal word, the "
+              "player stays at 50; after a lead -> one heal word, 50 -> 90 (resolve_heal skipped on "
+              "the fail, on the wire)", (heals, heals2, log[-200:]))
+        st, (sent, send) = _world(), _sender()
+        log = _press_and_land(st, send, S_CHAINSTANCE, FOE)
+        eps = [ep["skill"] for ep in authsrv.effect_table(st).on_agent(PLAYER)]
+        st2, (sent2, send2) = _world(), _sender()
+        authsrv.player_chain(st2).advance(FOE, authsrv.chain.LEAD, time.time())
+        log2 = _press_and_land(st2, send2, S_CHAINSTANCE, FOE)
+        eps2 = [ep["skill"] for ep in authsrv.effect_table(st2).on_agent(PLAYER)]
+        check(S_CHAINSTANCE not in eps and "FAILED on agent 10" in log
+              and eps2 == [S_CHAINSTANCE] and "FAILED" not in log2,
+              "a STANCE that must follow a lead: no lead -> the fail word and NO episode on the "
+              "player; after a lead -> the episode opens (apply_effect skipped on the fail)",
+              (eps, eps2, log[-200:]))
+        # the fix pass (LU-R1 / ENG-D4C-1, the reviewers' BLOCKER): a BODY's cast of a
+        # chain-gated row lands on NOBODY -- a hero at a hostile, a hostile at the player,
+        # 784's Poison shape and 1033's damage shape; the cast still closes (58, released)
+        st, (sent, send) = _world(), _sender()
+        hero = st["agents"][HERO]
+        hero.update({"pos": (60.0, 0.0), "skills": [[S_CHAIN, 1.0, 5.0]], "skill_ready": [0.0],
+                     "casting": 0, "cast_target": FOE})
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            authsrv.land_skill(send, st, HERO, hero, 1)
+        log = buf.getvalue()
         fails = [v for op, v in sent if op == 0x00A0 and v[0] == agents.GV_ATTACK_FAIL]
-        check(fails == [] and _conditioned(st, FOE, POISON) and "FAILED" not in log,
-              "KNOWN-BAD ARM --no-nonattack-chain-gate: the Poison lands with no chain at all -- "
-              "the pre-2026-09-23 behaviour the gate excluded the row for")
+        check(not _conditioned(st, FOE, POISON) and fails == [] and hero["casting"] is None
+              and [v[:2] for op, v in sent if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+                   and v[0] == 58] == [[58, HERO]]
+              and "must follow a lead and a body carries no chain: it lands on NOBODY" in log
+              and "retail's bodies meet it" in log,
+              "a HERO casting 784's shape at a hostile with no chain: NO Poison, no fail word, the "
+              "58 closes its cast and it is released; the log names the unmet requirement and that "
+              "retail's bodies DO meet it (5 of 5 live 784s after their own 782)", (fails, log[-300:]))
+        st, (sent, send) = _world(), _sender()
+        st["player_health"] = 480.0
+        foe = st["agents"][FOE]
+        foe.update({"skills": [[S_CHAIN, 1.0, 5.0], [S_CHAINDMG, 1.0, 5.0]], "skill_ready": [0.0, 0.0],
+                    "casting": 0, "cast_target": PLAYER})
+        with contextlib.redirect_stdout(io.StringIO()):
+            authsrv.land_skill(send, st, FOE, foe, 1)
+        foe.update({"casting": 1})
+        with contextlib.redirect_stdout(io.StringIO()):
+            authsrv.land_skill(send, st, FOE, foe, 1)
+        check(not _conditioned(st, PLAYER, POISON) and st["player_health"] == 480.0
+              and _words(sent) == [] and foe["casting"] is None,
+              "a HOSTILE casting 784's and 1033's shapes at the player: no Poison, no damage word, "
+              "the player untouched (the over-application the gate's exclusion refused)")
+        authsrv.NONATTACK_CHAIN_GATE = False
+        st, (sent, send) = _world(), _sender()
+        foe = st["agents"][FOE]
+        foe.update({"skills": [[S_CHAIN, 1.0, 5.0]], "skill_ready": [0.0], "casting": 0, "cast_target": PLAYER})
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            authsrv.land_skill(send, st, FOE, foe, 1)
+        authsrv.NONATTACK_CHAIN_GATE = True
+        check(not _conditioned(st, PLAYER, POISON) and "--no-nonattack-chain-gate, the gate's exclusion" in buf.getvalue(),
+              "and under --no-nonattack-chain-gate the body's cast lands on NOBODY too (the exclusion "
+              "covered bodies): the log names the flag")
+        # POSITIVE CONTROL for the body arm: a body's NON-gated Poison (840's shape) does land
+        # through the same land_skill, so 'no Poison' above is the gate, not a dead path
+        st, (sent, send) = _world(), _sender()
+        foe = st["agents"][FOE]
+        foe.update({"skills": [[S_POISON, 1.0, 5.0]], "skill_ready": [0.0], "casting": 0, "cast_target": PLAYER})
+        with contextlib.redirect_stdout(io.StringIO()):
+            authsrv.land_skill(send, st, FOE, foe, 1)
+        check(_conditioned(st, PLAYER, POISON),
+              "POSITIVE CONTROL: the same hostile's un-gated byte-0 Poison lands on the player "
+              "through land_skill -- the body's 'no Poison' above is the requirement, not a dead path")
         # 974's shape: a Skill that counts as an off-hand attack
         st, (sent, send) = _world(), _sender()
         log = _press_and_land(st, send, S_STEP, FOE)
@@ -386,11 +530,13 @@ def main():
               "KNOWN-BAD ARM --no-nonattack-chain-gate: the Crippled lands and the chain does NOT move")
         # the attack gate is untouched: an ATTACK skill's combo_req is DAGGERS-B5's branch, not this
         check("_na_combo, _na_req, _ = skill_chain_fields(cast[\"skill_id\"])" in src
-              and src.index("if target and not _is_attack_skill(cast[\"skill_id\"]):")
+              and src.index("            if not _is_attack_skill(cast[\"skill_id\"]):\n                _na_combo")
               < src.index("_na_combo, _na_req, _ = skill_chain_fields(cast[\"skill_id\"])")
-              and src.count("if not _na_fail:") == 2,
-              "SOURCE: the non-attack gate reads the chain fields only for a non-attack, and a "
-              "failed step skips BOTH the effect and the heal (two `if not _na_fail:` guards)")
+              and src.count("if not _na_fail:") == 2
+              and src.count("_na_body_req = 0 if _is_attack_skill(skill_id) else skill_chain_fields(skill_id)[1]") == 1,
+              "SOURCE: the non-attack gate reads the chain fields only for a non-attack, a failed "
+              "step skips BOTH the effect and the heal (two `if not _na_fail:` guards), and "
+              "land_skill reads a body's requirement once (the NOBODY arm)")
 
         # ------------------------------------------------------------------
         print("\n5. the flags parse and rebind; the loaded overlay's marks agree with the predicates")
@@ -413,8 +559,37 @@ def main():
               "--no-caster-areas / --no-party-heals / --no-nonattack-chain-gate parse (default off) "
               "and main() rebinds each global to False before the listener; the defaults are on")
         lab = {int(k): r for k, r in saved_tables["skill_effect"].items() if r.get("tier") == "label"}
+        hand = {int(k): r for k, r in saved_tables["skill_effect"].items()
+                if r.get("tier") != "label" and str(k).isdigit()}
         marks = {m: sorted(s for s, r in lab.items() if m in (r.get("tier_detail") or ()))
                  for m in ("AREA_CASTER", "HEAL_PARTY", "CHAIN_GATED")}
+        # the fix pass (ENG-D4C-4): the server predicates are BROADER than the gate (no
+        # wording test, no reading), so a HAND row they match would be re-routed with no
+        # mark and no test reddening. Every loaded hand row through the same readers: the
+        # allow-list of hand rows a consumer may re-route is EMPTY today, so any match is
+        # named. Runs on any overlay (the hand rows are always loaded).
+        HAND_REROUTED_OK = frozenset()
+        hand_area = sorted(s for s in hand if authsrv.caster_area_row(s)
+                           and (authsrv.skill_damage(s, 0) or authsrv.skill_condition(s, 0))
+                           and s not in HAND_REROUTED_OK)
+        hand_party = sorted(s for s in hand if authsrv.party_heal_radius(s) is not None
+                            and s not in HAND_REROUTED_OK)
+        hand_gated = sorted(s for s in hand if authsrv.skill_chain_fields(s)[1]
+                            and not authsrv._is_attack_skill(s))
+        check(hand_area == [] and hand_party == [] and len(hand) >= 10,
+              f"no HAND skill_effect row ({len(hand)} loaded) is a caster_area_row with a damage or "
+              f"a condition, nor a party_heal_radius row -- a consumer re-routes no hand row "
+              f"silently (the allow-list is empty)", (hand_area, hand_party))
+        check(hand_gated == [],
+              "no HAND row is a non-attack with combo_req -- among the effect rows the gate reaches "
+              "label rows only", hand_gated)
+        if "1643" in agents.WORLD.rows("skills"):
+            check(authsrv.skill_chain_fields(1643)[1] == 1 and not authsrv._is_attack_skill(1643)
+                  and "1643" not in saved_tables["skill_effect"],
+                  "1643 -- a Skill, combo_req 1, NO effect row -- is the one loaded row the gate's "
+                  "RECORD read fails unchained beyond the label rows (LU-R6, stated in skills 56.7)")
+        else:
+            LEDGER.skip("5a. 1643's record (1 check)", "no skills table row 1643 (a bare machine)")
         if not any(marks.values()):
             LEDGER.skip("5b. the loaded overlay's SKILLS-LU marks (3 checks)",
                         "no AREA_CASTER / HEAL_PARTY / CHAIN_GATED row is loaded -- the vault's "
