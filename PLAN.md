@@ -1892,6 +1892,19 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 ### 8.1 Open from the live arcs (September)
 
+**Desk routes the owner took, 2026-09-22** — [studies/deskwork/PLAN.md](studies/deskwork/PLAN.md) §3
+
+* **DESKWORK-D1**: the c2s send-site census, SANDBOX-N2's hero kick armed from retail's
+  one batch and the add from its ChCliApi wrapper, then retail's unhandled c2s triaged,
+  the hero skill toggle, travel and inventory.
+* **DESKWORK-D5**: the combat rules retail's tapes on disk already settle — the adrenaline
+  gate (SKILLS-B1's gate half), interrupts, property 10 and the `[42]`/`[55]` residue, NPC
+  recharge from completion, party-wide shouts, the adrenaline replay, the refusal ids.
+* **DESKWORK-D4**: skill coverage in bulk — labels parsed from the archive's own
+  description templates, refereed slot by slot against the client table, served as a
+  marked label tier (the owner's yes to the plan's §8 Q3, given by taking the route); then
+  the timed effect types.
+
 **Skills and the slice** — [studies/skills/FINDINGS.md](studies/skills/FINDINGS.md),
 [studies/slice/FINDINGS.md](studies/slice/FINDINGS.md)
 
@@ -2126,6 +2139,10 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 ### 8.2 Waiting on the owner, or on a live capture
 
+* **DESKWORK-D14's off-disk vault copy** waits on a second disk: the owner has none
+  available (2026-09-22). The mirror stays same-disk, last run 2026-08-06; the route's
+  census, manifest and RUNBOOK half need no disk and were not taken
+  ([studies/deskwork/PLAN.md](studies/deskwork/PLAN.md) §3 D14).
 * **§7 Q14** — the plane repair ships ON by default with no ruling. **§7 Q2** — the
   WASM question has no date and no default; every line written since presumes "no".
 * **R-ISLE rung 8d's bench half**: one requirement-MET block at effective rank 13, ~80 s,

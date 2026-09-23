@@ -1572,6 +1572,12 @@ is in this document's route steps, stated so each probe can be re-run from the t
 
 ## 8. Decision questions for the owner
 
+**The owner's answer, 2026-09-22: take D1, D5 and D4.** Q1 is answered by circumstance —
+there is no second disk available, so the off-disk copy waits and D14 is not taken (its
+line is in `PLAN.md` §8.2). Q3 is yes, given by taking D4 as written. Q2, Q4 and Q5 are
+unanswered; Q4 and Q5 belong to routes not taken. The three routes' open lines are in
+`PLAN.md` §8.1 under "Desk routes the owner took"; their landings go in `PLAN-LOG.md`.
+
 Each answerable in a word.
 
 1. **Backup off-disk now?** May the irreplaceable vault tier (~24 GB: pinned builds, keys,
