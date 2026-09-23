@@ -18467,6 +18467,18 @@ def handle_skillbar_skill_set(values, send, state, conn_id, rec):
     else:
         if store is not None:
             store.set_hero_bar_slot(uuid_hex, hero_index, slot, skill_id)
+        state.setdefault("hero_bars", {})[hero_index] = list(after)   # the fix pass, ENG-M1
+        # The fix pass, EVID-D1C-1: the client's 0x005C sender (0x008212C0,
+        # ChCliSkill:258) CLEARS the set slot's suppress bit (`btr [+0xA4],
+        # hotKey` at 0x00821356) -- a skill dropped into a suppressed slot
+        # arrives unsuppressed. The server's mask follows, so the body and the
+        # panel agree. (hero_disabled_mask is 0 under --no-hero-skill-toggle,
+        # so the arm's revert covers this site too.)
+        _was = hero_disabled_mask(state, hero_index)
+        if (_was >> slot) & 1:
+            hero_mask_write(state, hero_index, _was & ~(1 << slot), conn_id,
+                            f"the client's 0x005C set into slot {slot} cleared "
+                            f"its bit (0x008212C0 `btr`)")
         sync_hero_body_bar(state, agent_id, after, conn_id)   # SANDBOX-B7
 
     send(GAME_SMSG_SKILLBAR_UPDATE_SKILL, [agent_id, slot, skill_id, 0],
@@ -18549,6 +18561,23 @@ def handle_skillbar_skill_swap(values, send, state, conn_id, rec):
     else:
         if store is not None:
             store.set_hero_skillbar(uuid_hex, hero_index, after)
+        state.setdefault("hero_bars", {})[hero_index] = list(after)   # the fix pass, ENG-M1
+        # The fix pass, EVID-D1C-1: the client's swap routine (0x00821460,
+        # ChCliSkill:332/333, the 0x005E sender) EXCHANGES the two slots'
+        # suppress bits after it sends (bts/btr at 0x0082157D..0x008215A7),
+        # so suppression follows the SKILL. The first cut kept the bit on the
+        # slot and the body cast the skill the client drew struck through (the
+        # reviewer's swap_demo). The same routine sends 0x005F for a move into
+        # an EMPTY slot and moves the bit the same way -- that message is not
+        # armed here (UNHANDLED on our wire). hero_disabled_mask is 0 under
+        # --no-hero-skill-toggle, so the revert covers this site too.
+        _was = hero_disabled_mask(state, hero_index)
+        if ((_was >> src_slot) & 1) != ((_was >> tgt_slot) & 1):
+            hero_mask_write(state, hero_index,
+                            _was ^ (1 << src_slot) ^ (1 << tgt_slot), conn_id,
+                            f"the client's 0x005E swap exchanged bits {src_slot} "
+                            f"and {tgt_slot} (0x00821460); suppression follows "
+                            f"the skill")
         sync_hero_body_bar(state, agent_id, after, conn_id)   # SANDBOX-B7
 
     print(f"[c{conn_id}] SKILLBAR SWAP {who}: skill {src} slot {src_slot} <-> "
@@ -22692,8 +22721,14 @@ def ally_cast_tick(send, state, conn_id):
         _dead = party_dead_target(state, agent_id)
         _res = None
         if _dead is not None:
+            # DESKWORK-D1 step 6 (the fix pass, ENG-B2): a SUPPRESSED
+            # resurrection is never cast either -- this loop picks from the
+            # bar itself and so bypassed pick_skill's gate; a hero with
+            # Resurrection Signet struck through raised the player anyway.
+            _dis = agent.get("skill_disabled_ids") or ()
             for _i, _s in enumerate(skills):
-                if skill_resurrects(_s[0]) and agent["skill_ready"][_i] <= now:
+                if (skill_resurrects(_s[0]) and _s[0] not in _dis
+                        and agent["skill_ready"][_i] <= now):
                     _res = _i
                     break
         if _res is not None:
@@ -24166,8 +24201,16 @@ def hero_panel_bar_ids(state, hid, stored_bar=None):
     (DESKWORK-D1 step 6): a bit means "this slot of THIS array".
 
     `stored_bar` is the caller's already-fetched hero_build() bar, or None to
-    look it up here."""
-    if stored_bar is None:
+    look it up here.
+
+    THE SESSION'S EDITED BAR FIRST (the fix pass, ENG-M1): a 0x005C / 0x005E
+    on a hero writes state["hero_bars"][hid] whether or not a store is
+    attached, so without --persist a slot the client just filled is not
+    refused as EMPTY and the mask is joined to the bar the panel shows."""
+    session = (state.get("hero_bars") or {}).get(int(hid))
+    if session is not None:
+        stored_bar = session
+    elif stored_bar is None:
         _o, stored_bar, _r, _p = hero_build(state, hid)
     bar = (list(stored_bar) if stored_bar is not None
            else hero_bar_ids(hid)               # SANDBOX-B3: per hero
@@ -24215,6 +24258,37 @@ def hero_disabled_skill_ids(state, hid):
                      if (mask >> i) & 1 and bar[i])
 
 
+def hero_mask_write(state, hid, mask, conn_id, why):
+    """Replace a hero's suppress mask after the CLIENT's own bar edit moved
+    its bits (the fix pass, EVID-D1C-1): the session cache, the store under
+    --persist, and one log line. The body is re-joined by the caller's
+    sync_hero_body_bar, which reads this mask against the edited bar.
+
+    Why the server must follow: the client keeps the mask itself and edits
+    it on every bar change without being told -- `codescan --field 0xA4 --in
+    ChCliSkill --writes` finds six stores on 38797: the 0x0065 handler
+    (0x008220D0, the whole byte), the 0x0064 handler (0x00822050, one bit),
+    the 0x00DA setter (0x008223B0: mask = 0 before the slots are refilled,
+    which is why 0x0065 must FOLLOW 0x00DA), the whole-bar setter 0x00821390
+    (mask = 0), the 0x005C sender 0x008212C0 (ChCliSkill:258: `btr` the set
+    slot's bit), and the 0x005E/0x005F sender 0x00821460 (ChCliSkill:332/333:
+    the two slots' bits EXCHANGED). So suppression follows the SKILL on a
+    swap and is cleared by a set; a server that kept the bit on the slot had
+    the body casting the skill the client draws struck through."""
+    hid = int(hid)
+    was = hero_disabled_mask(state, hid)
+    mask &= 0xFF
+    state.setdefault("hero_skill_disabled", {})[hid] = mask
+    store = state.get("charstore_game")
+    if PERSIST and store is not None:
+        store.set_hero_disabled_slots(state.get("char_uuid", ""), hid, mask)
+    print(f"[c{conn_id}] HERO_SKILL_TOGGLE: hero {hid} mask 0x{was:02X} -> "
+          f"0x{mask:02X} -- {why}"
+          + ("" if (PERSIST and store is not None) else "  [not persisted: no store]")
+          + " [DESKWORK-D1 step 6, fix pass]", flush=True)
+    return mask
+
+
 def hero_body_sync_disabled(state, hid):
     """Push the current suppress set onto the hero's BODY row, if it has one."""
     for _h, _haid, _d in hero_slots():
@@ -24241,11 +24315,14 @@ def handle_hero_skill_toggle(values, send, state, conn_id):
         suppression, not "use this skill". The route pre-registered exactly
         that reading and nothing refuted it.
       * WHAT THE CLIENT NEEDS BACK. Its hotKeyState mask (+0xA4, pvpui 30.2)
-        is written ONLY by s2c 0x0065 [agent, mask] (0x008220D0) and 0x0064
-        [agent, bit, value] (0x00822050); both fire the redraw event
+        is written from the wire by s2c 0x0065 [agent, mask] (0x008220D0) and
+        0x0064 [agent, bit, value] (0x00822050); both fire the redraw event
         0x1000005A GmSkSlot subscribes to (0x00542470); neither asserts. The
         default answers with the whole mask (retail's only observed writer,
         8 of 8 in load blocks); --hero-skill-toggle-per-bit sends 0x0064.
+        (The client ALSO edits the mask locally on its own bar edits and the
+        0x00DA setter zeroes it -- hero_mask_write lists the six writers; the
+        first cut said "written ONLY by 0x0065/0x0064", which was false.)
       * POLARITY. Retail's load sends mask 0 for every hero (8 of 8) and a
         hero so loaded casts (20260914T005758 :56011, 50 casts), so 0 is
         "nothing suppressed" and bit=1 is the suppressed slot.
@@ -24297,10 +24374,13 @@ def handle_hero_skill_toggle(values, send, state, conn_id):
     if PERSIST and state.get("charstore_game") is not None:
         state["charstore_game"].set_hero_disabled_slots(
             state.get("char_uuid", ""), hid, mask)
+    _all_off = all((mask >> i) & 1 for i in range(SKILLBAR_SLOTS) if bar[i])
     print(f"[c{conn_id}] HERO_SKILL_TOGGLE: hero {hid} (agent {agent_id}) slot "
           f"{slot} (skill {bar[slot]}) {'SUPPRESSED' if value else 'released'}; "
           f"mask 0x{was:02X} -> 0x{mask:02X}; the body "
           f"{'skips' if value else 'may cast'} it"
+          + (" (every occupied slot is now suppressed: the hero casts nothing "
+             "and stands)" if _all_off else "")
           + ("" if (PERSIST and state.get("charstore_game") is not None)
              else "  [not persisted: no store]")
           + " [DESKWORK-D1 step 6]", flush=True)
@@ -29769,6 +29849,20 @@ def _handle_request_players(send, state, conn_id, stop, rec):
               SKILLBAR_PVP_MASKS, SKILLBAR_TRAILER],
              f"SKILLBAR_UPDATE(hero agent "
              f"{_haid}){_hskills}")
+        # DESKWORK-D1 step 6 (the fix pass, EVID-D1C-3): the 0x00DA setter
+        # ZEROES the client's suppress mask (0x008223B0 -> `mov [esi+0xA4], 0`
+        # at 0x00822751) before it refills the slots, so a stored mask has to
+        # be re-sent AFTER the bar or the struck-through slot is not drawn
+        # while the body still skips it. The retail rig's block already
+        # orders it so (hero_character_block); this legacy rig sent no 0x0065
+        # at all. Sent only when a mask is stored -- the default wire is
+        # byte-identical to every earlier run.
+        _hmask_legacy = hero_disabled_mask(state, _hid)
+        if _hmask_legacy:
+            hsend(GAME_SMSG_HERO_UNNAMED_0065, [_haid, _hmask_legacy],
+                  f"0x0065 [hero agent {_haid}, 0x{_hmask_legacy:02X}] -- the "
+                  f"stored suppress mask, after 0x00DA (which zeroes it) "
+                  f"[DESKWORK-D1 step 6, fix pass]")
     # The char-by-id registration, BEFORE activate so the
     # table covers the id by the time any click can open
     # the commander panel. One message per hero slot; the

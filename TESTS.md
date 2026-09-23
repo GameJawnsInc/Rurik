@@ -6392,17 +6392,28 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   BODY stops casting it: `pick_skill` never returns a suppressed skill, the join is by
   SKILL ID through the PANEL's eight slots (a stored bar with a hole suppressed at panel
   slot 2 removes skill 348, not the body's list index 2; the KNOWN-BAD join by list index
-  picks the wrong skill), releasing restores the pick, all-suppressed picks None, a bar
-  edit re-reads the join; §4 `--persist` writes `disabled_slots` to the hero's row, a
-  fresh connection reads it and its load block's two 0x0065 rows carry it,
-  `charstore.validate` refuses 256 / -1 / a bool and accepts 0x9D, `--no-hero-skill-toggle`
-  reads and sends nothing stored; §5 BYTE-IDENTITY: no toggle means `[agent, 0]` twice
-  (retail's 8-of-8 value) and `hero_panel_bar_ids` equals the block's pre-step expression;
-  §6 SOURCE LOCKS with mutations: the arm calls the handler only under
-  `HERO_SKILL_TOGGLE_ENABLED`, `main()` wires both flags, `pick_skill` reads
-  `skill_disabled_ids`, `hero_body_create` seeds it, `sync_hero_body_bar` refreshes it,
-  the block's two rows carry the mask, `serverargs.py` defines both flags. Drives the real
-  handler with a fake send and a scratch store. Floor 53 from the green run, ~2 s),
+  picks the wrong skill), releasing restores the pick, all-suppressed picks None; **the
+  client's own bar edits move the mask (the fix pass, EVID-D1C-1)**: a `0x005E` swap
+  through the real handler EXCHANGES the two slots' bits (the client's `0x00821460`,
+  ChCliSkill:332/333) so suppression follows the SKILL, the per-SLOT reading being the
+  KNOWN-BAD arm, and a `0x005C` set CLEARS the set slot's bit (`0x008212C0`); §3b a
+  SUPPRESSED RESURRECTION is not cast by `ally_cast_tick`'s dead-first branch and is
+  cast once released (ENG-B2); §3c without `--persist` the toggle reads the SESSION's
+  edited bar, so a slot the client just filled is answered rather than refused as EMPTY
+  (ENG-M1); §4 `--persist` writes `disabled_slots` to the hero's row, a fresh connection
+  reads it and its load block's two 0x0065 rows carry it, the setter and
+  `charstore.validate` refuse 256 / -1 / a bool (the stored mask unchanged) and accept
+  0x9D, `--no-hero-skill-toggle` reads and sends nothing stored; §5 BYTE-IDENTITY: no
+  toggle means `[agent, 0]` twice (retail's 8-of-8 value) and `hero_panel_bar_ids`
+  equals the block's pre-step expression; §6 SOURCE LOCKS with mutations: the arm calls
+  the handler only under `HERO_SKILL_TOGGLE_ENABLED`, `main()` wires both flags,
+  `pick_skill` reads `skill_disabled_ids`, `hero_body_create` seeds it,
+  `sync_hero_body_bar` refreshes it, the block's two rows carry the mask, `serverargs.py`
+  defines both flags, both bar-edit handlers call `hero_mask_write`, the dead-first loop
+  skips a suppressed id, the legacy rig's `0x00DA` is followed by a `0x0065` carrying a
+  stored mask (the `0x00DA` setter zeroes the client's mask, EVID-D1C-3),
+  `hero_panel_bar_ids` reads the session's bar first. Drives the real handlers with a
+  fake send and a scratch store. Floor 53 -> 71 from the green run, ~2 s),
   `toolkit/authsrv/test_itemmoves.py` (**2026-09-23, DESKWORK-D1 step 8: the inventory
   pair, c2s 0x004F ITEM_MOVE and 0x0030 EQUIP_ITEM, and the item store behind them**,
   `toolkit/authsrv/itemstore.py`, `studies/cmsg/FINDINGS.md` §DESKWORK-D1 "Inventory".

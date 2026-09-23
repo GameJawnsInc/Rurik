@@ -1117,10 +1117,13 @@ three GmView sites (`0x004E554A`, `0x004E8AC1`, `0x004ED360`), and the query eve
 `0x100001A7` is one of a block GmView subscribes to one handler (`0x004ED21B`,
 `0x100001A3`…`0x100001B5`), so both senders gate on the same GmView-held modifier state.
 **So `0x0019` is the MODIFIED hero-skill action and the plain one never leaves the
-client.** GWW names the modified action (WIKI, GWW "Hero Control panel" / Guide to Hero
-Basics, read 2026-09-23 via search summary): *hold the suppress key (Left Shift by
-default) and left-click a hero's skill; it is marked with a stroke-through red circle
-and the hero never uses it unless forced.* The route's pre-registered reading —
+client.** GWW names the modified action (WIKI, GWW "Guide to Hero Basics and
+Optimization" §Forced skill use → *Suppress*; the page "Hero Control panel" redirects
+there; raw wikitext read 2026-09-23 through the browser): *"Hold down your suppress key
+(standard: left shift) and left-click on the hero's skill in the hero control panel to
+suppress it. It'll be marked with a stroke-through red circle."* The same section's
+*Force* entry is the plain click: *"By clicking on a skill in the hero control panel you
+force the hero to use it."* The route's pre-registered reading —
 **toggle, not use** — stands; its "ctrl-click" is corrected to the suppress key (Shift
 by default; Ctrl only if rebound).
 
@@ -1134,12 +1137,14 @@ slot** (polarity RECONSTRUCTION from that one witness; the direction the wiki's 
 implies).
 
 **What the client needs back.** Its hotKeyState mask (`+0xA4`, pvpui §30.2) is written
-by exactly two handlers, both read to the end and **assert-free**: `0x0064` (`0x0091E040
-→ 0x00810820 → 0x00822050`: find the agent's entry, `bts`/`btr` the bit, fire event
-`0x1000005A {agent, bit, value}`; an unknown agent returns silently) and `0x0065`
-(`0x0091E060 → 0x00810850 → 0x008220D0`: write the whole byte, diff eight bits, one
-event per changed bit). GmSkSlot subscribes to `0x1000005A` (`0x00542470`), which is the
-redraw. **The server answers with the whole mask, `0x0065 [hero agent, mask]`** —
+FROM THE WIRE by two handlers, both read to the end and **assert-free**: `0x0064`
+(`0x0091E040 → 0x00810820 → 0x00822050`: find the agent's entry, `bts`/`btr` the bit,
+fire event `0x1000005A {agent, bit, value}`; an unknown agent returns silently) and
+`0x0065` (`0x0091E060 → 0x00810850 → 0x008220D0`: write the whole byte, diff eight bits,
+one event per changed bit). GmSkSlot subscribes to `0x1000005A` (`0x00542470`), which is
+the redraw. (This paragraph used to say the mask is written *only* by those two; the fix
+pass below found four more writers, all the client's own — the bar edits and the `0x00DA`
+setter — and the server now follows them.) **The server answers with the whole mask, `0x0065 [hero agent, mask]`** —
 retail's only observed writer of the field (8 of 8), the message the load already sends
 this agent; `--hero-skill-toggle-per-bit` sends the route's pre-registered `0x0064
 [agent, slot, value]` instead, a message no retail tape carries.
@@ -1163,10 +1168,13 @@ with the KNOWN-BAD join by list index. `schema/overrides.json` GAME_CMSG 25 name
 HERO_SKILL_TOGGLE at LOW (static only).
 
 **What this does NOT cover, said plainly.** The plain hero-skill click (order the hero to
-use a skill now) is the client-side path above and sends `0x001C`/`0x005C`, not `0x0019`;
-whether retail's server re-sends `0x0065` on a bar edit, and whether the suppression
-follows the SLOT or the SKILL when the bar is rearranged, are UNOBSERVED — this server
-keeps the mask per slot (what the client stores) and re-reads the join.
+use a skill now) is the client-side path above — ChCliSkill's use method `0x00821260`
+(ChCliSkill:219) sends `0x001C` through `0x0091FE50`, explorable-gated, and nothing else
+(the first cut also named `0x005C` here; that is the BAR EDIT's sender, `0x008212C0`,
+ChCliSkill:258 — not part of the use path); whether retail's server re-sends `0x0065` on
+a bar edit is UNOBSERVED. Whether suppression follows the SLOT or the SKILL on a
+rearrangement was written up as UNOBSERVED too, and that was wrong — the client's own
+code answers it, and the fix pass below records the answer and moves the server to it.
 
 **Runsheet — the owner's click (one loopback session, the sandbox rig; the toggle is
 independent of the outpost gate, so a field works too).**
@@ -1194,6 +1202,59 @@ independent of the outpost gate, so a field works too).**
    `now casts […]` line after a bar edit and the mask line are the evidence to file.
    The client asserting on either message would refute the static read (`0x00822050`
    / `0x008220D0` have no assert); `--no-hero-skill-toggle` is the revert.
+5. **A hero bar swap while a skill is suppressed** (the fix pass's arm): with a skill
+   struck through, drag it onto another slot of the hero's bar. Expect the red circle to
+   travel WITH the skill on screen (the client's own routine) and the log to print
+   `HERO_SKILL_TOGGLE: hero 6 mask 0x.. -> 0x.. -- the client's 0x005E swap exchanged
+   bits A and B (0x00821460); suppression follows the skill`; the hero must still never
+   cast that skill and must cast the one now in its old slot. A `not in _dis`-style
+   miss shows as the hero casting the struck-through skill.
+
+**Fix pass (2026-09-23, the same day; two reviews read).** Three things the first cut had
+wrong, each re-derived from the client before it was changed:
+
+- **The client edits the mask itself, and suppression follows the SKILL** (EVID-D1C-1,
+  the blocker). `codescan.py --field 0xA4 --in ChCliSkill --writes` on 38797 finds **six**
+  stores to hotKeyState `+0xA4`, not two: the `0x0065` handler (`0x008220D0`, the whole
+  byte, at `0x00822102`); the `0x0064` handler (`0x00822050`, one bit, at `0x0082208D`);
+  the `0x00DA` bar setter (`0x008223B0` → `mov [esi+0xA4], 0` at `0x00822751`, BEFORE it
+  refills the slots — so a `0x0065` must FOLLOW `0x00DA` or the mask is lost); the
+  whole-bar sender `0x00821390` (mask = 0 at `0x00821431`); the **`0x005C` sender
+  `0x008212C0`** (ChCliSkill, source line 258; after it sends, the `btr` of bit `hotKey` in `+0xA4` at `0x00821356` —
+  a SET clears the written slot's bit); and the **`0x005E`/`0x005F` sender `0x00821460`**
+  (asserts `hotKey1` :332 and `hotKey2` :333; it sends `0x005E` through `0x009211C0`
+  when both slots hold a skill, `0x005F` through `0x00921220` when one is empty, exchanges
+  the two `0x14`-byte hotKey entries, and at `0x0082157D..0x008215A7` reads `+0xA4`,
+  `bts`/`btr`s bit `hotKey1` from the old bit `hotKey2` and vice versa, and writes it back
+  before firing `0x1000005E`). So after a swap the client draws the circle on the SKILL's
+  new slot, while the first cut's server kept the bit on the old slot and its body cast
+  the struck-through skill (the reviewer's `swap_demo`: bar `[322, 382, 348, …]`, slot 2
+  suppressed, `0x005E [200, 322, 0, 348, 0]` → the body's picks began `348, 382, …`).
+  **Now:** `handle_skillbar_skill_swap`'s hero branch exchanges the two bits and
+  `handle_skillbar_skill_set`'s clears the set slot's, through `hero_mask_write` (session
+  cache, the store under `--persist`, one log line), before `sync_hero_body_bar` re-joins
+  the body — RECONSTRUCTION of the client's own arithmetic; the server's mask is a mirror
+  of the client's. `0x005F` (a move into an empty slot) moves the bit the same way and is
+  NOT armed on our wire (UNHANDLED); `test_heroskilltoggle.py` §3 drives both handlers and
+  keeps the per-slot reading as the KNOWN-BAD arm.
+- **The legacy rig drew no stored mask** (EVID-D1C-3, minor): the non-retail hero path
+  (`HERO_SKILLBAR and not _rig_retail`) sent `0x00DA` with no `0x0065` after it, and
+  `0x008223B0` zeroes the mask on every `0x00DA`, so under `--persist` a stored mask was
+  skipped by the body and not drawn. Now a `0x0065` follows the bar there when — and only
+  when — a mask is stored; the default wire is byte-identical.
+- **A suppressed resurrection was still cast** (ENG-B2, blocker): `ally_cast_tick`'s
+  "the dead first" loop picks a resurrection off the bar itself and never asked
+  `pick_skill`; with Resurrection Signet struck through and the player dead, the hero
+  raised the player anyway. The loop now skips a suppressed id (`_s[0] not in _dis`);
+  §3b casts it once released, as the control.
+- **Without `--persist` the toggle read a stale bar** (ENG-M1, major): `hero_panel_bar_ids`
+  read the store's bar, else the row's, so a slot the client had just filled by `0x005C`
+  was refused as EMPTY. Both bar-edit handlers now write the session's bar
+  (`state["hero_bars"]`) whether or not a store is attached, and the panel expression
+  reads it first (§3c).
+- Smaller: the store's setter refuses a bool mask (the first cut's test let `True` store
+  1); the all-suppressed log line says the hero stands; the GWW citation above is the page
+  itself, not a search summary; `0x005C` is named as the bar edit, not the use path.
 
 ### Inventory — `c2s 0x004F ITEM_MOVE` and `0x0030 EQUIP_ITEM` armed on an item store (DESKWORK-D1 step 8, 2026-09-23)
 

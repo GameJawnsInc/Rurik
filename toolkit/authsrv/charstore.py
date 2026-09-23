@@ -819,6 +819,10 @@ class Store:
         hero = self.ensure_hero(uuid_hex, hero_index)
         if hero is None:
             return None
+        if isinstance(mask, bool):
+            # int(True) == 1 is a legal mask by accident; validate() refuses a
+            # stored bool, so the setter refuses it too (the fix pass, ENG-M3).
+            raise ValueError("suppress mask must be an int 0..255, not a bool")
         mask = int(mask)
         if not 0 <= mask <= 0xFF:
             raise ValueError(f"suppress mask {mask} outside 0..255; the "

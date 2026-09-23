@@ -24,11 +24,20 @@ does exactly that reading:
     PANEL's eight slots -- a bar with a hole ([322, 0, 348, ...]) suppressed
     at panel slot 2 removes skill 348, not the body's list index 2 -- and the
     KNOWN-BAD arm (indexing the body's compacted list) picks the wrong skill;
-    releasing restores the pick; all-suppressed picks None; a bar edit
-    (sync_hero_body_bar) re-reads the join.
+    releasing restores the pick; all-suppressed picks None. THE CLIENT'S OWN
+    BAR EDITS MOVE THE MASK (the fix pass, EVID-D1C-1): a 0x005E swap through
+    the real handler EXCHANGES the two slots' bits (the client's 0x00821460
+    does, ChCliSkill:332/333), so suppression follows the SKILL -- the
+    KNOWN-BAD per-SLOT reading (the first cut's) disagrees with the screen;
+    a 0x005C set CLEARS the set slot's bit (0x008212C0, ChCliSkill:258).
+    §3b a SUPPRESSED RESURRECTION is never cast by ally_cast_tick's dead-first
+    branch, and is cast once released (ENG-B2). §3c without --persist the
+    toggle reads the SESSION's edited bar, so a slot the client just filled
+    is answered, not refused as EMPTY (ENG-M1).
   * §4 PERSIST: a toggle under --persist writes `disabled_slots` to the
     hero's row; a fresh connection reads it back and its load block's two
-    0x0065 rows carry the mask; the store refuses 256, -1 and a bool; with
+    0x0065 rows carry the mask; the store's setter and validate() refuse 256,
+    -1 and a bool (the setter left the stored mask unchanged); with
     --no-hero-skill-toggle a stored mask is neither read nor sent.
   * §5 BYTE-IDENTITY: with no toggle the load block's 0x0065 rows are
     [agent, 0] twice, retail's 8-of-8 value, and hero_panel_bar_ids equals the
@@ -39,7 +48,11 @@ does exactly that reading:
     HERO_SKILL_TOGGLE_ENABLED; main() wires both flags; pick_skill reads
     skill_disabled_ids; hero_body_create passes it; sync_hero_body_bar
     refreshes it; the block's two 0x0065 rows carry the mask; serverargs
-    defines both flags.
+    defines both flags; both hero bar-edit handlers call hero_mask_write;
+    ally_cast_tick's dead-first loop skips a suppressed id; the legacy rig's
+    0x00DA is followed by a 0x0065 carrying a stored mask (the 0x00DA setter
+    zeroes the client's mask, EVID-D1C-3); hero_panel_bar_ids reads the
+    session's bar first.
 
 Drives the real handler with a fake send and a scratch store, like
 test_heroadd.py. Floor from the green run (see the ledger line).
@@ -61,7 +74,7 @@ import checks                                                # noqa: E402
 import charstore                                             # noqa: E402
 import authsrv                                               # noqa: E402
 
-led = checks.Ledger("hero skill toggle (DESKWORK-D1 step 6)", floor=53)   # 2026-09-23, from the green run
+led = checks.Ledger("hero skill toggle (DESKWORK-D1 step 6)", floor=71)   # 2026-09-23, from the green run (53 -> 71 at the fix pass)
 
 SRC_PATH = os.path.join(HERE, "authsrv.py")
 ARGS_PATH = os.path.join(HERE, "serverargs.py")
@@ -83,6 +96,12 @@ def fresh_state(**kw):
     st = {"agents": {}, "char_uuid": UUID}
     st.update(kw)
     return st
+
+
+class Rec:
+    """The bar-edit handlers' recorder; nothing here reads what it records."""
+    def event(self, *a, **k):
+        pass
 
 
 _saved = {k: getattr(authsrv, k) for k in
@@ -191,15 +210,13 @@ try:
            "348 -- the defect the id join exists for", f"picks {bad_picks}")
     authsrv.handle_hero_skill_toggle([TOGGLE, 200, 2], send6, st6, 0)      # release
     body["last_slot"] = -1
-    picks2 = {body["skills"][authsrv.pick_skill(body, 1.0)][0] for _ in range(1)}
-    body["last_slot"] = -1
     all_picks = []
     for _ in range(5):
         slot = authsrv.pick_skill(body, 1.0)
         all_picks.append(body["skills"][slot][0])
         body["last_slot"] = slot
     led.ok(body["skill_disabled_ids"] == frozenset() and 348 in all_picks,
-           "released: the body picks 348 again", f"{all_picks} {picks2}")
+           "released: the body picks 348 again", f"{all_picks}")
     for slot in (0, 2, 3, 4, 7):
         authsrv.handle_hero_skill_toggle([TOGGLE, 200, slot], send6, st6, 0)
     led.ok(authsrv.hero_disabled_mask(st6, 6) == 0b10011101
@@ -208,15 +225,115 @@ try:
            "hero stands", f"mask {authsrv.hero_disabled_mask(st6, 6):#x}")
     led.ok(dict(store.hero_row(UUID, 6)).get("disabled_slots") is None,
            "without --persist nothing was written to the store")
-    # a bar edit re-reads the join
+    # -- the client's own bar edits move the mask (the fix pass, EVID-D1C-1) ----------
+    # The client's swap routine (0x00821460, ChCliSkill:332/333) sends 0x005E and
+    # then EXCHANGES the two slots' bits of its hotKeyState mask (+0xA4), so
+    # suppression follows the SKILL. The first cut kept the bit on the SLOT and
+    # pinned that here; the reviewer's swap_demo showed the body casting the
+    # skill the client draws struck through. Through the REAL swap handler:
     authsrv.handle_hero_skill_toggle([TOGGLE, 200, 0], send6, st6, 0)     # release 322 -> mask 0x9C
-    # The real caller (handle_skillbar_skill_swap) writes the STORE's bar first,
-    # then syncs the body; the panel bar the mask indexes is the store's.
-    store.set_hero_skillbar(UUID, 6, [348, 0, 322, 1, 385, 0, 0, 2])
-    authsrv.sync_hero_body_bar(st6, 200, [348, 0, 322, 1, 385, 0, 0, 2], 0)
-    led.ok(body["skill_disabled_ids"] == frozenset({322, 1, 385, 2}),
-           "after a bar edit that swaps slots 0 and 2 the mask (per SLOT) now covers 322 "
-           "and not 348 -- the body re-read the join", f"{body['skill_disabled_ids']}")
+    led.ok(authsrv.hero_disabled_mask(st6, 6) == 0x9C and 348 in body["skill_disabled_ids"]
+           and 322 not in body["skill_disabled_ids"],
+           "before the swap: 348 (slot 2) suppressed, 322 (slot 0) not; mask 0x9C")
+    authsrv.handle_skillbar_skill_swap([0x5E, 200, 322, 0, 348, 0], send6, st6, 0, Rec())
+    led.ok(authsrv.hero_panel_bar_ids(st6, 6) == [348, 0, 322, 1, 385, 0, 0, 2]
+           and store.hero_skillbar(UUID, 6) == [348, 0, 322, 1, 385, 0, 0, 2],
+           "0x005E [200, 322, 0, 348, 0] swapped slots 0 and 2 on the panel bar and in the store")
+    led.ok(authsrv.hero_disabled_mask(st6, 6) == 0x99,
+           "...and the server's mask EXCHANGED bits 0 and 2 the way the client's routine does: "
+           "0x9C -> 0x99", f"mask {authsrv.hero_disabled_mask(st6, 6):#x}")
+    led.ok(body["skill_disabled_ids"] == frozenset({348, 1, 385, 2}),
+           "the body still skips 348 (now in slot 0) and may cast 322 -- suppression followed "
+           "the skill", f"{body['skill_disabled_ids']}")
+    per_slot = frozenset(s for i, s in enumerate([348, 0, 322, 1, 385, 0, 0, 2])
+                         if (0x9C >> i) & 1 and s)
+    led.ok(per_slot == frozenset({322, 1, 385, 2}) and per_slot != body["skill_disabled_ids"],
+           "KNOWN-BAD: the per-SLOT reading (the old mask on the new bar) would suppress 322 "
+           "and cast 348 -- the client draws 348 struck through, so that body disagrees "
+           "with the screen", f"{per_slot}")
+    # a 0x005C SET into a suppressed slot clears its bit (0x008212C0, ChCliSkill:258: btr)
+    lib6 = sorted(authsrv.hero_usable_library(st6, 6, authsrv.hero_bar_ids(6)))
+    new6 = next(s for s in lib6 if s not in [348, 0, 322, 1, 385, 0, 0, 2])
+    authsrv.handle_skillbar_skill_set([0x5C, 200, 0, new6, 0], send6, st6, 0, Rec())
+    led.ok(authsrv.hero_panel_bar_ids(st6, 6)[0] == new6
+           and authsrv.hero_disabled_mask(st6, 6) == 0x98
+           and body["skill_disabled_ids"] == frozenset({1, 385, 2}),
+           f"0x005C set skill {new6} into the SUPPRESSED slot 0: the bit is cleared (0x99 -> "
+           f"0x98) and the body may cast the new skill", f"mask {authsrv.hero_disabled_mask(st6, 6):#x}")
+    authsrv.handle_skillbar_skill_set([0x5C, 200, 3, 1, 0], send6, st6, 0, Rec())   # same skill, same slot
+    led.ok(authsrv.hero_disabled_mask(st6, 6) == 0x90,
+           "...a set into suppressed slot 3 clears bit 3 too (the client clears whatever slot it "
+           "writes)", f"mask {authsrv.hero_disabled_mask(st6, 6):#x}")
+    authsrv.handle_skillbar_skill_swap([0x5E, 200, 322, 0, 385, 0], send6, st6, 0, Rec())
+    led.ok(authsrv.hero_disabled_mask(st6, 6) == 0x84,
+           "a swap of an unsuppressed skill (322, slot 2) with a suppressed one (385, slot 4) "
+           "moves the bit: 0x90 -> 0x84", f"mask {authsrv.hero_disabled_mask(st6, 6):#x}")
+    authsrv.handle_skillbar_skill_swap([0x5E, 200, 385, 0, 322, 0], send6, st6, 0, Rec())
+    led.ok(authsrv.hero_disabled_mask(st6, 6) == 0x90,
+           "...and swapping them back restores it (0x84 -> 0x90)")
+
+    # -- §3b a SUPPRESSED resurrection is never cast (the fix pass, ENG-B2) -------------
+    # ally_cast_tick's "THE DEAD FIRST" branch picks a resurrection off the bar
+    # itself, bypassing pick_skill's gate; the first cut let a struck-through
+    # Resurrection Signet raise the player.
+    _saved_energy = authsrv.ENERGY
+    authsrv.ENERGY = False
+    store_r = charstore.Store.open("rez@rurik.invalid", base=base)
+    store_r.ensure_character(UUID, "Raiser", "cc" * 37)
+    store_r.set_hero_skillbar(UUID, 6, [322, 0, 348, 1, 385, 0, 0, 2])
+    str_ = fresh_state(charstore_game=store_r)
+    panel_r = authsrv.hero_panel_bar_ids(str_, 6)
+    led.ok(authsrv.skill_resurrects(2) and panel_r[7] == 2,
+           "the stored bar's slot 7 holds skill 2, which resurrects")
+    skills_r = authsrv.bar_triples(panel_r)
+    body_r = {"hero": 6, "name": "Raiser", "allegiance": authsrv.agents.ALLEGIANCE_PLAYER,
+              "pos": (0.0, 0.0), "plane": 0, "skills": skills_r,
+              "skill_ready": [0.0] * len(skills_r), "last_slot": -1,
+              "health": 100.0, "max_health": 100.0,
+              "skill_disabled_ids": authsrv.hero_disabled_skill_ids(str_, 6)}
+    str_["agents"][200] = body_r
+    str_["player_dead"] = True
+    sent_r, send_r = fake_send_factory()
+    authsrv.handle_hero_skill_toggle([TOGGLE, 200, 7], send_r, str_, 0)     # suppress the rez
+    led.ok(sent_r == [(MASK_MSG, [200, 0x80])] and body_r["skill_disabled_ids"] == frozenset({2}),
+           "Shift-click on slot 7: 0x0065 [200, 0x80], the body suppresses skill 2")
+    sent_r.clear()
+    authsrv.ally_cast_tick(send_r, str_, 0)
+    led.ok(body_r.get("casting") is None and body_r.get("cast_lands_at") is None
+           and not any(2 in v for _op, v in sent_r if isinstance(v, list)),
+           "with the player dead the tick does NOT cast the suppressed resurrection "
+           "(nothing casting, no message naming skill 2)",
+           f"casting {body_r.get('casting')} sent {sent_r}")
+    authsrv.handle_hero_skill_toggle([TOGGLE, 200, 7], send_r, str_, 0)     # release
+    sent_r.clear()
+    body_r["last_slot"] = -1
+    authsrv.ally_cast_tick(send_r, str_, 0)
+    led.ok(body_r.get("casting") is not None and skills_r[body_r["casting"]][0] == 2,
+           "CONTROL: released, the same tick casts skill 2 at the dead player (the dead first)",
+           f"casting {body_r.get('casting')} sent {sent_r[:2]}")
+    authsrv.ENERGY = _saved_energy
+
+    # -- §3c without --persist the toggle reads the session's EDITED bar (ENG-M1) -------
+    st_e = fresh_state()
+    panel_e = authsrv.hero_panel_bar_ids(st_e, 6)
+    body_e = {"hero": 6, "skills": authsrv.bar_triples(panel_e), "skill_ready": [0.0] * 8,
+              "last_slot": -1, "skill_disabled_ids": frozenset()}
+    st_e["agents"][200] = body_e
+    lib_e = sorted(authsrv.hero_usable_library(st_e, 6, authsrv.hero_bar_ids(6)))
+    new_e = next(s for s in lib_e if s not in panel_e)
+    empty_e = panel_e.index(0)
+    sent_e, send_e = fake_send_factory()
+    authsrv.handle_skillbar_skill_set([0x5C, 200, empty_e, new_e, 0], send_e, st_e, 0, Rec())
+    led.ok(authsrv.hero_panel_bar_ids(st_e, 6)[empty_e] == new_e
+           and [s[0] for s in body_e["skills"]].count(new_e) == 1,
+           f"no store: 0x005C put skill {new_e} into empty slot {empty_e}; hero_panel_bar_ids "
+           f"reads the SESSION's bar (the first cut re-read the row's and saw the slot empty)")
+    sent_e.clear()
+    authsrv.handle_hero_skill_toggle([TOGGLE, 200, empty_e], send_e, st_e, 0)
+    led.ok(sent_e == [(MASK_MSG, [200, 1 << empty_e])]
+           and body_e["skill_disabled_ids"] == frozenset({new_e}),
+           "...and a Shift-click on that slot is ANSWERED (not refused as EMPTY) and the body "
+           "skips the new skill", f"sent {sent_e}")
 
     # -- §4 persist ------------------------------------------------------------------
     authsrv.PERSIST = True
@@ -252,10 +369,9 @@ try:
             refused = False
         except ValueError:
             refused = True
-        except Exception:
-            refused = bad_mask is True    # int(True) == 1 is legal at the setter; validate() below is the guard
-        led.ok(refused or bad_mask is True,
-               f"the setter refuses a mask of {bad_mask!r}")
+        led.ok(refused and store_p.hero_disabled_slots(UUID, 6) == 2,
+               f"the setter refuses a mask of {bad_mask!r} and the stored mask is unchanged "
+               f"(the first cut's check passed a bool that stored 1 -- ENG-M3)")
     for bad_mask in (256, -1, True):
         data = {"version": charstore.STORE_VERSION, "account": {}, "characters": {
             UUID: {"name": "X", "level": 1, "xp": 0, "skill_points": 0,
@@ -293,9 +409,11 @@ try:
         return h
     led.ok(authsrv.hero_panel_bar_ids(st7, 6) == legacy(None, 6),
            "hero_panel_bar_ids == the block's pre-step expression (no stored bar)")
-    led.ok(authsrv.hero_panel_bar_ids(st6, 6) == legacy([348, 0, 322, 1, 385, 0, 0, 2], 6)
-           == [348, 0, 322, 1, 385, 0, 0, 2],
-           "...and for a stored bar with holes (the store's CURRENT bar wins, holes kept)")
+    cur6 = store.hero_skillbar(UUID, 6)
+    led.ok(authsrv.hero_panel_bar_ids(fresh_state(charstore_game=store), 6) == legacy(cur6, 6)
+           == authsrv.hero_panel_bar_ids(st6, 6) and cur6[1] == 0 and cur6[5] == 0,
+           "...and for a stored bar with holes (the store's CURRENT bar wins on a fresh "
+           "connection, holes kept; the session that edited it reads the same bar)", f"{cur6}")
     led.ok(authsrv.hero_panel_bar_ids(st7, 6, [1, 2, 3]) == [1, 2, 3, 0, 0, 0, 0, 0],
            "...and a short bar handed in is padded to eight")
 
@@ -391,6 +509,23 @@ try:
         ARGS = f.read()
     led.ok('"--no-hero-skill-toggle"' in ARGS and '"--hero-skill-toggle-per-bit"' in ARGS,
            "LOCK: serverargs.py defines both flags")
+    # the fix pass's locks
+    swap_fn, set_fn = _func(TREE, "handle_skillbar_skill_swap"), _func(TREE, "handle_skillbar_skill_set")
+    led.ok("hero_mask_write" in _calls(swap_fn) and "hero_mask_write" in _calls(set_fn),
+           "LOCK: both hero bar-edit handlers move the mask through hero_mask_write (the swap "
+           "exchanges two bits, the set clears one -- the client's 0x00821460 / 0x008212C0)")
+    tick_src = ast.get_source_segment(SRC, _func(TREE, "ally_cast_tick"))
+    led.ok("_s[0] not in _dis" in tick_src and 'agent.get("skill_disabled_ids")' in tick_src,
+           "LOCK: ally_cast_tick's dead-first loop skips a suppressed resurrection (ENG-B2)")
+    players_src = ast.get_source_segment(SRC, _func(TREE, "_handle_request_players"))
+    led.ok("GAME_SMSG_HERO_UNNAMED_0065, [_haid, _hmask_legacy]" in players_src
+           and players_src.index("[_haid, _hmask_legacy]") > players_src.index("SKILLBAR_PVP_MASKS, SKILLBAR_TRAILER],"),
+           "LOCK: the legacy rig's 0x00DA is followed by a 0x0065 carrying a stored mask "
+           "(0x008223B0 zeroes the client's mask on every 0x00DA -- EVID-D1C-3)")
+    panel_src = ast.get_source_segment(SRC, _func(TREE, "hero_panel_bar_ids"))
+    led.ok('state.get("hero_bars")' in panel_src
+           and panel_src.index('state.get("hero_bars")') < panel_src.index("hero_build(state, hid)"),
+           "LOCK: hero_panel_bar_ids reads the session's edited bar before the store's (ENG-M1)")
 finally:
     for k, v in _saved.items():
         setattr(authsrv, k, v)
