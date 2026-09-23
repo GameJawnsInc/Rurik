@@ -381,23 +381,41 @@ def load_wire_reports(path):
 def offset_detail(walls):
     """unix epoch of server t=0, and WHICH clock said so. REALFIX-T1.
 
-    Returns `{source, offset, spread, n, n_trunc}`. `spread` is the achieved
-    residual in seconds on the source that was actually used -- so it is
-    comparable across the two only in the sense that both are "how wrong the
-    pairing can be", which is the number a reader needs.
+    Returns `{source, offset, spread, n, n_trunc, clock_residual,
+    worst_delay}`. `spread` is max - min of the per-row offsets in the family
+    used, and it is a different quantity on each arm: read `source` first.
 
     TWO ESTIMATORS, AND THEY ARE NEVER MIXED. A row carrying `wall_unix` gives
-    `wall_unix - t` = the true offset directly, to the system clock's own
-    resolution, so the estimator over many such rows is the MEDIAN and the
-    max-min spread measures perf_counter<->system-clock drift over the run. A
-    row carrying only the truncated `wall` gives `floor(unix) - t =
+    `wall_unix - t` = the true offset PLUS the time between `Recorder.event`'s
+    two clock reads (`perf_counter`, then `time.time()`), never minus it, so a
+    preemption in that gap lifts ONE row. The estimator is the MEDIAN, which
+    such a row cannot move, and the spread splits there into two things
+    (OBSERVED 2026-09-23, REALFIX.md T1; test_movesync section 21):
+      `clock_residual` = median - min, REALFIX section 2.2's clock alignment
+          term (predicted < 1 ms): 0.48-3.81 us over 1,000 runs of a 200-row
+          Recorder loop idle or loaded, 3-36 us on 396 vault captures. A drift
+          across the run lands here; a step in a few rows does not.
+      `worst_delay` = max - median, the longest preemption on one row: up to
+          79.6 ms under load, 23.2 ms in the vault. The median absorbs it.
+    So this arm's `spread` is the worst preemption, not the clock term. Until
+    2026-09-23 this said it "measures perf_counter<->system-clock drift over
+    the run". It stays because `offset_from_stamps` returns it.
+
+    A row carrying only the truncated `wall` gives `floor(unix) - t =
     true_offset - frac` with frac in [0,1), so the estimator is the MAXIMUM --
     which approaches the truth from below -- and the spread is ~1.0 s by
-    construction on any run longer than a second. Averaging the two families
-    together would produce a number that is neither, biased by the mix ratio;
-    pooling the max-estimator over float rows would throw away the resolution
-    that makes them worth having. So one family is chosen and the other is
-    counted, and `n` vs `n_trunc` is what tells a reader the file was mixed.
+    construction on any run longer than a second. That spread is how much of
+    the second the rows sampled, and not the max's error: on the 396 captures
+    carrying both stamps the max sat 0.1-17.3 ms below the float median
+    (OBSERVED 2026-09-23, REALFIX.md T1). Both new keys are None on this arm,
+    and `offset_line` still prints its spread as the residual; relabelling
+    that is its own change (PROBE-GATEFIRE.md block 12 quotes the line).
+
+    Averaging the two families together would produce a number that is
+    neither, biased by the mix ratio; pooling the max-estimator over float
+    rows would throw away the resolution that makes them worth having. So one
+    family is chosen and the other is counted, and `n` vs `n_trunc` is what
+    tells a reader the file was mixed.
 
     A mean over truncated stamps would sit half a second low -- 144 units at
     run speed, the same size as the separation being measured -- which is why
@@ -406,15 +424,18 @@ def offset_detail(walls):
     unix = sorted(getattr(walls, "unix", ()) or ())
     n_trunc = len(walls)
     if unix:
-        return {"source": OFFSET_SRC_UNIX, "offset": unix[len(unix) // 2],
+        med = unix[len(unix) // 2]
+        return {"source": OFFSET_SRC_UNIX, "offset": med,
                 "spread": unix[-1] - unix[0], "n": len(unix),
-                "n_trunc": n_trunc}
+                "n_trunc": n_trunc, "clock_residual": med - unix[0],
+                "worst_delay": unix[-1] - med}
     if not walls:
         return {"source": None, "offset": None, "spread": None,
-                "n": 0, "n_trunc": 0}
+                "n": 0, "n_trunc": 0, "clock_residual": None,
+                "worst_delay": None}
     return {"source": OFFSET_SRC_TRUNC, "offset": max(walls),
             "spread": max(walls) - min(walls), "n": n_trunc,
-            "n_trunc": n_trunc}
+            "n_trunc": n_trunc, "clock_residual": None, "worst_delay": None}
 
 
 def offset_line(d, indent=""):
@@ -424,6 +445,12 @@ def offset_line(d, indent=""):
     that the residual stops being an assumption. A run that silently fell back
     to the truncated stamps looks identical in every downstream number; this
     line is the only place it says so.
+
+    The float arm prints the spread's two halves by name: the clock residual
+    (median - min) with its run-speed equivalent, and the worst single-row
+    delay (max - median) in ms only, since the median absorbs it and a figure
+    in units would read as pairing error. Until 2026-09-23 it printed max - min
+    as "residual", which on a live capture is the worst preemption.
     """
     if not d["n"]:
         return (indent + "clock offset: NO STAMPS -- the two clocks cannot be "
@@ -434,10 +461,13 @@ def offset_line(d, indent=""):
              f"NOT pooled in")
     if d["source"] == OFFSET_SRC_UNIX:
         return (indent + f"clock offset {d['offset']:.6f} from {d['n']} "
-                f"`wall_unix` row(s) [REALFIX-T1, float, median]: residual "
-                f"{d['spread'] * 1000.0:.3f} ms = "
-                f"{d['spread'] * RUN_SPEED:.2f} u at {RUN_SPEED:.0f} u/s"
-                + mixed)
+                f"`wall_unix` row(s) [REALFIX-T1, float, median]: clock "
+                f"residual {d['clock_residual'] * 1000.0:.3f} ms = "
+                f"{d['clock_residual'] * RUN_SPEED:.2f} u at "
+                f"{RUN_SPEED:.0f} u/s (median - min); worst single-row delay "
+                f"{d['worst_delay'] * 1000.0:.3f} ms (max - median: the gap "
+                f"between the two clock reads on the slowest row, which the "
+                f"median absorbs)" + mixed)
     return (indent + f"clock offset {d['offset']:.3f} from {d['n']} truncated "
             f"`wall` stamp(s) [PRE-REALFIX-T1, max-estimator]: residual "
             f"{d['spread']:.3f} s = {d['spread'] * RUN_SPEED:.0f} u at "
@@ -450,7 +480,9 @@ def offset_from_stamps(walls, announce=True):
     Kept at two values deliberately: `pair()`, `resyncscore`, `grantsim` and the
     tests all unpack exactly two, and REALFIX-T1 is an instrument change that
     must not cost a rewrite of everything downstream of it. `offset_detail` is
-    where the third and fourth facts live for a caller that wants them.
+    where the other facts live for a caller that wants them -- including
+    `clock_residual`, because the `spread` returned here is max - min, and on
+    the float arm that is the worst single preemption, not the clock term.
     """
     d = offset_detail(walls)
     if announce:

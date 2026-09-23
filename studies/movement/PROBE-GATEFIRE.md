@@ -442,7 +442,7 @@ cd C:/gd/Rurik && python toolkit/clientscan/movesync.py --selftest
 
 `movetap` ends `selftest passed -- 250 checks, floor 250`; `movesync` ends
 `selftest passed -- 80 checks, floor 80`. Both exit 0. **Those two totals are EXACT floors**
-(`SELFTEST_FLOOR` at `movetap.py:1481` and `movesync.py:1097`), so any net loss of a check
+(`SELFTEST_FLOOR` at `movetap.py:1481` and `movesync.py:1129`), so any net loss of a check
 reddens them — and for `movetap` that is the **only** per-section guard there is (§12 item 9).
 
 > **NOT `gatetap.py` / `gatescore.py` / `studies/movement/gatefire.tsv`.** Those were
@@ -505,7 +505,7 @@ cd C:/gd/Rurik && Get-ChildItem C:\gd\Rurik\vault\captures\gamesrv\*.jsonl | Sor
 Twenty gamesrv captures carried today's stamp by 12:53 — newest
 `authsrv-20260820T125214-c1.jsonl` — from sessions this arc did not run, in a shared vault
 that now holds **984** `*.jsonl`. `movesync`'s `newest()` is
-`sorted(glob.glob(pattern), key=os.path.getmtime)[-1]` (`movesync.py:621`) over that shared
+`sorted(glob.glob(pattern), key=os.path.getmtime)[-1]` (`movesync.py:653`) over that shared
 vault, and `session.py` has no `--capture-root` flag. If the newest timestamps are not yours,
 **pass every path explicitly in step 14** and never use the bare form.
 
@@ -832,7 +832,7 @@ or §5 reddens.
 split that created `movefence.py` — it did not exist at `e2468e5`, and `movesync.py`'s
 digest moved with the cut and not with anything it prints. Measured at the split:
 `movetap.py` sha256 `da20751f11d80d6628f1d6c56a9951a3e8f9b0df1e6b31e53391a99843e2259b` (re-pinned 2026-09-16 as the LF digest -- the content is unchanged, `44d87c2f...` was the same bytes hashed with CRLF line endings; `test_probedoc` now normalises before hashing so the pin is the same on every checkout),
-`movesync.py` sha256 `c0bc2dc4e957855d39506d8dfbf1120f697c54fe254b6542ed24772cf2928e6d` (moved 2026-09-17: `late_stamp` and its two constants APPENDED at the file's end, below the 09-14 block, nothing above them touched -- analysis only, `hard_step` and every printer unchanged; every §6 block re-checked against the disk by `test_probedoc` and none had changed, the earlier digest was `0f70a1399af03badd24c54bb244fee4442ecb36360b7b80c96c92936a7602c3a`. Before that, moved 2026-09-14: `hard_sets` / `mark_server_sets` / `named_players` APPENDED at the file's end -- the JARIN shrine -- so every line this document cites still holds; every §6 block re-checked against the disk by `test_probedoc` at that commit and none had changed, the earlier digest was `76b6b534e0c674e0f0cb533768a91c0b4953aca51834664056f370cda3f97ead`) and
+`movesync.py` sha256 `5dae0c21fa2f6c8b6ec04d16328efa188902d071622eb473a9841a9a8b0d1c51` (moved 2026-09-23: `offset_detail` gained `clock_residual` / `worst_delay`, and `offset_line`'s FLOAT arm prints those two instead of max - min as "residual". That is a mid-file change, so the three citations of lines below it -- `SELFTEST_FLOOR`, the newest-file `sorted(glob.glob(...))` and `print_wire_only` -- were re-pointed by +32. The truncated arm's line, the only offset line §6 quotes (block 12), is byte-identical, and every §6 block was re-checked against the disk by `test_probedoc`; the earlier digest was `c0bc2dc4e957855d39506d8dfbf1120f697c54fe254b6542ed24772cf2928e6d`. Before that, moved 2026-09-17: `late_stamp` and its two constants APPENDED at the file's end, below the 09-14 block, nothing above them touched -- analysis only, `hard_step` and every printer unchanged; every §6 block re-checked against the disk by `test_probedoc` and none had changed, the earlier digest was `0f70a1399af03badd24c54bb244fee4442ecb36360b7b80c96c92936a7602c3a`. Before that, moved 2026-09-14: `hard_sets` / `mark_server_sets` / `named_players` APPENDED at the file's end -- the JARIN shrine -- so every line this document cites still holds; every §6 block re-checked against the disk by `test_probedoc` at that commit and none had changed, the earlier digest was `76b6b534e0c674e0f0cb533768a91c0b4953aca51834664056f370cda3f97ead`) and
 `movefence.py` sha256 `2c6a95261f1a269f3a42304a97d3b096d2417e73c606507f805a507b77e02c08` (re-pinned 2026-09-16 as the LF digest, likewise; `08a1594a...` was the CRLF hash of the same content). If
 any hash has moved, re-derive every block before quoting one — a printed sentence that
 changed upstream makes this whole section a description of code that no longer exists, which
@@ -1447,7 +1447,7 @@ cd C:/gd/Rurik && python toolkit/clientscan/movesync.py --wire-only --capture "C
 ```
 
 ⚠ **`--wire-only` prints NO fence section at all.** It is a different printer
-(`movesync.print_wire_only`, `movesync.py:932`), not a subset of the paired one. An operator
+(`movesync.print_wire_only`, `movesync.py:964`), not a subset of the paired one. An operator
 reaching for the wire half to check the fence would find nothing there and could misread that
 absence as a null. Use the paired form for anything about the fence.
 
