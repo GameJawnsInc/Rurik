@@ -13521,8 +13521,9 @@ def burst_body_spell(send, state, conn_id, who, sid, terms, amount, rank, inflic
 # [20, foe, caster, impact], then the condition -- burst_player_spell's shape
 # with the centre moved. A duration on the record (1113's 5 s of ticks, 840's
 # flat 10) is NOT modelled: one tick, at the cast, and the label row says so
-# (DURATION_UNMODELLED). RECONSTRUCTION: the live corpus holds no cast of a
-# byte-0 area Spell to read the shape from (skills 56.1).
+# (DURATION_UNMODELLED). RECONSTRUCTION: no capture of a byte-0 area Spell's
+# cast was read for this arm -- the corpus was not searched for one (skills
+# 56.1 names the search as owed).
 #
 # --no-caster-areas reverts -- and the revert is NOT the one-target path. A
 # byte-0 area row then lands on NOBODY, which is exactly what the gate's
@@ -13624,7 +13625,8 @@ def body_caster_area_condition(send, state, conn_id, agent_id, skill_id, inflict
 # class heals INCLUDE the caster is the gate's decision, made per row
 # against the template's own digest (skilldesc.CLASS_HEAL_READINGS): 1262
 # excludes the caster and 943 heals only the relieved, and neither ships.
-# RECONSTRUCTION: no party heal in the live corpus (skills 56.2).
+# RECONSTRUCTION: no capture of a party heal was read for this arm -- the
+# corpus was not searched for one (skills 56.2 names the search as owed).
 # --no-party-heals reverts to the caster alone -- a SUBSET of the right
 # recipients, never a wrong one, which is why this revert differs from the
 # area's.

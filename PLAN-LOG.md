@@ -28,6 +28,50 @@ move back.
 
 ---
 
+### SKILLS-LU / DESKWORK-D4 residue, pass 1 -- 2026-09-23 -- **the first three per-skill consumers behind the label gate: a CASTER-centred area (5 rows), a caster-centred PARTY heal (2), the NON-attack chain gate (3); 57 label rows, not 47; each new row marked by the consumer it rides; the vault overlay regenerates at the merge**
+
+The step-4 gate (skills §55.2) excluded whole classes of plain SERVED rows because no
+consumer acted where retail acts; this pass built the three cheapest, per §55.6's order.
+[studies/skills/FINDINGS.md](studies/skills/FINDINGS.md) §56 is the record. **(A)** the
+CASTER-centred area: a Spell whose record's target byte is 0 with an `aoe_range` and no
+projectile bursts from the caster's position over the record's OWN radius (156 / 240 / 312
+-- `spell_burst`'s field, no constant of ours), at the player's E5 ahead of the attack
+branch and at a body's completion before its 58, damage and condition alike, the selected
+target never read; a duration is one tick, marked. 183 188 840 1113 2212 ship `AREA_CASTER`;
+97 falls to `UNMODELLED_CLASS` (a corpse-centred area), 1364 (no area, no radius), 769 (byte
+1, and a 312 radius against an "adjacent" text -- the 156 sits flat in its bonus slot), 917
+1468 (byte 1, unmodelled classes) and 770 (byte 4: which position "adjacent" is measured from
+is not in the record) stay. `--no-caster-areas` lands such a row on NOBODY -- never the
+selected target at any range, the over-application the gate refused. **(B)** the party heal:
+a byte-0 heal with a radius heals the caster and every living ally within the record's
+5000 u of the caster (`party_within`, in `resolve_heal`); the gate ships a class heal only
+on a PERSON's reading of its template recorded as an enum against the template's
+sha256[:16] (`skilldesc.CLASS_HEAL_READINGS`: 287 and 2221 `INCLUDES_CASTER` ship
+`HEAL_PARTY`; 943 `CONDITIONED` and 1262 `EXCLUDES_CASTER` stay out; a changed template
+voids the reading). `--no-party-heals` heals the caster alone (a subset, never a wrong
+recipient). **(C)** the non-attack chain gate: the player's E5 judges `combo_req` for any
+type against the same chain state and fails it the attack's way (the fail word, a zero
+recharge, nothing lands -- RECONSTRUCTION: retail's one witness is an attack); 784 973 1033
+ship `CHAIN_GATED`; 974's "counts as an off-hand attack" advances the chain as its Crippled
+lands (`CHAIN_STEP_ADVANCES`); a body's requirement is not judged (no body chain, as for
+attacks). `--no-nonattack-chain-gate` reverts both. New marks `CLAUSE_REVEAL` (2212's
+compass clause) and the wordings "relieved of" / "you and all". `check_label_rows` names a
+row shipped without its consumer's mark or outside its predicate. **57 = 131 − 10 − 64**
+(UNMODELLED_CLASS 5, RECIPIENT_NOT_A_FOE 5, HEAL_RECIPIENT_CLASS 2, CHAIN_REQUIREMENT 0); 46
+marked, the same eleven unmarked. Every arm is RECONSTRUCTION: no capture of any of the
+eleven skills' casts was read (the corpus search is owed, §56.5), and the client
+confirmation is a runsheet (183 at rank 0: 30 fire on each hostile within 156 u of the
+player, nothing on a far selected one; `gamesrv_args = ["--no-caster-areas"]` the control).
+Tests: `test_labelconsumers.py` NEW (30 checks, 33 with the marks loaded; every consumer
+through the real cast path with a known-bad arm and a vacuity guard), `test_skilldesc`
+bare 77 / 146 with the vault (the on-disk check reads `RURIK_SKILL_LABELS` when set, the
+vault by default), `test_skilldamage` 80, `test_guards` 45. **For the merger: NOTHING was
+written to `vault/content/` -- the emit went to the pass's scratch directory; run `python
+toolkit/clientscan/skilldesc.py --emit-labels` on the merged main to regenerate
+`vault/content/skill_labels.toml` (57 rows), after which `test_skilldesc`'s default
+on-disk arm, `test_skilldamage` §14's chain check and `test_labelconsumers` §5b read the
+new rows.**
+
 ### SKILLS-LT fix pass / DESKWORK-D4 step 4 -- 2026-09-23 -- **the label tier re-cut on review: 47 rows, not 59; nine refuted rows out, each refutation now a gate rule with a known-bad arm; 36 of 47 marked; `--no-skill-labels` wired and tested**
 
 Two reviewers read the first pass. The evidence refuter read all 59 shipped templates at run

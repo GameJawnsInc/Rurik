@@ -1934,12 +1934,15 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   excluded by reason (§55.2); the three hand-row fixes done. **Still open:** (i) **the
   client confirmation** — §55.5's two-line runsheet, 187 at rank 0 → 7 before armour with
   the LABEL-tier log line, `gamesrv_args = ["--no-skill-labels"]` the control; (ii) **the
-  residue per skill** — the 74 client-side exclusions by class (a caster-centred area for
-  target byte 0/1 moves 12 and a caster-centred party heal 4 — 287 and 2221 first, being
-  under-applied only; a chain gate for non-attack `combo_req` 3, and 974's step; a condition
-  rider on episodes 6; byte 1's resolution 3 heals; 292's percent-of-loss heal), the 210
-  conditional SERVED rows, the marked clauses (6 knock-downs on label rows first), a
-  flat-constant reader in `skill_condition` (167), then the 924 RECOGNISED and §54.4's
+  residue per skill** — **pass 1 LANDED 2026-09-23 (skills §56, SKILLS-LU; PLAN-LOG): the
+  caster-centred area (5 rows), the party heal (2, on a per-row reading), the non-attack
+  chain gate (3) and 974's step → 57 label rows, each marked by its consumer; the vault
+  overlay regenerates AT THE MERGE (`skilldesc.py --emit-labels`); every arm RECONSTRUCTION
+  until a capture of one of the eleven casts is read.** Still out: 770's ally-centred
+  adjacency; a condition rider on episodes 6; byte 1's resolution (769 917 1468) and its 3
+  heals; 292's percent-of-loss heal; 943's conditioned heal, 1262's "creatures"; the 210
+  conditional SERVED rows, the marked clauses (7 knock-downs on label rows first), a
+  flat-constant reader in `skill_condition` (167, 1033), then the 924 RECOGNISED and §54.4's
   two-consumer proposal (still the owner's call); (iii) step 5, the 68 no-slot rows; (iv)
   step 6, the timed effect types 16 / 24–28; (v) the 141 INDETERMINATE slots wait on a
   client tooltip run (§54.3).

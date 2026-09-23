@@ -2034,7 +2034,7 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "over-application the gate refused. The default bursts "
                          "over the record's own radius from the CASTER's position, "
                          "the shape spell_burst gives a byte-16 Spell at its target "
-                         "(RECONSTRUCTION: no byte-0 area cast in the corpus).")
+                         "(RECONSTRUCTION: no capture of one was read).")
     ap.add_argument("--no-party-heals", action="store_true",
                     help="drop the CASTER-CENTRED party heal: a byte-0 heal with an "
                          "aoe_range (287, 2221 as label rows: \"heal entire party\") "
