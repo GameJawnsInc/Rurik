@@ -4895,6 +4895,42 @@ SKILL_DAMAGE_WORD = True
 # --no-interrupts reverts to the server that could not interrupt anything.
 INTERRUPTS = True
 
+# NPC RECHARGE FROM COMPLETION (DESKWORK-D5 step 4, 2026-09-23; `rechargeprobe.py`).
+# Both NPC cast sites armed `skill_ready[slot] = now + recharge` at the cast's START
+# and said so: "a RECONSTRUCTION from the table's semantics ... no NPC in the corpus
+# casts twice, so there is no recharge cycle to tell start-triggered from
+# finish-triggered" (this comment was written over a corpus of two captures). The
+# corpus is now 36 and other agents cast the same skill many times. The probe joins
+# every `0x00A0 [60, caster, target, skill]` per (connection, caster INCARNATION,
+# skill) -- split at each `0x0020` create so a recycled id cannot manufacture a short
+# gap -- against the table on the connection's OWN build (read from the vault's exe;
+# 47 recharges moved 38797 -> 38888). The tightest-binding gaps -- when the AI re-cast
+# as fast as it could -- OBSERVED: SIX spells re-cast at recharge + activation from the
+# start (185 6.24/5.25, 186 8.51/7.00, 179 8.00/6.98, 286 4.01/3.25, 222 5.99/4.99,
+# 230 6.00/5.00; start-to-start / completion-to-next against recharge + activation and
+# recharge), which is COMPLETION-anchored: the recharge runs from the cast end (the
+# `0x009F [58]`, at start + activation), not the start. Four more skills (160, 197,
+# 220, 1097) re-cast far above either anchor -- the AI's own wait, which the recharge
+# never gates. The lone exception is 229 (Lightning Orb): most of its pairs sit at
+# recharge + activation like the six, but 2 of 24 (on two bodies) re-cast a touch
+# before completion + recharge -- one clearly (3.25 s after a 5 s-recharge cast's
+# completion, 20260917T224104 t=406.517), consistent with a staff's 20 % HSR proc
+# (WEAPONS-W5b) or a start-anchor for that skill alone; OBSERVED, n small, left as a
+# named divergence rather than fitted. So the anchor is COMPLETION: arm skill_ready
+# at now + activation + recharge. Attack skills (activation 0 in the table; their
+# completion is the strike windup) are UNCHANGED by this -- no attack-skill recharge
+# cadence was measured. --no-npc-recharge-from-completion is the pre-2026-09-23 arm
+# (start + recharge), which casts ~20 % too fast for a 1 s / 5 s spell.
+NPC_RECHARGE_FROM_COMPLETION = True
+
+
+def npc_recharge_anchor(activation):
+    """Seconds added to `recharge` when arming an NPC's `skill_ready`: the
+    activation under the completion anchor (skill_ready = start + activation +
+    recharge = completion + recharge), 0 under --no-npc-recharge-from-completion
+    (start + recharge). One place so the two cast sites cannot drift."""
+    return float(activation) if NPC_RECHARGE_FROM_COMPLETION else 0.0
+
 # THE PLAYER'S OWN MAXIMUM BEFORE A DAMAGE WORD (DESKWORK-D5 step 3(a)). Retail
 # never puts the OBSERVER's property 42 immediately ahead of a damage word at
 # the observer: 0 of 401 16/17 words and 0 of 3 armour-ignoring 55 words. The
@@ -21985,10 +22021,12 @@ def enemy_attack_tick(send, state, conn_id):
         # a monster's skill-selection policy is not in the client, is not on the
         # wire, and needs a capture campaign (its 7.6, tier 2).
         #
-        # A recharge runs from the START of the cast, which is what the client's
-        # table means by one. That is a RECONSTRUCTION from the table's semantics,
-        # not an observation: no NPC in the corpus casts twice, so there is no
-        # recharge cycle anywhere to tell start-triggered from finish-triggered.
+        # A recharge runs from the cast's COMPLETION (start + activation), which
+        # DESKWORK-D5 step 4 measured -- the START-triggered claim here was a
+        # RECONSTRUCTION written when "no NPC in the corpus casts twice" (a corpus
+        # of two captures); over the 36-capture corpus other agents re-cast the
+        # same spell at recharge + activation from the start, i.e. from the cast
+        # end (rechargeprobe.py; the anchor and the flag are npc_recharge_anchor's).
         slot = pick_skill(agent, now)
         # ---- AND THE RESOURCE GATE, which is NOT an AI rule ---------------
         #
@@ -22128,7 +22166,10 @@ def enemy_attack_tick(send, state, conn_id):
                 if _units > 0:
                     agent_adrenaline(agent).use(skill_id)
                 agent_energy(agent).spend(_cost)
-            agent["skill_ready"][slot] = now + recharge
+            # DESKWORK-D5 step 4: the recharge runs from the cast's COMPLETION
+            # (start + activation), not its start -- armed here at the start so
+            # an interrupted or aborted cast still holds the slot on recharge.
+            agent["skill_ready"][slot] = now + recharge + npc_recharge_anchor(activation)
             agent["last_slot"] = slot          # the round-robin cursor
             agent["casting"] = slot
             agent["last_swing"] = now      # a cast is not a free swing
@@ -22413,7 +22454,11 @@ def ally_cast_tick(send, state, conn_id):
                       f"{_hch} %) [WEAPONS-W5b]", flush=True)
         agent["cast_recharge"] = recharge
         agent["cast_target"] = target
-        agent["skill_ready"][slot] = now + recharge
+        # DESKWORK-D5 step 4: recharge from the COMPLETION (start + activation),
+        # the same anchor as the hostile site (rechargeprobe.py); the halved
+        # `recharge` above still applies (a staff's HSR is on the recharge, not
+        # the anchor).
+        agent["skill_ready"][slot] = now + recharge + npc_recharge_anchor(activation)
         agent["last_slot"] = slot
         agent["casting"] = slot
         if _atk:
@@ -35466,6 +35511,15 @@ def main():
         print("NO INTERRUPTS: Disrupting Chop and Lightning Javelin land their "
               "damage and interrupt nothing, as this server did until 2026-09-23 "
               "(retail: interruptjoin.py's two witnesses).", flush=True)
+
+    if a.no_npc_recharge_from_completion:
+        global NPC_RECHARGE_FROM_COMPLETION
+        NPC_RECHARGE_FROM_COMPLETION = False
+        print("NPC RECHARGE FROM START: an NPC's per-slot recharge is armed at "
+              "the cast's start, not its completion, as this server did until "
+              "2026-09-23 (retail: recharge + activation, rechargeprobe.py -- a "
+              "hostile casts ~20%% too fast for a 1 s / 5 s spell with this flag).",
+              flush=True)
 
     if a.player_max_always:
         global PLAYER_MAX_ALWAYS

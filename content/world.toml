@@ -2414,7 +2414,10 @@ is what lets a body's cast deal it and resolve against the taker's penetrated ra
 # The wire for the victim is authsrv.interrupt_player (the player, OBSERVED n=2 --
 # toolkit/authsrv/interruptjoin.py) and interrupt_body (a body, RECONSTRUCTION).
 [skill_effect.340]
-scale_means = "Bonus damage"   # +20 on every rank (scale 20 -> 20, args = 0): the strike's bonus
+# No scale_means: 340's scale is a flat 20 (scale0 = scale15 = 20, args = 0), so it has
+# no %strN% slot to referee (a scale_means here lands NO_SLOT in test_skilldesc). The
+# strike's +20 damage comes from skills.toml through skill_damage, as every attack
+# skill's bonus does; this row carries only the interrupt.
 interrupts = "action"
 interrupt_disable = 20
 [skill_effect.340.provenance]

@@ -6889,6 +6889,23 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   first cut); the end-to-end ORDER at the victim equal to the tape's for both witnesses; the
   tape's 0x00E6 at 24.0 ± 0.1 s after the interrupt; the interrupters 340 and 230 read off
   the `[10]` words. 30 checks, floor 21 (the sender's 21). Read-only on the vault),
+  `toolkit/authsrv/test_recharge.py` (**2026-09-23, DESKWORK-D5 step 4 — an NPC's per-slot
+  recharge runs from the cast's COMPLETION, not its start.** §1 is the sender, fixture-less:
+  `npc_recharge_anchor` returns the activation under the completion anchor and 0 under
+  `--no-npc-recharge-from-completion`; then it DRIVES the real `enemy_attack_tick` and
+  `ally_cast_tick` on a two-slot spell bar and reads `skill_ready[slot]` back — the operand
+  — asserting it lands at now + activation + recharge (completion + recharge) with the flag
+  on and at now + recharge (the START anchor, the known-bad arm) with it off, at both cast
+  sites. §2 is `rechargeprobe`'s verdict over the live corpus (declared a skip without the
+  vault and the client tables): the floor holds (≥ 4 skills with ≥ 5 completed pairs); the
+  six spells 185/186/179/286/222/230 are completion-anchored (min start-to-start at recharge
+  + activation, min completion-to-next at the recharge) and completion is the majority anchor
+  of the discriminating skills; 229 (Lightning Orb) is the named divergence — a sub-recharge
+  completion-to-next gap (one clear at ~3.25 s), consistent with a staff HSR proc or a
+  start-anchor for that skill alone, OBSERVED and not fitted away; the corpus recycles agent
+  ids (2,238 creates) and the six stay completion-anchored with the ids pooled too (the
+  anchor is not an artifact of the re-create split); every connection's build has a table in
+  the vault, over ≥ 2 builds. 15 checks, floor 8 (the sender). Read-only on the vault),
   `toolkit/authsrv/test_adrenreplay.py` (**2026-09-22, DESKWORK-D5 step 6 — the per-bar
   adrenaline simulation animref §19 asked for, scored press by press against retail's
   accept / refuse.** `adrenreplay.py` replays the client's own slot rules (skills §26.2:

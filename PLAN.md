@@ -1905,8 +1905,10 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   and the `[42]` residue (§16.6, self-scoped; `[42]` only when the maximum moved); the
   adrenaline replay (ANIMREF §19, a second refusal gate named). LANDED 2026-09-23: the
   interrupt (castmech §4's note, animref D5's note; `interruptjoin.py`, `interrupt_player`
-  OBSERVED n=2 at the player, `interrupt_body` RECONSTRUCTION). Still OPEN:
-  NPC recharge from completion, party-wide shouts, the refusal ids; 3(d) Mend Condition;
+  OBSERVED n=2 at the player, `interrupt_body` RECONSTRUCTION); the NPC recharge anchor
+  moved to the cast's COMPLETION (`rechargeprobe.py`, six spells OBSERVED, 229 a named
+  divergence; `--no-npc-recharge-from-completion`). Still OPEN:
+  party-wide shouts, the refusal ids; 3(d) Mend Condition;
   3(e) a hero's zero gain; the `[62]` energy word (read, own-party-scoped, not shipped);
   the second refusal gate's variable; the armed-EMPTY death clear (a one-witness
   divergence, skills §34.11.4).

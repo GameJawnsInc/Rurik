@@ -573,7 +573,13 @@ never sent); blocking/evasion/misses (the corpus contains **zero observed misses
 docstring says "THIS IS A TESTING FUNCTION, NOT A DECISION ABOUT AI"); NPC aftercast
 (RECONSTRUCTION — the NPC path arms recharge at cast *start* and never adds aftercast,
 because no NPC in the corpus casts twice, so there is no cycle to tell start-triggered from
-finish-triggered).
+finish-triggered). **(The recharge anchor is answered as of 2026-09-23, DESKWORK-D5 step 4:
+the 36-capture corpus does have NPCs casting the same skill many times, and `rechargeprobe.py`
+shows six spells re-casting at recharge + activation from the start — the recharge runs from
+the cast's COMPLETION, and the server now arms it there (`npc_recharge_anchor`,
+`--no-npc-recharge-from-completion`). AFTERCAST proper is still not added to the NPC cycle;
+the anchor is completion, not completion + aftercast — the wire's min completion-to-next sits
+at the recharge, not recharge + aftercast.)**
 
 **What the skeptic refuted:**
 

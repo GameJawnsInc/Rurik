@@ -387,7 +387,7 @@ Three properties of that finding matter more than the finding:
 
 1. **The caster carries the `nonc` allegiance token.** Corpus-wide, no `nonc` agent ever appears as an attacker, as a target, or in any damage event — **0 in 21,543 messages.** For a study about monster AI, the one NPC cast in the corpus was performed by an agent class that never fights.
 2. **The NPC's activation rides `0x009F` (int, no target); all four player activations ride `0x00A0` (int, with target).** Same value id, different message shape by actor. For anyone writing an NPC casting path, that is the most actionable byte in the finding.
-3. **Nothing can be said about order, cadence or recharge.** No NPC casts twice. There is no second event to sequence against.
+3. **Nothing can be said about order, cadence or recharge.** No NPC casts twice. There is no second event to sequence against. **(Superseded 2026-09-23, DESKWORK-D5 step 4: over the 36-capture corpus other agents cast the same skill many times, and `rechargeprobe.py` reads the cadence -- six spells re-cast at recharge + activation from the start, i.e. the recharge runs from the cast's COMPLETION. This paragraph was written over a two-capture corpus; it holds for that corpus and not the current one. Selection ORDER is still a capture-campaign question, §7.6; only the recharge ANCHOR is answered.)**
 
 `GV_ADD_EFFECT` and `GV_REMOVE_EFFECT` (ids 6, 7) do not occur anywhere. A correlation scan for NPC-applied conditions on the player returns zero, but it is **uninformative**: every one of the 17 player-kind status events in the whole corpus carries the same value, `0x100`. The dependent variable is a constant, so the scan could not have found anything.
 
