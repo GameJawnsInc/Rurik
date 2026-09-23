@@ -19,24 +19,36 @@ THE CLASSIFICATION, per stop word, by the SAME agent's companions inside one bat
 
   knockdown   a [63, agent, f32] rides the batch  (prop 63 = knocked_down, animref 6)
   interrupt   a [35, agent, 0]   rides the batch  (prop 35 = interrupted, animref D5)
-  cancel      neither -- the player's own release (Esc, a move, a retarget; castmech 3f)
+  cancel      neither -- NO [35] and NO [63] in the batch. The name is the cancel
+              family's (castmech 3f); it does NOT mean "the player's own release":
+              most stops are addressed to agents OTHER than the observer (the
+              own / other split per property is printed), whose c2s this reader
+              cannot see, so only the observer's own can be read as an Esc, a move
+              or a retarget -- and of those, few sit near a c2s 0x0028 (printed).
+              (Fix pass 2026-09-23, D5B-R6: the first cut's docstring and log
+              called them all "the player's own release".)
 
 THE PREDICTIONS, stated before the numbers (the survey's counts are the priors; a
 reader that finds a third [35] refutes the write-up, not the tape):
 
   P1  DENOMINATORS: the corpus holds exactly 34 [59] and 12 [49] (the survey), and
       exactly 2 [35]. A third [35] FAILS the route's acceptance (b).
-  P2  BOTH [35] name the connection's OWN player as the interrupted agent, and the
-      INTERRUPT'S RUN -- its own messages, from the hold release to the last of the
-      family -- opens with `[8, agent, 0]` (the cancel burst's own first message,
-      castmech 3f, 4 of 4) and is CONTIGUOUS: nothing addressed to anyone else sits
-      inside it. (First cut, 2026-09-23: "both BATCHES open with" -- FAILED as
-      phrased, twice: the 50 ms batch carries the INTERRUPTER's landing ahead of the
-      run ([46, 104, 0], the gain, [10, 25, 340], the word on the cast witness; two
-      [20] impact visuals and the 0x00A7 on the swing witness), and the victim's
-      [10] and word name the victim too, so "the victim's messages" also opens with
-      the landing. The operand was wrong both times; the claim is about the
-      interrupt's run. Re-stated, not fitted -- both other readings are printed.)
+  P2  BOTH [35] name the connection's OWN player as the interrupted agent; the FIRST
+      message of the interrupt FAMILY addressed to the victim in the batch ([8],
+      [59] / [49] / [3], [35], E2, E5) IS the hold release `[8, agent, 0]` (the
+      cancel burst's own first message, castmech 3f, 4 of 4 -- a stop or a bar
+      message ahead of it FAILS this); and the run from there to the family's last
+      is CONTIGUOUS: nothing addressed to anyone else sits inside it. (First cut,
+      2026-09-23: "both BATCHES open with" -- FAILED as phrased, twice: the 50 ms
+      batch carries the INTERRUPTER's landing ahead of the run ([46, 104, 0], the
+      gain, [10, 25, 340], the word on the cast witness; two [20] impact visuals and
+      the 0x00A7 on the swing witness), and the victim's [10] and word name the
+      victim too, so "the victim's messages" also opens with the landing. The
+      operand was wrong both times; the claim is about the interrupt's run.
+      Re-stated, not fitted -- both other readings are printed. Fix pass, ENG-7:
+      the re-statement's "the run opens with [8]" was TRUE BY CONSTRUCTION -- the
+      run is sliced from the first [8, agent, 0] -- so the conjunct now reads the
+      batch: nothing of the family precedes that hold release.)
   P3  THE CAST INTERRUPT (`20260916T213125` conn 57894, t ~ 484.333): the victim was
       mid-activation on a skill; the batch carries `[59, agent, 0]`, `0x00E2 [agent,
       skill, copy]` and an `0x00E5 [agent, skill, copy, recharge]` -- the recharge start
@@ -209,6 +221,15 @@ def rows_of(seq, player, c2s=()):
                        PROP_ATTACK_SKILL_STOPPED, PROP_SKILL_STOPPED}
                 starts = [k for k, (bop, vals) in enumerate(flat)
                           if bop == OP_INT and vals[:3] == [PROP_HOLD, agent, 0]]
+                # P2's real conjunct: the first FAMILY message at the victim in
+                # the whole batch is the hold release (a [59]/[49]/[3]/[35] or an
+                # E2/E5 ahead of it would fail this; the run's own first message
+                # cannot, it is sliced from the [8]).
+                fam_first = next((k for k, (bop, vals) in enumerate(flat)
+                                  if (bop == OP_INT and len(vals) > 1 and vals[1] == agent
+                                      and vals[0] in fam)
+                                  or (bop in (OP_SKILL_REFUSED, OP_SKILL_RECHARGE)
+                                      and vals and vals[0] == agent)), None)
                 run = []
                 if starts:
                     i = starts[0]
@@ -229,6 +250,7 @@ def rows_of(seq, player, c2s=()):
                     "run": run,
                     "run_contiguous": bool(run) and all(_names(bop, vals)
                                                         for bop, vals in run),
+                    "run_opens_family": bool(starts) and fam_first == starts[0],
                     "stop": sorted(stop), "e2": e2, "e5": e5,
                     "interrupter": word[0] if word else by_ann,
                     "interrupter_agent": (a[0] if a is not None
@@ -300,8 +322,7 @@ def score(c):
                and by_prop.get(PROP_ATTACK_SKILL_STOPPED, 0) == EXPECT_49
                and len(tfs) == EXPECT_35),
         "p2": bool(tfs) and all(r["own"] for r in tfs)
-        and all(r["run"] and r["run"][0] == (OP_INT, [PROP_HOLD, r["agent"], 0])
-                and r["run_contiguous"] for r in tfs),
+        and all(r["run"] and r["run_opens_family"] and r["run_contiguous"] for r in tfs),
         "p2_batch_opens_with_hold": sum(
             1 for r in tfs if r["batch"] and r["batch"][0][1] == OP_INT
             and r["batch"][0][2][1] == PROP_HOLD and r["batch"][0][2][2] == r["agent"]),
@@ -317,14 +338,22 @@ def score(c):
         "p4_detail": None if swing is None else {
             "stops": swing["stop"], "e2": swing["e2"], "e5": swing["e5"],
             "interrupter": swing["interrupter"], "t": swing["t"]},
-        "p5": not any(r["knockdown_too"] for r in tfs)
-        and not any(r["kind"] == "knockdown" and r["prop"] != PROP_ATTACK_STOPPED
-                    for r in stops) or True,   # informational: reported below
+        # P5 as registered: no batch holds a [63] and a [35] on one agent. (The
+        # first cut ended this in `or True`, which made it no predicate at all --
+        # fix pass, ENG-7. Whether a stop ever rides a [63] is `kinds`.)
+        "p5": not any(r["knockdown_too"] for r in tfs),
         "knockdown_with_35": sum(1 for r in tfs if r["knockdown_too"]),
         "cancels_with_c2s_0028": sum(1 for r in stops if r["kind"] == "cancel"
                                      and r["c2s_cancel"]),
         "cancels": sum(1 for r in stops if r["kind"] == "cancel"),
         "own_stops": sum(1 for r in stops if r["own"]),
+        # Per property: (addressed to the observer, addressed to another agent).
+        # Only the first column can be the observer's own release.
+        "own_by_prop": {p: (sum(1 for r in stops if r["prop"] == p and r["own"]),
+                            sum(1 for r in stops if r["prop"] == p and not r["own"]))
+                        for p in sorted(by_prop)},
+        "own_cancels_with_c2s_0028": sum(1 for r in stops if r["kind"] == "cancel"
+                                         and r["own"] and r["c2s_cancel"]),
         "witnesses": witnesses,
     }
 
@@ -339,7 +368,8 @@ def print_batch(r):
         print(f"      +{dt:6.1f} ms  0x{op:04X} {v[1:]}")
     print(f"      the victim's messages ({len(r['victim_batch'])}): "
           + " ".join(f"0x{op:02X}{vals}" for op, vals in r["victim_batch"]))
-    print(f"      the interrupt's run ({len(r['run'])}, contiguous {r['run_contiguous']}): "
+    print(f"      the interrupt's run ({len(r['run'])}, contiguous {r['run_contiguous']}, "
+          f"the family's first message at the victim is its [8] {r['run_opens_family']}): "
           + " ".join(f"0x{op:02X}{vals}" for op, vals in r["run"]))
 
 
@@ -363,10 +393,12 @@ def main():
     print(f"P1 denominators: [59] {sc['n59']} (expect {EXPECT_59}), [49] {sc['n49']} "
           f"(expect {EXPECT_49}), [3] {sc['n3']}, [35] {sc['n35']} (expect {EXPECT_35}), "
           f"[63] {sc['n63']}, [10] {sc['n10']} -> {'HOLDS' if sc['p1'] else 'FAILS'}")
-    print(f"   by kind: {sc['kinds']}; stops on the observer {sc['own_stops']}; cancels "
-          f"{sc['cancels']}, of which a c2s 0x0028 inside {CANCEL_WINDOW} s "
-          f"{sc['cancels_with_c2s_0028']}")
-    print(f"P2 both [35] on the observer, the VICTIM'S RUN opening [8, agent, 0]: "
+    print(f"   by kind: {sc['kinds']}; per property (on the observer, on another agent): "
+          f"{sc['own_by_prop']}; cancels {sc['cancels']}, of which a c2s 0x0028 inside "
+          f"{CANCEL_WINDOW} s {sc['cancels_with_c2s_0028']} (the observer's own cancels "
+          f"with one: {sc['own_cancels_with_c2s_0028']})")
+    print(f"P2 both [35] on the observer, the FIRST family message at the victim the hold "
+          f"release [8, agent, 0], the run contiguous: "
           f"{'HOLDS' if sc['p2'] else 'FAILS'} (batches whose FIRST message is the "
           f"victim's hold release: {sc['p2_batch_opens_with_hold']} of {sc['n35']} -- "
           f"the interrupter's landing precedes the run)")
@@ -375,8 +407,8 @@ def main():
     print(f"P4 the swing interrupt ([3], no E2/E5, interrupter 230): "
           f"{'HOLDS' if sc['p4'] else 'FAILS'} {sc['p4_detail']}")
     print(f"P5 [63] riding a [35] batch: {sc['knockdown_with_35']} "
-          f"(0 predicted)")
-    if args.batches or True:
+          f"(0 predicted) -> {'HOLDS' if sc['p5'] else 'FAILS'}")
+    if args.batches:
         print("the [35] batches, wire order, dt from the batch's first message:")
         for r in c["thirty_fives"]:
             print_batch(r)

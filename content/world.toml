@@ -2411,8 +2411,9 @@ is what lets a body's cast deal it and resolve against the taker's penetrated ra
 # `interrupts` names what the skill stops when it hits: "action" is any action in
 # progress (a skill in activation or an attack), "attacking" only a victim that is
 # attacking. `interrupt_disable` is added to the interrupted skill's full recharge.
-# The wire for the victim is authsrv.interrupt_player (the player, OBSERVED n=2 --
-# toolkit/authsrv/interruptjoin.py) and interrupt_body (a body, RECONSTRUCTION).
+# The wire for the victim is authsrv.interrupt_player (the player, OBSERVED n=1 per
+# shape -- one cast, one swing; toolkit/authsrv/interruptjoin.py) and interrupt_body (a
+# body, RECONSTRUCTION).
 [skill_effect.340]
 # No scale_means: 340's scale is a flat 20 (scale0 = scale15 = 20, args = 0), so it has
 # no %strN% slot to referee (a scale_means here lands NO_SLOT in test_skilldesc). The
@@ -2428,11 +2429,11 @@ verified = """OBSERVED n=1 (conn 57894, t=484.333, interruptjoin.py): agent 104'
 at 483.770; at 484.333 its [46], the observer's gain, [10, 25, 340], the word, then the victim's run \
 [8, 25, 0], 0x00E5 [25, 1, 0, 4], [59, 25, 0], 0x00E2 [25, 1, 0], [35, 25, 0], 0x00E5 [25, 1, 0, 24] -- \
 Healing Signet (1, activation 2.0, table recharge 4) interrupted 1.55 s in, recharging 4 then 24, the \
-0x00E6 [25, 1, 0] at 508.340 (+24.007 s). WIKI (GWW "Disrupting Chop", read 2026-09-23): "If it hits, \
-this attack interrupts the target's current action. If that action was a skill, that skill is disabled \
-for an additional 20 seconds" -- a signet is a skill, so the tape AGREES (the survey read "spell" \
-there; the page does not say it). Client 38797: id 340, type_code 14, axe, 6 adrenaline (38888: 5), \
-recharge 1 (38888: 0). The row's own damage is the strike's +20 bonus."""
+0x00E6 [25, 1, 0] at 508.340 (+24.007 s). WIKI (GWW "Disrupting Chop", read 2026-09-23): the disable \
+clause is conditioned on "that action was a skill" (20 seconds) -- a signet is a skill, so the tape \
+AGREES (the survey read "spell" there; the page does not say it; the client's own description of \
+340, resolved at run time, says the same). Client 38797: id 340, type_code 14, axe, 6 adrenaline \
+(38888: 5), recharge 1 (38888: 0). The strike's +20 is skills.toml's, not this row's."""
 
 [skill_effect.230]
 scale_means = "Lightning damage"

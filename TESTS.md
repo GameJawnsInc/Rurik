@@ -6879,16 +6879,29 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   THEN `[10]` THEN the word); `interrupt_body` on a hostile mid-cast (`[59] [35]`, no hold, the
   slot recharging 24 s), on a hero mid-cast (E5 `[59]` E2 `[35]` E5 on the hero's id), on a
   swing in flight (`[3] [35]`, the landing dropped, the chain's clock untouched), on a body
-  doing neither (nothing), under the flag (nothing); and the three content rows. §2 reads the
+  doing neither (nothing), under the flag (nothing); and the three content rows. **The fix
+  pass (same day)** added the body victim through `land_swing_on_body` (a hostile's 340 on a
+  party body mid-cast: the word, then `[59] [35]` on the body, its slot recharging 24 s — the
+  first cut had no hook on that path), the two hook sites that had no test (`hit_enemy` with a
+  340 skill strike on a hostile mid-cast; `land_player_spell_shot` with a 230 shot on a
+  hostile's swing in flight — the word, then the run, on a body), the three NOT-swinging
+  states in which the swing branch used to fire and now sends nothing (a chain paused in a
+  cast's aftercast, E5 sent and E3 owed — retail's 3 of 3 such hits carry no `[35]`; a follow
+  leg walking in; a target 5000 u out of reach), and `mode="action"` passed explicitly (D6's
+  entry point) interrupting a cast on a skill whose row says nothing. §2 reads the
   live corpus through `interruptjoin.census()` (declared skip without the vault): EXACTLY 2
   property-35 messages on tapes stamped 2026-09-23 or earlier (a third reddens it; a later
-  tape does not), ≥ 34 `[59]`, ≥ 12 `[49]`, ≥ 92 `[10]`; both victims the observer, each run
-  opening `[8, victim, 0]` and contiguous; no `[63]` riding a `[35]` and no stop riding a
-  `[63]`; §1's OWN cast run and swing run equal to the tape's, byte for byte with the victim
-  id substituted in the agent slot (a blind replace rewrote skill 1 and the hold's 1 — the
-  first cut); the end-to-end ORDER at the victim equal to the tape's for both witnesses; the
-  tape's 0x00E6 at 24.0 ± 0.1 s after the interrupt; the interrupters 340 and 230 read off
-  the `[10]` words. 30 checks, floor 21 (the sender's 21). Read-only on the vault),
+  tape does not), ≥ 34 `[59]`, ≥ 12 `[49]`, ≥ 92 `[10]`; both victims the observer, in each
+  batch the FIRST interrupt-family message at the victim the hold release `[8, victim, 0]`
+  (a stop or bar message ahead of it reddens this — the first cut's "the run opens with
+  `[8]`" was true by construction) and the run contiguous; P5 as registered (no batch with
+  a `[63]` and a `[35]` on one agent — the first cut's ended in `or True`); no `[63]` riding
+  a `[35]` and no stop riding a `[63]`; §1's OWN cast run and swing run equal to the tape's,
+  byte for byte with the victim id substituted in the agent slot (a blind replace rewrote
+  skill 1 and the hold's 1 — the first cut); the end-to-end ORDER at the victim equal to the
+  tape's for both witnesses; the tape's 0x00E6 at 24.0 ± 0.1 s after the interrupt; the
+  interrupters 340 and 230 read off the `[10]` words. 38 checks, floor 28 (the sender's 28;
+  30 / 21 before the fix pass). Read-only on the vault),
   `toolkit/authsrv/test_recharge.py` (**2026-09-23, DESKWORK-D5 step 4 — an NPC's per-slot
   recharge runs from the cast's COMPLETION, not its start.** §1 is the sender, fixture-less:
   `npc_recharge_anchor` returns the activation under the completion anchor and 0 under

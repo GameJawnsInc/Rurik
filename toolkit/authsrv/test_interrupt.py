@@ -22,6 +22,14 @@ interrupted attack skill (the cancel family's split); the un-queue of a queued c
 (WIKI); a BODY as victim (`interrupt_body`: the stop + [35] without the hold, a hero's
 bar getting the E5 / E2 / E5 mirror). `--no-interrupts` is the known-bad arm.
 
+THE FIX PASS (2026-09-23, D5B-R1/R2, ENG-1/4/5/10d) added: the body victim through
+`land_swing_on_body` (a hostile's 340 on a party body -- the first cut had no hook on
+that path, so no NPC attack skill interrupted anything), the two hook sites that had no
+test (`hit_enemy`, `land_player_spell_shot`), and the three NOT-swinging states the
+swing branch used to fire in (a chain paused in a cast's aftercast -- retail 3 of 3
+such hits carry no [35] -- a follow leg walking in, a target out of reach), plus the
+`mode` override that is D6's entry point.
+
 Section 1 needs no vault (the sender). Section 2 reads `vault/captures/live/` through
 `interruptjoin.census()` and is declared a skip without it; it compares section 1's
 OWN output against the tape's bytes, agent id substituted, so a hand-copied constant
@@ -48,9 +56,10 @@ import authsrv                                                 # noqa: E402
 import vaultpath                                               # noqa: E402
 
 # Floor from the green run of 2026-09-23: section 1 alone (the fixture-less sender,
-# 21 of the 30). Section 2 (the tape, 9) is declared a skip without the vault. The
-# first cut declared 22 from a guess and the count came back 21 -- set from the run.
-LEDGER = checks.Ledger("the interrupt on the wire", floor=21)
+# 28 of the 38 after the fix pass; 21 of 30 before it). Section 2 (the tape, 10) is
+# declared a skip without the vault. The first cut declared 22 from a guess and the
+# count came back 21 -- set from the run, both times.
+LEDGER = checks.Ledger("the interrupt on the wire", floor=28)
 check = checks.adopt(LEDGER)
 
 P = authsrv.PLAYER_AGENT_ID
@@ -307,8 +316,129 @@ def section_sender():
               "victim with no disable, 322 nothing",
               f"{authsrv.skill_interrupts(CHOP)} +{authsrv.skill_interrupt_disable(CHOP)}, "
               f"{authsrv.skill_interrupts(JAVELIN)} +{authsrv.skill_interrupt_disable(JAVELIN)}")
+        # ---- THE FIX PASS (2026-09-23, D5B-R1/R2, ENG-1/4/5/10d) -------------------
+        # (o) END TO END, a BODY as victim through land_swing_on_body: a hostile's
+        # 340 at a PARTY BODY mid-cast -- the word, THEN the body's run. The first
+        # cut hooked land_swing's PLAYER branch only, so no NPC's attack skill could
+        # interrupt a hero or a henchman (RECONSTRUCTION, as every body victim).
+        sent, send, st = _fake()
+        st["agents"][20] = _party_body_casting()
+        body = st["agents"][104]
+        res = authsrv.land_swing(send, st, 104, body, 0, skill_id=CHOP, target_id=20)
+        hero = st["agents"][20]
+        iw = _idx(sent, FLT, [agents.PROP_DAMAGE, 20])
+        i59 = _idx(sent, INT, [STOP_SKILL, 20])
+        i35 = _idx(sent, INT, [INTERRUPTED, 20])
+        check(res == "landed" and iw is not None and i59 is not None and i35 == i59 + 1
+              and iw < i59 and hero["casting"] is None and hero["cast_lands_at"] is None
+              and abs(hero["skill_ready"][0] - (time.time() + 24.0)) < 0.5,
+              "through land_swing_on_body: a hostile's 340 on a party body mid-cast lands "
+              "its word, THEN [59, body, 0] [35, body, 0]; the body's cast is dropped and its "
+              "slot recharges 24 s (RECONSTRUCTION; the first cut had no hook on this path)",
+              f"{res} {sent}")
+        # (p) END TO END, hit_enemy: the PLAYER's 340 (skill_strike) on a hostile
+        # mid-cast -- the word, then the body's run (this site had no test).
+        sent, send, st = _fake()
+        body = st["agents"][104]
+        body.update({"skills": ((SIGNET, 2.0, 4.0),), "skill_ready": [0.0], "casting": 0,
+                     "cast_lands_at": time.time() + 1.0,
+                     "health": 1000.0, "max_health": 1000.0})
+        res = authsrv.hit_enemy(send, st, 104, 0, bonus_damage=20.0, skill_strike=True,
+                                skill_id=CHOP)
+        iw = _word_idx(sent, 104)          # 16, or 17 on a critical roll
+        i59 = _idx(sent, INT, [STOP_SKILL, 104])
+        i35 = _idx(sent, INT, [INTERRUPTED, 104])
+        check(res == "landed" and iw is not None and i59 is not None and i35 == i59 + 1
+              and iw < i59 and body["casting"] is None
+              and abs(body["skill_ready"][0] - (time.time() + 24.0)) < 0.5,
+              "through hit_enemy: the player's 340 on a hostile mid-cast -- the word, then "
+              "[59, body, 0] [35, body, 0], the slot recharging 24 s (RECONSTRUCTION)",
+              f"{res} {sent}")
+        # (q) END TO END, land_player_spell_shot: the PLAYER's 230 arriving on a
+        # hostile whose swing is in flight -- the word (hit_enemy's), then [3] [35].
+        sent, send, st = _fake()
+        body = st["agents"][104]
+        body.update({"swinging": True, "swing_lands_at": time.time() + 0.3, "last_swing": 7.0,
+                     "health": 1000.0, "max_health": 1000.0})
+        shot = {"spell": {"skill_id": JAVELIN, "amount": 12.0, "visual": None, "first": False},
+                "target": 104}
+        res = authsrv.land_player_spell_shot(send, st, 0, shot)
+        iw = _word_idx(sent, 104)
+        i3 = _idx(sent, INT, [STOP_ATK, 104])
+        i35 = _idx(sent, INT, [INTERRUPTED, 104])
+        check(res == "landed" and iw is not None and i3 is not None and i35 == i3 + 1
+              and iw < i3 and body["swing_lands_at"] is None and body["last_swing"] == 7.0,
+              "through land_player_spell_shot: the player's 230 on a hostile's swing in "
+              "flight -- the word, then [3, body, 0] [35, body, 0], the landing dropped, the "
+              "clock untouched (RECONSTRUCTION: a body's word is hit_enemy's, ahead of the run)",
+              f"{res} {sent}")
+        # (r) NOT SWINGING: the chain PAUSED in a cast's AFTERCAST (E5 sent, E3 owed).
+        # Retail: 3 of 3 such hits by 340 / 230 carry no [35] (_player_chain_running).
+        sent, send, st = _fake()
+        st["attacking"] = 104
+        done = _cast()
+        done["e5_sent"] = True
+        st["pending_casts"] = [done]
+        r340 = authsrv.interrupt_player(send, st, 0, CHOP, 104)
+        r230 = authsrv.interrupt_player(send, st, 0, JAVELIN, 117)
+        check(r340 is None and r230 is None and sent == [] and st["attacking"] == 104,
+              "AFTERCAST: a chain paused for a cast (E5 sent, E3 owed) is not swinging -- "
+              "neither 340 nor 230 sends the swing run (retail: 3 of 3 aftercast hits, no [35])",
+              f"{r340} {r230} {sent}")
+        # (s) NOT SWINGING: the follow leg is walking the body in (`approach`).
+        sent, send, st = _fake()
+        st["attacking"] = 104
+        st["approach"] = {"target": 104, "t0": time.time()}
+        res = authsrv.interrupt_player(send, st, 0, CHOP, 104)
+        check(res is None and sent == [],
+              "APPROACH: a chain whose follow leg is still walking in is not swinging -- "
+              "nothing goes out (UNOBSERVED on retail; left alone)",
+              f"{res} {sent}")
+        # (t) NOT SWINGING: the target out of reach (the chain stalls there).
+        sent, send, st = _fake()
+        st["attacking"] = 104
+        st["agents"][104]["pos"] = (5000.0, 0.0)
+        res = authsrv.interrupt_player(send, st, 0, CHOP, 104)
+        check(res is None and sent == [],
+              "OUT OF REACH: a chain whose target is 5000 u away is not swinging -- nothing "
+              "goes out",
+              f"{res} {sent}")
+        # (u) D6's hook: `mode` overrides the row -- a skill-less "action" interrupt
+        # on an open cast runs the cast shape with no disable.
+        sent, send, st = _fake()
+        st["pending_casts"] = [_cast()]
+        res = authsrv.interrupt_player(send, st, 0, POWER_ATTACK, 104, mode="action")
+        check(res == "cast" and sent == [(INT, [HOLD, P, 0]), (E5, [P, SIGNET, 0, 4]),
+                                         (INT, [STOP_SKILL, P, 0]), (E2, [P, SIGNET, 0]),
+                                         (INT, [INTERRUPTED, P, 0])],
+              "mode='action' passed explicitly (D6's entry point) interrupts the cast on a "
+              "skill whose row says nothing, with no second E5",
+              f"{res} {sent}")
     finally:
         authsrv.INTERRUPTS = saved
+
+
+def _idx(sent, op, head):
+    """Index of the first message with this opcode whose values open with `head`."""
+    return next((i for i, (o, v) in enumerate(sent) if o == op and v[:len(head)] == head),
+                None)
+
+
+def _word_idx(sent, victim):
+    """Index of the first damage word at `victim`: property 16, or 17 when the
+    player's roll came up a critical (hit_enemy's own word for one)."""
+    return next((i for i, (o, v) in enumerate(sent)
+                 if o == FLT and len(v) > 1 and v[1] == victim and v[0] in (16, 17)), None)
+
+
+def _party_body_casting():
+    """A party body (a hero) mid-cast on Healing Signet, for a hostile's swing to land on."""
+    return {"name": "a hero", "dead": False, "died_at": 0.0, "health": 500.0,
+            "max_health": 500.0, "last_hit": 0.0, "pos": (5.0, 0.0), "plane": 0,
+            "allegiance": agents.ALLEGIANCE_PLAYER, "attack_speed": authsrv.ENEMY_ATTACK_SPEED,
+            "effects": 0, "attacks_back": False, "skills": ((SIGNET, 2.0, 4.0),),
+            "skill_ready": [0.0], "last_swing": 0.0, "casting": 0,
+            "cast_lands_at": time.time() + 1.0}
 
 
 def _f32(dw):
@@ -364,10 +494,15 @@ def section_corpus():
           "tape of that day or earlier reddens this); >= 34 [59], >= 12 [49], >= 92 [10]",
           f"[35] {len(dated)} of {len(tfs)} dated, [59] {sc['n59']}, [49] {sc['n49']}, "
           f"[3] {sc['n3']}, [10] {sc['n10']}, [63] {sc['n63']}")
-    check(sc["p2"] and all(r["own"] for r in tfs),
-          "both victims are the observer; each interrupt run opens with [8, victim, 0] and "
-          "is contiguous",
-          f"{[(r['capture'], r['own'], r['run_contiguous']) for r in tfs]}")
+    check(sc["p2"] and all(r["own"] and r["run_opens_family"] for r in tfs),
+          "both victims are the observer; in each batch the FIRST interrupt-family message "
+          "at the victim is the hold release [8, victim, 0] (no stop or bar message ahead of "
+          "it) and the run is contiguous",
+          f"{[(r['capture'], r['own'], r['run_opens_family'], r['run_contiguous']) for r in tfs]}")
+    check(sc["p5"] and sc["knockdown_with_35"] == 0,
+          "P5 as registered: no batch holds a [63] and a [35] on one agent (a real "
+          "predicate now; the first cut's ended in `or True`)",
+          f"p5 {sc['p5']}, [63] with [35]: {sc['knockdown_with_35']}")
     check(sc["knockdown_with_35"] == 0
           and all(r["kind"] != "knockdown" for r in c["stops"]),
           "no [63] rides a [35] batch and no stop rides a [63] batch: a knock-down is not "

@@ -17285,10 +17285,43 @@ def _open_player_cast(state):
     return None
 
 
-def interrupt_player(send, state, conn_id, by_skill, by_agent):
+def _player_chain_running(state):
+    """Is the player's auto-attack chain actually SWINGING -- the state the
+    swing witness was in (in reach, in its backswing)? False while the chain
+    is PAUSED for a cast (any pending entry short of its E3: the pause the
+    press bought, the same predicate the press's own [3] reads at the
+    `chain_live` site), while the follow leg walks the body in (`approach`),
+    or with the target out of reach (the chain stalls there, ANIMREF-RE 38).
+    `attacking` alone is the TARGET, not a running chain, and the first cut
+    read it alone (fix pass, D5B-R2 / ENG-4). THE NEGATIVE CONTROL, retail:
+    three 340 / 230 hits landed inside the observer's 0.75 s aftercast (E5
+    0.26-0.45 s before, E3 0.30-0.48 s after -- 340 at 20260916T213125
+    t=459.419; 230 at 20260917T090355 t=378.100 and 384.106) and none carries
+    a [35], 3 of 3; the two that do interrupt hit a cast in activation and a
+    chain in its backswing. What a hit on a chain WALKING IN or out of reach
+    does is UNOBSERVED (no such hit is on tape); it is left alone here."""
+    tid = state.get("attacking")
+    if not tid:
+        return False
+    if any(not c["e3_sent"] for c in state.get("pending_casts") or ()):
+        return False
+    if state.get("approach") is not None:
+        return False
+    agent = state.get("agents", {}).get(tid)
+    if agent is None or agent.get("pos") is None:
+        return False
+    px, py = _reach_frame(state)
+    ax, ay = agent["pos"]
+    return math.hypot(float(ax) - px, float(ay) - py) <= attack_reach()
+
+
+def interrupt_player(send, state, conn_id, by_skill, by_agent, mode=None):
     """Retail's interrupt at the PLAYER, both witnessed shapes (DESKWORK-D5
     step 2; `interruptjoin.py`; castmech P1 / animref D5, 2026-09-23 notes).
     Returns "cast", "swing" or None (nothing to interrupt, or the flag off).
+    `mode` overrides the interrupter's content row ("action" / "attacking"):
+    the entry point for a skill-less interrupt -- Dazed's "any hit interrupts
+    a spell" is D6's and rides this when built; nothing passes it today.
 
     A CAST in activation -- OBSERVED 1 of 1 (Disrupting Chop 340 on Healing
     Signet, 1.55 s into 2.0 s; 20260916T213125 conn 57894 t=484.333), sent in
@@ -17321,11 +17354,15 @@ def interrupt_player(send, state, conn_id, by_skill, by_agent):
     holding it -- does. "attacking" (230) does not touch a spell in
     activation: the chain is paused for a cast, so the victim is not
     attacking; it does interrupt an attack skill in activation (UNVERIFIED
-    reading of "attacking foes").
+    reading of "attacking foes"). ONLY A RUNNING CHAIN takes this branch
+    (`_player_chain_running`): a chain paused in a cast's aftercast, walking
+    in, or out of reach is not swinging, and retail's three aftercast hits by
+    these interrupters carry no [35] (the control is in that helper).
     """
     if not INTERRUPTS or state.get("player_dead"):
         return None
-    mode = skill_interrupts(by_skill)
+    if mode is None:
+        mode = skill_interrupts(by_skill)
     if mode is None:
         return None
     now = time.time()
@@ -17383,7 +17420,7 @@ def interrupt_player(send, state, conn_id, by_skill, by_agent):
               + (f", {unqueued} queued cast(s) un-queued" if unqueued else "")
               + " [DESKWORK-D5]", flush=True)
         return "cast"
-    if state.get("attacking") and mode in ("action", "attacking"):
+    if _player_chain_running(state) and mode in ("action", "attacking"):
         held = state.get("action_hold", 0) == 1
         if held:
             action_hold(send, state, 0, f"skill {by_skill} interrupts the attack")
@@ -17404,7 +17441,8 @@ def interrupt_player(send, state, conn_id, by_skill, by_agent):
     return None
 
 
-def interrupt_body(send, state, agent_id, agent, conn_id, by_skill, by_agent):
+def interrupt_body(send, state, agent_id, agent, conn_id, by_skill, by_agent,
+                   mode=None):
     """An interrupt landing on a BODY -- a hostile or a party body -- as the
     victim. RECONSTRUCTION, ALL OF IT: both witnesses have the player as the
     victim and no tape shows a body interrupted, so this mirrors the player's
@@ -17419,10 +17457,12 @@ def interrupt_body(send, state, agent_id, agent, conn_id, by_skill, by_agent):
     stop properties on other agents ARE consumed by the client (the corpus's
     [59] / [49] / [3] cancels on PvP casters); [35] on a non-observer is
     unwitnessed, same handler as [63] which knock_down already sends to bodies.
-    Returns "cast", "swing" or None."""
+    Returns "cast", "swing" or None. `mode` overrides the row (D6's hook, as
+    interrupt_player's)."""
     if not INTERRUPTS or agent is None or agent.get("dead"):
         return None
-    mode = skill_interrupts(by_skill)
+    if mode is None:
+        mode = skill_interrupts(by_skill)
     if mode is None:
         return None
     now = time.time()
@@ -22790,6 +22830,14 @@ def land_swing_on_body(send, state, agent_id, agent, tid, conn_id, bonus=0.0,
                        _damage_fraction(_prep_pts, row["max_health"], agents.PROP_DAMAGE,
                                         f"agent {agent_id}'s preparation {_prep_sid}"),
                        conn_id, f"agent {agent_id}'s preparation {_prep_sid}'s own word")
+    # DESKWORK-D5 step 2 (fix pass, D5B-R1 / ENG-1): an ATTACK SKILL that
+    # interrupts, landing on a BODY -- a hostile's 340 on a party body or a
+    # party body's on a hostile -- after the words, as land_swing puts it at
+    # the player (1 of 1). A body as victim is RECONSTRUCTION (interrupt_body);
+    # the first cut hooked land_swing's player branch only, so no NPC's attack
+    # skill could interrupt anything. A killing blow interrupts nothing.
+    if skill_id is not None and not target_dead(state, tid):
+        interrupt_body(send, state, tid, row, conn_id, skill_id, agent_id)
     return "landed"
 
 
