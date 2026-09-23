@@ -1093,7 +1093,7 @@ run.
 `msghandler.py --callers`, `asserts.py --at`).** The game wrapper is `0x0091FD80` (12
 bytes; `0x00920700` on 38888, `0x0091FDE0` on 38833/38849, `0x00915B40` on 38519), and
 the census's "0 callers" is because it is reached by a tail `jmp` from ChCliApi
-`0x0080E000`, which asserts `hotKey < 8` (ChCliApi:4359) and — unlike its neighbours
+`0x0080E000`, which asserts the hotKey bound (below 8; ChCliApi, source line 4359) and — unlike its neighbours
 `0x0080E030`/`0x0080E050`, the `0x001A`/`0x001B` senders, which gate on
 `MissionCliGetMap() == 1` — has **no map gate**. The schema's shape holds: `[agent_id,
 dword]` = the hero's AGENT and the panel slot. `0x0080E000` has two callers, both in the
