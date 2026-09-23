@@ -262,6 +262,12 @@ def _validate_heroes(path, who, heroes):
                                or not isinstance(row[key], int)
                                or row[key] < 0):
                 _refuse(path, f"{where}: {key} must be a non-negative int")
+        if "disabled_slots" in row:
+            m = row["disabled_slots"]
+            if isinstance(m, bool) or not isinstance(m, int) or not 0 <= m <= 0xFF:
+                _refuse(path, f"{where}: disabled_slots must be an int 0..255 "
+                              f"(the hero panel's suppress mask, one bit per "
+                              f"slot; DESKWORK-D1 step 6)")
 
 
 def validate(data, path):
@@ -356,6 +362,19 @@ def validate(data, path):
         if "skillbar" in row:
             _validate_hero_bar(path, f"character {row['name']!r}",
                                row["skillbar"])
+        if "item_locations" in row:
+            locs = row["item_locations"]
+            if not isinstance(locs, dict):
+                _refuse(path, f"character {row['name']!r}: item_locations must "
+                              f"be an object keyed by item id (DESKWORK-D1 step 8)")
+            for iid, cell in locs.items():
+                if (not str(iid).isdigit() or not isinstance(cell, list)
+                        or len(cell) != 2
+                        or not all(isinstance(v, int) and not isinstance(v, bool)
+                                   and v >= 0 for v in cell)):
+                    _refuse(path, f"character {row['name']!r}: item_locations["
+                                  f"{iid!r}] must be [bag, slot], two non-negative "
+                                  f"ints under an integer item id")
         blob = row.get("settings_blob", "")
         if blob:
             try:
@@ -782,6 +801,61 @@ class Store:
         row["kicked_heroes"] = sorted(have)
         self.save()
         return row["kicked_heroes"]
+
+    # ---- suppressed hero skills (DESKWORK-D1 step 6) ----------------------
+    # The hero panel's suppress click (c2s 0x0019, hold the suppress key and
+    # click a skill) toggles one bit of an 8-bit mask, bit = panel slot, and
+    # the client draws it from s2c 0x0065 [agent, mask] -- the byte retail's
+    # load block sends as 0 for every hero (8 of 8 on the live corpus). Per
+    # HERO, per CHARACTER, like the bar it indexes: slot N means slot N of
+    # THIS hero's `skillbar` as the panel shows it (authsrv.hero_panel_bar_ids).
+    def hero_disabled_slots(self, uuid_hex, hero_index):
+        """The hero's suppress mask, 0 when none is stored."""
+        hero = self.hero_row(uuid_hex, hero_index)
+        return 0 if hero is None else int(hero.get("disabled_slots") or 0)
+
+    def set_hero_disabled_slots(self, uuid_hex, hero_index, mask):
+        """Write the whole mask (0..255); saves. Returns the stored value."""
+        hero = self.ensure_hero(uuid_hex, hero_index)
+        if hero is None:
+            return None
+        if isinstance(mask, bool):
+            # int(True) == 1 is a legal mask by accident; validate() refuses a
+            # stored bool, so the setter refuses it too (the fix pass, ENG-M3).
+            raise ValueError("suppress mask must be an int 0..255, not a bool")
+        mask = int(mask)
+        if not 0 <= mask <= 0xFF:
+            raise ValueError(f"suppress mask {mask} outside 0..255; the "
+                             f"client's mask is eight bits (hotKeyState +0xA4)")
+        hero["disabled_slots"] = mask
+        self.save()
+        return mask
+
+    # ---- where the character's items are (DESKWORK-D1 step 8) -------------
+    # {item id: [bag, slot]} for the items the dress creates, written when an
+    # in-game move (c2s 0x004F) or equip (0x0030) is accepted and read back by
+    # the next dress so armour and set items are where the character left
+    # them. Item ids are OURS (the dress's constants), so a stored cell for an
+    # id this launch does not create is ignored at the dress, never a refusal.
+    def item_locations(self, uuid_hex):
+        """{int item_id: (bag, slot)}; {} when none is stored."""
+        row = self.character_by_uuid(uuid_hex)
+        locs = (row or {}).get("item_locations") or {}
+        return {int(k): (int(v[0]), int(v[1])) for k, v in locs.items()}
+
+    def set_item_location(self, uuid_hex, item_id, bag, slot):
+        """Record one item's cell; saves. Returns the stored {id: [bag, slot]}."""
+        row = self.character_by_uuid(uuid_hex)
+        if row is None:
+            return None
+        bag, slot = int(bag), int(slot)
+        if bag < 0 or slot < 0:
+            raise ValueError(f"item {item_id}: bag {bag} slot {slot} -- a cell is "
+                             f"two non-negative ints")
+        locs = row.setdefault("item_locations", {})
+        locs[str(int(item_id))] = [bag, slot]
+        self.save()
+        return dict(locs)
 
 
 def find_character(uuid_hex, base=None):

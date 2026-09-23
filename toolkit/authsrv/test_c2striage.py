@@ -217,15 +217,23 @@ if live is not None:
     led.ok(un_live == [],
            "...and the same over the LIVE census, not just the file",
            f"untriaged {[f'0x{o:04x}' for o in un_live]}")
-    # The three named this step are in the census with their reply chains.
-    for op, nm in ((0x009F, "HENCHMAN_ADD"), (0x00B1, "MAP_TRAVEL"),
-                   (0x004F, "ITEM_MOVE")):
+    # The three named at step 3 are in the census with their reply chains; two
+    # still wait for their arm, and 0x004F ITEM_MOVE got its arm at step 8
+    # (2026-09-23) -- so it must now be HANDLED and off the allowlist.
+    for op, nm in ((0x009F, "HENCHMAN_ADD"), (0x00B1, "MAP_TRAVEL")):
         led.ok(named.get(op, ("", ""))[0] == nm and op in dropped
                and op in live[0] and op not in (handled or {}),
                f"0x{op:04X} is named {nm} (medium), on retail's wire, not yet "
                f"armed, and its drop carries a reason",
                f"name {named.get(op)}, dropped {op in dropped}, "
                f"seen {op in live[0]}")
+    for op, nm in ((0x004F, "ITEM_MOVE"), (0x0030, "EQUIP_ITEM")):
+        led.ok(named.get(op, ("", ""))[0] == nm and op not in dropped
+               and op in live[0] and op in (handled or {}),
+               f"0x{op:04X} is named {nm}, on retail's wire, ARMED (DESKWORK-D1 "
+               f"step 8) and no longer on the allowlist",
+               f"name {named.get(op)}, dropped {op in dropped}, "
+               f"seen {op in live[0]}, handled {op in (handled or {})}")
 else:
     led.skip("§4 the live half", "no live captures")
 # The status vocabulary, and the reverse predicate's known-bad arm.

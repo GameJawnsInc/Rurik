@@ -6159,10 +6159,11 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   connections, `0x000D` on 1,384). It reads `retail_c2s.json` beside the test -- the
   census `c2striage.py --write` commits, a FILE in git so this test stays vault-free
   -- and reddens on any opcode retail sent that is neither handled, named, nor on
-  `DROPPED_ON_PURPOSE` (26 rows now: the eight, fifteen UNNAMED rows each carrying
+  `DROPPED_ON_PURPOSE` (26 rows at step 3: the eight, fifteen UNNAMED rows each carrying
   what was measured and what would name it, and three named this step and dropped
   until their arm -- `0x009F` HENCHMAN_ADD, `0x00B1` MAP_TRAVEL, `0x004F`
-  ITEM_MOVE). The orphan rule widens with it: a row may answer "why is this opcode
+  ITEM_MOVE; 24 since DESKWORK-D1 step 8 armed `0x004F` and `0x0030` EQUIP_ITEM and
+  took both rows off, `test_itemmoves.py`). The orphan rule widens with it: a row may answer "why is this opcode
   RETAIL SENDS dropped". Floors on the file (57 opcodes, 96 connections -- the corpus
   is append-only) guard the vacuity; the known-bad arms are a census carrying an
   undecided `0x00FE`, which the predicate must name alone, and the `0x0008` row
@@ -6378,6 +6379,97 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   has ONE sender; `main()` reads `HEROES_PARTY_MAX`, not the literal 7. Drives the real
   handlers with a fake send and a scratch store like `test_herokick.py`. Floor 48 ->
   78 from the green run, ~3 s),
+  `toolkit/authsrv/test_heroskilltoggle.py` (**2026-09-23, DESKWORK-D1 step 6: the hero
+  panel's SUPPRESS click, c2s 0x0019 HERO_SKILL_TOGGLE**, `studies/cmsg/FINDINGS.md`
+  §DESKWORK-D1 "The hero skill toggle". RECONSTRUCTION end to end -- no retail tape and
+  no loopback log carries the request -- so it pins the READING and that the arm does it:
+  §1 a click on an occupied panel slot flips one bit of the hero's mask and is answered
+  with the whole mask `0x0065 [hero agent, mask]` (retail's only observed writer of the
+  client's hotKeyState mask, 8 of 8 at load, all zero), a second click releases it, two
+  slots compose, `--hero-skill-toggle-per-bit` answers `0x0064 [agent, slot, value]`
+  instead; §2 refusals send NOTHING (a non-hero agent, a kicked hero, hotKey 8 and -1, an
+  EMPTY panel slot, a malformed request) with the un-kicked hero as the control; §3 the
+  BODY stops casting it: `pick_skill` never returns a suppressed skill, the join is by
+  SKILL ID through the PANEL's eight slots (a stored bar with a hole suppressed at panel
+  slot 2 removes skill 348, not the body's list index 2; the KNOWN-BAD join by list index
+  picks the wrong skill), releasing restores the pick, all-suppressed picks None; **the
+  client's own bar edits move the mask (the fix pass, EVID-D1C-1)**: a `0x005E` swap
+  through the real handler EXCHANGES the two slots' bits (the client's `0x00821460`,
+  ChCliSkill:332/333) so suppression follows the SKILL, the per-SLOT reading being the
+  KNOWN-BAD arm, and a `0x005C` set CLEARS the set slot's bit (`0x008212C0`); §3b a
+  SUPPRESSED RESURRECTION is not cast by `ally_cast_tick`'s dead-first branch and is
+  cast once released (ENG-B2); §3c without `--persist` the toggle reads the SESSION's
+  edited bar, so a slot the client just filled is answered rather than refused as EMPTY
+  (ENG-M1); §4 `--persist` writes `disabled_slots` to the hero's row, a fresh connection
+  reads it and its load block's two 0x0065 rows carry it, the setter and
+  `charstore.validate` refuse 256 / -1 / a bool (the stored mask unchanged) and accept
+  0x9D, `--no-hero-skill-toggle` reads and sends nothing stored; §5 BYTE-IDENTITY: no
+  toggle means `[agent, 0]` twice (retail's 8-of-8 value) and `hero_panel_bar_ids`
+  equals the block's pre-step expression; §6 SOURCE LOCKS with mutations: the arm calls
+  the handler only under `HERO_SKILL_TOGGLE_ENABLED`, `main()` wires both flags,
+  `pick_skill` reads `skill_disabled_ids`, `hero_body_create` seeds it,
+  `sync_hero_body_bar` refreshes it, the block's two rows carry the mask, `serverargs.py`
+  defines both flags, both bar-edit handlers call `hero_mask_write`, the dead-first loop
+  skips a suppressed id, the legacy rig's `0x00DA` is followed by a `0x0065` carrying a
+  stored mask (the `0x00DA` setter zeroes the client's mask, EVID-D1C-3),
+  `hero_panel_bar_ids` reads the session's bar first. Drives the real handlers with a
+  fake send and a scratch store. Floor 53 -> 71 from the green run, ~2 s),
+  `toolkit/authsrv/test_itemmoves.py` (**2026-09-23, DESKWORK-D1 step 8: the inventory
+  pair, c2s 0x004F ITEM_MOVE and 0x0030 EQUIP_ITEM, and the item store behind them**,
+  `toolkit/authsrv/itemstore.py`, `studies/cmsg/FINDINGS.md` §DESKWORK-D1 "Inventory".
+  §1 RETAIL'S BATCHES, value for value against the transcription, through the pure leaf
+  with retail's own ids, bag ids, inventory keys and agents: the three field unequips of 20260917T090355 :53310
+  (`0x004F [4,2,1]` → `0x014B [1,213,2,1]` + `0x006F [25,6,0]`, and the gloves' and
+  boots'), their three re-equips (`0x0030 [213]` → `0x014B [1,213,3,4]` + `0x006F
+  [25,6,213]` — retail's bag in ldufr's order, its visual in GWLP-R's), the outpost
+  off-hand move of 20260919T103604 :58638 (`0x014B [241,17730,136,6]` alone), the
+  Factions wand of 20260913T210901 :60877, the four outpost swaps of 20260819T132414
+  :53419 (`0x0152 [159, occupant, item]` alone, the occupant taking the item's cell);
+  KNOWN-BAD arms: our identity visual mapping on retail's head (slot 4, the tape says
+  6), our visual-order bag on retail's equip, a visual in the outpost. §1b THE SAME
+  TWELVE DECODED FROM THE TAPES (vault-gated, `LEDGER.skip` on a bare machine; the fix
+  pass, EVID-D1C-4): `livewire.decode_conn` on the four connections, the item state
+  built from the tape's own 0x013F/0x013E/0x014B/0x0152 rows (the equipped bag = the
+  type-2 bag, the key, the field bit and the agent read off the tape; only the item
+  TYPES transcribed), the planner's batch against the s2c rows inside 0.1 s of each
+  request, and the count of requests pinned at twelve. §2 REFUSALS return no batch (an empty source, the equipped bag as a
+  destination, an undeclared bag, a slot past the bag, a FILLED destination
+  (ItCliInv:105); an unknown, an already-worn, a slot-less type, an off hand beside a
+  two-hander) and the two-hander that displaces a worn off hand (the shield leaves
+  FIRST to the backpack's first free slot, RECONSTRUCTION; a full backpack refuses).
+  §3 RESTORE: a stored armour cell wins, a stored HAND change is kept at the default
+  with a note, an unknown id is ignored, an illegal cell or a collision discards the
+  whole store. §4 THE SERVER: `item_layout_begin`'s default layout is the constants'
+  and `itemstore.worn_array` over it equals the 0x006E fill the load path built before
+  this step; `--outpost` WINS over `--explorable` (ENG-M3); the real handlers with a fake
+  send in a field (visual) and a town (none); the DAMAGE MODEL follows the store — a head
+  in the backpack leaves `player_armour_at('warrior_head')` at 0.0 while the chest keeps
+  its rating, with the no-layout control (ENG-B5); six refusals send nothing; the hands
+  mirror (the weapon moved out → `SET_ITEMS_OVERRIDE[0] == (0, 0)`; `select_weapon_set`
+  then ENTERS an empty hand by `0x014B` and never sends a `0x0152` with a 0, and LEAVES
+  to a free backpack slot on the way back; the hammer equipped back and the sword
+  equipped over it move `agents.PLAYER_WEAPON` and the session's set items while the
+  LAUNCH RECORDS stand — ENG-B4; F2/F1 after that equip read the swing model off the
+  hands, not the record); THE NEXT CONNECTION dresses item 1 as the hammer and item 11 as
+  the sword and re-declares a shield dragged out (ENG-B4: the first cut created two
+  swords and named an undeclared item in 0x0147); RESERVED cells: a `0x004F` into a worn
+  set item's return cell is refused with the unreserved control, F1 puts the shield back
+  there, and a restored layout that fills it sends the shield to a free cell with the
+  reservation following (ENG-B3); `--persist` writes `item_locations`, a fresh dress
+  restores the armour cell and not the hand — from a BARE state, the store looked up by
+  the dress itself, with the no-store KNOWN-BAD/control (ENG-B1: REQUEST_ITEMS runs
+  before the load attaches the store); a restored set-item slot survives
+  `declare_weapon_sets` and F2/F1 (ENG-M2); `charstore.validate` refuses five malformed
+  shapes and accepts a good one, `--no-item-moves` reads nothing stored. §5 SOURCE LOCKS
+  with a mutation: both arms under `ITEM_MOVES_ENABLED`, `main()`'s wiring,
+  `item_layout_begin` before the weapon's create and `item_cell` at the five placements,
+  `declare_weapon_sets(send, state)`, the 0x006E build's `itemstore.worn_array` and
+  `hand_items`, `weapon_set_items`'s override, `select_weapon_set`'s two-real-leads
+  guard, no allowlist row for either opcode in `test_dispatch.py`, `--no-item-moves` in
+  `serverargs.py`, and the fix pass's five (the dress's store lookup and set-0 re-apply,
+  the mirror's untouched records, the slot map, the reserved cells, the armour read).
+  Floor 78 -> 102 from the green run (the bare-machine core; §1b's 17 ride the vault),
+  ~4 s),
   `toolkit/authsrv/test_labelrun.py` (the labelled input run, which names GAME_CMSG
   opcodes from what a human was told to do: a message lands in exactly one step's
   window, instance-load traffic is never folded into step 1, and a dirty idle CONTROL

@@ -28,6 +28,149 @@ move back.
 
 ---
 
+### DESKWORK-D1 (steps 6 + 8, fix pass) -- 2026-09-23 -- **the suppress mask follows the client's own bar edits; the dress reads the store it never read; reserved cells; the launch records stand; removed armour protects nothing; a suppressed resurrection is never cast**
+
+[studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md) §DESKWORK-D1 "The hero skill
+toggle" and "Inventory", each with a **Fix pass** record. **Desk work, no client
+launched.** Two reviews read the pass; every blocker and major was reproduced against the
+branch and re-derived from the client or the tapes before it was changed. **Corrects the
+two entries below it** (steps 6 and 8) on these points:
+
+- **Step 6 said the client's mask is "written only by 0x0065 and 0x0064" and that
+  slot-vs-skill on a rearrangement was UNOBSERVED. Both false.** `codescan --field 0xA4
+  --in ChCliSkill --writes` finds SIX stores on 38797: the two wire handlers, the `0x00DA`
+  setter (`0x008223B0`, mask = 0 before the slots refill), the whole-bar sender
+  (`0x00821390`, mask = 0), the `0x005C` sender (`0x008212C0`, ChCliSkill:258: `btr` the
+  set slot's bit) and the `0x005E`/`0x005F` sender (`0x00821460`, ChCliSkill:332/333:
+  the two slots' bits EXCHANGED). So suppression follows the SKILL on a swap and a set
+  clears it; the first cut kept the bit on the SLOT, pinned that in its test, and its body
+  cast the skill the client drew struck through (EVID-D1C-1). The server now mirrors the
+  three (`hero_mask_write` from both bar-edit handlers), the test's pin is inverted with
+  per-slot as the KNOWN-BAD arm, the legacy rig follows `0x00DA` with a stored mask
+  (EVID-D1C-3), a suppressed resurrection is skipped by `ally_cast_tick`'s dead-first
+  loop (ENG-B2), and without `--persist` the toggle reads the session's edited bar
+  (`state["hero_bars"]`, ENG-M1). `0x005C` is the bar edit, not the use path (`0x00821260`
+  sends `0x001C` only); the GWW citation is the page itself ("Guide to Hero Basics and
+  Optimization" §Forced skill use → Suppress, read through the browser).
+- **Step 6's entry said its affected set was "17 of 17 green … provlint"; provlint was
+  RED at that commit** (a piped `tail` hid the exit status) and green only at `b51a2b38`
+  (ENG-m2). The count stands corrected here rather than there.
+- **Step 8 said "the next dress restores armour and set items where they were left".
+  It did not, on any real connection**: REQUEST_ITEMS is answered before REQUEST_PLAYERS
+  attaches `charstore_game` (harness `20260922T175325`'s gamesrv log, lines 84 / 98 /
+  132), so `item_layout_begin` read no store and the test had pre-seeded it (ENG-B1). It
+  now looks the store up itself; the restored set-item slot also survives
+  `declare_weapon_sets` (ENG-M2).
+- **Step 8 said the sender "sends only when the item's bag has model 21".** 21 is
+  `0x00844800`'s default for any non-container item; the gate is `0x008454F0`'s "parent
+  bag of type 2 → the slot byte, else 9 → the local path" (EVID-D1C-2). Same conclusion.
+  17730's witness is the `0x014B` out at 150.310 and the `0x0152` back at 224.681, not
+  its load cell (EVID-D1C-7); the visual permutation is OBSERVED whole on `:53310`'s load
+  `0x006E` (EVID-D1C-6).
+- **Step 8 said "replayed byte for byte".** The test compared to a hand transcription;
+  it now also decodes the four connections through `livewire` and replays the twelve
+  requests against the tape's own item state (vault-gated, EVID-D1C-4).
+- **Three more blockers the reviewers reproduced:** an accepted `0x004F` could fill a
+  worn set item's return cell and the next switch sent `0x014B` into a filled cell —
+  reserved cells are refused and the switch falls back to a free one (ENG-B3); an equip
+  rewrote set 0's record and `WEAPON_SETS[k]`, so the next connection created two swords
+  and no hammer, or named an undeclared shield in `0x0147` — the records are never
+  written from an equip and the dress re-applies set 0's record first (ENG-B4, which also
+  closes the older set-switch form on `main`); removed armour still protected its
+  location — `player_armour_at` reads the item store and a removed piece leaves a bare
+  location, the spell path being the declared open edge (ENG-B5).
+
+`test_heroskilltoggle.py` 53 → 71, `test_itemmoves.py` 78 → 102 (+17 with the vault), both
+green; the step-6 affected set 17 of 17 green (1,276 checks) at `de0e0546`. **Still owed: the
+loopback clicks** (both runsheets, now with a swap-while-suppressed step and a zone-after-equip
+check).
+
+---
+
+### DESKWORK-D1 (step 8) -- 2026-09-23 -- **the inventory pair armed on an item store: c2s 0x004F ITEM_MOVE's field 1 settled (the item's slot in the EQUIPPED bag), 0x0030 EQUIP_ITEM's two shapes, retail's batches replayed byte for byte, cells persisted**
+
+[studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md) §DESKWORK-D1 "Inventory";
+`toolkit/authsrv/itemstore.py`. **Desk work, no client launched.** **Field 1 of
+`0x004F`, UNVERIFIED since step 3, read off the client:** the wrapper `0x00920DE0`
+is reached from GmItemHelpers `0x00526900` (asserts `sourceItemId` :279, `quantity`
+:281, `targetBag < ITEM_BAG_SLOTS` :282), which sends ONLY when the item's bag has
+model 21 -- the EQUIPPED bag -- and packs the item's own slot, the target bag's id and
+the target slot; so field 1 is the item's slot in the equipped bag and the source bag
+is implied. CORROBORATED 4 of 4 by the loads' own `0x013E` cells (head 213 at (3,4),
+boots 214 at (3,5), gloves 215 at (3,6) on `20260917T090355 :53310` moved as
+`[4,2,1]`/`[6,2,2]`/`[5,2,3]`; set 0's off hand 17730 at (231,1) on `20260919T103604
+:58638` moved as `[1,136,6]`). The general bag-to-bag move is another message and on
+no tape. **`0x0030`'s two shapes:** an EMPTY target slot draws `0x014B [key, item,
+equipped bag, slot]` + `0x006F [agent, visual, item]` (4 of 4, a field); an OCCUPIED
+one draws `0x0152 [key, occupant, item]` ALONE (4 of 4, `20260819T132414 :53419`, an
+outpost), the client exchanging the two items' cells. **Two slot orders:** retail's
+equipped BAG is ldufr's order (Head 4, Boots 5, Gloves 6) and the VISUAL array is
+GWLP-R's (Boots 3, Gloves 5, Head 6) -- both lineages right about different arrays;
+ours puts armour at the visual slot (legal; identity mapping), and the replay carries
+retail's two mappings with known-bad arms for each applied to the wrong array. **The
+`0x006F` rule:** a field's own-agent equip/unequip carries it (7 of 7), an outpost's
+does not (0 of 5); sent by the `0x0199` byte's rule. **Client asserts read first:**
+`0x014B` ItCliApi:2126 + the add worker's ItCliInv:105 (the destination must be
+EMPTY -- a filled cell is refused, never sent), `0x0152` ItCliApi:2253/2254/2257 and
+ItCliInv:687/688. **The model:** the dress decides every item's cell first
+(`item_layout_begin`, the constants' layout then the character's stored cells under
+`--persist`) and sends it through `item_cell` (byte-identical when nothing is stored);
+`handle_item_move` / `handle_equip_item` plan against the store (itemstore.plan_move /
+plan_equip) and refuse with nothing sent: an empty source, an undeclared bag, a slot
+past the bag, a FILLED destination, an unknown or worn item, a slot-less type, an off
+hand beside a two-hander; a two-hander displaces a worn off hand to the backpack FIRST
+(RECONSTRUCTION, the set switch's shape). The `0x006E` array and the player's `0x006D`
+are built from the store; an equip into slot 0/1 rewrites the ACTIVE set's items
+(`SET_ITEMS_OVERRIDE`) and the swing model (`apply_party_character`); a hand EMPTIED in
+game is the open edge (the swing model keeps the last weapon; said in the log), and
+`select_weapon_set` then enters the empty hand by `0x014B`, never a `0x0152` with a 0.
+Every accepted cell is persisted (`charstore` `item_locations`, validated); the next
+dress restores armour and set items, NOT a hand change (the sets own slots 0/1;
+logged). `schema/overrides.json` 79 and 48 carry the derivation; `test_dispatch` lost
+both allowlist rows (the stale "(0 loopback, 1 live)" note with them); `test_c2striage`
+§4 requires both ARMED. `test_itemmoves.py` (floor 78, TESTS.md) replays the twelve
+retail batches byte for byte with retail's ids and drives the server. Affected set:
+19 of 19 green (1,619 checks: itemmoves, weapons, dispatch, c2striage, charstore, agentlife, catalog, codec, cmsgnames, heroskilltoggle, heroadd, herokick, wearmap, harness/sandbox, srclint, checks, citelint, identlint, provlint). **Still owed: the loopback drag and double-click** -- the runsheet is in
+the cmsg section, including the drag that will name the general move.
+
+---
+
+### DESKWORK-D1 (step 6) -- 2026-09-23 -- **the hero skill toggle armed as RECONSTRUCTION (c2s 0x0019 HERO_SKILL_TOGGLE): the suppress click, a per-hero mask, the whole-mask reply, the body stops casting it**
+
+[studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md) §DESKWORK-D1 "The hero skill
+toggle". **Desk work, no client launched.** The route's question -- toggle or "use
+this skill now" -- was answered from the client: the `0x0091FD80` wrapper (38797) is
+reached by a tail `jmp` from ChCliApi `0x0080E000` (`hotKey < 8`, ChCliApi:4359, NO
+map gate), whose two callers BOTH send only under a modifier -- GmSkSlot's click
+(`0x00543480`) when GmView answers query event `0x100001A7`, GmView's hero-hotkey
+handler (`0x004E8A20`) when its flag word `0xC078D4` carries bit `0x10000` -- and run
+the client-side skill USE path otherwise (ChCliSkill's hotKeyState methods, which send
+`0x001C`/`0x005C`). So `0x0019` is the MODIFIED action, and GWW names it: hold the
+suppress key (Left Shift by default) and click a hero's skill -- a TOGGLE of one slot's
+suppression, drawn as a struck-through red circle (WIKI). The route's "ctrl-click" is
+corrected to the suppress key. **Nulls measured first:** c2s `0x0019` 0 of 96 live
+connections and 0 of 1,557 loopback logs; s2c `0x0064` 0 on retail; s2c `0x0065` 8,
+all `[hero, 0]` in load blocks -- and a hero so loaded casts 50 times (`20260914T005758
+:56011`), so bit = 1 is the suppressed slot. **The reply:** the client's hotKeyState
+mask (+0xA4) is written only by `0x0065` (whole mask) and `0x0064` (one bit), both read
+assert-free; the default answers with the whole mask, retail's only observed writer;
+`--hero-skill-toggle-per-bit` sends the route's pre-registered `0x0064`. **The model**
+(`handle_hero_skill_toggle`, `--no-hero-skill-toggle`): a per-hero 8-bit mask in party
+state, bit = slot of the PANEL's bar (`hero_panel_bar_ids`, the one expression the
+block's `0x00DA` and the mask now share); the body's `pick_skill` skips a suppressed
+skill, joined to the panel bar BY SKILL ID (the body's list drops empty slots, so a bar
+with a hole would otherwise suppress the wrong skill -- the known-bad arm); `--persist`
+writes `disabled_slots` to the hero's row and the load's two `0x0065` rows carry it;
+the default wire is byte-identical. Refused with nothing sent: a non-party hero, a slot
+outside 0..7, an EMPTY panel slot (both client senders check the slot first).
+`schema/overrides.json` GAME_CMSG 25 HERO_SKILL_TOGGLE at LOW. `test_heroskilltoggle.py`
+(floor 53, TESTS.md). Affected set: 17 of 17 green (1,257 checks: heroskilltoggle,
+heroadd, herokick, herolib, charstore, dispatch, cmsgnames, c2striage, catalog, codec,
+agentlife, harness/sandbox, srclint, checks, citelint, identlint, provlint). **Still
+owed: the loopback Shift-click** -- the runsheet is in the cmsg section.
+
+---
+
 ### SKILLS-OB -- 2026-09-23 -- **whose connection it is: `spellhitjoin.player_of` took the first `0x00E3`, named the JARIN HERO as the player and named NOBODY on 69 connections; four readers inherited it; the rule is property 41 cross-checked against the answered presses, a disagreement refused; the published own/other numbers re-derived**
 
 **Desk work, no client launched; nothing written to the vault.** [studies/skills/FINDINGS.md](studies/skills/FINDINGS.md)
