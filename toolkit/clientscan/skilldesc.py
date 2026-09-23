@@ -64,11 +64,16 @@ known-bad arm can fail: under `shifted()` their 51 AGREE collapse to 3.
 THE LABELS ARE OURS. `Label` is our own enum, read from the words around a
 slot after `normalise()` -- it is not ArenaNet's text and none of that text is
 carried past the parse: what leaves is a label, a slot index, a verdict and
-numbers already in `vault/content/skills.toml`. Two tiers: SERVED are the labels
-the server consumes today through `skill_effect` rows (authsrv
-`SCALE_MEANS_DAMAGE`, `SCALE_MEANS_HEAL`, the movement / attack-speed means,
-`effects.condition_id`, ...); RECOGNISED are parsed to a label with no consumer
-yet. UNPARSED is the residue, reported and never guessed at.
+numbers already in `vault/content/skills.toml`. Two tiers, per ROW: SERVED
+when every slot's (label, INDEX, type_code) has a consumer in the server today
+(`CONSUMERS`, read off the sites: `skill_damage` reads `scale_means` on an
+at-cast type, `skill_condition` reads bonus then scale on any type, the
+movement means only on an open episode, ...); RECOGNISED when every slot is
+labelled but some slot has no reader -- for its label, at its index, or on its
+type. UNPARSED is the residue, reported and never guessed at. The classifier's
+own precision is measured, not assumed: a "N% faster" with no movement verb is
+a RATE_PERCENT (a recharge, an expiry), and a percent is a HEALTH_PERCENT only
+when health is the thing named.
 
 PROVENANCE. Commit the id, resolve the string at run time (CLAUDE.md). This
 module prints template windows only from `--row` / `--residue`, as a TOOL over
@@ -201,6 +206,8 @@ class Label:
     CAST_SPEED = "CAST_SPEED"                # "cast N% faster"
     CHANCE = "CHANCE"                        # "N% chance"
     BLOCK_CHANCE = "BLOCK_CHANCE"
+    RATE_PERCENT = "RATE_PERCENT"            # "N% faster/slower" of a recharge, an
+                                             # expiry, adrenaline -- not a body
     PERCENT = "PERCENT"                      # some other percentage
     DURATION = "DURATION"                    # "for N seconds" (the effect)
     CONDITION_DURATION = "CONDITION_DURATION"  # detail = the condition
@@ -244,46 +251,110 @@ ELEMENT_WORDS = {
 }
 
 # SERVED: a `skill_effect` row carrying this meaning is acted on by the server
-# today. The consumer sites, so the tier is a fact and not a hope:
-#   elemental / plus damage    authsrv.SCALE_MEANS_DAMAGE, combatmath
-#   heal                       authsrv.SCALE_MEANS_HEAL (property 55)
-#   energy, energy loss        authsrv glyph_energy_amount / "Energy loss"
-#   move / attack speed        episodemods.MOVE_SPEED_MEANS, attack_speed_factor
-#   armour penetration         combatmath.BASE_PENETRATION_MEANS
-#   health threshold %         authsrv "Health threshold %"
-#   condition duration         authsrv skill_condition -> effects.condition_id
-SERVED = frozenset({
-    Label.FIRE_DAMAGE, Label.COLD_DAMAGE, Label.LIGHTNING_DAMAGE,
-    Label.EARTH_DAMAGE, Label.HOLY_DAMAGE, Label.PLUS_DAMAGE,
-    Label.HEAL, Label.ENERGY, Label.ENERGY_LOSS,
-    Label.MOVE_SPEED_UP, Label.MOVE_SPEED_DOWN,
-    Label.ATTACK_SPEED_UP, Label.ATTACK_SPEED_DOWN,
-    Label.ARMOR_PENETRATION, Label.HEALTH_PERCENT,
-    Label.CONDITION_DURATION,
-    # DURATION is served by the EPISODE machinery, not by a label row:
-    # `effects.resolve_duration` reads duration0/15 for the `EFFECT_TYPES`
-    # families (stance, hex, enchantment, glyph, preparation) and for nothing
-    # else, so `slot_served` gates it by type_code rather than by the label.
-    Label.DURATION,
-})
+# today -- by ONE consumer each, and every consumer reads ONE field, most of
+# them on ONE family of types. So the tier is a fact about (label, INDEX,
+# type_code), not about the label alone: a heal numbered by %str2% has no
+# reader, because `skill_heal` reads `scale_means` and nothing else. The
+# first version tiered by label and counted 583 rows SERVED; against what the
+# consumers read it is 350 (reviewers D4-R1 / ENG-1). The sites, 2026-09-22
+# (line numbers move, the names do not):
+#
+#   FIRE/COLD/LIGHTNING/EARTH/HOLY_DAMAGE, PLUS_DAMAGE
+#       authsrv.skill_damage: `scale_means` in SCALE_MEANS_DAMAGE, and only
+#       when `_resolves_at_cast` (type NOT in effects.EFFECT_TYPES); the one
+#       episode reader is the preparation's arrow bonus (episodemods /
+#       authsrv `"preparation"`, type 19).       -> str1; at-cast types or 19
+#   HEAL    authsrv.skill_heal: `scale_means` in SCALE_MEANS_HEAL, at cast.
+#                                                -> str1; at-cast types
+#   CONDITION_DURATION
+#       authsrv.skill_condition: `bonus_scale_means` then `scale_means` through
+#       effects.condition_id, at the land, any type; never the duration field.
+#                                                -> str1 or str2; any type
+#   ARMOR_PENETRATION
+#       authsrv (combatmath.BASE_PENETRATION_MEANS): `bonus_scale_means`, and
+#       the value must be flat.                  -> str2; any type
+#   MOVE_SPEED_UP / DOWN
+#       episodemods.move_speed_terms: either means, on OPEN EPISODES only.
+#                                                -> str1 or str2; EFFECT_TYPES
+#   ATTACK_SPEED_UP / DOWN
+#       episodemods attack_speed_factor: `scale_means`, open episodes only.
+#                                                -> str1; EFFECT_TYPES
+#   ENERGY  authsrv.glyph_energy_amount: `scale_means == "Energy"`, called from
+#       energy_cost_for over GLYPH episodes and nowhere else.
+#                                                -> str1; type 12
+#   DURATION  effects.resolve_duration reads duration0/15 for EFFECT_TYPES.
+#                                                -> str3; EFFECT_TYPES
+#
+# RECOGNISED although a reader mentions the word (so NOT served):
+#   ENERGY_LOSS     read only as the Energy Feast pair -- `scale_means ==
+#                   "Energy loss"` AND `bonus_scale_means == "Heal per energy
+#                   lost"` -- one row's shape, not a consumer of the label.
+#   HEALTH_PERCENT  the one reader is `"Health threshold %"` on the BONUS of an
+#                   attack whose bonus damage doubles below it (Final Thrust,
+#                   flat); the parse cannot tell a threshold from a share of
+#                   health, and of the 20 slots it labels none is that shape.
+#
+# Whether a served (label, index, type) is RIGHT for the skill -- Ignite
+# Arrows' "Fire damage" rides the arrows, authsrv "A LABEL DOES NOT SAY WHEN"
+# -- is D4 step 4's gate, not this tier's.
+_AT_CAST, _EPISODE, _ANY, _GLYPH, _AT_CAST_OR_PREP = (
+    "at-cast", "episode", "any", "glyph", "at-cast-or-preparation")
+CONSUMERS = {
+    Label.FIRE_DAMAGE: ((1,), _AT_CAST_OR_PREP),
+    Label.COLD_DAMAGE: ((1,), _AT_CAST_OR_PREP),
+    Label.LIGHTNING_DAMAGE: ((1,), _AT_CAST_OR_PREP),
+    Label.EARTH_DAMAGE: ((1,), _AT_CAST_OR_PREP),
+    Label.HOLY_DAMAGE: ((1,), _AT_CAST_OR_PREP),
+    Label.PLUS_DAMAGE: ((1,), _AT_CAST_OR_PREP),
+    Label.HEAL: ((1,), _AT_CAST),
+    Label.CONDITION_DURATION: ((1, 2), _ANY),
+    Label.ARMOR_PENETRATION: ((2,), _ANY),
+    Label.MOVE_SPEED_UP: ((1, 2), _EPISODE),
+    Label.MOVE_SPEED_DOWN: ((1, 2), _EPISODE),
+    Label.ATTACK_SPEED_UP: ((1,), _EPISODE),
+    Label.ATTACK_SPEED_DOWN: ((1,), _EPISODE),
+    Label.ENERGY: ((1,), _GLYPH),
+    Label.DURATION: ((3,), _EPISODE),
+}
+SERVED = frozenset(CONSUMERS)
 RECOGNISED = frozenset(v for k, v in vars(Label).items()
                        if k.isupper() and v not in SERVED and v != Label.UNPARSED)
+GLYPH_TYPE = 12          # effects.EFFECT_TYPES[12] == "glyph"
+PREPARATION_TYPE = 19    # effects.EFFECT_TYPES[19] == "preparation"
 
 
-def slot_served(label, type_code):
-    """Does the server consume a slot carrying `label` on a skill of this type?
+def served_reason(label, index, type_code):
+    """None when the server consumes a slot carrying `label` at `%str<index>%`
+    on a skill of `type_code`; else a short reason it does not.
 
-    The one type-gated label is DURATION: a Shout's "for N seconds" has no
-    consumer because no episode opens for a Shout (effects.EFFECT_TYPES), while
-    a Stance's does. Every other SERVED label is consumed through a
-    `skill_effect` row whatever the type -- and whether that is RIGHT for the
-    type (Ignite Arrows' "Fire damage" is a preparation, authsrv "A LABEL DOES
-    NOT SAY WHEN") is D4 step 4's gate, not this tier's.
+    `import effects` is what makes the type families the server's own list
+    and not a copy of it.
     """
-    if label == Label.DURATION:
-        import effects
-        return int(type_code) in effects.EFFECT_TYPES
-    return label in SERVED
+    rule = CONSUMERS.get(label)
+    if rule is None:
+        return "no consumer"
+    indices, when = rule
+    if index not in indices:
+        return "wrong slot"
+    import effects
+    tc = int(type_code)
+    episode = tc in effects.EFFECT_TYPES
+    if when == _ANY:
+        return None
+    if when == _EPISODE:
+        return None if episode else "non-episode type"
+    if when == _AT_CAST:
+        return None if not episode else "episode type"
+    if when == _AT_CAST_OR_PREP:
+        return None if (not episode or tc == PREPARATION_TYPE) else "episode type"
+    if when == _GLYPH:
+        return None if tc == GLYPH_TYPE else "not a glyph"
+    raise ValueError(when)
+
+
+def slot_served(label, index, type_code):
+    """Does the server consume a slot carrying `label` at this index on this type?"""
+    return served_reason(label, index, type_code) is None
 
 # Row-level classifier flags: conditional / compound wording and area wording.
 FLAG_IF = "IF"
@@ -310,8 +381,10 @@ FLAG_PATTERNS = (
     (FLAG_EXCEPTION, r"\bunless\b|\binstead\b|\botherwise\b"),
     (FLAG_CHANCE, r"\bchance\b"),
     # on the NORMALISED text `%%` is already `%`, so a literal percent is a
-    # digit then `%` ("25%"); a slot's percent is "%strN%%" and has no digit.
-    (FLAG_LITERAL_PERCENT, r"\d%"),
+    # digit then `%` ("25%") -- with the digit not preceded by a letter, or
+    # the `1%` closing `%str1%` matches and the flag is raised on every
+    # slot-bearing row (it was, 1,278 rows: a flag that could not stay down)
+    (FLAG_LITERAL_PERCENT, r"(?<![a-z])\d%"),
     (FLAG_AREA_ADJACENT, r"\badjacent\b"),
     (FLAG_AREA_NEARBY, r"\bnearby\b"),
     (FLAG_AREA_IN_THE_AREA, r"\bin (the|this) area\b"),
@@ -345,17 +418,23 @@ _MARKUP = (
     (re.compile(r"\[s\]"), "s"),                  # the plural s
     (re.compile(r"%%"), "%"),                     # an escaped literal percent
 )
+_SLOT_GUARD = "\x00"
 
 
 def normalise(text):
     """Strip the template markup the classifier does not care about.
 
     `%strN%` is left alone. Everything else the client's text engine handles
-    (colour, `[s]`, `[pl:...]`, `%%`) is reduced to the plain word.
+    (colour, `[s]`, `[pl:...]`, `%%`) is reduced to the plain word. The slots
+    are fenced before the `%%` rewrite so a slot's closing `%` can never pair
+    with the escape that follows it: the corpus spells a slotted percent
+    `%strN%%%` (250 times, MEASURED) and never `%strN%%`, so nothing was lost
+    on this build -- by ArenaNet's spelling, not by this function's design.
     """
+    text = SLOT_RE.sub(lambda m: f"{_SLOT_GUARD}str{m.group(1)}{_SLOT_GUARD}", text)
     for pat, rep in _MARKUP:
         text = pat.sub(rep, text)
-    return text
+    return text.replace(_SLOT_GUARD, "%")
 
 
 def parse_slots(text, window=48):
@@ -458,37 +537,43 @@ def classify(before, after):
 
     # -- percentages: the slot is followed by a literal %
     if a1.startswith("%"):
-        rest = " ".join(aw[1:4]) if a1 == "%" else (a1[1:] + " " + " ".join(aw[1:3])).strip()
-        if rest.startswith("faster"):
-            if "attack" in btail or rest.startswith("faster and attack"):
-                return Label.ATTACK_SPEED_UP, ""
+        # the five words after the percent sign, so "of your maximum health"
+        # reaches its noun; a percent label needs the thing it is a percent OF
+        # named, or it is a plain PERCENT (reviewers ENG-2 / D4-R8: "faster"
+        # alone was a movement speed and "of that" alone was a health share)
+        tail = (aw[1:6] if a1 == "%" else [a1[1:]] + aw[1:5])
+        tail = [w for w in tail if w]
+        rest = " ".join(tail)
+        if rest.startswith("faster") or rest.startswith("slower"):
+            up = rest.startswith("faster")
+            if re.search(r"\brecharge", btail6) or rest.startswith(("faster and recharge", "slower and recharge")):
+                return Label.RATE_PERCENT, "recharge"
+            if re.search(r"\bexpire", btail6):
+                return Label.RATE_PERCENT, "expire"
+            if "adrenaline" in btail6:
+                return Label.RATE_PERCENT, "adrenaline"
+            if "attack" in btail or rest.startswith(("faster and attack", "slower and attack")):
+                return (Label.ATTACK_SPEED_UP if up else Label.ATTACK_SPEED_DOWN), ""
             if "cast" in btail or "activat" in btail:
                 return Label.CAST_SPEED, ""
-            return Label.MOVE_SPEED_UP, ""
-        if rest.startswith("slower"):
-            if "attack" in btail:
-                return Label.ATTACK_SPEED_DOWN, ""
-            if "cast" in btail or "activat" in btail:
-                return Label.CAST_SPEED, ""
-            return Label.MOVE_SPEED_DOWN, ""
+            if re.search(r"\b(move|moves|moving|movement|run|runs|running|walk|walks)\b", btail6):
+                return (Label.MOVE_SPEED_UP if up else Label.MOVE_SPEED_DOWN), ""
+            return Label.RATE_PERCENT, blast
         if rest.startswith("chance"):
             return (Label.BLOCK_CHANCE if "block" in " ".join(aw[:8]) or "block" in btail
                     else Label.CHANCE), ""
         if rest.startswith("armor penetration"):
             return Label.ARMOR_PENETRATION, ""
-        if rest.startswith("less damage") or rest.startswith("more damage") \
-                or rest.startswith("damage") or rest.startswith("of the damage"):
+        if rest.startswith(("less damage", "more damage", "damage", "of the damage")) \
+                or "damage" in tail[:3]:
             return Label.DAMAGE_PERCENT, ""
-        if rest.startswith("health") or rest.startswith("of your maximum health") \
-                or rest.startswith("of its maximum health") or rest.startswith("of your health") \
-                or rest.startswith("of that") or rest.startswith("of the target") \
-                or rest.startswith("of target") or rest.startswith("of your"):
+        if "health" in tail:
             return Label.HEALTH_PERCENT, ""
-        if rest.startswith("energy"):
+        if "energy" in tail:
             return Label.ENERGY_PERCENT, ""
         if rest.startswith("longer") or rest.startswith("shorter"):
             return Label.PERCENT, "duration"
-        return Label.PERCENT, rest.split(" ")[0] if rest else ""
+        return Label.PERCENT, tail[0] if tail else ""
 
     # -- seconds
     if a1.startswith("second"):
@@ -823,19 +908,24 @@ def analyse(records, texts, hand=None, mapping=None):
         if sid in hand:
             for r in referee_hand_row(slots, hand[sid], mapping):
                 hand_results.append((sid,) + r)
-        # per-row tier
+        # per-row tier: SERVED when EVERY slot has a consumer for its
+        # (label, index, type_code); the reasons keeping a row out are counted
+        # per row as "LABEL strN: reason"
+        reasons = {}
+        for s in row["slots"]:
+            why = served_reason(s["label"], s["index"], rec["type_code"])
+            if why is not None:
+                reasons[f"{s['label']} str{s['index']}: {why}"] = True
         if not slots:
             row["tier"] = "NO_SLOT"
         elif any(s["label"] == Label.UNPARSED for s in row["slots"]):
             row["tier"] = "UNPARSED"
-        elif all(slot_served(s["label"], rec["type_code"]) for s in row["slots"]):
+        elif not reasons:
             row["tier"] = "SERVED"
         else:
             row["tier"] = "RECOGNISED"
-            # which unserved labels keep this row out of the served tier
-            for lbl in sorted({s["label"] for s in row["slots"]
-                               if not slot_served(s["label"], rec["type_code"])}):
-                blocking[lbl if lbl != Label.DURATION else "DURATION (non-episode type)"] += 1
+            for key in reasons:
+                blocking[key] += 1
         rows[sid] = row
     tiers = collections.Counter(r["tier"] for r in rows.values())
     return {

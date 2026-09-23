@@ -14,7 +14,9 @@ reddens if it is wrong:
   * THE LABELS. Our own enum, from the words around a slot. Every slot in the
     corpus gets a label (0 UNPARSED); the 54 hand rows agree on 51 of the 52
     comparable slots and the one disagreement is a real one (Battle Rage's
-    `scale_means = "Duration"` on a flat 33 that is its movement speed).
+    `scale_means = "Duration"` on a flat 33 that is its movement speed). The
+    SERVED tier is per (label, INDEX, type_code), read off the consumer sites:
+    341 of 1,265 slot-bearing rows, 27 % -- the route's half-mark FAILS.
   * THE CENSUS (DESKWORK-Q7). What the server resolves today: 54 modelled, 419
     episodes (+45 refused durations), 815 nothing.
 
@@ -37,9 +39,9 @@ import skilltable   # noqa: E402
 from skilldesc import Label, SLOT_FIELD, shifted, referee_slot   # noqa: E402
 
 # Floor from the BARE run, MEASURED 2026-09-22 with RURIK_VAULT at an empty
-# directory: 31 checks, 1 declared skip ("2. the corpus"), rc=0 -- the
-# mandatory core per checks.py. A whole green run with the vault is 73.
-LEDGER = checks.Ledger("skill description templates", floor=31)
+# directory: 40 checks, 1 declared skip ("2. the corpus"), rc=0 -- the
+# mandatory core per checks.py. A whole green run with the vault is 85.
+LEDGER = checks.Ledger("skill description templates", floor=40)
 check = checks.adopt(LEDGER)
 
 
@@ -83,6 +85,13 @@ check(referee_slot(1, pa, shifted())[0] == "CONFLICT_EMPTY",
 
 norm = skilldesc.normalise('<c=@SkillDull>x</c> second[s] 25%% [pl:"hexes"] %str1%')
 check(norm == "x seconds 25% hexes %str1%", "normalise strips the markup and keeps %strN%", repr(norm))
+check(skilldesc.normalise("%str1%%% a") == "%str1%% a" and skilldesc.normalise("%str1%% a") == "%str1%% a",
+      "a slot's closing % never pairs with the escape after it: the slotted percent survives "
+      "under either spelling (the corpus spells it %strN%%%, 250 times)",
+      (skilldesc.normalise("%str1%%% a"), skilldesc.normalise("%str1%% a")))
+check("LITERAL_PERCENT" in skilldesc.row_flags("a 25% stride") and not skilldesc.row_flags("%str1% and %str2%"),
+      "LITERAL_PERCENT is a digit-then-% the text prints, and a bare slot raises no flag "
+      "(the first pattern matched the 1% inside %str1% on 1,278 rows)")
 
 C = skilldesc.classify
 cases = [
@@ -107,6 +116,17 @@ cases = [
     (("up to ", " foes"), (Label.COUNT, "foes")),
     (("this attack has ", "% armor penetration"), (Label.ARMOR_PENETRATION, "")),
     (("you have a ", "% chance to block"), (Label.BLOCK_CHANCE, "")),
+    # the precision cases (ENG-2 / D4-R8): a percent names the thing it is a
+    # percent OF, or it is not that label
+    (("your attack skills recharge ", "% faster"), (Label.RATE_PERCENT, "recharge")),
+    (("hexes on you expire ", "% faster"), (Label.RATE_PERCENT, "expire")),
+    (("you gain adrenaline ", "% faster"), (Label.RATE_PERCENT, "adrenaline")),
+    (("your allies run ", "% faster"), (Label.MOVE_SPEED_UP, "")),
+    (("that foe moves ", "% slower"), (Label.MOVE_SPEED_DOWN, "")),
+    (("you steal ", "% of that foe's energy"), (Label.ENERGY_PERCENT, "")),
+    (("adjacent foes take ", "% of that damage"), (Label.DAMAGE_PERCENT, "")),
+    (("the target is left with ", "% of its maximum health"), (Label.HEALTH_PERCENT, "")),
+    (("the hex lasts ", "% longer"), (Label.PERCENT, "duration")),
     (("skills are disabled for ", " seconds"), (Label.DISABLE_DURATION, "")),
     (("this spirit dies after ", " seconds"), (Label.LIFETIME, "")),
     (("the wearer's maximum health is raised by ", "."), (Label.MAX_HEALTH, "")),
@@ -136,10 +156,35 @@ check(not (skilldesc.SERVED & skilldesc.RECOGNISED)
       and Label.UNPARSED not in skilldesc.SERVED | skilldesc.RECOGNISED
       and skilldesc.SERVED | skilldesc.RECOGNISED | {Label.UNPARSED} == set(labels),
       "SERVED and RECOGNISED partition the enum, UNPARSED outside both")
-check(skilldesc.slot_served(Label.DURATION, 3) and not skilldesc.slot_served(Label.DURATION, 15),
-      "DURATION is served on a Stance (an episode) and not on a Shout")
-check(skilldesc.slot_served(Label.FIRE_DAMAGE, 19) and not skilldesc.slot_served(Label.LEVEL, 5),
-      "Fire damage is served whatever the type; LEVEL has no consumer")
+check(set(skilldesc.SERVED) == set(skilldesc.CONSUMERS)
+      and Label.ENERGY_LOSS in skilldesc.RECOGNISED and Label.HEALTH_PERCENT in skilldesc.RECOGNISED,
+      "SERVED is exactly the labels with a consumer; ENERGY_LOSS (the Energy Feast pair) and "
+      "HEALTH_PERCENT (the threshold reader, a shape the parse cannot see) are RECOGNISED")
+SS = skilldesc.slot_served
+check(SS(Label.DURATION, 3, 3) and not SS(Label.DURATION, 3, 15) and not SS(Label.DURATION, 1, 3),
+      "DURATION is served at str3 on a Stance (an episode), not on a Shout, and not at str1")
+check(SS(Label.FIRE_DAMAGE, 1, 5) and SS(Label.FIRE_DAMAGE, 1, 19)
+      and not SS(Label.FIRE_DAMAGE, 1, 4) and not SS(Label.FIRE_DAMAGE, 2, 5),
+      "Fire damage is served at str1 on a Spell (skill_damage, at cast) and on a Preparation "
+      "(the arrow bonus), not on a Hex (opens an episode; nothing reads its damage) and not at str2")
+check(SS(Label.HEAL, 1, 5) and not SS(Label.HEAL, 2, 5) and not SS(Label.HEAL, 1, 6),
+      "HEAL: skill_heal reads scale_means at cast -- str1 on a Spell, never str2, not on an Enchantment")
+check(SS(Label.CONDITION_DURATION, 1, 14) and SS(Label.CONDITION_DURATION, 2, 5)
+      and not SS(Label.CONDITION_DURATION, 3, 5),
+      "a condition duration is read from bonus then scale on any type (skill_condition), never duration")
+check(SS(Label.ARMOR_PENETRATION, 2, 14) and not SS(Label.ARMOR_PENETRATION, 1, 14),
+      "armour penetration is the BONUS slot (combatmath.BASE_PENETRATION_MEANS) and only that")
+check(SS(Label.MOVE_SPEED_UP, 1, 3) and SS(Label.MOVE_SPEED_UP, 2, 6) and not SS(Label.MOVE_SPEED_UP, 1, 15)
+      and SS(Label.ATTACK_SPEED_UP, 1, 3) and not SS(Label.ATTACK_SPEED_UP, 2, 3),
+      "speeds are read off OPEN EPISODES: movement from either slot, attack speed from scale only")
+check(SS(Label.ENERGY, 1, 12) and not SS(Label.ENERGY, 1, 5) and not SS(Label.ENERGY, 2, 12),
+      "ENERGY is glyph_energy_amount's: str1 on a Glyph and nowhere else")
+check(not SS(Label.LEVEL, 1, 5) and skilldesc.served_reason(Label.LEVEL, 1, 5) == "no consumer"
+      and skilldesc.served_reason(Label.HEAL, 2, 5) == "wrong slot"
+      and skilldesc.served_reason(Label.HEAL, 1, 6) == "episode type"
+      and skilldesc.served_reason(Label.DURATION, 3, 15) == "non-episode type"
+      and skilldesc.served_reason(Label.ENERGY, 1, 5) == "not a glyph",
+      "served_reason names why a slot is not consumed: no consumer / wrong slot / the type")
 check(skilldesc.CONDITION_NAMES == tuple(sorted(effects.CONDITION_BY_NAME)),
       "the condition names are effects.CONDITION_BY_NAME's keys -- the join key")
 
@@ -279,26 +324,41 @@ if records is not None:
     s1 = slot(234, 1)
     check((s1["lo"], s1["hi"], s1["label"]) == (10, 85, Label.COLD_DAMAGE)
           and (2, "bonus_scale", 66, "LITERAL_MATCH") in rep["rows"][234]["literals"]
-          and "LITERAL_PERCENT" in rep["rows"][234]["flags"],
-          "Deep Freeze (234): str1 cold damage 10..85; its 66% is literal text over bonus 66/66",
-          (s1, rep["rows"][234]["literals"]))
+          and "LITERAL_PERCENT" in rep["rows"][234]["flags"]
+          and rep["rows"][234]["tier"] == "RECOGNISED" and rep["rows"][234]["type_code"] == 4,
+          "Deep Freeze (234, a consistency row, not wiki-pinned): str1 cold damage 10..85; its 66% "
+          "is literal text over bonus 66/66; and it is RECOGNISED, not served -- a Hex opens an "
+          "episode and skill_damage resolves nothing at its cast", (s1, rep["rows"][234]["literals"]))
+    check(rep["rows"][322]["tier"] == "SERVED" and rep["rows"][382]["tier"] == "SERVED"
+          and rep["rows"][319]["tier"] == "SERVED",
+          "Power Attack (+damage at str1 on an attack), Sever Artery (Bleeding at str2) and Rush "
+          "(duration at str3 on a Stance) are SERVED: the consumer that reads each exists")
 
+    # THE HAND ROWS. Content-side counts are derived from the rows loaded, not
+    # pinned as literals, so a new [skill_effect.*] row does not redden a
+    # clientscan test (ENG-7); the CLIENT-side facts below stay exact.
+    n_hand = sum(1 for sid in hand_rows if sid in records)
+    n_means = sum(1 for sid in hand_rows if sid in records
+                  for k in ("scale_means", "bonus_scale_means") if hand_rows[sid].get(k))
     hs = rep["hand_summary"]
-    check(hs == {"AGREE": 51, "CONFLICT": 1, "NOT_COMPARABLE": 2, "NO_SLOT": 14},
-          "the 54 hand rows: 51 agree, 1 conflict, 2 not comparable, 14 name an unshown slot", hs)
+    check(sum(hs.values()) == n_means and hs.get("AGREE", 0) >= n_means - 17 and hs.get("AGREE", 0) >= 50,
+          f"every one of the {n_means} hand labels gets a verdict and at least {max(50, n_means - 17)} AGREE "
+          f"(51 of 68 on 2026-09-22)", hs)
     conflicts = [r for r in rep["hand"] if r[-1] == "CONFLICT"]
     check(conflicts == [(317, "scale_means", 1, "Duration", Label.MOVE_SPEED_UP, "CONFLICT")],
           "the one conflict is Battle Rage: `scale_means = \"Duration\"` on the flat 33 that is "
-          "its movement speed (the duration is str3)", conflicts)
+          "its movement speed (the duration is str3) -- when world.toml drops that label, this "
+          "check and test_skilldamage.py's pin on it change in the same commit", conflicts)
     no_slot = [r for r in rep["hand"] if r[-1] == "NO_SLOT"]
-    lit_ok = 0
+    unmatched = []
     for sid, key, index, _means, _lbl, _v in no_slot:
         field = SLOT_FIELD[index]
-        lit_ok += any(l[1] == field and l[3] == "LITERAL_MATCH" for l in rep["rows"][sid]["literals"])
-    check(lit_ok == 12 and len(no_slot) == 14,
-          "12 of the 14 unshown hand slots are flat constants printed as text; the other two are "
-          "Hamstring's (320) 0/0 scale (a label on the wrong slot) and Scourge Sacrifice's (253) "
-          "flat 100 the text never states (labelled 'Duration', which is str3)", (lit_ok, len(no_slot)))
+        if not any(l[1] == field and l[3] == "LITERAL_MATCH" for l in rep["rows"][sid]["literals"]):
+            unmatched.append(sid)
+    check(len(no_slot) >= 10 and sorted(unmatched) == [253, 320],
+          "every unshown hand slot is a flat constant printed as text EXCEPT Hamstring's (320) 0/0 "
+          "scale (a label on the wrong slot) and Scourge Sacrifice's (253) flat 100 the text never "
+          "states (labelled 'Duration', which is str3)", (len(no_slot), unmatched))
     check(records[253]["scale0"] == 100 and records[253]["skill_arguments"] == 1
           and slot(253, 3)["field"] == "duration",
           "Scourge Sacrifice (253): args = duration only, str3 is the duration; the scale slot's "
@@ -317,9 +377,10 @@ if records is not None:
     t = rep["tiers"]
     check("UNPARSED" not in t, "every slot in the corpus gets a label (0 UNPARSED rows)", t)
     check(t.get("NO_SLOT") == 68 and sum(t.values()) == 1333, "68 rows have no slot; the tiers sum to 1,333", t)
-    check(t.get("SERVED", 0) >= 560 and t.get("SERVED", 0) < 1265 // 2 + 60,
-          "SERVED (every slot in the server's current vocabulary) is ~46% of slot-bearing rows: "
-          "the route's own half-mark, measured, is NOT met on the served tier", t)
+    check(t.get("SERVED", 0) == 341 and t.get("SERVED", 0) * 2 < 1265,
+          "SERVED -- every slot read by a consumer for its label, index AND type -- is 341 of 1,265 "
+          "slot-bearing rows (27 %): the route's own half-mark is NOT met, and not nearly "
+          "(the label-only tier said 583 / 46 %; the bound here is below the half-mark, ENG-6)", t)
     lbl = rep["label_by_index"]
     check(all(lbl.get(f"str1:{e}", 0) >= 25 for e in
               (Label.FIRE_DAMAGE, Label.COLD_DAMAGE, Label.LIGHTNING_DAMAGE, Label.EARTH_DAMAGE, Label.HOLY_DAMAGE))
@@ -327,6 +388,11 @@ if records is not None:
           and rep["labels"].get(Label.CONDITION_DURATION, 0) >= 200,
           "vacuity guard: each elemental damage >= 25 at str1, HEAL >= 100, DURATION >= 570, "
           "condition durations >= 200")
+    check(rep["labels"].get(Label.RATE_PERCENT, 0) >= 30 and rep["labels"].get(Label.MOVE_SPEED_UP, 0) >= 30
+          and rep["labels"].get(Label.HEALTH_PERCENT, 0) >= 20,
+          "the precision split has both sides populated: RATE_PERCENT >= 30 (33: recharge 23, expiry 8, "
+          "adrenaline 2), MOVE_SPEED_UP >= 30 (33), HEALTH_PERCENT >= 20 (21)",
+          {k: rep["labels"].get(k) for k in (Label.RATE_PERCENT, Label.MOVE_SPEED_UP, Label.HEALTH_PERCENT)})
     conds = collections.Counter(s["detail"] for r in rep["rows"].values() for s in r["slots"]
                                 if s["label"] == Label.CONDITION_DURATION)
     check(set(conds) == set(skilldesc.CONDITION_NAMES),
@@ -337,10 +403,20 @@ if records is not None:
     check(fg.get("IF", 0) == 468 and fg.get("AREA_ADJACENT", 0) == 138 and fg.get("AREA_NEARBY", 0) == 94
           and fg.get("AREA_IN_THE_AREA", 0) == 53 and fg.get("AREA_EARSHOT", 0) == 84,
           "the classifier flags: IF 468, adjacent 138, nearby 94, in the area 53, earshot 84", fg)
+    check(fg.get("LITERAL_PERCENT", 0) == 166,
+          "LITERAL_PERCENT: 166 rows print a literal percent (of the 372 carrying a %%, 250 "
+          "occurrences are a slot's own percent sign); it was raised on all 1,278 slot-bearing rows",
+          fg.get("LITERAL_PERCENT"))
     blocking = rep["blocking"]
-    check(blocking.get("DURATION (non-episode type)", 0) >= 180 and blocking.get(Label.DAMAGE, 0) >= 120,
-          "the two labels blocking most RECOGNISED rows: a duration on a non-episode type, and "
-          "untyped damage", {k: blocking[k] for k in sorted(blocking, key=lambda k: -blocking[k])[:4]})
+    check(blocking.get("DURATION str3: non-episode type", 0) >= 180
+          and blocking.get(f"{Label.DAMAGE} str1: no consumer", 0) >= 80
+          and blocking.get(f"{Label.ENERGY} str2: wrong slot", 0) >= 55
+          and blocking.get(f"{Label.HEAL} str2: wrong slot", 0) >= 40
+          and blocking.get(f"{Label.HEAL} str1: episode type", 0) >= 25,
+          "what keeps rows out of SERVED, per (label, slot, reason): a duration on a non-episode "
+          "type 186, untyped damage 84, ENERGY at str2 61 (glyph reads scale), HEAL at str2 47 and "
+          "HEAL on an episode type 28 (skill_heal reads scale at cast)",
+          {k: blocking[k] for k in sorted(blocking, key=lambda k: -blocking[k])[:6]})
 
     # THE PvP / PvE JOIN, over the FULL table.
     data = ix.pe.data
@@ -355,20 +431,28 @@ if records is not None:
     out = sum(1 for r in records.values() if r["linked_id"] != count)
     check(out == 156, "156 corpus rows link out to a twin; the rest carry the table's 'none'", out)
 
-    # THE CENSUS (DESKWORK-Q7).
+    # THE CENSUS (DESKWORK-Q7). The client + effects facts are exact; the
+    # content-side split is derived from the hand rows loaded (ENG-7).
     grades = skilldesc.census(records, hand_rows)
     g = collections.Counter(grades.values())
-    check(g == {"modelled": 54, "episode-only": 419, "episode-refused": 45, "nothing": 815},
-          "what the server resolves today: 54 modelled, 419 episodes, 45 refused durations, 815 nothing",
-          dict(g))
+    n_ep = sum(1 for r in records.values() if effects.applies_effect(r))
+    check(g["modelled"] == n_hand and sum(g.values()) == 1333
+          and g["episode-only"] + g["episode-refused"] + sum(1 for sid in hand_rows if sid in records
+                                                              and effects.applies_effect(records[sid])) == n_ep
+          and g["episode-refused"] >= 40 and g["nothing"] >= 800,
+          f"what the server resolves today: {n_hand} carry a row (54 on 2026-09-22, at least 4 of them "
+          f"inert), every EFFECT_TYPES row not in hand is an episode or a refusal (419 + 45 that day), "
+          f"the rest nothing (815)", dict(g))
     cbt = skilldesc.census_by_type(records, grades, rep)
-    check(cbt[5]["nothing"] == 276 and cbt[5]["n"] == 287 and cbt[14]["modelled"] == 23
-          and cbt[6]["episode-only"] == 192 and cbt[6]["episode-refused"] == 32,
-          "by type: 276 of 287 Spells resolve nothing; 23 of the 54 hand rows are type-14 attacks; "
-          "192 + 32 enchantments", {k: dict(v) for k, v in cbt.items() if k in (5, 6, 14)})
-    check(all(grades[sid] == "modelled" for sid in hand_rows if sid in records)
-          and sum(1 for sid in hand_rows if sid in records) == 54,
-          "every hand row is a corpus row and grades modelled")
+    n_hand_14 = sum(1 for sid in hand_rows if sid in records and int(records[sid]["type_code"]) == 14)
+    check(cbt[5]["n"] == 287 and cbt[5]["nothing"] >= 270 and cbt[14]["modelled"] == n_hand_14
+          and cbt[6]["episode-only"] + cbt[6]["episode-refused"] + sum(
+              1 for sid in hand_rows if sid in records and int(records[sid]["type_code"]) == 6) == 227,
+          "by type: 270+ of 287 Spells resolve nothing; the type-14 modelled count is the hand rows' "
+          "own; every one of the 227 enchantments is an episode, a refusal or a hand row",
+          {k: dict(v) for k, v in cbt.items() if k in (5, 6, 14)})
+    check(all(grades[sid] == "modelled" for sid in hand_rows if sid in records) and n_hand >= 50,
+          f"every hand row is a corpus row and grades modelled ({n_hand} rows)")
     ix.close()
 
 sys.exit(LEDGER.verdict())
