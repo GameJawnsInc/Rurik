@@ -25,14 +25,19 @@ reddens if it is wrong:
   * THE LABEL TIER (SKILLS-LT, DESKWORK-D4 step 4, 2026-09-23). "Plain" is
     SERVED with none of IF / WHEN / FOR_EACH / WHILE / EXCEPTION / CHANCE: 131
     of the 341. The gate (`build_label_row`) excludes what the server would
-    OVER-apply -- a hand row's id, a duration-only row, a condition an episode
-    inflicts later, a pet attack, an at-cast damage or condition whose target
-    byte is not a foe's, a heal byte 1 would hand to the selected agent -- and
-    marks what it would UNDER-apply (area wording, a bit-clear or indeterminate
-    slot). 59 rows ship on build 38797; every exclusion is counted by reason.
-    The overlay is deterministic, carries client-table provenance per row and
-    no string outside OVERLAY_VOCABULARY; the known-bad arm forces a
-    conditional row through and the checker names it.
+    OVER-apply -- a hand row's id, a duration-only row, a percent slot under a
+    non-percent label, a condition an episode inflicts later, a pet attack, a
+    chain requirement on a non-attack, an at-cast damage or condition whose
+    target byte is not a foe's, a heal byte 1 would hand to the selected agent,
+    a recipient class the server has no object for (spirits, a corpse,
+    fleshiness), a self-targeted heal on a class of recipients -- and marks
+    what it would UNDER-apply (area wording, an over-time duration, a dropped
+    clause, a bit-clear or indeterminate slot). 47 rows ship on build 38797
+    (59 before the fix pass of the same day); every exclusion is counted by
+    reason. The overlay is deterministic, carries client-table provenance per
+    row and no string outside OVERLAY_VOCABULARY; the known-bad arms force a
+    conditional row, a percent slot, an unmodelled class and a chain
+    requirement through and the checker names each.
 
 Sections 1 and 1b run on a bare machine; sections 2 and 3 need the pinned exe
 and Gw.dat and declare one skip without them. Nothing here quotes a template.
@@ -56,7 +61,7 @@ from skilldesc import Label, SLOT_FIELD, shifted, referee_slot   # noqa: E402
 # 61 checks, 1 declared skip ("2. the corpus"), rc=0 -- the mandatory core per
 # checks.py (2026-09-23, SKILLS-LT: +21 in section 1b, the label tier's gate on
 # synthetic rows; 40 on 2026-09-22). A whole green run with the vault is 124.
-LEDGER = checks.Ledger("skill description templates", floor=61)
+LEDGER = checks.Ledger("skill description templates", floor=72)   # 72 from the bare run of 2026-09-23 (the fix pass: +11 in 1b); 138 with the vault
 check = checks.adopt(LEDGER)
 
 
@@ -343,11 +348,97 @@ check(why is None and fields == {"scale_means": "+ Damage"} and LT.DETAIL_AREA_O
       "a Preparation's +damage ships: swing_preparation_bonus is its consumer and the target byte "
       "is the caster's own; its adjacency splash is marked under-applied; the duration slot is "
       "recorded, not labelled", (why, det, fields, ver))
+# ---- the FIX PASS's rules (2026-09-23, reviewers LT-R1..R10 / ENG-2), each with its arm
+pct = srow(13, 5, [(1, Label.HEAL, "", AP, 100, 136)], ["TARGET_ALLY"])
+pct["slots"][0]["percent"] = True
+spd = srow(14, 3, [(1, Label.MOVE_SPEED_UP, "", AP, 10, 33)])
+spd["slots"][0]["percent"] = True
+check(G(pct, srec(4), set())[0] == LT.EXCL_PERCENT_SLOT and G(heal, srec(4), set())[0] is None
+      and G(spd, srec(0, tc=3), set())[0] is None,
+      "a slot printed as a PERCENT under a non-percent label is EXCLUDED (292: 'N% of the amount "
+      "you lost' parsed HEAL would heal N Health and charge no sacrifice); the same heal without "
+      "the % ships, and a percent under a percent label (movement speed) is what the consumer reads")
+chain = srow(15, 5, [(1, Label.CONDITION_DURATION, "Poison", AP, 5, 20)], ["TARGET_FOE"])
+r_chain = srec(5)
+r_chain["combo_req"] = 2
+check(G(chain, r_chain, set())[0] == LT.EXCL_CHAIN_REQUIREMENT
+      and G(dict(chain, type_code=14), dict(r_chain, type_code=14), set())[0] is None,
+      "combo_req on a NON-attack type is EXCLUDED -- the E5 chain gate (DAGGERS-B5) runs inside "
+      "_is_attack_skill, so 784 973 1033 would land whatever the chain says; the same requirement "
+      "on an attack ships, because there the gate exists")
+step = srow(16, 10, [(1, Label.CONDITION_DURATION, "Crippled", AP, 5, 20)], ["TARGET_FOE"])
+r_step = srec(5, tc=10)
+r_step["combo"] = 2
+check(LT.DETAIL_CHAIN_STEP_NOT_ADVANCED in G(step, r_step, set())[1],
+      "'counts as an off-hand attack' on a non-attack ships MARKED: the chain never advances (974)")
+uncls = srow(17, 5, [(1, Label.HEAL, "", AP, 60, 92)], ["UNMODELLED_CLASS"])
+check(G(uncls, srec(0), set())[0] == LT.EXCL_UNMODELLED_CLASS,
+      "a recipient class or prerequisite the server has no object for is EXCLUDED: the spirits "
+      "2051 and 2100 heal, 96's corpse, 106's fleshiness")
+cls = srow(18, 5, [(1, Label.HEAL, "", AP, 30, 150)], ["AREA_ADJACENT"])
+party = srow(19, 5, [(1, Label.HEAL, "", AP, 30, 150)], ["ALL_ALLIES"])
+check(G(cls, srec(0), set())[0] == LT.EXCL_HEAL_RECIPIENT_CLASS
+      and G(party, srec(0), set())[0] == LT.EXCL_HEAL_RECIPIENT_CLASS
+      and G(heal, srec(0), set())[0] is None
+      and G(party, srec(3), set())[0] is None and LT.DETAIL_AREA_ONE_TARGET in G(party, srec(3), set())[1],
+      "a SELF-targeted heal on a CLASS of recipients is EXCLUDED (1262 excludes the caster, 943 "
+      "heals only the members relieved of Burning; 287 and 2221 include the caster and fall to the "
+      "same rule -- the parse cannot tell them apart); a plain self heal ships, and a party heal "
+      "aimed at an ally (byte 3) ships marked ONE_TARGET")
+r_dur = srec(16, d=(9, 9))
+r_proj = srec(16)
+r_proj["projectile"] = 199
+check(LT.DETAIL_AREA_ONE_TARGET in G(area, r_dur, set())[1] and LT.DETAIL_AREA_BURST not in G(area, r_dur, set())[1]
+      and LT.DETAIL_DURATION_UNMODELLED in G(area, r_dur, set())[1]
+      and LT.DETAIL_AREA_ONE_TARGET in G(area, r_proj, set())[1] and LT.DETAIL_AREA_BURST not in G(area, r_proj, set())[1],
+      "spell_burst's WHOLE predicate: a byte-16 Spell with a duration is an area over time the "
+      "server delivers once to one target (192, 197: ONE_TARGET + DURATION_UNMODELLED), and one "
+      "with its own projectile flies instead of bursting")
+cl = srow(20, 5, [(1, Label.FIRE_DAMAGE, "", AP, 10, 40)],
+          ["TARGET_FOE", "CLAUSE_KNOCKDOWN", "CLAUSE_INTERRUPT", "LITERAL_PERCENT"])
+cl["conditions_named"] = ["Cracked Armor"]
+det = G(cl, srec(5), set())[1]
+check({"CLAUSE_KNOCKDOWN", "CLAUSE_INTERRUPT", LT.DETAIL_LITERAL_DROPPED, LT.DETAIL_CONDITION_UNNUMBERED} <= set(det)
+      and all(d in LT.DETAILS for d in det if d not in ("TARGET_FOE",)),
+      "the clauses a label DROPS are named in tier_detail, every token from DETAILS: a knock-down, "
+      "an interrupt, a literal constant (25% armor penetration), a condition the text names and "
+      "no slot numbers (228's Cracked Armor)", det)
+mv = srow(21, 4, [(1, Label.ATTACK_SPEED_DOWN, "", AP, 10, 33)], ["TARGET_FOE", "SPEED_MOVE", "CLAUSE_CAST_SPEED"])
+mv2 = srow(22, 4, [(1, Label.MOVE_SPEED_DOWN, "", AP, 10, 33)], ["TARGET_FOE", "SPEED_MOVE"])
+check(LT.DETAIL_CLAUSE_MOVE_SPEED in G(mv, srec(5, tc=4), set())[1]
+      and "CLAUSE_CAST_SPEED" in G(mv, srec(5, tc=4), set())[1]
+      and LT.DETAIL_CLAUSE_MOVE_SPEED not in G(mv2, srec(5, tc=4), set())[1],
+      "a move-speed clause with no MOVE_SPEED label is a dropped clause (1996 slows movement, "
+      "attacks and casting under ONE slot; only the attack speed is read); a labelled snare is not")
+rf = LT.row_flags
+check("CLAUSE_KNOCKDOWN" in rf("the foe is knocked down") and "CLAUSE_SHADOW_STEP" in rf("shadow step to the foe")
+      and "CLAUSE_INTERRUPT" in rf("struck foes are interrupted")
+      and "CLAUSE_INTERRUPT" not in rf("this spell is easily interrupted")
+      and "UNMODELLED_CLASS" in rf("all spirits you control") and "UNMODELLED_CLASS" not in rf("all non-spirit foes")
+      and "UNMODELLED_CLASS" in rf("exploit nearest corpse") and "UNMODELLED_CLASS" in rf("target fleshy foe")
+      and "AREA_NEAR" in rf("up to two other foes near your target") and "AREA_NEAR" in LT.AREA_FLAGS
+      and "CLAUSE_RANGE" in rf("half the normal range")
+      and "CLAUSE_REMOVAL" in rf("remove one condition and one hex")
+      and "CLAUSE_ALSO_CASTER" in rf("you and that ally are healed")
+      and "CLAUSE_DOUBLE_DAMAGE" in rf("you take double damage") and "CLAUSE_DISABLE" in rf("your skills are disabled")
+      and "CLAUSE_CAST_SPEED" in rf("casts spells 33% slower") and "SPEED_MOVE" in rf("moves, attacks, and casts 25% slower")
+      and not rf("target foe is struck for 30 fire damage") & (LT.CLAUSE_FLAGS | {"UNMODELLED_CLASS", "AREA_NEAR", "SPEED_MOVE"})
+      and not (LT.CLAUSE_FLAGS | {"UNMODELLED_CLASS", "AREA_NEAR", "SPEED_MOVE"}) & LT.COMPOUND_FLAGS,
+      "the fix pass's flags on OUR OWN phrases: each raised where its wording is, quiet on 'easily "
+      "interrupted', 'non-spirit' and a plain sentence -- and none of them is a COMPOUND flag, so "
+      "the owner's 131 stay 131")
+check(LT.template_digest({1: "a", 2: "b"}) == LT.template_digest({2: "b", 1: "a"})
+      and LT.template_digest({1: "a", 2: "b"}) != LT.template_digest({1: "a", 2: "c"})
+      and len(LT.template_digest({})) == 64,
+      "template_digest: order-free over ids, sensitive to one character, a sha256 hex")
 rep_fake = {"rows": {1: fire, 2: dict(fire, id=2, flags=["IF", "TARGET_FOE"]),
-                     3: dict(dur, tier="RECOGNISED"), 4: dict(fire, id=4, flags=["WHILE"])},
+                     3: dict(dur, tier="RECOGNISED"), 4: dict(fire, id=4, flags=["WHILE"]),
+                     5: pct, 6: uncls, 7: dict(fire, id=7)},
             "self_conflicts": []}
-check(LT.plain_served(rep_fake) == [1] and LT.conditional_served(rep_fake) == [2, 4],
-      "plain = SERVED with none of the six flags; conditional = SERVED with one; RECOGNISED is neither")
+check(LT.plain_served(rep_fake) == [1, 5, 6, 7] and LT.conditional_served(rep_fake) == [2, 4],
+      "plain = SERVED with none of the six flags (the percent, unmodelled-class and chain rows are "
+      "PLAIN -- the gate, not the definition, is what refuses them); conditional = SERVED with one; "
+      "RECOGNISED is neither")
 rows = {1: {"fields": {"scale_means": "Fire damage"}, "type_code": 5, "tier": "label",
             "tier_detail": ["TARGET_FOE"], "verified": [{"slot": 1, "label": Label.FIRE_DAMAGE}]}}
 check(LT.check_label_rows(rows, rep_fake, set()) == [], "a clean row set passes its own checker")
@@ -360,11 +451,21 @@ check(any("conditional wording IF" in x for x in faults) and any("WHILE" in x fo
       and len(faults) == 4,
       "KNOWN-BAD ARM: a conditional row forced in (IF; WHILE), a hand-row id and a means outside "
       "the vocabulary are each NAMED by the checker", faults)
+bad2 = {5: dict(rows[1], fields={"scale_means": "Heal"}), 6: dict(rows[1]), 7: dict(rows[1])}
+faults2 = LT.check_label_rows(bad2, rep_fake, set(), records={7: {"combo_req": 2}})
+check(len(faults2) == 3 and any("percent slot str1" in x for x in faults2)
+      and any("recipient class" in x for x in faults2) and any("chain requirement 2" in x for x in faults2)
+      and LT.check_label_rows({7: dict(rows[1])}, rep_fake, set(), records={7: {"combo_req": 2, "type_code": 14}}) != []
+      and LT.check_label_rows({7: dict(rows[1])}, rep_fake, set(), records={7: {"combo_req": 0}}) == [],
+      "KNOWN-BAD ARM (the fix pass): a percent slot under HEAL, an unmodelled recipient class and a "
+      "chain requirement on a non-attack, each forced in, are each NAMED by the checker; the same "
+      "row with combo_req 0 passes", faults2)
 import tempfile   # noqa: E402
 import tomllib    # noqa: E402
 with tempfile.TemporaryDirectory() as tmp:
     p = os.path.join(tmp, "x.toml")
-    LT.emit_labels(rows, [(9, LT.EXCL_PET_ATTACK)], 38797, "exe", p, plain=[1, 9])
+    LT.emit_labels(rows, [(9, LT.EXCL_PET_ATTACK)], 38797, "exe", p, plain=[1, 9],
+                   dat="the.dat", digest="ab" * 32)
     with open(p, "rb") as fh:
         table = tomllib.load(fh)
     text = open(p, encoding="utf-8").read()
@@ -374,9 +475,12 @@ with tempfile.TemporaryDirectory() as tmp:
               "source": "client-table", "extractor": "toolkit/clientscan/skilldesc.py",
               "build": 38797, "verified": [{"slot": 1, "label": Label.FIRE_DAMAGE}]}
           and LT.text_leak(table) == [] and "# excluded PET_ATTACK (1): 9" in text
-          and "# rows: 1 label-tier" in text,
+          and "# rows: 1 label-tier" in text
+          and "# dat: the.dat" in text and ("# templates_sha256: " + "ab" * 32) in text
+          and not os.path.exists(p + ".tmp"),
           "emit_labels writes a TOML tomllib reads back: the means, tier, client-table provenance "
-          "with the build, the slot record; no text; the exclusions in the header", table)
+          "with the build, the slot record; no text; the exclusions, the dat and the templates' "
+          "sha256 in the header; the temp file it renamed into place is gone", table)
     try:
         LT.emit_labels({1: dict(rows[1], fields={"scale_means": "Fire\ndamage"})}, [], 38797, "exe", p)
         raised = False
@@ -652,11 +756,33 @@ if records is not None:
           "(113, 435, 926, 1041, 1997, 2136); the pet attack 441; 11 at-cast damages / conditions "
           "whose target byte is self, ally or unresolved (97 183 188 769 770 840 917 1113 1364 "
           "1468 2212); 3 heals byte 1 would hand to the selected agent (918 1032 1354)", by_reason)
-    check(len(lrows) == 131 - n_hand_plain - 62 and len(lrows) + len(excluded) == 131,
-          f"THE SET: {len(lrows)} label-tier rows = 131 plain - {n_hand_plain} hand - 62 excluded "
-          f"(59 on 2026-09-23); nothing shrinks silently", (len(lrows), len(excluded)))
-    check(not (set(lrows) & hand_ids) and skilldesc.check_label_rows(lrows, rep, hand_ids) == [],
-          "no emitted row keys a hand-row id, and the set passes its own checker")
+    check(by_reason.get("PERCENT_SLOT") == [292]
+          and by_reason.get("CHAIN_REQUIREMENT") == [784, 973, 1033]
+          and by_reason.get("UNMODELLED_CLASS") == [96, 106, 2051, 2100]
+          and by_reason.get("HEAL_RECIPIENT_CLASS") == [287, 943, 1262, 2221]
+          and "SELF_CONFLICT" not in by_reason,
+          "THE FIX PASS's EXCLUSIONS (reviewers LT-R1..R6, R10): 292's percent slot; the chain "
+          "requirements 784 973 1033 carry on non-attack types; 96's corpse, 106's fleshiness, the "
+          "spirits of 2051 and 2100; the four self-targeted heals on a class -- 1262 excludes the "
+          "caster, 943 heals only the relieved, 287 and 2221 fall to the same rule", by_reason)
+    check(len(lrows) == 131 - n_hand_plain - 74 and len(lrows) + len(excluded) == 131,
+          f"THE SET: {len(lrows)} label-tier rows = 131 plain - {n_hand_plain} hand - 74 excluded "
+          f"(47 on 2026-09-23 after the fix pass; 59 before it); nothing shrinks silently",
+          (len(lrows), len(excluded)))
+    check(not (set(lrows) & hand_ids) and skilldesc.check_label_rows(lrows, rep, hand_ids, records) == [],
+          "no emitted row keys a hand-row id, and the set passes its own checker (records included)")
+    arms = {}
+    for sid, want in ((292, "percent slot"), (96, "recipient class"), (784, "chain requirement")):
+        why, det, fields, ver = skilldesc.build_label_row(rep["rows"][sid], records[sid], hand_ids)
+        forced_rows = {sid: {"fields": fields or {"scale_means": "Heal"}, "type_code": rep["rows"][sid]["type_code"],
+                             "tier": "label", "tier_detail": det, "verified": ver}}
+        arms[sid] = (why, skilldesc.check_label_rows(forced_rows, rep, hand_ids, records), want)
+    check(arms[292][0] == "PERCENT_SLOT" and arms[96][0] == "UNMODELLED_CLASS"
+          and arms[784][0] == "CHAIN_REQUIREMENT"
+          and all(len(f) == 1 and want in f[0] and str(sid) in f[0] for sid, (_w, f, want) in arms.items()),
+          "KNOWN-BAD ARMS (the fix pass): 292, 96 and 784 forced through the gate are each the ONE "
+          "fault the checker names -- a percent slot, a recipient class, a chain requirement",
+          {s: a[1] for s, a in arms.items()})
     forced = None
     for sid in cond:
         why, det, fields, ver = skilldesc.build_label_row(rep["rows"][sid], records[sid], hand_ids)
@@ -672,30 +798,55 @@ if records is not None:
           f"KNOWN-BAD ARM: a conditional SERVED row ({forced}) forced through the gate is the one "
           f"fault the checker names", faults)
     dt = collections.Counter(d for r in lrows.values() for d in r["tier_detail"] if d in skilldesc.DETAILS)
-    check(dt == {"AREA_BURST": 5, "AREA_ONE_TARGET": 20, "CONDITION_BIT_CLEAR_REFUSED": 2,
-                 "INDETERMINATE_SLOT": 1},
-          "UNDER-APPLIED, counted: 5 area spells spell_burst covers, 20 area wordings the server "
-          "reaches one recipient of, 2 conditions on bit-clear slots (167, 1033), 1 indeterminate "
-          "slot (1033's Deep Wound)", dict(dt))
+    check(dt == {"AREA_BURST": 3, "AREA_ONE_TARGET": 20, "CONDITION_BIT_CLEAR_REFUSED": 1,
+                 "DURATION_UNMODELLED": 7, "CONDITION_UNNUMBERED": 1, "LITERAL_DROPPED": 5,
+                 "CHAIN_STEP_NOT_ADVANCED": 1, "CLAUSE_MOVE_SPEED": 1, "CLAUSE_KNOCKDOWN": 6,
+                 "CLAUSE_SHADOW_STEP": 4, "CLAUSE_INTERRUPT": 2, "CLAUSE_REMOVAL": 2,
+                 "CLAUSE_ALSO_CASTER": 2, "CLAUSE_DISABLE": 1, "CLAUSE_DOUBLE_DAMAGE": 1,
+                 "CLAUSE_CAST_SPEED": 1, "CLAUSE_RANGE": 4},
+          "UNDER-APPLIED, counted: 3 bursts spell_burst covers (187 189 1086), 20 area wordings the "
+          "server reaches one recipient of, 1 bit-clear condition (167), 7 non-episode durations the "
+          "at-cast path never runs (the areas over time 167 192 197 among them), 228's unnumbered "
+          "Cracked Armor, 5 literal constants (25 % penetration), 974's chain step, and the dropped "
+          "clauses by kind: 6 knock-downs, 4 shadow steps, 2 interrupts, 2 removals, 2 'you and', a "
+          "disable, a double damage, 1996's cast and move slows, 4 half ranges", dict(dt))
+    under = sorted(s for s in lrows if set(lrows[s]["tier_detail"]) & set(skilldesc.DETAILS))
+    check(len(under) == 36
+          and sorted(set(lrows) - set(under)) == [117, 191, 220, 286, 293, 959, 1043, 1120, 1404, 1686, 1762]
+          and [s for s in sorted(lrows) if "AREA_BURST" in lrows[s]["tier_detail"]] == [187, 189, 1086]
+          and {"AREA_ONE_TARGET", "DURATION_UNMODELLED"} <= set(lrows[192]["tier_detail"])
+          and {"AREA_ONE_TARGET", "DURATION_UNMODELLED"} <= set(lrows[197]["tier_detail"]),
+          "36 of 47 rows carry an under-application mark; the eleven without one are single-clause "
+          "templates (a foe's condition or damage, a target ally's heal, a stance's speeds); "
+          "AREA_BURST is exactly 187 189 1086, and the areas over time 192 and 197 that spell_burst "
+          "refuses say ONE_TARGET + DURATION_UNMODELLED (ENG-2, LT-R7)", sorted(set(lrows) - set(under)))
     check(lrows[187]["fields"] == {"scale_means": "Fire damage"} and "AREA_BURST" in lrows[187]["tier_detail"]
-          and lrows[784]["fields"] == {"scale_means": "Poison"}
+          and lrows[220]["fields"] == {"bonus_scale_means": "Blind"}
           and lrows[831]["fields"] == {"scale_means": "Attack speed increase",
                                        "bonus_scale_means": "Movement speed increase"}
+          and "CLAUSE_DOUBLE_DAMAGE" in lrows[831]["tier_detail"]
           and lrows[434]["fields"] == {"scale_means": "+ Damage"} and lrows[434]["type_code"] == 19
           and lrows[3425]["fields"] == {"scale_means": "+ Damage"}
-          and lrows[1033]["fields"] == {"scale_means": "Earth damage", "bonus_scale_means": "Deep Wound"},
-          "spot rows: 187 fire (burst), 784 Poison at str1, 831 both speeds, 434 a preparation's "
-          "+damage, 3425's +holy is the additive '+ Damage', 1033 earth + an indeterminate Deep Wound")
+          and lrows[167]["fields"] == {"scale_means": "Earth damage", "bonus_scale_means": "Blind"}
+          and {"AREA_NEAR", "AREA_ONE_TARGET", "CONDITION_BIT_CLEAR_REFUSED", "DURATION_UNMODELLED"}
+          <= set(lrows[167]["tier_detail"])
+          and {"CLAUSE_MOVE_SPEED", "CLAUSE_CAST_SPEED"} <= set(lrows[1996]["tier_detail"])
+          and "CHAIN_STEP_NOT_ADVANCED" in lrows[974]["tier_detail"],
+          "spot rows: 187 fire (burst), 220 Blind at str2, 831 both speeds + its double damage named, "
+          "434 a preparation's +damage, 3425's +holy is the additive '+ Damage', 167 earth + a "
+          "bit-clear Blind over an area near a location for 5 s, 1996's dropped slows, 974's chain step")
     types = collections.Counter(r["type_code"] for r in lrows.values())
-    check(set(types) <= {3, 4, 5, 6, 7, 10, 14, 19} and types[5] >= 30,
-          "the shipped types: Stances, Hexes, Spells (30+), Enchantments, Signets, Skills, attacks, "
-          "Preparations -- no Shout, no pet attack, no Glyph", dict(types))
+    check(set(types) <= {3, 4, 5, 7, 10, 14, 19} and types[5] >= 20,
+          "the shipped types: Stances, Hexes, Spells (20+), Signets, Skills, attacks, a Preparation "
+          "-- no Enchantment, no Shout, no pet attack, no Glyph", dict(types))
     build = skilltable.build_of(data)
     check(build == 38797, "the build stamp is derived from the image's bytes: 38797", build)
     with tempfile.TemporaryDirectory() as tmp:
+        import textrec
         p1, p2 = os.path.join(tmp, "a.toml"), os.path.join(tmp, "b.toml")
-        skilldesc.emit_labels(lrows, excluded, build, exe, p1, plain)
-        skilldesc.emit_labels(lrows, excluded, build, exe, p2, plain)
+        digest = skilldesc.template_digest(texts)
+        skilldesc.emit_labels(lrows, excluded, build, exe, p1, plain, dat=textrec.DEFAULT_DAT, digest=digest)
+        skilldesc.emit_labels(lrows, excluded, build, exe, p2, plain, dat=textrec.DEFAULT_DAT, digest=digest)
         b1, b2 = open(p1, "rb").read(), open(p2, "rb").read()
         with open(p1, "rb") as fh:
             table = tomllib.load(fh)

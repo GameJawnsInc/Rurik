@@ -373,6 +373,28 @@ FLAG_ALL_FOES = "ALL_FOES"
 FLAG_ALL_ALLIES = "ALL_ALLIES"
 FLAG_TARGET_FOE = "TARGET_FOE"
 FLAG_TARGET_ALLY = "TARGET_ALLY"
+# SKILLS-LT fix pass (2026-09-23, reviewers LT-R1..R10 / ENG-2): wordings the
+# step-4 gate reads. None of these is a COMPOUND flag -- the owner's 131 plain
+# rows are defined by the six above and stay 131 -- they decide what the GATE
+# does with a plain row. AREA_NEAR is area wording ("near your target", "up to
+# three targets"); UNMODELLED_CLASS names a recipient or a prerequisite the
+# server has no object for (spirits, minions, a pet, a corpse, fleshiness);
+# the CLAUSE_* flags name a clause the label tier DROPS, so a shipped row can
+# say which one in `tier_detail` instead of "label" alone; SPEED_MOVE is read
+# together with the row's labels (a move-speed clause with no MOVE_SPEED label
+# is a dropped clause, 1996).
+FLAG_AREA_NEAR = "AREA_NEAR"
+FLAG_UNMODELLED_CLASS = "UNMODELLED_CLASS"
+FLAG_CLAUSE_KNOCKDOWN = "CLAUSE_KNOCKDOWN"
+FLAG_CLAUSE_SHADOW_STEP = "CLAUSE_SHADOW_STEP"
+FLAG_CLAUSE_INTERRUPT = "CLAUSE_INTERRUPT"
+FLAG_CLAUSE_DOUBLE_DAMAGE = "CLAUSE_DOUBLE_DAMAGE"
+FLAG_CLAUSE_DISABLE = "CLAUSE_DISABLE"
+FLAG_CLAUSE_REMOVAL = "CLAUSE_REMOVAL"
+FLAG_CLAUSE_ALSO_CASTER = "CLAUSE_ALSO_CASTER"
+FLAG_CLAUSE_CAST_SPEED = "CLAUSE_CAST_SPEED"
+FLAG_CLAUSE_RANGE = "CLAUSE_RANGE"       # "half the normal range": the arrow flies the weapon's here
+FLAG_SPEED_MOVE = "SPEED_MOVE"
 FLAG_PATTERNS = (
     (FLAG_IF, r"\bif\b"),
     (FLAG_FOR_EACH, r"\bfor (each|every)\b|\bper\b"),
@@ -394,12 +416,30 @@ FLAG_PATTERNS = (
     (FLAG_ALL_ALLIES, r"\ball (nearby |adjacent |non-spirit )?(party members|allies)\b|\bparty\b"),
     (FLAG_TARGET_FOE, r"\btarget foe\b"),
     (FLAG_TARGET_ALLY, r"\btarget (other )?ally\b"),
+    (FLAG_AREA_NEAR, r"\bnear (your|this|that|the) (target|location)\b"
+                     r"|\bup to (two|three|four|five|\d+) (other )?(foes|targets|allies|creatures)\b"),
+    (FLAG_UNMODELLED_CLASS, r"(?<!non-)\bspirits?\b|\bminions?\b|\bpets?\b|\banimal companion\b"
+                            r"|\bcorpses?\b|\bexploit\b|\bfleshy\b"),
+    (FLAG_CLAUSE_KNOCKDOWN, r"\bknock(ed|s)? down\b|\bknockdown\b"),
+    (FLAG_CLAUSE_SHADOW_STEP, r"\bshadow step"),
+    # "is easily interrupted" is a property of the cast, not a clause the
+    # server drops; an interrupt the skill DEALS is
+    (FLAG_CLAUSE_INTERRUPT, r"\binterrupts?\b|(?<!easily )\binterrupted\b"),
+    (FLAG_CLAUSE_DOUBLE_DAMAGE, r"\bdouble damage\b"),
+    (FLAG_CLAUSE_DISABLE, r"\bdisabled\b"),
+    (FLAG_CLAUSE_REMOVAL, r"\b(remove|lose)s? (one|all|\d+) (condition|hex|enchantment)"),
+    (FLAG_CLAUSE_ALSO_CASTER, r"\byou and (target|that)\b"),
+    (FLAG_CLAUSE_CAST_SPEED, r"\bcasts? (spells? )?[^.]{0,24}?\b(slower|faster)\b"),
+    (FLAG_CLAUSE_RANGE, r"\bhalf (the normal |its normal )?range\b|\b(shorter|longer|reduced|increased) range\b"),
+    (FLAG_SPEED_MOVE, r"\bmoves?\b[^.]{0,40}?\b(slower|faster)\b"),
 )
 FLAGS = tuple(f for f, _ in FLAG_PATTERNS)
 AREA_FLAGS = frozenset({FLAG_AREA_ADJACENT, FLAG_AREA_NEARBY,
-                        FLAG_AREA_IN_THE_AREA, FLAG_AREA_EARSHOT})
+                        FLAG_AREA_IN_THE_AREA, FLAG_AREA_EARSHOT, FLAG_AREA_NEAR})
 COMPOUND_FLAGS = frozenset({FLAG_IF, FLAG_FOR_EACH, FLAG_WHILE, FLAG_WHEN,
                             FLAG_EXCEPTION, FLAG_CHANCE})
+CLAUSE_FLAGS = frozenset(f for f in FLAGS if f.startswith("CLAUSE_"))
+_PERCENT_SLOT_RE = re.compile(r"%str(\d+)%%")   # a slot's own `%`, then a literal one
 
 
 def row_flags(text):
@@ -888,7 +928,18 @@ def analyse(records, texts, hand=None, mapping=None):
         slots, fl = parse_row(text)
         for f in fl:
             flags[f] += 1
-        row = {"id": sid, "type_code": int(rec["type_code"]), "slots": [], "flags": sorted(fl)}
+        norm = normalise(text)
+        # a slot printed as a percentage (`%strN%%%` in the corpus's spelling,
+        # `%strN%%` once normalised): its label must be one the consumers read
+        # as a percent, or the number is not what the label says (292's HEAL
+        # is "N% of the amount you lost", not N Health -- reviewer LT-R5)
+        percent_at = {int(n) for n in _PERCENT_SLOT_RE.findall(norm)}
+        # every condition the text names, numbered by a slot or not: a named
+        # condition no slot numbers is a clause the label tier drops (228's
+        # Cracked Armor) or a heal's own condition (943) -- the gate decides
+        named = sorted({CONDITION_WORDS[w] for w in _CONDITION_RE.findall(norm.lower())})
+        row = {"id": sid, "type_code": int(rec["type_code"]), "slots": [], "flags": sorted(fl),
+               "conditions_named": named}
         labels_at = collections.defaultdict(set)
         for n, label, _detail in slots:
             labels_at[n].add(label)
@@ -902,7 +953,8 @@ def analyse(records, texts, hand=None, mapping=None):
         for n, label, detail in slots:
             verdict, field, lo, hi = referee_slot(n, rec, mapping)
             row["slots"].append({"index": n, "field": field, "verdict": verdict,
-                                 "lo": lo, "hi": hi, "label": label, "detail": detail})
+                                 "lo": lo, "hi": hi, "label": label, "detail": detail,
+                                 "percent": n in percent_at})
             labels[label] += 1
             label_by_index[(n, label)] += 1
             if n in seen:
@@ -1119,28 +1171,48 @@ STANDALONE_DAMAGE = DAMAGE_LABELS - {Label.PLUS_DAMAGE}
 # other byte to the SELECTED agent, a foe included.
 FOE_TARGET_BYTES = frozenset({5, 16})
 HEAL_TARGET_BYTES = frozenset({0, 3, 4})
+SELF_TARGET_BYTE = 0            # cast_recipient: the caster, whatever is selected
 AREA_BURST_TARGET_BYTE = 16     # authsrv.AREA_TARGET_BYTE
 SPELL_TYPE = 5                  # authsrv.SPELL_TYPE_CODE: the one type spell_burst bursts
+ATTACK_TYPE = 14                # authsrv.ATTACK_TYPE_CODE: the one type the chain gate runs for
 PET_ATTACK_TYPE = 20
+# The labels whose number IS a percentage, as their consumers read it
+# (episodemods' speed terms, combatmath.BASE_PENETRATION_MEANS). A slot printed
+# with a literal `%` and labelled anything else is a number the label misreads.
+PERCENT_LABELS = frozenset({Label.ARMOR_PENETRATION, Label.MOVE_SPEED_UP, Label.MOVE_SPEED_DOWN,
+                            Label.ATTACK_SPEED_UP, Label.ATTACK_SPEED_DOWN})
+MOVE_SPEED_LABELS = frozenset({Label.MOVE_SPEED_UP, Label.MOVE_SPEED_DOWN})
 
 EXCL_HAND_ROW = "HAND_ROW"                    # a hand row exists; the tier sits under it
 EXCL_SELF_CONFLICT = "SELF_CONFLICT"          # one index, two labels: the parse disagrees
 EXCL_DURATION_ONLY = "DURATION_ONLY"          # every slot is the episode's own duration
+EXCL_PERCENT_SLOT = "PERCENT_SLOT"            # a `%` slot under a non-percent label (292: N% of a loss, read as N Health)
 EXCL_CONDITION_ON_EPISODE = "CONDITION_ON_EPISODE"   # the episode inflicts it LATER
 EXCL_PET_ATTACK = "PET_ATTACK"                # no pet is modelled
+EXCL_CHAIN_REQUIREMENT = "CHAIN_REQUIREMENT"  # combo_req on a non-attack: the E5 chain gate is attacks-only (DAGGERS-B5)
+EXCL_UNMODELLED_CLASS = "UNMODELLED_CLASS"    # spirits / minions / a pet / a corpse / fleshiness: no such object here
 EXCL_RECIPIENT_NOT_A_FOE = "RECIPIENT_NOT_A_FOE"     # damage / condition; target byte not 5 / 16
 EXCL_RECIPIENT_NOT_AN_ALLY = "RECIPIENT_NOT_AN_ALLY"  # heal; target byte not 0 / 3 / 4
-EXCLUSIONS = (EXCL_HAND_ROW, EXCL_SELF_CONFLICT, EXCL_DURATION_ONLY,
-              EXCL_CONDITION_ON_EPISODE, EXCL_PET_ATTACK,
-              EXCL_RECIPIENT_NOT_A_FOE, EXCL_RECIPIENT_NOT_AN_ALLY)
+EXCL_HEAL_RECIPIENT_CLASS = "HEAL_RECIPIENT_CLASS"    # a byte-0 heal on a CLASS (party, adjacent): the caster may not be in it (1262, 943)
+EXCLUSIONS = (EXCL_HAND_ROW, EXCL_SELF_CONFLICT, EXCL_DURATION_ONLY, EXCL_PERCENT_SLOT,
+              EXCL_CONDITION_ON_EPISODE, EXCL_PET_ATTACK, EXCL_CHAIN_REQUIREMENT,
+              EXCL_UNMODELLED_CLASS, EXCL_RECIPIENT_NOT_A_FOE, EXCL_RECIPIENT_NOT_AN_ALLY,
+              EXCL_HEAL_RECIPIENT_CLASS)
 
-DETAIL_AREA_BURST = "AREA_BURST"              # spell_burst covers the radius (byte 16, Spell, at cast)
+DETAIL_AREA_BURST = "AREA_BURST"              # spell_burst covers the radius (byte 16, Spell, at cast, no projectile, no duration)
 DETAIL_AREA_ONE_TARGET = "AREA_ONE_TARGET"    # area wording; the server reaches one recipient
 DETAIL_INDETERMINATE = "INDETERMINATE_SLOT"   # a labelled slot the consumer refuses (54.3)
 DETAIL_CONDITION_BIT_CLEAR = "CONDITION_BIT_CLEAR_REFUSED"   # skill_condition refuses a bit-clear slot
 DETAIL_SECOND_CONDITION = "SECOND_CONDITION_DROPPED"   # skill_condition returns one
+DETAIL_DURATION_UNMODELLED = "DURATION_UNMODELLED"     # a non-episode record with a duration: an area over time, a timed clause the at-cast path never runs
+DETAIL_CONDITION_UNNUMBERED = "CONDITION_UNNUMBERED"   # a condition the text names and no slot numbers: dropped (228's Cracked Armor)
+DETAIL_LITERAL_DROPPED = "LITERAL_DROPPED"             # a constant printed in the text (25% armor penetration) that no field reads
+DETAIL_CHAIN_STEP_NOT_ADVANCED = "CHAIN_STEP_NOT_ADVANCED"   # "counts as an off-hand attack" on a non-attack: the chain never advances
+DETAIL_CLAUSE_MOVE_SPEED = "CLAUSE_MOVE_SPEED"         # a move-speed clause with no MOVE_SPEED label (1996)
 DETAILS = (DETAIL_AREA_BURST, DETAIL_AREA_ONE_TARGET, DETAIL_INDETERMINATE,
-           DETAIL_CONDITION_BIT_CLEAR, DETAIL_SECOND_CONDITION)
+           DETAIL_CONDITION_BIT_CLEAR, DETAIL_SECOND_CONDITION, DETAIL_DURATION_UNMODELLED,
+           DETAIL_CONDITION_UNNUMBERED, DETAIL_LITERAL_DROPPED, DETAIL_CHAIN_STEP_NOT_ADVANCED,
+           DETAIL_CLAUSE_MOVE_SPEED) + tuple(sorted(CLAUSE_FLAGS))
 AREA_WORDING = AREA_FLAGS | {FLAG_ALL_FOES, FLAG_ALL_ALLIES, FLAG_TOUCH}
 
 # EVERY string the overlay may contain. `text_leak()` is the tripwire: a
@@ -1187,12 +1259,14 @@ def build_label_row(row, rec, hand_ids, self_conflict_ids=frozenset()):
     sid = int(row["id"])
     tc = int(row["type_code"])
     target = int(rec["target"])
+    flags = set(row["flags"])
     if sid in hand_ids:
         return EXCL_HAND_ROW, [], {}, []
     if sid in self_conflict_ids:
         return EXCL_SELF_CONFLICT, [], {}, []
     fields, verified, seen = {}, [], set()
     labels = []
+    percent_misread = False
     for s in row["slots"]:
         n = int(s["index"])
         if n in seen:
@@ -1205,6 +1279,8 @@ def build_label_row(row, rec, hand_ids, self_conflict_ids=frozenset()):
         verified.append(v)
         if s["label"] == Label.DURATION:
             continue                     # the episode machinery's; no field names it
+        if s.get("percent") and s["label"] not in PERCENT_LABELS:
+            percent_misread = True       # "N% of ..." under a label that reads N
         means = means_for(s["label"], s["detail"])
         field = FIELD_OF_INDEX.get(n)
         if means is None or field is None:
@@ -1213,23 +1289,53 @@ def build_label_row(row, rec, hand_ids, self_conflict_ids=frozenset()):
         labels.append((s["label"], n, s["verdict"], s["field"]))
     if not fields:
         return EXCL_DURATION_ONLY, [], {}, verified
+    if percent_misread:
+        return EXCL_PERCENT_SLOT, [], {}, verified
     episode = tc in effects.EFFECT_TYPES
     conditions = [l for l in labels if l[0] == Label.CONDITION_DURATION]
+    heals = [l for l in labels if l[0] == Label.HEAL]
     if conditions and episode:
         return EXCL_CONDITION_ON_EPISODE, [], {}, verified
     if tc == PET_ATTACK_TYPE:
         return EXCL_PET_ATTACK, [], {}, verified
+    # DAGGERS-B5's chain gate -- "must follow a lead / off-hand / dual" fails the
+    # press when the target's chain state does not meet it -- runs inside
+    # `if target and _is_attack_skill(...)`. A non-attack carrying `combo_req`
+    # (784's Spell, 973's Spell, 1033's Skill) has no gate at the E5, so its
+    # condition and its standalone damage would land whatever the chain says.
+    if int(rec.get("combo_req", 0) or 0) and tc != ATTACK_TYPE:
+        return EXCL_CHAIN_REQUIREMENT, [], {}, verified
     at_cast_on_foe = bool(conditions) or any(
         l[0] in DAMAGE_LABELS and not episode for l in labels)
     if at_cast_on_foe and target not in FOE_TARGET_BYTES:
         return EXCL_RECIPIENT_NOT_A_FOE, [], {}, verified
-    if any(l[0] == Label.HEAL for l in labels) and target not in HEAL_TARGET_BYTES:
+    if heals and target not in HEAL_TARGET_BYTES:
         return EXCL_RECIPIENT_NOT_AN_ALLY, [], {}, verified
+    # a recipient class or a prerequisite the server has no object for: the
+    # spirits 2051 and 2100 heal, 96's corpse, 106's fleshiness (against a
+    # non-fleshy target retail inflicts nothing; here every target is flesh).
+    # After the target-byte rules, so a row both refuse keeps its byte reason.
+    if FLAG_UNMODELLED_CLASS in flags:
+        return EXCL_UNMODELLED_CLASS, [], {}, verified
+    # a SELF-targeted heal whose text names a CLASS of recipients -- adjacent
+    # creatures, the party -- reaches the caster here and nobody else, and the
+    # text is what says whether the caster is in the class: 1262 excludes the
+    # caster outright, 943 heals only the members relieved of Burning, 287 and
+    # 2221 include the caster. The parse cannot tell these apart, so none ships
+    # (Refuse to guess); a caster-centred party heal is the residue for all four.
+    if heals and target == SELF_TARGET_BYTE and flags & AREA_WORDING:
+        return EXCL_HEAL_RECIPIENT_CLASS, [], {}, verified
     # shipped: name what the server does LESS of
-    detail = sorted(f for f in row["flags"] if f in AREA_WORDING or f in (FLAG_TARGET_FOE, FLAG_TARGET_ALLY))
-    if set(row["flags"]) & AREA_WORDING:
+    detail = sorted(f for f in flags if f in AREA_WORDING or f in (FLAG_TARGET_FOE, FLAG_TARGET_ALLY))
+    timed = bool(int(rec.get("duration0", 0) or 0) or int(rec.get("duration15", 0) or 0))
+    if flags & AREA_WORDING:
         standalone = any(l[0] in STANDALONE_DAMAGE for l in labels)
-        if tc == SPELL_TYPE and target == AREA_BURST_TARGET_BYTE and standalone:
+        # authsrv.spell_burst's WHOLE predicate (mirrored -- the tool cannot
+        # import the server): byte 16, a Spell, no projectile of its own, no
+        # duration. An area over time (192, 197) is one target here, once.
+        own_projectile = int(rec.get("projectile", skilltable.NO_PROJECTILE) or 0)
+        if (tc == SPELL_TYPE and target == AREA_BURST_TARGET_BYTE and standalone
+                and own_projectile in (0, skilltable.NO_PROJECTILE) and not timed):
             detail.append(DETAIL_AREA_BURST)
         else:
             detail.append(DETAIL_AREA_ONE_TARGET)
@@ -1239,6 +1345,18 @@ def build_label_row(row, rec, hand_ids, self_conflict_ids=frozenset()):
         detail.append(DETAIL_CONDITION_BIT_CLEAR)
     if len(conditions) > 1:
         detail.append(DETAIL_SECOND_CONDITION)
+    if timed and not episode:
+        detail.append(DETAIL_DURATION_UNMODELLED)
+    slotted = {v.get("detail") for v in verified if v.get("detail") in CONDITION_NAMES}
+    if set(row.get("conditions_named", ())) - slotted:
+        detail.append(DETAIL_CONDITION_UNNUMBERED)
+    if FLAG_LITERAL_PERCENT in flags:
+        detail.append(DETAIL_LITERAL_DROPPED)
+    if int(rec.get("combo", 0) or 0) and tc != ATTACK_TYPE:
+        detail.append(DETAIL_CHAIN_STEP_NOT_ADVANCED)
+    if FLAG_SPEED_MOVE in flags and not any(l[0] in MOVE_SPEED_LABELS for l in labels):
+        detail.append(DETAIL_CLAUSE_MOVE_SPEED)
+    detail.extend(sorted(flags & CLAUSE_FLAGS))
     return None, detail, fields, verified
 
 
@@ -1262,12 +1380,15 @@ def label_rows(report, records, hand_ids):
     return rows, excluded, plain
 
 
-def check_label_rows(rows, report, hand_ids):
+def check_label_rows(rows, report, hand_ids, records=None):
     """Violations of the tier's own contract, as strings; [] when clean.
 
     The vacuity guard and the known-bad arm's target: a conditional row forced
     into `rows` is named here, as is a hand-row id, a missing field, a means
-    outside the consumers' vocabulary or a string outside OVERLAY_VOCABULARY.
+    outside the consumers' vocabulary or a string outside OVERLAY_VOCABULARY --
+    and, since the fix pass, the classes the reviewers found shipped: a percent
+    slot under a non-percent label, an unmodelled recipient class, and (with
+    `records`) a chain requirement on a non-attack type.
     """
     out = []
     for sid, r in rows.items():
@@ -1282,6 +1403,17 @@ def check_label_rows(rows, report, hand_ids):
             out.append(f"{sid}: conditional wording {' '.join(bad)}")
         if sid in hand_ids:
             out.append(f"{sid}: a hand row exists")
+        pct = sorted(s["index"] for s in rep["slots"]
+                     if s.get("percent") and s["label"] not in PERCENT_LABELS
+                     and s["label"] != Label.DURATION)
+        if pct:
+            out.append(f"{sid}: percent slot str{pct[0]} under a non-percent label")
+        if FLAG_UNMODELLED_CLASS in rep["flags"]:
+            out.append(f"{sid}: names a recipient class the server does not model")
+        if records is not None and sid in records:
+            rec = records[sid]
+            if int(rec.get("combo_req", 0) or 0) and int(rep["type_code"]) != ATTACK_TYPE:
+                out.append(f"{sid}: chain requirement {rec['combo_req']} on a non-attack type")
         if r.get("tier") != LABEL_TIER:
             out.append(f"{sid}: tier {r.get('tier')!r}")
         if not r.get("fields"):
@@ -1339,16 +1471,39 @@ def _toml_value(v):
     raise TypeError(type(v))
 
 
-def emit_labels(rows, excluded, build, exe, out_path, plain=()):
+def template_digest(texts):
+    """sha256 over the corpus's templates in id order -- the drift tripwire for
+    the LABELS (reviewer LT-R12): a means string is parsed from Gw.dat's text,
+    and the exe's build alone does not say which text. A hash of ArenaNet's
+    words is a measurement of them, not a copy."""
+    import hashlib
+    h = hashlib.sha256()
+    for sid in sorted(texts):
+        h.update(f"{sid}\t{texts[sid] or ''}\n".encode("utf-8"))
+    return h.hexdigest()
+
+
+def emit_labels(rows, excluded, build, exe, out_path, plain=(), dat=None, digest=None):
     """Write the label overlay. Deterministic: sorted ids, fixed field order, no
     clock. Returns the row count. The header carries the counts and every
-    excluded id by reason, so the file itself says how the set was cut."""
+    excluded id by reason, so the file itself says how the set was cut; with
+    `dat` / `digest` it also names the archive the templates were read from
+    and their sha256. Written to a sibling temp file and renamed into place, so
+    a server starting mid-write never reads half a file."""
+    import os
     tally = collections.Counter(why for _sid, why in excluded)
     lines = [
         f"# GENERATED -- do not hand-edit. python {EXTRACTOR} --emit-labels",
         f"# exe: {exe}",
         f"# build: {build} (derived from the image's own sha256 via clientscan/pinned.py, "
         f"never typed in)",
+    ]
+    if dat is not None:
+        lines.append(f"# dat: {dat}")
+    if digest is not None:
+        lines.append(f"# templates_sha256: {digest} (the corpus's description templates in id "
+                     f"order; a different value means the labels were parsed from other text)")
+    lines += [
         f"# rows: {len(rows)} label-tier skill_effect rows = {len(plain)} plain SERVED "
         f"(SERVED and none of {' '.join(sorted(COMPOUND_FLAGS))}) minus {len(excluded)} excluded",
         "# Loaded by toolkit/content.py as kind 'skill_effect', UNDER the hand rows: a",
@@ -1375,15 +1530,36 @@ def emit_labels(rows, excluded, build, exe, out_path, plain=()):
         lines.append(f"build = {int(build)}")
         lines.append(f"verified = {_toml_value(list(r['verified']))}")
         lines.append("")
-    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
-    Path(out_path).write_text("\n".join(lines), encoding="utf-8", newline="\n")
+    out = Path(out_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_name(out.name + ".tmp")
+    tmp.write_text("\n".join(lines), encoding="utf-8", newline="\n")
+    os.replace(tmp, out)
     return len(rows)
 
 
-def default_labels_path():
-    """vault/content/skill_labels.toml, through vaultpath (never ../../vault)."""
+def default_labels_path(require=False):
+    """vault/content/skill_labels.toml, through vaultpath (never ../../vault).
+
+    `require=True` (the emitter's default target) goes through
+    `vaultpath.require_dir`, which RAISES when vault/content is not there: an
+    emit with no vault must not conjure one (reviewer ENG-7)."""
     import vaultpath
+    if require:
+        return Path(vaultpath.require_dir("content", why="the label overlay's home")) / LABELS_FILE
     return Path(vaultpath.vault_path("content")) / LABELS_FILE
+
+
+def skills_table_builds(world):
+    """The distinct `build` stamps on the loaded skills table (a set of ints).
+    Empty when there is no skills table -- the consumers read a label row's
+    numbers from THAT table, so the overlay's build must be one of these."""
+    out = set()
+    for r in world.rows("skills").values():
+        b = getattr(r, "provenance", {}).get("build")
+        if b is not None and str(b).strip():
+            out.add(int(b))
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -1589,15 +1765,35 @@ def main(argv=None):
                   "rows. Point --exe at a pristine snapshot.", file=sys.stderr)
             ix.close()
             return 2
-        out = Path(a.emit_labels) if a.emit_labels else default_labels_path()
+        # ENG-7: the consumers interpolate a label row's numbers from the SKILLS
+        # table, so a label overlay stamped with another build than that table's
+        # would pair 38833's labels with 38797's endpoints. Regenerate skills.toml
+        # first (skilltable.py --emit-content), then this.
+        table_builds = skills_table_builds(world)
+        if not table_builds or int(build) not in table_builds:
+            print(f"REFUSED: the exe is build {build} but the loaded skills table is "
+                  f"{sorted(table_builds) or 'ABSENT'} (vault/content/skills.toml). The label "
+                  f"rows' numbers are read from that table at run time, so both must come "
+                  f"from one build: `python toolkit/clientscan/skilltable.py --emit-content` "
+                  f"on the same exe first, then --emit-labels.", file=sys.stderr)
+            ix.close()
+            return 2
+        try:
+            out = Path(a.emit_labels) if a.emit_labels else default_labels_path(require=True)
+        except SystemExit as exc:
+            print(f"REFUSED: {exc}", file=sys.stderr)
+            ix.close()
+            return 2
         rows, excluded, plain = label_rows(rep, records, set(hand))
-        bad = check_label_rows(rows, rep, set(hand))
+        bad = check_label_rows(rows, rep, set(hand), records)
         if bad:
             print("REFUSED: the label rows fail their own checker:\n  " + "\n  ".join(bad[:20]),
                   file=sys.stderr)
             ix.close()
             return 2
-        n = emit_labels(rows, excluded, build, exe, out, plain)
+        import textrec
+        n = emit_labels(rows, excluded, build, exe, out, plain,
+                        dat=a.dat or textrec.DEFAULT_DAT, digest=template_digest(texts))
         tally = collections.Counter(w for _s, w in excluded)
         print(f"wrote {out}: {n} label-tier rows = {len(plain)} plain SERVED - "
               f"{len(excluded)} excluded {dict(sorted(tally.items()))}")
