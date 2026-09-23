@@ -1918,7 +1918,9 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   never cast — and the suppress mask now follows the client's own bar edits; the owner's
   confirmation pass, same day, PLAN-LOG: the doll's row order fixed — retail's bag order
   dressed, `--equipped-visual-order` reverts — and the general move `c2s 0x0072`
-  ITEM_MOVE_BY_ID armed as RECONSTRUCTION, `--no-item-move-by-id`). **Open**: the party
+  ITEM_MOVE_BY_ID armed as RECONSTRUCTION, `--no-item-move-by-id`; its fix pass, same
+  day, PLAN-LOG: the dress cell keyed by location, the merchant's purchases in the item
+  store, off hands' homes alone reserved, storage bags refused). **Open**: the party
   family from HENCHMAN_ADD's witness (step 5) and travel (step 7); on the client — the
   doll order (I + screenshot: head, chest, arms, legs, feet) and the backpack drag (A =
   stays, B = snaps back); the loopback clicks — kick and add in an outpost under the

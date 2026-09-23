@@ -1523,28 +1523,45 @@ bag->id (+8), slot]`. Its ONE caller is `0x00526AE0` — inside **GmItemHelpers
 `0x00526900`, the `0x004F` drag helper**, at the non-equipped path `0x00526AC3` that the
 "Inventory" section (and `itemstore.py`, `authsrv.py`, overrides row 79) said "sends
 nothing". **REFUTED (EVID-D1D-6)**, read to the call rather than the branch: a bag item →
-`0x00847AF0` (another message, unread), a WHOLE item (quantity == `0x00845120`'s total) →
-`0x00847860` → `0x0072`, a partial quantity → `0x008477C0` (a split, unread). **Nothing on
-the path checks the destination's occupancy**, so a drop onto a filled cell reaches the
-wire. `0x004F` names the item by its equipped SLOT; `0x0072` names it by ID; both are one
-helper's.
+`0x00847AF0` → **`c2s 0x007D` `[item, bag, slot]`** (msgshape SEND `[u32, u16, u8]`, 9 B;
+wrapper `0x0084C690`, callers `0x00847B96` / `0x00847BAA` inside that function), a WHOLE
+item (quantity == `0x00845120`'s total) → `0x00847860` → `0x0072`, a partial quantity →
+`0x008477C0` → **`c2s 0x0075` `[item, quantity, bag, slot]`** (`[u32, u32, u16, u8]`, 13 B;
+wrapper `0x0084C4D0`, its one caller `0x00847846`) — the two siblings named by the fix pass
+from `sendsites --all` + `msgshape` on 38797 (EVR-6), both on NO retail tape and NOT armed.
+**Nothing on the HELPER → SENDER path checks the destination's occupancy.** Whether the
+inventory UI routes a drop onto an OCCUPIED or STACKABLE target through this helper at all
+is **UNVERIFIED** (the fix pass, EVR-4; this paragraph first said "a drop onto a filled
+cell reaches the wire" as a read fact): `0x00526900`'s three callers — `0x004E88E2`,
+`0x004EA2E4`, `0x004EA7A2` (`codescan --xrefs`) — are unread, and two of them query the
+drop target first (`0x00633C10`). The runsheet's step 3 settles it on the client. `0x004F`
+names the item by its equipped SLOT; `0x0072` names it by ID; both are one helper's.
 
 **Named and armed (RECONSTRUCTION).** `schema/overrides.json` GAME_CMSG 114
 **`ITEM_MOVE_BY_ID`**, medium (the mechanism OBSERVED once on our client, the fields from
 the sender; retail's reply NOT FOUND). `handle_item_move_by_id` → `itemstore.plan_move_by_id`,
 labelled at every send: an EMPTY cell of a declared bag → `0x014B [key, item, bag, slot]`
 (retail's reply to every `0x004F` move into a backpack cell, 4 of 4; the add worker wants
-the cell empty, ItCliInv:105, and it is); an OCCUPIED cell → `0x0152 [key, occupant,
-item]` (retail's reply to every occupied-slot equip, 4 of 4; the swap handler exchanges
-any two bagged items — weapons §29: ItCliInv:687/688 hold, :105 holds after both removes);
-an equipped SOURCE → `0x004F`'s own batch; the equipped bag as DESTINATION → the equip's
-batch only at the item's type's slot, else refused (a piece in another piece's cell is
-defect 1). Refused, nothing sent: an unknown item, an undeclared bag, a slot past the bag,
-the item's own cell (the client never sends it — its arrival means the store and the
-client disagree), a RESERVED cell. The cells persist under `--persist`, the set
-machinery's home slot follows (`WEAPON_SET_BACKPACK_SLOTS`), `--no-item-move-by-id` is the
-revert arm; `test_c2striage` §4 requires it named, armed and on NO live tape, so the day a
-retail tape carries one the check reddens and names the witness.
+the cell empty, ItCliInv:105, and it is — the item store being the ONLY map of the bags,
+the merchant's purchases included since the fix pass, ENG-2); an OCCUPIED cell → `0x0152
+[key, occupant, item]` (retail's reply to every occupied-slot equip, 4 of 4; the swap
+handler exchanges any two bagged items — weapons §29: ItCliInv:687/688 hold, :105 holds
+after both removes); an equipped SOURCE → `0x004F`'s own batch; the equipped bag as
+DESTINATION → the equip's batch only at the item's type's slot, else refused (a piece in
+another piece's cell is defect 1); the delegated batches carry the ITEM_MOVE_BY_ID
+RECONSTRUCTION tag too. Refused, nothing sent: an unknown item, an undeclared bag, a slot
+past the bag, a STORAGE bag (types 4/5 — no tape carries a move into one: every `0x014B`
+on 96 live connections lands in a type-1 or type-2 bag and every `0x0152` is between
+those two; and the client's swap strips a set item landing in a type-4 bag from its equip
+sets, ItCliInv:348/375, which the set machinery does not model — the fix pass, ENG-7), the
+item's own cell (the client never sends it — its arrival means the store and the client
+disagree), an EMPTY RESERVED cell (a worn OFF HAND's return cell — leads come back by
+`0x0152` or to a free cell, so their homes are not reserved; an occupied reserved cell is
+a swap — ENG-6). The cells persist under `--persist` (a bought item's does not: the dress
+never re-declares a purchase), the set machinery's home slot follows
+(`WEAPON_SET_BACKPACK_SLOTS`), `--no-item-move-by-id` is the revert arm; `test_c2striage`
+§4 requires it named, armed and on NO live tape, so the day a retail tape carries one the
+check reddens and names the witness.
 
 **Runsheet — the owner's clicks (one loopback session, the sandbox rig, `--weapon-set
 1=starter_sword`, `--persist`), the predictions stated first.**
@@ -1561,14 +1578,63 @@ retail tape carries one the check reddens and names the witness.
 2. **Drag the sword (item 11) from backpack cell 0 to another EMPTY backpack cell.**
    **A** = the sword stays in the new cell and the log reads `ITEM_MOVE_BY_ID(item 11 ->
    bag 2 slot N) [RECONSTRUCTION]: 1 message(s), item 11 -> bag 2 slot N`. **B** = it
-   snaps back: an `UNHANDLED 0x0072` line means the arm is off, a `refused:` line names
-   why. Then drag it back (A again, slot 0). A client assert on `0x014B` (ItCliApi:2126,
-   ItCliInv:105) refutes the empty-cell arm.
+   snaps back: an `ITEM_MOVE_BY_ID ignored (--no-item-move-by-id)` line means the revert
+   flag is on; an `UNHANDLED 0x0072` line means the RUNNING SERVER does not carry this
+   branch at all (a stale sandbox stack — the failure CONFIRM-2026-09-23 §3 records; check
+   the ports and the build); a `refused:` line names why (a storage bag, a reserved cell,
+   the item's own cell). Then drag it back (A again, slot 0). A client assert on `0x014B`
+   (ItCliApi:2126, ItCliInv:105) refutes the empty-cell arm.
 3. **Drag the sword ONTO an occupied backpack cell** (with `--weapon-set
    1=starter_sword+starter_shield`, the shield's cell). A = the two exchange places and the
    log shows one `0x0152`. A client assert on `0x0152` (ItCliApi:2253/2254/2257,
-   ItCliInv:687/688) refutes the swap arm; then `--no-item-move-by-id` and the swap
-   becomes a refusal on the record.
+   ItCliInv:687/688) refutes the swap arm; then relaunch with `--no-item-move-by-id`,
+   which switches off the WHOLE `0x0072` arm (there is no swap-only switch — the empty-cell
+   move goes dark with it), and record the swap as refuted. If the client sends NOTHING for
+   the drop onto the shield (the sword snaps back with no `0x0072` in the log), the UI
+   never routes an occupied drop through the helper — EVID-D1D-5's UNVERIFIED clause
+   answered the other way; record that too.
 4. **Zone and come back.** The sword where it was left (`ITEMS: item 11 (set 1 lead,
-   starter_sword) dressed at bag 2 slot N -- the character's stored cell`), and F2 sends
-   it back to THAT cell afterwards (the home slot followed).
+   starter_sword) dressed at bag 2 slot N -- the character's stored cell`). F2 then puts
+   the sword in hand and the HAMMER in cell N (the leads exchange cells by `0x0152`), and
+   F1 returns the sword to cell N (the home slot followed).
+
+**The fix pass on this section (2026-09-23, two reviews — an evidence refuter and an
+engineering reviewer; their tokens `EVR-n` / `ENG-n` are quoted as written).** The
+evidence held: both re-derived the bag order and the visual permutation from all 96
+connections and reproduced the owner's doll with no free parameter (rows by `0x006E`
+position, by type and by `0x013E` arrival order each predict a correct doll and are
+refuted); the `0x0072` chain, the 1505 assert, the early return and the `[u32, u16, u8]`
+widths held on both builds; the capture is `authsrv-20260923T163355-c1` (the task's
+`163319` is the sandbox RUN id, not a file). What moved, all on `test_itemmoves`
+(floor 137 → 158 bare, 183 vaulted) and `test_purchase` (27 → 35): **(ENG-1 / EVR-1)**
+the dress cell was keyed by wire TYPE, and `wearmap.WORN_TYPES` lets a legs-class piece
+(19) be worn at the boots or gloves location, so such a row put two pieces in bag 3 — two
+`0x013E` into one cell, ItCliInv:105 on the second, and the revert arm could not
+reproduce the old layout for it; `equipped_bag_slot(visual_slot)` is now keyed by the
+worn LOCATION through the inverse permutation (a bijection; it agrees with the type table
+for every piece in its own location), and an in-game re-equip of an off-location piece
+still goes by TYPE (the client's equip path reads the type) — said, open. **(ENG-2 /
+EVR-2)** the merchant kept its own backpack map, never registering a purchase in the
+item store, so a purchase could land on the dressed sword and a drag onto a bought item's
+cell planned a bare `0x014B` into a FILLED cell (reachable under a merchant probe only;
+the same gap already existed for `0x004F`); purchases are now placed in the store
+(`itemstore.place` handed in by the wrapper, so `merchant.py` still imports nothing),
+chosen clear of the store and the reserved cells, popped by the sale, re-keyed on a move
+and never persisted. **(ENG-3)** the `0x0072` handler's `visual_of` had no known-bad arm
+(the mutation survived); it is locked and the real handler is driven through both
+delegates (visual 6 for the head). **(ENG-5 / EVR-8)** the planners' defaults were the
+revert pair; they are retail's now, the identity asked for by name; the `0x006E` comment
+that called the wire a refutation of ldufr's order — the misreading behind defect 1 — is
+scoped to the visual array. **(ENG-6)** every set item's home was reserved, but only an
+OFF HAND returns by `0x014B` (leads exchange by `0x0152` or leave to a free cell), so a
+drag onto the hammer sitting in the sword's home after F2 was refused with a false
+reason; off hands only, occupancy before reservation. **(ENG-7)** storage bags refused as
+destinations (above), and the delegated batches tagged. **(ENG-8)** `test_c2striage`'s
+catalogue entry and §1c's all-connections requirement. **(EVR-3 / ENG-4, EVR-7)** the
+runsheet's steps 2–4 above, corrected in place (an instruction, not a record). **(EVR-4,
+EVR-6)** EVID-D1D-6 above, corrected in place the same day it was written. **Declined:
+EVR-5** (merge `main` first — this branch does not merge itself; the orchestrator's merge
+will meet main's `1ce515a1` in PLAN.md 8.1's D1 bullet and PLAN-LOG's top, and main's
+closures of the kick/add clicks must win there; this section should then link
+[../deskwork/CONFIRM-2026-09-23.md](../deskwork/CONFIRM-2026-09-23.md), which is on main
+only).
