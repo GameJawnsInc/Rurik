@@ -28,6 +28,27 @@ move back.
 
 ---
 
+### REALFIX-L1 re-scored -- 2026-09-23 -- **P2's separation p50 miss is DECIDED (267.5 u at every offset the corrected clock bound admits), its p90 sits AT the 520 u bound, leaning met**
+
+This entry corrects the REALFIX-L1 FIRST RUN entry further below (append-only: that
+entry, and the REALFIX-T1 truncated-arm entry directly below that says "the misses are
+not re-scored here", stand as written). L1 recorded P2's separation misses (p50 267.5
+vs <= 150, p90 523.0 vs <= 520) as UNDECIDABLE-leaning-miss on a ~288 u clock
+systematic; the clock term on those captures is <= 15.848 ms. Re-scored through
+movesync's own pair() and score() at 401 offsets across the bound, and again with
+movetap interpolated to each report's instant plus REALFIX 2.2's 6 ms transport term:
+**p50 MISSED and DECIDED** (267.5 u nearest, 256.1-262.4 u interpolated; the old
+whole-second reading reached 83.8 u, which is why it could not be decided before);
+**p90 AT THE BOUND** (515.8-523.0 u nearest, over 520 at 254 of 401 offsets;
+514.4-518.6 u interpolated, over at 0 of 401, a 1.4-5.6 u margin inside the
+interpolation's own error, leave-one-out p90 7.6 u at double spacing); P0's p50 >= 800
+MET, 4,402.4 u unmoved; no hard row at any offset. All five predictions, written before
+the run, held. L1 stays VOID as a harm verdict; this touches the separation claim only.
+`toolkit/clientscan/test_truncbound.py` section 4 (31 checks vaulted, floor 11 bare);
+with the bound patched back to the old reading its p50 and p90 checks go red.
+[studies/movement/FINDINGS.md](studies/movement/FINDINGS.md) section "2026-09-23 --
+REALFIX-L1 RE-SCORED".
+
 ### REALFIX-T1 truncated arm -- 2026-09-23 -- **the pre-T1 clock slop was milliseconds, not 1.00 s / 288 u: a truncated spread near 1 s is the TIGHT case, and the bound is 1 s + one coarse-clock tick − spread**
 
 This entry corrects the REALFIX-L1 FIRST RUN entry below (append-only: that entry stands

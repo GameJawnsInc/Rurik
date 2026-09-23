@@ -56,6 +56,23 @@ inference from §2, on the same `Recorder.event` code path. `WALL_TICK` is the
 coarsest interval Windows reports on this box, not a property of the capture:
 the largest late rollover seen in a capture is 1.474 ms.
 
+§4, ADDED LATER THE SAME DAY: WHAT THE BOUND CHANGES. REALFIX-L1 (FINDINGS,
+2026-08-21) registered P2's separation at p50 <= 150 u and p90 <= 520 u, got
+267.5 / 523.0, and recorded UNDECIDABLE-leaning-miss on "a 1.00 s spread, worth
+up to ~288 u on any single pairing". §4 re-scores it through movesync's own
+pair() and score() at every offset the corrected bound admits, and with movetap
+interpolated to the instant (the nearest-sample phase removed, REALFIX 2.2's
+transport term added). Its prediction, written before it ran, and the outcome:
+  (1) the published figures reproduce first. HELD, exactly.
+  (2) arm B's p50 stays within +/-15 u of 267.5 across the bound, so the p50
+     miss is DECIDED. HELD: 267.5 at every offset, 256.1-262.4 interpolated.
+  (3) arm B's p90 straddles 520 under nearest-sample pairing, now because of
+     the sample phase and not the clock. HELD: 515.8-523.0; interpolated it is
+     514.4-518.6, under 520 at every offset by less than the interpolation's
+     own error -- AT the bound, leaning met.
+  (4) arm A's p50 >= 800 holds across its bound. HELD, 4402.4 unmoved.
+  (5) no offset in the bound mints a hard row. HELD.
+
 Sections: §1 synthetic, bare machine (the floor). §2 and §3 read the vault's
 server captures through `movesync.load_wire_reports`, the shipped loader, and
 declare a skip without it. Exact figures are asserted on a PINNED population
@@ -63,6 +80,7 @@ declare a skip without it. Exact figures are asserted on a PINNED population
 per-capture properties are asserted on every capture, because a new one that
 breaks them is a finding, not noise.
 """
+import bisect
 import glob
 import math
 import os
@@ -79,7 +97,9 @@ import vaultpath  # noqa: E402
 
 # MEASURED 2026-09-23 off real green runs: 25 checks with the vault present,
 # 11 with `RURIK_VAULT` pointed at an empty directory (2 declared skips). 11 is
-# the bare-machine core, §1, and is the floor.
+# the bare-machine core, §1, and is the floor. Later that day §4 (the
+# REALFIX-L1 re-score) took the vaulted run to 31; it needs the vault, so the
+# floor holds.
 LEDGER = checks.Ledger("the truncated offset's error is 1 - spread + a tick, "
                        "not the spread", floor=11)
 check = checks.adopt(LEDGER)
@@ -100,6 +120,18 @@ STEADY_MAX = 0.001          # the steady-clock check: 1 ms end to end
 BLOCK12 = "authsrv-20260819T145717-c1.jsonl"
 STEPPED = ("authsrv-20260810T151946-c1.jsonl",
            "authsrv-20260817T011449-c1.jsonl")
+# REALFIX-L1's two arms (studies/movement/FINDINGS.md, 2026-08-21), capture and
+# movetap. Its registered claim (REALFIX.md, the P2 block): separation, SYNC vs
+# the client's report, P0 p50 >= 800 u; P2 p50 <= 150 u and p90 <= 520 u.
+L1_ARMS = (("A (P0 control)", "authsrv-20260821T081744-c1.jsonl",
+            "movetap-20260821T081927.jsonl"),
+           ("B (P2 --zero-lead)", "authsrv-20260821T082631-c1.jsonl",
+            "movetap-20260821T082702.jsonl"))
+L1_P50, L1_P90, L1_P0_P50 = 150.0, 520.0, 800.0
+# REALFIX.md section 2.2's transport term: a report is the client's position
+# when SENT, up to this much before the server stamped it.
+TRANSPORT = 0.006
+GRID = 400
 
 
 def stamps(truth, ts, lags=None, step=None):
@@ -488,6 +520,160 @@ def section3(caps):
               "from a single delayed row")
 
 
+def interp_seps(S, keys, offset):
+    """Separation, SYNC (`live`) interpolated to each report's own instant.
+
+    `keys` is a fixed list of (server t, report xy), so every offset scores the
+    same reports. Linear between the two bracketing movetap samples, and only
+    when they sit within `MAX_PAIR_GAP` of each other; this removes the
+    nearest-sample phase term (up to one sample interval of travel) that
+    `movesync.pair` carries.
+    """
+    ts = [s["t"] for s in S]
+    out = []
+    for st, p in keys:
+        ut = offset + st
+        j = bisect.bisect_left(ts, ut)
+        if j == 0 or j >= len(S):
+            continue
+        a, b = S[j - 1], S[j]
+        if b["t"] - a["t"] > movesync.MAX_PAIR_GAP:
+            continue
+        la, lb = a["live"], b["live"]
+        if not all(math.isfinite(c) for c in la[:2] + lb[:2]):
+            continue
+        w = (ut - a["t"]) / (b["t"] - a["t"])
+        out.append(math.hypot(la[0] + w * (lb[0] - la[0]) - p[0],
+                              la[1] + w * (lb[1] - la[1]) - p[1]))
+    return out
+
+
+def sep_stats(seps):
+    """(n, p50, p90, max) by movesync's percentile, rounded as it prints."""
+    return (len(seps), round(movesync.pct(seps, 0.5), 1),
+            round(movesync.pct(seps, 0.9), 1), round(max(seps), 1))
+
+
+def grid(lo, hi, n=GRID):
+    return [lo + (hi - lo) * k / n for k in range(n + 1)]
+
+
+def section4(root):
+    print("\n4. REALFIX-L1's registered separation bounds, re-scored across "
+          "the clock bound")
+    arms = {}
+    for label, cap, tap in L1_ARMS:
+        pc = os.path.join(root, "captures", "gamesrv", cap)
+        pt = os.path.join(root, "captures", "movetap", tap)
+        if not (os.path.isfile(pc) and os.path.isfile(pt)):
+            LEDGER.skip("4. REALFIX-L1 re-score",
+                        f"arm {label}'s capture or movetap is not in this "
+                        f"vault")
+            return
+        S = movesync.load_movetap(pt)
+        reps, walls, _src = movesync.load_wire_reports(pc)
+        d = movesync.offset_detail(walls)
+        arms[label[0]] = (label, S, reps, d)
+
+    def scored(S, reps, off):
+        prs = movesync.pair(S, reps, off)
+        return sep_stats(movesync.score(prs, "live")[0])
+
+    # REPRODUCE FIRST: the published figures, from the shipped pairing at the
+    # shipped offset. A re-score of numbers this cannot reproduce is fiction.
+    got = {k: scored(S, reps, d["offset"]) for k, (_l, S, reps, d)
+           in arms.items()}
+    check(got == {"A": (63, 4402.4, 6287.3, 6811.4),
+                  "B": (68, 267.5, 523.0, 530.5)},
+          f"REPRODUCED at the shipped offset: arm A n/p50/p90/max {got['A']}, "
+          f"arm B {got['B']} -- the figures FINDINGS published",
+          "if these moved, the pipeline changed under the record and the "
+          "re-score below is not of the same measurement")
+
+    _lb, S, reps, d = arms["B"]
+    off, bound = d["offset"], d["bound"]
+    keys = [(t, p) for t, p, _s, _g in movesync.pair(S, reps, off)]
+    near = [scored(S, reps, off + x) for x in grid(0.0, bound)]
+    inter = [sep_stats(interp_seps(S, keys, off + x))
+             for x in grid(-TRANSPORT, bound)]
+    old = [scored(S, reps, off + x) for x in grid(0.0, 0.99, 99)]
+    hard = max(len(movesync.score(movesync.pair(S, reps, off + x), "live",
+                                  min_units=0.0,
+                                  min_speed=movesync.HARD_JUMP_SPEED)[1])
+               for x in grid(-TRANSPORT, bound))
+
+    def rng(rows, i):
+        return min(r[i] for r in rows), max(r[i] for r in rows)
+
+    p50n, p50i, p50o = rng(near, 1), rng(inter, 1), rng(old, 1)
+    print(f"   arm B, bound +{bound * MS:.3f} ms: nearest-sample pairing over "
+          f"[0, +bound] p50 {p50n[0]}-{p50n[1]}, p90 {rng(near, 2)[0]}-"
+          f"{rng(near, 2)[1]}; interpolated over [-{TRANSPORT * MS:.0f} ms, "
+          f"+bound] p50 {p50i[0]}-{p50i[1]}, p90 {rng(inter, 2)[0]}-"
+          f"{rng(inter, 2)[1]}")
+    check(min(p50n[0], p50i[0]) > L1_P50
+          and (p50n, p50i) == ((267.5, 267.5), (256.1, 262.4)),
+          f"P2 p50 <= {L1_P50:.0f} u is MISSED, and DECIDED: {p50n[0]}-"
+          f"{p50n[1]} u at every offset inside the clock bound, {p50i[0]}-"
+          f"{p50i[1]} u interpolated with the transport term too -- at least "
+          f"{min(p50n[0], p50i[0]) - L1_P50:.0f} u over",
+          "FINDINGS recorded it UNDECIDABLE-leaning-miss on a 288 u clock "
+          "systematic; the clock term is now <= 4.6 u")
+    # THE CONTROL THAT MAKES "DECIDED" MEAN SOMETHING: under the old reading
+    # (the offset anywhere in the whole second) the same statistic CAN cross
+    # the bar. If it could not, the old UNDECIDABLE was never about the clock.
+    check(p50o[0] <= L1_P50 < p50o[1] and p50o[0] == 83.8,
+          f"KNOWN-BAD, the old reading: with the offset anywhere in "
+          f"[offset, offset + 1 s) the p50 ranges {p50o[0]}-{p50o[1]} u and "
+          f"crosses {L1_P50:.0f}",
+          "the reason the record could not decide, reproduced -- and the "
+          "reason the corrected bound can")
+    p90n, p90i = rng(near, 2), rng(inter, 2)
+    over_n = sum(1 for r in near if r[2] > L1_P90)
+    over_i = sum(1 for r in inter if r[2] > L1_P90)
+    # How good is the interpolation? Leave each movetap sample out, predict it
+    # from its neighbours (DOUBLE the real spacing, so an over-estimate), and
+    # keep the samples within MAX_PAIR_GAP of a paired report.
+    inst = sorted(off + t for t, _p in keys)
+    loo = []
+    for a, b, c in zip(S, S[1:], S[2:]):
+        if c["t"] - a["t"] > 2 * movesync.MAX_PAIR_GAP:
+            continue
+        k = bisect.bisect_left(inst, b["t"])
+        if min(abs(inst[i] - b["t"]) for i in (k - 1, k)
+               if 0 <= i < len(inst)) > movesync.MAX_PAIR_GAP:
+            continue
+        w = (b["t"] - a["t"]) / (c["t"] - a["t"])
+        loo.append(math.hypot(
+            a["live"][0] + w * (c["live"][0] - a["live"][0]) - b["live"][0],
+            a["live"][1] + w * (c["live"][1] - a["live"][1]) - b["live"][1]))
+    loo_p90 = movesync.pct(loo, 0.9)
+    check(p90n[0] <= L1_P90 < p90n[1] and over_i == 0
+          and 0.0 < L1_P90 - p90i[1] < loo_p90
+          and (p90n, p90i, over_n) == ((515.8, 523.0), (514.4, 518.6), 254),
+          f"P2 p90 <= {L1_P90:.0f} u sits AT the bound: {p90n[0]}-{p90n[1]} u "
+          f"by the shipped nearest-sample pairing, over {L1_P90:.0f} at "
+          f"{over_n} of {len(near)} offsets in the clock bound (523.0, the "
+          f"published miss, is its low edge); {p90i[0]}-{p90i[1]} u "
+          f"interpolated, over at {over_i} of {len(inter)} with the transport "
+          f"term -- met by {L1_P90 - p90i[1]:.1f}-{L1_P90 - p90i[0]:.1f} u",
+          f"a margin inside the interpolation's own error (leave-one-out p90 "
+          f"{loo_p90:.1f} u at double spacing, n {len(loo)}): leaning met, "
+          f"not decided either way -- and no longer because of the clock")
+    check(hard == 0,
+          f"and no offset in [-{TRANSPORT * MS:.0f} ms, +bound] mints a hard "
+          f"row on arm B: the displacement falsifier cannot fire",
+          f"max hard rows over the sweep {hard}")
+
+    _la, S_a, reps_a, d_a = arms["A"]
+    p0 = [scored(S_a, reps_a, d_a["offset"] + x)[1]
+          for x in grid(0.0, d_a["bound"])]
+    check(min(p0) >= L1_P0_P50,
+          f"P0 p50 >= {L1_P0_P50:.0f} u is MET at every offset in arm A's "
+          f"bound ({min(p0)}-{max(p0)} u): the parked copy",
+          "the control's separation claim, unchanged by the re-score")
+
+
 def main():
     print("the truncated clock offset: its error bound, scored against the "
           "float stamp")
@@ -508,6 +694,7 @@ def main():
     caps = load(paths)
     section2(caps)
     section3(caps)
+    section4(root)
     return LEDGER.verdict()
 
 
