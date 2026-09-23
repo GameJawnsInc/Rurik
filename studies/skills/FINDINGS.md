@@ -5085,8 +5085,11 @@ against a census, not against whatever the sender happened to do first.
   committed replay (`adrenreplay.py`, animref §19's note) finds them in
   company — 20 of the 39 reason-1960 refusals also arrive with the client-rule
   slot exactly at cost, while all 45 accepted presses do too; so the "exactly
-  == cost" declines are not a fourth class of two but a second gate of
-  twenty-two, unidentified.
+  == cost" declines **may share a gate with** those twenty — a second gate of
+  up to twenty-two behind reason 1960 — but the two 384 declines carry **no**
+  reason string on the wire, so their membership is RECONSTRUCTION (inferred
+  from the shared "full slot", not read), and the gate is unidentified either
+  way.
 - **String ids 1928–1933** are RC4-encrypted archive records and unreadable.
 
 ## 37. SKILLS-R2 — the "~10 second" re-animation is a 1-second loop that never stops

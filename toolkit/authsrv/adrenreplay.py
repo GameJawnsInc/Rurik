@@ -24,9 +24,10 @@ simulation, with the client's own rules and NO free parameter:
 A disagreement is printed with its capture, connection, time, skill, slot and
 cost. It is a finding about the model, not a row to be fitted away.
 
-WHAT IT FOUND (2026-09-22, the whole live corpus, 86 adrenal presses on the
-one tape that presses them, 20260817T231139 -- the census animref 19 made by
-hand, 382 22/20, 384 14/13, 385 8/8, to the press):
+WHAT IT FOUND (2026-09-22, the whole live corpus, 86 adrenal presses in all --
+85 on 20260817T231139, the tape that presses them, plus one 348 accept on
+20260821T205552 -- the census animref 19 made by hand, 382 22/20, 384 14/13,
+385 8/8, to the press):
 
     P2 HOLDS, 45 of 45: every accepted adrenal press found its slot full.
     P1 SPLITS, 19 of 39: nineteen 1960-refusals found the slot short, and

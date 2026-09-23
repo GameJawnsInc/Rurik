@@ -891,8 +891,9 @@ empty or zero-cost one, add then cap at the skill's cost) and its spend rule
 (`test_adrenwire` §9 — the used skill to zero, every other occupied slot
 loses 25), replayed over both directions of every live connection with no
 free parameter, and scored press by press against E4/E2. It reproduces this
-section's census to the press (382 22/20, 384 14/13, 385 8/8; 86 adrenal
-presses, all on `20260817T231139`) and finds:
+section's census to the press (382 22/20, 384 14/13, 385 8/8 — 85 adrenal
+presses on `20260817T231139`, plus one 348 accept on `20260821T205552`, 86 in
+all) and finds:
 
 - **P2 — every accepted adrenal press found its replayed slot at cost: 45 of
   45.** OBSERVED.

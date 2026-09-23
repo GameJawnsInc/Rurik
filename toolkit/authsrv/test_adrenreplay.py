@@ -161,10 +161,13 @@ def section_corpus():
     check(full and all(r["held"] == r["cost"] for r in full)
           and all(r["capture"] == PVP_TAPE for r in disagree)
           and len(disagree) == PVP_REFUSE_FULL,
-          "and every one of them holds EXACTLY the cost -- the second gate's shape",
-          f"{sorted({(r['skill'], r['held'], r['cost']) for r in full})} -- the same "
-          f"value every accepted press carries, so the pool is not what separates "
-          f"them; named as a second gate behind reason 1960, not fitted")
+          "and all 20 sit at a FULL slot -- the second gate's size",
+          f"{sorted({(r['skill'], r['held'], r['cost']) for r in full})}. "
+          f"`held == cost` is true under the cap for anything the replay calls "
+          f"full, so the teeth here is the COUNT (20 of them, all on the PvP "
+          f"tape), not the equality -- the same value every accepted press "
+          f"carries, so the pool is not what separates them; named as a second "
+          f"gate behind reason 1960, not fitted")
     others = [r for r in pvp if r["answer"] == "refuse"
               and not (r["reason"] and ar.REASON_ADRENALINE in r["reason"])]
     check(len(others) == PVP_OTHER_REASON
