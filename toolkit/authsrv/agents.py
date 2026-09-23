@@ -1160,6 +1160,12 @@ GV_ATTACK_STOPPED = 3
 GV_DISABLED = 8
 GV_SKILL_DAMAGE = 10
 GV_MAX_HP_REACHED = 32
+# DESKWORK-D5 step 2 (2026-09-23): SENT since today -- the stagger of an interrupt
+# (animref D5: the prop-35 int handler plays AvChar 0x007E0490 with a compiled-in
+# 0.4 s; prop 63 is the same method with the wire's float). OBSERVED twice on the
+# live corpus, both at the observer (toolkit/authsrv/interruptjoin.py): inside the
+# cancel burst for a cast ([8,0] E5 [59] E2 [35] E5) and the attack's stop for an
+# auto-attack ([8,0] [3] [35] [8,1]). `authsrv.interrupt_player` / `interrupt_body`.
 GV_INTERRUPTED = 35
 GV_ATTACK_SKILL_FINISHED = 46
 GV_INSTANT_SKILL_ACTIVATED = 48

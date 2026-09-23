@@ -6862,6 +6862,33 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   Reversal-of-Fortune heals as damage-word declarations); and ≥ 13 of ≥ 47 positive-55 heal
   words at the observer carry it — some, not all, which is open. 16 checks (was 13), floor 10
   (the sender: §1's 10 fixture-less checks). Read-only on the vault),
+  `toolkit/authsrv/test_interrupt.py` (**2026-09-23, DESKWORK-D5 step 2 — the interrupt on
+  the wire, retail's two witnessed batches locked on our sender byte-order against the
+  TAPE.** §1 is the sender, fixture-less: `interrupt_player` on a cast in activation sends
+  `[8,0]`, E5 (the full recharge), `[59]`, E2, `[35]`, E5 (recharge + 20) and nothing else,
+  books the entry as released and recharging from the interrupt (the second E5 owns the
+  clock), and the tick then sends nothing until the E6 and exactly the E6 at R + 20;
+  `--no-interrupts` sends nothing and the cast runs on (the known-bad arm); Lightning
+  Javelin's "attacking" leaves a spell in activation alone and stops an attack skill in
+  activation with `[49]` and no second E5 (RECONSTRUCTION, said so); a queued cast behind the
+  interrupted one is marked cancelled for the tick's pre-begin release; on the auto-attack
+  chain `[8,0] [3] [35] [8,1]`, the armed swing handed to the tick, the chain and its swing
+  clock untouched, and with no hold held the two stops alone; nothing when neither casting
+  nor attacking, nothing for a skill without `interrupts`; end to end through `land_swing`
+  (340: the word THEN the run, identical to the unit run) and `body_spell_word` (230: the run
+  THEN `[10]` THEN the word); `interrupt_body` on a hostile mid-cast (`[59] [35]`, no hold, the
+  slot recharging 24 s), on a hero mid-cast (E5 `[59]` E2 `[35]` E5 on the hero's id), on a
+  swing in flight (`[3] [35]`, the landing dropped, the chain's clock untouched), on a body
+  doing neither (nothing), under the flag (nothing); and the three content rows. §2 reads the
+  live corpus through `interruptjoin.census()` (declared skip without the vault): EXACTLY 2
+  property-35 messages on tapes stamped 2026-09-23 or earlier (a third reddens it; a later
+  tape does not), ≥ 34 `[59]`, ≥ 12 `[49]`, ≥ 92 `[10]`; both victims the observer, each run
+  opening `[8, victim, 0]` and contiguous; no `[63]` riding a `[35]` and no stop riding a
+  `[63]`; §1's OWN cast run and swing run equal to the tape's, byte for byte with the victim
+  id substituted in the agent slot (a blind replace rewrote skill 1 and the hold's 1 — the
+  first cut); the end-to-end ORDER at the victim equal to the tape's for both witnesses; the
+  tape's 0x00E6 at 24.0 ± 0.1 s after the interrupt; the interrupters 340 and 230 read off
+  the `[10]` words. 30 checks, floor 21 (the sender's 21). Read-only on the vault),
   `toolkit/authsrv/test_adrenreplay.py` (**2026-09-22, DESKWORK-D5 step 6 — the per-bar
   adrenaline simulation animref §19 asked for, scored press by press against retail's
   accept / refuse.** `adrenreplay.py` replays the client's own slot rules (skills §26.2:

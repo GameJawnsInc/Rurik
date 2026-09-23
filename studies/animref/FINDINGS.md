@@ -133,6 +133,9 @@ float-shaped, some with `['22','11','11']` / `['22','12','12']` companions;
 value 8 on the ranger capture); **63 (knocked_down): 3**. And the negative that
 matters: **35 (interrupted): 0 in the whole corpus** — D5 stays a decode question, not
 a mining question. OBSERVED counts; semantics UNVERIFIED (R4's decode targets).
+**(2026-09-23: the negative fell — 35 occurs TWICE and 63 FOUR times on the corpus of
+that day, both 35s at the observer; `toolkit/authsrv/interruptjoin.py`, and the D5
+note below.)**
 
 ## 7. Property 45 at n=79 — a ~1 Hz per-agent mark, plus the E2 adjacency
 
@@ -260,6 +263,28 @@ today for the same reason: this server has **no interrupt mechanic and no
 knockdown mechanic** — nothing computes when a cast is interrupted or a body
 knocked down, so there is no event to attach the visual to. Decoded and parked;
 wiring waits on the mechanic, not on more reading.
+
+**2026-09-23 (DESKWORK-D5 step 2) — D5 WITNESSED and WIRED.** Two tapes recorded
+after this paragraph carry property 35, both at the observer, and the prediction
+above is right about the ingredients and wrong about their order
+(`toolkit/authsrv/interruptjoin.py`; the full account is castmech §4's 2026-09-23
+note). The cast interrupt (`20260916T213125` conn `57894`, t=484.333 — Disrupting
+Chop 340 landing on Healing Signet 1.55 s into 2.0 s) is, for the victim:
+`[8, 25, 0]`, **`0x00E5 [25, 1, 0, 4]`**, `[59, 25, 0]`, `0x00E2 [25, 1, 0]`,
+`[35, 25, 0]`, **`0x00E5 [25, 1, 0, 24]`** — the full recharge starts on an E5
+BEFORE the E2, the stagger follows the release, and a second E5 carries the +20
+disable (the E6 lands at +24.007 s). The swing interrupt (`20260917T224104` conn
+`62557`, t=434.658 — Lightning Javelin 230 on the auto-attack chain in its
+backswing): `[8, 25, 0]`, `[3, 25, 0]`, `[35, 25, 0]`, `[8, 25, 1]`, then the
+caster's `[10]` and word; no bar message, and the next START on the original
+swing clock. The value on 35 is 0 on both (the handler's compiled-in 0.4 s, as
+decoded above); the corpus's four `[63]` all carry 2.0 and none shares a batch
+with a stop or a 35 — the mechanism split above holds on the wire, and GWW
+"Interrupt" says knock-downs "are not considered interrupts". The mechanic now
+exists: `authsrv.interrupt_player` (the player as victim, OBSERVED n=1 per
+shape) and `interrupt_body` (a body or hero as victim, RECONSTRUCTION — no tape),
+`--no-interrupts`, `test_interrupt.py` byte-order against the tape. Dazed's "any
+hit interrupts a spell" is D6's and rides the same sender when it lands.
 
 **Prop 45 — DECODED as NOT cast-lifecycle.** Case body `0x00812DE5` calls
 `0x007E0080`, which resolves the agent and tail-jumps `0x0047F480(this=agent)`

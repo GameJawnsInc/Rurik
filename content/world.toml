@@ -2407,9 +2407,38 @@ its tooltip and 2^(60/40) of that bare (studies/skills 50.1, 20260917T090355: 10
 2) -- the 25 % (80 -> 60) and the elemental rating both. No shipped bar carries it; the row \
 is what lets a body's cast deal it and resolve against the taker's penetrated rating."""
 
+# ---- THE TWO WITNESSED INTERRUPTERS (DESKWORK-D5 step 2, 2026-09-23) ----------------
+# `interrupts` names what the skill stops when it hits: "action" is any action in
+# progress (a skill in activation or an attack), "attacking" only a victim that is
+# attacking. `interrupt_disable` is added to the interrupted skill's full recharge.
+# The wire for the victim is authsrv.interrupt_player (the player, OBSERVED n=2 --
+# toolkit/authsrv/interruptjoin.py) and interrupt_body (a body, RECONSTRUCTION).
+[skill_effect.340]
+scale_means = "Bonus damage"   # +20 on every rank (scale 20 -> 20, args = 0): the strike's bonus
+interrupts = "action"
+interrupt_disable = 20
+[skill_effect.340.provenance]
+source = "capture"
+capture = "20260916T213125"
+origin = "live"
+verified = """OBSERVED n=1 (conn 57894, t=484.333, interruptjoin.py): agent 104's [50, 104, 25, 340] \
+at 483.770; at 484.333 its [46], the observer's gain, [10, 25, 340], the word, then the victim's run \
+[8, 25, 0], 0x00E5 [25, 1, 0, 4], [59, 25, 0], 0x00E2 [25, 1, 0], [35, 25, 0], 0x00E5 [25, 1, 0, 24] -- \
+Healing Signet (1, activation 2.0, table recharge 4) interrupted 1.55 s in, recharging 4 then 24, the \
+0x00E6 [25, 1, 0] at 508.340 (+24.007 s). WIKI (GWW "Disrupting Chop", read 2026-09-23): "If it hits, \
+this attack interrupts the target's current action. If that action was a skill, that skill is disabled \
+for an additional 20 seconds" -- a signet is a skill, so the tape AGREES (the survey read "spell" \
+there; the page does not say it). Client 38797: id 340, type_code 14, axe, 6 adrenaline (38888: 5), \
+recharge 1 (38888: 0). The row's own damage is the strike's +20 bonus."""
+
 [skill_effect.230]
 scale_means = "Lightning damage"
 damage_type = 4                # lightning: the 0x00A7 kind on 15 of 15 arrivals (section 34)
+interrupts = "attacking"       # DESKWORK-D5 step 2: OBSERVED n=1 at the observer's auto-attack
+                               # (20260917T224104 conn 62557 t=434.658: [8,0] [3] [35] [8,1] before
+                               # [10, 25, 230] and the word; the chain's next START on the original
+                               # clock). What "attacking" covers beyond a swing chain -- an attack
+                               # skill in activation -- is UNVERIFIED; a spell in activation is not it.
 [skill_effect.230.provenance]
 source = "wiki"
 page = 'GWW, "Lightning Javelin", {{Skill infobox}} + {{Skill progression}}, read 2026-09-19'
@@ -2419,8 +2448,9 @@ penetration and strikes all foes between you and your target"; var1 `Lightning d
 15->50; `aoe = linear`. Client (38797): id 230, type_code 5, attribute 8, 5 energy, 1 s \
 activation, 5 s recharge, scale 15->50 args = 2, aoe_range 100 (the line), projectile 405, \
 the bonus slot 1->10 (unnamed here). OBSERVED: kind 4 on 15 of 15 arrivals (section 34); onto \
-the same Warrior 50 x 6 armoured and 140 x 1 bare, 2^(60/40) inside truncation (50.1). NOT \
-modelled, said here: the interrupt and the line AoE -- one target, its damage."""
+the same Warrior 50 x 6 armoured and 140 x 1 bare, 2^(60/40) inside truncation (50.1). The \
+interrupt is modelled since 2026-09-23 (`interrupts`, above). NOT modelled, said here: the line \
+AoE -- one target, its damage."""
 
 
 # ---- A PLAYER'S SPELL PROJECTILE (2026-09-20, studies/weapons/PLAN.md 36) -----------

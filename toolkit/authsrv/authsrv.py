@@ -4867,6 +4867,34 @@ ADREN_BAR_GATE = True
 # defined 2026-08-06 and never sent until today. --no-skill-damage-word reverts.
 SKILL_DAMAGE_WORD = True
 
+# THE INTERRUPT (DESKWORK-D5 step 2, 2026-09-23; `interruptjoin.py`; castmech P1's
+# and animref D5's 2026-09-23 notes). Both study lines said "no interrupt has ever
+# been captured"; two tapes recorded after them carry property 35, both with the
+# PLAYER as victim, and the reader gives them a denominator (34 [59], 12 [49],
+# 237 [3]: every other stop is a cancel; 4 [63]: no knockdown rides a stop).
+#   * A CAST interrupted (Disrupting Chop 340 on Healing Signet, 1.55 s into
+#     2.0 s; `20260916T213125` t=484.333): after the attacker's word,
+#     [8, victim, 0], 0x00E5 [victim, skill, copy, RECHARGE] (the full recharge
+#     starts), [59, victim, 0], 0x00E2 [victim, skill, copy], [35, victim, 0],
+#     then a SECOND 0x00E5 with recharge + 20 (the disable) -- and the 0x00E6
+#     lands 24.007 s later, so the second E5 owns the clock. No 0x00E3 follows.
+#   * An AUTO-ATTACK interrupted (Lightning Javelin 230, `20260917T224104`
+#     t=434.658, the chain between swings): BEFORE the caster's [10] and word,
+#     [8, victim, 0], [3, victim, 0], [35, victim, 0], [8, victim, 1] -- the
+#     chain survives and re-takes the hold; the next START came on the ORIGINAL
+#     clock (435.074 = 433.744 + 1.33), so the swing clock is not touched.
+# The WIKI (GWW "Interrupt"): any skill with an activation time and all attacks;
+# the interrupted skill "cannot be activated again until it has recharged";
+# queued skills are un-queued; knock-downs are NOT interrupts (the tape agrees,
+# 0 of 4). GWW "Disrupting Chop": "If that action was a SKILL, that skill is
+# disabled for an additional 20 seconds" -- a signet is a skill, so the +20 on
+# Healing Signet AGREES with the page (the survey read "spell" there; it does
+# not say spell). Content rows carry the flags (`interrupts`, `interrupt_disable`
+# on skill_effect 340 and 230). A body or hero as VICTIM is RECONSTRUCTION
+# (interrupt_body). Dazed's "any hit interrupts a spell" is D6's and NOT here.
+# --no-interrupts reverts to the server that could not interrupt anything.
+INTERRUPTS = True
+
 # THE PLAYER'S OWN MAXIMUM BEFORE A DAMAGE WORD (DESKWORK-D5 step 3(a)). Retail
 # never puts the OBSERVER's property 42 immediately ahead of a damage word at
 # the observer: 0 of 401 16/17 words and 0 of 3 armour-ignoring 55 words. The
@@ -12364,6 +12392,9 @@ def body_spell_word(send, state, agent_id, skill_id, tid, tbody, dealt, frac,
         # reward inside.
         hurt_agent_row(send, state, agent_id, tid, dealt, frac, conn_id,
                        f"skill {skill_id}")
+        # DESKWORK-D5 step 2: the spell's interrupt on a BODY -- RECONSTRUCTION.
+        interrupt_body(send, state, tid, state.get("agents", {}).get(tid), conn_id,
+                       skill_id, agent_id)
         return
     state["player_health"] = max(0.0, state["player_health"] - dealt)
     # THE GAIN PRECEDES THE DAMAGE (see hit_enemy for the census). No strike
@@ -12379,6 +12410,13 @@ def body_spell_word(send, state, agent_id, skill_id, tid, tbody, dealt, frac,
             pools.damage_units(dealt / player_max_health(state)),
             time.time(), conn_id, f"{dealt:.0f} damage taken from skill "
                                   f"{skill_id}")
+    # DESKWORK-D5 step 2: a SPELL that interrupts (Lightning Javelin 230) puts
+    # the interrupt run BEFORE its [10] and word -- retail's order, 1 of 1
+    # (20260917T224104 t=434.658: [8,0] [3] [35] [8,1], then [10, 25, 230] and
+    # the word). Where the gain sits relative to the run is UNOBSERVED (the
+    # witness's bar is dark); it stays ahead, as at every other word.
+    if state["player_health"] > 0.0:
+        interrupt_player(send, state, conn_id, skill_id, agent_id)
     # DESKWORK-D5 3(b): [10, player, skill] between the gain and the word --
     # retail's batch for a spell at the observer is 0xA7, 0xA0, (0xCF,) [10],
     # [16], 16 + 10 + 9 of the 92 (adrenjoin's order census).
@@ -12874,9 +12912,16 @@ def land_player_spell_shot(send, state, conn_id, shot, connected=True):
     # `armed`: the landing is not a swing and takes no swing-interval gate --
     # three daggers land inside 0.7 s on the tape (the E5's own exact hit
     # kept the gate, and keeps it on the revert arm).
-    return hit_enemy(send, state, tid, conn_id, exact=spell["amount"], swing=False,
+    _res = hit_enemy(send, state, tid, conn_id, exact=spell["amount"], swing=False,
                      armed=True, projectile=True,
                      label=f"skill {sid}'s projectile lands", before_damage=before)
+    if _res == "landed":
+        # DESKWORK-D5 step 2: the player's interrupting SPELL (Lightning
+        # Javelin 230) on a body -- RECONSTRUCTION; at the player retail puts
+        # the spell's run BEFORE the word, and a body's word is hit_enemy's.
+        interrupt_body(send, state, tid, state.get("agents", {}).get(tid), conn_id,
+                       sid, PLAYER_AGENT_ID)
+    return _res
 
 
 # ---- FIREBALL'S SPLASH: A PROJECTILE SPELL'S AREA (2026-09-20, studies/weapons 38)
@@ -16939,6 +16984,12 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
 
     if agent["health"] <= 0.0:
         kill_agent(send, state, target_id, agent, conn_id, now)
+    elif skill_id is not None:
+        # DESKWORK-D5 step 2: the player's interrupting ATTACK SKILL on a body
+        # -- after the word, as retail puts the attack-skill run at the player
+        # (1 of 1). A body as victim is RECONSTRUCTION (interrupt_body).
+        interrupt_body(send, state, target_id, agent, conn_id, skill_id,
+                       PLAYER_AGENT_ID)
     return "landed"
 
 
@@ -17157,6 +17208,244 @@ def skill_damage_word(send, skill_id, why):
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
          [agents.GV_SKILL_DAMAGE, PLAYER_AGENT_ID, int(skill_id)],
          f"skill {int(skill_id)} is the damage's skill ({why})")
+
+
+def skill_interrupts(skill_id):
+    """What a skill's content row says it interrupts (`interrupts` on its
+    skill_effect row): "action" -- any action in progress, a skill in
+    activation or an attack (Disrupting Chop 340); "attacking" -- only a
+    victim that is attacking, a swing chain or an attack skill in activation
+    (Lightning Javelin 230, "interrupts attacking foes"); None otherwise.
+    The two rows are the corpus's two witnesses (interruptjoin.py)."""
+    if not skill_id:
+        return None
+    try:
+        v = agents.WORLD.get("skill_effect", str(int(skill_id))).get("interrupts")
+    except Exception:                                          # noqa: BLE001
+        return None
+    return str(v) if v else None
+
+
+def skill_interrupt_disable(skill_id):
+    """`interrupt_disable` on the interrupter's row: seconds ADDED to the
+    interrupted skill's full recharge. OBSERVED n=1: Disrupting Chop on
+    Healing Signet, recharge 4 -> 24 on the second 0x00E5 and the 0x00E6 at
+    +24.007 s (20260916T213125). WIKI "Disrupting Chop": "+20 seconds" when
+    "that action was a skill" -- a signet is one."""
+    try:
+        return int(agents.WORLD.get("skill_effect", str(int(skill_id)))
+                   .get("interrupt_disable") or 0)
+    except Exception:                                          # noqa: BLE001
+        return 0
+
+
+def _open_player_cast(state):
+    """The player's cast IN ACTIVATION: begun, not completed (E5 unsent), not
+    already cancelled. A queued entry (begun False) is not open -- it is what
+    the interrupt un-queues."""
+    for cast in state.get("pending_casts") or ():
+        if cast.get("begun", True) and not cast["e5_sent"] and not cast.get("cancelled"):
+            return cast
+    return None
+
+
+def interrupt_player(send, state, conn_id, by_skill, by_agent):
+    """Retail's interrupt at the PLAYER, both witnessed shapes (DESKWORK-D5
+    step 2; `interruptjoin.py`; castmech P1 / animref D5, 2026-09-23 notes).
+    Returns "cast", "swing" or None (nothing to interrupt, or the flag off).
+
+    A CAST in activation -- OBSERVED 1 of 1 (Disrupting Chop 340 on Healing
+    Signet, 1.55 s into 2.0 s; 20260916T213125 conn 57894 t=484.333), sent in
+    the tape's order right AFTER the interrupter's damage word:
+        [8, player, 0]                       the hold releases
+        0x00E5 [player, skill, copy, R]      the FULL table recharge starts
+        [59, player, 0]                      the spell family's stop
+        0x00E2 [player, skill, copy]         the pending entry releases
+        [35, player, 0]                      the stagger (0.4 s, animref D5)
+        0x00E5 [player, skill, copy, R + D]  the disable, when the row has one
+    and the 0x00E6 follows at R + D (24.007 s on the tape): the second E5
+    owns the clock. No 0x00E3 follows (1 of 1), so the caster is free at once
+    (`cast_busy_until`). Costs stay paid (WIKI). RECONSTRUCTION inside it: an
+    ATTACK SKILL in activation gets [49] by the cancel family's own split (59
+    spells 4 of 4, 49 attack skills 2 of 2) -- no interrupted attack skill is
+    on tape; and the un-queue of anything still queued (WIKI "Interrupt":
+    "Any skills waiting to be activated will be un-queued") rides the
+    measured pre-begin release ([45] + E2) -- no tape has a queue behind an
+    interrupted cast.
+
+    An AUTO-ATTACK -- OBSERVED 1 of 1 (Lightning Javelin 230 on the chain in
+    its backswing; 20260917T224104 conn 62557 t=434.658), sent BEFORE the
+    caster's [10] and word:
+        [8, player, 0]  [3, player, 0]  [35, player, 0]  [8, player, 1]
+    The chain survives and re-takes the hold, and the swing clock is NOT
+    reset (the next START at 435.074 = 433.744 + 1.33). An armed swing in its
+    WINDUP is dropped through `player_swing_cancel` -- UNOBSERVED (the
+    witness hit the backswing); a chain that holds no walk gate (our auto
+    swing does not, ANIMREF-RE 35) sends neither 8, which retail's chain --
+    holding it -- does. "attacking" (230) does not touch a spell in
+    activation: the chain is paused for a cast, so the victim is not
+    attacking; it does interrupt an attack skill in activation (UNVERIFIED
+    reading of "attacking foes").
+    """
+    if not INTERRUPTS or state.get("player_dead"):
+        return None
+    mode = skill_interrupts(by_skill)
+    if mode is None:
+        return None
+    now = time.time()
+    cast = _open_player_cast(state)
+    if cast is not None:
+        if not (mode == "action" or (mode == "attacking" and cast.get("attack"))):
+            return None
+        recharge = int(cast["recharge"])
+        extra = skill_interrupt_disable(by_skill)
+        stop = (agents.GV_ATTACK_SKILL_STOPPED if cast.get("attack")
+                else agents.GV_SKILL_STOPPED)
+        action_hold(send, state, 0, f"skill {by_skill} interrupts the cast")
+        send(GAME_SMSG_SKILL_RECHARGE,
+             [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"], recharge],
+             f"SKILL_RECHARGE(skill {cast['skill_id']}, {recharge}s): the "
+             f"interrupted skill's FULL recharge starts")
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [stop, PLAYER_AGENT_ID, 0],
+             f"{'attack_skill' if cast.get('attack') else 'skill'}_stopped: "
+             f"agent {by_agent}'s skill {by_skill} interrupts skill {cast['skill_id']}")
+        send(GAME_SMSG_SKILL_REFUSED,
+             [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"]],
+             f"interrupted: E2 releases skill {cast['skill_id']}")
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_INTERRUPTED, PLAYER_AGENT_ID, 0],
+             f"interrupted: the stagger (skill {by_skill})")
+        if extra > 0:
+            send(GAME_SMSG_SKILL_RECHARGE,
+                 [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"], recharge + extra],
+                 f"SKILL_RECHARGE(skill {cast['skill_id']}, {recharge + extra}s): "
+                 f"disabled +{extra}s by skill {by_skill}")
+        # THE BOOKS: the entry is released and RECHARGING. e5_sent stops the
+        # tick completing it (no damage, no effect, no aftercast); e3_sent
+        # skips the E3 the tape does not carry; the E6 branch fires at
+        # now + R + D and removes the entry; `released` keeps the cancelled
+        # branch from a second burst; a dual's second strike never comes.
+        cast["e5_sent"] = True
+        cast["e3_sent"] = True
+        cast["released"] = True
+        cast["interrupted_by"] = by_skill
+        cast["second_at"] = None
+        cast["recharge"] = recharge + extra
+        cast["recharge_s"] = float(recharge + extra)
+        cast["e6_at"] = now + recharge + extra
+        state["cast_busy_until"] = now
+        unqueued = 0
+        for other in state.get("pending_casts") or ():
+            if (other is not cast and not other.get("begun", True)
+                    and not other.get("cancelled")):
+                other["cancelled"] = (f"un-queued: skill {cast['skill_id']} "
+                                      f"was interrupted")
+                unqueued += 1
+        print(f"[c{conn_id}] INTERRUPTED: agent {by_agent}'s skill {by_skill} "
+              f"stops the player's skill {cast['skill_id']} -- full recharge "
+              f"{recharge}s" + (f" + {extra}s disable" if extra else "")
+              + (f", {unqueued} queued cast(s) un-queued" if unqueued else "")
+              + " [DESKWORK-D5]", flush=True)
+        return "cast"
+    if state.get("attacking") and mode in ("action", "attacking"):
+        held = state.get("action_hold", 0) == 1
+        if held:
+            action_hold(send, state, 0, f"skill {by_skill} interrupts the attack")
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_ATTACK_STOPPED, PLAYER_AGENT_ID, 0],
+             f"attack_stopped: agent {by_agent}'s skill {by_skill} interrupts the swing")
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_INTERRUPTED, PLAYER_AGENT_ID, 0],
+             f"interrupted: the stagger (skill {by_skill})")
+        if held:
+            action_hold(send, state, 1, "the chain re-takes the hold after the interrupt")
+        if state.get("player_swing"):
+            state["player_swing_cancel"] = "interrupted"
+        print(f"[c{conn_id}] INTERRUPTED: agent {by_agent}'s skill {by_skill} "
+              f"stops the player's attack; the chain continues on its own clock "
+              f"[DESKWORK-D5]", flush=True)
+        return "swing"
+    return None
+
+
+def interrupt_body(send, state, agent_id, agent, conn_id, by_skill, by_agent):
+    """An interrupt landing on a BODY -- a hostile or a party body -- as the
+    victim. RECONSTRUCTION, ALL OF IT: both witnesses have the player as the
+    victim and no tape shows a body interrupted, so this mirrors the player's
+    run without the hold (our NPC paths never send property 8, castmech 3c):
+    a cast in flight -> [59 | 49, body, 0], [35, body, 0], `casting` cleared,
+    the slot's `skill_ready` moved to now + full recharge (+ the disable); a
+    HERO's bar additionally gets the player's E5 / E2 / E5 mirror on its own
+    agent id (hero_skill_messages already proves E5 and E3 to a hero id; E2
+    shares E3's dispatch, skillcast 5), so its panel shows the recharge. A
+    body's swing in flight -> [3, body, 0], [35, body, 0], the armed landing
+    dropped, its chain and clock untouched (the player witness's rule). The
+    stop properties on other agents ARE consumed by the client (the corpus's
+    [59] / [49] / [3] cancels on PvP casters); [35] on a non-observer is
+    unwitnessed, same handler as [63] which knock_down already sends to bodies.
+    Returns "cast", "swing" or None."""
+    if not INTERRUPTS or agent is None or agent.get("dead"):
+        return None
+    mode = skill_interrupts(by_skill)
+    if mode is None:
+        return None
+    now = time.time()
+    slot = agent.get("casting")
+    skills = agent.get("skills") or ()
+    if slot is not None and agent.get("cast_lands_at") is not None and slot < len(skills):
+        skill_id = skills[slot][0]
+        _atk = _is_attack_skill(skill_id)
+        if not (mode == "action" or (mode == "attacking" and _atk)):
+            return None
+        extra = skill_interrupt_disable(by_skill)
+        recharge = float(agent.pop("cast_recharge",
+                                   skills[slot][2] if len(skills[slot]) > 2 else 0.0))
+        total = recharge + extra
+        agent["cast_lands_at"] = None
+        agent["casting"] = None
+        ready = agent.get("skill_ready")
+        if ready is not None and slot < len(ready):
+            ready[slot] = now + total
+        hero = HERO_WIRE_POOLS and hero_body_id(agent) is not None
+        if hero:
+            send(GAME_SMSG_SKILL_RECHARGE, [agent_id, int(skill_id), 0, int(recharge)],
+                 f"SKILL_RECHARGE(hero agent {agent_id}, skill {skill_id}, "
+                 f"{int(recharge)}s): interrupted, the full recharge [RECONSTRUCTION]")
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_ATTACK_SKILL_STOPPED if _atk else agents.GV_SKILL_STOPPED,
+              agent_id, 0],
+             f"{'attack_skill' if _atk else 'skill'}_stopped: agent {by_agent}'s "
+             f"skill {by_skill} interrupts agent {agent_id}'s skill {skill_id}")
+        if hero:
+            send(GAME_SMSG_SKILL_REFUSED, [agent_id, int(skill_id), 0],
+                 f"interrupted: E2 releases hero agent {agent_id}'s skill {skill_id}")
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_INTERRUPTED, agent_id, 0],
+             f"interrupted: agent {agent_id}'s stagger (skill {by_skill})")
+        if hero and extra > 0:
+            send(GAME_SMSG_SKILL_RECHARGE, [agent_id, int(skill_id), 0, int(total)],
+                 f"SKILL_RECHARGE(hero agent {agent_id}, skill {skill_id}, "
+                 f"{int(total)}s): disabled +{extra}s [RECONSTRUCTION]")
+        if hero and total > 0:
+            agent.setdefault("hero_recharged_due", {})[int(skill_id)] = now + total
+        print(f"[c{conn_id}] INTERRUPTED: agent {by_agent}'s skill {by_skill} stops "
+              f"agent {agent_id}'s skill {skill_id} -- recharge {total:.0f}s "
+              f"[DESKWORK-D5, RECONSTRUCTION]", flush=True)
+        return "cast"
+    if slot is None and (agent.get("swing_lands_at") is not None or agent.get("swinging")) \
+            and mode in ("action", "attacking"):
+        agent["swing_lands_at"] = None
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_ATTACK_STOPPED, agent_id, 0],
+             f"attack_stopped: agent {by_agent}'s skill {by_skill} interrupts agent "
+             f"{agent_id}'s swing")
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_INTERRUPTED, agent_id, 0],
+             f"interrupted: agent {agent_id}'s stagger (skill {by_skill})")
+        print(f"[c{conn_id}] INTERRUPTED: agent {by_agent}'s skill {by_skill} stops "
+              f"agent {agent_id}'s swing [DESKWORK-D5, RECONSTRUCTION]", flush=True)
+        return "swing"
+    return None
 
 
 def declare_player_max(send, state, why, force=False):
@@ -25420,6 +25709,12 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
                                f"agent {agent_id}'s preparation {_prep_sid}")],
              f"damage {_prep_pts:.0f} to the player (agent {agent_id}'s preparation "
              f"{_prep_sid}'s own word)")
+    # DESKWORK-D5 step 2: an ATTACK SKILL that interrupts lands its word and THEN
+    # the interrupt run -- retail's order for Disrupting Chop, 1 of 1
+    # (20260916T213125 t=484.333: [10], the word, then [8,0] E5 [59] E2 [35] E5).
+    # A killing blow interrupts nothing: the death batch owns the release.
+    if skill_id is not None and state["player_health"] > 0.0:
+        interrupt_player(send, state, conn_id, skill_id, agent_id)
     # ADRENALINE, both directions of the enemy's swing. WIKI: the swinger gets
     # a strike for a successful weapon hit; the player gets one unit per 1% of
     # MAXIMUM health lost, floored -- so a hit for under 1% grants nothing and,
@@ -35164,6 +35459,13 @@ def main():
               "skill's damage word at the player, as this server sent until "
               "2026-09-22 (retail: 92 of 92, self-scoped; skillcast 16.6's note).",
               flush=True)
+
+    if a.no_interrupts:
+        global INTERRUPTS
+        INTERRUPTS = False
+        print("NO INTERRUPTS: Disrupting Chop and Lightning Javelin land their "
+              "damage and interrupt nothing, as this server did until 2026-09-23 "
+              "(retail: interruptjoin.py's two witnesses).", flush=True)
 
     if a.player_max_always:
         global PLAYER_MAX_ALWAYS

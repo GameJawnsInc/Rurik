@@ -1947,6 +1947,17 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "own hits), and the client stores it as the skill "
                          "the next damage number belongs to (skillcast 16.6 "
                          "and its 2026-09-22 note).")
+    ap.add_argument("--no-interrupts", action="store_true",
+                    help="no skill interrupts anything -- the server as it was "
+                         "until 2026-09-23 (castmech P1 / animref D5: 'no "
+                         "interrupt has ever been captured'). With it, "
+                         "Disrupting Chop (340) and Lightning Javelin (230) "
+                         "land their damage and leave the victim's cast or "
+                         "attack running. The known-bad arm of DESKWORK-D5 "
+                         "step 2: retail's two witnesses (interruptjoin.py) "
+                         "send [8,0], E5 (full recharge), [59], E2, [35], E5 "
+                         "(+20) for a cast and [8,0], [3], [35], [8,1] for an "
+                         "auto-attack.")
     ap.add_argument("--player-max-always", action="store_true",
                     help="declare the player's property 42 before EVERY "
                          "armour-ignoring damage word at the player, as until "
