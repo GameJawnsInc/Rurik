@@ -1915,12 +1915,15 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   and restored at the dress, a stored HAND change not restored; the fix pass closed five
   blockers — the dress reads the store itself, reserved cells, the launch records never
   rewritten by an equip, removed armour protects nothing, a suppressed resurrection is
-  never cast — and the suppress mask now follows the client's own bar edits). **Open**: the party family from
-  HENCHMAN_ADD's witness (step 5) and travel (step 7); the general bag-to-bag move (no
-  tape carries it — the runsheet's drag will name its opcode); the loopback clicks —
-  kick and add in an outpost under the sandbox rig, the Shift-click on a hero skill,
-  the drag out of the paper doll and the double-click back (runsheets in studies/cmsg
-  §DESKWORK-D1 "The hero add", "The hero skill toggle" and "Inventory").
+  never cast — and the suppress mask now follows the client's own bar edits).
+  **CONFIRMED on our client 2026-09-23** (studies/deskwork/CONFIRM-2026-09-23.md): kick,
+  add, kick-add-kick-add, the kick held across a relaunch, the suppress circle on and off
+  and the body skipping a suppressed skill, move, stored-cell restore, equip and swap.
+  **Open**: the party family from HENCHMAN_ADD's witness (step 5) and travel (step 7);
+  the bag-to-bag move — c2s `0x0072` [item, bag, slot], named by the owner's drag, on
+  no retail tape, unanswered — and the paper doll's armour ORDER (ours legs, chest, head,
+  feet, arms: the equipped bag dressed in the visual array's numbering), both on
+  `desk-inv`.
 * **DESKWORK-D5**: the combat rules retail's tapes on disk already settle. LANDED
   2026-09-22: the adrenaline gate (SKILLS-B1's gate half, skills §34.11); property 10
   and the `[42]` residue (§16.6, self-scoped; `[42]` only when the maximum moved); the
@@ -1942,7 +1945,9 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   gate's #1985 its one consumer); 3(d) Mend Condition (skills §58, `heal_if_removed`). Still
   OPEN: the shout ANNOUNCE — retail's `[48, caster, skill]` for every instant skill (stances
   and shouts, 133 in the corpus), ours prop 60; a 348 row (no armour-bonus mechanic to hang
-  it on); the hero's cure on screen (final-confirmation-needs-run; the player-to-hero
+  it on); the hero's cure on screen (final-confirmation-needs-run; the hero's apply itself
+  CONFIRMED on our wire 2026-09-23, 2 of 2 vs 0 of 2, as was the interrupt at the PLAYER,
+  2 of 2 with the 24 s disable drawn — studies/deskwork/CONFIRM-2026-09-23.md; the player-to-hero
   direction is unwitnessed on every tape); the allied NONCOMBATANT retail's shout boosts
   and `allies_of` excludes (§56.7); the batch order (retail
   all applies then all speed words, ours per wearer); 3(e) a hero's zero gain;
@@ -1958,13 +1963,13 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   PLAN-LOG): the 131 PLAIN SERVED rows through the step-4 gate → **47 label-tier rows** in
   `vault/content/skill_labels.toml` (59 before the same day's review-driven fix pass,
   §55.7), under the hand rows, 36 of them marked, `--no-skill-labels` reverting; 84
-  excluded by reason (§55.2); the three hand-row fixes done. **Still open:** (i) **the
-  client confirmation** — §55.5's two-line runsheet, 187 at rank 0 → 7 before armour with
-  the LABEL-tier log line, `gamesrv_args = ["--no-skill-labels"]` the control; (ii) **the
+  excluded by reason (§55.2); the three hand-row fixes done. (i) **The client confirmation
+  is DONE** (2026-09-23, studies/deskwork/CONFIRM-2026-09-23.md): 187 drew −7 on the
+  client, nothing under `--no-skill-labels`; 183's caster-centred area 30 on the near foe
+  only, nothing under `--no-caster-areas`. **Still open:** (ii) **the
   residue per skill** — pass 1 and its fix pass landed 2026-09-23 (skills §59–§59.7,
-  SKILLS-LU; PLAN-LOG): 57 label rows. **Owed at the merge: regenerate the vault overlay
-  from `main` after every live worktree has merged (`skilldesc.py --emit-labels`,
-  RUNBOOK).** Still out: a BODY's own chain (a body's chain-gated cast lands on NOBODY;
+  SKILLS-LU; PLAN-LOG): 57 label rows, the vault overlay regenerated at the merge
+  (`57ae1dbe`). Still out: a BODY's own chain (a body's chain-gated cast lands on NOBODY;
   retail's bodies meet the requirement, 5 of 5 live 784s); 770's ally-centred adjacency; a
   condition rider on episodes 6; byte 1's resolution (769 917 1468) and its 3 heals; 292's
   percent-of-loss heal; 943's conditioned heal, 1262's "creatures"; the 210 conditional
