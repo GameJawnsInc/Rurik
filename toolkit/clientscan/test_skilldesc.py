@@ -12,11 +12,13 @@ reddens if it is wrong:
     and a dozen on duration sentinels. Six controls pinned to the wiki by
     `content/world.toml` or FINDINGS 4 land on the field the wiki named.
   * THE LABELS. Our own enum, from the words around a slot. Every slot in the
-    corpus gets a label (0 UNPARSED); the 54 hand rows agree on 51 of the 52
-    comparable slots and the one disagreement is a real one (Battle Rage's
-    `scale_means = "Duration"` on a flat 33 that is its movement speed). The
-    SERVED tier is per (label, INDEX, type_code), read off the consumer sites:
-    341 of 1,265 slot-bearing rows, 27 % -- the route's half-mark FAILS.
+    corpus gets a label (0 UNPARSED); every comparable hand label agrees with
+    the parse -- the one disagreement there was (Battle Rage's `scale_means =
+    "Duration"` on a flat 33 that is its movement speed) was a real one and
+    world.toml dropped it on 2026-09-23, with Hamstring's label moved to the
+    slot the template numbers. The SERVED tier is per (label, INDEX,
+    type_code), read off the consumer sites: 341 of 1,265 slot-bearing rows,
+    27 % -- the route's half-mark FAILS.
   * THE CENSUS (DESKWORK-Q7). What the server resolves today: 54 modelled, 419
     episodes (+45 refused durations), 815 nothing.
 
@@ -345,20 +347,26 @@ if records is not None:
           f"every one of the {n_means} hand labels gets a verdict and at least {max(50, n_means - 17)} AGREE "
           f"(51 of 68 on 2026-09-22)", hs)
     conflicts = [r for r in rep["hand"] if r[-1] == "CONFLICT"]
-    check(conflicts == [(317, "scale_means", 1, "Duration", Label.MOVE_SPEED_UP, "CONFLICT")],
-          "the one conflict is Battle Rage: `scale_means = \"Duration\"` on the flat 33 that is "
-          "its movement speed (the duration is str3) -- when world.toml drops that label, this "
-          "check and test_skilldamage.py's pin on it change in the same commit", conflicts)
+    check(conflicts == [],
+          "no hand label conflicts with the parse. Battle Rage 317's `scale_means = "
+          "\"Duration\"` on the flat 33 that is its movement speed (the duration is str3) "
+          "was the one conflict until 2026-09-23; world.toml dropped it with Scourge "
+          "Sacrifice 253's, and test_skilldamage.py's pins moved in the same commit "
+          "(SKILLS-LT)", conflicts)
     no_slot = [r for r in rep["hand"] if r[-1] == "NO_SLOT"]
     unmatched = []
     for sid, key, index, _means, _lbl, _v in no_slot:
         field = SLOT_FIELD[index]
         if not any(l[1] == field and l[3] == "LITERAL_MATCH" for l in rep["rows"][sid]["literals"]):
             unmatched.append(sid)
-    check(len(no_slot) >= 10 and sorted(unmatched) == [253, 320],
-          "every unshown hand slot is a flat constant printed as text EXCEPT Hamstring's (320) 0/0 "
-          "scale (a label on the wrong slot) and Scourge Sacrifice's (253) flat 100 the text never "
-          "states (labelled 'Duration', which is str3)", (len(no_slot), unmatched))
+    check(len(no_slot) >= 10 and unmatched == [],
+          "every unshown hand slot is a flat constant printed as text. Until 2026-09-23 two were "
+          "not: Hamstring's (320) 0/0 scale (a label on the wrong slot -- now `bonus_scale_means = "
+          "\"Crippled\"`, the slot %str2% numbers) and Scourge Sacrifice's (253) flat 100 the text "
+          "never states (labelled 'Duration', which is str3 -- dropped)", (len(no_slot), unmatched))
+    h320 = [r for r in rep["hand"] if r[0] == 320]
+    check(h320 == [(320, "bonus_scale_means", 2, "Crippled", f"{Label.CONDITION_DURATION}:Crippled", "AGREE")],
+          "Hamstring's hand label now AGREES with the template at str2", h320)
     check(records[253]["scale0"] == 100 and records[253]["skill_arguments"] == 1
           and slot(253, 3)["field"] == "duration",
           "Scourge Sacrifice (253): args = duration only, str3 is the duration; the scale slot's "

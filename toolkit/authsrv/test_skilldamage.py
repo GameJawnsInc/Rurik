@@ -47,7 +47,7 @@ import effects  # noqa: E402
 # a short run means a section stopped rather than passed.
 # SKILLS-HN +4 (44), SKILLS-FA +13 (57: 7 model + 6 corpus), each from its
 # green run. Section 12 needs the live corpus and declares a skip without it.
-LEDGER = checks.Ledger("skill damage", floor=67)  # 2026-09-17 SKILLS-LR +4 (the location roll: three unit, one corpus); 2026-09-16 RUN-SKILLS-RB +2 (section 13, the converted word); 2026-09-16 SLICE-F47 +1 (the penalty split in whole points); 2026-09-14 HEAL-INT +1, ZEROWORD +1;   # MANTID-S +1: the player-side control beside the foe-side refusal
+LEDGER = checks.Ledger("skill damage", floor=68)  # 2026-09-23 SKILLS-LT +1 (sec.3: Hamstring inflicts through the bonus slot); 2026-09-17 SKILLS-LR +4 (the location roll: three unit, one corpus); 2026-09-16 RUN-SKILLS-RB +2 (section 13, the converted word); 2026-09-16 SLICE-F47 +1 (the penalty split in whole points); 2026-09-14 HEAL-INT +1, ZEROWORD +1;   # MANTID-S +1: the player-side control beside the foe-side refusal
 check = LEDGER.ok
 
 
@@ -101,15 +101,35 @@ def main():
     # ...and the ones it must NOT, which is the whole point.
     for skill_id, means, name in ((276, "Healing", "Restore Condition"),
                                   (289, "+ Maximum health", "Vital Blessing"),
-                                  (253, "Duration", "Scourge Sacrifice"),
-                                  (318, "+ Maximum health", "Defy Pain"),
-                                  (320, "Crippled duration", "Hamstring")):
+                                  (318, "+ Maximum health", "Defy Pain")):
         row = agents.WORLD.get("skill_effect", str(skill_id))
         check(authsrv.skill_damage(skill_id, 15) is None
               and row["scale_means"] == means,
               f"{name} deals NO damage -- its scale is {means!r}",
               "returning None rather than 0, so a caller must decide what an "
               "unmodelled skill means instead of silently dealing nothing")
+    # SKILLS-LT (2026-09-23, studies/skills 54.5 / 55): the two `scale_means =
+    # "Duration"` labels were INERT -- nothing compares a means against
+    # "Duration"; an episode's duration is the skills table's -- and skilldesc
+    # refereed Battle Rage's a CONFLICT (its flat 33 is the movement speed).
+    # Both rows keep their wiki provenance and carry no label.
+    for skill_id, name in ((253, "Scourge Sacrifice"), (317, "Battle Rage")):
+        row = agents.WORLD.get("skill_effect", str(skill_id))
+        check(authsrv.skill_damage(skill_id, 15) is None
+              and "scale_means" not in row and "bonus_scale_means" not in row,
+              f"{name} deals NO damage and its row carries no label at all -- "
+              f"the inert 'Duration' is gone", dict(row))
+    # And Hamstring's label moved to the slot the client numbers: args = 4
+    # (bonus only), Crippled 3..15 in the BONUS slot, %str2% in the template.
+    # Under "Crippled duration" on `scale_means` the server inflicted nothing.
+    row = agents.WORLD.get("skill_effect", "320")
+    check(authsrv.skill_damage(320, 15) is None and "scale_means" not in row
+          and row.get("bonus_scale_means") == "Crippled"
+          and authsrv.skill_condition(320, 0) == (481, 3.0)
+          and authsrv.skill_condition(320, 15) == (481, 15.0),
+          "Hamstring deals NO damage; its Crippled rides the BONUS slot, 3 s at "
+          "rank 0 and 15 s at rank 15 (481 = Crippled)",
+          (dict(row), authsrv.skill_condition(320, 0), authsrv.skill_condition(320, 15)))
 
     print("\n4. a disabled set is refused, not read")
     # Rush's scale slot holds 25 -- the "move 25% faster" in its description --
