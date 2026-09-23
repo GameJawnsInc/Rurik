@@ -28,6 +28,42 @@ move back.
 
 ---
 
+### DESKWORK-D1 (step 6) -- 2026-09-23 -- **the hero skill toggle armed as RECONSTRUCTION (c2s 0x0019 HERO_SKILL_TOGGLE): the suppress click, a per-hero mask, the whole-mask reply, the body stops casting it**
+
+[studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md) §DESKWORK-D1 "The hero skill
+toggle". **Desk work, no client launched.** The route's question -- toggle or "use
+this skill now" -- was answered from the client: the `0x0091FD80` wrapper (38797) is
+reached by a tail `jmp` from ChCliApi `0x0080E000` (`hotKey < 8`, ChCliApi:4359, NO
+map gate), whose two callers BOTH send only under a modifier -- GmSkSlot's click
+(`0x00543480`) when GmView answers query event `0x100001A7`, GmView's hero-hotkey
+handler (`0x004E8A20`) when its flag word `0xC078D4` carries bit `0x10000` -- and run
+the client-side skill USE path otherwise (ChCliSkill's hotKeyState methods, which send
+`0x001C`/`0x005C`). So `0x0019` is the MODIFIED action, and GWW names it: hold the
+suppress key (Left Shift by default) and click a hero's skill -- a TOGGLE of one slot's
+suppression, drawn as a struck-through red circle (WIKI). The route's "ctrl-click" is
+corrected to the suppress key. **Nulls measured first:** c2s `0x0019` 0 of 96 live
+connections and 0 of 1,557 loopback logs; s2c `0x0064` 0 on retail; s2c `0x0065` 8,
+all `[hero, 0]` in load blocks -- and a hero so loaded casts 50 times (`20260914T005758
+:56011`), so bit = 1 is the suppressed slot. **The reply:** the client's hotKeyState
+mask (+0xA4) is written only by `0x0065` (whole mask) and `0x0064` (one bit), both read
+assert-free; the default answers with the whole mask, retail's only observed writer;
+`--hero-skill-toggle-per-bit` sends the route's pre-registered `0x0064`. **The model**
+(`handle_hero_skill_toggle`, `--no-hero-skill-toggle`): a per-hero 8-bit mask in party
+state, bit = slot of the PANEL's bar (`hero_panel_bar_ids`, the one expression the
+block's `0x00DA` and the mask now share); the body's `pick_skill` skips a suppressed
+skill, joined to the panel bar BY SKILL ID (the body's list drops empty slots, so a bar
+with a hole would otherwise suppress the wrong skill -- the known-bad arm); `--persist`
+writes `disabled_slots` to the hero's row and the load's two `0x0065` rows carry it;
+the default wire is byte-identical. Refused with nothing sent: a non-party hero, a slot
+outside 0..7, an EMPTY panel slot (both client senders check the slot first).
+`schema/overrides.json` GAME_CMSG 25 HERO_SKILL_TOGGLE at LOW. `test_heroskilltoggle.py`
+(floor 53, TESTS.md). Affected set: 17 of 17 green (1,257 checks: heroskilltoggle,
+heroadd, herokick, herolib, charstore, dispatch, cmsgnames, c2striage, catalog, codec,
+agentlife, harness/sandbox, srclint, checks, citelint, identlint, provlint). **Still
+owed: the loopback Shift-click** -- the runsheet is in the cmsg section.
+
+---
+
 ### SKILLS-LT fix pass / DESKWORK-D4 step 4 -- 2026-09-23 -- **the label tier re-cut on review: 47 rows, not 59; nine refuted rows out, each refutation now a gate rule with a known-bad arm; 36 of 47 marked; `--no-skill-labels` wired and tested**
 
 Two reviewers read the first pass. The evidence refuter read all 59 shipped templates at run

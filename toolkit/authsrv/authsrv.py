@@ -5048,6 +5048,16 @@ HERO_RIG_RETAIL = True         # False (--hero-rig-legacy): 0x0074 first, the bl
 # are the only members we had left out. A hypothesis under test, stated as one.
 HERO_RIG_0065 = True
 GAME_SMSG_HERO_UNNAMED_0065 = 0x0065   # [agent_id, byte]; catalog name null; hero-only on the tape
+# The same mask, one bit at a time: [agent_id, bit, value] sets or clears bit
+# `bit` of the agent's hotKeyState mask (+0xA4) and fires the same redraw
+# event 0x1000005A the whole-mask write does (handler 0x0091E040 ->
+# 0x00822050 on 38797: `bts`/`btr`, no assert, an unknown agent is dropped
+# silently). NEVER on retail's wire (0 of 96 live game connections); the
+# whole-mask 0x0065 is what retail writes (8 of 8, all zero, in the hero's
+# load block). DESKWORK-D1 step 6 sends it only under
+# --hero-skill-toggle-per-bit; the default answers a suppress click with the
+# whole mask. The CMSG with this number is CHAT_SEND; the two share nothing.
+GAME_SMSG_SKILLBAR_SLOT_FLAG = 0x0064
 # HERO_INFO, the message that CREATES the hero record on retail -- one per
 # owned hero in every load, inside the player's own block (agents.hero_info's
 # docstring has the witness and the two asserting runs without it).
@@ -10195,6 +10205,23 @@ GAME_CMSG_HERO_KICK = 0x001F
 # RECONSTRUCTION end to end: the payload
 # is the hero index by the wrapper's own bounds and the kick's two witnesses.
 GAME_CMSG_HERO_ADD = 0x001E
+# DESKWORK-D1 step 6 (2026-09-23): the hero panel's SUPPRESS click -- [hero
+# agent, hotKey], the client's ChCliApi 0x0080E000 (`hotKey < 8`, ChCliApi:4359,
+# NO map gate) tail-jumping to the 0x0091FD80 wrapper on 38797 (0x00920700 on
+# 38888). Read statically, no tape or loopback log carries one (0 of 96 live
+# game connections, 0 of 1,557 loopback logs): BOTH callers send it only under
+# a modifier -- GmSkSlot's click (0x00543480) when GmView answers the query
+# event 0x100001A7, GmView's hero-hotkey handler (0x004E8A20) when GmView's
+# flag word 0xC078D4 carries bit 0x10000 -- and the UNMODIFIED branch of each
+# runs the client-side skill USE path instead (ChCliSkill's hotKeyState
+# methods, which send 0x001C / 0x005C). So 0x0019 is the modified action, and
+# GWW names it: hold the suppress key (default Left Shift) and click a hero's
+# skill to toggle its suppression; a suppressed skill draws a struck-through
+# red circle and the hero never casts it unless ordered to (WIKI, "Hero Control
+# panel"). The client's hotKeyState mask (+0xA4, pvpui 30.2) is written by
+# s2c 0x0064 (one bit) and 0x0065 (the whole mask) only, so the reply is what
+# redraws the slot -- handle_hero_skill_toggle. studies/cmsg DESKWORK-D1.
+GAME_CMSG_HERO_SKILL_TOGGLE = 0x0019
 # 0x0017 is NOT the unlock. It was named HERO_UNLOCK_TARGET on 2026-08-19 by
 # reading it as "the other branch of the crosshair", and the name was
 # RETRACTED the same day (pvpui 28.11): the branch is chosen by a getter
@@ -11232,6 +11259,10 @@ def sync_hero_body_bar(state, agent_id, bar_ids, conn_id):
         return False
     row["skills"] = bar_triples(bar_ids)
     row["skill_ready"] = [0.0] * len(row["skills"])
+    if row.get("hero") is not None:
+        # DESKWORK-D1 step 6: the suppress mask is per SLOT; an edited bar
+        # re-reads which skill ids the mask now covers.
+        row["skill_disabled_ids"] = hero_disabled_skill_ids(state, row["hero"])
     print(f"[c{conn_id}] hero agent {agent_id} now casts "
           f"{[s[0] for s in row['skills']]} (its edited bar; recharges reset) "
           f"[SANDBOX-B7]", flush=True)
@@ -11443,6 +11474,23 @@ HERO_UNLOCK_MASK = True        # False (--no-hero-unlock-mask): 0x0018 stays
 PARTY_SIZE_COUNTS_HEROES = True  # False (--party-size-no-heroes): the LOAD's
                                # 0x00B0 counts 1 + henchman and leaves the
                                # heroes out, as every run before 2026-09-23.
+HERO_SKILL_TOGGLE_ENABLED = True  # False (--no-hero-skill-toggle): c2s 0x0019
+                               # is ignored and no stored suppression is read
+                               # or sent -- every run before DESKWORK-D1 step
+                               # 6 (2026-09-23). Default ON: the message is
+                               # RECONSTRUCTION end to end (never on any wire
+                               # this repo holds), but the two replies it can
+                               # draw are the client's own mask writers, both
+                               # read assert-free (0x00822050 / 0x008220D0),
+                               # and a hero with mask 0 casts on retail
+                               # (20260914T005758 :56011, 50 casts), so bit=1
+                               # is the suppressed state. handle_hero_skill_toggle.
+HERO_SKILL_TOGGLE_PER_BIT = False  # True (--hero-skill-toggle-per-bit): answer
+                               # with 0x0064 [agent, slot, value] -- the
+                               # route's pre-registered reply, never seen on
+                               # retail's wire -- instead of the whole mask
+                               # 0x0065 [agent, mask], retail's only observed
+                               # writer of the mask (8 of 8, at load).
                                # Default ON: OBSERVED -- retail's load sent
                                # [68, 2] with one hero in the party and the kick
                                # [68, 1] after (20260916T150306 :62321), so the
@@ -22819,7 +22867,10 @@ def hero_body_create(hsend, state, _i, _hid, _haid, _hdef, pos, plane, conn_id):
          # SANDBOX-B7: the STORED bar when --persist holds one, else the
          # row's -- the body casts what the panel shows.
          "skills": hero_cast_bar(state, _hid),
-         "skill_ready": [0.0] * len(hero_cast_bar(state, _hid))},
+         "skill_ready": [0.0] * len(hero_cast_bar(state, _hid)),
+         # DESKWORK-D1 step 6: the panel's suppressed slots, as skill ids
+         # -- pick_skill never picks one (hero_disabled_skill_ids).
+         "skill_disabled_ids": hero_disabled_skill_ids(state, _hid)},
         f"hero body (hero {_hid})", conn_id=conn_id)
     # SLICE-H7: WHAT THE BODY HOLDS -- retail's create batch for a
     # henchman body is 0x0020, then 0x0161 per weapon, then 0x006D
@@ -23443,12 +23494,9 @@ def hero_character_block(state, haid, hid):
     if HERO_SKILLBAR:
         # The hero's OWN bar (retail: [322, 382, 348, 1, 385, 346, 0, 2] on
         # the panel); the player's SKILLBAR only when the hero has none.
-        _hskills = (list(_hs_bar) if _hs_bar is not None
-                    else hero_bar_ids(hid)              # SANDBOX-B3: per hero
-                    if hero_bar_authored(hid)           # SANDBOX-B7: an authored empty bar stays empty
-                    else hero_bar_ids(hid) or list(SKILLBAR))
-        _hskills = _hskills[:SKILLBAR_SLOTS]
-        _hskills += [0] * (SKILLBAR_SLOTS - len(_hskills))
+        # DESKWORK-D1 step 6: the expression lives in hero_panel_bar_ids so
+        # the suppress mask (below) indexes the SAME eight slots this sends.
+        _hskills = hero_panel_bar_ids(state, hid, _hs_bar)
         out.append((GAME_SMSG_SKILLBAR_UPDATE,
                     [haid, _hskills, SKILLBAR_PVP_MASKS, SKILLBAR_TRAILER],
                     f"SKILLBAR_UPDATE(hero agent {haid}){_hskills} [JARIN rig]"))
@@ -23456,9 +23504,14 @@ def hero_character_block(state, haid, hid):
     _hv = hero_vitals(hid) or (100, 30)                 # SANDBOX-B3: per hero
     _e_max = int(morale.effective_max(_hv[1], _hv[1], _m))
     _h_max = int(morale.effective_max(_hv[0], _hv[0], _m))
+    # DESKWORK-D1 step 6: the byte is the hero's SUPPRESS mask -- retail's
+    # eight sightings are all 0 and so is ours unless a toggle was stored;
+    # a nonzero mask here is the load re-drawing the struck-through slots.
+    _hmask = hero_disabled_mask(state, hid)
     if HERO_RIG_0065:
-        out.append((GAME_SMSG_HERO_UNNAMED_0065, [haid, 0],
-                    f"0x0065 [hero agent {haid}, 0] -- retail's, after the bar [JARIN rig]"))
+        out.append((GAME_SMSG_HERO_UNNAMED_0065, [haid, _hmask],
+                    f"0x0065 [hero agent {haid}, {_hmask}] -- retail's, after the bar [JARIN rig]"
+                    + (f" (suppress mask 0x{_hmask:02X}) [DESKWORK-D1 step 6]" if _hmask else "")))
         out.append((GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
                     [GV_ENERGY_REGEN, haid,
                      _f32(morale.regen_fraction(agents.PLAYER_FLOAT_43, agents.PLAYER_ENERGY, _e_max))],
@@ -23470,8 +23523,8 @@ def hero_character_block(state, haid, hid):
     out.append((GAME_SMSG_AGENT_MORALE, [haid, _m],
                 f"morale {morale.display(_m)} on hero agent {haid} [JARIN rig]"))
     if HERO_RIG_0065:
-        out.append((GAME_SMSG_HERO_UNNAMED_0065, [haid, 0],
-                    f"0x0065 [hero agent {haid}, 0] -- retail's, after the morale [JARIN rig]"))
+        out.append((GAME_SMSG_HERO_UNNAMED_0065, [haid, _hmask],
+                    f"0x0065 [hero agent {haid}, {_hmask}] -- retail's, after the morale [JARIN rig]"))
     if hero_level(hid) is not None:                     # SANDBOX-B3: per hero
         out.append((GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [agents.PROP_LEVEL, haid, hero_level(hid)],
                     f"hero agent {haid} at level {hero_level(hid)} [JARIN rig]"))
@@ -24030,6 +24083,155 @@ def handle_hero_add(values, send, state, conn_id):
     send(op, vals, f"{label} [HERO_ADD, bare -- RECONSTRUCTION]")
     print(f"[c{conn_id}] HERO_ADD: hero {hid} (agent {_haid}) back in the party; "
           f"size now {party_size} [SANDBOX-N2]", flush=True)
+
+def hero_panel_bar_ids(state, hid, stored_bar=None):
+    """The eight slots the hero PANEL shows -- 0x00DA's array for this hero:
+    the STORED bar under --persist, else the row's own (an authored empty bar
+    stays empty, SANDBOX-B7), else the player's SKILLBAR (the JARIN rig's
+    fallback). Padded to SKILLBAR_SLOTS with 0 for empty. This is the one
+    expression hero_character_block sends and the suppress mask indexes
+    (DESKWORK-D1 step 6): a bit means "this slot of THIS array".
+
+    `stored_bar` is the caller's already-fetched hero_build() bar, or None to
+    look it up here."""
+    if stored_bar is None:
+        _o, stored_bar, _r, _p = hero_build(state, hid)
+    bar = (list(stored_bar) if stored_bar is not None
+           else hero_bar_ids(hid)               # SANDBOX-B3: per hero
+           if hero_bar_authored(hid)            # SANDBOX-B7: an authored empty bar stays empty
+           else hero_bar_ids(hid) or list(SKILLBAR))
+    bar = [int(s) for s in bar[:SKILLBAR_SLOTS]]
+    bar += [0] * (SKILLBAR_SLOTS - len(bar))
+    return bar
+
+
+def hero_disabled_mask(state, hid):
+    """This hero's SUPPRESS mask -- bit N set = panel slot N suppressed
+    (DESKWORK-D1 step 6). The session's value first, else the store's under
+    --persist, else 0; cached in state["hero_skill_disabled"] so the load
+    and the toggle read one number. 0 with the arm off, whatever is stored:
+    --no-hero-skill-toggle is the pre-step-6 wire (0x0065 [hero, 0])."""
+    if not HERO_SKILL_TOGGLE_ENABLED:
+        return 0
+    masks = state.setdefault("hero_skill_disabled", {})
+    hid = int(hid)
+    if hid in masks:
+        return int(masks[hid])
+    mask = 0
+    store = state.get("charstore_game")
+    if store is None and PERSIST:
+        store, _row = charstore.find_character(state.get("char_uuid", ""))
+        if store is not None:
+            state["charstore_game"] = store
+    if store is not None:
+        mask = int(store.hero_disabled_slots(state.get("char_uuid", ""), hid) or 0)
+    masks[hid] = mask & 0xFF
+    return masks[hid]
+
+
+def hero_disabled_skill_ids(state, hid):
+    """The skill ids the suppress mask covers on this hero's PANEL bar --
+    what pick_skill refuses to pick. The join is done here and nowhere else:
+    the mask is per slot (the client's hotKeyState +0xA4), the body's
+    `skills` list drops empty slots, so the body is gated by id."""
+    mask = hero_disabled_mask(state, hid)
+    if not mask:
+        return frozenset()
+    bar = hero_panel_bar_ids(state, hid)
+    return frozenset(int(bar[i]) for i in range(len(bar))
+                     if (mask >> i) & 1 and bar[i])
+
+
+def hero_body_sync_disabled(state, hid):
+    """Push the current suppress set onto the hero's BODY row, if it has one."""
+    for _h, _haid, _d in hero_slots():
+        if _h == int(hid):
+            row = (state.get("agents") or {}).get(_haid)
+            if row is not None:
+                row["skill_disabled_ids"] = hero_disabled_skill_ids(state, hid)
+                return True
+    return False
+
+
+def handle_hero_skill_toggle(values, send, state, conn_id):
+    """GAME_CMSG 0x0019 [hero agent, hotKey]: the hero panel's SUPPRESS click
+    (DESKWORK-D1 step 6, studies/cmsg/FINDINGS.md). RECONSTRUCTION end to end
+    -- no tape and no loopback log carries the request -- built from three
+    things read rather than guessed:
+
+      * WHAT IT MEANS. The client's two senders (GmSkSlot::click 0x00543480,
+        GmView's hero hotkey 0x004E8A20) send it only under a GmView-held
+        modifier (query event 0x100001A7 / flag bit 0x10000 of 0xC078D4) and
+        run the client-side skill USE path otherwise, so this is the MODIFIED
+        click -- GWW's "hold the suppress key (default Left Shift) and click a
+        hero skill" (WIKI, "Hero Control panel"): a TOGGLE of one slot's
+        suppression, not "use this skill". The route pre-registered exactly
+        that reading and nothing refuted it.
+      * WHAT THE CLIENT NEEDS BACK. Its hotKeyState mask (+0xA4, pvpui 30.2)
+        is written ONLY by s2c 0x0065 [agent, mask] (0x008220D0) and 0x0064
+        [agent, bit, value] (0x00822050); both fire the redraw event
+        0x1000005A GmSkSlot subscribes to (0x00542470); neither asserts. The
+        default answers with the whole mask (retail's only observed writer,
+        8 of 8 in load blocks); --hero-skill-toggle-per-bit sends 0x0064.
+      * POLARITY. Retail's load sends mask 0 for every hero (8 of 8) and a
+        hero so loaded casts (20260914T005758 :56011, 50 casts), so 0 is
+        "nothing suppressed" and bit=1 is the suppressed slot.
+
+    Refused with nothing sent (retail's refusal NOT FOUND): an agent that is
+    not a party hero, a hotKey outside 0..7 (the client asserts `hotKey < 8`
+    itself, ChCliApi:4359), an EMPTY panel slot (both senders check the slot
+    holds a skill before sending, so an empty-slot request is a client this
+    code does not know). Under --persist the mask is written to the hero's
+    row (charstore `disabled_slots`), so the load's 0x0065 re-draws it.
+    """
+    if len(values) < 3:
+        print(f"[c{conn_id}] HERO_SKILL_TOGGLE refused: malformed request "
+              f"{values[1:]!r} [DESKWORK-D1]", flush=True)
+        return
+    agent_id, slot = int(values[1]), int(values[2])
+    hid = hero_index_for_agent(agent_id)
+    if hid is None or hero_kicked(state, hid):
+        print(f"[c{conn_id}] HERO_SKILL_TOGGLE({agent_id}, {slot}) refused: agent "
+              f"{agent_id} is not a party hero of this run "
+              f"{[a for _h, a, _d in party_hero_slots(state)]} [DESKWORK-D1]",
+              flush=True)
+        return
+    if not 0 <= slot < SKILLBAR_SLOTS:
+        print(f"[c{conn_id}] HERO_SKILL_TOGGLE(hero {hid}, {slot}) refused: hotKey "
+              f"outside 0..{SKILLBAR_SLOTS - 1} (the client's own bound, "
+              f"ChCliApi:4359) [DESKWORK-D1]", flush=True)
+        return
+    bar = hero_panel_bar_ids(state, hid)
+    if not bar[slot]:
+        print(f"[c{conn_id}] HERO_SKILL_TOGGLE(hero {hid}, {slot}) refused: the "
+              f"panel slot is EMPTY ({bar}); the client sends only for a slot "
+              f"holding a skill [DESKWORK-D1]", flush=True)
+        return
+    was = hero_disabled_mask(state, hid)
+    mask = (was ^ (1 << slot)) & 0xFF
+    state.setdefault("hero_skill_disabled", {})[int(hid)] = mask
+    value = (mask >> slot) & 1
+    if HERO_SKILL_TOGGLE_PER_BIT:
+        send(GAME_SMSG_SKILLBAR_SLOT_FLAG, [agent_id, slot, value],
+             f"SKILLBAR_SLOT_FLAG(hero agent {agent_id} slot {slot} = {value}) "
+             f"[DESKWORK-D1 step 6, --hero-skill-toggle-per-bit]")
+    else:
+        send(GAME_SMSG_HERO_UNNAMED_0065, [agent_id, mask],
+             f"0x0065 [hero agent {agent_id}, 0x{mask:02X}] -- the suppress mask "
+             f"after slot {slot} {'suppressed' if value else 'released'} "
+             f"[DESKWORK-D1 step 6]")
+    hero_body_sync_disabled(state, hid)
+    if PERSIST and state.get("charstore_game") is not None:
+        state["charstore_game"].set_hero_disabled_slots(
+            state.get("char_uuid", ""), hid, mask)
+    print(f"[c{conn_id}] HERO_SKILL_TOGGLE: hero {hid} (agent {agent_id}) slot "
+          f"{slot} (skill {bar[slot]}) {'SUPPRESSED' if value else 'released'}; "
+          f"mask 0x{was:02X} -> 0x{mask:02X}; the body "
+          f"{'skips' if value else 'may cast'} it"
+          + ("" if (PERSIST and state.get("charstore_game") is not None)
+             else "  [not persisted: no store]")
+          + " [DESKWORK-D1 step 6]", flush=True)
+
 
 def party_flag_point(state, agent_id, agent):
     """Where a party body is FLAGGED to stand, or None: its own hero flag
@@ -26365,9 +26567,18 @@ def pick_skill(agent, now):
     n = len(skills)
     if not n:
         return None
+    # DESKWORK-D1 step 6: a SUPPRESSED slot (the hero panel's struck-through
+    # skill, c2s 0x0019) is never picked -- the one rule GWW states for the
+    # mask ("the hero will never use a suppressed skill unless forced"), and
+    # not an AI policy: it removes a slot from the round robin, it does not
+    # rank the rest. Keyed by SKILL ID because `skills` drops empty slots and
+    # the mask is per panel slot; hero_disabled_skill_ids does the join.
+    disabled = agent.get("skill_disabled_ids") or ()
     start = (agent.get("last_slot", -1) + 1) % n
     for i in range(n):
         slot = (start + i) % n
+        if skills[slot][0] in disabled:
+            continue
         if now >= agent["skill_ready"][slot]:
             return slot
     return None
@@ -30808,6 +31019,17 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         else:
                             print(f"[c{conn_id}] HERO_ADD ignored "
                                   f"(--no-hero-add) [SANDBOX-N2]", flush=True)
+                    elif opcode == GAME_CMSG_HERO_SKILL_TOGGLE:
+                        # DESKWORK-D1 step 6: the hero panel's suppress click
+                        # (Shift-click by default). RECONSTRUCTION: no tape
+                        # carries the request; the reply is the client's own
+                        # mask writer (studies/cmsg DESKWORK-D1).
+                        if HERO_SKILL_TOGGLE_ENABLED:
+                            handle_hero_skill_toggle(values, send, state, conn_id)
+                        else:
+                            print(f"[c{conn_id}] HERO_SKILL_TOGGLE ignored "
+                                  f"(--no-hero-skill-toggle) [DESKWORK-D1]",
+                                  flush=True)
                     elif opcode == GAME_CMSG_CANCEL_ACTION:
                         # The one door that reaches a held cast -- the client
                         # sends no movement while casting, only this (the
@@ -34821,6 +35043,20 @@ def main():
         print("[party] --party-size-no-heroes: the load's 0x00B0 counts 1 + "
               "henchman and leaves the heroes out, as every run before "
               "2026-09-23 (retail's load counted them: [68, 2]).", flush=True)
+    if a.no_hero_skill_toggle:
+        global HERO_SKILL_TOGGLE_ENABLED
+        HERO_SKILL_TOGGLE_ENABLED = False
+        print("[party] --no-hero-skill-toggle: c2s 0x0019 is ignored and no "
+              "stored suppression is read -- every run before DESKWORK-D1 step "
+              "6 (2026-09-23): the hero's 0x0065 carries 0 and the body casts "
+              "its whole bar.", flush=True)
+    if a.hero_skill_toggle_per_bit:
+        global HERO_SKILL_TOGGLE_PER_BIT
+        HERO_SKILL_TOGGLE_PER_BIT = True
+        print("[party] --hero-skill-toggle-per-bit: a suppress click is answered "
+              "with 0x0064 [agent, slot, value] (the route's pre-registered "
+              "reply, never on retail's wire) instead of the whole mask 0x0065.",
+              flush=True)
     if a.party_no_fight:
         global PARTY_FIGHTS
         PARTY_FIGHTS = False

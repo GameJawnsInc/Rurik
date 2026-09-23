@@ -1081,3 +1081,116 @@ log line the arm-off path does not print.
    `0x01C2` in the log); after a kick, that it does not — and then add it back from the
    outpost, which is the kick → zone → add path (the load skipped the block, so the
    add's `0x0037` is legal; the load registered no `0x009A` for it, so the add's does).
+
+### The hero skill toggle — `c2s 0x0019 HERO_SKILL_TOGGLE`, RECONSTRUCTION (DESKWORK-D1 step 6, 2026-09-23)
+
+**Desk work, no client launched.** The route asked whether `0x0019 [hero, slot < 8]`
+means "toggle this slot's suppression" or "use this skill now", and what the client
+expects back. Both were answered from the binary, the corpus and the wiki; nothing was
+run.
+
+**The message, statically (38797; `sendsites.py`, `codescan.py --xrefs/--dis`,
+`msghandler.py --callers`, `asserts.py --at`).** The game wrapper is `0x0091FD80` (12
+bytes; `0x00920700` on 38888, `0x0091FDE0` on 38833/38849, `0x00915B40` on 38519), and
+the census's "0 callers" is because it is reached by a tail `jmp` from ChCliApi
+`0x0080E000`, which asserts `hotKey < 8` (ChCliApi:4359) and — unlike its neighbours
+`0x0080E030`/`0x0080E050`, the `0x001A`/`0x001B` senders, which gate on
+`MissionCliGetMap() == 1` — has **no map gate**. The schema's shape holds: `[agent_id,
+dword]` = the hero's AGENT and the panel slot. `0x0080E000` has two callers, both in the
+UI, and **both send only under a modifier:**
+
+- **GmSkSlot's click, `0x00543480`** (the skill-slot widget, `this+4` the agent, `+8`
+  the hotKey, `+0x10` the slot's skill): the agent must be a hero (`0x0080E390`, the
+  `+0x584` activation table), the slot non-empty, and a QUERY event `0x100001A7` (fired
+  with an out-parameter) must answer nonzero; only then `0x0080E000(agent, hotKey)`.
+  Otherwise the click falls through to the plain paths (`0x00816060(9, agent)` etc.).
+- **GmView's hero-hotkey handler, `0x004E8A20`** (`(heroIndex, hotKey)`; it walks the
+  hero list through `0x00524D70`/`0x0080E2F0`, takes `heroData+4` as the agent, and
+  requires the slot to hold a skill via the hotKeyState getter `0x00816EA0`,
+  ChCliApi:6253): `test [0xC078D4], 0x10000` → send `0x0019`; else, in an explorable,
+  the CLIENT-SIDE use path — `0x00816FE0` / `0x0080E0A0` / `0x0080E070`, thin wrappers
+  over ChCliSkill's hotKeyState methods (`0x00821260` sends `0x001C` via `0x0091FE50`,
+  `0x005C` via `0x009210F0`).
+
+`0xC078D4` is GmView's flags word — bit `0x10000` is set once (`0x004E97C5`) and read at
+three GmView sites (`0x004E554A`, `0x004E8AC1`, `0x004ED360`), and the query event
+`0x100001A7` is one of a block GmView subscribes to one handler (`0x004ED21B`,
+`0x100001A3`…`0x100001B5`), so both senders gate on the same GmView-held modifier state.
+**So `0x0019` is the MODIFIED hero-skill action and the plain one never leaves the
+client.** GWW names the modified action (WIKI, GWW "Hero Control panel" / Guide to Hero
+Basics, read 2026-09-23 via search summary): *hold the suppress key (Left Shift by
+default) and left-click a hero's skill; it is marked with a stroke-through red circle
+and the hero never uses it unless forced.* The route's pre-registered reading —
+**toggle, not use** — stands; its "ctrl-click" is corrected to the suppress key (Shift
+by default; Ctrl only if rebound).
+
+**The corpus.** c2s `0x0019`: **0 of 96** live game connections (`retail_c2s.json` has
+no row) and **0 of 1,557** loopback connection logs (no UNHANDLED opcode-25 row, no
+decoded one). s2c `0x0064`: **0** on the live corpus. s2c `0x0065`: **8**, every one
+`[hero, 0]`, twice per hero in the load block (heroes 117, 30, 324, 379). One of those
+heroes then casts: agent 30 on `20260914T005758 :56011` opens 50 casts (`0x00E4`) after
+its `[30, 0]` — so **mask 0 is not "all suppressed", and bit = 1 is the suppressed
+slot** (polarity RECONSTRUCTION from that one witness; the direction the wiki's prose
+implies).
+
+**What the client needs back.** Its hotKeyState mask (`+0xA4`, pvpui §30.2) is written
+by exactly two handlers, both read to the end and **assert-free**: `0x0064` (`0x0091E040
+→ 0x00810820 → 0x00822050`: find the agent's entry, `bts`/`btr` the bit, fire event
+`0x1000005A {agent, bit, value}`; an unknown agent returns silently) and `0x0065`
+(`0x0091E060 → 0x00810850 → 0x008220D0`: write the whole byte, diff eight bits, one
+event per changed bit). GmSkSlot subscribes to `0x1000005A` (`0x00542470`), which is the
+redraw. **The server answers with the whole mask, `0x0065 [hero agent, mask]`** —
+retail's only observed writer of the field (8 of 8), the message the load already sends
+this agent; `--hero-skill-toggle-per-bit` sends the route's pre-registered `0x0064
+[agent, slot, value]` instead, a message no retail tape carries.
+
+**The model (`handle_hero_skill_toggle`, behind `--no-hero-skill-toggle`, default ON).**
+A per-hero 8-bit mask in party state (`state["hero_skill_disabled"]`), bit = slot of the
+PANEL's bar — the eight slots `hero_character_block` sends in `0x00DA`, now built by one
+function (`hero_panel_bar_ids`) so the mask and the bar index the same array. The click
+flips the bit and sends the mask; the hero's BODY refuses to pick a suppressed skill:
+`pick_skill` skips a slot whose skill id is in the row's `skill_disabled_ids`, a set the
+handler, `hero_body_create` and `sync_hero_body_bar` keep current from the mask joined
+to the panel bar **by skill id**, because the body's `skills` list drops empty slots and a
+bar with a hole (`[322, 0, 348, …]`) would otherwise suppress the wrong skill. Under
+`--persist` the mask is written to the hero's row (`charstore` `disabled_slots`, 0..255,
+validated) and the next load's two `0x0065` rows carry it, so the struck-through slot
+survives a zone; the default wire is byte-identical (`[hero, 0]`, retail's value).
+Refused with nothing sent (retail's refusal NOT FOUND): an agent that is not a party
+hero, a slot outside 0..7, an EMPTY panel slot (both client senders check the slot
+holds a skill before sending). `test_heroskilltoggle.py` (floor 53) drives all of it,
+with the KNOWN-BAD join by list index. `schema/overrides.json` GAME_CMSG 25 names it
+HERO_SKILL_TOGGLE at LOW (static only).
+
+**What this does NOT cover, said plainly.** The plain hero-skill click (order the hero to
+use a skill now) is the client-side path above and sends `0x001C`/`0x005C`, not `0x0019`;
+whether retail's server re-sends `0x0065` on a bar edit, and whether the suppression
+follows the SLOT or the SKILL when the bar is rearranged, are UNOBSERVED — this server
+keeps the mask per slot (what the client stores) and re-reads the join.
+
+**Runsheet — the owner's click (one loopback session, the sandbox rig; the toggle is
+independent of the outpost gate, so a field works too).**
+
+1. Start the sandbox as usual (the hero-add runsheet's command, with `--persist`), load
+   in with at least one hero in the party, and open its skill bar: the party window's
+   hero row, or the hero's own panel (the hero control panel via its portrait).
+2. **Hold the suppress key — Left Shift by default (`Options → Control` names it
+   "Suppress"; Ctrl only if the owner rebound it) — and left-click one of the hero's
+   skills.** Expect the skill to draw a struck-through red circle and the gamesrv log to
+   print `HERO_SKILL_TOGGLE: hero 6 (agent 200) slot N (skill S) SUPPRESSED; mask 0x00 ->
+   0x..; the body skips it`. That line is the OBSERVED half: the client did send `0x0019`
+   for this click and the shape is `[agent, slot]`. The red circle is the client
+   accepting `0x0065` as the mask writer. Click the same skill again with Shift held →
+   `released`, the circle gone.
+3. In a field, watch the hero for a minute: it must never cast the suppressed skill
+   (the log's per-cast lines name the skill id) and must keep casting the others.
+4. Outcomes: **no log line** → the click did not send (a different modifier is bound to
+   Suppress; check `Options → Control`), or the click was a plain one (the hero used the
+   skill instead — that is the `0x001C`/`0x005C` path, not this arm). **A `refused:`
+   line** → read its reason (an empty slot, a non-party hero). **The circle does not
+   appear but the log line does** → the client did not redraw on `0x0065`; retry with
+   `--hero-skill-toggle-per-bit` (`0x0064`), which separates "wrong message" from "wrong
+   polarity". **The hero still casts it** → the body's join is wrong; the log's
+   `now casts […]` line after a bar edit and the mask line are the evidence to file.
+   The client asserting on either message would refute the static read (`0x00822050`
+   / `0x008220D0` have no assert); `--no-hero-skill-toggle` is the revert.

@@ -780,6 +780,30 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "The default counts the party's heroes -- OBSERVED: "
                          "retail's load sent [68, 2] with one hero in the party "
                          "and the kick [68, 1] after (20260916T150306 :62321).")
+    ap.add_argument("--no-hero-skill-toggle", action="store_true",
+                    help="THE REVERT ARM for DESKWORK-D1 step 6: ignore c2s 0x0019 "
+                         "(the hero panel's SUPPRESS click -- hold the suppress key, "
+                         "Left Shift by default, and click a hero's skill) and read "
+                         "no stored suppression -- every run before 2026-09-23: the "
+                         "hero's 0x0065 carries 0 and its body casts the whole bar. "
+                         "The default keeps a per-hero mask (bit = panel slot), "
+                         "answers the click with the whole mask 0x0065 [agent, mask] "
+                         "(retail's only observed writer of the client's hotKeyState "
+                         "mask, 8 of 8 at load; both mask handlers read assert-free), "
+                         "stops the body casting a suppressed slot, and under "
+                         "--persist writes the mask to the hero's row so the next "
+                         "load re-draws it. RECONSTRUCTION: no tape carries the "
+                         "request; the meaning is read from the client's two send "
+                         "sites (a modifier-gated click, the plain click being the "
+                         "client-side use path) and named by GWW. An agent that is "
+                         "not a party hero, a slot outside 0..7 and an empty slot are "
+                         "refused with nothing sent.")
+    ap.add_argument("--hero-skill-toggle-per-bit", action="store_true",
+                    help="THE ALTERNATIVE REPLY for DESKWORK-D1 step 6: answer a "
+                         "suppress click with 0x0064 [agent, slot, value] -- one bit "
+                         "(the route's pre-registered reply; handler 0x00822050 is "
+                         "assert-free but the message is on no retail tape) -- "
+                         "instead of the whole mask 0x0065.")
     ap.add_argument("--no-zone-carry", action="store_true",
                     help="THE REVERT ARM for JARIN: a zone forgets the death "
                          "penalty and the hero's stance. Retail carries the "

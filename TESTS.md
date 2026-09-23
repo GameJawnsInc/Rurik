@@ -6378,6 +6378,30 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   has ONE sender; `main()` reads `HEROES_PARTY_MAX`, not the literal 7. Drives the real
   handlers with a fake send and a scratch store like `test_herokick.py`. Floor 48 ->
   78 from the green run, ~3 s),
+  `toolkit/authsrv/test_heroskilltoggle.py` (**2026-09-23, DESKWORK-D1 step 6: the hero
+  panel's SUPPRESS click, c2s 0x0019 HERO_SKILL_TOGGLE**, `studies/cmsg/FINDINGS.md`
+  §DESKWORK-D1 "The hero skill toggle". RECONSTRUCTION end to end -- no retail tape and
+  no loopback log carries the request -- so it pins the READING and that the arm does it:
+  §1 a click on an occupied panel slot flips one bit of the hero's mask and is answered
+  with the whole mask `0x0065 [hero agent, mask]` (retail's only observed writer of the
+  client's hotKeyState mask, 8 of 8 at load, all zero), a second click releases it, two
+  slots compose, `--hero-skill-toggle-per-bit` answers `0x0064 [agent, slot, value]`
+  instead; §2 refusals send NOTHING (a non-hero agent, a kicked hero, hotKey 8 and -1, an
+  EMPTY panel slot, a malformed request) with the un-kicked hero as the control; §3 the
+  BODY stops casting it: `pick_skill` never returns a suppressed skill, the join is by
+  SKILL ID through the PANEL's eight slots (a stored bar with a hole suppressed at panel
+  slot 2 removes skill 348, not the body's list index 2; the KNOWN-BAD join by list index
+  picks the wrong skill), releasing restores the pick, all-suppressed picks None, a bar
+  edit re-reads the join; §4 `--persist` writes `disabled_slots` to the hero's row, a
+  fresh connection reads it and its load block's two 0x0065 rows carry it,
+  `charstore.validate` refuses 256 / -1 / a bool and accepts 0x9D, `--no-hero-skill-toggle`
+  reads and sends nothing stored; §5 BYTE-IDENTITY: no toggle means `[agent, 0]` twice
+  (retail's 8-of-8 value) and `hero_panel_bar_ids` equals the block's pre-step expression;
+  §6 SOURCE LOCKS with mutations: the arm calls the handler only under
+  `HERO_SKILL_TOGGLE_ENABLED`, `main()` wires both flags, `pick_skill` reads
+  `skill_disabled_ids`, `hero_body_create` seeds it, `sync_hero_body_bar` refreshes it,
+  the block's two rows carry the mask, `serverargs.py` defines both flags. Drives the real
+  handler with a fake send and a scratch store. Floor 53 from the green run, ~2 s),
   `toolkit/authsrv/test_labelrun.py` (the labelled input run, which names GAME_CMSG
   opcodes from what a human was told to do: a message lands in exactly one step's
   window, instance-load traffic is never folded into step 1, and a dirty idle CONTROL

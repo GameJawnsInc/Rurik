@@ -262,6 +262,12 @@ def _validate_heroes(path, who, heroes):
                                or not isinstance(row[key], int)
                                or row[key] < 0):
                 _refuse(path, f"{where}: {key} must be a non-negative int")
+        if "disabled_slots" in row:
+            m = row["disabled_slots"]
+            if isinstance(m, bool) or not isinstance(m, int) or not 0 <= m <= 0xFF:
+                _refuse(path, f"{where}: disabled_slots must be an int 0..255 "
+                              f"(the hero panel's suppress mask, one bit per "
+                              f"slot; DESKWORK-D1 step 6)")
 
 
 def validate(data, path):
@@ -782,6 +788,31 @@ class Store:
         row["kicked_heroes"] = sorted(have)
         self.save()
         return row["kicked_heroes"]
+
+    # ---- suppressed hero skills (DESKWORK-D1 step 6) ----------------------
+    # The hero panel's suppress click (c2s 0x0019, hold the suppress key and
+    # click a skill) toggles one bit of an 8-bit mask, bit = panel slot, and
+    # the client draws it from s2c 0x0065 [agent, mask] -- the byte retail's
+    # load block sends as 0 for every hero (8 of 8 on the live corpus). Per
+    # HERO, per CHARACTER, like the bar it indexes: slot N means slot N of
+    # THIS hero's `skillbar` as the panel shows it (authsrv.hero_panel_bar_ids).
+    def hero_disabled_slots(self, uuid_hex, hero_index):
+        """The hero's suppress mask, 0 when none is stored."""
+        hero = self.hero_row(uuid_hex, hero_index)
+        return 0 if hero is None else int(hero.get("disabled_slots") or 0)
+
+    def set_hero_disabled_slots(self, uuid_hex, hero_index, mask):
+        """Write the whole mask (0..255); saves. Returns the stored value."""
+        hero = self.ensure_hero(uuid_hex, hero_index)
+        if hero is None:
+            return None
+        mask = int(mask)
+        if not 0 <= mask <= 0xFF:
+            raise ValueError(f"suppress mask {mask} outside 0..255; the "
+                             f"client's mask is eight bits (hotKeyState +0xA4)")
+        hero["disabled_slots"] = mask
+        self.save()
+        return mask
 
 
 def find_character(uuid_hex, base=None):

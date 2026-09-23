@@ -346,6 +346,12 @@
    }
   },
   "GAME_CMSG": {
+   "25": {
+    "opcode": 25,
+    "name": "HERO_SKILL_TOGGLE",
+    "name_confidence": "low",
+    "why": "STATIC ONLY -- the hero panel's SUPPRESS click: hold the suppress key (Left Shift by default; WIKI, GWW 'Hero Control panel') and click a hero's skill to toggle its suppression, drawn as a struck-through red circle. NOT FOUND on any wire: 0 of 96 live game connections (toolkit/authsrv/c2striage.py) and 0 of 1,557 loopback connection logs. Read on build 38797 (toolkit/clientscan/sendsites.py, codescan.py --xrefs/--dis, msghandler.py --callers): send wrapper 0x0091FD80 (site 0x0091FDAF, 12 bytes; 0x00920700 on 38888, 0x0091FDE0 on 38833/38849, 0x00915B40 on 38519), reached by a tail JMP from ChCliApi 0x0080E000, which asserts `hotKey < 8` (ChCliApi:4359) and has NO MissionCliGetMap gate (its neighbours 0x0080E030/0x0080E050, the 0x001A/0x001B senders, gate on an explorable). Payload [agent_id, dword] = the HERO'S AGENT and the panel slot 0..7. Both callers send it only under a modifier and run the client-side skill USE path otherwise: GmSkSlot's click 0x00543480 when GmView answers query event 0x100001A7 nonzero; GmView's hero-hotkey handler 0x004E8A20 when flag word 0xC078D4 carries bit 0x10000 (set once at 0x004E97C5); the unmodified branches call ChCliSkill's hotKeyState methods (0x00821260 -> 0x001C / 0x005C). The client's hotKeyState mask (+0xA4, studies/pvpui 30.2) is written only by s2c 0x0065 [agent, mask] and 0x0064 [agent, bit, value], both assert-free, so the reply is what redraws the slot. Named LOW: mechanism and meaning read from the binary and the wiki, never seen sent; the loopback click that would raise it to OBSERVED is owed (studies/cmsg/FINDINGS.md DESKWORK-D1 step 6, the runsheet). Handled by handle_hero_skill_toggle behind --no-hero-skill-toggle (RECONSTRUCTION)."
+   },
    "30": {
     "opcode": 30,
     "name": "HERO_ADD",
