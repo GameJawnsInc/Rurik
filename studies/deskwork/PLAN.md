@@ -257,7 +257,7 @@ confound SKILLS-B1 recorded on 08-21.
    before the 16/17/55 word — a decoded client rule (skillcast §16.6; 0x008129DA stores
    it at charContext+0x640, the number bodies consume and clear it) broken on every skill
    hit since August, 91 of 92 retail batches; (a) the player branch of
-   `armour_ignoring_damage` (`authsrv.py:19450`) stops declaring [42, max] unless the
+   `armour_ignoring_damage` (`authsrv.py:19483`) stops declaring [42, max] unless the
    maximum moved; (c) a body's completion batch carries its [55] energy word; (d)
    `skill_effect.275` Mend Condition with `heal_if_removed` (WIKI); (e) optional,
    INFERRED: `hero_pool_gain` sends the zero gain as the player's does.
@@ -362,7 +362,8 @@ generality; skills §16, §47.
 4. **Emit** `vault/content/skill_labels.toml` (`source = "client-table"`, extractor and
    build per row, `verified` = the slot match) merged UNDER `world.toml`'s 54 hand rows;
    **LANDED 2026-09-23 for the PLAIN SERVED rows only (the owner's option 1 on the failed
-   step-3 gate): 59 rows of 131, 72 excluded by reason — skills §55, SKILLS-LT.**
+   step-3 gate): 47 rows of 131, 84 excluded by reason (59 / 72 before the same day's
+   review-driven fix pass, skills §55.7) — skills §55, SKILLS-LT.**
    the server reads `scale_means` / `bonus_scale_means` / condition labels carrying
    `tier = 'label'` so the log and the sandbox's "modelled" grade say "label-only" — the
    fidelity judge's condition: a skill that deals its damage and drops its "if" clause
@@ -436,14 +437,14 @@ line.
    D (recall disagrees on P and D); pin literals in `test_sandbox`; PLAN-LOG line.
 2. **Primaries**, each with a `--no-<attr>` switch, applied to player, heroes and bodies
    alike (SKILLS-WK's lesson: Weakness reached only the player's wire): Energy Storage +3
-   max per rank in `player_max_energy` (`authsrv.py:21348`) and body pools, resent as
+   max per rank in `player_max_energy` (`authsrv.py:21381`) and body pools, resent as
    0x009F 41 on a rank change; Expertise 4 %/rank off attack skills, touch skills,
    preparations, rituals, with JARIN's 14 of 15 for skill 392 at rank 1
    (`20260914T005758`) as the OBSERVED check; Fast Casting on activation and Mesmer
    signet recharge; Soul Reaping on a nearby non-spirit death with the cap; Divine Favor
    on a Monk spell cast on an ally. Spawning Power, Leadership and Mysticism recorded as
    waiting on unmodelled families.
-3. **Item words.** `equipped_attribute_bonuses` (`authsrv.py:17586`) decodes each
+3. **Item words.** `equipped_attribute_bonuses` (`authsrv.py:17618`) decodes each
    equipped item's `modifiers` through `itemmods.attribute_bonuses` over weapon, offhand
    AND `agents.PLAYER_ARMOUR` (543 stacks, 542 takes the max per attribute, bit-31 words
    refused — the WORN rune form is unmeasured); the declared `attribute_bonus` becomes a

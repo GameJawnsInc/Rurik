@@ -1911,18 +1911,22 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 * **DESKWORK-D4**: skill coverage in bulk. **Steps 1–4 LANDED** — 1–3 on 2026-09-22
   (skills §54, SKILLS-DT: the slot mapping, the referee, the Q7 census; the step-3 gate
   FAILED at 27 %), **step 4 on 2026-09-23 on the owner's option 1** (skills §55, SKILLS-LT;
-  PLAN-LOG): the 131 PLAIN SERVED rows through the step-4 gate → **59 label-tier rows** in
-  `vault/content/skill_labels.toml`, under the hand rows, marked, `--no-skill-labels`
-  reverting; 72 excluded by reason (§55.2); the three hand-row fixes done. **Still open:**
-  (i) **the client confirmation** — §55.5's two-line runsheet, 187 at rank 0 → 7 before
-  armour with the LABEL-tier log line, `--no-skill-labels` the control; (ii) **the residue
-  per skill** — the 62 client-side exclusions by class (a caster-centred area for target
-  byte 0/1 moves 12, a condition rider on episodes 6, byte 1's resolution 3 heals), the 210
-  conditional SERVED rows, the unnumbered clauses (831, 231, 1044, 1652, 1996), a
-  flat-constant reader in `skill_condition` (167, 1033), then the 924 RECOGNISED and
-  §54.4's two-consumer proposal (still the owner's call); (iii) step 5, the 68 no-slot
-  rows; (iv) step 6, the timed effect types 16 / 24–28; (v) the 141 INDETERMINATE slots
-  wait on a client tooltip run (§54.3).
+  PLAN-LOG): the 131 PLAIN SERVED rows through the step-4 gate → **47 label-tier rows** in
+  `vault/content/skill_labels.toml` (59 before the same day's review-driven fix pass,
+  §55.7), under the hand rows, 36 of them marked, `--no-skill-labels` reverting; 84
+  excluded by reason (§55.2); the three hand-row fixes done. **Still open:** (i) **the
+  client confirmation** — §55.5's two-line runsheet, 187 at rank 0 → 7 before armour with
+  the LABEL-tier log line, `gamesrv_args = ["--no-skill-labels"]` the control; (ii) **the
+  residue per skill** — the 74 client-side exclusions by class (a caster-centred area for
+  target byte 0/1 moves 12 and a caster-centred party heal 4 — 287 and 2221 first, being
+  under-applied only; a chain gate for non-attack `combo_req` 3, and 974's step; a condition
+  rider on episodes 6; byte 1's resolution 3 heals; 292's percent-of-loss heal), the 210
+  conditional SERVED rows, the marked clauses (6 knock-downs on label rows first), a
+  flat-constant reader in `skill_condition` (167), then the 924 RECOGNISED and §54.4's
+  two-consumer proposal (still the owner's call); (iii) step 5, the 68 no-slot rows; (iv)
+  step 6, the timed effect types 16 / 24–28; (v) the 141 INDETERMINATE slots wait on a
+  client tooltip run (§54.3). **For the merger (ENG-1):** the overlay is live in the shared
+  vault; main's pre-tier `test_skilldesc` is red against it until desk-d4b merges.
 
 **Skills and the slice** — [studies/skills/FINDINGS.md](studies/skills/FINDINGS.md),
 [studies/slice/FINDINGS.md](studies/slice/FINDINGS.md)

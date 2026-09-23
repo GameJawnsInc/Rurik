@@ -28,7 +28,45 @@ move back.
 
 ---
 
-### SKILLS-LT / DESKWORK-D4 step 4 -- 2026-09-23 -- **the label tier: 59 plain SERVED skills shipped as generated rows under the hand rows; 72 of 131 excluded by reason; `--no-skill-labels` reverts**
+### SKILLS-LT fix pass / DESKWORK-D4 step 4 -- 2026-09-23 -- **the label tier re-cut on review: 47 rows, not 59; nine refuted rows out, each refutation now a gate rule with a known-bad arm; 36 of 47 marked; `--no-skill-labels` wired and tested**
+
+Two reviewers read the first pass. The evidence refuter read all 59 shipped templates at run
+time and called the real consumers on each: nine rows OVER-applied — 1262 heals the caster its
+text excludes, 2051 and 2100 heal the caster's spirits, 943 heals unconditionally where only
+the relieved are healed, 292's slot is a percentage of a sacrifice parsed as flat Health, 784
+973 1033 carry a chain requirement the E5 gate tests for attacks only, 96 needs a corpse; 106's
+fleshy-only Disease was the tenth (minor). The engineering reviewer found `AREA_BURST` false
+for 192 and 197 (`spell_burst` refuses their durations), the `tier` value unvalidated, the
+flag's wiring untested, an emit that creates a vault and accepts another build.
+[studies/skills/FINDINGS.md](studies/skills/FINDINGS.md) §55.7 is the record. The gate
+(`skilldesc.build_label_row`) now reads the slot's own `%` (`PERCENT_SLOT`), the record's
+`combo_req` and `combo` (`CHAIN_REQUIREMENT`, `CHAIN_STEP_NOT_ADVANCED`), an `UNMODELLED_CLASS`
+flag (spirits, minions, a pet, a corpse, fleshiness), the recipient class of a byte-0 heal
+(`HEAL_RECIPIENT_CLASS` — 287 and 2221 fall with 1262 and 943, under-applied only, because the
+parse cannot tell them apart: Refuse to guess), and `spell_burst`'s WHOLE predicate (no
+projectile, no duration); what a label DROPS is marked by kind (`DURATION_UNMODELLED`,
+`CONDITION_UNNUMBERED`, `LITERAL_DROPPED`, the `CLAUSE_*` family — knock-downs, shadow steps,
+interrupts, removals, disables, ranges, "you and", 1996's slows). **47 = 131 − 10 hand − 74
+excluded** (HAND_ROW 10, DURATION_ONLY 41, PERCENT_SLOT 1, CONDITION_ON_EPISODE 6, PET_ATTACK
+1, CHAIN_REQUIREMENT 3, UNMODELLED_CLASS 4, RECIPIENT_NOT_A_FOE 11, RECIPIENT_NOT_AN_ALLY 3,
+HEAL_RECIPIENT_CLASS 4); AREA_BURST 3 (187 189 1086). `check_label_rows` names a percent slot,
+an unmodelled class and a chain requirement forced past the gate (arms on 292 96 784).
+Plumbing: `content.TIERS` is a closed set (a near-miss `tier` spelling is refused at load, not
+promoted to a hand row); the dead `SKILL_LABELS` global is gone and `test_skilldamage` §14
+parses `--no-skill-labels`, locks `drop_tier` before `srv.listen`, captures the LABEL-tier log
+line, locks both call sites, and checks every row's `AREA_BURST` against `spell_burst` itself;
+the emitter refuses a build other than the loaded skills table's and a missing `vault/content/`,
+writes atomically, and stamps the `Gw.dat` path and a sha256 over the templates; the sandbox
+spec's `gamesrv_args` makes the runsheet's control arm runnable; the orchestrator's `--smoke`
+asserts the ` *` / ` ~label` marks. Tests: test_skilldesc bare 72 (138 with the vault),
+test_content 52 bare / 55, test_skilldamage 80, test_sandbox 111, smoke 23 / 0 failures;
+citelint's four shifted citations re-pointed. **Reviewer ENG-1, for the merger: the overlay in
+`vault/content/` is read by every tree on the machine; main's pre-tier `test_skilldesc` is red
+against it until desk-d4b merges, and a checkout older than 2026-09-22 (no `skilldesc.py`)
+refuses to load content on the extractor condition — point `RURIK_VAULT` elsewhere to bisect
+past that date.**
+
+### SKILLS-LT / DESKWORK-D4 step 4 -- 2026-09-23 -- **the label tier: 59 plain SERVED skills shipped as generated rows under the hand rows; 72 of 131 excluded by reason; `--no-skill-labels` reverts** (superseded the same day by the fix pass above: 47 rows, 84 excluded)
 
 The owner's decision on §54.4's failed gate (27 %): option 1 — ship the PLAIN SERVED rows now
 as a marked tier, the residue per skill. [studies/skills/FINDINGS.md](studies/skills/FINDINGS.md)

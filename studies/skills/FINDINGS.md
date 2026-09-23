@@ -7694,21 +7694,24 @@ half-mark (ENG-6). Found in the fix pass and by neither review: `LITERAL_PERCENT
 on every slot-bearing row (§54.4), and `normalise()` let a slot's closing `%` pair with the
 escape after it — harmless on this corpus by ArenaNet's spelling alone (§54.1), fenced now.
 
-## 55. SKILLS-LT — the label tier: 59 of the 131 plain SERVED skills shipped as generated `tier = "label"` rows under the hand rows; 72 excluded by the step-4 gate, each by reason; `--no-skill-labels` reverts (2026-09-23)
+## 55. SKILLS-LT — the label tier: 47 of the 131 plain SERVED skills shipped as generated `tier = "label"` rows under the hand rows; 84 excluded by the step-4 gate, each by reason; `--no-skill-labels` reverts (2026-09-23; the fix pass of the same day took the count from 59 to 47, §55.7)
 
 **Status: SHIPPED, behind a revert flag, as a MARKED tier.** DESKWORK-D4 step 4 on the
 owner's decision of 2026-09-23 (option 1): the step-3 gate having FAILED at 27 % (§54.4),
 ship the PLAIN SERVED rows now and treat the residue per skill. Extractor:
 `toolkit/clientscan/skilldesc.py --emit-labels` → `vault/content/skill_labels.toml` (the
-vault, never git). Locks: `toolkit/clientscan/test_skilldesc.py` §1b + §3 (bare floor 61,
-124 with the vault), `toolkit/test_content.py` (+4, floor 50), `toolkit/authsrv/test_skilldamage.py`
-§14 (75 with the overlay), `toolkit/harness/test_sandbox.py` §5 (109). Build 38797, snapshot
-`vault/client/2026-07-29_221c13772c7a`. `SKILLS-LT<n>` = a finding of this section;
-convention: [studies/idents/CONVENTION.md](../idents/CONVENTION.md). The three content
-fixes §54.8 owed landed the same day, first (`73eb8320`): Hamstring 320 →
+vault, never git). Locks: `toolkit/clientscan/test_skilldesc.py` §1b + §3 (bare floor 72,
+138 with the vault), `toolkit/test_content.py` (floor 52 bare, 55 with the vault),
+`toolkit/authsrv/test_skilldamage.py` §14 (80 with the overlay), `toolkit/harness/test_sandbox.py`
+§5 (111), `tools/orchestrator/orchestrator.py --smoke` (23, two of them the grade marks). Build
+38797, snapshot `vault/client/2026-07-29_221c13772c7a`. `SKILLS-LT<n>` = a finding of this
+section; convention: [studies/idents/CONVENTION.md](../idents/CONVENTION.md). The three
+content fixes §54.8 owed landed the same day, first (`73eb8320`): Hamstring 320 →
 `bonus_scale_means = "Crippled"`, and Battle Rage 317's and Scourge Sacrifice 253's inert
 `scale_means = "Duration"` dropped; §54.5's one CONFLICT and two unmatched NO_SLOT rows are
-gone, and Hamstring inflicts Crippled 3..15 s where it inflicted nothing.
+gone, and Hamstring inflicts Crippled 3..15 s where it inflicted nothing. **The first pass
+shipped 59 rows; two reviewers read all 59 templates and refuted nine of them (§55.7), and
+the fix pass turned each refutation into a gate rule with a known-bad arm. 47 ship.**
 
 **Provenance, stated once.** A description is ArenaNet's authored text and none of it leaves
 the parse. What the overlay carries is a skill id, the record's `type_code`, a means string
@@ -7718,8 +7721,11 @@ is a list of `{slot, field, lo, hi, verdict, label[, detail]}` — numbers and e
 `skilldesc.OVERLAY_VOCABULARY` is the closed set of every string the file may hold, and
 `skilldesc.text_leak()` names any string outside it; the test asserts the emitted file
 leaks nothing and that no string value is longer than the vocabulary's longest token (31,
-the extractor path). This section names skills by id; the names used are the short proper
-nouns `PLAN.md` §7 Q17 permits and are already in §54.
+the extractor path). The header names the exe, its build (from the image's sha256), the
+`Gw.dat` the templates were read from and a sha256 over the corpus's templates in id order
+(`skilldesc.template_digest`) — a measurement of the text, so a drift between builds shows.
+This section names skills by id; the names used are the short proper nouns `PLAN.md` §7
+Q17 permits and are already in §54.
 
 ### 55.1 SKILLS-LT1 — the set, defined in code and reproduced
 
@@ -7729,7 +7735,10 @@ fire unconditionally. **341 SERVED = 131 plain + 210 conditional** (IF 154, WHEN
 17, WHILE 9, CHANCE 7, EXCEPTION 6), the orchestrator's count to the row (OBSERVED, build
 38797). Of the 131, **10 already carry a hand row** (160, 170, 186, 229, 252, 253, 281, 319,
 431, 433) and stay hand rows; 121 are candidates, by type: Spell 49, Hex 22, Enchantment 18,
-Stance 12, attack 7, Signet 4, Skill 4, Preparation 2, pet attack 1, Glyph 1, Shout 1.
+Stance 12, attack 7, Signet 4, Skill 4, Preparation 2, pet attack 1, Glyph 1, Shout 1. The
+fix pass added flags the GATE reads (`AREA_NEAR`, `UNMODELLED_CLASS`, the `CLAUSE_*` family,
+`SPEED_MOVE`) and none of them is a COMPOUND flag: the owner's 131 stay 131 (`test_skilldesc`
+§1b pins the disjointness).
 
 ### 55.2 SKILLS-LT2 — the gate: "A LABEL DOES NOT SAY WHEN", applied to every consumer
 
@@ -7740,7 +7749,7 @@ something retail would not — is **excluded with a reason**; one it would **UND
 ships with the shortfall named in `tier_detail` and counted. Every exclusion is written
 into the overlay's header by id. The rulings, each read off the consumer's own code and
 the record's own bytes (the template windows were read as a tool over the owner's install,
-`--row`, to decide; none is carried):
+`--row`, to decide; none is carried); the last four rows are the fix pass's (§55.7):
 
 | reason | rows | ids | why the server would over-apply |
 |---|---|---|---|
@@ -7750,92 +7759,146 @@ the record's own bytes (the template windows were read as a tool over the owner'
 | `PET_ATTACK` | 1 | 441 | type 20; no pet is modelled and the bonus rides a pet's swing |
 | `RECIPIENT_NOT_A_FOE` | 11 | 97 183 188 769 770 840 917 1113 1364 1468 2212 | an at-cast damage or condition acts on the cast's TARGET (the player path: `if inflicted and target`; the body path: `_tid`), and the record's target byte says the target is the caster (0: 97 183 188 840 1113 1364 2212 — self-centred areas and 1364's own Bleeding), unresolved (1: 769 917 1468 — `effects.TARGET_KINDS` has no entry; 1468's conditions ride a later attack besides) or another ally (4: 770, whose Crippled is on the foes around the ally). The server would act on the SELECTED agent at any range, or on the ally |
 | `RECIPIENT_NOT_AN_ALLY` | 3 | 918 1032 1354 | heals whose target byte is 1: `cast_recipient`'s fall-through hands an unresolved byte to the selected target, a foe included |
+| `PERCENT_SLOT` | 1 | 292 | the slot is printed with a literal `%` (`%str1%%%` in the corpus's spelling) and the parse labelled it HEAL: retail heals N % of the health the caster gave up, the row would heal N Health and charge no sacrifice (LT-R5). Rule: a `%` slot ships only under a label the consumers read as a percent (`PERCENT_LABELS`: armour penetration, the four speeds); `analyse()` now records `percent` per slot |
+| `CHAIN_REQUIREMENT` | 3 | 784 973 1033 | the record's `combo_req` (must follow a lead / off-hand / dual) on a NON-attack type: DAGGERS-B5's chain gate at the E5 runs inside `if target and _is_attack_skill(...)`, so a Spell's or a Skill's condition and standalone damage would land whatever the chain says (LT-R4). On an attack the gate exists and the row ships |
+| `UNMODELLED_CLASS` | 4 | 96 106 2051 2100 | the recipient or the prerequisite is an object the server does not have: 2051's and 2100's heal belongs to the spirits the caster controls, 96 needs a corpse exploited, 106 inflicts on a fleshy foe only (LT-R2, R6, R10). Rule: the `UNMODELLED_CLASS` flag — spirits (not `non-spirit`), minions, a pet, a corpse, `exploit`, `fleshy` — excludes. Placed after the target-byte rules so 97 917 918 1468, which both refuse, keep their byte reason |
+| `HEAL_RECIPIENT_CLASS` | 4 | 287 943 1262 2221 | a SELF-targeted heal (byte 0) whose text names a CLASS of recipients — adjacent creatures, the party: `cast_recipient` places it on the caster and nobody else, and only the text says whether the caster is in the class. 1262 excludes the caster outright (LT-R1); 943 heals only the members relieved of Burning (LT-R3); **287 and 2221 include the caster and would only be under-applied, but the parse cannot tell them from the other two, so the rule takes all four** (Refuse to guess). A caster-centred party heal is the residue for the four |
 
 Foe bytes are 5 and 16 (`authsrv.AREA_TARGET_BYTE`); heal bytes 0, 3, 4 (self, ally, other
 ally — what `cast_recipient` places). A damage label on a Preparation (434) is NOT
 target-gated: its consumer is `swing_preparation_bonus`, riding the caster's own arrows.
 `SELF_CONFLICT` (one index, two labels) is a rule too; it caught nothing in the plain set.
+`check_label_rows` re-checks the set against the report (and, given the records, against
+`combo_req`), so a percent slot, an unmodelled class or a chain requirement forced past the
+gate is named — `test_skilldesc` §1b on synthetic rows and §3 on 292, 96 and 784.
 
-**Excluded ≠ refuted.** These 62 client-side exclusions are the FIRST per-skill targets:
-each names the machinery it waits on (a caster-centred area for byte 0/1, a resolution of
-byte 1, a condition rider on episodes, a pet), and the wording is plain — nothing here is
-the conditional residue.
+**Excluded ≠ refuted.** These 74 client-side exclusions are the FIRST per-skill targets:
+each names the machinery it waits on (a caster-centred area for byte 0/1 and for the four
+class heals, a resolution of byte 1, a condition rider on episodes, a chain gate for
+non-attacks, a percent-of-loss heal, a pet, spirits, corpses, fleshiness), and the wording is
+plain — nothing here is the conditional residue.
 
-### 55.3 SKILLS-LT3 — what ships: 59 rows, and what the server does LESS of
+### 55.3 SKILLS-LT3 — what ships: 47 rows, and what the server does LESS of
 
-**59 = 131 − 10 − 62**, by type: Spell 37, attack 7, Stance 4, Skill 4, Hex 3, Signet 3,
+**47 = 131 − 10 − 74**, by type: Spell 26, attack 7, Stance 4, Hex 3, Signet 3, Skill 3,
 Preparation 1, Enchantment 0 (all 18 plain Enchantments were duration-only or
 condition-riders; the shipped Hexes are 1044's and 1652's snares and 1996's attack slow, the
 Stances 831, 1043, 1404 and 1762 with their speeds). Means, as the consumers read them:
-`Heal` 18 (on byte 0, 3 or 4), `+ Damage` 8, `Fire damage` 5, `Lightning damage` 5, `Earth
-damage` 3, `Cold damage` 1, `Holy damage` 1; conditions on the scale slot 6 (Crippled 2,
-Bleeding, Poison, Dazed, Blind) and on the bonus slot 11 (Weakness 4, Blind 3, Burning 2,
-Disease, Deep Wound); the speeds 8 (attack up 3, attack down 1, movement up 2, movement down
-3). Eight rows carry two means: 831 (attack speed + movement speed), 1404 (attack speed +
-snare), and 167, 189, 191, 224, 228, 1033 (damage + a condition).
+`Heal` 10 (on byte 3 or 4 — every byte-0 heal on a class is out), `+ Damage` 8, `Fire
+damage` 5, `Lightning damage` 5, `Earth damage` 2, `Cold damage` 1, `Holy damage` 1;
+conditions on the scale slot 4 (Crippled 2, Bleeding, Dazed) and on the bonus slot 9
+(Weakness 4, Blind 3, Burning 2); the speeds 9 (attack up 3, attack down 1, movement up 2,
+movement down 3). Seven rows carry two means: 831 (attack speed + movement speed), 1404
+(attack speed + snare), and 167, 189, 191, 224, 228 (damage + a condition).
 
-**Marked under-applications** (`tier_detail`, counted by the test):
+**Marked under-applications** (`tier_detail`; every token in `skilldesc.DETAILS`; counted by
+`test_skilldesc` §3; 36 of the 47 rows carry at least one, and the 11 that carry none — 117
+191 220 286 293 959 1043 1120 1404 1686 1762 — are single-clause templates: a foe's condition
+or damage, a target ally's heal, a stance's speeds):
 
-- `AREA_BURST` **5** — 187 189 192 197 1086, byte-16 Spells with standalone damage and area
-  wording: `spell_burst` (studies/weapons 40) already bursts over every foe within
-  `aoe_range` of the target and applies the condition per foe. Not under-applied; marked so
-  a reader knows which machinery it rides. (167 is byte 16 too but its text names one foe,
-  so it carries no area mark.)
-- `AREA_ONE_TARGET` **20** — area wording the server reaches ONE recipient of: 105 118 131
-  228 231 287 294 330 353 424 434 943 973 985 992 1118 1262 2107 2221 3425 — the adjacent
-  attacks (330 353 992 2107 3425: `adjacent_damage` is a hand opt-in and a different
-  mechanic, so the label does not set it), the party and area heals on byte 0 or 3 (287 943
-  1118 1262 2221: the recipient heals alone), 131's and 294's Signets, 105's and 228's area
-  damage on byte 5, 118's, 973's and 985's area conditions, 424's and 231's touch wording,
-  434's arrow splash (Ignite Arrows' documented gap).
-- `CONDITION_BIT_CLEAR_REFUSED` **2** — 167's Blind 10/10 and 1033's Deep Wound sit on a
-  bonus slot whose bit is clear; `skill_condition` reads only enabled progressions
-  (`skill_scale_value` raises), so the damage lands and the condition does not. The label
-  is right and inert; a flat-constant reader in `skill_condition` is the fix, not the row.
-- `INDETERMINATE_SLOT` **1** — 1033's Deep Wound 5..20, bit clear (§54.3's contest).
+- `AREA_BURST` **3** — 187 189 1086: byte-16 Spells with standalone damage, no projectile of
+  their own and no duration — `spell_burst`'s WHOLE predicate (studies/weapons 40), mirrored
+  in the gate and checked row by row against the server's own function in `test_skilldamage`
+  §14. Not under-applied; marked so a reader knows which machinery it rides. **Correction
+  (ENG-2, LT-R7):** the first pass marked 192 and 197 `AREA_BURST` too; both carry a duration
+  (9 / 10 s) and `spell_burst` refuses a duration, so the server deals one hit, once, to one
+  target. They are `AREA_ONE_TARGET` + `DURATION_UNMODELLED`.
+- `AREA_ONE_TARGET` **20** — area wording the server reaches ONE recipient of: 105 118 131 167
+  192 197 223 228 231 294 330 353 424 434 985 992 1118 1664 2107 3425 — the adjacent attacks
+  (330 353 992 2107 3425: `adjacent_damage` is a hand opt-in and a different mechanic), the
+  areas over time (167 192 197), "up to two other foes near your target" (223 1664, the new
+  `AREA_NEAR` flag; 105's three targets), 131's and 294's Signets, 228's shockwave, 118's
+  and 985's area conditions, 424's and 231's touch wording, 1118's party gain, 434's arrow
+  splash.
+- `DURATION_UNMODELLED` **7** — 105 167 192 197 228 424 799: a non-episode record whose
+  duration field is not zero. The at-cast path reads the scale and bonus slots and never the
+  duration, so an area over time ticks once (167 192 197), and whatever else the field times
+  (105's flight, 228's 3 s, 424's and 799's 3..10 / 3..9 beside their condition slot) does not
+  run. The mark can over-state — 424's and 799's timed thing may be the condition the bonus
+  slot already carries — and a mark that over-states costs nothing.
+- `CONDITION_BIT_CLEAR_REFUSED` **1** — 167's Blind 10/10 sits on a bonus slot whose bit is
+  clear; `skill_condition` reads only enabled progressions (`skill_scale_value` raises), so
+  the damage lands and the Blind does not. The label is right and inert; a flat-constant
+  reader in `skill_condition` is the fix, not the row. (1033's Deep Wound was the second;
+  1033 is out on its chain requirement, so `INDETERMINATE_SLOT` is 0 this pass.)
+- `CONDITION_UNNUMBERED` **1** — 228 names Cracked Armor beside its numbered Weakness; no
+  slot numbers it and no field carries it (`analyse()`'s `conditions_named` minus the slots').
+- `LITERAL_DROPPED` **5** — 223 224 228 231 1664: a constant printed in the text (their 25 %
+  armour penetration) that no slot carries and no field reads (`FLAG_LITERAL_PERCENT`).
+- `CHAIN_STEP_NOT_ADVANCED` **1** — 974 "counts as an off-hand attack" on a Skill: the chain
+  advances inside the attack branch only, so its Crippled lands and the chain does not move.
+- **The dropped clauses, by kind** (`CLAUSE_*`, raised by wording; the first pass listed five of
+  these in prose as "the standing weakness" and the fix pass made them marks): `CLAUSE_KNOCKDOWN`
+  **6** (187 192 231 294 1086 3425 — a label row carries no `knocks_down`), `CLAUSE_SHADOW_STEP`
+  **4** (799 1044 1652 2420), `CLAUSE_INTERRUPT` **2** (228, 434's Choking Gas; "easily
+  interrupted" on 959 is a property of the cast, not a clause, and is not raised),
+  `CLAUSE_REMOVAL` **2** (941, 1126: the cure beside the heal), `CLAUSE_ALSO_CASTER` **2**
+  (1126 2420: "you and that ally"), `CLAUSE_DISABLE` **1** (1118), `CLAUSE_DOUBLE_DAMAGE` **1**
+  (831), `CLAUSE_RANGE` **4** (407 958 985 1192: "half the normal range"), and 1996's one slot
+  that slows movement, attacks and casting together — read as attack speed, the other two
+  marked `CLAUSE_MOVE_SPEED` (a move clause with no MOVE_SPEED label) and `CLAUSE_CAST_SPEED`.
 
-**The standing weakness, stated.** "Plain" is measured by OUR flags. A clause with no slot
-and no conditional word is invisible to them: 831 also doubles the damage its wearer takes,
-231 exhausts its caster, 1044 and 1652 shadow-step before they snare, 1996 also slows its
-foe's movement and casting. Under the pass's rule these are under-applications (the server
-does less than the text) and they ship; they are listed here because the tier's mark says
-"label" and not which clause is missing. The per-skill residue starts with them.
+**Corrections to the first pass's prose (LT-R8):** 167 is NOT "one foe" — it is an area near
+a location struck every second for 5 s (now `AREA_NEAR` + `AREA_ONE_TARGET` +
+`DURATION_UNMODELLED`); 231 does NOT exhaust its caster — its unmodelled clauses are a
+knock-down and 25 % penetration, both now marked.
+
+**The standing weakness, restated smaller.** "Plain" is measured by OUR flags, and the marks
+are measured by our patterns. A clause with no slot, no conditional word and no pattern in
+`FLAG_PATTERNS` is still invisible; after the fix pass the reviewers' census of the shipped
+templates found none, but the census is of 47 rows on one build.
 
 ### 55.4 SKILLS-LT4 — the plumbing: one path, a tier rule, a flag, a grade
 
 - **No second path.** A label row resolves through `skill_damage`, `skill_heal`,
   `skill_condition` and the episode terms exactly as a hand row does: `test_skilldamage`
-  §14 puts 187 through `skill_damage` (7 at rank 0, 112 at rank 15, "standalone") and 784
-  through `skill_condition` (484 for 5 s / 20 s) and then drops the tier and watches both
-  resolve to None with Holy Strike and Sever Artery untouched.
+  §14 puts 187 through `skill_damage` (7 at rank 0, 112 at rank 15, "standalone") and 220
+  through `skill_condition` (Blind 479 for 3 s / 8 s; 784 was the example until its chain
+  requirement excluded it) and then drops the tier and watches both resolve to None with
+  Holy Strike, Sever Artery and Hamstring's 54.8 fix untouched.
 - **The tier sits UNDER everything** (`content.py` WHERE ROWS LIVE): a `tier = "label"` row
   never replaces a row without that tier, whichever layer either came from — the vault is
   merged over the repo, and this is the one exception, by TIER rather than by layer.
   `test_content` proves a label row keyed on a hand id LOSES and, as the known-bad arm,
-  that the plain update this merge was until today lets it win.
+  that the plain update this merge was until today lets it win. **The tier values are a
+  closed set** (`content.TIERS`, ENG-6): a near-miss spelling (`Label`, `labels`, `label `)
+  would have loaded as a hand row, beaten the real one and survived the flag; it is refused
+  at load, and `test_content` proves the refusal on all three. (A client-table row with NO
+  tier is a hand row — world.toml's 346 — so the other direction is not a rule.)
 - **The log names the tier.** At the player's E5 and at a body's landing:
   `resolves through a LABEL-tier row (<detail>) -- parsed from the client's template, not
-  hand-verified`. **`--no-skill-labels`** drops the tier at startup (`World.drop_tier`; a
-  bounded start on spare ports printed `59 label-tier skill_effect row(s) dropped`) — the
-  server as it was before 2026-09-23, the control for anything a run attributes to a
-  label-tier number.
+  hand-verified`. `test_skilldamage` §14 captures the line for 187, its silence for 312, and
+  source-locks both call sites. **`--no-skill-labels`** drops the tier at startup
+  (`World.drop_tier`, in `main()` before `srv.listen`; §14 parses the flag and locks the
+  order) — the consumers then see the HAND rows alone, **including the 54.8 hand fixes of the
+  same day** (the first pass's help text said "the server as it was until 2026-09-23", which
+  Hamstring's Crippled refutes; reworded). The dead `SKILL_LABELS` global is gone.
 - **The grade.** `sandbox.modelled_skills` is the HAND rows only; `label_skills` the tier;
-  the orchestrator marks `*` and `~label`, so nothing it shows as modelled is a label row
-  (the fidelity judge's condition on step 4). `skilldesc.census` grades a label row
-  `label-only`, never `modelled`: the census today reads 54 modelled, 59 label-only, 411
-  episode-only, 45 refused, 764 nothing.
+  `sandbox.LABEL_TIER` is `content.LABEL_TIER` (one definition); the orchestrator marks `*`
+  and `~label`, so nothing it shows as modelled is a label row (the fidelity judge's
+  condition on step 4), and its `--smoke` now asserts a hand row ends ` *`, a label row
+  ` ~label`, and "modelled only" shows exactly the union (54 + 47). `skilldesc.census`
+  grades a label row `label-only`, never `modelled`: the census today reads 54 modelled, 47
+  label-only, 411 episode-only, 45 refused, 776 nothing.
 
 ### 55.5 Regeneration, and the owed client confirmation (a runsheet, not a run)
 
 ```
-python toolkit/clientscan/skilldesc.py --emit-labels          # -> vault/content/skill_labels.toml
-python toolkit/clientscan/test_skilldesc.py                   # the on-disk overlay must equal a fresh emit
+python toolkit/clientscan/skilltable.py --emit-content   # vault/content/skills.toml FIRST, when the pin moves
+python toolkit/clientscan/skilldesc.py --emit-labels     # -> vault/content/skill_labels.toml
+python toolkit/clientscan/test_skilldesc.py              # the on-disk overlay must equal a fresh emit
 ```
 
 Deterministic (two emits are byte-identical) and stamped with the build derived from the
-image's own sha256; an exe outside `pinned.BUILDS`' pristine set is refused, as is a
-shifted mapping. Every ArenaNet update means redoing it, and `test_skilldesc` §3 says so
-by comparing the file on disk with a fresh emit.
+image's own sha256, the `Gw.dat` path and the templates' sha256. Refused (rc 2): an exe
+outside `pinned.BUILDS`' pristine set; a shifted mapping; **a build other than the loaded
+skills table's** (ENG-7: the consumers interpolate a label row's numbers from THAT table, so
+38833's labels over 38797's endpoints would be two builds in one row — regenerate
+`skills.toml` first); **no `vault/content/` to write into** (the default path goes through
+`vaultpath.require_dir`; an emit must not conjure a vault). The file is written to a sibling
+`.tmp` and renamed into place, so a server starting mid-emit never reads half a file. Every
+ArenaNet update means redoing both emits, and `test_skilldesc` §3 says so by comparing the
+file on disk with a fresh emit.
 
 **OWED: the client confirmation** — a label-tier cast on the loopback client shows the
 number the record gives. Not run this pass (no client). The runsheet, prediction first:
@@ -7843,38 +7906,91 @@ number the record gives. Not run this pass (no client). The runsheet, prediction
 (`skill_scale_value(187, 0)`; at rank 15, 112), so the client's damage word on the practice
 target is 7 × 2^((60 − AR)/40) truncated to whole points (studies/skills 43's rule), and
 the gamesrv log carries `skill 187 resolves through a LABEL-tier row (ALL_FOES
-AREA_ADJACENT TARGET_FOE AREA_BURST)` on the same tick; under `--no-skill-labels` the same
-press deals nothing and the log says `no modelled effect`.
+AREA_ADJACENT TARGET_FOE AREA_BURST CLAUSE_KNOCKDOWN)` on the same tick; under
+`--no-skill-labels` the same press deals nothing and the log says `no modelled effect`.
+The control arm is runnable (ENG-8): a sandbox spec's `gamesrv_args` list passes any flag to
+the gamesrv, last (`sandbox.game_args`; `test_sandbox` §5).
 
 ```
-python toolkit/harness/sandbox.py --spec labelcast.toml --launch     # the example spec with [player] secondary = 6 and 187 first on the bar; cast it on the practice target by hand
-python toolkit/harness/sandbox.py --spec labelcast.toml --launch     # again with --no-skill-labels on the gamesrv: the control, no word
+python toolkit/harness/sandbox.py --spec labelcast.toml --launch          # [player] secondary = 6, 187 first on the bar; cast it on the practice target by hand
+python toolkit/harness/sandbox.py --spec labelcast_ctl.toml --launch      # the same spec plus  gamesrv_args = ["--no-skill-labels"]  : the control, no word
 ```
 
 ### 55.6 What this refutes or changes in the route, and what is next
 
 - **The route's step 4 is DONE for the plain set and the residue is per skill**, as the
   route's own failed-gate consequence prescribed. Nothing here moves the 27 % (§54.4): the
-  tier adds 59 acting skills to 54, not 341.
+  tier adds 47 acting skills to 54, not 341.
 - **Changed: what "modelled" means.** Until today a `skill_effect` row was the grade; now
   the grade is the row's TIER, and three readers (the census, the sandbox, the orchestrator)
   say `label-only` for the generated ones.
 - **Refuted, small:** the assumption in §54.4 that `CONDITION_DURATION` is served "on any
   type" is true of the consumer and false of six skills — the step-4 gate is where that
   difference lives, as §54.4's last sentence said it would.
-- **Open, per skill (the residue, in order of cheapness):** the 62 client-side exclusions
-  by class (a caster-centred area for byte 0/1 would move 12; a condition rider on
-  episodes 6; byte 1's resolution 3 heals); the 210 conditional SERVED rows; the standing
-  weakness's unnumbered clauses (831, 231, 1044, 1652, 1996); a flat-constant reader in
-  `skill_condition` (167, 1033); then the 924 RECOGNISED and §54.4's two-consumer proposal,
-  still the owner's call.
+- **Refuted, by review (§55.7):** nine of the first pass's 59 rows over-applied. The gate's
+  first version read the target byte and the type and nothing else; it now reads the slot's
+  own `%`, the record's `combo_req` and `combo`, `spell_burst`'s whole predicate, and the
+  recipient's class.
+- **Open, per skill (the residue, in order of cheapness):** the 74 client-side exclusions by
+  class (a caster-centred area for byte 0/1 would move 12 and a caster-centred party heal 4
+  — 287 and 2221 first, being under-applied only; a chain gate for non-attack `combo_req`
+  moves 3 and would also advance 974's step; a condition rider on episodes 6; byte 1's
+  resolution 3 heals; a percent-of-loss heal 1); the 210 conditional SERVED rows; the marked
+  clauses (knock-downs on label rows first: 6); a flat-constant reader in `skill_condition`
+  (167); then the 924 RECOGNISED and §54.4's two-consumer proposal, still the owner's call.
 - **Open, route:** step 5 (the 68 no-slot rows), step 6 (the timed effect types 16, 24–28),
   the 141 INDETERMINATE slots on a client tooltip run (§54.3), and §55.5's confirmation run.
+
+### 55.7 SKILLS-LT5 — the fix pass: what the reviewers refuted, and how the gate answers each
+
+Two reviewers read the first pass (59 rows): an evidence refuter who read all 59 templates
+at run time and called the real consumers on each, and an engineering reviewer who probed
+the plumbing. Their findings, and the fix pass's answer (every answer is a rule in
+`build_label_row` with a synthetic known-bad arm in `test_skilldesc` §1b and, where a corpus
+row carries it, a forced-row arm in §3 that the checker must name):
+
+| finding | rows | what the server did | the rule now |
+|---|---|---|---|
+| LT-R1 a byte-0 heal whose text excludes the caster | 1262 | `skill_heal` 30..150 on the caster — the one recipient retail refuses | `HEAL_RECIPIENT_CLASS` |
+| LT-R2 heals that belong to the caster's spirits | 2051 2100 | 60..92 on the caster | `UNMODELLED_CLASS` |
+| LT-R3 a heal conditioned on a condition's removal | 943 | 10..82 on the caster at every cast, Burning or not | `HEAL_RECIPIENT_CLASS` (287, 2221 fall with it — under-applied only, the parse cannot tell) |
+| LT-R4 a chain requirement on a non-attack | 784 973 1033 | Poison / Blind / earth + Deep Wound landing with no chain test (the E5 gate is attacks-only) | `CHAIN_REQUIREMENT` from the record's `combo_req` |
+| LT-R5 a percent slot labelled HEAL | 292 | 100..136 Health, no sacrifice | `PERCENT_SLOT` (`analyse()` records `percent` per slot) |
+| LT-R6 a corpse prerequisite | 96 | 50..234 on the caster with no corpse | `UNMODELLED_CLASS` |
+| LT-R10 a fleshy-only condition (PLAUSIBLE, minor) | 106 | Disease on any target | `UNMODELLED_CLASS` — the server has no fleshiness, so it cannot refuse what retail refuses |
+| LT-R7 / ENG-2 `AREA_BURST` false for two rows | 192 197 | one hit, once, to one target — `spell_burst` refuses a duration | the gate mirrors `spell_burst`'s whole predicate; `test_skilldamage` §14 checks the mark against the function on every row |
+| LT-R8 under-applications shipped unmarked | 20 rows | a knock-down, a shadow step, an interrupt, a cure, a disable, a range, "you and", 1996's slows, 25 % penetration, Cracked Armor, the areas over time | `DURATION_UNMODELLED`, `CONDITION_UNNUMBERED`, `LITERAL_DROPPED`, `CHAIN_STEP_NOT_ADVANCED`, `CLAUSE_*` (§55.3); 36 of 47 rows marked |
+| LT-R9 no arm for the classes that got through | — | nothing could have gone red | `check_label_rows` names a percent slot, an unmodelled class and (with the records) a chain requirement; arms on 292 96 784 |
+| LT-R11 / ENG-4 the flag's wiring untested; a dead global | — | — | §14 parses `--no-skill-labels` and locks `drop_tier` before `srv.listen`; `SKILL_LABELS` removed |
+| LT-R12 no `Gw.dat` in the provenance | — | — | header: `dat`, `templates_sha256` |
+| ENG-5 the log line and the `~label` mark unchecked | — | — | §14 captures the line and locks both call sites; `--smoke` asserts the marks and the filter |
+| ENG-6 `tier` unvalidated | — | `tier = "Label"` loaded as a hand row and won | `content.TIERS`, refused at load, three spellings tested |
+| ENG-7 an emit with no vault, or on another build | — | created `vault/content/`; stamped 38833 over a 38797 table | `require_dir`; the build must be the loaded skills table's |
+| ENG-8 the runsheet's control not runnable | — | — | `gamesrv_args` in the sandbox spec |
+| ENG-3 four citations shifted by the helper block | — | — | re-pointed (deskwork PLAN 260 / 439 / 446, unitsetup FINDINGS 22) |
+| LT-R13 / ENG-9 / ENG-10 / ENG-11 | — | a mangled line, a stale message, an overstated help text, a miscounted skip, three LABEL_TIER literals, a non-atomic write | each fixed; `test_skilldamage` is NOT bare-capable (section 1 needs the skills table — pre-existing, main's copy crashes the same way) |
+
+**Declined, with the reason.** ENG-1 asked that the overlay be moved out of `vault/content/`
+until the branch merges, because main's `test_skilldesc` (pre-tier `hand_rows`) counts the
+label rows as hand rows and is red against the live vault, and four stale worktrees whose
+checkout lacks `skilldesc.py` refuse to load content on its extractor condition. The fix
+pass does not merge (its instructions) and does not move the file: the overlay's home is
+the scope's own design and the merge is the fix — **merge desk-d4b promptly, and any tree
+older than 2026-09-22 needs `RURIK_VAULT` pointed elsewhere to load content** (this is now
+in the PLAN-LOG entry). The one reviewer proposal not taken is ENG-6's second half (refuse a
+client-table `skill_effect` row with no tier): world.toml's 346 is exactly that and is a
+hand row.
+
+**Count, honestly.** 131 plain → 10 hand → 74 excluded → **47 shipped**, 36 of them marked.
+The first pass said 59; the reviewers' honest number was "at most 50"; the rule that answers
+LT-R1/R3 without reading grammar costs 287 and 2221 as well, and 106 falls to LT-R10's
+class. Every id is in the overlay's header by reason.
 
 **What would refute this section.** A label-tier cast whose client word is not the record's
 number (the consumer or the mapping is wrong — the runsheet above is the test); a string in
 `skill_labels.toml` outside `OVERLAY_VOCABULARY` (the gate leaked text; `test_skilldesc` §3
 would be red); a hand row that a label row replaced at load (the tier rule failed;
-`test_content`); a shipped row whose skill retail does NOT fire unconditionally — a
-conditional clause our six flags do not catch — which is the standing weakness above, and
-the reason the tier is marked.
+`test_content`); a shipped row whose skill retail does NOT fire unconditionally, or fires on
+someone else — a clause our flags and patterns do not catch — which is the standing
+weakness above, and the reason the tier is marked; an `AREA_BURST` mark on a row
+`spell_burst` refuses (`test_skilldamage` §14 would be red).

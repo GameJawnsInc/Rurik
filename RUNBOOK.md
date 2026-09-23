@@ -822,20 +822,26 @@ slice as a spec). Needs `vault/run/slice/` (SLICE-B9's `compose.py --name slice
 
 ### The label tier, and regenerating it after an update
 
-The Skills tab's `~label` skills (59 on build 38797) act through a row the toolkit parsed
-out of the client's own description templates, not a hand-verified one
-(`studies/skills/FINDINGS.md` §55, SKILLS-LT). The rows live in the vault and are
-regenerated, never edited:
+The Skills tab's `~label` skills (47 on build 38797; the file's header says how many) act
+through a row the toolkit parsed out of the client's own description templates, not a
+hand-verified one (`studies/skills/FINDINGS.md` §55, SKILLS-LT). The rows live in the vault
+and are regenerated, never edited:
 
 ```bash
+python toolkit/clientscan/skilltable.py --emit-content   # vault/content/skills.toml first, when the pin moves
 python toolkit/clientscan/skilldesc.py --emit-labels     # -> vault/content/skill_labels.toml
 python toolkit/clientscan/test_skilldesc.py              # the file on disk must equal a fresh emit
 ```
 
-Redo it after every ArenaNet update (the emitter stamps the build from the image's own
-bytes and refuses an exe that is not a pinned pristine build). The gamesrv names the tier
-in its log at every such cast; `--no-skill-labels` drops the whole tier at startup and is
-the control for anything a run attributes to one of those numbers.
+Redo both when the pinned build moves (the emitter stamps the build from the image's own
+bytes, refuses an exe that is not a pinned pristine build, and refuses a build other than
+the loaded skills table's — the label rows' numbers are interpolated from that table, so
+the two files must come from one build). The gamesrv names the tier in its log at every
+such cast; `--no-skill-labels` drops the whole tier at startup (the hand rows stay) and is
+the control for anything a run attributes to one of those numbers — from a sandbox spec,
+`gamesrv_args = ["--no-skill-labels"]`. The overlay is read by every tree on this machine:
+a checkout older than 2026-09-22 has no `skilldesc.py` and refuses to load content while the
+file is there (point `RURIK_VAULT` elsewhere to run one).
 
 ## Where the pieces live
 
