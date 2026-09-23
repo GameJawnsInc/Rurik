@@ -33,7 +33,7 @@ import checks   # noqa: E402
 import content  # noqa: E402
 import sandbox  # noqa: E402
 
-led = checks.Ledger("sandbox", floor=107)     # 88 from the green run 2026-09-20; +19 SANDBOX-B7 (2026-09-22)
+led = checks.Ledger("sandbox", floor=111)     # 88 from the green run 2026-09-20; +19 SANDBOX-B7 (2026-09-22); +2 SKILLS-LT sec.5, the hand / label split (2026-09-23); +2 the fix pass (one LABEL_TIER, gamesrv_args)
 
 
 # ---------------------------------------------------------------- the fixture
@@ -507,5 +507,28 @@ if real is not None:
     ex = sandbox.example_toml()
     led.ok(tomllib.loads(ex)["groups"][2]["members"][0]["boss"] is True,
            "--example prints TOML that parses back with the boss marked")
+
+# ---------------------------------------------------------------- 5. SKILLS-LT: hand rows and label rows are two grades
+# A generated `tier = "label"` skill_effect row (skilldesc.py --emit-labels)
+# acts, but through a parsed label; the Skills tab must say "label-only", never
+# "modelled" (deskwork D4 step 4's fidelity condition).
+TIERED = FakeWorld({"skill_effect": {"1": {}, "281": {}, "322": {"scale_means": "+ Damage"},
+                                     "784": {"scale_means": "Poison", "tier": "label"},
+                                     "187": {"scale_means": "Fire damage", "tier": "label"}}})
+led.ok(sandbox.modelled_skills(TIERED) == [1, 281, 322] and sandbox.label_skills(TIERED) == [187, 784],
+       "modelled_skills is the HAND rows only; label_skills the label tier -- disjoint, both sorted",
+       (sandbox.modelled_skills(TIERED), sandbox.label_skills(TIERED)))
+led.ok(sandbox.skill_tiers(TIERED) == {1: "hand", 281: "hand", 322: "hand", 784: "label", 187: "label"}
+       and sandbox.modelled_skills(WORLD) == [1, 281, 322] and sandbox.label_skills(WORLD) == [],
+       "skill_tiers names each row's grade; a world with no label rows has the old modelled set and "
+       "an empty label set")
+led.ok(sandbox.LABEL_TIER is content.LABEL_TIER,
+       "one definition of the tier string: sandbox reads content.LABEL_TIER (ENG-11)")
+_ctl = sandbox.game_args({"player": {"profession": 1}, "gamesrv_args": ["--no-skill-labels"]}, WORLD)
+_plain = sandbox.game_args({"player": {"profession": 1}}, WORLD)
+led.ok(_ctl[-1] == "--no-skill-labels" and _ctl[:-1] == _plain and "--no-skill-labels" not in _plain,
+       "gamesrv_args passes a flag through to the gamesrv, LAST -- the label tier's control arm "
+       "(skills 55.5's runsheet: --no-skill-labels) -- and adds nothing by default (ENG-8)",
+       (_ctl, _plain))
 
 sys.exit(led.verdict())

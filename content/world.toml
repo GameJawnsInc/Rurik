@@ -110,6 +110,14 @@ the cycle is testable without it.
 # `toolkit/authsrv/authsrv.py` models only the labels it names in
 # SCALE_MEANS_DAMAGE. Everything else lands as "no modelled effect" and says so
 # in the log rather than being quietly treated as damage.
+#
+# THE LABEL TIER (2026-09-23, SKILLS-LT, studies/skills 55) sits UNDER these
+# rows: vault/content/skill_labels.toml carries `tier = "label"` skill_effect
+# rows that toolkit/clientscan/skilldesc.py --emit-labels generates from the
+# client's own description templates, using THIS vocabulary of means strings.
+# A label row never replaces a row here (toolkit/content.py's tier rule), the
+# server's log names the tier at every such cast, and --no-skill-labels drops
+# them. A hand row written for a skill the tier already serves simply wins.
 
 # ---------------------------------------------------------------------------
 # R4b'S NINE EXEMPLARS, added 2026-08-20.
@@ -621,13 +629,17 @@ client's 56 is what this server deals. The doubling against summoned
 creatures is not modelled; nothing in the slice is summoned."""
 
 [skill_effect.253]
-scale_means = "Duration"
 [skill_effect.253.provenance]
 source = "wiki"
 page = 'GWW, "Scourge Sacrifice", {{Skill progression}}, rev. 2026-02-05'
 verified = """Client duration 8->20 with args = 1 (duration only); the scale
 slot holds a constant 100 with its bit CLEAR, which is the same shape as Rush's
-25 and is why the bitfield has to be honoured."""
+25 and is why the bitfield has to be honoured. The row carried
+scale_means = "Duration" until 2026-09-23 and it was INERT (nothing compares a
+means against "Duration"; the hex's duration is the episode machinery's) and
+twice wrong: the template never states the 100 and numbers the duration with
+%str3% (studies/skills 54.5). Dropped (SKILLS-LT); the hex's own effect is a
+"whenever" clause with no label."""
 
 [skill_effect.289]
 scale_means = "+ Maximum health"
@@ -646,11 +658,17 @@ progression as Max foes 1->6, Duration 10->20, + Max health 10->60. Cited from
 there rather than re-fetched: the plain title redirects on the API."""
 
 [skill_effect.317]
-scale_means = "Duration"
 [skill_effect.317.provenance]
 source = "wiki"
 page = 'GWW, "Battle Rage", {{Skill progression}}, rev. 2026-07-31'
-verified = "args = 1 (duration only); the scale slot holds a constant 33."
+verified = """args = 1 (duration only); the scale slot holds a constant 33. The row
+carried scale_means = "Duration" until 2026-09-23 and it was INERT: nothing compares a
+means against "Duration" (the stance's duration is the episode machinery's, read from
+the skills table), and skilldesc refereed it a CONFLICT -- the template numbers the
+flat 33 as the movement speed (%str1%), the duration is %str3% (studies/skills 54.5).
+Dropped (SKILLS-LT); the row stands as the wiki check of the duration progression.
+The movement speed (33 %, flat, "gain double adrenaline" and "ends if you use a
+skill" beside it) is NOT labelled here: an open per-skill item."""
 
 [skill_effect.318]
 scale_means = "+ Maximum health"
@@ -734,11 +752,15 @@ of Survival shot the operator once -- 0x00A0 [50, 103, 25, 392] at draw, 0x0042 
 t=183.755)."""
 
 [skill_effect.320]
-scale_means = "Crippled duration"
+bonus_scale_means = "Crippled"
 [skill_effect.320.provenance]
 source = "wiki"
 page = 'GWW, "Hamstring", {{Skill progression}}, rev. 2026-06-25'
-verified = "args = 4 (bonus only); the scale slot is 0->0."
+verified = """args = 4 (bonus only); the scale slot is 0->0 and the Crippled duration
+3->15 is the BONUS slot -- the template numbers it with %str2% (studies/skills 54.5,
+SKILLS-DT5). Until 2026-09-23 this row said scale_means = "Crippled duration": the
+wrong slot, and a label outside effects.CONDITION_BY_NAME, so skill_condition found
+nothing on either slot and the server inflicted no Crippled for it (SKILLS-LT)."""
 
 [skill_effect.321]
 scale_means = "none"

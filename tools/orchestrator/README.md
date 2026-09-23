@@ -65,8 +65,12 @@ Every name on screen is resolved when the window opens: skill names off the pinn
 own skill table and the archive's text files (`toolkit/clientscan/textrec.py`), hero names off
 the extracted hero table's string ids, attribute names likewise. Nothing is written anywhere;
 the spec on disk carries ids. A machine with no client shows ids and says why in the status
-bar. A `*` after a skill marks one this server models beyond its icon (a `[skill_effect.*]`
-row); the rest draw and time correctly and do nothing.
+bar. A `*` after a skill marks one this server models beyond its icon from a HAND
+`[skill_effect.*]` row; `~label` marks a **label-only** skill (SKILLS-LT, 2026-09-23): it acts
+too, but through a label parsed from the client's own description template
+(`vault/content/skill_labels.toml`, 47 rows on 38797; the file's header says how many) rather than a hand-verified row, and the
+server's log says so at every cast; `--no-skill-labels` on the gamesrv drops them. The rest
+draw and time correctly and do nothing.
 
 Templates marked `(unwatched)` load closed but have never been seen rendering
 (`studies/slice/RUN-PARADE.md` names the fifteen that have).

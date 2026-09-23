@@ -47,7 +47,7 @@ import effects  # noqa: E402
 # a short run means a section stopped rather than passed.
 # SKILLS-HN +4 (44), SKILLS-FA +13 (57: 7 model + 6 corpus), each from its
 # green run. Section 12 needs the live corpus and declares a skip without it.
-LEDGER = checks.Ledger("skill damage", floor=67)  # 2026-09-17 SKILLS-LR +4 (the location roll: three unit, one corpus); 2026-09-16 RUN-SKILLS-RB +2 (section 13, the converted word); 2026-09-16 SLICE-F47 +1 (the penalty split in whole points); 2026-09-14 HEAL-INT +1, ZEROWORD +1;   # MANTID-S +1: the player-side control beside the foe-side refusal
+LEDGER = checks.Ledger("skill damage", floor=68)  # 2026-09-23 SKILLS-LT +1 (sec.3: Hamstring inflicts through the bonus slot); 2026-09-17 SKILLS-LR +4 (the location roll: three unit, one corpus); 2026-09-16 RUN-SKILLS-RB +2 (section 13, the converted word); 2026-09-16 SLICE-F47 +1 (the penalty split in whole points); 2026-09-14 HEAL-INT +1, ZEROWORD +1;   # MANTID-S +1: the player-side control beside the foe-side refusal
 check = LEDGER.ok
 
 
@@ -101,15 +101,35 @@ def main():
     # ...and the ones it must NOT, which is the whole point.
     for skill_id, means, name in ((276, "Healing", "Restore Condition"),
                                   (289, "+ Maximum health", "Vital Blessing"),
-                                  (253, "Duration", "Scourge Sacrifice"),
-                                  (318, "+ Maximum health", "Defy Pain"),
-                                  (320, "Crippled duration", "Hamstring")):
+                                  (318, "+ Maximum health", "Defy Pain")):
         row = agents.WORLD.get("skill_effect", str(skill_id))
         check(authsrv.skill_damage(skill_id, 15) is None
               and row["scale_means"] == means,
               f"{name} deals NO damage -- its scale is {means!r}",
               "returning None rather than 0, so a caller must decide what an "
               "unmodelled skill means instead of silently dealing nothing")
+    # SKILLS-LT (2026-09-23, studies/skills 54.5 / 55): the two `scale_means =
+    # "Duration"` labels were INERT -- nothing compares a means against
+    # "Duration"; an episode's duration is the skills table's -- and skilldesc
+    # refereed Battle Rage's a CONFLICT (its flat 33 is the movement speed).
+    # Both rows keep their wiki provenance and carry no label.
+    for skill_id, name in ((253, "Scourge Sacrifice"), (317, "Battle Rage")):
+        row = agents.WORLD.get("skill_effect", str(skill_id))
+        check(authsrv.skill_damage(skill_id, 15) is None
+              and "scale_means" not in row and "bonus_scale_means" not in row,
+              f"{name} deals NO damage and its row carries no label at all -- "
+              f"the inert 'Duration' is gone", dict(row))
+    # And Hamstring's label moved to the slot the client numbers: args = 4
+    # (bonus only), Crippled 3..15 in the BONUS slot, %str2% in the template.
+    # Under "Crippled duration" on `scale_means` the server inflicted nothing.
+    row = agents.WORLD.get("skill_effect", "320")
+    check(authsrv.skill_damage(320, 15) is None and "scale_means" not in row
+          and row.get("bonus_scale_means") == "Crippled"
+          and authsrv.skill_condition(320, 0) == (481, 3.0)
+          and authsrv.skill_condition(320, 15) == (481, 15.0),
+          "Hamstring deals NO damage; its Crippled rides the BONUS slot, 3 s at "
+          "rank 0 and 15 s at rank 15 (481 = Crippled)",
+          (dict(row), authsrv.skill_condition(320, 0), authsrv.skill_condition(320, 15)))
 
     print("\n4. a disabled set is refused, not read")
     # Rush's scale slot holds 25 -- the "move 25% faster" in its description --
@@ -680,6 +700,124 @@ def main():
           f"{cv['coincident_heal_first']} of {cv['coincident']}, which is not "
           f"a claim) -- WIKI (GWW, \"Reversal of Fortune\" Notes): healing "
           f"before damage")
+
+    print("\n14. the LABEL tier through the SAME consumers (SKILLS-LT, DESKWORK-D4 step 4)")
+    # vault/content/skill_labels.toml -- `python toolkit/clientscan/skilldesc.py
+    # --emit-labels` -- carries a `tier = "label"` skill_effect row per plain
+    # SERVED skill (studies/skills 55). No second path: skill_damage and
+    # skill_condition read the row exactly as they read a hand row, and
+    # `World.drop_tier` (what --no-skill-labels does at startup) leaves the
+    # server as it was before 2026-09-23. Skipped where the overlay is not
+    # loaded: a bare machine, or one that has not regenerated it.
+    lab = {k: r for k, r in agents.WORLD.rows("skill_effect").items()
+           if r.get("tier") == "label"}
+    if "187" not in lab or "220" not in lab:
+        LEDGER.skip("14. the label tier (12 checks)",
+                    "skill_labels.toml not loaded -- `python toolkit/clientscan/"
+                    "skilldesc.py --emit-labels` regenerates it into vault/content/")
+    else:
+        import contextlib
+        import io
+        check(authsrv.skill_damage(187, 0) == (7, "standalone")
+              and authsrv.skill_damage(187, 15) == (112, "standalone"),
+              "a label-tier fire spell (187: scale 7..112 at str1, a Spell aimed at "
+              "the burst's byte 16) resolves through skill_damage at both ends of "
+              "the ladder -- the record's own numbers",
+              (authsrv.skill_damage(187, 0), authsrv.skill_damage(187, 15)))
+        check(authsrv.skill_condition(220, 0) == (479, 3.0)
+              and authsrv.skill_condition(220, 15) == (479, 8.0),
+              "a label-tier Blind (220: bonus 3..8 at str2, a foe Spell) resolves "
+              "through skill_condition's first slot: 479 for 3 s at rank 0, 8 s "
+              "at rank 15 (784 was this example until the fix pass excluded it: "
+              "its chain requirement has no gate on a Spell)",
+              (authsrv.skill_condition(220, 0), authsrv.skill_condition(220, 15)))
+        check(lab["187"]["tier"] == "label" and "AREA_BURST" in lab["187"]["tier_detail"]
+              and lab["187"].provenance["source"] == "client-table"
+              and lab["187"].provenance["build"] == 38797
+              and lab["220"]["tier_detail"] == ["TARGET_FOE"],
+              "the rows say what they are: tier label, 187's area is spell_burst's "
+              "(AREA_BURST), 220 reaches its one target; client-table provenance, "
+              "build 38797", (dict(lab["187"]), dict(lab["220"])))
+        check(authsrv.skill_label_tier(187) == list(lab["187"]["tier_detail"])
+              and authsrv.skill_label_tier(312) is None
+              and authsrv.skill_label_tier(999999) is None,
+              "skill_label_tier -- what the per-cast log prints -- returns the label row's "
+              "detail, None for a hand row (Holy Strike) and None for no row")
+        # ENG-5: the per-cast line itself, and its two call sites in the source.
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            authsrv._label_tier_note(187, 7, "the player's")
+            authsrv._label_tier_note(312, 7, "the player's")
+        out = buf.getvalue()
+        check(out.startswith("[c7] the player's skill 187 resolves through a LABEL-tier row (")
+              and "AREA_BURST" in out and "not hand-verified" in out and "--no-skill-labels" in out
+              and out.count("\n") == 1 and "312" not in out,
+              "_label_tier_note prints ONE line for a label-tier skill naming the tier "
+              "and its detail, and nothing for a hand row (Holy Strike)", out)
+        src = open(authsrv.__file__, encoding="utf-8").read()
+        check(src.count('_label_tier_note(cast["skill_id"], conn_id, "the player\'s")') == 1
+              and src.count('_label_tier_note(skill_id, conn_id, f"agent {agent_id}\'s")') == 1,
+              "SOURCE LOCK: the note is called at the player's E5 and at a body's landing, "
+              "once each")
+        # ENG-4 / LT-R11: the revert flag's WIRING -- it parses, and main() drops the
+        # tier before the listener opens (an early WORLD read would otherwise see it).
+        import serverargs
+        ap = serverargs.build_parser(
+            doc="x", GAME_SRV_HOST=authsrv.GAME_SRV_HOST, GAME_SRV_PORT=authsrv.GAME_SRV_PORT,
+            HOST_FIELD_ENCODING=authsrv.HOST_FIELD_ENCODING, TEST_SKILLBAR=authsrv.TEST_SKILLBAR,
+            GRANT_MIN_INTERVAL=authsrv.GRANT_MIN_INTERVAL, PROF_WARRIOR=authsrv.PROF_WARRIOR,
+            VAULT_DEFAULT=authsrv.VAULT_DEFAULT)
+        i_main = src.index("\ndef main():")
+        i_flag = src.index("    if a.no_skill_labels:", i_main)
+        i_drop = src.index('drop_tier("skill_effect", agents.content.LABEL_TIER)', i_flag)
+        i_listen = src.index("srv.listen(", i_main)
+        check(ap.parse_args([]).no_skill_labels is False
+              and ap.parse_args(["--no-skill-labels"]).no_skill_labels is True
+              and i_main < i_flag < i_drop < i_listen and i_drop - i_flag < 200
+              and "SKILL_LABELS" not in src.replace("NO SKILL LABELS", ""),
+              "--no-skill-labels parses (default off), and main()'s block calls "
+              "World.drop_tier(skill_effect, LABEL_TIER) BEFORE srv.listen; no dead "
+              "SKILL_LABELS global is left to look load-bearing")
+        # ENG-2 / LT-R7: the AREA_BURST mark agrees with the server's OWN predicate,
+        # row by row -- spell_burst's radius AND a standalone damage to burst with
+        # (118's area Weakness has the radius and no damage: one target here).
+        lab_ids = sorted(int(k) for k in lab)
+
+        def _bursts(sid):
+            d = authsrv.skill_damage(sid, 0)
+            return authsrv.spell_burst(sid) is not None and bool(d) and d[1] == "standalone"
+        disagree = [s for s in lab_ids if ("AREA_BURST" in lab[str(s)]["tier_detail"]) != _bursts(s)]
+        check(disagree == [] and authsrv.spell_burst(192) is None and authsrv.spell_burst(197) is None
+              and authsrv.spell_burst(187) == 156.0 and "AREA_BURST" not in lab["192"]["tier_detail"]
+              and "DURATION_UNMODELLED" in lab["192"]["tier_detail"],
+              f"AREA_BURST agrees with spell_burst + a standalone damage on all {len(lab_ids)} "
+              f"label rows; the areas over time 192 and 197 are refused by the server (a "
+              f"duration) and marked ONE_TARGET + DURATION_UNMODELLED", disagree)
+        # LT-R4: no shipped row carries a chain requirement the E5 gate would not test.
+        chained = [s for s in lab_ids
+                   if authsrv.skill_chain_fields(s)[1] and not authsrv._is_attack_skill(s)]
+        check(chained == [] and authsrv.skill_chain_fields(784)[1] == 2
+              and not authsrv._is_attack_skill(784) and "784" not in lab,
+              "no label row is a non-attack with combo_req (the chain gate at the E5 runs "
+              "inside _is_attack_skill); 784 -- combo_req 2, a Spell -- is out", chained)
+        gone = agents.WORLD.drop_tier("skill_effect", "label")
+        try:
+            check(authsrv.skill_damage(187, 15) is None
+                  and authsrv.skill_condition(220, 15) is None and len(gone) >= 40,
+                  f"with the tier DROPPED (--no-skill-labels) both resolve to nothing "
+                  f"-- the hand rows alone; {len(gone)} rows gone",
+                  (authsrv.skill_damage(187, 15), authsrv.skill_condition(220, 15)))
+            check(authsrv.skill_damage(312, 15) is not None
+                  and authsrv.skill_condition(382, 15) is not None
+                  and authsrv.skill_condition(320, 15) == (481, 15.0),
+                  "and the hand rows are untouched by the drop: Holy Strike, Sever "
+                  "Artery and Hamstring's 54.8 fix (Crippled 15 s) still resolve -- the "
+                  "flag reverts the TIER, not the hand fixes of the same day")
+        finally:
+            agents.WORLD.tables["skill_effect"].update(gone)
+        check(authsrv.skill_damage(187, 15) == (112, "standalone"),
+              "restored: the label row resolves again (the drop is a removal, not a "
+              "rewrite)")
 
     return LEDGER.verdict()
 

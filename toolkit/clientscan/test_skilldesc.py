@@ -12,16 +12,35 @@ reddens if it is wrong:
     and a dozen on duration sentinels. Six controls pinned to the wiki by
     `content/world.toml` or FINDINGS 4 land on the field the wiki named.
   * THE LABELS. Our own enum, from the words around a slot. Every slot in the
-    corpus gets a label (0 UNPARSED); the 54 hand rows agree on 51 of the 52
-    comparable slots and the one disagreement is a real one (Battle Rage's
-    `scale_means = "Duration"` on a flat 33 that is its movement speed). The
-    SERVED tier is per (label, INDEX, type_code), read off the consumer sites:
-    341 of 1,265 slot-bearing rows, 27 % -- the route's half-mark FAILS.
+    corpus gets a label (0 UNPARSED); every comparable hand label agrees with
+    the parse -- the one disagreement there was (Battle Rage's `scale_means =
+    "Duration"` on a flat 33 that is its movement speed) was a real one and
+    world.toml dropped it on 2026-09-23, with Hamstring's label moved to the
+    slot the template numbers. The SERVED tier is per (label, INDEX,
+    type_code), read off the consumer sites: 341 of 1,265 slot-bearing rows,
+    27 % -- the route's half-mark FAILS.
   * THE CENSUS (DESKWORK-Q7). What the server resolves today: 54 modelled, 419
     episodes (+45 refused durations), 815 nothing.
 
-Section 1 runs on a bare machine; section 2 needs the pinned exe and Gw.dat
-and declares one skip without them. Nothing here quotes a template.
+  * THE LABEL TIER (SKILLS-LT, DESKWORK-D4 step 4, 2026-09-23). "Plain" is
+    SERVED with none of IF / WHEN / FOR_EACH / WHILE / EXCEPTION / CHANCE: 131
+    of the 341. The gate (`build_label_row`) excludes what the server would
+    OVER-apply -- a hand row's id, a duration-only row, a percent slot under a
+    non-percent label, a condition an episode inflicts later, a pet attack, a
+    chain requirement on a non-attack, an at-cast damage or condition whose
+    target byte is not a foe's, a heal byte 1 would hand to the selected agent,
+    a recipient class the server has no object for (spirits, a corpse,
+    fleshiness), a self-targeted heal on a class of recipients -- and marks
+    what it would UNDER-apply (area wording, an over-time duration, a dropped
+    clause, a bit-clear or indeterminate slot). 47 rows ship on build 38797
+    (59 before the fix pass of the same day); every exclusion is counted by
+    reason. The overlay is deterministic, carries client-table provenance per
+    row and no string outside OVERLAY_VOCABULARY; the known-bad arms force a
+    conditional row, a percent slot, an unmodelled class and a chain
+    requirement through and the checker names each.
+
+Sections 1 and 1b run on a bare machine; sections 2 and 3 need the pinned exe
+and Gw.dat and declare one skip without them. Nothing here quotes a template.
 """
 import collections
 import os
@@ -38,10 +57,11 @@ import skilldesc    # noqa: E402
 import skilltable   # noqa: E402
 from skilldesc import Label, SLOT_FIELD, shifted, referee_slot   # noqa: E402
 
-# Floor from the BARE run, MEASURED 2026-09-22 with RURIK_VAULT at an empty
-# directory: 40 checks, 1 declared skip ("2. the corpus"), rc=0 -- the
-# mandatory core per checks.py. A whole green run with the vault is 85.
-LEDGER = checks.Ledger("skill description templates", floor=40)
+# Floor from the BARE run, MEASURED with RURIK_VAULT at an empty directory:
+# 61 checks, 1 declared skip ("2. the corpus"), rc=0 -- the mandatory core per
+# checks.py (2026-09-23, SKILLS-LT: +21 in section 1b, the label tier's gate on
+# synthetic rows; 40 on 2026-09-22). A whole green run with the vault is 124.
+LEDGER = checks.Ledger("skill description templates", floor=72)   # 72 from the bare run of 2026-09-23 (the fix pass: +11 in 1b); 138 with the vault
 check = checks.adopt(LEDGER)
 
 
@@ -225,6 +245,249 @@ check(lit == [(1, "scale", 25, "LITERAL_MATCH")],
 check(skilldesc.literal_check(rush, "Lasts %str3% seconds.", {3}) == [(1, "scale", 25, "LITERAL_MISS")],
       "and a constant the text never states is LITERAL_MISS")
 
+# ---------------------------------------------------------------- section 1b
+print("\n== 1b. the label tier's gate, on synthetic rows (SKILLS-LT, DESKWORK-D4 step 4) ==")
+LT = skilldesc
+check(LT.means_for(Label.FIRE_DAMAGE, "") == "Fire damage"
+      and LT.means_for(Label.HOLY_DAMAGE, "plus") == "+ Damage"
+      and LT.means_for(Label.CONDITION_DURATION, "Crippled") == "Crippled"
+      and LT.means_for(Label.CONDITION_DURATION, "") is None
+      and LT.means_for(Label.LEVEL, "") is None and LT.means_for(Label.DURATION, "") is None,
+      "means_for: our label -> the consumer's own string; +N holy on an attack is the additive "
+      "'+ Damage' (Spear of Lightning's precedent); a condition needs its name; DURATION and an "
+      "unserved label have none")
+check(all(v in LT.OVERLAY_VOCABULARY for v in LT.MEANS_OF.values())
+      and all(c in LT.OVERLAY_VOCABULARY for c in LT.CONDITION_NAMES)
+      and not {"seconds", "damage", "foe", "target", "for"} & LT.OVERLAY_VOCABULARY
+      and LT.text_leak({"a": {"b": ["Heal", "label"], "c": "for 5 seconds"}}) == ["for 5 seconds"]
+      and LT.text_leak({"a": {"b": ["Heal", "label"]}}) == [],
+      "OVERLAY_VOCABULARY holds every means and condition name and no template word; text_leak "
+      "names a sentence and passes a clean table")
+
+
+def srow(sid, tc, slots, flags=()):
+    return {"id": sid, "type_code": tc, "flags": list(flags), "tier": "SERVED",
+            "slots": [{"index": n, "field": SLOT_FIELD[n], "verdict": v, "lo": lo, "hi": hi,
+                       "label": lbl, "detail": det} for n, lbl, det, v, lo, hi in slots]}
+
+
+def srec(target=5, args=2, s=(10, 40), b=(0, 0), d=(0, 0), tc=5):
+    r = rec(args=args, s=s, b=b, d=d, type_code=tc)
+    r["target"] = target
+    return r
+
+
+G = LT.build_label_row
+AP = "AGREE_PROGRESSION"
+fire = srow(1, 5, [(1, Label.FIRE_DAMAGE, "", AP, 10, 40)], ["TARGET_FOE"])
+why, det, fields, ver = G(fire, srec(5), set())
+check(why is None and fields == {"scale_means": "Fire damage"} and det == ["TARGET_FOE"]
+      and ver == [{"slot": 1, "field": "scale", "lo": 10, "hi": 40, "verdict": AP, "label": Label.FIRE_DAMAGE}],
+      "a plain fire Spell on a foe ships: scale_means = 'Fire damage', the slot's agreement as "
+      "numbers and enums, no text", (why, det, fields, ver))
+check(G(fire, srec(5), {1})[0] == LT.EXCL_HAND_ROW, "a hand-row id is EXCLUDED: the tier sits under it")
+check(G(fire, srec(5), set(), {1})[0] == LT.EXCL_SELF_CONFLICT,
+      "a row whose parse disagrees with itself (one index, two labels) is EXCLUDED")
+check(G(fire, srec(0), set())[0] == LT.EXCL_RECIPIENT_NOT_A_FOE
+      and G(fire, srec(4), set())[0] == LT.EXCL_RECIPIENT_NOT_A_FOE
+      and G(fire, srec(1), set())[0] == LT.EXCL_RECIPIENT_NOT_A_FOE
+      and G(fire, srec(16), set())[0] is None,
+      "at-cast damage acts on the cast's target, so the target byte must be a foe (5) or the "
+      "burst's aim (16): self (0), the unresolved 1 and other-ally (4) are EXCLUDED -- the server "
+      "would hit whatever is selected, at any range")
+area = srow(2, 5, [(1, Label.FIRE_DAMAGE, "", AP, 7, 112)], ["ALL_FOES", "AREA_ADJACENT", "TARGET_FOE"])
+check(LT.DETAIL_AREA_BURST in G(area, srec(16), set())[1]
+      and LT.DETAIL_AREA_ONE_TARGET in G(area, srec(5), set())[1]
+      and LT.DETAIL_AREA_ONE_TARGET in G(dict(area, id=3, type_code=7), srec(16), set())[1]
+      and LT.DETAIL_AREA_BURST not in G(dict(area, id=3, type_code=7), srec(16), set())[1],
+      "area wording: a byte-16 Spell's standalone damage is spell_burst's (AREA_BURST); the same "
+      "words on a byte-5 Spell or on a Signet reach ONE target and say so (AREA_ONE_TARGET)")
+dur = srow(4, 3, [(3, Label.DURATION, "", AP, 8, 20)])
+check(G(dur, srec(0, args=1, d=(8, 20), tc=3), set())[0] == LT.EXCL_DURATION_ONLY,
+      "a duration-only Stance has no field to write -- resolve_duration reads the skills table "
+      "-- so it is EXCLUDED rather than emitted empty (an empty row would grade 'modelled')")
+cond_ep = srow(5, 19, [(2, Label.CONDITION_DURATION, "Poison", AP, 3, 15)])
+check(G(cond_ep, srec(0, args=4, b=(3, 15), tc=19), set())[0] == LT.EXCL_CONDITION_ON_EPISODE
+      and G(dict(cond_ep, type_code=6), srec(0, args=4, b=(3, 15), tc=6), set())[0] == LT.EXCL_CONDITION_ON_EPISODE,
+      "a condition on a Preparation or an Enchantment is what the episode does LATER (poisoned "
+      "arrows, bleeding daggers); skill_condition would inflict it at the cast: EXCLUDED -- "
+      "A LABEL DOES NOT SAY WHEN")
+cond = srow(6, 5, [(1, Label.CONDITION_DURATION, "Poison", AP, 5, 20)], ["TARGET_FOE"])
+why, det, fields, ver = G(cond, srec(5), set())
+check(why is None and fields == {"scale_means": "Poison"} and ver[0]["detail"] == "Poison",
+      "a plain Poison at str1 on a foe Spell ships as scale_means = 'Poison' -- skill_condition's "
+      "second slot -- with the condition name in the record", (why, fields, ver))
+flat = srow(7, 5, [(1, Label.EARTH_DAMAGE, "", AP, 10, 40),
+                   (2, Label.CONDITION_DURATION, "Blind", "AGREE_FLAT", 10, 10)], ["TARGET_FOE"])
+why, det, fields, _v = G(flat, srec(5, args=2, b=(10, 10)), set())
+check(why is None and fields == {"scale_means": "Earth damage", "bonus_scale_means": "Blind"}
+      and LT.DETAIL_CONDITION_BIT_CLEAR in det,
+      "a condition on a BIT-CLEAR slot ships labelled and MARKED: skill_scale_value refuses the "
+      "slot, so the damage lands and the Blind does not (under-applied, counted)", (det, fields))
+indet = srow(8, 10, [(2, Label.CONDITION_DURATION, "Deep Wound", "INDETERMINATE", 5, 20)], ["TARGET_FOE"])
+check(LT.DETAIL_INDETERMINATE in G(indet, srec(5, args=2, b=(5, 20), tc=10), set())[1],
+      "an INDETERMINATE slot ships MARKED (54.3's contest; the consumer refuses the bit-clear pair)")
+two = srow(12, 15, [(2, Label.CONDITION_DURATION, "Bleeding", AP, 5, 15),
+                    (1, Label.CONDITION_DURATION, "Crippled", AP, 5, 15)], ["TARGET_FOE"])
+check(LT.DETAIL_SECOND_CONDITION in G(two, srec(5, args=6, s=(5, 15), b=(5, 15), tc=15), set())[1],
+      "two conditions on one row: skill_condition returns the first, the second is MARKED dropped")
+pet = srow(9, 20, [(1, Label.PLUS_DAMAGE, "", AP, 5, 20)])
+check(G(pet, srec(0, tc=20), set())[0] == LT.EXCL_PET_ATTACK, "a pet attack is EXCLUDED: no pet is modelled")
+heal = srow(10, 5, [(1, Label.HEAL, "", AP, 30, 240)])
+check(G(heal, srec(1), set())[0] == LT.EXCL_RECIPIENT_NOT_AN_ALLY
+      and G(heal, srec(5), set())[0] == LT.EXCL_RECIPIENT_NOT_AN_ALLY
+      and G(heal, srec(3), set())[0] is None and G(heal, srec(0), set())[0] is None
+      and G(heal, srec(4), set())[2] == {"scale_means": "Heal"},
+      "a heal needs a recipient cast_recipient places on self / ally / other ally (0, 3, 4): "
+      "byte 1 or 5 hands it to the SELECTED agent, a foe included -- EXCLUDED")
+prep = srow(11, 19, [(3, Label.DURATION, "", AP, 1, 12), (1, Label.PLUS_DAMAGE, "", AP, 1, 8)],
+            ["ALL_FOES", "AREA_ADJACENT"])
+why, det, fields, ver = G(prep, srec(0, args=3, s=(1, 8), d=(1, 12), tc=19), set())
+check(why is None and fields == {"scale_means": "+ Damage"} and LT.DETAIL_AREA_ONE_TARGET in det
+      and [v["slot"] for v in ver] == [3, 1],
+      "a Preparation's +damage ships: swing_preparation_bonus is its consumer and the target byte "
+      "is the caster's own; its adjacency splash is marked under-applied; the duration slot is "
+      "recorded, not labelled", (why, det, fields, ver))
+# ---- the FIX PASS's rules (2026-09-23, reviewers LT-R1..R10 / ENG-2), each with its arm
+pct = srow(13, 5, [(1, Label.HEAL, "", AP, 100, 136)], ["TARGET_ALLY"])
+pct["slots"][0]["percent"] = True
+spd = srow(14, 3, [(1, Label.MOVE_SPEED_UP, "", AP, 10, 33)])
+spd["slots"][0]["percent"] = True
+check(G(pct, srec(4), set())[0] == LT.EXCL_PERCENT_SLOT and G(heal, srec(4), set())[0] is None
+      and G(spd, srec(0, tc=3), set())[0] is None,
+      "a slot printed as a PERCENT under a non-percent label is EXCLUDED (292: 'N% of the amount "
+      "you lost' parsed HEAL would heal N Health and charge no sacrifice); the same heal without "
+      "the % ships, and a percent under a percent label (movement speed) is what the consumer reads")
+chain = srow(15, 5, [(1, Label.CONDITION_DURATION, "Poison", AP, 5, 20)], ["TARGET_FOE"])
+r_chain = srec(5)
+r_chain["combo_req"] = 2
+check(G(chain, r_chain, set())[0] == LT.EXCL_CHAIN_REQUIREMENT
+      and G(dict(chain, type_code=14), dict(r_chain, type_code=14), set())[0] is None,
+      "combo_req on a NON-attack type is EXCLUDED -- the E5 chain gate (DAGGERS-B5) runs inside "
+      "_is_attack_skill, so 784 973 1033 would land whatever the chain says; the same requirement "
+      "on an attack ships, because there the gate exists")
+step = srow(16, 10, [(1, Label.CONDITION_DURATION, "Crippled", AP, 5, 20)], ["TARGET_FOE"])
+r_step = srec(5, tc=10)
+r_step["combo"] = 2
+check(LT.DETAIL_CHAIN_STEP_NOT_ADVANCED in G(step, r_step, set())[1],
+      "'counts as an off-hand attack' on a non-attack ships MARKED: the chain never advances (974)")
+uncls = srow(17, 5, [(1, Label.HEAL, "", AP, 60, 92)], ["UNMODELLED_CLASS"])
+check(G(uncls, srec(0), set())[0] == LT.EXCL_UNMODELLED_CLASS,
+      "a recipient class or prerequisite the server has no object for is EXCLUDED: the spirits "
+      "2051 and 2100 heal, 96's corpse, 106's fleshiness")
+cls = srow(18, 5, [(1, Label.HEAL, "", AP, 30, 150)], ["AREA_ADJACENT"])
+party = srow(19, 5, [(1, Label.HEAL, "", AP, 30, 150)], ["ALL_ALLIES"])
+check(G(cls, srec(0), set())[0] == LT.EXCL_HEAL_RECIPIENT_CLASS
+      and G(party, srec(0), set())[0] == LT.EXCL_HEAL_RECIPIENT_CLASS
+      and G(heal, srec(0), set())[0] is None
+      and G(party, srec(3), set())[0] is None and LT.DETAIL_AREA_ONE_TARGET in G(party, srec(3), set())[1],
+      "a SELF-targeted heal on a CLASS of recipients is EXCLUDED (1262 excludes the caster, 943 "
+      "heals only the members relieved of Burning; 287 and 2221 include the caster and fall to the "
+      "same rule -- the parse cannot tell them apart); a plain self heal ships, and a party heal "
+      "aimed at an ally (byte 3) ships marked ONE_TARGET")
+r_dur = srec(16, d=(9, 9))
+r_proj = srec(16)
+r_proj["projectile"] = 199
+check(LT.DETAIL_AREA_ONE_TARGET in G(area, r_dur, set())[1] and LT.DETAIL_AREA_BURST not in G(area, r_dur, set())[1]
+      and LT.DETAIL_DURATION_UNMODELLED in G(area, r_dur, set())[1]
+      and LT.DETAIL_AREA_ONE_TARGET in G(area, r_proj, set())[1] and LT.DETAIL_AREA_BURST not in G(area, r_proj, set())[1],
+      "spell_burst's WHOLE predicate: a byte-16 Spell with a duration is an area over time the "
+      "server delivers once to one target (192, 197: ONE_TARGET + DURATION_UNMODELLED), and one "
+      "with its own projectile flies instead of bursting")
+cl = srow(20, 5, [(1, Label.FIRE_DAMAGE, "", AP, 10, 40)],
+          ["TARGET_FOE", "CLAUSE_KNOCKDOWN", "CLAUSE_INTERRUPT", "LITERAL_PERCENT"])
+cl["conditions_named"] = ["Cracked Armor"]
+det = G(cl, srec(5), set())[1]
+check({"CLAUSE_KNOCKDOWN", "CLAUSE_INTERRUPT", LT.DETAIL_LITERAL_DROPPED, LT.DETAIL_CONDITION_UNNUMBERED} <= set(det)
+      and all(d in LT.DETAILS for d in det if d not in ("TARGET_FOE",)),
+      "the clauses a label DROPS are named in tier_detail, every token from DETAILS: a knock-down, "
+      "an interrupt, a literal constant (25% armor penetration), a condition the text names and "
+      "no slot numbers (228's Cracked Armor)", det)
+mv = srow(21, 4, [(1, Label.ATTACK_SPEED_DOWN, "", AP, 10, 33)], ["TARGET_FOE", "SPEED_MOVE", "CLAUSE_CAST_SPEED"])
+mv2 = srow(22, 4, [(1, Label.MOVE_SPEED_DOWN, "", AP, 10, 33)], ["TARGET_FOE", "SPEED_MOVE"])
+check(LT.DETAIL_CLAUSE_MOVE_SPEED in G(mv, srec(5, tc=4), set())[1]
+      and "CLAUSE_CAST_SPEED" in G(mv, srec(5, tc=4), set())[1]
+      and LT.DETAIL_CLAUSE_MOVE_SPEED not in G(mv2, srec(5, tc=4), set())[1],
+      "a move-speed clause with no MOVE_SPEED label is a dropped clause (1996 slows movement, "
+      "attacks and casting under ONE slot; only the attack speed is read); a labelled snare is not")
+rf = LT.row_flags
+check("CLAUSE_KNOCKDOWN" in rf("the foe is knocked down") and "CLAUSE_SHADOW_STEP" in rf("shadow step to the foe")
+      and "CLAUSE_INTERRUPT" in rf("struck foes are interrupted")
+      and "CLAUSE_INTERRUPT" not in rf("this spell is easily interrupted")
+      and "UNMODELLED_CLASS" in rf("all spirits you control") and "UNMODELLED_CLASS" not in rf("all non-spirit foes")
+      and "UNMODELLED_CLASS" in rf("exploit nearest corpse") and "UNMODELLED_CLASS" in rf("target fleshy foe")
+      and "AREA_NEAR" in rf("up to two other foes near your target") and "AREA_NEAR" in LT.AREA_FLAGS
+      and "CLAUSE_RANGE" in rf("half the normal range")
+      and "CLAUSE_REMOVAL" in rf("remove one condition and one hex")
+      and "CLAUSE_ALSO_CASTER" in rf("you and that ally are healed")
+      and "CLAUSE_DOUBLE_DAMAGE" in rf("you take double damage") and "CLAUSE_DISABLE" in rf("your skills are disabled")
+      and "CLAUSE_CAST_SPEED" in rf("casts spells 33% slower") and "SPEED_MOVE" in rf("moves, attacks, and casts 25% slower")
+      and not rf("target foe is struck for 30 fire damage") & (LT.CLAUSE_FLAGS | {"UNMODELLED_CLASS", "AREA_NEAR", "SPEED_MOVE"})
+      and not (LT.CLAUSE_FLAGS | {"UNMODELLED_CLASS", "AREA_NEAR", "SPEED_MOVE"}) & LT.COMPOUND_FLAGS,
+      "the fix pass's flags on OUR OWN phrases: each raised where its wording is, quiet on 'easily "
+      "interrupted', 'non-spirit' and a plain sentence -- and none of them is a COMPOUND flag, so "
+      "the owner's 131 stay 131")
+check(LT.template_digest({1: "a", 2: "b"}) == LT.template_digest({2: "b", 1: "a"})
+      and LT.template_digest({1: "a", 2: "b"}) != LT.template_digest({1: "a", 2: "c"})
+      and len(LT.template_digest({})) == 64,
+      "template_digest: order-free over ids, sensitive to one character, a sha256 hex")
+rep_fake = {"rows": {1: fire, 2: dict(fire, id=2, flags=["IF", "TARGET_FOE"]),
+                     3: dict(dur, tier="RECOGNISED"), 4: dict(fire, id=4, flags=["WHILE"]),
+                     5: pct, 6: uncls, 7: dict(fire, id=7)},
+            "self_conflicts": []}
+check(LT.plain_served(rep_fake) == [1, 5, 6, 7] and LT.conditional_served(rep_fake) == [2, 4],
+      "plain = SERVED with none of the six flags (the percent, unmodelled-class and chain rows are "
+      "PLAIN -- the gate, not the definition, is what refuses them); conditional = SERVED with one; "
+      "RECOGNISED is neither")
+rows = {1: {"fields": {"scale_means": "Fire damage"}, "type_code": 5, "tier": "label",
+            "tier_detail": ["TARGET_FOE"], "verified": [{"slot": 1, "label": Label.FIRE_DAMAGE}]}}
+check(LT.check_label_rows(rows, rep_fake, set()) == [], "a clean row set passes its own checker")
+bad = dict(rows)
+bad[2] = dict(rows[1])
+bad[4] = dict(rows[1], fields={"scale_means": "Fire damage to all nearby foes"})
+faults = LT.check_label_rows(bad, rep_fake, {1})
+check(any("conditional wording IF" in x for x in faults) and any("WHILE" in x for x in faults)
+      and any("hand row" in x for x in faults) and any("vocabulary" in x for x in faults)
+      and len(faults) == 4,
+      "KNOWN-BAD ARM: a conditional row forced in (IF; WHILE), a hand-row id and a means outside "
+      "the vocabulary are each NAMED by the checker", faults)
+bad2 = {5: dict(rows[1], fields={"scale_means": "Heal"}), 6: dict(rows[1]), 7: dict(rows[1])}
+faults2 = LT.check_label_rows(bad2, rep_fake, set(), records={7: {"combo_req": 2}})
+check(len(faults2) == 3 and any("percent slot str1" in x for x in faults2)
+      and any("recipient class" in x for x in faults2) and any("chain requirement 2" in x for x in faults2)
+      and LT.check_label_rows({7: dict(rows[1])}, rep_fake, set(), records={7: {"combo_req": 2, "type_code": 14}}) != []
+      and LT.check_label_rows({7: dict(rows[1])}, rep_fake, set(), records={7: {"combo_req": 0}}) == [],
+      "KNOWN-BAD ARM (the fix pass): a percent slot under HEAL, an unmodelled recipient class and a "
+      "chain requirement on a non-attack, each forced in, are each NAMED by the checker; the same "
+      "row with combo_req 0 passes", faults2)
+import tempfile   # noqa: E402
+import tomllib    # noqa: E402
+with tempfile.TemporaryDirectory() as tmp:
+    p = os.path.join(tmp, "x.toml")
+    LT.emit_labels(rows, [(9, LT.EXCL_PET_ATTACK)], 38797, "exe", p, plain=[1, 9],
+                   dat="the.dat", digest="ab" * 32)
+    with open(p, "rb") as fh:
+        table = tomllib.load(fh)
+    text = open(p, encoding="utf-8").read()
+    check(table["skill_effect"]["1"]["tier"] == "label"
+          and table["skill_effect"]["1"]["scale_means"] == "Fire damage"
+          and table["skill_effect"]["1"]["provenance"] == {
+              "source": "client-table", "extractor": "toolkit/clientscan/skilldesc.py",
+              "build": 38797, "verified": [{"slot": 1, "label": Label.FIRE_DAMAGE}]}
+          and LT.text_leak(table) == [] and "# excluded PET_ATTACK (1): 9" in text
+          and "# rows: 1 label-tier" in text
+          and "# dat: the.dat" in text and ("# templates_sha256: " + "ab" * 32) in text
+          and not os.path.exists(p + ".tmp"),
+          "emit_labels writes a TOML tomllib reads back: the means, tier, client-table provenance "
+          "with the build, the slot record; no text; the exclusions, the dat and the templates' "
+          "sha256 in the header; the temp file it renamed into place is gone", table)
+    try:
+        LT.emit_labels({1: dict(rows[1], fields={"scale_means": "Fire\ndamage"})}, [], 38797, "exe", p)
+        raised = False
+    except ValueError:
+        raised = True
+    check(raised, "the writer refuses a value that is not a plain token (a newline inside a string)")
+
 # ---------------------------------------------------------------- section 2
 print("\n== 2. the corpus (pinned exe + Gw.dat) ==")
 try:
@@ -345,20 +608,26 @@ if records is not None:
           f"every one of the {n_means} hand labels gets a verdict and at least {max(50, n_means - 17)} AGREE "
           f"(51 of 68 on 2026-09-22)", hs)
     conflicts = [r for r in rep["hand"] if r[-1] == "CONFLICT"]
-    check(conflicts == [(317, "scale_means", 1, "Duration", Label.MOVE_SPEED_UP, "CONFLICT")],
-          "the one conflict is Battle Rage: `scale_means = \"Duration\"` on the flat 33 that is "
-          "its movement speed (the duration is str3) -- when world.toml drops that label, this "
-          "check and test_skilldamage.py's pin on it change in the same commit", conflicts)
+    check(conflicts == [],
+          "no hand label conflicts with the parse. Battle Rage 317's `scale_means = "
+          "\"Duration\"` on the flat 33 that is its movement speed (the duration is str3) "
+          "was the one conflict until 2026-09-23; world.toml dropped it with Scourge "
+          "Sacrifice 253's, and test_skilldamage.py's pins moved in the same commit "
+          "(SKILLS-LT)", conflicts)
     no_slot = [r for r in rep["hand"] if r[-1] == "NO_SLOT"]
     unmatched = []
     for sid, key, index, _means, _lbl, _v in no_slot:
         field = SLOT_FIELD[index]
         if not any(l[1] == field and l[3] == "LITERAL_MATCH" for l in rep["rows"][sid]["literals"]):
             unmatched.append(sid)
-    check(len(no_slot) >= 10 and sorted(unmatched) == [253, 320],
-          "every unshown hand slot is a flat constant printed as text EXCEPT Hamstring's (320) 0/0 "
-          "scale (a label on the wrong slot) and Scourge Sacrifice's (253) flat 100 the text never "
-          "states (labelled 'Duration', which is str3)", (len(no_slot), unmatched))
+    check(len(no_slot) >= 10 and unmatched == [],
+          "every unshown hand slot is a flat constant printed as text. Until 2026-09-23 two were "
+          "not: Hamstring's (320) 0/0 scale (a label on the wrong slot -- now `bonus_scale_means = "
+          "\"Crippled\"`, the slot %str2% numbers) and Scourge Sacrifice's (253) flat 100 the text "
+          "never states (labelled 'Duration', which is str3 -- dropped)", (len(no_slot), unmatched))
+    h320 = [r for r in rep["hand"] if r[0] == 320]
+    check(h320 == [(320, "bonus_scale_means", 2, "Crippled", f"{Label.CONDITION_DURATION}:Crippled", "AGREE")],
+          "Hamstring's hand label now AGREES with the template at str2", h320)
     check(records[253]["scale0"] == 100 and records[253]["skill_arguments"] == 1
           and slot(253, 3)["field"] == "duration",
           "Scourge Sacrifice (253): args = duration only, str3 is the duration; the scale slot's "
@@ -453,6 +722,170 @@ if records is not None:
           {k: dict(v) for k, v in cbt.items() if k in (5, 6, 14)})
     check(all(grades[sid] == "modelled" for sid in hand_rows if sid in records) and n_hand >= 50,
           f"every hand row is a corpus row and grades modelled ({n_hand} rows)")
+
+    # ---------------------------------------------------------- section 3
+    # THE LABEL TIER (SKILLS-LT, DESKWORK-D4 step 4, the owner's 2026-09-23
+    # decision): the plain SERVED rows as generated rows. Client-side counts are
+    # exact; the hand-row count is derived from the rows loaded (ENG-7).
+    print("\n== 3. the label tier: the plain SERVED set, the gate, the emitted overlay ==")
+    plain = skilldesc.plain_served(rep)
+    cond = skilldesc.conditional_served(rep)
+    check(len(plain) == 131 and len(cond) == 210 and len(plain) + len(cond) == t["SERVED"],
+          "341 SERVED = 131 PLAIN (no IF / WHEN / FOR_EACH / WHILE / EXCEPTION / CHANCE) + 210 "
+          "conditional -- the orchestrator's count, reproduced", (len(plain), len(cond)))
+    cf = collections.Counter(f for sid in cond for f in rep["rows"][sid]["flags"]
+                             if f in skilldesc.COMPOUND_FLAGS)
+    check(cf == {"IF": 154, "WHEN": 37, "FOR_EACH": 17, "WHILE": 9, "CHANCE": 7, "EXCEPTION": 6},
+          "the 210 held back, by the wording a label would drop: IF 154, WHEN 37, FOR_EACH 17, "
+          "WHILE 9, CHANCE 7, EXCEPTION 6", dict(cf))
+    hand_ids = set(hand_rows)
+    lrows, excluded, _p = skilldesc.label_rows(rep, records, hand_ids)
+    tally = collections.Counter(w for _s, w in excluded)
+    by_reason = {w: sorted(s for s, ww in excluded if ww == w) for w in tally}
+    n_hand_plain = sum(1 for sid in plain if sid in hand_ids)
+    check(tally.get("HAND_ROW", 0) == n_hand_plain and n_hand_plain >= 10
+          and all(w in skilldesc.EXCLUSIONS for w in tally),
+          f"the plain rows a hand row already covers are excluded as HAND_ROW ({n_hand_plain}; 10 "
+          f"on 2026-09-23), every reason from the enum", dict(tally))
+    check(tally.get("DURATION_ONLY") == 41
+          and by_reason.get("CONDITION_ON_EPISODE") == [113, 435, 926, 1041, 1997, 2136]
+          and by_reason.get("PET_ATTACK") == [441]
+          and by_reason.get("RECIPIENT_NOT_A_FOE") == [97, 183, 188, 769, 770, 840, 917, 1113, 1364, 1468, 2212]
+          and by_reason.get("RECIPIENT_NOT_AN_ALLY") == [918, 1032, 1354],
+          "THE EXCLUSIONS, client-side: 41 duration-only; 6 conditions an episode inflicts later "
+          "(113, 435, 926, 1041, 1997, 2136); the pet attack 441; 11 at-cast damages / conditions "
+          "whose target byte is self, ally or unresolved (97 183 188 769 770 840 917 1113 1364 "
+          "1468 2212); 3 heals byte 1 would hand to the selected agent (918 1032 1354)", by_reason)
+    check(by_reason.get("PERCENT_SLOT") == [292]
+          and by_reason.get("CHAIN_REQUIREMENT") == [784, 973, 1033]
+          and by_reason.get("UNMODELLED_CLASS") == [96, 106, 2051, 2100]
+          and by_reason.get("HEAL_RECIPIENT_CLASS") == [287, 943, 1262, 2221]
+          and "SELF_CONFLICT" not in by_reason,
+          "THE FIX PASS's EXCLUSIONS (reviewers LT-R1..R6, R10): 292's percent slot; the chain "
+          "requirements 784 973 1033 carry on non-attack types; 96's corpse, 106's fleshiness, the "
+          "spirits of 2051 and 2100; the four self-targeted heals on a class -- 1262 excludes the "
+          "caster, 943 heals only the relieved, 287 and 2221 fall to the same rule", by_reason)
+    check(len(lrows) == 131 - n_hand_plain - 74 and len(lrows) + len(excluded) == 131,
+          f"THE SET: {len(lrows)} label-tier rows = 131 plain - {n_hand_plain} hand - 74 excluded "
+          f"(47 on 2026-09-23 after the fix pass; 59 before it); nothing shrinks silently",
+          (len(lrows), len(excluded)))
+    check(not (set(lrows) & hand_ids) and skilldesc.check_label_rows(lrows, rep, hand_ids, records) == [],
+          "no emitted row keys a hand-row id, and the set passes its own checker (records included)")
+    arms = {}
+    for sid, want in ((292, "percent slot"), (96, "recipient class"), (784, "chain requirement")):
+        why, det, fields, ver = skilldesc.build_label_row(rep["rows"][sid], records[sid], hand_ids)
+        forced_rows = {sid: {"fields": fields or {"scale_means": "Heal"}, "type_code": rep["rows"][sid]["type_code"],
+                             "tier": "label", "tier_detail": det, "verified": ver}}
+        arms[sid] = (why, skilldesc.check_label_rows(forced_rows, rep, hand_ids, records), want)
+    check(arms[292][0] == "PERCENT_SLOT" and arms[96][0] == "UNMODELLED_CLASS"
+          and arms[784][0] == "CHAIN_REQUIREMENT"
+          and all(len(f) == 1 and want in f[0] and str(sid) in f[0] for sid, (_w, f, want) in arms.items()),
+          "KNOWN-BAD ARMS (the fix pass): 292, 96 and 784 forced through the gate are each the ONE "
+          "fault the checker names -- a percent slot, a recipient class, a chain requirement",
+          {s: a[1] for s, a in arms.items()})
+    forced = None
+    for sid in cond:
+        why, det, fields, ver = skilldesc.build_label_row(rep["rows"][sid], records[sid], hand_ids)
+        if why is None:
+            forced = sid
+            break
+    bad = dict(lrows)
+    bad[forced] = {"fields": fields, "type_code": rep["rows"][forced]["type_code"],
+                   "tier": "label", "tier_detail": det, "verified": ver}
+    faults = skilldesc.check_label_rows(bad, rep, hand_ids)
+    check(forced is not None and len(faults) == 1 and str(forced) in faults[0]
+          and "conditional wording" in faults[0],
+          f"KNOWN-BAD ARM: a conditional SERVED row ({forced}) forced through the gate is the one "
+          f"fault the checker names", faults)
+    dt = collections.Counter(d for r in lrows.values() for d in r["tier_detail"] if d in skilldesc.DETAILS)
+    check(dt == {"AREA_BURST": 3, "AREA_ONE_TARGET": 20, "CONDITION_BIT_CLEAR_REFUSED": 1,
+                 "DURATION_UNMODELLED": 7, "CONDITION_UNNUMBERED": 1, "LITERAL_DROPPED": 5,
+                 "CHAIN_STEP_NOT_ADVANCED": 1, "CLAUSE_MOVE_SPEED": 1, "CLAUSE_KNOCKDOWN": 6,
+                 "CLAUSE_SHADOW_STEP": 4, "CLAUSE_INTERRUPT": 2, "CLAUSE_REMOVAL": 2,
+                 "CLAUSE_ALSO_CASTER": 2, "CLAUSE_DISABLE": 1, "CLAUSE_DOUBLE_DAMAGE": 1,
+                 "CLAUSE_CAST_SPEED": 1, "CLAUSE_RANGE": 4},
+          "UNDER-APPLIED, counted: 3 bursts spell_burst covers (187 189 1086), 20 area wordings the "
+          "server reaches one recipient of, 1 bit-clear condition (167), 7 non-episode durations the "
+          "at-cast path never runs (the areas over time 167 192 197 among them), 228's unnumbered "
+          "Cracked Armor, 5 literal constants (25 % penetration), 974's chain step, and the dropped "
+          "clauses by kind: 6 knock-downs, 4 shadow steps, 2 interrupts, 2 removals, 2 'you and', a "
+          "disable, a double damage, 1996's cast and move slows, 4 half ranges", dict(dt))
+    under = sorted(s for s in lrows if set(lrows[s]["tier_detail"]) & set(skilldesc.DETAILS))
+    check(len(under) == 36
+          and sorted(set(lrows) - set(under)) == [117, 191, 220, 286, 293, 959, 1043, 1120, 1404, 1686, 1762]
+          and [s for s in sorted(lrows) if "AREA_BURST" in lrows[s]["tier_detail"]] == [187, 189, 1086]
+          and {"AREA_ONE_TARGET", "DURATION_UNMODELLED"} <= set(lrows[192]["tier_detail"])
+          and {"AREA_ONE_TARGET", "DURATION_UNMODELLED"} <= set(lrows[197]["tier_detail"]),
+          "36 of 47 rows carry an under-application mark; the eleven without one are single-clause "
+          "templates (a foe's condition or damage, a target ally's heal, a stance's speeds); "
+          "AREA_BURST is exactly 187 189 1086, and the areas over time 192 and 197 that spell_burst "
+          "refuses say ONE_TARGET + DURATION_UNMODELLED (ENG-2, LT-R7)", sorted(set(lrows) - set(under)))
+    check(lrows[187]["fields"] == {"scale_means": "Fire damage"} and "AREA_BURST" in lrows[187]["tier_detail"]
+          and lrows[220]["fields"] == {"bonus_scale_means": "Blind"}
+          and lrows[831]["fields"] == {"scale_means": "Attack speed increase",
+                                       "bonus_scale_means": "Movement speed increase"}
+          and "CLAUSE_DOUBLE_DAMAGE" in lrows[831]["tier_detail"]
+          and lrows[434]["fields"] == {"scale_means": "+ Damage"} and lrows[434]["type_code"] == 19
+          and lrows[3425]["fields"] == {"scale_means": "+ Damage"}
+          and lrows[167]["fields"] == {"scale_means": "Earth damage", "bonus_scale_means": "Blind"}
+          and {"AREA_NEAR", "AREA_ONE_TARGET", "CONDITION_BIT_CLEAR_REFUSED", "DURATION_UNMODELLED"}
+          <= set(lrows[167]["tier_detail"])
+          and {"CLAUSE_MOVE_SPEED", "CLAUSE_CAST_SPEED"} <= set(lrows[1996]["tier_detail"])
+          and "CHAIN_STEP_NOT_ADVANCED" in lrows[974]["tier_detail"],
+          "spot rows: 187 fire (burst), 220 Blind at str2, 831 both speeds + its double damage named, "
+          "434 a preparation's +damage, 3425's +holy is the additive '+ Damage', 167 earth + a "
+          "bit-clear Blind over an area near a location for 5 s, 1996's dropped slows, 974's chain step")
+    types = collections.Counter(r["type_code"] for r in lrows.values())
+    check(set(types) <= {3, 4, 5, 7, 10, 14, 19} and types[5] >= 20,
+          "the shipped types: Stances, Hexes, Spells (20+), Signets, Skills, attacks, a Preparation "
+          "-- no Enchantment, no Shout, no pet attack, no Glyph", dict(types))
+    build = skilltable.build_of(data)
+    check(build == 38797, "the build stamp is derived from the image's bytes: 38797", build)
+    with tempfile.TemporaryDirectory() as tmp:
+        import textrec
+        p1, p2 = os.path.join(tmp, "a.toml"), os.path.join(tmp, "b.toml")
+        digest = skilldesc.template_digest(texts)
+        skilldesc.emit_labels(lrows, excluded, build, exe, p1, plain, dat=textrec.DEFAULT_DAT, digest=digest)
+        skilldesc.emit_labels(lrows, excluded, build, exe, p2, plain, dat=textrec.DEFAULT_DAT, digest=digest)
+        b1, b2 = open(p1, "rb").read(), open(p2, "rb").read()
+        with open(p1, "rb") as fh:
+            table = tomllib.load(fh)
+        se = table["skill_effect"]
+        check(b1 == b2 and len(se) == len(lrows) and set(map(int, se)) == set(lrows),
+              "the overlay is DETERMINISTIC (two emits, identical bytes) and holds exactly the set")
+        check(all(r["provenance"]["source"] == "client-table"
+                  and r["provenance"]["extractor"] == "toolkit/clientscan/skilldesc.py"
+                  and r["provenance"]["build"] == 38797 and r["tier"] == "label"
+                  and r["provenance"]["verified"] for r in se.values()),
+              "every row: source client-table, the extractor, build 38797, tier label, a slot record")
+        strings = skilldesc.overlay_strings(table)
+        check(skilldesc.text_leak(table) == []
+              and max(len(s) for s in strings) <= skilldesc.OVERLAY_MAX_STRING,
+              f"NO TEXT: all {len(strings)} string values are in OVERLAY_VOCABULARY and none is "
+              f"longer than its longest token ({skilldesc.OVERLAY_MAX_STRING})",
+              skilldesc.text_leak(table)[:5])
+        import content
+        w = content.load(vault_dir=tmp)
+        lab = skilldesc.loaded_label_rows(w)
+        hnd = skilldesc.hand_rows(w)
+        check(set(lab) == set(lrows) and set(hnd) == hand_ids
+              and all(w.rows("skill_effect")[str(s)]["tier"] == "label" for s in lrows),
+              "content.load takes the overlay as the vault: the label rows load under the hand "
+              "rows, and hand_rows() / loaded_label_rows() split them by tier")
+        g2 = skilldesc.census(records, hnd, labels=lab)
+        c2 = collections.Counter(g2.values())
+        check(c2["label-only"] == len(lrows) and c2["modelled"] == g["modelled"]
+              and all(g2[s] == grades[s] for s in records if s not in lab),
+              "the census grades a label row 'label-only', never 'modelled', and nothing else moves",
+              dict(c2))
+        disk = skilldesc.default_labels_path()
+        if disk.is_file():
+            check(disk.read_bytes() == b1,
+                  f"the overlay ON DISK ({disk}) is byte-identical to a fresh emit -- regenerated, "
+                  f"not hand-edited")
+        else:
+            LEDGER.skip("the vault overlay on disk (1 check)",
+                        f"{disk} absent -- `python toolkit/clientscan/skilldesc.py --emit-labels`")
     ix.close()
 
 sys.exit(LEDGER.verdict())

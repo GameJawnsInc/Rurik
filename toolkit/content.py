@@ -59,6 +59,20 @@ hand-sized rows in the repo, bulk extraction in the vault.
     the orchestrator's generated party and spawn rows (SANDBOX-B1, 2026-09-20,
     `toolkit/harness/sandbox.py`). The vault overlay is read by every process on the
     machine, so a per-launch row there would leak into the next unrelated run.
+  * THE LABEL TIER SITS UNDER EVERYTHING (2026-09-23, SKILLS-LT, DESKWORK-D4 step 4).
+    A row carrying `tier = "label"` -- `vault/content/skill_labels.toml`, the
+    `skill_effect` rows `toolkit/clientscan/skilldesc.py --emit-labels` generates from
+    the client's own description templates -- NEVER replaces a row without that tier,
+    whichever layer either came from. The layer order above says "later wins"; this
+    is the one exception, and it is by TIER rather than by layer because a generated
+    row must lose to a hand-verified one even when the hand row is in the repo (the
+    lowest layer) and the label row in the vault (above it). `_merge` enforces it;
+    `test_content.py` proves it with the plain-merge known-bad arm. The emitter also
+    skips hand-row ids, but the load rule is the guarantee. `World.drop_tier` is how
+    `--no-skill-labels` makes the server forget the tier entirely. The tier values are
+    a CLOSED set (`TIERS`): a `tier` outside it is refused at load, because the rule
+    compares the string exactly and a near-miss would load as a hand row
+    (`_check_tier`). A client-table row with NO tier is a hand row (world.toml's 346).
 
 The gate keeps its evidentiary value that way: "no extracted table was ever committed,
 prove it with one git command" stays literally true, which is the whole reason PLAN.md
@@ -175,6 +189,19 @@ RULE_1_1 = ('PLAN.md section 1.1: gw-preservation and Py4GW_Reforged "carry no l
             'at all, which means all rights reserved: read them, learn from them, cite '
             'them -- never copy from them."')
 
+# The generated tier (WHERE ROWS LIVE, last bullet). A row whose body says
+# `tier = "label"` is machine-derived from a parse and sits UNDER every hand row.
+LABEL_TIER = "label"
+# The CLOSED set of tier values a row may carry. `_merge` and `drop_tier` compare
+# the string exactly, so a near-miss spelling ("Label", "labels", "label ") would
+# load as a HAND row: it would replace the real hand row, survive --no-skill-labels
+# and grade "modelled" (reviewer ENG-6). Refused at load instead.
+TIERS = frozenset({LABEL_TIER})
+# (A client-table skill_effect row with NO tier is a legitimate HAND row -- world.toml's
+# 346 measures its number from the client's table and is hand-placed -- so the other
+# direction, "an extracted row must carry a tier", is NOT a rule; the emitter's own
+# checker guarantees its rows carry one.)
+
 
 class ContentError(Exception):
     """A row that does not load. Never a warning -- the house rule is refuse to guess."""
@@ -274,6 +301,19 @@ def _need(kind, key, prov, field, why):
             f"{why}")
 
 
+def _check_tier(kind, key, row, prov):
+    """A `tier`, when present, is one of TIERS or the row is refused. The tier rule
+    in `_merge` compares the string exactly, so a row that misses the comparison
+    would be promoted to a hand row by silence (ENG-6)."""
+    tier = row.get("tier")
+    if tier is not None and tier not in TIERS:
+        raise ContentError(
+            f"{kind} row {key!r} carries tier {tier!r}, which is not one of "
+            f"{sorted(TIERS)}. A row whose tier misses the exact spelling would load as "
+            f"a HAND row -- replacing the real one, surviving --no-skill-labels and grading "
+            f"\"modelled\" -- so the set is closed and a near-miss is refused, not promoted.")
+
+
 def _check_extracted(kind, key, prov):
     """Conditions 1 and 2 of the owner's 2026-08-11 ruling, enforced from the row.
 
@@ -325,13 +365,25 @@ def _load_file(path):
             raise ContentError(f"{path}: {exc}") from exc
 
 
-def _merge(base, overlay):
-    """Overlay wins per top-level key. Used to let the vault extend the repo."""
+def _is_label_row(row):
+    return isinstance(row, dict) and row.get("tier") == LABEL_TIER
+
+
+def _merge(base, overlay, tier_aware=True):
+    """Overlay wins per top-level key -- EXCEPT a `tier = "label"` row, which never
+    replaces a row without that tier (WHERE ROWS LIVE, last bullet). Used to let
+    the vault extend the repo. `tier_aware=False` is the plain update this was
+    until 2026-09-23, kept as test_content's known-bad arm: under it a generated
+    row keyed on a hand row's id would win."""
     out = dict(base)
     for section, rows in overlay.items():
         if isinstance(rows, dict) and isinstance(out.get(section), dict):
             merged = dict(out[section])
-            merged.update(rows)
+            for key, row in rows.items():
+                if (tier_aware and _is_label_row(row) and key in merged
+                        and not _is_label_row(merged[key])):
+                    continue
+                merged[key] = row
             out[section] = merged
         else:
             out[section] = rows
@@ -367,6 +419,17 @@ class World:
 
     def census(self):
         return {kind: len(rows) for kind, rows in sorted(self.tables.items())}
+
+    def drop_tier(self, kind, tier):
+        """Remove every `kind` row whose body says `tier = <tier>`, in place, and
+        return them ({key: Row}) so a caller can put them back. `--no-skill-labels`
+        (authsrv) drops the label tier this way: the consumers then see exactly the
+        hand rows, which is the server as it was before 2026-09-23."""
+        table = self.tables.get(kind, {})
+        gone = {k: r for k, r in table.items() if r.get("tier") == tier}
+        for k in gone:
+            del table[k]
+        return gone
 
 
 def extra_dirs_from_env(env=None):
@@ -429,6 +492,7 @@ def load(repo_dir=None, vault_dir=None, require_vault=False, overrides_dir=None,
             if not isinstance(row, dict):
                 continue
             prov = _check_provenance(kind, key, row)
+            _check_tier(kind, key, row, prov)
             body = {k: v for k, v in row.items() if k != "provenance"}
             out[key] = Row(body, kind, key, prov)
         tables[kind] = out

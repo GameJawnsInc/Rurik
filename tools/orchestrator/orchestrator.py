@@ -123,7 +123,9 @@ class Names:
         row = self.world.rows("skills").get(str(sid)) or {}
         prof = sandbox.ABBREV.get(int(row.get("profession", 0) or 0), "-")
         attr = self.attr.get(int(row.get("attribute", -1)), "")
-        mark = " *" if sid in self.modelled else ""
+        # `*` a hand row; `~label` a label-tier row (SKILLS-LT): acts through a
+        # parsed label and must not read as modelled (deskwork D4 step 4).
+        mark = " *" if sid in self.modelled else (" ~label" if sid in self.labelled else "")
         return f"{self.skill.get(sid, f'skill {sid}')}  [{sid} {prof}{(' ' + attr) if attr else ''}]{mark}"
 
     def hero_label(self, idx):
@@ -137,6 +139,12 @@ class Names:
         if not hasattr(self, "_modelled"):
             self._modelled = set(sandbox.modelled_skills(self.world))
         return self._modelled
+
+    @property
+    def labelled(self):
+        if not hasattr(self, "_labelled"):
+            self._labelled = set(sandbox.label_skills(self.world))
+        return self._labelled
 
 
 # ---------------------------------------------------------------- pieces
@@ -325,7 +333,7 @@ class SkillsTab(QWidget):
         for pid, name in sandbox.PROFESSIONS.items():
             self.prof.addItem(f"{name} ({sandbox.ABBREV[pid]})", pid)
         self.prof.addItem("common (no profession)", -1)
-        self.modelled_only = QCheckBox("modelled only")
+        self.modelled_only = QCheckBox("modelled only (* hand, ~label)")
         row.addWidget(self.filter, 2)
         row.addWidget(self.prof, 1)
         row.addWidget(self.modelled_only)
@@ -371,7 +379,8 @@ class SkillsTab(QWidget):
             sp = self.names.skill_profession(sid)
             hide = ((text and text not in it.text().lower())
                     or (prof > 0 and sp != prof) or (prof == -1 and sp != 0)
-                    or (only and sid not in self.names.modelled))
+                    or (only and sid not in self.names.modelled
+                        and sid not in self.names.labelled))
             it.setHidden(bool(hide))
         self._count()
 
@@ -1012,6 +1021,26 @@ def smoke(win, app, out_dir):
     for i, tab in enumerate((win.skills, win.party, win.enemies, win.run)):
         win.tabs.setCurrentIndex(i)
         app.processEvents()
+    # the Skills tab's GRADES (SKILLS-LT): a hand row is ` *`, a label-tier row
+    # ` ~label`, and the "modelled only" filter keeps both and nothing else.
+    listed = {int(it.data(Qt.UserRole)) for it in win.skills._items()}
+    hand_ids, label_ids = win.names.modelled & listed, win.names.labelled & listed
+    if hand_ids and label_ids:
+        h0, l0 = sorted(hand_ids)[0], sorted(label_ids)[0]
+        check(win.names.skill_label(h0).endswith(" *") and win.names.skill_label(l0).endswith(" ~label")
+              and not win.names.skill_label(l0).endswith(" *"),
+              f"a hand row ({h0}) is marked ' *', a label-tier row ({l0}) ' ~label' and never ' *'")
+        win.skills.modelled_only.setChecked(True)
+        app.processEvents()
+        shown_ids = {int(it.data(Qt.UserRole)) for it in win.skills._items() if not it.isHidden()}
+        check(shown_ids == hand_ids | label_ids,
+              f"'modelled only' shows the hand rows and the label rows and nothing else "
+              f"({len(hand_ids)} + {len(label_ids)})")
+        win.skills.modelled_only.setChecked(False)
+        app.processEvents()
+    else:
+        print(f"  [skip] the grade marks: hand {len(hand_ids)} / label {len(label_ids)} rows listed "
+              f"-- the vault overlay (skilldesc.py --emit-labels) is what puts label rows here")
     # the Skills tab: filter, lock, the party's professions
     win.skills.prof.setCurrentIndex(3)              # Monk
     app.processEvents()

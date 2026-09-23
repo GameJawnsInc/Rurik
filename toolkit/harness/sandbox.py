@@ -267,10 +267,28 @@ def default_unlocks(world, professions):
                   if int(r.get("profession", 0)) in want)
 
 
+LABEL_TIER = content.LABEL_TIER    # one definition; `import content` is above
+
+
+def skill_tiers(world):
+    """{id: "hand" | "label"} for every [skill_effect.*] row: hand-verified, or
+    generated from the client's description templates (SKILLS-LT, the tier
+    field on the row)."""
+    return {int(k): (LABEL_TIER if r.get("tier") == LABEL_TIER else "hand")
+            for k, r in _rows(world, "skill_effect").items()}
+
+
 def modelled_skills(world):
-    """Ids with a [skill_effect.*] row: the ones this server resolves beyond
-    their icon (studies/skills)."""
-    return sorted(int(k) for k in _rows(world, "skill_effect"))
+    """Ids with a HAND [skill_effect.*] row: the ones this server resolves beyond
+    their icon from a hand-verified row (studies/skills). The label tier is
+    `label_skills`: those act too, through a parsed label, and the grade must
+    say so rather than read as modelled (deskwork D4 step 4's condition)."""
+    return sorted(k for k, t in skill_tiers(world).items() if t == "hand")
+
+
+def label_skills(world):
+    """Ids whose only [skill_effect.*] row is a tier = "label" one (SKILLS-LT)."""
+    return sorted(k for k, t in skill_tiers(world).items() if t == LABEL_TIER)
 
 
 def templates(world):
@@ -753,6 +771,10 @@ def game_args(spec, world):
         args += ["--unlocks", ",".join(str(s) for s in unlocks)]
     if spec.get("persist", True):
         args.append("--persist")
+    # SKILLS-LT: `gamesrv_args = ["--no-skill-labels"]` is how a spec runs the
+    # label tier's CONTROL arm (studies/skills 55.5's runsheet); any gamesrv
+    # flag passes through, last, so it can override the fixed ones above.
+    args += [str(x) for x in (spec.get("gamesrv_args") or [])]
     return args
 
 
