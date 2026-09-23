@@ -6417,8 +6417,8 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   `toolkit/authsrv/test_itemmoves.py` (**2026-09-23, DESKWORK-D1 step 8: the inventory
   pair, c2s 0x004F ITEM_MOVE and 0x0030 EQUIP_ITEM, and the item store behind them**,
   `toolkit/authsrv/itemstore.py`, `studies/cmsg/FINDINGS.md` §DESKWORK-D1 "Inventory".
-  §1 RETAIL'S BATCHES BYTE FOR BYTE through the pure leaf with retail's own ids, bag
-  ids, inventory keys and agents: the three field unequips of 20260917T090355 :53310
+  §1 RETAIL'S BATCHES, value for value against the transcription, through the pure leaf
+  with retail's own ids, bag ids, inventory keys and agents: the three field unequips of 20260917T090355 :53310
   (`0x004F [4,2,1]` → `0x014B [1,213,2,1]` + `0x006F [25,6,0]`, and the gloves' and
   boots'), their three re-equips (`0x0030 [213]` → `0x014B [1,213,3,4]` + `0x006F
   [25,6,213]` — retail's bag in ldufr's order, its visual in GWLP-R's), the outpost
@@ -6426,8 +6426,13 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   Factions wand of 20260913T210901 :60877, the four outpost swaps of 20260819T132414
   :53419 (`0x0152 [159, occupant, item]` alone, the occupant taking the item's cell);
   KNOWN-BAD arms: our identity visual mapping on retail's head (slot 4, the tape says
-  6), our visual-order bag on retail's equip, a visual in the outpost, a swap read
-  backwards. §2 REFUSALS return no batch (an empty source, the equipped bag as a
+  6), our visual-order bag on retail's equip, a visual in the outpost. §1b THE SAME
+  TWELVE DECODED FROM THE TAPES (vault-gated, `LEDGER.skip` on a bare machine; the fix
+  pass, EVID-D1C-4): `livewire.decode_conn` on the four connections, the item state
+  built from the tape's own 0x013F/0x013E/0x014B/0x0152 rows (the equipped bag = the
+  type-2 bag, the key, the field bit and the agent read off the tape; only the item
+  TYPES transcribed), the planner's batch against the s2c rows inside 0.1 s of each
+  request, and the count of requests pinned at twelve. §2 REFUSALS return no batch (an empty source, the equipped bag as a
   destination, an undeclared bag, a slot past the bag, a FILLED destination
   (ItCliInv:105); an unknown, an already-worn, a slot-less type, an off hand beside a
   two-hander) and the two-hander that displaces a worn off hand (the shield leaves
@@ -6436,20 +6441,35 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   with a note, an unknown id is ignored, an illegal cell or a collision discards the
   whole store. §4 THE SERVER: `item_layout_begin`'s default layout is the constants'
   and `itemstore.worn_array` over it equals the 0x006E fill the load path built before
-  this step; the real handlers with a fake send in a field (visual) and a town (none);
-  six refusals send nothing; the hands mirror (the weapon moved out → `SET_ITEMS_OVERRIDE
-  [0] == (0, 0)`; `select_weapon_set` then ENTERS an empty hand by `0x014B` and never
-  sends a `0x0152` with a 0, and LEAVES to a free backpack slot on the way back; the
-  hammer equipped back and the sword equipped over it move set 0's record and
-  `agents.PLAYER_WEAPON`); `--persist` writes `item_locations`, a fresh dress restores
-  the armour cell and not the hand, `charstore.validate` refuses five malformed shapes
-  and accepts a good one, `--no-item-moves` reads nothing stored. §5 SOURCE LOCKS with a
-  mutation: both arms under `ITEM_MOVES_ENABLED`, `main()`'s wiring, `item_layout_begin`
-  before the weapon's create and `item_cell` at the five placements,
+  this step; `--outpost` WINS over `--explorable` (ENG-M3); the real handlers with a fake
+  send in a field (visual) and a town (none); the DAMAGE MODEL follows the store — a head
+  in the backpack leaves `player_armour_at('warrior_head')` at 0.0 while the chest keeps
+  its rating, with the no-layout control (ENG-B5); six refusals send nothing; the hands
+  mirror (the weapon moved out → `SET_ITEMS_OVERRIDE[0] == (0, 0)`; `select_weapon_set`
+  then ENTERS an empty hand by `0x014B` and never sends a `0x0152` with a 0, and LEAVES
+  to a free backpack slot on the way back; the hammer equipped back and the sword
+  equipped over it move `agents.PLAYER_WEAPON` and the session's set items while the
+  LAUNCH RECORDS stand — ENG-B4; F2/F1 after that equip read the swing model off the
+  hands, not the record); THE NEXT CONNECTION dresses item 1 as the hammer and item 11 as
+  the sword and re-declares a shield dragged out (ENG-B4: the first cut created two
+  swords and named an undeclared item in 0x0147); RESERVED cells: a `0x004F` into a worn
+  set item's return cell is refused with the unreserved control, F1 puts the shield back
+  there, and a restored layout that fills it sends the shield to a free cell with the
+  reservation following (ENG-B3); `--persist` writes `item_locations`, a fresh dress
+  restores the armour cell and not the hand — from a BARE state, the store looked up by
+  the dress itself, with the no-store KNOWN-BAD/control (ENG-B1: REQUEST_ITEMS runs
+  before the load attaches the store); a restored set-item slot survives
+  `declare_weapon_sets` and F2/F1 (ENG-M2); `charstore.validate` refuses five malformed
+  shapes and accepts a good one, `--no-item-moves` reads nothing stored. §5 SOURCE LOCKS
+  with a mutation: both arms under `ITEM_MOVES_ENABLED`, `main()`'s wiring,
+  `item_layout_begin` before the weapon's create and `item_cell` at the five placements,
   `declare_weapon_sets(send, state)`, the 0x006E build's `itemstore.worn_array` and
   `hand_items`, `weapon_set_items`'s override, `select_weapon_set`'s two-real-leads
   guard, no allowlist row for either opcode in `test_dispatch.py`, `--no-item-moves` in
-  `serverargs.py`. Floor 78 from the green run, ~3 s),
+  `serverargs.py`, and the fix pass's five (the dress's store lookup and set-0 re-apply,
+  the mirror's untouched records, the slot map, the reserved cells, the armour read).
+  Floor 78 -> 102 from the green run (the bare-machine core; §1b's 17 ride the vault),
+  ~4 s),
   `toolkit/authsrv/test_labelrun.py` (the labelled input run, which names GAME_CMSG
   opcodes from what a human was told to do: a message lands in exactly one step's
   window, instance-load traffic is never folded into step 1, and a dirty idle CONTROL

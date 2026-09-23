@@ -28,6 +28,65 @@ move back.
 
 ---
 
+### DESKWORK-D1 (steps 6 + 8, fix pass) -- 2026-09-23 -- **the suppress mask follows the client's own bar edits; the dress reads the store it never read; reserved cells; the launch records stand; removed armour protects nothing; a suppressed resurrection is never cast**
+
+[studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md) §DESKWORK-D1 "The hero skill
+toggle" and "Inventory", each with a **Fix pass** record. **Desk work, no client
+launched.** Two reviews read the pass; every blocker and major was reproduced against the
+branch and re-derived from the client or the tapes before it was changed. **Corrects the
+two entries below it** (steps 6 and 8) on these points:
+
+- **Step 6 said the client's mask is "written only by 0x0065 and 0x0064" and that
+  slot-vs-skill on a rearrangement was UNOBSERVED. Both false.** `codescan --field 0xA4
+  --in ChCliSkill --writes` finds SIX stores on 38797: the two wire handlers, the `0x00DA`
+  setter (`0x008223B0`, mask = 0 before the slots refill), the whole-bar sender
+  (`0x00821390`, mask = 0), the `0x005C` sender (`0x008212C0`, ChCliSkill:258: `btr` the
+  set slot's bit) and the `0x005E`/`0x005F` sender (`0x00821460`, ChCliSkill:332/333:
+  the two slots' bits EXCHANGED). So suppression follows the SKILL on a swap and a set
+  clears it; the first cut kept the bit on the SLOT, pinned that in its test, and its body
+  cast the skill the client drew struck through (EVID-D1C-1). The server now mirrors the
+  three (`hero_mask_write` from both bar-edit handlers), the test's pin is inverted with
+  per-slot as the KNOWN-BAD arm, the legacy rig follows `0x00DA` with a stored mask
+  (EVID-D1C-3), a suppressed resurrection is skipped by `ally_cast_tick`'s dead-first
+  loop (ENG-B2), and without `--persist` the toggle reads the session's edited bar
+  (`state["hero_bars"]`, ENG-M1). `0x005C` is the bar edit, not the use path (`0x00821260`
+  sends `0x001C` only); the GWW citation is the page itself ("Guide to Hero Basics and
+  Optimization" §Forced skill use → Suppress, read through the browser).
+- **Step 6's entry said its affected set was "17 of 17 green … provlint"; provlint was
+  RED at that commit** (a piped `tail` hid the exit status) and green only at `b51a2b38`
+  (ENG-m2). The count stands corrected here rather than there.
+- **Step 8 said "the next dress restores armour and set items where they were left".
+  It did not, on any real connection**: REQUEST_ITEMS is answered before REQUEST_PLAYERS
+  attaches `charstore_game` (harness `20260922T175325`'s gamesrv log, lines 84 / 98 /
+  132), so `item_layout_begin` read no store and the test had pre-seeded it (ENG-B1). It
+  now looks the store up itself; the restored set-item slot also survives
+  `declare_weapon_sets` (ENG-M2).
+- **Step 8 said the sender "sends only when the item's bag has model 21".** 21 is
+  `0x00844800`'s default for any non-container item; the gate is `0x008454F0`'s "parent
+  bag of type 2 → the slot byte, else 9 → the local path" (EVID-D1C-2). Same conclusion.
+  17730's witness is the `0x014B` out at 150.310 and the `0x0152` back at 224.681, not
+  its load cell (EVID-D1C-7); the visual permutation is OBSERVED whole on `:53310`'s load
+  `0x006E` (EVID-D1C-6).
+- **Step 8 said "replayed byte for byte".** The test compared to a hand transcription;
+  it now also decodes the four connections through `livewire` and replays the twelve
+  requests against the tape's own item state (vault-gated, EVID-D1C-4).
+- **Three more blockers the reviewers reproduced:** an accepted `0x004F` could fill a
+  worn set item's return cell and the next switch sent `0x014B` into a filled cell —
+  reserved cells are refused and the switch falls back to a free one (ENG-B3); an equip
+  rewrote set 0's record and `WEAPON_SETS[k]`, so the next connection created two swords
+  and no hammer, or named an undeclared shield in `0x0147` — the records are never
+  written from an equip and the dress re-applies set 0's record first (ENG-B4, which also
+  closes the older set-switch form on `main`); removed armour still protected its
+  location — `player_armour_at` reads the item store and a removed piece leaves a bare
+  location, the spell path being the declared open edge (ENG-B5).
+
+`test_heroskilltoggle.py` 53 → 71, `test_itemmoves.py` 78 → 102 (+17 with the vault), both
+green; the step-6 affected set 17 of 17 green (1,276 checks) at `de0e0546`. **Still owed: the
+loopback clicks** (both runsheets, now with a swap-while-suppressed step and a zone-after-equip
+check).
+
+---
+
 ### DESKWORK-D1 (step 8) -- 2026-09-23 -- **the inventory pair armed on an item store: c2s 0x004F ITEM_MOVE's field 1 settled (the item's slot in the EQUIPPED bag), 0x0030 EQUIP_ITEM's two shapes, retail's batches replayed byte for byte, cells persisted**
 
 [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md) §DESKWORK-D1 "Inventory";

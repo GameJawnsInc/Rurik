@@ -2700,7 +2700,13 @@ def declare_weapon_sets(send, state=None):
     constants' layout."""
     if not EQUIP_WEAPON:
         return
-    _assign_backpack_slots()
+    if not (state or {}).get("items"):
+        # The constants' slots. When item_layout_begin has run on this state
+        # the map already carries the RESTORED slots and is left alone -- the
+        # fix pass, ENG-M2: this call used to clear them, so a set item put
+        # back at a stored cell was later sent (0x014B) to its default cell,
+        # which another item could be sitting in.
+        _assign_backpack_slots()
     for k in (1, 2, 3):
         s = WEAPON_SETS[k]
         if not s:
@@ -2748,6 +2754,36 @@ def select_weapon_set(send, state, k, conn_id):
     old_lead, old_off = weapon_set_items(old)
     new_lead, new_off = weapon_set_items(k)
     out = []
+    _items_now = state.get("items") or {}
+    # DESKWORK-D1 step 8 (the fix pass, ENG-B3): where the leaving off hand
+    # goes. Its reserved backpack slot (WEAPON_SET_BACKPACK_SLOTS) unless the
+    # item store says another item sits there -- a restored layout can put one
+    # there (itemstore.restore checks collisions among DECIDED cells, and a
+    # hand item's return slot is not one) -- in which case the first free cell
+    # outside every reservation; a 0x014B into a filled cell asserts the client
+    # (ItCliInv:105). With no cell at all the switch is refused before anything
+    # is sent. (plan_move / plan_equip refuse to FILL a reserved cell, so in a
+    # session this fallback is for the restored case.)
+    _off_dest = None
+    if old_off and old_off != new_off:
+        _off_dest = WEAPON_SET_BACKPACK_SLOTS.get(old_off, 0)
+        _occ = itemstore.at(_items_now, BACKPACK_BAG_ID, _off_dest) if _items_now else None
+        if _occ is not None and _occ != old_off:
+            _alt = itemstore.first_free(_items_now, BACKPACK_BAG_ID,
+                                        player_bags().get(BACKPACK_BAG_ID, 0),
+                                        avoid=reserved_backpack_slots(state))
+            if _alt is None:
+                print(f"[c{conn_id}] weapon set {k}: off hand {old_off}'s return cell "
+                      f"(backpack {_off_dest}) holds item {_occ} and the backpack has no "
+                      f"free cell -- nothing sent [DESKWORK-D1 step 8, fix pass]",
+                      flush=True)
+                return []
+            print(f"[c{conn_id}] weapon set {k}: off hand {old_off}'s return cell "
+                  f"(backpack {_off_dest}) holds item {_occ}; it goes to backpack {_alt} "
+                  f"instead and the reservation follows [DESKWORK-D1 step 8, fix pass]",
+                  flush=True)
+            _off_dest = _alt
+            WEAPON_SET_BACKPACK_SLOTS[old_off] = _alt
 
     def _send(op, vals, why):
         out.append((op, list(vals)))
@@ -2757,7 +2793,7 @@ def select_weapon_set(send, state, k, conn_id):
           f"SET_ACTIVE_WEAPON_SET({k}) [WEAPONS-W9]")
     if old_off and old_off != new_off:
         _send(GAME_SMSG_ITEM_CHANGE_LOCATION,
-              [1, old_off, BACKPACK_BAG_ID, WEAPON_SET_BACKPACK_SLOTS.get(old_off, 0)],
+              [1, old_off, BACKPACK_BAG_ID, _off_dest],
               f"ITEM_CHANGE_LOCATION(off hand {old_off} -> backpack) [WEAPONS-W9]")
     if new_off and new_off != old_off:
         _send(GAME_SMSG_ITEM_CHANGE_LOCATION,
@@ -2776,7 +2812,8 @@ def select_weapon_set(send, state, k, conn_id):
               f"empty) [DESKWORK-D1 step 8]")
     elif old_lead and not new_lead:
         _free = itemstore.first_free(state.get("items") or {}, BACKPACK_BAG_ID,
-                                     player_bags().get(BACKPACK_BAG_ID, 0))
+                                     player_bags().get(BACKPACK_BAG_ID, 0),
+                                     avoid=reserved_backpack_slots(state))   # the fix pass, ENG-B3
         if _free is None:
             print(f"[c{conn_id}] weapon set {k}: its lead was moved out in game and "
                   f"the backpack has no free slot for {old_lead} -- the lead stays "
@@ -2806,13 +2843,22 @@ def select_weapon_set(send, state, k, conn_id):
     old_max_energy = player_max_energy(state)
     old_base = WEAPON_ATTACK_SPEED
     agents.PLAYER_OFFHAND = None
-    changed = apply_party_character({"player_weapon": s["lead"],
-                                     "player_offhand": s.get("off")},
+    # DESKWORK-D1 step 8 (the fix pass, ENG-B4): the swing model follows WHAT
+    # IS NOW IN THE HANDS -- the item store's keys for the set's items, which
+    # an in-game equip may have changed (SET_ITEMS_OVERRIDE) -- and the set's
+    # RECORD only where the store has no answer: no store (a legacy state), or
+    # a hand emptied in game (the open edge: the record's weapon stands in).
+    _lead_key = ((_items_now.get(new_lead) or {}).get("key") if new_lead else None) or s["lead"]
+    _off_key = (((_items_now.get(new_off) or {}).get("key") if new_off else None)
+                if _items_now else s.get("off"))
+    changed = apply_party_character({"player_weapon": _lead_key,
+                                     "player_offhand": _off_key},
                                     record_set0=False)
     state["weapon_set"] = k
     # DESKWORK-D1 step 8: the item cells follow the batch above -- the same
     # exchange the client's 0x0152 handler performs and the shield's two moves.
-    item_cells_after_set_switch(state, old_lead, old_off, new_lead, new_off)
+    item_cells_after_set_switch(state, old_lead, old_off, new_lead, new_off,
+                                off_dest=_off_dest)
     # RUN-W9-2 (2026-09-19): a base CHANGE re-declares the 0x0035 pair, and
     # retail times it to the NEXT ATTACK START, not to this batch -- OBSERVED
     # on RUN-1A (20260919T103604, agent 25): the axe->scythe switch at t=303.4
@@ -10596,12 +10642,16 @@ GAME_CMSG_SELECT_WEAPON_SET = 0x0032
 # an outpost).
 GAME_CMSG_EQUIP_ITEM = 0x0030
 # 0x004F [byte slot, word bag, byte slot]: GmItemHelpers' EQUIPPED-bag move
-# (0x00526900, sent only when the item's bag has model 21, packing the item's
-# own slot, the target bag's id and the target slot) -> ItCliApi 0x00816AF0 ->
-# wrapper 0x00920DE0. So field 1 is the item's slot IN THE EQUIPPED BAG,
-# CORROBORATED 4 of 4 by each moved item's load-time 0x013E cell; the reply is
-# 0x014B [key, item, bag, slot] + 0x006F [agent, visual slot, 0] in a field.
-# The general bag-to-bag move is another message and is on no tape.
+# (0x00526900) -> ItCliApi 0x00816AF0 -> wrapper 0x00920DE0. Its gate is
+# 0x008454F0(item): the item's PARENT bag (item+0xC) must be of type 2 -- the
+# equipped bag -- and then field 1 is the item's slot byte (item+0x50); any
+# other bag answers 9 and the drag takes the local path at 0x00526AC3, sending
+# nothing. (The first cut read the gate as "the item's bag has model 21"; 21 is
+# 0x00844800's DEFAULT for any item that is not itself a bag container -- EVID-
+# D1C-2.) So field 1 is the item's slot IN THE EQUIPPED BAG, CORROBORATED 4 of
+# 4 by each moved item's cell on the tape; the reply is 0x014B [key, item, bag,
+# slot] + 0x006F [agent, visual slot, 0] in a field. The general bag-to-bag
+# move is another message and is on no tape.
 GAME_CMSG_ITEM_MOVE = 0x004F
 
 # THE THREE PURE-INBOUND ONES. Each is fully named in `schema/overrides.json`
@@ -11535,6 +11585,13 @@ HERO_UNLOCK_MASK = True        # False (--no-hero-unlock-mask): 0x0018 stays
 PARTY_SIZE_COUNTS_HEROES = True  # False (--party-size-no-heroes): the LOAD's
                                # 0x00B0 counts 1 + henchman and leaves the
                                # heroes out, as every run before 2026-09-23.
+                               # Default ON: OBSERVED -- retail's load sent
+                               # [68, 2] with one hero in the party and the kick
+                               # [68, 1] after (20260916T150306 :62321), so the
+                               # old value was a measured under-count, not a
+                               # rival reading. The flag is the revert arm the
+                               # convention asks for (the first cut shipped the
+                               # change with none -- ENG-M4).
 HERO_SKILL_TOGGLE_ENABLED = True  # False (--no-hero-skill-toggle): c2s 0x0019
                                # is ignored and no stored suppression is read
                                # or sent -- every run before DESKWORK-D1 step
@@ -11564,13 +11621,10 @@ ITEM_MOVES_ENABLED = True      # False (--no-item-moves): c2s 0x004F ITEM_MOVE
                                # ItCliInv:105 EMPTY slot -- why a filled
                                # destination is refused) and 0x0152
                                # (ItCliApi:2253/2254/2257, ItCliInv:687/688).
-                               # Default ON: OBSERVED -- retail's load sent
-                               # [68, 2] with one hero in the party and the kick
-                               # [68, 1] after (20260916T150306 :62321), so the
-                               # old value was a measured under-count, not a
-                               # rival reading. The flag is the revert arm the
-                               # convention asks for (the first cut shipped the
-                               # change with none -- ENG-M4).
+                               # NOT reverted by the flag: select_weapon_set's
+                               # lead rule (0x014B into an EMPTIED hand, never
+                               # a 0x0152 with a 0) and the store-built 0x006E
+                               # -- with no in-game move nothing differs.
 AI_MODE_FIGHT, AI_MODE_GUARD, AI_MODE_AVOID = 0, 1, 2   # 0x0015's byte (pvpui 28.5)
 AI_MODE_NAMES = {0: "Fight", 1: "Guard", 2: "Avoid Combat"}
 SPIRIT_RANGE = 2512.0          # u -- WIKI (GWW "Range"): binding rituals /
@@ -12076,11 +12130,35 @@ def player_armour_at(location_key, damage_type="physical", state=None,
     "elemental"), the two readings it always meant."""
     if physical is not None:
         damage_type = "physical" if physical else "elemental"
+    if EQUIP_ARMOUR and state is not None and state.get("items"):
+        # DESKWORK-D1 step 8 (the fix pass, ENG-B5): a piece the player dragged
+        # OUT of the equipped bag (c2s 0x004F) protects nothing -- the location
+        # is bare: a rating of 0 plus the shield's bonus that rides every
+        # location (offhand_armour), which the armour term's own formula
+        # (armour_multiplier, the wiki's table) turns into 2^(60/40) of the
+        # baseline. RECONSTRUCTION: what retail deals to a bare location is on
+        # no tape here. This is a different thing from --no-armour's None (the
+        # INSTRUMENT that turns the armour term off), and the spell path is
+        # the open edge: combatmath rolls a spell's location inside the leaf
+        # with no state to read, so a spell still meets the removed piece
+        # (spell_armour_for says so).
+        _iid = armour_item_id_at(location_key)
+        if _iid is not None and (state["items"].get(_iid) or {}).get("bag") != EQUIPPED_BAG_ID:
+            return 0.0 + offhand_armour(damage_type, state)
     got = combatmath.player_armour_at(location_key, damage_type, EQUIP_ARMOUR,
                                       ARMOR_RATING_MODIFIER,
                                       ARMOR_VS_TYPE_MODIFIER,
                                       level=player_level_of(state))   # a 573 piece
     return None if got is None else got + offhand_armour(damage_type, state)
+
+
+def armour_item_id_at(location_key):
+    """The dress's item id for an armour LOCATION (STARTER_ARMOUR's keys are
+    the location keys HIT_LOCATION_ODDS rolls), or None."""
+    for iid, key, _slot in STARTER_ARMOUR:
+        if key == location_key:
+            return iid
+    return None
 
 
 def player_spell_armour():
@@ -12100,7 +12178,14 @@ def spell_armour_for(skill_id):
     spell's OWN base penetration comes off (studies/weapons 35: an Air Magic
     lightning spell's 25 % -- Lightning Orb onto 80 lands as onto 60, the
     tape's 101 / 286), BEFORE the taker's casting penalty the call site adds
-    (the wiki's step 4)."""
+    (the wiki's step 4).
+
+    OPEN EDGE (DESKWORK-D1 step 8, the fix pass): with SPELL_LOCATION_ROLL the
+    leaf rolls the location itself and reads the fixture's piece there -- a
+    piece moved OUT of the equipped bag in game (c2s 0x004F) still meets a
+    spell here, while the physical path (player_armour_at) reads the item
+    store and treats the location as bare. Threading the store into the leaf
+    is the fix; it is not done here."""
     got = combatmath.spell_armour_for(skill_id, SPELL_ARMOUR, ARMOUR_TERM,
                                        ARMOUR_RESPECTING_MEANS,
                                        SCALE_MEANS_DAMAGE, EQUIP_ARMOUR,
@@ -24455,13 +24540,50 @@ def item_layout_begin(state, conn_id=0):
     which keeps the HANDS at their defaults (the weapon sets own slots 0/1;
     a stored hand change is logged, not applied) and drops the whole store on
     an illegal or colliding cell. The set items' backpack slots follow, so
-    select_weapon_set moves a shield to where it really sits. Returns the
-    items dict; with the arm off the store is not read and the layout is the
-    constants' -- byte-identical to every earlier run."""
+    select_weapon_set moves a shield to where it really sits (and
+    declare_weapon_sets leaves that map alone once this has run -- the fix
+    pass, ENG-M2). Returns the items dict; with the arm off the store is not
+    read and the layout is the constants' -- byte-identical to every earlier
+    run.
+
+    THE STORE IS LOOKED UP HERE, not taken from state (the fix pass, ENG-B1):
+    REQUEST_ITEMS -- this dress -- arrives BEFORE REQUEST_PLAYERS, which is
+    where the load attaches `charstore_game` (harness/20260922T175325's
+    gamesrv.log: c2s 0x8091 line 84, the dress line 98, c2s 0x8090 line 132),
+    so the first cut read `state.get("charstore_game")` as None on every real
+    connection and no stored cell was ever restored; the test had pre-seeded
+    the store into the state. Same lazy find_character as hero_build, for
+    the same reason.
+
+    SET 0'S RECORD IS RE-APPLIED FIRST (the fix pass, ENG-B4): the swing-model
+    globals (agents.PLAYER_WEAPON / PLAYER_OFFHAND and what hangs off them)
+    are process-wide, and an in-game equip or a set switch leaves them on
+    whatever was last in the hands; the load below says set 0 is active with
+    set 0's items (0x0147 [1, 0, lead, off]) and creates item 1 from
+    agents.PLAYER_WEAPON, so they must be set 0's again before the layout
+    reads them -- or the next connection created item 1 as the sword set 1
+    also names (two swords, no hammer), and a shield moved out of the hands
+    was named by 0x0147 and never declared."""
+    if EQUIP_WEAPON and WEAPON_SETS[0]:
+        _w0, _o0 = agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND
+        agents.PLAYER_OFFHAND = None
+        apply_party_character({"player_weapon": WEAPON_SETS[0]["lead"],
+                               "player_offhand": WEAPON_SETS[0].get("off")},
+                              record_set0=False)
+        if agents.PLAYER_WEAPON != _w0 or agents.PLAYER_OFFHAND != _o0:
+            print(f"[c{conn_id}] ITEMS: the swing model is set 0's again "
+                  f"({WEAPON_SETS[0]['lead']}"
+                  + (f" + {WEAPON_SETS[0]['off']}" if WEAPON_SETS[0].get("off") else "")
+                  + ") -- the last session's equip or set switch had left it on "
+                  f"another item [DESKWORK-D1 step 8, fix pass]", flush=True)
     defaults = item_layout_defaults()
     cells = {iid: (bag, slot) for iid, (bag, slot, _k, _kind, _t) in defaults.items()}
     stored, notes = {}, []
     store = state.get("charstore_game")
+    if store is None and ITEM_MOVES_ENABLED and PERSIST:
+        store, _il_row = charstore.find_character(state.get("char_uuid", ""))
+        if store is not None:
+            state["charstore_game"] = store
     if ITEM_MOVES_ENABLED and PERSIST and store is not None:
         stored = store.item_locations(state.get("char_uuid", ""))
     decided = dict(cells)
@@ -24493,10 +24615,32 @@ def item_cell(state, item_id, default_bag, default_slot):
     return [int(row["bag"]), int(row["slot"])]
 
 
-def item_cells_after_set_switch(state, old_lead, old_off, new_lead, new_off):
+def reserved_backpack_slots(state):
+    """The backpack slots the set machinery will send a HAND item back to
+    (WEAPON_SET_BACKPACK_SLOTS) for the set items NOT currently in the
+    backpack -- a move or equip may not fill one (the fix pass, ENG-B3): the
+    next set switch sends 0x014B there, and the client's add worker asserts
+    the destination EMPTY (ItCliInv:105)."""
+    items = (state or {}).get("items") or {}
+    out = set()
+    for iid, slot in WEAPON_SET_BACKPACK_SLOTS.items():
+        row = items.get(int(iid))
+        if row is not None and row["bag"] != BACKPACK_BAG_ID:
+            out.add(int(slot))
+    return out
+
+
+def reserved_backpack_cells(state):
+    """reserved_backpack_slots as (bag, slot) cells, for itemstore's planners."""
+    return {(BACKPACK_BAG_ID, s) for s in reserved_backpack_slots(state)}
+
+
+def item_cells_after_set_switch(state, old_lead, old_off, new_lead, new_off,
+                                off_dest=None):
     """Mirror select_weapon_set's batch into the item cells: the leads
     EXCHANGE cells (the client's 0x0152 does the same), an off hand leaving
-    goes to its backpack slot, one entering to equipped slot 1."""
+    goes to `off_dest` (the cell select_weapon_set chose; its reserved slot
+    when None), one entering to equipped slot 1."""
     items = state.get("items")
     if not items:
         return
@@ -24508,7 +24652,9 @@ def item_cells_after_set_switch(state, old_lead, old_off, new_lead, new_off):
     elif new_lead and not old_lead and new_lead in items:
         changes.append((new_lead, EQUIPPED_BAG_ID, EQUIPPED_SLOT_WEAPON))
     if old_off and old_off != new_off and old_off in items:
-        changes.append((old_off, BACKPACK_BAG_ID, WEAPON_SET_BACKPACK_SLOTS.get(old_off, 0)))
+        changes.append((old_off, BACKPACK_BAG_ID,
+                        WEAPON_SET_BACKPACK_SLOTS.get(old_off, 0) if off_dest is None
+                        else int(off_dest)))
     if new_off and new_off != old_off and new_off in items:
         changes.append((new_off, EQUIPPED_BAG_ID, EQUIPPED_SLOT_OFFHAND))
     itemstore.apply(items, changes)
@@ -24516,11 +24662,19 @@ def item_cells_after_set_switch(state, old_lead, old_off, new_lead, new_off):
 
 def _item_hands_mirror(state, conn_id, before):
     """After an accepted move or equip: if the HANDS changed, the ACTIVE set's
-    record and the server's own swing model follow (the same door a set
-    switch uses, apply_party_character). A hand emptied in game is the open
-    edge: the server's swing model keeps the last weapon's numbers -- an
-    unarmed player mid-session is not modelled (--no-weapon is the launch-time
-    unarmed rig) -- and it is said in the log."""
+    ITEMS for this session (SET_ITEMS_OVERRIDE) and the server's own swing
+    model follow (the same door a set switch uses, apply_party_character). A
+    hand emptied in game is the open edge: the server's swing model keeps the
+    last weapon's numbers -- an unarmed player mid-session is not modelled
+    (--no-weapon is the launch-time unarmed rig) -- and it is said in the log.
+
+    THE LAUNCH-LEVEL RECORDS ARE NEVER REWRITTEN (the fix pass, ENG-B4): the
+    first cut wrote set 0's record (record_set0) and WEAPON_SETS[k] from an
+    in-game equip, and the NEXT connection's dress -- which creates item 1
+    from set 0's record and set 1's item from WEAPON_SETS[1] -- then created
+    the sword twice and the hammer not at all. The per-session truth is
+    SET_ITEMS_OVERRIDE (cleared at the dress); the swing-model globals are
+    re-applied from set 0's record by item_layout_begin at every dress."""
     items = state.get("items") or {}
     after = itemstore.hand_items(items, EQUIPPED_BAG_ID)
     if after == tuple(before):
@@ -24532,12 +24686,11 @@ def _item_hands_mirror(state, conn_id, before):
     if after[0] and lead_key:
         agents.PLAYER_OFFHAND = None
         apply_party_character({"player_weapon": lead_key, "player_offhand": off_key},
-                              record_set0=(k == 0))
-        if k != 0:
-            WEAPON_SETS[k] = {"lead": str(lead_key), "off": (str(off_key) if off_key else None)}
+                              record_set0=False)
         print(f"[c{conn_id}] ITEMS: the hands are now lead {after[0]} ({lead_key}), off "
-              f"{after[1] or 0} ({off_key}); set {k}'s record and the swing model "
-              f"follow (apply_party_character) [DESKWORK-D1 step 8]", flush=True)
+              f"{after[1] or 0} ({off_key}); set {k}'s items for this session and the "
+              f"swing model follow (apply_party_character; the launch records stand) "
+              f"[DESKWORK-D1 step 8]", flush=True)
     elif after[0]:
         print(f"[c{conn_id}] ITEMS: lead item {after[0]} has no content key; the swing "
               f"model is unchanged [DESKWORK-D1 step 8]", flush=True)
@@ -24571,8 +24724,9 @@ def _item_moves_commit(send, state, conn_id, batch, changes, what):
         for iid in moved:
             store.set_item_location(state.get("char_uuid", ""), iid,
                                     items[iid]["bag"], items[iid]["slot"])
-    print(f"[c{conn_id}] {what}: {len(batch)} message(s), "
-          f"{', '.join(f'item {i} -> bag {items[i][chr(98)+chr(97)+chr(103)]} slot {items[i][chr(115)+chr(108)+chr(111)+chr(116)]}' for i in moved) or 'no cell changed'}"
+    where = ", ".join(f"item {i} -> bag {items[i]['bag']} slot {items[i]['slot']}"
+                      for i in moved) or "no cell changed"
+    print(f"[c{conn_id}] {what}: {len(batch)} message(s), {where}"
           + ("" if (PERSIST and store is not None) else "  [not persisted: no store]")
           + " [DESKWORK-D1 step 8]", flush=True)
     return moved
@@ -24599,7 +24753,8 @@ def handle_item_move(values, send, state, conn_id):
     batch, changes, why = itemstore.plan_move(
         state["items"], player_bags(), src, bag, slot, key=PLAYER_INVENTORY_KEY,
         equipped_bag=EQUIPPED_BAG_ID, agent=PLAYER_AGENT_ID,
-        visuals=instance_is_field(state))
+        visuals=instance_is_field(state),
+        reserved_cells=reserved_backpack_cells(state))   # the fix pass, ENG-B3
     if why is not None:
         print(f"[c{conn_id}] ITEM_MOVE(slot {src} -> bag {bag} slot {slot}) refused: "
               f"{why}; nothing sent [DESKWORK-D1]", flush=True)
@@ -24628,7 +24783,8 @@ def handle_equip_item(values, send, state, conn_id):
         state["items"], player_bags(), item_id, key=PLAYER_INVENTORY_KEY,
         equipped_bag=EQUIPPED_BAG_ID, backpack_bag=BACKPACK_BAG_ID,
         agent=PLAYER_AGENT_ID, visuals=instance_is_field(state),
-        hands_of_type=item_hands_of_type())
+        hands_of_type=item_hands_of_type(),
+        reserved_cells=reserved_backpack_cells(state))   # the fix pass, ENG-B3
     if why is not None:
         print(f"[c{conn_id}] EQUIP_ITEM({item_id}) refused: {why}; nothing sent "
               f"[DESKWORK-D1]", flush=True)

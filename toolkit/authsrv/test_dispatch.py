@@ -325,8 +325,10 @@ DROPPED_ON_PURPOSE = {
 # 2026-09-23): "fields 2-3 are the destination bag and slot ... field 1 is
 # UNVERIFIED ... this server dresses the body once at login and holds no bag
 # model to move within. Dropped until step 8." Step 8 read the client's sender
-# (GmItemHelpers 0x00526900 sends it only for an item in the bag of model 21,
-# packing the item's own slot first) and the four tapes' load cells: field 1 is
+# (GmItemHelpers 0x00526900 sends it only for an item whose PARENT bag is of
+# type 2, the equipped bag -- 0x008454F0's gate, which answers the item's slot
+# byte; the fix pass corrected the first reading, "the bag of model 21") and
+# the four tapes' cells at the time of each move: field 1 is
 # the item's slot IN THE EQUIPPED BAG, 4 of 4. ARMED: handle_item_move answers
 # 0x014B [key, item, bag, slot] (+ 0x006F [agent, slot, 0] in a field) from the
 # itemstore the dress seeds. studies/cmsg DESKWORK-D1 "Inventory".

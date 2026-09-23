@@ -14,15 +14,27 @@ WHAT THE TWO MESSAGES ARE, read from the client (build 38797) and the tapes:
   * 0x004F [byte slot, word bag, byte slot] is sent by GmItemHelpers'
     equipped-bag move (0x00526900; asserts `sourceItemId` :279,
     `ItemCliValidate(sourceItemId)` :280, `quantity` :281, `targetBag <
-    ITEM_BAG_SLOTS` :282) ONLY when the item's bag has model 21 -- the
-    EQUIPPED bag -- and it packs (the item's own slot, the target bag's id,
-    the target slot). So field 1 is the item's SOURCE SLOT in the equipped
-    bag, and the source bag is implied. CORROBORATED 4 of 4 on retail: each
-    moved item's load-time 0x013E cell was (equipped bag, field 1) --
-    20260917T090355 :53310 213@(3,4)/215@(3,6)/214@(3,5) moved as [4,2,1] /
-    [6,2,2] / [5,2,3]; 20260919T103604 :58638 17730, set 0's off hand at
-    (231,1), moved as [1,136,6]. The general bag-to-bag move is another
-    message and is on no tape.
+    ITEM_BAG_SLOTS` :282). Its GATE is 0x008454F0(item): the item's PARENT
+    bag (item+0xC) must be of type 2 -- the EQUIPPED bag -- and the answer
+    is then the item's slot byte (item+0x50); for any other bag it answers 9
+    and 0x00526900 branches to the local path at 0x00526AC3 and sends
+    nothing. It packs (that slot, the target bag's id, the target slot). So
+    field 1 is the item's SOURCE SLOT in the equipped bag, and the source bag
+    is implied. (The first cut read the gate as "the item's bag has model
+    21": 0x00844800 writes 21 as its DEFAULT for any item that is not itself
+    a bag container -- the `cmp [ebp+8], 0x15` at 0x0052698C only refuses a
+    dragged bag, a non-empty one at 0x0052699C -- so a backpack sword gets 21
+    too; the fix pass, EVID-D1C-2. Same conclusion, different mechanism.)
+    CORROBORATED 4 of 4 on retail: each moved item sat at (equipped bag,
+    field 1) when the move came -- 20260917T090355 :53310 213@(3,4) /
+    215@(3,6) / 214@(3,5) from the load's 0x013E, moved as [4,2,1] / [6,2,2]
+    / [5,2,3]; 20260919T103604 :58638 17730, set 0's off hand, loaded at
+    (231,1) at 90.764, LEFT it on the set-1 switch (0x014B [241,17730,136,1]
+    at 150.310), and came BACK to it by the 0x0152 [241,13467,17730] at
+    224.681 (13467 having been put at (231,1) by a 0x013E at 176.813), before
+    [1,136,6] moved it at 232.975 -- that chain, not the load cell, is its
+    witness (EVID-D1C-7). The general bag-to-bag move is another message and
+    is on no tape.
   * 0x0030 [dword item] is GmItemHelpers' equip for the player (0x00526860;
     the hero form is 0x0031 [agent, item]).
 
@@ -90,9 +102,14 @@ ARMOUR_SLOT_OF_TYPE = {
 }
 
 # Retail's equipped-bag slot -> its visual (0x006E/0x006F) position: ldufr's
-# bag order read through GWLP-R's visual order. OBSERVED on 20260917T090355
-# :53310 (head 4 -> 6, gloves 6 -> 5, boots 5 -> 3); 0, 1 and 2 by the wand
-# (0 -> 0), the off hand (1 -> 1) and the body slot's shared numbering.
+# bag order read through GWLP-R's visual order. OBSERVED for the WHOLE
+# permutation on 20260917T090355 :53310's load (the fix pass, EVID-D1C-6):
+# 0x013E put items 209..215 at (3,0)..(3,6) and the 0x006E that followed was
+# [25, 209, 210, 211, 214, 212, 215, 213, 0, 0] -- so bag 0->0, 1->1, 2->2,
+# 3->4 (legs), 4->6 (head), 5->3 (boots), 6->5 (gloves); the three unequips
+# and re-equips later on the same tape agree (head 4 -> 6, gloves 6 -> 5,
+# boots 5 -> 3). 7 and 8 (the costume pair) are the identity by assumption:
+# no tape carries a costume in a bag cell.
 RETAIL_VISUAL_OF_BAG_SLOT = {0: 0, 1: 1, 2: 2, 3: 4, 4: 6, 5: 3, 6: 5, 7: 7, 8: 8}
 # Retail's equipped-bag slot per armour wire type -- ldufr's order (Body 2,
 # Legs 3, Head 4, Boots 5, Gloves 6), OBSERVED on the three :53310 re-equips
@@ -186,7 +203,7 @@ def hand_items(items, equipped_bag):
 
 
 def plan_move(items, bags, src_slot, dst_bag, dst_slot, *, key, equipped_bag,
-              agent, visuals, visual_of=visual_of_bag_slot):
+              agent, visuals, visual_of=visual_of_bag_slot, reserved_cells=()):
     """c2s 0x004F [src_slot, dst_bag, dst_slot] -> (batch, changes, None) or
     (None, None, reason). `changes` is [(item, bag, slot)] to apply on send.
 
@@ -195,7 +212,11 @@ def plan_move(items, bags, src_slot, dst_bag, dst_slot, *, key, equipped_bag,
     (unobserved -- the equip is how an item enters it); a bag this launch
     never declared; a slot past the bag's size; an OCCUPIED destination --
     the client's add worker asserts the slot empty (ItCliInv:105), so a
-    0x014B into a filled cell would assert the client rather than swap.
+    0x014B into a filled cell would assert the client rather than swap; a
+    RESERVED destination (`reserved_cells`, {(bag, slot)}: the cells the
+    caller's set machinery will send a worn set item back to -- the fix pass,
+    ENG-B3: filling one meant the next set switch sent 0x014B into a filled
+    cell).
     """
     src_slot, dst_bag, dst_slot = int(src_slot), int(dst_bag), int(dst_slot)
     item = at(items, equipped_bag, src_slot)
@@ -216,6 +237,10 @@ def plan_move(items, bags, src_slot, dst_bag, dst_slot, *, key, equipped_bag,
                             f"client's add worker asserts the destination EMPTY "
                             f"(ItCliInv:105), and retail's own reply to a filled cell "
                             f"is NOT FOUND")
+    if (dst_bag, dst_slot) in set(reserved_cells or ()):
+        return None, None, (f"bag {dst_bag} slot {dst_slot} is RESERVED for a worn set "
+                            f"item's return (the set switch sends 0x014B there, and the "
+                            f"client asserts that cell EMPTY, ItCliInv:105)")
     batch = [(GAME_SMSG_ITEM_CHANGE_LOCATION, [int(key), item, dst_bag, dst_slot],
               f"ITEM_CHANGE_LOCATION(item {item}: equipped {src_slot} -> bag "
               f"{dst_bag} slot {dst_slot}) [DESKWORK-D1 step 8]")]
@@ -229,7 +254,7 @@ def plan_move(items, bags, src_slot, dst_bag, dst_slot, *, key, equipped_bag,
 
 def plan_equip(items, bags, item_id, *, key, equipped_bag, backpack_bag, agent,
                visuals, hands_of_type, visual_of=visual_of_bag_slot,
-               bag_slot_of_type=None):
+               bag_slot_of_type=None, reserved_cells=()):
     """c2s 0x0030 [item] -> (batch, changes, None) or (None, None, reason).
 
     The slot is the item's TYPE's (slot_of_type). An occupied slot answers
@@ -243,7 +268,8 @@ def plan_equip(items, bags, item_id, *, key, equipped_bag, backpack_bag, agent,
     on no tape. Refused: an unknown item, an item already in the equipped
     bag, a type with no slot, an off-hand item while a two-handed lead is
     worn (retail's answer NOT FOUND), no free backpack slot for a displaced
-    off hand.
+    off hand. `reserved_cells` ({(bag, slot)}) are never chosen for the
+    displaced off hand (the fix pass, ENG-B3).
     """
     item_id = int(item_id)
     row = items.get(item_id)
@@ -266,7 +292,7 @@ def plan_equip(items, bags, item_id, *, key, equipped_bag, backpack_bag, agent,
                                 f"answer to an off hand equipped beside it is NOT FOUND")
     if slot == SLOT_WEAPON and hands == "two" and off:
         free = first_free(items, backpack_bag, bags.get(backpack_bag, 0),
-                          avoid=() if row["bag"] != int(backpack_bag) else ())
+                          avoid={s for b, s in (reserved_cells or ()) if b == int(backpack_bag)})
         if free is None:
             return None, None, (f"no free backpack slot for the displaced off hand "
                                 f"{off}")

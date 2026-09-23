@@ -819,8 +819,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "0/1; said in the log). Refused with nothing sent: an empty "
                          "source slot, an undeclared bag, a slot past the bag, a "
                          "FILLED destination (the client's add worker asserts it "
-                         "empty, ItCliInv:105), an unknown or already-worn item, a "
-                         "type with no slot.")
+                         "empty, ItCliInv:105), a cell RESERVED for a worn set "
+                         "item's return, an unknown or already-worn item, a type "
+                         "with no slot. NOT reverted by this flag: "
+                         "select_weapon_set's lead rule (0x014B into an emptied "
+                         "hand, never a 0x0152 with a 0) and the store-built "
+                         "0x006E -- with no in-game move nothing differs.")
     ap.add_argument("--hero-skill-toggle-per-bit", action="store_true",
                     help="THE ALTERNATIVE REPLY for DESKWORK-D1 step 6: answer a "
                          "suppress click with 0x0064 [agent, slot, value] -- one bit "

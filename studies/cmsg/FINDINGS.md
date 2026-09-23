@@ -1262,27 +1262,40 @@ wrong, each re-derived from the client before it was changed:
 field 1 UNVERIFIED and `0x0030` had been dropped since 2026-09-13 as "no state for it
 yet". This step re-derived both from the tapes and the client, built the state, and
 armed them. Everything below is on `toolkit/authsrv/itemstore.py` (the pure leaf: cells,
-plans, refusals) and `test_itemmoves.py` (floor 78), which replays every batch below
-**byte for byte with retail's own ids**.
+plans, refusals) and `test_itemmoves.py` (floor 102, the bare-machine core), which replays
+every batch below **value for value against a transcription with retail's own ids** and,
+with the vault present, **from the decoded tapes themselves** (§1b, `livewire.decode_conn`;
+the fix pass added it — the first cut's "byte for byte" named a check the file did not
+make).
 
 **`0x004F`'s field 1, settled from the client.** The wrapper `0x00920DE0` (38797) packs
 three dword arguments into the wire's `[byte, word, byte]`; it is reached by a tail
 `jmp` from ItCliApi `0x00816AF0`, whose callers sit in **GmItemHelpers `0x00526900`**
 (asserts `sourceItemId` :279, `ItemCliValidate(sourceItemId)` :280, `quantity` :281,
 `targetBag < ITEM_BAG_SLOTS` :282, `quantity == sourceQuantityTotal` :310,
-`sourceAgentId` :356). That function sends **only when the item's bag has model `0x15`
-= 21, the EQUIPPED bag**, and the three arguments it pushes are `0x008454F0(item)` — the
-item's own SLOT — then the target bag's id (`0x00844870(targetBag)`) and the target
-slot. **So field 1 is the item's slot in the equipped bag and the source bag is
-implied**; the general bag-to-bag move is another message and is on no tape. The hero
+`sourceAgentId` :356). **Its gate is `0x008454F0(item)`**: the item's PARENT bag
+(`item+0xC`) must be of **type 2 — the EQUIPPED bag** — and the answer is then the item's
+slot byte (`item+0x50`); for any other bag it answers 9, and `0x00526900` branches to the
+local path at `0x00526AC3` and sends nothing. The three arguments it pushes are that slot,
+the target bag's id (`0x00844870(targetBag)`) and the target slot. (The first cut read the
+gate as "the item's bag has model `0x15` = 21": `0x00844800` writes 21 into its first
+out-parameter as the DEFAULT for any item that is not itself a bag container — it is
+overridden only for an item of byte `+0x20` == 3 with a bag object at `+8` — so the `cmp
+[ebp+8], 0x15` at `0x0052698C` refuses a dragged BAG (a non-empty one at `0x0052699C`) and
+a backpack sword gets 21 too. Same conclusion, different mechanism; corrected by the fix
+pass, EVID-D1C-2.) **So field 1 is the item's slot in the equipped bag and the source bag
+is implied**; the general bag-to-bag move is another message and is on no tape. The hero
 form is `0x0050 [agent, slot, bag, slot]` (`0x00920E30`). **CORROBORATED 4 of 4 by the
-load's own cells:** on `20260917T090355 :53310` the load's `0x013E` put head 213 at
-(bag 3, slot 4), boots 214 at (3, 5), gloves 215 at (3, 6) — bag 3 being the type-2,
-model-21 equipped bag — and the three moves were `[4, 2, 1]`, `[6, 2, 2]`, `[5, 2, 3]`
-(head, gloves, boots, each from its cell); on `20260919T103604 :58638` item 17730 was
-set 0's OFF HAND (`0x0147 [241, 0, 24945, 17730]`), sitting at (231, 1) when `[1, 136, 6]`
-moved it. Step 3's "field 1 is UNVERIFIED" is retired; the route's "move item to
-bag/slot" was half the message.
+tapes' own cells at the moment of each move:** on `20260917T090355 :53310` the load's
+`0x013E` put head 213 at (bag 3, slot 4), boots 214 at (3, 5), gloves 215 at (3, 6) — bag
+3 being the type-2 equipped bag — and the three moves were `[4, 2, 1]`, `[6, 2, 2]`, `[5,
+2, 3]` (head, gloves, boots, each from its cell); on `20260919T103604 :58638` item 17730
+was set 0's OFF HAND (`0x0147 [241, 0, 24945, 17730]`), loaded at (231, 1) at 90.764 —
+but it LEFT that cell on the set-1 switch (`0x014B [241, 17730, 136, 1]` at 150.310) and
+came BACK to it by the `0x0152 [241, 13467, 17730]` at 224.681 (13467 having been placed
+at (231, 1) by a `0x013E` at 176.813), so it sat at (231, 1) again when `[1, 136, 6]` moved
+it at 232.975; that chain, not the load cell, is its witness (EVID-D1C-7). Step 3's "field
+1 is UNVERIFIED" is retired; the route's "move item to bag/slot" was half the message.
 
 **The replies, from the tapes.** A move: `0x014B [key, item, bag, slot]` (4 of 4) and
 `0x006F [agent, visual slot, 0]` (the three field moves; not the outpost one). An equip
@@ -1299,7 +1312,11 @@ and slot (weapons §29), so the occupant lands in the cell the item came from.
 equipped BAG follows ldufr's order (Legs 3, **Head 4, Boots 5, Gloves 6** — the cells
 above), while the `0x006E`/`0x006F` VISUAL array follows GWLP-R's (Boots 3, Legs 4,
 Gloves 5, Head 6 — newopcodes `0x006F`, corroborated again here: bag 4 → visual 6, 6 →
-5, 5 → 3). `studies/character` §"CONTESTED" was a question about the visual array and
+5, 5 → 3). The WHOLE permutation is OBSERVED at once on `:53310`'s load (the fix pass,
+EVID-D1C-6): `0x013E` put items 209..215 at (3, 0)..(3, 6) and the `0x006E` that followed
+read `[25, 209, 210, 211, 214, 212, 215, 213, 0, 0]` — bag 0→0, 1→1, 2→2, 3→4 (legs),
+4→6 (head), 5→3 (boots), 6→5 (gloves); the first cut had attributed 0/1/2 to "the wand,
+the off hand and the body slot's shared numbering" and left legs without a witness. `studies/character` §"CONTESTED" was a question about the visual array and
 was decided right; the bag array was never asked. This server puts armour into the
 equipped bag at the VISUAL slot (`STARTER_ARMOUR`, `wearmap.SLOT_*`) — legal, a bag cell
 is opaque to the client — so OUR bag→visual mapping is the identity;
@@ -1368,7 +1385,11 @@ sandbox rig as usual, with `--persist`).**
    `0x004F [source slot, bag, slot]` for a drag out of the equipped bag. **No log line
    but the item moved on screen** → the client sent a different opcode; the gamesrv
    log's `UNHANDLED` line names it (the general move — the next arm). **A `refused:`
-   line** → read the reason (a filled cell; a bag we do not declare).
+   line** → read the reason (a filled cell; a bag we do not declare; a cell RESERVED for
+   a worn set item's return — with `--weapon-set 1=…+starter_shield` and set 1 active,
+   the shield's home cell is one). Then let a body hit you a few times: a hit on the head
+   location now lands against a bare location (the log's `AR 0` on that location; the
+   fix pass, ENG-B5) — a spell still meets the fixture's piece there (the open edge).
 2. **Double-click the piece in the backpack.** Expect `EQUIP_ITEM(7): 2 message(s), item
    7 -> bag 1 slot 6` and the piece back on the body. Then **double-click a weapon set's
    lead in the backpack** (a `--weapon-set 1=starter_sword` launch puts item 11 there):
@@ -1380,7 +1401,51 @@ sandbox rig as usual, with `--persist`).**
    opcode; the client will show the item back where it was (nothing was answered).
    Copy the opcode into the study — it is what names the next arm.
 4. **Zone and come back** (the portal, not the world map). Expect the head where it was
-   left (backpack) and the weapon in hand whatever was done to it (the hand rule; the
-   log prints `not restored (the weapon sets own slots 0/1)` if it was moved).
+   left (backpack) — the log's `ITEMS: item 7 (armour, warrior_head) dressed at bag 2
+   slot N -- the character's stored cell` line — and the weapon in hand whatever was
+   done to it (the hand rule; the log prints `not restored (the weapon sets own slots
+   0/1)` if it was moved). If the sword was equipped over the hammer before the zone,
+   the new instance still creates item 1 as the HAMMER and item 11 as the sword (`ITEMS:
+   the swing model is set 0's again`); two swords and no hammer would refute the fix.
 5. The client asserting on `0x014B`/`0x0152` would refute the static read (ItCliApi:2126
    / :2253); `--no-item-moves` is the revert.
+
+**Fix pass (2026-09-23, the same day; two reviews read).** Reproduced in memory against
+the branch before each change, then fixed with a test that reddens without it:
+
+- **Saved cells were never read back** (ENG-B1, blocker). REQUEST_ITEMS — the dress — is
+  answered BEFORE REQUEST_PLAYERS, which is where the load attaches `charstore_game`
+  (harness `20260922T175325`'s gamesrv log: c2s `0x8091` at line 84, the dress at 98, c2s
+  `0x8090` at 132), so `item_layout_begin` read the store as absent on every real
+  connection and restored nothing; the test had pre-seeded the store into the state.
+  It now looks the store up itself (`find_character`, the pattern `hero_build` uses for
+  the same reason); the test dresses a BARE state, with the no-store control.
+- **The restored set-item slot was thrown away** (ENG-M2, major, latent behind B1):
+  `declare_weapon_sets` re-assigned `WEAPON_SET_BACKPACK_SLOTS` from the constants after
+  the dress had written the restored slots. It now leaves the map alone once a layout ran.
+- **An accepted move could fill a worn set item's return cell** (ENG-B3, blocker): the
+  next set switch then sent `0x014B` into a filled cell (the add worker's ItCliInv:105).
+  `reserved_backpack_slots` names those cells; `plan_move` refuses one, `plan_equip`'s
+  displaced off hand avoids one, and `select_weapon_set` — for the restored layout that
+  can still fill one — sends the leaving off hand to a free cell instead and moves the
+  reservation (the switch is refused before anything is sent when no cell is free).
+- **An equip rewrote the launch-level records, and the next connection duplicated or
+  lost weapons** (ENG-B4, blocker): `_item_hands_mirror` wrote set 0's record and
+  `WEAPON_SETS[k]`, and the next dress created item 1 from the rewritten record (two
+  swords, no hammer) or named an undeclared shield in `0x0147`. The per-session truth is
+  `SET_ITEMS_OVERRIDE` alone; the records are never written from an equip; the dress
+  re-applies set 0's record to the swing-model globals FIRST (which also closes the
+  older set-switch form of the same bug); a set switch reads the swing model off the
+  items now in the hands, not the record, so an equipped sword stays the sword on F1/F2.
+- **Removed armour still protected** (ENG-B5, blocker): `player_armour_at` read the
+  fixture. It now reads the item store: a piece out of the equipped bag leaves a BARE
+  location (a rating of 0 plus the shield's bonus — RECONSTRUCTION; what retail deals to a
+  bare location is on no tape). Open edge, said at the site: the spell path rolls its
+  location inside `combatmath` with no state and still meets the removed piece.
+- The record: the gate above (EVID-D1C-2), the 17730 chain (EVID-D1C-7), the whole visual
+  permutation (EVID-D1C-6), the vault-gated replay from the decoded tapes (EVID-D1C-4),
+  `schema/overrides.json` GAME_CMSG 79's head re-cut so one row no longer contradicts
+  itself (EVID-D1C-5); `--outpost` over `--explorable` pinned (the reviewer's
+  `visual_always` mutant survived without it); the `--no-item-moves` help text says what
+  the flag does NOT revert (the lead rule, the store-built `0x006E`); three readability
+  leftovers cleaned.

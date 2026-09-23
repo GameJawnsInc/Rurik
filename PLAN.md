@@ -1911,8 +1911,11 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   the inventory pair armed on an item store (`itemstore.py`, `--no-item-moves`: c2s
   `0x004F` ITEM_MOVE is an item leaving the EQUIPPED bag — field 1 its slot there,
   4 of 4 — and `0x0030` EQUIP_ITEM draws `0x014B`+`0x006F` into an empty slot or
-  `0x0152` onto an occupied one, both retail's batches replayed byte for byte; cells
-  persisted, a stored HAND change not restored). **Open**: the party family from
+  `0x0152` onto an occupied one, both replayed from the decoded tapes; cells persisted
+  and restored at the dress, a stored HAND change not restored; the fix pass closed five
+  blockers — the dress reads the store itself, reserved cells, the launch records never
+  rewritten by an equip, removed armour protects nothing, a suppressed resurrection is
+  never cast — and the suppress mask now follows the client's own bar edits). **Open**: the party family from
   HENCHMAN_ADD's witness (step 5) and travel (step 7); the general bag-to-bag move (no
   tape carries it — the runsheet's drag will name its opcode); the loopback clicks —
   kick and add in an outpost under the sandbox rig, the Shift-click on a hero skill,
