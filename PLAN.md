@@ -32,7 +32,7 @@ sgwlpr in Scala) produced zero playable outcomes."* This is the load-bearing pre
 | [apoguita/Py4GW_Reforged](https://github.com/apoguita/Py4GW_Reforged) | Live successor to Py4GW | pushed **2026-08-04 19:53 UTC**. No license. (`apoguita/Py4GW`, 68★, was **archived 2026-07-21**.) |
 | [Fournux/Tyria-Extractor](https://github.com/Fournux/Tyria-Extractor) | `Gw.dat` → skills/items/quests/NPCs, plus a sniffer | **MIT**, Rust, created 2026-06-30 |
 | [gwdevhub/GWToolboxpp](https://github.com/gwdevhub/GWToolboxpp) | The in-client toolbox | 872★, MIT, pushed **2026-08-04** |
-| [build-wars/gw-skilldata](https://github.com/build-wars/gw-skilldata) | Community skill dataset | MIT, pushed **2026-08-04** |
+| [build-wars/gw-skilldata](https://github.com/build-wars/gw-skilldata) | Community skill dataset | Repository MIT (its `LICENSE`, SPDX MIT via GitHub's licence API); the DATA carries the source wikis' licences per its README §Licensing — GFDL (GWW), CC BY-NC-SA 2.5 (GuildWiki), CC BY-NC-SA 2.0 FR (GWiki). Verified 2026-09-22, skills §54.8. Pushed **2026-08-04** |
 
 Four repositories were pushed to on the day this plan was written, two of them within the hour. The
 `gw-preservation/server` tree carries **397 map definitions** (essentially the whole game), a real
@@ -798,7 +798,9 @@ packets. This is the answer to "can the client be an oracle," and the harness is
 automation script rather than a bespoke engine.
 
 **A6 — Agent-scale data entry with the client as referee.** *(months · agent-farmable)*
-Seed from `build-wars/gw-skilldata` (MIT, pushed today). Cross-check every numeric field against
+Seed from `build-wars/gw-skilldata` (repository MIT; its DATA is GFDL / CC BY-NC-SA from the
+source wikis — README §Licensing, verified 2026-09-22; the owner's own archive's description
+templates are now the primary source, skills §54, and the dataset the fallback). Cross-check every numeric field against
 the client-extracted `GW::Skill` table — any disagreement is a hard conflict, not a judgement call.
 For behaviour rather than numbers, drive a headless client to cast the skill on the live service
 and diff against your engine's prediction. A row counts as verified only when the numbers agree and
