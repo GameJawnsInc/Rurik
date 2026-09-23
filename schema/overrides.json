@@ -346,6 +346,12 @@
    }
   },
   "GAME_CMSG": {
+   "30": {
+    "opcode": 30,
+    "name": "HERO_ADD",
+    "name_confidence": "low",
+    "why": "STATIC ONLY -- the party panel's add-hero request, the mirror of 0x001F HERO_KICK (GAME_CMSG 31, OBSERVED). NOT FOUND on any wire: 0 of 96 live game connections (toolkit/authsrv/c2striage.py, 13,320 c2s) and 0 of 1,557 loopback connection logs carry one. Read on build 38797 (toolkit/clientscan/sendsites.py, msghandler.py --callers, codescan.py --dis): send wrapper 0x0091FF00 (site 0x0091FF1F, 8 bytes; 0x00920880 on 38888, 0x0091FF60 on 38833/38849, 0x00915CC0 on 38519), one caller inside ChCliApi 0x0080E250, which asserts `hero < HEROES` (ChCliApi:4446) and `hero != 0` (:4447) and sends only when MissionCliGetMap() (0x0084D9B0, missionContext+0x238) is MISSION_MAP_OUTPOST == 0 -- the kick's twin 0x0080E2A0 (:4459/:4460) has the same gate, so both go out from an outpost only. Callers of 0x0080E250: PtSearch 0x00562FB0 (after PtSearch:774 `m_activeList == LIST_HEROES`) and UiCtlInstance 0x00577A3F. Payload [word] = the hero index, by the wrapper's own bounds and by the kick's two witnesses ([6] retail, [3] loopback) sharing the shape. Named LOW: the mechanism is read from the binary, never seen sent; the loopback click that would raise it to OBSERVED is owed (studies/cmsg/FINDINGS.md DESKWORK-D1 'The hero add', the runsheet). Handled by handle_hero_add behind --no-hero-add (RECONSTRUCTION; the commander rig only)."
+   },
    "31": {
     "opcode": 31,
     "table": "GAME_CMSG_0031",

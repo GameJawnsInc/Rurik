@@ -1902,10 +1902,13 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   over 96 live connections, zero undecided; `test_dispatch` §10 is the reverse guard;
   `0x009F` HENCHMAN_ADD, `0x00B1` MAP_TRAVEL, `0x004F` ITEM_MOVE named medium and
   dropped until their arms), and the hero ADD armed as RECONSTRUCTION (c2s `0x001E`,
-  `--no-hero-add`; `0x0018` from the owned set, `--no-hero-unlock-mask`). **Open**: the
-  hero skill toggle (step 6), the party family from HENCHMAN_ADD's witness (step 5),
-  travel (step 7) and inventory (step 8); the loopback click for kick and add (the
-  runsheet is in studies/cmsg §DESKWORK-D1).
+  `--no-hero-add`, for the commander rig — `--party` — where it re-declares the
+  inventory a kick destroyed and refuses in the legacy rig; `0x0018` from the owned set
+  as a labelled policy, `--no-hero-unlock-mask`; the client sends both hero commands
+  from an OUTPOST only). **Open**: the hero skill toggle (step 6), the party family
+  from HENCHMAN_ADD's witness (step 5), travel (step 7) and inventory (step 8); the
+  loopback click for kick and add, in an outpost under the sandbox rig (the runsheet is
+  in studies/cmsg §DESKWORK-D1 "The hero add").
 * **DESKWORK-D5**: the combat rules retail's tapes on disk already settle. LANDED
   2026-09-22: the adrenaline gate (SKILLS-B1's gate half, skills §34.11); property 10
   and the `[42]` residue (§16.6, self-scoped; `[42]` only when the maximum moved); the
@@ -2158,11 +2161,14 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   halves shipped** (DESKWORK-D1 steps 1 + 4, PLAN-LOG): c2s `0x001F` HERO_KICK is
   OBSERVED with retail's own teardown batch (`--no-hero-kick`; a kick of a hero WITH a
   body is UNOBSERVED, RECONSTRUCTION); c2s `0x001E` HERO_ADD is RECONSTRUCTION end to
-  end — no tape and no loopback capture carries the request — answered with the load
-  pipeline's own messages in retail's load order (`--no-hero-add`), the stored kick
-  clearing under `--persist`; `--reset-hero-kicks` stays as the bulk un-kick; the load's
-  `0x00B0` now counts heroes. **Owed: one loopback click each** — the runsheet (command,
-  clicks, what each outcome means) is in studies/cmsg §DESKWORK-D1 "The hero add".
+  end — no tape and no loopback log carries the request — answered in the COMMANDER
+  rig (`--party`) with that rig's own load messages in its order, the inventory a kick
+  destroyed re-declared first (`--no-hero-add`; the legacy rig is refused), the stored
+  kick clearing under `--persist`; `--reset-hero-kicks` stays as the bulk un-kick; the
+  load's `0x00B0` counts heroes (`--party-size-no-heroes` reverts). **Owed: one
+  loopback click each, in an OUTPOST** (the client's `MissionCliGetMap()` gate) — the
+  runsheet (command, clicks, what each outcome means) is in studies/cmsg §DESKWORK-D1
+  "The hero add".
 * **SANDBOX: `ENERGY_BY_PROFESSION` is WIKI recalled, unread** — eight of ten rows in
   `toolkit/harness/sandbox.py` want GWW "Energy" read back before they are quoted as
   facts; the window shows them as editable defaults.

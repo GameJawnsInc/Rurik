@@ -28,6 +28,60 @@ move back.
 
 ---
 
+### DESKWORK-D1 (step 4, fix pass) / SANDBOX-N2 -- 2026-09-23 -- **the hero ADD corrected after two reviews: the inventory a kick destroyed comes back first, the legacy rig is refused, the owned formation slot, 0x009A, the outpost-only send gate named, 0x0018 relabelled**
+
+Corrects the "DESKWORK-D1 (step 4)" entry below it, after two reviewers drove the
+handler in the rigs the first cut never pinned (`--party`'s commander rig and plain
+`--hero`) and re-read the client. [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md)
+§DESKWORK-D1 "The hero add" (rewritten; its opening CORRECTED paragraph is the record),
+[studies/heroes/FINDINGS.md](studies/heroes/FINDINGS.md) §3.3. **Desk work, no client
+launched.** Three blockers, all outside the first cut's rig: **(1)** in the sandbox rig
+(`--hero-bags --hero-inventory 2`) a kick of the last hero destroys the shared key
+(`0x0145`) and the add re-activated the hero naming it -- pvpui §26.2's `ItCliApi:488`
+chain; now `hero_inventory_declare` (the load's own `0x0144` + `0x013F`, one function
+for both callers) re-declares the key FIRST when `state["hero_inv_destroyed"]` says a
+kick destroyed it, retail's own order (its load declares the hero's container BEFORE
+the block -- the first cut misquoted the tape in exactly that spot), and the kick never
+destroys a key twice (kick -> kick sends no second `0x0145`; kick -> add -> kick
+destroys a live key each time). **(2)** In the legacy rig (`HERO_ACTIVATE` off, plain
+`--hero`) the load never sends `0x0072` and skips `0x0074` for a kicked hero, so the add
+sent `0x0072` to a client holding no hero record (ChCliHero:199, heroes §11.3); the
+handler now REFUSES there with the reason logged, and the "default ON" claim is scoped
+to the commander rig (`--party`), the only rig whose load sends `0x0072`. **(3)** The
+body's formation slot compacted (`party.index(hid)`): with [5, 6, 7] and 5 kicked at
+load, the re-added 5 got hero 6's slot 0, item 210 and spot; `hero_owned_slot` (the
+position in `hero_slots()`) keys the load's loop and the add alike, a kicked hero
+leaving a hole. **The gate is named:** `0x0084D9B0` is `MissionCliGetMap()` (maprows),
+so the client sends `0x001E` -- and the kick -- from an OUTPOST only; the first cut's
+"the kick fired on loopback, so the gate is not what kept the add off our wire" is
+withdrawn, and the add's field-body arm is reachable only under
+`--party-body-in-outpost`. **Read, not assumed:** the `0x0075` worker and the `0x00F8`
+sweep's `+0x584` remover both zero `heroData->agentId` and drop the activation record
+and neither deletes the hero record (codescan on `0x0081DC50` / `0x0081D880`), so not
+re-sending `0x0073` is CORROBORATED statically; the block's `ChCliAttrib:313
+!attribState` is cleared by the kick's `0x00F8` or the load's skip -- the dependency
+`hero_kicked` guards, now written down; `0x009A`'s handler has no create-once, and the
+add sends it under `--hero-char` (the load registers party heroes only). `0x009A`,
+`0x0144`, `0x013F`, `0x0145` asserts recorded. **Smaller:** the body goes BEFORE the
+roster pair (the commander rig's load order; the first cut said "the load's order" of
+the opposite); `HEROES_PARTY_MAX` is read by `--hero` and `--party` too (the handler's
+check is defensive and unreachable from any command line); the load's `0x00B0` count
+has its revert arm, **`--party-size-no-heroes`**; `0x0018`'s bit = hero index is
+CORROBORATED on 15 of the 17 comparable connections, the 2 contrary (`[224]` with hero 6
+alone, one of them the kick tape) making it the ACCOUNT's superset, so the owned-set
+build is a labelled POLICY (docstring, flag help, studies); `schema/overrides.json`
+GAME_CMSG 30 names HERO_ADD at LOW (static only); stale comments refreshed. **The
+runsheet is rewritten**: the sandbox rig, clicks in an outpost, kick -> add -> kick, a
+zone through the portal (map travel is dropped until step 7), the real arm-off log
+line. `test_heroadd.py` floor 48 -> 78 (the rig gate, the sandbox rig's re-declaration
+and its known-bad, the owned slots with the first cut's collision shown, the unowned
+refusal made non-vacuous, the `0x00F8` dependency, the flagless-count mutation).
+test_herokick 53, test_agentlife 552, test_agtrack_guard 91, test_dispatch 54,
+test_codec 29, test_catalog 13, test_cmsgnames 16 green. **Still owed: the loopback
+click for kick and add, in an outpost under the sandbox rig.**
+
+---
+
 ### DESKWORK-D1 (step 3, fix pass) -- 2026-09-23 -- **three triage rows' evidence corrected from the tapes; the loopback denominator was a directory count; the triage test's floor is its core**
 
 Corrects the "DESKWORK-D1 (step 3)" entry below it, after two reviewers re-derived

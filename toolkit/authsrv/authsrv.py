@@ -10076,9 +10076,17 @@ GAME_CMSG_HERO_KICK = 0x001F
 # The party panel's ADD -- the kick's inverse and its static twin: the send
 # wrapper 0x0091FF00 on 38797 (0x00920880 on 38888) sits inside ChCliApi
 # 0x0080E250, which asserts `hero < HEROES` at ChCliApi:4446 and `hero != 0`
-# at :4447 and sends only when the flag word 0x84D9B0 reads is zero -- the
-# SAME gate the kick's twin 0x0080E2A0 (:4459/:4460) passes, and the kick
-# fired on loopback, so the gate is not what has kept 0x001E off our wire.
+# at :4447 and sends ONLY IN AN OUTPOST: `call 0x0084D9B0; test eax; jne skip`,
+# and 0x0084D9B0 is MissionCliGetMap() (studies/maprows/FINDINGS.md, reading
+# missionContext+0x238; MISSION_MAP_OUTPOST == 0, MISSION_MAP_GAME == 1 by
+# MsCliApi:251), so the client sends 0x001E -- and the kick's twin 0x0080E2A0
+# (:4459/:4460), which has the identical gate -- only while the instance is an
+# outpost. (The first cut called it "a flag word" and inferred from the kick
+# firing on loopback that the gate was not what kept the add off our wire;
+# the review named the function, and the inference is withdrawn: an
+# explorable loopback run has the gate CLOSED for both.) In a field the client
+# never sends either, so the add's body arm is reachable only under
+# --party-body-in-outpost.
 # Callers 0x00562FB0 (PtSearch) and 0x00577A3F (UiCtlInstance). NO retail
 # tape (0 of 96 live game connections) and NO loopback connection log (0 of
 # 1,557, decoded or UNHANDLED) carries one, so handle_hero_add is
@@ -10744,9 +10752,15 @@ HERO_AGENT_ID = 200
 # exactly CONST_KEY_COMMAND_HERO1..HERO7. Agent ids and definitions run
 # consecutively from the bases below so no two heroes collide.
 HERO_IDS = []
-# THE PARTY CAP, the client's own (the three asserts above): --hero refuses
-# more than seven at the command line, and handle_hero_add refuses the eighth
-# at run time -- the cap lives HERE, in one name, read by both.
+# THE PARTY CAP, the client's own (the three asserts above): --hero and --party
+# refuse more than seven OWNED heroes at the command line, and handle_hero_add
+# refuses an eighth in the PARTY at run time -- the cap lives HERE, in one name,
+# read by all three. The handler's check is DEFENSIVE: both command-line gates
+# cap the owned set, and an add is of an owned, KICKED hero, so when it runs the
+# party holds at most six others and the check cannot fire from any command
+# line today (the 2026-09-23 review's R7/M7; the first cut said "read by both"
+# while main() still carried the literal 7). It stays for a store or a flag that
+# ever grows the owned set past the CLI.
 HEROES_PARTY_MAX = 7
 
 
@@ -10792,10 +10806,12 @@ def kicked_heroes_set(state):
             state["charstore_game"] = store
     uuid = state.get("char_uuid", "")
     if store is not None and RESET_HERO_KICKS and store.kicked_heroes(uuid):
-        # --reset-hero-kicks: the un-kick until the ADD (c2s 0x001E) ships. A
-        # kick under --persist otherwise holds for every later run, and the
-        # sandbox always passes --persist, so without this one press of the
-        # button would drop a hero from the party for good.
+        # --reset-hero-kicks: the BULK un-kick (the per-hero one is the panel's
+        # Add, c2s 0x001E, since 2026-09-23 -- armed for the commander rig
+        # only, so in the legacy rig this is still the only way back). A kick
+        # under --persist otherwise holds for every later run, and the sandbox
+        # always passes --persist, so without this one press of the button
+        # would drop a hero from the party for good.
         was = list(store.kicked_heroes(uuid))
         for h in was:
             store.set_hero_kicked(uuid, h, kicked=False)
@@ -10823,20 +10839,46 @@ def party_hero_slots(state):
             if not hero_kicked(state, h)]
 
 
-def hero_unlock_mask():
-    """0x0018 PVP_UPDATE_UNLOCKED_HEROES's payload: the account's hero-unlock
-    bitmask, BIT = HERO INDEX, as dwords.
+def hero_owned_slot(hero_index):
+    """The hero's FORMATION slot and weapon-item offset: its position in
+    hero_slots(), the OWNED order -- stable across a kick, never compacted.
 
-    CORROBORATED on 34 live connections (c2striage-era read, 2026-09-23): retail
-    sends ONE dword -- `[64]` (bit 6) on every 2026-08 tape, where 0x0073
-    HERO_INFO names hero 6 and no other, and `[224]` (bits 5, 6, 7) from
-    20260913 on, where the loads that list every owned hero name exactly 5, 6
-    and 7. So the bits are the OWNED hero indices, and this server's owned set
-    is hero_slots(). The client's handler (0x00804670 -> 0x00807CF0 on 38797)
-    resizes its array to the count sent and copies it in -- any count is
-    accepted, its one assert is the memcpy overlap (Array:369) -- then fires
-    event 0x100000BF; what reads it is NOT FOUND statically, and the route's
-    reading that the Party Search hero list draws from it is UNVERIFIED.
+    The load's body loop and handle_hero_add both key `party_slot`, the
+    HERO_BODY_OFFSET fan-out and HERO_WEAPON_ITEM_ID + slot on this. The first
+    cut of the add used the hero's index in party_hero_slots(), which COMPACTS:
+    with heroes [5, 6, 7] and 5 kicked at load, 6 held slot 0 and item 210, and
+    re-adding 5 gave it slot 0 and item 210 too -- two bodies on one spot and a
+    second 0x0161 for a declared id, which rewrites the client's record without
+    error (probebase.py's own note on 2 and 3). Reproduced by the 2026-09-23
+    review (ENG-B3). A kicked hero leaves a HOLE in the formation rather than
+    shifting the others onto its ids; a rig with no kick is unchanged.
+    """
+    owned = [h for h, _a, _d in hero_slots()]
+    return owned.index(int(hero_index))
+
+
+def hero_unlock_mask():
+    """0x0018 PVP_UPDATE_UNLOCKED_HEROES's payload: the ACCOUNT's hero-unlock
+    bitmask, BIT = HERO INDEX, as dwords -- built here from this run's OWNED
+    set, which is a POLICY, and the labels below say which part is which.
+
+    BIT = HERO INDEX is CORROBORATED (re-derived 2026-09-23, the D1 fix pass):
+    retail sends ONE dword on all 34 live connections that carry 0x0018 --
+    `[64]` (bit 6) on 19, `[224]` (bits 5, 6, 7) on 15. 17 of the 34 also carry
+    0x0073 HERO_INFO to compare against: on 15 the bits are exactly the heroes
+    0x0073 names; on 2 (20260914T005758 :51659 and 20260916T150306 :62321, the
+    kick tape) the mask is `[224]` while 0x0073 names hero 6 alone -- so the
+    mask is a SUPERSET of the character's heroes there, i.e. the ACCOUNT's
+    unlocks, not the character's roster. (The first cut said "CORROBORATED on
+    34 connections" for the owned-set reading; it is 15 of 17, with 2 contrary.)
+    This server has no account-level hero state, so hero_slots() -- what this
+    run authors -- stands in for the account's unlocks: a CHOICE, labelled as
+    one. The client's handler (0x00804670 -> 0x00807CF0 on 38797) resizes its
+    array to the count sent and copies it in -- any count is accepted, its one
+    assert is the memcpy overlap (Array:369) -- then fires event 0x100000BF;
+    what READS the array is NOT FOUND statically, so any UI effect (the route's
+    "the Party Search hero list draws from it") is UNVERIFIED until the
+    loopback click.
 
     With no hero authored, or under --no-hero-unlock-mask, the payload stays
     OpenTyria's eight all-ones dwords VERBATIM (UPSTREAM) -- what every run
@@ -11271,20 +11313,41 @@ RESET_HERO_KICKS = False       # True (--reset-hero-kicks): clear the character'
                                # bulk un-kick (the in-game ADD, c2s 0x001E, is
                                # the per-hero one since 2026-09-23).
 HERO_ADD_ENABLED = True        # False (--no-hero-add): c2s 0x001E is ignored,
-                               # the pre-2026-09-23 behaviour. Default ON --
-                               # RECONSTRUCTION, but every message it sends is
-                               # one the load path already sends this client
-                               # for the same hero (heroes FINDINGS 38: zero
-                               # asserts in that order), the order is retail's
-                               # own load order, and the kick it inverts is
-                               # OBSERVED; the owner's ask is add AND kick from
-                               # the panel, so the default is the useful arm
-                               # and the flag is the control (test_heroadd.py).
+                               # the pre-2026-09-23 behaviour. Default ON, and
+                               # the claim behind it is scoped to the COMMANDER
+                               # rig (HERO_RIG_RETAIL and HERO_ACTIVATE: what
+                               # --party sets, and the only rig whose load
+                               # sends 0x0072 at all): there every message the
+                               # add sends is one that rig's load already sends
+                               # this client for the same hero (heroes FINDINGS
+                               # 38: zero asserts in that order), the kick it
+                               # inverts is OBSERVED, and the owner's ask is add
+                               # AND kick from the panel. In the legacy rig the
+                               # handler REFUSES (nothing sent) rather than send
+                               # 0x0072 to a client holding no hero record
+                               # (ChCliHero:199, heroes 11.3). So the default is
+                               # the useful arm, the flag is the control, and
+                               # the rig gate is what keeps ON honest
+                               # (test_heroadd.py). The first cut's rationale
+                               # said "the load" without naming the rig.
 HERO_UNLOCK_MASK = True        # False (--no-hero-unlock-mask): 0x0018 stays
                                # OpenTyria's eight all-ones dwords. Default ON:
-                               # the bit = hero-index reading is CORROBORATED
-                               # on 34 live connections (hero_unlock_mask), and
-                               # with no hero authored the payload is unchanged.
+                               # bit = hero index is CORROBORATED (15 of the 17
+                               # live connections with both 0x0018 and 0x0073;
+                               # the 2 contrary show the mask is the ACCOUNT's
+                               # superset -- hero_unlock_mask), building it from
+                               # the owned set is a labelled POLICY, and with
+                               # no hero authored the payload is unchanged.
+PARTY_SIZE_COUNTS_HEROES = True  # False (--party-size-no-heroes): the LOAD's
+                               # 0x00B0 counts 1 + henchman and leaves the
+                               # heroes out, as every run before 2026-09-23.
+                               # Default ON: OBSERVED -- retail's load sent
+                               # [68, 2] with one hero in the party and the kick
+                               # [68, 1] after (20260916T150306 :62321), so the
+                               # old value was a measured under-count, not a
+                               # rival reading. The flag is the revert arm the
+                               # convention asks for (the first cut shipped the
+                               # change with none -- ENG-M4).
 AI_MODE_FIGHT, AI_MODE_GUARD, AI_MODE_AVOID = 0, 1, 2   # 0x0015's byte (pvpui 28.5)
 AI_MODE_NAMES = {0: "Fight", 1: "Guard", 2: "Avoid Combat"}
 SPIRIT_RANGE = 2512.0          # u -- WIKI (GWW "Range"): binding rituals /
@@ -23190,6 +23253,36 @@ def handle_hero_command(values, send, state, conn_id, opcode):
                   f"[SLICE-H5]", flush=True)
 
 
+def hero_inventory_declare(send, state, why):
+    """Declare the heroes' inventory container to the item client: 0x0144
+    [HERO_INVENTORY, 0] then the equipped-items bag 0x013F for that key -- the
+    load's REQUEST_ITEMS pair (studies/pvpui/FINDINGS.md 26), in ONE place so
+    the hero ADD's re-declaration is byte for byte the load's.
+
+    Declared ONCE per key: 0x0144's handler asserts ItCliApi:2010 `!inventory`
+    and 0x013F's asserts ItCliInv:129 `!m_bagEquip` (both read statically on
+    38797, msghandler --follow), so this is called only for a key the client
+    does not hold -- at load, and from handle_hero_add after a kick's 0x0145
+    destroyed it, which is what `state["hero_inv_destroyed"]` records (set by
+    the kick that sent the 0x0145, cleared here). Without it the re-added
+    hero's 0x0072 names a key the table no longer has and the party window's
+    next equip walk asserts ItCliApi:488 (pvpui 26.2 -- the model that
+    retrodicted the 2026-08-17 crash; the 2026-09-23 review's R1/ENG-B1).
+    Sends nothing when --hero-bags is off or the key is 0: nothing to declare.
+    Returns whether it sent.
+    """
+    if not (HERO_BAGS and HERO_INVENTORY):
+        return False
+    send(GAME_SMSG_ITEM_STREAM_CREATE, [HERO_INVENTORY, 0],
+         f"ITEM_STREAM_CREATE(hero inv {HERO_INVENTORY}){why}")
+    send(GAME_SMSG_INVENTORY_CREATE_BAG,
+         [HERO_INVENTORY, BAG_TYPE_EQUIPPED, BAG_MODEL_EQUIPPED, EQUIPPED_BAG_ID,
+          EQUIPPED_SLOT_COUNT, 0],
+         f"INVENTORY_CREATE_BAG(hero equipped){why}")
+    state["hero_inv_destroyed"] = False
+    return True
+
+
 def hero_kick_batch(agent_id, player_number, party_id, inventory_id, party_size):
     """SANDBOX-N2: retail's hero-kick teardown, in retail's order.
 
@@ -23241,17 +23334,21 @@ def handle_hero_kick(values, send, state, conn_id):
       * the batch and its order -- OBSERVED, byte for byte against the tape;
       * the party SIZE -- OBSERVED for "heroes count": the same tape's load
         sent 0x00B0 [68, 2] with one hero in the party and [68, 1] after the
-        kick. The LOAD path here still sends 1 + henchman without counting
-        heroes (its `_party_size`); that under-count is named in PLAN.md §8.1
-        rather than fixed under this arc;
+        kick. The LOAD path counts heroes the same way since 2026-09-23
+        (`_party_size`, behind --party-size-no-heroes);
       * 0x0145 -- OBSERVED for retail's PER-HERO key (96 was Koss's own
         container, 0x0144 [96, 1] at load). OURS is ONE --hero-inventory key
         shared by every hero slot (HERO_BAGS's comment), and the client's
         0x0145 handler (0x008462B0 on 38797) asserts `inventory` at
         ItCliApi:2024 on a key it cannot find -- undeclared (the default rig:
-        --hero-bags off, key 0) or already destroyed (a second kick). So the
-        row goes out ONLY when HERO_BAGS declared the key and no remaining
-        party hero still names it; the omission is logged, never silent;
+        --hero-bags off, key 0) or already destroyed. So the row goes out ONLY
+        when HERO_BAGS declared the key, no remaining party hero still names
+        it, and no earlier kick already destroyed it -- `state[
+        "hero_inv_destroyed"]`, set here and cleared when the ADD re-declares
+        the key (hero_inventory_declare), is what makes "already destroyed"
+        knowable, so kick -> add -> kick destroys a LIVE key each time and
+        kick -> kick never destroys one twice; the omission is logged, never
+        silent;
       * a BODY -- UNOBSERVED. The retail witness was an outpost (0x0199 map
         449, explorable byte 0) and its hero had no 0x0020 create among the
         connection's 130, so the tape says nothing about a hero with a body,
@@ -23297,8 +23394,14 @@ def handle_hero_kick(values, send, state, conn_id):
               f"{HERO_INVENTORY} is one key shared by every hero slot and "
               f"{len(remaining)} party hero(es) still name it (retail's key is "
               f"per hero) [SANDBOX-N2]", flush=True)
+    elif state.get("hero_inv_destroyed"):
+        print(f"[c{conn_id}] HERO_KICK: no 0x0145 -- inventory key "
+              f"{HERO_INVENTORY} was destroyed by an earlier kick on this "
+              f"connection and no add has re-declared it; the client asserts "
+              f"ItCliApi:2024 on a key it cannot find [SANDBOX-N2]", flush=True)
     else:
         inv = HERO_INVENTORY
+        state["hero_inv_destroyed"] = True
     for op, vals, label in hero_kick_batch(_haid, PLAYER_NUMBER, 1, inv,
                                            party_size):
         send(op, vals, label)
@@ -23312,58 +23415,107 @@ def handle_hero_kick(values, send, state, conn_id):
 
 def handle_hero_add(values, send, state, conn_id):
     """GAME_CMSG 0x001E HERO_ADD: the party panel's add-hero click -- the
-    kick's inverse (SANDBOX-N2, DESKWORK-D1 step 4).
+    kick's inverse (SANDBOX-N2, DESKWORK-D1 step 4; corrected by the fix pass
+    of the same day after two reviews, and every correction is labelled).
 
-    RECONSTRUCTION END TO END, and every label below says which kind. No
-    retail tape carries a c2s 0x001E (0 of 96 live game connections) and no
-    loopback connection log does either (0 of 1,557) -- the send-site census puts its
-    wrapper at 0x0091FF00 on 38797 inside ChCliApi 0x0080E250 (asserts
-    `hero < HEROES` :4446, `hero != 0` :4447; sent only when the flag word
-    0x84D9B0 reads is zero, the SAME gate the kick's twin passes; callers
-    PtSearch 0x00562FB0 and UiCtlInstance 0x00577A3F). values[0] is the header
-    word; values[1] is the hero INDEX -- by the wrapper's own bounds and the
-    kick's two witnesses ([6] retail, [3] loopback), the shape 0x001F shares.
+    RECONSTRUCTION END TO END. No retail tape carries a c2s 0x001E (0 of 96
+    live game connections) and no loopback connection log does either (0 of
+    1,557) -- the send-site census puts its wrapper at 0x0091FF00 on 38797
+    inside ChCliApi 0x0080E250 (asserts `hero < HEROES` :4446, `hero != 0`
+    :4447), which sends ONLY when MissionCliGetMap() == MISSION_MAP_OUTPOST
+    (`call 0x0084D9B0; test eax; jne skip`; studies/maprows names the function,
+    MsCliApi:251 fixes GAME == 1) -- the kick's twin 0x0080E2A0 has the same
+    gate, so the client sends BOTH only in an outpost; callers PtSearch
+    0x00562FB0 and UiCtlInstance 0x00577A3F. values[0] is the header word;
+    values[1] is the hero INDEX -- by the wrapper's own bounds and the kick's
+    two witnesses ([6] retail, [3] loopback), the shape 0x001F shares.
 
     THE REFUSALS send NOTHING. What retail's client expects back from a refused
     add is NOT FOUND (no tape); the client's own asserts already refuse index 0
     and >= 40 before sending, so what reaches us is a legal index that is
-    either not ours, already in, or one too many:
+    either not ours, already in, one too many, or arrives in a rig the add has
+    no arm for:
       * not an OWNED hero (not in hero_slots());
       * not KICKED (already in the party -- the kick's `already kicked` mirror);
       * the party already holds HEROES_PARTY_MAX heroes (the client's own cap,
-        PtPlayer:332 / GmHeroCommander:214; --hero refuses it at the command
-        line and this is the run-time half).
+        PtPlayer:332 / GmHeroCommander:214) -- DEFENSIVE: --hero and --party
+        cap the OWNED set at the same name, and an add is of an owned kicked
+        hero, so this cannot fire from any command line today;
+      * the LEGACY rig (not HERO_RIG_RETAIL, or HERO_ACTIVATE off -- plain
+        `--hero N` is the latter). That rig's load sends 0x0074 for PARTY heroes
+        only and never 0x0072, so after a persisted kick and a zone the client
+        holds NO hero record for the kicked hero and the batch below would
+        assert ChCliHero:199 `charHeroData` on its 0x0072 (heroes 11.3; the
+        review's ENG-B2/R5 -- the first cut sent it regardless). The add is
+        armed for the COMMANDER rig, which is what --party sets and the only
+        rig whose load sends 0x0072 at all; --reset-hero-kicks stays the way
+        back in the legacy rig.
 
-    THE BATCH is the load pipeline's own messages for this hero, in the order
-    retail's LOAD installs the same state (20260916T150306 :62321, t=151.746 to
-    151.784: 0x0073, the hero agent's 0x0037 0x00B7 0x00DA 0x0065 0x003A, 0x0072
-    at 151.747, then 0x00B0 [68, 2] at 151.784 and the roster row 0x01C2 inside
-    the build window):
+    THE BATCH, in the commander rig, mirrors that rig's OWN LOAD for one hero
+    (`_handle_request_players` under `_rig_retail`, the order every sandbox run
+    has exercised) with the size/row pair adjacent as the henchman add has it:
+      0. The heroes' inventory container, re-declared FIRST if a kick's 0x0145
+         destroyed it (state["hero_inv_destroyed"]; hero_inventory_declare, the
+         load's own 0x0144 + 0x013F). Retail's load declares the hero's
+         container BEFORE its block (20260916T150306 :62321 at 151.746: 0x0144
+         [96, 1], 0x013F [96, ...], seven items into 96, THEN hero 379's block
+         and 0x0072 [6, 379, 96, 2]); 0x0072 stores the key at the activation
+         record +8 and the party window's row resolves it through
+         ItCliApi:488 (pvpui 26.2). Declared once per key (ItCliApi:2010), so
+         only after a destroy. Nothing to re-declare with --hero-bags off.
       1. `hero_character_block` -- 0x0037, 0x00B7, 0x00DA, [0x0065], the maxima,
          0x009C, prop 36, 0x00A6, 0x003A. The same function the load calls, so
          the gates it clears (heroes FINDINGS 14: attribState created by 0x0037,
          ConstChar:1296 by 0x00B7 for the hero's agent, the 0x0037 -> 0x00B7 ->
-         0x003A order) are cleared the same way, and it goes FIRST because the
-         commander is created SYNCHRONOUSLY on 0x01C2 from state these install
-         (heroes FINDINGS 38, the ordering blocker: zero asserts in this order).
-      2. 0x0072 HERO_ACTIVATE -- after the block, as at load (OBSERVED order).
-      3. 0x00B0 PLAYER_PARTY_SIZE with the hero COUNTED, BEFORE the roster row:
-         retail's load sends [68, 2] then 0x01C2, and the only mid-session add
-         on any tape -- the henchman add 0x009F -- answers 0x00B0 THEN 0x01BF,
-         3 of 3 (c2striage). The kick goes row then size; the add mirrors the
-         henchman, not the kick. RECONSTRUCTION by analogy.
-      4. 0x01C2 PARTY_HERO_ADD, BARE -- outside a party-build window, the way
-         the kick's 0x01C3 and the henchman's 0x01BF arrive (both OBSERVED
-         bare). Read statically 2026-09-23: the handler (0x00856B80 ->
-         0x00858F50) looks the party up by id, appends the row, fires event
-         0x1000011E; its only assert in range is Array:369 (a memcpy overlap),
-         no window gate. RECONSTRUCTION: no tape shows a bare 0x01C2.
-      5. In a FIELD (party_bodies_here), the body -- `hero_body_create`, the
-         load path's own, beside the player. A town gets none, as at load.
-    0x0073 HERO_INFO is NOT re-sent: the load sends it for every OWNED hero,
-    kicked or not (the kick tape's next two loads), so the record exists, and
-    the kick destroyed no hero data (its batch touches the agent, the roster
-    row and the inventory only).
+         0x003A order) are cleared the same way, and it goes BEFORE the roster
+         row because the commander is created SYNCHRONOUSLY on 0x01C2 from
+         state these install (heroes FINDINGS 38, the ordering blocker).
+         0x0037's creator asserts ChCliAttrib:313 `!attribState` (heroes 13.1),
+         so the block is legal ONLY for an agent whose attribState is gone --
+         which `hero_kicked` guarantees: a kick THIS connection sent 0x00F8,
+         whose sweep removes the agent's +0xAC attribState (pvpui 31.1), and a
+         kick seeded from the store means the load skipped the block for this
+         hero. That dependency is why the kicked check above is load-bearing
+         and not just a mirror (the review's R6/ENG-M2).
+      2. 0x0072 HERO_ACTIVATE -- after the block, as at load (retail: 0x003A at
+         151.747 then 0x0072). 0x0073 HERO_INFO is NOT re-sent, and the reason
+         is now READ rather than assumed: our load sends 0x0073 for every OWNED
+         hero, kicked or not, and neither the kick's 0x0075 (worker 0x0081DC50)
+         nor its 0x00F8 sweep's +0x584 remover (0x0081D880) deletes the hero
+         record -- both find the agent-keyed ACTIVATION record, look the hero
+         record up by its hero id (asserting ChCliHero:291 / :119 `charHeroData`
+         if absent), write heroData->agentId = 0, and memmove the activation
+         record out of its 36-byte-stride array (codescan --dis, 38797). So
+         after a kick the record 0x0072 asserts on (:199) exists with agentId 0,
+         and 0x0072 -- the only writer of heroData->agentId -- re-creates the
+         activation record. CORROBORATED statically; the loopback click is
+         what makes it OBSERVED.
+      3. 0x009A CHAR_TABLE_VALUE for the hero's agent, under HERO_CHAR -- the
+         load's char-by-id registration (pvpui 27: Array:587 on a commander
+         click for an id nothing grew the table past). A zone-load with the
+         hero kicked skips it (the load registers party heroes only), so the
+         re-added hero would be unregistered without this (ENG-M6). Retail
+         sends its hero's 0x009A [379, 100 << 24] at 151.784, before 0x00B0 and
+         the build window; the handler (0x0091EC40 -> 0x00812640) has bounds
+         asserts only, no create-once.
+      4. In a FIELD (party_bodies_here), the body -- `hero_body_create`, the
+         load path's own, at the hero's OWNED formation slot (hero_owned_slot,
+         never its index among the party heroes -- ENG-B3), BEFORE the roster
+         row, which is where the commander rig's load puts it (0x0020 at
+         index 52 of that load, 0x01C2 at 61; the first cut sent the body after
+         the row and called that the load's order). RECONSTRUCTION either way:
+         the retail witness was an outpost with no body, and since the client
+         sends 0x001E only in an outpost this arm is reachable only under
+         --party-body-in-outpost. A town gets no body, as at load.
+      5. 0x00B0 PLAYER_PARTY_SIZE with the hero COUNTED, then
+      6. 0x01C2 PARTY_HERO_ADD, BARE and ADJACENT -- the only mid-session add
+         on any tape, the henchman's (0x009F, 3 of 3), answers 0x00B0 THEN the
+         0x01BF row in one chunk with no build window; the kick goes row then
+         size, so the add mirrors the henchman, not the kick (RECONSTRUCTION by
+         analogy). The 0x01C2 handler (0x00856B80 -> 0x00858F50) looks the
+         party up by id, appends the row, fires event 0x1000011E; its only
+         assert in range is Array:369, no window gate -- no tape shows a bare
+         0x01C2, so its acceptance is RECONSTRUCTION too.
 
     Under --persist the stored kick is cleared, so the next zone-in parties
     the hero again -- the kick's `set_hero_kicked` in reverse. The hero's
@@ -23387,6 +23539,15 @@ def handle_hero_add(values, send, state, conn_id):
               f"(HEROES_PARTY_MAX={HEROES_PARTY_MAX}, PtPlayer:332); nothing "
               f"sent [SANDBOX-N2]", flush=True)
         return
+    if not (HERO_RIG_RETAIL and HERO_ACTIVATE):
+        print(f"[c{conn_id}] HERO_ADD({hid}) refused: the load ran the LEGACY "
+              f"hero rig (HERO_RIG_RETAIL={HERO_RIG_RETAIL}, "
+              f"HERO_ACTIVATE={HERO_ACTIVATE}) -- it sends no 0x0072 and no hero "
+              f"record for a kicked hero, so the add's 0x0072 would assert "
+              f"ChCliHero:199; the add is armed for the commander rig (--party, "
+              f"or --hero-activate without --hero-rig-legacy); nothing sent -- "
+              f"--reset-hero-kicks is the un-kick here [SANDBOX-N2]", flush=True)
+        return
     _hid, _haid, _hdef = slot
     kicked_heroes_set(state).discard(hid)
     (state.get("hero_cmd") or {}).pop(_haid, None)
@@ -23395,6 +23556,14 @@ def handle_hero_add(values, send, state, conn_id):
                                                 kicked=False)
         print(f"[c{conn_id}] PERSIST: hero {hid} re-added -- the stored kick is "
               f"cleared, so the next zone-in parties it [SANDBOX-N2]", flush=True)
+    # 0. the inventory container a kick destroyed, back first (retail's load
+    #    declares the hero's container before its block).
+    if HERO_BAGS and HERO_INVENTORY and state.get("hero_inv_destroyed"):
+        hero_inventory_declare(send, state, " [HERO_ADD: re-declared after the "
+                                            "kick's 0x0145]")
+        print(f"[c{conn_id}] HERO_ADD: inventory key {HERO_INVENTORY} re-declared "
+              f"(0x0144 + 0x013F) -- the kick's 0x0145 destroyed it and 0x0072 "
+              f"is about to name it (ItCliApi:488) [SANDBOX-N2]", flush=True)
     # 1. the character block (the load pipeline's own).
     for op, vals, label in hero_character_block(state, _haid, _hid):
         send(op, vals, label + " [HERO_ADD]")
@@ -23405,34 +23574,36 @@ def handle_hero_add(values, send, state, conn_id):
         _haid, HERO_INVENTORY,
         (hero_command(state, _haid)["ai_mode"] if PARTY_COMMANDS else HERO_AI_MODE))
     send(op, vals, f"{label} [HERO_ADD]")
-    # 3. the size, hero counted, BEFORE the row (retail's load; the henchman add).
-    party = party_hero_slots(state)
-    party_size = 1 + (1 if HENCHMAN is not None else 0) + len(party)
-    send(GAME_SMSG_PLAYER_PARTY_SIZE,
-         agents.player_party_size(PLAYER_NUMBER, party_size),
-         f"PLAYER_PARTY_SIZE({party_size}) -- the party after the add [HERO_ADD]")
-    # 4. the roster row, bare -- the same arguments the load path's build uses.
-    op, vals, label = agents.party_hero_add(1, PLAYER_NUMBER, _haid, _hid, HERO_MSG14)
-    send(op, vals, f"{label} [HERO_ADD, bare -- RECONSTRUCTION]")
-    # 5. the body, in a field only.
+    # 3. the char-by-id registration, as the load sends it under --hero-char.
+    if HERO_CHAR:
+        send(GAME_SMSG_CHAR_TABLE_VALUE, [_haid, 100 << 24],
+             f"CHAR_TABLE_VALUE(hero agent {_haid}) [HERO_ADD]")
+    # 4. the body, in a field only, BEFORE the roster row (the load's order).
     if HERO_BODY and party_bodies_here(state):
         if _haid in state.get("agents", {}):
             print(f"[c{conn_id}] HERO_ADD: agent {_haid} is already in the world; "
                   f"no second body (the kick removes it, so this is a rig that "
                   f"never kicked the body) [SANDBOX-N2]", flush=True)
         else:
-            _slot = [h for h, _a, _d in party].index(_hid)
             _pos = state.get("pos") or tuple(state.get("spawn_point", (0.0, 0.0, 0))[:2])
             _plane = int(state.get("plane", 0) or 0)
-            hero_body_create(send, state, _slot, _hid, _haid, _hdef,
+            hero_body_create(send, state, hero_owned_slot(_hid), _hid, _haid, _hdef,
                              (float(_pos[0]), float(_pos[1])), _plane, conn_id)
     else:
         print(f"[c{conn_id}] HERO_ADD: map {state.get('map_id')} is a town or "
               f"--hero-body is off -- roster, activation and size only, as at "
               f"load [SANDBOX-N2]", flush=True)
+    # 5. the size, hero counted, then 6. the roster row, bare and adjacent --
+    #    the henchman add's shape (0x00B0 then the row, one chunk, 3 of 3).
+    party = party_hero_slots(state)
+    party_size = 1 + (1 if HENCHMAN is not None else 0) + len(party)
+    send(GAME_SMSG_PLAYER_PARTY_SIZE,
+         agents.player_party_size(PLAYER_NUMBER, party_size),
+         f"PLAYER_PARTY_SIZE({party_size}) -- the party after the add [HERO_ADD]")
+    op, vals, label = agents.party_hero_add(1, PLAYER_NUMBER, _haid, _hid, HERO_MSG14)
+    send(op, vals, f"{label} [HERO_ADD, bare -- RECONSTRUCTION]")
     print(f"[c{conn_id}] HERO_ADD: hero {hid} (agent {_haid}) back in the party; "
           f"size now {party_size} [SANDBOX-N2]", flush=True)
-
 
 def party_flag_point(state, agent_id, agent):
     """Where a party body is FLAGGED to stand, or None: its own hero flag
@@ -27640,7 +27811,8 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     # order-independent (it opens the store itself), so the
     # kicked set is right here too.
     _party_size = (1 + (0 if HENCHMAN is None else 1)
-                   + len(party_hero_slots(state)))
+                   + (len(party_hero_slots(state))
+                      if PARTY_SIZE_COUNTS_HEROES else 0))   # --party-size-no-heroes reverts
     send(GAME_SMSG_PLAYER_PARTY_SIZE,
          agents.player_party_size(PLAYER_NUMBER,
                                   _party_size),
@@ -28496,13 +28668,16 @@ def _handle_request_players(send, state, conn_id, stop, rec):
               f"the hero bodies are withheld (stock shows a hero's model in "
               f"a field only); roster, activation, level and vitals still "
               f"go out [SLICE-H2b]", flush=True)
-    for _i, (_hid, _haid, _hdef) in (
-            enumerate(party_hero_slots(state))         # SANDBOX-N2: a kicked hero gets no body
-            if HERO_BODY and party_bodies_here(state) else ()):
+    for _hid, _haid, _hdef in (party_hero_slots(state)   # SANDBOX-N2: a kicked hero gets no body
+                               if HERO_BODY and party_bodies_here(state) else ()):
         # The body itself lives in hero_body_create, shared with the in-game
         # ADD (handle_hero_add, SANDBOX-N2) so the two are one implementation.
-        hero_body_create(hsend, state, _i, _hid, _haid, _hdef, pos, cfg[2],
-                         conn_id)
+        # Its slot is the hero's OWNED position (hero_owned_slot), never its
+        # index among the party heroes: a kicked hero leaves a hole, so the
+        # add can hand it its own slot and weapon item id back instead of a
+        # neighbour's (the enumerate() this replaced compacted -- ENG-B3).
+        hero_body_create(hsend, state, hero_owned_slot(_hid), _hid, _haid, _hdef,
+                         pos, cfg[2], conn_id)
     # THE HERO'S ATTRIBUTE STATE, and it is not a new
     # mechanism -- it is the pair the PLAYER's own agent
     # already gets, addressed to the hero's agent instead.
@@ -29653,25 +29828,19 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # stalls again they are the next candidates.
                         send(GAME_SMSG_ITEM_STREAM_CREATE, [1, 0],
                              "ITEM_STREAM_CREATE")
-                        if HERO_BAGS and HERO_INVENTORY:
-                            # The hero's container, keyed to what 0x0072 will
-                            # carry in field 3. 0x0144's handler is the ONLY
-                            # caller of the inventoryTable insert, so this is
-                            # the one message that can make the party window's
-                            # equip walk find the hero (ItCliApi:488). The bag
-                            # id reuses EQUIPPED_BAG_ID legally: ItCliBag:167's
-                            # collision search walks the OWNING inventory's
-                            # m_bagArray, so ids are per-inventory.
-                            # studies/pvpui/FINDINGS.md 26.
-                            send(GAME_SMSG_ITEM_STREAM_CREATE,
-                                 [HERO_INVENTORY, 0],
-                                 f"ITEM_STREAM_CREATE(hero inv "
-                                 f"{HERO_INVENTORY})")
-                            send(GAME_SMSG_INVENTORY_CREATE_BAG,
-                                 [HERO_INVENTORY, BAG_TYPE_EQUIPPED,
-                                  BAG_MODEL_EQUIPPED, EQUIPPED_BAG_ID,
-                                  EQUIPPED_SLOT_COUNT, 0],
-                                 "INVENTORY_CREATE_BAG(hero equipped)")
+                        # The hero's container, keyed to what 0x0072 will
+                        # carry in field 3. 0x0144's handler is the ONLY
+                        # caller of the inventoryTable insert, so this is
+                        # the one message that can make the party window's
+                        # equip walk find the hero (ItCliApi:488). The bag
+                        # id reuses EQUIPPED_BAG_ID legally: ItCliBag:167's
+                        # collision search walks the OWNING inventory's
+                        # m_bagArray, so ids are per-inventory.
+                        # studies/pvpui/FINDINGS.md 26. The pair lives in
+                        # hero_inventory_declare, shared with the hero ADD,
+                        # which re-declares it after a kick's 0x0145
+                        # (SANDBOX-N2); off or key 0 sends nothing, as before.
+                        hero_inventory_declare(send, state, "")
                         # THE PLAYER'S BAGS, and they belong HERE rather than
                         # in a probe. Sending 0x013F AFTER spawn produced no
                         # grid at all (`20260819T141246`, a backpack sent 40 s
@@ -33059,7 +33228,7 @@ def main():
         _pheroes = _prow.get("heroes")
         if _pheroes is not None:
             _pheroes = [dict(h) for h in _pheroes]
-            if len(_pheroes) > 7:
+            if len(_pheroes) > HEROES_PARTY_MAX:
                 raise SystemExit(f"--party {a.party!r}: {len(_pheroes)} heroes; "
                                  f"the client's cap is 7 (PtPlayer:332)")
             for _i, _h in enumerate(_pheroes, 1):
@@ -34213,6 +34382,12 @@ def main():
         HERO_UNLOCK_MASK = False
         print("[party] --no-hero-unlock-mask: 0x0018 carries OpenTyria's eight "
               "all-ones dwords, as every run before 2026-09-23.", flush=True)
+    if a.party_size_no_heroes:
+        global PARTY_SIZE_COUNTS_HEROES
+        PARTY_SIZE_COUNTS_HEROES = False
+        print("[party] --party-size-no-heroes: the load's 0x00B0 counts 1 + "
+              "henchman and leaves the heroes out, as every run before "
+              "2026-09-23 (retail's load counted them: [68, 2]).", flush=True)
     if a.party_no_fight:
         global PARTY_FIGHTS
         PARTY_FIGHTS = False
@@ -35505,7 +35680,7 @@ def main():
         global HERO, HERO_IDS, HERO_BODY, HERO_SWAP, HERO_ACTIVATE, HERO_INFO
         global HERO_BODY_NPC, HERO_ACTIVATE_FIRST, HERO_PIPELINE_FIRST
         HERO_IDS = [int(x, 0) for x in str(a.hero).split(",")]
-        if len(HERO_IDS) > 7:
+        if len(HERO_IDS) > HEROES_PARTY_MAX:
             raise SystemExit(
                 f"--hero got {len(HERO_IDS)} heroes; the client's own cap is 7 "
                 f"(PtPlayer:332 and GmHeroCommander:214 both `cmp 7`, and "
