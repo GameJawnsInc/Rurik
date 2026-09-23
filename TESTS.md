@@ -6152,7 +6152,51 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   client -- deliberately, and it constrains what may be asserted: the capture tree is
   append-only and GROWS WHILE THE TEST RUNS (`0x00C1` went 363 to 429 between two
   reads minutes apart), so every corpus count above is dated prose and not one of them
-  is an assertion. 45 checks, ~1 s),
+  is an assertion. **Section 10, 2026-09-23 (DESKWORK-D1 step 3), is the REVERSE
+  guard**: section 7 asks of every NAMED opcode and could not ask about one nothing
+  had named, and ArenaNet's own client sent eighteen of those over the 96 live game
+  connections -- every one falling off the chain on loopback too (`0x0008` on 1,027
+  connections, `0x000D` on 1,384). It reads `retail_c2s.json` beside the test -- the
+  census `c2striage.py --write` commits, a FILE in git so this test stays vault-free
+  -- and reddens on any opcode retail sent that is neither handled, named, nor on
+  `DROPPED_ON_PURPOSE` (26 rows now: the eight, fifteen UNNAMED rows each carrying
+  what was measured and what would name it, and three named this step and dropped
+  until their arm -- `0x009F` HENCHMAN_ADD, `0x00B1` MAP_TRAVEL, `0x004F`
+  ITEM_MOVE). The orphan rule widens with it: a row may answer "why is this opcode
+  RETAIL SENDS dropped". Floors on the file (57 opcodes, 96 connections -- the corpus
+  is append-only) guard the vacuity; the known-bad arms are a census carrying an
+  undecided `0x00FE`, which the predicate must name alone, and the `0x0008` row
+  deleted, which must name `0x0008` alone. `test_c2striage.py` is what keeps the
+  file honest against the vault. 54 checks, ~1 s),
+  `toolkit/authsrv/test_c2striage.py` (**2026-09-23, DESKWORK-D1 step 3: retail's
+  c2s triage**, `studies/cmsg/FINDINGS.md` §DESKWORK-D1. `c2striage.py` is the
+  committed recipe for "which client actions does our server ignore": over every
+  origin=LIVE game connection (`livewire.live_connections`), per c2s opcode the
+  count, captures, connections, whether the schema names it, whether the dispatch
+  chain handles it (`test_dispatch`'s syntax-tree harvester, imported), whether the
+  drop is on purpose, and retail's FIRST s2c within 1.5 s in two columns -- strict,
+  and with the `0x001E` clock skipped, because the clock follows everything within
+  20-500 ms and is never an answer. §1 drives `census_connection` on a SYNTHETIC
+  stream, which is the check the vault cannot give: on a real tape every c2s has
+  some s2c after it, so a walker pointed one message off would still fill every
+  column -- the clock is taken in the strict column and skipped in the other, a
+  reply 2.0 s out is none, a trailing c2s is none, a 0 s window empties every
+  column (known-bad) and a 9 s window takes the straggler. §2 the live census
+  reaches the 2026-09-23 floors (96 connections, 57 opcodes, 13,320 c2s), every
+  receipt closes, and two tape anchors hold -- the henchman add `0x009F` answers
+  `0x00B0` first 3 of 3 and MAP_TRAVEL `0x00B1` answers `0x01D9` first on 9 of 10 --
+  while the kick's first non-clock s2c is NOT its `0x0075` (an outpost `0x0029` at
+  21 ms beats the batch at 42 ms), which is why the column is a CORRELATION and
+  `test_herokick` pins the batch by bytes. §3 the committed `retail_c2s.json`
+  against the vault: every live opcode is in it (a new tape with a new opcode reddens
+  this until `--write` runs and the opcode is triaged), no committed count exceeds
+  the live one, the tool and window are named; known-bad: a table missing `0x0009`
+  names `0x0009`. §4 ACCEPTANCE (c): `untriaged()` is EMPTY over the file and over
+  the live census, the three names of this step are named-and-dropped-with-reason,
+  and removing the `0x0008` row names `0x0008` alone. §5 an empty root is REFUSED
+  with exit 2 and a source with no dispatch chain yields None. §6 the send-site
+  census joins on the pinned build (`0x001F` -> `0x0091FF30`) and invents no wrapper
+  for `0x000D`. Vault-gated sections skip loudly. Floor 34, ~20 s),
   `toolkit/authsrv/test_population.py` (what LIVES in an authored area -- the
   `content/world.toml` spawn rows carrying `area = NAME`, served by
   `authsrv --area`. R5's criterion is "a new zone in TOML, hot-reloaded,

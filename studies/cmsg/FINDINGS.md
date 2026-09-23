@@ -729,3 +729,96 @@ n=1). The add (`0x001E`) stays static-only — its wrapper is `0x0091FF00`, no
 retail tape carries it — and is the next step. **Still owed: one loopback click**
 on a real client; the wire, the store and the source locks are proven offline
 (`test_herokick.py`, floor 52).
+
+### The retail c2s triage — `toolkit/authsrv/c2striage.py` (DESKWORK-D1 step 3, 2026-09-23)
+
+**The question.** Which client actions does our server ignore? Every earlier answer
+was a one-off script over one capture (`test_dispatch.py`'s own docstring quotes a
+2026-08-13 sweep of the LOOPBACK corpus), and `test_dispatch` §7 could only ask of
+opcodes something had already NAMED. This is the committed recipe, over ArenaNet's
+own wire: `python toolkit/authsrv/c2striage.py` walks every origin=LIVE game
+connection (`livewire.live_connections`, the refuse-to-mix loader) and, per c2s
+opcode, counts sends / captures / connections, asks the schema for a name, asks the
+dispatch chain for an arm (the same syntax-tree harvester `test_dispatch` uses,
+imported from it), asks `test_dispatch.DROPPED_ON_PURPOSE` — the ONE place a drop
+reason lives — whether the drop is deliberate, and records retail's first s2c within
+1.5 s in two columns: strict, and with `0x001E` WORLD_SIMULATION_TICK skipped,
+because the clock follows everything within 20–500 ms and is never an answer.
+`--static` joins the send-site census (`sendsites.py`) on the pinned build for the
+wrapper VA, its caller count and the nearest assert module — a LABEL for where the
+client sends from, not a name. `--write` commits the census to
+`toolkit/authsrv/retail_c2s.json` (counts and replies only; status and name are read
+off the tree at test time so the file cannot go stale); a zero-connection run is
+REFUSED with exit 2.
+
+**MEASURED 2026-09-23: 96 live game connections over 29 captures (of 35 origin=LIVE),
+13,320 c2s messages, 57 distinct GAME_CMSG opcodes; 0 connections with a receipt
+shortfall.** 31 handled, 8 already on the allowlist, **18 UNTRIAGED** — seen on
+retail, unhandled, unnamed, and not dropped on purpose (the route estimated ~19):
+
+| opcode | sends | conns | shape | first s2c, clock skipped | wrapper (38797) / module | decision |
+|---|---|---|---|---|---|---|
+| `0x0008` | 84 | 84 | header only | none 66 of 84 | `0x00491D30` GcGameCmd, STATIC buffer | dropped, unnamed |
+| `0x000B` | 29 | 29 | blob16, 4 dwords, string16 ×2 | load burst | `0x00491820` (the `0x000A` builder) | dropped, unnamed — the OS name and client version string; `0x000A`'s companion |
+| `0x000C` | 2 | 2 | header only | none consistent | — | dropped, n=2 |
+| `0x000D` | 31 | 30 | header only | `0x019F` 11 | NOT FOUND on the game channel | dropped — a load-sequence marker between `0x0090` and `0x0092` |
+| `0x0013` | 2 | 1 | header only | `0x00A2` 1 | `0x0091FC30` CharMsg, 0 direct callers | dropped, n=2 |
+| `0x0023` | 1 | 1 | byte, agent_id | `0x0034` | `0x00920030` CharMsg | dropped, n=1 |
+| `0x0041` | 1 | 1 | agent_id, byte | movement | `0x00920800` CharMsg | dropped, n=1 |
+| `0x0044` | 1 | 1 | dword | `0x009F` | `0x009208B0` CharMsg | dropped, n=1 |
+| `0x0045` | 5 | 3 | array8 (one fixed 11-byte blob) | none 2 of 5 | `0x00920980` CharMsg, 1 caller | dropped — a fixed client-state report |
+| **`0x004F`** | 4 | 2 | byte, word, byte | **`0x014B` 3 of 4, `0x006F` 4 of 4 in sequence** | `0x00920DE0` CharMsg | **NAMED `ITEM_MOVE` (medium)**; dropped until step 8 |
+| `0x0051` | 6 | 2 | agent_id, byte | agent updates | `0x00920E90` CharMsg | dropped — bursts on one low agent id |
+| `0x0063` | 3 | 3 | header only | `0x009F`/`0x0020` | `0x00921950` CiCommand | dropped — a load-time marker our client never sends |
+| `0x0085` | 2 | 2 | word | `0x015C` 2 of 2 in sequence | `0x0084C860` ItCliMsg | dropped — PvP equipment panel, owner's want first |
+| `0x0086` | 6 | 2 | word, word, array16, 3 bytes | `0x015D` in sequence | `0x0084C890` | dropped — the pair's other half |
+| `0x0089` | 5 | 5 | header only | load burst | `0x008526E0` | dropped — the 5 character-creation connections |
+| `0x008B` | 5 | 5 | string16(20), blob8, dword | `0x0099` 5 of 5, then `0x0188` | `0x00852740` MsCliMsg | dropped — character creation's name commit (the string is a typed character name) |
+| **`0x009F`** | 3 | 1 | word agent_id | **`0x00B0` 3 of 3, then `0x01BF`** | `0x0085BE40`, 1 caller | **NAMED `HENCHMAN_ADD` (medium)**; dropped until step 5 |
+| **`0x00B1`** | 10 | 10 | word, byte, word, byte, byte | **`0x01D9` 9 of 10, then `0x01A5`, `0x0099`** | `0x0085C280`, 0 direct callers | **NAMED `MAP_TRAVEL` (medium)**; dropped until step 7 |
+
+Loopback counts for the same opcodes (UNHANDLED events, one per connection per
+opcode, 3,107 gamesrv captures): `0x0008` 1,027, `0x000B` 1,395, `0x000C` 76,
+`0x000D` 1,384, `0x0023` 2, `0x0044` 1, `0x0045` 8; the other eleven our client has
+never sent. So four of the eighteen had been falling off the dispatch chain on
+nearly every loopback connection for weeks, unremarked — the class the reverse
+guard exists for.
+
+**Three names, each from an OBSERVED reply chain, each medium, each ALSO on the
+allowlist until its arm ships** (a name in `overrides.json` obliges an arm or a
+reason — `test_dispatch` §7): `0x009F` HENCHMAN_ADD — `[agent]` of the outpost
+henchman, answered within 31–132 ms by `0x00B0` PLAYER_PARTY_SIZE and THEN the
+`0x01BF` roster row, 3 of 3 on `20260819T132414 :53419` (**size before row**; the
+hero KICK answers row `0x01C3` then size, so the hero ADD below mirrors the
+henchman, not the kick); `0x00B1` MAP_TRAVEL — `[map_id, 0, 0, 0, 1]` answered by
+`0x01D9 [2, 1, '']` then the transfer pair `0x01A5`/`0x0099`, 10 of 10 in sequence,
+followed by c2s `0x0008` every time; `0x004F` ITEM_MOVE — `[byte, word, byte]`
+answered by `0x014B` ITEM_CHANGE_LOCATION then `0x006F`, 4 of 4, with WHICH field is
+the source slot, the bag and the target UNVERIFIED. The route's "one caller
+`0x004A791F`" for the travel wrapper is not what the census reads — `0x0085C280` has
+NO direct caller on 38797 (reached through a pointer); the survey text stays
+unverified there. The fifteen others are UNNAMED on purpose: a name is DESKWORK-D2's
+product, and each allowlist row says what was measured and what would name it.
+
+**What the first-reply column is and is not.** A CORRELATION on a busy wire. The
+kick's own row shows it: c2s `0x001F` at t=158.676 is followed at 21 ms by an
+outpost `0x0029` (some other agent moving) and only at 42 ms by its batch, so even
+the clock-skipped column names `0x0029`, not `0x0075`. Where a reply is real it is
+unmistakable (`0x009F` → `0x00B0` 3 of 3; `0x00B1` → `0x01D9` 9 of 10 first, 10 of 10
+in sequence); where it is not, the column says so by scattering. A tape-locked test
+pins a batch by BYTES (`test_herokick` §1), never by this column.
+
+**The guard.** `test_dispatch.py` §10 reads `retail_c2s.json` (no vault, as that
+test insists) and reddens on any opcode retail sent that is neither handled, named
+nor dropped on purpose — with floors on the file (57 opcodes, 96 connections; the
+corpus is append-only) so an empty or shrunken census cannot pass vacuously, and
+two known-bad arms (an undecided `0x00FE` in a fixture census; the `0x0008` row
+deleted). Its orphan rule widens: an allowlist row may answer "why is this opcode
+RETAIL SENDS dropped" as well as "why is this NAMED one dropped".
+`test_c2striage.py` (floor 34) drives the walker on a synthetic stream (the check
+the vault cannot give — on a real tape every c2s has SOME s2c after it, so a walker
+pointed one message off would still fill every column), re-derives the census from
+the vault, holds the committed file to it (a new tape with a new opcode reddens
+until `--write` runs and the opcode is triaged), and proves acceptance (c): **zero
+retail c2s opcodes are neither named nor `DROPPED_ON_PURPOSE` with a reason**, over
+the file and over the live census.

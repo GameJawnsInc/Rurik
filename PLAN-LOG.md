@@ -28,6 +28,40 @@ move back.
 
 ---
 
+### DESKWORK-D1 (step 3) -- 2026-09-23 -- **retail's c2s triaged: 57 opcodes over 96 live connections, 18 undecided ones decided, the reverse guard on**
+
+[studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md) §DESKWORK-D1, "The retail c2s
+triage". **Desk work, no client launched.** `toolkit/authsrv/c2striage.py` is the
+committed answer to "which client actions does our server ignore": over every
+origin=LIVE game connection it counts each c2s opcode, asks the schema for a name,
+the dispatch chain for an arm (`test_dispatch`'s syntax-tree harvester, imported),
+`DROPPED_ON_PURPOSE` for a reason, and records retail's first s2c within 1.5 s --
+strict and with the `0x001E` clock skipped, because the clock follows everything.
+**MEASURED: 96 connections / 29 captures / 13,320 c2s / 57 opcodes; 18 UNTRIAGED**
+(seen on retail, unhandled, unnamed, undropped) -- four of them (`0x0008`, `0x000B`,
+`0x000D`, `0x000C`) had been falling off the chain on 1,027 / 1,395 / 1,384 / 76
+loopback connections too. Decided: **three NAMED from OBSERVED reply chains**
+(`schema/overrides.json`, medium) -- `0x009F` HENCHMAN_ADD (`[agent]` → `0x00B0` then
+`0x01BF`, 3 of 3; SIZE BEFORE ROW, the order the hero add will mirror), `0x00B1`
+MAP_TRAVEL (`[map, 0, 0, 0, 1]` → `0x01D9` then `0x01A5`/`0x0099`, 10 of 10), `0x004F`
+ITEM_MOVE (→ `0x014B` then `0x006F`, 4 of 4; field roles UNVERIFIED) -- each also on
+the allowlist until its arm (steps 5, 7, 8); **fifteen UNNAMED allowlist rows**, each
+carrying what was measured (count, connections, the first s2c, the 38797 send wrapper
+and module from `sendsites.py`) and what would name it -- a name is D2's product and
+none is guessed. `test_dispatch.py` §10 is **the REVERSE guard** (floor 45 → 54): it
+reads the committed census `retail_c2s.json` (vault-free) and reddens on any retail
+opcode neither handled, named nor dropped on purpose, with file floors (57 / 96) and
+two known-bad arms; its orphan rule now admits a row for a retail-seen unnamed opcode.
+`test_c2striage.py` (floor 34, TESTS.md) drives the walker on a synthetic stream,
+re-derives the census from the vault, holds the file to it, and proves acceptance (c)
+-- **zero retail c2s opcodes undecided** -- over the file and the live census. The
+first-reply column is a CORRELATION and the study says so (the kick's own row names
+an ambient `0x0029` at 21 ms, not its `0x0075` at 42 ms). Corrects the route text in
+one place: the travel wrapper `0x0085C280` has NO direct caller on 38797 (the route's
+`0x004A791F` is unverified by the census).
+
+---
+
 ### DESKWORK-D1 (fix pass) -- 2026-09-22 -- **the census's channel and window corrected; the kick's 0x0145 and body guarded; the revert reverts**
 
 Corrects the entry below it (DESKWORK-D1 steps 1-2, same day), after two reviewers

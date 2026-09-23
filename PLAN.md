@@ -1896,10 +1896,14 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 **Desk routes the owner took, 2026-09-22** — [studies/deskwork/PLAN.md](studies/deskwork/PLAN.md) §3
 
-* **DESKWORK-D1**: steps 1–2 landed (PLAN-LOG) — the bare-machine c2s send-site census
-  over both framers (`sendsites.py`, 214 sites) and SANDBOX-N2's hero kick armed from
-  retail's one batch (c2s `0x001F`). **Open**: retail's unhandled c2s triaged, the add
-  from its ChCliApi wrapper (c2s `0x001E`), the hero skill toggle, travel and inventory.
+* **DESKWORK-D1**: steps 1–3 landed (PLAN-LOG) — the bare-machine c2s send-site census
+  over both framers (`sendsites.py`, 214 sites), SANDBOX-N2's hero kick armed from
+  retail's one batch (c2s `0x001F`), and retail's c2s triaged (`c2striage.py`: 57
+  opcodes over 96 live connections, zero undecided; `test_dispatch` §10 is the reverse
+  guard; `0x009F` HENCHMAN_ADD, `0x00B1` MAP_TRAVEL, `0x004F` ITEM_MOVE named medium
+  and dropped until their arms). **Open**: the add from its ChCliApi wrapper (c2s
+  `0x001E`), the hero skill toggle (step 6), the party family from HENCHMAN_ADD's
+  witness (step 5), travel (step 7) and inventory (step 8).
 * **DESKWORK-D5**: the combat rules retail's tapes on disk already settle. LANDED
   2026-09-22: the adrenaline gate (SKILLS-B1's gate half, skills §34.11); property 10
   and the `[42]` residue (§16.6, self-scoped; `[42]` only when the maximum moved); the
