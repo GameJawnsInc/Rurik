@@ -7371,6 +7371,63 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   — CLAUDE.md's "commit the id, resolve the string at run time from the owner's
   own archive" — so §§1–2 run on a bare machine and the archive half declares a
   skip. Floor 6 of a 16-check green run. ~4 s),
+  `toolkit/clientscan/test_skilldesc.py` (**the skill DESCRIPTION TEMPLATES: which
+  `%strN%` is which record field, and a referee over all 1,333 player rows** —
+  studies/skills §54, SKILLS-DT, DESKWORK-D4 steps 1–3 and the DESKWORK-Q7
+  census. §1 runs bare: `%str1%` is the SCALE slot, `%str2%` the BONUS slot,
+  `%str3%` the DURATION slot — the natural order is REFUTED — and
+  `referee_slot`'s six verdicts on synthetic records (a slot on a 0/0 field is
+  `CONFLICT_EMPTY` whatever its bit, never a value; bit clear with differing
+  endpoints is `INDETERMINATE`, never fitted); `normalise` keeps a slotted
+  percent under either spelling and `LITERAL_PERCENT` never fires on a bare
+  slot; the classifier on 39 phrases in our own wording (no fixture is a
+  template — the longest fragment shared with one is a generic four-word
+  phrase found in dozens), including the sentence rule (a condition named at
+  the head of the sentence owns the "for N seconds" at its tail — Dismember's
+  shape), its guard (the verb right before "for" is the thing timed), its bound
+  (the previous sentence is not this slot's), and nine precision cases (a
+  "N% faster" is a movement speed only after a movement verb, else
+  `RATE_PERCENT`; a percent is `HEALTH_PERCENT` only when health is named);
+  the served / recognised partition of the enum with `SERVED` == the labels in
+  `CONSUMERS`; nine `slot_served` / `served_reason` checks pinning each
+  consumer's slot and type (damage and heal at str1 at cast, conditions from
+  bonus then scale on any type, penetration at str2, speeds on open episodes,
+  ENERGY on a Glyph only, DURATION at str3 on EFFECT_TYPES); the hand-row
+  equivalence table and `referee_hand_row` reading the TEMPLATE (under the
+  shifted mapping Dismember's shape is NO_SLOT + CONFLICT, and no slots means
+  NO_SLOT under any mapping — the mapping alone decides nothing); the
+  literal-constant check. §2 (pinned exe + Gw.dat; skips on `pinned.find`'s
+  SystemExit ALONE, so a loader defect reddens): the probe reproduced to the
+  row (1,265 of 1,333 with a slot, str1 1,090 / str2 582 / str3 685, 2,357
+  occurrences, 0 unreadable); **THE THEOREM — under the measured mapping ZERO
+  of 2,357 slots numbers a 0/0 field or a sentinel** (1,698 progressions, 481
+  flat, 141 indeterminate), and the KNOWN-BAD ARM — `shifted()` by one and by
+  two — puts 762 / 763 distinct slots on 0/0 fields and 12 / 24 on sentinels,
+  collapses the hand rows' 51 AGREE to ≤ 5 with 15+ CONFLICT, and blows the
+  hidden-progression count from 21 to 800+; 18 same-index self-conflicts
+  listed; six controls each on the field the wiki named (Sever Artery 382 str2
+  = bonus 5..25 Bleeding; Faintheartedness 135 str3 = duration 3..16 and str2
+  = bonus 0..3 degeneration with its flat 50 printed as text; Defy Pain 318;
+  Rush 319; Power Attack 322; "To the Limit!" 316) plus Deep Freeze 234 as a
+  consistency row (66 literal over bonus 66/66; RECOGNISED, because a Hex's
+  damage has no at-cast reader); the hand rows with the content-side counts
+  DERIVED from the rows loaded (every label gets a verdict, ≥ 50 AGREE, the
+  ONE conflict is Battle Rage 317's `scale_means = "Duration"` on a flat 33
+  that is its movement speed, every NO_SLOT slot a literal match except 320
+  and 253); Hamstring 320's Crippled duration is the BONUS slot, not the scale
+  slot its hand row names; 0 UNPARSED rows; **SERVED 341 of 1,265 slot-bearing
+  rows (27 %), pinned exactly and bounded BELOW the route's half-mark**, with
+  the blocking (label, slot, reason) keys named (a duration on a non-episode
+  type 186, untyped damage 84, ENERGY at str2 61, HEAL at str2 47 and on an
+  episode type 28); the precision split populated on both sides; all ten
+  conditions numbered somewhere; LITERAL_PERCENT on 166 rows; the PvP/PvE join
+  over the full table (177 PvP-only family-0 rows link INTO the corpus, 0
+  share a template, 156 corpus rows link out); and the census — modelled ==
+  the hand rows loaded, every EFFECT_TYPES row an episode, a refusal or a hand
+  row (419 + 45 on 2026-09-22), 815 nothing, 270+ of 287 Spells nothing.
+  **Floor 40, the bare core, MEASURED** (RURIK_VAULT at an empty directory: 40
+  checks, 1 declared skip, rc=0); a whole green run is 85. ~15 s with the
+  vault),
   `toolkit/clientscan/test_attribtable.py` (the client's own `s_attrib` table,
   and the numbering verdict it settles. `studies/combat/PLAN.md` carried
   "contiguous 0–41" — OpenTyria's, and the source of `ATTRIBUTE_COUNT = 42` —

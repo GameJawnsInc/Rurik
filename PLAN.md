@@ -32,7 +32,7 @@ sgwlpr in Scala) produced zero playable outcomes."* This is the load-bearing pre
 | [apoguita/Py4GW_Reforged](https://github.com/apoguita/Py4GW_Reforged) | Live successor to Py4GW | pushed **2026-08-04 19:53 UTC**. No license. (`apoguita/Py4GW`, 68★, was **archived 2026-07-21**.) |
 | [Fournux/Tyria-Extractor](https://github.com/Fournux/Tyria-Extractor) | `Gw.dat` → skills/items/quests/NPCs, plus a sniffer | **MIT**, Rust, created 2026-06-30 |
 | [gwdevhub/GWToolboxpp](https://github.com/gwdevhub/GWToolboxpp) | The in-client toolbox | 872★, MIT, pushed **2026-08-04** |
-| [build-wars/gw-skilldata](https://github.com/build-wars/gw-skilldata) | Community skill dataset | MIT, pushed **2026-08-04** |
+| [build-wars/gw-skilldata](https://github.com/build-wars/gw-skilldata) | Community skill dataset | Repository MIT (its `LICENSE`, SPDX MIT via GitHub's licence API); the DATA carries the source wikis' licences per its README §Licensing — GFDL (GWW), CC BY-NC-SA 2.5 (GuildWiki), CC BY-NC-SA 2.0 FR (GWiki). Verified 2026-09-22, skills §54.8. Pushed **2026-08-04** |
 
 Four repositories were pushed to on the day this plan was written, two of them within the hour. The
 `gw-preservation/server` tree carries **397 map definitions** (essentially the whole game), a real
@@ -798,7 +798,9 @@ packets. This is the answer to "can the client be an oracle," and the harness is
 automation script rather than a bespoke engine.
 
 **A6 — Agent-scale data entry with the client as referee.** *(months · agent-farmable)*
-Seed from `build-wars/gw-skilldata` (MIT, pushed today). Cross-check every numeric field against
+Seed from `build-wars/gw-skilldata` (repository MIT; its DATA is GFDL / CC BY-NC-SA from the
+source wikis — README §Licensing, verified 2026-09-22; the owner's own archive's description
+templates are now the primary source, skills §54, and the dataset the fallback). Cross-check every numeric field against
 the client-extracted `GW::Skill` table — any disagreement is a hard conflict, not a judgement call.
 For behaviour rather than numbers, drive a headless client to cast the skill on the live service
 and diff against your engine's prediction. A row counts as verified only when the numbers agree and
@@ -1900,10 +1902,19 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 * **DESKWORK-D5**: the combat rules retail's tapes on disk already settle — the adrenaline
   gate (SKILLS-B1's gate half), interrupts, property 10 and the `[42]`/`[55]` residue, NPC
   recharge from completion, party-wide shouts, the adrenaline replay, the refusal ids.
-* **DESKWORK-D4**: skill coverage in bulk — labels parsed from the archive's own
-  description templates, refereed slot by slot against the client table, served as a
-  marked label tier (the owner's yes to the plan's §8 Q3, given by taking the route); then
-  the timed effect types.
+* **DESKWORK-D4**: skill coverage in bulk. **Steps 1–3 LANDED 2026-09-22** (skills §54,
+  SKILLS-DT; PLAN-LOG): the probe reproduced, the slot mapping measured (str1 scale, str2
+  bonus, str3 duration — the natural order refuted), the parser + referee shipped with 0
+  slot conflicts and 1 real hand-row conflict, the Q7 census written (54 / 419 / 815).
+  **The route's own step-3 gate FAILED**: 341 of 1,265 slot-bearing rows (27 %) have every
+  slot read by a server consumer for its label, index and type (§54.4). **Owner's call
+  before step 4 emits anything**: (a) the route's own consequence — the label route is
+  refuted for the residue, coverage is per-skill work — or (b) §54.4's proposal, two bulk
+  consumers first (untyped damage; a duration episode for the non-episode families), which
+  move 115 rows (341 → 456, still under the gate). **Open either way:** three hand rows to
+  fix (Hamstring 320's slot, 317's and 253's inert "Duration"; `test_skilldamage.py:102-111`
+  moves with them); step 6, the timed effect types; the 141 INDETERMINATE slots wait on a
+  client tooltip run (§54.3).
 
 **Skills and the slice** — [studies/skills/FINDINGS.md](studies/skills/FINDINGS.md),
 [studies/slice/FINDINGS.md](studies/slice/FINDINGS.md)

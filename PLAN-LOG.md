@@ -28,6 +28,39 @@ move back.
 
 ---
 
+### SKILLS-DT / DESKWORK-Q7 -- 2026-09-22 -- **the skill description templates read and refereed: `%str1%` is the SCALE slot, `%str2%` the BONUS, `%str3%` the DURATION; 0 slot conflicts over 1,333 rows; the route's step-3 gate FAILED at 27 %; the coverage census 54 / 419 / 815**
+
+[studies/skills/FINDINGS.md](studies/skills/FINDINGS.md) §54; DESKWORK-D4 steps 1--3 and
+DESKWORK-Q7 of [studies/deskwork/PLAN.md](studies/deskwork/PLAN.md). Shipped:
+`toolkit/clientscan/skilldesc.py` + `test_skilldesc.py` (85 checks with the vault, floor 40
+bare; TESTS.md), reviewed by two readers and corrected the same day (§54.9 -- the first
+version overstated the served tier by 1.7x and carried two checks that could not fail). The
+probe reproduced to the row (1,265 of 1,333 with a slot; str1 1,090 / str2 582 / str3 685).
+**The slot-to-field mapping MEASURED**: str1 = scale, str2 = bonus_scale, str3 = duration,
+on five wiki-pinned controls (Power Attack, Sever Artery, Faintheartedness, Defy Pain, Rush,
+"To the Limit!") and one consistency row (Deep Freeze); under it 0 of 2,357 slots number a
+0/0 field or a sentinel, and the known-bad arm (either shift) puts 760+ distinct slots on
+0/0 fields and collapses the hand rows' 51 AGREE to 3 -- the natural order is REFUTED, and
+"seconds" is not the duration slot's word (141 str2, 82 str1 of 905). **The referee**: 1,698
+progressions, 481 flat constants, 141 INDETERMINATE (bit clear, differing -- §12's shape,
+which the templates DO number; CONTESTED, a client tooltip run settles it); 18 templates
+label one index two ways, listed. **The labels**: our own enum, 0 UNPARSED rows (~150 in
+catch-alls); **SERVED -- every slot read by a server consumer for its label, INDEX and type
+-- is 341 of 1,265 = 27 %, so the route's own step-3 gate FAILED** (the label-only count
+was 583 / 46 %); the gap is 91 blocking keys, the two largest (a duration on a non-episode
+type 186 rows, untyped damage at str1 84) moving 115 rows if both were built -- a labelled
+PROPOSAL for the owner, not a next action. **The 54 hand rows**: 51 agree, 1 real conflict
+(Battle Rage 317's inert `scale_means = "Duration"`), and Hamstring 320's Crippled duration
+is on the BONUS slot with a label outside the condition vocabulary -- it inflicts nothing
+today; content fixes owed next pass (`test_skilldamage.py:102-111` moves with them). **The
+PvP/PvE join**: 177 PvP-only twins link into the corpus, 0 share a template. **The census
+(Q7)**: 54 carry a row (at least 4 inert), 419 episode-only, 45 episode-refused, 815
+nothing; 276 of 287 Spells nothing. Also: `PLAN.md` §1's and A6's gw-skilldata licence
+lines corrected from primary sources (repository MIT; data GFDL / CC BY-NC-SA). No overlay
+emitted; server untouched; D4 step 4 waits in §8 on the owner's answer to the gate.
+
+---
+
 ### SANDBOX-B7 -- 2026-09-22 -- **the in-game panels own the bars and the ranks; Skills and Party tabs**
 
 [studies/sandbox/PLAN.md](studies/sandbox/PLAN.md) §2 B7, §4 F3. The owner: "first tab
