@@ -1934,7 +1934,8 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   and `allies_of` excludes (§56.7); the batch order (retail
   all applies then all speed words, ours per wearer); 3(e) a hero's zero gain;
   the `[62]` energy word (read, own-party-scoped, not shipped); the second refusal gate's
-  variable; the armed-EMPTY death clear (a one-witness divergence, skills §34.11.4); a body
+  variable (the recharge refusal's id is 1988, witnessed once on `20260913T210901`, §57);
+  the armed-EMPTY death clear (a one-witness divergence, skills §34.11.4); a body
   or hero as interrupt VICTIM (RECONSTRUCTION, final-confirmation-needs-run) and the
   windup-swing drop (UNOBSERVED); 229's recharge anchor (HSR proc vs start, a capture
   campaign); NPC aftercast proper and attack-skill recharge cadence (unmeasured).

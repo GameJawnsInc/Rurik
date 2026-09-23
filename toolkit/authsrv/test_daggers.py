@@ -236,7 +236,7 @@ def section_weapon_gate(have_fields):
         # is pinned, never the text).
         import chatdefs
         authsrv.WEAPON_GATE = True
-        authsrv.REFUSAL_REASONS = True
+        authsrv.REFUSAL_REASON_IDS = True
         try:
             sent = _land(authsrv, _world(authsrv), OFF)
             ops = [op for op, _ in sent]
@@ -249,7 +249,7 @@ def section_weapon_gate(have_fields):
                   "channel 7, then the release -- retail's three-message shape with the "
                   "RECONSTRUCTED id", str([(hex(o), v) for o, v in sent]))
         finally:
-            authsrv.REFUSAL_REASONS = False
+            authsrv.REFUSAL_REASON_IDS = False
         sent = _land(authsrv, _world(authsrv), OFF)
         check([op for op, _ in sent] == [E2],
               "  and with the flag OFF (the default) the bare release again -- the "

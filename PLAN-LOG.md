@@ -67,6 +67,19 @@ crashed bare); the "primary excluded" check named the player, never in its own a
 and now names the hero; `census(cutoff=…)` skips a later tape before reading it. 47
 checks, floor 30 (42 before). The pass-3 entry's shout numbers below are superseded here.
 
+**The refusal ids (§57).** Every live `0x005D` scanned for a coded id in the block: **1960
+× 39, 1961 × 17, 1934 × 1, 1988 × 1.** 1961 had been labelled from the screen while retail's
+wire carries it 17 times (two tapes of 2026-09-14/16; `chatdefs.py` still said "zero energy
+refusals" — corrected). **1988 was RECONSTRUCTION and is on the wire once as the recharge
+refusal** (`20260913T210901` conn 60877: a second press of skill 40 during its own cast, after
+its recharge began, answered `0x00E3`, `#1988`, `0x005E [1, 7]`, prop 57, `0x00E2` — the
+sentence between ack and release, an order no 1960 refusal uses); so the recharge refusal's
+id is 1988, not 1964, and the pass-3 summary's "never on any wire" is withdrawn.
+`REFUSAL_OBSERVED = {1934, 1960, 1961, 1988}`. Also: the templated guard moved onto
+`refusal_body` (the send path); the Q17 sentence re-worded as a reading of the carve-out;
+`test_chatdefs` §7 catches `SystemExit` (it died bare — a regression from `main`); the
+authsrv flag renamed `REFUSAL_REASON_IDS`; the gate's comment names the label.
+
 ---
 
 ### DESKWORK-D5 pass 3 (steps 5, 7, 3d) -- 2026-09-23 -- **party-wide shouts OBSERVED and shipped (a shout reaches every living ally inside the client's own `aoe_range`, 1000 u; 23 foreign applies on retail's wire, 0 of 8 foe shouts; the announce is property 48, not 60); the refusal block as a table of 60 ids and our labels behind a DEFAULT-OFF flag, the weapon gate its one consumer; Mend Condition's heal-if-removed shape**

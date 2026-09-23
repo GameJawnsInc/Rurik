@@ -10633,11 +10633,13 @@ GAME_SMSG_SKILL_REFUSED = 0x00E2
 REFUSAL_SILENT = False
 # Set from --refusal-reasons (DESKWORK-D5 step 7). OFF by default: the table
 # `chatdefs.REFUSAL_REASONS` names the client's whole refusal block by id, but
-# only 1934, 1960 and 1961 are OBSERVED answering a condition; every other row
-# is RECONSTRUCTION from the sentence's own statement, and a reconstructed
-# sentence on the warning panel is invented traffic until a tape shows it. The
-# two OBSERVED resource refusals are sent regardless of this flag.
-REFUSAL_REASONS = False
+# only 1934, 1960, 1961 and 1988 are OBSERVED answering a condition (the fix
+# pass of 2026-09-23 counted the wire: 1960 x39, 1961 x17, 1934 x1, 1988 x1);
+# every other row is RECONSTRUCTION from the sentence's own statement, and a
+# reconstructed sentence on the warning panel is invented traffic until a tape
+# shows it. The two OBSERVED resource refusals are sent regardless of this
+# flag. (Named REFUSAL_REASON_IDS so it cannot be read as the table itself.)
+REFUSAL_REASON_IDS = False
 GAME_SMSG_CHAT_MESSAGE_LOCAL = 0x0061
 
 GAME_SMSG_AGENT_MOVE_TO_POINT = 0x0029
@@ -18694,8 +18696,9 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
     # attack with a sword in hand begins nothing and costs nothing. The bare
     # release, no chat line -- the refusal's sentence is not observed (see
     # WEAPON_GATE). DESKWORK-D5 step 7: under --refusal-reasons the release
-    # carries #1985 (chatdefs.REFUSE_WEAPON_TYPE, "a different weapon type" --
-    # RECONSTRUCTION from the sentence's own condition, no tape shows it).
+    # carries #1985 (chatdefs.REFUSE_WEAPON_TYPE, the label
+    # skill_needs_different_weapon_type -- RECONSTRUCTION from the sentence's
+    # own condition, no tape shows it).
     if WEAPON_GATE and not weapon_satisfies(skill_id):
         print(f"[c{conn_id}] REFUSED skill {skill_id}: its weapon_req "
               f"{skill_chain_fields(skill_id)[2]:#04x} is not what the player "
@@ -18703,7 +18706,7 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
               f"{(agents.PLAYER_WEAPON or {}).get('item_type') if EQUIP_WEAPON else None}) "
               f"[DAGGERS-B4]", flush=True)
         refuse_press(send, skill_id, copy, conn_id,
-                     chatdefs.REFUSE_WEAPON_TYPE if REFUSAL_REASONS else None)
+                     chatdefs.REFUSE_WEAPON_TYPE if REFUSAL_REASON_IDS else None)
         return
 
     # ---- THE RESOURCE GATE, and it runs BEFORE the first send ------------
@@ -36149,8 +36152,8 @@ def main():
               "(retail: shoutjoin.py, 23 foreign applies, 0 on a foe).", flush=True)
 
     if a.refusal_reasons:
-        global REFUSAL_REASONS
-        REFUSAL_REASONS = True
+        global REFUSAL_REASON_IDS
+        REFUSAL_REASON_IDS = True
         print("REFUSAL REASONS: RECONSTRUCTED reason ids from the client's refusal "
               "block go out with the release (today: the weapon gate's #1985). The "
               "OBSERVED 1960/1961 are sent either way.", flush=True)

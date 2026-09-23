@@ -57,9 +57,13 @@ from codec import Codec  # noqa: E402
 # set-the-floor-from-a-green-run rule earning its keep on its own test.)
 # 2026-09-23 (DESKWORK-D5 step 7): +12 unconditional (section 6, the refusal block's
 # ids and labels) and +4 behind the archive (section 7, declared skip without it);
-# 49 with the vault on the green run, floor 28 -> 40.
+# 49 with the vault on the green run, floor 28 -> 40. The fix pass the same day:
+# +3 unconditional in section 6 (1964 stays RECONSTRUCTION; refusal_body's
+# send-path guard, and its plain body); section 7's skip now catches SystemExit,
+# so the BARE run is green again -- 43 checks + 2 declared skips, measured with
+# RURIK_VAULT at an empty directory; 52 with the vault. Floor 40 -> 43.
 LEDGER = checks.Ledger("chat echo: framing, fragments, arm, retail bytes",
-                       floor=40)
+                       floor=43)
 check = checks.adopt(LEDGER)
 
 CAPTURE = "20260817T183756"   # the multi-part advert, studies/chat 2 and 3
@@ -282,8 +286,13 @@ def main():
     check(chatdefs.refusal_evidence(1960) == "OBSERVED"
           and chatdefs.refusal_evidence(1961) == "OBSERVED"
           and chatdefs.refusal_evidence(1934) == "OBSERVED"
-          and chatdefs.REFUSAL_OBSERVED == {1934, 1960, 1961},
-          "exactly three ids are OBSERVED (1960 39 of 39, 1961 on screen, 1934 1 of 1)")
+          and chatdefs.refusal_evidence(1988) == "OBSERVED"
+          and chatdefs.REFUSAL_OBSERVED == {1934, 1960, 1961, 1988},
+          "exactly four ids are OBSERVED (1960 39 of 39, 1961 on screen and 17x on the wire, "
+          "1934 1 of 1, 1988 1 of 1 -- the recharge refusal, fix pass 2026-09-23)")
+    check(chatdefs.refusal_evidence(1964) == "RECONSTRUCTION",
+          "1964 -- the OTHER id with the recharging sentence -- stays RECONSTRUCTION: never "
+          "on any wire held; the id retail sent was 1988")
     check(all(chatdefs.refusal_evidence(i) == "RECONSTRUCTION"
               for i in chatdefs.REFUSAL_REASONS if i not in chatdefs.REFUSAL_OBSERVED),
           "every other id is RECONSTRUCTION -- the label says so at the read")
@@ -304,6 +313,17 @@ def main():
     check(chatdefs.REFUSAL_TEMPLATED == {1942, 1943}
           and all(i in chatdefs.REFUSAL_REASONS for i in chatdefs.REFUSAL_TEMPLATED),
           "the two templated ids are in the block and marked")
+    # The guard on the SEND path (fix pass): a constant handed straight to
+    # refuse_press never passes refusal_reason_id, so refusal_body must refuse
+    # a templated id itself -- and still build the plain ones.
+    try:
+        chatdefs.refusal_body(1942)
+        check(False, "refusal_body(1942) must refuse a templated id")
+    except ValueError:
+        check(True, "refusal_body refuses a templated id on the send path (1942), not only "
+                    "refusal_reason_id -- the guard a constant cannot bypass")
+    check(len(chatdefs.refusal_body(1988)) == 1 and len(chatdefs.refusal_body(1934)) == 1,
+          "and still builds the one-word body for a plain id (1988, 1934)")
     try:
         chatdefs.refusal_reason_id("no_such_label")
         check(False, "an unknown label must raise")
@@ -319,7 +339,11 @@ def main():
     try:
         import textrec
         idx = textrec.TextIndex()
-    except Exception as ex:                                        # noqa: BLE001
+    # textrec REFUSES with SystemExit when the pinned build is not in the vault
+    # (it will not fall through to C:\gw); `except Exception` alone let that
+    # escape and the test died bare with no verdict -- a regression from main
+    # the engineering review caught (fix pass 2026-09-23).
+    except (Exception, SystemExit) as ex:                          # noqa: BLE001
         LEDGER.skip("refusal block archive check (4 checks)",
                     f"{type(ex).__name__}: {str(ex).splitlines()[0]}")
         idx = None
