@@ -23351,8 +23351,11 @@ def handle_hero_kick(values, send, state, conn_id):
         silent;
       * a BODY -- UNOBSERVED. The retail witness was an outpost (0x0199 map
         449, explorable byte 0) and its hero had no 0x0020 create among the
-        connection's 130, so the tape says nothing about a hero with a body,
-        and whether the client offers a kick in a field at all is unobserved.
+        connection's 130, so the tape says nothing about a hero with a body --
+        and read since (the D1 fix pass, handle_hero_add's docstring): the
+        client's send site 0x0080E2A0 is gated on MissionCliGetMap() ==
+        MISSION_MAP_OUTPOST, so it never sends 0x001F from a field, and a hero
+        WITH a body here means --party-body-in-outpost.
         RECONSTRUCTION: a hero that has a body here leaves through
         `remove_agent` (0x0021) FIRST, because dropping the id from
         state["agents"] while the client keeps the body would hand that id out
