@@ -6159,10 +6159,11 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   connections, `0x000D` on 1,384). It reads `retail_c2s.json` beside the test -- the
   census `c2striage.py --write` commits, a FILE in git so this test stays vault-free
   -- and reddens on any opcode retail sent that is neither handled, named, nor on
-  `DROPPED_ON_PURPOSE` (26 rows now: the eight, fifteen UNNAMED rows each carrying
+  `DROPPED_ON_PURPOSE` (26 rows at step 3: the eight, fifteen UNNAMED rows each carrying
   what was measured and what would name it, and three named this step and dropped
   until their arm -- `0x009F` HENCHMAN_ADD, `0x00B1` MAP_TRAVEL, `0x004F`
-  ITEM_MOVE). The orphan rule widens with it: a row may answer "why is this opcode
+  ITEM_MOVE; 24 since DESKWORK-D1 step 8 armed `0x004F` and `0x0030` EQUIP_ITEM and
+  took both rows off, `test_itemmoves.py`). The orphan rule widens with it: a row may answer "why is this opcode
   RETAIL SENDS dropped". Floors on the file (57 opcodes, 96 connections -- the corpus
   is append-only) guard the vacuity; the known-bad arms are a census carrying an
   undecided `0x00FE`, which the predicate must name alone, and the `0x0008` row
@@ -6402,6 +6403,42 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   `skill_disabled_ids`, `hero_body_create` seeds it, `sync_hero_body_bar` refreshes it,
   the block's two rows carry the mask, `serverargs.py` defines both flags. Drives the real
   handler with a fake send and a scratch store. Floor 53 from the green run, ~2 s),
+  `toolkit/authsrv/test_itemmoves.py` (**2026-09-23, DESKWORK-D1 step 8: the inventory
+  pair, c2s 0x004F ITEM_MOVE and 0x0030 EQUIP_ITEM, and the item store behind them**,
+  `toolkit/authsrv/itemstore.py`, `studies/cmsg/FINDINGS.md` §DESKWORK-D1 "Inventory".
+  §1 RETAIL'S BATCHES BYTE FOR BYTE through the pure leaf with retail's own ids, bag
+  ids, inventory keys and agents: the three field unequips of 20260917T090355 :53310
+  (`0x004F [4,2,1]` → `0x014B [1,213,2,1]` + `0x006F [25,6,0]`, and the gloves' and
+  boots'), their three re-equips (`0x0030 [213]` → `0x014B [1,213,3,4]` + `0x006F
+  [25,6,213]` — retail's bag in ldufr's order, its visual in GWLP-R's), the outpost
+  off-hand move of 20260919T103604 :58638 (`0x014B [241,17730,136,6]` alone), the
+  Factions wand of 20260913T210901 :60877, the four outpost swaps of 20260819T132414
+  :53419 (`0x0152 [159, occupant, item]` alone, the occupant taking the item's cell);
+  KNOWN-BAD arms: our identity visual mapping on retail's head (slot 4, the tape says
+  6), our visual-order bag on retail's equip, a visual in the outpost, a swap read
+  backwards. §2 REFUSALS return no batch (an empty source, the equipped bag as a
+  destination, an undeclared bag, a slot past the bag, a FILLED destination
+  (ItCliInv:105); an unknown, an already-worn, a slot-less type, an off hand beside a
+  two-hander) and the two-hander that displaces a worn off hand (the shield leaves
+  FIRST to the backpack's first free slot, RECONSTRUCTION; a full backpack refuses).
+  §3 RESTORE: a stored armour cell wins, a stored HAND change is kept at the default
+  with a note, an unknown id is ignored, an illegal cell or a collision discards the
+  whole store. §4 THE SERVER: `item_layout_begin`'s default layout is the constants'
+  and `itemstore.worn_array` over it equals the 0x006E fill the load path built before
+  this step; the real handlers with a fake send in a field (visual) and a town (none);
+  six refusals send nothing; the hands mirror (the weapon moved out → `SET_ITEMS_OVERRIDE
+  [0] == (0, 0)`; `select_weapon_set` then ENTERS an empty hand by `0x014B` and never
+  sends a `0x0152` with a 0, and LEAVES to a free backpack slot on the way back; the
+  hammer equipped back and the sword equipped over it move set 0's record and
+  `agents.PLAYER_WEAPON`); `--persist` writes `item_locations`, a fresh dress restores
+  the armour cell and not the hand, `charstore.validate` refuses five malformed shapes
+  and accepts a good one, `--no-item-moves` reads nothing stored. §5 SOURCE LOCKS with a
+  mutation: both arms under `ITEM_MOVES_ENABLED`, `main()`'s wiring, `item_layout_begin`
+  before the weapon's create and `item_cell` at the five placements,
+  `declare_weapon_sets(send, state)`, the 0x006E build's `itemstore.worn_array` and
+  `hand_items`, `weapon_set_items`'s override, `select_weapon_set`'s two-real-leads
+  guard, no allowlist row for either opcode in `test_dispatch.py`, `--no-item-moves` in
+  `serverargs.py`. Floor 78 from the green run, ~3 s),
   `toolkit/authsrv/test_labelrun.py` (the labelled input run, which names GAME_CMSG
   opcodes from what a human was told to do: a message lands in exactly one step's
   window, instance-load traffic is never folded into step 1, and a dirty idle CONTROL

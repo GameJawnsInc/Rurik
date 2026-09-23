@@ -1896,22 +1896,28 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 **Desk routes the owner took, 2026-09-22** — [studies/deskwork/PLAN.md](studies/deskwork/PLAN.md) §3
 
-* **DESKWORK-D1**: steps 1–4 and 6 landed (PLAN-LOG) — the bare-machine c2s send-site
-  census over both framers (`sendsites.py`, 214 sites), SANDBOX-N2's hero kick armed
-  from retail's one batch (c2s `0x001F`), retail's c2s triaged (`c2striage.py`: 57
+* **DESKWORK-D1**: steps 1–4, 6 and 8 landed (PLAN-LOG) — the bare-machine c2s
+  send-site census over both framers (`sendsites.py`, 214 sites), SANDBOX-N2's hero kick
+  armed from retail's one batch (c2s `0x001F`), retail's c2s triaged (`c2striage.py`: 57
   opcodes over 96 live connections, zero undecided; `test_dispatch` §10 is the reverse
-  guard; `0x009F` HENCHMAN_ADD, `0x00B1` MAP_TRAVEL, `0x004F` ITEM_MOVE named medium
-  and dropped until their arms), the hero ADD armed as RECONSTRUCTION (c2s `0x001E`,
-  `--no-hero-add`, for the commander rig — `--party` — where it re-declares the
-  inventory a kick destroyed and refuses in the legacy rig; `0x0018` from the owned set
-  as a labelled policy, `--no-hero-unlock-mask`; the client sends both hero commands
-  from an OUTPOST only), and the hero skill SUPPRESS toggle armed as RECONSTRUCTION
-  (c2s `0x0019` HERO_SKILL_TOGGLE, `--no-hero-skill-toggle`: Shift-click a hero skill
-  → a per-hero mask answered with the whole-mask `0x0065`, the body skips the slot,
-  persisted). **Open**: the party family from HENCHMAN_ADD's witness (step 5), travel
-  (step 7) and inventory (step 8); the loopback clicks — kick and add in an outpost
-  under the sandbox rig, and the Shift-click on a hero skill (runsheets in studies/cmsg
-  §DESKWORK-D1 "The hero add" and "The hero skill toggle").
+  guard; `0x009F` HENCHMAN_ADD and `0x00B1` MAP_TRAVEL named medium and dropped until
+  their arms), the hero ADD armed as RECONSTRUCTION (c2s `0x001E`, `--no-hero-add`, for
+  the commander rig — `--party` — where it re-declares the inventory a kick destroyed
+  and refuses in the legacy rig; `0x0018` from the owned set as a labelled policy,
+  `--no-hero-unlock-mask`; the client sends both hero commands from an OUTPOST only),
+  the hero skill SUPPRESS toggle armed as RECONSTRUCTION (c2s `0x0019`
+  HERO_SKILL_TOGGLE, `--no-hero-skill-toggle`: Shift-click a hero skill → a per-hero
+  mask answered with the whole-mask `0x0065`, the body skips the slot, persisted), and
+  the inventory pair armed on an item store (`itemstore.py`, `--no-item-moves`: c2s
+  `0x004F` ITEM_MOVE is an item leaving the EQUIPPED bag — field 1 its slot there,
+  4 of 4 — and `0x0030` EQUIP_ITEM draws `0x014B`+`0x006F` into an empty slot or
+  `0x0152` onto an occupied one, both retail's batches replayed byte for byte; cells
+  persisted, a stored HAND change not restored). **Open**: the party family from
+  HENCHMAN_ADD's witness (step 5) and travel (step 7); the general bag-to-bag move (no
+  tape carries it — the runsheet's drag will name its opcode); the loopback clicks —
+  kick and add in an outpost under the sandbox rig, the Shift-click on a hero skill,
+  the drag out of the paper doll and the double-click back (runsheets in studies/cmsg
+  §DESKWORK-D1 "The hero add", "The hero skill toggle" and "Inventory").
 * **DESKWORK-D5**: the combat rules retail's tapes on disk already settle. LANDED
   2026-09-22: the adrenaline gate (SKILLS-B1's gate half, skills §34.11); property 10
   and the `[42]` residue (§16.6, self-scoped; `[42]` only when the maximum moved); the

@@ -362,6 +362,19 @@ def validate(data, path):
         if "skillbar" in row:
             _validate_hero_bar(path, f"character {row['name']!r}",
                                row["skillbar"])
+        if "item_locations" in row:
+            locs = row["item_locations"]
+            if not isinstance(locs, dict):
+                _refuse(path, f"character {row['name']!r}: item_locations must "
+                              f"be an object keyed by item id (DESKWORK-D1 step 8)")
+            for iid, cell in locs.items():
+                if (not str(iid).isdigit() or not isinstance(cell, list)
+                        or len(cell) != 2
+                        or not all(isinstance(v, int) and not isinstance(v, bool)
+                                   and v >= 0 for v in cell)):
+                    _refuse(path, f"character {row['name']!r}: item_locations["
+                                  f"{iid!r}] must be [bag, slot], two non-negative "
+                                  f"ints under an integer item id")
         blob = row.get("settings_blob", "")
         if blob:
             try:
@@ -813,6 +826,32 @@ class Store:
         hero["disabled_slots"] = mask
         self.save()
         return mask
+
+    # ---- where the character's items are (DESKWORK-D1 step 8) -------------
+    # {item id: [bag, slot]} for the items the dress creates, written when an
+    # in-game move (c2s 0x004F) or equip (0x0030) is accepted and read back by
+    # the next dress so armour and set items are where the character left
+    # them. Item ids are OURS (the dress's constants), so a stored cell for an
+    # id this launch does not create is ignored at the dress, never a refusal.
+    def item_locations(self, uuid_hex):
+        """{int item_id: (bag, slot)}; {} when none is stored."""
+        row = self.character_by_uuid(uuid_hex)
+        locs = (row or {}).get("item_locations") or {}
+        return {int(k): (int(v[0]), int(v[1])) for k, v in locs.items()}
+
+    def set_item_location(self, uuid_hex, item_id, bag, slot):
+        """Record one item's cell; saves. Returns the stored {id: [bag, slot]}."""
+        row = self.character_by_uuid(uuid_hex)
+        if row is None:
+            return None
+        bag, slot = int(bag), int(slot)
+        if bag < 0 or slot < 0:
+            raise ValueError(f"item {item_id}: bag {bag} slot {slot} -- a cell is "
+                             f"two non-negative ints")
+        locs = row.setdefault("item_locations", {})
+        locs[str(int(item_id))] = [bag, slot]
+        self.save()
+        return dict(locs)
 
 
 def find_character(uuid_hex, base=None):

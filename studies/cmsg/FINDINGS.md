@@ -1194,3 +1194,132 @@ independent of the outpost gate, so a field works too).**
    `now casts […]` line after a bar edit and the mask line are the evidence to file.
    The client asserting on either message would refute the static read (`0x00822050`
    / `0x008220D0` have no assert); `--no-hero-skill-toggle` is the revert.
+
+### Inventory — `c2s 0x004F ITEM_MOVE` and `0x0030 EQUIP_ITEM` armed on an item store (DESKWORK-D1 step 8, 2026-09-23)
+
+**Desk work, no client launched.** Step 3 named `0x004F` from its reply chain with
+field 1 UNVERIFIED and `0x0030` had been dropped since 2026-09-13 as "no state for it
+yet". This step re-derived both from the tapes and the client, built the state, and
+armed them. Everything below is on `toolkit/authsrv/itemstore.py` (the pure leaf: cells,
+plans, refusals) and `test_itemmoves.py` (floor 78), which replays every batch below
+**byte for byte with retail's own ids**.
+
+**`0x004F`'s field 1, settled from the client.** The wrapper `0x00920DE0` (38797) packs
+three dword arguments into the wire's `[byte, word, byte]`; it is reached by a tail
+`jmp` from ItCliApi `0x00816AF0`, whose callers sit in **GmItemHelpers `0x00526900`**
+(asserts `sourceItemId` :279, `ItemCliValidate(sourceItemId)` :280, `quantity` :281,
+`targetBag < ITEM_BAG_SLOTS` :282, `quantity == sourceQuantityTotal` :310,
+`sourceAgentId` :356). That function sends **only when the item's bag has model `0x15`
+= 21, the EQUIPPED bag**, and the three arguments it pushes are `0x008454F0(item)` — the
+item's own SLOT — then the target bag's id (`0x00844870(targetBag)`) and the target
+slot. **So field 1 is the item's slot in the equipped bag and the source bag is
+implied**; the general bag-to-bag move is another message and is on no tape. The hero
+form is `0x0050 [agent, slot, bag, slot]` (`0x00920E30`). **CORROBORATED 4 of 4 by the
+load's own cells:** on `20260917T090355 :53310` the load's `0x013E` put head 213 at
+(bag 3, slot 4), boots 214 at (3, 5), gloves 215 at (3, 6) — bag 3 being the type-2,
+model-21 equipped bag — and the three moves were `[4, 2, 1]`, `[6, 2, 2]`, `[5, 2, 3]`
+(head, gloves, boots, each from its cell); on `20260919T103604 :58638` item 17730 was
+set 0's OFF HAND (`0x0147 [241, 0, 24945, 17730]`), sitting at (231, 1) when `[1, 136, 6]`
+moved it. Step 3's "field 1 is UNVERIFIED" is retired; the route's "move item to
+bag/slot" was half the message.
+
+**The replies, from the tapes.** A move: `0x014B [key, item, bag, slot]` (4 of 4) and
+`0x006F [agent, visual slot, 0]` (the three field moves; not the outpost one). An equip
+into an **empty** slot: `0x014B [key, item, equipped bag, slot]` + `0x006F [agent, visual
+slot, item]` — 4 of 4, all in a field (`:60877`'s wand `[40]` → `[1, 40, 3, 0]` + `[9, 0,
+40]`; `:53310`'s re-equips `[213]` → `[1, 213, 3, 4]` + `[25, 6, 213]`, `[215]` → `(3, 6)`
++ visual 5, `[214]` → `(3, 5)` + visual 3). An equip onto an **occupied** slot: **`0x0152
+[key, occupant, item]` ALONE** — 4 of 4 on `20260819T132414 :53419` (Shing Jea, an
+outpost: `[3451]` → `[159, 2767, 3451]`, `[1469]` → `[159, 3451, 1469]`, and back twice),
+no `0x006F`, no `0x0147` within 2 s; the client's handler exchanges the two items' bag
+and slot (weapons §29), so the occupant lands in the cell the item came from.
+
+**Two slot orders, and both lineages were right about different arrays.** Retail's
+equipped BAG follows ldufr's order (Legs 3, **Head 4, Boots 5, Gloves 6** — the cells
+above), while the `0x006E`/`0x006F` VISUAL array follows GWLP-R's (Boots 3, Legs 4,
+Gloves 5, Head 6 — newopcodes `0x006F`, corroborated again here: bag 4 → visual 6, 6 →
+5, 5 → 3). `studies/character` §"CONTESTED" was a question about the visual array and
+was decided right; the bag array was never asked. This server puts armour into the
+equipped bag at the VISUAL slot (`STARTER_ARMOUR`, `wearmap.SLOT_*`) — legal, a bag cell
+is opaque to the client — so OUR bag→visual mapping is the identity;
+`itemstore.RETAIL_VISUAL_OF_BAG_SLOT` and `RETAIL_BAG_SLOT_OF_TYPE` carry retail's for
+the replay, and the KNOWN-BAD arms show either mapping applied to the other array
+misses the tape.
+
+**The `0x006F` rule.** Retail rode it on every own-agent equip and unequip in a FIELD
+(7 of 7) and on none in an OUTPOST (0 of 5: the four swaps and the off-hand move). For
+the swaps that is CONFOUNDED (swap vs outpost); the outpost unequip breaks the tie
+toward the outpost, and the set switch in a field (weapons §27: `0x0152` then three
+`0x006F`) agrees. The server sends the visual in a field only, by the `0x0199`
+explorable byte's own rule (`instance_is_field`); the field-swap visual is
+RECONSTRUCTION and labelled at the send.
+
+**Client asserts, read before sending.** `0x014B` (`0x00846520`): ItCliApi:2126 `item`,
+and the shared add worker's ItCliInv:105 — the destination slot must be EMPTY, which is
+why a filled destination is REFUSED rather than sent. `0x0152` (`0x00846840`):
+ItCliApi:2253/2254 `item1`/`item2`, :2257 `inventory`, ItCliInv:687/688 both items in a
+bag — which is why a set switch after an emptied hand may never send a `0x0152` with a
+0 (below). `0x006F` (`0x0091E1E0 → 0x008110F0`): no assert.
+
+**The model (`itemstore.py`; `handle_item_move`, `handle_equip_item`, behind
+`--no-item-moves`, default ON).** The dress (REQUEST_ITEMS) now decides every item's
+cell first — `item_layout_begin`: the constants' layout (weapon at equipped 0, the five
+armour pieces at their slots, an off hand at 1, set items in the backpack, costumes at
+7/8), then under `--persist` the character's stored cells through `itemstore.restore` —
+and every placement sends the decided cell through `item_cell`, byte-identical to every
+earlier run when nothing is stored. The two handlers plan against that store: a move
+needs an item at the source slot and an EMPTY, declared, in-range destination in a
+non-equipped bag; an equip needs a known, not-yet-worn item whose wire TYPE has a slot
+(armour and costumes per type; a weapon type's `hands` row: one/two → 0, off → 1); a
+two-handed lead entering while an off hand is worn sends the off hand to the backpack's
+first free slot FIRST (RECONSTRUCTION from the set switch's shape); an off hand beside a
+worn two-hander is refused (retail's answer NOT FOUND). Refusals send nothing. The
+`0x006E` array and the player's `0x006D` lead are built from the store, so they cannot
+disagree with the bag. **The hands and the weapon sets:** an equip into slot 0/1
+rewrites the ACTIVE set's items (`SET_ITEMS_OVERRIDE`, read by `weapon_set_items`) and
+the server's swing model through `apply_party_character`, the door a set switch uses;
+a hand EMPTIED by `0x004F` is the open edge — the swing model keeps the last weapon's
+numbers (an unarmed player mid-session is not modelled; `--no-weapon` is the
+launch-time unarmed rig) and the log says so; `select_weapon_set` then enters the empty
+hand by `0x014B` and never sends a `0x0152` with a 0. **Persistence:** every accepted
+cell is written to the character's `item_locations`; the next dress restores armour and
+set items where they were left, but **a stored HAND change is not restored** (slots 0/1
+belong to the set machinery — logged, not applied); an illegal or colliding stored cell
+discards the whole store for that login with the reason.
+
+**What is UNOBSERVED and modelled anyway (each labelled at its site):** which set
+record retail rewrites on an equip (its four swaps re-sent no `0x0147`); the field swap's
+visual; a two-hander displacing a shield; the general bag-to-bag move (no tape carries
+it; our client would send it on a drag between two bags — the log will show the opcode
+as UNHANDLED, and that is the next arm). The PvP equipment panel (`0x0085`/`0x0086`)
+stays out of scope. `schema/overrides.json` GAME_CMSG 79 and 48 carry the derivation;
+`test_dispatch`'s allowlist lost both rows and `test_c2striage` §4 now requires both
+ARMED.
+
+**Runsheet — the owner's clicks (one loopback session; a FIELD for the visuals, the
+sandbox rig as usual, with `--persist`).**
+
+1. **Drag an armour piece out of the paper doll into the backpack** (Inventory → the
+   equipped pane → drag the head or gloves onto an empty backpack cell). Expect the log
+   line `ITEM_MOVE(equipped 6 -> bag 2 slot N): 2 message(s), item 7 -> bag 2 slot N`
+   (the head; gloves are slot 5, item 6), the piece to appear in the backpack cell and
+   the body to lose it (in a field). The log line is the OBSERVED half: the client sent
+   `0x004F [source slot, bag, slot]` for a drag out of the equipped bag. **No log line
+   but the item moved on screen** → the client sent a different opcode; the gamesrv
+   log's `UNHANDLED` line names it (the general move — the next arm). **A `refused:`
+   line** → read the reason (a filled cell; a bag we do not declare).
+2. **Double-click the piece in the backpack.** Expect `EQUIP_ITEM(7): 2 message(s), item
+   7 -> bag 1 slot 6` and the piece back on the body. Then **double-click a weapon set's
+   lead in the backpack** (a `--weapon-set 1=starter_sword` launch puts item 11 there):
+   expect `EQUIP_ITEM(11)` with a `0x0152` in the sent list (the hammer goes to the
+   sword's cell) and `ITEMS: the hands are now lead 11 (starter_sword)`; the body draws
+   the sword and its swing is the sword's interval.
+3. **Drag a backpack item onto another EMPTY backpack cell.** This is the general move
+   that is on no tape: expect NO `ITEM_MOVE` line and an `UNHANDLED` line naming the
+   opcode; the client will show the item back where it was (nothing was answered).
+   Copy the opcode into the study — it is what names the next arm.
+4. **Zone and come back** (the portal, not the world map). Expect the head where it was
+   left (backpack) and the weapon in hand whatever was done to it (the hand rule; the
+   log prints `not restored (the weapon sets own slots 0/1)` if it was moved).
+5. The client asserting on `0x014B`/`0x0152` would refute the static read (ItCliApi:2126
+   / :2253); `--no-item-moves` is the revert.

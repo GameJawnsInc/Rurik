@@ -28,6 +28,54 @@ move back.
 
 ---
 
+### DESKWORK-D1 (step 8) -- 2026-09-23 -- **the inventory pair armed on an item store: c2s 0x004F ITEM_MOVE's field 1 settled (the item's slot in the EQUIPPED bag), 0x0030 EQUIP_ITEM's two shapes, retail's batches replayed byte for byte, cells persisted**
+
+[studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md) §DESKWORK-D1 "Inventory";
+`toolkit/authsrv/itemstore.py`. **Desk work, no client launched.** **Field 1 of
+`0x004F`, UNVERIFIED since step 3, read off the client:** the wrapper `0x00920DE0`
+is reached from GmItemHelpers `0x00526900` (asserts `sourceItemId` :279, `quantity`
+:281, `targetBag < ITEM_BAG_SLOTS` :282), which sends ONLY when the item's bag has
+model 21 -- the EQUIPPED bag -- and packs the item's own slot, the target bag's id and
+the target slot; so field 1 is the item's slot in the equipped bag and the source bag
+is implied. CORROBORATED 4 of 4 by the loads' own `0x013E` cells (head 213 at (3,4),
+boots 214 at (3,5), gloves 215 at (3,6) on `20260917T090355 :53310` moved as
+`[4,2,1]`/`[6,2,2]`/`[5,2,3]`; set 0's off hand 17730 at (231,1) on `20260919T103604
+:58638` moved as `[1,136,6]`). The general bag-to-bag move is another message and on
+no tape. **`0x0030`'s two shapes:** an EMPTY target slot draws `0x014B [key, item,
+equipped bag, slot]` + `0x006F [agent, visual, item]` (4 of 4, a field); an OCCUPIED
+one draws `0x0152 [key, occupant, item]` ALONE (4 of 4, `20260819T132414 :53419`, an
+outpost), the client exchanging the two items' cells. **Two slot orders:** retail's
+equipped BAG is ldufr's order (Head 4, Boots 5, Gloves 6) and the VISUAL array is
+GWLP-R's (Boots 3, Gloves 5, Head 6) -- both lineages right about different arrays;
+ours puts armour at the visual slot (legal; identity mapping), and the replay carries
+retail's two mappings with known-bad arms for each applied to the wrong array. **The
+`0x006F` rule:** a field's own-agent equip/unequip carries it (7 of 7), an outpost's
+does not (0 of 5); sent by the `0x0199` byte's rule. **Client asserts read first:**
+`0x014B` ItCliApi:2126 + the add worker's ItCliInv:105 (the destination must be
+EMPTY -- a filled cell is refused, never sent), `0x0152` ItCliApi:2253/2254/2257 and
+ItCliInv:687/688. **The model:** the dress decides every item's cell first
+(`item_layout_begin`, the constants' layout then the character's stored cells under
+`--persist`) and sends it through `item_cell` (byte-identical when nothing is stored);
+`handle_item_move` / `handle_equip_item` plan against the store (itemstore.plan_move /
+plan_equip) and refuse with nothing sent: an empty source, an undeclared bag, a slot
+past the bag, a FILLED destination, an unknown or worn item, a slot-less type, an off
+hand beside a two-hander; a two-hander displaces a worn off hand to the backpack FIRST
+(RECONSTRUCTION, the set switch's shape). The `0x006E` array and the player's `0x006D`
+are built from the store; an equip into slot 0/1 rewrites the ACTIVE set's items
+(`SET_ITEMS_OVERRIDE`) and the swing model (`apply_party_character`); a hand EMPTIED in
+game is the open edge (the swing model keeps the last weapon; said in the log), and
+`select_weapon_set` then enters the empty hand by `0x014B`, never a `0x0152` with a 0.
+Every accepted cell is persisted (`charstore` `item_locations`, validated); the next
+dress restores armour and set items, NOT a hand change (the sets own slots 0/1;
+logged). `schema/overrides.json` 79 and 48 carry the derivation; `test_dispatch` lost
+both allowlist rows (the stale "(0 loopback, 1 live)" note with them); `test_c2striage`
+§4 requires both ARMED. `test_itemmoves.py` (floor 78, TESTS.md) replays the twelve
+retail batches byte for byte with retail's ids and drives the server. Affected set:
+19 of 19 green (1,619 checks: itemmoves, weapons, dispatch, c2striage, charstore, agentlife, catalog, codec, cmsgnames, heroskilltoggle, heroadd, herokick, wearmap, harness/sandbox, srclint, checks, citelint, identlint, provlint). **Still owed: the loopback drag and double-click** -- the runsheet is in
+the cmsg section, including the drag that will name the general move.
+
+---
+
 ### DESKWORK-D1 (step 6) -- 2026-09-23 -- **the hero skill toggle armed as RECONSTRUCTION (c2s 0x0019 HERO_SKILL_TOGGLE): the suppress click, a per-hero mask, the whole-mask reply, the body stops casting it**
 
 [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md) §DESKWORK-D1 "The hero skill

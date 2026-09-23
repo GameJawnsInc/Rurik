@@ -190,13 +190,14 @@ DROPPED_ON_PURPOSE = {
             "day a drop exists, and its reply is measured: 0x002A move-to with "
             "the target, then 0x0159 [item, agent], 0x013E [1, item, bag, slot], "
             "0x0021 [agent]. schema/overrides.json GAME_CMSG 63.",
-    0x0030: "EQUIP_ITEM (0 loopback, 1 live) -- the inventory double-click. "
-            "NAMED 2026-09-13 from the same capture, n=1, and dropped because "
-            "this server dresses the body once at login (0x006E) and holds no "
-            "per-slot equip state to move: answering it means 0x014B "
-            "ITEM_CHANGE_LOCATION [1, item, 3, 0] + 0x006F [agent, slot, item] "
-            "for the item's slot, both measured on retail. Small arm, no state "
-            "for it yet. schema/overrides.json GAME_CMSG 48.",
+# 0x0030 EQUIP_ITEM was here as "(0 loopback, 1 live) -- the inventory
+# double-click ... this server dresses the body once at login (0x006E) and
+# holds no per-slot equip state to move ... Small arm, no state for it yet."
+# Both halves were stale by the time it left: retail's census counts 8 sends on
+# 3 connections, not 1, and the state exists -- ARMED 2026-09-23 (DESKWORK-D1
+# step 8): itemstore.py holds every item's (bag, slot) from the dress on, and
+# handle_equip_item answers the two shapes retail's tapes show (an empty slot:
+# 0x014B + 0x006F; an occupied slot: 0x0152 alone). studies/cmsg DESKWORK-D1.
 # ---- DESKWORK-D1 step 3, 2026-09-23: retail's c2s triage ---------------------
 # Every GAME_CMSG opcode ArenaNet's own client sent over the 96 live game
 # connections (`python toolkit/authsrv/c2striage.py`, the census committed as
@@ -320,18 +321,15 @@ DROPPED_ON_PURPOSE = {
             "models, a refusal for a map with no content row. Dropped until "
             "step 7 -- an arm that transferred the client to an unbuilt map "
             "would strand it.",
-    0x004F: "ITEM_MOVE (1 loopback DECODE on 2026-08-10, before UNHANDLED "
-            "logging; 4 live on 2 connections, 20260917T090355 and "
-            "20260919T103604) -- [byte, word, byte] answered 42-69 ms later by "
-            "0x014B ITEM_CHANGE_LOCATION (4 of 4) with 0x006F "
-            "AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT beside it on 3 of 4: an item "
-            "moving between slots, the reply naming it; fields 2-3 are the "
-            "destination bag and slot (0x014B echoes them 4 of 4), field 1 is "
-            "UNVERIFIED. NAMED 2026-09-23 "
-            "(schema/overrides.json GAME_CMSG 79). DESKWORK-D1 step 8 arms it "
-            "with a per-slot equip store alongside 0x0030 EQUIP_ITEM; this server "
-            "dresses the body once at login and holds no bag model to move "
-            "within. Dropped until step 8.",
+# 0x004F ITEM_MOVE was here from step 3 to step 8 of DESKWORK-D1 (both
+# 2026-09-23): "fields 2-3 are the destination bag and slot ... field 1 is
+# UNVERIFIED ... this server dresses the body once at login and holds no bag
+# model to move within. Dropped until step 8." Step 8 read the client's sender
+# (GmItemHelpers 0x00526900 sends it only for an item in the bag of model 21,
+# packing the item's own slot first) and the four tapes' load cells: field 1 is
+# the item's slot IN THE EQUIPPED BAG, 4 of 4. ARMED: handle_item_move answers
+# 0x014B [key, item, bag, slot] (+ 0x006F [agent, slot, 0] in a field) from the
+# itemstore the dress seeds. studies/cmsg DESKWORK-D1 "Inventory".
 }
 
 # The retail c2s census `c2striage.py --write` commits beside this file: every
