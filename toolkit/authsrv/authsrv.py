@@ -10664,14 +10664,15 @@ GAME_CMSG_EQUIP_ITEM = 0x0030
 # (0x00526900) -> ItCliApi 0x00816AF0 -> wrapper 0x00920DE0. Its gate is
 # 0x008454F0(item): the item's PARENT bag (item+0xC) must be of type 2 -- the
 # equipped bag -- and then field 1 is the item's slot byte (item+0x50); any
-# other bag answers 9 and the drag takes the local path at 0x00526AC3, sending
-# nothing. (The first cut read the gate as "the item's bag has model 21"; 21 is
-# 0x00844800's DEFAULT for any item that is not itself a bag container -- EVID-
-# D1C-2.) So field 1 is the item's slot IN THE EQUIPPED BAG, CORROBORATED 4 of
-# 4 by each moved item's cell on the tape; the reply is 0x014B [key, item, bag,
-# slot] + 0x006F [agent, visual slot, 0] in a field. The path at 0x00526AC3
-# is the general move, 0x0072 below (this comment said "sending nothing"
-# until the owner's client sent one).
+# other bag answers 9 and the drag takes the path at 0x00526AC3, which sends
+# 0x0072 (below) for a whole item. (The first cut read the gate as "the item's
+# bag has model 21"; 21 is 0x00844800's DEFAULT for any item that is not itself
+# a bag container -- EVID-D1C-2. This comment said the 0x00526AC3 path sends
+# nothing until the owner's client sent one -- the branch was read to its
+# `je`, not to its call; the owner's confirmation pass, EVID-D1D-6.) So field 1
+# is the item's slot IN THE EQUIPPED BAG, CORROBORATED 4 of 4 by each moved
+# item's cell on the tape; the reply is 0x014B [key, item, bag, slot] + 0x006F
+# [agent, visual slot, 0] in a field.
 GAME_CMSG_ITEM_MOVE = 0x004F
 # 0x0072 [dword item, word bag, byte slot]: the general move, an item named by
 # ID dragged between two cells of the non-equipped bags. On NO retail tape (0
