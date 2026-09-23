@@ -6807,6 +6807,23 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   wrong (see `studies/skills` §37.5 for the session where exactly that shape of
   null nearly shipped from a different cause)
   (was 82 of 98 before §11)),
+  `toolkit/authsrv/test_skillword.py` (**2026-09-22, DESKWORK-D5 step 3 (a) and (b) — the
+  skill-damage word and the player's own maximum before a damage word.** §1 is the sender,
+  fixture-less: a body's spell at the player goes out as gain, `[10, player, skill]`, word
+  (retail's order for a spell onto the observer); `--no-skill-damage-word` drops the `[10]`
+  (the known-bad arm); the player's own skill hit on a foe carries none (self-scoped); a
+  hostile's attack skill 322 at the player names it immediately before its word and a plain
+  swing does not; `armour_ignoring_damage` at the player sends no 42 while the maximum is
+  the last declared value and `[10, player, 258]` immediately ahead of the 55, sends the 42
+  first once the maximum moved (and the tracker follows), and `--player-max-always` sends it
+  every time (the known-bad arm). §2 reads the live corpus (declared skip without it): ≥ 92
+  property-10 words, every one naming the observer and every one followed by a damage word
+  to it; 0 of the observer's ≥ 45 own hits on others carries one (1,440 today — a negative
+  with exposure); the observer's 42 rides 0 of its ≥ 3 armour-ignoring words and sits immediately
+  ahead of 0 of ≥ 400 damage words at the observer (a first cut counted a 42 anywhere earlier
+  in the batch and read four Reversal-of-Fortune heals as damage-word declarations); and ≥ 13
+  of ≥ 47 positive-55 heal words at the observer carry it — some, not all, which is open.
+  13 checks, floor 8 (the sender). Read-only on the vault),
   `toolkit/authsrv/test_adrenreplay.py` (**2026-09-22, DESKWORK-D5 step 6 — the per-bar
   adrenaline simulation animref §19 asked for, scored press by press against retail's
   accept / refuse.** `adrenreplay.py` replays the client's own slot rules (skills §26.2:

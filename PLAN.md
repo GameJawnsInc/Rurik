@@ -1945,7 +1945,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   last paragraph) — an Elementalist arc's seed. Cyclone Axe's per-foe attack and scatter
   are unmeasured.
 * **DAGGERS, after RUN-2** (daggers §8, last paragraph). A dual whose first strike
-  lands and whose second misses (is 3 sent?); property 10 on the victim (the foe's skill, 229 / 230 unread); the short gap
+  lands and whose second misses (is 3 sent?); ~~property 10 on the victim~~ (decoded, skillcast §16.6, and SENT since 2026-09-22: `[10, me, skill]` ahead of a skill's word at the observer, self-scoped 92 of 92; 229 / 230 are Lightning Orb / Javelin); the short gap
   after a skill's hit on SWORDS (9 of 21, an eighth of the interval off) and the three
   short-and-single dagger ones — not DAGGERS-F20's early double, which explains the
   rest. Sneak Attack with a sword is dropped (PvE-only).

@@ -1921,6 +1921,21 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "messages; studies/skills 34.11), and the client "
                          "repaints nothing either way (34.6), so the "
                          "difference is wire shape only.")
+    ap.add_argument("--no-skill-damage-word", action="store_true",
+                    help="do not send 0x009F [10, player, skill] ahead of a "
+                         "skill's damage word at the player -- the server as "
+                         "it was until 2026-09-22. Retail sends it 92 of 92, "
+                         "always naming the observer (never the observer's "
+                         "own hits), and the client stores it as the skill "
+                         "the next damage number belongs to (skillcast 16.6 "
+                         "and its 2026-09-22 note).")
+    ap.add_argument("--player-max-always", action="store_true",
+                    help="declare the player's property 42 before EVERY "
+                         "armour-ignoring damage word at the player, as until "
+                         "2026-09-22. Retail never puts the observer's own "
+                         "maximum immediately ahead of a damage word at the "
+                         "observer (0 of 3 armour-ignoring, 0 of 401 damage "
+                         "words); it rides the Deep Wound batches instead.")
     ap.add_argument("--no-armour", action="store_true",
                     help="leave the five armour slots empty. The control for "
                          "anything that reads an armour RATING off the client: "

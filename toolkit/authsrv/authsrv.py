@@ -4854,6 +4854,29 @@ ENERGY = True
 # the pre-2026-09-22 arm: the family goes out to a dark bar as it did before.
 ADREN_BAR_GATE = True
 
+# THE SKILL-DAMAGE WORD, property 10 (DESKWORK-D5 step 3(b), 2026-09-22;
+# studies/skillcast/FINDINGS.md 16.6 for the client, skillcast 16.6's 2026-09-22
+# note for the wire). The client stores property 10's value at charContext+0x640 and the
+# next damage number consumes and clears it -- the skill the number belongs
+# to. ON THE WIRE IT IS SELF-SCOPED: all 92 in the live corpus name the
+# OBSERVER as the victim, each immediately followed by a damage word to the
+# observer (16: 82, 17: 7, 55: 3), and not one of the observer's own skill hits
+# on a foe carries one (0 of 45 accepted attack-skill presses on the PvP tape).
+# So it goes out when a SKILL damages the PLAYER, between the player's own
+# gain and the word, and never for the player's hits. `GV_SKILL_DAMAGE` was
+# defined 2026-08-06 and never sent until today. --no-skill-damage-word reverts.
+SKILL_DAMAGE_WORD = True
+
+# THE PLAYER'S OWN MAXIMUM BEFORE A DAMAGE WORD (DESKWORK-D5 step 3(a)). Retail
+# never puts the OBSERVER's property 42 immediately ahead of a damage word at
+# the observer: 0 of 401 16/17 words and 0 of 3 armour-ignoring 55 words. The
+# observer's 42 rides the Deep Wound's own open/close batches (the maximum
+# moving, 480 <-> 384 on 20260916T213125) and sits ahead of SOME heal words
+# (13 of 47 positive 55s; which is open). `armour_ignoring_damage`'s player
+# branch declared it before EVERY 55 word; now only when the maximum differs
+# from the last value declared. --player-max-always is the pre-2026-09-22 arm.
+PLAYER_MAX_ALWAYS = False
+
 # MOVEMENT SPEED ON THE WIRE (SLICE-F48, 2026-09-16; OFF by default from
 # 2026-08-22 until then). A speed modifier has exactly one wire channel:
 # GAME_SMSG 0x0027 AGENT_UPDATE_SPEED_BASE, the maxSpeed store at agent+0x5C
@@ -12251,6 +12274,10 @@ def body_spell_word(send, state, agent_id, skill_id, tid, tbody, dealt, frac,
             pools.damage_units(dealt / player_max_health(state)),
             time.time(), conn_id, f"{dealt:.0f} damage taken from skill "
                                   f"{skill_id}")
+    # DESKWORK-D5 3(b): [10, player, skill] between the gain and the word --
+    # retail's batch for a spell at the observer is 0xA7, 0xA0, (0xCF,) [10],
+    # [16], 16 + 10 + 9 of the 92 (adrenjoin's order census).
+    skill_damage_word(send, skill_id, f"a body's skill {skill_id} at the player")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id, frac],
          f"skill {skill_id} deals {dealt:.0f} to the player")
@@ -17013,6 +17040,35 @@ def agent_adrenaline(agent):
     return pool
 
 
+def skill_damage_word(send, skill_id, why):
+    """0x009F [10, PLAYER, skill] -- the skill the player's next damage number
+    belongs to (skillcast 16.6: the client stores it at charContext+0x640 and
+    the 16/17/18 and 55/56 bodies consume and clear it). Sent IMMEDIATELY
+    before the word, after the player's own gain, on every SKILL that damages
+    the player: OBSERVED 92 of 92 on the live corpus, all at the observer.
+    Never for the player's own hits (0 of 45); never for a plain swing."""
+    if not SKILL_DAMAGE_WORD or not skill_id:
+        return
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.GV_SKILL_DAMAGE, PLAYER_AGENT_ID, int(skill_id)],
+         f"skill {int(skill_id)} is the damage's skill ({why})")
+
+
+def declare_player_max(send, state, why, force=False):
+    """The player's property 42, sent when it DIFFERS from the last value this
+    server declared (retail: 0 of 401 damage words and 0 of 3 armour-ignoring
+    words at the observer have it immediately ahead; it rides the Deep Wound
+    batches where the maximum moves). `force` is the create and the
+    morale/restore sites, which declare unconditionally and seed the tracker;
+    --player-max-always forces every site."""
+    pool = int(player_max_health(state))
+    if force or PLAYER_MAX_ALWAYS or state.get("player_max_declared") != pool:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID, pool], why)
+        state["player_max_declared"] = pool
+    return pool
+
+
 def bar_holds_adrenal(bar=None):
     """Does this bar carry ANY skill with a non-zero adrenaline cost?
 
@@ -19277,7 +19333,7 @@ def aura_off(send, state, buff):
 
 
 def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, what,
-                           declare_max="always"):
+                           declare_max="always", skill_id=None):
     """Damage that ignores armour, on the channel retail uses for it: 0x00A3
     [55, target, source, -fraction], the target's maximum declared FIRST
     (3 of 3 on the tape). Kills through the same doors a hit does.
@@ -19293,10 +19349,13 @@ def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, w
         player_pools(state)
         if state.get("player_dead"):
             return 0.0
-        pool = float(player_max_health(state))
-        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-             [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID, int(pool)],
-             f"maximum {int(pool)} declared ahead of {what}")
+        # DESKWORK-D5 3(a): the player's own 42 only when it MOVED since the
+        # last declaration (retail: 0 of 3 immediately before a 55 at the
+        # observer, 0 of 401 before a 16/17). It used to go out before every
+        # 55 word here, "3 of 3 on the tape" -- those three were a FOE's
+        # maximum ahead of Empathy's word, not the observer's.
+        pool = float(declare_player_max(send, state,
+                                        f"maximum declared ahead of {what}"))
         frac = _damage_fraction(amount, pool, agents.GV_ARMOR_IGNORING, what)
         state["player_health"] = max(0.0, state["player_health"] - amount)
         if ENERGY:
@@ -19309,6 +19368,9 @@ def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, w
             player_gains_adrenaline(
                 send, state, pools.damage_units(amount / pool), time.time(),
                 conn_id, f"{amount:.0f} armour-ignoring damage taken ({what})")
+        # 3(b): the skill the word belongs to, when the caller knows it (3 of
+        # the corpus's 92 property-10 words precede a 55 at the observer)
+        skill_damage_word(send, skill_id, what)
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
              [agents.GV_ARMOR_IGNORING, PLAYER_AGENT_ID, source_id, frac],
              f"{what}: {amount:.0f} armour-ignoring to the player")
@@ -19360,7 +19422,8 @@ def on_attack_triggers(send, state, attacker_id, conn_id):
             continue
         total += armour_ignoring_damage(
             send, state, attacker_id, ep.get("caster") or PLAYER_AGENT_ID,
-            amount, conn_id, f"hex {ep['skill']} punishes the attack")
+            amount, conn_id, f"hex {ep['skill']} punishes the attack",
+            skill_id=ep["skill"])                       # 3(b): the word's skill
     return total
 
 
@@ -21251,6 +21314,7 @@ def push_morale(send, state, conn_id, new_value, why, between=None):
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
          [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID, max_health],
          f"maximum health {max_health} at morale {morale.display(new_value)}")
+    state["player_max_declared"] = int(max_health)      # 3(a): the tracker
     # A SHRINKING POOL CANNOT RAISE THE BAR, and the client would not be the one
     # to notice: our own bookkeeping is what decides when the player dies, so a
     # current health left above the new maximum would make the next fraction we
@@ -25077,6 +25141,10 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
              [agents.GV_EFFECT_ON_TARGET, PLAYER_AGENT_ID, agent_id, _prep_vis],
              f"impact {_prep_vis} of agent {agent_id}'s preparation {_prep_sid} on the player")
+    # DESKWORK-D5 3(b): an ATTACK SKILL's hit on the player names its skill
+    # ahead of the word (322 / 327 / 340 / 341 among the corpus's 92); a plain
+    # swing (skill_id None) never does.
+    skill_damage_word(send, skill_id, f"agent {agent_id}'s attack skill at the player")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id, frac],
          f"damage {dealt:.0f} to the player"
@@ -25591,6 +25659,7 @@ def revive_player(send, state, conn_id, health_frac=1.0, why=" (the timer)",
          [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID,
           int(player_max_health(state))],
          "restore the player's maximum")
+    state["player_max_declared"] = int(player_max_health(state))   # 3(a)
     # Property 34 SETS the pool to fraction x maximum (studies/agentprops 1e), so
     # 1.0 is a full bar and not a doubled one. The client's own death path zeroes
     # the pools, so clearing the bit alone returns a body at nothing.
@@ -25646,6 +25715,7 @@ def player_refill_due(send, state, conn_id):
          [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID,
           int(player_max_health(state))],
          "restore the player's maximum (deferred)")
+    state["player_max_declared"] = int(player_max_health(state))   # 3(a)
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.GV_HEALTH, PLAYER_AGENT_ID, PLAYER_AGENT_ID, frac],
          "refill the player's bar (deferred)")
@@ -27632,6 +27702,7 @@ def _handle_request_players(send, state, conn_id, stop, rec):
          [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID,
           _health_max],
          f"PLAYER health = {_health_max}")
+    state["player_max_declared"] = int(_health_max)     # 3(a): seeds the tracker
     # The value field is a dword carrying IEEE float bits,
     # same as the damage path above. The purpose is no
     # longer unknown -- energy regeneration as a fraction
@@ -34801,6 +34872,22 @@ def main():
         print("NO ENERGY: skills are free, nothing is deducted, no property 62 "
               "goes out, and no adrenaline is tracked or sent (0x00CF, 0x00D0 "
               "and 0x00D2 all stay off the wire).")
+
+    if a.no_skill_damage_word:
+        global SKILL_DAMAGE_WORD
+        SKILL_DAMAGE_WORD = False
+        print("NO SKILL-DAMAGE WORD: no 0x009F [10, player, skill] ahead of a "
+              "skill's damage word at the player, as this server sent until "
+              "2026-09-22 (retail: 92 of 92, self-scoped; skillcast 16.6's note).",
+              flush=True)
+
+    if a.player_max_always:
+        global PLAYER_MAX_ALWAYS
+        PLAYER_MAX_ALWAYS = True
+        print("PLAYER MAX ALWAYS: the player's property 42 goes out before every "
+              "armour-ignoring word, as until 2026-09-22 (retail: never immediately "
+              "ahead of a damage word at the observer, 0 of 3 / 0 of 401).",
+              flush=True)
 
     if a.no_adren_bar_gate:
         global ADREN_BAR_GATE

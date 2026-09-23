@@ -2055,7 +2055,14 @@ Empathy's damage on the tape: the hexed foe's first swing drew `0x009F [42, foe,
 `triggers_on_attack = "Damage"` on a hex's row; `on_attack_triggers` at all three landing sites
 (`hit_enemy`, `land_swing`, `land_swing_on_body`) deals the episode's scale from its caster
 (episodes now remember `caster`) through `armour_ignoring_damage`, which declares the target's
-prop 42 immediately before the word and kills through the same doors a hit does; a foe that
+prop 42 immediately before the word (**for the PLAYER only when it moved since the last
+declaration, from 2026-09-22 — DESKWORK-D5 3(a): retail never puts the OBSERVER's own 42
+immediately ahead of a damage word at the observer — 0 of 3 armour-ignoring and 0 of 401
+16/17 words; it rides the Deep Wound's own open/close batches on `20260916T213125` (480 ↔
+384) and sits ahead of SOME heal fractions (13 of 47 positive 55s at the observer — which,
+is open). The "3 of 3" here is a FOE's maximum ahead of Empathy's word, which the body
+branch keeps; `--player-max-always` reverts**)
+and kills through the same doors a hit does; a foe that
 dies to its own swing's punishment never lands the swing. The declaration-before-fraction is
 what unit-setup's "health-max is a rare mid-combat correction" was. Empathy's `bonus` (the foe
 deals 1..15 less) is NOT modelled, said on the row. `--no-hex-triggers` reverts. **The corpus

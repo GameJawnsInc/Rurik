@@ -2292,6 +2292,18 @@ and every Javelin 1.0 s. `test_guards`' caller walk gains the three body-side he
 its two ground visuals); the dodge for every projectile; the `[55]` energy word a body's
 completion carries; the bonus penetration tier (item word 574).
 
+**2026-09-22 (DESKWORK-D5 3(c), read and NOT shipped).** "The `[55]` energy word" is a
+mislabel: property 55 is the health-gain channel everywhere else in this repo, and the
+body's energy word on the tape is **property 62 on `0x00A2`**, `[62, body, −cost/max]`. It
+is **hero-scoped** — 17 of the 48 hero completions on `20260914T005758` carry
+`[62, hero, −0.25]` (5 energy over a 20 pool), and 0 of 373 hostile prop-60 cast batches carry
+a `[62, hostile]` (the 25 `[62]`s in those batches are the observer's own) — so a HOSTILE's
+completion needs nothing. And its placement is not one rule: for the stance 346 (instant,
+E4/E5/E3 in one batch) the word rides that batch 17 of 17; for the attack skill 322 it rides
+the E4 batch 1 of 11 and a batch of its own 10 of 11. The hero's energy word is therefore
+recorded, not sent: which batch carries it for a cast with an activation, and where in the
+batch, is the question a hero tape with a 1 s spell would answer.
+
 ## 38. Fireball's splash -- 2026-09-20: a burst at the aim -- the explosion, then a word and an impact per foe
 
 **What §37 left.** A body's Fireball flew and landed on ONE target; the tape's 35 Fireball
