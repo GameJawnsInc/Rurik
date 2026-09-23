@@ -91,6 +91,124 @@ REFUSE_NOT_ENOUGH_ADRENALINE = 1960
 # run that reads the sentence off the screen. If the client shows something
 # else, this constant is refuted and that is a finding, not a build failure.
 REFUSE_NOT_ENOUGH_ENERGY = 1961
+
+# THE WHOLE REFUSAL BLOCK, ids only (DESKWORK-D5 step 7, REX-5; skills FINDINGS
+# 57). The owner's archive holds 1934..1993 as 60 PLAIN records, bracketed by
+# encrypted ones on both sides (1928-1933 and 1994-2000, RC4, `textrec.needs_key`)
+# -- so "60 readable, 6 encrypted" is the span 1928-1993, and the readable block
+# is exactly this table. The LABEL is OUR word for the condition the sentence
+# names, a closed vocabulary a test can pin; the sentence itself stays in the
+# archive and `textrec.TextIndex.get(id)` resolves it at run time. Where a
+# label carries a skill's name it is the short proper noun the repo uses
+# everywhere as a label (PLAN.md 7 Q17), not the sentence. EVIDENCE per row:
+# OBSERVED where a tape or a screen shows the id answering that condition,
+# RECONSTRUCTION otherwise -- the ids live server-side and the client only
+# renders what it is handed (skills 38.8), so most rows can only be
+# reconstructed from the text's own statement of its condition. Two rows are
+# TEMPLATED (they take %str/%num arguments) and `refusal_body` cannot carry
+# them bare; `refusal_reason_id` refuses them for that reason.
+REFUSAL_REASONS = {
+    1934: "invalid_attack_target",           # OBSERVED 1 of 1 (target 0, skills 38.5)
+    1935: "attack_needs_weapon",
+    1936: "attack_prevented_pacifism",
+    1937: "attack_prevented_amity",
+    1938: "target_invulnerable",
+    1939: "attack_prevented_obsidian_flesh",
+    1940: "spell_prevented_holy_veil",
+    1941: "attack_prevented_armor_of_mist",
+    1942: "attribute_check_failed",          # TEMPLATED
+    1943: "attribute_check_missed",          # TEMPLATED
+    1944: "spell_prevented_well_of_the_profane",
+    1945: "spell_prevented_crystal_bonds",
+    1946: "item_not_in_competitive_missions",
+    1947: "item_not_in_towns",
+    1948: "chest_in_use",
+    1949: "chest_empty",
+    1950: "chest_locked",
+    1951: "chest_already_open",
+    1952: "chest_already_used",
+    1953: "key_does_not_fit",
+    1954: "cannot_pick_up_item",
+    1955: "gold_capacity_reached",
+    1956: "item_reserved_for_other_player",
+    1957: "target_immune_bleeding",
+    1958: "target_immune_disease",
+    1959: "target_immune_poison",
+    1960: "not_enough_adrenaline",           # OBSERVED 39 of 39 (above)
+    1961: "not_enough_energy",               # OBSERVED on screen (skills 38.2)
+    1962: "inventory_full",
+    1963: "target_obstructed",
+    1964: "skill_recharging",                # never on any wire held (skills 38.5)
+    1965: "already_have_pet",
+    1966: "invalid_target",
+    1967: "no_pet",
+    1968: "pet_out_of_range",
+    1969: "casting_prevented_shroud_of_silence",
+    1970: "item_use_prevented_ignorance",
+    1971: "shouts_prevented_vocal_minority",
+    1972: "casting_prevented_shroud_of_shadows",
+    1973: "casting_prevented_silenced",
+    1974: "skill_prevented_world_enchantment",
+    1975: "spell_failed_target_carrying_bundle",
+    1976: "spell_failed_spell_breaker",
+    1977: "spell_failed_spell_shield",
+    1978: "spell_failed_shadow_shroud",
+    1979: "spell_failed_target_more_energy",
+    1980: "target_no_spells_to_steal",
+    1981: "target_not_animal",
+    1982: "target_no_flesh",
+    1983: "target_not_allied_minion",
+    1984: "target_not_enemy_minion",
+    1985: "skill_needs_different_weapon_type",   # the weapon gate's consumer
+    1986: "invalid_spell_target",
+    1987: "target_out_of_range",
+    1988: "skill_recharging_2",              # a second id with the recharging sentence
+    1989: "unrecognized_appearance_type",
+    1990: "already_have_boss_last_skill",
+    1991: "target_used_no_skills",
+    1992: "no_target_in_range_dead_boss",
+    1993: "target_last_skill_not_your_professions",
+}
+REFUSAL_OBSERVED = {1934, 1960, 1961}       # every other id is RECONSTRUCTION
+REFUSAL_TEMPLATED = {1942, 1943}            # take arguments; never sent bare
+REFUSAL_BLOCK = (1934, 1993)                # inclusive; the plain span
+REFUSAL_ENCRYPTED_NEIGHBOURS = tuple(range(1928, 1934)) + tuple(range(1994, 2001))
+# THE WEAPON GATE'S REASON (DAGGERS-B4). What retail sends on a weapon mismatch
+# is NOT OBSERVED -- the client very likely never sends the press -- so this
+# id is RECONSTRUCTION from the sentence's own condition, and the gate sends it
+# only under --refusal-reasons (default OFF: the bare release, the shape
+# retail uses 3 of 43 for a refusal whose reason we cannot name).
+REFUSE_WEAPON_TYPE = 1985
+assert REFUSAL_REASONS[REFUSE_NOT_ENOUGH_ADRENALINE] == "not_enough_adrenaline"
+assert REFUSAL_REASONS[REFUSE_NOT_ENOUGH_ENERGY] == "not_enough_energy"
+assert len(REFUSAL_REASONS) == REFUSAL_BLOCK[1] - REFUSAL_BLOCK[0] + 1
+assert len(set(REFUSAL_REASONS.values())) == len(REFUSAL_REASONS)
+
+
+def refusal_evidence(string_id):
+    """'OBSERVED' | 'RECONSTRUCTION' for an id in the block; KeyError outside it."""
+    if string_id not in REFUSAL_REASONS:
+        raise KeyError(f"string id {string_id} is not in the refusal block "
+                       f"{REFUSAL_BLOCK[0]}..{REFUSAL_BLOCK[1]}")
+    return "OBSERVED" if string_id in REFUSAL_OBSERVED else "RECONSTRUCTION"
+
+
+def refusal_reason_id(label):
+    """The string id for one of OUR labels; refuses a templated sentence.
+
+    A templated record (%str1%, %num1%) rendered bare shows the placeholders
+    or nothing -- neither is a refusal retail ever drew -- so the two such ids
+    are refused here rather than sent and found out on screen.
+    """
+    for sid, name in REFUSAL_REASONS.items():
+        if name == label:
+            if sid in REFUSAL_TEMPLATED:
+                raise ValueError(f"refusal {label!r} (#{sid}) takes arguments and "
+                                 f"cannot be sent as a bare coded string")
+            return sid
+    raise KeyError(f"no refusal reason labelled {label!r}")
+
+
 PLAYER_ARG_SLOT = 13           # arg slot rendering a playerId as a name (n=2)
 
 assert codedstr.decode_id([ALL_BODY_WRAPPER]) == (8, 1)

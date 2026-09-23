@@ -31,7 +31,7 @@ import chain  # noqa: E402
 import checks  # noqa: E402
 
 # FLOOR 83, from the green run of 2026-09-17 on the machine with the vault.
-LEDGER = checks.Ledger("daggers and the attack chain", floor=103)
+LEDGER = checks.Ledger("daggers and the attack chain", floor=105)   # 2026-09-23 (DESKWORK-D5 step 7): +2 in section 4, the weapon gate's reason id under --refusal-reasons and the bare release without it, from the green run
 check = LEDGER.ok
 
 PLAYER = 1
@@ -230,6 +230,30 @@ def section_weapon_gate(have_fields):
         check(E4 in [op for op, _ in sent],
               "--no-weapon-gate: the same press is accepted (the arm before "
               "today)")
+        # DESKWORK-D5 step 7: the reason id, DEFAULT OFF. Under --refusal-reasons
+        # the same refusal carries #1985 on the warning panel ahead of the
+        # release (RECONSTRUCTION from the sentence's own condition; the id
+        # is pinned, never the text).
+        import chatdefs
+        authsrv.WEAPON_GATE = True
+        authsrv.REFUSAL_REASONS = True
+        try:
+            sent = _land(authsrv, _world(authsrv), OFF)
+            ops = [op for op, _ in sent]
+            check(ops == [authsrv.GAME_SMSG_CHAT_MESSAGE_CORE,
+                          authsrv.GAME_SMSG_CHAT_MESSAGE_SERVER, E2]
+                  and sent[0][1] == [chatdefs.refusal_body(chatdefs.REFUSE_WEAPON_TYPE)]
+                  and chatdefs.REFUSE_WEAPON_TYPE == 1985
+                  and sent[1][1][1] == chatdefs.CHANNEL_WARNING,
+                  "--refusal-reasons: the sentence #1985 (the weapon-type refusal) on "
+                  "channel 7, then the release -- retail's three-message shape with the "
+                  "RECONSTRUCTED id", str([(hex(o), v) for o, v in sent]))
+        finally:
+            authsrv.REFUSAL_REASONS = False
+        sent = _land(authsrv, _world(authsrv), OFF)
+        check([op for op, _ in sent] == [E2],
+              "  and with the flag OFF (the default) the bare release again -- the "
+              "two arms differ")
     finally:
         authsrv.WEAPON_GATE = True
         agents.PLAYER_WEAPON = held

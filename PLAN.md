@@ -1918,8 +1918,17 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   RECONSTRUCTION); the NPC recharge anchor moved to the cast's COMPLETION
   (`rechargeprobe.py`, six spells OBSERVED, 229 a named divergence;
   `--no-npc-recharge-from-completion`); the fix pass the same day (the body hook, the
-  running-chain gate, P2/P3 recorded FAILED as written -- the log's fix-pass entry). Still
-  OPEN: party-wide shouts, the refusal ids; 3(d) Mend Condition; 3(e) a hero's zero gain;
+  running-chain gate, P2/P3 recorded FAILED as written -- the log's fix-pass entry).
+  LANDED 2026-09-23 (pass 3): party-wide shouts (skills §56, `shoutjoin.py`: 23 foreign
+  applies of 364/348 on the observer and a hero, 0 of 8 foe shouts, the radius the client's
+  own `aoe_range` 1000 bounded by the tape to ≥ 913 u; `party_wide = "earshot"`,
+  `--no-party-wide-shouts`); the refusal ids (skills §57, `chatdefs.REFUSAL_REASONS`: the 60
+  plain ids 1934–1993 by label, three OBSERVED, `--refusal-reasons` DEFAULT OFF, the weapon
+  gate's #1985 its one consumer); 3(d) Mend Condition (skills §58, `heal_if_removed`). Still
+  OPEN: the shout ANNOUNCE — retail's `[48, caster, skill]` for every instant skill (stances
+  and shouts, 133 in the corpus), ours prop 60; a 348 row (no armour-bonus mechanic to hang
+  it on); the hero's cure on screen (final-confirmation-needs-run); the batch order (retail
+  all applies then all speed words, ours per wearer); 3(e) a hero's zero gain;
   the `[62]` energy word (read, own-party-scoped, not shipped); the second refusal gate's
   variable; the armed-EMPTY death clear (a one-witness divergence, skills §34.11.4); a body
   or hero as interrupt VICTIM (RECONSTRUCTION, final-confirmation-needs-run) and the

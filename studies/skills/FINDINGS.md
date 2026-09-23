@@ -7994,3 +7994,161 @@ would be red); a hand row that a label row replaced at load (the tier rule faile
 someone else — a clause our flags and patterns do not catch — which is the standing
 weakness above, and the reason the tier is marked; an `AREA_BURST` mark on a row
 `spell_burst` refuses (`test_skilldamage` §14 would be red).
+
+---
+
+## 56. SKILLS-SH — party-wide shouts: retail applies "Charge!" and "Watch Yourself!" to every ally in earshot, each apply attributed by the INSTANT-skill announce `[48, caster, skill]`; the radius is the client's own `aoe_range` (1000 u) and the tape bounds it from below at 913 u without refuting it (2026-09-23)
+
+**Desk, no run.** DESKWORK-D5 step 5 ([studies/deskwork/PLAN.md](../deskwork/PLAN.md)
+§3 D5). The route's survey said: every type-15 `0x0042` on an observer is skill 364,
+all on `20260817T231139`, 42 the observer's own cast and 23 another caster's. The
+reader `toolkit/authsrv/shoutjoin.py` re-derives that from the bytes with its
+predictions stated first, and what it found is below. **The witness context is PvP**
+(Random Arenas on `20260817T231139`, the observer's four-player team against another)
+plus the owner's own PvE casts on six later captures, one of them with a hero.
+
+### 56.1 The survey, re-derived — P1 FAILED as registered, REPRODUCED as a total
+
+96 connections decode whole, none refused. **65 shout applies**: 59 on the observer
+(364 × 48, 348 × 11) and **6 on a hero** (348, `20260914T005758`, Koss); **42 the
+observer's own cast, 23 another ally's** — 17 on the observer and the 6 on the hero.
+The 65 = 42 + 23 is the survey's number to the unit; the "all 364, all on one capture"
+is not: 348 ("Watch Yourself!", type 15, `aoe_range` 1000) is in the set and the applies
+sit on ten captures. Recorded as P1 FAILED-as-registered with the measured composition
+beside it; `test_shouts.py` §2 pins the composition on tapes stamped to 2026-09-23.
+
+### 56.2 Which message announces a shout — OBSERVED, and it is not property 60
+
+The first cut looked for the spell's `0x009F [60, caster, skill]` and found **zero**
+for any Shout id in the corpus: every apply came out unattributed. The apply's own
+batch shows the announce: **`0x009F [48, caster, skill]`** — `agents.GV_INSTANT_SKILL_ACTIVATED`,
+named there since the property census and **sent by this server nowhere** — beside a
+`[21, caster, 622]` and an `0x00A5 [caster, text]` (the speech bubble), and for the
+observer's own shout E4 / E5 / E3 with no E4→E5 gap (activation 0). The corpus census
+of property 48 by the skill's type: **Stance (3) 64, Shout (15) 67, type 16 2** — 48 is
+the INSTANT skill's announce, not the shout's alone. Every one of the 65 applies has
+its 48 inside 1.5 s (P2), all at dt = 0. **Divergence, OPEN:** ours announces a shout
+through `cast_anim_msg`'s property 60.
+
+### 56.3 Sides: a shout reaches allies and never foes — OBSERVED
+
+The `0x0020` create's field 12 (the allegiance token) names the observer's team; the
+other team's casters shouted 364 **8 times** with **0 applies** on the observer, **4 of
+them inside 1000 u** under both position readings (169–558 u interpolated, 655–958 u
+held — §56.4 says what those numbers are worth). All 17 foreign applies on the observer
+came from the observer's own token (P3). One agent (15, conn 54071) carries a **third
+token**, never shouts, and is boosted by the team's shouts every time — so token
+equality is not party membership, and the reader treats a third token as UNKNOWN, not
+as a foe (the first cut called it a foe and P6 went red on it).
+
+### 56.4 Reach: the radius, bounded, not measured
+
+`aoe_range` (+0x6C of the skill record, `skilltable.py`) is **1000.0** for 364 and 348 —
+the value WIKI (GWW "Area of effect", as `skilltable.py`'s comment cites it) calls
+earshot. The tape has no agent's position at an apply: a create is exact once, a
+`0x0029` lead and a `0x002A` destination are points AHEAD of the agent, `0x002C` is exact
+and rare, and the observer's c2s moves are exact for the observer alone. So every
+distance here is interpolated between the samples either side of the event, carries its
+hold value and a stated error (a lead's allowance plus speed × age), and a party body's
+lead that lands ON the observer's own sample is a **follow lead** (the follow parks on
+the model) and says nothing about where the body stood.
+
+Over the 24 ally (announce, wearer) pairs: **23 applied** — 20 at 69–913 u, three at
+1114–1289 u each inside its own error; **1 did not** (the hero at t = 439.258 on
+`20260914T005758`), on a follow lead (hold 0.0), UNRESOLVED. **Largest resolved apply
+distance 912.7 u; zero resolved crossings of 1000 u either way** (P4). So the tape puts
+earshot at **≥ 913 u** and refutes nothing about 1000; the client's record and the wiki
+agree on 1000 and the server uses the record's number. **Label: the party-wide rule
+OBSERVED (23 foreign applies, 0 foe applies); the radius CORROBORATED (client table +
+WIKI), bounded by the tape.**
+
+### 56.5 The other allies are on the wire too — P6
+
+The batch of a 364 apply on the observer carries **`0x0027` speed words for the OTHER
+party members**: 86 words across the arena's 364 batches, 3–5 agents per apply, none on
+a foe-token agent, 15 on the third-token ally. That is the wire's own statement that the
+shout landed on every ally reached, not only on the agents whose effect list is sent
+(F38: the observer's and a hero's). Two refinements fall out: the observer's own words
+sit at 288 × 1.33 = 383.04 while the other players' sit at 300 × 1.33 = 399 (F48 P6's two
+bases, seen side by side in one batch); and at t = 702.662 the observer re-cast 364 over
+an ally's still-open 364 and **no word went out for the observer** — retail declares a
+speed word on a change of the VALUE, not at every episode change; F48 P5's "re-declares
+at EVERY episode change" was read off the cure batch, where both words were changes.
+`push_speed` already sends only on a change, so nothing moved.
+
+### 56.6 Shipped
+
+* `content/world.toml` `skill_effect.364`: `party_wide = "earshot"`, the row's own
+  provenance carrying §56.1–56.4.
+* `authsrv.apply_effect`: the per-wearer body moved into `_apply_effect_on` unchanged;
+  a `party_wide` row runs it once more for every agent `shout_wearers` returns — the
+  living allies (`allies_of`: heroes, henchmen, the player when a body shouts) inside the
+  skill row's `aoe_range` of the caster; each wearer gets its own episode, buff id, cure,
+  status / speed / attribute words, and the `0x0042` only where `effect_list_send` sends
+  one (the player, a hero). A row with no radius, or a caster with no position, reaches
+  the caster alone and says so. `--no-party-wide-shouts` is the caster-alone arm.
+* `toolkit/authsrv/shoutjoin.py`, `test_shouts.py` (42 checks, floor 30; TESTS.md).
+
+### 56.7 Not settled
+
+* **348 has no `skill_effect` row** and gets none here: its effect is an armour bonus
+  and no armour-bonus mechanic exists to hang it on, so a hand row would be an
+  icon-only row — the label tier's business (§55), not a hand row's.
+* **The hero's cure on screen** is final-confirmation-needs-run (D5's own cost line).
+* **The announce property** (56.2) and **the batch order** — retail sends every apply,
+  then every speed word; ours interleaves per wearer — are named divergences, unshipped.
+* The reach table's distances are bounds with stated errors; a tape with `0x002C`
+  positions around a shout, or a loopback run with the party placed at 990 / 1010 u,
+  would turn the bound into a measurement.
+
+---
+
+## 57. SKILLS-RX — the refusal block by id: the 60 plain strings 1934–1993 as a table of ids and OUR labels, three OBSERVED, the rest RECONSTRUCTION, behind a default-off flag whose one consumer is the weapon gate (2026-09-23)
+
+**Desk, no run.** DESKWORK-D5 step 7 (REX-5), closing §38.8's second item as far as a
+desk can. The owner's archive, read through `textrec.TextIndex` (never committed):
+**1934–1993 are 60 PLAIN records, none empty; 1928–1933 and 1994–2000 are RC4-encrypted**
+(`needs_key`). So the route's "60 readable, 6 encrypted" is the span 1928–1993, and the
+readable block is exactly the table. Two ids carry the same recharging sentence (1964
+and 1988); 1964 never appears on any wire we hold (§38.5). Two are TEMPLATED (1942,
+1943 take `%str` / `%num` arguments) and cannot be sent as a bare coded word.
+
+**What is committed** (`toolkit/authsrv/chatdefs.py`): `REFUSAL_REASONS`, id → a
+snake_case label of ours for the condition the sentence names (where a label carries a
+skill's name it is the short proper noun the repo uses everywhere, PLAN.md §7 Q17);
+`REFUSAL_OBSERVED = {1934, 1960, 1961}` (1934 1 of 1, §38.5; 1960 39 of 39; 1961 on
+screen, §38.2) — **every other row is RECONSTRUCTION**, because the ids live server-side
+and the client renders what it is handed (§38.8); `REFUSAL_TEMPLATED`; the block's edges
+and its encrypted neighbours; `refusal_evidence(id)`, `refusal_reason_id(label)`.
+`REFUSE_WEAPON_TYPE = 1985`.
+
+**The flag.** `--refusal-reasons`, **DEFAULT OFF**. Its one consumer is DAGGERS-B4's
+weapon gate, which sends `#1985` with the `0x00E2` release when the flag is on and the
+bare release (retail's shape for 3 of 43 refusals) when it is off — off because what
+retail sends on a weapon mismatch is NOT OBSERVED (the client very likely never sends
+the press). The two OBSERVED resource refusals go out either way, as before.
+
+**Tests pin ids and labels, never text**: `test_chatdefs` §6 (the table's shape and the
+three constants), §7 (the archive: every id plain and non-empty, the 13 neighbours
+encrypted — a declared skip without the archive), `test_daggers` §4 (the gate under both
+arms).
+
+---
+
+## 58. SKILLS-MC — Mend Condition (275): remove ONE condition and heal the flat scale once, IF one was removed (2026-09-23)
+
+**Desk, no run, no corpus witness** — the third cure shape §46.3 left unmodelled.
+The client's row: scale 5→70 (57 at rank 12), energy 5, activation 0.75, recharge 2,
+**target byte 4 = other ally** (the caster is not a legal recipient; Mend Ailment's is 3).
+The mechanic is the one §46.1/46.3 recorded from GWW on 2026-09-10 — remove one
+condition; if a condition was removed, heal — a flat heal gated on the removal, neither
+per-removed (276) nor per-remaining (277). Which condition goes: the newest (GWW "Cover",
+the rule `remove_conditions` already honours).
+
+**Shipped:** `skill_effect.275` (`removes_conditions = 1`, `heal_if_removed = true`);
+`resolve_heal` reads `heal_if_removed` and heals the flat scale once when the removal
+removed something, nothing otherwise; `--no-condition-heal-rule` reverts it with the other
+two shapes. `test_mechanics` §34: the no-condition CONTROL heals nothing (a flat heal
+there is the revert arm), one condition → removed and 57 once, two → the newest goes and
+still 57 once, aimed at the caster → no legal recipient, the revert arm heals without
+curing. **RECONSTRUCTION on the wire** (§46.3 stands: no retail cure has been captured).

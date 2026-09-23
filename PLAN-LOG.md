@@ -28,6 +28,44 @@ move back.
 
 ---
 
+### DESKWORK-D5 pass 3 (steps 5, 7, 3d) -- 2026-09-23 -- **party-wide shouts OBSERVED and shipped (a shout reaches every living ally inside the client's own `aoe_range`, 1000 u; 23 foreign applies on retail's wire, 0 of 8 foe shouts; the announce is property 48, not 60); the refusal block as a table of 60 ids and our labels behind a DEFAULT-OFF flag, the weapon gate its one consumer; Mend Condition's heal-if-removed shape**
+
+**Step 5, shouts** ([studies/skills/FINDINGS.md](studies/skills/FINDINGS.md) §56;
+`toolkit/authsrv/shoutjoin.py`; `test_shouts.py`). The survey's 65 = 42 + 23 is reproduced
+to the unit and its "all 364, one capture" is refuted: 59 applies on the observer (364 × 48,
+348 × 11) and 6 on a hero, on ten captures. **The announce is `0x009F [48, caster, skill]`**
+(`GV_INSTANT_SKILL_ACTIVATED`, stances and shouts alike, 133 in the corpus; property 60 never
+carries a Shout id — the first cut looked there and attributed nothing), every apply at
+dt = 0. Sides from the create's allegiance token: 17 of 17 foreign applies from the observer's
+team, 0 of 8 foe shouts applying (4 inside 1000 u); a third-token ally boosted every time, so
+the token is not party membership. Reach: 23 of 24 ally pairs applied, the largest RESOLVED
+distance 912.7 u, four crossings inside their own position error (leads, follow leads), zero
+refuting — the radius is the client's `aoe_range` 1000 (= WIKI earshot), CORROBORATED and
+bounded from below by the tape. The batch's `0x0027` words name the other party members
+(86, none on a foe token) and retail sends one only where the VALUE changed (F48 P5
+refined). Shipped: `party_wide = "earshot"` on 364, `apply_effect` → `_apply_effect_on` per
+wearer through `shout_wearers` (living allies inside the row's radius; the player when a body
+shouts; a row with no radius or a caster with no position reaches the caster alone, said so),
+`--no-party-wide-shouts`. **Witness context: PvP** (Random Arenas) plus the owner's PvE casts.
+**Open:** the announce property (ours 60), a 348 row (no armour mechanic), the batch order,
+the hero's cure on screen.
+
+**Step 7, the refusal ids** (§57; `chatdefs.REFUSAL_REASONS`; `test_chatdefs` §6–7,
+`test_daggers` §4). The archive holds 1934–1993 as 60 PLAIN records with 1928–1933 and
+1994–2000 encrypted — the route's "60 readable, 6 encrypted" is the span 1928–1993. Committed
+as ids and our snake_case labels only; OBSERVED 1934 / 1960 / 1961, every other row
+RECONSTRUCTION; two templated ids refused as bare bodies; `--refusal-reasons` DEFAULT OFF,
+the weapon gate sending #1985 under it and the bare release without.
+
+**Step 3(d), Mend Condition** (§58; `skill_effect.275`; `test_mechanics` §34): remove ONE
+(the newest) and heal the flat scale once IF one was removed; the no-condition control heals
+nothing; target byte 4 (other ally); `--no-condition-heal-rule` reverts. RECONSTRUCTION.
+
+Tests: test_shouts 42 (floor 30), test_mechanics 245 → 256, test_chatdefs 28 → 40 (49 with
+the vault), test_daggers 103 → 105; the affected set is in the pass summary, not the suite.
+
+---
+
 ### SKILLS-LT fix pass / DESKWORK-D4 step 4 -- 2026-09-23 -- **the label tier re-cut on review: 47 rows, not 59; nine refuted rows out, each refutation now a gate rule with a known-bad arm; 36 of 47 marked; `--no-skill-labels` wired and tested**
 
 Two reviewers read the first pass. The evidence refuter read all 59 shipped templates at run
