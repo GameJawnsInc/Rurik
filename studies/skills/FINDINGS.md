@@ -7995,7 +7995,7 @@ someone else — a clause our flags and patterns do not catch — which is the s
 weakness above, and the reason the tier is marked; an `AREA_BURST` mark on a row
 `spell_burst` refuses (`test_skilldamage` §14 would be red).
 
-## 56. SKILLS-LU — the first residue consumers: a CASTER-centred area, a caster-centred PARTY heal and the NON-attack chain gate; 10 more plain SERVED rows ship (57 of 131), each riding a consumer the row names (2026-09-23)
+## 59. SKILLS-LU — the first residue consumers: a CASTER-centred area, a caster-centred PARTY heal and the NON-attack chain gate; 10 more plain SERVED rows ship (57 of 131), each riding a consumer the row names (2026-09-23)
 
 **Status: SHIPPED, behind three revert flags, as label-tier rows marked by consumer.**
 DESKWORK-D4's residue per skill (§55.6), cheapest first, on the owner's chosen desk work.
@@ -8010,7 +8010,7 @@ step-4 overlay reached it early last time and served unreviewed rows to every se
 The emit went to the pass's scratch directory (`skilldesc.py --emit-labels <path>`), the
 tests read it through `RURIK_SKILL_LABELS` (the on-disk check) and `RURIK_CONTENT_EXTRA`
 (the server-side checks), and **the merge regenerates `vault/content/skill_labels.toml`**
-(§56.5). Until it does, `test_skilldesc`'s default on-disk arm is honestly red against the
+(§59.5). Until it does, `test_skilldesc`'s default on-disk arm is honestly red against the
 stale vault, and every server on the machine serves the 47-row tier.
 
 **The rule this pass follows is §55.2's, unchanged**: a row ships when the consumer acting
@@ -8019,7 +8019,7 @@ the machinery a whole class of exclusions was waiting on, and each row it moves 
 re-read against its template (at run time, `--row`; none is carried) for
 OVER-application the way §55.7's reviewers read the first 59.
 
-### 56.1 SKILLS-LU1 — the caster-centred area (A): five rows, one arm, and the six that stay
+### 59.1 SKILLS-LU1 — the caster-centred area (A): five rows, one arm, and the six that stay
 
 **What the records say** (a census over the corpus, a tool over the owner's install):
 284 records carry target byte 0 AND an `aoe_range` > 0, 36 of them Spells; every
@@ -8057,7 +8057,7 @@ position, computed before the 58 (the refusal contract), and a condition-only bo
 refuses one: for a byte-16 area over time "one target here" was a defensible reading;
 for a byte-0 one it has no meaning (the target IS the caster), so 1113 deals one tick to
 everyone inside and says so. RECONSTRUCTION throughout: the live corpus was searched in
-the fix pass (§56.7; 96 connections) and holds **no cast of 183 / 188 / 840 / 1113 / 2212
+the fix pass (§59.7; 96 connections) and holds **no cast of 183 / 188 / 840 / 1113 / 2212
 by anyone — NOT FOUND**, so the arm rests on the record alone (an `aoe_range`-radius
 `foes_within` at the caster's position is the whole claim) until a capture of one is read.
 
@@ -8067,7 +8067,7 @@ is exactly the over-application §55.2 excluded these rows for. `caster_area_row
 flag-free predicate the revert still reads so it can refuse; `test_labelconsumers` §1–§2
 put the flag's arm on the wire and watch the adjacent selected target stay untouched.
 
-### 56.2 SKILLS-LU2 — the party heal (B): two rows on a human reading, pinned to the template's digest
+### 59.2 SKILLS-LU2 — the party heal (B): two rows on a human reading, pinned to the template's digest
 
 **What the records say.** The four `HEAL_RECIPIENT_CLASS` rows are byte-0 Spells with a
 radius: 287, 2221 and 943 carry `aoe_range` 5000 — the record's own word for "the entire
@@ -8078,7 +8078,7 @@ Spell, an `aoe_range`, a `scale_means` in `SCALE_MEANS_HEAL`) and, in `resolve_h
 the caster's position, each healed `skill_heal`'s amount through `heal_agent` (a
 property-55 word each). For the player that is the party bodies; for a hero, itself and
 the player; for a hostile, its spawn `group` when its row carries one, else its allegiance
-(the fix pass, §56.7: the allegiance reading healed the OTHER hostile group inside 5000 u;
+(the fix pass, §59.7: the allegiance reading healed the OTHER hostile group inside 5000 u;
 what a monster's party is on retail is UNVERIFIED, and the group is the narrower reading).
 
 **Who is in the class is not in the record, and §55.7 refused to guess.** This pass does
@@ -8096,14 +8096,14 @@ changes its digest and the row falls back to `HEAL_RECIPIENT_CLASS` (a stale rea
 cannot ship). This is §55.7's review, written down where the gate can act on it, and no
 word of the text is carried — a digest of a sentence is a measurement of it, the same
 measurement the whole-corpus `templates_sha256` already is. RECONSTRUCTION: the live corpus
-holds **no cast of 287 or 2221 by anyone — NOT FOUND** (the fix pass's search, §56.7).
+holds **no cast of 287 or 2221 by anyone — NOT FOUND** (the fix pass's search, §59.7).
 
 **The revert differs from the area's, and the reason is written at both.**
 `--no-party-heals` heals the caster alone — `cast_recipient`'s path, the server until
 today — because the caster alone is a SUBSET of the right recipients, never a wrong one;
 the area's one-target path would be a wrong recipient at any range.
 
-### 56.3 SKILLS-LU3 — the non-attack chain gate (C): three rows judged, one row's step
+### 59.3 SKILLS-LU3 — the non-attack chain gate (C): three rows judged, one row's step
 
 DAGGERS-B5's gate at the E5 runs inside `if target and _is_attack_skill(...)`. The three
 `CHAIN_REQUIREMENT` rows — **784** (a Spell, `combo_req` 2: must follow a lead; a Poison
@@ -8123,7 +8123,7 @@ off-hand attack; `combo` 2) ADVANCES the chain as its Crippled lands on a living
 the 0x005C between the E5 and the E3 — the attack's order (E5, 0x005C, the word), read
 across (RECONSTRUCTION); its mark moves from `CHAIN_STEP_NOT_ADVANCED` to
 `CHAIN_STEP_ADVANCES`. **A body's cast of a chain-gated row lands on NOBODY** (the fix
-pass, §56.7 — this paragraph first said the requirement "is not judged" for a body and
+pass, §59.7 — this paragraph first said the requirement "is not judged" for a body and
 called that pre-existing; both reviewers showed it was a NEW over-application: for one
 commit a hero or a hostile put 784's Poison on its target with no lead, where the
 exclusion had landed nothing). Bodies carry no chain table, so a requirement is unmet by
@@ -8135,7 +8135,7 @@ retail, stated; a body chain is the residue. The gate reads the RECORD's `combo_
 1643 (a Skill, `combo_req` 1, no effect row) fails unchained too: less, and the family's
 rule (a reviewer's LU-R6).
 
-### 56.4 SKILLS-LU4 — the gate, the checker and the count
+### 59.4 SKILLS-LU4 — the gate, the checker and the count
 
 New marks (all in `skilldesc.DETAILS`, so in `OVERLAY_VOCABULARY`): `AREA_CASTER`,
 `HEAL_PARTY`, `CHAIN_GATED`, `CHAIN_STEP_ADVANCES`, `CLAUSE_REVEAL`. New wordings the
@@ -8163,7 +8163,7 @@ consumer that is named. By type: Spell 35, attack 7, Stance 4, Skill 4, Hex 3, S
 Preparation 1. The census with the fresh overlay: 55 modelled, 57 label-only, 411
 episode-only, 45 refused, 765 nothing.
 
-### 56.5 Regeneration, what the merge owes, and the owed client confirmation
+### 59.5 Regeneration, what the merge owes, and the owed client confirmation
 
 ```
 python toolkit/clientscan/skilldesc.py --emit-labels        # AT THE MERGE, on main: -> vault/content/skill_labels.toml (57 rows)
@@ -8182,8 +8182,8 @@ lacks a consumer serves its rows through the one-target path — main at 6d74d03
 on a selected hostile 3000 u away and poisons with 784 unchained (a reviewer's
 reproduction). Regenerate from `main`, after every live desk-\*c tree has merged it. A tree
 with the fix pass DROPS a label row carrying a mark it does not know
-(`content.LABEL_DETAILS_KNOWN`, §56.7), so the hazard is bounded to trees older than that
-fix.** The corpus search is DONE (§56.7): 784 OBSERVED 5× by bodies, the other ten NOT
+(`content.LABEL_DETAILS_KNOWN`, §59.7), so the hazard is bounded to trees older than that
+fix.** The corpus search is DONE (§59.7): 784 OBSERVED 5× by bodies, the other ten NOT
 FOUND. Owed: the client confirmation, a runsheet not a run, prediction first: **183 (Fire Magic, byte 0) at rank
 0 deals 30 fire to EACH hostile within 156 u of the player and nothing to a selected
 hostile farther off**; the gamesrv log carries `resolves through a LABEL-tier row
@@ -8195,7 +8195,7 @@ the player alone. 784 pressed at a hostile with no lead FAILS (the fail float, n
 and lands after a lead attack on it; `--no-nonattack-chain-gate` lands it on NOBODY with
 or without the lead (the exclusion), and a hero's 784 lands on nobody either way.
 
-### 56.6 What this refutes or changes, and what is next
+### 59.6 What this refutes or changes, and what is next
 
 - **Changed: three exclusion classes of §55.2 have consumers**, and the honest count of
   the plain set the server acts on is 57 of 131. Nothing here touches the 27 % (§54.4).
@@ -8213,7 +8213,7 @@ or without the lead (the exclusion), and a hero's 784 lands on nobody either way
   210 conditional SERVED rows; the marked clauses (7 knock-downs on label rows first; 840's
   self-Poison; 1113's four ticks); a flat-constant reader in `skill_condition` (167, 1033);
   then the 924 RECOGNISED and §54.4's two-consumer proposal (the owner's call).
-- **Open, route:** §55.5's and §56.5's confirmation runs; the corpus searches; step 5 (the 68
+- **Open, route:** §55.5's and §59.5's confirmation runs; the corpus searches; step 5 (the 68
   no-slot rows); step 6 (the timed effect types); the 141 INDETERMINATE slots.
 
 **What would refute this section.** A capture of a byte-0 area Spell whose words land on
@@ -8221,11 +8221,11 @@ foes around the TARGET rather than the caster, or at a radius other than the rec
 `aoe_range` (the arm's whole claim); a party heal on the wire that reaches an ally beyond
 5000 u or misses one inside it, or that leaves the caster out on 287 / 2221 (the reading
 was wrong — the digest pins which text was read); a failed non-attack chain step on the
-wire with a recharge, or with a shape other than the attack's (§56.3's RECONSTRUCTION);
+wire with a recharge, or with a shape other than the attack's (§59.3's RECONSTRUCTION);
 974's 0x005C absent or after the word; a shipped row whose template a person reads as
 firing on someone else — §55.3's standing weakness, unchanged.
 
-### 56.7 SKILLS-LU5 — the fix pass: what the reviewers refuted, and how each is answered (2026-09-23)
+### 59.7 SKILLS-LU5 — the fix pass: what the reviewers refuted, and how each is answered (2026-09-23)
 
 Two reviewers read pass 1 (an evidence refuter and an engineering reviewer); every
 finding below was re-derived on this tree before it was acted on, with the templates read
@@ -8236,11 +8236,11 @@ bare, 58 with the vault), `test_skilldesc` (a conjunct and a FAIL arm, counts un
 
 | # | finding | verdict on this tree | answer |
 |---|---|---|---|
-| 1 | **BLOCKER** (both): a BODY's cast of 784 / 973 / 1033 landed with no chain — `land_skill` never read `combo_req`. A new over-application: before pass 1 the rows were excluded and a body's cast landed nothing; the "pre-existing" defence covered the hand attack rows only | **CONFIRMED** — reproduced with the fresh overlay: a hero's 784 poisoned its target, a hostile's 784 poisoned the player, 1033 dealt its earth damage | a body's non-attack with `combo_req` lands on **NOBODY** (`land_skill`, before the terms; the 58 still closes the cast). Bodies carry no chain table, so the requirement is unmet by construction. **Retail's bodies meet it — TAPE, OBSERVED n=5** (§56.3), so NOBODY is LESS than retail, and a body chain is the residue. Tested: a hero and a hostile casting 784's and 1033's shapes land nothing, no fail word; a POSITIVE CONTROL (the same hostile's un-gated 840-shape Poison lands through the same path) so the null is the gate, not a dead path |
+| 1 | **BLOCKER** (both): a BODY's cast of 784 / 973 / 1033 landed with no chain — `land_skill` never read `combo_req`. A new over-application: before pass 1 the rows were excluded and a body's cast landed nothing; the "pre-existing" defence covered the hand attack rows only | **CONFIRMED** — reproduced with the fresh overlay: a hero's 784 poisoned its target, a hostile's 784 poisoned the player, 1033 dealt its earth damage | a body's non-attack with `combo_req` lands on **NOBODY** (`land_skill`, before the terms; the 58 still closes the cast). Bodies carry no chain table, so the requirement is unmet by construction. **Retail's bodies meet it — TAPE, OBSERVED n=5** (§59.3), so NOBODY is LESS than retail, and a body chain is the residue. Tested: a hero and a hostile casting 784's and 1033's shapes land nothing, no fail word; a POSITIVE CONTROL (the same hostile's un-gated 840-shape Poison lands through the same path) so the null is the gate, not a dead path |
 | 2 | **MAJOR** (refuter; minor for the engineer): a HOSTILE's party heal reached every same-allegiance hostile within 5000 u — across spawn GROUPS (`allies_of` reads allegiance only; the sandbox spaces groups 2,100 u apart) | **CONFIRMED** — group 'a' casting 287 healed group 'b' | `party_within` reads a hostile caster's `group` (MONSTERAI-J's, the provocation's unit) when its row carries one and heals that group; no group, its allegiance as before. **UNVERIFIED** as retail's definition of a monster's party, labelled at the banner; the group is the NARROWER reading (a subset of an allegiance). Tested with two groups inside the radius; a party body's `group` is not read (allegiance is the party marker) |
-| 3 | **MAJOR** (engineer): regenerating the machine-wide vault overlay at the merge serves the ten new rows to every tree that lacks the consumers (main at 6d74d03b lands 183 on a selected hostile 3000 u off; 784 poisons unchained) — the hazard the previous merge message already recorded, un-named here | **CONFIRMED** (the reviewer's reproduction on main's `authsrv`) | (a) named: §56.5, the PLAN-LOG entry, RUNBOOK's regeneration lines (regenerate from `main`, after every live tree has merged); (b) **structural**: `content.LABEL_DETAILS_KNOWN` — a label row whose `tier_detail` carries a token this tree does not know is DROPPED at load and named in `World.dropped` (the server prints `CONTENT DROPPED:` at startup); the set is `skilldesc.label_detail_vocabulary()` copied (the server path cannot import clientscan) and `test_skilldesc` pins the two equal. A tree with this fix serves the pre-consumer state for a row it cannot ride; a tree older than the fix has no guard, so the ordering rule stands. Proven through the real `load` with a forged future overlay |
+| 3 | **MAJOR** (engineer): regenerating the machine-wide vault overlay at the merge serves the ten new rows to every tree that lacks the consumers (main at 6d74d03b lands 183 on a selected hostile 3000 u off; 784 poisons unchained) — the hazard the previous merge message already recorded, un-named here | **CONFIRMED** (the reviewer's reproduction on main's `authsrv`) | (a) named: §59.5, the PLAN-LOG entry, RUNBOOK's regeneration lines (regenerate from `main`, after every live tree has merged); (b) **structural**: `content.LABEL_DETAILS_KNOWN` — a label row whose `tier_detail` carries a token this tree does not know is DROPPED at load and named in `World.dropped` (the server prints `CONTENT DROPPED:` at startup); the set is `skilldesc.label_detail_vocabulary()` copied (the server path cannot import clientscan) and `test_skilldesc` pins the two equal. A tree with this fix serves the pre-consumer state for a row it cannot ride; a tree older than the fix has no guard, so the ordering rule stands. Proven through the real `load` with a forged future overlay |
 | 4 | minor (refuter): `--no-nonattack-chain-gate` did not revert to the pre-pass server — it landed 784 unchained, the very over-application the exclusion prevented; `--no-caster-areas` had made the opposite choice | **CONFIRMED** | the flag is now the gate's **EXCLUSION**: a non-attack `combo_req` row lands on NOBODY for the player and for a body, no fail word, the cast's own E5 kept; 974's step moves nothing (its Crippled lands — the row shipped before this arm). The ungated landing is reachable by no flag, on purpose. Tested with and without a lead on the target |
-| 5 | minor (refuter): the owed corpus search takes one scan and finds 784 | **CONFIRMED and re-measured**: 96 live connections; positive controls 185 (27 announcements) and 780 (31); 784 announced 5×, each by a body 0.41–1.37 s after the same body's own 782 lead on the same target; 183 188 840 1113 2212 287 2221 973 1033 974 NOT FOUND as an announcement or an 0x00E3/E4/E5 | recorded at §56.1–§56.3 and the three banners; the labels are now RECONSTRUCTION (the arms) + OBSERVED n=5 (that retail's bodies meet 784's lead) + NOT FOUND (the other ten). The reviewer's note that the 784 completions carry a knock-down was not re-measured here; `CLAUSE_KNOCKDOWN` stays marked on 784 |
+| 5 | minor (refuter): the owed corpus search takes one scan and finds 784 | **CONFIRMED and re-measured**: 96 live connections; positive controls 185 (27 announcements) and 780 (31); 784 announced 5×, each by a body 0.41–1.37 s after the same body's own 782 lead on the same target; 183 188 840 1113 2212 287 2221 973 1033 974 NOT FOUND as an announcement or an 0x00E3/E4/E5 | recorded at §59.1–§59.3 and the three banners; the labels are now RECONSTRUCTION (the arms) + OBSERVED n=5 (that retail's bodies meet 784's lead) + NOT FOUND (the other ten). The reviewer's note that the 784 completions carry a knock-down was not re-measured here; `CLAUSE_KNOCKDOWN` stays marked on 784 |
 | 6 | minor (engineer): nothing tested ON THE WIRE that a failed step skips `apply_effect` and `resolve_heal` — a source count was the only lock | **CONFIRMED** | a chained self heal (no lead: the fail word and NO heal word, 50 stays 50; after a lead: 50 → 90) and a chained stance (no lead: no episode; after a lead: the episode opens) |
 | 7 | minor (engineer): `caster_area_row` / `party_heal_radius` are broader than the gate (no wording test, no reading) and would silently re-route a future HAND row; 5b read label rows only | **CONFIRMED** (no hand row matches today) | 5a now runs the HAND rows through the same predicates on every overlay, with an EMPTY allow-list: any hand row a consumer would re-route is named. 1643 (a Skill, `combo_req` 1, no effect row) is named as the one record the gate fails unchained beyond the label rows |
 | 8 | minor (engineer): the player's caster-centred burst never applied the row's knock-down; the body's arm (through `burst_body_spell`) did | **CONFIRMED**, latent (no `AREA_CASTER` row carries `knocks_down`) | `burst_player_caster_area` knocks down each landed, living foe as `burst_player_spell` does; tested on a synthetic row |
@@ -8249,11 +8249,11 @@ bare, 58 with the vault), `test_skilldesc` (a conjunct and a FAIL arm, counts un
 **Declined: nothing.** The one suggestion not taken as offered is LU-R6's "limit the gate to
 rows with a skill_effect row": the gate reads the record's `combo_req` on purpose — a
 requirement is the record's, not the label's, and failing 1643 unchained is less than
-retail and the family's rule — so it is stated (§56.3, the banner, 5a) rather than
+retail and the family's rule — so it is stated (§59.3, the banner, 5a) rather than
 narrowed.
 
 **What is still RECONSTRUCTION after this pass, unchanged in kind:** the fail shape for a
 non-attack (retail's one witness is an attack); whether 784's Poison lands on retail after a
 met lead (the five witnesses are announcements; the completion's words were not scored);
 what a monster's party is. **Owed:** a body chain (so a body's 784 can land after its own
-782, as retail's did 5 of 5); §56.5's client run.
+782, as retail's did 5 of 5); §59.5's client run.

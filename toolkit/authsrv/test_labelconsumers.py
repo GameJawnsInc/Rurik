@@ -1,6 +1,6 @@
 """SKILLS-LU: the first per-skill residue consumers, on synthetic rows.
 
-studies/skills/FINDINGS.md 56 (DESKWORK-D4's residue, 2026-09-23). The step-4
+studies/skills/FINDINGS.md 59 (DESKWORK-D4's residue, 2026-09-23). The step-4
 gate (skills 55.2) EXCLUDED three classes of plain SERVED rows because no
 consumer acted where retail acts; this file drives the three consumers that
 now do, each through the REAL cast path (handle_skill_press -> cast_tick for
@@ -20,7 +20,7 @@ reaches nobody). Section 5 reads the LOADED label overlay -- the vault's, or
 RURIK_CONTENT_EXTRA's -- and checks each row's mark against the server's own
 predicate, the way test_skilldamage 14 checks AREA_BURST against spell_burst;
 it declares a skip on an overlay with none of the three marks (the vault
-before the SKILLS-LU regeneration). The fix pass (skills 56.7) added: a BODY's
+before the SKILLS-LU regeneration). The fix pass (skills 59.7) added: a BODY's
 cast of a chain-gated row lands on NOBODY (the reviewers' blocker: a hero put
 784's Poison on its target with no lead), --no-nonattack-chain-gate is the
 gate's EXCLUSION (NOBODY) rather than the ungated landing, a hostile's party
@@ -49,7 +49,7 @@ import effects  # noqa: E402
 # FLOOR 30, from the green run of 2026-09-23 (SKILLS-LU): 8 (A, player) + 6 (A,
 # body) + 7 (B) + 8 (C) + 1 (the flags) -- section 5b declares a skip without a
 # regenerated overlay and adds 3 with one (33 under RURIK_CONTENT_EXTRA).
-# The fix pass of the same day (skills 56.7): +10 -> FLOOR 40 from the bare run (the
+# The fix pass of the same day (skills 59.7): +10 -> FLOOR 40 from the bare run (the
 # knock-down arm, the hostile group, the flag's NOBODY arm, the heal and stance guards,
 # a hero's and a hostile's chain-gated casts + the flag on the body path + the positive
 # control, 5a's two hand-row sweeps; 1643's record is a declared skip on a bare machine);
@@ -587,7 +587,7 @@ def main():
             check(authsrv.skill_chain_fields(1643)[1] == 1 and not authsrv._is_attack_skill(1643)
                   and "1643" not in saved_tables["skill_effect"],
                   "1643 -- a Skill, combo_req 1, NO effect row -- is the one loaded row the gate's "
-                  "RECORD read fails unchained beyond the label rows (LU-R6, stated in skills 56.7)")
+                  "RECORD read fails unchained beyond the label rows (LU-R6, stated in skills 59.7)")
         else:
             LEDGER.skip("5a. 1643's record (1 check)", "no skills table row 1643 (a bare machine)")
         if not any(marks.values()):

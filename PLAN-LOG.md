@@ -32,7 +32,7 @@ move back.
 
 This entry corrects the SKILLS-LU entry below it (append-only: that entry stands as
 written). Two reviewers read pass 1; [studies/skills/FINDINGS.md](studies/skills/FINDINGS.md)
-§56.7 is the record, every finding re-derived on the tree. **(1) BLOCKER, both reviewers:**
+§59.7 is the record, every finding re-derived on the tree. **(1) BLOCKER, both reviewers:**
 784 / 973 / 1033 shipped for every caster, but only the player's E5 judged `combo_req`; a
 hero's or a hostile's cast landed the Poison / Blind / earth damage with no chain — a NEW
 over-application (before pass 1 the rows were excluded and a body's cast landed nothing;
@@ -46,7 +46,7 @@ player and for a body; 974 moves nothing), never the ungated landing (which it p
 one commit). **(3)** a HOSTILE's party heal reached the OTHER hostile group inside 5000 u
 (`allies_of` reads allegiance); `party_within` now reads the caster's spawn `group` when it
 has one (UNVERIFIED as retail's party, the narrower reading). **(4)** the regeneration
-hazard named (§56.5, RUNBOOK): the vault is machine-wide, and a tree without the consumers
+hazard named (§59.5, RUNBOOK): the vault is machine-wide, and a tree without the consumers
 serves the ten rows through the one-target path — and bounded: `content.LABEL_DETAILS_KNOWN`
 DROPS a label row carrying a mark the tree does not know at load (`World.dropped`, printed
 at startup), pinned equal to `skilldesc.label_detail_vocabulary()` by `test_skilldesc`.
@@ -69,7 +69,7 @@ main; nothing was written to the vault by this pass either.**
 
 The step-4 gate (skills §55.2) excluded whole classes of plain SERVED rows because no
 consumer acted where retail acts; this pass built the three cheapest, per §55.6's order.
-[studies/skills/FINDINGS.md](studies/skills/FINDINGS.md) §56 is the record. **(A)** the
+[studies/skills/FINDINGS.md](studies/skills/FINDINGS.md) §59 is the record. **(A)** the
 CASTER-centred area: a Spell whose record's target byte is 0 with an `aoe_range` and no
 projectile bursts from the caster's position over the record's OWN radius (156 / 240 / 312
 -- `spell_burst`'s field, no constant of ours), at the player's E5 ahead of the attack
@@ -96,7 +96,7 @@ compass clause) and the wordings "relieved of" / "you and all". `check_label_row
 row shipped without its consumer's mark or outside its predicate. **57 = 131 − 10 − 64**
 (UNMODELLED_CLASS 5, RECIPIENT_NOT_A_FOE 5, HEAL_RECIPIENT_CLASS 2, CHAIN_REQUIREMENT 0); 46
 marked, the same eleven unmarked. Every arm is RECONSTRUCTION: no capture of any of the
-eleven skills' casts was read (the corpus search is owed, §56.5), and the client
+eleven skills' casts was read (the corpus search is owed, §59.5), and the client
 confirmation is a runsheet (183 at rank 0: 30 fire on each hostile within 156 u of the
 player, nothing on a far selected one; `gamesrv_args = ["--no-caster-areas"]` the control).
 Tests: `test_labelconsumers.py` NEW (30 checks, 33 with the marks loaded; every consumer

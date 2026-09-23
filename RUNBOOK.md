@@ -836,7 +836,7 @@ python toolkit/clientscan/test_skilldesc.py              # the file on disk must
 **The vault is machine-wide, and the overlay names the consumer each row rides.** Regenerate
 it from `main` only, and only after every live worktree has merged the gate that produced it:
 a tree whose server lacks a consumer a row's mark names (`AREA_CASTER`, `HEAL_PARTY`,
-`CHAIN_GATED`, skills §56) would otherwise serve that row through the one-target path — the
+`CHAIN_GATED`, skills §59) would otherwise serve that row through the one-target path — the
 over-application the gate refused. Since SKILLS-LU's fix pass a tree DROPS a label row
 carrying a mark it does not know (`content.LABEL_DETAILS_KNOWN`; the server prints
 `CONTENT DROPPED: …` at startup), which is the pre-consumer state and self-heals at the

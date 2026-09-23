@@ -2022,7 +2022,7 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "2026-09-23 (Hamstring's Crippled), which are not the "
                          "tier's (SKILLS-LT, studies/skills 55). The control "
                          "for anything a run attributes to a label-tier number.")
-    # SKILLS-LU (2026-09-23, studies/skills 56; DESKWORK-D4's per-skill residue):
+    # SKILLS-LU (2026-09-23, studies/skills 59; DESKWORK-D4's per-skill residue):
     # the first three consumers the step-4 gate was waiting on, one flag each.
     ap.add_argument("--no-caster-areas", action="store_true",
                     help="drop the CASTER-CENTRED area: a Spell whose record's "

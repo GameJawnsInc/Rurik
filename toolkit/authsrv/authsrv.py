@@ -13504,7 +13504,7 @@ def burst_body_spell(send, state, conn_id, who, sid, terms, amount, rank, inflic
           f"[studies/weapons 40]", flush=True)
 
 
-# ---- SKILLS-LU: THE CASTER-CENTRED AREA (2026-09-23, studies/skills 56; the
+# ---- SKILLS-LU: THE CASTER-CENTRED AREA (2026-09-23, studies/skills 59; the
 # first of DESKWORK-D4's per-skill residue consumers) --------------------------
 #
 # `spell_burst` above centres on the TARGET -- the record's byte 16, "target
@@ -13522,7 +13522,7 @@ def burst_body_spell(send, state, conn_id, who, sid, terms, amount, rank, inflic
 # with the centre moved. A duration on the record (1113's 5 s of ticks, 840's
 # flat 10) is NOT modelled: one tick, at the cast, and the label row says so
 # (DURATION_UNMODELLED). RECONSTRUCTION: the live corpus was searched
-# 2026-09-23 (the fix pass, skills 56.7; 96 connections) and holds NO cast of
+# 2026-09-23 (the fix pass, skills 59.7; 96 connections) and holds NO cast of
 # 183 / 188 / 840 / 1113 / 2212 by anyone -- NOT FOUND, so the arm rests on
 # the record alone (an `aoe_range`-radius `foes_within` at the caster).
 #
@@ -13635,7 +13635,7 @@ def body_caster_area_condition(send, state, conn_id, agent_id, skill_id, inflict
 # (skilldesc.CLASS_HEAL_READINGS): 1262 excludes the caster and 943 heals
 # only the relieved, and neither ships.
 # RECONSTRUCTION: the live corpus was searched 2026-09-23 (the fix pass, skills
-# 56.7) and holds NO cast of 287 or 2221 by anyone -- NOT FOUND, so the arm
+# 59.7) and holds NO cast of 287 or 2221 by anyone -- NOT FOUND, so the arm
 # rests on the record and the reading alone. A HOSTILE's party is UNVERIFIED
 # here: MONSTERAI-J's `group` (the spawn's own, the provocation's unit) is the
 # nearest thing the server has to a monster party, and the reading is the
@@ -13710,7 +13710,7 @@ def party_within(state, caster_id, radius):
 # condition lands on a living target, ahead of the condition's own messages
 # (the attack's order: E5, 0x005C, the word).
 #
-# A BODY's cast of such a row lands on NOBODY (the fix pass, skills 56.7):
+# A BODY's cast of such a row lands on NOBODY (the fix pass, skills 59.7):
 # bodies carry no chain table, so the requirement is UNMET by construction,
 # and landing the row unjudged was the over-application the gate's
 # CHAIN_REQUIREMENT exclusion refused (a hero or a hostile put 784's Poison on
@@ -36423,7 +36423,7 @@ def main():
         print(f"NO SKILL LABELS: {len(_gone)} label-tier skill_effect row(s) dropped "
               f"(vault/content/skill_labels.toml, SKILLS-LT) -- the consumers see the "
               f"hand rows only (the 54.8 hand fixes included).", flush=True)
-    # SKILLS-LU (studies/skills 56): the first residue consumers, one revert each.
+    # SKILLS-LU (studies/skills 59): the first residue consumers, one revert each.
     if a.no_caster_areas:
         global CASTER_AREAS
         CASTER_AREAS = False

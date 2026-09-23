@@ -395,7 +395,7 @@ FLAG_CLAUSE_ALSO_CASTER = "CLAUSE_ALSO_CASTER"
 FLAG_CLAUSE_CAST_SPEED = "CLAUSE_CAST_SPEED"
 FLAG_CLAUSE_RANGE = "CLAUSE_RANGE"       # "half the normal range": the arrow flies the weapon's here
 FLAG_SPEED_MOVE = "SPEED_MOVE"
-# SKILLS-LU (2026-09-23, the first residue consumers, skills 56): a compass /
+# SKILLS-LU (2026-09-23, the first residue consumers, skills 59): a compass /
 # hidden-object clause a combat consumer never reads (2212's second sentence).
 FLAG_CLAUSE_REVEAL = "CLAUSE_REVEAL"
 FLAG_PATTERNS = (
@@ -1220,7 +1220,7 @@ DETAIL_CONDITION_UNNUMBERED = "CONDITION_UNNUMBERED"   # a condition the text na
 DETAIL_LITERAL_DROPPED = "LITERAL_DROPPED"             # a constant printed in the text (25% armor penetration) that no field reads
 DETAIL_CHAIN_STEP_NOT_ADVANCED = "CHAIN_STEP_NOT_ADVANCED"   # "counts as an off-hand attack" on a non-attack: the chain never advances
 DETAIL_CLAUSE_MOVE_SPEED = "CLAUSE_MOVE_SPEED"         # a move-speed clause with no MOVE_SPEED label (1996)
-# SKILLS-LU (2026-09-23, skills 56): the first residue consumers, each named
+# SKILLS-LU (2026-09-23, skills 59): the first residue consumers, each named
 # on the rows it covers -- like AREA_BURST, a mark that says which machinery
 # the row rides, not an under-application.
 DETAIL_AREA_CASTER = "AREA_CASTER"            # authsrv.caster_area: byte 0, a Spell, a radius, no projectile -- bursts from the CASTER (a duration beside it is marked DURATION_UNMODELLED)
@@ -1243,7 +1243,7 @@ def label_detail_vocabulary():
     import clientscan -- and test_skilldesc pins the two equal, so a new mark
     lands in both files in one commit and an older tree DROPS the rows that
     carry it instead of serving them through the one-target path (SKILLS-LU's
-    fix pass, skills 56.7)."""
+    fix pass, skills 59.7)."""
     return frozenset(DETAILS) | AREA_WORDING | {FLAG_TARGET_FOE, FLAG_TARGET_ALLY}
 
 # SKILLS-LU: a byte-0 heal whose text names a CLASS of recipients (HEAL_RECIPIENT_CLASS)

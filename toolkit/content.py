@@ -202,7 +202,7 @@ LABEL_TIER = "label"
 # and grade "modelled" (reviewer ENG-6). Refused at load instead.
 TIERS = frozenset({LABEL_TIER})
 # THE MARKS A LABEL ROW MAY CARRY AND THIS TREE KNOWS (SKILLS-LU's fix pass, 2026-09-23,
-# skills 56.7; reviewer ENG-D4C-2). A label row names the machinery it rides in
+# skills 59.7; reviewer ENG-D4C-2). A label row names the machinery it rides in
 # `tier_detail` -- AREA_CASTER, HEAL_PARTY, CHAIN_GATED are CONSUMER marks: without
 # that consumer the row falls through to the one-target path, which is the very
 # over-application the gate's exclusion refused. The vault is machine-wide, so a

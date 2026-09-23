@@ -1934,7 +1934,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   excluded by reason (§55.2); the three hand-row fixes done. **Still open:** (i) **the
   client confirmation** — §55.5's two-line runsheet, 187 at rank 0 → 7 before armour with
   the LABEL-tier log line, `gamesrv_args = ["--no-skill-labels"]` the control; (ii) **the
-  residue per skill** — pass 1 and its fix pass landed 2026-09-23 (skills §56–§56.7,
+  residue per skill** — pass 1 and its fix pass landed 2026-09-23 (skills §59–§59.7,
   SKILLS-LU; PLAN-LOG): 57 label rows. **Owed at the merge: regenerate the vault overlay
   from `main` after every live worktree has merged (`skilldesc.py --emit-labels`,
   RUNBOOK).** Still out: a BODY's own chain (a body's chain-gated cast lands on NOBODY;

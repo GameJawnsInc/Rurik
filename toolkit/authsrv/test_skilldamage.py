@@ -796,7 +796,7 @@ def main():
         # LT-R4 / SKILLS-LU: a shipped non-attack with a chain requirement carries the
         # CHAIN_GATED mark -- the player's E5 judges it (NONATTACK_CHAIN_GATE) -- and
         # 784 (combo_req 2, a Spell) is such a row once the overlay is regenerated
-        # (skills 56); on the 2026-09-23 overlay before that it is simply absent.
+        # (skills 59); on the 2026-09-23 overlay before that it is simply absent.
         chained = [s for s in lab_ids
                    if authsrv.skill_chain_fields(s)[1] and not authsrv._is_attack_skill(s)]
         unmarked = [s for s in chained if "CHAIN_GATED" not in lab[str(s)]["tier_detail"]]

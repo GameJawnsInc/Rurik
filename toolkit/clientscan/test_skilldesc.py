@@ -842,7 +842,7 @@ if records is not None:
           and by_reason.get("UNMODELLED_CLASS") == [96, 97, 106, 2051, 2100]
           and by_reason.get("HEAL_RECIPIENT_CLASS") == [943, 1262]
           and "SELF_CONFLICT" not in by_reason,
-          "THE FIX PASS's EXCLUSIONS after SKILLS-LU (skills 56): 292's percent slot; NO chain "
+          "THE FIX PASS's EXCLUSIONS after SKILLS-LU (skills 59): 292's percent slot; NO chain "
           "requirement (784 973 1033 ship CHAIN_GATED); 96's corpse, 97's corpse-centred area, 106's "
           "fleshiness, the spirits of 2051 and 2100; the two class heals a person read as NOT "
           "including the caster -- 1262 excludes it, 943 heals only the relieved (287 and 2221 ship "
