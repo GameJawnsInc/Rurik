@@ -7878,6 +7878,28 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   Needs the vault. Floor 39 (was 29; §5 adds 12, of which 3 ride on
   `run/reskin-roster/Gw.exe` and declare a skip — 42 on a full vault, 39 on a
   vault holding only the pristine snapshots, which is the mandatory core), ~8 s),
+  `toolkit/clientscan/test_sendsites.py` (**2026-09-22, DESKWORK-D1 / CMSG: the
+  c2s send-site census, `studies/cmsg/FINDINGS.md` §D1**. `sendsites.py` is a
+  BARE-MACHINE byte scan — `gwpe`, `asserts`, `buildid`, no `capstone` — because
+  a census that answers "did a new c2s opcode appear after an ArenaNet build"
+  must run on a fresh machine. It finds the two channel framers by a MASKED
+  PROLOGUE SIGNATURE and reads each of their call sites' opcode from the
+  `C7 45 YY <imm32>` store within 64 bytes before, with a CONFIDENCE tie (the
+  store's stack slot must equal the `lea eax,[ebp+D]` buffer the framer is
+  handed) that rejects a coincidental `mov [ebp+D], 0x40` local. §1 pins that
+  the signature finds EXACTLY two framers per build (their two VAs swapped order
+  between 38797 and 38888, so a hardcoded "second framer" would census the wrong
+  channel). §2 pins 214 sites, 40 + 174 across the two — the game framer
+  (CharMsg, 174) and the auth framer (GcAuthCmd, 40), which is why a
+  single-framer census that finds 174 is not enough. §3 pins the five anchors
+  0x0040/0x0016/0x00B1/0x001E/0x001F to one game-channel wrapper each, at the VA
+  measured per build — the D1 survey's 38797 wrapper for 0x0016 (0x0091FD60) was
+  WRONG, that VA stores opcode 0x17, and the true wrapper is 0x0091FD00. §4 is
+  the known-bad arm: a bogus framer VA yields zero rows, so the census cannot
+  silently read as "no c2s opcodes". §5 proves the anchor scoping does real work
+  by showing the AUTH channel also carries a 0x16 homonym the game-framer scope
+  excludes. Needs the vault (the 38797 and 38888 client snapshots); an absent or
+  incomplete `vault/client` declares a skip. Floor 35, ~6 s),
   `toolkit/clientscan/test_avevents.py` (the two AgentView event allocators,
   located by ArenaNet's own asserts — `studies/crossbuild/FINDINGS.md` §2.5, and
   the last two addresses in that census. They were literals used to match call
