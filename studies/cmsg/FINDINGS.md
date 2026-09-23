@@ -520,3 +520,212 @@ solid and the NOUN is ours. `INSTANCE_LOAD_READY`, `LEAVE_GAME_SERVER`,
 `CLIENT_PERF_REPORT` are role labels with no client word behind them, and the
 refutation pass struck them on the same standard the proposals themselves had used
 to reject rivals. That is the standard working in both directions.
+
+---
+
+## DESKWORK-D1 — the c2s send-site census, and the hero kick it found (2026-09-22)
+
+DESKWORK-D1, steps 1 and 2. Two things settled here: a permanent, bare-machine
+census of every c2s send site in the client, and the hero-kick message it
+confirms — `c2s 0x001F`, OBSERVED once on a live tape, the client action
+`studies/heroes/FINDINGS.md` §3.3 had recorded as NOT FOUND.
+
+**CORRECTED 2026-09-22 (the fix pass), and read this before quoting the first
+cut.** The first version of this section, committed the same day, made three
+claims the two reviewers refuted from the bytes: (1) that the 40-site framer
+was "the AUTH channel" — it is a calling convention, and it carries GAME
+`0x0009`, `0x0092` and `0x0008` on the game connection; (2) that the two
+framers' VAs "swapped order" between 38797 and 38888 — they did not; (3) that
+7 of 214 sites "pass the opcode in a register (a forwarding thunk)" — six store
+it beyond a 64-byte window and one pushes a static buffer. All three are
+corrected below; the numbers that stand (214 = 40 + 174, the five anchors, the
+`0x0016` correction) were reproduced independently by both reviewers.
+
+### The census — `toolkit/clientscan/sendsites.py`
+
+Every "c2s NOT FOUND" verdict in this repo rested on a scratch enumeration that
+was never committed, and one searched the wrong family. This is the committed
+recipe, and it runs with no `capstone` (CLAUDE.md carve-out (1) scopes the
+disassembler to two named files; a census that must be re-run after every
+ArenaNet build cannot need a pip install), so it is a byte scan over `gwpe` +
+`asserts` + `buildid`.
+
+**TWO framers, by CALLING CONVENTION — neither is a channel. MEASURED (38797).**
+The client wraps each outbound message in a small function that stores the
+opcode into a stack buffer, fetches a connection, and calls one of:
+
+| framer (38797) | arguments | sites | example |
+|---|---|---|---|
+| `0x007DCF00` | `(conn, nbytes, buf)` | **174** | `0x0091FF30` (0x001F): `push buf; push 8; push conn` |
+| `0x007DCB10` | `(conn, buf, ndwords)` | **40** | `0x00491E50` (0x0009): `push 3; push buf; push conn` |
+
+**214 sites in all.** The submitted survey counted only the first; a census that
+claims it cannot go stale must enumerate both. On 38888 they are `0x007DD360`
+(174) and `0x007DCF70` (40); the dword framer is the LOWER VA on both builds.
+They are found by a **masked prologue signature**, never a hardcoded VA.
+
+**The CHANNEL is the connection argument, read per row.** Both framers take the
+connection as their first argument, and the same framer is called with either:
+
+- **`game`** — the site calls the GAME-connection getter, a 6-byte function
+  `mov eax,[abs]; ret` (`0x00491DE0` on BOTH builds, returning `[0x00C034D4]` on
+  38797 and `[0x00C06514]` on 38888), or pushes/loads that global directly.
+  Derived per build as the dominant `call X; push eax` before a framer call
+  (171 of 214 sites). **175 rows**, including THREE on the dword framer:
+  `0x00491E50` (opcode `0x0009`, 2,687 c2s on the live game wire), `0x00852930`
+  (`0x0092`, 305 on the wire; `0x00852E80` on 38888) and `0x00491D30` (`0x0008`,
+  a STATIC buffer in `.rdata` pushed as an image address). A census that
+  attributed the channel per framer reported GAME `0x0009` and `0x0092` as
+  having NO send site — the exact false-NOT-FOUND this tool exists to prevent.
+- **`auth`** — the site pushes `[reg+0x14]` of a struct loaded from the AUTH
+  global (`[0x00C03524]` on 38797, `[0x00C06564]` on 38888; derived per build as
+  the dominant absolute load in those sites' windows). **35 rows**, all on the
+  dword framer, none on the byte framer. The label is the nearest assert module
+  of its wrappers (GcAuthCmd) — a LABEL, not a name the client gave.
+- **`?`** — **4 rows**, named, not guessed: three sites in `0x004923D0`
+  (opcodes `0x0001`, `0x0002`, `0x0016`; `mov esi,[ebp+8]` — the connection
+  struct is a PARAMETER, so its channel is the caller's) and one in an AgTrack
+  function (`0x006047A0` / `0x00604C00`, opcode `0x000D`; `mov eax,[esi+0x1c]`
+  — a struct field). The window cannot name them and the footer counts them.
+
+**A site's opcode is the imm32 store INTO THE SLOT THE FRAMER IS HANDED, read
+over the whole containing function.** The store is `C7 45 D <imm32>` or
+`C7 85 D32 <imm32>`; the tie is a `lea reg,[ebp+D]` with the same displacement
+in the same function. MEASURED on both builds: **214 of 214 sites resolve, all
+CONFIDENT**, one of them static. The farthest store sits **235 bytes** before
+its call (`0x00920A70`, opcode `0x004D`); `0x002B` COMPASS_DRAW (`0x00920230`)
+stores at +0x1B and calls at +0x75. The first cut's 64-byte window missed
+`0x000A`, `0x000B`, `0x002B`, `0x0045`, `0x004C`, `0x004D` and the static
+`0x0008`, and its docstring explained the gap as "register thunks" — false. The
+confidence tie is what separates the true `0x0040` wrapper `0x009207B0` from a
+coincidental `mov [ebp-0x48], 0x40` size local in `0x0091FB20`. The length
+column is the last `push imm` in the arg-setup tail (bytes for the byte framer,
+dwords for the dword framer; `0x00A2`'s push comes AFTER its store and is read
+correctly, 4).
+
+**Five anchors, pinned per build.** MEASURED, each resolving to ONE game-channel
+wrapper:
+
+| opcode | 38797 | 38888 | length |
+|---|---|---|---|
+| `0x0040` ROTATE_PLAYER | `0x009207B0` | `0x00921130` | 12 |
+| `0x0016` HERO_LOCK_TARGET | `0x0091FD00` | `0x00920680` | 12 |
+| `0x00B1` travel | `0x0085C280` | `0x0085C7C0` | — |
+| `0x001E` hero ADD | `0x0091FF00` | `0x00920880` | 8 |
+| `0x001F` hero KICK | `0x0091FF30` | `0x009208B0` | 8 |
+
+**The survey's `0x0016` VA is REFUTED.** DESKWORK-D1's route put the 38797
+`0x0016` wrapper at `0x0091FD60`. That VA is nobody's wrapper start on 38797: it
+lies 16 bytes INSIDE the `0x0017` wrapper (entry `0x0091FD50`; the bytes at
+`0x0091FD60` are `f8 50 6a 08 c7 45 f8 17`, mid-instruction). The true 38797
+`0x0016` wrapper is `0x0091FD00`. `0x0091FD60` IS the `0x0016` wrapper on 38833
+and 38849 — `schema/overrides.json`'s HERO_LOCK_TARGET row records it for 38833
+— so the survey conflated builds. The census reads each wrapper's own bytes and
+is self-correcting; the byte scan is the arbiter, not the survey text.
+
+**The known-bad arms.** A wrong framer VA yields zero rows from `census()`, and
+the CLI REFUSES a zero-row or a not-two-framers result with exit status 2 — the
+first cut printed `coverage: 0 sites` at exit 0, which on a drifted build reads
+as a clean "no c2s opcodes". `test_sendsites.py` (floor 85) identifies both
+snapshots with `buildid.of_image`, pins the framers, the 214 = 40 + 174, every
+row resolved, the per-row channels (175/35/4 and the three game sites on the
+dword framer), the recovered far stores, the anchors and their lengths, the
+`0x0017` wrapper start, the AUTH `0x0016` homonym, and both refusals.
+
+### The hero kick — `c2s 0x001F HERO_KICK`, OBSERVED n=1
+
+**Capture `20260916T150306`, connection `10.0.0.210:62321`.** The hero (index 6,
+Koss) loads into the party at t=151.746:
+
+- `s2c 0x0073` HERO_INFO `[6, 3, 1, 0, 243282, 245053, [322, 382, 348, 1, 385, 2], 0, 0]`
+- `s2c 0x0072` HERO_ACTIVATE `[6, 379, 96, 2]` — hero 6, **agent 379**, inventory **96**, aiMode 2
+- `s2c 0x01C2` PARTY_HERO_ADD `[28, 68, 379, 6, 3]` (t=151.784) — party 28, **owner player 68**, agent 379
+- `s2c 0x0144 [96, 1]` — Koss's OWN inventory container, declared at load
+- `s2c 0x00B0 [68, 2]` — the party size at load counts the hero
+
+Then the kick, at **t=158.676**:
+
+- `c2s 0x001F [6]` — the payload is the hero index (livewire prints the header
+  word `32799` = `0x801F` first).
+
+and its reply batch **42 ms later, at t=158.7182**, one 41-byte plaintext chunk
+whose first 35 bytes are, in this order:
+
+- `s2c 0x0075 [379]` — the hero agent
+- `s2c 0x01C3 [28, 68, 379]` — PARTY_HERO_REMOVE (RECV table `0x00bcb788`, the
+  SAME table as `0x01C2` PARTY_HERO_ADD — its roster-remove mirror)
+- `s2c 0x00F8 [379]` — the despawn sweep
+- `s2c 0x003E [379]` — AGENT_VIEW_UNLINK
+- `s2c 0x00B0 [68, 1]` — PLAYER_PARTY_SIZE(player 68, size 1)
+- `s2c 0x0145 [96]` — destroys the hero's inventory container 96
+
+(the remaining 6 bytes are `0x001E [62]`, a routine message). `test_herokick.py`
+encodes `hero_kick_batch(379, 68, 28, 96, 1)` through the codec and compares it
+to those 35 bytes **byte for byte**, with a rotated batch as the known-bad arm.
+
+The identity fields are proven from this one connection: **379** is the hero's
+agent id (`0x0072`, `0x01C2`), **68** the owner player number (`0x00B0`,
+`0x0199` INSTANCE_LOAD_INFO field 1, `0x01C2`), **28** the party id (`0x01C2`
+field 1, the first argument of `agents.party_hero_add`), and **96** the hero's
+inventory container (`0x0072` field 3 = inventoryId; `0x013E`/`0x0144` fill it at
+load; `0x0145` destroys it at the kick). Across the 35 LIVE captures (96 game
+connections) this is the ONLY c2s `0x001F`, and `0x0075`, `0x01C3`, `0x00F8`
+and `0x0145` each occur exactly once, all in this batch (both reviewers' census).
+
+**The kick holds across a zone. OBSERVED.** The two subsequent loads on the same
+tape — connection `50807` (map 449) and `56865` (map 430) — send `0x0073`
+HERO_INFO for hero 6 (still an owned hero, in the catalog) but **no `0x0072` and
+no `0x01C2`** (not in the party). A kicked hero is owned-but-not-in-party, and
+that asymmetry is the acceptance the server's `--persist` kick reproduces.
+
+**What the witness does NOT cover.** The connection's `0x0199` is
+`[68, 449, 0, 3, 0, 0]` — Kamadan, an outpost — and none of its 130 `0x0020`
+creates carries agent 379: the hero was a roster entry with NO BODY. So the tape
+says nothing about kicking a hero that has a body, and nothing about whether the
+client offers a kick in a field at all — **UNOBSERVED**. And 96 was Koss's own
+container: retail's `0x0145` is per hero.
+
+**The loopback witness.** `vault/captures/gamesrv/authsrv-20260913T093718-c1.jsonl`
+carries `c2s 0x001F [3]` at t=27.085 and `c2s 0x001F [40]` at t=29.755, both on
+the server's `unhandled` path. That run owned ONE hero, index 3 (HERO_ACTIVATE
+hero 3, agent 200, inventory 2, map 148 — also a town), so **`[3]` is a second,
+independent witness that the field is the hero index**. **`[40]` names no hero
+and is UNEXPLAINED** (40 = 0x28, the client's HEROES bound; possibly a
+sentinel); the handler drops it as unowned. **That the operator pressed the
+kick button is RECONSTRUCTION** — nothing in the capture records the click.
+Until now the server armed only HERO_AI_MODE / LOCK_TARGET / FLAG_PLACE /
+PARTY_FLAG_PLACE; the kick had no arm.
+
+**What the server now does (`handle_hero_kick`, behind `--no-hero-kick`).**
+
+- The batch, in retail's order, with OUR ids — OBSERVED.
+- The party size counts the remaining heroes — OBSERVED for "heroes count" (the
+  load frame `[68, 2]` with one hero). The LOAD path still sends
+  `1 + henchman` without heroes; that under-count is named in `PLAN.md` §8.1.
+- `0x0145` goes out ONLY for a key `--hero-bags` declared and no remaining party
+  hero still names. OURS is one `--hero-inventory` key shared by every hero
+  slot, and the client's `0x0145` handler (`0x008462B0` on 38797, a lookup on
+  `inventoryTable`) asserts `inventory` at **ItCliApi:2024** on a key it cannot
+  find — undeclared (the default rig: bags off, key 0; the first cut sent
+  `0x0145 [0]`, which `studies/smsgsweep` measured as the crash) or already
+  destroyed (a second kick). The omission is logged.
+- A hero WITH a body leaves through `remove_agent` (`0x0021`) FIRST —
+  **RECONSTRUCTION** (see above: the witness had no body). The first cut popped
+  `state["agents"]` and told the client nothing, and claimed retail "does NOT
+  send 0x0021", which the tape cannot support.
+- Its standing orders (`hero_cmd`) are cleared; `hero_locks_release` and
+  `handle_hero_command` iterate the PARTY, so a kicked hero holds no lock and
+  takes no orders.
+- Under `--persist` the kick is written to the character store and seeded back
+  on the next connection. `--no-hero-kick` reads NO stored kick (a revert that
+  left a saved kick in force was not a revert), and **`--reset-hero-kicks`** clears
+  the store at the character's first load — the un-kick until the ADD ships,
+  because the sandbox always passes `--persist` and one press would otherwise
+  drop a hero from the party for good. `sandbox.store_state` shows
+  `kicked_heroes`.
+
+`c2s 0x001F` is named **HERO_KICK** in `schema/overrides.json` (medium, OBSERVED
+n=1). The add (`0x001E`) stays static-only — its wrapper is `0x0091FF00`, no
+retail tape carries it — and is the next step. **Still owed: one loopback click**
+on a real client; the wire, the store and the source locks are proven offline
+(`test_herokick.py`, floor 52).

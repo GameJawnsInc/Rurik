@@ -778,8 +778,11 @@ def store_path(email=None):
 def store_state(email=None):
     """What the character store holds for the loopback account, or None:
     {"path", "account_unlocked", "characters": {name: {"level", "skillbar",
-    "attributes", "heroes": {index: {"skillbar", "attributes",
-    "attribute_points"}}}}}. Read-only, stdlib (json)."""
+    "attributes", "kicked_heroes", "heroes": {index: {"skillbar",
+    "attributes", "attribute_points"}}}}}. Read-only, stdlib (json).
+    `kicked_heroes` (SANDBOX-N2) is what an in-game kick under --persist
+    holds: those heroes stay OWNED but out of the party on every later run
+    until `--reset-hero-kicks` (or the ADD, when it ships) puts them back."""
     import json
     path = store_path(email)
     if not path or not os.path.isfile(path):
@@ -791,6 +794,7 @@ def store_state(email=None):
         chars[str(row.get("name", _uuid))] = {
             "level": row.get("level"), "skillbar": row.get("skillbar"),
             "attributes": row.get("attributes"),
+            "kicked_heroes": list(row.get("kicked_heroes") or []),
             "heroes": {int(k): {"skillbar": v.get("skillbar"),
                                 "attributes": v.get("attributes"),
                                 "attribute_points": v.get("attribute_points")}

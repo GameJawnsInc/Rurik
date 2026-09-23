@@ -258,6 +258,28 @@ the client refused it on its own — "Norgu cannot have a target while in an out
 so that bullet's verdict now lives with the explorable-map run in pvpui §28.5. Hiring
 remains NOT FOUND.
 
+**CORRECTED 2026-09-22, DESKWORK-D1 — the KICK is FOUND, from a live tape.** The
+"c2s hero direction is NOT FOUND" header, and the reading that leant on it for the
+in-game party panel (SANDBOX-N2), no longer covers removing a hero. **c2s `0x001F`
+HERO_KICK is OBSERVED** (n=1): capture `20260916T150306` connection
+`10.0.0.210:62321`, `c2s 0x001F [6]` at t=158.676 (the payload is the hero index),
+answered 42 ms later by retail's teardown batch `0x0075 [379]`, `0x01C3 [28, 68, 379]`
+(PARTY_HERO_REMOVE, the `0x01C2` mirror), `0x00F8 [379]` (despawn sweep), `0x003E
+[379]` (AGENT_VIEW_UNLINK), `0x00B0 [68, 1]` (party size), `0x0145 [96]` (the hero's
+inventory container). It **holds across a zone**: the tape's next two loads send
+`0x0073` for hero 6 (still owned) but no `0x0072`/`0x01C2` (not in the party). Our own
+client emits it too (`authsrv-20260913T093718-c1`, `0x001F` unhandled until now): its
+`[3]` names that run's one hero, a second witness that the field is the hero index; a
+later `[40]` names no hero and is UNEXPLAINED, and that the operator pressed the button
+is RECONSTRUCTION (the capture records no click). The retail witness was an outpost and
+its hero had no body, so a kick of a hero WITH a body — or in a field at all — is
+UNOBSERVED. Send wrapper `0x0091FF30` on 38797 (`studies/cmsg/FINDINGS.md`
+§DESKWORK-D1, the send-site census). This is the FIRST c2s hero *command* that removes
+party state, found the same way the stance was — by capturing rather than reading. The
+ADD (`0x001E`, wrapper `0x0091FF00`) is static only, no retail tape carries it, and
+stays NOT FOUND on the wire. Hiring (the outpost UI request for a fresh hero) also
+remains NOT FOUND.
+
 ---
 
 ## 4. Hero skill bars — the sharpest negative

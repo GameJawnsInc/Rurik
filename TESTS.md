@@ -6322,6 +6322,39 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   NEW list (an in-place write made the before/after log print the same value twice);
   and the duplicate report ignores empties, since two 0 slots are not two copies of a
   skill. Floor 24, set from a real green run.), **2026-09-15 (night, last), RUN-HEROLIB-D -- the swap.** `refuse_bar_swap` and `apply_bar_swap` are checked on the run's OWN numbers: fixture [281, 276, 310, 284, 991, 279, 1685, 256], D1 [281, 0, 256, 0] puts the leftmost skill rightmost and returns a new bar, D2 [256, 0, 281, 0] restores the fixture (the run's mirror check, no free parameter), the exchange is symmetric in its two ids, and the four refusals name their reason -- same skill both ends citing ChCliSkill.cpp:515, an id not on the bar (a swap exchanges two OCCUPIED slots; a replace is 0x005C), id 0, and a bar already holding an id twice. Floor 24 -> 33.
+  `toolkit/authsrv/test_herokick.py` (**2026-09-22, SANDBOX-N2 / DESKWORK-D1: the
+  hero kick, c2s 0x001F HERO_KICK**, `studies/cmsg/FINDINGS.md` §DESKWORK-D1. Not in
+  `test_herolib.py` because that module is bare-machine (no server import) and the
+  kick handler needs the server; this drives the real `handle_hero_kick` with a fake
+  send and a scratch store, like `test_charstore.py`'s 0x005E swap. §1 encodes the
+  pure `hero_kick_batch(379, 68, 28, 96, 1)` through the codec and compares it BYTE
+  FOR BYTE with the tape's own s2c plaintext chunk at t=158.7182 on 20260916T150306
+  :62321 (35 bytes; the remaining 6 are 0x001E [62]), with a ROTATED batch and a
+  0x00F8/0x003E swap through the same comparator as the known-bad arms (the first cut
+  compared to a hand-typed list and its known-bad, `reversed(order) != ORDER`, could
+  not fail); vault-gated, a missing capture declares a skip. §2 drives the handler:
+  (a) the DEFAULT rig (--hero-bags off, key 0) sends FIVE messages and no 0x0145 (the
+  first cut sent 0x0145 [0], the client's ItCliApi:2024 assert); (b) a hero WITH A
+  BODY leaves through remove_agent -- 0x0021 first, RECONSTRUCTION -- and its
+  hero_cmd is cleared; (c) a bags rig in a town emits retail's exact six with OUR ids;
+  (d) two heroes sharing one key: the first kick keeps the key (hero 7 still names
+  it), the second destroys it; (e) an unowned index and an already-kicked hero send
+  NOTHING; (f) a kicked hero's command is ignored (the guard reads the party). §3 is
+  the acceptance: a kick on a --persist store writes the character's `kicked_heroes`,
+  survives a reopen, and a fresh connection seeds it back so `hero_slots()` still OWNS
+  the hero (0x0073) while `party_hero_slots()` EXCLUDES it (no 0x0072/0x01C2) -- the
+  tape's next two loads; controls: --persist OFF writes nothing, `--no-hero-kick` with
+  a SAVED kick puts every owned hero back without reading the store (the first cut's
+  revert read the store anyway), `--reset-hero-kicks` clears the store on disk, and
+  the store REFUSES `kicked_heroes` holding index 0. §4 SOURCE LOCKS (syntax tree over
+  authsrv.py): the two `hero_slots()` loops in `_handle_request_players` guard on
+  `hero_kicked` and at least nine loops iterate `party_hero_slots(state)`; the 0x001F
+  dispatch arm calls `handle_hero_kick` only under `HERO_KICK_ENABLED`; `main()` wires
+  both flags; `hero_locks_release`/`handle_hero_command` iterate the party -- each
+  with a KNOWN-BAD source mutation (a party loop reverted to hero_slots(); `if
+  HERO_KICK_ENABLED:` -> `if True:`; the call hoisted above the check) that must
+  redden it (the first cut's load-path acceptance survived every such mutation
+  green). Floor 52.),
   `toolkit/authsrv/test_charstore.py` (the §6 persistence layer against a scratch
   vault, no server started: round-trips, the client's settings blob served back
   verbatim, and ensure-never-overwrites — the disease persistence exists to cure is
@@ -7979,6 +8012,40 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   Needs the vault. Floor 39 (was 29; §5 adds 12, of which 3 ride on
   `run/reskin-roster/Gw.exe` and declare a skip — 42 on a full vault, 39 on a
   vault holding only the pristine snapshots, which is the mandatory core), ~8 s),
+  `toolkit/clientscan/test_sendsites.py` (**2026-09-22, DESKWORK-D1 / CMSG: the
+  c2s send-site census, `studies/cmsg/FINDINGS.md` §DESKWORK-D1**. `sendsites.py`
+  is a BARE-MACHINE byte scan — `gwpe`, `asserts`, `buildid`, no `capstone` —
+  because a census that answers "did a new c2s opcode appear after an ArenaNet
+  build" must run on a fresh machine. It finds the two framers by a MASKED
+  PROLOGUE SIGNATURE, reads each call site's opcode from the `C7 45 D <imm32>`
+  store INTO THE SLOT a `lea` in the same function hands the framer (over the
+  whole containing function, not a fixed window), reads a STATIC .rdata buffer's
+  first dword when one is pushed, and names each row's CHANNEL from its own
+  connection argument (the game getter / global, or the auth struct's +0x14).
+  §0 identifies each snapshot with `buildid.of_image` (never the directory
+  name). §1 pins exactly two framers per build at the known VAs, the busier as
+  (conn, nbytes, buf) and the other as (conn, buf, ndwords), and that the dword
+  framer is the LOWER VA on both builds (the first cut claimed they swapped).
+  §2 pins 214 sites, 40 + 174, ALL 214 resolved and CONFIDENT (the first cut's
+  "7 register thunks" were a 64-byte window: the farthest store sits 235 bytes
+  before its call), the one static site (0x00491D30, opcode 0x0008), and the six
+  far stores (0x002B, 0x0045, 0x004C, 0x004D, 0x000A, 0x000B) by wrapper. §3
+  pins the derived connection map per build, channels 175 game / 35 auth / 4
+  unknown, the THREE game-channel sites on the dword framer (0x0009, 0x0092,
+  0x0008 — per-framer attribution called that framer "AUTH" and lost GAME
+  0x0009's only sender), no auth site on the byte framer, and the two functions
+  holding the 4 unknowns (a parameter connection). §4 pins the five anchors
+  0x0040/0x0016/0x00B1/0x001E/0x001F to one game-channel wrapper each per build,
+  their prologues, their lengths (8/8/12, and 0x00A2's 4 whose push follows its
+  store), the 0x0017 wrapper start (0x0091FD50 on 38797 — the survey's
+  0x0091FD60 for 0x0016 lies inside it and is nobody's wrapper start; the true
+  0x0016 wrapper is 0x0091FD00), and the AUTH 0x0016 homonym the channel scope
+  excludes. §5 is the known-bad arm: a bogus framer VA yields zero rows from
+  `census()`, and the CLI REFUSES it with exit status 2 (with and without
+  --anchors; the first cut exited 0 on "coverage: 0 sites"), with the real CLI
+  run as the positive control. Needs the vault (the 38797 and 38888 client
+  snapshots); an absent or incomplete `vault/client` declares a skip. Floor 85,
+  ~8 s),
   `toolkit/clientscan/test_avevents.py` (the two AgentView event allocators,
   located by ArenaNet's own asserts — `studies/crossbuild/FINDINGS.md` §2.5, and
   the last two addresses in that census. They were literals used to match call

@@ -28,6 +28,79 @@ move back.
 
 ---
 
+### DESKWORK-D1 (fix pass) -- 2026-09-22 -- **the census's channel and window corrected; the kick's 0x0145 and body guarded; the revert reverts**
+
+Corrects the entry below it (DESKWORK-D1 steps 1-2, same day), after two reviewers
+re-derived every claim from the bytes and the tapes. [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md)
+§DESKWORK-D1 (the section was renamed from §D1; its opening CORRECTED paragraph is the
+record). **Three claims of the first cut were false and are withdrawn:** (1) the 40-site
+framer `0x007DCB10` is not "the AUTH channel" — it is the `(conn, buf, ndwords)` calling
+convention, called with the GAME connection at three sites (`0x0009`, 2,687 c2s on the
+live wire; `0x0092`, 305; a static `0x0008`), so the census now names each row's CHANNEL
+from its own connection argument (175 game / 35 auth / 4 unknown, per build) and scopes
+the anchors by channel; (2) the framers' VAs did not swap order between 38797 and 38888;
+(3) the 7 "register-thunk" sites had opcodes 80–348 bytes before their calls (or a static
+buffer) — the window is now the containing function and all 214 sites resolve, confident.
+The CLI refuses a zero-row or not-two-framers result with exit 2. **The kick's defaults
+were unsafe:** `0x0145` went out unconditionally, on the default rig with key 0 (the
+measured `smsgsweep` crash, ItCliApi:2024) and in a multi-hero party against the ONE key
+every remaining hero still named; it now goes out only for a declared key no other party
+hero names. A hero WITH a body (UNOBSERVED — the retail witness was an outpost with no
+`0x0020` for the hero) now leaves through `remove_agent` (`0x0021`, RECONSTRUCTION) and
+its `hero_cmd` is cleared; `hero_locks_release`/`handle_hero_command` read the party.
+`--no-hero-kick` now reads no stored kick (it left a saved kick in force), and
+**`--reset-hero-kicks`** is the un-kick until the ADD ships (the sandbox always passes
+`--persist`; `sandbox.store_state` shows `kicked_heroes`). `test_herokick.py` (floor 29 →
+52) compares the batch to the tape's own 35 plaintext bytes with a rotated known-bad,
+drives the default/bags/body/two-hero/revert/reset arms, and locks the load path, the
+dispatch arm and `main()` with syntax-tree checks each carrying a source mutation that
+reddens it (the first cut's acceptance survived every mutation green, and its known-bad
+`reversed(order) != ORDER` could not fail). `test_sendsites.py` (35 → 85) identifies the
+snapshots with `buildid`, pins the channels, the far stores, the lengths and both
+refusals. The loopback witness is relabelled: `0x001F [3]` corroborates the hero index,
+`[40]` is UNEXPLAINED, the button press is RECONSTRUCTION. Named as a follow-up in §8.1:
+the load path's `0x00B0` under-counts heroes (retail's load sent `[68, 2]` with one hero).
+
+---
+
+### DESKWORK-D1 (steps 1-2) -- 2026-09-22 -- **the c2s send-site census, and the hero kick it found**
+
+[studies/deskwork/PLAN.md](studies/deskwork/PLAN.md) §3 DESKWORK-D1;
+[studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md) §D1. Two things landed, one commit
+each; the remaining D1 steps (retail c2s triage, the add, the hero skill toggle, travel,
+inventory) stay open in §8.1.
+
+**Step 2, the census.** `toolkit/clientscan/sendsites.py` enumerates every c2s send site
+in the client with NO disassembler (`gwpe` + `asserts` + `buildid`, bare-machine, so it
+re-runs after any ArenaNet build). It finds the two channel framers by a masked prologue
+signature and reads each call site's opcode from the `C7 45 YY <imm32>` store within 64
+bytes before, tied to the pushed buffer slot for confidence. MEASURED on 38797 and 38888:
+**214 sites, 40 (auth framer, GcAuthCmd) + 174 (game framer, CharMsg)**; the framers' two
+VAs swapped order between the builds, which is why a hardcoded "second framer" would have
+censused the wrong channel. Five anchors pinned per build (`0x0040`, `0x0016`, `0x00B1`,
+`0x001E`, `0x001F`). The route's 38797 wrapper for `0x0016` (`0x0091FD60`) is **refuted** —
+that VA stores opcode `0x17`; the true `0x0016` wrapper is `0x0091FD00` (the route
+conflated the 38833 address). Known-bad arm: a wrong framer VA yields zero rows.
+`test_sendsites.py` pins the framers, the counts, the anchors per build and the known-bad
+arm (floor 35). Commit `49a3ef01`.
+
+**Step 1, the kick.** c2s `0x001F` HERO_KICK is **OBSERVED n=1** (`20260916T150306`
+`:62321`, `c2s 0x001F [6]` at t=158.676 → the teardown batch at 158.718: `0x0075 [379]`,
+`0x01C3 [28, 68, 379]`, `0x00F8 [379]`, `0x003E [379]`, `0x00B0 [68, 1]`, `0x0145 [96]`).
+Named `HERO_KICK` in `schema/overrides.json` (medium). The server now handles it
+(`handle_hero_kick`): it drops the hero from the party set, despawns its body, sends
+retail's own batch in retail's order with OUR ids, and under `--persist` writes the kick to
+the character store (`charstore.set_hero_kicked` / `kicked_heroes`) so the next zone-in
+sends `0x0073` for the hero (still owned) but no `0x0072`/`0x01C2` — the acceptance the
+tape's own next two loads show. Behind `--no-hero-kick` (default ON: OBSERVED and tested).
+`test_herokick.py` replays the batch in byte order with a known-bad permutation arm, drives
+the real handler with a fake send and a scratch store, and pins the persist-across-zone
+asymmetry (floor 29). This corrects `studies/heroes` §3.3's "c2s direction NOT FOUND" (the
+kick is found; the add `0x001E` stays static-only) and §8.1's SANDBOX-N2 line. **Client
+confirmation (one loopback click) is still owed** — the wire and persist are proven offline.
+
+---
+
 ### ✅ DESKWORK-D5 step 3 — the fix pass corrections — 2026-09-22 — **corrects the "wire residue" entry below after two reviews: a real behaviour bug (the Deep Wound tracker left stale, re-declaring the player's 42) fixed with a tape-driven test; a FINDINGS note that listed five attack skills as spells corrected and moved to §16.6; the refuted "4 of 402" reading and the "hero-scoped" [62] wording fixed; §8's D5 line trimmed to what is actually open (ENG-4)**
 
 **Desk work, no client launched.** **(1) ENG-1/D5-R2, a real behaviour defect:** `deep_wound_open`/`deep_wound_close`'s player branches sent the moved maximum (property 42) without updating `player_max_declared`, so the first armour-ignoring word after every Deep Wound edge re-declared the same 42 ahead of its damage word — the exact case retail shows 0 of 3. Both branches now set the tracker as they send; `test_skillword` §1 gains two checks that DRIVE `deep_wound_open` (not a faked tracker) and assert no redundant 42 (floor 8 → 10). Reproduced before and after with a scratch probe. **(2) ENG-2, a false statement in a cited note:** the property-10 note listed 336/338/340/341/392 as spells; all five carry `type_code` 14 (`_is_attack_skill`) and arrive under an attack-skill announce/close, so they are attack skills (spells 143/179/185/186/197/222/229/230; attack skills 322/327/336/338/340/341/392; 499 has no row). The 2026-09-22 note also sat under skillcast §15.2 while every citation points to §16.6 — it is moved to §16.6, where "what §16 changes for a server" and property 10's ordering already live. **(3) ENG-5/D5-R6ii:** `test_skillword`'s docstring and a detail string carried the refuted "4 of 402 (all four with the maximum swinging)"; the file itself measures 0 of 401, and the four were Reversal-of-Fortune heals — corrected. **(4) D5-R7/ENG-7:** the `[10]` at the hex-trigger site is labelled INFERRED (the 3 corpus 55-with-[10] words are all skill 143 life steals, not hex punishments; the general rule holds 35 of 35 skill completions); the test fixture's "life steal" now uses 143. **(5) ENG-9b:** `armour_ignoring_damage`'s docstring header ("the target's maximum declared FIRST, 3 of 3") no longer matched the player branch — rewritten. **(6) D5-R9/ENG-9:** property 62 is **own-party-scoped** (observer 189 words + one hero agent 28, 0 to any other agent), not "hero-scoped" — weapons PLAN §37 corrected; nothing ships for it. **(7) ENG-11:** `test_skillword` §2 gains the OTHER direction of the 92/92 rule — a plain-swing word carries no [10] (0 of ≥40), an attack-skill-closed word carries it every time (≥15 of ≥15). **(8) ENG-4:** steps 6 and 3 landed but `PLAN.md` §8.1's D5 line still listed the replay and the [10]/[42]/[55] residue as open — trimmed to what is actually open, and it now records the armed-empty death clear and the second refusal gate as leads.
