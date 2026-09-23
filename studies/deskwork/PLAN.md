@@ -361,6 +361,8 @@ generality; skills §16, §47.
    enum per row, exporting no text.
 4. **Emit** `vault/content/skill_labels.toml` (`source = "client-table"`, extractor and
    build per row, `verified` = the slot match) merged UNDER `world.toml`'s 54 hand rows;
+   **LANDED 2026-09-23 for the PLAIN SERVED rows only (the owner's option 1 on the failed
+   step-3 gate): 59 rows of 131, 72 excluded by reason — skills §55, SKILLS-LT.**
    the server reads `scale_means` / `bonus_scale_means` / condition labels carrying
    `tier = 'label'` so the log and the sandbox's "modelled" grade say "label-only" — the
    fidelity judge's condition: a skill that deals its damage and drops its "if" clause

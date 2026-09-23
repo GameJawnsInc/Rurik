@@ -820,6 +820,23 @@ closing the game client ends the run. The same run without the window is
 slice as a spec). Needs `vault/run/slice/` (SLICE-B9's `compose.py --name slice
 --build`). [tools/orchestrator/README.md](tools/orchestrator/README.md).
 
+### The label tier, and regenerating it after an update
+
+The Skills tab's `~label` skills (59 on build 38797) act through a row the toolkit parsed
+out of the client's own description templates, not a hand-verified one
+(`studies/skills/FINDINGS.md` §55, SKILLS-LT). The rows live in the vault and are
+regenerated, never edited:
+
+```bash
+python toolkit/clientscan/skilldesc.py --emit-labels     # -> vault/content/skill_labels.toml
+python toolkit/clientscan/test_skilldesc.py              # the file on disk must equal a fresh emit
+```
+
+Redo it after every ArenaNet update (the emitter stamps the build from the image's own
+bytes and refuses an exe that is not a pinned pristine build). The gamesrv names the tier
+in its log at every such cast; `--no-skill-labels` drops the whole tier at startup and is
+the control for anything a run attributes to one of those numbers.
+
 ## Where the pieces live
 
 | Path | What it is |

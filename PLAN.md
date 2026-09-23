@@ -1908,19 +1908,21 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   3(e) a hero's zero gain; the `[62]` energy word (read, own-party-scoped, not shipped);
   the second refusal gate's variable; the armed-EMPTY death clear (a one-witness
   divergence, skills §34.11.4).
-* **DESKWORK-D4**: skill coverage in bulk. **Steps 1–3 LANDED 2026-09-22** (skills §54,
-  SKILLS-DT; PLAN-LOG): the probe reproduced, the slot mapping measured (str1 scale, str2
-  bonus, str3 duration — the natural order refuted), the parser + referee shipped with 0
-  slot conflicts and 1 real hand-row conflict, the Q7 census written (54 / 419 / 815).
-  **The route's own step-3 gate FAILED**: 341 of 1,265 slot-bearing rows (27 %) have every
-  slot read by a server consumer for its label, index and type (§54.4). **Owner's call
-  before step 4 emits anything**: (a) the route's own consequence — the label route is
-  refuted for the residue, coverage is per-skill work — or (b) §54.4's proposal, two bulk
-  consumers first (untyped damage; a duration episode for the non-episode families), which
-  move 115 rows (341 → 456, still under the gate). **Open either way:** three hand rows to
-  fix (Hamstring 320's slot, 317's and 253's inert "Duration"; `test_skilldamage.py:102-111`
-  moves with them); step 6, the timed effect types; the 141 INDETERMINATE slots wait on a
-  client tooltip run (§54.3).
+* **DESKWORK-D4**: skill coverage in bulk. **Steps 1–4 LANDED** — 1–3 on 2026-09-22
+  (skills §54, SKILLS-DT: the slot mapping, the referee, the Q7 census; the step-3 gate
+  FAILED at 27 %), **step 4 on 2026-09-23 on the owner's option 1** (skills §55, SKILLS-LT;
+  PLAN-LOG): the 131 PLAIN SERVED rows through the step-4 gate → **59 label-tier rows** in
+  `vault/content/skill_labels.toml`, under the hand rows, marked, `--no-skill-labels`
+  reverting; 72 excluded by reason (§55.2); the three hand-row fixes done. **Still open:**
+  (i) **the client confirmation** — §55.5's two-line runsheet, 187 at rank 0 → 7 before
+  armour with the LABEL-tier log line, `--no-skill-labels` the control; (ii) **the residue
+  per skill** — the 62 client-side exclusions by class (a caster-centred area for target
+  byte 0/1 moves 12, a condition rider on episodes 6, byte 1's resolution 3 heals), the 210
+  conditional SERVED rows, the unnumbered clauses (831, 231, 1044, 1652, 1996), a
+  flat-constant reader in `skill_condition` (167, 1033), then the 924 RECOGNISED and
+  §54.4's two-consumer proposal (still the owner's call); (iii) step 5, the 68 no-slot
+  rows; (iv) step 6, the timed effect types 16 / 24–28; (v) the 141 INDETERMINATE slots
+  wait on a client tooltip run (§54.3).
 
 **Skills and the slice** — [studies/skills/FINDINGS.md](studies/skills/FINDINGS.md),
 [studies/slice/FINDINGS.md](studies/slice/FINDINGS.md)

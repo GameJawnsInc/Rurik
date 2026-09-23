@@ -28,6 +28,41 @@ move back.
 
 ---
 
+### SKILLS-LT / DESKWORK-D4 step 4 -- 2026-09-23 -- **the label tier: 59 plain SERVED skills shipped as generated rows under the hand rows; 72 of 131 excluded by reason; `--no-skill-labels` reverts**
+
+The owner's decision on §54.4's failed gate (27 %): option 1 — ship the PLAIN SERVED rows now
+as a marked tier, the residue per skill. [studies/skills/FINDINGS.md](studies/skills/FINDINGS.md)
+§55 (SKILLS-LT1..4) is the record. "Plain" is code (`skilldesc.plain_served`): SERVED and none
+of IF / WHEN / FOR_EACH / WHILE / EXCEPTION / CHANCE — **131 of 341** (210 conditional: IF 154,
+WHEN 37, FOR_EACH 17, WHILE 9, CHANCE 7, EXCEPTION 6), the orchestrator's count reproduced.
+The step-4 gate (`build_label_row`) applies "A LABEL DOES NOT SAY WHEN" to every consumer and
+EXCLUDES what the server would over-apply, each by reason and id in the overlay's header: 10
+hand rows; 41 duration-only rows (no field to write); 6 conditions an episode inflicts later
+(113 435 926 1041 1997 2136); the pet attack 441; 11 at-cast damages / conditions whose target
+byte is self, unresolved or an ally (97 183 188 769 770 840 917 1113 1364 1468 2212); 3 heals
+byte 1 would hand to the selected agent (918 1032 1354). **59 = 131 − 10 − 62.** Under-applied
+rows ship MARKED (`tier_detail`): AREA_BURST 5, AREA_ONE_TARGET 20, CONDITION_BIT_CLEAR_REFUSED
+2, INDETERMINATE_SLOT 1. `skilldesc.py --emit-labels` writes `vault/content/skill_labels.toml`
+(deterministic; client-table provenance per row, build from the image's sha256, `verified` =
+per-slot numbers and enums; no text — `OVERLAY_VOCABULARY` is the closed set and `text_leak()`
+the tripwire). `content.py`: a `tier = "label"` row NEVER replaces a row without that tier,
+whichever layer (`_merge`, with the plain-update known-bad arm); `World.drop_tier`. The server:
+one path — `skill_damage` / `skill_heal` / `skill_condition` read a label row as a hand row —
+the per-cast log names the tier, and `--no-skill-labels` drops it at startup (the pre-2026-09-23
+server; a bounded start printed the 59 dropped). The grade: `sandbox.modelled_skills` is the hand
+rows only, `label_skills` the tier, the orchestrator marks `*` / `~label` (smoke green), the census
+grades `label-only`. The three content fixes §54.8 owed landed first (`73eb8320`): Hamstring 320
+→ `bonus_scale_means = "Crippled"` (inflicts 3..15 s where it inflicted nothing), Battle Rage 317
+and Scourge Sacrifice 253 drop the inert `scale_means = "Duration"`. Commits `73eb8320`
+(content), `7c9aec24` (emitter, gate, tier-aware load), `1f2173c0` (server, grade), and this
+one (the record). Tests: test_skilldesc bare floor 40 → 61 (124 with the vault), test_content
+46 → 50 (54), test_skilldamage 68 (75), test_sandbox 107 → 109, test_mechanics 246; the
+affected set (87 tests reading authsrv.py / content.py / sandbox.py / skilldesc.py as text or
+loading content) run and reported in the pass summary; not the suite. **Owed:** the client
+confirmation (§55.5's two-line runsheet: 187 at rank 0 → 7 before armour, the LABEL-tier log
+line, `--no-skill-labels` as the control). **Open:** the residue per skill (§55.6), step 5, step
+6, the 141 INDETERMINATE slots on a client tooltip run.
+
 ### DESKWORK-D1 (fix pass) -- 2026-09-22 -- **the census's channel and window corrected; the kick's 0x0145 and body guarded; the revert reverts**
 
 Corrects the entry below it (DESKWORK-D1 steps 1-2, same day), after two reviewers
