@@ -170,8 +170,14 @@ import vaultpath  # noqa: E402
 # checks read median - min instead of max - min (the flake: a preemption between
 # the two clock reads lifts one row) and gained the control that plants both a
 # preemption and a clock drift. It needs only a directory: bare floor.
+# 2026-09-23 (later): 141 -> 143, MEASURED with `RURIK_VAULT` at an empty
+# directory (143, the same 7 declared skips; 197 vaulted). sec.21 gained two
+# checks when `offset_line` stopped printing max - min as "residual": the float
+# line names median - min and max - median on a fixture where the three
+# differ, and the real Recorder's `clock_residual` is this section's own clock
+# term. One synthetic, one on a temp dir: both bare.
 LEDGER = checks.Ledger("separation: the quantity that actually predicts a warp",
-                       floor=141)
+                       floor=143)
 check = checks.adopt(LEDGER)
 
 MOVETAP = "movetap-20260819T171436.jsonl"
@@ -1887,11 +1893,18 @@ def main():
               f"({d_post['offset'] - T0:+.9f} s)",
               "per-row `wall_unix - t` IS the offset; anything else here means "
               "the loader is deriving rather than reading it")
-        check(d_post["spread"] < 1e-6 and d_post["spread"] * movesync.RUN_SPEED < 0.3,
-              f"the achieved residual is {d_post['spread'] * 1000.0:.6f} ms = "
-              f"{d_post['spread'] * movesync.RUN_SPEED:.4f} u at "
+        # `clock_residual` (median - min) is the residual since 2026-09-23;
+        # `spread` (max - min) bounds it and is held to the same line because
+        # this fixture is exact -- no row here is delayed.
+        check(d_post["clock_residual"] < 1e-6
+              and d_post["clock_residual"] * movesync.RUN_SPEED < 0.3
+              and d_post["spread"] < 1e-6,
+              f"the achieved clock residual is "
+              f"{d_post['clock_residual'] * 1000.0:.6f} ms = "
+              f"{d_post['clock_residual'] * movesync.RUN_SPEED:.4f} u at "
               f"{movesync.RUN_SPEED:.0f} u/s -- REALFIX section 2.2's "
-              f"\"< 1 ms (< 0.3 u)\" line, demonstrated",
+              f"\"< 1 ms (< 0.3 u)\" line, demonstrated (max - min "
+              f"{d_post['spread'] * 1000.0:.6f} ms: an exact fixture)",
               "this is the number the whole clock-anchor delta exists to move")
         check(0.9 < d_pre["spread"] < 1.0,
               f"while the truncated estimator's residual is "
@@ -1968,14 +1981,47 @@ def main():
         with contextlib.redirect_stdout(buf):
             off, spread = movesync.offset_from_stamps(w_post)
         printed = buf.getvalue()
+        # The return is still (median, max - min) -- `spread` kept its meaning
+        # and no caller changed -- while the announcement is `offset_line`'s,
+        # which since 2026-09-23 prints the clock residual, not `spread`.
         check((off, spread) == (d_post["offset"], d_post["spread"])
+              and printed == movesync.offset_line(d_post, "   ") + "\n"
               and "wall_unix" in printed
-              and f"{d_post['spread'] * 1000.0:.3f} ms" in printed,
+              and (f"clock residual {d_post['clock_residual'] * 1000.0:.3f} ms"
+                   in printed),
               "`offset_from_stamps` still returns the two-value contract every "
-              "caller unpacks, AND announces the source and residual",
+              "caller unpacks, AND announces the source and the clock residual",
               f"returned {(off, spread)} and printed {printed!r} -- a third "
               f"return value would have broken movesync.pair, resyncscore, "
               f"grantsim and this file's own section 1")
+
+        # THE LINE SAYS WHAT EACH NUMBER IS. Until 2026-09-23 the float arm
+        # printed max - min as "residual", and on a live capture that is the
+        # worst preemption between `event()`'s two clock reads, not the clock
+        # term (the real-Recorder block below). Every fixture above is exact,
+        # so there the two halves are both zero and no label could be wrong.
+        # This one is built so all three differ: one row on the least-delayed
+        # offset, 39 rows 3 us above it, one row 80 ms above it. By
+        # construction median - min = 3 us, max - median = 79.997 ms and
+        # max - min = 80 ms. The old line printed "residual 80.000 ms" here.
+        u_lab = ([T0] + [T0 + 3e-6] * 39 + [T0 + 0.080])
+        d_lab = movesync.offset_detail(
+            movesync.WallStamps([math.floor(o) for o in u_lab], u_lab))
+        line_lab = movesync.offset_line(d_lab)
+        check(abs(d_lab["clock_residual"] - 3e-6) < 1e-6
+              and abs(d_lab["worst_delay"] - 0.079997) < 1e-6
+              and (f"clock residual {d_lab['clock_residual'] * 1000.0:.3f} ms"
+                   in line_lab)
+              and (f"worst single-row delay "
+                   f"{d_lab['worst_delay'] * 1000.0:.3f} ms" in line_lab)
+              and f"{d_lab['spread'] * 1000.0:.3f} ms" not in line_lab,
+              f"the float line prints median - min as the clock residual "
+              f"({d_lab['clock_residual'] * 1e6:.1f} us, 3 by construction) "
+              f"and max - median as the worst single-row delay "
+              f"({d_lab['worst_delay'] * 1000.0:.3f} ms), and never prints "
+              f"max - min ({d_lab['spread'] * 1000.0:.3f} ms) as either",
+              f"printed {line_lab!r} -- a line that calls the worst "
+              f"preemption the residual quotes the scheduler as the clock")
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             movesync.offset_from_stamps(w_post, announce=False)
@@ -2099,6 +2145,24 @@ def main():
                   "this is the ONE number the whole clock anchor exists to "
                   "move, and it is measured on the same two clock reads a live "
                   "run makes -- on the side of them the scheduler cannot move")
+            # AND IT IS THE NUMBER THE LINE PRINTS. The check above computes the
+            # clock term itself from the file's offsets; `offset_line` prints
+            # `offset_detail`'s `clock_residual` and `worst_delay` (since
+            # 2026-09-23 -- before that it printed `spread` as "residual"). On
+            # the real capture they must be the same two numbers, or the
+            # printed line and this demonstration are about different things.
+            check(d_real["clock_residual"] == clock_term
+                  and d_real["worst_delay"] == real_offs[-1] - d_real["offset"],
+                  f"and `offset_detail` carries that same clock term as "
+                  f"`clock_residual` ({d_real['clock_residual'] * 1e6:.1f} us) "
+                  f"and the slowest row as `worst_delay` "
+                  f"({d_real['worst_delay'] * 1e6:.1f} us) -- the two halves "
+                  f"`offset_line` prints",
+                  f"clock_residual {d_real['clock_residual']!r} vs the test's "
+                  f"{clock_term!r}; worst_delay {d_real['worst_delay']!r} vs "
+                  f"{real_offs[-1] - d_real['offset']!r}. A key that still "
+                  f"held max - min would print the worst preemption as the "
+                  f"clock")
             trunc_real = movesync.offset_detail(
                 movesync.WallStamps(list(w_real), ()))
             check(trunc_real["spread"] > 100.0 * clock_term,
@@ -2116,25 +2180,27 @@ def main():
             # CONTROL, both directions, on THIS capture's own offsets: an
             # operand swapped for one that cannot fail is the failure this repo
             # keeps finding. Plant the worst preemption seen (80 ms, one row):
-            # max - min takes all of it and the clock term stays under 1 ms.
-            # Plant a 3 ms drift of the system clock against `perf_counter`
-            # across the file -- a CLOCK defect, what sec 2.2's term is about:
-            # the clock term goes red.
+            # the worst single-row delay takes all of it and the clock term
+            # stays under 1 ms. Plant a 3 ms drift of the system clock against
+            # `perf_counter` across the file -- a CLOCK defect, what sec 2.2's
+            # term is about: the clock term goes red. Read through the keys
+            # `offset_line` prints (2026-09-23), which the check above ties to
+            # this section's own clock term, so the control covers the line.
             def _term(unix):
                 d = movesync.offset_detail(movesync.WallStamps((), unix))
-                return d["offset"] - min(unix), d["spread"]
+                return d["clock_residual"], d["worst_delay"]
             u_real = list(w_real.unix)
             spiked = u_real[:]
             spiked[len(spiked) // 3] += 0.080
             drifted = [o + 0.003 * i / (len(u_real) - 1)
                        for i, o in enumerate(u_real)]
-            sp_term, sp_spread = _term(spiked)
-            dr_term, _dr_spread = _term(drifted)
-            check(sp_spread > 0.079 and sp_term < 0.001 and dr_term >= 0.001,
-                  f"CONTROL: an 80 ms preemption planted on one row takes max - "
-                  f"min to {sp_spread * 1e3:.1f} ms and leaves the clock term at "
-                  f"{sp_term * 1e6:.1f} us; a 3 ms clock drift across the file "
-                  f"takes it to {dr_term * 1e3:.3f} ms, red",
+            sp_term, sp_delay = _term(spiked)
+            dr_term, _dr_delay = _term(drifted)
+            check(sp_delay > 0.079 and sp_term < 0.001 and dr_term >= 0.001,
+                  f"CONTROL: an 80 ms preemption planted on one row takes the "
+                  f"worst single-row delay to {sp_delay * 1e3:.1f} ms and leaves "
+                  f"the clock residual at {sp_term * 1e6:.1f} us; a 3 ms clock "
+                  f"drift across the file takes it to {dr_term * 1e3:.3f} ms, red",
                   "the operand is blind to the scheduler and not to the clock; "
                   "without the second half this check could not fail, and "
                   "without the first it is still the flake")
