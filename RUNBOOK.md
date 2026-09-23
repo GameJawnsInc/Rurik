@@ -833,6 +833,15 @@ python toolkit/clientscan/skilldesc.py --emit-labels     # -> vault/content/skil
 python toolkit/clientscan/test_skilldesc.py              # the file on disk must equal a fresh emit
 ```
 
+**The vault is machine-wide, and the overlay names the consumer each row rides.** Regenerate
+it from `main` only, and only after every live worktree has merged the gate that produced it:
+a tree whose server lacks a consumer a row's mark names (`AREA_CASTER`, `HEAL_PARTY`,
+`CHAIN_GATED`, skills §56) would otherwise serve that row through the one-target path — the
+over-application the gate refused. Since SKILLS-LU's fix pass a tree DROPS a label row
+carrying a mark it does not know (`content.LABEL_DETAILS_KNOWN`; the server prints
+`CONTENT DROPPED: …` at startup), which is the pre-consumer state and self-heals at the
+merge; a tree older than that fix has no such guard, so the ordering rule stands.
+
 Redo both when the pinned build moves (the emitter stamps the build from the image's own
 bytes, refuses an exe that is not a pinned pristine build, and refuses a build other than
 the loaded skills table's — the label rows' numbers are interpolated from that table, so

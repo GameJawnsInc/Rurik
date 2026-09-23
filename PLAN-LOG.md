@@ -28,6 +28,43 @@ move back.
 
 ---
 
+### SKILLS-LU fix pass / DESKWORK-D4 residue -- 2026-09-23 -- **a body's chain-gated cast lands on NOBODY (the reviewers' blocker), the chain flag is the gate's exclusion, a hostile's party is its spawn group, a label row's marks are a closed set at load (the regeneration hazard, bounded), 784 OBSERVED 5x by retail's bodies after their own lead**
+
+This entry corrects the SKILLS-LU entry below it (append-only: that entry stands as
+written). Two reviewers read pass 1; [studies/skills/FINDINGS.md](studies/skills/FINDINGS.md)
+§56.7 is the record, every finding re-derived on the tree. **(1) BLOCKER, both reviewers:**
+784 / 973 / 1033 shipped for every caster, but only the player's E5 judged `combo_req`; a
+hero's or a hostile's cast landed the Poison / Blind / earth damage with no chain — a NEW
+over-application (before pass 1 the rows were excluded and a body's cast landed nothing;
+"pre-existing" covered the hand attack rows only). Now a BODY's non-attack with `combo_req`
+lands on **NOBODY** (bodies carry no chain, so the requirement is unmet by construction;
+the 58 still closes the cast). **Retail's bodies DO meet it — TAPE, OBSERVED n=5**: every
+live 784 is a body's, 0.41–1.37 s after the same body's own 782 (a lead) on the same target
+(`20260819T132414` ×3, `20260913T210901` ×2) — so NOBODY is LESS, stated; a body chain is
+the residue. **(2)** `--no-nonattack-chain-gate` is the gate's EXCLUSION (NOBODY for the
+player and for a body; 974 moves nothing), never the ungated landing (which it produced for
+one commit). **(3)** a HOSTILE's party heal reached the OTHER hostile group inside 5000 u
+(`allies_of` reads allegiance); `party_within` now reads the caster's spawn `group` when it
+has one (UNVERIFIED as retail's party, the narrower reading). **(4)** the regeneration
+hazard named (§56.5, RUNBOOK): the vault is machine-wide, and a tree without the consumers
+serves the ten rows through the one-target path — and bounded: `content.LABEL_DETAILS_KNOWN`
+DROPS a label row carrying a mark the tree does not know at load (`World.dropped`, printed
+at startup), pinned equal to `skilldesc.label_detail_vocabulary()` by `test_skilldesc`.
+**(5)** the corpus search done: 183 188 840 1113 2212 287 2221 973 1033 974 NOT FOUND on 96
+live connections (controls 185 ×27, 780 ×31); the banners say so. **(6)** the player's
+caster burst knocks down as the body's does (latent); a failed step's skipped heal and
+effect are tested ON THE WIRE; the HAND rows run through the consumer predicates with an
+empty allow-list (1643 named as the one record the gate fails beyond the label rows); a
+mistyped `RURIK_SKILL_LABELS` FAILS instead of skipping; the readings comment, the help and
+§1b's fixtures paraphrased; `--no-condition-heal-rule`'s effect on the party arm stated;
+PLAN.md §8.1's D4 bullet cut to a pointer. Declined: nothing (LU-R6 stated, not narrowed).
+Tests: `test_labelconsumers` floor 30 → 40 (bare; 41 with the vault, 44 with the marks),
+`test_content` 52 → 55 (58 with the vault), `test_skilldesc` 77 / 146 unchanged,
+`test_skilldamage` 80, `test_guards` 45. **For the merger, unchanged from the entry
+below plus the ORDER: regenerate `vault/content/skill_labels.toml` from `main`
+(`skilldesc.py --emit-labels`, 57 rows) only after every live desk-\*c tree has merged
+main; nothing was written to the vault by this pass either.**
+
 ### SKILLS-LU / DESKWORK-D4 residue, pass 1 -- 2026-09-23 -- **the first three per-skill consumers behind the label gate: a CASTER-centred area (5 rows), a caster-centred PARTY heal (2), the NON-attack chain gate (3); 57 label rows, not 47; each new row marked by the consumer it rides; the vault overlay regenerates at the merge**
 
 The step-4 gate (skills §55.2) excluded whole classes of plain SERVED rows because no
