@@ -28,6 +28,43 @@ move back.
 
 ---
 
+### DESKWORK-D1, the owner's answer -- 2026-09-23 -- **the inventory panel's per-slot DISPLAY MODE: `s2c 0x00EF` CHAR_VISIBILITY_FLAGS sent at load, `c2s 0x0057` SET_CHAR_VISIBILITY_FLAGS answered, the byte persisted, the body's `0x006E` built without a piece the mode hides in this regime**
+
+The owner's two retail screenshots (CONFIRM-2026-09-23 §5): the eye beside the cape, the
+headgear and both costume slots is a per-slot drop-down — Always Show / Hide in Towns and
+Outposts / Hide in Combat Areas / Always Hide — governing the doll AND the world body; ours
+showed the circled bar on all four and a bare-headed doll. **Found** (studies/cmsg
+"The display mode", `visstatus.py`): the state is ONE byte at the character context +0x7C8,
+`CHAR_STATS_VIS` (ChCliApi.cpp:5032, eight bits), two bits per kind (0x03 cape, 0x0C
+headgear, 0x30 costume body, 0xC0 costume head); its only writer is `GAME_SMSG 0x00EF
+[value, mask]`'s handler (`(flags & ~mask) | value`, frame 0x1000006C) — **OBSERVED once
+per connection on 95 of 96 live connections, always `[0xFF, 0xFF]`, right after `0x00E9`**;
+the drop-down sends `GAME_CMSG 0x0057 [bits & mask, mask]` (InvVisibilityStatus 0x008ECF30
+→ thunk 0x00816C10 → wrapper 0x00920FE0; on NO tape) and applies nothing locally; the doll
+(GmAgentDoll 0x005384B0) reads the HIGH bit of a pair in a town and the LOW bit in a field
+(`MissionCliGetMap()`); the world body reads the byte NOWHERE (no reader on the agent-view
+path; the AvApi dresser's three callers are message workers), so the server's array is the
+only channel — retail's outpost bodies are bare-headed 756 of 2,245 times against 0 of 48
+in a field, and the cape's `0x0048` bit shows the same pattern (855 of 2,246 vs 0 of 48).
+**Shipped**: `0x00EF [flags, 0xFF]` after `0x00E9` (default 0xFF; the store's byte under
+`--persist`); `0x0057` handled — the echo `0x00EF [value, mask]` (RECONSTRUCTION) plus
+`0x006F [player, slot, item or 0]` for a kind whose view in the current regime changed,
+persisted (`vis_flags`, validated), three refusals sending nothing; `visible_worn` strips a
+hidden kind's visual slot from the body's `0x006E` per regime; **`--no-visibility-status`
+reverts**. Schema: `0x00EF` named high, `0x0057` medium. `test_visstatus.py` (floor 47 bare,
+56 vaulted; TESTS.md): the tables round-tripped through the client's arithmetic, the unsent
+zero reproduced, a KNOWN-BAD swapped regime rule, a vacuity guard, the tape census over all
+96 connections, the real handler in both regimes, the revert arm, the store. **Refuted**:
+0x008EBDD0 is `InvElementSlot.cpp`'s drag control, not the widget; "callers 0" on a CharMsg
+wrapper means a thunk, not unreachable; the slot count is four, not three. **NOT FOUND**:
+retail's echo bytes and its outpost re-dress of the local body (no `0x006F` on outpost
+equips). Predictions for the client run are pre-registered in the study. On this tree: the
+nine gates green before the commit (srclint 26, dispatch 54, c2striage 36, catalog 13, codec
+29, cmsgnames 16, smsgnames 26, charstore 91, visstatus 47/56); the 93-test affected sweep
+is reported in the commit that closes it.
+
+---
+
 ### DESKWORK-D1 step 8, the owner's confirmation, fix pass -- 2026-09-23 -- **the dress cell keyed by the worn LOCATION (a type-keyed cell collided for a legs-class piece at the boots location); the merchant's purchases in the item store the drag handlers read; off hands' homes alone reserved; storage bags refused as `0x0072` destinations; the two sibling sends named**
 
 Two reviews of the entry below (an evidence refuter and an engineering reviewer) held its

@@ -1638,3 +1638,129 @@ will meet main's `1ce515a1` in PLAN.md 8.1's D1 bullet and PLAN-LOG's top, and m
 closures of the kick/add clicks must win there; this section should then link
 [../deskwork/CONFIRM-2026-09-23.md](../deskwork/CONFIRM-2026-09-23.md), which is on main
 only).
+
+### The display mode — `s2c 0x00EF` CHAR_VISIBILITY_FLAGS, `c2s 0x0057` SET_CHAR_VISIBILITY_FLAGS, and the InvVisibilityStatus drop-down (DESKWORK-D1, the owner's answer, 2026-09-23)
+
+**The question** ([../deskwork/CONFIRM-2026-09-23.md](../deskwork/CONFIRM-2026-09-23.md) §5,
+the owner's answer): the inventory panel carries, beside the cape (top-left), the headgear
+(top-right) and the two costume slots (lower-left), a per-slot DISPLAY MODE drop-down —
+Always Show (an eye), Hide in Towns and Outposts, Hide in Combat Areas, Always Hide (a
+circled bar) — and on retail it governs both the paper doll's figure and the world model.
+Retail's screenshot shows the eye on all four; ours (`20260923T185124`, frame `w001-step4`)
+shows the circled bar on all four, the doll bare-headed in the outpost, the world body
+still helmed. **Four slots, not three** — the top-left eye is the cape's. Identifiers:
+`EVID-D1E-<n>`. Everything static is build 38797, the pinned pristine client, read with
+`codescan.py`, `asserts.py`, `msgshape.py`, `sendsites.py`; every tape number is
+`livewire.decode_conn` over every `origin=LIVE` game connection (96), reproducible by
+`test_visstatus.py` §2.
+
+**(a) The state and the s2c that carries it (EVID-D1E-1, OBSERVED on the wire; the binary
+read).** The drop-down (`InvVisibilityStatus.cpp`; the widget class is 0x008EC760/0x008EC790
+with statics 0x1088770/74/78, the image lists asserted at lines 328/339/350) reads ONE dword
+through the getter 0x00815EF0 — `ctx->[0x2c]->[0x7c8]`, the character context. The per-bit
+tester 0x00815EA0 asserts `vis < CHAR_STATS_VIS` (ChCliApi.cpp:5032) and the bound it
+compares is 8: eight bits, ArenaNet's own enum name. The kind masks are the table at
+0xBA38D4 — **0x03 cape, 0x0C headgear, 0x30 costume body, 0xC0 costume head** — and the
+byte's ONLY writer image-wide is 0x00814BE0(value, mask): `flags = (flags & ~mask) |
+value`, then frame 0x1000006C `{mask, flags}` to the bus (`codescan --field 0x7C8` over the
+whole image: that writer, the tester, the getter and three context resets are every hit;
+the +0x7C8 hits at 0x006Exxxx are another struct). The writer's one caller is the RECV stub
+0x0091F7F0, which pushes `[msg+4], [msg+8]` — **GAME_SMSG 0x00EF `[u32 value, u32 mask]`**,
+10 B (msgshape RECV table 0x00BC8F68, identical to `messages.json` GAME_SMSG_0239). On the
+tapes: **exactly one per connection on 95 of 96 live connections, always `[0xFF, 0xFF]`,
+immediately after `0x00E9` CHARACTER_UPDATE_FACTIONS on 95 of 95 and before `0x003C`** (the
+one without it is `20260807T133758 :54560`). So retail's default for the owner's characters
+is every slot Always Show — which is the retail screenshot — and our server never sent the
+message at all: the client read an unsent zero. The bit meanings, from the drop-down's own
+tables (0xBA3854/74/94/B4, read by 0x008ECD00; the lookup 0x008ECD90 takes the first row
+whose `bits & mask == flags & mask`): both bits set = Always Show, the LOW bit alone =
+Hide in Towns and Outposts, the HIGH bit alone = Hide in Combat Areas, neither = Always
+Hide; the code→icon map (0x008EC7F5) draws the eye for Always Show and the circled bar for
+Always Hide, which is why the zero read as Always Hide on every slot. **Kind 1 is the
+headgear from a second direction**: the tester's one caller is UiGame's roster-blob packer
+(0x004A8C59), and `CHAR_STATS_VIS(3)` — the headgear's HIGH bit — is the roster blob's
+"helm_shown" bit 14 that three server lineages named ([../character/FINDINGS.md](../character/FINDINGS.md),
+[../heroes/RUN-HEROLIB.md](../heroes/RUN-HEROLIB.md) §22.5's open "helm toggle" question, now
+answered: it is another message, `0x0057`/`0x00EF`, not the settings write).
+
+**(b) The c2s the drop-down sends, and what retail answers (EVID-D1E-2, the sender READ;
+the reply RECONSTRUCTION).** The widget's "selected" arm (0x008ECF30, `msg 8`) recomputes
+the current code from the getter, finds the chosen code's row, and calls
+0x00816C10(`bits & mask`, `mask`) — a `jmp` thunk to the send wrapper 0x00920FE0, which
+`sendsites.py` lists as **GAME_CMSG 0x0057, 12-byte buffer, CharMsg**; msgshape's SEND table
+0x00BC8CB8 gives `[u32, u32]`, 10 B, identical to GAME_CMSG_0087. The thunk has exactly one
+direct caller (the widget), which is also the answer to a question the c2s triage's
+"callers 0" column raised: the CharMsg wrappers are reached through the 0x8161xx thunk band
+(`0x0030`'s at 0x008161D0), so a wrapper's caller count is the thunk's, not the sender's.
+**`0x0057` is on no tape** — 0 of 13,320 c2s over 96 live connections — so retail's reply is
+not witnessed. What the binary settles about it: the client applies nothing locally (the
+sender's arm writes no state; the byte's only writer is `0x00EF`'s handler), so a server
+that answered nothing would leave the icon unchanged; the answer that reaches the writer
+is `0x00EF`, and `[value, mask]` through `(flags & ~mask) | value` is exactly the request's
+own arithmetic. Our server answers that (RECONSTRUCTION) — one client run settles whether
+retail's echo is `[value, mask]` or `[flags, 0xFF]`; both land identically in the writer.
+
+**(c) How the WORLD model applies the mode (EVID-D1E-3: the negative OBSERVED statically,
+the mechanism RECONSTRUCTION, the regime pattern OBSERVED on the tapes).** Two readers
+apply the byte on the client, and both are UI: the drop-down's icon, and **GmAgentDoll**
+(0x005384B0) — the paper doll's figure — which subscribes to frame 0x1000006C (0x0053761C)
+and picks the regime with `MissionCliGetMap()` (0x0084D9B0, OBSERVED 0 = OUTPOST, 1 =
+GAME, [../minimap/FINDINGS.md](../minimap/FINDINGS.md)): **in a town it tests the HIGH bit
+of each pair (0x2/0x8/0x20/0x80), in a field the LOW bit (0x1/0x4/0x10/0x40)**, and a clear
+bit hides that kind on the figure (the costumes are also hidden in a field whose map flags
+carry 0x40000 without 0x40000000 — a PvP rule this server never meets). So the doll follows
+the mode client-side. **The world body does not read the byte at all**: nothing on the
+agent-view or composite path touches +0x7C8 (the exhaustive scan above; the biased-`this`
+caveat of `codescan.py` stands), and the AvApi dresser 0x007DFCE0 has three direct callers,
+all ChCliApi message workers (the `0x006E` bulk write and the `0x006F` slot write among
+them). The world body therefore wears exactly what the server's visual array says, and the
+server must leave the hidden piece out. The tapes corroborate that reading with the regime
+pattern a server-side strip would produce: **`0x006E`'s head slot is 0 on 756 of 2,245
+outpost bodies and on 0 of 48 field bodies; `0x0048`'s cape bit is 0 on 855 of 2,246 outpost
+bodies and on 0 of 48 field bodies** — neither outpost share is 100%, so it is per player,
+not per regime alone. (The cape's world half is `0x0048` AGENT_SET_TABARD_VISIBLE — the
+[smsg study](../smsg/FINDINGS.md)'s reading, a guild lookup gated per agent, is exactly a
+server-resolved cape mode; this server has no guild and keeps sending 0.) **NOT FOUND**: how
+retail re-dresses the LOCAL body after a mid-session mode change in an outpost — the item
+study found no `0x006F` on outpost equips (0 of 5), so retail's outpost path for the body
+is unwitnessed; the `0x006F` handler is regime-blind, so sending it is safe on our client.
+
+**Shipped** ([`toolkit/authsrv/visstatus.py`](../../toolkit/authsrv/visstatus.py) is the leaf;
+`test_visstatus.py`, 47 bare / 56 vaulted): `0x00EF [flags, 0xFF]` at load right after
+`0x00E9` (default 0xFF, the store's byte under `--persist`); `c2s 0x0057` handled —
+`(flags & ~mask) | value`, the echo `0x00EF [value, mask]`, then `0x006F [player, slot, item
+or 0]` for each kind whose view under the CURRENT regime changed (head 6, costumes 7/8; the
+cape has no slot), persisted per character (`charstore` `vis_flags`, validated 0..255);
+refused with nothing sent: an empty mask, bits beyond the eight, a value outside its mask.
+The body's `0x006E` is built through `visible_worn`: a kind the mode hides in this regime
+(the `0x0199` byte's own rule, `instance_is_field`) leaves the array. **`--no-visibility-status`
+reverts** to today's behaviour (no `0x00EF`, `0x0057` ignored, the full array). Schema:
+`0x00EF` CHAR_VISIBILITY_FLAGS (high), `0x0057` SET_CHAR_VISIBILITY_FLAGS (medium — sender
+read, reply unwitnessed).
+
+**Refuted on the way.** (1) The first proc found under the module's assert range,
+0x008EBDD0 (`msg.code` switch at line 343, `s_backgroundImageList` at 407), is
+`InvElementSlot.cpp`'s slot control (its file string at 0xBA3824), not the widget — its click
+arm starts an item DRAG (a `GmCtlItemImage` of kind 0x2A), which read like a menu for ten
+minutes; the widget is the class registered from 0x008ECE90/0x008ECF30 with the
+`InvVisibilityStatus.cpp` file string at 0xBA38E4. (2) `sendsites.py`'s "callers 0" on the
+CharMsg wrappers is not "unreachable": the wrappers are reached through `jmp` thunks in the
+0x8161xx–0x816Cxx band. (3) The three-slot count in the task: the retail screenshot has four
+eyes and ours four circled bars.
+
+**Runsheet and PREDICTIONS (pre-registered).** *Default launch* (the orchestrator, no
+owner): press `I` — beside the headgear, the cape and both costume slots the icon is the
+**eye** (code 0/1 → icon 0), and the doll's figure **wears the helm** in the outpost; the
+gamesrv log carries `CHAR_VISIBILITY_FLAGS(0xff: ...)` right after `CHARACTER_UPDATE_FACTIONS`.
+Under `--no-visibility-status`: the circled bar on all four and a bare-headed doll (the
+20260923T185124 frame, reproduced). *One owner step*: click the eye beside the headgear and
+choose **Hide in Towns and Outposts** in the outpost — the icon becomes the second icon,
+the doll's figure loses the helm (client-side, from `0x00EF [0x4, 0xC]`), and the world body
+loses the helm too (from our `0x006F [1, 6, 0]`; the log line names both sends). A/B
+against `--no-visibility-status`: the choice sends `0x0057 [4, 12]` (the log says
+`SET_CHAR_VISIBILITY_FLAGS ignored`) and NOTHING changes — icon, doll and body all stay.
+Then `--explorable` (or a zone): the helm is back on doll and body (the low bit is set),
+and `Hide in Combat Areas` there hides both. Under `--persist`, relaunch: the mode is
+remembered (`vis_flags` in the store), the icon shows it at `I`. What a run cannot settle
+alone: retail's exact echo bytes (b); the doll's exact icon for codes 5/6 (the cape's third
+and fourth strings, 0x330/0x331, unread).
