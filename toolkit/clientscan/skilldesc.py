@@ -30,14 +30,18 @@ degeneration` on 0..3 (bonus); Defy Pain (318), Rush (319) and "To the Limit!"
 duration" would have Power Attack print a 0-second duration as its damage.
 
 THE THEOREM THE ARTIFACT CAN REFUTE. Under this mapping, of the 2,357 slot
-occurrences in the corpus, ZERO point at a field that is empty (bit clear and
-0/0), zero reach a duration sentinel (>= 0x10000), and every `%strN%` has N in
-1..3. Shift the mapping by one (`shifted()`), and hundreds of slots land on
-empty fields -- `test_skilldesc.py` runs that known-bad arm and requires the
-referee to redden on it. "seconds" is NOT the duration slot's word: 682 of 872
-"second" slots are str3, but 141 are str2 and 82 are str1 -- a condition's
-duration lives in the bonus or scale slot (Sever Artery), which is why the
-mapping is per INDEX and never inferred from the words.
+occurrences in the corpus, ZERO point at a field that is 0/0 -- WHATEVER its
+bit says -- zero reach a duration sentinel (>= 0x10000), and every `%strN%`
+has N in 1..3. Shift the mapping by one (`shifted()`), and 760+ of the 2,320
+distinct slots land on 0/0 fields -- `test_skilldesc.py` runs that known-bad
+arm and requires the referee to redden on it. The theorem's reach, stated:
+it can refute a slot only where some OTHER field of the same row is 0/0,
+which is 1,264 of the 2,320 distinct slots; on the other 1,056 the label
+distribution is the witness (356 of the 359 str3 slots there carry a time
+label). "seconds" is NOT the duration slot's word: of 905 "second" slots,
+682 are str3, 141 are str2 and 82 are str1 -- a condition's duration lives in
+the bonus or scale slot (Sever Artery), which is why the mapping is per INDEX
+and never inferred from the words.
 
 THE REFEREE. For each slot: the field it maps to, and one of
   AGREE_PROGRESSION   bit set, lo != hi         the client scales it by rank
@@ -45,13 +49,17 @@ THE REFEREE. For each slot: the field it maps to, and one of
   INDETERMINATE       bit clear, lo != hi       FINDINGS 12's unwitnessed shape:
                                                 two numbers, no rule for which
                                                 the client prints; NOT fitted
-  CONFLICT_EMPTY      bit clear, 0/0            the text numbers an empty field
+  CONFLICT_EMPTY      0/0, bit set OR clear     the text numbers an empty field
   CONFLICT_SENTINEL   duration >= 0x10000       upkeep / no-duration marker
   CONFLICT_INDEX      N not in the mapping
-A disagreement is listed, never fitted. The same goes for the 54 hand rows:
-where `world.toml` names `scale_means` / `bonus_scale_means`, the label this
-parser reads at str1 / str2 must belong to the same family, or the row is a
-listed conflict (`referee_hand_row`).
+A disagreement is listed, never fitted -- including a template that gives ONE
+index two different labels (`self_conflicts`: the classifier disagreeing with
+itself, 18 rows). The same goes for the 54 hand rows: where `world.toml` names
+`scale_means` / `bonus_scale_means`, the label this parser reads at the index
+the mapping gives that FIELD must belong to the same family, or the row is a
+listed conflict (`referee_hand_row`) -- and because the verdict is read from
+the template, the hand rows are a second witness for the mapping that the
+known-bad arm can fail: under `shifted()` their 51 AGREE collapse to 3.
 
 THE LABELS ARE OURS. `Label` is our own enum, read from the words around a
 slot after `normalise()` -- it is not ArenaNet's text and none of that text is
@@ -138,10 +146,15 @@ def referee_slot(index, rec, mapping=None):
     lo, hi, on = field_endpoints(rec, field)
     if field == "duration" and max(lo, hi) >= SENTINEL_FLOOR:
         return CONFLICT_SENTINEL, field, lo, hi
+    if lo == hi == 0:
+        # Before the bit: an ENABLED 0..0 is still no number for the text to
+        # print. The first version tested the bit first and graded a bit-set
+        # 0/0 AGREE_FLAT against its own docstring, which hid 33 empty-field
+        # landings from each known-bad arm (reviewers D4-R5 / ENG-8). Under
+        # the measured mapping the count is 0 at either bit state.
+        return CONFLICT_EMPTY, field, lo, hi
     if on:
         return (AGREE_PROGRESSION if lo != hi else AGREE_FLAT), field, lo, hi
-    if lo == hi == 0:
-        return CONFLICT_EMPTY, field, lo, hi
     if lo == hi:
         return AGREE_FLAT, field, lo, hi
     return INDETERMINATE, field, lo, hi
@@ -658,7 +671,8 @@ HAND_FAMILY = {
 for _c in CONDITION_NAMES:
     HAND_FAMILY[_c] = {(Label.CONDITION_DURATION, _c)}
     HAND_FAMILY[_c + " duration"] = {(Label.CONDITION_DURATION, _c)}
-HAND_SLOT = (("scale_means", 1), ("bonus_scale_means", 2))
+# A hand row names a FIELD, never an index: `scale_means` is the scale field.
+HAND_FIELD = (("scale_means", "scale"), ("bonus_scale_means", "bonus_scale"))
 
 
 def hand_agrees(label, detail, means):
@@ -672,30 +686,36 @@ def hand_agrees(label, detail, means):
 def referee_hand_row(slots, hand_row, mapping=None):
     """[(means_key, index, hand_label, parsed_label, verdict)] for one hand row.
 
-    verdict is AGREE, CONFLICT, NO_SLOT (the hand names a slot the template does
-    not number), NOT_COMPARABLE (a hand label outside HAND_FAMILY) or
-    MAPPING_CONFLICT: the hand row says `scale_means`, i.e. the SCALE field,
-    and `mapping` sends the index that field's slot should be to another field.
-    Under `shifted()` every comparable hand row reddens this way, which makes
-    the 51 wiki-verified rows a second witness for the mapping, independent of
-    the empty-field theorem.
+    The hand row names a FIELD; `mapping` says which `%strN%` numbers that
+    field; the verdict compares the hand label with the label the parser read
+    AT THAT INDEX: AGREE, CONFLICT, NO_SLOT (the template numbers no such
+    index), NOT_COMPARABLE (a hand label outside HAND_FAMILY). `index` in the
+    result is the one the mapping gave.
+
+    The verdict is read from the TEMPLATE, so the known-bad arm is a
+    measurement: under `shifted()` the 51 AGREE collapse to 3 (shift 2: 2),
+    the rest NO_SLOT or CONFLICT. The first version short-circuited to a
+    MAPPING_CONFLICT computed from the mapping alone -- a check that could not
+    fail on data, counted as a witness (reviewers D4-R4 / ENG-3).
+
+    A repeated index keeps its FIRST label here; a template that labels one
+    index two ways is listed separately (`analyse()`'s `self_conflicts`).
     """
     mapping = mapping or SLOT_FIELD
+    index_of = {field: n for n, field in mapping.items()}
     out = []
     by_index = {}
     for n, label, detail in slots:
         by_index.setdefault(n, (label, detail))
-    for key, index in HAND_SLOT:
+    for key, field in HAND_FIELD:
         means = hand_row.get(key)
         if not means:
             continue
+        index = index_of.get(field)
         if means not in HAND_FAMILY:
             out.append((key, index, means, None, "NOT_COMPARABLE"))
             continue
-        if mapping.get(index) != key[:-len("_means")]:
-            out.append((key, index, means, None, "MAPPING_CONFLICT"))
-            continue
-        if index not in by_index:
+        if index is None or index not in by_index:
             out.append((key, index, means, None, "NO_SLOT"))
             continue
         label, detail = by_index[index]
@@ -713,7 +733,10 @@ def load_corpus(exe=None, dat=None, language=0):
     """(records, texts, ix, exe, why): the player corpus, id -> record and id -> template.
 
     Needs the pinned exe and the archive. Raises (SystemExit from pinned.find,
-    or LookupError) rather than returning something empty.
+    or LookupError) rather than returning something empty. A description the
+    archive cannot resolve is `None` in `texts` -- `analyse()` counts it
+    (`n_unreadable`, tier UNREADABLE) instead of folding it into "no slot"
+    (0 today, MEASURED; on another build or language it would not be silent).
     """
     import textrec
     exe, why = (exe, "given") if exe else find_exe()
@@ -721,9 +744,9 @@ def load_corpus(exe=None, dat=None, language=0):
     data = ix.pe.data
     base, count, _score = skilltable.locate_table(data)
     rows = [skilltable.parse_record(data, base, i) for i in range(count)]
-    corpus = skilltable.player_corpus(rows)
-    records = {r["id"]: r for r in rows if r["id"] in set(corpus)}
-    texts = {sid: (ix.get(records[sid]["description_id"]) or "") for sid in corpus}
+    corpus = set(skilltable.player_corpus(rows))
+    records = {r["id"]: r for r in rows if r["id"] in corpus}
+    texts = {sid: ix.get(records[sid]["description_id"]) for sid in sorted(corpus)}
     return records, texts, ix, exe, why
 
 
@@ -754,13 +777,26 @@ def analyse(records, texts, hand=None, mapping=None):
     literals = collections.Counter()
     flags = collections.Counter()
     blocking = collections.Counter()     # RECOGNISED rows per unserved label
+    self_conflicts = []  # (sid, index, [labels]): one index, two labels
+    n_unreadable = 0
     for sid in sorted(records):
         rec = records[sid]
-        text = texts.get(sid) or ""
+        text = texts.get(sid)
+        if text is None:
+            n_unreadable += 1
+            rows[sid] = {"id": sid, "type_code": int(rec["type_code"]), "slots": [],
+                         "flags": [], "literals": [], "tier": "UNREADABLE"}
+            continue
         slots, fl = parse_row(text)
         for f in fl:
             flags[f] += 1
         row = {"id": sid, "type_code": int(rec["type_code"]), "slots": [], "flags": sorted(fl)}
+        labels_at = collections.defaultdict(set)
+        for n, label, _detail in slots:
+            labels_at[n].add(label)
+        for n in sorted(labels_at):
+            if len(labels_at[n]) > 1:
+                self_conflicts.append((sid, n, sorted(labels_at[n])))
         seen = set()
         row["literals"] = literal_check(rec, text, {n for n, _l, _d in slots}, mapping)
         for lit in row["literals"]:
@@ -816,6 +852,8 @@ def analyse(records, texts, hand=None, mapping=None):
         "conflicts": conflicts,
         "indeterminate": indeterminate,
         "hidden_progressions": hidden,
+        "self_conflicts": self_conflicts,
+        "n_unreadable": n_unreadable,
         "hand": hand_results,
         "hand_summary": dict(collections.Counter(r[-1] for r in hand_results)),
         "literals": dict(literals),
@@ -868,7 +906,9 @@ def census(records, hand, rank=12):
             try:
                 effects.resolve_duration(rec, rank)
                 out[sid] = GRADE_EPISODE
-            except Exception:                                   # noqa: BLE001
+            except effects.EffectError:
+                # the refusal class and nothing else: a code defect in the
+                # resolver must surface, not grade as "refused" (ENG-10)
                 out[sid] = GRADE_EPISODE_REFUSED
             continue
         out[sid] = GRADE_NOTHING
@@ -946,8 +986,9 @@ def main(argv=None):
     hand = hand_rows()
     rep = analyse(records, texts, hand, mapping)
     print(f"{rep['n_rows']} corpus rows, {rep['n_with_slot']} with a %strN% slot, "
-          f"{rep['n_slot_occurrences']} slot occurrences")
+          f"{rep['n_slot_occurrences']} slot occurrences, {rep['n_unreadable']} unreadable")
     print(f"verdicts: {rep['verdicts']}")
+    print(f"self-conflicts (one index, two labels): {len(rep['self_conflicts'])}")
     print(f"tiers:    {rep['tiers']}")
     print(f"hand rows: {rep['hand_summary']}")
     print(f"unshown flat constants: {rep['literals']}")
@@ -1010,6 +1051,12 @@ def main(argv=None):
                 print("   ", r)
         print(f"   {rep['hand_summary']}\n")
 
+    if a.hand or a.referee:
+        print(f"== self-conflicts: one index, two labels ({len(rep['self_conflicts'])}) ==")
+        for sc in rep["self_conflicts"]:
+            print("   ", sc)
+        print()
+
     if a.labels:
         print("== labels by index ==")
         for k, v in sorted(rep["label_by_index"].items(), key=lambda kv: -kv[1]):
@@ -1022,17 +1069,19 @@ def main(argv=None):
             if rec is None:
                 print(f"{sid}: not in the player corpus")
                 continue
-            norm = normalise(texts[sid])
+            text = texts.get(sid) or ""
+            norm = normalise(text)
             print(f"== {sid}  type {rec['type_code']}  args {rec['skill_arguments']}  "
                   f"scale {rec['scale0']}/{rec['scale15']}  bonus {rec['bonus_scale0']}/"
-                  f"{rec['bonus_scale15']}  duration {rec['duration0']}/{rec['duration15']}")
-            for (n, b, af), (_, label, detail) in zip(parse_slots(norm), parse_row(texts[sid])[0]):
+                  f"{rec['bonus_scale15']}  duration {rec['duration0']}/{rec['duration15']}"
+                  + ("  UNREADABLE description" if texts.get(sid) is None else ""))
+            for (n, b, af), (_, label, detail) in zip(parse_slots(norm), parse_row(text)[0]):
                 v = referee_slot(n, rec, mapping)
                 print(f"   str{n} -> {v[1]} {v[0]} {v[2]}/{v[3]}  {label}{':' + detail if detail else ''}")
                 print(f"        ...{b[-32:]!r} [] {af[:32]!r}")
             print(f"   flags: {sorted(rep['rows'][sid]['flags'])}")
             if sid in hand:
-                print(f"   hand: {referee_hand_row(parse_row(texts[sid])[0], hand[sid])}")
+                print(f"   hand: {referee_hand_row(parse_row(text)[0], hand[sid], mapping)}")
         print()
 
     if a.label:
@@ -1040,8 +1089,9 @@ def main(argv=None):
         print(f"== slot windows labelled {a.label} ==")
         n_shown = 0
         for sid in sorted(records):
-            norm = normalise(texts[sid])
-            for (n, b, af), (_, label, detail) in zip(parse_slots(norm), parse_row(texts[sid])[0]):
+            text = texts.get(sid) or ""
+            norm = normalise(text)
+            for (n, b, af), (_, label, detail) in zip(parse_slots(norm), parse_row(text)[0]):
                 if label != want_label or (want_detail and detail != want_detail) \
                         or (a.index and n != a.index):
                     continue
@@ -1053,8 +1103,9 @@ def main(argv=None):
         print(f"== {a.residue} unparsed slot windows ==")
         shown = 0
         for sid in sorted(records):
-            norm = normalise(texts[sid])
-            for (n, b, af), (_, label, detail) in zip(parse_slots(norm), parse_row(texts[sid])[0]):
+            text = texts.get(sid) or ""
+            norm = normalise(text)
+            for (n, b, af), (_, label, detail) in zip(parse_slots(norm), parse_row(text)[0]):
                 if label != Label.UNPARSED:
                     continue
                 print(f"   {sid:5d} str{n}  ...{b[-36:]!r} [] {af[:36]!r}")

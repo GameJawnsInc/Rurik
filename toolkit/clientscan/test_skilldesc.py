@@ -37,9 +37,9 @@ import skilltable   # noqa: E402
 from skilldesc import Label, SLOT_FIELD, shifted, referee_slot   # noqa: E402
 
 # Floor from the BARE run, MEASURED 2026-09-22 with RURIK_VAULT at an empty
-# directory: 29 checks, 1 declared skip ("2. the corpus"), rc=0 -- the
-# mandatory core per checks.py. A whole green run with the vault is 69.
-LEDGER = checks.Ledger("skill description templates", floor=29)
+# directory: 31 checks, 1 declared skip ("2. the corpus"), rc=0 -- the
+# mandatory core per checks.py. A whole green run with the vault is 73.
+LEDGER = checks.Ledger("skill description templates", floor=31)
 check = checks.adopt(LEDGER)
 
 
@@ -66,6 +66,9 @@ check(referee_slot(2, sa) == ("AGREE_PROGRESSION", "bonus_scale", 5, 25),
       "bonus only: str2 is the progression")
 check(referee_slot(1, sa)[0] == "CONFLICT_EMPTY",
       "a slot on a bit-clear 0/0 field is a CONFLICT, never a value")
+check(referee_slot(1, rec(args=2, s=(0, 0)))[0] == "CONFLICT_EMPTY",
+      "and so is a slot on a bit-SET 0/0 field -- the bit does not conjure a number "
+      "(the first version graded it AGREE_FLAT, hiding 33 landings per known-bad arm)")
 check(referee_slot(1, rec(s=(25, 25)))[0] == "AGREE_FLAT",
       "bit clear, equal, non-zero: the flat constant (Rush's 25)")
 check(referee_slot(1, rec(s=(10, 18)))[0] == "INDETERMINATE",
@@ -154,8 +157,14 @@ hand = {"scale_means": "+ Damage", "bonus_scale_means": "Deep Wound"}
 res = skilldesc.referee_hand_row(slots, hand)
 check([r[-1] for r in res] == ["AGREE", "AGREE"], "Dismember's shape agrees on both slots", res)
 res = skilldesc.referee_hand_row(slots, hand, shifted())
-check([r[-1] for r in res] == ["MAPPING_CONFLICT", "MAPPING_CONFLICT"],
-      "and under the known-bad mapping both are MAPPING_CONFLICT", res)
+check([r[-1] for r in res] == ["NO_SLOT", "CONFLICT"],
+      "under the known-bad mapping the scale field is str3 (no such slot) and the bonus "
+      "field is str1, where the template says +damage, not Deep Wound: read from the "
+      "TEMPLATE, so the verdicts are NO_SLOT and CONFLICT", res)
+check([r[-1] for r in skilldesc.referee_hand_row([], hand, shifted())] == ["NO_SLOT", "NO_SLOT"]
+      and [r[-1] for r in skilldesc.referee_hand_row([], hand)] == ["NO_SLOT", "NO_SLOT"],
+      "with no slots at all every hand label is NO_SLOT under either mapping -- the verdict "
+      "depends on the slots, never on the mapping alone (the vacuous MAPPING_CONFLICT is gone)")
 check(skilldesc.referee_hand_row([(1, Label.MOVE_SPEED_UP, "")], {"scale_means": "Duration"})[0][-1]
       == "CONFLICT", "a hand 'Duration' on a movement-speed slot is a CONFLICT")
 check(skilldesc.referee_hand_row([(1, Label.DAMAGE, "")], {"bonus_scale_means": "Crippled"})[0][-1]
@@ -175,7 +184,10 @@ check(skilldesc.literal_check(rush, "Lasts %str3% seconds.", {3}) == [(1, "scale
 print("\n== 2. the corpus (pinned exe + Gw.dat) ==")
 try:
     records, texts, ix, exe, why = skilldesc.load_corpus()
-except BaseException as ex:                                        # noqa: BLE001
+except SystemExit as ex:
+    # pinned.find's refusal, and ONLY that: no vault, or the build not in it.
+    # Anything else (a loader defect, a missing Gw.dat beside a present exe)
+    # must redden the run, not pass it at the bare floor (ENG-4).
     records = None
     LEDGER.skip("2. the corpus", f"{type(ex).__name__}: {str(ex).splitlines()[0]}")
 
@@ -187,6 +199,9 @@ if records is not None:
     check(rep["n_with_slot"] == 1265, "1,265 of them carry a %strN% slot (the probe, reproduced)",
           rep["n_with_slot"])
     check(rep["n_slot_occurrences"] == 2357, "2,357 slot occurrences", rep["n_slot_occurrences"])
+    check(rep["n_unreadable"] == 0 and "UNREADABLE" not in rep["tiers"],
+          "0 descriptions the archive cannot resolve (counted, never folded into 'no slot')",
+          rep["n_unreadable"])
     ix_counts = collections.Counter()
     for r in rep["rows"].values():
         for s in r["slots"]:
@@ -206,13 +221,15 @@ if records is not None:
     for by in (1, 2):
         bad_rep = skilldesc.analyse(records, texts, hand_rows, shifted(by=by))
         bv = bad_rep["verdicts"]
-        check(bv.get("CONFLICT_EMPTY", 0) >= 700 and bv.get("CONFLICT_SENTINEL", 0) >= 10,
-              f"KNOWN-BAD ARM shift {by}: hundreds of slots on empty fields and some on sentinels",
+        check(bv.get("CONFLICT_EMPTY", 0) >= 750 and bv.get("CONFLICT_SENTINEL", 0) >= 10,
+              f"KNOWN-BAD ARM shift {by}: 750+ distinct slots on 0/0 fields (762 / 763 measured, "
+              f"33 of them bit-set) and some on sentinels",
               {k: bv.get(k, 0) for k in skilldesc.CONFLICTS})
-        check(bad_rep["hand_summary"].get("MAPPING_CONFLICT", 0) == 66
-              and "AGREE" not in bad_rep["hand_summary"],
-              f"  and every comparable hand slot (66) is a MAPPING_CONFLICT at shift {by}",
-              bad_rep["hand_summary"])
+        bh = bad_rep["hand_summary"]
+        check(bh.get("AGREE", 0) <= 5 and bh.get("CONFLICT", 0) >= 15
+              and "MAPPING_CONFLICT" not in bh,
+              f"  and the hand rows' 51 AGREE collapse to <= 5 with 15+ CONFLICT at shift {by} "
+              f"-- read from the templates, a witness the arm can fail", bh)
         check(len(bad_rep["hidden_progressions"]) >= 800,
               f"  and the hidden-progression count explodes at shift {by}",
               len(bad_rep["hidden_progressions"]))
@@ -290,6 +307,12 @@ if records is not None:
           and (slot(320, 2)["label"], slot(320, 2)["detail"]) == (Label.CONDITION_DURATION, "Crippled"),
           "Hamstring (320): the client's Crippled duration is str2 = BONUS 3..15 (args = bonus only), "
           "not the scale slot the hand row names", slot(320, 2))
+
+    sc = rep["self_conflicts"]
+    check(len(sc) == 18 and (476, 3, [Label.DURATION, Label.LIFETIME]) in sc
+          and any(s[0] == 951 and set(s[2]) == {Label.MOVE_SPEED_DOWN, Label.MOVE_SPEED_UP} for s in sc),
+          "18 templates give one index two labels -- listed as the classifier disagreeing with "
+          "itself (476's str3 DURATION vs LIFETIME, 951's up vs down), never fitted", sc[:6])
 
     t = rep["tiers"]
     check("UNPARSED" not in t, "every slot in the corpus gets a label (0 UNPARSED rows)", t)
