@@ -744,14 +744,18 @@ the corpus witnesses 47 applies of 364 on 0x0042 (bufflog), and the operator's o
 casts on the Isle close the lifecycle to the millisecond. `removes_condition` is the
 initial effect, OBSERVED once: the Isle's Crippled episode ends 11.2 s early in the
 same millisecond as a 364 apply (studies/isle 1). `party_wide` (DESKWORK-D5 step 5,
-2026-09-23, shoutjoin.py, studies/skills 56): OBSERVED on retail -- 17 of the 48
-applies of 364 on an observer were another ally's cast (attributed by the [48, caster,
-364] announce in the same batch, 48 of 48 attributed), 0 of 8 foe shouts applied, and
-the apply's batch re-declares the speed of the other party members; the radius is
-the client's own aoe_range for this row (1000 u, = WIKI earshot), which the tape
-bounds (applies out to 913 u resolved, no resolved crossing) without measuring. The
-witness context is PvP (Random Arenas, 20260817T231139) plus the owner's own PvE
-casts; a hero's cure on screen is final-confirmation-needs-run."""
+2026-09-23, shoutjoin.py, studies/skills 56; the fix pass's numbers, 56.8): OBSERVED
+on retail -- 14 of the 48 applies of 364 on an observer were another ally's cast (23
+of 58 with 348's 9, six of those a HERO's shout landing on the player), attributed by
+the [48, caster, skill] announce in the same batch, 65 of 65 attributed, every foreign
+caster the observer's own token, 0 of 8 foe shouts applied, and the apply's batch
+re-declares the speed of the other party members; the radius is the client's own
+aoe_range for this row (1000 u, = WIKI earshot), which the tape neither measures nor
+bounds -- every caster-to-wearer pair rests on a 0x0029/0x002A lead sample, and a
+lead sits a median 765 u from the agent's position (the lead check). The player's own
+shout reaching a hero is unwitnessed (RECONSTRUCTION by symmetry). The witness context
+is PvP (Random Arenas, 20260817T231139) plus the owner's own PvE casts; a hero's cure
+on screen is final-confirmation-needs-run."""
 
 [skill_effect.455]
 scale_means = "Energy gain"

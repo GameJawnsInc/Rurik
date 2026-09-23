@@ -6998,29 +6998,40 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   interrupters 340 and 230 read off the `[10]` words. 38 checks, floor 28 (the sender's 28;
   30 / 21 before the fix pass). Read-only on the vault),
   `toolkit/authsrv/test_shouts.py` (**2026-09-23, DESKWORK-D5 step 5 — a party-wide shout
-  reaches every living ally in earshot, and the tape that says so.** §1 is the sender,
-  fixture-less (a player at the origin; a hero at 500 u, a henchman at 300 u, a hero at
-  1500 u, a dead hero, a foe): the 364 row carries `party_wide = "earshot"` and the client's
-  own `aoe_range` is 1000.0; a vacuity guard that the fixture's living party is exactly the
-  three allies; the player's "Charge!" opens one episode each on the player, the hero and
-  the henchman — three distinct buff ids — and none on the far hero, the dead hero or the
-  foe; the 0x0042 goes out for the player and the hero and is SUPPRESSED for the henchman
-  (MANTID, counted once); each wearer gets exactly one 0x0027 at base × 1.33 and its apply
-  precedes its speed word; a Crippled hero is cured by the shout (its 0x0044, its speed
-  restored to the boost); a HERO shouting reaches the PLAYER (the hero's 0x0042 then the
-  player's — retail's 17 foreign applies on the observer); the boundary is inclusive (1000
-  in, 1000.5 out); Frenzy (a stance) reaches nobody; `shout_wearers` on a row without a
-  radius, without the key, or a caster without a position reaches nobody; and the
-  KNOWN-BAD ARM `--no-party-wide-shouts`: the caster alone, the hero at 500 u gets nothing,
-  and the two arms differ. §2 reads the live corpus through `shoutjoin.census()` (declared
-  skip without the vault), on tapes stamped 2026-09-23 or earlier: 96+ connections whole;
-  48 applies of 364 and 11 of 348 on the observer plus 6 on a hero (the survey's 65); 42
-  self / 17 other (+6 = 23); 0 unattributed (every apply has its `[48, caster, skill]`
-  announce inside 1.5 s); the prop-60 control at 0; every foreign apply an ally's; 0 of 8 foe
-  shouts applying with 4 of them inside 1000 u; 0 RESOLVED crossings of the radius; the
-  largest resolved apply distance in [900, 1000] u; 20+ applies inside with the crossings
-  inside their own error; the six hero applies attributed; 80+ boost words on other party
-  members and none on a foe-token agent. 42 checks, floor 30 (§1). Read-only on the vault),
+  reaches every living ally in earshot, and the tape that says so; re-pinned the same day
+  by the fix pass (skills §56.8).** §1 is the sender; it needs the vault's skills table
+  (the client's row for 364: `aoe_range`, type) and declares a skip without it, and needs
+  no capture. The fixture: a player at the origin; a hero at 500 u, a henchman at 300 u, a
+  hero at 1500 u, a dead hero, a foe. The 364 row carries `party_wide = "earshot"` and the
+  client's own `aoe_range` is 1000.0; a vacuity guard that the fixture's living party is
+  exactly the three allies; the player's "Charge!" opens one episode each on the player,
+  the hero and the henchman — three distinct buff ids — and none on the far hero, the dead
+  hero or the foe; the 0x0042 goes out for the player and the hero and is SUPPRESSED for
+  the henchman (MANTID, counted once); each wearer gets exactly one 0x0027 at base × 1.33
+  and its apply precedes its speed word; a Crippled hero is cured by the shout (its 0x0044,
+  its speed restored to the boost); a HERO shouting reaches the PLAYER (the hero's 0x0042
+  then the player's — retail's six hero-to-player applies; the reverse direction is
+  unwitnessed); the boundary is inclusive (1000 in, 1000.5 out); Frenzy (a stance) reaches
+  nobody; `shout_wearers` on a row without a radius, without the key, or a caster without a
+  position reaches nobody; the primary wearer is excluded even as an ALLY in range (the
+  fix pass: the first cut named the player, never in its own ally set — a check that could
+  not fail); and the KNOWN-BAD ARM `--no-party-wide-shouts`: the caster alone, the hero at
+  500 u gets nothing, and the two arms differ. §2 reads the live corpus through
+  `shoutjoin.census(cutoff="20260923T235959")` (declared skip without the vault) — the
+  cutoff skips a later tape BEFORE reading it, so every pin is exact: 95 connections whole
+  with one observer and the one refusal by the observer rule (no property 41, no press);
+  the observer on the hero tape is agent 29 (the correction); 48 applies of 364 and 10 of
+  348 on the observer, 7 of 348 on the hero; 42 / 23 by caster == wearer, the observer's
+  own 35, 6 hero-to-player, 0 player-to-hero; 0 unattributed (every apply has its `[48,
+  caster, skill]` announce inside 1.5 s); the prop-60 control at 0; all 23 foreign applies
+  an ally's by token; 0 of 8 foe shouts applying; 4 of the 8 inside 1000 u by point
+  estimate and none exact; all 32 reach pairs on a lead sample, no exact pair, so the
+  distance half of P4 is UNTESTABLE; no bound on the radius in either direction and 0
+  refuting; the lead check (6000+ observer leads against its c2s report, median offset
+  above 700 u, most beyond 300); the 23 applied pairs inside by point estimate; the seven
+  hero applies attributed to the hero; 86 boost words on other agents — 71 team, 15 on the
+  noncombatant token, 0 on a foe token — and the 0–5 distribution. 47 checks, floor 30 (§1;
+  42 before the fix pass). Read-only on the vault),
   `toolkit/authsrv/test_recharge.py` (**2026-09-23, DESKWORK-D5 step 4 — an NPC's per-slot
   recharge runs from the cast's COMPLETION, not its start.** §1 is the sender, fixture-less:
   `npc_recharge_anchor` returns the activation under the completion anchor and 0 under

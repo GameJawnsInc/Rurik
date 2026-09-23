@@ -4701,12 +4701,17 @@ CONDITION_HEAL_RULE = True   # False (--no-condition-heal-rule): flat heal, any 
 # DESKWORK-D5 step 5 (shoutjoin.py, skills FINDINGS 56): a skill_effect row with
 # `party_wide = "earshot"` opens its episode on every living ally inside the
 # skill's own `aoe_range` (the client's record: 1000 u for 364 and 348), the
-# caster included. OBSERVED on retail: 17 foreign applies of 364/348 on the
-# observer and 6 on a hero, every one from an ally, 0 of 8 foe shouts applying,
+# caster included. OBSERVED on retail (the fix pass's numbers, 56.8): 23
+# foreign applies of 364/348 on the observer, every one from an ally by token,
+# 6 of them a HERO's shout landing on the player, 0 of 8 foe shouts applying,
 # and the batch's speed words re-declared on the other party members (P6). The
-# radius is CORROBORATED (client table + WIKI earshot) and BOUNDED by the tape
-# (applies out to 913 u resolved, no resolved crossing). --no-party-wide-shouts
-# is the caster-alone arm, the server as it was until 2026-09-23.
+# player's shout reaching a hero is UNWITNESSED (0 pairs on any tape) and rests
+# on symmetry -- RECONSTRUCTION. The radius is CORROBORATED (client table +
+# WIKI earshot); the tape bounds it in NEITHER direction (every reach pair
+# rests on a lead sample, and a lead sits a median 765 u from the position --
+# the first record's ">= 913 u" was the observer's own lead taken for its
+# position). --no-party-wide-shouts is the caster-alone arm, the server as it
+# was until 2026-09-23.
 PARTY_WIDE_SHOUTS = True
 #
 # THE HEAL NUMBER (SKILLS-HN, studies/skills 42). Retail sends property 55
@@ -20222,8 +20227,9 @@ def apply_effect(send, state, caster_id, skill_id, rank, target_id, conn_id):
     # DESKWORK-D5 step 5: A PARTY-WIDE SHOUT reaches every living ally inside
     # the skill's own radius, each with its OWN episode (its own buff id, its
     # own arithmetic, its own status / speed / attribute words). OBSERVED on
-    # retail (shoutjoin.py): 17 foreign applies of 364/348 on the observer and 6
-    # on a hero, 0 of 8 foe shouts applying, and the apply batch's 0x0027 words
+    # retail (shoutjoin.py): 23 foreign applies of 364/348 on the observer (6 of
+    # them a hero's shout reaching the player; the reverse direction is
+    # unwitnessed), 0 of 8 foe shouts applying, and the apply batch's 0x0027 words
     # re-declared on the other party members. Only the agents whose effect list
     # is on the wire get the 0x0042 (effect_list_send: the player, a hero); a
     # henchman gets the episode and the words. --no-party-wide-shouts is the
@@ -20251,13 +20257,17 @@ def shout_wearers(state, caster_id, row, primary, conn_id):
 
     THE RADIUS IS THE CLIENT'S OWN: the skill record's `aoe_range` (+0x6C,
     skilltable.py) -- 1000.0 for "Charge!" (364) and "Watch Yourself!" (348),
-    the value WIKI calls earshot. The tape BOUNDS it rather than measuring it
-    (shoutjoin.py P4: applies resolved out to 913 u, no resolved crossing,
-    four crossings inside their own position error). A row with no radius
-    reaches nobody and says so -- guessing a radius would be inventing one.
-    A caster with no known position reaches nobody either (the same refusal).
-    Allies are `allies_of`'s -- living party members, the player included when
-    a body shouts (that is retail's 17 foreign applies on the observer).
+    the value WIKI calls earshot. The tape neither measures nor bounds it
+    (shoutjoin.py: every reach pair rests on a lead sample, which the lead
+    check puts a median 765 u from the agent's position; sides are OBSERVED,
+    distance is not). A row with no radius reaches nobody and says so --
+    guessing a radius would be inventing one. A caster with no known position
+    reaches nobody either (the same refusal). Allies are `allies_of`'s --
+    living party members, the player included when a body shouts (that is
+    retail's 6 hero-to-player applies on 20260914T005758). Retail also boosts
+    the allied NONCOMBATANT in the arena (15 words on the 'nonc' agent);
+    `allies_of` admits ALLEGIANCE_PLAYER alone, a named under-application
+    (skills 56.7).
     """
     try:
         radius = float(row.get("aoe_range") or 0.0)

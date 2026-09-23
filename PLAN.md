@@ -1920,14 +1920,18 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   `--no-npc-recharge-from-completion`); the fix pass the same day (the body hook, the
   running-chain gate, P2/P3 recorded FAILED as written -- the log's fix-pass entry).
   LANDED 2026-09-23 (pass 3): party-wide shouts (skills §56, `shoutjoin.py`: 23 foreign
-  applies of 364/348 on the observer and a hero, 0 of 8 foe shouts, the radius the client's
-  own `aoe_range` 1000 bounded by the tape to ≥ 913 u; `party_wide = "earshot"`,
-  `--no-party-wide-shouts`); the refusal ids (skills §57, `chatdefs.REFUSAL_REASONS`: the 60
+  applies of 364/348 on the observer, 6 of them a hero's, 0 of 8 foe shouts; the radius the
+  client's own `aoe_range` 1000, CORROBORATED, which the tape neither measures nor bounds —
+  every pair rests on a lead, §56.8 (the fix pass withdrew "≥ 913 u" and corrected the hero
+  tape's observer); `party_wide = "earshot"`, `--no-party-wide-shouts`); the refusal ids
+  (skills §57, `chatdefs.REFUSAL_REASONS`: the 60
   plain ids 1934–1993 by label, three OBSERVED, `--refusal-reasons` DEFAULT OFF, the weapon
   gate's #1985 its one consumer); 3(d) Mend Condition (skills §58, `heal_if_removed`). Still
   OPEN: the shout ANNOUNCE — retail's `[48, caster, skill]` for every instant skill (stances
   and shouts, 133 in the corpus), ours prop 60; a 348 row (no armour-bonus mechanic to hang
-  it on); the hero's cure on screen (final-confirmation-needs-run); the batch order (retail
+  it on); the hero's cure on screen (final-confirmation-needs-run; the player-to-hero
+  direction is unwitnessed on every tape); the allied NONCOMBATANT retail's shout boosts
+  and `allies_of` excludes (§56.7); the batch order (retail
   all applies then all speed words, ours per wearer); 3(e) a hero's zero gain;
   the `[62]` energy word (read, own-party-scoped, not shipped); the second refusal gate's
   variable; the armed-EMPTY death clear (a one-witness divergence, skills §34.11.4); a body

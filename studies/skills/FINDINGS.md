@@ -7997,7 +7997,7 @@ weakness above, and the reason the tier is marked; an `AREA_BURST` mark on a row
 
 ---
 
-## 56. SKILLS-SH — party-wide shouts: retail applies "Charge!" and "Watch Yourself!" to every ally in earshot, each apply attributed by the INSTANT-skill announce `[48, caster, skill]`; the radius is the client's own `aoe_range` (1000 u) and the tape bounds it from below at 913 u without refuting it (2026-09-23)
+## 56. SKILLS-SH — party-wide shouts: retail applies "Charge!" and "Watch Yourself!" to every ally in earshot, each apply attributed by the INSTANT-skill announce `[48, caster, skill]`; the radius is the client's own `aoe_range` (1000 u), which the tape neither measures nor bounds (2026-09-23; the fix pass the same day, §56.8)
 
 **Desk, no run.** DESKWORK-D5 step 5 ([studies/deskwork/PLAN.md](../deskwork/PLAN.md)
 §3 D5). The route's survey said: every type-15 `0x0042` on an observer is skill 364,
@@ -8009,13 +8009,20 @@ plus the owner's own PvE casts on six later captures, one of them with a hero.
 
 ### 56.1 The survey, re-derived — P1 FAILED as registered, REPRODUCED as a total
 
-96 connections decode whole, none refused. **65 shout applies**: 59 on the observer
-(364 × 48, 348 × 11) and **6 on a hero** (348, `20260914T005758`, Koss); **42 the
-observer's own cast, 23 another ally's** — 17 on the observer and the 6 on the hero.
-The 65 = 42 + 23 is the survey's number to the unit; the "all 364, all on one capture"
-is not: 348 ("Watch Yourself!", type 15, `aoe_range` 1000) is in the set and the applies
-sit on ten captures. Recorded as P1 FAILED-as-registered with the measured composition
-beside it; `test_shouts.py` §2 pins the composition on tapes stamped to 2026-09-23.
+96 connections decode whole; 95 name one observer (the 96th, `20260807T133758` conn
+54560, carries no property 41 and no skill press and is refused by the observer rule —
+§56.8). **65 shout applies**: 58 on the observer (364 × 48, 348 × 10) and **7 on a
+hero** (348, `20260914T005758`, the hero's own casts); **42 with caster == wearer, 23
+another ally's**. The 65 = 42 + 23 is the survey's number to the unit — but ONLY as
+caster == wearer versus not: **the observer cast 35 of them, not 42** (34 × 364 and
+1 × 348), a hero cast 7 on itself, and of the 23 foreign applies on the observer **6 are
+the hero's shout landing on the player**. The "all 364, all on one capture" is not the
+tape's either: 348 ("Watch Yourself!", type 15, `aoe_range` 1000) is in the set and the
+applies sit on ten captures. Recorded as P1 FAILED-as-registered with the measured
+composition beside it; `test_shouts.py` §2 pins the composition on tapes stamped to
+2026-09-23, a cutoff the census applies by construction. (The first record of this
+section said 59 / 6 and "42 the observer's own": it had taken the hero for the observer
+on the one hero tape — §56.8.)
 
 ### 56.2 Which message announces a shout — OBSERVED, and it is not property 60
 
@@ -8032,41 +8039,60 @@ through `cast_anim_msg`'s property 60.
 
 ### 56.3 Sides: a shout reaches allies and never foes — OBSERVED
 
-The `0x0020` create's field 12 (the allegiance token) names the observer's team; the
-other team's casters shouted 364 **8 times** with **0 applies** on the observer, **4 of
-them inside 1000 u** under both position readings (169–558 u interpolated, 655–958 u
-held — §56.4 says what those numbers are worth). All 17 foreign applies on the observer
-came from the observer's own token (P3). One agent (15, conn 54071) carries a **third
-token**, never shouts, and is boosted by the team's shouts every time — so token
-equality is not party membership, and the reader treats a third token as UNKNOWN, not
-as a foe (the first cut called it a foe and P6 went red on it).
+The `0x0020` create's field 12 (the allegiance token) names the sides, and the reader
+reads them from the tokens ALONE: the same token is an ally, the client's own
+`ALLEGIANCE_NONCOMBATANT` ('nonc', 0x6E6F6E63, `agents.py`) is its own class, any other
+token is a foe (the first cut defined a foe token by the outcome under test — a token
+whose casters never produced an apply on the observer — which made "0 foe applies"
+nearly true by construction; §56.8). The other team's casters shouted 364 **8 times**
+with **0 applies** on the observer. 4 of the 8 sit inside 1000 u by POINT ESTIMATE
+(230–500 u), but every one of those estimates rests on a lead sample (§56.4), so the foe
+exclusion is OBSERVED as 0 of 8 and is **not distance-controlled** on this corpus. All 23
+foreign applies on the observer came from the observer's own token (P3). One agent per
+arena connection (11 on conn 50286, 15 on 50513 and 54071, 17 on 50527) carries the
+**noncombatant token**, never shouts, and is boosted by the team's shouts (15 words at
+383.04 across the 364 batches — the arena's and five PvE connections'; on conn 63805
+three noncombatants at once) — so token equality is not party membership, and **retail's
+party shout reaches an allied noncombatant where ours does not** (`skillread.allies_of`
+admits `ALLEGIANCE_PLAYER` alone; §56.7).
 
 ### 56.4 Reach: the radius, bounded, not measured
 
 `aoe_range` (+0x6C of the skill record, `skilltable.py`) is **1000.0** for 364 and 348 —
 the value WIKI (GWW "Area of effect", as `skilltable.py`'s comment cites it) calls
-earshot. The tape has no agent's position at an apply: a create is exact once, a
-`0x0029` lead and a `0x002A` destination are points AHEAD of the agent, `0x002C` is exact
-and rare, and the observer's c2s moves are exact for the observer alone. So every
-distance here is interpolated between the samples either side of the event, carries its
-hold value and a stated error (a lead's allowance plus speed × age), and a party body's
-lead that lands ON the observer's own sample is a **follow lead** (the follow parks on
-the model) and says nothing about where the body stood.
+earshot. **The tape has no agent's position at an apply, and what it has is worth less
+than the first record allowed.** Exact samples are a create (once), `0x002C` (rare) and
+the observer's own c2s move reports; every other sample is a `0x0029` lead or a `0x002A`
+destination — a point AHEAD of the agent on its path. The one place the tape holds an
+exact position and a lead for the same agent at the same moment is the observer itself,
+and **the lead check** (`shoutjoin.py`: 6,639 observer leads with a c2s report inside
+0.1 s) puts the lead a **median 765 u** from the position (maximum 4,264 u; 5,238 of the
+6,639 beyond the 300 u the first cut allowed a lead). A lead is not a position with an
+allowance. Every one of the 32 caster-to-wearer pairs rests on at least one lead sample
+— the observer is the only agent with exact samples, and the other agent of every pair
+has leads alone — so **no pair resolves, the tape bounds earshot in neither direction,
+and the distance half of P4 is UNTESTABLE on this corpus.** The sides half stands: 0 of 8
+foe pairs applied, 23 of 24 ally pairs did (the 24th is the hero's shout at t = 439.258
+on `20260914T005758`, whose apply on the player is absent — on a lead, unresolved). By
+point estimate the 23 applied ally pairs sit at 51–753 u: a consistency, not a bound.
 
-Over the 24 ally (announce, wearer) pairs: **23 applied** — 20 at 69–913 u, three at
-1114–1289 u each inside its own error; **1 did not** (the hero at t = 439.258 on
-`20260914T005758`), on a follow lead (hold 0.0), UNRESOLVED. **Largest resolved apply
-distance 912.7 u; zero resolved crossings of 1000 u either way** (P4). So the tape puts
-earshot at **≥ 913 u** and refutes nothing about 1000; the client's record and the wiki
-agree on 1000 and the server uses the record's number. **Label: the party-wide rule
-OBSERVED (23 foreign applies, 0 foe applies); the radius CORROBORATED (client table +
-WIKI), bounded by the tape.**
+**The first record's "the tape puts earshot at ≥ 913 u" is withdrawn.** That pair
+(`20260817T231139` conn 50513, t = 476.998) took the observer's own `0x0029` lead — 765 u
+from its c2s report 35 ms earlier — for its position; from the report the pair is 188 u.
+And "resolved" was asymmetric: a pair that agreed with the radius resolved whatever its
+error, so 912.7 ± 882.8 u counted as a bound. Both rules are replaced (§56.8). **Label:
+the party-wide rule OBSERVED (23 foreign applies on the observer, every caster the
+observer's token; 0 foe applies); the radius CORROBORATED (client table + WIKI) and
+untested by the tape; the hero-to-player direction OBSERVED (6 applies), the
+player-to-hero direction UNWITNESSED (RECONSTRUCTION by symmetry — no tape has both a
+player shout and a hero wearer).**
 
 ### 56.5 The other allies are on the wire too — P6
 
 The batch of a 364 apply on the observer carries **`0x0027` speed words for the OTHER
-party members**: 86 words across the arena's 364 batches, 3–5 agents per apply, none on
-a foe-token agent, 15 on the third-token ally. That is the wire's own statement that the
+party members**: 86 words across the observer's 364 batches, **0 to 5** other agents per
+apply ({0: 17, 1: 5, 2: 6, 3: 13, 4: 5, 5: 2} over the 48 applies — the first record
+said 3–5), none on a foe-token agent, 15 on the noncombatant. That is the wire's own statement that the
 shout landed on every ally reached, not only on the agents whose effect list is sent
 (F38: the observer's and a hero's). Two refinements fall out: the observer's own words
 sit at 288 × 1.33 = 383.04 while the other players' sit at 300 × 1.33 = 399 (F48 P6's two
@@ -8097,9 +8123,65 @@ at EVERY episode change" was read off the cure batch, where both words were chan
 * **The hero's cure on screen** is final-confirmation-needs-run (D5's own cost line).
 * **The announce property** (56.2) and **the batch order** — retail sends every apply,
   then every speed word; ours interleaves per wearer — are named divergences, unshipped.
-* The reach table's distances are bounds with stated errors; a tape with `0x002C`
+* **Retail's party shout reaches the allied NONCOMBATANT; ours does not** (§56.3: 15
+  boost words on the 'nonc' agent in the arena batches, three at once on conn 63805).
+  `skillread.allies_of` admits `ALLEGIANCE_PLAYER` alone. An under-application, open.
+* **The player's shout reaching a hero is unwitnessed.** On the hero-roster connections
+  where the observer shouted no hero cast anything, and on the one tape with a casting
+  hero (`20260914T005758`) the player never pressed a shout (its presses are 392 / 394 /
+  433 / 446 / 455). The server does it by symmetry (RECONSTRUCTION); the loopback run in
+  D5's cost line is its confirmation.
+* The reach table's distances are point estimates on leads (§56.4). A tape with `0x002C`
   positions around a shout, or a loopback run with the party placed at 990 / 1010 u,
-  would turn the bound into a measurement.
+  would make earshot a measurement; nothing on disk does.
+* `spellhitjoin.player_of` — the first-`0x00E3` rule shoutjoin's first cut copied — is
+  what `interruptjoin` still uses to name the player; on the hero tape it names the hero.
+  Outside this pass's scope; recorded so the next reader of that tape knows.
+
+### 56.8 Fix pass (2026-09-23): what two reviewers refuted, and how the reader answers each
+
+Two reviewers read the first record of this section — one re-deriving every claim from
+the tapes, one reading the code. Both are right on the two facts below; nothing they
+found touches what shipped (`party_wide` on 364 with the client's 1000 u; the per-ally
+episodes; `--no-party-wide-shouts`).
+
+* **The observer on the hero tape was the hero.** `shoutjoin.rows_of` took the agent
+  of the connection's first `0x00E3` (`spellhitjoin.player_of`'s rule). On
+  `20260914T005758` conn 56011 agent 30 — class tag 2, definition 0x11ab, 48 of the 54
+  acks — casts 346 and 348 all session and is the hero; agent 29 is the only class-tag-3
+  create, the agent of the first property 41, and the agent whose acks answer every c2s
+  press. So "6 applies on a hero" was the hero's Watch Yourself! landing on the PLAYER,
+  the composition is 58 / 7 not 59 / 6, and the observer cast 35 not 42. The reader now
+  names the observer by `adrenjoin.whose_agent` (property 41, self-scoped, the JARIN
+  kind-5 tie-break) CROSS-CHECKED against the agent that answers the connection's own
+  presses, and REFUSES a connection where the two disagree; the 96th connection, with
+  neither, is refused rather than guessed. `test_shouts` §2 pins the observer as 29.
+* **"≥ 913 u" was the observer's own lead.** The observer's `0x0029` is a point ahead
+  of it, not its position (§56.4); the reader now positions the observer from its exact
+  samples only, measures what a lead is worth against those samples (the lead check:
+  median 765 u), never resolves a pair that rests on a lead, and resolves an exact pair
+  only when its verdict stands outside its stated error on EITHER side of the radius —
+  the first cut resolved every agreeing pair whatever its error. The stated error for
+  exact samples is a bound with no free parameter (speed × hold age; twice speed × the
+  nearer age when interpolated). Result: no exact pair exists, no bound exists, and the
+  section says so instead of a number.
+* **Sides were defined by the outcome.** A foe token was "one whose casters never
+  applied on the observer". Now: the same token is an ally, 'nonc' is the noncombatant,
+  anything else a foe — from the create's field 12 alone. 0 of 8 foe applies reproduces.
+* **The third token is the client's own noncombatant constant**, and retail's shout
+  boosts it (56.3, 56.7). Named, and the under-application recorded as open.
+* **"4 foe shouts inside 1000 u under both readings"** — one held at 1156 u, and all
+  four rest on leads; now "4 by point estimate, none exact, not distance-controlled".
+* **"3–5 agents per apply"** — the distribution is 0–5 and is given (56.5).
+* **The 364 row said "17 of the 48 applies of 364"** — 17 was 364 and 348 together;
+  the row now says 14 of 48 (23 of 58 with 348's 9).
+* **The test** claimed section 1 "needs no vault"; it needs the vault's skills table
+  (the client's row for 364) and now declares a skip without it, so a bare machine gets
+  a named shortfall instead of a traceback. Its "primary excluded" check named the
+  player as the primary, which is never in its own ally set — a check that could not
+  fail; it now names the hero. Its cutoff filtered rows after the census counted
+  connections and refusals over every tape; `census(cutoff=…)` now skips a later tape
+  before reading it, so every pin is exact by construction. 47 checks, floor 30.
 
 ---
 

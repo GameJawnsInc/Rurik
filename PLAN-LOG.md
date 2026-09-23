@@ -28,6 +28,47 @@ move back.
 
 ---
 
+### DESKWORK-D5 pass 3 fix pass -- 2026-09-23 -- **the shout record corrected (the hero tape's observer was the hero; "earshot ≥ 913 u" was the observer's own lead and is withdrawn; the tape bounds the radius in neither direction); the refusal table's wire witnesses re-counted; Mend Condition's witness named**
+
+Two reviewers read the pass-3 entry below this one. What SHIPPED there stands unchanged —
+`party_wide = "earshot"` on 364 with the client's own 1000 u, the per-ally episodes,
+`--no-party-wide-shouts`, the refusal table behind `--refusal-reasons` (default OFF), Mend
+Condition's heal-if-removed — and every revert arm still reddens. The RECORD behind it
+carried two false facts, each pinned by a green test, and this entry corrects them
+([studies/skills/FINDINGS.md](studies/skills/FINDINGS.md) §56.8 is the full account).
+
+**The shouts (§56).** (1) `shoutjoin.py` named the observer by the connection's first
+`0x00E3` (`spellhitjoin.player_of`'s rule); on the one hero tape (`20260914T005758` conn
+56011) that ack is the HERO's — agent 30, class tag 2, 48 of 54 acks, casting 346 and 348
+all session — while agent 29 is the class-tag-3 create, the first property 41 and the agent
+whose acks answer every c2s press. So "6 applies on a hero" was the hero's Watch Yourself!
+landing on the PLAYER: the composition is **58 on the observer / 7 on the hero (all 7 the
+hero's own), the observer cast 35 not 42**, 65 = 42 + 23 holds only as caster == wearer
+versus not, **6 hero-to-player applies OBSERVED, 0 player-to-hero on any tape**
+(RECONSTRUCTION by symmetry). The reader now uses `adrenjoin.whose_agent` (property 41,
+the JARIN kind-5 tie-break) cross-checked against the agent answering the connection's
+presses, and refuses a connection where they disagree (one of 96, with neither, is
+refused). (2) "The tape bounds earshot from below at 913 u" took the observer's own
+`0x0029` lead for its position (765 u from its c2s report 35 ms earlier; from the report
+the pair is 188 u) and resolved every radius-agreeing pair whatever its error. The reader
+now positions the observer from exact samples only and MEASURES what a lead is worth
+against them — **the lead check: 6,639 observer leads with a report inside 0.1 s, median
+offset 765 u, max 4,264 u** — so a pair on a lead never resolves; every one of the 32
+pairs rests on a lead, **no bound exists in either direction, the distance half of P4 is
+UNTESTABLE on this corpus**, and the radius stays CORROBORATED (client table + WIKI),
+untested by the tape. (3) Sides are now read from the create's token alone (the first cut
+defined a foe token by the outcome): 0 of 8 foe applies reproduces; the "third token" is
+the client's `ALLEGIANCE_NONCOMBATANT`, which retail's shout boosts (15 words) and
+`allies_of` excludes — a new open under-application. (4) "4 foe shouts inside 1000 u under
+both readings" → 4 by point estimate, none exact; "3–5 agents per apply" → 0–5 with the
+distribution; the 364 row's "17 of the 48" → 14 of 48 (23 of 58 with 348). (5)
+`test_shouts`: section 1 needs the vault's skills table and declares a skip without it (it
+crashed bare); the "primary excluded" check named the player, never in its own ally set,
+and now names the hero; `census(cutoff=…)` skips a later tape before reading it. 47
+checks, floor 30 (42 before). The pass-3 entry's shout numbers below are superseded here.
+
+---
+
 ### DESKWORK-D5 pass 3 (steps 5, 7, 3d) -- 2026-09-23 -- **party-wide shouts OBSERVED and shipped (a shout reaches every living ally inside the client's own `aoe_range`, 1000 u; 23 foreign applies on retail's wire, 0 of 8 foe shouts; the announce is property 48, not 60); the refusal block as a table of 60 ids and our labels behind a DEFAULT-OFF flag, the weapon gate its one consumer; Mend Condition's heal-if-removed shape**
 
 **Step 5, shouts** ([studies/skills/FINDINGS.md](studies/skills/FINDINGS.md) §56;
