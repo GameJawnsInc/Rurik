@@ -56,6 +56,7 @@ import checks       # noqa: E402
 import effects      # noqa: E402
 import skilldesc    # noqa: E402
 import skilltable   # noqa: E402
+import content as _content   # noqa: E402  (the label marks' closed set, SKILLS-LU fix pass)
 from skilldesc import Label, SLOT_FIELD, shifted, referee_slot   # noqa: E402
 
 # Floor from the BARE run, MEASURED with RURIK_VAULT at an empty directory:
@@ -261,9 +262,12 @@ check(all(v in LT.OVERLAY_VOCABULARY for v in LT.MEANS_OF.values())
       and all(c in LT.OVERLAY_VOCABULARY for c in LT.CONDITION_NAMES)
       and not {"seconds", "damage", "foe", "target", "for"} & LT.OVERLAY_VOCABULARY
       and LT.text_leak({"a": {"b": ["Heal", "label"], "c": "for 5 seconds"}}) == ["for 5 seconds"]
-      and LT.text_leak({"a": {"b": ["Heal", "label"]}}) == [],
+      and LT.text_leak({"a": {"b": ["Heal", "label"]}}) == []
+      and LT.label_detail_vocabulary() == _content.LABEL_DETAILS_KNOWN,
       "OVERLAY_VOCABULARY holds every means and condition name and no template word; text_leak "
-      "names a sentence and passes a clean table")
+      "names a sentence and passes a clean table; and the tier_detail vocabulary EQUALS "
+      "content.LABEL_DETAILS_KNOWN (the fix pass: a new mark lands in both files or this reddens, "
+      "and an older tree drops the rows that carry it)")
 
 
 def srow(sid, tc, slots, flags=()):

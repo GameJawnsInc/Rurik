@@ -1235,6 +1235,17 @@ DETAILS = (DETAIL_AREA_BURST, DETAIL_AREA_ONE_TARGET, DETAIL_INDETERMINATE,
 AREA_WORDING = AREA_FLAGS | {FLAG_ALL_FOES, FLAG_ALL_ALLIES, FLAG_TOUCH}
 CASTER_AREA_WORDING = AREA_FLAGS | {FLAG_ALL_FOES}    # the foe-area words a byte-0 Spell bursts on
 
+
+def label_detail_vocabulary():
+    """Every token a label row's `tier_detail` may carry: DETAILS, the area
+    wordings and the two target flags (build_label_row's `detail`).
+    `content.LABEL_DETAILS_KNOWN` is this set COPIED -- the server path cannot
+    import clientscan -- and test_skilldesc pins the two equal, so a new mark
+    lands in both files in one commit and an older tree DROPS the rows that
+    carry it instead of serving them through the one-target path (SKILLS-LU's
+    fix pass, skills 56.7)."""
+    return frozenset(DETAILS) | AREA_WORDING | {FLAG_TARGET_FOE, FLAG_TARGET_ALLY}
+
 # SKILLS-LU: a byte-0 heal whose text names a CLASS of recipients (HEAL_RECIPIENT_CLASS)
 # ships through the party-heal arm ONLY when a person has read its template and
 # recorded that the caster is IN the class -- the same reading 55.7's reviewers

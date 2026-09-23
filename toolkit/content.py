@@ -73,6 +73,10 @@ hand-sized rows in the repo, bulk extraction in the vault.
     a CLOSED set (`TIERS`): a `tier` outside it is refused at load, because the rule
     compares the string exactly and a near-miss would load as a hand row
     (`_check_tier`). A client-table row with NO tier is a hand row (world.toml's 346).
+    And a label row whose `tier_detail` carries a mark this tree does not know
+    (`LABEL_DETAILS_KNOWN`) is DROPPED at load and named in `World.dropped`, because
+    the mark may name a consumer this tree lacks and the vault is machine-wide
+    (SKILLS-LU's fix pass; `authsrv.main` prints the drops at startup).
 
 The gate keeps its evidentiary value that way: "no extracted table was ever committed,
 prove it with one git command" stays literally true, which is the whole reason PLAN.md
@@ -197,6 +201,29 @@ LABEL_TIER = "label"
 # load as a HAND row: it would replace the real hand row, survive --no-skill-labels
 # and grade "modelled" (reviewer ENG-6). Refused at load instead.
 TIERS = frozenset({LABEL_TIER})
+# THE MARKS A LABEL ROW MAY CARRY AND THIS TREE KNOWS (SKILLS-LU's fix pass, 2026-09-23,
+# skills 56.7; reviewer ENG-D4C-2). A label row names the machinery it rides in
+# `tier_detail` -- AREA_CASTER, HEAL_PARTY, CHAIN_GATED are CONSUMER marks: without
+# that consumer the row falls through to the one-target path, which is the very
+# over-application the gate's exclusion refused. The vault is machine-wide, so a
+# regenerated overlay reaches every tree at once, merged or not -- and the tree that
+# lacks the consumer cannot know which new token names one. So a label row carrying
+# ANY token outside this set is DROPPED at load (named in `World.dropped`, never
+# served), which is the pre-consumer state for that row and self-heals when the tree
+# merges. The set is `skilldesc`'s whole `tier_detail` vocabulary (DETAILS +
+# AREA_WORDING + the target flags), pinned equal to it by `test_skilldesc` so a new
+# mark lands in both files in one commit; `content.py` cannot import `skilldesc` (the
+# server path stays free of clientscan), hence the copy.
+LABEL_DETAILS_KNOWN = frozenset({
+    "ALL_ALLIES", "ALL_FOES", "AREA_ADJACENT", "AREA_BURST", "AREA_CASTER", "AREA_EARSHOT",
+    "AREA_IN_THE_AREA", "AREA_NEAR", "AREA_NEARBY", "AREA_ONE_TARGET", "CHAIN_GATED",
+    "CHAIN_STEP_ADVANCES", "CHAIN_STEP_NOT_ADVANCED", "CLAUSE_ALSO_CASTER", "CLAUSE_CAST_SPEED",
+    "CLAUSE_DISABLE", "CLAUSE_DOUBLE_DAMAGE", "CLAUSE_INTERRUPT", "CLAUSE_KNOCKDOWN",
+    "CLAUSE_MOVE_SPEED", "CLAUSE_RANGE", "CLAUSE_REMOVAL", "CLAUSE_REVEAL", "CLAUSE_SHADOW_STEP",
+    "CONDITION_BIT_CLEAR_REFUSED", "CONDITION_UNNUMBERED", "DURATION_UNMODELLED", "HEAL_PARTY",
+    "INDETERMINATE_SLOT", "LITERAL_DROPPED", "SECOND_CONDITION_DROPPED", "TARGET_ALLY",
+    "TARGET_FOE", "TOUCH",
+})
 # (A client-table skill_effect row with NO tier is a legitimate HAND row -- world.toml's
 # 346 measures its number from the client's table and is hand-placed -- so the other
 # direction, "an extracted row must carry a tier", is NOT a rule; the emitter's own
@@ -390,12 +417,21 @@ def _merge(base, overlay, tier_aware=True):
     return out
 
 
-class World:
-    """Everything loaded, indexed. Built once at startup."""
+def _unknown_label_details(row):
+    """The `tier_detail` tokens of a label row this tree does not know, or []."""
+    if not _is_label_row(row):
+        return []
+    return [str(t) for t in (row.get("tier_detail") or ()) if str(t) not in LABEL_DETAILS_KNOWN]
 
-    def __init__(self, tables, sources):
+
+class World:
+    """Everything loaded, indexed. Built once at startup. `dropped` names the
+    label rows the load refused to serve (an unknown mark), one line each."""
+
+    def __init__(self, tables, sources, dropped=()):
         self.tables = tables
         self.sources = sources
+        self.dropped = list(dropped)
 
     def rows(self, kind):
         return self.tables.get(kind, {})
@@ -483,7 +519,7 @@ def load(repo_dir=None, vault_dir=None, require_vault=False, overrides_dir=None,
             + ". A server with no world is not a server; refusing to start with an "
               "empty store rather than falling back to something invented.")
 
-    tables = {}
+    tables, dropped = {}, []
     for kind, rows in raw.items():
         if not isinstance(rows, dict):
             continue
@@ -493,10 +529,18 @@ def load(repo_dir=None, vault_dir=None, require_vault=False, overrides_dir=None,
                 continue
             prov = _check_provenance(kind, key, row)
             _check_tier(kind, key, row, prov)
+            unknown = _unknown_label_details(row)
+            if unknown:
+                # SKILLS-LU's fix pass: a mark this tree does not know may name a
+                # consumer it lacks -- the row is not served (LABEL_DETAILS_KNOWN)
+                dropped.append(f"{kind} {key}: label row carries tier_detail "
+                               f"{' '.join(unknown)} this tree does not know -- DROPPED, not "
+                               f"served (merge main, or regenerate the overlay on this tree)")
+                continue
             body = {k: v for k, v in row.items() if k != "provenance"}
             out[key] = Row(body, kind, key, prov)
         tables[kind] = out
-    return World(tables, sources)
+    return World(tables, sources, dropped)
 
 
 def main():

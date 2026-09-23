@@ -36414,6 +36414,10 @@ def main():
               "hostile casts ~20% too fast for a 1 s / 5 s spell with this flag).",
               flush=True)
 
+    for _line in getattr(agents.WORLD, "dropped", ()):
+        # SKILLS-LU's fix pass (content.LABEL_DETAILS_KNOWN): a label row with a
+        # mark this tree does not know was not served -- said at startup, once
+        print(f"CONTENT DROPPED: {_line}", flush=True)
     if a.no_skill_labels:
         _gone = agents.WORLD.drop_tier("skill_effect", agents.content.LABEL_TIER)
         print(f"NO SKILL LABELS: {len(_gone)} label-tier skill_effect row(s) dropped "
