@@ -4190,6 +4190,11 @@ every adrenal skill taken off the bar, landing hits. Gate A predicts silence;
 Gate B predicts 25s. It is a live run and it is cheap, but it is a run — this is
 recorded as the experiment, not performed.
 
+**SEPARATED 2026-09-22 without the run — §34.11.** The owner's September
+sessions put a level-1 Warrior on [346, 1] and a level-20 A/W into the dark
+population, fighting; Gate B is refuted and Gate A shipped. The profession
+above was read off the bar's skills; §34.11 reads it off `0x00B7`.
+
 ### 34.6 Why nobody saw this from the screen. OBSERVED, from the bytes
 
 The charge worker gates its own repaint on whether any slot actually moved, and
@@ -4235,6 +4240,10 @@ no-ops on an unaccepted 207, and §30 shows an unarmed bar has no overlay to
 repaint. What lands is the record — the docstring now names the divergence, and
 `test_adrenwire` §12 pins the measurement so the capture that separates A from B
 goes red on the number it changes.
+
+**SUPERSEDED 2026-09-22 — §34.11: the sender is changed.** The captures that
+separate A from B arrived as ordinary play rather than as the staged run, and
+the gate (Gate A, the current bar) ships behind `--no-adren-bar-gate`.
 
 ### 34.8 P28–P31, scored
 
@@ -4480,6 +4489,158 @@ health other than 480 separates "% of maximum health" from "per 4.8 raw
 points", and a +health mitigation build may supply the second denominator for
 free — and both plans carry an in-run positive control, because §34.4 is the
 measurement that says silence without one is void.
+
+**2026-09-22: the gate plan is WITHDRAWN UNRUN — §34.11. The corpus answered
+its question without it. The boundary plan stands.**
+
+### 34.11 The gate half, closed at the desk: the confound broken by tapes already on disk, the third rival read, Gate A shipped (2026-09-22)
+
+**Desk work, no client launched — DESKWORK-D5 step 1
+([studies/deskwork/PLAN.md](../deskwork/PLAN.md) §3 D5).** Extractor:
+`toolkit/authsrv/adrenjoin.py --by-connection` (new this day); pins:
+`test_adrenwire.py` §12 (six checks added, 77 → 83) and `test_pools.py` §11d3
+(floor 132 → 136). The staged plan `vault/plans/adren_gate.txt` (sha256
+`686e76a4…`) is **WITHDRAWN UNRUN**, recorded in `PLAN-LOG.md` the way
+RUN-AGGRO-LAKESIDE-2 was; the file is left where it is, because editing it
+would change the hash a seal compares.
+
+#### 34.11.1 The corpus on 2026-09-22
+
+`adrenjoin.py` reproduces the fidelity judge's run to the digit:
+
+| | connections | messages | `0x00CF` | `0x00D0` | `0x00D2` | hits landed | melee finished | damage words | deaths |
+|---|---|---|---|---|---|---|---|---|---|
+| **ARMED** | 46 | 145,399 | **1,163** | 39 | 40 | 1,073 | 977 | 93 | — |
+| **DARK** | 49 | 142,209 | **0** | **0** | **0** | 367 | 210 | 312 | **11** |
+
+§34.3's total split is unchanged in kind and eight times larger in the dark
+side's fighting. What is new is who the dark characters are.
+
+#### 34.11.2 The character, read off the wire and not off the bar — Gate B REFUTED
+
+§34.5's "every dark connection is also a non-Warrior" was read from the
+**bar's** profession bytes. `--by-connection` reads the **character**: `0x00B7
+[agent, primary, secondary, flag]` for the observer's own agent, cross-checked
+against the `0x0059` appearance nibble (90 of 90 connections agree) and against
+the `CHARACTER_INFO` summary's profession on the capture's auth channel, joined
+on the appearance dword (77 of 77 agree). The level is int property 36 for the
+observer's agent (the summary agrees on 76 of 77; the one disagreement is
+`20260819T132414`'s third connection reading 3 where the login summary said 2 —
+a level-up inside the session). Five connections carry no property 36 for the
+observer: four map-transfer stubs of 280–300 messages and the 6112 auth channel.
+
+DARK by (primary, level): (1, 1) ×13, (2, 1) ×4, (2, 3) ×6, (4, 1) ×4, (5, 1)
+×2, (5, 2), (7, 1) ×2, (7, 2) ×7, (7, 3), **(7, 20) ×4**, and 6 with no level
+read. **Thirteen dark connections are a primary Warrior**, and four more carry
+Warrior as the secondary. The ones that fought:
+
+| capture | connection | `0x00B7` | level | bar | hits landed | melee finished | damage words | deaths | family |
+|---|---|---|---|---|---|---|---|---|---|
+| `20260914T180058` | `10.0.0.210:56301` | 1 / 0 | 1 | [346, 1] | 18 | 18 | 112 | 2 | 0 |
+| `20260915T155656` | `10.0.0.210:51922` | 1 / 0 | 1 | [346, 1] | 17 | 17 | 24 | 0 | 0 |
+| `20260915T164906` | `10.0.0.210:51282` | 1 / 0 | 1 | [346, 1] | 1 | 1 | 0 | 0 | 0 |
+| `20260917T224104` | `10.0.0.210:62557` | 7 / 1 | 20 | [782, 780, 775, 781, 346] | 127 | 86 | 24 | 4 | 0 |
+
+163 landed hits, 122 completed melee attacks, 160 damage words and 6 deaths by
+characters who ARE Warriors, and not one message of the family — while the
+W/Mo on [382, 384, 385, 364, 1, 2] at level 20 (`20260818T132739`
+`10.0.0.210:53202`, the same account) lands 280 hits and gets 280 gains. The
+Frenzy-and-Healing-Signet bar costs 0 adrenaline in both slots, which is why a
+Warrior can be dark at all. **Gate B is refuted at level 1 for a PRIMARY
+Warrior and at level 20 for a SECONDARY one**, and the level caveat — "maybe a
+level-1 character earns nothing" — dies on the second row. The corner no tape
+covers is a *primary* Warrior above level 1 on a dark bar; said here rather than
+assumed. (The A/W's other fighting tape, `20260917T160915` conn `52569`, reads
+`0x00B7` 7 / 0 — no secondary yet — 127 hits, 0 gains: a dark Assassin, which
+is why the pinned Warrior count is 4 and not 5.)
+
+#### 34.11.3 The third rival — "the LEARNED set holds an adrenal skill" — REFUTED
+
+Raised by the fidelity judge before any "corroborated" could be written, and
+it needed **both** libraries, because §47.1 measured that the account set
+(`0x001D`) and the character set (`0x00DB`) are different objects and neither
+contains the other. `--by-connection` decodes both bitmaps to ids and joins
+them to content's `adrenaline_units`. Two facts about how they ride first:
+`0x00DB` is on every map connection; `0x001D` is sent **once per session** (1 of
+6 connections on `20260818T132739` carries it), so it is read per capture and
+labelled so in the report.
+
+- **The account library carries 348 / 382 / 385 on every capture in the
+  corpus** — the owner's account has three adrenal Warrior skills unlocked. So
+  the account half of the rival is refuted on all 14 dark connections with a
+  landed hit: 0 gains.
+- **The A/W's CHARACTER library carries 348 / 382 / 385 too** (42 ids), on both
+  of its fighting connections — `20260917T160915` and `20260917T224104`, 127
+  hits each, 0 gains.
+
+A character that has *learned* adrenal skills and does not have one *on the
+bar* is sent nothing. OBSERVED, 2 connections for the character set and 14 for
+the account set. (How an Assassin with no secondary holds Warrior skills in its
+character library is not asked here; the wire says it does.)
+
+#### 34.11.4 The clear is gated too. OBSERVED
+
+Eleven player deaths on dark connections (`0x0026 [me, 4]`), zero `0x00D0`.
+So retail's silence covers the death clear, not only the gain — which is what
+puts the gate on `kill_player`'s clear and not only on the sender.
+
+#### 34.11.5 What stays UNOBSERVED, measured as such
+
+- **The dark-to-armed transition.** The bar is a timeline (`0x00DA` whole,
+  `0x00D9` per slot), and **no connection in the corpus flips its bar's
+  armed-ness mid-connection — 0 of 95.** Bars are edited in outposts:
+  `20260917T224104` conn `57677` goes [782, 780, 775, 781, 0, …] → [… 346 …]
+  (dark → dark), `20260819T132414` conn `52606` adds 780 then 952 (dark →
+  dark). 0 hits land before the observer's first own `0x00DA`; 0 family
+  messages arrive while a bar is dark. So what retail sends on the first hit
+  after an adrenal skill is dragged onto a dark bar *in an explorable* is
+  unobserved. The gate reads the bar at gain time and starts sending on the
+  next hit — the smaller claim, said at the call site, pinned in `test_pools`
+  11d3 as the control.
+- **A dark-bar hero.** Every hero that received a `0x00DA` in the corpus
+  carries the same armed bar [1, 2, 322, 346, 348, 382, 385] — 4 of 4, on
+  `20260914T005758` and `20260916T150306` — so no tape shows a dark-bar hero
+  gaining or dying.
+- **The rounding half's (0, 0.5 %) hit** — unchanged from §34.10; the
+  boundary plan stands.
+
+#### 34.11.6 What shipped, and what did not need to
+
+- `authsrv.bar_holds_adrenal()` reads `SKILLBAR` **at call time** — the list
+  `--skills` rebinds, the store rebinds at the instance load, and the `0x005C`
+  handler rewrites in place on an in-game drag (SANDBOX-B7) — so the gate is
+  on the CURRENT bar.
+- `player_gains_adrenaline` returns before the grant and the send when the bar
+  is dark, **the AD4 zero included**: the zero rides a damage word *to an
+  adrenal bar* (§53.4); the dark side's 312 damage words carry none.
+- `kill_player`'s `0x00D0` is gated on the same predicate (the book still
+  clears). The other two clear sites need none and are left alone, said why:
+  `energy_tick`'s 25 s clear cannot fire from a dark pool (`AdrenalinePool`
+  keeps only slots with a cost and `tick` wipes only a bar that had charge),
+  and `cast_tick`'s Final Thrust clear completes an adrenal skill cast FROM
+  the bar, so the bar is armed by construction. That last site was guarded
+  for an hour and `test_agentlife`'s Final Thrust fixture — which stubs
+  `skill_cost` to (0, 0) — showed the guard reading the stub rather than the
+  bar; the guard came out and the comment stayed. `0x00D2` is unreachable on
+  a dark bar for the same reason.
+- **The hero.** `hero_pool_gain` has read the row's bar since JARIN
+  (2026-09-14) and `sync_hero_body_bar` rewrites that row on an edit, so its
+  gain was already gated — the SKILLS-WK class ran the other way here: the
+  rule reached the hero and not the player for eight days. `hero_pool_clear`
+  now follows the same flag, labelled RECONSTRUCTION at the site (the player's
+  half is OBSERVED, the hero's has no dark witness; silence is the smaller
+  claim).
+- `--no-adren-bar-gate` is the revert: the pre-2026-09-22 sender.
+- **The client sees nothing either way** (§34.6's EDI flag; `test_adrenwire`
+  §13). This is wire fidelity and one staged live run removed from the owner's
+  queue, not something on screen.
+
+#### 34.11.7 What this corrects
+
+§34.5's "this corpus cannot separate them" was true of the corpus on
+2026-08-21 and is dated now; §34.7's "deliberately not fixed" is superseded;
+`player_gains_adrenaline`'s docstring carries the new paragraph in place of the
+ruling. `PLAN.md` §8.2's SKILLS-B1 line keeps only the rounding half.
 
 ## 35. SKILLS-T1 — the client names its own skill types
 

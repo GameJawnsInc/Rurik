@@ -1898,8 +1898,9 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   one batch and the add from its ChCliApi wrapper, then retail's unhandled c2s triaged,
   the hero skill toggle, travel and inventory.
 * **DESKWORK-D5**: the combat rules retail's tapes on disk already settle — the adrenaline
-  gate (SKILLS-B1's gate half), interrupts, property 10 and the `[42]`/`[55]` residue, NPC
-  recharge from completion, party-wide shouts, the adrenaline replay, the refusal ids.
+  gate (SKILLS-B1's gate half: LANDED 2026-09-22, skills §34.11), interrupts, property 10
+  and the `[42]`/`[55]` residue, NPC recharge from completion, party-wide shouts, the
+  adrenaline replay, the refusal ids.
 * **DESKWORK-D4**: skill coverage in bulk — labels parsed from the archive's own
   description templates, refereed slot by slot against the client table, served as a
   marked label tier (the owner's yes to the plan's §8 Q3, given by taking the route); then
@@ -2149,10 +2150,9 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   the in-run reference the unmet-requirement divisor (3.098) has never had. It needs its
   own short plan or a line on the next Isle tape — not `isle_rung8d_recast_v2.txt`,
   whose re-cast steps RB2 made moot ([studies/isle/PLAN.md](studies/isle/PLAN.md), rung 8d).
-* **SKILLS-B1**: the armed/dark gate still wants its staged live capture (skills
-  §34.10). The rounding half is mostly answered without one — ceil is dead, round holds
-  k = 1 (skills §53.1) — and what is left of it is a hit in (0, 0.5 %): a `0x00CF`
-  carrying 0, or nothing.
+* **SKILLS-B1**, the rounding half only (the gate half closed at the desk 2026-09-22,
+  skills §34.11): ceil is dead, round holds k = 1 (skills §53.1), and what is left is a
+  hit in (0, 0.5 %): a `0x00CF` carrying 0, or nothing.
 * **MORALE-Q5 and Q6**: morale BOOSTS have zero sightings on retail's wire, and the
   corpus holds no death followed by a zone, so what resets a penalty is WIKI only
   ([studies/morale/FINDINGS.md](studies/morale/FINDINGS.md)).

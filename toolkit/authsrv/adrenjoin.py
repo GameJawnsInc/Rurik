@@ -93,6 +93,29 @@ DAMAGE_PROPS = (16, 17)     # both carry a negative fraction of max health
 LIFE_DRAIN_PROP = 55
 STRIKE_UNITS = 25
 
+# --by-connection (DESKWORK-D5 step 1, 2026-09-22): the messages that say WHO a
+# dark connection's character is, read off the same GAME stream as the bar --
+# so that "every dark connection is a non-Warrior" (34.5) is a measurement
+# rather than a reading of the bar's profession byte.
+AGENT_PROFESSIONS = 0x00B7     # [agent, primary, secondary, flag]  (authsrv 3051)
+PROP_LEVEL = 36                # int property 36 on 0x009F: the per-AGENT level
+                               # that drives the nameplate (authsrv.py's 0x003A
+                               # block says which channel is which; 0x003A is
+                               # the attribute RANKS and was this scanner's
+                               # first, wrong, read -- 9 dwords, no level in it)
+PLAYER_INFO = 0x0059           # [player, agent, appearance, ...]; the profession
+                               # nibble at bits 20-23 (charsummary.py)
+SKILLBAR_UPDATE_SKILL = 0x00D9  # [agent, slot, skill, copy]  -- an in-game edit
+ACCOUNT_LIBRARY = 0x001D       # array32[128]; the ACCOUNT's unlocks (skills 47).
+                               # ONCE PER SESSION, not per map connection: 1 of
+                               # 6 connections on 20260818T132739 carries it, so
+                               # it is collected per CAPTURE below and labelled so
+CHARACTER_LIBRARY = 0x00DB     # array32[128]; the CHARACTER's learned set --
+                               # this one rides every map connection
+AGENT_UPDATE_FLAGS = 0x0026    # [agent, flags]; 4 is the player's death
+PLAYER_DEAD_FLAG = 4
+PROFESSION_SHIFT = 20
+
 
 def is_damage_to(op, v, me):
     """A damage word whose TARGET is `me`: 16/17 at me, or a NEGATIVE 55 at me."""
@@ -376,14 +399,317 @@ def fits(rows):
     return out
 
 
+def _ids_from_words(words):
+    """A 128-dword unlock bitmap back to skill ids (skillunlock.ids_from_words,
+    copied rather than imported so this scanner stays a leaf of tape + codec)."""
+    out = []
+    for wi, w in enumerate(words):
+        w, b = int(w), 0
+        while w:
+            if w & 1:
+                out.append(wi * 32 + b)
+            w >>= 1
+            b += 1
+    return out
+
+
+def _auth_summaries(cap):
+    """appearance dword -> (level, profession, secondary) from the capture's
+    AUTH channel (CHARACTER_INFO's summary blobs, s2c), or {} when the capture
+    has no auth tape or none decodes. The join key is the appearance dword,
+    which 0x0059 carries on the GAME channel for the same character."""
+    try:
+        import charsummary as cs
+        import summarycensus
+    except Exception:                                          # noqa: BLE001
+        return {}
+    out = {}
+    for name in sorted(os.listdir(cap)):
+        if not (name.startswith("auth-") and name.endswith(".jsonl")):
+            continue
+        try:
+            with open(os.path.join(cap, name), encoding="utf-8") as fh:
+                for line in fh:
+                    try:
+                        e = json.loads(line)
+                    except ValueError:
+                        continue
+                    if e.get("kind") != "frame" or e.get("direction") != "s2c":
+                        continue
+                    for blob in summarycensus.find_summaries(e["plain"]):
+                        try:
+                            f = cs.decode(blob)
+                        except cs.Malformed:
+                            continue
+                        out[int(f["appearance"])] = (
+                            int(f["level"]), int(f["profession"]),
+                            int(f["secondary"]))
+        except OSError:
+            continue
+    return out
+
+
+def by_connection(costs=None):
+    """One row per usable GAME connection: who the character is, from the wire.
+
+    THE QUESTION THIS ANSWERS (studies/skills 34.5 / 34.11). The corpus split
+    ARMED/DARK on the bar, and 34.5 said every dark connection was ALSO a
+    non-Warrior -- read off the bar's skills, not off the character. This
+    reads the character: 0x00B7's primary/secondary for the observer's own
+    agent, the 0x0059 appearance nibble, the level at 0x003A dword 9, and --
+    where the capture carries its auth tape -- the CHARACTER_INFO summary's
+    level and profession joined on the appearance dword. Two witnesses for
+    each of profession and level, from two channels.
+
+    THE THIRD RIVAL, named by the fidelity judge before anything is called
+    corroborated: "the character's LEARNED set holds an adrenal skill". The
+    account library (0x001D) and the character library (0x00DB) are two
+    different sets (skills 47.1, neither contains the other), so both are
+    decoded and every adrenal id in either is listed per connection.
+
+    THE BAR IS A TIMELINE, not a set. 0x00DA is the whole bar and 0x00D9 is an
+    in-game slot write; the row records whether the bar's ARMED-ness ever
+    flipped inside one connection and, if it did, how much fighting happened
+    on each side of the flip -- that is the only place a dark-to-armed
+    transition could be OBSERVED, and `flips` says whether the corpus holds
+    one. A hero's bar (JARIN) is not the observer's and is not read here.
+
+    READ-ONLY, like everything else in this module.
+    """
+    costs = adrenal_costs() if costs is None else costs
+    live = vaultpath.require_dir("captures", "live",
+                                 why="the per-connection census")
+    codec = Codec()
+    rows = []
+    for stamp in sorted(os.listdir(live)):
+        cap = os.path.join(live, stamp)
+        if not os.path.isdir(cap):
+            continue
+        summaries = None
+        cap_rows = []
+        # the ACCOUNT library, wherever in this capture it was sent
+        cap_account = None
+        for chan in tape.channel_files(cap):
+            conn = chan["connection"]
+            try:
+                _info, events = tape.load_tape(cap, conn)
+                msgs, _receipt = tape.decode_all(events, codec, "GAME_SMSG", 0)
+            except Exception:                                  # noqa: BLE001
+                continue
+            me = whose_agent(msgs)
+            if me is None:
+                continue
+            r = {"capture": stamp, "connection": conn, "agent": me,
+                 "messages": len(msgs),
+                 "span_s": (round(float(msgs[-1][0]) - float(msgs[0][0]), 1)
+                            if msgs else 0.0),
+                 "bars": [], "flips": [], "profession": None,
+                 "secondary": None, "profession_59": None, "level": None,
+                 "appearance": None, "summary_level": None,
+                 "summary_profession": None, "summary_secondary": None,
+                 # the ACCOUNT set: on THIS connection, and anywhere in the
+                 # capture (it rides once per session, see ACCOUNT_LIBRARY)
+                 "account_adrenal": None, "account_n": None,
+                 "account_adrenal_capture": None,
+                 "character_adrenal": None, "character_n": None,
+                 "gain": 0, "clear": 0, "spend": 0, "hits_landed": 0,
+                 "melee_finished": 0, "damage_taken": 0, "deaths": 0,
+                 # fighting on each side of the bar's state, IN ORDER; a hit
+                 # before the first own 0x00DA is "before_bar", not dark
+                 "hits_dark": 0, "hits_armed": 0, "hits_before_bar": 0,
+                 "family_dark": 0, "family_before_bar": 0}
+            bar, armed = [], None          # None until the first own 0x00DA
+            for i, (_t, op, v) in enumerate(msgs):
+                if op == SKILLBAR_UPDATE and len(v) > 2 and int(v[1]) == me:
+                    bar = [int(x) for x in v[2]]
+                    if bar not in r["bars"]:
+                        r["bars"].append(list(bar))
+                elif (op == SKILLBAR_UPDATE_SKILL and len(v) > 3
+                      and int(v[1]) == me):
+                    slot = int(v[2])
+                    while len(bar) <= slot:
+                        bar.append(0)
+                    bar[slot] = int(v[3])
+                    if bar not in r["bars"]:
+                        r["bars"].append(list(bar))
+                if r["bars"]:
+                    now_armed = any(costs.get(s, 0) > 0 for s in bar if s)
+                    if armed is not None and now_armed != armed:
+                        r["flips"].append({"index": i,
+                                           "to": "armed" if now_armed else "dark"})
+                    armed = now_armed
+                side = ("before_bar" if armed is None
+                        else "armed" if armed else "dark")
+                if op == AGENT_PROFESSIONS and len(v) > 3 and int(v[1]) == me:
+                    r["profession"], r["secondary"] = int(v[2]), int(v[3])
+                elif op == PLAYER_INFO and len(v) > 3 and int(v[2]) == me:
+                    r["appearance"] = int(v[3])
+                    r["profession_59"] = (int(v[3]) >> PROFESSION_SHIFT) & 0xF
+                elif (op == PROP_INT and len(v) > 3 and int(v[1]) == PROP_LEVEL
+                      and int(v[2]) == me):
+                    r["level"] = int(v[3])
+                elif op == ACCOUNT_LIBRARY and len(v) > 1:
+                    ids = _ids_from_words(v[1])
+                    r["account_n"] = len(ids)
+                    r["account_adrenal"] = sorted(
+                        s for s in ids if costs.get(s, 0) > 0)
+                    cap_account = r["account_adrenal"]
+                elif op == CHARACTER_LIBRARY and len(v) > 1:
+                    ids = _ids_from_words(v[1])
+                    r["character_n"] = len(ids)
+                    r["character_adrenal"] = sorted(
+                        s for s in ids if costs.get(s, 0) > 0)
+                elif (op in (ADRENALINE_GAIN, ADRENALINE_CLEAR, ADRENALINE_SPEND)
+                      and int(v[1]) == me):
+                    r[{ADRENALINE_GAIN: "gain", ADRENALINE_CLEAR: "clear",
+                       ADRENALINE_SPEND: "spend"}[op]] += 1
+                    if side == "dark":
+                        r["family_dark"] += 1
+                    elif side == "before_bar":
+                        r["family_before_bar"] += 1
+                elif (op == AGENT_UPDATE_FLAGS and len(v) > 2 and int(v[1]) == me
+                      and int(v[2]) == PLAYER_DEAD_FLAG):
+                    r["deaths"] += 1
+                elif op in DAMAGE_OPS and int(v[1]) in DAMAGE_PROPS + (LIFE_DRAIN_PROP,):
+                    if is_damage_to(op, v, me):
+                        r["damage_taken"] += 1
+                    if (op == PROP_FLOAT_TARGET and int(v[3]) == me
+                            and int(v[1]) in DAMAGE_PROPS):
+                        r["hits_landed"] += 1
+                        r["hits_" + side] += 1
+                elif (op == PROP_INT and len(v) > 2
+                        and int(v[1]) == PROP_MELEE_FINISHED and int(v[2]) == me):
+                    r["melee_finished"] += 1
+            on_bar = {s for b in r["bars"] for s in b if s}
+            r["adrenal_on_bar"] = sorted(s for s in on_bar if costs.get(s, 0) > 0)
+            r["arm"] = "armed" if r["adrenal_on_bar"] else "dark"
+            if r["appearance"] is not None:
+                if summaries is None:
+                    summaries = _auth_summaries(cap)
+                hit = summaries.get(r["appearance"])
+                if hit:
+                    (r["summary_level"], r["summary_profession"],
+                     r["summary_secondary"]) = hit
+            cap_rows.append(r)
+        for r in cap_rows:
+            r["account_adrenal_capture"] = cap_account
+        rows.extend(cap_rows)
+    return rows
+
+
+def print_by_connection(rows):
+    """The per-connection table and the dark side's summary."""
+    print("arm    gain clr spd  hits melee dmg  dth  prof  lvl  "
+          "bar(s) / adrenal on bar / adrenal LEARNED (acct | char)")
+    print("-" * 100)
+    for r in sorted(rows, key=lambda r: (r["arm"], r["capture"], r["connection"])):
+        prof = (f"{r['profession']}/{r['secondary']}"
+                if r["profession"] is not None else "?")
+        if r["profession_59"] is not None and r["profession_59"] != r["profession"]:
+            prof += f"(59:{r['profession_59']})"
+        lvl = str(r["level"]) if r["level"] is not None else "?"
+        if r["summary_level"] is not None:
+            lvl += ("" if r["summary_level"] == r["level"]
+                    else f"(sum:{r['summary_level']})")
+        bars = " | ".join(str(b) for b in r["bars"]) or "(no own bar)"
+        print(f"{r['arm']:5} {r['gain']:5} {r['clear']:3} {r['spend']:3} "
+              f"{r['hits_landed']:5} {r['melee_finished']:5} "
+              f"{r['damage_taken']:4} {r['deaths']:3}  {prof:6} {lvl:5} "
+              f"{r['capture']} {r['connection']}  "
+              f"({r['messages']} msgs, {r['span_s']} s)")
+        print(f"       bars {bars}")
+        acct = (f"{r['account_adrenal']} ({r['account_n']})"
+                if r["account_n"] is not None
+                else f"{r['account_adrenal_capture']} (from the capture)")
+        print(f"       adrenal on bar {r['adrenal_on_bar']}   learned adrenal "
+              f"acct {acct} | char {r['character_adrenal']} "
+              f"({r['character_n']})")
+        if r["flips"] or r["hits_before_bar"] or r["family_before_bar"]:
+            print(f"       flips {r['flips']}; hits landed before the bar "
+                  f"{r['hits_before_bar']} / dark {r['hits_dark']} / armed "
+                  f"{r['hits_armed']}; family messages while dark "
+                  f"{r['family_dark']}, before the bar {r['family_before_bar']}")
+    dark = [r for r in rows if r["arm"] == "dark"]
+    armed = [r for r in rows if r["arm"] == "armed"]
+    print()
+    print(f"{len(armed)} armed, {len(dark)} dark connections")
+    profs = collections.Counter((r["profession"], r["level"]) for r in dark)
+    print(f"DARK by (primary profession, level): "
+          f"{dict(sorted(profs.items(), key=lambda kv: (str(kv[0][0]), str(kv[0][1]))))}")
+    warriors = [r for r in dark if r["profession"] == 1 or r["secondary"] == 1]
+    print(f"DARK connections whose character is a Warrior (primary or "
+          f"secondary): {len(warriors)}")
+    for r in warriors:
+        print(f"   {r['capture']} {r['connection']}  prof {r['profession']}/"
+              f"{r['secondary']}  level {r['level']}  hits {r['hits_landed']}  "
+              f"melee {r['melee_finished']}  gains {r['gain']}  bars {r['bars']}")
+
+    def _learned(r):
+        acct = (r["account_adrenal"] if r["account_n"] is not None
+                else r["account_adrenal_capture"])
+        return bool(acct) or bool(r["character_adrenal"])
+    learned = [r for r in dark if _learned(r)]
+    print(f"DARK connections whose LEARNED set (account, this capture's, or "
+          f"character) holds an adrenal skill: {len(learned)} of {len(dark)}; "
+          f"of those, with a landed hit: "
+          f"{sum(1 for r in learned if r['hits_landed'])}, gains on them "
+          f"{sum(r['gain'] for r in learned)}")
+    for r in learned:
+        if not r["hits_landed"]:
+            continue
+        acct = (r["account_adrenal"] if r["account_n"] is not None
+                else f"{r['account_adrenal_capture']} (capture)")
+        print(f"   {r['capture']} {r['connection']}  acct {acct}"
+              f"  char {r['character_adrenal']}  hits {r['hits_landed']}  "
+              f"melee {r['melee_finished']}  gains {r['gain']}")
+    flips = [r for r in rows if r["flips"]]
+    print(f"connections whose bar's armed-ness FLIPPED mid-connection: "
+          f"{len(flips)}; hits landed before any own bar arrived: "
+          f"{sum(r['hits_before_bar'] for r in rows)}; family messages while "
+          f"the bar was dark: {sum(r['family_dark'] for r in rows)}, before "
+          f"the bar: {sum(r['family_before_bar'] for r in rows)}")
+    disagree = [r for r in rows if r["summary_level"] is not None
+                and r["summary_level"] != r["level"]]
+    joined = [r for r in rows if r["summary_level"] is not None]
+    print(f"level cross-check property 36 vs CHARACTER_INFO summary: "
+          f"{len(joined)} joined, {len(disagree)} disagree; connections with "
+          f"no property 36 for the observer: "
+          f"{sum(1 for r in rows if r['level'] is None)}")
+    pdis = [r for r in rows if r["profession_59"] is not None
+            and r["profession"] is not None
+            and r["profession_59"] != r["profession"]]
+    print(f"profession cross-check 0x00B7 vs 0x0059 nibble: "
+          f"{sum(1 for r in rows if r['profession_59'] is not None and r['profession'] is not None)} "
+          f"joined, {len(pdis)} disagree")
+    sdis = [r for r in rows if r["summary_profession"] is not None
+            and r["summary_profession"] != r["profession"]]
+    print(f"profession cross-check 0x00B7 vs summary: "
+          f"{sum(1 for r in rows if r['summary_profession'] is not None)} "
+          f"joined, {len(sdis)} disagree")
+    print(f"deaths on dark connections: {sum(r['deaths'] for r in dark)}; "
+          f"0x00D0 clears on those: {sum(r['clear'] for r in dark)}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--rows", action="store_true",
                     help="print every damage-to-self row, sorted by percentage")
     ap.add_argument("--bars", action="store_true",
                     help="print every connection's OWN 0x00DA bar (see bars())")
+    ap.add_argument("--by-connection", action="store_true",
+                    help="one row per connection: profession and level from the "
+                         "wire, the learned sets' adrenal ids, the bar timeline, "
+                         "and the family counts (see by_connection())")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
+
+    if args.by_connection:
+        found = by_connection()
+        if args.json:
+            print(json.dumps(found, indent=2))
+            return 0
+        print_by_connection(found)
+        return 0
 
     if args.bars:
         found = bars()

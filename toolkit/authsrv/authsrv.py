@@ -4842,6 +4842,18 @@ GLYPH_SPELL_CHARGES = 2
 # control for anything a run sees on the orb or the skill icons.
 ENERGY = True
 
+# THE BAR GATE ON THE ADRENALINE FAMILY (SKILLS-B1's gate half, shipped
+# 2026-09-22 as DESKWORK-D5 step 1; studies/skills/FINDINGS.md 34.11). Retail
+# sends a player whose CURRENT bar holds no adrenal skill NONE of 0x00CF /
+# 0x00D0 / 0x00D2 -- 49 dark connections, 367 landed hits, 210 completed melee
+# attacks, 11 deaths, 0 messages -- and since 2026-09-14 the corpus separates
+# that from "the profession does not use adrenaline" (a level-1 Warrior on
+# [346, 1] and a level-20 A/W, both dark, both silent) and from "the learned
+# set holds an adrenal skill" (the account library carries three on every
+# capture; the A/W's character library too; silent). `--no-adren-bar-gate` is
+# the pre-2026-09-22 arm: the family goes out to a dark bar as it did before.
+ADREN_BAR_GATE = True
+
 # MOVEMENT SPEED ON THE WIRE (SLICE-F48, 2026-09-16; OFF by default from
 # 2026-08-22 until then). A speed modifier has exactly one wire channel:
 # GAME_SMSG 0x0027 AGENT_UPDATE_SPEED_BASE, the maxSpeed store at agent+0x5C
@@ -17001,6 +17013,19 @@ def agent_adrenaline(agent):
     return pool
 
 
+def bar_holds_adrenal(bar=None):
+    """Does this bar carry ANY skill with a non-zero adrenaline cost?
+
+    THE CURRENT bar, read at call time: `SKILLBAR` is rebound at --skills and
+    from the store at the instance load, and rewritten in place by the 0x005C
+    handler on an in-game slot edit (SANDBOX-B7), so a bar frozen at def time
+    or cached in `state` would gate on what the bar WAS. `player_adrenaline`
+    already rebuilds the pools on the same read for the same reason.
+    """
+    slots = SKILLBAR if bar is None else bar
+    return any(skill_cost(int(s))[1] > 0 for s in slots if s)
+
+
 def player_gains_adrenaline(send, state, units, now, conn_id, why):
     """Grant `units` to the player's pools AND tell the client, from one call.
 
@@ -17048,19 +17073,42 @@ def player_gains_adrenaline(send, state, units, now, conn_id, why):
     cannot hold it, clears included, so the clock argument above does not even
     arise there: no gain, no clock, nothing to keep honest.
 
-    NOT IMPLEMENTED, AND THAT IS A RULING RATHER THAN AN OVERSIGHT. The gate's
-    variable is CONFOUNDED -- every dark connection is also a non-Warrior, so
-    "the bar carries an adrenal skill" and "the profession uses adrenaline" fit
-    all 58 connections identically and the corpus cannot separate them. Gating
-    on either would be picking a side on no evidence. The two errors are also
-    symmetric and both invisible: the charge worker clears EDI before its slot
-    loop, sets it only where a slot is written, and `test edi,edi` / `je` at
-    0x008219F8 jumps past the UI event, so a 207 no slot accepted repaints
-    nothing and arms no timer (test_adrenwire 13). One capture separates the
-    two rules -- the Warrior, explorable, adrenal skills OFF the bar, landing
-    hits -- and test_adrenwire 12 pins the numbers it would move.
+    IMPLEMENTED 2026-09-22 (DESKWORK-D5 step 1; studies/skills/FINDINGS.md
+    34.11), AND THE PARAGRAPH THAT USED TO STAND HERE SAID WHY IT WAS NOT.
+    The gate's variable was CONFOUNDED on 2026-08-21 -- every dark connection
+    was also a non-Warrior -- and the ruling was to implement neither rule.
+    The corpus has since separated them without the staged live run: a
+    level-1 Warrior (0x00B7 primary 1) on the bar [346, 1] landed 18 and 17
+    hits on two connections and a level-20 A/W (7/1) landed 127 twice, all
+    dark, all silent -- 0 of the family over 254 + 36 hits, 11 deaths on dark
+    connections with 0 clears -- while W/Mo bars on the same maps gain. So
+    "the profession uses adrenaline" is REFUTED at level 1 (primary) and at
+    level 20 (secondary), and "the LEARNED set holds an adrenal skill" is
+    REFUTED too: the account library carries 348/382/385 on every capture and
+    the A/W's character library carries them as well. Gate A -- THE CURRENT
+    BAR -- is the one rule left standing, OBSERVED on 49 of 49 dark and 46 of
+    46 armed connections (`adrenjoin.py --by-connection`).
+
+    WHAT IS STILL NOT OBSERVED, said here because the gate reads it: the
+    dark-to-armed TRANSITION. No connection in the corpus flips its bar's
+    armed-ness mid-connection (0 of 95; the bar is edited in outposts), so
+    what retail sends on the first hit after an adrenal skill is dragged onto
+    a dark bar in an explorable is UNOBSERVED. This reads the bar at gain
+    time, so a bar that turns armed mid-fight starts sending on its next hit
+    -- the smaller claim, and `--no-adren-bar-gate` is the pre-gate arm. The
+    grant is skipped with the send: a dark bar has no pool to fill
+    (`AdrenalinePool` keeps only slots with a cost) and `tick` wipes only a
+    bar that had charge, so no 25 s clear can arise from a dark bar either
+    way. The two errors this used to weigh are still both invisible on the
+    client (test_adrenwire 13); what changed is that one of them is now
+    retail's wire and the other is not.
     """
     if not ENERGY or units < 0:
+        return
+    if ADREN_BAR_GATE and not bar_holds_adrenal():
+        # Retail's silence to a dark bar, gains AND the AD4 zero alike: the
+        # zero rides a damage word TO AN ADRENAL BAR (53.4), never to a dark one
+        # (312 dark damage words, 0 messages). OBSERVED.
         return
     if units > 0:
         # A zero skips the grant AND the combat-clock mark inside it -- the
@@ -18984,6 +19032,13 @@ def cast_tick(send, state, conn_id):
             # the death: the pool and 0x00D0 together, ONE call's worth.
             if ENERGY and skill_clears_adrenaline(cast["skill_id"]):
                 player_adrenaline(state).clear()
+                # NOT BEHIND SKILLS-B1's BAR GATE (34.11), on purpose: a
+                # completing `clears_adrenaline` skill is an adrenal skill cast
+                # FROM the bar, so the bar is armed by construction and the
+                # gate would be redundant here. It was briefly guarded, and
+                # test_agentlife's Final Thrust fixture -- which stubs
+                # `skill_cost` to (0, 0) to measure the double, not the price
+                # -- showed the guard reading the stub, not the bar.
                 send(AGENT_ADRENALINE_CLEAR, [PLAYER_AGENT_ID],
                      f"adrenaline cleared: skill {cast['skill_id']} "
                      f"(the row's clears_adrenaline)")
@@ -19823,8 +19878,12 @@ def kill_player(send, state, conn_id, why="took a killing blow"):
     # decided and `content/maps.toml` is where it is written down.
     if ENERGY:
         player_adrenaline(state).clear()
-        send(AGENT_ADRENALINE_CLEAR, [PLAYER_AGENT_ID],
-             f"adrenaline cleared: the player died ({why})")
+        # SKILLS-B1's gate (34.11): a dark bar gets no 0x00D0 at death either
+        # -- 11 player deaths on dark connections, 0 clears, OBSERVED. The book
+        # clears regardless (it holds nothing on a dark bar anyway).
+        if not ADREN_BAR_GATE or bar_holds_adrenal():
+            send(AGENT_ADRENALINE_CLEAR, [PLAYER_AGENT_ID],
+                 f"adrenaline cleared: the player died ({why})")
     # JARIN: the flags byte closes the death tick -- 0x0026 [player, 4],
     # 3 of 3 player deaths in the corpus (the morale study's tick).
     send(GAME_SMSG_AGENT_UPDATE_FLAGS, [PLAYER_AGENT_ID, AGENT_FLAGS_PLAYER_DEAD],
@@ -22313,11 +22372,19 @@ def hero_pool_gain(send, state, agent_id, row, units, why):
     """JARIN: a hero's adrenaline is on the wire like the player's -- 0x00CF
     [hero, 25] per hit landed, [hero, units] per hit taken (107 rows on the
     tape); a henchman's never (0 on eleven bodies). --hero-silent-pools is
-    the pre-JARIN arm. A zero-unit gain sends nothing, as the player's."""
+    the pre-JARIN arm. A zero-unit gain sends nothing here; the PLAYER's has
+    sent the zero since AD4 (2026-09-19), and whether a hero's does is
+    DESKWORK-D5 3(e), open."""
     if not HERO_WIRE_POOLS or hero_body_id(row) is None or int(units) <= 0:
         return
     # The DARK rule holds for a hero as for the player (test_adrenwire 12):
-    # a bar with no adrenal skill on it charges nothing on the wire.
+    # a bar with no adrenal skill on it charges nothing on the wire. THIS GATE
+    # PREDATES THE PLAYER'S (JARIN, 2026-09-14) and reads the row's CURRENT bar
+    # -- sync_hero_body_bar rewrites row["skills"] on an in-game edit (B7) --
+    # so the SKILLS-WK defect class ran the other way here: the rule reached
+    # the hero and not the player until 2026-09-22 (skills 34.11). Kept
+    # unconditional: it is the pre-2026-09-22 behaviour, so the revert flag
+    # does not touch it.
     if not any(skill_cost(int(sk[0]))[1] > 0 for sk in (row.get("skills") or ())):
         return
     send(AGENT_ADRENALINE_GAIN, [agent_id, int(units)],
@@ -22325,8 +22392,20 @@ def hero_pool_gain(send, state, agent_id, row, units, why):
 
 
 def hero_pool_clear(send, state, agent_id, row, why):
-    """0x00D0 [hero]: at each Final Thrust (5 of 5) and at its death (2 of 2)."""
+    """0x00D0 [hero]: at each Final Thrust (5 of 5) and at its death (2 of 2).
+
+    THE DARK HALF IS UNOBSERVED FOR A HERO and said so: every hero on tape
+    carries the same armed bar (4 of 4, 20260914T005758 and 20260916T150306),
+    so no capture shows a dark-bar hero dying. The player's rule is OBSERVED
+    (11 deaths on dark connections, 0 clears) and the hero's GAIN already
+    follows the player's bar rule, so the clear follows it too under the same
+    flag -- RECONSTRUCTION by the rule that already gates its gain, the
+    smaller claim being silence. --no-adren-bar-gate is the arm that sends.
+    """
     if not HERO_WIRE_POOLS or hero_body_id(row) is None:
+        return
+    if ADREN_BAR_GATE and not any(
+            skill_cost(int(sk[0]))[1] > 0 for sk in (row.get("skills") or ())):
         return
     send(AGENT_ADRENALINE_CLEAR, [agent_id],
          f"hero agent {agent_id} adrenaline cleared ({why}) [JARIN]")
@@ -34722,6 +34801,15 @@ def main():
         print("NO ENERGY: skills are free, nothing is deducted, no property 62 "
               "goes out, and no adrenaline is tracked or sent (0x00CF, 0x00D0 "
               "and 0x00D2 all stay off the wire).")
+
+    if a.no_adren_bar_gate:
+        global ADREN_BAR_GATE
+        ADREN_BAR_GATE = False
+        print("NO ADRENALINE BAR GATE: 0x00CF (the AD4 zero included) and the "
+              "death's 0x00D0 go out to a bar with no adrenal skill on it, "
+              "as this server did before 2026-09-22 -- the known-bad arm; "
+              "retail sends a dark bar none of the family (skills 34.11).",
+              flush=True)
 
     if a.no_armour:
         global EQUIP_ARMOUR

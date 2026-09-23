@@ -1911,6 +1911,16 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "its recharge alone. Use it to say whether something "
                          "a run saw was THIS channel rather than the cast "
                          "cycle it rides on.")
+    ap.add_argument("--no-adren-bar-gate", action="store_true",
+                    help="send the adrenaline family (0x00CF, the AD4 zero, "
+                         "the death's 0x00D0) to a player whose bar "
+                         "holds no adrenal skill, as this server did before "
+                         "2026-09-22. The known-bad arm of SKILLS-B1's gate: "
+                         "retail sends a dark bar NONE of the family (49 "
+                         "connections, 367 landed hits, 11 deaths, 0 "
+                         "messages; studies/skills 34.11), and the client "
+                         "repaints nothing either way (34.6), so the "
+                         "difference is wire shape only.")
     ap.add_argument("--no-armour", action="store_true",
                     help="leave the five armour slots empty. The control for "
                          "anything that reads an armour RATING off the client: "
