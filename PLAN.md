@@ -1896,14 +1896,16 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 **Desk routes the owner took, 2026-09-22** — [studies/deskwork/PLAN.md](studies/deskwork/PLAN.md) §3
 
-* **DESKWORK-D1**: steps 1–3 landed (PLAN-LOG) — the bare-machine c2s send-site census
+* **DESKWORK-D1**: steps 1–4 landed (PLAN-LOG) — the bare-machine c2s send-site census
   over both framers (`sendsites.py`, 214 sites), SANDBOX-N2's hero kick armed from
-  retail's one batch (c2s `0x001F`), and retail's c2s triaged (`c2striage.py`: 57
-  opcodes over 96 live connections, zero undecided; `test_dispatch` §10 is the reverse
-  guard; `0x009F` HENCHMAN_ADD, `0x00B1` MAP_TRAVEL, `0x004F` ITEM_MOVE named medium
-  and dropped until their arms). **Open**: the add from its ChCliApi wrapper (c2s
-  `0x001E`), the hero skill toggle (step 6), the party family from HENCHMAN_ADD's
-  witness (step 5), travel (step 7) and inventory (step 8).
+  retail's one batch (c2s `0x001F`), retail's c2s triaged (`c2striage.py`: 57 opcodes
+  over 96 live connections, zero undecided; `test_dispatch` §10 is the reverse guard;
+  `0x009F` HENCHMAN_ADD, `0x00B1` MAP_TRAVEL, `0x004F` ITEM_MOVE named medium and
+  dropped until their arms), and the hero ADD armed as RECONSTRUCTION (c2s `0x001E`,
+  `--no-hero-add`; `0x0018` from the owned set, `--no-hero-unlock-mask`). **Open**: the
+  hero skill toggle (step 6), the party family from HENCHMAN_ADD's witness (step 5),
+  travel (step 7) and inventory (step 8); the loopback click for kick and add (the
+  runsheet is in studies/cmsg §DESKWORK-D1).
 * **DESKWORK-D5**: the combat rules retail's tapes on disk already settle. LANDED
   2026-09-22: the adrenaline gate (SKILLS-B1's gate half, skills §34.11); property 10
   and the `[42]` residue (§16.6, self-scoped; `[42]` only when the maximum moved); the
@@ -2152,19 +2154,15 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   entirely in-game from empty bars and unspent points keep the build across a run) —
   predictions in §3 there.
 * **SANDBOX-N1**: a filterable skill and attribute picker for the Enemies tab (the
-  owner, 2026-09-22), then **N2**: adding heroes from the in-game party panel. The
-  **kick shipped** (DESKWORK-D1 step 1 + fix pass, PLAN-LOG): c2s `0x001F` HERO_KICK
-  is OBSERVED with retail's own teardown batch and is handled behind `--no-hero-kick`,
-  holding across a zone under `--persist`; `--reset-hero-kicks` is the un-kick until
-  the add lands (a kick of a hero WITH a body is UNOBSERVED and handled as
-  RECONSTRUCTION). The **add is next** — c2s `0x001E`, static only (its wrapper
-  `0x0091FF00`; no retail tape carries it). Both need a final loopback click to
-  confirm.
-* **SANDBOX-N2 follow-up, the load path's party size**: `_handle_request_players`
-  sends `0x00B0 [player, 1 + henchman]` without counting heroes, while retail's load on
-  `20260916T150306` sent `[68, 2]` with one hero and the kick now sends the count WITH
-  heroes (OBSERVED). Fix the under-count with the add, and re-check `test_agentlife`'s
-  hero-rig pins.
+  owner, 2026-09-22), then **N2**: adding heroes from the in-game party panel. **Both
+  halves shipped** (DESKWORK-D1 steps 1 + 4, PLAN-LOG): c2s `0x001F` HERO_KICK is
+  OBSERVED with retail's own teardown batch (`--no-hero-kick`; a kick of a hero WITH a
+  body is UNOBSERVED, RECONSTRUCTION); c2s `0x001E` HERO_ADD is RECONSTRUCTION end to
+  end — no tape and no loopback capture carries the request — answered with the load
+  pipeline's own messages in retail's load order (`--no-hero-add`), the stored kick
+  clearing under `--persist`; `--reset-hero-kicks` stays as the bulk un-kick; the load's
+  `0x00B0` now counts heroes. **Owed: one loopback click each** — the runsheet (command,
+  clicks, what each outcome means) is in studies/cmsg §DESKWORK-D1 "The hero add".
 * **SANDBOX: `ENERGY_BY_PROFESSION` is WIKI recalled, unread** — eight of ten rows in
   `toolkit/harness/sandbox.py` want GWW "Energy" read back before they are quoted as
   facts; the window shows them as editable defaults.

@@ -10071,8 +10071,19 @@ GAME_CMSG_HERO_LOCK_TARGET = 0x0016
 # HEROES bound -- possibly a sentinel); the handler drops it as unowned. That
 # the operator pressed the kick button is RECONSTRUCTION: nothing in the
 # capture records the click. The mirror c2s 0x001E is hero ADD, static-only
-# (no retail tape carries it); next step.
+# (no retail tape carries it); armed 2026-09-23 as RECONSTRUCTION, below.
 GAME_CMSG_HERO_KICK = 0x001F
+# The party panel's ADD -- the kick's inverse and its static twin: the send
+# wrapper 0x0091FF00 on 38797 (0x00920880 on 38888) sits inside ChCliApi
+# 0x0080E250, which asserts `hero < HEROES` at ChCliApi:4446 and `hero != 0`
+# at :4447 and sends only when the flag word 0x84D9B0 reads is zero -- the
+# SAME gate the kick's twin 0x0080E2A0 (:4459/:4460) passes, and the kick
+# fired on loopback, so the gate is not what has kept 0x001E off our wire.
+# Callers 0x00562FB0 (PtSearch) and 0x00577A3F (UiCtlInstance). NO retail
+# tape (0 of 96 live game connections) and NO loopback capture (0 of 3,107)
+# carries one, so handle_hero_add is RECONSTRUCTION end to end: the payload
+# is the hero index by the wrapper's own bounds and the kick's two witnesses.
+GAME_CMSG_HERO_ADD = 0x001E
 # 0x0017 is NOT the unlock. It was named HERO_UNLOCK_TARGET on 2026-08-19 by
 # reading it as "the other branch of the crosshair", and the name was
 # RETRACTED the same day (pvpui 28.11): the branch is chosen by a getter
@@ -10732,6 +10743,10 @@ HERO_AGENT_ID = 200
 # exactly CONST_KEY_COMMAND_HERO1..HERO7. Agent ids and definitions run
 # consecutively from the bases below so no two heroes collide.
 HERO_IDS = []
+# THE PARTY CAP, the client's own (the three asserts above): --hero refuses
+# more than seven at the command line, and handle_hero_add refuses the eighth
+# at run time -- the cap lives HERE, in one name, read by both.
+HEROES_PARTY_MAX = 7
 
 
 def hero_slots():
@@ -10805,6 +10820,38 @@ def party_hero_slots(state):
     """
     return [(h, a, d) for (h, a, d) in hero_slots()
             if not hero_kicked(state, h)]
+
+
+def hero_unlock_mask():
+    """0x0018 PVP_UPDATE_UNLOCKED_HEROES's payload: the account's hero-unlock
+    bitmask, BIT = HERO INDEX, as dwords.
+
+    CORROBORATED on 34 live connections (c2striage-era read, 2026-09-23): retail
+    sends ONE dword -- `[64]` (bit 6) on every 2026-08 tape, where 0x0073
+    HERO_INFO names hero 6 and no other, and `[224]` (bits 5, 6, 7) from
+    20260913 on, where the loads that list every owned hero name exactly 5, 6
+    and 7. So the bits are the OWNED hero indices, and this server's owned set
+    is hero_slots(). The client's handler (0x00804670 -> 0x00807CF0 on 38797)
+    resizes its array to the count sent and copies it in -- any count is
+    accepted, its one assert is the memcpy overlap (Array:369) -- then fires
+    event 0x100000BF; what reads it is NOT FOUND statically, and the route's
+    reading that the Party Search hero list draws from it is UNVERIFIED.
+
+    With no hero authored, or under --no-hero-unlock-mask, the payload stays
+    OpenTyria's eight all-ones dwords VERBATIM (UPSTREAM) -- what every run
+    before 2026-09-23 sent -- so a no-hero rig is byte-identical. ONE SENDER,
+    and read the 0x001D comment at that site before adding another: a second
+    sender of unlock state once wiped the skill library and asserted
+    GmSkSlot:206. Hero indices run 1..39 (HEROES == 40), so an index >= 32
+    needs a second dword; retail's tapes never needed one.
+    """
+    ids = [h for h, _a, _d in hero_slots()]
+    if not HERO_UNLOCK_MASK or not ids:
+        return [0xFFFFFFFF] * 8
+    words = [0] * (max(ids) // 32 + 1)
+    for h in ids:
+        words[h // 32] |= 1 << (h % 32)
+    return words
 HERO_DEFINITION = 10
 HERO_BODY = False
 # THESE THREE NEED A MODULE-LEVEL DEFAULT AND IT IS NOT DECORATION. They were
@@ -11220,7 +11267,23 @@ HERO_KICK_ENABLED = True       # False (--no-hero-kick): c2s 0x001F is ignored
                                # tested (test_herokick.py).
 RESET_HERO_KICKS = False       # True (--reset-hero-kicks): clear the character's
                                # stored kicked_heroes at its first load -- the
-                               # un-kick until the hero ADD (c2s 0x001E) ships.
+                               # bulk un-kick (the in-game ADD, c2s 0x001E, is
+                               # the per-hero one since 2026-09-23).
+HERO_ADD_ENABLED = True        # False (--no-hero-add): c2s 0x001E is ignored,
+                               # the pre-2026-09-23 behaviour. Default ON --
+                               # RECONSTRUCTION, but every message it sends is
+                               # one the load path already sends this client
+                               # for the same hero (heroes FINDINGS 38: zero
+                               # asserts in that order), the order is retail's
+                               # own load order, and the kick it inverts is
+                               # OBSERVED; the owner's ask is add AND kick from
+                               # the panel, so the default is the useful arm
+                               # and the flag is the control (test_heroadd.py).
+HERO_UNLOCK_MASK = True        # False (--no-hero-unlock-mask): 0x0018 stays
+                               # OpenTyria's eight all-ones dwords. Default ON:
+                               # the bit = hero-index reading is CORROBORATED
+                               # on 34 live connections (hero_unlock_mask), and
+                               # with no hero authored the payload is unchanged.
 AI_MODE_FIGHT, AI_MODE_GUARD, AI_MODE_AVOID = 0, 1, 2   # 0x0015's byte (pvpui 28.5)
 AI_MODE_NAMES = {0: "Fight", 1: "Guard", 2: "Avoid Combat"}
 SPIRIT_RANGE = 2512.0          # u -- WIKI (GWW "Range"): binding rituals /
@@ -22213,6 +22276,86 @@ def party_bodies(state):
             and row.get("allegiance") == agents.ALLEGIANCE_PLAYER]
 
 
+def hero_body_create(hsend, state, _i, _hid, _haid, _hdef, pos, plane, conn_id):
+    """One hero's WORLD BODY, at formation slot `_i` beside `pos`: the create
+    burst through create_agent_world (0x0056/0x0057 once per definition, 0x00F0,
+    0x0020) and, when the body row names a weapon, the item and 0x006D that
+    retail sends for every henchman body (SLICE-H7, 12 of 12).
+
+    ONE implementation for two callers -- the instance load
+    (`_handle_request_players`, every party hero in a field) and the in-game
+    ADD (`handle_hero_add`, SANDBOX-N2, the re-added hero alone) -- so the
+    body a re-added hero gets is byte-for-byte the body it had at load. The
+    text below is the load loop's body of 2026-09-22, moved here unchanged
+    but for `cfg[2]` -> `plane`; its comments keep their original arc tags.
+    `hsend` is the caller's send door (the load path's HERO_LATE router, or a
+    plain send).
+    """
+    _hro = hero_body_row(_hid)                     # SANDBOX-B3: per hero
+    _hvt = hero_vitals(_hid)
+    _wkey = party_weapon_item(_hro, hero_weapon(_hid))   # SLICE-H7
+    _hhp = float(_hvt[0]) if _hvt else 100.0
+    _hhp_eff = float(morale.effective_max(_hhp, _hhp, hero_morale(state, _haid)))
+    # Fan them out rather than stacking: bodies sharing a
+    # spot read as one body, and "nothing appeared" is the
+    # failure this repo already paid for once.
+    _rx = pos[0] + HERO_BODY_OFFSET[0]
+    _ry = pos[1] + HERO_BODY_OFFSET[1] * _i
+    create_agent_world(
+        hsend, state, _haid,
+        {"pos": (_rx, _ry), "plane": plane,
+         # SLICE-H8: the party row's health (HERO_VITALS), level, ranks,
+         # armour and weapon range -- see the constants' comment.
+         "health": _hhp_eff, "max_health": _hhp_eff,
+         "base_max_health": _hhp,          # JARIN: the maxima scale with the hero's morale
+         "base_max_energy": float(_hvt[1]) if _hvt else 30.0,
+         "hero": _hid,                     # JARIN: the body IS a hero (effect list, pools, skill family)
+         "weapon_item_id": (HERO_WEAPON_ITEM_ID + _i) if _wkey is not None else None,
+         "attributes": dict(hero_attributes(_hid) or {}),      # SANDBOX-B3: per hero
+         "armor_rating": hero_armor(_hid),
+         "damage": (list(hero_damage(_hid)) if hero_damage(_hid) else None),
+         "weapon_attribute": hero_weapon_attribute(_hid),
+         "weapon_item": _wkey,
+         # SLICE-B7b: `.get` -- see the henchman body above. This is the
+         # site that actually raised: --hero-body-npc def_1486 (the parade's
+         # Academy Monk) killed instance bring-up with KeyError: 'name' while
+         # the run reported PASS, and the hero follow it was launched to test
+         # measured nothing because no body ever existed.
+         "dead": False, "name": _hro.get("name") or str(hero_body_key(_hid)),
+         "npc": dict(_hro, level=int(hero_level(_hid) or _hro.get("level") or 0)),
+         "definition": _hdef,
+         "party_slot": _i,                  # SLICE-H2: its formation slot
+         "allegiance": agents.ALLEGIANCE_PLAYER,
+         "effects": 0,
+         # SLICE-H4: its own weapon's interval (a Monk's staff, 1.75 --
+         # retail's Monk henchman swung 1.91 s apart p50).
+         "attack_speed": party_attack_speed(_hro, hero_weapon(_hid)),
+         "resend_definition": True,
+         "attacks_back": False,
+         # SLICE-B7c: the party body's bar, empty until --hero-skills.
+         # `skill_ready` is per SLOT, never per id -- a bar may legitimately
+         # carry the same skill twice and keying recharge by id would make
+         # the second copy share the first's cooldown (spawn_enemy's own
+         # comment, same reason).
+         # SANDBOX-B7: the STORED bar when --persist holds one, else the
+         # row's -- the body casts what the panel shows.
+         "skills": hero_cast_bar(state, _hid),
+         "skill_ready": [0.0] * len(hero_cast_bar(state, _hid))},
+        f"hero body (hero {_hid})", conn_id=conn_id)
+    # SLICE-H7: WHAT THE BODY HOLDS -- retail's create batch for a
+    # henchman body is 0x0020, then 0x0161 per weapon, then 0x006D
+    # [agent, leadhand, offhand] (12 of 12 retail bodies). Without it
+    # the client draws the caster's ranged swing as a punch.
+    if _wkey is not None:
+        _wid = HERO_WEAPON_ITEM_ID + _i
+        hsend(GAME_SMSG_CREATE_NAMED_ITEM,
+              agents.named_item(_wid, agents.item_template(_wkey)),
+              f"CREATE_NAMED_ITEM({_wkey}, item {_wid}, hero agent {_haid})")
+        hsend(GAME_SMSG_NPC_UPDATE_WEAPONS, [_haid, _wid, 0],
+              f"NPC_UPDATE_WEAPONS(hero agent {_haid}: leadhand = item "
+              f"{_wid}, {_wkey}) [SLICE-H7]")
+
+
 def target_pos(state, tid):
     if tid == PLAYER_AGENT_ID:
         return state.get("pos", (0.0, 0.0))
@@ -23164,6 +23307,130 @@ def handle_hero_kick(values, send, state, conn_id):
               f"(--reset-hero-kicks clears it) [SANDBOX-N2]", flush=True)
     print(f"[c{conn_id}] HERO_KICK: hero {hid} (agent {_haid}) removed from the "
           f"party; size now {party_size} [SANDBOX-N2]", flush=True)
+
+
+def handle_hero_add(values, send, state, conn_id):
+    """GAME_CMSG 0x001E HERO_ADD: the party panel's add-hero click -- the
+    kick's inverse (SANDBOX-N2, DESKWORK-D1 step 4).
+
+    RECONSTRUCTION END TO END, and every label below says which kind. No
+    retail tape carries a c2s 0x001E (0 of 96 live game connections) and no
+    loopback capture does either (0 of 3,107) -- the send-site census puts its
+    wrapper at 0x0091FF00 on 38797 inside ChCliApi 0x0080E250 (asserts
+    `hero < HEROES` :4446, `hero != 0` :4447; sent only when the flag word
+    0x84D9B0 reads is zero, the SAME gate the kick's twin passes; callers
+    PtSearch 0x00562FB0 and UiCtlInstance 0x00577A3F). values[0] is the header
+    word; values[1] is the hero INDEX -- by the wrapper's own bounds and the
+    kick's two witnesses ([6] retail, [3] loopback), the shape 0x001F shares.
+
+    THE REFUSALS send NOTHING. What retail's client expects back from a refused
+    add is NOT FOUND (no tape); the client's own asserts already refuse index 0
+    and >= 40 before sending, so what reaches us is a legal index that is
+    either not ours, already in, or one too many:
+      * not an OWNED hero (not in hero_slots());
+      * not KICKED (already in the party -- the kick's `already kicked` mirror);
+      * the party already holds HEROES_PARTY_MAX heroes (the client's own cap,
+        PtPlayer:332 / GmHeroCommander:214; --hero refuses it at the command
+        line and this is the run-time half).
+
+    THE BATCH is the load pipeline's own messages for this hero, in the order
+    retail's LOAD installs the same state (20260916T150306 :62321, t=151.746 to
+    151.784: 0x0073, the hero agent's 0x0037 0x00B7 0x00DA 0x0065 0x003A, 0x0072
+    at 151.747, then 0x00B0 [68, 2] at 151.784 and the roster row 0x01C2 inside
+    the build window):
+      1. `hero_character_block` -- 0x0037, 0x00B7, 0x00DA, [0x0065], the maxima,
+         0x009C, prop 36, 0x00A6, 0x003A. The same function the load calls, so
+         the gates it clears (heroes FINDINGS 14: attribState created by 0x0037,
+         ConstChar:1296 by 0x00B7 for the hero's agent, the 0x0037 -> 0x00B7 ->
+         0x003A order) are cleared the same way, and it goes FIRST because the
+         commander is created SYNCHRONOUSLY on 0x01C2 from state these install
+         (heroes FINDINGS 38, the ordering blocker: zero asserts in this order).
+      2. 0x0072 HERO_ACTIVATE -- after the block, as at load (OBSERVED order).
+      3. 0x00B0 PLAYER_PARTY_SIZE with the hero COUNTED, BEFORE the roster row:
+         retail's load sends [68, 2] then 0x01C2, and the only mid-session add
+         on any tape -- the henchman add 0x009F -- answers 0x00B0 THEN 0x01BF,
+         3 of 3 (c2striage). The kick goes row then size; the add mirrors the
+         henchman, not the kick. RECONSTRUCTION by analogy.
+      4. 0x01C2 PARTY_HERO_ADD, BARE -- outside a party-build window, the way
+         the kick's 0x01C3 and the henchman's 0x01BF arrive (both OBSERVED
+         bare). Read statically 2026-09-23: the handler (0x00856B80 ->
+         0x00858F50) looks the party up by id, appends the row, fires event
+         0x1000011E; its only assert in range is Array:369 (a memcpy overlap),
+         no window gate. RECONSTRUCTION: no tape shows a bare 0x01C2.
+      5. In a FIELD (party_bodies_here), the body -- `hero_body_create`, the
+         load path's own, beside the player. A town gets none, as at load.
+    0x0073 HERO_INFO is NOT re-sent: the load sends it for every OWNED hero,
+    kicked or not (the kick tape's next two loads), so the record exists, and
+    the kick destroyed no hero data (its batch touches the agent, the roster
+    row and the inventory only).
+
+    Under --persist the stored kick is cleared, so the next zone-in parties
+    the hero again -- the kick's `set_hero_kicked` in reverse. The hero's
+    standing orders start fresh (any stale hero_cmd is dropped).
+    """
+    hid = int(values[1])
+    slot = next(((h, a, d) for (h, a, d) in hero_slots() if h == hid), None)
+    if slot is None:
+        print(f"[c{conn_id}] HERO_ADD({hid}) refused: not an owned hero of this "
+              f"run {[h for h, _a, _d in hero_slots()]}; nothing sent (retail's "
+              f"refusal reply NOT FOUND) [SANDBOX-N2]", flush=True)
+        return
+    if not hero_kicked(state, hid):
+        print(f"[c{conn_id}] HERO_ADD({hid}) refused: already in the party; "
+              f"nothing sent [SANDBOX-N2]", flush=True)
+        return
+    in_party = party_hero_slots(state)
+    if len(in_party) >= HEROES_PARTY_MAX:
+        print(f"[c{conn_id}] HERO_ADD({hid}) refused: the party already holds "
+              f"{len(in_party)} heroes, the client's own cap "
+              f"(HEROES_PARTY_MAX={HEROES_PARTY_MAX}, PtPlayer:332); nothing "
+              f"sent [SANDBOX-N2]", flush=True)
+        return
+    _hid, _haid, _hdef = slot
+    kicked_heroes_set(state).discard(hid)
+    (state.get("hero_cmd") or {}).pop(_haid, None)
+    if PERSIST and state.get("charstore_game") is not None:
+        state["charstore_game"].set_hero_kicked(state.get("char_uuid", ""), hid,
+                                                kicked=False)
+        print(f"[c{conn_id}] PERSIST: hero {hid} re-added -- the stored kick is "
+              f"cleared, so the next zone-in parties it [SANDBOX-N2]", flush=True)
+    # 1. the character block (the load pipeline's own).
+    for op, vals, label in hero_character_block(state, _haid, _hid):
+        send(op, vals, label + " [HERO_ADD]")
+    # 2. the activation, as the load sends it.
+    op, vals, label = agents.hero_activate(
+        HERO_ACTIVATE_ID
+        if (HERO_ACTIVATE_ID is not None and _haid == HERO_AGENT_ID) else _hid,
+        _haid, HERO_INVENTORY,
+        (hero_command(state, _haid)["ai_mode"] if PARTY_COMMANDS else HERO_AI_MODE))
+    send(op, vals, f"{label} [HERO_ADD]")
+    # 3. the size, hero counted, BEFORE the row (retail's load; the henchman add).
+    party = party_hero_slots(state)
+    party_size = 1 + (1 if HENCHMAN is not None else 0) + len(party)
+    send(GAME_SMSG_PLAYER_PARTY_SIZE,
+         agents.player_party_size(PLAYER_NUMBER, party_size),
+         f"PLAYER_PARTY_SIZE({party_size}) -- the party after the add [HERO_ADD]")
+    # 4. the roster row, bare -- the same arguments the load path's build uses.
+    op, vals, label = agents.party_hero_add(1, PLAYER_NUMBER, _haid, _hid, HERO_MSG14)
+    send(op, vals, f"{label} [HERO_ADD, bare -- RECONSTRUCTION]")
+    # 5. the body, in a field only.
+    if HERO_BODY and party_bodies_here(state):
+        if _haid in state.get("agents", {}):
+            print(f"[c{conn_id}] HERO_ADD: agent {_haid} is already in the world; "
+                  f"no second body (the kick removes it, so this is a rig that "
+                  f"never kicked the body) [SANDBOX-N2]", flush=True)
+        else:
+            _slot = [h for h, _a, _d in party].index(_hid)
+            _pos = state.get("pos") or tuple(state.get("spawn_point", (0.0, 0.0, 0))[:2])
+            _plane = int(state.get("plane", 0) or 0)
+            hero_body_create(send, state, _slot, _hid, _haid, _hdef,
+                             (float(_pos[0]), float(_pos[1])), _plane, conn_id)
+    else:
+        print(f"[c{conn_id}] HERO_ADD: map {state.get('map_id')} is a town or "
+              f"--hero-body is off -- roster, activation and size only, as at "
+              f"load [SANDBOX-N2]", flush=True)
+    print(f"[c{conn_id}] HERO_ADD: hero {hid} (agent {_haid}) back in the party; "
+          f"size now {party_size} [SANDBOX-N2]", flush=True)
 
 
 def party_flag_point(state, agent_id, agent):
@@ -27364,7 +27631,15 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     # fires only on a LEADER CHANGE, so leader-first makes
     # the change a no-op against the default and nothing is
     # notified.
-    _party_size = 1 if HENCHMAN is None else 2
+    # ...and the heroes COUNT (SANDBOX-N2 follow-up, 2026-09-23):
+    # retail's load sent 0x00B0 [68, 2] with one hero in the
+    # party, before its 0x01C2 (20260916T150306 :62321,
+    # t=151.784), and the kick's [68, 1] after. This site sent
+    # 1 + henchman and left the heroes out; party_hero_slots is
+    # order-independent (it opens the store itself), so the
+    # kicked set is right here too.
+    _party_size = (1 + (0 if HENCHMAN is None else 1)
+                   + len(party_hero_slots(state)))
     send(GAME_SMSG_PLAYER_PARTY_SIZE,
          agents.player_party_size(PLAYER_NUMBER,
                                   _party_size),
@@ -28223,69 +28498,10 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     for _i, (_hid, _haid, _hdef) in (
             enumerate(party_hero_slots(state))         # SANDBOX-N2: a kicked hero gets no body
             if HERO_BODY and party_bodies_here(state) else ()):
-        _hro = hero_body_row(_hid)                     # SANDBOX-B3: per hero
-        _hvt = hero_vitals(_hid)
-        _wkey = party_weapon_item(_hro, hero_weapon(_hid))   # SLICE-H7
-        _hhp = float(_hvt[0]) if _hvt else 100.0
-        _hhp_eff = float(morale.effective_max(_hhp, _hhp, hero_morale(state, _haid)))
-        # Fan them out rather than stacking: bodies sharing a
-        # spot read as one body, and "nothing appeared" is the
-        # failure this repo already paid for once.
-        _rx = pos[0] + HERO_BODY_OFFSET[0]
-        _ry = pos[1] + HERO_BODY_OFFSET[1] * _i
-        create_agent_world(
-            hsend, state, _haid,
-            {"pos": (_rx, _ry), "plane": cfg[2],
-             # SLICE-H8: the party row's health (HERO_VITALS), level, ranks,
-             # armour and weapon range -- see the constants' comment.
-             "health": _hhp_eff, "max_health": _hhp_eff,
-             "base_max_health": _hhp,          # JARIN: the maxima scale with the hero's morale
-             "base_max_energy": float(_hvt[1]) if _hvt else 30.0,
-             "hero": _hid,                     # JARIN: the body IS a hero (effect list, pools, skill family)
-             "weapon_item_id": (HERO_WEAPON_ITEM_ID + _i) if _wkey is not None else None,
-             "attributes": dict(hero_attributes(_hid) or {}),      # SANDBOX-B3: per hero
-             "armor_rating": hero_armor(_hid),
-             "damage": (list(hero_damage(_hid)) if hero_damage(_hid) else None),
-             "weapon_attribute": hero_weapon_attribute(_hid),
-             "weapon_item": _wkey,
-             # SLICE-B7b: `.get` -- see the henchman body above. This is the
-             # site that actually raised: --hero-body-npc def_1486 (the parade's
-             # Academy Monk) killed instance bring-up with KeyError: 'name' while
-             # the run reported PASS, and the hero follow it was launched to test
-             # measured nothing because no body ever existed.
-             "dead": False, "name": _hro.get("name") or str(hero_body_key(_hid)),
-             "npc": dict(_hro, level=int(hero_level(_hid) or _hro.get("level") or 0)),
-             "definition": _hdef,
-             "party_slot": _i,                  # SLICE-H2: its formation slot
-             "allegiance": agents.ALLEGIANCE_PLAYER,
-             "effects": 0,
-             # SLICE-H4: its own weapon's interval (a Monk's staff, 1.75 --
-             # retail's Monk henchman swung 1.91 s apart p50).
-             "attack_speed": party_attack_speed(_hro, hero_weapon(_hid)),
-             "resend_definition": True,
-             "attacks_back": False,
-             # SLICE-B7c: the party body's bar, empty until --hero-skills.
-             # `skill_ready` is per SLOT, never per id -- a bar may legitimately
-             # carry the same skill twice and keying recharge by id would make
-             # the second copy share the first's cooldown (spawn_enemy's own
-             # comment, same reason).
-             # SANDBOX-B7: the STORED bar when --persist holds one, else the
-             # row's -- the body casts what the panel shows.
-             "skills": hero_cast_bar(state, _hid),
-             "skill_ready": [0.0] * len(hero_cast_bar(state, _hid))},
-            f"hero body (hero {_hid})", conn_id=conn_id)
-        # SLICE-H7: WHAT THE BODY HOLDS -- retail's create batch for a
-        # henchman body is 0x0020, then 0x0161 per weapon, then 0x006D
-        # [agent, leadhand, offhand] (12 of 12 retail bodies). Without it
-        # the client draws the caster's ranged swing as a punch.
-        if _wkey is not None:
-            _wid = HERO_WEAPON_ITEM_ID + _i
-            hsend(GAME_SMSG_CREATE_NAMED_ITEM,
-                  agents.named_item(_wid, agents.item_template(_wkey)),
-                  f"CREATE_NAMED_ITEM({_wkey}, item {_wid}, hero agent {_haid})")
-            hsend(GAME_SMSG_NPC_UPDATE_WEAPONS, [_haid, _wid, 0],
-                  f"NPC_UPDATE_WEAPONS(hero agent {_haid}: leadhand = item "
-                  f"{_wid}, {_wkey}) [SLICE-H7]")
+        # The body itself lives in hero_body_create, shared with the in-game
+        # ADD (handle_hero_add, SANDBOX-N2) so the two are one implementation.
+        hero_body_create(hsend, state, _i, _hid, _haid, _hdef, pos, cfg[2],
+                         conn_id)
     # THE HERO'S ATTRIBUTE STATE, and it is not a new
     # mechanism -- it is the pair the PLAYER's own agent
     # already gets, addressed to the hero's agent instead.
@@ -29980,6 +30196,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         else:
                             print(f"[c{conn_id}] HERO_KICK ignored "
                                   f"(--no-hero-kick) [SANDBOX-N2]", flush=True)
+                    elif opcode == GAME_CMSG_HERO_ADD:
+                        # SANDBOX-N2: the party panel's add button -- the
+                        # kick's inverse. RECONSTRUCTION: no tape carries the
+                        # request (studies/cmsg DESKWORK-D1 step 4).
+                        if HERO_ADD_ENABLED:
+                            handle_hero_add(values, send, state, conn_id)
+                        else:
+                            print(f"[c{conn_id}] HERO_ADD ignored "
+                                  f"(--no-hero-add) [SANDBOX-N2]", flush=True)
                     elif opcode == GAME_CMSG_CANCEL_ACTION:
                         # The one door that reaches a held cast -- the client
                         # sends no movement while casting, only this (the
@@ -32329,10 +32554,19 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             state.get("char_uuid", ""), UNLOCKED, UNLOCK_LABEL)
                         send(GAME_SMSG_PVP_UPDATE_UNLOCKED_SKILLS, [_pv_words],
                              f"PVP_UNLOCKED_SKILLS({_pv_label})")
-                        # Heroes are all-ones in OpenTyria; kept verbatim rather
-                        # than second-guessed.
+                        # The hero-unlock mask: retail's shape (one dword,
+                        # BIT = HERO INDEX, CORROBORATED on 34 connections)
+                        # built from hero_slots() when a hero is authored;
+                        # OpenTyria's all-ones verbatim otherwise or under
+                        # --no-hero-unlock-mask. ONE SENDER -- the 0x001D
+                        # comment above is why (hero_unlock_mask's docstring).
+                        _hum = hero_unlock_mask()
                         send(GAME_SMSG_PVP_UPDATE_UNLOCKED_HEROES,
-                             [[0xFFFFFFFF] * 8], "PVP_UNLOCKED_HEROES")
+                             [_hum],
+                             "PVP_UNLOCKED_HEROES("
+                             + ("all-ones, UPSTREAM" if _hum[0] == 0xFFFFFFFF
+                                else f"bits {[h for h, _a, _d in hero_slots()]}")
+                             + ")")
                         send(GAME_SMSG_PVP_ITEM_STREAM_END, [],
                              "PVP_ITEM_STREAM_END")
                         for fid, p1, p2 in ACCOUNT_FEATURES:
@@ -33965,7 +34199,19 @@ def main():
         RESET_HERO_KICKS = True
         print("[party] --reset-hero-kicks: the character's stored kicked_heroes "
               "is cleared at its first load -- every owned hero is back in the "
-              "party (the un-kick until the ADD ships).", flush=True)
+              "party (the bulk un-kick; the panel's Add is the per-hero one).",
+              flush=True)
+    if a.no_hero_add:
+        global HERO_ADD_ENABLED
+        HERO_ADD_ENABLED = False
+        print("[party] --no-hero-add: c2s 0x001E is ignored -- the pre-2026-09-23 "
+              "behaviour (the party panel's Add Hero did nothing; a kicked hero "
+              "stays out until --reset-hero-kicks).", flush=True)
+    if a.no_hero_unlock_mask:
+        global HERO_UNLOCK_MASK
+        HERO_UNLOCK_MASK = False
+        print("[party] --no-hero-unlock-mask: 0x0018 carries OpenTyria's eight "
+              "all-ones dwords, as every run before 2026-09-23.", flush=True)
     if a.party_no_fight:
         global PARTY_FIGHTS
         PARTY_FIGHTS = False

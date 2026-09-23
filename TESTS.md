@@ -6327,6 +6327,35 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   and the 800 ms envelope ceiling now excludes that one connection by name (the same
   capture's Isle connection, where every section-25 clock was read, sits at 301 ms).
   Needs `vault/captures/live/`, skips whole if absent; floor 15),
+  `toolkit/authsrv/test_heroadd.py` (**2026-09-23, SANDBOX-N2 / DESKWORK-D1 step 4:
+  the hero ADD, c2s 0x001E HERO_ADD, and the 0x0018 hero-unlock mask**,
+  `studies/cmsg/FINDINGS.md` §DESKWORK-D1 "The hero add". The add is RECONSTRUCTION
+  end to end -- no retail tape and no loopback capture carries a c2s 0x001E -- so
+  nothing here compares to a chunk; it pins that `handle_hero_add` sends exactly the
+  load pipeline's own messages for the hero in retail's LOAD order, and that it is the
+  kick's inverse. §1 the town rig: the batch opens with the hero's character block,
+  op for op `hero_character_block`'s (the load's own), then 0x0072, then 0x00B0 with
+  the hero COUNTED ([68, 2]), then a bare 0x01C2 with the load path's arguments, and
+  NO 0x0073; the order predicate `retail_load_order` has three KNOWN-BAD arms through
+  the same predicate -- a rotated batch, the KICK's row-then-size, a re-sent 0x0073.
+  §2 refusals send NOTHING: an unowned index, a hero already in, an EIGHTH hero
+  (`HEROES_PARTY_MAX`, the PtPlayer:332 cap in one name), with the SEVENTH accepted
+  as the positive control. §3 the round trip under `--persist`: kick writes [6], add
+  clears it, a fresh connection seeds an empty set and parties the hero (the kick's
+  acceptance inverted), a second add is refused, `--persist` off writes nothing. §4
+  the field rig: the body's 0x0020 follows the roster row through `hero_body_create`
+  -- the SAME function the load calls -- at HERO_BODY_OFFSET from the player in slot
+  0; kick then add re-creates it at agent 200; the town is the known-bad (no create).
+  §5 `hero_unlock_mask`: [64] for hero 6 and [224] for 5/6/7 (the tape's two values,
+  CORROBORATED on 34 connections), a second dword for an index >= 32, all-ones with no
+  hero or under `--no-hero-unlock-mask`, and the flag read. §6 SOURCE LOCKS by syntax
+  tree: the 0x001E arm calls the handler only under `HERO_ADD_ENABLED` (two mutations
+  redden it), `main()` wires both flags, both defaults ON, `hero_body_create` is called
+  from BOTH the load and the add (the body label appears once -- moved, not copied),
+  the load's `_party_size` counts `party_hero_slots` (mutation reddens), and 0x0018 has
+  ONE sender calling `hero_unlock_mask()` with the all-ones literal gone. Drives the
+  real handler with a fake send and a scratch store like `test_herokick.py`. Floor 48,
+  ~3 s),
   `toolkit/authsrv/test_labelrun.py` (the labelled input run, which names GAME_CMSG
   opcodes from what a human was told to do: a message lands in exactly one step's
   window, instance-load traffic is never folded into step 1, and a dirty idle CONTROL

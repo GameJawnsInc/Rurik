@@ -280,6 +280,27 @@ ADD (`0x001E`, wrapper `0x0091FF00`) is static only, no retail tape carries it, 
 stays NOT FOUND on the wire. Hiring (the outpost UI request for a fresh hero) also
 remains NOT FOUND.
 
+**CORRECTED 2026-09-23, DESKWORK-D1 step 4 — the ADD is ARMED, as RECONSTRUCTION,
+and it is still NOT FOUND on any wire.** `c2s 0x001E` stays unwitnessed: 0 of 96 live
+game connections and 0 of 3,107 loopback captures carry one (the send-site census and
+`c2striage.py`, `studies/cmsg/FINDINGS.md` §DESKWORK-D1). What is READ, statically on
+38797: its send wrapper `0x0091FF00` sits inside ChCliApi `0x0080E250`, which asserts
+`hero < HEROES` at ChCliApi:4446 and `hero != 0` at :4447 and sends only when the flag
+word `0x84D9B0` reads (`ctx->[0x44]->[0x238]`) is zero — the SAME gate the kick's twin
+`0x0080E2A0` (:4459/:4460, wrapper `0x0091FF30`) passes, and the kick fired on loopback,
+so that gate is not what has kept the add off our wire; its callers are PtSearch
+`0x00562FB0` and UiCtlInstance `0x00577A3F`. The server now answers it
+(`handle_hero_add`, behind `--no-hero-add`) with the load pipeline's own messages for
+the hero in retail's LOAD order — the character block (§14's gates, §38's ordering:
+the commander is created synchronously on `0x01C2` from state the block installs),
+`0x0072`, `0x00B0` with the hero counted, then a BARE `0x01C2` (outside a build
+window, the way the kick's `0x01C3` and the henchman add's `0x01BF` arrive) and, in a
+field, the body through the load's own `hero_body_create`. Refused with nothing sent:
+an unowned hero, one already in the party, an eighth (`HEROES_PARTY_MAX`, the
+PtPlayer:332 cap). `0x0018`'s payload is now retail's shape — one dword, bit = hero
+index, CORROBORATED on 34 live connections (`hero_unlock_mask`). Hiring remains NOT
+FOUND. The loopback click for both halves is owed; the runsheet is in the cmsg study.
+
 ---
 
 ## 4. Hero skill bars — the sharpest negative

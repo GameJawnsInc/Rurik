@@ -822,3 +822,150 @@ the vault, holds the committed file to it (a new tape with a new opcode reddens
 until `--write` runs and the opcode is triaged), and proves acceptance (c): **zero
 retail c2s opcodes are neither named nor `DROPPED_ON_PURPOSE` with a reason**, over
 the file and over the live census.
+
+### The hero add — `c2s 0x001E HERO_ADD`, RECONSTRUCTION (DESKWORK-D1 step 4, 2026-09-23)
+
+**Two nulls first, both measured.** No retail tape carries a c2s `0x001E` — 0 of 96
+live game connections (`c2striage.py`, the 57-opcode census above) — and no loopback
+capture does either: 0 of 3,107 gamesrv captures hold a decoded or unhandled
+`GAME_CMSG` 30 (the kick's `0x001F` is in one). Our own client has never sent the add
+to our server, so unlike the kick there is no loopback witness to lean on; the whole
+arm is RECONSTRUCTION and every message in it is labelled below.
+
+**What is READ, statically (38797; `sendsites.py`, `msghandler.py --callers`,
+`codescan.py --dis`).** The game-channel wrapper is `0x0091FF00` (site `0x0091FF1F`,
+8 bytes; `0x00920880` on 38888, `0x0091FF60` on 38833/38849, `0x00915CC0` on 38519),
+its one caller inside ChCliApi `0x0080E250`: `cmp esi, 0x28 / jl` then `test esi,
+esi / jne` — the assert pair `hero < HEROES` (ChCliApi:4446, line `0x115E`) and
+`hero != 0` (:4447) — then `call 0x84D9B0; test eax; jne skip; push hero; call
+0x91FF00`. **The survey's "unread `0x84d9b0` gate" is read:** it returns
+`ctx->[0x44]->[0x238]`, a flag word (the neighbour `0x84D9E0` asserts it `== 1` at
+its line 251), and **the kick's twin `0x0080E2A0` has the identical gate** (asserts
+`hero <= HEROES` :4459, `!= 0` :4460, then `call 0x84D9B0`, `call 0x91FF30`). The
+kick fired on loopback, so the gate was zero then and is not what has kept the add
+off our wire. The survey's two callers hold: `msghandler --callers 0x0080E250` gives
+`0x00562FB0` (PtSearch) and `0x00577A3F` (UiCtlInstance). `values[1]` is the hero
+INDEX by the wrapper's own bounds and the kick's two witnesses (`[6]` retail, `[3]`
+loopback) — the shape `0x001F` shares.
+
+**Why the ordering blocker does not bite, from the tape.** Heroes §38: the commander
+is created SYNCHRONOUSLY on `0x01C2` from state three other messages install, so the
+hero pipeline must precede the roster row. Retail's own load on the kick tape
+(`20260916T150306 :62321`) shows the order for one hero, 151.746–151.784 s: `0x0018
+[[224]]`, the hero agent's `0x0037`, `0x00B7`, `0x00DA`, `0x0065` ×2, `0x0073`,
+`0x003A`, `0x0144 [96, 1]`, then `0x0072 [6, 379, 96, 2]` at 151.747, then `0x00B0
+[68, 2]` at 151.784 (the size already counting the hero) and the build window
+`0x01D2 [28]`, `0x01CB [28, 68, 1]`, `0x01C2 [28, 68, 379, 6, 3]`, `0x01D3`, `0x01B2`.
+Block → activate → size → row. **The only mid-session ADD on any tape is the
+henchman's** (`0x009F`, 3 of 3 on `20260819T132414`): `0x00B0 [14, n+1]` THEN the
+`0x01BF` row, same millisecond, no build window — **size before row, bare**. The
+kick goes the other way (`0x01C3` row, then `0x00B0`), so the add mirrors the
+henchman add and the load, not the kick.
+
+**Handler asserts, read before sending anything mid-session.** `0x01C2`'s handler
+(`0x00856B80` → `0x00858F50`) looks the party up by id (`[ebx+0x4C]` the current
+party, else `[ebx+0x3C][id]` with `id < [ebx+0x44]`), grows the row array, writes the
+six fields, fires event `0x1000011E` and calls `0x7DFED0(owner)`; the only assert in
+range is Array:369 (a memcpy overlap) — **no build-window gate**, so a bare `0x01C2`
+is not refused by its handler (RECONSTRUCTION that it is accepted: no tape shows one
+bare). `0x0018`'s handler (`0x00804670` → `0x00807CF0`) resizes an array at
+`ctx+0x28+0xB4` to the count sent, copies, fires `0x100000BF` — any count accepted,
+Array:369 its one assert. `0x0073`, `0x0072`, `0x00DA`, `0x00B7`, `0x0065`, `0x00B0`,
+`0x00A6`, `0x009C`: only Array bounds asserts inside their thin handlers
+(`asserts.py --at`); the load-bearing gates are the ones heroes §14 already measured
+(`charHeroData` cleared by `0x0073`, `attribState` by `0x0037`, ConstChar:1296 by
+`0x00B7` for the hero's agent, the `0x0037 → 0x00B7 → 0x003A` order), and the add
+clears them the way the load does — by calling `hero_character_block`, the load's
+own function. `0x0073` is NOT re-sent: the load sends it for every OWNED hero,
+kicked or not (the tape's next two loads), so the record exists, and the kick's batch
+touches the agent, the row and the inventory only.
+
+**What the server now does (`handle_hero_add`, behind `--no-hero-add`).**
+
+- Refuses, sending NOTHING, an index that is not an owned hero, a hero not kicked
+  (already in the party), and an eighth hero — `HEROES_PARTY_MAX = 7`, one name for
+  the client's own cap (PtPlayer:332 `heroIndex < arrsize(m_heroAgentId)`,
+  GmHeroCommander:214), read by `--hero`'s command-line refusal and by the handler.
+  What retail's client expects back from a refused add is NOT FOUND (no tape); its
+  own asserts already refuse 0 and ≥ 40 before sending.
+- Sends, in the load's order: `hero_character_block` (OBSERVED order, the load's
+  own) → `0x0072` → `0x00B0` with the hero counted (RECONSTRUCTION by analogy with
+  the henchman add and the load's own `[68, 2]`) → a bare `0x01C2` with the load
+  path's own arguments `[1, PLAYER_NUMBER, agent, hero, HERO_MSG14]`
+  (RECONSTRUCTION) → in a FIELD, the body through `hero_body_create`, the load's
+  body-create loop factored into one function so the two callers cannot drift
+  (`test_heroadd` locks both call sites), placed at the player's side in the hero's
+  formation slot; a town gets no body, as at load.
+- Clears the stored kick under `--persist` (`set_hero_kicked(..., kicked=False)`),
+  so the next zone-in parties the hero again — the kick's acceptance (b) in reverse.
+  `--reset-hero-kicks` stays as the BULK un-kick.
+- **The load path's `0x00B0` under-count is fixed with it** (the §8.1 follow-up):
+  `_party_size` now counts `party_hero_slots`, as retail's load `[68, 2]` does.
+
+**`0x0018` ships with it, from the sandbox's owned set.** Retail sends ONE dword:
+`[64]` on every 2026-08 tape (bit 6; `0x0073` names hero 6 and no other) and `[224]`
+from `20260913` on (bits 5, 6, 7; the loads that list every owned hero name exactly
+5, 6, 7) — **bit = hero index, CORROBORATED on 34 live connections.** Ours sent
+OpenTyria's eight all-ones dwords verbatim. `hero_unlock_mask()` builds retail's
+shape from `hero_slots()` when a hero is authored and keeps the all-ones otherwise
+or under `--no-hero-unlock-mask`; the sender stays ONE site — the same PvP-arm burst
+whose `0x001D` comment records the 2026-09-15 crash (a second sender of unlock state
+wiped the skill library and asserted GmSkSlot:206), which is why the change is to
+the value at that site and never a second send. What consumes the mask is NOT FOUND
+statically (the handler fires event `0x100000BF`); the route's reading that the
+Party Search hero list draws from it is UNVERIFIED and the loopback click is what
+tests it.
+
+**The default is ON, and here is the evidence for that call.** Against: the request
+is unwitnessed and the bare `0x01C2` unwitnessed. For: every message the arm sends
+is one the load already sends this same client for this same hero, in the order
+retail's load sends them, and heroes §38 measured zero asserts in that order; the
+kick it inverts is OBSERVED; the only mid-session add on tape is bare and
+size-then-row; the handlers were read and carry no window gate; and the owner's ask
+is add AND kick from the party panel, so an OFF default would ship the ask half done.
+The flag is the control arm; a client assert on the click flips it off and names the
+gate.
+
+**Tests.** `test_heroadd.py` (floor 48): the batch op-for-op against
+`hero_character_block` and in retail's load order (known-bad: a rotated batch, the
+KICK's row-then-size, a re-sent `0x0073` — all through the same predicate); the three
+refusals with the seventh-hero control; the kick-then-add round trip under
+`--persist` (store `[6]` → `[]` → a fresh connection parties the hero) and the
+`--persist`-off control; the field arm's body at agent 200 slot 0 and its re-create
+after a kick, with the town as the known-bad; the mask's two tape values, the
+second-dword case, the two all-ones cases and the flag; source locks on the arm, the
+flags, the shared body function and the load's party size, each with a mutation.
+`test_herokick` (floor 52 → 53) re-targets its known-bad mutation at a `for` header,
+because the first `party_hero_slots(state)` in the load is now the size expression;
+`test_agentlife` scopes its PLAYER_CREATE → SIZE → LEADER walk to the load and counts
+the seventh `party_bodies_here` site.
+
+**Runsheet — the two clicks, still owed (one loopback session, the owner's hands).**
+Not run here; this is what to do and what each outcome means.
+
+1. Start the server with a hero authored and the store on, the daily loop otherwise
+   as `RUNBOOK.md` gives it — the game-catalog terminal becomes
+   `python toolkit/authsrv/authsrv.py --bind 127.0.0.3 --port 6112 --vault vault/captures/gamesrv --hero 6 --persist`
+   (add `--hero-body --explorable` to see the body arm; the sandbox's Compile with a
+   hero ticked passes `--persist` itself). Launch the loopback client as usual.
+2. **Kick.** Party window → the hero's row → its remove button. Expect the row to
+   leave and the gamesrv log to print `HERO_KICK: hero 6 (agent 200) removed from
+   the party; size now 1` (and `PERSIST: hero 6 kicked`). A row that stays with no
+   log line means no c2s reached us — read the log for `UNHANDLED 0x801F` (arm off).
+3. **Add.** Party window → the hero list (Party Search's Heroes tab, or the hero
+   panel's add) → the hero. The outcomes, each with its reading:
+   - the log prints `HERO_ADD: hero 6 (agent 200) back in the party; size now 2`
+     and the row returns → the add is CORROBORATED on our client (the batch, order
+     and bare `0x01C2` accepted); in a field with `--hero-body` a body appears
+     ~150 u beside the player → the field arm too;
+   - the log prints nothing after the click → the client did NOT send: either the
+     `0x84D9B0` flag word was non-zero at that moment (the gate the kick shares) or
+     the UI offered no add for this hero (the `0x0018` mask lists the owned heroes;
+     with `--no-hero-unlock-mask` the list is every hero) — try the other mask arm;
+   - the log prints `HERO_ADD(n) refused: ...` → the client sent an index we do not
+     own or a hero already in — the number in the line is the evidence;
+   - the client asserts → copy the dialog's `File.cpp(N)`; a gate in the roster row
+     (`0x01C2` bare) or the commander (heroes §38) is what the static read could not
+     exclude, and `--no-hero-add` is the revert while it is read.
+4. **Persist.** After a successful add, zone (map travel) and confirm the hero loads
+   in the party (`0x0072`/`0x01C2` in the log); after a kick, that it does not.

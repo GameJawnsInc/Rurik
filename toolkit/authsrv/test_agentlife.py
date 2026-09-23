@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=551)   # 2026-09-17 CAST-TARGET-DIED +4 (an ally cast whose target died lands on nothing), from the green run  # 2026-09-15 (probe-walk noise) +2 (the CONTROL is pinned to one name and captured: quiet prints nothing, the failure is named to the caller), from the green run; 2026-09-15 (later) HEROLIB +2 (no 0x001D send site may zero the account library -- the GmSkSlot.cpp:206 crash of run 20260915T201538; the negative control restores the literal and reddens naming the line); 2026-09-15 +2 (offset_y honoured); SLICE-F43 +3 (the wipe countdown and its stop), from the green run   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=552)   # 2026-09-23 SANDBOX-N2 add +1 (the load-order walk locates _handle_request_players), from the green run  # 2026-09-17 CAST-TARGET-DIED +4 (an ally cast whose target died lands on nothing), from the green run  # 2026-09-15 (probe-walk noise) +2 (the CONTROL is pinned to one name and captured: quiet prints nothing, the failure is named to the caller), from the green run; 2026-09-15 (later) HEROLIB +2 (no 0x001D send site may zero the account library -- the GmSkSlot.cpp:206 crash of run 20260915T201538; the negative control restores the literal and reddens naming the line); 2026-09-15 +2 (offset_y honoured); SLICE-F43 +3 (the wipe countdown and its stop), from the green run   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
 def section_weapon_damage():
@@ -4307,8 +4307,18 @@ def section_party_of_one():
     # cannot tell which send comes first.
     with open(authsrv.__file__, encoding="utf-8") as f:
         tree = ast.parse(f.read())
+    # Scoped to the LOAD (`_handle_request_players`), which is what the claim
+    # is about: since 2026-09-23 the in-game hero ADD (handle_hero_add,
+    # SANDBOX-N2) sends 0x00B0 mid-session too, by design and after the load,
+    # and a module-wide walk read it as "SIZE before PLAYER_CREATE".
+    _load_fn = next((n for n in tree.body
+                     if isinstance(n, ast.FunctionDef)
+                     and n.name == "_handle_request_players"), None)
+    LEDGER.ok(_load_fn is not None,
+              "the load path (_handle_request_players) is locatable for the "
+              "order walk", "an absent function would make the walk below vacuous")
     order = []
-    for node in ast.walk(tree):
+    for node in ast.walk(_load_fn if _load_fn is not None else tree):
         if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
                 and node.func.id == "send" and node.args
                 and isinstance(node.args[0], ast.Name)):
@@ -4320,7 +4330,7 @@ def section_party_of_one():
     names = [n for _, n in order]
     LEDGER.ok(names == ["GAME_SMSG_PLAYER_INFO", "GAME_SMSG_PLAYER_PARTY_SIZE",
                         "GAME_SMSG_PLAYER_SET_PARTY"],
-              "PLAYER_CREATE, then SIZE, then LEADER (syntax tree)",
+              "PLAYER_CREATE, then SIZE, then LEADER (syntax tree, in the load)",
               f"{names} -- leader-first is a no-op against the default, and "
               f"both need the player record PLAYER_CREATE makes")
 
@@ -5407,7 +5417,7 @@ def section_hold_plane():
                   "revert arm")
     finally:
         authsrv.PARTY_BODY_IN_OUTPOST = _saved_bio
-    LEDGER.ok(_src.count("party_bodies_here(state)") == 6     # the def + 4 sites + zone_carry_apply (JARIN)
+    LEDGER.ok(_src.count("party_bodies_here(state)") == 7     # the def + 4 sites + zone_carry_apply (JARIN) + handle_hero_add (SANDBOX-N2, 2026-09-23)
               and _src.count("if HERO_BODY and party_bodies_here(state) else ()") == 1
               and "HENCHMAN_BODY and party_bodies_here(state)" in _src,
               "both party body sites in the load path -- the hero loop and the "

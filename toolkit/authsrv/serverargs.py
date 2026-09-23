@@ -732,12 +732,37 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "under --persist the kick holds across a zone (OBSERVED "
                          "on 20260916T150306).")
     ap.add_argument("--reset-hero-kicks", action="store_true",
-                    help="THE UN-KICK until the hero ADD (c2s 0x001E) ships: at "
-                         "this character's first load under --persist, clear its "
-                         "stored kicked_heroes so every owned hero is back in the "
-                         "party. Without it a kick under --persist holds for "
-                         "every later run, and the sandbox always passes "
+                    help="THE BULK UN-KICK: at this character's first load under "
+                         "--persist, clear its stored kicked_heroes so every "
+                         "owned hero is back in the party. The per-hero un-kick "
+                         "is the party panel's Add (c2s 0x001E, since "
+                         "2026-09-23); this remains for a store the panel cannot "
+                         "reach, because a kick under --persist otherwise holds "
+                         "for every later run and the sandbox always passes "
                          "--persist.")
+    ap.add_argument("--no-hero-add", action="store_true",
+                    help="THE REVERT ARM for SANDBOX-N2's add: ignore c2s 0x001E "
+                         "HERO_ADD -- the pre-2026-09-23 behaviour (the party "
+                         "panel's Add Hero did nothing; a kicked hero stayed out "
+                         "until --reset-hero-kicks). The default handles it: an "
+                         "owned, kicked hero rejoins with the load pipeline's own "
+                         "messages in retail's load order (its character block, "
+                         "0x0072, 0x00B0 with the hero counted, a bare 0x01C2, "
+                         "and in a field its body), and under --persist the "
+                         "stored kick clears. RECONSTRUCTION: no tape carries a "
+                         "c2s 0x001E; an unowned hero, a hero already in the "
+                         "party and an eighth hero are refused with nothing sent "
+                         "(retail's refusal reply NOT FOUND).")
+    ap.add_argument("--no-hero-unlock-mask", action="store_true",
+                    help="THE REVERT ARM for 0x0018: send OpenTyria's eight "
+                         "all-ones dwords as the account's hero-unlock mask, as "
+                         "every run before 2026-09-23 did. The default, when a "
+                         "hero is authored, sends retail's shape -- one dword "
+                         "per 32 indices with BIT = HERO INDEX (CORROBORATED on "
+                         "34 live connections: [64] with hero 6 owned, [224] "
+                         "with 5, 6, 7) -- so the client's hero lists offer the "
+                         "heroes this run owns and no others. With no hero "
+                         "authored the payload is unchanged either way.")
     ap.add_argument("--no-zone-carry", action="store_true",
                     help="THE REVERT ARM for JARIN: a zone forgets the death "
                          "penalty and the hero's stance. Retail carries the "

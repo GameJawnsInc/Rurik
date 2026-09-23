@@ -28,6 +28,47 @@ move back.
 
 ---
 
+### DESKWORK-D1 (step 4) / SANDBOX-N2 -- 2026-09-23 -- **the hero ADD armed as RECONSTRUCTION (c2s 0x001E), the kick's inverse; 0x0018 from the owned set; the load's party size counts heroes**
+
+[studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md) §DESKWORK-D1 "The hero add";
+[studies/heroes/FINDINGS.md](studies/heroes/FINDINGS.md) §3.3 (corrected). **Desk work,
+no client launched.** Two nulls measured first: no retail tape (0 of 96 live game
+connections) and no loopback capture (0 of 3,107) carries a c2s `0x001E` -- the add has
+never reached our server, so unlike the kick it has no witness at all. Read statically
+on 38797: wrapper `0x0091FF00` inside ChCliApi `0x0080E250` (asserts `hero < HEROES`
+:4446, `hero != 0` :4447), sent only when the flag word `0x84D9B0` reads is zero -- the
+SAME gate the kick's twin passes, so that gate is not what suppresses it; callers
+PtSearch `0x00562FB0`, UiCtlInstance `0x00577A3F` (the survey's addresses hold).
+`handle_hero_add` (behind **`--no-hero-add`**, default ON -- the evidence for the call is
+at the flag) sends the load pipeline's own messages for the hero in retail's LOAD order,
+read off the kick tape (t=151.746-151.784): `hero_character_block` → `0x0072` → `0x00B0`
+with the hero COUNTED → a BARE `0x01C2` → in a field the body via **`hero_body_create`**,
+the load's body loop factored into one function so the two callers cannot drift. Size
+before row and bare because the only mid-session add on any tape, the henchman's
+(`0x009F`, 3 of 3), goes `0x00B0` then `0x01BF` with no build window -- the kick goes
+row-then-size, so the add mirrors the henchman, not the kick. The `0x01C2` handler
+(`0x00856B80` → `0x00858F50`) was read: party lookup, row append, event `0x1000011E`, no
+window gate, Array:369 its one assert. `0x0073` is not re-sent (the load sends it for
+every OWNED hero, kicked or not). Refused with nothing sent (retail's reply NOT FOUND):
+an unowned hero, one already in, an eighth -- **`HEROES_PARTY_MAX = 7`**, the client's cap
+(PtPlayer:332) in one name read by `--hero` and the handler. Under `--persist` the stored
+kick clears; `--reset-hero-kicks` stays as the bulk un-kick. **`0x0018` ships with it:**
+retail sends ONE dword, bit = hero index -- `[64]` with hero 6, `[224]` with 5/6/7,
+CORROBORATED on 34 live connections -- and `hero_unlock_mask()` builds that from
+`hero_slots()` behind **`--no-hero-unlock-mask`**, all-ones verbatim with no hero; ONE
+sender, the `0x001D` crash record read first. **The `0x00B0` load under-count (the §8.1
+follow-up) is fixed**: `_party_size` counts `party_hero_slots`, as retail's `[68, 2]`.
+`test_heroadd.py` (floor 48, TESTS.md): the batch against `hero_character_block` and the
+order predicate with three known-bad arms, the refusals with the seventh-hero control,
+the kick-then-add round trip under `--persist`, the field arm's body and re-create with
+the town as known-bad, the mask's tape values and flag, source locks with mutations.
+`test_herokick` re-targets its mutation at a `for` header (52 → 53); `test_agentlife`
+scopes its load-order walk to `_handle_request_players` and counts the seventh
+`party_bodies_here` site. **Still owed: one loopback click each for kick and add** --
+the runsheet (command, clicks, what each outcome means) is in the cmsg section.
+
+---
+
 ### DESKWORK-D1 (step 3) -- 2026-09-23 -- **retail's c2s triaged: 57 opcodes over 96 live connections, 18 undecided ones decided, the reverse guard on**
 
 [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md) §DESKWORK-D1, "The retail c2s
