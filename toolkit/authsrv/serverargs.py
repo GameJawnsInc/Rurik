@@ -825,6 +825,35 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "select_weapon_set's lead rule (0x014B into an emptied "
                          "hand, never a 0x0152 with a 0) and the store-built "
                          "0x006E -- with no in-game move nothing differs.")
+    ap.add_argument("--equipped-visual-order", action="store_true",
+                    help="THE REVERT ARM for the owner's confirmation pass on "
+                         "DESKWORK-D1 step 8 (2026-09-23): dress the armour into "
+                         "the EQUIPPED BAG at its 0x006E position (body 2, boots 3, "
+                         "legs 4, gloves 5, head 6) -- every run before that day. "
+                         "KNOWN-BAD: the paper doll draws each BAG slot at a fixed "
+                         "row, so that order reads legs, chest, head, feet, arms top "
+                         "to bottom (the owner's screenshot). The default is retail's "
+                         "bag order (body 2, legs 3, head 4, boots 5, gloves 6 -- "
+                         "OBSERVED on every load cell of all 96 live connections) "
+                         "with the 0x006E/0x006F visuals read through the bag->visual "
+                         "permutation, so the visual array is byte-identical either "
+                         "way. A stored equipped cell that is not the piece's type's "
+                         "is dropped from the store with a log line under either "
+                         "arm, never reinterpreted.")
+    ap.add_argument("--no-item-move-by-id", action="store_true",
+                    help="THE REVERT ARM for c2s 0x0072 ITEM_MOVE_BY_ID (the owner's "
+                         "confirmation pass, 2026-09-23): ignore a drag between two "
+                         "cells of the non-equipped bags, as the 2026-09-23 client "
+                         "session did (UNHANDLED; the client put the sword back). The "
+                         "default answers RECONSTRUCTION -- no retail tape carries "
+                         "the request: an EMPTY cell with 0x014B [key, item, bag, "
+                         "slot] (0x004F's reply shape), an OCCUPIED one with 0x0152 "
+                         "[key, occupant, item] (the occupied-slot equip's shape; "
+                         "the client's swap handler is not equipped-specific), the "
+                         "cells persisted under --persist. Refused with nothing sent: "
+                         "an unknown item, an undeclared bag, a slot past the bag, "
+                         "the item's own cell, a RESERVED cell, an equipped-bag "
+                         "destination that is not the item's type's slot.")
     ap.add_argument("--hero-skill-toggle-per-bit", action="store_true",
                     help="THE ALTERNATIVE REPLY for DESKWORK-D1 step 6: answer a "
                          "suppress click with 0x0064 [agent, slot, value] -- one bit "

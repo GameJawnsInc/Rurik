@@ -857,6 +857,22 @@ class Store:
         self.save()
         return dict(locs)
 
+    def drop_item_location(self, uuid_hex, item_id):
+        """Forget one item's stored cell; saves. True when a row was removed.
+        The dress calls this for a stored EQUIPPED cell that is not the piece's
+        type's (written under the pre-2026-09-23 visual numbering, or foreign):
+        never reinterpreted, dropped with the reason in the log
+        (itemstore.restore's `stale`)."""
+        row = self.character_by_uuid(uuid_hex)
+        if row is None:
+            return False
+        locs = row.get("item_locations") or {}
+        if str(int(item_id)) not in locs:
+            return False
+        del locs[str(int(item_id))]
+        self.save()
+        return True
+
 
 def find_character(uuid_hex, base=None):
     """(Store, row) for a character uuid, searching every account file.

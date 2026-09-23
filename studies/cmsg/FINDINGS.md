@@ -1449,3 +1449,126 @@ the branch before each change, then fixed with a test that reddens without it:
   `visual_always` mutant survived without it); the `--no-item-moves` help text says what
   the flag does NOT revert (the lead rule, the store-built `0x006E`); three readability
   leftovers cleaned.
+
+### Inventory, the owner's confirmation — the doll reads BAG slots, retail's bag order from every tape, and `c2s 0x0072` (DESKWORK-D1 step 8, the confirmation pass, 2026-09-23)
+
+**The owner's client session (loopback, the sandbox rig; gamesrv capture
+`authsrv-20260923T163355-c1`) confirmed** the drag out of the paper doll, the stored-cell
+restore, the equip into an empty slot and the occupied-slot swap on our own client — the
+"Inventory" runsheet's steps 1, 2 and 4 — **and found two defects.** Identifiers below:
+`EVID-D1D-<n>`, this pass's evidence rows, the same series as the fix pass's `EVID-D1C`.
+
+**Defect 1 — the paper doll's rows (EVID-D1D-1, OBSERVED, the owner's screenshot).** Retail's
+armour column reads head, chest, arms, legs, feet top to bottom; ours read **legs, chest,
+head, feet, arms**. The mechanism is two numberings the "Inventory" section already named
+and then mis-assigned: the doll draws each **equipped-BAG slot** at a fixed row — head 4,
+chest 2, arms 6, legs 3, feet 5, retail's ldufr-order bag — and this server dressed the
+bag with the **VISUAL** numbering (body 2, boots 3, legs 4, gloves 5, head 6:
+`STARTER_ARMOUR`'s third column, `wearmap.SLOT_*`). So the row that draws bag slot 4 showed
+our legs, the row for 6 our head, the row for 3 our boots and the row for 5 our gloves —
+exactly the observed order. That section's "a bag cell is opaque to the client" is
+REFUTED: the bag cell is what the doll reads; only the BODY reads `0x006E`.
+
+**Retail's bag order, re-derived from every tape (EVID-D1D-2, OBSERVED, n = 96
+connections).** `test_itemmoves.py` §1c decodes every live game connection
+(`livewire.decode_conn`): the type-2 bag from `0x013F`, each item's wire type from its own
+`0x0161`, every `0x013E`/`0x014B` into that bag. Wire type 7 (body) sits at slot **2** ×110,
+19 (legs) at **3** ×110, 16 (head) at **4** ×112, 4 (boots) at **5** ×111, 13 (gloves) at
+**6** ×111 — one slot per type, on all 96 connections, zero exceptions; shields (24) at 1
+×51, every weapon type at 0. The `0x006E` after each load, joined by item id, reads bag
+0→0 ×40, 1→1 ×23, 2→2, 3→4, 4→6, 5→3, 6→5 ×98 each — the whole permutation the fix pass
+had OBSERVED once on `:53310` (EVID-D1C-6) now stands on the corpus, and it is
+`itemstore.RETAIL_VISUAL_OF_BAG_SLOT` / `RETAIL_BAG_SLOT_OF_TYPE` unchanged.
+
+**The fix.** The dress puts the armour into the equipped bag at **retail's** cells
+(`item_layout_defaults` → `equipped_bag_slot(type, visual)`, `itemstore.bag_slot_table`),
+and every reader of an equipped cell goes through the pair `item_bag_slot_table()` /
+`item_visual_of()`: the `0x006E` build (`worn_array` through the permutation — the array
+is **byte-identical** to before, pinned), `plan_move`'s and `plan_equip`'s `0x006F`,
+`plan_equip`'s slot per type, the refusal checks, the hands mirror (slots 0/1 are the
+identity in both orders). `STARTER_ARMOUR`'s third column stays the visual slot (the
+import-time `wearmap.check_content_row`, `test_armour`, `test_daggers` and `compositetrap`
+read it as one). **`--equipped-visual-order`** is the revert arm and reproduces the
+defect; the KNOWN-BAD arms in `test_itemmoves` show the visual table missing the measured
+slot on four of five pieces and the identity mapping putting the head at visual 4.
+
+**A stale persisted cell (EVID-D1D-3).** No store on this machine carries an
+`item_locations` row (grep over `vault/state/`, 2026-09-23: zero files), so nothing is
+migrated. The rule for one that did: an armour piece's or costume's equipped cell is
+decided by its TYPE and can only ever equal the default, so `itemstore.restore` REFUSES any
+stored equipped cell that is not the default (a hand cell is the existing keep-hands
+rule), notes it as "written under the pre-2026-09-23 visual numbering or a foreign
+store", and `item_layout_begin` DROPS it from the store (`charstore.drop_item_location`)
+with a log line — never reinterpreted; under the revert arm the same rule holds against
+that arm's defaults (the test's control). **The log label** `ITEM_MOVED_TO_LOCATION(...
+-> equipped 6) [stored cell: bag 2 slot 2]` printed the constant beside other bytes; all
+six placement sites now print the SENT cell (`dress_cell_label`: `-> bag 2 slot 2
+[stored cell]`, `-> equipped 4`).
+
+**Defect 2 — a drag between two backpack cells is unanswered (EVID-D1D-4, OBSERVED, our
+client, n = 1).** The sword (item 11) from backpack cell 0 to cell 4 sent `c2s 0x0072`
+`[11, 2, 4]` (frame `72800b000000020004`, t = 18.418, 20:34:13Z), UNHANDLED, and the client
+put it back. On **no** retail tape (0 of 96 live connections, `retail_c2s.json`, 13,320
+c2s) and 1 of 1,581 loopback logs.
+
+**Read statically, 38797 and 38888 (EVID-D1D-5).** `msgshape` SEND table `0x00bcac48`
+`[u32, u16, u8]`, 9 bytes = messages.json `GAME_CMSG_0114`, and the codec consumes the
+owner's frame to the byte. Send wrapper `0x0084C400` (site `0x0084C435`, a 16-byte buffer;
+38888 `0x0084C950`), ONE caller `0x008478DA` in ItCliApi **`0x00847860`**`(itemId,
+bagIndex, slot)` (38888 `0x00847DB0`, the same body at +0x550): asserts `inventory`
+(ItCliApi:1505); a bagIndex of −1 asks `0x0084A7A0` and 21 = none returns; item =
+itemTable[itemId] (ctx+0xB8, bound ctx+0xC0); if item→bag (+0xC) IS the target bag and
+item→slot (+0x50) IS the slot it **returns without sending**; else pushes `[itemId,
+bag->id (+8), slot]`. Its ONE caller is `0x00526AE0` — inside **GmItemHelpers
+`0x00526900`, the `0x004F` drag helper**, at the non-equipped path `0x00526AC3` that the
+"Inventory" section (and `itemstore.py`, `authsrv.py`, overrides row 79) said "sends
+nothing". **REFUTED (EVID-D1D-6)**, read to the call rather than the branch: a bag item →
+`0x00847AF0` (another message, unread), a WHOLE item (quantity == `0x00845120`'s total) →
+`0x00847860` → `0x0072`, a partial quantity → `0x008477C0` (a split, unread). **Nothing on
+the path checks the destination's occupancy**, so a drop onto a filled cell reaches the
+wire. `0x004F` names the item by its equipped SLOT; `0x0072` names it by ID; both are one
+helper's.
+
+**Named and armed (RECONSTRUCTION).** `schema/overrides.json` GAME_CMSG 114
+**`ITEM_MOVE_BY_ID`**, medium (the mechanism OBSERVED once on our client, the fields from
+the sender; retail's reply NOT FOUND). `handle_item_move_by_id` → `itemstore.plan_move_by_id`,
+labelled at every send: an EMPTY cell of a declared bag → `0x014B [key, item, bag, slot]`
+(retail's reply to every `0x004F` move into a backpack cell, 4 of 4; the add worker wants
+the cell empty, ItCliInv:105, and it is); an OCCUPIED cell → `0x0152 [key, occupant,
+item]` (retail's reply to every occupied-slot equip, 4 of 4; the swap handler exchanges
+any two bagged items — weapons §29: ItCliInv:687/688 hold, :105 holds after both removes);
+an equipped SOURCE → `0x004F`'s own batch; the equipped bag as DESTINATION → the equip's
+batch only at the item's type's slot, else refused (a piece in another piece's cell is
+defect 1). Refused, nothing sent: an unknown item, an undeclared bag, a slot past the bag,
+the item's own cell (the client never sends it — its arrival means the store and the
+client disagree), a RESERVED cell. The cells persist under `--persist`, the set
+machinery's home slot follows (`WEAPON_SET_BACKPACK_SLOTS`), `--no-item-move-by-id` is the
+revert arm; `test_c2striage` §4 requires it named, armed and on NO live tape, so the day a
+retail tape carries one the check reddens and names the witness.
+
+**Runsheet — the owner's clicks (one loopback session, the sandbox rig, `--weapon-set
+1=starter_sword`, `--persist`), the predictions stated first.**
+
+1. **Open the inventory (I) and look at the paper doll.** PREDICTION: top to bottom
+   **head = `warrior_head` (item 7, bag 4), chest = `warrior_body` (3, bag 2), arms =
+   `warrior_gloves` (6, bag 6), legs = `warrior_legs` (5, bag 3), feet = `warrior_boots`
+   (4, bag 5)** — retail's order; the body on screen unchanged (the `0x006E` bytes are).
+   The log's `ITEM_MOVED_TO_LOCATION(warrior_head -> equipped 4)` line is the server's
+   half. The OLD order (legs, chest, head, feet, arms) → `--equipped-visual-order` was
+   passed, or the fix did not land. ANY OTHER order → the doll's row-to-slot map is not
+   what the screenshot implied: write the order down; it refutes EVID-D1D-1's mechanism,
+   not the tape's bag order.
+2. **Drag the sword (item 11) from backpack cell 0 to another EMPTY backpack cell.**
+   **A** = the sword stays in the new cell and the log reads `ITEM_MOVE_BY_ID(item 11 ->
+   bag 2 slot N) [RECONSTRUCTION]: 1 message(s), item 11 -> bag 2 slot N`. **B** = it
+   snaps back: an `UNHANDLED 0x0072` line means the arm is off, a `refused:` line names
+   why. Then drag it back (A again, slot 0). A client assert on `0x014B` (ItCliApi:2126,
+   ItCliInv:105) refutes the empty-cell arm.
+3. **Drag the sword ONTO an occupied backpack cell** (with `--weapon-set
+   1=starter_sword+starter_shield`, the shield's cell). A = the two exchange places and the
+   log shows one `0x0152`. A client assert on `0x0152` (ItCliApi:2253/2254/2257,
+   ItCliInv:687/688) refutes the swap arm; then `--no-item-move-by-id` and the swap
+   becomes a refusal on the record.
+4. **Zone and come back.** The sword where it was left (`ITEMS: item 11 (set 1 lead,
+   starter_sword) dressed at bag 2 slot N -- the character's stored cell`), and F2 sends
+   it back to THAT cell afterwards (the home slot followed).

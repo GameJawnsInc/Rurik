@@ -6453,8 +6453,24 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   `hero_panel_bar_ids` reads the session's bar first. Drives the real handlers with a
   fake send and a scratch store. Floor 53 -> 71 from the green run, ~2 s),
   `toolkit/authsrv/test_itemmoves.py` (**2026-09-23, DESKWORK-D1 step 8: the inventory
-  pair, c2s 0x004F ITEM_MOVE and 0x0030 EQUIP_ITEM, and the item store behind them**,
-  `toolkit/authsrv/itemstore.py`, `studies/cmsg/FINDINGS.md` §DESKWORK-D1 "Inventory".
+  messages, c2s 0x004F ITEM_MOVE, 0x0030 EQUIP_ITEM and 0x0072 ITEM_MOVE_BY_ID, and the
+  item store behind them**, `toolkit/authsrv/itemstore.py`, `studies/cmsg/FINDINGS.md`
+  §DESKWORK-D1 "Inventory" and "Inventory, the owner's confirmation". §1c RETAIL'S BAG
+  ORDER FROM EVERY TAPE (vault-gated, ~7 s): `livewire.decode_conn` over every live game
+  connection, each armour wire type's equipped-bag slot from the load's 0x013E/0x014B rows
+  into the type-2 bag (items typed by their own 0x0161) — one slot per type, equal to
+  `RETAIL_BAG_SLOT_OF_TYPE` (body 2, legs 3, head 4, boots 5, gloves 6), on ≥ 90
+  connections and ≥ 100 rows each — and the 0x006E join equal to the bag→visual
+  permutation; bare-machine pins of both tables' literals and of `bag_slot_table` /
+  `visual_fn` / `bag_slot_of_visual`; KNOWN-BAD: the visual-order table misses the
+  measured slot on four of five pieces. §6 THE GENERAL MOVE: the owner's frame
+  `72800b000000020004` decodes to 0x0072 [11, 2, 4] by the schema's widths, all 9 bytes;
+  `plan_move_by_id`'s two shapes (0x014B into an empty cell, 0x0152 onto an occupied one,
+  the cells exchanging; both labelled RECONSTRUCTION), the two delegates (an equipped
+  source → 0x004F's batch with the head's visual 6; the type's equipped slot → the equip's
+  0x0152 + visual), six refusals, the identity-mapping KNOWN-BAD (visual 4); the real
+  handler on the owner's rig moves the sword to backpack 4 and `WEAPON_SET_BACKPACK_SLOTS`
+  follows, back to 0, four refusals send nothing, `--persist` writes `item_locations[11]`.
   §1 RETAIL'S BATCHES, value for value against the transcription, through the pure leaf
   with retail's own ids, bag ids, inventory keys and agents: the three field unequips of 20260917T090355 :53310
   (`0x004F [4,2,1]` → `0x014B [1,213,2,1]` + `0x006F [25,6,0]`, and the gloves' and
@@ -6498,16 +6514,32 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   the dress itself, with the no-store KNOWN-BAD/control (ENG-B1: REQUEST_ITEMS runs
   before the load attaches the store); a restored set-item slot survives
   `declare_weapon_sets` and F2/F1 (ENG-M2); `charstore.validate` refuses five malformed
-  shapes and accepts a good one, `--no-item-moves` reads nothing stored. §5 SOURCE LOCKS
-  with a mutation: both arms under `ITEM_MOVES_ENABLED`, `main()`'s wiring,
+  shapes and accepts a good one, `--no-item-moves` reads nothing stored. THE OWNER'S
+  CONFIRMATION PASS in §4: the default layout puts the five pieces at RETAIL's bag cells
+  (the head at 4) and `worn_array` through the permutation is BYTE-IDENTICAL to the
+  pre-step-8 0x006E fill (KNOWN-BAD: the identity mapping puts the head at visual 4);
+  `--equipped-visual-order` reproduces the old layout with the same visual bytes (the
+  KNOWN-BAD arm, the doll's wrong rows) and its identity trio; a 0x004F naming slot 6 now
+  moves the GLOVES; every head pin re-cut to bag 4; a STALE stored cell (the head at
+  equipped 6) is not applied, said, and DROPPED from the store, with the equal-to-default
+  and the other-bag controls, and the same stored cell accepted under the revert arm (the
+  rule is "equals the type's cell"); `drop_item_location` answers False on nothing;
+  `dress_cell_label` prints the sent cell, never "equipped 6" beside bag-2 bytes. §5
+  SOURCE LOCKS with a mutation: both arms under `ITEM_MOVES_ENABLED`, `main()`'s wiring,
   `item_layout_begin` before the weapon's create and `item_cell` at the five placements,
   `declare_weapon_sets(send, state)`, the 0x006E build's `itemstore.worn_array` and
   `hand_items`, `weapon_set_items`'s override, `select_weapon_set`'s two-real-leads
-  guard, no allowlist row for either opcode in `test_dispatch.py`, `--no-item-moves` in
-  `serverargs.py`, and the fix pass's five (the dress's store lookup and set-0 re-apply,
-  the mirror's untouched records, the slot map, the reserved cells, the armour read).
-  Floor 78 -> 102 from the green run (the bare-machine core; §1b's 17 ride the vault),
-  ~4 s),
+  guard, no allowlist row for any of the three opcodes in `test_dispatch.py`,
+  `--no-item-moves` in `serverargs.py`, the fix pass's five (the dress's store lookup and
+  set-0 re-apply, the mirror's untouched records, the slot map, the reserved cells, the
+  armour read), and the confirmation pass's: the 0x0072 arm ONLY under
+  `ITEM_MOVE_BY_ID_ENABLED` (its mutation reddens), `main()` wiring both new flags and
+  `serverargs.py` defining them, `dress_cell_label` at all six placement labels,
+  `equipped_bag_slot` at the three equipped placements, `item_visual_of` at the 0x006E
+  build and `item_visual_of` / `item_bag_slot_table` in all three handlers.
+  Floor 78 -> 102 -> 137 from the green run with `RURIK_VAULT` pointed at an empty
+  directory (the bare-machine core; §1b's 17 and §1c's 8 ride the vault, 162 vaulted),
+  ~13 s),
   `toolkit/authsrv/test_labelrun.py` (the labelled input run, which names GAME_CMSG
   opcodes from what a human was told to do: a message lands in exactly one step's
   window, instance-load traffic is never folded into step 1, and a dirty idle CONTROL

@@ -7,8 +7,13 @@ until 2026-08-23 no document said which one does what
 (studies/playercomposite/FINDINGS.md 2 step E's standing unknown, resolved in
 9.2). The ruling, each half read from the client AND measured on retail's wire:
 
-  1. The EQUIP SLOT (0x006E array position / 0x006F index / the equipped bag's
-     slot -- one vocabulary) is a HANGER. It never chooses a body component.
+  1. The EQUIP SLOT (0x006E array position / 0x006F index) is a HANGER. It
+     never chooses a body component. (This line used to add "/ the equipped
+     bag's slot -- one vocabulary": REFUTED 2026-09-23 by the owner's paper
+     doll and every live load -- the equipped BAG numbers the same pieces
+     body 2, legs 3, head 4, boots 5, gloves 6, a permutation of the 0x006E
+     order; itemstore.RETAIL_VISUAL_OF_BAG_SLOT. SLOT_* below are the 0x006E
+     positions and nothing else.)
      Retail itself wears three DIFFERENT leggings-class items in the Boots,
      Legs and Gloves slots of one agent (capture 20260817T231139), all three
      resolving to the legs component. Slots are special-cased three ways only:

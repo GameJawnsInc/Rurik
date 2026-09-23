@@ -1915,12 +1915,15 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   and restored at the dress, a stored HAND change not restored; the fix pass closed five
   blockers — the dress reads the store itself, reserved cells, the launch records never
   rewritten by an equip, removed armour protects nothing, a suppressed resurrection is
-  never cast — and the suppress mask now follows the client's own bar edits). **Open**: the party family from
-  HENCHMAN_ADD's witness (step 5) and travel (step 7); the general bag-to-bag move (no
-  tape carries it — the runsheet's drag will name its opcode); the loopback clicks —
-  kick and add in an outpost under the sandbox rig, the Shift-click on a hero skill,
-  the drag out of the paper doll and the double-click back (runsheets in studies/cmsg
-  §DESKWORK-D1 "The hero add", "The hero skill toggle" and "Inventory").
+  never cast — and the suppress mask now follows the client's own bar edits; the owner's
+  confirmation pass, same day, PLAN-LOG: the doll's row order fixed — retail's bag order
+  dressed, `--equipped-visual-order` reverts — and the general move `c2s 0x0072`
+  ITEM_MOVE_BY_ID armed as RECONSTRUCTION, `--no-item-move-by-id`). **Open**: the party
+  family from HENCHMAN_ADD's witness (step 5) and travel (step 7); on the client — the
+  doll order (I + screenshot: head, chest, arms, legs, feet) and the backpack drag (A =
+  stays, B = snaps back); the loopback clicks — kick and add in an outpost under the
+  sandbox rig, the Shift-click on a hero skill (runsheets in studies/cmsg §DESKWORK-D1
+  "The hero add", "The hero skill toggle", "Inventory, the owner's confirmation").
 * **DESKWORK-D5**: the combat rules retail's tapes on disk already settle. LANDED
   2026-09-22: the adrenaline gate (SKILLS-B1's gate half, skills §34.11); property 10
   and the `[42]` residue (§16.6, self-scoped; `[42]` only when the maximum moved); the

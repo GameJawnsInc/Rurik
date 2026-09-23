@@ -28,6 +28,29 @@ move back.
 
 ---
 
+### DESKWORK-D1 step 8, the owner's confirmation -- 2026-09-23 -- **the paper doll draws BAG slots and our bag used the VISUAL numbering (legs in the head row); retail's bag order re-derived from all 96 live connections and dressed; the drag between two backpack cells is `c2s 0x0072` ITEM_MOVE_BY_ID, read from the client and armed as RECONSTRUCTION**
+
+The owner's loopback session confirmed the step-8 moves on our own client and found two
+defects (OBSERVED, screenshot + capture `authsrv-20260923T163355-c1`). **(1)** Retail's
+doll reads head, chest, arms, legs, feet; ours read legs, chest, head, feet, arms — the
+doll draws each equipped-BAG slot at a fixed row (4, 2, 6, 3, 5) and the server dressed
+the bag with the `0x006E` numbering; "a bag cell is opaque to the client" is refuted.
+`test_itemmoves` §1c re-derives retail's bag order from every live tape: body 2, legs 3,
+head 4, boots 5, gloves 6, one slot per type on all 96 connections, zero exceptions, and
+the bag→visual permutation ×98. The dress now uses retail's cells and every equipped-cell
+reader goes through `item_bag_slot_table()` / `item_visual_of()`, so the `0x006E` bytes are
+unchanged (pinned); `--equipped-visual-order` reverts (KNOWN-BAD arm). A stored equipped
+cell that is not the piece's type's is refused, said and DROPPED from the store, never
+reinterpreted (no store on this machine has one); the `0x013E` log label prints the sent
+cell. **(2)** The sword dragged between two backpack cells sent `c2s 0x0072 [11, 2, 4]`,
+UNHANDLED. Read on 38797/38888: wrapper `0x0084C400` ← ItCliApi `0x00847860(item, bag,
+slot)` ← GmItemHelpers `0x00526900`'s non-equipped path `0x00526AC3` — the path the
+Inventory section said "sends nothing" (refuted). Named `ITEM_MOVE_BY_ID` (medium; on no
+retail tape), armed behind `--no-item-move-by-id`: `0x014B` into an empty cell, `0x0152`
+onto an occupied one, RECONSTRUCTION at every send. Floor 102 → 137 (162 vaulted).
+Runsheet and the doll prediction: [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md)
+§"Inventory, the owner's confirmation".
+
 ### REALFIX-T1 truncated arm -- 2026-09-23 -- **the pre-T1 clock slop was milliseconds, not 1.00 s / 288 u: a truncated spread near 1 s is the TIGHT case, and the bound is 1 s + one coarse-clock tick − spread**
 
 This entry corrects the REALFIX-L1 FIRST RUN entry below (append-only: that entry stands
