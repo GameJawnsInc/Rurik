@@ -90,8 +90,14 @@ shape CORROBORATED by page and template, the wire RECONSTRUCTION. No code change
 
 **Counts the pass-3 entry below did not name** (a review finding): its affected sweep was
 123 of 124 green (7,938 runner-counted checks + 218 in three tests with declared skips),
-`test_handshake` NOT RUN — port 6112 held by another session. This pass's own sweep is
-named in its last commit.
+`test_handshake` NOT RUN — port 6112 held by another session. **This pass's own sweep**: the
+same 123 affected tests, **123 of 123 green** — 121 in two 4-wide chunks (7,632 runner-counted
+checks + 218 in three tests with declared skips), `test_kbdsync` red under load on one
+wall-clock fence check and green alone (236), `test_scrub` green alone (78; under the 4-wide
+load it outran the runner's 30-minute per-test cap and took the first attempt's whole result
+with it — the runner's weakness, not the test's); `test_handshake` again NOT RUN, port 6112
+held by two other sessions' processes. Lints on the final tree: checks 17, srclint 26, citelint
+50, identlint 28, provlint 19.
 
 ---
 

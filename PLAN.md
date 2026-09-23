@@ -1925,7 +1925,8 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   every pair rests on a lead, §56.8 (the fix pass withdrew "≥ 913 u" and corrected the hero
   tape's observer); `party_wide = "earshot"`, `--no-party-wide-shouts`); the refusal ids
   (skills §57, `chatdefs.REFUSAL_REASONS`: the 60
-  plain ids 1934–1993 by label, three OBSERVED, `--refusal-reasons` DEFAULT OFF, the weapon
+  plain ids 1934–1993 by label, four OBSERVED — 1988 the recharge refusal, witnessed once,
+  the fix pass — `--refusal-reasons` DEFAULT OFF, the weapon
   gate's #1985 its one consumer); 3(d) Mend Condition (skills §58, `heal_if_removed`). Still
   OPEN: the shout ANNOUNCE — retail's `[48, caster, skill]` for every instant skill (stances
   and shouts, 133 in the corpus), ours prop 60; a 348 row (no armour-bonus mechanic to hang
