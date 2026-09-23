@@ -14,10 +14,16 @@ WHAT IT IS REALLY CHECKING. Two residues of the damage batch at the PLAYER:
       and never for the player's hits; `--no-skill-damage-word` is the pre-2026-09-22
       arm.
   (a) the player's own property 42 rides a word at the observer only when the
-      maximum MOVED -- 0 of 3 armour-ignoring words, 4 of 402 damage words (all four
-      with the maximum swinging). `armour_ignoring_damage`'s player branch declared
-      it before every word; now `declare_player_max` sends it only when it differs
-      from the last declared value. `--player-max-always` is the pre-2026-09-22 arm.
+      maximum MOVED -- retail puts it immediately ahead of a damage word 0 of 3
+      (armour-ignoring) / 0 of 401 (16/17). The observer's 42 rides the Deep
+      Wound's own open/close batches (the maximum moving) and 13 of 47 heals; a
+      first cut misread four Reversal-of-Fortune heals as damage-word
+      declarations ("4 of 402"), which they are not. `armour_ignoring_damage`'s
+      player branch declared it before every word; now `declare_player_max`
+      sends it only when it differs from the last declared value, and
+      `deep_wound_open`/`deep_wound_close` update the tracker as they send their
+      own 42 (so the next word does not re-declare it -- ENG-1).
+      `--player-max-always` is the pre-2026-09-22 arm.
 
 Section 1 needs no vault (the sender, with a known-bad arm per flag). Section 2 reads
 `vault/captures/live/` and is declared as a skip without it.
@@ -43,8 +49,10 @@ import agents                                                  # noqa: E402
 import authsrv                                                 # noqa: E402
 import vaultpath                                               # noqa: E402
 
-# Floor from the green run of 2026-09-22: section 1 alone (the fixture-less core).
-LEDGER = checks.Ledger("the skill-damage word and the player's maximum", floor=8)
+# Floor from the green run of 2026-09-22: section 1 alone (the fixture-less core),
+# 8 -> 10 with the two Deep Wound tracker checks (ENG-1). Section 2 (the tape,
+# incl. the ENG-11 swing/attack-skill pins) is declared a skip without the vault.
+LEDGER = checks.Ledger("the skill-damage word and the player's maximum", floor=10)
 check = checks.adopt(LEDGER)
 
 PLAYER = authsrv.PLAYER_AGENT_ID
@@ -142,19 +150,22 @@ def section_sender():
               and not any(op == INT and v[0] == P10 for op, v in sent),
               "and a plain swing at the player carries none",
               f"{sent} -- property 10 names a SKILL; a swing has none to name")
-        # (a) the player's own 42: not before a 55 when it did not move
+        # (a) the player's own 42: not before a 55 when it did not move. The
+        # word's skill here is 143 (a life steal) -- the 3 corpus property-10
+        # words that precede a 55 at the observer are all skill 143.
         sent, send, st = _fake()
         st["player_max_declared"] = int(authsrv.player_max_health(st))   # the create declared it
-        authsrv.armour_ignoring_damage(send, st, PLAYER, 10, 9.0, 0, "a life steal", skill_id=258)
+        authsrv.armour_ignoring_damage(send, st, PLAYER, 10, 9.0, 0, "a life steal", skill_id=143)
         ops = _ops(sent)
         check((INT, P42) not in ops and (FLT, agents.GV_ARMOR_IGNORING) in ops
               and (INT, P10) in ops
               and ops.index((INT, P10)) == ops.index((FLT, agents.GV_ARMOR_IGNORING)) - 1,
               "an armour-ignoring word at the player with the maximum unmoved: no 42, and "
-              "[10, player, 258] immediately ahead of the 55",
+              "[10, player, 143] immediately ahead of the 55",
               f"{sent} -- retail: 0 of 3 armour-ignoring words at the observer carry the "
-              f"observer's 42; 3 of the 92 property-10 words precede a 55")
-        # (a) ... and declared once it MOVED since the last declaration
+              f"observer's 42; the 3 of the 92 property-10 words that precede a 55 are skill 143")
+        # (a) ... declare_player_max's own logic: the 42 goes out when the tracker
+        # is stale (a UNIT test of "differs"; the detail is now the corrected count)
         st["player_max_declared"] = int(authsrv.player_max_health(st)) - 20
         sent.clear()
         authsrv.armour_ignoring_damage(send, st, PLAYER, 10, 9.0, 0, "another")
@@ -164,7 +175,35 @@ def section_sender():
               and st["player_max_declared"] == int(authsrv.player_max_health(st)),
               "with the maximum moved since the last declaration the 42 goes out first and "
               "the tracker follows",
-              f"{sent} -- retail's 4 of 402: the maximum swinging 480 <-> 384 on 20260916T213125")
+              f"{sent} -- retail: 0 of 401 damage words carry the observer's 42 immediately "
+              f"ahead; it rides the Deep Wound's own batches (480 <-> 384 on 20260916T213125)")
+        # (a) ENG-1: a REAL Deep Wound moves the maximum, and the tracker must
+        # follow it so the next armour-ignoring word does NOT re-declare the 42.
+        # This drives deep_wound_open rather than faking the tracker, so it
+        # reddens if deep_wound_open stops updating `player_max_declared`.
+        saved_dw = authsrv.DEEP_WOUND
+        try:
+            authsrv.DEEP_WOUND = True
+            sent, send, st = _fake()
+            st["player_max_declared"] = int(authsrv.player_max_health(st))
+            authsrv.deep_wound_open(send, st, PLAYER, 0)
+            dw_42 = [v for op, v in sent if op == INT and v[0] == P42]
+            new_max = int(authsrv.player_max_health(st))
+            check(len(dw_42) == 1 and dw_42[0] == [P42, PLAYER, new_max]
+                  and st["player_max_declared"] == new_max,
+                  "deep_wound_open declares the moved maximum ONCE and updates the tracker",
+                  f"{sent}, tracker {st['player_max_declared']} vs max {new_max}")
+            sent.clear()
+            authsrv.armour_ignoring_damage(send, st, PLAYER, 10, 9.0, 0, "after a Deep Wound",
+                                           skill_id=143)
+            ops = _ops(sent)
+            check((INT, P42) not in ops and (FLT, agents.GV_ARMOR_IGNORING) in ops,
+                  "and the next armour-ignoring word after the Deep Wound sends NO redundant "
+                  "42 (the tracker already holds the reduced maximum)",
+                  f"{sent} -- before ENG-1 the stale tracker re-declared [42, player, "
+                  f"{new_max}] ahead of the 55, the exact case retail shows 0 of 3")
+        finally:
+            authsrv.DEEP_WOUND = saved_dw
         # the known-bad arm
         authsrv.PLAYER_MAX_ALWAYS = True
         sent.clear()
@@ -207,6 +246,13 @@ def section_corpus():
     own_dmg_with_42 = 0
     own_heal = 0
     own_heal_with_42 = 0
+    # ENG-11: the OTHER direction of the [10] rule, pinned too -- a word closed
+    # by a plain swing (property 1 naming the source) carries no [10]; one closed
+    # by an attack skill (property 46 naming the source) carries it every time.
+    swing_words = 0
+    swing_words_with_10 = 0
+    atk_words = 0
+    atk_words_with_10 = 0
     for stamp in sorted(os.listdir(live)):
         cap = os.path.join(live, stamp)
         if not os.path.isdir(cap):
@@ -251,6 +297,21 @@ def section_corpus():
                             own_dmg_with_42 += (prev is not None and prev[0] == 0x9F
                                                 and len(prev[1]) > 3 and _i(prev[1][1]) == 42
                                                 and _i(prev[1][2]) == me)
+                            # ENG-11: classify by what CLOSED the attack -- a
+                            # property 1 (melee finished) or 46 (attack skill
+                            # finished) earlier in the batch naming the source
+                            closing = None
+                            for pop, pv in reversed(items[:k]):
+                                if (pop == 0x9F and len(pv) > 2 and _i(pv[1]) in (1, 46)
+                                        and _i(pv[2]) == src):
+                                    closing = _i(pv[1])
+                                    break
+                            if closing == 1:
+                                swing_words += 1
+                                swing_words_with_10 += has10
+                            elif closing == 46:
+                                atk_words += 1
+                                atk_words_with_10 += has10
                     if (op == 0xA3 and len(v) > 4 and _i(v[1]) == 55 and _i(v[2]) == me
                             and _f32(v[4]) > 0.0):
                         prev = items[k - 1] if k > 0 else None
@@ -274,6 +335,13 @@ def section_corpus():
           f"and none of the observer's own {own_hits} hits on others carries one (exposure: the "
           f"PvP tape's 45 accepted attack skills)",
           f"{own_hits_with_10} of {own_hits} -- a real negative, not a missing population")
+    check(swing_words >= 40 and swing_words_with_10 == 0
+          and atk_words >= 15 and atk_words_with_10 == atk_words,
+          f"a damage word at the observer closed by a PLAIN SWING carries no [10] "
+          f"({swing_words_with_10} of {swing_words}); one closed by an ATTACK SKILL carries it "
+          f"every time ({atk_words_with_10} of {atk_words})",
+          f"the other direction of the 92/92 rule, pinned so the sender's 'a swing has no "
+          f"skill to name' rests on the tape and not on reasoning (ENG-11)")
     check(own55 >= CORPUS_OWN_55 and own55_with_42 == 0,
           f"the observer's own 42 rides NONE of its {own55} armour-ignoring words",
           f"{own55_with_42} of {own55} -- so `armour_ignoring_damage`'s player branch stops "

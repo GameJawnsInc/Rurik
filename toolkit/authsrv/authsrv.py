@@ -19345,13 +19345,18 @@ def aura_off(send, state, buff):
 def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, what,
                            declare_max="always", skill_id=None):
     """Damage that ignores armour, on the channel retail uses for it: 0x00A3
-    [55, target, source, -fraction], the target's maximum declared FIRST
-    (3 of 3 on the tape). Kills through the same doors a hit does.
+    [55, target, source, -fraction]. Kills through the same doors a hit does.
 
-    `declare_max="stale"` (DAGGERS-B8) is hit_enemy's PVPMAX rule instead: a
-    BODY's maximum rides only the first word after it moved. RUN-DAGGERS-1's
-    adjacent words say so -- [42, neighbour, 480] sits ahead of the FIRST 55
-    on each of the two bodies and ahead of none of the 13 after it."""
+    THE MAXIMUM (property 42) IS DECLARED ONLY WHEN IT MOVED (DESKWORK-D5 3(a)):
+    the PLAYER branch goes through `declare_player_max`, which sends the 42 only
+    when the current maximum differs from the last one declared -- retail puts
+    it ahead of a damage word at the observer 0 of 3 (armour-ignoring) / 0 of
+    401 (16/17). It used to declare FIRST before every 55 here, "3 of 3 on the
+    tape", but those three were a FOE's maximum ahead of Empathy's word, kept on
+    the body branch. A BODY's rule is `declare_max`: "always" declares each time,
+    "stale" (DAGGERS-B8) is hit_enemy's PVPMAX -- the first word after it moved.
+    RUN-DAGGERS-1's adjacent words say so -- [42, neighbour, 480] sits ahead of
+    the FIRST 55 on each of the two bodies and ahead of none of the 13 after."""
     amount = _whole_points(float(amount))   # DAMAGE-INT
     if amount <= 0.0:
         return 0.0
@@ -19378,8 +19383,13 @@ def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, w
             player_gains_adrenaline(
                 send, state, pools.damage_units(amount / pool), time.time(),
                 conn_id, f"{amount:.0f} armour-ignoring damage taken ({what})")
-        # 3(b): the skill the word belongs to, when the caller knows it (3 of
-        # the corpus's 92 property-10 words precede a 55 at the observer)
+        # 3(b): the skill the word belongs to, when the caller knows it. On a
+        # hex-triggered 55 (Empathy punishing the player's attack) this is
+        # INFERRED from the every-skill-damage rule (skill completions at the
+        # observer carry [10] 35 of 35 -- attack skills 18/18, spells 17/17):
+        # the 3 corpus property-10 words that precede a 55 are all skill 143
+        # LIFE STEALS (a hostile spell), not hex punishments, so the hex case
+        # itself has no direct witness.
         skill_damage_word(send, skill_id, what)
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
              [agents.GV_ARMOR_IGNORING, PLAYER_AGENT_ID, source_id, frac],
@@ -20112,6 +20122,10 @@ def deep_wound_open(send, state, agent_id, conn_id):
              [agents.PROP_HEALTH_MAX, agent_id, int(new_max)],
              f"Deep Wound: maximum health {int(new_max)} on agent {agent_id} "
              f"(-{reduction})")
+        # 3(a): this IS the moved-maximum declaration, so the tracker follows
+        # it -- otherwise the next armour-ignoring word re-declares the same 42
+        # ahead of its damage word, the exact case retail shows 0 of 3 (ENG-1).
+        state["player_max_declared"] = int(new_max)
     else:
         # PVPMAX (F46.10): retail declares ANOTHER agent's moved maximum on
         # the observer's next landed hit (hit_enemy), never in this batch --
@@ -20160,6 +20174,7 @@ def deep_wound_close(send, state, agent_id, conn_id, dead=False):
              [agents.PROP_HEALTH_MAX, agent_id, int(new_max)],
              f"Deep Wound ends: maximum health {int(new_max)} on agent {agent_id} "
              f"(+{reduction})")
+        state["player_max_declared"] = int(new_max)   # 3(a): the tracker follows
     else:
         agent["max_declared_on_hit"] = None       # PVPMAX: the next hit declares it
     print(f"[c{conn_id}] Deep Wound off agent {agent_id}: maximum back to "

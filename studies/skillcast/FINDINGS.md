@@ -1201,27 +1201,9 @@ constraint no source states: **send property 10 immediately before the damage
 property, or the floating number is attributed to nothing.** It also says 18 is
 a third member of the 16/17 damage family (GWCA names 16 `damage` and 17
 `critical` and leaves 18 unnamed; OpenTyria has `DamageModifier1/2` and
-`Value18`), and 56 is the second member of 55's.
-
-**2026-09-22 — on the wire, and shipped (DESKWORK-D5 step 3(b)).** The live
-corpus holds **92** property-10 words, all on `0x009F`, over seven captures,
-and **every one names the OBSERVER as the victim** — `[10, me, skill]` — with
-the very next message a damage word to the observer (16: 82, 17: 7, 55: 3;
-92 of 92). Not one of the observer's own skill hits on a foe carries one, with
-exposure: the PvP tape alone has 45 accepted attack-skill presses by the
-observer, each with its word on the foe and no `[10]` ahead of it. So the
-word is **self-scoped**, like the adrenaline family — retail tells you which
-skill hit *you*, not which of yours hit them. Its skills: spells (143, 179,
-185, 186, 197, 222, 229, 230, 336, 338, 340, 341, 392, 499) and attack skills
-(322, 327). The batch order for a spell onto the observer is `0xA7`, `0xA0`,
-(`0xCF`,) `[10]`, `[16]` — 16 + 10 + 9 of the 92. `GV_SKILL_DAMAGE` had been
-defined in `agents.py` on 2026-08-06 and never sent; `authsrv.skill_damage_word`
-now sends it between the player's own gain and the word wherever a skill's
-damage lands on the player (`body_spell_word`, `land_swing` with a skill,
-`armour_ignoring_damage` when the caller names the skill), and never for the
-player's hits. `--no-skill-damage-word` reverts; `test_skillword.py` locks the
-tape and the sender. What the client draws with it — the number's label — is
-final-confirmation-needs-run.
+`Value18`), and 56 is the second member of 55's. (The 2026-09-22 wire finding
+for property 10 — self-scoped, shipped — is in §16.6, where "what §16 changes
+for a server" lives and where property 10's ordering is already stated.)
 
 **Properties 20 and 21 call the same function, and 21 passes the agent where 20
 passes the target.** At `0x00812B6C` the arguments are `(agent, target, value)`;
@@ -1651,6 +1633,28 @@ numbers where they assert `agent`, and those are usable: AvApi:1256 =
 - The event kinds are the vocabulary to use when talking to ourselves about what
   the client will *do*, since they are the client's own grouping and the wire
   ids are three catalogues' guesses.
+
+**2026-09-22 — on the wire, and shipped (DESKWORK-D5 step 3(b)).** The live
+corpus holds **92** property-10 words, all on `0x009F`, over seven captures,
+and **every one names the OBSERVER as the victim** — `[10, me, skill]` — with
+the very next message a damage word to the observer (16: 82, 17: 7, 55: 3;
+92 of 92). Not one of the observer's own skill hits on a foe carries one, with
+exposure: the PvP tape alone has 45 accepted attack-skill presses by the
+observer, each with its word on the foe and no `[10]` ahead of it. So the
+word is **self-scoped**, like the adrenaline family — retail tells you which
+skill hit *you*, not which of yours hit them. Its skills: spells (143, 179,
+185, 186, 197, 222, 229, 230) and attack skills (322, 327, 336, 338, 340, 341,
+392; 499 has no content row) — 336/338/340/341/392 carry `type_code` 14
+(`_is_attack_skill`) and arrive under an attack-skill announce/close, so they
+are attack skills, not spells. The batch order for a spell onto the observer is
+`0xA7`, `0xA0`, (`0xCF`,) `[10]`, `[16]` — 16 + 10 + 9 of the 92.
+`GV_SKILL_DAMAGE` had been defined in `agents.py` on 2026-08-06 and never sent;
+`authsrv.skill_damage_word` now sends it between the player's own gain and the
+word wherever a skill's damage lands on the player (`body_spell_word`,
+`land_swing` with a skill, `armour_ignoring_damage` when the caller names the
+skill), and never for the player's hits. `--no-skill-damage-word` reverts;
+`test_skillword.py` locks the tape and the sender. What the client draws with
+it — the number's label — is final-confirmation-needs-run.
 
 ## 16.7 Reproducing §16
 

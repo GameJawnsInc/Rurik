@@ -1897,10 +1897,14 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 * **DESKWORK-D1**: the c2s send-site census, SANDBOX-N2's hero kick armed from retail's
   one batch and the add from its ChCliApi wrapper, then retail's unhandled c2s triaged,
   the hero skill toggle, travel and inventory.
-* **DESKWORK-D5**: the combat rules retail's tapes on disk already settle — the adrenaline
-  gate (SKILLS-B1's gate half: LANDED 2026-09-22, skills §34.11), interrupts, property 10
-  and the `[42]`/`[55]` residue, NPC recharge from completion, party-wide shouts, the
-  adrenaline replay, the refusal ids.
+* **DESKWORK-D5**: the combat rules retail's tapes on disk already settle. LANDED
+  2026-09-22: the adrenaline gate (SKILLS-B1's gate half, skills §34.11); property 10
+  and the `[42]` residue (§16.6, self-scoped; `[42]` only when the maximum moved); the
+  adrenaline replay (ANIMREF §19, a second refusal gate named). Still OPEN: interrupts,
+  NPC recharge from completion, party-wide shouts, the refusal ids; 3(d) Mend Condition;
+  3(e) a hero's zero gain; the `[62]` energy word (read, own-party-scoped, not shipped);
+  the second refusal gate's variable; the armed-EMPTY death clear (a one-witness
+  divergence, skills §34.11.4).
 * **DESKWORK-D4**: skill coverage in bulk — labels parsed from the archive's own
   description templates, refereed slot by slot against the client table, served as a
   marked label tier (the owner's yes to the plan's §8 Q3, given by taking the route); then
