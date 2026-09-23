@@ -165,8 +165,13 @@ import vaultpath  # noqa: E402
 # the same 7 declared skips; 194 vaulted). sec.21 gained RECORDER-D1's five
 # checks on the real `Recorder`: a write after close() is dropped and counted,
 # never raised. They need only a directory, so all five are in the bare floor.
+# 2026-09-23: 140 -> 141, MEASURED with `RURIK_VAULT` at an empty directory (141,
+# the same 7 declared skips; 195 vaulted). sec.21's two real-Recorder clock
+# checks read median - min instead of max - min (the flake: a preemption between
+# the two clock reads lifts one row) and gained the control that plants both a
+# preemption and a clock drift. It needs only a directory: bare floor.
 LEDGER = checks.Ledger("separation: the quantity that actually predicts a warp",
-                       floor=140)
+                       floor=141)
 check = checks.adopt(LEDGER)
 
 MOVETAP = "movetap-20260819T171436.jsonl"
@@ -2008,8 +2013,9 @@ def main():
         # adjacent clock reads inside `event()` that a live run makes -- and
         # loads it back through `load_wire_reports`. What it measures is the
         # real thing: `perf_counter` against the system clock, over the real
-        # scheduling jitter between the two calls. No socket, no client, no
-        # server: `Recorder` only needs a directory.
+        # scheduling jitter between the two calls -- which lands on ONE side of
+        # the offsets, row by row (see the clock-term check below). No socket,
+        # no client, no server: `Recorder` only needs a directory.
         sys.path.insert(0, os.path.join(os.path.dirname(HERE), "authsrv"))
         try:
             import authsrv                                   # noqa: E402
@@ -2055,24 +2061,50 @@ def main():
                   f"{len(reps_r)} reports of 200 written; the preamble is "
                   f"`origin` + `flags` today. This half is what would catch a "
                   f"DECODE regression, which the row-count half cannot see")
-            check(d_real["spread"] < 0.001,
-                  f"REALFIX-T1 DEMONSTRATED END TO END: the offset spread over "
-                  f"{d_real['n']} real rows is "
-                  f"{d_real['spread'] * 1e6:.1f} us = "
-                  f"{d_real['spread'] * movesync.RUN_SPEED:.4f} u, against the "
-                  f"{d_pre['spread']:.3f} s / "
+            # THE CLOCK TERM IS THE LOWER HALF OF THE SPREAD; THE UPPER HALF IS
+            # THE SCHEDULER. Until 2026-09-23 the two checks below read
+            # `d_real["spread"]`, max - min, and went red run to run (0.010 s /
+            # 59x, 0.025 s / 14x, 1823.2 us). `event()` reads `perf_counter`
+            # FIRST and `time.time()` after it, a `strftime` between, so a row's
+            # `wall_unix - t` is the offset PLUS whatever elapsed between the
+            # reads, never minus it, and a preemption inside that window lifts
+            # that one row by its length. Over 1,000 runs of this exact loop
+            # (REALFIX.md, T1's 2026-09-23 note): max - median up to 0.50 ms
+            # idle and 79.6 ms with 16 busy processes on 12 cores, always one to
+            # six isolated rows, always UP; median - min 0.48-3.81 us in every
+            # run, idle or loaded. The estimator was bit-identical under four
+            # hash seeds and the file comes from a fresh temp dir: the input
+            # moved, not the arithmetic, and no threshold on max - min holds.
+            # So the operand is median - min: how far the offset the float arm
+            # RETURNS (its median -- what pairs a report) sits above the
+            # least-delayed row. No free parameter, and the side a preemption
+            # cannot reach; the median was chosen to survive exactly this (the
+            # outlier control above). Thresholds UNCHANGED (1 ms, 100x), and
+            # max - min is printed beside it rather than dropped. It does NOT
+            # see a shift confined to a minority of rows (a mid-run clock step);
+            # the control after these two shows what it does see.
+            real_offs = sorted(w_real.unix)
+            clock_term = d_real["offset"] - real_offs[0]
+            check(clock_term < 0.001,
+                  f"REALFIX-T1 DEMONSTRATED END TO END: over {d_real['n']} real "
+                  f"rows the median offset sits {clock_term * 1e6:.1f} us = "
+                  f"{clock_term * movesync.RUN_SPEED:.4f} u above the "
+                  f"least-delayed row, against the {d_pre['spread']:.3f} s / "
                   f"{d_pre['spread'] * movesync.RUN_SPEED:.0f} u the truncated "
                   f"stamp gives -- REALFIX section 2.2's \"< 1 ms (< 0.3 u)\" "
-                  f"clock term, measured rather than assumed",
+                  f"clock term, measured rather than assumed (max - min "
+                  f"{d_real['spread'] * 1e6:.1f} us: the worst row sits "
+                  f"{(real_offs[-1] - d_real['offset']) * 1e6:.1f} us above the "
+                  f"median, a delay between the two reads the median absorbs)",
                   "this is the ONE number the whole clock anchor exists to "
-                  "move, and it is measured on the same two adjacent clock "
-                  "reads a live run makes")
+                  "move, and it is measured on the same two clock reads a live "
+                  "run makes -- on the side of them the scheduler cannot move")
             trunc_real = movesync.offset_detail(
                 movesync.WallStamps(list(w_real), ()))
-            check(trunc_real["spread"] > 100.0 * d_real["spread"],
+            check(trunc_real["spread"] > 100.0 * clock_term,
                   f"and the SAME capture scored on its truncated stamps gives "
                   f"{trunc_real['spread']:.3f} s -- "
-                  f"{trunc_real['spread'] / max(d_real['spread'], 1e-12):.0f}x "
+                  f"{trunc_real['spread'] / max(clock_term, 1e-12):.0f}x "
                   f"worse on the identical rows",
                   "the same file, the two estimators, side by side: this is "
                   "the comparison that says the improvement is the stamp and "
@@ -2081,6 +2113,31 @@ def main():
                   "so its spread is the span rather than the 1.00 s a real run "
                   "reaches; the synthetic fixture above is where the full "
                   "defect shows, and 100x is deliberately far below it")
+            # CONTROL, both directions, on THIS capture's own offsets: an
+            # operand swapped for one that cannot fail is the failure this repo
+            # keeps finding. Plant the worst preemption seen (80 ms, one row):
+            # max - min takes all of it and the clock term stays under 1 ms.
+            # Plant a 3 ms drift of the system clock against `perf_counter`
+            # across the file -- a CLOCK defect, what sec 2.2's term is about:
+            # the clock term goes red.
+            def _term(unix):
+                d = movesync.offset_detail(movesync.WallStamps((), unix))
+                return d["offset"] - min(unix), d["spread"]
+            u_real = list(w_real.unix)
+            spiked = u_real[:]
+            spiked[len(spiked) // 3] += 0.080
+            drifted = [o + 0.003 * i / (len(u_real) - 1)
+                       for i, o in enumerate(u_real)]
+            sp_term, sp_spread = _term(spiked)
+            dr_term, _dr_spread = _term(drifted)
+            check(sp_spread > 0.079 and sp_term < 0.001 and dr_term >= 0.001,
+                  f"CONTROL: an 80 ms preemption planted on one row takes max - "
+                  f"min to {sp_spread * 1e3:.1f} ms and leaves the clock term at "
+                  f"{sp_term * 1e6:.1f} us; a 3 ms clock drift across the file "
+                  f"takes it to {dr_term * 1e3:.3f} ms, red",
+                  "the operand is blind to the scheduler and not to the clock; "
+                  "without the second half this check could not fail, and "
+                  "without the first it is still the flake")
 
             # RECORDER-D1 (studies/recorder/FINDINGS.md): a write that arrives
             # AFTER close() is dropped and counted, never raised. handle()'s
