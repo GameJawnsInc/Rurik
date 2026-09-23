@@ -199,7 +199,12 @@ def static_hints(exe=None):
         from gwpe import PE                                  # noqa: E402
         exe = exe or sendsites.find_exe()[0]
         rows = sendsites.census(PE(exe))
-    except Exception as exc:                                 # noqa: BLE001
+    except (Exception, SystemExit) as exc:                   # noqa: BLE001
+        # SystemExit too: `pinned.find()` REFUSES a vault with no verified
+        # build by raising it (never a wrong path), and on a bare machine that
+        # refusal must become this tool's "no census here" and the test's
+        # declared skip, not a crash with no verdict (the bare-machine defect
+        # class: the suite runs where the vault is, so nothing exercised this).
         return None, f"no send-site census here ({exc})"
     out = defaultdict(list)
     for r in rows:

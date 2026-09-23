@@ -206,8 +206,12 @@ DROPPED_ON_PURPOSE = {
 # first s2c after it with the 0x001E clock skipped / the send wrapper on
 # 38797 from sendsites.py) and what would name it. UNNAMED means exactly that;
 # a name is DESKWORK-D2's product and none is guessed here. Loopback counts are
-# UNHANDLED events, one per connection per opcode, over the 3,107 gamesrv
-# captures on 2026-09-23. Studies: studies/cmsg/FINDINGS.md DESKWORK-D1.
+# UNHANDLED events, one per connection per opcode, over the 1,557 loopback
+# connection logs under vault/captures/gamesrv (1,553 + 4 in hop2/) on
+# 2026-09-23 -- an UNHANDLED row was only logged from about 2026-08-11, so an
+# older log can decode a c2s without one and these counts are FLOORS. (The
+# first cut said "3,107 gamesrv captures": that is the directory's entry count,
+# .jsonl and .raw together.) Studies: studies/cmsg/FINDINGS.md DESKWORK-D1.
     0x0008: "UNNAMED -- header only (2 bytes), once per connection on retail (84 "
             "of 96 live connections; 1,027 loopback connections), mid-session "
             "(p50 46 s in): the NEXT c2s after every 0x00B1 MAP_TRAVEL (10 of "
@@ -255,19 +259,22 @@ DROPPED_ON_PURPOSE = {
             "loopback connection), followed 118 ms later by property updates "
             "0x009F/0x00A3/0x00A4. Wrapper 0x009208B0 on 38797 (CharMsg, zero "
             "direct callers). n=1.",
-    0x0045: "UNNAMED -- [array8 of 256] carrying the SAME 11-byte blob every "
-            "time (5 sends on 3 connections, 7-630 s in; 8 loopback connections), "
-            "nothing following on 2 of 5. Wrapper 0x00920980 (CharMsg, one "
-            "caller, a 264-byte frame). A fixed client-state report, not a "
-            "request; the one caller is what would name it.",
+    0x0045: "UNNAMED -- [array8] of 50 bytes on every send (5 sends on 3 "
+            "connections, 7-630 s in; 8 loopback connections), identical but for "
+            "bytes 14-15 (4 distinct payloads over the 5), nothing following on "
+            "2 of 5. Wrapper 0x00920980 (CharMsg, one caller, a 264-byte frame). "
+            "A client-state report, not a request; the one caller is what would "
+            "name it. (The first cut called it 'the SAME 11-byte blob every "
+            "time'; the D1 fix pass re-read the five payloads.)",
     0x0051: "UNNAMED -- [agent_id, byte] = [3, 0] x5 and [10, 0] x1 in bursts (6 "
             "sends on 2 connections around 40 s and 78 s; 0 loopback), followed "
             "by movement and agent updates (0x00BF, 0x00A7). Wrapper 0x00920E90 "
             "(CharMsg, zero direct callers). Bursts of one low agent id read as a "
             "UI action on a party member; unnamed until a labelled run.",
     0x0063: "UNNAMED -- header only, 3 of 96 connections at ~3 s and 15 s (0 "
-            "loopback), right after 0x0092 MISSION_MASK_REPORT and before the "
-            "first MOVE_SET_HEADING, followed by the world's creates (0x009F, "
+            "loopback), right after 0x0092 MISSION_MASK_REPORT on 2 of 3 (the "
+            "third follows a 0x0009) and before the first MOVE_SET_HEADING, "
+            "followed by the world's creates (0x009F, "
             "0x0020). Wrapper 0x00921950 (CiCommand, zero direct callers) -- the "
             "one c2s in that module. A load-time marker our client never sends; "
             "nothing to answer.",
@@ -313,11 +320,14 @@ DROPPED_ON_PURPOSE = {
             "models, a refusal for a map with no content row. Dropped until "
             "step 7 -- an arm that transferred the client to an unbuilt map "
             "would strand it.",
-    0x004F: "ITEM_MOVE (0 loopback, 4 live on 2 connections) -- [byte, word, "
-            "byte] answered 46 ms later by 0x014B ITEM_CHANGE_LOCATION then "
-            "0x006F AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT (4 of 4 in sequence): an "
-            "item moving between slots, the reply naming it; WHICH field is the "
-            "source slot, the bag and the target is UNVERIFIED. NAMED 2026-09-23 "
+    0x004F: "ITEM_MOVE (1 loopback DECODE on 2026-08-10, before UNHANDLED "
+            "logging; 4 live on 2 connections, 20260917T090355 and "
+            "20260919T103604) -- [byte, word, byte] answered 42-69 ms later by "
+            "0x014B ITEM_CHANGE_LOCATION (4 of 4) with 0x006F "
+            "AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT beside it on 3 of 4: an item "
+            "moving between slots, the reply naming it; fields 2-3 are the "
+            "destination bag and slot (0x014B echoes them 4 of 4), field 1 is "
+            "UNVERIFIED. NAMED 2026-09-23 "
             "(schema/overrides.json GAME_CMSG 79). DESKWORK-D1 step 8 arms it "
             "with a per-slot equip store alongside 0x0030 EQUIP_ITEM; this server "
             "dresses the body once at login and holds no bag model to move "
@@ -900,8 +910,10 @@ def main():
     # The retail census (section 10's subject) is loaded here because the orphan
     # rule reads it too: since 2026-09-23 a row may answer "why is this opcode
     # RETAIL SENDS dropped" as well as "why is this NAMED one dropped".
-    retail = json.load(open(RETAIL_C2S, encoding="utf-8")) \
-        if os.path.exists(RETAIL_C2S) else None
+    retail = None
+    if os.path.exists(RETAIL_C2S):
+        with open(RETAIL_C2S, encoding="utf-8") as _rf:
+            retail = json.load(_rf)
     seen = ({int(k, 16): v for k, v in retail.get("opcodes", {}).items()}
             if retail else {})
 

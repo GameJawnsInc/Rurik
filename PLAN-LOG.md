@@ -28,6 +28,38 @@ move back.
 
 ---
 
+### DESKWORK-D1 (step 3, fix pass) -- 2026-09-23 -- **three triage rows' evidence corrected from the tapes; the loopback denominator was a directory count; the triage test's floor is its core**
+
+Corrects the "DESKWORK-D1 (step 3)" entry below it, after two reviewers re-derived
+every row. The census reproduces exactly (96 / 29 / 13,320 / 57; the 31 / 8 / 18
+split; every wrapper) and the reverse guard reddens on its known-bad arms -- what
+was wrong was evidence TEXT in three rows, re-read from the tapes by this pass:
+**`0x004F` ITEM_MOVE** sits on `20260917T090355 :53310` (three sends) and
+`20260919T103604 :58638` (one), not on the two captures the row cited, which hold
+none; `0x014B` follows 4 of 4 but `0x006F` 3 of 4 (the fourth drew `0x002E` then
+`0x014B [241, 17730, 136, 6]`); fields 2-3 are the DESTINATION bag and slot,
+CORROBORATED by `0x014B`'s own `[_, item, bag, slot]` echoing them 4 of 4, field 1
+UNVERIFIED; and "zero loopback arrivals" was false -- one decode on
+`authsrv-20260810T151946-c1` (t=334.0), from before UNHANDLED logging.
+**`0x0045`** is a 50-byte array8 with 4 distinct payloads over 5 sends (bytes 14-15
+vary), not "the same 11-byte blob". **`0x0063`** follows `0x0092` on 2 of 3. **The
+loopback denominator "3,107 gamesrv captures"** (cited seven times) was the
+directory's entry count, `.jsonl` and `.raw` together; it is 1,557 connection logs
+(1,553 + 4 in `hop2/`), and the per-opcode loopback counts are UNHANDLED events,
+FLOORS, because that row was only logged from about 2026-08-11. `schema/overrides.json`
+GAME_CMSG 79, `test_dispatch.DROPPED_ON_PURPOSE` and the cmsg table now say so.
+**Test hygiene:** `c2striage.static_hints` catches the `SystemExit` `pinned.find()`
+raises on a vault with no verified build, so a bare machine gets the declared skip
+instead of a crash with no verdict; `test_c2striage`'s floor is its vault-free
+core (34 -> 20, measured with `RURIK_VAULT` at an empty directory; 34 still run with
+the vault), its kick pin is `>= 1` (a second live kick is confirming evidence), its
+static check requires the kick/add wrapper PAIR of one build (accepting either kick
+wrapper alone also accepted 38797's `0x0044` wrapper), and its scratch file is a
+`mkstemp`; `test_dispatch` closes the census file it reads. Counts: test_c2striage 34
+(20 vault-free), test_dispatch 54.
+
+---
+
 ### DESKWORK-D1 (step 4) / SANDBOX-N2 -- 2026-09-23 -- **the hero ADD armed as RECONSTRUCTION (c2s 0x001E), the kick's inverse; 0x0018 from the owned set; the load's party size counts heroes**
 
 [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md) §DESKWORK-D1 "The hero add";

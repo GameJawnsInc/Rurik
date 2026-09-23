@@ -282,7 +282,7 @@ remains NOT FOUND.
 
 **CORRECTED 2026-09-23, DESKWORK-D1 step 4 — the ADD is ARMED, as RECONSTRUCTION,
 and it is still NOT FOUND on any wire.** `c2s 0x001E` stays unwitnessed: 0 of 96 live
-game connections and 0 of 3,107 loopback captures carry one (the send-site census and
+game connections and 0 of 1,557 loopback connection logs carry one (the send-site census and
 `c2striage.py`, `studies/cmsg/FINDINGS.md` §DESKWORK-D1). What is READ, statically on
 38797: its send wrapper `0x0091FF00` sits inside ChCliApi `0x0080E250`, which asserts
 `hero < HEROES` at ChCliApi:4446 and `hero != 0` at :4447 and sends only when the flag

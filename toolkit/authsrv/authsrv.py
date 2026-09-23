@@ -10080,8 +10080,9 @@ GAME_CMSG_HERO_KICK = 0x001F
 # SAME gate the kick's twin 0x0080E2A0 (:4459/:4460) passes, and the kick
 # fired on loopback, so the gate is not what has kept 0x001E off our wire.
 # Callers 0x00562FB0 (PtSearch) and 0x00577A3F (UiCtlInstance). NO retail
-# tape (0 of 96 live game connections) and NO loopback capture (0 of 3,107)
-# carries one, so handle_hero_add is RECONSTRUCTION end to end: the payload
+# tape (0 of 96 live game connections) and NO loopback connection log (0 of
+# 1,557, decoded or UNHANDLED) carries one, so handle_hero_add is
+# RECONSTRUCTION end to end: the payload
 # is the hero index by the wrapper's own bounds and the kick's two witnesses.
 GAME_CMSG_HERO_ADD = 0x001E
 # 0x0017 is NOT the unlock. It was named HERO_UNLOCK_TARGET on 2026-08-19 by
@@ -23315,7 +23316,7 @@ def handle_hero_add(values, send, state, conn_id):
 
     RECONSTRUCTION END TO END, and every label below says which kind. No
     retail tape carries a c2s 0x001E (0 of 96 live game connections) and no
-    loopback capture does either (0 of 3,107) -- the send-site census puts its
+    loopback connection log does either (0 of 1,557) -- the send-site census puts its
     wrapper at 0x0091FF00 on 38797 inside ChCliApi 0x0080E250 (asserts
     `hero < HEROES` :4446, `hero != 0` :4447; sent only when the flag word
     0x84D9B0 reads is zero, the SAME gate the kick's twin passes; callers

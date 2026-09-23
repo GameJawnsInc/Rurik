@@ -766,10 +766,10 @@ retail, unhandled, unnamed, and not dropped on purpose (the route estimated ~19)
 | `0x0023` | 1 | 1 | byte, agent_id | `0x0034` | `0x00920030` CharMsg | dropped, n=1 |
 | `0x0041` | 1 | 1 | agent_id, byte | movement | `0x00920800` CharMsg | dropped, n=1 |
 | `0x0044` | 1 | 1 | dword | `0x009F` | `0x009208B0` CharMsg | dropped, n=1 |
-| `0x0045` | 5 | 3 | array8 (one fixed 11-byte blob) | none 2 of 5 | `0x00920980` CharMsg, 1 caller | dropped — a fixed client-state report |
-| **`0x004F`** | 4 | 2 | byte, word, byte | **`0x014B` 3 of 4, `0x006F` 4 of 4 in sequence** | `0x00920DE0` CharMsg | **NAMED `ITEM_MOVE` (medium)**; dropped until step 8 |
+| `0x0045` | 5 | 3 | array8, 50 bytes; 4 distinct over 5 (bytes 14–15 vary) | none 2 of 5 | `0x00920980` CharMsg, 1 caller | dropped — a client-state report |
+| **`0x004F`** | 4 | 2 | byte, word, byte | **`0x014B` 3 of 4 first, 4 of 4 in sequence; `0x006F` beside it 3 of 4** | `0x00920DE0` CharMsg | **NAMED `ITEM_MOVE` (medium)**; dropped until step 8 |
 | `0x0051` | 6 | 2 | agent_id, byte | agent updates | `0x00920E90` CharMsg | dropped — bursts on one low agent id |
-| `0x0063` | 3 | 3 | header only | `0x009F`/`0x0020` | `0x00921950` CiCommand | dropped — a load-time marker our client never sends |
+| `0x0063` | 3 | 3 | header only | `0x009F`/`0x0020` | `0x00921950` CiCommand | dropped — a load-time marker (after `0x0092` on 2 of 3) our client never sends |
 | `0x0085` | 2 | 2 | word | `0x015C` 2 of 2 in sequence | `0x0084C860` ItCliMsg | dropped — PvP equipment panel, owner's want first |
 | `0x0086` | 6 | 2 | word, word, array16, 3 bytes | `0x015D` in sequence | `0x0084C890` | dropped — the pair's other half |
 | `0x0089` | 5 | 5 | header only | load burst | `0x008526E0` | dropped — the 5 character-creation connections |
@@ -778,9 +778,14 @@ retail, unhandled, unnamed, and not dropped on purpose (the route estimated ~19)
 | **`0x00B1`** | 10 | 10 | word, byte, word, byte, byte | **`0x01D9` 9 of 10, then `0x01A5`, `0x0099`** | `0x0085C280`, 0 direct callers | **NAMED `MAP_TRAVEL` (medium)**; dropped until step 7 |
 
 Loopback counts for the same opcodes (UNHANDLED events, one per connection per
-opcode, 3,107 gamesrv captures): `0x0008` 1,027, `0x000B` 1,395, `0x000C` 76,
-`0x000D` 1,384, `0x0023` 2, `0x0044` 1, `0x0045` 8; the other eleven our client has
-never sent. So four of the eighteen had been falling off the dispatch chain on
+opcode, over the 1,557 loopback connection logs under `vault/captures/gamesrv` —
+1,553 plus 4 in `hop2/`; "3,107 gamesrv captures" in the first cut was the
+directory's entry count, `.jsonl` and `.raw` together): `0x0008` 1,027, `0x000B`
+1,395, `0x000C` 76, `0x000D` 1,384, `0x0023` 2, `0x0044` 1, `0x0045` 8. These are
+FLOORS — an UNHANDLED row was only logged from about 2026-08-11, so an older log can
+decode a c2s without one, which is how `0x004F` has ONE loopback decode (2026-08-10)
+and zero UNHANDLED rows. The other ten our client has never sent. So four of the
+eighteen had been falling off the dispatch chain on
 nearly every loopback connection for weeks, unremarked — the class the reverse
 guard exists for.
 
@@ -793,8 +798,16 @@ hero KICK answers row `0x01C3` then size, so the hero ADD below mirrors the
 henchman, not the kick); `0x00B1` MAP_TRAVEL — `[map_id, 0, 0, 0, 1]` answered by
 `0x01D9 [2, 1, '']` then the transfer pair `0x01A5`/`0x0099`, 10 of 10 in sequence,
 followed by c2s `0x0008` every time; `0x004F` ITEM_MOVE — `[byte, word, byte]`
-answered by `0x014B` ITEM_CHANGE_LOCATION then `0x006F`, 4 of 4, with WHICH field is
-the source slot, the bag and the target UNVERIFIED. The route's "one caller
+answered by `0x014B` ITEM_CHANGE_LOCATION (4 of 4) with `0x006F` beside it on 3 of
+4, on `20260917T090355 :53310` (three sends) and `20260919T103604 :58638` (one);
+fields 2–3 are the DESTINATION bag and slot — `0x014B`'s own reply `[_, item, bag,
+slot]` echoes them 4 of 4 (`[4, 2, 1]` → `[1, 213, 2, 1]`, `[1, 136, 6]` → `[241,
+17730, 136, 6]`) — CORROBORATED from the reply; field 1 (4, 6, 5, 1) is UNVERIFIED.
+**CORRECTED in the D1 fix pass (2026-09-23):** the first cut of this row cited
+`20260913T210901` and `20260914T005758`, which hold no `0x004F`, said `0x006F`
+followed 4 of 4, and claimed zero loopback arrivals — there is ONE loopback decode
+(`authsrv-20260810T151946-c1`, t=334.0, `[0, 4, 1]`), from before UNHANDLED logging.
+The route's "one caller
 `0x004A791F`" for the travel wrapper is not what the census reads — `0x0085C280` has
 NO direct caller on 38797 (reached through a pointer); the survey text stays
 unverified there. The fifteen others are UNNAMED on purpose: a name is DESKWORK-D2's
@@ -827,8 +840,9 @@ the file and over the live census.
 
 **Two nulls first, both measured.** No retail tape carries a c2s `0x001E` — 0 of 96
 live game connections (`c2striage.py`, the 57-opcode census above) — and no loopback
-capture does either: 0 of 3,107 gamesrv captures hold a decoded or unhandled
-`GAME_CMSG` 30 (the kick's `0x001F` is in one). Our own client has never sent the add
+connection log does either: 0 of 1,557 (`vault/captures/gamesrv`, 1,553 plus 4 in
+`hop2/`) hold a decoded or unhandled `GAME_CMSG` 30 (the kick's `0x001F` is in one;
+"3,107" in the first cut was the directory's entry count). Our own client has never sent the add
 to our server, so unlike the kick there is no loopback witness to lean on; the whole
 arm is RECONSTRUCTION and every message in it is labelled below.
 

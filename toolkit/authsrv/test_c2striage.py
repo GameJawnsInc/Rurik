@@ -32,8 +32,12 @@ WHAT THIS PINS.
   * §6 STATIC hints: on a machine with the pinned client the send-site census
     joins -- 0x001F's wrapper is 0x0091FF30 on 38797 -- else a skip.
 
-Floor 34, from the green run of 2026-09-23 (with the vault and the pinned
-client present; §2, §3's live half, §4's live half and §6 skip without them).
+Floor 20 -- the MANDATORY CORE, measured on 2026-09-23 with RURIK_VAULT pointed
+at an empty directory (§1, §3's file half, §4's file half, §5: the checks that
+need no vault and no client). With the vault and the pinned client present the
+same run executes 34; §2, §3's live half, §4's live half and §6 declare skips
+without them. The first cut set the floor at 34 and so failed a vault-free run
+by construction (checks.py: the floor is the core, not the fullest run).
 """
 import contextlib
 import io
@@ -52,7 +56,7 @@ import c2striage                                             # noqa: E402
 import livewire                                              # noqa: E402
 import test_dispatch as dispatchmod                          # noqa: E402
 
-led = checks.Ledger("retail c2s triage (DESKWORK-D1 step 3)", floor=34)
+led = checks.Ledger("retail c2s triage (DESKWORK-D1 step 3)", floor=20)
 
 # ---- §1 the walk, on a synthetic stream -------------------------------------
 # t, dir, opcode, values -- sorted by (t, c2s first on a tie) like livewire's.
@@ -145,8 +149,12 @@ if livewire.live_captures():
            "TAPE ANCHOR: MAP_TRAVEL 0x00B1 answers 0x01D9 first on >= 9 of 10",
            f"{None if trv is None else dict(trv['first_non_tick'])}")
     kick = live_rows.get(0x001F)
-    led.ok(kick is not None and kick["count"] == 1
-           and kick["first_non_tick"] != {0x0075: 1},
+    # `>= 1`, not `== 1`: a second live kick is confirming evidence and must
+    # not redden a floor (the corpus counts redden on confirming evidence
+    # otherwise); what is pinned is that the one witness's first non-clock
+    # s2c is the ambient 0x0029, so the column stays a correlation.
+    led.ok(kick is not None and kick["count"] >= 1
+           and kick["first_non_tick"].get(0x0029, 0) >= 1,
            "and the kick's first non-clock s2c is NOT its 0x0075 (an outpost "
            "0x0029 lands at 21 ms, the batch at 42 ms) -- the column is a "
            "CORRELATION, which is why test_herokick pins the batch by bytes",
@@ -253,8 +261,8 @@ try:
 finally:
     os.rmdir(empty)
 # A source with no locatable game chain refuses too.
-nochain = os.path.join(tempfile.gettempdir(), "c2striage-nochain.py")
-with open(nochain, "w", encoding="utf-8") as f:
+_fd, nochain = tempfile.mkstemp(prefix="c2striage-nochain-", suffix=".py")
+with os.fdopen(_fd, "w", encoding="utf-8") as f:
     f.write("def f():\n    pass\n")
 try:
     led.ok(c2striage.handled_opcodes(nochain) is None,
@@ -269,11 +277,18 @@ if hints is None:
     led.skip("§6 static hints", where)
 else:
     rows_1f = hints.get(0x001F, [])
-    led.ok(any(w == 0x0091FF30 for w, _m, _c, _l in rows_1f)
-           or any(w == 0x009208B0 for w, _m, _c, _l in rows_1f),
-           "the send-site census joins: 0x001F's wrapper is 0x0091FF30 (38797) "
-           "or 0x009208B0 (38888)",
-           f"{where}: {[(hex(w), m, c, l) for w, m, c, l in rows_1f]}")
+    rows_1e = hints.get(0x001E, [])
+    # The kick/add wrapper PAIR per build -- (0x0091FF30, 0x0091FF00) on 38797,
+    # (0x009208B0, 0x00920880) on 38888 -- must match as a pair: accepting
+    # either kick wrapper alone would also accept 38797's 0x0044 wrapper
+    # (0x009208B0 there), which is the trap a per-opcode `or` sets.
+    PAIRS = {(0x0091FF30, 0x0091FF00), (0x009208B0, 0x00920880)}
+    led.ok(any((w1f, w1e) in PAIRS
+               for w1f, _m, _c, _l in rows_1f for w1e, _m2, _c2, _l2 in rows_1e),
+           "the send-site census joins: 0x001F/0x001E's wrappers are one build's "
+           "pair -- 0x0091FF30/0x0091FF00 (38797) or 0x009208B0/0x00920880 (38888)",
+           f"{where}: 1F {[hex(w) for w, m, c, l in rows_1f]}, "
+           f"1E {[hex(w) for w, m, c, l in rows_1e]}")
     led.ok(0x000D not in hints and 0x0009 in hints,
            "and it says NO game-channel send site for 0x000D while 0x0009 has "
            "one -- the census does not invent a wrapper",
