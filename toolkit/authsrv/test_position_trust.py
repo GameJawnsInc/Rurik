@@ -317,6 +317,9 @@ def fresh(pos=ANCHOR, plane=0, seen=1000.0):
     return {"pos": pos, "plane": plane, "pos_seen": seen}
 
 
+_PARSED_ARMS = {}   # (path, mtime_ns, size) -> authsrv.py's syntax tree; see receive_arm
+
+
 def receive_arm(opcode_name, params):
     """The SHIPPED body of one `elif opcode == NAME:` arm, as a callable.
 
@@ -338,8 +341,22 @@ def receive_arm(opcode_name, params):
 
     `params` names the arm's free variables in call order: the heading arm needs
     (values, state, rec, send) and the stop arm needs `conn_id` too.
+
+    THE PARSE IS CACHED PER PROCESS, keyed on the file's path, mtime and size, so
+    an edit still re-extracts. `ast.parse` of authsrv.py takes ~7 s on this
+    machine, and test_kbdsync stamps absolute times (`fence_shut_at`) into a state
+    BEFORE drive_heading calls this: re-parsing on every call put the parse inside
+    FENCE_LATCH_MAX_AGE's 8 s window, and under load the latch read as expired
+    (a neighbour printed shut_for 12.093 s; 2026-09-23, DESKWORK merges).
     """
-    tree = ast.parse(open(authsrv.__file__, encoding="utf-8").read())
+    path = authsrv.__file__
+    st = os.stat(path)
+    key = (path, st.st_mtime_ns, st.st_size)
+    tree = _PARSED_ARMS.get(key)
+    if tree is None:
+        tree = ast.parse(open(path, encoding="utf-8").read())
+        _PARSED_ARMS.clear()
+        _PARSED_ARMS[key] = tree
     node = None
     for n in ast.walk(tree):
         if (isinstance(n, ast.If) and isinstance(n.test, ast.Compare)

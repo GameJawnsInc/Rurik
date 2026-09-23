@@ -41,11 +41,16 @@ import math                 # noqa: E402
 import authsrv              # noqa: E402
 import checks               # noqa: E402
 # The arm extractor is test_position_trust's and is IMPORTED rather than
-# copied: it re-parses authsrv.py on every call and executes the server's own
-# bytes, and two copies of a subtle extractor drifting apart is exactly the
-# failure this repo keeps recording. Importing is safe -- that file guards its
-# main() behind __name__.
+# copied: it re-reads authsrv.py (a parse cached per process on the file's mtime
+# and size) and executes the server's own bytes, and two copies of a subtle
+# extractor drifting apart is exactly the failure this repo keeps recording.
+# Importing is safe -- that file guards its main() behind __name__.
 from test_position_trust import receive_arm, Sent, FakeRec   # noqa: E402
+
+# Parse once HERE, before any check stamps an absolute time into a state: the
+# fence checks set fence_shut_at and then call drive_heading, and a ~7 s parse
+# inside that span read as an 8 s latch expiring (2026-09-23).
+receive_arm("GAME_CMSG_TURN_TO_DIRECTION", ("values", "state", "rec", "send", "conn_id"))
 
 # Floor read off the first green run of this file, per CLAUDE.md -- never
 # guessed from a head-count, which this arc has got wrong three times.
