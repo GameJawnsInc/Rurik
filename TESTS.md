@@ -6807,6 +6807,28 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   wrong (see `studies/skills` §37.5 for the session where exactly that shape of
   null nearly shipped from a different cause)
   (was 82 of 98 before §11)),
+  `toolkit/authsrv/test_adrenreplay.py` (**2026-09-22, DESKWORK-D5 step 6 — the per-bar
+  adrenaline simulation animref §19 asked for, scored press by press against retail's
+  accept / refuse.** `adrenreplay.py` replays the client's own slot rules (skills §26.2:
+  skip a recharging slot, skip an empty or zero-cost one, add then cap at the cost;
+  `test_adrenwire` §9: a spend zeroes the used skill and drains every other occupied slot
+  25) over BOTH directions of every live connection through `livewire.decode_conn`, with
+  no free parameter. §1 is bare-machine: the arithmetic rule by rule, a known-bad arm per
+  switch (cap off overfills, drain off leaves the neighbour, `drain_at e3` defers the
+  strike). §2 needs the vault (declared skip without it) and decodes the corpus ONCE for
+  every arm: the PvP tape's press census is animref §19's to the press (382 22/20, 384
+  14/13, 385 8/8 — EXACT, a tape does not grow); P2 — every accepted adrenal press found its
+  slot full (45 of 45, `accept_DISAGREE == 0`); P1 SPLITS — of the 39 reason-1960 refusals
+  19 find the slot short and 20 find it EXACTLY at cost (EXACT), every disagreement at
+  `held == cost` (the second gate's shape, named, not fitted); P3 — the two reason-less 384
+  declines of skills §38.8, both at a full slot; and the five one-bit rivals (drain at the
+  E3, at both, two strikes, the landing gain unbooked or booked to the landing skill alone)
+  each break accepted presses, so the scoring can fail for the reason it claims. §3 feeds
+  `pools.AdrenalinePool` the same events and finds it holding the replay's number at all 85
+  presses on the tape (so `refuse_press` agrees with retail on every accept and 19 of 39
+  refusals, and would accept the twenty — measured on the book, not its docstring), with a
+  two-strike replay as the arm that parts from it. 18 checks, floor 9 (the bare-machine
+  core). Read-only on the vault),
   `toolkit/authsrv/test_adrenwire.py` (**2026-09-22, SKILLS-B1's gate (DESKWORK-D5 step 1, skills §34.11): §12 grows six checks read off `adrenjoin.by_connection()`, a second walk of the corpus with its own counters that must first reproduce `scan()`'s split (46/49, dark family 0/0/0) — GATE B REFUTED (≥ 4 dark connections whose 0x00B7 primary or secondary is Warrior, ≥ 163 landed hits, 0 of the family, a primary at level 1 AND a secondary at level 20 among them, 0x00B7 agreeing with the 0x0059 nibble on every connection carrying both); THE THIRD RIVAL REFUTED (≥ 14 dark fighting connections with an adrenal skill in the account or character library, ≥ 2 in the CHARACTER library itself, 0 gains); the dark-to-armed TRANSITION pinned UNOBSERVED (0 mid-connection flips, 0 hits before the observer's first bar, 0 family messages while dark); ≥ 11 player deaths on dark connections with 0 clears; and OUR SENDER through `hit_enemy` — the dark bar `[346, 1]` sends no 207 with the damage word asserted present, `--no-adren-bar-gate` sends it, an armed bar sends it. 77 → 83 checks, floor 10 unchanged (bare-machine core).** **2026-09-19, SKILLS-AD shipped (skills §53.6): `adrenjoin.is_damage_to` now files a NEGATIVE property-55 word at the observer as a damage row (a positive one is the steal's heal), so §12's armed population is 93 rows, 93 granted, round 93 of 93 — RB's three life steals join at 9 = round(41/480); the ZERO GRANT check's message no longer calls our silence a divergence; 77 checks, floor 10 unchanged.** **2026-09-17, SKILLS-AD (skills §53): red on `main` from two tapes made to be HIT (`20260916T213125` RB, `20260917T090355` RB2), located by a per-tape scan — the corpus before them reproduces 4b to the digit. 4b's four shape claims now read the corpus WITHOUT those two tapes, and a new check pins each tape's `0x00CF` multiset whole (seven 0s on RB; 30 ×3, 34, 60, 70 and not one 25 on RB2), so a third such tape reddens and gets named. §12: a gain of 0 is a message that ARRIVED (`is not None`, not truthiness — 83/90 was the seven zero grants filed as ungranted); THE ZERO GRANT (the seven +0.0 damage words and the seven 0-unit gains are the same rows); integrality per row against the row's OWN property 42, over four maxima, the original eleven numerators kept as a subset; THE DENOMINATOR IS THE CURRENT MAXIMUM (11 of 11, the points/4.8 rival 0 of 11); NO CAP at 25 (six single damage words); and the family check is now ROUND ALONE — ceil's interval is empty, round's is [1.0, 1.0054) inside the old outer bound — with zero-damage rows skipped in the solve (the ZeroDivisionError). 73 → 77 checks, floor 10 unchanged (bare-machine core).** **2026-09-14 (night), SLICE-H17b: §3's off-grid census reads six distinct costs over 37 rows on the served table (the 38888 overrides moved Final Thrust's 240 and Gash's 140 onto the grid); the floor follows the measurement.** **adrenaline IS on the wire, and this is the
   file that stops us forgetting again**. Until 2026-08-21 `pools.py`'s header read
   *"ADRENALINE IS NOT ON THE WIRE AT ALL, and that is a finding rather than a gap"* and

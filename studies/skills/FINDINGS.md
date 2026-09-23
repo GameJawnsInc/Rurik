@@ -5043,7 +5043,12 @@ against a census, not against whatever the sender happened to do first.
 - **The reason ids for the rest of the 1934–1993 block.** They live server-side
   and are not derivable from a client that only renders what it is handed.
 - **Two silent skill-384 declines** (pool exactly == cost, no recharge window)
-  may be a fourth refusal class. Recorded, not fitted.
+  may be a fourth refusal class. Recorded, not fitted. **2026-09-22:** the
+  committed replay (`adrenreplay.py`, animref §19's note) finds them in
+  company — 20 of the 39 reason-1960 refusals also arrive with the client-rule
+  slot exactly at cost, while all 45 accepted presses do too; so the "exactly
+  == cost" declines are not a fourth class of two but a second gate of
+  twenty-two, unidentified.
 - **String ids 1928–1933** are RC4-encrypted archive records and unreadable.
 
 ## 37. SKILLS-R2 — the "~10 second" re-animation is a 1-second loop that never stops

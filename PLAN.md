@@ -2187,5 +2187,7 @@ the log alone.
   §7.4–7.5): 3 of the 34 CHANGED screens have been read and named; `0x0191` has no
   usable run.
 * **ANIMREF's desk queue** ([studies/animref/FINDINGS.md](studies/animref/FINDINGS.md)):
-  §19's per-bar adrenaline simulation with cross-drain; §15's movement-start gate;
-  §16's visual ids are wired and their appearance is the owner's verdict to give.
+  §19's second refusal gate — 20 of 39 reason-1960 refusals arrive with the client-rule
+  slot exactly at cost (`adrenreplay.py`, 2026-09-22; the simulation is built, the
+  variable is not found); §15's movement-start gate; §16's visual ids are wired and
+  their appearance is the owner's verdict to give.

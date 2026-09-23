@@ -73,8 +73,14 @@ BOW_TEMPLATE = 1687            # "%player% bows." -- id measured, text ArenaNet'
 # 1960 IS OBSERVED, 39 of 39. Every channel-7 line in the corpus that is not
 # the single target-0 case carries coded word 0x8A8, which is exactly
 # `codedstr.encode_id(1960)`, and 1960 resolves to the adrenaline refusal.
-# Replayed against a pool model with no free parameter it lands on 39 of 39
-# pool-short declines and 0 of 4 others.
+# THE REPLAY SENTENCE THAT STOOD HERE -- "replayed against a pool model with
+# no free parameter it lands on 39 of 39 pool-short declines and 0 of 4
+# others" -- WAS SCORED ON THE DECLINES ALONE, which a model that calls every
+# slot short also passes, and its model was never committed. The committed
+# replay (`adrenreplay.py`, 2026-09-22, the client's own rules, scored on
+# BOTH answers) says: every accepted press full, 45 of 45; the 1960 refusals
+# 19 of 39 at a short slot and 20 at a FULL one -- a second gate behind this
+# same reason string (animref FINDINGS 19, its 2026-09-22 note).
 REFUSE_NOT_ENOUGH_ADRENALINE = 1960
 # 1961 IS A RECONSTRUCTION AND MUST NOT BE PROMOTED WITHOUT A RUN. The TEXT is
 # observed -- record 937 of file 1, immediately adjacent to 1960's record 936 --

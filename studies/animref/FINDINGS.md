@@ -875,6 +875,50 @@ our own harness presses, and would address 1 of 43 refusals. Recording that
 is the whole return here — the item's premise was wrong, and building it
 first would have hidden that.
 
+**2026-09-22 — the charge gate is OBSERVED, and the per-bar simulation this
+section asked for was built and splits the refusals (DESKWORK-D5 step 6).**
+Two things happened after this was written. **(1)** skills §38 (2026-08-22)
+read the refusal's reason off the wire: every one of the 39 channel-7 lines
+behind these refusals carries string id **1960**, which the owner's archive
+resolves to the adrenaline refusal and which the 2026-08-22 loopback run drew
+on screen as the expected sentence (skills §38.2; `chatdefs.py`,
+`REFUSE_NOT_ENOUGH_ADRENALINE`). So "the refusals are a charge gate" is no
+longer RECONSTRUCTION from a median: retail *says* it is adrenaline, 39 of 39.
+**(2)** The "per-bar simulation with cross-drain" is
+`toolkit/authsrv/adrenreplay.py`, pinned by `test_adrenreplay.py`: the
+client's own charging rules (skills §26.2 — skip a recharging slot, skip an
+empty or zero-cost one, add then cap at the skill's cost) and its spend rule
+(`test_adrenwire` §9 — the used skill to zero, every other occupied slot
+loses 25), replayed over both directions of every live connection with no
+free parameter, and scored press by press against E4/E2. It reproduces this
+section's census to the press (382 22/20, 384 14/13, 385 8/8; 86 adrenal
+presses, all on `20260817T231139`) and finds:
+
+- **P2 — every accepted adrenal press found its replayed slot at cost: 45 of
+  45.** OBSERVED.
+- **P1 — of the 39 reason-1960 refusals, 19 found the slot short and 20 found
+  it EXACTLY AT COST** — the same value every accepted press carries. The
+  replayed pool therefore cannot be what separates those twenty, and they are
+  **a second gate behind the same reason string**, named and not fitted: the
+  five one-bit rivals to the arithmetic (drain at the 0x00E3 completion
+  instead of the 0x00D2; at both; a two-strike drain; the landing hit's gain
+  unbooked; booked to the landing skill alone) each explain more refusals and
+  each breaks accepted presses (6 / 12 / 12 / 17 / 12). Neither the time
+  since the observer's last completion, activation, spend, gain or refusal,
+  nor a spent skill still in flight, nor the press opcode or its target
+  separates the 20 from the 44 accepted presses at the same full slot. The
+  two reason-less 384 declines skills §38.8 recorded sit at a full slot too.
+  What the second gate is has no desk answer in this corpus.
+- **Ours.** `pools.AdrenalinePool` fed the same events holds the replay's
+  number at every press (`test_adrenreplay` §3), so `refuse_press` agrees with
+  retail on every accepted press and on 19 of the 39 refusals, and would
+  ACCEPT the twenty. Nothing ships for that: a rule with an unidentified
+  variable is not a rule.
+
+`chatdefs.py`'s earlier "39 of 39 pool-short declines" was scored on the
+declines alone, which a model that calls every slot short also passes; the
+comment now says so and points here.
+
 ## 20. Props 22/23/28 are NOT a per-skill id space — R8's method does not port
 
 **2026-08-31.** The queue carried these as "the id-space method may port,
