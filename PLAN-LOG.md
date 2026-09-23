@@ -28,6 +28,112 @@ move back.
 
 ---
 
+### DESKWORK-D5 (fix pass, steps 2 and 4) -- 2026-09-23 -- **the interrupt hooked where a body is the victim and gated on a RUNNING chain; rechargeprobe's P2 and P3 recorded FAILED as written and re-stated in the open; the vacuous split check replaced; the cancel class and the counts made honest**
+
+Corrects the two entries below it (DESKWORK-D5 step 2 and step 4, same day), after two
+reviewers -- an evidence refuter and an engineering reviewer -- re-derived every claim from
+the tapes, the vault exes and the code (`0480c206` step 2, `30f74699` step 4). **What held:**
+the stop-property denominators, both witnessed interrupt batches byte for byte, Healing
+Signet's 4 -> 24 with the E6 at +24.007 s, the six completion-anchored spells to the digit,
+every caster behind them NPC-class, and the "skill, not spell" reading of Disrupting Chop
+(the client's own description of 340 says the same as GWW). **What did not, and is corrected:**
+
+**Step 2.** (1) `land_swing` hands every non-player target to `land_swing_on_body`, which had
+no `interrupt_body` call -- so a hostile's 340 on a hero or henchman mid-cast, and a party
+body's on a hostile, interrupted nothing; the step-2 entry's "hooked into `land_swing`"
+covered the player branch only, and its owner runsheet named a path that could not fire.
+Hooked after the words, RECONSTRUCTION like every body victim; `test_interrupt` (o) drives
+it. (2) `interrupt_player`'s swing branch read `state["attacking"]` alone -- the TARGET, not a
+running chain -- and so staggered the player in a cast's aftercast (against its own
+docstring), while walking in, and out of reach. `_player_chain_running()` gates it now: no
+pending cast short of its E3 (the press's own `chain_live` predicate), no `approach`, target
+in reach. **The negative control, read for this pass:** three 340 / 230 hits landed inside
+the observer's 0.75 s aftercast (E5 0.26-0.45 s before, E3 0.30-0.48 s after -- 340 at
+`20260916T213125` t=459.419; 230 at `20260917T090355` t=378.100 and 384.106) and none
+carries a `[35]`, 3 of 3. A hit on a chain walking in or out of reach is UNOBSERVED. (3) The
+`hit_enemy` and `land_player_spell_shot` hooks had no test (either removed left the suite
+green); (p) and (q) drive both. (4) `interruptjoin`'s re-stated P2 "the run opens with `[8,
+victim, 0]`" was true by construction (the run is sliced from that message) -- the conjunct
+now reads the batch: the FIRST interrupt-family message at the victim is the hold release;
+`p5` ended in `or True` and is the registered predicate now; `--batches` is honoured. (5)
+**Withdrawn:** the step-2 entry's reading of the cancel class as "the player's own release
+... so most are retargets and moves". 209 of the 283 stops are addressed to agents OTHER than
+the observer (`[3]` 60 / 177, `[49]` 3 / 9, `[59]` 11 / 23 on the observer / on another),
+whose c2s the reader cannot see; the class is "no `[35]` and no `[63]` in the batch", and of
+the observer's own 74 only 2 sit within 0.5 s of a c2s `0x0028`. (6) "`interrupt_player`
+OBSERVED n=2" (PLAN.md 8.1, world.toml) overstated two witnesses of two different shapes:
+**n=1 per shape**. (7) `skill_effect.340`'s provenance quoted the wiki sentence whole; it
+quotes the six load-bearing words, and its stale "the row's own damage is the strike's +20"
+is gone. (8) `interrupt_player` / `interrupt_body` take `mode=None`, D6's explicit entry
+point for Dazed. (9) Commit hygiene: `101e0478` carried a `scale_means` on 340 that
+`de170b3a` removed (it landed NO_SLOT in `test_skilldesc`), so `101e0478` was not a tested
+milestone and a step-2 fix travelled in the step-4 commit, whose message said
+"`test_skilldesc` fixed" -- it is not this branch's to fix: its 2 reds (nothing 764 < 800,
+spells-nothing 239 < 270) are not in `05ed8d67`'s code (the orchestrator ran it green, 85
+checks, at the D4 merge). They appeared when DESKWORK-D4 step 4's label overlay
+`vault/content/skill_labels.toml` was written into the SHARED vault ahead of the code that
+reads it, and `test_skilldesc`'s census counts every `skill_effect` row the vault loads; they
+clear when that route lands (orchestrator's correction, 2026-09-23).
+
+**Step 4.** (1) **Withdrawn:** the step-4 entry's "P3 -- the split works". P3 as registered
+("pooled, at least one sub-recharge gap; split, none; the arms must DIFFER") FAILED: both arms
+give `{229: [4.497, 3.251]}` -- the split half fails and the pooled half holds only trivially
+on the same two -- and the arms differ by six pairs (160 56 -> 60, 222 10 -> 12) with no
+minimum moved. Both 229 casters were created ONCE (agent 85 on `20260917T090355`, agent 117
+on `20260917T224104`), so the survey's recycled-id explanation of 229 is REFUTED: its short
+gaps are on singly-created bodies, the named divergence stands. The test's "the split is not
+a no-op" check compared `recycled_creates` across the arms -- a counter the split does not
+touch -- and stayed green with the split disabled; replaced by the route's acceptance (c), a
+SYNTHETIC re-created id through `gaps_of` (one id, a cast of 186, its completion, a remove, a
+re-create, a second 186 1 s later: pooled reads a 2.5 s cycle with a 1.0 s completion-to-next
+against a 7 s recharge, split reads no pair), and by the corpus pair count differing across
+the arms (227 vs 233); the mutation reddens 2 checks. (2) P2 as registered ("EVERY separable
+skill at the floor") FAILED on 5 of 11 -- 229 start-like, 160 / 197 / 220 / 1097 above both
+anchors -- and `score()` judged a "majority" rule no prediction named, unannounced. The
+re-statement is disclosed in the docstring the way `interruptjoin`'s was, `p2_as_written` is
+printed beside it, and `test_recharge` asserts it FALSE (red the day every skill lines up).
+**The anchor conclusion stands** -- six of seven discriminating skills on completion -- and
+**four of the six (179, 185, 186, 286) come from one capture, `20260817T231139`**; 222 and
+230 from two others each. (3) The route named monsterai FINDINGS' "Recharge from cast start
+... No live NPC recharge cycle exists" line for correction and the step-4 entry reported the
+three lines corrected; section 3 item 3 had been corrected instead. Both carry the note now,
+as do that file's "No energy, no interrupt, no aftercast" (the interrupt half) and
+`studies/enemy/PLAN.md`'s copy. (4) "47 recharges moved 38797 -> 38888" was uncounted: **49**
+of the 3,443 shared ids differ in recharge (11 in activation), and none of the seven
+discriminating skills moves on any of the five vault builds. (5) Labels: "STARTED NO
+RECHARGE" for an uncompleted pair is UNVERIFIED (all 11 have next-cast gaps of 7 s or more);
+"an interrupted or aborted cast still holds the slot" is RECONSTRUCTION. (6) `test_recharge`'s
+skill-name comments were wrong and are gone. (7) "Attack skills UNCHANGED" holds for a table
+activation of 0; one carrying an activation gets it added. (8) The flag's "~20%%" printed the
+doubled sign.
+
+**Tests:** `test_interrupt.py` 38 checks (section 1 28 fixture-less, floor 28; was 30 / 21);
+`test_recharge.py` 19 checks (section 1 10, floor 10; was 15 / 8); lints srclint 26, checks
+17, citelint 50, identlint 28, provlint 19 green after each commit. **Declined:** nothing --
+every major and minor held on re-derivation; of the nits, only the wording of R2's fourth
+aftercast hit (t=406.040 was a hit with no cast and no chain for 100 s -- nothing to
+interrupt, consistent either way, not an aftercast) differs from the finding. **Owner
+runsheet, corrected:** (1) a hostile carrying Disrupting Chop (340) landing on a HERO
+mid-cast -- the path now exists -- watch the hero's skill monitor go to full recharge and the
+stagger draw (`interrupt_body` is RECONSTRUCTION); (2) the purple stagger at the PLAYER on a
+hostile 340 / 230 interrupting the player's own cast / chain (the wire is OBSERVED; what the
+client draws with `[35]` is final-confirmation-needs-run). Both against our own server;
+`--no-interrupts` is the A/B.
+
+---
+
+### ✅ DESKWORK-D5 step 4, NPC recharge from completion — 2026-09-23 — **the negative "no NPC in the corpus casts twice" fell on the 36-capture corpus, and `rechargeprobe.py` reads the cadence: six spells re-cast at recharge + activation from the start — the recharge runs from the cast's COMPLETION, not its start. The server now arms `skill_ready = now + activation + recharge` at both NPC cast sites behind `--no-npc-recharge-from-completion`; the three "casts twice" lines corrected. 229 (Lightning Orb) is a named divergence, not fitted away** (`toolkit/authsrv/rechargeprobe.py`; `test_recharge.py`; [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md) §3 item 3's note; [studies/isle/PLAN.md](studies/isle/PLAN.md)'s aftercast note; `authsrv.py`'s `pick_skill` comment)
+
+**Desk work, no client launched.** **The probe first, predictions stated** (`rechargeprobe.py`, P1–P4): every `0x00A0 [60, caster, target, skill]` by an agent other than the connection's own player, grouped per (connection, caster INCARNATION, skill) — split at each `0x0020` create so a recycled id cannot manufacture a short gap — with the gaps between consecutive announcements read against the table's activation and recharge ON THE CONNECTION'S OWN BUILD (from the client's VERSION frame; the vault's exe of that build supplies the row, 47 recharges having moved 38797 → 38888). Two readings per completed pair (the first cast carried its `0x009F [58]`, so a recharge started): the start-to-start minimum against recharge + activation (completion-anchored) or recharge (start-anchored), and the completion-to-next minimum against recharge or recharge − activation. **The corpus:** 346 other-agent announcements over 4 builds (38797/38833/38849/38888, all with a table in the vault, 0 connections excluded for a missing table), 2,238 recycled creates. **P1 HOLDS:** 11 skills with ≥ 5 completed pairs. **P2 — the anchor:** six spells sit cleanly on **recharge + activation** at the tightest-binding gap (the AI re-casting as fast as it could): 185 6.24 / 5.25 (rec 5, act 1), 186 8.51 / 7.00 (rec 7, act 1.5), 179 8.00 / 6.98 (rec 7, act 1), 286 4.01 / 3.25 (rec 3, act 0.75), 222 5.99 / 4.99 (rec 5, act 1), 230 6.00 / 5.00 (rec 5, act 1) — the recharge runs from the cast's COMPLETION (`[58]`, at start + activation), which is `rec + act` behind the start, and the current server's start-anchor (`skill_ready = now + rec`) casts these ~20 % too fast. Four more (160, 197, 220, 1097) re-cast far above either anchor — the AI's own wait, which the recharge never gates. **The lone exception is 229 (Lightning Orb):** most of its pairs sit at rec + activation like the six, but 2 of 24 (on two different bodies) re-cast a touch before completion + recharge — one clearly (agent 117 on `20260917T224104`: cast 229 at t=401.269, completed 403.266, cast 230 in between, re-cast 229 at t=406.517 = start + 5.25 while completion-anchoring would forbid it until 408.27), consistent with a staff's 20 % HSR proc (WEAPONS-W5b) or a start-anchor for that skill alone. OBSERVED, small n, recorded as a named divergence rather than fitted; the flag reverts if a future campaign resolves it. **P3 — the split works:** with recycled ids pooled the count is identical (2,238), and the six stay completion-anchored either way — the anchor is not an artifact of the split; the sub-recharge gaps that remain (229's) are on singly-created bodies, not recycled ids. **Shipped** (`authsrv.py`): `npc_recharge_anchor(activation)` (the activation under the default-on `NPC_RECHARGE_FROM_COMPLETION`, 0 under the flag) added to `skill_ready = now + recharge` at both cast sites — the hostile (`enemy_attack_tick`) and the party body (`ally_cast_tick`), armed at the START so an interrupted or aborted cast still holds the slot. Attack skills (table activation 0; their completion is the strike windup) are UNCHANGED — no attack-skill recharge cadence was measured, said at the flag. `--no-npc-recharge-from-completion` is the pre-2026-09-23 (start-anchored) arm. The three lines that rested on "no NPC casts twice" are corrected in the same commit: `pick_skill`'s comment, monsterai FINDINGS §3 item 3, isle PLAN's aftercast line (all noting the anchor is answered while selection ORDER and aftercast-proper remain open). **Tests:** `test_recharge.py` (new; 15 checks, floor 8) drives the real `enemy_attack_tick` and `ally_cast_tick` and reads `skill_ready[slot]` back — the operand — asserting the completion anchor with the flag on and the start anchor (known-bad) with it off, at both sites, plus `rechargeprobe`'s corpus verdict. **Open, recorded:** 229's anchor (HSR vs start, needs a campaign); NPC aftercast proper (the anchor is completion, not completion + aftercast — the min completion-to-next sits at the recharge); attack-skill recharge cadence (unmeasured).
+
+---
+
+### ✅ DESKWORK-D5 step 2, the interrupt — 2026-09-23 — **castmech P1 and animref D5 ANSWERED from two tapes already on disk and SHIPPED: an interrupt at the player is the cancel burst with an E5 carrying the FULL recharge ahead of the E2, the [35] stagger behind it, and a second E5 with the disable when the interrupter carries one (the E6 honours the second, +24.007 s); an interrupted auto-attack is [8,0] [3] [35] [8,1] with the swing clock untouched; `interrupt_player` OBSERVED n=1 per shape, `interrupt_body` RECONSTRUCTION, `--no-interrupts` reverts** ([studies/castmech/FINDINGS.md](studies/castmech/FINDINGS.md) §4's 2026-09-23 note and P1's row; [studies/animref/FINDINGS.md](studies/animref/FINDINGS.md) D5's note; `toolkit/authsrv/interruptjoin.py`; `test_interrupt.py`)
+
+**Desk work, no client launched.** **The reader first, predictions stated** (`interruptjoin.py`, P1–P5): over 96 connections framed whole on `deepwoundjoin.sequence`'s absolute base, the corpus holds 34 `[59]`, 12 `[49]`, 237 `[3]`, **exactly 2 `[35]`**, 4 `[63]` (animref §6 said 3), 92 `[10]` — the survey's denominators to the digit; every stop but the two is a **cancel** (nothing else in its batch; only 3 of 281 sit within 0.5 s of a c2s `0x0028`, so most are retargets and moves), and **no `[63]` ever shares a batch with a stop or a `[35]`** — a knock-down is not an interrupt on the wire, which is what GWW "Interrupt" says. P2 as first phrased FAILED twice — "the batch opens with `[8, victim, 0]`" (the 50 ms batch carries the interrupter's landing first), then "the victim's messages open with it" (the victim's own `[10]` and word precede the run) — and was re-stated on the interrupt's own contiguous run, both other readings still printed rather than fitted. **The cast witness** (`20260916T213125` conn `57894`, t=484.333): the observer pressed Healing Signet at 482.715 (E4 + `[60, 25, 1]` + `[8, 25, 1]` at 482.779), agent 104 announced `[50, 104, 25, 340]` at 483.770, and at 484.333 — 1.55 s into the 2.0 s activation — after `[46, 104, 0]`, the gain, `[10, 25, 340]` and the word, the victim's run **`[8, 25, 0]`, `0x00E5 [25, 1, 0, 4]`, `[59, 25, 0]`, `0x00E2 [25, 1, 0]`, `[35, 25, 0]`, `0x00E5 [25, 1, 0, 24]`**, the `0x00E6 [25, 1, 0]` at 508.340 and no `0x00E3` ever. So castmech P1's prediction was right in kind (E2 plus a recharge start) and wrong in order (the E5 comes BEFORE the E2, not E7/E8), and there are two E5s. **The +20 landed on a SIGNET and the wiki AGREES**: GWW "Disrupting Chop" (read 2026-09-23 through the browser) says "If that action was a **skill**, that skill is disabled for an additional 20 seconds" — the survey's "if that action was a spell" is not on the page; the survey misread it, and the tape corroborates the page rather than contradicting it (OBSERVED n=1, WIKI). **The swing witness** (`20260917T224104` conn `62557`, t=434.658): the observer's auto-attack chain (START 433.744, a miss at 434.310) hit in its backswing by Lightning Javelin 230 — two `[20, 25, 117, 404]`, `0xA7`, then **`[8, 25, 0]`, `[3, 25, 0]`, `[35, 25, 0]`, `[8, 25, 1]`**, then `[10, 25, 230]` and the word; no bar message, and the next START at 435.074 = 433.744 + 1.33 — the swing clock NOT reset, the chain surviving and re-taking the hold. The order differs by interrupter (the attack skill's run trails its word; the spell's run precedes its `[10]`), n=1 each, said at both call sites. **Shipped** (`authsrv.py`): `interrupt_player` — on a cast in activation: `[8,0]`, E5 (full recharge), `[59]` (`[49]` for an attack skill: RECONSTRUCTION from the cancel family's split), E2, `[35]`, E5 (+ `interrupt_disable`); the entry booked released and recharging from the interrupt so the tick sends nothing until the E6; queued casts un-queued through the measured pre-begin release (WIKI, no tape); on the auto-attack chain: `[8,0]` `[3]` `[35]` `[8,1]` when the hold is held (our auto swing holds no walk gate, ANIMREF-RE 35 — then the two stops alone), the armed windup swing dropped through `player_swing_cancel` (UNOBSERVED: the witness hit the backswing), the swing clock untouched; "attacking" (230) leaves a spell in activation alone and stops an attack skill in activation (UNVERIFIED reading). `interrupt_body` — a hostile or hero as victim, RECONSTRUCTION: the stop and the `[35]` without the hold, the slot's `skill_ready` moved to now + full recharge + disable, a hero's bar getting the E5 / E2 / E5 mirror on its own id. Hooks: `land_swing` (after the words), `body_spell_word` (before the `[10]`, both branches), `hit_enemy` and the player's spell arrival (a body victim). Content: `skill_effect` 340 (`interrupts = "action"`, `interrupt_disable = 20`, capture-sourced) and 230 (`interrupts = "attacking"`). `--no-interrupts` is the pre-2026-09-23 server. Dazed's "any hit interrupts a spell" (GWW "Interrupt") is D6's and not built. **Tests:** `test_interrupt.py` (new; 30 checks, floor 21 = the sender) locks both runs against the TAPE's bytes with the victim id substituted in the agent slot (a blind replace rewrote skill 1 and the hold's 1 — `PLAYER_AGENT_ID` is 1), the end-to-end order at the victim for both witnesses, the E6 at +24.0 ± 0.1, the known-bad arm on player and body, and "exactly 2 `[35]` on tapes stamped up to 2026-09-23". **Acceptance (b)** named `test_mechanics` as the home of the batch lock; it lives in `test_interrupt.py`, its own file with its own floor. **Open, recorded:** a body or hero as victim (final-confirmation-needs-run, and the hero mirror sends E2 to a hero id, unwitnessed); the windup-swing drop; where a spell interrupt's gain sits (the witness's bar is dark); the property-35 handler on a non-observer agent (same method as `[63]`, which `knock_down` already sends to bodies).
+
+---
+
 ### DESKWORK-D1 (step 4, fix pass) / SANDBOX-N2 -- 2026-09-23 -- **the hero ADD corrected after two reviews: the inventory a kick destroyed comes back first, the legacy rig is refused, the owned formation slot, 0x009A, the outpost-only send gate named, 0x0018 relabelled**
 
 Corrects the "DESKWORK-D1 (step 4)" entry below it, after two reviewers drove the

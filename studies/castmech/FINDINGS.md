@@ -675,6 +675,37 @@ carried by **what else the server sends**:
   start — E2 followed by an E5-shaped message carrying the full recharge, or
   by `0x00E7`/`0x00E8` (both zero occurrences in the corpus). No interrupt has
   ever been captured; CASTMECH-P1 below.
+  **2026-09-23 (DESKWORK-D5 step 2): CAPTURED, twice, and the prediction was
+  right in kind and wrong in order.** `toolkit/authsrv/interruptjoin.py` reads
+  every stop property in the live corpus (96 connections framed whole): 34
+  `[59]`, 12 `[49]`, 237 `[3]`, **2 `[35]`**, 4 `[63]`, 92 `[10]`; every stop
+  but two is a cancel (no `[35]`, no `[63]` in its batch), and no `[63]` ever
+  rides a stop — a knock-down is not an interrupt on the wire (GWW "Interrupt"
+  says the same). Both `[35]` have the OBSERVER as victim. **The cast interrupt**
+  (`20260916T213125` conn `57894`, t=484.333, absolute base): the observer
+  pressed Healing Signet (c2s `0x0046 [1,…]` 482.715; E4 + `[60, 25, 1]` +
+  `[8, 25, 1]` at 482.779), agent 104 announced `[50, 104, 25, 340]` at 483.770,
+  and at 484.333 — 1.55 s into the 2.0 s activation — one batch: `[46, 104, 0]`,
+  `0xCF [25, 4]`, `[10, 25, 340]`, `0xA3 [16, 25, 104, f]`, then the victim's run
+  **`[8, 25, 0]`, `0x00E5 [25, 1, 0, 4]`, `[59, 25, 0]`, `0x00E2 [25, 1, 0]`,
+  `[35, 25, 0]`, `0x00E5 [25, 1, 0, 24]`**. So the recharge start is an ordinary
+  E5 (not E7/E8), it comes BEFORE the E2 rather than after, and there are TWO:
+  the table recharge (4) and then, after the stagger, recharge + 20 — Disrupting
+  Chop's disable; the `0x00E6 [25, 1, 0]` lands at 508.340, +24.007 s, so the
+  second E5 owns the clock. No `0x00E3` follows an interrupt (the caster is free
+  at once, like a cancel). **The swing interrupt** (`20260917T224104` conn
+  `62557`, t=434.658): the observer's auto-attack chain (START 433.744, the miss
+  434.310) hit in its backswing by Lightning Javelin 230 — `[20, 25, 117, 404]`
+  ×2, `0xA7 [117, 1, 4]`, then **`[8, 25, 0]`, `[3, 25, 0]`, `[35, 25, 0]`,
+  `[8, 25, 1]`**, then `[10, 25, 230]` and the word; no E2/E5 (nothing on the
+  bar to release), and the next START came at 435.074 = 433.744 + 1.33 — the
+  swing clock was NOT reset. Note the order differs by interrupter: the attack
+  skill's run trails its word, the spell's run precedes its `[10]` + word (n=1
+  each). OBSERVED n=1 per shape; a body or hero as victim is unwitnessed.
+  Shipped: `authsrv.interrupt_player` / `interrupt_body`, `--no-interrupts`,
+  `content/world.toml` `skill_effect` 340 (`interrupts = "action"`,
+  `interrupt_disable = 20`) and 230 (`interrupts = "attacking"`);
+  `test_interrupt.py` locks both runs against the tape's bytes.
 
 The animation half of a cancel is the property channel, same as the cast
 itself: property 60 starts the cast animation (combat/PLAN §16a, operator-
@@ -799,7 +830,7 @@ projectile from a knocked-down creature stalls until the KD ends.
 
 | id | question | how to settle |
 |---|---|---|
-| CASTMECH-P1 | the interrupt wire shape: does E2 come with a recharge-start (E5? E7/E8?) when a cast is genuinely interrupted, vs alone for a cancel? | live capture, shopping-list item 5 of combat/PLAN §3 (engineered interrupts, n≥2 causes) — or loopback: send E2 mid-sweep and watch whether the client's bar treats the skill as recharging |
+| ~~CASTMECH-P1~~ | ~~the interrupt wire shape: does E2 come with a recharge-start (E5? E7/E8?) when a cast is genuinely interrupted, vs alone for a cancel?~~ **ANSWERED 2026-09-23, §4's note: an E5 with the FULL recharge BEFORE the E2, then `[35]`, then a second E5 with the disable; the E6 honours the second. Two witnesses, both at the observer (`interruptjoin.py`).** | ~~live capture~~ two tapes recorded after this row was written (`20260916T213125`, `20260917T224104`) |
 | CASTMECH-P2 | does the client *predict* a movement-cancel (stop the cast bar on a move press) or wait for the server's E2? | loopback: begin a cast, script a move press, send no E2 — does the bar keep filling? Settles who owns cancel detection |
 | CASTMECH-P3 | the swing gate model (M4's three-way): does a re-press after a quarterstep land the next hit on the original schedule? | capture: operator quarterstepping the Isle dummies at fixed cadence vs mashing — hit-to-hit deltas discriminate gate-from-start (1.33 I) from no-gate (0.92 I) |
 | ~~CASTMECH-P4~~ | ~~`+0x40` sweep vs the Aftercast page's exception lists~~ **RAN 2026-09-09, §9**: Dolyak 0 ✓, non-Prophecies preparations 0.75 ✓, shadow steps and flash enchantments 0 ✓, Norn forms 0 ✓; the ranged-attack rows hold 0.6/1.0/1.5 and are NOT the wiki's aftercast → CASTMECH-P7 | `toolkit/clientscan/aftercastsweep.py` |

@@ -6957,6 +6957,74 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   Reversal-of-Fortune heals as damage-word declarations); and ≥ 13 of ≥ 47 positive-55 heal
   words at the observer carry it — some, not all, which is open. 16 checks (was 13), floor 10
   (the sender: §1's 10 fixture-less checks). Read-only on the vault),
+  `toolkit/authsrv/test_interrupt.py` (**2026-09-23, DESKWORK-D5 step 2 — the interrupt on
+  the wire, retail's two witnessed batches locked on our sender byte-order against the
+  TAPE.** §1 is the sender, fixture-less: `interrupt_player` on a cast in activation sends
+  `[8,0]`, E5 (the full recharge), `[59]`, E2, `[35]`, E5 (recharge + 20) and nothing else,
+  books the entry as released and recharging from the interrupt (the second E5 owns the
+  clock), and the tick then sends nothing until the E6 and exactly the E6 at R + 20;
+  `--no-interrupts` sends nothing and the cast runs on (the known-bad arm); Lightning
+  Javelin's "attacking" leaves a spell in activation alone and stops an attack skill in
+  activation with `[49]` and no second E5 (RECONSTRUCTION, said so); a queued cast behind the
+  interrupted one is marked cancelled for the tick's pre-begin release; on the auto-attack
+  chain `[8,0] [3] [35] [8,1]`, the armed swing handed to the tick, the chain and its swing
+  clock untouched, and with no hold held the two stops alone; nothing when neither casting
+  nor attacking, nothing for a skill without `interrupts`; end to end through `land_swing`
+  (340: the word THEN the run, identical to the unit run) and `body_spell_word` (230: the run
+  THEN `[10]` THEN the word); `interrupt_body` on a hostile mid-cast (`[59] [35]`, no hold, the
+  slot recharging 24 s), on a hero mid-cast (E5 `[59]` E2 `[35]` E5 on the hero's id), on a
+  swing in flight (`[3] [35]`, the landing dropped, the chain's clock untouched), on a body
+  doing neither (nothing), under the flag (nothing); and the three content rows. **The fix
+  pass (same day)** added the body victim through `land_swing_on_body` (a hostile's 340 on a
+  party body mid-cast: the word, then `[59] [35]` on the body, its slot recharging 24 s — the
+  first cut had no hook on that path), the two hook sites that had no test (`hit_enemy` with a
+  340 skill strike on a hostile mid-cast; `land_player_spell_shot` with a 230 shot on a
+  hostile's swing in flight — the word, then the run, on a body), the three NOT-swinging
+  states in which the swing branch used to fire and now sends nothing (a chain paused in a
+  cast's aftercast, E5 sent and E3 owed — retail's 3 of 3 such hits carry no `[35]`; a follow
+  leg walking in; a target 5000 u out of reach), and `mode="action"` passed explicitly (D6's
+  entry point) interrupting a cast on a skill whose row says nothing. §2 reads the
+  live corpus through `interruptjoin.census()` (declared skip without the vault): EXACTLY 2
+  property-35 messages on tapes stamped 2026-09-23 or earlier (a third reddens it; a later
+  tape does not), ≥ 34 `[59]`, ≥ 12 `[49]`, ≥ 92 `[10]`; both victims the observer, in each
+  batch the FIRST interrupt-family message at the victim the hold release `[8, victim, 0]`
+  (a stop or bar message ahead of it reddens this — the first cut's "the run opens with
+  `[8]`" was true by construction) and the run contiguous; P5 as registered (no batch with
+  a `[63]` and a `[35]` on one agent — the first cut's ended in `or True`); no `[63]` riding
+  a `[35]` and no stop riding a `[63]`; §1's OWN cast run and swing run equal to the tape's,
+  byte for byte with the victim id substituted in the agent slot (a blind replace rewrote
+  skill 1 and the hold's 1 — the first cut); the end-to-end ORDER at the victim equal to the
+  tape's for both witnesses; the tape's 0x00E6 at 24.0 ± 0.1 s after the interrupt; the
+  interrupters 340 and 230 read off the `[10]` words. 38 checks, floor 28 (the sender's 28;
+  30 / 21 before the fix pass). Read-only on the vault),
+  `toolkit/authsrv/test_recharge.py` (**2026-09-23, DESKWORK-D5 step 4 — an NPC's per-slot
+  recharge runs from the cast's COMPLETION, not its start.** §1 is the sender, fixture-less:
+  `npc_recharge_anchor` returns the activation under the completion anchor and 0 under
+  `--no-npc-recharge-from-completion`; then it DRIVES the real `enemy_attack_tick` and
+  `ally_cast_tick` on a two-slot spell bar and reads `skill_ready[slot]` back — the operand
+  — asserting it lands at now + activation + recharge (completion + recharge) with the flag
+  on and at now + recharge (the START anchor, the known-bad arm) with it off, at both cast
+  sites; and (the fix pass) the re-create SPLIT on a synthetic sequence — one id created,
+  a cast of 186, its completion, a remove, a re-create under the same id and a second 186
+  1 s later: pooled, `gaps_of` reads one body's 2.5 s cycle with a 1.0 s completion-to-next
+  against a 7 s recharge (the known-bad arm, the manufactured sub-recharge pair); split, no
+  pair (the route's acceptance (c)). §2 is `rechargeprobe`'s verdict over the live corpus
+  (declared a skip without the vault and the client tables): the floor holds (≥ 4 skills
+  with ≥ 5 completed pairs); the six spells 185/186/179/286/222/230 are completion-anchored
+  (min start-to-start at recharge + activation, min completion-to-next at the recharge);
+  the RE-STATED P2 holds (completion the majority anchor of the discriminating skills) and
+  P2 AS WRITTEN is recorded FAILED (229 start-like, four skills above both anchors — goes
+  red the day every skill lines up); 229 (Lightning Orb) is the named divergence — a
+  sub-recharge completion-to-next gap (one clear at ~3.25 s), consistent with a staff HSR
+  proc or a start-anchor for that skill alone, OBSERVED and not fitted away; the split drops
+  the pairs that cross a re-create (227 split vs 233 pooled — a `gaps_of` that ignores
+  `split` reddens this; the first cut compared `recycled_creates` across the arms, which
+  the split does not touch, and stayed green under that mutation); P3 AS WRITTEN is
+  recorded FAILED (229's two gaps survive the split and the pooled arm shows exactly the
+  same two — the arms do not differ, so 229 is not a recycled-id artifact); the six stay
+  completion-anchored with the ids pooled too; every connection's build has a table in the
+  vault, over ≥ 2 builds. 19 checks, floor 10 (the sender's 8 + the synthetic split's 2; 15 /
+  8 before the fix pass). Read-only on the vault),
   `toolkit/authsrv/test_adrenreplay.py` (**2026-09-22, DESKWORK-D5 step 6 — the per-bar
   adrenaline simulation animref §19 asked for, scored press by press against retail's
   accept / refuse.** `adrenreplay.py` replays the client's own slot rules (skills §26.2:
