@@ -761,7 +761,7 @@ class Store:
     # every load -- but leaves the party, so it is not activated (0x0072) and
     # gets no roster row (0x01C2). OBSERVED on 20260916T150306: after the kick
     # of hero 6, the tape's next two loads carry 0x0073 for hero 6 and neither
-    # 0x0072 nor 0x01C2 (studies/cmsg/FINDINGS.md D1). Persisted here so the kick
+    # 0x0072 nor 0x01C2 (studies/cmsg/FINDINGS.md DESKWORK-D1). Persisted so the kick
     # holds across a zone. This is a CHARACTER-scoped set, like heroes, because
     # party membership is the character's, not the account's.
     def kicked_heroes(self, uuid_hex):

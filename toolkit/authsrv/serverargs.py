@@ -722,12 +722,22 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "full health with the maxima kept, no 0x01D8.")
     ap.add_argument("--no-hero-kick", action="store_true",
                     help="THE REVERT ARM for SANDBOX-N2: ignore c2s 0x001F "
-                         "HERO_KICK, the pre-N2 behaviour. The default handles "
-                         "it -- the party panel's kick button drops the hero "
-                         "from the party, despawns its body and sends retail's "
-                         "own teardown batch (0x0075, 0x01C3, 0x00F8, 0x003E, "
-                         "0x00B0, 0x0145), and under --persist the kick holds "
-                         "across a zone (OBSERVED on 20260916T150306).")
+                         "HERO_KICK and read no stored kick -- every owned hero "
+                         "is in the party, the pre-N2 behaviour. The default "
+                         "handles it -- the party panel's kick button drops the "
+                         "hero from the party (removing its body if it has one, "
+                         "RECONSTRUCTION) and sends retail's own teardown batch "
+                         "(0x0075, 0x01C3, 0x00F8, 0x003E, 0x00B0, and 0x0145 "
+                         "only for a declared key no other hero names), and "
+                         "under --persist the kick holds across a zone (OBSERVED "
+                         "on 20260916T150306).")
+    ap.add_argument("--reset-hero-kicks", action="store_true",
+                    help="THE UN-KICK until the hero ADD (c2s 0x001E) ships: at "
+                         "this character's first load under --persist, clear its "
+                         "stored kicked_heroes so every owned hero is back in the "
+                         "party. Without it a kick under --persist holds for "
+                         "every later run, and the sandbox always passes "
+                         "--persist.")
     ap.add_argument("--no-zone-carry", action="store_true",
                     help="THE REVERT ARM for JARIN: a zone forgets the death "
                          "penalty and the hero's stance. Retail carries the "
