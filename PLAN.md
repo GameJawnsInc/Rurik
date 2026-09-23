@@ -1902,10 +1902,15 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 * **DESKWORK-D5**: the combat rules retail's tapes on disk already settle — the adrenaline
   gate (SKILLS-B1's gate half), interrupts, property 10 and the `[42]`/`[55]` residue, NPC
   recharge from completion, party-wide shouts, the adrenaline replay, the refusal ids.
-* **DESKWORK-D4**: skill coverage in bulk — labels parsed from the archive's own
-  description templates, refereed slot by slot against the client table, served as a
-  marked label tier (the owner's yes to the plan's §8 Q3, given by taking the route); then
-  the timed effect types.
+* **DESKWORK-D4**: skill coverage in bulk. **Steps 1–3 LANDED 2026-09-22** (skills §54,
+  SKILLS-DT; PLAN-LOG): the probe reproduced, the slot mapping measured (str1 scale, str2
+  bonus, str3 duration — the natural order refuted), the parser + referee shipped with 0
+  slot conflicts and 1 real hand-row conflict, the Q7 census written (54 / 419 / 815).
+  **Open:** step 4, the `skill_labels.toml` overlay from the SERVED tier, gated by
+  `type_code`, `tier = 'label'`, merged UNDER the 54 hand rows; the two bulk consumers
+  §54.4 names (untyped damage; a duration on a non-episode type); three hand rows to fix
+  (Hamstring 320's slot, 317's and 253's inert "Duration"); step 6, the timed effect
+  types; and the 141 INDETERMINATE slots wait on a client tooltip run (§54.3).
 
 **Skills and the slice** — [studies/skills/FINDINGS.md](studies/skills/FINDINGS.md),
 [studies/slice/FINDINGS.md](studies/slice/FINDINGS.md)

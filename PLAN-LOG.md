@@ -28,6 +28,33 @@ move back.
 
 ---
 
+### SKILLS-DT / DESKWORK-Q7 -- 2026-09-22 -- **the skill description templates read and refereed: `%str1%` is the SCALE slot, `%str2%` the BONUS, `%str3%` the DURATION; 0 slot conflicts over 1,333 rows; the coverage census 54 / 419 / 815**
+
+[studies/skills/FINDINGS.md](studies/skills/FINDINGS.md) §54; DESKWORK-D4 steps 1--3 and
+DESKWORK-Q7 of [studies/deskwork/PLAN.md](studies/deskwork/PLAN.md). Shipped:
+`toolkit/clientscan/skilldesc.py` + `test_skilldesc.py` (69 checks with the vault, floor 29
+bare; TESTS.md). The probe reproduced to the row (1,265 of 1,333 with a slot; str1 1,090 /
+str2 582 / str3 685). **The slot-to-field mapping MEASURED**: str1 = scale, str2 =
+bonus_scale, str3 = duration, on six wiki-pinned controls (Power Attack, Sever Artery,
+Faintheartedness, Defy Pain, Rush, "To the Limit!"); under it 0 of 2,357 slots number an
+empty field or a sentinel, and the known-bad arm (either shift) puts 700+ on empty fields --
+the natural order is REFUTED, and "seconds" is not the duration slot's word (141 str2, 82
+str1). **The referee**: 1,698 progressions, 481 flat constants, 141 INDETERMINATE (bit clear,
+differing -- §12's shape, which the templates DO number; CONTESTED, a client tooltip run
+settles it). **The labels**: our own enum, 0 UNPARSED rows; SERVED (every slot in the
+server's current vocabulary) 583 of 1,265 = 46 %, so the route's half-mark is a near-miss
+on the served tier and a pass on the label tier, with the gap named per label (a duration on
+a non-episode type 191, untyped damage 134). **The 54 hand rows**: 51 agree, 1 real conflict
+(Battle Rage 317's inert `scale_means = "Duration"`), and Hamstring 320's Crippled duration
+is on the BONUS slot with a label outside the condition vocabulary -- it inflicts nothing
+today; content fixes owed next pass. **The PvP/PvE join**: 177 PvP-only twins link into the
+corpus, 0 share a template. **The census (Q7)**: 54 modelled, 419 episode-only, 45
+episode-refused, 815 nothing; 276 of 287 Spells nothing. Also: `PLAN.md` §1's and A6's
+gw-skilldata licence lines corrected from primary sources (repository MIT; data GFDL /
+CC BY-NC-SA). No overlay emitted; server untouched; D4 step 4 onward stays in §8.
+
+---
+
 ### SANDBOX-B7 -- 2026-09-22 -- **the in-game panels own the bars and the ranks; Skills and Party tabs**
 
 [studies/sandbox/PLAN.md](studies/sandbox/PLAN.md) §2 B7, §4 F3. The owner: "first tab
