@@ -3309,8 +3309,16 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   item ceases to exist. `0x00CC` is last in all nine transactions, the one ordering
   invariant this family has. The backpack is asserted to be a slot MAP and not a
   cursor (a sale frees its slot, the next buy reuses it) -- a cursor would call a
-  20-slot bag full after twenty transactions on an empty one. Floor 27. No vault, no
-  socket, no client. ~1 s),
+  20-slot bag full after twenty transactions on an empty one. **Section 5 (2026-09-23,
+  DESKWORK-D1 step 8's confirmation pass, its fix, ENG-2): the ITEM STORE is the other
+  map and it wins** -- with the dressed sword at backpack 0 in `state["items"]` the
+  purchase lands at slot 1 and is REGISTERED in the store (kind `bought`, the wire type
+  from the minted row) beside the merchant's own map; CONTROL / KNOWN-BAD: with no store
+  the same purchase takes slot 0 (the first cut's answer even when the store held the
+  sword there, the cell a drag then answered `0x014B` into); the sale pops the bought
+  item from the store and leaves the sword; `avoid` (the wrapper's reserved off-hand
+  return cells) is skipped and with no `place` nothing is registered. Floor 27 → 35
+  from the green run. No vault, no socket, no client. ~1 s),
   `toolkit/authsrv/test_playerbags.py` (**2026-09-14: the JARIN tape (20260914T005758) carried a TENTH bag and the one-set check went red -- it was a second INVENTORY KEY, the hero's, with one type-2 bag; `invcensus.bag_shapes` now groups by field 1 and returns the other keys' bags as a fifth element, the one-set claim is about the player's inventory, and a new check pins the hero's extra to exactly `[(2, 21, 9)]` (n = 3 connections, one tape); floor 18 → 19.** the player's nine containers, and **WHERE**
   the burst sends them. Until 2026-08-19 this server created ONE bag, and the
   symptom was not a missing grid but a missing PURCHASE: with a funded purse, a
@@ -6232,10 +6240,13 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   the live one, the tool and window are named; known-bad: a table missing `0x0009`
   names `0x0009`. §4 ACCEPTANCE (c): `untriaged()` is EMPTY over the file and over
   the live census, the three names of this step are named-and-dropped-with-reason,
-  and removing the `0x0008` row names `0x0008` alone. §5 an empty root is REFUSED
+  and removing the `0x0008` row names `0x0008` alone; **and (2026-09-23, step 8's
+  confirmation pass) `0x0072` is named `ITEM_MOVE_BY_ID`, ARMED (RECONSTRUCTION) and on
+  NO live tape** -- the day a retail tape carries one this reddens and names the
+  witness. §5 an empty root is REFUSED
   with exit 2 and a source with no dispatch chain yields None. §6 the send-site
   census joins on the pinned build (`0x001F` -> `0x0091FF30`) and invents no wrapper
-  for `0x000D` -- and the kick/add wrapper PAIR must be one build's (either kick wrapper alone also accepted 38797's `0x0044` wrapper). Vault-gated sections skip loudly -- 4 declared skips on a bare machine, where `static_hints` now turns `pinned.find()`'s SystemExit into a skip instead of a crash with no verdict. Floor 20, the vault-free core measured with `RURIK_VAULT` at an empty directory (the fix pass; the first cut's 34 was the fullest run and a bare machine could not reach it); 34 run with the vault, ~20 s),
+  for `0x000D` -- and the kick/add wrapper PAIR must be one build's (either kick wrapper alone also accepted 38797's `0x0044` wrapper). Vault-gated sections skip loudly -- 4 declared skips on a bare machine, where `static_hints` now turns `pinned.find()`'s SystemExit into a skip instead of a crash with no verdict. Floor 20, the vault-free core measured with `RURIK_VAULT` at an empty directory (the fix pass; the first cut's 34 was the fullest run and a bare machine could not reach it); 36 run with the vault (34 -> 35 at the hero add's `0x001E` row -> 36 at `0x0072`), ~20 s),
   `toolkit/authsrv/test_population.py` (what LIVES in an authored area -- the
   `content/world.toml` spawn rows carrying `area = NAME`, served by
   `authsrv --area`. R5's criterion is "a new zone in TOML, hot-reloaded,
@@ -6536,10 +6547,29 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   `ITEM_MOVE_BY_ID_ENABLED` (its mutation reddens), `main()` wiring both new flags and
   `serverargs.py` defining them, `dress_cell_label` at all six placement labels,
   `equipped_bag_slot` at the three equipped placements, `item_visual_of` at the 0x006E
-  build and `item_visual_of` / `item_bag_slot_table` in all three handlers.
-  Floor 78 -> 102 -> 137 from the green run with `RURIK_VAULT` pointed at an empty
-  directory (the bare-machine core; §1b's 17 and §1c's 8 ride the vault, 162 vaulted),
-  ~13 s),
+  build and `item_visual_of` / `item_bag_slot_table` in all three handlers. **THE
+  CONFIRMATION PASS'S FIX (the two reviews, 2026-09-23)**: the dress cell is keyed by the
+  worn LOCATION through the inverse permutation, so a legs-class piece worn at the boots
+  location (wearmap allows it) dresses at the boots' cell 5 beside the legs' 3 and the
+  revert arm reproduces that row's old layout too (ENG-1; KNOWN-BAD: by TYPE both pieces
+  took bag 3, two `0x013E` into one cell); the planners' DEFAULTS are retail's pair -- an
+  omitted `visual_of` / `bag_slot_of_type` reproduces the tape's equip, the identity is
+  asked for by name (ENG-5); only OFF HANDS' homes are reserved, the hammer in the sword's
+  home after F2 takes a `0x0152` swap rather than a RESERVED refusal, and an OCCUPIED
+  reserved cell is a swap in the leaf (ENG-6); a STORAGE bag (types 4/5) is a refused
+  `0x0072` destination with its no-`storage_bags` control and the real handler's five
+  refusals (ENG-7); the real `handle_item_move_by_id` sends `0x006F` visual 6 for the
+  head through both delegates and every delegated label ends in the ITEM_MOVE_BY_ID tag
+  (ENG-3, ENG-7); THE MERCHANT'S PURCHASE lives in the same store -- it lands clear of
+  the sword and of the reserved cell, a drag onto it is a `0x0152` swap and never a bare
+  `0x014B`, a drag of it is accepted, the sale pops it from both maps, its move is not
+  persisted while the sword's is (ENG-2; KNOWN-BAD: the purchase outside the store plans
+  a bare `0x014B` into a FILLED cell); §1c is scored over the connections that decode
+  closed (ENG-8); locks for `equipped_bag_slot`'s one argument, `OFF_HAND_ITEM_IDS`,
+  `storage_bag_ids()`, the wrapper's `place` / `avoid` and the commit's two merchant
+  rules. Floor 78 -> 102 -> 137 -> 158 from the green run with `RURIK_VAULT` pointed at
+  an empty directory (the bare-machine core; §1b's 17 and §1c's 8 ride the vault, 183
+  vaulted), ~13 s),
   `toolkit/authsrv/test_labelrun.py` (the labelled input run, which names GAME_CMSG
   opcodes from what a human was told to do: a message lands in exactly one step's
   window, instance-load traffic is never folded into step 1, and a dirty idle CONTROL

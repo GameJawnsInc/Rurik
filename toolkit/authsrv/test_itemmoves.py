@@ -21,9 +21,24 @@ docstring for the tapes).
   * §6 THE GENERAL MOVE (0x0072): the owner's frame decodes to [11, 2, 4] by
     the schema's widths; plan_move_by_id's two shapes (0x014B into an empty
     cell, 0x0152 onto an occupied one, RECONSTRUCTION), the delegates (an
-    equipped source -> 0x004F's batch; the type's equipped slot -> the equip's),
-    seven refusals; the real handler moves the sword and the set machinery's
-    slot follows, persisted; source locks for the arm and both flags.
+    equipped source -> 0x004F's batch; the type's equipped slot -> the equip's;
+    both re-labelled via ITEM_MOVE_BY_ID), seven refusals (a STORAGE bag among
+    them, with its no-storage_bags control), an OCCUPIED reserved cell is a
+    swap; the real handler moves the sword and the set machinery's slot
+    follows, persisted; the real handler's 0x006F visual 6 through both
+    delegates; the merchant's purchase in the SAME store (lands clear of the
+    sword, a drag onto it is a swap, a drag of it is accepted, the sale pops
+    it, its move is not persisted; KNOWN-BAD: the purchase outside the store
+    plans a bare 0x014B into a filled cell); source locks for the arm and
+    both flags.
+  * THE CONFIRMATION PASS'S FIX (the two reviews, 2026-09-23): the dress cell
+    is keyed by the worn LOCATION, so a legs-class piece at the boots location
+    (wearmap allows it) shares no cell (ENG-1; KNOWN-BAD: by type both took
+    bag 3); the planners' DEFAULTS are retail's pair (ENG-5); only OFF HANDS'
+    homes are reserved and a drag onto the hammer in the sword's home is a
+    swap (ENG-6); storage bags refused as 0x0072 destinations (ENG-7); the
+    0x0072 handler's visual_of locked and driven (ENG-3); §1c scored over the
+    connections that decode closed (ENG-8).
 
   * §1 RETAIL'S BATCHES, value for value against the TRANSCRIPTION, through
     the pure leaf with retail's own ids, bag ids, inventory keys and agent
@@ -98,7 +113,7 @@ import charstore                                             # noqa: E402
 import itemstore                                             # noqa: E402
 import authsrv                                               # noqa: E402
 
-led = checks.Ledger("inventory moves (DESKWORK-D1 step 8)", floor=137)   # 2026-09-23, from the green run with RURIK_VAULT pointed at an empty directory: the bare-machine core (78 -> 102 at the fix pass -> 137 at the owner's confirmation pass); §1b's 17 and §1c's 8 ride the vault (162 vaulted)
+led = checks.Ledger("inventory moves (DESKWORK-D1 step 8)", floor=158)   # 2026-09-23, from the green run with RURIK_VAULT pointed at an empty directory: the bare-machine core (78 -> 102 at the fix pass -> 137 at the owner's confirmation pass -> 158 at its fix pass); §1b's 17 and §1c's 8 ride the vault (183 vaulted)
 
 CHG, SWAP, VIS = 0x014B, 0x0152, 0x006F
 MOVE, EQUIP = authsrv.GAME_CMSG_ITEM_MOVE, authsrv.GAME_CMSG_EQUIP_ITEM
@@ -155,10 +170,12 @@ for src, bag, slot, expect in tape_moves:
 led.ok(itemstore.in_bag(it, 3) == {} and itemstore.in_bag(it, 2) == {1: 213, 2: 215, 3: 214},
        "after the three unequips the equipped bag is empty and the backpack holds 213/215/214 "
        "at slots 1/2/3")
-# KNOWN-BAD: our identity visual mapping on retail's cells.
+# KNOWN-BAD: our identity visual mapping on retail's cells (asked for by name --
+# the planners' DEFAULTS are retail's pair since the confirmation pass's fix, ENG-5).
 bad, _c, _w = itemstore.plan_move(dict((k, dict(v)) for k, v in
                                        {213: {"bag": 3, "slot": 4, "key": None, "kind": None, "item_type": 16}}.items()),
-                                  bags_53310, 4, 2, 1, key=1, equipped_bag=3, agent=25, visuals=True)
+                                  bags_53310, 4, 2, 1, key=1, equipped_bag=3, agent=25, visuals=True,
+                                  visual_of=itemstore.visual_of_bag_slot)
 led.ok(ops_vals(bad) == [(CHG, [1, 213, 2, 1]), (VIS, [25, 4, 0])] and ops_vals(bad) != tape_moves[0][3],
        "KNOWN-BAD: the identity visual mapping (ours) on retail's head gives 0x006F slot 4; the "
        "tape says 6 -- the bag order and the visual order are two arrays")
@@ -178,10 +195,24 @@ led.ok(itemstore.in_bag(it, 3) == {4: 213, 5: 214, 6: 215},
        "...and the three pieces are back at the load's cells (3,4) (3,5) (3,6)")
 bad3, _c, _w = itemstore.plan_equip({213: {"bag": 2, "slot": 1, "key": None, "kind": None, "item_type": 16}},
                                     bags_53310, 213, key=1, equipped_bag=3, backpack_bag=2, agent=25,
-                                    visuals=True, hands_of_type=HANDS, visual_of=RV)
+                                    visuals=True, hands_of_type=HANDS, visual_of=RV,
+                                    bag_slot_of_type=itemstore.ARMOUR_SLOT_OF_TYPE)
 led.ok(ops_vals(bad3) == [(CHG, [1, 213, 3, 6]), (VIS, [25, 5, 213])] and ops_vals(bad3) != tape_equips[0][1],
        "KNOWN-BAD: our visual-order bag layout on retail's head equips it at bag slot 6 (visual 5); "
        "the tape says bag 4, visual 6 -- retail's bag is ldufr's order")
+dflt, _c, _w = itemstore.plan_equip({213: {"bag": 2, "slot": 1, "key": None, "kind": None, "item_type": 16}},
+                                    bags_53310, 213, key=1, equipped_bag=3, backpack_bag=2, agent=25,
+                                    visuals=True, hands_of_type=HANDS)
+led.ok(ops_vals(dflt) == tape_equips[0][1]
+       and itemstore.plan_move.__kwdefaults__["visual_of"] is RV
+       and itemstore.plan_equip.__kwdefaults__["visual_of"] is RV
+       and itemstore.plan_move_by_id.__kwdefaults__["visual_of"] is RV
+       and itemstore.worn_array.__defaults__[-1] is RV
+       and itemstore.slot_of_type(16, HANDS) == 4 and itemstore.slot_of_type(13, HANDS) == 6,
+       "the planners' DEFAULTS are retail's pair (ENG-5): with visual_of and bag_slot_of_type OMITTED the "
+       "equip reproduces the tape's [1,213,3,4] + [25,6,213], worn_array's default is the permutation, "
+       "and slot_of_type puts the head at 4 and the gloves at 6 -- the identity must be asked for by name",
+       f"{ops_vals(dflt)}")
 
 # 20260919T103604 :58638 -- an OUTPOST; key 241; equipped bag 231; 17730 = set 0's off hand at (231, 1).
 it2 = {}
@@ -337,6 +368,8 @@ if livewire.live_captures(root):
         conn, merged, ok = livewire.decode_conn(capdir, gf)
         n_conn += 1
         n_conn_ok += bool(ok)
+        if not ok:
+            continue        # scored over the connections that decode closed (ENG-8)
         types, equipped, cells = {}, set(), {}
         for t, d, op, v in merged:
             if d != "s2c":
@@ -362,9 +395,11 @@ if livewire.live_captures(root):
                     if item and item in cells and cells[item][0] in equipped:
                         vis_of_bag.setdefault(cells[item][1], {}).setdefault(pos, 0)
                         vis_of_bag[cells[item][1]][pos] += 1
-    led.ok(n_conn >= 90 and n_conn_ok == n_conn,
-           f"every live game connection decodes closed ({n_conn} connections, floor 90 -- "
-           f"the corpus is append-only)", f"{n_conn} connections, {n_conn_ok} ok")
+    led.ok(n_conn >= 90 and n_conn_ok >= 90,
+           f"the census runs over >= 90 live game connections that decode closed ({n_conn_ok} of "
+           f"{n_conn}; the corpus is append-only, and a future tape with a receipt shortfall -- "
+           f"c2striage counts those, flagged -- is left out rather than reddening the bag-order claim)",
+           f"{n_conn} connections, {n_conn_ok} ok")
     for t, nm in ARMOUR_TYPES.items():
         slots = per_type.get(t, {})
         conns = per_type_conn.get(t, {})
@@ -498,10 +533,13 @@ try:
            "itemstore.worn_array over the retail-order layout, read through the permutation, == "
            "the 0x006E fill the load path built before step 8 -- BYTE-IDENTITY of the visual "
            "array: the bag order changed, the body did not", f"{itemstore.worn_array(items, EQ, visual_of=RV)}")
-    led.ok(itemstore.worn_array(items, EQ, authsrv.VISUAL_EQUIPMENT_SLOTS) != legacy
-           and itemstore.worn_array(items, EQ, authsrv.VISUAL_EQUIPMENT_SLOTS)[4] == 7,
+    _ident = itemstore.visual_of_bag_slot
+    led.ok(itemstore.worn_array(items, EQ, authsrv.VISUAL_EQUIPMENT_SLOTS, visual_of=_ident) != legacy
+           and itemstore.worn_array(items, EQ, authsrv.VISUAL_EQUIPMENT_SLOTS, visual_of=_ident)[4] == 7
+           and itemstore.worn_array(items, EQ, authsrv.VISUAL_EQUIPMENT_SLOTS) == legacy,
            "KNOWN-BAD: the identity mapping over the retail-order layout puts the head (item 7) at "
-           "visual 4 -- the legs' position -- so the two orders cannot be mixed")
+           "visual 4 -- the legs' position -- so the two orders cannot be mixed; worn_array's DEFAULT "
+           "is the permutation (ENG-5)")
     # The revert arm: --equipped-visual-order reproduces the pre-fix layout
     # exactly (the doll defect), and the visual array is the same bytes either way.
     authsrv.EQUIPPED_VISUAL_ORDER = True
@@ -516,15 +554,44 @@ try:
            "KNOWN-BAD ARM, --equipped-visual-order: the head goes back to bag slot 6 (every dress "
            "before 2026-09-23 -- the doll reads legs, chest, head, feet, arms) and the 0x006E "
            "array is still the same bytes", f"{ {k: (v['bag'], v['slot']) for k, v in items_v.items()} }")
-    led.ok(authsrv.equipped_bag_slot(16, 6) == 6 and authsrv.item_bag_slot_table() is itemstore.ARMOUR_SLOT_OF_TYPE
+    led.ok(authsrv.equipped_bag_slot(6) == 6 and authsrv.item_bag_slot_table() is itemstore.ARMOUR_SLOT_OF_TYPE
            and authsrv.item_visual_of() is itemstore.visual_of_bag_slot,
            "...and under the arm equipped_bag_slot / item_bag_slot_table / item_visual_of are the "
            "identity trio")
     authsrv.EQUIPPED_VISUAL_ORDER = False
-    led.ok(authsrv.equipped_bag_slot(16, 6) == 4 and authsrv.equipped_bag_slot(None, 6) == 4
-           and authsrv.equipped_bag_slot(44, 7) == 7,
-           "default: equipped_bag_slot puts the head (type 16, visual 6) at bag 4, a typeless piece "
-           "through the inverse permutation, and the costume at 7")
+    led.ok(authsrv.equipped_bag_slot(6) == 4 and authsrv.equipped_bag_slot(3) == 5
+           and authsrv.equipped_bag_slot(7) == 7
+           and [authsrv.equipped_bag_slot(s) for s in range(9)] == [0, 1, 2, 5, 3, 6, 4, 7, 8]
+           and all(authsrv.equipped_bag_slot(itemstore.ARMOUR_SLOT_OF_TYPE[t]) == RBAG[t]
+                   for t in (7, 4, 19, 13, 16, 44, 45)),
+           "default: equipped_bag_slot is keyed by the worn LOCATION through the inverse permutation "
+           "(visual 6 the head -> bag 4, visual 3 the boots -> 5, the costume 7 -> 7), a bijection over "
+           "0..8, and it agrees with the TYPE table for every piece in its own location")
+    # ENG-1 / EVR-1 (the confirmation pass's fix): the dress cell is keyed by
+    # LOCATION, not type. wearmap.WORN_TYPES lets a legs-class piece (19) be worn
+    # at the boots or gloves location; keyed by type both pieces took bag 3.
+    _saved_pa = authsrv.agents.PLAYER_ARMOUR
+    authsrv.agents.PLAYER_ARMOUR = {"warrior_boots": "warrior_legs"}
+    try:
+        d19 = authsrv.item_layout_defaults()
+        cells19 = {iid: (b, s) for iid, (b, s, _k, _kind, _t) in d19.items()}
+        led.ok(d19[4][2] == "warrior_legs" and d19[4][4] == 19 and d19[5][4] == 19
+               and cells19[4] == (EQ, 5) and cells19[5] == (EQ, 3)
+               and len(set(cells19.values())) == len(cells19),
+               "a legs-class piece worn at the BOOTS location (wearmap allows it) dresses at the boots' "
+               "cell 5 and the legs at 3 -- keyed by LOCATION, no two pieces share a cell (ENG-1)",
+               f"{cells19}")
+        led.ok(RBAG[d19[4][4]] == RBAG[d19[5][4]] == 3,
+               "KNOWN-BAD (the first cut): keyed by TYPE both pieces take bag 3 -- two 0x013E into one "
+               "cell, the client's add worker asserting the second (ItCliInv:105)")
+        authsrv.EQUIPPED_VISUAL_ORDER = True
+        d19v = authsrv.item_layout_defaults()
+        led.ok(d19v[4][:2] == (EQ, 3) and d19v[5][:2] == (EQ, 4),
+               "...and under --equipped-visual-order the same row is the OLD location-keyed layout "
+               "exactly, (1,3) and (1,4) -- the revert arm reverts this row too")
+        authsrv.EQUIPPED_VISUAL_ORDER = False
+    finally:
+        authsrv.agents.PLAYER_ARMOUR = _saved_pa
     led.ok(items[W]["key"] == "starter_hammer" and items[W]["item_type"] == 15
            and items[7]["key"] == "warrior_head" and items[7]["item_type"] == 16,
            "the rows carry the content key and the wire type (what the equip's slot is decided from)")
@@ -713,10 +780,30 @@ try:
     sent_r, send_r = fake_send_factory()
     authsrv.select_weapon_set(send_r, st_r, 1, 0)                     # F2: sword + shield into the hands
     res = authsrv.WEAPON_SET_BACKPACK_SLOTS[12]
+    home11 = authsrv.WEAPON_SET_BACKPACK_SLOTS[11]
     led.ok(itemstore.hand_items(items_r, EQ) == (11, 12) and itemstore.at(items_r, BP, res) is None
-           and authsrv.reserved_backpack_slots(st_r) == {authsrv.WEAPON_SET_BACKPACK_SLOTS[11], res},
-           f"after F2 the shield's return cell (backpack {res}) is EMPTY and RESERVED, with the "
-           f"sword's", f"reserved {authsrv.reserved_backpack_slots(st_r)}")
+           and authsrv.reserved_backpack_slots(st_r) == {res}
+           and itemstore.at(items_r, BP, home11) == W,
+           f"after F2 the shield's return cell (backpack {res}) is EMPTY and RESERVED -- and ONLY it: "
+           f"the sword's home {home11} holds the hammer (the 0x0152 put it there) and a lead never comes "
+           f"back by 0x014B, so it is not reserved (ENG-6)", f"reserved {authsrv.reserved_backpack_slots(st_r)}")
+
+    class _Rec:
+        def event(self, *_a, **_k):
+            pass
+    STOCK_ROW = [40, 0x8000005B, 7, 19, 11, 0, 0, 0x20001006, 5, 2440, 1, "x", []]
+    BUY_REQ = [0x804D, 1, 10, [], b"", 0, [40], b""]
+    st_r["declared_items"] = {40: list(STOCK_ROW)}
+    sent_r.clear()
+    authsrv.handle_item_purchase(BUY_REQ, send_r, st_r, 0, _Rec())
+    placed_r = [v for op, v in sent_r if op == authsrv.GAME_SMSG_ITEM_MOVED_TO_LOCATION]
+    bought_r = placed_r[0][1] if placed_r else None
+    led.ok(len(placed_r) == 1 and placed_r[0][2] == BP and placed_r[0][3] not in (res, home11)
+           and bought_r in items_r and items_r[bought_r]["slot"] == placed_r[0][3]
+           and len({(r["bag"], r["slot"]) for r in items_r.values()}) == len(items_r),
+           f"a PURCHASE in this state lands clear of the hammer's cell {home11} AND the shield's reserved "
+           f"cell {res} (the wrapper hands the merchant the reserved slots), and is registered in the "
+           f"store -- no two items share a cell (ENG-2)", f"{placed_r} cells {sorted((r['bag'], r['slot']) for r in items_r.values())}")
     sent_r.clear()
     authsrv.handle_item_move([MOVE, HEAD_BAG, BP, res], send_r, st_r, 0)   # the head into the reserved cell
     led.ok(sent_r == [] and items_r[7]["bag"] == EQ,
@@ -725,11 +812,24 @@ try:
     authsrv.handle_item_move([MOVE, HEAD_BAG, BP, 9], send_r, st_r, 0)     # CONTROL: an unreserved cell
     led.ok(len(sent_r) == 2 and items_r[7]["bag"] == BP and items_r[7]["slot"] == 9,
            "CONTROL: the same drag into an unreserved cell is accepted")
+    # ENG-6: the hammer sits in the sword's home; a drag onto it is a SWAP, not a
+    # RESERVED refusal (the first cut refused it "for a set item's return" that
+    # never comes by 0x014B).
+    sent_r.clear()
+    authsrv.handle_item_move_by_id([MOVE_ID, 7, BP, home11], send_r, st_r, 0)   # the head onto the hammer
+    led.ok(sent_r == [(SWAP, [1, W, 7])] and items_r[7]["slot"] == home11 and items_r[W]["slot"] == 9,
+           "the head dragged by id onto the hammer's cell (the sword's home) is a 0x0152 swap -- the "
+           "first cut refused it as RESERVED with a false reason (ENG-6)", f"{sent_r}")
     sent_r.clear()
     authsrv.select_weapon_set(send_r, st_r, 0, 0)                     # F1
     cells_r = [(r["bag"], r["slot"]) for r in items_r.values()]
-    led.ok((CHG, [1, 12, BP, res]) in sent_r and len(cells_r) == len(set(cells_r)),
-           "F1 sends the shield back to its reserved cell and every item has a cell of its own")
+    led.ok((CHG, [1, 12, BP, res]) in sent_r and len(cells_r) == len(set(cells_r))
+           and (SWAP, [1, 11, W]) in sent_r and items_r[11]["slot"] == 9 and items_r[7]["slot"] == home11,
+           "F1 sends the shield back to its reserved cell, exchanges the leads (the sword lands where the "
+           "hammer was, cell 9; the head keeps the sword's old home) and every item has a cell of its own",
+           f"{sent_r} cells {sorted(cells_r)}")
+    del items_r[bought_r]                    # the bought item leaves the fixture (a sale's effect)
+    st_r["backpack"].clear()
     # the RESTORED case: a stored layout puts another item in a hand item's return cell,
     # and the switch chooses a free cell instead (select_weapon_set's fallback)
     itemstore.place(items_r, 7, BP, authsrv.WEAPON_SET_BACKPACK_SLOTS[12])   # the head where the shield returns
@@ -914,7 +1014,7 @@ try:
     itemstore.place(it7, 7, EQ, HEAD_BAG, item_type=16)
     itemstore.place(it7, 11, BP, 0, item_type=27)
     itemstore.place(it7, 12, BP, 1, item_type=24)
-    bags7 = {EQ: 9, BP: 20, 3: 12}
+    bags7 = {EQ: 9, BP: 20, 3: 12, 4: 25}
     kw7 = dict(key=1, equipped_bag=EQ, backpack_bag=BP, agent=25, visuals=True,
                hands_of_type=HANDS, visual_of=RV, bag_slot_of_type=RBAG)
     batch, changes, why = itemstore.plan_move_by_id(it7, bags7, 11, BP, 4, **kw7)
@@ -934,18 +1034,35 @@ try:
                              ((11, 9, 0), "never declared", "an undeclared bag"),
                              ((11, BP, 20), "outside bag", "a slot past the bag"),
                              ((11, BP, 1), "already sits at", "the item's own cell (the client never sends it)"),
-                             ((11, BP, 7), "RESERVED", "a reserved cell"),
+                             ((11, BP, 7), "RESERVED", "an EMPTY reserved cell"),
+                             ((11, 4, 0), "STORAGE", "a storage-pane destination (bag type 4; no tape, the set "
+                                                    "strip unmodelled -- ENG-7)"),
                              ((11, EQ, HEAD_BAG), "not item 11's", "an equipped slot that is not the type's")):
-        batch, changes, why = itemstore.plan_move_by_id(it7, bags7, *args, reserved_cells={(BP, 7)}, **kw7)
+        batch, changes, why = itemstore.plan_move_by_id(it7, bags7, *args, reserved_cells={(BP, 7)},
+                                                        storage_bags={4}, **kw7)
         led.ok(batch is None and why and frag in why, f"REFUSED move-by-id {args}: {what}", f"why {why!r}")
+    itemstore.place(it7, 30, BP, 7, item_type=28)                     # something IN the reserved cell
+    batch, changes, why = itemstore.plan_move_by_id(it7, bags7, 11, BP, 7, reserved_cells={(BP, 7)}, **kw7)
+    led.ok(why is None and ops_vals(batch) == [(SWAP, [1, 30, 11])],
+           "a reserved cell that is OCCUPIED is a swap, not a refusal -- occupancy is decided first "
+           "(ENG-6): the cell stays filled either way and the set switch's fallback picks a free one",
+           f"{why or ops_vals(batch)}")
+    del it7[30]
+    batch, changes, why = itemstore.plan_move_by_id(it7, bags7, 11, 4, 0, **kw7)
+    led.ok(why is None and ops_vals(batch) == [(CHG, [1, 11, 4, 0])],
+           "CONTROL: with no storage_bags declared the same bag-4 destination is an ordinary empty cell")
     batch, changes, why = itemstore.plan_move_by_id(it7, bags7, 11, EQ, 0, **kw7)
-    led.ok(why is None and ops_vals(batch) == [(SWAP, [1, 1, 11]), (VIS, [25, 0, 11])],
+    led.ok(why is None and ops_vals(batch) == [(SWAP, [1, 1, 11]), (VIS, [25, 0, 11])]
+           and all(lbl.endswith(itemstore.MOVE_BY_ID_TAG) for _o, _v, lbl in batch),
            "the sword dragged onto equipped slot 0 (ITS type's slot) delegates to the equip: 0x0152 "
-           "[1, hammer, sword] + the hand's visual", f"{why or ops_vals(batch)}")
+           "[1, hammer, sword] + the hand's visual -- both labels tagged RECONSTRUCTION via ITEM_MOVE_BY_ID "
+           "(ENG-7)", f"{why or [l for _o, _v, l in batch]}")
     batch, changes, why = itemstore.plan_move_by_id(it7, bags7, 7, BP, 5, **kw7)
-    led.ok(why is None and ops_vals(batch) == [(CHG, [1, 7, BP, 5]), (VIS, [25, 6, 0])],
+    led.ok(why is None and ops_vals(batch) == [(CHG, [1, 7, BP, 5]), (VIS, [25, 6, 0])]
+           and all(lbl.endswith(itemstore.MOVE_BY_ID_TAG) for _o, _v, lbl in batch),
            "the head (equipped bag 4) dragged by id to backpack 5 delegates to 0x004F's batch: "
-           "0x014B + 0x006F [agent, 6, 0] -- visual 6 through the permutation", f"{why or ops_vals(batch)}")
+           "0x014B + 0x006F [agent, 6, 0] -- visual 6 through the permutation; labels tagged",
+           f"{why or ops_vals(batch)}")
     bad7, _c, _w = itemstore.plan_move_by_id(it7, bags7, 7, BP, 5, **dict(kw7, visual_of=itemstore.visual_of_bag_slot))
     led.ok(ops_vals(bad7)[1] == (VIS, [25, 4, 0]),
            "KNOWN-BAD: the identity visual_of over retail's bag cell empties visual 4 (the legs) "
@@ -967,19 +1084,82 @@ try:
     authsrv.handle_item_move_by_id([MOVE_ID, 11, BP, 0], send6, st6, 0)          # B: back
     led.ok(sent6 == [(CHG, [1, 11, BP, 0])] and items6[11]["slot"] == 0,
            "...and back: 0x014B [1, 11, 2, 0] (the runsheet's B)")
+    # ENG-3: the REAL handler's visual_of, through both delegates (the mutation that
+    # dropped it from handle_item_move_by_id survived the first cut's locks).
+    sent6.clear()
+    authsrv.handle_item_move_by_id([MOVE_ID, 7, BP, 5], send6, st6, 0)            # the head, by id, out
+    led.ok(sent6 == [(CHG, [1, 7, BP, 5]), (VIS, [authsrv.PLAYER_AGENT_ID, 6, 0])]
+           and items6[7]["bag"] == BP,
+           "the REAL handler on an equipped SOURCE (the head at bag 4): 0x014B + 0x006F [player, 6, 0] -- "
+           "visual 6 through item_visual_of; the identity would empty the legs' 4 (ENG-3)", f"{sent6}")
+    sent6.clear()
+    authsrv.handle_item_move_by_id([MOVE_ID, 7, EQ, HEAD_BAG], send6, st6, 0)     # back, by id, at ITS slot
+    led.ok(sent6 == [(CHG, [1, 7, EQ, HEAD_BAG]), (VIS, [authsrv.PLAYER_AGENT_ID, 6, 7])]
+           and items6[7]["bag"] == EQ and items6[7]["slot"] == HEAD_BAG,
+           "...and on the equipped DESTINATION at its type's slot: 0x014B [1, 7, 1, 4] + 0x006F "
+           "[player, 6, 7]", f"{sent6}")
     sent6.clear()
     authsrv.handle_item_move_by_id([MOVE_ID, 11, BP], send6, st6, 0)              # malformed
     authsrv.handle_item_move_by_id([MOVE_ID, 11, BP, 0], send6, st6, 0)           # its own cell
     authsrv.handle_item_move_by_id([MOVE_ID, 99, BP, 3], send6, st6, 0)           # unknown
+    authsrv.handle_item_move_by_id([MOVE_ID, 11, 4, 0], send6, st6, 0)            # a storage pane (ENG-7)
     authsrv.handle_item_move_by_id([MOVE_ID, 11, BP, 3], send6, {"agents": {}}, 0)   # no layout
-    led.ok(sent6 == [], "four refusals through the real handler send NOTHING")
+    led.ok(sent6 == [] and items6[11]["slot"] == 0 and authsrv.storage_bag_ids() == {4, 5, 6, 7, 8, 9},
+           "five refusals through the real handler send NOTHING (the storage panes 4-8 and material "
+           "storage 9 are the refused destinations)")
+    # ENG-2: the merchant's purchases live in the SAME store the drag handlers
+    # read. Before the fix a purchase took the dressed sword's cell 0, and a drag
+    # onto a bought item's cell was a bare 0x014B into a FILLED cell.
+    st6["declared_items"] = {40: list(STOCK_ROW)}
+    sent6.clear()
+    authsrv.handle_item_purchase(BUY_REQ, send6, st6, 0, _Rec())
+    placed6 = [v for op, v in sent6 if op == authsrv.GAME_SMSG_ITEM_MOVED_TO_LOCATION]
+    bought6 = placed6[0][1] if placed6 else None
+    led.ok(len(placed6) == 1 and placed6[0][2:] == [BP, 1] and bought6 in items6
+           and items6[bought6] == {"bag": BP, "slot": 1, "key": None, "kind": "bought", "item_type": 7}
+           and st6["backpack"] == {1: bought6},
+           "a PURCHASE with the sword at backpack 0 lands at cell 1 -- not on the sword -- and is "
+           "registered in the item store (kind 'bought', wire type 7 from the minted row) beside the "
+           "merchant's own map", f"{placed6} store {items6.get(bought6)} map {st6.get('backpack')}")
+    sent6.clear()
+    authsrv.handle_item_move_by_id([MOVE_ID, 11, BP, 1], send6, st6, 0)           # the sword onto the bought item
+    led.ok(sent6 == [(SWAP, [1, bought6, 11])] and items6[11]["slot"] == 1 and items6[bought6]["slot"] == 0
+           and st6["backpack"] == {0: bought6},
+           "the sword dragged ONTO the bought item's cell is a 0x0152 swap, never a bare 0x014B; the cells "
+           "exchange and the merchant's map follows the bought item to cell 0", f"{sent6} map {st6['backpack']}")
+    it_bad = {k: dict(v) for k, v in items6.items() if k != bought6}
+    bad_b, _c, _w = itemstore.plan_move_by_id(it_bad, authsrv.player_bags(), 11, BP, 0, **kw7)
+    led.ok(ops_vals(bad_b) == [(CHG, [1, 11, BP, 0])],
+           "KNOWN-BAD (the first cut): with the purchase OUTSIDE the store the same drag onto its cell "
+           "plans a bare 0x014B into a FILLED cell -- the ItCliInv:105 path ENG-2 named")
+    sent6.clear()
+    authsrv.handle_item_move_by_id([MOVE_ID, bought6, BP, 5], send6, st6, 0)      # the bought item itself
+    led.ok(sent6 == [(CHG, [1, bought6, BP, 5])] and items6[bought6]["slot"] == 5
+           and st6["backpack"] == {5: bought6},
+           "a drag OF the bought item is accepted -- it is a declared item of the store now (the first "
+           "cut refused it as 'not one this connection declared'): 0x014B [1, id, 2, 5]", f"{sent6}")
+    sent6.clear()
+    authsrv.handle_item_sale([0x804A, 11, 0, [bought6], 7, []], send6, st6, 0, _Rec())
+    led.ok([op for op, _v in sent6][:1] == [authsrv.GAME_SMSG_ITEM_REMOVED] and bought6 not in items6
+           and st6["backpack"] == {} and itemstore.at(items6, BP, 5) is None,
+           "the SALE removes the bought item from the store and the merchant's map alike, so cell 5 is "
+           "EMPTY again for the next drag", f"{sent6} store {sorted(items6)}")
     authsrv.PERSIST = True
     store6 = charstore.Store.open("items@rurik.invalid", base=base)
-    st6p = {"agents": {}, "char_uuid": UUID, "map_id": 145, "charstore_game": store6}
-    authsrv.item_layout_begin(st6p, 0)
+    st6p = {"agents": {}, "char_uuid": UUID, "map_id": 145, "charstore_game": store6,
+            "declared_items": {40: list(STOCK_ROW)}}
+    items6p = authsrv.item_layout_begin(st6p, 0)
     authsrv.handle_item_move_by_id([MOVE_ID, 11, BP, 4], send6, st6p, 0)
     led.ok(charstore.Store.open("items@rurik.invalid", base=base).item_locations(UUID).get(11) == (BP, 4),
            "under --persist the move-by-id is on disk as item_locations[11] = (2, 4)")
+    sent6.clear()
+    authsrv.handle_item_purchase(BUY_REQ, send6, st6p, 0, _Rec())
+    bought6p = [v for op, v in sent6 if op == authsrv.GAME_SMSG_ITEM_MOVED_TO_LOCATION][0][1]
+    authsrv.handle_item_move_by_id([MOVE_ID, bought6p, BP, 9], send6, st6p, 0)
+    locs6p = charstore.Store.open("items@rurik.invalid", base=base).item_locations(UUID)
+    led.ok(items6p[bought6p]["slot"] == 9 and bought6p not in locs6p and locs6p.get(11) == (BP, 4),
+           "...but a BOUGHT item's move is NOT persisted (the dress never re-declares a purchase; a row "
+           "for it would be dead) while the sword's cell is", f"{locs6p}")
     authsrv.PERSIST = False
     authsrv.WEAPON_SETS = [{"lead": "starter_hammer", "off": None}, None, None, None]
     authsrv._assign_backpack_slots()
@@ -1120,14 +1300,36 @@ try:
            "LOCK: every 0x013E placement label (five in the dress, one in declare_weapon_sets) is "
            "built from the SENT cell by dress_cell_label, and the constant-slot label is gone")
     ild = ast.get_source_segment(SRC, _func(TREE, "item_layout_defaults"))
+    hm_src = ast.get_source_segment(SRC, _func(TREE, "handle_item_move"))
+    he_src = ast.get_source_segment(SRC, _func(TREE, "handle_equip_item"))
+    hb_src = ast.get_source_segment(SRC, _func(TREE, "handle_item_move_by_id"))
     led.ok(ild.count("equipped_bag_slot(") == 3
            and "itemstore.worn_array(state[\"items\"], EQUIPPED_BAG_ID,\n                                        VISUAL_EQUIPMENT_SLOTS,\n                                        visual_of=item_visual_of())" in players_src
-           and "visual_of=item_visual_of()" in ast.get_source_segment(SRC, _func(TREE, "handle_item_move"))
-           and "bag_slot_of_type=item_bag_slot_table()" in ast.get_source_segment(SRC, _func(TREE, "handle_equip_item"))
-           and "bag_slot_of_type=item_bag_slot_table()" in ast.get_source_segment(SRC, _func(TREE, "handle_item_move_by_id")),
-           "LOCK: the layout derives the three equipped placements' cells from the type "
-           "(equipped_bag_slot), the 0x006E build reads the store through item_visual_of, and all "
-           "three handlers pass the server's visual/bag-slot pair to the planner")
+           and "visual_of=item_visual_of()" in hm_src
+           and "visual_of=item_visual_of()" in he_src and "bag_slot_of_type=item_bag_slot_table()" in he_src
+           and "visual_of=item_visual_of()" in hb_src and "bag_slot_of_type=item_bag_slot_table()" in hb_src,
+           "LOCK: the layout derives the three equipped placements' cells through equipped_bag_slot, "
+           "the 0x006E build reads the store through item_visual_of, and all three handlers pass BOTH "
+           "halves of the server's visual/bag-slot pair to the planner (ENG-3: the 0x0072 handler's "
+           "visual_of was unlocked and its removal survived)")
+    # the confirmation pass's fix (ENG-1, ENG-2, ENG-6, ENG-7)
+    ebs_fn = _func(TREE, "equipped_bag_slot")
+    led.ok([a.arg for a in ebs_fn.args.args] == ["visual_slot"]
+           and "bag_slot_of_visual(visual_slot" in ast.get_source_segment(SRC, ebs_fn.body[-1]),
+           "LOCK: equipped_bag_slot is keyed by the worn LOCATION alone -- one argument, the inverse "
+           "permutation -- never by type (ENG-1)")
+    rbs = ast.get_source_segment(SRC, _func(TREE, "reserved_backpack_slots"))
+    led.ok("if int(iid) not in OFF_HAND_ITEM_IDS:" in rbs
+           and authsrv.OFF_HAND_ITEM_IDS == frozenset({authsrv.OFFHAND_ITEM_ID, 12, 14, 16}),
+           "LOCK: reserved_backpack_slots reserves OFF HANDS' homes only -- set 0's and sets 1-3's (ENG-6)")
+    led.ok("storage_bags=storage_bag_ids()" in hb_src and authsrv.STORAGE_BAG_TYPES == (4, 5),
+           "LOCK: the 0x0072 handler refuses the storage bags (types 4 and 5) as destinations (ENG-7)")
+    hip = ast.get_source_segment(SRC, _func(TREE, "handle_item_purchase"))
+    imc = ast.get_source_segment(SRC, _func(TREE, "_item_moves_commit"))
+    led.ok("place=itemstore.place" in hip and "avoid=reserved_backpack_slots(state)" in hip
+           and 'held = state.get("backpack")' in imc and '== "bought"' in imc,
+           "LOCK: the merchant wrapper hands the purchase the store's `place` and the reserved cells, "
+           "and the commit re-keys the merchant's map and never persists a bought item's cell (ENG-2)")
 finally:
     for k, v in _saved.items():
         setattr(authsrv, k, v)

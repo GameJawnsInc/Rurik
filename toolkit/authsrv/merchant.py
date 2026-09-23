@@ -124,8 +124,14 @@ PURCHASED_ITEM_ID_BASE = 5000
 
 def handle_item_purchase(values, send, state, conn_id, rec,
                          PLAYER_INVENTORY_KEY, GAME_SMSG_CREATE_NAMED_ITEM,
-                         GAME_SMSG_ITEM_MOVED_TO_LOCATION):
+                         GAME_SMSG_ITEM_MOVED_TO_LOCATION, place=None, avoid=()):
     """Answer one GAME_CMSG 0x004D: mint the item, place it, take the money.
+
+    `place` (itemstore.place, handed in by authsrv's wrapper) registers the
+    bought item in state["items"] when that store exists; `avoid` is the set
+    of backpack slots the caller keeps EMPTY (the worn off hands' return
+    cells). Both default to "no store" so test_purchase's bare recipe and the
+    no-dress state keep working (the confirmation pass's fix, ENG-2).
 
     REFUSALS ARE LOUD AND COST NOTHING, which matters more here than usual: the
     client has already decided locally that it can afford this and has room for
@@ -158,11 +164,28 @@ def handle_item_purchase(values, send, state, conn_id, rec,
     # A MAP, not a cursor: a sale frees its slot and the next purchase must be
     # able to take it. A monotonic cursor would call a bag full after twenty
     # transactions on an empty backpack.
+    #
+    # THE ITEM STORE IS THE OTHER MAP, and it wins (DESKWORK-D1 step 8, the
+    # confirmation pass's fix, ENG-2): state["items"] -- the dress's cells,
+    # itemstore.py -- holds the sword and every set item, and the drag
+    # handlers decide EMPTY from it alone. Until 2026-09-23 this picker read
+    # only its own map, so the first purchase landed on the dressed sword's
+    # cell, and a drag onto a bought item's cell was answered 0x014B into a
+    # FILLED cell (the client's add worker asserts it empty, ItCliInv:105).
+    # Now the cell is the lowest one free of BOTH maps and of `avoid` (the
+    # worn off hands' reserved return cells), and the purchase is registered
+    # in the store through `place` (itemstore.place, passed by the wrapper
+    # so this file still imports nothing).
     held = state.setdefault("backpack", {})
-    slot = next((s for s in range(BACKPACK_SLOT_COUNT) if s not in held), None)
+    store = state.get("items")
+    taken = set(held) | set(avoid or ())
+    taken |= {int(row["slot"]) for row in (store or {}).values()
+              if int(row.get("bag", -1)) == BACKPACK_BAG_ID}
+    slot = next((s for s in range(BACKPACK_SLOT_COUNT) if s not in taken), None)
     if slot is None:
         print(f"[c{conn_id}] BUY refused: backpack full "
-              f"({len(held)}/{BACKPACK_SLOT_COUNT} slots)", flush=True)
+              f"({len(taken)}/{BACKPACK_SLOT_COUNT} slots taken: {len(held)} bought, "
+              f"{len(taken) - len(held)} dressed or reserved)", flush=True)
         return
     # array8 decodes to a str of code points, the same shape the settings blob
     # arrives in; one byte per item id, so the first is this item's quantity.
@@ -178,6 +201,11 @@ def handle_item_purchase(values, send, state, conn_id, rec,
     minted[0] = new_id
     if len(minted) > 10:
         minted[10] = quantity
+    if store is not None and place is not None:
+        # named_item()'s field order: id, file, TYPE, ... -- the wire type is
+        # what an equip's slot is decided from (itemstore.slot_of_type).
+        place(store, new_id, BACKPACK_BAG_ID, slot, key=None, kind="bought",
+              item_type=(minted[2] if len(minted) > 2 else None))
 
     # Pay, mint, place, confirm -- retail's own order, by byte offset.
     send(GAME_SMSG_GOLD_DEBIT, [PLAYER_INVENTORY_KEY, price],
@@ -244,6 +272,12 @@ def handle_item_sale(values, send, state, conn_id, rec, PLAYER_INVENTORY_KEY):
               f"player's backpack ({sorted(held.values())})", flush=True)
         return
     del held[slot]
+    store = state.get("items")
+    if store is not None:
+        # ENG-2: the item store is the drag handlers' map; a sold item
+        # leaves it too, or the next drag onto its old cell would be a swap
+        # with an item the client no longer has.
+        store.pop(item_id, None)
 
     send(GAME_SMSG_ITEM_REMOVED, [PLAYER_INVENTORY_KEY, item_id],
          f"ITEM_REMOVED(sold {item_id} from slot {slot})")

@@ -47,7 +47,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(HERE), "schema"))
 import authsrv  # noqa: E402
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("answering a transaction", floor=27)
+LEDGER = checks.Ledger("answering a transaction", floor=35)   # 2026-09-23, the green run after section 5 (the item store as the other map, ENG-2); 27 before it
 
 # The two requests, verbatim. values[0] is the header, as everywhere in the
 # dispatch chain.
@@ -178,6 +178,52 @@ def main():
               "a full backpack is refused",
               f"{authsrv.BACKPACK_SLOT_COUNT} slots is the type-1 bag's own "
               f"capacity, measured 49/49 in the live corpus")
+
+    # ---- 5. the item store is the OTHER map, and it wins ------------------
+    # DESKWORK-D1 step 8, the confirmation pass's fix (ENG-2): the dress's
+    # item store (state["items"], itemstore.py) holds the sword and the set
+    # items, and the drag handlers decide EMPTY from it alone. A purchase must
+    # land clear of it and be registered in it, or a drag onto the bought
+    # item's cell answers 0x014B into a FILLED cell (ItCliInv:105).
+    sword = {"bag": authsrv.BACKPACK_BAG_ID, "slot": 0, "key": "starter_sword",
+             "kind": "set 1 lead", "item_type": 27}
+    sent, state, _r = run(OURS, state={"items": {11: dict(sword)}})
+    moved = dict(sent)[authsrv.GAME_SMSG_ITEM_MOVED_TO_LOCATION]
+    new_id = moved[1]
+    LEDGER.ok(moved[3] == 1
+              and state["items"].get(new_id) == {"bag": authsrv.BACKPACK_BAG_ID, "slot": 1,
+                                                  "key": None, "kind": "bought", "item_type": 7}
+              and state["backpack"] == {1: new_id},
+              "with the dressed sword at backpack 0 in the item store the purchase "
+              "lands at slot 1 and is REGISTERED in the store (kind 'bought', wire "
+              "type 7 from the minted row), beside the merchant's own map",
+              f"moved {moved}, store row {state['items'].get(new_id)}, map "
+              f"{state['backpack']}")
+    LEDGER.ok(dict(run(OURS, state={})[0])[authsrv.GAME_SMSG_ITEM_MOVED_TO_LOCATION][3] == 0,
+              "CONTROL / KNOWN-BAD: the same purchase on a state with NO item store "
+              "takes slot 0 -- the first cut's answer even when the store held the "
+              "sword there",
+              "the store is the map the drag handlers read; a picker blind to it "
+              "put the purchase on the sword")
+    sent, state, _r = run([0x804A, 11, 0, [new_id], 7, []], state=state,
+                          fn=authsrv.handle_item_sale)
+    LEDGER.ok([op for op, _v in sent][:1] == [authsrv.GAME_SMSG_ITEM_REMOVED]
+              and new_id not in state["items"] and 11 in state["items"]
+              and state["backpack"] == {},
+              "the SALE pops the bought item from the store and leaves the sword",
+              f"store {sorted(state['items'])}, map {state['backpack']}")
+    sent_a = []
+    st_a = {"declared_items": {STOCK[0]: list(STOCK)}, "items": {}}
+    authsrv.merchant.handle_item_purchase(
+        OURS, lambda op, values, label, quiet=False: sent_a.append((op, list(values))),
+        st_a, 1, Rec(), authsrv.PLAYER_INVENTORY_KEY, authsrv.GAME_SMSG_CREATE_NAMED_ITEM,
+        authsrv.GAME_SMSG_ITEM_MOVED_TO_LOCATION, place=None, avoid={0, 1})
+    LEDGER.ok(dict(sent_a)[authsrv.GAME_SMSG_ITEM_MOVED_TO_LOCATION][3] == 2
+              and st_a["items"] == {},
+              "`avoid` (the wrapper's reserved off-hand return cells) is skipped -- "
+              "slots 0 and 1 avoided, the purchase lands at 2 -- and with no `place` "
+              "nothing is registered",
+              f"{dict(sent_a)[authsrv.GAME_SMSG_ITEM_MOVED_TO_LOCATION]}")
 
 
     # ---- 6. SELL: remove, pay, confirm ----------------------------------
