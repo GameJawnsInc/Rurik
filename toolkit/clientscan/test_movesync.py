@@ -176,8 +176,14 @@ import vaultpath  # noqa: E402
 # line names median - min and max - median on a fixture where the three
 # differ, and the real Recorder's `clock_residual` is this section's own clock
 # term. One synthetic, one on a temp dir: both bare.
+# 2026-09-23 (latest): 143 -> 144, MEASURED with `RURIK_VAULT` at an empty
+# directory (144, the same 7 declared skips; 198 vaulted). sec.21's mixed-file
+# note must print the 38 rows that carry only the truncated stamp, not the 40
+# with a `wall` -- synthetic, bare. Two sec.21 checks that scored the truncated
+# spread as the error score `bound` now and two messages stop calling it one
+# (test_truncbound.py); no count change from those.
 LEDGER = checks.Ledger("separation: the quantity that actually predicts a warp",
-                       floor=143)
+                       floor=144)
 check = checks.adopt(LEDGER)
 
 MOVETAP = "movetap-20260819T171436.jsonl"
@@ -1842,8 +1848,12 @@ def main():
     # stamped `wall` truncated to the second, so `offset_from_stamps` could only
     # bound the offset from below and the measured spread was 0.999920 s (L1 arm
     # A) / 0.999777 s (arm B) -- 288 units at run speed, on every wire<->movetap
-    # pairing this arc has made. `wall_unix` is the same instant at 1e-7 s
-    # resolution. What this section is really about is that the two estimators
+    # pairing this arc has made. (CORRECTED 2026-09-23: that spread is how much
+    # of the second the rows covered; the offset's error was 1 - spread plus a
+    # tick of the coarse clock `wall` is read from -- milliseconds -- and a
+    # spread near 1 s is the TIGHT case. test_truncbound.py, REALFIX.md T1.)
+    # `wall_unix` is the same instant at 1e-7 s resolution. What this section
+    # is really about is that the two estimators
     # are NEVER MIXED and that the file SAYS which one it used: a run that
     # silently fell back to the truncated stamps produces identical-looking
     # numbers everywhere downstream.
@@ -1856,10 +1866,12 @@ def main():
         # A post-T1 capture: every row carries BOTH stamps, exactly as
         # `Recorder.event` now writes them.
         # 40 rows at a 0.317 s cadence, not a handful: the truncated
-        # estimator's residual approaches 1.00 s only as the rows sample
-        # `frac(unix)` densely, and six rows reach 0.76 -- which would have
-        # understated the defect this whole delta is about. A real capture
-        # carries hundreds.
+        # stamps' spread approaches 1.00 s only as the rows sample
+        # `frac(unix)` densely, and six rows reach 0.76. (That was written as
+        # "understating the defect"; it is the reverse -- dense rows are what
+        # make the truncated bound TIGHT, 1 - spread, and six rows leave it
+        # loose. 2026-09-23, test_truncbound.py.) A real capture carries
+        # hundreds.
         ts = [round(0.317 * k, 3) for k in range(40)]
         post = cap(os.path.join(td, "post.jsonl"), [
             dict(selfreport(t, 100.0 * i, 200.0 * i),
@@ -1906,18 +1918,26 @@ def main():
               f"\"< 1 ms (< 0.3 u)\" line, demonstrated (max - min "
               f"{d_post['spread'] * 1000.0:.6f} ms: an exact fixture)",
               "this is the number the whole clock-anchor delta exists to move")
+        # RELABELLED 2026-09-23 (latest): the truncated spread is how much of
+        # the second the rows covered, not the offset's error -- the error is
+        # bounded by 1 - spread (plus a tick of the coarse clock `wall` is read
+        # from, which this exact fixture does not have). REALFIX section 2.1
+        # read this ~1 s as 288 u of pairing error; test_truncbound.py.
         check(0.9 < d_pre["spread"] < 1.0,
-              f"while the truncated estimator's residual is "
-              f"{d_pre['spread']:.6f} s = "
-              f"{d_pre['spread'] * movesync.RUN_SPEED:.0f} u -- the 1.00 s "
-              f"REALFIX section 2.1 measured, reproduced from a synthetic file",
-              "if the fallback did NOT show ~1 s here the fixture is not "
-              "exercising the defect and the comparison above means nothing")
-        check(d_pre["offset"] <= T0 and T0 - d_pre["offset"] < 1.0,
-              f"and the fallback still estimates from BELOW "
-              f"({d_pre['offset'] - T0:+.3f} s), unchanged",
-              "every capture in the vault is a pre-T1 one, so the old "
-              "estimator's behaviour is not free to move")
+              f"while the truncated stamps' spread is {d_pre['spread']:.6f} s "
+              f"-- the ~1.00 s REALFIX section 2.1 read as the error, "
+              f"reproduced from a synthetic file",
+              "if the fallback did NOT show ~1 s here the fixture would not "
+              "cover the second densely and the bound below would be loose")
+        check(0.0 <= T0 - d_pre["offset"] <= 1.0 - d_pre["spread"]
+              and T0 - d_pre["offset"] <= d_pre["bound"],
+              f"and the fallback still estimates from BELOW, "
+              f"{(T0 - d_pre['offset']) * 1000.0:.1f} ms under the truth -- "
+              f"inside 1 - spread ({(1.0 - d_pre['spread']) * 1000.0:.1f} ms) "
+              f"and the printed bound ({d_pre['bound'] * 1000.0:.1f} ms)",
+              "every capture older than T1 is scored this way, so the old "
+              "estimator's behaviour is not free to move; a spread near 1 s "
+              "is a tight bound, not a 1 s error")
 
         # THE FLOAT ARM'S ESTIMATOR IS A MEDIAN, AND UNTIL NOW NOTHING SAID SO.
         # `offset_detail`'s docstring makes median-vs-max the whole design of
@@ -1967,6 +1987,16 @@ def main():
               f"({d_mix['offset'] - T0:+.9f} s from the truth)",
               "pooling the two families gives an offset biased by the mix "
               "ratio -- neither estimator, and no way to tell from the number")
+        # AND THE NOTE COUNTS THE RIGHT ROWS. `n_trunc` counts every row with a
+        # `wall`, the two float rows included; until 2026-09-23 the note printed
+        # it as the rows that "carry only the truncated stamp" -- 40 here, 38
+        # true.
+        line_mix = movesync.offset_line(d_mix)
+        check(f"; {len(ts) - 2} more row(s) carry only the truncated stamp"
+              in line_mix and f"; {len(ts)} " not in line_mix,
+              f"and its note counts the {len(ts) - 2} rows that carry only "
+              f"the truncated stamp, not all {len(ts)} with a `wall`",
+              f"printed {line_mix!r}")
 
         # THE LINE ITSELF, read back out of stdout. A residual computed and not
         # printed is the assumption T1 exists to remove, and `offset_from_stamps`
@@ -2135,9 +2165,10 @@ def main():
                   f"REALFIX-T1 DEMONSTRATED END TO END: over {d_real['n']} real "
                   f"rows the median offset sits {clock_term * 1e6:.1f} us = "
                   f"{clock_term * movesync.RUN_SPEED:.4f} u above the "
-                  f"least-delayed row, against the {d_pre['spread']:.3f} s / "
-                  f"{d_pre['spread'] * movesync.RUN_SPEED:.0f} u the truncated "
-                  f"stamp gives -- REALFIX section 2.2's \"< 1 ms (< 0.3 u)\" "
+                  f"least-delayed row, against the {d_pre['bound'] * 1e3:.1f} ms "
+                  f"/ {d_pre['bound'] * movesync.RUN_SPEED:.1f} u the synthetic "
+                  f"file's truncated stamps can bound it to -- REALFIX 2.2's "
+                  f"\"< 1 ms (< 0.3 u)\" "
                   f"clock term, measured rather than assumed (max - min "
                   f"{d_real['spread'] * 1e6:.1f} us: the worst row sits "
                   f"{(real_offs[-1] - d_real['offset']) * 1e6:.1f} us above the "
@@ -2165,18 +2196,22 @@ def main():
                   f"clock")
             trunc_real = movesync.offset_detail(
                 movesync.WallStamps(list(w_real), ()))
-            check(trunc_real["spread"] > 100.0 * clock_term,
-                  f"and the SAME capture scored on its truncated stamps gives "
-                  f"{trunc_real['spread']:.3f} s -- "
-                  f"{trunc_real['spread'] / max(clock_term, 1e-12):.0f}x "
+            # RELABELLED 2026-09-23 (latest): this compared the truncated
+            # SPREAD, and called the truncated arm "flattered" because 200
+            # rows in a few ms span a sliver of the second. It is the other
+            # way round: a sliver is the LOOSE case. The truncated error bound
+            # is `bound` = 1 s + one tick - spread (test_truncbound.py), close
+            # to a full second here unless the rows straddle a boundary, and
+            # never under one tick. 100x unchanged.
+            check(trunc_real["bound"] > 100.0 * clock_term,
+                  f"and the SAME capture scored on its truncated stamps can "
+                  f"only be bounded to {trunc_real['bound'] * 1e3:.1f} ms "
+                  f"(spread {trunc_real['spread'] * 1e3:.1f} ms) -- "
+                  f"{trunc_real['bound'] / max(clock_term, 1e-12):.0f}x "
                   f"worse on the identical rows",
                   "the same file, the two estimators, side by side: this is "
                   "the comparison that says the improvement is the stamp and "
-                  "not the fixture. NOTE the truncated arm is FLATTERED here "
-                  "-- 200 rows written in a few ms span less than one second, "
-                  "so its spread is the span rather than the 1.00 s a real run "
-                  "reaches; the synthetic fixture above is where the full "
-                  "defect shows, and 100x is deliberately far below it")
+                  "not the fixture")
             # CONTROL, both directions, on THIS capture's own offsets: an
             # operand swapped for one that cannot fail is the failure this repo
             # keeps finding. Plant the worst preemption seen (80 ms, one row):

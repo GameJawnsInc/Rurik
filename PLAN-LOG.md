@@ -28,6 +28,25 @@ move back.
 
 ---
 
+### REALFIX-T1 truncated arm -- 2026-09-23 -- **the pre-T1 clock slop was milliseconds, not 1.00 s / 288 u: a truncated spread near 1 s is the TIGHT case, and the bound is 1 s + one coarse-clock tick − spread**
+
+This entry corrects the REALFIX-L1 FIRST RUN entry below (append-only: that entry stands
+as written), whose P2 separation misses were recorded as UNDECIDABLE-leaning-miss partly
+on a "~1 s movetap↔wire clock systematic (≤ ~288 u/pairing)". On L1's own two captures
+(`20260821T081744`, `20260821T082631`) the truncated offset is bounded to **15.705 ms =
+4.52 u** and **15.848 ms = 4.56 u** (OBSERVED). The truncated `wall` floors
+`GetSystemTimeAsFileTime`, one timer tick behind `time.time()`, so the truth lies in
+`[max, min + 1 + one tick)`. `movesync.offset_detail` gains `bound` and `offset_line`
+prints it where it printed the spread as "residual"; it prints NO BOUND on a capture
+whose stamps show the clock moved (2 of 1,034 pre-T1 captures, clock steps of +1.25 and
+−1.36 s, where the old reading understated). New `toolkit/clientscan/test_truncbound.py`
+scores it on the 511 captures carrying both stamps: the max 0.105–17.262 ms below the
+float median, never above, inside `bound` by ≥ 14.150 ms; a mean, a bound without the
+tick and the old label each go red. The misses are not re-scored here. The record, and
+every conclusion that leaned on 288 u, listed and not rewritten:
+[studies/movement/REALFIX.md](studies/movement/REALFIX.md) §5, T1's note "SETTLED
+2026-09-23 (latest)".
+
 ### SKILLS-LU fix pass / DESKWORK-D4 residue -- 2026-09-23 -- **a body's chain-gated cast lands on NOBODY (the reviewers' blocker), the chain flag is the gate's exclusion, a hostile's party is its spawn group, a label row's marks are a closed set at load (the regeneration hazard, bounded), 784 OBSERVED 5x by retail's bodies after their own lead**
 
 This entry corrects the SKILLS-LU entry below it (append-only: that entry stands as

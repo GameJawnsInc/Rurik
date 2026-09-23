@@ -239,6 +239,17 @@ OP_CANCEL_REPORT = 71       # c2s 0x0047 -- the client's position at a STOP
 # below across the whole file.
 OFFSET_SRC_UNIX = "wall_unix"
 OFFSET_SRC_TRUNC = "wall(truncated)"
+# The coarsest tick of the clock the truncated `wall` is read from, in seconds.
+# `time.gmtime()` with no argument does NOT read `time.time()`'s precise clock:
+# floor-to-second of `GetSystemTimeAsFileTime` equalled it on 1,748,920 of
+# 1,748,920 reads bracketed by an unchanged coarse value (OBSERVED 2026-09-23,
+# this box, Python 3.14). That clock advances once per timer interrupt, so it
+# LAGS the precise one and a `wall` second rolls over late -- 782 of 4.1 M
+# back-to-back reads, never early. NtQueryTimerResolution reports the interval
+# between 0.5 ms and 15.625 ms (156,250 x 100 ns, the coarsest), and the 511
+# vault captures carrying both stamps show late rollovers of at most 1.474 ms
+# (test_truncbound.py). The bound below takes the coarsest.
+WALL_TICK = 156250e-7
 
 
 class WallStamps(list):
@@ -382,8 +393,9 @@ def offset_detail(walls):
     """unix epoch of server t=0, and WHICH clock said so. REALFIX-T1.
 
     Returns `{source, offset, spread, n, n_trunc, clock_residual,
-    worst_delay}`. `spread` is max - min of the per-row offsets in the family
-    used, and it is a different quantity on each arm: read `source` first.
+    worst_delay, bound}`. `spread` is max - min of the per-row offsets in the
+    family used, and it is a different quantity on each arm: read `source`
+    first.
 
     TWO ESTIMATORS, AND THEY ARE NEVER MIXED. A row carrying `wall_unix` gives
     `wall_unix - t` = the true offset PLUS the time between `Recorder.event`'s
@@ -401,21 +413,36 @@ def offset_detail(walls):
     2026-09-23 this said it "measures perf_counter<->system-clock drift over
     the run". It stays because `offset_from_stamps` returns it.
 
-    A row carrying only the truncated `wall` gives `floor(unix) - t =
-    true_offset - frac` with frac in [0,1), so the estimator is the MAXIMUM --
-    which approaches the truth from below -- and the spread is ~1.0 s by
-    construction on any run longer than a second. That spread is how much of
-    the second the rows sampled, and not the max's error: on the 396 captures
-    carrying both stamps the max sat 0.1-17.3 ms below the float median
-    (OBSERVED 2026-09-23, REALFIX.md T1). Both new keys are None on this arm,
-    and `offset_line` still prints its spread as the residual; relabelling
-    that is its own change (PROBE-GATEFIRE.md block 12 quotes the line).
+    A row carrying only the truncated `wall` gives `floor(C) - t`, C being
+    the COARSE clock `gmtime()` reads (`WALL_TICK`), which lags the precise
+    one by up to a tick. Every row sits at or below the true offset -- by the
+    fraction of the second, plus that lag -- so the estimator is the MAXIMUM,
+    which approaches the truth from below, and its error is one-sided and
+    bounded by the rows themselves: if the offset held steady no row sits a
+    full second plus a tick below the truth, so the truth lies in
+    [max, min + 1 + WALL_TICK) and `bound` = 1 + WALL_TICK - spread is how
+    far ABOVE `offset` it can be. The spread is how much of the second the
+    rows covered: near 1 s it is a TIGHT bound, not a 1 s error, and above
+    1 s + one tick the stamps themselves show the offset moved (a clock
+    step, or drift), `bound` goes negative and `offset_line` refuses it.
+    OBSERVED 2026-09-23 (test_truncbound.py) on the 511 vault captures
+    carrying both stamps: the max sat 0.105-17.262 ms below the float median
+    and never above it, inside `bound` on every one by at least 14.150 ms,
+    and none was refused; two of 1,034 pre-T1 captures are, and each splits
+    into two steady runs, one clock step apart (+1.25 s, -1.36 s between the
+    runs' max-estimators). A preemption between `event()`'s `perf_counter` and
+    `gmtime` reads could lift one row above the truth; none has. Until
+    2026-09-23 `offset_line` printed this spread as "residual", and REALFIX
+    section 2.1 read 1.00 s = 288 u of pairing error off it.
+    `clock_residual` and `worst_delay` are None on this arm, `bound` on the
+    float one.
 
     Averaging the two families together would produce a number that is
     neither, biased by the mix ratio; pooling the max-estimator over float
     rows would throw away the resolution that makes them worth having. So one
     family is chosen and the other is counted, and `n` vs `n_trunc` is what
-    tells a reader the file was mixed.
+    tells a reader the file was mixed. `n_trunc` counts every row with a
+    `wall`, float rows included (`Recorder.event` writes both on every row).
 
     A mean over truncated stamps would sit half a second low -- 144 units at
     run speed, the same size as the separation being measured -- which is why
@@ -428,14 +455,16 @@ def offset_detail(walls):
         return {"source": OFFSET_SRC_UNIX, "offset": med,
                 "spread": unix[-1] - unix[0], "n": len(unix),
                 "n_trunc": n_trunc, "clock_residual": med - unix[0],
-                "worst_delay": unix[-1] - med}
+                "worst_delay": unix[-1] - med, "bound": None}
     if not walls:
         return {"source": None, "offset": None, "spread": None,
                 "n": 0, "n_trunc": 0, "clock_residual": None,
-                "worst_delay": None}
+                "worst_delay": None, "bound": None}
+    spread = max(walls) - min(walls)
     return {"source": OFFSET_SRC_TRUNC, "offset": max(walls),
-            "spread": max(walls) - min(walls), "n": n_trunc,
-            "n_trunc": n_trunc, "clock_residual": None, "worst_delay": None}
+            "spread": spread, "n": n_trunc, "n_trunc": n_trunc,
+            "clock_residual": None, "worst_delay": None,
+            "bound": 1.0 + WALL_TICK - spread}
 
 
 def offset_line(d, indent=""):
@@ -451,14 +480,26 @@ def offset_line(d, indent=""):
     delay (max - median) in ms only, since the median absorbs it and a figure
     in units would read as pairing error. Until 2026-09-23 it printed max - min
     as "residual", which on a live capture is the worst preemption.
+
+    The truncated arm prints `bound`, how far above the offset the truth can
+    lie if the clock held steady, and the spread it came from, named as what
+    it is; a negative `bound` is printed as NO BOUND and the step it implies.
+    Until 2026-09-23 (later) it printed the spread as "residual 1.000 s =
+    288 u", which is the error bound read backwards: on a real capture it
+    sits near 1 s exactly when the max is near the truth.
     """
     if not d["n"]:
         return (indent + "clock offset: NO STAMPS -- the two clocks cannot be "
                          "aligned and nothing paired against them would mean "
                          "anything")
-    mixed = ("" if d["n"] == d["n_trunc"] else
-             f"; {d['n_trunc']} row(s) carry only the truncated stamp and were "
-             f"NOT pooled in")
+    # `n_trunc` counts every row with a `wall`, float rows included, so the
+    # rows that carry ONLY the truncated stamp are the difference -- exact
+    # while every float-stamped row also carries `wall`, which is the row
+    # shape `Recorder.event` writes (test_movesync section 21 pins it). Until
+    # 2026-09-23 this printed `n_trunc` itself: 40 where 38 was true.
+    mixed = ("" if d["n_trunc"] <= d["n"] else
+             f"; {d['n_trunc'] - d['n']} more row(s) carry only the truncated "
+             f"stamp and were NOT pooled in")
     if d["source"] == OFFSET_SRC_UNIX:
         return (indent + f"clock offset {d['offset']:.6f} from {d['n']} "
                 f"`wall_unix` row(s) [REALFIX-T1, float, median]: clock "
@@ -468,10 +509,22 @@ def offset_line(d, indent=""):
                 f"{d['worst_delay'] * 1000.0:.3f} ms (max - median: the gap "
                 f"between the two clock reads on the slowest row, which the "
                 f"median absorbs)" + mixed)
-    return (indent + f"clock offset {d['offset']:.3f} from {d['n']} truncated "
-            f"`wall` stamp(s) [PRE-REALFIX-T1, max-estimator]: residual "
-            f"{d['spread']:.3f} s = {d['spread'] * RUN_SPEED:.0f} u at "
-            f"{RUN_SPEED:.0f} u/s -- this capture predates the float stamp")
+    head = (indent + f"clock offset {d['offset']:.3f} from {d['n']} truncated "
+            f"`wall` stamp(s) [PRE-REALFIX-T1, max-estimator]: ")
+    tail = " -- this capture predates the float stamp"
+    tick = f"1 s + one {WALL_TICK * 1000.0:.3f} ms clock tick"
+    if d["bound"] < 0.0:
+        moved = -d["bound"]
+        return (head + f"NO BOUND -- spread {d['spread']:.6f} s exceeds "
+                f"{tick}, so the offset moved by at least "
+                f"{moved * 1000.0:.3f} ms = {moved * RUN_SPEED:.2f} u at "
+                f"{RUN_SPEED:.0f} u/s during this capture (a clock step, "
+                f"drift, or one row delayed that long)" + tail)
+    return (head + f"bound +{d['bound'] * 1000.0:.3f} ms = "
+            f"{d['bound'] * RUN_SPEED:.2f} u at {RUN_SPEED:.0f} u/s -- the "
+            f"true offset lies at most that far above it if the clock held "
+            f"steady ({tick} - spread {d['spread']:.6f} s; the spread is how "
+            f"much of the second the rows covered, not the error)" + tail)
 
 
 def offset_from_stamps(walls, announce=True):

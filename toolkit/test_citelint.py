@@ -117,11 +117,13 @@ CONTROLS = [
      "2026-09-07, and this control MUST move with the document, because it names "
      "the citation text and a stale one has zero hits. The check that proves the "
      "symbol tier fires at all"),
-    (PILOT, "movesync.py:1129", "ok-symbol", "SELFTEST_FLOOR",
+    (PILOT, "movesync.py:1182", "ok-symbol", "SELFTEST_FLOOR",
      "the SECOND citation in `(`SELFTEST_FLOOR` at `movetap.py:1481` and "
-     "`movesync.py:1129`)`. It only resolves because `pair_symbol` erases an "
+     "`movesync.py:1182`)`. It only resolves because `pair_symbol` erases an "
      "intervening citation instead of refusing the pairing, so this control is "
-     "what stops that rule from being quietly removed. Was `:1097` until "
+     "what stops that rule from being quietly removed. Was `:1129` until later "
+     "on 2026-09-23, when `WALL_TICK` and the truncated arm's `bound` put 53 "
+     "more lines above it (test_truncbound.py), `:1097` before "
      "2026-09-23, when `offset_detail`'s docstring and two keys put 32 lines "
      "above it (the REALFIX-T1 relabel), and `:2759` before the fence section "
      "left `movesync.py` for `movefence.py` on 2026-09-11 and took 1,662 lines "
