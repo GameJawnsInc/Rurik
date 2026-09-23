@@ -29112,20 +29112,20 @@ class Recorder:
         kw["kind"] = kind
         kw["t"] = round(time.perf_counter() - self.t0, 6)
         kw["wall"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        # REALFIX-T1. `wall` is truncated to the second, so `wall - t` gives
-        # `true_offset - frac` with frac in [0,1) and the best any reader can do
-        # is bound the offset from below across many rows -- measured spread
-        # 0.999920 s (L1 arm A) and 0.999777 s (arm B), which at 288 u/s is 288
-        # units of slop on every wire<->movetap pairing in the whole arc.
-        # `wall_unix` is the SAME instant read two lines later at full
-        # resolution (`time.get_clock_info('time')` on this box reports
-        # GetSystemTimePreciseAsFileTime, resolution 1e-07 s), so the offset
-        # becomes PER ROW and its spread becomes a real diagnostic of
-        # perf_counter<->system-clock drift rather than an artefact of the
-        # format. `wall` STAYS: every existing consumer and every vault fixture
-        # reads it, and a capture written before today has only that one.
-        # Loader side: `movesync.offset_detail`, which prefers this and prints
-        # which estimator it used -- it never mixes the two.
+        # REALFIX-T1. `wall` is truncated to the second, and `gmtime()` reads a
+        # COARSE clock (GetSystemTimeAsFileTime, up to a timer tick behind), so
+        # `wall - t` is `true_offset - frac - lag`: a reader bounds the offset
+        # from below across many rows, to within 1 s + one tick - the rows'
+        # spread (movesync.WALL_TICK, test_truncbound.py) -- milliseconds, not
+        # the 288 u a ~1.000 s spread was once read as (REALFIX.md T1 note).
+        # `wall_unix` is read just after at full resolution
+        # (`time.get_clock_info('time')`: GetSystemTimePreciseAsFileTime, 1e-07
+        # s), so the offset becomes PER ROW. Its max - min is NOT a drift
+        # diagnostic: a preemption between this row's clock reads lifts that
+        # one row. median - min is the clock term (movesync `clock_residual`).
+        # `wall` STAYS: every existing consumer and every vault fixture reads
+        # it, and a capture written before 2026-08-21 has only that one.
+        # Loader side: `movesync.offset_detail`, which never mixes the two.
         kw["wall_unix"] = time.time()
         line = json.dumps(kw) + "\n"
         try:
