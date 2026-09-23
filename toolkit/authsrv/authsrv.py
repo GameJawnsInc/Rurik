@@ -2593,7 +2593,19 @@ EQUIP_WEAPON = True
 # Our ids: set 0 is WEAPON_ITEM_ID / OFFHAND_ITEM_ID as before; sets 1-3 take
 # the pairs below, clear of the player's 1-10 and the hero bodies' 210+.
 WEAPON_SET_ITEM_IDS = ((11, 12), (13, 14), (15, 16))   # (lead, off) of sets 1, 2, 3
+# The item ids that are OFF HANDS: set 0's (the create's) and sets 1-3's.
+# reserved_backpack_slots keeps THEIR homes empty -- an off hand is the only
+# set item the switch sends home by 0x014B (the confirmation pass's fix, ENG-6).
+OFF_HAND_ITEM_IDS = frozenset({OFFHAND_ITEM_ID} | {off for _lead, off in WEAPON_SET_ITEM_IDS})
 BACKPACK_BAG_ID = 2                                    # PLAYER_BAGS' first row
+# Bag TYPES the 0x0072 arm refuses as a destination: 4 the storage panes, 5
+# material storage (PLAYER_BAGS). No retail tape carries a move into either --
+# every 0x014B on 96 live connections lands in a type-1 or type-2 bag and every
+# 0x0152 is between those two -- and the client's swap strips a set item that
+# lands in a type-4 bag from its equip sets (ItCliInv:348/375, weapons 29),
+# which the set machinery here does not model (the confirmation pass's fix,
+# ENG-7). Lifted the day a run shows the shape.
+STORAGE_BAG_TYPES = (4, 5)
 # WEAPON_SETS[k] is None (empty) or {"lead": key, "off": key or None}. Set 0 is
 # written by apply_party_character from whatever fills it (a party row,
 # --player-weapon); the default is the starter hammer the create hands out.
@@ -2723,10 +2735,8 @@ def declare_weapon_sets(send, state=None):
             _bag, _slot = item_cell(state, item_id, BACKPACK_BAG_ID, slot)
             send(GAME_SMSG_ITEM_MOVED_TO_LOCATION,
                  [1, item_id, _bag, _slot],
-                 f"ITEM_MOVED_TO_LOCATION(set {k} {what} -> backpack {slot}) "
-                 f"[WEAPONS-W9]"
-                 + (f" [stored cell: bag {_bag} slot {_slot}] [DESKWORK-D1 step 8]"
-                    if (_bag, _slot) != (BACKPACK_BAG_ID, slot) else ""))
+                 f"ITEM_MOVED_TO_LOCATION(set {k} {what} -> "
+                 f"{dress_cell_label((_bag, _slot), BACKPACK_BAG_ID, slot)}) [WEAPONS-W9]")
 
 
 def select_weapon_set(send, state, k, conn_id):
@@ -2927,7 +2937,13 @@ WEAPON_ATTACK_SPEED = agents.ATTACK_SPEED["hammer"]
 # in test_armour.py: 9 retail sightings of each model, every field agreeing).
 EQUIP_ARMOUR = True
 STARTER_ARMOUR = (
-    # (item_id, content key, equipped-bag slot)
+    # (item_id, content key, VISUAL slot -- the 0x006E position). The
+    # EQUIPPED-BAG cell is NOT this number: retail keeps the pieces at body 2,
+    # legs 3, head 4, boots 5, gloves 6 (itemstore.RETAIL_BAG_SLOT_OF_TYPE,
+    # OBSERVED on every live load), and item_layout_defaults derives the cell
+    # from the piece's wire type. Until 2026-09-23 this column WAS the bag
+    # cell too, and the paper doll drew every piece in another piece's row
+    # (the owner's screenshot; --equipped-visual-order reproduces it).
     (3, "warrior_body", 2),
     (4, "warrior_boots", 3),
     (5, "warrior_legs", 4),
@@ -10660,14 +10676,30 @@ GAME_CMSG_EQUIP_ITEM = 0x0030
 # (0x00526900) -> ItCliApi 0x00816AF0 -> wrapper 0x00920DE0. Its gate is
 # 0x008454F0(item): the item's PARENT bag (item+0xC) must be of type 2 -- the
 # equipped bag -- and then field 1 is the item's slot byte (item+0x50); any
-# other bag answers 9 and the drag takes the local path at 0x00526AC3, sending
-# nothing. (The first cut read the gate as "the item's bag has model 21"; 21 is
-# 0x00844800's DEFAULT for any item that is not itself a bag container -- EVID-
-# D1C-2.) So field 1 is the item's slot IN THE EQUIPPED BAG, CORROBORATED 4 of
-# 4 by each moved item's cell on the tape; the reply is 0x014B [key, item, bag,
-# slot] + 0x006F [agent, visual slot, 0] in a field. The general bag-to-bag
-# move is another message and is on no tape.
+# other bag answers 9 and the drag takes the path at 0x00526AC3, which sends
+# 0x0072 (below) for a whole item. (The first cut read the gate as "the item's
+# bag has model 21"; 21 is 0x00844800's DEFAULT for any item that is not itself
+# a bag container -- EVID-D1C-2. This comment said the 0x00526AC3 path sends
+# nothing until the owner's client sent one -- the branch was read to its
+# `je`, not to its call; the owner's confirmation pass, EVID-D1D-6.) So field 1
+# is the item's slot IN THE EQUIPPED BAG, CORROBORATED 4 of 4 by each moved
+# item's cell on the tape; the reply is 0x014B [key, item, bag, slot] + 0x006F
+# [agent, visual slot, 0] in a field.
 GAME_CMSG_ITEM_MOVE = 0x004F
+# 0x0072 [dword item, word bag, byte slot]: the general move, an item named by
+# ID dragged between two cells of the non-equipped bags. On NO retail tape (0
+# of 96 live connections); our own client sent ONE (the owner's drag of the
+# sword, item 11, from backpack cell 0 to cell 4: capture
+# authsrv-20260923T163355-c1.jsonl t=18.418, frame 72800b000000020004). Read on
+# 38797 and 38888: GmItemHelpers 0x00526900 -> its non-equipped path
+# 0x00526AC3 -> ItCliApi 0x00847860 (asserts `inventory` :1505; returns
+# WITHOUT sending when the item already sits at the cell) -> wrapper
+# 0x0084C400 [itemId, bag->id, slot]. Nothing on the path checks occupancy.
+# Answered by handle_item_move_by_id (itemstore.plan_move_by_id) as
+# RECONSTRUCTION -- 0x014B into an empty cell, 0x0152 onto an occupied one --
+# behind --no-item-move-by-id. The GAME_SMSG with this number is HERO_ACTIVATE;
+# the two share nothing.
+GAME_CMSG_ITEM_MOVE_BY_ID = 0x0072
 
 # THE THREE PURE-INBOUND ONES. Each is fully named in `schema/overrides.json`
 # with the client-side evidence beside it, each is among the largest single
@@ -11649,6 +11681,26 @@ ITEM_MOVES_ENABLED = True      # False (--no-item-moves): c2s 0x004F ITEM_MOVE
                                # lead rule (0x014B into an EMPTIED hand, never
                                # a 0x0152 with a 0) and the store-built 0x006E
                                # -- with no in-game move nothing differs.
+EQUIPPED_VISUAL_ORDER = False  # True (--equipped-visual-order): dress the armour
+                               # into the EQUIPPED BAG at its 0x006E position
+                               # (body 2, boots 3, legs 4, gloves 5, head 6) --
+                               # every run before the owner's confirmation pass
+                               # (2026-09-23). KNOWN-BAD: the paper doll draws
+                               # each BAG slot at a fixed row, so that order reads
+                               # legs, chest, head, feet, arms top to bottom
+                               # (OBSERVED, the owner's screenshot). Default OFF:
+                               # retail's bag order (body 2, legs 3, head 4,
+                               # boots 5, gloves 6 -- OBSERVED on every load cell
+                               # of all 96 live connections, itemstore.py) with
+                               # the 0x006E/0x006F visuals read through the
+                               # permutation, so the visual array is unchanged.
+ITEM_MOVE_BY_ID_ENABLED = True  # False (--no-item-move-by-id): c2s 0x0072
+                               # ITEM_MOVE_BY_ID -- a drag between two cells of
+                               # the non-equipped bags -- is ignored, as on the
+                               # owner's 2026-09-23 client session (UNHANDLED,
+                               # the sword snapped back). Default ON: 0x014B
+                               # into an empty cell, 0x0152 onto an occupied one
+                               # (RECONSTRUCTION; no tape carries the request).
 AI_MODE_FIGHT, AI_MODE_GUARD, AI_MODE_AVOID = 0, 1, 2   # 0x0015's byte (pvpui 28.5)
 AI_MODE_NAMES = {0: "Fight", 1: "Guard", 2: "Avoid Combat"}
 SPIRIT_RANGE = 2512.0          # u -- WIKI (GWW "Range"): binding rituals /
@@ -19042,9 +19094,15 @@ import merchant  # noqa: E402
 
 
 def handle_item_purchase(values, send, state, conn_id, rec):
+    # `place` / `avoid` (the confirmation pass's fix, ENG-2): a bought item is
+    # registered in the item store the drag handlers read, and its cell is
+    # chosen clear of the store's items and the off hands' reserved homes --
+    # the merchant's own map alone let a 0x0072 answer 0x014B into a bought
+    # item's cell (ItCliInv:105) and a purchase land on the dressed sword.
     return merchant.handle_item_purchase(
         values, send, state, conn_id, rec, PLAYER_INVENTORY_KEY,
-        GAME_SMSG_CREATE_NAMED_ITEM, GAME_SMSG_ITEM_MOVED_TO_LOCATION)
+        GAME_SMSG_CREATE_NAMED_ITEM, GAME_SMSG_ITEM_MOVED_TO_LOCATION,
+        place=itemstore.place, avoid=reserved_backpack_slots(state))
 
 
 def handle_item_sale(values, send, state, conn_id, rec):
@@ -24919,6 +24977,12 @@ def player_bags():
     return {int(b[0]): int(b[3]) for b in PLAYER_BAGS}
 
 
+def storage_bag_ids():
+    """The declared bags of STORAGE_BAG_TYPES -- the 0x0072 arm's refused
+    destinations (ENG-7)."""
+    return {int(b[0]) for b in PLAYER_BAGS if int(b[1]) in STORAGE_BAG_TYPES}
+
+
 def instance_is_field(state):
     """The 0x0199 is_explorable byte's own rule (INSTANCE_LOAD_INFO): --outpost
     forces a town, else --explorable or the map's content row. DESKWORK-D1 step
@@ -24936,11 +25000,46 @@ def item_hands_of_type():
     return {int(t): (row or {}).get("hands") for t, row in WEAPON_TYPE_ROW.items()}
 
 
+def item_bag_slot_table():
+    """Wire type -> equipped-bag slot for this server's dress and equips:
+    retail's order, or the visual order under --equipped-visual-order."""
+    return itemstore.bag_slot_table(EQUIPPED_VISUAL_ORDER)
+
+
+def item_visual_of():
+    """Bag slot -> 0x006E/0x006F position, paired with item_bag_slot_table."""
+    return itemstore.visual_fn(EQUIPPED_VISUAL_ORDER)
+
+
+def equipped_bag_slot(visual_slot):
+    """The equipped-bag cell for a DRESSED piece, keyed by its worn LOCATION
+    (STARTER_ARMOUR's third column / COSTUME_SLOT, the 0x006E position)
+    through the inverse of the bag->visual permutation -- a bijection, so no
+    two locations can share a cell; the identity under --equipped-visual-order.
+
+    NOT keyed by wire type (the confirmation pass's fix, ENG-1 / EVR-1): the
+    first cut read the type's cell off item_bag_slot_table first, and
+    wearmap.WORN_TYPES lets a legs-class piece (19) be worn at the BOOTS or
+    GLOVES location (retail's NPC precedent), so a party row wearing one
+    there put it in the LEGS' cell 3 beside the legs -- two 0x013E into one
+    cell, the second asserting the client (ItCliInv:105), and the revert arm
+    could not reproduce the old location-keyed layout for that row. For every
+    piece retail wears in its own location the two rules agree (body 7 -> 2,
+    legs 19 -> 3, head 16 -> 4, boots 4 -> 5, gloves 13 -> 6, the costume
+    pair 7 / 8; test_itemmoves 4). An in-game RE-EQUIP of an off-location
+    piece goes by TYPE (plan_equip -> slot_of_type), as the client's own
+    equip path reads the type; that edge is open and said here."""
+    return itemstore.bag_slot_of_visual(visual_slot, EQUIPPED_VISUAL_ORDER)
+
+
 def item_layout_defaults():
     """{item id: (bag, slot, key, kind, item type)} for every item this
-    launch's dress CREATES and places -- the constants' layout, the one every
-    run before DESKWORK-D1 step 8 sent. Read by item_layout_begin; the dress's
-    own send sites keep their constants and ask item_cell for the cell."""
+    launch's dress CREATES and places -- the constants' layout. Read by
+    item_layout_begin; the dress's own send sites keep their constants and
+    ask item_cell for the cell. The armour's and costumes' EQUIPPED cells
+    are their worn LOCATIONS' in the server's bag order (equipped_bag_slot):
+    retail's since the owner's confirmation pass, the visual order under
+    --equipped-visual-order -- the layout every run before 2026-09-23 sent."""
     out = {}
     if EQUIP_WEAPON:
         _lead_key = (WEAPON_SETS[0] or {}).get("lead")
@@ -24964,15 +25063,18 @@ def item_layout_defaults():
                                agents.item_template(s["off"]).get("item_type"))
     if EQUIP_ARMOUR:
         for item_id, key, slot in worn_armour():
-            out[item_id] = (EQUIPPED_BAG_ID, slot, key, "armour",
-                            armour_row(key, slot).get("item_type"))
+            _type = armour_row(key, slot).get("item_type")
+            out[item_id] = (EQUIPPED_BAG_ID, equipped_bag_slot(slot), key, "armour",
+                            _type)
     if EQUIP_COSTUME:
-        out[COSTUME_ITEM_ID] = (EQUIPPED_BAG_ID, COSTUME_SLOT, COSTUME_KEY, "costume",
-                                agents.item_template(COSTUME_KEY).get("item_type"))
+        _type = agents.item_template(COSTUME_KEY).get("item_type")
+        out[COSTUME_ITEM_ID] = (EQUIPPED_BAG_ID, equipped_bag_slot(COSTUME_SLOT),
+                                COSTUME_KEY, "costume", _type)
     if EQUIP_COSTUME_HEAD:
-        out[COSTUME_HEAD_ITEM_ID] = (EQUIPPED_BAG_ID, COSTUME_HEAD_SLOT, COSTUME_HEAD_KEY,
-                                     "costume head",
-                                     agents.item_template(COSTUME_HEAD_KEY).get("item_type"))
+        _type = agents.item_template(COSTUME_HEAD_KEY).get("item_type")
+        out[COSTUME_HEAD_ITEM_ID] = (EQUIPPED_BAG_ID,
+                                     equipped_bag_slot(COSTUME_HEAD_SLOT),
+                                     COSTUME_HEAD_KEY, "costume head", _type)
     return out
 
 
@@ -25030,8 +25132,20 @@ def item_layout_begin(state, conn_id=0):
     if ITEM_MOVES_ENABLED and PERSIST and store is not None:
         stored = store.item_locations(state.get("char_uuid", ""))
     decided = dict(cells)
+    stale = []
     if stored:
-        decided, notes = itemstore.restore(cells, stored, player_bags(), EQUIPPED_BAG_ID)
+        decided, notes = itemstore.restore(cells, stored, player_bags(), EQUIPPED_BAG_ID,
+                                           stale=stale)
+    for iid, cell in stale:
+        # A stored EQUIPPED cell that is not the piece's type's (the owner's
+        # confirmation pass): written under the pre-2026-09-23 visual
+        # numbering, or foreign. Never reinterpreted -- dropped from the store
+        # here, loudly, so the next dress does not say it again.
+        dropped = store.drop_item_location(state.get("char_uuid", ""), iid) if store else None
+        print(f"[c{conn_id}] ITEMS: item {iid}'s stored cell bag {cell[0]} slot {cell[1]} "
+              f"DROPPED from the store ({'removed' if dropped else 'no row to remove'}): "
+              f"an equipped cell is its type's, never a stored one [DESKWORK-D1 step 8, "
+              f"the owner's confirmation]", flush=True)
     items = {}
     for iid, (bag, slot, key, kind, itype) in defaults.items():
         b, s = decided[iid]
@@ -25058,15 +25172,38 @@ def item_cell(state, item_id, default_bag, default_slot):
     return [int(row["bag"]), int(row["slot"])]
 
 
+def dress_cell_label(cell, default_bag, default_slot):
+    """The log's half of a 0x013E placement, read off the BYTES SENT: "equipped
+    4" for the equipped bag, "bag 2 slot 2" otherwise, plus "[stored cell]"
+    when the cell is not the dress's default. Until the owner's confirmation
+    pass the armour line printed its constant ("-> equipped 6") beside bytes
+    that said bag 2 slot 2."""
+    bag, slot = int(cell[0]), int(cell[1])
+    where = f"equipped {slot}" if bag == EQUIPPED_BAG_ID else f"bag {bag} slot {slot}"
+    if (bag, slot) != (int(default_bag), int(default_slot)):
+        where += " [stored cell] [DESKWORK-D1 step 8]"
+    return where
+
+
 def reserved_backpack_slots(state):
-    """The backpack slots the set machinery will send a HAND item back to
-    (WEAPON_SET_BACKPACK_SLOTS) for the set items NOT currently in the
-    backpack -- a move or equip may not fill one (the fix pass, ENG-B3): the
-    next set switch sends 0x014B there, and the client's add worker asserts
-    the destination EMPTY (ItCliInv:105)."""
+    """The backpack slots the set machinery will send a worn OFF HAND back to
+    by 0x014B (WEAPON_SET_BACKPACK_SLOTS) for the off hands NOT currently in
+    the backpack -- a move or equip may not fill one (the fix pass, ENG-B3):
+    the next set switch sends 0x014B there, and the client's add worker
+    asserts the destination EMPTY (ItCliInv:105).
+
+    OFF HANDS ONLY (the confirmation pass's fix, ENG-6): a LEAD never returns
+    to its home by 0x014B -- select_weapon_set exchanges two real leads with
+    0x0152 (the leaving lead lands in the entering one's cell) and sends a
+    lead whose set was emptied in game to the first FREE cell -- so the
+    first cut's reservation of every set item's home refused drags into a
+    cell nothing would ever be sent to (after F2 the old lead sits in the new
+    lead's home; a drop there is a swap, not a fill)."""
     items = (state or {}).get("items") or {}
     out = set()
     for iid, slot in WEAPON_SET_BACKPACK_SLOTS.items():
+        if int(iid) not in OFF_HAND_ITEM_IDS:
+            continue
         row = items.get(int(iid))
         if row is not None and row["bag"] != BACKPACK_BAG_ID:
             out.add(int(slot))
@@ -25155,16 +25292,26 @@ def _item_moves_commit(send, state, conn_id, batch, changes, what):
     for op, vals, label in batch:
         send(op, vals, label)
     moved = itemstore.apply(items, changes)
+    held = state.get("backpack") or {}           # the merchant's {slot: bought id}
     for iid in moved:
         row = items[iid]
         if iid in WEAPON_SET_BACKPACK_SLOTS or (
-                row.get("kind", "").startswith("set ") and row["bag"] == BACKPACK_BAG_ID):
+                (row.get("kind") or "").startswith("set ") and row["bag"] == BACKPACK_BAG_ID):
             if row["bag"] == BACKPACK_BAG_ID:
                 WEAPON_SET_BACKPACK_SLOTS[iid] = row["slot"]
+        if iid in held.values():
+            # ENG-2: a BOUGHT item moved -- the merchant's map follows the
+            # store, so a sale still finds it and a purchase sees its cell.
+            for s in [s for s, hid in held.items() if hid == iid]:
+                del held[s]
+            if row["bag"] == BACKPACK_BAG_ID:
+                held[row["slot"]] = iid
     _item_hands_mirror(state, conn_id, before)
     store = state.get("charstore_game")
     if PERSIST and store is not None:
         for iid in moved:
+            if (items[iid].get("kind") or "") == "bought":
+                continue        # per-session: the dress never re-declares a purchase
             store.set_item_location(state.get("char_uuid", ""), iid,
                                     items[iid]["bag"], items[iid]["slot"])
     where = ", ".join(f"item {i} -> bag {items[i]['bag']} slot {items[i]['slot']}"
@@ -25196,7 +25343,7 @@ def handle_item_move(values, send, state, conn_id):
     batch, changes, why = itemstore.plan_move(
         state["items"], player_bags(), src, bag, slot, key=PLAYER_INVENTORY_KEY,
         equipped_bag=EQUIPPED_BAG_ID, agent=PLAYER_AGENT_ID,
-        visuals=instance_is_field(state),
+        visuals=instance_is_field(state), visual_of=item_visual_of(),
         reserved_cells=reserved_backpack_cells(state))   # the fix pass, ENG-B3
     if why is not None:
         print(f"[c{conn_id}] ITEM_MOVE(slot {src} -> bag {bag} slot {slot}) refused: "
@@ -25226,13 +25373,55 @@ def handle_equip_item(values, send, state, conn_id):
         state["items"], player_bags(), item_id, key=PLAYER_INVENTORY_KEY,
         equipped_bag=EQUIPPED_BAG_ID, backpack_bag=BACKPACK_BAG_ID,
         agent=PLAYER_AGENT_ID, visuals=instance_is_field(state),
-        hands_of_type=item_hands_of_type(),
+        hands_of_type=item_hands_of_type(), visual_of=item_visual_of(),
+        bag_slot_of_type=item_bag_slot_table(),
         reserved_cells=reserved_backpack_cells(state))   # the fix pass, ENG-B3
     if why is not None:
         print(f"[c{conn_id}] EQUIP_ITEM({item_id}) refused: {why}; nothing sent "
               f"[DESKWORK-D1]", flush=True)
         return
     _item_moves_commit(send, state, conn_id, batch, changes, f"EQUIP_ITEM({item_id})")
+
+
+def handle_item_move_by_id(values, send, state, conn_id):
+    """GAME_CMSG 0x0072 ITEM_MOVE_BY_ID [item, target bag, target slot]: an
+    item dragged between two cells of the non-equipped bags (the owner's
+    confirmation pass, 2026-09-23; itemstore.plan_move_by_id has the client's
+    sender and the refusals). RECONSTRUCTION -- no retail tape carries the
+    request: an EMPTY cell is answered with 0x014B [key, item, bag, slot]
+    (0x004F's reply shape, 4 of 4), an OCCUPIED one with 0x0152 [key,
+    occupant, item] (the occupied-slot equip's shape, 4 of 4; the client's
+    swap handler is not equipped-specific). Refused with nothing sent: an
+    unknown item, an undeclared bag, a slot past the bag, the item's own
+    cell, an EMPTY RESERVED cell, a STORAGE bag (types 4/5, storage_bag_ids;
+    no tape, and the client's set strip is unmodelled -- ENG-7), an
+    equipped-bag destination that is not the item's type's slot. The store
+    is the ONLY map of the bags -- the merchant's purchases are in it too
+    (ENG-2) -- so an EMPTY verdict here is the client's too."""
+    if len(values) < 4:
+        print(f"[c{conn_id}] ITEM_MOVE_BY_ID refused: malformed request {values[1:]!r} "
+              f"[DESKWORK-D1]", flush=True)
+        return
+    if not state.get("items"):
+        print(f"[c{conn_id}] ITEM_MOVE_BY_ID{list(values[1:])} refused: no item layout on "
+              f"this connection (the dress has not run) [DESKWORK-D1]", flush=True)
+        return
+    item_id, bag, slot = int(values[1]), int(values[2]), int(values[3])
+    batch, changes, why = itemstore.plan_move_by_id(
+        state["items"], player_bags(), item_id, bag, slot, key=PLAYER_INVENTORY_KEY,
+        equipped_bag=EQUIPPED_BAG_ID, backpack_bag=BACKPACK_BAG_ID,
+        agent=PLAYER_AGENT_ID, visuals=instance_is_field(state),
+        hands_of_type=item_hands_of_type(), visual_of=item_visual_of(),
+        bag_slot_of_type=item_bag_slot_table(),
+        reserved_cells=reserved_backpack_cells(state),
+        storage_bags=storage_bag_ids())                  # ENG-7: types 4/5 refused
+    if why is not None:
+        print(f"[c{conn_id}] ITEM_MOVE_BY_ID(item {item_id} -> bag {bag} slot {slot}) "
+              f"refused: {why}; nothing sent [DESKWORK-D1]", flush=True)
+        return
+    _item_moves_commit(send, state, conn_id, batch, changes,
+                       f"ITEM_MOVE_BY_ID(item {item_id} -> bag {bag} slot {slot}) "
+                       f"[RECONSTRUCTION]")
 
 
 def party_flag_point(state, agent_id, agent):
@@ -30148,28 +30337,40 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     #
     # Position order is MEASURED as of 2026-08-17, and the
     # "2 lineages against 1" this comment used to cite was
-    # backing the WRONG one. Retail's own wire settles it:
-    # seven 0x006F per-slot writes in the Shing Jea capture,
-    # each preceded by the 0x015E declaring its item, give
+    # backing the WRONG one FOR THIS ARRAY. Retail's own wire
+    # settles it: seven 0x006F per-slot writes in the Shing
+    # Jea capture, each preceded by the 0x015E declaring its
+    # item, give
     #   2 Body, 3 BOOTS, 4 LEGS, 5 GLOVES, 6 HEAD
-    # -- GWLP-R's permuted reading, refuting the bag order
-    # ldufr and GWCA share (they agree because they make the
-    # same assumption: one witness counted twice).
-    # studies/newopcodes/FINDINGS.md 0x006F.
-    # Positions 1..8 are all zero here, so this send never
-    # depended on the dispute; anything that DRESSES a body
-    # must use the measured order above.
+    # -- GWLP-R's reading of the VISUAL array. The order ldufr
+    # and GWCA share (Body 2, Legs 3, Head 4, Boots 5, Gloves
+    # 6) is the EQUIPPED BAG's, OBSERVED on every load cell of
+    # all 96 live connections (2026-09-23, the owner's
+    # confirmation pass; itemstore.RETAIL_BAG_SLOT_OF_TYPE).
+    # The two lineages described two DIFFERENT arrays, and this
+    # comment's earlier wording -- the wire "refuting" ldufr's
+    # order -- was the misreading behind the paper-doll defect.
+    # studies/newopcodes/FINDINGS.md 0x006F; itemstore.py "TWO
+    # SLOT ORDERS". Positions 1..8 are all zero here, so this
+    # send never depended on the dispute; anything that fills a
+    # body's 0x006E / 0x006F must use the VISUAL order above,
+    # and anything that puts a piece in the equipped BAG must
+    # use retail's bag order (RETAIL_VISUAL_OF_BAG_SLOT joins
+    # them).
     if (EQUIP_WEAPON or EQUIP_ARMOUR or EQUIP_COSTUME
             or EQUIP_COSTUME_HEAD):
         if state.get("items"):
             # DESKWORK-D1 step 8: what the EQUIPPED BAG holds, by visual
             # position -- the dress's item cells (item_layout_begin), which
             # are the constants' below unless a stored cell moved a piece.
-            # Our bag slot IS the visual slot (itemstore's docstring), so
-            # with the default layout this array is the one the else-branch
-            # has always built; test_itemmoves pins that equality.
+            # The bag cell and the visual position are TWO orders (the
+            # owner's confirmation pass): item_visual_of maps retail's bag
+            # slot to its 0x006E position (bag 4, the head -> visual 6), so
+            # with the default layout this array is byte-identical to the one
+            # the else-branch has always built; test_itemmoves pins that.
             worn = itemstore.worn_array(state["items"], EQUIPPED_BAG_ID,
-                                        VISUAL_EQUIPMENT_SLOTS)
+                                        VISUAL_EQUIPMENT_SLOTS,
+                                        visual_of=item_visual_of())
         else:
             worn = [0] * VISUAL_EQUIPMENT_SLOTS
             if EQUIP_WEAPON:
@@ -31653,11 +31854,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # `--no-weapon` used to leave the character with no
                             # containers at all, so every inventory question
                             # silently depended on a weapon flag.
+                            _cell = item_cell(state, WEAPON_ITEM_ID, EQUIPPED_BAG_ID,
+                                              EQUIPPED_SLOT_WEAPON)
                             send(GAME_SMSG_ITEM_MOVED_TO_LOCATION,
-                                 [1, WEAPON_ITEM_ID]
-                                 + item_cell(state, WEAPON_ITEM_ID, EQUIPPED_BAG_ID,
-                                             EQUIPPED_SLOT_WEAPON),
-                                 "ITEM_MOVED_TO_LOCATION(weapon -> equipped 0)")
+                                 [1, WEAPON_ITEM_ID] + _cell,
+                                 f"ITEM_MOVED_TO_LOCATION(weapon -> "
+                                 f"{dress_cell_label(_cell, EQUIPPED_BAG_ID, EQUIPPED_SLOT_WEAPON)})")
                         if EQUIP_WEAPON and agents.PLAYER_OFFHAND:
                             # SLICE-H9: the shield -- declared, then the
                             # offhand cell of the equipped bag (UPSTREAM slot
@@ -31667,18 +31869,25 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                  agents.named_item(OFFHAND_ITEM_ID,
                                                    agents.PLAYER_OFFHAND),
                                  "CREATE_NAMED_ITEM(the player's offhand)")
+                            _cell = item_cell(state, OFFHAND_ITEM_ID, EQUIPPED_BAG_ID,
+                                              EQUIPPED_SLOT_OFFHAND)
                             send(GAME_SMSG_ITEM_MOVED_TO_LOCATION,
-                                 [1, OFFHAND_ITEM_ID]
-                                 + item_cell(state, OFFHAND_ITEM_ID, EQUIPPED_BAG_ID,
-                                             EQUIPPED_SLOT_OFFHAND),
-                                 "ITEM_MOVED_TO_LOCATION(offhand -> equipped 1)")
+                                 [1, OFFHAND_ITEM_ID] + _cell,
+                                 f"ITEM_MOVED_TO_LOCATION(offhand -> "
+                                 f"{dress_cell_label(_cell, EQUIPPED_BAG_ID, EQUIPPED_SLOT_OFFHAND)})")
                         # WEAPONS-W9: the other sets' items, declared and
                         # put in the backpack -- retail's shape at the 1A
                         # map load (every set's item created, the inactive
                         # ones moved to bag 2, before the 0x0147 rows).
                         declare_weapon_sets(send, state)
                         # THE ARMOUR. Declared and put in the equipped
-                        # bag at the slots retail's own 0x006F writes name.
+                        # bag at RETAIL'S bag cells (body 2, legs 3, head 4,
+                        # boots 5, gloves 6 -- keyed by the piece's worn
+                        # LOCATION, equipped_bag_slot / item_layout_defaults;
+                        # the owner's confirmation pass and its fix, ENG-1),
+                        # NOT at the 0x006E positions STARTER_ARMOUR's third
+                        # column names: the paper doll draws each bag slot at
+                        # a fixed row.
                         # CREATE_NAMED_ITEM only declares the bytes;
                         # ITEM_MOVED_TO_LOCATION is what makes the paper doll
                         # draw a piece, and 0x006E below is what puts it on
@@ -31690,14 +31899,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                      agents.named_item(
                                          item_id, armour_row(key, slot)),
                                      f"CREATE_NAMED_ITEM({key})")
-                                _cell = item_cell(state, item_id, EQUIPPED_BAG_ID, slot)
+                                _bag_slot = equipped_bag_slot(slot)   # by LOCATION (ENG-1)
+                                _cell = item_cell(state, item_id, EQUIPPED_BAG_ID, _bag_slot)
                                 send(GAME_SMSG_ITEM_MOVED_TO_LOCATION,
                                      [1, item_id] + _cell,
                                      f"ITEM_MOVED_TO_LOCATION({key} -> "
-                                     f"equipped {slot})"
-                                     + (f" [stored cell: bag {_cell[0]} slot "
-                                        f"{_cell[1]}] [DESKWORK-D1 step 8]"
-                                        if _cell != [EQUIPPED_BAG_ID, slot] else ""))
+                                     f"{dress_cell_label(_cell, EQUIPPED_BAG_ID, _bag_slot)})")
                         if EQUIP_COSTUME:
                             # Declared like any other item; what makes it a
                             # costume is its wire TYPE (44), which is the only
@@ -31707,24 +31914,24 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                      COSTUME_ITEM_ID,
                                      agents.item_template(COSTUME_KEY)),
                                  f"CREATE_NAMED_ITEM({COSTUME_KEY})")
+                            _cell = item_cell(state, COSTUME_ITEM_ID, EQUIPPED_BAG_ID,
+                                              COSTUME_SLOT)
                             send(GAME_SMSG_ITEM_MOVED_TO_LOCATION,
-                                 [1, COSTUME_ITEM_ID]
-                                 + item_cell(state, COSTUME_ITEM_ID, EQUIPPED_BAG_ID,
-                                             COSTUME_SLOT),
+                                 [1, COSTUME_ITEM_ID] + _cell,
                                  f"ITEM_MOVED_TO_LOCATION({COSTUME_KEY} -> "
-                                 f"equipped {COSTUME_SLOT})")
+                                 f"{dress_cell_label(_cell, EQUIPPED_BAG_ID, COSTUME_SLOT)})")
                         if EQUIP_COSTUME_HEAD:
                             send(GAME_SMSG_CREATE_NAMED_ITEM,
                                  agents.named_item(
                                      COSTUME_HEAD_ITEM_ID,
                                      agents.item_template(COSTUME_HEAD_KEY)),
                                  f"CREATE_NAMED_ITEM({COSTUME_HEAD_KEY})")
+                            _cell = item_cell(state, COSTUME_HEAD_ITEM_ID,
+                                              EQUIPPED_BAG_ID, COSTUME_HEAD_SLOT)
                             send(GAME_SMSG_ITEM_MOVED_TO_LOCATION,
-                                 [1, COSTUME_HEAD_ITEM_ID]
-                                 + item_cell(state, COSTUME_HEAD_ITEM_ID,
-                                             EQUIPPED_BAG_ID, COSTUME_HEAD_SLOT),
-                                 f"ITEM_MOVED_TO_LOCATION({COSTUME_HEAD_KEY}"
-                                 f" -> equipped {COSTUME_HEAD_SLOT})")
+                                 [1, COSTUME_HEAD_ITEM_ID] + _cell,
+                                 f"ITEM_MOVED_TO_LOCATION({COSTUME_HEAD_KEY} -> "
+                                 f"{dress_cell_label(_cell, EQUIPPED_BAG_ID, COSTUME_HEAD_SLOT)})")
                         send(GAME_SMSG_ITEM_SET_ACTIVE_WEAPON_SET, [1, 0],
                              "SET_ACTIVE_WEAPON_SET")
                         for slot in range(4):
@@ -32143,6 +32350,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         else:
                             print(f"[c{conn_id}] EQUIP_ITEM ignored "
                                   f"(--no-item-moves) [DESKWORK-D1]", flush=True)
+                    elif opcode == GAME_CMSG_ITEM_MOVE_BY_ID:
+                        # The owner's confirmation pass (2026-09-23): a drag
+                        # between two backpack cells. On no retail tape;
+                        # RECONSTRUCTION (itemstore.py).
+                        if ITEM_MOVE_BY_ID_ENABLED:
+                            handle_item_move_by_id(values, send, state, conn_id)
+                        else:
+                            print(f"[c{conn_id}] ITEM_MOVE_BY_ID ignored "
+                                  f"(--no-item-move-by-id) [DESKWORK-D1]", flush=True)
                     elif opcode == GAME_CMSG_CANCEL_ACTION:
                         # The one door that reaches a held cast -- the client
                         # sends no movement while casting, only this (the
@@ -36177,6 +36393,22 @@ def main():
               "are ignored and no stored item cell is read -- every run before "
               "DESKWORK-D1 step 8 (2026-09-23): the dress is the constants' and a "
               "drag or double-click in the inventory gets no reply.", flush=True)
+    if a.equipped_visual_order:
+        global EQUIPPED_VISUAL_ORDER
+        EQUIPPED_VISUAL_ORDER = True
+        print("[items] --equipped-visual-order: the armour is dressed into the "
+              "equipped BAG at its 0x006E position (body 2, boots 3, legs 4, gloves "
+              "5, head 6) -- every run before the owner's confirmation pass "
+              "(2026-09-23). KNOWN-BAD: the paper doll reads legs, chest, head, "
+              "feet, arms top to bottom. Retail keeps body 2, legs 3, head 4, boots "
+              "5, gloves 6 (every live load).", flush=True)
+    if a.no_item_move_by_id:
+        global ITEM_MOVE_BY_ID_ENABLED
+        ITEM_MOVE_BY_ID_ENABLED = False
+        print("[items] --no-item-move-by-id: c2s 0x0072 ITEM_MOVE_BY_ID (a drag "
+              "between two cells of the non-equipped bags) is ignored -- the "
+              "owner's 2026-09-23 client session: UNHANDLED, and the client put "
+              "the item back.", flush=True)
     if a.party_no_fight:
         global PARTY_FIGHTS
         PARTY_FIGHTS = False

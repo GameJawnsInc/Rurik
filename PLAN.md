@@ -1915,15 +1915,19 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   and restored at the dress, a stored HAND change not restored; the fix pass closed five
   blockers — the dress reads the store itself, reserved cells, the launch records never
   rewritten by an equip, removed armour protects nothing, a suppressed resurrection is
-  never cast — and the suppress mask now follows the client's own bar edits).
+  never cast — and the suppress mask now follows the client's own bar edits; the owner's
+  confirmation pass, same day, PLAN-LOG: the doll's row order fixed — retail's bag order
+  dressed, `--equipped-visual-order` reverts — and the general move `c2s 0x0072`
+  ITEM_MOVE_BY_ID armed as RECONSTRUCTION, `--no-item-move-by-id`; its fix pass, same
+  day, PLAN-LOG: the dress cell keyed by location, the merchant's purchases in the item
+  store, off hands' homes alone reserved, storage bags refused).
   **CONFIRMED on our client 2026-09-23** (studies/deskwork/CONFIRM-2026-09-23.md): kick,
   add, kick-add-kick-add, the kick held across a relaunch, the suppress circle on and off
   and the body skipping a suppressed skill, move, stored-cell restore, equip and swap.
-  **Open**: the party family from HENCHMAN_ADD's witness (step 5) and travel (step 7);
-  the bag-to-bag move — c2s `0x0072` [item, bag, slot], named by the owner's drag, on
-  no retail tape, unanswered — and the paper doll's armour ORDER (ours legs, chest, head,
-  feet, arms: the equipped bag dressed in the visual array's numbering), both on
-  `desk-inv`.
+  **Open**: the party family from HENCHMAN_ADD's witness (step 5) and travel (step 7); on
+  the client — the doll order after the fix (I + screenshot: head, chest, arms, legs,
+  feet) and the backpack drag (A = stays, B = snaps back; runsheet in studies/cmsg
+  "Inventory, the owner's confirmation").
 * **DESKWORK-D5**: the combat rules retail's tapes on disk already settle. LANDED
   2026-09-22: the adrenaline gate (SKILLS-B1's gate half, skills §34.11); property 10
   and the `[42]` residue (§16.6, self-scoped; `[42]` only when the maximum moved); the

@@ -28,6 +28,74 @@ move back.
 
 ---
 
+### DESKWORK-D1 step 8, the owner's confirmation, fix pass -- 2026-09-23 -- **the dress cell keyed by the worn LOCATION (a type-keyed cell collided for a legs-class piece at the boots location); the merchant's purchases in the item store the drag handlers read; off hands' homes alone reserved; storage bags refused as `0x0072` destinations; the two sibling sends named**
+
+Two reviews of the entry below (an evidence refuter and an engineering reviewer) held its
+evidence — both re-derived retail's bag order and the bag→visual permutation from all 96
+connections and reproduced the owner's doll with no free parameter — and found no blocker;
+their majors and the cheap minors are fixed here, all on `test_itemmoves` (floor 137 → 158
+bare, 183 vaulted) and `test_purchase` (27 → 35). **ENG-1 / EVR-1**: `equipped_bag_slot`
+picked the equipped cell by wire TYPE, and `wearmap` lets a legs-class piece (19) be worn at
+the boots or gloves location, so such a row dressed two pieces into bag 3 (two `0x013E`
+into one cell, ItCliInv:105 on the second) and `--equipped-visual-order` could not
+reproduce the old layout for it; the cell is keyed by the worn LOCATION through the inverse
+permutation now — a bijection that agrees with the type table for every piece in its own
+location (KNOWN-BAD arm: by type both take 3). **ENG-2 / EVR-2**: `merchant.py` kept its
+own backpack map and never registered a purchase in `state["items"]`, so a purchase landed
+on the dressed sword's cell and a `0x0072` onto a bought item's cell planned a bare
+`0x014B` into a FILLED cell (a merchant probe only; the gap predates the arm); purchases
+are placed in the store (`itemstore.place` handed in by the wrapper, the merchant still
+imports nothing), chosen clear of the store and the reserved cells, popped by the sale,
+re-keyed on a move, never persisted. **ENG-6**: only an OFF HAND returns home by `0x014B`
+(leads exchange by `0x0152` or leave to a free cell), so `reserved_backpack_slots` reserves
+off hands' homes alone and `plan_move_by_id` decides occupancy before the reservation — the
+hammer in the sword's home after F2 takes a swap, not a false RESERVED refusal. **ENG-7**:
+storage bags (types 4/5) refused as `0x0072` destinations (no tape carries a move into one
+— every retail `0x014B` lands in a type-1 or -2 bag and every `0x0152` is between them —
+and the client's swap strips a set item landing in a type-4 bag from its equip sets,
+ItCliInv:348/375, unmodelled); delegated batches carry the ITEM_MOVE_BY_ID tag.
+**ENG-3**: the `0x0072` handler's `visual_of` had no known-bad arm; locked, and the real
+handler driven through both delegates (visual 6 for the head). **ENG-5 / EVR-8**: the
+planners' defaults are retail's pair; the `0x006E` comment that called the wire a
+refutation of ldufr's order — the misreading behind defect 1 — is scoped to the visual
+array. **EVR-6**: `0x0072`'s two siblings named from `sendsites` + `msgshape` on 38797 —
+`c2s 0x0075 [item, quantity, bag, slot]` the split, `c2s 0x007D [item, bag, slot]` the
+bag move — on no tape, not armed. **EVR-4**: "a drop onto a filled cell reaches the wire"
+downgraded to UNVERIFIED (the helper→sender path checks no occupancy; the three UI callers
+are unread; runsheet step 3 settles it). **EVR-3 / ENG-4, EVR-7, ENG-8**: the runsheet's
+flag semantics (`ignored` = the revert flag; `UNHANDLED` = a server without the branch),
+its step 4 (F2 puts the hammer in cell N, F1 returns the sword), the catalogue entries.
+**Declined — EVR-5** (merge `main` first): this branch does not merge itself; the merge
+will meet `1ce515a1` in PLAN.md 8.1's D1 bullet and this file's top, and main's closures
+(the kick/add clicks, the Shift-click) must win there. Record:
+[studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md) §"Inventory, the owner's
+confirmation", its closing paragraph.
+
+### DESKWORK-D1 step 8, the owner's confirmation -- 2026-09-23 -- **the paper doll draws BAG slots and our bag used the VISUAL numbering (legs in the head row); retail's bag order re-derived from all 96 live connections and dressed; the drag between two backpack cells is `c2s 0x0072` ITEM_MOVE_BY_ID, read from the client and armed as RECONSTRUCTION**
+
+The owner's loopback session confirmed the step-8 moves on our own client and found two
+defects (OBSERVED, screenshot + capture `authsrv-20260923T163355-c1`). **(1)** Retail's
+doll reads head, chest, arms, legs, feet; ours read legs, chest, head, feet, arms — the
+doll draws each equipped-BAG slot at a fixed row (4, 2, 6, 3, 5) and the server dressed
+the bag with the `0x006E` numbering; "a bag cell is opaque to the client" is refuted.
+`test_itemmoves` §1c re-derives retail's bag order from every live tape: body 2, legs 3,
+head 4, boots 5, gloves 6, one slot per type on all 96 connections, zero exceptions, and
+the bag→visual permutation ×98. The dress now uses retail's cells and every equipped-cell
+reader goes through `item_bag_slot_table()` / `item_visual_of()`, so the `0x006E` bytes are
+unchanged (pinned); `--equipped-visual-order` reverts (KNOWN-BAD arm). A stored equipped
+cell that is not the piece's type's is refused, said and DROPPED from the store, never
+reinterpreted (no store on this machine has one); the `0x013E` log label prints the sent
+cell. **(2)** The sword dragged between two backpack cells sent `c2s 0x0072 [11, 2, 4]`,
+UNHANDLED. Read on 38797/38888: wrapper `0x0084C400` ← ItCliApi `0x00847860(item, bag,
+slot)` ← GmItemHelpers `0x00526900`'s non-equipped path `0x00526AC3` — the path the
+Inventory section said "sends nothing" (refuted). Named `ITEM_MOVE_BY_ID` (medium; on no
+retail tape), armed behind `--no-item-move-by-id`: `0x014B` into an empty cell, `0x0152`
+onto an occupied one, RECONSTRUCTION at every send. Floor 102 → 137 (162 vaulted).
+Runsheet and the doll prediction: [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md)
+§"Inventory, the owner's confirmation".
+
+---
+
 ### DESKWORK client confirmation -- 2026-09-23 -- **24 loopback launches, every prediction held: kick, add, suppress, move, equip, swap, the label tier, the caster-centred area, party shouts and the player interrupt work on our own client; two defects found (the paper doll's armour order, the unanswered bag-to-bag drag c2s `0x0072`)**
 
 [studies/deskwork/CONFIRM-2026-09-23.md](studies/deskwork/CONFIRM-2026-09-23.md) is the

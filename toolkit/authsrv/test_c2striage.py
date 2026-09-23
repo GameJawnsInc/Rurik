@@ -234,6 +234,19 @@ if live is not None:
                f"step 8) and no longer on the allowlist",
                f"name {named.get(op)}, dropped {op in dropped}, "
                f"seen {op in live[0]}, handled {op in (handled or {})}")
+    # The owner's confirmation pass (2026-09-23): the general move was seen
+    # ONLY on our own client (1 of 1,581 loopback logs), never on retail's
+    # wire -- so it is named and armed as RECONSTRUCTION and must stay OUT of
+    # the live census; a retail tape carrying it would be the witness the arm
+    # lacks, and this check going red is how that tape announces itself.
+    led.ok(named.get(0x0072, ("", ""))[0] == "ITEM_MOVE_BY_ID"
+           and 0x0072 in (handled or {}) and 0x0072 not in dropped
+           and 0x0072 not in live[0],
+           "0x0072 is named ITEM_MOVE_BY_ID, ARMED (RECONSTRUCTION), and on NO "
+           "live tape -- seen only on our client (a retail send would make this "
+           "red: read it, it is the witness)",
+           f"name {named.get(0x0072)}, handled {0x0072 in (handled or {})}, "
+           f"dropped {0x0072 in dropped}, live {0x0072 in live[0]}")
 else:
     led.skip("§4 the live half", "no live captures")
 # The status vocabulary, and the reverse predicate's known-bad arm.
