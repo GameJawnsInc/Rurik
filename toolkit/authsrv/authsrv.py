@@ -17077,6 +17077,12 @@ def bar_holds_adrenal(bar=None):
     handler on an in-game slot edit (SANDBOX-B7), so a bar frozen at def time
     or cached in `state` would gate on what the bar WAS. `player_adrenaline`
     already rebuilds the pools on the same read for the same reason.
+
+    A ROWLESS SKILL READS AS ZERO-COST, so a bar of skills with no content row
+    reads DARK and the family is withheld -- a bare-machine path (`skill_cost`
+    returns (0, 0) and says so once). In a real session the vault overlay is
+    loaded and every bar skill has its row; this is noted rather than guarded
+    because "no row" is already the loud direction (skill_cost announces it).
     """
     slots = SKILLBAR if bar is None else bar
     return any(skill_cost(int(s))[1] > 0 for s in slots if s)
@@ -17134,16 +17140,20 @@ def player_gains_adrenaline(send, state, units, now, conn_id, why):
     The gate's variable was CONFOUNDED on 2026-08-21 -- every dark connection
     was also a non-Warrior -- and the ruling was to implement neither rule.
     The corpus has since separated them without the staged live run: a
-    level-1 Warrior (0x00B7 primary 1) on the bar [346, 1] landed 18 and 17
-    hits on two connections and a level-20 A/W (7/1) landed 127 twice, all
-    dark, all silent -- 0 of the family over 254 + 36 hits, 11 deaths on dark
-    connections with 0 clears -- while W/Mo bars on the same maps gain. So
-    "the profession uses adrenaline" is REFUTED at level 1 (primary) and at
+    level-1 primary Warrior (0x00B7 1/0) on the bar [346, 1] landed 18 + 17 +
+    1 hits on three connections and a level-20 A/W (7/1) landed 127 on
+    20260917T224104 conn 62557, all dark, all silent -- 0 of the family over
+    163 hits, 11 deaths on dark connections with 0 clears -- while a primary
+    Warrior at level 20 (0x00B7 1/0) on the same account gains on every hit.
+    So "the profession uses adrenaline" is REFUTED at level 1 (primary) and at
     level 20 (secondary), and "the LEARNED set holds an adrenal skill" is
     REFUTED too: the account library carries 348/382/385 on every capture and
-    the A/W's character library carries them as well. Gate A -- THE CURRENT
-    BAR -- is the one rule left standing, OBSERVED on 49 of 49 dark and 46 of
-    46 armed connections (`adrenjoin.py --by-connection`).
+    the A/W's character library carries them as well (its OTHER fighting tape,
+    20260917T160915 conn 52569, reads 0x00B7 7/0 -- a dark Assassin with no
+    secondary yet, 127 hits, 0 gains -- and belongs with the learned-set
+    refutation, not the dark-Warrior count of 4). Gate A -- THE CURRENT BAR --
+    is the one rule left standing across all 95 connections (49 dark with 0 of
+    the family over 367 hits, 46 armed; `adrenjoin.py --by-connection`).
 
     WHAT IS STILL NOT OBSERVED, said here because the gate reads it: the
     dark-to-armed TRANSITION. No connection in the corpus flips its bar's
@@ -19944,6 +19954,15 @@ def kill_player(send, state, conn_id, why="took a killing blow"):
         # SKILLS-B1's gate (34.11): a dark bar gets no 0x00D0 at death either
         # -- 11 player deaths on dark connections, 0 clears, OBSERVED. The book
         # clears regardless (it holds nothing on a dark bar anyway).
+        # ONE ARMED-EMPTY DIVERGENCE, CONTESTED (n=1; 34.11.4): the corpus's
+        # four armed player deaths are 3 with a 0x00D0 (a pool that held charge,
+        # 20260917T090355) and 1 without (20260917T224104... no: 20260821T152147
+        # conn 63150, an armed bar that landed 0 hits, empty pool, no clear).
+        # So "clear only when the pool held charge" fits all 15 deaths where
+        # "clear when the bar is armed" fits 14 -- but on a single distinguishing
+        # witness. This gate still clears on an armed-EMPTY death (a 0x00D0 that
+        # one witness did not send); the charge rule is an OPEN lead, not shipped
+        # on n=1 ("a negative needs a positive control").
         if not ADREN_BAR_GATE or bar_holds_adrenal():
             send(AGENT_ADRENALINE_CLEAR, [PLAYER_AGENT_ID],
                  f"adrenaline cleared: the player died ({why})")

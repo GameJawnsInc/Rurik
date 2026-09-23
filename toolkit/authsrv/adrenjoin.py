@@ -456,8 +456,9 @@ def by_connection(costs=None):
     ARMED/DARK on the bar, and 34.5 said every dark connection was ALSO a
     non-Warrior -- read off the bar's skills, not off the character. This
     reads the character: 0x00B7's primary/secondary for the observer's own
-    agent, the 0x0059 appearance nibble, the level at 0x003A dword 9, and --
-    where the capture carries its auth tape -- the CHARACTER_INFO summary's
+    agent, the 0x0059 appearance nibble, the level from int property 36
+    (PROP_LEVEL), and -- where the capture carries its auth tape -- the
+    CHARACTER_INFO summary's
     level and profession joined on the appearance dword. Two witnesses for
     each of profession and level, from two channels.
 

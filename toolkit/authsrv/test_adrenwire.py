@@ -1733,8 +1733,13 @@ def section_bar_gate(agg):
               and sum(r["clear"] for r in dark_c) == 0,
               f"{dark_deaths} player deaths on dark connections, 0 clears",
               f"the 0x0026 [me, 4] death flag against 0x00D0 naming the "
-              f"observer; the armed side clears at death (JARIN 2 of 2 for the "
-              f"hero, the player's death tick), the dark side never")
+              f"observer. On the ARMED side the death clear is not so simple: "
+              f"of four armed player deaths, three carry a 0x00D0 (a pool that "
+              f"held charge, 20260917T090355) and one does not (20260821T152147 "
+              f"conn 63150, an armed bar that landed 0 hits -- empty pool). So "
+              f"the dark silence is OBSERVED (11/11) but the armed clear's "
+              f"CAUSE -- the bar, or charge held -- is CONTESTED at n=1 "
+              f"(skills 34.11.4); this check locks only the dark half")
 
     # THE SANDBOX CHECK the acceptance names: our own sender, the corpus's own
     # dark Warrior bar, a landed hit -- no 0x00CF; the revert flag is the

@@ -4510,8 +4510,12 @@ would change the hash a seal compares.
 
 | | connections | messages | `0x00CF` | `0x00D0` | `0x00D2` | hits landed | melee finished | damage words | deaths |
 |---|---|---|---|---|---|---|---|---|---|
-| **ARMED** | 46 | 145,399 | **1,163** | 39 | 40 | 1,073 | 977 | 93 | — |
+| **ARMED** | 46 | 145,399 | **1,163** | 39 | 40 | 1,073 | 977 | 93 | **4** |
 | **DARK** | 49 | 142,209 | **0** | **0** | **0** | 367 | 210 | 312 | **11** |
+
+The armed side's four player deaths are three that cleared and one that did not;
+see §34.11.4, where that one witness is the whole reason the death clear's cause
+(the bar, or the charge held) stays CONTESTED.
 
 §34.3's total split is unchanged in kind and eight times larger in the dark
 side's fighting. What is new is who the dark characters are.
@@ -4538,13 +4542,16 @@ Warrior as the secondary. The ones that fought:
 |---|---|---|---|---|---|---|---|---|---|
 | `20260914T180058` | `10.0.0.210:56301` | 1 / 0 | 1 | [346, 1] | 18 | 18 | 112 | 2 | 0 |
 | `20260915T155656` | `10.0.0.210:51922` | 1 / 0 | 1 | [346, 1] | 17 | 17 | 24 | 0 | 0 |
-| `20260915T164906` | `10.0.0.210:51282` | 1 / 0 | 1 | [346, 1] | 1 | 1 | 0 | 0 | 0 |
+| `20260915T164906` | `10.0.0.210:51282` | 1 / 0 | 1 | [346, 1] | 1 | 1 | 22 | 0 | 0 |
 | `20260917T224104` | `10.0.0.210:62557` | 7 / 1 | 20 | [782, 780, 775, 781, 346] | 127 | 86 | 24 | 4 | 0 |
 
-163 landed hits, 122 completed melee attacks, 160 damage words and 6 deaths by
+163 landed hits, 122 completed melee attacks, 182 damage words and 6 deaths by
 characters who ARE Warriors, and not one message of the family — while the
-W/Mo on [382, 384, 385, 364, 1, 2] at level 20 (`20260818T132739`
-`10.0.0.210:53202`, the same account) lands 280 hits and gets 280 gains. The
+primary Warrior (0x00B7 1 / 0) on [382, 384, 385, 364, 1, 2] at level 20
+(`20260818T132739` `10.0.0.210:53202`, the same account) lands 280 hits and gets
+280 gains. (The damage-words column supports no inference — Gate B rests on the
+hits landed — and it was miscopied as 0 for `164906` and totalled 160; the
+tool's `--by-connection` says 22 there and 182 across the four.) The
 Frenzy-and-Healing-Signet bar costs 0 adrenaline in both slots, which is why a
 Warrior can be dark at all. **Gate B is refuted at level 1 for a PRIMARY
 Warrior and at level 20 for a SECONDARY one**, and the level caveat — "maybe a
@@ -4562,8 +4569,8 @@ it needed **both** libraries, because §47.1 measured that the account set
 contains the other. `--by-connection` decodes both bitmaps to ids and joins
 them to content's `adrenaline_units`. Two facts about how they ride first:
 `0x00DB` is on every map connection; `0x001D` is sent **once per session** (1 of
-6 connections on `20260818T132739` carries it), so it is read per capture and
-labelled so in the report.
+the 8 usable connections on `20260818T132739` carries it), so it is read per
+capture and labelled so in the report.
 
 - **The account library carries 348 / 382 / 385 on every capture in the
   corpus** — the owner's account has three adrenal Warrior skills unlocked. So
@@ -4578,11 +4585,42 @@ bar* is sent nothing. OBSERVED, 2 connections for the character set and 14 for
 the account set. (How an Assassin with no secondary holds Warrior skills in its
 character library is not asked here; the wire says it does.)
 
-#### 34.11.4 The clear is gated too. OBSERVED
+#### 34.11.4 The clear is gated on the dark side (OBSERVED); its cause on the armed side is CONTESTED
 
 Eleven player deaths on dark connections (`0x0026 [me, 4]`), zero `0x00D0`.
 So retail's silence covers the death clear, not only the gain — which is what
-puts the gate on `kill_player`'s clear and not only on the sender.
+puts the gate on `kill_player`'s clear and not only on the sender. That much is
+OBSERVED, 11 of 11.
+
+**But the armed side has a counter-witness, and it costs the "OBSERVED" this
+paragraph used to claim for the whole rule.** The corpus holds four player
+deaths on ARMED connections:
+
+| capture | connection | gains before death | `0x00D0` at death |
+|---|---|---|---|
+| `20260917T090355` | `10.139.166.60:53310` | 19 | yes |
+| `20260917T090355` | `10.139.166.60:53310` | 21 | yes |
+| `20260917T090355` | `10.139.166.60:53310` | 26 | yes |
+| `20260821T152147` | `10.0.0.210:63150` | **0** | **no** |
+
+The three deaths on `20260917T090355` clear; the one on `20260821T152147` — an
+armed bar `[382, 384, 385, 364, 1, 0, 0, 2]` that landed **0 hits on the whole
+connection**, so its pool never charged — does not. Two rules fit the dark side
+and split on that one row:
+
+- **"clear when the bar is ARMED"** (what this server ships) fits **14 of 15**
+  deaths — it mispredicts the armed-empty death, sending a `0x00D0` the tape did
+  not.
+- **"clear only when the pool HELD CHARGE"** fits **15 of 15**, and subsumes the
+  dark observation (a dark bar never charges).
+
+The charge rule is the better fit and the smaller claim, but the row that
+separates them is **a single witness** — an armed bar that happened to land no
+hits — and the corpus cannot tell "empty pool" from "no fight this life". So the
+cause is **CONTESTED, n=1**, and nothing is reshipped on it: `kill_player` keeps
+the bar gate (its dark half is OBSERVED, 11 of 11) and the armed-empty
+divergence is recorded as an OPEN lead rather than fitted away
+("refuse to guess"; "a negative needs a positive control").
 
 #### 34.11.5 What stays UNOBSERVED, measured as such
 
