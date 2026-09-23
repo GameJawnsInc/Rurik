@@ -1,0 +1,1389 @@
+{
+ "generated": "2026-09-23",
+ "tool": "toolkit/authsrv/c2striage.py",
+ "what": "every GAME_CMSG opcode on ArenaNet's live wire (origin=LIVE captures only), with counts and the first s2c within the window (strict, and with the 0x001E clock skipped) -- a measurement, regenerated with --write; test_dispatch.py section 10 reads it, test_c2striage.py checks it against the vault",
+ "window_s": 1.5,
+ "live_captures": 35,
+ "captures": 29,
+ "connections": 96,
+ "connections_not_ok": 0,
+ "c2s_total": 13320,
+ "opcodes": {
+  "0x0008": {
+   "count": 84,
+   "captures": 28,
+   "connections": 84,
+   "first_reply": {
+    "none": 58,
+    "0x001E": 24,
+    "0x000D": 2
+   },
+   "reply_p50_ms": 17.1,
+   "first_non_tick": {
+    "none": 66,
+    "0x0029": 9,
+    "0x002E": 5,
+    "0x000D": 2,
+    "0x0025": 2
+   },
+   "non_tick_p50_ms": 17.1
+  },
+  "0x0009": {
+   "count": 2687,
+   "captures": 29,
+   "connections": 96,
+   "first_reply": {
+    "0x000D": 2136,
+    "0x001E": 416,
+    "0x009F": 34,
+    "0x00A0": 24,
+    "0x009B": 15,
+    "0x00A7": 7,
+    "0x001D": 6,
+    "0x00F0": 6,
+    "0x00A1": 4,
+    "0x00BF": 4,
+    "0x00F1": 4,
+    "0x0043": 3,
+    "0x00A2": 3,
+    "0x00E5": 3,
+    "0x0198": 3,
+    "0x019F": 3,
+    "0x0044": 2,
+    "0x0056": 2,
+    "0x005D": 2,
+    "0x008C": 2,
+    "0x00A3": 2,
+    "0x00A4": 2,
+    "0x000F": 1,
+    "0x00E6": 1,
+    "0x0144": 1,
+    "0x0195": 1
+   },
+   "reply_p50_ms": 33.5,
+   "first_non_tick": {
+    "0x000D": 2298,
+    "0x0029": 74,
+    "0x0025": 56,
+    "0x002E": 55,
+    "0x009F": 34,
+    "0x0021": 32,
+    "0x00A0": 24,
+    "0x009B": 15,
+    "0x002B": 12,
+    "0x002A": 11,
+    "0x00A7": 9,
+    "0x001D": 6,
+    "0x00F0": 6,
+    "0x00F1": 5,
+    "0x0198": 5,
+    "0x019F": 5,
+    "0x00A1": 4,
+    "0x00BF": 4,
+    "0x0043": 3,
+    "0x005D": 3,
+    "0x00A2": 3,
+    "0x00E5": 3,
+    "0x0020": 2,
+    "0x0028": 2,
+    "0x0044": 2,
+    "0x0056": 2,
+    "0x008C": 2,
+    "0x00A3": 2,
+    "0x00A4": 2,
+    "0x000F": 1,
+    "0x002D": 1,
+    "0x0059": 1,
+    "0x00E6": 1,
+    "0x0144": 1,
+    "0x0195": 1
+   },
+   "non_tick_p50_ms": 34.7
+  },
+  "0x000A": {
+   "count": 29,
+   "captures": 29,
+   "connections": 29,
+   "first_reply": {
+    "0x0144": 22,
+    "0x0186": 4,
+    "0x000D": 2,
+    "0x0196": 1
+   },
+   "reply_p50_ms": 45.5,
+   "first_non_tick": {
+    "0x0144": 22,
+    "0x0186": 4,
+    "0x000D": 2,
+    "0x0196": 1
+   },
+   "non_tick_p50_ms": 45.5
+  },
+  "0x000B": {
+   "count": 29,
+   "captures": 29,
+   "connections": 29,
+   "first_reply": {
+    "0x0144": 22,
+    "0x0186": 4,
+    "0x000D": 2,
+    "0x0196": 1
+   },
+   "reply_p50_ms": 45.5,
+   "first_non_tick": {
+    "0x0144": 22,
+    "0x0186": 4,
+    "0x000D": 2,
+    "0x0196": 1
+   },
+   "non_tick_p50_ms": 45.5
+  },
+  "0x000C": {
+   "count": 2,
+   "captures": 2,
+   "connections": 2,
+   "first_reply": {
+    "0x001E": 1,
+    "0x01AD": 1
+   },
+   "reply_p50_ms": 1324.1,
+   "first_non_tick": {
+    "0x0029": 1,
+    "0x01AD": 1
+   },
+   "non_tick_p50_ms": 1324.1
+  },
+  "0x000D": {
+   "count": 31,
+   "captures": 28,
+   "connections": 30,
+   "first_reply": {
+    "0x001E": 18,
+    "0x019F": 8,
+    "0x004C": 2,
+    "0x0198": 2,
+    "0x01D2": 1
+   },
+   "reply_p50_ms": 32.9,
+   "first_non_tick": {
+    "0x019F": 11,
+    "0x004C": 6,
+    "0x002E": 5,
+    "0x0025": 2,
+    "0x0029": 2,
+    "0x0198": 2,
+    "none": 2,
+    "0x01D2": 1
+   },
+   "non_tick_p50_ms": 43.6
+  },
+  "0x000E": {
+   "count": 27,
+   "captures": 4,
+   "connections": 6,
+   "first_reply": {
+    "0x0036": 15,
+    "0x001E": 11,
+    "0x009F": 1
+   },
+   "reply_p50_ms": 34.4,
+   "first_non_tick": {
+    "0x0036": 17,
+    "0x002E": 5,
+    "0x0029": 2,
+    "0x0025": 1,
+    "0x002B": 1,
+    "0x009F": 1
+   },
+   "non_tick_p50_ms": 39.2
+  },
+  "0x000F": {
+   "count": 26,
+   "captures": 4,
+   "connections": 5,
+   "first_reply": {
+    "0x0036": 17,
+    "0x001E": 8,
+    "0x000D": 1
+   },
+   "reply_p50_ms": 34.0,
+   "first_non_tick": {
+    "0x0036": 18,
+    "0x0025": 3,
+    "0x002E": 3,
+    "0x000D": 1,
+    "0x0029": 1
+   },
+   "non_tick_p50_ms": 34.1
+  },
+  "0x0012": {
+   "count": 63,
+   "captures": 14,
+   "connections": 47,
+   "first_reply": {
+    "0x004C": 36,
+    "0x001E": 22,
+    "0x0161": 2,
+    "0x0059": 1,
+    "0x00B0": 1,
+    "0x01D2": 1
+   },
+   "reply_p50_ms": 33.6,
+   "first_non_tick": {
+    "0x004C": 47,
+    "0x0029": 4,
+    "0x002E": 4,
+    "0x0025": 3,
+    "0x0161": 2,
+    "0x0059": 1,
+    "0x00B0": 1,
+    "0x01D2": 1
+   },
+   "non_tick_p50_ms": 38.1
+  },
+  "0x0013": {
+   "count": 2,
+   "captures": 1,
+   "connections": 1,
+   "first_reply": {
+    "0x001E": 1,
+    "0x00A2": 1
+   },
+   "reply_p50_ms": 248.0,
+   "first_non_tick": {
+    "0x00A2": 1,
+    "none": 1
+   },
+   "non_tick_p50_ms": 60.6
+  },
+  "0x0014": {
+   "count": 4,
+   "captures": 3,
+   "connections": 3,
+   "first_reply": {
+    "0x000D": 1,
+    "0x001E": 1,
+    "0x0051": 1,
+    "0x0056": 1
+   },
+   "reply_p50_ms": 19.0,
+   "first_non_tick": {
+    "0x000D": 1,
+    "0x0029": 1,
+    "0x0051": 1,
+    "0x0056": 1
+   },
+   "non_tick_p50_ms": 19.0
+  },
+  "0x0015": {
+   "count": 4,
+   "captures": 1,
+   "connections": 1,
+   "first_reply": {
+    "0x0062": 4
+   },
+   "reply_p50_ms": 39.4,
+   "first_non_tick": {
+    "0x0062": 4
+   },
+   "non_tick_p50_ms": 39.4
+  },
+  "0x0016": {
+   "count": 1,
+   "captures": 1,
+   "connections": 1,
+   "first_reply": {
+    "0x0063": 1
+   },
+   "reply_p50_ms": 48.6,
+   "first_non_tick": {
+    "0x0063": 1
+   },
+   "non_tick_p50_ms": 48.6
+  },
+  "0x001A": {
+   "count": 2,
+   "captures": 1,
+   "connections": 1,
+   "first_reply": {
+    "0x0066": 2
+   },
+   "reply_p50_ms": 53.5,
+   "first_non_tick": {
+    "0x0066": 2
+   },
+   "non_tick_p50_ms": 53.5
+  },
+  "0x001B": {
+   "count": 2,
+   "captures": 1,
+   "connections": 1,
+   "first_reply": {
+    "0x001E": 1,
+    "0x0067": 1
+   },
+   "reply_p50_ms": 47.2,
+   "first_non_tick": {
+    "0x0029": 1,
+    "0x0067": 1
+   },
+   "non_tick_p50_ms": 47.2
+  },
+  "0x001F": {
+   "count": 1,
+   "captures": 1,
+   "connections": 1,
+   "first_reply": {
+    "0x001E": 1
+   },
+   "reply_p50_ms": 21.3,
+   "first_non_tick": {
+    "0x0029": 1
+   },
+   "non_tick_p50_ms": 21.3
+  },
+  "0x0023": {
+   "count": 1,
+   "captures": 1,
+   "connections": 1,
+   "first_reply": {
+    "0x0034": 1
+   },
+   "reply_p50_ms": 30.4,
+   "first_non_tick": {
+    "0x0034": 1
+   },
+   "non_tick_p50_ms": 30.4
+  },
+  "0x0026": {
+   "count": 369,
+   "captures": 21,
+   "connections": 30,
+   "first_reply": {
+    "0x001E": 137,
+    "0x00A0": 76,
+    "0x009F": 72,
+    "0x0034": 25,
+    "0x0035": 11,
+    "0x00A3": 10,
+    "0x00A7": 8,
+    "0x00A4": 7,
+    "0x000D": 4,
+    "0x000C": 2,
+    "0x009B": 2,
+    "0x00F1": 2,
+    "0x0108": 2,
+    "0x0056": 1,
+    "0x005D": 1,
+    "0x00A1": 1,
+    "0x00A2": 1,
+    "0x00A5": 1,
+    "0x00BF": 1,
+    "0x00E3": 1,
+    "0x00E4": 1,
+    "0x00F0": 1,
+    "0x010E": 1,
+    "0x0181": 1
+   },
+   "reply_p50_ms": 36.7,
+   "first_non_tick": {
+    "0x00A0": 77,
+    "0x009F": 73,
+    "0x0029": 48,
+    "0x002A": 42,
+    "0x002B": 29,
+    "0x0034": 25,
+    "0x0035": 11,
+    "0x00A3": 10,
+    "0x0025": 8,
+    "0x00A7": 8,
+    "0x00A4": 7,
+    "0x000D": 4,
+    "0x0021": 4,
+    "0x000C": 2,
+    "0x0028": 2,
+    "0x009B": 2,
+    "0x00F1": 2,
+    "0x0108": 2,
+    "0x002E": 1,
+    "0x0056": 1,
+    "0x005D": 1,
+    "0x008C": 1,
+    "0x00A1": 1,
+    "0x00A2": 1,
+    "0x00A5": 1,
+    "0x00BF": 1,
+    "0x00E3": 1,
+    "0x00E4": 1,
+    "0x00F0": 1,
+    "0x010E": 1,
+    "0x0181": 1
+   },
+   "non_tick_p50_ms": 37.8
+  },
+  "0x0027": {
+   "count": 159,
+   "captures": 6,
+   "connections": 9,
+   "first_reply": {
+    "0x00E4": 88,
+    "0x005D": 25,
+    "0x009F": 19,
+    "0x001E": 6,
+    "0x00A0": 5,
+    "0x00BF": 5,
+    "0x00A3": 3,
+    "0x00A7": 3,
+    "0x000D": 1,
+    "0x0044": 1,
+    "0x00A4": 1,
+    "0x00E5": 1,
+    "0x00E6": 1
+   },
+   "reply_p50_ms": 31.5,
+   "first_non_tick": {
+    "0x00E4": 91,
+    "0x005D": 25,
+    "0x009F": 19,
+    "0x00A0": 5,
+    "0x00BF": 5,
+    "0x00A3": 3,
+    "0x00A7": 3,
+    "0x002A": 2,
+    "0x000D": 1,
+    "0x0029": 1,
+    "0x0044": 1,
+    "0x00A4": 1,
+    "0x00E5": 1,
+    "0x00E6": 1
+   },
+   "non_tick_p50_ms": 31.6
+  },
+  "0x0028": {
+   "count": 6,
+   "captures": 2,
+   "connections": 2,
+   "first_reply": {
+    "0x009F": 4,
+    "0x001E": 1,
+    "0x00A7": 1
+   },
+   "reply_p50_ms": 42.0,
+   "first_non_tick": {
+    "0x009F": 5,
+    "0x00A7": 1
+   },
+   "non_tick_p50_ms": 45.1
+  },
+  "0x002B": {
+   "count": 2,
+   "captures": 2,
+   "connections": 2,
+   "first_reply": {
+    "0x001E": 1,
+    "0x009F": 1
+   },
+   "reply_p50_ms": 452.2,
+   "first_non_tick": {
+    "0x0025": 1,
+    "0x009F": 1
+   },
+   "non_tick_p50_ms": 452.2
+  },
+  "0x0030": {
+   "count": 8,
+   "captures": 3,
+   "connections": 3,
+   "first_reply": {
+    "0x014B": 4,
+    "0x0152": 4
+   },
+   "reply_p50_ms": 42.1,
+   "first_non_tick": {
+    "0x014B": 4,
+    "0x0152": 4
+   },
+   "non_tick_p50_ms": 42.1
+  },
+  "0x0032": {
+   "count": 8,
+   "captures": 1,
+   "connections": 2,
+   "first_reply": {
+    "0x0148": 6,
+    "0x001E": 1,
+    "0x009B": 1
+   },
+   "reply_p50_ms": 46.1,
+   "first_non_tick": {
+    "0x0148": 6,
+    "0x0029": 1,
+    "0x009B": 1
+   },
+   "non_tick_p50_ms": 46.1
+  },
+  "0x0033": {
+   "count": 2,
+   "captures": 1,
+   "connections": 1,
+   "first_reply": {
+    "0x001E": 1,
+    "0x0034": 1
+   },
+   "reply_p50_ms": 32.5,
+   "first_non_tick": {
+    "0x0029": 1,
+    "0x0034": 1
+   },
+   "non_tick_p50_ms": 32.5
+  },
+  "0x0039": {
+   "count": 95,
+   "captures": 13,
+   "connections": 22,
+   "first_reply": {
+    "0x001E": 62,
+    "0x009F": 15,
+    "0x0080": 7,
+    "0x00C4": 4,
+    "0x008C": 2,
+    "0x000D": 1,
+    "0x0056": 1,
+    "0x005D": 1,
+    "0x009E": 1,
+    "0x00B0": 1
+   },
+   "reply_p50_ms": 35.4,
+   "first_non_tick": {
+    "0x002A": 17,
+    "0x0029": 16,
+    "0x009F": 15,
+    "0x002B": 10,
+    "0x0080": 9,
+    "0x0025": 6,
+    "0x00C4": 4,
+    "0x002E": 3,
+    "0x000D": 2,
+    "0x0020": 2,
+    "0x0021": 2,
+    "0x0056": 2,
+    "0x008C": 2,
+    "0x000C": 1,
+    "0x005D": 1,
+    "0x009B": 1,
+    "0x009E": 1,
+    "0x00B0": 1
+   },
+   "non_tick_p50_ms": 36.3
+  },
+  "0x003B": {
+   "count": 50,
+   "captures": 9,
+   "connections": 15,
+   "first_reply": {
+    "0x005D": 17,
+    "0x001E": 10,
+    "0x0080": 8,
+    "0x0052": 6,
+    "0x0054": 2,
+    "0x0081": 2,
+    "0x00EE": 2,
+    "0x000C": 1,
+    "0x009F": 1,
+    "0x00DC": 1
+   },
+   "reply_p50_ms": 33.8,
+   "first_non_tick": {
+    "0x005D": 21,
+    "0x0080": 10,
+    "0x0052": 6,
+    "0x0029": 3,
+    "0x0054": 2,
+    "0x0081": 2,
+    "0x00EE": 2,
+    "0x000C": 1,
+    "0x002E": 1,
+    "0x009F": 1,
+    "0x00DC": 1
+   },
+   "non_tick_p50_ms": 35.9
+  },
+  "0x003D": {
+   "count": 6140,
+   "captures": 27,
+   "connections": 80,
+   "first_reply": {
+    "0x001E": 5609,
+    "0x009F": 158,
+    "0x000D": 58,
+    "0x000C": 55,
+    "0x009B": 53,
+    "0x00F0": 35,
+    "0x0056": 23,
+    "0x00A0": 19,
+    "0x00F1": 16,
+    "0x008C": 15,
+    "0x00A7": 9,
+    "0x0107": 9,
+    "0x00A2": 7,
+    "0x00A4": 6,
+    "0x00B0": 6,
+    "0x00BF": 6,
+    "0x0044": 5,
+    "0x0035": 4,
+    "0x0042": 4,
+    "0x00A3": 4,
+    "0x0108": 4,
+    "0x0043": 3,
+    "0x0059": 3,
+    "0x00A1": 3,
+    "0x00A5": 3,
+    "0x00CF": 3,
+    "0x00E6": 3,
+    "0x010E": 3,
+    "0x005D": 2,
+    "0x00E3": 2,
+    "0x00E5": 2,
+    "0x0161": 2,
+    "0x019F": 2,
+    "0x0036": 1,
+    "0x003E": 1,
+    "0x00A6": 1,
+    "0x013C": 1
+   },
+   "reply_p50_ms": 34.0,
+   "first_non_tick": {
+    "0x0025": 4065,
+    "0x0029": 1103,
+    "0x009F": 163,
+    "0x0021": 146,
+    "0x002E": 102,
+    "0x002B": 83,
+    "0x000D": 60,
+    "0x000C": 59,
+    "0x009B": 55,
+    "0x00F0": 39,
+    "0x002D": 30,
+    "0x002A": 29,
+    "0x0020": 24,
+    "0x0056": 24,
+    "0x00A0": 20,
+    "0x008C": 17,
+    "0x00F1": 16,
+    "0x00A7": 9,
+    "0x0107": 9,
+    "0x00A2": 7,
+    "0x00A4": 6,
+    "0x00B0": 6,
+    "0x00BF": 6,
+    "0x0028": 5,
+    "0x0044": 5,
+    "0x0035": 4,
+    "0x0042": 4,
+    "0x00A3": 4,
+    "0x0108": 4,
+    "0x0043": 3,
+    "0x0059": 3,
+    "0x00A1": 3,
+    "0x00A5": 3,
+    "0x00CF": 3,
+    "0x00E3": 3,
+    "0x00E6": 3,
+    "0x010E": 3,
+    "0x005D": 2,
+    "0x00E5": 2,
+    "0x0161": 2,
+    "0x019F": 2,
+    "0x0036": 1,
+    "0x003E": 1,
+    "0x00A6": 1,
+    "0x013C": 1
+   },
+   "non_tick_p50_ms": 34.6
+  },
+  "0x003E": {
+   "count": 100,
+   "captures": 13,
+   "connections": 20,
+   "first_reply": {
+    "0x001E": 91,
+    "0x000C": 2,
+    "0x009F": 2,
+    "0x000D": 1,
+    "0x00F0": 1,
+    "0x0107": 1,
+    "0x0198": 1,
+    "0x019F": 1
+   },
+   "reply_p50_ms": 34.3,
+   "first_non_tick": {
+    "0x0029": 68,
+    "0x002B": 13,
+    "0x000C": 2,
+    "0x0020": 2,
+    "0x0021": 2,
+    "0x0025": 2,
+    "0x002E": 2,
+    "0x009F": 2,
+    "0x000D": 1,
+    "0x0028": 1,
+    "0x002A": 1,
+    "0x00F0": 1,
+    "0x0107": 1,
+    "0x0198": 1,
+    "0x019F": 1
+   },
+   "non_tick_p50_ms": 35.2
+  },
+  "0x003F": {
+   "count": 4,
+   "captures": 2,
+   "connections": 2,
+   "first_reply": {
+    "0x001E": 2,
+    "0x009F": 2
+   },
+   "reply_p50_ms": 30.9,
+   "first_non_tick": {
+    "0x009F": 2,
+    "0x002A": 1,
+    "0x002B": 1
+   },
+   "non_tick_p50_ms": 30.9
+  },
+  "0x0040": {
+   "count": 171,
+   "captures": 19,
+   "connections": 28,
+   "first_reply": {
+    "0x001E": 156,
+    "0x009F": 5,
+    "0x000C": 3,
+    "0x000D": 3,
+    "0x00A2": 1,
+    "0x00E6": 1,
+    "0x00F1": 1,
+    "0x0180": 1
+   },
+   "reply_p50_ms": 33.5,
+   "first_non_tick": {
+    "0x002E": 132,
+    "0x002B": 9,
+    "0x0029": 8,
+    "0x009F": 8,
+    "0x000C": 4,
+    "0x000D": 3,
+    "0x0021": 2,
+    "0x00A2": 1,
+    "0x00E6": 1,
+    "0x00F1": 1,
+    "0x0180": 1,
+    "none": 1
+   },
+   "non_tick_p50_ms": 33.8
+  },
+  "0x0041": {
+   "count": 1,
+   "captures": 1,
+   "connections": 1,
+   "first_reply": {
+    "0x001E": 1
+   },
+   "reply_p50_ms": 4.4,
+   "first_non_tick": {
+    "0x002E": 1
+   },
+   "non_tick_p50_ms": 4.4
+  },
+  "0x0044": {
+   "count": 1,
+   "captures": 1,
+   "connections": 1,
+   "first_reply": {
+    "0x009F": 1
+   },
+   "reply_p50_ms": 118.3,
+   "first_non_tick": {
+    "0x009F": 1
+   },
+   "non_tick_p50_ms": 118.3
+  },
+  "0x0045": {
+   "count": 5,
+   "captures": 3,
+   "connections": 3,
+   "first_reply": {
+    "0x001E": 4,
+    "0x009F": 1
+   },
+   "reply_p50_ms": 197.9,
+   "first_non_tick": {
+    "none": 2,
+    "0x0025": 1,
+    "0x0029": 1,
+    "0x009F": 1
+   },
+   "non_tick_p50_ms": 143.6
+  },
+  "0x0046": {
+   "count": 162,
+   "captures": 18,
+   "connections": 24,
+   "first_reply": {
+    "0x00E4": 113,
+    "0x001E": 18,
+    "0x005D": 16,
+    "0x009F": 4,
+    "0x000D": 3,
+    "0x00A0": 3,
+    "0x00A7": 3,
+    "0x009B": 1,
+    "0x00A1": 1
+   },
+   "reply_p50_ms": 37.3,
+   "first_non_tick": {
+    "0x00E4": 116,
+    "0x005D": 16,
+    "0x0029": 6,
+    "0x009F": 4,
+    "0x000D": 3,
+    "0x002A": 3,
+    "0x00A0": 3,
+    "0x00A7": 3,
+    "0x0025": 2,
+    "0x0021": 1,
+    "0x0028": 1,
+    "0x002B": 1,
+    "0x002E": 1,
+    "0x009B": 1,
+    "0x00A1": 1
+   },
+   "non_tick_p50_ms": 38.0
+  },
+  "0x0047": {
+   "count": 511,
+   "captures": 27,
+   "connections": 59,
+   "first_reply": {
+    "0x001E": 472,
+    "0x009F": 7,
+    "0x00F0": 6,
+    "0x000C": 5,
+    "0x008C": 4,
+    "0x000D": 3,
+    "0x00A0": 2,
+    "0x00E4": 2,
+    "0x0035": 1,
+    "0x0059": 1,
+    "0x005D": 1,
+    "0x0080": 1,
+    "0x009B": 1,
+    "0x00A1": 1,
+    "0x00A2": 1,
+    "0x00B0": 1,
+    "0x0198": 1,
+    "0x01D2": 1
+   },
+   "reply_p50_ms": 33.9,
+   "first_non_tick": {
+    "0x002B": 302,
+    "0x0025": 51,
+    "0x0028": 39,
+    "0x009F": 28,
+    "0x0029": 27,
+    "0x0021": 12,
+    "0x002E": 9,
+    "none": 7,
+    "0x00F0": 6,
+    "0x000C": 5,
+    "0x008C": 4,
+    "0x000D": 3,
+    "0x002A": 2,
+    "0x0056": 2,
+    "0x00A0": 2,
+    "0x00E4": 2,
+    "0x0035": 1,
+    "0x0059": 1,
+    "0x005D": 1,
+    "0x0080": 1,
+    "0x009B": 1,
+    "0x00A1": 1,
+    "0x00A2": 1,
+    "0x00B0": 1,
+    "0x0198": 1,
+    "0x01D2": 1
+   },
+   "non_tick_p50_ms": 34.0
+  },
+  "0x004A": {
+   "count": 8,
+   "captures": 1,
+   "connections": 2,
+   "first_reply": {
+    "0x001E": 4,
+    "0x014D": 4
+   },
+   "reply_p50_ms": 33.3,
+   "first_non_tick": {
+    "0x014D": 7,
+    "0x000D": 1
+   },
+   "non_tick_p50_ms": 43.5
+  },
+  "0x004D": {
+   "count": 1,
+   "captures": 1,
+   "connections": 1,
+   "first_reply": {
+    "0x014F": 1
+   },
+   "reply_p50_ms": 37.0,
+   "first_non_tick": {
+    "0x014F": 1
+   },
+   "non_tick_p50_ms": 37.0
+  },
+  "0x004F": {
+   "count": 4,
+   "captures": 2,
+   "connections": 2,
+   "first_reply": {
+    "0x014B": 3,
+    "0x001E": 1
+   },
+   "reply_p50_ms": 46.1,
+   "first_non_tick": {
+    "0x014B": 3,
+    "0x002E": 1
+   },
+   "non_tick_p50_ms": 46.1
+  },
+  "0x0051": {
+   "count": 6,
+   "captures": 2,
+   "connections": 2,
+   "first_reply": {
+    "0x001E": 4,
+    "0x00A0": 1,
+    "0x00BF": 1
+   },
+   "reply_p50_ms": 53.0,
+   "first_non_tick": {
+    "0x0029": 2,
+    "0x002A": 1,
+    "0x002B": 1,
+    "0x00A0": 1,
+    "0x00BF": 1
+   },
+   "non_tick_p50_ms": 53.0
+  },
+  "0x005C": {
+   "count": 6,
+   "captures": 6,
+   "connections": 6,
+   "first_reply": {
+    "0x001E": 3,
+    "0x00D9": 3
+   },
+   "reply_p50_ms": 33.0,
+   "first_non_tick": {
+    "0x00D9": 4,
+    "0x0029": 1,
+    "0x002E": 1
+   },
+   "non_tick_p50_ms": 36.1
+  },
+  "0x0060": {
+   "count": 25,
+   "captures": 5,
+   "connections": 5,
+   "first_reply": {
+    "0x00B7": 10,
+    "0x014D": 10,
+    "0x001D": 3,
+    "0x000C": 2
+   },
+   "reply_p50_ms": 34.6,
+   "first_non_tick": {
+    "0x00B7": 10,
+    "0x014D": 10,
+    "0x001D": 3,
+    "0x000C": 2
+   },
+   "non_tick_p50_ms": 34.6
+  },
+  "0x0063": {
+   "count": 3,
+   "captures": 3,
+   "connections": 3,
+   "first_reply": {
+    "0x001E": 2,
+    "0x009F": 1
+   },
+   "reply_p50_ms": 34.0,
+   "first_non_tick": {
+    "0x009F": 2,
+    "0x0020": 1
+   },
+   "non_tick_p50_ms": 41.9
+  },
+  "0x0064": {
+   "count": 1,
+   "captures": 1,
+   "connections": 1,
+   "first_reply": {
+    "0x005D": 1
+   },
+   "reply_p50_ms": 50.5,
+   "first_non_tick": {
+    "0x005D": 1
+   },
+   "non_tick_p50_ms": 50.5
+  },
+  "0x0084": {
+   "count": 175,
+   "captures": 5,
+   "connections": 5,
+   "first_reply": {
+    "0x00B7": 70,
+    "0x014D": 70,
+    "0x001D": 21,
+    "0x000C": 14
+   },
+   "reply_p50_ms": 34.6,
+   "first_non_tick": {
+    "0x00B7": 70,
+    "0x014D": 70,
+    "0x001D": 21,
+    "0x000C": 14
+   },
+   "non_tick_p50_ms": 34.6
+  },
+  "0x0085": {
+   "count": 2,
+   "captures": 2,
+   "connections": 2,
+   "first_reply": {
+    "0x001E": 1,
+    "0x015C": 1
+   },
+   "reply_p50_ms": 28.5,
+   "first_non_tick": {
+    "0x0029": 1,
+    "0x015C": 1
+   },
+   "non_tick_p50_ms": 28.5
+  },
+  "0x0086": {
+   "count": 6,
+   "captures": 2,
+   "connections": 2,
+   "first_reply": {
+    "0x001E": 4,
+    "0x0161": 2
+   },
+   "reply_p50_ms": 28.7,
+   "first_non_tick": {
+    "0x002E": 3,
+    "0x0161": 2,
+    "0x0029": 1
+   },
+   "non_tick_p50_ms": 28.7
+  },
+  "0x0088": {
+   "count": 91,
+   "captures": 29,
+   "connections": 91,
+   "first_reply": {
+    "0x0195": 87,
+    "0x000D": 2,
+    "0x000C": 1,
+    "0x003E": 1
+   },
+   "reply_p50_ms": 36.8,
+   "first_non_tick": {
+    "0x0195": 87,
+    "0x000D": 2,
+    "0x000C": 1,
+    "0x003E": 1
+   },
+   "non_tick_p50_ms": 36.8
+  },
+  "0x0089": {
+   "count": 5,
+   "captures": 5,
+   "connections": 5,
+   "first_reply": {
+    "0x0186": 4,
+    "0x000D": 1
+   },
+   "reply_p50_ms": 33.8,
+   "first_non_tick": {
+    "0x0186": 4,
+    "0x000D": 1
+   },
+   "non_tick_p50_ms": 33.8
+  },
+  "0x008A": {
+   "count": 5,
+   "captures": 5,
+   "connections": 5,
+   "first_reply": {
+    "0x001D": 3,
+    "0x000C": 2
+   },
+   "reply_p50_ms": 35.0,
+   "first_non_tick": {
+    "0x001D": 3,
+    "0x000C": 2
+   },
+   "non_tick_p50_ms": 35.0
+  },
+  "0x008B": {
+   "count": 5,
+   "captures": 5,
+   "connections": 5,
+   "first_reply": {
+    "0x0099": 5
+   },
+   "reply_p50_ms": 31.8,
+   "first_non_tick": {
+    "0x0099": 5
+   },
+   "non_tick_p50_ms": 31.8
+  },
+  "0x0090": {
+   "count": 90,
+   "captures": 28,
+   "connections": 90,
+   "first_reply": {
+    "0x01AD": 42,
+    "0x001D": 26,
+    "0x000F": 17,
+    "0x006D": 2,
+    "0x0057": 1,
+    "0x009F": 1,
+    "0x015E": 1
+   },
+   "reply_p50_ms": 41.2,
+   "first_non_tick": {
+    "0x01AD": 42,
+    "0x001D": 26,
+    "0x000F": 17,
+    "0x006D": 2,
+    "0x0057": 1,
+    "0x009F": 1,
+    "0x015E": 1
+   },
+   "non_tick_p50_ms": 41.2
+  },
+  "0x0091": {
+   "count": 91,
+   "captures": 29,
+   "connections": 91,
+   "first_reply": {
+    "0x0144": 88,
+    "0x000D": 1,
+    "0x0196": 1,
+    "0x0197": 1
+   },
+   "reply_p50_ms": 41.6,
+   "first_non_tick": {
+    "0x0144": 88,
+    "0x000D": 1,
+    "0x0196": 1,
+    "0x0197": 1
+   },
+   "non_tick_p50_ms": 41.6
+  },
+  "0x0092": {
+   "count": 305,
+   "captures": 27,
+   "connections": 46,
+   "first_reply": {
+    "0x001E": 178,
+    "0x019F": 103,
+    "0x004C": 8,
+    "0x00A7": 4,
+    "0x0059": 3,
+    "0x009F": 3,
+    "0x000C": 2,
+    "0x00B0": 2,
+    "0x000D": 1,
+    "0x00F1": 1
+   },
+   "reply_p50_ms": 29.5,
+   "first_non_tick": {
+    "0x019F": 153,
+    "0x002E": 40,
+    "0x0025": 33,
+    "0x0029": 27,
+    "0x004C": 14,
+    "0x002B": 9,
+    "0x00A7": 8,
+    "0x009F": 5,
+    "0x0021": 3,
+    "0x0059": 3,
+    "0x00B0": 3,
+    "0x000C": 2,
+    "0x000D": 2,
+    "0x002A": 1,
+    "0x00A6": 1,
+    "0x00F1": 1
+   },
+   "non_tick_p50_ms": 36.6
+  },
+  "0x0093": {
+   "count": 216,
+   "captures": 15,
+   "connections": 16,
+   "first_reply": {
+    "0x0198": 133,
+    "0x001E": 71,
+    "0x000C": 4,
+    "0x00F1": 2,
+    "0x0059": 1,
+    "0x009F": 1,
+    "0x00A7": 1,
+    "0x00AE": 1,
+    "0x00B0": 1,
+    "0x0107": 1
+   },
+   "reply_p50_ms": 31.9,
+   "first_non_tick": {
+    "0x0198": 174,
+    "0x0025": 11,
+    "0x002E": 9,
+    "0x0029": 6,
+    "0x000C": 4,
+    "0x002A": 2,
+    "0x002B": 2,
+    "0x00F1": 2,
+    "0x0059": 1,
+    "0x009F": 1,
+    "0x00A7": 1,
+    "0x00AE": 1,
+    "0x00B0": 1,
+    "0x0107": 1
+   },
+   "non_tick_p50_ms": 34.9
+  },
+  "0x009F": {
+   "count": 3,
+   "captures": 1,
+   "connections": 1,
+   "first_reply": {
+    "0x00B0": 3
+   },
+   "reply_p50_ms": 39.2,
+   "first_non_tick": {
+    "0x00B0": 3
+   },
+   "non_tick_p50_ms": 39.2
+  },
+  "0x00B1": {
+   "count": 10,
+   "captures": 6,
+   "connections": 10,
+   "first_reply": {
+    "0x01D9": 9,
+    "0x001E": 1
+   },
+   "reply_p50_ms": 38.6,
+   "first_non_tick": {
+    "0x01D9": 9,
+    "0x0029": 1
+   },
+   "non_tick_p50_ms": 38.6
+  },
+  "0x00C1": {
+   "count": 1473,
+   "captures": 27,
+   "connections": 72,
+   "first_reply": {
+    "0x001E": 1096,
+    "0x009F": 121,
+    "0x000C": 53,
+    "0x009B": 35,
+    "0x00F0": 26,
+    "0x00A0": 19,
+    "0x0056": 18,
+    "0x000D": 14,
+    "0x008C": 12,
+    "0x0107": 10,
+    "0x0042": 8,
+    "0x00A7": 8,
+    "0x00E4": 8,
+    "0x00F1": 6,
+    "0x0108": 5,
+    "none": 5,
+    "0x00A2": 3,
+    "0x00A3": 3,
+    "0x00A4": 3,
+    "0x00A5": 3,
+    "0x0044": 2,
+    "0x0059": 2,
+    "0x0151": 2,
+    "0x0043": 1,
+    "0x0054": 1,
+    "0x0080": 1,
+    "0x00A1": 1,
+    "0x00B0": 1,
+    "0x00C4": 1,
+    "0x00D0": 1,
+    "0x00E5": 1,
+    "0x00E6": 1,
+    "0x0181": 1,
+    "0x019F": 1
+   },
+   "reply_p50_ms": 100.4,
+   "first_non_tick": {
+    "0x0025": 344,
+    "0x0029": 261,
+    "0x009F": 163,
+    "0x002E": 110,
+    "0x0021": 102,
+    "0x000C": 88,
+    "0x002B": 67,
+    "0x002A": 41,
+    "0x009B": 41,
+    "none": 36,
+    "0x00F0": 27,
+    "0x0020": 22,
+    "0x00A0": 19,
+    "0x0056": 18,
+    "0x008C": 17,
+    "0x000D": 14,
+    "0x0107": 14,
+    "0x00E4": 12,
+    "0x0028": 9,
+    "0x0042": 8,
+    "0x00A7": 8,
+    "0x00F1": 7,
+    "0x0043": 6,
+    "0x0108": 5,
+    "0x00A2": 4,
+    "0x00A3": 3,
+    "0x00A4": 3,
+    "0x00A5": 3,
+    "0x0044": 2,
+    "0x0059": 2,
+    "0x0080": 2,
+    "0x00E6": 2,
+    "0x0151": 2,
+    "0x002D": 1,
+    "0x0051": 1,
+    "0x0054": 1,
+    "0x00A1": 1,
+    "0x00B0": 1,
+    "0x00C4": 1,
+    "0x00D0": 1,
+    "0x00E5": 1,
+    "0x015E": 1,
+    "0x0181": 1,
+    "0x019F": 1
+   },
+   "non_tick_p50_ms": 112.4
+  }
+ }
+}

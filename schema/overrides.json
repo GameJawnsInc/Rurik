@@ -346,6 +346,12 @@
    }
   },
   "GAME_CMSG": {
+   "30": {
+    "opcode": 30,
+    "name": "HERO_ADD",
+    "name_confidence": "low",
+    "why": "STATIC ONLY -- the party panel's add-hero request, the mirror of 0x001F HERO_KICK (GAME_CMSG 31, OBSERVED). NOT FOUND on any wire: 0 of 96 live game connections (toolkit/authsrv/c2striage.py, 13,320 c2s) and 0 of 1,557 loopback connection logs carry one. Read on build 38797 (toolkit/clientscan/sendsites.py, msghandler.py --callers, codescan.py --dis): send wrapper 0x0091FF00 (site 0x0091FF1F, 8 bytes; 0x00920880 on 38888, 0x0091FF60 on 38833/38849, 0x00915CC0 on 38519), one caller inside ChCliApi 0x0080E250, which asserts `hero < HEROES` (ChCliApi:4446) and `hero != 0` (:4447) and sends only when MissionCliGetMap() (0x0084D9B0, missionContext+0x238) is MISSION_MAP_OUTPOST == 0 -- the kick's twin 0x0080E2A0 (:4459/:4460) has the same gate, so both go out from an outpost only. Callers of 0x0080E250: PtSearch 0x00562FB0 (after PtSearch:774 `m_activeList == LIST_HEROES`) and UiCtlInstance 0x00577A3F. Payload [word] = the hero index, by the wrapper's own bounds and by the kick's two witnesses ([6] retail, [3] loopback) sharing the shape. Named LOW: the mechanism is read from the binary, never seen sent; the loopback click that would raise it to OBSERVED is owed (studies/cmsg/FINDINGS.md DESKWORK-D1 'The hero add', the runsheet). Handled by handle_hero_add behind --no-hero-add (RECONSTRUCTION; the commander rig only)."
+   },
    "31": {
     "opcode": 31,
     "table": "GAME_CMSG_0031",
@@ -1045,6 +1051,24 @@
     "name": "SELECT_WEAPON_SET",
     "name_confidence": "high",
     "why": "OBSERVED on ArenaNet's wire and reproduced by a labelled run against our own server. field1=set u8 (0..3). Widths per messages.json [byte], 3 B. WITNESS vault/captures/live/20260919T103604 (RUN-WEAPONS-1A, Isle of the Nameless, agent 25, four sets from its own 0x0147 rows: axe 212; scythe 209; spear 210; spear 208 + shield 207): c2s [1] at t=303.379, [2] at 486.664, [3] at 529.958, [0] at 590.704 -- the operator's narrated set swaps -- each answered 40-46 ms later by ONE batch: 0x0148 ITEM_SET_ACTIVE_EQUIP_SET [1, set] naming the SAME set, 0x0152 [1, old lead, new lead], 0x014B ITEM_CHANGE_LOCATION for a shield entering (bag 3 slot 1) or leaving (back to bag 2 slot 1) the hands, and 0x006F AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT per changed hand; never a fresh 0x006E. 4 of 4, the set byte matching the reply's every time, on no other of the 29 captures. LABELLED RUN vault/captures/harness/20260919T152451 (our server, --weapon-set 1..3 filled, hands off): F2, F3, F4, F1 pressed by the harness (vk 0x71/0x72/0x73/0x70) produced c2s 0x0032 [1], [2], [3], [0] in that order and nothing else -- the key IS the message. Dispatched: authsrv.select_weapon_set (WEAPONS-W9, studies/weapons/PLAN.md 27)."
+   },
+   "159": {
+    "opcode": 159,
+    "name": "HENCHMAN_ADD",
+    "name_confidence": "medium",
+    "why": "OBSERVED n=3 on one connection -- the party panel's add-henchman click in an outpost. Capture 20260819T132414 connection 10.0.0.210:53419 at t=126.234, 128.201 and 130.186: c2s 0x009F [4], [2], [6] (payload = the henchman NPC's agent id, a word), each answered 31-132 ms later by 0x00B0 PLAYER_PARTY_SIZE [14, 2] / [14, 3] / [14, 4] (player 14, the party growing by one per add) and THEN the 0x01BF henchman roster row [11, agent, name, ...] in the same plaintext chunk -- size before row, 3 of 3 (the hero KICK 0x001F answers row 0x01C3 then size 0x00B0; the hero ADD 0x001E mirrors THIS order). Zero loopback arrivals: this server has no outpost henchman NPC to click and hires its henchman from --henchman. Send wrapper 0x0085BE40 on 38797, one caller (toolkit/clientscan/sendsites.py; module label Array). The retail c2s triage (toolkit/authsrv/c2striage.py, studies/cmsg/FINDINGS.md DESKWORK-D1 step 3) counts it 3 of 13,320 live c2s. Named medium: mechanism OBSERVED, one connection. Not yet handled -- DESKWORK-D1 step 5 arms the party family; test_dispatch.DROPPED_ON_PURPOSE carries the reason."
+   },
+   "177": {
+    "opcode": 177,
+    "name": "MAP_TRAVEL",
+    "name_confidence": "medium",
+    "why": "OBSERVED n=10 on 10 connections over 6 captures -- the world map's travel to another outpost. c2s 0x00B1 [map_id, 0, 0, 0, 1] (map ids 248 x5, 148 x2, 281, 242, ... -- word, byte, word, byte, byte), answered 39 ms later (p50) by 0x01D9 [2, 1, ''] then the transfer pair 0x01A5 GAME_SERVER_TRANSFER and 0x0099 -- 10 of 10 in sequence, 9 of 10 as the very first non-clock s2c -- and followed by c2s 0x0008 every time (10 of 10). The payload's map field is the destination: the connection that follows each transfer loads that map. Zero loopback arrivals. Send wrapper 0x0085C280 on 38797 with NO direct caller (reached through a pointer; sendsites.py). Named medium: mechanism OBSERVED, the three trailing fields unread (always 0, 0, 0, 1 on tape). Not yet handled -- DESKWORK-D1 step 7 (what the world map gates on, the unlocked-outpost state nothing models, a refusal for a map with no content row); test_dispatch.DROPPED_ON_PURPOSE carries the reason."
+   },
+   "79": {
+    "opcode": 79,
+    "name": "ITEM_MOVE",
+    "name_confidence": "medium",
+    "why": "OBSERVED n=4 on 2 connections -- captures 20260917T090355 (10.139.166.60:53310, three sends at t=406.203, 411.075, 412.443) and 20260919T103604 (10.139.166.60:58638, one at t=232.975) -- an item moved between inventory slots. c2s 0x004F [byte, word, byte] = [4, 2, 1], [6, 2, 2], [5, 2, 3], [1, 136, 6], each answered 42-69 ms later by 0x014B ITEM_CHANGE_LOCATION (4 of 4; 3 of 4 as the first non-clock s2c), which is what names it; 0x006F AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT rides beside it on 3 of 4 (the fourth, [1, 136, 6], drew 0x002E then 0x014B [241, 17730, 136, 6] and no 0x006F within 1.5 s). FIELD ROLES: fields 2 and 3 are the DESTINATION bag and slot -- 0x014B's reply is [_, item, bag, slot] and its bag/slot equal the request's word/byte on 4 of 4 ([1, 213, 2, 1], [1, 215, 2, 2], [1, 214, 2, 3], [241, 17730, 136, 6]) -- CORROBORATED from the reply; field 1 (4, 6, 5, 1) is UNVERIFIED (it is not the 0x006F slot, which read 6, 5, 3). Loopback: ONE decoded on vault/captures/gamesrv/authsrv-20260810T151946-c1.jsonl at t=334.0 ([0, 4, 1]), from before UNHANDLED logging existed; none since. Send wrapper 0x00920DE0 on 38797 (CharMsg, no direct caller). Named medium: mechanism OBSERVED, field 1 open. Not yet handled -- DESKWORK-D1 step 8 arms it with a per-slot equip store alongside 0x0030 EQUIP_ITEM; test_dispatch.DROPPED_ON_PURPOSE carries the reason. CORRECTED 2026-09-23 (the D1 fix pass, studies/cmsg/FINDINGS.md): the first cut cited captures 20260913T210901 and 20260914T005758, which hold no 0x004F, said 0x006F followed 4 of 4 and claimed zero loopback arrivals."
    }
   },
   "GAME_SMSG": {

@@ -3342,7 +3342,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   cannot mean the detector is blind. Floor 16; sections 1-4 print a `skip`
   without the vault. No socket, no client. ~4 s),
   `toolkit/authsrv/test_movement_fidelity.py`,
-  `toolkit/authsrv/test_agentlife.py` (**2026-09-20, SANDBOX-B3: two locks moved with the code, no new checks -- the SLICE-H2c order lock now finds the per-hero level print (`level {_hlv} on hero agent`), and the SLICE-H7 weapon check expects a Warrior party body to hold `starter_sword` (the row landed at SLICE-H9; `PARTY_WEAPON_ITEMS` said `None` until today) and a row's own class (`party_weapon_item(npc, "hammer")`) to win; floor 551 unchanged.** Earlier: **2026-09-17, CAST-TARGET-DIED: `section_cast_target_died` -- the owner saw Restore Condition cast on a dead bandit. The pick never chooses a corpse; the LANDING never re-asked, so an ally-target cast whose target died during its second resolved anyway (the pre-fix tree sent Orison's heal word at the CASTER and played 276's visual on the body -- reproduced on main before the fix). Through the real `land_skill`: the living hurt ally gets `[55, ally, caster, +h]` (the arm that can fail), a dead target gets the caster's close and nothing else for 281 and for 276, and a resurrection still stands its corpse up. Floor 547 -> 551.** Earlier: **2026-09-16, MONSTERAI-J: `section_passive_hostiles` -- a row's `passive = true` notices nothing until the player or a party body hits it (no pick, no chase, no swing, no cast; the arm that makes each mean something is the same row after the hit), the hit provokes the row AND every passive row sharing its `group` unhit while another group stands, armour-ignoring damage provokes, a HOSTILE's hit does not, a row that says nothing picks at proximity as before, and `--no-passive-hostiles` reverts. Retail: four level-1 definitions and a level-2 Warrior let the player stand inside 170-950 u (`studies/monsterai/FINDINGS.md` 12.6-12.7). +11; floor 536 -> 547.** **2026-09-15 (probe-walk noise): a green run printed 97 lines reading `[FAIL] <probe>: malformed -> ValueError: GAME_SMSG 0x0000 wants 1 values, got 0`. None was a broken probe: `section_probe_encoding`'s CONTROL monkeypatches `probes.get` to hand ONE deliberately malformed step (label `malformed`, opcode 0x0000, no values, `sends=True`) to the walk under `quiet=True`, only `get` was patched so the walk fed it to all 97 names in `probes.names()`, and `check_encodable`'s `[FAIL]` print ignored `quiet`. The verdict never saw them -- the real walk runs on the real registry BEFORE the patch, so `checked=552` was and is correct to exclude them, and the ledger reads no stdout. Fix: `check_encodable` honours `quiet` for failures and returns them by name in `counts['failures']` (probe, label, refusal), which the red line now prints so silence costs no diagnostic; the CONTROL pins `probes.names` to one synthetic name and runs under `redirect_stdout`. +2: the captured output is EMPTY (sabotage -- the print made unconditional again -- reddens this one check and nothing else) and `counts['failures']` names `('control', 'malformed', ...)`; floor 534 -> 536 from the green run.** **2026-09-15 (later): `offset_y` is HONOURED -- `population.enemy_spots` tries the exact (offset_x, offset_y) point first, then the compass ring at that point's distance; until now only offset_x was read, as the radius, and the owner's (300, -1200) spawned the hostile due east. +2; the existing ring check pins ENEMY_OFFSET at (300, 0) itself instead of reading world.toml; floor 530 -> 532.** **2026-09-15, MONSTERAI-N3: the `section_constants` pin for `AGGRO_RANGE` moves 1200 -> 1012 and its label OURS -> CORROBORATED (the wiki's Danger Zone radius, and the one unprovoked retail reaction with both positions on the wire brackets it at [992, 1105], `studies/monsterai/FINDINGS.md` 11); the ANIMREF-RE 42.5 off-mesh fixture point moves from (600, 950) = 1,123 u to (300, 950) = 996 u so the follow still opens inside the new radius -- the two checks that reddened were the fixture standing outside it, not the plane words; floor 530 unchanged.** **2026-09-14 (late night), DAMAGE-INT: the party body's swing takes 11 off the foe at AR 35 — 11.7 truncated; floor 530 unchanged.** **SKILLS-HN (2026-09-09): `dmg_floats`
+  `toolkit/authsrv/test_agentlife.py` (**2026-09-20, SANDBOX-B3: two locks moved with the code, no new checks -- the SLICE-H2c order lock now finds the per-hero level print (`level {_hlv} on hero agent`), and the SLICE-H7 weapon check expects a Warrior party body to hold `starter_sword` (the row landed at SLICE-H9; `PARTY_WEAPON_ITEMS` said `None` until today) and a row's own class (`party_weapon_item(npc, "hammer")`) to win; floor 551 unchanged. 2026-09-23, DESKWORK-D1 step 4 / SANDBOX-N2: +1 -- the PLAYER_CREATE -> SIZE -> LEADER order walk is scoped to `_handle_request_players` (the add's 0x00B0 read as load order otherwise) and the `party_bodies_here(state)` site count is 7 (the add's); floor 551 -> 552.** Earlier: **2026-09-17, CAST-TARGET-DIED: `section_cast_target_died` -- the owner saw Restore Condition cast on a dead bandit. The pick never chooses a corpse; the LANDING never re-asked, so an ally-target cast whose target died during its second resolved anyway (the pre-fix tree sent Orison's heal word at the CASTER and played 276's visual on the body -- reproduced on main before the fix). Through the real `land_skill`: the living hurt ally gets `[55, ally, caster, +h]` (the arm that can fail), a dead target gets the caster's close and nothing else for 281 and for 276, and a resurrection still stands its corpse up. Floor 547 -> 551.** Earlier: **2026-09-16, MONSTERAI-J: `section_passive_hostiles` -- a row's `passive = true` notices nothing until the player or a party body hits it (no pick, no chase, no swing, no cast; the arm that makes each mean something is the same row after the hit), the hit provokes the row AND every passive row sharing its `group` unhit while another group stands, armour-ignoring damage provokes, a HOSTILE's hit does not, a row that says nothing picks at proximity as before, and `--no-passive-hostiles` reverts. Retail: four level-1 definitions and a level-2 Warrior let the player stand inside 170-950 u (`studies/monsterai/FINDINGS.md` 12.6-12.7). +11; floor 536 -> 547.** **2026-09-15 (probe-walk noise): a green run printed 97 lines reading `[FAIL] <probe>: malformed -> ValueError: GAME_SMSG 0x0000 wants 1 values, got 0`. None was a broken probe: `section_probe_encoding`'s CONTROL monkeypatches `probes.get` to hand ONE deliberately malformed step (label `malformed`, opcode 0x0000, no values, `sends=True`) to the walk under `quiet=True`, only `get` was patched so the walk fed it to all 97 names in `probes.names()`, and `check_encodable`'s `[FAIL]` print ignored `quiet`. The verdict never saw them -- the real walk runs on the real registry BEFORE the patch, so `checked=552` was and is correct to exclude them, and the ledger reads no stdout. Fix: `check_encodable` honours `quiet` for failures and returns them by name in `counts['failures']` (probe, label, refusal), which the red line now prints so silence costs no diagnostic; the CONTROL pins `probes.names` to one synthetic name and runs under `redirect_stdout`. +2: the captured output is EMPTY (sabotage -- the print made unconditional again -- reddens this one check and nothing else) and `counts['failures']` names `('control', 'malformed', ...)`; floor 534 -> 536 from the green run.** **2026-09-15 (later): `offset_y` is HONOURED -- `population.enemy_spots` tries the exact (offset_x, offset_y) point first, then the compass ring at that point's distance; until now only offset_x was read, as the radius, and the owner's (300, -1200) spawned the hostile due east. +2; the existing ring check pins ENEMY_OFFSET at (300, 0) itself instead of reading world.toml; floor 530 -> 532.** **2026-09-15, MONSTERAI-N3: the `section_constants` pin for `AGGRO_RANGE` moves 1200 -> 1012 and its label OURS -> CORROBORATED (the wiki's Danger Zone radius, and the one unprovoked retail reaction with both positions on the wire brackets it at [992, 1105], `studies/monsterai/FINDINGS.md` 11); the ANIMREF-RE 42.5 off-mesh fixture point moves from (600, 950) = 1,123 u to (300, 950) = 996 u so the follow still opens inside the new radius -- the two checks that reddened were the fixture standing outside it, not the plane words; floor 530 unchanged.** **2026-09-14 (late night), DAMAGE-INT: the party body's swing takes 11 off the foe at AR 35 — 11.7 truncated; floor 530 unchanged.** **SKILLS-HN (2026-09-09): `dmg_floats`
   reads DAMAGE properties only** — it read every `0x00A3` float, which was fine
   while an overheal sent nothing; the enemy's Restore Condition on its own full
   pool now sends one positive 55 (retail does), and the cast section pins that
@@ -6152,7 +6152,51 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   client -- deliberately, and it constrains what may be asserted: the capture tree is
   append-only and GROWS WHILE THE TEST RUNS (`0x00C1` went 363 to 429 between two
   reads minutes apart), so every corpus count above is dated prose and not one of them
-  is an assertion. 45 checks, ~1 s),
+  is an assertion. **Section 10, 2026-09-23 (DESKWORK-D1 step 3), is the REVERSE
+  guard**: section 7 asks of every NAMED opcode and could not ask about one nothing
+  had named, and ArenaNet's own client sent eighteen of those over the 96 live game
+  connections -- every one falling off the chain on loopback too (`0x0008` on 1,027
+  connections, `0x000D` on 1,384). It reads `retail_c2s.json` beside the test -- the
+  census `c2striage.py --write` commits, a FILE in git so this test stays vault-free
+  -- and reddens on any opcode retail sent that is neither handled, named, nor on
+  `DROPPED_ON_PURPOSE` (26 rows now: the eight, fifteen UNNAMED rows each carrying
+  what was measured and what would name it, and three named this step and dropped
+  until their arm -- `0x009F` HENCHMAN_ADD, `0x00B1` MAP_TRAVEL, `0x004F`
+  ITEM_MOVE). The orphan rule widens with it: a row may answer "why is this opcode
+  RETAIL SENDS dropped". Floors on the file (57 opcodes, 96 connections -- the corpus
+  is append-only) guard the vacuity; the known-bad arms are a census carrying an
+  undecided `0x00FE`, which the predicate must name alone, and the `0x0008` row
+  deleted, which must name `0x0008` alone. `test_c2striage.py` is what keeps the
+  file honest against the vault. 54 checks, ~1 s),
+  `toolkit/authsrv/test_c2striage.py` (**2026-09-23, DESKWORK-D1 step 3: retail's
+  c2s triage**, `studies/cmsg/FINDINGS.md` §DESKWORK-D1. `c2striage.py` is the
+  committed recipe for "which client actions does our server ignore": over every
+  origin=LIVE game connection (`livewire.live_connections`), per c2s opcode the
+  count, captures, connections, whether the schema names it, whether the dispatch
+  chain handles it (`test_dispatch`'s syntax-tree harvester, imported), whether the
+  drop is on purpose, and retail's FIRST s2c within 1.5 s in two columns -- strict,
+  and with the `0x001E` clock skipped, because the clock follows everything within
+  20-500 ms and is never an answer. §1 drives `census_connection` on a SYNTHETIC
+  stream, which is the check the vault cannot give: on a real tape every c2s has
+  some s2c after it, so a walker pointed one message off would still fill every
+  column -- the clock is taken in the strict column and skipped in the other, a
+  reply 2.0 s out is none, a trailing c2s is none, a 0 s window empties every
+  column (known-bad) and a 9 s window takes the straggler. §2 the live census
+  reaches the 2026-09-23 floors (96 connections, 57 opcodes, 13,320 c2s), every
+  receipt closes, and two tape anchors hold -- the henchman add `0x009F` answers
+  `0x00B0` first 3 of 3 and MAP_TRAVEL `0x00B1` answers `0x01D9` first on 9 of 10 --
+  while the kick's first non-clock s2c is NOT its `0x0075` (an outpost `0x0029` at
+  21 ms beats the batch at 42 ms), which is why the column is a CORRELATION and
+  `test_herokick` pins the batch by bytes. §3 the committed `retail_c2s.json`
+  against the vault: every live opcode is in it (a new tape with a new opcode reddens
+  this until `--write` runs and the opcode is triaged), no committed count exceeds
+  the live one, the tool and window are named; known-bad: a table missing `0x0009`
+  names `0x0009`. §4 ACCEPTANCE (c): `untriaged()` is EMPTY over the file and over
+  the live census, the three names of this step are named-and-dropped-with-reason,
+  and removing the `0x0008` row names `0x0008` alone. §5 an empty root is REFUSED
+  with exit 2 and a source with no dispatch chain yields None. §6 the send-site
+  census joins on the pinned build (`0x001F` -> `0x0091FF30`) and invents no wrapper
+  for `0x000D` -- and the kick/add wrapper PAIR must be one build's (either kick wrapper alone also accepted 38797's `0x0044` wrapper). Vault-gated sections skip loudly -- 4 declared skips on a bare machine, where `static_hints` now turns `pinned.find()`'s SystemExit into a skip instead of a crash with no verdict. Floor 20, the vault-free core measured with `RURIK_VAULT` at an empty directory (the fix pass; the first cut's 34 was the fullest run and a bare machine could not reach it); 34 run with the vault, ~20 s),
   `toolkit/authsrv/test_population.py` (what LIVES in an authored area -- the
   `content/world.toml` spawn rows carrying `area = NAME`, served by
   `authsrv --area`. R5's criterion is "a new zone in TOML, hot-reloaded,
@@ -6283,6 +6327,57 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   and the 800 ms envelope ceiling now excludes that one connection by name (the same
   capture's Isle connection, where every section-25 clock was read, sits at 301 ms).
   Needs `vault/captures/live/`, skips whole if absent; floor 15),
+  `toolkit/authsrv/test_heroadd.py` (**2026-09-23, SANDBOX-N2 / DESKWORK-D1 step 4:
+  the hero ADD, c2s 0x001E HERO_ADD, and the 0x0018 hero-unlock mask; rewritten by
+  the D1 fix pass the same day**, `studies/cmsg/FINDINGS.md` §DESKWORK-D1 "The hero
+  add". The add is RECONSTRUCTION end to end -- no retail tape and no loopback
+  connection log carries a c2s 0x001E -- so nothing here compares to a chunk; it pins
+  that `handle_hero_add` sends exactly the COMMANDER rig's own load messages for the
+  hero in that rig's order, that it is the kick's inverse in the rig the owner runs,
+  and that it refuses where it cannot be. The first cut pinned only the rig it was
+  written in (--hero-bags, --hero-char, --hero-activate all OFF) and every reviewer
+  blocker lived outside it. §1 town, commander rig: the batch opens with the hero's
+  character block, op for op `hero_character_block`'s, then 0x0072, then 0x00B0 with
+  the hero COUNTED ([68, 2]) and a bare 0x01C2 ADJACENT, no 0x0073/0x0074; the order
+  predicate `add_order` has five KNOWN-BAD arms -- rotated, the KICK's row-then-size,
+  a re-sent 0x0073/0x0074 (the add's CHOICE, read statically: neither 0x0075 nor the
+  0x00F8 sweep deletes the hero record), a body AFTER the row, an inventory
+  re-declaration that is not first. §1b the RIG GATE: HERO_ACTIVATE off (plain --hero)
+  and --hero-rig-legacy each REFUSE with nothing sent (that load holds no hero record,
+  ChCliHero:199), the commander rig is the control. §2 refusals send NOTHING: an
+  unowned index that IS in the kicked set (so only the owned check can refuse it; the
+  first cut's 99 was refused by the kicked check -- vacuous), a hero already in, an
+  EIGHTH (`HEROES_PARTY_MAX`, defensive -- main() refuses eight owned), the SEVENTH as
+  control. §3 the round trip under `--persist`: kick writes [6], add clears it, a
+  fresh connection parties the hero, a second add is refused, `--persist` off writes
+  nothing. §4 the field rig: the body's 0x0020 BEFORE the roster pair through
+  `hero_body_create` at HERO_BODY_OFFSET, slot 0, item 210; kick then add re-creates
+  at agent 200; THE SLOTS -- heroes [5, 6, 7] with 5 kicked at load hold 1/211 and
+  2/212 and the re-added 5 takes 0/210, three distinct slots, items and spots (the
+  first cut's compacting rule gave 5 hero 6's slot -- shown as the known-bad); the
+  town sends no create. §5 THE SANDBOX RIG (bags, inventory 2, char): the kick of the
+  last hero sends 0x0145 [2] and records it; the add re-declares 0x0144 [2, 0] + the
+  equipped 0x013F FIRST (the load's own bytes), 0x0072 names key 2, 0x009A [200,
+  100<<24] sits between 0x0072 and the pair; kick -> add -> kick destroys the live key
+  again; kick on an already-destroyed key sends five messages and no 0x0145 (the
+  guard's known-bad); two heroes on one key destroy and re-declare nothing; bags off
+  re-declares nothing; char off sends no 0x009A; the kick batch carries the 0x00F8 the
+  block's ChCliAttrib:313 depends on. §6 `hero_unlock_mask`: [64] for hero 6, [224]
+  for 5/6/7 (bit = hero index CORROBORATED on 15 of 17 comparable connections; the 2
+  contrary make the mask the ACCOUNT's superset, so owned-set is a labelled policy), a
+  second dword for an index >= 32, all-ones with no hero or under
+  `--no-hero-unlock-mask`, the flag read. §7 SOURCE LOCKS by syntax tree, each with a
+  mutation: the 0x001E arm only under `HERO_ADD_ENABLED`; `main()` wires
+  --no-hero-add, --no-hero-unlock-mask and --party-size-no-heroes, all ON by default;
+  the handler tests the commander rig BEFORE un-kicking and calls `hero_kicked`;
+  `hero_body_create` is called from BOTH the load and the add with `hero_owned_slot`
+  as the slot (a literal slot fails); `_party_size` counts `party_hero_slots` behind
+  `PARTY_SIZE_COUNTS_HEROES` (dropping the count fails, so does counting with no
+  flag); `hero_inventory_declare` exists with two callers and the pair's labels
+  appear once, the kick SETS `hero_inv_destroyed` and the declaration CLEARS it; 0x0018
+  has ONE sender; `main()` reads `HEROES_PARTY_MAX`, not the literal 7. Drives the real
+  handlers with a fake send and a scratch store like `test_herokick.py`. Floor 48 ->
+  78 from the green run, ~3 s),
   `toolkit/authsrv/test_labelrun.py` (the labelled input run, which names GAME_CMSG
   opcodes from what a human was told to do: a message lands in exactly one step's
   window, instance-load traffic is never folded into step 1, and a dirty idle CONTROL
@@ -6354,7 +6449,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   with a KNOWN-BAD source mutation (a party loop reverted to hero_slots(); `if
   HERO_KICK_ENABLED:` -> `if True:`; the call hoisted above the check) that must
   redden it (the first cut's load-path acceptance survived every such mutation
-  green). Floor 52.),
+  green). Floor 52 -> 53 (2026-09-23, DESKWORK-D1 step 4: +1, the mutation-target check -- the first `party_hero_slots(state)` in the load became the size expression, so the known-bad arm now names a `for` header).),
   `toolkit/authsrv/test_charstore.py` (the §6 persistence layer against a scratch
   vault, no server started: round-trips, the client's settings blob served back
   verbatim, and ensure-never-overwrites — the disease persistence exists to cure is

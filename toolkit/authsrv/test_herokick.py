@@ -41,7 +41,7 @@ WHAT THIS PINS.
 
 `handle_hero_kick` needs the server, so this cannot live in the bare-machine
 `test_herolib.py` (that module imports no server); it drives the real handler
-with a scratch store instead, like `test_charstore.py`. Floor 52.
+with a scratch store instead, like `test_charstore.py`. Floor 53 (52 until 2026-09-23; +1, the mutation target check).
 """
 import ast
 import json
@@ -63,7 +63,7 @@ import codec as codecmod                                     # noqa: E402
 import authsrv                                               # noqa: E402
 import livewire                                              # noqa: E402
 
-led = checks.Ledger("hero kick (SANDBOX-N2)", floor=52)
+led = checks.Ledger("hero kick (SANDBOX-N2)", floor=53)
 
 # The tape's own reply order (20260916T150306 :62321, t=158.718).
 RETAIL_ORDER = [0x0075, 0x01C3, 0x00F8, 0x003E, 0x00B0, 0x0145]
@@ -435,9 +435,18 @@ led.ok(party >= 9,
        "party_hero_slots(state) (body, profession, level, vitals, attributes, "
        "skillbar, char, activate, party build)", f"got {party}")
 # KNOWN-BAD: revert ONE party loop to hero_slots() and the lock must redden.
+# The mutation targets a `for` header by its full text: since 2026-09-23 the
+# first `party_hero_slots(state)` in the load is the party-SIZE expression
+# (the SANDBOX-N2 follow-up), not a loop, and mutating that would leave every
+# loop intact and this arm green for the wrong reason.
 fn_src_start = SRC.index("def _handle_request_players(")
+LOOP_HEADER = "for _hid, _haid, _hdef in party_hero_slots(state):"
+led.ok(LOOP_HEADER in SRC[fn_src_start:],
+       "the load path has a `for ... in party_hero_slots(state):` header to mutate",
+       "the known-bad arm below would otherwise mutate nothing")
 mut = (SRC[:fn_src_start]
-       + SRC[fn_src_start:].replace("party_hero_slots(state)", "hero_slots()", 1))
+       + SRC[fn_src_start:].replace(LOOP_HEADER,
+                                    "for _hid, _haid, _hdef in hero_slots():", 1))
 hs_m, unguarded_m, party_m = load_path_lock(ast.parse(mut))
 led.ok(hs_m == 3 and len(unguarded_m) == 1 and party_m == party - 1,
        "KNOWN-BAD: reverting one party loop to hero_slots() is caught -- three "

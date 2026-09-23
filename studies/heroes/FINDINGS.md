@@ -280,6 +280,42 @@ ADD (`0x001E`, wrapper `0x0091FF00`) is static only, no retail tape carries it, 
 stays NOT FOUND on the wire. Hiring (the outpost UI request for a fresh hero) also
 remains NOT FOUND.
 
+**CORRECTED 2026-09-23, DESKWORK-D1 step 4 — the ADD is ARMED, as RECONSTRUCTION,
+and it is still NOT FOUND on any wire.** `c2s 0x001E` stays unwitnessed: 0 of 96 live
+game connections and 0 of 1,557 loopback connection logs carry one (the send-site census and
+`c2striage.py`, `studies/cmsg/FINDINGS.md` §DESKWORK-D1). What is READ, statically on
+38797: its send wrapper `0x0091FF00` sits inside ChCliApi `0x0080E250`, which asserts
+`hero < HEROES` at ChCliApi:4446 and `hero != 0` at :4447 and sends **only in an
+OUTPOST** — `call 0x0084D9B0; test eax; jne skip`, and `0x0084D9B0` is
+`MissionCliGetMap()` (`studies/maprows/FINDINGS.md`: `missionContext+0x238`, OUTPOST ==
+0, GAME == 1 by MsCliApi:251); the kick's twin `0x0080E2A0` (:4459/:4460, wrapper
+`0x0091FF30`) has the SAME gate, so the client sends both hero commands from an outpost
+only (the first cut called the gate "a flag word" and inferred from the loopback kick
+that it did not keep the add off our wire — withdrawn by the fix pass); its callers
+are PtSearch `0x00562FB0` and UiCtlInstance `0x00577A3F`. The server now answers it
+(`handle_hero_add`, behind `--no-hero-add`) **in the commander rig only** (`--party`,
+or `--hero-activate` without `--hero-rig-legacy` — the one rig whose load sends
+`0x0072`; in the legacy rig it refuses, because that load holds no hero record for a
+kicked hero and `0x0072` would assert `charHeroData`, §11.3) with that rig's own load
+messages in its load order — the heroes' inventory container re-declared first if a
+kick's `0x0145` destroyed it (`0x0144` + `0x013F`; the `ItCliApi:488` chain of pvpui
+§26.2), the character block (§14's gates; §13.1's `!attribState` is cleared by the
+kick's `0x00F8` sweep or by the load skipping the block; §38's ordering: the commander
+is created synchronously on `0x01C2` from state the block installs), `0x0072`
+(`0x0073` not re-sent: the `0x0075` worker and the `0x00F8` sweep's `+0x584` remover
+both zero `heroData->agentId` and drop the activation record and neither deletes the
+hero record — read on 38797, cmsg §DESKWORK-D1), `0x009A` under `--hero-char`, in a
+field the body at the hero's OWNED formation slot, then `0x00B0` with the hero counted
+and a BARE `0x01C2` (outside a build window, the way the kick's `0x01C3` and the
+henchman add's `0x01BF` arrive). Refused with nothing sent: an unowned hero, one
+already in the party, an eighth (`HEROES_PARTY_MAX`, the PtPlayer:332 cap, read by
+`--hero`, `--party` and the handler). `0x0018`'s payload is now retail's shape — one
+dword, bit = hero index, CORROBORATED on 15 of the 17 live connections carrying both
+`0x0018` and `0x0073`; the 2 contrary (`[224]` with hero 6 alone) make it the
+**account's** unlock set, so building it from the owned set is a labelled policy
+(`hero_unlock_mask`). Hiring remains NOT FOUND. The loopback click for both halves is
+owed; the runsheet is in the cmsg study, and the clicks happen in an outpost.
+
 ---
 
 ## 4. Hero skill bars — the sharpest negative

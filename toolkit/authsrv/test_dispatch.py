@@ -75,6 +75,7 @@ assertions are all about the source and the schema, which are in git.
 import ast
 import contextlib
 import io
+import json
 import os
 import sys
 
@@ -85,12 +86,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(HERE), "schema"))
 import checks  # noqa: E402
 from codec import Codec, Undecodable  # noqa: E402
 
-# 45, MEASURED from the green run of 2026-08-13 and not guessed. Every check in
-# this file is unconditional -- no vault, no socket, no client, and the one loop
-# runs a fixed four -- so the floor is the exact count rather than a mandatory
-# core. It was 20 against a run of 23 before sections 6-9; a floor left trailing
-# its run is a floor that would not notice a whole section going missing.
-LEDGER = checks.Ledger("dispatch catch-all (D9a)", floor=45)
+# 54, MEASURED from the green run of 2026-09-23 (45 on 2026-08-13, before
+# section 10) and not guessed. Every check in this file is unconditional -- no
+# vault, no socket, no client, and the one loop runs a fixed four -- so the
+# floor is the exact count rather than a mandatory core. It was 20 against a
+# run of 23 before sections 6-9; a floor left trailing its run is a floor that
+# would not notice a whole section going missing.
+LEDGER = checks.Ledger("dispatch catch-all (D9a)", floor=54)
 
 AUTHSRV_PY = os.path.join(HERE, "authsrv.py")
 
@@ -195,7 +197,155 @@ DROPPED_ON_PURPOSE = {
             "ITEM_CHANGE_LOCATION [1, item, 3, 0] + 0x006F [agent, slot, item] "
             "for the item's slot, both measured on retail. Small arm, no state "
             "for it yet. schema/overrides.json GAME_CMSG 48.",
+# ---- DESKWORK-D1 step 3, 2026-09-23: retail's c2s triage ---------------------
+# Every GAME_CMSG opcode ArenaNet's own client sent over the 96 live game
+# connections (`python toolkit/authsrv/c2striage.py`, the census committed as
+# retail_c2s.json beside this file) is now HANDLED, NAMED, or on this list --
+# section 10 is the guard. The rows below are the ones the wire carries that no
+# name had reached: each says what was measured (count / connections / the
+# first s2c after it with the 0x001E clock skipped / the send wrapper on
+# 38797 from sendsites.py) and what would name it. UNNAMED means exactly that;
+# a name is DESKWORK-D2's product and none is guessed here. Loopback counts are
+# UNHANDLED events, one per connection per opcode, over the 1,557 loopback
+# connection logs under vault/captures/gamesrv (1,553 + 4 in hop2/) on
+# 2026-09-23 -- an UNHANDLED row was only logged from about 2026-08-11, so an
+# older log can decode a c2s without one and these counts are FLOORS. (The
+# first cut said "3,107 gamesrv captures": that is the directory's entry count,
+# .jsonl and .raw together.) Studies: studies/cmsg/FINDINGS.md DESKWORK-D1.
+    0x0008: "UNNAMED -- header only (2 bytes), once per connection on retail (84 "
+            "of 96 live connections; 1,027 loopback connections), mid-session "
+            "(p50 46 s in): the NEXT c2s after every 0x00B1 MAP_TRAVEL (10 of "
+            "10) and every 0x008B (5 of 5). Retail answers nothing within 1.5 s "
+            "on 66 of 84. Sent from a STATIC .rdata buffer through the dword "
+            "framer (wrapper 0x00491D30, GcGameCmd, one caller) -- the one c2s "
+            "the send-site census marks `static`. What it is is NOT FOUND; its "
+            "one caller is what would name it. Payload-less and unanswered, and "
+            "1,027 loopback connections played on through the drop.",
+    0x000B: "UNNAMED but self-describing -- SEND_MACHINE_SPEC's companion from "
+            "the same connection-established callback (wrapper 0x00491820, the "
+            "0x000A builder; 29 of 29 retail connections at 0.1-0.2 s, always the "
+            "c2s right after 0x000A; 1,395 loopback connections). Payload "
+            "[blob16, 0, 0, 32694, 12, string16, string16] and the two strings "
+            "are the OS name and the client's own version string, OBSERVED on "
+            "retail and on loopback alike. Like 0x000A every field is about the "
+            "MACHINE, ArenaNet's server sends nothing back (the 0x0144/0x0186 "
+            "that follow are the load burst), and there is no state here for a "
+            "game server to hold.",
+    0x000C: "UNNAMED -- header only, 2 of 96 retail connections (0.8 s and 118 s "
+            "in; 76 loopback connections), no consistent reply (0x01AD once, then "
+            "movement). n=2 and unpatterned; nothing to build an arm from.",
+    0x000D: "UNNAMED -- header only, 31 sends on 30 of 96 retail connections at "
+            "p50 1.6 s (1,384 loopback connections): a LOAD-SEQUENCE marker, the "
+            "c2s between 0x0090 (23 of 31 precede it) and 0x0092 "
+            "MISSION_MASK_REPORT (17 of 31 follow it), and what follows it is the "
+            "manifest family the surrounding requests earn (0x019F 11, 0x004C 6). "
+            "Our load proceeds without answering it on 1,384 connections. "
+            "sendsites.py finds NO game-channel send site for it on the pinned "
+            "build (an indirect or auth-struct send), so its caller is not yet "
+            "readable.",
+    0x0013: "UNNAMED -- header only, 2 sends on one connection at 593 s and "
+            "663 s (0 loopback); one followed 61 ms later by 0x00A2 "
+            "AGENT_PROPERTY_UPDATE_FLOAT, the other by nothing. Wrapper "
+            "0x0091FC30 (CharMsg) with zero direct callers. n=2, no consequence "
+            "chain.",
+    0x0023: "UNNAMED -- [byte, agent_id] = [3, 7], n=1 (2 loopback connections), "
+            "sent right after 0x0033 INTERACT_PLAYER at 39 s and followed 30 ms "
+            "later by 0x0034 then chat (0x005D/0x0061). Wrapper 0x00920030 "
+            "(CharMsg, zero direct callers). n=1; a name needs a labelled run.",
+    0x0041: "UNNAMED -- [agent_id, byte] = [568, 4], n=1 at 8.7 s (0 loopback), "
+            "followed by movement only. Wrapper 0x00920800 (CharMsg, zero direct "
+            "callers). n=1.",
+    0x0044: "UNNAMED -- [dword] = [1], n=1 at 511 s after a TARGET_SELECT (1 "
+            "loopback connection), followed 118 ms later by property updates "
+            "0x009F/0x00A3/0x00A4. Wrapper 0x009208B0 on 38797 (CharMsg, zero "
+            "direct callers). n=1.",
+    0x0045: "UNNAMED -- [array8] of 50 bytes on every send (5 sends on 3 "
+            "connections, 7-630 s in; 8 loopback connections), identical but for "
+            "bytes 14-15 (4 distinct payloads over the 5), nothing following on "
+            "2 of 5. Wrapper 0x00920980 (CharMsg, one caller, a 264-byte frame). "
+            "A client-state report, not a request; the one caller is what would "
+            "name it. (The first cut called it 'the SAME 11-byte blob every "
+            "time'; the D1 fix pass re-read the five payloads.)",
+    0x0051: "UNNAMED -- [agent_id, byte] = [3, 0] x5 and [10, 0] x1 in bursts (6 "
+            "sends on 2 connections around 40 s and 78 s; 0 loopback), followed "
+            "by movement and agent updates (0x00BF, 0x00A7). Wrapper 0x00920E90 "
+            "(CharMsg, zero direct callers). Bursts of one low agent id read as a "
+            "UI action on a party member; unnamed until a labelled run.",
+    0x0063: "UNNAMED -- header only, 3 of 96 connections at ~3 s and 15 s (0 "
+            "loopback), right after 0x0092 MISSION_MASK_REPORT on 2 of 3 (the "
+            "third follows a 0x0009) and before the first MOVE_SET_HEADING, "
+            "followed by the world's creates (0x009F, "
+            "0x0020). Wrapper 0x00921950 (CiCommand, zero direct callers) -- the "
+            "one c2s in that module. A load-time marker our client never sends; "
+            "nothing to answer.",
+    0x0085: "UNNAMED -- [word] = [46] and [241] on 2 connections (0 loopback), "
+            "answered 29 ms later by 0x015C (2 of 2 in sequence). With 0x0086 the "
+            "PvP equipment panel's request pair (DESKWORK-D1 step 8: 0x0085 -> "
+            "0x015C, 0x0086 -> 0x015D), armed ONLY after the owner confirms the "
+            "want; the panel has never been driven on our server. Wrapper "
+            "0x0084C860 (ItCliMsg, one caller).",
+    0x0086: "UNNAMED -- [word, word, array16, byte 9, byte, byte], 6 sends on "
+            "the same 2 connections as 0x0085 (0 loopback), answered by 0x0161 / "
+            "0x013E / 0x015D in sequence. The other half of the PvP equipment "
+            "panel's pair -- see 0x0085. Wrapper 0x0084C890 (label List, one "
+            "caller).",
+    0x0089: "UNNAMED -- header only, 5 of 96 connections at 0.2 s (0 loopback), "
+            "the c2s between 0x000B and 0x008A, answered by the load burst "
+            "(0x0186, 4 of 5). Those five are the character-creation connections "
+            "(0x0060/0x0084 CHAR_CREATE_* live on the same five). Character "
+            "creation is not implemented here (the 0x0060 row) and our client "
+            "never sends it.",
+    0x008B: "UNNAMED -- [string16 of 20, blob 8, dword 1] on the same 5 "
+            "character-creation connections (0 loopback), 9-26 s in, answered "
+            "32 ms later by 0x0099 then 0x0188 (5 of 5) and followed by c2s "
+            "0x0008. The string is a character NAME typed by the player (the "
+            "owner's own; not quoted here), the blob and the 1 unread: character "
+            "creation's name commit, by position and payload. Named the day the "
+            "create flow is driven; this server serves fixed characters.",
+    0x009F: "HENCHMAN_ADD (0 loopback, 3 live on one connection, 20260819T132414 "
+            ":53419) -- [word agent_id] of the henchman NPC in the outpost, "
+            "answered within 31-132 ms by 0x00B0 PLAYER_PARTY_SIZE [player, "
+            "size] THEN the 0x01BF henchman roster row, 3 of 3 (SIZE BEFORE ROW; "
+            "the hero kick answers row 0x01C3 then size). NAMED 2026-09-23 from "
+            "that witness (schema/overrides.json GAME_CMSG 159). DESKWORK-D1 step "
+            "5 arms the party family 0x98-0xB2 from it; today this server hires "
+            "its henchman from --henchman and has no outpost henchman NPC to "
+            "click. Dropped until step 5.",
+    0x00B1: "MAP_TRAVEL (0 loopback, 10 live on 10 connections over 6 captures) "
+            "-- [map_id, 0, 0, 0, 1] from the world map, answered 39 ms later by "
+            "0x01D9 [2, 1, ''] then 0x01A5 GAME_SERVER_TRANSFER and 0x0099 (10 "
+            "of 10 in sequence), and followed by c2s 0x0008 every time. NAMED "
+            "2026-09-23 (schema/overrides.json GAME_CMSG 177). DESKWORK-D1 step "
+            "7: what the world map gates on, the unlocked-outpost state nothing "
+            "models, a refusal for a map with no content row. Dropped until "
+            "step 7 -- an arm that transferred the client to an unbuilt map "
+            "would strand it.",
+    0x004F: "ITEM_MOVE (1 loopback DECODE on 2026-08-10, before UNHANDLED "
+            "logging; 4 live on 2 connections, 20260917T090355 and "
+            "20260919T103604) -- [byte, word, byte] answered 42-69 ms later by "
+            "0x014B ITEM_CHANGE_LOCATION (4 of 4) with 0x006F "
+            "AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT beside it on 3 of 4: an item "
+            "moving between slots, the reply naming it; fields 2-3 are the "
+            "destination bag and slot (0x014B echoes them 4 of 4), field 1 is "
+            "UNVERIFIED. NAMED 2026-09-23 "
+            "(schema/overrides.json GAME_CMSG 79). DESKWORK-D1 step 8 arms it "
+            "with a per-slot equip store alongside 0x0030 EQUIP_ITEM; this server "
+            "dresses the body once at login and holds no bag model to move "
+            "within. Dropped until step 8.",
 }
+
+# The retail c2s census `c2striage.py --write` commits beside this file: every
+# GAME_CMSG opcode on ArenaNet's live wire with its counts. Section 10 reads
+# it -- a FILE in git, so this test stays vault-free as its docstring insists --
+# and test_c2striage.py is what keeps the file honest against the vault.
+RETAIL_C2S = os.path.join(HERE, "retail_c2s.json")
+# MEASURED 2026-09-23 over 96 live game connections (35 origin=LIVE captures,
+# 29 with a game connection): 57 distinct opcodes, 13,320 c2s. The corpus is
+# append-only, so these are FLOORS the committed file must not fall under --
+# a smaller regeneration means captures were removed, which somebody should
+# have to argue for rather than absorb.
+RETAIL_C2S_MIN_OPCODES = 57
+RETAIL_C2S_MIN_CONNECTIONS = 96
 
 
 class FakeRec:
@@ -757,13 +907,25 @@ def main():
               f"row silently re-permits the drop, which is this check's own "
               f"failure mode rather than the server's")
 
-    orphan = sorted(set(DROPPED_ON_PURPOSE) - set(named))
+    # The retail census (section 10's subject) is loaded here because the orphan
+    # rule reads it too: since 2026-09-23 a row may answer "why is this opcode
+    # RETAIL SENDS dropped" as well as "why is this NAMED one dropped".
+    retail = None
+    if os.path.exists(RETAIL_C2S):
+        with open(RETAIL_C2S, encoding="utf-8") as _rf:
+            retail = json.load(_rf)
+    seen = ({int(k, 16): v for k, v in retail.get("opcodes", {}).items()}
+            if retail else {})
+
+    orphan = sorted(set(DROPPED_ON_PURPOSE) - set(named) - set(seen))
     LEDGER.ok(not orphan,
-              "and no allowlist row names an opcode nothing has named",
+              "and no allowlist row names an opcode that is neither named nor on "
+              "retail's wire",
               f"orphan rows {[f'0x{o:04x}' for o in orphan]} -- the allowlist "
-              f"answers 'why is this NAMED opcode dropped'. A row for an unnamed "
-              f"one answers a question nobody asked and inflates the list until "
-              f"nobody reads it")
+              f"answers 'why is this NAMED opcode dropped' or, since the retail "
+              f"triage, 'why is this opcode ARENANET'S CLIENT SENDS dropped'. A "
+              f"row for an opcode that is neither answers a question nobody "
+              f"asked and inflates the list until nobody reads it")
 
     # ---- 8. the dword/float trap, behaviourally ------------------------------
     # The one check here that is not structural, and it is on the thing most
@@ -902,6 +1064,84 @@ def main():
               f"harvested {pf}; the catalog has no GAME_CMSG 0x00FE, so the "
               f"forward check above is refutable rather than true by "
               f"construction")
+
+    # ---- 10. the REVERSE guard: what ArenaNet's client SENDS, against the arms
+    # Section 7 asks of every NAMED opcode; it cannot ask about one nothing has
+    # named, and retail's wire carried eighteen of those on 2026-09-23 -- every
+    # one had fallen off the end of the chain on loopback too, unremarked, for
+    # weeks (0x0008 on 1,027 connections, 0x000D on 1,384). The census is a
+    # committed FILE (retail_c2s.json, `c2striage.py --write`), so this stays
+    # vault-free; test_c2striage.py re-derives the file from the tapes.
+    LEDGER.ok(retail is not None
+              and retail.get("tool") == "toolkit/authsrv/c2striage.py",
+              "the retail c2s census is committed beside this test, and names "
+              "the tool that wrote it",
+              f"{RETAIL_C2S}: {'present' if retail else 'MISSING'}; run "
+              f"`python toolkit/authsrv/c2striage.py --write`")
+    LEDGER.ok(len(seen) >= RETAIL_C2S_MIN_OPCODES
+              and (retail or {}).get("connections", 0) >= RETAIL_C2S_MIN_CONNECTIONS,
+              "and it has not SHRUNK below the 2026-09-23 census",
+              f"{len(seen)} opcodes over {(retail or {}).get('connections')} "
+              f"connections (floors {RETAIL_C2S_MIN_OPCODES} / "
+              f"{RETAIL_C2S_MIN_CONNECTIONS}). Same idiom as section 6's arm "
+              f"counts: the live corpus is append-only, so a smaller file means "
+              f"captures were removed or the census broke")
+    LEDGER.ok(all(isinstance(v.get("count"), int) and v["count"] >= 1
+                  and isinstance(v.get("first_non_tick"), dict)
+                  for v in seen.values()),
+              "every row carries a positive count and a first-reply column",
+              "a row with no count is a row the census did not measure")
+
+    def unlisted_seen(armed, table_ops, dropped=None):
+        """REVERSE: opcodes retail sent that are neither handled, named, nor
+        dropped on purpose. The same predicate as c2striage.untriaged, restated
+        here because c2striage imports THIS module (a cycle otherwise)."""
+        dropped = DROPPED_ON_PURPOSE if dropped is None else dropped
+        return sorted(o for o in table_ops
+                      if o not in armed and o not in named and o not in dropped)
+
+    un = unlisted_seen(game, seen)
+    LEDGER.ok(seen and not un,
+              "REVERSE: every opcode ArenaNet's own client sent is handled, "
+              "named, or dropped on purpose with a reason on the record",
+              "RETAIL SENDS IT AND NOBODY DECIDED: "
+              + (", ".join(f"0x{o:04x} (x{seen[o]['count']})" for o in un)
+                 or f"none -- {len(seen)} retail opcodes: "
+                    f"{len(set(seen) & set(game))} handled, "
+                    f"{len(set(seen) & set(DROPPED_ON_PURPOSE) - set(game))} "
+                    f"dropped on purpose")
+              + ". Add the arm, name it in overrides.json with its evidence, or "
+                "add the DROPPED_ON_PURPOSE row saying what was measured and "
+                "what would name it")
+    # The three columns of that decision, so a regression names which one moved.
+    LEDGER.ok({0x0009, 0x003D, 0x00C1, 0x001F} <= set(seen) & set(game),
+              "the busiest retail opcodes and the kick are in the census AND "
+              "handled (0x0009, 0x003D, 0x00C1, 0x001F)",
+              f"census & arms: {sorted(f'0x{o:04x}' for o in set(seen) & set(game))}")
+    LEDGER.ok({0x0008, 0x000B, 0x000D, 0x009F, 0x00B1} <= set(seen) & set(DROPPED_ON_PURPOSE),
+              "and the five loudest of the 2026-09-23 triage are in the census "
+              "AND on the allowlist (0x0008, 0x000B, 0x000D, 0x009F, 0x00B1)",
+              f"census & allowlist: "
+              f"{sorted(f'0x{o:04x}' for o in set(seen) & set(DROPPED_ON_PURPOSE))}")
+
+    # Known-bad arms: the predicate must NAME the offender, alone.
+    fixture_seen = {0x0009: {"count": 1}, 0x00FE: {"count": 1}}
+    LEDGER.ok(unlisted_seen(game, fixture_seen) == [0x00FE],
+              "CONTROL: a census carrying an opcode nobody decided on names it, "
+              "and only it",
+              f"got {[f'0x{o:04x}' for o in unlisted_seen(game, fixture_seen)]} "
+              f"-- 0x00FE has no arm, no name and no row; 0x0009 has an arm")
+    without_8 = {k: v for k, v in DROPPED_ON_PURPOSE.items() if k != 0x0008}
+    LEDGER.ok(unlisted_seen(game, seen, without_8) == [0x0008],
+              "CONTROL: delete the 0x0008 row and the guard names 0x0008, alone",
+              f"got {[f'0x{o:04x}' for o in unlisted_seen(game, seen, without_8)]}"
+              f" -- this is the world before 2026-09-23 for one opcode, and it "
+              f"is run rather than reasoned about")
+    LEDGER.ok(unlisted_seen(game, {}) == [],
+              "CONTROL: an EMPTY census reports nothing -- which is why the "
+              "floor check above exists, and why the REVERSE check requires "
+              "`seen` to be non-empty",
+              "vacuity guarded two lines up, not here")
 
     return LEDGER.verdict()
 

@@ -28,6 +28,167 @@ move back.
 
 ---
 
+### DESKWORK-D1 (step 4, fix pass) / SANDBOX-N2 -- 2026-09-23 -- **the hero ADD corrected after two reviews: the inventory a kick destroyed comes back first, the legacy rig is refused, the owned formation slot, 0x009A, the outpost-only send gate named, 0x0018 relabelled**
+
+Corrects the "DESKWORK-D1 (step 4)" entry below it, after two reviewers drove the
+handler in the rigs the first cut never pinned (`--party`'s commander rig and plain
+`--hero`) and re-read the client. [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md)
+§DESKWORK-D1 "The hero add" (rewritten; its opening CORRECTED paragraph is the record),
+[studies/heroes/FINDINGS.md](studies/heroes/FINDINGS.md) §3.3. **Desk work, no client
+launched.** Three blockers, all outside the first cut's rig: **(1)** in the sandbox rig
+(`--hero-bags --hero-inventory 2`) a kick of the last hero destroys the shared key
+(`0x0145`) and the add re-activated the hero naming it -- pvpui §26.2's `ItCliApi:488`
+chain; now `hero_inventory_declare` (the load's own `0x0144` + `0x013F`, one function
+for both callers) re-declares the key FIRST when `state["hero_inv_destroyed"]` says a
+kick destroyed it, retail's own order (its load declares the hero's container BEFORE
+the block -- the first cut misquoted the tape in exactly that spot), and the kick never
+destroys a key twice (kick -> kick sends no second `0x0145`; kick -> add -> kick
+destroys a live key each time). **(2)** In the legacy rig (`HERO_ACTIVATE` off, plain
+`--hero`) the load never sends `0x0072` and skips `0x0074` for a kicked hero, so the add
+sent `0x0072` to a client holding no hero record (ChCliHero:199, heroes §11.3); the
+handler now REFUSES there with the reason logged, and the "default ON" claim is scoped
+to the commander rig (`--party`), the only rig whose load sends `0x0072`. **(3)** The
+body's formation slot compacted (`party.index(hid)`): with [5, 6, 7] and 5 kicked at
+load, the re-added 5 got hero 6's slot 0, item 210 and spot; `hero_owned_slot` (the
+position in `hero_slots()`) keys the load's loop and the add alike, a kicked hero
+leaving a hole. **The gate is named:** `0x0084D9B0` is `MissionCliGetMap()` (maprows),
+so the client sends `0x001E` -- and the kick -- from an OUTPOST only; the first cut's
+"the kick fired on loopback, so the gate is not what kept the add off our wire" is
+withdrawn, and the add's field-body arm is reachable only under
+`--party-body-in-outpost`. **Read, not assumed:** the `0x0075` worker and the `0x00F8`
+sweep's `+0x584` remover both zero `heroData->agentId` and drop the activation record
+and neither deletes the hero record (codescan on `0x0081DC50` / `0x0081D880`), so not
+re-sending `0x0073` is CORROBORATED statically; the block's `ChCliAttrib:313
+!attribState` is cleared by the kick's `0x00F8` or the load's skip -- the dependency
+`hero_kicked` guards, now written down; `0x009A`'s handler has no create-once, and the
+add sends it under `--hero-char` (the load registers party heroes only). `0x009A`,
+`0x0144`, `0x013F`, `0x0145` asserts recorded. **Smaller:** the body goes BEFORE the
+roster pair (the commander rig's load order; the first cut said "the load's order" of
+the opposite); `HEROES_PARTY_MAX` is read by `--hero` and `--party` too (the handler's
+check is defensive and unreachable from any command line); the load's `0x00B0` count
+has its revert arm, **`--party-size-no-heroes`**; `0x0018`'s bit = hero index is
+CORROBORATED on 15 of the 17 comparable connections, the 2 contrary (`[224]` with hero 6
+alone, one of them the kick tape) making it the ACCOUNT's superset, so the owned-set
+build is a labelled POLICY (docstring, flag help, studies); `schema/overrides.json`
+GAME_CMSG 30 names HERO_ADD at LOW (static only); stale comments refreshed. **The
+runsheet is rewritten**: the sandbox rig, clicks in an outpost, kick -> add -> kick, a
+zone through the portal (map travel is dropped until step 7), the real arm-off log
+line. `test_heroadd.py` floor 48 -> 78 (the rig gate, the sandbox rig's re-declaration
+and its known-bad, the owned slots with the first cut's collision shown, the unowned
+refusal made non-vacuous, the `0x00F8` dependency, the flagless-count mutation).
+test_herokick 53, test_agentlife 552, test_agtrack_guard 91, test_dispatch 54,
+test_codec 29, test_catalog 13, test_cmsgnames 16 green. **Still owed: the loopback
+click for kick and add, in an outpost under the sandbox rig.**
+
+---
+
+### DESKWORK-D1 (step 3, fix pass) -- 2026-09-23 -- **three triage rows' evidence corrected from the tapes; the loopback denominator was a directory count; the triage test's floor is its core**
+
+Corrects the "DESKWORK-D1 (step 3)" entry below it, after two reviewers re-derived
+every row. The census reproduces exactly (96 / 29 / 13,320 / 57; the 31 / 8 / 18
+split; every wrapper) and the reverse guard reddens on its known-bad arms -- what
+was wrong was evidence TEXT in three rows, re-read from the tapes by this pass:
+**`0x004F` ITEM_MOVE** sits on `20260917T090355 :53310` (three sends) and
+`20260919T103604 :58638` (one), not on the two captures the row cited, which hold
+none; `0x014B` follows 4 of 4 but `0x006F` 3 of 4 (the fourth drew `0x002E` then
+`0x014B [241, 17730, 136, 6]`); fields 2-3 are the DESTINATION bag and slot,
+CORROBORATED by `0x014B`'s own `[_, item, bag, slot]` echoing them 4 of 4, field 1
+UNVERIFIED; and "zero loopback arrivals" was false -- one decode on
+`authsrv-20260810T151946-c1` (t=334.0), from before UNHANDLED logging.
+**`0x0045`** is a 50-byte array8 with 4 distinct payloads over 5 sends (bytes 14-15
+vary), not "the same 11-byte blob". **`0x0063`** follows `0x0092` on 2 of 3. **The
+loopback denominator "3,107 gamesrv captures"** (cited seven times) was the
+directory's entry count, `.jsonl` and `.raw` together; it is 1,557 connection logs
+(1,553 + 4 in `hop2/`), and the per-opcode loopback counts are UNHANDLED events,
+FLOORS, because that row was only logged from about 2026-08-11. `schema/overrides.json`
+GAME_CMSG 79, `test_dispatch.DROPPED_ON_PURPOSE` and the cmsg table now say so.
+**Test hygiene:** `c2striage.static_hints` catches the `SystemExit` `pinned.find()`
+raises on a vault with no verified build, so a bare machine gets the declared skip
+instead of a crash with no verdict; `test_c2striage`'s floor is its vault-free
+core (34 -> 20, measured with `RURIK_VAULT` at an empty directory; 34 still run with
+the vault), its kick pin is `>= 1` (a second live kick is confirming evidence), its
+static check requires the kick/add wrapper PAIR of one build (accepting either kick
+wrapper alone also accepted 38797's `0x0044` wrapper), and its scratch file is a
+`mkstemp`; `test_dispatch` closes the census file it reads. Counts: test_c2striage 34
+(20 vault-free), test_dispatch 54.
+
+---
+
+### DESKWORK-D1 (step 4) / SANDBOX-N2 -- 2026-09-23 -- **the hero ADD armed as RECONSTRUCTION (c2s 0x001E), the kick's inverse; 0x0018 from the owned set; the load's party size counts heroes**
+
+[studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md) §DESKWORK-D1 "The hero add";
+[studies/heroes/FINDINGS.md](studies/heroes/FINDINGS.md) §3.3 (corrected). **Desk work,
+no client launched.** Two nulls measured first: no retail tape (0 of 96 live game
+connections) and no loopback capture (0 of 3,107) carries a c2s `0x001E` -- the add has
+never reached our server, so unlike the kick it has no witness at all. Read statically
+on 38797: wrapper `0x0091FF00` inside ChCliApi `0x0080E250` (asserts `hero < HEROES`
+:4446, `hero != 0` :4447), sent only when the flag word `0x84D9B0` reads is zero -- the
+SAME gate the kick's twin passes, so that gate is not what suppresses it; callers
+PtSearch `0x00562FB0`, UiCtlInstance `0x00577A3F` (the survey's addresses hold).
+`handle_hero_add` (behind **`--no-hero-add`**, default ON -- the evidence for the call is
+at the flag) sends the load pipeline's own messages for the hero in retail's LOAD order,
+read off the kick tape (t=151.746-151.784): `hero_character_block` → `0x0072` → `0x00B0`
+with the hero COUNTED → a BARE `0x01C2` → in a field the body via **`hero_body_create`**,
+the load's body loop factored into one function so the two callers cannot drift. Size
+before row and bare because the only mid-session add on any tape, the henchman's
+(`0x009F`, 3 of 3), goes `0x00B0` then `0x01BF` with no build window -- the kick goes
+row-then-size, so the add mirrors the henchman, not the kick. The `0x01C2` handler
+(`0x00856B80` → `0x00858F50`) was read: party lookup, row append, event `0x1000011E`, no
+window gate, Array:369 its one assert. `0x0073` is not re-sent (the load sends it for
+every OWNED hero, kicked or not). Refused with nothing sent (retail's reply NOT FOUND):
+an unowned hero, one already in, an eighth -- **`HEROES_PARTY_MAX = 7`**, the client's cap
+(PtPlayer:332) in one name read by `--hero` and the handler. Under `--persist` the stored
+kick clears; `--reset-hero-kicks` stays as the bulk un-kick. **`0x0018` ships with it:**
+retail sends ONE dword, bit = hero index -- `[64]` with hero 6, `[224]` with 5/6/7,
+CORROBORATED on 34 live connections -- and `hero_unlock_mask()` builds that from
+`hero_slots()` behind **`--no-hero-unlock-mask`**, all-ones verbatim with no hero; ONE
+sender, the `0x001D` crash record read first. **The `0x00B0` load under-count (the §8.1
+follow-up) is fixed**: `_party_size` counts `party_hero_slots`, as retail's `[68, 2]`.
+`test_heroadd.py` (floor 48, TESTS.md): the batch against `hero_character_block` and the
+order predicate with three known-bad arms, the refusals with the seventh-hero control,
+the kick-then-add round trip under `--persist`, the field arm's body and re-create with
+the town as known-bad, the mask's tape values and flag, source locks with mutations.
+`test_herokick` re-targets its mutation at a `for` header (52 → 53); `test_agentlife`
+scopes its load-order walk to `_handle_request_players` and counts the seventh
+`party_bodies_here` site. **Still owed: one loopback click each for kick and add** --
+the runsheet (command, clicks, what each outcome means) is in the cmsg section.
+
+---
+
+### DESKWORK-D1 (step 3) -- 2026-09-23 -- **retail's c2s triaged: 57 opcodes over 96 live connections, 18 undecided ones decided, the reverse guard on**
+
+[studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md) §DESKWORK-D1, "The retail c2s
+triage". **Desk work, no client launched.** `toolkit/authsrv/c2striage.py` is the
+committed answer to "which client actions does our server ignore": over every
+origin=LIVE game connection it counts each c2s opcode, asks the schema for a name,
+the dispatch chain for an arm (`test_dispatch`'s syntax-tree harvester, imported),
+`DROPPED_ON_PURPOSE` for a reason, and records retail's first s2c within 1.5 s --
+strict and with the `0x001E` clock skipped, because the clock follows everything.
+**MEASURED: 96 connections / 29 captures / 13,320 c2s / 57 opcodes; 18 UNTRIAGED**
+(seen on retail, unhandled, unnamed, undropped) -- four of them (`0x0008`, `0x000B`,
+`0x000D`, `0x000C`) had been falling off the chain on 1,027 / 1,395 / 1,384 / 76
+loopback connections too. Decided: **three NAMED from OBSERVED reply chains**
+(`schema/overrides.json`, medium) -- `0x009F` HENCHMAN_ADD (`[agent]` → `0x00B0` then
+`0x01BF`, 3 of 3; SIZE BEFORE ROW, the order the hero add will mirror), `0x00B1`
+MAP_TRAVEL (`[map, 0, 0, 0, 1]` → `0x01D9` then `0x01A5`/`0x0099`, 10 of 10), `0x004F`
+ITEM_MOVE (→ `0x014B` then `0x006F`, 4 of 4; field roles UNVERIFIED) -- each also on
+the allowlist until its arm (steps 5, 7, 8); **fifteen UNNAMED allowlist rows**, each
+carrying what was measured (count, connections, the first s2c, the 38797 send wrapper
+and module from `sendsites.py`) and what would name it -- a name is D2's product and
+none is guessed. `test_dispatch.py` §10 is **the REVERSE guard** (floor 45 → 54): it
+reads the committed census `retail_c2s.json` (vault-free) and reddens on any retail
+opcode neither handled, named nor dropped on purpose, with file floors (57 / 96) and
+two known-bad arms; its orphan rule now admits a row for a retail-seen unnamed opcode.
+`test_c2striage.py` (floor 34, TESTS.md) drives the walker on a synthetic stream,
+re-derives the census from the vault, holds the file to it, and proves acceptance (c)
+-- **zero retail c2s opcodes undecided** -- over the file and the live census. The
+first-reply column is a CORRELATION and the study says so (the kick's own row names
+an ambient `0x0029` at 21 ms, not its `0x0075` at 42 ms). Corrects the route text in
+one place: the travel wrapper `0x0085C280` has NO direct caller on 38797 (the route's
+`0x004A791F` is unverified by the census).
+
+---
+
 ### DESKWORK-D1 (fix pass) -- 2026-09-22 -- **the census's channel and window corrected; the kick's 0x0145 and body guarded; the revert reverts**
 
 Corrects the entry below it (DESKWORK-D1 steps 1-2, same day), after two reviewers
