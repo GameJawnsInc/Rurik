@@ -88,7 +88,7 @@ cases = [
     (("deals +", " lightning damage"), (Label.LIGHTNING_DAMAGE, "plus")),
     (("takes ", " damage"), (Label.DAMAGE, "")),
     (("begins bleeding for ", " seconds"), (Label.CONDITION_DURATION, "Bleeding")),
-    (("for ", " seconds, you move 25% faster"), (Label.DURATION, "")),
+    (("for ", " seconds, the caster hums a tune"), (Label.DURATION, "")),
     (("you move ", "% faster"), (Label.MOVE_SPEED_UP, "")),
     (("you attack ", "% faster"), (Label.ATTACK_SPEED_UP, "")),
     (("target foe attacks ", "% slower"), (Label.ATTACK_SPEED_DOWN, "")),
@@ -106,7 +106,7 @@ cases = [
     (("you have a ", "% chance to block"), (Label.BLOCK_CHANCE, "")),
     (("skills are disabled for ", " seconds"), (Label.DISABLE_DURATION, "")),
     (("this spirit dies after ", " seconds"), (Label.LIFETIME, "")),
-    (("your maximum health is increased by ", "."), (Label.MAX_HEALTH, "")),
+    (("the wearer's maximum health is raised by ", "."), (Label.MAX_HEALTH, "")),
     (("you have an additional ", " health"), (Label.MAX_HEALTH, "")),
     (("you take -", " less damage"), (Label.DAMAGE_REDUCTION, "")),
     # the sentence rule: the condition named at the head of the sentence, the
@@ -161,11 +161,14 @@ check(skilldesc.referee_hand_row([(1, Label.MOVE_SPEED_UP, "")], {"scale_means":
 check(skilldesc.referee_hand_row([(1, Label.DAMAGE, "")], {"bonus_scale_means": "Crippled"})[0][-1]
       == "NO_SLOT", "a hand label on an index the template does not number is NO_SLOT")
 
+# Rush's SHAPE (duration 8..20 on the bit, a flat 25 the text prints) under a
+# sentence of our own -- no fixture here is a template (the first version's
+# was, to the character, after normalise(): reviewers D4-R2 / ENG-11).
 rush = rec(args=1, d=(8, 20), s=(25, 25))
-lit = skilldesc.literal_check(rush, "For %str3% seconds, you move 25%% faster.", {3})
+lit = skilldesc.literal_check(rush, "Lasts %str3% seconds; the stride is 25%% quicker.", {3})
 check(lit == [(1, "scale", 25, "LITERAL_MATCH")],
-      "Rush's flat 25 is printed as text: LITERAL_MATCH; the empty bonus is skipped", lit)
-check(skilldesc.literal_check(rush, "For %str3% seconds.", {3}) == [(1, "scale", 25, "LITERAL_MISS")],
+      "a flat 25 printed as text is LITERAL_MATCH; the empty bonus is skipped", lit)
+check(skilldesc.literal_check(rush, "Lasts %str3% seconds.", {3}) == [(1, "scale", 25, "LITERAL_MISS")],
       "and a constant the text never states is LITERAL_MISS")
 
 # ---------------------------------------------------------------- section 2
