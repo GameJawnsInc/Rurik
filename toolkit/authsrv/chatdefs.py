@@ -70,9 +70,12 @@ BOW_TEMPLATE = 1687            # "%player% bows." -- id measured, text ArenaNet'
 # and `textrec.py` resolves it; this is the same "commit the id, resolve the
 # string at run time" rule `mapbuild.py` and `typenames.py` follow.
 #
-# 1960 IS OBSERVED, 39 of 39. Every channel-7 line in the corpus that is not
-# the single target-0 case carries coded word 0x8A8, which is exactly
+# 1960 IS OBSERVED, 39 of 39. On 20260817T231139 every channel-7 line that is
+# not the single target-0 case carries coded word 0x8A8, which is exactly
 # `codedstr.encode_id(1960)`, and 1960 resolves to the adrenaline refusal.
+# (The sentence used to say "every channel-7 line in the corpus"; the corpus
+# has grown -- the fix pass of 2026-09-23 scanned every live 0x005D for a coded
+# id in the refusal block and found 1960 x39, 1961 x17, 1934 x1, 1988 x1.)
 # THE REPLAY SENTENCE THAT STOOD HERE -- "replayed against a pool model with
 # no free parameter it lands on 39 of 39 pool-short declines and 0 of 4
 # others" -- WAS SCORED ON THE DECLINES ALONE, which a model that calls every
@@ -82,15 +85,149 @@ BOW_TEMPLATE = 1687            # "%player% bows." -- id measured, text ArenaNet'
 # 19 of 39 at a short slot and 20 at a FULL one -- a second gate behind this
 # same reason string (animref FINDINGS 19, its 2026-09-22 note).
 REFUSE_NOT_ENOUGH_ADRENALINE = 1960
-# 1961 IS A RECONSTRUCTION AND MUST NOT BE PROMOTED WITHOUT A RUN. The TEXT is
-# observed -- record 937 of file 1, immediately adjacent to 1960's record 936 --
-# but THE WIRE HAS ZERO ENERGY REFUSALS: all 43 declines in the corpus are
-# 0x0027 attack-skill presses, and 0 of 49 0x0046 casts was ever refused. The
-# operator never ran out of energy. So this id rests on the text plus its
-# position in the block, and the cheapest thing that settles it is a loopback
-# run that reads the sentence off the screen. If the client shows something
-# else, this constant is refuted and that is a finding, not a build failure.
+# 1961 IS OBSERVED -- on screen AND on retail's wire. The comment that stood
+# here said "THE WIRE HAS ZERO ENERGY REFUSALS: all 43 declines in the corpus
+# are 0x0027 attack-skill presses", which was true of the corpus it was written
+# against and was settled first on screen (skills 38.2: the loopback run drew
+# the energy sentence for #1961) and then by two later tapes the fix pass of
+# 2026-09-23 counted: 17 channel-7 lines carry #1961 -- 12 on 20260914T005758
+# answering the player's 0x0046 presses of 392 and 446, 5 on 20260916T213125
+# answering 307 and 346 -- each as 0x005D #1961, 0x005E [1, 7], 0x00E2, the
+# shape 1960 uses. The record's position (937 of file 1, beside 1960's 936) is
+# now the least of its evidence.
 REFUSE_NOT_ENOUGH_ENERGY = 1961
+
+# THE WHOLE REFUSAL BLOCK, ids only (DESKWORK-D5 step 7, REX-5; skills FINDINGS
+# 57). The owner's archive holds 1934..1993 as 60 PLAIN records, bracketed by
+# encrypted ones on both sides (1928-1933 and 1994-2000, RC4, `textrec.needs_key`)
+# -- so "60 readable, 6 encrypted" is the span 1928-1993, and the readable block
+# is exactly this table. The LABEL is OUR word for the condition the sentence
+# names, a closed vocabulary a test can pin; the sentence itself stays in the
+# archive and `textrec.TextIndex.get(id)` resolves it at run time. Fourteen
+# labels carry a skill's name inside OUR identifier (obsidian_flesh, holy_veil,
+# ...). That is a skill name used as a short proper noun inside a label -- the
+# use PLAN.md 7 Q17's carve-out describes for a place name in a content row --
+# and not the authored NAME STRING the same ruling puts on the id side; the
+# comments and studies of this repo use skill names the same way throughout.
+# It is a reading of the ruling, not a citation of it: if the owner reads Q17
+# the other way, these fourteen become numeric labels and nothing else moves.
+# EVIDENCE per row: OBSERVED where a tape or a screen shows the id answering
+# that condition, RECONSTRUCTION otherwise -- the ids live server-side and the
+# client only renders what it is handed (skills 38.8), so most rows can only be
+# reconstructed from the text's own statement of its condition. Two rows are
+# TEMPLATED (they take %str/%num arguments) and `refusal_body` refuses to carry
+# them bare (the fix pass moved the guard from `refusal_reason_id` alone onto
+# the send path, so a constant passed straight to `refuse_press` meets it too).
+REFUSAL_REASONS = {
+    1934: "invalid_attack_target",           # OBSERVED 1 of 1 (target 0, skills 38.5)
+    1935: "attack_needs_weapon",
+    1936: "attack_prevented_pacifism",
+    1937: "attack_prevented_amity",
+    1938: "target_invulnerable",
+    1939: "attack_prevented_obsidian_flesh",
+    1940: "spell_prevented_holy_veil",
+    1941: "attack_prevented_armor_of_mist",
+    1942: "attribute_check_failed",          # TEMPLATED
+    1943: "attribute_check_missed",          # TEMPLATED
+    1944: "spell_prevented_well_of_the_profane",
+    1945: "spell_prevented_crystal_bonds",
+    1946: "item_not_in_competitive_missions",
+    1947: "item_not_in_towns",
+    1948: "chest_in_use",
+    1949: "chest_empty",
+    1950: "chest_locked",
+    1951: "chest_already_open",
+    1952: "chest_already_used",
+    1953: "key_does_not_fit",
+    1954: "cannot_pick_up_item",
+    1955: "gold_capacity_reached",
+    1956: "item_reserved_for_other_player",
+    1957: "target_immune_bleeding",
+    1958: "target_immune_disease",
+    1959: "target_immune_poison",
+    1960: "not_enough_adrenaline",           # OBSERVED 39 of 39 (above)
+    1961: "not_enough_energy",               # OBSERVED on screen (skills 38.2) and 17x on the wire
+    1962: "inventory_full",
+    1963: "target_obstructed",
+    1964: "skill_recharging",                # never on any wire held (skills 38.5)
+    1965: "already_have_pet",
+    1966: "invalid_target",
+    1967: "no_pet",
+    1968: "pet_out_of_range",
+    1969: "casting_prevented_shroud_of_silence",
+    1970: "item_use_prevented_ignorance",
+    1971: "shouts_prevented_vocal_minority",
+    1972: "casting_prevented_shroud_of_shadows",
+    1973: "casting_prevented_silenced",
+    1974: "skill_prevented_world_enchantment",
+    1975: "spell_failed_target_carrying_bundle",
+    1976: "spell_failed_spell_breaker",
+    1977: "spell_failed_spell_shield",
+    1978: "spell_failed_shadow_shroud",
+    1979: "spell_failed_target_more_energy",
+    1980: "target_no_spells_to_steal",
+    1981: "target_not_animal",
+    1982: "target_no_flesh",
+    1983: "target_not_allied_minion",
+    1984: "target_not_enemy_minion",
+    1985: "skill_needs_different_weapon_type",   # the weapon gate's consumer
+    1986: "invalid_spell_target",
+    1987: "target_out_of_range",
+    1988: "skill_recharging_2",              # OBSERVED 1 of 1 -- THE recharge refusal's id (below)
+    1989: "unrecognized_appearance_type",
+    1990: "already_have_boss_last_skill",
+    1991: "target_used_no_skills",
+    1992: "no_target_in_range_dead_boss",
+    1993: "target_last_skill_not_your_professions",
+}
+# 1988 IS OBSERVED ONCE, and it is the recharge refusal (fix pass 2026-09-23;
+# skills 57). 20260913T210901 conn 60877 t=701.625: the player pressed skill 40
+# a second time (c2s 0x0046 at 700.022, during its own cast) after its 8 s
+# recharge had started (0x00E5 [9, 40, 0, 8] at 700.897), and retail answered
+# 0x00E3 [9, 40, 0], 0x005D #1988, 0x005E [1, 7], 0x009F [57, 9, 0], 0x00E2
+# [9, 40, 0] -- the sentence AFTER the ack and BEFORE the release, an order no
+# 1960 refusal uses. 1964 carries the same sentence in the archive and has never
+# been on any wire we hold (skills 38.5); the id retail sends is 1988.
+REFUSAL_OBSERVED = {1934, 1960, 1961, 1988}   # every other id is RECONSTRUCTION
+REFUSAL_TEMPLATED = {1942, 1943}            # take arguments; never sent bare
+REFUSAL_BLOCK = (1934, 1993)                # inclusive; the plain span
+REFUSAL_ENCRYPTED_NEIGHBOURS = tuple(range(1928, 1934)) + tuple(range(1994, 2001))
+# THE WEAPON GATE'S REASON (DAGGERS-B4). What retail sends on a weapon mismatch
+# is NOT OBSERVED -- the client very likely never sends the press -- so this
+# id is RECONSTRUCTION from the sentence's own condition, and the gate sends it
+# only under --refusal-reasons (default OFF: the bare release, the shape
+# retail uses 3 of 43 for a refusal whose reason we cannot name).
+REFUSE_WEAPON_TYPE = 1985
+assert REFUSAL_REASONS[REFUSE_NOT_ENOUGH_ADRENALINE] == "not_enough_adrenaline"
+assert REFUSAL_REASONS[REFUSE_NOT_ENOUGH_ENERGY] == "not_enough_energy"
+assert len(REFUSAL_REASONS) == REFUSAL_BLOCK[1] - REFUSAL_BLOCK[0] + 1
+assert len(set(REFUSAL_REASONS.values())) == len(REFUSAL_REASONS)
+
+
+def refusal_evidence(string_id):
+    """'OBSERVED' | 'RECONSTRUCTION' for an id in the block; KeyError outside it."""
+    if string_id not in REFUSAL_REASONS:
+        raise KeyError(f"string id {string_id} is not in the refusal block "
+                       f"{REFUSAL_BLOCK[0]}..{REFUSAL_BLOCK[1]}")
+    return "OBSERVED" if string_id in REFUSAL_OBSERVED else "RECONSTRUCTION"
+
+
+def refusal_reason_id(label):
+    """The string id for one of OUR labels; refuses a templated sentence.
+
+    A templated record (%str1%, %num1%) rendered bare shows the placeholders
+    or nothing -- neither is a refusal retail ever drew -- so the two such ids
+    are refused here rather than sent and found out on screen.
+    """
+    for sid, name in REFUSAL_REASONS.items():
+        if name == label:
+            if sid in REFUSAL_TEMPLATED:
+                raise ValueError(f"refusal {label!r} (#{sid}) takes arguments and "
+                                 f"cannot be sent as a bare coded string")
+            return sid
+    raise KeyError(f"no refusal reason labelled {label!r}")
+
+
 PLAYER_ARG_SLOT = 13           # arg slot rendering a playerId as a name (n=2)
 
 assert codedstr.decode_id([ALL_BODY_WRAPPER]) == (8, 1)
@@ -147,8 +284,15 @@ def refusal_body(string_id):
 
     Retail's refusal lines take no substitutions: the whole payload is the
     string id, which is why the observed wire word is a single 0x8A8 rather
-    than a template plus argument slots the way `bow_body` builds one.
+    than a template plus argument slots the way `bow_body` builds one. A
+    TEMPLATED record (1942, 1943 take %str/%num arguments) rendered bare shows
+    the placeholders or nothing, so it is refused HERE, on the send path --
+    `refusal_reason_id` refuses it too, but a constant handed straight to
+    `refuse_press` never passes through that function (fix pass 2026-09-23).
     """
+    if string_id in REFUSAL_TEMPLATED:
+        raise ValueError(f"refusal #{string_id} ({REFUSAL_REASONS[string_id]}) takes "
+                         f"arguments and cannot be sent as a bare coded string")
     return "".join(chr(w) for w in codedstr.encode_id(string_id))
 
 

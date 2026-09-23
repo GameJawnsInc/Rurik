@@ -29,7 +29,7 @@ import agents       # noqa: E402
 import effects      # noqa: E402
 
 # Floor set from a real green run (39 checks, 2026-08-22; 99 checks, 2026-09-09 SKILLS-DW; 129 checks, 2026-09-10 SKILLS-BL; 153 checks, 2026-09-10 SKILLS-RC; 162 checks, 2026-09-10 SKILLS-MA).
-LEDGER = checks.Ledger("effect mechanics", floor=245)  # 2026-09-17: +5, RUN-SKILLS-WKL sec.33 + WKL1-2 (a cast that lifts Weakness heals at the weakened rank), from the green run  # 2026-09-17: +12, SKILLS-WK sec.31-32 (Weakness takes one off every attribute), from the green run  # 2026-09-16: +14, SLICE-F48 sec.8b (movement speed on the wire), from the green run  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
+LEDGER = checks.Ledger("effect mechanics", floor=256)  # 2026-09-23: +11, SKILLS-MC sec.34 (Mend Condition: heal IF removed, the no-condition control, the other-ally byte, the revert), from the green run  # 2026-09-17: +5, RUN-SKILLS-WKL sec.33 + WKL1-2 (a cast that lifts Weakness heals at the weakened rank), from the green run  # 2026-09-17: +12, SKILLS-WK sec.31-32 (Weakness takes one off every attribute), from the green run  # 2026-09-16: +14, SLICE-F48 sec.8b (movement speed on the wire), from the green run  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
 check = checks.adopt(LEDGER)
 
 FRENZY, RUSH, ROF, GLYPH, IGNITE, FAINT = 346, 319, 307, 200, 431, 135
@@ -2063,5 +2063,101 @@ try:
           f"{len(lifts)} lifts")
 except (Exception, SystemExit) as exc:                           # noqa: BLE001
     LEDGER.skip("section 32 (corpus)", f"{type(exc).__name__}: {exc}")
+
+# 34: SKILLS-MC, Mend Condition (275) -- DESKWORK-D5 3(d), studies/skills 58:
+#     remove ONE condition (the newest) and heal the FLAT scale once, only if a
+#     condition was actually removed. Target byte 4: other ally, the caster
+#     NOT legal. The no-condition CONTROL is what separates this shape from
+#     Mend Ailment's (277, heal per REMAINING) and Restore Condition's (276,
+#     heal per REMOVED).
+print("== 34. SKILLS-MC: Mend Condition removes the NEWEST condition and heals the "
+      "flat scale once IF one was removed; nothing otherwise ==")
+MC = 275
+saved = (authsrv.CONDITION_HEAL_RULE, authsrv.ENERGY)
+try:
+    authsrv.CONDITION_HEAL_RULE = True
+    authsrv.ENERGY = False
+    check(authsrv.skill_heal(MC, 12) == 57,
+          "the client's scale at rank 12: 5 + 65 x 12/15 = 57 (the same progression as 277)",
+          f"{authsrv.skill_heal(MC, 12)}")
+    row = agents.WORLD.get("skill_effect", str(MC))
+    check(row.get("removes_conditions") == 1 and row.get("heal_if_removed") is True
+          and not row.get("heal_per_condition_removed")
+          and not row.get("heal_per_condition_remaining"),
+          "the row: remove ONE, heal IF removed (and neither per-removed nor per-remaining)")
+    check(int(agents.WORLD.get("skills", str(MC))["target"]) == effects.OTHER_ALLY_TARGET,
+          "the client's target byte is 4 = other ally (the caster is not a legal recipient)")
+
+    # THE CONTROL: no condition -> nothing removed, nothing healed, nothing sent.
+    sent, send = collector()
+    state = two_hostiles()
+    out = authsrv.resolve_heal(send, state, MC, 12, 10, 11, 0)
+    check(out["removed"] == 0 and out["remaining"] == 0
+          and out["healed"] == 0.0 and not sent
+          and state["agents"][11]["health"] == 60.0,
+          "CONTROL, no condition: nothing removed, NOTHING healed, nothing sent -- the "
+          "wounded ally stays at 60 (a flat heal here would be Mend Ailment's revert arm)",
+          f"out={out} sent={sent}")
+
+    # ONE condition: removed, and the flat 57 heals (40 lands on 60/100).
+    sent, send = collector()
+    state = two_hostiles()
+    authsrv.apply_condition(send, state, 11, BLEED, 9.0, 12, 0, 382)
+    sent, send = collector()
+    out = authsrv.resolve_heal(send, state, MC, 12, 10, 11, 0)
+    check(out["removed"] == 1 and out["remaining"] == 0 and out["healed"] == 40.0
+          and not state["effects"].on_agent(11)
+          and state["agents"][11]["health"] == 100.0,
+          "ONE condition: it is removed and the flat 57 heals once (40 landing on 60/100) "
+          "-- the whole difference from Mend Ailment, which heals nothing here",
+          f"out={out}")
+    check(not removes(sent) and len(heals(sent)) == 1,
+          "the wire: no 0x0044 for a body (MANTID); the one 55 heal word",
+          f"ops={[hex(o) for o, _v, _l in sent]}")
+
+    # TWO conditions: the NEWEST goes, the other stays, still ONE flat heal.
+    sent, send = collector()
+    state = two_hostiles(h11=10.0)
+    authsrv.apply_condition(send, state, 11, BLEED, 9.0, 12, 0, 382)
+    time.sleep(0.01)
+    authsrv.apply_condition(send, state, 11, POISON, 9.0, 12, 0, 382)
+    sent, send = collector()
+    out = authsrv.resolve_heal(send, state, MC, 12, 10, 11, 0)
+    left = [ep["skill"] for ep in state["effects"].on_agent(11)]
+    check(out["removed"] == 1 and out["remaining"] == 1 and left == [BLEED]
+          and out["healed"] == 57.0 and state["agents"][11]["health"] == 67.0,
+          "TWO conditions, Bleeding then Poison: the NEWEST (Poison) goes, the Bleeding "
+          "stays, and the heal is the flat 57 ONCE -- not 57 per remaining (277) and not "
+          "57 per removed (276)", f"out={out} left={left}")
+
+    # THE RECIPIENT: byte 4 -- a hostile casting it at itself has no legal target.
+    sent, send = collector()
+    state = two_hostiles()
+    authsrv.apply_condition(send, state, 10, BLEED, 9.0, 12, 0, 382)
+    sent, send = collector()
+    out = authsrv.resolve_heal(send, state, MC, 12, 10, 10, 0)
+    check(out is None and len(state["effects"].on_agent(10)) == 1 and not sent,
+          "aimed at the CASTER: no legal recipient (other ally), nothing resolves, the "
+          "caster keeps its Bleeding", f"out={out}")
+
+    # THE REVERT: a flat 57 on the aimed target and no cure.
+    authsrv.CONDITION_HEAL_RULE = False
+    sent, send = collector()
+    state = two_hostiles()
+    authsrv.apply_condition(send, state, 11, BLEED, 9.0, 12, 0, 382)
+    sent, send = collector()
+    out = authsrv.resolve_heal(send, state, MC, 12, 10, 11, 0)
+    check(not removes(sent) and len(heals(sent)) == 1
+          and len(state["effects"].on_agent(11)) == 1 and out["healed"] == 40.0,
+          "--no-condition-heal-rule: a flat 57 and no cure (the known-bad arm)")
+    sent, send = collector()
+    state = two_hostiles()
+    out = authsrv.resolve_heal(send, state, MC, 12, 10, 11, 0)
+    check(len(heals(sent)) == 1 and out["healed"] == 40.0,
+          "  and under it the no-condition control DOES heal -- the two arms differ on "
+          "exactly the gate this shape adds")
+    authsrv.CONDITION_HEAL_RULE = True
+finally:
+    authsrv.CONDITION_HEAL_RULE, authsrv.ENERGY = saved
 
 sys.exit(LEDGER.verdict())

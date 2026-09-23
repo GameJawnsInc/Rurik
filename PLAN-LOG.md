@@ -28,6 +28,117 @@ move back.
 
 ---
 
+### DESKWORK-D5 pass 3 fix pass -- 2026-09-23 -- **the shout record corrected (the hero tape's observer was the hero; "earshot ≥ 913 u" was the observer's own lead and is withdrawn; the tape bounds the radius in neither direction); the refusal table's wire witnesses re-counted; Mend Condition's witness named**
+
+Two reviewers read the pass-3 entry below this one. What SHIPPED there stands unchanged —
+`party_wide = "earshot"` on 364 with the client's own 1000 u, the per-ally episodes,
+`--no-party-wide-shouts`, the refusal table behind `--refusal-reasons` (default OFF), Mend
+Condition's heal-if-removed — and every revert arm still reddens. The RECORD behind it
+carried two false facts, each pinned by a green test, and this entry corrects them
+([studies/skills/FINDINGS.md](studies/skills/FINDINGS.md) §56.8 is the full account).
+
+**The shouts (§56).** (1) `shoutjoin.py` named the observer by the connection's first
+`0x00E3` (`spellhitjoin.player_of`'s rule); on the one hero tape (`20260914T005758` conn
+56011) that ack is the HERO's — agent 30, class tag 2, 48 of 54 acks, casting 346 and 348
+all session — while agent 29 is the class-tag-3 create, the first property 41 and the agent
+whose acks answer every c2s press. So "6 applies on a hero" was the hero's Watch Yourself!
+landing on the PLAYER: the composition is **58 on the observer / 7 on the hero (all 7 the
+hero's own), the observer cast 35 not 42**, 65 = 42 + 23 holds only as caster == wearer
+versus not, **6 hero-to-player applies OBSERVED, 0 player-to-hero on any tape**
+(RECONSTRUCTION by symmetry). The reader now uses `adrenjoin.whose_agent` (property 41,
+the JARIN kind-5 tie-break) cross-checked against the agent answering the connection's
+presses, and refuses a connection where they disagree (one of 96, with neither, is
+refused). (2) "The tape bounds earshot from below at 913 u" took the observer's own
+`0x0029` lead for its position (765 u from its c2s report 35 ms earlier; from the report
+the pair is 188 u) and resolved every radius-agreeing pair whatever its error. The reader
+now positions the observer from exact samples only and MEASURES what a lead is worth
+against them — **the lead check: 6,639 observer leads with a report inside 0.1 s, median
+offset 765 u, max 4,264 u** — so a pair on a lead never resolves; every one of the 32
+pairs rests on a lead, **no bound exists in either direction, the distance half of P4 is
+UNTESTABLE on this corpus**, and the radius stays CORROBORATED (client table + WIKI),
+untested by the tape. (3) Sides are now read from the create's token alone (the first cut
+defined a foe token by the outcome): 0 of 8 foe applies reproduces; the "third token" is
+the client's `ALLEGIANCE_NONCOMBATANT`, which retail's shout boosts (15 words) and
+`allies_of` excludes — a new open under-application. (4) "4 foe shouts inside 1000 u under
+both readings" → 4 by point estimate, none exact; "3–5 agents per apply" → 0–5 with the
+distribution; the 364 row's "17 of the 48" → 14 of 48 (23 of 58 with 348). (5)
+`test_shouts`: section 1 needs the vault's skills table and declares a skip without it (it
+crashed bare); the "primary excluded" check named the player, never in its own ally set,
+and now names the hero; `census(cutoff=…)` skips a later tape before reading it. 47
+checks, floor 30 (42 before). The pass-3 entry's shout numbers below are superseded here.
+
+**The refusal ids (§57).** Every live `0x005D` scanned for a coded id in the block: **1960
+× 39, 1961 × 17, 1934 × 1, 1988 × 1.** 1961 had been labelled from the screen while retail's
+wire carries it 17 times (two tapes of 2026-09-14/16; `chatdefs.py` still said "zero energy
+refusals" — corrected). **1988 was RECONSTRUCTION and is on the wire once as the recharge
+refusal** (`20260913T210901` conn 60877: a second press of skill 40 during its own cast, after
+its recharge began, answered `0x00E3`, `#1988`, `0x005E [1, 7]`, prop 57, `0x00E2` — the
+sentence between ack and release, an order no 1960 refusal uses); so the recharge refusal's
+id is 1988, not 1964, and the pass-3 summary's "never on any wire" is withdrawn.
+`REFUSAL_OBSERVED = {1934, 1960, 1961, 1988}`. Also: the templated guard moved onto
+`refusal_body` (the send path); the Q17 sentence re-worded as a reading of the carve-out;
+`test_chatdefs` §7 catches `SystemExit` (it died bare — a regression from `main`); the
+authsrv flag renamed `REFUSAL_REASON_IDS`; the gate's comment names the label.
+
+**Mend Condition (§58).** The row's provenance cited §46.3's paraphrase, which quotes
+nothing from the page (§46.1's quote is Mend Ailment's). The page is now read — **WIKI (GWW,
+"Mend Condition", rev. 2023-02-19)**: energy 5, activation ¾, recharge 2, target other
+allies, remove one condition and IF one is removed heal 5…70 — and the client's own
+description template is cited beside it (`skilldesc.py --row 275`: the scale slot
+AGREE_PROGRESSION 5/70 as HEAL; CLAUSE_REMOVAL, IF, TARGET_ALLY). Labels unchanged: the
+shape CORROBORATED by page and template, the wire RECONSTRUCTION. No code change.
+
+**Counts the pass-3 entry below did not name** (a review finding): its affected sweep was
+123 of 124 green (7,938 runner-counted checks + 218 in three tests with declared skips),
+`test_handshake` NOT RUN — port 6112 held by another session. **This pass's own sweep**: the
+same 123 affected tests, **123 of 123 green** — 121 in two 4-wide chunks (7,632 runner-counted
+checks + 218 in three tests with declared skips), `test_kbdsync` red under load on one
+wall-clock fence check and green alone (236), `test_scrub` green alone (78; under the 4-wide
+load it outran the runner's 30-minute per-test cap and took the first attempt's whole result
+with it — the runner's weakness, not the test's); `test_handshake` again NOT RUN, port 6112
+held by two other sessions' processes. Lints on the final tree: checks 17, srclint 26, citelint
+50, identlint 28, provlint 19.
+
+---
+
+### DESKWORK-D5 pass 3 (steps 5, 7, 3d) -- 2026-09-23 -- **party-wide shouts OBSERVED and shipped (a shout reaches every living ally inside the client's own `aoe_range`, 1000 u; 23 foreign applies on retail's wire, 0 of 8 foe shouts; the announce is property 48, not 60); the refusal block as a table of 60 ids and our labels behind a DEFAULT-OFF flag, the weapon gate its one consumer; Mend Condition's heal-if-removed shape**
+
+**Step 5, shouts** ([studies/skills/FINDINGS.md](studies/skills/FINDINGS.md) §56;
+`toolkit/authsrv/shoutjoin.py`; `test_shouts.py`). The survey's 65 = 42 + 23 is reproduced
+to the unit and its "all 364, one capture" is refuted: 59 applies on the observer (364 × 48,
+348 × 11) and 6 on a hero, on ten captures. **The announce is `0x009F [48, caster, skill]`**
+(`GV_INSTANT_SKILL_ACTIVATED`, stances and shouts alike, 133 in the corpus; property 60 never
+carries a Shout id — the first cut looked there and attributed nothing), every apply at
+dt = 0. Sides from the create's allegiance token: 17 of 17 foreign applies from the observer's
+team, 0 of 8 foe shouts applying (4 inside 1000 u); a third-token ally boosted every time, so
+the token is not party membership. Reach: 23 of 24 ally pairs applied, the largest RESOLVED
+distance 912.7 u, four crossings inside their own position error (leads, follow leads), zero
+refuting — the radius is the client's `aoe_range` 1000 (= WIKI earshot), CORROBORATED and
+bounded from below by the tape. The batch's `0x0027` words name the other party members
+(86, none on a foe token) and retail sends one only where the VALUE changed (F48 P5
+refined). Shipped: `party_wide = "earshot"` on 364, `apply_effect` → `_apply_effect_on` per
+wearer through `shout_wearers` (living allies inside the row's radius; the player when a body
+shouts; a row with no radius or a caster with no position reaches the caster alone, said so),
+`--no-party-wide-shouts`. **Witness context: PvP** (Random Arenas) plus the owner's PvE casts.
+**Open:** the announce property (ours 60), a 348 row (no armour mechanic), the batch order,
+the hero's cure on screen.
+
+**Step 7, the refusal ids** (§57; `chatdefs.REFUSAL_REASONS`; `test_chatdefs` §6–7,
+`test_daggers` §4). The archive holds 1934–1993 as 60 PLAIN records with 1928–1933 and
+1994–2000 encrypted — the route's "60 readable, 6 encrypted" is the span 1928–1993. Committed
+as ids and our snake_case labels only; OBSERVED 1934 / 1960 / 1961, every other row
+RECONSTRUCTION; two templated ids refused as bare bodies; `--refusal-reasons` DEFAULT OFF,
+the weapon gate sending #1985 under it and the bare release without.
+
+**Step 3(d), Mend Condition** (§58; `skill_effect.275`; `test_mechanics` §34): remove ONE
+(the newest) and heal the flat scale once IF one was removed; the no-condition control heals
+nothing; target byte 4 (other ally); `--no-condition-heal-rule` reverts. RECONSTRUCTION.
+
+Tests: test_shouts 42 (floor 30), test_mechanics 245 → 256, test_chatdefs 28 → 40 (49 with
+the vault), test_daggers 103 → 105; the affected set is in the pass summary, not the suite.
+
+---
+
 ### DESKWORK-D1 (steps 6 + 8, fix pass) -- 2026-09-23 -- **the suppress mask follows the client's own bar edits; the dress reads the store it never read; reserved cells; the launch records stand; removed armour protects nothing; a suppressed resurrection is never cast**
 
 [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md) §DESKWORK-D1 "The hero skill

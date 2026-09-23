@@ -569,6 +569,32 @@ Health." Which one: GWW "Effect"/"Cover" -- "the most recently applied effect
 is always the first one to be removed". SKILLS-MA, studies/skills 46. Revision
 dates not retrieved (the pages refused the fetcher)."""
 
+# DESKWORK-D5 3(d), SKILLS-MC (2026-09-23): the third cure shape skills 46.3 left
+# unmodelled -- remove ONE condition and, IF one was removed, heal the flat scale once.
+[skill_effect.275]
+scale_means = "Healing"
+removes_conditions = 1
+heal_if_removed = true
+[skill_effect.275.provenance]
+source = "wiki"
+page = 'GWW, "Mend Condition", rev. 2023-02-19'
+verified = """The page read through the browser on 2026-09-23 (the fix pass: the first
+record cited skills 46.3's paraphrase, which quotes nothing from this page -- 46.1's
+quote is Mend Ailment's). GWW: Spell, Monk, Protection Prayers, energy 5, activation 3/4,
+recharge 2, target "other allies" (concise text: "Cannot self-target."); "Remove one
+condition (...) from target other ally. If a condition is removed, that ally is healed
+for 5...70 Health." Client row 275: scale 5->70 (57 at rank 12), energy 5, activation
+0.75, recharge 2, target byte 4 = other ally (effects.OTHER_ALLY_TARGET; the caster is
+NOT a legal target, unlike Mend Ailment's byte 3) -- every number agrees with the page.
+The client's own description template is the LOCAL witness for the mechanic
+(toolkit/clientscan/skilldesc.py --row 275: str1 is the scale slot, AGREE_PROGRESSION
+5/70, labelled HEAL; flags CLAUSE_REMOVAL, IF, TARGET_ALLY; hand row scale_means =
+Healing AGREE): a flat heal inside an IF clause on the removal, neither per-removed (276)
+nor per-remaining (277). Which condition goes: the newest (GWW "Cover", the rule
+remove_conditions already honours). RECONSTRUCTION on the wire: no retail cast of 275
+has been captured (46.3 stands); the numbers are the client's own row. studies/skills
+58."""
+
 # SLICE-B3 (2026-09-12): the slice's monk bar. Both rows below carry a
 # DISAGREEMENT this file had not met before: the client's endpoints and the
 # wiki's differ, where every earlier row agreed endpoint for endpoint. GWW's
@@ -714,6 +740,7 @@ its bit clear -- "target ally moves 33% faster". Duration CORROBORATED on the wi
 scale_means = "Movement speed increase"
 opens_episode = "shout"
 removes_condition = "Crippled"
+party_wide = "earshot"
 [skill_effect.364.provenance]
 source = "wiki"
 page = 'GWW, "Charge!", rev. 2026-04-16'
@@ -724,8 +751,19 @@ effects.py's docstring reserved for a type that is not definitionally a timed ef
 the corpus witnesses 47 applies of 364 on 0x0042 (bufflog), and the operator's own
 casts on the Isle close the lifecycle to the millisecond. `removes_condition` is the
 initial effect, OBSERVED once: the Isle's Crippled episode ends 11.2 s early in the
-same millisecond as a 364 apply (studies/isle 1). Earshot is not modelled: the shout
-lands on the caster alone (the loopback party is the player)."""
+same millisecond as a 364 apply (studies/isle 1). `party_wide` (DESKWORK-D5 step 5,
+2026-09-23, shoutjoin.py, studies/skills 56; the fix pass's numbers, 56.8): OBSERVED
+on retail -- 14 of the 48 applies of 364 on an observer were another ally's cast (23
+of 58 with 348's 9, six of those a HERO's shout landing on the player), attributed by
+the [48, caster, skill] announce in the same batch, 65 of 65 attributed, every foreign
+caster the observer's own token, 0 of 8 foe shouts applied, and the apply's batch
+re-declares the speed of the other party members; the radius is the client's own
+aoe_range for this row (1000 u, = WIKI earshot), which the tape neither measures nor
+bounds -- every caster-to-wearer pair rests on a 0x0029/0x002A lead sample, and a
+lead sits a median 765 u from the agent's position (the lead check). The player's own
+shout reaching a hero is unwitnessed (RECONSTRUCTION by symmetry). The witness context
+is PvP (Random Arenas, 20260817T231139) plus the owner's own PvE casts; a hero's cure
+on screen is final-confirmation-needs-run."""
 
 [skill_effect.455]
 scale_means = "Energy gain"

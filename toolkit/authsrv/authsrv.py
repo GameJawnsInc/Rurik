@@ -4784,6 +4784,21 @@ WEAKNESS_DAMAGE_FACTOR = 0.34
 # -- is RECONSTRUCTION from the description's own sentence order.
 # `--no-condition-heal-rule` is the known-bad arm: the flat self-heal.
 CONDITION_HEAL_RULE = True   # False (--no-condition-heal-rule): flat heal, any target.
+# DESKWORK-D5 step 5 (shoutjoin.py, skills FINDINGS 56): a skill_effect row with
+# `party_wide = "earshot"` opens its episode on every living ally inside the
+# skill's own `aoe_range` (the client's record: 1000 u for 364 and 348), the
+# caster included. OBSERVED on retail (the fix pass's numbers, 56.8): 23
+# foreign applies of 364/348 on the observer, every one from an ally by token,
+# 6 of them a HERO's shout landing on the player, 0 of 8 foe shouts applying,
+# and the batch's speed words re-declared on the other party members (P6). The
+# player's shout reaching a hero is UNWITNESSED (0 pairs on any tape) and rests
+# on symmetry -- RECONSTRUCTION. The radius is CORROBORATED (client table +
+# WIKI earshot); the tape bounds it in NEITHER direction (every reach pair
+# rests on a lead sample, and a lead sits a median 765 u from the position --
+# the first record's ">= 913 u" was the observer's own lead taken for its
+# position). --no-party-wide-shouts is the caster-alone arm, the server as it
+# was until 2026-09-23.
+PARTY_WIDE_SHOUTS = True
 #
 # THE HEAL NUMBER (SKILLS-HN, studies/skills 42). Retail sends property 55
 # carrying the skill's own amount whether or not the pool has room for it:
@@ -10754,6 +10769,15 @@ GAME_SMSG_SKILL_REFUSED = 0x00E2
 # behaviour. A channel that only exists behind a flag is a channel nobody
 # watches -- test_pools section 11i makes the same argument about ENERGY.
 REFUSAL_SILENT = False
+# Set from --refusal-reasons (DESKWORK-D5 step 7). OFF by default: the table
+# `chatdefs.REFUSAL_REASONS` names the client's whole refusal block by id, but
+# only 1934, 1960, 1961 and 1988 are OBSERVED answering a condition (the fix
+# pass of 2026-09-23 counted the wire: 1960 x39, 1961 x17, 1934 x1, 1988 x1);
+# every other row is RECONSTRUCTION from the sentence's own statement, and a
+# reconstructed sentence on the warning panel is invented traffic until a tape
+# shows it. The two OBSERVED resource refusals are sent regardless of this
+# flag. (Named REFUSAL_REASON_IDS so it cannot be read as the table itself.)
+REFUSAL_REASON_IDS = False
 GAME_SMSG_CHAT_MESSAGE_LOCAL = 0x0061
 
 GAME_SMSG_AGENT_MOVE_TO_POINT = 0x0029
@@ -18906,14 +18930,18 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
     # The skill record's own mask against what the character holds: a dagger
     # attack with a sword in hand begins nothing and costs nothing. The bare
     # release, no chat line -- the refusal's sentence is not observed (see
-    # WEAPON_GATE).
+    # WEAPON_GATE). DESKWORK-D5 step 7: under --refusal-reasons the release
+    # carries #1985 (chatdefs.REFUSE_WEAPON_TYPE, the label
+    # skill_needs_different_weapon_type -- RECONSTRUCTION from the sentence's
+    # own condition, no tape shows it).
     if WEAPON_GATE and not weapon_satisfies(skill_id):
         print(f"[c{conn_id}] REFUSED skill {skill_id}: its weapon_req "
               f"{skill_chain_fields(skill_id)[2]:#04x} is not what the player "
               f"holds (item_type "
               f"{(agents.PLAYER_WEAPON or {}).get('item_type') if EQUIP_WEAPON else None}) "
               f"[DAGGERS-B4]", flush=True)
-        refuse_press(send, skill_id, copy, conn_id)
+        refuse_press(send, skill_id, copy, conn_id,
+                     chatdefs.REFUSE_WEAPON_TYPE if REFUSAL_REASON_IDS else None)
         return
 
     # ---- THE RESOURCE GATE, and it runs BEFORE the first send ------------
@@ -20432,6 +20460,83 @@ def apply_effect(send, state, caster_id, skill_id, rank, target_id, conn_id):
         return None
 
     wearer = effects.effect_recipient(row, caster_id, target_id)
+    ep = _apply_effect_on(send, state, caster_id, skill_id, rank, wearer, conn_id,
+                          row, erow, family, duration)
+    # DESKWORK-D5 step 5: A PARTY-WIDE SHOUT reaches every living ally inside
+    # the skill's own radius, each with its OWN episode (its own buff id, its
+    # own arithmetic, its own status / speed / attribute words). OBSERVED on
+    # retail (shoutjoin.py): 23 foreign applies of 364/348 on the observer (6 of
+    # them a hero's shout reaching the player; the reverse direction is
+    # unwitnessed), 0 of 8 foe shouts applying, and the apply batch's 0x0027 words
+    # re-declared on the other party members. Only the agents whose effect list
+    # is on the wire get the 0x0042 (effect_list_send: the player, a hero); a
+    # henchman gets the episode and the words. --no-party-wide-shouts is the
+    # caster-alone arm.
+    if PARTY_WIDE_SHOUTS and erow.get("party_wide") == "earshot":
+        for ally in shout_wearers(state, caster_id, row, wearer, conn_id):
+            _apply_effect_on(send, state, caster_id, skill_id, rank, ally, conn_id,
+                             row, erow, family, duration)
+    return ep
+
+
+def _agent_xy(state, agent_id):
+    """(x, y) of the player or a body, or None when nothing holds one."""
+    if agent_id == PLAYER_AGENT_ID:
+        pos = state.get("pos")
+    else:
+        pos = (state.get("agents", {}).get(agent_id) or {}).get("pos")
+    if not pos or len(pos) < 2:
+        return None
+    return float(pos[0]), float(pos[1])
+
+
+def shout_wearers(state, caster_id, row, primary, conn_id):
+    """The living allies inside a party-wide shout's radius, the primary apart.
+
+    THE RADIUS IS THE CLIENT'S OWN: the skill record's `aoe_range` (+0x6C,
+    skilltable.py) -- 1000.0 for "Charge!" (364) and "Watch Yourself!" (348),
+    the value WIKI calls earshot. The tape neither measures nor bounds it
+    (shoutjoin.py: every reach pair rests on a lead sample, which the lead
+    check puts a median 765 u from the agent's position; sides are OBSERVED,
+    distance is not). A row with no radius reaches nobody and says so --
+    guessing a radius would be inventing one. A caster with no known position
+    reaches nobody either (the same refusal). Allies are `allies_of`'s --
+    living party members, the player included when a body shouts (that is
+    retail's 6 hero-to-player applies on 20260914T005758). Retail also boosts
+    the allied NONCOMBATANT in the arena (15 words on the 'nonc' agent);
+    `allies_of` admits ALLEGIANCE_PLAYER alone, a named under-application
+    (skills 56.7).
+    """
+    try:
+        radius = float(row.get("aoe_range") or 0.0)
+    except (TypeError, ValueError):
+        radius = 0.0
+    if radius <= 0.0:
+        print(f"[c{conn_id}] party-wide shout by agent {caster_id}: its row "
+              f"carries no aoe_range, so it reaches the caster alone", flush=True)
+        return []
+    here = _agent_xy(state, caster_id)
+    if here is None:
+        print(f"[c{conn_id}] party-wide shout by agent {caster_id}: the caster's "
+              f"position is unknown, so it reaches the caster alone", flush=True)
+        return []
+    out = []
+    for ally in sorted(allies_of(state, caster_id)):
+        if ally == primary:
+            continue
+        there = _agent_xy(state, ally)
+        if there is None:
+            continue
+        if math.hypot(there[0] - here[0], there[1] - here[1]) <= radius:
+            out.append(ally)
+    return out
+
+
+def _apply_effect_on(send, state, caster_id, skill_id, rank, wearer, conn_id,
+                     row, erow, family, duration):
+    """Open one episode on one wearer and send its batch. `apply_effect`'s body
+    from 2026-08-20 to 2026-09-23, moved here unchanged so a party-wide shout
+    can run it once per wearer; the comments below are its own."""
     table = effect_table(state)
     # ONE STANCE, ONE GLYPH, ONE PREPARATION AT A TIME -- the wiki's rule, and
     # for two of the three it is text the game shows a player. The replacement
@@ -21260,6 +21365,11 @@ def resolve_heal(send, state, skill_id, rank, caster_id, target_id, conn_id):
     # (1 for Mend Ailment: the most recently applied goes, GWW "Cover").
     per_remaining = (bool(erow.get("heal_per_condition_remaining"))
                      if CONDITION_HEAL_RULE else False)
+    # DESKWORK-D5 3(d), SKILLS-MC: Mend Condition's shape -- remove ONE and heal
+    # the FLAT scale once, only if the removal actually removed something (WIKI,
+    # skills FINDINGS 46.3 / 58; no retail witness for any cure's wire).
+    heal_if_removed = (bool(erow.get("heal_if_removed"))
+                       if CONDITION_HEAL_RULE else False)
     if not healed and not removes:
         return None
     if CONDITION_HEAL_RULE:
@@ -21307,6 +21417,13 @@ def resolve_heal(send, state, skill_id, rank, caster_id, target_id, conn_id):
                   f"nothing healed", flush=True)
             return out
         amount *= remaining
+    elif heal_if_removed:
+        if not gone:
+            print(f"[c{conn_id}] skill {skill_id} removed no condition from "
+                  f"agent {recipient} and heals only if one was removed -- "
+                  f"nothing healed", flush=True)
+            return out
+        # the flat scale, once -- however many were removed
     out["healed"] = heal_agent(send, state, recipient, caster_id, amount,
                                conn_id)
     return out
@@ -36887,6 +37004,20 @@ def main():
         print("NO INTERRUPTS: Disrupting Chop and Lightning Javelin land their "
               "damage and interrupt nothing, as this server did until 2026-09-23 "
               "(retail: interruptjoin.py's two witnesses).", flush=True)
+
+    if a.no_party_wide_shouts:
+        global PARTY_WIDE_SHOUTS
+        PARTY_WIDE_SHOUTS = False
+        print("NO PARTY-WIDE SHOUTS: a party_wide = \"earshot\" shout opens its "
+              "episode on the caster alone, as this server did until 2026-09-23 "
+              "(retail: shoutjoin.py, 23 foreign applies, 0 on a foe).", flush=True)
+
+    if a.refusal_reasons:
+        global REFUSAL_REASON_IDS
+        REFUSAL_REASON_IDS = True
+        print("REFUSAL REASONS: RECONSTRUCTED reason ids from the client's refusal "
+              "block go out with the release (today: the weapon gate's #1985). The "
+              "OBSERVED 1960/1961 are sent either way.", flush=True)
 
     if a.no_npc_recharge_from_completion:
         global NPC_RECHARGE_FROM_COMPLETION

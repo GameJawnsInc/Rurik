@@ -2061,6 +2061,29 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "send [8,0], E5 (full recharge), [59], E2, [35], E5 "
                          "(+20) for a cast and [8,0], [3], [35], [8,1] for an "
                          "auto-attack.")
+    ap.add_argument("--no-party-wide-shouts", action="store_true",
+                    help="a shout whose skill_effect row says party_wide = "
+                         "\"earshot\" opens its episode on the CASTER ALONE -- "
+                         "the server as it was until 2026-09-23. DESKWORK-D5 "
+                         "step 5 (shoutjoin.py): retail applies \"Charge!\" "
+                         "(364) and \"Watch Yourself!\" (348) to every living "
+                         "ally inside the skill's own aoe_range (1000 u, the "
+                         "client's record; WIKI earshot) -- 17 foreign applies "
+                         "on the observer and 6 on a hero, 0 on a foe -- and "
+                         "re-declares each ally's speed. With this flag the "
+                         "heroes and party bodies get nothing.")
+    ap.add_argument("--refusal-reasons", action="store_true",
+                    help="name the reason on refusals whose id this server can "
+                         "only RECONSTRUCT from the client's own refusal block "
+                         "(chatdefs.REFUSAL_REASONS, string ids 1934-1993; "
+                         "DESKWORK-D5 step 7). Today its one consumer is the "
+                         "weapon gate (DAGGERS-B4), which sends #1985 with the "
+                         "0x00E2 release instead of the bare release. DEFAULT "
+                         "OFF: what retail sends on a weapon mismatch is NOT "
+                         "OBSERVED (the client very likely never sends the "
+                         "press), so the bare release -- retail's own shape "
+                         "for 3 of 43 refusals -- stays the default. The "
+                         "OBSERVED ids 1960 and 1961 are sent either way.")
     ap.add_argument("--no-skill-labels", action="store_true",
                     help="drop the LABEL tier at startup: every skill_effect "
                          "row carrying tier = \"label\" (vault/content/"

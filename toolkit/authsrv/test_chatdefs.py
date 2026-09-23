@@ -55,8 +55,15 @@ from codec import Codec  # noqa: E402
 # itself by name when it cannot run rather than shrinking silently. (The first
 # draft wrote 26 from a count in my head; the run said 28 -- CLAUDE.md's
 # set-the-floor-from-a-green-run rule earning its keep on its own test.)
+# 2026-09-23 (DESKWORK-D5 step 7): +12 unconditional (section 6, the refusal block's
+# ids and labels) and +4 behind the archive (section 7, declared skip without it);
+# 49 with the vault on the green run, floor 28 -> 40. The fix pass the same day:
+# +3 unconditional in section 6 (1964 stays RECONSTRUCTION; refusal_body's
+# send-path guard, and its plain body); section 7's skip now catches SystemExit,
+# so the BARE run is green again -- 43 checks + 2 declared skips, measured with
+# RURIK_VAULT at an empty directory; 52 with the vault. Floor 40 -> 43.
 LEDGER = checks.Ledger("chat echo: framing, fragments, arm, retail bytes",
-                       floor=28)
+                       floor=43)
 check = checks.adopt(LEDGER)
 
 CAPTURE = "20260817T183756"   # the multi-part advert, studies/chat 2 and 3
@@ -258,6 +265,103 @@ def main():
               f"rebuilt {len(rebuilt)} units -> fragments "
               f"{[len(f) for f in frags]}; retail fragments "
               f"{[len(f) for f in retail_frags]}")
+
+    # DESKWORK-D5 step 7 (2026-09-23): the refusal block as a table of IDS and
+    # OUR labels. Nothing here is text -- a check that compared a sentence
+    # would be committing it.
+    print("== 6. the refusal block: ids and labels, never text ==")
+    lo, hi = chatdefs.REFUSAL_BLOCK
+    check((lo, hi) == (1934, 1993) and sorted(chatdefs.REFUSAL_REASONS) == list(range(lo, hi + 1)),
+          "the table is exactly the 60 ids 1934..1993, contiguous, none missing",
+          f"{len(chatdefs.REFUSAL_REASONS)} ids, {lo}..{hi}")
+    check(len(set(chatdefs.REFUSAL_REASONS.values())) == 60
+          and all(v.replace("_", "").isalnum() and v == v.lower()
+                  for v in chatdefs.REFUSAL_REASONS.values()),
+          "60 distinct labels, each a lower-case snake_case word of ours")
+    check(chatdefs.REFUSAL_REASONS[chatdefs.REFUSE_NOT_ENOUGH_ADRENALINE] == "not_enough_adrenaline"
+          and chatdefs.REFUSAL_REASONS[chatdefs.REFUSE_NOT_ENOUGH_ENERGY] == "not_enough_energy"
+          and chatdefs.REFUSAL_REASONS[chatdefs.REFUSE_WEAPON_TYPE] == "skill_needs_different_weapon_type"
+          and chatdefs.REFUSE_WEAPON_TYPE == 1985,
+          "the three named constants resolve to their labels: 1960, 1961, 1985")
+    check(chatdefs.refusal_evidence(1960) == "OBSERVED"
+          and chatdefs.refusal_evidence(1961) == "OBSERVED"
+          and chatdefs.refusal_evidence(1934) == "OBSERVED"
+          and chatdefs.refusal_evidence(1988) == "OBSERVED"
+          and chatdefs.REFUSAL_OBSERVED == {1934, 1960, 1961, 1988},
+          "exactly four ids are OBSERVED (1960 39 of 39, 1961 on screen and 17x on the wire, "
+          "1934 1 of 1, 1988 1 of 1 -- the recharge refusal, fix pass 2026-09-23)")
+    check(chatdefs.refusal_evidence(1964) == "RECONSTRUCTION",
+          "1964 -- the OTHER id with the recharging sentence -- stays RECONSTRUCTION: never "
+          "on any wire held; the id retail sent was 1988")
+    check(all(chatdefs.refusal_evidence(i) == "RECONSTRUCTION"
+              for i in chatdefs.REFUSAL_REASONS if i not in chatdefs.REFUSAL_OBSERVED),
+          "every other id is RECONSTRUCTION -- the label says so at the read")
+    try:
+        chatdefs.refusal_evidence(1933)
+        check(False, "an id outside the block must raise")
+    except KeyError:
+        check(True, "an id outside the block (1933) raises KeyError")
+    check(chatdefs.refusal_reason_id("skill_needs_different_weapon_type") == 1985
+          and chatdefs.refusal_reason_id("not_enough_adrenaline") == 1960,
+          "a label resolves back to its id")
+    for lbl in ("attribute_check_failed", "attribute_check_missed"):
+        try:
+            chatdefs.refusal_reason_id(lbl)
+            check(False, f"the templated {lbl} must be refused")
+        except ValueError:
+            check(True, f"the templated {lbl} (takes arguments) is refused as a bare body")
+    check(chatdefs.REFUSAL_TEMPLATED == {1942, 1943}
+          and all(i in chatdefs.REFUSAL_REASONS for i in chatdefs.REFUSAL_TEMPLATED),
+          "the two templated ids are in the block and marked")
+    # The guard on the SEND path (fix pass): a constant handed straight to
+    # refuse_press never passes refusal_reason_id, so refusal_body must refuse
+    # a templated id itself -- and still build the plain ones.
+    try:
+        chatdefs.refusal_body(1942)
+        check(False, "refusal_body(1942) must refuse a templated id")
+    except ValueError:
+        check(True, "refusal_body refuses a templated id on the send path (1942), not only "
+                    "refusal_reason_id -- the guard a constant cannot bypass")
+    check(len(chatdefs.refusal_body(1988)) == 1 and len(chatdefs.refusal_body(1934)) == 1,
+          "and still builds the one-word body for a plain id (1988, 1934)")
+    try:
+        chatdefs.refusal_reason_id("no_such_label")
+        check(False, "an unknown label must raise")
+    except KeyError:
+        check(True, "an unknown label raises KeyError")
+    body = chatdefs.refusal_body(chatdefs.REFUSE_WEAPON_TYPE)
+    check(len(body) == 1 and [ord(c) for c in body] == list(codedstr.encode_id(1985)),
+          "#1985's body is the one coded word codedstr makes of it (the same shape as "
+          "1960's 0x8A8)", f"{[hex(ord(c)) for c in body]}")
+
+    print("== 7. the archive: every id in the block is a PLAIN record; the neighbours "
+          "are encrypted (the boundary, not the text) ==")
+    try:
+        import textrec
+        idx = textrec.TextIndex()
+    # textrec REFUSES with SystemExit when the pinned build is not in the vault
+    # (it will not fall through to C:\gw); `except Exception` alone let that
+    # escape and the test died bare with no verdict -- a regression from main
+    # the engineering review caught (fix pass 2026-09-23).
+    except (Exception, SystemExit) as ex:                          # noqa: BLE001
+        LEDGER.skip("refusal block archive check (4 checks)",
+                    f"{type(ex).__name__}: {str(ex).splitlines()[0]}")
+        idx = None
+    if idx is not None:
+        with idx:
+            plain = {i for i in chatdefs.REFUSAL_REASONS if idx.needs_key(i) is False}
+            nonempty = {i for i in plain if idx.get(i)}
+            check(plain == set(chatdefs.REFUSAL_REASONS),
+                  "all 60 ids resolve to PLAIN records in the owner's archive",
+                  f"{len(plain)} plain of {len(chatdefs.REFUSAL_REASONS)}")
+            check(nonempty == plain, "and none of them is empty", f"{len(nonempty)}")
+            enc = {i for i in chatdefs.REFUSAL_ENCRYPTED_NEIGHBOURS if idx.needs_key(i) is True}
+            check(enc == set(chatdefs.REFUSAL_ENCRYPTED_NEIGHBOURS),
+                  "the 13 neighbours 1928-1933 and 1994-2000 are ENCRYPTED -- the block's "
+                  "edges are where the route's '60 readable, 6 encrypted' put them (1928-1993)",
+                  f"{sorted(enc)}")
+            check(idx.needs_key(1985) is False and idx.needs_key(1960) is False,
+                  "the two ids this server sends are plain (a bare coded word renders them)")
 
     return LEDGER.verdict()
 
