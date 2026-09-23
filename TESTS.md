@@ -6584,6 +6584,38 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   rules. Floor 78 -> 102 -> 137 -> 159 from the green run with `RURIK_VAULT` pointed at
   an empty directory (the bare-machine core; §1b's 17 and §1c's 8 ride the vault, 184
   vaulted), ~13 s),
+  `toolkit/authsrv/test_visstatus.py` (**2026-09-23, DESKWORK-D1, the owner's answer: the
+  inventory panel's per-slot DISPLAY MODE** — s2c `0x00EF` CHAR_VISIBILITY_FLAGS, c2s
+  `0x0057` SET_CHAR_VISIBILITY_FLAGS and the regime rule that leaves a hidden piece out of
+  the body's `0x006E`; `toolkit/authsrv/visstatus.py`, `studies/cmsg/FINDINGS.md` §"The
+  display mode". §1 THE CLIENT'S TABLES AND ARITHMETIC (bare-machine): the four kind masks
+  (0xBA38D4: cape 0x03, headgear 0x0C, costume body 0x30, costume head 0xC0) partition the
+  eight CHAR_STATS_VIS bits; every menu row of every kind round-trips through the client's
+  writer `(flags & ~mask) | value` (0x00814BE0) and its code lookup (0x008ECD90); retail's
+  0xFF draws the eye on all four and the UNSENT ZERO draws the circled bar on all four (the
+  defect of 20260923T185124 reproduced); the regime rule — the high bit of a pair in a town,
+  the low bit in a field (GmAgentDoll 0x005384B0) — with a KNOWN-BAD swapped rule that
+  disagrees on both half-modes; the drop-down's sixteen possible sends pass `check_request`
+  and three malformed ones are refused; `strip_visual` and `slot_changes` in both regimes
+  with a 0xFF control and a VACUITY guard (a hidden kind whose slot is empty reports
+  nothing). §2 RETAIL'S WIRE (vault-gated, `livewire.decode_conn` over every live game
+  connection, ~9 s; `LEDGER.skip` on a bare machine): `0x00EF` exactly once on ≥ 90
+  connections (95 of 96), never twice, always `[0xFF, 0xFF]`, always immediately after
+  `0x00E9`; c2s `0x0057` absent (0 of 13,320); the regime census — `0x006E`'s head slot
+  empty on ≥ 500 outpost bodies (756 of 2,245) and 0 of ≥ 40 field bodies (0 of 48), and
+  `0x0048`'s cape bit 0 on the same pattern (855 of 2,246 vs 0 of 48), neither outpost
+  share 100%. §3 THE SERVER: source locks (the `0x0057` arm behind
+  `VISIBILITY_STATUS_ENABLED` naming the revert flag, the `0x00EF` send right after the
+  `0x00E9` send, the `0x006E` build through `visible_worn`, the flag in `serverargs.py`
+  and `main()`); the real `handle_visibility_flags` with a fake send in a TOWN (Hide in
+  Towns → `0x00EF [0x4, 0xC]` + `0x006F [player, 6, 0]`; Always Show → the item back; Hide
+  in Combat → `0x00EF` alone; Always Hide → the head to 0) and in a FIELD (the mirror),
+  four refusals sending nothing with the state untouched; the revert arm (KNOWN-BAD: every
+  mode Always Hide and the body still wears the helm); `--persist` through a scratch store
+  (`vis_flags` written, re-read, restored by the burst's rule; the setter refuses 256;
+  validation refuses a string and 300); the two schema names. Drives the real handler and
+  a scratch store, launches nothing. Floor 47 from the green run with `RURIK_VAULT` pointed
+  at an empty directory (the bare-machine core; §2's 9 ride the vault, 56 vaulted), ~10 s),
   `toolkit/authsrv/test_labelrun.py` (the labelled input run, which names GAME_CMSG
   opcodes from what a human was told to do: a message lands in exactly one step's
   window, instance-load traffic is never folded into step 1, and a dirty idle CONTROL

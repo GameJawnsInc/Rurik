@@ -859,6 +859,26 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "return cell), an equipped-bag destination that is not the "
                          "item's type's slot. The item store is the only map of the "
                          "bags -- a merchant purchase is registered in it too.")
+    ap.add_argument("--no-visibility-status", action="store_true",
+                    help="THE REVERT ARM for the inventory panel's per-slot DISPLAY "
+                         "MODE (the owner's answer, 2026-09-23): send no 0x00EF at "
+                         "load, ignore c2s 0x0057, and dress the body's 0x006E with "
+                         "every piece whatever the mode -- every run before that "
+                         "day. KNOWN-BAD: the client reads an unsent zero, so the "
+                         "drop-down shows the circled bar (Always Hide) beside the "
+                         "cape, the headgear and both costume slots and the paper "
+                         "doll's figure is bare-headed in a town (20260923T185124) "
+                         "while the world's body wears the helm. The default sends "
+                         "0x00EF [flags, 0xFF] right after 0x00E9 (retail: [0xFF, "
+                         "0xFF] once on 95 of 96 live connections, every slot Always "
+                         "Show), answers 0x0057 [value, mask] with 0x00EF [value, "
+                         "mask] (RECONSTRUCTION -- on no tape; the client's only "
+                         "writer of the byte is 0x00EF's handler) plus 0x006F for a "
+                         "slot whose view in the current regime changed, leaves a "
+                         "hidden piece out of the body's 0x006E per regime (the low "
+                         "bit of a kind's pair shows it in a field, the high bit in "
+                         "a town -- the doll's own rule), and persists the byte per "
+                         "character under --persist.")
     ap.add_argument("--hero-skill-toggle-per-bit", action="store_true",
                     help="THE ALTERNATIVE REPLY for DESKWORK-D1 step 6: answer a "
                          "suppress click with 0x0064 [agent, slot, value] -- one bit "
