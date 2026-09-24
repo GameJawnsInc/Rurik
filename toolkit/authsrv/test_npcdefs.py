@@ -73,12 +73,17 @@ from codec import Codec  # noqa: E402
 # vault-dependent section declares its skips, so a run without the live captures lands
 # below the floor and goes RED -- which is the point, since a compiler checked against
 # nothing is the failure checks.py exists for.
-LEDGER = checks.Ledger("npcdefs: capture -> content rows", floor=42)
+LEDGER = checks.Ledger("npcdefs: capture -> content rows", floor=55)
 # floor 25 -> 32 on 2026-08-16, measured from the green run that added the
 # named-capture selection, the fourth-capture proof and the mode plumbing;
 # 32 -> 40 on 2026-08-22 with section 7 (field 9 is per-instance, the full
 # pool reads without refusing)
 # (studies/isle/PLAN.md rung 5). Every new check runs whenever the vault does.
+# 42 -> 55 on 2026-09-24 with section 8 (DESKWORK-Q5): --build, the by-name
+# refusal of a pool spanning builds, the build stamp on every emitted row, and
+# the honest R4c-2 recount over the September map-146 tapes. Sabotaged in a
+# scratch driver before the floor was set: require_one_build never refusing
+# reddens 3, to_toml dropping the stamp reddens 2.
 
 # Measured 2026-08-11 over the three keyed captures. Written as literals rather than
 # computed from the module under test, because a symbol appearing in a test file is not
@@ -436,6 +441,114 @@ def main():
     LEDGER.ok(pooled[159].row().get("move_speed_reduced") == [144.0],
               "and the reduced state reaches the content row as evidence",
               "move_speed_reduced is on the row only when a snare was seen")
+
+    # ---- 8. a definition index is scoped by build: --build, the refusal, the
+    #         build on every row, and the honest R4c-2 recount --------------
+    print("\n8. --build: the pool is one build or it is refused by name "
+          "(DESKWORK-Q5)")
+    groups = npcdefs.builds_of(all_caps)
+    LEDGER.ok(len(groups) >= 5 and None in groups
+              and sum(len(v) for v in groups.values()) == len(all_caps),
+              "builds_of partitions every keyed capture, and the one capture "
+              "with no exe in its manifest keys as None rather than vanishing",
+              f"{ {k: len(v) for k, v in groups.items()} }")
+    try:
+        npcdefs.require_one_build(all_caps)
+        why = ""
+    except npcdefs.NpcDefsError as exc:
+        why = str(exc)
+    LEDGER.ok(bool(why) and all(k in why for k in groups if k)
+              and "unknown" in why and "20260817T180610" in why
+              and "--build" in why,
+              "the whole vault is REFUSED, naming every build, the unknown "
+              "capture by stamp, and the flag that selects one",
+              why.splitlines()[0] if why else "not refused")
+    LEDGER.ok(npcdefs.require_one_build(build_caps) == POOL_BUILD,
+              f"one build's pool passes and names itself ({POOL_BUILD})")
+    # A pool of ONE capture whose build is unknown is refused too: an unknown
+    # build is not "any build".
+    unknown = [c for c in all_caps if npcdefs.capture_build(c) is None]
+    try:
+        npcdefs.require_one_build(unknown[:1])
+        refused_unknown = False
+    except npcdefs.NpcDefsError:
+        refused_unknown = bool(unknown)
+    LEDGER.ok(refused_unknown,
+              "a pool made only of a capture with no readable build is refused",
+              f"{[os.path.basename(c) for c in unknown]}")
+    # The CLI: a bare census refuses; --build selects. main() takes argv so
+    # the plumbing is exercised, not re-derived.
+    import contextlib
+    import io
+    try:
+        npcdefs.main([])
+        bare = "ran"
+    except npcdefs.NpcDefsError as exc:
+        bare = str(exc)
+    LEDGER.ok(bare != "ran" and "refusing to pool" in bare,
+              "a bare `npcdefs` census over the whole vault is REFUSED",
+              bare.splitlines()[0][:80])
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = npcdefs.main(["--build", "2026-07-29_221c13772c7a"])
+    LEDGER.ok(rc == 0 and "3 capture(s) of build 2026-07-29_221c13772c7a" in buf.getvalue()
+              and f"{DEFINITIONS} definition(s) declared" in buf.getvalue(),
+              f"`--build 2026-07-29_221c13772c7a` runs the census over its three "
+              f"captures and finds the {DEFINITIONS} pinned definitions",
+              buf.getvalue().splitlines()[0][:90])
+    # Every emitted row says which build it was read from, and content.py
+    # loads the stamped rows.
+    text = npcdefs.to_toml(host, build="2026-07-29_221c13772c7a")
+    LEDGER.ok(text.count('build = "2026-07-29_221c13772c7a"') == len(host)
+              and 'build = "2026-07-29_221c13772c7a"' in text.split("[npc.def_1442.provenance]")[1].split("[npc.")[0],
+              f"to_toml(build=...) writes `build` into all {len(host)} rows' "
+              f"provenance", "under each row's [provenance], beside capture and origin")
+    with tempfile.TemporaryDirectory() as tmp:
+        with open(os.path.join(tmp, "npcs.toml"), "w", encoding="utf-8") as fh:
+            fh.write(text)
+        world = content.load(repo_dir=tmp, vault_dir="")
+        prov = world.get("npc", "def_1442").provenance
+    LEDGER.ok(prov.get("build") == "2026-07-29_221c13772c7a",
+              "and content.py loads the stamped rows with the build readable off "
+              "the row", repr(prov.get("build")))
+    LEDGER.ok("build = " not in npcdefs.to_toml(host),
+              "CONTROL: with no build given the rows carry none -- the stamp is "
+              "a fact, never a default")
+    # THE HONEST R4c-2 RECOUNT (PLAN.md 3.2). The September (2026-09-01
+    # build) map-146 tapes, per definition, never pooled across builds: six
+    # of the original seven hostiles are created there (1434 is not), and
+    # seven definitions the 2026-08-11 corpus never saw. Pinned as literals.
+    sept = npcdefs.read(npcdefs.live_captures(build="2026-09-01_44fbd68767a8"))[0]
+    sept_host = npcdefs.hostile(sept)
+    LEDGER.ok(len({i: d for i, d in sept.items() if d.declared}) == 294
+              and len(sept_host) == 40,
+              "the 2026-09-01 build's 13-capture pool declares 294 definitions, "
+              "40 hostile (every map: the Isle's furniture is in there)",
+              f"{len(sept)} declared, {len(sept_host)} hostile")
+    ON_146 = {1346, 1397, 1405, 1409, 1411, 1420, 1421, 1428, 1431, 1432,
+              1433, 1437, 1442}
+    LEDGER.ok(ON_146 <= set(sept_host) and 1434 not in sept_host
+              and (ON_146 & HOSTILE) == HOSTILE - {1434},
+              "the 13 hostiles created on the September map-146 tapes are all "
+              "hostile in that build's pool; 1434 is absent from it; six of "
+              "the original seven are among them",
+              f"missing from the pool: {sorted(ON_146 - set(sept_host))}")
+    LEDGER.ok(sept[1431].health and sept[1431].health[0][1] == 56
+              and sept[1432].health and sept[1432].health[0][1] == 96
+              and sept[1437].health and sept[1437].health[0][1] == 64
+              and sept[1397].attack == (1.9, 1.0)
+              and sept[1437].attack == (2.475, 1.0),
+              "and the four with a stat past the declaration: 1431 health 56, "
+              "1432 health 96, 1437 health 64 + attack 2.475, 1397 attack 1.9",
+              f"1431 {sept[1431].health} 1432 {sept[1432].health} "
+              f"1437 {sept[1437].health} {sept[1437].attack} 1397 {sept[1397].attack}")
+    # The one cross-build disagreement, counted rather than met: 7809 alone.
+    july_d = {i for i, d in july.items() if d.declared}
+    sept_d = {i for i, d in sept.items() if d.declared}
+    differ = sorted(i for i in july_d & sept_d if july[i].payload != sept[i].payload)
+    LEDGER.ok(differ == [7809],
+              f"of the {len(july_d & sept_d)} indices both builds declare, "
+              f"exactly ONE has a different body: 7809", f"{differ}")
 
     return LEDGER.verdict()
 

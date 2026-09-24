@@ -7036,7 +7036,23 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   a level-20 one (shell 16271) in the 2026-09-01 build -- a real cross-build
   content drift, asserted as such (both identities read), NOT the instantaneous
   field-9 value. `capture_build`/`live_captures(build=)` scope the pool.
-  Floor 32→40→42),
+  **§8 (2026-09-24, DESKWORK-Q5, floor 42 → 55): the build is the scope, by
+  default.** `builds_of` partitions every keyed capture (the one with no exe in
+  its manifest keys as `None`, never vanishes); `require_one_build` REFUSES the
+  whole vault naming all five builds, the unknown capture by stamp and the
+  `--build` flag, refuses a pool of only the unknown capture, and passes one
+  build's pool naming it; `main([])` refuses and `main(["--build",
+  "2026-07-29_221c13772c7a"])` runs the census over its three captures to the 54
+  pinned definitions (main takes argv, so the plumbing is exercised); `to_toml(
+  build=)` stamps every row's provenance and content.py reads it back off the
+  row, with the CONTROL that no build given writes none. Then the honest R4c-2
+  recount as literals: the 2026-09-01 pool declares 294 / 40 hostile; the
+  September map-146 tapes create 13 hostiles, six of the original seven (1434
+  absent) and seven new; the four with a stat past the declaration (1431 health
+  56, 1432 96, 1437 64 + attack 2.475, 1397 attack 1.9); and of the 38 indices
+  both 2026-07-29 and 2026-09-01 declare exactly ONE body differs (7809).
+  Scratch sabotages: `require_one_build` never refusing reddens 3, `to_toml`
+  dropping the stamp reddens 2. Floor 32→40→42→55),
   `toolkit/authsrv/test_agentroster.py` (the per-agent roster reader —
   `studies/isle/PLAN.md` rung 1: every WORLD_CREATE_AGENT **with its coordinates**,
   partitioned by class tag before any masking, because field 2's low 16 bits are a
