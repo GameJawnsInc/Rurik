@@ -46,9 +46,10 @@ import npcdefs  # noqa: E402
 # 6 partition + 3 position + 8 cross-session + 3 sabotage + 2 edge -- every one
 # executes on every healthy run, so the floor is the count. Vault-dependent sections
 # declare their skips, and a run without the live captures lands at 2 of 27 and goes
-# RED rather than green-by-absence.
+# RED rather than green-by-absence. 29 since 2026-09-24: + 2 cp1252 (4b, vault-free,
+# so a bare run now lands at 4 of 29 and is still RED by design).
 LEDGER = checks.Ledger("agentroster: creates -> stations -> cross-session identity",
-                       floor=27)
+                       floor=29)
 
 # Measured 2026-08-16 over the three keyed live captures, and written as literals:
 # a symbol imported from the module under test is not a check. NAMED selection,
@@ -97,6 +98,37 @@ def main():
     if refused:
         LEDGER.ok("0x5" in msg and "agent 51" in msg,
                   "and the refusal names the tag and the agent", msg[:70])
+
+    # ---- 4b. the census prints on a cp1252 console, vault or no vault ----------
+    # DESKWORK-Q1 (2026-09-24): `python agentroster.py > file` died with
+    # UnicodeEncodeError on the token `ani` + U+008F (MONSTERAI-N10's tutorial
+    # creatures) -- the default Windows stream is cp1252 and strict. KNOWN-BAD ARM
+    # FIRST: the same strict cp1252 stream must still raise on that token, or the
+    # fixture cannot see the defect and the fixed arm below proves nothing.
+    print("4b. the census on a cp1252 console")
+    import io
+    token = "ani\u008f"
+    bad = io.TextIOWrapper(io.BytesIO(), encoding="cp1252", errors="strict")
+    try:
+        print(token, file=bad)
+        bad.flush()
+        raised = False
+    except UnicodeEncodeError:
+        raised = True
+    LEDGER.ok(raised, "KNOWN-BAD: a strict cp1252 stream raises on the wire token",
+              "if this passes silently, the check below is vacuous")
+    raw = io.BytesIO()
+    good = agentroster.console_safe(
+        io.TextIOWrapper(raw, encoding="cp1252", errors="strict"))
+    try:
+        print(token, file=good)
+        good.flush()
+        wrote = raw.getvalue()
+    except UnicodeEncodeError as e:
+        wrote = repr(e).encode()
+    LEDGER.ok(wrote == b"ani\\x8f" + os.linesep.encode(),
+              "console_safe: the same stream ESCAPES the token instead of raising",
+              repr(wrote))
 
     if not caps:
         for why in ("the corpus reads whole", "the partition holds",

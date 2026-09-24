@@ -30,7 +30,7 @@ def run(build):
 
 
 def main():
-    led = checks.Ledger("checks.py itself", floor=17)
+    led = checks.Ledger("checks.py itself", floor=20)
 
     # --- the rule that would have caught test_codec.py in 2026-08 ---------------
     def empty():
@@ -160,6 +160,46 @@ def main():
            "CONTROL: the measurer sizes one section, to the next H2, and says None "
            "for a section that is not there")
 
+    # --- and PLAN.md 3.2's content counts are the loader's, not a transcription ---
+    # DESKWORK-D12 step 4's first half (2026-09-24). Section 3.2 grades R4c-1 on a
+    # census of the content store, and that census went stale twice while the prose
+    # around it was re-read: "map 10, npc 56" stood on 2026-08-27 while content.py
+    # read map 15, and "map 15, npc 56" stood until 2026-09-24 against map 19, npc
+    # 63. So the TRACKED half of the census -- content/*.toml and content/overrides/,
+    # no vault -- is quoted behind one marker and recomputed here. Only the tracked
+    # half: the vault overlay is machine state (a bare machine has none; a tree that
+    # lags main drops label rows it does not know), so a check on it would redden on
+    # the machine, not on the document. Which kinds are checked is whatever the
+    # marker quotes; today map and npc, the two R4c-1 grades on.
+    quoted = census_quote(plan_subsection(read_plan(), "3.2"))
+    led.ok(bool(quoted) and "map" in quoted and "npc" in quoted,
+           "PLAN.md 3.2 quotes the tracked content census (map and npc at least)",
+           f"quoted {quoted}" if quoted else "no `The tracked census ...: kind N, ...` in "
+           "3.2 -- a reworded marker would make the next check pass on nothing")
+    tracked = tracked_census()
+    wrong = census_contradictions(quoted or {}, tracked)
+    led.ok(bool(quoted) and not wrong,
+           "and every count it quotes is what content.py loads from the tree today",
+           "; ".join(f"{k}: 3.2 says {q}, content.py loads {t}" for k, q, t in wrong)
+           + ("; UPDATE PLAN.md 3.2 (and date it), do not loosen this" if wrong else ""))
+    # CONTROL on synthetic text, so it cannot rot with the document: the known-bad
+    # quote (the "map 15" 3.2 carried for four weeks) is caught, the right one is
+    # not, a kind the loader lacks is caught, a missing marker reads as None, and
+    # the parser stops at the section's end rather than reading 3.3's numbers.
+    fx = ("## 3. L\n### 3.2 R4b and R4c\nx **The tracked census** (`content/*.toml`\n"
+          "alone): map 15,\nnpc 9. More prose, npc 70.\n### 3.3 Next\nThe tracked census "
+          "(y): map 99.\n")
+    got = census_quote(plan_subsection(fx, "3.2"))
+    led.ok(got == {"map": 15, "npc": 9}
+           and census_contradictions(got, {"map": 19, "npc": 9}) == [("map", 15, 19)]
+           and census_contradictions({"map": 19, "npc": 9}, {"map": 19, "npc": 9}) == []
+           and census_contradictions({"ghost": 1}, {"map": 19}) == [("ghost", 1, None)]
+           and census_quote("### 3.2 R\nmap 19, npc 9\n") is None
+           and plan_subsection(fx, "3.4") is None,
+           "CONTROL: a 3.2 quoting map 15 against a loader reading 19 is caught; the "
+           "marker spans a line break, stops at its own list, and 3.3's numbers are "
+           "never read")
+
     return led.verdict()
 
 
@@ -183,6 +223,49 @@ def plan_section_bytes(text, number):
     nxt = re.search(r"^## ", text[m.end():], re.M)
     body = text[m.end():m.end() + nxt.start()] if nxt else text[m.end():]
     return len(body.encode("utf-8"))
+
+
+def plan_subsection(text, number):
+    """The body of `### <number> ...`, up to the next H2 or H3. None if absent."""
+    m = re.search(rf"^### {re.escape(number)} [^\n]*\n", text, re.M)
+    if not m:
+        return None
+    nxt = re.search(r"^#{2,3} ", text[m.end():], re.M)
+    return text[m.end():m.end() + nxt.start()] if nxt else text[m.end():]
+
+
+# `The tracked census (<anything without a colon>): kind N, kind N.` -- the first
+# such marker in the text. The list may wrap across lines; it ends at the first
+# item that is not `word number`.
+CENSUS_MARKER = re.compile(r"The tracked census\**[^:]*:\s*"
+                           r"((?:[a-z_]+ \d+)(?:,\s*[a-z_]+ \d+)*)")
+
+
+def census_quote(section):
+    """{kind: count} the marker quotes, or None when there is no marker."""
+    if not section:
+        return None
+    m = CENSUS_MARKER.search(section)
+    if not m:
+        return None
+    pairs = re.findall(r"([a-z_]+) (\d+)", m.group(1))
+    return {k: int(n) for k, n in pairs}
+
+
+def census_contradictions(quoted, census):
+    """[(kind, quoted, loaded)] for every quoted count the census does not match
+    (loaded is None for a kind the loader does not have)."""
+    return [(k, q, census.get(k)) for k, q in sorted(quoted.items())
+            if census.get(k) != q]
+
+
+def tracked_census():
+    """content.py's census of the TREE's rows alone: no vault overlay, no
+    RURIK_CONTENT_EXTRA -- the half of the store a document can be held to."""
+    import tempfile
+    import content
+    with tempfile.TemporaryDirectory() as empty:
+        return content.load(vault_dir=empty, extra_dirs=[]).census()
 
 
 TOP_DOCS = ("CLAUDE.md", "PLAN.md", "PLAN-LOG.md", "RUNBOOK.md", "HANDOFF.md", "TESTS.md")

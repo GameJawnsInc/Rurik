@@ -28,6 +28,203 @@ move back.
 
 ---
 
+### DESKWORK-Q1 + DESKWORK-Q3 (pass 5, INFRA-A), fix pass -- 2026-09-24 -- **option C back in §8.3 as NOT BUILT (its candidate keys were refuted, not the plan); MORALE-Q6's outpost half stands on 2 witnesses, not 3; the embodied-hero kick caveat back in §8.1; "22 named" is 17; the quests HANDOFF §1 edit withdrawn for desk-gold's**
+
+One review of the two entries below — an evidence refuter that re-derived Q3, the census,
+every §8 closure and the study lines before reading the landing, then an engineering
+review of the diff — reproduced the late-stamp census with an independent script (274
+speed-arm rows in 71 captures, 0 late stamps, the same refusal breakdown), the §3.2
+census and its `test_checks` check under four sabotage arms, the `agentroster` fix, and
+13 of the 15 §8 changes. It moved the following; each finding's evidence was re-checked
+here before the fix.
+* **STAT-R1 (blocker) — the entry below is wrong to say "The archive — 3 of 4 clauses
+  REMOVED … option C's durable key REFUTED".** maprows §10.12 refutes (C)'s three
+  candidate KEYS (MFT crc + size, the map dims, the content UUID) and says in terms that
+  (C) is not impossible — a durable key has to come from the map id the server sends or
+  an `s_missionClientData` join — and the log's (C) entry defers it until a second archive
+  state must be supported; nothing builds it. §8.3's "The archive" carries it again,
+  reworded: NOT BUILT, its candidates REFUTED, where the key must come from, deferred.
+  Read the entry below as "2 of 4 clauses removed (the restore verb, the compressor),
+  option C reworded".
+* **STAT-R2 (major) — MORALE-Q6's outpost half is OBSERVED on n = 2, not 3.** Re-read here
+  (a scratch census, prediction first, printing the LAST own `0x009C` before each zone
+  rather than the minimum): of the 3 penalised connections with a next hop, 2 carry the
+  penalty to the zone — `20260914T005758` at 71 and `20260916T150306` at 85, both 430 →
+  449, both loading 100 at 0.621 s. `20260913T210901`'s own `0x009C` read 100 again at
+  618.056 s (a +10 step from 90, beside a 2,000-experience `0x00EE` field 0), 177.5 s
+  before the connection's last message at 795.598 s, so its zone carried no penalty. The
+  entry below's "all 3 zone into an OUTPOST" counted the minimum. Corrected in morale
+  FINDINGS §6's Q6 row, §8.2's MORALE line and plansplit's log-4712 note; the conclusion
+  holds (the outpost half OBSERVED, the field-to-field half WIKI only), on one map pair.
+* **STAT-R5 (nit)** — §8.1's N2 sentence had dropped "a kick of a hero WITH a body is
+  UNOBSERVED" when it was cut to one sentence; it is back (heroes §3.3; cmsg FINDINGS "The
+  hero kick": the retail witness had no body, `0x0021` first is RECONSTRUCTION).
+* **STAT-R6 (nit)** — "22 CHANGED rows named" is 17 named: smsgsweep §7.6 has 22 real rows
+  — 13 named `high`, 4 `medium`, the 5 account-name selectors left unnamed on purpose —
+  and 13 hover artifacts (its own heading says TWENTY-TWO NAMED, so the slip was
+  inherited). plansplit's log-9228 note is corrected; the entry below's wording is
+  corrected here.
+* **STAT-R4 (minor) — the quests HANDOFF §1 correction is WITHDRAWN from this lane.**
+  desk-gold (DESKWORK-D9) rewrites the same sentence with the experience AND the gold
+  reward, so the two branches conflicted textually and desk-gold's text supersedes. The
+  file is back at the merge base here; the entry below's "quests HANDOFF §1" item is
+  desk-gold's to land.
+* **STAT-R3 (minor) — §3's R-SANDBOX row still ends "Next: … N2 hero add/kick from the
+  party panel"** while §8 and the studies record N2 shipped and confirmed. The finding
+  holds and is left to the merge, as the review proposed: main's `bdcfa25c` rewrote that
+  single-line row, so an edit on this branch is a certain conflict. At merge, on main's
+  row: "**Next: N1** a filterable skill/attribute picker for the Enemies tab; **N2**, hero
+  add/kick from the party panel, shipped (DESKWORK-D1 steps 1 + 4) and was confirmed on
+  our client 2026-09-23."
+
+What did not move: Q3's 0 of 274 in 71, the §3.2 census and its check, §3's R5m strike,
+the code changes, and the other §8 lines.
+
+---
+
+### DESKWORK-Q1 (the study lines and small fixes) + DESKWORK-D12 step 4's first half -- 2026-09-24 -- **`PLAN.md` §3.2's content census refreshed and now CHECKED by `test_checks`; §3's R5m "elevation still open" struck; stale lines in eleven study documents corrected in place; `agentroster` prints on a cp1252 console; `effects.py`'s "none of them is modelled" corrected**
+
+The second half of the sweep the entry below opens (same lane, same day). **§3 moved, and
+only in wording**: no rung's status changes.
+* **§3.2's census** read "map 15, npc 56" (2026-08-27) against today's loader. Re-run
+  2026-09-24 with this machine's vault overlay: map 19, npc 63, item 28, spawn 23, area 25,
+  quest 2, skill_effect 113 (npc 54 and skill_effect 57 of those are the vault's). The
+  TRACKED half (`content/*.toml` + `content/overrides/`, no vault): **map 19, npc 9**,
+  quoted behind `The tracked census (...): kind N, ...` and **recomputed by
+  `toolkit/test_checks.py`** (floor 17 → 20: the marker found with map and npc, every quoted
+  count equal to `content.load(vault_dir=<empty>, extra_dirs=[])`, and a synthetic CONTROL
+  where a `map 15` quote against a loader reading 19 is caught). Only the tracked half,
+  because the overlay is machine state — a bare machine has none and a tree lagging main
+  drops label rows it does not know — so a check on it would redden on the machine rather
+  than the document. Sabotaged on the real document both ways: `map 19` → `map 15` reddens
+  the count check, a renamed marker reddens both. Bare run: the same 20.
+* **§3.2's spawn score** re-run (`spawncheck.py --flag-origin`, the study archive): **11 of
+  19** — PASS 9, SEAM 2, OFF-MESH 3, WRONG-PLANE 1, UNRESOLVED 4 (the created chains
+  165–168); the one `(0,0)` PASS is still Sparkfly Swamp's. Written beside the 2026-08-27
+  "8 of 15", with the caveat that the store's 19 rows are not the criterion's 19
+  Pre-Searing zones.
+* **§3's R5m row**: "elevation — a height field that is not flat, walked, is still open as §8
+  item 10(c)" struck — WORLDMAPS W16–W19 walked authored slopes on the retail client on
+  2026-08-21 (W19: S4 climbs a 41.5–42.5° strip to its plateau, max y 3,064; S5 stops below
+  46.45° at 1,728, to the unit). The old citation is left in place, struck.
+
+**Code (no server behaviour moves; `authsrv.py` untouched):** `effects.py`'s condition
+comment said none of the six non-degenerating conditions is modelled — Blind's miss,
+Crippled's speed, Deep Wound's maximum and heal cut and Weakness's damage and attribute
+are, elsewhere; Dazed and Cracked Armor are not (DESKWORK-D6). `agentroster.py` died with
+UnicodeEncodeError on any redirect (reproduced: the `ani` + U+008F token, MONSTERAI-N10's);
+`console_safe(stream)` escapes instead of raising, `main()` calls it, and the redirected
+census now completes (4,270 lines, 21 escaped tokens). `test_agentroster` §4b, vault-free,
+floor 27 → 29: a strict cp1252 stream must still RAISE on the token (the known-bad arm)
+and `console_safe`'s must write `ani\x8f`; sabotaging `console_safe` to the identity
+reddens it. `wireshells.py`'s docstring: definition 7809's exception is the cross-BUILD
+drift SUITE-FIXES measured (the 2026-07-29 vs 2026-09-01 builds), not "two maps".
+
+**Study lines, each corrected in place with a dated note, the old words struck or kept:**
+heroes §3.3 (the kick/add clicks ran 2026-09-23; hiring a HENCHMAN is found, c2s
+`0x009F`), heroes §40.6 and RUN-HEROLIB §12.6 (`0x0065` is sent, `0x001B` is
+PARTY_FLAG_PLACE), quests HANDOFF §1 (the experience reward is paid since SLICE-B5,
+3a12e4fd), daggers F18 and §8 (229 / 230 are Lightning Orb / Javelin; property 10 is
+decoded and sent), plansplit's three wrong "(confirmed)" tags (`0x0191`, the compressor,
+MORALE-Q6), unitexport §6 item 3 (node bases are ABSOLUTE, archivewrite C-10), minimap
+§6g.4 (A3 closed the "STILL OPEN" item the same day), crossbuild §4d item 3 (the restore
+verb, 95f550ef), datwrite's open-questions table (four rows answered: survival, the
+rescan, the icon flags, the encoder) and its "no compression-8 encoder" bullet, handshake
+PLAN §6 (the probes ran 2026-08-04), and the sandbox plan's N2 row (shipped, confirmed).
+`test_dispatch.py`'s EQUIP_ITEM comment and `chatdefs.py`'s 1961 were already corrected
+and were left alone.
+
+**Deferred on purpose — `authsrv.py`'s stale comments** wait for the next lane that edits
+that file (about 40 tests read it as text): `HERO_RIG_0065` "A hypothesis under test" (the
+block is retail's and ships), the leash comment "nothing has measured retail's leash"
+(MONSTERAI-N9 measured it 2026-09-15: a stander goes home, a patroller resumes its
+leg; the server models neither), and the DAGGERS-B8 note "land_skill's SINGLE
+TARGET, ALWAYS is still true of every NPC's cast" (a body's spell areas ship since weapons
+§37–§40).
+
+---
+
+### DESKWORK-Q1 + DESKWORK-Q3, the status sweep (pass 5, INFRA-A) -- 2026-09-24 -- **fifteen `PLAN.md` §8 lines retired or reworded, each re-verified against the code or the study first; late stamps on OUR tapes MEASURED: 0 of 274 speed-arm hard rows over 1,582 captures**
+
+**Q3 (movement FINDINGS, the 2026-09-17 entry's new closing paragraph).**
+`studies/movement/review/latestamps.py` (new, read-only) runs `movesync.late_stamp` over every
+recorder capture `origin.origin_of` calls OURS: 1,582 of 1,583 files in
+`vault/captures/gamesrv/`, 25,400 self-report intervals, 208 spanning a `0x002C` we sent the
+player (marked as `mark_server_sets` marks retail's shrine). **274 speed-arm hard rows in 71
+captures; 0 late stamps within the 67 ms bound.** Refusals in the predicate's own order: 207
+pairs still over the arm (a real displacement), 57 pairs under it with the implied delay
+outside (0, 67] ms (10 at 85–246 ms, the rest 289 ms–108 s), 5 with a neighbour under the dt
+floor, 3 with no predecessor, 2 whose flanks disagree; not one of the 57 has flanks within
+2 u/s of its pair, so none is the stamp SHAPE with a longer delay. Prediction first (zero of
+~270–290 in ~70), held; positive control first (retail's `20260916T213125` t = 197.760 named,
+18.3 ms) or the census stops; it refuses to print if its classification disagrees with the
+committed predicate on any row. Reproduces the survey's single-witness 0 of 274 in 71
+(`studies/deskwork/PLAN.md` §4); the survey's "11 stamp-shaped rows at 85–250 ms" reads here
+as 10 rows in 85–246 ms, none passing the flank test. Caveat recorded with it: our recorder
+stamps at RECEIVE time on one clock over loopback, so the artifact may be structurally rarer
+on our tapes. The §8.1 line "Late stamps on OUR tapes" is removed. (The task named
+`studies/movecode/FINDINGS.md`; the 2026-09-17 entry is in `studies/movement/FINDINGS.md`,
+which is where §8 pointed, so that is where it went.)
+
+**Q1's §8 lines, each checked before it was touched** (`studies/deskwork/PLAN.md` §6.1 is the
+survey's table; its numbers were re-derived, not copied):
+* §8.1 Skills, **Mend Condition (275) "not modelled" — REMOVED.** Shipped as skills §58
+  SKILLS-MC: `content/world.toml` `[skill_effect.275]` `heal_if_removed = true`,
+  `resolve_heal`'s branch (`authsrv.py` 21971 / 22037), `test_mechanics` §34; the same
+  section's D5 bullet already listed it landed, so §8.1 contradicted itself.
+* §8.1 Daggers, **"an NPC's cast is still single-target" — REWORDED.** A body's Fireball bursts
+  at the aim (`land_body_spell_area`, weapons §37–§38), the point-blank bursts
+  (`burst_body_spell`, §40), the caster-centred area (`body_caster_area_condition`, skills
+  §59.1) and party heal (§59.2). Still open, restated: B8's adjacent damage is the player's
+  strike only; 185 and 179 have no row; 197's label row reaches ONE target
+  (`AREA_ONE_TARGET` in `vault/content/skill_labels.toml`); the areas over time and hexes.
+* §8.1 Monster AI, **MONSTERAI-J "nothing uses them" — REWORDED.** `toolkit/harness/sandbox.py`
+  writes `group` on every generated hostile and `passive` on request; no `content/*.toml` or
+  vault row sets either (grep), so "no content rows" stands.
+* §8.1 Heroes, **"`0x0065` and the hero-family `0x001B` are unmodelled" — REWORDED to `0x005E`'s
+  retail reply alone.** `0x001B` is PARTY_FLAG_PLACE (`authsrv.py` 24598, the `0x0067` echo,
+  `git log -S` 7f0cd7c1 2026-08-19); `0x0065` is sent (the hero block, D1 step 6's mask).
+* §8.1 Movement, **§1z-dj leg B — REMOVED**: decoded at the desk in MOVECODE-1z-dk (the log's
+  2026-09-10 entry; 1z-dk.4 re-reads leg B as agenttap's sample-and-hold, the residue is
+  §1z-dl's lip, which keeps its own line). **§1z-cw.5 — REMOVED**: explained by §1z-cw.6 (the
+  copy arrived at a lead the wall or fence cut short; 255 episodes, 172 on the granted point).
+  **NPCTRACK Q3's clause — REMOVED** (npctrack FINDINGS: "CLOSED on the owner's own route,
+  2026-09-06 15:48", corrected by GROUNDZ-F12, the corridor shipped as Q9 / F16); Q10 and Q8
+  stay. **§1z-dd.8 — REWORDED** "registered, no run" → "retail half needs a live corner": the
+  check ran at the desk as §1z-dh, SLIDE 0 of 236 — NOT FOUND, not unrun.
+* §8.1 The sandbox, **N2's "Owed: one loopback click each, in an OUTPOST" — REMOVED**:
+  confirmed on our client in an outpost 2026-09-23 (`studies/deskwork/CONFIRM-2026-09-23.md`
+  R1–R5, runs `20260923T155339` … `160232`), and the bullet's description of the shipped N2
+  (which the DESKWORK-D1 bullet already carries) cut to one sentence. N1 stays open
+  (`studies/sandbox/PLAN.md`: NEXT).
+* §8.2, **MORALE-Q6 "the corpus holds no death followed by a zone" — REWORDED**, re-counted
+  over the 36 live captures: 7 connections carry an own-agent `0x009C` below 100, 3 have a
+  next hop in `tape.chain`, and all 3 zone into an OUTPOST loading 100 on `0x009C` and
+  `0x00E9` field 10 (`20260913T210901` 212 → 242, `20260914T005758` 430 → 449,
+  `20260916T150306` 430 → 449). The field-to-field half and Q5 stay. morale FINDINGS §6's Q6
+  row corrected the same way (struck, not erased).
+* §8.3 Skills, **"the reason ids for the rest of the 1934–1993 refusal strings are undecoded"
+  — REWORDED**: `chatdefs.REFUSAL_REASONS` holds all 60, four OBSERVED (1934, 1960, 1961,
+  1988), the rest RECONSTRUCTION-labelled behind the default-off `--refusal-reasons` (skills
+  §57). The `EFFECT_TYPES` and `GmSkSlot` clauses stay (D4 step 6's).
+* §8.3 **The archive — 3 of 4 clauses REMOVED**: the restore verb (`datwrite.restore`,
+  95f550ef, 2026-08-14), the compressor (`gwenc.py`, c4a9fe03, 2026-08-18; WORLDMAPS W1/W2
+  installed and a retail client read a compression-8 row), and option C's durable key
+  REFUTED (b8d5ecf2, maprows §10.11–§10.12). Allocator pressure stays.
+* §8.3 **The silent-opcode sweep — REWORDED to its residue**: `0x0191` was READ 2026-08-13 (a
+  map change, smsgsweep §7.5) and 22 CHANGED rows named with 13 the operator's mouse (§7.6).
+  What stays: the five account-name selectors (§7.9) and `0x0191`'s missing
+  `schema/overrides.json` row (checked: GAME_SMSG 401 has none).
+* §8.3 ANIMREF, **"§15's movement-start gate" — REMOVED**: animref §22 REFUTES §15's mechanism
+  (gate B's writer is property 8), confirmed in the client in §23. §19's gate and §16 stay.
+
+**Not touched, by instruction**: the DESKWORK-D1 bullet and the pass-4 confirmations (the
+orchestrator's pass), and RUN-R8 / §7 Q14 (D10's). §8 is 31,505 bytes after this, from
+33,308 (`test_checks`' ceiling is 40,000); the reworded lines were cut to what is open, the
+evidence being here.
+
+---
+
 ### DESKWORK-D10 (steps 2, 3, 5), MOVE-B — FIX PASS — 2026-09-24 — **the review pass corrects the entry below: 1z-di.3's mechanism IS witnessed once, unrefereed, at a plane seam (c5 t=172.59), and the "on our own grant" and "under the gate" readings were two instrument bugs, now fixed**
 
 Corrects the DESKWORK-D10 (steps 2, 3, 5) entry immediately below (commits `76be343f`/`2333de81`/`3ac8018f`);

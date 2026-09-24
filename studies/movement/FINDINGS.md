@@ -6228,6 +6228,32 @@ of dt, and at short dt anywhere it is cheap. A hard-jump count on a boosted or
 short-cadence capture of OURS may include late stamps. Not measured; `late_stamp` is the
 tool that would.
 
+**MEASURED 2026-09-24 (DESKWORK-Q3): ZERO on our tapes — 0 of 274 speed-arm hard rows.**
+`studies/movement/review/latestamps.py` runs `late_stamp` over every recorder capture in
+`vault/captures/gamesrv/` that `origin.origin_of` calls OURS: **1,582 captures** (1,583
+files, one of unknown origin; the corpus grew by one during the pass, and a first run over
+1,581 read the same numbers), 25,400 self-report intervals, 208 of them spanning a `0x002C`
+we sent the player and marked the way `mark_server_sets` marks retail's shrine. **274 rows
+clear the speed arm, in 71 captures, and none is a late stamp within the 67 ms bound.** The
+refusals, in `late_stamp`'s own order: the pair still averages over 400 u/s — a real
+displacement, 207; the pair averages under the arm but the implied delay falls outside
+(0, 67] ms, 57 (10 of them at 85–246 ms, the rest 289 ms to 108 s, a pair spanning a stop);
+a neighbour below the dt floor, 5; no predecessor, 3; flanks that disagree with the pair,
+2. **No row has the stamp SHAPE with a longer delay either**: of the 57, not one has flanks
+within 2 u/s of the pair's own speed. Prediction stated before the run: zero of roughly
+270–290 rows in roughly 70 captures — held. **Positive control first**: the same classifier
+names retail's own row (`20260916T213125`, t = 197.760, 18.3 ms late) through `cmsgstream`
+or the census stops, and it refuses to print if its classification disagrees with
+`movesync.late_stamp` on any row. This re-measures the DESKWORK survey's single-witness
+scratch count (0 of 274 in 71, `studies/deskwork/PLAN.md` §4), which it reproduces; the
+survey's "11 stamp-shaped rows at 85–250 ms" reads here as 10 rows with an implied delay in
+85–246 ms, none of which passes the flank test. **The caveat that bounds it:** our recorder
+stamps a c2s report when our own server receives it, on one process clock over loopback,
+where retail's capture stamps what a sniffer sees — so the artifact may be structurally
+rarer on our tapes, and the zero is a statement about them, not about the predicate. **So
+the hard-jump counts quoted from `movesync` on our captures carry no late-stamp artifact
+as of this date**; `hard_step` is unchanged and still does not call `late_stamp`.
+
 ### 2026-09-23 — REALFIX-L1 RE-SCORED under the corrected clock bound: P2's p50 miss is DECIDED, its p90 sits AT the bound
 
 **What is re-scored, and why now.** L1's registered separation claim (REALFIX.md, the P2

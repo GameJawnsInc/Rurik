@@ -6988,8 +6988,11 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   two live sessions THREE DAYS APART, and map 164's whole outpost joining 6/0/0. Also
   the `tuple(v[3:5])` regression: a synthetic create carries decoy values at fields
   3/4 that would read as a plausible position, so decoding the wrong slots cannot
-  come back green. Needs `vault/captures/live/`; without it, 2 of a floor of 27 run
-  and the floor takes it red),
+  come back green. **2026-09-24, DESKWORK-Q1, floor 27 → 29:** `agentroster.console_safe` — the CLI
+  died with UnicodeEncodeError on a cp1252 console or any redirect, on MONSTERAI-N10's `ani` + U+008F
+  token; §4b prints that token to a strict cp1252 stream both ways, the bare stream required to
+  RAISE (the known-bad arm) and the `console_safe` one to write the escaped bytes. Needs
+  `vault/captures/live/`; without it, 4 of a floor of 29 run and the floor takes it red),
   `toolkit/authsrv/test_damagepass.py` (the rung-7 damage-pass consumer —
   `studies/isle/PLAN.md` §6's exit criterion made runnable BEFORE the live session,
   because §7's named risk is measurements no line ever consumes. Three layers: exact
@@ -10328,7 +10331,18 @@ the same-tick ALIAS**: the
   1,113,422), and a CONTROL on synthetic text that the measurer stops at the next H2
   and says None for an absent section. When it fires, MOVE entries to the log; raising
   the number is how the 1.1 MB happened. `PLAN-LOG.md` also joined `TOP_DOCS`, so its
-  repo-relative links are checked like the other house documents'),
+  repo-relative links are checked like the other house documents'. **2026-09-24, DESKWORK-D12 step 4's first half, floor 17 → 20:**
+  `PLAN.md` §3.2's content census is RECOMPUTED rather than trusted — it read "map 10" and
+  then "map 15, npc 56" for weeks while `content.py` loaded more. The TRACKED half only
+  (`content/*.toml` + `content/overrides/`, an empty vault dir and no
+  `RURIK_CONTENT_EXTRA`), quoted behind the marker `The tracked census (...): kind N, ...`;
+  the vault overlay is machine state and is dated prose, never checked. Three checks: the
+  marker is found with map and npc (a reworded marker would otherwise pass on nothing),
+  every quoted count equals the loader's, and a CONTROL on synthetic text (a `map 15`
+  quote against 19 is caught, a kind the loader lacks is caught, the list spans a line
+  break and stops at its own end, §3.3's numbers are never read). Sabotaged both ways on
+  the real document: `map 19` → `map 15` reddens the count check, a renamed marker
+  reddens both. Runs bare: the same 20 with `RURIK_VAULT` at an empty directory),
   `toolkit/test_run_suite.py` (the suite RUNNER, which did not exist until
   2026-08-13 — 66 test files and **0 scripts that ran them**, so every "the suite is
   green" in this repo's history was a human pasting paths into a shell, which is how

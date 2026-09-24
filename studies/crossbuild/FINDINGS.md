@@ -459,7 +459,12 @@ deliverable.**
 2. **The bit-31 watchlist is unprobed**, and neither run could have probed it: our rows are
    not on it. Testing it means deliberately arming a row that *is*, which is a different
    experiment with a different risk profile.
-3. **`datwrite` has no explicit-restore verb**, and that is a live state rather than a
+3. ~~**`datwrite` has no explicit-restore verb**~~ **CLOSED 2026-08-14 (95f550ef):
+   `datwrite --restore ROW --from DONOR`** restores a row from a pristine donor archive,
+   copying the donor's whole reservation, because the journals this item leaned on did
+   not exist (a grep of the vault found none) — and the compressor this paragraph's
+   `--replace` lacked landed 2026-08-18 as `gwenc.py` (c4a9fe03). DESKWORK-Q1 note,
+   2026-09-24; the item as written, which was a live state rather than a
    hypothetical — §4c left three skill-icon rows **armed on purpose** in
    `vault/run/reskin-roster/Gw.dat`, because `--replace` writes uncompressed and cannot put a
    compression-8 payload back and `--overwrite` is same-length only, while `--revert` correctly

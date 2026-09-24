@@ -29,7 +29,11 @@ are -- 332 of 333 indices name ONE shell across every connection they appear
 in, so the table is stable across sessions of the same content and the one
 exception is two different maps sharing a number -- and one exception is
 enough: a pooled-by-index reading is a 332/333 approximation, and this
-module does not take it. A SIGHTING is (capture, connection, index), and the
+module does not take it. (CORRECTED 2026-09-24, DESKWORK-Q1: the exception is
+a CROSS-BUILD drift, not two maps -- 7809 is the level-5 creature in the
+2026-07-29 client build and the level-20 one in the 2026-09-01 build, each
+capture's build read off its own manifest exe; SUITE-FIXES, 2026-09-16,
+`npcdefs.capture_build`. The keying below is right either way.) A SIGHTING is (capture, connection, index), and the
 pairing it records is the shell and bodies declared FOR THAT SLOT IN THAT
 CONNECTION. Within one connection a repeat declaration must still agree
 byte-for-byte -- the refusal `npcdefs` carries, kept, because a slot that
