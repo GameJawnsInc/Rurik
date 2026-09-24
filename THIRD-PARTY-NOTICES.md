@@ -2,9 +2,9 @@
 
 Rurik contains no third-party code as a dependency — `toolkit/` is Python 3 standard
 library only, with the `capstone`/`pefile` carve-out in [CLAUDE.md](CLAUDE.md) for
-read-only client analysis. Two consumers OUTSIDE `toolkit/` import a toolkit they do not
-derive from: `tools/blender/` runs inside Blender's `bpy`, and `tools/viewer/` is a
-PySide6 window, as is `tools/orchestrator/` (its notice is below). What it does contain is work **derived from** other people's
+read-only client analysis. Three consumers OUTSIDE `toolkit/` import a toolkit they do not
+derive from: `tools/blender/` runs inside Blender's `bpy`, and `tools/viewer/` and
+`tools/orchestrator/` are PySide6 windows (their notice is below). What it does contain is work **derived from** other people's
 reverse engineering: file-format layouts, constant tables, and algorithms.
 
 This file is where that is credited. It exists because one licence in this list

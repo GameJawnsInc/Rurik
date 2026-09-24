@@ -81,8 +81,8 @@ try:
     from PySide6.QtGui import (QColor, QFont, QImage, QKeyEvent, QPainter, QTextCharFormat,
                                QTextCursor, QWheelEvent)
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import (QAbstractItemView, QApplication, QBoxLayout, QCheckBox,
-                                   QComboBox,
+    from PySide6.QtWidgets import (QAbstractItemView, QAbstractSpinBox, QApplication,
+                                   QBoxLayout, QCheckBox, QComboBox,
                                    QCompleter, QFileDialog, QFormLayout, QFrame,
                                    QGridLayout, QHBoxLayout, QHeaderView, QLabel,
                                    QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox,
@@ -448,6 +448,9 @@ def profession_picker(none=False, short=False):
         pk.addItem("(none)", 0)
     for pid, name in sandbox.PROFESSIONS.items():
         pk.addItem(name if short else f"{name} ({sandbox.ABBREV[pid]})", pid)
+    # the popup is a list, not a menu (the sheet), and a list shows ten rows:
+    # '(none)' makes eleven, and the eleventh scrolled
+    pk.setMaxVisibleItems(pk.count())
     pk.currentIndexChanged.connect(lambda _i: pk.setToolTip(pk.currentText()))
     pk.setToolTip(pk.currentText())
     return pk
@@ -521,6 +524,7 @@ class SkillsTab(QWidget):
         for pid, name in sandbox.PROFESSIONS.items():
             self.prof.addItem(f"{name} ({sandbox.ABBREV[pid]})", pid)
         self.prof.addItem("Common (no profession)", -1)
+        self.prof.setMaxVisibleItems(self.prof.count())      # twelve rows, none scrolled
         # named with the pills' own two words: the filter keeps BOTH grades, and a
         # label row must never read as modelled (deskwork D4 step 4)
         self.modelled_only = QCheckBox("Modelled or label")
@@ -2171,6 +2175,38 @@ def _diff(a, b):
     return sum(1 for y in range(h) for x in range(w) if a.pixelColor(x, y) != b.pixelColor(x, y))
 
 
+def _moved(win, widget, before, after, rect=None):
+    """The largest channel distance any pixel of `widget` (or `rect` in its
+    coordinates) moved between two grabs of the WINDOW. A grab of the widget
+    alone is a transparent canvas, and on it any fill at all counts as a
+    change -- the light tab strip's focus fill sat 3 from the page and counted
+    3,000 px; measured on the ground it is painted on, it moved 3."""
+    r = rect or widget.rect()
+    at = widget.mapTo(win, r.topLeft())
+    worst = 0
+    for y in range(at.y(), min(before.height(), after.height(), at.y() + r.height())):
+        for x in range(at.x(), min(before.width(), after.width(), at.x() + r.width())):
+            a, b = before.pixelColor(x, y), after.pixelColor(x, y)
+            if a != b:
+                worst = max(worst, orchtheme.distance(a.name(), b.name()))
+    return worst
+
+
+def _best_contrast(img, ground, inset=3):
+    """The highest contrast any pixel of `img`, `inset` px in from its edges,
+    makes against `ground`: a glyph's core ink, whatever the sheet names it."""
+    best = 0.0
+    for y in range(inset, img.height() - inset):
+        for x in range(inset, img.width() - inset):
+            best = max(best, orchtheme.contrast(img.pixelColor(x, y).name(), ground))
+    return best
+
+
+def _spin_field(sp):
+    """A spin box's line edit (QAbstractSpinBox.lineEdit() is protected)."""
+    return sp.findChild(QLineEdit)
+
+
 def _field_width(combo):
     """The px a combo's text actually gets: the edit field, or its line edit."""
     if combo.isEditable() and combo.lineEdit() is not None:
@@ -2244,13 +2280,19 @@ def smoke(win, app, out_dir):
     World-IX: "a law in a docstring is a wish"): both palettes clear their
     contrast floors, the sheet has none of the silent QSS faults, every role
     the window uses is styled and every styled role is used, there is exactly
-    one accent, text fits the combos that hold it, and the accent, a checked
-    box, a well, a hovered danger button, the list's pills and its placeholder
-    are what the tokens say -- measured off the rendered pixels, because a
-    property is not a rendered colour. Each law was a finding of the review
-    that came after the first cut; a check that needs keyboard focus, or a
-    real OS wheel, says [skip] when it cannot have that. The window is native
-    but never on the screen (WA_DontShowOnScreen, as --snap renders)."""
+    one accent, text fits the combos and spin boxes that hold it, and the
+    accent, a checked box (at rest and hovered), a well, a hovered danger
+    button's ink, a pressed button's relief, a log's scroll corner, a popup's
+    edge, the list's pills and its placeholder are what the tokens say --
+    measured off the rendered pixels, because a property is not a rendered
+    colour, and focus off grabs of the WINDOW, because a widget's own grab is
+    a transparent canvas on which any fill counts. The wheel is sent as the
+    OS sends it, with the window inactive and then ACTIVE (the regime in use,
+    where Qt hands a hovered combo focus before any filter runs). Each law
+    was a finding of a review that came after the first cut, or after the
+    fix pass; a check that needs keyboard focus, or a real OS wheel, says
+    [skip] when it cannot have that. The window is native but never on the
+    screen (WA_DontShowOnScreen, as --snap renders)."""
     out_dir = vaultpath.resolve_out(out_dir, what="smoke output")
     os.makedirs(out_dir, exist_ok=True)
     fails = []
@@ -2442,6 +2484,19 @@ def smoke(win, app, out_dir):
               f"at {w} px the Character card is {'stacked above' if want else 'beside'} the "
               f"table, every profession fits its combo ({len(profs)}; clipped {clipped}) and "
               f"the common bodies fit theirs (clipped {bclipped})")
+        # ...and every spin box on the tab holds its longest value, measured off
+        # its line edit: the heroes' Level field was 10 px, and a level-20 hero
+        # read '2' (the sheet reserved the buttons' width twice)
+        spins = [s for s in win.findChildren(QAbstractSpinBox) if s.isVisibleTo(win)]
+        narrow = [(s.accessibleName() or "spin", _spin_field(s).width(),
+                   s.fontMetrics().horizontalAdvance(s.textFromValue(s.maximum())))
+                  for s in spins
+                  if _spin_field(s).width() - 4
+                  < s.fontMetrics().horizontalAdvance(s.textFromValue(s.maximum()))]
+        check(len(spins) == len(win.party.rows) + 1 and not narrow,
+              f"at {w} px every spin box on the tab shows its longest value whole ({len(spins)} "
+              f"spins for {len(win.party.rows)} heroes and the character; too narrow: "
+              f"{narrow[:3] or 'none'})")
     win.resize(size)
     settle(6)
 
@@ -2526,7 +2581,8 @@ def smoke(win, app, out_dir):
             settle(5)
             check(bar.value() > 0 and pk.currentIndex() == before,
                   f"a real wheel over an unfocused combo scrolls the page ({bar.value()} px; the "
-                  f"control over a caption scrolled {moved_control}) and leaves the combo alone")
+                  f"control over a caption scrolled {moved_control}) and leaves the combo alone "
+                  f"-- the window inactive; the active window's law is below")
             bar.setValue(0)
     else:
         skip("a real wheel over a combo scrolls the page",
@@ -2933,22 +2989,78 @@ def smoke(win, app, out_dir):
     le = win.header.name
     got = _pixel(le, le.width() // 2, 4)
     check(_near(got, pal["field"], 10), f"a well renders as the field token ({got} vs {pal['field']})")
-    # a hovered danger button: its ink measured against the fill it is painted on
+    # a button drawn in a state, as the style paints it (a hover and a press
+    # cannot be had from the pointer here)
+    def painted(b, state, control=QStyle.CE_PushButton):
+        opt = QStyleOptionButton()
+        b.initStyleOption(opt)
+        opt.state |= state
+        img = QImage(b.size(), QImage.Format_ARGB32)
+        img.fill(QColor(pal["surface"]))
+        painter = QPainter(img)
+        b.style().drawControl(control, opt, painter, b)
+        painter.end()
+        return img, opt
+
+    # a hovered danger button: the CONTRAST of its painted ink on the fill it is
+    # painted on, the measure with no tolerance to get wrong -- a count of pixels
+    # near the right token gave the same number to the old ink, 7 away
     rb = win.run.reset_b
-    opt = QStyleOptionButton()
-    rb.initStyleOption(opt)
-    opt.state |= QStyle.State_MouseOver
-    img = QImage(rb.size(), QImage.Format_ARGB32)
-    img.fill(QColor(pal["surface"]))
-    painter = QPainter(img)
-    rb.style().drawControl(QStyle.CE_PushButton, opt, painter, rb)
-    painter.end()
+    img, _o = painted(rb, QStyle.State_MouseOver)
     fill = _count_near(img, pal["chip_crit_bg"], 6)
-    ink = _count_near(img, pal["chip_crit_fg"], 30)
-    check(fill > 100 and ink > 15,
-          f"a hovered danger button paints the ink solved for its hover fill ({fill} px fill, "
-          f"{ink} px ink)")
-    # focus you can see, where keyboard focus needs the window to be active
+    ink = round(_best_contrast(img, pal["chip_crit_bg"]), 2)
+    check(fill > 100 and ink >= orchtheme.TEXT_FLOOR,
+          f"a hovered danger button paints an ink that clears {orchtheme.TEXT_FLOOR}:1 on its "
+          f"hover fill ({fill} px fill, {ink}:1)")
+    # a press keeps its relief with focus on it: the shaded top and lit foot,
+    # not the ring on every side (a tier's :focus rule out-ranked :pressed)
+    edges = {}
+    for tag, b, top, foot in (("default", win.header.compile_b, "border_shade", "border_lit"),
+                              ("primary", lb, "accent_shade", "accent_lit")):
+        img, _o = painted(b, QStyle.State_Sunken | QStyle.State_HasFocus)
+        got_top = img.pixelColor(b.width() // 2, 0).name()
+        got_foot = img.pixelColor(b.width() // 2, b.height() - 1).name()
+        edges[tag] = (_near(got_top, pal[top], 6) and _near(got_foot, pal[foot], 6),
+                      got_top, got_foot)
+    check(all(v[0] for v in edges.values()),
+          f"a pressed button with focus keeps its relief, default and primary "
+          f"({ {k: (v[1], v[2]) for k, v in edges.items()} })")
+    # a checked box under the pointer shifts its fill, off the token audited for it
+    cb = QCheckBox("probe")
+    cb.setParent(win.run)
+    cb.move(0, 0)
+    cb.setChecked(True)
+    cb.show()
+    settle()
+    img, opt = painted(cb, QStyle.State_MouseOver, QStyle.CE_CheckBox)
+    ind = cb.style().subElementRect(QStyle.SE_CheckBoxIndicator, opt, cb)
+    hovered = img.pixelColor(ind.x() + 3, ind.center().y() - 5).name()     # off the tick
+    check(_near(hovered, pal["check_hover"], 6)
+          and orchtheme.distance(hovered, pal["check_bg"]) >= 6,
+          f"a hovered checked box RENDERS the shifted fill ({hovered} vs {pal['check_hover']}; "
+          f"at rest {pal['check_bg']})")
+    cb.setParent(None)
+    cb.deleteLater()
+    # a log with both bars shows no square where they meet (the light theme
+    # drew Fusion's bordered corner there)
+    view = QPlainTextEdit()
+    view.setAttribute(Qt.WA_DontShowOnScreen, True)
+    view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+    view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+    view.resize(300, 200)
+    view.show()
+    settle()
+    img = view.grab().toImage()
+    vb, hb = view.verticalScrollBar(), view.horizontalScrollBar()
+    cx, cy = vb.mapTo(view, QPoint(0, 0)).x(), hb.mapTo(view, QPoint(0, 0)).y()
+    corner = (cx, cy, cx + vb.width(), cy + hb.height())
+    off = (vb.width() * hb.height()) - _count_near(img, pal["log_bg"], 3, corner)
+    check(vb.isVisible() and hb.isVisible() and off == 0,
+          f"where a log's two bars meet, the corner is the log's own ground ({off} px of "
+          f"{vb.width()}x{hb.height()} are not)")
+    view.deleteLater()
+    # focus you can see, where keyboard focus needs the window to be active --
+    # measured on grabs of the WINDOW, not of the widget (see _moved)
     win.activateWindow()
     win.raise_()
     settle(5)
@@ -2956,10 +3068,11 @@ def smoke(win, app, out_dir):
     win.tabs.setCurrentWidget(en)
     settle()
     if focus(en.add):
-        rest = en.tree.grab().toImage()
+        rest = win.grab().toImage()
         if focus(en.tree):
-            n = _diff(rest, en.tree.grab().toImage())
-            check(n > 100, f"the encounter list SHOWS keyboard focus ({n} px change)")
+            n = _moved(win, en.tree, rest, win.grab().toImage())
+            check(n >= orchtheme.TAB_FOCUS_FLOOR,
+                  f"the encounter list SHOWS keyboard focus (a pixel moved {n} on the page)")
         else:
             skip("the encounter list shows keyboard focus", lost)
     else:
@@ -2967,18 +3080,114 @@ def smoke(win, app, out_dir):
     tb = win.tabs.tabBar()
     lb.clearFocus()
     settle()
-    at_rest = lb.grab().toImage()
+    at_rest = win.grab().toImage()
     if focus(lb):
-        n = _diff(at_rest, lb.grab().toImage())
-        check(n > 30, f"Launch's focus ring shows inside its own fill ({n} px change)")
-        before_tab = tb.grab().toImage()
+        n = _moved(win, lb, at_rest, win.grab().toImage())
+        check(n >= orchtheme.TAB_FOCUS_FLOOR,
+              f"Launch's focus ring shows inside its own fill (a pixel moved {n})")
+        before_tab = win.grab().toImage()
         QApplication.sendEvent(lb, QKeyEvent(QEvent.KeyPress, Qt.Key_Tab, Qt.NoModifier))
         settle()
-        n = _diff(before_tab, tb.grab().toImage())
-        check(tb.hasFocus() and n > 100,
-              f"Tab from Launch lands on the tab strip, and the strip SHOWS it ({n} px change)")
+        n = _moved(win, tb, before_tab, win.grab().toImage(), tb.tabRect(tb.currentIndex()))
+        check(tb.hasFocus() and n >= orchtheme.TAB_FOCUS_FLOOR,
+              f"Tab from Launch lands on the tab strip, and the strip SHOWS it on the page "
+              f"(a pixel of the tab moved {n}; the floor is {orchtheme.TAB_FOCUS_FLOOR})")
     else:
         skip("Launch and the tab strip show keyboard focus", lost)
+    # the wheel in the ACTIVE window, which is normal use: Qt gives a WheelFocus
+    # widget focus BEFORE any filter sees the wheel, so the inactive law above
+    # was green while every combo the pointer crossed took the wheel here
+    wheelable = [w for w in win.findChildren(QComboBox) + win.findChildren(QAbstractSpinBox)
+                 if w.focusPolicy() == Qt.WheelFocus]
+    check(not wheelable, f"no combo or spin box can take focus from the wheel ({len(wheelable)} "
+                         f"of {len(win.findChildren(QComboBox)) + len(win.findChildren(QAbstractSpinBox))})")
+    m0 = en.groups[0].members[0]
+    en.select(m0)
+    settle()
+    page, bar, pk = en._pages[m0], en._pages[m0].verticalScrollBar(), m0.bar.slots[0]
+    if win.isActiveWindow() and sys.platform == "win32" and bar.maximum() > 0 and focus(en.tree):
+        rolled = []
+        for tag, w, value in (("skill slot", pk, pk.currentIndex), ("Level", m0.level, m0.level.value)):
+            bar.setValue(0)
+            settle()
+            v0 = value()
+            _real_wheel(win, w)
+            settle(5)
+            rolled.append((tag, bar.value(), v0, value(), w.hasFocus()))
+        check(all(px > 0 and v0 == v1 and not took for _t, px, v0, v1, took in rolled),
+              f"in the ACTIVE window a real wheel over an unfocused skill slot and Level spin "
+              f"scrolls the page and leaves both alone, unfocused ({rolled})")
+        bar.setValue(0)
+        if focus(pk):
+            v0 = pk.currentIndex()
+            _real_wheel(win, pk)
+            settle(5)
+            check(pk.currentIndex() != v0 and bar.value() == 0,
+                  f"and a FOCUSED combo still takes the wheel, the page staying put "
+                  f"({v0} -> {pk.currentIndex()}, {bar.value()} px)")
+            pk.setCurrentIndex(v0)
+        else:
+            skip("a focused combo takes the wheel", lost)
+        pk.clearFocus()
+        win.tabs.setCurrentWidget(win.party)
+        settle()
+        tbar = win.party.table.verticalScrollBar()
+        tbar.setValue(0)
+        settle()
+        lvl3 = win.party.rows[3][3]
+        v0 = lvl3.value()
+        _real_wheel(win, lvl3)
+        settle(5)
+        check(lvl3.isEnabled() and tbar.value() > 0 and lvl3.value() == v0,
+              f"a real wheel over an unlocked hero's Level spin scrolls the heroes table "
+              f"({tbar.value()} rows) and leaves the level at {v0}")
+    else:
+        skip("the wheel in the active window", lost if not win.isActiveWindow()
+             else "the page does not scroll at this size, or this is not Windows")
+    # a popup keeps its own edge: a non-editable combo's (the profession pickers
+    # -- Fusion's menu mode framed the view a second time, top and bottom, and
+    # the list mode shows ten rows unless told the count), a Picker's, and the
+    # completer's, each opened hidden with the focus a real one has
+    win.tabs.setCurrentWidget(win.party)
+    settle()
+    popups = {}
+    for tag, combo in (("profession", win.party.secondary), ("Picker", win.party.weapon)):
+        holder = combo.view().window()
+        holder.setAttribute(Qt.WA_DontShowOnScreen, True)
+        combo.showPopup()
+        settle(5)
+        v = combo.view()
+        img = holder.grab().toImage()
+        rim = [img.pixelColor(x, y).name()
+               for x, y in ((0, 0), (img.width() - 1, 0), (0, img.height() - 1),
+                            (img.width() - 1, img.height() - 1), (img.width() // 2, 0),
+                            (img.width() // 2, img.height() - 1))]
+        popups[tag] = (v.hasFocus(), v.geometry() == holder.rect(),
+                       all(_near(c, pal["border_strong"], 6) for c in rim),
+                       not v.verticalScrollBar().isVisible() or combo.isEditable(),
+                       f"{holder.width()}x{holder.height()} view {v.geometry().getRect()} "
+                       f"rim {rim[0]}/{rim[4]}")
+        combo.hidePopup()
+        settle()
+    pop = win.party.weapon.completer().popup()
+    pop.setAttribute(Qt.WA_DontShowOnScreen, True)
+    focus(win.party.weapon)                      # the popup's focus is its line edit's, by proxy
+    win.party.weapon.completer().setCompletionPrefix("s")
+    win.party.weapon.completer().complete()
+    settle(5)
+    img = pop.grab().toImage()
+    rim = [img.pixelColor(x, y).name() for x, y in ((0, 0), (img.width() - 1, img.height() - 1))]
+    popups["completer"] = (pop.hasFocus(), True, all(_near(c, pal["border_strong"], 6) for c in rim),
+                           True, f"{pop.width()}x{pop.height()}")
+    pop.hide()
+    settle()
+    if all(p[0] for p in popups.values()):
+        check(all(p[1] and p[2] and p[3] for p in popups.values()),
+              f"a focused popup is one box in the popup edge, the view filling it, its rows "
+              f"unscrolled ({ {k: v[4] for k, v in popups.items()} })")
+    else:
+        skip("a focused popup is one box in the popup edge",
+             f"a popup opened without focus ({ {k: v[0] for k, v in popups.items()} })")
     for i in range(win.tabs.count()):
         win.tabs.setCurrentIndex(i)
         settle()

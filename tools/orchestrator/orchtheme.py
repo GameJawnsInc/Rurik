@@ -7,9 +7,11 @@ Qt import -- so the contrast audit runs on a bare machine:
 WHERE THE RULES COME FROM. Dream-World-IX, the owner's other project, spent
 twelve rounds on its PySide6 workspace (`studies/gui-aesthetics/`,
 `ff9mapkit/workspace/style.py`, `editor/theme.py`). What is borrowed here is
-the part that fits a four-tab tool -- the rules, and a few small helpers
-rewritten here (the colour mix and contrast walk, the selection tint, the
-content-addressed image cache). Dream-World-IX is MIT and the same owner's:
+the part that fits a four-tab tool -- the rules, and a few small helpers: the
+colour mix, taken as written (`editor/theme.py`'s `_mix`); the contrast walk,
+the selection tint and the content-addressed image cache, rewritten; the
+checkbox tick, redrawn from `style.py`'s `_CHECK_SVG` with its points moved a
+tenth. Dream-World-IX is MIT and the same owner's:
 
   * ONE loud object. The accent is a FILL spent on the verb you press --
     Launch -- and nowhere else: not on a checked box, not on a selected row
@@ -88,6 +90,7 @@ TEXT_FLOOR = 4.5            # WCAG AA, normal text
 MARK_FLOOR = 3.0            # WCAG 1.4.11: a focus ring, a status mark, a check
 EDGE_T = 0.14               # the lit/shaded edge mix (DWIX: 0.18 grew a bevel)
 SELECTION_FLOOR = 20        # raw RGB channel distance a selection keeps from hover
+TAB_FOCUS_FLOOR = 12        # ...and a focused tab's fill keeps from the page it sits on
 
 TYPE = {"caption": 12, "body": 14, "head": 18, "mono": 13}
 SPACE = {"s1": 4, "s2": 8, "s3": 12, "s4": 16, "s6": 24}
@@ -225,9 +228,13 @@ def audit(pal):
 
     The list is written by hand, and a hand list can miss a pair: the first
     review found the danger button's hover (its ink over the chip fill, 4.22:1
-    in light) missing, with this function printing "clean". So a state rule
-    that changes a FILL names its ink here, and the smoke renders a hovered
-    danger button and measures the painted pixels as well.
+    in light) missing, with this function printing "clean". A state rule that
+    changes a FILL names its ink in the sheet, and this list measures TOKENS,
+    never what a rule paints -- so that pair's guards read the sheet itself:
+    `test_orchtheme.py` resolves the danger :hover and :pressed rules' ink on
+    their fill, and the smoke renders the hovered button and measures the
+    painted ink's contrast. (A row here for the same pair measured what the
+    chip row already does, and stayed green with the sheet's ink reverted.)
 
     The primary button's focus ring is drawn INSIDE its own fill (an outline in
     accent_fg), so it is measured by 'accent_fg on accent'; its outer edge on
@@ -257,7 +264,6 @@ def audit(pal):
     need("check mark on its fill", p["check_fg"], p["check_bg"], MARK_FLOOR)
     need("checked box on field", p["check_bg"], p["field"], MARK_FLOOR)
     need("accent fill on bg", p["accent"], p["bg"], MARK_FLOOR)
-    need("danger text on its hover and press", p["chip_crit_fg"], p["chip_crit_bg"], TEXT_FLOOR)
     need("check mark on a hovered checked box", p["check_fg"], p["check_hover"], MARK_FLOOR)
     # interactive states must be DIFFERENT, measurably (DWIX: hover was byte-
     # identical to rest in 4 of 8 palettes and nobody saw it for rounds)
@@ -272,6 +278,10 @@ def audit(pal):
                  distance(p["check_hover"], p["check_bg"]), 6))
     rows.append(("a card differs from the page", distance(p["surface"], p["bg"]), 6))
     rows.append(("a well differs from its card", distance(p["field"], p["surface"]), 6))
+    # the focused tab is filled with `pressed` on the PAGE, not on a card: hover
+    # sat 3 from bg in light, a fill nobody could see behind a green law
+    rows.append(("tab focus fill differs from the page", distance(p["pressed"], p["bg"]),
+                 TAB_FOCUS_FLOOR))
     return rows
 
 
@@ -281,6 +291,8 @@ def failures(pal):
 
 # ---------------------------------------------------------------- assets
 
+# the tick is DWIX's `_CHECK_SVG` (ff9mapkit/workspace/style.py), its two far
+# points moved a tenth and the stroke 2 rather than 2.4
 _CHECK = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">'
           '<path d="M3.5 8.4 6.6 11.3 12.6 4.9" fill="none" stroke="{ink}" '
           'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>')
@@ -403,12 +415,18 @@ QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: center r
 QComboBox::down-arrow { image: url($img_down); width: 14px; height: 14px; }
 QComboBox::down-arrow:disabled { image: url($img_down_disabled); }
 QComboBox QLineEdit { background: transparent; border: none; padding: 0; min-height: 0; }
+/* a list dropped below the combo, never Fusion's menu over it: the menu mode
+   wraps the view in a frame of its own (a second edge, top and bottom) that no
+   selector reaches. The list honours maxVisibleItems, so a combo with more
+   than ten rows says so. */
+QComboBox { combobox-popup: 0; }
 QComboBox QAbstractItemView, QComboBox QAbstractItemView:focus,
 QListView[role="popup"], QListView[role="popup"]:focus {
     background: $surface; color: $text; border: 1px solid $border_strong; border-radius: 0;
     padding: 4px; selection-background-color: $selection_bg; selection-color: $text; outline: 0;
 }
-QSpinBox, QDoubleSpinBox { padding-right: 22px; }
+/* the buttons take their own 22 px (origin border, below): a padding-right for
+   them as well reserved it twice, and the heroes table's Level field was 10 px */
 QSpinBox::up-button, QDoubleSpinBox::up-button, QSpinBox::down-button, QDoubleSpinBox::down-button {
     subcontrol-origin: border; width: 20px; border: none; background: transparent;
 }
@@ -495,7 +513,7 @@ QTabBar::tab {
 }
 QTabBar::tab:hover { color: $text; }
 QTabBar::tab:selected { color: $text; border-bottom: 2px solid $accent; }
-QTabBar::tab:selected:focus { background: $hover; }
+QTabBar::tab:selected:focus { background: $pressed; }
 
 /* ---- scrolling */
 QScrollArea { background: transparent; border: none; }

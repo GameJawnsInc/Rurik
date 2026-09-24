@@ -265,12 +265,23 @@ class WheelGuard(QObject):
 
     Dream-World-IX's guard is exactly this. The first cut here forwarded a new
     event to the parent instead, and Qt never propagates a synthesized wheel,
-    so the hostile pages stopped scrolling wherever the pointer crossed a combo."""
+    so the hostile pages stopped scrolling wherever the pointer crossed a combo.
+
+    The second cut asked hasFocus() and nothing else, and in an ACTIVE window
+    that is always True: a combo or spin box is born WheelFocus, and
+    QApplication::notify gives the hovered widget focus by that policy BEFORE
+    any application filter sees the wheel. So every guarded widget is moved to
+    StrongFocus (Tab and click, no wheel) as it is polished -- the Polish event
+    reaches this filter for the ones add_member and add_group build later too
+    -- and a wheel can no longer create the focus this filter then asks about."""
     GUARDED = (QComboBox, QAbstractSpinBox)
 
     def eventFilter(self, obj, ev):
-        if (ev.type() == QEvent.Wheel and isinstance(obj, self.GUARDED)
-                and not obj.hasFocus()):
+        kind = ev.type()
+        if kind == QEvent.Polish and isinstance(obj, self.GUARDED) \
+                and obj.focusPolicy() == Qt.WheelFocus:
+            obj.setFocusPolicy(Qt.StrongFocus)
+        elif kind == QEvent.Wheel and isinstance(obj, self.GUARDED) and not obj.hasFocus():
             ev.ignore()
             return True
         return False

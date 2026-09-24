@@ -12590,15 +12590,21 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   `tools/blender/`; the rest of the look is `orchestrator.py --smoke`'s, which needs
   PySide6 and the vault. §1 both palettes: exactly the base keys, every pair
   `audit()` measures clears its floor (4.5:1 text, 3:1 marks, measured distances for
-  hover/pressed/selection), both real sheets lint clean, `derive()` idempotent, the
-  window's roles styled. §2 the lint goes RED on each planted fault Qt's parser
+  hover/pressed/selection, the focused tab's fill from the page), both real sheets
+  lint clean, every derived token a `#rrggbb`, the window's roles styled, and
+  `derive()` refuses a palette missing a base key (the verify round found the
+  "idempotent" check it replaces unable to fail: derive() hands a derived palette
+  straight back). §2 the lint goes RED on each planted fault Qt's parser
   accepts silently -- a pseudo-class before a sub-control, its NEGATED form and its
   chained and attribute-selector forms (the review found the negated one slipping
   past), a leftover `$` token, unbalanced braces, an `em` font size -- and stays
   clean on three known-good controls. §3 the audit can refuse: a muted grey that
-  fails on the card, a hover identical to rest. §4 pins the pairs the review found
-  missing (the danger button's hover ink was 4.22:1 in light while the audit printed
-  clean). Floor 25, <1 s),
+  fails on the card, a hover identical to rest. §4 pins the pairs the reviews found
+  missing, and for the danger button's hover READS THE SHEET: the `:hover` and
+  `:pressed` rules' ink, resolved with the base rule's as the fallback, must clear
+  4.5:1 on their fill, and a planted hover that keeps the base ink (the first cut's
+  4.22:1 in light) is refused -- an audit row for that pair measured tokens and
+  stayed green with the sheet's ink reverted. Floor 29, <1 s),
   `toolkit/test_bareimport.py` (the SERVER must import on a machine with no
   vault -- proven in a subprocess, not argued. **What earns it: on 2026-08-15
   `probes.py` grew `GIVER_NPC = npc_template("def_1480")` at module level**, and

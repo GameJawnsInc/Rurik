@@ -19,10 +19,15 @@ and `audit()` missing a pair the sheet paints (the danger button's hover ink,
 4.22:1 in light) while printing "clean". So section 2 plants each fault in a
 sheet and requires the lint to go red on it, with a known-good control that must
 stay clean; section 3 walks a colour the audit must refuse and requires that it
-does; section 4 pins the pairs the review found missing.
+does; section 4 pins the pairs the review found missing -- and for the danger
+button's hover reads the SHEET, because the audit measures tokens and a row
+naming the right pair stayed green with the sheet's ink put back to 4.22:1
+(the verify round found that, and a `derive()` idempotence check that could
+not fail either: derive() hands a derived palette straight back).
 """
 import importlib.util
 import os
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -30,7 +35,7 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("orchtheme", floor=25)
+LEDGER = checks.Ledger("orchtheme", floor=29)
 ORCHTHEME = os.path.join(os.path.dirname(HERE), "tools", "orchestrator", "orchtheme.py")
 
 
@@ -39,6 +44,35 @@ def load():
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def real_sheet(t, pal):
+    return t.qss(pal, {k: f"/{k}.svg" for k in t.asset_svgs(pal)})
+
+
+def rule(sheet, selector):
+    """{property: value} of the sheet's rule for exactly `selector` (a rule
+    whose selector goes on, `:hover` or `:focus`, is another rule)."""
+    m = re.search(r"(?m)^" + re.escape(selector) + r"\s*\{([^}]*)\}", sheet)
+    if not m:
+        return {}
+    return {k.strip(): v.strip() for k, v in
+            (d.split(":", 1) for d in m.group(1).split(";") if ":" in d)}
+
+
+def danger_pairs(sheet):
+    """[(state, ink, fill)] the resolved sheet paints for the danger button's
+    :hover and :pressed. A state rule that sets no colour keeps the base rule's
+    -- which is how the first cut painted error_text on the chip fill."""
+    base = rule(sheet, 'QPushButton[role="danger"]')
+    out = []
+    for state in (":hover", ":pressed"):
+        r = rule(sheet, f'QPushButton[role="danger"]{state}')
+        ink = r.get("color", base.get("color"))
+        fill = r.get("background", base.get("background"))
+        if ink and fill and fill.startswith("#"):
+            out.append((state, ink, fill))
+    return out
 
 
 def main():
@@ -51,13 +85,21 @@ def main():
                   f"{sorted(set(pal) ^ set(t.BASE_KEYS)) or 'same'}")
         bad = t.failures(pal)
         LEDGER.ok(not bad, f"{name}: every audited pair clears its floor", f"{bad or 'clean'}")
-        sheet = t.qss(pal, {k: f"/{k}.svg" for k in t.asset_svgs(pal)})
+        sheet = real_sheet(t, pal)
         LEDGER.ok(not t.lint(sheet), f"{name}: the real sheet lints clean", f"{t.lint(sheet)}")
-        LEDGER.ok(t.derive(t.derive(pal)) == t.derive(pal), f"{name}: derive() is idempotent")
+        odd = [k for k, v in t.derive(pal).items()
+               if isinstance(v, str) and not re.fullmatch(r"#[0-9a-f]{6}", v)]
+        LEDGER.ok(not odd, f"{name}: every derived token is a #rrggbb colour", f"{odd or 'all'}")
         roles = t.styled_roles(sheet)
         LEDGER.ok({"card", "primary", "quiet", "danger", "chip", "flat", "popup"} <= roles,
                   f"{name}: the sheet styles the roles the window stamps",
                   f"{sorted(roles)}")
+    try:                       # log_fg: a key derive() never reads, so only the guard can refuse
+        t.derive({k: v for k, v in t.DARK.items() if k != "log_fg"})
+        refused = False
+    except KeyError:
+        refused = True
+    LEDGER.ok(refused, "derive() refuses a palette missing a base key")
 
     print("\n2. the lint goes red on every planted fault, and not on the control")
     planted = {
@@ -86,13 +128,28 @@ def main():
     LEDGER.ok("hover differs from a button at rest" in fails,
               "a hover identical to its rest state is refused", f"{fails[:3]}")
 
-    print("\n4. the pairs the first review found missing")
+    print("\n4. the pairs the reviews found missing -- the danger hover read off the sheet")
     for name, pal in t.PALETTES.items():
         labels = {label for label, _g, _f in t.audit(pal)}
-        LEDGER.ok({"danger text on its hover and press", "muted on selection_bg",
-                   "check mark on a hovered checked box"} <= labels,
-                  f"{name}: the danger hover, muted-on-selection and checked-hover pairs are "
-                  f"audited")
+        LEDGER.ok({"muted on selection_bg", "check mark on a hovered checked box",
+                   "tab focus fill differs from the page"} <= labels,
+                  f"{name}: the muted-on-selection, checked-hover and tab-focus pairs are audited")
+        pairs = danger_pairs(real_sheet(t, pal))
+        LEDGER.ok(len(pairs) == 2 and all(t.contrast(ink, fill) >= t.TEXT_FLOOR
+                                          for _s, ink, fill in pairs),
+                  f"{name}: the danger button's :hover and :pressed rules paint an ink that "
+                  f"clears {t.TEXT_FLOOR}:1 on their fill",
+                  f"{[(s, ink, fill, round(t.contrast(ink, fill), 2)) for s, ink, fill in pairs]}")
+    # the known-bad sheet: the first cut's hover, a fill change with the base
+    # rule's ink kept (4.22:1 in light), must be refused
+    light = real_sheet(t, t.LIGHT)
+    prefix = re.sub(r'(QPushButton\[role="danger"\]:hover \{[^}]*?) color: #[0-9a-f]{6};',
+                    r"\1", light, count=1)
+    pairs = danger_pairs(prefix)
+    LEDGER.ok(prefix != light and pairs
+              and any(t.contrast(ink, fill) < t.TEXT_FLOOR for _s, ink, fill in pairs),
+              "a hover rule that changes the fill and keeps the base ink is refused",
+              f"{[(s, ink, fill, round(t.contrast(ink, fill), 2)) for s, ink, fill in pairs]}")
     return LEDGER.verdict()
 
 

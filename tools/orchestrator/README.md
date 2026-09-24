@@ -106,7 +106,8 @@ its credit in `THIRD-PARTY-NOTICES.md`.
 
 The rules are Dream-World-IX's (the owner's own PySide6 workspace, `studies/gui-aesthetics/`,
 `studies/gui-ux/`, `studies/gui-strings/`), taken at the size of this tool — the rules and a
-few small helpers rewritten here, not its framework:
+few small helpers ported or rewritten here (`orchtheme.py`'s docstring says which), not its
+framework:
 
 - **One loud object.** The accent is a fill spent on Launch and nowhere else: a checked box
   is neutral ink, a selected row tints toward the accent, the tab underline is a thin mark.
@@ -120,16 +121,24 @@ few small helpers rewritten here, not its framework:
   text; the heroes table's Profession and Body columns hold their longest common item, and
   below 1,120 px the Character card goes above the table rather than squeezing it.
 - **A hovered combo or spin box never changes under the wheel** unless it has focus; the wheel
-  scrolls the page instead.
+  scrolls the page instead. (The wheel cannot GIVE it focus: Qt hands a hovered widget focus by
+  its policy before any filter sees the event, so every combo and spin box is StrongFocus.)
 
 `toolkit/test_orchtheme.py` (in the suite, bare) holds the arithmetic: both palettes clear every
-audited pair, the sheet lints clean, and the lint goes red on each planted fault. `--smoke`
-holds the rest as laws measured off rendered pixels — one accent and it renders gold, a checked
-box renders neutral, a hovered danger button paints the ink solved for its fill, the list
+audited pair, the sheet lints clean, the lint goes red on each planted fault, and the danger
+button's hover and press rules, read off the sheet itself, paint an ink that clears 4.5:1 on
+their fill (a planted hover that keeps the base ink is refused). `--smoke` holds the rest as
+laws measured off rendered pixels — one accent and it renders gold, a checked box renders
+neutral and shifts its fill under the pointer, a hovered danger button's painted ink clears
+4.5:1 on its fill, a pressed button keeps its relief with focus on it, a log's scroll corner is
+the log's own ground, a popup is one box in the popup edge with no row scrolled, the list
 renders its pills and its empty-filter placeholder, focus shows on the list, the tab strip and
-Launch, every profession fits its combo at 1,280 and at 1,000 px, a real OS wheel over an
-unfocused combo scrolls the page and leaves the combo alone, and no flag, file name, ident or
-hex id sits on the visible surface. The window's STATE has laws of the same kind: the slice
+Launch (measured on grabs of the window: a widget's own grab is a transparent canvas on which
+any fill counts), every profession fits its combo and every spin box shows its longest value at
+1,280 and at 1,000 px, a real OS wheel over an unfocused combo scrolls the page and leaves the
+combo alone with the window inactive and then active (where a focused one still takes it, and
+an unlocked hero's Level spin scrolls the table), and no flag, file name, ident or hex id sits
+on the visible surface. The window's STATE has laws of the same kind: the slice
 opens one window and adding hostiles opens none (a label shown with no parent is a window of
 its own), every input the compiler reads turns a fresh green **Compiled** into **Changed since
 compile** while the Skills filters leave it green, a hostile's edit reaches its group's roster
