@@ -179,9 +179,10 @@ movement arc, where each entry's NEXT is the following entry's subject.
   `GmSkSlot`'s refresh UNVERIFIED; `EFFECT_TYPES` still five (confirmed in code).
 * log 4712 — MORALE-Q5, Q6 (confirmed in the study's table); a GIF-rate capture of a
   killing blow's number. (**Q6 half WRONG** — the table itself was stale: the corpus
-  already held three deaths followed by a zone into an outpost, `20260913T210901`,
-  `20260914T005758`, `20260916T150306`; only the field-to-field half is open. Morale
-  FINDINGS §6, DESKWORK-Q1, 2026-09-24.)
+  already held two zones into an outpost with the penalty still live, `20260914T005758`
+  and `20260916T150306` (both 430 → 449; a third death, `20260913T210901`'s, recovered to
+  100 before its zone); only the field-to-field half is open. Morale FINDINGS §6,
+  DESKWORK-Q1, 2026-09-24.)
 * log 4857 — narrow-gate clearance, water and shore, slope materials, a created map's
   minimap; top byte 3+ untested; strict or non-strict at the 45° boundary.
 * log 5297 — the glyph's discount watched draining on screen *(unsure)*.
@@ -232,9 +233,9 @@ movement arc, where each entry's NEXT is the following entry's subject.
 * log 8898 — the account-posture call (confirmed unmade, crossbuild).
 * log 9208 — `0x002E` has a builder and no send site.
 * log 9228 — 3 of 34 CHANGED screens read; `0x0191` has no usable run (confirmed).
-  (**WRONG** — `0x0191` was READ on 2026-08-13 as a map change and 22 CHANGED rows were
-  named with 13 the operator's mouse, smsgsweep §7.5–§7.6; the residue is the five
-  account-name selectors, §7.9. DESKWORK-Q1, 2026-09-24.)
+  (**WRONG** — `0x0191` was READ on 2026-08-13 as a map change, and of the CHANGED rows 22
+  were real (17 named, the 5 selectors deliberately not) and 13 more the operator's
+  mouse, smsgsweep §7.5–§7.6; the residue is the five account-name selectors, §7.9. DESKWORK-Q1, 2026-09-24.)
 * log 9258 — eight named opcodes retail sends continuously and we never send.
 * log 9597–9622 — a capture-to-row compiler; R4a's shrine and spawn table (confirmed in
   §3); the Pre-Searing manifest's upkeep; OpenTyria build, devalued; Probe 3 with no

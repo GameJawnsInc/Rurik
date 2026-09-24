@@ -28,6 +28,60 @@ move back.
 
 ---
 
+### DESKWORK-Q1 + DESKWORK-Q3 (pass 5, INFRA-A), fix pass -- 2026-09-24 -- **option C back in §8.3 as NOT BUILT (its candidate keys were refuted, not the plan); MORALE-Q6's outpost half stands on 2 witnesses, not 3; the embodied-hero kick caveat back in §8.1; "22 named" is 17; the quests HANDOFF §1 edit withdrawn for desk-gold's**
+
+One review of the two entries below — an evidence refuter that re-derived Q3, the census,
+every §8 closure and the study lines before reading the landing, then an engineering
+review of the diff — reproduced the late-stamp census with an independent script (274
+speed-arm rows in 71 captures, 0 late stamps, the same refusal breakdown), the §3.2
+census and its `test_checks` check under four sabotage arms, the `agentroster` fix, and
+13 of the 15 §8 changes. It moved the following; each finding's evidence was re-checked
+here before the fix.
+* **STAT-R1 (blocker) — the entry below is wrong to say "The archive — 3 of 4 clauses
+  REMOVED … option C's durable key REFUTED".** maprows §10.12 refutes (C)'s three
+  candidate KEYS (MFT crc + size, the map dims, the content UUID) and says in terms that
+  (C) is not impossible — a durable key has to come from the map id the server sends or
+  an `s_missionClientData` join — and the log's (C) entry defers it until a second archive
+  state must be supported; nothing builds it. §8.3's "The archive" carries it again,
+  reworded: NOT BUILT, its candidates REFUTED, where the key must come from, deferred.
+  Read the entry below as "2 of 4 clauses removed (the restore verb, the compressor),
+  option C reworded".
+* **STAT-R2 (major) — MORALE-Q6's outpost half is OBSERVED on n = 2, not 3.** Re-read here
+  (a scratch census, prediction first, printing the LAST own `0x009C` before each zone
+  rather than the minimum): of the 3 penalised connections with a next hop, 2 carry the
+  penalty to the zone — `20260914T005758` at 71 and `20260916T150306` at 85, both 430 →
+  449, both loading 100 at 0.621 s. `20260913T210901`'s own `0x009C` read 100 again at
+  618.056 s (a +10 step from 90, beside a 2,000-experience `0x00EE` field 0), 177.5 s
+  before the connection's last message at 795.598 s, so its zone carried no penalty. The
+  entry below's "all 3 zone into an OUTPOST" counted the minimum. Corrected in morale
+  FINDINGS §6's Q6 row, §8.2's MORALE line and plansplit's log-4712 note; the conclusion
+  holds (the outpost half OBSERVED, the field-to-field half WIKI only), on one map pair.
+* **STAT-R5 (nit)** — §8.1's N2 sentence had dropped "a kick of a hero WITH a body is
+  UNOBSERVED" when it was cut to one sentence; it is back (heroes §3.3; cmsg FINDINGS "The
+  hero kick": the retail witness had no body, `0x0021` first is RECONSTRUCTION).
+* **STAT-R6 (nit)** — "22 CHANGED rows named" is 17 named: smsgsweep §7.6 has 22 real rows
+  — 13 named `high`, 4 `medium`, the 5 account-name selectors left unnamed on purpose —
+  and 13 hover artifacts (its own heading says TWENTY-TWO NAMED, so the slip was
+  inherited). plansplit's log-9228 note is corrected; the entry below's wording is
+  corrected here.
+* **STAT-R4 (minor) — the quests HANDOFF §1 correction is WITHDRAWN from this lane.**
+  desk-gold (DESKWORK-D9) rewrites the same sentence with the experience AND the gold
+  reward, so the two branches conflicted textually and desk-gold's text supersedes. The
+  file is back at the merge base here; the entry below's "quests HANDOFF §1" item is
+  desk-gold's to land.
+* **STAT-R3 (minor) — §3's R-SANDBOX row still ends "Next: … N2 hero add/kick from the
+  party panel"** while §8 and the studies record N2 shipped and confirmed. The finding
+  holds and is left to the merge, as the review proposed: main's `bdcfa25c` rewrote that
+  single-line row, so an edit on this branch is a certain conflict. At merge, on main's
+  row: "**Next: N1** a filterable skill/attribute picker for the Enemies tab; **N2**, hero
+  add/kick from the party panel, shipped (DESKWORK-D1 steps 1 + 4) and was confirmed on
+  our client 2026-09-23."
+
+What did not move: Q3's 0 of 274 in 71, the §3.2 census and its check, §3's R5m strike,
+the code changes, and the other §8 lines.
+
+---
+
 ### DESKWORK-Q1 (the study lines and small fixes) + DESKWORK-D12 step 4's first half -- 2026-09-24 -- **`PLAN.md` §3.2's content census refreshed and now CHECKED by `test_checks`; §3's R5m "elevation still open" struck; stale lines in eleven study documents corrected in place; `agentroster` prints on a cp1252 console; `effects.py`'s "none of them is modelled" corrected**
 
 The second half of the sweep the entry below opens (same lane, same day). **§3 moved, and

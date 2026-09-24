@@ -2223,7 +2223,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   owner, 2026-09-22). (N2, adding and kicking heroes from the in-game party panel,
   shipped as DESKWORK-D1 steps 1 + 4 and was CONFIRMED on our client in an outpost
   2026-09-23 — studies/deskwork/CONFIRM-2026-09-23.md R1–R5; the hero ADD stays
-  RECONSTRUCTION, heroes §3.3.)
+  RECONSTRUCTION, heroes §3.3; the kick of an embodied hero stays UNOBSERVED on retail.)
 * **SANDBOX: `ENERGY_BY_PROFESSION` is WIKI recalled, unread** — eight of ten rows in
   `toolkit/harness/sandbox.py` want GWW "Energy" read back before they are quoted as
   facts; the window shows them as editable defaults.
@@ -2244,8 +2244,9 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   skills §34.11): ceil is dead, round holds k = 1 (skills §53.1), and what is left is a
   hit in (0, 0.5 %): a `0x00CF` carrying 0, or nothing.
 * **MORALE-Q5 and Q6's field-to-field half**: morale BOOSTS have zero sightings on
-  retail's wire, and all 3 deaths-then-zone in the corpus zone into an OUTPOST, so what a
-  field-to-field zone does with a penalty is WIKI only
+  retail's wire, and both zones in the corpus that carry a live penalty go into an
+  OUTPOST (n = 2, one map pair), so what a field-to-field zone does with a penalty is
+  WIKI only
   ([studies/morale/FINDINGS.md](studies/morale/FINDINGS.md) §6).
 * **The account-posture call**: whether a live session may run against an archive
   holding an authored map is the owner's, unmade, and "launch and quit is enough" is
@@ -2270,7 +2271,11 @@ the log alone.
   map are untouched. The engine half is green; the presentation half is why the arc
   is paused.
 * **The archive** ([studies/crossbuild/FINDINGS.md](studies/crossbuild/FINDINGS.md)):
-  nothing has pressured the allocator with many sessions over many maps.
+  nothing has pressured the allocator with many sessions over many maps. Content keyed
+  to a durable per-map key (option C) is NOT BUILT: its three candidate keys are REFUTED
+  (maprows §10.11–§10.12 — each is a fact about the bytes, which a patch changes), a
+  durable key must come from the map id the server sends or an `s_missionClientData`
+  join, and it waits for a second archive state.
 * **The silent-opcode sweep's residue** ([studies/smsgsweep/FINDINGS.md](studies/smsgsweep/FINDINGS.md)):
   the five account-name selectors (§7.9), and `0x0191` — READ as a map change (§7.5) —
   has no `schema/overrides.json` row.
