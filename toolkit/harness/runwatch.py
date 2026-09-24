@@ -9,8 +9,8 @@ are the evidence, not decoration, and they travel verbatim.
 
 THE REFERENTS THAT STAYED BEHIND. `walk_legs` (the other retraction, for a client
 that dies BETWEEN steps), `run_client` (the `finally` that calls
-`capture_error_dialog` a second time with a shorter wait, and the call site that
-consumes `hold_open`'s return) and `main` (`--keep-open`, whose `finally` used to
+`capture_error_dialog` a second time with a shorter wait and folds what it finds
+into the verdict, and the call site that consumes `hold_open`'s return) and `main` (`--keep-open`, whose `finally` used to
 stop the servers out from under the client) are all still in `session.py`, which
 re-exports all four names here.
 
@@ -137,7 +137,26 @@ def hold_open(proc, seconds, tails, outdir, quiet=False, shot_every=0.0):
         #
         # Short wait: we are not expecting a dialog here, only checking. Silent
         # when there is none, because most holds end this way.
-        capture_error_dialog(outdir, wait=1.0, quiet=True)
+        #
+        # AND FINDING ONE RETRACTS THE VERDICT, which this branch did not do for
+        # six weeks after it was written: it captured the dialog, printed the
+        # `>>> Assertion:` line, dropped the path and returned None, so the run
+        # still printed RUN VERDICT: PASS and exited 0 over the very crash the
+        # comment above names. MEASURED 2026-09-24 over vault/captures/harness:
+        # 197 crash-dialog.txt files, EVERY one carrying an `Assertion:` or
+        # `Exception:` line (so "a dialog was found" has no false positive on
+        # record), and 177 of the 184 with a report.json beside them say
+        # `"passed": true`. The fix for the other exit had the same shape --
+        # a return that went nowhere -- see verdict_after_hold.
+        if capture_error_dialog(outdir, wait=1.0, quiet=True):
+            return "crashed"
+    return None
+
+
+# What `hold_open` returns when the hold unmakes a PASS: the client exited, or
+# the timer ran out on a client sitting behind its crash dialog. None (the timer
+# ran out on a live client) keeps it.
+RETRACTING = ("exited", "crashed")
 
 
 def verdict_after_hold(ok, hold_result):
@@ -158,11 +177,17 @@ def verdict_after_hold(ok, hold_result):
     nobody invokes is precisely the bug being fixed, and it would otherwise look
     identical from here.
 
+    AND "crashed" SINCE 2026-09-24, for the hold that ran out with a crash dialog
+    up -- a Guild Wars assert keeps the process alive behind it, so that is the
+    common crash, not the rare one, and this function used to see only "exited".
+    `run_client` also passes "crashed" for a dialog its `finally` finds at
+    teardown: the same leak on a run without --keep-open, one rule for both.
+
     Retraction only. A hold cannot turn a failed run green: the verdict is read
     before the walk and says something true about the spawn, and the hold can
     only add bad news.
     """
-    return bool(ok) and hold_result != "exited"
+    return bool(ok) and hold_result not in RETRACTING
 
 
 def capture_error_dialog(outdir, wait=12.0, quiet=False):
@@ -194,6 +219,12 @@ def capture_error_dialog(outdir, wait=12.0, quiet=False):
 
     `quiet` suppresses the no-dialog line for the polling call, where finding
     nothing is the normal case rather than a result.
+
+    THE RETURN IS A VERDICT, NOT A LOG LINE. A path means a dialog was found
+    (or an earlier look this run already found one), and both call sites that
+    can meet a crashed-but-running client -- `hold_open`'s timer branch and
+    `run_client`'s `finally` -- retract the PASS on it. Printing the assert and
+    dropping the path is how 177 runs said PASS over a captured crash.
 
     READ ONLY, and that is a safety property rather than a style choice. The
     dialog's default button is "Send report to ArenaNet", which would upload a

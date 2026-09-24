@@ -68,7 +68,7 @@ Every one of these, in the order they were written:
   because it is stamped `validated_against_build 38797`, where 112 is correct),
   `toolkit/schema/test_catalog.py` (our message catalog vs. the client's own
   format tables — 477/477 GAME_SMSG agree field-for-field on build 38797),
-  `toolkit/harness/test_harness.py` (**2026-09-15: `test_dashed_values` -- a lone dashed value after `--game-args` / `--client-arg` (`--game-args --explorable`) is rewritten to the = form before argparse sees it, because argparse reads it as another option and dies with 'expected one argument' unless the string happens to contain a space; the owner hit it on the runbook's own example. +4, floor 170 -> 174.** **2026-09-14 (night): the third control mailbox, `skill` — `request_skill` / `take_skill` round-trip a (skill, target) pair, default target 0, read-and-clear, dropped by `clear()`; +5, floor 165 → 170.** the one-command stack, the launch safety
+  `toolkit/harness/test_harness.py` (**2026-09-24: the verdict leak on the hold's TIMER branch, and at teardown.** A GW assert keeps the process alive behind its modal dialog, so the common crash is the hold running out with `poll()` still None -- and that branch captured the dialog, printed the `>>> Assertion:` line and returned None, which `verdict_after_hold` correctly read as "keep the PASS": a right rule handed the wrong value, so the run printed RUN VERDICT: PASS and exited 0. `run_client`'s `finally` dropped its own look the same way, on every run without `--keep-open`. MEASURED over `vault/captures/harness`: 197 `crash-dialog.txt` files, every one carrying an `Assertion:`/`Exception:` line, and 177 of the 184 with a report said `"passed": true`. `hold_open` now returns `"crashed"` when the timer-path look finds a dialog, the teardown look is folded through the same rule, and the report carries `checkpoints_passed` apart from the retractions (see `test_smsgsweep.py` for the two loops that need it). +7: three truth-table rows (`"crashed"` retracts, the real healthy value None keeps, a crash never promotes); the timer path taken through the REAL `hold_open` with a client whose `poll()` stays None and a faked dialog, plus its no-dialog control -- the truth table alone cannot see this defect; and a syntax-tree check that the `finally` keeps the teardown look AND that the kept name reaches `verdict_after_hold`, whose control rejects both the pre-fix bare call and a kept-but-unread value. Each half was sabotaged and run: `runwatch.py` at HEAD reddens 2, the timer branch alone 1, the teardown alone 1. Floor 174 -> 181.** **2026-09-15: `test_dashed_values` -- a lone dashed value after `--game-args` / `--client-arg` (`--game-args --explorable`) is rewritten to the = form before argparse sees it, because argparse reads it as another option and dies with 'expected one argument' unless the string happens to contain a space; the owner hit it on the runbook's own example. +4, floor 170 -> 174.** **2026-09-14 (night): the third control mailbox, `skill` — `request_skill` / `take_skill` round-trip a (skill, target) pair, default target 0, read-and-clear, dropped by `clear()`; +5, floor 165 → 170.** the one-command stack, the launch safety
   gate, the live capture tail, and the crash-dialog capture — which is the ONLY
   machine-readable evidence a client assert leaves: `Gw.log` does not record
   asserts, no dump file is written anywhere findable, and a ConnectionResetError
@@ -7751,7 +7751,21 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   against. Last, the ORDER is asked of the syntax tree -- the guard must sit BEFORE the
   launch statement in the round body, with the guard deleted AND the guard moved one past
   the launch as controls, because a client that goes up and is stopped afterwards has
-  already measured the wrong opcodes),
+  already measured the wrong opcodes.
+  **And since 2026-09-24 it pins that the loops stop on a stack that never reached the
+  map, NOT on a crash.** That day `session.py` began retracting its PASS over a client
+  that asserted after the spawn (the hold's timer branch and the teardown look, see
+  `test_harness.py`), and both `sweeploop` and `shotloop` read `RUN VERDICT: PASS` as "the
+  stack reached the map" -- so the honest verdict would have ended a sweep, which exists
+  to crash clients, on its first result, as "a broken stack". The report now carries
+  `checkpoints_passed` apart from the retractions and `smsgsweep.reached_checkpoints`
+  reads it: a retracted-after-spawn report reached the map, a never-passed one did not
+  (the control), a pre-key report falls back to `passed`, a missing one reached nothing.
+  A syntax-tree check that both loops ask it and no longer gate on the verdict string,
+  whose control rejects sweeploop's old line verbatim AND the old line with the new call
+  bolted on; and a check that `session.run_client` writes the key, the other end of the
+  contract. Sabotaged: either loop at HEAD reddens the loop check, the report key removed
+  reddens its own. +6, floor 118 -> 124),
   `toolkit/authsrv/test_fogrle.py` (the fog-init pair's SYNTHETIC stream — the
   2026-08-24 durable fix for the M-key crash (`GmMapView.cpp(1731)`, minimap
   FINDINGS 6f.2, the RUNBOOK failure table's `key:m` row), where `authsrv.py`

@@ -264,12 +264,17 @@ def main():
         for line in out.splitlines():
             if "Assertion" in line or "RUN VERDICT" in line or "ERROR DIALOG" in line:
                 print("    " + line.strip(), flush=True)
-        failed = rc != 0 or "RUN VERDICT: PASS" not in out
         try:
             report = newest_report(before)
         except RuntimeError as exc:
             print(f"  STOP: {exc}", flush=True)
             break
+        # "FAILED" IS "DID NOT REACH THE MAP", which is what `decide` says when it stops
+        # on it -- not "the verdict was not PASS". Since 2026-09-24 a client that
+        # asserts after the spawn ends RUN VERDICT: FAIL, and a crash is what this loop
+        # is here to localise; keyed on the verdict, the first one would end the sweep
+        # as "a broken stack". See smsgsweep.reached_checkpoints.
+        failed = not smsgsweep.reached_checkpoints(report)
 
         rc, out, _ = run([sys.executable, SWEEP, "--from-report", report, "--record"])
         for line in out.splitlines():
