@@ -28,6 +28,50 @@ move back.
 
 ---
 
+### DESKWORK-D1, the field shield -- 2026-09-24 -- **the load's player `0x006D` withheld in a FIELD too, as retail's wire does; `--field-player-weapons` the KNOWN-BAD arm; the client run owed**
+
+The defect the town fix's review opened (TF-R1, `PLAN.md` 8.1): our load sent the player's own
+agent `0x006D` `[player, lead, 0]` two messages after the `0x006E`, and the client's one
+visual-equipment store per agent takes the last writer, so a sword-and-shield field body lost its
+shield at load (run `20260923T154229`, c1 seq 111/113, OBSERVED). Retail sends the own body no
+`0x006D` in either regime — 0 of 46 outpost and 0 of 44 field connections with a controlled agent,
+re-derived independently by the evidence reviewer (96 live connections, 3,502 field `0x006D` in
+all, so the census is not vacuous). The alternative (carry the bag's off hand as the third field)
+was rejected: it would still be a message retail never sends.
+
+**The desk read first** (`townweapon.py` THE FIELD SHIELD, build 38797): the `0x006D` worker
+`0x00810B70` and the `0x006E` worker `0x00810E30` are one code body with a different slot count —
+228 instructions each; with branch targets and the jump-table base made relative two rows differ
+(the assert stub's address, `cmp ebx, 2` vs `cmp ebx, 9`), and the two slot-to-kind tables are
+identical (OBSERVED). The lead's type byte at record+0x48 is the setter `0x0081BE10`'s own write.
+So nothing the `0x006D` writes for slots 0..1 is missing when only the `0x006E` arrives (NOT FOUND,
+bounded to direct calls); what ours added was the UNDRESS `0x007E0510(agent, 1)` of the off hand —
+the erased shield, now with its instruction. The town fix's "swing path UNVERIFIED" is answered at
+the desk as far as direct calls reach; the run watches the swing anyway.
+
+**The fix** (branch `desk-fieldshield`, `8e840c71` + the fix pass `f9b658a4`, merge `e7893067`):
+`townweapon.player_weapons_sent` answers per regime and per arm (none by default),
+`send_player_weapons` asks it once and logs `FIELD SHIELD` / `TOWN WEAPON` per arm;
+`--field-player-weapons` (default off) sends the pre-fix `[player, lead, 0]` byte for byte. The two
+town arms are unchanged (the code reviewer ran all 32 arm combinations on the old and new trees:
+every town arm byte-identical). Two read-only reviewers (evidence, code/tests) returned eight
+findings, all minor or nit, all applied — the town carrier relabelled OBSERVED at every site
+(CONFIRM-2 §7), the flag locks reading `global` in `main()`, the vacuity pair's wording, the
+jump-table normalisation named. The fixer died on a usage limit with its edits uncommitted; the
+orchestrator verified and finished them. `test_townweapon` 70 vaulted / 55 bare (floor 45 → 55).
+The lane's sweep: 77 of 77 affected tests green, 6,298 checks, then test_webgate 9,
+test_harness 181, test_preflight_owner 30 serially; **test_handshake NOT RUN** — a sandbox stack
+started from `C:\gd\Rurik` at 14:35 holds 6112 (not this session's; left alone). On the merged
+tree (after main's `19da8c97`): test_townweapon 70, test_sandbox 140, test_itemmoves 184, the five
+lints green.
+
+**Owed on the client** (`PLAN.md` 8.1): F1 a field load with `--player-weapon starter_sword
+--player-offhand starter_shield` — the body holds both (PREDICTION); F2 the same, attacking the
+practice target — the swing plays and lands, no crash dialog; F3 `--field-player-weapons` — the
+shield gone again, `20260923T154229`'s picture.
+
+---
+
 ### R-SANDBOX, hostile caps lifted: the verifier's fixes -- 2026-09-24 -- **one hostile past both caps was refused for one; the spin-fit law printed a constant it never measured; the two open residues were in the log and not in §8; and the client half of the definition defect was stated as fact**
 
 Corrects the entry below it, "R-SANDBOX, hostile level and rank caps lifted -- 2026-09-24"
