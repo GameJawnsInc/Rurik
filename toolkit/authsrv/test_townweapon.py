@@ -81,6 +81,8 @@ census).
 """
 import collections
 import os
+import contextlib
+import io
 import re
 import sys
 
@@ -96,7 +98,7 @@ import townweapon as tw                                      # noqa: E402
 import itemstore                                             # noqa: E402
 import authsrv                                               # noqa: E402
 
-led = checks.Ledger("the town weapon (DESKWORK-D1)", floor=55)  # 2026-09-24 (the field shield), from the green run with RURIK_VAULT pointed at an empty directory (the bare-machine core, 1 declared skip); section 2's 15 ride the vault (70 vaulted). History: 35 bare / 46 vaulted on 2026-09-23; +1/+1 on the fix pass (the 0x006E label lock WEAP-R5, the 0x0022 cross-check WEAP-R6); +9 bare / +3 vaulted on the CONFIRM-2 carrier fix (send_player_weapons' four arms, vacuity, F2 with no 0x006D, three source locks; the own-0x006D, own-addressed and stranger-change census pins) = 45 / 60; +10 bare / +10 vaulted on the field shield (the leaf's player_weapons_sent x3, the field flag's source lock, the field KNOWN-BAD arm, the arms' VACUITY pair, the sword-and-shield load on both arms, the emptied lead's default, the field F2 with no 0x006D; the FIELD CONTROL became the field default, same count)
+led = checks.Ledger("the town weapon (DESKWORK-D1)", floor=72)  # 2026-09-24 (CLEANUP-3's review), from the green run with RURIK_VAULT pointed at an empty directory (the bare-machine core, 1 declared skip); section 2's 15 ride the vault (87 vaulted). +6 bare / +6 vaulted at the review (the leaf's per-slot pin split in three, the commit-count lock, the TOWN ARMOUR log under Hide in Towns, the strip-off town hammer, the commit count, the both-off town head); +11 / +11 on CLEANUP-3 itself (the leaf's pair, three source locks, the town head out/back, the town hands beside it, the 0x0072 drag, the KNOWN-BAD arm, the field VACUITY, Hide in Towns) = 66 / 81. History: 55 bare / 70 vaulted on the field shield (2026-09-24); 35 bare / 46 vaulted on 2026-09-23; +1/+1 on the fix pass (the 0x006E label lock WEAP-R5, the 0x0022 cross-check WEAP-R6); +9 bare / +3 vaulted on the CONFIRM-2 carrier fix (send_player_weapons' four arms, vacuity, F2 with no 0x006D, three source locks; the own-0x006D, own-addressed and stranger-change census pins) = 45 / 60; +10 bare / +10 vaulted on the field shield (the leaf's player_weapons_sent x3, the field flag's source lock, the field KNOWN-BAD arm, the arms' VACUITY pair, the sword-and-shield load on both arms, the emptied lead's default, the field F2 with no 0x006D; the FIELD CONTROL became the field default, same count)
 
 VIS = authsrv.GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT           # 0x006F
 WORN = authsrv.GAME_SMSG_UPDATE_AGENT_VISUAL_EQUIPMENT               # 0x006E
@@ -149,6 +151,20 @@ led.ok(tw.filter_hand_writes([(1, 0)], False) == ([], [(1, 0)]) and tw.filter_ha
        "an emptied hand's zero is dropped in a town too (retail's outpost off-hand unequip carried no "
        "0x006F) and kept in a field (the tape's [25, 1, 0])")
 led.ok(tw.filter_hand_writes([], False) == ([], []), "CONTROL: an empty batch stays empty")
+# THE TOWN ARMOUR (CLEANUP-3, 2026-09-24): the planners plan PER SLOT -- a town's armour, never its hands
+led.ok(all(tw.visual_planned(s, True) is True for s in (0, 1, 6, 7))
+       and tw.visual_planned(6, False) is True and tw.visual_planned(7, False) is True,
+       "visual_planned: a field plans every slot (retail 7 of 7) and a town plans an ARMOUR slot by default -- "
+       "retail writes outpost armour visuals (the own PvP head [336, 6, 23284], 31 strangers'; RECONSTRUCTION "
+       "for a town armour equip: none is on tape)")
+led.ok(tw.visual_planned(0, False) is False and tw.visual_planned(1, False) is False
+       and tw.visual_planned(0, False, town_armour=False) is False,
+       "...and NEVER a town hand, under either arm (retail 0 of 14; the review's RV-2: planned-then-dropped "
+       "let --no-town-weapon-strip send a town equip's hand write, which no run ever did)")
+led.ok(tw.visual_planned(6, False, town_armour=False) is False
+       and all(tw.visual_planned(s, True, town_armour=False) is True for s in (0, 1, 6)),
+       "KNOWN-BAD (--no-town-armour-visuals): a town plans nothing -- every run before CLEANUP-3 -- and it "
+       "disagrees with the default; the field is untouched by the flag (VACUITY)")
 # THE FIELD SHIELD (2026-09-24): the load's player 0x006D is nobody's by default
 led.ok(tw.player_weapons_sent(True) is False and tw.player_weapons_sent(False) is False,
        "player_weapons_sent: retail sends the own body no 0x006D in either regime (0 of 46 outpost, 0 of 44 "
@@ -390,10 +406,12 @@ led.ok("if TOWN_WEAPON_STRIP_ENABLED:" in vw and "townweapon.strip_hands(shown, 
        and "visstatus.strip_visual(" in vw and vw.index("visstatus.strip_visual(") < vw.index("townweapon.strip_hands("),
        "SOURCE LOCK: visible_worn applies the display mode then the town's hands, each behind its flag")
 vsw = func_src("visible_slot_writes")
-led.ok("if not VISIBILITY_STATUS_ENABLED and not TOWN_WEAPON_STRIP_ENABLED:" in vsw
-       and "townweapon.drops(vals[1], field)" in vsw and "int(vals[0]) == PLAYER_AGENT_ID" in vsw,
+led.ok("if not VISIBILITY_STATUS_ENABLED and not TOWN_WEAPON_STRIP_ENABLED and field:" in vsw
+       and "townweapon.drops(vals[1], field)" in vsw and "int(vals[0]) == PLAYER_AGENT_ID" in vsw
+       and vsw.index("field = instance_is_field(state)") < vsw.index("and field:"),
        "SOURCE LOCK: visible_slot_writes drops the PLAYER's hand writes in a town behind the flag and "
-       "passes the batch whole only when both flags are off")
+       "passes the batch whole only when both flags are off AND it is a field -- a town still passes for "
+       "the armour label (the review's RV-5)")
 sws = func_src("select_weapon_set")
 led.ok("_send(GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT" not in sws
        and sws.count("_vis.append((GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT") == 3
@@ -443,6 +461,38 @@ led.ok('"weapon" if EQUIP_WEAPON else ""' not in players and '"weapon" if _hands
        "SOURCE LOCK: the burst's 0x006E label names what the ARRAY carries -- `weapon` only when a hand is "
        "non-zero, `[hands empty: a town]` when the strip left both empty (the review's WEAP-R5: the old "
        "label named a weapon the town message did not carry)")
+# THE TOWN ARMOUR (CLEANUP-3): the flag, wired; the three handlers through item_visuals_planned
+led.ok('"--no-town-armour-visuals"' in ARGS and "a.no_town_armour_visuals" in SRC
+       and "TOWN_ARMOUR_VISUALS_ENABLED = True" in SRC and "TOWN_ARMOUR_VISUALS_ENABLED = False" in SRC
+       and "global TOWN_ARMOUR_VISUALS_ENABLED" in func_src("main")
+       and ARGS.index('"--no-town-armour-visuals"') > ARGS.index('"--field-player-weapons"'),
+       "SOURCE LOCK: the town armour revert flag (--no-town-armour-visuals) is declared in serverargs.py beside "
+       "the field shield's, defaults ON and is wired in main() through a `global`")
+ivp = func_src("item_visuals_planned")
+_handlers = ("handle_item_move", "handle_equip_item", "handle_item_move_by_id")
+led.ok("townweapon.visual_planned(slot, field" in ivp and "field = instance_is_field(state)" in ivp
+       and "town_armour=TOWN_ARMOUR_VISUALS_ENABLED" in ivp and "lambda slot:" in ivp
+       and all("visuals=item_visuals_planned(state)" in func_src(f) for f in _handlers)
+       and not any("visuals=instance_is_field(state)" in func_src(f) for f in _handlers)
+       and SRC.count("visuals=item_visuals_planned(state)") == 3,
+       "SOURCE LOCK: the three item handlers plan their visuals through item_visuals_planned -- the leaf's "
+       "PER-SLOT rule asked with the flag, a callable itemstore's planners call per visual slot -- and none "
+       "is handed visuals=instance_is_field(state) any more (the pre-CLEANUP-3 form, which planned nothing "
+       "in a town)")
+led.ok("town_armour.append((int(vals[1]), planned, int(vals[2])))" in vsw
+       and "int(vals[1]) not in townweapon.HAND_SLOTS" in vsw
+       and vsw.index("townweapon.drops(vals[1], field)") < vsw.index("visstatus.filter_slot_writes(")
+       < vsw.index("town_armour.append(")
+       and "[a town's armour visual -- RECONSTRUCTION" in vsw
+       and "hidden by the display mode, sent 0" in vsw,
+       "SOURCE LOCK: visible_slot_writes labels a town armour write RECONSTRUCTION at the send, AFTER the hands' "
+       "drop and AFTER the display mode's zero -- so the log names the item as SENT (the review's RV-4) -- and "
+       "never labels a hand")
+imc = func_src("_item_moves_commit")
+led.ok("\n    out = visible_slot_writes(batch, state, conn_id)\n" in imc and "{len(out)} message(s)" in imc
+       and "{len(batch)} message(s)" not in imc and "for op, vals, label in out:" in imc,
+       "SOURCE LOCK: _item_moves_commit sends and COUNTS what the gate returned, not the planned batch (the "
+       "review's RV-3: '2 message(s)' was logged for a town hammer that sent one)")
 import visstatus                                             # noqa: E402
 led.ok(set(visstatus.KIND_VISUAL_SLOT.values()) == {6, 7, 8}
        and all(s not in tw.HAND_SLOTS for _k, s, _i in visstatus.slot_changes(0xFF, 0x00, [1, 12, 3, 4, 5, 6, 7, 8, 9], False)),
@@ -453,7 +503,8 @@ _saved = {k: getattr(authsrv, k) for k in
            "EQUIP_ARMOUR", "EQUIP_COSTUME", "EQUIP_COSTUME_HEAD", "WEAPON_SETS",
            "PLAYER_SWING_DAMAGE", "WEAPON_ATTACK_SPEED", "ATTACK_INTERVAL",
            "EQUIPPED_VISUAL_ORDER", "VISIBILITY_STATUS_ENABLED", "TOWN_WEAPON_STRIP_ENABLED",
-           "TOWN_PLAYER_WEAPONS_ENABLED", "FIELD_PLAYER_WEAPONS_ENABLED")}
+           "TOWN_PLAYER_WEAPONS_ENABLED", "FIELD_PLAYER_WEAPONS_ENABLED",
+           "TOWN_ARMOUR_VISUALS_ENABLED", "ITEM_MOVE_BY_ID_ENABLED")}
 _saved_off, _saved_wpn = authsrv.agents.PLAYER_OFFHAND, authsrv.agents.PLAYER_WEAPON
 _saved_slots, _saved_over = dict(authsrv.WEAPON_SET_BACKPACK_SLOTS), dict(authsrv.SET_ITEMS_OVERRIDE)
 try:
@@ -464,6 +515,8 @@ try:
     authsrv.VISIBILITY_STATUS_ENABLED, authsrv.TOWN_WEAPON_STRIP_ENABLED = True, True
     W, EQ, BP = authsrv.WEAPON_ITEM_ID, authsrv.EQUIPPED_BAG_ID, authsrv.BACKPACK_BAG_ID
     MOVE, EQUIP = authsrv.GAME_CMSG_ITEM_MOVE, authsrv.GAME_CMSG_EQUIP_ITEM
+    MOVE_ID = authsrv.GAME_CMSG_ITEM_MOVE_BY_ID
+    authsrv.TOWN_ARMOUR_VISUALS_ENABLED, authsrv.ITEM_MOVE_BY_ID_ENABLED = True, True
 
     def fresh(outpost, strip=True, vis=True, flags=None, p6d=False, f6d=False, shield=False):
         """A real item layout (--weapon-set 1=starter_sword+starter_shield) in a town or a field;
@@ -663,6 +716,102 @@ try:
            "FIELD equip path CONTROL: 0x014B + 0x006F [player, 0, 0] out, 0x014B + 0x006F [player, 0, hammer] "
            "back (retail's field 0x0030: 0x014B + 0x006F, 4 of 4)", f"{sentf}")
 
+    # THE TOWN ARMOUR (CLEANUP-3, 2026-09-24): the head out and back in a TOWN carries its visual;
+    # the hands in the SAME state still do not (the one gate).
+    HEAD, HEAD_BAG = 7, itemstore.RETAIL_BAG_SLOT_OF_TYPE[16]          # warrior_head, retail's cell 4
+    st, items = fresh(outpost=True)
+    sent, send = fake_send_factory()
+    authsrv.handle_item_move([MOVE, HEAD_BAG, BP, 9], send, st, 0)
+    authsrv.handle_equip_item([EQUIP, HEAD], send, st, 0)
+    town_head = [(CHG, [1, HEAD, BP, 9]), (VIS, [P, 6, 0]), (CHG, [1, HEAD, EQ, HEAD_BAG]), (VIS, [P, 6, HEAD])]
+    led.ok(sent == town_head and itemstore.at(items, EQ, HEAD_BAG) == HEAD,
+           "TOWN ARMOUR: the head out (0x004F) and back (0x0030) in a town carry 0x006F [player, 6, 0] and "
+           "[player, 6, head] -- the SLOT's rule, retail's own outpost head write [336, 6, 23284] the precedent "
+           "(RECONSTRUCTION for the equip: no own outpost armour 0x0030 is on tape)", f"{sent}")
+    sent.clear()
+    authsrv.handle_item_move([MOVE, 0, BP, 10], send, st, 0)
+    authsrv.handle_equip_item([EQUIP, W], send, st, 0)
+    led.ok(sent == [(CHG, [1, W, BP, 10]), (CHG, [1, W, EQ, 0])],
+           "...and the hammer out and back in the SAME town state still ride 0x014B alone: a town hand's write "
+           "is never PLANNED (townweapon.visual_planned; retail 0 of 14) -- the armour and the hands part at "
+           "the slot")
+    sent.clear()
+    authsrv.handle_item_move_by_id([MOVE_ID, HEAD, BP, 9], send, st, 0)
+    authsrv.handle_item_move_by_id([MOVE_ID, HEAD, EQ, HEAD_BAG], send, st, 0)
+    led.ok(sent == town_head,
+           "the 0x0072 drag of the head out and back in a town carries the same two visuals (the delegated "
+           "batches plan through the same gate)", f"{sent}")
+    authsrv.TOWN_ARMOUR_VISUALS_ENABLED = False
+    st_k, _ik = fresh(outpost=True)
+    sent_k, send_k = fake_send_factory()
+    authsrv.handle_item_move([MOVE, HEAD_BAG, BP, 9], send_k, st_k, 0)
+    authsrv.handle_equip_item([EQUIP, HEAD], send_k, st_k, 0)
+    led.ok(sent_k == [(CHG, [1, HEAD, BP, 9]), (CHG, [1, HEAD, EQ, HEAD_BAG])] and sent_k != town_head,
+           "KNOWN-BAD (--no-town-armour-visuals): the town head equip rides 0x014B alone -- every run before "
+           "CLEANUP-3 (measured on the real handlers) -- and it disagrees with the default, so the pin can tell "
+           "the arms apart", f"{sent_k}")
+    st_kf, _ikf = fresh(outpost=False)
+    sent_kf, send_kf = fake_send_factory()
+    authsrv.handle_item_move([MOVE, HEAD_BAG, BP, 9], send_kf, st_kf, 0)
+    led.ok(sent_kf == [(CHG, [1, HEAD, BP, 9]), (VIS, [P, 6, 0])],
+           "VACUITY: the flag leaves the FIELD's head visual alone (retail's [25, 6, 0])", f"{sent_kf}")
+    authsrv.TOWN_ARMOUR_VISUALS_ENABLED = True
+    st_h, _ih = fresh(outpost=True, flags=0xF7)
+    sent_h, send_h = fake_send_factory()
+    buf_h = io.StringIO()
+    with contextlib.redirect_stdout(buf_h):
+        authsrv.handle_item_move([MOVE, HEAD_BAG, BP, 9], send_h, st_h, 0)
+        authsrv.handle_equip_item([EQUIP, HEAD], send_h, st_h, 0)
+    led.ok(sent_h == [(CHG, [1, HEAD, BP, 9]), (VIS, [P, 6, 0]), (CHG, [1, HEAD, EQ, HEAD_BAG]), (VIS, [P, 6, 0])],
+           "BOTH RULES: under Hide in Towns (0xF7) the town head equip's visual goes out ZEROED, [player, 6, 0] "
+           "-- the display mode's idempotent zero -- neither dropped nor the item", f"{sent_h}")
+    ta = [l for l in buf_h.getvalue().splitlines() if "TOWN ARMOUR" in l]
+    led.ok(len(ta) == 2 and "visual 6 (emptied)" in ta[0]
+           and f"visual 6 (item {HEAD} hidden by the display mode, sent 0)" in ta[1]
+           and f"(item {HEAD}) goes out" not in ta[1],
+           "...and the TOWN ARMOUR log names the item as SENT -- 'hidden by the display mode, sent 0' beside the "
+           "DISPLAY MODE line, not '(item 7) goes out' (the review's RV-4: the lane recorded the planned item)",
+           f"{[l[:120] for l in ta]}")
+    # THE REVIEW'S RV-2: the strip's own revert arm restores ITS picture. A town hammer equip rode
+    # 0x014B alone on every run before 2026-09-23 (visuals=instance_is_field), so with the strip
+    # OFF it must still: a town hand's write is never planned, whatever the gate then does.
+    st_s, _is = fresh(outpost=True, strip=False)
+    sent_s, send_s = fake_send_factory()
+    authsrv.handle_item_move([MOVE, 0, BP, 10], send_s, st_s, 0)
+    authsrv.handle_equip_item([EQUIP, W], send_s, st_s, 0)
+    led.ok(sent_s == [(CHG, [1, W, BP, 10]), (CHG, [1, W, EQ, 0])],
+           "--no-town-weapon-strip, a town hammer out and back: 0x014B alone -- that arm's own picture (every "
+           "run before 2026-09-23); the lane's planned-then-dropped hands sent 0x006F [player, 0, x] here, "
+           "which no run ever did (the review's RV-2)", f"{sent_s}")
+    # THE REVIEW'S RV-3: the commit log counts what went out.
+    st_c, _ic = fresh(outpost=True)
+    sent_c, send_c = fake_send_factory()
+    buf_c = io.StringIO()
+    with contextlib.redirect_stdout(buf_c):
+        authsrv.handle_item_move([MOVE, 0, BP, 10], send_c, st_c, 0)
+        authsrv.handle_item_move([MOVE, HEAD_BAG, BP, 9], send_c, st_c, 0)
+    logs_c = [l for l in buf_c.getvalue().splitlines() if "message(s)" in l]
+    led.ok(len(sent_c) == 3 and len(logs_c) == 2
+           and "equipped 0 -> bag 2 slot 10): 1 message(s)" in logs_c[0]
+           and f"equipped {HEAD_BAG} -> bag 2 slot 9): 2 message(s)" in logs_c[1],
+           "the commit log counts what the gate RETURNED: the town hammer out '1 message(s)' (0x014B alone), "
+           "the head out '2 message(s)' (0x014B + 0x006F) -- the review's RV-3 (the lane logged the planned "
+           "count, 2 for a hammer that sent one)", f"{[l[:90] for l in logs_c]}")
+    # THE REVIEW'S RV-5: with BOTH gates off in a town, the armour write is still labelled and logged.
+    st_b, _ib = fresh(outpost=True, strip=False, vis=False)
+    got_b = []
+    buf_b = io.StringIO()
+    with contextlib.redirect_stdout(buf_b):
+        authsrv.handle_item_move([MOVE, HEAD_BAG, BP, 9],
+                                 lambda op, v, label=None, **_k: got_b.append((op, list(v), label or "")),
+                                 st_b, 0)
+    led.ok([(o, v) for o, v, _l in got_b] == [(CHG, [1, HEAD, BP, 9]), (VIS, [P, 6, 0])]
+           and "[a town's armour visual -- RECONSTRUCTION" in got_b[1][2]
+           and any("TOWN ARMOUR" in l for l in buf_b.getvalue().splitlines()),
+           "--no-town-weapon-strip AND --no-visibility-status, a town head out: the 0x006F still carries the "
+           "RECONSTRUCTION label and the TOWN ARMOUR line still prints (the review's RV-5: the gate's both-off "
+           "shortcut skipped both; it now applies to a field only)", f"{got_b}")
+
     # composition with the display mode: headgear Hide in Towns (0xF7) in a town
     st, items = fresh(outpost=True, flags=0xF7)
     dressed = authsrv.player_worn_array(st)
@@ -684,16 +833,23 @@ try:
     plain = [(CHG, [1, 2, 3, 4], "x"), (VIS, [P, 0, 9], "hand"), (VIS, [P + 1, 0, 9], "npc hand"),
              (VIS, [P, 6, 7], "head"), (VIS, [P, 1, 0], "emptied off hand")]
     got = authsrv.visible_slot_writes(plain, {"vis_flags": 0xFF}, 0)
-    led.ok(got == [plain[0], plain[2], plain[3]],
+    led.ok([(o, v) for o, v, _l in got] == [(o, v) for o, v, _l in (plain[0], plain[2], plain[3])]
+           and got[2][2].startswith("head [a town's armour visual -- RECONSTRUCTION")
+           and got[0][2] == "x" and got[1][2] == "npc hand",
            "visible_slot_writes in a town: the player's lead and emptied off hand are DROPPED; another "
-           "agent's hand and the player's head pass (the PvP head precedent)", f"{got}")
+           "agent's hand and the player's head pass (the PvP head precedent), the head's label tagged "
+           "RECONSTRUCTION at the send (CLEANUP-3) and the others untouched", f"{got}")
     authsrv.VISIBILITY_STATUS_ENABLED = False
     got2 = authsrv.visible_slot_writes(plain, {"vis_flags": 0xFF}, 0)
-    led.ok(got2 == [plain[0], plain[2], plain[3]],
+    led.ok([(o, v) for o, v, _l in got2] == [(o, v) for o, v, _l in (plain[0], plain[2], plain[3])],
            "...the hands are dropped whatever the display-mode flag (the gates are independent)")
     authsrv.TOWN_WEAPON_STRIP_ENABLED = False
-    led.ok(authsrv.visible_slot_writes(plain, {"vis_flags": 0xFF}, 0) == plain,
-           "KNOWN-BAD, both flags off: the batch passes whole (every run before the display-mode pass)")
+    got3 = authsrv.visible_slot_writes(plain, {"vis_flags": 0xFF}, 0)
+    led.ok([(o, v) for o, v, _l in got3] == [(o, v) for o, v, _l in plain]
+           and got3[3][2].startswith("head [a town's armour visual -- RECONSTRUCTION")
+           and [l for _o, _v, l in got3 if not l.startswith("head")] == ["x", "hand", "npc hand", "emptied off hand"],
+           "KNOWN-BAD, both flags off: the batch passes whole in a town (every run before the display-mode "
+           "pass) -- the head's label still tagged (the review's RV-5), the others untouched", f"{got3}")
     authsrv.TOWN_WEAPON_STRIP_ENABLED, authsrv.VISIBILITY_STATUS_ENABLED = True, True
     authsrv.OUTPOST, authsrv.EXPLORABLE = False, True
     led.ok(authsrv.visible_slot_writes(plain, {"vis_flags": 0xFF}, 0) == plain,

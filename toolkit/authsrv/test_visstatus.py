@@ -60,7 +60,7 @@ import charstore                                             # noqa: E402
 import visstatus as vs                                       # noqa: E402
 import authsrv                                               # noqa: E402
 
-led = checks.Ledger("display mode (DESKWORK-D1, the owner's answer)", floor=63)  # 2026-09-23 fix pass, from the green run with RURIK_VAULT pointed at an empty directory (the bare-machine core); section 2's 10 ride the vault (73 vaulted)
+led = checks.Ledger("display mode (DESKWORK-D1, the owner's answer)", floor=64)  # 2026-09-24 (CLEANUP-3's review, RV-1: the town equip re-cut to the zeroed pair, +1 for its KNOWN-BAD arm), from the green run with RURIK_VAULT pointed at an empty directory (the bare-machine core); section 2's 10 ride the vault (74 vaulted); 63 / 73 at the 2026-09-23 fix pass
 
 VIS_S2C, VIS_C2S = 0x00EF, 0x0057
 assert (VIS_S2C, VIS_C2S) == (authsrv.GAME_SMSG_CHAR_VISIBILITY_FLAGS,
@@ -359,18 +359,20 @@ led.ok(w6e > 0 and "worn = visible_worn(player_worn_array(state), state, conn_id
        and 'itemstore.worn_array(state["items"], EQUIPPED_BAG_ID,' in func_src("player_worn_array"),
        "SOURCE LOCK: the player's 0x006E is visible_worn over player_worn_array -- the ONE copy of "
        "the dressed array, which reads itemstore.worn_array; the burst has no inline copy left")
-led.ok("visible_slot_writes(batch, state, conn_id)" in func_src("_item_moves_commit")
-       and "for op, vals, label in visible_slot_writes(batch, state, conn_id):" in func_src("_item_moves_commit")
+led.ok("\n    out = visible_slot_writes(batch, state, conn_id)\n" in func_src("_item_moves_commit")
+       and "for op, vals, label in out:" in func_src("_item_moves_commit")
+       and func_src("_item_moves_commit").count("visible_slot_writes(") == 1
        and all("_item_moves_commit(send, state, conn_id, batch, changes," in func_src(h)
                for h in ("handle_item_move", "handle_equip_item", "handle_item_move_by_id")),
        "SOURCE LOCK: every item handler commits through _item_moves_commit, which sends the batch "
-       "through visible_slot_writes -- one gate for every consumer")
+       "through visible_slot_writes ONCE -- one gate for every consumer -- and sends what it returned "
+       "(the CLEANUP-3 review's RV-3 re-shaped the loop)")
 led.ok('"--no-visibility-status"' in ARGS and "a.no_visibility_status" in SRC
        and "VISIBILITY_STATUS_ENABLED = False" in SRC,
        "SOURCE LOCK: the revert flag is declared in serverargs.py and wired in main()")
 
 saved = (authsrv.OUTPOST, authsrv.EXPLORABLE, authsrv.PERSIST, authsrv.VISIBILITY_STATUS_ENABLED,
-         authsrv.TOWN_WEAPON_STRIP_ENABLED)
+         authsrv.TOWN_WEAPON_STRIP_ENABLED, authsrv.TOWN_ARMOUR_VISUALS_ENABLED)
 try:
     authsrv.OUTPOST, authsrv.EXPLORABLE, authsrv.PERSIST = True, False, False
     authsrv.VISIBILITY_STATUS_ENABLED = True
@@ -465,10 +467,21 @@ try:
     led.ok(helm3 == helm and got3[3][1] == [1, 6, helm] and vis3[6] == helm,
            "CONTROL: under Always Show the re-equip's 0x006F carries the helm -- the filter passes "
            "a shown piece", f"{got3}")
+    authsrv.TOWN_ARMOUR_VISUALS_ENABLED = True
     helm4, got4, _a4, vis4 = drive_reequip(0xF7, True, outpost=True)
-    led.ok(helm4 == helm and [op for op, _v in got4] == [ITEM_LOC, ITEM_LOC] and vis4[6] == 0,
-           "TOWN, Hide in Towns: an outpost equip rides no 0x006F (retail's 0 of 5), so the filter "
-           "has nothing to withhold and the load's array hides the helm on its own", f"{got4}")
+    led.ok(helm4 == helm and [op for op, _v in got4] == [ITEM_LOC, SLOT_VIS, ITEM_LOC, SLOT_VIS]
+           and got4[1][1] == [1, 6, 0] and got4[3][1] == [1, 6, 0] and vis4[6] == 0,
+           "TOWN, Hide in Towns: since CLEANUP-3 (2026-09-24) an outpost ARMOUR equip plans its 0x006F "
+           "(retail's outpost armour writes) and the filter sends both as [player, 6, 0] -- the display "
+           "mode's idempotent zero, neither dropped nor the item -- while the load's array hides the helm "
+           "too (the review's RV-1: this check pinned the pre-lane 0x014B alone and was RED at the lane's "
+           "commit)", f"{got4}")
+    authsrv.TOWN_ARMOUR_VISUALS_ENABLED = False
+    helm5, got5, _a5, vis5 = drive_reequip(0xF7, True, outpost=True)
+    led.ok(helm5 == helm and [op for op, _v in got5] == [ITEM_LOC, ITEM_LOC] and vis5[6] == 0,
+           "KNOWN-BAD (--no-town-armour-visuals): the same town equip rides no 0x006F -- every run before "
+           "CLEANUP-3 -- so the filter has nothing to withhold; and it disagrees with the default", f"{got5}")
+    authsrv.TOWN_ARMOUR_VISUALS_ENABLED = True
     authsrv.OUTPOST, authsrv.EXPLORABLE = False, True
     plain = [(ITEM_LOC, [1, 2, 3, 4], "x"), (SLOT_VIS, [1, 0, 9], "hand"), (SLOT_VIS, [2, 6, 9], "npc")]
     led.ok(authsrv.visible_slot_writes(plain, {"vis_flags": 0x00}) == plain,
@@ -529,7 +542,8 @@ try:
         shutil.rmtree(base, ignore_errors=True)
 finally:
     (authsrv.OUTPOST, authsrv.EXPLORABLE, authsrv.PERSIST,
-     authsrv.VISIBILITY_STATUS_ENABLED, authsrv.TOWN_WEAPON_STRIP_ENABLED) = saved
+     authsrv.VISIBILITY_STATUS_ENABLED, authsrv.TOWN_WEAPON_STRIP_ENABLED,
+     authsrv.TOWN_ARMOUR_VISUALS_ENABLED) = saved
 
 ov = json.load(open(os.path.join(os.path.dirname(HERE), "..", "schema", "overrides.json"),
                     encoding="utf-8"))["channels"]
