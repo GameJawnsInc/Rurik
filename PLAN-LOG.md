@@ -28,6 +28,59 @@ move back.
 
 ---
 
+### DESKWORK-D1, the town weapon's carrier fix -- the fix pass -- 2026-09-24 -- **the carrier claim re-labelled CORROBORATED (no run has withheld the message; the runsheet's ARM 1 is the observation), with a field frame as the on-client control for last-writer-wins; the FIELD's player `0x006D` is a DEFECT, not a divergence -- its zero off hand erases the shield at every sword-and-shield field load -- opened as its own item; the own-addressed pin widened to all 14 outpost hand changes; the vacuity check that could not fail replaced**
+
+The review pass corrects the entry below. **The blockers.** (1) The entry below, the
+`send_player_weapons` log line, `townweapon.py`'s THE CARRIER, both flags' help, the census pin's
+message and CONFIRM-2 §5 called it OBSERVED that our load's player `0x006D` was the carrier that
+re-armed CONFIRM-2's town body. It is CORROBORATED: the `0x006D` went out at gamesrv.log line 151
+in all four CONFIRM-2 runs, so no frame separates it from the runsheet's own rival (a client
+arming the body from the equipped bag once at load), and OBSERVED is owed to the runsheet's ARM 1,
+the first run to withhold it. What IS observed on our client is the mechanism itself: harness run
+`20260923T154229` (a field) sent `0x006E [1, 1, 10, …]` -- the shield at visual 1 -- then
+`0x006D [1, 1, 0]`, and `walk1-wait.png` shows the sword and NO shield while CONFIRM-2 A4b's
+`0x006F [1, 1, 12]` draws the same shield model: a later `0x006D` overrides the `0x006E`'s hand
+store (the engineering review's TF-R1; the evidence review's EVREF-TF-1). Every site re-labelled.
+(2) The same frame refutes the entry below's "Open" and the study's, which called the FIELD's
+player `0x006D` a divergence with "the body right regardless": the `0x006D` worker writes both
+slots (`inc ebx; cmp ebx, 2` at 0x00810DD6), so its zero off hand is the last hand write and every
+sword-and-shield field load -- 48 harness runs carry the slice's `leadhand=1 offhand=10` -- loses
+its shield on the body. Corrected in the study, the two docstrings, `PLAN.md` §8.1 and here;
+opened as a field item with its two fixes (carry `hand_items(...)[1]` as the third field, or
+withhold as retail does -- the swing path UNVERIFIED, the `0x006D` worker doing more than the
+setter for slot 0) and the send site's pre-existing `or WEAPON_ITEM_ID` fallback beside it (an
+emptied lead names the hammer then in the backpack; unreachable at load, now pinned). **The field
+wire is NOT changed by this pass**: the choice between the two fixes is a field run's and outside
+the town lane. **The minors.** The own-addressed 5 s pin covered 9 of the study's 14 outpost hand
+changes; the PvP panel's five `0x0086` creations straight into equipped 0/1 are in it now (14 of
+14 quiet; the evidence review also widened the window to 60 s with the same result) -- EVREF-TF-2
+/ TF-R4. The `send_player_weapons` "VACUITY" check dragged the hammer out in a TOWN and asserted
+None, which the regime gate returns whatever the hand holds (a mutation of `player_weapons_sent`
+reddened it together with the TOWN check): replaced by a FIELD pin of the emptied-lead fallback,
+proven to redden when the fallback is fixed (`[1, 0, 0]` against the pinned `[1, 1, 0]`) --
+EVREF-TF-3 / TF-R3. "0 of 47 outpost" made "0 of 46 with a controlled agent" (`20260807T133758
+:54560` has a `0x0199` and 91 messages, no `0x0022` / `0x006E` / `0x006D`), pinned -- EVREF-TF-4.
+The revert-arm log line worded per arm (the `0x006E` is ARMED under `--no-town-weapon-strip`) --
+EVREF-TF-5. The store called what it is -- one visual-equipment store per agent, slots 0..8, the
+`0x006D` writing 0..1, an item-0 write putting 0x2E at +0x48 -- and its direct readers named: the
+dresser 0x007DFCE0's only three callers are the three workers, and its callee 0x007F70B0's other
+four direct callers take slots 0/1 from the getter 0x0080D4C0 over the same record -- EVREF-TF-6,
+with the review's overlap census reproduced (no (connection, agent) in the corpus gets both a
+`0x006E` and a `0x006D`: outpost 1,981 / 1,510 bodies, field 44 / 2,081, overlap 0). "0 of 2,245
+outpost bodies" made "2,245 `0x006E` messages, 1,981 bodies" in the study, the leaf, the flag
+comments and the test -- EVREF-TF-7 / TF-R7 -- and the garbled `--town-player-weapons` check
+message rewritten. Town combat with no hand declared noted as unexercised under the default in
+the runsheet (record+0x48 at the setter's 0x2E) -- TF-R6. **Declined:** squashing 8a73d855 into
+d267ab3b (TF-R5 -- both hashes are cited by two reviews; the merge message is to say d267ab3b
+was red on `test_itemmoves`' source lock until 8a73d855); editing the entry below's title
+(append-only -- this entry corrects it by name, the log's own rule). **Tests:** `test_townweapon`
+45 bare (1 declared skip) / 60 vaulted, one check replaced and conjuncts added, the floor
+unchanged; the five lints green (srclint 26, checks 20, citelint 50, identlint 28, provlint 19);
+the affected set re-run after the last fix, its count in the entry above this one once it lands.
+TESTS.md updated.
+
+---
+
 ### DESKWORK-D1, the town weapon's carrier fix -- 2026-09-24 -- **CONFIRM-2's stale weapon was OUR load's player `0x006D`, a message retail never sends the own body; withheld in a town, `--town-player-weapons` the A/B**
 
 The regression CONFIRM-2 §1 found (with the strip on, an outpost F2 left the WORLD body holding the

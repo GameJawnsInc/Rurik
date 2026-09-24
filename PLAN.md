@@ -1940,13 +1940,18 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   Hide in Towns hiding the helm on the doll AND the world body, and the drag staying.
   **CONFIRM-2 ran 2026-09-24** (studies/deskwork/CONFIRM-2026-09-24.md, PLAN-LOG): the
   henchman add HELD on the client. **Open**: the town weapon's carrier fix (PLAN-LOG
-  2026-09-24: CONFIRM-2's stale weapon was OUR load's player `0x006D`, which retail never
-  sends the own body — 0 of 47 outpost, 0 of 44 field; withheld in a town,
-  `--town-player-weapons` the A/B) awaits its client run — the outpost body EMPTY-HANDED
-  after F2 while the doll changes (studies/cmsg "The town weapon" (f), its runsheet) — and
-  the owner's one-word question: on retail, does a character hold a weapon in an outpost at
-  all?; the FIELD's player `0x006D` (retail 0 of 44, ours sent) is a divergence for a field
-  run; the henchman kick, c2s `0x00A8 [agent]`, named on our client, unarmed,
+  2026-09-24 and its fix pass: CONFIRM-2's stale weapon was most likely OUR load's player
+  `0x006D`, which retail never sends the own body — 0 of 46 outpost connections with a
+  controlled agent, 0 of 44 field; withheld in a town, `--town-player-weapons` the A/B;
+  CORROBORATED by the binary and a field frame) awaits its client run, the observation — the
+  outpost body EMPTY-HANDED after F2 while the doll changes (studies/cmsg "The town weapon"
+  (f), its runsheet; town combat with no hand declared unexercised) — and the owner's one-word
+  question: on retail, does a character hold a weapon in an outpost at all?; **the FIELD's
+  player `0x006D` is a defect** (the fix pass, TF-R1): retail sends none (0 of 44), ours sends
+  `[player, lead, 0]` after the `0x006E`, and its zero off hand is the last hand write, so a
+  sword-and-shield field body loses its shield at load (run 20260923T154229, seq 111/113,
+  OBSERVED) — carry the bag's off hand, or withhold it as retail does (the swing path
+  UNVERIFIED); a field run's choice; the henchman kick, c2s `0x00A8 [agent]`, named on our client, unarmed,
   its reply on no tape; travel's confirmation BLOCKED on content (no fog-initialised view
   carries a second pin; `M` on 449 / 242 / 248 / 310 asserts, CONFIRM-2 §3); the display
   mode's field step (the owner's hands, the harness cannot open the drop-down); the

@@ -6764,7 +6764,8 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   array disagrees); `drops` / `filter_hand_writes` (the hands and an emptied hand's zero
   dropped in a town, armour and a field untouched, order kept). §2 RETAIL'S WIRE (vault-gated,
   `livewire.decode_conn` over every live game connection, ~10 s; `LEDGER.skip` on a bare
-  machine): every outpost `0x006E` empty-handed on BOTH visuals (0 of 2,245 bodies; the OWN
+  machine): every outpost `0x006E` empty-handed on BOTH visuals (0 of 2,245 messages, 1,981
+  distinct bodies; the OWN
   body — the `0x006E` whose armour ids all sit in ONE type-2 bag, a hero's equipped bag being
   type 2 too — on 50 outpost loads with a lead in that bag and 22 with an off hand, 0 carrying
   either); the own FIELD body carrying every hand its bag holds (40 of 40 leads, 23 of 23 off
@@ -6779,9 +6780,11 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   exactly the controlled agents that have a `0x006E`); no hero body in an outpost (3 party
   heroes, none created), a hero body in a field; every connection decoded; THE CARRIER
   (CONFIRM-2's census, 2026-09-24): retail sends the OWN body NO `0x006D` on any connection
-  (0 of 47 outpost, 0 of 44 field), within 5 s of every outpost switch, equip and move (9)
-  nothing addressed to the own agent is a `0x006D` or a hand `0x006F`, and outpost strangers
-  with several `0x006D` never change hands (0) while field bodies do (6). §3 THE SERVER:
+  (0 of 46 outpost connections with a controlled agent — 47 with a `0x0199` — and 0 of 44
+  field), within 5 s of every outpost switch, equip, move and PvP-panel hand placement (14;
+  the fix pass added the panel's five `0x0086`) nothing addressed to the own agent is a
+  `0x006D` or a hand `0x006F`, and outpost strangers with several `0x006D` never change hands
+  (0) while field bodies do (6). §3 THE SERVER:
   source locks (the leaf imported, the flag in `serverargs.py` and `main()`, the load's player
   `0x006D` routed through `send_player_weapons` — the only `*send(0x006D)` naming the player —
   behind the leaf's rule and its own revert flag `--town-player-weapons`, declared and wired;
@@ -6795,8 +6798,11 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   KNOWN-BAD revert arm (the weapon kept, and it disagrees); VACUITY (the hammer dragged out);
   the load's player `0x006D` through `send_player_weapons` — NOT sent in a town, sent in a
   field, sent in a town under either revert flag (KNOWN-BAD both: `--no-town-weapon-strip`
-  the pre-strip picture exactly, `--town-player-weapons` CONFIRM-2's own), nothing for an
-  emptied hand (VACUITY);
+  the pre-strip picture exactly, `--town-player-weapons` CONFIRM-2's own), and the FIELD's
+  emptied lead PINNED — still sent, naming the hammer through the send site's pre-existing
+  `or WEAPON_ITEM_ID` fallback, the gate being the regime and never the hand (the fix pass
+  replaced a VACUITY check the town gate had made unable to fail on its own; the pin reddens
+  when the fallback is fixed);
   F2/F1 in a TOWN — `0x0148` + `0x014B` + `0x0152` and NO `0x006F` and no `0x006D`, the bag and the doll's
   array swapped — and in a FIELD — the same rows plus `0x006F [player, 0, sword]`,
   `[player, 1, shield]` and on F1 `[player, 1, 0]` before `[player, 0, hammer]`, retail's
@@ -6808,7 +6814,8 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   setting, and passing the batch whole with both flags off. Drives the real handlers,
   launches nothing. Floor 45 from the green run with `RURIK_VAULT` pointed at an empty
   directory (the bare-machine core; §2's 15 ride the vault, 60 vaulted; 36/48 before the
-  CONFIRM-2 carrier fix of 2026-09-24, re-set from its own bare run), ~10 s),
+  CONFIRM-2 carrier fix of 2026-09-24, re-set from its own bare run; the fix pass the same
+  day replaced one check and added conjuncts, the counts unchanged), ~10 s),
   `toolkit/authsrv/test_maptravel.py` (**2026-09-23, DESKWORK-D1 step 7: world-map travel**,
   rebuilt by the fix pass the same day — c2s `0x00B1` MAP_TRAVEL and the s2c `0x0094` unlock
   state that makes the client's world map offer our outposts; `toolkit/authsrv/maptravel.py`,
