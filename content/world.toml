@@ -2624,13 +2624,32 @@ word then [20, foe, caster, 304], the knock-down on each. NOT modelled, said her
 # ---------------------------------------------------------------------------
 # THE OUTPOST HENCHMEN -- DESKWORK-D1 step 5 (2026-09-23). Three standing NPCs
 # in our served outpost (Ascalon City, map 148) that the party window offers for
-# hire: `hireable = true` makes spawn_population send 0x0071 after each create
-# and record the agent, so c2s 0x009F HENCHMAN_ADD can hire it (henchparty.py).
-# The NPC templates and their professions/level are the retail Shing Jea
-# henchmen the tape's three adds witnessed (content/npcs.toml); the PLACEMENT is
-# ours, chosen near the arrival point and checked against the navmesh, so the
-# rows are `invented` like every other placement here. Ids 31/32/33 and
-# definitions 70/71/72 are clear of the party-reserved block.
+# hire: `hireable = true` makes spawn_population send the displayed level (prop
+# 36) and 0x0071 BEFORE each create, in an outpost only, and record the agent,
+# so c2s 0x009F HENCHMAN_ADD can hire it (henchparty.py). The NPC templates
+# and their professions/level are the retail Shing Jea henchmen the tape's
+# three adds witnessed (content/npcs.toml); the PLACEMENT is ours, chosen near
+# the arrival point and checked against the navmesh, so the rows are
+# `invented` like every other placement here. Ids 31/32/33 and definitions
+# 70/71/72 are clear of the party-reserved block.
+#
+# TWO THINGS RETAIL DOES DIFFERENTLY HERE, both said rather than hidden:
+#   * the ALLEGIANCE. Retail creates every outpost henchman with the 0x0020
+#     allegiance dword 'play' (ALLEGIANCE_PLAYER) -- 6 of 6 on both outpost
+#     connections of 20260819T132414 -- where every other kind-9 NPC there is
+#     'nonc' (43 of 43, 36 of 36). These rows say `noncombatant`:
+#     RECONSTRUCTION, and a deliberate one, because in this server every
+#     party-body path keys on ALLEGIANCE_PLAYER (authsrv.party_bodies and its
+#     eight callers: the formation, the follow, the ally casts, the party
+#     attack tick), so a 'play' standing NPC would follow the player and
+#     fight. Serving 'play' needs a `standing` gate on those paths -- the next
+#     increment. Whether the client's henchman list or the hire needs the
+#     allied allegiance is UNVERIFIED; the runsheet names it as the first
+#     suspect if the list is empty or the add is refused client-side.
+#   * the MAP. Retail's Ascalon City (148, AreaInfo type 10) offers no
+#     henchmen: 0x0071 appears on 11 of 96 live connections, all on maps 242,
+#     281 and 449 (types 13/11), and on 0 of the 11 connections to 148. That
+#     the client's list works on a type-10 map is UNVERIFIED until the run.
 # Served with `--area outpost_henchmen`.
 
 [spawn.hench_warrior_stand]
@@ -2651,8 +2670,10 @@ source = "invented"
 verified = """Ours: a standing spot near Ascalon City's arrival point, to be \
 checked walkable against the compiled navmesh at spawn (place_on_mesh). The NPC \
 template, its profession and level are the retail Warrior henchman's \
-(content/npcs.toml hench_warrior, capture 20260819T132414); only the position \
-and the allocator ids are chosen here."""
+(content/npcs.toml hench_warrior, capture 20260819T132414); the position, the \
+allocator ids, the MAP (retail's 148 offers no henchmen) and the ALLEGIANCE \
+(retail's is 'play', 6 of 6; `noncombatant` here is RECONSTRUCTION -- the \
+header above says why) are chosen here."""
 
 [spawn.hench_ranger_stand]
 area = "outpost_henchmen"
@@ -2671,7 +2692,8 @@ enabled = true
 source = "invented"
 verified = """Ours: a standing spot near Ascalon City's arrival point, checked \
 walkable at spawn. The template is the retail Ranger henchman's (hench_ranger, \
-capture 20260819T132414); position and ids are chosen here."""
+capture 20260819T132414); position, ids, map and allegiance (`noncombatant`, \
+RECONSTRUCTION -- retail's is 'play'; the header above) are chosen here."""
 
 [spawn.hench_assassin_stand]
 area = "outpost_henchmen"
@@ -2690,4 +2712,6 @@ enabled = true
 source = "invented"
 verified = """Ours: a standing spot near Ascalon City's arrival point, checked \
 walkable at spawn. The template is the retail Assassin henchman's \
-(hench_assassin, capture 20260819T132414); position and ids are chosen here."""
+(hench_assassin, capture 20260819T132414); position, ids, map and allegiance \
+(`noncombatant`, RECONSTRUCTION -- retail's is 'play'; the header above) are \
+chosen here."""

@@ -341,9 +341,14 @@ capture = "20260819T132414"
 origin = "live"
 verified = """OBSERVED on ArenaNet's own wire, connection 10.0.0.210:53419 (an \
 outpost, map 242). Agent 6, definition 3485: declared by GAME_SMSG 0x0056 \
-[3485, 161433, 0, 0x64000000, 0, 0x21C, 7, 3, name] with model 0x0057 [3485, \
+[3485, 161433, 0, 0x64000000, 1, 0x21C, 7, 3, name] with model 0x0057 [3485, \
 184625], named 0x009B [6, name], professioned 0x00A6 [6, 7, 0], marked hireable \
 0x0071 [6], created kind 9. Its c2s 0x009F [6] add was answered by 0x00B0 [14, \
 4] then 0x01BF [11, 6, name, 7, 3]. enc_name is the 0x009B proper name (the \
-0x0056 definition carries [0x3EB4, 0x970E, 0xC5D4, 0x4E92]). Every field read \
-from that connection."""
+0x0056 definition carries [0x3EB4, 0x970E, 0xC5D4, 0x4E92]). Every field this \
+row CARRIES is read from that connection; ONE field is not carried: the 0x0056 \
+FIFTH dword is 1 for this definition (and for the two Shing Jea henchmen not \
+served, defs 3486/3487; it is 0 for the Warrior's and Ranger's), and \
+agents.npc_properties sends 0 in that slot for every NPC -- its meaning is NOT \
+FOUND, so the served definition diverges there, unmodelled and said here (the \
+landing quoted the tape's value as 0; corrected by the fix pass)."""

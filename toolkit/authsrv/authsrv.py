@@ -10387,14 +10387,19 @@ GAME_CMSG_HERO_UNNAMED_0017 = 0x0017
 # had no hireable outpost henchman to click until this step. handle_henchman_add.
 GAME_CMSG_HENCHMAN_ADD = 0x009F
 # The message that MARKS an agent as a hireable henchman, so the party window's
-# henchman tab lists it: the client's handler 0x0091E220 -> 0x008113D0
-# BINARY-SEARCH-INSERTS the agent id into a sorted dword set at the party
-# context +0x574. OBSERVED it was sent for exactly the six henchman NPCs (agents
-# 1..6) of 20260819T132414 :53419 and NO other of the ~45 kind-9 NPCs, in both
-# outpost connections and NEVER in the field -- so it is the hireable marker
-# (henchparty.hireable_mark). We SEND it after a hireable NPC's create; there
-# is no reply. (GWCA's offset numbering names its own 0x0071 differently; the
-# name here is from our own handler read and the 6-of-6 correlation.)
+# henchman list offers it: the client's handler 0x0091E220 -> 0x008113D0
+# BINARY-SEARCH-INSERTS the agent id into a sorted dword set at
+# [ctx+0x2c]+0x574 (the object 0x00B0's per-player array +0x80C lives in; the
+# set's enumerator 0x0080E200 is called from PtSearch, asserts PtSearch:365 and
+# :1116). OBSERVED it was sent for exactly the six henchman NPCs (agents 1..6)
+# of 20260819T132414 :53419 and NO other of the 44 kind-9 NPCs, in both outpost
+# connections and NEVER in the field (11 of 96 live connections carry it, all
+# outposts) -- so it is the hireable marker (henchparty.hireable_mark). We SEND
+# it BEFORE a hireable NPC's create, as retail does, with the displayed level
+# (prop 36) beside it; there is no reply. (GWCA's offset numbering names its
+# own 0x0071 differently; the name here is from our own handler read and the
+# 6-of-6 correlation.) The same value as henchparty.HENCHMAN_HIREABLE, which
+# the sends use; test_henchparty locks the two equal.
 GAME_SMSG_PARTY_HENCHMAN_HIREABLE = 0x0071
 # The flag placements the 2026-08-19 clicks measured (pvpui 28.5): hero flag
 # [agent, vec2, plane], party flag [vec2, plane]. The client draws NOTHING on
@@ -11770,16 +11775,19 @@ HENCHMAN_ADD_ENABLED = True    # False (--no-henchman-add): c2s 0x009F is ignore
                                # every standing henchman is one this server
                                # marked hireable, so what reaches us is an id we
                                # placed. handle_henchman_add.
-OUTPOST_PARTY_CAP = 4          # The party window refuses a further henchman at
-                               # the map's max_party. This is the client's own
+OUTPOST_PARTY_CAP = 4          # The party cap a henchman add AND a hero add
+                               # refuse at. ONE CONSTANT for every served map,
+                               # not a per-map read: it is the client's own
                                # AreaInfo max_party, read with
-                               # toolkit/clientscan/areatable.py (build 38797):
-                               # 4 for Ascalon City (148), Lakeside (146), Shing
-                               # Jea (242 -- the tape's outpost, where 3 adds
-                               # fill 1 player -> 4) and Kamadan (449). OBSERVED.
-                               # A per-map table (some outposts read 6 or 8) is
-                               # the next step; --henchman-cap overrides. Heroes
-                               # AND henchmen count against it.
+                               # toolkit/clientscan/areatable.py (build 38797),
+                               # for the maps we serve -- 4 for Ascalon City
+                               # (148), Lakeside (146), Shing Jea (242 -- the
+                               # tape's outpost, where 3 adds fill 1 player ->
+                               # 4) and Kamadan (449). OBSERVED for those four;
+                               # 248/280 read 8 and 55/238 read 6, so a per-map
+                               # table is the next step. --henchman-cap
+                               # overrides (N >= 1). Heroes AND henchmen count
+                               # against it (party_member_count).
 AI_MODE_FIGHT, AI_MODE_GUARD, AI_MODE_AVOID = 0, 1, 2   # 0x0015's byte (pvpui 28.5)
 AI_MODE_NAMES = {0: "Fight", 1: "Guard", 2: "Avoid Combat"}
 SPIRIT_RANGE = 2512.0          # u -- WIKI (GWW "Range"): binding rituals /
@@ -24634,7 +24642,11 @@ def handle_hero_kick(values, send, state, conn_id):
                      "(RECONSTRUCTION -- the retail witness had no body)",
                      conn_id)
     remaining = party_hero_slots(state)
-    party_size = 1 + (1 if HENCHMAN is not None else 0) + len(remaining)
+    # ONE count for the whole party (DESKWORK-D1 step 5's fix pass): the hired
+    # henchmen count too -- this line summed 1 + henchman + heroes and sent
+    # [pn, 1] with two henchmen still in the party -- and the heroes ride
+    # PARTY_SIZE_COUNTS_HEROES as the load's own 0x00B0 does.
+    party_size = party_size_on_wire(state)
     inv = None
     if not (HERO_BAGS and HERO_INVENTORY):
         print(f"[c{conn_id}] HERO_KICK: no 0x0145 -- no inventory container "
@@ -24791,6 +24803,17 @@ def handle_hero_add(values, send, state, conn_id):
               f"(HEROES_PARTY_MAX={HEROES_PARTY_MAX}, PtPlayer:332); nothing "
               f"sent [SANDBOX-N2]", flush=True)
         return
+    # DESKWORK-D1 step 5's fix pass: the MAP's cap, henchmen counted -- the
+    # henchman add refused at it while this add did not, so with the player and
+    # three hired henchmen (4 of 4) a re-added hero made 5 (HENCH-EVR-1 /
+    # ENG-HENCH-1). The same rule and constant as handle_henchman_add.
+    if henchparty.party_is_full(party_member_count(state), OUTPOST_PARTY_CAP):
+        print(f"[c{conn_id}] HERO_ADD({hid}) refused: the party already holds "
+              f"{party_member_count(state)} members (heroes and henchmen), the "
+              f"served cap (OUTPOST_PARTY_CAP={OUTPOST_PARTY_CAP}, --henchman-cap "
+              f"overrides); nothing sent (retail's refusal reply NOT FOUND) "
+              f"[DESKWORK-D1]", flush=True)
+        return
     if not (HERO_RIG_RETAIL and HERO_ACTIVATE):
         print(f"[c{conn_id}] HERO_ADD({hid}) refused: the load ran the LEGACY "
               f"hero rig (HERO_RIG_RETAIL={HERO_RIG_RETAIL}, "
@@ -24847,8 +24870,9 @@ def handle_hero_add(values, send, state, conn_id):
               f"load [SANDBOX-N2]", flush=True)
     # 5. the size, hero counted, then 6. the roster row, bare and adjacent --
     #    the henchman add's shape (0x00B0 then the row, one chunk, 3 of 3).
-    party = party_hero_slots(state)
-    party_size = 1 + (1 if HENCHMAN is not None else 0) + len(party)
+    #    ONE count for the whole party (step 5's fix pass): hired henchmen
+    #    count, heroes ride PARTY_SIZE_COUNTS_HEROES as at load.
+    party_size = party_size_on_wire(state)
     send(GAME_SMSG_PLAYER_PARTY_SIZE,
          agents.player_party_size(PLAYER_NUMBER, party_size),
          f"PLAYER_PARTY_SIZE({party_size}) -- the party after the add [HERO_ADD]")
@@ -24858,14 +24882,28 @@ def handle_hero_add(values, send, state, conn_id):
           f"size now {party_size} [SANDBOX-N2]", flush=True)
 
 
-def party_member_count(state):
+def party_member_count(state, count_heroes=True):
     """How many the party holds: the player, its heroes, the launch henchman
-    and every henchman hired in game. The value the map's cap is compared to and
-    the size 0x00B0 carries -- DESKWORK-D1 step 5."""
+    and every henchman hired in game -- the ONE count the map's cap is compared
+    to (heroes always counted: they hold party slots). DESKWORK-D1 step 5; the
+    fix pass made it the hero kick's and the hero add's count too, because both
+    still summed `1 + henchman + heroes` and so, with a hired henchman in the
+    party, the kick sent 0x00B0 one short and the add went past the cap
+    (HENCH-EVR-1 / ENG-HENCH-1, reproduced on the real handlers)."""
     return (1
-            + len(party_hero_slots(state))
+            + (len(party_hero_slots(state)) if count_heroes else 0)
             + (1 if HENCHMAN is not None else 0)
             + len(state.get("party_henchmen", {})))
+
+
+def party_size_on_wire(state):
+    """The size 0x00B0 carries after a hero kick, a hero add or a henchman add:
+    party_member_count with the heroes counted unless --party-size-no-heroes
+    (PARTY_SIZE_COUNTS_HEROES, the LOAD's revert arm) left them out of the
+    load's 0x00B0 -- the load and the clicks must agree or the party counter
+    jumps between them (HENCH-EVR-11 / ENG-HENCH-11). The cap keeps counting
+    heroes whatever the flag says."""
+    return party_member_count(state, count_heroes=PARTY_SIZE_COUNTS_HEROES)
 
 
 def handle_henchman_add(values, send, state, conn_id):
@@ -24900,12 +24938,14 @@ def handle_henchman_add(values, send, state, conn_id):
         return
     if henchparty.party_is_full(party_member_count(state), OUTPOST_PARTY_CAP):
         print(f"[c{conn_id}] HENCHMAN_ADD({aid}) refused: the party already holds "
-              f"{party_member_count(state)} members, the map's cap "
-              f"(OUTPOST_PARTY_CAP={OUTPOST_PARTY_CAP}); nothing sent (retail's "
-              f"refusal reply NOT FOUND) [DESKWORK-D1]", flush=True)
+              f"{party_member_count(state)} members (heroes and henchmen), the "
+              f"served cap (OUTPOST_PARTY_CAP={OUTPOST_PARTY_CAP} -- a constant, "
+              f"the AreaInfo max_party of the maps we serve; --henchman-cap "
+              f"overrides); nothing sent (retail's refusal reply NOT FOUND) "
+              f"[DESKWORK-D1]", flush=True)
         return
     party[aid] = hench
-    size = party_member_count(state)
+    size = party_size_on_wire(state)
     for op, vals, label in henchparty.henchman_add_batch(
             1, PLAYER_NUMBER, size, aid, hench["enc_name"],
             hench["profession"], hench["level"]):
@@ -29283,6 +29323,36 @@ def spawn_population(send, state, origin, conn_id, area=None):
             # `damage` first, agent_weapon_range's order).
             "weapon_item": row.get("weapon_item"),
         }
+        # DESKWORK-D1 step 5: a `hireable` row is an outpost henchman the party
+        # window offers. BEFORE its create (retail's position: 0x009B, 0x009F
+        # [36], 0x00A6, 0x0071, then 0x00F0 and 0x0020, 24 of 24 sends on the
+        # two outpost connections), send the two messages that single a
+        # hireable henchman out from every other kind-9 NPC on the tape -- the
+        # displayed level (prop 36: 6 of 6 henchmen, 0 of 38 others) and the
+        # hireable mark (0x0071: the set the panel's henchman list reads) --
+        # and record what its 0x01BF roster row will need: the proper name,
+        # the profession and the level. c2s 0x009F then hires it
+        # (handle_henchman_add). OUTPOST ONLY, as on retail (0x0071 on 11 of
+        # 96 live connections, all outposts, none in a field): a field gets
+        # neither message and says so. The rest of the burst is
+        # create_agent_world's own order (RECONSTRUCTION; henchparty.py).
+        if row.get("hireable") and HENCHMAN_ADD_ENABLED:
+            _haid = int(row["agent_id"])
+            _hlevel = int(row.get("level", npc.get("level", 0)) or 0)
+            if instance_is_field(state):
+                print(f"[c{conn_id}] {key!r}: hireable row in a FIELD (map "
+                      f"{state.get('map_id')}) -- not marked (no 0x0071, no prop "
+                      f"36): retail offers henchmen in outposts only "
+                      f"[DESKWORK-D1]", flush=True)
+            else:
+                for op, vals, lbl in henchparty.hireable_bringup(_haid, _hlevel):
+                    send(op, vals, lbl)
+                state.setdefault("hireable_henchmen", {})[_haid] = {
+                    "enc_name": npc["enc_name"],
+                    "profession": int(npc.get("profession") or 0),
+                    "level": _hlevel,
+                    "name": label,
+                }
         create_agent_world(send, state, int(row["agent_id"]), entry, key,
                            conn_id=conn_id)
         if row.get("weapon_item"):
@@ -29297,22 +29367,6 @@ def spawn_population(send, state, origin, conn_id, area=None):
             send(GAME_SMSG_NPC_UPDATE_WEAPONS, [int(row["agent_id"]), _wid, 0],
                  f"NPC_UPDATE_WEAPONS(agent {int(row['agent_id'])}: leadhand = "
                  f"item {_wid}, {row['weapon_item']}) [SLICE-H11]")
-        # DESKWORK-D1 step 5: a `hireable` row is an outpost henchman the party
-        # window offers. After its create, mark it hireable (0x0071 -- the set
-        # the panel's henchman tab lists) and record what its 0x01BF roster row
-        # will need: the proper name, the profession and the level. c2s 0x009F
-        # then hires it (handle_henchman_add). OBSERVED the marker is sent for
-        # exactly the hireable henchmen and nowhere else (henchparty.py).
-        if row.get("hireable") and HENCHMAN_ADD_ENABLED:
-            _haid = int(row["agent_id"])
-            op, vals, lbl = henchparty.hireable_mark(_haid)
-            send(op, vals, lbl)
-            state.setdefault("hireable_henchmen", {})[_haid] = {
-                "enc_name": npc["enc_name"],
-                "profession": int(npc.get("profession") or 0),
-                "level": int(row.get("level", npc.get("level", 0)) or 0),
-                "name": label,
-            }
         # SLICE-B6: THE BOSS AURA is one int property on the body, sent after
         # its create (the setter looks the agent up by id and returns silently
         # if it is not there yet -- SLICE-F1's `0x007DFD70`). The range is
@@ -36744,10 +36798,15 @@ def main():
               "DESKWORK-D1 step 5.", flush=True)
     if a.henchman_cap is not None:
         global OUTPOST_PARTY_CAP
+        if int(a.henchman_cap) < 1:
+            raise SystemExit(f"--henchman-cap {a.henchman_cap}: the cap counts the "
+                             f"player, so it is 1 or more (0 or less would refuse "
+                             f"every add, including the hero's).")
         OUTPOST_PARTY_CAP = int(a.henchman_cap)
-        print(f"[party] --henchman-cap {OUTPOST_PARTY_CAP}: the henchman add "
-              f"refuses at {OUTPOST_PARTY_CAP} party members (heroes counted), "
-              f"overriding the map's AreaInfo max_party.", flush=True)
+        print(f"[party] --henchman-cap {OUTPOST_PARTY_CAP}: the henchman add and "
+              f"the hero add refuse at {OUTPOST_PARTY_CAP} party members (heroes "
+              f"and henchmen counted), overriding the constant 4 (the AreaInfo "
+              f"max_party of the maps we serve).", flush=True)
     if a.party_no_fight:
         global PARTY_FIGHTS
         PARTY_FIGHTS = False

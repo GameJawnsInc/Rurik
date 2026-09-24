@@ -903,11 +903,14 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "the party over the map's cap (--henchman-cap) are refused "
                          "with nothing sent (retail's refusal reply NOT FOUND).")
     ap.add_argument("--henchman-cap", type=int, default=None, metavar="N",
-                    help="Override the party cap the henchman add refuses at "
-                         "(DESKWORK-D1 step 5). The default is the served map's "
-                         "AreaInfo max_party (4 for Ascalon City, Lakeside, Shing "
-                         "Jea and Kamadan; OBSERVED via areatable.py). Heroes count "
-                         "against it too.")
+                    help="Override the party cap the henchman add AND the hero add "
+                         "refuse at (DESKWORK-D1 step 5). The default is a CONSTANT "
+                         "4 for every served map -- the client's AreaInfo max_party "
+                         "of the maps we serve (Ascalon City, Lakeside, Shing Jea, "
+                         "Kamadan; OBSERVED via areatable.py, build 38797), not a "
+                         "per-map read (248/280 read 8, 55/238 read 6; a per-map "
+                         "table is next). Heroes and hired henchmen both count "
+                         "against it. N is 1 or more (the player counts).")
     ap.add_argument("--no-zone-carry", action="store_true",
                     help="THE REVERT ARM for JARIN: a zone forgets the death "
                          "penalty and the hero's stance. Retail carries the "
