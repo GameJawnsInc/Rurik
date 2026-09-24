@@ -6378,7 +6378,42 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   30/definition 9, hero bodies 200..206/definitions 10..16 -- refused at load
   rather than at spawn, with the test enemy's ids as the deliberate
   NON-example (an area replaces it, so reserving agent 10 would refuse a
-  collision that cannot happen). 51 checks, ~2 s),
+  collision that cannot happen). **Section 8 (2026-09-24, R-SANDBOX, the
+  server-load level guard)**: a content row whose EFFECTIVE level (its own, else
+  its template's -- the create path's own expression) is past `GAME_SMSG 0x0056`'s
+  level field is refused at LOAD with a `PopulationError` naming the row, the
+  template when the level came from it, the level, the range and why (the codec
+  packs the field `'<B'` and raises `struct.error` at 256 or -1 inside `send()`,
+  `handle()` catches only the socket errors, and the client's session drops
+  mid-population; the compiler refuses such a spec, a hand-written row never met
+  the compiler). The range is the WIRE's, read off the schema by the server
+  (`NPC_LEVEL_RANGE`, from `codec.fields_for` and the codec's `FIXED` width
+  table), and pinned three ways here: to `schema/overrides.json` read
+  independently plus the literal 0..255, to the width through `FIXED`, and to
+  the compiler's `sandbox.HOSTILE_LEVEL_MAX` (the server never imports the
+  harness, so the equality lives in the test). Served rows: 255 accepted, 256
+  and -1 refused, 20.0 refused as not an integer, a row with no level over a
+  template at 300 refused naming the template, the row's own valid level winning
+  over that template, a template the store lacks refused at load, and
+  `spawn_population` refusing before its first send. The fixture half,
+  `fixture_level_guards()` (called by `main()` once every flag is final): a
+  plain server checks exactly one path (the test enemy's `agents.HATCHER`); the
+  hatcher at 300 is refused for the test enemy and for a `--probe`, and checked
+  for neither under `--area` or `--no-enemy`; `--henchman X --henchman-body` is
+  refused for X's own 300 and unchecked without the body; a hero's body is
+  refused for the party row's 300, for `--hero-level 300` and for the body
+  template's 300 (naming it), the row's 20 wins over the flag, and nothing is
+  checked without `--hero-body`. The last line: `create_agent_world` raises
+  `ValueError` naming the agent, the definition and the level with nothing
+  sent, while a body at 255 goes out with the byte in place. Three AST locks:
+  `area_population` calls `wire_level_problem`, `main()` calls
+  `fixture_level_guards`, `create_agent_world` holds the last line. Eight plants
+  each proven red with a verdict banner: the area loop removed (7 red), the
+  range 0..256 (7), the template fallback ignored (2), the hatcher / henchman /
+  hero branches removed (3 / 2 / 4), `main()`'s call removed (1), the last line
+  removed (2). `FakeWorld` and `StatWorld` carry an npc table now (the real
+  store's, overridable by key) because the guard reads a row's template. 75 ->
+  106 checks, floor 106, ~3 s),
   `toolkit/authsrv/test_ping.py` (the `0x000C`→`0x0009`→`0x000D` round trip that
   drives the client's net graph, and the three places a plausible
   implementation quietly LIES: sending a second request while one is

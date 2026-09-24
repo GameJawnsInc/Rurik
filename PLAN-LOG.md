@@ -28,6 +28,110 @@ move back.
 
 ---
 
+### R-SANDBOX, the server-load level guard -- 2026-09-24 -- **a content row whose level 0x0056's byte cannot carry is refused when the server STARTS, naming the row, the level, the range and why -- not inside send() with the client's session dropping mid-population; the range is the wire's, read off the schema, and pinned to the compiler's**
+
+Closes residue (a) of "R-SANDBOX, hostile level and rank caps lifted -- 2026-09-24" below
+("Two things NOT done"; the §8.1 bullet the verifier's entry added). The owner's ask, verbatim:
+"add the server-load guard for levels past 255". Residue (b), the level-0 quirk, stays in §8.1.
+
+**The hole.** `GAME_SMSG 0x0056 NPC_UPDATE_PROPERTIES` carries an NPC's level as
+`npc_properties`' eighth payload slot (`[def, file, 0, scale, 0, flags, profession, LEVEL,
+name]`), a `byte` (`schema/overrides.json` "86"). The codec packs `'<B'` and raises
+`struct.error` at 256 or -1 -- inside `send()`, whose caller `handle()` catches only
+`(ConnectionError, socket.timeout, OSError)`, so the exception closes the socket and the
+client's session drops partway through the population. The compiler
+(`sandbox.HOSTILE_LEVEL_MAX`) refuses such a spec; a `[spawn.*]` row written by hand in
+`content/*.toml` or a vault overlay never met the compiler, and nothing at server load read a
+level (the recon of 2026-09-24, lane "level"; its `boundprobe.py` MEASURED the bound: 0, 20,
+24, 30 and 255 encode with the byte in place, 256, 1000 and -1 raise).
+
+**What landed** (`toolkit/authsrv/authsrv.py`):
+
+- **The range is the wire's, not a literal.** `npc_level_field()` reads 0x0056's eighth
+  payload field off `codec.fields_for` (the same merged schema the server sends through) and
+  its width off the codec's own `FIXED` table (bytes per type); `NPC_LEVEL_RANGE = (0,
+  2^(8*width) - 1)`, unsigned as the codec packs it. A schema that widened the field would
+  widen the range with it. `wire_level_problem(level, who, template=None)` returns None or the
+  refusal text: who carries the level, the template when the level came from it, the level, the
+  range, and why (the field, the struct.error inside send(), the drop). A non-integer (20.0,
+  None) is refused too: `'<B'` raises on those exactly as on 256.
+- **The served-area half, inside `area_population`** beside its other set checks (its own
+  precedent and register, so `main()`'s existing startup call runs it and a refusal is the same
+  `SystemExit` naming `--area`): for every served row the EFFECTIVE level -- `row.get("level",
+  npc.get("level", 0))`, `spawn_population`'s own expression, the row's else its template's --
+  must fit, or `PopulationError` names the row and, when the level is the template's, the
+  template. A row naming a template the store does not carry is refused there too:
+  `spawn_population` would have raised inside instance bring-up, where the harness reports PASS
+  with the body absent (`test_population` §2b's shape).
+- **The fixture half, `fixture_level_guards()`**, called by `main()` once every flag that picks
+  a path is final (after the source banner, before the listen; a refusal is
+  `SystemExit("level guard: ...")`, each path checked prints one line): the TEST ENEMY
+  (`spawn_enemy` sends `agents.HATCHER`, the content npc `hatcher` as loaded at import -- the
+  spawn row's own `npc` key is not what that path reads; checked when no area is named and
+  `--no-enemy` is not given), a `--probe` (the combat probes read the same fixture), the
+  HENCHMAN's body (`--henchman X --henchman-body`: X's own level) and each HERO's body (`--hero
+  IDS --hero-body`: `int(hero_level(hid) or template.level or 0)`, `hero_body_create`'s own
+  expression -- the party row's level, else `--hero-level`, else the template's). The hero
+  level was bounded NOWHERE on the server before this -- only by the compiler, for a spec;
+  `--hero-level 300 --hero-body` would have dropped the session at the body's create.
+- **The last line, in `create_agent_world`**: before its one 0x0056 send, `wire_level_problem`
+  on the entry's npc level raises `ValueError` naming the agent, the definition and the level,
+  with nothing sent. The drop is the same as before (handle() catches only the socket errors)
+  but the log names the cause; nothing changes for a level that fits (proven: a body at 255
+  goes out with the byte in place). Taken -- one comparison per create.
+
+**Coverage, every 0x0056 send path** (`grep npc_properties|GAME_SMSG_NPC_UPDATE_PROPERTIES|
+0x0056`). `authsrv.py` has ONE send site, `create_agent_world` (the last line), reached by: (1)
+`spawn_population`, an area's rows -- guarded at load in `area_population`; (2) `spawn_enemy` /
+`_spawn_one_enemy`, the test enemy -- guarded at startup through `agents.HATCHER`; (3)
+`hero_body_create`, at instance load and at the in-game add (`handle_hero_add`) -- guarded at
+startup per hero, the add re-using the row already checked; (4) the henchman's body -- guarded
+at startup; (5) `burrow_tick`'s re-create and the shrine's re-create -- `send_definition=False`,
+no 0x0056 at all. Outside `authsrv.py`: the probe modules (`probes.py`, `probequest.py`,
+`probeunitsetup.py`, `probecombat.py`, `probemerchant.py`) build raw `Step(..., 0x0056,
+npc_properties(...))` lists under `--probe` only. The hatcher fixture is checked at startup when
+a probe is named; their other templates (`def_1480` and the vault's `def_NNNN` rows) are
+`npcdefs.py`'s own extraction -- the level came off a 0x0056 byte and fits by construction --
+and are NOT startup-guarded: a hand-edited one fails at send with the codec's struct.error as
+before, under a deliberate probe mode; `probes.py:359` writes a level literal into a raw list
+and is not guarded either. A template's own level that no served row references is not
+checked: the guard covers what will be sent, not what exists.
+
+**Tests.** `toolkit/authsrv/test_population.py` §8, 75 -> 106 checks, floor 106 from the green
+run: the range pinned three ways (`schema/overrides.json` read independently plus the literal
+0..255; the width through `FIXED`; `== sandbox.HOSTILE_LEVEL_MAX`, the equality living in the
+test because the server must not import the harness); 255 accepted, 256 / -1 / 20.0 refused
+with the message; the template fallback (no level over a template at 300 -> refused naming it;
+the row's own 20 wins; a missing template refused; `spawn_population` refuses before its first
+send); the fixture paths (a plain server: one path, the hatcher; the hatcher at 300 refused for
+the test enemy and for `--probe death`, unchecked under `--area` or `--no-enemy`; the henchman;
+a hero's row / flag / template / row-wins / no-body); the last line (255 sends, 256 ->
+ValueError, nothing sent); three AST locks (`area_population` calls `wire_level_problem`,
+`main()` calls `fixture_level_guards`, `create_agent_world` holds the last line). Eight plants,
+each proven red with a verdict banner: the area loop removed (7 red), the range made 0..256 (7),
+the template fallback ignored (2), the hatcher branch removed (3), the henchman branch (2), the
+hero branch (4), `main()`'s call (1), the last line (2). The first cut of three of those plants
+crashed the test without a banner (the last line's ValueError, or the codec's struct.error at a
+widened cap, escaping a check); those checks now catch and report. `FakeWorld` and `StatWorld`
+carry an npc table (the real store's, overridable by key) because the guard reads a row's
+template. `TESTS.md`'s entry carries the dated section; the tail 75 -> 106.
+
+**Runs** (no server, harness or client started; import and call only): `test_population` 106
+(and 106 under an empty `RURIK_VAULT`); `test_sandbox` 140; `test_transfer` 28
+(`area_population` over the real store); the seven lints (srclint 26, citelint 50, identlint
+28, provlint 19, derivlint 32, seclint 26, checks 20); the source-lock set -- every test that
+reads `authsrv.py` as text, 49 -- plus `test_bareimport`, 50 of 50 green, 4,749 checks (the
+largest: `test_agentlife` 552, `test_weapons` 276, `test_position_trust` 251, `test_deploy`
+251, `test_kbdsync` 236). NOT run: `test_handshake.py` (spawns `authsrv.py --once`) and
+`test_preflight_owner.py` (spawns `webgate.py`), both of which start a server; test_handshake's
+one `authsrv.py` lock (handle() binds the key at ONE site outside the `kind == 'auth'` branch)
+was re-run statically over the AST and holds, and test_preflight_owner's "authsrv.py" hit is a
+command-line string it matches, not a source lock. A missing `--hero-body-npc` template is
+already refused at startup by `main()`'s own resolve (lines above the guard's call), so the
+hero branch never sees a bare `ContentError`.
+
+---
+
 ### R-SANDBOX, hostile caps lifted: the verifier's fixes -- 2026-09-24 -- **one hostile past both caps was refused for one; the spin-fit law printed a constant it never measured; the two open residues were in the log and not in §8; and the client half of the definition defect was stated as fact**
 
 Corrects the entry below it, "R-SANDBOX, hostile level and rank caps lifted -- 2026-09-24"

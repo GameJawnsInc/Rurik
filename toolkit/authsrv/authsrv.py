@@ -29238,6 +29238,17 @@ def create_agent_world(send, state, agent_id, entry, why,
     x, y = entry["pos"]
     plane = entry["plane"]
     if send_definition:
+        # THE LAST LINE of the level guard (R-SANDBOX, 2026-09-24). The startup
+        # guards -- area_population for an area's rows, fixture_level_guards
+        # for the fixtures -- refuse first; a level that still reaches here
+        # past 0x0056's field would otherwise die as the codec's bare
+        # struct.error inside send(). The drop is the same (handle() catches
+        # only the socket errors), but the log names the agent, the definition
+        # and the level. Nothing changes for a level that fits.
+        problem = wire_level_problem(
+            npc.get("level"), f"agent {agent_id} ({why}), definition {definition}")
+        if problem:
+            raise ValueError(problem)
         send(GAME_SMSG_NPC_UPDATE_PROPERTIES,
              agents.npc_properties(definition, npc),
              f"NPC_UPDATE_PROPERTIES(def {definition})")
@@ -29569,6 +29580,109 @@ class PopulationError(Exception):
     """An area's declared population cannot be placed as written."""
 
 
+# ------------------------------------------------ the 0x0056 level guard
+# THE RANGE IS THE WIRE'S, READ OFF THE SCHEMA THE WAY THE CODEC READS IT.
+# GAME_SMSG 0x0056 NPC_UPDATE_PROPERTIES carries an NPC's level as
+# `npc_properties`' eighth payload slot ([def, file, 0, scale, 0, flags,
+# profession, LEVEL, name]), and the schema says `byte` (schema/overrides.json
+# "86"), so the codec packs '<B' and raises struct.error at 256 or at -1 --
+# INSIDE send(), whose caller handle() catches only the socket errors, so the
+# exception closes the socket and the client's session drops partway through
+# the population (R-SANDBOX, the recon of 2026-09-24; boundprobe measured the
+# bound). The compiler (toolkit/harness/sandbox.py, HOSTILE_LEVEL_MAX) refuses
+# such a spec, but a content row written by hand -- content/*.toml or a vault
+# overlay -- bypasses the compiler, and until 2026-09-24 nothing at server load
+# read a level at all. NO LITERAL HERE: a schema that widened the field would
+# widen this range with it, and test_population pins the range to the schema
+# read independently, to the codec's width table and to the compiler's
+# constant (the server must not import toolkit/harness, so that equality lives
+# in the test and not here).
+from codec import FIXED as CODEC_FIXED  # noqa: E402  (toolkit/schema/codec.py's width table, bytes per type)
+
+NPC_LEVEL_FIELD = 7        # the level's index among npc_properties' payload fields
+
+
+def npc_level_field():
+    """(type, width in bytes) of 0x0056's level field, off the schema."""
+    fields = [f for f in codec.fields_for("GAME_SMSG", GAME_SMSG_NPC_UPDATE_PROPERTIES)
+              if f["type"] != "msg_header"]
+    kind = fields[NPC_LEVEL_FIELD]["type"]
+    return kind, CODEC_FIXED[kind]
+
+
+NPC_LEVEL_TYPE, NPC_LEVEL_WIDTH = npc_level_field()
+NPC_LEVEL_RANGE = (0, (1 << (8 * NPC_LEVEL_WIDTH)) - 1)     # the codec packs it unsigned
+
+
+def wire_level_problem(level, who, template=None):
+    """None when `level` fits 0x0056's level field; else the refusal text.
+
+    It names who carries the level, the template it came from (when it did),
+    the level, the range and why. The startup guards -- `area_population` for
+    an area's rows, `fixture_level_guards` for the test enemy, a probe's
+    fixture, the henchman's and each hero's body -- raise PopulationError on
+    it before any client connects; `create_agent_world`, the last line, raises
+    ValueError at the send. A non-integer is refused too: the codec's '<B'
+    raises on 20.0 or None exactly as it raises on 256.
+    """
+    lo, hi = NPC_LEVEL_RANGE
+    if isinstance(level, int) and lo <= level <= hi:
+        return None
+    src = f" (from its template {template!r})" if template is not None else ""
+    what = (f"level {level!r}{src} is not an integer" if not isinstance(level, int)
+            else f"level {level}{src} is outside {lo}..{hi}")
+    return (f"{who}: {what}. GAME_SMSG 0x{GAME_SMSG_NPC_UPDATE_PROPERTIES:04X} "
+            f"NPC_UPDATE_PROPERTIES carries the level as a `{NPC_LEVEL_TYPE}` "
+            f"({NPC_LEVEL_WIDTH} byte(s), schema/overrides.json), past which the "
+            f"codec raises struct.error inside send() and the client's session "
+            f"drops partway through the population -- refused at load instead")
+
+
+def fixture_level_guards():
+    """The startup half of the level guard for the 0x0056 paths that are NOT
+    an area's rows, over the globals main() has finished setting:
+
+      * the TEST ENEMY -- `spawn_enemy` sends `agents.HATCHER` (the content npc
+        'hatcher' as loaded at import; the spawn row's own `npc` key is not
+        what that path reads), served when no area is named and --no-enemy is
+        not given -- and a --probe, whose combat fixtures read the same
+        template;
+      * the HENCHMAN's body (--henchman NAME --henchman-body): NAME's own level;
+      * each HERO's body (--hero IDS --hero-body): the party row's level, else
+        --hero-level, else the body template's -- `hero_body_create`'s own
+        expression at its create, repeated here so the two cannot disagree.
+
+    Returns [(who, level)] for the startup log; raises PopulationError.
+    """
+    checked = []
+
+    def _guard(level, who, template=None):
+        problem = wire_level_problem(level, who, template=template)
+        if problem:
+            raise PopulationError(problem)
+        checked.append((who, level))
+
+    if PROBE_NAME or (SPAWN_ENEMY and not AREA_NAME):
+        who = (f"the fixture template of probe {PROBE_NAME!r}" if PROBE_NAME
+               else "the test enemy's body")
+        _guard(agents.HATCHER.get("level"),
+               f"{who} (agents.HATCHER, the content npc 'hatcher')",
+               template="hatcher")
+    if HENCHMAN is not None and HENCHMAN_BODY:
+        _guard(agents.npc_template(HENCHMAN).get("level"),
+               f"the henchman's body (--henchman {HENCHMAN!r} --henchman-body)",
+               template=HENCHMAN)
+    if HERO_BODY:
+        for hid in HERO_IDS:
+            hro = hero_body_row(hid)
+            own = hero_level(hid)
+            _guard(int(own or hro.get("level") or 0),
+                   f"hero {hid}'s body (--hero-body; the party row's level, else "
+                   f"--hero-level, else the template's)",
+                   template=None if own else hero_body_key(hid))
+    return checked
+
+
 def spawn_row_on_map(row, map_id):
     """Is this spawn row FOR `map_id`? Its own `map`, else its area's map_id,
     else yes -- see spawn_population's comment."""
@@ -29645,6 +29759,32 @@ def area_population(area):
                 f"npc templates. The definition array is a raw index on the "
                 f"client, so one would silently wear the other's model")
         seen[v] = (key, npc)
+
+    # THE LEVEL FITS THE WIRE (R-SANDBOX, 2026-09-24). spawn_population sends
+    # `row.get("level", npc.get("level", 0))` -- the row's, else its
+    # template's -- in 0x0056's level field, and the codec raises past it
+    # inside send() (NPC_LEVEL_RANGE above), so the EFFECTIVE level is computed
+    # here with that same expression and refused at load, naming the row and,
+    # when the level is the template's, the template. The compiler refuses a
+    # spec past the cap; a row written by hand never met the compiler. A row
+    # naming a template the store does not carry is refused here too:
+    # spawn_population would raise inside instance bring-up, where the harness
+    # reports PASS with the body simply absent (test_population section 2b's
+    # shape).
+    for key, row in rows:
+        try:
+            npc = agents.WORLD.get("npc", row["npc"])
+        except (KeyError, agents.content.ContentError) as exc:
+            raise PopulationError(
+                f"spawn row {key!r} in area {area!r} names npc template "
+                f"{row['npc']!r}, which the content store does not carry: {exc}")
+        own = "level" in row
+        problem = wire_level_problem(
+            row.get("level", npc.get("level", 0)),
+            f"spawn row {key!r} in area {area!r}",
+            template=None if own else row["npc"])
+        if problem:
+            raise PopulationError(problem)
 
     # THE PARTY CO-LOADS WITH EVERY AREA, so its ids are reserved against area
     # rows even though the rows above are internally consistent. The set checks
@@ -39179,6 +39319,19 @@ def main():
     # -- so the server now names the one it came from, in the log the diagnosis
     # actually reads.
     print(f"source:    {os.path.dirname(os.path.abspath(__file__))}")
+
+    # THE 0x0056 LEVEL GUARD'S OTHER HALF (R-SANDBOX, 2026-09-24). An area's
+    # rows were refused above, at area_population; the fixture paths -- the
+    # test enemy, a probe's hatcher, the henchman's and each hero's body --
+    # are refused here, once every flag that picks one is final, for the same
+    # reason: past the field the codec raises inside send() and the client's
+    # session drops mid-population. A refusal is a SystemExit naming the path.
+    try:
+        for _who, _lv in fixture_level_guards():
+            print(f"level guard: {_who} at level {_lv} fits 0x0056's "
+                  f"{NPC_LEVEL_RANGE[0]}..{NPC_LEVEL_RANGE[1]}")
+    except PopulationError as exc:
+        raise SystemExit(f"level guard: {exc}")
 
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     # Do NOT set SO_REUSEADDR here. On Windows it does not mean what it means on

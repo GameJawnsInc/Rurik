@@ -32,6 +32,7 @@ authored from nothing, so the placement half needs no archive.
 """
 
 import ast
+import json
 import os
 import sys
 
@@ -51,7 +52,7 @@ import pathmap  # noqa: E402
 # party-reserved ids, studies/unitsetup/FINDINGS.md 8 Q9). Every section is
 # synthetic -- no vault, no socket, no client -- so there is nothing here that
 # may skip.
-LEDGER = checks.Ledger("test_population", floor=75)   # SLICE-H11 +2 (section 7: the held weapon); SLICE-B2 +7, SLICE-B6 glow +4 (section 6); from the green run
+LEDGER = checks.Ledger("test_population", floor=106)  # R-SANDBOX 2026-09-24 +30 (section 8: the level guard), from the green run; SLICE-H11 +2 (section 7: the held weapon); SLICE-B2 +7, SLICE-B6 glow +4 (section 6)
 check = checks.adopt(LEDGER)
 
 AREA = "sculpt"
@@ -73,15 +74,29 @@ def rows_for(area, table):
 
 
 class FakeWorld:
-    """Just enough of content.World for area_population: rows() and get()."""
+    """Just enough of content.World for area_population: rows() and get().
 
-    def __init__(self, spawn):
+    The npc table is the REAL store's, captured at construction (while the
+    real store is still in place), with `npc` overriding by key: the level
+    guard (section 8) reads a row's template, so a synthetic template at level
+    300 needs a home, and every earlier section's rows name real templates.
+    """
+
+    def __init__(self, spawn, npc=None):
         self._spawn = spawn
+        self._npc = dict(authsrv.agents.WORLD.rows("npc"))
+        self._npc.update(npc or {})
 
     def rows(self, kind):
-        return dict(self._spawn) if kind == "spawn" else {}
+        if kind == "spawn":
+            return dict(self._spawn)
+        if kind == "npc":
+            return dict(self._npc)
+        return {}
 
     def get(self, kind, key):
+        if kind == "npc":
+            return self._npc[key]
         return self._spawn[key]
 
 
@@ -92,7 +107,7 @@ def row(**kw):
     return base
 
 
-def accepts(spawn):
+def accepts(spawn, npc=None):
     """The accepted keys, or None if the population was refused.
 
     EVERY call in this file goes through here or `refuses`, and that is not
@@ -104,7 +119,7 @@ def accepts(spawn):
     caught defect.
     """
     try:
-        return [k for k, _ in rows_for(AREA, FakeWorld(spawn))]
+        return [k for k, _ in rows_for(AREA, FakeWorld(spawn, npc))]
     except authsrv.PopulationError:
         return None
 
@@ -112,6 +127,18 @@ def accepts(spawn):
 def refuses(spawn, why):
     """True iff area_population refuses this table."""
     return accepts(spawn) is None
+
+
+def refusal(spawn, npc=None):
+    """The refusal's TEXT, or None if the population was accepted -- section 8
+    reads the message, because a guard that refuses without naming the row,
+    the level and the reason costs the operator the same hunt it exists to
+    spare."""
+    try:
+        rows_for(AREA, FakeWorld(spawn, npc))
+        return None
+    except authsrv.PopulationError as exc:
+        return str(exc)
 
 
 def section0():
@@ -332,29 +359,36 @@ class StatWorld:
     honest, so this delegates everything that is not a spawn row.
     """
 
-    def __init__(self, spawn, real):
-        self._spawn, self._real = spawn, real
+    def __init__(self, spawn, real, npc=None):
+        self._spawn, self._real, self._npc = spawn, real, dict(npc or {})
 
     def rows(self, kind):
-        return dict(self._spawn) if kind == "spawn" else self._real.rows(kind)
+        if kind == "spawn":
+            return dict(self._spawn)
+        if kind == "npc" and self._npc:
+            return dict(self._real.rows(kind), **self._npc)
+        return self._real.rows(kind)
 
     def get(self, kind, key):
         if kind == "spawn":
             return self._spawn[key]
+        if kind == "npc" and key in self._npc:
+            return self._npc[key]
         return self._real.get(kind, key)
 
 
-def place(spawn, sent=None):
+def place(spawn, sent=None, npc=None):
     """Run `spawn_population` over a synthetic table; return state['agents'].
 
     `sent`, when given, collects every (opcode, values, label) the placement
-    put on the wire -- the glow arm reads it.
+    put on the wire -- the glow arm reads it. `npc` overrides templates by
+    key (section 8's level-300 template).
     """
     saved = authsrv.agents.WORLD
     state = {"agents": {}, "pos": (0.0, 0.0), "pathmap": None}
     sent = [] if sent is None else sent
     try:
-        authsrv.agents.WORLD = StatWorld(spawn, saved)
+        authsrv.agents.WORLD = StatWorld(spawn, saved, npc)
         authsrv.spawn_population(
             lambda op, vals, label="", **kw: sent.append((op, vals, label)),
             state, (0.0, 0.0, 0), 0, area=AREA)
@@ -681,6 +715,305 @@ def section5():
           "cannot happen", got)
 
 
+class Globals:
+    """Set authsrv module globals for one block and restore them, whatever
+    happens -- `fixture_level_guards` reads the flags main() sets, so section
+    8 sets every flag it reads explicitly rather than trusting import-time
+    state (SPAWN_ENEMY, for one, is read out of content at import)."""
+
+    def __init__(self, **kw):
+        self.kw, self.saved = kw, {}
+
+    def __enter__(self):
+        self.saved = {k: getattr(authsrv, k) for k in self.kw}
+        for k, v in self.kw.items():
+            setattr(authsrv, k, v)
+
+    def __exit__(self, *_exc):
+        for k, v in self.saved.items():
+            setattr(authsrv, k, v)
+
+
+PLAIN = dict(AREA_NAME=None, SPAWN_ENEMY=True, PROBE_NAME=None, HENCHMAN=None,
+             HENCHMAN_BODY=False, HERO_BODY=False, HERO_IDS=[], HERO_ROWS={},
+             HERO_LEVEL=None, HERO_BODY_NPC="hatcher")   # `python authsrv.py`, no flags
+
+
+def fixture_guard(world=None, hatcher=None, **flags):
+    """Run `fixture_level_guards` under PLAIN + `flags`, with `world` as the
+    content store and `hatcher` as agents.HATCHER when given. Returns
+    ("ok", [(who, level)]) or ("refused", text)."""
+    saved_world, saved_hatcher = authsrv.agents.WORLD, authsrv.agents.HATCHER
+    try:
+        if world is not None:
+            authsrv.agents.WORLD = world
+        if hatcher is not None:
+            authsrv.agents.HATCHER = hatcher
+        with Globals(**dict(PLAIN, **flags)):
+            try:
+                return "ok", authsrv.fixture_level_guards()
+            except authsrv.PopulationError as exc:
+                return "refused", str(exc)
+    finally:
+        authsrv.agents.WORLD, authsrv.agents.HATCHER = saved_world, saved_hatcher
+
+
+def section8():
+    """R-SANDBOX (2026-09-24): a content row whose level 0x0056 cannot carry is
+    refused at LOAD, not inside send().
+
+    GAME_SMSG 0x0056's level field is a `byte`; the codec raises struct.error
+    at 256 or -1 inside send(), handle() catches only the socket errors, and
+    the client's session drops partway through the population. The compiler
+    (sandbox.HOSTILE_LEVEL_MAX) refuses such a spec, but a hand-written row --
+    content/*.toml or a vault overlay -- never met the compiler, and until this
+    guard nothing at server load read a level. The range is the WIRE's, read
+    off the schema by the server, and pinned here three ways: to the schema
+    read independently, to the codec's own width table, and to the compiler's
+    constant (the server must not import the harness, so that equality lives
+    here). The served-area half sits inside area_population; the fixture half
+    (the test enemy, a probe's hatcher, the henchman's and each hero's body)
+    is fixture_level_guards, which main() calls once every flag is final; the
+    last line is create_agent_world's ValueError at the send.
+    """
+    print("\n8. R-SANDBOX: a level past 0x0056's field is refused at load, "
+          "naming the row, the level, the range and why")
+    lo, hi = authsrv.NPC_LEVEL_RANGE
+
+    # THE RANGE, three ways. (1) the schema read INDEPENDENTLY of the server,
+    # and the bound as a LITERAL written here (section 2's rule: a symbol in a
+    # test is not a check).
+    with open(os.path.join(os.path.dirname(os.path.dirname(HERE)), "schema",
+                           "overrides.json"), encoding="utf-8") as fh:
+        fields = json.load(fh)["channels"]["GAME_SMSG"]["86"]["fields"]
+    payload = [f["type"] for f in fields if f["type"] != "msg_header"]
+    check(payload[7] == "byte" and (lo, hi) == (0, 255),
+          "0x0056's level field (the eighth payload field) is a `byte` in "
+          "schema/overrides.json, and the guard's range is 0..255 -- the literal",
+          f"{payload[7]}, {(lo, hi)}")
+    # (2) the width through the codec's own table -- red if the schema widens
+    # the field and the server does not follow, or the server's range moves
+    # while the schema does not.
+    from codec import FIXED  # noqa: E402
+    check(authsrv.NPC_LEVEL_WIDTH == FIXED[payload[7]]
+          and (lo, hi) == (0, (1 << (8 * FIXED[payload[7]])) - 1),
+          "the guard's range is that field's width through the codec's FIXED "
+          "table: 0..2^(8*width)-1 -- so the schema width and the range cannot "
+          "disagree without this going red",
+          f"width {authsrv.NPC_LEVEL_WIDTH}, {(lo, hi)}")
+    # (3) the compiler's constant. The server never imports toolkit/harness.
+    sys.path.insert(0, os.path.join(os.path.dirname(HERE), "harness"))
+    import sandbox  # noqa: E402
+    check((lo, hi) == (0, sandbox.HOSTILE_LEVEL_MAX),
+          "the server's range EQUALS the compiler's HOSTILE_LEVEL_MAX "
+          "(toolkit/harness/sandbox.py), so the two cannot drift -- the "
+          "equality lives here because the server does not import the harness",
+          f"{(lo, hi)} vs 0..{sandbox.HOSTILE_LEVEL_MAX}")
+    # THE MECHANISM the guard pre-empts: the same codec the server sends
+    # through packs the cap and raises one past it. Every encode here goes
+    # through `packs`, which returns the frame or the exception's NAME, so a
+    # plant that widens the range makes a check red rather than a traceback
+    # with no verdict (this file's own section 0 lesson).
+    codec = Codec()
+    npc = authsrv.agents.npc_template("hatcher")
+    LEVEL_BYTE = 2 + 6 * 4 + 1          # header, six dwords, the profession byte
+
+    def packs(values):
+        try:
+            return codec.encode("GAME_SMSG",
+                                authsrv.GAME_SMSG_NPC_UPDATE_PROPERTIES, values)
+        except Exception as exc:                              # noqa: BLE001
+            return type(exc).__name__
+
+    at_cap = packs(authsrv.agents.npc_properties(5, dict(npc, level=hi)))
+    past = packs(authsrv.agents.npc_properties(5, dict(npc, level=hi + 1)))
+    check(isinstance(at_cap, bytes) and at_cap[LEVEL_BYTE] == hi and past == "error",
+          "the codec packs level 255 with the byte in place and raises "
+          "struct.error at 256 -- inside send(), the drop the guard exists to "
+          "pre-empt", f"at the cap: {at_cap if not isinstance(at_cap, bytes) else at_cap[LEVEL_BYTE]}, "
+                      f"past it: {past}")
+
+    # A SERVED ROW: at the cap accepted; one past it and -1 refused, and the
+    # refusal NAMES the row, the level, the range and why.
+    check(accepts({"a": row(agent_id=20, definition=5, level=hi)}) == ["a"],
+          "a served row at 255 is ACCEPTED -- the cap is inclusive, the "
+          "positive control every refusal below needs")
+    msg = refusal({"a": row(agent_id=20, definition=5, level=hi + 1)})
+    check(msg is not None and "'a'" in msg and "256" in msg and "0..255" in msg
+          and "0x0056" in msg and "send()" in msg
+          and "from its template" not in msg,
+          "a served row at 256 is REFUSED at load, naming the row, the level, "
+          "the range 0..255, 0x0056 and the send() drop -- and not a template, "
+          "since the level is the row's own", msg)
+    msg = refusal({"a": row(agent_id=20, definition=5, level=-1)})
+    check(msg is not None and "'a'" in msg and "-1" in msg and "0..255" in msg,
+          "...and at -1 (the codec packs the byte unsigned)", msg)
+    # NOT AN INTEGER: the codec's '<B' raises on 20.0 exactly as on 256, so
+    # the guard refuses it too, and says which fault it is.
+    float_past = packs(authsrv.agents.npc_properties(5, dict(npc, level=20.0)))
+    msg = refusal({"a": row(agent_id=20, definition=5, level=20.0)})
+    check(float_past == "error" and msg is not None and "not an integer" in msg,
+          "a level of 20.0 is refused as 'not an integer' -- the codec raises "
+          "struct.error on a float too", f"codec: {float_past}; {msg}")
+
+    # THE TEMPLATE FALLBACK: the create path sends
+    # `row.get("level", npc.get("level", 0))`, so a row with NO level takes its
+    # template's, and the guard computes the same expression -- a template at
+    # 300 refuses the row NAMING the template; the row's own valid level wins.
+    tall = {"tall": dict(authsrv.agents.WORLD.get("npc", "hatcher"), level=300)}
+    msg = refusal({"a": row(agent_id=20, definition=5, npc="tall")}, npc=tall)
+    check(msg is not None and "'a'" in msg and "300" in msg
+          and "from its template 'tall'" in msg,
+          "a row with NO level whose template sits at 300 is REFUSED naming "
+          "the template -- the effective level is the create path's own "
+          "expression, the row's else its template's", msg)
+    check(accepts({"a": row(agent_id=20, definition=5, npc="tall", level=20)},
+                  npc=tall) == ["a"],
+          "...and a row's own valid level WINS over its template's 300 -- "
+          "accepted, so the fallback is a fallback and not a second bound")
+    msg = refusal({"a": row(agent_id=20, definition=5, npc="nobody")})
+    check(msg is not None and "'a'" in msg and "'nobody'" in msg,
+          "a row naming a template the store does not carry is refused at "
+          "load naming it -- spawn_population would have raised inside "
+          "instance bring-up, where the harness reports PASS with the body "
+          "absent (section 2b's shape)", msg)
+    # The guard sits INSIDE area_population, which spawn_population calls
+    # before its first send: the create path refuses with nothing on the wire.
+    sent = []
+    try:
+        place({"a": row(agent_id=20, definition=5, npc="tall")}, sent=sent, npc=tall)
+        outcome = "accepted"
+    except authsrv.PopulationError:
+        outcome = "PopulationError"
+    except Exception as exc:                                  # noqa: BLE001
+        outcome = type(exc).__name__     # the last line's ValueError, under a plant
+    check(outcome == "PopulationError" and sent == [],
+          "spawn_population over that row refuses at LOAD (PopulationError) "
+          "before its FIRST send -- nothing reached the wire",
+          f"{outcome}, {len(sent)} sent")
+
+    # THE FIXTURE PATHS, the other half: what a plain `python authsrv.py`
+    # declares (the test enemy = agents.HATCHER), a --probe's hatcher, the
+    # henchman's body, each hero's body. Every flag read is set explicitly.
+    hatcher = authsrv.agents.WORLD.get("npc", "hatcher")
+    kind, got = fixture_guard()
+    check(kind == "ok" and len(got) == 1 and "test enemy" in got[0][0]
+          and got[0][1] == hatcher["level"],
+          "a plain server (no area, enemy on, no probe, no henchman, no hero "
+          "body) checks exactly ONE path, the test enemy's, at the hatcher "
+          "template's level", f"{kind}: {got}")
+    kind, got = fixture_guard(hatcher=dict(hatcher, level=300))
+    check(kind == "refused" and "test enemy" in got and "300" in got
+          and "'hatcher'" in got,
+          "the test enemy's template at 300 is REFUSED naming the test enemy "
+          "and the hatcher template -- the legacy global spawn sends "
+          "agents.HATCHER, whatever the spawn row's `npc` says", got)
+    kind, got = fixture_guard(hatcher=dict(hatcher, level=300), AREA_NAME=AREA)
+    check(kind == "ok" and got == [],
+          "...but with an --area named (and no probe) that same 300 checks "
+          "NOTHING: an area replaces the test enemy, and the guard covers "
+          "what will be sent, not what exists", f"{kind}: {got}")
+    kind, got = fixture_guard(hatcher=dict(hatcher, level=300), AREA_NAME=AREA,
+                              PROBE_NAME="death")
+    check(kind == "refused" and "probe 'death'" in got and "300" in got,
+          "...and a --probe brings the hatcher back: probe 'death' with the "
+          "template at 300 is refused naming the probe", got)
+    kind, got = fixture_guard(hatcher=dict(hatcher, level=300), SPAWN_ENEMY=False)
+    check(kind == "ok" and got == [],
+          "...and --no-enemy checks nothing either", f"{kind}: {got}")
+    # The henchman's body: its template's own level.
+    world = FakeWorld({}, npc=tall)
+    kind, got = fixture_guard(world=world, HENCHMAN="tall", HENCHMAN_BODY=True)
+    check(kind == "refused" and "henchman" in got and "'tall'" in got and "300" in got,
+          "--henchman tall --henchman-body with tall at 300 is REFUSED naming "
+          "the henchman's body and its template", got)
+    kind, got = fixture_guard(world=world, HENCHMAN="tall", HENCHMAN_BODY=False)
+    check(kind == "ok" and not [w for w, _l in got if "henchman" in w],
+          "...and --henchman tall WITHOUT --henchman-body checks no henchman "
+          "(no body, no 0x0056; the roster row's level is another message's)",
+          f"{kind}: {got}")
+    kind, got = fixture_guard(world=world, HENCHMAN="hatcher", HENCHMAN_BODY=True)
+    check(kind == "ok" and [lv for w, lv in got if "henchman" in w] == [hatcher["level"]],
+          "...and the hatcher's body is accepted at its own level",
+          f"{kind}: {got}")
+    # Each hero's body: the party row's level, else --hero-level, else the
+    # body template's -- hero_body_create's own expression.
+    kind, got = fixture_guard(world=world, HERO_BODY=True, HERO_IDS=[1],
+                              HERO_ROWS={1: {"level": 300}})
+    check(kind == "refused" and "hero 1" in got and "300" in got
+          and "from its template" not in got,
+          "--hero 1 --hero-body with the party row's level at 300 is REFUSED "
+          "naming hero 1 (the row's own level, so no template named)", got)
+    kind, got = fixture_guard(world=world, HERO_BODY=True, HERO_IDS=[1],
+                              HERO_ROWS={}, HERO_LEVEL=300)
+    check(kind == "refused" and "hero 1" in got and "300" in got,
+          "...--hero-level 300 with no row is refused too (it feeds the body's "
+          "0x0056 as well as prop 36)", got)
+    kind, got = fixture_guard(world=world, HERO_BODY=True, HERO_IDS=[1],
+                              HERO_ROWS={1: {"level": 20}}, HERO_LEVEL=300)
+    check(kind == "ok" and [lv for w, lv in got if "hero 1" in w] == [20],
+          "...the party row's 20 WINS over --hero-level 300: accepted at 20",
+          f"{kind}: {got}")
+    kind, got = fixture_guard(world=world, HERO_BODY=True, HERO_IDS=[1],
+                              HERO_ROWS={}, HERO_LEVEL=None, HERO_BODY_NPC="tall")
+    check(kind == "refused" and "hero 1" in got and "from its template 'tall'" in got,
+          "...and with neither, the body template's 300 is refused naming the "
+          "template", got)
+    kind, got = fixture_guard(world=world, HERO_BODY=False, HERO_IDS=[1],
+                              HERO_ROWS={1: {"level": 300}})
+    check(kind == "ok" and not [w for w, _l in got if "hero" in w],
+          "...and without --hero-body a hero at 300 is not checked: no body, "
+          "no 0x0056 (0x003A/0x003B carry its ranks under their own bound)",
+          f"{kind}: {got}")
+
+    # THE LAST LINE: create_agent_world refuses a level past the field with a
+    # ValueError naming the agent, the definition and the level, before the
+    # send -- and at the cap it sends the byte in place.
+    sent = []
+    bodies = place({"a": row(agent_id=20, definition=5, level=hi)}, sent=sent)
+    props = [v for op, v, _l in sent
+             if op == authsrv.GAME_SMSG_NPC_UPDATE_PROPERTIES]
+    blob = packs(props[0]) if props else "no definition sent"
+    check(len(props) == 1 and props[0][7] == hi
+          and isinstance(blob, bytes) and blob[LEVEL_BYTE] == hi,
+          "a body at 255 goes out through create_agent_world with the level "
+          "byte in place -- nothing changes for a level that fits",
+          f"{len(props)} definition(s), level {props and props[0][7]}, "
+          f"packed: {blob if not isinstance(blob, bytes) else blob[LEVEL_BYTE]}")
+    entry = dict(bodies[20], npc=dict(bodies[20]["npc"], level=hi + 1))
+    late, why = [], None
+    try:
+        authsrv.create_agent_world(
+            lambda op, vals, label="", **kw: late.append((op, vals)),
+            {"agents": {}}, 20, entry, "probe")
+    except ValueError as exc:
+        why = str(exc)
+    check(why is not None and "agent 20" in why and "definition 5" in why
+          and "256" in why and late == [],
+          "the same entry at 256 raises ValueError from create_agent_world "
+          "naming the agent, the definition and the level, with NOTHING sent "
+          "-- the codec's bare struct.error inside send() named none of them",
+          f"{why!r}; {len(late)} sent")
+
+    # STRUCTURAL: the served-area half is INSIDE area_population (so main()'s
+    # startup call, section 3, runs it), main() calls the fixture half, and
+    # the create path holds the last line. Section 3's AST idiom.
+    tree = ast.parse(open(authsrv.__file__, encoding="utf-8").read())
+    fns = {n.name: n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+
+    def calls(fn, name):
+        return any(isinstance(n, ast.Call) and getattr(n.func, "id", "") == name
+                   for n in ast.walk(fns[fn]))
+    check(calls("area_population", "wire_level_problem"),
+          "area_population itself calls wire_level_problem -- the served-area "
+          "half sits beside the other set checks main() runs at startup")
+    check(calls("main", "fixture_level_guards"),
+          "main() calls fixture_level_guards, so the fixture paths are refused "
+          "at startup and not at the first client's spawn")
+    check(calls("create_agent_world", "wire_level_problem"),
+          "and create_agent_world holds the last line")
+
+
 def main():
     print("=" * 70)
     print("POPULATION -- what lives in an authored area")
@@ -694,6 +1027,7 @@ def main():
     section5()
     section6()
     section7()
+    section8()
     return LEDGER.verdict()
 
 
