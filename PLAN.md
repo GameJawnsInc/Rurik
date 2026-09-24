@@ -612,7 +612,7 @@ Both are now graded against an enumerated content surface:
   criterion's 19 Pre-Searing zones, which is the same number by coincidence — against the
   study archive (the tool's default): 11 of 19** — PASS 9, SEAM 2, OFF-MESH 3, WRONG-PLANE 1,
   UNRESOLVED 4 (the four created chains 165–168); the one `(0,0)` PASS is still Sparkfly
-  Swamp's. The paragraph below describes the 2026-08-27 run. Nine had become fifteen, and one number was hiding four
+  Swamp's. The rest of this paragraph describes the 2026-08-27 run. Nine had become fifteen, and one number was hiding four
   different failures, so the verdict is five-valued: **PASS 6, SEAM 2, OFF-MESH 3,
   WRONG-PLANE 1, UNRESOLVED 3.** Four things the score does not say on its own, each of
   which is the reason its own token exists. (1) **The criterion's own premise has an
