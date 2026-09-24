@@ -33,7 +33,7 @@ import checks   # noqa: E402
 import content  # noqa: E402
 import sandbox  # noqa: E402
 
-led = checks.Ledger("sandbox", floor=111)     # 88 from the green run 2026-09-20; +19 SANDBOX-B7 (2026-09-22); +2 SKILLS-LT sec.5, the hand / label split (2026-09-23); +2 the fix pass (one LABEL_TIER, gamesrv_args)
+led = checks.Ledger("sandbox", floor=112)     # 88 from the green run 2026-09-20; +19 SANDBOX-B7 (2026-09-22); +2 SKILLS-LT sec.5, the hand / label split (2026-09-23); +2 the fix pass (one LABEL_TIER, gamesrv_args); +1 budget_for_level (2026-09-24)
 
 
 # ---------------------------------------------------------------- the fixture
@@ -116,6 +116,10 @@ try:
     led.ok(False, "level 21 is refused")
 except ValueError:
     led.ok(True, "level 21 is refused (1..20)")
+led.ok([sandbox.budget_for_level(l) for l in (0, 1, 2, 20, 21)] == [0, 0, 5, 170, 0],
+       "budget_for_level is the compiler's rule: points_for_level inside 1..20 and 0 outside "
+       "(a level-0 row spends nothing, and raises nowhere -- the window's hint and roster "
+       "line read it)")
 
 # ---------------------------------------------------------------- 1. geometry
 pos = sandbox.group_positions(3, [2, 2, 1], 2)

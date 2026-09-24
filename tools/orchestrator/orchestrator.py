@@ -80,6 +80,7 @@ try:
                                 QProcessEnvironment, Qt, QTimer, Signal)
     from PySide6.QtGui import (QColor, QFont, QImage, QKeyEvent, QPainter, QTextCharFormat,
                                QTextCursor, QWheelEvent)
+    from PySide6.QtTest import QTest
     from PySide6.QtWidgets import (QAbstractItemView, QApplication, QBoxLayout, QCheckBox,
                                    QComboBox,
                                    QCompleter, QFileDialog, QFormLayout, QFrame,
@@ -151,19 +152,10 @@ class Names:
         or None (draws and times, does nothing)."""
         return "hand" if sid in self.modelled else ("label" if sid in self.labelled else None)
 
-    def skill_label(self, sid):
-        row = self.world.rows("skills").get(str(sid)) or {}
-        prof = sandbox.ABBREV.get(int(row.get("profession", 0) or 0), "-")
-        attr = self.attr.get(int(row.get("attribute", -1)), "")
-        # `*` a hand row; `~label` a label-tier row (SKILLS-LT): acts through a
-        # parsed label and must not read as modelled (deskwork D4 step 4).
-        grade = self.skill_grade(sid)
-        mark = " *" if grade == "hand" else (" ~label" if grade == "label" else "")
-        return f"{self.skill.get(sid, f'skill {sid}')}  [{sid} {prof}{(' ' + attr) if attr else ''}]{mark}"
-
     def skill_parts(self, sid):
-        """(name, meta, grade) -- the same facts as skill_label, kept apart so
-        the list can set each in its own register."""
+        """(name, meta, grade) -- what a skill row draws, kept apart so the list
+        can set each in its own register; slot_label joins them as the text the
+        filters match."""
         row = self.world.rows("skills").get(str(sid)) or {}
         prof = sandbox.ABBREV.get(int(row.get("profession", 0) or 0), "-")
         attr = self.attr.get(int(row.get("attribute", -1)), "")
@@ -171,10 +163,12 @@ class Names:
         return (self.skill.get(sid, f"skill {sid}"), meta, self.skill_grade(sid))
 
     def slot_label(self, sid):
-        """A skill as a bar slot's picker shows it: the grade in the same words
-        as the Skills tab's pills, right after the name, so a narrow slot clips
-        the id and attribute before it clips the grade. The id and attribute
-        stay in the text because the picker filters on it (type '322')."""
+        """A skill as a bar slot's picker shows it, and as the Skills list's
+        item text (what its filter matches and a screen reader says): the grade
+        in the same words as the pills, right after the name, so a narrow slot
+        clips the id and attribute before it clips the grade, and 'modelled'
+        typed into either filter finds the modelled rows. The id and attribute
+        stay in the text because both filter on it (type '322')."""
         name, meta, grade = self.skill_parts(sid)
         word = {"hand": "  · modelled", "label": "  · label"}.get(grade, "")
         return f"{name}{word}  [{meta.replace('  ', ' ')}]"
@@ -288,6 +282,8 @@ class Bar(QWidget):
     """Eight skill slots, two columns of four (the Enemies tab's; the party's
     bars are in-game). Wide enough for a whole skill label."""
 
+    changed = Signal()                          # a slot edited
+
     def __init__(self, names, parent=None):
         super().__init__(parent)
         self.names = names
@@ -304,6 +300,7 @@ class Bar(QWidget):
             pk = Picker(chars=16)
             pk.setAccessibleName(f"Skill slot {i + 1}")
             num.setBuddy(pk)
+            pk.currentIndexChanged.connect(lambda _i: self.changed.emit())
             grid.addWidget(num, row, col)
             grid.addWidget(pk, row, col + 1)
             self.slots.append(pk)
@@ -330,23 +327,32 @@ class Bar(QWidget):
 class Ranks(QWidget):
     """One spin box per attribute of the given professions, two to a row, and
     the budget as a chip (the Enemies tab's; the party's ranks are in-game).
-    The chip is the NOTICE; `hint`, a caption the card puts under the grid,
-    stays the HINT, so an over-budget spend never erases the sentence saying
-    what a valid one is. (The hint is not in the grid: set_professions wipes
-    the grid.)"""
+    The chip is the NOTICE; `hint`, a caption under the grid, stays the HINT,
+    so an over-budget spend never erases the sentence saying what a valid one
+    is. Ranks lays the hint out ITSELF, under the grid set_professions wipes:
+    the first cut left that to the card, which forgot, and a label shown with
+    no parent is a top-level window of its own -- one per hostile, and the
+    app no longer quit when the main window closed."""
+
+    changed = Signal()                          # a rank edited (never a rebuild)
 
     def __init__(self, names, parent=None):
         super().__init__(parent)
         self.names = names
         self.rules = sandbox.attribute_rules(names.world)
-        self.grid = QGridLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(8)
+        self.grid = QGridLayout()
         self.grid.setContentsMargins(0, 0, 0, 0)
         self.grid.setHorizontalSpacing(12)
         self.grid.setVerticalSpacing(8)
+        outer.addLayout(self.grid)
         self.spins = {}
         self.chip = chip("", "info")
         self.label = self.chip
         self.hint = caption("")
+        outer.addWidget(self.hint)
         self.level = 3
         self.professions = ()
 
@@ -384,6 +390,7 @@ class Ranks(QWidget):
             sp.setValue(dict(keep).get(aid, 0))
             sp.setFixedWidth(92)
             sp.valueChanged.connect(self._budget)
+            sp.valueChanged.connect(lambda _v: self.changed.emit())
             name = self.names.attr_label(aid)
             lab = QLabel(name + (f'  <span style="color:{orchui.PAL["muted"]}">primary</span>'
                                  if row["is_primary"] else ""))
@@ -407,7 +414,7 @@ class Ranks(QWidget):
         if self.rules is None:
             return
         spent = self.rules.total_spent({a: s.value() for a, s in self.spins.items()})
-        budget = sandbox.points_for_level(self.level)
+        budget = sandbox.budget_for_level(self.level)   # 0 at level 0: the spin offers it
         self.hint.setText(f"A level-{self.level} hostile has {budget} points to spend; the "
                           f"compiler refuses more.")
         self.hint.setToolTip("Attribute points by level, as GWW gives them.")
@@ -554,8 +561,8 @@ class SkillsTab(QWidget):
         outer.addLayout(key)
         self.party_professions = set()
         every = sorted(int(k) for k in names.world.rows("skills"))
-        for sid in sorted(every, key=lambda s: names.skill_label(s).lower()):
-            it = QListWidgetItem(names.skill_label(sid))
+        for sid in sorted(every, key=lambda s: names.slot_label(s).lower()):
+            it = QListWidgetItem(names.slot_label(sid))
             it.setData(ROLE_ID, sid)
             it.setData(ROLE_PARTS, names.skill_parts(sid))
             it.setToolTip(names.skill_tip(sid))
@@ -587,15 +594,19 @@ class SkillsTab(QWidget):
                         and sid not in self.names.labelled))
             it.setHidden(bool(hide))
         self.list.viewport().update()
-        self._count()
+        self._count(emit=False)                 # a view of the same spec: nothing changed
 
-    def _count(self):
+    def _count(self, emit=True):
+        """The chip; and `changed`, which the header summary and the Run tab's
+        'Changed since compile' read -- so only when the UNLOCKS moved, never
+        when a filter did (ids() reads hidden rows the same as shown ones)."""
         n = sum(1 for it in self._items() if it.checkState() == Qt.Checked)
         total = self.list.count()
         shown = self.list.visible_count()
         tail = f"  ·  {shown:,} shown" if shown != total else ""
         set_chip(self.count, f"{n:,} of {total:,} unlocked{tail}", "info" if n else "warn")
-        self.changed.emit()
+        if emit:
+            self.changed.emit()
 
     def _set_shown(self, on):
         for it in self._items():
@@ -758,6 +769,8 @@ class PartyTab(QWidget):
         self.primary.currentIndexChanged.connect(lambda _i: self.on_change())
         self.secondary.currentIndexChanged.connect(lambda _i: self.on_change())
         self.level.valueChanged.connect(lambda _v: self.on_change())
+        self.weapon.currentIndexChanged.connect(lambda _i: self.on_change())
+        self.offhand.currentIndexChanged.connect(lambda _i: self.on_change())
         self._count()
 
     def _arrange(self, stacked):
@@ -838,6 +851,8 @@ class PartyTab(QWidget):
         row = self.names.world.rows("npc").get(body.value()) or {}
         if row.get("profession") in sandbox.PROFESSIONS and not getattr(body, "_touched", False):
             set_combo(prof, int(row["profession"]))
+        self._prof_changed(idx)                 # the body is in the spec whether or not the
+                                                # profession moved with it
 
     def professions(self):
         return (int(self.primary.currentData()), int(self.secondary.currentData() or 0))
@@ -1004,6 +1019,14 @@ class MemberEditor(QWidget):
         self.level.valueChanged.connect(self.ranks.set_level)
         self.level.valueChanged.connect(lambda _v: self._changed())
         self.boss.toggled.connect(self._boss)
+        # every input to_spec reads, not only the three the list shows: the
+        # group's roster line, the header summary and the Run tab's 'Changed
+        # since compile' all hang off this one path
+        for w in (self.health, self.glow, self.speed, self.dlo, self.dhi):
+            w.valueChanged.connect(lambda *_a: self._changed())
+        self.weapon_item.currentIndexChanged.connect(lambda _i: self._changed())
+        self.bar.changed.connect(self._changed)
+        self.ranks.changed.connect(self._changed)
         self._template()
         self._boss(self.boss.isChecked())
 
@@ -1028,7 +1051,7 @@ class MemberEditor(QWidget):
     def _template(self):
         prof = self.profession()
         self.bar.set_professions((prof,))
-        self.ranks.set_professions((prof,), max(1, self.level.value()))
+        self.ranks.set_professions((prof,), self.level.value())
         self._changed()
 
     def _boss(self, on):
@@ -1059,7 +1082,7 @@ class MemberEditor(QWidget):
                 f"{k} of {sandbox.BAR_SLOTS} skills"]
         if self.ranks.rules is not None:
             spent = self.ranks.rules.total_spent({a: s.value() for a, s in self.ranks.spins.items()})
-            bits.append(f"{spent} of {sandbox.points_for_level(self.ranks.level)} points")
+            bits.append(f"{spent} of {sandbox.budget_for_level(self.ranks.level)} points")
         bits.append(self.weapon_item.value() or "the template's swing")
         return "  ·  ".join(bits)
 
@@ -1121,8 +1144,8 @@ class GroupEditor(QWidget):
         self.roster.setProperty("role", "flat")
         self.roster.setAccessibleName("This group's hostiles")
         self.roster.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.roster.itemClicked.connect(lambda it: owner.select(it.data(Qt.UserRole)))
-        self.roster.itemActivated.connect(lambda it: owner.select(it.data(Qt.UserRole)))
+        self.roster.itemClicked.connect(self._pick)
+        self.roster.itemActivated.connect(self._pick)
         box.body.addWidget(self.roster)
         row = QHBoxLayout()
         self.add = button("Add hostile", icon="plus")
@@ -1134,6 +1157,12 @@ class GroupEditor(QWidget):
         page.addStretch(1)
         self.set_index(index)
         self._count()
+
+    def _pick(self, it):
+        # the tree's selection is the one selection: a row left painted here
+        # would read as a second one when the operator comes back to this page
+        self.roster.clearSelection()
+        self.owner.select(it.data(Qt.UserRole))
 
     def set_index(self, index):
         self.index = index
@@ -1149,14 +1178,19 @@ class GroupEditor(QWidget):
         groups = self.owner.groups
         last = not groups or self is groups[-1]
         has_boss = any(m.boss.isChecked() for m in self.members)
-        boss_anywhere = any(m.boss.isChecked() for g in groups for m in g.members)
+        n_boss = sum(1 for g in groups for m in g.members if m.boss.isChecked())
         where = f"{self.index} of {max(len(groups), self.index)} along the corridor, south to north"
         if has_boss and last:
             where += "  ·  holds the boss"
-        elif last and not boss_anywhere:
+        elif last and not n_boss:
             where += "  ·  the boss belongs in this group"
         self.subtitle.setText(where)
-        if has_boss and not last:
+        if has_boss and n_boss > 1:
+            set_chip(self.note, "Only one hostile can be the boss", "warn",
+                     tip="The compiler refuses two bosses: exactly one row is the quest's kill "
+                         "objective.")
+            self.note.show()
+        elif has_boss and not last:
             set_chip(self.note, "The boss must be in the last group", "warn",
                      tip="The compiler refuses a boss outside the last group: the quest's kill "
                          "stands at the corridor's north end.")
@@ -1675,12 +1709,24 @@ class RunTab(QWidget):
                                                    "TOML (*.toml)")
         if not path:
             return
+        prev = self.window.to_spec()
+        spec = None
         try:
-            spec = sandbox.load_spec(path)       # a TOML error leaves the tabs untouched
+            spec = sandbox.load_spec(path)       # a TOML error leaves the tabs untouched...
             self.window.from_spec(spec)
         except Exception as exc:                 # noqa: BLE001 -- said, not swallowed
-            self._say(f"Could not open {os.path.basename(path)}: {type(exc).__name__}: {exc}",
-                      15000)
+            why = f"{type(exc).__name__}: {exc}"
+            if spec is None:
+                self._say(f"Could not open {os.path.basename(path)}: {why}", 15000)
+                return
+            # ...but a row that raises inside from_spec does not: the name, the
+            # party and the unlocks were written and the encounter torn down
+            # before it, so the message would be false, and Save would default
+            # to the file that failed. Put the previous spec back (to_spec's
+            # own shape, so it cannot raise).
+            self.window.from_spec(prev)
+            self._say(f"Could not open {os.path.basename(path)} ({why}); your spec is "
+                      f"unchanged", 15000)
             return
         self._say(f"Opened {path}")
 
@@ -2145,6 +2191,20 @@ def smoke(win, app, out_dir):
         settle()
         return win.isActiveWindow() and w.hasFocus()
 
+    def strays():
+        """Windows of their own besides this one (a hidden completer popup is
+        not one): a label shown with no parent becomes one, and the review
+        found five on the desktop -- one per hostile -- keeping the app alive
+        after the main window closed."""
+        return [w for w in QApplication.topLevelWidgets()
+                if w is not win and w.isVisible() and w.property("role") != "popup"]
+
+    def hint_housed(ed):
+        """The Attributes hint lives in the hostile's own page, with words."""
+        h = ed.ranks.hint
+        return (h.window() is win and h.isVisibleTo(win.enemies._pages[ed])
+                and "points to spend" in h.text())
+
     # native, but never on the screen: nothing flashes on a shared desktop, and
     # no other window can take keyboard focus away in the middle of a run
     win.setAttribute(Qt.WA_DontShowOnScreen, True)
@@ -2152,6 +2212,10 @@ def smoke(win, app, out_dir):
     settle()
     win.from_spec(sandbox.example_spec())
     settle()
+    m0 = win.enemies.groups[0].members[0]
+    check(not strays() and hint_housed(m0),
+          f"the slice opens ONE window: every hostile's Attributes hint is a child of its page "
+          f"({len(strays())} stray top-level widget(s))")
     spec = win.to_spec()
     check(spec["player"]["profession"] == 1 and spec["player"]["level"] == 3,
           "the slice loads into the Party tab")
@@ -2173,17 +2237,28 @@ def smoke(win, app, out_dir):
         seen_roles |= used_roles(win)
         lore += surface_lore(win)
 
-    # ---- the Skills tab's GRADES (SKILLS-LT): a hand row is ` *`, a label-tier
-    # row ` ~label`, and the "modelled or label" filter keeps both and nothing else
+    # ---- the Skills tab's GRADES (SKILLS-LT): the pills' own words find their
+    # rows through the filter, and the "modelled or label" filter keeps both
+    # and nothing else
     listed = {int(it.data(ROLE_ID)) for it in win.skills._items()}
     hand_ids, label_ids = win.names.modelled & listed, win.names.labelled & listed
     win.tabs.setCurrentWidget(win.skills)
     settle()
     if hand_ids and label_ids:
         h0, l0 = sorted(hand_ids)[0], sorted(label_ids)[0]
-        check(win.names.skill_label(h0).endswith(" *") and win.names.skill_label(l0).endswith(" ~label")
-              and not win.names.skill_label(l0).endswith(" *"),
-              f"a hand row ({h0}) is marked ' *', a label-tier row ({l0}) ' ~label' and never ' *'")
+        found = {}
+        for word in ("modelled", "label"):
+            win.skills.filter.setText(word)
+            settle()
+            found[word] = {int(it.data(ROLE_ID)) for it in win.skills._items() if not it.isHidden()}
+        win.skills.filter.setText("")
+        settle()
+        check(found["modelled"] == hand_ids and found["label"] == label_ids
+              and not any("modelled" in it.text() for it in win.skills._items()
+                          if int(it.data(ROLE_ID)) in label_ids),
+              f"typing a pill's word into the filter finds that tier and nothing else "
+              f"('modelled' {len(found['modelled'])} of {len(hand_ids)}, 'label' "
+              f"{len(found['label'])} of {len(label_ids)}), and no label row reads as modelled")
         sh, sl = win.names.slot_label(h0), win.names.slot_label(l0)
         check("· modelled" in sh and "· label" in sl and "modelled" not in sl,
               "a bar slot names the grade in the pills' words, and a label row never "
@@ -2303,6 +2378,38 @@ def smoke(win, app, out_dir):
     boss_rows = [it for it in en._walk() if it.data(0, Qt.UserRole) is boss]
     check(boss_rows and boss_rows[0].text(1).startswith("boss"), "the boss is marked in the list")
     check(en.groups[0].roster.count() == 4, "a group's page lists its hostiles, one line each")
+    check(not strays() and all(hint_housed(m) for m in g.members),
+          f"adding hostiles opens no window of its own ({len(strays())} stray)")
+    # a real click on a roster row selects that hostile; back on the group's
+    # page, the row is not left painted as a second selection
+    en.select(g)
+    settle()
+    row1 = g.roster.item(1)
+    QTest.mouseClick(g.roster.viewport(), Qt.LeftButton, Qt.NoModifier,
+                     g.roster.visualItemRect(row1).center())
+    settle()
+    picked = en.current()
+    en.select(g)
+    settle()
+    check(picked is row1.data(Qt.UserRole) and picked is g.members[1]
+          and not g.roster.selectedItems(),
+          "a click on a roster row selects that hostile, and leaves no row painted selected "
+          "on the group's page")
+    # level 0 is a value the spin offers and the compiler accepts: the roster
+    # and the change signal survive it (the fix pass's summary() raised there,
+    # emptying the roster and losing the signal)
+    m1 = en.groups[1].members[0]
+    emits = []
+    en.changed.connect(lambda: emits.append(1))
+    m1.level.setValue(0)
+    settle()
+    check(en.groups[1].roster.count() == len(en.groups[1].members) and emits
+          and "level-0" in m1.ranks.hint.text() and " 0 points" in m1.ranks.hint.text(),
+          f"a hostile at level 0 keeps its group's roster ({en.groups[1].roster.count()} of "
+          f"{len(en.groups[1].members)} rows), emits the change ({len(emits)}) and its hint "
+          f"says 0 points")
+    m1.level.setValue(2)
+    settle()
     pk = en.groups[0].members[0].bar.slots[0]
     check(pk.lineEdit().cursorPosition() == 0, "a skill slot shows the start of its label")
     check(isinstance(pk.view().itemDelegate(), orchui.SkillDelegate),
@@ -2398,9 +2505,87 @@ def smoke(win, app, out_dir):
     check(was == "Compiled" and win.run.state.text() == "Changed since compile"
           and win.run.state.property("kind") == "warn",
           "an edit after a compile turns the green chip into 'Changed since compile'")
+    # ...and so does EVERY input compile_spec reads, not only the ones the tree
+    # shows (the review found eleven that left it green), each from a fresh
+    # compile; a hostile's edit also reaches its group's roster line at once
+    m0, g0 = en.groups[0].members[0], en.groups[0]
+    boss = en.groups[2].members[0]
+
+    def turn(combo, skip_first=False):
+        n = combo.count() - (1 if skip_first else 0)
+        combo.setCurrentIndex((combo.currentIndex() - (1 if skip_first else 0) + 1) % n
+                              + (1 if skip_first else 0))
+
+    edits = [("party weapon", lambda: turn(win.party.weapon)),
+             ("party off-hand", lambda: turn(win.party.offhand, skip_first=True)),
+             ("a hero's body", lambda: win.party.rows[3][2].set_value("hatcher")),
+             ("health", lambda: m0.health.setValue(m0.health.value() + 1)),
+             ("weapon item", lambda: turn(m0.weapon_item)),
+             ("attack interval", lambda: m0.speed.setValue(1.25)),
+             ("damage high", lambda: m0.dhi.setValue(40)),
+             ("damage low", lambda: m0.dlo.setValue(7)),
+             ("skill slot 8", lambda: m0.bar.slots[7].setCurrentIndex(1)),
+             ("the boss's glow", lambda: boss.glow.setValue(boss.glow.value() + 1)),
+             ("hold", lambda: win.run.hold.setValue(30)),
+             ("template", lambda: m0.template.set_value("academy_monk"))]
+    if m0.ranks.spins:
+        # a rank, and a rank on the spins a template change REBUILDS
+        def rank():
+            sp = next(iter(m0.ranks.spins.values()))
+            sp.setValue(sp.value() + 1)
+        edits.insert(9, ("attribute rank", rank))
+        edits.append(("attribute rank after the template change", rank))
+    stayed, stale_rows = [], []
+    for label, edit in edits:
+        win.run.compile()
+        fresh = win.run.state.text().startswith("Compiled")
+        edit()
+        settle()
+        if not (fresh and win.run.state.text() == "Changed since compile"):
+            stayed.append(label)
+        if label not in ("party weapon", "party off-hand", "a hero's body", "hold") \
+                and not g0.roster.item(0).text().endswith(m0.summary()):
+            stale_rows.append(label)
+    check(not stayed, f"each of {len(edits)} spec inputs turns a fresh 'Compiled' into 'Changed "
+                      f"since compile' (left green: {stayed or 'none'})")
+    check(not stale_rows, f"and a hostile's edit reaches its roster line at once "
+                          f"(stale after: {stale_rows or 'none'})")
+    win.run.hold.setValue(0)
+    # a view of the same spec is not an edit: the Skills filters leave the chip
+    # green, while an unlock still turns it
+    win.tabs.setCurrentWidget(win.skills)
+    turned = []
+    for label, act in (("filter text", lambda: win.skills.filter.setText("heal")),
+                       ("profession filter", lambda: win.skills.prof.setCurrentIndex(1)),
+                       ("'modelled or label'", lambda: win.skills.modelled_only.setChecked(True))):
+        win.run.compile()
+        before = win.to_spec()
+        act()
+        settle()
+        if not win.run.state.text().startswith("Compiled") or win.to_spec() != before:
+            turned.append(label)
+    win.skills.filter.setText("")
+    win.skills.prof.setCurrentIndex(0)
+    win.skills.modelled_only.setChecked(False)
+    settle()
+    win.run.compile()
+    first = next(it for it in win.skills._items() if not it.isHidden())
+    first.setCheckState(Qt.Unchecked if first.checkState() == Qt.Checked else Qt.Checked)
+    settle()
+    unlock_turned = win.run.state.text() == "Changed since compile"
+    first.setCheckState(Qt.Unchecked if first.checkState() == Qt.Checked else Qt.Checked)
+    settle()
+    check(not turned and unlock_turned,
+          f"the Skills filters leave a fresh 'Compiled' green (turned it: {turned or 'none'}), "
+          f"and one unlock turns it")
     win.header.name.setText("smoke-bad")
     win.enemies.groups[0].members[0].boss.setChecked(True)
     win.tabs.setCurrentWidget(win.enemies)
+    settle()
+    g3 = en.groups[2]
+    check(not g0.note.isHidden() and not g3.note.isHidden()
+          and g0.note.text() == g3.note.text() == "Only one hostile can be the boss",
+          "a second boss is said on both groups' pages before any compile")
     win.header.compile_b.click()
     settle()
     check(win.run.compiled is None and "bosses" in win.run.summary.toPlainText(),
@@ -2408,6 +2593,8 @@ def smoke(win, app, out_dir):
     check(win.run.state.property("kind") == "crit" and win.tabs.currentWidget() is win.run,
           "and a refusal opens the Run tab, its chip saying Refused")
     win.enemies.groups[0].members[0].boss.setChecked(False)
+    settle()
+    check(g0.note.isHidden() and g3.note.isHidden(), "and unticking it clears both notes")
     seen_roles |= used_roles(win)
     lore += surface_lore(win)
     # a malformed spec must not latch the Enemies tab dead
@@ -2422,8 +2609,33 @@ def smoke(win, app, out_dir):
     check(raised and not en._building and rows == live,
           f"a malformed hostile row raises, and the list still shows what loaded "
           f"({rows} rows for {live} editors)")
+    # a saved level-0 hostile opens (its budget hint used to raise on the way in)
+    try:
+        en.from_spec([{"members": [{"npc": "bandit_raider", "level": 0}]}])
+        opened = True
+    except Exception:                                   # noqa: BLE001
+        opened = False
+    settle()
+    check(opened and len(en.groups) == 1 and len(en.groups[0].members) == 1
+          and en.groups[0].roster.count() == 1 and en.groups[0].members[0].level.value() == 0,
+          f"a spec with a level-0 hostile opens ({opened}), and its group lists it")
     en.from_spec(saved)
     settle()
+    # a file that fails INSIDE from_spec (well-formed TOML, a malformed row)
+    # leaves the spec as it was: the message says nothing opened, so nothing may
+    # have -- and Save must not default to the file that failed
+    broken = os.path.join(out_dir, "smoke_broken.toml")
+    with open(broken, "w", encoding="utf-8") as fh:
+        fh.write('name = "smoke-broken"\n\n[player]\nprofession = 1\nlevel = 7\n\n[[groups]]\n\n'
+                 '[[groups.members]]\nnpc = "bandit_raider"\ndamage = [6]\n')
+    before = win.to_spec()
+    win.run.load(broken)
+    settle()
+    msg = win.statusBar().currentMessage()
+    check(win.to_spec() == before and msg.startswith("Could not open") and "unchanged" in msg,
+          f"a spec file whose row fails to load leaves the spec unchanged, and says so "
+          f"({msg!r})")
+    check(not strays(), f"and after every load, still one window ({len(strays())} stray)")
     # how a run ended is read from what the harness printed
     rt = win.run
     harness = ""

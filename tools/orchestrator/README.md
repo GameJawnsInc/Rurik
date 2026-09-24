@@ -78,10 +78,10 @@ bar. The Skills list marks a skill this server models beyond its icon from a HAN
 client's own description template (`vault/content/skill_labels.toml`, 47 rows on 38797; the
 file's header says how many) rather than a hand-verified row, and the server's log says so at
 every cast; `--no-skill-labels` on the gamesrv drops them. The Enemies tab's bar slots say
-`· modelled` / `· label` after the name in the same words, and the Skills list's filter is
-**Modelled or label** because it keeps both. The rest draw and time correctly and do
-nothing. (The list's filter text, and `--smoke`'s lock on it, still carry the older ` *` /
-` ~label` suffix.)
+`· modelled` / `· label` after the name in the same words, the Skills list's item text (what
+its filter matches and a screen reader says) carries the same words, so typing `modelled`
+into either filter finds the modelled rows, and the list's checkbox filter is **Modelled or
+label** because it keeps both. The rest draw and time correctly and do nothing.
 
 Templates marked `(unwatched)` load closed but have never been seen rendering
 (`studies/slice/RUN-PARADE.md` names the fifteen that have).
@@ -123,8 +123,13 @@ box renders neutral, a hovered danger button paints the ink solved for its fill,
 renders its pills and its empty-filter placeholder, focus shows on the list, the tab strip and
 Launch, every profession fits its combo at 1,280 and at 1,000 px, a real OS wheel over an
 unfocused combo scrolls the page and leaves the combo alone, and no flag, file name, ident or
-hex id sits on the visible surface. `--snap` renders every surface to a PNG for a person to
-read; a visual claim nobody looked at is a guess.
+hex id sits on the visible surface. The window's STATE has laws of the same kind: the slice
+opens one window and adding hostiles opens none (a label shown with no parent is a window of
+its own), every input the compiler reads turns a fresh green **Compiled** into **Changed since
+compile** while the Skills filters leave it green, a hostile's edit reaches its group's roster
+line at once, a hostile at level 0 keeps that roster and the change signal, and a spec file
+whose row fails inside the load leaves the spec as it was and says so. `--snap` renders every
+surface to a PNG for a person to read; a visual claim nobody looked at is a guess.
 
 ## Open on the client
 

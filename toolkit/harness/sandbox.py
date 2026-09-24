@@ -178,6 +178,16 @@ def points_for_level(level):
                for lv in range(2, level + 1))
 
 
+def budget_for_level(level):
+    """The points a hostile row of `level` may spend: points_for_level inside
+    1..LEVEL_MAX and 0 outside it -- the compiler's own rule (_check_ranks),
+    which accepts a level-0 row (content rows default to 0). The window's
+    budget hint and roster line share it, so a level its spin offers never
+    raises under them."""
+    level = int(level)
+    return points_for_level(level) if 1 <= level <= LEVEL_MAX else 0
+
+
 def group_positions(n_groups, sizes, boss_group):
     """[(x, y)] per member, group by group, on the corridor's long axis.
 
@@ -512,7 +522,7 @@ def validate(spec, world):
 def _check_ranks(p, who, pairs, level, professions, rules):
     if not pairs:
         return
-    budget = points_for_level(level) if 1 <= int(level) <= LEVEL_MAX else 0
+    budget = budget_for_level(level)
     ranks = {}
     for pair in pairs:
         try:
