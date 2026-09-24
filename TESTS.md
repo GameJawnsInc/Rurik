@@ -6584,6 +6584,61 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   rules. Floor 78 -> 102 -> 137 -> 159 from the green run with `RURIK_VAULT` pointed at
   an empty directory (the bare-machine core; §1b's 17 and §1c's 8 ride the vault, 184
   vaulted), ~13 s),
+  `toolkit/authsrv/test_visstatus.py` (**2026-09-23, DESKWORK-D1, the owner's answer: the
+  inventory panel's per-slot DISPLAY MODE** — s2c `0x00EF` CHAR_VISIBILITY_FLAGS, c2s
+  `0x0057` SET_CHAR_VISIBILITY_FLAGS and the regime rule that leaves a hidden piece out of
+  the body's `0x006E`; `toolkit/authsrv/visstatus.py`, `studies/cmsg/FINDINGS.md` §"The
+  display mode". §1 THE CLIENT'S TABLES AND ARITHMETIC (bare-machine): the four kind masks
+  (0xBA38D4: cape 0x03, headgear 0x0C, costume body 0x30, costume head 0xC0) partition the
+  eight CHAR_STATS_VIS bits; every menu row of every kind round-trips through the client's
+  writer `(flags & ~mask) | value` (0x00814BE0) and its code lookup (0x008ECD90); retail's
+  0xFF draws the eye on all four and the UNSENT ZERO draws the circled bar on all four (the
+  defect of 20260923T185124 reproduced); the regime rule — the high bit of a pair in a town,
+  the low bit in a field (GmAgentDoll 0x005384B0) — with a KNOWN-BAD swapped rule that
+  disagrees on both half-modes; the code→string table read THROUGH its jump table
+  (0x008ECE3C: the headgear menu 0x32C/0x32D/0x32E/0x330, the cape's own 0x32F/0x331)
+  against the KNOWN-BAD address order the landing shipped (codes 3/4/5 permuted); the
+  drop-down's sixteen possible sends pass `check_request` and three malformed ones are
+  refused; `strip_visual` and `slot_changes` in both regimes with a 0xFF control and a
+  VACUITY guard (a hidden kind whose slot is empty reports nothing); `load_flags` (no row
+  value → 0xFF, a stored int kept to eight bits, a string or bool → the default) and
+  `load_message` (`[flags, 0xFF]`) with the KNOWN-BAD zero default that would send the
+  defect's own bytes; `filter_slot_writes` (a helm entering visual 6 in a field under Hide
+  in Combat Areas goes out as 0, the hands and a shown costume pass, an unequip's 0 is never
+  "hidden") against the KNOWN-BAD unfiltered batch. §2 RETAIL'S WIRE (vault-gated,
+  `livewire.decode_conn` over every live game connection, ~10 s; `LEDGER.skip` on a bare
+  machine): `0x00EF` exactly once on ≥ 90 connections (95 of 96), never twice, always
+  `[0xFF, 0xFF]`, always immediately after `0x00E9`; c2s `0x0057` absent (0 of 13,320); the
+  OWN body (the `0x006E` whose armour ids all sit in the connection's equipped bag) carries
+  its equipped helm on every outpost load (50 of 50) and every field load (48 of 48) under
+  Always Show — consistent with the regime strip, NOT discriminating; THE CONFOUND named
+  (every bare-headed outpost body, 756, is a stranger; every field body is the owner's own —
+  the landing's "756 vs 0 of 48" compared strangers in towns with the owner in fields); the
+  OBSERVED per-regime tailoring of the own array on the WEAPON (no outpost `0x006E` carries
+  one, 0 of 2,245, the owner's own 50 with a weapon in the bag among them; every field body
+  whose bag holds one carries it, 40 of 40; the 8 field loads with no bag weapon carry
+  none); every connection decoded ok; the two own-body tallies from one identification.
+  §3 THE SERVER: source locks (the `0x0057` arm behind `VISIBILITY_STATUS_ENABLED` naming
+  the revert flag, the `0x00EF` send right after the `0x00E9` send with `load_message`'s
+  payload, the byte loaded through `load_flags` from the store row, the `0x006E` build as
+  `visible_worn(player_worn_array(state), …)` — the ONE copy, no inline `worn_array` left in
+  the burst — every item handler committing through `_item_moves_commit` which sends through
+  `visible_slot_writes`, the flag in `serverargs.py` and `main()`); the real
+  `handle_visibility_flags` with a fake send in a TOWN (Hide in Towns → `0x00EF [0x4, 0xC]`
+  + `0x006F [player, 6, 0]`; Always Show → the item back; Hide in Combat → `0x00EF` alone;
+  Always Hide → the head to 0) and in a FIELD (the mirror), four refusals sending nothing
+  with the state untouched; THE EQUIP PATH (the fix pass): in a field under Hide in Combat
+  Areas, `item_layout_begin`'s layout, the helm dragged out (`0x004F`) and double-clicked
+  back (`0x0030`) → the re-equip's `0x006F` goes out as `[player, 6, 0]` (KNOWN-BAD, the
+  revert arm: `[player, 6, helm]`, the landing's re-helmed body); the CONTROL under Always
+  Show carries the helm; a town equip rides no `0x006F` to filter; the filter leaves the
+  hands and another agent's slot alone; the revert arm on the load (KNOWN-BAD: every mode
+  Always Hide and the body still wears the helm); `--persist` through a scratch store
+  (`vis_flags` written, re-read, restored by `load_flags`/`load_message` to `[0xF7, 0xFF]`;
+  the setter refuses 256; validation refuses a string and 300); the two schema names.
+  Drives the real handlers and a scratch store, launches nothing. Floor 63 from the green
+  run with `RURIK_VAULT` pointed at an empty directory (the bare-machine core; §2's 10 ride
+  the vault, 73 vaulted), ~10 s),
   `toolkit/authsrv/test_labelrun.py` (the labelled input run, which names GAME_CMSG
   opcodes from what a human was told to do: a message lands in exactly one step's
   window, instance-load traffic is never folded into step 1, and a dirty idle CONTROL

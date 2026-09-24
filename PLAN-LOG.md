@@ -28,6 +28,98 @@ move back.
 
 ---
 
+### DESKWORK-D1, the owner's answer, fix pass -- 2026-09-23 -- **the equip path's `0x006F` gated by the display mode (the one blocker); the tape "corroboration" withdrawn as a population confound and replaced by the weapon precedent; the string table read through its jump table; the reader census redone at the getter; the load's default and restore pinned**
+
+Two reviews of the entry below — an evidence refuter that re-derived (a)–(c) from the 96
+live connections and the pinned 38797 client before reading it, and an engineering review
+that drove the handlers and mutated the tree in memory — upheld the wire evidence (`0x00EF`
+`[0xFF, 0xFF]` once on 95 of 96 right after `0x00E9`; `0x0057 [bits & mask, mask]` from the
+widget; the byte's one writer; the doll's regime rule; no reader on the world-body path) and
+moved seven things, fixed here (studies/cmsg "The display mode", "The fix pass").
+**ENG-VIS-1 / EVR-VIS-2 (the blocker)**: `itemstore.plan_equip`/`plan_move` append a `0x006F`
+whenever the instance is a field and never read the mode, so in a field under Hide in Combat
+Areas dragging the helm out (`0x004F`) and double-clicking it back (`0x0030`) sent
+`0x006F [1, 6, helm]` and re-helmed the world body while the doll and the load's `0x006E`
+hid it; every item batch now commits through `visible_slot_writes` — a write into the
+player's visual 6/7/8 whose kind the mode hides here goes out as item 0 (idempotent on the
+regime-blind handler; RECONSTRUCTION, retail's reply under a hiding mode on no tape),
+`--no-visibility-status` passes it unfiltered (KNOWN-BAD, driven). **EVR-VIS-1 / ENG-VIS-2**:
+the landing's "`0x006E` head slot 0 on 756 of 2,245 outpost bodies vs 0 of 48 field bodies"
+was quoted as corroborating the server-side strip in five places; joining each body to the
+connection's equipped bag, every field body is the owner's OWN Always-Show body and every
+bare outpost head a STRANGER — strangers in towns against the owner in fields, a comparison
+a tape with no strip at all would produce. Withdrawn everywhere (test, study, schema,
+docstring, this log); the own body carries its helm 50 of 50 and 48 of 48 under `[0xFF,
+0xFF]` (consistent, not discriminating); the OBSERVED precedent for a regime-keyed own array
+is the WEAPON — absent from every outpost `0x006E` (0 of 2,245; the owner's own 50 with a
+weapon in the equipped bag among them), carried by every field body whose bag holds one
+(40 of 40). The head strip stays RECONSTRUCTION. **EVR-VIS-3**: `CODE_STRING_ID` had codes
+3/4/5 as the switch's case bodies in ADDRESS order; through the jump table at 0x008ECE3C
+(the menu builder's copy at 0x008ED080 agrees) they are 0x330/0x32E/0x32F, so the cape's own
+strings are 0x32F/0x331 — pinned against the address order. **ENG-VIS-3 / EVR-VIS-4**: the
+reader census was `--field`'s direct hits; the GETTER 0x00815EF0 has eight callers, one
+outside UI (0x0081DDD0, a `ChCliObserver.cpp` record builder applying the costume FIELD
+bits to a record, not a body), and the frame id 0x1000006C has exactly six `.text` sites —
+the negative restated over all of them. **ENG-VIS-4 / EVR-VIS-6**: no test pinned the load's
+default or restore — a burst defaulting to ZERO, the defect itself, ran green; the byte and
+the payload now come from `visstatus.load_flags`/`load_message`, driven with a KNOWN-BAD
+zero, and the burst's two calls are source-locked. **ENG-VIS-6**: one copy of the dressed
+array (`player_worn_array`), read by the burst's `0x006E` and the mode change's `0x006F`;
+`test_itemmoves`' two locks follow the call. **ENG-VIS-5 / EVR-VIS-8**: two tautological §2
+checks dropped for a decode-ok count; `CODE_NONE and 0x00` written as `0x00`;
+`test_provlint`'s comment names QuestLog:261's enum value (it said MISSION_MAP_GAME; the
+assert is MISSION_MAP_OUTPOST, studies/minimap §3.3).
+**EVR-VIS-5**: the runsheet's field step needs `--persist` (a new connection resets the byte
+to 0xFF, so a returned helm would mean the reset); "press I in the field first" added.
+**EVR-VIS-7**: "retail's position" is relative to `0x00E9` (our burst sends `0x018E` earlier
+than retail's). **Declined**: driving the whole `_handle_request_players` burst under a
+fake send — nothing in the tree drives it and it needs a live connection's state; its
+helpers are driven and its call sites locked, which is what the mutations needed.
+**Surfaced, out of scope**: our TOWN `0x006E` carries the weapon where retail's never does
+(0 of 2,245) — §8.1's D1 bullet carries it. `test_visstatus` floor 47 → 63 bare (1 declared
+skip), 73 vaulted; TESTS.md. On this tree: the gates before the code commit (visstatus 63/73,
+itemmoves 184, srclint 26, dispatch 54, c2striage 36, catalog 13, codec 29, cmsgnames 16,
+smsgnames 26, charstore 91, bareimport 8); 79 of 79 affected tests green on the fixed tree (77 + two with declared skips; 5,960 checks; run by the orchestrator after the fix pass's own sweep was cut off).
+
+---
+
+### DESKWORK-D1, the owner's answer -- 2026-09-23 -- **the inventory panel's per-slot DISPLAY MODE: `s2c 0x00EF` CHAR_VISIBILITY_FLAGS sent at load, `c2s 0x0057` SET_CHAR_VISIBILITY_FLAGS answered, the byte persisted, the body's `0x006E` built without a piece the mode hides in this regime**
+
+The owner's two retail screenshots (CONFIRM-2026-09-23 §5): the eye beside the cape, the
+headgear and both costume slots is a per-slot drop-down — Always Show / Hide in Towns and
+Outposts / Hide in Combat Areas / Always Hide — governing the doll AND the world body; ours
+showed the circled bar on all four and a bare-headed doll. **Found** (studies/cmsg
+"The display mode", `visstatus.py`): the state is ONE byte at the character context +0x7C8,
+`CHAR_STATS_VIS` (ChCliApi.cpp:5032, eight bits), two bits per kind (0x03 cape, 0x0C
+headgear, 0x30 costume body, 0xC0 costume head); its only writer is `GAME_SMSG 0x00EF
+[value, mask]`'s handler (`(flags & ~mask) | value`, frame 0x1000006C) — **OBSERVED once
+per connection on 95 of 96 live connections, always `[0xFF, 0xFF]`, right after `0x00E9`**;
+the drop-down sends `GAME_CMSG 0x0057 [bits & mask, mask]` (InvVisibilityStatus 0x008ECF30
+→ thunk 0x00816C10 → wrapper 0x00920FE0; on NO tape) and applies nothing locally; the doll
+(GmAgentDoll 0x005384B0) reads the HIGH bit of a pair in a town and the LOW bit in a field
+(`MissionCliGetMap()`); the world body reads the byte NOWHERE (no reader on the agent-view
+path; the AvApi dresser's three callers are message workers), so the server's array is the
+only channel — retail's outpost bodies are bare-headed 756 of 2,245 times against 0 of 48
+in a field, and the cape's `0x0048` bit shows the same pattern (855 of 2,246 vs 0 of 48).
+**Shipped**: `0x00EF [flags, 0xFF]` after `0x00E9` (default 0xFF; the store's byte under
+`--persist`); `0x0057` handled — the echo `0x00EF [value, mask]` (RECONSTRUCTION) plus
+`0x006F [player, slot, item or 0]` for a kind whose view in the current regime changed,
+persisted (`vis_flags`, validated), three refusals sending nothing; `visible_worn` strips a
+hidden kind's visual slot from the body's `0x006E` per regime; **`--no-visibility-status`
+reverts**. Schema: `0x00EF` named high, `0x0057` medium. `test_visstatus.py` (floor 47 bare,
+56 vaulted; TESTS.md): the tables round-tripped through the client's arithmetic, the unsent
+zero reproduced, a KNOWN-BAD swapped regime rule, a vacuity guard, the tape census over all
+96 connections, the real handler in both regimes, the revert arm, the store. **Refuted**:
+0x008EBDD0 is `InvElementSlot.cpp`'s drag control, not the widget; "callers 0" on a CharMsg
+wrapper means a thunk, not unreachable; the slot count is four, not three. **NOT FOUND**:
+retail's echo bytes and its outpost re-dress of the local body (no `0x006F` on outpost
+equips). Predictions for the client run are pre-registered in the study. On this tree: the
+nine gates green before the commit (srclint 26, dispatch 54, c2striage 36, catalog 13, codec
+29, cmsgnames 16, smsgnames 26, charstore 91, visstatus 47/56); the 93-test affected sweep
+is reported in the commit that closes it.
+
+---
+
 ### DESKWORK-D1 step 8, the owner's confirmation, fix pass -- 2026-09-23 -- **the dress cell keyed by the worn LOCATION (a type-keyed cell collided for a legs-class piece at the boots location); the merchant's purchases in the item store the drag handlers read; off hands' homes alone reserved; storage bags refused as `0x0072` destinations; the two sibling sends named**
 
 Two reviews of the entry below (an evidence refuter and an engineering reviewer) held its

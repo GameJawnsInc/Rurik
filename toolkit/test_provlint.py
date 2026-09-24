@@ -89,6 +89,22 @@ GRANDFATHERED = {
     os.path.join("studies", "reconstruction", "FINDINGS.md"): 25,  # 11
     os.path.join("studies", "enemy", "PLAN.md"): 25,          # 11
     os.path.join("studies", "skillcast", "FINDINGS.md"): 20,  # 7
+    # 11 on 2026-09-23, one over NEWCOMER_CEILING on the day DESKWORK-D1's display-mode
+    # section landed, and the eleven are ELEVEN DISTINCT asserts across a 1,750-line
+    # document of six arcs (the c2s send-site census, the hero kick, add and skill
+    # toggle, the two inventory passes, the display mode), each one pinning ONE claim:
+    # `ChCliApi.cpp:5562` bounding ROTATE_PLAYER, `MsCliMsg:181`/`MsCliMan:368` the
+    # mission mask, `ChCliApi:4446`/`PtSearch:774`/`PtPlayer:332`/`ChCliHero:291` the
+    # hero family, `QuestLog:261` MISSION_MAP_OUTPOST (== 0; MISSION_MAP_GAME is
+    # MsCliApi:251's), `ItCliApi:2010`/`:1942` the
+    # inventory's two refusals -- and the eleventh, `ChCliApi.cpp:5032 vis <
+    # CHAR_STATS_VIS`, is the one line that gives the display-mode byte ArenaNet's
+    # own name and its width (the bound compared is 8), i.e. the quote a reader needs
+    # to audit "eight bits, two per slot kind" without the binary. That is the SINGLE-
+    # assert-as-MEASUREMENT case CLAUDE.md's refinement keeps; scrubbing it would
+    # leave the claim resting on our tool's word alone, the failure this file's own
+    # docstring names. 25 is the proportion the 11-entry rows above carry.
+    os.path.join("studies", "cmsg", "FINDINGS.md"): 25,
     # 11 on 2026-08-20, one over NEWCOMER_CEILING on the day round 5 landed, and the
     # ruling is easy because the offending citation is a REPEAT: four of the eleven
     # are the SAME assert (`Map.cpp:1239`), re-cited once per section that leans on

@@ -375,6 +375,12 @@ def validate(data, path):
                     _refuse(path, f"character {row['name']!r}: item_locations["
                                   f"{iid!r}] must be [bag, slot], two non-negative "
                                   f"ints under an integer item id")
+        if "vis_flags" in row:
+            vf = row["vis_flags"]
+            if not isinstance(vf, int) or isinstance(vf, bool) or not 0 <= vf <= 0xFF:
+                _refuse(path, f"character {row['name']!r}: vis_flags must be an "
+                              f"int 0..255 -- the client's CHAR_STATS_VIS is eight "
+                              f"bits (ChCliApi.cpp:5032; visstatus.py)")
         blob = row.get("settings_blob", "")
         if blob:
             try:
@@ -856,6 +862,30 @@ class Store:
         locs[str(int(item_id))] = [bag, slot]
         self.save()
         return dict(locs)
+
+    def character_vis_flags(self, uuid_hex):
+        """The character's display-mode byte (CHAR_STATS_VIS, visstatus.py),
+        or None when the row exists but never stored one -- absence means
+        retail's default (every slot Always Show), not zero."""
+        row = self.character_by_uuid(uuid_hex)
+        if row is None:
+            return None
+        vf = row.get("vis_flags")
+        return int(vf) if isinstance(vf, int) and not isinstance(vf, bool) else None
+
+    def set_character_vis_flags(self, uuid_hex, flags):
+        """Record the display-mode byte; saves. Returns the stored int, or
+        None when there is no row for the character."""
+        row = self.character_by_uuid(uuid_hex)
+        if row is None:
+            return None
+        flags = int(flags)
+        if not 0 <= flags <= 0xFF:
+            raise ValueError(f"vis_flags {flags}: CHAR_STATS_VIS is eight bits "
+                             f"(ChCliApi.cpp:5032)")
+        row["vis_flags"] = flags
+        self.save()
+        return flags
 
     def drop_item_location(self, uuid_hex, item_id):
         """Forget one item's stored cell; saves. True when a row was removed.
