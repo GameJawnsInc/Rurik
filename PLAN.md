@@ -1923,16 +1923,13 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   store, off hands' homes alone reserved, storage bags refused).
   **CONFIRMED on our client 2026-09-23** (studies/deskwork/CONFIRM-2026-09-23.md): kick,
   add, kick-add-kick-add, the kick held across a relaunch, the suppress circle on and off
-  and the body skipping a suppressed skill, move, stored-cell restore, equip and swap.
-  **The owner's answer, 2026-09-23, and its fix pass: PLAN-LOG** (the display mode,
-  `0x00EF`/`0x0057`, `--no-visibility-status`).
-  **Open**: the party family from HENCHMAN_ADD's witness (step 5) and travel (step 7); on
-  the client — the doll order after the fix (I + screenshot: head, chest, arms, legs,
-  feet), the backpack drag (A = stays, B = snaps back; runsheet in studies/cmsg
-  "Inventory, the owner's confirmation"), and the display mode (I: the eye beside the
-  headgear and the helm on the doll; the owner's Hide in Towns click hides the helm on doll
-  AND body, A/B against `--no-visibility-status`; the field step under `--persist`;
-  predictions in studies/cmsg "The display mode"); our TOWN `0x006E` carries the weapon
+  and the body skipping a suppressed skill, move, stored-cell restore, equip and swap;
+  and after the owner's-answer fixes (PLAN-LOG: the doll order, the display mode
+  `0x00EF`/`0x0057`, the backpack drag `0x0072`) the doll's order, the eye and the helm,
+  Hide in Towns hiding the helm on the doll AND the world body, and the drag staying.
+  **Open**: the party family from HENCHMAN_ADD's witness (step 5) and travel (step 7); the
+  display mode's field step under `--persist` (studies/cmsg "The display mode"); our TOWN
+  `0x006E` carries the weapon
   where retail's never does (0 of 2,245 outpost bodies) — a pre-existing divergence the fix
   pass's census surfaced, its own item.
 * **DESKWORK-D5**: the combat rules retail's tapes on disk already settle. LANDED
