@@ -1837,3 +1837,124 @@ double-click it back: the body stays bare (the fix pass's filter; under
 (`vis_flags` in the store), the icon shows it at `I`. What a run cannot settle alone:
 retail's exact echo bytes (b); the cape's third and fourth menu TEXTS (string ids 0x32F/0x331,
 unread — their icons 2 and 3 are read from the widget's table).
+
+### World-map travel — `c2s 0x00B1 MAP_TRAVEL`, the `s2c 0x0094` unlock state, and the transfer it hands off (DESKWORK-D1 step 7, 2026-09-23)
+
+**The question.** The retail c2s triage (step 3) named `0x00B1` MAP_TRAVEL medium
+and left it `DROPPED_ON_PURPOSE`: an arm that transferred the client to an unbuilt
+map would strand it, and the route asked two prior things — what the world map's
+click gates on, and the unlocked-outpost state nothing models. Both are answered
+here from the tapes and the binary, and the arm ships.
+
+**The request, re-derived from the tapes (OBSERVED, 10 of 10 on 10 connections over
+6 captures; `livewire.decode_conn`).** Every c2s `0x00B1` is `[map_id, 0, 0, 0, 1]`
+(word map_id, byte, word, byte, byte). The destination map varies (248 ×5, 148 ×2,
+281, 242, 449); **the trailing four fields were `0, 0, 0, 1` on all ten and never
+varied** — region / district / language / a flag are the candidates the field widths
+suggest, UNVERIFIED because nothing on the tape moves them. The reply is
+`0x01D9 [2, 1, '']` then the transfer pair `0x01A5` GAME_SERVER_TRANSFER and `0x0099`
+MAP_UPDATE_CURRENT — **10 of 10 in sequence, 9 of 10 with `0x01D9` the first non-clock
+s2c** (the tenth interleaves an ambient `0x001E`/`0x0029` first, the same busy-wire
+effect the kick's row shows) — then the server hangs up and the client re-dials the
+transfer address, sending c2s `0x0008` every time. **No `0x0028` AGENT_STOP_MOVING
+precedes it** (the player is standing in an outpost), unlike a portal transfer where
+the moving body is stopped first (SLICE-B8). The `0x01D9` batch is OBSERVED; the two
+bytes' and the empty string's meaning is UNVERIFIED — its worker `0x0085a290` sets a
+state at `[ctx+0x54]` and fires UI notifications (`0x1000012a`/`12d`/`130`), with no
+assert gating it, so a bare send is accepted (RECONSTRUCTION that it is; the
+client-confirmation run is the witness).
+
+**The send gate, statically (38797; `sendsites.py`, `codescan.py --dis`,
+`asserts.py`).** The travel wrapper `0x0085C280` has NO direct caller (reached
+through a pointer; the route's "one caller `0x004A791F`" is the census's finding
+corrected at step 3). The world map's click reaches it through the thunk `0x008576E0`
+(`jmp 0x85c280`), whose one caller `0x004A791F` sits in `0x004A78C0` — a function that
+reads a UI record's `[+0x20]`: `== 1` sends `0x00B1` (the travel path), `== 0` and
+`== 2` take sibling thunks `0x008576D0`/`0x008576F0`. `0x004A78C0` is reached from
+three sites, each of which first calls the three map-state getters `0x0084DE70`
+(`missionContext+0x2a8` bit 1), `0x0084DF60` (bit 4) and `0x0084DEC0`
+(`missionContext+0x190` bit 0) — the client's own "may I travel from here" gate. What
+the world map OFFERS as a clickable destination is the unlock state below; the send
+itself carries whatever record the UI built.
+
+**The unlock state nothing modelled — `s2c 0x0094` (schema 148: five `array32`).**
+Our server sends NO `0x0094` today (grep `authsrv.py`), so the client's unlocked-map
+set starts empty and the world map offers nothing to click — which is why travel
+needed the unlock state, not only the arm. The handler `0x0091eb10 -> 0x008122f0`
+copies the five arrays into `charCtx +0x5cc/+0x5dc/+0x5ec/+0x5fc/+0x60c` through
+Array::CopyBits `0x00473550` (asserts `ChCliApi:1641` `accumMapInitOffset <
+accumMapInitData.Count()` on the accumulator, `Array:130` `Bytes() >= bytes` on the
+copy) — **no create-once, no ordering gate**, so it is safe to send in any load state.
+**MEASURED on every live tape:** arr0-3 are EMPTY and arr4 holds map ids, bit index
+== map id. **Across 22 connections EVERY map the client then sent `0x00B1` to had its
+arr4 bit set at load, and the set GROWS as the session unlocks more** — on
+`20260817T231139` map 281 is clear at load, and by `20260818T094648` (same account,
+the next day, once visited) 281 and 309-312 are set. The client already models this id
+space: `c2s 0x0148` MISSION_MASK_REPORT reports one bit per map id back
+(`authsrv.mission_mask_bytes`). **LABELS:** arr4 == the unlocked map set is OBSERVED
+(bit == map id, every travel destination set, over 22 connections); arr0-3 are
+UNVERIFIED (empty on every tape) and are sent empty; **that arr4 IS the world map's
+clickability gate is CORROBORATED by that correlation and stays RECONSTRUCTION** until
+the owner opens `M` on our client and sees our outposts.
+
+**What the server now does (`handle_map_travel`, `maptravel.py`, behind
+`--no-map-travel`; the load's `0x0094` behind `--no-map-unlock`).**
+
+- At load, ONCE per instance (right after the fog-init pair, the map-init phase),
+  `send(0x0094, [[], [], [], [], words])` where `words` has arr4's bit set for every
+  travelable content map. **Travelable = enabled AND not explorable** — the world map
+  lists outposts/towns; an explorable is entered by walking out of one. Our content's
+  travelable set is `[55, 143, 144, 148, 165, 166, 167, 194, 242, 248, 310, 449]`
+  (12 maps). The bitmap is `mission_mask_bytes(MAP_ID_COUNT) // 4` dwords wide (28 on
+  38797), covering every content map id; an id past the width is logged as overflow,
+  never dropped silently. **Exactly ONE sender** (this site) — a duplicate sender of
+  unlock state once wiped a library and crashed a client (2026-09-15), so
+  `test_maptravel` pins the single site. This is a labelled policy (RECONSTRUCTION of
+  the unlock set from our content), the same shape as the hero add's `0x0018` from the
+  owned set.
+- On `c2s 0x00B1`, `plan_travel(WORLD, cur_map, dest)` decides:
+  **accept** a served, enabled, non-explorable map that is not the one you are on →
+  `send(0x01D9, [2, 1, ''])` then `send_transfer(..., send_stop=False)` (the pair
+  `0x01A5`/`0x0099`, no `0x0028`) then a graceful close; the client re-dials and the
+  re-entry serves the destination. The transfer carries the party, heroes and
+  kicked-hero store through `zone_carry_store`, exactly as a portal does (SLICE-B8 /
+  JARIN). **refuse, with NOTHING sent** (retail's refusal reply is NOT FOUND on any
+  tape — no tape shows retail travelling to a barred map): the map you are already on,
+  a map with no served content row, an explorable. Each refusal logs its reason.
+- `0x00B1` comes OFF the `DROPPED_ON_PURPOSE` allowlist in the same commit
+  (`test_dispatch` §10, `test_c2striage`); `overrides.json` GAME_CMSG 177's `why`
+  records the arm.
+
+**What a run cannot settle alone, and the runsheet exists for.** Whether arr4 is the
+world map's clickability gate (the correlation is necessary on the tapes; sufficiency
+is the owner's `M` press); retail's acceptance of a bare `0x01D9` (RECONSTRUCTION, no
+tape shows one out of the travel sequence); the three trailing `0x00B1` fields'
+meaning (UNVERIFIED). Two content maps in the travelable set carry placeholder spawns
+(194 `(0,0)`, 310) and would strand the body — a content-quality matter, not travel's;
+the runsheet picks a known-good destination.
+
+**Runsheet (the orchestrator runs it after the merge; the client is loopback, caged).**
+Server, from the `desk-trav` tree, serving an outpost with a good spawn:
+
+    python toolkit/authsrv/authsrv.py --persist
+
+Then the loopback client (owner drives; a world-map click on an outpost is a travel
+order — HANDS ON for the click). Predictions:
+
+1. **Open the world map (`M`).** Our served outposts appear as clickable pins (the
+   `0x0094` unlock set). If the map is EMPTY, arr4 is NOT the clickability gate — record
+   it: the correlation was necessary, not sufficient. (Requires fog-init on, the
+   default; do not test `M` on a map whose fog init was skipped — it crashes on
+   `GmMapView.cpp(1731)`.)
+2. **Click another served outpost** (Great Temple 248 or Kamadan 449 — one the server
+   pre-warms). The server log prints `MAP_TRAVEL to map N: 0x01D9 then the transfer
+   pair`, the client fades out and re-dials, and the destination outpost loads. The
+   party, any heroes and a stored kick survive the zone (the transfer's carry).
+3. **Try to travel to the map you are on** (if the UI allows re-selecting it): the log
+   prints `MAP_TRAVEL(map N) refused: already on map N; nothing sent`, and nothing
+   happens.
+4. **Control, `--no-map-travel`** (unlock still sent, so the map still shows pins):
+   `python toolkit/authsrv/authsrv.py --persist --no-map-travel`. Open `M`, click an
+   outpost: the log prints `MAP_TRAVEL ignored (--no-map-travel)` and nothing happens —
+   the arm is the lever. **Control, `--no-map-unlock`**: the world map offers nothing to
+   click, confirming the unlock send is what populates it.

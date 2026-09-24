@@ -1896,7 +1896,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 **Desk routes the owner took, 2026-09-22** — [studies/deskwork/PLAN.md](studies/deskwork/PLAN.md) §3
 
-* **DESKWORK-D1**: steps 1–4, 6 and 8 landed (PLAN-LOG) — the bare-machine c2s
+* **DESKWORK-D1**: steps 1–4 and 6–8 landed (PLAN-LOG) — the bare-machine c2s
   send-site census over both framers (`sendsites.py`, 214 sites), SANDBOX-N2's hero kick
   armed from retail's one batch (c2s `0x001F`), retail's c2s triaged (`c2striage.py`: 57
   opcodes over 96 live connections, zero undecided; `test_dispatch` §10 is the reverse
@@ -1920,14 +1920,20 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   dressed, `--equipped-visual-order` reverts — and the general move `c2s 0x0072`
   ITEM_MOVE_BY_ID armed as RECONSTRUCTION, `--no-item-move-by-id`; its fix pass, same
   day, PLAN-LOG: the dress cell keyed by location, the merchant's purchases in the item
-  store, off hands' homes alone reserved, storage bags refused).
+  store, off hands' homes alone reserved, storage bags refused), and world-map travel
+  (step 7, `maptravel.py`, PLAN-LOG): `c2s 0x00B1` MAP_TRAVEL answered with `0x01D9`
+  then the transfer pair for a served non-explorable destination and refused otherwise
+  (`--no-map-travel`), and the unlocked-outpost state nothing modelled built from the
+  travelable content maps and sent as `s2c 0x0094`'s arr4 (bit == map id; one sender,
+  `--no-map-unlock`) so the world map offers our outposts.
   **CONFIRMED on our client 2026-09-23** (studies/deskwork/CONFIRM-2026-09-23.md): kick,
   add, kick-add-kick-add, the kick held across a relaunch, the suppress circle on and off
   and the body skipping a suppressed skill, move, stored-cell restore, equip and swap;
   and after the owner's-answer fixes (PLAN-LOG: the doll order, the display mode
   `0x00EF`/`0x0057`, the backpack drag `0x0072`) the doll's order, the eye and the helm,
   Hide in Towns hiding the helm on the doll AND the world body, and the drag staying.
-  **Open**: the party family from HENCHMAN_ADD's witness (step 5) and travel (step 7); the
+  **Open**: the party family from HENCHMAN_ADD's witness (step 5); travel's client
+  confirmation (the owner's `M` press, runsheet in studies/cmsg "World-map travel"); the
   display mode's field step under `--persist` (studies/cmsg "The display mode"); our TOWN
   `0x006E` carries the weapon
   where retail's never does (0 of 2,245 outpost bodies) — a pre-existing divergence the fix

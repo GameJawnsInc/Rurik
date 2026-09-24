@@ -28,6 +28,50 @@ move back.
 
 ---
 
+### DESKWORK-D1 (step 7) -- 2026-09-23 -- **world-map travel armed: `c2s 0x00B1 MAP_TRAVEL` answered with `0x01D9` then the transfer pair, and the unlocked-outpost state nothing modelled built and sent (`s2c 0x0094` arr4, bit == map id)**
+
+Travel comes OFF the step-3 allowlist. Two halves, both behind revert flags.
+[studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md) §"World-map travel"; `toolkit/authsrv/maptravel.py`;
+`toolkit/authsrv/test_maptravel.py`.
+
+**The unlock state (`--no-map-unlock`).** Our server sent no `s2c 0x0094` at all (grep
+`authsrv.py`), so the client's unlocked-map set started empty and the world map offered
+nothing to travel to -- the reason the arm alone was not enough. `0x0094` carries five
+map-id bitmaps (schema 148, five `array32`; handler `0x0091eb10 -> 0x008122f0` copies them
+into `charCtx +0x5cc..+0x60c` via `Array::CopyBits`, no create-once, no ordering gate).
+MEASURED on every live tape: arr0-3 empty, arr4 a map-id bitmap (bit == map id), and
+across 22 connections EVERY map the client then sent `0x00B1` to had its arr4 bit set at
+load, the set growing as the session unlocked more (map 281 clear on `20260817T231139`,
+set the next day). OBSERVED for arr4; arr0-3 UNVERIFIED and sent empty; that arr4 IS the
+world map's clickability gate is CORROBORATED by the correlation, RECONSTRUCTION until the
+owner's `M` press. The load now sends `0x0094` once per instance (right after the fog-init
+pair) with arr4's bit set for every travelable content map -- enabled and not explorable,
+the 12-map set `[55, 143, 144, 148, 165, 166, 167, 194, 242, 248, 310, 449]` -- a labelled
+policy built from our content rows, the shape of the hero add's `0x0018`. EXACTLY ONE
+sender (a duplicate sender of unlock state crashed a client on 2026-09-15; `test_maptravel`
+pins the site).
+
+**The arm (`--no-map-travel`).** `c2s 0x00B1 [map_id, 0, 0, 0, 1]` (OBSERVED 10 of 10 on
+10 connections over 6 captures; the trailing four fields `0, 0, 0, 1` on all ten,
+UNVERIFIED). `handle_map_travel` answers a served, non-explorable destination that is not
+the one you are on with `0x01D9 [2, 1, '']` then the transfer pair `0x01A5`/`0x0099`
+(retail's batch, 10 of 10 in sequence, no `0x0028` -- `send_transfer(send_stop=False)`,
+new kwarg) then a graceful close; the client re-dials and the re-entry serves the
+destination, the party/heroes/kicked-hero store carried by `zone_carry_store` as a portal
+does. Refuses -- with nothing sent, retail's refusal reply NOT FOUND -- the map you are on,
+a map with no served content row, an explorable. `0x00B1` off `DROPPED_ON_PURPOSE`
+(`test_dispatch` §10, `test_c2striage`), named in `overrides.json` GAME_CMSG 177's `why`.
+
+`test_maptravel.py` (floor 23 bare-machine core + 6 on the vault): the leaf's travelable
+set, the bitmap with a VACUITY guard and a KNOWN-BAD too-narrow overflow, the four
+plan_travel outcomes with a KNOWN-BAD accept-an-explorable arm; the source locks and the
+one-sender guard; the real handler emitting `[0x01D9, 0x01A5, 0x0099]` in order (KNOWN-BAD
+transfer-first) and the refusals sending nothing; the tape anchor (`0x00B1` shape, the
+batch order 10 of 10, `0x01D9` first 9 of 10, KNOWN-BAD transfer-never-first, `0x0094`
+arr4 non-empty 29 of 29). Affected sweep: green (count in the merge notes). CLIENT
+CONFIRMATION OWED -- the runsheet is in the study; the owner's `M` press settles whether
+arr4 populates the map.
+
 ### DESKWORK-D1, the owner's answer, fix pass -- 2026-09-23 -- **the equip path's `0x006F` gated by the display mode (the one blocker); the tape "corroboration" withdrawn as a population confound and replaced by the weapon precedent; the string table read through its jump table; the reader census redone at the getter; the load's default and restore pinned**
 
 Two reviews of the entry below — an evidence refuter that re-derived (a)–(c) from the 96

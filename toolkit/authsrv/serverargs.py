@@ -882,6 +882,31 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "into a slot the mode hides here as item 0 (the fix pass: "
                          "re-equipping a hidden helm in a field re-helmed the body), "
                          "and persists the byte per character under --persist.")
+    ap.add_argument("--no-map-travel", action="store_true",
+                    help="THE REVERT ARM for DESKWORK-D1 step 7's world-map travel: "
+                         "ignore c2s 0x00B1 MAP_TRAVEL, as today (it was "
+                         "DROPPED_ON_PURPOSE). The default answers it as retail "
+                         "does -- OBSERVED 10 of 10 on 10 live connections: 0x01D9 "
+                         "[2, 1, ''] then the transfer pair 0x01A5 / 0x0099, then a "
+                         "graceful close and the client re-dials the destination "
+                         "(via send_transfer, so the party, heroes and kicked-hero "
+                         "store carry across as a portal's do). Accepted only for a "
+                         "served, non-explorable content map that is not the one "
+                         "you are on; every other request is refused with NOTHING "
+                         "sent (retail's refusal reply is NOT FOUND on any tape). "
+                         "maptravel.py, studies/cmsg DESKWORK-D1 'World-map "
+                         "travel'.")
+    ap.add_argument("--no-map-unlock", action="store_true",
+                    help="THE REVERT ARM for DESKWORK-D1 step 7's unlock state: "
+                         "send no s2c 0x0094 at load, as today -- the client's "
+                         "unlocked-outpost set starts empty and the world map "
+                         "offers nothing to click. The default sends 0x0094's five "
+                         "map-id bitmaps once per load with arr4's bit set for "
+                         "every travelable content map (bit == map id, OBSERVED "
+                         "across 22 live connections that every 0x00B1 destination "
+                         "was set; arr0-3 empty as on every tape). ONE sender, so a "
+                         "duplicate cannot wipe the library the way a second sender "
+                         "of skill unlocks did (2026-09-15). maptravel.py.")
     ap.add_argument("--hero-skill-toggle-per-bit", action="store_true",
                     help="THE ALTERNATIVE REPLY for DESKWORK-D1 step 6: answer a "
                          "suppress click with 0x0064 [agent, slot, value] -- one bit "

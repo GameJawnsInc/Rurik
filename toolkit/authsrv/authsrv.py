@@ -1210,6 +1210,18 @@ GAME_SMSG_INSTANCE_LOAD_INFO = 0x0199
 GAME_SMSG_MAP_EXPLORATION_INIT_BEGIN = 0x008B
 GAME_SMSG_MAP_EXPLORATION_INIT_DATA = 0x008A
 GAME_SMSG_MAP_UPDATE_CURRENT = 0x0099
+# DESKWORK-D1 step 7: the world map's travel reply, sent BEFORE the transfer.
+# Retail sends [2, 1, ''] (byte, byte, string16) 10 of 10 in answer to c2s
+# 0x00B1, then the transfer pair. The batch is OBSERVED; the two bytes' and the
+# string's meaning is UNVERIFIED (worker 0x0085a290 sets a state at [ctx+0x54]
+# and fires UI notifications -- no assert gates it). maptravel.py.
+GAME_SMSG_MAP_TRAVEL_READY = 0x01D9
+# DESKWORK-D1 step 7: the world map's unlocked-outpost bitmaps, sent once at
+# load so the client offers our served outposts as destinations. Five map-id
+# bitmaps; arr4 == the unlocked map set (bit == map id, OBSERVED across 22 live
+# connections -- every travel destination's bit was set); arr0-3 empty on every
+# tape (UNVERIFIED, sent empty). maptravel.py.
+GAME_SMSG_MAP_TRAVEL_UNLOCK = 0x0094
 GAME_SMSG_ITEM_STREAM_CREATE = 0x0144
 GAME_SMSG_INSTANCE_LOAD_SPAWN_POINT = 0x0195
 GAME_SMSG_READY_FOR_MAP_SPAWN = 0x01AB
@@ -1483,20 +1495,27 @@ def transfer_sockaddr(host, port):
             + socket.inet_aton(host) + b"\x00" * 16)
 
 
-def send_transfer(send, state, conn_id, dest_map, local_host):
+def send_transfer(send, state, conn_id, dest_map, local_host, send_stop=True):
     """Hand the client to `dest_map` on this server: the three messages.
 
     Returns the host advertised. The caller closes the socket GRACEFULLY
     afterwards (`graceful_close`) -- the client releases the deferred
     transfer only on the reason code a clean shutdown produces.
+
+    `send_stop` sends AGENT_STOP_MOVING first (a portal fires while the body is
+    WALKING into a circle, so it is stopped). A world-map travel (DESKWORK-D1
+    step 7) passes send_stop=False: the player is standing in an outpost and
+    retail's batch is 0x01D9 then the pair, no 0x0028 (10 of 10 on tape).
     """
     host, changed = transfer_host_for(local_host)
     row = agents.WORLD.rows("map").get(str(int(dest_map)), {})
     explorable = 1 if row.get("explorable") else 0
     world_id = int(state.get("world_id", 0) or 0)
     player_id = int(state.get("player_id", 0) or 0)
-    send(GAME_SMSG_AGENT_STOP_MOVING, agents.agent_stop_moving(PLAYER_AGENT_ID),
-         "transfer 1/3: AGENT_STOP_MOVING [player]")
+    if send_stop:
+        send(GAME_SMSG_AGENT_STOP_MOVING,
+             agents.agent_stop_moving(PLAYER_AGENT_ID),
+             "transfer 1/3: AGENT_STOP_MOVING [player]")
     send(GAME_SMSG_GAME_SERVER_TRANSFER,
          [transfer_sockaddr(host, TRANSFER_PORT), world_id, 0, int(dest_map),
           explorable, player_id, 0],
@@ -1570,6 +1589,40 @@ def portal_reachable(start_map):
 def transfer_reentry(world_id, player_id, map_id):
     """Is this VERSION frame the client coming back from a transfer WE sent?"""
     return TRANSFERS_ISSUED.get((int(world_id), int(player_id))) == int(map_id)
+
+
+def handle_map_travel(values, send, state, conn_id, local_host):
+    """GAME_CMSG 0x00B1 MAP_TRAVEL [map_id, 0, 0, 0, 1]: the world map's travel
+    to another outpost (DESKWORK-D1 step 7; maptravel.plan_travel has the tape,
+    the refusals and the labels). -> True when a transfer went out (the caller
+    closes the socket), False on a refusal (nothing sent).
+
+    On acceptance the batch is retail's, OBSERVED 10 of 10: 0x01D9 [2, 1, '']
+    then the transfer pair 0x01A5 / 0x0099 (via send_transfer with send_stop
+    False -- no 0x0028, the player is standing still), then a graceful close;
+    the client re-dials and the re-entry serves the destination. The transfer
+    carries the party, heroes and kicked-hero store through zone_carry_store,
+    exactly as a portal does. Refused with NOTHING sent (retail's refusal reply
+    is NOT FOUND on any tape): the map already on, a map with no served content
+    row, an explorable."""
+    if not values or len(values) < 2:
+        print(f"[c{conn_id}] MAP_TRAVEL refused: malformed request "
+              f"{list(values[1:]) if values else values!r}; nothing sent "
+              f"[DESKWORK-D1]", flush=True)
+        return False
+    dest = int(values[1])
+    cur = state.get("map_id")
+    ok, why = maptravel.plan_travel(agents.WORLD, cur, dest)
+    if not ok:
+        print(f"[c{conn_id}] MAP_TRAVEL(map {dest}) refused: {why}; nothing "
+              f"sent [DESKWORK-D1]", flush=True)
+        return False
+    send(GAME_SMSG_MAP_TRAVEL_READY, [2, 1, ""],
+         f"MAP_TRAVEL 1/3: MAP_TRAVEL_READY [2, 1, ''] (map {dest})")
+    send_transfer(send, state, conn_id, dest, local_host, send_stop=False)
+    print(f"[c{conn_id}] MAP_TRAVEL to map {dest}: 0x01D9 then the transfer "
+          f"pair; the client re-dials [DESKWORK-D1]", flush=True)
+    return True
 
 # Print every client position report with our own belief beside it, plus the
 # origin each click's collision ray is cast from. OFF by default -- it is a
@@ -5311,6 +5364,11 @@ import itemstore                                               # noqa: E402
 # Read by the burst, the 0x006E build, handle_visibility_flags and
 # test_visstatus.py.
 import visstatus                                               # noqa: E402
+# The world map's travel: which content maps are travel destinations, the
+# unlock bitmap that makes the client offer them, and a travel request's
+# refusal -- DESKWORK-D1 step 7. Read by the load preamble's 0x0094 send,
+# handle_map_travel and test_maptravel.py.
+import maptravel                                               # noqa: E402
 from skillunlock import (                                      # noqa: F401,E402
     unlock_corpus_words, refuse_skill_zero,
     # The persisted skill library's two halves read these by bare name: the
@@ -10727,6 +10785,15 @@ GAME_CMSG_ITEM_MOVE = 0x004F
 # behind --no-item-move-by-id. The GAME_SMSG with this number is HERO_ACTIVATE;
 # the two share nothing.
 GAME_CMSG_ITEM_MOVE_BY_ID = 0x0072
+# 0x00B1 [word map_id, byte, word, byte, byte]: the world map's travel to
+# another outpost. OBSERVED 10 of 10 on 10 live connections over 6 captures
+# (c2striage.py); answered by 0x01D9 then the transfer pair, then the client
+# re-dials. Payload is [map_id, 0, 0, 0, 1] on every tape -- the trailing four
+# fields never varied (region / district / language / flag candidates,
+# UNVERIFIED). Handled by handle_map_travel behind --no-map-travel; the world
+# map only offers a destination whose 0x0094 unlock bit is set. The GAME_SMSG
+# with this number is PLAYER_SET_PARTY; the two share nothing. maptravel.py.
+GAME_CMSG_MAP_TRAVEL = 0x00B1
 
 # THE THREE PURE-INBOUND ONES. Each is fully named in `schema/overrides.json`
 # with the client-side evidence beside it, each is among the largest single
@@ -11735,6 +11802,18 @@ ITEM_MOVE_BY_ID_ENABLED = True  # False (--no-item-move-by-id): c2s 0x0072
                                # the sword snapped back). Default ON: 0x014B
                                # into an empty cell, 0x0152 onto an occupied one
                                # (RECONSTRUCTION; no tape carries the request).
+MAP_TRAVEL_ENABLED = True      # False (--no-map-travel): c2s 0x00B1 MAP_TRAVEL
+                               # is ignored, as today (DROPPED_ON_PURPOSE). The
+                               # default answers it as retail does -- 0x01D9 then
+                               # the transfer pair -- for a served, non-explorable
+                               # destination, and refuses the rest with nothing
+                               # sent (maptravel.py). DESKWORK-D1 step 7.
+MAP_UNLOCK_ENABLED = True      # False (--no-map-unlock): do not send s2c 0x0094
+                               # at load. Today's behaviour -- the client's
+                               # unlocked-outpost set starts empty and the world
+                               # map offers nothing to click. Default ON: arr4's
+                               # bit set for every travelable content map so the
+                               # map offers our served outposts (maptravel.py).
 AI_MODE_FIGHT, AI_MODE_GUARD, AI_MODE_AVOID = 0, 1, 2   # 0x0015's byte (pvpui 28.5)
 AI_MODE_NAMES = {0: "Fight", 1: "Guard", 2: "Avoid Combat"}
 SPIRIT_RANGE = 2512.0          # u -- WIKI (GWW "Range"): binding rituals /
@@ -31406,6 +31485,30 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                       f"press kills the client on GmMapView.cpp(1731).",
                       flush=True)
 
+            # DESKWORK-D1 step 7: the world map's unlocked-outpost set, so the
+            # map offers our served outposts as travel destinations. s2c 0x0094
+            # carries five map-id bitmaps; arr4's bit is set per travelable
+            # content map (bit == map id, OBSERVED across 22 live connections --
+            # every 0x00B1 destination was set), arr0-3 empty as on every tape.
+            # ONE sender (this site), once per instance load, as retail does;
+            # a duplicate sender of unlock state once wiped a library and
+            # crashed a client (test_maptravel pins the single site).
+            if MAP_UNLOCK_ENABLED:
+                _mu_words, _mu_over = maptravel.unlock_bitmap_words(
+                    agents.WORLD, mission_mask_bytes(MAP_ID_COUNT) // 4)
+                send(GAME_SMSG_MAP_TRAVEL_UNLOCK, [[], [], [], [], _mu_words],
+                     f"MAP_TRAVEL_UNLOCK [{sum(bin(w).count('1') for w in _mu_words)} "
+                     f"outposts unlocked]")
+                if _mu_over:
+                    print(f"[c{conn_id}] MAP UNLOCK: map id(s) {_mu_over} past "
+                          f"the {len(_mu_words)}-dword bitmap -- not offered "
+                          f"[DESKWORK-D1]", flush=True)
+            else:
+                print(f"[c{conn_id}] MAP UNLOCK OFF (--no-map-unlock): the "
+                      f"client's unlocked-outpost set stays empty; the world "
+                      f"map offers nothing to travel to [DESKWORK-D1]",
+                      flush=True)
+
             spawn = MAP_STATIC_CONFIG.get(state["map_id"],
                                           MAP_STATIC_CONFIG[FALLBACK_MAP_ID])
             state["pos"], state["plane"], state["dest"] = spawn[1], spawn[2], None
@@ -32550,6 +32653,19 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         else:
                             print(f"[c{conn_id}] SET_CHAR_VISIBILITY_FLAGS ignored "
                                   f"(--no-visibility-status) [DESKWORK-D1]", flush=True)
+                    elif opcode == GAME_CMSG_MAP_TRAVEL:
+                        # DESKWORK-D1 step 7: the world map's travel click.
+                        # OBSERVED 10/10 on retail -- 0x01D9 then the transfer
+                        # pair (maptravel.py). A transfer hands the client on
+                        # and the socket closes; a refusal sends nothing.
+                        if MAP_TRAVEL_ENABLED:
+                            if handle_map_travel(values, send, state, conn_id,
+                                                 _local_host):
+                                graceful_close(sock, conn_id, "map travel")
+                                return
+                        else:
+                            print(f"[c{conn_id}] MAP_TRAVEL ignored "
+                                  f"(--no-map-travel) [DESKWORK-D1]", flush=True)
                     elif opcode == GAME_CMSG_CANCEL_ACTION:
                         # The one door that reaches a held cast -- the client
                         # sends no movement while casting, only this (the
@@ -36608,6 +36724,19 @@ def main():
               "headgear and both costume slots, the doll bare-headed in a "
               "town, 20260923T185124), c2s 0x0057 ignored, the body's 0x006E "
               "carries every piece whatever the mode.", flush=True)
+    if a.no_map_travel:
+        global MAP_TRAVEL_ENABLED
+        MAP_TRAVEL_ENABLED = False
+        print("[map] --no-map-travel: c2s 0x00B1 MAP_TRAVEL is ignored, as "
+              "today (DROPPED_ON_PURPOSE) -- the world map's travel click does "
+              "nothing. DESKWORK-D1 step 7.", flush=True)
+    if a.no_map_unlock:
+        global MAP_UNLOCK_ENABLED
+        MAP_UNLOCK_ENABLED = False
+        print("[map] --no-map-unlock: no s2c 0x0094 at load -- the client's "
+              "unlocked-outpost set stays empty and the world map offers "
+              "nothing to travel to (today's behaviour). DESKWORK-D1 step 7.",
+              flush=True)
     if a.party_no_fight:
         global PARTY_FIGHTS
         PARTY_FIGHTS = False

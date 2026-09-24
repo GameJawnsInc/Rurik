@@ -6639,6 +6639,28 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   Drives the real handlers and a scratch store, launches nothing. Floor 63 from the green
   run with `RURIK_VAULT` pointed at an empty directory (the bare-machine core; §2's 10 ride
   the vault, 73 vaulted), ~10 s),
+  `toolkit/authsrv/test_maptravel.py` (**2026-09-23, DESKWORK-D1 step 7: world-map travel** —
+  c2s `0x00B1` MAP_TRAVEL and the s2c `0x0094` unlock state that makes the client's world map
+  offer our outposts; `toolkit/authsrv/maptravel.py`, `studies/cmsg/FINDINGS.md` §"World-map
+  travel". §1 THE LEAF (bare-machine): `travelable_maps` is exactly our enabled non-explorable
+  content maps and no explorable is offered; `unlock_bitmap_words` sets bit == map id for each
+  and nothing else in 28 dwords, with a VACUITY guard (not empty) and a KNOWN-BAD 1-dword
+  bitmap that reports every id ≥ 32 as overflow rather than dropping it silently; `plan_travel`
+  accepts a served non-explorable destination and refuses the map you are on, an unserved id
+  and an explorable each with a reason, against a KNOWN-BAD arm where the accept and the
+  explorable-refusal must differ. §2 THE SERVER (bare-machine): source locks (the dispatch arm
+  behind `MAP_TRAVEL_ENABLED`, the graceful close, the `0x0094` send behind `MAP_UNLOCK_ENABLED`,
+  EXACTLY ONE sender of the unlock message — the duplicate-sender guard, since a second sender
+  of unlock state crashed a client on 2026-09-15 — and both revert flags in `serverargs.py`
+  and `main()`); `handle_map_travel` driven with a fake send and the real `send_transfer`
+  (`send_stop=False`) emits `[0x01D9, 0x01A5, 0x0099]` in that order with `0x01D9` first and
+  its payload `[2, 1, '']`, against a KNOWN-BAD transfer-first batch, and each refusal returns
+  False and sends nothing. §3 THE TAPE (vault-gated, `livewire.decode_conn`; `LEDGER.skip` on
+  a bare machine): every live c2s `0x00B1` is `[map_id, 0, 0, 0, 1]`; its s2c batch is `0x01D9`
+  then `0x01A5` then `0x0099` in order (10 of 10), `0x01D9` the first non-clock reply on 9 of
+  10, the transfer NEVER before `0x01D9` (KNOWN-BAD); s2c `0x0094` rides the load with a
+  non-empty arr4 on every sighting (29 of 29). Drives the real handler and `send_transfer`,
+  launches nothing. Floor 23 (§1+§2 bare-machine core; §3 adds 6 on the vault), ~10 s),
   `toolkit/authsrv/test_labelrun.py` (the labelled input run, which names GAME_CMSG
   opcodes from what a human was told to do: a message lands in exactly one step's
   window, instance-load traffic is never folded into step 1, and a dirty idle CONTROL
