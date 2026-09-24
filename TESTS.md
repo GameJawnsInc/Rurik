@@ -5532,6 +5532,35 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   code a mean estimator reddens 7 checks, a bound without the tick 6, the old label
   4. Floor 11, measured bare (2 declared skips); 31 with the vault. No client. ~80 s,
   most of it loading ~1,560 captures),
+  `toolkit/clientscan/test_sessionscore.py` (**2026-09-24, DESKWORK-D10 step 2 / MOVECODE-1z-do:
+  the WARP ROW's first test, and `sessionscore.py`'s first test at all — the movement scorecard
+  (`studies/movecode/review/sessionscore.py`) had every metric scored by a per-arc script except
+  hard jumps, which is why four post-ship hard rows on 09-13 sat unread eleven days. FIX PASS
+  2026-09-24 (MOVE-B, movecode §1z-do.6): the two review blockers get their known-bad arms — a
+  grant sent AFTER the landing that echoes it (our STOP-ECHO) must NOT read `on_grant` (§3c′,
+  strictly-before), and the gate reading is the SERVER's own drift + gate1-red, not the
+  between-frame `under_gate1` annotation; plus the attribution filters to the PLAYER's agent
+  (§2h), the report verdict is testable (§4c–4f), and the glob reaches `-c4`/`-c5` (§5h).
+  Sections 1–4′ are bare-machine (synthetic `movesync`-format wire rows in a temp file): §1 the
+  two-arm bar is REUSED and discriminates (a planted 600 u / 0.1 s speed-arm jump and a 540 u /
+  0.03 s distance-arm jump are caught; a 150 u/s walk is not — the **known-bad arm**), §2
+  attribution is a SUSPECT (the nearest preceding PLAYER 0x0029 send within 3 s — a hero/creature
+  0x0029 nearer in time is EXCLUDED, §2h; a wall-slide re-grant in that window flagged SEPARATELY;
+  the known-bad arm removes the re-grant and `regrant_before` clears while the nearest send is
+  unchanged; a send older than 3 s is not attributed), §3 the traps the arc paid for — a jump
+  landing on a point we granted BEFORE the landing is `on_grant` with its no-grant control, a grant
+  echoing the landing AFTER it is NOT (§3c′, the known-bad arm) while the same point granted before
+  still is (§3c″), and a between-frame move under 299.33 u reads `under_gate1` as an ANNOTATION,
+  §4 `score_capture` threads `cap_path`, §4′ the report verdict via `warp_report_lines` (n=0 OK,
+  n>0 RED, a warp that could not run RED not silent — the ENG-5 known-bad arm — and rule 7's
+  refusal keeps the count). §5 (vault-gated, declares a skip bare) is the REAL controls: the 09-13
+  corner captures `174629-c4` and `190815-c5` each read 2 hard rows with the attribution 1z-do
+  adjudicates (c5 t=172.59 re-grant-adjacent + plane flip + the SERVER over the gate: drift > 299.33
+  and gate1-red; c5 t=142.57's 649 u NOT on our grant with drift over the gate — a snap-back; c4
+  t=118.41's nearest send the PLAYER lead, gate1-red, on a straight wall), the 09-12 `151709-c2` — 29
+  re-grants — reads 0, the `--since` glob reaches `-c4`/`-c5` (§5h), and a re-grant relabelled
+  `[clear]` sets no `regrant_before` (§5i). Floor 28, measured bare (1 declared skip); 37 with the
+  vault. No client, no server bind, stdlib only),
   `toolkit/clientscan/test_resyncscore.py` (**2026-09-17: §15's "retail scores 0 hard jumps" is the same late-stamp row as test_movesync §16 seen through the control — split the same way (zero firings that are displacements; every firing a `movesync.late_stamp`, the 09-16 row required among them). 116 → 117 checks, floor 50 unchanged.** **2026-09-14: retail tracks carry `server_sets` (the same flag as test_movesync §16, skipped where `hard_idx` is built and in `fires()`; the JARIN shrine was scored as retail's one hard jump), and §17's `70 < p50` bound widened to 50 -- p50 read 69.5 u whole-corpus against 80.9 u as of the August pin, a bound one unit above the median being a pin on the vault's size.** WHAT WOULD THE 0x002C RESYNC HAVE
   DONE -- the guard on `toolkit/clientscan/resyncscore.py`, which prices a
   server change nobody has made against captures already on disk. The proposal:
