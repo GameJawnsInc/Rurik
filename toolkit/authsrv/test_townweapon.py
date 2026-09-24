@@ -28,9 +28,17 @@ census).
     the PvP panel's hand placements with none and its armour placement with one;
     retail's outpost NPCs DO carry 0x006D weapons (counted as 0x006D MESSAGES;
     the rule is the player's hands); no hero body in an outpost (party heroes
-    never created), a hero body in a field; every connection decoded.
+    never created), a hero body in a field; every connection decoded. THE
+    CARRIER (CONFIRM-2's census, 2026-09-24): retail sends the OWN body NO
+    0x006D on any connection (0 of 47 outpost, 0 of 44 field); within 5 s of
+    every outpost switch, equip and move nothing addressed to the own agent is
+    a 0x006D or a hand 0x006F; outpost strangers with several 0x006D never
+    change hands while field bodies do.
   * §3 THE SERVER: source locks (the leaf imported; the flag in serverargs.py
-    and main(); visible_worn and visible_slot_writes gated; select_weapon_set's
+    and main(); the load's player 0x006D routed through send_player_weapons,
+    the only `*send(0x006D)` naming the player, behind the leaf's rule and its
+    own revert flag --town-player-weapons, declared and wired; visible_worn and
+    visible_slot_writes gated; select_weapon_set's
     three hand 0x006F built into a batch that passes visible_slot_writes and no
     direct send left -- the ONE gate; the only direct player 0x006F sender left,
     in any `*send(` spelling, is handle_visibility_flags, whose slots are the
@@ -39,8 +47,12 @@ census).
     real item layout in a TOWN: the dressed array keeps the hammer at visual 0
     (the doll) while visible_worn zeroes 0 and 1; the FIELD control; the
     KNOWN-BAD revert arm (the weapon kept in a town, and it disagrees); VACUITY
-    (empty hands); F2/F1 (--weapon-set 1=sword+shield) in a TOWN -- 0x0148 +
-    0x014B + 0x0152 and NO 0x006F, the bag and the doll's array swapped -- and
+    (empty hands); the load's player 0x006D through send_player_weapons --
+    NOT sent in a town, sent in a field, sent in a town under either revert
+    flag (KNOWN-BAD both: --no-town-weapon-strip the pre-strip picture,
+    --town-player-weapons CONFIRM-2's), nothing for an emptied hand (VACUITY);
+    F2/F1 (--weapon-set 1=sword+shield) in a TOWN -- 0x0148 +
+    0x014B + 0x0152 and NO 0x006F and no 0x006D, the bag and the doll's array swapped -- and
     in a FIELD -- the same rows plus the two hand 0x006F in retail's order; the
     revert arm's town F2 carrying them (KNOWN-BAD); the equip path (0x004F out,
     0x0030 back) in a town with no 0x006F and in a field with them; the
@@ -67,7 +79,7 @@ import townweapon as tw                                      # noqa: E402
 import itemstore                                             # noqa: E402
 import authsrv                                               # noqa: E402
 
-led = checks.Ledger("the town weapon (DESKWORK-D1)", floor=36)  # 2026-09-23, from the green run with RURIK_VAULT pointed at an empty directory (the bare-machine core, 1 declared skip); section 2's 12 ride the vault (48 vaulted). Re-set on the fix pass from its own bare run: +1 bare (the 0x006E label lock, WEAP-R5), +1 vaulted (the 0x0022 cross-check, WEAP-R6)
+led = checks.Ledger("the town weapon (DESKWORK-D1)", floor=45)  # 2026-09-24, from the green run with RURIK_VAULT pointed at an empty directory (the bare-machine core, 1 declared skip); section 2's 15 ride the vault (60 vaulted). History: 35 bare / 46 vaulted on 2026-09-23; +1/+1 on the fix pass (the 0x006E label lock WEAP-R5, the 0x0022 cross-check WEAP-R6); +9 bare / +3 vaulted on the CONFIRM-2 carrier fix (send_player_weapons' four arms, vacuity, F2 with no 0x006D, three source locks; the own-0x006D, own-addressed and stranger-change census pins)
 
 VIS = authsrv.GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT           # 0x006F
 WORN = authsrv.GAME_SMSG_UPDATE_AGENT_VISUAL_EQUIPMENT               # 0x006E
@@ -140,6 +152,9 @@ if conns:
     npc6d = collections.Counter()       # (regime, lead != 0)
     heroes = collections.Counter()      # (regime, created?, has 0x006D?)
     ctrl_agree = collections.Counter()  # (regime, the armour join == 0x0022's agents that have a 0x006E?)
+    own6d = collections.Counter()       # (regime, how many 0x006D address the OWN agent on the connection)
+    own_addr = collections.Counter()    # (regime, c2s op, a 0x006D or hand 0x006F addressed to the own agent within 5 s?)
+    changed6d = collections.Counter()   # regime -> strangers with more than one 0x006D and differing hands
     for capdir, gf in conns:
         _conn, merged, ok = livewire.decode_conn(capdir, gf)
         decoded += 1 if ok else 0
@@ -192,10 +207,24 @@ if conns:
         # WORLD_UPDATE_CONTROLLED_AGENT names that have a 0x006E (four connections' 0x0022 also
         # names a second, bodiless agent for a moment -- value 1 between the own body's 3 and 1).
         ctrl_agree[(rg, own_ids == {a for a in ctrl_ids if a in seen6e})] += 1
+        # THE CARRIER (CONFIRM-2's census, 2026-09-24): how many 0x006D address the own
+        # agent at all, and whether any outpost stranger's 0x006D ever changes its hands.
+        own6d[(rg, sum(1 for _t, op, v in s2c if op == 0x006D and len(v) > 1 and int(v[1]) in own_ids))] += 1
+        stranger_hands = collections.defaultdict(set)
+        for _t, op, v in s2c:
+            if op == 0x006D and len(v) > 3 and int(v[1]) not in own_ids:
+                stranger_hands[int(v[1])].add((int(v[2]), int(v[3])))
+        changed6d[rg] += sum(1 for hands in stranger_hands.values() if len(hands) > 1)
 
         def reply(t, ops):
             return [(rop, list(rv)) for (rt, rop, rv) in s2c if t <= rt <= t + 1.5 and rop in ops]
         for t, op, v in c2s:
+            if op in (0x0032, 0x0030, 0x004F):
+                # a few seconds, not one batch: anything that could redraw the OWN body
+                addressed = [rop for (rt, rop, rv) in s2c if t <= rt <= t + 5.0 and rop in (0x006D, VIS)
+                             and len(rv) > 3 and int(rv[1]) in own_ids
+                             and (rop == 0x006D or int(rv[2]) in tw.HAND_SLOTS)]
+                own_addr[(rg, op, bool(addressed))] += 1
             if op == 0x0032:
                 r = reply(t, (ACTIVE, VIS))
                 switches[(rg, any(o == ACTIVE for o, _ in r),
@@ -273,6 +302,23 @@ if conns:
            f"OBSERVED: no hero body in an outpost ({o_heroes} party heroes over the outpost connections, none "
            f"created, none with a 0x006D); a field hero has a body and a 0x006D ({heroes[('field', True, True)]})",
            f"{dict(heroes)}")
+    # THE CARRIER (CONFIRM-2's census, 2026-09-24; the fix's premise, pinned)
+    led.ok(own6d[("outpost", 0)] >= 45 and own6d[("field", 0)] >= 40 and all(n == 0 for (_r, n) in own6d),
+           f"OBSERVED: retail sends the OWN body NO 0x006D -- 0 of {own6d[('outpost', 0)]} outpost and 0 of "
+           f"{own6d[('field', 0)]} field connections carry one addressed to the controlled agent; our load's player "
+           f"0x006D is a divergence, and in a town the carrier CONFIRM-2 saw arm the body", f"{dict(own6d)}")
+    o_changes = sum(n for (r, _op, _a), n in own_addr.items() if r == "outpost")
+    o_quiet = sum(n for (r, _op, a), n in own_addr.items() if r == "outpost" and not a)
+    led.ok(own_addr[("outpost", 0x0032, False)] >= 3 and o_changes >= 8 and o_quiet == o_changes,
+           f"OBSERVED: within 5 s of every outpost 0x0032 switch ({own_addr[('outpost', 0x0032, False)]}), 0x0030 "
+           f"equip and 0x004F move ({o_changes} in all) retail addresses NO 0x006D and no hand 0x006F to the own "
+           f"agent -- nothing redraws a town body because nothing drew it; there is no redraw to send",
+           f"{ {(r, hex(o), a): n for (r, o, a), n in own_addr.items()} }")
+    led.ok(changed6d["outpost"] == 0 and changed6d["field"] >= 1
+           and sum(n for (r, op, a), n in own_addr.items() if r == "field" and op == 0x0032 and a) >= 3,
+           f"CONTROL: outpost strangers with more than one 0x006D never change hands ({changed6d['outpost']}) while "
+           f"field bodies do ({changed6d['field']}), and the field's own switches DO address the own agent (a hand "
+           f"0x006F) -- the redraws exist and retail uses neither in a town")
 
 # ---- §3 the server ---------------------------------------------------------------------
 SRC = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
@@ -317,7 +363,22 @@ led.ok(senders == ["handle_visibility_flags"],
        "SOURCE LOCK: the only direct `*send(0x006F ...)` left in authsrv.py, in any wrapper's spelling, is "
        "handle_visibility_flags' (the display mode's slots 6/7/8, never a hand); every other player 0x006F "
        "passes visible_slot_writes", f"{senders}")
+# THE CARRIER (CONFIRM-2's fix, 2026-09-24): the load's player 0x006D has ONE sender, behind the leaf's rule
+spw = func_src("send_player_weapons")
 players = func_src("_handle_request_players")
+led.ok(spw and "townweapon.player_weapons_sent(field)" in spw and "not TOWN_PLAYER_WEAPONS_ENABLED" in spw
+       and "TOWN_WEAPON_STRIP_ENABLED and" in spw and "send(GAME_SMSG_NPC_UPDATE_WEAPONS, vals" in spw
+       and "send_player_weapons(send, state, conn_id)" in players and "GAME_SMSG_NPC_UPDATE_WEAPONS" not in players,
+       "SOURCE LOCK: the load's player 0x006D goes through send_player_weapons -- the leaf's rule under the strip "
+       "flag, --town-player-weapons the override -- and _handle_request_players holds no direct 0x006D send")
+p6d_senders = sorted({func_at(m.start())[1] for m in re.finditer(r"\w*send\(GAME_SMSG_NPC_UPDATE_WEAPONS", SRC)
+                      if "PLAYER_AGENT_ID" in SRC[max(0, m.start() - 160):m.start() + 160]})
+led.ok(p6d_senders == ["send_player_weapons"],
+       "SOURCE LOCK: the only `*send(0x006D ...)` in authsrv.py naming PLAYER_AGENT_ID, in any wrapper's spelling, is "
+       "send_player_weapons'; the hero, spawn, hostile and shrine 0x006D name their own agents", f"{p6d_senders}")
+led.ok('"--town-player-weapons"' in ARGS and "a.town_player_weapons" in SRC
+       and "TOWN_PLAYER_WEAPONS_ENABLED = False" in SRC and "TOWN_PLAYER_WEAPONS_ENABLED = True" in SRC,
+       "SOURCE LOCK: the 0x006D revert arm is declared in serverargs.py, defaults OFF and is wired in main()")
 led.ok('"weapon" if EQUIP_WEAPON else ""' not in players and '"weapon" if _hands else ""' in players
        and "[hands empty: a town]" in players
        and 0 < players.find("worn = visible_worn(player_worn_array(state), state, conn_id)") < players.find('"weapon" if _hands'),
@@ -333,7 +394,8 @@ _saved = {k: getattr(authsrv, k) for k in
           ("PERSIST", "ITEM_MOVES_ENABLED", "EXPLORABLE", "OUTPOST", "EQUIP_WEAPON",
            "EQUIP_ARMOUR", "EQUIP_COSTUME", "EQUIP_COSTUME_HEAD", "WEAPON_SETS",
            "PLAYER_SWING_DAMAGE", "WEAPON_ATTACK_SPEED", "ATTACK_INTERVAL",
-           "EQUIPPED_VISUAL_ORDER", "VISIBILITY_STATUS_ENABLED", "TOWN_WEAPON_STRIP_ENABLED")}
+           "EQUIPPED_VISUAL_ORDER", "VISIBILITY_STATUS_ENABLED", "TOWN_WEAPON_STRIP_ENABLED",
+           "TOWN_PLAYER_WEAPONS_ENABLED")}
 _saved_off, _saved_wpn = authsrv.agents.PLAYER_OFFHAND, authsrv.agents.PLAYER_WEAPON
 _saved_slots, _saved_over = dict(authsrv.WEAPON_SET_BACKPACK_SLOTS), dict(authsrv.SET_ITEMS_OVERRIDE)
 try:
@@ -345,14 +407,16 @@ try:
     W, EQ, BP = authsrv.WEAPON_ITEM_ID, authsrv.EQUIPPED_BAG_ID, authsrv.BACKPACK_BAG_ID
     MOVE, EQUIP = authsrv.GAME_CMSG_ITEM_MOVE, authsrv.GAME_CMSG_EQUIP_ITEM
 
-    def fresh(outpost, strip=True, vis=True, flags=None):
-        """A real item layout (--weapon-set 1=starter_sword+starter_shield) in a town or a field."""
+    def fresh(outpost, strip=True, vis=True, flags=None, p6d=False):
+        """A real item layout (--weapon-set 1=starter_sword+starter_shield) in a town or a field;
+        `p6d` is --town-player-weapons (the town 0x006D sent, CONFIRM-2's arm)."""
         authsrv.WEAPON_SETS = [{"lead": "starter_hammer", "off": None}, None, None, None]
         authsrv.agents.PLAYER_OFFHAND = None
         authsrv.SET_ITEMS_OVERRIDE.clear()
         authsrv.configure_weapon_sets(["1=starter_sword+starter_shield"])
         authsrv.OUTPOST, authsrv.EXPLORABLE = outpost, not outpost
         authsrv.TOWN_WEAPON_STRIP_ENABLED, authsrv.VISIBILITY_STATUS_ENABLED = strip, vis
+        authsrv.TOWN_PLAYER_WEAPONS_ENABLED = p6d
         st = {"agents": {}, "char_uuid": UUID, "map_id": 145}
         if flags is not None:
             st["vis_flags"] = flags
@@ -385,6 +449,40 @@ try:
            "VACUITY: a town body whose hands are already empty (the hammer dragged out) is unchanged by "
            "the strip")
 
+    # the load's player 0x006D: THE CARRIER CONFIRM-2 found (2026-09-24) -- withheld in a town
+    W6D = authsrv.GAME_SMSG_NPC_UPDATE_WEAPONS
+    st, items = fresh(outpost=True)
+    sent, send = fake_send_factory()
+    led.ok(authsrv.send_player_weapons(send, st, 0) is None and sent == []
+           and itemstore.hand_items(items, EQ) == (W, 0),
+           f"TOWN load: the player's 0x006D is NOT sent (retail: 0 of 47 own outpost connections carry one) while "
+           f"the bag still holds the hammer (item {W}) -- the third carrier into the client's hand store stays "
+           f"empty with the 0x006E's two, so the body is bare as retail's")
+    stf, _if = fresh(outpost=False)
+    sentf, sendf = fake_send_factory()
+    led.ok(authsrv.send_player_weapons(sendf, stf, 0) == [P, W, 0] and sentf == [(W6D, [P, W, 0])],
+           f"FIELD CONTROL: the load's 0x006D [player, hammer {W}, 0] goes out as every run before (the divergence "
+           f"kept for a field run; the 0x006E carries the same hand there)", f"{sentf}")
+    stk, _ik = fresh(outpost=True, strip=False)
+    sentk, sendk = fake_send_factory()
+    led.ok(authsrv.send_player_weapons(sendk, stk, 0) == [P, W, 0] and sentk == sentf,
+           "KNOWN-BAD (--no-town-weapon-strip): the town 0x006D goes out -- the pre-strip picture restored "
+           "exactly (the same values as the field's), with the hands in the 0x006E and the switch's 0x006F")
+    stp, _ip = fresh(outpost=True, p6d=True)
+    sentp, sendp = fake_send_factory()
+    led.ok(authsrv.send_player_weapons(sendp, stp, 0) == [P, W, 0] and sentp == sentf
+           and authsrv.visible_worn(authsrv.player_worn_array(stp), stp, 0)[:2] == [0, 0],
+           "KNOWN-BAD (--town-player-weapons): the strip on, the 0x006E bare, and the town 0x006D sent -- "
+           "CONFIRM-2's own arm (runs 084418 / 084811: the body armed at load, the OLD weapon kept across F2); "
+           "the default before this fix, and it differs from the fixed default's nothing")
+    st_e, items_e = fresh(outpost=True)
+    authsrv.handle_item_move([MOVE, 0, BP, 9], fake_send_factory()[1], st_e, 0)   # the hammer out
+    sent_e, send_e = fake_send_factory()
+    led.ok(itemstore.hand_items(items_e, EQ) == (0, 0) and authsrv.send_player_weapons(send_e, st_e, 0) is None
+           and sent_e == [],
+           "VACUITY: a town body whose hand is already empty (the hammer dragged out) gets no 0x006D either -- "
+           "nothing to withhold, nothing sent")
+
     # F2 / F1 in a TOWN: retail's outpost shape (0 of 4 switches carried a 0x006F)
     st, items = fresh(outpost=True)
     sent, send = fake_send_factory()
@@ -397,6 +495,10 @@ try:
            "0x0152 [1, hammer, sword] and NO 0x006F -- retail's outpost batch (20260919T103604 :58638, "
            "0 of 4 with a visual); the bag and the doll's array hold the new set, the world's hands stay "
            "empty", f"{sent}")
+    led.ok(all(op != W6D for op, _v in sent) and authsrv.send_player_weapons(fake_send_factory()[1], st, 0) is None,
+           "...and no 0x006D either, not in the switch and not re-sent after it: retail's four outpost switches "
+           "address nothing to the own agent, so no redraw is invented -- the town body stays bare, which is what "
+           "the empty-handed doll's sword and shield look like on retail (the fix is the load's gate)")
     sent.clear()
     authsrv.select_weapon_set(send, st, 0, 0)
     led.ok([op for op, _v in sent] == [ACTIVE, CHG, SWAP] and sent[1][1] == [1, 12, BP, 1]

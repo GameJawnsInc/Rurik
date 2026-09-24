@@ -6777,17 +6777,27 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   of 1,510 distinct bodies — the rule is the player's hands); the own body's join
   cross-checked against `0x0022` WORLD_UPDATE_CONTROLLED_AGENT on every connection (it names
   exactly the controlled agents that have a `0x006E`); no hero body in an outpost (3 party
-  heroes, none created), a hero body in a field; every connection decoded. §3 THE SERVER:
-  source locks (the leaf imported, the flag in `serverargs.py` and `main()`, `visible_worn`
-  and `visible_slot_writes` gated, `select_weapon_set`'s three hand `0x006F` built into a
-  batch that passes `visible_slot_writes` with no direct send left, the only direct
-  `*send(0x006F)` in `authsrv.py` — in any wrapper's spelling — being
+  heroes, none created), a hero body in a field; every connection decoded; THE CARRIER
+  (CONFIRM-2's census, 2026-09-24): retail sends the OWN body NO `0x006D` on any connection
+  (0 of 47 outpost, 0 of 44 field), within 5 s of every outpost switch, equip and move (9)
+  nothing addressed to the own agent is a `0x006D` or a hand `0x006F`, and outpost strangers
+  with several `0x006D` never change hands (0) while field bodies do (6). §3 THE SERVER:
+  source locks (the leaf imported, the flag in `serverargs.py` and `main()`, the load's player
+  `0x006D` routed through `send_player_weapons` — the only `*send(0x006D)` naming the player —
+  behind the leaf's rule and its own revert flag `--town-player-weapons`, declared and wired;
+  `visible_worn` and `visible_slot_writes` gated, `select_weapon_set`'s three hand `0x006F`
+  built into a batch that passes `visible_slot_writes` with no direct send left, the only
+  direct `*send(0x006F)` in `authsrv.py` — in any wrapper's spelling — being
   `handle_visibility_flags`' slots 6/7/8, the burst's `0x006E` label built from the array so
   a town's reads `[hands empty: a town]`); the real item layout
   (`--weapon-set 1=starter_sword+starter_shield`) in a TOWN — the dressed array keeps the
   hammer at visual 0 (the doll) while `visible_worn` zeroes 0 and 1; the FIELD control; the
   KNOWN-BAD revert arm (the weapon kept, and it disagrees); VACUITY (the hammer dragged out);
-  F2/F1 in a TOWN — `0x0148` + `0x014B` + `0x0152` and NO `0x006F`, the bag and the doll's
+  the load's player `0x006D` through `send_player_weapons` — NOT sent in a town, sent in a
+  field, sent in a town under either revert flag (KNOWN-BAD both: `--no-town-weapon-strip`
+  the pre-strip picture exactly, `--town-player-weapons` CONFIRM-2's own), nothing for an
+  emptied hand (VACUITY);
+  F2/F1 in a TOWN — `0x0148` + `0x014B` + `0x0152` and NO `0x006F` and no `0x006D`, the bag and the doll's
   array swapped — and in a FIELD — the same rows plus `0x006F [player, 0, sword]`,
   `[player, 1, shield]` and on F1 `[player, 1, 0]` before `[player, 0, hammer]`, retail's
   order; the revert arm's town F2 carrying them (KNOWN-BAD); the equip path (`0x004F` out,
@@ -6796,9 +6806,9 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   flag alone its own slots); `visible_slot_writes` leaving another agent's hand and the
   player's head alone in a town, dropping the player's hand under either display-mode
   setting, and passing the batch whole with both flags off. Drives the real handlers,
-  launches nothing. Floor 36 from the green run with `RURIK_VAULT` pointed at an empty
-  directory (the bare-machine core; §2's 12 ride the vault, 48 vaulted; re-set on the fix
-  pass from its own bare run), ~10 s),
+  launches nothing. Floor 45 from the green run with `RURIK_VAULT` pointed at an empty
+  directory (the bare-machine core; §2's 15 ride the vault, 60 vaulted; 36/48 before the
+  CONFIRM-2 carrier fix of 2026-09-24, re-set from its own bare run), ~10 s),
   `toolkit/authsrv/test_maptravel.py` (**2026-09-23, DESKWORK-D1 step 7: world-map travel**,
   rebuilt by the fix pass the same day — c2s `0x00B1` MAP_TRAVEL and the s2c `0x0094` unlock
   state that makes the client's world map offer our outposts; `toolkit/authsrv/maptravel.py`,

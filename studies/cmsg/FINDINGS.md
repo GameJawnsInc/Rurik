@@ -1924,7 +1924,10 @@ indirect calls — a bounded negative, not a proof. Our own town `0x006E` did ca
 run `20260923T210546`'s c1 wire, seq 100: `[1, 1, 0, 3, 4, 5, 6, 7, 0, 0]` under a map-148
 outpost load) and the body stood armed. The shape is OBSERVED; that the SERVER strips (rather
 than the client ignoring a hand in a town) is what the run below settles on our client — if the
-body is empty-handed only under the strip, the array is the channel.
+body is empty-handed only under the strip, the array is the channel. **REFUTED on the client
+2026-09-24 and CORRECTED in (f) below: the array is ONE of three carriers into a single
+client-side hand store, and our own load's player `0x006D` — a message retail never sends the
+own body — was re-arming what the array had emptied.**
 
 **Refuted or refined on the way.** (1) The first census pass reported one field own body with
 an off hand in the bag and visual 1 empty (`20260914T005758 :56011`, t=87.209): the "bag off
@@ -1968,36 +1971,86 @@ opcode; the hands were already `weaponcensus.py`'s slots 0/1).
 
 **RUN 2026-09-24: prediction (1) REFUTED on the client, and the switch half a visible
 regression** (studies/deskwork/CONFIRM-2026-09-24.md §1): the body holds the weapon whatever
-the town `0x006E` carries, and after an outpost F2 it keeps the OLD weapon while the doll
-changes. The `--walk` below does not parse (`vk:` is an `--actions` step).
+the town `0x006E` carries (A1 = A4), and after an outpost F2 it keeps the OLD weapon while the
+doll changes (A2); `--no-town-weapon-strip`'s `0x006F` redraws it (A4b). The first runsheet
+(prediction (1) "no weapon in either hand" under the default; its `--walk` with `vk:` steps did
+not parse — `vk:` is an `--actions` step) is superseded by the carrier fix's runsheet below.
 
-**Runsheet and PREDICTIONS (pre-registered; the orchestrator runs it after the merge, no
-owner needed).** Server flags: `--weapon-set 1=starter_sword+starter_shield` (the default
-outpost); then the same with `--explorable`; then the outpost with `--no-town-weapon-strip`.
-Harness steps as `--walk` items (`vk:0x49` is `I`, `vk:0x70` / `vk:0x71` are F1 / F2;
-`shot:1` after each).
-*Outpost, default* — (1) `wait:3 shot:1`: the body stands with **no weapon in either hand**
-(the hammer is not drawn; the rival — the client draws the bag's weapon regardless — would
-show it and refute (e)); the gamesrv log has `UPDATE_AGENT_VISUAL_EQUIPMENT(+armour) [hands
-empty: a town]` with visuals 0 and 1 zero (the label names what the array carries — the fix
-pass) and the `TOWN WEAPON: … leaves out the lead hand (item 1, visual 0)` line right
-before it. (2) `vk:0x49 wait:1 shot:1`: the inventory panel's doll **holds the hammer** in
-the weapon cell and the F1–F4 strip shows set 1's sword + shield — the bag is untouched. (3)
-`vk:0x71 wait:1 shot:1`: F2 — the log has `SET_ACTIVE_WEAPON_SET(1)`, the shield's
-`ITEM_CHANGE_LOCATION`, the `ITEM_SWAP_LOCATIONS` and `TOWN WEAPON: the body's 0x006F for the
-lead hand (item 11), the off hand (item 12) is not sent`; the doll now shows the sword and
-shield, the panel set 2 active, and the world body **still empty-handed**; no assert (retail's
-outpost switch is exactly these rows). (4) `vk:0x70 wait:1 shot:1`: F1 back — the doll shows
-the hammer, the body unchanged. *Explorable, default* (the control) — (5) `wait:3 shot:1`:
-the hammer **in hand**; no `TOWN WEAPON` line; the `0x006E` carries item 1 at visual 0 and is
-labelled `UPDATE_AGENT_VISUAL_EQUIPMENT(weapon+armour)`. (6)
-`vk:0x71 wait:1 shot:1`: F2 — the sword and shield **appear on the body** with `0x006F [1, 0,
-11]`, `[1, 1, 12]` in the log. *Outpost, `--no-town-weapon-strip`* (KNOWN-BAD) — (7) `wait:3
-shot:1`: the hammer in hand in the town (the pre-fix picture); (8) `vk:0x71 wait:1 shot:1`: F2
-puts the sword and shield on the body (`0x006F [1, 0, 11]`, `[1, 1, 12]` sent in a town). What
-a run cannot settle: whether retail's client would ALSO hide a hand the server sent in a town
-(no retail outpost `0x006E` ever carries one, so the question has no tape) — irrelevant to
-fidelity, since the server now sends what retail sends.
+**(f) The carrier (the CONFIRM-2 desk fix, 2026-09-24).** The question the run left — WHAT
+draws a town body's weapon, and what does retail send when it changes — was put to the same
+96 connections with predictions stated first (`weaponcensus.py`'s "every NPC, never a player"
+for the own `0x006D`; nothing agent-addressed on a switch; NPC redraws through `0x006D`),
+then to the binary. **EVID-D1W-5, OBSERVED: retail sends the OWN body no `0x006D`
+NPC_UPDATE_WEAPONS at all** — 0 of 47 outpost and 0 of 44 field connections carry one
+addressed to `0x0022`'s controlled agent. Our load has sent one for the player since
+2026-08-06 (`NPC_UPDATE_WEAPONS(leadhand = item 1)`), and it sits two messages after the
+`0x006E` in all four CONFIRM-2 logs, under the strip too. **EVID-D1W-6, OBSERVED:** within
+5 s of every outpost own hand change — the four `0x0032` switches, the four `0x0030`
+double-click equips, the `0x004F` move (9) — nothing addressed to the own agent is a `0x006D`
+or a hand `0x006F` (t=224.632's switch draws movement rows only, `0x0029`/`0x002B`; the
+`0x0086` head creation draws its `0x006F [336, 6, 23284]`, the armour precedent of (c));
+outpost strangers with more than one `0x006D` never change hands (0 of 1,510 bodies — 1,443
+with one, 21 with two, 46 with three or more, all repeating the same pair) while field bodies
+do (6), and the field's four own switches carry their hand `0x006F`. So the redraws exist and
+retail uses neither in a town. **EVID-D1W-7, read from build 38797:** the client keeps **one
+hand array per agent, at record+0x24**, and the `0x006D` worker (0x00810B70, from the
+handler 0x0091E1A0), the `0x006E` worker (0x00810E30) and the `0x006F` worker (0x008110F0)
+all write it through the one setter **0x0081BE10** — its only three direct callers
+(`codescan --xrefs 0x0081BE10`: 0x00810BCB, 0x00810E8B, 0x00811145), each resolving the
+agent through 0x005FC380 (kind 1) and storing `[record + slot*4 + 0x24] = item`; a slot-0
+write also puts the item's type byte at record+0x48. Last writer wins. That explains all four
+frames: the `0x006E` emptied the store, our `0x006D` re-armed it with the hammer (A1 = A4),
+the town switch's dropped `0x006F` left it there (A2), the revert arm's `0x006F` overwrote it
+(A4b). **(e) is corrected:** the array is not "the channel" but one of three carriers into
+that store; retail's town body is bare because every carrier leaves it bare; and the stale
+weapon the owner saw was OUR message, not a retail quirk — **there is no redraw to invent.**
+Not read: who consumes record+0x24 / +0x48 downstream (the dresser's path in (e) is the
+likeliest reader; the behavioural frames make the question moot for the hands).
+
+**Shipped (the carrier fix).** `send_player_weapons` in `authsrv.py` — the load's player
+`0x006D` now has ONE sender, gated by `townweapon.player_weapons_sent(field)`: **withheld in a
+town** under the strip (the log: `TOWN WEAPON: the player's 0x006D (lead item 1) is not sent
+-- a town; retail sends the own body none (0 of 47 outpost connections) …`), sent in a field.
+Two revert arms: **`--no-town-weapon-strip`** restores every pre-2026-09-23 carrier at once —
+the town `0x006E` armed, the switch's `0x006F`, AND the `0x006D` — the pre-pass-4 wire exactly;
+**`--town-player-weapons`** (new, default OFF) restores the `0x006D` alone with the strip on —
+CONFIRM-2's own picture, KNOWN-BAD, and the A/B for the run below. Nothing new goes on the
+wire; in a field nothing moved. `test_townweapon` 45 bare / 60 vaulted: the three census
+pins above against the tape, `send_player_weapons`' four arms with both revert flags as
+KNOWN-BAD (yesterday's default — the town `0x006D` sent — reddens the town pin), vacuity (an
+emptied hand), the TOWN F2 through the real `select_weapon_set` with no `0x006F` and no
+`0x006D`, and the source locks (one `0x006D` sender naming the player; the flag declared and
+wired). The docstrings of `townweapon.py`, `visible_worn` and `visible_slot_writes` and the
+`--no-town-weapon-strip` help no longer call the array the channel.
+
+**Runsheet and PREDICTIONS (pre-registered; the orchestrator runs it after the merge).**
+Outpost, server `--weapon-set 1=starter_sword+starter_shield`; harness
+`--actions "0:play 40:vk:0x71"` (F2, timed from the Play click, fires before the walk) and
+`--walk "wait:3 shot:1 i:0.4 wait:2 shot:1"`; the body crop is about (860,500,1080,740) of the
+1936x1040 frame. *Default* — the gamesrv log has `TOWN WEAPON: the player's 0x006D (lead
+item 1) is not sent` and **no** `NPC_UPDATE_WEAPONS(leadhand` line on c1, the `0x006E`
+labelled `[hands empty: a town]`, then `SET_ACTIVE_WEAPON_SET(1)` and `TOWN WEAPON: the body's
+0x006F for the lead hand (item 11), the off hand (item 12) is not sent`; shot 1 (after F2):
+the body stands **EMPTY-HANDED — no hammer, no sword, no shield**; shot 2 (the inventory
+open): the doll holds the **sword and shield**, set 2 active, the hammer in the backpack; no
+assert. *A/B, `--town-player-weapons`* — `NPC_UPDATE_WEAPONS(leadhand = item 1)` in the log;
+shot 1: the body **holds the HAMMER** after F2 (CONFIRM-2's A2 reproduced) while the doll
+shows the sword and shield. *Rivals:* the default's body holding the hammer anyway means a
+third carrier (the client reading the equipped bag) and refutes this fix; holding the sword
+means the client redraws from the `0x0152` swap and both records are wrong. **A note for the
+reader:** the task that produced this fix expected "the body must hold the sword and shield
+after F2" — that picture is NOT retail's (0 of 2,245 outpost bodies armed, no own `0x006D`),
+and sending it would be an invention. **The owner's one-word question**, on retail, in any
+outpost: *does your character hold a weapon at all while standing in an outpost?* The wire
+says no. A "yes" means the retail client draws from data this census cannot see, and the fix
+moves.
+
+**Open after (f).** The FIELD's player `0x006D`: retail sends none there either (0 of 44)
+and ours does. The body is right regardless — the field `0x006E` carries the same hand and its
+worker calls the same setter, which writes the type byte at +0x48 — so the message is a
+divergence, not a defect; its removal is a field run's question because the send site's
+history (the 2026-08-06 ItCliApi.cpp(400) assert) was about a wrong VALUE and says nothing
+about absence. UNVERIFIED that the swing path needs nothing this message alone provides.
 
 **The fix pass (2026-09-23, the combined review's WEAP-R1–R8; no blocker, no major; every
 finding's evidence re-derived before it was applied, and none declined).** (e) re-labelled and

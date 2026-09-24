@@ -38,22 +38,46 @@ no 0x0199; reproduced by test_townweapon.py section 2):
     20260917T160915 :58557 at t=73.5) and retail sent 0x006F [336, 6, 23284]
     for it -- the one outpost 0x006F on an own body. Armour visuals are
     written in a town; the hands are not.
-  * WHY THE SERVER DOES IT (RECONSTRUCTION): the client's 0x006E / 0x006F
-    handlers (0x0091E1C0 / 0x0091E1E0) reach the AvApi dresser (0x007DFCE0)
-    through ChCliApi message workers (0x00810E30 / 0x008110F0), and those
-    handlers, workers and every function the workers call directly -- the
-    dresser's fifteen-instruction body among them -- hold no direct call to
+  * THE CARRIER (OBSERVED on our client, CONFIRM-2 2026-09-24, and read from
+    the binary the same day). The 0x006E array is NOT the only channel into
+    the body's hands -- the first record's (e) said it was, and the client
+    refuted it: with the town 0x006E empty-handed the body still drew the
+    bag's hammer (runs 20260924T084418 = 084637, strip on and off), and after
+    an outpost F2 it kept the OLD weapon while the doll changed (084811).
+    The carrier was OUR OWN load's 0x006D NPC_UPDATE_WEAPONS for the PLAYER
+    (`NPC_UPDATE_WEAPONS(leadhand = item 1)`, two messages after the 0x006E
+    in all four logs) -- a message RETAIL NEVER SENDS THE OWN BODY: 0 of 47
+    outpost and 0 of 44 field connections carry a 0x006D addressed to
+    0x0022's controlled agent (weaponcensus.py's "every NPC, never a player"
+    holds over all 91). The mechanism: the client keeps ONE hand array per
+    agent, at record+0x24, and the 0x006D worker (0x00810B70, from handler
+    0x0091E1A0), the 0x006E worker (0x00810E30) and the 0x006F worker
+    (0x008110F0) all write it through the one setter 0x0081BE10 -- its only
+    three direct callers (`codescan --xrefs 0x0081BE10`: 0x00810BCB,
+    0x00810E8B, 0x00811145), each resolving the agent through 0x005FC380 and
+    storing `[record + slot*4 + 0x24] = item` (slot 0 also puts the item's
+    type byte at record+0x48). Last writer wins, so the 0x006D re-armed what
+    the 0x006E had emptied and the dropped town 0x006F left it there. And on
+    retail's four outpost switches NOTHING is addressed to the own agent
+    within 5 s but movement rows (t=224.632's 0x0029/0x002B); on the four
+    0x0030 equips nothing at all; outpost strangers with more than one 0x006D
+    never change hands (0 of 1,510 bodies; a field's do, 6). So retail's town
+    body is bare because every carrier leaves it bare -- there is no redraw
+    to send, and the fix is to withhold ours: player_weapons_sent. The
+    regime-read negative below still stands and is now moot for the hands.
+  * THE REGIME READ (a bounded negative, kept): the 0x006E / 0x006F handlers
+    (0x0091E1C0 / 0x0091E1E0) reach the AvApi dresser (0x007DFCE0) through
+    the ChCliApi workers above, and those handlers, workers and every
+    function the workers call directly hold no direct call to
     MissionCliGetMap (0x0084D9B0) or the map-flags reader (0x0084D950):
     `msghandler.py 0x006E --follow --depth 2` and the same for 0x006F, read
     on the fix pass; of MissionCliGetMap's 37 direct callers (`codescan
     --xrefs`) none lies in them. NOT searched: the dresser's callee
-    0x007F70B0 and deeper, and indirect calls -- a measured negative, not a
-    proof (visstatus.py's census, which the first pass cited here, was of the
-    display FLAGS' readers and said nothing about a regime read). Our own
-    town 0x006E carried the hand (run 20260923T210546, c1 seq 100: visual 0 =
-    item 1 under a map-148 outpost load) and the body stood armed. Shape
-    OBSERVED; that the server strips rather than the client ignoring is what
-    the runsheet's rival prediction settles on our client.
+    0x007F70B0 and deeper, and indirect calls (visstatus.py's census, which
+    the first pass cited here, was of the display FLAGS' readers and said
+    nothing about a regime read). Our own town 0x006E carried the hand (run
+    20260923T210546, c1 seq 100: visual 0 = item 1 under a map-148 outpost
+    load) and the body stood armed -- consistent with the shared store above.
   * WHAT THIS DOES NOT TOUCH: the equipped BAG (0x013E / 0x014B / 0x0152 --
     the doll and the weapon-set panel read it, and retail's outpost switches
     still moved the items), the 0x0147 / 0x0148 set declarations, the
@@ -79,6 +103,20 @@ def hands_shown(explorable):
     """Does the WORLD body carry its hands in this regime? A field does
     (40 of 40 leads, 23 of 23 off hands on the own body); a town never
     (0 of 2,245 bodies). OBSERVED."""
+    return bool(explorable)
+
+
+def player_weapons_sent(explorable):
+    """Does the load send the PLAYER a 0x006D NPC_UPDATE_WEAPONS here? In a
+    TOWN, no: retail sends the own body none (0 of 47 outpost connections --
+    and 0 of 44 field ones, OBSERVED, CONFIRM-2's census), and on our client
+    that message was THE carrier that armed the empty-handed town body and
+    kept the OLD weapon standing across F2 (the docstring's THE CARRIER: one
+    hand store per agent, three writers, last one wins). In a FIELD ours still
+    sends it -- a divergence kept, not a rule: the 0x006E carries the same
+    hands there, and the swing model's history at the send site (the
+    ItCliApi.cpp(400) assert of 2026-08-06) makes its removal a field run's
+    question, not this town fix's."""
     return bool(explorable)
 
 

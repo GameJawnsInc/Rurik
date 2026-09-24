@@ -1939,11 +1939,14 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   `0x00EF`/`0x0057`, the backpack drag `0x0072`) the doll's order, the eye and the helm,
   Hide in Towns hiding the helm on the doll AND the world body, and the drag staying.
   **CONFIRM-2 ran 2026-09-24** (studies/deskwork/CONFIRM-2026-09-24.md, PLAN-LOG): the
-  henchman add HELD on the client. **Open**: the town weapon's SWITCH half is a visible
-  regression — in an outpost the body keeps the old weapon after F1–F4 while the doll
-  changes (`--no-town-weapon-strip` restores it); its load half is invisible, the client
-  draws the weapon from another carrier (the player's `0x006D`?) — fix at the desk
-  (CONFIRM-2 §1); the henchman kick, c2s `0x00A8 [agent]`, named on our client, unarmed,
+  henchman add HELD on the client. **Open**: the town weapon's carrier fix (PLAN-LOG
+  2026-09-24: CONFIRM-2's stale weapon was OUR load's player `0x006D`, which retail never
+  sends the own body — 0 of 47 outpost, 0 of 44 field; withheld in a town,
+  `--town-player-weapons` the A/B) awaits its client run — the outpost body EMPTY-HANDED
+  after F2 while the doll changes (studies/cmsg "The town weapon" (f), its runsheet) — and
+  the owner's one-word question: on retail, does a character hold a weapon in an outpost at
+  all?; the FIELD's player `0x006D` (retail 0 of 44, ours sent) is a divergence for a field
+  run; the henchman kick, c2s `0x00A8 [agent]`, named on our client, unarmed,
   its reply on no tape; travel's confirmation BLOCKED on content (no fog-initialised view
   carries a second pin; `M` on 449 / 242 / 248 / 310 asserts, CONFIRM-2 §3); the display
   mode's field step (the owner's hands, the harness cannot open the drop-down); the

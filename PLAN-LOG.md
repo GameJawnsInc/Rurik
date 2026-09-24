@@ -28,6 +28,41 @@ move back.
 
 ---
 
+### DESKWORK-D1, the town weapon's carrier fix -- 2026-09-24 -- **CONFIRM-2's stale weapon was OUR load's player `0x006D`, a message retail never sends the own body; withheld in a town, `--town-player-weapons` the A/B**
+
+The regression CONFIRM-2 §1 found (with the strip on, an outpost F2 left the WORLD body holding the
+OLD weapon while the doll changed; and the strip's load half was invisible, A1 = A4) was put to the
+tape and the binary before anything was built, predictions first
+(studies/cmsg/FINDINGS.md "The town weapon" (f); `test_townweapon` §2 pins the numbers). **Retail
+sends the OWN body no `0x006D` NPC_UPDATE_WEAPONS at all** -- 0 of 47 outpost and 0 of 44 field
+connections carry one addressed to `0x0022`'s controlled agent -- while our load has sent
+`NPC_UPDATE_WEAPONS(leadhand = item 1)` for the player since 2026-08-06, two messages after the
+`0x006E`, in all four CONFIRM-2 logs. Within 5 s of every outpost own hand change on tape (the four
+`0x0032` switches, four `0x0030` equips, the `0x004F` move) nothing addressed to the own agent is a
+`0x006D` or a hand `0x006F`; outpost strangers with several `0x006D` never change hands (0 of
+1,510 bodies; field bodies do, 6). And the client keeps ONE hand array per agent (record+0x24):
+the `0x006D`, `0x006E` and `0x006F` workers (0x00810B70 / 0x00810E30 / 0x008110F0) all write it
+through the one setter 0x0081BE10 -- its only three direct callers -- so the last writer wins.
+That is every frame: the `0x006E` emptied the store, our `0x006D` re-armed it, the dropped town
+`0x006F` left the old weapon standing. **The study's (e) is corrected** (the array is one of three
+carriers, not "the channel"), and the task's premise -- send the redraw retail sends, or invent
+one -- is refuted: retail sends none because nothing drew the body, and the stale weapon was ours.
+
+**Shipped:** `send_player_weapons` (`authsrv.py`), the load's one player-`0x006D` sender, gated by
+`townweapon.player_weapons_sent(field)` -- withheld in a town under the strip (a `TOWN WEAPON: the
+player's 0x006D … is not sent` line), sent in a field. `--no-town-weapon-strip` restores all three
+pre-2026-09-23 carriers at once (the pre-pass-4 wire exactly); **`--town-player-weapons`** (new,
+default OFF) restores the `0x006D` alone -- CONFIRM-2's picture, KNOWN-BAD. Docstrings and the
+strip flag's help corrected. `test_townweapon` 36/48 -> **45 bare / 60 vaulted**: the three census
+pins, the four arms (yesterday's default reddens the town pin), vacuity, TOWN F2 with no `0x006D`,
+the source locks. TESTS.md updated. **Owed on the client** (the runsheet in (f), the orchestrator
+after the merge): the outpost body EMPTY-HANDED after F2 under the default, the HAMMER under the
+A/B; and the owner's one-word question -- on retail, does a character hold a weapon in an outpost
+at all? (the wire says no). **Open:** the FIELD's player `0x006D` is a divergence too (retail 0 of
+44) with a swing-model history at its send site; a field run's question.
+
+---
+
 ### DESKWORK pass 5, landed -- 2026-09-24 -- **gold (D9), the warp row (MOVE-B) and the status sweep (INFRA-A) merged; the merged tree's sweep 95 of 95 green**
 
 Merged into `deskwork` in that order (`3bd7de5b`, `ca5e6d9d`, `9ab7b2f9`, only PLAN-LOG entries
