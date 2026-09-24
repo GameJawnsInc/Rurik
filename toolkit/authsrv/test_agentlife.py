@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=596)   # 2026-09-24 DESKWORK-D8 steps 3/4 +44 (section_leash_return 26: the anchor, the dwell give-up, the legs home, the party bodies untouched, the revert arm; section_caster_opening 18: who is a caster, the stand-and-cast, the leg to range, the hold, the revert arm), from the green run (596)  # 2026-09-23 SANDBOX-N2 add +1 (the load-order walk locates _handle_request_players), from the green run  # 2026-09-17 CAST-TARGET-DIED +4 (an ally cast whose target died lands on nothing), from the green run  # 2026-09-15 (probe-walk noise) +2 (the CONTROL is pinned to one name and captured: quiet prints nothing, the failure is named to the caller), from the green run; 2026-09-15 (later) HEROLIB +2 (no 0x001D send site may zero the account library -- the GmSkSlot.cpp:206 crash of run 20260915T201538; the negative control restores the literal and reddens naming the line); 2026-09-15 +2 (offset_y honoured); SLICE-F43 +3 (the wipe countdown and its stop), from the green run   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=619)   # 2026-09-24 DESKWORK-D8 steps 3/4 FIXER +23 (section_leash_caster_review: the caster notice gate CD-1/EV-4, the short-leash no-loop CD-2, lost-contact-walks-home EV-2, revive-clears-the-return CD-8, the NPC_FOLLOW gate CD-9, the per-skill touch/half reach EV-1, the engaged/dwell/plumbing terms CD-5, the standing-fight give-up EV-8), plus the EV-9/CD-4 planted-record check made real, from the green run (619)  # 2026-09-24 DESKWORK-D8 steps 3/4 +44 (section_leash_return 26: the anchor, the dwell give-up, the legs home, the party bodies untouched, the revert arm; section_caster_opening 18: who is a caster, the stand-and-cast, the leg to range, the hold, the revert arm), from the green run (596)  # 2026-09-23 SANDBOX-N2 add +1 (the load-order walk locates _handle_request_players), from the green run  # 2026-09-17 CAST-TARGET-DIED +4 (an ally cast whose target died lands on nothing), from the green run  # 2026-09-15 (probe-walk noise) +2 (the CONTROL is pinned to one name and captured: quiet prints nothing, the failure is named to the caller), from the green run; 2026-09-15 (later) HEROLIB +2 (no 0x001D send site may zero the account library -- the GmSkSlot.cpp:206 crash of run 20260915T201538; the negative control restores the literal and reddens naming the line); 2026-09-15 +2 (offset_y honoured); SLICE-F43 +3 (the wipe countdown and its stop), from the green run   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
 def section_weapon_damage():
@@ -541,6 +541,7 @@ def main():
     section_owed_swing()
     section_leash_return()
     section_caster_opening()
+    section_leash_caster_review()
     section_npc_attack_skill()
     section_facing()
     section_enemy_skill()
@@ -2788,23 +2789,27 @@ def section_leash_return():
                   f"sent {[(hex(op), v[:2]) for op, v, _l in sent]}")
 
         # 14-15. A ROW'S OWN LEASH, and the arm that makes it mean something.
-        st = _bull(leash=600.0)
+        # The target is NOTICED inside 600 (CD-2: the notice is clamped to the
+        # leash) and THEN runs out to 700 -- so the row's leash is what ends the
+        # chase, not AGGRO_RANGE.
+        st = _bull(pos=(0.0, 0.0), player=(500.0, 0.0), leash=600.0)
         ag = st["agents"][10]
-        _leash_tick(st, pm, 0.0)
+        _leash_tick(st, pm, 0.0)                             # noticed inside 600
         st["pos"] = (700.0, 0.0)                             # 700 > 600, < 1350
         _leash_tick(st, pm, 0.05)
         _leash_tick(st, pm, 0.05 + authsrv.LEASH_SECONDS + 0.05)
         row_gave = ag.get("leash_return") is not None
-        st2 = _bull()
+        st2 = _bull(pos=(0.0, 0.0), player=(500.0, 0.0))
         ag2 = st2["agents"][10]
         _leash_tick(st2, pm, 0.0)
         st2["pos"] = (700.0, 0.0)
         _leash_tick(st2, pm, 0.05)
         _leash_tick(st2, pm, 0.05 + authsrv.LEASH_SECONDS + 0.05)
         LEDGER.ok(row_gave and ag2.get("leash_return") is None,
-                  "a row's `leash = 600` gives up on a target 700 u from home; the "
-                  f"same target under the default {authsrv.LEASH_DISTANCE:.0f} does not "
-                  f"-- the field is read, and it is the row's",
+                  "a row's `leash = 600` gives up on a target that ran to 700 u "
+                  f"from home; the same target under the default "
+                  f"{authsrv.LEASH_DISTANCE:.0f} does not -- the field is read, "
+                  f"and it is the row's",
                   f"row {row_gave}, default {ag2.get('leash_return')}")
         LEDGER.ok(abs(authsrv.LEASH_DISTANCE - 1350.0) < 1e-9
                   and abs(authsrv.LEASH_SECONDS - 3.0) < 1e-9
@@ -2909,9 +2914,6 @@ def section_leash_return():
                   "no anchor recorded: the pre-D8 halt where the copy stands "
                   "(every hand-made fixture in this file is one)",
                   f"{[(hex(op), l[:60]) for op, _v, l in old]}")
-        st = _bull(pos=(300.0, 0.0), player=(400.0, 0.0))    # anchor (300,0)
-        ag = st["agents"][10]
-        _leash_tick(st, pm, 0.0)                              # the notice at 100 u... no: 100 < reach
         st = _bull(pos=(0.0, 0.0), player=(900.0, 0.0))
         ag = st["agents"][10]
         _leash_tick(st, pm, 0.0)
@@ -2937,12 +2939,29 @@ def section_leash_return():
                   "target passes AGGRO_RANGE from it, no leg, no walk home -- every "
                   "run before 2026-09-24 (the known-bad arm)",
                   f"{[(hex(op), l[:70]) for op, _v, l in old]}, return {ag.get('leash_return')}")
+        # EV-9/CD-4: the OLD conjunct `not _swings(st) is None` parsed as
+        # `not (_swings(st) is None)` -- always True, since _swings returns a
+        # list. It tested nothing but leash_returning(). Drive BOTH ticks with a
+        # planted record and the player 85 u away (in reach); the copy stands
+        # 400 u FROM its anchor, so a record-reading tick would send a RETURN
+        # leg toward home rather than homing instantly. The attack tick must
+        # open the swing and the move tick must send no RETURN leg -- both read
+        # the FLAG, not the record. Reddens if either tick reads the record.
+        st = _bull(pos=(400.0, 0.0), player=(485.0, 0.0), anchor=(0.0, 0.0))
+        ag = st["agents"][10]
         ag["leash_return"] = {"t0": 0.0, "legs": 0, "leg": None, "leg_at": 0.0,
                               "from": (0.0, 0.0)}
-        LEDGER.ok(not authsrv.leash_returning(ag) and not _swings(st) is None,
+        walk = _walk(st, elapsed=0.05)
+        sw = _swings(st)
+        opened = [v for op, v, _l in sw if op == START and v[0] == 4]
+        no_return_leg = not [1 for op, v, l in walk if op == POINT and "RETURN" in l]
+        LEDGER.ok(not authsrv.leash_returning(ag) and opened == [[4, 10, 1, 0]]
+                  and no_return_leg,
                   "and under it even a planted return record is ignored: the "
-                  "attack and move ticks read the flag, not the record",
-                  f"returning {authsrv.leash_returning(ag)}")
+                  "attack tick opens the swing and the move tick sends no RETURN "
+                  "leg -- both read the flag, not the record (EV-9/CD-4)",
+                  f"returning {authsrv.leash_returning(ag)}, opened {opened}, "
+                  f"no_return_leg {no_return_leg}")
         authsrv.LEASH_RETURN = True
 
         # 24. THE STALE COMMENT is gone: the source no longer says the leash is unmeasured.
@@ -3158,6 +3177,321 @@ def section_caster_opening():
     finally:
         (authsrv.CASTER_OPENING, authsrv._is_attack_skill, authsrv.skill_cost,
          authsrv.skill_damage, authsrv.skill_condition) = saved
+
+
+def section_leash_caster_review():
+    """DESKWORK-D8 steps 3 and 4, the FIXER pass (2026-09-24): the corrections
+    the review found, each with the arm that makes it mean something.
+
+    The leash and the caster shipped over-reaching their evidence in ways two
+    reviewers pinned on the wire: a caster cast before it noticed (EV-4/CD-1); a
+    leash shorter than the notice radius looped (CD-2); a body frozen away from
+    home by the death halt chased a target revived across the map (EV-2); a body
+    killed while returning jumped on revive (CD-8); the caster opening leaked
+    into the legacy arm (CD-9); a touch skill was cast from range (EV-1); and
+    several `engaged`/dwell/plumbing rules had no check that could redden (CD-5).
+    Every check below reddens under a sabotage of what it guards.
+    """
+    import authsrv
+    print("\n== DESKWORK-D8 steps 3/4: the fixer's corrections ==")
+    POINT = authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT
+    FOLLOW = authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION
+    HALT = authsrv.GAME_SMSG_AGENT_STOP_MOVING
+    SPEED = authsrv.GAME_SMSG_AGENT_UPDATE_SPEED
+    INT_T = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+    pm = _Flat()
+    SPELL, ATTACK = 253, 382
+    saved = (authsrv.CASTER_OPENING, authsrv.LEASH_RETURN, authsrv.NPC_FOLLOW,
+             authsrv._is_attack_skill, authsrv.skill_cost, authsrv.skill_damage,
+             authsrv.skill_condition, authsrv.agents.WORLD,
+             authsrv._caster_skill_reach)
+    authsrv._is_attack_skill = lambda sid: sid == ATTACK
+    authsrv.skill_cost = lambda sid: (0, 0)
+    authsrv.skill_damage = lambda sid, r: None
+    authsrv.skill_condition = lambda sid, r: None
+
+    def mk(pos=(0.0, 0.0), player=(1100.0, 0.0), prof=3, skills=((SPELL, 1.0, 5.0),),
+           **over):
+        st = _bull(pos=pos, player=player, npc={"profession": prof},
+                   skills=[tuple(s) for s in skills],
+                   skill_ready=[0.0] * len(skills))
+        st["player_dead"] = False
+        st["player_health"] = 1e9
+        st["player_max_health"] = 1e9
+        st["agents"][10].update(over)
+        return st
+
+    def casts(sent):
+        return [v for op, v, _l in sent if op == INT_T and v[0] in (60, 50)]
+
+    try:
+        authsrv.CASTER_OPENING = True
+        authsrv.LEASH_RETURN = True
+
+        # ---- A. CD-1/EV-4: a caster casts no further than AGGRO_RANGE until it
+        #        has engaged. -----------------------------------------------
+        st = mk(player=(1100.0, 0.0))                 # at home, not engaged
+        LEDGER.ok(casts(_swings(st)) == [],
+                  "CD-1/EV-4: a NOT-engaged caster at home does NOT cast a "
+                  f"player 1100 u away -- beyond AGGRO_RANGE ({authsrv.AGGRO_RANGE:.0f}) "
+                  "though inside its 1248 u cast range: it makes a proximity "
+                  "notice like everything else first",
+                  f"casts {casts(_swings(mk(player=(1100.0, 0.0))))}")
+        LEDGER.ok(casts(_swings(mk(player=(1000.0, 0.0)))) == [[60, 10, 1, SPELL]],
+                  "the same caster DOES cast a player 1000 u away (inside "
+                  "AGGRO_RANGE) -- the positive control, and retail's 4440 cast "
+                  "at ~1,010 u, AT the notice radius",
+                  "1000 u casts")
+        LEDGER.ok(casts(_swings(mk(player=(1100.0, 0.0), target_locked=True)))
+                  == [[60, 10, 1, SPELL]],
+                  "once ENGAGED (target_locked) the cast range is the skill's "
+                  "again: the same 1100 u player is cast",
+                  "engaged 1100 u casts")
+
+        # ---- B. CD-2: a leash under AGGRO_RANGE does not loop. --------------
+        st = _bull(pos=(0.0, 0.0), player=(800.0, 0.0), leash=600.0)
+        ag = st["agents"][10]
+        loop_ops = []
+        for i in range(1, 60):
+            for op, v, l in _leash_tick(st, pm, i * 0.05):
+                loop_ops.append((op, l))
+        LEDGER.ok(not [1 for op, l in loop_ops if op in (FOLLOW, POINT)]
+                  and "GIVES UP" not in "".join(l for _op, l in loop_ops)
+                  and ag.get("leash_return") is None,
+                  "CD-2: leash 600, a player STANDING 800 u from the anchor "
+                  "(inside AGGRO_RANGE, outside the leash) is never noticed -- "
+                  "no chase, no give-up, no notice/leash/home loop; the notice "
+                  "is clamped to the leash",
+                  f"ops {sorted(set(hex(op) for op, _l in loop_ops))}")
+        st = _bull(pos=(0.0, 0.0), player=(500.0, 0.0), leash=600.0)
+        opened = _leash_tick(st, pm, 0.0)
+        LEDGER.ok([op for op, _v, _l in opened] == [SPEED, FOLLOW],
+                  "the control: a player 500 u from the anchor (inside the 600 u "
+                  "leash) IS noticed and chased -- the clamp bounds the notice, "
+                  "it does not disable it",
+                  f"{[hex(op) for op, _v, _l in opened]}")
+
+        # ---- C. EV-2: a displaced body that lost contact walks HOME, it does
+        #        not chase a target across the map. ------------------------
+        st = _bull(pos=(720.0, 0.0), player=(4440.0, 0.0), anchor=(0.0, 0.0))
+        ag = st["agents"][10]
+        ag["follow"] = None
+        ag["target_locked"] = False
+        lost = _leash_tick(st, pm, 0.05)
+        LEDGER.ok([op for op, _v, _l in lost] == [POINT]
+                  and "RETURN" in lost[0][2]
+                  and ag.get("leash_return") is not None
+                  and ag.get("follow") is None,
+                  "EV-2: a body 720 u from home with NO bout (no follow, no "
+                  "lock) and its target 3720 u away has lost contact -- it walks "
+                  "home (a RETURN leg), it does not chase a target it never "
+                  "noticed (the post-wipe charge)",
+                  f"{[(hex(op), l[:40]) for op, _v, l in lost]}")
+        st = _bull(pos=(720.0, 0.0), player=(4440.0, 0.0), anchor=(0.0, 0.0))
+        ag = st["agents"][10]
+        ag["follow"] = None
+        ag["target_locked"] = True                     # a REAL bout
+        held = _leash_tick(st, pm, 0.05)
+        LEDGER.ok(ag.get("leash_return") is None
+                  and not [1 for op, _v, l in held if "left the area" in l],
+                  "a LOCKED bout at the same geometry is NOT lost contact: it is "
+                  "a real chase, leashed by distance-plus-time (the dwell just "
+                  "started; no give-up on the first tick)",
+                  f"leash_return {ag.get('leash_return')}")
+
+        # ---- D. CD-8: a body killed while returning drops the return. -------
+        st = _bull(pos=(1200.0, 0.0), player=(3000.0, 0.0), anchor=(0.0, 0.0))
+        ag = st["agents"][10]
+        ag["leash_return"] = {"t0": 0.0, "legs": 1, "leg": (800.0, 0.0),
+                              "leg_at": 0.0, "from": (1200.0, 0.0)}
+        ag["leash_out_since"] = 5.0
+        ag["dead"] = True
+        ag["died_at"] = time.time()
+        authsrv.enemy_move_tick(lambda op, v, l="", quiet=False: None, st, 1)
+        LEDGER.ok(ag.get("leash_return") is None and ag.get("leash_out_since") is None,
+                  "CD-8: a body killed WHILE walking home drops the return record "
+                  "in the dead branch -- so a revive does not advance the copy by "
+                  "the whole dead interval (a 400 u jump); it re-decides from "
+                  "where it rose",
+                  f"leash_return {ag.get('leash_return')}, since {ag.get('leash_out_since')}")
+
+        # ---- E. CD-9: the caster opening is the NPC_FOLLOW arm's. -----------
+        authsrv.NPC_FOLLOW = False
+        st = mk(player=(900.0, 0.0))
+        ag = st["agents"][10]
+        LEDGER.ok(not authsrv.hostile_caster(ag),
+                  "CD-9: under --legacy-npc-chase a Monk caster is NOT a caster "
+                  "(the opening lives on the NPC_FOLLOW arm)",
+                  f"hostile_caster {authsrv.hostile_caster(ag)}")
+        LEDGER.ok(casts(_swings(mk(player=(900.0, 0.0)))) == [],
+                  "and its attack tick reads body_reach, not the cast range: it "
+                  "does NOT cast from 900 u while the legacy chase walks it in "
+                  "(no 0x0029-and-cast on one tick)",
+                  "silence is the assertion")
+        authsrv.NPC_FOLLOW = True
+
+        # ---- F. EV-1: a caster does not lob a touch skill from range. -------
+        class _SkillWorld:
+            def __init__(self, rows):
+                self._rows = rows
+
+            def get(self, kind, key):
+                if kind == "skills" and key in self._rows:
+                    return self._rows[key]
+                raise KeyError(key)
+
+        a_c = mk()["agents"][10]
+        rng = authsrv.caster_range(a_c)
+        authsrv.agents.WORLD = _SkillWorld({str(SPELL): {"touch_range": True}})
+        LEDGER.ok(abs(authsrv._caster_skill_reach(a_c, SPELL)
+                      - authsrv.body_reach(a_c)) < 1e-9,
+                  "EV-1: a row carrying `touch_range` gives a MELEE reach "
+                  "(FLAG_TOUCH_RANGE 0x2) -- a touch spell is not a ranged cast",
+                  f"{authsrv._caster_skill_reach(a_c, SPELL)} vs body_reach "
+                  f"{authsrv.body_reach(a_c)}")
+        authsrv.agents.WORLD = _SkillWorld({str(SPELL): {"half_range": True}})
+        LEDGER.ok(abs(authsrv._caster_skill_reach(a_c, SPELL) - rng * 0.5) < 1e-9,
+                  "`half_range` (FLAG_HALF_RANGE 0x8) gives half the cast range",
+                  f"{authsrv._caster_skill_reach(a_c, SPELL)} vs {rng * 0.5}")
+        authsrv.agents.WORLD = _SkillWorld({str(SPELL): {}})
+        LEDGER.ok(abs(authsrv._caster_skill_reach(a_c, SPELL) - rng) < 1e-9,
+                  "a row with neither bit (the build-38797 table) keeps the full "
+                  "cast range -- today's behaviour, unchanged until a re-emit",
+                  f"{authsrv._caster_skill_reach(a_c, SPELL)} vs {rng}")
+        authsrv.agents.WORLD = saved[7]        # the REAL table for the full tick
+        # Behavioural: force the spell's reach to MELEE (as a touch bit would);
+        # an engaged caster 900 u out HOLDS it rather than casting from range.
+        authsrv._caster_skill_reach = (
+            lambda a, sid: (authsrv.body_reach(a) if sid == SPELL
+                            else authsrv.caster_range(a)))
+        st = mk(pos=(0.0, 0.0), player=(900.0, 0.0), target_locked=True)
+        LEDGER.ok(casts(_swings(st)) == [],
+                  "and an ENGAGED caster 900 u out HOLDS a melee-reach (touch) "
+                  "skill -- the per-cast gate refuses it -- rather than lobbing "
+                  "it across the field",
+                  f"casts {casts(_swings(mk(pos=(0.0, 0.0), player=(900.0, 0.0), target_locked=True)))}")
+        authsrv._caster_skill_reach = saved[8]
+        st = mk(pos=(0.0, 0.0), player=(900.0, 0.0), target_locked=True)
+        LEDGER.ok(casts(_swings(st)) == [[60, 10, 1, SPELL]],
+                  "with the default reach (no flag) the SAME caster casts from "
+                  "900 u -- the gate is per-skill, not a blanket refusal (EV-1)",
+                  "900 u casts")
+
+        # ---- G. CD-5: the engaged terms, HOME closing the bout, the dwell. ---
+        atk_home = _bull(pos=(50.0, 0.0), player=(200.0, 0.0), anchor=(0.0, 0.0))
+        disp = _bull(pos=(200.0, 0.0), player=(300.0, 0.0), anchor=(0.0, 0.0))
+        LEDGER.ok(not authsrv._hostile_engaged(atk_home["agents"][10])
+                  and authsrv._hostile_engaged(disp["agents"][10]),
+                  "CD-5a: a copy within LEASH_HOME_RADIUS of its anchor is NOT "
+                  "engaged; one 200 u out (no follow, no lock) IS -- the "
+                  "displacement term",
+                  f"home {authsrv._hostile_engaged(atk_home['agents'][10])}, "
+                  f"disp {authsrv._hostile_engaged(disp['agents'][10])}")
+        lock_home = _bull(pos=(0.0, 0.0), player=(300.0, 0.0), anchor=(0.0, 0.0),
+                          target_locked=True)
+        LEDGER.ok(authsrv._hostile_engaged(lock_home["agents"][10]),
+                  "CD-5b: a copy AT home with target_locked is engaged -- the "
+                  "lock term (the gap between a follow arriving and the swing)",
+                  f"{authsrv._hostile_engaged(lock_home['agents'][10])}")
+        # HOME closes the bout, with the lock actually SET first.
+        st = _bull(pos=(0.0, 0.0), player=(900.0, 0.0))
+        ag = st["agents"][10]
+        _leash_tick(st, pm, 0.0)
+        t_cross = (authsrv.LEASH_DISTANCE - 900.0) / 288.0
+        _flee(st, pm, 0.0, t_cross + authsrv.LEASH_SECONDS + 0.2)
+        assert ag.get("leash_return") is not None
+        ag["target_locked"] = True                     # a live bout, planted
+        ag["target"] = authsrv.PLAYER_AGENT_ID
+        t = time.time()
+        n = 0
+        while ag.get("leash_return") is not None and n < 4000:
+            t2 = (t_cross + authsrv.LEASH_SECONDS + 0.2) + n * 0.05
+            _leash_tick(st, pm, t2)
+            n += 1
+        LEDGER.ok(not ag.get("target_locked") and ag.get("target") is None,
+                  "CD-5c: HOME clears the bout -- target_locked was SET during "
+                  "the return and is False at home (the old check never set it, "
+                  "so it could not redden)",
+                  f"locked {ag.get('target_locked')}, target {ag.get('target')}")
+        # The dwell resets when the target comes back inside the leash.
+        st = _bull(pos=(0.0, 0.0), player=(900.0, 0.0))
+        ag = st["agents"][10]
+        _leash_tick(st, pm, 0.0)
+        st["pos"] = (authsrv.LEASH_DISTANCE + 200.0, 0.0)      # out
+        _leash_tick(st, pm, 0.10)
+        _leash_tick(st, pm, 0.10 + authsrv.LEASH_SECONDS - 0.1)  # 2.9 s out
+        out_since_a = ag.get("leash_out_since")
+        st["pos"] = (900.0, 0.0)                               # back inside
+        _leash_tick(st, pm, 0.10 + authsrv.LEASH_SECONDS)
+        reset = ag.get("leash_out_since")
+        st["pos"] = (authsrv.LEASH_DISTANCE + 200.0, 0.0)      # out again
+        _leash_tick(st, pm, 0.10 + authsrv.LEASH_SECONDS + 0.15)  # 0.15 s later
+        LEDGER.ok(out_since_a is not None and reset is None
+                  and ag.get("leash_return") is None,
+                  "CD-5d: the dwell clock is CONTINUOUS -- a target out 2.9 s, "
+                  "back inside, then out again does NOT give up 0.15 s later; the "
+                  "clock reset when it came back",
+                  f"out {out_since_a}, reset {reset}, return {ag.get('leash_return')}")
+
+        # ---- H. EV-8: the standing-fight give-up (RECONSTRUCTION). ----------
+        st = _bull(pos=(1330.0, 0.0), player=(1400.0, 0.0), anchor=(0.0, 0.0),
+                   target_locked=True)
+        ag = st["agents"][10]
+        ag["target"] = authsrv.PLAYER_AGENT_ID
+        gave_at = None
+        for i in range(1, 100):
+            for op, v, l in _leash_tick(st, pm, i * 0.05):
+                if op == POINT and "RETURN" in l and gave_at is None:
+                    gave_at = i * 0.05
+        LEDGER.ok(gave_at is not None and abs(gave_at - authsrv.LEASH_SECONDS) < 0.2
+                  and ag.get("leash_return") is not None,
+                  "EV-8: a STANDING fight held 1400 u from home gives up ~3 s "
+                  "later by the distance-plus-time rule and walks home -- "
+                  "RECONSTRUCTION outside the witnessed regime (every retail "
+                  "chase was of a fleeing target; documented at the constant)",
+                  f"gave up at {gave_at} s, return {ag.get('leash_return') is not None}")
+
+        # ---- I. CD-5e / --enemy-cast-range: the row and fixture plumbing,
+        #        FUNCTIONAL (the module globals must flow to a created body). ---
+        import inspect
+        src_pop = inspect.getsource(authsrv.spawn_population)
+        LEDGER.ok('float(row["leash"])' in src_pop
+                  and 'float(row["cast_range"])' in src_pop,
+                  "CD-5e: spawn_population copies a row's `leash` and "
+                  "`cast_range` into the entry",
+                  "row plumbing present")
+        _saved_globals = (authsrv.ENEMY_LEASH, authsrv.ENEMY_CAST_RANGE)
+        try:
+            authsrv.ENEMY_LEASH = 777.0
+            authsrv.ENEMY_CAST_RANGE = 456.0
+            fx = {"agents": {}, "pos": (0.0, 0.0)}
+            authsrv._spawn_one_enemy(lambda op, v, l="", quiet=False: None,
+                                     fx, 10, 100.0, 0.0, 0, (1, 1))
+            e = fx["agents"].get(10, {})
+            LEDGER.ok(e.get("leash") == 777.0 and e.get("cast_range") == 456.0,
+                      "the fixture entry carries the module globals ENEMY_LEASH "
+                      "and ENEMY_CAST_RANGE -- so --enemy-leash / --enemy-cast-range "
+                      "(each wired in main() through a global) reach a spawned body",
+                      f"leash {e.get('leash')}, cast_range {e.get('cast_range')}")
+        finally:
+            authsrv.ENEMY_LEASH, authsrv.ENEMY_CAST_RANGE = _saved_globals
+        # The --enemy-cast-range global is DECLARED in main() (without the
+        # `global`, the flag would rebind a local and never take effect). A
+        # source pin on the declaration, paired with the functional flow above.
+        src_main = inspect.getsource(authsrv.main)
+        import re as _re
+        LEDGER.ok(_re.search(r"^\s*global ENEMY_CAST_RANGE\s*$", src_main, _re.M)
+                  is not None
+                  and _re.search(r"^\s*if a\.enemy_cast_range is not None:\s*$",
+                                 src_main, _re.M) is not None,
+                  "--enemy-cast-range is wired in main() through a `global` and "
+                  "an enabling `if a.enemy_cast_range is not None:` (not disabled)",
+                  "the flag is wired")
+    finally:
+        (authsrv.CASTER_OPENING, authsrv.LEASH_RETURN, authsrv.NPC_FOLLOW,
+         authsrv._is_attack_skill, authsrv.skill_cost, authsrv.skill_damage,
+         authsrv.skill_condition, authsrv.agents.WORLD,
+         authsrv._caster_skill_reach) = saved
 
 
 def section_npc_attack_skill():

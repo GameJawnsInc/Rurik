@@ -1338,18 +1338,34 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "2026-09-24 ('a monk charges into melee'). By "
                          "default a non-melee-profession hostile with a spell "
                          "on its bar and nothing to shoot casts from where it "
-                         "stands inside its cast range (retail's Elementalist "
-                         "4440, 2 of 2), walks ONE 0x0029 leg to range and "
-                         "halts when outside it, and never sends a 0x002A. "
+                         "stands inside AGGRO_RANGE, then its cast range once "
+                         "the bout opens (the stand-and-cast shape is retail's "
+                         "4440, 2 of 2 -- but 4440 and the other witness both "
+                         "held a WAND, so the weaponless class is RECONSTRUCTION "
+                         "with no exact witness), walks ONE 0x0029 leg to range "
+                         "and halts when outside it, and never sends a 0x002A. "
                          "The standing Hatcher is a Monk with four spells, so "
-                         "`--enemy` alone spawns a caster now.")
+                         "`--enemy` alone spawns a caster now (--enemy-weapon, "
+                         "--no-enemy-skills or this flag give the walk-in).")
     ap.add_argument("--enemy-leash", type=float, default=None, metavar="U",
                     help="DESKWORK-D8: the standing hostile's own leash "
                          "distance in units from its anchor (default "
                          "LEASH_DISTANCE, 1350 -- retail's stander, n=3). A "
                          "smaller number makes the walk home visible in a "
                          "short run: --enemy-leash 600 with the player "
-                         "walking 700 u away.")
+                         "walking 700 u away. A leash under AGGRO_RANGE (1012) "
+                         "no longer loops: the notice that starts a chase is "
+                         "clamped to the leash (CD-2), so the hostile only "
+                         "notices a target it will not immediately leash.")
+    ap.add_argument("--enemy-cast-range", type=float, default=None, metavar="U",
+                    help="DESKWORK-D8 step 4: the fixture caster's own cast "
+                         "range in units (default CASTER_CAST_RANGE, 1248 -- "
+                         "the WIKI casting range). A value UNDER AGGRO_RANGE "
+                         "(1012) makes the leg-to-range opening visible: "
+                         "--enemy-cast-range 450 with the player standing 900 "
+                         "u away shows the caster walk a 0x0029 leg to ~450 u, "
+                         "halt, and cast (the Broodcaller's shape). Needs a "
+                         "spell-bar caster (the default Hatcher, or a row).")
     ap.add_argument("--party-body-in-outpost", action="store_true",
                     help="SLICE-H2b REVERT: create the party's world bodies "
                          "in a town as well. Stock shows a hero's model in a "

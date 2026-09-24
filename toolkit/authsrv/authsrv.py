@@ -12446,6 +12446,11 @@ ENEMY_GROUP = _ENEMY.get("group")                          # MONSTERAI-J
 # anchor), or None for LEASH_DISTANCE. `--enemy-leash U` overrides for a run.
 ENEMY_LEASH = (float(_ENEMY["leash"]) if _ENEMY.get("leash") is not None
                else None)
+# DESKWORK-D8 step 4: the fixture caster's cast range (u from the target), or
+# None for CASTER_CAST_RANGE. `--enemy-cast-range U` overrides for a run -- a
+# value under AGGRO_RANGE makes the leg-to-range opening visible (the runsheet).
+ENEMY_CAST_RANGE = (float(_ENEMY["cast_range"]) if _ENEMY.get("cast_range") is not None
+                    else None)
 ENEMY_MAX_HEALTH = _ENEMY["max_health"]
 
 # CREATURE ARMOUR moved to combatmath.py (REFACTOR-A12), wiki banner and all.
@@ -15140,26 +15145,40 @@ ENEMY_HIT_FRACTION = 0.10  # of the PLAYER's maximum, so ~10 swings to drop them
 # one STANDING creature (def 1397, CORROBORATED the Rogue Bull, sec.14) chased
 # a player running straight away three times.
 #
-#   * THE ANCHOR IS THE CREATE POSITION. Each return's last 0x0029 ended 37 /
-#     14 / 65 u from the 0x0020's own point, and the next notice found the
-#     body parked there. OBSERVED, 3 of 3. So `anchor` is written ONCE at
-#     create_agent_world; a burrow re-create hands the same entry back and
-#     keeps it. Party bodies get one too and nothing reads it (HERO_FOLLOW_LEASH).
+#   * THE RETURN ENDS NEAR WHERE THE BODY STARTED. Each return's last 0x0029
+#     ended 37 / 14 / 65 u from the 0x0020's create point. OBSERVED, 3 of 3
+#     (within 65 u of the create). The tapes do NOT distinguish the create
+#     from the chase's start point: the two candidates sit 0 / 37 / 14 u apart,
+#     well inside the 14-65 u scatter of the endpoints, so anchoring on the
+#     CREATE rather than the chase-start is a RECONSTRUCTION (EV-6). `anchor`
+#     is written ONCE at create_agent_world; a burrow re-create hands the same
+#     entry back and keeps it. Party bodies get one and nothing reads it
+#     (HERO_FOLLOW_LEASH).
 #   * THE GIVE-UP IS NOT ONE NUMBER. The last outward order sat 1,850 / 2,111 /
 #     2,877 u from the anchor, 8 / 22 / 14 s after the notice (N9's "1,358 u"
 #     for the third was its FIRST RETURN LEG, misfiled as a chase leg; sec.15
 #     corrects it). The target was 1,936 / 2,066 / 2,877 u from the anchor at
 #     that instant and had crossed ~1,350 u of it 1.2-3.0 / 2.6 / 5.6 s earlier
-#     -- 1,350 being the farthest point at which every chase was still
-#     following (follows at 1,349 / 1,362 / 1,371 u). So the rule here is
+#     -- 1,350 being where the 0x002A follows STOPPED in 2 of 3 chases, after
+#     which retail walked OUTWARD 0x0029 legs (follows at 1,349 / 1,362 /
+#     1,371 u; retreat 2 followed all the way to 2,877 u). So the rule here is
 #     DISTANCE PLUS TIME: the target beyond LEASH_DISTANCE of the anchor for
-#     LEASH_SECONDS continuously. RECONSTRUCTION, n = 3: 1,350 is the largest
-#     distance no chase had ended inside, 3.0 s the middle dwell. A pure
+#     LEASH_SECONDS continuously. RECONSTRUCTION, n = 3: 1,350 is where the
+#     follows stopped (2 of 3), 3.0 s a value chosen between the two consistent
+#     dwell medians (2.65 s crossing->last-outward-order and 4.39 s
+#     crossing->first-return-leg) -- NO single dwell fits all three chases
+#     (retreat 2 ran past any T that fits retreat 3; EV-5). This code keeps
+#     sending 0x002A through the whole dwell rather than modelling the
+#     stop-then-legs-outward switch (unmodelled, RECONSTRUCTION). A pure
 #     distance rule would end every chase at one distance and these did not
 #     (1,850-2,877); a pure clock from the notice would end the 22 s
 #     fight-then-run chase 12 s early. A landed hit does not reset the clock:
-#     retreat 2's last swing landed AS it gave up. A spawn row may carry its
-#     own `leash` (u), the fixture hostile --enemy-leash.
+#     retreat 2's last swing landed AS it gave up. THE DWELL APPLIES TO ANY
+#     target, standing or fleeing: every retail chase was of a FLEEING target
+#     (the only standing fight, retreat 1's, was ~890 u from home), so ending a
+#     STANDING melee fight held beyond 1,350 u after 3 s is a RECONSTRUCTION
+#     outside the witnessed regime (EV-8). A spawn row may carry its own
+#     `leash` (u), the fixture hostile --enemy-leash.
 #   * THE RETURN IS 0x0029 LEGS: NO HALT, NO SPEED WORD. 4-7 legs, each ~500 u
 #     nearer home (gap p50 1.75 s = 500 u at the body's own 288 u/s; 0.5-4.2 s),
 #     no 0x0028 at the give-up nor at the end -- the last leg's end IS the stop,
@@ -15199,32 +15218,47 @@ RETURN_LEG_TIMEOUT = 8.0   # s: a leg the copy has not finished by then is
 # activation) at the player FROM WHERE IT STOOD ~1,010 u out and moved only
 # after the damage landed -- twice (positions RECON, it was on a leg; the
 # shape OBSERVED: no 0x0029, no 0x002A, no 0x002B before the first cast, 2 of
-# 2). The Broodcaller (def 1432, a wand) opened from beyond its preferred
-# distance with 0x002B 1.0 + one to four 0x0029 legs ending ~430-490 u from
-# the player, a halt (1 of 2), then its swing -- never a 0x002A before it
-# (2 of 2 tapes). So a CASTER here -- a HOSTILE of a non-melee profession
+# 2, and on the full default run of the instrument a leg-to-range-then-cast-222
+# opening too: 0x002B 1.0 + three 0x0029 legs + halt, then 222 -- OBSERVED
+# n=1 on a spell caster, CD-6). The Broodcaller (def 1432, a wand) opened from
+# beyond its distance with 0x002B 1.0 + one to four 0x0029 legs ending ~430-490
+# u from the player, a halt (1 of 2), then its swing -- never a 0x002A before
+# it (2 of 2 tapes). So a CASTER here -- a HOSTILE of a non-melee profession
 # (PARTY_MELEE_PROFESSIONS' complement, the party's own rule, F30) whose bar
 # holds a spell and whose hands hold no ranged weapon -- stands and casts when
 # the target is inside its cast range, and otherwise walks a 0x0029 leg to the
 # point AT range (the corridor's vertex first when geometry intervenes), halts
-# on the follow's own clock, and casts. It sends NO 0x002A at all: the client
-# parks a 0x002A at the melee disc whatever the server's stop radius says
-# (F14, NPCTRACK-Q1), which is the charge the owner saw -- so the leg shape is
-# kept for every approach, not only the first (RECONSTRUCTION for the later
-# ones; retail's 4440 did follow after its first cast, with a wand to swing).
-# Between casts it HOLDS its ground: no punch from range (4440 "holds its
-# ground", 12.8 -- RECONSTRUCTION for the wait; a lone healer with nothing to
-# cast at a foe simply stands). THE RANGE IS ONE NUMBER: the client's skill
-# record carries no cast range (aoe_range only), so "the first ready spell's
-# range" is CASTER_CAST_RANGE for every spell -- the WIKI casting range
-# PARTY_RANGED_REACH already uses -- or a spawn row's own `cast_range`. With
-# AGGRO_RANGE (1012) inside it, a proximity notice always finds the target in
-# range and the leg branch runs on a row whose `cast_range` is under 1012
-# (the Broodcaller's ~450 u shape) or when the target withdraws mid-fight.
-# NOTE THE FIXTURE: the standing Hatcher is a Monk with four spells and no
-# weapon, so `--enemy` alone now spawns a caster that stands at 300 u and
-# casts; --enemy-weapon, --no-enemy-skills or --no-caster-opening give the
-# walk-in every run before today had.
+# on the follow's own clock, and casts. NOTE THE WITNESS GAP (EV-7/CD-7): both
+# retail witnesses (4440, 1432) carried a ranged WEAPON, and hostile_caster
+# EXCLUDES a ranged-weapon body -- so the weaponless class that actually ships
+# has no exact retail witness; the stand-and-cast shape is transplanted from
+# wand-carrying casters (RECONSTRUCTION), and a 4440-shaped body with a wand
+# takes W6a's 0x002A archer walk-in here instead. It sends NO 0x002A at all:
+# the client parks a 0x002A at the melee disc whatever the server's stop radius
+# says (F14, NPCTRACK-Q1), which is the charge the owner saw -- so the leg
+# shape is kept for every approach, not only the first (RECONSTRUCTION for the
+# later ones; retail's 4440 did follow after its first cast, with a wand to
+# swing). Between casts it HOLDS its ground: no punch from range (4440 "holds
+# its ground", 12.8 -- RECONSTRUCTION for the wait; a lone healer with nothing
+# to cast at a foe simply stands). THE RANGE IS ONE NUMBER PER BODY: the
+# client's skill record carries a per-skill range CLASS (FLAG_TOUCH_RANGE 0x2,
+# FLAG_HALF_RANGE 0x8 at +0x10, skilltable.py -- NOT "no cast range"; the range
+# in UNITS is not in the record) but the server's build-38797 table predates
+# emitting those bits, so "the first ready spell's range" is CASTER_CAST_RANGE
+# for every spell -- the WIKI casting range PARTY_RANGED_REACH already uses --
+# or a spawn row's own `cast_range`. When a row DOES carry the bits,
+# `_caster_skill_reach` narrows the per-cast reach so a touch spell is not lobbed
+# from across the field (EV-1). A NOT-yet-engaged caster casts no further than
+# AGGRO_RANGE (1012): the one aggro radius, so a caster at home makes a
+# proximity notice like everything else before its first cast (CD-1/EV-4; retail
+# 4440 cast at ~1,010 u, AT the notice radius); once a bout opens the cast range
+# is the skill's. The leg branch runs on a row whose `cast_range` is under 1012
+# (the Broodcaller's ~450 u shape, --enemy-cast-range) or when the target
+# withdraws mid-fight. NOTE THE FIXTURE: the standing Hatcher is a Monk with
+# four spells and no weapon, so `--enemy` alone now spawns a caster that stands
+# at 300 u and casts (its touch skill 312 from 300 u until the table re-emits
+# the touch bit -- owed, EV-1); --enemy-weapon, --no-enemy-skills or
+# --no-caster-opening give the walk-in every run before today had.
 #
 # --no-caster-opening: the pre-D8 arm byte for byte -- the 0x002A to the
 # melee disc, the cast from 92 u, the punch between casts.
@@ -23528,8 +23562,17 @@ def enemy_attack_tick(send, state, conn_id):
             agent["swing_owed_at"] = None            # expired, or re-following
         # DESKWORK-D8 step 4: a CASTER's reach is its cast range (the swing
         # below still needs body_reach -- the hold after the skill pick).
+        # CD-1/EV-4 fix: a caster that has NOT engaged casts no further than
+        # AGGRO_RANGE -- the one aggro radius, the compass circle (PLAN 7 Q18).
+        # Without this a caster at home cast a player 1013-1248 u away and never
+        # made a proximity notice; retail's one witness (4440) cast at ~1,010 u,
+        # AT the notice radius. Once a bout opens the cast range is the skill's.
         _caster = hostile_caster(agent)
-        _reach_gate = caster_range(agent) if _caster else body_reach(agent)
+        if _caster:
+            _reach_gate = (caster_range(agent) if _hostile_engaged(agent)
+                           else min(caster_range(agent), AGGRO_RANGE))
+        else:
+            _reach_gate = body_reach(agent)
         if not _owed and (math.hypot(ax - px, ay - py) > _reach_gate
                           or (NPC_FOLLOW and agent.get("follow") is not None)):
             agent["swinging"] = False
@@ -23715,6 +23758,19 @@ def enemy_attack_tick(send, state, conn_id):
                 and _is_attack_skill(agent["skills"][slot][0])
                 and now - agent.get("last_swing", 0.0) < interval):
             slot = None
+        # EV-1: a CASTER does not lob a skill from beyond ITS OWN reach. A touch
+        # skill needs melee and a half-range skill half the cast range
+        # (_caster_skill_reach reads the row's FLAG_TOUCH_RANGE / FLAG_HALF_RANGE
+        # bits). The slot is HELD -- ready and uncharged -- not cast from across
+        # the field. The build-38797 table carries neither bit, so every skill
+        # reads the full cast range and this never fires until skilltable
+        # re-emits (owed); it makes the code correct for the day it does.
+        if slot is not None and _caster and cast_target is not None:
+            _rsid = agent["skills"][slot][0]
+            _ctx, _cty = ((px, py) if cast_target == _tid
+                          else target_pos(state, cast_target))
+            if math.hypot(ax - _ctx, ay - _cty) > _caster_skill_reach(agent, _rsid):
+                slot = None
         if slot is not None:
             skill_id, activation, recharge = agent["skills"][slot]
             agent["cast_target"] = cast_target
@@ -24269,6 +24325,23 @@ def _leash_anchor(agent):
     return float(a[0]), float(a[1])
 
 
+def _hostile_engaged(agent):
+    """DESKWORK-D8: a HOSTILE with an anchor is ENGAGED once a bout has opened
+    -- a follow in flight, `target_locked`, or its copy away from home (the gap
+    between a follow arriving and the first swing setting the lock). A hostile
+    that has not engaged keeps the notice gate (AGGRO_RANGE) for BOTH ticks: the
+    move tick starts no chase past it, and the attack tick (below) opens no cast
+    past it. Once engaged the leash/cast reach is the wider number. No anchor
+    (a bare fixture) or a party body: never engaged by displacement."""
+    if agent.get("follow") is not None or agent.get("target_locked"):
+        return True
+    anc = _leash_anchor(agent)
+    if anc is None:
+        return False
+    ax, ay = agent["pos"]
+    return math.hypot(ax - anc[0], ay - anc[1]) > LEASH_HOME_RADIUS
+
+
 def hostile_caster(agent):
     """DESKWORK-D8 step 4: a HOSTILE that fights from cast range -- a non-melee
     profession (the party's own rule, PARTY_MELEE_PROFESSIONS, F30) with a
@@ -24276,6 +24349,13 @@ def hostile_caster(agent):
     this (party_reach / ally_cast_tick are theirs); a Warrior with a spell, an
     archer, and a caster with an empty bar all take the walk-in as before."""
     if not CASTER_OPENING or (agent or {}).get("allegiance") != agents.ALLEGIANCE_HOSTILE:
+        return False
+    if not NPC_FOLLOW:
+        # CD-9 fix: the caster opening lives on the NPC_FOLLOW arm (the leg to
+        # range is _npc_follow_tick's). Under --legacy-npc-chase the legacy
+        # walk-in is the whole movement, and a caster gate here cast from range
+        # while the legacy chase walked the SAME body to melee on the same tick
+        # -- a 0x0029 and a cast at once. The legacy arm is its own revert.
         return False
     # An UNKNOWN profession (a fixture with no `npc` row) is not a caster: the
     # walk-in is the conservative arm, and every spawn path writes the row.
@@ -24289,9 +24369,35 @@ def hostile_caster(agent):
 
 def caster_range(agent):
     """Where a caster stands to cast: its row's `cast_range`, else the WIKI
-    casting range. One number for every spell -- the client's skill record
-    carries no cast range (skilltable: aoe_range only)."""
+    casting range. ONE number PER BODY -- the client's skill record does carry
+    a per-skill range CLASS (a touch-range bit and a half-range bit at +0x10,
+    skilltable.FLAG_TOUCH_RANGE / FLAG_HALF_RANGE, UPSTREAM), but not a range
+    in units, and the server's skills table (build 38797) predates emitting
+    those bits, so the body's own number is the reach until a re-emit. When a
+    row DOES carry them, `_caster_skill_reach` narrows the per-cast reach."""
     return float((agent or {}).get("cast_range") or CASTER_CAST_RANGE)
+
+
+def _caster_skill_reach(agent, skill_id):
+    """DESKWORK-D8 step 4 (EV-1): the reach of THIS skill from a caster. The
+    client marks touch skills (FLAG_TOUCH_RANGE 0x2) and half-range skills
+    (FLAG_HALF_RANGE 0x8) at +0x10 (UPSTREAM, skilltable.py); when the server's
+    row carries `touch_range` / `half_range` (a re-emitted table), a touch
+    skill is cast from MELEE and a half-range skill from half the cast range,
+    so a caster never lobs a touch spell from across the field. The current
+    build-38797 table has neither field, so this returns the full cast range
+    for every skill -- today's behaviour -- until `skilltable.py --emit-content`
+    re-runs on the client (owed; the arc's final-confirmation-needs-run)."""
+    rng = caster_range(agent)
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return rng
+    if row.get("touch_range"):
+        return body_reach(agent)
+    if row.get("half_range"):
+        return rng * 0.5
+    return rng
 
 
 def provoke_hostile(state, tid, attacker_id, conn_id):
@@ -27019,6 +27125,15 @@ def enemy_move_tick(send, state, conn_id, rec=None):
         if agent["dead"] or not (agent.get("attacks_back") or _ally):
             agent["moving"] = False
             agent["follow"] = None
+            # CD-8 fix: a body killed WHILE walking home drops the return with
+            # everything else. Left set, the record's stale `moved_at` made the
+            # first tick after a revive advance the copy by the whole dead
+            # interval (a 400 u jump the client never drew), then resume a walk
+            # home the world had moved past. A revived stander re-decides from
+            # where it rose next tick (engaged by displacement, or a fresh pick).
+            if agent.get("leash_return") is not None:
+                agent["leash_return"] = None
+                agent["leash_out_since"] = None
             continue
         if knocked_down(state, agent_id, now):          # SLICE-H12: no walk
             continue
@@ -28164,11 +28279,15 @@ def _return_leg(pm, ax, ay, anchor, plane):
 
 
 def _leash_give_up(send, state, conn_id, agent_id, agent, now, pm, rec,
-                   d_anchor, limit, dwell, target_id):
+                   d_anchor, limit, dwell, target_id, reason=None):
     """DESKWORK-D8 step 3: the chase ends and the walk home begins -- no
     0x0028, no 0x002B (retail's stander: 0 of 3 give-ups carry either), the
     first return leg at once. The follow and everything armed on it are
-    forgotten; a swing in flight lands from enemy_attack_tick (F21)."""
+    forgotten; a swing in flight lands from enemy_attack_tick (F21).
+
+    `reason` names a give-up that is NOT the distance-plus-time leash -- the
+    EV-2 lost-contact case (a displaced body whose target left the notice
+    radius). The default (None) prints the dwell clause the tests read."""
     agent["follow"] = None
     agent.pop("froute", None)
     agent.pop("froute_at", None)
@@ -28179,9 +28298,11 @@ def _leash_give_up(send, state, conn_id, agent_id, agent, now, pm, rec,
     agent["leash_out_since"] = None
     agent["leash_return"] = {"t0": now, "legs": 0, "leg": None, "leg_at": now,
                              "from": (float(agent["pos"][0]), float(agent["pos"][1]))}
+    _why = (f"for {dwell:.1f} s (leash {limit:.0f} u, {LEASH_SECONDS:.1f} s)"
+            if reason is None else f"-- {reason}")
     print(f"[c{conn_id}] agent {agent_id} ({agent.get('name', '?')}) GIVES UP: "
           f"{target_label(state, target_id)} {d_anchor:.0f} u from its anchor "
-          f"for {dwell:.1f} s (leash {limit:.0f} u, {LEASH_SECONDS:.1f} s) -- "
+          f"{_why} -- "
           f"walks home from ({agent['pos'][0]:.0f},{agent['pos'][1]:.0f}) "
           f"[DESKWORK-D8, MONSTERAI-L2]", flush=True)
     if rec is not None:
@@ -28285,9 +28406,11 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
     DESKWORK-D8 (2026-09-24) added two things and moved one. `opening` is the
     CASTER's approach: every order is a 0x0029 leg to the point at `stop_at`
     from the target (the corridor's vertex first when geometry intervenes),
-    never a 0x002A (retail's Elementalist cast from where it stood, 2 of 2;
-    the Broodcaller walked legs to ~450 u, halted and swung, 2 of 2; the
-    client parks a 0x002A at the melee disc whatever `stop_at` says). The
+    never a 0x002A (retail's Elementalist cast from where it stood, 2 of 2, and
+    once with a leg-to-range first, CD-6; the Broodcaller walked legs to ~450 u,
+    halted and swung, 2 of 2 -- both WITNESSES carried a ranged weapon, so this
+    weaponless class is RECONSTRUCTION, EV-7; the client parks a 0x002A at the
+    melee disc whatever `stop_at` says). The
     LEASH for a HOSTILE no longer reads AGGRO_RANGE from the copy: it reads
     the anchor (`agent["anchor"]`, the create position) -- the target beyond
     LEASH_DISTANCE of it for LEASH_SECONDS -- and ends not in a halt but in
@@ -28559,16 +28682,35 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
         # retail's three chases: the target crossed ~1,350 u of home and the
         # chase ran 1.2-5.6 s more), and then walks home instead of halting.
         anx, any_ = _anchor
-        engaged = (fol is not None or bool(agent.get("target_locked"))
+        limit = float(agent.get("leash") or LEASH_DISTANCE)
+        _disp_only = fol is None and not agent.get("target_locked")
+        engaged = (not _disp_only
                    or math.hypot(ax - anx, ay - any_) > LEASH_HOME_RADIUS)
         if not engaged:
-            if leash_d > _leash:
+            # CD-2 fix: the notice that STARTS a chase is no wider than the
+            # hostile's own leash. AGGRO_RANGE (1012) is ours and the default
+            # leash (1350) is wider, so this is min(1012, limit) -- no change
+            # for the default, but a row's `leash`/`--enemy-leash` below 1012
+            # no longer leaves a band [leash, 1012] where the hostile notices
+            # a target it will leash 3 s later, homes, and re-notices forever.
+            if leash_d > min(_leash, limit):
+                agent["leash_out_since"] = None
                 agent["moved_at"] = now
                 return
             agent["leash_out_since"] = None
         else:
+            # EV-2 fix: ENGAGED BY DISPLACEMENT ALONE (no follow, no bout) with
+            # the target beyond AGGRO_RANGE of the COPY is a body that lost
+            # contact -- a stander frozen away from home by the pre-D8 death
+            # halt, whose target then revived across the map. It walks home; it
+            # does not chase a target it never noticed. A real bout (a follow or
+            # target_locked) still chases and leashes by distance-plus-time.
+            if _disp_only and dist > AGGRO_RANGE:
+                _leash_give_up(send, state, conn_id, agent_id, agent, now,
+                               pm, rec, math.hypot(px - anx, py - any_), limit,
+                               0.0, target_id, reason="its target left the area")
+                return
             d_anchor = math.hypot(px - anx, py - any_)
-            limit = float(agent.get("leash") or LEASH_DISTANCE)
             if d_anchor > limit:
                 since = agent.get("leash_out_since")
                 if since is None:
@@ -30484,6 +30626,7 @@ def _spawn_one_enemy(send, state, agent_id, x, y, plane, conn_id, n_of=(1, 1)):
         "passive": ENEMY_PASSIVE, "group": ENEMY_GROUP,          # MONSTERAI-J
         "provoked": False,
         "leash": ENEMY_LEASH,                                     # DESKWORK-D8
+        "cast_range": ENEMY_CAST_RANGE,                           # DESKWORK-D8
         "skills": ENEMY_SKILLS,
         # Per-SLOT rather than per-id: a bar may legitimately carry the same skill
         # twice, and keying recharge by id would make the second copy share the
@@ -38093,6 +38236,14 @@ def main():
         print(f"[enemy] --enemy-leash {ENEMY_LEASH:.0f}: the standing hostile "
               f"gives up once its target has been {ENEMY_LEASH:.0f} u from its "
               f"anchor for {LEASH_SECONDS:.1f} s (default {LEASH_DISTANCE:.0f}).",
+              flush=True)
+    if a.enemy_cast_range is not None:
+        global ENEMY_CAST_RANGE
+        ENEMY_CAST_RANGE = float(a.enemy_cast_range)
+        print(f"[enemy] --enemy-cast-range {ENEMY_CAST_RANGE:.0f}: the fixture "
+              f"caster stands and casts inside {ENEMY_CAST_RANGE:.0f} u and walks "
+              f"a 0x0029 leg to range beyond it (default "
+              f"{CASTER_CAST_RANGE:.0f}). Under AGGRO_RANGE it shows the leg.",
               flush=True)
     if a.party_body_in_outpost:
         global PARTY_BODY_IN_OUTPOST
