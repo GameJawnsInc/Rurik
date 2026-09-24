@@ -23762,11 +23762,16 @@ def enemy_attack_tick(send, state, conn_id):
                 agent["cast_lands_at"] = now + swing_windup(interval)
             else:
                 agent["cast_lands_at"] = now + activation
+            # THIS LINE'S SHAPE IS abrun.py's `agent_casts` counter (anchored
+            # on "(slot i of n)$"): nothing may ride it. The caster's distance
+            # goes on its own line, and never with the words "casts skill".
             print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) casts skill "
                   f"{skill_id} (slot {slot + 1} of "
-                  f"{len(agent['skills'])})"
-                  + (f" from {math.hypot(ax - px, ay - py):.0f} u, standing "
-                     f"[DESKWORK-D8]" if _caster else ""), flush=True)
+                  f"{len(agent['skills'])})", flush=True)
+            if _caster:
+                print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) stands "
+                      f"and casts: {math.hypot(ax - px, ay - py):.0f} u from "
+                      f"{target_label(state, _tid)} [DESKWORK-D8]", flush=True)
             continue
 
         if _caster and math.hypot(ax - px, ay - py) > body_reach(agent):
