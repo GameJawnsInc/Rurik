@@ -6807,8 +6807,9 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   picture exactly, `--town-player-weapons` CONFIRM-2's own) and in a field under
   `--field-player-weapons` (`[P, W, 0]`, the pre-fix bytes exactly, KNOWN-BAD — the arm a
   client run A/Bs the fix against); the arms' VACUITY pair (the field flag sends nothing in
-  a town, either town flag nothing in a field, so a gate answering None regardless could not
-  pass); THE FIELD SHIELD itself (set 0 = sword + shield, run `20260923T154229`'s layout):
+  a town, either town flag nothing in a field, so a gate that ignored the regime — any arm
+  sending anywhere — could not pass; the KNOWN-BAD sends are what refuse one answering None
+  regardless); THE FIELD SHIELD itself (set 0 = sword + shield, run `20260923T154229`'s layout):
   the `0x006E` carries the shield at visual 1 and by default no `0x006D` follows to zero it,
   while the flag arm's `0x006D` has 0 at the off hand with the shield still in the bag — the
   two arms disagree exactly at the off hand; the FIELD's emptied lead PINNED under the flag
@@ -6825,10 +6826,12 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   flag alone its own slots); `visible_slot_writes` leaving another agent's hand and the
   player's head alone in a town, dropping the player's hand under either display-mode
   setting, and passing the batch whole with both flags off. Drives the real handlers,
-  launches nothing. Floor 45 from the green run with `RURIK_VAULT` pointed at an empty
-  directory (the bare-machine core; §2's 15 ride the vault, 60 vaulted; 36/48 before the
-  CONFIRM-2 carrier fix of 2026-09-24, re-set from its own bare run; the fix pass the same
-  day replaced one check and added conjuncts, the counts unchanged), ~10 s),
+  launches nothing. Floor 55 from the green run with `RURIK_VAULT` pointed at an empty
+  directory (the bare-machine core; §2's 15 ride the vault, 70 vaulted; 45/60 before the
+  field shield of 2026-09-24 and 36/48 before the CONFIRM-2 carrier fix the same day, each
+  re-set from its own bare run; the CONFIRM-2 fix pass replaced one check and added
+  conjuncts, and the field shield's fix pass added the `global` conjunct to both flag
+  locks, the counts unchanged both times), ~10 s),
   `toolkit/authsrv/test_maptravel.py` (**2026-09-23, DESKWORK-D1 step 7: world-map travel**,
   rebuilt by the fix pass the same day — c2s `0x00B1` MAP_TRAVEL and the s2c `0x0094` unlock
   state that makes the client's world map offer our outposts; `toolkit/authsrv/maptravel.py`,

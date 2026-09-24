@@ -11962,7 +11962,8 @@ TOWN_WEAPON_STRIP_ENABLED = True  # False (--no-town-weapon-strip): the town
                                # are untouched.
 TOWN_PLAYER_WEAPONS_ENABLED = False  # True (--town-player-weapons): the load's
                                # player 0x006D NPC_UPDATE_WEAPONS goes out in a
-                               # TOWN too -- CONFIRM-2's picture (2026-09-24),
+                               # TOWN, and a town only -- CONFIRM-2's picture
+                               # (2026-09-24),
                                # KNOWN-BAD: retail sends the own body no 0x006D
                                # in either regime (0 of 46 outpost connections
                                # with a controlled agent, 0 of 44 field), and
@@ -11970,7 +11971,7 @@ TOWN_PLAYER_WEAPONS_ENABLED = False  # True (--town-player-weapons): the load's
                                # per agent (record+0x24, the setter 0x0081BE10)
                                # that 0x006D, 0x006E and 0x006F all write -- so
                                # this message, two after the empty-handed town
-                               # 0x006E, is the likeliest re-arming of the body
+                               # 0x006E, is the re-arming of the body
                                # (A1 = A4) that the dropped town 0x006F then
                                # left standing after F2 (A2): OBSERVED since
                                # CONFIRM-2 section 7 (withholding it was the
@@ -26056,8 +26057,8 @@ def visible_slot_writes(batch, state, conn_id=None):
     item batch, select_weapon_set), so the gate is ONE. Untouched under
     --no-town-weapon-strip. A dropped write leaves the body AS IT WAS -- on
     CONFIRM-2 (2026-09-24) that was the OLD weapon, most likely because the
-    load's own player 0x006D had armed it (CORROBORATED by the binary's one
-    store; the runsheet's ARM 1 is the observation); the fix is that
+    load's own player 0x006D had armed it (OBSERVED, CONFIRM-2 section 7:
+    withholding it was the whole difference on screen); the fix is that
     message's town gate (send_player_weapons), not a redraw here: retail's
     fourteen outpost hand changes address nothing to the own agent within
     5 s but movement rows."""
@@ -26115,11 +26116,12 @@ def visible_worn(worn, state, conn_id=None):
     wins -- read from the binary, and OBSERVED on our client in a field frame,
     run 20260923T154229), NOT the only channel -- the first record here said
     it was, and CONFIRM-2 (2026-09-24) refuted that on the client: the load's
-    own player 0x006D, sent two frames later, is the likeliest re-arming of
-    the body this array had left bare (A1 = A4; CORROBORATED, the runsheet's
-    ARM 1 the observation). That message is now withheld in a town too
-    (send_player_weapons); with all three carriers empty-handed the body is
-    what retail's is. The client applies no regime of its own on the path
+    own player 0x006D, sent two frames later, is the re-arming of the body
+    this array had left bare (A1 = A4; OBSERVED, CONFIRM-2 section 7:
+    withholding it was the whole difference on screen). That message is now
+    withheld in a town (send_player_weapons -- and in a field since the field
+    shield, the same day); with all three carriers empty-handed the town body
+    is what retail's is. The client applies no regime of its own on the path
     (no direct MissionCliGetMap 0x0084D9B0 / map-flags 0x0084D950 call to
     depth 2 -- townweapon.py, a bounded negative). Untouched under
     --no-town-weapon-strip). The equipped BAG -- the doll -- is not touched
@@ -26174,8 +26176,11 @@ def send_player_weapons(send, state, conn_id=None):
     [1, 1, 10, ...], seq 113 0x006D [1, 1, 0], walk1-wait.png -- OBSERVED).
     The field shield's desk read (townweapon.py, THE FIELD SHIELD) found the
     0x006D worker and the 0x006E worker to be ONE code body with a different
-    slot count (228 instructions each, two rows differ: the assert stub's
-    address and `cmp ebx, 2` vs `cmp ebx, 9`), so nothing the 0x006D writes --
+    slot count (228 instructions each; with each function's branch targets
+    and its jump-table base made relative, two rows differ: the assert stub's
+    address and `cmp ebx, 2` vs `cmp ebx, 9`; and the two nine-entry
+    slot-to-kind tables the base hides, 0x00810E04 / 0x008110C4, are
+    identical relative to each base), so nothing the 0x006D writes --
     the store, the lead's type byte at record+0x48 (the setter's own doing),
     the AvApi dresser 0x007DFCE0 -- the 0x006E has not already written for
     slots 0 and 1; what ours ADDED was the UNDRESS of the off hand
@@ -37477,10 +37482,11 @@ def main():
         global TOWN_PLAYER_WEAPONS_ENABLED
         TOWN_PLAYER_WEAPONS_ENABLED = True
         print("[items] --town-player-weapons: the load's player 0x006D NPC_UPDATE_WEAPONS "
-              "goes out in a TOWN too -- CONFIRM-2's picture (2026-09-24): the body armed, "
-              "most likely from this message after the empty-handed 0x006E, and the OLD "
-              "weapon kept across F2 (CORROBORATED; the run without this flag is the "
-              "observation). KNOWN-BAD: retail sends the own body no 0x006D (0 of 46 "
+              "goes out in a TOWN, and a town only -- CONFIRM-2's picture (2026-09-24): the body armed, "
+              "from this message after the empty-handed 0x006E, and the OLD "
+              "weapon kept across F2 (OBSERVED, CONFIRM-2 section 7: the run without this "
+              "flag was the whole difference on screen). KNOWN-BAD: retail sends the own "
+              "body no 0x006D (0 of 46 "
               "outpost connections with a controlled agent, 0 of 44 field).", flush=True)
     if a.field_player_weapons:
         global FIELD_PLAYER_WEAPONS_ENABLED

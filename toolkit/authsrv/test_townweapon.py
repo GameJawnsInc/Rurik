@@ -58,8 +58,9 @@ census).
     --town-player-weapons CONFIRM-2's) and in a field under
     --field-player-weapons ([P, W, 0], the pre-fix bytes exactly, KNOWN-BAD);
     the VACUITY pair (the field flag sends nothing in a town, either town flag
-    nothing in a field -- the arms disagree where they should, so a gate
-    answering None regardless could not pass); THE FIELD SHIELD itself (set 0
+    nothing in a field -- the arms disagree where they should, so a gate that
+    ignored the regime, any arm sending anywhere, could not pass; the KNOWN-BAD
+    sends are what refuse one answering None regardless); THE FIELD SHIELD itself (set 0
     = sword + shield, run 20260923T154229's layout): the 0x006E carries the
     shield at visual 1 and, by default, no 0x006D follows to zero it, while the
     flag arm's 0x006D has 0 at the off hand with the shield still in the bag;
@@ -346,9 +347,9 @@ if conns:
            and witness[("outpost", True)] >= 45 and witness[("outpost", False)] <= 1 and witness[("field", True)] >= 40,
            f"OBSERVED: retail sends the OWN body NO 0x006D -- 0 of {witness[('outpost', True)]} outpost connections "
            f"with a controlled agent ({own6d[('outpost', 0)]} with a 0x0199) and 0 of {witness[('field', True)]} field "
-           f"carry one addressed to it; our load's player 0x006D is a divergence, and in a town the likeliest "
-           f"carrier of CONFIRM-2's armed body (CORROBORATED: the binary's one store, a field frame; the run's ARM 1 "
-           f"is the observation)", f"{dict(own6d)} witness {dict(witness)}")
+           f"carry one addressed to it; our load's player 0x006D is a divergence, and in a town the carrier of "
+           f"CONFIRM-2's armed body (OBSERVED: the binary's one store, a field frame, and CONFIRM-2 section 7 -- "
+           f"withholding it was the whole difference on screen)", f"{dict(own6d)} witness {dict(witness)}")
     o_changes = sum(n for (r, _op, _a), n in own_addr.items() if r == "outpost")
     o_quiet = sum(n for (r, _op, a), n in own_addr.items() if r == "outpost" and not a)
     led.ok(own_addr[("outpost", 0x0032, False)] >= 3 and own_addr[("outpost", 0x0086, False)] >= 4
@@ -425,13 +426,17 @@ led.ok(p6d_senders == ["send_player_weapons"],
        "SOURCE LOCK: the only `*send(0x006D ...)` in authsrv.py naming PLAYER_AGENT_ID, in any wrapper's spelling, is "
        "send_player_weapons'; the hero, spawn, hostile and shrine 0x006D name their own agents", f"{p6d_senders}")
 led.ok('"--town-player-weapons"' in ARGS and "a.town_player_weapons" in SRC
-       and "TOWN_PLAYER_WEAPONS_ENABLED = False" in SRC and "TOWN_PLAYER_WEAPONS_ENABLED = True" in SRC,
-       "SOURCE LOCK: the 0x006D revert arm is declared in serverargs.py, defaults OFF and is wired in main()")
+       and "TOWN_PLAYER_WEAPONS_ENABLED = False" in SRC and "TOWN_PLAYER_WEAPONS_ENABLED = True" in SRC
+       and "global TOWN_PLAYER_WEAPONS_ENABLED" in func_src("main"),
+       "SOURCE LOCK: the 0x006D revert arm is declared in serverargs.py, defaults OFF and is wired in main() "
+       "through a `global` -- without one the assignment binds a local and the flag parses but never takes "
+       "effect (the fix pass, 2026-09-24)")
 led.ok('"--field-player-weapons"' in ARGS and "a.field_player_weapons" in SRC
        and "FIELD_PLAYER_WEAPONS_ENABLED = False" in SRC and "FIELD_PLAYER_WEAPONS_ENABLED = True" in SRC
+       and "global FIELD_PLAYER_WEAPONS_ENABLED" in func_src("main")
        and ARGS.index('"--field-player-weapons"') > ARGS.index('"--town-player-weapons"'),
        "SOURCE LOCK: the FIELD's 0x006D revert arm (--field-player-weapons, the field shield) is declared in "
-       "serverargs.py beside the town's, defaults OFF and is wired in main()")
+       "serverargs.py beside the town's, defaults OFF and is wired in main() through a `global`")
 led.ok('"weapon" if EQUIP_WEAPON else ""' not in players and '"weapon" if _hands else ""' in players
        and "[hands empty: a town]" in players
        and 0 < players.find("worn = visible_worn(player_worn_array(state), state, conn_id)") < players.find('"weapon" if _hands'),
@@ -543,8 +548,10 @@ try:
            "CONFIRM-2's own arm (runs 084418 / 084811: the body armed at load, the OLD weapon kept across F2), "
            "which is what every run before this fix sent; it differs from the fixed default's nothing, so the "
            "pin can tell the arms apart")
-    # VACUITY, the arms: a gate that returned None regardless of the regime or the flags would pass the
-    # four default/town checks above; the three KNOWN-BAD sends and this pair together refuse it.
+    # VACUITY, the arms: every arm above was asked in its own regime, so a gate that ignored the regime (any
+    # arm sending anywhere) would pass all of them; this pair asks each arm in the OTHER regime and refuses
+    # that gate. The other inversion, a gate answering None regardless, passes this pair -- the three
+    # KNOWN-BAD sends above are what refuse it.
     st_x, _ix = fresh(outpost=True, f6d=True)
     st_y, _iy = fresh(outpost=False, p6d=True)
     st_z, _iz = fresh(outpost=False, strip=False)

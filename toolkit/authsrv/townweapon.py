@@ -40,8 +40,9 @@ no 0x0199; reproduced by test_townweapon.py section 2):
     for it -- the one outpost 0x006F on an own body. Armour visuals are
     written in a town; the hands are not.
   * THE CARRIER (read from the binary and matched to CONFIRM-2's frames,
-    2026-09-24; CORROBORATED for the town, with OBSERVED owed to the
-    runsheet's ARM 1 -- the fix pass's relabel the same day). The 0x006E
+    2026-09-24, and OBSERVED for the town since CONFIRM-2 section 7 the same
+    day -- the reading below was written before that ablation, and the close
+    of this bullet records it). The 0x006E
     array is NOT the only channel into the body's hands -- the first
     record's (e) said it was, and the client refuted it: with the town
     0x006E empty-handed the body still drew the bag's hammer (runs
@@ -58,8 +59,8 @@ no 0x0199; reproduced by test_townweapon.py section 2):
     and a 0x006D -- outpost 1,981 / 1,510 bodies, field 44 / 2,081, overlap
     0 -- OBSERVED). The mechanism (build 38797): the client keeps ONE
     visual-equipment store per agent, at record+0x24, slots 0..8; the 0x006D
-    worker (0x00810B70, from handler 0x0091E1A0; slots 0..1 -- `cmp ebx, 2`
-    at 0x00810DD6 -- BOTH written unconditionally), the 0x006E worker
+    worker (0x00810B70, from handler 0x0091E1A0; slots 0..1 -- `inc ebx;
+    cmp ebx, 2` at 0x00810DD6 -- BOTH written unconditionally), the 0x006E worker
     (0x00810E30, slots 0..8) and the 0x006F worker (0x008110F0) all write it
     through the one setter 0x0081BE10 -- its only three direct callers
     (`codescan --xrefs 0x0081BE10`: 0x00810BCB, 0x00810E8B, 0x00811145),
@@ -75,10 +76,11 @@ no 0x0199; reproduced by test_townweapon.py section 2):
     drew the sword and NO shield, while CONFIRM-2 A4b's 0x006F [1, 1, 12]
     drew the same shield model. So in the town the 0x006D re-armed what the
     0x006E had emptied and the dropped town 0x006F left it there -- the
-    reading of every frame, not yet the ablation: no run has withheld the
-    message (it went out in all four), and a client arming the body from the
-    equipped bag once at load would give the same four frames (the
-    runsheet's rival). And on retail's fourteen outpost hand changes NOTHING
+    reading of every frame, which at the time was not yet the ablation: no
+    run had withheld the message (it went out in all four), and a client
+    arming the body from the equipped bag once at load would give the same
+    four frames (the runsheet's rival -- refuted by the ablation, at the close
+    of this bullet). And on retail's fourteen outpost hand changes NOTHING
     is addressed to the own agent within 5 s but movement rows (t=224.632's
     0x0029/0x002B; the 0x004F's 0x0025/0x0029/0x002B/0x0028/0x00F1); outpost
     strangers with more than one 0x006D never change hands (0 of 1,510
@@ -102,8 +104,16 @@ no 0x0199; reproduced by test_townweapon.py section 2):
     stub's address (`ja 0x810df1` / `ja 0x8110b1`, each function's own
     ChCliApi.cpp:51 "No valid case for switch variable 'prop'") and the loop
     bound (`cmp ebx, 2` at 0x00810DD7 / `cmp ebx, 9` at 0x00811097); every
-    call target and argument is the same (OBSERVED, a check over codescan's
-    own listing). Per slot both: resolve the agent (0x005FC380), store the
+    call target and argument is the same. A third row is made relative
+    before that count -- the jump-table base, `jmp dword ptr [ebx*4 +
+    0x00810E04]` / `[ebx*4 + 0x008110C4]` -- and the two nine-entry
+    slot-to-kind tables it hides are identical relative to each base
+    (+0x96, +0xda, +0xe1, +0xf6, +0xe8, +0xfd, +0xef, +0x104, +0x10b), each
+    case arm loading the same `kind` for the dresser and the undress
+    ({1: 1, 2: 2, 3: 5, 4: 3, 5: 6, 6: 4, 7: 7, 8: 8}; slot 0 is the bundle
+    arm) (OBSERVED, a check over codescan's own listing plus a stdlib read of
+    both tables from the pinned exe). Per slot both: resolve the agent
+    (0x005FC380), store the
     item through the setter 0x0081BE10 -- which ITSELF refreshes the lead's
     type byte at record+0x48 on a slot-0 write (0x0081BE31 / 0x0081BE35, or
     0x2E at 0x0081BE3D for an empty hand), so every writer keeps it current --
