@@ -34,7 +34,7 @@ python tools/orchestrator/orchestrator.py --theme light            # dark / ligh
 in one palette only (the light tab strip's focus fill was) is seen by running it with `--theme
 dark` and again with `--theme light`. Its verdict is the house ledger's (`toolkit/checks.py`):
 a law that cannot run declares a skip, printed in the verdict, and a run that executes fewer
-than its floor of 141 laws (the green run's 159 less the 18 behind a declared skip) fails naming
+than its floor of 145 laws (the green run's 163 less the 18 behind a declared skip) fails naming
 the shortfall. No mandatory law sits behind a state gate: a precondition (the hostile page
 stacked at 1,000 px) is a law of its own, since the floor cannot see a law that stops running
 while the gated ones do run.
@@ -118,7 +118,17 @@ into either filter finds the modelled rows, and the list's checkbox filter is **
 label** because it keeps both. The rest draw and time correctly and do nothing.
 
 Templates marked `(unwatched)` load closed but have never been seen rendering
-(`studies/slice/RUN-PARADE.md` names the fifteen that have).
+(`studies/slice/RUN-PARADE.md` names the fifteen that have). A template's label is
+`name  [ABBR Ln]` and it is **bounded**: content is the operator's and a row may carry any
+name (desk-hench's three henchman rows carry 60-character descriptions; a mod row may carry
+200), and every width the window derives from its labels — the heroes table's Body column, the
+stack edge under it, the hostile page's 740 px edge — would follow the longest one. So a label
+wider than `TEMPLATE_LABEL_PX` (202 px in the picker's own font: the widest label the fields
+were fitted to before those rows landed, so nothing that fitted then is elided now) shows its
+name elided with an ellipsis and its tag whole — the fact the operator picks by — with the
+label whole on the row's hover, on the field's, and in the type-to-filter, which matches the
+whole label (a word from the middle of a long name, typed, still finds its row) and completes
+with the shown one.
 
 ## Why `PySide6` is allowed here and nowhere under `toolkit/`
 
@@ -150,7 +160,9 @@ framework:
   not guessed), and the width below which the Character card goes above the table, its five
   fields three to a row, is derived from those columns and the widest hero name as its cell
   paints it — DemiBold, the unlocked weight, inside the delegate's margins (1,140 px, checked
-  against the rendered cells); a
+  against the rendered cells); a template's label is bounded to 202 px in the picker's font
+  (the name elided, the tag whole, the label whole on hover), so those derived widths hold for
+  any content rather than for today's; a
   narrow hostile page stacks its Body and Weapon cards on one shared label column, and a bar
   goes to one column of eight where two would not hold the widest choice it holds NOW (a
   Monk's list is wider than a Warrior's), so no picker clips.
@@ -183,7 +195,16 @@ an unlocked hero's Level spin scrolls the table), and no flag, file name, ident 
 on the visible surface. Layout and words have their own: every profession and every body fits
 its heroes-table column, and every choice in EVERY example hostile's slots, Template and
 Weapon fits its field at 1,280, 1,120 and 1,000 px, and in one body per profession at 1,280,
-the bar re-picking its columns from each list at one width; stacked, the Body and Weapon
+the bar re-picking its columns from each list at one width; a 218-character template name the
+smoke plants in its own world view (in memory, never in `content/` or the vault — the fit laws
+iterate today's content, which is how three 60-character names stacked the Character card at
+1,280 px with every law green until the merge) is shown elided with its tag whole and fits the
+Template field and the Body combo at all three widths, no label in either picker over the
+budget, the label whole is the row's hover, the picked field's and the encounter row's, the
+elided name is the page title and the roster's with the page flooring the window no wider, a
+word from the middle of the name typed into the picker's filter finds that row alone and
+completes with the shown label, and a visible hostile's `from_spec` to a different template
+opens no window of its own; stacked, the Body and Weapon
 cards start their inputs at one x with every label's ink right-aligned up to it, and the
 Template field comes back where it was after a re-polish while stacked; the Character card is
 top-aligned beside the table and two rows of three when stacked, each stacked label under half

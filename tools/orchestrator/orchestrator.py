@@ -103,8 +103,8 @@ except ImportError as exc:                                  # pragma: no cover
 
 import orchtheme      # noqa: E402  (tools/orchestrator: palettes, sheet, audit)
 import orchui         # noqa: E402  (tools/orchestrator: the widget helpers)
-from orchui import (ROLE_ID, ROLE_PARTS, ROLE_ROSTER, button, caption, card, chip,  # noqa: E402
-                    overline, role_label, set_chip)
+from orchui import (ROLE_FULL, ROLE_ID, ROLE_PARTS, ROLE_ROSTER, button, caption,  # noqa: E402
+                    card, chip, overline, role_label, set_chip)
 
 
 # ---------------------------------------------------------------- names
@@ -217,6 +217,19 @@ GRADE_TIP = {"hand": "Modelled: this server acts it from a hand-verified [skill_
 
 # ---------------------------------------------------------------- pieces
 
+class _Completer(QCompleter):
+    """The Picker's type-to-filter. It matches on ROLE_FULL -- a row's label
+    whole, where the shown one is elided (template_label) -- so a word from
+    the middle of a long name finds its row after the ellipsis has taken it
+    off the surface; and it completes with the SHOWN text, since pathFromIndex
+    is what the completer puts in the line edit and emits as activated(str).
+    Qt's own returns the match role's text, which would leave the field
+    holding a label wider than any row it offers."""
+
+    def pathFromIndex(self, index):
+        return str(index.data(Qt.EditRole) or "")
+
+
 class Picker(QComboBox):
     """A combo whose items carry a value, type-to-filter.
 
@@ -232,10 +245,12 @@ class Picker(QComboBox):
         self.setInsertPolicy(QComboBox.NoInsert)
         self.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self.setMinimumContentsLength(chars)
-        comp = self.completer()
+        comp = _Completer(self.model(), self)
+        comp.setCompletionRole(ROLE_FULL)
         comp.setFilterMode(Qt.MatchContains)
         comp.setCompletionMode(QCompleter.PopupCompletion)
         comp.setCaseSensitivity(Qt.CaseInsensitive)
+        self.setCompleter(comp)
         comp.popup().setProperty("role", "popup")
         self.tips = {}
         self.currentIndexChanged.connect(self._show_start)
@@ -246,17 +261,24 @@ class Picker(QComboBox):
             le.setCursorPosition(0)
         self.setToolTip(self.tips.get(self.currentData(), self.currentText()))
 
-    def set_choices(self, pairs, keep=None, parts=None, tips=None):
+    def set_choices(self, pairs, keep=None, parts=None, tips=None, full=None):
         """pairs: [(label, value)]. Keeps the current value when it is still
         offered. `parts` ({value: (name, meta, grade)}) makes the drop-down draw
-        its rows the way the Skills list does; `tips` gives each its hover."""
+        its rows the way the Skills list does; `tips` gives each its hover;
+        `full` ({value: the label whole}) is what the type-to-filter matches
+        where the shown label is elided, and the row's own hover there."""
         current = keep if keep is not None else self.value()
         self.blockSignals(True)
         self.clear()
         for label, value in pairs:
             self.addItem(label, value)
+            i = self.count() - 1
+            whole = (full or {}).get(value, label)
+            self.setItemData(i, whole, ROLE_FULL)
+            if whole != label:
+                self.setItemData(i, whole, Qt.ToolTipRole)
             if parts and value in parts:
-                self.setItemData(self.count() - 1, parts[value], ROLE_PARTS)
+                self.setItemData(i, parts[value], ROLE_PARTS)
         self.blockSignals(False)
         self.tips = dict(tips or {})
         if parts:
@@ -409,10 +431,19 @@ class Ranks(QWidget):
         self.professions = ()
 
     def _clear(self):
+        """Hidden BEFORE it is un-parented: a widget the grid queued a show
+        for (addWidget on a visible Ranks) and that a second set_professions
+        in the same turn un-parents first is shown by that queued call as a
+        window of its own -- ten on the desktop, one per label and spin, with
+        the keyboard focus in one of them (--smoke's long-name law found it:
+        a visible editor's from_spec to a different template runs
+        set_professions twice in one turn). hide() sets the explicit flag the
+        queued show respects; setParent(None) alone does not."""
         while self.grid.count():
             item = self.grid.takeAt(0)
             w = item.widget()
             if w is not None:
+                w.hide()
                 w.setParent(None)
                 w.deleteLater()
 
@@ -515,17 +546,53 @@ def set_combo(combo, value):
             return
 
 
-def template_choices(world, bodies_only=True):
-    out = []
+# The most a template's label may measure, px in the picker's own font. Content
+# is the operator's and a row may carry any name (desk-hench put three 60-
+# character descriptions in content/npcs.toml; a mod row may carry 200), and
+# every width this window derives from its labels -- the heroes table's Body
+# column, the stack edge under it, the hostile page's 740 px edge -- would
+# follow the longest one: those three stacked the Character card at 1,280 px
+# and cut two Template rows mid-glyph. So the label is bounded and the widths
+# stay derived. The budget is the widest label the fields were fitted to
+# before those rows landed (4e93a581): 'def_2037  [Mo L10]  (unwatched)', 202
+# px in Segoe UI at 14 px, the window's font -- so no label that fitted then is
+# elided now, and the Body column, the 1,140 px stack edge and the 1,000 /
+# 1,120 / 1,280 px layouts are where they were. A label over it shows its name
+# elided ("…"), its tag whole (the fact the operator picks by), the label whole
+# on hover and in the type-to-filter (ROLE_FULL).
+TEMPLATE_LABEL_PX = 202
+
+
+def template_label(name, key, prof, level, fm=None):
+    """(shown, whole) for one template row: 'name  [ABBR Ln]', '  (unwatched)'
+    after it for a row with no name (the key stands in). `fm`, the picker's
+    QFontMetrics, bounds the shown label to TEMPLATE_LABEL_PX -- the name
+    elided, the tag kept; None leaves it whole (a caller with no widget)."""
+    tag = f"  [{sandbox.ABBREV.get(prof, '-')} L{level}]" + ("" if name else "  (unwatched)")
+    head = name or key
+    whole = head + tag
+    if fm is None or fm.horizontalAdvance(whole) <= TEMPLATE_LABEL_PX:
+        return whole, whole
+    room = TEMPLATE_LABEL_PX - fm.horizontalAdvance(tag)
+    shown = fm.elidedText(head, Qt.ElideRight, room) + tag
+    while room > 0 and fm.horizontalAdvance(shown) > TEMPLATE_LABEL_PX:   # kerning over the join
+        room -= 1
+        shown = fm.elidedText(head, Qt.ElideRight, room) + tag
+    return shown, whole
+
+
+def template_choices(world, fm=None, bodies_only=True):
+    """([(shown label, key)] sorted, {key: the label whole}) -- the pairs a
+    Picker offers and the `full` (and `tips`) it takes with them."""
+    pairs, full = [], {}
     for key, name, prof, level, has_body in sandbox.templates(world):
         if bodies_only and not has_body:
             continue
-        label = f"{name or key}  [{sandbox.ABBREV.get(prof, '-')} L{level}]"
-        if not name:
-            label += "  (unwatched)"
-        out.append((label, key))
-    out.sort(key=lambda p: (not p[0][0].isupper(), p[0].lower()))
-    return out
+        shown, whole = template_label(name, key, prof, level, fm)
+        pairs.append((shown, key))
+        full[key] = whole
+    pairs.sort(key=lambda p: (not p[0][0].isupper(), p[0].lower()))
+    return pairs, full
 
 
 def weapon_keys(world):
@@ -828,7 +895,7 @@ class PartyTab(QWidget):
         self.rows = {}                         # hero index -> (check, prof, body, level)
         self.name_items = {}
         cat = names.heroes or [(i, 0) for i in range(1, sandbox.HERO_INDEX_MAX + 1)]
-        bodies = template_choices(world)
+        bodies = full = None
         for idx, _nid in cat:
             r = self.table.rowCount()
             self.table.insertRow(r)
@@ -838,7 +905,12 @@ class PartyTab(QWidget):
             prof = profession_picker(short=True)
             prof.setAccessibleName(f"{hero}'s profession")
             body = Picker(chars=20)
-            body.set_choices(bodies)
+            if bodies is None:
+                # the labels bounded in the combo's own font (the sheet's,
+                # before any show), the font _fit_columns measures them in
+                body.ensurePolished()
+                bodies, full = template_choices(world, body.fontMetrics())
+            body.set_choices(bodies, tips=full, full=full)
             body.set_value("hatcher")
             body.setAccessibleName(f"{hero}'s body")
             lvl = QSpinBox()
@@ -1125,9 +1197,11 @@ class MemberEditor(QWidget):
     cut a skill id through its last digit and the weapon's '(none…)' row)."""
 
     # Below this width (the editor's own) the Body and Weapon cards' pickers
-    # cannot hold the widest template (202 px) or the weapon's '(none: the
-    # template's swing)' (174): measured fields of 159 and 127 at 640 px, and
-    # each grows 1 px per 2 of the editor. The bar sets its own threshold.
+    # cannot hold the widest template (TEMPLATE_LABEL_PX, 202: a label is
+    # bounded to it, so this edge holds for any content) or the weapon's
+    # '(none: the template's swing)' (174): measured fields of 159 and 127 at
+    # 640 px, and each grows 1 px per 2 of the editor. The bar sets its own
+    # threshold.
     STACK_BELOW = 740
 
     def __init__(self, names, on_remove, on_change=None, parent=None):
@@ -1159,7 +1233,9 @@ class MemberEditor(QWidget):
         body = card("Body")
         form = form_layout()
         self.template = Picker(chars=10)
-        self.template.set_choices(template_choices(names.world))
+        self.template.ensurePolished()          # the sheet's font, the labels' bound
+        pairs, full = template_choices(names.world, self.template.fontMetrics())
+        self.template.set_choices(pairs, tips=full, full=full)
         self.level = QSpinBox()
         self.level.setRange(0, sandbox.LEVEL_MAX)
         self.level.setValue(2)
@@ -1288,7 +1364,13 @@ class MemberEditor(QWidget):
         return int(row.get("profession", 0) or 0)
 
     def display_name(self):
+        """The template's name as the field shows it -- bounded (template_label),
+        so the page title and the group's roster never outgrow a long name."""
         return self.template.currentText().split("  [")[0] or "hostile"
+
+    def template_full(self):
+        """The template's label whole: the hover's, where the shown is elided."""
+        return self.template.tips.get(self.template.value(), self.template.currentText())
 
     def set_where(self, group, member):
         self.where = (group, member)
@@ -1732,7 +1814,7 @@ class EnemiesTab(QWidget):
         f = item.font(0)
         f.setWeight(QFont.DemiBold if ed.boss.isChecked() else QFont.Normal)
         item.setFont(0, f)
-        item.setToolTip(0, f"{ed.template.currentText()}"
+        item.setToolTip(0, ed.template_full()
                         + ("\nThe boss: the quest's kill objective" if ed.boss.isChecked() else ""))
 
     def _member_changed(self, ed):
@@ -2771,15 +2853,40 @@ def _real_wheel(win, widget, delta=-120):
 # label rows), the inactive real wheel 1 (Windows, a page that scrolls), the
 # over-budget hostile 1 (an attribute table), the encounter list's focus 1,
 # Launch's ring and the tab strip's cue 3, the active-window wheel 3, the
-# four popups 4 -- 18 of the green run's 159. A gated law that skips is
-# printed in the verdict; a run short of the floor is a FAIL naming the
-# shortfall, which "0 failure(s)" never was. What the floor cannot see: on a
-# machine where every gated law runs, up to 18 mandatory laws could stop
-# before it names one -- so no mandatory law sits behind a STATE gate. A
+# four popups 4 -- 18 of the green run's 163 (159 before the long-name laws:
+# the bounded label, its hover, its filter, the no-stray restore). A gated law
+# that skips is printed in the verdict; a run short of the floor is a FAIL
+# naming the shortfall, which "0 failure(s)" never was. What the floor cannot
+# see: on a machine where every gated law runs, up to 18 mandatory laws could
+# stop before it names one -- so no mandatory law sits behind a STATE gate. A
 # precondition is a law of its own (`if m0.stacked:` once held the stacked
 # label law with no else, and the law vanished unnamed when the stack was
 # planted away, the re-polish law after it passing over no re-polish).
-SMOKE_FLOOR = 141
+SMOKE_FLOOR = 145
+
+# --smoke's own npc row: the content of tomorrow. The fit laws iterate the
+# content of today, which is how desk-hench's three 60-character names stacked
+# the Character card at 1,280 px and cut two Template rows mid-glyph with every
+# law green until the merge. A 200-character name, planted in the loaded world
+# IN MEMORY before the window builds its choices (main, under --smoke only;
+# never --snap, never content/ or the vault), so every law after it sees the
+# label bound (template_label) working on a name no field was fitted to. A
+# profession the example already offers (Warrior), so the one-body-per-
+# profession law keeps its rows; a level of its own; a model id, so it is a
+# body. The word 'gravelbeard' sits past where the ellipsis falls, for the
+# type-to-filter law.
+SMOKE_LONG_KEY = "smoke_long_name"
+SMOKE_LONG_NAME = ("Tomorrow's hostile, whose name runs far past any field the window fits: a "
+                   "row an operator may write, its label elided by the window, its tag kept "
+                   "whole, the name whole on hover, and found by gravelbeard from its middle")
+
+
+def plant_long_template(world):
+    """Put SMOKE_LONG_KEY into `world`'s npc table (in memory) and return its row."""
+    row = content.Row({"name": SMOKE_LONG_NAME, "profession": 1, "level": 5, "model_id": 1},
+                      "npc", SMOKE_LONG_KEY, {"source": "smoke"})
+    world.tables.setdefault("npc", {})[SMOKE_LONG_KEY] = row
+    return row
 
 
 def smoke(win, app, out_dir):
@@ -3407,6 +3514,86 @@ def smoke(win, app, out_dir):
           f"at 1,280 px a hostile in any of {len(byprof)} professions' bodies fits every slot "
           f"choice, the bar re-picking its columns from each list at one width (by profession "
           f"{cols}; Warrior, Monk, Warrior: {swing}; cut: {cut[:2] or 'none'})")
+    # ...and a label no field was fitted to: --smoke's own row (SMOKE_LONG_NAME,
+    # planted by main), 200 characters against a budget of TEMPLATE_LABEL_PX.
+    # The three fit laws above iterate today's content; this row is tomorrow's.
+    # Shown elided -- the name ending in an ellipsis, the tag whole -- it fits
+    # the Template field and the Body combo at each width, and no label in
+    # either picker measures over the budget in the picker's own font
+    long_i = m0.template.findData(SMOKE_LONG_KEY)
+    body3 = win.party.rows[3][2]
+    long_b = body3.findData(SMOKE_LONG_KEY)
+    long_full = m0.template.itemData(long_i, ROLE_FULL) if long_i >= 0 else ""
+    fit, over = {}, []
+    for w, h in ((1280, 860), (1120, 760), (1000, 720)):
+        win.resize(w, h)
+        settle(8)
+        en.select(m0)
+        settle(4)
+        shown = m0.template.itemText(long_i)
+        head = shown.rsplit("  [", 1)[0]
+        fit[w] = (head.endswith("…"), shown.endswith("  [W L5]"), _fits(m0.template, shown),
+                  body3.itemText(long_b) == shown, _fits(body3, shown))
+    for picker in (m0.template, body3):
+        over += [picker.itemText(i)[:30] for i in range(picker.count())
+                 if picker.fontMetrics().horizontalAdvance(picker.itemText(i)) > TEMPLATE_LABEL_PX]
+    check(long_i >= 0 and long_b >= 0 and len(SMOKE_LONG_NAME) >= 200
+          and long_full == SMOKE_LONG_NAME + "  [W L5]" and all(all(v) for v in fit.values())
+          and not over,
+          f"a {len(SMOKE_LONG_NAME)}-character template name (--smoke's own row) is shown with "
+          f"its name elided and its tag whole, and fits the Template field and the Body combo at "
+          f"1,280, 1,120 and 1,000 px (elided, tag, fits, the same in Body, fits: {fit}); no "
+          f"label in either picker is over {TEMPLATE_LABEL_PX} px ({over[:2] or 'none'})")
+    # ...the label whole is the row's hover in the drop-down, the field's once
+    # picked, and the encounter row's; picked into a hostile, the elided name
+    # is the page title and the group roster's name, and the page floors the
+    # window no wider than the raider's did
+    win.resize(1280, 860)
+    settle(8)
+    floor_before = win.minimumSizeHint().width()
+    m0.template.set_value(SMOKE_LONG_KEY)
+    settle(4)
+    shown = m0.template.itemText(long_i)
+    head = shown.rsplit("  [", 1)[0]
+    row_tip = next((it.toolTip(0) for it in en._walk() if it.data(0, Qt.UserRole) is m0), "")
+    roster_name = en.groups[0].roster.item(0).data(ROLE_ROSTER)[0]
+    floor_after = win.minimumSizeHint().width()
+    check(m0.template.itemData(long_i, Qt.ToolTipRole) == long_full
+          and m0.template.toolTip() == long_full and row_tip.startswith(long_full)
+          and m0.title.text() == head and roster_name == head and "gravelbeard" not in head
+          and floor_after <= floor_before,
+          f"the long label whole is the row's hover, the picked field's and the encounter row's "
+          f"({len(long_full)} characters); the elided name is the page title and the roster's "
+          f"({head[-12:]!r}), and the page floors the window no wider ({floor_after} of "
+          f"{floor_before})")
+    # ...and the type-to-filter matches the label WHOLE: a word the ellipsis
+    # took off the surface, typed, finds that row alone and completes with the
+    # shown label (Qt's own completer matched the shown text, and completed
+    # with the match role's); a word in no name finds none
+    comp = m0.template.completer()
+    comp.setCompletionPrefix("gravelbeard")
+    hits, hit = comp.completionCount(), comp.currentCompletion()
+    hit_key = comp.currentIndex().data(ROLE_ID) if hits else None
+    comp.setCompletionPrefix("gravelbeard-of-no-row")
+    none = comp.completionCount()
+    comp.setCompletionPrefix("")
+    check(m0.template.lineEdit().completer() == comp and hits == 1 and hit_key == SMOKE_LONG_KEY
+          and hit == shown and "gravelbeard" in long_full and "gravelbeard" not in shown
+          and none == 0,
+          f"typing a word from the middle of the long name into the Template picker's filter "
+          f"finds that row alone by its label whole (the shown one lost the word to the "
+          f"ellipsis) and completes with the shown label ({hits} hit, {hit[-16:]!r}; a word in "
+          f"no name: {none})")
+    # ...and the restore, a VISIBLE editor's from_spec to a different template
+    # (set_professions twice in one turn), opens no window of its own: the
+    # first turn's Attributes widgets, un-parented before the grid's queued
+    # show fired, were shown as ten windows with the keyboard focus in one --
+    # which also took the OS wheel law below it (Ranks._clear hides first)
+    m0.from_spec(m0_spec)
+    settle(4)
+    check(m0.to_spec() == m0_spec and not strays(),
+          f"a visible hostile's from_spec to a different template (its ranks rebuilt twice in "
+          f"one turn) opens no window of its own ({len(strays())} stray)")
     # a group page and a hostile page share one right edge whether or not the
     # hostile's page scrolls: at 860 tall it does, at 1080 (a maximized 1080p
     # window) it does not, and a fixed reserve matched only the first
@@ -4631,6 +4818,8 @@ def main(argv=None):
     theme = orchui.apply_theme(app, args.theme)
     t0 = time.perf_counter()
     world = content.load()
+    if args.smoke:
+        plant_long_template(world)      # the smoke's own row, in memory: tomorrow's content
     names = Names(world, resolve=not args.no_names)
     print(f"content and names loaded in {time.perf_counter() - t0:.1f} s ({theme} theme)"
           + (f" -- {names.why}" if names.why else ""))

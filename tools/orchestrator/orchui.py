@@ -321,6 +321,7 @@ class PlaceholderList(QListWidget):
 ROLE_ID = Qt.UserRole
 ROLE_PARTS = Qt.UserRole + 1
 ROLE_ROSTER = Qt.UserRole + 2                   # (name, facts) of a group's roster row
+ROLE_FULL = Qt.UserRole + 3                     # a Picker row's label whole, where the shown one is elided
 
 GRADE_TEXT = {"hand": "modelled", "label": "label"}
 
