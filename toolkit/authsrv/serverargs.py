@@ -900,8 +900,9 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "town 0x006E and drops a player 0x006F into visual 0/1 in a "
                          "town (the ONE gate every item batch and the set switch pass; "
                          "OBSERVED shape -- the mechanism, the server stripping rather "
-                         "than the client ignoring, is RECONSTRUCTION from the "
-                         "dresser's regime-blind path). The equipped BAG, the paper "
+                         "than the client ignoring, is RECONSTRUCTION: no direct regime "
+                         "read on the client's 0x006E/0x006F path to depth 2, "
+                         "townweapon.py). The equipped BAG, the paper "
                          "doll and the weapon-set panel are untouched; a field carries "
                          "the hands as before. townweapon.py.")
     ap.add_argument("--hero-skill-toggle-per-bit", action="store_true",

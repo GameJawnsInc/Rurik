@@ -38,18 +38,29 @@ no 0x0199; reproduced by test_townweapon.py section 2):
     20260917T160915 :58557 at t=73.5) and retail sent 0x006F [336, 6, 23284]
     for it -- the one outpost 0x006F on an own body. Armour visuals are
     written in a town; the hands are not.
-  * WHY THE SERVER MUST DO IT: the client's 0x006E / 0x006F handlers reach
-    the AvApi dresser (0x007DFCE0) through ChCliApi message workers with no
-    regime test on the path (visstatus.py's reader census; the display-mode
-    pass), and our own town body stood armed on every run before this day
-    because our 0x006E said so. Shape OBSERVED; mechanism (the server strips
-    rather than the client ignoring) RECONSTRUCTION from that negative.
+  * WHY THE SERVER DOES IT (RECONSTRUCTION): the client's 0x006E / 0x006F
+    handlers (0x0091E1C0 / 0x0091E1E0) reach the AvApi dresser (0x007DFCE0)
+    through ChCliApi message workers (0x00810E30 / 0x008110F0), and those
+    handlers, workers and every function the workers call directly -- the
+    dresser's fifteen-instruction body among them -- hold no direct call to
+    MissionCliGetMap (0x0084D9B0) or the map-flags reader (0x0084D950):
+    `msghandler.py 0x006E --follow --depth 2` and the same for 0x006F, read
+    on the fix pass; of MissionCliGetMap's 37 direct callers (`codescan
+    --xrefs`) none lies in them. NOT searched: the dresser's callee
+    0x007F70B0 and deeper, and indirect calls -- a measured negative, not a
+    proof (visstatus.py's census, which the first pass cited here, was of the
+    display FLAGS' readers and said nothing about a regime read). Our own
+    town 0x006E carried the hand (run 20260923T210546, c1 seq 100: visual 0 =
+    item 1 under a map-148 outpost load) and the body stood armed. Shape
+    OBSERVED; that the server strips rather than the client ignoring is what
+    the runsheet's rival prediction settles on our client.
   * WHAT THIS DOES NOT TOUCH: the equipped BAG (0x013E / 0x014B / 0x0152 --
     the doll and the weapon-set panel read it, and retail's outpost switches
     still moved the items), the 0x0147 / 0x0148 set declarations, the
     server's own swing model (a town never swings), and NPC bodies -- retail's
-    outpost NPCs DO carry weapons in 0x006D (466 of 1,653 with a lead), so an
-    NPC's hands are not this rule's. Heroes have no body in a town on retail
+    outpost NPCs DO carry weapons in 0x006D (466 of 1,653 outpost 0x006D
+    MESSAGES with a lead; 403 of 1,510 distinct bodies), so an NPC's hands are
+    not this rule's. Heroes have no body in a town on retail
     (3 party heroes over the outpost connections, none created, none with a
     0x006D) or on ours (PARTY_BODY_IN_OUTPOST).
 

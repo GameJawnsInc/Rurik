@@ -6658,13 +6658,17 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   panel's, slot 6); every outpost c2s `0x0032` switch (4) answered with `0x0148` and no hand
   `0x006F`, every field switch (4) with one; the outpost `0x0030` equips and `0x004F` move (5)
   with none; the PvP panel's five hand placements with none and its armour placement with
-  one; retail's outpost NPCs carrying `0x006D` weapons (466 of 1,653 — the rule is the
-  player's hands); no hero body in an outpost (3 party heroes, none created), a hero body in a
-  field; every connection decoded. §3 THE SERVER: source locks (the leaf imported, the flag in
-  `serverargs.py` and `main()`, `visible_worn` and `visible_slot_writes` gated,
-  `select_weapon_set`'s three hand `0x006F` built into a batch that passes
-  `visible_slot_writes` with no direct send left, the only direct `send(0x006F)` in
-  `authsrv.py` being `handle_visibility_flags`' slots 6/7/8); the real item layout
+  one; retail's outpost NPCs carrying `0x006D` weapons (466 of 1,653 `0x006D` messages, 403
+  of 1,510 distinct bodies — the rule is the player's hands); the own body's join
+  cross-checked against `0x0022` WORLD_UPDATE_CONTROLLED_AGENT on every connection (it names
+  exactly the controlled agents that have a `0x006E`); no hero body in an outpost (3 party
+  heroes, none created), a hero body in a field; every connection decoded. §3 THE SERVER:
+  source locks (the leaf imported, the flag in `serverargs.py` and `main()`, `visible_worn`
+  and `visible_slot_writes` gated, `select_weapon_set`'s three hand `0x006F` built into a
+  batch that passes `visible_slot_writes` with no direct send left, the only direct
+  `*send(0x006F)` in `authsrv.py` — in any wrapper's spelling — being
+  `handle_visibility_flags`' slots 6/7/8, the burst's `0x006E` label built from the array so
+  a town's reads `[hands empty: a town]`); the real item layout
   (`--weapon-set 1=starter_sword+starter_shield`) in a TOWN — the dressed array keeps the
   hammer at visual 0 (the doll) while `visible_worn` zeroes 0 and 1; the FIELD control; the
   KNOWN-BAD revert arm (the weapon kept, and it disagrees); VACUITY (the hammer dragged out);
@@ -6677,8 +6681,9 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   flag alone its own slots); `visible_slot_writes` leaving another agent's hand and the
   player's head alone in a town, dropping the player's hand under either display-mode
   setting, and passing the batch whole with both flags off. Drives the real handlers,
-  launches nothing. Floor 35 from the green run with `RURIK_VAULT` pointed at an empty
-  directory (the bare-machine core; §2's 11 ride the vault, 46 vaulted), ~10 s),
+  launches nothing. Floor 36 from the green run with `RURIK_VAULT` pointed at an empty
+  directory (the bare-machine core; §2's 12 ride the vault, 48 vaulted; re-set on the fix
+  pass from its own bare run), ~10 s),
   `toolkit/authsrv/test_labelrun.py` (the labelled input run, which names GAME_CMSG
   opcodes from what a human was told to do: a message lands in exactly one step's
   window, instance-load traffic is never folded into step 1, and a dirty idle CONTROL

@@ -17,21 +17,25 @@ census).
     every origin=LIVE game connection -- every outpost 0x006E empty-handed on
     BOTH visuals (>= 2,000 bodies; the OWN body, the 0x006E whose armour ids all
     sit in ONE type-2 bag, on >= 40 outpost loads with a lead in that bag and
-    >= 15 with an off hand); the own FIELD body carrying every hand its bag
+    >= 15 with an off hand -- and that join cross-checked against 0x0022
+    WORLD_UPDATE_CONTROLLED_AGENT: it names exactly the controlled agents that
+    have a 0x006E, on every connection); the own FIELD body carrying every hand its bag
     holds (>= 30 leads, >= 15 off hands, no miss) and none when the bag has none;
     no outpost 0x006F into slot 0 or 1 on ANY agent, the own outpost 0x006F that
     does exist going to an ARMOUR slot (the PvP panel's head); every outpost
     c2s 0x0032 switch answered with 0x0148 and no 0x006F, every field switch
     with a hand 0x006F; the outpost 0x0030 equips and 0x004F move with none;
     the PvP panel's hand placements with none and its armour placement with one;
-    retail's outpost NPCs DO carry 0x006D weapons (the rule is the player's
-    hands); no hero body in an outpost (party heroes never created), a hero body
-    in a field; every connection decoded.
+    retail's outpost NPCs DO carry 0x006D weapons (counted as 0x006D MESSAGES;
+    the rule is the player's hands); no hero body in an outpost (party heroes
+    never created), a hero body in a field; every connection decoded.
   * §3 THE SERVER: source locks (the leaf imported; the flag in serverargs.py
     and main(); visible_worn and visible_slot_writes gated; select_weapon_set's
     three hand 0x006F built into a batch that passes visible_slot_writes and no
-    direct send left -- the ONE gate; the only direct player 0x006F sender left
-    is handle_visibility_flags, whose slots are the display mode's 6/7/8); the
+    direct send left -- the ONE gate; the only direct player 0x006F sender left,
+    in any `*send(` spelling, is handle_visibility_flags, whose slots are the
+    display mode's 6/7/8; the burst's 0x006E label built from the ARRAY, so a
+    town's reads `[hands empty: a town]` and never names a weapon it lacks); the
     real item layout in a TOWN: the dressed array keeps the hammer at visual 0
     (the doll) while visible_worn zeroes 0 and 1; the FIELD control; the
     KNOWN-BAD revert arm (the weapon kept in a town, and it disagrees); VACUITY
@@ -63,7 +67,7 @@ import townweapon as tw                                      # noqa: E402
 import itemstore                                             # noqa: E402
 import authsrv                                               # noqa: E402
 
-led = checks.Ledger("the town weapon (DESKWORK-D1)", floor=35)  # 2026-09-23, from the green run with RURIK_VAULT pointed at an empty directory (the bare-machine core, 1 declared skip); section 2's 11 ride the vault (46 vaulted)
+led = checks.Ledger("the town weapon (DESKWORK-D1)", floor=36)  # 2026-09-23, from the green run with RURIK_VAULT pointed at an empty directory (the bare-machine core, 1 declared skip); section 2's 12 ride the vault (48 vaulted). Re-set on the fix pass from its own bare run: +1 bare (the 0x006E label lock, WEAP-R5), +1 vaulted (the 0x0022 cross-check, WEAP-R6)
 
 VIS = authsrv.GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT           # 0x006F
 WORN = authsrv.GAME_SMSG_UPDATE_AGENT_VISUAL_EQUIPMENT               # 0x006E
@@ -135,6 +139,7 @@ if conns:
     pvp = collections.Counter()         # (placed slot kind, has 0x006F, 0x006F slots all armour?)
     npc6d = collections.Counter()       # (regime, lead != 0)
     heroes = collections.Counter()      # (regime, created?, has 0x006D?)
+    ctrl_agree = collections.Counter()  # (regime, the armour join == 0x0022's agents that have a 0x006E?)
     for capdir, gf in conns:
         _conn, merged, ok = livewire.decode_conn(capdir, gf)
         decoded += 1 if ok else 0
@@ -146,9 +151,12 @@ if conns:
         rg = R[regime]
         type2, cells, own_ids, own_bag_id = set(), {}, set(), None
         hero_agents, created, d6 = set(), set(), {}
+        ctrl_ids, seen6e = set(), set()
         for t, op, v in s2c:
             if op == 0x013F and int(v[2]) == 2:
                 type2.add(int(v[4]))
+            elif op == 0x0022 and len(v) > 1:
+                ctrl_ids.add(int(v[1]))
             elif op in (0x013E, 0x014B):
                 cells[int(v[2])] = (int(v[3]), int(v[4]))
             elif op == 0x0152:
@@ -163,6 +171,7 @@ if conns:
                 d6[int(v[1])] = (int(v[2]), int(v[3]))
                 npc6d[(rg, int(v[2]) != 0)] += 1
             elif op == WORN and len(v) > 10:
+                seen6e.add(int(v[1]))
                 armour = [int(x) for x in v[4:8] if int(x)]
                 bags = {cells[a][0] for a in armour if a in cells}
                 is_own = bool(armour) and len(bags) == 1 and bags <= type2
@@ -179,6 +188,10 @@ if conns:
                 slot6f[(rg, int(v[1]) in own_ids, int(v[2]), int(v[3]) != 0)] += 1
         for h in hero_agents:
             heroes[(rg, h in created, h in d6)] += 1
+        # The review's WEAP-R6: the armour join must name exactly the agents 0x0022
+        # WORLD_UPDATE_CONTROLLED_AGENT names that have a 0x006E (four connections' 0x0022 also
+        # names a second, bodiless agent for a moment -- value 1 between the own body's 3 and 1).
+        ctrl_agree[(rg, own_ids == {a for a in ctrl_ids if a in seen6e})] += 1
 
         def reply(t, ops):
             return [(rop, list(rv)) for (rt, rop, rv) in s2c if t <= rt <= t + 1.5 and rop in ops]
@@ -209,6 +222,12 @@ if conns:
            f"...the OWN body among them (its armour ids all in ONE type-2 bag): {o_own_lead} outpost loads "
            f"with a lead in that bag, {o_own_off} with an off hand, and {o_own_armed} carry either -- the "
            f"bag holds the weapon the body does not show", f"{dict(own_bag)}")
+    c_agree = sum(n for (_r, eq), n in ctrl_agree.items() if eq)
+    c_differ = sum(n for (_r, eq), n in ctrl_agree.items() if not eq)
+    led.ok(c_agree >= 85 and c_differ == 0,
+           f"CROSS-CHECK: the armour join names exactly the agents 0x0022 WORLD_UPDATE_CONTROLLED_AGENT "
+           f"names that have a 0x006E, on every connection with a regime ({c_agree} agree, {c_differ} "
+           f"differ) -- the own body is the controlled agent, not a hero's", f"{dict(ctrl_agree)}")
     f_lead_c = own_bag[("field", True, False, True, False)] + own_bag[("field", True, True, True, True)]
     f_lead_m = sum(n for (r, bl, _bo, a, _b), n in own_bag.items() if r == "field" and bl and not a)
     f_off_c = own_bag[("field", True, True, True, True)]
@@ -246,8 +265,9 @@ if conns:
            f"{pvp[('armour', True, True)]} into an armour cell WITH one to a non-hand slot", f"{dict(pvp)}")
     o_npc = npc6d[("outpost", True)] + npc6d[("outpost", False)]
     led.ok(o_npc >= 1000 and npc6d[("outpost", True)] >= 100,
-           f"REPORT: retail's outpost NPCs carry 0x006D weapons ({npc6d[('outpost', True)]} of {o_npc} with a "
-           f"lead) -- the empty hands are the PLAYER body's rule, not a town's")
+           f"REPORT: retail's outpost NPCs carry 0x006D weapons ({npc6d[('outpost', True)]} of {o_npc} 0x006D "
+           f"MESSAGES with a lead; 403 of 1,510 distinct bodies on the fix pass's count) -- the empty hands "
+           f"are the PLAYER body's rule, not a town's")
     o_heroes = sum(n for (r, _c, _d), n in heroes.items() if r == "outpost")
     led.ok(o_heroes >= 1 and heroes[("outpost", False, False)] == o_heroes and heroes[("field", True, True)] >= 1,
            f"OBSERVED: no hero body in an outpost ({o_heroes} party heroes over the outpost connections, none "
@@ -290,11 +310,20 @@ led.ok("_send(GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT" not in sws
        and sws.index("_vis.append((GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT") < sws.index("visible_slot_writes(_vis"),
        "SOURCE LOCK: select_weapon_set builds its three hand 0x006F into a batch and sends only what "
        "visible_slot_writes returns -- no direct hand send left")
-senders = sorted({func_at(m.start())[1] for m in re.finditer(r"\bsend\(GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT", SRC)})
+# Any `*send(` spelling counts -- `send(`, `_send(`, `hsend(`, `psend(` -- so a sender written
+# in another wrapper's name cannot slip past (the review's WEAP-R4; `\b` saw none of them).
+senders = sorted({func_at(m.start())[1] for m in re.finditer(r"\w*send\(GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT", SRC)})
 led.ok(senders == ["handle_visibility_flags"],
-       "SOURCE LOCK: the only direct `send(0x006F ...)` left in authsrv.py is handle_visibility_flags' "
-       "(the display mode's slots 6/7/8, never a hand); every other player 0x006F passes "
-       "visible_slot_writes", f"{senders}")
+       "SOURCE LOCK: the only direct `*send(0x006F ...)` left in authsrv.py, in any wrapper's spelling, is "
+       "handle_visibility_flags' (the display mode's slots 6/7/8, never a hand); every other player 0x006F "
+       "passes visible_slot_writes", f"{senders}")
+players = func_src("_handle_request_players")
+led.ok('"weapon" if EQUIP_WEAPON else ""' not in players and '"weapon" if _hands else ""' in players
+       and "[hands empty: a town]" in players
+       and 0 < players.find("worn = visible_worn(player_worn_array(state), state, conn_id)") < players.find('"weapon" if _hands'),
+       "SOURCE LOCK: the burst's 0x006E label names what the ARRAY carries -- `weapon` only when a hand is "
+       "non-zero, `[hands empty: a town]` when the strip left both empty (the review's WEAP-R5: the old "
+       "label named a weapon the town message did not carry)")
 import visstatus                                             # noqa: E402
 led.ok(set(visstatus.KIND_VISUAL_SLOT.values()) == {6, 7, 8}
        and all(s not in tw.HAND_SLOTS for _k, s, _i in visstatus.slot_changes(0xFF, 0x00, [1, 12, 3, 4, 5, 6, 7, 8, 9], False)),

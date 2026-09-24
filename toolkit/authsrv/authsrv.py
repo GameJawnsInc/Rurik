@@ -25583,8 +25583,14 @@ def visible_worn(worn, state, conn_id=None):
     2026-09-23: retail's outpost 0x006E never carries a weapon, 0 of 2,245
     bodies, the owner's own 50 loads with a weapon in the equipped bag among
     them, while the own field body carries every hand its bag holds, 40 of 40
-    leads and 23 of 23 off hands -- OBSERVED; the client's dresser reads no
-    regime, so the server's array is the channel; untouched under
+    leads and 23 of 23 off hands -- OBSERVED. That the SERVER's array is the
+    channel -- the client applying no regime of its own to a hand -- is
+    RECONSTRUCTION: the 0x006E / 0x006F handlers, their ChCliApi workers and
+    every function those call directly, the AvApi dresser 0x007DFCE0 among
+    them, hold no direct call to MissionCliGetMap 0x0084D9B0 or the map-flags
+    reader 0x0084D950 (msghandler --follow --depth 2; the dresser's own callee
+    0x007F70B0 and indirect calls unsearched -- townweapon.py), and the
+    runsheet's rival prediction settles it on our client. Untouched under
     --no-town-weapon-strip). The equipped BAG -- the doll -- is not touched
     here. Says which pieces it hid."""
     shown = list(worn)
@@ -30634,11 +30640,20 @@ def _handle_request_players(send, state, conn_id, stop, rec):
         # visstatus.py's docstring). The doll is untouched: it reads the
         # equipped BAG and the flags itself.
         worn = visible_worn(player_worn_array(state), state, conn_id)
+        # The label names what the ARRAY carries, not the launch flag: in a
+        # town visible_worn leaves both hands zero (DESKWORK-D1, the town
+        # weapon) and the runsheet reads this line, so "weapon" is said only
+        # when a hand is non-zero, and an empty pair under EQUIP_WEAPON says
+        # so with its regime (the town-weapon review's WEAP-R5).
+        _hands = len(worn) > 1 and bool(worn[0] or worn[1])
         send(GAME_SMSG_UPDATE_AGENT_VISUAL_EQUIPMENT,
              [PLAYER_AGENT_ID] + worn,
              "UPDATE_AGENT_VISUAL_EQUIPMENT("
-             + ("weapon" if EQUIP_WEAPON else "")
-             + ("+armour" if EQUIP_ARMOUR else "") + ")")
+             + ("weapon" if _hands else "")
+             + ("+armour" if EQUIP_ARMOUR else "") + ")"
+             + ("" if _hands or not EQUIP_WEAPON else
+                (" [hands empty: a town]" if not instance_is_field(state)
+                 else " [hands empty]")))
         # ArenaNet sends this after EVERY 0x006E, 366 of
         # 366 across both live captures. Zero because we
         # have never populated a guild id, and 0 is what
