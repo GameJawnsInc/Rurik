@@ -1939,11 +1939,17 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   `0x00EF`/`0x0057`, the backpack drag `0x0072`) the doll's order, the eye and the helm,
   Hide in Towns hiding the helm on the doll AND the world body, and the drag staying.
   **CONFIRM-2 ran 2026-09-24** (studies/deskwork/CONFIRM-2026-09-24.md, PLAN-LOG): the
-  henchman add HELD on the client. **Open**: the town weapon's SWITCH half is a visible
-  regression — in an outpost the body keeps the old weapon after F1–F4 while the doll
-  changes (`--no-town-weapon-strip` restores it); its load half is invisible, the client
-  draws the weapon from another carrier (the player's `0x006D`?) — fix at the desk
-  (CONFIRM-2 §1); the henchman kick, c2s `0x00A8 [agent]`, named on our client, unarmed,
+  henchman add HELD on the client. The town weapon's carrier fix
+  CONFIRMED on the client (CONFIRM-2 §7, PLAN-LOG): our load's player `0x006D` was the
+  carrier — withheld in a town the body is empty-handed at load and after F2, and
+  `--town-player-weapons` reproduces the stale hammer (OBSERVED). The owner's answer
+  (2026-09-24): on retail no weapon is shown on the body in a town, only on the doll — the fix's
+  picture. **Open**: town combat with no hand declared (unexercised); **the FIELD's
+  player `0x006D` is a defect** (the fix pass, TF-R1): retail sends none (0 of 44), ours sends
+  `[player, lead, 0]` after the `0x006E`, and its zero off hand is the last hand write, so a
+  sword-and-shield field body loses its shield at load (run 20260923T154229, seq 111/113,
+  OBSERVED) — carry the bag's off hand, or withhold it as retail does (the swing path
+  UNVERIFIED); a field run's choice; the henchman kick, c2s `0x00A8 [agent]`, named on our client, unarmed,
   its reply on no tape; travel's confirmation BLOCKED on content (no fog-initialised view
   carries a second pin; `M` on 449 / 242 / 248 / 310 asserts, CONFIRM-2 §3); the display
   mode's field step (the owner's hands, the harness cannot open the drop-down); the
