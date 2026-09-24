@@ -4,6 +4,7 @@ window. PySide6; nothing here knows the archive, the wire or the rules.
     python tools/orchestrator/orchestrator.py                    # the window, the slice loaded
     python tools/orchestrator/orchestrator.py --spec my.toml     # open a saved spec
     python tools/orchestrator/orchestrator.py --smoke DIR        # drive every panel once, exit
+    python tools/orchestrator/orchestrator.py --snap DIR         # render every surface to PNG, exit
     pythonw apps/orchestrator.pyw                                # double-click launcher
 
 WHY THIS LIVES UNDER `tools/` AND NOT `toolkit/`. `CLAUDE.md` pins `toolkit/`
@@ -13,9 +14,14 @@ group stands, which ids are reserved, what the gamesrv is told -- is
 `toolkit/harness/sandbox.py`'s (stdlib, `test_sandbox.py`), the content is
 `toolkit/content.py`'s, and every NAME on screen is resolved at run time from
 the owner's own archive through `toolkit/clientscan/textrec.py`. This file
-holds widgets. If a run is wrong, the question is for the compiler.
+holds widgets; `orchui.py` the helpers they are built from; `orchtheme.py`
+(stdlib) the palettes, the stylesheet and their contrast audit. If a run is
+wrong, the question is for the compiler.
 
-WHAT THE WINDOW IS. Four tabs over one spec:
+WHAT THE WINDOW IS. A header over four tabs, all over one spec:
+  header   the spec's name, open / save / load the slice, a one-line summary
+           of the spec, and the three verbs -- Compile, LAUNCH (the one accent
+           in the window: the verb you are here to press), Stop
   Skills   the ACCOUNT library -- which skills are unlocked, account-wide
            (0x001D). The character's own bar and every hero's draw on it;
            a hero's usable library is its own list plus this
@@ -26,14 +32,14 @@ WHAT THE WINDOW IS. Four tabs over one spec:
            in-game Skills and Attributes panels set them, for the character
            and for each hero, and `--persist` keeps what they set from one
            run to the next.
-  Enemies  up to four groups of up to four hostiles, one of them the boss,
-           each with its bar and ranks (a filterable picker for these is the
-           next step, SANDBOX-N1)
-  Run      the spec's name; save and load; COMPILE (the overlay and the
-           command, shown before anything runs, with what the character
-           store already holds); LAUNCH, which starts the harness on the
-           slice archive and streams its output here; RESET, which clears
-           the stored character so the next login starts clean
+  Enemies  up to four groups of up to four hostiles, one of them the boss:
+           the groups and hostiles as a list on the left, the selected
+           hostile's template, weapon, bar and ranks on the right (a
+           filterable picker for these is the next step, SANDBOX-N1)
+  Run      the launch options; the stored character and its reset; the
+           compiled result (the overlay and the command, shown before
+           anything runs, with what the character store already holds); the
+           harness's output, streamed
 The operator plays; closing the game client ends the run and the stack.
 
 NAMES. Skill names come off the pinned client's own skill table (the record's
@@ -42,14 +48,23 @@ names off the extracted hero table's string ids; attribute names likewise.
 None of it is stored anywhere -- the spec on disk carries ids -- and a
 machine with no client shows ids. That is the provenance gate's "commit the
 id, resolve the string at run time", one more time.
+
+THE LOOK is Dream-World-IX's rules at the size of this tool (`orchtheme.py`
+says which and why): one accent, spent on Launch; cards with real titles in
+place of group boxes; a sentence goes under a control, never inside it; ids
+and citations on hover, not on the surface; every colour walked to its
+contrast floor. `--smoke` checks those as laws, not as intentions.
 """
 import argparse
 import os
+import re
 import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
 for p in (os.path.join(ROOT, "toolkit"), os.path.join(ROOT, "toolkit", "harness"),
           os.path.join(ROOT, "toolkit", "clientscan"), os.path.join(ROOT, "toolkit", "mapdata"),
           os.path.join(ROOT, "toolkit", "authsrv")):
@@ -61,16 +76,24 @@ import content        # noqa: E402
 import vaultpath      # noqa: E402
 
 try:
-    from PySide6.QtCore import Qt, QProcess, QProcessEnvironment, QTimer
-    from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QCompleter,
-                                   QFileDialog, QFormLayout, QGroupBox, QHBoxLayout,
-                                   QHeaderView, QLabel, QLineEdit, QListWidget,
-                                   QListWidgetItem, QMainWindow, QMessageBox,
+    from PySide6.QtCore import (QElapsedTimer, QPoint, QPointF, QProcess,
+                                QProcessEnvironment, Qt, QTimer, Signal)
+    from PySide6.QtGui import QColor, QFont, QTextCharFormat, QTextCursor, QWheelEvent
+    from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComboBox,
+                                   QCompleter, QFileDialog, QFormLayout, QFrame,
+                                   QGridLayout, QHBoxLayout, QHeaderView, QLabel,
+                                   QLineEdit, QListWidgetItem, QMainWindow, QMessageBox,
                                    QPlainTextEdit, QPushButton, QScrollArea, QSpinBox,
-                                   QDoubleSpinBox, QTableWidget, QTableWidgetItem,
-                                   QTabWidget, QVBoxLayout, QWidget)
+                                   QDoubleSpinBox, QSplitter, QStackedWidget,
+                                   QTableWidget, QTableWidgetItem, QTabWidget,
+                                   QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
 except ImportError as exc:                                  # pragma: no cover
     sys.exit(f"the run orchestrator needs PySide6 (py -m pip install PySide6): {exc}")
+
+import orchtheme      # noqa: E402  (tools/orchestrator: palettes, sheet, audit)
+import orchui         # noqa: E402  (tools/orchestrator: the widget helpers)
+from orchui import (ROLE_ID, ROLE_PARTS, button, caption, card, chip,  # noqa: E402
+                    overline, role_label, set_chip)
 
 
 # ---------------------------------------------------------------- names
@@ -119,17 +142,36 @@ class Names:
         row = self.world.rows("skills").get(str(sid)) or {}
         return int(row.get("profession", 0) or 0)
 
+    def skill_grade(self, sid):
+        """'hand' (a HAND [skill_effect.*] row), 'label' (SKILLS-LT: acts
+        through a label parsed from the client's own description template)
+        or None (draws and times, does nothing)."""
+        return "hand" if sid in self.modelled else ("label" if sid in self.labelled else None)
+
     def skill_label(self, sid):
         row = self.world.rows("skills").get(str(sid)) or {}
         prof = sandbox.ABBREV.get(int(row.get("profession", 0) or 0), "-")
         attr = self.attr.get(int(row.get("attribute", -1)), "")
         # `*` a hand row; `~label` a label-tier row (SKILLS-LT): acts through a
         # parsed label and must not read as modelled (deskwork D4 step 4).
-        mark = " *" if sid in self.modelled else (" ~label" if sid in self.labelled else "")
+        grade = self.skill_grade(sid)
+        mark = " *" if grade == "hand" else (" ~label" if grade == "label" else "")
         return f"{self.skill.get(sid, f'skill {sid}')}  [{sid} {prof}{(' ' + attr) if attr else ''}]{mark}"
 
+    def skill_parts(self, sid):
+        """(name, meta, grade) -- the same facts as skill_label, kept apart so
+        the list can set each in its own register."""
+        row = self.world.rows("skills").get(str(sid)) or {}
+        prof = sandbox.ABBREV.get(int(row.get("profession", 0) or 0), "-")
+        attr = self.attr.get(int(row.get("attribute", -1)), "")
+        meta = f"{sid}  {prof}" + (f"  {attr}" if attr else "")
+        return (self.skill.get(sid, f"skill {sid}"), meta, self.skill_grade(sid))
+
+    def hero_name(self, idx):
+        return self.hero.get(idx, f"hero {idx}")
+
     def hero_label(self, idx):
-        return f"{self.hero.get(idx, f'hero {idx}')}  [{idx}]"
+        return f"{self.hero_name(idx)}  [{idx}]"
 
     def attr_label(self, aid):
         return self.attr.get(aid, f"attribute {aid}")
@@ -147,19 +189,41 @@ class Names:
         return self._labelled
 
 
+GRADE_TIP = {"hand": "modelled: this server acts it from a hand-verified [skill_effect] row",
+             "label": ("label: acts through a label parsed from the client's own description "
+                       "template, not a hand-verified row (SKILLS-LT); the gamesrv log says so "
+                       "at every cast"),
+             None: "draws and times correctly; this server does nothing more with it"}
+
+
 # ---------------------------------------------------------------- pieces
 
 class Picker(QComboBox):
-    """A combo whose items carry a value, type-to-filter."""
+    """A combo whose items carry a value, type-to-filter.
 
-    def __init__(self, parent=None):
+    Sized from a character count, not from its longest item (that is how the
+    old window grew 1,250 px combos), and it shows the START of its text: an
+    editable combo narrower than its text used to scroll to the end, so a
+    skill read 'V Strength] *'. The full text is on hover, and the popup is
+    as wide as its longest row."""
+
+    def __init__(self, parent=None, chars=24):
         super().__init__(parent)
         self.setEditable(True)
         self.setInsertPolicy(QComboBox.NoInsert)
+        self.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.setMinimumContentsLength(chars)
         comp = self.completer()
         comp.setFilterMode(Qt.MatchContains)
         comp.setCompletionMode(QCompleter.PopupCompletion)
         comp.setCaseSensitivity(Qt.CaseInsensitive)
+        self.currentIndexChanged.connect(self._show_start)
+
+    def _show_start(self, *_a):
+        le = self.lineEdit()
+        if le is not None:
+            le.setCursorPosition(0)
+        self.setToolTip(self.currentText())
 
     def set_choices(self, pairs, keep=None):
         """pairs: [(label, value)]. Keeps the current value when it is still offered."""
@@ -169,6 +233,9 @@ class Picker(QComboBox):
         for label, value in pairs:
             self.addItem(label, value)
         self.blockSignals(False)
+        fm = self.fontMetrics()
+        widest = max((fm.horizontalAdvance(label) for label, _v in pairs), default=0)
+        self.view().setMinimumWidth(min(widest + 48, 760))
         self.set_value(current)
 
     def value(self):
@@ -178,9 +245,11 @@ class Picker(QComboBox):
         for i in range(self.count()):
             if self.itemData(i) == value:
                 self.setCurrentIndex(i)
+                self._show_start()
                 return True
         if self.count():
             self.setCurrentIndex(0)
+        self._show_start()
         return False
 
 
@@ -191,19 +260,31 @@ def skill_choices(names, professions, empty=True):
 
 
 class Bar(QWidget):
-    """Eight skill slots (the Enemies tab's; the party's bars are in-game)."""
+    """Eight skill slots, two columns of four (the Enemies tab's; the party's
+    bars are in-game). Wide enough for a whole skill label."""
 
     def __init__(self, names, parent=None):
         super().__init__(parent)
         self.names = names
-        lay = QHBoxLayout(self)
-        lay.setContentsMargins(0, 0, 0, 0)
+        grid = QGridLayout(self)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(8)
         self.slots = []
         for i in range(sandbox.BAR_SLOTS):
-            pk = Picker()
-            pk.setMinimumWidth(110)
-            lay.addWidget(pk)
+            row, col = i % 4, (i // 4) * 3
+            num = role_label(str(i + 1), "slot")
+            num.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            num.setFixedWidth(14)
+            pk = Picker(chars=16)
+            pk.setAccessibleName(f"Skill slot {i + 1}")
+            num.setBuddy(pk)
+            grid.addWidget(num, row, col)
+            grid.addWidget(pk, row, col + 1)
             self.slots.append(pk)
+        grid.setColumnMinimumWidth(2, 16)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(4, 1)
 
     def set_professions(self, professions):
         pairs = skill_choices(self.names, professions)
@@ -220,32 +301,46 @@ class Bar(QWidget):
 
 
 class Ranks(QWidget):
-    """One spin box per attribute of the given professions, with the budget
-    (the Enemies tab's; the party's ranks are in-game)."""
+    """One spin box per attribute of the given professions, two to a row, and
+    the budget as a chip (the Enemies tab's; the party's ranks are in-game).
+    The chip is the NOTICE; the caption under the card stays the HINT, so an
+    over-budget spend never erases the sentence saying what a valid one is."""
 
     def __init__(self, names, parent=None):
         super().__init__(parent)
         self.names = names
         self.rules = sandbox.attribute_rules(names.world)
-        self.form = QFormLayout(self)
-        self.form.setContentsMargins(0, 0, 0, 0)
+        self.grid = QGridLayout(self)
+        self.grid.setContentsMargins(0, 0, 0, 0)
+        self.grid.setHorizontalSpacing(12)
+        self.grid.setVerticalSpacing(8)
         self.spins = {}
-        self.label = QLabel("")
+        self.chip = chip("", "info")
+        self.label = self.chip
         self.level = 3
         self.professions = ()
 
+    def _clear(self):
+        while self.grid.count():
+            item = self.grid.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.setParent(None)
+                w.deleteLater()
+
     def set_professions(self, professions, level):
         keep = self.ranks()
-        while self.form.rowCount():
-            self.form.removeRow(0)          # deletes the row's widgets, the label included
-        self.label = QLabel("")
+        self._clear()
         self.spins = {}
         self.professions = tuple(int(p) for p in professions if p)
         self.level = int(level)
         if self.rules is None:
-            self.form.addRow(QLabel("no attribute table (vault/content/attributes.toml): "
-                                    "ranks cannot be edited here"))
+            self.grid.addWidget(caption("No attribute table (vault/content/attributes.toml): "
+                                        "ranks cannot be edited here."), 0, 0, 1, 6)
+            self.chip.hide()
             return
+        self.chip.show()
+        n = 0
         for aid, row in sorted(self.rules.attributes.items()):
             if row["profession"] not in self.professions:
                 continue
@@ -254,11 +349,25 @@ class Ranks(QWidget):
             sp = QSpinBox()
             sp.setRange(0, self.rules.rank_max)
             sp.setValue(dict(keep).get(aid, 0))
+            sp.setFixedWidth(92)
             sp.valueChanged.connect(self._budget)
+            name = self.names.attr_label(aid)
+            lab = QLabel(name + (f'  <span style="color:{orchui.PAL["muted"]}">primary</span>'
+                                 if row["is_primary"] else ""))
+            lab.setToolTip(f"attribute {aid}" + (" — the primary's own attribute"
+                                                 if row["is_primary"] else ""))
+            lab.setBuddy(sp)
+            sp.setAccessibleName(name)
+            r, c = n // 2, (n % 2) * 3
+            self.grid.addWidget(lab, r, c)
+            self.grid.addWidget(sp, r, c + 1)
             self.spins[aid] = sp
-            self.form.addRow(f"{self.names.attr_label(aid)} [{aid}]"
-                             + (" (primary)" if row["is_primary"] else ""), sp)
-        self.form.addRow("points", self.label)
+            n += 1
+        if not n:
+            self.grid.addWidget(caption("This template's profession has no spendable "
+                                        "attributes."), 0, 0, 1, 6)
+        self.grid.setColumnMinimumWidth(2, 24)
+        self.grid.setColumnStretch(5, 1)
         self._budget()
 
     def _budget(self):
@@ -266,8 +375,14 @@ class Ranks(QWidget):
             return
         spent = self.rules.total_spent({a: s.value() for a, s in self.spins.items()})
         budget = sandbox.points_for_level(self.level)
-        self.label.setText(f"{spent} of {budget} spent"
-                           + ("  -- OVER: the compiler will refuse this" if spent > budget else ""))
+        if spent > budget:
+            set_chip(self.chip, f"{spent} of {budget} points — over budget", "crit",
+                     tip="The compiler refuses ranks the level cannot pay for "
+                         "(GWW's attribute points by level).")
+        else:
+            set_chip(self.chip, f"{spent} of {budget} points",
+                     "good" if spent == budget else "info",
+                     tip=f"A level-{self.level} hostile has {budget} attribute points.")
 
     def set_level(self, level):
         self.level = int(level)
@@ -285,6 +400,8 @@ class Ranks(QWidget):
 
 def profession_picker(none=False):
     pk = QComboBox()
+    pk.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+    pk.setMinimumContentsLength(14)
     if none:
         pk.addItem("(none)", 0)
     for pid, name in sandbox.PROFESSIONS.items():
@@ -312,49 +429,88 @@ def template_choices(world, bodies_only=True):
     return out
 
 
+def weapon_keys(world):
+    armour = ("_body", "_boots", "_legs", "_gloves", "_head", "backpack", "costume")
+    return [k for k in sorted(world.rows("item")) if not any(w in k for w in armour)]
+
+
+def form_layout():
+    form = QFormLayout()
+    form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
+    form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+    form.setHorizontalSpacing(14)
+    form.setVerticalSpacing(10)
+    return form
+
+
 # ---------------------------------------------------------------- Skills
 
 class SkillsTab(QWidget):
     """The ACCOUNT library: every player-usable skill, ticked = unlocked."""
+    changed = Signal()
 
     def __init__(self, names, parent=None):
         super().__init__(parent)
         self.names = names
-        outer = QVBoxLayout(self)
-        outer.addWidget(QLabel("Unlocked skills, ACCOUNT-wide (0x001D). The character's bar "
-                               "and every hero's bar are filled in-game from these; a hero "
-                               "may also use its own list. * = a skill this server models "
-                               "beyond its icon."))
+        outer = orchui.page_layout(self)
+        head = QHBoxLayout()
+        head.addWidget(role_label("Skill library", "title"))
+        head.addStretch(1)
+        self.count = chip("", "info")
+        head.addWidget(self.count)
+        outer.addLayout(head)
+        outer.addWidget(caption(
+            "Unlocked account-wide. The character's bar and every hero's are filled in game "
+            "from these; a hero may also use its own list.",
+            tip="The account's unlock set (0x001D). A hero's usable library is its own list "
+                "plus this one (herolib.hero_library)."))
         row = QHBoxLayout()
+        row.setSpacing(8)
         self.filter = QLineEdit()
-        self.filter.setPlaceholderText("filter by name, id or attribute")
+        self.filter.setPlaceholderText("Filter by name, id or attribute")
+        self.filter.setClearButtonEnabled(True)
+        self.filter.addAction(orchui.tinted_icon("search"), QLineEdit.LeadingPosition)
+        self.filter.setAccessibleName("Filter skills")
         self.prof = QComboBox()
-        self.prof.addItem("every profession", 0)
+        self.prof.setAccessibleName("Profession filter")
+        self.prof.addItem("Every profession", 0)
         for pid, name in sandbox.PROFESSIONS.items():
             self.prof.addItem(f"{name} ({sandbox.ABBREV[pid]})", pid)
-        self.prof.addItem("common (no profession)", -1)
-        self.modelled_only = QCheckBox("modelled only (* hand, ~label)")
-        row.addWidget(self.filter, 2)
+        self.prof.addItem("Common (no profession)", -1)
+        self.modelled_only = QCheckBox("Modelled only")
+        self.modelled_only.setToolTip("Only the skills this server acts: a hand-verified row "
+                                      "(modelled) or a parsed label (label).")
+        self.all_b = button("Unlock shown", "quiet",
+                            tip="Unlock every skill the filter shows.")
+        self.none_b = button("Lock shown", "quiet",
+                             tip="Lock every skill the filter shows.")
+        self.party_b = button("Party's professions", "quiet",
+                              tip="Unlock exactly the skills of the character's and the heroes' "
+                                  "professions, plus the common ones; lock the rest.")
+        row.addWidget(self.filter, 3)
         row.addWidget(self.prof, 1)
+        row.addSpacing(4)
         row.addWidget(self.modelled_only)
-        outer.addLayout(row)
-        row2 = QHBoxLayout()
-        self.all_b = QPushButton("unlock all shown")
-        self.none_b = QPushButton("lock all shown")
-        self.party_b = QPushButton("the party's professions")
-        self.count = QLabel("")
+        row.addStretch(1)
         for b in (self.all_b, self.none_b, self.party_b):
-            row2.addWidget(b)
-        row2.addWidget(self.count)
-        row2.addStretch(1)
-        outer.addLayout(row2)
-        self.list = QListWidget()
+            row.addWidget(b)
+        outer.addLayout(row)
+        self.list = orchui.PlaceholderList("No skill matches this filter.")
+        self.list.setItemDelegate(orchui.SkillDelegate(self.list))
+        self.list.setUniformItemSizes(True)
+        self.list.setAccessibleName("Skills")
         outer.addWidget(self.list, 1)
+        outer.addWidget(caption(
+            "modelled — this server acts it from a hand-verified row.     label — it acts "
+            "through a label parsed from the client's description, not hand-verified.     "
+            "Unmarked skills draw and time correctly and do nothing."))
         self.party_professions = set()
         every = sorted(int(k) for k in names.world.rows("skills"))
         for sid in sorted(every, key=lambda s: names.skill_label(s).lower()):
             it = QListWidgetItem(names.skill_label(sid))
-            it.setData(Qt.UserRole, sid)
+            it.setData(ROLE_ID, sid)
+            it.setData(ROLE_PARTS, names.skill_parts(sid))
+            it.setToolTip(f"{names.skill_label(sid)}\n{GRADE_TIP[names.skill_grade(sid)]}")
             it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
             it.setCheckState(Qt.Checked)
             self.list.addItem(it)
@@ -375,18 +531,23 @@ class SkillsTab(QWidget):
         prof = int(self.prof.currentData() or 0)
         only = self.modelled_only.isChecked()
         for it in self._items():
-            sid = int(it.data(Qt.UserRole))
+            sid = int(it.data(ROLE_ID))
             sp = self.names.skill_profession(sid)
             hide = ((text and text not in it.text().lower())
                     or (prof > 0 and sp != prof) or (prof == -1 and sp != 0)
                     or (only and sid not in self.names.modelled
                         and sid not in self.names.labelled))
             it.setHidden(bool(hide))
+        self.list.viewport().update()
         self._count()
 
     def _count(self):
         n = sum(1 for it in self._items() if it.checkState() == Qt.Checked)
-        self.count.setText(f"{n} of {self.list.count()} unlocked")
+        total = self.list.count()
+        shown = self.list.visible_count()
+        tail = f"  ·  {shown:,} shown" if shown != total else ""
+        set_chip(self.count, f"{n:,} of {total:,} unlocked{tail}", "info" if n else "warn")
+        self.changed.emit()
 
     def _set_shown(self, on):
         for it in self._items():
@@ -399,17 +560,17 @@ class SkillsTab(QWidget):
     def unlock_party(self):
         want = self.party_professions | {0}
         for it in self._items():
-            sp = self.names.skill_profession(int(it.data(Qt.UserRole)))
+            sp = self.names.skill_profession(int(it.data(ROLE_ID)))
             it.setCheckState(Qt.Checked if sp in want else Qt.Unchecked)
 
     def ids(self):
-        return sorted(int(it.data(Qt.UserRole)) for it in self._items()
+        return sorted(int(it.data(ROLE_ID)) for it in self._items()
                       if it.checkState() == Qt.Checked)
 
     def set_ids(self, ids):
         want = set(int(s) for s in ids)
         for it in self._items():
-            it.setCheckState(Qt.Checked if int(it.data(Qt.UserRole)) in want else Qt.Unchecked)
+            it.setCheckState(Qt.Checked if int(it.data(ROLE_ID)) in want else Qt.Unchecked)
         self._count()
 
 
@@ -419,90 +580,157 @@ class PartyTab(QWidget):
     """The character, and which heroes are unlocked (each with a profession
     and a body). No bars, no ranks: those are the in-game panels' job."""
 
-    COLS = ("unlocked", "hero", "profession", "body", "level")
+    COLS = ("", "#", "Hero", "Profession", "Body", "Level")
 
     def __init__(self, names, on_change, parent=None):
         super().__init__(parent)
         self.names = names
         self.on_change = on_change
         world = names.world
-        outer = QVBoxLayout(self)
-        box = QGroupBox("the character")
-        form = QFormLayout(box)
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(16, 16, 16, 12)
+        outer.setSpacing(16)
+
+        cc = card("Character")
+        cc.setFixedWidth(320)
+        form = form_layout()
         self.primary = profession_picker()
         self.secondary = profession_picker(none=True)
         self.level = QSpinBox()
         self.level.setRange(1, sandbox.LEVEL_MAX)
         self.level.setValue(3)
-        items = sorted(world.rows("item"))
-        armour_words = ("_body", "_boots", "_legs", "_gloves", "_head", "backpack", "costume")
-        weapons = [k for k in items if not any(w in k for w in armour_words)]
-        self.weapon = Picker()
+        weapons = weapon_keys(world)
+        self.weapon = Picker(chars=16)
         self.weapon.set_choices([(k, k) for k in weapons])
-        self.offhand = Picker()
+        self.offhand = Picker(chars=16)
         self.offhand.set_choices([("(none)", "")] + [(k, k) for k in weapons
                                                      if "shield" in k or "focus" in k])
-        form.addRow("primary", self.primary)
-        form.addRow("secondary", self.secondary)
-        form.addRow("level", self.level)
-        form.addRow("weapon", self.weapon)
-        form.addRow("off hand", self.offhand)
-        form.addRow("", QLabel("bar and attribute ranks: the in-game K and skill panels; "
-                               "--persist keeps them. The level sets the points and health."))
-        outer.addWidget(box)
-        hb = QGroupBox("the heroes -- tick to unlock (they join the party); up to 7")
-        hl = QVBoxLayout(hb)
-        self.count = QLabel("")
-        hl.addWidget(self.count)
+        form.addRow("Primary", self.primary)
+        form.addRow("Secondary", self.secondary)
+        form.addRow("Level", self.level)
+        form.addRow("Weapon", self.weapon)
+        form.addRow("Off-hand", self.offhand)
+        cc.body.addLayout(form)
+        cc.body.addSpacing(4)
+        cc.body.addWidget(caption(
+            "Bars and attribute ranks are set in game, on the Skills panel (K), the "
+            "attribute panel and each hero's own, and kept between runs. The level sets "
+            "the points and the health.",
+            tip="Every sandbox run passes --persist; the store is vault/state/characters/."))
+        cc.body.addStretch(1)
+        outer.addWidget(cc, 0)
+
+        self.count = chip("", "info")
+        hc = card("Heroes", trailing=self.count)
+        hc.body.addWidget(caption(
+            f"Tick a hero to add them to the party, up to {sandbox.HEROES_MAX}. Their bars "
+            "and ranks are set in game too.",
+            tip=f"The client's cap is {sandbox.HEROES_MAX} heroes (PtPlayer:332)."))
         self.table = QTableWidget(0, len(self.COLS))
+        self.table.setProperty("role", "flat")
         self.table.setHorizontalHeaderLabels(self.COLS)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        hh = self.table.horizontalHeader()
+        hh.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        hh.setHighlightSections(False)
+        for col, mode, width in ((0, QHeaderView.Fixed, 32), (1, QHeaderView.Fixed, 40),
+                                 (2, QHeaderView.Fixed, 150), (3, QHeaderView.Fixed, 150),
+                                 (4, QHeaderView.Stretch, 0), (5, QHeaderView.Fixed, 92)):
+            hh.setSectionResizeMode(col, mode)
+            if width:
+                self.table.setColumnWidth(col, width)
         self.table.verticalHeader().setVisible(False)
-        hl.addWidget(self.table, 1)
-        outer.addWidget(hb, 1)
+        self.table.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
+        self.table.verticalHeader().setDefaultSectionSize(40)
+        self.table.setShowGrid(False)
+        self.table.setWordWrap(False)
+        self.table.setTextElideMode(Qt.ElideRight)
+        self.table.setSelectionMode(QAbstractItemView.NoSelection)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setFocusPolicy(Qt.NoFocus)
+        self.table.setAccessibleName("Heroes")
+        hc.body.addWidget(self.table, 1)
+        outer.addWidget(hc, 1)
+
         self.rows = {}                         # hero index -> (check, prof, body, level)
+        self.name_items = {}
         cat = names.heroes or [(i, 0) for i in range(1, sandbox.HERO_INDEX_MAX + 1)]
         bodies = template_choices(world)
         for idx, _nid in cat:
             r = self.table.rowCount()
             self.table.insertRow(r)
+            hero = names.hero_name(idx)
             chk = QCheckBox()
+            chk.setAccessibleName(f"Unlock {hero}")
             prof = profession_picker()
-            body = Picker()
+            prof.setAccessibleName(f"{hero}'s profession")
+            body = Picker(chars=20)
             body.set_choices(bodies)
             body.set_value("hatcher")
+            body.setAccessibleName(f"{hero}'s body")
             lvl = QSpinBox()
             lvl.setRange(1, sandbox.LEVEL_MAX)
             lvl.setValue(3)
-            name = QTableWidgetItem(names.hero_label(idx))
-            name.setFlags(name.flags() & ~Qt.ItemIsEditable)
-            self.table.setCellWidget(r, 0, chk)
-            self.table.setItem(r, 1, name)
-            self.table.setCellWidget(r, 2, prof)
-            self.table.setCellWidget(r, 3, body)
-            self.table.setCellWidget(r, 4, lvl)
+            lvl.setAccessibleName(f"{hero}'s level")
+            num = QTableWidgetItem(str(idx))
+            num.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            num.setFont(orchui.mono_font(orchtheme.TYPE["caption"]))
+            num.setForeground(QColor(orchui.PAL["muted"]))
+            num.setFlags(Qt.ItemIsEnabled)
+            num.setToolTip(f"hero index {idx}: what a spec's `hero = {idx}` names")
+            name = QTableWidgetItem(hero)
+            name.setFlags(Qt.ItemIsEnabled)
+            self.table.setCellWidget(r, 0, orchui.centered(chk))
+            self.table.setItem(r, 1, num)
+            self.table.setItem(r, 2, name)
+            self.table.setCellWidget(r, 3, prof)
+            self.table.setCellWidget(r, 4, body)
+            self.table.setCellWidget(r, 5, lvl)
             chk.toggled.connect(lambda on, i=idx: self._toggled(i, on))
             prof.currentIndexChanged.connect(lambda _i, i=idx: self._prof_changed(i))
             body.currentIndexChanged.connect(lambda _i, i=idx: self._body_changed(i))
+            lvl.valueChanged.connect(lambda _v, i=idx: self._prof_changed(i))
             self.rows[idx] = (chk, prof, body, lvl)
+            self.name_items[idx] = name
+            self._style_row(idx)
         self.primary.currentIndexChanged.connect(lambda _i: self.on_change())
         self.secondary.currentIndexChanged.connect(lambda _i: self.on_change())
+        self.level.valueChanged.connect(lambda _v: self.on_change())
         self._count()
 
     def unlocked(self):
         return [i for i, (chk, _p, _b, _l) in self.rows.items() if chk.isChecked()]
 
+    def _style_row(self, idx):
+        """A locked hero's row is quiet and its editors off: what the spec will
+        carry is exactly what reads as live."""
+        chk, prof, body, lvl = self.rows[idx]
+        on = chk.isChecked()
+        for w in (prof, body, lvl):
+            w.setEnabled(on)
+        self.name_items[idx].setForeground(QColor(orchui.PAL["text" if on else "muted"]))
+        f = self.name_items[idx].font()
+        f.setWeight(QFont.DemiBold if on else QFont.Normal)
+        self.name_items[idx].setFont(f)
+
     def _toggled(self, idx, on):
         if on and len(self.unlocked()) > sandbox.HEROES_MAX:
             self.rows[idx][0].setChecked(False)
-            self.count.setText(f"the client's cap is {sandbox.HEROES_MAX} heroes "
-                               f"(PtPlayer:332) -- unlock one fewer first")
+            set_chip(self.count, f"{sandbox.HEROES_MAX} of {sandbox.HEROES_MAX} — the "
+                                 f"client's cap", "warn",
+                     tip=f"The client allows {sandbox.HEROES_MAX} heroes (PtPlayer:332).")
+            win = self.window()
+            if isinstance(win, QMainWindow):
+                win.statusBar().showMessage(
+                    f"The client allows {sandbox.HEROES_MAX} heroes — untick one first.", 6000)
             return
+        self._style_row(idx)
         self._count()
         self.on_change()
 
     def _count(self):
-        self.count.setText(f"{len(self.unlocked())} of {sandbox.HEROES_MAX} unlocked")
+        n = len(self.unlocked())
+        set_chip(self.count, f"{n} of {sandbox.HEROES_MAX} unlocked", "info",
+                 tip=f"The client's cap is {sandbox.HEROES_MAX} heroes (PtPlayer:332).")
 
     def _prof_changed(self, idx):
         if self.rows[idx][0].isChecked():
@@ -556,19 +784,55 @@ class PartyTab(QWidget):
             set_combo(prof, hp)
             lvl.setValue(int(h.get("level", 3)))
             chk.setChecked(True)
+        for idx in self.rows:
+            self._style_row(idx)
         self._count()
         self.on_change()
 
 
 # ---------------------------------------------------------------- Enemies
 
-class MemberEditor(QGroupBox):
-    def __init__(self, names, on_remove, parent=None):
-        super().__init__("hostile", parent)
+def scrolled(widget):
+    """A page that scrolls when the window is short, with no frame of its own."""
+    area = QScrollArea()
+    area.setWidgetResizable(True)
+    area.setFrameShape(QFrame.NoFrame)
+    area.setWidget(widget)
+    return area
+
+
+class MemberEditor(QWidget):
+    """One hostile: its body, its weapon, its bar, its ranks -- one page of the
+    Enemies tab's detail pane."""
+
+    def __init__(self, names, on_remove, on_change=None, parent=None):
+        super().__init__(parent)
         self.names = names
-        outer = QVBoxLayout(self)
-        form = QFormLayout()
-        self.template = Picker()
+        self.on_change = on_change or (lambda _ed: None)
+        self.where = (1, 1)
+        page = QVBoxLayout(self)
+        page.setContentsMargins(0, 0, 8, 0)
+        page.setSpacing(12)
+
+        head = QHBoxLayout()
+        titles = QVBoxLayout()
+        titles.setSpacing(2)
+        self.title = role_label("", "title")
+        self.subtitle = role_label("", "subtitle")
+        titles.addWidget(self.title)
+        titles.addWidget(self.subtitle)
+        head.addLayout(titles)
+        head.addStretch(1)
+        self.remove_b = button("Remove hostile", "danger", icon="trash")
+        self.remove_b.clicked.connect(lambda: on_remove(self))
+        head.addWidget(self.remove_b, 0, Qt.AlignTop)
+        page.addLayout(head)
+
+        top = QHBoxLayout()
+        top.setSpacing(12)
+        body = card("Body")
+        form = form_layout()
+        self.template = Picker(chars=10)
         self.template.set_choices(template_choices(names.world))
         self.level = QSpinBox()
         self.level.setRange(0, sandbox.LEVEL_MAX)
@@ -576,58 +840,108 @@ class MemberEditor(QGroupBox):
         self.health = QSpinBox()
         self.health.setRange(1, 10000)
         self.health.setValue(120)
-        self.boss = QCheckBox("the BOSS (the quest's kill; glows)")
+        self.health.setSuffix(" hp")
+        self.boss = QCheckBox("Boss")
+        self.boss.setToolTip("The quest's kill objective (corridor_boss). Exactly one hostile, "
+                             "in the last group.")
         self.glow = QSpinBox()
         self.glow.setRange(0, sandbox.GLOW_MAX)
         self.glow.setValue(sandbox.DEFAULT_GLOW)
-        self.weapon_item = Picker()
-        items = sorted(k for k in names.world.rows("item")
-                       if not any(w in k for w in ("_body", "_boots", "_legs", "_gloves",
-                                                   "_head", "backpack", "costume")))
-        self.weapon_item.set_choices([("(none: the template's swing)", "")] + [(k, k) for k in items])
+        self.glow.setToolTip(f"0..{sandbox.GLOW_MAX}; the client asserts past "
+                             f"{sandbox.GLOW_MAX} (ConstGlow.cpp:42). Boss only.")
+        form.addRow("Template", self.template)
+        form.addRow("Level", self.level)
+        form.addRow("Health", self.health)
+        form.addRow("", self.boss)
+        form.addRow("Glow", self.glow)
+        body.body.addLayout(form)
+        body.body.addWidget(caption("The boss is the quest's kill, and it glows."))
+        body.body.addStretch(1)
+
+        weapon = card("Weapon")
+        wform = form_layout()
+        self.weapon_item = Picker(chars=10)
+        self.weapon_item.set_choices([("(none: the template's swing)", "")]
+                                     + [(k, k) for k in weapon_keys(names.world)])
         self.speed = QDoubleSpinBox()
         self.speed.setRange(0.0, 5.0)
         self.speed.setSingleStep(0.05)
-        self.speed.setSpecialValueText("(the weapon's)")
+        self.speed.setSuffix(" s")
+        self.speed.setSpecialValueText("the weapon's")
+        self.speed.setMinimumWidth(120)
         self.dlo, self.dhi = QSpinBox(), QSpinBox()
         for s in (self.dlo, self.dhi):
             s.setRange(0, 200)
+            s.setMinimumWidth(72)
+        self.dlo.setAccessibleName("Damage, low")
+        self.dhi.setAccessibleName("Damage, high")
         self.dhi.setValue(0)
-        form.addRow("template", self.template)
-        form.addRow("level", self.level)
-        form.addRow("health", self.health)
-        form.addRow("", self.boss)
-        form.addRow("glow (boss only, 0..10)", self.glow)
-        form.addRow("weapon item", self.weapon_item)
-        form.addRow("attack interval s", self.speed)
         dmg = QHBoxLayout()
-        dmg.addWidget(self.dlo)
-        dmg.addWidget(QLabel("to"))
-        dmg.addWidget(self.dhi)
-        dmg.addWidget(QLabel("(0-0 = the item's own range)"))
-        form.addRow("damage", dmg)
-        outer.addLayout(form)
-        outer.addWidget(QLabel("skill bar (the template's profession and the common skills)"))
+        dmg.setSpacing(8)
+        dmg.addWidget(self.dlo, 1)
+        dmg.addWidget(role_label("to", "caption"))
+        dmg.addWidget(self.dhi, 1)
+        wform.addRow("Weapon item", self.weapon_item)
+        wform.addRow("Attack interval", self.speed)
+        wform.addRow("Damage", dmg)
+        weapon.body.addLayout(wform)
+        weapon.body.addWidget(caption("An interval of 0 uses the weapon's own; damage 0 to 0 "
+                                      "uses the item's own range."))
+        weapon.body.addStretch(1)
+        top.addWidget(body, 1)
+        top.addWidget(weapon, 1)
+        page.addLayout(top)
+
+        bar = card("Skill bar")
+        bar.body.addWidget(caption("From the template's profession and the common skills."))
         self.bar = Bar(names)
-        outer.addWidget(self.bar)
+        bar.body.addWidget(self.bar)
+        page.addWidget(bar)
+
         self.ranks = Ranks(names)
-        outer.addWidget(self.ranks)
-        rm = QPushButton("remove this hostile")
-        rm.clicked.connect(lambda: on_remove(self))
-        outer.addWidget(rm)
+        ranks = card("Attributes", trailing=self.ranks.chip)
+        ranks.body.addWidget(self.ranks)
+        page.addWidget(ranks)
+        page.addStretch(1)
+
         self.template.currentIndexChanged.connect(self._template)
         self.level.valueChanged.connect(self.ranks.set_level)
+        self.level.valueChanged.connect(lambda _v: self._changed())
+        self.boss.toggled.connect(self._boss)
         self._template()
+        self._boss(self.boss.isChecked())
 
     def profession(self):
         row = self.names.world.rows("npc").get(self.template.value()) or {}
         return int(row.get("profession", 0) or 0)
 
+    def display_name(self):
+        return self.template.currentText().split("  [")[0] or "hostile"
+
+    def set_where(self, group, member):
+        self.where = (group, member)
+        self._titles()
+
+    def _titles(self):
+        prof = sandbox.PROFESSIONS.get(self.profession(), "no profession")
+        g, m = self.where
+        self.title.setText(self.display_name())
+        self.subtitle.setText(f"{prof}  ·  group {g}, hostile {m}"
+                              + ("  ·  the boss" if self.boss.isChecked() else ""))
+
     def _template(self):
         prof = self.profession()
         self.bar.set_professions((prof,))
         self.ranks.set_professions((prof,), max(1, self.level.value()))
-        self.setTitle(f"hostile -- {sandbox.PROFESSIONS.get(prof, 'no profession')}")
+        self._changed()
+
+    def _boss(self, on):
+        self.glow.setEnabled(bool(on))
+        self._changed()
+
+    def _changed(self):
+        self._titles()
+        self.on_change(self)
 
     def to_spec(self):
         m = {"npc": self.template.value(), "level": self.level.value(),
@@ -656,49 +970,92 @@ class MemberEditor(QGroupBox):
         self.dhi.setValue(int(d[1]))
         self.bar.set_values(m.get("skills"))
         self.ranks.set_ranks(m.get("attributes"))
+        self._changed()
 
 
-class GroupEditor(QGroupBox):
-    def __init__(self, names, index, on_remove, parent=None):
-        super().__init__(f"group {index}", parent)
-        self.names = names
-        outer = QVBoxLayout(self)
-        top = QHBoxLayout()
-        self.add = QPushButton("add a hostile")
-        self.add.clicked.connect(lambda: self.add_member())
-        self.count = QLabel("")
-        rm = QPushButton("remove this group")
-        rm.clicked.connect(lambda: on_remove(self))
-        top.addWidget(self.add)
-        top.addWidget(self.count)
-        top.addStretch(1)
-        top.addWidget(rm)
-        outer.addLayout(top)
-        self.lay = QHBoxLayout()
-        outer.addLayout(self.lay)
+class GroupEditor(QWidget):
+    """One group: its page in the detail pane, and the owner of its hostiles."""
+
+    def __init__(self, owner, index, parent=None):
+        super().__init__(parent)
+        self.owner = owner
+        self.names = owner.names
+        self.index = index
         self.members = []
+        page = QVBoxLayout(self)
+        page.setContentsMargins(0, 0, 8, 0)
+        page.setSpacing(12)
+        head = QHBoxLayout()
+        titles = QVBoxLayout()
+        titles.setSpacing(2)
+        self.title = role_label("", "title")
+        self.subtitle = role_label("", "subtitle")
+        titles.addWidget(self.title)
+        titles.addWidget(self.subtitle)
+        head.addLayout(titles)
+        head.addStretch(1)
+        self.remove_b = button("Remove group", "danger", icon="trash")
+        self.remove_b.clicked.connect(lambda: owner.remove(self))
+        head.addWidget(self.remove_b, 0, Qt.AlignTop)
+        page.addLayout(head)
+        self.count = chip("", "info")
+        box = card("Hostiles", trailing=self.count)
+        box.body.addWidget(caption(
+            "A group spawns together; its hostiles stand side by side. Select one in the "
+            "list to edit it."))
+        row = QHBoxLayout()
+        self.add = button("Add hostile", icon="plus")
+        self.add.clicked.connect(lambda: owner.select(self.add_member()))
+        row.addWidget(self.add)
+        row.addStretch(1)
+        box.body.addLayout(row)
+        page.addWidget(box)
+        page.addStretch(1)
+        self.set_index(index)
         self._count()
+
+    def set_index(self, index):
+        self.index = index
+        self.title.setText(f"Group {index}")
+        last = index == len(self.owner.groups) or not self.owner.groups
+        self.subtitle.setText(f"{index} of {max(len(self.owner.groups), index)} along the "
+                              f"corridor, south to north"
+                              + ("  ·  holds the boss" if last else ""))
+        for m, ed in enumerate(self.members, 1):
+            ed.set_where(index, m)
+
+    def setTitle(self, text):                 # the old QGroupBox call, kept for callers
+        m = re.search(r"\d+", text)
+        if m:
+            self.set_index(int(m.group(0)))
 
     def add_member(self, spec=None):
         if len(self.members) >= sandbox.GROUP_SIZE_MAX:
             return None
-        ed = MemberEditor(self.names, self.remove)
+        ed = MemberEditor(self.names, self.remove, self.owner._member_changed)
         if spec:
             ed.from_spec(spec)
-        self.lay.addWidget(ed)
         self.members.append(ed)
+        ed.set_where(self.index, len(self.members))
+        self.owner._attach(ed)
         self._count()
+        self.owner._structure_changed()
         return ed
 
     def remove(self, ed):
         self.members.remove(ed)
-        ed.setParent(None)
-        ed.deleteLater()
+        self.owner._detach(ed)
+        for m, e in enumerate(self.members, 1):
+            e.set_where(self.index, m)
         self._count()
+        self.owner._structure_changed(select=self if not self.members else self.members[0])
 
     def _count(self):
-        self.count.setText(f"{len(self.members)} of {sandbox.GROUP_SIZE_MAX}")
-        self.add.setEnabled(len(self.members) < sandbox.GROUP_SIZE_MAX)
+        n = len(self.members)
+        set_chip(self.count, f"{n} of {sandbox.GROUP_SIZE_MAX}",
+                 "warn" if not n else "info",
+                 tip="An empty group spawns nothing." if not n else None)
+        self.add.setEnabled(n < sandbox.GROUP_SIZE_MAX)
 
     def to_spec(self):
         return {"members": [m.to_spec() for m in self.members]}
@@ -711,115 +1068,404 @@ class GroupEditor(QGroupBox):
 
 
 class EnemiesTab(QWidget):
+    """The encounter as a list on the left and the selected group or hostile
+    on the right. The old tab laid four hostile forms side by side in a
+    scroll area, each ~940 px wide, so the second always ran off the edge."""
+    changed = Signal()
+
     def __init__(self, names, parent=None):
         super().__init__(parent)
         self.names = names
-        outer = QVBoxLayout(self)
-        top = QHBoxLayout()
-        self.add = QPushButton("add a group")
-        self.add.clicked.connect(lambda: self.add_group())
-        self.count = QLabel("")
-        top.addWidget(self.add)
-        top.addWidget(self.count)
-        top.addWidget(QLabel("groups stand along the corridor south to north; the LAST "
-                             "group holds the boss at the north end"))
-        top.addStretch(1)
-        outer.addLayout(top)
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        self.inner = QWidget()
-        self.lay = QVBoxLayout(self.inner)
-        self.lay.addStretch(1)
-        scroll.setWidget(self.inner)
-        outer.addWidget(scroll)
         self.groups = []
-        self._count()
+        self._pages = {}                        # editor -> its page in the stack
+        self._building = False
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(16, 16, 16, 12)
+        outer.setSpacing(16)
+
+        self.count = chip("", "info")
+        left = card("Encounter", trailing=self.count)
+        left.setFixedWidth(300)
+        self.tree = QTreeWidget()
+        self.tree.setProperty("role", "flat")
+        self.tree.setColumnCount(2)
+        self.tree.setHeaderHidden(True)
+        self.tree.setIndentation(14)
+        self.tree.setRootIsDecorated(False)
+        self.tree.setUniformRowHeights(True)
+        self.tree.setAccessibleName("Groups and hostiles")
+        self.tree.header().setStretchLastSection(False)
+        self.tree.header().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.tree.header().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.tree.itemSelectionChanged.connect(self._selected)
+        left.body.addWidget(self.tree, 1)
+        btns = QHBoxLayout()
+        btns.setSpacing(6)
+        self.add = button("Group", "quiet", icon="plus", name="Add a group",
+                          tip=f"Add a group (up to {sandbox.GROUPS_MAX}).")
+        self.add_member_b = button("Hostile", "quiet", icon="plus", name="Add a hostile",
+                                   tip=f"Add a hostile to the selected group (up to "
+                                       f"{sandbox.GROUP_SIZE_MAX}).")
+        # icon-only: three labelled buttons do not fit the list's width, and the
+        # group and hostile pages carry a labelled Remove of their own
+        self.remove_b = button("", "quiet", icon="remove", name="Remove the selection",
+                               tip="Remove the selected hostile, or the selected group "
+                                   "with its hostiles.")
+        self.add.clicked.connect(lambda: self.select(self.add_group()))
+        self.add_member_b.clicked.connect(self._add_member_here)
+        self.remove_b.clicked.connect(self._remove_selected)
+        for b in (self.add, self.add_member_b, self.remove_b):
+            btns.addWidget(b)
+        btns.addStretch(1)
+        left.body.addLayout(btns)
+        left.body.addWidget(caption("Groups stand along the corridor, south to north. The "
+                                    "last group holds the boss at the north end."))
+        outer.addWidget(left)
+
+        self.stack = QStackedWidget()
+        self.empty = QWidget()
+        ev = QVBoxLayout(self.empty)
+        ev.addStretch(1)
+        t = role_label("No hostile groups", "empty_title")
+        t.setAlignment(Qt.AlignCenter)
+        ev.addWidget(t)
+        c = caption("A run needs at least one group, and the last group's boss is the "
+                    "quest's kill.")
+        c.setAlignment(Qt.AlignCenter)
+        ev.addWidget(c)
+        eb = QHBoxLayout()
+        eb.addStretch(1)
+        self.empty_add = button("Add a group", icon="plus")
+        self.empty_add.clicked.connect(lambda: self.select(self.add_group()))
+        eb.addWidget(self.empty_add)
+        eb.addStretch(1)
+        ev.addLayout(eb)
+        ev.addStretch(2)
+        self.stack.addWidget(self.empty)
+        outer.addWidget(self.stack, 1)
+        self._structure_changed()
+
+    # ---- pages
+
+    def _attach(self, ed):
+        page = scrolled(ed)
+        self._pages[ed] = page
+        self.stack.addWidget(page)
+
+    def _detach(self, ed):
+        page = self._pages.pop(ed, None)
+        if page is not None:
+            self.stack.removeWidget(page)
+            page.setParent(None)
+            page.deleteLater()
+
+    # ---- structure
 
     def add_group(self, spec=None):
         if len(self.groups) >= sandbox.GROUPS_MAX:
             return None
-        ed = GroupEditor(self.names, len(self.groups) + 1, self.remove)
+        building, self._building = self._building, True
+        ed = GroupEditor(self, len(self.groups) + 1)
+        self.groups.append(ed)
+        self._attach(ed)
         if spec:
             ed.from_spec(spec)
         else:
             ed.add_member()
-        self.lay.insertWidget(self.lay.count() - 1, ed)
-        self.groups.append(ed)
-        self._count()
+        self._building = building
+        self._renumber()
+        self._structure_changed()
         return ed
 
     def remove(self, ed):
+        for m in list(ed.members):
+            self._detach(m)
         self.groups.remove(ed)
-        ed.setParent(None)
-        ed.deleteLater()
-        for i, g in enumerate(self.groups, 1):
-            g.setTitle(f"group {i}")
-        self._count()
+        self._detach(ed)
+        self._renumber()
+        self._structure_changed(select=(self.groups[-1] if self.groups else None))
 
-    def _count(self):
-        self.count.setText(f"{len(self.groups)} of {sandbox.GROUPS_MAX}")
+    def _renumber(self):
+        for i, g in enumerate(self.groups, 1):
+            g.set_index(i)
+
+    def _group_of(self, ed):
+        for g in self.groups:
+            if ed is g or ed in g.members:
+                return g
+        return None
+
+    def _add_member_here(self):
+        g = self._group_of(self.current()) or (self.groups[-1] if self.groups else None)
+        if g is None:
+            g = self.add_group()
+            self.select(g.members[0] if g and g.members else g)
+            return
+        self.select(g.add_member())
+
+    def _remove_selected(self):
+        cur = self.current()
+        if isinstance(cur, MemberEditor):
+            g = self._group_of(cur)
+            if g:
+                g.remove(cur)
+        elif isinstance(cur, GroupEditor):
+            self.remove(cur)
+
+    # ---- the list
+
+    def current(self):
+        items = self.tree.selectedItems()
+        return items[0].data(0, Qt.UserRole) if items else None
+
+    def select(self, ed):
+        if ed is None:
+            return
+        for item in self._walk():
+            if item.data(0, Qt.UserRole) is ed:
+                self.tree.setCurrentItem(item)
+                return
+
+    def _walk(self):
+        for i in range(self.tree.topLevelItemCount()):
+            top = self.tree.topLevelItem(i)
+            yield top
+            for j in range(top.childCount()):
+                yield top.child(j)
+
+    def _member_texts(self, ed):
+        abbrev = sandbox.ABBREV.get(ed.profession(), "-")
+        tail = f"{abbrev}  L{ed.level.value()}"
+        return ed.display_name(), ("boss  ·  " + tail if ed.boss.isChecked() else tail)
+
+    def _decorate(self, item, ed):
+        a, b = self._member_texts(ed)
+        item.setText(0, a)
+        item.setText(1, b)
+        item.setForeground(1, QColor(orchui.PAL["muted"]))
+        f = item.font(0)
+        f.setWeight(QFont.DemiBold if ed.boss.isChecked() else QFont.Normal)
+        item.setFont(0, f)
+        item.setToolTip(0, f"{ed.template.currentText()}"
+                        + ("\nthe boss: the quest's kill objective" if ed.boss.isChecked() else ""))
+
+    def _member_changed(self, ed):
+        if self._building:
+            return
+        for item in self._walk():
+            if item.data(0, Qt.UserRole) is ed:
+                self._decorate(item, ed)
+        self.changed.emit()
+
+    def _structure_changed(self, select=None):
+        if self._building:
+            return
+        keep = select if select is not None else self.current()
+        self.tree.blockSignals(True)
+        self.tree.clear()
+        for g in self.groups:
+            top = QTreeWidgetItem([f"Group {g.index}", f"{len(g.members)} of "
+                                                       f"{sandbox.GROUP_SIZE_MAX}"])
+            top.setData(0, Qt.UserRole, g)
+            f = top.font(0)
+            f.setWeight(QFont.DemiBold)
+            top.setFont(0, f)
+            top.setForeground(1, QColor(orchui.PAL["muted"]))
+            self.tree.addTopLevelItem(top)
+            for ed in g.members:
+                child = QTreeWidgetItem(["", ""])
+                child.setData(0, Qt.UserRole, ed)
+                self._decorate(child, ed)
+                top.addChild(child)
+            top.setExpanded(True)
+        self.tree.blockSignals(False)
+        set_chip(self.count, f"{len(self.groups)} of {sandbox.GROUPS_MAX} groups",
+                 "warn" if not self.groups else "info")
         self.add.setEnabled(len(self.groups) < sandbox.GROUPS_MAX)
+        alive = [x for g in self.groups for x in [g] + g.members]
+        target = keep if keep in alive else (self.groups[0].members[0] if self.groups
+                                             and self.groups[0].members else
+                                             (self.groups[0] if self.groups else None))
+        if target is not None:
+            self.select(target)
+        self._selected()
+        self.changed.emit()
+
+    def _selected(self):
+        cur = self.current()
+        page = self._pages.get(cur)
+        self.stack.setCurrentWidget(page if page is not None else self.empty)
+        g = self._group_of(cur)
+        self.add_member_b.setEnabled(bool(self.groups) and
+                                     (g is None or len(g.members) < sandbox.GROUP_SIZE_MAX))
+        self.remove_b.setEnabled(cur is not None)
 
     def to_spec(self):
         return [g.to_spec() for g in self.groups]
 
     def from_spec(self, groups):
+        self._building = True
         for g in list(self.groups):
-            self.remove(g)
+            for m in list(g.members):
+                self._detach(m)
+            self._detach(g)
+        self.groups = []
         for g in groups or []:
             self.add_group(g)
+        self._building = False
+        self._renumber()
+        self._structure_changed(select=None)
 
 
 # ---------------------------------------------------------------- Run
+
+LOG_ERROR = re.compile(r"^Traceback|\bERROR\b|\[FAIL\]|Error:|Exception\b")
+
+
+def write_lines(view, lines):
+    """Append [(text, kind)] to a plain-text view, one char format per line --
+    never HTML, so a '<' in a process's output is a '<'. The registers are
+    weight for structure and a state colour only where it is unambiguous."""
+    pal = orchui.PAL
+    cur = view.textCursor()
+    cur.movePosition(QTextCursor.End)
+    for text, kind in lines:
+        fmt = QTextCharFormat()
+        fmt.setForeground(QColor(pal[{"head": "text", "note": "warn_text", "error": "error_text",
+                                      "quiet": "muted"}.get(kind, "log_fg")]))
+        fmt.setFontWeight(QFont.DemiBold if kind in ("head", "echo") else QFont.Normal)
+        if not view.document().isEmpty():
+            cur.insertBlock()
+        cur.insertText(text, fmt)
+    view.setTextCursor(cur)
+    view.ensureCursorVisible()
+
+
+def compiled_lines(compiled):
+    """The compiler's summary, reflowed for reading: each gamesrv flag on its
+    own line, the store's notes in the warning register. Nothing is dropped."""
+    out = []
+    for i, ln in enumerate(sandbox.summary(compiled)):
+        s = ln.strip()
+        if s.startswith("gamesrv:"):
+            out.append(("  gamesrv", "head"))
+            flag = []
+            for tok in compiled["args"]:
+                if tok.startswith("--") and flag:
+                    out.append(("    " + " ".join(flag), "body"))
+                    flag = []
+                flag.append(tok)
+            if flag:
+                out.append(("    " + " ".join(flag), "body"))
+        elif s.startswith(("NOTE:", "STORE:")):
+            out.append((ln, "note"))
+        else:
+            out.append((ln, "head" if i == 0 else "body"))
+    out += [("", "body"), ("command", "head"), ("  " + " ".join(compiled["command"]), "body"),
+            ("", "body"), (f"overlay  ->  {compiled['overlay_path']}", "head")]
+    for ln in compiled["overlay"].splitlines():
+        out.append((ln, "quiet" if ln.lstrip().startswith("#") else "body"))
+    return out
+
 
 class RunTab(QWidget):
     def __init__(self, window, parent=None):
         super().__init__(parent)
         self.window = window
-        outer = QVBoxLayout(self)
-        form = QFormLayout()
-        self.name = QLineEdit("slice")
-        form.addRow("spec name", self.name)
+        outer = orchui.page_layout(self)
+        top = QHBoxLayout()
+        top.setSpacing(16)
+        opts = card("Launch options")
+        form = form_layout()
         self.hold = QSpinBox()
         self.hold.setRange(0, 7200)
+        self.hold.setSuffix(" s")
         self.hold.setSpecialValueText("until the client closes")
-        form.addRow("end after (s)", self.hold)
-        outer.addLayout(form)
+        self.hold.setFixedWidth(220)
+        form.addRow("End after", self.hold)
+        opts.body.addLayout(form)
+        opts.body.addWidget(caption("The harness logs the client in — hands off the keyboard "
+                                    "while it says so. Closing the game client ends the run "
+                                    "and the stack."))
+        opts.body.addStretch(1)
+        store = card("Stored character")
+        store.body.addWidget(caption(
+            "What you set in game (bars, ranks, hero builds) carries to the next run. "
+            "A reset makes the next login start fresh; the spec is untouched.",
+            tip="Every sandbox run passes --persist; the store is vault/state/characters/."))
+        self.reset_b = button("Reset stored character…", "danger", icon="trash",
+                              name="Reset the stored character")
         row = QHBoxLayout()
-        self.save_b, self.load_b = QPushButton("save spec"), QPushButton("load spec")
-        self.example_b = QPushButton("load the slice")
-        self.compile_b = QPushButton("COMPILE")
-        self.launch_b = QPushButton("LAUNCH")
-        self.stop_b = QPushButton("stop")
-        self.reset_b = QPushButton("reset the stored character")
-        self.stop_b.setEnabled(False)
-        for b in (self.save_b, self.load_b, self.example_b, self.compile_b, self.launch_b,
-                  self.stop_b, self.reset_b):
-            row.addWidget(b)
-        outer.addLayout(row)
-        self.status = QLabel("")
+        row.addWidget(self.reset_b)
+        row.addStretch(1)
+        store.body.addLayout(row)
+        store.body.addStretch(1)
+        top.addWidget(opts, 1)
+        top.addWidget(store, 1)
+        outer.addLayout(top)
+
+        srow = QHBoxLayout()
+        srow.setSpacing(10)
+        self.state = chip("Not compiled", "info")
+        self.status = QLabel("Compile shows the overlay and the command before anything runs.")
         self.status.setWordWrap(True)
-        outer.addWidget(self.status)
+        self.status.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        srow.addWidget(self.state, 0, Qt.AlignTop)
+        srow.addWidget(self.status, 1)
+        outer.addLayout(srow)
+
+        split = QSplitter(Qt.Vertical)
+        split.setChildrenCollapsible(False)
+        split.setHandleWidth(10)
         self.summary = QPlainTextEdit()
         self.summary.setReadOnly(True)
         self.summary.setMaximumBlockCount(4000)
-        outer.addWidget(QLabel("compiled: what the server is told, what the store already "
-                               "holds, then the overlay"))
-        outer.addWidget(self.summary, 1)
+        self.summary.setLineWrapMode(QPlainTextEdit.NoWrap)
+        self.summary.setAccessibleName("Compiled spec")
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
         self.log.setMaximumBlockCount(20000)
-        outer.addWidget(QLabel("the run's output (session.py)"))
-        outer.addWidget(self.log, 2)
-        self.save_b.clicked.connect(self.save)
-        self.load_b.clicked.connect(self.load)
-        self.example_b.clicked.connect(lambda: self.window.from_spec(sandbox.example_spec()))
-        self.compile_b.clicked.connect(self.compile)
-        self.launch_b.clicked.connect(self.launch)
-        self.stop_b.clicked.connect(self.stop)
+        self.log.setAccessibleName("Run output")
+        for title, note, view in (
+                ("Compiled", "what the server is told, what the store already holds, "
+                             "then the overlay", self.summary),
+                ("Output", "the harness, session.py, streamed", self.log)):
+            pane = QWidget()
+            pv = QVBoxLayout(pane)
+            pv.setContentsMargins(0, 0, 0, 0)
+            pv.setSpacing(6)
+            ph = QHBoxLayout()
+            ph.setSpacing(10)
+            ph.addWidget(overline(title))
+            ph.addWidget(role_label(note, "caption"))
+            ph.addStretch(1)
+            pv.addLayout(ph)
+            pv.addWidget(view, 1)
+            split.addWidget(pane)
+        split.setStretchFactor(0, 1)
+        split.setStretchFactor(1, 1)
+        outer.addWidget(split, 1)
+
         self.reset_b.clicked.connect(self.reset)
         self.proc = None
         self.compiled = None
+        self._partial = ""
+        self.clock = QElapsedTimer()
+        self.ticker = QTimer(self)
+        self.ticker.setInterval(1000)
+        self.ticker.timeout.connect(self._tick)
+        self.compile_b = self.launch_b = self.stop_b = None
+
+    def bind(self, compile_b, launch_b, stop_b):
+        """The verbs live in the window's header, reachable from every tab."""
+        self.compile_b, self.launch_b, self.stop_b = compile_b, launch_b, stop_b
+        compile_b.clicked.connect(self.compile)
+        launch_b.clicked.connect(self.launch)
+        stop_b.clicked.connect(self.stop)
+        stop_b.setEnabled(False)
+
+    def _say(self, text, ms=6000):
+        self.window.statusBar().showMessage(text, ms)
 
     def specs_dir(self):
         d = vaultpath.vault_path("sandbox")
@@ -830,23 +1476,23 @@ class RunTab(QWidget):
         spec = self.window.to_spec()
         if not path:
             path, _f = QFileDialog.getSaveFileName(
-                self, "save the spec", os.path.join(self.specs_dir(), f"{spec['name']}.toml"),
+                self, "Save the spec", os.path.join(self.specs_dir(), f"{spec['name']}.toml"),
                 "TOML (*.toml)")
         if not path:
             return None
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(sandbox.spec_toml(spec))
-        self.status.setText(f"saved {path}")
+        self._say(f"Saved {path}")
         return path
 
     def load(self, path=None):
         if not path:
-            path, _f = QFileDialog.getOpenFileName(self, "load a spec", self.specs_dir(),
+            path, _f = QFileDialog.getOpenFileName(self, "Open a spec", self.specs_dir(),
                                                    "TOML (*.toml)")
         if not path:
             return
         self.window.from_spec(sandbox.load_spec(path))
-        self.status.setText(f"loaded {path}")
+        self._say(f"Opened {path}")
 
     def compile(self):
         spec = self.window.to_spec()
@@ -862,31 +1508,43 @@ class RunTab(QWidget):
                                                  exe=exe, dat=dat,
                                                  hold=self.hold.value() or None)
         except sandbox.SpecError as exc:
-            self.summary.setPlainText(str(exc))
-            self.status.setText("REFUSED -- fix the spec")
+            self.summary.clear()
+            text = str(exc).splitlines() or ["refused"]
+            write_lines(self.summary, [(text[0], "head")] + [(t, "error") for t in text[1:]])
+            set_chip(self.state, "Refused", "crit")
+            self.status.setText("The compiler refused the spec; the reasons are below. Fix "
+                                "them and compile again.")
             return None
-        lines = sandbox.summary(self.compiled)
-        lines += ["", "command: " + " ".join(self.compiled["command"]), "",
-                  "--- overlay ---", self.compiled["overlay"]]
-        self.summary.setPlainText("\n".join(lines))
-        self.status.setText(missing or
-                            f"compiled; the overlay goes to {self.compiled['overlay_path']}"
-                            + (f"; {len(self.compiled['store_warnings'])} note(s) about the "
-                               f"stored character above" if self.compiled["store_warnings"] else ""))
+        self.summary.clear()
+        write_lines(self.summary, compiled_lines(self.compiled))
+        self.summary.moveCursor(QTextCursor.Start)
+        notes = len(self.compiled["store_warnings"])
+        if missing:
+            set_chip(self.state, "Compiled — no slice archive", "warn")
+            self.status.setText(missing)
+        else:
+            set_chip(self.state, "Compiled", "good")
+            self.status.setText(f"The overlay goes to {self.compiled['overlay_path']}"
+                                + (f"; {notes} note(s) about the stored character below."
+                                   if notes else "."))
         return self.compiled
 
     def launch(self):
         if self.proc is not None:
             return
         if self.compile() is None:
+            self.window.tabs.setCurrentWidget(self)
             return
         try:
             sandbox.run_paths()
         except sandbox.SpecError as exc:
-            QMessageBox.warning(self, "no slice archive", str(exc))
+            QMessageBox.warning(self, "No slice archive", str(exc))
             return
         sandbox.write_overlay(self.compiled)
         self.log.clear()
+        self._partial = ""
+        cmd = self.compiled["command"]
+        write_lines(self.log, [("$ " + " ".join(cmd), "echo")])
         self.proc = QProcess(self)
         env = QProcessEnvironment.systemEnvironment()
         for k, v in self.compiled["env"].items():
@@ -896,50 +1554,126 @@ class RunTab(QWidget):
         self.proc.setProcessChannelMode(QProcess.MergedChannels)
         self.proc.readyReadStandardOutput.connect(self._read)
         self.proc.finished.connect(self._done)
-        cmd = self.compiled["command"]
         self.proc.start(cmd[0], cmd[1:])
-        self.launch_b.setEnabled(False)
-        self.stop_b.setEnabled(True)
-        self.status.setText("running: the game client is coming up. Play; closing it ends "
-                            "the run and the stack. Hands off the keyboard while the harness "
-                            "logs in (it says when).")
+        self._busy(True)
+        self.clock.start()
+        self.ticker.start()
+        self._tick()
+        self.window.tabs.setCurrentWidget(self)
+        self.status.setText("The game client is coming up. Play; closing it ends the run and "
+                            "the stack. Hands off the keyboard while the harness logs in "
+                            "(it says when).")
+
+    def _busy(self, on):
+        """Mirror the run onto the verbs that started it: a re-click on a
+        running Launch used to vanish without a word."""
+        self.launch_b.setEnabled(not on)
+        self.launch_b.setText("Running…" if on else "Launch")
+        self.compile_b.setEnabled(not on)
+        self.stop_b.setEnabled(on)
+
+    def _tick(self):
+        secs = self.clock.elapsed() // 1000
+        set_chip(self.state, f"Running  {secs // 60}:{secs % 60:02d}", "info")
 
     def _read(self):
-        data = bytes(self.proc.readAllStandardOutput()).decode("utf-8", "replace")
-        self.log.appendPlainText(data.rstrip("\n"))
+        data = self._partial + bytes(self.proc.readAllStandardOutput()).decode("utf-8", "replace")
+        lines = data.replace("\r\n", "\n").split("\n")
+        self._partial = lines.pop()
+        write_lines(self.log, [(ln, "error" if LOG_ERROR.search(ln) else "body") for ln in lines])
 
     def _done(self, code, _status):
-        self.log.appendPlainText(f"\n[session.py exited with code {code}]")
-        self.status.setText(f"the run ended (exit {code}); the report is under "
-                            f"vault/captures/harness/")
+        if self._partial:
+            write_lines(self.log, [(self._partial, "error" if LOG_ERROR.search(self._partial)
+                                    else "body")])
+            self._partial = ""
+        write_lines(self.log, [("", "body"), (f"[session.py exited with code {code}]", "echo")])
+        self.ticker.stop()
+        set_chip(self.state, f"Ended  ·  exit {code}", "good" if code == 0 else "warn")
+        self.status.setText("The run ended; the report and the server logs are under "
+                            "vault/captures/harness/.")
         self.proc = None
-        self.launch_b.setEnabled(True)
-        self.stop_b.setEnabled(False)
+        self._busy(False)
 
     def stop(self):
         if self.proc is not None:
             self.proc.kill()
-            self.status.setText("killed the harness; its servers are stopped by --replace "
-                                "on the next launch if any survived")
+            self._say("Killed the harness; --replace stops any server that survived on the "
+                      "next launch.", 8000)
 
     def reset(self, confirm=True):
         path = sandbox.store_path()
         if not path or not os.path.isfile(path):
-            self.status.setText("no stored character to reset")
+            self._say("No stored character to reset.")
             return False
         if confirm:
             ok = QMessageBox.question(
-                self, "reset the stored character",
+                self, "Reset the stored character",
                 f"Delete {path}?\n\nThe next login starts a fresh character: an empty bar, "
                 f"every attribute point unspent, no hero builds. The spec is untouched.")
             if ok != QMessageBox.Yes:
                 return False
         removed = sandbox.reset_store()
-        self.status.setText(f"removed {removed}; the next login re-seeds the character")
+        self._say(f"Removed {removed}; the next login re-seeds the character.", 8000)
         return True
 
 
 # ---------------------------------------------------------------- the window
+
+class Header(QFrame):
+    """The spec and the verbs, above the tabs so Launch is one click from
+    anywhere. Launch is the window's only accent."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setProperty("role", "header")
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(16, 12, 16, 12)
+        lay.setSpacing(16)
+        left = QVBoxLayout()
+        left.setSpacing(6)
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        row.addWidget(overline("Spec"))
+        self.name = QLineEdit("slice")
+        self.name.setPlaceholderText("spec name")
+        self.name.setFixedWidth(220)
+        self.name.setAccessibleName("Spec name")
+        self.name.setToolTip("Names the overlay's directory, vault/sandbox/<name>/, and the "
+                             "saved file.")
+        row.addWidget(self.name)
+        row.addSpacing(4)
+        self.open_b = button("Open…", "quiet", icon="open", tip="Open a saved spec (TOML).",
+                             name="Open a spec")
+        self.save_b = button("Save…", "quiet", icon="save", tip="Save this spec as TOML.",
+                             name="Save the spec")
+        self.slice_b = button("Load slice", "quiet", icon="reset",
+                              tip="Replace every tab with the vertical slice's own setup.")
+        for b in (self.open_b, self.save_b, self.slice_b):
+            row.addWidget(b)
+        row.addStretch(1)
+        left.addLayout(row)
+        self.summary = role_label("", "subtitle")
+        self.summary.setAccessibleName("Spec summary")
+        left.addWidget(self.summary)
+        lay.addLayout(left, 1)
+        verbs = QHBoxLayout()
+        verbs.setSpacing(8)
+        self.compile_b = button("Compile", icon="compile",
+                                tip="Compile the spec: the overlay and the command, shown on the "
+                                    "Run tab before anything runs.")
+        self.launch_b = button("Launch", "primary", icon="play",
+                               tip="Compile, write the overlay and start the harness on the "
+                                   "slice archive.")
+        self.launch_b.setMinimumWidth(116)
+        self.stop_b = button("Stop", "quiet", icon="stop", tip="Kill the harness.")
+        for b in (self.compile_b, self.launch_b, self.stop_b):
+            verbs.addWidget(b)
+        right = QVBoxLayout()
+        right.addLayout(verbs)
+        right.addStretch(1)
+        lay.addLayout(right)
+
 
 class Window(QMainWindow):
     def __init__(self, world, names):
@@ -947,6 +1681,12 @@ class Window(QMainWindow):
         self.world, self.names = world, names
         self.setWindowTitle("Rurik run orchestrator")
         self.resize(1280, 860)
+        central = QWidget()
+        v = QVBoxLayout(central)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(0)
+        self.header = Header()
+        v.addWidget(self.header)
         self.tabs = QTabWidget()
         self.skills = SkillsTab(names)
         self.party = PartyTab(names, self._party_changed)
@@ -956,22 +1696,58 @@ class Window(QMainWindow):
         self.tabs.addTab(self.party, "Party")
         self.tabs.addTab(self.enemies, "Enemies")
         self.tabs.addTab(self.run, "Run")
-        self.setCentralWidget(self.tabs)
-        msg = names.why or "names resolved from the owner's archive"
-        self.statusBar().showMessage(msg)
+        v.addWidget(self.tabs, 1)
+        self.setCentralWidget(central)
+        self.run.bind(self.header.compile_b, self.header.launch_b, self.header.stop_b)
+        self.header.open_b.clicked.connect(lambda: self.run.load())
+        self.header.save_b.clicked.connect(lambda: self.run.save())
+        self.header.slice_b.clicked.connect(lambda: self.from_spec(sandbox.example_spec()))
+        if names.why:
+            names_chip = chip("ids only — names unresolved", "warn", tip=names.why)
+        else:
+            names_chip = chip("names from the owner's archive", "info",
+                              tip="Skill, hero and attribute names are read from the pinned "
+                                  "client at start; the spec on disk carries ids.")
+        self.statusBar().addPermanentWidget(names_chip)
+        self.statusBar().setSizeGripEnabled(False)
+        self._summary_timer = QTimer(self)
+        self._summary_timer.setSingleShot(True)
+        self._summary_timer.setInterval(50)
+        self._summary_timer.timeout.connect(self._refresh_summary)
+        self.skills.changed.connect(self._summary_timer.start)
+        self.enemies.changed.connect(self._summary_timer.start)
+        self.header.name.textChanged.connect(self._summary_timer.start)
+        self._refresh_summary()
 
     def _party_changed(self):
         prim, sec = self.party.professions()
         self.skills.set_party_professions({prim, sec} | set(self.party.hero_professions()))
+        self._summary_timer.start()
+
+    def spec_summary(self, spec=None):
+        spec = spec or self.to_spec()
+        p = spec["player"]
+        pair = sandbox.PROFESSIONS.get(p["profession"], "?") + (
+            "/" + sandbox.PROFESSIONS.get(p["secondary"], "?") if p["secondary"] else "")
+        nh = len(spec["heroes"])
+        groups = spec["groups"]
+        nm = sum(len(g["members"]) for g in groups)
+        return (f"{pair}, level {p['level']}   ·   {nh} hero{'es' if nh != 1 else ''}   ·   "
+                f"{len(groups)} group{'s' if len(groups) != 1 else ''}, "
+                f"{nm} hostile{'s' if nm != 1 else ''}   ·   "
+                f"{len(spec['unlocks']):,} of {self.skills.list.count():,} skills unlocked")
+
+    def _refresh_summary(self):
+        self.header.summary.setText(self.spec_summary())
 
     def to_spec(self):
-        return {"name": self.run.name.text().strip() or "sandbox",
+        return {"name": self.header.name.text().strip() or "sandbox",
                 "unlocks": self.skills.ids(),
                 "player": self.party.player_spec(), "heroes": self.party.heroes_spec(),
                 "groups": self.enemies.to_spec()}
 
     def from_spec(self, spec):
-        self.run.name.setText(str(spec.get("name") or "sandbox"))
+        self.header.name.setText(str(spec.get("name") or "sandbox"))
         self.party.from_spec(spec.get("player") or {}, spec.get("heroes"))
         unl = spec.get("unlocks")
         if unl is None:
@@ -981,9 +1757,23 @@ class Window(QMainWindow):
         else:
             self.skills.set_ids(int(k) for k in self.world.rows("skills"))
         self.enemies.from_spec(spec.get("groups"))
+        self._refresh_summary()
 
 
 # ---------------------------------------------------------------- smoke
+
+def _pixel(widget, x, y):
+    return widget.grab().toImage().pixelColor(x, y).name()
+
+
+def _near(a, b, tol=14):
+    return orchtheme.distance(a, b) <= tol
+
+
+def used_roles(win):
+    return {str(w.property("role")) for w in win.findChildren(QWidget)
+            if w.property("role") is not None}
+
 
 def smoke(win, app, out_dir):
     """`--smoke`: drive every panel once with the window up, then exit.
@@ -991,7 +1781,15 @@ def smoke(win, app, out_dir):
     A window nobody has clicked through is a window that may not open; this
     runs the click path in code so a refactor cannot leave a dead tab behind
     a green suite. Writes a screenshot and prints one line per check; exits
-    non-zero on any failure. Never writes into the working tree."""
+    non-zero on any failure. Never writes into the working tree.
+
+    The LOOK is checked here too, as laws rather than intentions (Dream-
+    World-IX: "a law in a docstring is a wish"): both palettes clear their
+    contrast floors, the sheet has none of the silent QSS faults, every role
+    the window uses is styled and every styled role is used, there is exactly
+    one accent, and the accent, a checked box and a well are the colours the
+    tokens say -- measured off the rendered pixels, because a property is not
+    a rendered colour."""
     out_dir = vaultpath.resolve_out(out_dir, what="smoke output")
     os.makedirs(out_dir, exist_ok=True)
     fails = []
@@ -1018,21 +1816,25 @@ def smoke(win, app, out_dir):
     n_all = win.skills.list.count()
     check(n_all >= 1000 and len(spec["unlocks"]) == n_all,
           f"the Skills tab lists every player-usable skill ({n_all}), all unlocked by default")
-    for i, tab in enumerate((win.skills, win.party, win.enemies, win.run)):
+    seen_roles = set()
+    for i in range(win.tabs.count()):
         win.tabs.setCurrentIndex(i)
         app.processEvents()
+        seen_roles |= used_roles(win)
     # the Skills tab's GRADES (SKILLS-LT): a hand row is ` *`, a label-tier row
     # ` ~label`, and the "modelled only" filter keeps both and nothing else.
-    listed = {int(it.data(Qt.UserRole)) for it in win.skills._items()}
+    listed = {int(it.data(ROLE_ID)) for it in win.skills._items()}
     hand_ids, label_ids = win.names.modelled & listed, win.names.labelled & listed
     if hand_ids and label_ids:
         h0, l0 = sorted(hand_ids)[0], sorted(label_ids)[0]
         check(win.names.skill_label(h0).endswith(" *") and win.names.skill_label(l0).endswith(" ~label")
               and not win.names.skill_label(l0).endswith(" *"),
               f"a hand row ({h0}) is marked ' *', a label-tier row ({l0}) ' ~label' and never ' *'")
+        check(win.names.skill_parts(h0)[2] == "hand" and win.names.skill_parts(l0)[2] == "label",
+              "and the list's pills read the same grades (modelled / label)")
         win.skills.modelled_only.setChecked(True)
         app.processEvents()
-        shown_ids = {int(it.data(Qt.UserRole)) for it in win.skills._items() if not it.isHidden()}
+        shown_ids = {int(it.data(ROLE_ID)) for it in win.skills._items() if not it.isHidden()}
         check(shown_ids == hand_ids | label_ids,
               f"'modelled only' shows the hand rows and the label rows and nothing else "
               f"({len(hand_ids)} + {len(label_ids)})")
@@ -1045,10 +1847,15 @@ def smoke(win, app, out_dir):
     win.skills.prof.setCurrentIndex(3)              # Monk
     app.processEvents()
     shown = [it for it in win.skills._items() if not it.isHidden()]
-    check(shown and all(win.names.skill_profession(int(it.data(Qt.UserRole))) == 3 for it in shown),
+    check(shown and all(win.names.skill_profession(int(it.data(ROLE_ID))) == 3 for it in shown),
           f"filtering by Monk shows Monk skills only ({len(shown)})")
     win.skills.none_b.click()
     check(all(it.checkState() == Qt.Unchecked for it in shown), "lock all shown locks them")
+    win.skills.filter.setText("no skill is called this")
+    app.processEvents()
+    check(win.skills.list.visible_count() == 0 and win.skills.list.placeholder,
+          "a filter that matches nothing leaves the list its placeholder, not a void")
+    win.skills.filter.setText("")
     win.skills.prof.setCurrentIndex(0)
     win.skills.party_b.click()
     ids = set(win.skills.ids())
@@ -1060,15 +1867,20 @@ def smoke(win, app, out_dir):
     app.processEvents()
     check(6 in win.skills.party_professions, "the secondary reaches the Skills tab's party set")
     chk6, prof6, body6, _l = win.party.rows[6]
+    check(not prof6.isEnabled() and not body6.isEnabled(),
+          "a locked hero's editors are off (what reads as live is what the spec carries)")
     chk6.setChecked(True)
     set_combo(prof6, 1)
     body6.set_value("bandit_raider")
+    check(prof6.isEnabled() and body6.isEnabled(), "and unlocking the hero turns them on")
     check(len(win.party.unlocked()) == 2 and win.to_spec()["heroes"][1]["profession"] == 1,
           "a second hero (index 6) unlocked as a Warrior in the raider's body")
     for idx in (1, 2, 4, 5, 7, 8):
         win.party.rows[idx][0].setChecked(True)
     check(len(win.party.unlocked()) == 7 and not win.party.rows[8][0].isChecked(),
           "the eighth hero is refused (the client's cap of 7)")
+    check(win.party.count.property("kind") == "warn",
+          "and the refusal is said, in the warning register")
     for idx in (1, 2, 4, 5, 7):
         win.party.rows[idx][0].setChecked(False)
     # the Enemies tab
@@ -1076,6 +1888,30 @@ def smoke(win, app, out_dir):
     g.add_member()
     g.add_member()
     check(len(g.members) == 4 and not g.add.isEnabled(), "a group fills to four and the add stops")
+    n_items = sum(1 for _ in win.enemies._walk())
+    check(n_items == 3 + 7, f"the encounter list holds 3 groups and 7 hostiles ({n_items} rows)")
+    boss = win.enemies.groups[2].members[0]
+    win.enemies.select(boss)
+    app.processEvents()
+    check(win.enemies.stack.currentWidget() is win.enemies._pages[boss],
+          "selecting a hostile shows its editor")
+    boss_rows = [it for it in win.enemies._walk() if it.data(0, Qt.UserRole) is boss]
+    check(boss_rows and boss_rows[0].text(1).startswith("boss"),
+          "the boss is marked in the list")
+    # a combo shows the START of its text (the old one read 'V Strength] *')
+    pk = win.enemies.groups[0].members[0].bar.slots[0]
+    check(pk.lineEdit().cursorPosition() == 0, "a skill slot shows the start of its label")
+    # the wheel does not edit an unfocused combo
+    win.tabs.setCurrentWidget(win.enemies)
+    win.enemies.select(win.enemies.groups[0].members[0])
+    app.processEvents()
+    before = pk.currentIndex()
+    ev = QWheelEvent(QPointF(10, 10), QPointF(pk.mapToGlobal(QPoint(10, 10))), QPoint(0, 0),
+                     QPoint(0, -120), Qt.NoButton, Qt.NoModifier, Qt.NoScrollPhase, False)
+    QApplication.sendEvent(pk, ev)
+    app.processEvents()
+    check(pk.currentIndex() == before, "the wheel over an unfocused combo does not change it")
+    seen_roles |= used_roles(win)
     compiled = win.run.compile()
     check(compiled is not None, "the changed spec COMPILES")
     if compiled:
@@ -1090,22 +1926,138 @@ def smoke(win, app, out_dir):
               compiled["party_row"]["player_attributes"] == [],
               "the character's bar and ranks are written EMPTY for the panels")
         check(len(compiled["spawn_rows"]) == 7, f"seven hostiles ({len(compiled['spawn_rows'])})")
+        text = win.run.summary.toPlainText()
+        check(all(tok in text for tok in compiled["args"]) and compiled["overlay"].strip() in text,
+              "the compiled pane drops nothing: every gamesrv argument and the whole overlay")
+    t_end = time.perf_counter() + 2.0            # the summary is debounced: let it land
+    while win._summary_timer.isActive() and time.perf_counter() < t_end:
+        app.processEvents()
+        time.sleep(0.01)
+    check("2 heroes" in win.header.summary.text() and "7 hostiles" in win.header.summary.text(),
+          f"the header's summary follows the spec ({win.header.summary.text()!r})")
     path = win.run.save(os.path.join(out_dir, "smoke_spec.toml"))
     check(path and os.path.isfile(path), "the spec saves")
     if path:
         back = sandbox.load_spec(path)
         check(back["player"]["secondary"] == 6 and len(back["heroes"]) == 2
               and len(back["unlocks"]) == len(ids), "and loads back with its unlocks")
-    win.run.name.setText("smoke-bad")
+    win.header.name.setText("smoke-bad")
     win.enemies.groups[0].members[0].boss.setChecked(True)
     check(win.run.compile() is None and "bosses" in win.run.summary.toPlainText(),
           "two bosses are REFUSED at compile, and the reason is shown")
+    check(win.run.state.property("kind") == "crit", "and the run's state chip says Refused")
     win.enemies.groups[0].members[0].boss.setChecked(False)
+    seen_roles |= used_roles(win)
+
+    # ---- the look, as laws
+    for name, pal in orchtheme.PALETTES.items():
+        bad = orchtheme.failures(pal)
+        check(not bad, f"the {name} palette clears every contrast floor"
+              + (f" -- {bad}" if bad else ""))
+    sheet = app.styleSheet()
+    check(not orchtheme.lint(sheet), f"the stylesheet has no silent QSS faults {orchtheme.lint(sheet)}")
+    styled = orchtheme.styled_roles(sheet)
+    unstyled = seen_roles - styled
+    unused = styled - seen_roles
+    check(not unstyled, f"every role the window uses has a rule ({sorted(unstyled) or 'all'})")
+    check(not unused, f"every role the sheet styles is used somewhere ({sorted(unused) or 'all'})")
+    primaries = [b for b in win.findChildren(QPushButton) if b.property("role") == "primary"]
+    check(len(primaries) == 1 and primaries[0] is win.header.launch_b,
+          f"exactly one accent in the window, and it is Launch ({len(primaries)})")
+    pal = orchui.PAL
+    lb = win.header.launch_b
+    got = _pixel(lb, 5, lb.height() // 2)
+    check(_near(got, pal["accent"]), f"Launch RENDERS in the accent ({got} vs {pal['accent']})")
+    cb = QCheckBox("probe")
+    cb.setParent(win.run)
+    cb.move(0, 0)
+    cb.show()
+    app.processEvents()
+    off = cb.grab().toImage()
+    cb.setChecked(True)
+    app.processEvents()
+    on = cb.grab().toImage()
+    diff = sum(1 for x in range(min(20, on.width())) for y in range(on.height())
+               if on.pixelColor(x, y) != off.pixelColor(x, y))
+    corner = on.pixelColor(3, on.height() // 2 - 5).name()
+    check(diff > 20, f"a checked box renders differently from an unchecked one ({diff} px)")
+    check(_near(corner, pal["check_bg"], 40),
+          f"a checked box is the neutral ink, not the accent ({corner} vs {pal['check_bg']})")
+    cb.setParent(None)
+    cb.deleteLater()
+    le = win.header.name
+    got = _pixel(le, le.width() // 2, 4)
+    check(_near(got, pal["field"], 10), f"a well renders as the field token ({got} vs {pal['field']})")
+    for i in range(win.tabs.count()):
+        win.tabs.setCurrentIndex(i)
+        app.processEvents()
+        w = win.minimumSizeHint().width()
+        check(w <= 1180, f"tab {win.tabs.tabText(i)!r}: nothing floors the window wider than "
+                         f"1180 px ({w})")
+    win.tabs.setCurrentIndex(0)
+    app.processEvents()
     shot = os.path.join(out_dir, "smoke_screen.png")
     win.grab().save(shot)
     check(os.path.isfile(shot), f"screenshot {shot}")
     print(f"smoke: {len(fails)} failure(s)")
     return 1 if fails else 0
+
+
+# ---------------------------------------------------------------- snap
+
+def snap(win, app, out_dir, theme):
+    """`--snap`: every surface to a PNG, rendered on the NATIVE platform but
+    never shown on screen -- the offscreen platform stubs the font database
+    and lies about every width (Dream-World-IX measured 2-3x). Prints each
+    surface's size and hints, the numbers sizing bugs live in. Read the PNGs;
+    a visual claim nobody looked at is a guess."""
+    out_dir = vaultpath.resolve_out(out_dir, what="snap output")
+    os.makedirs(out_dir, exist_ok=True)
+    win.setAttribute(Qt.WA_DontShowOnScreen, True)
+    win.show()
+    app.processEvents()
+
+    def grab(tag, widget=None, scale=1):
+        for _ in range(3):
+            app.processEvents()
+        w = widget or win
+        img = w.grab().toImage()
+        if scale > 1:
+            img = img.scaled(img.width() * scale, img.height() * scale,
+                             Qt.IgnoreAspectRatio, Qt.FastTransformation)
+        path = os.path.join(out_dir, f"{tag}_{theme}.png")
+        img.save(path)
+        print(f"  {tag:<18} {w.width()}x{w.height()}  min {w.minimumSizeHint().width()}x"
+              f"{w.minimumSizeHint().height()}  -> {path}")
+
+    for i, tag in enumerate(("skills", "party", "enemies", "run")):
+        win.tabs.setCurrentIndex(i)
+        grab(tag)
+    win.tabs.setCurrentWidget(win.enemies)
+    if win.enemies.groups:
+        win.enemies.select(win.enemies.groups[-1].members[0] if win.enemies.groups[-1].members
+                           else win.enemies.groups[-1])
+        grab("enemies_boss")
+        win.enemies.select(win.enemies.groups[0])
+        grab("enemies_group")
+    win.tabs.setCurrentWidget(win.run)
+    win.run.compile()
+    grab("run_compiled")
+    grab("header_x2", win.header, 2)
+    win.tabs.setCurrentWidget(win.skills)
+    win.skills.filter.setText("heal")
+    grab("skills_filtered")
+    win.skills.filter.setText("")
+    saved = win.enemies.to_spec()
+    win.enemies.from_spec([])
+    win.tabs.setCurrentWidget(win.enemies)
+    grab("enemies_empty")
+    win.enemies.from_spec(saved)
+    win.resize(1000, 720)
+    for i, tag in enumerate(("skills", "party", "enemies", "run")):
+        win.tabs.setCurrentIndex(i)
+        grab(f"narrow_{tag}")
+    return 0
 
 
 # ---------------------------------------------------------------- main
@@ -1115,22 +2067,27 @@ def main(argv=None):
     ap.add_argument("--spec", default=None, help="a saved spec to open")
     ap.add_argument("--smoke", default=None, metavar="DIR",
                     help="drive every panel once, write a screenshot there, exit")
+    ap.add_argument("--snap", default=None, metavar="DIR",
+                    help="render every surface to PNGs there (never shown on screen), exit")
+    ap.add_argument("--theme", default="auto", choices=("auto", "dark", "light"),
+                    help="the palette (default: follow the OS)")
     ap.add_argument("--no-names", action="store_true",
                     help="skip resolving names from the archive (ids only; faster)")
     args = ap.parse_args(argv)
     app = QApplication.instance() or QApplication(sys.argv[:1])
+    theme = orchui.apply_theme(app, args.theme)
     t0 = time.perf_counter()
     world = content.load()
     names = Names(world, resolve=not args.no_names)
-    print(f"content and names loaded in {time.perf_counter() - t0:.1f} s"
+    print(f"content and names loaded in {time.perf_counter() - t0:.1f} s ({theme} theme)"
           + (f" -- {names.why}" if names.why else ""))
     win = Window(world, names)
     if args.spec:
         win.from_spec(sandbox.load_spec(args.spec))
     else:
         win.from_spec(sandbox.example_spec())
-    if args.smoke:
-        rc = smoke(win, app, args.smoke)
+    if args.smoke or args.snap:
+        rc = smoke(win, app, args.smoke) if args.smoke else snap(win, app, args.snap, theme)
         QTimer.singleShot(0, app.quit)
         app.exec()
         return rc
