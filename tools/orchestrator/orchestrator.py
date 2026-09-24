@@ -3534,18 +3534,25 @@ def smoke(win, app, out_dir):
         # '255' in the Level spin and '21' in each Ranks spin, measured off
         # the line edit as the Party tab's spin law measures (that law stops
         # at its own tab, and the lift put a third digit in a field fitted
-        # to two)
+        # to two). The value each spin is measured at is PINNED here too --
+        # the Level spin's at '255' and every Ranks spin's at '21' -- and the
+        # label prints the maxima measured, not the constants: with the Ranks
+        # spins planted back to 0..12 this law passed while printing "its
+        # '21'", having measured '12' (the verifier's plant, 2026-09-24)
         hsp = [m0.level] + list(m0.ranks.spins.values())
+        rmax = sorted({s.textFromValue(s.maximum()) for s in m0.ranks.spins.values()})
         hnarrow = [(s.accessibleName() or "Level", _spin_field(s).width(),
                     s.fontMetrics().horizontalAdvance(s.textFromValue(s.maximum())))
                    for s in hsp
                    if _spin_field(s).width() - 4
                    < s.fontMetrics().horizontalAdvance(s.textFromValue(s.maximum()))]
-        check(m0.level.textFromValue(m0.level.maximum()) == "255" and not hnarrow
+        check(m0.level.textFromValue(m0.level.maximum()) == "255"
+              and rmax == [str(sandbox.HOSTILE_RANK_MAX)] and not hnarrow
               and all(s.isVisibleTo(win) for s in hsp),
-              f"at {w} px the hostile page's Level spin shows '255' whole and each of its "
-              f"{len(hsp) - 1} Ranks spins its '{sandbox.HOSTILE_RANK_MAX}' (too narrow: "
-              f"{hnarrow[:3] or 'none'})")
+              f"at {w} px the hostile page's Level spin shows its maximum "
+              f"'{m0.level.textFromValue(m0.level.maximum())}' whole and each of its "
+              f"{len(hsp) - 1} Ranks spins its maximum {rmax} (the constants say '255' and "
+              f"'{sandbox.HOSTILE_RANK_MAX}'; too narrow: {hnarrow[:3] or 'none'})")
         # the stack itself is a law, never a gate: behind `if m0.stacked:` the
         # two laws below vanished unnamed when the stack was planted away, and
         # the re-polish law after them passed over no re-polish
@@ -4051,7 +4058,8 @@ def smoke(win, app, out_dir):
               f"points' -- a hostile has no budget to be 'of' ({summ!r})")
         # ...and the KEPT rules still refuse a hostile's ranks at compile: a
         # file whose first hostile carries an attribute of another profession
-        # and a rank past the table opens (the card offers neither -- the
+        # and a rank past HOSTILE_RANK_MAX (22: the cap is 21 since the lift,
+        # no longer the table's 12) opens (the card offers neither -- the
         # foreign id is dropped, the rank clamped by the spin), and the bar
         # says what the compiler refused, so the exemption opened nothing else
         rules = m0.ranks.rules
@@ -4154,15 +4162,19 @@ def smoke(win, app, out_dir):
               f"the bar says {msg!r}, the window holds level {m0.level.value()} and rank "
               f"{m0.ranks.spins[mine].value()} (a level-24 template clamped to 20 in silence "
               f"before the ruling)")
-        # ...while a file past the new caps -- level 300 on one hostile, rank
-        # 22 on the next -- is refused for both at compile, the spins hold
-        # 255 and 21 (their ranges ARE the compiler's), and the bar says so
-        m1 = en.groups[0].members[1]
-        theirs = next(iter(m1.ranks.spins))
+        # ...while a file past the new caps -- level 300 AND rank 22 on ONE
+        # hostile -- is refused for both at compile, the spins hold 255 and
+        # 21 (their ranges ARE the compiler's), and the bar says so, '2
+        # changes'. Both on one member, because that is the case the compiler
+        # once hid: its `elif` checked the ranks only when the level had
+        # passed, so this member was refused for the level alone and the bar
+        # said '1 change' while the window clamped both (this law had put the
+        # two values on two members and could not see it; the verifier's
+        # plant, 2026-09-24)
         over = dict(held_spec, name="smoke-hostileover",
-                    groups=[dict(g1, members=[dict(g1["members"][0], level=300),
-                                              dict(g1["members"][1], attributes=[[theirs, 22]])]
-                                 + g1["members"][2:])] + held_spec["groups"][1:])
+                    groups=[dict(g1, members=[dict(g1["members"][0], level=300,
+                                                   attributes=[[mine, 22]])]
+                                 + g1["members"][1:])] + held_spec["groups"][1:])
         over_path = os.path.join(out_dir, "smoke_hostileover.toml")
         with open(over_path, "w", encoding="utf-8") as fh:
             fh.write(sandbox.spec_toml(over))
@@ -4172,14 +4184,17 @@ def smoke(win, app, out_dir):
         msg = win.statusBar().currentMessage()
         held_now = win.to_spec()
         now = held_now["groups"][0]["members"]
-        check(len(refused) == 2 and "group 1 member 1: level 300 is outside 0..255" in refused
-              and f"group 1 member 2.attributes: rank 22 on {theirs} is outside 0..21" in refused
+        m0 = en.groups[0].members[0]
+        check(refused == ["group 1 member 1: level 300 is outside 0..255",
+                          f"group 1 member 1.attributes: rank 22 on {mine} is outside 0..21"]
               and not sandbox.validate(held_now, win.world)
-              and now[0]["level"] == 255 and [theirs, 21] in (now[1].get("attributes") or [])
+              and now[0]["level"] == 255 and [mine, 21] in (now[0].get("attributes") or [])
+              and m0.level.value() == 255 and m0.ranks.spins[mine].value() == 21
               and msg.startswith("Opened smoke_hostileover, but the window could not hold all of "
                                  "it (2 changes: "),
-              f"...and a file at level 300 and rank 22 is refused for both at compile "
-              f"({refused}), the window holds 255 and 21, and the bar says so ({msg[:86]!r})")
+              f"...and a file with level 300 AND rank 22 on ONE hostile is refused for BOTH at "
+              f"compile ({refused}), the window holds 255 and 21, and the bar says '2 changes' "
+              f"({msg[:86]!r})")
         win.from_spec(held_spec)
         settle()
     else:

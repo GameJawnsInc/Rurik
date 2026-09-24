@@ -49,15 +49,18 @@ IDS. Agent ids run from 110 and definitions from 60, one definition per
 rows sharing one must name the same body (area_population); and since GAME_SMSG
 0x0056 carries the level inside the definition and is re-sent on every create,
 two members of one template at different levels sharing a slot would overwrite
-each other's byte and the client would show one level for both (retail declares
-each definition exactly once per connection: 2,748 of 2,748 on the owner's
-tapes; a slot per level is our RECONSTRUCTION of how retail would carry two
-levels of one body, 2026-09-24). Members of one template at one level still
-share a slot. At most sixteen members, so definitions 60..75; both ranges are
-clear of the errand rows the same process serves (agents 98 / 99, definitions
-50 / 51) and of the party's reserve (player 1, henchman 30, heroes 200..206,
-definitions 9..16), which area_population refuses at startup rather than at
-the fourth body.
+each other's byte (OBSERVED: the server re-sends the definition per create), and
+the client would then show one level for both -- RECONSTRUCTION, UNVERIFIED on
+the client: the recon read the definition-slot getter, and that a body's
+displayed level (AvChar +0x110) is copied from the slot at create is inferred,
+not witnessed (retail declares each definition exactly once per connection:
+2,748 of 2,748 on the owner's tapes; a slot per level is our RECONSTRUCTION of
+how retail would carry two levels of one body, 2026-09-24). Members of one
+template at one level still share a slot. At most sixteen members, so
+definitions 60..75; both ranges are clear of the errand rows the same process
+serves (agents 98 / 99, definitions 50 / 51) and of the party's reserve
+(player 1, henchman 30, heroes 200..206, definitions 9..16), which
+area_population refuses at startup rather than at the fourth body.
 
 WHAT THIS MODULE REFUSES, before a client is launched, because each of these
 was found by a run once: a bar skill outside the character's own professions
@@ -562,12 +565,17 @@ def validate(spec, world):
             # 'level 24 has 0' named the ranks when the level was the fault.)
             # No template, no check: an unknown one is refused above, and with
             # no npc rows at all the rest of this loop is unchecked too (in
-            # profession 0 every rank read 'not to []')
+            # profession 0 every rank read 'not to []'). The ranks are checked
+            # whether or not the level passed -- `if`, not `elif`: the elif
+            # was the budget's (a level past the cap priced the ranks at 0),
+            # and with no budget it only hid a rank reason behind a level
+            # reason, so a member at level 300 with a rank of 22 was refused
+            # for one and the window clamped both, saying '1 change'
             tmpl = npcs.get(npc) or {}
             lvl = int(m.get("level", tmpl.get("level", 0) or 0))
             if not 0 <= lvl <= HOSTILE_LEVEL_MAX:
                 p.append(f"{who}: level {lvl} is outside 0..{HOSTILE_LEVEL_MAX}")
-            elif tmpl:
+            if tmpl:
                 _check_ranks(p, who, m.get("attributes"),
                              (int(tmpl.get("profession") or 0),), rules)
             if int(m.get("health", 1)) < 1:

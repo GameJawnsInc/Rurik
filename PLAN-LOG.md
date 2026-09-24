@@ -28,6 +28,64 @@ move back.
 
 ---
 
+### R-SANDBOX, hostile caps lifted: the verifier's fixes -- 2026-09-24 -- **one hostile past both caps was refused for one; the spin-fit law printed a constant it never measured; the two open residues were in the log and not in §8; and the client half of the definition defect was stated as fact**
+
+Corrects the entry below it, "R-SANDBOX, hostile level and rank caps lifted -- 2026-09-24"
+(that entry stands; this one names it). An independent verifier read the commit
+(`d36dfd93`) against the ruling and found the ruling held exactly -- 20,000 random specs
+through the old and the new `validate` differ only in a hostile's level and rank reasons,
+each version matching its own rule; the player's and each hero's lines identical -- and six
+smaller things, five taken, one declined:
+
+- **One member past BOTH caps was refused for ONE (`toolkit/harness/sandbox.py`).**
+  `validate`'s member branch checked a hostile's ranks only `elif` its level had passed. The
+  `elif` was the budget's: a level past the cap priced the ranks at 0 and `level 24 has 0`
+  named the wrong fault. A hostile has had no budget since the exemption ruling, so the
+  `elif` only hid a rank reason behind a level reason -- a member at level 300 with a rank
+  of 22 was refused for the level alone, and the window clamped BOTH and said `1 change`.
+  The lift's own smoke law had put level 300 and rank 22 on two different members and could
+  not see it. Now `if tmpl:`; the level-256 checks keep their single reason (the raider's
+  ranks are valid). `test_sandbox` +1 (both reasons, the level first; red under the `elif`
+  put back), and the smoke law reshaped onto ONE member expecting both reasons, the spins at
+  255 and 21, and the bar's `2 changes` (red under the same plant). Floor 139 → 140.
+- **The spin-fit law's '21' came from the constant, not the spin
+  (`tools/orchestrator/orchestrator.py`).** The law measured each Ranks spin's
+  `textFromValue(maximum())` for width and printed `sandbox.HOSTILE_RANK_MAX` in its label:
+  with the spins planted back to 0..12 it passed at all three widths saying "its '21'",
+  having measured '12' (the separate 0..21 law caught the plant, so nothing reached the
+  suite -- but a law's printed claim may not be false). The predicate now pins every Ranks
+  spin's maximum text at `str(HOSTILE_RANK_MAX)` and the label prints the maxima measured;
+  red under that plant, 3 of 3 widths.
+- **`PLAN.md` §3's R-SANDBOX row made two "now" claims about one bound.** The restyle
+  clause still said `validate` "now refuses a hostile level outside 0..20 ... each rank within
+  the table" ahead of the lift's clause in the same cell. Past tense, marked SUPERSEDED
+  with the new bounds, so the single status authority has one current statement.
+- **The two residues were in the log only.** The entry below records "Two things NOT done"
+  -- no server-load guard in `area_population` for a content row past 255, and the level-0
+  quirk (`agent_level` treats 0 as None) -- and `CLAUDE.md` puts what is OPEN in `PLAN.md`
+  §8. One §8.1 bullet under "The sandbox" now names both and points here.
+- **`TESTS.md`'s `test_sandbox` entry** ended "107 checks, floor 107" (stale since 129) and
+  its Section 2 still said "ONE definition per template". Tail 140 / 140; the phrase now
+  "one definition per (template, level)"; the dated head prepended for the +1.
+- **Three stale words and one label.** `test_sandbox.py`'s exemption comment ("each rank
+  within the table" → 0..HOSTILE_RANK_MAX); the kept-rules law's comment ("a rank past the
+  table" → past HOSTILE_RANK_MAX, 22); and the IDS paragraph of `sandbox.py` stated as fact
+  that "the client would show one level for both". The recon read the server's per-create
+  re-send of the definition (OBSERVED); that the client's displayed level (AvChar +0x110)
+  is copied from the slot at create is inferred -- RECONSTRUCTION, UNVERIFIED on the
+  client. The docstring, the test comment and this entry say so; the entry below and the
+  commit `d36dfd93` say "showed", and are corrected by this line, not edited.
+
+**Declined: nothing.** All six were real; the nit was cheap.
+
+**The gate.** `test_sandbox` 140 of 140 (floor 140); `--smoke` 174 of 174 in dark and in
+light, 0 skips (floor 150 = 174 − 24 gated, unchanged: one law reshaped, none added);
+`test_orchtheme` 37; the seven lints green. Records: `PLAN.md` §3's R-SANDBOX row (the
+superseded clause, the count) and §8.1; `TESTS.md`; `tools/orchestrator/README.md` (140;
+the one-member law).
+
+---
+
 ### R-SANDBOX, hostile level and rank caps lifted -- 2026-09-24 -- **the owner's second ruling of the day: a hostile's level 0..255 (the wire's byte) and ranks 0..21 (retail's ceiling), constants of their own; the player's and a hero's 1..20 / 0..12 untouched and now pinned; one client definition per (template, level); the Attributes chip prices to the table's 12 and counts the ranks past it**
 
 The owner's ruling (2026-09-24, verbatim): "lift the rank and level caps for hostiles too".

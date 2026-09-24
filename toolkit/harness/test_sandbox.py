@@ -33,7 +33,7 @@ import checks   # noqa: E402
 import content  # noqa: E402
 import sandbox  # noqa: E402
 
-led = checks.Ledger("sandbox", floor=139)     # 88 from the green run 2026-09-20; +19 SANDBOX-B7 (2026-09-22); +2 SKILLS-LT sec.5, the hand / label split (2026-09-23); +2 the fix pass (one LABEL_TIER, gamesrv_args); +1 budget_for_level (2026-09-24); +4 a hostile's ranks checked (2026-09-24); +7 the pre-merge pass: a hostile's level range, the no-level fallback told from 2 and 20, no npc rows (2026-09-24); +4 hostiles exempt from the budget, the owner's ruling: two budget refusals inverted, three kept rules and a hero's budget as controls, the no-level fallback re-witnessed on spawn_rows and validate's level range (2026-09-24); +2 the verifier's fixes: a malformed pair and an id outside the table on a hostile, the two kept rules with no hostile witness (2026-09-24); +10 the hostile caps lifted, the owner's ruling: rank 13 and 21 accepted, 22 refused, a level-255 hostile accepted and 24 too, 256 refused, the player's and a hero's rank 13 and level 21 refused (four controls that did not exist), HOSTILE_LEVEL_MAX tied to 0x0056's byte in the schema and to the codec's raise, a definition per (template, level) with its ids in range (2026-09-24)
+led = checks.Ledger("sandbox", floor=140)     # 88 from the green run 2026-09-20; +19 SANDBOX-B7 (2026-09-22); +2 SKILLS-LT sec.5, the hand / label split (2026-09-23); +2 the fix pass (one LABEL_TIER, gamesrv_args); +1 budget_for_level (2026-09-24); +4 a hostile's ranks checked (2026-09-24); +7 the pre-merge pass: a hostile's level range, the no-level fallback told from 2 and 20, no npc rows (2026-09-24); +4 hostiles exempt from the budget, the owner's ruling: two budget refusals inverted, three kept rules and a hero's budget as controls, the no-level fallback re-witnessed on spawn_rows and validate's level range (2026-09-24); +2 the verifier's fixes: a malformed pair and an id outside the table on a hostile, the two kept rules with no hostile witness (2026-09-24); +10 the hostile caps lifted, the owner's ruling: rank 13 and 21 accepted, 22 refused, a level-255 hostile accepted and 24 too, 256 refused, the player's and a hero's rank 13 and level 21 refused (four controls that did not exist), HOSTILE_LEVEL_MAX tied to 0x0056's byte in the schema and to the codec's raise, a definition per (template, level) with its ids in range (2026-09-24); +1 the lift's verifier's fix: one member past both caps refused for both (`if tmpl:`, the elif hid the rank reason) (2026-09-24)
 
 
 # ---------------------------------------------------------------- the fixture
@@ -340,7 +340,7 @@ led.ok(ok, "five groups are refused", why)
 # a hostile is EXEMPT from the point budget -- the owner's ruling (2026-09-24,
 # PLAN-LOG): retail foes and bosses exceed a player's. Its ranks are still
 # held to VALIDITY (a real attribute of the template's profession, each rank
-# within the table), and the player's and a hero's ranks keep their budget.
+# 0..HOSTILE_RANK_MAX), and the player's and a hero's ranks keep their budget.
 # (For one day validate refused a hostile past its budget, as the window's
 # hint had promised; these two checks are that rule's, inverted.)
 hot = dict(raider, attributes=[[17, 12], [19, 12], [20, 12], [21, 12]])
@@ -447,6 +447,18 @@ led.ok(problems(spec(groups=[{"members": [dict(raider, level=24)]}] + groups[1:]
 ok, why = refuses(spec(groups=[{"members": [dict(raider, level=-1)]}] + groups[1:]),
                   "level -1 is outside 0..255")
 led.ok(ok, "...a level below 0 is refused by the same rule, the reason naming 0..255", why)
+# ...and a member past BOTH caps is refused for both: the ranks are checked
+# whether or not the level passed (`if tmpl:`, not `elif`). The elif was the
+# budget's -- a level past the cap priced the ranks at 0 and 'level 24 has 0'
+# named the wrong fault -- and with no budget it only hid the rank reason: a
+# level-300 member with a rank of 22 was refused for the level alone, and the
+# window clamped both and said '1 change' (the verifier's plant, 2026-09-24)
+ps = problems(spec(groups=[{"members": [dict(raider, level=300, attributes=[[17, 22]])]}]
+                   + groups[1:]))
+led.ok(ps == ["group 1 member 1: level 300 is outside 0..255",
+              "group 1 member 1.attributes: rank 22 on 17 is outside 0..21"],
+       "ONE member at level 300 with a rank of 22 is refused for BOTH, the level first (the "
+       "elif hid the rank behind the level)", ps)
 # ...the PLAYER's and a HERO's level keep 1..20 (points_for_level's table ends
 # there, and 0x003A / 0x003B carry their ranks): the controls the lift needs,
 # since sandbox.LEVEL_MAX served all three roles and a naive bump would have
@@ -536,9 +548,11 @@ led.ok(rows4[-1][0] == "corridor_boss" and rows4[-1][1]["y"] == sandbox.BOSS_Y,
        "the boss is still last and still at the north end")
 # a definition per (template, LEVEL): 0x0056 carries the level inside the
 # definition and is re-sent on every create, so one slot for an L3 and an L24
-# raider held whichever was declared last and the client showed one level for
-# both (retail declares each definition once per connection, 2,748 of 2,748 on
-# the owner's tapes; a slot per level is RECONSTRUCTION, 2026-09-24)
+# raider held whichever was declared last (OBSERVED on the server's sends) and
+# the client would show one level for both (RECONSTRUCTION, unverified on the
+# client -- sandbox's IDS paragraph; retail declares each definition once per
+# connection, 2,748 of 2,748 on the owner's tapes; a slot per level is
+# RECONSTRUCTION, 2026-09-24)
 lv = sandbox.spawn_rows(spec(groups=[{"members": [dict(raider, level=3), dict(raider, level=24),
                                                   dict(raider, level=3)]}] + groups[1:]), WORLD)
 lvd = [(r["level"], r["definition"]) for _, r in lv[:3]]

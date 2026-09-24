@@ -78,7 +78,7 @@ directory needs the elevated cage step once.
 
 ## What it refuses, and why
 
-The compiler (`toolkit/harness/sandbox.py`, stdlib, 139 checks in `test_sandbox.py`) refuses
+The compiler (`toolkit/harness/sandbox.py`, stdlib, 140 checks in `test_sandbox.py`) refuses
 before a client is launched: a bar skill outside the character's own professions (the
 client's template rule); a hero body the content lacks; an eighth hero (the client's cap);
 a fifth member or group; no boss, two bosses, or a boss not in the last group; ranks the
@@ -251,8 +251,9 @@ compiler's own constants, so Open and the CLI give one verdict; '255' and '21' s
 1,280, 1,120 and 1,000 px) while the character's and every hero's Level spin stays 1..20 with
 no rank spin theirs, the chip tells rank 12 from rank 15 (the table prices both alike, so it
 prices to 12 and counts the ranks past it, the roster line following), a level-28 hostile
-carrying a rank of 16 opens whole with "Opened" alone, a file at level 300 and rank 22 is
-refused for both at compile and said on Open with the spins holding 255 and 21, and a Ranks
+carrying a rank of 16 opens whole with "Opened" alone, a file with level 300 AND rank 22 on ONE
+hostile is refused for both at compile and said on Open as "2 changes" with the spins holding
+255 and 21 (the compiler checks a hostile's ranks whether or not its level passed), and a Ranks
 built by any caller houses its chip. The Run tab's lifecycle
 has its own: every line the end chip reads, and the crash line's prefix, is one the harness
 still PRINTS (its print calls read off the syntax tree, so a comment or a docstring quoting an
