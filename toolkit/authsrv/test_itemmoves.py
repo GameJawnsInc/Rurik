@@ -641,7 +641,7 @@ try:
            "...and equipped back, the head protects again",
            f"{authsrv.player_armour_at('warrior_head', state=st)}")
     # the same two in a TOWN: the ARMOUR's visual rides there too since CLEANUP-3
-    # (2026-09-24; townweapon.visuals_planned -- retail's rule is the SLOT: outpost
+    # (2026-09-24; townweapon.visual_planned, per slot -- retail's rule is the SLOT: outpost
     # armour 0x006F are on tape, outpost hand 0x006F are not, and the five outpost
     # own-agent requests this check used to cite were all HAND changes).
     authsrv.EXPLORABLE, authsrv.OUTPOST = False, True

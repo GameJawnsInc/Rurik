@@ -12019,10 +12019,13 @@ TOWN_ARMOUR_VISUALS_ENABLED = True  # False (--no-town-armour-visuals): an
                                # so a town helm equip rode 0x014B alone and the
                                # world body kept the old helm (measured on the
                                # real handlers, the lane's scratch). Default
-                               # ON: the visuals are planned in BOTH regimes
-                               # (townweapon.visuals_planned) and the one gate,
-                               # visible_slot_writes, still DROPS the town's
-                               # hands (visuals 0/1) and zeroes a hidden kind.
+                               # ON: an armour or costume slot's write is
+                               # planned in BOTH regimes and a town HAND's is
+                               # never planned (townweapon.visual_planned, per
+                               # slot -- the review's RV-2: planned-then-
+                               # dropped left --no-town-weapon-strip sending a
+                               # town equip's hand write); the gate,
+                               # visible_slot_writes, zeroes a hidden kind.
                                # RECONSTRUCTION for a town armour EQUIP: retail
                                # writes armour visuals in an outpost -- the one
                                # own-body outpost 0x006F on tape is the head's
@@ -12094,9 +12097,12 @@ HENCHMAN_ADD_ENABLED = True    # False (--no-henchman-add): c2s 0x009F is ignore
                                # marked hireable, so what reaches us is an id we
                                # placed. handle_henchman_add.
 HENCHMAN_KICK_ENABLED = True   # False (--no-henchman-kick): c2s 0x00A8 is
-                               # ignored -- CONFIRM-2's picture (2026-09-24,
-                               # section 2 step 6: the Kick sends the word, the
-                               # row stays, UNHANDLED in the census). Default
+                               # dispatched and ignored -- CONFIRM-2's picture
+                               # on the wire (2026-09-24, section 2 step 6: the
+                               # Kick sends the word, the row stays), though
+                               # that run's word was UNHANDLED and this arm's
+                               # never reaches the census (the review's RV-7).
+                               # Default
                                # ON: the reply is 0x01C0 [party, agent] then
                                # 0x00B0 -- RECONSTRUCTION, the hero kick's
                                # row-then-size; the client's 0x01C0 worker
@@ -25422,19 +25428,26 @@ def handle_henchman_kick(values, send, state, conn_id):
     a body the client draws.
 
     THE REFUSALS send NOTHING (retail's refusal reply is NOT FOUND, as is the
-    request): a malformed request (no word) and an agent that is not a hired
+    request): a malformed request (no word); an agent that is not a hired
     henchman of this party -- a hireable that was never hired, a stranger, a
-    hero's agent, the player's own (henchparty.kick_refusal). Nothing is
-    persisted: the hire is not either (a zone starts a fresh instance without
-    it -- the deferred field carry), so a stored kick would outlive the thing
-    it kicked."""
+    hero's agent, the player's own; and the LAUNCH henchman (--henchman),
+    refused with its own reason: its 0x01BF row is the load's, not a hire --
+    its count is a launch global and no 0x0071 marks it hireable, so a kick
+    could neither be counted per connection nor undone by the panel; not
+    modelled (the review's RV-6; the client sends 0x00A8 for any row of the
+    own party, so the click reaches here). henchparty.kick_refusal. Nothing
+    is persisted: the hire is not either (a zone starts a fresh instance
+    without it -- the deferred field carry), so a stored kick would outlive
+    the thing it kicked."""
     if len(values) < 2:
         print(f"[c{conn_id}] HENCHMAN_KICK refused: malformed request "
               f"{list(values[1:])!r} -- the client sends one word, the agent id; "
               f"nothing sent [CLEANUP-3]", flush=True)
         return
     party = state.setdefault("party_henchmen", {})
-    why = henchparty.kick_refusal(party, values[1])
+    why = henchparty.kick_refusal(
+        party, values[1],
+        launch_agent=HENCHMAN_AGENT_ID if HENCHMAN is not None else None)
     if why is not None:
         print(f"[c{conn_id}] HENCHMAN_KICK({values[1]!r}) refused: {why}; nothing "
               f"sent (retail's refusal reply NOT FOUND) [CLEANUP-3]", flush=True)
@@ -25662,23 +25675,30 @@ def instance_is_field(state):
     and unequip in a FIELD (7 of 7) and on none in an OUTPOST (0 of 5) --
     itemstore.py's docstring, VISUALS -- and those five outpost requests were
     all HAND changes, so since CLEANUP-3 (2026-09-24) the planners ask
-    item_visuals_planned instead and the town's hands are dropped at the gate."""
+    item_visuals_planned instead, per slot: a town's armour is planned, its
+    hands never (townweapon.visual_planned)."""
     if OUTPOST:
         return False
     return bool(EXPLORABLE or map_explorable(state.get("map_id")))
 
 
 def item_visuals_planned(state):
-    """Does an equip / unequip / drag PLAN the player's 0x006F writes on this
-    connection? townweapon.visuals_planned: a field always (retail 7 of 7);
-    a town under TOWN_ARMOUR_VISUALS_ENABLED (the default -- CLEANUP-3,
-    2026-09-24, RECONSTRUCTION from retail's outpost armour writes: the own
-    PvP head, 31 strangers'), where visible_slot_writes then DROPS the hands
-    (retail's 0 of 14 outpost hand changes) and zeroes a hidden kind, so what
-    reaches the wire in a town is the armour's write alone. --no-town-armour-
-    visuals is the pre-CLEANUP-3 arm: nothing planned in a town."""
-    return townweapon.visuals_planned(instance_is_field(state),
-                                      town_armour=TOWN_ARMOUR_VISUALS_ENABLED)
+    """What an equip / unequip / drag PLANS of the player's 0x006F writes on
+    this connection -- itemstore's `visuals`, as a per-VISUAL-SLOT predicate
+    (townweapon.visual_planned): a field plans every slot (retail 7 of 7); a
+    town plans an ARMOUR or costume slot under TOWN_ARMOUR_VISUALS_ENABLED
+    (the default -- CLEANUP-3, 2026-09-24, RECONSTRUCTION from retail's
+    outpost armour writes: the own PvP head, 31 strangers') and NEVER a hand
+    (retail's 0 of 14 outpost hand changes, and no run of ours sent one; the
+    review's RV-2 -- the lane first planned the town's hands and left them to
+    the gate's strip, so --no-town-weapon-strip, the gate's own revert arm,
+    sent a town equip's hand 0x006F, which no run ever did). What reaches
+    the wire in a town is the armour's write, zeroed by visstatus when the
+    display mode hides its kind. --no-town-armour-visuals is the
+    pre-CLEANUP-3 arm: nothing planned in a town."""
+    field = instance_is_field(state)
+    return lambda slot: townweapon.visual_planned(slot, field,
+                                                   town_armour=TOWN_ARMOUR_VISUALS_ENABLED)
 
 
 def item_hands_of_type():
@@ -25977,8 +25997,11 @@ def _item_moves_commit(send, state, conn_id, batch, changes, what):
     items = state["items"]
     before = itemstore.hand_items(items, EQUIPPED_BAG_ID)
     # Every consumer of the item batch passes here, so the display mode
-    # gates the batch's 0x006F ONCE (visible_slot_writes; the fix pass).
-    for op, vals, label in visible_slot_writes(batch, state, conn_id):
+    # gates the batch's 0x006F ONCE (visible_slot_writes; the fix pass). The
+    # count below is what the gate RETURNED, not what was planned (the
+    # CLEANUP-3 review, RV-3: len(batch) said 2 when one went out).
+    out = visible_slot_writes(batch, state, conn_id)
+    for op, vals, label in out:
         send(op, vals, label)
     moved = itemstore.apply(items, changes)
     held = state.get("backpack") or {}           # the merchant's {slot: bought id}
@@ -26005,7 +26028,7 @@ def _item_moves_commit(send, state, conn_id, batch, changes, what):
                                     items[iid]["bag"], items[iid]["slot"])
     where = ", ".join(f"item {i} -> bag {items[i]['bag']} slot {items[i]['slot']}"
                       for i in moved) or "no cell changed"
-    print(f"[c{conn_id}] {what}: {len(batch)} message(s), {where}"
+    print(f"[c{conn_id}] {what}: {len(out)} message(s), {where}"
           + ("" if (PERSIST and store is not None) else "  [not persisted: no store]")
           + " [DESKWORK-D1 step 8]", flush=True)
     return moved
@@ -26172,10 +26195,13 @@ def visible_slot_writes(batch, state, conn_id=None):
     message's town gate (send_player_weapons), not a redraw here: retail's
     fourteen outpost hand changes address nothing to the own agent within
     5 s but movement rows."""
-    if not VISIBILITY_STATUS_ENABLED and not TOWN_WEAPON_STRIP_ENABLED:
+    field = instance_is_field(state)
+    if not VISIBILITY_STATUS_ENABLED and not TOWN_WEAPON_STRIP_ENABLED and field:
+        # a FIELD with both gates off: nothing below touches it. A TOWN still
+        # passes, for the armour label (the CLEANUP-3 review, RV-5: the old
+        # shortcut sent a town armour write unlabelled under both flags off).
         return list(batch)
     flags = int(state.get("vis_flags", visstatus.DEFAULT_FLAGS))
-    field = instance_is_field(state)
     out, hid, dropped, town_armour = [], [], [], []
     for op, vals, label in batch:
         mine = (op == GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT and len(vals) >= 3
@@ -26183,14 +26209,7 @@ def visible_slot_writes(batch, state, conn_id=None):
         if mine and TOWN_WEAPON_STRIP_ENABLED and townweapon.drops(vals[1], field):
             dropped.append((int(vals[1]), int(vals[2])))
             continue
-        if mine and not field and int(vals[1]) not in townweapon.HAND_SLOTS:
-            # CLEANUP-3 (2026-09-24): a TOWN armour visual reaches the wire
-            # (townweapon.visuals_planned) -- the label says what it rests on.
-            town_armour.append((int(vals[1]), int(vals[2])))
-            label = (label + " [a town's armour visual -- RECONSTRUCTION: retail "
-                             "writes outpost armour 0x006F (the own PvP head, 31 "
-                             "strangers'); no own outpost armour EQUIP is on tape; "
-                             "CLEANUP-3]")
+        planned = int(vals[2]) if mine else None
         if mine and VISIBILITY_STATUS_ENABLED:
             writes, h = visstatus.filter_slot_writes([(vals[1], vals[2])], flags, field)
             slot, item = writes[0]
@@ -26201,6 +26220,16 @@ def visible_slot_writes(batch, state, conn_id=None):
                          f"{'a field' if field else 'a town'} by the display mode "
                          f"[DESKWORK-D1, RECONSTRUCTION]")
                 vals = [vals[0], slot, item]
+        if mine and not field and int(vals[1]) not in townweapon.HAND_SLOTS:
+            # CLEANUP-3 (2026-09-24): a TOWN armour visual reaches the wire
+            # (townweapon.visual_planned) -- the label says what it rests on.
+            # Recorded AFTER the display mode's zero, with the item as planned
+            # and as sent, so the log names what went out (the review, RV-4).
+            town_armour.append((int(vals[1]), planned, int(vals[2])))
+            label = (label + " [a town's armour visual -- RECONSTRUCTION: retail "
+                             "writes outpost armour 0x006F (the own PvP head, 31 "
+                             "strangers'); no own outpost armour EQUIP is on tape; "
+                             "CLEANUP-3]")
         out.append((op, vals, label))
     if hid and conn_id is not None:
         print(f"[c{conn_id}] DISPLAY MODE: the body's 0x006F leaves out "
@@ -26216,9 +26245,12 @@ def visible_slot_writes(batch, state, conn_id=None):
                 "changes, the field's switches all carry one [DESKWORK-D1, OBSERVED]",
               flush=True)
     if town_armour and conn_id is not None:
+        def _sent_as(planned, item):
+            if planned != item:
+                return f"item {planned} hidden by the display mode, sent 0"
+            return f"item {item}" if item else "emptied"
         print(f"[c{conn_id}] TOWN ARMOUR: the body's 0x006F for "
-              + ", ".join(f"visual {s} ({f'item {i}' if i else 'emptied'})"
-                          for s, i in town_armour)
+              + ", ".join(f"visual {s} ({_sent_as(p, i)})" for s, p, i in town_armour)
               + " goes out in a town -- retail writes outpost armour visuals (the "
                 "one own-body outpost 0x006F on tape is the PvP panel's head "
                 "[336, 6, 23284]; 31 strangers'), no own outpost armour EQUIP is on "
@@ -37642,7 +37674,8 @@ def main():
               "piece in a TOWN plans no 0x006F -- 0x014B / 0x0152 alone, the world body "
               "keeping the old piece -- every run before CLEANUP-3 (2026-09-24). "
               "KNOWN-BAD against retail's outpost armour writes (the own PvP head, 31 "
-              "strangers'); the hands were never at issue (dropped at the gate either way).",
+              "strangers'); a town hand's write is never planned under either arm "
+              "(townweapon.visual_planned).",
               flush=True)
     if a.no_load_purse:
         global LOAD_PURSE_ENABLED
@@ -37689,10 +37722,11 @@ def main():
     if a.no_henchman_kick:
         global HENCHMAN_KICK_ENABLED
         HENCHMAN_KICK_ENABLED = False
-        print("[party] --no-henchman-kick: c2s 0x00A8 HENCHMAN_KICK is ignored -- "
-              "the party window's Kick on a hired henchman sends its word and the "
-              "row stays (UNHANDLED in the census), CONFIRM-2's picture "
-              "(2026-09-24, section 2 step 6) and every run before CLEANUP-3.",
+        print("[party] --no-henchman-kick: c2s 0x00A8 HENCHMAN_KICK is dispatched and "
+              "ignored -- the party window's Kick on a hired henchman sends its word "
+              "and the row stays: CONFIRM-2's picture on the wire (2026-09-24, section "
+              "2 step 6) and every run before CLEANUP-3, though the word is not in the "
+              "unhandled census those runs put it in.",
               flush=True)
     if a.henchman_cap is not None:
         global OUTPOST_PARTY_CAP

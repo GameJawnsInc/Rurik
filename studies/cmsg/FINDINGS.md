@@ -1950,24 +1950,32 @@ whether retail answers a town `0x0030` of a helm with `0x006F [agent, 6, item]` 
 RECONSTRUCTION from the PvP head's precedent — probably one message short of retail, and the
 display mode's hiding-mode equip in a town ((c) of that section, its open (b)) is the same
 question. `PLAN.md` §8.1's D1 bullet carries it.
-**SHIPPED (the CLEANUP-3 lane, 2026-09-24; `townweapon.visuals_planned`,
+**SHIPPED (the CLEANUP-3 lane, 2026-09-24; `townweapon.visual_planned`,
 `authsrv.item_visuals_planned`, `--no-town-armour-visuals`).** Established first on the real
 handlers (the lane's scratch, tree `054b2c15`): a TOWN `0x0030` of the head rode `0x014B [1, 7, 1,
 4]` alone and a `0x004F` out `0x014B [1, 7, 2, 9]` alone, the `0x0072` drag likewise, while the
 FIELD carried `0x006F [1, 6, 7]` / `[1, 6, 0]` — the planners were handed
 `visuals=instance_is_field(state)`, so a town armour change never reached the world body (the
-doll changed, the body kept the old piece). The fix plans the visuals in BOTH regimes
-(`visuals_planned`: a field always, a town by default) and leaves the one gate as it was:
-`visible_slot_writes` still DROPS the town's planned hand writes (retail's 0 of 14) and
-`visstatus` still zeroes a hidden kind, so a town head equip now sends `0x014B` + `0x006F
+doll changed, the body kept the old piece). The fix plans the visuals PER SLOT (`visual_planned`,
+handed to `itemstore` as a callable: a field every slot; a town an armour or costume slot by
+default and NEVER a hand — the lane first planned the town's hands too and left them to the gate's
+strip, and under `--no-town-weapon-strip` a town hammer equip then sent `0x006F [player, 0, item]`,
+which no run ever did: the review's RV-2, re-cut so the strip governs the weapon-set switch alone,
+as its contract says) and leaves the one gate as it was: `visstatus` still zeroes a hidden kind,
+and `_item_moves_commit` now counts what the gate returned (RV-3), so a town head equip now sends `0x014B` + `0x006F
 [player, 6, 7]`, the hammer beside it still `0x014B` alone, and under Hide in Towns the head's
 visual goes out ZEROED `[player, 6, 0]`. The town armour write is labelled RECONSTRUCTION at the
-send and logged (`TOWN ARMOUR: …`): retail writes outpost armour visuals (the own PvP head `[336,
-6, 23284]`, 31 strangers'), but no own outpost `0x0030` of an armour piece is on any tape.
+send and logged (`TOWN ARMOUR: …`, naming the item as SENT — `item 7 hidden by the display mode,
+sent 0` under a hiding mode, the review's RV-4 — and in every flag combination, the gate's
+both-flags-off shortcut now applying to a field only, RV-5): retail writes outpost armour visuals
+(the own PvP head `[336, 6, 23284]`, 31 strangers'), but no own outpost `0x0030` of an armour
+piece is on any tape.
 `--no-town-armour-visuals` is the pre-lane arm (`0x014B` alone, KNOWN-BAD). Tests:
 `test_townweapon.py` §1 / §3 (floor 55 → 66 bare, 81 vaulted), `test_itemmoves.py` §4's town check
 re-cut with the KNOWN-BAD arm beside it (floor 159 → 160); each new check inverted in a scratch
-copy and red. The display mode's hiding-mode equip in a town is now pinned (zeroed, not dropped).
+copy and red. The display mode's hiding-mode equip in a town is now pinned (zeroed, not dropped) in
+`test_townweapon.py`'s BOTH RULES check and in `test_visstatus.py`'s town equip — the latter pinned
+the pre-lane `0x014B` alone and was RED at the lane's commit until the review re-cut it (RV-1).
 **Owed: one client run** — a town helm change with the body watched (the PLAN-LOG entry's
 runsheet).
 
@@ -2659,8 +2667,10 @@ null → returns silently), walks the party's stride-`0x34` row array at `[party
 silently; the only assert in the loop is Array:587 `index < m_count`, the count re-read each
 iteration, unreachable by wire input), then Array:942, a memmove of the tail down one row
 (`0x0046DBB0`), `dec [party+0x1c]`, the dirty flag `[party+0x78] = 1` (the flag `0x01C3`'s worker
-sets too), frame-bus event `0x1000011c` through `0x00633D70` with `{party or 0 when it is the own
-party, agent}`, and `0x007DFED0(agent)` — a per-agent refresh called by all four roster workers
+sets too), and then — unless the party is the manager's `[mgr+0x4c]` one (`cmp esi, [eax+0x4c];
+je` at `0x00858EB3`/`B6`, jumping past both calls; `0x01BF`'s worker carries the same guard at
+`0x00858D9D`; the review's RV-8) — frame-bus event `0x1000011c` through `0x00633D70` with `{party
+or 0 when it is the own party, agent}`, and `0x007DFED0(agent)` — a per-agent refresh called by all four roster workers
 (`0x01BF` at `0x00858DC9`, `0x01C0` at `0x00858EDF`, `0x01C2` at `0x0085901A`, `0x01C3` at
 `0x0085916E`) that looks the agent up (`0x00802160`) and returns when it is not found. OBSERVED
 (the disassembly). The party lookup is the same code as `0x01C3`'s worker `0x00859030`, and our
@@ -2678,7 +2688,11 @@ henchman's NPC keeps standing (the add created no body and destroyed none), and 
 and the freed slot takes the third henchman), stays hireable, can be re-added. Refused with
 nothing sent (`henchparty.kick_refusal`; retail's refusal reply NOT FOUND, as is the request): a
 malformed request, an agent that is not a hired henchman of this party — a hireable never hired,
-a stranger, a hero's agent, the player's own. Not persisted: the hire is not (a zone starts a
+a stranger, a hero's agent, the player's own — and the LAUNCH henchman (`--henchman`), refused with
+its own reason: its `0x01BF` row is the load's, not a hire; its count is a launch global and no
+`0x0071` marks it hireable, so a kick could neither be counted per connection nor undone by the
+panel; not modelled (the review's RV-6 — the sender tests only the party's "is mine" bit, so the
+click reaches the server for any row). Not persisted: the hire is not (a zone starts a
 fresh instance without it — the deferred field carry), so a stored kick would outlive the thing
 it kicked. Default ON — the reply is two table operations the client already performs for our
 party id and the add's own size message; `--no-henchman-kick` is CONFIRM-2's picture (the word

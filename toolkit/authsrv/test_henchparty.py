@@ -85,6 +85,8 @@ directory (§1 and the two accepting hero adds declare skips there); the vault
 adds 15.
 """
 import ast
+import contextlib
+import io
 import os
 import sys
 
@@ -101,7 +103,7 @@ import henchparty                                            # noqa: E402
 import authsrv                                               # noqa: E402
 import livewire                                              # noqa: E402
 
-led = checks.Ledger("henchman add (DESKWORK-D1 step 5)", floor=79)   # 2026-09-24 (CLEANUP-3, the kick): the bare-machine core from the green run with RURIK_VAULT pointed at an empty directory (49 before; +30: the kick batch and its refusals, the handler's (g)-(k), the locks and their mutations); the vault adds 15 (94 vaulted)
+led = checks.Ledger("henchman add (DESKWORK-D1 step 5)", floor=82)   # 2026-09-24 (CLEANUP-3's review): the bare-machine core from the green run with RURIK_VAULT pointed at an empty directory (79 at the lane's commit, +3 at the review: (l) the launch henchman's refusal x2 and the launch-guard mutation; 49 before the kick; +30 on the kick: the batch and its refusals, the handler's (g)-(k), the locks and their mutations); the vault adds 15 (97 vaulted)
 
 COD = codecmod.Codec()
 SRC_PATH = os.path.join(HERE, "authsrv.py")
@@ -416,7 +418,9 @@ try:
     authsrv.handle_henchman_kick([KICKH, 2], send, st, 0)        # hireable, never hired
     authsrv.handle_henchman_kick([KICKH, 99], send, st, 0)       # a stranger
     authsrv.handle_henchman_kick([KICKH], send, st, 0)           # malformed: no word
-    authsrv.handle_henchman_kick([KICKH, 200], send, st, 0)      # the hero's agent
+    authsrv.HERO_IDS = [6]                                       # a hero IN the party for this one
+    authsrv.handle_henchman_kick([KICKH, 200], send, st, 0)      # the hero's agent (HERO_AGENT_ID; RV-9)
+    authsrv.HERO_IDS = []
     authsrv.handle_henchman_kick([KICKH, 0], send, st, 0)        # zero
     authsrv.handle_henchman_kick([KICKH, "x"], send, st, 0)      # not an int
     led.ok(len(sent) == n and sorted(st["party_henchmen"]) == [4] and 2 in st["hireable_henchmen"],
@@ -466,6 +470,32 @@ try:
            "(k) under --persist with a store attached the kick writes nothing to it (an opaque "
            "object would raise): the hire is not persisted, so neither is the kick")
     authsrv.PERSIST = False
+    # (l) the LAUNCH henchman (--henchman): in party 1 by the load's 0x01BF and counted, so
+    #     the client can send 0x00A8 for its row -- refused with ITS reason, nothing sent
+    #     (the review's RV-6: the lane said "not a hired henchman ... no 0x01BF row").
+    authsrv.HENCHMAN = "hench_warrior"       # any non-None: the count and the handler test `is not None`
+    sent, send = fake_send()
+    st = seeded(HENCH)
+    authsrv.handle_henchman_add([ADD, 4], send, st, 0)
+    sent.clear()
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        authsrv.handle_henchman_kick([KICKH, authsrv.HENCHMAN_AGENT_ID], send, st, 0)
+    line = buf.getvalue().strip()
+    led.ok(sent == [] and sorted(st["party_henchmen"]) == [4] and authsrv.party_member_count(st) == 3
+           and "the LAUNCH henchman (--henchman)" in line and "not a hired henchman" not in line
+           and "not modelled" in line,
+           f"(l) kicking the LAUNCH henchman (--henchman, agent {authsrv.HENCHMAN_AGENT_ID}: the load's "
+           f"0x01BF row, counted in the party of 3) sends nothing and says WHY -- 'the LAUNCH henchman ... "
+           f"not modelled', not 'no 0x01BF row' (the review's RV-6); the hired henchman stays", f"{line[:170]}")
+    r_launch = henchparty.kick_refusal({4: {}}, 30, launch_agent=30)
+    r_plain = henchparty.kick_refusal({4: {}}, 30)
+    led.ok(r_launch is not None and "LAUNCH" in r_launch
+           and henchparty.kick_refusal({4: {}}, 4, launch_agent=30) is None
+           and r_plain is not None and "LAUNCH" not in r_plain,
+           "(l) kick_refusal(launch_agent=30): 30 refused as the launch henchman, 4 still passes, and "
+           "without the kwarg 30 is refused as an unhired agent (the pre-review reason)")
+    authsrv.HENCHMAN = None
 
     led.ok(henchparty.party_is_full(4, 4) and not henchparty.party_is_full(3, 4),
            "party_is_full: 4/4 full, 3/4 not -- the boundary the cap refuses on")
@@ -647,12 +677,13 @@ def lock_main_kick(m):
             and "global HENCHMAN_KICK_ENABLED" in m)
 
 
-KICK_REFUSAL = "henchparty.kick_refusal(party, values[1])"
+KICK_REFUSAL = "why = henchparty.kick_refusal("
+KICK_LAUNCH = "launch_agent=HENCHMAN_AGENT_ID if HENCHMAN is not None else None"
 KICK_BATCH = "henchparty.henchman_kick_batch(1, PLAYER_NUMBER, size, aid)"
 
 
 def lock_hench_kick(s):
-    return (KICK_REFUSAL in s and "hench = party.pop(aid)" in s
+    return (KICK_REFUSAL in s and KICK_LAUNCH in s and "hench = party.pop(aid)" in s
             and "size = party_size_on_wire(state)" in s and KICK_BATCH in s
             and "charstore" not in s and "set_hero_kicked" not in s
             and 'state.setdefault("party_henchmen"' in s)
@@ -685,10 +716,11 @@ LOCKS = [
      [("the assignment inverted", _mut(M, "HENCHMAN_KICK_ENABLED = False",
                                        "HENCHMAN_KICK_ENABLED = True")),
       ("the global dropped", _mut(M, "global HENCHMAN_KICK_ENABLED", "pass"))]),
-    ("handle_henchman_kick refuses through kick_refusal, pops the party, sizes through "
-     "party_size_on_wire, sends henchman_kick_batch and names no store",
+    ("handle_henchman_kick refuses through kick_refusal (the launch henchman named to it), pops the "
+     "party, sizes through party_size_on_wire, sends henchman_kick_batch and names no store",
      lock_hench_kick, HKK,
-     [("the refusal removed", _mut(HKK, KICK_REFUSAL, "None")),
+     [("the refusal removed", _mut(HKK, KICK_REFUSAL, "why = None and henchparty.kick_refusal(")),
+      ("the launch guard dropped (RV-6)", _mut(HKK, KICK_LAUNCH, "launch_agent=None")),
       ("the pop made a get", _mut(HKK, "hench = party.pop(aid)", "hench = party.get(aid)")),
       ("the size taken from the count", _mut(HKK, "size = party_size_on_wire(state)",
                                               "size = party_member_count(state)")),

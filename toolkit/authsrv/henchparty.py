@@ -78,9 +78,12 @@ WHAT THE TAPE SAYS (studies/cmsg/FINDINGS.md "The party family", capture
     party's stride-0x34 row array at [party+0x14] x [party+0x1c] -- the
     array 0x01BF's worker 0x00858CB0 INSERTS into -- for the agent id (no
     match -> returns silently), memmoves the tail down, decrements the
-    count, sets the dirty flag [party+0x78], raises frame-bus event
-    0x1000011c and refreshes the agent through 0x007DFED0 (shared by all four
-    roster workers; returns when the agent is not found). 0x01C3's worker
+    count, sets the dirty flag [party+0x78] and then -- unless the party is
+    the manager's [mgr+0x4c] one (`cmp esi, [eax+0x4c]; je` at 0x00858EB3,
+    jumping past both calls; the guard 0x01BF's worker also carries, at
+    0x00858D9D; the review's RV-8) -- raises frame-bus event 0x1000011c and
+    refreshes the agent through 0x007DFED0 (shared by all four roster
+    workers; returns when the agent is not found). 0x01C3's worker
     0x00859030 uses the IDENTICAL party lookup and our 0x01C3 [1, ...] is
     CONFIRMED on the client (the hero kick, 2026-09-23), so party id 1
     resolves for 0x01C0 too. `henchman_kick_batch` is 0x01C0 then 0x00B0 --
@@ -204,20 +207,30 @@ def henchman_kick_batch(party_id, player_number, party_size, agent_id):
     ]
 
 
-def kick_refusal(party, agent_id):
+def kick_refusal(party, agent_id, launch_agent=None):
     """Why a c2s 0x00A8 for `agent_id` is refused (a string), or None when it
     is a hired henchman of `party` ({agent id: record}, the server's
     state["party_henchmen"]). Nothing is sent for a refusal: retail's refusal
     reply is NOT FOUND (no tape carries the request at all). A hireable
     henchman that was never hired, a stranger, a hero's agent and the player's
     own agent all fail the one test -- the roster row is the only thing the
-    reply removes, so an agent with no row has nothing to kick."""
+    reply removes, so an agent with no row has nothing to kick. `launch_agent`
+    is the LAUNCH henchman's agent id when --henchman put one in the party at
+    load: its 0x01BF row is the load's, not a hire -- its count is a launch
+    global and no 0x0071 marks it hireable, so a kick could neither be counted
+    per connection nor undone by the panel -- and the client sends 0x00A8 for
+    any row of the own party (the sender tests only the party's "is mine"
+    bit), so it is refused with THAT reason, not "no row" (the review's
+    RV-6)."""
     try:
         aid = int(agent_id)
     except (TypeError, ValueError):
         return f"agent {agent_id!r} is not an integer"
     if aid <= 0:
         return f"agent {aid} is not a positive agent id"
+    if launch_agent is not None and aid == int(launch_agent):
+        return (f"agent {aid} is the LAUNCH henchman (--henchman): its 0x01BF row is "
+                f"the load's, not a hire, and kicking it is not modelled")
     if aid not in (party or {}):
         return (f"agent {aid} is not a hired henchman of this party "
                 f"{sorted(party or {})} -- no 0x01BF row to remove")
