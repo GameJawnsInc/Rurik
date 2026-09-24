@@ -1921,11 +1921,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   ITEM_MOVE_BY_ID armed as RECONSTRUCTION, `--no-item-move-by-id`; its fix pass, same
   day, PLAN-LOG: the dress cell keyed by location, the merchant's purchases in the item
   store, off hands' homes alone reserved, storage bags refused), and world-map travel
-  (step 7, `maptravel.py`, PLAN-LOG): `c2s 0x00B1` MAP_TRAVEL answered with `0x01D9`
-  then the transfer pair for a served non-explorable destination and refused otherwise
-  (`--no-map-travel`), and the unlocked-outpost state nothing modelled built from the
-  travelable content maps and sent as `s2c 0x0094`'s arr4 (bit == map id; one sender,
-  `--no-map-unlock`) so the world map offers our outposts.
+  (step 7, `maptravel.py`, PLAN-LOG: the landing and its fix pass, both 2026-09-23).
   **CONFIRMED on our client 2026-09-23** (studies/deskwork/CONFIRM-2026-09-23.md): kick,
   add, kick-add-kick-add, the kick held across a relaunch, the suppress circle on and off
   and the body skipping a suppressed skill, move, stored-cell restore, equip and swap;
@@ -1933,7 +1929,9 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   `0x00EF`/`0x0057`, the backpack drag `0x0072`) the doll's order, the eye and the helm,
   Hide in Towns hiding the helm on the doll AND the world body, and the drag staying.
   **Open**: the party family from HENCHMAN_ADD's witness (step 5); travel's client
-  confirmation (the owner's `M` press, runsheet in studies/cmsg "World-map travel"); the
+  confirmation (the owner's `M` press and one click; runsheet in studies/cmsg "World-map
+  travel" — its `--no-map-unlock` control predicts the current map's pin alone, not an
+  empty map); the
   display mode's field step under `--persist` (studies/cmsg "The display mode"); our TOWN
   `0x006E` carries the weapon
   where retail's never does (0 of 2,245 outpost bodies) — a pre-existing divergence the fix
