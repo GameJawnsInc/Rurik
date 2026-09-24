@@ -28,6 +28,81 @@ move back.
 
 ---
 
+### R-SANDBOX, the server-load level guard: the verifier's fixes -- 2026-09-24 -- **a `--probe`'s own 0x0056 steps are built at startup exactly as they will fire and each checked at its level slot -- the quest probes' vault templates and `probes.py:359`'s literal, which the entry below says are NOT startup-guarded, now are; the last line's text names the send, not the load; two positive controls test the literal 255; `test_population`'s duration corrected**
+
+Corrects the entry below it, "R-SANDBOX, the server-load level guard -- 2026-09-24" (that
+entry stands; this one names it). An independent verifier read the commit (`ad28035b`)
+against the owner's ask and found the coverage held -- every caller of `create_agent_world`
+(the one 0x0056 send site) guarded at startup or at load, the guard reading the same
+expression as each create, no false refusal over the base store (44 rows), the two vault
+sandbox overlays (52 and 56 rows), a freshly compiled spec and that spec with every hostile
+at 255, and 23 plants of its own red -- with four findings, three of them nits:
+
+1. **Probe templates other than the hatcher were not guarded, and the startup line said the
+   probe's fixture fit** (minor). `fixture_level_guards` checked `agents.HATCHER` under any
+   `--probe`. `probequest`'s giver and objective are `_vault_npc("def_1480")` /
+   `("def_1473")` -- vault rows an overlay can rewrite -- sent as raw `Step(0x0056, ...)`
+   lists that never pass `create_agent_world`, so the last line never saw them either.
+   Reproduced by import and call: `def_1480` at 300 under `--probe quest_giver_def` -> the
+   guard returned the hatcher at 1, `main()` would have printed "the fixture template of
+   probe 'quest_giver_def' ... fits 0x0056's 0..255", and the probe's own step raised the
+   codec's `struct.error` -- the mid-session drop the guard exists to pre-empt, under a log
+   line claiming the opposite. **Fix:** under `--probe` the guard BUILDS the named probe the
+   way `scriptrun.run_probe` will (`probes.get(PROBE_NAME, PLAYER_AGENT_ID,
+   probes.DEFAULT_ORIGIN)`; the origin reaches only the position steps) and runs
+   `wire_level_problem` over `values[7]` of every 0x0056 step that sends, naming the probe,
+   the step's index/count and its label; a declared refusal (`sends=False`,
+   `probebase.Step`) sends nothing and is skipped; a probe that cannot be BUILT here (a vault
+   row this machine lacks, the shape `check_encodable` skips) is refused at startup naming
+   the error, since `run_probe` builds it inside the instance load where the same raise
+   would have cost the client run. The test enemy's hatcher check is its own condition now
+   (`SPAWN_ENEMY and not AREA_NAME`): a probe never replaced the test enemy -- the instance
+   load's `elif SPAWN_ENEMY` does not read `PROBE_NAME` -- so `--probe death` with no area
+   checks both. **This supersedes the entry below's "NOT startup-guarded"** for the quest
+   probes' `def_NNNN` templates and for `probes.py:359`'s level literal: both are checked at
+   startup now, and each `level guard:` line names exactly what was checked. Still
+   unchecked, as before: a template's own level that no served row or probe step sends.
+2. **The last line said "refused at load instead" while firing at the send** (nit).
+   `wire_level_problem` takes `where` (default: the startup guards' tail);
+   `create_agent_world` passes "refused at the send instead, with nothing sent (the session
+   still drops, as before, but this line names the cause)".
+3. **Two positive controls said '255' and tested the symbol `hi`** (nit): under the
+   verifier's own plant (the range narrowed to 0..254) checks 5 and 26 stayed green with
+   labels claiming 255. Literals 255/256 now in checks 4, 5, 26 and the last-line entry, as
+   check 1 already had; under that plant both redden (11 red in all), and check 26's
+   positive control reports the load refusal as a red check rather than a traceback.
+4. **`TESTS.md` said ~3 s; the verifier measured 21.9 and 26.5 s** (nit), 5.7 s of it section
+   8's second `ast.parse` of the 39k-line `authsrv.py`. `authsrv_source()` parses once per
+   run for sections 3 and 8 (section 8: 5.7 s -> 0.2 s); section 3's own parse plus its
+   negative control's remain the bulk, 12-20 s. Four runs here: 38.8, 36.1, 26.6, 23.3 s on a
+   loaded machine; the entry says ~25 s.
+
+**Tests.** `toolkit/authsrv/test_population.py` §8, 106 -> 114 checks, floor 114 from the
+green run: minus the old "`--probe death` with `agents.HATCHER` at 300 is refused naming the
+probe" (it read the fixture, which the probe modules bind at import and never re-read -- the
+wrong operand), plus nine: `death` under `--area` builds and checks its one step at the
+hatcher's level naming "step 1/7"; no area -> both the test enemy and the step; a raw
+literal list with 300 in the slot refused naming the probe, "step 1/2", its label, 300 and
+0..255; `npc_properties` at 255 accepted at 255; `sends=False` at 300 unchecked; a build
+that raises refused naming "RuntimeError: no npc row 'def_9999'"; `quest_giver_def` with the
+store's `def_1480` at 300 refused naming the probe and step 1 / at 20 accepted at 20 (the
+verifier's reproduction, the row re-keyed from the hatcher so a bare machine has one;
+`probes.PROBES` takes the synthetic probes for one call each, `probequest._VAULT_NPC_CACHE`
+cleared around them); the last line's tail. Five plants each red with a verdict banner
+(backed up to the scratchpad, planted, run, restored by `cp`, `git diff --stat` confirmed
+unchanged after each): the probe walk disabled (7 red), a declared refusal checked anyway
+(1), the `where` tail dropped (1), the range narrowed to 0..254 (11, checks 5 and 26 among
+them), the old combined `PROBE_NAME or (SPAWN_ENEMY and not AREA_NAME)` condition restored
+(2). `TESTS.md`'s entry carries the fix and the corrected tail; `PLAN.md` §3's R-SANDBOX
+row gains the clause.
+
+**Runs** (no server, harness or client started; import and call only): `test_population`
+114 (four runs); `test_bareimport` 8; the source-lock set and the seven lints as recorded in
+the commit message. NOT run: `test_handshake.py` and `test_preflight_owner.py`, which spawn
+a server.
+
+---
+
 ### R-SANDBOX, the server-load level guard -- 2026-09-24 -- **a content row whose level 0x0056's byte cannot carry is refused when the server STARTS, naming the row, the level, the range and why -- not inside send() with the client's session dropping mid-population; the range is the wire's, read off the schema, and pinned to the compiler's**
 
 Closes residue (a) of "R-SANDBOX, hostile level and rank caps lifted -- 2026-09-24" below

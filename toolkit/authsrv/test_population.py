@@ -52,10 +52,22 @@ import pathmap  # noqa: E402
 # party-reserved ids, studies/unitsetup/FINDINGS.md 8 Q9). Every section is
 # synthetic -- no vault, no socket, no client -- so there is nothing here that
 # may skip.
-LEDGER = checks.Ledger("test_population", floor=106)  # R-SANDBOX 2026-09-24 +30 (section 8: the level guard), from the green run; SLICE-H11 +2 (section 7: the held weapon); SLICE-B2 +7, SLICE-B6 glow +4 (section 6)
+LEDGER = checks.Ledger("test_population", floor=114)  # R-SANDBOX 2026-09-24 +30 (section 8: the level guard) then +8 (the verifier's fixes: a --probe's own 0x0056 steps, the last line's tail), from the green run; SLICE-H11 +2 (section 7: the held weapon); SLICE-B2 +7, SLICE-B6 glow +4 (section 6)
 check = checks.adopt(LEDGER)
 
 AREA = "sculpt"
+
+_AUTHSRV_SOURCE = {}
+
+
+def authsrv_source():
+    """authsrv.py's text and its AST, parsed ONCE per run. Sections 3 and 8
+    both ask the syntax tree, and one parse of a 39k-line file is seconds; the
+    verifier of 2026-09-24 timed section 8's second parse at most of its 5.7 s."""
+    if not _AUTHSRV_SOURCE:
+        src = open(authsrv.__file__, encoding="utf-8").read()
+        _AUTHSRV_SOURCE["src"], _AUTHSRV_SOURCE["tree"] = src, ast.parse(src)
+    return _AUTHSRV_SOURCE["src"], _AUTHSRV_SOURCE["tree"]
 
 
 def rows_for(area, table):
@@ -504,8 +516,7 @@ def section6():
 
 def section3():
     print("\n3. an area REPLACES the global enemy; the wiring is not optional")
-    src = open(authsrv.__file__, encoding="utf-8").read()
-    tree = ast.parse(src)
+    src, tree = authsrv_source()
 
     # The call site: `if AREA_NAME: spawn_population(...) elif SPAWN_ENEMY: ...`
     # Both firing would drop the offset-placed test enemy into the middle of an
@@ -772,9 +783,10 @@ def section8():
     read independently, to the codec's own width table, and to the compiler's
     constant (the server must not import the harness, so that equality lives
     here). The served-area half sits inside area_population; the fixture half
-    (the test enemy, a probe's hatcher, the henchman's and each hero's body)
-    is fixture_level_guards, which main() calls once every flag is final; the
-    last line is create_agent_world's ValueError at the send.
+    (the test enemy, every 0x0056 step of a --probe built as it will fire, the
+    henchman's and each hero's body) is fixture_level_guards, which main()
+    calls once every flag is final; the last line is create_agent_world's
+    ValueError at the send.
     """
     print("\n8. R-SANDBOX: a level past 0x0056's field is refused at load, "
           "naming the row, the level, the range and why")
@@ -825,9 +837,12 @@ def section8():
         except Exception as exc:                              # noqa: BLE001
             return type(exc).__name__
 
-    at_cap = packs(authsrv.agents.npc_properties(5, dict(npc, level=hi)))
-    past = packs(authsrv.agents.npc_properties(5, dict(npc, level=hi + 1)))
-    check(isinstance(at_cap, bytes) and at_cap[LEVEL_BYTE] == hi and past == "error",
+    # LITERALS, not `hi`, wherever a label says 255 or 256 (the verifier's nit
+    # of 2026-09-24: two positive controls said '255' and tested the symbol,
+    # so a range narrowed to 0..254 left them green under labels that lied).
+    at_cap = packs(authsrv.agents.npc_properties(5, dict(npc, level=255)))
+    past = packs(authsrv.agents.npc_properties(5, dict(npc, level=256)))
+    check(isinstance(at_cap, bytes) and at_cap[LEVEL_BYTE] == 255 and past == "error",
           "the codec packs level 255 with the byte in place and raises "
           "struct.error at 256 -- inside send(), the drop the guard exists to "
           "pre-empt", f"at the cap: {at_cap if not isinstance(at_cap, bytes) else at_cap[LEVEL_BYTE]}, "
@@ -835,9 +850,9 @@ def section8():
 
     # A SERVED ROW: at the cap accepted; one past it and -1 refused, and the
     # refusal NAMES the row, the level, the range and why.
-    check(accepts({"a": row(agent_id=20, definition=5, level=hi)}) == ["a"],
-          "a served row at 255 is ACCEPTED -- the cap is inclusive, the "
-          "positive control every refusal below needs")
+    check(accepts({"a": row(agent_id=20, definition=5, level=255)}) == ["a"],
+          "a served row at 255 (the literal) is ACCEPTED -- the cap is "
+          "inclusive, the positive control every refusal below needs")
     msg = refusal({"a": row(agent_id=20, definition=5, level=hi + 1)})
     check(msg is not None and "'a'" in msg and "256" in msg and "0..255" in msg
           and "0x0056" in msg and "send()" in msg
@@ -913,14 +928,126 @@ def section8():
           "...but with an --area named (and no probe) that same 300 checks "
           "NOTHING: an area replaces the test enemy, and the guard covers "
           "what will be sent, not what exists", f"{kind}: {got}")
-    kind, got = fixture_guard(hatcher=dict(hatcher, level=300), AREA_NAME=AREA,
-                              PROBE_NAME="death")
-    check(kind == "refused" and "probe 'death'" in got and "300" in got,
-          "...and a --probe brings the hatcher back: probe 'death' with the "
-          "template at 300 is refused naming the probe", got)
     kind, got = fixture_guard(hatcher=dict(hatcher, level=300), SPAWN_ENEMY=False)
     check(kind == "ok" and got == [],
           "...and --no-enemy checks nothing either", f"{kind}: {got}")
+
+    # A --PROBE'S OWN 0x0056 STEPS. The probe modules write raw Step lists from
+    # whatever each step names -- the hatcher, a vault def_NNNN row, a literal
+    # -- and none passes through create_agent_world, so the guard BUILDS the
+    # named probe as run_probe will and checks each sending 0x0056 step's
+    # level slot. The verifier's finding of 2026-09-24: until then this branch
+    # checked agents.HATCHER alone under any --probe, and main()'s startup line
+    # said quest_giver_def's "fixture" fit while its def_1480 sat at 300 in an
+    # overlay -- the same mid-session struct.error the guard exists to pre-empt.
+    import probes  # noqa: E402
+    import probequest  # noqa: E402
+    from probebase import Probe, Step  # noqa: E402
+
+    def synthetic(*steps):
+        return lambda agent_id, origin: Probe("q?", "p.", list(steps))
+
+    def with_probes(extra, **kw):
+        """fixture_guard with `extra` {name: factory} registered in
+        probes.PROBES for the call, and probequest's vault-row cache cleared
+        before and after so a synthetic template never outlives its check."""
+        probequest._VAULT_NPC_CACHE.clear()
+        probes.PROBES.update(extra)
+        try:
+            return fixture_guard(**kw)
+        finally:
+            for k in extra:
+                del probes.PROBES[k]
+            probequest._VAULT_NPC_CACHE.clear()
+
+    def step56(values, label="0x0056 step", **kw):
+        return Step(0.0, authsrv.GAME_SMSG_NPC_UPDATE_PROPERTIES, values, label,
+                    "watch", **kw)
+
+    # The positive control on a REAL probe: 'death' (probecombat) declares the
+    # hatcher once; under --area the test enemy is not checked, so the walk's
+    # line is the only one, at the hatcher's own level.
+    kind, got = fixture_guard(AREA_NAME=AREA, PROBE_NAME="death")
+    mine = [(w, lv) for w, lv in got if "probe 'death' step " in w]
+    check(kind == "ok" and len(got) == 1 and len(mine) == 1
+          and mine[0][1] == hatcher["level"] and "/" in mine[0][0],
+          "--probe death under --area BUILDS the probe and checks its one "
+          "0x0056 step at the hatcher's own level, naming the probe and the "
+          "step (index/count) -- the guard reads the step the probe will send",
+          f"{kind}: {got}")
+    # Both paths when no area is named: the test enemy AND the probe's step --
+    # the instance load's `elif SPAWN_ENEMY` never reads PROBE_NAME.
+    kind, got = fixture_guard(PROBE_NAME="death")
+    check(kind == "ok" and len(got) == 2
+          and any("test enemy" in w for w, _l in got)
+          and any("probe 'death' step " in w for w, _l in got),
+          "...and with no area named, --probe death checks BOTH the test "
+          "enemy's hatcher and the probe's own step: a probe does not replace "
+          "the test enemy", f"{kind}: {got}")
+    # probes.py:359's shape -- a raw literal list, the level a bare number at
+    # the eighth slot -- at 300: refused naming the probe, the step and its
+    # label, the level and the range.
+    raw300 = [25, 116227, 0, 1677721600, 0, 524, 3, 300, "ཧ"]
+    kind, got = with_probes(
+        {"_lvl_raw": synthetic(step56(raw300, "declare def 25, level 300"),
+                                Step(0.0, 0x0057, [25, [116698]], "model", "w"))},
+        AREA_NAME=AREA, PROBE_NAME="_lvl_raw")
+    check(kind == "refused" and "probe '_lvl_raw' step 1/2" in got
+          and "'declare def 25, level 300'" in got and "300" in got
+          and "0..255" in got and "refused at load" in got,
+          "a probe whose 0x0056 step is a raw literal list with 300 in the "
+          "level slot (probes.py:359's shape) is REFUSED at startup naming the "
+          "probe, step 1/2, its label, 300 and 0..255", got)
+    # At 255 through npc_properties (the other shape): accepted, the log line
+    # carrying the literal.
+    kind, got = with_probes(
+        {"_lvl_cap": synthetic(step56(
+            authsrv.agents.npc_properties(5, dict(npc, level=255)), "def 5 at 255"))},
+        AREA_NAME=AREA, PROBE_NAME="_lvl_cap")
+    check(kind == "ok" and [lv for w, lv in got if "probe '_lvl_cap'" in w] == [255],
+          "...and one built by npc_properties at 255 is accepted, the startup "
+          "line naming the probe at 255", f"{kind}: {got}")
+    # A declared REFUSAL (sends=False) sends nothing, so its level is not
+    # checked: the guard covers what will be sent (probebase.Step's flag).
+    kind, got = with_probes(
+        {"_lvl_ref": synthetic(step56(raw300, "no plan", sends=False))},
+        AREA_NAME=AREA, PROBE_NAME="_lvl_ref")
+    check(kind == "ok" and got == [],
+          "...a step declared sends=False at 300 is NOT checked: a refusal "
+          "puts nothing on the wire", f"{kind}: {got}")
+    # A probe that cannot be BUILT here (the vault-row shape check_encodable
+    # skips) is refused now, naming the error, not at the fire.
+
+    def boom(agent_id, origin):
+        raise RuntimeError("no npc row 'def_9999'")
+    kind, got = with_probes({"_lvl_boom": boom}, AREA_NAME=AREA,
+                            PROBE_NAME="_lvl_boom")
+    check(kind == "refused" and "probe '_lvl_boom' cannot be built here" in got
+          and "RuntimeError: no npc row 'def_9999'" in got,
+          "...a probe whose build raises is REFUSED at startup naming the "
+          "probe and the error -- run_probe builds it inside the instance load, "
+          "after the client run", got)
+    # THE VERIFIER'S REPRODUCTION: quest_giver_def's giver is def_1480, a vault
+    # row read at build time through probequest._vault_npc -> npc_template ->
+    # agents.WORLD. A store carrying def_1480 at 300 (the hatcher's row
+    # re-keyed, so a bare machine has one too) is refused naming the probe and
+    # the step; the same row at 20 is accepted at 20.
+    for lvl, want in ((300, "refused"), (20, "ok")):
+        world1480 = FakeWorld({}, npc={"def_1480": dict(hatcher, level=lvl)})
+        kind, got = with_probes({}, world=world1480, AREA_NAME=AREA,
+                                PROBE_NAME="quest_giver_def")
+        if want == "refused":
+            check(kind == "refused" and "probe 'quest_giver_def' step 1/" in got
+                  and "def 1480" in got and "300" in got,
+                  "quest_giver_def with the store's def_1480 at 300 is REFUSED "
+                  "at startup naming the probe, step 1 and 300 -- the vault "
+                  "template the old hatcher rule never read", got)
+        else:
+            check(kind == "ok"
+                  and [lv for w, lv in got if "probe 'quest_giver_def'" in w] == [20],
+                  "...and at 20 it is accepted at 20, the startup line naming "
+                  "the probe's own step rather than a fixture it never sends",
+                  f"{kind}: {got}")
     # The henchman's body: its template's own level.
     world = FakeWorld({}, npc=tall)
     kind, got = fixture_guard(world=world, HENCHMAN="tall", HENCHMAN_BODY=True)
@@ -970,35 +1097,51 @@ def section8():
     # ValueError naming the agent, the definition and the level, before the
     # send -- and at the cap it sends the byte in place.
     sent = []
-    bodies = place({"a": row(agent_id=20, definition=5, level=hi)}, sent=sent)
+    try:
+        bodies = place({"a": row(agent_id=20, definition=5, level=255)}, sent=sent)
+        placed = "placed"
+    except Exception as exc:                                  # noqa: BLE001
+        # A range narrowed below 255 refuses the positive control at load;
+        # that is a RED check here, never a bare traceback with no verdict.
+        bodies, placed = {}, f"{type(exc).__name__}: {exc}"
     props = [v for op, v, _l in sent
              if op == authsrv.GAME_SMSG_NPC_UPDATE_PROPERTIES]
     blob = packs(props[0]) if props else "no definition sent"
-    check(len(props) == 1 and props[0][7] == hi
-          and isinstance(blob, bytes) and blob[LEVEL_BYTE] == hi,
-          "a body at 255 goes out through create_agent_world with the level "
-          "byte in place -- nothing changes for a level that fits",
-          f"{len(props)} definition(s), level {props and props[0][7]}, "
+    check(placed == "placed" and len(props) == 1 and props[0][7] == 255
+          and isinstance(blob, bytes) and blob[LEVEL_BYTE] == 255,
+          "a body at 255 (the literal) goes out through create_agent_world "
+          "with the level byte in place -- nothing changes for a level that fits",
+          f"{placed}; {len(props)} definition(s), level {props and props[0][7]}, "
           f"packed: {blob if not isinstance(blob, bytes) else blob[LEVEL_BYTE]}")
-    entry = dict(bodies[20], npc=dict(bodies[20]["npc"], level=hi + 1))
     late, why = [], None
-    try:
-        authsrv.create_agent_world(
-            lambda op, vals, label="", **kw: late.append((op, vals)),
-            {"agents": {}}, 20, entry, "probe")
-    except ValueError as exc:
-        why = str(exc)
+    if 20 in bodies:
+        entry = dict(bodies[20], npc=dict(bodies[20]["npc"], level=256))
+        try:
+            authsrv.create_agent_world(
+                lambda op, vals, label="", **kw: late.append((op, vals)),
+                {"agents": {}}, 20, entry, "probe")
+        except ValueError as exc:
+            why = str(exc)
     check(why is not None and "agent 20" in why and "definition 5" in why
           and "256" in why and late == [],
           "the same entry at 256 raises ValueError from create_agent_world "
           "naming the agent, the definition and the level, with NOTHING sent "
           "-- the codec's bare struct.error inside send() named none of them",
           f"{why!r}; {len(late)} sent")
+    # ...and its tail names the MOMENT: the startup guards' text ends "refused
+    # at load instead", which printed mid-population would name the wrong one
+    # (the verifier's nit of 2026-09-24).
+    check(why is not None and "refused at the send" in why
+          and "refused at load" not in why,
+          "the last line's text says it fired AT THE SEND with nothing sent, "
+          "not 'refused at load instead' -- the startup guards' tail, which is "
+          "false by the time create_agent_world runs", why)
 
     # STRUCTURAL: the served-area half is INSIDE area_population (so main()'s
     # startup call, section 3, runs it), main() calls the fixture half, and
-    # the create path holds the last line. Section 3's AST idiom.
-    tree = ast.parse(open(authsrv.__file__, encoding="utf-8").read())
+    # the create path holds the last line. Section 3's AST idiom, on section
+    # 3's own parse.
+    _src, tree = authsrv_source()
     fns = {n.name: n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
 
     def calls(fn, name):

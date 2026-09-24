@@ -29244,9 +29244,13 @@ def create_agent_world(send, state, agent_id, entry, why,
         # past 0x0056's field would otherwise die as the codec's bare
         # struct.error inside send(). The drop is the same (handle() catches
         # only the socket errors), but the log names the agent, the definition
-        # and the level. Nothing changes for a level that fits.
+        # and the level -- and says it fired at the SEND, since the default
+        # tail ("refused at load instead") is the startup guards' and would
+        # name the wrong moment here. Nothing changes for a level that fits.
         problem = wire_level_problem(
-            npc.get("level"), f"agent {agent_id} ({why}), definition {definition}")
+            npc.get("level"), f"agent {agent_id} ({why}), definition {definition}",
+            where="refused at the send instead, with nothing sent (the session "
+                  "still drops, as before, but this line names the cause)")
         if problem:
             raise ValueError(problem)
         send(GAME_SMSG_NPC_UPDATE_PROPERTIES,
@@ -29614,16 +29618,20 @@ NPC_LEVEL_TYPE, NPC_LEVEL_WIDTH = npc_level_field()
 NPC_LEVEL_RANGE = (0, (1 << (8 * NPC_LEVEL_WIDTH)) - 1)     # the codec packs it unsigned
 
 
-def wire_level_problem(level, who, template=None):
+def wire_level_problem(level, who, template=None, where="refused at load instead"):
     """None when `level` fits 0x0056's level field; else the refusal text.
 
     It names who carries the level, the template it came from (when it did),
-    the level, the range and why. The startup guards -- `area_population` for
-    an area's rows, `fixture_level_guards` for the test enemy, a probe's
-    fixture, the henchman's and each hero's body -- raise PopulationError on
-    it before any client connects; `create_agent_world`, the last line, raises
-    ValueError at the send. A non-integer is refused too: the codec's '<B'
-    raises on 20.0 or None exactly as it raises on 256.
+    the level, the range and why, and ends with `where` -- WHEN the refusal
+    fired. The startup guards -- `area_population` for an area's rows,
+    `fixture_level_guards` for the test enemy, a --probe's own 0x0056 steps,
+    the henchman's and each hero's body -- raise PopulationError on it before
+    any client connects, and the default tail says so; `create_agent_world`,
+    the last line, raises ValueError at the send and passes its own tail,
+    because a line reading "refused at load instead" printed mid-population
+    would name the wrong moment (the verifier's nit, 2026-09-24). A
+    non-integer is refused too: the codec's '<B' raises on 20.0 or None
+    exactly as it raises on 256.
     """
     lo, hi = NPC_LEVEL_RANGE
     if isinstance(level, int) and lo <= level <= hi:
@@ -29635,7 +29643,7 @@ def wire_level_problem(level, who, template=None):
             f"NPC_UPDATE_PROPERTIES carries the level as a `{NPC_LEVEL_TYPE}` "
             f"({NPC_LEVEL_WIDTH} byte(s), schema/overrides.json), past which the "
             f"codec raises struct.error inside send() and the client's session "
-            f"drops partway through the population -- refused at load instead")
+            f"drops partway through the population -- {where}")
 
 
 def fixture_level_guards():
@@ -29645,8 +29653,27 @@ def fixture_level_guards():
       * the TEST ENEMY -- `spawn_enemy` sends `agents.HATCHER` (the content npc
         'hatcher' as loaded at import; the spawn row's own `npc` key is not
         what that path reads), served when no area is named and --no-enemy is
-        not given -- and a --probe, whose combat fixtures read the same
-        template;
+        not given. A --probe does not replace it: the instance load's `if
+        AREA_NAME ... elif SPAWN_ENEMY` never reads PROBE_NAME;
+      * a --PROBE's OWN 0x0056 STEPS, built here the way `run_probe` will
+        build them at the fire (`probes.get` with the player's agent id; the
+        origin is the spawn point's stand-in, which only the position steps
+        read). The probe modules write raw `Step(..., 0x0056, ...)` lists from
+        whatever each step names -- the hatcher for the combat probes, a vault
+        `def_NNNN` row for the quest probes (`probequest._vault_npc`), a
+        literal for `encname_render` (probes.py's declare-1470 step) -- and
+        none of them passes through `create_agent_world`, so the last line
+        never sees them either. Every step that sends is checked at its level
+        slot, named by the probe, the step's index and its label; a declared
+        refusal (`sends=False`, probebase.Step) sends nothing and is not. Until
+        the verifier's pass of 2026-09-24 this branch checked `agents.HATCHER`
+        alone under any --probe, and main()'s log line then said "the fixture
+        template of probe 'quest_giver_def' ... fits" about a template that
+        probe never sends, while its def_1480 sat at whatever an overlay wrote.
+        A probe that cannot be BUILT here (a vault row this machine lacks --
+        the shape `probes.check_encodable` skips) is refused here too, naming
+        the error: `run_probe` builds it inside the instance load, where the
+        same raise would have cost the client run;
       * the HENCHMAN's body (--henchman NAME --henchman-body): NAME's own level;
       * each HERO's body (--hero IDS --hero-body): the party row's level, else
         --hero-level, else the body template's -- `hero_body_create`'s own
@@ -29662,12 +29689,30 @@ def fixture_level_guards():
             raise PopulationError(problem)
         checked.append((who, level))
 
-    if PROBE_NAME or (SPAWN_ENEMY and not AREA_NAME):
-        who = (f"the fixture template of probe {PROBE_NAME!r}" if PROBE_NAME
-               else "the test enemy's body")
+    if SPAWN_ENEMY and not AREA_NAME:
         _guard(agents.HATCHER.get("level"),
-               f"{who} (agents.HATCHER, the content npc 'hatcher')",
+               "the test enemy's body (agents.HATCHER, the content npc 'hatcher')",
                template="hatcher")
+    if PROBE_NAME:
+        try:
+            probe = probes.get(PROBE_NAME, PLAYER_AGENT_ID, probes.DEFAULT_ORIGIN)
+        except Exception as exc:                               # noqa: BLE001
+            raise PopulationError(
+                f"probe {PROBE_NAME!r} cannot be built here -- "
+                f"{type(exc).__name__}: {exc} -- and run_probe would have raised "
+                f"the same inside the instance load, after the client run was spent")
+        if probe is None:
+            raise PopulationError(f"no probe named {PROBE_NAME!r}")
+        for i, step in enumerate(probe.steps, 1):
+            if (step.opcode != GAME_SMSG_NPC_UPDATE_PROPERTIES
+                    or not getattr(step, "sends", True)):
+                continue
+            vals = step.values
+            level = (vals[NPC_LEVEL_FIELD]
+                     if isinstance(vals, (list, tuple)) and len(vals) > NPC_LEVEL_FIELD
+                     else None)
+            _guard(level, f"probe {PROBE_NAME!r} step {i}/{len(probe.steps)} "
+                          f"({step.label!r})")
     if HENCHMAN is not None and HENCHMAN_BODY:
         _guard(agents.npc_template(HENCHMAN).get("level"),
                f"the henchman's body (--henchman {HENCHMAN!r} --henchman-body)",
@@ -39322,10 +39367,12 @@ def main():
 
     # THE 0x0056 LEVEL GUARD'S OTHER HALF (R-SANDBOX, 2026-09-24). An area's
     # rows were refused above, at area_population; the fixture paths -- the
-    # test enemy, a probe's hatcher, the henchman's and each hero's body --
-    # are refused here, once every flag that picks one is final, for the same
-    # reason: past the field the codec raises inside send() and the client's
-    # session drops mid-population. A refusal is a SystemExit naming the path.
+    # test enemy, every 0x0056 step of a --probe (built here as it will fire),
+    # the henchman's and each hero's body -- are refused here, once every flag
+    # that picks one is final, for the same reason: past the field the codec
+    # raises inside send() and the client's session drops mid-population. A
+    # refusal is a SystemExit naming the path; each line below names exactly
+    # what was checked, and nothing that was not.
     try:
         for _who, _lv in fixture_level_guards():
             print(f"level guard: {_who} at level {_lv} fits 0x0056's "
