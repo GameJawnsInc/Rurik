@@ -915,8 +915,11 @@ class Store:
         return int(pu) if isinstance(pu, int) and not isinstance(pu, bool) else default
 
     def set_character_purse(self, uuid_hex, amount):
-        """Record the carried purse; saves. Returns the stored int, or None
-        when there is no row for the character."""
+        """Record the carried purse; saves. Returns the stored int, None when
+        there is no row for the character, or False when save() refused a
+        STALE write (the file changed under this Store; save() already printed
+        why) -- so a caller can tell "nothing to write" from "not written"
+        (the D9 fix pass)."""
         row = self.character_by_uuid(uuid_hex)
         if row is None:
             return None
@@ -925,7 +928,8 @@ class Store:
             raise ValueError(f"purse {amount}: the carried-gold accumulator "
                              f"floors at 0 (0x0140 +0x90; DESKWORK-D9)")
         row["purse"] = amount
-        self.save()
+        if not self.save():
+            return False
         return amount
 
     def drop_item_location(self, uuid_hex, item_id):

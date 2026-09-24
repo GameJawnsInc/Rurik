@@ -1136,6 +1136,39 @@ def main():
           == [[authsrv.PLAYER_INVENTORY_KEY, 7]] and _st.get("purse") == 7,
           "a gold-only reward pays the gold although there is no experience",
           f"{[hex(op) for op, _v, _l in sent]} purse={_st.get('purse')}")
+    # THE HAND-IN BATCH (the D9 fix pass): turn_in_quest puts the reward
+    # BETWEEN the single 0x0052 and 0x004A -- retail's relative order on 10 of
+    # 10 hand-ins (6 connections, 4 captures). --no-reward-in-frame is the
+    # pass-1 order (reward after 0x004A), which no tape shows.
+    _REMOVE = authsrv.GAME_SMSG_QUEST_REMOVE
+    _UNLIST = authsrv.GAME_SMSG_QUEST_REMOVE_AND_UNLIST
+    _saved_frame = authsrv.REWARD_IN_FRAME
+
+    def _turn_in(frame):
+        sent = []
+        st = {"quests": {1463}, "objectives_done": set(),
+              "quests_completed": set(), "agents": {}, "char_uuid": "u1"}
+        authsrv.REWARD_IN_FRAME = frame
+        try:
+            authsrv.turn_in_quest(
+                lambda op, vals, label="", **kw: sent.append((op, list(vals), label)),
+                st, 1463, {"reward_experience": 250, "reward_gold": 25}, 0)
+        finally:
+            authsrv.REWARD_IN_FRAME = _saved_frame
+        return [op for op, _v, _l in sent
+                if op in (_REMOVE, _UNLIST, _OP_XP, _GOLD)], st
+
+    order, st = _turn_in(True)
+    check(order == [_REMOVE, _OP_XP, _GOLD, _UNLIST]
+          and 1463 not in st["quests"] and 1463 in st["quests_completed"],
+          "turn_in_quest sends 0x0052 · 0x00EE · 0x0140 · 0x004A -- the tape's "
+          "relative order on 10 of 10 hand-ins, the quest leaving the log",
+          f"{[hex(o) for o in order]}")
+    order_bad, _ = _turn_in(False)
+    check(order_bad == [_REMOVE, _UNLIST, _OP_XP, _GOLD],
+          "KNOWN-BAD: --no-reward-in-frame sends the reward AFTER 0x004A (the "
+          "pass-1 order; no tape shows it) -- the predicate above tells them apart",
+          f"{[hex(o) for o in order_bad]}")
 
     class _Store:
         def __init__(self):

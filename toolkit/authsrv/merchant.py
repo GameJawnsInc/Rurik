@@ -50,6 +50,16 @@ what lets `test_purchase.py` exercise the whole buy/sell recipe with no vault,
 no client and no socket.
 """
 
+import os
+import sys
+
+# A leaf importing a sibling leaf inserts its own directory, guarded (CLAUDE.md
+# "Leaf modules"): purse.py holds the carried-gold arithmetic both arms move.
+HERE = os.path.dirname(os.path.abspath(__file__))
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+import purse  # noqa: E402
+
 
 # ------------------------------------------------- buying from a merchant
 #
@@ -107,11 +117,15 @@ GAME_SMSG_ITEM_REMOVED = 0x014D
 # same `add` shape in the client -- handler 0x00846120 -> 0x00849FE0,
 # `add [ecx+0x90], eax` (an accumulate, not a set). The CREDIT is now well
 # CORROBORATED (DESKWORK-D9, the purse census over every live game connection):
-# it rides the sell (0x004A), the quest hand-in (0x003B, n=8 for the batch) and
-# the gameplay-instance LOAD (keyed by that connection's 0x0144 stream key), and
-# the cross-connection chain `next_load = prev_load + credits - debits` closes on
-# every capture. So the message is a credit/delta, OBSERVED. It is the 0x014F
-# DEBIT alone (the buy) that stays n=1.
+# it rides the sell (0x004A), the quest hand-in (0x003B; 10 hand-ins on 6
+# connections in 4 captures) and the gameplay-instance LOAD (a positive purse,
+# keyed by that connection's 0x0144 stream key; 41 of 96 loads, the other 55
+# load a 0 purse and carry none), and the cross-connection chain
+# `next_load = prev_load + credits` closes on every capture. So the message is a
+# credit/delta, OBSERVED. It is the 0x014F DEBIT alone (the buy) that stays n=1
+# on the wire -- the one debit (20260819T132414 :55414, [183, 40] at 363.259 s)
+# comes after that capture's last load, so no chain closes over it; its SIGN is
+# read from the binary (0x00846730: `neg eax` before the same add).
 GAME_SMSG_GOLD_CREDIT = 0x0140
 TRANSACTION_KIND_BUY = 1
 # 11, and it is a CONSTANT rather than a count: it rides `0x004A`'s field 1 on
@@ -143,18 +157,24 @@ def handle_item_purchase(values, send, state, conn_id, rec,
     THE PURSE (DESKWORK-D9). `state["purse"]` is the server's carried-gold
     bookkeeping. The WIRE debit is the `0x014F [key, price]` this arm already
     sends -- the client applies it to its own carried purse (0x00849FE0's
-    `add`, the mirror of 0x0140) -- so this does not send another message; it
-    tracks the balance so it persists and the next load's credit is right.
+    `add` of a negated amount, the mirror of 0x0140; the SERVER debits, the
+    client only applies, per the 2026-08-19 correction in studies/newopcodes)
+    -- so this does not send another message; it tracks the balance through
+    purse.py's arithmetic so it persists and the next load's credit is right.
     `purse_persist(state)` (passed by authsrv's wrapper under --persist) writes
     it through. When `state` carries no purse the server is not modelling one
     (the bare recipe) and nothing here gates or moves.
 
-    INSUFFICIENT FUNDS is a belt-and-suspenders refusal. The client debits its
-    OWN purse and will not send 0x004D for a purchase it cannot afford (retail's
-    server-side insufficient-funds reply is NOT FOUND -- 0 of the corpus), so
+    INSUFFICIENT FUNDS is a belt-and-suspenders refusal. The client gates
+    affordability LOCALLY: at `Your Funds: 0` against a 50 quote the Buy button
+    is GREYED and the click produces no c2s at all -- OBSERVED on our loopback
+    client, 20260818T235130 and 20260818T235758 (studies/newopcodes/FINDINGS.md,
+    "PRESSING BUY"), at a ZERO balance only; a partly funded purse below the
+    price is untested. Retail's server-side insufficient-funds reply is NOT
+    FOUND (0 of the corpus, and the client never asks at zero funds), so
     reaching this branch means our model and the client's disagree; we send
-    nothing (retail sends nothing either) and print it loudly rather than
-    minting an item the balance cannot cover.
+    nothing and print it loudly rather than minting an item the balance cannot
+    cover, and what retail's server would say is not claimed.
 
     REFUSALS ARE LOUD AND COST NOTHING, which matters more here than usual: the
     client has already decided locally that it can afford this and has room for
@@ -195,7 +215,7 @@ def handle_item_purchase(values, send, state, conn_id, rec,
     # funds reply is NOT FOUND).
     _purse = state.get("purse")
     if _purse is not None and state.get("purse_synced") \
-            and int(_purse) < int(price):
+            and not purse.can_afford(_purse, price):
         print(f"[c{conn_id}] BUY refused: purse {_purse} < price {price} "
               f"(server-credited balance) -- nothing sent (retail's "
               f"insufficient-funds reply is NOT FOUND).", flush=True)
@@ -263,12 +283,11 @@ def handle_item_purchase(values, send, state, conn_id, rec,
     # authoritative (the client showed it bought), the number is not.
     _desync = ""
     if _purse is not None:
-        new = int(_purse) - int(price)
-        if new < 0:
+        if not purse.can_afford(_purse, price):
             _desync = (f" (purse {_purse} < {price}: unsynced, left as is -- "
                        f"the client was funded out-of-band)")
         else:
-            state["purse"] = new
+            state["purse"] = purse.after_buy(_purse, price)
             if purse_persist is not None:
                 purse_persist(state)
     rec.event("purchase", stock_id=stock_id, new_id=new_id, price=price,
@@ -346,7 +365,7 @@ def handle_item_sale(values, send, state, conn_id, rec, PLAYER_INVENTORY_KEY,
     # The purse follows the wire credit we just sent (0x0140). DESKWORK-D9.
     _purse = state.get("purse")
     if _purse is not None:
-        state["purse"] = int(_purse) + int(price)
+        state["purse"] = purse.after_sell(_purse, price)
         if purse_persist is not None:
             purse_persist(state)
     rec.event("sale", item_id=item_id, price=price, slot=slot)

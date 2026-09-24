@@ -348,19 +348,26 @@ def grant_quest_reward(send, state, qid, row, conn_id):
 
     GOLD IS NOW GRANTED (DESKWORK-D9, 2026-09-24). A live hand-in DOES carry
     gold: `0x0140 [stream key, amount]` in the reward frame, AFTER the
-    experience `0x00EE` -- OBSERVED on 8 single-quest turn-ins across 6 captures
-    (byte-offset order on 20260914T180058 :56301: ... 0x00EE[0,250], then
-    0x0140[key,25]). 0x0140 is a CREDIT (the client's `add [inv+0x90]`, purse.py),
-    so the row's `reward_gold` is paid onto the carried purse and persists.
-    --no-quest-gold reverts to the pre-D9 refusal.
+    experience `0x00EE` -- OBSERVED on 10 hand-ins (6 connections, 4 captures:
+    20260807T143055 x3, 20260810T235916 x3, 20260819T132414 x3, 20260914T180058
+    x1; amounts 10/25/25, 10/25/25, 10/10/50, 25), the xp 0x00EE [0, xp] before
+    the 0x0140 in all 10. 0x0140 is a CREDIT (the client's `add [inv+0x90]`,
+    purse.py), so the row's `reward_gold` is paid onto the carried purse and
+    persists. --no-quest-gold reverts to the pre-D9 refusal.
 
-    ORDER, PASS 1. The gold sits after the experience, as the tape shows. The
-    turn-in dispatch still sends its two removes (0x0052 then 0x004A) and then
-    this; the fuller OBSERVED batch -- 0x004D marker, the 0x004C re-send, the
-    reward lines BETWEEN a DOUBLED 0x0052 and before 0x004A, and 0x00EE [10, 0]
-    (UNREAD) -- is documented in studies/quests §12 and DEFERRED to a pass with
-    a client run. Nothing here is invented for those four chat lines or the
-    0x00EE [10, 0].
+    ORDER. Within this function the gold follows the experience, as the tape
+    shows. WHERE this function is called is turn_in_quest's business: retail
+    puts the reward lines BETWEEN the first 0x0052 and the closing
+    0x0052 · 0x004A on 10 of 10, and turn_in_quest does the same (the D9 fix
+    pass; --no-reward-in-frame puts them after 0x004A as pass 1 did). The
+    fuller OBSERVED batch -- 0x004D marker, the 0x004C re-send, the DOUBLED
+    0x0052, 0x00EE [10, 0] (UNREAD) -- is documented in studies/quests §12.1 and
+    stays deferred; nothing here is invented for those or the four chat lines.
+    NOTED, NOT MOVED: on the two retail hand-ins that grant skills
+    (20260807T143055 92.792 s, 20260810T235916 126.917 s) the 0x00DC/0x00D9
+    pairs come AFTER the gold; ours go first (test_mechanics §29 locks skills
+    ahead of the xp, from the tape's kill frame) -- n=2, left for a pass that
+    reads why.
 
     The same consequences the experience has: the wire delta, the death-penalty
     credit (WIKI: 75 XP buys back 1%), and the persisted sheet under --persist.
@@ -387,7 +394,7 @@ def grant_quest_reward(send, state, qid, row, conn_id):
         if g > 0:
             send(merchant.GAME_SMSG_GOLD_CREDIT, [PLAYER_INVENTORY_KEY, g],
                  f"quest {qid} reward: gold +{g} (DESKWORK-D9, OBSERVED)")
-            state["purse"] = player_purse(state) + g
+            state["purse"] = purse.after_credit(player_purse(state), g)
             gold_paid = g
     elif gold is not None and not QUEST_GOLD_ENABLED:
         print(f"[c{conn_id}] quest {qid}: reward_gold = {gold} is NOT GRANTED "
@@ -416,6 +423,42 @@ def grant_quest_reward(send, state, qid, row, conn_id):
           + (f", +{gold_paid} gold (purse {state.get('purse', 0)})"
              if gold_paid else ""), flush=True)
     return xp_paid
+
+
+def turn_in_quest(send, state, qid, row, conn_id):
+    """The hand-in batch for one quest: the remove pair with the reward INSIDE
+    it (DESKWORK-D9 fix pass). The dispatch's SERVICE_TURN_IN arm calls this,
+    then moves the markers and closes the dialog.
+
+    ONE 0x0052, NOT TWO, AND THAT IS THE EXPERIMENT. ArenaNet sends 0x0052
+    twice then 0x004A, 10 of 10 hand-ins -- but studies/quests §4.2 flags the
+    doubling as exactly the shape a PARTY BROADCAST would have, and every live
+    session is a solo operator, so the corpus cannot tell a protocol
+    requirement from one player's copy of a two-player message. Sending one is
+    the discriminator: if the quest leaves the log, the second was never for
+    us. Run-validated (the quest does leave the log).
+
+    THE REWARD SITS BETWEEN 0x0052 AND 0x004A. On every one of the 10 retail
+    hand-ins (6 connections, 4 captures) the reward lines -- 0x00EE [0, xp],
+    then 0x0140 [key, gold], then any 0x00DC/0x00D9 -- come AFTER the first
+    0x0052 and BEFORE the closing 0x0052 · 0x004A, and 0x004A is the last
+    quest-family message of the batch. With our single 0x0052 that is
+    0x0052 · reward · 0x004A, which keeps the tape's relative order of every
+    message we send. Pass 1 sent the reward after 0x004A (the only retail
+    hand-in-adjacent order NOT witnessed); --no-reward-in-frame restores that
+    for an A/B. What is still not sent, and why, is grant_quest_reward's
+    docstring.
+    """
+    send(GAME_SMSG_QUEST_REMOVE, [qid],
+         f"QUEST_REMOVE[{qid}] (turn-in, 1 of 1)")
+    state.setdefault("quests", set()).discard(qid)
+    state.setdefault("quests_completed", set()).add(qid)
+    if REWARD_IN_FRAME:
+        grant_quest_reward(send, state, qid, row, conn_id)
+    send(GAME_SMSG_QUEST_REMOVE_AND_UNLIST, [qid],
+         f"QUEST_REMOVE_AND_UNLIST[{qid}]")
+    if not REWARD_IN_FRAME:
+        grant_quest_reward(send, state, qid, row, conn_id)
 
 
 def kill_completes_objective(send, state, dead_id, conn_id):
@@ -794,7 +837,11 @@ def _quest_prose(row, text):
     if xp is None:
         return questdefs.coded_literal(text, framing,
                                        limit=questdefs.DIALOG_UNITS)
-    return questdefs.with_reward(text, int(xp), row.get("reward_gold"),
+    # SLOT B FOLLOWS THE FLAG (the D9 fix pass, ENG-9): --no-quest-gold is
+    # "as before this arc", and before this arc the screen drew no gold line;
+    # a promise the server then refuses to pay is the worse half of a revert.
+    gold = row.get("reward_gold") if QUEST_GOLD_ENABLED else None
+    return questdefs.with_reward(text, int(xp), gold,
                                  framing, limit=questdefs.DIALOG_UNITS)
 
 
@@ -11924,16 +11971,28 @@ LOAD_PURSE_ENABLED = True      # False (--no-load-purse): the load sends no
                                # 0x0140 carried-gold credit, as every run before
                                # DESKWORK-D9. Default ON: retail sends
                                # 0x0140 [stream key, purse] right after the last
-                               # 0x0147 on every gameplay-instance load (OBSERVED
-                               # corpus-wide; the chain closes), so the inventory
-                               # window's gold counter fills. purse.py.
+                               # 0x0147 whenever the purse is POSITIVE (41 of 96
+                               # live loads) and NOTHING for a 0 purse (the other
+                               # 55, chain-proven on 20260807T143055 and
+                               # 20260810T235916: no credit, +10 at the hand-in,
+                               # the next load credits 10) -- both halves
+                               # OBSERVED, so the inventory window's gold counter
+                               # fills exactly as retail's does. purse.py.
 QUEST_GOLD_ENABLED = True      # False (--no-quest-gold): a turned-in quest's
-                               # reward_gold is NOT paid (the print names it), as
-                               # before DESKWORK-D9. Default ON: grant_quest_reward
-                               # pays it with 0x0140 [key, gold] in the reward
-                               # frame after the experience 0x00EE (OBSERVED, the
-                               # hand-in batch, n=8 for the shape; the specific
+                               # reward_gold is NOT paid (the print names it) and
+                               # the offer screen draws no gold line, as before
+                               # DESKWORK-D9. Default ON: grant_quest_reward pays
+                               # it with 0x0140 [key, gold] in the reward frame
+                               # after the experience 0x00EE (OBSERVED, 10 hand-ins
+                               # on 6 connections in 4 captures; the specific
                                # amount is the content row's own number).
+REWARD_IN_FRAME = True         # False (--no-reward-in-frame): the reward lines
+                               # (skills, 0x00EE, 0x0140) go AFTER the closing
+                               # 0x004A, as every run before the D9 fix pass.
+                               # Default ON: turn_in_quest sends them BETWEEN
+                               # 0x0052 and 0x004A -- retail's relative order on
+                               # 10 of 10 hand-ins (the xp 0x00EE, then the gold,
+                               # then 0x0052 · 0x004A close the quest family).
 MAP_TRAVEL_ENABLED = True      # False (--no-map-travel): c2s 0x00B1 MAP_TRAVEL
                                # is ignored, as today (DROPPED_ON_PURPOSE). The
                                # default answers it as retail does -- 0x01D9 then
@@ -19380,6 +19439,20 @@ def player_purse(state):
     p = purse.start()
     if PERSIST:
         store = state.get("charstore_game")
+        if store is None:
+            # ORDER-INDEPENDENT ON PURPOSE -- the same lazy find_character
+            # hero_build and item_layout_begin use, for the same measured
+            # reason: the load's 0x0140 goes out in REQUEST_ITEMS, and the
+            # load attaches `charstore_game` in REQUEST_PLAYERS, which comes
+            # LATER (ENG-B1's gamesrv.log lines). Pass 1 relied on
+            # item_layout_begin having attached it first, which holds only
+            # while ITEM_MOVES_ENABLED: under --persist --no-item-moves the
+            # load read 0 here, cached it, and the next hand-in or sale wrote
+            # 0 + delta OVER the stored balance (both reviews reproduced it
+            # on a temp store: 85 became 10, 60 became 10). The D9 fix pass.
+            store, _pp_row = charstore.find_character(state.get("char_uuid", ""))
+            if store is not None:
+                state["charstore_game"] = store
         if store is not None:
             stored = store.character_purse(state.get("char_uuid", ""),
                                            default=None)
@@ -19387,6 +19460,58 @@ def player_purse(state):
                 p = int(stored)
     state["purse"] = p
     return p
+
+
+def load_purse_messages(state):
+    """The load's carried-gold credit, as [(opcode, values, label)] -- one
+    0x0140 [PLAYER_INVENTORY_KEY, purse] for a positive purse, [] for 0 or
+    under --no-load-purse (DESKWORK-D9; a helper so test_purse can drive the
+    burst's arm without a socket).
+
+    Retail's rule, both halves OBSERVED over the 96 live game connections: a
+    positive purse is credited as the message right after the last 0x0147
+    (41 loads, keyed by that connection's own 0x0144 key); a 0 purse sends
+    NOTHING (55 loads -- chain-proven on 20260807T143055 :60935 and
+    20260810T235916 :61193, which load with no credit, earn +10 at a hand-in,
+    and whose next connection loads exactly [key, 10]). Ours is keyed by
+    PLAYER_INVENTORY_KEY (1), registered by the 0x0144 [1, 0] at the top of
+    the same burst so 0x0140's handler finds the inventory (ItCliApi:1955).
+
+    Marks `purse_synced` when it credits: the server just told the client its
+    whole balance, so the two agree and the merchant's buy gate may refuse an
+    over-spend. A 0 purse credits nothing and stays unsynced (the client's
+    default 0 already agrees, and a probe may fund it out-of-band).
+    """
+    if not LOAD_PURSE_ENABLED:
+        return []
+    credit = purse.load_credit(PLAYER_INVENTORY_KEY, player_purse(state))
+    if credit is None:
+        return []
+    state["purse_synced"] = True
+    return [(merchant.GAME_SMSG_GOLD_CREDIT, credit,
+             f"GOLD_CREDIT(load purse {credit[1]}) -- DESKWORK-D9")]
+
+
+def desync_purse_for_probe(state, opcode, conn_id):
+    """A probe's own gold message puts the client's purse where the server
+    cannot see it (DESKWORK-D9 fix pass, ENG-8): probemerchant funds the
+    player with its own 0x0140 [1, 2000], and under --persist with a positive
+    stored purse the load had already set `purse_synced`, so the buy gate
+    would have refused every purchase priced above the STORED balance while
+    the client showed 2000 more. Clearing the sync is the honest reading --
+    the server no longer knows the client's number -- and the gate is inert
+    again, as it is for every unsynced client. The probe's send wrapper calls
+    this for 0x0140 and 0x014F."""
+    if opcode not in (merchant.GAME_SMSG_GOLD_CREDIT,
+                      merchant.GAME_SMSG_GOLD_DEBIT):
+        return False
+    if state.get("purse_synced"):
+        state["purse_synced"] = False
+        print(f"[c{conn_id}] PURSE: a probe sent 0x{opcode:04X} itself -- the "
+              f"server-credited balance no longer matches the client's; the "
+              f"buy gate is inert until the next load (DESKWORK-D9).",
+              flush=True)
+    return True
 
 
 def persist_purse(state):
@@ -19401,7 +19526,12 @@ def persist_purse(state):
     store = state.get("charstore_game")
     if store is None:
         return
-    store.set_character_purse(state.get("char_uuid", ""), int(state["purse"]))
+    if store.set_character_purse(state.get("char_uuid", ""),
+                                 int(state["purse"])) is False:
+        # save() refused a STALE write and printed why; the purse in state is
+        # still right for this session, the disk is not (the D9 fix pass).
+        print(f"PERSIST: purse {state['purse']} NOT written -- the store "
+              f"changed under this connection; reload() first.", flush=True)
 
 
 def handle_item_purchase(values, send, state, conn_id, rec):
@@ -31389,7 +31519,13 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     for _op, _vals, _lbl in _party_deferred:
         hsend(_op, _vals, _lbl)
     if PROBE_NAME:
-        run_probe(PROBE_NAME, send, conn_id, stop,
+        # A probe's own gold message desyncs the purse the load credited
+        # (desync_purse_for_probe, the D9 fix pass); everything else passes
+        # through untouched.
+        def probe_send(opcode, values, label, quiet=False):
+            desync_purse_for_probe(state, opcode, conn_id)
+            return send(opcode, values, label, quiet)
+        run_probe(PROBE_NAME, probe_send, conn_id, stop,
                   origin=(pos[0], pos[1], cfg[2]))
     if LABEL_RUN:
         # The no-tape path: label against our OWN world, which
@@ -32638,30 +32774,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                  + (f" offhand={off}" if off else ""))
                         # THE CARRIED PURSE (DESKWORK-D9). Retail sends
                         # 0x0140 [stream key, purse] as the message right after
-                        # the last 0x0147 and before the first quest message --
-                        # OBSERVED on every gameplay-instance load in the corpus,
-                        # keyed by that connection's own 0x0144 key, the balance
-                        # crediting onto the client's fresh (0) purse. Ours is
-                        # PLAYER_INVENTORY_KEY (1), registered by the
-                        # 0x0144 [1, 0] at the top of this burst so 0x0140's
-                        # handler finds the inventory (ItCliApi:1955). Skipped
-                        # for a 0 purse, which no gameplay load in the corpus
-                        # carried and which is a no-op on an already-0 client
-                        # purse. --no-load-purse reverts. purse.py.
-                        if LOAD_PURSE_ENABLED:
-                            _purse_credit = purse.load_credit(
-                                PLAYER_INVENTORY_KEY, player_purse(state))
-                            if _purse_credit is not None:
-                                send(merchant.GAME_SMSG_GOLD_CREDIT, _purse_credit,
-                                     f"GOLD_CREDIT(load purse "
-                                     f"{_purse_credit[1]}) -- DESKWORK-D9")
-                                # The server just credited the client's whole
-                                # balance, so the two now AGREE: the buy gate
-                                # may refuse an over-spend. A 0 purse credits
-                                # nothing and stays unsynced (the client's
-                                # default 0 already agrees, and a probe may fund
-                                # it out-of-band without the server knowing).
-                                state["purse_synced"] = True
+                        # the last 0x0147 and before the first quest message
+                        # whenever the purse is positive, and NOTHING for a 0
+                        # purse -- both OBSERVED (41 and 55 of the 96 live
+                        # loads; the 0-purse half chain-proven). The rule, the
+                        # skip and the sync mark are load_purse_messages';
+                        # this site only owns the POSITION. --no-load-purse
+                        # reverts. purse.py.
+                        for _pop, _pvals, _plbl in load_purse_messages(state):
+                            send(_pop, _pvals, _plbl)
                         send(GAME_SMSG_UPDATE_GOLD_STORAGE, [1, 0],
                              "UPDATE_GOLD_STORAGE")
                         send(GAME_SMSG_CHARACTER_UPDATE_INFO,
@@ -32828,33 +32949,18 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 _close_dialog(send, state["interacting"],
                                               "accepted")
                             elif row and code == questdefs.SERVICE_TURN_IN:
-                                # ONE 0x0052, NOT TWO, AND THAT IS THE
-                                # EXPERIMENT. ArenaNet sends 0x0052 twice then
-                                # 0x004A, 3 of 3 -- but studies/quests 4.2 flags
-                                # the doubling as exactly the shape a PARTY
-                                # BROADCAST would have, and every live session
-                                # is a solo operator, so the corpus cannot tell
-                                # a protocol requirement from one player's copy
-                                # of a two-player message. Sending one is the
-                                # discriminator: if the quest leaves the log,
-                                # the second was never for us.
-                                #
-                                # THE REWARD IS GRANTED AFTER THE REMOVES
-                                # (SLICE-B5), and it is OURS: the completion
-                                # family (0x004E, 0x006C, 0x0096, 0x0097,
-                                # 0x00FB) is 0 of 22,524 in the corpus, so the
-                                # grant is the kill's own 0x00EE delta, which
-                                # the client is proven to apply. See
-                                # grant_quest_reward.
-                                send(GAME_SMSG_QUEST_REMOVE, [qid],
-                                     f"QUEST_REMOVE[{qid}] (turn-in, 1 of 1)")
-                                send(GAME_SMSG_QUEST_REMOVE_AND_UNLIST, [qid],
-                                     f"QUEST_REMOVE_AND_UNLIST[{qid}]")
-                                state.setdefault("quests", set()).discard(qid)
-                                state.setdefault("quests_completed",
-                                                 set()).add(qid)
-                                grant_quest_reward(send, state, qid, row,
-                                                   conn_id)
+                                # THE HAND-IN BATCH is turn_in_quest's: one
+                                # 0x0052 (the party-broadcast experiment), the
+                                # reward lines, then 0x004A -- retail's relative
+                                # order on 10 of 10 hand-ins (DESKWORK-D9 fix
+                                # pass; --no-reward-in-frame puts the reward
+                                # after 0x004A as SLICE-B5 and D9 pass 1 did).
+                                # The completion family (0x004E, 0x006C, 0x0096,
+                                # 0x0097, 0x00FB) is still 0 of the corpus and a
+                                # live hand-in uses none of it; the reward is the
+                                # kill's own 0x00EE delta plus the 0x0140 credit
+                                # the tape carries. See grant_quest_reward.
+                                turn_in_quest(send, state, qid, row, conn_id)
                                 _send_markers(send, state, " (turned in)")
                                 _close_dialog(send, state["interacting"],
                                               "turned in")
@@ -37226,14 +37332,23 @@ def main():
         LOAD_PURSE_ENABLED = False
         print("[items] --no-load-purse: the load sends no 0x0140 carried-gold "
               "credit -- the inventory window's gold counter stays 0, as every "
-              "run before DESKWORK-D9. Retail sends it on every gameplay-instance "
-              "load, so this is the pre-arc behaviour.", flush=True)
+              "run before DESKWORK-D9. Retail credits a positive purse on every "
+              "load (41 of 96) and sends nothing for 0 (55 of 96), so this is "
+              "the pre-arc behaviour, faithful only for a 0 purse.", flush=True)
     if a.no_quest_gold:
         global QUEST_GOLD_ENABLED
         QUEST_GOLD_ENABLED = False
         print("[quests] --no-quest-gold: a turned-in quest's reward_gold is NOT "
-              "paid (the print names it) -- the pre-DESKWORK-D9 behaviour. "
-              "Default pays 0x0140 [key, gold] after the experience 0x00EE.",
+              "paid (the print names it) and the offer screen draws no gold "
+              "line -- the pre-DESKWORK-D9 behaviour. Default pays 0x0140 "
+              "[key, gold] after the experience 0x00EE.", flush=True)
+    if a.no_reward_in_frame:
+        global REWARD_IN_FRAME
+        REWARD_IN_FRAME = False
+        print("[quests] --no-reward-in-frame: the hand-in's reward lines go "
+              "AFTER the closing 0x004A, as SLICE-B5 and DESKWORK-D9 pass 1 sent "
+              "them. KNOWN-BAD against the tape: retail puts them between "
+              "0x0052 and 0x004A on 10 of 10 hand-ins (turn_in_quest).",
               flush=True)
     if a.no_map_travel:
         MAP_TRAVEL_ENABLED = False
