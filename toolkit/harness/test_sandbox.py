@@ -33,7 +33,7 @@ import checks   # noqa: E402
 import content  # noqa: E402
 import sandbox  # noqa: E402
 
-led = checks.Ledger("sandbox", floor=127)     # 88 from the green run 2026-09-20; +19 SANDBOX-B7 (2026-09-22); +2 SKILLS-LT sec.5, the hand / label split (2026-09-23); +2 the fix pass (one LABEL_TIER, gamesrv_args); +1 budget_for_level (2026-09-24); +4 a hostile's ranks checked (2026-09-24); +7 the pre-merge pass: a hostile's level range, the no-level fallback told from 2 and 20, no npc rows (2026-09-24); +4 hostiles exempt from the budget, the owner's ruling: two budget refusals inverted, three kept rules and a hero's budget as controls, the no-level fallback re-witnessed on spawn_rows and validate's level range (2026-09-24)
+led = checks.Ledger("sandbox", floor=129)     # 88 from the green run 2026-09-20; +19 SANDBOX-B7 (2026-09-22); +2 SKILLS-LT sec.5, the hand / label split (2026-09-23); +2 the fix pass (one LABEL_TIER, gamesrv_args); +1 budget_for_level (2026-09-24); +4 a hostile's ranks checked (2026-09-24); +7 the pre-merge pass: a hostile's level range, the no-level fallback told from 2 and 20, no npc rows (2026-09-24); +4 hostiles exempt from the budget, the owner's ruling: two budget refusals inverted, three kept rules and a hero's budget as controls, the no-level fallback re-witnessed on spawn_rows and validate's level range (2026-09-24); +2 the verifier's fixes: a malformed pair and an id outside the table on a hostile, the two kept rules with no hostile witness (2026-09-24)
 
 
 # ---------------------------------------------------------------- the fixture
@@ -363,6 +363,17 @@ led.ok(ok, "a rank past the table's 12 on a hostile is still refused", why)
 ok, why = refuses(spec(groups=[{"members": [dict(raider, attributes=[[17, 1], [17, 2]])]}]
                        + groups[1:]), "attribute 17 twice")
 led.ok(ok, "one attribute twice on a hostile is still refused", why)
+# ...the two kept rules that had no hostile witness (the verifier's plants
+# skipped each for a hostile alone and nothing went red): a pair that is not
+# [attribute, rank], and an id the table lacks
+ok, why = refuses(spec(groups=[{"members": [dict(raider, attributes=[["x", 1]])]}] + groups[1:]),
+                  "is not [attribute, rank]")
+led.ok(ok, "a malformed pair on a hostile is still refused (['x', 1] is not [attribute, rank])",
+       why)
+ok, why = refuses(spec(groups=[{"members": [dict(raider, attributes=[[99, 1]])]}] + groups[1:]),
+                  "99 is not an attribute id")
+led.ok(ok, "an id outside the table on a hostile is still refused (99 is not an attribute id)",
+       why)
 # ...and the budget itself, still the player's (sec. 3's 194-of-10 above) and a hero's
 ok, why = refuses(spec(heroes=[dict(hero, attributes=[[13, 12], [14, 12]])]),
                   "hero 1.attributes spend 194 points; level 3 has 10")

@@ -34,7 +34,7 @@ python tools/orchestrator/orchestrator.py --theme light            # dark / ligh
 in one palette only (the light tab strip's focus fill was) is seen by running it with `--theme
 dark` and again with `--theme light`. Its verdict is the house ledger's (`toolkit/checks.py`):
 a law that cannot run declares a skip, printed in the verdict, and a run that executes fewer
-than its floor of 145 laws (the green run's 164 less the 19 behind a declared skip) fails naming
+than its floor of 145 laws (the green run's 165 less the 20 behind a declared skip) fails naming
 the shortfall. No mandatory law sits behind a state gate: a precondition (the hostile page
 stacked at 1,000 px) is a law of its own, since the floor cannot see a law that stops running
 while the gated ones do run.
@@ -238,7 +238,8 @@ no off-hand opens with none, Open, Save and a failed Open say the file's name an
 path (a reset never the store's), one bulk write of the Skills list (Unlock party only, a
 load) is one count and one change signal, a low damage bound typed with the high at 0 is not
 an edit, a hostile's ranks past a player's budget compile (a hostile is exempt: its chip
-counts the spend and never judges it, its hint claims no refusal) while a file carrying an
+counts the spend and never judges it, its roster line is that count and never "N of B
+points", its hint claims no refusal) while a file carrying an
 attribute of another profession or a rank past the table on a hostile is still refused for
 both and said in the bar, and a Ranks built by any caller houses its chip. The Run tab's lifecycle
 has its own: every line the end chip reads, and the crash line's prefix, is one the harness

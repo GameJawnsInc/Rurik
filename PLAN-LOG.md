@@ -28,6 +28,38 @@ move back.
 
 ---
 
+### R-SANDBOX, hostiles exempt from the point budget: the verifier's fixes -- 2026-09-24 -- **three of the ruling's surfaces had no witness or a stale word: the roster line's budget-free count gets a law, the two kept rules with no hostile check get one each, and three comments say whose budget is left**
+
+Corrects the counts in "R-SANDBOX, hostiles exempt from the point budget -- 2026-09-24"
+(that entry stands; this one names it). An independent verifier planted the old rule back
+in three places the ruling's checks did not reach, and each stayed green:
+
+- **The roster line (`MemberEditor.summary`).** The old budget form (`"N of B points"`)
+  put back left `--smoke` green: the one law reading the roster compared the line with
+  `summary()` itself, so it could not tell a count from a budget. A new law inside the
+  over-budget law's gate reads the roster item and the summary while the spin sits at its
+  maximum, requires the exact `n_of(spent, "point")` token and rejects `\d+ of \d+ points?`
+  anywhere on the line -- red under that plant (`'97 of 5 points'`). `--smoke` 164 → 165
+  laws, the gated count 19 → 20, floor 145 unchanged (165 − 20).
+- **Two kept rules with no hostile witness (`_check_ranks`).** A malformed pair
+  (`["x", 1]`, "is not [attribute, rank]") and an id the table lacks (99, "is not an
+  attribute id") were each skippable for a hostile alone without a red -- the kept-rule
+  block tested another profession's attribute, rank 13 and a duplicate only. Two checks
+  added, each red under its plant; `test_sandbox` 127 → 129. Neither rule existed to
+  serve the budget: both stand on the row's shape, and both hold for the player too.
+- **Three stale words.** The floor comment's "up to 18 mandatory laws" (it counts the
+  gated laws, now 20); `from_spec`'s comment gave the budget as the reason for the
+  template-level fallback, where the reasons that hold are the spawn row's level and the
+  0..20 range (a level-24 template opened at a constant 2 would compile in the window and
+  be refused by the CLI); `sandbox.py`'s module docstring listed "ranks the level cannot
+  pay for" without saying whose, and omitted the hostile level range.
+
+Both themes 165 of 165, 0 skips; `test_orchtheme` 37; the seven lints green. Records:
+`tools/orchestrator/README.md` (the smoke count, the state laws), `PLAN.md` §3's R-SANDBOX
+row, `TESTS.md`'s `test_sandbox` entry.
+
+---
+
 ### R-SANDBOX, hostiles exempt from the point budget -- 2026-09-24 -- **the owner's ruling on the question the restyle entry recorded: a hostile's ranks are never held to a player's attribute-point budget; validity (the template's profession, each rank within the table) and the level range stay; the player's and a hero's budget stay; the window's Attributes chip counts and never judges**
 
 The owner's ruling (2026-09-24, verbatim): "exempt hostiles from the rank budget". It

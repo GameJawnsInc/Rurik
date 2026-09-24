@@ -56,8 +56,11 @@ was found by a run once: a bar skill outside the character's own professions
 (the client's own template rule, skilltemplate.validate); a hero body the
 content does not know; a fifth member or a fifth group; an eighth hero (the
 client's cap, PtPlayer:332); a boss that is not in the last group, or two of
-them, or none (the quest's kill objective binds ONE spawn key); ranks the level
-cannot pay for; a weapon key the rates table lacks.
+them, or none (the quest's kill objective binds ONE spawn key); ranks the
+player's or a hero's level cannot pay for (a hostile is exempt, the owner's
+ruling 2026-09-24 -- retail foes and bosses exceed a player's budget; its ranks
+are held to validity alone); a hostile level outside 0..20; a weapon key the
+rates table lacks.
 
 Standard library only. Loads content through toolkit/content.py; runs nothing
 unless --launch.

@@ -1425,8 +1425,11 @@ class MemberEditor(QWidget):
         self.template.set_value(m.get("npc"))
         self._template()
         # a member with no level is at its TEMPLATE's, the level spawn_rows
-        # and validate give the row (a constant 2 opened a level-10 template
-        # over budget, and the CLI and the window gave one file two verdicts)
+        # and validate give the row: the spawn row's level and the 0..20
+        # range (a level-24 template opened at a constant 2 would compile
+        # here and be refused by the CLI -- one file, two verdicts, the way
+        # the constant once opened a level-10 template over a budget a
+        # hostile no longer has)
         tmpl = self.names.world.rows("npc").get(m.get("npc")) or {}
         self.level.setValue(int(m.get("level", tmpl.get("level", 0) or 0)))
         self.health.setValue(int(m.get("health", 120)))
@@ -2851,14 +2854,15 @@ def _real_wheel(win, widget, delta=-120):
 # "set the floor to its mandatory core and let the optional sections declare
 # skips"). The gated laws, by gate: the grade marks 5 (a vault overlay with
 # label rows), the inactive real wheel 1 (Windows, a page that scrolls), the
-# exempt hostile's compile and the kept rules' refusal 2 (an attribute table),
-# the encounter list's focus 1, Launch's ring and the tab strip's cue 3, the
-# active-window wheel 3, the four popups 4 -- 19 of the green run's 164 (163
-# before the kept-rules law; 159 before the long-name laws: the bounded label,
-# its hover, its filter, the no-stray restore). A gated law
+# exempt hostile's compile, its roster line and the kept rules' refusal 3 (an
+# attribute table), the encounter list's focus 1, Launch's ring and the tab
+# strip's cue 3, the active-window wheel 3, the four popups 4 -- 20 of the
+# green run's 165 (164 before the roster-line law; 163 before the kept-rules
+# law; 159 before the long-name laws: the bounded label, its hover, its
+# filter, the no-stray restore). A gated law
 # that skips is printed in the verdict; a run short of the floor is a FAIL
 # naming the shortfall, which "0 failure(s)" never was. What the floor cannot
-# see: on a machine where every gated law runs, up to 18 mandatory laws could
+# see: on a machine where every gated law runs, up to 20 mandatory laws could
 # stop before it names one -- so no mandatory law sits behind a STATE gate. A
 # precondition is a law of its own (`if m0.stacked:` once held the stacked
 # label law with no else, and the law vanished unnamed when the stack was
@@ -3945,6 +3949,9 @@ def smoke(win, app, out_dir):
         compiled = (win.run.compiled is not None and chip_said[2].startswith("Compiled")
                     and "points; level" not in win.run.summary.toPlainText())
         hint = m0.ranks.hint.text()
+        settle()
+        line, summ = g0.roster.item(0).text(), m0.summary()
+        said = n_of(m0.ranks.spent(), "point")
         sp.setValue(keep)
         check(over and compiled and chip_said[1] == "info" and "over budget" not in chip_said[0]
               and chip_said[0] == n_of(m0.ranks.rules.total_spent(
@@ -3954,6 +3961,14 @@ def smoke(win, app, out_dir):
               f"a hostile's ranks past its level's budget COMPILE (a hostile is exempt), the chip "
               f"counts the spend without judging it ({chip_said[0]!r}, {chip_said[1]}; "
               f"{chip_said[2]!r}) and the hint claims no refusal")
+        # ...and the group's roster line says the same: the spend alone, the
+        # exact n_of token, never 'N of B points' (the budget form the line
+        # had; the change law above compares the line with summary() itself,
+        # so it could not tell a count from a budget put back)
+        check(over and said in summ and line.endswith(summ)
+              and re.search(r"\d+ of \d+ points?", line) is None,
+              f"...and its roster line carries the spend alone ({said!r}), never 'N of B "
+              f"points' -- a hostile has no budget to be 'of' ({summ!r})")
         # ...and the KEPT rules still refuse a hostile's ranks at compile: a
         # file whose first hostile carries an attribute of another profession
         # and a rank past the table opens (the card offers neither -- the
@@ -3990,6 +4005,7 @@ def smoke(win, app, out_dir):
         settle()
     else:
         skip("an over-budget hostile compiles (exempt)", "no attribute table, so no ranks")
+        skip("a hostile's roster line counts, never 'of'", "no attribute table, so no ranks")
         skip("the kept rules still refuse a hostile's ranks", "no attribute table, so no ranks")
     seen_roles |= used_roles(win)
     lore += surface_lore(win)
