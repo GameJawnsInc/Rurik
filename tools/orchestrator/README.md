@@ -7,8 +7,10 @@ reachable from every tab. **Skills**: which skills are unlocked, account-wide. *
 character to play (profession pair, level, hands) and which heroes are unlocked, each with a
 profession, a body and a level. **Enemies**: up to four groups of up to four hostiles, one
 the boss — the groups and hostiles as a list on the left, the selected one's template,
-weapon, bar and ranks on the right. **Run**: the launch options, the stored character and
-its reset, the compiled result and the harness's output. The quest is the slice's own —
+weapon, bar and ranks on the right — added from the list's **+ Group** and **+ Hostile**, each
+removed by the labelled **Remove** on its own page (a group holding hostiles asks first).
+**Run**: the launch options, the stored character and its reset, the compiled result and the
+harness's output. The quest is the slice's own —
 Fisk in Ascalon City, the west portal into the corridor, the groups, the boss, the portal
 back, the turn-in — and everything else is yours to change.
 
@@ -118,8 +120,10 @@ framework:
   view inside a card is part of it, not a box in a box.
 - **A sentence goes under a control, never inside it**; ids, flags and citations go on hover.
 - **Text fits or is sized to fit**: a combo is sized in characters and shows the start of its
-  text; the heroes table's Profession and Body columns hold their longest common item, and
-  below 1,120 px the Character card goes above the table rather than squeezing it.
+  text; the heroes table's Profession and Body columns are sized to their widest item (measured,
+  not guessed); below 1,120 px the Character card goes above the table, its five fields three to
+  a row; and a narrow hostile page stacks its Body and Weapon cards and puts its bar in one
+  column, so no picker clips.
 - **A hovered combo or spin box never changes under the wheel** unless it has focus; the wheel
   scrolls the page instead. (The wheel cannot GIVE it focus: Qt hands a hovered widget focus by
   its policy before any filter sees the event, so every combo and spin box is StrongFocus.)
@@ -138,7 +142,17 @@ any fill counts), every profession fits its combo and every spin box shows its l
 1,280 and at 1,000 px, a real OS wheel over an unfocused combo scrolls the page and leaves the
 combo alone with the window inactive and then active (where a focused one still takes it, and
 an unlocked hero's Level spin scrolls the table), and no flag, file name, ident or hex id sits
-on the visible surface. The window's STATE has laws of the same kind: the slice
+on the visible surface. Layout and words have their own: every profession and every body fits
+its heroes-table column and every choice in a hostile's slots, Template and Weapon fits its
+field at 1,280, 1,120 and 1,000 px; the Character card is top-aligned beside the table and two
+rows of three when stacked, its labels centred on their fields at the window's minimum height;
+the Skills list's grade pills stand in one column near the name, not flush right; a group page
+and a hostile page end at one right edge whether or not the hostile page scrolls; the tab
+carries one labelled Remove per object (a group holding hostiles asks first) and no icon-only
+verb; the status chip's right gap is the page gutter and the Run tab's COMPILED and OUTPUT
+start at the card titles' x; every caption is one line, none says "the stack", the two Run wells
+name what will appear, and every tooltip, special value and placeholder that is a sentence
+starts with a capital. The window's STATE has laws of the same kind: the slice
 opens one window and adding hostiles opens none (a label shown with no parent is a window of
 its own), every input the compiler reads turns a fresh green **Compiled** into **Changed since
 compile** while the Skills filters leave it green, a hostile's edit reaches its group's roster

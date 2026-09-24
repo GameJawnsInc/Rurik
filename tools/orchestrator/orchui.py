@@ -326,10 +326,15 @@ GRADE_TEXT = {"hand": "modelled", "label": "label"}
 
 class SkillDelegate(QStyledItemDelegate):
     """One skill row: the name at body size, then its id, profession and
-    attribute in a quiet mono, then a small grade pill at the right edge --
-    instead of all of it jammed into one string with a trailing asterisk."""
+    attribute in a quiet mono, then a small grade pill in ONE column just past
+    the widest name and meta (set_column) -- instead of all of it jammed into
+    one string with a trailing asterisk. Flush right, the pill sat 940 px from
+    the row it graded with no rule or stripe to carry the eye across; in a
+    column it still scans as a column and stays within about 130 px of its
+    name. A row too narrow for the column keeps the pill at its right edge."""
 
     PAD_V = 12
+    PILL_GAP = 12                               # past the widest name + meta
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -337,6 +342,15 @@ class SkillDelegate(QStyledItemDelegate):
         self.pill_font = QFont("Segoe UI")
         self.pill_font.setPixelSize(orchtheme.TYPE["caption"] - 1)
         self.pill_font.setWeight(QFont.DemiBold)
+        self.column = None                      # px from the text's left; None: flush right
+
+    def set_column(self, parts):
+        """Put the pill column just past the widest (name, meta) among `parts`
+        ((name, meta, grade) triples, as ROLE_PARTS holds them)."""
+        fm, mfm = QFontMetrics(QApplication.font()), QFontMetrics(self.meta_font)
+        widest = max((fm.horizontalAdvance(name) + 12 + mfm.horizontalAdvance(meta)
+                      for name, meta, _g in parts), default=0)
+        self.column = widest + self.PILL_GAP
 
     def sizeHint(self, opt, idx):
         base = super().sizeHint(opt, idx)
@@ -362,7 +376,8 @@ class SkillDelegate(QStyledItemDelegate):
             label = GRADE_TEXT[grade]
             fm = QFontMetrics(self.pill_font)
             w, h = fm.horizontalAdvance(label) + 14, fm.height() + 4
-            pill = QRect(right - w, r.center().y() - h // 2, w, h)
+            x = right - w if self.column is None else min(r.left() + self.column, right - w)
+            pill = QRect(x, r.center().y() - h // 2, w, h)
             p.setRenderHint(QPainter.Antialiasing)
             p.setPen(QColor(PAL[f"chip_{kind}_edge"]))
             p.setBrush(QColor(PAL[f"chip_{kind}_bg"]))
