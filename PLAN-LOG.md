@@ -28,6 +28,44 @@ move back.
 
 ---
 
+### DESKWORK-D10 (steps 2, 3, 5), MOVE-B — FIX PASS — 2026-09-24 — **the review pass corrects the entry below: 1z-di.3's mechanism IS witnessed once, unrefereed, at a plane seam (c5 t=172.59), and the "on our own grant" and "under the gate" readings were two instrument bugs, now fixed**
+
+Corrects the DESKWORK-D10 (steps 2, 3, 5) entry immediately below (commits `76be343f`/`2333de81`/`3ac8018f`);
+this entry is on top per the append-only rule. Two reviewers (evidence-refuter, engineering) re-derived
+the hard rows from the wire; the surviving findings, verified here, moved the reading and the instrument:
+
+- **Blocker 1 — `on_grant` looked 0.05 s PAST the landing** and so caught our own `STOP-ECHO`, which
+  repeats the client's stop point ~0.6 ms after every stop. c5 t=142.57's 649 u jump had read "on our
+  grant, the client obeying"; the nearest grant *before* the landing is 946 u away. Fixed to
+  strictly-before; the row is re-adjudicated as a real **click-drop snap-back** (the suspect is our
+  own dropped click + copy-park, not the arrival re-grant).
+- **Blocker 2 — `under_gate1` compared a between-frame DISPLACEMENT with the copy-to-body SEPARATION
+  gate.** c5 t=172.59 read "under the gate", but the server's own rows show drift 343 u and
+  `agtrack_guard` gate1-red — **over** the gate. The re-grant walked the copy 257 u onto plane 29 and
+  the body teleported (1,429 u/s) onto the re-grant's path (18 u off it, 212 of 257 u along); without
+  the re-grant the copy parks 249.8 u away (under the gate). **This is 1z-di.3's mechanism, CORROBORATED
+  on the wire, unrefereed (no tape).** Each row now carries the server's drift + gate1 verdict; `under_gate1`
+  is an annotation.
+- **Majors:** the nearest-send attribution filtered to the PLAYER's agent (c4 t=118.41's nearest send
+  was a hero FORMATION order to agent 200; and gate1-red there predates the re-grant — a lead-chain
+  gate snap on a STRAIGHT wall, re-grant secondary); a warp row that RAISED now prints RED instead of
+  vanishing from the report; the LITERAL corner crawl (c5 t=2–4.5, inside the task's box) is read at
+  last — the crawl reached the body, drift 0.0, **no snap** (a clean negative the first pass skipped);
+  and the OOS section is corrected — **35 connections / 13 sessions** (not "13 connections"), the
+  baseline relabelled 1z-dh's silence census, and 1z-di.1's per-grant geometry re-derived: the CENTRE
+  holds out of sample (chord p50 765 u along, 0 across, restatement 0) but the TAILS widen (along
+  min −247, across max 266 vs 0/17 in sample).
+- Display/hygiene: rule 7 (a refusal keeps the count), rule 8 (the rate carries its active-time
+  threshold), min/max not p50==max at n<3, the fence `client-reseed` count printed with the warp row's
+  blind-spot note, constants deduped, `captures()` sorted by (stamp, conn).
+
+`sessionscore.py` and `test_sessionscore.py` fixed; `test_sessionscore` 21 → 28 bare (1 skip) / 37
+vaulted, floor 28, TESTS.md updated in the same commit. Record: movecode §1z-do.6 (headline moved from
+"REFUTED" to "witnessed once, unrefereed"; §1z-do.3 rows, §1z-do.3b the corner crawl, §1z-do.4 the OOS
+correction). **No `authsrv.py` change; `KBD_LEAD_ARRIVAL_REGRANT` stays ON; the gate stays a registered
+proposal (§1z-do.5), now with one wire witness arguing for the tape'd corner measurement, not for
+shipping it blind.** Affected: 7 green of 7 (226 checks) then the docs set.
+
 ### DESKWORK-D10 (steps 2, 3, 5), MOVE-B -- 2026-09-24 -- **a warp row in the movement scorecard, and the adjudication it enabled: 1z-di.3's predicted corner-crawl-then-snap is NOT witnessed in the four post-ship hard rows -- two are click artifacts, one lands on our own grant, and the two re-grant-adjacent rows are a straight wall and a sub-gate corner; the arrival re-grant is a SUSPECT in at most two rows and a proven cause in none. No authsrv.py change; a gate is registered as a proposal, not built**
 
 `sessionscore.py` (studies/movecode/review), the movement regression scorecard, had every

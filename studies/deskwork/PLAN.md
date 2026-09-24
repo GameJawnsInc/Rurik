@@ -916,27 +916,36 @@ movement HANDOFF §A ("current at 22bfe86", 917 commits behind).
    1z-p "scored from the corpus" or withdraw R8 keeping R8b; rewrite Q14 item 1 with the
    numbers.
 2. **A warp row in `sessionscore`.** ✅ **LANDED 2026-09-24 (MOVE-B), PLAN-LOG DESKWORK-D10
-   steps 2/3/5, movecode §1z-do.2.** `movesync.wire_only`'s two-arm bar (not
-   `resyncscore` — it gives the grant labels attribution needs); band 0 (retail and
-   09-09/09-12 all 0); each row a SUSPECT with its nearest send, a wall-slide re-grant
-   flagged separately, `on_grant` and `under_gate1`. Positive controls c4/c5 RED, 09-12
-   OK; `captures()` now reaches every connection suffix; first test `test_sessionscore.py`.
-3. **Adjudicate the post-ship warps.** ✅ **LANDED 2026-09-24 (MOVE-B), movecode §1z-do.3.**
-   1z-di.3's corner-crawl-then-snap is NOT witnessed in the four rows: c5 142.57 lands on
-   our own STOP-ECHO grant (click regime); c5 172.59 is re-grant-adjacent but UNDER
-   gate-1 with a plane flip; c4 118.41 is over gate-1 but a STRAIGHT wall; c4 142.55 is a
-   click artifact. No `0x002C`, no overlapping tape. CONTESTED/REFUTED for these four; a
-   gate is a REGISTERED PROPOSAL (§1z-do.5), not built.
+   steps 2/3/5 + the FIX PASS entry, movecode §1z-do.2/.6.** `movesync.wire_only`'s two-arm
+   bar (not `resyncscore` — it gives the grant labels attribution needs); band 0 (retail and
+   09-09/09-12 all 0); each row a SUSPECT with its nearest PLAYER send, a wall-slide re-grant
+   flagged separately, the server's own drift + gate1 verdict, and `on_grant`/`under_gate1` as
+   annotations. Positive controls c4/c5 RED, 09-12 OK; `captures()` reaches every connection
+   suffix; first test `test_sessionscore.py` (37 vaulted / 28 bare after the fix pass). Fix
+   pass corrected `on_grant` (strictly before the landing, not catching the STOP-ECHO), the
+   agent filter, and the silent-warp-error → RED.
+3. **Adjudicate the post-ship warps.** ✅ **LANDED 2026-09-24 (MOVE-B), movecode §1z-do.3/.3b/.6.**
+   FIX PASS reading: 1z-di.3's mechanism IS witnessed once, unrefereed, at a **plane seam**
+   (c5 172.59 — the re-grant walked the copy over the separation gate: server drift 343 u,
+   gate1-red, body teleports onto the re-grant's path); c5 142.57 is a **click-drop snap-back**
+   (NOT on our grant — that was the STOP-ECHO sent after the report); c4 118.41 is a lead-chain
+   gate snap on a **straight wall** (gate1-red predates the re-grant; nearest send is the player
+   lead, not a hero grant); c4 142.55 is a **sub-gate** click jump. The LITERAL corner crawl
+   (c5 t=2–4.5, inside the box) reached the body with **no snap** (§1z-do.3b). No `0x002C`, no
+   overlapping tape; n=4. CONTESTED; a gate is a REGISTERED PROPOSAL (§1z-do.5), not built.
 4. **Tap rate.** Memoise `tls_blocks`/`_threads_of` per (pid, tls_index) in `movetap.py`,
    re-enumerating only when the TEB32 self-check fails; `calibrate()` times a full poll;
    both loops pace to a deadline (`agenttap.py:352`; at 30 Hz today 33 ms sleep + 57 ms
    snapshot ≈ 11 Hz); a fake-memory selftest shows reuse and invalidation. No agenttap
    tape exists since 09-10, so this pays when tape'd runs resume.
-5. **Out-of-sample re-grant.** ✅ **LANDED 2026-09-24 (MOVE-B), movecode §1z-do.4.**
-   `parkedcopy.silences` re-run on the 13 live connections after 09-10: 26/36 (72 %)
-   straight silences carry a re-grant against 65 % fitted, +0.06 s arrival lag, pairs
-   10/26; the SLIDE class is **0 in sample and out** — retail still has no
-   wall-slide-then-silence witness, so the composition stays a RECONSTRUCTION.
+5. **Out-of-sample re-grant.** ✅ **LANDED 2026-09-24 (MOVE-B), movecode §1z-do.4/.6.**
+   `parkedcopy.silences` re-run on the **35 live connections (13 sessions)** after 09-10
+   (FIX PASS: the first pass mislabelled 13 sessions as connections): 26/36 (72 %) straight
+   silences carry a re-grant against 65 % fitted, +0.06 s arrival lag, pairs 10/26. The
+   per-grant geometry re-derived: the CENTRE holds (chord p50 765 u along, 0 across) but the
+   TAILS widen out of sample (along min −247, across max 266 vs 0/17 in sample). The SLIDE
+   class is **0 in sample and out** — retail still has no wall-slide-then-silence witness, so
+   the composition stays a RECONSTRUCTION.
 6. **`_reach_frame` through a client-walked follow.** The client's follow stop is decoded
    with no weapon term (park at (r1 + r2 + TABLE[kind])² with the target's world-0 as
    destination); a small follow model walks the mirror's copy toward the target and parks
