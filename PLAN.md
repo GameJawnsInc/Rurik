@@ -1942,9 +1942,9 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   henchman add HELD on the client. The town weapon's carrier fix
   CONFIRMED on the client (CONFIRM-2 §7, PLAN-LOG): our load's player `0x006D` was the
   carrier — withheld in a town the body is empty-handed at load and after F2, and
-  `--town-player-weapons` reproduces the stale hammer (OBSERVED). **Open**: the owner's
-  one-word question (on retail, does a character hold a weapon in an outpost at all?); town
-  combat with no hand declared (unexercised); **the FIELD's
+  `--town-player-weapons` reproduces the stale hammer (OBSERVED). The owner's answer
+  (2026-09-24): on retail no weapon is shown on the body in a town, only on the doll — the fix's
+  picture. **Open**: town combat with no hand declared (unexercised); **the FIELD's
   player `0x006D` is a defect** (the fix pass, TF-R1): retail sends none (0 of 44), ours sends
   `[player, lead, 0]` after the `0x006E`, and its zero off hand is the last hand write, so a
   sword-and-shield field body loses its shield at load (run 20260923T154229, seq 111/113,

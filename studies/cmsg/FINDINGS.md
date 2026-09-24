@@ -1982,7 +1982,10 @@ EMPTY-HANDED at load (T1, the doll still holding the hammer) and after F2 (T2, t
 the sword and shield); `--town-player-weapons`, the same wire plus that one message, reproduces
 CONFIRM-2's stale hammer after F2 (T3). The rival below (the client arming the body from the
 equipped bag once at load) is refuted: with the message withheld nothing arms it. The
-CORROBORATED labels below stand as the record of what was known before this run.
+CORROBORATED labels below stand as the record of what was known before this run. **The
+owner's answer to the one-word question (2026-09-24): on retail no weapon is shown on the body
+in a town, only on the paper doll** — the wire's picture (0 own `0x006D`, empty-handed town
+`0x006E`) and now ours.
 
 **(f) The carrier (the CONFIRM-2 desk fix, 2026-09-24).** The question the run left — WHAT
 draws a town body's weapon, and what does retail send when it changes — was put to the same

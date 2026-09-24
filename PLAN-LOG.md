@@ -28,6 +28,16 @@ move back.
 
 ---
 
+### DESKWORK-D1, the town weapon: the owner's answer -- 2026-09-24 -- **on retail no weapon is shown on the body in a town, only on the doll**
+
+The one-word question the carrier fix left (the entry below and its fix pass): the owner,
+from retail play, "no weapon shown in town (other than the doll)". That is the wire's picture
+(retail sends the own body no `0x006D` and an empty-handed town `0x006E`) and the one T1/T2
+drew after the fix. The question leaves `PLAN.md` 8.1; the D1 line keeps town combat with no
+hand declared and the FIELD `0x006D` erasing a shield at load.
+
+---
+
 ### DESKWORK-D1, the town weapon's carrier fix CONFIRMED on the client -- 2026-09-24 -- **the body empty-handed in a town at load and after F2; `--town-player-weapons` reproduces the stale hammer; the carrier is OBSERVED**
 
 Three harness launches on the merged tree (`2762740d`; studies/deskwork/CONFIRM-2026-09-24.md
