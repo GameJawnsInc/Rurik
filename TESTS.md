@@ -12590,7 +12590,9 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   `tools/blender/`; the rest of the look is `orchestrator.py --smoke`'s, which needs
   PySide6 and the vault. §1 both palettes: exactly the base keys, every pair
   `audit()` measures clears its floor (4.5:1 text, 3:1 marks, measured distances for
-  hover/pressed/selection, the focused tab's fill from the page), both real sheets
+  hover/pressed/selection, and the `pressed` TOKEN from the page -- the focused
+  tab's fill is read off the sheet in §4, since the row cannot see which token the
+  rule names), both real sheets
   lint clean, every derived token a `#rrggbb`, the window's roles styled, and
   `derive()` refuses a palette missing a base key (the verify round found the
   "idempotent" check it replaces unable to fail: derive() hands a derived palette
@@ -12607,7 +12609,12 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   stayed green with the sheet's ink reverted. **2026-09-24, the third fix pass,
   group G, §4 +2: the spin boxes' `max-height` read off the sheet is the wells'
   `min-height` (22px, both contents heights), so a spin stands as tall as a combo
-  -- `--smoke` measures the rendered heights, this is its bare twin; floor 29 → 31.**
+  -- `--smoke` measures the rendered heights, this is its bare twin; floor 29 → 31.
+  Group F, §4 +6: the focused tab's `:selected:focus` rule READ OFF THE SHEET, both
+  palettes -- its fill 12+ from the page (the token row stayed green with the rule
+  put back to hover, 3 from the light page) and its top edge a mark that clears 3:1
+  on the page -- and two planted rules refused, one filled with hover and one with no
+  edge; floor 31 → 37.**
   Floor 31, <1 s),
   `toolkit/test_bareimport.py` (the SERVER must import on a machine with no
   vault -- proven in a subprocess, not argued. **What earns it: on 2026-08-15

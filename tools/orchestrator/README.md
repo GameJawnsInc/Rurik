@@ -28,6 +28,16 @@ python tools/orchestrator/orchestrator.py --spec my.toml   # open a saved spec
 python tools/orchestrator/orchestrator.py --smoke C:\scratch\out   # every panel once, and the look's laws
 python tools/orchestrator/orchestrator.py --snap C:\scratch\out    # every surface to a PNG, never on screen
 python tools/orchestrator/orchestrator.py --theme light            # dark / light / auto (follows the OS)
+```
+
+`--smoke` renders one palette a process and `--theme auto` follows the OS, so a law that is red
+in one palette only (the light tab strip's focus fill was) is seen by running it with `--theme
+dark` and again with `--theme light`. Its verdict is the house ledger's (`toolkit/checks.py`):
+a law that cannot run declares a skip, printed in the verdict, and a run that executes fewer
+than its floor of 132 laws (the green run's 150 less the 18 behind a declared skip) fails naming
+the shortfall.
+
+```
 python tools/orchestrator/orchtheme.py                             # the contrast audit, no Qt needed
 pythonw apps/orchestrator.pyw                              # double-click launcher
 ```
@@ -141,15 +151,22 @@ framework:
 `toolkit/test_orchtheme.py` (in the suite, bare) holds the arithmetic: both palettes clear every
 audited pair, the sheet lints clean, the lint goes red on each planted fault, the danger
 button's hover and press rules, read off the sheet itself, paint an ink that clears 4.5:1 on
-their fill (a planted hover that keeps the base ink is refused), and the spin boxes' max-height
-is the wells' min-height (one field height). `--smoke` holds the rest as
-laws measured off rendered pixels — one accent and it renders gold, a checked box renders
-neutral and shifts its fill under the pointer, a hovered danger button's painted ink clears
-4.5:1 on its fill, a pressed button keeps its relief with focus on it, a log's scroll corner is
-the log's own ground, a popup is one box in the popup edge with no row scrolled, the list
-renders its pills and its empty-filter placeholder, focus shows on the list, the tab strip and
-Launch (measured on grabs of the window: a widget's own grab is a transparent canvas on which
-any fill counts), every profession fits its combo and every spin box shows its longest value at
+their fill (a planted hover that keeps the base ink is refused), the focused tab's rule, read
+off the sheet too, fills 12 from the page and draws a top edge that clears 3:1 on it (the
+token audit cannot see which token a rule names: a rule put back on hover kept it green), and
+the spin boxes' max-height is the wells' min-height (one field height). `--smoke` holds the rest
+as laws measured off rendered pixels — one accent and it renders gold, a checked box renders
+neutral and shifts its fill under the pointer, a hovered danger button paints its WORDS in an
+ink that clears 4.5:1 on its fill (the trash icon left out of the picture: in dark it is the
+hover ink's own colour, and it passed the law with the words invisible), a pressed button
+keeps its relief with focus on it, a log's scroll corner is the log's own ground, each of the
+four popups — a profession picker's, the Skills filter's, a Picker's and its completer's — is
+one box in the popup edge, a plain combo's rows unscrolled, and a census names any plain combo
+built with fewer visible rows than it holds, the list renders its pills and its empty-filter
+placeholder, focus shows on the list, the tab strip and Launch (measured on grabs of the
+window: a widget's own grab is a transparent canvas on which any fill counts) and the focused
+tab's cue is a mark in the focus ring's ink, 3:1 against what it replaced (the fill alone was
+1.13:1 in light), every profession fits its combo and every spin box shows its longest value at
 1,280 and at 1,000 px, a real OS wheel over an unfocused combo scrolls the page and leaves the
 combo alone with the window inactive and then active (where a focused one still takes it, and
 an unlocked hero's Level spin scrolls the table), and no flag, file name, ident or hex id sits
@@ -187,14 +204,16 @@ path (a reset never the store's), one bulk write of the Skills list (Unlock part
 load) is one count and one change signal, a low damage bound typed with the high at 0 is not
 an edit, ranks past a hostile's budget are refused at compile as its hint promises, and a
 Ranks built by any caller houses its chip. The Run tab's lifecycle
-has its own: every line the end chip reads is one the harness still PRINTS (its print sites,
-not its comments), a crash reads crit on exit 0 too, a run's verdict outlives the first edit
+has its own: every line the end chip reads, and the crash line's prefix, is one the harness
+still PRINTS (its print calls read off the syntax tree, so a comment or a docstring quoting an
+old line is not one), a crash reads crit on exit 0 too, a run's verdict outlives the first edit
 after it and an edit during the run is said when it ends, a harness that cannot start (the
 real start path, a program that does not exist) leaves Launch enabled and the clock stopped,
 the no-archive dialog's face is a sentence and the command with the citation behind Show
-Details, the compiled status line names no path, the Compiled pane wraps, the live status
-repeats no caption on the tab, and the Output log keeps a scrolled-back reader's line under
-them at its block cap. `--snap` renders every surface to a PNG for a person to read; a visual
+Details and Launch shows that dialog, the compiled status line names no path, the Compiled pane
+wraps, the live status repeats no caption on the tab and its say site puts the constant on the
+line whole, and the Output log keeps a scrolled-back reader's line under them at its block cap,
+wrapped lines included. `--snap` renders every surface to a PNG for a person to read; a visual
 claim nobody looked at is a guess.
 
 ## Open on the client

@@ -56,6 +56,7 @@ and citations on hover, not on the surface; every colour walked to its
 contrast floor. `--smoke` checks those as laws, not as intentions.
 """
 import argparse
+import ast
 import inspect
 import os
 import re
@@ -73,14 +74,15 @@ for p in (os.path.join(ROOT, "toolkit"), os.path.join(ROOT, "toolkit", "harness"
         sys.path.insert(0, p)
 
 import sandbox        # noqa: E402  (toolkit/harness/sandbox.py)
+import checks         # noqa: E402  (toolkit/checks.py: the smoke's verdict, floored)
 import content        # noqa: E402
 import vaultpath      # noqa: E402
 
 try:
     from PySide6.QtCore import (QElapsedTimer, QEvent, QPoint, QPointF, QProcess,
                                 QProcessEnvironment, QRect, Qt, QTimer, Signal)
-    from PySide6.QtGui import (QColor, QFont, QImage, QKeyEvent, QPainter, QTextCharFormat,
-                               QTextCursor, QWheelEvent)
+    from PySide6.QtGui import (QColor, QFont, QIcon, QImage, QKeyEvent, QPainter,
+                               QTextCharFormat, QTextCursor, QWheelEvent)
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import (QAbstractItemView, QAbstractSpinBox, QApplication,
                                    QBoxLayout, QCheckBox, QComboBox,
@@ -1788,9 +1790,11 @@ class EnemiesTab(QWidget):
 # ---------------------------------------------------------------- Run
 
 LOG_ERROR = re.compile(r"^Traceback|\bERROR\b|\[FAIL\]|Error:|Exception\b")
-# What the harness prints that decides how a run ENDED (session.py, runwatch.py).
+# What the harness prints that decides how a run ENDED (session.py, runwatch.py),
+# and how it prefixes the crash dialog's own line (the chip's hover).
 RUN_MARKS = {"retracted": "RUN VERDICT RETRACTED", "crash": "ERROR DIALOG captured",
              "fail": "RUN VERDICT: FAIL"}
+ASSERT_PREFIX = ">>> "
 BUILD_SLICE = ("Build the slice archive with:  python toolkit/mapdata/compose.py --name slice "
                "--build   (RUNBOOK.md, SLICE-B9); a new run directory needs the elevated cage "
                "step once.")
@@ -1832,7 +1836,11 @@ def write_lines(view, lines):
     # at the block cap the document trims the top as these go in, and the view
     # keeps its top block NUMBER, so a scrolled-back reader sees the text creep
     # up under them (appendPlainText moves its top block back; this cursor does
-    # not). Count the lines about to go, in the bar's own units.
+    # not). Count the lines about to go, in the bar's own units, and take them
+    # off the value read NOW: after the edit the bar holds a value Qt re-derived
+    # from the kept block number, which is the reader's only while no line
+    # wraps (a log with every third line wrapped crept 2 rows in 10)
+    v0 = bar.value()
     cap = doc.maximumBlockCount()
     new_blocks = len(lines) - (1 if doc.isEmpty() else 0)
     trimmed = max(0, doc.blockCount() + new_blocks - cap) if cap else 0
@@ -1855,7 +1863,7 @@ def write_lines(view, lines):
     if at_bottom:
         bar.setValue(bar.maximum())
     elif lost:
-        bar.setValue(bar.value() - lost)
+        bar.setValue(max(0, v0 - lost))
 
 
 def compiled_lines(compiled):
@@ -2221,8 +2229,8 @@ class RunTab(QWidget):
         for key, needle in RUN_MARKS.items():
             if needle in line:
                 self._marks.add(key)
-        if line.strip().startswith(">>> "):      # the dialog's own line, for the chip's hover
-            self._assert = line.strip()[4:]
+        if line.strip().startswith(ASSERT_PREFIX):   # the dialog's own line, for the chip's hover
+            self._assert = line.strip()[len(ASSERT_PREFIX):]
 
     def _read(self):
         data = self._partial + bytes(self.proc.readAllStandardOutput()).decode("utf-8", "replace")
@@ -2532,6 +2540,22 @@ def _moved(win, widget, before, after, rect=None):
     return worst
 
 
+def _shifted(win, widget, before, after, rect=None):
+    """The highest CONTRAST any pixel of `widget` (or `rect`) makes against
+    what it was, between two grabs of the WINDOW. A focus cue is a mark, and
+    the theme holds a mark to MARK_FLOOR on its ground; the distance _moved
+    reads told a fill from the page (17 in light) that was 1.13:1 to the eye."""
+    r = rect or widget.rect()
+    at = widget.mapTo(win, r.topLeft())
+    best = 1.0
+    for y in range(at.y(), min(before.height(), after.height(), at.y() + r.height())):
+        for x in range(at.x(), min(before.width(), after.width(), at.x() + r.width())):
+            a, b = before.pixelColor(x, y), after.pixelColor(x, y)
+            if a != b:
+                best = max(best, orchtheme.contrast(a.name(), b.name()))
+    return best
+
+
 def _best_contrast(img, ground, inset=3):
     """The highest contrast any pixel of `img`, `inset` px in from its edges,
     makes against `ground`: a glyph's core ink, whatever the sheet names it."""
@@ -2540,6 +2564,14 @@ def _best_contrast(img, ground, inset=3):
         for x in range(inset, img.width() - inset):
             best = max(best, orchtheme.contrast(img.pixelColor(x, y).name(), ground))
     return best
+
+
+def _ink_pixels(img, ground, floor, inset=3):
+    """How many pixels of `img`, `inset` px in, clear `floor` on `ground`: the
+    glyphs' own count, which a best-pixel reading cannot give (one pixel of
+    the right ink passes it)."""
+    return sum(1 for y in range(inset, img.height() - inset) for x in range(inset, img.width() - inset)
+               if round(orchtheme.contrast(img.pixelColor(x, y).name(), ground), 2) >= floor)
 
 
 def _ink_span(img, rect, ground, tol=40):
@@ -2617,6 +2649,22 @@ def surface_lore(win):
     return out
 
 
+def printed_strings(path):
+    """Every string a print() call in the file at `path` can put on a line:
+    the constants inside the call, an f-string's literal parts among them.
+    Read through the syntax tree, so a comment or a docstring quoting an old
+    line is not a print site (a regex over the text took a commented-out
+    print for one)."""
+    with open(path, encoding="utf-8") as fh:
+        tree = ast.parse(fh.read())
+    out = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "print":
+            out += [c.value for c in ast.walk(node)
+                    if isinstance(c, ast.Constant) and isinstance(c.value, str)]
+    return out
+
+
 def _real_wheel(win, widget, delta=-120):
     """A spontaneous wheel, the way the OS sends one (Windows): Qt never
     propagates a synthesized wheel, so sendEvent cannot test the guard's
@@ -2637,13 +2685,30 @@ def _real_wheel(win, widget, delta=-120):
     return True
 
 
+# The laws a healthy --smoke executes, less the ones behind a declared skip --
+# set from a green run of this tree, never from a wish (toolkit/checks.py:
+# "set the floor to its mandatory core and let the optional sections declare
+# skips"). The gated laws, by gate: the grade marks 5 (a vault overlay with
+# label rows), the inactive real wheel 1 (Windows, a page that scrolls), the
+# over-budget hostile 1 (an attribute table), the encounter list's focus 1,
+# Launch's ring and the tab strip's cue 3, the active-window wheel 3, the
+# four popups 4 -- 18 of the green run's 150. A gated law that skips is
+# printed in the verdict; a mandatory law that stops running is a FAIL naming
+# the shortfall, which "0 failure(s)" never was.
+SMOKE_FLOOR = 132
+
+
 def smoke(win, app, out_dir):
     """`--smoke`: drive every panel once with the window up, then exit.
 
     A window nobody has clicked through is a window that may not open; this
     runs the click path in code so a refactor cannot leave a dead tab behind
-    a green suite. Writes a screenshot and prints one line per check; exits
-    non-zero on any failure. Never writes into the working tree.
+    a green suite. Writes a screenshot and prints one line per check, and
+    rules through the house ledger (toolkit/checks.py): a law that cannot run
+    declares a skip, printed in the verdict, and a run that executes fewer
+    laws than SMOKE_FLOOR fails naming the shortfall -- "0 failure(s)" once
+    said nothing about whether 124 or 115 laws had run. Never writes into
+    the working tree.
 
     The LOOK is checked here too, as laws rather than intentions (Dream-
     World-IX: "a law in a docstring is a wish"): both palettes clear their
@@ -2660,20 +2725,20 @@ def smoke(win, app, out_dir):
     where Qt hands a hovered combo focus before any filter runs). Each law
     was a finding of a review that came after the first cut, or after the
     fix pass; a check that needs keyboard focus, or a real OS wheel, says
-    [skip] when it cannot have that. The window is native but never on the
-    screen (WA_DontShowOnScreen, as --snap renders)."""
+    [SKIP] when it cannot have that. The window is native but never on the
+    screen (WA_DontShowOnScreen, as --snap renders). One palette a process:
+    --theme auto follows the OS, so a law red in one palette only is seen by
+    running both."""
     out_dir = vaultpath.resolve_out(out_dir, what="smoke output")
     os.makedirs(out_dir, exist_ok=True)
-    fails = []
+    led = checks.Ledger("orchestrator --smoke", floor=SMOKE_FLOOR)
     pal = orchui.PAL
 
     def check(cond, label):
-        print(f"  [{'ok' if cond else 'FAIL'}] {label}")
-        if not cond:
-            fails.append(label)
+        led.ok(cond, label)
 
     def skip(label, why):
-        print(f"  [skip] {label} -- {why}")
+        led.skip(label, why)
 
     def settle(n=3):
         for _ in range(n):
@@ -2683,6 +2748,18 @@ def smoke(win, app, out_dir):
         w.setFocus(Qt.TabFocusReason)
         settle()
         return win.isActiveWindow() and w.hasFocus()
+
+    def activate():
+        """The window active, waited for rather than assumed: the OS hands
+        activation back on its own clock, and five turns of the loop once
+        left a popup law skipped whole while the laws before it had run."""
+        win.activateWindow()
+        win.raise_()
+        t_end = time.perf_counter() + 2.0
+        while not win.isActiveWindow() and time.perf_counter() < t_end:
+            settle(1)
+            time.sleep(0.01)
+        return win.isActiveWindow()
 
     def strays():
         """Windows of their own besides this one (a hidden completer popup is
@@ -3399,6 +3476,10 @@ def smoke(win, app, out_dir):
     check(caps and not shared,
           f"the live status repeats no Run-tab caption ({len(caps)} captions; a run of four "
           f"words shared: {shared[:2] or 'none'})")
+    # ...read at the constant, so the say site is locked to it: _start says
+    # LAUNCH_STATUS and nothing appended (a launch is not driven here)
+    check("self.status.setText(LAUNCH_STATUS)" in inspect.getsource(RunTab._start),
+          "and the launch's say site puts that constant on the line, whole")
     t_end = time.perf_counter() + 2.0            # the summary is debounced: let it land
     while win._summary_timer.isActive() and time.perf_counter() < t_end:
         settle(1)
@@ -3643,16 +3724,18 @@ def smoke(win, app, out_dir):
           f"bar says what the window could not hold ({shape}; {msg[:96]!r})")
     win.from_spec(before)
     settle()
-    # how a run ended is read from what the harness PRINTS -- print sites, not
-    # the source whole: the same files quote the old lines in comments
-    harness = ""
+    # how a run ended is read from what the harness PRINTS -- print sites, read
+    # off the syntax tree, not the source text: the same files quote the old
+    # lines in comments, and a commented-out print fooled a regex. The crash
+    # line's prefix is read the same way: the chip's hover is empty without it
+    strs = []
     for name in ("session.py", "runwatch.py"):
-        with open(os.path.join(ROOT, "toolkit", "harness", name), encoding="utf-8") as fh:
-            harness += fh.read()
-    printed = {key: bool(re.search(r"print\([^\n]*" + re.escape(needle), harness))
-               for key, needle in RUN_MARKS.items()}
+        strs += printed_strings(os.path.join(ROOT, "toolkit", "harness", name))
+    printed = {key: any(needle in s for s in strs)
+               for key, needle in dict(RUN_MARKS, assert_line=ASSERT_PREFIX).items()}
     check(all(printed.values()),
-          f"every line the end-of-run chip reads is one the harness still PRINTS ({printed})")
+          f"every line the end-of-run chip reads, and the crash line's prefix, is one the "
+          f"harness still PRINTS ({printed})")
     table = ((set(), 0, "good"), ({"retracted"}, 1, "good"), ({"crash", "retracted"}, 1, "crit"),
              ({"crash"}, 0, "crit"), ({"fail"}, 1, "warn"), ({"stopped"}, 1, "info"),
              ({"no start"}, -1, "crit"), (set(), 1, "warn"))
@@ -3726,6 +3809,10 @@ def smoke(win, app, out_dir):
           f"the no-archive dialog's face is a sentence and the command; the citation and the "
           f"compiler's words are behind Show Details ({face})")
     box.deleteLater()
+    # ...and launch shows THAT box (the seam a law reads is not the call site:
+    # a QMessageBox.warning with the old face would pass the law above)
+    check("self.no_archive_box(exc).exec()" in inspect.getsource(RunTab.launch),
+          "and Launch shows that dialog, not one of its own")
     # after a refusal, an edit says the pane holds REASONS; after a no-archive
     # compile, it keeps the build hint on hover
     win.enemies.groups[0].members[0].boss.setChecked(True)
@@ -3778,6 +3865,29 @@ def smoke(win, app, out_dir):
     check(top == "row 40" and view.firstVisibleBlock().text() == top and view.blockCount() == 100,
           f"at the block cap the scrolled-back reader's line stays under them ({top!r} -> "
           f"{view.firstVisibleBlock().text()!r}, {view.blockCount()} blocks)")
+    view.deleteLater()
+    # ...and when lines WRAP: every third row too long for the view, the reader
+    # on row 40 (the bar in visual lines, so the row's first line), ten rows in
+    # -- the value read after the edit is Qt's from the kept block number, and
+    # the trimmed rows' lines came off it twice (row 40 -> row 42)
+    view = QPlainTextEdit()
+    view.setAttribute(Qt.WA_DontShowOnScreen, True)
+    view.resize(400, 200)
+    view.setMaximumBlockCount(100)
+    view.show()
+    wrapped = [(f"row {i}" + (" wraps" * 60 if i % 3 == 0 else ""), "body") for i in range(100)]
+    write_lines(view, wrapped)
+    line40 = view.document().findBlockByNumber(40).firstLineNumber()   # > 40: rows wrapped above
+    view.verticalScrollBar().setValue(line40)
+    settle()
+    top = view.firstVisibleBlock().text()
+    write_lines(view, [(f"row {i}" + (" wraps" * 60 if i % 3 == 0 else ""), "body")
+                       for i in range(100, 110)])
+    settle()
+    now = view.firstVisibleBlock().text()
+    check(line40 > 40 and top.startswith("row 40") and now == top,
+          f"at the block cap with every third row wrapped the reader's line stays under them "
+          f"({top[:12]!r} -> {now[:12]!r}; row 40 began at visual line {line40})")
     view.deleteLater()
 
     # ---- the look, as laws
@@ -3893,11 +4003,14 @@ def smoke(win, app, out_dir):
     got = _pixel(le, le.width() // 2, 4)
     check(_near(got, pal["field"], 10), f"a well renders as the field token ({got} vs {pal['field']})")
     # a button drawn in a state, as the style paints it (a hover and a press
-    # cannot be had from the pointer here)
-    def painted(b, state, control=QStyle.CE_PushButton):
+    # cannot be had from the pointer here); without its icon on request, on
+    # the OPTION only, so the button keeps it
+    def painted(b, state, control=QStyle.CE_PushButton, icon=True):
         opt = QStyleOptionButton()
         b.initStyleOption(opt)
         opt.state |= state
+        if not icon:
+            opt.icon = QIcon()
         img = QImage(b.size(), QImage.Format_ARGB32)
         img.fill(QColor(pal["surface"]))
         painter = QPainter(img)
@@ -3907,14 +4020,22 @@ def smoke(win, app, out_dir):
 
     # a hovered danger button: the CONTRAST of its painted ink on the fill it is
     # painted on, the measure with no tolerance to get wrong -- a count of pixels
-    # near the right token gave the same number to the old ink, 7 away
+    # near the right token gave the same number to the old ink, 7 away. The TEXT
+    # alone: the trash icon is tinted error_text at build time and keeps it on
+    # hover, and in dark that is the hover ink's own colour at 4.72:1, so with
+    # the icon in the picture the best pixel was the icon's whatever the words
+    # got (invisible words passed at 4.72). And a COUNT of ink pixels, since
+    # one pixel of the right colour passes a best-pixel reading
     rb = win.run.reset_b
-    img, _o = painted(rb, QStyle.State_MouseOver)
-    fill = _count_near(img, pal["chip_crit_bg"], 6)
-    ink = round(_best_contrast(img, pal["chip_crit_bg"]), 2)
-    check(fill > 100 and ink >= orchtheme.TEXT_FLOOR,
-          f"a hovered danger button paints an ink that clears {orchtheme.TEXT_FLOOR}:1 on its "
-          f"hover fill ({fill} px fill, {ink}:1)")
+    img, _o = painted(rb, QStyle.State_MouseOver, icon=False)
+    ground = pal["chip_crit_bg"]
+    fill = _count_near(img, ground, 6)
+    ink = round(_best_contrast(img, ground), 2)
+    core = _ink_pixels(img, ground, orchtheme.TEXT_FLOOR)
+    check(fill > 100 and ink >= orchtheme.TEXT_FLOOR and core >= 20,
+          f"a hovered danger button paints its words in an ink that clears "
+          f"{orchtheme.TEXT_FLOOR}:1 on its hover fill ({fill} px fill, {core} px of ink, "
+          f"the best {ink}:1; the icon left out of the picture)")
     # a press keeps its relief with focus on it: the shaded top and lit foot,
     # not the ring on every side (a tier's :focus rule out-ranked :pressed)
     edges = {}
@@ -3964,9 +4085,7 @@ def smoke(win, app, out_dir):
     view.deleteLater()
     # focus you can see, where keyboard focus needs the window to be active --
     # measured on grabs of the WINDOW, not of the widget (see _moved)
-    win.activateWindow()
-    win.raise_()
-    settle(5)
+    activate()
     lost = "the window could not hold keyboard focus, so focus cannot be seen"
     win.tabs.setCurrentWidget(en)
     settle()
@@ -3991,10 +4110,20 @@ def smoke(win, app, out_dir):
         before_tab = win.grab().toImage()
         QApplication.sendEvent(lb, QKeyEvent(QEvent.KeyPress, Qt.Key_Tab, Qt.NoModifier))
         settle()
-        n = _moved(win, tb, before_tab, win.grab().toImage(), tb.tabRect(tb.currentIndex()))
+        after_tab, cur = win.grab().toImage(), tb.tabRect(tb.currentIndex())
+        n = _moved(win, tb, before_tab, after_tab, cur)
         check(tb.hasFocus() and n >= orchtheme.TAB_FOCUS_FLOOR,
               f"Tab from Launch lands on the tab strip, and the strip SHOWS it on the page "
               f"(a pixel of the tab moved {n}; the floor is {orchtheme.TAB_FOCUS_FLOOR})")
+        # ...and shows it as a MARK: the theme holds a focus ring to 3:1, and
+        # the fill alone was 1.13:1 in light (17 from the page, faint) -- the
+        # weakest focus cue in the app on the control that switches pages.
+        # The focused tab's top edge is the ring's own ink; its contrast is
+        # read against the pixels it replaced
+        c = _shifted(win, tb, before_tab, after_tab, cur)
+        check(c >= orchtheme.MARK_FLOOR,
+              f"and the focused tab carries a cue in the focus ring's ink: a pixel of the tab "
+              f"changed by {c:.2f}:1, against the ring floor of {orchtheme.MARK_FLOOR}:1")
     else:
         skip("Launch and the tab strip show keyboard focus", lost)
     # the wheel in the ACTIVE window, which is normal use: Qt gives a WheelFocus
@@ -4008,7 +4137,8 @@ def smoke(win, app, out_dir):
     en.select(m0)
     settle()
     page, bar, pk = en._pages[m0], en._pages[m0].verticalScrollBar(), m0.bar.slots[0]
-    if win.isActiveWindow() and sys.platform == "win32" and bar.maximum() > 0 and focus(en.tree):
+    scrolls = sys.platform == "win32" and bar.maximum() > 0
+    if scrolls and focus(en.tree):
         rolled = []
         for tag, w, value in (("skill slot", pk, pk.currentIndex), ("Level", m0.level, m0.level.value)):
             bar.setValue(0)
@@ -4045,52 +4175,77 @@ def smoke(win, app, out_dir):
               f"a real wheel over an unlocked hero's Level spin scrolls the heroes table "
               f"({tbar.value()} rows) and leaves the level at {v0}")
     else:
-        skip("the wheel in the active window", lost if not win.isActiveWindow()
-             else "the page does not scroll at this size, or this is not Windows")
+        skip("the wheel in the active window",
+             lost if scrolls else "the page does not scroll at this size, or this is not Windows")
     # a popup keeps its own edge: a non-editable combo's (the profession pickers
-    # -- Fusion's menu mode framed the view a second time, top and bottom, and
-    # the list mode shows ten rows unless told the count), a Picker's, and the
-    # completer's, each opened hidden with the focus a real one has
-    win.tabs.setCurrentWidget(win.party)
-    settle()
-    popups = {}
-    for tag, combo in (("profession", win.party.secondary), ("Picker", win.party.weapon)):
+    # and the Skills filter -- Fusion's menu mode framed the view a second
+    # time, top and bottom, and the list mode shows ten rows unless told the
+    # count), a Picker's, and the completer's, each opened hidden with the
+    # focus a real one has. One arm each: an arm that opens without focus
+    # skips itself, not the others (the completer's proxy focus, taken after a
+    # fixed few turns while the combos had just handed activation back, once
+    # skipped the whole law)
+    def rim_of(img):
+        return [img.pixelColor(x, y).name()
+                for x, y in ((0, 0), (img.width() - 1, 0), (0, img.height() - 1),
+                             (img.width() - 1, img.height() - 1), (img.width() // 2, 0),
+                             (img.width() // 2, img.height() - 1))]
+
+    activate()
+    for tag, combo, page in (("profession", win.party.secondary, win.party),
+                             ("Picker", win.party.weapon, win.party),
+                             ("Skills filter", win.skills.prof, win.skills)):
+        win.tabs.setCurrentWidget(page)
+        settle()
         holder = combo.view().window()
         holder.setAttribute(Qt.WA_DontShowOnScreen, True)
         combo.showPopup()
         settle(5)
         v = combo.view()
-        img = holder.grab().toImage()
-        rim = [img.pixelColor(x, y).name()
-               for x, y in ((0, 0), (img.width() - 1, 0), (0, img.height() - 1),
-                            (img.width() - 1, img.height() - 1), (img.width() // 2, 0),
-                            (img.width() // 2, img.height() - 1))]
-        popups[tag] = (v.hasFocus(), v.geometry() == holder.rect(),
-                       all(_near(c, pal["border_strong"], 6) for c in rim),
-                       not v.verticalScrollBar().isVisible() or combo.isEditable(),
-                       f"{holder.width()}x{holder.height()} view {v.geometry().getRect()} "
-                       f"rim {rim[0]}/{rim[4]}")
+        rim = rim_of(holder.grab().toImage())
+        focused, filling = v.hasFocus(), v.geometry() == holder.rect()
+        edged = all(_near(c, pal["border_strong"], 6) for c in rim)
+        barred = v.verticalScrollBar().isVisible()
+        said = (f"{holder.width()}x{holder.height()} view {v.geometry().getRect()} rim "
+                f"{rim[0]}/{rim[4]}/{rim[5]}"
+                + ("" if combo.isEditable() else f", {combo.count()} rows, a bar: {barred}"))
         combo.hidePopup()
         settle()
+        if focused:
+            # a Picker's list scrolls by design (its rows are many, its type-to-
+            # filter the way through them); a plain combo's says its count
+            check(filling and edged and (combo.isEditable() or not barred),
+                  f"the focused {tag} popup is one box in the popup edge, the view filling it"
+                  f"{'' if combo.isEditable() else ', its rows unscrolled'} ({said})")
+        else:
+            skip(f"the {tag} popup is one box in the popup edge", "it opened without focus")
+    win.tabs.setCurrentWidget(win.party)
+    settle()
     pop = win.party.weapon.completer().popup()
     pop.setAttribute(Qt.WA_DontShowOnScreen, True)
     focus(win.party.weapon)                      # the popup's focus is its line edit's, by proxy
     win.party.weapon.completer().setCompletionPrefix("s")
     win.party.weapon.completer().complete()
     settle(5)
-    img = pop.grab().toImage()
-    rim = [img.pixelColor(x, y).name() for x, y in ((0, 0), (img.width() - 1, img.height() - 1))]
-    popups["completer"] = (pop.hasFocus(), True, all(_near(c, pal["border_strong"], 6) for c in rim),
-                           True, f"{pop.width()}x{pop.height()}")
+    rim = rim_of(pop.grab().toImage())
+    focused, edged = pop.hasFocus(), all(_near(c, pal["border_strong"], 6) for c in rim)
     pop.hide()
     settle()
-    if all(p[0] for p in popups.values()):
-        check(all(p[1] and p[2] and p[3] for p in popups.values()),
-              f"a focused popup is one box in the popup edge, the view filling it, its rows "
-              f"unscrolled ({ {k: v[4] for k, v in popups.items()} })")
+    if focused:
+        check(edged, f"the focused completer popup is one box in the popup edge (its rows scroll "
+                     f"by design: {pop.width()}x{pop.height()}, rim {rim[0]}/{rim[4]}/{rim[5]})")
     else:
-        skip("a focused popup is one box in the popup edge",
-             f"a popup opened without focus ({ {k: v[0] for k, v in popups.items()} })")
+        skip("the completer popup is one box in the popup edge", "it opened without focus")
+    # ...and the row limit itself, a census: a plain combo lists every row it
+    # holds, so none scrolls (the Skills filter's twelve rows had no law, and
+    # its limit undone hid Dervish and Common behind a bar with every law
+    # green); the next combo built without one is named here
+    plain = [c for c in win.findChildren(QComboBox) if not c.isEditable()]
+    over = [(c.accessibleName() or c.toolTip()[:30] or "a combo", c.count(), c.maxVisibleItems())
+            for c in plain if c.count() > c.maxVisibleItems()]
+    check(len(plain) >= 20 and not over,
+          f"every plain combo in the window lists all its rows without a bar ({len(plain)} combos; "
+          f"over their limit: {over or 'none'})")
     heights = {}
     for i in range(win.tabs.count()):
         win.tabs.setCurrentIndex(i)
@@ -4138,8 +4293,7 @@ def smoke(win, app, out_dir):
     shot = os.path.join(out_dir, "smoke_screen.png")
     win.grab().save(shot)
     check(os.path.isfile(shot), f"screenshot {shot}")
-    print(f"smoke: {len(fails)} failure(s)")
-    return 1 if fails else 0
+    return led.verdict()
 
 
 # ---------------------------------------------------------------- snap

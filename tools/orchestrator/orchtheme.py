@@ -10,8 +10,9 @@ twelve rounds on its PySide6 workspace (`studies/gui-aesthetics/`,
 the part that fits a four-tab tool -- the rules, and a few small helpers: the
 colour mix, taken as written (`editor/theme.py`'s `_mix`); the contrast walk,
 the selection tint and the content-addressed image cache, rewritten; the
-checkbox tick, redrawn from `style.py`'s `_CHECK_SVG` with its points moved a
-tenth. Dream-World-IX is MIT and the same owner's:
+checkbox tick, redrawn from `style.py`'s `_CHECK_SVG` with its two far points
+lifted 0.2 (the far end also out 0.1). Dream-World-IX is MIT and the same
+owner's:
 
   * ONE loud object. The accent is a FILL spent on the verb you press --
     Launch -- and nowhere else: not on a checked box, not on a selected row
@@ -279,9 +280,12 @@ def audit(pal):
     rows.append(("a card differs from the page", distance(p["surface"], p["bg"]), 6))
     rows.append(("a well differs from its card", distance(p["field"], p["surface"]), 6))
     # the focused tab is filled with `pressed` on the PAGE, not on a card: hover
-    # sat 3 from bg in light, a fill nobody could see behind a green law
-    rows.append(("tab focus fill differs from the page", distance(p["pressed"], p["bg"]),
-                 TAB_FOCUS_FLOOR))
+    # sat 3 from bg in light, a fill nobody could see behind a green law. This
+    # row holds the TOKEN to the floor; which token the tab rule names, and the
+    # focus-ring edge it draws, are read off the sheet by test_orchtheme.py
+    # (this row stayed green with the rule put back to hover)
+    rows.append(("pressed differs from the page (the focused tab's fill)",
+                 distance(p["pressed"], p["bg"]), TAB_FOCUS_FLOOR))
     return rows
 
 
@@ -292,7 +296,7 @@ def failures(pal):
 # ---------------------------------------------------------------- assets
 
 # the tick is DWIX's `_CHECK_SVG` (ff9mapkit/workspace/style.py), its two far
-# points moved a tenth and the stroke 2 rather than 2.4
+# points lifted 0.2 (the far end also out 0.1) and the stroke 2 rather than 2.4
 _CHECK = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">'
           '<path d="M3.5 8.4 6.6 11.3 12.6 4.9" fill="none" stroke="{ink}" '
           'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>')
@@ -508,17 +512,21 @@ QPlainTextEdit {
 }
 QPlainTextEdit:focus { border: 1px solid $focus; }
 
-/* ---- tabs: the selected tab is underlined, not boxed */
+/* ---- tabs: the selected tab is underlined, not boxed. Keyboard focus on the
+   strip is a MARK in the focus ring's ink -- a top edge, its room reserved at
+   rest so no tab moves -- over the pressed fill: the fill alone is 1.13:1 on
+   the light page (17 from it), the faintest focus cue in the window on the
+   one control that switches pages, where every other ring clears 3:1 */
 QTabWidget::pane { border: none; border-top: 1px solid $border; top: -1px; background: $bg; }
 QTabWidget::tab-bar { left: 12px; }
 QTabBar { background: transparent; }
 QTabBar::tab {
     background: transparent; color: $muted; border: none; border-bottom: 2px solid transparent;
-    padding: 9px 18px 8px 18px; margin-right: 2px;
+    border-top: 2px solid transparent; padding: 7px 18px 8px 18px; margin-right: 2px;
 }
 QTabBar::tab:hover { color: $text; }
 QTabBar::tab:selected { color: $text; border-bottom: 2px solid $accent; }
-QTabBar::tab:selected:focus { background: $pressed; }
+QTabBar::tab:selected:focus { background: $pressed; border-top: 2px solid $focus; }
 
 /* ---- scrolling */
 QScrollArea { background: transparent; border: none; }

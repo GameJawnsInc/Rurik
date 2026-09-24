@@ -35,7 +35,7 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("orchtheme", floor=31)
+LEDGER = checks.Ledger("orchtheme", floor=37)
 ORCHTHEME = os.path.join(os.path.dirname(HERE), "tools", "orchestrator", "orchtheme.py")
 
 
@@ -73,6 +73,16 @@ def danger_pairs(sheet):
         if ink and fill and fill.startswith("#"):
             out.append((state, ink, fill))
     return out
+
+
+def tab_focus(sheet):
+    """(fill, edge) the resolved sheet paints for the focused tab: the rule's
+    background and the colour of its border-top. The audit row for the fill
+    measures the `pressed` token and stayed green with the rule put back to
+    hover; this reads which token the rule names, and the edge with it."""
+    r = rule(sheet, "QTabBar::tab:selected:focus")
+    m = re.search(r"#[0-9a-f]{6}", r.get("border-top", ""))
+    return r.get("background"), m.group(0) if m else None
 
 
 def main():
@@ -128,12 +138,27 @@ def main():
     LEDGER.ok("hover differs from a button at rest" in fails,
               "a hover identical to its rest state is refused", f"{fails[:3]}")
 
-    print("\n4. the pairs the reviews found missing -- the danger hover read off the sheet")
+    print("\n4. the pairs the reviews found missing -- the danger hover and the focused tab "
+          "read off the sheet")
     for name, pal in t.PALETTES.items():
         labels = {label for label, _g, _f in t.audit(pal)}
         LEDGER.ok({"muted on selection_bg", "check mark on a hovered checked box",
-                   "tab focus fill differs from the page"} <= labels,
+                   "pressed differs from the page (the focused tab's fill)"} <= labels,
                   f"{name}: the muted-on-selection, checked-hover and tab-focus pairs are audited")
+        # the focused tab's RULE: its fill keeps the distance floor from the page
+        # it sits on, and its top edge is a mark that clears the ring floor --
+        # both off the sheet, since the token audit above cannot see which token
+        # the rule names ($hover, 3 from the light page, kept it green)
+        bg = t.derive(pal)["bg"]
+        fill, edge = tab_focus(real_sheet(t, pal))
+        d = t.distance(fill, bg) if fill and fill.startswith("#") else 0
+        LEDGER.ok(d >= t.TAB_FOCUS_FLOOR,
+                  f"{name}: the tab strip's :selected:focus rule fills {t.TAB_FOCUS_FLOOR}+ from "
+                  f"the page", f"{fill} on {bg}: {d}")
+        c = t.contrast(edge, bg) if edge else 0
+        LEDGER.ok(c >= t.MARK_FLOOR,
+                  f"{name}: and draws a top edge that clears {t.MARK_FLOOR}:1 on the page, the "
+                  f"focus ring's floor", f"{edge} on {bg}: {round(c, 2)}")
         pairs = danger_pairs(real_sheet(t, pal))
         LEDGER.ok(len(pairs) == 2 and all(t.contrast(ink, fill) >= t.TEXT_FLOOR
                                           for _s, ink, fill in pairs),
@@ -159,6 +184,19 @@ def main():
               and any(t.contrast(ink, fill) < t.TEXT_FLOOR for _s, ink, fill in pairs),
               "a hover rule that changes the fill and keeps the base ink is refused",
               f"{[(s, ink, fill, round(t.contrast(ink, fill), 2)) for s, ink, fill in pairs]}")
+    # ...and the focused tab's: the fix pass's first fill, hover (3 from the
+    # light page), and a rule with no edge, must each be refused
+    lp = t.derive(t.LIGHT)
+    hover = re.sub(r"(QTabBar::tab:selected:focus \{ background: )#[0-9a-f]{6}",
+                   r"\g<1>" + lp["hover"], light, count=1)
+    fill, _e = tab_focus(hover)
+    LEDGER.ok(hover != light and fill == lp["hover"] and t.distance(fill, lp["bg"]) < t.TAB_FOCUS_FLOOR,
+              "a focused-tab rule filled with hover is refused",
+              f"{fill} on {lp['bg']}: {t.distance(fill, lp['bg'])}")
+    edgeless = re.sub(r"(QTabBar::tab:selected:focus \{[^}]*?) border-top: [^;]*;", r"\1", light, count=1)
+    _f, edge = tab_focus(edgeless)
+    LEDGER.ok(edgeless != light and edge is None, "a focused-tab rule with no edge is refused",
+              f"edge {edge}")
     return LEDGER.verdict()
 
 
