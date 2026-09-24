@@ -28,6 +28,21 @@ move back.
 
 ---
 
+### R-SANDBOX, the hostile rank ceiling's source -- 2026-09-24 -- **21 re-sourced from "WIKI, weak" to GWW's Attribute page, quoted by the owner; no behaviour change**
+
+Corrects the source, not the value, of the entry "R-SANDBOX, hostile level and rank caps lifted --
+2026-09-24", which cited `sandbox.HOSTILE_RANK_MAX = 21` as "WIKI, weak (search summaries of GWW talk /
+template pages)". The owner supplied the rule (2026-09-24) and it reads verbatim on the page: WIKI (GWW,
+"Attribute" §Notes, rev. 2026-09-02, revid 2739369): "Attributes are capped at rank 20, the maximum
+that can be reached through runes and skill effects", and items offering a 20% chance of +1 can
+temporarily pass that cap -- so 21. A rank cap is player-visible (the Skills and Attributes panel
+shows it), the wiki's strong kind (`.claude/skills/browse-gw-wiki` "Labelling what you find"), where
+the earlier citation was a talk page's summary. The rest of the reasoning stands: the client is
+witnessed handling an NPC rank of 15, and past 22.5 our own formulas invert. Changed: the constant's
+comment in `toolkit/harness/sandbox.py` and `PLAN.md` §3's R-SANDBOX row; no code, test or count moves.
+
+---
+
 ### R-SANDBOX, the server-load level guard: the verifier's fixes -- 2026-09-24 -- **a `--probe`'s own 0x0056 steps are built at startup exactly as they will fire and each checked at its level slot -- the quest probes' vault templates and `probes.py:359`'s literal, which the entry below says are NOT startup-guarded, now are; the last line's text names the send, not the load; two positive controls test the literal 255; `test_population`'s duration corrected**
 
 Corrects the entry below it, "R-SANDBOX, the server-load level guard -- 2026-09-24" (that
