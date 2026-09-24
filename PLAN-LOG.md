@@ -28,6 +28,20 @@ move back.
 
 ---
 
+### DESKWORK pass 5, landed -- 2026-09-24 -- **gold (D9), the warp row (MOVE-B) and the status sweep (INFRA-A) merged; the merged tree's sweep 95 of 95 green**
+
+Merged into `deskwork` in that order (`3bd7de5b`, `ca5e6d9d`, `9ab7b2f9`, only PLAN-LOG entries
+stacking) and fast-forwarded to `main`. The sweep on the merged tree: the union of the three
+lanes' affected sets, every test reading a changed file by name and every test importing
+`authsrv` or a changed module as a module -- 91 run 4-wide, 88 read green by the runner
+(6,686 checks) and three green with declared skips (test_attribspend 49, test_pathmap 129,
+test_contentids 40) -- then the four port-binders the lanes skipped while CONFIRM-2 held the
+client, run serially (test_webgate 9, test_handshake 24, test_harness 181,
+test_preflight_owner 30): 95 of 95, 7,148 checks. Owed on the client: the gold counter
+(studies/quests 12.1's runsheet, agent-pilotable); the warp row needs no run.
+
+---
+
 ### DESKWORK-Q1 + DESKWORK-Q3 (pass 5, INFRA-A), fix pass -- 2026-09-24 -- **option C back in §8.3 as NOT BUILT (its candidate keys were refuted, not the plan); MORALE-Q6's outpost half stands on 2 witnesses, not 3; the embodied-hero kick caveat back in §8.1; "22 named" is 17; the quests HANDOFF §1 edit withdrawn for desk-gold's**
 
 One review of the two entries below — an evidence refuter that re-derived Q3, the census,
