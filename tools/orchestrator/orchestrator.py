@@ -56,6 +56,7 @@ and citations on hover, not on the surface; every colour walked to its
 contrast floor. `--smoke` checks those as laws, not as intentions.
 """
 import argparse
+import inspect
 import os
 import re
 import sys
@@ -380,7 +381,11 @@ class Ranks(QWidget):
         self.grid.setVerticalSpacing(8)
         outer.addLayout(self.grid)
         self.spins = {}
+        # housed HERE from birth (a card's `trailing` re-homes it in its own
+        # header): set_professions shows it, and shown with no parent it would
+        # be a window of its own -- the hint's trap, one widget over
         self.chip = chip("", "info")
+        self.chip.setParent(self)
         self.label = self.chip
         self.hint = caption("")
         outer.addWidget(self.hint)
@@ -546,7 +551,8 @@ class SkillsTab(QWidget):
         row.setSpacing(8)
         self.filter = QLineEdit()
         self.filter.setPlaceholderText("Filter by name or id")
-        self.filter.setToolTip("Matches a skill's name, id, profession or attribute.")
+        self.filter.setToolTip("Matches a skill's name, id, profession or attribute, or its "
+                               "grade in the pills' words (modelled, label).")
         self.filter.setClearButtonEnabled(True)
         self.filter.addAction(orchui.tinted_icon("search"), QLineEdit.LeadingPosition)
         self.filter.setAccessibleName("Filter skills")
@@ -651,19 +657,40 @@ class SkillsTab(QWidget):
         if emit:
             self.changed.emit()
 
+    def _bulk(self, write, emit=None):
+        """One write of many boxes is ONE count and ONE `changed`: the list's
+        signals are held while `write` runs. Per item, each of the ~985 boxes
+        a party-only unlock flips ran the O(n) count and marked the compile
+        stale -- 18 s for the button, and a failed Open blocked the window
+        56 s doing it twice. `emit` None says the signal only when the
+        unlocks moved, so a click that changes nothing leaves a fresh
+        'Compiled' green; the view repaints off the model either way."""
+        before = self.ids() if emit is None else None
+        self.list.blockSignals(True)
+        try:
+            write()
+        finally:
+            self.list.blockSignals(False)
+        self._count(emit=emit if emit is not None else self.ids() != before)
+
     def _set_shown(self, on):
-        for it in self._items():
-            if not it.isHidden():
-                it.setCheckState(Qt.Checked if on else Qt.Unchecked)
+        def write():
+            for it in self._items():
+                if not it.isHidden():
+                    it.setCheckState(Qt.Checked if on else Qt.Unchecked)
+        self._bulk(write)
 
     def set_party_professions(self, profs):
         self.party_professions = set(int(p) for p in profs if p)
 
     def unlock_party(self):
         want = self.party_professions | {0}
-        for it in self._items():
-            sp = self.names.skill_profession(int(it.data(ROLE_ID)))
-            it.setCheckState(Qt.Checked if sp in want else Qt.Unchecked)
+
+        def write():
+            for it in self._items():
+                sp = self.names.skill_profession(int(it.data(ROLE_ID)))
+                it.setCheckState(Qt.Checked if sp in want else Qt.Unchecked)
+        self._bulk(write)
 
     def ids(self):
         return sorted(int(it.data(ROLE_ID)) for it in self._items()
@@ -671,9 +698,11 @@ class SkillsTab(QWidget):
 
     def set_ids(self, ids):
         want = set(int(s) for s in ids)
-        for it in self._items():
-            it.setCheckState(Qt.Checked if int(it.data(ROLE_ID)) in want else Qt.Unchecked)
-        self._count()
+
+        def write():
+            for it in self._items():
+                it.setCheckState(Qt.Checked if int(it.data(ROLE_ID)) in want else Qt.Unchecked)
+        self._bulk(write, emit=True)            # a load is a change, moved or not
 
 
 # ---------------------------------------------------------------- Party
@@ -936,8 +965,11 @@ class PartyTab(QWidget):
 
     def player_spec(self):
         prim, sec = self.professions()
+        # '(none)' is an off-hand of "" and is WRITTEN: TOML has no null, so a
+        # None key would leave the file, and a missing key is the profession's
+        # default (a shield, for a Warrior) to the compiler and to from_spec
         return {"profession": prim, "secondary": sec, "level": self.level.value(),
-                "weapon": self.weapon.value() or None, "offhand": self.offhand.value() or None}
+                "weapon": self.weapon.value() or None, "offhand": self.offhand.value() or ""}
 
     def heroes_spec(self):
         out = []
@@ -954,7 +986,10 @@ class PartyTab(QWidget):
         prim = int(player.get("profession", 1))
         w, o = sandbox.PLAYER_ITEMS_BY_PROFESSION.get(prim, ("starter_sword", "starter_shield"))
         self.weapon.set_value(player.get("weapon") or w)
-        self.offhand.set_value(player.get("offhand") or o or "")
+        # a key that is PRESENT and empty is no off-hand, as party_row reads it;
+        # only a missing key is the profession's default (an `or` here read
+        # both the same way, and a failed Open's restore re-armed the shield)
+        self.offhand.set_value((player["offhand"] if "offhand" in player else o) or "")
         for idx, (chk, _p, _b, _l) in self.rows.items():
             chk.setChecked(False)
         for h in heroes or []:
@@ -973,6 +1008,21 @@ class PartyTab(QWidget):
             self._style_row(idx)
         self._count()
         self.on_change()
+
+    def row_values(self):
+        """Every hero row's editors, ticked or not -- what to_spec does not
+        carry and a load writes only for the heroes it names, so a row the
+        failed file wrote would keep its level after the restore."""
+        return {i: (prof.currentData(), body.value(), getattr(body, "_touched", False),
+                    lvl.value()) for i, (_c, prof, body, lvl) in self.rows.items()}
+
+    def set_row_values(self, values):
+        for i, (pd, bv, touched, lv) in values.items():
+            _c, prof, body, lvl = self.rows[i]
+            body.set_value(bv)                  # reads _touched: put that back after
+            body._touched = touched
+            set_combo(prof, pd)
+            lvl.setValue(lv)
 
 
 # ---------------------------------------------------------------- Enemies
@@ -1124,8 +1174,11 @@ class MemberEditor(QWidget):
         # every input to_spec reads, not only the three the list shows: the
         # group's roster line, the header summary and the Run tab's 'Changed
         # since compile' all hang off this one path
-        for w in (self.health, self.glow, self.speed, self.dlo, self.dhi):
+        for w in (self.health, self.glow, self.speed, self.dhi):
             w.valueChanged.connect(lambda *_a: self._changed())
+        # the low bound is in the spec only with a high one: typed first (the
+        # natural order) it changes nothing, and must not paint the chip amber
+        self.dlo.valueChanged.connect(lambda *_a: self._changed() if self.dhi.value() else None)
         self.weapon_item.currentIndexChanged.connect(lambda _i: self._changed())
         self.bar.changed.connect(self._changed)
         self.ranks.changed.connect(self._changed)
@@ -1535,6 +1588,23 @@ class EnemiesTab(QWidget):
                 self.tree.setCurrentItem(item)
                 return
 
+    def place(self):
+        """The selection as (group index, member index or None): the form
+        that survives a rebuild of every editor, which a load is."""
+        cur = self.current()
+        for gi, g in enumerate(self.groups):
+            if cur is g:
+                return (gi, None)
+            if cur in g.members:
+                return (gi, g.members.index(cur))
+        return None
+
+    def select_place(self, place):
+        if place is None or place[0] >= len(self.groups):
+            return
+        g, m = self.groups[place[0]], place[1]
+        self.select(g if m is None or m >= len(g.members) else g.members[m])
+
     def _walk(self):
         for i in range(self.tree.topLevelItemCount()):
             top = self.tree.topLevelItem(i)
@@ -1653,11 +1723,21 @@ NO_ARCHIVE = ("There is no slice archive yet, so this cannot launch. Build it wi
 LAUNCH_STATUS = ("The game client is coming up. Hands off the keyboard while the harness "
                  "logs in (it says when); then play.")
 STALE_NOTE = "  The spec has changed since; Launch compiles again."
+# What a reset says: the sentence, never the store's path (the confirm box
+# shows that; the bar is scanned for lore, and a drive path is lore).
+RESET_DONE = "Removed the stored character; the next login re-seeds it."
 
 
 def n_of(n, word, plural=None):
     """'1 note', '2 notes': the count with its noun, never 'note(s)'."""
     return f"{n} {word if n == 1 else (plural or word + 's')}"
+
+
+def file_stem(path):
+    """What the bar calls a spec file: its name, without the directory or the
+    extension -- the path is lore, and it goes on a hover (the header's Open
+    and Save buttons say where the last one went)."""
+    return os.path.splitext(os.path.basename(path))[0]
 
 
 def write_lines(view, lines):
@@ -1848,7 +1928,8 @@ class RunTab(QWidget):
             return None
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(sandbox.spec_toml(spec))
-        self._say(f"Saved {path}")
+        self._say(f"Saved {file_stem(path)}")
+        self.window.header.save_b.setToolTip(f"Save this spec as TOML.\nLast saved to {path}")
         return path
 
     def load(self, path=None):
@@ -1857,26 +1938,59 @@ class RunTab(QWidget):
                                                    "TOML (*.toml)")
         if not path:
             return
-        prev = self.window.to_spec()
+        win = self.window
+        prev = win.to_spec()
+        # ...and what to_spec does not carry, for the restore below: this
+        # tab's words (a from_spec marks the compile stale, and a restore is
+        # two of them over a spec that did not change), the operator's place
+        # in the encounter, and the hero rows a load leaves as it found them
+        words = (self._stale, self.state.text(), self.state.property("kind"),
+                 self.state.toolTip(), self.status.text(), self.status.toolTip())
+        place = win.enemies.place()
+        rows = win.party.row_values()
         spec = None
         try:
             spec = sandbox.load_spec(path)       # a TOML error leaves the tabs untouched...
-            self.window.from_spec(spec)
+            win.from_spec(spec)
         except Exception as exc:                 # noqa: BLE001 -- said, not swallowed
             why = f"{type(exc).__name__}: {exc}"
             if spec is None:
-                self._say(f"Could not open {os.path.basename(path)}: {why}", 15000)
+                self._say(f"Could not open {file_stem(path)}: {why}", 15000)
                 return
             # ...but a row that raises inside from_spec does not: the name, the
             # party and the unlocks were written and the encounter torn down
             # before it, so the message would be false, and Save would default
             # to the file that failed. Put the previous spec back (to_spec's
-            # own shape, so it cannot raise).
-            self.window.from_spec(prev)
-            self._say(f"Could not open {os.path.basename(path)} ({why}); your spec is "
-                      f"unchanged", 15000)
+            # own shape, so it cannot raise), and say 'unchanged' only once
+            # the window agrees.
+            win.from_spec(prev)
+            win.party.set_row_values(rows)
+            if win.to_spec() != prev:
+                self._say(f"Could not open {file_stem(path)} ({why}), and your spec could not "
+                          f"be put back whole: check every tab before you save", 15000)
+                return
+            self._stale = words[0]
+            set_chip(self.state, words[1], words[2], tip=words[3])
+            self.status.setText(words[4])
+            self.status.setToolTip(words[5])
+            win.enemies.select_place(place)
+            self._say(f"Could not open {file_stem(path)} ({why}); your spec is unchanged",
+                      15000)
             return
-        self._say(f"Opened {path}")
+        win.header.open_b.setToolTip(f"Open a saved spec (TOML).\nLast opened {path}")
+        # what the window holds is what Save writes: a fifth group or hostile
+        # is dropped at the cap and a template the content lacks becomes the
+        # first on the list, without a raise -- so a file the compiler refuses
+        # opens as one it accepts, and 'Opened' alone would be the same false
+        # word as 'unchanged' above, reached without an exception
+        held = set(sandbox.validate(win.to_spec(), win.world))
+        lost = [q for q in sandbox.validate(spec, win.world) if q not in held]
+        if lost:
+            self._say(f"Opened {file_stem(path)}, but the window could not hold all of it "
+                      f"({n_of(len(lost), 'change')}: {lost[0]}). Save as a new file to keep "
+                      f"the original.", 20000)
+            return
+        self._say(f"Opened {file_stem(path)}")
 
     def compile(self):
         spec = self.window.to_spec()
@@ -2108,8 +2222,8 @@ class RunTab(QWidget):
                 f"every attribute point unspent, no hero builds. The spec is untouched.")
             if ok != QMessageBox.Yes:
                 return False
-        removed = sandbox.reset_store()
-        self._say(f"Removed {removed}; the next login re-seeds the character.", 8000)
+        sandbox.reset_store()
+        self._say(RESET_DONE, 8000)
         return True
 
 
@@ -2573,18 +2687,43 @@ def smoke(win, app, out_dir):
           f"({with_ph} px with it, {without_ph} without)")
     win.skills.filter.setText("")
     win.skills.prof.setCurrentIndex(0)
+    # one bulk write of the list -- this button's, a load's -- is ONE count and
+    # ONE change signal however many boxes move (per item, each of ~985 flips
+    # ran the O(n) count: 18 s for this click, and a failed Open blocked the
+    # window 56 s doing it twice); the same click again moves nothing and
+    # says nothing, and a load says it once whether or not anything moved
+    emits, counts = [], []
+    tally = lambda: emits.append(1)              # noqa: E731
+    win.skills.changed.connect(tally)
+    real_count = win.skills._count
+    win.skills._count = lambda *a, **k: (counts.append(1), real_count(*a, **k))[1]
+    n_all_on = len(win.skills.ids())
     win.skills.party_b.click()
     ids = set(win.skills.ids())
+    moved, first = n_all_on - len(ids), (len(emits), len(counts))
+    del emits[:], counts[:]
+    win.skills.party_b.click()
+    again = (len(emits), len(counts))
+    del emits[:], counts[:]
+    win.skills.set_ids(ids)
+    load_said = (len(emits), len(counts))
+    win.skills.changed.disconnect(tally)
+    del win.skills._count
     check(ids and all(win.names.skill_profession(s) in {0, 1, 3} for s in ids)
           and any(win.names.skill_profession(s) == 3 for s in ids),
           "'Unlock party only' unlocks Warrior, Monk and common skills only")
+    check(moved > 500 and first == (1, 1) and again == (0, 1) and load_said == (1, 1),
+          f"one bulk write of the list is one count and one change signal ({moved} boxes "
+          f"moved: {first} signals, counts; the same click again {again}; a load of the same "
+          f"set {load_said})")
     # the words themselves, which the two checks above never read: the filter
     # box is named with both pills' words, the party button with its verb
-    words = (win.skills.modelled_only.text(), win.skills.party_b.text())
-    check(all(w in words[0].lower() for w in orchui.GRADE_TEXT.values())
+    words = (win.skills.modelled_only.text(), win.skills.party_b.text(),
+             win.skills.filter.toolTip())
+    check(all(w in words[0].lower() and w in words[2] for w in orchui.GRADE_TEXT.values())
           and words[1].startswith("Unlock"),
-          f"the filter box is named with the pills' own words and the party button with its "
-          f"verb ({words})")
+          f"the filter box is named with the pills' own words, the text filter's hover says it "
+          f"matches them, and the party button has its verb ({words[:2]})")
     # the filter keeps its placeholder whole at 1,000 px: the row's one text
     # input gave up width before an empty spacer did
     size = win.size()
@@ -2700,6 +2839,14 @@ def smoke(win, app, out_dir):
     check(en.groups[0].roster.count() == 4, "a group's page lists its hostiles, one line each")
     check(not strays() and all(hint_housed(m) for m in g.members),
           f"adding hostiles opens no window of its own ({len(strays())} stray)")
+    # ...nor does a Ranks built by any caller: its chip is housed from birth (a
+    # card re-homes it; shown with no parent, it was the hint's trap one over)
+    lone = Ranks(win.names)
+    lone.set_professions((1,), 5)
+    settle()
+    check(not strays() and lone.chip.parentWidget() is lone,
+          f"a Ranks on its own houses its chip ({len(strays())} stray)")
+    lone.deleteLater()
     # a real click on a roster row selects that hostile; back on the group's
     # page, the row is not left painted as a second selection
     en.select(g)
@@ -2927,6 +3074,7 @@ def smoke(win, app, out_dir):
     check("2 heroes" in win.header.summary.text() and "7 hostiles" in win.header.summary.text(),
           f"the header's summary follows the spec ({win.header.summary.text()!r})")
     path = win.run.save(os.path.join(out_dir, "smoke_spec.toml"))
+    lore += surface_lore(win)                    # 'Saved …': the name, not the path
     check(path and os.path.isfile(path), "the spec saves")
     if path:
         back = sandbox.load_spec(path)
@@ -2961,10 +3109,13 @@ def smoke(win, app, out_dir):
              ("hold", lambda: win.run.hold.setValue(30)),
              ("template", lambda: m0.template.set_value("academy_monk"))]
     if m0.ranks.spins:
-        # a rank, and a rank on the spins a template change REBUILDS
+        # a rank, and a rank on the spins a template change REBUILDS -- down
+        # where it can: this hostile stands at its budget, and one more point
+        # is a spec the compiler refuses, which the next three edits would
+        # then read as 'not fresh'
         def rank():
             sp = next(iter(m0.ranks.spins.values()))
-            sp.setValue(sp.value() + 1)
+            sp.setValue(sp.value() - 1 if sp.value() else 1)
         edits.insert(9, ("attribute rank", rank))
         edits.append(("attribute rank after the template change", rank))
     stayed, stale_rows = [], []
@@ -3010,6 +3161,16 @@ def smoke(win, app, out_dir):
     check(not turned and unlock_turned,
           f"the Skills filters leave a fresh 'Compiled' green (turned it: {turned or 'none'}), "
           f"and one unlock turns it")
+    # the low damage bound with the high at 0 is not in the spec either: typed
+    # first, the natural order, it painted a false amber
+    m0.dhi.setValue(0)
+    win.run.compile()
+    before = win.to_spec()
+    m0.dlo.setValue(m0.dlo.value() + 3)
+    settle()
+    check(win.to_spec() == before and win.run.state.text() == "Compiled",
+          f"a low damage bound typed with the high at 0 changes no spec and leaves the chip "
+          f"green ({win.run.state.text()!r})")
     win.header.name.setText("smoke-bad")
     win.enemies.groups[0].members[0].boss.setChecked(True)
     win.tabs.setCurrentWidget(win.enemies)
@@ -3031,6 +3192,23 @@ def smoke(win, app, out_dir):
     win.enemies.groups[0].members[0].boss.setChecked(False)
     settle()
     check(g0.note.isHidden() and g3.note.isHidden(), "and unticking it clears both notes")
+    # ranks past a hostile's budget are REFUSED at compile, as its Attributes
+    # hint promises (validate checked the player's and the heroes' ranks and
+    # never a member's, so the crit chip was the only sign)
+    if m0.ranks.spins:
+        sp = next(iter(m0.ranks.spins.values()))
+        keep = sp.value()
+        sp.setValue(sp.maximum())
+        win.run.compile()
+        chip_said = (m0.ranks.chip.text(), m0.ranks.chip.property("kind"), win.run.state.text())
+        refused = (win.run.compiled is None and chip_said[2] == "Refused"
+                   and "points; level" in win.run.summary.toPlainText())
+        sp.setValue(keep)
+        check(chip_said[1] == "crit" and "over budget" in chip_said[0] and refused,
+              f"a hostile's ranks past its level's budget are refused at compile, as the hint "
+              f"promises ({chip_said[0]!r}; {chip_said[2]!r})")
+    else:
+        skip("an over-budget hostile is refused at compile", "no attribute table, so no ranks")
     seen_roles |= used_roles(win)
     lore += surface_lore(win)
     # a malformed spec must not latch the Enemies tab dead
@@ -3058,20 +3236,81 @@ def smoke(win, app, out_dir):
     en.from_spec(saved)
     settle()
     # a file that fails INSIDE from_spec (well-formed TOML, a malformed row)
-    # leaves the spec as it was: the message says nothing opened, so nothing may
-    # have -- and Save must not default to the file that failed
+    # leaves the spec as it was -- a '(none)' off-hand included, which the
+    # restore read as a missing key and handed back the profession's shield --
+    # and the words with it: the message says nothing opened, so nothing may
+    # have; Save must not default to the file that failed; the chip may not
+    # read 'Changed since compile' beside a bar that says unchanged; the
+    # operator's place in the encounter, and a hero row the failed file wrote
+    # before its bad row, are put back
+    win.party.offhand.set_value("")
+    en.select(en.groups[1].members[0])
+    rt.compile()
+    settle()
+    at, was_green, lvl5 = en.place(), rt.state.text() == "Compiled", win.party.rows[5][3].value()
+    before = win.to_spec()
     broken = os.path.join(out_dir, "smoke_broken.toml")
     with open(broken, "w", encoding="utf-8") as fh:
-        fh.write('name = "smoke-broken"\n\n[player]\nprofession = 1\nlevel = 7\n\n[[groups]]\n\n'
+        fh.write('name = "smoke-broken"\n\n[player]\nprofession = 1\nlevel = 7\n\n'
+                 '[[heroes]]\nhero = 5\nbody = "hatcher"\nlevel = 9\n\n[[groups]]\n\n'
                  '[[groups.members]]\nnpc = "bandit_raider"\ndamage = [6]\n')
-    before = win.to_spec()
     win.run.load(broken)
     settle()
     msg = win.statusBar().currentMessage()
-    check(win.to_spec() == before and msg.startswith("Could not open") and "unchanged" in msg,
-          f"a spec file whose row fails to load leaves the spec unchanged, and says so "
-          f"({msg!r})")
+    lore += surface_lore(win)                    # 'Could not open …': the name, not the file
+    check(was_green and before["player"]["offhand"] == "" and win.to_spec() == before
+          and msg.startswith("Could not open") and "unchanged" in msg,
+          f"a spec file whose row fails to load leaves the spec unchanged, a '(none)' off-hand "
+          f"included, and says so ({msg!r})")
+    check(rt.state.text() == "Compiled" and not rt._stale and at == (1, 0) == en.place()
+          and win.party.rows[5][3].value() == lvl5 and not win.party.rows[5][0].isChecked(),
+          f"and keeps the chip green, the selection and the hero row the file wrote "
+          f"({rt.state.text()!r}, {en.place()} of {at}, hero 5 at level "
+          f"{win.party.rows[5][3].value()} of {lvl5})")
     check(not strays(), f"and after every load, still one window ({len(strays())} stray)")
+    # a spec saved with no off-hand comes back with none (the file says
+    # offhand = ""; a MISSING key is the profession's default, to the compiler
+    # and the window alike), and Save and Open say the file's name, not its path
+    good = win.run.save(os.path.join(out_dir, "smoke_none.toml"))
+    saved_said = win.statusBar().currentMessage()
+    win.run.load(good)
+    settle()
+    msg = win.statusBar().currentMessage()
+    lore += surface_lore(win)                    # 'Opened …'
+    check(sandbox.load_spec(good)["player"].get("offhand") == "" and win.to_spec() == before
+          and msg == "Opened smoke_none" and saved_said == "Saved smoke_none",
+          f"a spec saved with no off-hand opens with none, and the bar says the name only "
+          f"({saved_said!r}, {msg!r})")
+    # a file the compiler would refuse -- a fifth group, a fifth hostile, a
+    # template the content lacks, the boss not last -- opens as one it accepts:
+    # what the window cannot hold is dropped or replaced on the way in, with
+    # no raise, and the bar said 'Opened' and nothing else, so a Save
+    # (defaulting to that file) wrote the trimmed encounter over the original
+    plain = {k: v for k, v in before["groups"][1]["members"][0].items()
+             if k not in ("boss", "glow")}
+    over = dict(before, name="smoke-toomany",
+                groups=[{"members": [dict(plain) for _ in range(5)]}, {"members": [dict(plain)]},
+                        {"members": [dict(plain)]},
+                        {"members": [dict(before["groups"][2]["members"][0])]},
+                        {"members": [dict(plain)]}])
+    over["groups"][0]["members"][1]["npc"] = "no_such_template"
+    many = os.path.join(out_dir, "smoke_toomany.toml")
+    with open(many, "w", encoding="utf-8") as fh:
+        fh.write(sandbox.spec_toml(over))
+    lost = sandbox.validate(over, win.world)
+    win.run.load(many)
+    settle()
+    msg = win.statusBar().currentMessage()
+    lore += surface_lore(win)                    # 'Opened …, but …'
+    held = win.to_spec()
+    shape = [len(g["members"]) for g in held["groups"]]
+    check(len(lost) >= 4 and shape == [4, 1, 1, 1] and not sandbox.validate(held, win.world)
+          and msg.startswith("Opened smoke_toomany, but the window could not hold")
+          and f"{n_of(len(lost), 'change')}: {lost[0]}" in msg,
+          f"a file the compiler refuses ({len(lost)} reasons) opens as one it accepts, and the "
+          f"bar says what the window could not hold ({shape}; {msg[:96]!r})")
+    win.from_spec(before)
+    settle()
     # how a run ended is read from what the harness PRINTS -- print sites, not
     # the source whole: the same files quote the old lines in comments
     harness = ""
@@ -3222,6 +3461,11 @@ def smoke(win, app, out_dir):
     check(not unstyled, f"every role the window uses has a rule ({sorted(unstyled) or 'all'})")
     check(not unused, f"every role the sheet styles is used somewhere ({sorted(unused) or 'all'})")
     check(not lore, f"no flag, file name, ident or hex id on the visible surface ({lore[:4]})")
+    # ...the one bar message the smoke cannot provoke (a reset deletes the
+    # vault's store), read at its say site: the sentence, never the store's path
+    check(not SURFACE_LORE.search(RESET_DONE)
+          and re.search(r"_say\(RESET_DONE\b", inspect.getsource(RunTab.reset)) is not None,
+          "what a reset says is its sentence, never the store's path (the confirm box shows it)")
     # the words: a caption is one constraint and one pointer (the research's
     # 74 characters a line; two clauses here), never a legend or a run-on, and
     # 'the stack' is nowhere; the Run tab's two wells say what will appear
@@ -3615,10 +3859,10 @@ def main(argv=None):
     print(f"content and names loaded in {time.perf_counter() - t0:.1f} s ({theme} theme)"
           + (f" -- {names.why}" if names.why else ""))
     win = Window(world, names)
+    win.from_spec(sandbox.example_spec())
     if args.spec:
-        win.from_spec(sandbox.load_spec(args.spec))
-    else:
-        win.from_spec(sandbox.example_spec())
+        win.run.load(args.spec)                  # the header's Open: said in the bar,
+                                                 # what the window could not hold too
     if args.smoke or args.snap:
         rc = smoke(win, app, args.smoke) if args.smoke else snap(win, app, args.snap, theme)
         QTimer.singleShot(0, app.quit)

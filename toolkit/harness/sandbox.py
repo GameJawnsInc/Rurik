@@ -179,11 +179,12 @@ def points_for_level(level):
 
 
 def budget_for_level(level):
-    """The points a hostile row of `level` may spend: points_for_level inside
-    1..LEVEL_MAX and 0 outside it -- the compiler's own rule (_check_ranks),
-    which accepts a level-0 row (content rows default to 0). The window's
-    budget hint and roster line share it, so a level its spin offers never
-    raises under them."""
+    """The points a row of `level` may spend: points_for_level inside
+    1..LEVEL_MAX and 0 outside it -- the compiler's own rule (_check_ranks,
+    for the player, each hero and each hostile), so a level-0 hostile row
+    (content rows default to 0) spends nothing and raises nowhere. The
+    window's budget hint and roster line share it, so a level its spin offers
+    never raises under them."""
     level = int(level)
     return points_for_level(level) if 1 <= level <= LEVEL_MAX else 0
 
@@ -506,6 +507,15 @@ def validate(spec, world):
             wi = m.get("weapon_item")
             if wi and items and wi not in items:
                 p.append(f"{who}: weapon_item {wi!r} is not a content item")
+            # its ranks against its level's budget, the player's and the heroes'
+            # rule -- at the level spawn_rows gives the row (the member's, else
+            # its template's), in the template's own profession. The window's
+            # Attributes hint promised this refusal before the loop had it.
+            tmpl = npcs.get(npc) or {}
+            if tmpl or not npcs:
+                _check_ranks(p, who, m.get("attributes"),
+                             int(m.get("level", tmpl.get("level", 0) or 0)),
+                             (int(tmpl.get("profession") or 0),), rules)
             if int(m.get("level", 0)) < 0:
                 p.append(f"{who}: level below 0")
             if int(m.get("health", 1)) < 1:

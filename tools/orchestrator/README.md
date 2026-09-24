@@ -66,13 +66,21 @@ directory needs the elevated cage step once.
 
 ## What it refuses, and why
 
-The compiler (`toolkit/harness/sandbox.py`, stdlib, 88 checks in `test_sandbox.py`) refuses
+The compiler (`toolkit/harness/sandbox.py`, stdlib, 116 checks in `test_sandbox.py`) refuses
 before a client is launched: a bar skill outside the character's own professions (the
 client's template rule); a hero body the content lacks; an eighth hero (the client's cap);
 a fifth member or group; no boss, two bosses, or a boss not in the last group; ranks the
-level cannot pay for (GWW's attribute points by level); a weapon class the rates table
-lacks. The window's pickers only offer what the pair or the profession owns, so most of
-those cannot be reached from it; the level/ranks one can, and the reason is shown.
+level cannot pay for (GWW's attribute points by level), for the character, each hero and
+each hostile alike; a weapon class the rates table lacks. The window's pickers only offer
+what the pair or the profession owns, so most of those cannot be reached from it; the
+level/ranks one can, and the reason is shown.
+
+**Open** is not the compiler. A file past the caps, or naming a template the content lacks,
+opens with what the window can hold — a fifth group or hostile dropped, the template replaced
+by the first on the list — and the bar says so and how much, so that Save as a new file keeps
+the original; a file whose row fails inside the load leaves the spec, the chip and your place
+as they were, and says so. Save and Open name the file, never its path (the path is on the
+header buttons' hover), and a spec saved with no off-hand opens with none.
 
 ## Names, and the gate
 
@@ -156,8 +164,15 @@ starts with a capital. The window's STATE has laws of the same kind: the slice
 opens one window and adding hostiles opens none (a label shown with no parent is a window of
 its own), every input the compiler reads turns a fresh green **Compiled** into **Changed since
 compile** while the Skills filters leave it green, a hostile's edit reaches its group's roster
-line at once, a hostile at level 0 keeps that roster and the change signal, and a spec file
-whose row fails inside the load leaves the spec as it was and says so. The Run tab's lifecycle
+line at once, a hostile at level 0 keeps that roster and the change signal, a spec file
+whose row fails inside the load leaves the spec as it was — a '(none)' off-hand included —
+with the chip, the selection and every hero row, and says so, a file the compiler refuses
+opens as one it accepts and the bar says what the window could not hold, a spec saved with
+no off-hand opens with none, Open, Save and a failed Open say the file's name and never its
+path (a reset never the store's), one bulk write of the Skills list (Unlock party only, a
+load) is one count and one change signal, a low damage bound typed with the high at 0 is not
+an edit, ranks past a hostile's budget are refused at compile as its hint promises, and a
+Ranks built by any caller houses its chip. The Run tab's lifecycle
 has its own: every line the end chip reads is one the harness still PRINTS (its print sites,
 not its comments), a crash reads crit on exit 0 too, a run's verdict outlives the first edit
 after it and an edit during the run is said when it ends, a harness that cannot start (the
