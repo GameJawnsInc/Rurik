@@ -253,10 +253,16 @@ create, `agentroster`), with what the build's own pool declares for each
 
 **13 hostile definition slots on the September map-146 tapes**: six of the
 original seven (1434 was not created in any September session) and seven the
-2026-08-11 corpus never saw. Four carry a stat past the declaration — 1431,
-1432 and 1437 a health reading, 1397 and 1437 an attack rate — and that is the
-number R4c-2b's "real stats" clause can honestly cite for pre-Searing today: 4
-of 13. The 40 hostile in the whole September pool are, as §7.1 warned, mostly
-the Isle's furniture (129–165, 2937) and map 430's (4389–4440); reporting 40
-against the rung's 35 counts the training dummies again. `test_npcdefs` §8 pins
-the 13, the absent 1434, the four stats and the one drift as literals.
+2026-08-11 corpus never saw. Four carry a stat past the declaration — three a
+health reading (1431 56, 1432 96, 1437 64) and four an attack rate (1397 1.9,
+1431 1.75, 1432 1.75, 1437 2.475), as the table says; the first draft of this
+sentence left 1431's and 1432's rates out — and that is the number R4c-2b's
+"real stats" clause can honestly cite for pre-Searing today: 4 of 13. The 40
+hostile in the whole September pool are, as §7.1 warned, mostly the Isle's
+furniture (129–165, 2937) and map 430's (4389–4440); reporting 40 against the
+rung's 35 counts the training dummies again. `test_npcdefs` §8 pins the 13 as
+the hostile definitions CREATED on the map-146 connections of the September
+roster (`agentroster.read_roster`, `map_id == 146`, exact set equality — the
+first version tested only that the 13 were among the pool's 40, which an Isle
+definition swapped in would have passed), the absent 1434, the four stats and
+the one drift as literals.

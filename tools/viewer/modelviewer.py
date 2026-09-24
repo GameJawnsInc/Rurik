@@ -559,6 +559,7 @@ class CatalogModel(QAbstractListModel):
         self.queued = set()
         self.failed = set()
         self.rendered = 0                # lazily rendered this session
+        self.rendered_fids = []          # ...and which, in render order
         self.row_of = {r.fid: i for i, r in enumerate(records)}
         self.timer = QTimer(self)
         self.timer.setInterval(0)
@@ -623,6 +624,7 @@ class CatalogModel(QAbstractListModel):
                 return                       # not ready; the next paint asks again
             self.thumbs.save(fid, img)
             self.rendered += 1
+            self.rendered_fids.append(fid)
         self.icons.pop(fid, None)
         row = self.row_of.get(fid)
         if row is not None:
@@ -1284,13 +1286,18 @@ def smoke(win, app, out_dir):
          "forcing slot 0 decodes and binds its texture")
     win.slot_box.setCurrentIndex(0)
 
-    win.tabs.setCurrentIndex(2)
+    # on_tab runs synchronously inside setCurrentIndex (a direct signal), so
+    # the clock starts BEFORE it -- the first version started it after, timed
+    # processEvents alone, and printed 0.0 s with a 5 s sleep planted in the
+    # map read. The bound is what makes it a check: a cold or refused cache
+    # decodes 17 maps in 20-30 s and reddens it.
     t0 = time.time()
+    win.tabs.setCurrentIndex(2)
     app.processEvents()
     maps_secs = time.time() - t0
-    step(win.maps is not None and "449" in win.maps,
-         f"Maps tab reads the content maps ({maps_secs:.1f} s; warm through the "
-         f"map index cache, cold ~20 s)")
+    step(win.maps is not None and "449" in win.maps and maps_secs < 5,
+         f"Maps tab reads the content maps in {maps_secs:.2f} s (< 5 s: warm "
+         f"through the map index cache; a cold decode is 20-30 s)")
     for i in range(win.map_list.count()):
         d = win.map_list.item(i).data(Qt.UserRole)
         if d and d[0] == "449":
@@ -1393,14 +1400,31 @@ def smoke(win, app, out_dir):
     step(first_batch >= 3 and win.list_model.rendered >= 3,
          f"the Models tab renders thumbnails for the rows in view on its own: "
          f"{first_batch} PNGs in {lazy.dir} without the menu action")
-    win.list.scrollToBottom()
-    before = win.list_model.rendered
+    # THE SCROLL. Drain what the first paint queued FIRST, so nothing left
+    # over from the top of the list can satisfy this step -- the first version
+    # counted "3 more rendered" after scrollToBottom, and with the scroll
+    # removed the rows still queued from the top rendered and passed it. Then
+    # only rows near the END of the list count: a fid whose row is within the
+    # last 50 was painted because the scroll brought it into view.
     deadline = time.time() + 30
-    while time.time() < deadline and win.list_model.rendered < before + 3:
+    while win.list_model.pending and time.time() < deadline:
         app.processEvents()
-    step(win.list_model.rendered >= before + 3,
+    drained = not win.list_model.pending
+    seen = set(win.list_model.rendered_fids)
+    nrows = win.list_model.rowCount()
+    win.list.scrollToBottom()
+
+    def bottom_new():
+        return [f for f in win.list_model.rendered_fids
+                if f not in seen and win.list_model.row_of.get(f, -1) >= nrows - 50]
+    deadline = time.time() + 30
+    while time.time() < deadline and len(bottom_new()) < 3:
+        app.processEvents()
+    got = bottom_new()
+    step(drained and len(got) >= 3,
          f"scrolling to the end queues the rows that came into view: "
-         f"{win.list_model.rendered - before} more rendered")
+         f"{len(got)} rendered from the last 50 of {nrows} rows, none of them "
+         f"queued before the scroll (queue drained first: {drained})")
     while win.list_model.pending and time.time() < deadline:
         app.processEvents()
     print(f"smoke: {len(fails)} failure(s)")

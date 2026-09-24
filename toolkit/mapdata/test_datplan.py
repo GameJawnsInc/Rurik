@@ -95,7 +95,12 @@ import checks  # noqa: E402
 # phase 0 (6). The first version of the last check passed the first arm --
 # it looked for the kind's words anywhere in the plan, and the withheld
 # header now says them on every plan; it reads the run's own line.
-LEDGER = checks.Ledger("dat planner", floor=60)
+# 60 -> 61 on 2026-09-24 (the lane's review, RV-10): the chunk-boundary check
+# -- mft_content read in 1,536-byte chunks scores the planted tail the same
+# tuple as in one piece; with the straddle branch disabled in a scratch copy
+# that check alone goes red (the default chunk is larger than any fixture run,
+# so nothing else exercised the branch).
+LEDGER = checks.Ledger("dat planner", floor=61)
 check = checks.adopt(LEDGER)
 
 FILE_MAGIC = b"3AN\x1a"
@@ -659,6 +664,23 @@ def section_overwritten_head(tmp):
               "and at phase 0 alone the same run scores ZERO identical -- the "
               "six-phase search is what finds a tail that starts mid-block",
               f"{got0}")
+        # CHUNKING. mft_content reads a run in MFT_CONTENT_CHUNK-byte pieces
+        # and tests the one record per phase that straddles each boundary. The
+        # default chunk (1,049,088 B) is far larger than this run, so with it
+        # the straddle branch never executes here; at 1,536 B (3 blocks, still
+        # a multiple of 24) the planted tail crosses two boundaries, and the
+        # phase-8 records that straddle them are found only by that branch.
+        saved = datplan.MFT_CONTENT_CHUNK
+        try:
+            datplan.MFT_CONTENT_CHUNK = 1536
+            small = datplan.mft_content(ar.fh, RUN_8 * BLOCK, 8 * BLOCK, rows)
+        finally:
+            datplan.MFT_CONTENT_CHUNK = saved
+        check(small == got and (8 * BLOCK) // 1536 >= 2,
+              f"read in 1,536-byte chunks the run scores the same tuple {got} "
+              f"-- the records that straddle a chunk boundary are counted, "
+              f"so a run scores the same however it is chunked",
+              f"chunked {small} vs whole {got}")
 
         usable, excluded = datplan.classify_runs(ar)
         by_start = {x.start_block: x for x in excluded}

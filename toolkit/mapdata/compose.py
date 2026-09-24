@@ -240,10 +240,15 @@ def row_budget(dat):
     its own last 512-byte block (`datalloc.mft_slack`: `-mft_size % 512`,
     17 rows on a pristine 38833-line copy) plus whatever erased rows it
     already holds (`datplan.free_rows`). Both numbers change under the
-    CLIENT: every file it patches or compiles spends a row, so the run
-    archive's budget only falls between builds, and `--fresh` -- which
-    re-copies the pristine source -- is the one thing that restores it
-    (DESKWORK-D11 step 7, 2026-09-24).
+    CLIENT, and `--fresh` -- which re-copies the pristine source -- is the
+    one thing that restores them (DESKWORK-D11 step 7, 2026-09-24).
+    RECONSTRUCTION, from one measurement: WORLDMAPS-W6 read the slice's
+    slack at 17 rows on the pristine copy and 0 after client sessions, so
+    "a session spends rows" is the reading of that fall, not a mechanism
+    anything here traced -- and the slice's 1 claimable erased row where its
+    source has 0 is a component that ROSE under the client, by an actor
+    nothing here identified. The budget has only fallen so far; nothing
+    says it can only fall.
     """
     import datalloc                                              # noqa: E402
     import datplan                                               # noqa: E402
@@ -265,8 +270,9 @@ def budget_lines(name, src_dat):
                    f"must move (a map chain is two)")
     out.append(f"  MFT row budget of the pristine source: {s_slack} + {s_erased} "
                f"= {s_slack + s_erased} row(s); --fresh re-copies it. Client "
-               f"sessions SPEND rows (every file the client patches or compiles "
-               f"takes one), so a run archive's budget only falls.")
+               f"sessions SPEND rows (RECONSTRUCTION from WORLDMAPS-W6: slack "
+               f"17 -> 0 across sessions on the slice), so a run archive's "
+               f"budget has only fallen so far.")
     return out
 
 

@@ -62,6 +62,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "schema"))
+import agentroster  # noqa: E402
 import checks  # noqa: E402
 import content  # noqa: E402
 import npcdefs  # noqa: E402
@@ -73,7 +74,7 @@ from codec import Codec  # noqa: E402
 # vault-dependent section declares its skips, so a run without the live captures lands
 # below the floor and goes RED -- which is the point, since a compiler checked against
 # nothing is the failure checks.py exists for.
-LEDGER = checks.Ledger("npcdefs: capture -> content rows", floor=55)
+LEDGER = checks.Ledger("npcdefs: capture -> content rows", floor=59)
 # floor 25 -> 32 on 2026-08-16, measured from the green run that added the
 # named-capture selection, the fourth-capture proof and the mode plumbing;
 # 32 -> 40 on 2026-08-22 with section 7 (field 9 is per-instance, the full
@@ -84,6 +85,13 @@ LEDGER = checks.Ledger("npcdefs: capture -> content rows", floor=55)
 # the honest R4c-2 recount over the September map-146 tapes. Sabotaged in a
 # scratch driver before the floor was set: require_one_build never refusing
 # reddens 3, to_toml dropping the stamp reddens 2.
+# 55 -> 59 on 2026-09-24 (the lane's review): a lone capture of unknown build
+# is ACCEPTED (it was refused with an impossible remedy), the unknown capture
+# beside a known one still refused, `--build NOSUCH` refused rather than a
+# TypeError, `--capture 20260817T180610` running as at base; and the map-146
+# roster check now READS map 146 (agentroster, map_id == 146, exact set) where
+# it tested a subset of the whole pool -- 129 swapped in for 1397 passed that
+# and reddens this. The new test run against HEAD's old npcdefs.py reddens 3.
 
 # Measured 2026-08-11 over the three keyed captures. Written as literals rather than
 # computed from the module under test, because a symbol appearing in a test file is not
@@ -465,17 +473,31 @@ def main():
               why.splitlines()[0] if why else "not refused")
     LEDGER.ok(npcdefs.require_one_build(build_caps) == POOL_BUILD,
               f"one build's pool passes and names itself ({POOL_BUILD})")
-    # A pool of ONE capture whose build is unknown is refused too: an unknown
-    # build is not "any build".
+    # A pool of ONE capture is accepted whatever its build -- one capture
+    # cannot span two -- and names no build when its manifest names no exe.
+    # The first version refused the lone unknown capture and told the
+    # operator to pass the --capture STAMP they had just passed; at base
+    # `--capture 20260817T180610` ran (8 declared, 0 hostile), so that was a
+    # regression with no flag to restore it.
     unknown = [c for c in all_caps if npcdefs.capture_build(c) is None]
     try:
-        npcdefs.require_one_build(unknown[:1])
-        refused_unknown = False
-    except npcdefs.NpcDefsError:
-        refused_unknown = bool(unknown)
-    LEDGER.ok(refused_unknown,
-              "a pool made only of a capture with no readable build is refused",
-              f"{[os.path.basename(c) for c in unknown]}")
+        lone = npcdefs.require_one_build(unknown)
+    except npcdefs.NpcDefsError as exc:
+        lone = f"REFUSED: {exc}"
+    LEDGER.ok(len(unknown) == 1 and lone is None,
+              "a pool of ONE capture passes whatever its build: the capture "
+              "with no exe in its manifest is accepted alone and names no "
+              "build (None -- no stamp is written for it)",
+              f"{[os.path.basename(c) for c in unknown]} -> {str(lone)[:60]}")
+    try:
+        npcdefs.require_one_build(unknown + build_caps[:1])
+        mixed = ""
+    except npcdefs.NpcDefsError as exc:
+        mixed = str(exc)
+    LEDGER.ok("unknown" in mixed and POOL_BUILD in mixed,
+              "and the same capture beside ONE of a known build is refused "
+              "naming both -- an unknown build is not 'any build'",
+              mixed.splitlines()[0] if mixed else "not refused")
     # The CLI: a bare census refuses; --build selects. main() takes argv so
     # the plumbing is exercised, not re-derived.
     import contextlib
@@ -496,6 +518,31 @@ def main():
               f"`--build 2026-07-29_221c13772c7a` runs the census over its three "
               f"captures and finds the {DEFINITIONS} pinned definitions",
               buf.getvalue().splitlines()[0][:90])
+    # A mistyped key is REFUSED naming the builds the vault holds. The first
+    # version crashed here instead: the refusal sorted a set holding None
+    # (the unknown capture) against str.
+    try:
+        npcdefs.main(["--build", "NOSUCH"])
+        bad = "ran"
+    except npcdefs.NpcDefsError as exc:
+        bad = str(exc)
+    except TypeError as exc:
+        bad = f"TypeError: {exc}"
+    LEDGER.ok(bad.startswith("no keyed live capture of build 'NOSUCH'")
+              and POOL_BUILD in bad and "'unknown'" in bad,
+              "`--build NOSUCH` is REFUSED naming the vault's builds, the "
+              "unknown one included -- not a TypeError", bad[:100])
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        try:
+            rc = npcdefs.main(["--capture", os.path.basename(unknown[0])])
+        except npcdefs.NpcDefsError as exc:
+            rc = f"REFUSED: {exc}"
+    LEDGER.ok(rc == 0 and "1 capture(s) of build unknown" in buf.getvalue()
+              and "8 definition(s) declared, 0 hostile" in buf.getvalue(),
+              "`--capture 20260817T180610` alone runs as it did at base (8 "
+              "declared, 0 hostile), printed as build unknown",
+              (buf.getvalue().splitlines() or [str(rc)])[0][:90])
     # Every emitted row says which build it was read from, and content.py
     # loads the stamped rows.
     text = npcdefs.to_toml(host, build="2026-07-29_221c13772c7a")
@@ -527,21 +574,46 @@ def main():
               f"{len(sept)} declared, {len(sept_host)} hostile")
     ON_146 = {1346, 1397, 1405, 1409, 1411, 1420, 1421, 1428, 1431, 1432,
               1433, 1437, 1442}
-    LEDGER.ok(ON_146 <= set(sept_host) and 1434 not in sept_host
-              and (ON_146 & HOSTILE) == HOSTILE - {1434},
-              "the 13 hostiles created on the September map-146 tapes are all "
-              "hostile in that build's pool; 1434 is absent from it; six of "
-              "the original seven are among them",
+    # THE MAP FILTER IS THE CHECK. The first version asserted only that
+    # ON_146 is a subset of the whole September pool's 40 hostiles -- 21 of
+    # which are the Isle's (129..165, 2937) and 6 map 430's -- so 129 swapped
+    # in for 1397 passed it. The roster is read per connection with its
+    # VERSION frame's map_id, and the hostile definitions CREATED on map 146
+    # must equal the 13 exactly.
+    rosters = agentroster.read_roster(
+        npcdefs.live_captures(build="2026-09-01_44fbd68767a8"))
+    on146 = [r for r in rosters if r["map_id"] == 146]
+    created = {c["definition"] for r in on146 for c in r["creates"]
+               if c["tag"] == agentroster.TAG_NPC
+               and c["token"] in npcdefs.HOSTILE_TOKENS}
+    LEDGER.ok(len(on146) == 5 and len({r["capture"] for r in on146}) == 4
+              and created == ON_146,
+              "the September tapes reach map 146 in 5 connections of 4 "
+              "captures, and the hostile definitions CREATED there (mon1/band "
+              "on an NPC-tag create) are EXACTLY the 13",
+              f"{len(on146)} connection(s); created - pinned = "
+              f"{sorted(created - ON_146)}, pinned - created = "
+              f"{sorted(ON_146 - created)}")
+    LEDGER.ok(1434 not in created and (ON_146 & HOSTILE) == HOSTILE - {1434}
+              and ON_146 <= set(sept_host),
+              "1434 is not created on any September map-146 tape; six of the "
+              "original seven are; all 13 are hostile in the build's own pool",
               f"missing from the pool: {sorted(ON_146 - set(sept_host))}")
     LEDGER.ok(sept[1431].health and sept[1431].health[0][1] == 56
               and sept[1432].health and sept[1432].health[0][1] == 96
               and sept[1437].health and sept[1437].health[0][1] == 64
               and sept[1397].attack == (1.9, 1.0)
-              and sept[1437].attack == (2.475, 1.0),
-              "and the four with a stat past the declaration: 1431 health 56, "
-              "1432 health 96, 1437 health 64 + attack 2.475, 1397 attack 1.9",
-              f"1431 {sept[1431].health} 1432 {sept[1432].health} "
-              f"1437 {sept[1437].health} {sept[1437].attack} 1397 {sept[1397].attack}")
+              and sept[1431].attack == (1.75, 1.0)
+              and sept[1432].attack == (1.75, 1.0)
+              and sept[1437].attack == (2.475, 1.0)
+              and not sept[1397].health,
+              "and the four with a stat past the declaration: three with a "
+              "health reading (1431 56, 1432 96, 1437 64) and four with an "
+              "attack rate (1397 1.9, 1431 1.75, 1432 1.75, 1437 2.475) -- the "
+              "first version's label left 1431/1432's rates out",
+              f"1431 {sept[1431].health} {sept[1431].attack} 1432 "
+              f"{sept[1432].health} {sept[1432].attack} 1437 {sept[1437].health} "
+              f"{sept[1437].attack} 1397 {sept[1397].health} {sept[1397].attack}")
     # The one cross-build disagreement, counted rather than met: 7809 alone.
     july_d = {i for i, d in july.items() if d.declared}
     sept_d = {i for i, d in sept.items() if d.declared}

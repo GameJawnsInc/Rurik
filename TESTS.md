@@ -1644,7 +1644,16 @@ Every one of these, in the order they were written:
   line for that run names the kind and the count. Four scratch sabotages redden
   it -- the rule off (6), the majority off (4), the count off (4), one phase
   (6); the last check's first version read the kind's words anywhere in the plan
-  and passed the first arm, so it reads the run's own line),
+  and passed the first arm, so it reads the run's own line. **Floor 60 -> 61
+  (the lane's review, RV-10): the chunk-boundary check** -- `mft_content` reads
+  a run in `MFT_CONTENT_CHUNK` pieces and tests the one record per phase that
+  straddles each boundary, and the default chunk (1,049,088 B) is larger than
+  any fixture run, so nothing exercised that branch; read in 1,536-byte chunks
+  the planted tail crosses two boundaries and must score the same tuple, and
+  with the branch disabled in a scratch copy that check alone goes red. The
+  mark's text is neutral since the same review (RV-8): it states the count, the
+  fraction and the phase and asserts no mechanism, because the rule also
+  withholds one-block slivers at 57-86 % that are not overwritten heads),
   `toolkit/mapdata/test_datalloc.py` (the THIRD write verb: rows that did not
   exist, and the file id that makes the client able to name them. `--replace`
   needs a row, `datmove` needs a row; both start from one ArenaNet made, which is
@@ -7040,19 +7049,32 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   default.** `builds_of` partitions every keyed capture (the one with no exe in
   its manifest keys as `None`, never vanishes); `require_one_build` REFUSES the
   whole vault naming all five builds, the unknown capture by stamp and the
-  `--build` flag, refuses a pool of only the unknown capture, and passes one
-  build's pool naming it; `main([])` refuses and `main(["--build",
-  "2026-07-29_221c13772c7a"])` runs the census over its three captures to the 54
-  pinned definitions (main takes argv, so the plumbing is exercised); `to_toml(
-  build=)` stamps every row's provenance and content.py reads it back off the
-  row, with the CONTROL that no build given writes none. Then the honest R4c-2
-  recount as literals: the 2026-09-01 pool declares 294 / 40 hostile; the
-  September map-146 tapes create 13 hostiles, six of the original seven (1434
-  absent) and seven new; the four with a stat past the declaration (1431 health
-  56, 1432 96, 1437 64 + attack 2.475, 1397 attack 1.9); and of the 38 indices
-  both 2026-07-29 and 2026-09-01 declare exactly ONE body differs (7809).
-  Scratch sabotages: `require_one_build` never refusing reddens 3, `to_toml`
-  dropping the stamp reddens 2. Floor 32→40→42→55),
+  `--build` flag, and passes one build's pool naming it; a pool of ONE capture
+  passes whatever its build (the unknown capture alone returns `None` and gets
+  no stamp -- the first version refused it and told the operator to pass the
+  `--capture STAMP` they had passed, a regression from base with no flag to
+  restore it), while the same capture beside one of a known build is refused
+  naming both; `main([])` refuses, `main(["--build", "2026-07-29_221c13772c7a"])`
+  runs the census over its three captures to the 54 pinned definitions (main
+  takes argv, so the plumbing is exercised), `main(["--build", "NOSUCH"])` is
+  REFUSED naming the vault's builds with the unknown one included (the first
+  version crashed sorting `None` against `str`), and `--capture 20260817T180610`
+  alone runs as at base (8 declared, 0 hostile); `to_toml(build=)` stamps every
+  row's provenance and content.py reads it back off the row, with the CONTROL
+  that no build given writes none. Then the honest R4c-2 recount as literals:
+  the 2026-09-01 pool declares 294 / 40 hostile; **the September map-146 tapes
+  are READ as map 146** -- `agentroster.read_roster` over the build's 13
+  captures, connections with `map_id == 146` (5 in 4 captures), the hostile
+  definitions CREATED there equal to the 13 EXACTLY (the first version tested
+  only that the 13 were among the pool's 40, 21 of which are the Isle's, and an
+  Isle definition swapped in for 1397 passed it; it reddens this), six of the
+  original seven with 1434 absent; the four with a stat past the declaration --
+  three with a health reading (1431 56, 1432 96, 1437 64) and four with an attack
+  rate (1397 1.9, 1431 1.75, 1432 1.75, 1437 2.475); and of the 38 indices both
+  2026-07-29 and 2026-09-01 declare exactly ONE body differs (7809). Scratch
+  sabotages: `require_one_build` never refusing reddens 3, `to_toml` dropping
+  the stamp reddens 2, the whole new §8 against HEAD's pre-review `npcdefs.py`
+  reddens 3. Floor 32→40→42→55→59),
   `toolkit/authsrv/test_agentroster.py` (the per-agent roster reader —
   `studies/isle/PLAN.md` rung 1: every WORLD_CREATE_AGENT **with its coordinates**,
   partitioned by class tag before any masking, because field 2's low 16 bits are a

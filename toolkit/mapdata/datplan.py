@@ -97,23 +97,25 @@ CONTAINER_PROBE_BYTES = CONTAINER_PROBE_PAIRS * 8
 # BYTE-IDENTICAL to a live row of this archive's own table is the run's score.
 # All-zero records are excluded: an erased row is zero and so is empty space.
 #
-# MEASURED 2026-09-24 over every usable free run of all 21 Gw.dat copies in
-# the vault (DESKWORK-Q4; the sweep is quoted in the PLAN-LOG entry). The runs
-# that are an overwritten-head generation score 0.997..1.000 of their non-zero
-# records identical -- dat_study_38833's 0xF5923800: 120,507 of 120,533; the
-# 38833-line archives' 0xF8A5E200: 11,859 of 11,882 and 0xF8FD7C00: 6,675 of
-# 6,698; the 38888-line archives' 0xFC84F200: 25,445 of 25,450 -- and on the
-# 38833 line every other usable run scores exactly zero.
+# MEASURED 2026-09-24 over every usable free run of all 32 archive-size .dat
+# files in the vault -- the 21 Gw.dat copies under client/, dat_*/, run/ and
+# run-live/ (DESKWORK-Q4's sweep) plus the 11 under exports/ (its review's),
+# read-only. The runs that are an overwritten-head generation score
+# 0.997..1.000 of their non-zero records identical -- dat_study_38833's
+# 0xF5923800: 120,507 of 120,533; the 38833-line archives' 0xF8A5E200: 11,859
+# of 11,882 and 0xF8FD7C00: 6,675 of 6,698; the 38888-line archives'
+# 0xFC84F200: 25,445 of 25,450 -- and on the 38833 and 08-20 lines every other
+# usable run scores exactly zero.
 #
 # THE FLOOR IS NOT ZERO EVERYWHERE, and the first draft of this comment said
 # it was. On the 38797-line copies (dat_study_38797, dat_c2, reskin-roster,
 # the July run directories) a dozen small runs each carry 1..20 identical
-# records at 1%..76% -- and decoding them (the scratch inspect_fragments.py)
-# shows exactly what they are: CONTIGUOUS spans of table rows (72325..72340 in
-# a single 512-byte block at 0xDC29D800; 1267..1279 at 0x0731D000) with the
-# rest of the run decoding as junk, i.e. compressed payload. They are slivers
-# of an old table block that survived the client reusing the region for
-# files. That is why the trigger has TWO terms:
+# records at 1%..76% -- and decoding them record by record shows what they
+# are: CONTIGUOUS spans of table rows (72325..72340 in a single 512-byte block
+# at 0xDC29D800; 1267..1279 at 0x0731D000) with the rest of the run decoding
+# as junk, i.e. compressed payload. They are slivers of an old table block
+# that survived the client reusing the region for files. That is why the
+# trigger has TWO terms:
 #
 #   * the COUNT -- at least MFT_CONTENT_MIN_ROWS identical records, so that a
 #     lone row in a block of zeros does not withhold anything; and
@@ -124,13 +126,32 @@ CONTAINER_PROBE_BYTES = CONTAINER_PROBE_PAIRS * 8
 #     excluded from the denominator because a generation's growth area and
 #     empty space are both zero and say nothing either way.
 #
-# The line sits at one half. Every multi-block run in the vault is either
-# 99.7%+ (the targets) or under 3% (reused regions, 0xF9A62600's 20 of 22,144
-# is the largest); the only runs between 5% and 90% are single blocks and one
-# 5 KB run (0xF9EF4A00, 69 of 213 -- an old generation's last four rows-blocks
-# followed by six of payload), where a withheld block costs nothing and a
-# usable one risks nothing a 5 KB file could reach. Named here so the residue
-# is visible rather than tuned away.
+# The line sits at one half, and THE RESIDUE ON EACH SIDE OF IT IS NAMED
+# rather than tuned away (the second draft of this paragraph claimed a clean
+# band -- "every multi-block run is 99.7%+ or under 3%" -- and the review's
+# sweep refuted it):
+#
+#   * WITHHELD by the majority term although they are slivers, not tails: the
+#     single-block runs 0xDC29D800 (16 of 21, 76%, on every 38797-line copy),
+#     0xF53F9C00 (57%, run-live/2026-07-29) and 0xFAAE2000 (18 of 21, 86%, the
+#     38888 line; 3 junk records then rows 177774..177791). A block each; the
+#     mark states the count and nothing about how the rows got there.
+#   * LEFT USABLE by it although they carry at least 8 identical rows:
+#     0xF542FE00 (18 blocks, 13 of 383, 3.4%), 0xF5595400 (5 blocks, 5.7%),
+#     0xF6DD5400 (2 blocks, 9.5%), 0x9662A00 (1 block, 8 of 20, 40%),
+#     0xF567E200 (3 blocks, 20 of 63, 32%, rows 173569..173588 at the run's
+#     end) and 0xF9EF4A00 (10 blocks, 69 of 213, 32%, on the 38888 line): 135
+#     records of payload FOLLOWED by a contiguous tail of rows 177714..177791
+#     running to the run's end -- and best_fit writes a payload from the run's
+#     START, so any 7..10-block file (3.1..5.1 KB; WORLDMAPS-W6's 4,820 B map
+#     is one) would overwrite those rows. That is the honest cost of the
+#     whole-run fraction: the rows are stale (their generation's head is under
+#     the file in front of them), and whether the client can ever return to
+#     such a generation is studies/archivewrite's standing UNVERIFIED, so this
+#     rule does not claim that overwriting them is safe -- only that the region
+#     already went to a file once. A per-BLOCK rule (withhold the row-bearing
+#     blocks, keep the payload blocks) would catch both lists consistently and
+#     is the next refinement if that question ever gets an answer.
 MFT_CONTENT_PHASES = tuple(range(0, ENTRY_SIZE, 4))
 MFT_CONTENT_MIN_ROWS = 8
 MFT_CONTENT_MAJORITY = 0.5
@@ -401,12 +422,16 @@ def content_mark(ar, start_block, nblocks, rows):
         ar.fh, start_block * block, nblocks * block, rows)
     if identical < MFT_CONTENT_MIN_ROWS or identical < MFT_CONTENT_MAJORITY * nonzero:
         return None
+    # The mark states what was measured and nothing about how the rows got
+    # there: the same score fits a generation's tail whose head the live
+    # file-id table overwrote (0xF5923800) and a one-block sliver in a region
+    # the client reused (0xDC29D800), and the first version of this string
+    # asserted the former for both.
     return (0, KIND_MFT_CONTENT,
             f"{identical} of {nonzero} non-zero 24-byte records "
             f"({identical / nonzero:.1%}) are byte-identical to live MFT rows at "
-            f"phase {phase} (best of {len(MFT_CONTENT_PHASES)}); no header to "
-            f"project an extent from, so this is a generation whose head was "
-            f"overwritten")
+            f"phase {phase} (best of {len(MFT_CONTENT_PHASES)}); withheld as stale "
+            f"table rows, no header to project an extent from")
 
 
 def classify_runs(ar, runs=None):
@@ -473,7 +498,14 @@ def classify_runs(ar, runs=None):
     to live rows -- carried no magic at any boundary and no extent reached it,
     so it was the LARGEST USABLE RUN in the archive. On the slice archive the
     same shape at 0xF8A5E200 (11,859 of 11,882) was the largest usable run and
-    the next compose would have written into it. The third rule reads the rows
+    0xF8FD7C00 (160,768 B) the next -- which is NOT to say the next compose
+    would have written into either: best_fit is smallest-fit, and measured on
+    the slice before this rule a 4,820 B payload went to a 12-block run at
+    0x7857200 and the 8,192 B area reservation to a 23-block run at 0x4C19000.
+    A payload over 17,408 B (the largest run left usable now) would have been
+    placed in 0xF8FD7C00 and one over 160,768 B in 0xF8A5E200, and plan_move
+    on the 38833 copy accepted 1.1 MB and 2 MB moves into 0xF5923800; those
+    are what the rule protects. The third rule reads the rows
     themselves (`mft_content`): a run whose bytes parse, at the best of six
     phases, as at least MFT_CONTENT_MIN_ROWS records identical to live table
     rows AND a MFT_CONTENT_MAJORITY of its non-zero records is withheld as

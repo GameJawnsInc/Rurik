@@ -75,8 +75,17 @@ build is unknown. Every emitted row carries `build` in its provenance.
 
     python toolkit/authsrv/npcdefs.py --builds        # what the vault holds, per build
     python toolkit/authsrv/npcdefs.py --build 2026-09-01_44fbd68767a8   # census
-    python toolkit/authsrv/npcdefs.py --build 2026-09-01_44fbd68767a8 --emit
+    python toolkit/authsrv/npcdefs.py --build 2026-07-29_221c13772c7a --emit
                                                       # -> vault/content/npcs.toml
+
+`--emit` REPLACES the single overlay `vault/content/npcs.toml`, so the build it is
+given decides which definitions every consumer of that file sees: `probequest.py`
+reads `def_1473` off it, and 1473 is declared ONLY in the 2026-07-29 pool (the
+2026-09-01 pool has 1470, 1480 and 1486 but not 1473). Emitting a newer build
+without checking the consumers is how a probe goes hunting for a row that is not
+there. A pool of ONE capture is accepted whatever its build (it cannot span two);
+when that build is unknown the rows carry no `build` line, because the stamp is a
+fact, never a default.
 """
 import argparse
 import collections
@@ -516,7 +525,10 @@ def live_captures(names=None, build=None):
     if build is not None:
         kept = [p for p in out if capture_build(p) == build]
         if not kept:
-            seen = sorted({capture_build(p) for p in out})
+            # `or "unknown"`: the set holds None for a capture with no exe in
+            # its manifest, and sorting None against str is a TypeError -- the
+            # first version crashed here on a mistyped key instead of refusing.
+            seen = sorted({capture_build(p) or "unknown" for p in out})
             raise NpcDefsError(
                 f"no keyed live capture of build {build!r}; the vault holds builds "
                 f"{seen}. A build selector that matches nothing turns every count "
@@ -544,11 +556,15 @@ def require_one_build(capture_dirs):
     first index that collides, with no word about builds; this refuses first
     and says what the pool is made of, so the operator can pick a `--build`
     rather than guess from a definition number. A capture whose build cannot
-    be read is listed as `unknown` and refuses the pool the same way -- an
-    unknown build is not "any build".
+    be read is listed as `unknown` and refuses a pool of two or more the same
+    way -- an unknown build is not "any build", so two unknown captures may
+    be two builds. A pool of exactly ONE capture is accepted whatever its
+    build, because one capture cannot span two: its key is returned, `None`
+    when the manifest names no exe (the first version refused that too, and
+    told the operator to pass a `--capture STAMP` they had already passed).
     """
     groups = builds_of(capture_dirs)
-    if len(groups) == 1 and None not in groups:
+    if len(capture_dirs) == 1 or (len(groups) == 1 and None not in groups):
         return next(iter(groups))
     lines = "\n".join(
         f"    {b or 'unknown (no exe in manifest.json)'}: {len(cs)} capture(s) "
@@ -558,7 +574,9 @@ def require_one_build(capture_dirs):
         f"refusing to pool captures of {len(groups)} client builds:\n{lines}\n"
         f"A definition index is only a name within one build (7809 is a "
         f"different creature in 2026-07-29 and 2026-09-01). Pass --build KEY to "
-        f"select one, or --capture STAMP for captures that share one.")
+        f"select one, --capture STAMP (repeatable) for captures that share one, "
+        f"or a single --capture STAMP, which is one build whatever its manifest "
+        f"says.")
 
 
 def capture_mode(capture_dir):
@@ -649,8 +667,8 @@ def main(argv=None):
     defs, _intervals = read(caps)
     declared = {i: d for i, d in defs.items() if d.declared}
     host = hostile(defs)
-    print(f"{len(caps)} capture(s) of build {build}, {len(declared)} definition(s) "
-          f"declared, {len(host)} hostile")
+    print(f"{len(caps)} capture(s) of build {build or 'unknown (no exe in manifest.json)'}, "
+          f"{len(declared)} definition(s) declared, {len(host)} hostile")
     print(f"  with a model id     : {sum(1 for d in declared.values() if d.model_id)}")
     print(f"  with an attack rate : {sum(1 for d in declared.values() if d.attack)}")
     print(f"  with a health value : {sum(1 for d in declared.values() if d.health)}")
@@ -671,7 +689,8 @@ def main(argv=None):
     path = os.path.join(outdir, "npcs.toml")
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(to_toml(chosen, mode=mode, build=build))
-    print(f"\nwrote {len(chosen)} row(s) -> {path} (mode={mode}, build={build})")
+    print(f"\nwrote {len(chosen)} row(s) -> {path} (mode={mode}, "
+          f"build={build or 'unknown: no build line written'})")
     if mode == "unrecorded":
         print("  stats carry mode='unrecorded': Reforged Mode scales health ~20% and "
               "no capture in this run recorded a game_mode (nor was one declared). "
