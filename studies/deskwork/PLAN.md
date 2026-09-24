@@ -620,11 +620,20 @@ MANIFEST:707 (TIMER); quests HANDOFF §1; `content/quests.toml`'s commented `rew
    TIMER per MANIFEST:707 (a server-side schedule) or say why a countdown was chosen;
    each verb ships WITH a quest row using it (`authsrv.py:413-418` refuses a mechanism
    nothing exercises); 0x004C before 0x0054; `test_quests` per verb.
-5. **Gold.** Pay `reward_gold` with 0x0140 [key, gold] (`merchant.py:109`; the sell arm
-   already sends it); check field 1 of the tape's [2, 25] against that connection's
-   0x0144 stream key to make "gold is the guess" OBSERVED; reorder the hand-in to quests
-   §12's observed batch; a persisted purse in charstore or say there is none; fix
-   `authsrv.py:355/374`'s "NOT GRANTED" and quests HANDOFF §1.
+5. **Gold. LANDED 2026-09-24 (DESKWORK-D9 pass 1 `ff29a71c` + fix pass `3c25fd11`,
+   PLAN-LOG; studies/quests §12.1).** `reward_gold` is paid with `0x0140 [key, gold]`
+   after the experience `0x00EE`, inside the `0x0052 · 0x004A` pair (`turn_in_quest`);
+   the tape's `[2, 25]` was checked against that connection's `0x0144` key and "gold is
+   the guess" is now OBSERVED (10 hand-ins, 6 connections, 4 captures; the chain closes);
+   a persisted purse is in charstore (optional field, no version bump), the load credits a
+   positive one and sends nothing for 0 (retail's rule, 41 / 55 of 96 loads, both
+   OBSERVED), `player_purse` reads the store lazily so the load cannot zero it; the
+   merchant moves it through `purse.py`; `--no-quest-gold` / `--no-load-purse` /
+   `--no-reward-in-frame` revert. DEFERRED (client-run discriminators): the doubled
+   `0x0052`, the `0x004D`/`0x004C` resends, `0x00EE[10,0]` UNREAD, skills after the gold
+   (n=2). The byte-offset order is `0x004D · 0x004C · 0x0052 · reward · 0x0052 · 0x004A`,
+   so the option's "0x004A first" was refuted. **The client run is owed** (runsheet in
+   §12.1, three pre-registered questions). Loot (step 6) still open.
 6. **Loot** (low confidence). Census the death drop burst (0x0135, 0x0168, the kind-0
    create 25 u away; 12 records in 4 captures) and the pickup (c2s 0x003F, UPSTREAM; 4 in
    2 captures); a drop row on spawn or npc templates (rates are the operator's, not
@@ -915,26 +924,37 @@ movement HANDOFF §A ("current at 22bfe86", 917 commits behind).
    lock — MOV-verify's reading); replace the hardcoded line with a computed count; write
    1z-p "scored from the corpus" or withdraw R8 keeping R8b; rewrite Q14 item 1 with the
    numbers.
-2. **A warp row in `sessionscore`.** `resyncscore.track_from_capture` per capture; hard
-   rows (count, magnitude, per active minute against the quiet-day band — 0 on 09-09 and
-   09-12 — and the retail control's 0); attribute each to the nearest preceding movement
-   send within 3 s, labelled "suspect", never "cause"; positive control: `--since` on the
-   09-13 sessions must flag `authsrv-20260913T174629-c4` and `190815-c5`.
-3. **Adjudicate the post-ship warps.** For the 4 hard rows since 20260910T160000, causal
-   vs coincident (190815-c5 t=171.48: "KBD LEAD RE-GRANT 1" along the wall turning
-   north-west, the body kept north-east, drift 323 u past gate 1's 299.33, then a 288.6 u
-   snap at 172.59 onto the re-grant's destination; 174629-c4 t=118.15: sent while the
-   guard read gate1-red, jump 438.6 u 0.25 s later); the unattributed 190815-c5 t=142.57
-   (649 u in 68 ms); if causal, a gate behind a flag; the slide law's concave-corner
-   behaviour RECONSTRUCTION.
+2. **A warp row in `sessionscore`.** ✅ **LANDED 2026-09-24 (MOVE-B), PLAN-LOG DESKWORK-D10
+   steps 2/3/5 + the FIX PASS entry, movecode §1z-do.2/.6.** `movesync.wire_only`'s two-arm
+   bar (not `resyncscore` — it gives the grant labels attribution needs); band 0 (retail and
+   09-09/09-12 all 0); each row a SUSPECT with its nearest PLAYER send, a wall-slide re-grant
+   flagged separately, the server's own drift + gate1 verdict, and `on_grant`/`under_gate1` as
+   annotations. Positive controls c4/c5 RED, 09-12 OK; `captures()` reaches every connection
+   suffix; first test `test_sessionscore.py` (37 vaulted / 28 bare after the fix pass). Fix
+   pass corrected `on_grant` (strictly before the landing, not catching the STOP-ECHO), the
+   agent filter, and the silent-warp-error → RED.
+3. **Adjudicate the post-ship warps.** ✅ **LANDED 2026-09-24 (MOVE-B), movecode §1z-do.3/.3b/.6.**
+   FIX PASS reading: 1z-di.3's mechanism IS witnessed once, unrefereed, at a **plane seam**
+   (c5 172.59 — the re-grant walked the copy over the separation gate: server drift 343 u,
+   gate1-red, body teleports onto the re-grant's path); c5 142.57 is a **click-drop snap-back**
+   (NOT on our grant — that was the STOP-ECHO sent after the report); c4 118.41 is a lead-chain
+   gate snap on a **straight wall** (gate1-red predates the re-grant; nearest send is the player
+   lead, not a hero grant); c4 142.55 is a **sub-gate** click jump. The LITERAL corner crawl
+   (c5 t=2–4.5, inside the box) reached the body with **no snap** (§1z-do.3b). No `0x002C`, no
+   overlapping tape; n=4. CONTESTED; a gate is a REGISTERED PROPOSAL (§1z-do.5), not built.
 4. **Tap rate.** Memoise `tls_blocks`/`_threads_of` per (pid, tls_index) in `movetap.py`,
    re-enumerating only when the TEB32 self-check fails; `calibrate()` times a full poll;
    both loops pace to a deadline (`agenttap.py:352`; at 30 Hz today 33 ms sleep + 57 ms
    snapshot ≈ 11 Hz); a fake-memory selftest shows reuse and invalidation. No agenttap
    tape exists since 09-10, so this pays when tape'd runs resume.
-5. **Out-of-sample re-grant.** 1z-di.1's per-grant SHAPE table on the 35 connections
-   after 09-10 only (36 new silences with 26 re-grants, 72 %, against 65 % fitted); a
-   1z-do section; the SLIDE class still 0 of 363.
+5. **Out-of-sample re-grant.** ✅ **LANDED 2026-09-24 (MOVE-B), movecode §1z-do.4/.6.**
+   `parkedcopy.silences` re-run on the **35 live connections (13 sessions)** after 09-10
+   (FIX PASS: the first pass mislabelled 13 sessions as connections): 26/36 (72 %) straight
+   silences carry a re-grant against 65 % fitted, +0.06 s arrival lag, pairs 10/26. The
+   per-grant geometry re-derived: the CENTRE holds (chord p50 765 u along, 0 across) but the
+   TAILS widen out of sample (along min −247, across max 266 vs 0/17 in sample). The SLIDE
+   class is **0 in sample and out** — retail still has no wall-slide-then-silence witness, so
+   the composition stays a RECONSTRUCTION.
 6. **`_reach_frame` through a client-walked follow.** The client's follow stop is decoded
    with no weapon term (park at (r1 + r2 + TABLE[kind])² with the target's world-0 as
    destination); a small follow model walks the mirror's copy toward the target and parks

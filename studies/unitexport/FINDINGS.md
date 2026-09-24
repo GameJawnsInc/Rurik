@@ -274,10 +274,16 @@ is load-bearing rather than cosmetic.
    nothing here reads it, and naming it without a consumer-side derivation
    is exactly the mistake the house rules bar. A U-ladder follow-up could
    disassemble the FA0 consumer's use of the field on a unit body.
-3. **Node base: parent-relative vs absolute** — still open from U2; the
+3. ~~**Node base: parent-relative vs absolute** — still open from U2~~; the
    viewer deliberately takes no side (§3). Decidable by disassembling the
    GrTrans stream-2 commit path (0x006737C0 onward), or empirically on a
    corpus file whose deep chain would place the two readings far apart.
+   **DECIDED empirically, ABSOLUTE** (DESKWORK-Q1 note, 2026-09-24):
+   [archivewrite C-10 / §11.6a](../archivewrite/FINDINGS.md) — the `blk2C`
+   bases are absolute model-space rest positions, refereed by ArenaNet's own
+   mesh (file 116703: the absolute reading seats all 86 joints inside the skin,
+   median 1.40 u from a vertex; the accumulated reading puts them 532 u away).
+   Whether the viewer should now take that side is this study's follow-up.
 4. **COMPOSITED shells** (116228 and the 43-file class) export nothing
    here by design — U4's resolver + this exporter compose the answer;
    the refusal message names U4.

@@ -839,7 +839,10 @@ transfer.
 
 * Retail's **reply** to `0x005E`, if any. Needs a live session in which the
   owner swaps two hero-bar slots on the secondary account, at human cadence.
-* `0x0065 SKILLBAR_SLOT_FLAGS` and `0x001B` remain unmodelled (§40.6).
+* ~~`0x0065 SKILLBAR_SLOT_FLAGS` and `0x001B` remain unmodelled (§40.6).~~ Both are
+  on the wire now (DESKWORK-Q1 note, 2026-09-24): `0x001B` is PARTY_FLAG_PLACE, handled
+  since 2026-08-19; `0x0065` is sent in the hero's block and, since DESKWORK-D1 step 6,
+  as the suppress mask (FINDINGS §40.6). Retail's reply to `0x005E` is what stays open.
 
 ## 13. RUN-HEROLIB-E — does a game-side edit SURVIVE the transfer's settings write now? (§10's fix, on a client)
 

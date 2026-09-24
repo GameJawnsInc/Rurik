@@ -340,9 +340,14 @@ def reward_run(slot_a, slot_b=None):
     SLOT A IS EXPERIENCE, promoted from the seven-quest magnitude argument to
     CORROBORATED 2026-08-16: a live client showed `Reward: 500 Experience` for a
     stock quest, and 500 is exactly what slot A carries for quests 82, 86 and
-    1462. The rival assignment would have put 500 in the gold line. Slot B is
-    presumed gold and is still RECONSTRUCTION -- no screenshot has yet shown a
-    two-line reward.
+    1462. The rival assignment would have put 500 in the gold line. SLOT B IS
+    GOLD: OBSERVED on screen the same day (the quest_reward probe above rendered
+    "222 Gold" for slot B -- this docstring used to say "still RECONSTRUCTION",
+    stale against its own module) and CORROBORATED on the wire by the D9 fix
+    pass, 2026-09-24: in 7 of 7 hand-in batches carrying the 0x004C re-send,
+    the description's two reward numerics equal [the batch's 0x00EE xp, the
+    batch's 0x0140 gold] -- [100, 10], [250, 25], [1000, 10] and their repeats
+    (studies/quests/FINDINGS.md §12.1).
     """
     slots = [slot_a] if slot_b is None else [slot_a, slot_b]
     for n in slots:

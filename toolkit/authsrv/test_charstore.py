@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import checks  # noqa: E402
 import charstore  # noqa: E402
 
-led = checks.Ledger("charstore", floor=91)
+led = checks.Ledger("charstore", floor=96)   # 2026-09-24 DESKWORK-D9 +5 (the carried purse: optional field, round-trip, three refusals), from the green run; 91 before
 base = tempfile.mkdtemp(prefix="charstore-test-")
 UUID = "11111111111111111111111111111111"
 
@@ -482,6 +482,30 @@ try:
     led.ok(True, "an all-empty bar, an empty skill list and a zero budget are "
                  "all legal -- the refusals above are shape errors, not a ban "
                  "on a hero who has nothing yet")
+
+    # -- the carried purse (DESKWORK-D9) -----------------------------------
+    # An OPTIONAL field: absent reads as the caller's default (no STORE_VERSION
+    # bump), a stored value round-trips, and a negative or non-int is refused.
+    st_pu = charstore.Store.open("purse@rurik.invalid", base=base)
+    st_pu.ensure_character(UUID, "Purse")
+    st_pu.save()
+    led.ok(st_pu.character_purse(UUID, default=0) == 0
+           and st_pu.character_purse(UUID, default=50) == 50,
+           "an absent purse reads back as the caller's default, not a silent 0")
+    st_pu.set_character_purse(UUID, 85)
+    led.ok(charstore.Store.open("purse@rurik.invalid", base=base)
+           .character_purse(UUID) == 85,
+           "a stored purse round-trips through disk (a zone/relaunch)")
+    for bad, why in ((-1, "a negative purse"), ("40", "a string purse"),
+                     (True, "a bool purse")):
+        st_pu.character_by_uuid(UUID)["purse"] = bad
+        try:
+            st_pu.save()
+            led.ok(False, f"{why} is refused")
+        except (ValueError, TypeError):
+            led.ok(True, f"{why} is refused -- the carried-gold accumulator is a "
+                         f"non-negative int")
+    st_pu.character_by_uuid(UUID)["purse"] = 85
 
     # The two mirrored client bounds must not drift from attribcolumns.py.
     import attribcolumns  # noqa: E402

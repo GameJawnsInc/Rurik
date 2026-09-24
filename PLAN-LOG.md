@@ -111,6 +111,428 @@ state laws); `PLAN.md` §3's R-SANDBOX row; `TESTS.md`'s `test_sandbox` entry.
 
 ---
 
+### DESKWORK pass 5, landed -- 2026-09-24 -- **gold (D9), the warp row (MOVE-B) and the status sweep (INFRA-A) merged; the merged tree's sweep 95 of 95 green**
+
+Merged into `deskwork` in that order (`3bd7de5b`, `ca5e6d9d`, `9ab7b2f9`, only PLAN-LOG entries
+stacking) and fast-forwarded to `main`. The sweep on the merged tree: the union of the three
+lanes' affected sets, every test reading a changed file by name and every test importing
+`authsrv` or a changed module as a module -- 91 run 4-wide, 88 read green by the runner
+(6,686 checks) and three green with declared skips (test_attribspend 49, test_pathmap 129,
+test_contentids 40) -- then the four port-binders the lanes skipped while CONFIRM-2 held the
+client, run serially (test_webgate 9, test_handshake 24, test_harness 181,
+test_preflight_owner 30): 95 of 95, 7,148 checks. Owed on the client: the gold counter
+(studies/quests 12.1's runsheet, agent-pilotable); the warp row needs no run.
+
+---
+
+### DESKWORK-Q1 + DESKWORK-Q3 (pass 5, INFRA-A), fix pass -- 2026-09-24 -- **option C back in §8.3 as NOT BUILT (its candidate keys were refuted, not the plan); MORALE-Q6's outpost half stands on 2 witnesses, not 3; the embodied-hero kick caveat back in §8.1; "22 named" is 17; the quests HANDOFF §1 edit withdrawn for desk-gold's**
+
+One review of the two entries below — an evidence refuter that re-derived Q3, the census,
+every §8 closure and the study lines before reading the landing, then an engineering
+review of the diff — reproduced the late-stamp census with an independent script (274
+speed-arm rows in 71 captures, 0 late stamps, the same refusal breakdown), the §3.2
+census and its `test_checks` check under four sabotage arms, the `agentroster` fix, and
+13 of the 15 §8 changes. It moved the following; each finding's evidence was re-checked
+here before the fix.
+* **STAT-R1 (blocker) — the entry below is wrong to say "The archive — 3 of 4 clauses
+  REMOVED … option C's durable key REFUTED".** maprows §10.12 refutes (C)'s three
+  candidate KEYS (MFT crc + size, the map dims, the content UUID) and says in terms that
+  (C) is not impossible — a durable key has to come from the map id the server sends or
+  an `s_missionClientData` join — and the log's (C) entry defers it until a second archive
+  state must be supported; nothing builds it. §8.3's "The archive" carries it again,
+  reworded: NOT BUILT, its candidates REFUTED, where the key must come from, deferred.
+  Read the entry below as "2 of 4 clauses removed (the restore verb, the compressor),
+  option C reworded".
+* **STAT-R2 (major) — MORALE-Q6's outpost half is OBSERVED on n = 2, not 3.** Re-read here
+  (a scratch census, prediction first, printing the LAST own `0x009C` before each zone
+  rather than the minimum): of the 3 penalised connections with a next hop, 2 carry the
+  penalty to the zone — `20260914T005758` at 71 and `20260916T150306` at 85, both 430 →
+  449, both loading 100 at 0.621 s. `20260913T210901`'s own `0x009C` read 100 again at
+  618.056 s (a +10 step from 90, beside a 2,000-experience `0x00EE` field 0), 177.5 s
+  before the connection's last message at 795.598 s, so its zone carried no penalty. The
+  entry below's "all 3 zone into an OUTPOST" counted the minimum. Corrected in morale
+  FINDINGS §6's Q6 row, §8.2's MORALE line and plansplit's log-4712 note; the conclusion
+  holds (the outpost half OBSERVED, the field-to-field half WIKI only), on one map pair.
+* **STAT-R5 (nit)** — §8.1's N2 sentence had dropped "a kick of a hero WITH a body is
+  UNOBSERVED" when it was cut to one sentence; it is back (heroes §3.3; cmsg FINDINGS "The
+  hero kick": the retail witness had no body, `0x0021` first is RECONSTRUCTION).
+* **STAT-R6 (nit)** — "22 CHANGED rows named" is 17 named: smsgsweep §7.6 has 22 real rows
+  — 13 named `high`, 4 `medium`, the 5 account-name selectors left unnamed on purpose —
+  and 13 hover artifacts (its own heading says TWENTY-TWO NAMED, so the slip was
+  inherited). plansplit's log-9228 note is corrected; the entry below's wording is
+  corrected here.
+* **STAT-R4 (minor) — the quests HANDOFF §1 correction is WITHDRAWN from this lane.**
+  desk-gold (DESKWORK-D9) rewrites the same sentence with the experience AND the gold
+  reward, so the two branches conflicted textually and desk-gold's text supersedes. The
+  file is back at the merge base here; the entry below's "quests HANDOFF §1" item is
+  desk-gold's to land.
+* **STAT-R3 (minor) — §3's R-SANDBOX row still ends "Next: … N2 hero add/kick from the
+  party panel"** while §8 and the studies record N2 shipped and confirmed. The finding
+  holds and is left to the merge, as the review proposed: main's `bdcfa25c` rewrote that
+  single-line row, so an edit on this branch is a certain conflict. At merge, on main's
+  row: "**Next: N1** a filterable skill/attribute picker for the Enemies tab; **N2**, hero
+  add/kick from the party panel, shipped (DESKWORK-D1 steps 1 + 4) and was confirmed on
+  our client 2026-09-23."
+
+What did not move: Q3's 0 of 274 in 71, the §3.2 census and its check, §3's R5m strike,
+the code changes, and the other §8 lines.
+
+---
+
+### DESKWORK-Q1 (the study lines and small fixes) + DESKWORK-D12 step 4's first half -- 2026-09-24 -- **`PLAN.md` §3.2's content census refreshed and now CHECKED by `test_checks`; §3's R5m "elevation still open" struck; stale lines in eleven study documents corrected in place; `agentroster` prints on a cp1252 console; `effects.py`'s "none of them is modelled" corrected**
+
+The second half of the sweep the entry below opens (same lane, same day). **§3 moved, and
+only in wording**: no rung's status changes.
+* **§3.2's census** read "map 15, npc 56" (2026-08-27) against today's loader. Re-run
+  2026-09-24 with this machine's vault overlay: map 19, npc 63, item 28, spawn 23, area 25,
+  quest 2, skill_effect 113 (npc 54 and skill_effect 57 of those are the vault's). The
+  TRACKED half (`content/*.toml` + `content/overrides/`, no vault): **map 19, npc 9**,
+  quoted behind `The tracked census (...): kind N, ...` and **recomputed by
+  `toolkit/test_checks.py`** (floor 17 → 20: the marker found with map and npc, every quoted
+  count equal to `content.load(vault_dir=<empty>, extra_dirs=[])`, and a synthetic CONTROL
+  where a `map 15` quote against a loader reading 19 is caught). Only the tracked half,
+  because the overlay is machine state — a bare machine has none and a tree lagging main
+  drops label rows it does not know — so a check on it would redden on the machine rather
+  than the document. Sabotaged on the real document both ways: `map 19` → `map 15` reddens
+  the count check, a renamed marker reddens both. Bare run: the same 20.
+* **§3.2's spawn score** re-run (`spawncheck.py --flag-origin`, the study archive): **11 of
+  19** — PASS 9, SEAM 2, OFF-MESH 3, WRONG-PLANE 1, UNRESOLVED 4 (the created chains
+  165–168); the one `(0,0)` PASS is still Sparkfly Swamp's. Written beside the 2026-08-27
+  "8 of 15", with the caveat that the store's 19 rows are not the criterion's 19
+  Pre-Searing zones.
+* **§3's R5m row**: "elevation — a height field that is not flat, walked, is still open as §8
+  item 10(c)" struck — WORLDMAPS W16–W19 walked authored slopes on the retail client on
+  2026-08-21 (W19: S4 climbs a 41.5–42.5° strip to its plateau, max y 3,064; S5 stops below
+  46.45° at 1,728, to the unit). The old citation is left in place, struck.
+
+**Code (no server behaviour moves; `authsrv.py` untouched):** `effects.py`'s condition
+comment said none of the six non-degenerating conditions is modelled — Blind's miss,
+Crippled's speed, Deep Wound's maximum and heal cut and Weakness's damage and attribute
+are, elsewhere; Dazed and Cracked Armor are not (DESKWORK-D6). `agentroster.py` died with
+UnicodeEncodeError on any redirect (reproduced: the `ani` + U+008F token, MONSTERAI-N10's);
+`console_safe(stream)` escapes instead of raising, `main()` calls it, and the redirected
+census now completes (4,270 lines, 21 escaped tokens). `test_agentroster` §4b, vault-free,
+floor 27 → 29: a strict cp1252 stream must still RAISE on the token (the known-bad arm)
+and `console_safe`'s must write `ani\x8f`; sabotaging `console_safe` to the identity
+reddens it. `wireshells.py`'s docstring: definition 7809's exception is the cross-BUILD
+drift SUITE-FIXES measured (the 2026-07-29 vs 2026-09-01 builds), not "two maps".
+
+**Study lines, each corrected in place with a dated note, the old words struck or kept:**
+heroes §3.3 (the kick/add clicks ran 2026-09-23; hiring a HENCHMAN is found, c2s
+`0x009F`), heroes §40.6 and RUN-HEROLIB §12.6 (`0x0065` is sent, `0x001B` is
+PARTY_FLAG_PLACE), quests HANDOFF §1 (the experience reward is paid since SLICE-B5,
+3a12e4fd), daggers F18 and §8 (229 / 230 are Lightning Orb / Javelin; property 10 is
+decoded and sent), plansplit's three wrong "(confirmed)" tags (`0x0191`, the compressor,
+MORALE-Q6), unitexport §6 item 3 (node bases are ABSOLUTE, archivewrite C-10), minimap
+§6g.4 (A3 closed the "STILL OPEN" item the same day), crossbuild §4d item 3 (the restore
+verb, 95f550ef), datwrite's open-questions table (four rows answered: survival, the
+rescan, the icon flags, the encoder) and its "no compression-8 encoder" bullet, handshake
+PLAN §6 (the probes ran 2026-08-04), and the sandbox plan's N2 row (shipped, confirmed).
+`test_dispatch.py`'s EQUIP_ITEM comment and `chatdefs.py`'s 1961 were already corrected
+and were left alone.
+
+**Deferred on purpose — `authsrv.py`'s stale comments** wait for the next lane that edits
+that file (about 40 tests read it as text): `HERO_RIG_0065` "A hypothesis under test" (the
+block is retail's and ships), the leash comment "nothing has measured retail's leash"
+(MONSTERAI-N9 measured it 2026-09-15: a stander goes home, a patroller resumes its
+leg; the server models neither), and the DAGGERS-B8 note "land_skill's SINGLE
+TARGET, ALWAYS is still true of every NPC's cast" (a body's spell areas ship since weapons
+§37–§40).
+
+---
+
+### DESKWORK-Q1 + DESKWORK-Q3, the status sweep (pass 5, INFRA-A) -- 2026-09-24 -- **fifteen `PLAN.md` §8 lines retired or reworded, each re-verified against the code or the study first; late stamps on OUR tapes MEASURED: 0 of 274 speed-arm hard rows over 1,582 captures**
+
+**Q3 (movement FINDINGS, the 2026-09-17 entry's new closing paragraph).**
+`studies/movement/review/latestamps.py` (new, read-only) runs `movesync.late_stamp` over every
+recorder capture `origin.origin_of` calls OURS: 1,582 of 1,583 files in
+`vault/captures/gamesrv/`, 25,400 self-report intervals, 208 spanning a `0x002C` we sent the
+player (marked as `mark_server_sets` marks retail's shrine). **274 speed-arm hard rows in 71
+captures; 0 late stamps within the 67 ms bound.** Refusals in the predicate's own order: 207
+pairs still over the arm (a real displacement), 57 pairs under it with the implied delay
+outside (0, 67] ms (10 at 85–246 ms, the rest 289 ms–108 s), 5 with a neighbour under the dt
+floor, 3 with no predecessor, 2 whose flanks disagree; not one of the 57 has flanks within
+2 u/s of its pair, so none is the stamp SHAPE with a longer delay. Prediction first (zero of
+~270–290 in ~70), held; positive control first (retail's `20260916T213125` t = 197.760 named,
+18.3 ms) or the census stops; it refuses to print if its classification disagrees with the
+committed predicate on any row. Reproduces the survey's single-witness 0 of 274 in 71
+(`studies/deskwork/PLAN.md` §4); the survey's "11 stamp-shaped rows at 85–250 ms" reads here
+as 10 rows in 85–246 ms, none passing the flank test. Caveat recorded with it: our recorder
+stamps at RECEIVE time on one clock over loopback, so the artifact may be structurally rarer
+on our tapes. The §8.1 line "Late stamps on OUR tapes" is removed. (The task named
+`studies/movecode/FINDINGS.md`; the 2026-09-17 entry is in `studies/movement/FINDINGS.md`,
+which is where §8 pointed, so that is where it went.)
+
+**Q1's §8 lines, each checked before it was touched** (`studies/deskwork/PLAN.md` §6.1 is the
+survey's table; its numbers were re-derived, not copied):
+* §8.1 Skills, **Mend Condition (275) "not modelled" — REMOVED.** Shipped as skills §58
+  SKILLS-MC: `content/world.toml` `[skill_effect.275]` `heal_if_removed = true`,
+  `resolve_heal`'s branch (`authsrv.py` 21971 / 22037), `test_mechanics` §34; the same
+  section's D5 bullet already listed it landed, so §8.1 contradicted itself.
+* §8.1 Daggers, **"an NPC's cast is still single-target" — REWORDED.** A body's Fireball bursts
+  at the aim (`land_body_spell_area`, weapons §37–§38), the point-blank bursts
+  (`burst_body_spell`, §40), the caster-centred area (`body_caster_area_condition`, skills
+  §59.1) and party heal (§59.2). Still open, restated: B8's adjacent damage is the player's
+  strike only; 185 and 179 have no row; 197's label row reaches ONE target
+  (`AREA_ONE_TARGET` in `vault/content/skill_labels.toml`); the areas over time and hexes.
+* §8.1 Monster AI, **MONSTERAI-J "nothing uses them" — REWORDED.** `toolkit/harness/sandbox.py`
+  writes `group` on every generated hostile and `passive` on request; no `content/*.toml` or
+  vault row sets either (grep), so "no content rows" stands.
+* §8.1 Heroes, **"`0x0065` and the hero-family `0x001B` are unmodelled" — REWORDED to `0x005E`'s
+  retail reply alone.** `0x001B` is PARTY_FLAG_PLACE (`authsrv.py` 24598, the `0x0067` echo,
+  `git log -S` 7f0cd7c1 2026-08-19); `0x0065` is sent (the hero block, D1 step 6's mask).
+* §8.1 Movement, **§1z-dj leg B — REMOVED**: decoded at the desk in MOVECODE-1z-dk (the log's
+  2026-09-10 entry; 1z-dk.4 re-reads leg B as agenttap's sample-and-hold, the residue is
+  §1z-dl's lip, which keeps its own line). **§1z-cw.5 — REMOVED**: explained by §1z-cw.6 (the
+  copy arrived at a lead the wall or fence cut short; 255 episodes, 172 on the granted point).
+  **NPCTRACK Q3's clause — REMOVED** (npctrack FINDINGS: "CLOSED on the owner's own route,
+  2026-09-06 15:48", corrected by GROUNDZ-F12, the corridor shipped as Q9 / F16); Q10 and Q8
+  stay. **§1z-dd.8 — REWORDED** "registered, no run" → "retail half needs a live corner": the
+  check ran at the desk as §1z-dh, SLIDE 0 of 236 — NOT FOUND, not unrun.
+* §8.1 The sandbox, **N2's "Owed: one loopback click each, in an OUTPOST" — REMOVED**:
+  confirmed on our client in an outpost 2026-09-23 (`studies/deskwork/CONFIRM-2026-09-23.md`
+  R1–R5, runs `20260923T155339` … `160232`), and the bullet's description of the shipped N2
+  (which the DESKWORK-D1 bullet already carries) cut to one sentence. N1 stays open
+  (`studies/sandbox/PLAN.md`: NEXT).
+* §8.2, **MORALE-Q6 "the corpus holds no death followed by a zone" — REWORDED**, re-counted
+  over the 36 live captures: 7 connections carry an own-agent `0x009C` below 100, 3 have a
+  next hop in `tape.chain`, and all 3 zone into an OUTPOST loading 100 on `0x009C` and
+  `0x00E9` field 10 (`20260913T210901` 212 → 242, `20260914T005758` 430 → 449,
+  `20260916T150306` 430 → 449). The field-to-field half and Q5 stay. morale FINDINGS §6's Q6
+  row corrected the same way (struck, not erased).
+* §8.3 Skills, **"the reason ids for the rest of the 1934–1993 refusal strings are undecoded"
+  — REWORDED**: `chatdefs.REFUSAL_REASONS` holds all 60, four OBSERVED (1934, 1960, 1961,
+  1988), the rest RECONSTRUCTION-labelled behind the default-off `--refusal-reasons` (skills
+  §57). The `EFFECT_TYPES` and `GmSkSlot` clauses stay (D4 step 6's).
+* §8.3 **The archive — 3 of 4 clauses REMOVED**: the restore verb (`datwrite.restore`,
+  95f550ef, 2026-08-14), the compressor (`gwenc.py`, c4a9fe03, 2026-08-18; WORLDMAPS W1/W2
+  installed and a retail client read a compression-8 row), and option C's durable key
+  REFUTED (b8d5ecf2, maprows §10.11–§10.12). Allocator pressure stays.
+* §8.3 **The silent-opcode sweep — REWORDED to its residue**: `0x0191` was READ 2026-08-13 (a
+  map change, smsgsweep §7.5) and 22 CHANGED rows named with 13 the operator's mouse (§7.6).
+  What stays: the five account-name selectors (§7.9) and `0x0191`'s missing
+  `schema/overrides.json` row (checked: GAME_SMSG 401 has none).
+* §8.3 ANIMREF, **"§15's movement-start gate" — REMOVED**: animref §22 REFUTES §15's mechanism
+  (gate B's writer is property 8), confirmed in the client in §23. §19's gate and §16 stay.
+
+**Not touched, by instruction**: the DESKWORK-D1 bullet and the pass-4 confirmations (the
+orchestrator's pass), and RUN-R8 / §7 Q14 (D10's). §8 is 31,505 bytes after this, from
+33,308 (`test_checks`' ceiling is 40,000); the reworded lines were cut to what is open, the
+evidence being here.
+
+---
+
+### DESKWORK-D10 (steps 2, 3, 5), MOVE-B — FIX PASS — 2026-09-24 — **the review pass corrects the entry below: 1z-di.3's mechanism IS witnessed once, unrefereed, at a plane seam (c5 t=172.59), and the "on our own grant" and "under the gate" readings were two instrument bugs, now fixed**
+
+Corrects the DESKWORK-D10 (steps 2, 3, 5) entry immediately below (commits `76be343f`/`2333de81`/`3ac8018f`);
+this entry is on top per the append-only rule. Two reviewers (evidence-refuter, engineering) re-derived
+the hard rows from the wire; the surviving findings, verified here, moved the reading and the instrument:
+
+- **Blocker 1 — `on_grant` looked 0.05 s PAST the landing** and so caught our own `STOP-ECHO`, which
+  repeats the client's stop point ~0.6 ms after every stop. c5 t=142.57's 649 u jump had read "on our
+  grant, the client obeying"; the nearest grant *before* the landing is 946 u away. Fixed to
+  strictly-before; the row is re-adjudicated as a real **click-drop snap-back** (the suspect is our
+  own dropped click + copy-park, not the arrival re-grant).
+- **Blocker 2 — `under_gate1` compared a between-frame DISPLACEMENT with the copy-to-body SEPARATION
+  gate.** c5 t=172.59 read "under the gate", but the server's own rows show drift 343 u and
+  `agtrack_guard` gate1-red — **over** the gate. The re-grant walked the copy 257 u onto plane 29 and
+  the body teleported (1,429 u/s) onto the re-grant's path (18 u off it, 212 of 257 u along); without
+  the re-grant the copy parks 249.8 u away (under the gate). **This is 1z-di.3's mechanism, CORROBORATED
+  on the wire, unrefereed (no tape).** Each row now carries the server's drift + gate1 verdict; `under_gate1`
+  is an annotation.
+- **Majors:** the nearest-send attribution filtered to the PLAYER's agent (c4 t=118.41's nearest send
+  was a hero FORMATION order to agent 200; and gate1-red there predates the re-grant — a lead-chain
+  gate snap on a STRAIGHT wall, re-grant secondary); a warp row that RAISED now prints RED instead of
+  vanishing from the report; the LITERAL corner crawl (c5 t=2–4.5, inside the task's box) is read at
+  last — the crawl reached the body, drift 0.0, **no snap** (a clean negative the first pass skipped);
+  and the OOS section is corrected — **35 connections / 13 sessions** (not "13 connections"), the
+  baseline relabelled 1z-dh's silence census, and 1z-di.1's per-grant geometry re-derived: the CENTRE
+  holds out of sample (chord p50 765 u along, 0 across, restatement 0) but the TAILS widen (along
+  min −247, across max 266 vs 0/17 in sample).
+- Display/hygiene: rule 7 (a refusal keeps the count), rule 8 (the rate carries its active-time
+  threshold), min/max not p50==max at n<3, the fence `client-reseed` count printed with the warp row's
+  blind-spot note, constants deduped, `captures()` sorted by (stamp, conn).
+
+`sessionscore.py` and `test_sessionscore.py` fixed; `test_sessionscore` 21 → 28 bare (1 skip) / 37
+vaulted, floor 28, TESTS.md updated in the same commit. Record: movecode §1z-do.6 (headline moved from
+"REFUTED" to "witnessed once, unrefereed"; §1z-do.3 rows, §1z-do.3b the corner crawl, §1z-do.4 the OOS
+correction). **No `authsrv.py` change; `KBD_LEAD_ARRIVAL_REGRANT` stays ON; the gate stays a registered
+proposal (§1z-do.5), now with one wire witness arguing for the tape'd corner measurement, not for
+shipping it blind.** Affected: 7 green of 7 (226 checks) then the docs set.
+
+### DESKWORK-D10 (steps 2, 3, 5), MOVE-B -- 2026-09-24 -- **a warp row in the movement scorecard, and the adjudication it enabled: 1z-di.3's predicted corner-crawl-then-snap is NOT witnessed in the four post-ship hard rows -- two are click artifacts, one lands on our own grant, and the two re-grant-adjacent rows are a straight wall and a sub-gate corner; the arrival re-grant is a SUSPECT in at most two rows and a proven cause in none. No authsrv.py change; a gate is registered as a proposal, not built**
+
+`sessionscore.py` (studies/movecode/review), the movement regression scorecard, had every
+quantity the arc convicts a defect on **except hard jumps**, and its capture discovery globbed
+`authsrv-*-c1.jsonl` — so the four post-ship hard rows on 09-13 sat unread eleven days: nothing
+scored them and nothing could open the `-c4`/`-c5` corner connections they live in. **Step 2:** a
+warp row reusing `movesync.wire_only`'s two-arm bar verbatim on the client's own self-report
+stream — retail scores 0 on both arms and the quiet days 09-09/09-12 score 0, so any hard row is a
+LOOK; each row a SUSPECT carrying its nearest preceding `0x0029` send, a wall-slide re-grant in the
+3 s window flagged separately, `on_grant` (the client obeying, not a snap), and `under_gate1`
+(under the client's own 299.33 u gate). Positive controls `174629-c4` and `190815-c5` read RED (2
+hard each); `151709-c2` (09-12, 29 re-grants) reads 0 — re-grant presence is not a warp. `captures()`
+now globs every connection suffix, so `--since` reaches `-c4`/`-c5`. First test `test_sessionscore.py`
+(28 vaulted / 21 bare, 1 skip), its TESTS.md entry in the same commit. **Step 3:** adjudicated
+(movecode §1z-do.3) — c5 t=142.57 (649 u) is a click-move-then-STOP landing ON our STOP-ECHO grant;
+c5 t=172.59 (288.6 u) is re-grant-adjacent but UNDER gate-1 with a plane flip, landing 49 u off the
+slide dest; c4 t=118.41 (438.6 u) is the strongest suspect (over gate-1, wall-slide re-grant 0.25 s
+before) but on a STRAIGHT wall, not the concave corner; c4 t=142.55 is a click artifact. No `0x002C`
+in any window (any snap is the client's own gate-1) and no agenttap tape overlaps 09-13 (the body is
+inferred from reports). CONTESTED, tending REFUTED for these four rows. **Step 5:** 1z-di.1's shape
+re-run out of sample on the 13 live connections after 09-10 — 26/36 (72 %) straight silences carry a
+re-grant against 65 % fitted, +0.06 s arrival lag, and the **SLIDE class is 0 in sample and out**, so
+retail still has no wall-slide-then-silence witness and the composition stays a RECONSTRUCTION.
+Registered proposal for a future pass (movecode §1z-do.5), NOT built: `--no-corner-regrant-slide`,
+known-bad arm = today's default, precondition = an owner corner session with an overlapping agenttap
+tape (unmet). Full record: [studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1z-do;
+studies/deskwork/PLAN.md D10 steps 2/3/5 retired.
+
+---
+
+### DESKWORK-D9 (step 5), fix pass -- 2026-09-24 -- **the stored purse no longer overwritten under `--persist --no-item-moves`; the reward inside the `0x0052 · 0x004A` pair; "55 portal connections" refuted (they are 0-purse loads, so skip-at-0 and a 0 starting purse are OBSERVED); the tape test can go red**
+
+Two reviews of the pass-1 entry below (`ff29a71c`) -- an evidence refuter who re-derived the
+wire facts over all 96 live game connections, and an engineering reviewer who ran the 110
+affected tests and eleven in-memory mutations -- agreed on two blockers and five majors.
+This pass re-derived every claim FIRST (prediction written to scratch before the decode;
+every prediction HELD) and then moved what each review named. Code `3c25fd11`, record this
+commit. Full write-up: studies/quests/FINDINGS.md §12.1, rewritten in place with each
+correction marked **[FIX]**.
+
+**What each review moved.**
+
+* **GOLD-R2 / GOLD-ENG-1 (blocker, code).** `player_purse` read `state["charstore_game"]`
+  only; the load's `0x0140` goes out in REQUEST_ITEMS and REQUEST_PLAYERS attaches the store
+  later, so pass 1 worked only because `item_layout_begin` had attached it -- which it does
+  only while `ITEM_MOVES_ENABLED`. Under `--persist --no-item-moves` the load read 0, cached
+  it, and the next hand-in or sale wrote 0 + delta over the stored balance (85 → 10, 60 → 10,
+  both reviews on temp stores). Fixed with the lazy `find_character` `hero_build` and
+  `item_layout_begin` use; `test_purse` §4b drives the sequence (stored 85 → 95, not 10).
+* **GOLD-R1 / GOLD-ENG-2 (blocker, labels).** Pass 1 said the 55 of 96 connections with no
+  load `0x0140` were "portal / char-select / pre connections, never a gameplay instance",
+  so a 0-gold load was "never witnessed" and the starting purse "NOT FOUND (RECONSTRUCTION)".
+  FALSE: all 96 carry `0x0144` and four `0x0147`; the 55 are 0-purse gameplay loads,
+  chain-proven on `20260807T143055` (:60935 no credit → +10 at a hand-in → :62994 loads
+  `[k, 10]`) and `20260810T235916` (:61193 → :61624). Skip-at-0 and `STARTING_PURSE = 0`
+  are OBSERVED. `purse.py`, the flag comments, `serverargs` help, `test_purse` labels,
+  FINDINGS §12.1 rewritten; the shipped behaviour was already right.
+* **GOLD-R4 / GOLD-ENG-5 (major, code).** The brief's item 3, which pass 1 deferred: our
+  dispatch sent `0x0052 · 0x004A · reward` while the test label said it matched the tape.
+  On 10 of 10 retail hand-ins the reward lines sit AFTER the first `0x0052` and BEFORE the
+  closing `0x0052 · 0x004A`. New arm `turn_in_quest` sends `0x0052 · reward · 0x004A` (the
+  single-`0x0052` experiment kept; every relative order we send is now the tape's);
+  `--no-reward-in-frame` (`REWARD_IN_FRAME`) restores pass 1's order for an A/B. Noted, not
+  moved: retail's skill grants come after the gold (n = 2), ours before the xp
+  (`test_mechanics` §29 locks it).
+* **GOLD-R3 / GOLD-ENG-4 (major, test).** `test_purse`'s tape section could not fail (a
+  present tape that mismatched became a skip; the xp search accepted any earlier `0x00EE`).
+  Rewritten: with the capture directory present every predicate is `led.ok`; the xp is
+  same-batch; OUR `turn_in_quest` batch is diffed against the tape's (equal with the doubled
+  `0x0052` collapsed); `--no-reward-in-frame` is the mutant that does NOT match; a sabotaged
+  tape (gold before xp) reddens the predicate; `20260807T143055`'s 0-purse chain is checked.
+* **GOLD-R6 / GOLD-ENG-3 (major, test).** The load arm, its flag and `player_purse`'s store
+  read had no test. `load_purse_messages(state)` is the burst's arm as a helper: `[0x0140
+  [1, N]]` + `purse_synced` for a positive purse, `[]` for 0, `[]` under `--no-load-purse`,
+  the stored purse reaching it lazily; a source lock pins its position (after the weapon-set
+  loop, before `UPDATE_GOLD_STORAGE`); `authsrv.handle_item_sale`/`handle_item_purchase`
+  write the temp store under `--persist`.
+* **GOLD-R5 / GOLD-ENG-11 (major, labels).** The insufficient-funds rationale cited
+  `20260819T141246` (a FUNDED buy with no backpack slot), repeated "the client debits its own
+  purse" (refuted 2026-08-19: `0x014F` is the server's debit), and stated "retail sends
+  nothing either" about a reply that is NOT FOUND. `merchant.py` and §12.1 now cite
+  `20260818T235130/235758` (Buy GREYED at `Your Funds: 0` against a 50 quote, loopback, zero
+  balance only) and claim nothing about retail's server.
+* **GOLD-R7 / GOLD-ENG-6 (minor, counts).** 10 hand-ins on 6 connections in 4 captures
+  (not "n = 8 across 6 captures"); amounts 10/25/25, 10/25/25, 10/10/50, 25 (not "25"); on
+  `20260819T132414` 22 → 38 is seven sells and 38 → 108 three hand-ins, the one `0x014F`
+  comes after the last load so no chain closes over a debit (its sign is the binary's);
+  `0x004A` is the last QUEST-FAMILY message, not the frame's; the character switch is shown
+  by the balances, not the stream key; the byte-order listing now shows the chat pairs.
+* **GOLD-ENG-7 (minor, label).** Reward slot B = gold raised to CORROBORATED on the wire: 7
+  of 7 hand-in `0x004C` re-sends carry reward numerics equal to `[0x00EE xp, 0x0140 gold]`;
+  `questdefs.reward_run`'s "presumed gold, still RECONSTRUCTION" was stale against the
+  2026-08-16 probe recorded in the same module.
+* **GOLD-ENG-8 (minor, code).** `purse_synced` was set by the load and never cleared, so
+  under `--persist` with a positive stored purse `probemerchant`'s own `0x0140 [1, 2000]`
+  would have left the gate refusing every buy above the STORED balance. A probe's own
+  `0x0140`/`0x014F` now clears the sync (`desync_purse_for_probe`, via a `probe_send`
+  wrapper at the one `run_probe` call).
+* **GOLD-ENG-9 (minor, code).** `--no-quest-gold` also drops the offer screen's slot-B line
+  (`_quest_prose`), so the revert leaves no promise the server refuses to pay.
+* **GOLD-ENG-10 (minor, code).** `merchant.py` and `grant_quest_reward` route their
+  arithmetic through `purse.py` (`can_afford` / `after_buy` / `after_sell` /
+  `after_credit`), so the leaf's helpers are production code; the "reversed-list" known-bad
+  arm is replaced by the flag mutant above.
+* **GOLD-R8 / GOLD-ENG-11 (nits).** TESTS.md's floor (23 → the real bare count, now 45);
+  `set_character_purse` returns False on a refused stale save and `persist_purse` prints it;
+  the runsheet's non-existent `charstore.py set` replaced (the hand-in IS the seed), step 4
+  names `rurik_first_errand` re-handed after a relaunch, the shipped commit is cited.
+
+**Declined, with evidence.** None of the findings' evidence failed to hold; nothing is
+declined. Two items are recorded rather than moved: the skill-grant order (n = 2, and
+`test_mechanics` §29 locks the kill frame's) and the doubled `0x0052` (§4.2's party-broadcast
+question, still a client-run discriminator).
+
+**Tests (counts named).** `test_purse` rewritten: 58 vaulted / 45 bare (floor 45 from the
+bare run, 2 declared skips bare); `test_quests` 133 → 135 (the `turn_in_quest` order and its
+mutant); `test_charstore` 96; `test_purchase` 35; `test_mechanics` 256; srclint, checks,
+citelint, identlint, provlint 5 of 5 (140 checks); the 38 `authsrv.py` source-lock readers
+and the behaviour set are named in the fix-pass report. **The client run is still owed** --
+the runsheet in §12.1 now pre-registers three questions (the counter reads the persisted
+purse ONCE after a zone; the quest still leaves the log with the reward inside the
+`0x0052 · 0x004A` pair; the counter rises by exactly the row's gold) and carries the
+`--no-reward-in-frame` A/B.
+
+---
+
+### DESKWORK-D9 (step 5), pass 1 -- 2026-09-24 -- **the carried purse, quest gold PAID, and the hand-in order re-derived from the tape**
+
+The quest/gold step of DESKWORK-D9 (studies/deskwork/PLAN.md "DESKWORK-D9" step 5), and
+the promotion of studies/quests §12's `0x0140 [2, 25]` from "gold is the guess, UNVERIFIED"
+to **OBSERVED** (full write-up: studies/quests/FINDINGS.md §12.1, with the runsheet).
+
+**Re-derived first (livewire.decode_conn / codec.decode_stream_at over every origin=LIVE
+game connection).** `0x0140` is a **CREDIT** everywhere, not a set: on every
+gameplay-instance load it is `[stream key, purse]` immediately after the last `0x0147`
+(purses 10/22/38/60/85/108/164/500 across the corpus, keyed by the per-connection `0x0144`
+key), and the cross-connection chain `next_load = prev_load + Σcredits − Σdebits` **closes
+on every capture** (the one exception a character switch). So a load credit onto the
+client's fresh 0 purse equals the balance (the handler's `add [inv+0x90]`, `ItCliApi:1955`).
+The hand-in gold is **n=8, not n=1**: by byte offset the reward frame is `0x004D · 0x004C ·
+0x0052 · 0x009C · 0x00EE[10,0] · 0x00EE[0,xp] · **0x0140[key,gold]** · 0x0052 · 0x004A` --
+so the brief's "0x004A first" is **REFUTED** (0x004A is LAST), `0x0052` doubles, and the
+gold follows the experience `0x00EE`.
+
+**Shipped.** A persisted purse in `charstore` (optional `purse` field, **no STORE_VERSION
+bump** -- absent = the starting purse, so every prior store stays byte-identical); the load
+sends `0x0140 [PLAYER_INVENTORY_KEY, purse]` after the weapon sets when positive
+(`--no-load-purse` reverts); `grant_quest_reward` pays `reward_gold` as `0x0140 [key, gold]`
+**after** the experience `0x00EE`, as a DELTA, persisted (`--no-quest-gold` reverts); the
+merchant's buy debits and sell credits the purse (the wire already moves it via `0x014F`/
+`0x0140`), an unaffordable buy sends nothing **only when the server credited the balance**
+(`purse_synced`) so a probe funding the client out-of-band is never wrongly refused (retail's
+insufficient-funds reply is NOT FOUND); `content/quests.toml`'s `rurik_first_errand`
+`reward_gold` uncommented (amount OURS, mechanism OBSERVED); the stale "GOLD IS NOT GRANTED"
+docstrings corrected. New leaf `toolkit/authsrv/purse.py`; `test_purse.py` 24 bare / 30
+vaulted (KNOWN-BAD arms: gold missing, gold before xp, a balance where a delta belongs; a
+vacuity guard; the tape's load and hand-in bytes); `test_charstore.py` +5 (91 → 96);
+`test_quests.py` §23 rewritten (gold GRANTED, the order, the revert, gold-only).
+
+**PASS-1 scope, DEFERRED with evidence (studies/quests §12.1).** The gold is paid in the
+reward frame after the xp; the turn-in dispatch still sends its two removes then the reward.
+The fuller OBSERVED batch -- the `0x004D`/`0x004C` resends, the reward BETWEEN a doubled
+`0x0052` and before `0x004A`, `0x00EE[10,0]` (UNREAD) -- is deferred to a pass with a client
+run, because the current single-`0x0052` order is run-validated. **The client run is owed**
+(runsheet in studies/quests §12.1: load and read the `I`-panel gold counter, accept/hand in
+`rurik_first_errand`, watch the counter rise by 10, zone and relaunch under `--persist`, and
+the `--no-quest-gold` control). Affected tests: 60 green (test_purse, test_charstore,
+test_quests, test_mechanics, test_purchase, test_dispatch, test_agentlife, the load-burst and
+census readers of authsrv.py, and the five linters); the full suite and the client run are
+the orchestrator's at merge.
+
+---
+
 ### DESKWORK CONFIRM-2 -- 2026-09-24 -- **the pass-4 client runs: the henchman add HELD; the town weapon's load strip is INVISIBLE and its switch half a VISIBLE REGRESSION; travel BLOCKED on content; the display mode's field step is the owner's**
 
 Sixteen harness launches, loopback, build 38797, main at `09126d4a` (verdicts read as

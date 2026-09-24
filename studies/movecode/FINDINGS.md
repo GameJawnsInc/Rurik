@@ -19926,3 +19926,195 @@ green.
 **A caveat on n, stated plainly:** 18 sends over 7 captures, 2 of them refereed by a tape. The
 chord verdict rests on those 2 plus the 0-of-5 in-regime clip result; the row is what makes the
 next session's census cheap and complete rather than a reconstruction.
+
+---
+
+## 1z-do. THE POST-SHIP WARPS, READ AT LAST — **1z-di.3's predicted wall-slide-re-grant-then-gate-snap IS witnessed once, unrefereed, at a plane seam (c5 t=172.59): the re-grant walked the copy over the client's separation gate and the body teleported onto the re-grant's path.** The LITERAL corner crawl (c5 t=2–4.5) reached the body with no snap; of the other three hard rows, one is a click-drop snap-back and two are sub-gate click jumps. n is four, none tape-refereed. Plus 1z-di.1's shape held OUT OF SAMPLE in the CENTRE but its tails widen, and retail STILL has no wall-slide-then-silence witness. **CORRECTED 2026-09-24 (§1z-do.6): the first read booked c5 t=142.57 as "on our grant" — it was our STOP-ECHO sent after the report — and read c5 t=172.59 as "under the gate" by comparing a between-frame move with a separation limit; both are fixed, and the headline moved from "REFUTED" to "witnessed once, unrefereed"**
+
+**2026-09-24.** Ident `MOVECODE-1z-do` (DESKWORK-D10 steps 2, 3, 5). Desk only: `sessionscore.py`'s
+new warp row and `test_sessionscore.py` (its first test), `movesync.wire_only`, and
+`parkedcopy.silences` re-run out of sample. **An INSTRUMENT plus an ADJUDICATION, not a fix** —
+`authsrv.py` is untouched this pass. OBSERVED unless marked. **Two passes: the first shipped the
+instrument and a reading; a review pass (§1z-do.6, same day) corrected two blockers in that reading
+and the instrument behind them, and the headline moved from "REFUTED" to "witnessed once,
+unrefereed". Where §1z-do.2–.5 below carry a first-pass number the fix pass changed, §1z-do.6 names it.**
+
+### 1z-do.1 The prediction, pre-registered (1z-di.3's own words)
+
+1z-di.3 shipped `KBD_LEAD_ARRIVAL_REGRANT = True` and labelled the corner composition a
+**RECONSTRUCTION** — two observed rules (the arrival re-grant, the wall-slide clip) composed with
+no witness (0 slide-then-silence windows on retail, §1z-dh.2). Its stated risk, verbatim: *"a slide
+rule that turns the second wall's way would walk the copy past the corner the body stopped in, and
+the client's own separation gate would then snap the body onto it."* It named **"the next corner
+session"** as the measurement, predicting: at the corner, either `regrant-stop` rows (the wall, no
+slide) **or** a run of `regrant` rows with `wall-slide` clips (the crawl) — the tape to say whether
+the crawl reached the body. That session is `authsrv-20260913T190815-c5` (map 148) and
+`authsrv-20260913T174629-c4` (map 168), and it sat unread eleven days.
+
+My pre-registered predictions for this pass (NOTES, 2026-09-24, before the finished instrument ran;
+the wire was windowed first and this is said out loud): **P1** the warp row flags c4 and c5 and
+reads 0 on a 09-12 capture; **P2** the c5 t=172.59 jump lands NEAR, not onto, the re-grant's slide
+dest; **P3** — the discriminator likely to REFUTE the simple story — NOT all four hard rows are
+re-grant-adjacent (the click regime produces hard rows too); **P4** 1z-di.1's shape holds out of
+sample and the SLIDE class stays 0.
+
+### 1z-do.2 ★★★ The warp row, and why the exposure went unread
+
+`sessionscore.py` — the movement scorecard run on whatever the owner played — had every quantity
+the arc convicts a defect on **except a hard-jump row**, and its capture discovery globbed
+`authsrv-*-c1.jsonl`. A session re-dials on a map travel, so the corner regime's later connections
+are `-c4`/`-c5`, which the `-c1` glob **could not even open**. So the exposure went unread for two
+reasons at once: nothing scored hard jumps, and nothing could load the files they were in.
+
+The row (DESKWORK-D10 step 2) reuses `movesync.wire_only`'s repaired **two-arm bar** verbatim (a
+second reader would be a second chance to disagree with what the client said): implied speed
+> 400 u/s at dt ≥ 0.05 s, or displacement ≥ 520 u below that dt floor. **Retail scores 0 on both
+arms** (movesync header; the one 400 u/s firing is an 18 ms late capture stamp, `late_stamp`, not a
+displacement), and the quiet owner days **09-09 and 09-12 score 0**, so the band is 0 = OK and any
+hard row is a **LOOK, never a verdict**. Each row is a **SUSPECT**: it carries the nearest preceding
+`0x0029` send within 3 s; a wall-slide arrival re-grant in that window flagged **separately** (an
+ordinary lead can be nearer in time than the re-grant that is the reason to look); `on_grant` when
+the landing sits within 4 u of a point we granted **strictly before the landing report**, in the
+last second (**the client obeying, not a separation snap** — the trap the arc paid for, §1z-ck; the
+window ends AT the landing, because our STOP-ECHO echoes the client's stop point 0.6 ms *after* it,
+and a window reaching past booked every stop report as "on our grant", §1z-do.6); the SERVER's own
+separation at each row — the `position_report` drift and the `agtrack_guard` gate1 verdict before it;
+and `under_gate1` as an **annotation** — the report moved less than **299.33 u** between two frames,
+which is a displacement, not the copy-to-body separation the gate is defined on (§1z-do.6).
+
+**Positive/negative controls (P1 CONFIRMED):** `190815-c5` reads **RED, 2 hard**; `174629-c4` reads
+**RED, 2 hard**; `151709-c2` (09-12, **29 re-grants**) reads **OK, 0**. A whole-corpus census since
+09-09 (`census.py`, scratch) finds hard rows in **exactly** those two captures and **nowhere else** —
+including `190348-c4` (09-13, 27 re-grants, 0 hard). **Re-grant presence is not a warp.** The row's
+first test is `test_sessionscore.py` (37 vaulted / 28 bare after the fix pass): the bar reused with a
+known-bad walk arm, attribution to the PLAYER's agent, `on_grant` (with a known-bad echo-after-landing
+arm), `under_gate1` as an annotation, the report verdict as a check that can go red, and these real
+controls.
+
+### 1z-do.3 ★★★ The four hard rows adjudicated — one witness to the mechanism (unrefereed), a snap-back, and two sub-gate click jumps
+
+Each row read on the client's own `0x003D`/`0x0047` self-report stream, joined to the server's own
+separation rows (`position_report` drift; `agtrack_guard` gate1 verdict). **No `0x002C` was sent in
+any of the four windows**, so any body teleport is the client's OWN gate-1, which we do **not**
+directly observe: **no agenttap tape overlaps the 09-13 sessions**, so the drawn body is inferred
+from the reports the hard row is itself computed from. Said plainly, and it bounds every reading below.
+
+| row | mag / dt (u/s) | regime | nearest PLAYER send | wall-slide re-grant before | server at the landing | verdict |
+|---|---|---|---|---|---|---|
+| **c5 t=142.57** | 649 u / 0.068 s (9,553) | **click-drop** | `kbd-lead` 0.06 s | none in 3 s | drift **674 u** (over the gate); guard pass/match | at 139.688 a click was **dropped** (router `kbd-drop`, keyboard authority) and the click-kill **parked our copy at (9613,7635)**; 2.9 s later the body — which walked the dropped click to (10040,8177) — reports a STOP at (9644,7663), **41 u from that parked copy**. A real **backward snap** of 649 u; the client's gate-1 pulling the body to (near) the copy we parked. **NOT the re-grant; NOT "on our grant"** — the point it lands on is the `STOP-ECHO` we send 0.6 ms *after* the report (§1z-do.6). Suspect: the click-drop. |
+| **c5 t=172.59** | 288.6 u / 0.202 s (1,429) | **plane seam** (0↔29) | `kbd-lead` 0.20 s | **1.06 s (wall-slide)** | drift **343 u** (over the gate); guard **veto gate1-red**, budget 336.5 | the wall-slide re-grant walked the copy 257 u to (10876,9385); the body was elsewhere on plane 0, and at 1,429 u/s (a teleport, not a walk) it lands on **plane 29, 18 u off the re-grant's PATH, 212 of its 257 u along it**. Counterfactual: **without** the re-grant the copy parks at (11057,9202) — 249.8 u, **under** the gate; **with** it, 331 u, **over**. The re-grant CREATED the over-gate separation and the body snapped onto the copy. **This is 1z-di.3's mechanism — CORROBORATED on the wire and the server's rows, unrefereed (no tape). The one "49 u off the dest" reading (first pass) measured the wrong end: the copy was 212 of 257 u along its path, not at it.** |
+| **c4 t=118.41** | 438.6 u / 0.253 s (1,736) | **straight wall** (x=2208) | `kbd-lead` 0.25 s | 0.25 s (wall-slide) | drift **435 u** (over the gate); guard **veto gate1-red**, budget 396 | 439 u SOUTH along a straight wall. **gate1-red was already flagged at 117.771 (budget 395), BEFORE the re-grant at 118.151** — the wall-slide LEAD CHAIN had run the copy ahead of a body sliding down the wall; without the re-grant the copy parks at (2208,9866), 410 u from the body, **still over the gate**. So the re-grant is a **secondary** contributor here, not the cause; a gate-1 snap driven by the lead chain, on a straight wall **not the concave corner**. (First pass named a hero FORMATION grant to agent 200 as the nearest send; the fix filters to the player, §1z-do.6.) |
+| **c4 t=142.55** | 121.7 u / 0.164 s (742) | **click** (`0x003E`) | `click-kill` 0.11 s | 2.85 s (coincidental) | drift **78 u** (under the gate); guard pass-gates | a spam-click descent; drift only 78 u, so **below the separation gate**, onto a copy running ahead around a dropped click. **UNVERIFIED** — a sub-gate jump around a click, **not the re-grant** (2.85 s back is not the neighbour). |
+
+**So the reading is:** of four hard rows, **one witnesses 1z-di.3's mechanism** (c5 t=172.59 — the
+wall-slide re-grant walked the copy over the separation gate and the body snapped onto its path,
+CORROBORATED on the wire, **unrefereed**), **one is a click-drop snap-back** (c5 t=142.57 — the
+suspect is our own click-drop and copy-park, not the arrival re-grant), and **two are sub-gate or
+straight-wall** (c4 118.41 a lead-chain gate snap on a straight wall, re-grant secondary; c4 142.55 a
+sub-gate click jump). The arrival re-grant is a **proven contributor in one row and secondary in a
+second**; in none of the four is it the clean **concave-corner** crawl-then-snap 1z-di.3 named — the
+one mechanism witness is at a **plane seam**, not a concave corner. **CONTESTED, and n = 4 with no
+tape: this says the mechanism is real on the wire at least once, not that the re-grant is unsafe or
+that it is the owner's warp.**
+
+### 1z-do.3b ★★ The LITERAL corner crawl produced no snap — the negative the first pass never read
+
+The task named the corner regime box ≈ (10069–10272, 8092–8577); that box is **c5's own run of
+wall-slide re-grants at t = 2.06–3.94**, the literal test of 1z-di.3. Re-grants 1→3 crawl the copy
+(10272,8182) → (10206,8439) → (10159,8487) → (10069,8577); `regrant-stop` (no-progress) at 4.35; and
+at **4.48 the body reports EXACTLY (10069,8577), drift 0.0** — the crawl **reached the body and
+stopped at it, no snap, no gate1-red**. A second corner-ish episode at t = 178.15–178.20 (two
+wall-slide re-grants to (10069,8577)) draws the body to (10192,8485) then (10164.9,8463.5), drift
+15.3 → 39.0, **again no gate1-red and no snap**. So at the actual corner the crawl behaved as
+1z-di.1 says it should; the one snap in the capture (t=172.59) is at a **plane seam** where the copy
+was walked well past where the body stood. The first pass read only the hard rows and so labelled a
+row **outside** the box "the corner row" while the crawl **inside** it went unread — corrected here.
+
+### 1z-do.4 ★★ 1z-di.1's shape held OUT OF SAMPLE in the CENTRE; its tails widen (P4 partly)
+
+1z-di.1's per-grant shape table was fit on the **61 live connections (16 sessions) as of 2026-09-10**.
+Re-run out of sample on the **35 live connections (13 sessions) after 09-10** (genuinely out of
+sample). The rate and lag use `parkedcopy.silences` verbatim (the 1z-dh instrument); the per-grant
+geometry — which `silences` discards — is re-derived by the same window-finding, decomposing each
+inside grant onto the held heading from the arrival point, and it reproduces 1z-di.1's in-sample
+centre (chord p50 765 u along, 0 across, restatement 0):
+
+| | in sample (≤ 09-10) | **out of sample (post-09-10)** |
+|---|---|---|
+| population | 61 connections / 16 sessions | **35 connections / 13 sessions** |
+| true silences, straight (1z-dh census) | 71 | **36** |
+| straight silences with a re-grant inside | 46 (65 %) | **26 (72 %)** |
+| first inside grant minus the copy's arrival | p50 +0.09 s | **p50 +0.06 s** |
+| same-instant pairs | 16 of 46 | **10 of 26** |
+| chord ALONG the heading (from the arrival point) | p50 765, min 0, **max 768** | p50 **765**, **min −247**, max 772 |
+| chord ACROSS the heading | p50 0, **max 17** | p50 0, **max 266** |
+| **SLIDE class (> 20° off, RUN-1zDB leg 4's)** | **0** | **0** |
+
+The **centre holds** out of sample — the re-grant fraction (72 % vs 65 % fitted, the D10 plan's
+estimate re-derived exactly), the +0.06 s arrival lag, the pair ratio, and the chord's median 765 u
+along / 0 across. **The tails do not:** a handful of out-of-sample grants land **behind** the arrival
+point (along −247 u) or **well off** the heading (across 266 u), against 0/17 u in sample — new, and
+unstated by the first pass, which called the shape held on the median alone. The baseline column is
+**1z-dh's silence census**, not 1z-di.1's shape table (the first pass mislabelled it). And the
+**SLIDE class is still 0 in sample and out** — across the whole live corpus ArenaNet's players never
+produced a wall-slide-then-silence window, so the wall-slide composition remains a **RECONSTRUCTION
+with no retail witness either way**.
+
+### 1z-do.5 What ships (nothing behavioural), and the gate as a REGISTERED PROPOSAL only
+
+**Nothing behavioural.** `authsrv.py` is untouched: the lane was scoped instrument-plus-adjudication
+and parallel-safe. `KBD_LEAD_ARRIVAL_REGRANT` stays ON.
+
+**The gate, registered for a future pass, NOT built.** If the corner slide is ever gated, the shape
+is: flag `--no-corner-regrant-slide` (a wall-slide clip on an arrival re-grant stays a `regrant-stop`
+instead of crawling); **known-bad arm = today's default** (the wall-slide re-grant ON, crawling the
+copy along the wall). **Precondition, and it is not met:** an owner corner session **with an agenttap
+tape that overlaps it**, so the drawn body is measured rather than inferred, and the pre-registered
+read is *"a body snap onto a wall-slide-re-granted point, above 299.33 u, within one report of the
+crawl."* What changed this pass: the corpus now has **one wire witness** to that mechanism (c5
+t=172.59, unrefereed), so the case for the pre-registered corner-session-with-tape measurement is
+**stronger**, not the case for shipping the gate blind — the SLIDE class is still 0, so the gate
+would still be choosing between two reconstructions until a tape referees the snap.
+
+**What this pass banked:** the warp row and its test (a scored regression check for the arc's
+headline defect on every future owner session, reaching every connection not just `-c1`, carrying the
+server's own gate evidence); the four rows read and labelled against the server's separation rows; the
+literal corner crawl read as a clean negative; and the shape's out-of-sample centre and tails. **A
+caveat on n, plainly:** four hard rows, two of them clicks, none tape-refereed; the one mechanism
+witness rests on the wire's reports and the server's own gate1-red, and it says *the mechanism is real
+here at least once — measure it with a tape before gating it*, not *the re-grant is the owner's warp*.
+
+### 1z-do.6 ★★★ The fix pass — what the two review lenses moved
+
+The first pass (§1z-do.2–.5, commits `76be343f`/`2333de81`/`3ac8018f`) was reviewed by an
+evidence-refuter and an engineering lens; both were re-derived from the wire before acting, and the
+findings below survived that check (the review scratch is not in the tree). Fix commits on this branch.
+
+- **BLOCKER — `on_grant` looked past the landing.** It counted grants sent up to 0.05 s *after* the
+  landing report, and our server sends a `STOP-ECHO` that repeats the client's stop point ~0.6 ms
+  after every stop. So c5 t=142.57's 649 u snap-back read "on our grant, the client obeying"; the
+  nearest grant *before* the landing is 946 u away. **Fixed:** the window ends strictly at the
+  landing (`bisect_left`). c5 t=142.57 re-adjudicated as a click-drop snap-back (§1z-do.3).
+- **BLOCKER — `under_gate1` compared the wrong quantities.** It read a jump under 299.33 u as "the
+  gate cannot even be firing", but 299.33 u is the copy-to-body **separation** gate, and the row was
+  the **between-frame displacement** — a body that walks away and is snapped back shows a small
+  between-frame move. c5 t=172.59 (drift 343 u, `agtrack_guard` gate1-red) is **over** the gate.
+  **Fixed:** `under_gate1` is an annotation; each row now carries the server's own drift and gate1
+  verdict, and c5 t=172.59 is re-adjudicated as the corpus's one mechanism witness.
+- **MAJOR — attribution pooled other agents' grants.** The nearest-send loop took every `0x0029`;
+  c4 t=118.41's nearest send was a hero `FORMATION` order to agent 200. **Fixed:** the loop decodes
+  the agent id from the packed bytes and keeps only the player's, as `load_grants` does.
+- **MAJOR — a warp row that failed vanished from the report.** `score_capture` wrapped the row in a
+  bare `except` and `report()` dropped the `{error}` with no line, so a capture whose only RED was a
+  warp error would pass. **Fixed:** the verdict is factored into `warp_report_lines`, an error prints
+  RED, and it has a known-bad arm.
+- **MAJOR — the literal corner crawl was never read** (§1z-do.3b), and the OOS section **miscounted
+  its population** (13 sessions read as connections; it is 35 connections / 13 sessions) and
+  **never re-ran the per-grant geometry** (§1z-do.4). Both corrected.
+- **Display and hygiene:** a refusal now keeps the count and withholds only the rate (movesync rule
+  7); the rate carries its active-time threshold (rule 8); `n < 3` prints min/max not p50==max; the
+  server's fence `client-reseed` count is printed beside the warp count with a note that the warp row
+  cannot see reseeds during a reporting silence (c5 has one at t=123.75, a 364 u step over 9.9 s — not
+  a hard row); the on-grant constants reuse `GRANT_ARRIVAL_*`; `captures()` sorts by (stamp, conn).
+  The tests gained the known-bad echo arm, the agent-filter arm, the report-verdict arms and the
+  glob-reach and re-grant-label arms; floor 21 → 28 bare (37 vaulted).

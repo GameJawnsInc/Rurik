@@ -479,7 +479,9 @@ both rivals predict here, and the Moebius readout was never reached (the owner d
 The death batch, one instant, the same order three times (367.057 / 408.587 / 446.688):
 `0x00A7 [117, 1, 4]`, `0x00A0 [20, me, 117, 404]`, `[10, me, 229]` (property 10 = the
 foe's skill that hit, 229 / 230 on every hit he landed — which two Air Magic skills those
-are is UNREAD), the killing word `[16, me, 117, −x]`, **`0x00F1 [me, 18]`**,
+are is UNREAD; **read since** — Lightning Orb and Lightning Javelin, `content/world.toml`
+`[skill_effect.229]` / `[skill_effect.230]`, weapons §34; DESKWORK-Q1 note, 2026-09-24),
+the killing word `[16, me, 117, −x]`, **`0x00F1 [me, 18]`**,
 **`0x005C [me, 117, 0]`**, `0x009C [me, 85 / 70 / 55]`, `0x00EE`, `[8, me, 1]`,
 `0x0044 [me, n]` (effect removals; on the third death Frenzy was up), `[7, me, 24]`,
 `0x00F1 [me, 16]`, `[41, me, max energy]`, `[43, me, 0.0]`, `[42, me, max health]`,
@@ -543,7 +545,9 @@ doubles and criticals; unexplained, not modelled).
 A dual whose first strike LANDS and whose second misses (is 3 sent?); Sneak Attack with
 a sword (2116 is PvE-only and not on this account — dropped, not deferred); where the
 death batch strips effects relative to the morale tick (`kill_player` strips first,
-retail after `[8, me, 1]` — n = 1); what property 10 on the victim names; the 7/8 swing
+retail after `[8, me, 1]` — n = 1); ~~what property 10 on the victim names~~ (DECODED:
+the skill the next damage number belongs to, `charContext + 0x640`, skillcast §16.6, and
+SENT since 2026-09-22 — DESKWORK-Q1 note, 2026-09-24); the 7/8 swing
 sub-mode. A lead that is BLOCKED (reason 0) rather than missed was not exposed —
 Bonetti's Defense never went up in the two minutes; the miss is the same fail-word
 family and the server treats them alike.

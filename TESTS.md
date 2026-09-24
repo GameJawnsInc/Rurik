@@ -3319,6 +3319,48 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   item from the store and leaves the sword; `avoid` (the wrapper's reserved off-hand
   return cells) is skipped and with no `place` nothing is registered. Floor 27 → 35
   from the green run. No vault, no socket, no client. ~1 s),
+  `toolkit/authsrv/test_purse.py` (**2026-09-24, DESKWORK-D9: the carried purse, the
+  quest gold, the hand-in ORDER and the merchant's moves** -- `purse.py`, `charstore`'s
+  optional `purse` field, `grant_quest_reward`'s gold, `turn_in_quest`, and the load
+  credit (`load_purse_messages`); `studies/quests/FINDINGS.md` §12.1. **Rewritten by the
+  D9 fix pass** after two reviews showed its tape section could not fail (a present tape
+  that mismatched became a `skip`) and that the load arm, the revert flag and
+  `player_purse`'s store read had no test. §1 THE LEAF (bare): `load_credit` SKIPS a 0
+  purse (retail's own rule -- 55 of 96 live loads carry no `0x0140`, none credits 0) and
+  builds `[key, N]` for a positive one, with that skip as a KNOWN-BAD; `can_afford`,
+  `after_buy`/`after_sell` (now the merchant's own arithmetic), a purse driven negative
+  RAISES (vacuity). §2 THE QUEST GOLD (bare): `reward_gold` pays `0x0140 [key, gold]` AFTER
+  the experience `0x00EE` as a DELTA, not the new balance (KNOWN-BAD), `--no-quest-gold`
+  pays nothing and ALSO drops the offer screen's slot-B gold line, a gold-only reward
+  pays. §2b THE HAND-IN BATCH (bare): `turn_in_quest` sends `0x0052 · 0x00EE · 0x0140 ·
+  0x004A` -- retail's relative order on 10 of 10 hand-ins -- and `--no-reward-in-frame`
+  is the MUTANT (pass 1's reward-after-`0x004A`, which no tape shows) that reddens the
+  same predicate. §3 THE MERCHANT (bare): a buy debits and a sell credits
+  `state["purse"]` through `purse.py`, an unaffordable buy against a SERVER-CREDITED
+  balance sends NOTHING (the client greys Buy at zero funds, 20260818T235130; retail's
+  reply NOT FOUND), an unsynced one completes, no purse = the bare recipe (vacuity),
+  `purse_persist` is called with the moved balance, and a probe's own `0x0140` clears
+  `purse_synced` (`desync_purse_for_probe`). §4 THE STORE (temp dir; `find_character`
+  redirected to it): `STORE_VERSION` stayed 1, an absent purse reads the caller's default,
+  a stored purse survives a reopen, a STALE `set_character_purse` returns False and the
+  disk keeps the other writer's value, a hand-in under `--persist` writes to disk, a
+  negative purse is refused; §4b `player_purse` with NO cached store under `--persist`
+  looks the character up lazily and a hand-in right after the load accumulates onto the
+  stored 85 (95, not the pass-1 10); §4c `load_purse_messages` credits `[1, stored]` from
+  the store and marks the sync, `[]` for 0, `[]` under `--no-load-purse`, plus a SOURCE
+  LOCK on its position (after the weapon-set loop, before `UPDATE_GOLD_STORAGE`); §4d
+  `authsrv.handle_item_sale`/`handle_item_purchase` under `--persist` write the temp
+  store. §5 THE TAPE (vault-gated, `livewire.decode_conn`; **`led.ok` throughout once the
+  capture directory exists -- only a MISSING capture skips**): 20260914T180058's five
+  loads credit `[own 0x0144 key, 60/60/60/60/85]` right after the last `0x0147`; the
+  :56301 hand-in batch (same timestamp as `0x0140 [2, 25]`) is `0x0052 · 0x00EE [0, 250]
+  · 0x0140 · 0x0052 · 0x004A` with `0x004A` the last quest-family message and
+  `0x00EE [10, 0]` present (UNREAD); OURS vs TAPE: `turn_in_quest`'s order equals the
+  tape's with the doubled `0x0052` collapsed, the pass-1 order does NOT (KNOWN-BAD), and a
+  sabotaged tape (gold before xp) fails the predicate (KNOWN-BAD); 20260807T143055's
+  :60935 loads with NO `0x0140`, earns `[k, 10]` at a `0x003B` hand-in, and :62994 loads
+  `[k, 10]` -- the 0-purse load chain-closed. Floor 45 from the bare green run (the tape
+  adds 13: 58 vaulted). No socket, no client, temp stores only. ~8 s vaulted),
   `toolkit/authsrv/test_playerbags.py` (**2026-09-14: the JARIN tape (20260914T005758) carried a TENTH bag and the one-set check went red -- it was a second INVENTORY KEY, the hero's, with one type-2 bag; `invcensus.bag_shapes` now groups by field 1 and returns the other keys' bags as a fifth element, the one-set claim is about the player's inventory, and a new check pins the hero's extra to exactly `[(2, 21, 9)]` (n = 3 connections, one tape); floor 18 → 19.** the player's nine containers, and **WHERE**
   the burst sends them. Until 2026-08-19 this server created ONE bag, and the
   symptom was not a missing grid but a missing PURCHASE: with a funded purse, a
@@ -5490,6 +5532,35 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   code a mean estimator reddens 7 checks, a bound without the tick 6, the old label
   4. Floor 11, measured bare (2 declared skips); 31 with the vault. No client. ~80 s,
   most of it loading ~1,560 captures),
+  `toolkit/clientscan/test_sessionscore.py` (**2026-09-24, DESKWORK-D10 step 2 / MOVECODE-1z-do:
+  the WARP ROW's first test, and `sessionscore.py`'s first test at all — the movement scorecard
+  (`studies/movecode/review/sessionscore.py`) had every metric scored by a per-arc script except
+  hard jumps, which is why four post-ship hard rows on 09-13 sat unread eleven days. FIX PASS
+  2026-09-24 (MOVE-B, movecode §1z-do.6): the two review blockers get their known-bad arms — a
+  grant sent AFTER the landing that echoes it (our STOP-ECHO) must NOT read `on_grant` (§3c′,
+  strictly-before), and the gate reading is the SERVER's own drift + gate1-red, not the
+  between-frame `under_gate1` annotation; plus the attribution filters to the PLAYER's agent
+  (§2h), the report verdict is testable (§4c–4f), and the glob reaches `-c4`/`-c5` (§5h).
+  Sections 1–4′ are bare-machine (synthetic `movesync`-format wire rows in a temp file): §1 the
+  two-arm bar is REUSED and discriminates (a planted 600 u / 0.1 s speed-arm jump and a 540 u /
+  0.03 s distance-arm jump are caught; a 150 u/s walk is not — the **known-bad arm**), §2
+  attribution is a SUSPECT (the nearest preceding PLAYER 0x0029 send within 3 s — a hero/creature
+  0x0029 nearer in time is EXCLUDED, §2h; a wall-slide re-grant in that window flagged SEPARATELY;
+  the known-bad arm removes the re-grant and `regrant_before` clears while the nearest send is
+  unchanged; a send older than 3 s is not attributed), §3 the traps the arc paid for — a jump
+  landing on a point we granted BEFORE the landing is `on_grant` with its no-grant control, a grant
+  echoing the landing AFTER it is NOT (§3c′, the known-bad arm) while the same point granted before
+  still is (§3c″), and a between-frame move under 299.33 u reads `under_gate1` as an ANNOTATION,
+  §4 `score_capture` threads `cap_path`, §4′ the report verdict via `warp_report_lines` (n=0 OK,
+  n>0 RED, a warp that could not run RED not silent — the ENG-5 known-bad arm — and rule 7's
+  refusal keeps the count). §5 (vault-gated, declares a skip bare) is the REAL controls: the 09-13
+  corner captures `174629-c4` and `190815-c5` each read 2 hard rows with the attribution 1z-do
+  adjudicates (c5 t=172.59 re-grant-adjacent + plane flip + the SERVER over the gate: drift > 299.33
+  and gate1-red; c5 t=142.57's 649 u NOT on our grant with drift over the gate — a snap-back; c4
+  t=118.41's nearest send the PLAYER lead, gate1-red, on a straight wall), the 09-12 `151709-c2` — 29
+  re-grants — reads 0, the `--since` glob reaches `-c4`/`-c5` (§5h), and a re-grant relabelled
+  `[clear]` sets no `regrant_before` (§5i). Floor 28, measured bare (1 declared skip); 37 with the
+  vault. No client, no server bind, stdlib only),
   `toolkit/clientscan/test_resyncscore.py` (**2026-09-17: §15's "retail scores 0 hard jumps" is the same late-stamp row as test_movesync §16 seen through the control — split the same way (zero firings that are displacements; every firing a `movesync.late_stamp`, the 09-16 row required among them). 116 → 117 checks, floor 50 unchanged.** **2026-09-14: retail tracks carry `server_sets` (the same flag as test_movesync §16, skipped where `hard_idx` is built and in `fires()`; the JARIN shrine was scored as retail's one hard jump), and §17's `70 < p50` bound widened to 50 -- p50 read 69.5 u whole-corpus against 80.9 u as of the August pin, a bound one unit above the median being a pin on the vault's size.** WHAT WOULD THE 0x002C RESYNC HAVE
   DONE -- the guard on `toolkit/clientscan/resyncscore.py`, which prices a
   server change nobody has made against captures already on disk. The proposal:
@@ -6917,8 +6988,11 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   two live sessions THREE DAYS APART, and map 164's whole outpost joining 6/0/0. Also
   the `tuple(v[3:5])` regression: a synthetic create carries decoy values at fields
   3/4 that would read as a plausible position, so decoding the wrong slots cannot
-  come back green. Needs `vault/captures/live/`; without it, 2 of a floor of 27 run
-  and the floor takes it red),
+  come back green. **2026-09-24, DESKWORK-Q1, floor 27 → 29:** `agentroster.console_safe` — the CLI
+  died with UnicodeEncodeError on a cp1252 console or any redirect, on MONSTERAI-N10's `ani` + U+008F
+  token; §4b prints that token to a strict cp1252 stream both ways, the bare stream required to
+  RAISE (the known-bad arm) and the `console_safe` one to write the escaped bytes. Needs
+  `vault/captures/live/`; without it, 4 of a floor of 29 run and the floor takes it red),
   `toolkit/authsrv/test_damagepass.py` (the rung-7 damage-pass consumer —
   `studies/isle/PLAN.md` §6's exit criterion made runnable BEFORE the live session,
   because §7's named risk is measurements no line ever consumes. Three layers: exact
@@ -10257,7 +10331,18 @@ the same-tick ALIAS**: the
   1,113,422), and a CONTROL on synthetic text that the measurer stops at the next H2
   and says None for an absent section. When it fires, MOVE entries to the log; raising
   the number is how the 1.1 MB happened. `PLAN-LOG.md` also joined `TOP_DOCS`, so its
-  repo-relative links are checked like the other house documents'),
+  repo-relative links are checked like the other house documents'. **2026-09-24, DESKWORK-D12 step 4's first half, floor 17 → 20:**
+  `PLAN.md` §3.2's content census is RECOMPUTED rather than trusted — it read "map 10" and
+  then "map 15, npc 56" for weeks while `content.py` loaded more. The TRACKED half only
+  (`content/*.toml` + `content/overrides/`, an empty vault dir and no
+  `RURIK_CONTENT_EXTRA`), quoted behind the marker `The tracked census (...): kind N, ...`;
+  the vault overlay is machine state and is dated prose, never checked. Three checks: the
+  marker is found with map and npc (a reworded marker would otherwise pass on nothing),
+  every quoted count equals the loader's, and a CONTROL on synthetic text (a `map 15`
+  quote against 19 is caught, a kind the loader lacks is caught, the list spans a line
+  break and stops at its own end, §3.3's numbers are never read). Sabotaged both ways on
+  the real document: `map 19` → `map 15` reddens the count check, a renamed marker
+  reddens both. Runs bare: the same 20 with `RURIK_VAULT` at an empty directory),
   `toolkit/test_run_suite.py` (the suite RUNNER, which did not exist until
   2026-08-13 — 66 test files and **0 scripts that ran them**, so every "the suite is
   green" in this repo's history was a human pasting paths into a shell, which is how

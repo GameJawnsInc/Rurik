@@ -48,6 +48,7 @@ import glob
 import json
 import math
 import os
+import struct
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -59,6 +60,7 @@ for sub in ("toolkit", "toolkit/clientscan", "toolkit/mapdata", "toolkit/authsrv
 import vaultpath                                   # noqa: E402
 import w0score as W                                # noqa: E402
 import stalepair                                   # noqa: E402
+import movesync                                    # noqa: E402
 
 # ---- bands: (ok_max, red_min) per metric; between them is WATCH ------------
 REPIN_OK, REPIN_RED = 1, 4                # 0x002C sent to the player
@@ -80,6 +82,19 @@ FAR = 2.0
 FOLLOW_STOP = 80.0                        # authsrv.follow_stop_radius(): r + r + 56
 ENEMY_REACH = 92.0                        # authsrv.enemy_reach(): the disc + one radius
 FOLLOW_RE = None
+# THE WARP ROW (DESKWORK-D10 step 2 / MOVECODE-1z-do). A hard jump in the
+# CLIENT's own self-report stream (movesync's repaired two-arm bar, reused),
+# attributed to the nearest preceding movement SEND and flagged for a wall-slide
+# re-grant in a window before it -- SUSPECT, never a cause.
+WARP_ATTRIB_S = 3.0                       # s: the send-attribution window (DESKWORK-D10 step 2)
+GATE1_UNITS = 299.332591                  # u: the client's OWN separation gate (movement HANDOFF §8).
+#   NB it is defined on the SEPARATION between the two copies (body vs our copy), NOT on the
+#   distance a report moved between two frames. `under_gate1` below tests the latter, so it is an
+#   ANNOTATION ("a body that walked 288 u in 0.2 s did not travel 300"), never the gate verdict --
+#   the gate verdict is the server's own agtrack_guard/position_report drift, carried per row.
+WARP_ON_GRANT_U = GRANT_ARRIVAL_U         # u: a landing this close to a point we granted...
+WARP_ON_GRANT_S = GRANT_ARRIVAL_S         # s: ...this recently is arrival ON our grant, not a snap
+#   (reuses GRANT_ARRIVAL_*; they are the same 4 u / 1 s the tape's grant-arrival check already used)
 
 
 def _v(x, ok, red, lower_is_better=True):
@@ -142,7 +157,235 @@ def find_tape(rows):
     return best
 
 
-def score_capture(rows, mesh):
+def _warp_send_tag(label):
+    """One tag for a 0x0029 send, from its label. Re-grant detection lives here."""
+    lab = str(label or "")
+    if "RE-GRANT" in lab:
+        return ("re-grant", "wall-slide" in lab)
+    if "KILLED on click" in lab:
+        return ("click-kill", False)
+    if "ROUTER" in lab:
+        return ("router", False)
+    if "STOP-ECHO" in lab:
+        return ("stop-echo", False)
+    if "KBD LEAD" in lab:
+        return ("kbd-lead", False)
+    return ("grant", False)
+
+
+def _send_agent(row):
+    """The agent id a 0x0029 send names, from its packed bytes (as load_grants reads
+    it). None when there is no `plain` to read -- the caller keeps such a row rather
+    than dropping a real player send it cannot classify."""
+    raw = row.get("plain")
+    if not raw:
+        return None
+    try:
+        b = bytes.fromhex(raw)
+    except ValueError:
+        return None
+    if len(b) < 6:
+        return None
+    return struct.unpack_from("<I", b, 2)[0]
+
+
+def warp_rows(cap_path, rows):
+    """THE WARP ROW (DESKWORK-D10 step 2 / MOVECODE-1z-do). Hard jumps in the
+    CLIENT's own self-report stream, and what each sits near.
+
+    THE BAR IS REUSED, NEVER RE-IMPLEMENTED: `movesync.wire_only` splices the
+    c2s 0x003D+0x0047 stream and runs the repaired TWO-ARM hard bar (implied
+    speed > 400 u/s at dt >= 0.05 s; displacement >= 520 u below that floor).
+    Retail scores ZERO on both arms (movesync header), and the quiet owner days
+    09-09 / 09-12 score 0, so the band is 0 = OK and any hard row is a LOOK.
+
+    ATTRIBUTION IS A SUSPECT, NEVER A CAUSE. Each hard row carries:
+      * `nearest_send` -- the nearest preceding 0x0029 WE SENT TO THE PLAYER within
+        WARP_ATTRIB_S, with its tag and age. A temporal neighbour. Sends to any
+        other agent (a hero FORMATION order, a creature leg) are excluded, exactly
+        as `load_grants` filters to the player: they are not the player's movement.
+      * `regrant_before` -- whether a wall-slide arrival re-grant fired in that
+        same window, and how long before, because 1z-di.3's predicted failure is
+        exactly a wall-slide re-grant walking the copy past the corner. This is
+        SEPARATE from `nearest_send`: an ordinary lead can be nearer in time than
+        the re-grant that is the reason to look.
+      * `on_grant` -- the landing sits within WARP_ON_GRANT_U of a point we
+        granted STRICTLY BEFORE the landing report, in the last WARP_ON_GRANT_S.
+        A jump onto our OWN outstanding grant is the client obeying us, NOT a
+        separation snap (the trap the arc already paid for). The window ends AT the
+        landing, never after it: our STOP-ECHO echoes the client's stop point 0.6 ms
+        LATER, so a window reaching past the landing booked every stop report as
+        "on our grant" (WARP-R1/ENG-1) -- that was cause and effect reversed.
+      * `drift` / `gate1` -- the SERVER's own separation evidence at the landing:
+        the position_report drift (body vs our copy) and the last agtrack_guard
+        verdict before the landing (gate1-red and its budget). This is the quantity
+        the 299.33 u gate is defined on; `under_gate1` is not (see below).
+      * `under_gate1` -- an ANNOTATION only: the report moved less than 299.33 u
+        BETWEEN TWO FRAMES. That is a displacement, not the copy-to-body separation
+        the gate tests, so it does NOT rule a gate snap out (a body that walks away
+        then is snapped back shows a small between-frame move). Read `drift`/`gate1`
+        for the gate; `under_gate1` only flags that the naive magnitude is small.
+    """
+    w = movesync.wire_only(cap_path)
+    hard = w["hard"]
+    den = w["den"]
+    grants = movesync.load_grants(cap_path)        # (t, [x, y]) player grants from the wire bytes
+    gt = [g[0] for g in grants]
+    sends = []                                     # (t, tag, is_wall_slide)  PLAYER sends only
+    for r in rows:
+        if r.get("kind") == "sent" and r.get("opcode") == 0x29:
+            aid = _send_agent(r)
+            if aid is not None and aid != movesync.PLAYER_AGENT:
+                continue                           # a hero/creature grant is not the player's move
+            tag, ws = _warp_send_tag(r.get("label"))
+            sends.append((r["t"], tag, ws))
+    sends.sort()
+    st_ = [s[0] for s in sends]
+    # the server's OWN separation rows, for the gate evidence per hard row.
+    preps = sorted((r["t"], r.get("drift")) for r in rows
+                   if r.get("kind") == "position_report" and isinstance(r.get("drift"), (int, float)))
+    pt_ = [p[0] for p in preps]
+    guards = sorted((r["t"], r.get("code"), r.get("why"), r.get("budget")) for r in rows
+                    if r.get("kind") == "agtrack_guard")
+    ght_ = [g[0] for g in guards]
+    n_client_reseed = sum(1 for r in rows if r.get("kind") == "fence"
+                          and r.get("act") == "shut" and r.get("by") == "client-reseed")
+    out_rows = []
+    n_regrant = n_on_grant = n_under_gate1 = n_gate1_red = 0
+    for h in hard:
+        t, land = h["t"], h["p"]
+        # nearest preceding PLAYER send within the window
+        i = bisect.bisect_right(st_, t) - 1
+        nearest = None
+        if i >= 0 and t - sends[i][0] <= WARP_ATTRIB_S:
+            nearest = {"tag": sends[i][1], "age": round(t - sends[i][0], 2),
+                       "wall_slide": sends[i][2]}
+        # a wall-slide re-grant anywhere in the window before it
+        regrant_age = None
+        for s in reversed(sends):
+            if s[0] > t or t - s[0] > WARP_ATTRIB_S:
+                if t - s[0] > WARP_ATTRIB_S:
+                    break
+                continue
+            if s[1] == "re-grant" and s[2]:
+                regrant_age = round(t - s[0], 2)
+                break
+        # landing on our own outstanding grant? -- grants sent STRICTLY BEFORE the landing.
+        lo = bisect.bisect_left(gt, t - WARP_ON_GRANT_S)
+        hi = bisect.bisect_left(gt, t)
+        on_grant = any(math.hypot(grants[k][1][0] - land[0],
+                                  grants[k][1][1] - land[1]) <= WARP_ON_GRANT_U
+                       for k in range(lo, hi))
+        under = h["dist"] < GATE1_UNITS
+        # the server's separation at the landing report, and the gate verdict before it.
+        drift = None
+        pi = bisect.bisect_left(pt_, t - 0.02)
+        for k in range(pi, len(preps)):
+            if abs(preps[k][0] - t) <= 0.02:
+                drift = round(preps[k][1], 1)
+                break
+            if preps[k][0] > t + 0.02:
+                break
+        gate1 = None
+        gi = bisect.bisect_right(ght_, t) - 1     # last guard at or before the landing
+        if gi >= 0 and t - guards[gi][0] <= WARP_ATTRIB_S:
+            gate1 = {"code": guards[gi][1], "why": guards[gi][2], "budget": guards[gi][3],
+                     "age": round(t - guards[gi][0], 2)}
+        gate1_red = bool(gate1 and gate1.get("why") == "gate1-red")
+        if regrant_age is not None:
+            n_regrant += 1
+        if on_grant:
+            n_on_grant += 1
+        if under:
+            n_under_gate1 += 1
+        if gate1_red:
+            n_gate1_red += 1
+        out_rows.append({
+            "t": round(t, 2), "dist": round(h["dist"], 1), "dt": round(h["dt"], 3),
+            "speed": round(h["speed"]), "plane_flip": bool(h.get("plane_flip")),
+            "nearest_send": nearest, "regrant_before": regrant_age,
+            "on_grant": on_grant, "under_gate1": under,
+            "drift": drift, "gate1": gate1, "gate1_red": gate1_red})
+    span = den["span"]
+    active = den["active"]
+    mag = movesync.magnitude(hard) or (None, None)
+    return {
+        "n": len(hard),
+        "intervals": den["intervals"],
+        "refuse_all": w["refuse_all"],
+        "active_threshold": den.get("active_threshold"),
+        "mag_min": (min(h["dist"] for h in hard) if hard else None),
+        "mag_p50": mag[0],
+        "mag_max": mag[1],
+        "rate_span": (60.0 * len(hard) / span) if span > 0 else None,
+        "rate_active": (60.0 * len(hard) / active) if active > 0 else None,
+        "n_regrant": n_regrant, "n_on_grant": n_on_grant, "n_under_gate1": n_under_gate1,
+        "n_gate1_red": n_gate1_red, "n_client_reseed": n_client_reseed,
+        "rows": out_rows,
+    }
+
+
+def warp_report_lines(wp):
+    """The warp row's printed lines and their verdicts, as (name, value, verdict, note).
+
+    Factored out of report() so the RED/OK verdict, the refusal rule and the rate's
+    threshold are testable without a whole-session fixture (ENG-5/ENG-6). Retail and
+    the quiet days score 0, so any hard row is RED; a row that could not run is RED too
+    (a metric that failed silently is the defect this repo guards against), never dropped.
+    """
+    if wp is None:
+        return []
+    NAME = "client-report warps (hard jumps, two-arm bar)"
+    if "error" in wp:
+        return [(NAME, "ERROR", "RED  ",
+                 "the warp row raised (%s) -- a check that could not run is not a pass" % wp["error"])]
+    n = wp["n"]
+    rated = not wp["refuse_all"]
+    if n == 0:
+        mag = ""
+    elif n < 3:                                    # p50 == max at n<=2 (magnitude is the upper middle)
+        mag = " mag min %.0f / max %.0f u" % (wp["mag_min"], wp["mag_max"])
+    else:
+        mag = " mag p50 %.0f / max %.0f u" % (wp["mag_p50"], wp["mag_max"])
+    if not rated:                                  # rule 7: a refusal withholds the RATE, not the count
+        rate = "  rate not rated (%d intervals < %d)" % (wp["intervals"], movesync.MIN_INTERVALS)
+    elif wp["rate_active"] is not None:            # rule 8: a rate carries its active-time threshold
+        at = wp.get("active_threshold")
+        rate = "  %.2f/active-min (active gap <= %s s)" % (
+            wp["rate_active"], ("%.2f" % at) if at is not None else "?")
+    else:
+        rate = ""
+    note = ("retail 0, quiet 09-09/09-12 0; %d re-grant-adjacent, %d gate1-red (server), %d ON our "
+            "grant, %d disp<gate-1 (annotation); %d client-reseed in a silence (this row cannot see "
+            "those -- server fence rows do)%s" % (
+                wp["n_regrant"], wp["n_gate1_red"], wp["n_on_grant"], wp["n_under_gate1"],
+                wp["n_client_reseed"], rate))
+    lines = [(NAME, "%d%s" % (n, mag), "OK   " if n == 0 else "RED  ", note)]
+    for r in wp["rows"]:
+        ns = r["nearest_send"]
+        tag = ("send %s@%.2fs%s" % (ns["tag"], ns["age"], " wall-slide" if ns["wall_slide"] else "")
+               if ns else "no player send within %.0fs" % WARP_ATTRIB_S)
+        extra = []
+        if r["regrant_before"] is not None:
+            extra.append("wall-slide re-grant %.2fs before" % r["regrant_before"])
+        if r.get("drift") is not None:
+            extra.append("server drift %.0f u" % r["drift"])
+        if r.get("gate1_red"):
+            extra.append("gate1-red (budget %s)" % (r["gate1"] or {}).get("budget"))
+        if r["on_grant"]:
+            extra.append("ON our grant (client obeying, not a snap)")
+        if r["under_gate1"]:
+            extra.append("disp<gate-1 (annotation, not the separation)")
+        if r["plane_flip"]:
+            extra.append("plane flip")
+        lines.append(("  warp t=%.2f %.0f u / %.3f s (%.0f u/s)" % (
+            r["t"], r["dist"], r["dt"], r["speed"]),
+            "SUSPECT", "  -  ",
+            "nearest %s%s" % (tag, ("; " + ", ".join(extra)) if extra else "")))
+    return lines
+
+
+def score_capture(rows, mesh, cap_path=None):
     out = {}
     reps = [r for r in rows if r.get("kind") == "position_report" and r.get("accepted")]
     out["reports"] = len(reps)
@@ -279,6 +522,16 @@ def score_capture(rows, mesh):
     out["halts_in_reach"] = inreach
     out["parks_off_mesh"] = parks_off
     out["plane_corrections"] = sum(1 for r in sent if str(r.get("label", "")).startswith("PLANE CORRECT"))
+    # THE WARP ROW (DESKWORK-D10 step 2 / MOVECODE-1z-do): hard jumps in the
+    # client's self-report stream, from movesync's two-arm bar, each attributed
+    # to the nearest preceding send and flagged for a wall-slide re-grant before
+    # it. SUSPECT, never a cause. `cap_path` is optional so a caller with only
+    # rows still gets everything above.
+    if cap_path is not None:
+        try:
+            out["warp"] = warp_rows(cap_path, rows)
+        except Exception as e:                    # noqa: BLE001
+            out["warp"] = {"error": str(e)}
     return out
 
 
@@ -536,6 +789,12 @@ def report(cap_path, tape, mesh, mid, c, t):
     line("halt points off our mesh beyond %.0f u" % FAR, "%d%s" % (len(po), (" worst %.1f u" % max(po)) if po else ""),
          "OK   " if not po else "RED  ", "the copy is the client's (Q1): off-mesh = walked through (Q9) or ordered off (1z-cf)")
     line("plane corrections sent", "%d" % c["plane_corrections"], "  -  ", "GROUNDZ-Q5/F11")
+    # retail scores 0 on both arms and the quiet days 09-09/09-12 score 0, so any hard
+    # row is a LOOK. A refusal withholds only the RATE (rule 7); a row that could not run
+    # prints RED, never nothing (ENG-5). The attribution is printed so the LOOK can be
+    # read, never so it can be believed.
+    for nm, val, vd, nt in warp_report_lines(c.get("warp")):
+        line(nm, val, vd, nt)
     if t:
         print("TAPE")
         tm = t["tape_moving"] >= FLOOR_TAPE_MOVING
@@ -591,7 +850,22 @@ def report(cap_path, tape, mesh, mid, c, t):
 
 def captures(argv):
     root = vaultpath.require_dir("captures", "gamesrv", why="the session scorer reads our own captures")
-    caps = sorted(glob.glob(os.path.join(root, "authsrv-*-c1.jsonl")))
+    # EVERY connection, not just `-c1` (DESKWORK-D10 step 2). A session re-dials on
+    # a map travel, so its later connections carry a DIFFERENT suffix -- and the
+    # 09-13 corner regime lives in `-c4`/`-c5`, which the old `-c1` glob could not
+    # even open, half of why four post-ship hard rows sat unread for eleven days.
+    # Each connection is scored on its own, which is what a per-connection warp
+    # census wants.
+    def _key(p):
+        # (stamp, connection number): a lexical sort would put -c10 before -c2.
+        b = os.path.basename(p)
+        stamp = b[8:b.find("-", 8)] if "-" in b[8:] else b
+        try:
+            conn = int(b.rsplit("-c", 1)[1].split(".")[0])
+        except (IndexError, ValueError):
+            conn = 0
+        return (stamp, conn)
+    caps = sorted(glob.glob(os.path.join(root, "authsrv-*-c*.jsonl")), key=_key)
     if "--cap" in argv:
         return [argv[argv.index("--cap") + 1]]
     if "--since" in argv:
@@ -606,7 +880,7 @@ def main(argv):
         rows = load_cap(cap)
         mesh, mid = mesh_for(rows)
         tape = argv[argv.index("--tape") + 1] if "--tape" in argv else find_tape(rows)
-        c = score_capture(rows, mesh)
+        c = score_capture(rows, mesh, cap)
         t = score_tape(tape, mesh, cap, c.get("_reps")) if tape and os.path.exists(tape) else None
         red, _w = report(cap, tape, mesh, mid, c, t)
         total_red += red

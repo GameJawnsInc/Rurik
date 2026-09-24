@@ -381,6 +381,18 @@ def validate(data, path):
                 _refuse(path, f"character {row['name']!r}: vis_flags must be an "
                               f"int 0..255 -- the client's CHAR_STATS_VIS is eight "
                               f"bits (ChCliApi.cpp:5032; visstatus.py)")
+        # The carried purse (DESKWORK-D9). OPTIONAL, so STORE_VERSION did NOT
+        # bump: an ABSENT purse means "not authored" and reads back as the
+        # starting purse (purse.STARTING_PURSE, 0), which keeps every store
+        # written before this field byte-identical. When present it is a
+        # non-negative int -- the client's carried gold is a u32 accumulator
+        # (0x0140's +0x90), never negative or fractional.
+        if "purse" in row:
+            pu = row["purse"]
+            if not isinstance(pu, int) or isinstance(pu, bool) or pu < 0:
+                _refuse(path, f"character {row['name']!r}: purse must be a "
+                              f"non-negative int (the carried-gold accumulator, "
+                              f"0x0140 +0x90; DESKWORK-D9)")
         blob = row.get("settings_blob", "")
         if blob:
             try:
@@ -886,6 +898,39 @@ class Store:
         row["vis_flags"] = flags
         self.save()
         return flags
+
+    # ---- the carried purse (DESKWORK-D9) ---------------------------------
+    # The character's carried gold, persisted so the next load's 0x0140 credit
+    # and every buy/sell/quest reward survive a zone and a relaunch. ABSENT is
+    # not the same as 0 stored: absent means "not authored" and callers read it
+    # as purse.STARTING_PURSE, which is what keeps a pre-DESKWORK-D9 store
+    # byte-identical. A stored 0 is a real, authored empty purse.
+    def character_purse(self, uuid_hex, default=0):
+        """The stored purse, or `default` when the row exists but stored none
+        (and None when there is no such character)."""
+        row = self.character_by_uuid(uuid_hex)
+        if row is None:
+            return None
+        pu = row.get("purse")
+        return int(pu) if isinstance(pu, int) and not isinstance(pu, bool) else default
+
+    def set_character_purse(self, uuid_hex, amount):
+        """Record the carried purse; saves. Returns the stored int, None when
+        there is no row for the character, or False when save() refused a
+        STALE write (the file changed under this Store; save() already printed
+        why) -- so a caller can tell "nothing to write" from "not written"
+        (the D9 fix pass)."""
+        row = self.character_by_uuid(uuid_hex)
+        if row is None:
+            return None
+        amount = int(amount)
+        if amount < 0:
+            raise ValueError(f"purse {amount}: the carried-gold accumulator "
+                             f"floors at 0 (0x0140 +0x90; DESKWORK-D9)")
+        row["purse"] = amount
+        if not self.save():
+            return False
+        return amount
 
     def drop_item_location(self, uuid_hex, item_id):
         """Forget one item's stored cell; saves. True when a row was removed.

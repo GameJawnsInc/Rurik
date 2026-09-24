@@ -1100,12 +1100,75 @@ def main():
     check(paid == 0 and not sent,
           "a row with no reward_experience grants nothing and sends nothing")
 
+    # DESKWORK-D9: reward_gold IS granted now, as a 0x0140 credit AFTER the
+    # experience 0x00EE -- the tape's order (8 single-quest hand-ins).
+    _GOLD = authsrv.merchant.GAME_SMSG_GOLD_CREDIT
     paid, sent, _st = _grant({"reward_experience": 100, "reward_gold": 10})
-    check(paid == 100 and [v for op, v, _l in sent if op == _OP_XP]
-          == [[authsrv.KILL_REWARD_ATTR, 100]] and len(sent) == 1,
-          "reward_gold is NOT GRANTED -- no gold message is identified -- and "
-          "the experience still is: one message, not two",
-          f"{[hex(op) for op, _v, _l in sent]}")
+    ops = [op for op, _v, _l in sent]
+    gold = [v for op, v, _l in sent if op == _GOLD]
+    check(paid == 100 and gold == [[authsrv.PLAYER_INVENTORY_KEY, 10]]
+          and _st.get("purse") == 10,
+          "reward_gold = 10 is GRANTED as 0x0140 [key, 10] and the purse holds "
+          "it (DESKWORK-D9, OBSERVED: gold rides the hand-in frame)",
+          f"gold={gold} purse={_st.get('purse')} ops={[hex(o) for o in ops]}")
+    check(_GOLD in ops and _OP_XP in ops
+          and ops.index(_GOLD) > ops.index(_OP_XP),
+          "and the gold 0x0140 comes AFTER the experience 0x00EE -- the tape's "
+          "order (0x00EE[0,xp] then 0x0140[key,gold]); a balance sent before "
+          "the xp would be the known-bad arm",
+          f"{[hex(o) for o in ops]}")
+    # The revert arm: --no-quest-gold pays no gold, and the experience still is.
+    _saved_gold_flag = authsrv.QUEST_GOLD_ENABLED
+    authsrv.QUEST_GOLD_ENABLED = False
+    try:
+        paid, sent, _st = _grant({"reward_experience": 100, "reward_gold": 10})
+    finally:
+        authsrv.QUEST_GOLD_ENABLED = _saved_gold_flag
+    check(paid == 100 and _GOLD not in [op for op, _v, _l in sent]
+          and _st.get("purse") is None,
+          "--no-quest-gold reverts: no 0x0140 and no purse move, the experience "
+          "still paid (the pre-DESKWORK-D9 behaviour)",
+          f"{[hex(op) for op, _v, _l in sent]} purse={_st.get('purse')}")
+    # A row with gold but NO experience still pays the gold (the early-return
+    # must not swallow it).
+    paid, sent, _st = _grant({"reward_gold": 7})
+    check(paid == 0 and [v for op, v, _l in sent if op == _GOLD]
+          == [[authsrv.PLAYER_INVENTORY_KEY, 7]] and _st.get("purse") == 7,
+          "a gold-only reward pays the gold although there is no experience",
+          f"{[hex(op) for op, _v, _l in sent]} purse={_st.get('purse')}")
+    # THE HAND-IN BATCH (the D9 fix pass): turn_in_quest puts the reward
+    # BETWEEN the single 0x0052 and 0x004A -- retail's relative order on 10 of
+    # 10 hand-ins (6 connections, 4 captures). --no-reward-in-frame is the
+    # pass-1 order (reward after 0x004A), which no tape shows.
+    _REMOVE = authsrv.GAME_SMSG_QUEST_REMOVE
+    _UNLIST = authsrv.GAME_SMSG_QUEST_REMOVE_AND_UNLIST
+    _saved_frame = authsrv.REWARD_IN_FRAME
+
+    def _turn_in(frame):
+        sent = []
+        st = {"quests": {1463}, "objectives_done": set(),
+              "quests_completed": set(), "agents": {}, "char_uuid": "u1"}
+        authsrv.REWARD_IN_FRAME = frame
+        try:
+            authsrv.turn_in_quest(
+                lambda op, vals, label="", **kw: sent.append((op, list(vals), label)),
+                st, 1463, {"reward_experience": 250, "reward_gold": 25}, 0)
+        finally:
+            authsrv.REWARD_IN_FRAME = _saved_frame
+        return [op for op, _v, _l in sent
+                if op in (_REMOVE, _UNLIST, _OP_XP, _GOLD)], st
+
+    order, st = _turn_in(True)
+    check(order == [_REMOVE, _OP_XP, _GOLD, _UNLIST]
+          and 1463 not in st["quests"] and 1463 in st["quests_completed"],
+          "turn_in_quest sends 0x0052 · 0x00EE · 0x0140 · 0x004A -- the tape's "
+          "relative order on 10 of 10 hand-ins, the quest leaving the log",
+          f"{[hex(o) for o in order]}")
+    order_bad, _ = _turn_in(False)
+    check(order_bad == [_REMOVE, _UNLIST, _OP_XP, _GOLD],
+          "KNOWN-BAD: --no-reward-in-frame sends the reward AFTER 0x004A (the "
+          "pass-1 order; no tape shows it) -- the predicate above tells them apart",
+          f"{[hex(o) for o in order_bad]}")
 
     class _Store:
         def __init__(self):

@@ -399,7 +399,10 @@ rotate per build (§0.4), so a patched copy from last week keys to nothing.
 
 ## 6. Open items
 
-- Run the three probes (§5). Everything else in this arc is downstream of them.
+- ~~Run the three probes (§5). Everything else in this arc is downstream of them.~~ **RAN
+  2026-08-04** — the owner's three-run probe, §0 above (both stages connected, the bytes
+  match the model); and R1 itself landed the same night, 22:58, `3a6b9c5` (`PLAN.md` §3's
+  R1 row). §5's "NOT YET RUN" heading predates §0. DESKWORK-Q1 note, 2026-09-24.
 - Read `ldufr/OpenTyria`'s `tools/webgate.py` and treat it as the reference Stage A. Confirm its
   `tools/patch-gw.py` byte pattern still matches our pinned build before relying on it.
 - Establish whether `DispatchStream` is the message chokepoint (capture arc, not this one).
