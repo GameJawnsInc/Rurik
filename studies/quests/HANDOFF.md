@@ -25,11 +25,13 @@ retail client**, with a reward line on both screens and the marker moving betwee
 NPCs. The protocol underneath it is named in `schema/overrides.json` with evidence
 chains. The reward is now **granted**: experience since SLICE-B5 (2026-09-12) and **gold
 since DESKWORK-D9 (2026-09-24)** -- `grant_quest_reward` pays `reward_gold` as
-`0x0140 [key, gold]` in the hand-in frame after the experience `0x00EE`, the order
-OBSERVED on 8 live hand-ins (studies/quests §12.1), onto a persisted carried purse. What
-is *not* done is the fuller hand-in batch order (the `0x004D`/`0x004C` resends, the doubled
-`0x0052`, `0x00EE[10,0]` UNREAD -- deferred to a client run), the loot drop, quest names
-that are still ArenaNet's string ids, and two known bugs open by the owner's decision.
+`0x0140 [key, gold]` in the hand-in frame after the experience `0x00EE` and between the
+`0x0052` and the `0x004A` -- the relative order OBSERVED on 10 live hand-ins, 6 connections,
+4 captures (studies/quests §12.1) -- onto a persisted carried purse. What is *not* done is
+the rest of the batch (the `0x004D`/`0x004C` resends, the doubled `0x0052`, `0x00EE[10,0]`
+UNREAD, skill grants after the gold -- each recorded in §12.1 with its n), the client run
+that confirms the counter, the loot drop, quest names that are still ArenaNet's string ids,
+and two known bugs open by the owner's decision.
 
 ## 2. What will bite you, in the order it will bite
 

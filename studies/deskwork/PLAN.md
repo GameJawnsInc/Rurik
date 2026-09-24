@@ -620,16 +620,20 @@ MANIFEST:707 (TIMER); quests HANDOFF §1; `content/quests.toml`'s commented `rew
    TIMER per MANIFEST:707 (a server-side schedule) or say why a countdown was chosen;
    each verb ships WITH a quest row using it (`authsrv.py:413-418` refuses a mechanism
    nothing exercises); 0x004C before 0x0054; `test_quests` per verb.
-5. **Gold. LANDED 2026-09-24 (DESKWORK-D9 pass 1, PLAN-LOG; studies/quests §12.1).**
-   `reward_gold` is paid with `0x0140 [key, gold]` after the experience `0x00EE`; the
-   tape's `[2, 25]` was checked against that connection's `0x0144` key and "gold is the
-   guess" is now OBSERVED (n=8 for the batch shape, the chain closes); a persisted purse
-   is in charstore (optional field, no version bump) and the load credits it; the merchant
-   moves it; `authsrv.py`'s "NOT GRANTED" docstrings corrected; `--no-quest-gold` /
-   `--no-load-purse` revert. DEFERRED (needs a client run): the fuller hand-in order (the
-   `0x004D`/`0x004C` resends, the doubled `0x0052`, `0x00EE[10,0]` UNREAD) -- the byte-
-   offset order is `0x004D · 0x004C · 0x0052 · reward · 0x0052 · 0x004A`, so the option's
-   "0x004A first" was refuted. Loot (step 6) still open.
+5. **Gold. LANDED 2026-09-24 (DESKWORK-D9 pass 1 `ff29a71c` + fix pass `3c25fd11`,
+   PLAN-LOG; studies/quests §12.1).** `reward_gold` is paid with `0x0140 [key, gold]`
+   after the experience `0x00EE`, inside the `0x0052 · 0x004A` pair (`turn_in_quest`);
+   the tape's `[2, 25]` was checked against that connection's `0x0144` key and "gold is
+   the guess" is now OBSERVED (10 hand-ins, 6 connections, 4 captures; the chain closes);
+   a persisted purse is in charstore (optional field, no version bump), the load credits a
+   positive one and sends nothing for 0 (retail's rule, 41 / 55 of 96 loads, both
+   OBSERVED), `player_purse` reads the store lazily so the load cannot zero it; the
+   merchant moves it through `purse.py`; `--no-quest-gold` / `--no-load-purse` /
+   `--no-reward-in-frame` revert. DEFERRED (client-run discriminators): the doubled
+   `0x0052`, the `0x004D`/`0x004C` resends, `0x00EE[10,0]` UNREAD, skills after the gold
+   (n=2). The byte-offset order is `0x004D · 0x004C · 0x0052 · reward · 0x0052 · 0x004A`,
+   so the option's "0x004A first" was refuted. **The client run is owed** (runsheet in
+   §12.1, three pre-registered questions). Loot (step 6) still open.
 6. **Loot** (low confidence). Census the death drop burst (0x0135, 0x0168, the kind-0
    create 25 u away; 12 records in 4 captures) and the pickup (c2s 0x003F, UPSTREAM; 4 in
    2 captures); a drop row on spawn or npc templates (rates are the operator's, not

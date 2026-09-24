@@ -1947,100 +1947,156 @@ wants the hand-in stock-faithful:** `0x004A` first, the `0x004C` re-send, the fo
 the giver and the player (20 read 7 — the character's level is 7 if that is what prop 20 is).
 n = 1 hand-in; labels OBSERVED for the shape, UNVERIFIED for every meaning guessed above.
 
-### 12.1 The purse settled, gold paid, and the hand-in order re-derived (DESKWORK-D9, 2026-09-24)
+### 12.1 The purse settled, gold paid, and the hand-in order re-derived (DESKWORK-D9, 2026-09-24; corrected by its fix pass the same day)
 
 The lane that promoted §12's `0x0140 [2, 25]` from "gold is the guess, UNVERIFIED" to
 OBSERVED, built the carried purse, and paid `reward_gold`. Every number here was
-re-derived with `livewire.decode_conn` / `codec.decode_stream_at` over every origin=LIVE
-game connection (the scripts are in the impl scratch; the assertions live in
-`toolkit/authsrv/test_purse.py`).
+re-derived with `livewire.decode_conn` over every origin=LIVE game connection — first by
+pass 1 (`ff29a71c`), then independently by two reviewers, then again by the fix pass with
+its predictions written before the decode ran (impl scratch `FIX-PREDICTION.md`,
+`fix_census.py`). Where pass 1's text and the census disagree, the census won and the
+change is marked **[FIX]**. The assertions live in `toolkit/authsrv/test_purse.py`.
 
 **`0x0140` is a CREDIT everywhere, and the purse persists across a zone — OBSERVED, and it
-CORROBORATES the disassembly.** On every gameplay-instance load (the one carrying the
-inventory family — `0x0144` + bags + weapon sets) `0x0140 [stream key, purse]` is the
-message immediately after the last `0x0147` and before the first quest message
-(`prev_op = 0x0147`, `next_op = 0x0050`). The purse read at load was **10 / 22 / 38 / 60 /
-85 / 108 / 164 / 500** across the corpus, keyed by the per-connection `0x0144` stream key
-(141 / 2 / 156 / 117 / 40 / 4 / 159 / 183). And the cross-connection chain
-`next_load = prev_load + Σ credits − Σ debits` **closes on every capture**: on
-`20260819T132414` 22 → 38 → 108 through the sells and the one buy; on `20260807T143055`
-and `20260810T235916` 10 → 60 through two hand-in credits; the single "open" chain
-(`20260919T103604`, 85 → 500) is a **character switch** (stream key 116 vs 241), correctly
-flagged, not a break. So `0x0140`'s handler doing `add [inventory+0x90], amount` (an
-accumulate, `ItCliApi:1955` asserts the key is a registered inventory) means a load credit
-onto the client's fresh (0) purse **equals the balance**. `0x0140`-as-a-credit is now well
-CORROBORATED (load + sell + hand-in, chain closes); it is the `0x014F` DEBIT (the buy) that
-stays n = 1. 55 of 96 connections send no load `0x0140` — those are portal / char-select /
-pre connections, never a gameplay instance — so a **0-gold gameplay load was never
-witnessed**, and the starting purse of a brand-new character is **NOT FOUND** (0 by
-RECONSTRUCTION).
+CORROBORATES the disassembly.** All 96 live game connections are gameplay-instance loads:
+every one carries `0x0144` and the four `0x0147` weapon sets **[FIX: pass 1 called 55 of
+them "portal / char-select / pre connections"; none is]**. On **41** the server sends
+`0x0140 [stream key, purse]` as the message immediately after the last `0x0147` and before
+the first quest message (`prev_op = 0x0147`, `next_op = 0x0050`), keyed by that
+connection's own `0x0144` key (0 mismatches). The purse read at load was **10 / 22 / 38 /
+60 / 85 / 108 / 164 / 500** across the corpus; the stream keys (141 / 2 / 156 / 117 / 40 /
+4 / 159 / 183 …) change per connection for one character and are not paired with those
+balances one-to-one (60 was keyed 141, 2 and 156 on one tape). **The other 55 load a 0
+purse and carry NO `0x0140`, and that is retail's rule, OBSERVED [FIX]:** two are
+chain-proven — `20260807T143055` :60935 and `20260810T235916` :61193 load with the full
+inventory family and no credit, earn `0x0140 [k, 10]` at a `0x003B` hand-in, and their
+NEXT connections (:62994, :61624) load exactly `[k, 10]` — and 48 more load a named
+character (Jack Jawnson ×34 before his purse appears at 500, Strikey Blikey ×4, the Factions
+tutorial characters) with the family and play at 0 all session. So a **0-gold gameplay
+load is witnessed 55 times**, the **starting purse of a fresh character is 0, OBSERVED**
+(a chain that starts at 0), and `purse.STARTING_PURSE = 0` / the load's skip-at-0 are
+retail's behaviour rather than our reconstruction. No load-position `0x0140` carries 0.
 
-**The hand-in order, re-derived by byte offset (n = 8, not n = 1).** Ten `0x003B`-preceded
-`0x0140` credits sit across 6 captures; eight share one batch. On `20260914T180058` :56301
-(`codec.decode_stream_at` over the concatenated s2c plaintext), the reward frame is, in
-byte order:
+The cross-connection chain `next_load = prev_load + Σ credits` **closes on every capture**:
+on `20260819T132414` 22 → 38 through **seven sells** (+2 +2 +3 +3 +2 +2 +2 = 16, each a
+`0x004A`-preceded `0x0140`), then 38 → 108 through **three hand-ins** (+10 +10 +50) **[FIX:
+pass 1 put "the one buy" inside this chain; the single `0x014F [183, 40]` at 363.259 s comes
+AFTER the 108 load and no later load exists on that capture, so no chain closes over a
+debit — the DEBIT's sign is read from the binary, `0x00846730`'s `neg eax` before the same
+add]**; on `20260807T143055` and `20260810T235916` 0 → 10 → 60 through three hand-in credits
+each (+10, +25, +25). The one non-closing step (`20260919T103604`, 85 then 500) is a
+**character switch**, shown by the balances — 85 and 500 are two other characters' own
+tapes' balances — **[FIX: not by "stream key 116 vs 241"; the key changes on every
+connection]**. So `0x0140`'s handler doing `add [inventory+0x90], amount` (an accumulate;
+`ItCliApi:1955` asserts the key is a registered inventory) means a load credit onto the
+client's fresh (0) purse **equals the balance**. `0x0140`-as-a-credit is CORROBORATED (load
++ sell + hand-in, the chain closes); the `0x014F` DEBIT stays n = 1 on the wire.
+
+**Reward slot B is gold — CORROBORATED on the wire (the fix pass, ENG-7).** Seven of the
+ten hand-in batches carry the `0x004C` description re-send; in **7 of 7** its reward suffix's
+two numerics equal `[the batch's 0x00EE xp, the batch's 0x0140 gold]`: [100, 10], [250, 25],
+[100, 10], [250, 25], [1000, 10], [100, 10], [250, 25]. This joins the 2026-08-16 probe
+that rendered "111 Experience / 222 Gold" on screen (`questdefs.py`); the `reward_run`
+docstring's "slot B is presumed gold, still RECONSTRUCTION" was stale against its own
+module and is corrected.
+
+**The hand-in order, re-derived by byte offset — n = 10, on 6 connections in 4 captures
+[FIX: pass 1 wrote "n = 8 … across 6 captures"].** The `0x003B`-preceded `0x0140` credits:
+`20260807T143055` (46.797, 70.441, 92.792 s), `20260810T235916` (45.208, 68.073, 126.917 s),
+`20260819T132414` (145.487, 226.511, 276.818 s), `20260914T180058` (292.643 s); amounts
+10 / 25 / 25, 10 / 25 / 25, 10 / 10 / 50, 25. Seven carry the `0x004D · 0x004C` head; three
+start at `0x0052` and carry extra lines (two of them the `0x00DC`/`0x00D9` skill grants
+**after** the gold; extra `0x00EE` rows). On `20260914T180058` :56301 the whole
+same-timestamp batch, in byte order, WITH the four chat pairs pass 1 elided **[FIX]**:
 
 ```
-0x004D marker · 0x004C (re-send desc) · 0x0052 · 0x009C morale · 0x00EE [10, 0] (UNREAD)
-· 0x00EE [0, 250] (the experience) · 0x0140 [key, 25] (the GOLD) · 0x0052 · 0x004A
+0x005D·0x005E · 0x004D marker · 0x004C (re-send desc) · 0x0052 · 0x005D·0x005E · 0x009C morale
+· 0x00EE [10, 0] (UNREAD) · 0x00EE [0, 250] (the experience) · 0x005D·0x005E
+· 0x0140 [2, 25] (the GOLD) · 0x005D·0x005E · 0x0052 · 0x004A
+· 0x009F ×3 · 0x0080 · 0x0081 · 0x007E ×2 · 0x009F   (the giver's next dialog, not the quest family)
 ```
 
-Two corrections to §12's schematic listing, both OBSERVED:
+Three corrections to §12's schematic listing, all OBSERVED and all 10 of 10:
 
-* **`0x004A` is LAST, not first.** The first quest-family message is `0x004D` SET_MARKER;
-  `0x004A` QUEST_REMOVE_AND_UNLIST closes the frame. A reading that put `0x004A` first was
-  reading the schematic, not the bytes.
+* **`0x004A` is the LAST quest-family message of the batch, not the first** — and not the
+  last message: the dialog family follows it **[FIX: pass 1 said it "closes the frame"]**.
 * **`0x0052` DOUBLES, wrapping the reward lines**, and **the gold `0x0140` follows the
   experience `0x00EE [0, xp]`**. `0x00EE [10, 0]` (a second reward "kind"? field 1 = 10)
   stays **UNREAD** and is not sent by us.
+* **The reward lines sit BETWEEN the first `0x0052` and the closing `0x0052 · 0x004A`** in
+  every one of the ten. Pass 1's dispatch sent them AFTER `0x004A` — the one order the
+  tape never shows — while its test label claimed a match **[FIX, shipped: see below]**.
 
-**What shipped (DESKWORK-D9, `09126d4a`+).** A persisted purse in `charstore` (optional
-field, no `STORE_VERSION` bump; absent = the starting purse); the load sends
-`0x0140 [PLAYER_INVENTORY_KEY, purse]` after the weapon sets when the purse is positive
-(`--no-load-purse` reverts); `grant_quest_reward` pays `reward_gold` as `0x0140 [key, gold]`
-**after** the experience `0x00EE`, as a DELTA (`--no-quest-gold` reverts); the merchant's
-buy debits and sell credits the purse (the wire already moves it via `0x014F` / `0x0140`);
-`content/quests.toml`'s `rurik_first_errand` reward_gold uncommented (the amount is OURS,
-the mechanism OBSERVED). All in `toolkit/authsrv/purse.py` (a pure leaf), the load burst,
-`grant_quest_reward` and the merchant wrappers.
+**What shipped (DESKWORK-D9 pass 1 `ff29a71c`, fix pass `3c25fd11`+).** A persisted purse
+in `charstore` (optional field, no `STORE_VERSION` bump; absent = the starting purse; a
+refused stale save returns False); the load sends `0x0140 [PLAYER_INVENTORY_KEY, purse]`
+after the weapon sets when the purse is positive and nothing for 0 (`load_purse_messages`,
+`--no-load-purse` reverts); **`player_purse` looks the store up lazily** (the fix pass's
+blocker: pass 1 read `charstore_game` from state only, which REQUEST_PLAYERS attaches after
+REQUEST_ITEMS has already sent the load, so under `--persist --no-item-moves` the load read
+0 and the next hand-in wrote 0 + reward over the stored balance — both reviews reproduced
+85 → 10 and 60 → 10 on temp stores); **`turn_in_quest` sends `0x0052 · reward · 0x004A`**
+(the tape's relative order for every message we send; the single-`0x0052` experiment kept;
+`--no-reward-in-frame` restores pass 1's order for an A/B); `grant_quest_reward` pays
+`reward_gold` as `0x0140 [key, gold]` after the experience `0x00EE`, as a DELTA
+(`--no-quest-gold` reverts, and now also drops the offer screen's slot-B line, so the flag
+leaves no promise the server refuses to pay); the merchant's buy debits and sell credits the
+purse through `purse.py`'s arithmetic; a probe's own `0x0140`/`0x014F` clears the sync
+(`desync_purse_for_probe`); `content/quests.toml`'s `rurik_first_errand` `reward_gold`
+uncommented (the amount is OURS, the mechanism OBSERVED).
 
-**PASS-1 scope, DEFERRED with evidence.** The gold is paid in the reward frame after the
-xp, matching the tape; the turn-in dispatch still sends its two removes (`0x0052` then
-`0x004A`) and then the reward. The **fuller** OBSERVED batch — the `0x004D` marker resend,
-the `0x004C` description resend, the reward lines BETWEEN a DOUBLED `0x0052` and before
-`0x004A` — is deferred to a pass with a client run, because our current single-`0x0052`
-order is run-validated (the quest leaves the log) and reordering it blind is the kind of
-change §0 warns against. `0x00EE [10, 0]` and the four chat lines stay UNSENT (invented
-nothing).
+**Still deferred, with evidence.** The doubled `0x0052` (a party-broadcast shape the corpus
+cannot separate from a protocol requirement — §4.2), the `0x004D`/`0x004C` re-sends,
+`0x00EE [10, 0]` (UNREAD) and the four chat lines are not sent. **Noted, not moved:** retail
+puts a hand-in's skill grants (`0x00DC`/`0x00D9`) after the gold (n = 2); ours go before the
+xp, where `test_mechanics` §29 locks them from the kill frame.
 
-**The insufficient-funds guard.** Retail's server-side insufficient-funds reply is **NOT
-FOUND** (0 of the corpus), and the client debits its own purse and will not send `0x004D`
-for a purchase it cannot afford (`20260819T141246`: an operator-watched Buy click with
-nowhere to put the item produced ZERO c2s). So the server's refusal is a guard the client
-never reaches in normal play. It fires **only** when the server itself credited the balance
-(`purse_synced`) and it is short — the one case where server and client provably agree — so
-a probe that funds the client out-of-band (`probemerchant`'s own `0x0140 [1, 2000]`) is
-never wrongly refused.
+**The insufficient-funds guard.** The client gates affordability LOCALLY: at
+`Your Funds: 0` against a 50 quote the Buy button is GREYED and the click produces no c2s
+at all — OBSERVED on our loopback client, `20260818T235130` and `20260818T235758`
+(studies/newopcodes/FINDINGS.md, "PRESSING BUY"), at a ZERO balance only; a partly funded
+purse below the price is untested **[FIX: pass 1 cited `20260819T141246`, which is a FUNDED
+buy (2000) that failed for want of a backpack slot and says nothing about affordability; it
+also wrote "the client debits its own purse", refuted 2026-08-19 — the server's `0x014F`
+debits, the client applies a negated add]**. Retail's server-side reply to an unaffordable
+request is **NOT FOUND** (0 of the corpus, and the client never asks at zero funds); ours
+sends nothing and prints, and claims nothing about what retail's server would say. The
+refusal fires only when the server itself credited the balance (`purse_synced`) — set by
+the load's credit, cleared by a probe's own gold message — so `probemerchant`'s
+out-of-band `0x0140 [1, 2000]` is never refused, with or without a positive stored purse.
 
 **RUNSHEET (owed, agent-pilotable — the inventory panel's gold counter is fixed UI, key
-`I`).** The orchestrator runs this after the merge.
+`I`).** The orchestrator runs this after the merge. Pre-registered questions: (Q1) does the
+counter read the persisted purse after a zone, ONCE (10, not 20 — i.e. does the client's
+re-sent `0x0144 [1, 0]` reset its purse so our load credit does not double); (Q2) does the
+quest still leave the log with the reward INSIDE the `0x0052 · 0x004A` pair; (Q3) does the
+counter rise by exactly the row's gold.
 
-1. **Load, read the counter.** `python toolkit/authsrv/authsrv.py --persist` on our server;
-   drive the client to an outpost. Press `I` (Inventory). PREDICT: the gold counter reads
-   the character's stored purse (0 for a new store; the load sent no `0x0140` for 0, so the
-   counter stays 0). KNOWN-GOOD: seed a stored purse first
-   (`python toolkit/authsrv/charstore.py` set, or a prior sell) → the counter reads it.
-2. **Accept and hand in `rurik_first_errand`.** Talk to the giver, accept, meet the
-   objective, hand in. PREDICT: the giver's screen promised `Reward: / 100 Experience /
-   10 Gold`; on hand-in the XP sheet rises 100 and the **gold counter rises by 10**
-   (`0x0140 [1, 10]` after the `0x00EE`). Watch the counter, not just the log.
-3. **Zone and relaunch under `--persist`.** Travel to another served map, then quit and
-   relaunch. PREDICT: the load credits the persisted purse (10) — the counter reads 10
-   again, not 0. This is the persistence leg.
-4. **The `--no-quest-gold` control.** Relaunch with `--no-quest-gold`, hand in a second
-   quest. PREDICT: the XP rises, the gold counter does NOT (the server prints a NOT GRANTED
-   line). Confirms the gold is the only thing the flag moves.
-5. **Buy / sell (optional).** At a merchant, sell an item → the counter rises by the sale
-   price (`0x0140`); buy one you can afford → it falls (`0x014F`). A buy you cannot afford:
-   the client should not let the click through (no `0x004D`), so nothing changes — read
-   whether the Buy button is even enabled.
+1. **Load, read the counter.** `python toolkit/authsrv/authsrv.py --persist`; drive the
+   client to the outpost. Press `I`. PREDICT: 0 for a fresh store (the load sends no
+   `0x0140` for 0, as retail does; gamesrv.log shows no `GOLD_CREDIT(load purse`).
+2. **Accept and hand in `rurik_first_errand`.** Talk to the giver — PREDICT the offer
+   screen reads `Reward: / 100 Experience / 10 Gold` — accept, meet the objective, hand in.
+   PREDICT: the log shows `QUEST_REMOVE[…] (turn-in, 1 of 1)`, then the `0x00EE` and
+   `GOLD_CREDIT` lines, then `QUEST_REMOVE_AND_UNLIST`; the quest leaves the log (Q2); the XP
+   sheet rises 100 and the **gold counter reads 10** (Q3). KNOWN-GOOD seed for later steps:
+   this hand-in IS the seed (there is no CLI to set a purse; a merchant sell also works).
+3. **Zone and relaunch under `--persist`.** Travel to another served map (the counter
+   should still read 10 — the load credited the persisted 10 onto the fresh instance, Q1),
+   then quit and relaunch `python toolkit/authsrv/authsrv.py --persist`. PREDICT: the log
+   shows `GOLD_CREDIT(load purse 10)` and the counter reads **10, not 0 and not 20**.
+4. **The `--no-quest-gold` control.** Relaunch `python toolkit/authsrv/authsrv.py --persist
+   --no-quest-gold`. `quests_completed` is in-process state, so `rurik_first_errand` is
+   offerable again: PREDICT its offer screen now reads `Reward: / 100 Experience` with NO
+   gold line; accept and hand in; the XP rises, the counter stays at 10, and the server
+   prints `reward_gold = 10 is NOT GRANTED`.
+5. **The order control (optional A/B).** Relaunch with `--no-reward-in-frame` and hand in
+   again: PREDICT the same screen result (the quest leaves the log; +10) — the flag is for
+   telling the two orders apart on a capture, not for a visible difference. If the quest
+   FAILS to leave the log on the default order but leaves it under this flag, the reorder
+   is refuted and the flag becomes the default.
+6. **Buy / sell (optional).** At a merchant, sell → the counter rises by the price
+   (`0x0140`); buy affordable → it falls (`0x014F`); an unaffordable buy: read whether the
+   Buy button is greyed before clicking (expected, from `20260818T235130`); if it is lit and
+   the click sends `0x004D`, the server prints `BUY refused: purse … < price` and sends
+   nothing — record which.

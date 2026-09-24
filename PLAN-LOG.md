@@ -28,6 +28,102 @@ move back.
 
 ---
 
+### DESKWORK-D9 (step 5), fix pass -- 2026-09-24 -- **the stored purse no longer overwritten under `--persist --no-item-moves`; the reward inside the `0x0052 · 0x004A` pair; "55 portal connections" refuted (they are 0-purse loads, so skip-at-0 and a 0 starting purse are OBSERVED); the tape test can go red**
+
+Two reviews of the pass-1 entry below (`ff29a71c`) -- an evidence refuter who re-derived the
+wire facts over all 96 live game connections, and an engineering reviewer who ran the 110
+affected tests and eleven in-memory mutations -- agreed on two blockers and five majors.
+This pass re-derived every claim FIRST (prediction written to scratch before the decode;
+every prediction HELD) and then moved what each review named. Code `3c25fd11`, record this
+commit. Full write-up: studies/quests/FINDINGS.md §12.1, rewritten in place with each
+correction marked **[FIX]**.
+
+**What each review moved.**
+
+* **GOLD-R2 / GOLD-ENG-1 (blocker, code).** `player_purse` read `state["charstore_game"]`
+  only; the load's `0x0140` goes out in REQUEST_ITEMS and REQUEST_PLAYERS attaches the store
+  later, so pass 1 worked only because `item_layout_begin` had attached it -- which it does
+  only while `ITEM_MOVES_ENABLED`. Under `--persist --no-item-moves` the load read 0, cached
+  it, and the next hand-in or sale wrote 0 + delta over the stored balance (85 → 10, 60 → 10,
+  both reviews on temp stores). Fixed with the lazy `find_character` `hero_build` and
+  `item_layout_begin` use; `test_purse` §4b drives the sequence (stored 85 → 95, not 10).
+* **GOLD-R1 / GOLD-ENG-2 (blocker, labels).** Pass 1 said the 55 of 96 connections with no
+  load `0x0140` were "portal / char-select / pre connections, never a gameplay instance",
+  so a 0-gold load was "never witnessed" and the starting purse "NOT FOUND (RECONSTRUCTION)".
+  FALSE: all 96 carry `0x0144` and four `0x0147`; the 55 are 0-purse gameplay loads,
+  chain-proven on `20260807T143055` (:60935 no credit → +10 at a hand-in → :62994 loads
+  `[k, 10]`) and `20260810T235916` (:61193 → :61624). Skip-at-0 and `STARTING_PURSE = 0`
+  are OBSERVED. `purse.py`, the flag comments, `serverargs` help, `test_purse` labels,
+  FINDINGS §12.1 rewritten; the shipped behaviour was already right.
+* **GOLD-R4 / GOLD-ENG-5 (major, code).** The brief's item 3, which pass 1 deferred: our
+  dispatch sent `0x0052 · 0x004A · reward` while the test label said it matched the tape.
+  On 10 of 10 retail hand-ins the reward lines sit AFTER the first `0x0052` and BEFORE the
+  closing `0x0052 · 0x004A`. New arm `turn_in_quest` sends `0x0052 · reward · 0x004A` (the
+  single-`0x0052` experiment kept; every relative order we send is now the tape's);
+  `--no-reward-in-frame` (`REWARD_IN_FRAME`) restores pass 1's order for an A/B. Noted, not
+  moved: retail's skill grants come after the gold (n = 2), ours before the xp
+  (`test_mechanics` §29 locks it).
+* **GOLD-R3 / GOLD-ENG-4 (major, test).** `test_purse`'s tape section could not fail (a
+  present tape that mismatched became a skip; the xp search accepted any earlier `0x00EE`).
+  Rewritten: with the capture directory present every predicate is `led.ok`; the xp is
+  same-batch; OUR `turn_in_quest` batch is diffed against the tape's (equal with the doubled
+  `0x0052` collapsed); `--no-reward-in-frame` is the mutant that does NOT match; a sabotaged
+  tape (gold before xp) reddens the predicate; `20260807T143055`'s 0-purse chain is checked.
+* **GOLD-R6 / GOLD-ENG-3 (major, test).** The load arm, its flag and `player_purse`'s store
+  read had no test. `load_purse_messages(state)` is the burst's arm as a helper: `[0x0140
+  [1, N]]` + `purse_synced` for a positive purse, `[]` for 0, `[]` under `--no-load-purse`,
+  the stored purse reaching it lazily; a source lock pins its position (after the weapon-set
+  loop, before `UPDATE_GOLD_STORAGE`); `authsrv.handle_item_sale`/`handle_item_purchase`
+  write the temp store under `--persist`.
+* **GOLD-R5 / GOLD-ENG-11 (major, labels).** The insufficient-funds rationale cited
+  `20260819T141246` (a FUNDED buy with no backpack slot), repeated "the client debits its own
+  purse" (refuted 2026-08-19: `0x014F` is the server's debit), and stated "retail sends
+  nothing either" about a reply that is NOT FOUND. `merchant.py` and §12.1 now cite
+  `20260818T235130/235758` (Buy GREYED at `Your Funds: 0` against a 50 quote, loopback, zero
+  balance only) and claim nothing about retail's server.
+* **GOLD-R7 / GOLD-ENG-6 (minor, counts).** 10 hand-ins on 6 connections in 4 captures
+  (not "n = 8 across 6 captures"); amounts 10/25/25, 10/25/25, 10/10/50, 25 (not "25"); on
+  `20260819T132414` 22 → 38 is seven sells and 38 → 108 three hand-ins, the one `0x014F`
+  comes after the last load so no chain closes over a debit (its sign is the binary's);
+  `0x004A` is the last QUEST-FAMILY message, not the frame's; the character switch is shown
+  by the balances, not the stream key; the byte-order listing now shows the chat pairs.
+* **GOLD-ENG-7 (minor, label).** Reward slot B = gold raised to CORROBORATED on the wire: 7
+  of 7 hand-in `0x004C` re-sends carry reward numerics equal to `[0x00EE xp, 0x0140 gold]`;
+  `questdefs.reward_run`'s "presumed gold, still RECONSTRUCTION" was stale against the
+  2026-08-16 probe recorded in the same module.
+* **GOLD-ENG-8 (minor, code).** `purse_synced` was set by the load and never cleared, so
+  under `--persist` with a positive stored purse `probemerchant`'s own `0x0140 [1, 2000]`
+  would have left the gate refusing every buy above the STORED balance. A probe's own
+  `0x0140`/`0x014F` now clears the sync (`desync_purse_for_probe`, via a `probe_send`
+  wrapper at the one `run_probe` call).
+* **GOLD-ENG-9 (minor, code).** `--no-quest-gold` also drops the offer screen's slot-B line
+  (`_quest_prose`), so the revert leaves no promise the server refuses to pay.
+* **GOLD-ENG-10 (minor, code).** `merchant.py` and `grant_quest_reward` route their
+  arithmetic through `purse.py` (`can_afford` / `after_buy` / `after_sell` /
+  `after_credit`), so the leaf's helpers are production code; the "reversed-list" known-bad
+  arm is replaced by the flag mutant above.
+* **GOLD-R8 / GOLD-ENG-11 (nits).** TESTS.md's floor (23 → the real bare count, now 45);
+  `set_character_purse` returns False on a refused stale save and `persist_purse` prints it;
+  the runsheet's non-existent `charstore.py set` replaced (the hand-in IS the seed), step 4
+  names `rurik_first_errand` re-handed after a relaunch, the shipped commit is cited.
+
+**Declined, with evidence.** None of the findings' evidence failed to hold; nothing is
+declined. Two items are recorded rather than moved: the skill-grant order (n = 2, and
+`test_mechanics` §29 locks the kill frame's) and the doubled `0x0052` (§4.2's party-broadcast
+question, still a client-run discriminator).
+
+**Tests (counts named).** `test_purse` rewritten: 58 vaulted / 45 bare (floor 45 from the
+bare run, 2 declared skips bare); `test_quests` 133 → 135 (the `turn_in_quest` order and its
+mutant); `test_charstore` 96; `test_purchase` 35; `test_mechanics` 256; srclint, checks,
+citelint, identlint, provlint 5 of 5 (140 checks); the 38 `authsrv.py` source-lock readers
+and the behaviour set are named in the fix-pass report. **The client run is still owed** --
+the runsheet in §12.1 now pre-registers three questions (the counter reads the persisted
+purse ONCE after a zone; the quest still leaves the log with the reward inside the
+`0x0052 · 0x004A` pair; the counter rises by exactly the row's gold) and carries the
+`--no-reward-in-frame` A/B.
+
+---
+
 ### DESKWORK-D9 (step 5), pass 1 -- 2026-09-24 -- **the carried purse, quest gold PAID, and the hand-in order re-derived from the tape**
 
 The quest/gold step of DESKWORK-D9 (studies/deskwork/PLAN.md "DESKWORK-D9" step 5), and
