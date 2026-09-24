@@ -1339,7 +1339,7 @@ delays as the one residue; update "61 → 64 over 961" to "280 over 1,552"; drop
 line. MOV-5 needs no separate pass. Optionally commit the probe as `movesync
 --late-stamps`.
 
-**DESKWORK-Q4 — the stale-MFT allocator guard** (WLD-V1, from D11 step 7; S). On the slice
+**DESKWORK-Q4 — the stale-MFT allocator guard** (WLD-V1, from D11 step 7; S). **LANDED 2026-09-24** (PLAN-LOG "DESKWORK-Q4, DESKWORK-Q5 and MODELVIEWER"; D11 step 7's last clause, a RUNBOOK line that client sessions spend rows, still open). On the slice
 archive the largest usable free run is a stale MFT generation (0xF8A5E200, 1,365 of 1,365
 records matching live rows), so the next compose there writes into a region the client's
 table rotation may reclaim — a silent path to corrupting a 4 GB file.
@@ -1351,7 +1351,7 @@ MFT rows, all-zero records excluded; regression: `vault/dat_study_38833` withhol
 `test_datplan` whose generation head mark is OVERWRITTEN (the 08-17 fix never reached this
 case); re-measure every vault run archive; record the W6 decision.
 
-**DESKWORK-Q5 — `npcdefs --build` and the honest R4c-2 count** (BEH-12, from D8 step 1;
+**DESKWORK-Q5 — `npcdefs --build` and the honest R4c-2 count** (**LANDED 2026-09-24**, PLAN-LOG; BEH-12, from D8 step 1;
 S). SUITE-FIXES shipped `capture_build()`/`live_captures(build=)` on 09-16 but `main()`
 has no `--build`, so a bare census still refuses. Add it, re-emit `vault/content/npcs.toml`
 per build, recount the pre-Searing roster over the September map-146 tapes, update R4C2

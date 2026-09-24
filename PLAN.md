@@ -657,7 +657,14 @@ Both are now graded against an enumerated content surface:
     is still the original seven.** Reporting 31 against a 35 denominator counts the
     training dummies, which is §6 item 9's named error. What did genuinely improve:
     health readings went from 3 to 15, attack rates from 4 to 20, model ids to 245, and
-    the extractor held at 5× its original corpus with 0 problems. Full re-measurement
+    the extractor held at 5× its original corpus with 0 problems. **RE-COUNTED 2026-09-24
+    PER BUILD (DESKWORK-Q5, PLAN-LOG):** `npcdefs` refuses a pool spanning client builds (7809
+    is a different creature in 2026-07-29 and 2026-09-01, the only one of 38 shared indices whose
+    body differs); the September map-146 tapes (5 connections, build 38888) create **13 hostile
+    definition slots** — six of the original seven (1434 absent) plus 1397, 1405, 1409, 1411,
+    1428, 1433, 1437 — **4 of them with a stat past the declaration**; the 40 hostile in the
+    whole September pool are mostly the Isle's and map 430's furniture, so "40 of 35" would be
+    §6 item 9's error again (R4C2-FEASIBILITY §7.4). Full re-measurement
     and the stale-claim list: [studies/presearing/R4C2-FEASIBILITY.md](studies/presearing/R4C2-FEASIBILITY.md) §7. Coverage-blocked; a live capture
     campaign fixes it at roughly one explorable per session. **And the denominator is
     contested by 22% between two of our own wiki passes** (91 vs 111 hostile), while the
@@ -1910,7 +1917,9 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   opcodes over 96 live connections, zero undecided; `test_dispatch` §10 is the reverse
   guard; `0x00B1` MAP_TRAVEL named medium and dropped until its arm), the party family's
   henchman ADD armed (c2s `0x009F`, `--no-henchman-add`; PLAN-LOG step 5 and its fix
-  pass, studies/cmsg "The party family"),
+  pass, studies/cmsg "The party family") and its KICK armed as RECONSTRUCTION (c2s `0x00A8`,
+  `--no-henchman-kick`; PLAN-LOG "CLEANUP-3", 2026-09-24), a town ARMOUR change's `0x006F`
+  planned per slot in both regimes (`--no-town-armour-visuals`, the same entry),
   the hero ADD armed as RECONSTRUCTION (c2s `0x001E`, `--no-hero-add`, for
   the commander rig — `--party` — where it re-declares the inventory a kick destroyed
   and refuses in the legacy rig; `0x0018` from the owned set as a labelled policy,
@@ -1946,14 +1955,15 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   (2026-09-24): on retail no weapon is shown on the body in a town, only on the doll — the fix's
   picture. The field shield's fix CONFIRMED on the client (CONFIRM-2 §8, PLAN-LOG): the
   player's own `0x006D` withheld in a field too, the shield standing at load and through a swing.
-  **Open**: the henchman kick, c2s `0x00A8 [agent]`, named on our client, unarmed,
-  its reply on no tape; travel's confirmation BLOCKED on content (no fog-initialised view
+  **Open**: the henchman kick's and the town armour's CLIENT CLICKS (armed at the desk
+  2026-09-24, PLAN-LOG "CLEANUP-3", its runsheet; `--no-henchman-kick` and
+  `--no-town-armour-visuals` the A/B arms); travel's confirmation BLOCKED on content (no fog-initialised view
   carries a second pin; `M` on 449 / 242 / 248 / 310 asserts, CONFIRM-2 §3); the display
   mode's field step (the owner's hands, the harness cannot open the drop-down); the
   henchman FIELD-body carry, the outpost re-join and the `'play'` allegiance behind a
   `standing` gate (step 5's deferred half — the `0x00B0`-climbs-by-2 field size is NOT
-  FOUND); a per-map party cap (`OUTPOST_PARTY_CAP` is a constant 4); a town ARMOUR equip's
-  `0x006F` (RECONSTRUCTION; studies/cmsg "The town weapon", Open).
+  FOUND); a per-map party cap (`OUTPOST_PARTY_CAP` is a constant 4); the henchman LEAVE
+  (`0xA2`, unnamed — no run has sent it).
 * **DESKWORK-D5**: the combat rules retail's tapes on disk already settle. LANDED
   2026-09-22: the adrenaline gate (SKILLS-B1's gate half, skills §34.11); property 10
   and the `[42]` residue (§16.6, self-scoped; `[42]` only when the maximum moved); the
@@ -2209,8 +2219,9 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 **Tools**
 
-* **MODELVIEWER**: thumbnails render on demand rather than on scroll, the Maps tab pays
-  ~19 s on first open, and there is no per-map reverse index across the archive.
+* **MODELVIEWER**: no per-map reverse index across the ARCHIVE yet (model → maps over all 349
+  retail maps, D11 step 2, ~7 min first build); the content-map → model index and lazy
+  thumbnails landed 2026-09-24 (PLAN-LOG "DESKWORK-Q4, DESKWORK-Q5 and MODELVIEWER").
 
 **The sandbox** — [studies/sandbox/PLAN.md](studies/sandbox/PLAN.md)
 
