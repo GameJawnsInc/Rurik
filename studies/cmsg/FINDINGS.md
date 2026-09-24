@@ -1966,6 +1966,11 @@ the weapon a town body does not; the server's swing model is untouched (a town n
 switch's `0x006F` sent in a town — KNOWN-BAD, driven by the test). No schema change (no new
 opcode; the hands were already `weaponcensus.py`'s slots 0/1).
 
+**RUN 2026-09-24: prediction (1) REFUTED on the client, and the switch half a visible
+regression** (studies/deskwork/CONFIRM-2026-09-24.md §1): the body holds the weapon whatever
+the town `0x006E` carries, and after an outpost F2 it keeps the OLD weapon while the doll
+changes. The `--walk` below does not parse (`vk:` is an `--actions` step).
+
 **Runsheet and PREDICTIONS (pre-registered; the orchestrator runs it after the merge, no
 owner needed).** Server flags: `--weapon-set 1=starter_sword+starter_shield` (the default
 outpost); then the same with `--explorable`; then the outpost with `--no-town-weapon-strip`.
@@ -2169,6 +2174,10 @@ The landing said maps 194 and 310 "would strand the body": 194 and **55** carry 
 `(0, 0)` placeholder and the gate now withholds both; **310's spawn is retail's own
 measured arrival** (`(5089, 940)` on plane 4, one trapezoid — its row's provenance), not a
 placeholder, and it is offered.
+
+**RUN 2026-09-24 and BLOCKED — do not run as written** (studies/deskwork/CONFIRM-2026-09-24.md
+§3): `M` on 449 asserts (its continent has no fog init, as the warning below says), and no
+fog-initialised view carries a second pin.
 
 **Runsheet (the orchestrator runs it after the merge; loopback client, caged; the
 owner's hands for `M` and the click — a world-map click on an outpost is a travel
@@ -2461,6 +2470,10 @@ ENG-HENCH-7) — the branch merges as one unit and its history is not rewritten;
 arming the field carry and re-join (ENG-HENCH-5) — the scope's deferral stands
 and the reviewer accepted it; a per-map cap table — a `client-table` content
 row per map with its build, its own increment.
+
+**RUN 2026-09-24, harness-driven: steps 1–5 and 7 HELD, step 6 named the kick c2s `0x00A8
+[agent]`** (studies/deskwork/CONFIRM-2026-09-24.md §2); the list shows on type-10 map 148 and
+`noncombatant` blocks nothing; at max_party the client refuses a henchman add itself.
 
 **Runsheet (owner's hands, one loopback session — not run here).** Each step
 names what the log and the screen should show; the questions are pre-registered.

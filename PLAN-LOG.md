@@ -28,6 +28,37 @@ move back.
 
 ---
 
+### DESKWORK CONFIRM-2 -- 2026-09-24 -- **the pass-4 client runs: the henchman add HELD; the town weapon's load strip is INVISIBLE and its switch half a VISIBLE REGRESSION; travel BLOCKED on content; the display mode's field step is the owner's**
+
+Sixteen harness launches, loopback, build 38797, main at `09126d4a` (verdicts read as
+`checkpoints_passed`, every run folder checked for a crash dialog); the record is
+[studies/deskwork/CONFIRM-2026-09-24.md](studies/deskwork/CONFIRM-2026-09-24.md), with runs,
+frames and log lines. (1) **The town weapon** (A/B against `--no-town-weapon-strip`,
+`20260924T084418`/`084637`/`084811`/`085033`): the wire is as predicted, but the body HOLDS
+the hammer whatever the town `0x006E` carries (the load half changes nothing on screen, so
+the study's (e) is refuted on the client and its rival holds), and after an outpost F2 the
+body keeps the OLD weapon while the doll shows the new one; the revert flag's `0x006F`
+redraws it. A regression the shipped default introduced; owed at the desk (what retail's
+outpost switch sends instead; the player's own `0x006D` the likely load carrier). (2) **The
+party family** (`085250`-`090622`): steps 1-5 and 7 HELD -- the three hireables listed on
+type-10 map 148 with `noncombatant` (both UNVERIFIED points answered), size before row, the
+kick-then-re-add counts 3 / 4 (the fix pass's blocker on screen), the hero add at 4/4 sent by
+the client and refused by the server, `--no-henchman-add` greying the Henchmen tab; at its own
+max_party the client never sends a henchman add; step 6 named the henchman kick as c2s
+`0x00A8 [agent]` (UPSTREAM's reading CORROBORATED on our client; unarmed, the client keeps the
+row). (3) **Travel** (`090842`, `091054`, `091253`): the runsheet's `--map 449` ASSERTED on `M`
+(`GmMapView.cpp(1731)`: continent 4 has no fog init, which the server's own startup line and the
+runsheet's warning both say); on 148 `M` is safe but the pre-Searing view carries only the
+current pin, and every offered destination is on a view without fog init (242, 248, 310 have no
+`map_continent` row) or withheld unwarmed (165, 166) -- BLOCKED until two warmed outposts share
+a fog-initialised view. (4) **The display mode's field step** (`091443`, `091636`): the harness's
+click raises only the headgear icon's tooltip; the owner's hands. Runsheet defects recorded:
+`--walk` has no `vk:` step, and the travel runsheet chose the map its own warning excludes.
+`PLAN.md` 8.1's DESKWORK-D1 Open line rewritten around these; the three runsheets in
+studies/cmsg carry a pointer to the record.
+
+---
+
 ### DESKWORK-D1 (step 5), fix pass -- 2026-09-23 -- **ONE party count for the henchman add, the hero kick and the hero add (the blocker); the test's floor set from its bare run; every source lock paired with a mutation; the mark and the level in retail's pre-create position; the allegiance and the map recorded as divergences**
 
 Two reviews of the entry below — an evidence refuter that re-derived every tape claim

@@ -1930,19 +1930,19 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   and after the owner's-answer fixes (PLAN-LOG: the doll order, the display mode
   `0x00EF`/`0x0057`, the backpack drag `0x0072`) the doll's order, the eye and the helm,
   Hide in Towns hiding the helm on the doll AND the world body, and the drag staying.
-  **Open**: step 5's outpost henchman add owes its client run (the runsheet in
-  studies/cmsg "The party family": the list on a type-10 map and the `noncombatant`
-  allegiance are the two UNVERIFIED points); the henchman FIELD-body carry, the outpost
-  re-join and the `'play'` allegiance behind a `standing` gate (step 5's deferred half —
-  the `0x00B0`-climbs-by-2 field size is NOT FOUND); a per-map party cap
-  (`OUTPOST_PARTY_CAP` is a constant 4); travel's client confirmation (the owner's `M`
-  press and one click; runsheet in studies/cmsg "World-map travel" — its
-  `--no-map-unlock` control predicts the current map's pin alone, not an empty map); the
-  display mode's field step under `--persist` (studies/cmsg "The display mode"); the town
-  weapon's client check (LANDED 2026-09-23, PLAN-LOG: the town body's hands stripped,
-  `--no-town-weapon-strip`; runsheet in studies/cmsg "The town weapon"); a town ARMOUR
-  equip's `0x006F` — retail writes armour visuals in outposts (31 strangers', the own PvP
-  head), ours sends none there (RECONSTRUCTION; studies/cmsg "The town weapon", Open).
+  **CONFIRM-2 ran 2026-09-24** (studies/deskwork/CONFIRM-2026-09-24.md, PLAN-LOG): the
+  henchman add HELD on the client. **Open**: the town weapon's SWITCH half is a visible
+  regression — in an outpost the body keeps the old weapon after F1–F4 while the doll
+  changes (`--no-town-weapon-strip` restores it); its load half is invisible, the client
+  draws the weapon from another carrier (the player's `0x006D`?) — fix at the desk
+  (CONFIRM-2 §1); the henchman kick, c2s `0x00A8 [agent]`, named on our client, unarmed,
+  its reply on no tape; travel's confirmation BLOCKED on content (no fog-initialised view
+  carries a second pin; `M` on 449 / 242 / 248 / 310 asserts, CONFIRM-2 §3); the display
+  mode's field step (the owner's hands, the harness cannot open the drop-down); the
+  henchman FIELD-body carry, the outpost re-join and the `'play'` allegiance behind a
+  `standing` gate (step 5's deferred half — the `0x00B0`-climbs-by-2 field size is NOT
+  FOUND); a per-map party cap (`OUTPOST_PARTY_CAP` is a constant 4); a town ARMOUR equip's
+  `0x006F` (RECONSTRUCTION; studies/cmsg "The town weapon", Open).
 * **DESKWORK-D5**: the combat rules retail's tapes on disk already settle. LANDED
   2026-09-22: the adrenaline gate (SKILLS-B1's gate half, skills §34.11); property 10
   and the `[42]` residue (§16.6, self-scoped; `[42]` only when the maximum moved); the
