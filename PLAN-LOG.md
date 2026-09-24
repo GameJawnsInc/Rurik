@@ -28,6 +28,43 @@ move back.
 
 ---
 
+### DESKWORK-D1, the town weapon -- the fix pass -- 2026-09-23 -- **the mechanism claim re-labelled and measured; the strangers' 31 outpost armour `0x006F` cited; the town armour-equip gap recorded open; the `0x006E` label built from the array; the own body cross-checked against `0x0022`; NPC counts made message counts**
+
+The combined review of the entry below (WEAP-R1–R8: no blocker, no major; every finding's
+evidence re-derived before it was applied, none declined; studies/cmsg "The town weapon", its
+"The fix pass" paragraph). **Corrections to the entry below**: (R1) "no regime test on the
+path" rested on the display mode's census, which counted readers of the display FLAGS and never
+looked for a regime read; the fix pass measured it — `msghandler 0x006E --follow --depth 2` and
+the same for `0x006F`: the handlers (0x0091E1C0 / 0x0091E1E0), their ChCliApi workers
+(0x00810E30–0x008110B0 / 0x008110F0–0x008112E8) and every function the workers call directly,
+the AvApi dresser 0x007DFCE0's fifteen-instruction body among them, hold no direct call to
+`MissionCliGetMap` (0x0084D9B0) or the map-flags reader (0x0084D950), and none of
+`MissionCliGetMap`'s 37 direct callers (`codescan --xrefs`) lies in them; NOT searched: the
+dresser's callee 0x007F70B0 and deeper, indirect calls — the mechanism stays RECONSTRUCTION,
+now from a measured negative, and the runsheet's rival prediction settles it. (R3) "466 of
+1,653 outpost bodies" counted `0x006D` MESSAGES; as distinct (connection, agent) bodies it is
+403 of 1,510 (fields: 2,994 of 3,502 messages, 1,777 of 2,082 bodies) — the conclusion (retail's
+outpost NPCs are armed) stands. (R6) The own body was found by joining its armour to ONE type-2
+bag; cross-checked against `0x0022` WORLD_UPDATE_CONTROLLED_AGENT the join names exactly the
+controlled agents that have a `0x006E` on 91 of 91 regime connections (four connections' `0x0022`
+also names a second, bodiless agent for a moment) — pinned in `test_townweapon` §2. **Added**:
+(R2) the STRANGERS corroborate the slot rule — 31 outpost `0x006F` onto other agents' armour
+slots 2–7 (slot 2 ×6, 3 ×4, 4 ×7, 5 ×4+1 emptying, 6 ×5+2 emptying, 7 ×2) and 0 onto a hand — so
+our town ARMOUR equip, which sends no `0x006F` (`plan_equip`'s `visuals` is False in a town),
+is probably one message short of retail: RECONSTRUCTION (no own outpost armour equip on tape;
+the PvP head is the nearest witness), recorded Open in the study and in §8.1's D1 bullet, not
+built. (R5) The burst's `0x006E` label named `weapon` from the launch flag while the town
+message carried none; it is now built from the array — `UPDATE_AGENT_VISUAL_EQUIPMENT(+armour)
+[hands empty: a town]` in a town, `(weapon+armour)` in a field — and locked; the runsheet reads
+the new label. (R4) The whole-file source lock now matches any `*send(` spelling. (R8)
+`itemstore.py`'s "the same outpost sessions" is "the same outpost (map 248) on two sessions".
+(R7, process) the merge sweep's list is to include every test that imports `authsrv` as a
+module. `test_townweapon`: floor 36 bare (1 declared skip) / 48 vaulted, each from a real green
+run. Gates on the fix tree: townweapon 48/36, visstatus 73, itemmoves 184, weapons 276; the
+sweep count is in the merge commit.
+
+---
+
 ### DESKWORK-D1, the town weapon -- 2026-09-23 -- **in an outpost the player's WORLD body carries no weapon: the hands (visuals 0 and 1) leave the town body's `0x006E` and a town's hand `0x006F` is never sent, through the ONE gate the display mode built; the bag, the doll and the weapon-set panel keep it; `--no-town-weapon-strip` reverts**
 
 The divergence the display-mode fix pass surfaced (the entry below: our town `0x006E`

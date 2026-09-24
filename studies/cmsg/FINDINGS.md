@@ -1882,11 +1882,16 @@ with no `0x006F`). In a FIELD the four switches of the same capture's `:56576` (
 RUN-WEAPONS-1A) each carry the hands: `0x006F [25, 0, 209]`, `[25, 0, 210]`, `[25, 0, 208] +
 [25, 1, 207]`, `[25, 1, 0] + [25, 0, 212]` — the W9 batches `test_weapons` §18 replays.
 
-**(c) The rule is the SLOT, not the regime (EVID-D1W-3, OBSERVED n=1 against 5).** The same
+**(c) The rule is the SLOT, not the regime (EVID-D1W-3, OBSERVED: one own-body armour write
+and 31 strangers' against fourteen hand changes with none).** The same
 PvP panel in an outpost created a HEAD piece — c2s `0x0086 [46, 274, [], 9, 4, 0]` on
 `20260917T160915 :58557` at t=73.505; the reply creates item 23284 (type 16) into equipped
 `(843, 4)` and carries **`0x006F [336, 6, 23284]`** — the one own-body `0x006F` on any outpost
-connection. Armour visuals are written in a town; the hands are not. This refines
+connection. The STRANGERS corroborate it: across the 47 outpost connections retail wrote 31
+`0x006F` onto other agents' ARMOUR slots — slot 2 ×6, 3 ×4, 4 ×7, 5 ×4 (and one emptying it),
+6 ×5 (and two emptying it), 7 ×2 — and 0 onto a hand (the fix pass's census, the review's
+WEAP-R2; the own field body's 11 hand writes are the only hand `0x006F` on tape). Armour
+visuals are written in a town; the hands are not. This refines
 `itemstore.py`'s VISUALS paragraph ("0x006F rode … none in an OUTPOST, 0 of 5"): all five it
 counted were hand changes, and the confound it left open (the outpost or the swap?) resolves
 to neither — it is the slot. The display-mode pass's own filter is unaffected (it works on
@@ -1898,17 +1903,28 @@ outpost on retail: 3 party heroes (`0x01C2`'s agent ids) over the outpost connec
 created (`0x0020` / `0x0021`), none with a `0x006D`; the field's one hero has both. Ours
 withholds hero bodies in a town already (`PARTY_BODY_IN_OUTPOST`, SLICE-H2b), so there is no
 hero hand to strip and nothing was built. Retail's outpost NPCs DO carry weapons — `0x006D`
-lead non-zero on 466 of 1,653 outpost bodies (206 lead only, 260 both hands; 23 off hand
-only) against 2,994 of 3,502 in fields — so the empty hands are the PLAYER body's rule, not
-a town's; NPC hands are reported and untouched.
+lead non-zero on 466 of 1,653 outpost `0x006D` MESSAGES (206 lead only, 260 both hands; 23
+off hand only), which is 403 of 1,510 distinct (connection, agent) bodies, against 2,994 of
+3,502 messages (1,777 of 2,082 bodies) in fields — so the empty hands are the PLAYER body's
+rule, not a town's; NPC hands are reported and untouched. (This section's first record
+counted messages and called them bodies — the review's WEAP-R3.)
 
-**(e) Why the server does it (RECONSTRUCTION from the negative).** The client's `0x006E` /
-`0x006F` handlers reach the AvApi dresser (0x007DFCE0) through ChCliApi message workers with
-no regime test on the path ((c) of "The display mode" above), and our own town body stood
-armed on every run before this day because our `0x006E` said so. The shape is OBSERVED; that
-the SERVER strips (rather than the client ignoring a hand in a town) is what the run below
-settles on our client — if the body is empty-handed only under the strip, the array is the
-channel.
+**(e) Why the server does it (RECONSTRUCTION from a measured negative).** The client's
+`0x006E` / `0x006F` handlers (0x0091E1C0 / 0x0091E1E0) reach the AvApi dresser (0x007DFCE0)
+through ChCliApi message workers (0x00810E30–0x008110B0 / 0x008110F0–0x008112E8). This
+section's first record cited "(c) of The display mode" for "no regime test on the path" — but
+that census was of the display FLAGS' readers and never looked for a regime read (the review's
+WEAP-R1). The fix pass measured it: `msghandler.py 0x006E --follow --depth 2` and the same for
+`0x006F` disassemble the handler, the worker and every function the worker calls directly —
+fifteen functions, the dresser's own fifteen-instruction body among them (a lookup 0x00802160,
+the assert stub, then `call 0x007F70B0`) — and none holds a direct call to `MissionCliGetMap`
+(0x0084D9B0) or the map-flags reader (0x0084D950); of `MissionCliGetMap`'s 37 direct callers
+(`codescan --xrefs`), none lies in those functions. NOT searched: 0x007F70B0 and deeper, and
+indirect calls — a bounded negative, not a proof. Our own town `0x006E` did carry the hand (the
+run `20260923T210546`'s c1 wire, seq 100: `[1, 1, 0, 3, 4, 5, 6, 7, 0, 0]` under a map-148
+outpost load) and the body stood armed. The shape is OBSERVED; that the SERVER strips (rather
+than the client ignoring a hand in a town) is what the run below settles on our client — if the
+body is empty-handed only under the strip, the array is the channel.
 
 **Refuted or refined on the way.** (1) The first census pass reported one field own body with
 an off hand in the bag and visual 1 empty (`20260914T005758 :56011`, t=87.209): the "bag off
@@ -1922,6 +1938,15 @@ a field from an outpost; returning") needs nothing built: every load builds a fr
 from the bag (`player_worn_array`) and the strip is per load, so the field load carries the
 hands and the return to the outpost leaves them out; the 50 own outpost loads above include
 such returns.
+
+**Open (the fix pass, the review's WEAP-R2; reported, not built).** The town ARMOUR equip.
+`plan_equip` / `plan_move` append a `0x006F` only when `visuals` is True — a field — so a helm
+equipped in a town rides `0x014B` alone; retail, per (c), writes armour visuals in outposts
+(31 strangers' writes, the own PvP head). No own armour equip in an outpost is on tape, so
+whether retail answers a town `0x0030` of a helm with `0x006F [agent, 6, item]` is
+RECONSTRUCTION from the PvP head's precedent — probably one message short of retail, and the
+display mode's hiding-mode equip in a town ((c) of that section, its open (b)) is the same
+question. `PLAN.md` §8.1's D1 bullet carries it.
 
 **Shipped** ([`toolkit/authsrv/townweapon.py`](../../toolkit/authsrv/townweapon.py) is the
 leaf — `strip_hands`, `drops`, `filter_hand_writes`, stdlib, no repo import;
@@ -1948,8 +1973,9 @@ Harness steps as `--walk` items (`vk:0x49` is `I`, `vk:0x70` / `vk:0x71` are F1 
 `shot:1` after each).
 *Outpost, default* — (1) `wait:3 shot:1`: the body stands with **no weapon in either hand**
 (the hammer is not drawn; the rival — the client draws the bag's weapon regardless — would
-show it and refute (e)); the gamesrv log has `UPDATE_AGENT_VISUAL_EQUIPMENT` with visuals 0
-and 1 zero and the `TOWN WEAPON: … leaves out the lead hand (item 1, visual 0)` line right
+show it and refute (e)); the gamesrv log has `UPDATE_AGENT_VISUAL_EQUIPMENT(+armour) [hands
+empty: a town]` with visuals 0 and 1 zero (the label names what the array carries — the fix
+pass) and the `TOWN WEAPON: … leaves out the lead hand (item 1, visual 0)` line right
 before it. (2) `vk:0x49 wait:1 shot:1`: the inventory panel's doll **holds the hammer** in
 the weapon cell and the F1–F4 strip shows set 1's sword + shield — the bag is untouched. (3)
 `vk:0x71 wait:1 shot:1`: F2 — the log has `SET_ACTIVE_WEAPON_SET(1)`, the shield's
@@ -1958,7 +1984,8 @@ lead hand (item 11), the off hand (item 12) is not sent`; the doll now shows the
 shield, the panel set 2 active, and the world body **still empty-handed**; no assert (retail's
 outpost switch is exactly these rows). (4) `vk:0x70 wait:1 shot:1`: F1 back — the doll shows
 the hammer, the body unchanged. *Explorable, default* (the control) — (5) `wait:3 shot:1`:
-the hammer **in hand**; no `TOWN WEAPON` line; the `0x006E` carries item 1 at visual 0. (6)
+the hammer **in hand**; no `TOWN WEAPON` line; the `0x006E` carries item 1 at visual 0 and is
+labelled `UPDATE_AGENT_VISUAL_EQUIPMENT(weapon+armour)`. (6)
 `vk:0x71 wait:1 shot:1`: F2 — the sword and shield **appear on the body** with `0x006F [1, 0,
 11]`, `[1, 1, 12]` in the log. *Outpost, `--no-town-weapon-strip`* (KNOWN-BAD) — (7) `wait:3
 shot:1`: the hammer in hand in the town (the pre-fix picture); (8) `vk:0x71 wait:1 shot:1`: F2
@@ -1966,3 +1993,23 @@ puts the sword and shield on the body (`0x006F [1, 0, 11]`, `[1, 1, 12]` sent in
 a run cannot settle: whether retail's client would ALSO hide a hand the server sent in a town
 (no retail outpost `0x006E` ever carries one, so the question has no tape) — irrelevant to
 fidelity, since the server now sends what retail sends.
+
+**The fix pass (2026-09-23, the combined review's WEAP-R1–R8; no blocker, no major; every
+finding's evidence re-derived before it was applied, and none declined).** (e) re-labelled and
+MEASURED — the flags census the first record cited was not a regime census; the handlers' path
+disassembled to depth 2 with its unsearched edge named (R1). The strangers' 31 outpost armour
+`0x006F` cited in (c), and the town ARMOUR-equip gap recorded as Open here and in `PLAN.md`
+§8.1 (R2). "Bodies" made "messages" in (d), the leaf, the test and TESTS.md, with the
+distinct-body count beside it — 403 of 1,510 (R3). The source lock's regex widened to every
+`*send(` spelling, `_send(` / `hsend(` / `psend(` included (R4). The burst's `0x006E` label
+built from the ARRAY — `(+armour) [hands empty: a town]` in a town, `(weapon+armour)` in a
+field — and locked; the runsheet above reads the new label (R5). The own body cross-checked
+against `0x0022` WORLD_UPDATE_CONTROLLED_AGENT: the armour join names exactly the controlled
+agents that have a `0x006E` on 91 of 91 regime connections (47 outpost, 44 field; four
+connections' `0x0022` also names a second, bodiless agent for a moment — value 1 between the
+own body's 3 and 1), pinned as a conjunct in `test_townweapon` §2 (R6). The merge sweep's list
+is to include every test that imports `authsrv` as a module, not only the text readers (R7,
+process — the fix pass's own sweep does). `itemstore.py`'s "the same outpost sessions" made
+"the same outpost (map 248) on two sessions" — `0x0199 [.., 248, 0, ..]` on both `:58638`
+(20260919) and `:58557` (20260917) (R8). `test_townweapon`: floor 35 → 36 bare (the label
+lock), 46 → 48 vaulted (the cross-check), each from a real green run.

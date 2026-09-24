@@ -1930,7 +1930,9 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   **Open**: the party family from HENCHMAN_ADD's witness (step 5) and travel (step 7); the
   display mode's field step under `--persist` (studies/cmsg "The display mode"); the town
   weapon's client check (LANDED 2026-09-23, PLAN-LOG: the town body's hands stripped,
-  `--no-town-weapon-strip`; runsheet in studies/cmsg "The town weapon").
+  `--no-town-weapon-strip`; runsheet in studies/cmsg "The town weapon"); a town ARMOUR
+  equip's `0x006F` — retail writes armour visuals in outposts (31 strangers', the own PvP
+  head), ours sends none there (RECONSTRUCTION; studies/cmsg "The town weapon", Open).
 * **DESKWORK-D5**: the combat rules retail's tapes on disk already settle. LANDED
   2026-09-22: the adrenaline gate (SKILLS-B1's gate half, skills §34.11); property 10
   and the `[42]` residue (§16.6, self-scoped; `[42]` only when the maximum moved); the
