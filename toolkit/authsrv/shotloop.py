@@ -183,7 +183,6 @@ def main(argv=None):
         rc, out = run([sys.executable, SESSION, "--game-args", GAME_ARGS,
                        "--keep-open", "--shots", f"{a.shots:g}",
                        "--hold", f"{a.hold:.0f}"])
-        ok = rc == 0 and "RUN VERDICT: PASS" in out
         for line in out.splitlines():
             if "Assertion" in line or "ERROR DIALOG" in line:
                 print("    " + line.strip(), flush=True)
@@ -192,6 +191,14 @@ def main(argv=None):
         except RuntimeError as exc:
             print(f"  STOP: {exc}", flush=True)
             return 1
+        # Did the client reach the map -- the report's checkpoint verdict, NOT the run
+        # verdict. Since 2026-09-24 session.py retracts its PASS over a client that
+        # asserted after the spawn, which is a result about this opcode, not the
+        # "broken stack" the failure counter below stops on. For a crash that leaves
+        # the process alive behind its dialog -- the usual kind -- this is what the
+        # loop was reading all along, because the verdict never retracted on one.
+        # smsgsweep.reached_checkpoints.
+        reached = smsgsweep.reached_checkpoints(os.path.join(rundir, "report.json"))
         shots = len(glob.glob(os.path.join(rundir, "hold*.png")))
         # THE HARNESS VERDICT IS NOT ENOUGH, and this check is here because its
         # absence cost three runs on 2026-08-13. `session.py` judges "did the client
@@ -220,7 +227,7 @@ def main(argv=None):
             print(f"  SHORT: {shots} shot(s) of ~{int(a.hold / a.shots)} -- the client "
                   f"lost the foreground, so the frames that would show the effect are "
                   f"missing. Not recording {key}.", flush=True)
-        good = ok and sent_ok and long_enough
+        good = reached and sent_ok and long_enough
         print(f"  {'PASS' if good else 'FAIL'}  {os.path.basename(rundir)}  "
               f"{shots} shot(s)", flush=True)
         if good:
@@ -237,7 +244,7 @@ def main(argv=None):
                   f"them sends its opcode and screenshots nothing, so this measures "
                   f"nothing until whatever is stealing focus is closed.", flush=True)
             return 1
-        fails = fails + 1 if not (ok and sent_ok) else 0
+        fails = fails + 1 if not (reached and sent_ok) else 0
         if fails >= MAX_CONSECUTIVE_FAILURES:
             print(f"\nSTOP: {fails} runs in a row did not reach the map. That is a "
                   f"broken stack, not a result about these opcodes.", flush=True)

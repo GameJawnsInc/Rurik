@@ -64,7 +64,10 @@ import checks  # noqa: E402
 # measure, for the same two vault-dependent skips as before.
 # FLOOR: 141, MEASURED from a green run 2026-08-17 after section 10 gained
 # the camera-verb checks -- set from the run's own count, never arithmetic.
-LEDGER = checks.Ledger("harness", floor=174)   # 1z-cw: +2, the steer verb; 2026-09-14: +6, test_client_build; +5, the skill slot; 2026-09-15: +4, dashed values
+# 2026-09-24: 174 -> 181, MEASURED from a green run: +7 for the verdict leak on
+# the hold's timer branch and at teardown (3 truth-table rows, the real
+# hold_open timer path and its control, the finally's fold and its control).
+LEDGER = checks.Ledger("harness", floor=181)   # 1z-cw: +2, the steer verb; 2026-09-14: +6, test_client_build; +5, the skill slot; 2026-09-15: +4, dashed values
 check = checks.adopt_named(LEDGER)
 
 
@@ -967,6 +970,20 @@ def section_error_dialog():
         LEDGER.ok(fn(False, "expired") is False,
                   "and it never PROMOTES a failed run to a pass",
                   "it may only ever take the verdict away")
+        # "crashed", 2026-09-24: the hold ran out on a client sitting behind its
+        # crash dialog. A GW assert keeps the process alive, so this -- not
+        # "exited" -- is the usual crash, and the rule used to see only "exited".
+        LEDGER.ok(fn(True, "crashed") is False,
+                  "a hold that ran out on a client BEHIND ITS CRASH DIALOG retracts too",
+                  "the common crash, not the rare one: 177 of the 184 harness runs "
+                  "with a captured dialog and a report said PASS")
+        LEDGER.ok(fn(True, None) is True,
+                  "and the value a healthy timer path really returns (None) keeps it",
+                  "'expired' above is a stand-in hold_open never returns; this is "
+                  "the one it does")
+        LEDGER.ok(fn(False, "crashed") is False,
+                  "and a crash never promotes a failed run either",
+                  "retraction only, for the new token as for the old")
     else:
         LEDGER.skip("the hold-retraction truth table",
                     "verdict_after_hold does not exist yet")
@@ -996,6 +1013,48 @@ def section_error_dialog():
               "the defect as it actually stood, verbatim -- a checker that cannot "
               "tell the bug from the fix is what let the substring form of the "
               "check above sit green through the 2026-08-11 crash")
+
+    # THE TEARDOWN LOOK IS A VERDICT TOO -- 2026-09-24. `run_client`'s `finally`
+    # reads the dialog on every run (test_crash_capture_always pins that it does,
+    # and before close_client), and until this date it dropped the answer the way
+    # hold_open's timer branch did: on a run without --keep-open, a client that
+    # asserted during the walk or after the verdict is still RUNNING, so the
+    # walk's "client exited" test never fires, the teardown finds the dialog, and
+    # the run said PASS over it.
+    def folds_teardown_dialog(src):
+        """True if a `finally` KEEPS capture_error_dialog's answer AND that name
+        reaches verdict_after_hold. Both conjuncts: a kept value nothing reads
+        is the same dropped return with an extra line."""
+        t = ast.parse(textwrap.dedent(src))
+        kept = set()
+        for tr in (n for n in ast.walk(t) if isinstance(n, ast.Try) and n.finalbody):
+            for n in (m for st in tr.finalbody for m in ast.walk(st)):
+                if (isinstance(n, ast.Assign) and isinstance(n.value, ast.Call)
+                        and getattr(n.value.func, "id", None) == "capture_error_dialog"):
+                    kept |= {g.id for g in n.targets if isinstance(g, ast.Name)}
+        folded = any(isinstance(n, ast.Call)
+                     and getattr(n.func, "id", None) == "verdict_after_hold"
+                     and any(isinstance(x, ast.Name) and x.id in kept
+                             for arg in n.args for x in ast.walk(arg))
+                     for n in ast.walk(t))
+        return bool(kept) and folded
+
+    LEDGER.ok(folds_teardown_dialog(inspect.getsource(session.run_client)),
+              "run_client's finally KEEPS the teardown dialog and folds it into the verdict",
+              "a dialog up at close is a client that asserted; printing its assert "
+              "and then RUN VERDICT: PASS is the leak this closes")
+    LEDGER.ok(not folds_teardown_dialog(
+        "def f():\n    try:\n        pass\n    finally:\n"
+        "        capture_error_dialog(outdir, wait=2.0, quiet=True)\n"
+        "        dc.close_client(proc)\n")
+              and not folds_teardown_dialog(
+        "def f():\n    try:\n        pass\n    finally:\n"
+        "        d = capture_error_dialog(outdir, wait=2.0, quiet=True)\n"
+        "    ok = verdict_after_hold(ok, held)\n"),
+              "CONTROL: that detector reports the pre-fix bare call AND a kept-but-unread "
+              "value as broken",
+              "the first is the finally as it stood verbatim; the second is the "
+              "half-fix that assigns the path and never lets it reach the verdict")
 
     real = sys.modules.get("read_error_dialog")
     try:
@@ -1028,6 +1087,39 @@ def section_error_dialog():
                       f"wrote={wrote}, has the source line={'AgAgent.cpp(1198)' in text}. "
                       f"The line naming the fault sits at the TOP of a scrolled "
                       f"control, which is the part a screenshot always misses")
+
+        # THE TIMER PATH ITSELF, through the real hold_open -- 2026-09-24. The
+        # truth table above cannot see this defect: the branch captured the
+        # dialog, printed its `>>> Assertion:` line and returned None, and
+        # verdict_after_hold read None correctly as "keep the PASS". A right rule
+        # handed the wrong value. So the value comes from hold_open, with a
+        # client that never exits (poll() stays None, as behind a GW assert) and
+        # a hold that runs out on its timer.
+        class LiveClient:
+            pid, returncode = 4321, None
+
+            def poll(self):
+                return None
+
+        def timer_hold(dialog):
+            fake.gw_pids = lambda: {4321}
+            fake.dump = lambda pids: ([(0x1234, "Gw.exe", [("Static", body)])]
+                                      if dialog else [])
+            with tempfile.TemporaryDirectory() as d:
+                held = session.hold_open(LiveClient(), 0.1, {}, d, quiet=True)
+                return held, os.path.isfile(os.path.join(d, "crash-dialog.txt"))
+
+        held, wrote = timer_hold(dialog=True)
+        LEDGER.ok(wrote and session.verdict_after_hold(True, held) is False,
+                  "a dialog found when the hold RUNS OUT retracts the pass",
+                  f"hold_open returned {held!r}, crash-dialog.txt written={wrote}. "
+                  f"Until 2026-09-24 this path wrote the file, printed the assert "
+                  f"and returned None -- RUN VERDICT: PASS, exit 0")
+        held, wrote = timer_hold(dialog=False)
+        LEDGER.ok(not wrote and session.verdict_after_hold(True, held) is True,
+                  "CONTROL: no dialog when the hold runs out keeps the pass",
+                  f"hold_open returned {held!r}. Most holds end this way; a "
+                  f"retraction that fired on them would be switched off in a day")
     finally:
         if real is not None:
             sys.modules["read_error_dialog"] = real

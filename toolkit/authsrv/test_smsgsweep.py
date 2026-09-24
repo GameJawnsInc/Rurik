@@ -121,7 +121,9 @@ from codec import Codec  # noqa: E402
 # vault-less run: those two sections are the ones that pin the sweep's DENOMINATOR and the
 # ten opcodes that tear the game channel down, and a plan built on a constant nothing
 # confirmed is exactly the wish this repo keeps refusing.
-LEDGER = checks.Ledger("smsgsweep: the loopback sweep's readout", floor=118)
+# 2026-09-24: 118 -> 124, MEASURED from a green run: +6 in section 7b, the loops keyed on
+# the report's checkpoint verdict once session.py began retracting on a crash dialog.
+LEDGER = checks.Ledger("smsgsweep: the loopback sweep's readout", floor=124)
 
 # The three captures the canon-12 denominator was measured on. Named because a pin is
 # a fact about ITS corpus: the vault now also holds two live Factions captures
@@ -810,6 +812,75 @@ def main():
               "CONTROL: and with the guard moved one past the launch it fails too",
               "a client that goes up and is stopped afterwards has already measured the "
               "wrong opcodes; stopping is not the same as not launching")
+
+    # A CRASH IS THIS LOOP'S RESULT, NOT ITS BROKEN STACK -- 2026-09-24. `session.py` now
+    # retracts its PASS when the client asserts after the spawn (runwatch.hold_open's
+    # timer branch and run_client's teardown look), where for six weeks it printed PASS
+    # over the captured dialog. Both loops read "RUN VERDICT: PASS" as "the stack
+    # reached the map", and the sweep exists to crash clients: keyed on the honest
+    # verdict, the first crash would stop the sweep as "a broken stack". So the report
+    # carries the checkpoint verdict apart from the retractions, and the loops read that.
+    print("   and it stops on a stack that never reached the map, not on a crash")
+    rdir = tempfile.mkdtemp()
+
+    def report_file(name, **fields):
+        path = os.path.join(rdir, name)
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(fields, fh)
+        return path
+
+    LEDGER.ok(sw.reached_checkpoints(report_file(
+        "crashed.json", checkpoints_passed=True, passed=False)),
+              "a run retracted AFTER the spawn -- a crash -- still reached the map",
+              "that is the sweep's measurement; calling it a failure ends the loop on "
+              "its first result")
+    LEDGER.ok(not sw.reached_checkpoints(report_file(
+        "short.json", checkpoints_passed=False, passed=False)),
+              "CONTROL: one that never passed its checkpoints did not",
+              "the broken stack decide() exists to stop on, still stopped")
+    LEDGER.ok(sw.reached_checkpoints(report_file("old_pass.json", passed=True))
+              and not sw.reached_checkpoints(report_file("old_fail.json", passed=False))
+              and not sw.reached_checkpoints(os.path.join(rdir, "absent.json")),
+              "a report from before the key falls back to `passed`; a missing one "
+              "reached nothing",
+              "no key is the old harness, whose verdict never retracted on a dialog; "
+              "no report is a run that did not finish")
+
+    def keys_on_checkpoints(text):
+        """True if the module asks reached_checkpoints and no longer gates anything on
+        the RUN VERDICT string. Both halves: a call added beside the old test is the
+        old behaviour with an extra line."""
+        t = ast.parse(text)
+        asks = any(isinstance(n, ast.Call) and "reached_checkpoints" in (
+            getattr(n.func, "attr", None), getattr(n.func, "id", None))
+                   for n in ast.walk(t))
+        gated = any(isinstance(n, ast.Compare) and any(
+            isinstance(x, ast.Constant) and x.value == "RUN VERDICT: PASS"
+            for x in ast.walk(n)) for n in ast.walk(t))
+        return asks and not gated
+
+    shot_src = open(os.path.join(HERE, "shotloop.py"), encoding="utf-8").read()
+    LEDGER.ok(keys_on_checkpoints(src) and keys_on_checkpoints(shot_src),
+              "sweeploop's `failed` and shotloop's `reached` read the checkpoint "
+              "verdict, not the run verdict",
+              "the two consumers of session.py's verdict that WANT the client to crash")
+    LEDGER.ok(not keys_on_checkpoints(
+        'failed = rc != 0 or "RUN VERDICT: PASS" not in out\n')
+              and not keys_on_checkpoints(
+        'failed = not reached_checkpoints(r) or "RUN VERDICT: PASS" not in out\n'),
+              "CONTROL: the detector reports the old line, and the old line with the "
+              "new call bolted on, as broken",
+              "the first is sweeploop as it stood verbatim")
+    sess_tree = ast.parse(open(os.path.join(os.path.dirname(HERE), "harness",
+                                            "session.py"), encoding="utf-8").read())
+    run_client = next(n for n in ast.walk(sess_tree)
+                      if isinstance(n, ast.FunctionDef) and n.name == "run_client")
+    LEDGER.ok(any(isinstance(n, ast.Dict) and any(
+        isinstance(k, ast.Constant) and k.value == "checkpoints_passed" for k in n.keys)
+                  for n in ast.walk(run_client)),
+              "and session.run_client writes `checkpoints_passed` into the report",
+              "the other end of this contract: without the key every new report falls "
+              "back to the retracted verdict and the first crash stops the sweep again")
 
     # ---- 8. the denominator, rebuilt from the tapes -------------------------
     print("\n8. the observed set is recomputed, not remembered")

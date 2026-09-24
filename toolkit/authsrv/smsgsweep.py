@@ -965,6 +965,28 @@ def crash_kind(report_json):
     return "CRASHED", "dialog captured, neither an assert nor an exception line in it"
 
 
+def reached_checkpoints(report_json):
+    """True if the harness run behind this report reached what it was sent to reach.
+
+    NOT THE RUN VERDICT, and the difference is this sweep's whole business. Since
+    2026-09-24 `session.py` retracts its PASS when the client asserts after the spawn --
+    a dialog found when the hold runs out, or at teardown -- where for six weeks it had
+    printed PASS over the captured crash. `sweeploop` and `shotloop` read that verdict
+    as "the stack reached the map", and a sweep EXISTS to crash clients: keyed on the
+    honest verdict, the first crash would stop the loop as "a broken stack". So the
+    report carries the checkpoint verdict apart from the retractions, and this reads it.
+
+    A report written before that key existed has only `passed`, which is the best there
+    is; a missing or unreadable report did not reach anything anyone can show.
+    """
+    try:
+        with open(report_json, encoding="utf-8") as fh:
+            rep = json.load(fh)
+    except (OSError, ValueError):
+        return False
+    return bool(rep.get("checkpoints_passed", rep.get("passed", False)))
+
+
 def captures_from_report(report_json):
     """EVERY gamesrv capture this run produced, in the order the report lists them.
 
