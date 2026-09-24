@@ -28,6 +28,17 @@ move back.
 
 ---
 
+### DESKWORK-D1, town combat withdrawn -- 2026-09-24 -- **the owner: combat in a town is non-stock behaviour, out of scope**
+
+The carrier fix left one town item open in `PLAN.md` 8.1's D1 line: town combat with no hand
+declared (the player's `0x006D` is withheld in a town and the town `0x006E` carries empty
+hands, so a swing there would start with nothing declared in either carrier; never exercised).
+The owner, the same day: "town combat shouldn't be a concern for us - it's non-stock
+behavior". Retail has no town combat to match, so there is no picture to confirm and nothing to
+build. Withdrawn; the line leaves 8.1 and CONFIRM-2's closing paragraph records the ruling.
+
+---
+
 ### DESKWORK-D1, the town weapon: the owner's answer -- 2026-09-24 -- **on retail no weapon is shown on the body in a town, only on the doll**
 
 The one-word question the carrier fix left (the entry below and its fix pass): the owner,
