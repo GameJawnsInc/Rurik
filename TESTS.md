@@ -13588,8 +13588,20 @@ file_id (60), `shell_templates()` joins them onto 32 shell ids (the hatcher shel
 rows) -- the WIRE's pairing of skeleton and body, the only source that names a `skel`
 head as a creature; the hatcher resolves closed and draws its body, the worm draws itself,
 and a composited shell with NO body draws None -- the parade's white box, never
-invented; Kamadan's props chunk names >= 50 models (86, M4's count). Needs the study
-archive; sections 0-1 are bare-machine safe. 75 checks, floor 75. ~45 s)
+invented; Kamadan's props chunk names >= 50 models (86, M4's count). **Section 4b
+(2026-09-24, PLAN.md 8.1 MODELVIEWER, floor 75 -> 81): the map index cache.**
+`content_map_models` now answers through `map_model_index`, cached at
+`vault/cache/modelcatalog/maps-<mft sha>.json` and keyed by map FILE id (19 content rows
+name 17 files; a row change costs one decode, never a rebuild). The checks: the index
+sits under the vault cache, is stamped with this archive's MFT sha and holds every
+distinct content map file (the first version compared entry count to ROW count and
+went red on a correct cache); a second open answers the same maps and problems and
+DECODES NOTHING, under 5 s where a cold decode is ~20-30 s (what the viewer's Maps tab
+paid on every first open); the CONTROL that Kamadan's cached list equals a fresh
+`modelexport.map_model_ids` id for id; an index stamped from another archive state is
+REFUSED; and an id the index lacks costs exactly one decode and is appended -- as its
+problem, since the id is no map. Needs the study archive; sections 0-1 are
+bare-machine safe. 81 checks, floor 81. ~45 s warm, ~90 s the first time)
   `toolkit/mapdata/test_wireshells.py` (the WIRE-DERIVED SHELL INDEX, `wireshells.py`:
 which skeleton every keyed live tape dressed with which bodies, keyed per connection and
 stamped by the corpus. The archive never pairs a shell with a body -- `modelcatalog`
