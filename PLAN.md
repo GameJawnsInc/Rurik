@@ -1944,12 +1944,9 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   carrier — withheld in a town the body is empty-handed at load and after F2, and
   `--town-player-weapons` reproduces the stale hammer (OBSERVED). The owner's answer
   (2026-09-24): on retail no weapon is shown on the body in a town, only on the doll — the fix's
-  picture. **Open**: town combat with no hand declared (unexercised); **the FIELD's
-  player `0x006D` is a defect** (the fix pass, TF-R1): retail sends none (0 of 44), ours sends
-  `[player, lead, 0]` after the `0x006E`, and its zero off hand is the last hand write, so a
-  sword-and-shield field body loses its shield at load (run 20260923T154229, seq 111/113,
-  OBSERVED) — carry the bag's off hand, or withhold it as retail does (the swing path
-  UNVERIFIED); a field run's choice; the henchman kick, c2s `0x00A8 [agent]`, named on our client, unarmed,
+  picture. The field shield's fix CONFIRMED on the client (CONFIRM-2 §8, PLAN-LOG): the
+  player's own `0x006D` withheld in a field too, the shield standing at load and through a swing.
+  **Open**: the henchman kick, c2s `0x00A8 [agent]`, named on our client, unarmed,
   its reply on no tape; travel's confirmation BLOCKED on content (no fog-initialised view
   carries a second pin; `M` on 449 / 242 / 248 / 310 asserts, CONFIRM-2 §3); the display
   mode's field step (the owner's hands, the harness cannot open the drop-down); the

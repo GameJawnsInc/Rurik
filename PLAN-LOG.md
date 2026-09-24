@@ -222,6 +222,113 @@ hero branch never sees a bare `ContentError`.
 
 ---
 
+### R-SANDBOX, the run's servers die with the harness -- 2026-09-24 -- **a closed orchestrator left two `authsrv.py` holding 6112 for hours; the servers now sit in a kill-on-close Job Object, and Stop and the window's close kill the whole tree**
+
+OBSERVED 2026-09-24: the owner closed the run orchestrator at ~14:35 and two `authsrv.py --party
+sandbox --persist` processes, parent gone, kept 6112 bound for hours, refusing every other worktree's
+harness launch and `test_handshake.py` (the DESKWORK-D1 landing, `41988b1d`, records its
+`test_handshake` NOT RUN for exactly this, and its confirmation, `054b2c15`, ran it only once the
+owner had cleared the orphaned stack by hand). The orchestrator's Stop was `QProcess.kill()` and its
+window had no `closeEvent`, so the QProcess destructor did the same: on Windows both are
+TerminateProcess on `session.py` ALONE. `Stack.stop()` runs from `main()`'s `finally`, which a
+terminated process never reaches; Windows does not kill children with their parent; and under the
+orchestrator the servers run as `pythonw.exe`, with no console to notice. The webgate had died on
+its own (a broken stdout pipe, likely). Stop's message said "the next launch replaces any server
+still running" -- true only from the same tree, since `--replace` stops only its own tree's
+listeners by design (`test_preflight_owner.py`, the 2026-08-20 incident), and that rule is kept.
+
+The fix, in two halves. **`toolkit/harness/childjob.py`** (stdlib, ctypes): `Stack.start` creates
+one Job Object with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE and adopts each server right after its
+`Popen`; the handle is non-inheritable and held for `session.py`'s life, so the kernel's close of it
+at `session.py`'s death -- however it dies -- kills every server. A job that cannot be made, or a
+live server that cannot be adopted, is printed as a WARNING, not refused. **The orchestrator**:
+`RunTab.stop` runs `childjob.kill_tree` (`taskkill /T /F`) on `session.py` while it is still alive,
+then `kill()`, so the CLIENT goes too (a client killed this way may lose the tail of `Gw.log`,
+which `drive_client.close_client` would have flushed -- a Stop is an abort); `Window.closeEvent`
+does the same and waits up to 3 s for the run to end; the message now reads "Stopped the harness,
+its servers and the client.", and a failed tree kill says the client may still be open.
+
+Evidence. `test_childjob.py` (new, 28 checks, floor 28, ~7 s): a stand-in parent builds the REAL
+`session.Stack`, the test TerminateProcesses it, and the server's listener is gone at the first
+poll; the KNOWN-BAD arm (the job refused, the Stack's own no-job path) leaves the listener up and
+the orphan alive past 5 s. Sabotaged, `adopt()` replaced by `pass`: exactly 4 red, the known-bad
+arm green. Against the real stack, outside the suite: `session.py --serve` on private aliases
+127.0.0.71/.72/.73 killed by TerminateProcess -- all four endpoints (the gamesrv's transfer alias
+.103 included) gone at the first poll; main's pre-fix `session.py`, the same kill -- all three
+servers alive and listening at 5 s, reaped after. `orchestrator.py --smoke` 174 -> 177 (floor
+150 -> 153; the 24 gated laws unchanged): Stop kills a stand-in harness AND its child and says so,
+the control (the old `kill()` alone) orphans the child, and `closeEvent` kills the tree; with the
+old `stop` and no `closeEvent` patched in, the two treatment laws red and the control green.
+
+Not done, and not needed for the incident: the CLIENT is not in the job, so `session.py` killed
+from anywhere but the orchestrator (Task Manager, a closed terminal) still leaves Gw.exe open
+against dead servers -- a window the operator sees, unlike a pythonw server. Putting it in the job
+too is one line in `run_client` and a behaviour change for every harness run; not taken here.
+
+---
+
+### DESKWORK-D1, the field shield CONFIRMED on the client -- 2026-09-24 -- **the shield stands at load and through a swing; `--field-player-weapons` erases it again; OBSERVED**
+
+Three harness launches on the landed tree (`41988b1d`; studies/deskwork/CONFIRM-2026-09-24.md §8),
+explorable, `--player-weapon starter_sword --player-offhand starter_shield --practice-target`:
+F1 `20260924T153739`, the default, the body with the sword AND the shield at load; F2
+`20260924T153945`, `C` + `Space`, the sword swinging through four frames with the shield on the
+arm, 37 hits on the practice target, no crash dialog; F3 `20260924T154209`,
+`--field-player-weapons`, the sword and no shield — `20260923T154229`'s picture on F1's own map and
+frame. The entry below's PREDICTION becomes OBSERVED, and the town fix's "swing path UNVERIFIED"
+closes: with no `0x006D` for the player at all the swing plays, lands and asserts nothing. The
+own body now gets no `0x006D` in either regime, as on retail. `PLAN.md` 8.1 loses the item. Before
+the runs an orphaned sandbox stack held 6112 — the orchestrator window, closed at ~14:35, kills
+`session.py` and not the servers it started; the owner cleared it (a separate task is flagged);
+`test_handshake` then ran green (24) on the landed tree, the one test the landing's sweep had
+left unrun.
+
+---
+
+### DESKWORK-D1, the field shield -- 2026-09-24 -- **the load's player `0x006D` withheld in a FIELD too, as retail's wire does; `--field-player-weapons` the KNOWN-BAD arm; the client run owed**
+
+The defect the town fix's review opened (TF-R1, `PLAN.md` 8.1): our load sent the player's own
+agent `0x006D` `[player, lead, 0]` two messages after the `0x006E`, and the client's one
+visual-equipment store per agent takes the last writer, so a sword-and-shield field body lost its
+shield at load (run `20260923T154229`, c1 seq 111/113, OBSERVED). Retail sends the own body no
+`0x006D` in either regime — 0 of 46 outpost and 0 of 44 field connections with a controlled agent,
+re-derived independently by the evidence reviewer (96 live connections, 3,502 field `0x006D` in
+all, so the census is not vacuous). The alternative (carry the bag's off hand as the third field)
+was rejected: it would still be a message retail never sends.
+
+**The desk read first** (`townweapon.py` THE FIELD SHIELD, build 38797): the `0x006D` worker
+`0x00810B70` and the `0x006E` worker `0x00810E30` are one code body with a different slot count —
+228 instructions each; with branch targets and the jump-table base made relative two rows differ
+(the assert stub's address, `cmp ebx, 2` vs `cmp ebx, 9`), and the two slot-to-kind tables are
+identical (OBSERVED). The lead's type byte at record+0x48 is the setter `0x0081BE10`'s own write.
+So nothing the `0x006D` writes for slots 0..1 is missing when only the `0x006E` arrives (NOT FOUND,
+bounded to direct calls); what ours added was the UNDRESS `0x007E0510(agent, 1)` of the off hand —
+the erased shield, now with its instruction. The town fix's "swing path UNVERIFIED" is answered at
+the desk as far as direct calls reach; the run watches the swing anyway.
+
+**The fix** (branch `desk-fieldshield`, `8e840c71` + the fix pass `f9b658a4`, merge `e7893067`):
+`townweapon.player_weapons_sent` answers per regime and per arm (none by default),
+`send_player_weapons` asks it once and logs `FIELD SHIELD` / `TOWN WEAPON` per arm;
+`--field-player-weapons` (default off) sends the pre-fix `[player, lead, 0]` byte for byte. The two
+town arms are unchanged (the code reviewer ran all 32 arm combinations on the old and new trees:
+every town arm byte-identical). Two read-only reviewers (evidence, code/tests) returned eight
+findings, all minor or nit, all applied — the town carrier relabelled OBSERVED at every site
+(CONFIRM-2 §7), the flag locks reading `global` in `main()`, the vacuity pair's wording, the
+jump-table normalisation named. The fixer died on a usage limit with its edits uncommitted; the
+orchestrator verified and finished them. `test_townweapon` 70 vaulted / 55 bare (floor 45 → 55).
+The lane's sweep: 77 of 77 affected tests green, 6,298 checks, then test_webgate 9,
+test_harness 181, test_preflight_owner 30 serially; **test_handshake NOT RUN** — a sandbox stack
+started from `C:\gd\Rurik` at 14:35 holds 6112 (not this session's; left alone). On the merged
+tree (after main's `19da8c97`): test_townweapon 70, test_sandbox 140, test_itemmoves 184, the five
+lints green.
+
+**Owed on the client** (`PLAN.md` 8.1): F1 a field load with `--player-weapon starter_sword
+--player-offhand starter_shield` — the body holds both (PREDICTION); F2 the same, attacking the
+practice target — the swing plays and lands, no crash dialog; F3 `--field-player-weapons` — the
+shield gone again, `20260923T154229`'s picture.
+
+---
+
 ### R-SANDBOX, hostile caps lifted: the verifier's fixes -- 2026-09-24 -- **one hostile past both caps was refused for one; the spin-fit law printed a constant it never measured; the two open residues were in the log and not in §8; and the client half of the definition defect was stated as fact**
 
 Corrects the entry below it, "R-SANDBOX, hostile level and rank caps lifted -- 2026-09-24"
@@ -382,6 +489,17 @@ lints green; `--snap` of a lifted hostile page in both themes read.
 
 Records: `tools/orchestrator/README.md` (the compiler paragraph, the smoke count, the state
 laws), `PLAN.md` §3's R-SANDBOX row, `TESTS.md`'s `test_sandbox` entry.
+
+---
+
+### DESKWORK-D1, town combat withdrawn -- 2026-09-24 -- **the owner: combat in a town is non-stock behaviour, out of scope**
+
+The carrier fix left one town item open in `PLAN.md` 8.1's D1 line: town combat with no hand
+declared (the player's `0x006D` is withheld in a town and the town `0x006E` carries empty
+hands, so a swing there would start with nothing declared in either carrier; never exercised).
+The owner, the same day: "town combat shouldn't be a concern for us - it's non-stock
+behavior". Retail has no town combat to match, so there is no picture to confirm and nothing to
+build. Withdrawn; the line leaves 8.1 and CONFIRM-2's closing paragraph records the ruling.
 
 ---
 

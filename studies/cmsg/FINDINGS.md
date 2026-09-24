@@ -1987,6 +1987,12 @@ owner's answer to the one-word question (2026-09-24): on retail no weapon is sho
 in a town, only on the paper doll** — the wire's picture (0 own `0x006D`, empty-handed town
 `0x006E`) and now ours.
 
+**RUN 2026-09-24, the FIELD (F1-F3, studies/deskwork/CONFIRM-2026-09-24.md §8): the field
+shield is OBSERVED.** The load's player `0x006D` is now withheld in a field too (retail: 0 of 44).
+A sword-and-shield field body keeps the shield at load (F1), swings the sword and lands 37 hits
+with no assert (F2), and `--field-player-weapons`, the same wire plus that one message, erases the
+shield again (F3). The own body gets no `0x006D` in either regime now, as on retail.
+
 **(f) The carrier (the CONFIRM-2 desk fix, 2026-09-24).** The question the run left — WHAT
 draws a town body's weapon, and what does retail send when it changes — was put to the same
 96 connections with predictions stated first (`weaponcensus.py`'s "every NPC, never a player"

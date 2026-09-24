@@ -67,6 +67,7 @@ import control  # noqa: E402
 import cage  # noqa: E402
 import accounts  # noqa: E402
 import datcheck  # noqa: E402  -- toolkit/mapdata, the archive half of the gate
+import childjob  # noqa: E402  -- the servers die with this process: Stack.start
 
 # The Win32 bindings -- kernel32/ntdll/shell32, their argtypes and
 # UNICODE_STRING -- moved to `portclaim.py` with `image_name`, `cmdline` and
@@ -144,6 +145,7 @@ class Stack:
         self.echo = echo
         self.procs = {}          # name -> Popen
         self.logs = {}           # name -> path
+        self.job = None          # childjob.KillOnClose once start() runs; see there
 
     def _echoes(self, name):
         return self.echo is True or (bool(self.echo) and name in self.echo)
@@ -205,6 +207,23 @@ class Stack:
         # in all, and it grows with each enabled non-explorable content row. The
         # deadline is here to catch a child that NEVER listens; 60 s still does.
         os.makedirs(self.logdir, exist_ok=True)
+        # THE SERVERS DIE WITH THIS PROCESS, HOWEVER IT ENDS (2026-09-24).
+        # stop() below runs from main()'s `finally`, and a `finally` does not
+        # survive TerminateProcess -- which is what the orchestrator's Stop and
+        # its window close both were. Windows does not kill children with their
+        # parent, so two authsrv.py processes held 6112 for hours after the
+        # owner closed the orchestrator, and every other worktree's launch was
+        # refused behind them. Each server goes into one kill-on-close Job
+        # Object whose only handle is ours; the OS closes that handle when this
+        # process dies, and the close kills the job. childjob.py has the rest,
+        # and test_childjob.py kills a parent to prove it.
+        # A job that cannot be made is SAID, not refused: the stack still runs
+        # and stops as it always did, and the fallback for a leak is --replace.
+        try:
+            self.job = childjob.KillOnClose()
+        except OSError as exc:
+            print(f"  WARNING: no kill-on-close job ({exc}); a server outlives "
+                  f"this process if it is killed from outside")
         for name, host, port, cmd in self.specs:
             self.logs[name] = os.path.join(self.logdir, f"{name}.log")
             logf = open(self.logs[name], "a", encoding="utf-8")
@@ -213,6 +232,17 @@ class Stack:
                 text=True, encoding="utf-8", errors="replace",
                 creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
             self.procs[name] = proc
+            if self.job is not None:
+                try:
+                    self.job.adopt(proc.pid)
+                except OSError as exc:
+                    # A child that already exited cannot be adopted, and the
+                    # poll in the loop below names that exit; only a LIVE
+                    # child left outside the job is worth a warning.
+                    if proc.poll() is None:
+                        print(f"  WARNING: {name} (pid {proc.pid}) is not in the "
+                              f"kill-on-close job ({exc}); it outlives this "
+                              f"process if it is killed from outside")
             threading.Thread(target=self._pump, args=(name, proc, logf),
                              daemon=True).start()
 
@@ -259,7 +289,12 @@ class Stack:
             try:
                 proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                print(f"  {name} did not exit; leaving pid {proc.pid} to the OS")
+                # Not an orphan while the job holds it: the kernel kills it
+                # when this process exits and the job's handle closes.
+                held = self.job is not None and self.job.holds(proc.pid)
+                print(f"  {name} did not exit; leaving pid {proc.pid} to "
+                      + ("the job, which kills it when this process exits"
+                         if held else "the OS"))
 
 
 # The checkpoint ladders and their referee moved to `runladder.py`. They are

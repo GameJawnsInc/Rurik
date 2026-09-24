@@ -26,7 +26,9 @@ python toolkit/harness/session.py
 
 It pre-flights the ports (a stale listener is named by pid and image;
 `--replace` stops it if it is a python server, and refuses to touch anything
-else), starts all three servers and proves each owns its port, drives the
+else), starts all three servers and proves each owns its port (and the
+servers die with it however it ends, killed from outside included: a
+kill-on-close job, `toolkit/harness/childjob.py`), drives the
 client through login → EULA → Play with focus-verified clicks, and judges the
 run from the client's own messages — one `[PASS]`/`[FAIL]` line per checkpoint,
 ending at the spawn request. `--until login` stops sooner, `--serve` runs just
@@ -816,7 +818,8 @@ attribute ranks for the character and the heroes are set IN GAME and kept by
 `--persist`, which a sandbox run always passes. **Compile** shows the overlay, the
 command and what the stored character already holds on the Run tab; **Launch** runs the usual
 harness on the slice archive with the overlay merged in for that launch only, and
-closing the game client ends the run. The same run without the window is
+closing the game client ends the run. **Stop**, or closing the window, ends the whole
+run — the harness, its servers and the client. The same run without the window is
 `python toolkit/harness/sandbox.py --spec X.toml --launch` (`--example` prints the
 slice as a spec). Needs `vault/run/slice/` (SLICE-B9's `compose.py --name slice
 --build`). [tools/orchestrator/README.md](tools/orchestrator/README.md).
