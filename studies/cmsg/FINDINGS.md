@@ -1755,7 +1755,7 @@ study found no `0x006F` on outpost equips (0 of 5), so retail's outpost path for
 is unwitnessed; the `0x006F` handler is regime-blind, so sending it is safe on our client.
 **Open, out of this arc's scope** (the engineering review's side note): our TOWN `0x006E`
 carries the weapon at visual 0, which retail's never does (0 of 2,245) — a pre-existing
-divergence worth its own item.
+divergence worth its own item. (Closed the same day: §"The town weapon" below.)
 
 **Shipped** ([`toolkit/authsrv/visstatus.py`](../../toolkit/authsrv/visstatus.py) is the leaf;
 `test_visstatus.py`, 63 bare / 73 vaulted after the fix pass): `0x00EF [flags, 0xFF]` at
@@ -1837,3 +1837,639 @@ double-click it back: the body stays bare (the fix pass's filter; under
 (`vis_flags` in the store), the icon shows it at `I`. What a run cannot settle alone:
 retail's exact echo bytes (b); the cape's third and fourth menu TEXTS (string ids 0x32F/0x331,
 unread — their icons 2 and 3 are read from the widget's table).
+
+### The town weapon — the outpost body's empty hands, `select_weapon_set` through the one gate, `--no-town-weapon-strip` (DESKWORK-D1, 2026-09-23)
+
+**The question** (the display-mode fix pass's side note in (c) above; `PLAN.md` §8.1's D1
+bullet): our TOWN `0x006E` carried the weapon at visual 0 where retail's never does. The
+premise was re-derived from the tapes before anything was built — with a finer join than the
+fix pass's — and then closed. Identifiers: `EVID-D1W-<n>` (this document's `EVID` word, a
+third series; each token is one census fact). Every number below is `livewire.decode_conn`
+over every `origin=LIVE` game connection (96, all decoding closed), the regime read from the
+`0x0199` INSTANCE_LOAD_INFO byte (47 outpost connections, 44 field, 5 with no `0x0199` and no
+`0x006E` — character-select traffic), reproduced by
+[`test_townweapon.py`](../../toolkit/authsrv/test_townweapon.py) §2 as floors.
+
+**(a) The load (EVID-D1W-1, OBSERVED).** `0x006E [agent, lead, off, five armour, two costumes]`:
+every OUTPOST body is empty-handed on BOTH visuals — **0 of 2,245** carry a lead or an off
+hand. That count is 2,195 strangers and the owner's OWN body on 50 loads, and the own body is
+the one whose inventory the tape carries: it is the `0x006E` whose armour ids all sit in ONE
+type-2 (equipped) bag of the connection — **not** "any type-2 bag", because a hero's equipped
+bag is type 2 too, four connections carry more than one, and the first pass of this census
+counted a hero's shield as the player's (refutation (1) below). That bag holds a lead on all
+50 outpost loads (28 lead only, 22 lead + off hand) and the body shows neither. In a FIELD the
+same join gives 48 own loads: 8 with no bag weapon carry none, 17 with a lead alone carry
+visual 0 and leave 1 empty, 23 with lead + off hand carry both — **40 of 40 leads, 23 of 23
+off hands**, and never a hand the bag lacks. So the own array reflects the bag in a field and
+is empty-handed in a town, under one inventory, on the same character. (The fix pass's "0 of
+2,245 / 40 of 40" counted visual 0 only and any type-2 bag; both numbers survive the finer
+join, and the off hand is now counted too.)
+
+**(b) The changes (EVID-D1W-2, OBSERVED).** `0x006F [agent, slot, item]` never writes a hand
+in an outpost — on ANY agent, 0 writes to slot 0 or 1 across the 47 outpost connections —
+while the own field body's hands are written 11 times. Fourteen outpost hand changes are on
+tape, and none is answered with a hand `0x006F`: the **four weapon-set switches** (c2s
+`0x0032` on `20260919T103604 :58638` at t=150.257 / 159.967 / 172.746 / 224.632 — `0x0148`
+then the `0x014B` / `0x0152` rows only, e.g. `[0x0148 [241, 1], 0x014B [241, 17730, 136, 1],
+0x014B [241, 23247, 136, 2]]`); the **four double-click equips** of a weapon onto the occupied
+lead hand (c2s `0x0030` on `20260819T132414 :53419` — a type-27 sword and a type-32 weapon,
+`0x0152 [159, occupant, item]` alone, twice for the double press); the **off hand dragged
+out** (c2s `0x004F [1, 136, 6]` on `:58638` — `0x014B [241, 17730, 136, 6]` alone); and the
+**PvP equipment panel's five creations** straight into equipped slot 0 or 1 (c2s `0x0086` on
+`:58638` — axe 23247, scythe 12689, spear 13633 and spear 23652 to `(231, 0)`, shield 13467
+to `(231, 1)`, each a `0x0161` + `0x013E` + `0x015D` + `0x005D` + `0x005E` + `0x013A` burst
+with no `0x006F`). In a FIELD the four switches of the same capture's `:56576` (agent 25,
+RUN-WEAPONS-1A) each carry the hands: `0x006F [25, 0, 209]`, `[25, 0, 210]`, `[25, 0, 208] +
+[25, 1, 207]`, `[25, 1, 0] + [25, 0, 212]` — the W9 batches `test_weapons` §18 replays.
+
+**(c) The rule is the SLOT, not the regime (EVID-D1W-3, OBSERVED: one own-body armour write
+and 31 strangers' against fourteen hand changes with none).** The same
+PvP panel in an outpost created a HEAD piece — c2s `0x0086 [46, 274, [], 9, 4, 0]` on
+`20260917T160915 :58557` at t=73.505; the reply creates item 23284 (type 16) into equipped
+`(843, 4)` and carries **`0x006F [336, 6, 23284]`** — the one own-body `0x006F` on any outpost
+connection. The STRANGERS corroborate it: across the 47 outpost connections retail wrote 31
+`0x006F` onto other agents' ARMOUR slots — slot 2 ×6, 3 ×4, 4 ×7, 5 ×4 (and one emptying it),
+6 ×5 (and two emptying it), 7 ×2 — and 0 onto a hand (the fix pass's census, the review's
+WEAP-R2; the own field body's 11 hand writes are the only hand `0x006F` on tape). Armour
+visuals are written in a town; the hands are not. This refines
+`itemstore.py`'s VISUALS paragraph ("0x006F rode … none in an OUTPOST, 0 of 5"): all five it
+counted were hand changes, and the confound it left open (the outpost or the swap?) resolves
+to neither — it is the slot. The display-mode pass's own filter is unaffected (it works on
+slots 6/7/8, which a town does write), and its "no `0x006F` on outpost equips" negative stays
+true for the hands.
+
+**(d) Heroes and NPCs (EVID-D1W-4, OBSERVED; nothing changed).** No hero body exists in an
+outpost on retail: 3 party heroes (`0x01C2`'s agent ids) over the outpost connections, none
+created (`0x0020` / `0x0021`), none with a `0x006D`; the field's one hero has both. Ours
+withholds hero bodies in a town already (`PARTY_BODY_IN_OUTPOST`, SLICE-H2b), so there is no
+hero hand to strip and nothing was built. Retail's outpost NPCs DO carry weapons — `0x006D`
+lead non-zero on 466 of 1,653 outpost `0x006D` MESSAGES (206 lead only, 260 both hands; 23
+off hand only), which is 403 of 1,510 distinct (connection, agent) bodies, against 2,994 of
+3,502 messages (1,777 of 2,082 bodies) in fields — so the empty hands are the PLAYER body's
+rule, not a town's; NPC hands are reported and untouched. (This section's first record
+counted messages and called them bodies — the review's WEAP-R3.)
+
+**(e) Why the server does it (RECONSTRUCTION from a measured negative).** The client's
+`0x006E` / `0x006F` handlers (0x0091E1C0 / 0x0091E1E0) reach the AvApi dresser (0x007DFCE0)
+through ChCliApi message workers (0x00810E30–0x008110B0 / 0x008110F0–0x008112E8). This
+section's first record cited "(c) of The display mode" for "no regime test on the path" — but
+that census was of the display FLAGS' readers and never looked for a regime read (the review's
+WEAP-R1). The fix pass measured it: `msghandler.py 0x006E --follow --depth 2` and the same for
+`0x006F` disassemble the handler, the worker and every function the worker calls directly —
+fifteen functions, the dresser's own fifteen-instruction body among them (a lookup 0x00802160,
+the assert stub, then `call 0x007F70B0`) — and none holds a direct call to `MissionCliGetMap`
+(0x0084D9B0) or the map-flags reader (0x0084D950); of `MissionCliGetMap`'s 37 direct callers
+(`codescan --xrefs`), none lies in those functions. NOT searched: 0x007F70B0 and deeper, and
+indirect calls — a bounded negative, not a proof. Our own town `0x006E` did carry the hand (the
+run `20260923T210546`'s c1 wire, seq 100: `[1, 1, 0, 3, 4, 5, 6, 7, 0, 0]` under a map-148
+outpost load) and the body stood armed. The shape is OBSERVED; that the SERVER strips (rather
+than the client ignoring a hand in a town) is what the run below settles on our client — if the
+body is empty-handed only under the strip, the array is the channel.
+
+**Refuted or refined on the way.** (1) The first census pass reported one field own body with
+an off hand in the bag and visual 1 empty (`20260914T005758 :56011`, t=87.209): the "bag off
+hand" 779 sat in a HERO's type-2 bag beside the player's bow — a join artifact, fixed by
+identifying the own bag as the one holding the body's armour. (2) `itemstore.py`'s "0 of 5"
+is true and incomplete: a sixth outpost own-body `0x006F` exists and is the head's ((c)). (3)
+`test_weapons` §18 replayed the FIELD connection's W9 batches from states with no `map_id` —
+an implicit town under `map_explorable(None)` — so with the strip on, the section reddened on
+a regime it never declared; it now sets `EXPLORABLE`. (4) The transition question ("entering
+a field from an outpost; returning") needs nothing built: every load builds a fresh array
+from the bag (`player_worn_array`) and the strip is per load, so the field load carries the
+hands and the return to the outpost leaves them out; the 50 own outpost loads above include
+such returns.
+
+**Open (the fix pass, the review's WEAP-R2; reported, not built).** The town ARMOUR equip.
+`plan_equip` / `plan_move` append a `0x006F` only when `visuals` is True — a field — so a helm
+equipped in a town rides `0x014B` alone; retail, per (c), writes armour visuals in outposts
+(31 strangers' writes, the own PvP head). No own armour equip in an outpost is on tape, so
+whether retail answers a town `0x0030` of a helm with `0x006F [agent, 6, item]` is
+RECONSTRUCTION from the PvP head's precedent — probably one message short of retail, and the
+display mode's hiding-mode equip in a town ((c) of that section, its open (b)) is the same
+question. `PLAN.md` §8.1's D1 bullet carries it.
+
+**Shipped** ([`toolkit/authsrv/townweapon.py`](../../toolkit/authsrv/townweapon.py) is the
+leaf — `strip_hands`, `drops`, `filter_hand_writes`, stdlib, no repo import;
+`test_townweapon.py` 35 bare / 46 vaulted, TESTS.md). The load: `visible_worn` — the display
+mode's gate over `player_worn_array`, the ONE dressed copy — zeroes visuals 0 and 1 in a town
+after the mode's strip, and logs `TOWN WEAPON: the body's 0x006E leaves out the lead hand
+(item N, visual 0) …`. The changes: `visible_slot_writes` — the gate every item batch commits
+through — DROPS (not zeroes: retail sends nothing) a player `0x006F` into visual 0 or 1 in a
+town, under either display-mode setting, and `select_weapon_set`'s three direct hand sends
+(the off hand emptied, the lead, the off hand entering) now build a batch that passes the same
+gate, so the only direct player `0x006F` sender left in `authsrv.py` is
+`handle_visibility_flags`' (slots 6/7/8; locked by the test). In a field nothing moved: the
+load carries the hands and F1–F4 carry retail's `0x006F` pair in retail's order. The equipped
+BAG and the item store are untouched, so the paper doll and the weapon-set panel still show
+the weapon a town body does not; the server's swing model is untouched (a town never swings).
+**`--no-town-weapon-strip` reverts** to every run before this day (the town body armed, the
+switch's `0x006F` sent in a town — KNOWN-BAD, driven by the test). No schema change (no new
+opcode; the hands were already `weaponcensus.py`'s slots 0/1).
+
+**Runsheet and PREDICTIONS (pre-registered; the orchestrator runs it after the merge, no
+owner needed).** Server flags: `--weapon-set 1=starter_sword+starter_shield` (the default
+outpost); then the same with `--explorable`; then the outpost with `--no-town-weapon-strip`.
+Harness steps as `--walk` items (`vk:0x49` is `I`, `vk:0x70` / `vk:0x71` are F1 / F2;
+`shot:1` after each).
+*Outpost, default* — (1) `wait:3 shot:1`: the body stands with **no weapon in either hand**
+(the hammer is not drawn; the rival — the client draws the bag's weapon regardless — would
+show it and refute (e)); the gamesrv log has `UPDATE_AGENT_VISUAL_EQUIPMENT(+armour) [hands
+empty: a town]` with visuals 0 and 1 zero (the label names what the array carries — the fix
+pass) and the `TOWN WEAPON: … leaves out the lead hand (item 1, visual 0)` line right
+before it. (2) `vk:0x49 wait:1 shot:1`: the inventory panel's doll **holds the hammer** in
+the weapon cell and the F1–F4 strip shows set 1's sword + shield — the bag is untouched. (3)
+`vk:0x71 wait:1 shot:1`: F2 — the log has `SET_ACTIVE_WEAPON_SET(1)`, the shield's
+`ITEM_CHANGE_LOCATION`, the `ITEM_SWAP_LOCATIONS` and `TOWN WEAPON: the body's 0x006F for the
+lead hand (item 11), the off hand (item 12) is not sent`; the doll now shows the sword and
+shield, the panel set 2 active, and the world body **still empty-handed**; no assert (retail's
+outpost switch is exactly these rows). (4) `vk:0x70 wait:1 shot:1`: F1 back — the doll shows
+the hammer, the body unchanged. *Explorable, default* (the control) — (5) `wait:3 shot:1`:
+the hammer **in hand**; no `TOWN WEAPON` line; the `0x006E` carries item 1 at visual 0 and is
+labelled `UPDATE_AGENT_VISUAL_EQUIPMENT(weapon+armour)`. (6)
+`vk:0x71 wait:1 shot:1`: F2 — the sword and shield **appear on the body** with `0x006F [1, 0,
+11]`, `[1, 1, 12]` in the log. *Outpost, `--no-town-weapon-strip`* (KNOWN-BAD) — (7) `wait:3
+shot:1`: the hammer in hand in the town (the pre-fix picture); (8) `vk:0x71 wait:1 shot:1`: F2
+puts the sword and shield on the body (`0x006F [1, 0, 11]`, `[1, 1, 12]` sent in a town). What
+a run cannot settle: whether retail's client would ALSO hide a hand the server sent in a town
+(no retail outpost `0x006E` ever carries one, so the question has no tape) — irrelevant to
+fidelity, since the server now sends what retail sends.
+
+**The fix pass (2026-09-23, the combined review's WEAP-R1–R8; no blocker, no major; every
+finding's evidence re-derived before it was applied, and none declined).** (e) re-labelled and
+MEASURED — the flags census the first record cited was not a regime census; the handlers' path
+disassembled to depth 2 with its unsearched edge named (R1). The strangers' 31 outpost armour
+`0x006F` cited in (c), and the town ARMOUR-equip gap recorded as Open here and in `PLAN.md`
+§8.1 (R2). "Bodies" made "messages" in (d), the leaf, the test and TESTS.md, with the
+distinct-body count beside it — 403 of 1,510 (R3). The source lock's regex widened to every
+`*send(` spelling, `_send(` / `hsend(` / `psend(` included (R4). The burst's `0x006E` label
+built from the ARRAY — `(+armour) [hands empty: a town]` in a town, `(weapon+armour)` in a
+field — and locked; the runsheet above reads the new label (R5). The own body cross-checked
+against `0x0022` WORLD_UPDATE_CONTROLLED_AGENT: the armour join names exactly the controlled
+agents that have a `0x006E` on 91 of 91 regime connections (47 outpost, 44 field; four
+connections' `0x0022` also names a second, bodiless agent for a moment — value 1 between the
+own body's 3 and 1), pinned as a conjunct in `test_townweapon` §2 (R6). The merge sweep's list
+is to include every test that imports `authsrv` as a module, not only the text readers (R7,
+process — the fix pass's own sweep does). `itemstore.py`'s "the same outpost sessions" made
+"the same outpost (map 248) on two sessions" — `0x0199 [.., 248, 0, ..]` on both `:58638`
+(20260919) and `:58557` (20260917) (R8). `test_townweapon`: floor 35 → 36 bare (the label
+lock), 46 → 48 vaulted (the cross-check), each from a real green run.
+
+### World-map travel — `c2s 0x00B1 MAP_TRAVEL`, the `s2c 0x0094` unlock state, and the transfer it hands off (DESKWORK-D1 step 7, 2026-09-23)
+
+**The question.** The retail c2s triage (step 3) named `0x00B1` MAP_TRAVEL medium
+and left it `DROPPED_ON_PURPOSE`: an arm that transferred the client to an unbuilt
+map would strand it, and the route asked two prior things — what the world map's
+click gates on, and the unlocked-outpost state nothing models. Both are answered
+here from the tapes and the binary, and the arm ships.
+
+**The request, re-derived from the tapes (OBSERVED, 10 of 10 on 10 connections over
+6 captures; `livewire.decode_conn`).** Every c2s `0x00B1` is `[map_id, 0, 0, 0, 1]`
+(word map_id, byte, word, byte, byte). The destination map varies (248 ×5, 148 ×2,
+281, 242, 449); **the trailing four fields were `0, 0, 0, 1` on all ten and never
+varied** — region / district / language / a flag are the candidates the field widths
+suggest, UNVERIFIED because nothing on the tape moves them. The reply is
+`0x01D9 [2, 1, '']` then the transfer pair `0x01A5` GAME_SERVER_TRANSFER and `0x0099`
+MAP_UPDATE_CURRENT — **10 of 10 in sequence, 9 of 10 with `0x01D9` the first non-clock
+s2c** (the tenth interleaves an ambient `0x001E`/`0x0029` first, the same busy-wire
+effect the kick's row shows) — then the server hangs up and the client re-dials the
+transfer address, sending c2s `0x0008` every time. **No `0x0028` AGENT_STOP_MOVING
+precedes it** (the player is standing in an outpost), unlike a portal transfer where
+the moving body is stopped first (SLICE-B8). The `0x01D9` batch is OBSERVED; the two
+bytes' and the empty string's meaning is UNVERIFIED — its worker `0x0085a290` sets a
+state at `[ctx+0x54]` and fires UI notifications (`0x1000012a`/`12d`/`130`), with no
+assert gating it, so a bare send is accepted (RECONSTRUCTION that it is; the
+client-confirmation run is the witness). Retail's `0x01D9` rides its own TCP segment
+18.6–42.2 ms before the pair's (10 of 10); ours go out back to back — the gap is
+UNREPRODUCED, worth reproducing only if the client run shows a UI race.
+
+**The send gate, statically (38797; `sendsites.py`, `codescan.py --xrefs/--dis`,
+`asserts.py`; corrected by the fix pass).** The travel wrapper `0x0085C280` has no
+direct CALL — `sendsites.py` counts calls — and is NOT "reached through a pointer":
+`codescan --xrefs` finds 0 stored words holding its VA and exactly one direct reference,
+the one-instruction thunk `0x008576E0` (`jmp 0x85c280`), whose one caller is the `call`
+at `0x004A791F`. **The route's "one caller `0x004A791F`" was right**; the landing's
+pointer sentence was wrong. That call sits in `0x004A78C0`, which reads a UI record's
+`[+0x20]`: `== 1` sends `0x00B1` (the travel path), `== 0` and `== 2` take sibling thunks
+`0x008576D0`/`0x008576F0`. Before that switch, `0x004A78C0` ITSELF calls the three
+map-state getters at `0x004A78ED`/`F6`/`FF` — `0x0084DE70` (`missionContext+0x2a8`
+bit 1), `0x0084DF60` (bit 4) and `0x0084DEC0` (`missionContext+0x190` bit 0) — and a
+failed getter branches to `0x004A795A`, which continues into further calls rather than
+returning (the refuter read it as a UI-frame confirm path): an immediate-vs-deferred
+branch, not send-vs-drop. `0x004A78C0` has three direct callers. What the world map
+OFFERS as a clickable destination is the unlock state below; the send itself carries
+whatever record the UI built.
+
+**The unlock state nothing modelled — `s2c 0x0094` (schema 148: five `array32`) — and
+the SECOND writer the fix pass found.** Our server sent no `0x0094` (grep `authsrv.py` at
+`3b2df394`), but the client's set was NOT empty: **`s2c 0x0099` MAP_UPDATE_CURRENT's
+handler `0x0091ec20` pushes `[msg+8]`, `[msg+4]` and calls `0x00812600`, which loads
+`[[ctx]+0x2c] + 0x60c` — the SAME store `0x0094`'s fifth CopyBits fills (`lea ecx,
+[esi+0x60c]` at `0x00812343`) — and calls `0x0059d130`, which ends `bts eax, edx` at
+`0x0059d239` (word `map>>5`, bit `map&31`).** OBSERVED in the binary. Our server has
+always sent `0x0099 [map, 0]` at every load and in every transfer, so before this arc
+the client's arr4 held the current map plus every map zoned into; what `0x0094` adds is
+the OTHER served outposts, all at once. `0x0094`'s handler `0x0091eb10 -> 0x008122f0`
+copies the five arrays into `charCtx +0x5cc/+0x5dc/+0x5ec/+0x5fc/+0x60c` through
+Array::CopyBits `0x00473550` — a REPLACE, **no create-once, no ordering gate**,
+`Array:130` `Bytes() >= bytes` the only assert on the path (`ChCliApi:1641` sits at
+`0x00811AB9`, the fog accumulator — the landing misplaced it here) — so it is safe to
+send in any load state; and CopyBits grows the store before that check, so our 28-dword
+(38797) / 29-dword (38888) arr4 against retail's constant 27 cannot assert
+(RECONSTRUCTION; the width is ours).
+**MEASURED over the 96 live connections, 29 sightings on 29 connections:** arr4 is a
+map-id bitmap, bit index == map id, 27 dwords on 29 of 29; arr0-3 are EMPTY on 27 of 29,
+and on the two Kamadan-character logins (`20260914T005758`, `20260916T150306`) arr0 and
+arr1 carry 18 dwords with bit 544 set — UNVERIFIED what they are (mission completion is a
+candidate); all four are sent empty as a labelled choice. **arr4 is the client's
+KNOWN-MAPS set, not an outpost list:** ids our content marks explorable are set in it —
+280 Isle of the Nameless on 14 of 29, 146 Lakeside County on 5 of 29 (168 is set on 29 of
+29, but our row 168 is a created chain in a reused slot and says nothing of retail's
+type). Offering only enabled non-explorable content maps is OUR policy, RECONSTRUCTION.
+**Cadence:** retail sends `0x0094` ONCE PER LOGIN — on a login's first map-loading
+connection (28 of 29 first of their capture; the 29th is `20260919T103604`'s second
+login), on 0 of 61 connections that arrive from a transfer, all 10 world-map-travel
+arrivals included — after `0x0199` and before the fog pair `0x008B`/`0x008A` on 29 of 29
+(and after the connection's first `0x0099`, 29 of 29). In-session unlocks then arrive as
+`0x0099 [map, 1]`: one on the corpus, `[281, 1]` on `20260817T231139` conn `54071`
+(map 310) at +783.2 s, the second field's only non-zero in 268 `0x0099`. **THE JOIN,
+which replaces the landing's "across 22 connections EVERY map the client then sent
+`0x00B1` to had its arr4 bit set at load" (9 of 10, and no 22 exists):** every one of the
+10 `0x00B1` destinations had its arr4 bit set BEFORE the click — 9 by the login's
+`0x0094` (248 ×5, 242, 148 ×2, 449), and 281 by that `0x0099 [281, 1]` 24 s before the
+owner clicked it (its bit was CLEAR in the login's `0x0094`, which the landing's own
+parenthetical admitted while the sentence claimed the opposite). The client already
+models this id space: `c2s 0x0092` MISSION_MASK_REPORT reports one bit per map id back
+(`authsrv.mission_mask_bytes`). **LABELS:** arr4 == the known-maps bitmap, bit == map
+id — OBSERVED (29 sightings, both handlers' offsets); its two writers (`0x0094` replaces,
+`0x0099` sets one bit) — OBSERVED in the binary; arr0-3 — UNVERIFIED; **that a set arr4
+bit is what the world map offers as a pin — CORROBORATED by the join (a set bit preceded
+every click, by one writer or the other) and RECONSTRUCTION** until the owner opens `M`
+on our client and sees our outposts; the click's other preconditions are the getters
+inside `0x004A78C0` above.
+
+**What the server now does (`handle_map_travel`, `maptravel.py`, behind
+`--no-map-travel`; the login's `0x0094` behind `--no-map-unlock`; as corrected by the
+fix pass).**
+
+- **At LOGIN, once — not on every load.** Right after `INSTANCE_LOAD_INFO` and before
+  the fog-init pair (retail's bracket, 29 of 29), `send(0x0094, payload)` from
+  `maptravel.unlock_message`: arr0-3 empty, arr4 with bit == map id for every travelable
+  content map. **Travelable = enabled, NOT explorable, with a KNOWN spawn, and warmed** —
+  the `(0, 0)` placeholder rows (`[map.194]`, `[map.55]`: "not a coordinate") are
+  withheld, and so is any destination whose navmesh did not load at startup
+  (`TRAVEL_UNSERVABLE`, filled by `main()`'s prewarm: 165, 166, 167 on this archive
+  generation, whose created-chain files are not installed). The offer on this archive is
+  therefore `[143, 144, 148, 242, 248, 310, 449]`. The bitmap is
+  `mission_mask_bytes(MAP_ID_COUNT) // 4` dwords wide (28 on 38797; retail's 27, labelled);
+  an id past the width is logged as overflow, never dropped silently. **Not resent on a
+  re-entry after our own transfer**: `send_transfer` writes a one-shot
+  `TRANSFER_ARRIVALS[(world, player)] = (dest, issued_at)` and the load pops it
+  (`maptravel.arrival_skips_unlock`, TTL 300 s; consumed whatever the answer, so a later
+  relaunch on the same map gets its `0x0094` — `TRANSFERS_ISSUED` is never popped, which
+  is why it could not serve). A resend would REPLACE arr4 and wipe what `0x0099`
+  accumulated for maps outside our set. **The order matters because of the second
+  writer**: our `0x0094` precedes the burst's `0x0099 [map, 0]`, so the replace comes
+  first and the current map's bit is set after it — our bitmap may omit the map you are on
+  (an explorable under `--map 168`). **One `0x0094` site in the server**, counted over
+  every spelling across `toolkit/authsrv/*.py` by `test_maptravel` (a duplicate sender of
+  unlock state wiped a library and crashed a client on 2026-09-15). A labelled policy
+  (RECONSTRUCTION of the offer from our content), the shape of the hero add's `0x0018`
+  from the owned set.
+- **On `c2s 0x00B1`**, `plan_travel(WORLD, cur_map, dest, exclude=TRAVEL_UNSERVABLE)`
+  decides: **accept** a travelable map that is not the one you are on → `send(0x01D9,
+  [2, 1, ''])` then `send_transfer(..., send_stop=False)` (the pair `0x01A5`/`0x0099`, no
+  `0x0028`) then a graceful close; the client re-dials and the re-entry serves the
+  destination. The transfer carries the party, heroes and kicked-hero store through
+  `zone_carry_store`, exactly as a portal does (SLICE-B8 / JARIN). **refuse, with NOTHING
+  sent** (retail's refusal reply is NOT FOUND on any tape — no live `0x00B1` went
+  unanswered, none targeted the current map): the map you are already on, a map with no
+  served content row, an explorable, a `(0, 0)`-placeholder row, an unwarmed destination.
+  Each refusal logs its reason.
+- **The prewarm** (`83754cc6`, corrected): every travelable destination's navmesh is read
+  at startup through ONE shared archive and file table, gated as the portal prewarm is on
+  `--map` (the harness hands `--map` to the gamesrv alone, so the auth-only instance pays
+  nothing) and on the ARM (`a.no_map_travel`, read off the argparse namespace — the
+  landing's `MAP_UNLOCK_ENABLED` gate was read ~1,000 lines before the flag block set it
+  and never acted). MEASURED: 17.4 s → 13.0 s over the 12-map content set with the shared
+  archive (the rest is each map's own decompression), and startup to the listening line
+  17.7 s → **8.1 s** with `--map 449` once the placeholder rows left the set; 2.9 s under
+  `--no-map-travel`; 1.8 s without `--map`. The harness's listen deadline
+  (`session.Stack.start`) 20 → 60 s with this as the reason. A failed prewarm is worded
+  as "unwarmed, WITHHELD as a destination", not "this run serves NO collision".
+- `0x00B1` came OFF the `DROPPED_ON_PURPOSE` allowlist in the landing (`test_dispatch`
+  §10, `test_c2striage`); `overrides.json` GAME_CMSG 177's `why` records the arm and, now,
+  the two writers, the join and the thunk.
+
+**What a run cannot settle alone, and the runsheet exists for.** Whether a set arr4 bit
+is SUFFICIENT for the world map to offer a pin (the join shows one preceded every click;
+sufficiency is the owner's `M` press); retail's acceptance of a bare `0x01D9`
+(RECONSTRUCTION, no tape shows one out of the travel sequence); the three trailing
+`0x00B1` fields' meaning (UNVERIFIED); the `0x01D9` → pair segment gap (UNREPRODUCED).
+The landing said maps 194 and 310 "would strand the body": 194 and **55** carry the
+`(0, 0)` placeholder and the gate now withholds both; **310's spawn is retail's own
+measured arrival** (`(5089, 940)` on plane 4, one trapezoid — its row's provenance), not a
+placeholder, and it is offered.
+
+**Runsheet (the orchestrator runs it after the merge; loopback client, caged; the
+owner's hands for `M` and the click — a world-map click on an outpost is a travel
+order).** Through the harness, which supplies the gamesrv's `--transfer-alt` (every proven
+transfer used a second alias; re-dialling the endpoint just cut is NOT FOUND, tape T9):
+
+    python toolkit/harness/session.py --replace --keep-open --hold 900 --game-args "--map 449 --persist"
+
+or standalone, then a caged loopback client:
+
+    python toolkit/authsrv/authsrv.py --map 449 --persist --transfer-alt 127.0.0.31
+
+The gamesrv log at startup prints `pre-warming map N: a travel destination` for 143, 144,
+148, 165, 166, 167, 242, 248 and 310, then `travel destinations WITHHELD (unwarmed):
+[165, 166, 167]`; at the login's load, `MAP_TRAVEL_UNLOCK [7 destination(s) in arr4]`
+right after `INSTANCE_LOAD_INFO` and before `MAP_EXPLORATION_INIT_BEGIN`. PREDICTIONS:
+
+1. **Press `M` in Kamadan.** The world map offers our served outposts as clickable pins,
+   each on whichever continent view the client files it under: Great Temple of Balthazar
+   (248), Pre-Searing Ascalon (148), map 242, map 310, the two test slots 143/144 — and
+   Kamadan itself (its bit from the burst's `0x0099`). Lion's Arch and Kaineng Center do
+   NOT appear (withheld: placeholder spawns); 165/166/167 do NOT appear (withheld:
+   unwarmed). If NO pin but Kamadan's appears, a set arr4 bit is not sufficient — record
+   it. (Fog init must be on, the default; never press `M` on a map whose fog init was
+   skipped — `GmMapView.cpp(1731)`.)
+2. **Click Great Temple of Balthazar (248).** The gamesrv log prints `MAP_TRAVEL to map
+   248: 0x01D9 then the transfer pair; the client re-dials`, then on the new connection
+   `MAP UNLOCK: a re-entry after our own transfer -- 0x0094 NOT resent`; the client fades
+   and loads the Great Temple; the party, any heroes and a stored kick survive (the
+   carry). Press `M` there: the same pins (Kamadan's bit stays — the load's `0x0099` set
+   it and nothing replaced arr4).
+3. **Travel back to Kamadan, then relaunch the client** (`--persist`): the fresh login's
+   load prints `MAP_TRAVEL_UNLOCK [...]` again (the one-shot marker was consumed) and `M`
+   shows every pin. If it shows only Kamadan, the marker was not consumed — record it.
+4. **If the UI lets you select the map you are on**: the log prints `MAP_TRAVEL(map 449)
+   refused: already on map 449; nothing sent`, and nothing happens.
+5. **Control, `--no-map-travel`** (`--game-args "--map 449 --persist --no-map-travel"`):
+   the pins are unchanged (the unlock is still sent; no prewarm lines at startup); a click
+   on Great Temple logs `MAP_TRAVEL ignored (--no-map-travel)` and nothing happens — the
+   arm is the lever.
+6. **Control, `--no-map-unlock`** (`--game-args "--map 449 --persist --no-map-unlock"`):
+   the world map shows **Kamadan's pin and no other** — arr4 holds only what `0x0099` set.
+   (The landing predicted an EMPTY map; that was wrong, and an owner seeing one pin would
+   have been scored against the wrong expectation.) If a pin appears for a map never
+   zoned into, `0x0099` is not arr4's only other writer — record it.
+
+**The fix pass (2026-09-23, the same day).** Two reviews of the landing — an evidence
+refuter that re-derived the lane from the 96 live connections and the pinned client before
+reading the notes, and an engineering review with ten mutation arms and startup timings —
+found the ARM sound (the `0x00B1` shape, the `0x01D9` → `0x01A5` → `0x0099` batch, the
+refusals, the allowlist move; 10 of 10 reproduced) and the UNLOCK half's evidence not.
+Every contested measurement was re-derived here before a line changed, and every one of
+theirs held. Moved: the second writer of arr4, `0x0099`'s `bts`, named and its order
+against `0x0094` locked (TRAV-EV-1, blocker); "every destination set at load across 22
+connections" restated as 9 of 10 at load and 10 of 10 counting `0x0099`, the 22 dropped,
+the join added to the tape section (TRAV-EV-2 / ENG-TRAV-1, blockers); "arr0-3 empty on
+every tape" restated as 27 of 29 (ENG-TRAV-2, blocker); the per-load resend after the fog
+pair, labelled "as retail does", replaced by once-per-login before the fog pair with the
+one-shot arrival marker (TRAV-EV-3 / ENG-TRAV-3); arr4 relabelled the known-maps set with
+the explorables it carries, and the width divergence named (TRAV-EV-5 / ENG-TRAV-11); the
+constant-against-constant KNOWN-BAD replaced by `travel_batch_ok` on the real handler's
+output with `0x01D9` dropped, the gate locked by context, the one-sender guard widened to
+every spelling, the payload pinned, the flags locked contiguously — the engineer's four
+uncaught mutations (M5–M7, M9) now redden (TRAV-EV-4 / ENG-TRAV-6/7); the offer and the
+arm withhold `(0, 0)`-placeholder rows and unwarmed destinations (ENG-TRAV-8 /
+TRAV-EV-9); the prewarm gated on `--map` and the arm, shared, costed, and the harness
+deadline raised (ENG-TRAV-4/5, TRAV-EV-8); the runsheet given `--transfer-alt` through the
+harness and `--map 449`, its `--no-map-unlock` prediction corrected (ENG-TRAV-9);
+`ChCliApi:1641` dropped from the `0x0094` path (TRAV-EV-6); "reached through a pointer"
+corrected to the direct jmp thunk and the route's caller credited (TRAV-EV-7 /
+ENG-TRAV-10); the timing gap labelled (TRAV-EV-10); PLAN.md §8.1 trimmed to the open
+confirmation, the sweep count named, the prewarm recorded (ENG-TRAV-12). **Declined**:
+relabelling "arr4 gates the world map" CONTESTED (ENG-TRAV-1's suggestion) — the 281 case
+does not contest it once the second writer is counted, since 281's bit WAS set before the
+click, by `0x0099`; CORROBORATED-by-the-join and RECONSTRUCTION-until-`M` is the honest
+pair. Also declined: reproducing the 18.6–42.2 ms segment gap (TRAV-EV-10, a nit —
+labelled instead), and an explicit `travel = true` content column (ENG-TRAV-8's
+alternative) — the mechanical gates (spawn known, mesh warmed) withhold exactly the rows
+the reviews named without a schema change to a shared content file.
+
+### The party family — `c2s 0x009F HENCHMAN_ADD`, and the hireable marker `0x0071` (DESKWORK-D1 step 5, 2026-09-23)
+
+**Re-derived from the tape, no client launched.** Route step 5 asked the party
+family 0x98–0xB2 from HENCHMAN_ADD's witness: how outpost henchmen exist before
+the add, what the add's agent ids point at, what happens to the henchman after,
+and what the party carries into the explorable. The witness is capture
+`20260819T132414`, connection `:53419` (an outpost, map 242, Shing Jea
+Monastery, player 14, party 11), with the field side on the same capture's
+`:52606` (map 238) and the return on `:55414` (map 242 again). The second
+henchman capture `20260817T231139` corroborates the field shape (four loads,
+maps 309–312, three level-20 henchmen).
+
+**How the outpost henchmen exist — OBSERVED.** Six henchmen stand in the outpost
+as ordinary kind-9 NPC bodies, agents 1..6. Each is brought up like any NPC —
+`0x0056`/`0x0057` definition (defs 3485–3490), then a pre-create burst sent
+TWICE per connection (once at the load with the definitions, again as the body
+is created 5–9 s later): `0x009B` name, `0x009F [36, agent, 3]` the displayed
+level, `0x00A6` profession, **`0x0071 [agent]`**, then `0x00F0`, `0x0020` create
+(kind 9, speed 300), `0x0161` for its weapon item and `0x006D` — 24 of 24 sends
+in that order (the landing wrote `0x009A` here; no `0x009A` reaches agents 1..6
+in the outpost, it is the field's). **Two of those messages no other kind-9 NPC
+gets: `0x0071`, and the level property 36.** Both were sent for exactly those six
+agents and for **none** of the 38 other kind-9 NPCs on `:53419` (44 in all; 35
+others of 41 on `:55414`), in **both** outpost connections and **never** in the
+field; across all 96 live connections `0x0071` appears on 11, every one an
+outpost (maps 242, 281, 449). Its handler (`0x0091E220 → 0x008113D0`, `codescan
+--dis`) **binary-search-inserts** the agent id into a sorted dword set at
+`[ctx+0x2c]+0x574` — the same object `0x00B0`'s per-player array (`+0x80C`)
+lives in, not the party manager at `[ctx+0x4c]` that `0x01BF` and `0x01B2` use
+(the landing said "party context"); a duplicate id is skipped and no agent is
+looked up. The set's enumerator `0x0080E200` is called from `PtSearch` (asserts
+PtSearch:365 `listFrame`, PtSearch:1116 `partySearchTab < LISTS`), which ties
+the set to the party-search panel's lists from code. So `0x0071` is what marks
+an agent HIREABLE — the set the party window's henchman list offers.
+`GAME_SMSG_PARTY_HENCHMAN_HIREABLE` (medium: the handler read, the 6-of-6
+correlation, the whole-corpus census; `schema/overrides.json` GAME_SMSG 113;
+GWCA's offset numbering names its own `0x0071` differently and is not leaned
+on). Their `0x0020` allegiance dword is `'play'` (ALLEGIANCE_PLAYER), 6 of 6 on
+both outpost connections, where every other kind-9 NPC there is `'nonc'` (43 of
+43, 36 of 36) — the third discriminator, and the one the server does not
+reproduce (below).
+
+**The add — OBSERVED, 3 of 3.** c2s `0x009F [word agent_id]` carries the standing
+henchman's agent id (`[4]`, `[2]`, `[6]` at t=126.234/128.201/130.186), each
+answered 31–132 ms later by **`0x00B0` PLAYER_PARTY_SIZE then the `0x01BF`
+roster row, in one plaintext chunk** — SIZE BEFORE ROW (the hero KICK answers
+row `0x01C3` then size, so the henchman is the size-then-row shape, and the hero
+ADD was armed to mirror the henchman). The party grows 1 → 2 → 3 → 4. The three
+adds' agent ids point at the standing NPCs (agents 4, 2, 6); **the NPC is NOT
+destroyed** — no `0x0021` follows, it keeps standing in the outpost.
+
+**`0x01BF`'s two trailing bytes, settled.** `agents.party_henchman_add`'s
+docstring records them NOT FOUND ("GWCA and OpenTyria call them profession and
+level ... no naming assert"). The wire settles it: byte4 == the agent's `0x00A6`
+profession (2/1/7 for agents 4/2/6, 3 of 3) and byte5 == its `0x0056` LEVEL
+(3, the Shing Jea level-3 henchmen). **PROFESSION and LEVEL, CORROBORATED** from
+two independent server messages. The `0x01BF` NAME is the agent's `0x009B` proper
+name, which **differs on the wire** from its `0x0056` definition name (e.g. agent
+4: `0x009B` `[0x5985, 0x8759, 0x86AC, 0x3CA8]` vs def 3489's
+`[0x3EB8, 0xC34C, 0xC676, 0x41EC]`).
+
+**The field carry — OBSERVED, with one NOT FOUND.** On zone into the explorable
+(`:52606`, map 238) the party window is rebuilt (`0x01D2`/`0x01CB`/`0x01D3`/
+`0x01B2`/`0x01BE`) and each party henchman gets, in the add order (4, 2, 6):
+`0x00B0`, `0x00B1 [0, 1]`, `0x01BF [1, 28|29|30, name, prof, 3]` and a fresh
+world body (`0x009A`, `0x009B`, `0x0020` kind 9, `0x006D`) at NEW agent ids
+28/29/30. Two independent captures agree the field's `0x00B0` for the henchmen
+**climbs by 2 per row** (2, 4, 6), where the outpost climbs by 1 — the mechanism
+for the doubling is **NOT FOUND** (recorded, not modelled). On return to the
+outpost (`:55414`) the party PERSISTS: the six henchmen are re-created standing
+and the window is rebuilt with `0x01BF` for the outpost agent ids again.
+
+**The rest of 0x98–0xB2 — what each send is, at the confidence the evidence
+gives.** All 27 wrappers sit in `PyCliParty` (asserts `0x00857A91..0x0085AC3E`;
+`sendsites.py` widths agree with `msgshape` SEND descriptors, 27 of 27). The
+`0x9F`, `0xA0` and `0xA1` wrappers are called from **three sibling functions**
+(`0x00858410`, `0x00858450`, `0x00858490`, one thunk each at
+`0x00856670/90/B0`; the landing said "one caller function"), each asserting
+PyCliParty:516/525/534 `m_partyClient` and each gated on the party-client "is
+mine" flag bit `0x80` (`test byte [this+0x10], 0x80`; `0x01B2`'s worker
+`0x00858790` ORs it in when arg2 != 0). Reading `0xA0` as "add by player agent"
+and `0xA1` as "add by player name" is inference from the sibling shape and the
+string width, UNVERIFIED. On retail's wire, over 96 live connections, the range
+carries exactly two opcodes: `0x009F` ×3 (one connection) and `0x00B1` ×10; no
+other `0x98–0xB2` c2s was ever sent, so every other row below is static only.
+
+| c2s | SEND shape (msgshape, static) | wrapper → caller(s) (sendsites, 38797) | retail witness | UPSTREAM name (GWCA, its numbering is ours + 2) | label |
+|---|---|---|---|---|---|
+| `0x98` | `[]` (4 B) | `0x0085BCF0` ← `0x00857B8C` | 0 | — | UNVERIFIED |
+| `0x99` | `[]` | `0x0085BD20` ← `0x00857C2C` | 0 | — | UNVERIFIED |
+| `0x9A` | `[]` | `0x0085BD50` ← `0x0085649E` | 0 | — | UNVERIFIED |
+| `0x9B` | `[u8]` (8 B) | `0x0085BD80` ← `0x008583E1`, `0x008583F5` | 0 | — | UNVERIFIED |
+| `0x9C` | `[u16]` | `0x0085BDB0` ← `0x00857AE4` | 0 | — | UNVERIFIED |
+| `0x9D` | `[u16]` | `0x0085BDE0` ← `0x00857CA4` | 0 | — | UNVERIFIED |
+| `0x9E` | `[u16]` | `0x0085BE10` ← `0x00857EE4` | 0 | — | UNVERIFIED |
+| **`0x9F`** | `[u16]` agent | `0x0085BE40` ← `0x0085843A` (in `0x00858410`, PyCliParty:516, `&0x80`) | **3 of 3** | INVITE_NPC | **HENCHMAN_ADD, OBSERVED, armed** |
+| `0xA0` | `[u16]` | `0x0085BE70` ← `0x0085847A` (sibling, :525) | 0 | INVITE_PLAYER | UNVERIFIED (a second player) |
+| `0xA1` | `[string16(20)]` (44 B) | `0x0085BEA0` ← `0x008584BA` (sibling, :534) | 0 | INVITE_PLAYER_NAME | UNVERIFIED (a second player) |
+| `0xA2` | `[]` | `0x0085BEF0`, 0 direct callers (pointer-reached) | 0 | LEAVE_GROUP | UNVERIFIED; single-player-doable, unwitnessed |
+| `0xA3` | `[]` | `0x0085BF20` ← `0x0085A806` | 0 | — | UNVERIFIED |
+| `0xA4` | `[u8, string16(64)]` (136 B) | `0x0085C0D0` ← `0x0085A978`, `0x0085AB35` | 0 | — | UNVERIFIED |
+| `0xA5` | `[u8]` | `0x0085C140` ← `0x0085ABFA` | 0 | — | UNVERIFIED |
+| `0xA6` | `[u16, u32, u8]` (16 B) | `0x0085C170` ← `0x0085ABE7` | 0 | — | UNVERIFIED |
+| `0xA7` | `[]` | `0x0085C1C0` ← `0x0085AC25` | 0 | RETURN_TO_OUTPOST | UNVERIFIED; a run in a field could name it |
+| `0xA8` | `[u16]` | `0x0085BF50` ← `0x0085A84A` | 0 | KICK_NPC | UNVERIFIED — the henchman KICK candidate |
+| `0xA9` | `[u16]` | `0x0085BF80` ← `0x0085A88A` | 0 | KICK_PLAYER | UNVERIFIED (a second player) |
+| `0xAA` | `[u8, string16(32), u16]` (76 B) | `0x0085BFB0` ← `0x0085A8B2` | 0 | — | UNVERIFIED |
+| `0xAB` | `[]` | `0x0085C010`, 0 direct callers | 0 | SEARCH_CANCEL | UNVERIFIED |
+| `0xAC` | `[u16]` | `0x0085C040` ← `0x0085B4E9` | 0 | — | UNVERIFIED |
+| `0xAD` | `[u16]` | `0x0085C070` ← `0x0085B519` | 0 | — | UNVERIFIED |
+| `0xAE` | `[u8]` | `0x0085C0A0` ← `0x0085BB4B` | 0 | — | UNVERIFIED |
+| `0xAF` | `[u8]` | `0x0085C1F0` ← `0x0085AC50` | 0 | — | UNVERIFIED |
+| `0xB0` | `[blob16, u8]` (24 B) | `0x0085C220`, 0 direct callers | 0 | — | UNVERIFIED |
+| **`0xB1`** | `[u16, u8, u16, u8, u8]` (24 B) | `0x0085C280`, 0 direct callers | **10 of 10** | TRAVEL | **MAP_TRAVEL, OBSERVED — step 7's lane** |
+| `0xB2` | `[u8]` | `0x0085C2E0`, 0 direct callers | 0 | — | UNVERIFIED |
+
+The `0xA3..0xAF` callers carry `PyCliParty` `m_partyClient` asserts
+(`:1650/:1659/:1692/:1719/:1755/:1797`). **INVITE and ACCEPT (a player joining)
+need a second player and are out of scope for a single-player server.** The
+henchman **KICK** (`0xA8` by the UPSTREAM reading) and **LEAVE PARTY** (`0xA2`)
+are named only UPSTREAM — no tape carries either c2s or its reply (`0x01C0`,
+UPSTREAM-named PARTY_HENCHMAN_REMOVE, is 0 of 96 live connections) — so neither
+is armed here; arming would be RECONSTRUCTION with no witnessed reply, and the
+route says refuse to guess. They are the next step if the owner wants a kick,
+with a labelled loopback run to name the opcode (the runsheet says what a kick
+click does today).
+
+**Shipped.** `henchparty.py` (leaf): `henchman_add_batch` (0x00B0 + 0x01BF, the
+tape order, `agents.py`'s own builders), `hireable_bringup` (the level property
+36 then `hireable_mark`'s 0x0071, sent BEFORE the create as retail does — the
+count and the rest of the burst's order are RECONSTRUCTION, `create_agent_world`'s
+own), `party_is_full`. `authsrv.handle_henchman_add` hires a standing hireable
+henchman: 0x00B0 then 0x01BF, the NPC kept; it refuses — nothing sent, retail's
+refusal reply NOT FOUND — an agent that is not a hireable henchman of this
+outpost, one already in the party, and one over the cap. **ONE party count**
+(`party_member_count`: player + heroes + the launch henchman + the hired
+henchmen) is what the cap compares against and, through `party_size_on_wire`
+(heroes behind `--party-size-no-heroes` as the load's own 0x00B0), what the
+henchman add, the hero KICK and the hero ADD all put in 0x00B0 — the landing left
+the two hero sites on their old `1 + henchman + heroes`, so with a hired
+henchman in the party the kick sent one short and the hero add could take the
+party to 5 of 4 (the fix pass's blocker; the hero add now refuses at the same
+cap). The cap `OUTPOST_PARTY_CAP` is **one constant, 4**, the client's AreaInfo
+`max_party` for the maps we serve (148/146/242/449; 248/280 read 8, 55/238 read
+6 — a per-map table is the next step); `--henchman-cap N` (N ≥ 1) overrides.
+`spawn_population` sends the level and the mark for a `hireable` row in an
+OUTPOST only (a field creates the body and says why it marks nothing) and
+records the row. Content: three standing henchmen (labelled the Fighter, Archer
+and Cutthroat of Shing Jea's roster — the wire carries ids, the labels are
+ours) in our served outpost (Ascalon City, map 148), `noncombatant` where
+retail's are `'play'` (RECONSTRUCTION — every party-body path in the server keys
+on ALLEGIANCE_PLAYER, so a `'play'` standing NPC would follow and fight; the
+rows say so). Revert `--no-henchman-add`. `0x009F` off the DROPPED_ON_PURPOSE
+allowlist; `schema/overrides.json` GAME_CMSG 159 says handled, GAME_SMSG 113
+names 0x0071. Tests: `test_henchparty.py` (the batch byte-for-byte against the
+tape's three replies; the refusals; the hero kick/add sizes and the hero add's
+cap with hired henchmen present, the landing's sum as the KNOWN-BAD; the spawn
+order and the field gate; source locks each paired with a mutation that reddens
+it; floor 49 bare, 64 with the vault).
+
+**What is armed vs deferred.** The OUTPOST add is OBSERVED end to end and
+armed. The FIELD-body carry and the outpost RE-JOIN are OBSERVED on the tape but
+**not armed in this step** — they reuse the existing hero/henchman body machinery
+(`hero_body_create`, the launch `HENCHMAN_BODY` block) and cross-zone persistence
+(charstore), which is the next increment; today a hired henchman is a roster row
+and a standing NPC in the outpost, and a zone starts a fresh instance without it.
+The `0x00B0`-climbs-by-2 field rule is NOT FOUND and must be settled before the
+field size is trusted. **The allegiance** (`'play'` on retail) is deferred with
+the field carry: serving it needs a `standing` gate on `party_bodies` and its
+callers. **The map**: retail's Ascalon City (148, AreaInfo type 10) offers no
+henchmen — `0x0071` is on 0 of the 11 live connections to 148, and only on maps
+of types 13 (242, 449) and 11 (281) — so whether the client's list works on a
+type-10 map is UNVERIFIED until the run; Kamadan (449, our `FALLBACK_MAP_ID`
+with geometry) is the retail outpost with hireables if it does not.
+
+**The fix pass (2026-09-23, two reviews).** An evidence refuter re-derived every
+tape claim above (all reproduce, most byte for byte) and an engineering review
+drove the handlers and mutated the tree in memory. Moved here: **HENCH-EVR-1 /
+ENG-HENCH-1** (the blocker) — the hero kick and hero add did not count hired
+henchmen and the hero add had no map cap; one count now (`party_member_count`,
+`party_size_on_wire`), the hero add refuses at the cap, driven with the
+landing's sum as the KNOWN-BAD and a raised cap as the vacuity guard.
+**HENCH-EVR-2 / ENG-HENCH-2** — the test's floor of 27 was above its own bare
+run of 23 ("27 bare" was false); the floor is the measured bare core, 49.
+**HENCH-EVR-3 / ENG-HENCH-8** — "locks with mutations" named mutations the test
+did not carry; every lock now runs on a mutated copy of its function's text and
+must go red; the "no 0x0021" check ran against an empty agents table and could
+not have seen a destroy — the NPC is seeded now. **ENG-HENCH-3** — the
+allegiance: the tape's `'play'` recorded and labelled, the switch deferred with
+its reason (above), not made. **HENCH-EVR-4** — the runsheet named
+PyCliParty:1228/1238 as the `0x01BF` handler's asserts; those are the
+`0x01D2/0x01D3` build window's (`agents.party_build`); `asserts.py --at
+0x00858CB0` shows the worker's only assert is Array:587 at `0x00858D10`, in its
+agent-dedupe loop. **HENCH-EVR-5/6 / ENG-HENCH-6** — the mark's position and
+the level property, moved to retail's; `0x009A` corrected to `0x009F [36]`.
+**HENCH-EVR-7** — the set's location and its PtSearch reader. **HENCH-EVR-8** —
+retail's 148 has no hireables, recorded. **HENCH-EVR-9/10 / ENG-HENCH-10** — the
+cap is a constant, the help text and the log say so, N < 1 refused.
+**HENCH-EVR-10 / ENG-HENCH-4** — `hench_assassin`'s provenance quoted the
+`0x0056` fifth dword as 0; it is 1 (3486/3487 too), `npc_properties` sends 0,
+said as an unmodelled divergence. **HENCH-EVR-11 / ENG-HENCH-11** —
+`--party-size-no-heroes` honoured on the wire size, the outpost-only rule
+enforced at the spawn. **ENG-HENCH-9** — overrides 159 was stale and 113
+unnamed; the leaf's constants locked equal to authsrv's. **HENCH-EVR-13 /
+ENG-HENCH-12** — §8.1 trimmed to the pointer and the owed run. **HENCH-EVR-14 /
+ENG-HENCH-13** — the three sibling callers, 38 others, PARTY_HENCHMAN_REMOVE
+labelled UPSTREAM, the 27-row table, the runsheet's cap step and kick warning.
+**Declined**: making the code commit green at its own tree (HENCH-EVR-12 /
+ENG-HENCH-7) — the branch merges as one unit and its history is not rewritten;
+arming the field carry and re-join (ENG-HENCH-5) — the scope's deferral stands
+and the reviewer accepted it; a per-map cap table — a `client-table` content
+row per map with its build, its own increment.
+
+**Runsheet (owner's hands, one loopback session — not run here).** Each step
+names what the log and the screen should show; the questions are pre-registered.
+1. Launch the game catalog with the outpost henchmen served, in the outpost, WITH the one-hero party so the cap is reachable:
+   `python toolkit/authsrv/authsrv.py --bind 127.0.0.3 --port 6112 --vault vault/captures/gamesrv --map 148 --area outpost_henchmen --party slice` (the other terminals per `RUNBOOK.md`; launch the loopback client). Three henchmen stand near the arrival point (labelled Fighter / Archer / Cutthroat); the gamesrv log prints, for each, `level 3 on hireable agent 31/32/33 (prop 36, before its create)` then `PARTY_HENCHMAN_HIREABLE(agent 31/32/33)` BEFORE its `created agent` line. The party window shows the player and the hero (size 2).
+2. **Open the party window's henchmen list.** Expect the three listed, each with level 3 and its profession (W / R / A). **If the list is EMPTY**, the first suspects, in order: the map (retail offers no henchmen on 148, a type-10 map — relaunch on Kamadan, `--map 449 --area outpost_henchmen` needs the rows' `map` widened first) and the allegiance (`noncombatant` here, `'play'` on retail). Either outcome is a result: record it in this section.
+3. **Add one** (click a henchman → its add button). Expect the row in the party, the party counter at 3, and the log `HENCHMAN_ADD: <label> (agent 31) joined the party; size now 3`. A row that does not appear with no `HENCHMAN_ADD` line means no c2s reached us (the client refused the click itself — the allegiance is then the suspect).
+4. **Add a second.** Size 4 = the cap (player + hero + 2). **Add the third** → refused: the log prints `HENCHMAN_ADD(33) refused: the party already holds 4 members (heroes and henchmen), the served cap (OUTPOST_PARTY_CAP=4 ...)`, nothing is sent, the window does not change. (Retail's reply to a refused add is NOT FOUND; whether the client's own panel already greys the add at max_party is what the screen shows here — record it.)
+5. **The hero and the count** (the fix pass's blocker on screen): kick the hero (the party panel's X on its row). Expect the counter at 3 and `HERO_KICK: ... size now 3` — the landing would have said 1. Re-add the hero (Party Search → the hero): 3 < 4, so it goes THROUGH — counter 4, `HERO_ADD: ... size now 4`. Kick the hero again (counter 3), add the third henchman (counter 4), then re-add the hero → REFUSED at the cap: `HERO_ADD(3) refused: the party already holds 4 members (heroes and henchmen), the served cap`, nothing sent, the counter stays 4.
+6. **Do NOT click the X on a hired henchman's row** as part of this run: the henchman kick is not armed; its c2s (`0xA8` by the UPSTREAM reading, unwitnessed) lands in the connection's unhandled census at the end of the log — if you do click it, copy that census line, it names the opcode and closes the KICK question for the next step.
+7. **Control:** relaunch with `--no-henchman-add` (same flags otherwise). The henchmen do not appear in the party window's list (no `0x0071`, no level line in the log), and a click, if the panel offers one, prints `HENCHMAN_ADD ignored (--no-henchman-add)`.
+8. **Walk into the explorable** (through the town portal): the henchmen do NOT follow (the field carry is deferred, above) — the expected incomplete state; the run confirms the outpost add itself. If the client ASSERTS on any add, copy the dialog's `File.cpp(N)`: the `0x01BF` worker's only assert is Array:587 (`index < m_count`) at `0x00858D10`, inside its agent-dedupe loop, which wire input cannot reach, and an unknown party id returns silently — so any assert here is new information, not a known branch.

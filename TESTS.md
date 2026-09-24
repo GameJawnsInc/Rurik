@@ -68,7 +68,7 @@ Every one of these, in the order they were written:
   because it is stamped `validated_against_build 38797`, where 112 is correct),
   `toolkit/schema/test_catalog.py` (our message catalog vs. the client's own
   format tables — 477/477 GAME_SMSG agree field-for-field on build 38797),
-  `toolkit/harness/test_harness.py` (**2026-09-15: `test_dashed_values` -- a lone dashed value after `--game-args` / `--client-arg` (`--game-args --explorable`) is rewritten to the = form before argparse sees it, because argparse reads it as another option and dies with 'expected one argument' unless the string happens to contain a space; the owner hit it on the runbook's own example. +4, floor 170 -> 174.** **2026-09-14 (night): the third control mailbox, `skill` — `request_skill` / `take_skill` round-trip a (skill, target) pair, default target 0, read-and-clear, dropped by `clear()`; +5, floor 165 → 170.** the one-command stack, the launch safety
+  `toolkit/harness/test_harness.py` (**2026-09-24: the verdict leak on the hold's TIMER branch, and at teardown.** A GW assert keeps the process alive behind its modal dialog, so the common crash is the hold running out with `poll()` still None -- and that branch captured the dialog, printed the `>>> Assertion:` line and returned None, which `verdict_after_hold` correctly read as "keep the PASS": a right rule handed the wrong value, so the run printed RUN VERDICT: PASS and exited 0. `run_client`'s `finally` dropped its own look the same way, on every run without `--keep-open`. MEASURED over `vault/captures/harness`: 197 `crash-dialog.txt` files, every one carrying an `Assertion:`/`Exception:` line, and 177 of the 184 with a report said `"passed": true`. `hold_open` now returns `"crashed"` when the timer-path look finds a dialog, the teardown look is folded through the same rule, and the report carries `checkpoints_passed` apart from the retractions (see `test_smsgsweep.py` for the two loops that need it). +7: three truth-table rows (`"crashed"` retracts, the real healthy value None keeps, a crash never promotes); the timer path taken through the REAL `hold_open` with a client whose `poll()` stays None and a faked dialog, plus its no-dialog control -- the truth table alone cannot see this defect; and a syntax-tree check that the `finally` keeps the teardown look AND that the kept name reaches `verdict_after_hold`, whose control rejects both the pre-fix bare call and a kept-but-unread value. Each half was sabotaged and run: `runwatch.py` at HEAD reddens 2, the timer branch alone 1, the teardown alone 1. Floor 174 -> 181.** **2026-09-15: `test_dashed_values` -- a lone dashed value after `--game-args` / `--client-arg` (`--game-args --explorable`) is rewritten to the = form before argparse sees it, because argparse reads it as another option and dies with 'expected one argument' unless the string happens to contain a space; the owner hit it on the runbook's own example. +4, floor 170 -> 174.** **2026-09-14 (night): the third control mailbox, `skill` — `request_skill` / `take_skill` round-trip a (skill, target) pair, default target 0, read-and-clear, dropped by `clear()`; +5, floor 165 → 170.** the one-command stack, the launch safety
   gate, the live capture tail, and the crash-dialog capture — which is the ONLY
   machine-readable evidence a client assert leaves: `Gw.log` does not record
   asserts, no dump file is written anywhere findable, and a ConnectionResetError
@@ -6477,6 +6477,50 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   stored mask (the `0x00DA` setter zeroes the client's mask, EVID-D1C-3),
   `hero_panel_bar_ids` reads the session's bar first. Drives the real handlers with a
   fake send and a scratch store. Floor 53 -> 71 from the green run, ~2 s),
+  `toolkit/authsrv/test_henchparty.py` (**2026-09-23, DESKWORK-D1 step 5: the party
+  family's henchman add, c2s 0x009F HENCHMAN_ADD, and the ONE party count it shares
+  with the hero kick and hero add since the fix pass**, `studies/cmsg/FINDINGS.md` "The
+  party family". OBSERVED end to end (capture 20260819T132414 :53419, an outpost).
+  §1 the batch, byte for byte against the TAPE: `henchparty.henchman_add_batch` encodes
+  to the 23-byte prefix that answers each of the three c2s 0x009F adds -- 0x00B0
+  PLAYER_PARTY_SIZE then the 0x01BF roster row, SIZE BEFORE ROW -- with enc_name,
+  profession and level read from the tape's own 0x01BF (nothing ArenaNet authored is
+  committed in the test); the KNOWN-BAD arm is the KICK's row-before-size shape through
+  the same comparator, which must NOT match (13 checks, vault-gated, outside the floor).
+  §2 the real handlers with a fake send: a valid `handle_henchman_add` sends exactly
+  0x00B0 then 0x01BF and no 0x0021 (the standing NPC is SEEDED into state[agents] and is
+  still there after -- the landing's empty-agents version could not see a destroy), the
+  size counts player + henchman, and the refusals (not hireable, already in the party,
+  over the cap) send NOTHING; three adds fill the cap of 4 and the fourth is refused;
+  the cap counts HEROES too. THE FIX PASS'S CASES (HENCH-EVR-1 / ENG-HENCH-1): with a
+  hero and two hired henchmen in the party, `handle_hero_kick`'s 0x00B0 says 3 (the
+  landing's own `1 + henchman + heroes` said 1 -- run as the KNOWN-BAD value), the hero
+  ADD back says 4, and a hero add into a party the henchmen filled to the cap is
+  REFUSED with the same add accepted under `--henchman-cap 8` (the vacuity guard: the
+  refusal is the cap's). Under `--party-size-no-heroes` the henchman add's 0x00B0
+  leaves the hero out as the load does while the cap still counts it. The leaf's three
+  opcode constants are locked equal to authsrv's. The two ACCEPTING hero adds build the
+  hero character block, which reads the vault's attribute-cost rows, so on a bare
+  machine they declare a skip (2 checks). §3 the spawn wiring: `spawn_population` over
+  the shipped `outpost_henchmen` rows sends, for each hireable row and BEFORE its
+  0x0020 create, the displayed level (0x009F [36, agent, 3]) then 0x0071 -- retail's
+  position, 24 of 24 sends -- and records `state["hireable_henchmen"]` with each one's
+  profession and level (the 0x01BF row carries them); the KNOWN-BAD `--no-henchman-add`
+  marks nothing; a FIELD (`--explorable`) creates the bodies but sends neither message
+  (retail marks henchmen in outposts only, 11 of 96 live connections). §4 SOURCE LOCKS
+  on authsrv.py, EACH PAIRED WITH A MUTATION THAT REDDENS IT (the source parsed once,
+  the extracted function's text mutated): the 0x009F arm is gated on
+  HENCHMAN_ADD_ENABLED; `main()` wires --no-henchman-add and --henchman-cap and refuses
+  N < 1; spawn_population's hireable arm is flag-gated, sends `hireable_bringup` and
+  skips a field; `handle_henchman_add` caps on `party_member_count` vs
+  `OUTPOST_PARTY_CAP` and sizes through `party_size_on_wire`; `handle_hero_kick` and
+  `handle_hero_add` size through `party_size_on_wire` (the old sum is the mutation) and
+  the hero add refuses at the same cap; `party_size_on_wire` reads
+  PARTY_SIZE_COUNTS_HEROES; 0x009F is OFF the DROPPED_ON_PURPOSE allowlist (put back in
+  memory as the mutation). Drives the real functions with a fake send and a scratch
+  state. Floor 49 = the bare-machine core, measured with RURIK_VAULT at an empty
+  directory (64 with the vault; the landing's floor of 27 was above its own bare run of
+  23 -- HENCH-EVR-2 / ENG-HENCH-2), ~9 s),
   `toolkit/authsrv/test_itemmoves.py` (**2026-09-23, DESKWORK-D1 step 8: the inventory
   messages, c2s 0x004F ITEM_MOVE, 0x0030 EQUIP_ITEM and 0x0072 ITEM_MOVE_BY_ID, and the
   item store behind them**, `toolkit/authsrv/itemstore.py`, `studies/cmsg/FINDINGS.md`
@@ -6639,6 +6683,89 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   Drives the real handlers and a scratch store, launches nothing. Floor 63 from the green
   run with `RURIK_VAULT` pointed at an empty directory (the bare-machine core; §2's 10 ride
   the vault, 73 vaulted), ~10 s),
+  `toolkit/authsrv/test_townweapon.py` (**2026-09-23, DESKWORK-D1, the town weapon: in an
+  outpost the player's WORLD body carries no weapon** — the hands (visuals 0 and 1) leave the
+  town body's `0x006E` and a town's hand `0x006F` is never sent, while the equipped BAG (the
+  paper doll, the weapon-set panel) keeps it; `toolkit/authsrv/townweapon.py`,
+  `studies/cmsg/FINDINGS.md` §"The town weapon". §1 THE LEAF (bare-machine): the two hand
+  slots; `hands_shown` per regime; `strip_hands` in a town (both hands, a lead alone, a short
+  array) and a field (untouched) with a VACUITY guard and a KNOWN-BAD (the unstripped town
+  array disagrees); `drops` / `filter_hand_writes` (the hands and an emptied hand's zero
+  dropped in a town, armour and a field untouched, order kept). §2 RETAIL'S WIRE (vault-gated,
+  `livewire.decode_conn` over every live game connection, ~10 s; `LEDGER.skip` on a bare
+  machine): every outpost `0x006E` empty-handed on BOTH visuals (0 of 2,245 bodies; the OWN
+  body — the `0x006E` whose armour ids all sit in ONE type-2 bag, a hero's equipped bag being
+  type 2 too — on 50 outpost loads with a lead in that bag and 22 with an off hand, 0 carrying
+  either); the own FIELD body carrying every hand its bag holds (40 of 40 leads, 23 of 23 off
+  hands), none when the bag has none (8), never a hand the bag lacks; no outpost `0x006F` into
+  slot 0/1 on ANY agent (0), the own outpost `0x006F` that exists going to the head (the PvP
+  panel's, slot 6); every outpost c2s `0x0032` switch (4) answered with `0x0148` and no hand
+  `0x006F`, every field switch (4) with one; the outpost `0x0030` equips and `0x004F` move (5)
+  with none; the PvP panel's five hand placements with none and its armour placement with
+  one; retail's outpost NPCs carrying `0x006D` weapons (466 of 1,653 `0x006D` messages, 403
+  of 1,510 distinct bodies — the rule is the player's hands); the own body's join
+  cross-checked against `0x0022` WORLD_UPDATE_CONTROLLED_AGENT on every connection (it names
+  exactly the controlled agents that have a `0x006E`); no hero body in an outpost (3 party
+  heroes, none created), a hero body in a field; every connection decoded. §3 THE SERVER:
+  source locks (the leaf imported, the flag in `serverargs.py` and `main()`, `visible_worn`
+  and `visible_slot_writes` gated, `select_weapon_set`'s three hand `0x006F` built into a
+  batch that passes `visible_slot_writes` with no direct send left, the only direct
+  `*send(0x006F)` in `authsrv.py` — in any wrapper's spelling — being
+  `handle_visibility_flags`' slots 6/7/8, the burst's `0x006E` label built from the array so
+  a town's reads `[hands empty: a town]`); the real item layout
+  (`--weapon-set 1=starter_sword+starter_shield`) in a TOWN — the dressed array keeps the
+  hammer at visual 0 (the doll) while `visible_worn` zeroes 0 and 1; the FIELD control; the
+  KNOWN-BAD revert arm (the weapon kept, and it disagrees); VACUITY (the hammer dragged out);
+  F2/F1 in a TOWN — `0x0148` + `0x014B` + `0x0152` and NO `0x006F`, the bag and the doll's
+  array swapped — and in a FIELD — the same rows plus `0x006F [player, 0, sword]`,
+  `[player, 1, shield]` and on F1 `[player, 1, 0]` before `[player, 0, hammer]`, retail's
+  order; the revert arm's town F2 carrying them (KNOWN-BAD); the equip path (`0x004F` out,
+  `0x0030` back) with `0x014B` alone in a town and `0x014B` + `0x006F` in a field; the
+  composition with the display mode (Hide in Towns helm in a town: 0, 1 and 6 zeroed; each
+  flag alone its own slots); `visible_slot_writes` leaving another agent's hand and the
+  player's head alone in a town, dropping the player's hand under either display-mode
+  setting, and passing the batch whole with both flags off. Drives the real handlers,
+  launches nothing. Floor 36 from the green run with `RURIK_VAULT` pointed at an empty
+  directory (the bare-machine core; §2's 12 ride the vault, 48 vaulted; re-set on the fix
+  pass from its own bare run), ~10 s),
+  `toolkit/authsrv/test_maptravel.py` (**2026-09-23, DESKWORK-D1 step 7: world-map travel**,
+  rebuilt by the fix pass the same day — c2s `0x00B1` MAP_TRAVEL and the s2c `0x0094` unlock
+  state that makes the client's world map offer our outposts; `toolkit/authsrv/maptravel.py`,
+  `studies/cmsg/FINDINGS.md` §"World-map travel". §1 THE LEAF (bare-machine): `travelable_maps`
+  is exactly our enabled non-explorable content maps with a KNOWN spawn — the `(0, 0)`
+  placeholder rows (194, 55) withheld, and a KNOWN-BAD fake world that writes a spawn into one
+  puts it back; an exclusion dict withholds an unwarmed destination; `unlock_bitmap_words` sets
+  bit == map id at the SERVER's own width (`mission_mask_bytes(MAP_ID_COUNT)//4`, 28 on 38797;
+  retail's 27 labelled), with a VACUITY guard and a KNOWN-BAD 1-dword overflow; `unlock_message`
+  puts the words in arr4 and `unlock_payload_ok` refuses them in arr0 (KNOWN-BAD); `plan_travel`
+  accepts a served destination and refuses the map you are on, an unserved id, an explorable, a
+  placeholder spawn and an unwarmed destination each with a reason — and a KNOWN-BAD fake world
+  with the explorable flag STRIPPED is accepted, so the refusal reads the flag; `travel_batch_ok`
+  True on retail's batch, False reordered / without `0x01D9` / with a `0x0028`;
+  `arrival_skips_unlock` one-shot, map-checked, TTL-aware (4 checks). §2 THE SERVER
+  (bare-machine): the dispatch arm behind `MAP_TRAVEL_ENABLED`; the login's `0x0094` gate locked
+  by CONTEXT (`if MAP_UNLOCK_ENABLED and not _zoned_in:` immediately before `unlock_message`,
+  the send taking its payload and label; a KNOWN-BAD text with `if True:` fails the same
+  predicate); EXACTLY ONE `0x0094` send site across `toolkit/authsrv/*.py` counted over EVERY
+  spelling (`GAME_SMSG_MAP_TRAVEL_UNLOCK`, `0x0094`, `0x94`, `148`; the pattern proven on all
+  four); BOTH writers of arr4 present once each and ORDERED — `0x0199`, `0x0094`, the fog pair,
+  the burst's `0x0099` (a KNOWN-BAD swapped text fails); the revert flags applied CONTIGUOUSLY
+  (a commented-out assignment fails); the prewarm gated on `--map` and `a.no_map_travel` and
+  recording `TRAVEL_UNSERVABLE`; the transfer's one-shot arrival marker written and read;
+  `handle_map_travel` driven with a fake send and the real `send_transfer` (`send_stop=False`)
+  passes `travel_batch_ok` with `0x01D9` first and `[2, 1, '']`, records the marker (which the
+  re-entry check then consumes), and the SAME predicate goes False when the send wrapper DROPS
+  `0x01D9` from the real handler's output (KNOWN-BAD); five refusals (explorable, no row, already
+  here, placeholder spawn, unwarmed) return False and send nothing. §3 THE TAPE (vault-gated,
+  `livewire.decode_conn`; `LEDGER.skip` on a bare machine): every live c2s `0x00B1` is `[map_id,
+  0, 0, 0, 1]`; its s2c batch `0x01D9`, `0x01A5`, `0x0099` in order (10 of 10), `0x01D9` first
+  on 9 of 10, the transfer NEVER first (KNOWN-BAD); s2c `0x0094` 29 of 29 with a non-empty arr4,
+  on a LOGIN's first map-loading connection (28) or a second login (1) and on 0 transfer
+  arrivals, after `0x0199` and before `0x008B` (29 of 29), 27 dwords (29 of 29); THE JOIN: every
+  `0x00B1` destination's bit set before the click by the login's `0x0094` or a prior `0x0099`
+  (10 of 10), at load alone 9 of 10, and a `0x0099 [map, 1]` exists. Drives the real handler and
+  `send_transfer`, launches nothing. Floor 45 (§1+§2 bare-machine core, from the green run with
+  `RURIK_VAULT` empty; §3 adds 10 on the vault, 55), ~15 s),
   `toolkit/authsrv/test_labelrun.py` (the labelled input run, which names GAME_CMSG
   opcodes from what a human was told to do: a message lands in exactly one step's
   window, instance-load traffic is never folded into step 1, and a dirty idle CONTROL
@@ -7624,7 +7751,21 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   against. Last, the ORDER is asked of the syntax tree -- the guard must sit BEFORE the
   launch statement in the round body, with the guard deleted AND the guard moved one past
   the launch as controls, because a client that goes up and is stopped afterwards has
-  already measured the wrong opcodes),
+  already measured the wrong opcodes.
+  **And since 2026-09-24 it pins that the loops stop on a stack that never reached the
+  map, NOT on a crash.** That day `session.py` began retracting its PASS over a client
+  that asserted after the spawn (the hold's timer branch and the teardown look, see
+  `test_harness.py`), and both `sweeploop` and `shotloop` read `RUN VERDICT: PASS` as "the
+  stack reached the map" -- so the honest verdict would have ended a sweep, which exists
+  to crash clients, on its first result, as "a broken stack". The report now carries
+  `checkpoints_passed` apart from the retractions and `smsgsweep.reached_checkpoints`
+  reads it: a retracted-after-spawn report reached the map, a never-passed one did not
+  (the control), a pre-key report falls back to `passed`, a missing one reached nothing.
+  A syntax-tree check that both loops ask it and no longer gate on the verdict string,
+  whose control rejects sweeploop's old line verbatim AND the old line with the new call
+  bolted on; and a check that `session.run_client` writes the key, the other end of the
+  contract. Sabotaged: either loop at HEAD reddens the loop check, the report key removed
+  reddens its own. +6, floor 118 -> 124),
   `toolkit/authsrv/test_fogrle.py` (the fog-init pair's SYNTHETIC stream — the
   2026-08-24 durable fix for the M-key crash (`GmMapView.cpp(1731)`, minimap
   FINDINGS 6f.2, the RUNBOOK failure table's `key:m` row), where `authsrv.py`

@@ -303,24 +303,19 @@ DROPPED_ON_PURPOSE = {
             "owner's own; not quoted here), the blob and the 1 unread: character "
             "creation's name commit, by position and payload. Named the day the "
             "create flow is driven; this server serves fixed characters.",
-    0x009F: "HENCHMAN_ADD (0 loopback, 3 live on one connection, 20260819T132414 "
-            ":53419) -- [word agent_id] of the henchman NPC in the outpost, "
-            "answered within 31-132 ms by 0x00B0 PLAYER_PARTY_SIZE [player, "
-            "size] THEN the 0x01BF henchman roster row, 3 of 3 (SIZE BEFORE ROW; "
-            "the hero kick answers row 0x01C3 then size). NAMED 2026-09-23 from "
-            "that witness (schema/overrides.json GAME_CMSG 159). DESKWORK-D1 step "
-            "5 arms the party family 0x98-0xB2 from it; today this server hires "
-            "its henchman from --henchman and has no outpost henchman NPC to "
-            "click. Dropped until step 5.",
-    0x00B1: "MAP_TRAVEL (0 loopback, 10 live on 10 connections over 6 captures) "
-            "-- [map_id, 0, 0, 0, 1] from the world map, answered 39 ms later by "
-            "0x01D9 [2, 1, ''] then 0x01A5 GAME_SERVER_TRANSFER and 0x0099 (10 "
-            "of 10 in sequence), and followed by c2s 0x0008 every time. NAMED "
-            "2026-09-23 (schema/overrides.json GAME_CMSG 177). DESKWORK-D1 step "
-            "7: what the world map gates on, the unlocked-outpost state nothing "
-            "models, a refusal for a map with no content row. Dropped until "
-            "step 7 -- an arm that transferred the client to an unbuilt map "
-            "would strand it.",
+# 0x009F HENCHMAN_ADD came off this allowlist on 2026-09-23 when its arm
+# landed (DESKWORK-D1 step 5): handle_henchman_add answers the party window's
+# Add Henchman click with 0x00B0 + 0x01BF, and the standing henchmen carry
+# 0x0071 so the panel offers them. --no-henchman-add is the revert.
+# 0x00B1 MAP_TRAVEL was here from step 3 to step 7 of DESKWORK-D1 (both
+# 2026-09-23): "[map_id, 0, 0, 0, 1] from the world map, answered by 0x01D9
+# [2, 1, ''] then 0x01A5 / 0x0099, 10 of 10 ... Dropped until step 7 -- an arm
+# that transferred the client to an unbuilt map would strand it." Step 7 read
+# the world map's send path and the unlock state nothing modelled (s2c 0x0094's
+# arr4, bit == map id) and ARMED it: handle_map_travel answers 0x01D9 then the
+# transfer pair for a served, non-explorable destination, refuses the rest with
+# nothing sent, and the load sends 0x0094 so the map offers our outposts. Behind
+# --no-map-travel / --no-map-unlock. studies/cmsg DESKWORK-D1 "World-map travel".
 # 0x004F ITEM_MOVE was here from step 3 to step 8 of DESKWORK-D1 (both
 # 2026-09-23): "fields 2-3 are the destination bag and slot ... field 1 is
 # UNVERIFIED ... this server dresses the body once at login and holds no bag
@@ -1114,13 +1109,18 @@ def main():
                 "add the DROPPED_ON_PURPOSE row saying what was measured and "
                 "what would name it")
     # The three columns of that decision, so a regression names which one moved.
-    LEDGER.ok({0x0009, 0x003D, 0x00C1, 0x001F} <= set(seen) & set(game),
-              "the busiest retail opcodes and the kick are in the census AND "
-              "handled (0x0009, 0x003D, 0x00C1, 0x001F)",
+    # 0x009F HENCHMAN_ADD (DESKWORK-D1 step 5) and 0x00B1 MAP_TRAVEL (step 7)
+    # joined the handled set on 2026-09-23, so both moved from the allowlist
+    # row below to this one.
+    LEDGER.ok({0x0009, 0x003D, 0x00C1, 0x001F, 0x009F, 0x00B1}
+              <= set(seen) & set(game),
+              "the busiest retail opcodes, the kick, the henchman add and "
+              "MAP_TRAVEL are in the census AND handled (0x0009, 0x003D, "
+              "0x00C1, 0x001F, 0x009F, 0x00B1)",
               f"census & arms: {sorted(f'0x{o:04x}' for o in set(seen) & set(game))}")
-    LEDGER.ok({0x0008, 0x000B, 0x000D, 0x009F, 0x00B1} <= set(seen) & set(DROPPED_ON_PURPOSE),
-              "and the five loudest of the 2026-09-23 triage are in the census "
-              "AND on the allowlist (0x0008, 0x000B, 0x000D, 0x009F, 0x00B1)",
+    LEDGER.ok({0x0008, 0x000B, 0x000D} <= set(seen) & set(DROPPED_ON_PURPOSE),
+              "and the loudest still-dropped of the 2026-09-23 triage are in the "
+              "census AND on the allowlist (0x0008, 0x000B, 0x000D)",
               f"census & allowlist: "
               f"{sorted(f'0x{o:04x}' for o in set(seen) & set(DROPPED_ON_PURPOSE))}")
 

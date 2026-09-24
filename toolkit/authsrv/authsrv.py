@@ -1210,6 +1210,23 @@ GAME_SMSG_INSTANCE_LOAD_INFO = 0x0199
 GAME_SMSG_MAP_EXPLORATION_INIT_BEGIN = 0x008B
 GAME_SMSG_MAP_EXPLORATION_INIT_DATA = 0x008A
 GAME_SMSG_MAP_UPDATE_CURRENT = 0x0099
+# DESKWORK-D1 step 7: the world map's travel reply, sent BEFORE the transfer.
+# Retail sends [2, 1, ''] (byte, byte, string16) 10 of 10 in answer to c2s
+# 0x00B1, then the transfer pair. The batch is OBSERVED; the two bytes' and the
+# string's meaning is UNVERIFIED (worker 0x0085a290 sets a state at [ctx+0x54]
+# and fires UI notifications -- no assert gates it). maptravel.py.
+GAME_SMSG_MAP_TRAVEL_READY = 0x01D9
+# DESKWORK-D1 step 7: the client's KNOWN-MAPS bitmaps, sent once per LOGIN so
+# the world map offers our served outposts as destinations. Five map-id
+# bitmaps; arr4 is the map-known set (bit == map id, 27 dwords on 29 of 29
+# live sightings, explorables included -- so "outposts only" is our policy);
+# arr0-3 empty on 27 of 29 and UNVERIFIED on the other two (arr0/arr1 carry
+# bit 544 on the Kamadan logins), sent empty. The handler's CopyBits REPLACES
+# arr4; the SECOND writer, 0x0099's handler, SETS one bit in the same store
+# (bts at 0x0059d239) -- so the load's 0x0099 must follow this, and a re-entry
+# after our own transfer must NOT resend it (retail: 0 of 61 arrivals).
+# maptravel.py has the whole record.
+GAME_SMSG_MAP_TRAVEL_UNLOCK = 0x0094
 GAME_SMSG_ITEM_STREAM_CREATE = 0x0144
 GAME_SMSG_INSTANCE_LOAD_SPAWN_POINT = 0x0195
 GAME_SMSG_READY_FOR_MAP_SPAWN = 0x01AB
@@ -1452,6 +1469,13 @@ TRANSFER_ALT = None               # --transfer-alt HOST: the second listener
 TRANSFER_HOSTS = []               # filled by main(): every alias we listen on
 TRANSFER_PORT = 6112              # filled by main(): the port we listen on
 TRANSFERS_ISSUED = {}             # (world_id, player_id) -> map we handed out
+TRANSFER_ARRIVALS = {}            # (world_id, player_id) -> (map, issued_at):
+                                  # the ONE-SHOT marker the load pops to know
+                                  # it is a re-entry, so the login's 0x0094 is
+                                  # not resent (maptravel.arrival_skips_unlock;
+                                  # DESKWORK-D1 step 7). TRANSFERS_ISSUED is
+                                  # never popped, so a relaunch asking for the
+                                  # last destination would read as a re-entry.
 PORTAL_REARM = 1.25               # outside radius*this re-arms the portal
 
 
@@ -1483,20 +1507,27 @@ def transfer_sockaddr(host, port):
             + socket.inet_aton(host) + b"\x00" * 16)
 
 
-def send_transfer(send, state, conn_id, dest_map, local_host):
+def send_transfer(send, state, conn_id, dest_map, local_host, send_stop=True):
     """Hand the client to `dest_map` on this server: the three messages.
 
     Returns the host advertised. The caller closes the socket GRACEFULLY
     afterwards (`graceful_close`) -- the client releases the deferred
     transfer only on the reason code a clean shutdown produces.
+
+    `send_stop` sends AGENT_STOP_MOVING first (a portal fires while the body is
+    WALKING into a circle, so it is stopped). A world-map travel (DESKWORK-D1
+    step 7) passes send_stop=False: the player is standing in an outpost and
+    retail's batch is 0x01D9 then the pair, no 0x0028 (10 of 10 on tape).
     """
     host, changed = transfer_host_for(local_host)
     row = agents.WORLD.rows("map").get(str(int(dest_map)), {})
     explorable = 1 if row.get("explorable") else 0
     world_id = int(state.get("world_id", 0) or 0)
     player_id = int(state.get("player_id", 0) or 0)
-    send(GAME_SMSG_AGENT_STOP_MOVING, agents.agent_stop_moving(PLAYER_AGENT_ID),
-         "transfer 1/3: AGENT_STOP_MOVING [player]")
+    if send_stop:
+        send(GAME_SMSG_AGENT_STOP_MOVING,
+             agents.agent_stop_moving(PLAYER_AGENT_ID),
+             "transfer 1/3: AGENT_STOP_MOVING [player]")
     send(GAME_SMSG_GAME_SERVER_TRANSFER,
          [transfer_sockaddr(host, TRANSFER_PORT), world_id, 0, int(dest_map),
           explorable, player_id, 0],
@@ -1505,6 +1536,7 @@ def send_transfer(send, state, conn_id, dest_map, local_host):
     send(GAME_SMSG_MAP_UPDATE_CURRENT, [int(dest_map), 0],
          f"transfer 3/3: MAP_UPDATE_CURRENT {dest_map}")
     TRANSFERS_ISSUED[(world_id, player_id)] = int(dest_map)
+    TRANSFER_ARRIVALS[(world_id, player_id)] = (int(dest_map), time.time())
     state["transfer_sent"] = int(dest_map)
     zone_carry_store(state)                                    # JARIN
     print(f"[c{conn_id}] TRANSFER to map {dest_map} via {host}:{TRANSFER_PORT}"
@@ -1570,6 +1602,44 @@ def portal_reachable(start_map):
 def transfer_reentry(world_id, player_id, map_id):
     """Is this VERSION frame the client coming back from a transfer WE sent?"""
     return TRANSFERS_ISSUED.get((int(world_id), int(player_id))) == int(map_id)
+
+
+def handle_map_travel(values, send, state, conn_id, local_host):
+    """GAME_CMSG 0x00B1 MAP_TRAVEL [map_id, 0, 0, 0, 1]: the world map's travel
+    to another outpost (DESKWORK-D1 step 7; maptravel.plan_travel has the tape,
+    the refusals and the labels). -> True when a transfer went out (the caller
+    closes the socket), False on a refusal (nothing sent).
+
+    On acceptance the batch is retail's, OBSERVED 10 of 10: 0x01D9 [2, 1, '']
+    then the transfer pair 0x01A5 / 0x0099 (via send_transfer with send_stop
+    False -- no 0x0028, the player is standing still), then a graceful close;
+    the client re-dials and the re-entry serves the destination. The transfer
+    carries the party, heroes and kicked-hero store through zone_carry_store,
+    exactly as a portal does. Refused with NOTHING sent (retail's refusal reply
+    is NOT FOUND on any tape): the map already on, a map with no served content
+    row, an explorable, a row with the (0, 0) placeholder spawn, and a
+    destination whose navmesh did not load at startup (TRAVEL_UNSERVABLE, filled
+    by main()'s prewarm -- the fix pass: the arm used to accept maps the
+    prewarm had just reported unwarmed)."""
+    if not values or len(values) < 2:
+        print(f"[c{conn_id}] MAP_TRAVEL refused: malformed request "
+              f"{list(values[1:]) if values else values!r}; nothing sent "
+              f"[DESKWORK-D1]", flush=True)
+        return False
+    dest = int(values[1])
+    cur = state.get("map_id")
+    ok, why = maptravel.plan_travel(agents.WORLD, cur, dest,
+                                    exclude=TRAVEL_UNSERVABLE)
+    if not ok:
+        print(f"[c{conn_id}] MAP_TRAVEL(map {dest}) refused: {why}; nothing "
+              f"sent [DESKWORK-D1]", flush=True)
+        return False
+    send(GAME_SMSG_MAP_TRAVEL_READY, [2, 1, ""],
+         f"MAP_TRAVEL 1/3: MAP_TRAVEL_READY [2, 1, ''] (map {dest})")
+    send_transfer(send, state, conn_id, dest, local_host, send_stop=False)
+    print(f"[c{conn_id}] MAP_TRAVEL to map {dest}: 0x01D9 then the transfer "
+          f"pair; the client re-dials [DESKWORK-D1]", flush=True)
+    return True
 
 # Print every client position report with our own belief beside it, plus the
 # origin each click's collision ray is cast from. OFF by default -- it is a
@@ -2836,15 +2906,24 @@ def select_weapon_set(send, state, k, conn_id):
             itemstore.apply(state.get("items") or {}, [(old_lead, BACKPACK_BAG_ID, _free)])
             if old_lead in WEAPON_SET_BACKPACK_SLOTS or old_lead != WEAPON_ITEM_ID:
                 WEAPON_SET_BACKPACK_SLOTS[old_lead] = _free
+    # The hands' visuals go through the ONE gate every player 0x006F passes
+    # (visible_slot_writes; DESKWORK-D1, the town weapon, 2026-09-23): in a
+    # TOWN they are dropped -- retail's four outpost switches carried no
+    # 0x006F (0 of 4, 20260919T103604 :58638) while the field's four all did
+    # (4 of 4, :56576 -- the batches test_weapons 18 replays). The display
+    # mode never touches a hand. --no-town-weapon-strip sends them in a town.
+    _vis = []
     if old_off and not new_off:
-        _send(GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT, [PLAYER_AGENT_ID, EQUIPPED_SLOT_OFFHAND, 0],
-              "AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT(off hand emptied) [WEAPONS-W9]")
+        _vis.append((GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT, [PLAYER_AGENT_ID, EQUIPPED_SLOT_OFFHAND, 0],
+                     "AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT(off hand emptied) [WEAPONS-W9]"))
     if old_lead != new_lead:
-        _send(GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT, [PLAYER_AGENT_ID, EQUIPPED_SLOT_WEAPON, new_lead],
-              f"AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT(lead hand = item {new_lead}) [WEAPONS-W9]")
+        _vis.append((GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT, [PLAYER_AGENT_ID, EQUIPPED_SLOT_WEAPON, new_lead],
+                     f"AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT(lead hand = item {new_lead}) [WEAPONS-W9]"))
     if new_off and new_off != old_off:
-        _send(GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT, [PLAYER_AGENT_ID, EQUIPPED_SLOT_OFFHAND, new_off],
-              f"AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT(off hand = item {new_off}) [WEAPONS-W9]")
+        _vis.append((GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT, [PLAYER_AGENT_ID, EQUIPPED_SLOT_OFFHAND, new_off],
+                     f"AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT(off hand = item {new_off}) [WEAPONS-W9]"))
+    for _vop, _vvals, _vwhy in visible_slot_writes(_vis, state, conn_id):
+        _send(_vop, _vvals, _vwhy)
     # The server's own hands: the same door a party row's weapon comes
     # through, so nothing that reads the weapon can be left pointing at the
     # old one. The off hand is cleared FIRST because the door only sets it.
@@ -5311,6 +5390,16 @@ import itemstore                                               # noqa: E402
 # Read by the burst, the 0x006E build, handle_visibility_flags and
 # test_visstatus.py.
 import visstatus                                               # noqa: E402
+import townweapon                                              # noqa: E402
+# The world map's travel: which content maps are travel destinations, the
+# unlock bitmap that makes the client offer them, and a travel request's
+# refusal -- DESKWORK-D1 step 7. Read by the load preamble's 0x0094 send,
+# handle_map_travel and test_maptravel.py.
+import maptravel                                               # noqa: E402
+# The party family's henchman add -- DESKWORK-D1 step 5. The tape-locked
+# 0x00B0 + 0x01BF batch, the hireable-marker message and the party cap; read by
+# handle_henchman_add, spawn_population's hireable arm and test_henchparty.py.
+import henchparty                                              # noqa: E402
 from skillunlock import (                                      # noqa: F401,E402
     unlock_corpus_words, refuse_skill_zero,
     # The persisted skill library's two halves read these by bare name: the
@@ -5585,7 +5674,7 @@ _PATHMAPS = {}
 _PATHMAP_LOCK = threading.Lock()
 
 
-def load_pathmap(map_file_id):
+def load_pathmap(map_file_id, archive=None, table=None, role=None):
     """The walkable geometry for a map, or None if we cannot get it.
 
     None is a normal outcome, not an error: no archive on this machine, or a map
@@ -5596,6 +5685,13 @@ def load_pathmap(map_file_id):
     and a RUNNING Guild Wars client holds its own `Gw.dat` open exclusively, so
     on a run where the server and the client share one archive this read fails
     with EACCES and collision silently turns off.
+
+    `archive`/`table`: an already-open Archive and its file_id_table, so a
+    startup loop over many maps opens the archive once (DESKWORK-D1 step 7's
+    travel prewarm; MEASURED 17.4 s -> 13.0 s over 12 maps -- the rest is each
+    map's own decompression). `role`: what a failure means; None is the served
+    instance ("collision is OFF"), a string names a DESTINATION whose mesh is
+    merely unavailable, so the line does not claim this run lost collision.
     """
     if PathingMap is None:
         return None
@@ -5603,7 +5699,7 @@ def load_pathmap(map_file_id):
         if map_file_id in _PATHMAPS:
             return _PATHMAPS[map_file_id]
         try:
-            pm = PathingMap.load(map_file_id)
+            pm = PathingMap.load(map_file_id, archive=archive, table=table)
             print(f"[map] navmesh 0x{map_file_id:X}: {len(pm.planes)} planes, "
                   f"{len(pm.trapezoids)} trapezoids")
         except PermissionError as exc:
@@ -5613,18 +5709,23 @@ def load_pathmap(map_file_id):
             print(f"[map] no navmesh for 0x{map_file_id:X}: {exc}")
             print("[map] that is the CLIENT holding this archive open -- the "
                   "read came too late; see prewarm_pathmap()")
-            print("[map] collision is OFF; the character can walk through walls")
+            if role is None:
+                print("[map] collision is OFF; the character can walk through walls")
             pm = None
         except Exception as exc:                              # noqa: BLE001
             print(f"[map] no navmesh for 0x{map_file_id:X}: {exc}")
-            print("[map] collision is OFF; the character can walk through walls")
+            if role is None:
+                print("[map] collision is OFF; the character can walk through walls")
             pm = None
         _PATHMAPS[map_file_id] = pm
         return pm
 
 
-def prewarm_pathmap(map_id):
+def prewarm_pathmap(map_id, archive=None, table=None, role=None):
     """Read the navmesh at STARTUP, before any client can lock the archive.
+    `archive`/`table`/`role` pass through to load_pathmap (a shared open
+    archive for a loop; `role` names a destination so a failure is worded as
+    an unwarmed destination rather than as this run losing collision).
 
     MEASURED 2026-08-13, and it corrects a claim this repo made the other way
     round. `load_pathmap`'s other call site is instance bring-up -- the client
@@ -5654,10 +5755,15 @@ def prewarm_pathmap(map_id):
               f"be pre-warmed; it will be read at instance load, which is late "
               f"-- see prewarm_pathmap()")
         return None
-    pm = load_pathmap(cfg[0])
+    pm = load_pathmap(cfg[0], archive=archive, table=table, role=role)
     if pm is None:
-        print(f"[map] PRE-WARM FAILED for map {map_id} (file id 0x{cfg[0]:X}); "
-              f"this run serves NO collision")
+        if role is None:
+            print(f"[map] PRE-WARM FAILED for map {map_id} (file id "
+                  f"0x{cfg[0]:X}); this run serves NO collision")
+        else:
+            print(f"[map] PRE-WARM FAILED for map {map_id} (file id "
+                  f"0x{cfg[0]:X}): {role} -- unwarmed, so it is WITHHELD as a "
+                  f"destination; this run's own collision is unaffected")
     return pm
 
 
@@ -10371,6 +10477,32 @@ GAME_CMSG_HERO_SKILL_TOGGLE = 0x0019
 # that reading is inference and the wrong name already cost one correction.
 # No server arm: nothing we can send moves +0x24, so it cannot fire here.
 GAME_CMSG_HERO_UNNAMED_0017 = 0x0017
+# The party window's ADD-HENCHMAN click -- DESKWORK-D1 step 5 (2026-09-23).
+# [word agent_id] of a standing outpost henchman, OBSERVED 3 of 3 on capture
+# 20260819T132414 :53419 (an outpost, map 242): c2s 0x009F [4]/[2]/[6] each
+# answered 31-132 ms later by 0x00B0 PLAYER_PARTY_SIZE THEN the 0x01BF roster
+# row, in one chunk -- SIZE BEFORE ROW (the hero KICK answers row-then-size).
+# The client offers the click only for agents it was told are hireable, which
+# is what GAME_SMSG_PARTY_HENCHMAN_HIREABLE (0x0071) below marks. Send wrapper
+# 0x0085BE40 on 38797, one caller inside PyCliParty, gated on the party's
+# "is mine" flag bit 0x80 (0x01B2 sets it). No loopback arrival: this server
+# had no hireable outpost henchman to click until this step. handle_henchman_add.
+GAME_CMSG_HENCHMAN_ADD = 0x009F
+# The message that MARKS an agent as a hireable henchman, so the party window's
+# henchman list offers it: the client's handler 0x0091E220 -> 0x008113D0
+# BINARY-SEARCH-INSERTS the agent id into a sorted dword set at
+# [ctx+0x2c]+0x574 (the object 0x00B0's per-player array +0x80C lives in; the
+# set's enumerator 0x0080E200 is called from PtSearch, asserts PtSearch:365 and
+# :1116). OBSERVED it was sent for exactly the six henchman NPCs (agents 1..6)
+# of 20260819T132414 :53419 and NO other of the 44 kind-9 NPCs, in both outpost
+# connections and NEVER in the field (11 of 96 live connections carry it, all
+# outposts) -- so it is the hireable marker (henchparty.hireable_mark). We SEND
+# it BEFORE a hireable NPC's create, as retail does, with the displayed level
+# (prop 36) beside it; there is no reply. (GWCA's offset numbering names its
+# own 0x0071 differently; the name here is from our own handler read and the
+# 6-of-6 correlation.) The same value as henchparty.HENCHMAN_HIREABLE, which
+# the sends use; test_henchparty locks the two equal.
+GAME_SMSG_PARTY_HENCHMAN_HIREABLE = 0x0071
 # The flag placements the 2026-08-19 clicks measured (pvpui 28.5): hero flag
 # [agent, vec2, plane], party flag [vec2, plane]. The client draws NOTHING on
 # send -- the draw is the s2c echo pair below (pvpui 28.6).
@@ -10727,6 +10859,19 @@ GAME_CMSG_ITEM_MOVE = 0x004F
 # behind --no-item-move-by-id. The GAME_SMSG with this number is HERO_ACTIVATE;
 # the two share nothing.
 GAME_CMSG_ITEM_MOVE_BY_ID = 0x0072
+# 0x00B1 [word map_id, byte, word, byte, byte]: the world map's travel to
+# another outpost. OBSERVED 10 of 10 on 10 live connections over 6 captures
+# (c2striage.py); answered by 0x01D9 then the transfer pair, then the client
+# re-dials. Payload is [map_id, 0, 0, 0, 1] on every tape -- the trailing four
+# fields never varied (region / district / language / flag candidates,
+# UNVERIFIED). Handled by handle_map_travel behind --no-map-travel; the world
+# map offers a destination whose arr4 bit is set -- by the login's 0x0094 or
+# by a 0x0099 (the second writer; 10 of 10 destinations set before the click,
+# 9 by 0x0094 and one by 0x0099 [281, 1]). The send wrapper 0x0085C280 has no
+# direct CALL: a direct jmp thunk 0x008576E0 <- call 0x004A791F (the route's
+# caller stands). The GAME_SMSG with this number is PLAYER_SET_PARTY; the two
+# share nothing. maptravel.py.
+GAME_CMSG_MAP_TRAVEL = 0x00B1
 
 # THE THREE PURE-INBOUND ONES. Each is fully named in `schema/overrides.json`
 # with the client-side evidence beside it, each is among the largest single
@@ -11728,6 +11873,19 @@ VISIBILITY_STATUS_ENABLED = True  # False (--no-visibility-status): today's
                                # four slots, the doll bare-headed in town), c2s
                                # 0x0057 ignored, the world's body dressed with
                                # every piece whatever the mode. visstatus.py.
+TOWN_WEAPON_STRIP_ENABLED = True  # False (--no-town-weapon-strip): the town
+                               # body's 0x006E carries the hands (visuals 0/1)
+                               # and a weapon-set switch's 0x006F goes out in a
+                               # town -- every run before DESKWORK-D1's town
+                               # weapon (2026-09-23). Default ON: retail's
+                               # outpost 0x006E never carries a weapon (0 of
+                               # 2,245 bodies; the owner's own 50 loads with a
+                               # weapon in the equipped bag among them) and no
+                               # outpost hand change is answered with a 0x006F
+                               # (0 of 14) while the field carries both (40/40
+                               # leads, 23/23 off hands; 4/4 switches) --
+                               # OBSERVED, townweapon.py. The bag and the doll
+                               # are untouched.
 ITEM_MOVE_BY_ID_ENABLED = True  # False (--no-item-move-by-id): c2s 0x0072
                                # ITEM_MOVE_BY_ID -- a drag between two cells of
                                # the non-equipped bags -- is ignored, as on the
@@ -11735,6 +11893,47 @@ ITEM_MOVE_BY_ID_ENABLED = True  # False (--no-item-move-by-id): c2s 0x0072
                                # the sword snapped back). Default ON: 0x014B
                                # into an empty cell, 0x0152 onto an occupied one
                                # (RECONSTRUCTION; no tape carries the request).
+MAP_TRAVEL_ENABLED = True      # False (--no-map-travel): c2s 0x00B1 MAP_TRAVEL
+                               # is ignored, as today (DROPPED_ON_PURPOSE). The
+                               # default answers it as retail does -- 0x01D9 then
+                               # the transfer pair -- for a served, non-explorable
+                               # destination, and refuses the rest with nothing
+                               # sent (maptravel.py). DESKWORK-D1 step 7.
+MAP_UNLOCK_ENABLED = True      # False (--no-map-unlock): do not send s2c 0x0094
+                               # at login. The pre-arc behaviour -- the client's
+                               # arr4 then holds only what 0x0099 set: the map
+                               # you are on and every map zoned into this client
+                               # session; the OTHER served outposts are absent.
+                               # Default ON: arr4's bit set for every travelable
+                               # content map so the map offers them (maptravel.py).
+TRAVEL_UNSERVABLE = {}         # map_id -> reason: travel destinations whose
+                               # navmesh did NOT load at main()'s prewarm (no
+                               # file in this archive, no static config). Read
+                               # by the login's 0x0094 (withheld from arr4) and
+                               # by handle_map_travel (refused, nothing sent).
+HENCHMAN_ADD_ENABLED = True    # False (--no-henchman-add): c2s 0x009F is ignored
+                               # -- the pre-DESKWORK-D1-step-5 behaviour (the
+                               # party window's Add Henchman did nothing; only
+                               # the launch --henchman single roster row
+                               # existed). Default ON: the reply is OBSERVED,
+                               # retail's own 0x00B0 + 0x01BF in that order, 3 of
+                               # 3 (20260819T132414 :53419; henchparty.py), and
+                               # every standing henchman is one this server
+                               # marked hireable, so what reaches us is an id we
+                               # placed. handle_henchman_add.
+OUTPOST_PARTY_CAP = 4          # The party cap a henchman add AND a hero add
+                               # refuse at. ONE CONSTANT for every served map,
+                               # not a per-map read: it is the client's own
+                               # AreaInfo max_party, read with
+                               # toolkit/clientscan/areatable.py (build 38797),
+                               # for the maps we serve -- 4 for Ascalon City
+                               # (148), Lakeside (146), Shing Jea (242 -- the
+                               # tape's outpost, where 3 adds fill 1 player ->
+                               # 4) and Kamadan (449). OBSERVED for those four;
+                               # 248/280 read 8 and 55/238 read 6, so a per-map
+                               # table is the next step. --henchman-cap
+                               # overrides (N >= 1). Heroes AND henchmen count
+                               # against it (party_member_count).
 AI_MODE_FIGHT, AI_MODE_GUARD, AI_MODE_AVOID = 0, 1, 2   # 0x0015's byte (pvpui 28.5)
 AI_MODE_NAMES = {0: "Fight", 1: "Guard", 2: "Avoid Combat"}
 SPIRIT_RANGE = 2512.0          # u -- WIKI (GWW "Range"): binding rituals /
@@ -24589,7 +24788,11 @@ def handle_hero_kick(values, send, state, conn_id):
                      "(RECONSTRUCTION -- the retail witness had no body)",
                      conn_id)
     remaining = party_hero_slots(state)
-    party_size = 1 + (1 if HENCHMAN is not None else 0) + len(remaining)
+    # ONE count for the whole party (DESKWORK-D1 step 5's fix pass): the hired
+    # henchmen count too -- this line summed 1 + henchman + heroes and sent
+    # [pn, 1] with two henchmen still in the party -- and the heroes ride
+    # PARTY_SIZE_COUNTS_HEROES as the load's own 0x00B0 does.
+    party_size = party_size_on_wire(state)
     inv = None
     if not (HERO_BAGS and HERO_INVENTORY):
         print(f"[c{conn_id}] HERO_KICK: no 0x0145 -- no inventory container "
@@ -24746,6 +24949,17 @@ def handle_hero_add(values, send, state, conn_id):
               f"(HEROES_PARTY_MAX={HEROES_PARTY_MAX}, PtPlayer:332); nothing "
               f"sent [SANDBOX-N2]", flush=True)
         return
+    # DESKWORK-D1 step 5's fix pass: the MAP's cap, henchmen counted -- the
+    # henchman add refused at it while this add did not, so with the player and
+    # three hired henchmen (4 of 4) a re-added hero made 5 (HENCH-EVR-1 /
+    # ENG-HENCH-1). The same rule and constant as handle_henchman_add.
+    if henchparty.party_is_full(party_member_count(state), OUTPOST_PARTY_CAP):
+        print(f"[c{conn_id}] HERO_ADD({hid}) refused: the party already holds "
+              f"{party_member_count(state)} members (heroes and henchmen), the "
+              f"served cap (OUTPOST_PARTY_CAP={OUTPOST_PARTY_CAP}, --henchman-cap "
+              f"overrides); nothing sent (retail's refusal reply NOT FOUND) "
+              f"[DESKWORK-D1]", flush=True)
+        return
     if not (HERO_RIG_RETAIL and HERO_ACTIVATE):
         print(f"[c{conn_id}] HERO_ADD({hid}) refused: the load ran the LEGACY "
               f"hero rig (HERO_RIG_RETAIL={HERO_RIG_RETAIL}, "
@@ -24802,8 +25016,9 @@ def handle_hero_add(values, send, state, conn_id):
               f"load [SANDBOX-N2]", flush=True)
     # 5. the size, hero counted, then 6. the roster row, bare and adjacent --
     #    the henchman add's shape (0x00B0 then the row, one chunk, 3 of 3).
-    party = party_hero_slots(state)
-    party_size = 1 + (1 if HENCHMAN is not None else 0) + len(party)
+    #    ONE count for the whole party (step 5's fix pass): hired henchmen
+    #    count, heroes ride PARTY_SIZE_COUNTS_HEROES as at load.
+    party_size = party_size_on_wire(state)
     send(GAME_SMSG_PLAYER_PARTY_SIZE,
          agents.player_party_size(PLAYER_NUMBER, party_size),
          f"PLAYER_PARTY_SIZE({party_size}) -- the party after the add [HERO_ADD]")
@@ -24811,6 +25026,79 @@ def handle_hero_add(values, send, state, conn_id):
     send(op, vals, f"{label} [HERO_ADD, bare -- RECONSTRUCTION]")
     print(f"[c{conn_id}] HERO_ADD: hero {hid} (agent {_haid}) back in the party; "
           f"size now {party_size} [SANDBOX-N2]", flush=True)
+
+
+def party_member_count(state, count_heroes=True):
+    """How many the party holds: the player, its heroes, the launch henchman
+    and every henchman hired in game -- the ONE count the map's cap is compared
+    to (heroes always counted: they hold party slots). DESKWORK-D1 step 5; the
+    fix pass made it the hero kick's and the hero add's count too, because both
+    still summed `1 + henchman + heroes` and so, with a hired henchman in the
+    party, the kick sent 0x00B0 one short and the add went past the cap
+    (HENCH-EVR-1 / ENG-HENCH-1, reproduced on the real handlers)."""
+    return (1
+            + (len(party_hero_slots(state)) if count_heroes else 0)
+            + (1 if HENCHMAN is not None else 0)
+            + len(state.get("party_henchmen", {})))
+
+
+def party_size_on_wire(state):
+    """The size 0x00B0 carries after a hero kick, a hero add or a henchman add:
+    party_member_count with the heroes counted unless --party-size-no-heroes
+    (PARTY_SIZE_COUNTS_HEROES, the LOAD's revert arm) left them out of the
+    load's 0x00B0 -- the load and the clicks must agree or the party counter
+    jumps between them (HENCH-EVR-11 / ENG-HENCH-11). The cap keeps counting
+    heroes whatever the flag says."""
+    return party_member_count(state, count_heroes=PARTY_SIZE_COUNTS_HEROES)
+
+
+def handle_henchman_add(values, send, state, conn_id):
+    """GAME_CMSG 0x009F HENCHMAN_ADD: the party window's Add Henchman click --
+    hire a standing outpost henchman into the party (DESKWORK-D1 step 5).
+
+    OBSERVED end to end (studies/cmsg/FINDINGS.md "The party family", capture
+    20260819T132414 :53419): values[1] is the standing henchman's AGENT ID (the
+    client offers only agents this server marked hireable, 0x0071); the reply is
+    0x00B0 PLAYER_PARTY_SIZE then the 0x01BF roster row, SIZE BEFORE ROW, 3 of 3
+    -- henchparty.henchman_add_batch, tape-locked in test_henchparty. The
+    standing NPC is NOT destroyed (no 0x0021 follows on the tape); it keeps
+    standing and its record moves into the party.
+
+    THE REFUSALS send NOTHING (retail's refusal reply is NOT FOUND -- no tape
+    carries a refused add): an agent that is not a hireable henchman of this
+    outpost; one already in the party; and one that would put the party over the
+    map's cap (OUTPOST_PARTY_CAP -- heroes count against it too, the same value
+    the load's 0x00B0 carries)."""
+    aid = int(values[1])
+    hench = (state.get("hireable_henchmen") or {}).get(aid)
+    if hench is None:
+        print(f"[c{conn_id}] HENCHMAN_ADD({aid}) refused: not a hireable henchman "
+              f"of this outpost {sorted(state.get('hireable_henchmen') or {})}; "
+              f"nothing sent (retail's refusal reply NOT FOUND) [DESKWORK-D1]",
+              flush=True)
+        return
+    party = state.setdefault("party_henchmen", {})
+    if aid in party:
+        print(f"[c{conn_id}] HENCHMAN_ADD({aid}) refused: already in the party; "
+              f"nothing sent [DESKWORK-D1]", flush=True)
+        return
+    if henchparty.party_is_full(party_member_count(state), OUTPOST_PARTY_CAP):
+        print(f"[c{conn_id}] HENCHMAN_ADD({aid}) refused: the party already holds "
+              f"{party_member_count(state)} members (heroes and henchmen), the "
+              f"served cap (OUTPOST_PARTY_CAP={OUTPOST_PARTY_CAP} -- a constant, "
+              f"the AreaInfo max_party of the maps we serve; --henchman-cap "
+              f"overrides); nothing sent (retail's refusal reply NOT FOUND) "
+              f"[DESKWORK-D1]", flush=True)
+        return
+    party[aid] = hench
+    size = party_size_on_wire(state)
+    for op, vals, label in henchparty.henchman_add_batch(
+            1, PLAYER_NUMBER, size, aid, hench["enc_name"],
+            hench["profession"], hench["level"]):
+        send(op, vals, label + " [HENCHMAN_ADD]")
+    print(f"[c{conn_id}] HENCHMAN_ADD: {hench.get('name', aid)} (agent {aid}) "
+          f"joined the party; size now {size} [DESKWORK-D1]", flush=True)
+
 
 def hero_panel_bar_ids(state, hid, stored_bar=None):
     """The eight slots the hero PANEL shows -- 0x00DA's array for this hero:
@@ -25502,15 +25790,29 @@ def visible_slot_writes(batch, state, conn_id=None):
     while the doll and the load's 0x006E hid it). Untouched under
     --no-visibility-status. Other agents' writes and the hands (slots 0/1)
     pass through. Says what it hid. RECONSTRUCTION: retail's reply to an
-    equip under a hiding mode is on no tape."""
-    if not VISIBILITY_STATUS_ENABLED:
+    equip under a hiding mode is on no tape.
+
+    AND THE TOWN'S HANDS (DESKWORK-D1, the town weapon, 2026-09-23;
+    townweapon.py): in a town a player write into visual 0 or 1 -- a
+    weapon-set switch's, an equip's -- is DROPPED, not zeroed: retail sent no
+    hand 0x006F on any of its fourteen outpost hand changes (four switches,
+    four double-click weapon equips, one off-hand unequip, five PvP-panel
+    placements into equipped 0/1) while every field switch carried one (4 of
+    4) -- OBSERVED shape. Every consumer of a player 0x006F passes here (the
+    item batch, select_weapon_set), so the gate is ONE. Untouched under
+    --no-town-weapon-strip."""
+    if not VISIBILITY_STATUS_ENABLED and not TOWN_WEAPON_STRIP_ENABLED:
         return list(batch)
     flags = int(state.get("vis_flags", visstatus.DEFAULT_FLAGS))
     field = instance_is_field(state)
-    out, hid = [], []
+    out, hid, dropped = [], [], []
     for op, vals, label in batch:
-        if (op == GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT and len(vals) >= 3
-                and int(vals[0]) == PLAYER_AGENT_ID):
+        mine = (op == GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT and len(vals) >= 3
+                and int(vals[0]) == PLAYER_AGENT_ID)
+        if mine and TOWN_WEAPON_STRIP_ENABLED and townweapon.drops(vals[1], field):
+            dropped.append((int(vals[1]), int(vals[2])))
+            continue
+        if mine and VISIBILITY_STATUS_ENABLED:
             writes, h = visstatus.filter_slot_writes([(vals[1], vals[2])], flags, field)
             slot, item = writes[0]
             if h:
@@ -25527,25 +25829,56 @@ def visible_slot_writes(batch, state, conn_id=None):
                           for k, s, iid in hid)
               + f" -- {'a field' if field else 'a town'}, flags 0x{flags:02x} "
                 f"({visstatus.describe(flags)}) [DESKWORK-D1, RECONSTRUCTION]", flush=True)
+    if dropped and conn_id is not None:
+        print(f"[c{conn_id}] TOWN WEAPON: the body's 0x006F for "
+              + ", ".join(f"the {townweapon.HAND_NAMES[s]} ({f'item {i}' if i else 'emptied'})"
+                          for s, i in dropped)
+              + " is not sent -- a town; retail sent none on 14 of 14 outpost hand "
+                "changes, the field's switches all carry one [DESKWORK-D1, OBSERVED]",
+              flush=True)
     return out
 
 
 def visible_worn(worn, state, conn_id=None):
     """The 0x006E array the WORLD gets: `worn` with each piece the display
     mode hides under the current regime zeroed (visstatus.strip_visual; the
-    regime is instance_is_field's, the 0x0199 byte's own rule). Untouched
-    under --no-visibility-status. Says which pieces it hid."""
-    if not VISIBILITY_STATUS_ENABLED:
-        return list(worn)
-    flags = int(state.get("vis_flags", visstatus.DEFAULT_FLAGS))
-    shown, hid = visstatus.strip_visual(worn, flags, instance_is_field(state))
-    if hid and conn_id is not None:
-        print(f"[c{conn_id}] DISPLAY MODE: the body's 0x006E leaves out "
-              + ", ".join(f"the {visstatus.KIND_NAMES[k]} (item {iid}, visual {s})"
-                          for k, s, iid in hid)
-              + f" -- {'a field' if instance_is_field(state) else 'a town'}, flags "
-                f"0x{flags:02x} ({visstatus.describe(flags)}) [DESKWORK-D1, "
-                f"RECONSTRUCTION]", flush=True)
+    regime is instance_is_field's, the 0x0199 byte's own rule; untouched
+    under --no-visibility-status) AND, in a TOWN, with the hands (visuals 0
+    and 1) zeroed (townweapon.strip_hands; DESKWORK-D1, the town weapon,
+    2026-09-23: retail's outpost 0x006E never carries a weapon, 0 of 2,245
+    bodies, the owner's own 50 loads with a weapon in the equipped bag among
+    them, while the own field body carries every hand its bag holds, 40 of 40
+    leads and 23 of 23 off hands -- OBSERVED. That the SERVER's array is the
+    channel -- the client applying no regime of its own to a hand -- is
+    RECONSTRUCTION: the 0x006E / 0x006F handlers, their ChCliApi workers and
+    every function those call directly, the AvApi dresser 0x007DFCE0 among
+    them, hold no direct call to MissionCliGetMap 0x0084D9B0 or the map-flags
+    reader 0x0084D950 (msghandler --follow --depth 2; the dresser's own callee
+    0x007F70B0 and indirect calls unsearched -- townweapon.py), and the
+    runsheet's rival prediction settles it on our client. Untouched under
+    --no-town-weapon-strip). The equipped BAG -- the doll -- is not touched
+    here. Says which pieces it hid."""
+    shown = list(worn)
+    field = instance_is_field(state)
+    if VISIBILITY_STATUS_ENABLED:
+        flags = int(state.get("vis_flags", visstatus.DEFAULT_FLAGS))
+        shown, hid = visstatus.strip_visual(shown, flags, field)
+        if hid and conn_id is not None:
+            print(f"[c{conn_id}] DISPLAY MODE: the body's 0x006E leaves out "
+                  + ", ".join(f"the {visstatus.KIND_NAMES[k]} (item {iid}, visual {s})"
+                              for k, s, iid in hid)
+                  + f" -- {'a field' if field else 'a town'}, flags "
+                    f"0x{flags:02x} ({visstatus.describe(flags)}) [DESKWORK-D1, "
+                    f"RECONSTRUCTION]", flush=True)
+    if TOWN_WEAPON_STRIP_ENABLED:
+        shown, hands = townweapon.strip_hands(shown, field)
+        if hands and conn_id is not None:
+            print(f"[c{conn_id}] TOWN WEAPON: the body's 0x006E leaves out "
+                  + ", ".join(f"the {townweapon.HAND_NAMES[s]} (item {i}, visual {s})"
+                              for s, i in hands)
+                  + " -- a town; retail's outpost bodies carry none (0 of 2,245), the "
+                    "equipped bag and the doll keep the weapon [DESKWORK-D1, OBSERVED]",
+                  flush=True)
     return shown
 
 
@@ -29181,6 +29514,36 @@ def spawn_population(send, state, origin, conn_id, area=None):
             # `damage` first, agent_weapon_range's order).
             "weapon_item": row.get("weapon_item"),
         }
+        # DESKWORK-D1 step 5: a `hireable` row is an outpost henchman the party
+        # window offers. BEFORE its create (retail's position: 0x009B, 0x009F
+        # [36], 0x00A6, 0x0071, then 0x00F0 and 0x0020, 24 of 24 sends on the
+        # two outpost connections), send the two messages that single a
+        # hireable henchman out from every other kind-9 NPC on the tape -- the
+        # displayed level (prop 36: 6 of 6 henchmen, 0 of 38 others) and the
+        # hireable mark (0x0071: the set the panel's henchman list reads) --
+        # and record what its 0x01BF roster row will need: the proper name,
+        # the profession and the level. c2s 0x009F then hires it
+        # (handle_henchman_add). OUTPOST ONLY, as on retail (0x0071 on 11 of
+        # 96 live connections, all outposts, none in a field): a field gets
+        # neither message and says so. The rest of the burst is
+        # create_agent_world's own order (RECONSTRUCTION; henchparty.py).
+        if row.get("hireable") and HENCHMAN_ADD_ENABLED:
+            _haid = int(row["agent_id"])
+            _hlevel = int(row.get("level", npc.get("level", 0)) or 0)
+            if instance_is_field(state):
+                print(f"[c{conn_id}] {key!r}: hireable row in a FIELD (map "
+                      f"{state.get('map_id')}) -- not marked (no 0x0071, no prop "
+                      f"36): retail offers henchmen in outposts only "
+                      f"[DESKWORK-D1]", flush=True)
+            else:
+                for op, vals, lbl in henchparty.hireable_bringup(_haid, _hlevel):
+                    send(op, vals, lbl)
+                state.setdefault("hireable_henchmen", {})[_haid] = {
+                    "enc_name": npc["enc_name"],
+                    "profession": int(npc.get("profession") or 0),
+                    "level": _hlevel,
+                    "name": label,
+                }
         create_agent_world(send, state, int(row["agent_id"]), entry, key,
                            conn_id=conn_id)
         if row.get("weapon_item"):
@@ -30572,11 +30935,20 @@ def _handle_request_players(send, state, conn_id, stop, rec):
         # visstatus.py's docstring). The doll is untouched: it reads the
         # equipped BAG and the flags itself.
         worn = visible_worn(player_worn_array(state), state, conn_id)
+        # The label names what the ARRAY carries, not the launch flag: in a
+        # town visible_worn leaves both hands zero (DESKWORK-D1, the town
+        # weapon) and the runsheet reads this line, so "weapon" is said only
+        # when a hand is non-zero, and an empty pair under EQUIP_WEAPON says
+        # so with its regime (the town-weapon review's WEAP-R5).
+        _hands = len(worn) > 1 and bool(worn[0] or worn[1])
         send(GAME_SMSG_UPDATE_AGENT_VISUAL_EQUIPMENT,
              [PLAYER_AGENT_ID] + worn,
              "UPDATE_AGENT_VISUAL_EQUIPMENT("
-             + ("weapon" if EQUIP_WEAPON else "")
-             + ("+armour" if EQUIP_ARMOUR else "") + ")")
+             + ("weapon" if _hands else "")
+             + ("+armour" if EQUIP_ARMOUR else "") + ")"
+             + ("" if _hands or not EQUIP_WEAPON else
+                (" [hands empty: a town]" if not instance_is_field(state)
+                 else " [hands empty]")))
         # ArenaNet sends this after EVERY 0x006E, 366 of
         # 366 across both live captures. Zero because we
         # have never populated a guild id, and 0 is what
@@ -31376,6 +31748,50 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                  "INSTANCE_LOAD_INFO"
                  + (" [is_explorable=1, FORCED]" if EXPLORABLE else "")
                  + (" [is_explorable=0, FORCED OUTPOST]" if OUTPOST else ""))
+
+            # DESKWORK-D1 step 7: the client's known-maps set, so the world map
+            # offers our served outposts as travel destinations. s2c 0x0094
+            # carries five map-id bitmaps; arr4's bit is set per travelable
+            # content map (bit == map id; the width and the 27-dword retail
+            # census are in maptravel.py), arr0-3 sent empty (UNVERIFIED: empty
+            # on 27 of 29 tapes). ONCE PER LOGIN, as retail does (29 of 29 on a
+            # login's first map-loading connection, 0 of 61 transfer arrivals),
+            # and HERE -- after 0x0199, before the fog pair -- where retail's
+            # sits (29 of 29). NOT resent on a re-entry after our own transfer:
+            # the handler's CopyBits REPLACES arr4, and the SECOND writer of the
+            # same store, 0x0099's handler (bts at 0x0059d239), has by then
+            # added the destination. That second writer is also why this send
+            # precedes the burst's 0x0099 [map, 0]: our bitmap may omit the map
+            # you are on (an explorable under --map 168), and the 0x0099 that
+            # follows SETS it back. One 0x0094 site in the server; a duplicate
+            # sender of unlock state once wiped a library and crashed a client
+            # (test_maptravel counts every spelling across toolkit/authsrv).
+            _zoned_in = maptravel.arrival_skips_unlock(
+                TRANSFER_ARRIVALS, (state["world_id"], state["player_id"]),
+                state["map_id"], time.time())
+            if MAP_UNLOCK_ENABLED and not _zoned_in:
+                _mu_payload, _mu_label, _mu_over = maptravel.unlock_message(
+                    agents.WORLD, mission_mask_bytes(MAP_ID_COUNT) // 4,
+                    exclude=TRAVEL_UNSERVABLE)
+                send(GAME_SMSG_MAP_TRAVEL_UNLOCK, _mu_payload, _mu_label)
+                if _mu_over:
+                    print(f"[c{conn_id}] MAP UNLOCK: map id(s) {_mu_over} past "
+                          f"the {len(_mu_payload[4])}-dword bitmap -- not "
+                          f"offered [DESKWORK-D1]", flush=True)
+                if TRAVEL_UNSERVABLE:
+                    print(f"[c{conn_id}] MAP UNLOCK: withheld from arr4 -- "
+                          f"{TRAVEL_UNSERVABLE} [DESKWORK-D1]", flush=True)
+            elif MAP_UNLOCK_ENABLED:
+                print(f"[c{conn_id}] MAP UNLOCK: a re-entry after our own "
+                      f"transfer -- 0x0094 NOT resent (retail: once per login, "
+                      f"never on an arrival); the burst's 0x0099 sets map "
+                      f"{state['map_id']}'s bit [DESKWORK-D1]", flush=True)
+            else:
+                print(f"[c{conn_id}] MAP UNLOCK OFF (--no-map-unlock): no "
+                      f"0x0094; the client's arr4 holds only what 0x0099 set -- "
+                      f"this map and any map zoned into this session -- so the "
+                      f"world map shows THOSE pins and not the other served "
+                      f"outposts [DESKWORK-D1]", flush=True)
 
             # The exploration-init pair: without it mapDims stays 0 and the
             # first M press kills the client on GmMapView.cpp(1731) -- see
@@ -32540,6 +32956,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         else:
                             print(f"[c{conn_id}] ITEM_MOVE_BY_ID ignored "
                                   f"(--no-item-move-by-id) [DESKWORK-D1]", flush=True)
+                    elif opcode == GAME_CMSG_HENCHMAN_ADD:
+                        # DESKWORK-D1 step 5: the party window's Add Henchman
+                        # click. OBSERVED 3 of 3 on retail with the 0x00B0 +
+                        # 0x01BF reply (henchparty.py).
+                        if HENCHMAN_ADD_ENABLED:
+                            handle_henchman_add(values, send, state, conn_id)
+                        else:
+                            print(f"[c{conn_id}] HENCHMAN_ADD ignored "
+                                  f"(--no-henchman-add) [DESKWORK-D1]", flush=True)
                     elif opcode == GAME_CMSG_SET_CHAR_VISIBILITY_FLAGS:
                         # The owner's answer (2026-09-23): the inventory
                         # panel's DISPLAY MODE drop-down. On no retail tape;
@@ -32550,6 +32975,19 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         else:
                             print(f"[c{conn_id}] SET_CHAR_VISIBILITY_FLAGS ignored "
                                   f"(--no-visibility-status) [DESKWORK-D1]", flush=True)
+                    elif opcode == GAME_CMSG_MAP_TRAVEL:
+                        # DESKWORK-D1 step 7: the world map's travel click.
+                        # OBSERVED 10/10 on retail -- 0x01D9 then the transfer
+                        # pair (maptravel.py). A transfer hands the client on
+                        # and the socket closes; a refusal sends nothing.
+                        if MAP_TRAVEL_ENABLED:
+                            if handle_map_travel(values, send, state, conn_id,
+                                                 _local_host):
+                                graceful_close(sock, conn_id, "map travel")
+                                return
+                        else:
+                            print(f"[c{conn_id}] MAP_TRAVEL ignored "
+                                  f"(--no-map-travel) [DESKWORK-D1]", flush=True)
                     elif opcode == GAME_CMSG_CANCEL_ACTION:
                         # The one door that reaches a held cast -- the client
                         # sends no movement while casting, only this (the
@@ -35349,6 +35787,8 @@ def main():
     global SPAWN_SECONDARY                                    # SANDBOX-B4
     global DEATH_PENALTY_FORCED, ENEMY_HIT_FRACTION
     global PORTALS, TRANSFER_ALT        # read by the pre-warm before the flags
+    global MAP_TRAVEL_ENABLED, MAP_UNLOCK_ENABLED   # rebound by the flag block;
+    # the travel pre-warm reads a.no_map_travel DIRECTLY, not this global
     global CLIENT_BUILD, MAP_ID_COUNT, NO_MARKER_MAP   # --client-build
 
     # THE ARGPARSE BLOCK IS `build_parser()`, now in `serverargs.py`: 1,785 lines
@@ -35644,6 +36084,57 @@ def main():
             for _dest in portal_reachable(a.map if known else FALLBACK_MAP_ID):
                 print(f"[map] pre-warming map {_dest}: a portal destination")
                 prewarm_pathmap(_dest)
+
+    # DESKWORK-D1 step 7: and every map the world map offers as a travel
+    # destination, for the SAME reason as the portal set above -- a travel
+    # re-entry's map would otherwise load with no mesh (the client holds the
+    # archive by then). Gated as the portal prewarm is, on --map (the harness
+    # hands --map to the GAMESRV alone, so the auth-only instance, which serves
+    # no instance, pays nothing), and on the ARM (`a.no_map_travel` read
+    # directly -- the flag block below runs ~1,000 lines later, so the
+    # MAP_TRAVEL_ENABLED global is still True here; the fix pass found the
+    # landing's MAP_UNLOCK_ENABLED gate never acting for the same reason). The
+    # arm is the right gate: the mesh serves the ARRIVAL, whichever pin sent
+    # the client -- 0x0094's or a 0x0099-set one under --no-map-unlock.
+    # COST, MEASURED: ~1.3-3.8 s per real map, ~13 s for the 12-map content set
+    # with one shared archive (17.4 s with an archive per map), against the
+    # harness's listen deadline (session.Stack.start, raised to 60 s in the
+    # same commit, with this as the reason). A map whose mesh does not load is
+    # recorded in TRAVEL_UNSERVABLE and WITHHELD from arr4 and from the arm,
+    # so no pin leads into a collision-less load.
+    if a.map is not None and not a.no_map_travel:
+        _start = (a.map if MAP_STATIC_CONFIG.get(a.map) else FALLBACK_MAP_ID)
+        _ar = _tbl = None
+        try:
+            from archive import Archive, file_id_table        # noqa: E402
+            _ar = Archive()
+            _tbl = file_id_table(_ar)
+        except Exception as _exc:                             # noqa: BLE001
+            print(f"[map] travel prewarm: no shared archive ({_exc}); each "
+                  f"map opens its own")
+            _ar = _tbl = None
+        try:
+            for _dest in maptravel.travelable_maps(agents.WORLD):
+                if _dest == _start:
+                    continue
+                print(f"[map] pre-warming map {_dest}: a travel destination")
+                if prewarm_pathmap(_dest, archive=_ar, table=_tbl,
+                                   role=f"travel destination {_dest}") is None:
+                    TRAVEL_UNSERVABLE[_dest] = "no navmesh in this archive"
+        finally:
+            if _ar is not None:
+                try:
+                    _ar.close()
+                except Exception:                             # noqa: BLE001
+                    pass
+        if TRAVEL_UNSERVABLE:
+            print(f"[map] travel destinations WITHHELD (unwarmed): "
+                  f"{sorted(TRAVEL_UNSERVABLE)} -- not in 0x0094's arr4, and a "
+                  f"0x00B1 for one is refused with nothing sent")
+    elif a.map is None:
+        print("[map] no --map: no navmesh is pre-warmed (portals included), so "
+              "a travel destination's mesh would be read at its load -- late if "
+              "a client holds the archive (see prewarm_pathmap)")
 
     if a.area:
         global AREA_NAME
@@ -36608,6 +37099,44 @@ def main():
               "headgear and both costume slots, the doll bare-headed in a "
               "town, 20260923T185124), c2s 0x0057 ignored, the body's 0x006E "
               "carries every piece whatever the mode.", flush=True)
+    if a.no_town_weapon_strip:
+        global TOWN_WEAPON_STRIP_ENABLED
+        TOWN_WEAPON_STRIP_ENABLED = False
+        print("[items] --no-town-weapon-strip: the town body's 0x006E carries the "
+              "hands (visuals 0/1) and a weapon-set switch's 0x006F goes out in a "
+              "town -- every run before DESKWORK-D1's town weapon (2026-09-23). "
+              "KNOWN-BAD: retail's outpost bodies are empty-handed (0 of 2,245) and "
+              "its outpost switches carry no 0x006F (0 of 4).", flush=True)
+    if a.no_map_travel:
+        MAP_TRAVEL_ENABLED = False
+        print("[map] --no-map-travel: c2s 0x00B1 MAP_TRAVEL is ignored, as "
+              "today (DROPPED_ON_PURPOSE) -- the world map's travel click does "
+              "nothing. DESKWORK-D1 step 7.", flush=True)
+    if a.no_map_unlock:
+        MAP_UNLOCK_ENABLED = False
+        print("[map] --no-map-unlock: no s2c 0x0094 at login -- the client's "
+              "arr4 holds only what 0x0099 sets (the map you are on, every map "
+              "zoned into this session), so the world map shows those pins and "
+              "NOT the other served outposts (the pre-arc behaviour). "
+              "DESKWORK-D1 step 7.", flush=True)
+    if a.no_henchman_add:
+        global HENCHMAN_ADD_ENABLED
+        HENCHMAN_ADD_ENABLED = False
+        print("[party] --no-henchman-add: c2s 0x009F HENCHMAN_ADD is ignored and "
+              "no standing henchman is marked hireable (no 0x0071) -- the party "
+              "window's Add Henchman does nothing, the behaviour before "
+              "DESKWORK-D1 step 5.", flush=True)
+    if a.henchman_cap is not None:
+        global OUTPOST_PARTY_CAP
+        if int(a.henchman_cap) < 1:
+            raise SystemExit(f"--henchman-cap {a.henchman_cap}: the cap counts the "
+                             f"player, so it is 1 or more (0 or less would refuse "
+                             f"every add, including the hero's).")
+        OUTPOST_PARTY_CAP = int(a.henchman_cap)
+        print(f"[party] --henchman-cap {OUTPOST_PARTY_CAP}: the henchman add and "
+              f"the hero add refuse at {OUTPOST_PARTY_CAP} party members (heroes "
+              f"and henchmen counted), overriding the constant 4 (the AreaInfo "
+              f"max_party of the maps we serve).", flush=True)
     if a.party_no_fight:
         global PARTY_FIGHTS
         PARTY_FIGHTS = False

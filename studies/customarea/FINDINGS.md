@@ -4246,6 +4246,12 @@ carry the surface.
   and this client died during the HOLD. Fixed — a hold-time exit now retracts the
   verdict too. That is two distinct paths to a false PASS found in two days, both
   from the same root: the verdict is computed early and nothing downgraded it.
+  **2026-09-24: and two more.** "Fixed" above was not wired until 2026-08-18
+  (`runwatch.verdict_after_hold`), and even then covered only a client that
+  EXITED. A GW assert keeps the process alive behind its dialog, so the usual
+  crash is the hold running out on it -- and that branch, and `run_client`'s
+  teardown look, captured the dialog and still said PASS: 177 of 184 harness
+  runs with a captured dialog and a report. Both now retract.
 
 ## 32. The round trip out of Blender, and what its headline is worth (2026-08-12)
 

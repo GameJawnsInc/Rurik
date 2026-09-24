@@ -198,7 +198,12 @@ class Stack:
                     pass                # never stop reading the pipe: see above
         logf.close()
 
-    def start(self, timeout=20):
+    def start(self, timeout=60):
+        # 60 s, not 20 (2026-09-23, DESKWORK-D1 step 7's fix pass): the gamesrv
+        # now pre-warms every travel destination's navmesh at startup -- MEASURED
+        # ~13 s for the 12-map content set on top of a ~3.6 s bare start, ~17 s
+        # in all, and it grows with each enabled non-explorable content row. The
+        # deadline is here to catch a child that NEVER listens; 60 s still does.
         os.makedirs(self.logdir, exist_ok=True)
         for name, host, port, cmd in self.specs:
             self.logs[name] = os.path.join(self.logdir, f"{name}.log")
@@ -754,6 +759,7 @@ def run_client(a, outdir):
 
     actions = a.actions or ACTIONS[a.until]
     sent, results, ok, undec, walked = [], [], False, [], []
+    checkpoints_ok = False
     try:
         for i, spec in enumerate(actions.split()):
             parts = spec.split(":")
@@ -839,6 +845,12 @@ def run_client(a, outdir):
                        else LOGIN_CHECKPOINTS + MAP_CHECKPOINTS)
         print("\n=== verdict, from the client's own messages ===")
         results, ok = judge(tails, checkpoints, sampler.t0)
+        # Kept apart from `ok`, which the walk, the hold and the teardown below
+        # may each retract. The report carries both, because "did the client
+        # reach the map" is its own question: `sweeploop` and `shotloop` are
+        # SUPPOSED to crash clients, and a crash after the spawn is their
+        # result, not a broken stack (smsgsweep.reached_checkpoints).
+        checkpoints_ok = ok
 
         undec = [e for t in tails.values() for e in t.events
                  if e.get("kind") == "undecodable"]
@@ -879,7 +891,10 @@ def run_client(a, outdir):
             was_ok, ok = ok, verdict_after_hold(ok, held)
             if was_ok and not ok:
                 print("  RUN VERDICT RETRACTED: the run passed its checkpoints, "
-                      "then the client died during the hold.", flush=True)
+                      + ("then the client asserted during the hold -- its crash "
+                         "dialog is up and its process alive behind it."
+                         if held == "crashed" else
+                         "then the client died during the hold."), flush=True)
     finally:
         # READ THE CRASH DIALOG BEFORE ANYTHING CLOSES IT, ON EVERY PATH.
         # `capture_error_dialog` used to be reachable ONLY from hold_open(),
@@ -895,7 +910,15 @@ def run_client(a, outdir):
         # It goes FIRST because `close_client` destroys the dialog, and it is
         # quiet and short here: most runs end without one, and the --keep-open
         # path has already had its longer look.
-        capture_error_dialog(outdir, wait=2.0, quiet=True)
+        #
+        # AND ITS ANSWER IS KEPT, because this call dropped it too until
+        # 2026-09-24 -- the same leak as hold_open's timer branch, on every run
+        # without --keep-open: a client that asserted during the walk or after
+        # the verdict is still RUNNING behind its dialog, so the walk's "client
+        # exited" test never fires, this look finds the dialog, and the run
+        # printed PASS over it. Folded in below, after the `finally`, so a run
+        # that raised keeps its own exception.
+        dialog_at_close = capture_error_dialog(outdir, wait=2.0, quiet=True)
         # ALWAYS close the client, --keep-open included. The hold above is the
         # whole of what keep-open buys; once it ends the stack is about to be
         # stopped, and a client with no servers is not a running session, it is
@@ -905,6 +928,13 @@ def run_client(a, outdir):
         dc.close_client(proc)
         sampler.stop()
 
+    # A --keep-open run whose hold already retracted on this dialog gets the
+    # same path back (first capture wins) and prints nothing twice.
+    was_ok, ok = ok, verdict_after_hold(ok, "crashed" if dialog_at_close else None)
+    if was_ok and not ok:
+        print("  RUN VERDICT RETRACTED: the run passed its checkpoints, then the "
+              "client asserted -- its crash dialog was up at teardown.", flush=True)
+
     for t in tails.values():
         t.poll()                     # pick up anything written during close
     gwlog = ""
@@ -912,7 +942,7 @@ def run_client(a, outdir):
         gwlog = open(log_path, encoding="utf-8", errors="replace").read()
     report = {
         "exe": a.exe, "until": a.until, "actions": sent, "walk": walked,
-        "checkpoints": results, "passed": ok,
+        "checkpoints": results, "checkpoints_passed": checkpoints_ok, "passed": ok,
         "captures": sorted(f for t in tails.values() for f in t.files()),
         "endpoints": sampler.events,
         "undecodable": len(undec), "gw_log": gwlog.splitlines(),
