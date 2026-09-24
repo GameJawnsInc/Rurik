@@ -12724,6 +12724,41 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   guarded and commented. ~40 s default; nothing outside the vault is ever
   written -- the rebuilt archive and its journals live under
   `vault/exports/unitwrite/`),
+  `toolkit/test_orchtheme.py` (**2026-09-23, the orchestrator beautification's
+  review**: the run orchestrator's LOOK, the part that is arithmetic, checked on a
+  bare machine. `tools/orchestrator/orchtheme.py` is stdlib on purpose and is
+  imported BY PATH, nothing from Qt, the way `test_blenderimport.py` reaches into
+  `tools/blender/`; the rest of the look is `orchestrator.py --smoke`'s, which needs
+  PySide6 and the vault. §1 both palettes: exactly the base keys, every pair
+  `audit()` measures clears its floor (4.5:1 text, 3:1 marks, measured distances for
+  hover/pressed/selection, and the `pressed` TOKEN from the page -- the focused
+  tab's fill is read off the sheet in §4, since the row cannot see which token the
+  rule names), both real sheets
+  lint clean, every derived token a `#rrggbb`, the window's roles styled, and
+  `derive()` refuses a palette missing a base key (the verify round found the
+  "idempotent" check it replaces unable to fail: derive() hands a derived palette
+  straight back). §2 the lint goes RED on each planted fault Qt's parser
+  accepts silently -- a pseudo-class before a sub-control, its NEGATED form and its
+  chained and attribute-selector forms (the review found the negated one slipping
+  past), a leftover `$` token, unbalanced braces, an `em` font size -- and stays
+  clean on three known-good controls. §3 the audit can refuse: a muted grey that
+  fails on the card, a hover identical to rest. §4 pins the pairs the reviews found
+  missing, and for the danger button's hover READS THE SHEET: the `:hover` and
+  `:pressed` rules' ink, resolved with the base rule's as the fallback, must clear
+  4.5:1 on their fill, and a planted hover that keeps the base ink (the first cut's
+  4.22:1 in light) is refused -- an audit row for that pair measured tokens and
+  stayed green with the sheet's ink reverted. **2026-09-24, the third fix pass,
+  group G, §4 +2: the spin boxes' `max-height` read off the sheet is the wells'
+  `min-height` (22px, both contents heights), so a spin stands as tall as a combo
+  -- `--smoke` measures the rendered heights, this is its bare twin; floor 29 → 31.
+  Group F, §4 +6: the focused tab's `:selected:focus` rule READ OFF THE SHEET, both
+  palettes -- its fill 12+ from the page (the token row stayed green with the rule
+  put back to hover, 3 from the light page) and its top edge a mark that clears 3:1
+  on the page -- and two planted rules refused, one filled with hover and one with no
+  edge; floor 31 → 37. The pre-merge pass: `rule()` merges every block of the exact
+  selector in sheet order, the last value winning (Qt's cascade at equal specificity),
+  where the first block alone kept an edge a later override had cleared; floor 37.**
+  Floor 37, <1 s),
   `toolkit/test_bareimport.py` (the SERVER must import on a machine with no
   vault -- proven in a subprocess, not argued. **What earns it: on 2026-08-15
   `probes.py` grew `GIVER_NPC = npc_template("def_1480")` at module level**, and
@@ -13425,7 +13460,7 @@ and **content rows are a subset of the wire by construction, so every one of the
 no longer support would go red here. Needs the vault's live tapes and the study archive;
 sections 0-1 are bare-machine safe. 33 checks, floor 33. ~5 s)
 
-  `toolkit/harness/test_sandbox.py` (**2026-09-23 fix pass, §5 +2: `sandbox.LABEL_TIER` IS `content.LABEL_TIER` (one definition, ENG-11); a spec's `gamesrv_args` list reaches the gamesrv's flags LAST and adds nothing by default — the label tier's control arm `--no-skill-labels` (ENG-8); floor 109 → 111.**) Earlier the same day (**SKILLS-LT §5: hand rows and label rows are two GRADES — `modelled_skills` is the HAND `[skill_effect.*]` rows only, `label_skills` the `tier = "label"` ones (disjoint, sorted), `skill_tiers` names each row's grade, and a world with no label rows has the old modelled set and an empty label set; the orchestrator marks `*` / `~label` from them and its `--smoke` stays green; +2, floor 107 → 109.** **2026-09-20, SANDBOX-B2**: the run orchestrator's
+  `toolkit/harness/test_sandbox.py` (**2026-09-24, the orchestrator beautification's pre-merge fix pass, §3 +7: a hostile's level is refused outside 0..20 as the player's and a hero's are outside 1..20 — the one reason for a level-24 row with or without ranks, never `level 24 has 0` (past 20 the budget is 0, and the refusal named ranks the row may keep when the level was what the window's spin had clamped); at 20 the raider's 5 points are accepted; a level below 0 is refused by the same rule; the no-level fallback is told from the window's old constant 2 and from 20, not only from 0 — a monk with no level spending academy_monk's whole level-5 budget accepted, a hatcher with no level and one rank refused at its template's 1; and with NO npc rows a hostile's ranks are unchecked, not refused as another profession's (`if tmpl:`, where `or not npcs` checked them in profession 0); floor 116 → 123.**) Earlier (**2026-09-24, the third fix pass, §3 +4: a HOSTILE's ranks go through `_check_ranks` too — at the level `spawn_rows` gives the row (the member's, else its template's), in the template's own profession — where the window's Attributes hint had promised "the compiler refuses more" and `validate` never read a member's attributes; 388 points at level 2 refused, a level-0 row with a rank refused and with none accepted, a member with no `level` checked at its template's (the example raider's 5 points pass at 2, not at 0); the example and the slice's own corridor rows (the only content rows carrying ranks: level 2, 5 points each) obey it; floor 112 → 116.**) Earlier (**2026-09-24, the verify round, §0 +1: `budget_for_level` is the compiler's own rule lifted out of `_check_ranks` — `points_for_level` inside 1..20 and 0 outside, so a level-0 hostile row (a value the window's spin offers and the compiler accepts) spends nothing and raises nowhere; the window's budget hint and roster line read it, where `points_for_level` raised and emptied the group's roster; floor 111 → 112.**) Earlier (**2026-09-23 fix pass, §5 +2: `sandbox.LABEL_TIER` IS `content.LABEL_TIER` (one definition, ENG-11); a spec's `gamesrv_args` list reaches the gamesrv's flags LAST and adds nothing by default — the label tier's control arm `--no-skill-labels` (ENG-8); floor 109 → 111.**) Earlier the same day (**SKILLS-LT §5: hand rows and label rows are two GRADES — `modelled_skills` is the HAND `[skill_effect.*]` rows only, `label_skills` the `tier = "label"` ones (disjoint, sorted), `skill_tiers` names each row's grade, and a world with no label rows has the old modelled set and an empty label set; the orchestrator marks `*` / `~label` from them and its `--smoke` stays green; +2, floor 107 → 109.** **2026-09-20, SANDBOX-B2**: the run orchestrator's
 compiler, `toolkit/harness/sandbox.py` -- a run SPEC (the player's profession pair, level,
 bar and unlocks; up to seven heroes each with its own body, profession, bar and ranks; up to
 four hostile groups of up to four, one of them the boss) into a content overlay, the gamesrv

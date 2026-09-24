@@ -28,6 +28,54 @@ move back.
 
 ---
 
+### R-SANDBOX, the window restyled (branch `orch-beauty`) -- 2026-09-24 -- **the run orchestrator's look taken from Dream-World-IX's GUI laws, through four review rounds and four fix passes; its `--smoke` now a ledger of 163 laws, each fix's law proven red; and one compiler rule the window had always promised: a hostile's ranks refused past its level's budget**
+
+The owner's ask (2026-09-24): a beautification pass on `tools/orchestrator/`, borrowing
+the relevant ideas from Dream-World-IX's researched PySide GUI (`apps/workspace` and its
+docs) without matching it. `151ed9ee` is the pass: a derived two-theme palette
+(`orchtheme.py`, stdlib, its contrast pairs audited), one accent in the header, cards
+instead of boxes in boxes, a master-detail Enemies tab, widgets in `orchui.py`. Then the
+loop, every finding adversarially verified before it was fixed: a five-lens review (36
+confirmed, fixed at `b217e61b`); a verify round on that (≈41 confirmed, among them a
+BLOCKER the fix pass made -- the Attributes hint a parentless `QLabel`, one stray
+top-level window per hostile and an app that would not quit -- fixed in four groups,
+`c29b20e2` `f55919de` `fce7f150` `52a28621`); a third round (no blocker or major, ≈30
+minors, fixed at `b0c4cab9` `1db37259` `73326b05`); a focused pre-merge round (no
+blocker or major, 11 minors, fixed at `4e93a581`); and after merging main in, the
+henchman rows' 60-character `name`s unstacked the default layout, so every template
+label is now capped at the 202 px the fields were fitted to (the name elided, its
+`[ABBR Ln]` tag whole, the full label the tooltip and still found by the filter), and
+the smoke plants a 218-character template of its own so its fit laws hold for the
+operator's content, not only today's (`35204d99`).
+
+**What the rounds kept finding was checks that could not fail**, so that is what changed
+most: every fix carries a `--smoke` law (or a `test_orchtheme` / `test_sandbox` check)
+reading the defect's own operand, and each was proven red by undoing its fix alone. The
+smoke's verdict goes through `toolkit/checks.py`'s Ledger: 163 laws, `SMOKE_FLOOR` 145
+(the 18 focus-gated laws declare a skip when the desktop withholds focus -- a run while
+the owner types elsewhere skipped 2-3, printed, and stayed green). Traps worth keeping:
+Qt 6 gives a combo WheelFocus before the application's event filters run, so a wheel
+guard needs `StrongFocus`; a parentless widget's `show()` makes it a window; a focus fill
+must be measured against the ground it sits on, not the card.
+
+**The compiler change (`toolkit/harness/sandbox.py`, `b0c4cab9` and `4e93a581`).** `validate`
+now refuses a HOSTILE whose attribute ranks exceed its level's budget (the level
+`spawn_rows` gives the row, in the template's profession) and a hostile level outside
+0..20 -- the rule the window's Attributes hint and chip had claimed since `151ed9ee`
+while `validate` never read a member's ranks. No spec in the tree or the vault changes
+verdict (the corridor rows are level 2 with exactly 5 points; the runsheet specs pass).
+**Owner question, recorded rather than decided:** retail foes and bosses exceed a
+player's budget; if hostiles should be exempt, the reverse is one commit (the hint says
+the compiler does not check a hostile's ranks, the chip warns instead of crit).
+
+Tests: `toolkit/test_orchtheme.py` (new, 37), `test_sandbox` 111 → 123, `--smoke` 21 → 163 laws.
+Found on the way and fixed OUTSIDE this branch: `runwatch.hold_open`'s timer branch captured a crash dialog
+without retracting the verdict, so `session.py` exited 0 over an asserted client -- the
+harness verdict-leak merge `09126d4a`; the window ranks a captured crash
+above exit 0 either way.
+
+---
+
 ### DESKWORK-D1 (step 5), fix pass -- 2026-09-23 -- **ONE party count for the henchman add, the hero kick and the hero add (the blocker); the test's floor set from its bare run; every source lock paired with a mutation; the mark and the level in retail's pre-create position; the allegiance and the map recorded as divergences**
 
 Two reviews of the entry below — an evidence refuter that re-derived every tape claim

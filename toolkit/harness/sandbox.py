@@ -178,6 +178,17 @@ def points_for_level(level):
                for lv in range(2, level + 1))
 
 
+def budget_for_level(level):
+    """The points a row of `level` may spend: points_for_level inside
+    1..LEVEL_MAX and 0 outside it -- the compiler's own rule (_check_ranks,
+    for the player, each hero and each hostile), so a level-0 hostile row
+    (content rows default to 0) spends nothing and raises nowhere. The
+    window's budget hint and roster line share it, so a level its spin offers
+    never raises under them."""
+    level = int(level)
+    return points_for_level(level) if 1 <= level <= LEVEL_MAX else 0
+
+
 def group_positions(n_groups, sizes, boss_group):
     """[(x, y)] per member, group by group, on the corridor's long axis.
 
@@ -496,8 +507,23 @@ def validate(spec, world):
             wi = m.get("weapon_item")
             if wi and items and wi not in items:
                 p.append(f"{who}: weapon_item {wi!r} is not a content item")
-            if int(m.get("level", 0)) < 0:
-                p.append(f"{who}: level below 0")
+            # its level is one the window's spin offers, 0..LEVEL_MAX (content
+            # rows default to 0; past 20 the budget is 0, and 'level 24 has 0'
+            # named the ranks when the level was what the window had clamped),
+            # and its ranks go against that level's budget, the player's and
+            # the heroes' rule -- at the level spawn_rows gives the row (the
+            # member's, else its template's), in the template's own profession.
+            # The window's Attributes hint promised this refusal before the
+            # loop had it. No template, no check: an unknown one is refused
+            # above, and with no npc rows at all the rest of this loop is
+            # unchecked too (in profession 0 every rank read 'not to []')
+            tmpl = npcs.get(npc) or {}
+            lvl = int(m.get("level", tmpl.get("level", 0) or 0))
+            if not 0 <= lvl <= LEVEL_MAX:
+                p.append(f"{who}: level {lvl} is outside 0..{LEVEL_MAX}")
+            elif tmpl:
+                _check_ranks(p, who, m.get("attributes"), lvl,
+                             (int(tmpl.get("profession") or 0),), rules)
             if int(m.get("health", 1)) < 1:
                 p.append(f"{who}: health below 1")
     if len(bosses) != 1:
@@ -512,7 +538,7 @@ def validate(spec, world):
 def _check_ranks(p, who, pairs, level, professions, rules):
     if not pairs:
         return
-    budget = points_for_level(level) if 1 <= int(level) <= LEVEL_MAX else 0
+    budget = budget_for_level(level)
     ranks = {}
     for pair in pairs:
         try:
