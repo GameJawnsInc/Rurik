@@ -6639,6 +6639,51 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   Drives the real handlers and a scratch store, launches nothing. Floor 63 from the green
   run with `RURIK_VAULT` pointed at an empty directory (the bare-machine core; §2's 10 ride
   the vault, 73 vaulted), ~10 s),
+  `toolkit/authsrv/test_townweapon.py` (**2026-09-23, DESKWORK-D1, the town weapon: in an
+  outpost the player's WORLD body carries no weapon** — the hands (visuals 0 and 1) leave the
+  town body's `0x006E` and a town's hand `0x006F` is never sent, while the equipped BAG (the
+  paper doll, the weapon-set panel) keeps it; `toolkit/authsrv/townweapon.py`,
+  `studies/cmsg/FINDINGS.md` §"The town weapon". §1 THE LEAF (bare-machine): the two hand
+  slots; `hands_shown` per regime; `strip_hands` in a town (both hands, a lead alone, a short
+  array) and a field (untouched) with a VACUITY guard and a KNOWN-BAD (the unstripped town
+  array disagrees); `drops` / `filter_hand_writes` (the hands and an emptied hand's zero
+  dropped in a town, armour and a field untouched, order kept). §2 RETAIL'S WIRE (vault-gated,
+  `livewire.decode_conn` over every live game connection, ~10 s; `LEDGER.skip` on a bare
+  machine): every outpost `0x006E` empty-handed on BOTH visuals (0 of 2,245 bodies; the OWN
+  body — the `0x006E` whose armour ids all sit in ONE type-2 bag, a hero's equipped bag being
+  type 2 too — on 50 outpost loads with a lead in that bag and 22 with an off hand, 0 carrying
+  either); the own FIELD body carrying every hand its bag holds (40 of 40 leads, 23 of 23 off
+  hands), none when the bag has none (8), never a hand the bag lacks; no outpost `0x006F` into
+  slot 0/1 on ANY agent (0), the own outpost `0x006F` that exists going to the head (the PvP
+  panel's, slot 6); every outpost c2s `0x0032` switch (4) answered with `0x0148` and no hand
+  `0x006F`, every field switch (4) with one; the outpost `0x0030` equips and `0x004F` move (5)
+  with none; the PvP panel's five hand placements with none and its armour placement with
+  one; retail's outpost NPCs carrying `0x006D` weapons (466 of 1,653 `0x006D` messages, 403
+  of 1,510 distinct bodies — the rule is the player's hands); the own body's join
+  cross-checked against `0x0022` WORLD_UPDATE_CONTROLLED_AGENT on every connection (it names
+  exactly the controlled agents that have a `0x006E`); no hero body in an outpost (3 party
+  heroes, none created), a hero body in a field; every connection decoded. §3 THE SERVER:
+  source locks (the leaf imported, the flag in `serverargs.py` and `main()`, `visible_worn`
+  and `visible_slot_writes` gated, `select_weapon_set`'s three hand `0x006F` built into a
+  batch that passes `visible_slot_writes` with no direct send left, the only direct
+  `*send(0x006F)` in `authsrv.py` — in any wrapper's spelling — being
+  `handle_visibility_flags`' slots 6/7/8, the burst's `0x006E` label built from the array so
+  a town's reads `[hands empty: a town]`); the real item layout
+  (`--weapon-set 1=starter_sword+starter_shield`) in a TOWN — the dressed array keeps the
+  hammer at visual 0 (the doll) while `visible_worn` zeroes 0 and 1; the FIELD control; the
+  KNOWN-BAD revert arm (the weapon kept, and it disagrees); VACUITY (the hammer dragged out);
+  F2/F1 in a TOWN — `0x0148` + `0x014B` + `0x0152` and NO `0x006F`, the bag and the doll's
+  array swapped — and in a FIELD — the same rows plus `0x006F [player, 0, sword]`,
+  `[player, 1, shield]` and on F1 `[player, 1, 0]` before `[player, 0, hammer]`, retail's
+  order; the revert arm's town F2 carrying them (KNOWN-BAD); the equip path (`0x004F` out,
+  `0x0030` back) with `0x014B` alone in a town and `0x014B` + `0x006F` in a field; the
+  composition with the display mode (Hide in Towns helm in a town: 0, 1 and 6 zeroed; each
+  flag alone its own slots); `visible_slot_writes` leaving another agent's hand and the
+  player's head alone in a town, dropping the player's hand under either display-mode
+  setting, and passing the batch whole with both flags off. Drives the real handlers,
+  launches nothing. Floor 36 from the green run with `RURIK_VAULT` pointed at an empty
+  directory (the bare-machine core; §2's 12 ride the vault, 48 vaulted; re-set on the fix
+  pass from its own bare run), ~10 s),
   `toolkit/authsrv/test_labelrun.py` (the labelled input run, which names GAME_CMSG
   opcodes from what a human was told to do: a message lands in exactly one step's
   window, instance-load traffic is never folded into step 1, and a dirty idle CONTROL
