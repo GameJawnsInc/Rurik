@@ -28,6 +28,52 @@ move back.
 
 ---
 
+### DESKWORK-D1 (step 5) -- 2026-09-23 -- **the party family's henchman ADD armed from the tape: standing hireable henchmen marked `0x0071`, c2s `0x009F` answered by `0x00B0` + `0x01BF` in retail's order, the map cap, `0x01BF`'s trailing bytes settled**
+
+[studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md) §"The party family";
+[studies/deskwork/PLAN.md](studies/deskwork/PLAN.md) §3 DESKWORK-D1 step 5.
+
+Route step 5, re-derived from capture `20260819T132414` `:53419` (an outpost, map
+242) with the field side on `:52606` and the return on `:55414`, no client
+launched. OBSERVED, 3 of 3: six henchmen stand in the outpost as kind-9 NPCs
+(agents 1..6), each marked hireable by `0x0071` — a message the client's handler
+(`0x0091E220 → 0x008113D0`) binary-search-inserts into the party window's set at
+party context `+0x574`, sent for exactly those six and no other of the ~45 kind-9
+NPCs, outpost only. c2s `0x009F [agent]` hires one: answered 31–132 ms later by
+`0x00B0` PLAYER_PARTY_SIZE **then** the `0x01BF` roster row (SIZE BEFORE ROW; the
+hero KICK answers row-then-size), the NPC not destroyed. `0x01BF`'s two trailing
+bytes — NOT FOUND in `agents.party_henchman_add`'s docstring — are settled from
+the wire as PROFESSION (== the agent's `0x00A6`) and LEVEL (== its `0x0056`),
+CORROBORATED; the roster name is the `0x009B` proper name, not the `0x0056`
+definition name.
+
+Shipped: `toolkit/authsrv/henchparty.py` (leaf — `henchman_add_batch`,
+`hireable_mark`, `party_is_full`); `authsrv.handle_henchman_add` (hire a hireable
+henchman, refuse an unknown one / one already in / one over the cap, nothing sent
+— retail's refusal reply NOT FOUND); `spawn_population` marks a `hireable` spawn
+row with `0x0071` and records it; `OUTPOST_PARTY_CAP` (the AreaInfo `max_party`,
+4 for our outposts, heroes counted; `--henchman-cap`); revert `--no-henchman-add`;
+`content/npcs.toml` + `content/world.toml` three standing henchmen in Ascalon City
+(map 148, the Fighter/Archer/Cutthroat the adds witnessed, source=capture; ids
+31–33 / defs 70–72). `0x009F` off `test_dispatch.DROPPED_ON_PURPOSE` in the same
+commit, moved to §10's handled set; `test_c2striage` moved to its ARMED row.
+`test_henchparty.py` (floor 27; 36 with the vault): the batch byte-for-byte
+against the tape's three replies (enc_name/prof/level read from the tape, nothing
+ArenaNet-authored committed) with the kick's row-before-size as the known-bad; the
+real handler (a valid add, the NPC kept, the three refusals, the cap counting
+heroes); the spawn marking; source locks with mutations.
+
+DEFERRED (OBSERVED on the tape, not armed): the henchman's FIELD body carry and
+the outpost RE-JOIN — they reuse the hero/henchman body machinery and cross-zone
+persistence, the next increment. The field `0x00B0` climbs by 2 per henchman
+(2, 4, 6) where the outpost climbs by 1; that mechanism is NOT FOUND and must be
+settled before the field size is trusted. The party-family KICK, LEAVE and INVITE
+are named only UPSTREAM (GWCA offset numbering, no tape reply) — invite/accept
+need a second player, and a kick with no witnessed reply is left for a labelled
+run. The client confirmation (the runsheet in the study) is owed to the owner.
+
+---
+
 ### DESKWORK-D1, the owner's answer, fix pass -- 2026-09-23 -- **the equip path's `0x006F` gated by the display mode (the one blocker); the tape "corroboration" withdrawn as a population confound and replaced by the weapon precedent; the string table read through its jump table; the reader census redone at the getter; the load's default and restore pinned**
 
 Two reviews of the entry below — an evidence refuter that re-derived (a)–(c) from the 96
