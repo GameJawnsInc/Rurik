@@ -1701,42 +1701,85 @@ own arithmetic. Our server answers that (RECONSTRUCTION) — one client run sett
 retail's echo is `[value, mask]` or `[flags, 0xFF]`; both land identically in the writer.
 
 **(c) How the WORLD model applies the mode (EVID-D1E-3: the negative OBSERVED statically,
-the mechanism RECONSTRUCTION, the regime pattern OBSERVED on the tapes).** Two readers
-apply the byte on the client, and both are UI: the drop-down's icon, and **GmAgentDoll**
-(0x005384B0) — the paper doll's figure — which subscribes to frame 0x1000006C (0x0053761C)
-and picks the regime with `MissionCliGetMap()` (0x0084D9B0, OBSERVED 0 = OUTPOST, 1 =
-GAME, [../minimap/FINDINGS.md](../minimap/FINDINGS.md)): **in a town it tests the HIGH bit
-of each pair (0x2/0x8/0x20/0x80), in a field the LOW bit (0x1/0x4/0x10/0x40)**, and a clear
-bit hides that kind on the figure (the costumes are also hidden in a field whose map flags
-carry 0x40000 without 0x40000000 — a PvP rule this server never meets). So the doll follows
-the mode client-side. **The world body does not read the byte at all**: nothing on the
-agent-view or composite path touches +0x7C8 (the exhaustive scan above; the biased-`this`
-caveat of `codescan.py` stands), and the AvApi dresser 0x007DFCE0 has three direct callers,
-all ChCliApi message workers (the `0x006E` bulk write and the `0x006F` slot write among
-them). The world body therefore wears exactly what the server's visual array says, and the
-server must leave the hidden piece out. The tapes corroborate that reading with the regime
-pattern a server-side strip would produce: **`0x006E`'s head slot is 0 on 756 of 2,245
-outpost bodies and on 0 of 48 field bodies; `0x0048`'s cape bit is 0 on 855 of 2,246 outpost
-bodies and on 0 of 48 field bodies** — neither outpost share is 100%, so it is per player,
-not per regime alone. (The cape's world half is `0x0048` AGENT_SET_TABARD_VISIBLE — the
-[smsg study](../smsg/FINDINGS.md)'s reading, a guild lookup gated per agent, is exactly a
+the mechanism RECONSTRUCTION; the tapes CONSISTENT but not discriminating — corrected by
+the fix pass, below).** The readers of the byte, counted at the GETTER 0x00815EF0 rather
+than at `--field`'s direct hits (the fix pass, ENG-VIS-3/EVR-VIS-4 — the landing said "two
+readers", which was the `--field` scan's view): **eight direct callers** (`codescan
+--xrefs`). Three are the drop-down's (0x008EC6E3 the icon, 0x008ECEA8 the menu, 0x008ECF5B
+the "selected" arm). One is **GmAgentDoll** (0x005384E1 in 0x005384B0) — the paper doll's
+figure — which subscribes to frame 0x1000006C (0x0053761C) and picks the regime with
+`MissionCliGetMap()` (0x0084D9B0, OBSERVED 0 = OUTPOST, 1 = GAME,
+[../minimap/FINDINGS.md](../minimap/FINDINGS.md)): **in a town it tests the HIGH bit of
+each pair (0x2/0x8/0x20/0x80), in a field the LOW bit (0x1/0x4/0x10/0x40)**, and a clear bit
+hides that kind on the figure (the costumes are also hidden in a field whose map flags carry
+0x40000 without 0x40000000 — a PvP rule this server never meets). Three more are UI
+(0x005046F8; 0x00508C91, which gates bag slots 7/8 on the town bits 0x20/0x80; 0x0050CDFE,
+the same on the field bits 0x10/0x40). The eighth, 0x0081DE5E, is the ONE outside UI: in
+0x0081DDD0, a `ChCliObserver.cpp` record builder (the asserts inside it; past ChCliApi's
+assert range), called from 0x0080E3F5/0x0080E485, which copies the player's equipped bag
+slots 2..6 into a record and overrides with bag 7 under 0x10 (0x0081DED4) and bag 8 under
+0x40 (0x0081DEBD) — the costume FIELD bits, no regime test, into a record and not onto a
+body. The bit tester 0x00815EA0 has one caller (the roster packer, (a)); the writer has one
+(`0x00EF`'s stub); and the frame id 0x1000006C occurs at exactly **six** `.text` sites and
+in no data section (the writer 0x00814C17, the doll's subscribe 0x0053761D, four in the
+widget) — a raw scan of the image, not a decoder's view. So the doll follows the mode
+client-side, and **the world body does not read the byte at all**: none of the eight
+getter callers, the tester's caller or the six frame sites is on the agent-view or
+composite path, and the AvApi dresser 0x007DFCE0 has three direct callers, all ChCliApi
+message workers (the `0x006E` bulk write and the `0x006F` slot write among them). The world
+body therefore wears exactly what the server's visual array says, and the server must leave
+the hidden piece out — RECONSTRUCTION from that negative.
+
+**What the tapes say about it, corrected (the fix pass, EVR-VIS-1/ENG-VIS-2).** The landing
+quoted "`0x006E`'s head slot 0 on 756 of 2,245 outpost bodies and 0 of 48 field bodies"
+(and `0x0048`'s cape bit, 855 of 2,246 vs 0 of 48) as corroboration. **It is not**: joining
+each `0x006E` to the connection's equipped bag (the body whose armour ids all sit in it is
+the owner's own — `test_itemmoves` 1c's recipe), **every one of the 48 field bodies is the
+owner's OWN body** under `0x00EF [0xFF, 0xFF]`, and **every one of the 756 bare outpost
+heads is a STRANGER** whose mode and inventory the tape does not carry; the comparison was
+strangers in towns against the owner in fields, and a tape with no strip at all gives the
+same numbers. The own body carries its equipped helm on 50 of 50 outpost loads and 48 of 48
+field loads under Always Show — consistent with the strip, not discriminating. What the
+tapes DO show, OBSERVED, is retail tailoring the own `0x006E` per regime on the **weapon**:
+**no outpost `0x006E` carries one (0 of 2,245 bodies, visuals 0 and 1 both zero — the
+owner's own 50 among them, with a weapon in the equipped bag on all 50), while in a field
+every body whose bag holds one carries it (40 of 40; the other 8 field loads have no bag
+weapon and carry none)**. That is the precedent for a server-side, regime-keyed visual
+array; the head strip itself is unwitnessed on any body whose mode is known (every owner
+character on tape is Always Show: `0x00EF [0xFF, 0xFF]` on 95 of 95) and stays RECONSTRUCTION. (The
+cape's world half is `0x0048` AGENT_SET_TABARD_VISIBLE — the [smsg
+study](../smsg/FINDINGS.md)'s reading, a guild lookup gated per agent, is exactly a
 server-resolved cape mode; this server has no guild and keeps sending 0.) **NOT FOUND**: how
 retail re-dresses the LOCAL body after a mid-session mode change in an outpost — the item
 study found no `0x006F` on outpost equips (0 of 5), so retail's outpost path for the body
 is unwitnessed; the `0x006F` handler is regime-blind, so sending it is safe on our client.
+**Open, out of this arc's scope** (the engineering review's side note): our TOWN `0x006E`
+carries the weapon at visual 0, which retail's never does (0 of 2,245) — a pre-existing
+divergence worth its own item.
 
 **Shipped** ([`toolkit/authsrv/visstatus.py`](../../toolkit/authsrv/visstatus.py) is the leaf;
-`test_visstatus.py`, 47 bare / 56 vaulted): `0x00EF [flags, 0xFF]` at load right after
-`0x00E9` (default 0xFF, the store's byte under `--persist`); `c2s 0x0057` handled —
+`test_visstatus.py`, 63 bare / 73 vaulted after the fix pass): `0x00EF [flags, 0xFF]` at
+load right after our `0x00E9` — retail's position RELATIVE TO `0x00E9` (95 of 95; retail's
+whole load runs `0x00E9, 0x00EF, 0x006E, 0x018E` on 81 of 95 while our burst sends `0x018E`
+earlier, a pre-existing order the client's context resets do not disturb — EVR-VIS-7) — the
+byte loaded by `visstatus.load_flags` (the store's int under `--persist`, else 0xFF) and the
+payload by `load_message`, both driven by the test; `c2s 0x0057` handled —
 `(flags & ~mask) | value`, the echo `0x00EF [value, mask]`, then `0x006F [player, slot, item
 or 0]` for each kind whose view under the CURRENT regime changed (head 6, costumes 7/8; the
 cape has no slot), persisted per character (`charstore` `vis_flags`, validated 0..255);
 refused with nothing sent: an empty mask, bits beyond the eight, a value outside its mask.
-The body's `0x006E` is built through `visible_worn`: a kind the mode hides in this regime
-(the `0x0199` byte's own rule, `instance_is_field`) leaves the array. **`--no-visibility-status`
-reverts** to today's behaviour (no `0x00EF`, `0x0057` ignored, the full array). Schema:
-`0x00EF` CHAR_VISIBILITY_FLAGS (high), `0x0057` SET_CHAR_VISIBILITY_FLAGS (medium — sender
-read, reply unwitnessed).
+The body's `0x006E` is `visible_worn` over `player_worn_array` — the ONE copy of the dressed
+array (ENG-VIS-6): a kind the mode hides in this regime (the `0x0199` byte's own rule,
+`instance_is_field`) leaves the array. **The equip path is gated too (the fix pass's one
+blocker, ENG-VIS-1/EVR-VIS-2)**: every item batch (`0x004F`, `0x0030`, `0x0072`) commits
+through `_item_moves_commit`, which sends it through `visible_slot_writes` — a `0x006F` that
+would put an item into the player's visual 6/7/8 while the mode hides that kind here goes
+out as item 0 (the slot is already 0 on the body and the client's `0x006F` handler is
+regime-blind). The landing sent it unfiltered, so in a field under Hide in Combat Areas an
+unequip and re-equip of the helm re-helmed the world body while the doll and the load hid it.
+**`--no-visibility-status` reverts** to today's behaviour (no `0x00EF`, `0x0057` ignored, the
+full array, the equip's `0x006F` unfiltered). Schema: `0x00EF` CHAR_VISIBILITY_FLAGS (high),
+`0x0057` SET_CHAR_VISIBILITY_FLAGS (medium — sender read, reply unwitnessed).
 
 **Refuted on the way.** (1) The first proc found under the module's assert range,
 0x008EBDD0 (`msg.code` switch at line 343, `s_backgroundImageList` at 407), is
@@ -1746,7 +1789,32 @@ minutes; the widget is the class registered from 0x008ECE90/0x008ECF30 with the
 `InvVisibilityStatus.cpp` file string at 0xBA38E4. (2) `sendsites.py`'s "callers 0" on the
 CharMsg wrappers is not "unreachable": the wrappers are reached through `jmp` thunks in the
 0x8161xx–0x816Cxx band. (3) The three-slot count in the task: the retail screenshot has four
-eyes and ours four circled bars.
+eyes and ours four circled bars. (4) By the fix pass: the landing's `CODE_STRING_ID` had
+codes 3/4/5 as 0x32E/0x32F/0x330 — the switch's case bodies taken in ADDRESS order; through
+the jump table at 0x008ECE3C (and the menu builder's copy at 0x008ED080) code 3 is 0x330,
+4 is 0x32E, 5 is 0x32F, so the headgear/costume menu reads 0x32C/0x32D/0x32E/0x330 and the
+cape's own two strings are 0x32F/0x331 (EVR-VIS-3; the table is pinned against the address
+order). (5) The landing's "two readers of the byte" was `--field`'s view; the getter has
+eight callers, one of them outside UI ((c) above). (6) The landing's tape "corroboration"
+was a population confound ((c) above).
+
+**The fix pass (2026-09-23, the same day).** Two reviews — an evidence refuter that
+re-derived (a)–(c) from the tapes and the pinned client before reading the landing, and an
+engineering review that drove the handlers and mutated the tree in memory — found no
+blocker in the wire evidence and one in the code: the equip path's `0x006F` ignored the mode
+(fixed, above; the refuter's EVR-VIS-2, the engineer's ENG-VIS-1). Moved besides: the tape
+"corroboration" relabelled in all five places and replaced by the weapon precedent (EVR-VIS-1/
+ENG-VIS-2); the string table (EVR-VIS-3); the reader census (ENG-VIS-3/EVR-VIS-4); the load's
+default and restore, which no test pinned — the engineer's mutation of the burst to a zero
+default (the defect itself) ran green — now `load_flags`/`load_message` driven with a KNOWN-BAD
+zero and the burst's calls locked (ENG-VIS-4/EVR-VIS-6); the two tautological §2 checks
+dropped for a decode-ok count and one identification's two tallies (ENG-VIS-5/EVR-VIS-8);
+one worn-array copy (ENG-VIS-6); the runsheet's field step given its `--persist`
+precondition (EVR-VIS-5); the position wording (EVR-VIS-7); `test_provlint`'s comment
+naming QuestLog:261's enum value (EVR-VIS-8). **Declined**: driving the whole
+`_handle_request_players` burst under a fake send (EVR-VIS-6's first form — no test in the
+tree drives it, and the burst needs a live connection's state; the helpers it calls are
+driven instead, and its call sites are locked, which is what the mutations needed).
 
 **Runsheet and PREDICTIONS (pre-registered).** *Default launch* (the orchestrator, no
 owner): press `I` — beside the headgear, the cape and both costume slots the icon is the
@@ -1759,8 +1827,13 @@ the doll's figure loses the helm (client-side, from `0x00EF [0x4, 0xC]`), and th
 loses the helm too (from our `0x006F [1, 6, 0]`; the log line names both sends). A/B
 against `--no-visibility-status`: the choice sends `0x0057 [4, 12]` (the log says
 `SET_CHAR_VISIBILITY_FLAGS ignored`) and NOTHING changes — icon, doll and body all stay.
-Then `--explorable` (or a zone): the helm is back on doll and body (the low bit is set),
-and `Hide in Combat Areas` there hides both. Under `--persist`, relaunch: the mode is
-remembered (`vis_flags` in the store), the icon shows it at `I`. What a run cannot settle
-alone: retail's exact echo bytes (b); the doll's exact icon for codes 5/6 (the cape's third
-and fourth strings, 0x330/0x331, unread).
+*The field step needs `--persist`* (EVR-VIS-5: without it every new game connection starts
+at 0xFF, so a returned helm would mean the reset, not the regime rule): with the mode kept
+in the store, `--explorable` (or a zone) — press `I` first: the icon beside the headgear is
+STILL the second icon (the byte survived), and the helm is back on doll and body (the low
+bit is set); then `Hide in Combat Areas` there hides both; drag the helm to the backpack and
+double-click it back: the body stays bare (the fix pass's filter; under
+`--no-visibility-status` it re-helms). Relaunch under `--persist`: the mode is remembered
+(`vis_flags` in the store), the icon shows it at `I`. What a run cannot settle alone:
+retail's exact echo bytes (b); the cape's third and fourth menu TEXTS (string ids 0x32F/0x331,
+unread — their icons 2 and 3 are read from the widget's table).

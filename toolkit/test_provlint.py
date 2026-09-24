@@ -95,7 +95,8 @@ GRANDFATHERED = {
     # toggle, the two inventory passes, the display mode), each one pinning ONE claim:
     # `ChCliApi.cpp:5562` bounding ROTATE_PLAYER, `MsCliMsg:181`/`MsCliMan:368` the
     # mission mask, `ChCliApi:4446`/`PtSearch:774`/`PtPlayer:332`/`ChCliHero:291` the
-    # hero family, `QuestLog:261` MISSION_MAP_GAME, `ItCliApi:2010`/`:1942` the
+    # hero family, `QuestLog:261` MISSION_MAP_OUTPOST (== 0; MISSION_MAP_GAME is
+    # MsCliApi:251's), `ItCliApi:2010`/`:1942` the
     # inventory's two refusals -- and the eleventh, `ChCliApi.cpp:5032 vis <
     # CHAR_STATS_VIS`, is the one line that gives the display-mode byte ArenaNet's
     # own name and its width (the bound compared is 8), i.e. the quote a reader needs
