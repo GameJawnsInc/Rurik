@@ -95,6 +95,13 @@ and none in an OUTPOST (0 of 5: the four swaps and the off-hand unequip).
 Whether the rule is the outpost or the swap is CONFOUNDED for the swaps; the
 outpost unequip breaks the tie toward the outpost, and that is what `visuals`
 means to the callers: True in a field. The mechanism is UNVERIFIED.
+REFINED by the town-weapon lane (DESKWORK-D1, 2026-09-23; townweapon.py): all
+five of those were HAND changes, and the rule is the SLOT -- the same outpost
+sessions' PvP equipment panel placed five weapons into equipped 0/1 with no
+0x006F and one HEAD piece with a 0x006F [agent, 6, item] (20260917T160915
+:58557), so an outpost does write armour visuals and never the hands. The
+server strips the hands from every town 0x006F at visible_slot_writes, so a
+planner's `visuals` flag is moot for slots 0/1 in a town either way.
 
 TWO SLOT ORDERS, and both lineages were right about DIFFERENT arrays. The
 equipped BAG's cells on retail follow ldufr's order (Body 2, Legs 3, Head 4,

@@ -1928,10 +1928,9 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   `0x00EF`/`0x0057`, the backpack drag `0x0072`) the doll's order, the eye and the helm,
   Hide in Towns hiding the helm on the doll AND the world body, and the drag staying.
   **Open**: the party family from HENCHMAN_ADD's witness (step 5) and travel (step 7); the
-  display mode's field step under `--persist` (studies/cmsg "The display mode"); our TOWN
-  `0x006E` carries the weapon
-  where retail's never does (0 of 2,245 outpost bodies) — a pre-existing divergence the fix
-  pass's census surfaced, its own item.
+  display mode's field step under `--persist` (studies/cmsg "The display mode"); the town
+  weapon's client check (LANDED 2026-09-23, PLAN-LOG: the town body's hands stripped,
+  `--no-town-weapon-strip`; runsheet in studies/cmsg "The town weapon").
 * **DESKWORK-D5**: the combat rules retail's tapes on disk already settle. LANDED
   2026-09-22: the adrenaline gate (SKILLS-B1's gate half, skills §34.11); property 10
   and the `[42]` residue (§16.6, self-scoped; `[42]` only when the maximum moved); the

@@ -28,6 +28,53 @@ move back.
 
 ---
 
+### DESKWORK-D1, the town weapon -- 2026-09-23 -- **in an outpost the player's WORLD body carries no weapon: the hands (visuals 0 and 1) leave the town body's `0x006E` and a town's hand `0x006F` is never sent, through the ONE gate the display mode built; the bag, the doll and the weapon-set panel keep it; `--no-town-weapon-strip` reverts**
+
+The divergence the display-mode fix pass surfaced (the entry below: our town `0x006E`
+carried the weapon at visual 0 where retail's never does), re-derived and closed
+(studies/cmsg "The town weapon"; `toolkit/authsrv/townweapon.py` the leaf,
+`test_townweapon.py`). **OBSERVED over all 96 live connections** (96 decode closed; the
+regime is the `0x0199` byte): every outpost `0x006E` is empty-handed on BOTH visuals — 0 of
+2,245 bodies carry a lead or an off hand — the owner's OWN body among them on 50 outpost
+loads with a lead in ITS equipped bag (28 lead only, 22 lead + off hand), while the own
+FIELD body carries every hand its bag holds (40 of 40 leads, 23 of 23 off hands) and none
+when the bag has none (8). The own bag is the ONE type-2 bag holding the body's armour — a
+hero's equipped bag is type 2 too, four connections carry more than one, and the first pass
+of the census read a hero's shield as the player's (one "miss" that was a join artifact). No
+outpost `0x006F` writes a hand on ANY agent: fourteen outpost hand changes are on tape — four
+weapon-set switches (c2s `0x0032`, `20260919T103604 :58638`: `0x0148` then `0x014B` /
+`0x0152` only), four double-click weapon equips onto the occupied lead hand (`0x0030`,
+`20260819T132414 :53419`: `0x0152` alone), the off hand dragged out (`0x004F`: `0x014B`
+alone) and the PvP equipment panel's five creations straight into equipped 0/1 (`0x0086`) —
+and none carries a hand `0x006F`, while the field's four switches (`:56576`, agent 25, the
+W9 batches) all do. **The rule is the SLOT, not the regime**: the same PvP panel in the same
+outpost created a HEAD piece and retail sent `0x006F [336, 6, 23284]` for it
+(`20260917T160915 :58557`, t=73.5) — the one own-body outpost `0x006F`, which refines
+itemstore.py's "no `0x006F` in an outpost (0 of 5)": an outpost writes armour visuals and
+never the hands. Shape OBSERVED; the mechanism (the server strips rather than the client
+ignoring) RECONSTRUCTION from the dresser's regime-blind path (the display mode's reader
+census). **Shipped**: `visible_worn` zeroes visuals 0/1 in a town after the display mode's
+strip; `visible_slot_writes` DROPS (not zeroes — retail sends nothing) a player write into
+visual 0/1 in a town, under either display-mode setting; `select_weapon_set`'s three direct
+hand `0x006F` now build a batch that passes that gate, so the only direct player `0x006F`
+sender left is `handle_visibility_flags`' slots 6/7/8 (locked); `player_worn_array` — the
+doll's array — and the item store are untouched, so the doll and the F1–F4 panel show the
+weapon a town body does not. **Heroes**: no body in an outpost on retail (3 party heroes over
+the outpost connections, none created, none with a `0x006D`) or ours
+(`PARTY_BODY_IN_OUTPOST`) — nothing changed. **NPCs**: retail's outpost NPCs DO carry
+`0x006D` weapons (466 of 1,653 with a lead) — reported, not touched. **Corrected on the way**:
+`test_weapons` §18 replayed the FIELD connection's W9 batches from states with no `map_id` —
+an implicit town under `map_explorable(None)` — and now declares `EXPLORABLE`;
+`test_visstatus` §3 holds the new flag off (its subject is slots 6/7/8; the composition is
+the new test's). `test_townweapon`: floor 35 bare (1 declared skip), 46 vaulted; TESTS.md.
+Gates on the code commit's tree: townweapon 46/35, visstatus 73, weapons 276, itemmoves 184,
+dispatch 54, c2striage 36, bareimport 8, srclint 26, checks 17. The client check (the
+runsheet in the study: an empty-handed town body, the doll and the panel still armed, F2/F1
+moving items with no world change, the weapon back in the explorable) is the open half in
+§8.1's D1 bullet.
+
+---
+
 ### DESKWORK-D1, the owner's answer, fix pass -- 2026-09-23 -- **the equip path's `0x006F` gated by the display mode (the one blocker); the tape "corroboration" withdrawn as a population confound and replaced by the weapon precedent; the string table read through its jump table; the reader census redone at the getter; the load's default and restore pinned**
 
 Two reviews of the entry below — an evidence refuter that re-derived (a)–(c) from the 96
