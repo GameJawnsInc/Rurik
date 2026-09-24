@@ -11,8 +11,9 @@ origin=LIVE game connection, 96 of 96 decoding closed; the regime is the
 no 0x0199; reproduced by test_townweapon.py section 2):
 
   * THE LOAD (0x006E [agent, lead, off, five armour, two costumes]).
-    OUTPOST: 2,245 bodies -- 2,195 strangers and the owner's OWN body on 50
-    loads -- and visual 0 AND visual 1 are zero on ALL of them. The own body
+    OUTPOST: 2,245 0x006E messages (1,981 distinct bodies) -- 2,195
+    strangers' and the owner's OWN body's on 50 loads -- and visual 0 AND
+    visual 1 are zero on ALL of them. The own body
     is the 0x006E whose armour ids all sit in ONE type-2 (equipped) bag of
     the connection (a hero's equipped bag is type 2 too: 4 connections carry
     more than one, and the first pass of this census counted a hero's shield

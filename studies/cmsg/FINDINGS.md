@@ -2035,7 +2035,9 @@ a retail quirk — **there is no redraw to invent.**
 **Shipped (the carrier fix).** `send_player_weapons` in `authsrv.py` — the load's player
 `0x006D` now has ONE sender, gated by `townweapon.player_weapons_sent(field)`: **withheld in a
 town** under the strip (the log: `TOWN WEAPON: the player's 0x006D (lead item 1) is not sent
--- a town; retail sends the own body none (0 of 47 outpost connections) …`), sent in a field.
+-- a town; retail sends the own body none (0 of 46 outpost connections with a controlled
+agent, OBSERVED), and it is the likeliest carrier … (… CORROBORATED, this run the
+observation)`), sent in a field.
 Two revert arms: **`--no-town-weapon-strip`** restores every pre-2026-09-23 carrier at once —
 the town `0x006E` armed, the switch's `0x006F`, AND the `0x006D` — the pre-pass-4 wire exactly;
 **`--town-player-weapons`** (new, default OFF) restores the `0x006D` alone with the strip on —

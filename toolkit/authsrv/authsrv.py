@@ -31286,10 +31286,12 @@ def _handle_request_players(send, state, conn_id, stop, rec):
         # ItemType, the same way it derives the mesh from
         # file_id.
         # DESKWORK-D1, the town weapon's CONFIRM-2 fix (2026-09-24): retail
-        # never sends the OWN body this message (0 of 47 outpost, 0 of 44
-        # field connections), and in a town it was the carrier that drew the
-        # weapon the empty-handed 0x006E above had left out -- the client's
-        # one hand store per agent takes the last writer. So it goes through
+        # never sends the OWN body this message (0 of 46 outpost connections
+        # with a controlled agent, 0 of 44 field), and in a town it is the
+        # likeliest carrier that drew the weapon the empty-handed 0x006E above
+        # had left out -- the client's one visual-equipment store per agent
+        # takes the last writer (CORROBORATED; the runsheet's ARM 1 is the
+        # observation). So it goes through
         # send_player_weapons: withheld in a town under the strip, sent in a
         # field, sent in a town under --no-town-weapon-strip (every run before
         # 2026-09-23) or --town-player-weapons (CONFIRM-2's arm). The lead it
@@ -37425,10 +37427,11 @@ def main():
         global TOWN_PLAYER_WEAPONS_ENABLED
         TOWN_PLAYER_WEAPONS_ENABLED = True
         print("[items] --town-player-weapons: the load's player 0x006D NPC_UPDATE_WEAPONS "
-              "goes out in a TOWN too -- CONFIRM-2's picture (2026-09-24): the body armed "
-              "from this message after the empty-handed 0x006E, and the OLD weapon kept "
-              "across F2. KNOWN-BAD: retail sends the own body no 0x006D (0 of 47 outpost, "
-              "0 of 44 field connections).", flush=True)
+              "goes out in a TOWN too -- CONFIRM-2's picture (2026-09-24): the body armed, "
+              "most likely from this message after the empty-handed 0x006E, and the OLD "
+              "weapon kept across F2 (CORROBORATED; the run without this flag is the "
+              "observation). KNOWN-BAD: retail sends the own body no 0x006D (0 of 46 "
+              "outpost connections with a controlled agent, 0 of 44 field).", flush=True)
     if a.no_load_purse:
         global LOAD_PURSE_ENABLED
         LOAD_PURSE_ENABLED = False

@@ -76,7 +76,13 @@ was red on `test_itemmoves`' source lock until 8a73d855); editing the entry belo
 (append-only -- this entry corrects it by name, the log's own rule). **Tests:** `test_townweapon`
 45 bare (1 declared skip) / 60 vaulted, one check replaced and conjuncts added, the floor
 unchanged; the five lints green (srclint 26, checks 20, citelint 50, identlint 28, provlint 19);
-the affected set re-run after the last fix, its count in the entry above this one once it lands.
+the affected set -- 87 tests, the implementer's 80 plus the seven the engineering review named
+(`test_bareimport`, `test_c2striage`, `test_labelrun`, `test_codec`, `test_seclint`,
+`test_derivlint`, `test_weaponcensus`), the four port-binders held for the orchestrator -- re-run
+on `6bafcbc2`: **87 of 87 green, 6,605 checks** (6,427 on the 85 the runner counts, plus the
+declared-skip greens `test_attribspend` 49 + 1 skip and `test_pathmap` 129 + 5 skips); the
+text-only follow-up after it (a comment, `main()`'s flag print, the leaf's load paragraph, the
+study's quoted log line, this sentence) re-verified by `test_townweapon` and the five lints.
 TESTS.md updated.
 
 ---
