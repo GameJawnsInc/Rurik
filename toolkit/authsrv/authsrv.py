@@ -1216,11 +1216,16 @@ GAME_SMSG_MAP_UPDATE_CURRENT = 0x0099
 # string's meaning is UNVERIFIED (worker 0x0085a290 sets a state at [ctx+0x54]
 # and fires UI notifications -- no assert gates it). maptravel.py.
 GAME_SMSG_MAP_TRAVEL_READY = 0x01D9
-# DESKWORK-D1 step 7: the world map's unlocked-outpost bitmaps, sent once at
-# load so the client offers our served outposts as destinations. Five map-id
-# bitmaps; arr4 == the unlocked map set (bit == map id, OBSERVED across 22 live
-# connections -- every travel destination's bit was set); arr0-3 empty on every
-# tape (UNVERIFIED, sent empty). maptravel.py.
+# DESKWORK-D1 step 7: the client's KNOWN-MAPS bitmaps, sent once per LOGIN so
+# the world map offers our served outposts as destinations. Five map-id
+# bitmaps; arr4 is the map-known set (bit == map id, 27 dwords on 29 of 29
+# live sightings, explorables included -- so "outposts only" is our policy);
+# arr0-3 empty on 27 of 29 and UNVERIFIED on the other two (arr0/arr1 carry
+# bit 544 on the Kamadan logins), sent empty. The handler's CopyBits REPLACES
+# arr4; the SECOND writer, 0x0099's handler, SETS one bit in the same store
+# (bts at 0x0059d239) -- so the load's 0x0099 must follow this, and a re-entry
+# after our own transfer must NOT resend it (retail: 0 of 61 arrivals).
+# maptravel.py has the whole record.
 GAME_SMSG_MAP_TRAVEL_UNLOCK = 0x0094
 GAME_SMSG_ITEM_STREAM_CREATE = 0x0144
 GAME_SMSG_INSTANCE_LOAD_SPAWN_POINT = 0x0195
@@ -1464,6 +1469,13 @@ TRANSFER_ALT = None               # --transfer-alt HOST: the second listener
 TRANSFER_HOSTS = []               # filled by main(): every alias we listen on
 TRANSFER_PORT = 6112              # filled by main(): the port we listen on
 TRANSFERS_ISSUED = {}             # (world_id, player_id) -> map we handed out
+TRANSFER_ARRIVALS = {}            # (world_id, player_id) -> (map, issued_at):
+                                  # the ONE-SHOT marker the load pops to know
+                                  # it is a re-entry, so the login's 0x0094 is
+                                  # not resent (maptravel.arrival_skips_unlock;
+                                  # DESKWORK-D1 step 7). TRANSFERS_ISSUED is
+                                  # never popped, so a relaunch asking for the
+                                  # last destination would read as a re-entry.
 PORTAL_REARM = 1.25               # outside radius*this re-arms the portal
 
 
@@ -1524,6 +1536,7 @@ def send_transfer(send, state, conn_id, dest_map, local_host, send_stop=True):
     send(GAME_SMSG_MAP_UPDATE_CURRENT, [int(dest_map), 0],
          f"transfer 3/3: MAP_UPDATE_CURRENT {dest_map}")
     TRANSFERS_ISSUED[(world_id, player_id)] = int(dest_map)
+    TRANSFER_ARRIVALS[(world_id, player_id)] = (int(dest_map), time.time())
     state["transfer_sent"] = int(dest_map)
     zone_carry_store(state)                                    # JARIN
     print(f"[c{conn_id}] TRANSFER to map {dest_map} via {host}:{TRANSFER_PORT}"
@@ -1604,7 +1617,10 @@ def handle_map_travel(values, send, state, conn_id, local_host):
     carries the party, heroes and kicked-hero store through zone_carry_store,
     exactly as a portal does. Refused with NOTHING sent (retail's refusal reply
     is NOT FOUND on any tape): the map already on, a map with no served content
-    row, an explorable."""
+    row, an explorable, a row with the (0, 0) placeholder spawn, and a
+    destination whose navmesh did not load at startup (TRAVEL_UNSERVABLE, filled
+    by main()'s prewarm -- the fix pass: the arm used to accept maps the
+    prewarm had just reported unwarmed)."""
     if not values or len(values) < 2:
         print(f"[c{conn_id}] MAP_TRAVEL refused: malformed request "
               f"{list(values[1:]) if values else values!r}; nothing sent "
@@ -1612,7 +1628,8 @@ def handle_map_travel(values, send, state, conn_id, local_host):
         return False
     dest = int(values[1])
     cur = state.get("map_id")
-    ok, why = maptravel.plan_travel(agents.WORLD, cur, dest)
+    ok, why = maptravel.plan_travel(agents.WORLD, cur, dest,
+                                    exclude=TRAVEL_UNSERVABLE)
     if not ok:
         print(f"[c{conn_id}] MAP_TRAVEL(map {dest}) refused: {why}; nothing "
               f"sent [DESKWORK-D1]", flush=True)
@@ -5643,7 +5660,7 @@ _PATHMAPS = {}
 _PATHMAP_LOCK = threading.Lock()
 
 
-def load_pathmap(map_file_id):
+def load_pathmap(map_file_id, archive=None, table=None, role=None):
     """The walkable geometry for a map, or None if we cannot get it.
 
     None is a normal outcome, not an error: no archive on this machine, or a map
@@ -5654,6 +5671,13 @@ def load_pathmap(map_file_id):
     and a RUNNING Guild Wars client holds its own `Gw.dat` open exclusively, so
     on a run where the server and the client share one archive this read fails
     with EACCES and collision silently turns off.
+
+    `archive`/`table`: an already-open Archive and its file_id_table, so a
+    startup loop over many maps opens the archive once (DESKWORK-D1 step 7's
+    travel prewarm; MEASURED 17.4 s -> 13.0 s over 12 maps -- the rest is each
+    map's own decompression). `role`: what a failure means; None is the served
+    instance ("collision is OFF"), a string names a DESTINATION whose mesh is
+    merely unavailable, so the line does not claim this run lost collision.
     """
     if PathingMap is None:
         return None
@@ -5661,7 +5685,7 @@ def load_pathmap(map_file_id):
         if map_file_id in _PATHMAPS:
             return _PATHMAPS[map_file_id]
         try:
-            pm = PathingMap.load(map_file_id)
+            pm = PathingMap.load(map_file_id, archive=archive, table=table)
             print(f"[map] navmesh 0x{map_file_id:X}: {len(pm.planes)} planes, "
                   f"{len(pm.trapezoids)} trapezoids")
         except PermissionError as exc:
@@ -5671,18 +5695,23 @@ def load_pathmap(map_file_id):
             print(f"[map] no navmesh for 0x{map_file_id:X}: {exc}")
             print("[map] that is the CLIENT holding this archive open -- the "
                   "read came too late; see prewarm_pathmap()")
-            print("[map] collision is OFF; the character can walk through walls")
+            if role is None:
+                print("[map] collision is OFF; the character can walk through walls")
             pm = None
         except Exception as exc:                              # noqa: BLE001
             print(f"[map] no navmesh for 0x{map_file_id:X}: {exc}")
-            print("[map] collision is OFF; the character can walk through walls")
+            if role is None:
+                print("[map] collision is OFF; the character can walk through walls")
             pm = None
         _PATHMAPS[map_file_id] = pm
         return pm
 
 
-def prewarm_pathmap(map_id):
+def prewarm_pathmap(map_id, archive=None, table=None, role=None):
     """Read the navmesh at STARTUP, before any client can lock the archive.
+    `archive`/`table`/`role` pass through to load_pathmap (a shared open
+    archive for a loop; `role` names a destination so a failure is worded as
+    an unwarmed destination rather than as this run losing collision).
 
     MEASURED 2026-08-13, and it corrects a claim this repo made the other way
     round. `load_pathmap`'s other call site is instance bring-up -- the client
@@ -5712,10 +5741,15 @@ def prewarm_pathmap(map_id):
               f"be pre-warmed; it will be read at instance load, which is late "
               f"-- see prewarm_pathmap()")
         return None
-    pm = load_pathmap(cfg[0])
+    pm = load_pathmap(cfg[0], archive=archive, table=table, role=role)
     if pm is None:
-        print(f"[map] PRE-WARM FAILED for map {map_id} (file id 0x{cfg[0]:X}); "
-              f"this run serves NO collision")
+        if role is None:
+            print(f"[map] PRE-WARM FAILED for map {map_id} (file id "
+                  f"0x{cfg[0]:X}); this run serves NO collision")
+        else:
+            print(f"[map] PRE-WARM FAILED for map {map_id} (file id "
+                  f"0x{cfg[0]:X}): {role} -- unwarmed, so it is WITHHELD as a "
+                  f"destination; this run's own collision is unaffected")
     return pm
 
 
@@ -10791,8 +10825,12 @@ GAME_CMSG_ITEM_MOVE_BY_ID = 0x0072
 # re-dials. Payload is [map_id, 0, 0, 0, 1] on every tape -- the trailing four
 # fields never varied (region / district / language / flag candidates,
 # UNVERIFIED). Handled by handle_map_travel behind --no-map-travel; the world
-# map only offers a destination whose 0x0094 unlock bit is set. The GAME_SMSG
-# with this number is PLAYER_SET_PARTY; the two share nothing. maptravel.py.
+# map offers a destination whose arr4 bit is set -- by the login's 0x0094 or
+# by a 0x0099 (the second writer; 10 of 10 destinations set before the click,
+# 9 by 0x0094 and one by 0x0099 [281, 1]). The send wrapper 0x0085C280 has no
+# direct CALL: a direct jmp thunk 0x008576E0 <- call 0x004A791F (the route's
+# caller stands). The GAME_SMSG with this number is PLAYER_SET_PARTY; the two
+# share nothing. maptravel.py.
 GAME_CMSG_MAP_TRAVEL = 0x00B1
 
 # THE THREE PURE-INBOUND ONES. Each is fully named in `schema/overrides.json`
@@ -11809,11 +11847,17 @@ MAP_TRAVEL_ENABLED = True      # False (--no-map-travel): c2s 0x00B1 MAP_TRAVEL
                                # destination, and refuses the rest with nothing
                                # sent (maptravel.py). DESKWORK-D1 step 7.
 MAP_UNLOCK_ENABLED = True      # False (--no-map-unlock): do not send s2c 0x0094
-                               # at load. Today's behaviour -- the client's
-                               # unlocked-outpost set starts empty and the world
-                               # map offers nothing to click. Default ON: arr4's
-                               # bit set for every travelable content map so the
-                               # map offers our served outposts (maptravel.py).
+                               # at login. The pre-arc behaviour -- the client's
+                               # arr4 then holds only what 0x0099 set: the map
+                               # you are on and every map zoned into this client
+                               # session; the OTHER served outposts are absent.
+                               # Default ON: arr4's bit set for every travelable
+                               # content map so the map offers them (maptravel.py).
+TRAVEL_UNSERVABLE = {}         # map_id -> reason: travel destinations whose
+                               # navmesh did NOT load at main()'s prewarm (no
+                               # file in this archive, no static config). Read
+                               # by the login's 0x0094 (withheld from arr4) and
+                               # by handle_map_travel (refused, nothing sent).
 AI_MODE_FIGHT, AI_MODE_GUARD, AI_MODE_AVOID = 0, 1, 2   # 0x0015's byte (pvpui 28.5)
 AI_MODE_NAMES = {0: "Fight", 1: "Guard", 2: "Avoid Combat"}
 SPIRIT_RANGE = 2512.0          # u -- WIKI (GWW "Range"): binding rituals /
@@ -31456,6 +31500,50 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                  + (" [is_explorable=1, FORCED]" if EXPLORABLE else "")
                  + (" [is_explorable=0, FORCED OUTPOST]" if OUTPOST else ""))
 
+            # DESKWORK-D1 step 7: the client's known-maps set, so the world map
+            # offers our served outposts as travel destinations. s2c 0x0094
+            # carries five map-id bitmaps; arr4's bit is set per travelable
+            # content map (bit == map id; the width and the 27-dword retail
+            # census are in maptravel.py), arr0-3 sent empty (UNVERIFIED: empty
+            # on 27 of 29 tapes). ONCE PER LOGIN, as retail does (29 of 29 on a
+            # login's first map-loading connection, 0 of 61 transfer arrivals),
+            # and HERE -- after 0x0199, before the fog pair -- where retail's
+            # sits (29 of 29). NOT resent on a re-entry after our own transfer:
+            # the handler's CopyBits REPLACES arr4, and the SECOND writer of the
+            # same store, 0x0099's handler (bts at 0x0059d239), has by then
+            # added the destination. That second writer is also why this send
+            # precedes the burst's 0x0099 [map, 0]: our bitmap may omit the map
+            # you are on (an explorable under --map 168), and the 0x0099 that
+            # follows SETS it back. One 0x0094 site in the server; a duplicate
+            # sender of unlock state once wiped a library and crashed a client
+            # (test_maptravel counts every spelling across toolkit/authsrv).
+            _zoned_in = maptravel.arrival_skips_unlock(
+                TRANSFER_ARRIVALS, (state["world_id"], state["player_id"]),
+                state["map_id"], time.time())
+            if MAP_UNLOCK_ENABLED and not _zoned_in:
+                _mu_payload, _mu_label, _mu_over = maptravel.unlock_message(
+                    agents.WORLD, mission_mask_bytes(MAP_ID_COUNT) // 4,
+                    exclude=TRAVEL_UNSERVABLE)
+                send(GAME_SMSG_MAP_TRAVEL_UNLOCK, _mu_payload, _mu_label)
+                if _mu_over:
+                    print(f"[c{conn_id}] MAP UNLOCK: map id(s) {_mu_over} past "
+                          f"the {len(_mu_payload[4])}-dword bitmap -- not "
+                          f"offered [DESKWORK-D1]", flush=True)
+                if TRAVEL_UNSERVABLE:
+                    print(f"[c{conn_id}] MAP UNLOCK: withheld from arr4 -- "
+                          f"{TRAVEL_UNSERVABLE} [DESKWORK-D1]", flush=True)
+            elif MAP_UNLOCK_ENABLED:
+                print(f"[c{conn_id}] MAP UNLOCK: a re-entry after our own "
+                      f"transfer -- 0x0094 NOT resent (retail: once per login, "
+                      f"never on an arrival); the burst's 0x0099 sets map "
+                      f"{state['map_id']}'s bit [DESKWORK-D1]", flush=True)
+            else:
+                print(f"[c{conn_id}] MAP UNLOCK OFF (--no-map-unlock): no "
+                      f"0x0094; the client's arr4 holds only what 0x0099 set -- "
+                      f"this map and any map zoned into this session -- so the "
+                      f"world map shows THOSE pins and not the other served "
+                      f"outposts [DESKWORK-D1]", flush=True)
+
             # The exploration-init pair: without it mapDims stays 0 and the
             # first M press kills the client on GmMapView.cpp(1731) -- see
             # fog_init_for_map. Retail sends the pair once per instance at
@@ -31483,30 +31571,6 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                 print(f"[c{conn_id}] FOG INIT OFF (--no-fog-init): the "
                       f"pre-2026-08-24 baseline. 0x008C is inert, and an M "
                       f"press kills the client on GmMapView.cpp(1731).",
-                      flush=True)
-
-            # DESKWORK-D1 step 7: the world map's unlocked-outpost set, so the
-            # map offers our served outposts as travel destinations. s2c 0x0094
-            # carries five map-id bitmaps; arr4's bit is set per travelable
-            # content map (bit == map id, OBSERVED across 22 live connections --
-            # every 0x00B1 destination was set), arr0-3 empty as on every tape.
-            # ONE sender (this site), once per instance load, as retail does;
-            # a duplicate sender of unlock state once wiped a library and
-            # crashed a client (test_maptravel pins the single site).
-            if MAP_UNLOCK_ENABLED:
-                _mu_words, _mu_over = maptravel.unlock_bitmap_words(
-                    agents.WORLD, mission_mask_bytes(MAP_ID_COUNT) // 4)
-                send(GAME_SMSG_MAP_TRAVEL_UNLOCK, [[], [], [], [], _mu_words],
-                     f"MAP_TRAVEL_UNLOCK [{sum(bin(w).count('1') for w in _mu_words)} "
-                     f"outposts unlocked]")
-                if _mu_over:
-                    print(f"[c{conn_id}] MAP UNLOCK: map id(s) {_mu_over} past "
-                          f"the {len(_mu_words)}-dword bitmap -- not offered "
-                          f"[DESKWORK-D1]", flush=True)
-            else:
-                print(f"[c{conn_id}] MAP UNLOCK OFF (--no-map-unlock): the "
-                      f"client's unlocked-outpost set stays empty; the world "
-                      f"map offers nothing to travel to [DESKWORK-D1]",
                       flush=True)
 
             spawn = MAP_STATIC_CONFIG.get(state["map_id"],
@@ -35465,7 +35529,8 @@ def main():
     global SPAWN_SECONDARY                                    # SANDBOX-B4
     global DEATH_PENALTY_FORCED, ENEMY_HIT_FRACTION
     global PORTALS, TRANSFER_ALT        # read by the pre-warm before the flags
-    global MAP_TRAVEL_ENABLED, MAP_UNLOCK_ENABLED   # unlock read by the pre-warm
+    global MAP_TRAVEL_ENABLED, MAP_UNLOCK_ENABLED   # rebound by the flag block;
+    # the travel pre-warm reads a.no_map_travel DIRECTLY, not this global
     global CLIENT_BUILD, MAP_ID_COUNT, NO_MARKER_MAP   # --client-build
 
     # THE ARGPARSE BLOCK IS `build_parser()`, now in `serverargs.py`: 1,785 lines
@@ -35765,15 +35830,53 @@ def main():
     # DESKWORK-D1 step 7: and every map the world map offers as a travel
     # destination, for the SAME reason as the portal set above -- a travel
     # re-entry's map would otherwise load with no mesh (the client holds the
-    # archive by then). Gated with the offer itself: if the map is not offered
-    # (--no-map-unlock), its mesh is not needed at startup.
-    if MAP_UNLOCK_ENABLED:
-        _start = (a.map if (a.map and MAP_STATIC_CONFIG.get(a.map))
-                  else FALLBACK_MAP_ID)
-        for _dest in maptravel.travelable_maps(agents.WORLD):
-            if _dest != _start:
+    # archive by then). Gated as the portal prewarm is, on --map (the harness
+    # hands --map to the GAMESRV alone, so the auth-only instance, which serves
+    # no instance, pays nothing), and on the ARM (`a.no_map_travel` read
+    # directly -- the flag block below runs ~1,000 lines later, so the
+    # MAP_TRAVEL_ENABLED global is still True here; the fix pass found the
+    # landing's MAP_UNLOCK_ENABLED gate never acting for the same reason). The
+    # arm is the right gate: the mesh serves the ARRIVAL, whichever pin sent
+    # the client -- 0x0094's or a 0x0099-set one under --no-map-unlock.
+    # COST, MEASURED: ~1.3-3.8 s per real map, ~13 s for the 12-map content set
+    # with one shared archive (17.4 s with an archive per map), against the
+    # harness's listen deadline (session.Stack.start, raised to 60 s in the
+    # same commit, with this as the reason). A map whose mesh does not load is
+    # recorded in TRAVEL_UNSERVABLE and WITHHELD from arr4 and from the arm,
+    # so no pin leads into a collision-less load.
+    if a.map is not None and not a.no_map_travel:
+        _start = (a.map if MAP_STATIC_CONFIG.get(a.map) else FALLBACK_MAP_ID)
+        _ar = _tbl = None
+        try:
+            from archive import Archive, file_id_table        # noqa: E402
+            _ar = Archive()
+            _tbl = file_id_table(_ar)
+        except Exception as _exc:                             # noqa: BLE001
+            print(f"[map] travel prewarm: no shared archive ({_exc}); each "
+                  f"map opens its own")
+            _ar = _tbl = None
+        try:
+            for _dest in maptravel.travelable_maps(agents.WORLD):
+                if _dest == _start:
+                    continue
                 print(f"[map] pre-warming map {_dest}: a travel destination")
-                prewarm_pathmap(_dest)
+                if prewarm_pathmap(_dest, archive=_ar, table=_tbl,
+                                   role=f"travel destination {_dest}") is None:
+                    TRAVEL_UNSERVABLE[_dest] = "no navmesh in this archive"
+        finally:
+            if _ar is not None:
+                try:
+                    _ar.close()
+                except Exception:                             # noqa: BLE001
+                    pass
+        if TRAVEL_UNSERVABLE:
+            print(f"[map] travel destinations WITHHELD (unwarmed): "
+                  f"{sorted(TRAVEL_UNSERVABLE)} -- not in 0x0094's arr4, and a "
+                  f"0x00B1 for one is refused with nothing sent")
+    elif a.map is None:
+        print("[map] no --map: no navmesh is pre-warmed (portals included), so "
+              "a travel destination's mesh would be read at its load -- late if "
+              "a client holds the archive (see prewarm_pathmap)")
 
     if a.area:
         global AREA_NAME
@@ -36745,10 +36848,11 @@ def main():
               "nothing. DESKWORK-D1 step 7.", flush=True)
     if a.no_map_unlock:
         MAP_UNLOCK_ENABLED = False
-        print("[map] --no-map-unlock: no s2c 0x0094 at load -- the client's "
-              "unlocked-outpost set stays empty and the world map offers "
-              "nothing to travel to (today's behaviour). DESKWORK-D1 step 7.",
-              flush=True)
+        print("[map] --no-map-unlock: no s2c 0x0094 at login -- the client's "
+              "arr4 holds only what 0x0099 sets (the map you are on, every map "
+              "zoned into this session), so the world map shows those pins and "
+              "NOT the other served outposts (the pre-arc behaviour). "
+              "DESKWORK-D1 step 7.", flush=True)
     if a.party_no_fight:
         global PARTY_FIGHTS
         PARTY_FIGHTS = False
