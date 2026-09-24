@@ -28,6 +28,89 @@ move back.
 
 ---
 
+### R-SANDBOX, hostiles exempt from the point budget: the verifier's fixes -- 2026-09-24 -- **three of the ruling's surfaces had no witness or a stale word: the roster line's budget-free count gets a law, the two kept rules with no hostile check get one each, and three comments say whose budget is left**
+
+Corrects the counts in "R-SANDBOX, hostiles exempt from the point budget -- 2026-09-24"
+(that entry stands; this one names it). An independent verifier planted the old rule back
+in three places the ruling's checks did not reach, and each stayed green:
+
+- **The roster line (`MemberEditor.summary`).** The old budget form (`"N of B points"`)
+  put back left `--smoke` green: the one law reading the roster compared the line with
+  `summary()` itself, so it could not tell a count from a budget. A new law inside the
+  over-budget law's gate reads the roster item and the summary while the spin sits at its
+  maximum, requires the exact `n_of(spent, "point")` token and rejects `\d+ of \d+ points?`
+  anywhere on the line -- red under that plant (`'97 of 5 points'`). `--smoke` 164 → 165
+  laws, the gated count 19 → 20, floor 145 unchanged (165 − 20).
+- **Two kept rules with no hostile witness (`_check_ranks`).** A malformed pair
+  (`["x", 1]`, "is not [attribute, rank]") and an id the table lacks (99, "is not an
+  attribute id") were each skippable for a hostile alone without a red -- the kept-rule
+  block tested another profession's attribute, rank 13 and a duplicate only. Two checks
+  added, each red under its plant; `test_sandbox` 127 → 129. Neither rule existed to
+  serve the budget: both stand on the row's shape, and both hold for the player too.
+- **Three stale words.** The floor comment's "up to 18 mandatory laws" (it counts the
+  gated laws, now 20); `from_spec`'s comment gave the budget as the reason for the
+  template-level fallback, where the reasons that hold are the spawn row's level and the
+  0..20 range (a level-24 template opened at a constant 2 would compile in the window and
+  be refused by the CLI); `sandbox.py`'s module docstring listed "ranks the level cannot
+  pay for" without saying whose, and omitted the hostile level range.
+
+Both themes 165 of 165, 0 skips; `test_orchtheme` 37; the seven lints green. Records:
+`tools/orchestrator/README.md` (the smoke count, the state laws), `PLAN.md` §3's R-SANDBOX
+row, `TESTS.md`'s `test_sandbox` entry.
+
+---
+
+### R-SANDBOX, hostiles exempt from the point budget -- 2026-09-24 -- **the owner's ruling on the question the restyle entry recorded: a hostile's ranks are never held to a player's attribute-point budget; validity (the template's profession, each rank within the table) and the level range stay; the player's and a hero's budget stay; the window's Attributes chip counts and never judges**
+
+The owner's ruling (2026-09-24, verbatim): "exempt hostiles from the rank budget". It
+answers the question "R-SANDBOX, the window restyled (branch `orch-beauty`) -- 2026-09-24"
+recorded rather than decided -- `validate` had for one day refused a HOSTILE whose ranks
+spent more points than a player of its level has (`budget_for_level`), the rule the
+window's Attributes hint had always promised, while retail foes and bosses exceed a
+player's budget. That entry stands as written; this one names it.
+
+**The compiler (`toolkit/harness/sandbox.py`).** `_check_ranks(p, who, pairs,
+professions, rules, level=None)`: with a `level` the ranks go against that level's budget
+(the player's and each hero's call sites pass theirs, unchanged); `None` is no budget at
+all, and the member loop passes none. What a hostile is STILL refused for, because the
+owner did not rule on validity: a malformed `[attribute, rank]` pair, an attribute twice,
+an id outside the table, an attribute of another profession than its template's (and the
+primary rule), a rank outside `0..rank_max`, and a level outside `0..20`.
+`budget_for_level`'s docstring and the loop's comment say whose the budget is.
+
+**The window (`tools/orchestrator/orchestrator.py`, class `Ranks`).** No budget is computed
+for a hostile anywhere: the chip is the spend alone (`n_of(spent, "point")`, kind `info`,
+never `crit`, never "over budget"); the hint is "Not held to a player's point budget; each
+rank 0..12, in the template's profession." (the tooltip carries the ruling and what the
+compiler still refuses); `Ranks` no longer carries a level (`set_professions(professions)`,
+`set_level` gone, the level spin's hook to it gone); `MemberEditor.summary`'s roster line is
+the spent count.
+
+**Checks, each read off the defect's own operand and each proven red by planting the old
+rule back (the scratch backups, `cp`, `git diff --stat` clean after).** `test_sandbox`
+123 → 127: the two budget refusals INVERTED (388 points at level 2 accepted; a level-0
+hostile with a rank accepted); the kept rules on a hostile (a Monk attribute on a Warrior
+hostile refused; rank 13 refused past the table's 12; one attribute twice refused); the
+budget as a control (the player's 194-of-10 check kept; a hero's 194-of-10 at level 3
+added); and the no-level fallback, which had used the budget as its witness, re-witnessed
+where it still matters -- `spawn_rows` gives a member with no level its TEMPLATE's level
+(the raider's 2, the monk's 5, the hatcher's 1: told from 0, from the window's old 2 and
+from 20), and `validate` reads the same level (a level-24 template fails a member with no
+level for the template's level; the member's own 3 wins). `--smoke` 163 → 164 laws, floor
+145 (19 gated now, both hostile-ranks laws behind the attribute table): the over-budget
+law inverted -- a hostile's ranks past its level's budget COMPILE, the chip `info` and
+counting, no "over budget", the hint claiming no refusal; the level-0 law reads the chip's
+count and the hint's "point budget" where it read "0 points"; `hint_housed` looks for
+"point budget"; and a new law that a file with an attribute of another profession and a
+rank past the table on one hostile is refused for BOTH at compile, the card holds neither
+(the foreign id dropped, the rank clamped) and the bar says "2 changes". Both themes 164
+of 164, 0 skips.
+
+Records: `tools/orchestrator/README.md` (the compiler paragraph, the smoke count, the
+state laws); `PLAN.md` §3's R-SANDBOX row; `TESTS.md`'s `test_sandbox` entry.
+
+---
+
 ### DESKWORK pass 5, landed -- 2026-09-24 -- **gold (D9), the warp row (MOVE-B) and the status sweep (INFRA-A) merged; the merged tree's sweep 95 of 95 green**
 
 Merged into `deskwork` in that order (`3bd7de5b`, `ca5e6d9d`, `9ab7b2f9`, only PLAN-LOG entries
