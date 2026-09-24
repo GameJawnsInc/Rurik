@@ -129,17 +129,20 @@ framework:
 - **A sentence goes under a control, never inside it**; ids, flags and citations go on hover.
 - **Text fits or is sized to fit**: a combo is sized in characters and shows the start of its
   text; the heroes table's Profession and Body columns are sized to their widest item (measured,
-  not guessed); below 1,120 px the Character card goes above the table, its five fields three to
-  a row; and a narrow hostile page stacks its Body and Weapon cards and puts its bar in one
-  column, so no picker clips.
+  not guessed), and the width below which the Character card goes above the table, its five
+  fields three to a row, is derived from those columns and the widest hero name (1,130 px); a
+  narrow hostile page stacks its Body and Weapon cards on one shared label column, and a bar
+  goes to one column of eight where two would not hold the widest choice it holds NOW (a
+  Monk's list is wider than a Warrior's), so no picker clips.
 - **A hovered combo or spin box never changes under the wheel** unless it has focus; the wheel
   scrolls the page instead. (The wheel cannot GIVE it focus: Qt hands a hovered widget focus by
   its policy before any filter sees the event, so every combo and spin box is StrongFocus.)
 
 `toolkit/test_orchtheme.py` (in the suite, bare) holds the arithmetic: both palettes clear every
-audited pair, the sheet lints clean, the lint goes red on each planted fault, and the danger
+audited pair, the sheet lints clean, the lint goes red on each planted fault, the danger
 button's hover and press rules, read off the sheet itself, paint an ink that clears 4.5:1 on
-their fill (a planted hover that keeps the base ink is refused). `--smoke` holds the rest as
+their fill (a planted hover that keeps the base ink is refused), and the spin boxes' max-height
+is the wells' min-height (one field height). `--smoke` holds the rest as
 laws measured off rendered pixels — one accent and it renders gold, a checked box renders
 neutral and shifts its fill under the pointer, a hovered danger button's painted ink clears
 4.5:1 on its fill, a pressed button keeps its relief with focus on it, a log's scroll corner is
@@ -151,16 +154,27 @@ any fill counts), every profession fits its combo and every spin box shows its l
 combo alone with the window inactive and then active (where a focused one still takes it, and
 an unlocked hero's Level spin scrolls the table), and no flag, file name, ident or hex id sits
 on the visible surface. Layout and words have their own: every profession and every body fits
-its heroes-table column and every choice in a hostile's slots, Template and Weapon fits its
-field at 1,280, 1,120 and 1,000 px; the Character card is top-aligned beside the table and two
-rows of three when stacked, its labels centred on their fields at the window's minimum height;
-the Skills list's grade pills stand in one column near the name, not flush right; a group page
-and a hostile page end at one right edge whether or not the hostile page scrolls; the tab
-carries one labelled Remove per object (a group holding hostiles asks first) and no icon-only
-verb; the status chip's right gap is the page gutter and the Run tab's COMPILED and OUTPUT
-start at the card titles' x; every caption is one line, none says "the stack", the two Run wells
-name what will appear, and every tooltip, special value and placeholder that is a sentence
-starts with a capital. The window's STATE has laws of the same kind: the slice
+its heroes-table column, and every choice in EVERY example hostile's slots, Template and
+Weapon fits its field at 1,280, 1,120 and 1,000 px, and in one body per profession at 1,280,
+the bar re-picking its columns from each list at one width; stacked, the Body and Weapon
+cards start their inputs at one x with every label's ink right-aligned up to it, and the
+Template field comes back where it was after a re-polish while stacked; the Character card is
+top-aligned beside the table and two rows of three when stacked, each stacked label under half
+as far from its own field as from the one before it, its labels centred on their fields at the
+window's minimum height, and at the derived stack edge every hero name is whole; every combo,
+spin box and line edit on the four tabs is one height; the Skills filter shows its whole
+placeholder down to the window's minimum width, its checkbox twice as far from the bulk verbs
+as from its filters; the Skills list's grade pills stand in one column near the name, not
+flush right; a group's roster starts every row's facts at one x; a group page and a hostile
+page end at one right edge whether or not the hostile page scrolls; the tab carries one
+labelled Remove per object (a group holding hostiles asks first) and no icon-only verb, a
+removal lands on a group page, and a click repeated at one pixel takes at most one hostile
+before it meets a question; the status chip's right gap is the page gutter and the bar's
+message starts at the left one, the Run tab's COMPILED and OUTPUT start at the card titles'
+x; every caption is at most 110 characters (one constraint, one pointer) and the Stored
+character caption one line at the window's minimum width, none says "the stack", the two Run
+wells name what will appear, and every tooltip, special value and placeholder that is a
+sentence starts with a capital on every line. The window's STATE has laws of the same kind: the slice
 opens one window and adding hostiles opens none (a label shown with no parent is a window of
 its own), every input the compiler reads turns a fresh green **Compiled** into **Changed since
 compile** while the Skills filters leave it green, a hostile's edit reaches its group's roster

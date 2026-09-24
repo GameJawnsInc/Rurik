@@ -12604,7 +12604,11 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   `:pressed` rules' ink, resolved with the base rule's as the fallback, must clear
   4.5:1 on their fill, and a planted hover that keeps the base ink (the first cut's
   4.22:1 in light) is refused -- an audit row for that pair measured tokens and
-  stayed green with the sheet's ink reverted. Floor 29, <1 s),
+  stayed green with the sheet's ink reverted. **2026-09-24, the third fix pass,
+  group G, §4 +2: the spin boxes' `max-height` read off the sheet is the wells'
+  `min-height` (22px, both contents heights), so a spin stands as tall as a combo
+  -- `--smoke` measures the rendered heights, this is its bare twin; floor 29 → 31.**
+  Floor 31, <1 s),
   `toolkit/test_bareimport.py` (the SERVER must import on a machine with no
   vault -- proven in a subprocess, not argued. **What earns it: on 2026-08-15
   `probes.py` grew `GIVER_NPC = npc_template("def_1480")` at module level**, and

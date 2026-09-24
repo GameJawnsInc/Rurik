@@ -88,8 +88,8 @@ try:
                                    QGridLayout, QHBoxLayout, QHeaderView, QLabel,
                                    QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox,
                                    QPlainTextEdit, QPushButton, QScrollArea, QSpinBox,
-                                   QStyle, QStyleOptionButton, QStyleOptionComboBox,
-                                   QStyleOptionFrame, QStyleOptionViewItem,
+                                   QStatusBar, QStyle, QStyleOption, QStyleOptionButton,
+                                   QStyleOptionComboBox, QStyleOptionFrame, QStyleOptionViewItem,
                                    QDoubleSpinBox, QSplitter, QStackedWidget,
                                    QTableWidget, QTableWidgetItem, QTabWidget, QToolButton,
                                    QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
@@ -98,7 +98,7 @@ except ImportError as exc:                                  # pragma: no cover
 
 import orchtheme      # noqa: E402  (tools/orchestrator: palettes, sheet, audit)
 import orchui         # noqa: E402  (tools/orchestrator: the widget helpers)
-from orchui import (ROLE_ID, ROLE_PARTS, button, caption, card, chip,  # noqa: E402
+from orchui import (ROLE_ID, ROLE_PARTS, ROLE_ROSTER, button, caption, card, chip,  # noqa: E402
                     overline, role_label, set_chip)
 
 
@@ -201,8 +201,10 @@ class Names:
         return self._labelled
 
 
-GRADE_TIP = {"hand": "modelled: this server acts it from a hand-verified [skill_effect] row",
-             "label": ("label: acts through a label parsed from the client's own description "
+# each a sentence, the grade its first word: capitalised, as every sentence on
+# hover is (the pills themselves stay lower-case)
+GRADE_TIP = {"hand": "Modelled: this server acts it from a hand-verified [skill_effect] row",
+             "label": ("Label: acts through a label parsed from the client's own description "
                        "template, not a hand-verified row (SKILLS-LT); the gamesrv log says so "
                        "at every cast"),
              None: "Draws and times correctly; this server does nothing more with it"}
@@ -289,18 +291,14 @@ def skill_choices(names, professions, empty=True):
 class Bar(QWidget):
     """Eight skill slots, two columns of four (the Enemies tab's; the party's
     bars are in-game) -- one column of eight when the bar is too narrow for
-    two to hold a whole skill label."""
+    two to hold the widest label among the choices it holds NOW."""
 
     changed = Signal()                          # a slot edited
-    # Below this width (the bar's own) two columns cannot hold the widest
-    # skill label: measured 335 px against a slot field of 356 on an 878 px
-    # bar, and the field grows 1 px per 2 of the bar (--smoke: every slot's
-    # every choice fits at 1,280, 1,120 and 1,000 px).
-    STACK_BELOW = 840
 
     def __init__(self, names, parent=None):
         super().__init__(parent)
         self.names = names
+        self.need = 0                           # the widest choice, px (set_professions)
         self.grid = QGridLayout(self)
         self.grid.setContentsMargins(0, 0, 0, 0)
         self.grid.setHorizontalSpacing(10)
@@ -336,9 +334,19 @@ class Bar(QWidget):
         self.grid.setColumnStretch(1, 1)
         self.grid.setColumnStretch(4, 1 if columns == 2 else 0)
 
+    def _columns(self):
+        """Two while each slot's field would hold the widest choice, else one.
+        Two columns give a slot (bar - 166) / 2 px: 2 x 14 of numbers, 4 x 10
+        of spacing, the 16 px gutter and 41 of each combo's own chrome
+        (measured 356 / 371 / 416 / 516 at bars of 878 / 908 / 998 / 1198).
+        A threshold fitted to ONE list -- 840, the Warrior's 335 px -- cut a
+        Monk's 371 ('… [307 Mo Protection Prayers]') mid-word at the default
+        1,280, on the example's own second hostile."""
+        return 2 if (self.width() - 166) // 2 >= self.need else 1
+
     def resizeEvent(self, ev):
         super().resizeEvent(ev)
-        self._arrange(1 if self.width() < self.STACK_BELOW else 2)
+        self._arrange(self._columns())
 
     def set_professions(self, professions):
         pairs = skill_choices(self.names, professions)
@@ -346,6 +354,9 @@ class Bar(QWidget):
         tips = {s: self.names.skill_tip(s) for s in parts}
         for pk in self.slots:
             pk.set_choices(pairs, parts=parts, tips=tips)
+        fm = self.slots[0].fontMetrics()
+        self.need = max((fm.horizontalAdvance(label) for label, _s in pairs), default=0)
+        self._arrange(self._columns())          # a template change, at one width
 
     def values(self):
         return [int(pk.value() or 0) for pk in self.slots]
@@ -576,15 +587,19 @@ class SkillsTab(QWidget):
                               tip="Unlock the character's and the heroes' professions plus the "
                                   "common skills, and lock every other skill, including ones "
                                   "the filter hides.")
-        # the filter takes the row's slack first and the spacer what is left:
-        # stretched 3 : 1 : 1 against the combo and the spacer, the row's one
+        # the filter takes the row's slack first and the spacer what is left
+        # (stretched 3 : 1 : 1 against the combo and the spacer, the row's one
         # text input was 176 px at 1,000 px, its placeholder elided, beside
-        # 68 px of nothing
+        # 68 px of nothing) -- so the split between the filters and the bulk
+        # verbs is a fixed 16 px past the row's own 8, not the spacer's: the
+        # filter reaches its cap only from 1,250 px, and below that the spacer
+        # had nothing, so 'Modelled or label' stood 9 px from 'Unlock shown'
+        # and 12 from its own filters, as one of the verbs
         self.filter.setMaximumWidth(480)
         row.addWidget(self.filter, 1)
         row.addWidget(self.prof, 0)
-        row.addSpacing(4)
         row.addWidget(self.modelled_only)
+        row.addSpacing(16)
         row.addStretch(0)
         for b in (self.all_b, self.none_b, self.party_b):
             row.addWidget(b)
@@ -712,10 +727,12 @@ class PartyTab(QWidget):
     and a body). No bars, no ranks: those are the in-game panels' job."""
 
     COLS = ("", "#", "Hero", "Profession", "Body", "Level")
-    # Below this width the Character card goes ABOVE the table, as main laid it
-    # out: side by side, the table cannot hold a whole profession, a whole body
-    # and a readable name beside a 320 px card (measured: 1,114 px needed).
-    STACK_BELOW = 1120
+    # Below STACK_BELOW the Character card goes ABOVE the table, as main laid
+    # it out: side by side, the table cannot hold a whole profession, a whole
+    # body and a whole hero name beside a 320 px card. _fit_columns derives
+    # the width from what the row holds (a constant 1,120, "1,114 measured",
+    # outlived the columns it was measured with: from 1,120 to 1,129 px, side
+    # by side, 11 of 39 names elided).
     CARD_W = 320
 
     def __init__(self, names, on_change, parent=None):
@@ -763,7 +780,7 @@ class PartyTab(QWidget):
         self.outer.addWidget(cc, 0, Qt.AlignTop)
 
         self.count = chip("", "info")
-        hc = card("Heroes", trailing=self.count)
+        self.heroes_card = hc = card("Heroes", trailing=self.count)
         hc.body.addWidget(caption(
             f"Tick a hero to unlock them and add them to the party, up to "
             f"{sandbox.HEROES_MAX}.",
@@ -873,6 +890,19 @@ class PartyTab(QWidget):
             field = combo.style().subControlRect(QStyle.CC_ComboBox, opt,
                                                  QStyle.SC_ComboBoxEditField, combo).width()
             self.table.setColumnWidth(col, need + (100 - field) + 4 + cell)
+        # ...and the stack edge from what the row now needs: the page margins,
+        # the card and the gap to it, the heroes card's chrome, the fixed
+        # columns, the widest hero name in its cell, and the table's bar (39
+        # rows of 40 px scroll at any height). Measured: the first width with
+        # no name elided, to the pixel
+        widest = max(self.table.fontMetrics().horizontalAdvance(it.text())
+                     for it in self.name_items.values())
+        self.heroes_card.ensurePolished()       # the sheet's 1 px border, before any show
+        m, cm = self.outer.contentsMargins(), self.heroes_card.layout().contentsMargins()
+        self.STACK_BELOW = (m.left() + m.right() + self.CARD_W + self.outer.spacing()
+                            + cm.left() + cm.right() + 2 * self.heroes_card.frameWidth()
+                            + sum(self.table.columnWidth(c) for c in (0, 1, 3, 4, 5))
+                            + widest + cell + self.table.verticalScrollBar().sizeHint().width())
 
     def _arrange(self, stacked):
         """Side by side (a 320 px card, five form rows) or stacked (a full-width
@@ -894,6 +924,15 @@ class PartyTab(QWidget):
                 self.cgrid.addWidget(w, r, 2 * c + 1)
             for c in (1, 3, 5):
                 self.cgrid.setColumnStretch(c, 1)
+            # a label after the first in its row belongs to the field on its
+            # RIGHT: its column holds 16 px more than its widest label, and
+            # right alignment puts the room on the far side (the grid's one
+            # 14 px spacing had 'Secondary' 15 px from Primary's field and 14
+            # from its own -- label, field, label, field, with no pairs)
+            for c in (2, 4):
+                widest = max(lab.sizeHint().width() for i, (lab, _w) in enumerate(self.fields)
+                             if 2 * (i % 3) == c)
+                self.cgrid.setColumnMinimumWidth(c, widest + 16)
         else:
             self.outer.setDirection(QBoxLayout.LeftToRight)
             cc.setFixedWidth(self.CARD_W)
@@ -903,6 +942,8 @@ class PartyTab(QWidget):
             self.cgrid.setColumnStretch(1, 1)
             for c in (3, 5):
                 self.cgrid.setColumnStretch(c, 0)
+            for c in (2, 4):
+                self.cgrid.setColumnMinimumWidth(c, 0)
 
     def resizeEvent(self, ev):
         super().resizeEvent(ev)
@@ -1182,16 +1223,39 @@ class MemberEditor(QWidget):
         self.weapon_item.currentIndexChanged.connect(lambda _i: self._changed())
         self.bar.changed.connect(self._changed)
         self.ranks.changed.connect(self._changed)
+        # the two forms' labels, right-aligned as labels (the form right-aligns
+        # the CELL, and a label widened past its text -- _arrange, stacked --
+        # would fall back to its own left alignment, 72 px from its field)
+        self._labels = [f.itemAt(r, QFormLayout.LabelRole).widget()
+                        for f in (form, wform) for r in range(f.rowCount())
+                        if f.itemAt(r, QFormLayout.LabelRole) is not None]
+        for lab in self._labels:
+            lab.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self._template()
         self._boss(self.boss.isChecked())
         self._arrange(False)
 
     def _arrange(self, stacked):
-        """The Body and Weapon cards side by side, or one above the other."""
+        """The Body and Weapon cards side by side, or one above the other --
+        and stacked, the two forms share one label column, so their inputs
+        start at one x: each form sizes its column to its own widest label
+        ('Template' against 'Attack interval'), and two cards in one column
+        had ragged input edges 32 px apart. Side by side each keeps its own,
+        so the Template field keeps the width the fit law needs at 1,120."""
         if stacked == self.stacked:
             return
         self.stacked = stacked
         self.top.setDirection(QBoxLayout.TopToBottom if stacked else QBoxLayout.LeftToRight)
+        for lab in self._labels:
+            lab.setMinimumWidth(0)
+            # QLabel caches a hint with the minimum width in it, and clearing
+            # the width leaves the hint: re-polished while stacked (a sheet
+            # change), the fields sat at the stacked x side by side
+            lab.setIndent(lab.indent())
+        if stacked:
+            widest = max(lab.sizeHint().width() for lab in self._labels)
+            for lab in self._labels:
+                lab.setMinimumWidth(widest)
 
     def resizeEvent(self, ev):
         super().resizeEvent(ev)
@@ -1292,7 +1356,8 @@ class GroupEditor(QWidget):
         head.addLayout(titles)
         head.addStretch(1)
         # the one Remove for a group, and it asks first when the group holds
-        # hostiles: this button sits at the same pixel on the next group's page
+        # hostiles: this button sits at the same pixel on the next group's page,
+        # and on the page every removal lands on
         self.remove_b = button("Remove group", "danger", icon="trash")
         self.remove_b.clicked.connect(lambda: owner.remove(self, confirm=True))
         head.addWidget(self.remove_b, 0, Qt.AlignTop)
@@ -1309,6 +1374,8 @@ class GroupEditor(QWidget):
         box.body.addWidget(self.hint)
         self.roster = QListWidget()
         self.roster.setProperty("role", "flat")
+        self.delegate = orchui.RosterDelegate(self.roster)
+        self.roster.setItemDelegate(self.delegate)
         self.roster.setAccessibleName("This group's hostiles")
         self.roster.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.roster.itemClicked.connect(self._pick)
@@ -1361,12 +1428,18 @@ class GroupEditor(QWidget):
 
     def refresh_roster(self):
         self.roster.clear()
+        names = []
         for ed in self.members:
-            boss = "Boss  ·  " if ed.boss.isChecked() else ""
-            it = QListWidgetItem(f"{boss}{ed.display_name()}   —   {ed.summary()}")
+            name = ("Boss  ·  " if ed.boss.isChecked() else "") + ed.display_name()
+            # the whole line as the item's text (a screen reader's, and what
+            # the change law reads); the delegate draws it in two columns
+            it = QListWidgetItem(f"{name}   —   {ed.summary()}")
             it.setData(Qt.UserRole, ed)
+            it.setData(ROLE_ROSTER, (name, ed.summary()))
             it.setToolTip("Select to edit this hostile.")
             self.roster.addItem(it)
+            names.append(name)
+        self.delegate.set_column(names)
         rows = max(1, self.roster.count())
         self.roster.setFixedHeight(rows * (self.roster.fontMetrics().height() + 12) + 4)
         self.roster.setVisible(bool(self.members))
@@ -1390,12 +1463,17 @@ class GroupEditor(QWidget):
         return ed
 
     def remove(self, ed):
+        """Remove a hostile; the selection lands on ITS GROUP's page, never on
+        the next hostile, whose unasking 'Remove hostile' sat under the same
+        pixel: a hand that stayed there emptied the group, then the group
+        itself, then the next -- eight clicks, the whole encounter, and no
+        question. The group's Remove asks while it holds a hostile."""
         self.members.remove(ed)
         self.owner._detach(ed)
         for m, e in enumerate(self.members, 1):
             e.set_where(self.index, m)
         self._count()
-        self.owner._structure_changed(select=self if not self.members else self.members[0])
+        self.owner._structure_changed(select=self)
 
     def _count(self):
         n = len(self.members)
@@ -1457,8 +1535,8 @@ class EnemiesTab(QWidget):
                                        f"{sandbox.GROUP_SIZE_MAX}).")
         # one verb each: the adds live here, the Remove on the page of the thing
         # it removes (an unlabelled x here, 6 px from + Hostile, removed
-        # whatever was selected -- and the selection after a removal was the
-        # next GROUP, so three clicks emptied the encounter)
+        # whatever was selected without asking -- and the selection after a
+        # removal was the next GROUP, so three clicks emptied the encounter)
         self.add.clicked.connect(lambda: self.select(self.add_group()))
         self.add_member_b.clicked.connect(self._add_member_here)
         for b in (self.add, self.add_member_b):
@@ -1531,8 +1609,11 @@ class EnemiesTab(QWidget):
 
     def remove(self, ed, confirm=False):
         """Remove a group. `confirm` (the click path) asks first when the group
-        holds hostiles; the selection lands on the neighbouring group's first
-        hostile, never on a group, so the same click twice cannot take two."""
+        holds hostiles; the selection lands on the neighbouring GROUP's page,
+        whose Remove asks while it holds one, so a click repeated at the same
+        pixel meets a question. (It landed on the neighbour's first HOSTILE,
+        whose Remove asks nothing: an emptied group went without a word, and
+        the cascade crossed into the next.)"""
         if confirm and ed.members and not self.ask_remove(ed):
             return False
         at = self.groups.index(ed)
@@ -1542,7 +1623,7 @@ class EnemiesTab(QWidget):
         self._detach(ed)
         self._renumber()
         near = self.groups[min(at, len(self.groups) - 1)] if self.groups else None
-        self._structure_changed(select=(near.members[0] if near and near.members else near))
+        self._structure_changed(select=near)
         return True
 
     def remove_box(self, ed):
@@ -1626,7 +1707,7 @@ class EnemiesTab(QWidget):
         f.setWeight(QFont.DemiBold if ed.boss.isChecked() else QFont.Normal)
         item.setFont(0, f)
         item.setToolTip(0, f"{ed.template.currentText()}"
-                        + ("\nthe boss: the quest's kill objective" if ed.boss.isChecked() else ""))
+                        + ("\nThe boss: the quest's kill objective" if ed.boss.isChecked() else ""))
 
     def _member_changed(self, ed):
         if self._building:
@@ -1824,11 +1905,13 @@ class RunTab(QWidget):
         opts.body.addWidget(caption("Closing the game client ends the run and the servers."))
         opts.body.addStretch(1)
         store = card("Stored character")
-        store.body.addWidget(caption(
-            "What you set in game carries to the next run; a reset starts the next login "
-            "fresh.",
+        # one line down to the window's minimum width (943 px): three words
+        # longer, 'fresh.' stood alone on a second line there
+        self.stored_cap = caption(
+            "What you set in game carries to the next run; a reset starts it fresh.",
             tip="Bars, ranks and hero builds. Every sandbox run passes --persist; the store is "
-                "vault/state/characters/. A reset leaves the spec untouched."))
+                "vault/state/characters/. A reset leaves the spec untouched.")
+        store.body.addWidget(self.stored_cap)
         self.reset_b = button("Reset stored character…", "danger", icon="trash",
                               name="Reset the stored character")
         row = QHBoxLayout()
@@ -2027,7 +2110,8 @@ class RunTab(QWidget):
             set_chip(self.state, "Compiled — no slice archive", "warn", tip="")
             self.status.setText("There is no slice archive yet, so this cannot launch. Build "
                                 "it first (hover here for how).")
-            self.status.setToolTip(f"{BUILD_SLICE}\n\n{missing}")
+            # the compiler's sentence, a paragraph of its own on hover
+            self.status.setToolTip(f"{BUILD_SLICE}\n\n{missing[:1].upper()}{missing[1:]}")
             self._say("Compiled, but there is no slice archive yet"
                       + ("." if here else "; the Run tab says how to build it."))
         else:
@@ -2284,12 +2368,40 @@ class Header(QFrame):
         lay.addLayout(right)
 
 
+class GutterStatusBar(QStatusBar):
+    """A status bar whose message starts at the page gutter. QStatusBar paints
+    showMessage's text 6 px in, a number of its own (messageRect) that no
+    margin and no sheet moves, while the header, every page and the names
+    chip sit at 16 -- the one left edge in the window that did not. Only
+    the painting is here; showMessage, currentMessage and the timeout are
+    QStatusBar's, so every say site and every law reading the bar is as it
+    was."""
+
+    GUTTER = 16                                 # the page's own left gutter
+
+    def paintEvent(self, ev):
+        p = QPainter(self)
+        opt = QStyleOption()
+        opt.initFrom(self)
+        self.style().drawPrimitive(QStyle.PE_PanelStatusBar, opt, p, self)
+        msg = self.currentMessage()
+        if msg:
+            right = self.width() - 12           # QStatusBar's own bound, then the chip
+            for w in self.findChildren(QWidget, "", Qt.FindDirectChildrenOnly):
+                if w.isVisible():
+                    right = min(right, w.x() - 2)
+            p.setPen(self.palette().windowText().color())
+            p.drawText(QRect(self.GUTTER, 0, right - self.GUTTER, self.height()),
+                       Qt.AlignLeading | Qt.AlignVCenter | Qt.TextSingleLine, msg)
+
+
 class Window(QMainWindow):
     def __init__(self, world, names):
         super().__init__()
         self.world, self.names = world, names
         self.setWindowTitle("Rurik run orchestrator")
         self.resize(1280, 860)
+        self.setStatusBar(GutterStatusBar())
         central = QWidget()
         v = QVBoxLayout(central)
         v.setContentsMargins(0, 0, 0, 0)
@@ -2430,9 +2542,33 @@ def _best_contrast(img, ground, inset=3):
     return best
 
 
+def _ink_span(img, rect, ground, tol=40):
+    """(first, last) column of `rect` (in `img`, a grab of the window) holding a
+    pixel `tol` or more from `ground`: where painted text starts and ends."""
+    g = orchtheme._rgb(ground)
+    cols = []
+    for x in range(max(0, rect.left()), min(img.width(), rect.right() + 1)):
+        for y in range(max(0, rect.top()), min(img.height(), rect.bottom() + 1)):
+            c = img.pixelColor(x, y)
+            if max(abs(c.red() - g[0]), abs(c.green() - g[1]), abs(c.blue() - g[2])) > tol:
+                cols.append(x)
+                break
+    return (cols[0], cols[-1]) if cols else (None, None)
+
+
 def _spin_field(sp):
     """A spin box's line edit (QAbstractSpinBox.lineEdit() is protected)."""
     return sp.findChild(QLineEdit)
+
+
+def _within(widget, cls):
+    """Whether `widget` sits under a `cls` (a cell widget under its table)."""
+    p = widget.parent()
+    while p is not None:
+        if isinstance(p, cls):
+            return True
+        p = p.parent()
+    return False
 
 
 def _field_width(combo):
@@ -2724,19 +2860,37 @@ def smoke(win, app, out_dir):
           and words[1].startswith("Unlock"),
           f"the filter box is named with the pills' own words, the text filter's hover says it "
           f"matches them, and the party button has its verb ({words[:2]})")
-    # the filter keeps its placeholder whole at 1,000 px: the row's one text
-    # input gave up width before an empty spacer did
+    # the filter keeps its placeholder whole down to the window's minimum width
+    # (the row's one text input gave up width before an empty spacer did), and
+    # the row keeps its two halves apart there: the checkbox sits with its
+    # filters, twice as far from the bulk verbs as from the profession combo
+    # -- the spacer had nothing to give until the filter reached its cap at
+    # 1,250 px, and below that 'Modelled or label' stood 9 px from 'Unlock
+    # shown' and 12 from its own filters, as one of the verbs
     size = win.size()
-    win.resize(1000, 720)
-    settle(8)
-    fl = win.skills.filter
-    opt = QStyleOptionFrame()
-    fl.initStyleOption(opt)
-    room = (fl.style().subElementRect(QStyle.SE_LineEditContents, opt, fl).width()
-            - sum(b.width() for b in fl.findChildren(QToolButton) if b.isVisibleTo(fl)) - 4)
-    want = fl.fontMetrics().horizontalAdvance(fl.placeholderText())
-    check(room >= want, f"at 1,000 px the Skills filter shows its whole placeholder ({room} px of "
-                        f"room for {want}; the filter is {fl.width()} wide)")
+    fl, pf, cb, ub = win.skills.filter, win.skills.prof, win.skills.modelled_only, win.skills.all_b
+    row = {}
+    for w in (win.minimumSizeHint().width(), 1000, 1120):
+        win.resize(w, 720)
+        settle(8)
+        # the clear button fades for ~140 ms after the text above was cleared,
+        # and takes the placeholder's room while it does: wait for the search
+        # icon to be the one button left
+        t_end = time.perf_counter() + 1.0
+        while sum(1 for b in fl.findChildren(QToolButton) if b.isVisibleTo(fl)) > 1 \
+                and time.perf_counter() < t_end:
+            settle(1)
+            time.sleep(0.01)
+        opt = QStyleOptionFrame()
+        fl.initStyleOption(opt)
+        room = (fl.style().subElementRect(QStyle.SE_LineEditContents, opt, fl).width()
+                - sum(b.width() for b in fl.findChildren(QToolButton) if b.isVisibleTo(fl)) - 4)
+        want = fl.fontMetrics().horizontalAdvance(fl.placeholderText())
+        row[win.width()] = (room, want, cb.x() - (pf.x() + pf.width()), ub.x() - (cb.x() + cb.width()))
+    check(len(row) == 3 and all(room >= want and apart >= 2 * near for room, want, near, apart in row.values()),
+          f"down to the window's minimum width the Skills filter shows its whole placeholder and "
+          f"its checkbox stands twice as far from the bulk verbs as from its filters (width: room, "
+          f"placeholder, to the combo, to Unlock shown = {row})")
     win.resize(size)
     settle(8)
 
@@ -2785,6 +2939,20 @@ def smoke(win, app, out_dir):
             check(cc.height() <= cc.heightForWidth(cc.width()) and rows >= 5.5,
                   f"stacked, the Character card is its own height ({cc.height()} of "
                   f"{cc.heightForWidth(cc.width())}) and the heroes table shows {rows:.1f} rows")
+            # ...and a label after the first in its row reads as its own field's:
+            # under half as far from that field as from the one before it (the
+            # grid's one 14 px spacing had 'Secondary' 15 px from Primary's field
+            # and 14 from its own, and 'Level' 15 from both)
+            gaps = []
+            for i, (lab, wdg) in enumerate(win.party.fields):
+                if i % 3:
+                    prev = win.party.fields[i - 1][1]
+                    ink = lab.x() + lab.width() - lab.fontMetrics().horizontalAdvance(lab.text())
+                    gaps.append((lab.text(), wdg.x() - (lab.x() + lab.width()),
+                                 ink - (prev.x() + prev.width())))
+            check(len(gaps) == 3 and all(own * 2 < before for _t, own, before in gaps),
+                  f"stacked, each label after the first in its row is under half as far from its "
+                  f"own field as from the field before it (own, before: {gaps})")
         else:
             check(cc.height() <= cc.sizeHint().height() < win.party.table.height(),
                   f"beside the table, the Character card hugs its form ({cc.height()} px; hint "
@@ -2802,6 +2970,28 @@ def smoke(win, app, out_dir):
               f"at {w} px every spin box on the tab shows its longest value whole ({len(spins)} "
               f"spins for {len(win.party.rows)} heroes and the character; too narrow: "
               f"{narrow[:3] or 'none'})")
+    # the stack edge is where the row stops fitting, read off the fitted
+    # columns and the widest hero name: at that width, side by side, every
+    # name is whole, and one pixel narrower the card stacks (a constant 1,120,
+    # "1,114 measured" before the columns were fitted, elided 11 names side
+    # by side from 1,120 to 1,129 -- the squeeze the stack exists to avoid)
+    edge = win.party.STACK_BELOW
+    got = {}
+    for w in (edge, edge - 1):
+        win.resize(w, 800)
+        settle(8)
+        tbl = win.party.table
+        colw = tbl.columnWidth(2)
+        vopt = QStyleOptionViewItem()
+        vopt.rect = QRect(0, 0, 100, 40)
+        inset = 100 - tbl.style().subElementRect(QStyle.SE_ItemViewItemText, vopt, tbl).width()
+        elided = [it.text() for it in win.party.name_items.values()
+                  if tbl.fontMetrics().horizontalAdvance(it.text()) > colw - inset]
+        got[win.width()] = (win.party.stacked, colw, len(elided))
+    check(got.get(edge, (True,))[0] is False and got[edge][2] == 0 and got.get(edge - 1, (False,))[0],
+          f"at the stack edge ({edge} px) the card is beside the table and every hero name is "
+          f"whole, and one pixel under it the card stacks (width: stacked, Hero column, elided = "
+          f"{got})")
     # at the window's minimum height the squeeze lands on the scroll area, not
     # inside the form: three rows of form wanted 531 px of 424 and Qt evened
     # the cards out at 190 each, every label 3 px above its field
@@ -2862,6 +3052,27 @@ def smoke(win, app, out_dir):
           and not g.roster.selectedItems(),
           "a click on a roster row selects that hostile, and leaves no row painted selected "
           "on the group's page")
+    # the roster's facts start at ONE x on every row, past the widest name: as
+    # one string per row, 'Bandit Raider — …' and 'Academy Monk — …' began
+    # their facts 14 px apart. Measured off the rows: the first column a row
+    # loses when its facts are taken away
+    vp, starts, names = g.roster.viewport(), [], []
+    for i in range(g.roster.count()):
+        it = g.roster.item(i)
+        r, parts = g.roster.visualItemRect(it), it.data(ROLE_ROSTER)
+        with_facts = vp.grab(r).toImage()
+        it.setData(ROLE_ROSTER, (parts[0], ""))
+        settle(2)
+        without = vp.grab(r).toImage()
+        it.setData(ROLE_ROSTER, parts)
+        starts.append(next((x for x in range(with_facts.width())
+                            if any(with_facts.pixelColor(x, y) != without.pixelColor(x, y)
+                                   for y in range(with_facts.height()))), None))
+        names.append(g.roster.fontMetrics().horizontalAdvance(parts[0]))
+    check(len(starts) == 4 and None not in starts and len(set(starts)) == 1
+          and len(set(names)) > 1 and starts[0] > max(names),
+          f"a group's roster starts every row's facts at one x, past its widest name (facts at "
+          f"{starts}; names {names} px wide)")
     # level 0 is a value the spin offers and the compiler accepts: the roster
     # and the change signal survive it (the fix pass's summary() raised there,
     # emptying the roster and losing the signal)
@@ -2882,27 +3093,115 @@ def smoke(win, app, out_dir):
     check(isinstance(pk.view().itemDelegate(), orchui.SkillDelegate)
           and isinstance(pk.completer().popup().itemDelegate(), orchui.SkillDelegate),
           "and its drop-down and its type-to-filter popup draw rows the way the Skills list does")
-    # the hostile page at three widths: every choice in every slot, the
-    # Template and the Weapon (the '(none: the template's swing)' row every new
-    # hostile starts with among them) fits its field -- two columns of slots
-    # cut a skill id through its last digit at 1,000 px, and 20 attribute
-    # names at 1,120; the Encounter card keeps its 300 px, the page reflows
+    # the hostile page at three widths, for EVERY hostile in the example: every
+    # choice in every slot, the Template and the Weapon (the '(none: the
+    # template's swing)' row every new hostile starts with among them) fits its
+    # field -- two columns of slots cut a skill id through its last digit at
+    # 1,000 px, and 20 attribute names at 1,120; the Encounter card keeps its
+    # 300 px, the page reflows. Every hostile, because the bar's two-column
+    # threshold was a constant fitted to the first one's list (a Warrior's,
+    # 335 px), and the second's -- a Monk's, 371 -- was cut mid-word at the
+    # default 1,280 while this law, reading the first alone, stayed green
     m0 = en.groups[0].members[0]
-    en.select(m0)
-    settle()
+    eds = [m for gg in en.groups for m in gg.members]
+    edges = {}
+
+    def cut_choices(ed):
+        cut = []
+        for tag, combo in ([(f"slot {i + 1}", pk) for i, pk in enumerate(ed.bar.slots)]
+                           + [("Template", ed.template), ("Weapon", ed.weapon_item)]):
+            for i in range(combo.count()):
+                if not _fits(combo, combo.itemText(i)):
+                    cut.append((ed.template.value(), tag, combo.itemText(i)[:40],
+                                _field_width(combo)))
+        return cut
+
+    def label_edges(ed):
+        """(label, its ink's last column, its field's first) per labelled form
+        row, in window x: right-aligned, a label's ink ends a bearing short of
+        its field less the form's 14 px spacing."""
+        img = win.grab().toImage()
+        out = []
+        for f in ed.findChildren(QFormLayout):
+            for r in range(f.rowCount()):
+                li, fi = f.itemAt(r, QFormLayout.LabelRole), f.itemAt(r, QFormLayout.FieldRole)
+                if li is None or li.widget() is None or fi is None:
+                    continue
+                lab = li.widget()
+                at = lab.mapTo(win, QPoint(0, 0))
+                _l, ink = _ink_span(img, QRect(at, lab.size()), pal["surface"])
+                out.append((lab.text(), ink, f.parentWidget().mapTo(win, fi.geometry().topLeft()).x()))
+        return out
+
     for w, h in ((1280, 860), (1120, 760), (1000, 720)):
         win.resize(w, h)
         settle(8)
-        cut = []
-        for tag, combo in ([(f"slot {i + 1}", pk) for i, pk in enumerate(m0.bar.slots)]
-                           + [("Template", m0.template), ("Weapon", m0.weapon_item)]):
-            for i in range(combo.count()):
-                if not _fits(combo, combo.itemText(i)):
-                    cut.append((tag, combo.itemText(i)[:40], _field_width(combo)))
-        check(not cut and m0.weapon_item.itemText(0).startswith("(none"),
-              f"at {w} px every choice in a hostile's eight slots, its Template and its Weapon "
-              f"fits its field (the bar in {m0.bar.columns} column(s), the cards "
+        cut, cols = [], {}
+        for ed in eds:
+            en.select(ed)
+            settle(4)
+            cut += cut_choices(ed)
+            cols[ed.template.value()] = ed.bar.columns
+        check(not cut and all(ed.weapon_item.itemText(0).startswith("(none") for ed in eds),
+              f"at {w} px every choice in each example hostile's eight slots, its Template and "
+              f"its Weapon fits its field (the bars in {cols} column(s), the cards "
               f"{'stacked' if m0.stacked else 'side by side'}; cut: {cut[:2] or 'none'})")
+        # stacked, the Body and Weapon cards' inputs start at one x, their
+        # labels right-aligned up to it (each form sized its own label column:
+        # 'Template' and 'Attack interval' put the two cards' inputs 32 px
+        # apart in one column); side by side each form keeps its own column
+        en.select(m0)
+        settle(4)
+        edges[w] = (m0.template.mapTo(win, QPoint(0, 0)).x(), m0.template.width(),
+                    m0.weapon_item.mapTo(win, QPoint(0, 0)).x())
+        if m0.stacked:
+            labs = label_edges(m0)
+            check(edges[w][0] == edges[w][2] and len(labs) >= 7
+                  and all(ink is not None and 0 <= fx - 14 - ink <= 3 for _t, ink, fx in labs),
+                  f"at {w} px the stacked Body and Weapon cards start their inputs at one x "
+                  f"({edges[w][0]} and {edges[w][2]}), every label's ink ending at its field less "
+                  f"the form's spacing ({[(t, fx - 14 - (ink or 0)) for t, ink, fx in labs]})")
+            # a sheet change while stacked (the labels re-polished) must not
+            # leave the shared width behind when the cards go side by side
+            for lab in m0._labels:
+                lab.style().unpolish(lab)
+                lab.style().polish(lab)
+            settle(4)
+    win.resize(1280, 860)
+    settle(8)
+    back = (m0.template.mapTo(win, QPoint(0, 0)).x(), m0.template.width(),
+            m0.weapon_item.mapTo(win, QPoint(0, 0)).x())
+    check(m0.stacked is False and back == edges[1280] and back[0] != back[2],
+          f"back at 1,280 px after a re-polish while stacked, the Template field is where and as "
+          f"wide as it was, the Weapon's in its own card (x, width, weapon x: {back} was "
+          f"{edges[1280]})")
+    # ...and one body per profession the Template picker offers, at the default
+    # width: the bar picks its columns from the list a template gives it, at a
+    # constant width -- Warrior 2, Monk 1, Warrior 2 (a threshold read only on
+    # resize would hold the Warrior's columns for the Monk's list)
+    m0_spec = m0.to_spec()
+    rows = win.names.world.rows("npc")
+    byprof = {}
+    for i in range(m0.template.count()):
+        k = m0.template.itemData(i)
+        byprof.setdefault(int((rows.get(k) or {}).get("profession", 0) or 0), k)
+    cut, cols = [], {}
+    for p, k in sorted(byprof.items()):
+        m0.template.set_value(k)
+        settle(4)
+        cols[p] = m0.bar.columns
+        cut += cut_choices(m0)
+    swing = []
+    for k in ("bandit_raider", "academy_monk", "bandit_raider"):
+        m0.template.set_value(k)
+        settle(4)
+        swing.append(m0.bar.columns)
+    m0.from_spec(m0_spec)
+    settle(4)
+    check(len(byprof) >= 6 and not cut and swing == [2, 1, 2] and m0.to_spec() == m0_spec,
+          f"at 1,280 px a hostile in any of {len(byprof)} professions' bodies fits every slot "
+          f"choice, the bar re-picking its columns from each list at one width (by profession "
+          f"{cols}; Warrior, Monk, Warrior: {swing}; cut: {cut[:2] or 'none'})")
     # a group page and a hostile page share one right edge whether or not the
     # hostile's page scrolls: at 860 tall it does, at 1080 (a maximized 1080p
     # window) it does not, and a fixed reserve matched only the first
@@ -2982,8 +3281,8 @@ def smoke(win, app, out_dir):
           "a group added after the boss's group is not labelled as holding it, and the boss's "
           "group warns that it must be last")
     # the page's Remove group ASKS while the group holds a hostile, and a No
-    # removes nothing; a Yes removes it and lands the selection on a hostile,
-    # never on the next group (whose Remove sits at the same pixel)
+    # removes nothing; a Yes removes it and lands the selection on the
+    # neighbour GROUP's page, whose Remove (at the same pixel) asks in turn
     en.select(g4)
     settle()
     asked = []
@@ -2996,15 +3295,48 @@ def smoke(win, app, out_dir):
     settle()
     del en.ask_remove
     check(asked == [("no", g4), ("yes", g4)] and kept and g4 not in en.groups
-          and isinstance(en.current(), MemberEditor) and en.current() is g3.members[0],
+          and en.current() is g3,
           f"Remove group asks first, a No keeps the group, a Yes removes it and selects the "
-          f"neighbour's first hostile (asked {[a for a, _ in asked]}, now "
-          f"{type(en.current()).__name__})")
+          f"neighbour group (asked {[a for a, _ in asked]}, now {type(en.current()).__name__})")
     check("holds the boss" in g3.subtitle.text() and g3.note.isHidden(),
           "and removing it puts the note back")
     box_text = en.remove_box(g3).text()
     check(f"group {g3.index}" in box_text and f"{n_of(len(g3.members), 'hostile')} with it" in box_text,
           f"the box names the group and how many hostiles go with it ({box_text.splitlines()[0]!r})")
+    # a click repeated at ONE window pixel -- a double-click, a hand that stays
+    # -- takes at most one hostile and then meets a question: every removal
+    # lands on a GROUP page, whose Remove asks while the group holds one.
+    # (Landing on the next hostile put its unasking 'Remove hostile' under the
+    # pixel: eight clicks emptied the encounter, and nothing asked.) Clicks go
+    # through the window, to whatever is under the pointer, as a hand's do
+    saved = en.to_spec()
+    series = {}
+    for tag, pick in (("group 1's first hostile", lambda: en.groups[0].members[0]),
+                      ("the last group's sole hostile", lambda: en.groups[-1].members[-1])):
+        ed = pick()
+        en.select(ed)
+        settle(4)
+        n0 = (sum(len(gg.members) for gg in en.groups), len(en.groups))
+        asked = []
+        en.ask_remove = lambda e: (asked.append(e.index), False)[1]
+        b = ed.remove_b
+        at = b.mapTo(win, QPoint(b.width() // 2, b.height() // 2))
+        for _ in range(6):
+            before = (sum(len(gg.members) for gg in en.groups), len(en.groups))
+            QTest.mouseClick(win.windowHandle(), Qt.LeftButton, Qt.NoModifier, at)
+            settle(4)
+            if (sum(len(gg.members) for gg in en.groups), len(en.groups)) == before:
+                break
+        del en.ask_remove
+        n1 = (sum(len(gg.members) for gg in en.groups), len(en.groups))
+        series[tag] = (n0[0] - n1[0], n0[1] - n1[1], len(asked), type(en.current()).__name__)
+    check(len(series) == 2 and all(hostiles <= 1 and asks >= 1 and now == "GroupEditor"
+                                   for hostiles, _groups, asks, now in series.values()),
+          f"a click repeated at one pixel from a hostile's Remove takes at most that hostile and "
+          f"then meets a question (hostiles gone, groups gone, asks, the page now: {series})")
+    en.from_spec(saved)
+    settle()
+    g3 = en.groups[2]
     seen_roles |= used_roles(win)
 
     # ---- compile
@@ -3480,10 +3812,11 @@ def smoke(win, app, out_dir):
     check(all(h and not SURFACE_LORE.search(h) for h in holders),
           f"the Compiled and Output wells say what will appear in them ({holders})")
     # a tooltip, a special value or a placeholder that is a sentence starts
-    # with a capital: 'attribute 13' and 'hero index 3: …' did not (a key such
-    # as starter_sword or def_2036 is not a sentence; the test is a lower-case
-    # WORD then a space)
-    lower = re.compile(r"[a-z]+ ")
+    # with a capital, on EVERY line of it: 'attribute 13' and 'hero index 3: …'
+    # did not, nor 'modelled: this server …' as a skill tip's second line (a
+    # key such as starter_sword or def_2036 is not a sentence; the test is a
+    # lower-case WORD then a space or a colon)
+    lower = re.compile(r"[a-z]+[ :]")
     texts = []
     for w in win.findChildren(QWidget):
         texts += [("tip", w.toolTip())]
@@ -3496,15 +3829,28 @@ def smoke(win, app, out_dir):
               for c in range(tbl.columnCount()) if tbl.item(r, c) is not None]
     texts += [("row tip", it.toolTip(0)) for it in en._walk()]
     texts.append(("fallback", win.names.attr_label(-1)))
-    low = sorted({(k, t[:40]) for k, t in texts if t and lower.match(t)})
+    low = sorted({(k, ln[:40]) for k, t in texts if t for ln in t.splitlines() if lower.match(ln)})
     check(len(texts) > 100 and not low,
           f"every tooltip, special value and placeholder that is a sentence starts with a "
-          f"capital ({len(texts)} read; lower-case: {low[:3] or 'none'})")
+          f"capital, every line of it ({len(texts)} read; lower-case: {low[:3] or 'none'})")
     hold, special = win.run.hold, win.run.hold.specialValueText()
     room, want = _spin_field(hold).width() - 4, hold.fontMetrics().horizontalAdvance(special)
     check(special[0].isupper() and room >= want,
           f"the time limit's 'none' value is a capitalised phrase that fits its field "
           f"({special!r}: {want} px of {room})")
+    # the Stored character caption is one line down to the window's minimum
+    # width (three words longer, 'fresh.' stood alone on a second line at 943
+    # px, and the card grew 16 px for one word)
+    size = win.size()
+    win.tabs.setCurrentWidget(win.run)
+    win.resize(win.minimumSizeHint().width(), 720)
+    settle(8)
+    cap = win.run.stored_cap
+    need, room = cap.fontMetrics().horizontalAdvance(cap.text()), cap.contentsRect().width()
+    check(need <= room, f"at the window's minimum width ({win.width()} px) the Stored character "
+                        f"caption is one line ({need} px of {room})")
+    win.resize(size)
+    settle(8)
     # the empty state's verb stands apart from its sentence: the gap under the
     # caption is wider than the one over it
     saved = en.to_spec()
@@ -3745,18 +4091,41 @@ def smoke(win, app, out_dir):
     else:
         skip("a focused popup is one box in the popup edge",
              f"a popup opened without focus ({ {k: v[0] for k, v in popups.items()} })")
+    heights = {}
     for i in range(win.tabs.count()):
         win.tabs.setCurrentIndex(i)
         settle()
         w = win.minimumSizeHint().width()
         check(w <= 1180, f"tab {win.tabs.tabText(i)!r}: nothing floors the window wider than "
                          f"1180 px ({w})")
+        # one field height on the tab: a spin box's edit sub-control is 25 px
+        # tall to a combo's 22 of content, so every spin stood 35 px beside
+        # 32 px combos and line edits (the heroes table's cells have their own)
+        for cls in (QComboBox, QAbstractSpinBox, QLineEdit):
+            for f in win.findChildren(cls):
+                if f.isVisibleTo(win) and not isinstance(f.parent(), (QComboBox, QAbstractSpinBox)) \
+                        and not _within(f, QTableWidget):
+                    heights.setdefault(type(f).__name__, set()).add(f.height())
+    check(len(heights) >= 4 and len(set().union(*heights.values())) == 1,
+          f"every combo, spin box and line edit on the four tabs is one height ({heights})")
     # the gutters: the status chip ends at the page's own right gutter, and the
     # Run tab's bare overlines (COMPILED, OUTPUT) start where the card titles
     # do -- the two fixes the fix pass made and never measured
     at = win.names_chip.mapTo(win, QPoint(0, 0))
     gap, gutter = win.width() - at.x() - win.names_chip.width(), win.party.outer.contentsMargins().right()
     check(gap == gutter, f"the status chip's right gap is the page gutter ({gap} of {gutter} px)")
+    # ...and the bar's MESSAGE starts at the left one: QStatusBar paints it 6
+    # px in, a number of its own that no margin moves, the one left edge in
+    # the window off the gutter. Measured off the painted band, through the
+    # code's own say path
+    win.run._say("Compiled; 1 note about the stored character.")
+    settle(4)
+    sb = win.statusBar()
+    band = QRect(0, sb.mapTo(win, QPoint(0, 0)).y() + 2, at.x() - 2, sb.height() - 2)
+    ink, _r = _ink_span(win.grab().toImage(), band, pal["surface"])
+    left = win.party.outer.contentsMargins().left()
+    check(ink is not None and abs(ink - left) <= 1,
+          f"the status bar's message starts at the page gutter (ink at {ink}, the gutter {left})")
     win.tabs.setCurrentWidget(win.run)
     settle()
     over = {w.text(): w.mapTo(win, QPoint(0, 0)).x() for w in win.run.findChildren(QLabel)
@@ -3827,6 +4196,9 @@ def snap(win, app, out_dir, theme):
     saved = win.enemies.to_spec()
     win.enemies.from_spec([])
     win.tabs.setCurrentWidget(win.enemies)
+    # the compile's message, six seconds long, over a spec that cannot compile
+    # (no groups): the bar an operator sees here is empty
+    win.statusBar().clearMessage()
     grab("enemies_empty")
     win.enemies.from_spec(saved)
     win.run.compile()                            # the round trip marked the compile stale

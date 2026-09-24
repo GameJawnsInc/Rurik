@@ -415,6 +415,11 @@ QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: center r
 QComboBox::down-arrow { image: url($img_down); width: 14px; height: 14px; }
 QComboBox::down-arrow:disabled { image: url($img_down_disabled); }
 QComboBox QLineEdit { background: transparent; border: none; padding: 0; min-height: 0; }
+/* one field height: a spin box's edit sub-control is 25 px tall to a combo's
+   22 of content, so every spin stood 35 px beside 32 px combos and line edits.
+   A max-height is a CONTENTS height like the min-height above (32 here would
+   be 42 outside, and change nothing). */
+QSpinBox, QDoubleSpinBox { max-height: 22px; }
 /* a list dropped below the combo, never Fusion's menu over it: the menu mode
    wraps the view in a frame of its own (a second edge, top and bottom) that no
    selector reaches. The list honours maxVisibleItems, so a combo with more

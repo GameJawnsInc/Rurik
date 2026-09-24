@@ -316,10 +316,11 @@ class PlaceholderList(QListWidget):
                        Qt.AlignHCenter | Qt.AlignTop | Qt.TextWordWrap, self.placeholder)
 
 
-# Data roles the skill delegate reads (the item's own text stays the full
-# label: it is what the filter matches and what a screen reader says).
+# Data roles the delegates read (the item's own text stays the full line: it
+# is what the filter matches and what a screen reader says).
 ROLE_ID = Qt.UserRole
 ROLE_PARTS = Qt.UserRole + 1
+ROLE_ROSTER = Qt.UserRole + 2                   # (name, facts) of a group's roster row
 
 GRADE_TEXT = {"hand": "modelled", "label": "label"}
 
@@ -400,6 +401,51 @@ class SkillDelegate(QStyledItemDelegate):
             meta_rect = QRect(x, r.top(), right - x, r.height())
             p.drawText(meta_rect, Qt.AlignVCenter | Qt.AlignLeft,
                        mfm.elidedText(meta, Qt.ElideRight, meta_rect.width()))
+        p.restore()
+
+
+class RosterDelegate(QStyledItemDelegate):
+    """A group's roster row: the hostile's name in a column, its facts in the
+    muted ink past it -- so every row's facts start at ONE x. As one string,
+    'Bandit Raider — L2 …' and 'Academy Monk — L2 …' began their facts 14 px
+    apart, a ragged edge in a two-row list. The column is the widest name
+    (set_column) with 4 px to spare: at exactly its advance 'Academy Monk'
+    elided."""
+
+    GAP = 24                                    # from the column to the facts
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.column = 0
+
+    def set_column(self, names):
+        fm = QFontMetrics(QApplication.font())
+        self.column = max((fm.horizontalAdvance(n) for n in names), default=0) + 4
+
+    def paint(self, p, opt, idx):
+        parts = idx.data(ROLE_ROSTER)
+        if not parts:
+            return super().paint(p, opt, idx)
+        name, facts = parts
+        o = QStyleOptionViewItem(opt)
+        self.initStyleOption(o, idx)
+        o.text = ""
+        widget = o.widget
+        style = widget.style() if widget else QApplication.style()
+        style.drawControl(QStyle.CE_ItemViewItem, o, p, widget)
+        r = style.subElementRect(QStyle.SE_ItemViewItemText, o, widget).adjusted(4, 0, -8, 0)
+        fm = QFontMetrics(o.font)
+        p.save()
+        p.setFont(o.font)
+        p.setPen(QColor(PAL["text"] if o.state & QStyle.State_Enabled else PAL["disabled_fg"]))
+        p.drawText(QRect(r.left(), r.top(), self.column, r.height()),
+                   Qt.AlignVCenter | Qt.AlignLeft, fm.elidedText(name, Qt.ElideRight, self.column))
+        x = r.left() + self.column + self.GAP
+        if facts and x < r.right():
+            p.setPen(QColor(PAL["muted"]))
+            p.drawText(QRect(x, r.top(), r.right() - x, r.height()),
+                       Qt.AlignVCenter | Qt.AlignLeft,
+                       fm.elidedText(facts, Qt.ElideRight, r.right() - x))
         p.restore()
 
 

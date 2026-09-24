@@ -35,7 +35,7 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("orchtheme", floor=29)
+LEDGER = checks.Ledger("orchtheme", floor=31)
 ORCHTHEME = os.path.join(os.path.dirname(HERE), "tools", "orchestrator", "orchtheme.py")
 
 
@@ -140,6 +140,15 @@ def main():
                   f"{name}: the danger button's :hover and :pressed rules paint an ink that "
                   f"clears {t.TEXT_FLOOR}:1 on their fill",
                   f"{[(s, ink, fill, round(t.contrast(ink, fill), 2)) for s, ink, fill in pairs]}")
+        # one field height: a spin box's edit sub-control is 25 px tall to a
+        # combo's 22 of content, so the spins' max-height (a contents height,
+        # as QSS measures both) must be the wells' min-height -- read off the
+        # sheet; --smoke measures the rendered heights
+        wells = rule(real_sheet(t, pal), "QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox")
+        spins = rule(real_sheet(t, pal), "QSpinBox, QDoubleSpinBox")
+        LEDGER.ok(spins.get("max-height") == wells.get("min-height") == "22px",
+                  f"{name}: the spin boxes' max-height is the wells' min-height (one field height)",
+                  f"spins {spins.get('max-height')}, wells {wells.get('min-height')}")
     # the known-bad sheet: the first cut's hover, a fill change with the base
     # rule's ink kept (4.22:1 in light), must be refused
     light = real_sheet(t, t.LIGHT)
