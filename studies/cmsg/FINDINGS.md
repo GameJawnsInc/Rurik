@@ -1852,17 +1852,33 @@ maps 309–312, three level-20 henchmen).
 
 **How the outpost henchmen exist — OBSERVED.** Six henchmen stand in the outpost
 as ordinary kind-9 NPC bodies, agents 1..6. Each is brought up like any NPC —
-`0x0056`/`0x0057` definition (defs 3485–3490), `0x009A`, `0x009B` name, `0x00A6`
-profession, `0x00F0`, `0x0020` create (kind 9, speed 300), `0x006D` weapon —
-**plus one message no other NPC gets: `0x0071 [agent]`.** It was sent for exactly
-those six agents and for **none** of the ~45 other kind-9 NPCs on the connection,
-in **both** outpost connections and **never** in the field. Its handler
-(`0x0091E220 → 0x008113D0`, `codescan --dis`) **binary-search-inserts** the agent
-id into a sorted dword set at the party context `+0x574`. So `0x0071` is what
-marks an agent HIREABLE — the set the party window's henchman tab lists.
-`GAME_SMSG_PARTY_HENCHMAN_HIREABLE` (medium: the handler read plus the 6-of-6
-correlation; GWCA's offset numbering names its own `0x0071` differently and is
-not leaned on).
+`0x0056`/`0x0057` definition (defs 3485–3490), then a pre-create burst sent
+TWICE per connection (once at the load with the definitions, again as the body
+is created 5–9 s later): `0x009B` name, `0x009F [36, agent, 3]` the displayed
+level, `0x00A6` profession, **`0x0071 [agent]`**, then `0x00F0`, `0x0020` create
+(kind 9, speed 300), `0x0161` for its weapon item and `0x006D` — 24 of 24 sends
+in that order (the landing wrote `0x009A` here; no `0x009A` reaches agents 1..6
+in the outpost, it is the field's). **Two of those messages no other kind-9 NPC
+gets: `0x0071`, and the level property 36.** Both were sent for exactly those six
+agents and for **none** of the 38 other kind-9 NPCs on `:53419` (44 in all; 35
+others of 41 on `:55414`), in **both** outpost connections and **never** in the
+field; across all 96 live connections `0x0071` appears on 11, every one an
+outpost (maps 242, 281, 449). Its handler (`0x0091E220 → 0x008113D0`, `codescan
+--dis`) **binary-search-inserts** the agent id into a sorted dword set at
+`[ctx+0x2c]+0x574` — the same object `0x00B0`'s per-player array (`+0x80C`)
+lives in, not the party manager at `[ctx+0x4c]` that `0x01BF` and `0x01B2` use
+(the landing said "party context"); a duplicate id is skipped and no agent is
+looked up. The set's enumerator `0x0080E200` is called from `PtSearch` (asserts
+PtSearch:365 `listFrame`, PtSearch:1116 `partySearchTab < LISTS`), which ties
+the set to the party-search panel's lists from code. So `0x0071` is what marks
+an agent HIREABLE — the set the party window's henchman list offers.
+`GAME_SMSG_PARTY_HENCHMAN_HIREABLE` (medium: the handler read, the 6-of-6
+correlation, the whole-corpus census; `schema/overrides.json` GAME_SMSG 113;
+GWCA's offset numbering names its own `0x0071` differently and is not leaned
+on). Their `0x0020` allegiance dword is `'play'` (ALLEGIANCE_PLAYER), 6 of 6 on
+both outpost connections, where every other kind-9 NPC there is `'nonc'` (43 of
+43, 36 of 36) — the third discriminator, and the one the server does not
+reproduce (below).
 
 **The add — OBSERVED, 3 of 3.** c2s `0x009F [word agent_id]` carries the standing
 henchman's agent id (`[4]`, `[2]`, `[6]` at t=126.234/128.201/130.186), each
@@ -1894,33 +1910,93 @@ for the doubling is **NOT FOUND** (recorded, not modelled). On return to the
 outpost (`:55414`) the party PERSISTS: the six henchmen are re-created standing
 and the window is rebuilt with `0x01BF` for the outpost agent ids again.
 
-**The rest of 0x98–0xB2 — UPSTREAM/out of scope.** All 27 wrappers sit in
-`PyCliParty` (asserts `0x00857A91..0x0085AC3E`; `sendsites.py` widths agree with
-`msgshape` SEND descriptors, 27 of 27). `0x9F/0xA0/0xA1` share one caller
-function gated on the party-client "is mine" flag bit `0x80` (`0x01B2` sets it) —
-add by NPC agent / player agent / player name. The rest carry `PyCliParty`
-`m_partyClient` asserts (`:1650/:1659/:1692/:1719/:1755/:1797`). **INVITE and
-ACCEPT (a player joining) need a second player and are out of scope for a
-single-player server.** The henchman **KICK** and **LEAVE PARTY** are named only
-UPSTREAM (GWCA `PartyMgr.cpp`'s `KickHenchman`/`LeaveParty`, offset numbering) —
-no tape carries either c2s or its reply (`0x01C0` PARTY_HENCHMAN_REMOVE is 0 of
-96 live connections), so neither is armed here; arming would be RECONSTRUCTION
-with no witnessed reply, and the route says refuse to guess. They are the next
-step if the owner wants a kick, with a labelled run to name the opcode.
+**The rest of 0x98–0xB2 — what each send is, at the confidence the evidence
+gives.** All 27 wrappers sit in `PyCliParty` (asserts `0x00857A91..0x0085AC3E`;
+`sendsites.py` widths agree with `msgshape` SEND descriptors, 27 of 27). The
+`0x9F`, `0xA0` and `0xA1` wrappers are called from **three sibling functions**
+(`0x00858410`, `0x00858450`, `0x00858490`, one thunk each at
+`0x00856670/90/B0`; the landing said "one caller function"), each asserting
+PyCliParty:516/525/534 `m_partyClient` and each gated on the party-client "is
+mine" flag bit `0x80` (`test byte [this+0x10], 0x80`; `0x01B2`'s worker
+`0x00858790` ORs it in when arg2 != 0). Reading `0xA0` as "add by player agent"
+and `0xA1` as "add by player name" is inference from the sibling shape and the
+string width, UNVERIFIED. On retail's wire, over 96 live connections, the range
+carries exactly two opcodes: `0x009F` ×3 (one connection) and `0x00B1` ×10; no
+other `0x98–0xB2` c2s was ever sent, so every other row below is static only.
+
+| c2s | SEND shape (msgshape, static) | wrapper → caller(s) (sendsites, 38797) | retail witness | UPSTREAM name (GWCA, its numbering is ours + 2) | label |
+|---|---|---|---|---|---|
+| `0x98` | `[]` (4 B) | `0x0085BCF0` ← `0x00857B8C` | 0 | — | UNVERIFIED |
+| `0x99` | `[]` | `0x0085BD20` ← `0x00857C2C` | 0 | — | UNVERIFIED |
+| `0x9A` | `[]` | `0x0085BD50` ← `0x0085649E` | 0 | — | UNVERIFIED |
+| `0x9B` | `[u8]` (8 B) | `0x0085BD80` ← `0x008583E1`, `0x008583F5` | 0 | — | UNVERIFIED |
+| `0x9C` | `[u16]` | `0x0085BDB0` ← `0x00857AE4` | 0 | — | UNVERIFIED |
+| `0x9D` | `[u16]` | `0x0085BDE0` ← `0x00857CA4` | 0 | — | UNVERIFIED |
+| `0x9E` | `[u16]` | `0x0085BE10` ← `0x00857EE4` | 0 | — | UNVERIFIED |
+| **`0x9F`** | `[u16]` agent | `0x0085BE40` ← `0x0085843A` (in `0x00858410`, PyCliParty:516, `&0x80`) | **3 of 3** | INVITE_NPC | **HENCHMAN_ADD, OBSERVED, armed** |
+| `0xA0` | `[u16]` | `0x0085BE70` ← `0x0085847A` (sibling, :525) | 0 | INVITE_PLAYER | UNVERIFIED (a second player) |
+| `0xA1` | `[string16(20)]` (44 B) | `0x0085BEA0` ← `0x008584BA` (sibling, :534) | 0 | INVITE_PLAYER_NAME | UNVERIFIED (a second player) |
+| `0xA2` | `[]` | `0x0085BEF0`, 0 direct callers (pointer-reached) | 0 | LEAVE_GROUP | UNVERIFIED; single-player-doable, unwitnessed |
+| `0xA3` | `[]` | `0x0085BF20` ← `0x0085A806` | 0 | — | UNVERIFIED |
+| `0xA4` | `[u8, string16(64)]` (136 B) | `0x0085C0D0` ← `0x0085A978`, `0x0085AB35` | 0 | — | UNVERIFIED |
+| `0xA5` | `[u8]` | `0x0085C140` ← `0x0085ABFA` | 0 | — | UNVERIFIED |
+| `0xA6` | `[u16, u32, u8]` (16 B) | `0x0085C170` ← `0x0085ABE7` | 0 | — | UNVERIFIED |
+| `0xA7` | `[]` | `0x0085C1C0` ← `0x0085AC25` | 0 | RETURN_TO_OUTPOST | UNVERIFIED; a run in a field could name it |
+| `0xA8` | `[u16]` | `0x0085BF50` ← `0x0085A84A` | 0 | KICK_NPC | UNVERIFIED — the henchman KICK candidate |
+| `0xA9` | `[u16]` | `0x0085BF80` ← `0x0085A88A` | 0 | KICK_PLAYER | UNVERIFIED (a second player) |
+| `0xAA` | `[u8, string16(32), u16]` (76 B) | `0x0085BFB0` ← `0x0085A8B2` | 0 | — | UNVERIFIED |
+| `0xAB` | `[]` | `0x0085C010`, 0 direct callers | 0 | SEARCH_CANCEL | UNVERIFIED |
+| `0xAC` | `[u16]` | `0x0085C040` ← `0x0085B4E9` | 0 | — | UNVERIFIED |
+| `0xAD` | `[u16]` | `0x0085C070` ← `0x0085B519` | 0 | — | UNVERIFIED |
+| `0xAE` | `[u8]` | `0x0085C0A0` ← `0x0085BB4B` | 0 | — | UNVERIFIED |
+| `0xAF` | `[u8]` | `0x0085C1F0` ← `0x0085AC50` | 0 | — | UNVERIFIED |
+| `0xB0` | `[blob16, u8]` (24 B) | `0x0085C220`, 0 direct callers | 0 | — | UNVERIFIED |
+| **`0xB1`** | `[u16, u8, u16, u8, u8]` (24 B) | `0x0085C280`, 0 direct callers | **10 of 10** | TRAVEL | **MAP_TRAVEL, OBSERVED — step 7's lane** |
+| `0xB2` | `[u8]` | `0x0085C2E0`, 0 direct callers | 0 | — | UNVERIFIED |
+
+The `0xA3..0xAF` callers carry `PyCliParty` `m_partyClient` asserts
+(`:1650/:1659/:1692/:1719/:1755/:1797`). **INVITE and ACCEPT (a player joining)
+need a second player and are out of scope for a single-player server.** The
+henchman **KICK** (`0xA8` by the UPSTREAM reading) and **LEAVE PARTY** (`0xA2`)
+are named only UPSTREAM — no tape carries either c2s or its reply (`0x01C0`,
+UPSTREAM-named PARTY_HENCHMAN_REMOVE, is 0 of 96 live connections) — so neither
+is armed here; arming would be RECONSTRUCTION with no witnessed reply, and the
+route says refuse to guess. They are the next step if the owner wants a kick,
+with a labelled loopback run to name the opcode (the runsheet says what a kick
+click does today).
 
 **Shipped.** `henchparty.py` (leaf): `henchman_add_batch` (0x00B0 + 0x01BF, the
-tape order, `agents.py`'s own builders), `hireable_mark` (0x0071), `party_is_full`.
-`authsrv.handle_henchman_add` hires a standing hireable henchman: 0x00B0 then
-0x01BF with the party counted, the NPC kept; it refuses — nothing sent, retail's
+tape order, `agents.py`'s own builders), `hireable_bringup` (the level property
+36 then `hireable_mark`'s 0x0071, sent BEFORE the create as retail does — the
+count and the rest of the burst's order are RECONSTRUCTION, `create_agent_world`'s
+own), `party_is_full`. `authsrv.handle_henchman_add` hires a standing hireable
+henchman: 0x00B0 then 0x01BF, the NPC kept; it refuses — nothing sent, retail's
 refusal reply NOT FOUND — an agent that is not a hireable henchman of this
-outpost, one already in the party, and one over the map's cap (`OUTPOST_PARTY_CAP`
-= the client's AreaInfo `max_party`, 4 for our outposts; heroes count against it).
-`spawn_population` marks a `hireable` spawn row's body with `0x0071` and records
-it. Content: three standing henchmen (the Fighter/Archer/Cutthroat the adds
-witnessed) in our served outpost (Ascalon City, map 148). Revert `--no-henchman-add`;
-cap override `--henchman-cap`. `0x009F` off the DROPPED_ON_PURPOSE allowlist.
-Tests: `test_henchparty.py` (the batch byte-for-byte against the tape's three
-replies, the refusals, the cap counting heroes, the spawn marking, source locks).
+outpost, one already in the party, and one over the cap. **ONE party count**
+(`party_member_count`: player + heroes + the launch henchman + the hired
+henchmen) is what the cap compares against and, through `party_size_on_wire`
+(heroes behind `--party-size-no-heroes` as the load's own 0x00B0), what the
+henchman add, the hero KICK and the hero ADD all put in 0x00B0 — the landing left
+the two hero sites on their old `1 + henchman + heroes`, so with a hired
+henchman in the party the kick sent one short and the hero add could take the
+party to 5 of 4 (the fix pass's blocker; the hero add now refuses at the same
+cap). The cap `OUTPOST_PARTY_CAP` is **one constant, 4**, the client's AreaInfo
+`max_party` for the maps we serve (148/146/242/449; 248/280 read 8, 55/238 read
+6 — a per-map table is the next step); `--henchman-cap N` (N ≥ 1) overrides.
+`spawn_population` sends the level and the mark for a `hireable` row in an
+OUTPOST only (a field creates the body and says why it marks nothing) and
+records the row. Content: three standing henchmen (labelled the Fighter, Archer
+and Cutthroat of Shing Jea's roster — the wire carries ids, the labels are
+ours) in our served outpost (Ascalon City, map 148), `noncombatant` where
+retail's are `'play'` (RECONSTRUCTION — every party-body path in the server keys
+on ALLEGIANCE_PLAYER, so a `'play'` standing NPC would follow and fight; the
+rows say so). Revert `--no-henchman-add`. `0x009F` off the DROPPED_ON_PURPOSE
+allowlist; `schema/overrides.json` GAME_CMSG 159 says handled, GAME_SMSG 113
+names 0x0071. Tests: `test_henchparty.py` (the batch byte-for-byte against the
+tape's three replies; the refusals; the hero kick/add sizes and the hero add's
+cap with hired henchmen present, the landing's sum as the KNOWN-BAD; the spawn
+order and the field gate; source locks each paired with a mutation that reddens
+it; floor 49 bare, 64 with the vault).
 
 **What is armed vs deferred.** The OUTPOST add is OBSERVED end to end and
 armed. The FIELD-body carry and the outpost RE-JOIN are OBSERVED on the tape but
@@ -1929,13 +2005,60 @@ armed. The FIELD-body carry and the outpost RE-JOIN are OBSERVED on the tape but
 (charstore), which is the next increment; today a hired henchman is a roster row
 and a standing NPC in the outpost, and a zone starts a fresh instance without it.
 The `0x00B0`-climbs-by-2 field rule is NOT FOUND and must be settled before the
-field size is trusted.
+field size is trusted. **The allegiance** (`'play'` on retail) is deferred with
+the field carry: serving it needs a `standing` gate on `party_bodies` and its
+callers. **The map**: retail's Ascalon City (148, AreaInfo type 10) offers no
+henchmen — `0x0071` is on 0 of the 11 live connections to 148, and only on maps
+of types 13 (242, 449) and 11 (281) — so whether the client's list works on a
+type-10 map is UNVERIFIED until the run; Kamadan (449, our `FALLBACK_MAP_ID`
+with geometry) is the retail outpost with hireables if it does not.
 
-**Runsheet (owner's hands, one loopback session — not run here).**
-1. Launch the game catalog with the outpost henchmen served, in the outpost:
-   `python toolkit/authsrv/authsrv.py --bind 127.0.0.3 --port 6112 --vault vault/captures/gamesrv --map 148 --area outpost_henchmen` (the other terminals per `RUNBOOK.md`; launch the loopback client). Three henchmen stand near the arrival point; the gamesrv log prints `PARTY_HENCHMAN_HIREABLE(agent 31/32/33)`.
-2. **Open the party window's henchmen list.** Expect the three henchmen listed (the client reads the `0x0071` set). If the list is empty, the marker did not reach the client — check the log's hireable lines.
-3. **Add one** (click a henchman → its add button). Expect the row to appear in the party and the log to print `HENCHMAN_ADD: <name> (agent 31) joined the party; size now 2` (and the party size counter to read 2). A row that does not appear with no `HENCHMAN_ADD` line means no c2s reached us.
-4. **Add the other two.** Size climbs 3, 4; a fourth add (a fourth henchman, or with a hero also in the party) is refused with `HENCHMAN_ADD(..) refused: the party already holds 4 members` — the cap.
-5. **Control:** relaunch with `--no-henchman-add`. The henchmen do not appear in the party window's list at all (no `0x0071`), and a click, if the panel offers one, prints `HENCHMAN_ADD ignored (--no-henchman-add)`.
-6. **Walk into the explorable** (through the town portal): the henchmen do NOT follow yet (the field carry is deferred, above) — this is the expected incomplete state, and the run confirms the outpost add itself. If the client ASSERTS on any add, copy the dialog's `File.cpp(N)`: the `0x01BF` handler asserts only `PyCliParty:1228/1238` and the silent party-not-built branch, none of which a built party hits, so an assert would refute the "no build window needed for a mid-session add" reading.
+**The fix pass (2026-09-23, two reviews).** An evidence refuter re-derived every
+tape claim above (all reproduce, most byte for byte) and an engineering review
+drove the handlers and mutated the tree in memory. Moved here: **HENCH-EVR-1 /
+ENG-HENCH-1** (the blocker) — the hero kick and hero add did not count hired
+henchmen and the hero add had no map cap; one count now (`party_member_count`,
+`party_size_on_wire`), the hero add refuses at the cap, driven with the
+landing's sum as the KNOWN-BAD and a raised cap as the vacuity guard.
+**HENCH-EVR-2 / ENG-HENCH-2** — the test's floor of 27 was above its own bare
+run of 23 ("27 bare" was false); the floor is the measured bare core, 49.
+**HENCH-EVR-3 / ENG-HENCH-8** — "locks with mutations" named mutations the test
+did not carry; every lock now runs on a mutated copy of its function's text and
+must go red; the "no 0x0021" check ran against an empty agents table and could
+not have seen a destroy — the NPC is seeded now. **ENG-HENCH-3** — the
+allegiance: the tape's `'play'` recorded and labelled, the switch deferred with
+its reason (above), not made. **HENCH-EVR-4** — the runsheet named
+PyCliParty:1228/1238 as the `0x01BF` handler's asserts; those are the
+`0x01D2/0x01D3` build window's (`agents.party_build`); `asserts.py --at
+0x00858CB0` shows the worker's only assert is Array:587 at `0x00858D10`, in its
+agent-dedupe loop. **HENCH-EVR-5/6 / ENG-HENCH-6** — the mark's position and
+the level property, moved to retail's; `0x009A` corrected to `0x009F [36]`.
+**HENCH-EVR-7** — the set's location and its PtSearch reader. **HENCH-EVR-8** —
+retail's 148 has no hireables, recorded. **HENCH-EVR-9/10 / ENG-HENCH-10** — the
+cap is a constant, the help text and the log say so, N < 1 refused.
+**HENCH-EVR-10 / ENG-HENCH-4** — `hench_assassin`'s provenance quoted the
+`0x0056` fifth dword as 0; it is 1 (3486/3487 too), `npc_properties` sends 0,
+said as an unmodelled divergence. **HENCH-EVR-11 / ENG-HENCH-11** —
+`--party-size-no-heroes` honoured on the wire size, the outpost-only rule
+enforced at the spawn. **ENG-HENCH-9** — overrides 159 was stale and 113
+unnamed; the leaf's constants locked equal to authsrv's. **HENCH-EVR-13 /
+ENG-HENCH-12** — §8.1 trimmed to the pointer and the owed run. **HENCH-EVR-14 /
+ENG-HENCH-13** — the three sibling callers, 38 others, PARTY_HENCHMAN_REMOVE
+labelled UPSTREAM, the 27-row table, the runsheet's cap step and kick warning.
+**Declined**: making the code commit green at its own tree (HENCH-EVR-12 /
+ENG-HENCH-7) — the branch merges as one unit and its history is not rewritten;
+arming the field carry and re-join (ENG-HENCH-5) — the scope's deferral stands
+and the reviewer accepted it; a per-map cap table — a `client-table` content
+row per map with its build, its own increment.
+
+**Runsheet (owner's hands, one loopback session — not run here).** Each step
+names what the log and the screen should show; the questions are pre-registered.
+1. Launch the game catalog with the outpost henchmen served, in the outpost, WITH the one-hero party so the cap is reachable:
+   `python toolkit/authsrv/authsrv.py --bind 127.0.0.3 --port 6112 --vault vault/captures/gamesrv --map 148 --area outpost_henchmen --party slice` (the other terminals per `RUNBOOK.md`; launch the loopback client). Three henchmen stand near the arrival point (labelled Fighter / Archer / Cutthroat); the gamesrv log prints, for each, `level 3 on hireable agent 31/32/33 (prop 36, before its create)` then `PARTY_HENCHMAN_HIREABLE(agent 31/32/33)` BEFORE its `created agent` line. The party window shows the player and the hero (size 2).
+2. **Open the party window's henchmen list.** Expect the three listed, each with level 3 and its profession (W / R / A). **If the list is EMPTY**, the first suspects, in order: the map (retail offers no henchmen on 148, a type-10 map — relaunch on Kamadan, `--map 449 --area outpost_henchmen` needs the rows' `map` widened first) and the allegiance (`noncombatant` here, `'play'` on retail). Either outcome is a result: record it in this section.
+3. **Add one** (click a henchman → its add button). Expect the row in the party, the party counter at 3, and the log `HENCHMAN_ADD: <label> (agent 31) joined the party; size now 3`. A row that does not appear with no `HENCHMAN_ADD` line means no c2s reached us (the client refused the click itself — the allegiance is then the suspect).
+4. **Add a second.** Size 4 = the cap (player + hero + 2). **Add the third** → refused: the log prints `HENCHMAN_ADD(33) refused: the party already holds 4 members (heroes and henchmen), the served cap (OUTPOST_PARTY_CAP=4 ...)`, nothing is sent, the window does not change. (Retail's reply to a refused add is NOT FOUND; whether the client's own panel already greys the add at max_party is what the screen shows here — record it.)
+5. **The hero and the count** (the fix pass's blocker on screen): kick the hero (the party panel's X on its row). Expect the counter at 3 and `HERO_KICK: ... size now 3` — the landing would have said 1. Re-add the hero (Party Search → the hero): 3 < 4, so it goes THROUGH — counter 4, `HERO_ADD: ... size now 4`. Kick the hero again (counter 3), add the third henchman (counter 4), then re-add the hero → REFUSED at the cap: `HERO_ADD(3) refused: the party already holds 4 members (heroes and henchmen), the served cap`, nothing sent, the counter stays 4.
+6. **Do NOT click the X on a hired henchman's row** as part of this run: the henchman kick is not armed; its c2s (`0xA8` by the UPSTREAM reading, unwitnessed) lands in the connection's unhandled census at the end of the log — if you do click it, copy that census line, it names the opcode and closes the KICK question for the next step.
+7. **Control:** relaunch with `--no-henchman-add` (same flags otherwise). The henchmen do not appear in the party window's list (no `0x0071`, no level line in the log), and a click, if the panel offers one, prints `HENCHMAN_ADD ignored (--no-henchman-add)`.
+8. **Walk into the explorable** (through the town portal): the henchmen do NOT follow (the field carry is deferred, above) — the expected incomplete state; the run confirms the outpost add itself. If the client ASSERTS on any add, copy the dialog's `File.cpp(N)`: the `0x01BF` worker's only assert is Array:587 (`index < m_count`) at `0x00858D10`, inside its agent-dedupe loop, which wire input cannot reach, and an unknown party id returns silently — so any assert here is new information, not a known branch.

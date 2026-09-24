@@ -1901,11 +1901,8 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   armed from retail's one batch (c2s `0x001F`), retail's c2s triaged (`c2striage.py`: 57
   opcodes over 96 live connections, zero undecided; `test_dispatch` §10 is the reverse
   guard; `0x00B1` MAP_TRAVEL named medium and dropped until its arm), the party family's
-  henchman ADD armed (c2s `0x009F`, `--no-henchman-add`, `henchparty.py`: standing
-  hireable henchmen marked `0x0071` so the panel offers them, the click answered by
-  `0x00B0` + `0x01BF` in retail's order, 3 of 3; the map cap counts heroes;
-  `0x01BF`'s trailing bytes settled as profession + level; `0x009F` off the allowlist;
-  the field-body carry and outpost re-join deferred, studies/cmsg "The party family"),
+  henchman ADD armed (c2s `0x009F`, `--no-henchman-add`; PLAN-LOG step 5 and its fix
+  pass, studies/cmsg "The party family"),
   the hero ADD armed as RECONSTRUCTION (c2s `0x001E`, `--no-hero-add`, for
   the commander rig — `--party` — where it re-declares the inventory a kick destroyed
   and refuses in the legacy rig; `0x0018` from the owned set as a labelled policy,
@@ -1932,9 +1929,12 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   and after the owner's-answer fixes (PLAN-LOG: the doll order, the display mode
   `0x00EF`/`0x0057`, the backpack drag `0x0072`) the doll's order, the eye and the helm,
   Hide in Towns hiding the helm on the doll AND the world body, and the drag staying.
-  **Open**: travel (step 7); the henchman FIELD-body carry and outpost re-join (step 5's
-  deferred half — the `0x00B0`-climbs-by-2 field size is NOT FOUND, studies/cmsg "The
-  party family"); the
+  **Open**: travel (step 7); step 5's outpost henchman add owes its client run (the
+  runsheet in studies/cmsg "The party family": the list on a type-10 map and the
+  `noncombatant` allegiance are the two UNVERIFIED points); the henchman FIELD-body
+  carry, the outpost re-join and the `'play'` allegiance behind a `standing` gate (step
+  5's deferred half — the `0x00B0`-climbs-by-2 field size is NOT FOUND); a per-map party
+  cap (`OUTPOST_PARTY_CAP` is a constant 4); the
   display mode's field step under `--persist` (studies/cmsg "The display mode"); our TOWN
   `0x006E` carries the weapon
   where retail's never does (0 of 2,245 outpost bodies) — a pre-existing divergence the fix

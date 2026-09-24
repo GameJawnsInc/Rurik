@@ -28,6 +28,58 @@ move back.
 
 ---
 
+### DESKWORK-D1 (step 5), fix pass -- 2026-09-23 -- **ONE party count for the henchman add, the hero kick and the hero add (the blocker); the test's floor set from its bare run; every source lock paired with a mutation; the mark and the level in retail's pre-create position; the allegiance and the map recorded as divergences**
+
+Two reviews of the entry below — an evidence refuter that re-derived every tape claim
+from `20260819T132414`, the 96-connection census and the pinned 38797 client before
+reading the landing (all reproduce, most byte for byte), and an engineering review that
+drove the handlers and mutated the tree in memory — moved the following, fixed here
+(studies/cmsg "The party family", "The fix pass"). **HENCH-EVR-1 / ENG-HENCH-1 (the
+blocker)**: `handle_hero_kick` and `handle_hero_add` still summed `1 + henchman +
+heroes`, so with two hired henchmen in the party the kick sent `0x00B0 [pn, 1]` against
+a party of 3, and the hero add had no map cap, so player + 3 henchmen + a re-added hero
+made 5 of 4 (reproduced on the real handlers); `party_member_count` is now the one
+count (heroes always, for the cap) and `party_size_on_wire` (heroes behind
+`--party-size-no-heroes`, as the load's own `0x00B0`) is what all three sites send;
+the hero add refuses at the same cap; driven with the landing's sum as the KNOWN-BAD
+value and a raised cap as the vacuity guard. **HENCH-EVR-2 / ENG-HENCH-2**:
+`test_henchparty`'s floor of 27 was above its own bare run of 23 — "27 bare" in TESTS.md,
+the commit message and the entry below was false; the floor is the measured bare core,
+49 (64 with the vault; the two accepting hero adds need the vault's attribute-cost rows
+and declare a skip). **HENCH-EVR-3 / ENG-HENCH-8**: "source locks with mutations" named
+mutations the test did not carry; the source is parsed once and each lock now runs on a
+mutated copy of its function's text that must redden it; the "no `0x0021`" check ran
+against an empty agents table and is now seeded. **ENG-HENCH-3**: retail creates every
+outpost henchman `'play'` (6 of 6, both connections; every other kind-9 NPC `'nonc'`, 79
+of 79); ours stay `noncombatant` — RECONSTRUCTION, labelled in the rows and the study,
+because `party_bodies` and its eight callers (formation, follow, ally casts, party attack)
+key on ALLEGIANCE_PLAYER and a `'play'` standing NPC would follow and fight; the switch
+needs a `standing` gate, the next increment. **HENCH-EVR-4**: the runsheet named
+PyCliParty:1228/1238 as the `0x01BF` handler's asserts — those are the build window's;
+the worker's only assert is Array:587 at `0x00858D10`. **HENCH-EVR-5/6 / ENG-HENCH-6**:
+retail sends `0x0071` (twice) and the level property 36 BEFORE the create (`0x009B, 0x009F
+[36], 0x00A6, 0x0071, 0x00F0, 0x0020`, 24 of 24), and prop 36 marks 6 of 6 henchmen and 0
+of 38 other kind-9 NPCs; `hireable_bringup` sends both before the create, outposts only
+(11 of 96 live connections carry `0x0071`, all outposts — ENG-HENCH-11); `0x009A`
+corrected to `0x009F [36]`. **HENCH-EVR-7**: the set is `[ctx+0x2c]+0x574`, `0x00B0`'s
+object, read by PtSearch's enumerator `0x0080E200`. **HENCH-EVR-8**: retail's 148 offers
+no henchmen (0 of 11 connections; type 10 vs 13/11), recorded in the rows and the
+runsheet. **HENCH-EVR-9/10 / ENG-HENCH-10**: the cap is a constant 4; help text, log and
+comment say so; `--henchman-cap` refuses N < 1. **HENCH-EVR-10 / ENG-HENCH-4**:
+`hench_assassin`'s `0x0056` fifth dword is 1 (quoted as 0), `npc_properties` sends 0 —
+an unmodelled divergence, said. **ENG-HENCH-9**: `schema/overrides.json` GAME_CMSG 159
+said unhandled; GAME_SMSG 113 named PARTY_HENCHMAN_HIREABLE (medium); the leaf's three
+opcode constants locked equal to authsrv's. **HENCH-EVR-13 / ENG-HENCH-12**: §8.1's
+narration trimmed to the pointer, the owed client run added to Open. **HENCH-EVR-14 /
+ENG-HENCH-13**: three sibling caller functions (not one), 38 others, PARTY_HENCHMAN_REMOVE
+labelled UPSTREAM, a 27-row table for `0x98–0xB2`, the runsheet's cap step under
+`--party slice`, the kick-X warning. **Declined**: rewriting the branch so the code
+commit is green at its own tree (HENCH-EVR-12 / ENG-HENCH-7 — the branch merges as one
+unit); arming the field carry (ENG-HENCH-5 — the deferral stands). `test_heroadd`'s
+seventh-hero control runs under a cap of 8 (a party of 8 needs an 8-cap map).
+
+---
+
 ### DESKWORK-D1 (step 5) -- 2026-09-23 -- **the party family's henchman ADD armed from the tape: standing hireable henchmen marked `0x0071`, c2s `0x009F` answered by `0x00B0` + `0x01BF` in retail's order, the map cap, `0x01BF`'s trailing bytes settled**
 
 [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md) §"The party family";
