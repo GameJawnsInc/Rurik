@@ -34,8 +34,10 @@ python tools/orchestrator/orchestrator.py --theme light            # dark / ligh
 in one palette only (the light tab strip's focus fill was) is seen by running it with `--theme
 dark` and again with `--theme light`. Its verdict is the house ledger's (`toolkit/checks.py`):
 a law that cannot run declares a skip, printed in the verdict, and a run that executes fewer
-than its floor of 132 laws (the green run's 150 less the 18 behind a declared skip) fails naming
-the shortfall.
+than its floor of 141 laws (the green run's 159 less the 18 behind a declared skip) fails naming
+the shortfall. No mandatory law sits behind a state gate: a precondition (the hostile page
+stacked at 1,000 px) is a law of its own, since the floor cannot see a law that stops running
+while the gated ones do run.
 
 ```
 python tools/orchestrator/orchtheme.py                             # the contrast audit, no Qt needed
@@ -88,9 +90,15 @@ level/ranks one can, and the reason is shown.
 **Open** is not the compiler. A file past the caps, or naming a template the content lacks,
 opens with what the window can hold — a fifth group or hostile dropped, the template replaced
 by the first on the list — and the bar says so and how much, so that Save as a new file keeps
-the original; a file whose row fails inside the load leaves the spec, the chip and your place
-as they were, and says so. Save and Open name the file, never its path (the path is on the
-header buttons' hover), and a spec saved with no off-hand opens with none.
+the original (a line wider than the bar is elided, and the whole line is on the bar's hover); a
+file whose row fails inside the load leaves the spec, the chip and your place as they were,
+and says so; a field the window never reads that is malformed (a hero's bar as a string) is
+said the same way, not raised. A member with no level opens at its template's level and a hero
+with none at the player's — the levels the compiler gives them, so Open and the CLI agree on a
+file. `--spec` on the command line goes through the same Open, and a file it could not open is
+said on the console as well (under `--smoke` / `--snap` the process ends 1). Save and Open
+name the file, never its path (the path is on the header buttons' hover), and a spec saved
+with no off-hand opens with none.
 
 ## Names, and the gate
 
@@ -140,7 +148,9 @@ framework:
 - **Text fits or is sized to fit**: a combo is sized in characters and shows the start of its
   text; the heroes table's Profession and Body columns are sized to their widest item (measured,
   not guessed), and the width below which the Character card goes above the table, its five
-  fields three to a row, is derived from those columns and the widest hero name (1,130 px); a
+  fields three to a row, is derived from those columns and the widest hero name as its cell
+  paints it — DemiBold, the unlocked weight, inside the delegate's margins (1,140 px, checked
+  against the rendered cells); a
   narrow hostile page stacks its Body and Weapon cards on one shared label column, and a bar
   goes to one column of eight where two would not hold the widest choice it holds NOW (a
   Monk's list is wider than a Warrior's), so no picker clips.

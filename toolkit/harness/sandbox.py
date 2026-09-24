@@ -507,17 +507,23 @@ def validate(spec, world):
             wi = m.get("weapon_item")
             if wi and items and wi not in items:
                 p.append(f"{who}: weapon_item {wi!r} is not a content item")
-            # its ranks against its level's budget, the player's and the heroes'
-            # rule -- at the level spawn_rows gives the row (the member's, else
-            # its template's), in the template's own profession. The window's
-            # Attributes hint promised this refusal before the loop had it.
+            # its level is one the window's spin offers, 0..LEVEL_MAX (content
+            # rows default to 0; past 20 the budget is 0, and 'level 24 has 0'
+            # named the ranks when the level was what the window had clamped),
+            # and its ranks go against that level's budget, the player's and
+            # the heroes' rule -- at the level spawn_rows gives the row (the
+            # member's, else its template's), in the template's own profession.
+            # The window's Attributes hint promised this refusal before the
+            # loop had it. No template, no check: an unknown one is refused
+            # above, and with no npc rows at all the rest of this loop is
+            # unchecked too (in profession 0 every rank read 'not to []')
             tmpl = npcs.get(npc) or {}
-            if tmpl or not npcs:
-                _check_ranks(p, who, m.get("attributes"),
-                             int(m.get("level", tmpl.get("level", 0) or 0)),
+            lvl = int(m.get("level", tmpl.get("level", 0) or 0))
+            if not 0 <= lvl <= LEVEL_MAX:
+                p.append(f"{who}: level {lvl} is outside 0..{LEVEL_MAX}")
+            elif tmpl:
+                _check_ranks(p, who, m.get("attributes"), lvl,
                              (int(tmpl.get("profession") or 0),), rules)
-            if int(m.get("level", 0)) < 0:
-                p.append(f"{who}: level below 0")
             if int(m.get("health", 1)) < 1:
                 p.append(f"{who}: health below 1")
     if len(bosses) != 1:

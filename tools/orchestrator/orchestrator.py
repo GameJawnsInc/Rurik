@@ -58,9 +58,12 @@ contrast floor. `--smoke` checks those as laws, not as intentions.
 import argparse
 import ast
 import inspect
+import math
 import os
 import re
+import subprocess
 import sys
+import textwrap
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -81,7 +84,7 @@ import vaultpath      # noqa: E402
 try:
     from PySide6.QtCore import (QElapsedTimer, QEvent, QPoint, QPointF, QProcess,
                                 QProcessEnvironment, QRect, Qt, QTimer, Signal)
-    from PySide6.QtGui import (QColor, QFont, QIcon, QImage, QKeyEvent, QPainter,
+    from PySide6.QtGui import (QColor, QFont, QFontMetricsF, QIcon, QImage, QKeyEvent, QPainter,
                                QTextCharFormat, QTextCursor, QWheelEvent)
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import (QAbstractItemView, QAbstractSpinBox, QApplication,
@@ -734,7 +737,10 @@ class PartyTab(QWidget):
     # body and a whole hero name beside a 320 px card. _fit_columns derives
     # the width from what the row holds (a constant 1,120, "1,114 measured",
     # outlived the columns it was measured with: from 1,120 to 1,129 px, side
-    # by side, 11 of 39 names elided).
+    # by side, 11 of 39 names elided; the widest name in the table's font
+    # against the text inset alone gave 1,130 and left 'Master of Whisp…' on
+    # screen to 1,136 -- the cell paints the name DemiBold when its row is
+    # unlocked, at a fractional advance, inside the delegate's own margins).
     CARD_W = 320
 
     def __init__(self, names, on_change, parent=None):
@@ -894,17 +900,28 @@ class PartyTab(QWidget):
             self.table.setColumnWidth(col, need + (100 - field) + 4 + cell)
         # ...and the stack edge from what the row now needs: the page margins,
         # the card and the gap to it, the heroes card's chrome, the fixed
-        # columns, the widest hero name in its cell, and the table's bar (39
-        # rows of 40 px scroll at any height). Measured: the first width with
-        # no name elided, to the pixel
-        widest = max(self.table.fontMetrics().horizontalAdvance(it.text())
-                     for it in self.name_items.values())
+        # columns, the widest hero name AS ITS CELL PAINTS IT, and the table's
+        # bar (39 rows of 40 px scroll at any height). The name: DemiBold, the
+        # weight _style_row gives an unlocked row (any row can be), its
+        # fractional advance rounded up, plus the delegate's own text margin
+        # either side (PM_FocusFrameHMargin + 1) inside the SE inset -- the
+        # integer table-font advance against the inset alone said 1,130 and
+        # elided two names to 1,136 px, three ticked to 1,139. Measured: the
+        # first width with no name elided, the widest names ticked, to the
+        # pixel (--smoke compares each cell's pixels with a wide column's)
+        bold = QFont(self.table.font())
+        bold.setWeight(QFont.DemiBold)
+        widest = math.ceil(max(QFontMetricsF(bold).horizontalAdvance(it.text())
+                               for it in self.name_items.values()))
+        margin = 2 * (self.table.style().pixelMetric(QStyle.PM_FocusFrameHMargin, None,
+                                                     self.table) + 1)
         self.heroes_card.ensurePolished()       # the sheet's 1 px border, before any show
         m, cm = self.outer.contentsMargins(), self.heroes_card.layout().contentsMargins()
         self.STACK_BELOW = (m.left() + m.right() + self.CARD_W + self.outer.spacing()
                             + cm.left() + cm.right() + 2 * self.heroes_card.frameWidth()
                             + sum(self.table.columnWidth(c) for c in (0, 1, 3, 4, 5))
-                            + widest + cell + self.table.verticalScrollBar().sizeHint().width())
+                            + widest + cell + margin
+                            + self.table.verticalScrollBar().sizeHint().width())
 
     def _arrange(self, stacked):
         """Side by side (a 320 px card, five form rows) or stacked (a full-width
@@ -1045,7 +1062,10 @@ class PartyTab(QWidget):
             hp = int(h.get("profession") or
                      (self.names.world.rows("npc").get(h.get("body")) or {}).get("profession") or 1)
             set_combo(prof, hp)
-            lvl.setValue(int(h.get("level", 3)))
+            # a hero with no level is at the player's, as hero_table and
+            # validate read it (a constant 3 gave the file another verdict
+            # after Open than the CLI's)
+            lvl.setValue(int(h.get("level", player.get("level", 3))))
             chk.setChecked(True)
         for idx in self.rows:
             self._style_row(idx)
@@ -1322,7 +1342,11 @@ class MemberEditor(QWidget):
     def from_spec(self, m):
         self.template.set_value(m.get("npc"))
         self._template()
-        self.level.setValue(int(m.get("level", 2)))
+        # a member with no level is at its TEMPLATE's, the level spawn_rows
+        # and validate give the row (a constant 2 opened a level-10 template
+        # over budget, and the CLI and the window gave one file two verdicts)
+        tmpl = self.names.world.rows("npc").get(m.get("npc")) or {}
+        self.level.setValue(int(m.get("level", tmpl.get("level", 0) or 0)))
         self.health.setValue(int(m.get("health", 120)))
         self.boss.setChecked(bool(m.get("boss")))
         self.glow.setValue(int(m.get("glow", sandbox.DEFAULT_GLOW)))
@@ -2024,11 +2048,15 @@ class RunTab(QWidget):
         return path
 
     def load(self, path=None):
+        """Open a spec into the window. True once the file is held (whole, or
+        with what the window could not hold said in the bar), False when it
+        could not be opened -- the command line's --spec reads the answer,
+        since the bar is the only other place it is said. None: no file."""
         if not path:
             path, _f = QFileDialog.getOpenFileName(self, "Open a spec", self.specs_dir(),
                                                    "TOML (*.toml)")
         if not path:
-            return
+            return None
         win = self.window
         prev = win.to_spec()
         # ...and what to_spec does not carry, for the restore below: this
@@ -2047,7 +2075,7 @@ class RunTab(QWidget):
             why = f"{type(exc).__name__}: {exc}"
             if spec is None:
                 self._say(f"Could not open {file_stem(path)}: {why}", 15000)
-                return
+                return False
             # ...but a row that raises inside from_spec does not: the name, the
             # party and the unlocks were written and the encounter torn down
             # before it, so the message would be false, and Save would default
@@ -2059,7 +2087,7 @@ class RunTab(QWidget):
             if win.to_spec() != prev:
                 self._say(f"Could not open {file_stem(path)} ({why}), and your spec could not "
                           f"be put back whole: check every tab before you save", 15000)
-                return
+                return False
             self._stale = words[0]
             set_chip(self.state, words[1], words[2], tip=words[3])
             self.status.setText(words[4])
@@ -2067,7 +2095,7 @@ class RunTab(QWidget):
             win.enemies.select_place(place)
             self._say(f"Could not open {file_stem(path)} ({why}); your spec is unchanged",
                       15000)
-            return
+            return False
         win.header.open_b.setToolTip(f"Open a saved spec (TOML).\nLast opened {path}")
         # what the window holds is what Save writes: a fifth group or hostile
         # is dropped at the cap and a template the content lacks becomes the
@@ -2075,13 +2103,22 @@ class RunTab(QWidget):
         # opens as one it accepts, and 'Opened' alone would be the same false
         # word as 'unchanged' above, reached without an exception
         held = set(sandbox.validate(win.to_spec(), win.world))
-        lost = [q for q in sandbox.validate(spec, win.world) if q not in held]
+        try:
+            lost = [q for q in sandbox.validate(spec, win.world) if q not in held]
+        except Exception as exc:                 # noqa: BLE001 -- a field the window never reads
+            # validate int()s what the window dropped on the way in (a hero's
+            # bar written as a string, a scalar `attributes`): the file is
+            # held, as it was before this check existed, and the raise is
+            # what the window could not hold -- not a traceback after the
+            # tabs were rewritten and the bar left blank
+            lost = [f"{type(exc).__name__}: {exc}"]
         if lost:
             self._say(f"Opened {file_stem(path)}, but the window could not hold all of it "
                       f"({n_of(len(lost), 'change')}: {lost[0]}). Save as a new file to keep "
                       f"the original.", 20000)
-            return
+            return True
         self._say(f"Opened {file_stem(path)}")
+        return True
 
     def compile(self):
         spec = self.window.to_spec()
@@ -2383,9 +2420,26 @@ class GutterStatusBar(QStatusBar):
     chip sit at 16 -- the one left edge in the window that did not. Only
     the painting is here; showMessage, currentMessage and the timeout are
     QStatusBar's, so every say site and every law reading the bar is as it
-    was."""
+    was. A line wider than its room is painted elided, never sliced at the
+    chip (QStatusBar clips; at 1,000 px the over-cap Open's 'Save as a new
+    file to keep the original.' ended at 'keep ' with no mark), and the whole
+    line is the bar's hover while it shows."""
 
     GUTTER = 16                                 # the page's own left gutter
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.messageChanged.connect(self.setToolTip)
+
+    def message_rect(self):
+        """Where the message is painted: the gutter to QStatusBar's own bound,
+        or to the first visible chip (read by --smoke too, so the law and the
+        paint share one room)."""
+        right = self.width() - 12
+        for w in self.findChildren(QWidget, "", Qt.FindDirectChildrenOnly):
+            if w.isVisible():
+                right = min(right, w.x() - 2)
+        return QRect(self.GUTTER, 0, right - self.GUTTER, self.height())
 
     def paintEvent(self, ev):
         p = QPainter(self)
@@ -2394,13 +2448,10 @@ class GutterStatusBar(QStatusBar):
         self.style().drawPrimitive(QStyle.PE_PanelStatusBar, opt, p, self)
         msg = self.currentMessage()
         if msg:
-            right = self.width() - 12           # QStatusBar's own bound, then the chip
-            for w in self.findChildren(QWidget, "", Qt.FindDirectChildrenOnly):
-                if w.isVisible():
-                    right = min(right, w.x() - 2)
+            r = self.message_rect()
             p.setPen(self.palette().windowText().color())
-            p.drawText(QRect(self.GUTTER, 0, right - self.GUTTER, self.height()),
-                       Qt.AlignLeading | Qt.AlignVCenter | Qt.TextSingleLine, msg)
+            p.drawText(r, Qt.AlignLeading | Qt.AlignVCenter | Qt.TextSingleLine,
+                       self.fontMetrics().elidedText(msg, Qt.ElideRight, r.width()))
 
 
 class Window(QMainWindow):
@@ -2665,6 +2716,34 @@ def printed_strings(path):
     return out
 
 
+def source_calls(fn):
+    """Every call in `fn`'s body, in source order, read off the syntax tree
+    for the same reason as printed_strings: a text match over the source
+    took the old line kept in a comment for the say site, and a rewrite that
+    said a path after the sentence, or appended to the constant in a later
+    call, kept the lock green."""
+    tree = ast.parse(textwrap.dedent(inspect.getsource(fn)))
+    return sorted((n for n in ast.walk(tree) if isinstance(n, ast.Call)),
+                  key=lambda n: (n.lineno, n.col_offset))
+
+
+def dotted(node):
+    """'self.status.setText' for a call's callee; '' for one that is not a
+    name or a chain of attributes on one (a call on a call, a subscript)."""
+    parts = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if isinstance(node, ast.Name):
+        parts.append(node.id)
+        return ".".join(reversed(parts))
+    return ""
+
+
+def _is_name(node, ident):
+    return isinstance(node, ast.Name) and node.id == ident
+
+
 def _real_wheel(win, widget, delta=-120):
     """A spontaneous wheel, the way the OS sends one (Windows): Qt never
     propagates a synthesized wheel, so sendEvent cannot test the guard's
@@ -2692,10 +2771,15 @@ def _real_wheel(win, widget, delta=-120):
 # label rows), the inactive real wheel 1 (Windows, a page that scrolls), the
 # over-budget hostile 1 (an attribute table), the encounter list's focus 1,
 # Launch's ring and the tab strip's cue 3, the active-window wheel 3, the
-# four popups 4 -- 18 of the green run's 150. A gated law that skips is
-# printed in the verdict; a mandatory law that stops running is a FAIL naming
-# the shortfall, which "0 failure(s)" never was.
-SMOKE_FLOOR = 132
+# four popups 4 -- 18 of the green run's 159. A gated law that skips is
+# printed in the verdict; a run short of the floor is a FAIL naming the
+# shortfall, which "0 failure(s)" never was. What the floor cannot see: on a
+# machine where every gated law runs, up to 18 mandatory laws could stop
+# before it names one -- so no mandatory law sits behind a STATE gate. A
+# precondition is a law of its own (`if m0.stacked:` once held the stacked
+# label law with no else, and the law vanished unnamed when the stack was
+# planted away, the re-polish law after it passing over no re-polish).
+SMOKE_FLOOR = 141
 
 
 def smoke(win, app, out_dir):
@@ -3019,17 +3103,27 @@ def smoke(win, app, out_dir):
             # ...and a label after the first in its row reads as its own field's:
             # under half as far from that field as from the one before it (the
             # grid's one 14 px spacing had 'Secondary' 15 px from Primary's field
-            # and 14 from its own, and 'Level' 15 from both)
+            # and 14 from its own, and 'Level' 15 from both). The ink is read off
+            # the rendered window, as label_edges reads a hostile's: the label's
+            # rect less its advance is where a RIGHT-aligned label's ink starts,
+            # and stayed at the same numbers with the labels planted left (the
+            # ink then 14 px from the field before and 30 from its own)
+            img = win.grab().toImage()
             gaps = []
             for i, (lab, wdg) in enumerate(win.party.fields):
                 if i % 3:
                     prev = win.party.fields[i - 1][1]
-                    ink = lab.x() + lab.width() - lab.fontMetrics().horizontalAdvance(lab.text())
-                    gaps.append((lab.text(), wdg.x() - (lab.x() + lab.width()),
-                                 ink - (prev.x() + prev.width())))
-            check(len(gaps) == 3 and all(own * 2 < before for _t, own, before in gaps),
+                    first, last = _ink_span(img, QRect(lab.mapTo(win, QPoint(0, 0)), lab.size()),
+                                            pal["surface"])
+                    wx = wdg.mapTo(win, QPoint(0, 0)).x()
+                    px = prev.mapTo(win, QPoint(0, 0)).x() + prev.width()
+                    gaps.append((lab.text(), None if last is None else wx - last - 1,
+                                 None if first is None else first - px))
+            check(len(gaps) == 3 and all(own is not None and before is not None
+                                         and own * 2 < before for _t, own, before in gaps),
                   f"stacked, each label after the first in its row is under half as far from its "
-                  f"own field as from the field before it (own, before: {gaps})")
+                  f"own field as from the field before it, its ink read off the window (own, "
+                  f"before: {gaps})")
         else:
             check(cc.height() <= cc.sizeHint().height() < win.party.table.height(),
                   f"beside the table, the Character card hugs its form ({cc.height()} px; hint "
@@ -3051,24 +3145,51 @@ def smoke(win, app, out_dir):
     # columns and the widest hero name: at that width, side by side, every
     # name is whole, and one pixel narrower the card stacks (a constant 1,120,
     # "1,114 measured" before the columns were fitted, elided 11 names side
-    # by side from 1,120 to 1,129 -- the squeeze the stack exists to avoid)
+    # by side from 1,120 to 1,129 -- the squeeze the stack exists to avoid).
+    # Whole is read off the PIXELS: each name cell at the edge against the
+    # same cell with the column made wide in place, the three widest names
+    # ticked first so they are painted DemiBold -- the derivation's own model
+    # (the integer table-font advance against the SE inset) re-read here
+    # certified 1,130 with 'Master of Whisp…' on screen to 1,136
     edge = win.party.STACK_BELOW
+    tbl, hh = win.party.table, win.party.table.horizontalHeader()
+    bold = QFont(tbl.font())
+    bold.setWeight(QFont.DemiBold)
+    widest = sorted(win.party.name_items, key=lambda i: -QFontMetricsF(bold).horizontalAdvance(
+        win.party.name_items[i].text()))[:3]
+    ticked = [i for i in widest if not win.party.rows[i][0].isChecked()]
+    for i in ticked:
+        win.party.rows[i][0].setChecked(True)
+
+    def name_cell(it):
+        tbl.scrollToItem(it)
+        settle(2)
+        return tbl.viewport().grab(tbl.visualItemRect(it)).toImage()
+
     got = {}
     for w in (edge, edge - 1):
         win.resize(w, 800)
         settle(8)
-        tbl = win.party.table
         colw = tbl.columnWidth(2)
-        vopt = QStyleOptionViewItem()
-        vopt.rect = QRect(0, 0, 100, 40)
-        inset = 100 - tbl.style().subElementRect(QStyle.SE_ItemViewItemText, vopt, tbl).width()
-        elided = [it.text() for it in win.party.name_items.values()
-                  if tbl.fontMetrics().horizontalAdvance(it.text()) > colw - inset]
-        got[win.width()] = (win.party.stacked, colw, len(elided))
-    check(got.get(edge, (True,))[0] is False and got[edge][2] == 0 and got.get(edge - 1, (False,))[0],
-          f"at the stack edge ({edge} px) the card is beside the table and every hero name is "
-          f"whole, and one pixel under it the card stacks (width: stacked, Hero column, elided = "
-          f"{got})")
+        if win.party.stacked:
+            got[win.width()] = (True, colw, None)
+            continue
+        narrow = {i: name_cell(it) for i, it in win.party.name_items.items()}
+        hh.setSectionResizeMode(2, QHeaderView.Interactive)
+        tbl.setColumnWidth(2, colw + 300)
+        settle(4)
+        cut = [it.text() for i, it in win.party.name_items.items()
+               if narrow[i] != name_cell(it).copy(0, 0, narrow[i].width(), narrow[i].height())]
+        hh.setSectionResizeMode(2, QHeaderView.Stretch)
+        settle(4)
+        got[win.width()] = (False, colw, cut[:3])
+    for i in ticked:
+        win.party.rows[i][0].setChecked(False)
+    check(got.get(edge, (True,))[0] is False and got[edge][2] == [] and got.get(edge - 1, (False,))[0]
+          and len(ticked) >= 2,
+          f"at the stack edge ({edge} px) the card is beside the table and every hero name cell "
+          f"is painted as in a wide column, the widest ticked (DemiBold), and one pixel under it "
+          f"the card stacks (width: stacked, Hero column, cut = {got})")
     # at the window's minimum height the squeeze lands on the scroll area, not
     # inside the form: three rows of form wanted 531 px of 424 and Qt evened
     # the cards out at 190 each, every label 3 px above its field
@@ -3231,7 +3352,14 @@ def smoke(win, app, out_dir):
         settle(4)
         edges[w] = (m0.template.mapTo(win, QPoint(0, 0)).x(), m0.template.width(),
                     m0.weapon_item.mapTo(win, QPoint(0, 0)).x())
-        if m0.stacked:
+        # the stack itself is a law, never a gate: behind `if m0.stacked:` the
+        # two laws below vanished unnamed when the stack was planted away, and
+        # the re-polish law after them passed over no re-polish
+        check(m0.stacked is (w == 1000),
+              f"at {w} px the hostile page's cards are "
+              f"{'stacked' if w == 1000 else 'side by side'} (the editor {m0.width()} px "
+              f"against its edge of {m0.STACK_BELOW})")
+        if w == 1000:
             labs = label_edges(m0)
             check(edges[w][0] == edges[w][2] and len(labs) >= 7
                   and all(ink is not None and 0 <= fx - 14 - ink <= 3 for _t, ink, fx in labs),
@@ -3477,9 +3605,13 @@ def smoke(win, app, out_dir):
           f"the live status repeats no Run-tab caption ({len(caps)} captions; a run of four "
           f"words shared: {shared[:2] or 'none'})")
     # ...read at the constant, so the say site is locked to it: _start says
-    # LAUNCH_STATUS and nothing appended (a launch is not driven here)
-    check("self.status.setText(LAUNCH_STATUS)" in inspect.getsource(RunTab._start),
-          "and the launch's say site puts that constant on the line, whole")
+    # LAUNCH_STATUS and nothing appended (a launch is not driven here) -- the
+    # LAST setText on the status, off the syntax tree, so neither the old
+    # line kept in a comment nor a later call appending to it passes
+    sets = [c for c in source_calls(RunTab._start) if dotted(c.func) == "self.status.setText"]
+    check(bool(sets) and len(sets[-1].args) == 1 and _is_name(sets[-1].args[0], "LAUNCH_STATUS"),
+          f"and the launch's say site puts that constant on the line, whole: the last setText "
+          f"in _start is the name alone ({len(sets)} setText call(s), read off the syntax tree)")
     t_end = time.perf_counter() + 2.0            # the summary is debounced: let it land
     while win._summary_timer.isActive() and time.perf_counter() < t_end:
         settle(1)
@@ -3722,6 +3854,101 @@ def smoke(win, app, out_dir):
           and f"{n_of(len(lost), 'change')}: {lost[0]}" in msg,
           f"a file the compiler refuses ({len(lost)} reasons) opens as one it accepts, and the "
           f"bar says what the window could not hold ({shape}; {msg[:96]!r})")
+    # ...and the bar SHOWS a line it cannot hold whole elided, never sliced
+    # at the chip: at 1,000 px this message lost 'the original.' with no
+    # mark (QStatusBar clips), and the instruction is why the message exists.
+    # Read as pixels: the bar showing the long line must paint exactly what
+    # it paints showing the elided line itself, and the whole line is on hover
+    sb, size = win.statusBar(), win.size()
+    win.resize(1000, 720)
+    settle(8)
+    room = sb.message_rect().width()
+    sb.showMessage(msg, 20000)
+    settle(4)
+    tip, whole = sb.toolTip(), sb.grab().toImage()
+    short = sb.fontMetrics().elidedText(msg, Qt.ElideRight, room)
+    sb.showMessage(short, 20000)
+    settle(4)
+    cut = sb.grab().toImage()
+    adv = sb.fontMetrics().horizontalAdvance(msg)
+    check(adv > room and short != msg and whole == cut and tip == msg,
+          f"at 1,000 px a bar message wider than its room ({adv} of {room} px) is painted elided "
+          f"-- as the bar paints the elided line itself, pixel for pixel -- and the whole line is "
+          f"its hover (the same {whole == cut}; hover is the line {tip == msg})")
+    sb.clearMessage()
+    win.resize(size)
+    settle(8)
+    # a file whose field the window never reads is malformed (a hero's bar as
+    # a string): validate int()s it AFTER the tabs were rewritten, and the
+    # raise left the window changed with the bar blank -- opened and said, as
+    # a file the window could not hold whole, and load answers True
+    strbar = os.path.join(out_dir, "smoke_strbar.toml")
+    with open(strbar, "w", encoding="utf-8") as fh:
+        fh.write(sandbox.spec_toml(dict(before, name="smoke-strbar"))
+                 .replace("[[heroes]]\nhero = 3\n", "[[heroes]]\nhero = 3\nskills = \"281, 276\"\n", 1))
+    try:
+        answer, raised = win.run.load(strbar), None
+    except Exception as exc:                                # noqa: BLE001
+        answer, raised = None, f"{type(exc).__name__}: {exc}"
+    settle()
+    msg = win.statusBar().currentMessage()
+    check(raised is None and answer is True and "281, 276" in open(strbar, encoding="utf-8").read()
+          and win.header.name.text() == "smoke-strbar"
+          and msg.startswith("Opened smoke_strbar, but the window could not hold all of it (1 change: "
+                             "ValueError"),
+          f"a file with a hero's bar written as a string opens, load answers True, and the bar "
+          f"says what the window could not hold (raised {raised}; {msg[:100]!r})")
+    # a file that cannot be opened at all: load answers False and the spec
+    # stands (the command line reads the answer)
+    missing = os.path.join(out_dir, "no_such_spec.toml")
+    answer = win.run.load(missing)
+    settle()
+    msg = win.statusBar().currentMessage()
+    check(answer is False and msg.startswith("Could not open no_such_spec")
+          and win.header.name.text() == "smoke-strbar",
+          f"a file that is not there: load answers False, the bar says so, the window keeps "
+          f"what it held ({answer}; {msg[:60]!r})")
+    win.from_spec(before)
+    settle()
+    # ...and the command line's --spec goes through that Open: a file it
+    # could not open is said on stderr and, with nothing to show it in (a
+    # --snap), the process ends 1 before any render -- rc 0 with the example
+    # rendered as the file and nothing on the console was the route. Driven
+    # as a process, since main() is not reached from here; --no-names keeps
+    # it to a content load and the window
+    cli_out = os.path.join(out_dir, "cli_snap")
+    run = subprocess.run([sys.executable, os.path.abspath(__file__), "--spec", missing, "--snap",
+                          cli_out, "--theme", "dark", "--no-names"],
+                         capture_output=True, text=True, timeout=180)
+    check(run.returncode == 1 and "Could not open no_such_spec" in run.stderr
+          and not os.path.exists(cli_out),
+          f"--spec on a file that cannot be opened is said on stderr and, with --snap, the "
+          f"process ends 1 with nothing rendered (rc {run.returncode}; stderr "
+          f"{run.stderr.strip()[-70:]!r})")
+    # a member with no level, and a hero with none, open at the level the
+    # compiler gives them (the template's; the player's) -- a constant 2 put
+    # a level-10 template over its budget on the way in, and one file got
+    # one verdict from the CLI and another after Open
+    npc_rows = win.names.world.rows("npc")
+    tkey = max((k for k, r in npc_rows.items() if r.get("model_id")
+                and int(r.get("level", 0) or 0) > 2),
+               key=lambda k: int(npc_rows[k].get("level", 0) or 0), default=None)
+    nolevel = dict(before, name="smoke-nolevel", player=dict(before["player"], level=10),
+                   heroes=[{k: v for k, v in before["heroes"][0].items() if k != "level"}],
+                   groups=[{"members": [{"npc": tkey, "health": 120}]}] + before["groups"][1:])
+    nolevel_path = os.path.join(out_dir, "smoke_nolevel.toml")
+    with open(nolevel_path, "w", encoding="utf-8") as fh:
+        fh.write(sandbox.spec_toml(nolevel))
+    win.run.load(nolevel_path)
+    settle()
+    held = win.to_spec()
+    want = (sandbox.spawn_rows(nolevel, win.world)[0][1]["level"],
+            sandbox.party_row(nolevel, win.world)["heroes"][0]["level"])
+    got = (held["groups"][0]["members"][0]["level"], held["heroes"][0]["level"])
+    check(tkey is not None and want[0] > 2 and want[1] == 10 and want == got
+          and win.statusBar().currentMessage() == "Opened smoke_nolevel",
+          f"a member and a hero with no level open at the level the compiler gives them "
+          f"({tkey}'s template level and the player's: {want}; the window holds {got})")
     win.from_spec(before)
     settle()
     # how a run ended is read from what the harness PRINTS -- print sites, read
@@ -3810,9 +4037,17 @@ def smoke(win, app, out_dir):
           f"compiler's words are behind Show Details ({face})")
     box.deleteLater()
     # ...and launch shows THAT box (the seam a law reads is not the call site:
-    # a QMessageBox.warning with the old face would pass the law above)
-    check("self.no_archive_box(exc).exec()" in inspect.getsource(RunTab.launch),
-          "and Launch shows that dialog, not one of its own")
+    # a QMessageBox.warning with the old face would pass the law above) --
+    # an exec() on the box, and no QMessageBox call of launch's own, off the
+    # syntax tree (a text match took the old call in a comment for the site)
+    lcalls = source_calls(RunTab.launch)
+    shown = any(isinstance(c.func, ast.Attribute) and c.func.attr == "exec"
+                and isinstance(c.func.value, ast.Call)
+                and dotted(c.func.value.func) == "self.no_archive_box" for c in lcalls)
+    own = [dotted(c.func) for c in lcalls if dotted(c.func).startswith("QMessageBox")]
+    check(shown and not own,
+          f"and Launch shows that dialog, not one of its own (no_archive_box().exec() {shown}; "
+          f"its own boxes: {own or 'none'}; read off the syntax tree)")
     # after a refusal, an edit says the pane holds REASONS; after a no-archive
     # compile, it keeps the build hint on hover
     win.enemies.groups[0].members[0].boss.setChecked(True)
@@ -3904,10 +4139,19 @@ def smoke(win, app, out_dir):
     check(not unused, f"every role the sheet styles is used somewhere ({sorted(unused) or 'all'})")
     check(not lore, f"no flag, file name, ident or hex id on the visible surface ({lore[:4]})")
     # ...the one bar message the smoke cannot provoke (a reset deletes the
-    # vault's store), read at its say site: the sentence, never the store's path
+    # vault's store), read at its say site: the sentence, never the store's
+    # path -- every _say in reset says a name or a literal (never an f-string
+    # or a join), one of them RESET_DONE, off the syntax tree: the old line
+    # in a comment or a docstring, or the path said after the sentence, is
+    # not a say site
+    says = [c for c in source_calls(RunTab.reset) if dotted(c.func) == "self._say"]
     check(not SURFACE_LORE.search(RESET_DONE)
-          and re.search(r"_say\(RESET_DONE\b", inspect.getsource(RunTab.reset)) is not None,
-          "what a reset says is its sentence, never the store's path (the confirm box shows it)")
+          and any(c.args and _is_name(c.args[0], "RESET_DONE") for c in says)
+          and all(c.args and (isinstance(c.args[0], ast.Name)
+                              or (isinstance(c.args[0], ast.Constant)
+                                  and isinstance(c.args[0].value, str))) for c in says),
+          f"what a reset says is its sentence, never the store's path (the confirm box shows it): "
+          f"{len(says)} say site(s), each a name or a literal, read off the syntax tree")
     # the words: a caption is one constraint and one pointer (the research's
     # 74 characters a line; two clauses here), never a legend or a run-on, and
     # 'the stack' is nowhere; the Run tab's two wells say what will appear
@@ -4084,7 +4328,13 @@ def smoke(win, app, out_dir):
           f"{vb.width()}x{hb.height()} are not)")
     view.deleteLater()
     # focus you can see, where keyboard focus needs the window to be active --
-    # measured on grabs of the WINDOW, not of the widget (see _moved)
+    # measured on grabs of the WINDOW, not of the widget (see _moved). First,
+    # reachable by Tab at all: focus() forces focus with setFocus(), which a
+    # NoFocus policy does not refuse, so the ring laws show the ring once
+    # focus is forced, not that the keyboard can put it there
+    check(bool(lb.focusPolicy() & Qt.TabFocus) and bool(en.tree.focusPolicy() & Qt.TabFocus),
+          f"Launch and the encounter list take keyboard focus by Tab (their policies "
+          f"{lb.focusPolicy()!s}, {en.tree.focusPolicy()!s})")
     activate()
     lost = "the window could not hold keyboard focus, so focus cannot be seen"
     win.tabs.setCurrentWidget(en)
@@ -4386,9 +4636,15 @@ def main(argv=None):
           + (f" -- {names.why}" if names.why else ""))
     win = Window(world, names)
     win.from_spec(sandbox.example_spec())
-    if args.spec:
-        win.run.load(args.spec)                  # the header's Open: said in the bar,
-                                                 # what the window could not hold too
+    if args.spec and not win.run.load(args.spec):
+        # the header's Open: said in the bar, what the window could not hold
+        # too -- and a file it could not open said on the console as well,
+        # since the window then holds the example and a bar message is all
+        # the route left (rc 0, nothing printed, the example rendered as the
+        # file); with no window for anyone to read, the process ends 1
+        print(f"--spec {args.spec}: {win.statusBar().currentMessage()}", file=sys.stderr)
+        if args.smoke or args.snap:
+            return 1
     if args.smoke or args.snap:
         rc = smoke(win, app, args.smoke) if args.smoke else snap(win, app, args.snap, theme)
         QTimer.singleShot(0, app.quit)

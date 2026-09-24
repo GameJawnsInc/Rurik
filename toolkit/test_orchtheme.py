@@ -51,13 +51,16 @@ def real_sheet(t, pal):
 
 
 def rule(sheet, selector):
-    """{property: value} of the sheet's rule for exactly `selector` (a rule
-    whose selector goes on, `:hover` or `:focus`, is another rule)."""
-    m = re.search(r"(?m)^" + re.escape(selector) + r"\s*\{([^}]*)\}", sheet)
-    if not m:
-        return {}
-    return {k.strip(): v.strip() for k, v in
-            (d.split(":", 1) for d in m.group(1).split(";") if ":" in d)}
+    """{property: value} of the sheet's rules for exactly `selector` (a rule
+    whose selector goes on, `:hover` or `:focus`, is another rule), every
+    block merged in sheet order with the last value winning -- Qt's cascade
+    at equal specificity, so a block further down that clears the focused
+    tab's edge is read as Qt paints it (the first block alone kept it)."""
+    out = {}
+    for m in re.finditer(r"(?m)^" + re.escape(selector) + r"\s*\{([^}]*)\}", sheet):
+        out.update({k.strip(): v.strip() for k, v in
+                    (d.split(":", 1) for d in m.group(1).split(";") if ":" in d)})
+    return out
 
 
 def danger_pairs(sheet):
