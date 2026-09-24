@@ -7,7 +7,9 @@ Qt import -- so the contrast audit runs on a bare machine:
 WHERE THE RULES COME FROM. Dream-World-IX, the owner's other project, spent
 twelve rounds on its PySide6 workspace (`studies/gui-aesthetics/`,
 `ff9mapkit/workspace/style.py`, `editor/theme.py`). What is borrowed here is
-the part that fits a four-tab tool, as rules rather than code:
+the part that fits a four-tab tool -- the rules, and a few small helpers
+rewritten here (the colour mix and contrast walk, the selection tint, the
+content-addressed image cache). Dream-World-IX is MIT and the same owner's:
 
   * ONE loud object. The accent is a FILL spent on the verb you press --
     Launch -- and nowhere else: not on a checked box, not on a selected row
@@ -200,6 +202,9 @@ def derive(pal):
     # the list the loudest thing on screen)
     p["check_bg"] = p["text"]
     p["check_fg"] = p["surface"]
+    # a checked box under the pointer shifts its FILL (a ring on the pale fill
+    # reads as the box shrinking)
+    p["check_hover"] = mix(p["check_bg"], p["surface"], 0.14)
     # disabled: legible, plainly not live (WCAG exempts inactive controls)
     p["disabled_fg"] = mix(p["muted"], p["surface"], 0.35)
     p["disabled_bg"] = mix(p["field"], p["surface"], 0.5)
@@ -216,7 +221,17 @@ def derive(pal):
 
 def audit(pal):
     """[(label, measured, floor)] for every pair painted together. A FAILURE is
-    measured < floor. The pairs are the real neighbours, not neighbouring keys."""
+    measured < floor. The pairs are the real neighbours, not neighbouring keys.
+
+    The list is written by hand, and a hand list can miss a pair: the first
+    review found the danger button's hover (its ink over the chip fill, 4.22:1
+    in light) missing, with this function printing "clean". So a state rule
+    that changes a FILL names its ink here, and the smoke renders a hovered
+    danger button and measures the painted pixels as well.
+
+    The primary button's focus ring is drawn INSIDE its own fill (an outline in
+    accent_fg), so it is measured by 'accent_fg on accent'; its outer edge on
+    the header is exempt by design -- a gold ring on a gold edge cannot show."""
     p = derive(pal)
     rows = []
 
@@ -225,7 +240,7 @@ def audit(pal):
 
     for g in ("bg", "surface", "surface_btn", "field", "hover", "pressed", "selection_bg"):
         need(f"text on {g}", p["text"], p[g], TEXT_FLOOR)
-    for g in ("bg", "surface", "field", "surface_btn"):
+    for g in ("bg", "surface", "field", "surface_btn", "hover", "selection_bg", "log_bg"):
         need(f"muted on {g}", p["muted"], p[g], TEXT_FLOOR)
     for g in ("accent", "accent_hover", "accent_pressed"):
         need(f"accent_fg on {g}", p["accent_fg"], p[g], TEXT_FLOOR)
@@ -242,7 +257,8 @@ def audit(pal):
     need("check mark on its fill", p["check_fg"], p["check_bg"], MARK_FLOOR)
     need("checked box on field", p["check_bg"], p["field"], MARK_FLOOR)
     need("accent fill on bg", p["accent"], p["bg"], MARK_FLOOR)
-    need("danger text on surface", p["error_text"], p["surface"], TEXT_FLOOR)
+    need("danger text on its hover and press", p["chip_crit_fg"], p["chip_crit_bg"], TEXT_FLOOR)
+    need("check mark on a hovered checked box", p["check_fg"], p["check_hover"], MARK_FLOOR)
     # interactive states must be DIFFERENT, measurably (DWIX: hover was byte-
     # identical to rest in 4 of 8 palettes and nobody saw it for rounds)
     rows.append(("hover differs from a button at rest",
@@ -252,6 +268,8 @@ def audit(pal):
     rows.append(("pressed differs from hover", distance(p["pressed"], p["hover"]), 6))
     rows.append(("selection differs from hover", distance(p["selection_bg"], p["hover"]),
                  SELECTION_FLOOR))
+    rows.append(("a hovered checked box differs from one at rest",
+                 distance(p["check_hover"], p["check_bg"]), 6))
     rows.append(("a card differs from the page", distance(p["surface"], p["bg"]), 6))
     rows.append(("a well differs from its card", distance(p["field"], p["surface"]), 6))
     return rows
@@ -339,6 +357,7 @@ QPushButton:hover { background: $hover; }
 QPushButton:pressed { background: $pressed; border-top-color: $border_shade; border-bottom-color: $border_lit; }
 QPushButton:focus { border: 1px solid $focus; }
 QPushButton:disabled { background: $surface; color: $disabled_fg; border: 1px solid $border; }
+QPushButton:pressed:focus { border: 1px solid $border; border-top-color: $border_shade; border-bottom-color: $border_lit; }
 
 QPushButton[role="primary"] {
     background: $accent; color: $accent_fg; font-weight: 600;
@@ -347,7 +366,11 @@ QPushButton[role="primary"] {
 }
 QPushButton[role="primary"]:hover { background: $accent_hover; }
 QPushButton[role="primary"]:pressed { background: $accent_pressed; border-top-color: $accent_shade; border-bottom-color: $accent_lit; }
-QPushButton[role="primary"]:focus { border: 1px solid $accent_fg; }
+QPushButton[role="primary"]:focus {
+    border: 1px solid $accent; border-top-color: $accent_lit; border-bottom-color: $accent_shade;
+    outline: 1px solid $accent_fg;
+}
+QPushButton[role="primary"]:pressed:focus { border: 1px solid $accent; border-top-color: $accent_shade; border-bottom-color: $accent_lit; }
 QPushButton[role="primary"]:disabled { background: $surface_btn; color: $disabled_fg; border: 1px solid $border; }
 
 QPushButton[role="quiet"] { background: transparent; color: $text; border: 1px solid $border; }
@@ -355,12 +378,14 @@ QPushButton[role="quiet"]:hover { background: $hover; }
 QPushButton[role="quiet"]:pressed { background: $pressed; }
 QPushButton[role="quiet"]:focus { border: 1px solid $focus; }
 QPushButton[role="quiet"]:disabled { background: transparent; color: $disabled_fg; border: 1px solid $border; }
+QPushButton[role="quiet"]:pressed:focus { border: 1px solid $border_strong; }
 
 QPushButton[role="danger"] { background: transparent; color: $error_text; border: 1px solid $danger_edge; }
-QPushButton[role="danger"]:hover { background: $chip_crit_bg; }
-QPushButton[role="danger"]:pressed { background: $chip_crit_bg; border-color: $error; }
+QPushButton[role="danger"]:hover { background: $chip_crit_bg; color: $chip_crit_fg; }
+QPushButton[role="danger"]:pressed { background: $chip_crit_bg; color: $chip_crit_fg; border-color: $error; }
 QPushButton[role="danger"]:focus { border: 1px solid $focus; }
 QPushButton[role="danger"]:disabled { background: transparent; color: $disabled_fg; border: 1px solid $border; }
+QPushButton[role="danger"]:pressed:focus { border: 1px solid $error; }
 
 /* ---- wells: inputs are cut into the card (shade on top, lit foot) */
 QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
@@ -374,14 +399,14 @@ QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus { border:
 QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled {
     background: $disabled_bg; color: $disabled_fg; border: 1px solid $border;
 }
-QComboBox { padding-right: 26px; }
 QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: center right; width: 24px; border: none; }
 QComboBox::down-arrow { image: url($img_down); width: 14px; height: 14px; }
 QComboBox::down-arrow:disabled { image: url($img_down_disabled); }
 QComboBox QLineEdit { background: transparent; border: none; padding: 0; min-height: 0; }
-QComboBox QAbstractItemView {
-    background: $surface; color: $text; border: 1px solid $border_strong; padding: 4px;
-    selection-background-color: $selection_bg; selection-color: $text; outline: 0;
+QComboBox QAbstractItemView, QComboBox QAbstractItemView:focus,
+QListView[role="popup"], QListView[role="popup"]:focus {
+    background: $surface; color: $text; border: 1px solid $border_strong; border-radius: 0;
+    padding: 4px; selection-background-color: $selection_bg; selection-color: $text; outline: 0;
 }
 QSpinBox, QDoubleSpinBox { padding-right: 22px; }
 QSpinBox::up-button, QDoubleSpinBox::up-button, QSpinBox::down-button, QDoubleSpinBox::down-button {
@@ -411,6 +436,9 @@ QCheckBox::indicator:focus { border: 1px solid $focus; }
 QCheckBox::indicator:checked, QAbstractItemView::indicator:checked {
     background: $check_bg; border: 1px solid $check_bg; image: url($img_check);
 }
+QCheckBox::indicator:checked:hover, QAbstractItemView::indicator:checked:hover {
+    background: $check_hover; border: 1px solid $check_hover;
+}
 QCheckBox::indicator:checked:focus { border: 1px solid $focus; }
 QCheckBox::indicator:disabled, QAbstractItemView::indicator:disabled { background: $disabled_bg; border: 1px solid $border; }
 QCheckBox::indicator:checked:disabled, QAbstractItemView::indicator:checked:disabled {
@@ -433,6 +461,10 @@ QTreeView::branch { background: transparent; }
 /* a view inside a card is part of the card: no second box, no second fill */
 QListView[role="flat"], QTreeView[role="flat"], QTableView[role="flat"] {
     background: transparent; border: none; padding: 0;
+}
+QListView[role="flat"], QTreeView[role="flat"] { border: 1px solid transparent; }
+QListView[role="flat"]:focus, QTreeView[role="flat"]:focus, QTableView[role="flat"]:focus {
+    border: 1px solid $focus;
 }
 QTableView { gridline-color: $surface; }
 QTableView QComboBox, QTableView QSpinBox { margin: 4px 6px; }
@@ -463,7 +495,7 @@ QTabBar::tab {
 }
 QTabBar::tab:hover { color: $text; }
 QTabBar::tab:selected { color: $text; border-bottom: 2px solid $accent; }
-QTabBar::tab:focus { color: $text; }
+QTabBar::tab:selected:focus { background: $hover; }
 
 /* ---- scrolling */
 QScrollArea { background: transparent; border: none; }
@@ -474,6 +506,7 @@ QScrollBar::handle:horizontal { background: $scroll; border-radius: 4px; min-wid
 QScrollBar::handle:hover { background: $scroll_hover; }
 QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; border: none; background: none; }
 QScrollBar::add-page, QScrollBar::sub-page { background: none; }
+QAbstractScrollArea::corner { background: transparent; border: none; }
 
 QSplitter::handle { background: transparent; }
 QSplitter::handle:hover { background: $border; }
@@ -500,7 +533,7 @@ def qss(pal, assets):
     return _QSS.substitute(values)
 
 
-_BAD_ORDER = re.compile(r"[A-Za-z_][\w-]*:[a-z-]+::[a-z-]+")
+_BAD_ORDER = re.compile(r"(?:[A-Za-z_*][\w-]*|\])(?::!?[a-z-]+)+::[a-z-]+")
 _ROLE_RULE = re.compile(r'\[role="([a-z_]+)"\]')
 
 

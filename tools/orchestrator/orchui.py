@@ -10,15 +10,20 @@ selector-less one cascades into every child. The patterns are Dream-World-IX's
 drawn fresh here, so no one else's glyphs are copied.
 """
 import os
+import sys
 import tempfile
 
-import orchtheme
+HERE = os.path.dirname(os.path.abspath(__file__))
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
 
-from PySide6.QtCore import QEvent, QObject, QPointF, QRect, QSize, Qt
-from PySide6.QtGui import (QColor, QFont, QFontMetrics, QIcon, QImage, QPainter,
-                           QPalette, QPixmap, QWheelEvent)
-from PySide6.QtSvg import QSvgRenderer
-from PySide6.QtWidgets import (QAbstractSpinBox, QApplication, QComboBox, QFrame,
+import orchtheme  # noqa: E402  (tools/orchestrator, stdlib)
+
+from PySide6.QtCore import QEvent, QObject, QRect, QSize, Qt  # noqa: E402
+from PySide6.QtGui import (QColor, QFont, QFontMetrics, QIcon, QImage,  # noqa: E402
+                           QPainter, QPalette, QPixmap)
+from PySide6.QtSvg import QSvgRenderer  # noqa: E402
+from PySide6.QtWidgets import (QAbstractSpinBox, QApplication, QComboBox, QFrame,  # noqa: E402
                                QHBoxLayout, QLabel, QListWidget, QPushButton, QStyle,
                                QStyledItemDelegate, QStyleOptionViewItem, QVBoxLayout,
                                QWidget)
@@ -47,7 +52,8 @@ def apply_theme(app, requested="auto"):
 
     Fusion, not the native windows11 style: that style draws its own rounded
     fills and a sheet over it half-applies. The QPalette covers what QSS does
-    not reach (the completer's popup, a message box's body, text selection)."""
+    not reach -- a message box's body, a native dialog's controls, text
+    selection in a widget no rule names."""
     global PAL, THEME
     THEME = resolve_theme(app, requested)
     PAL = orchtheme.derive(orchtheme.PALETTES[THEME])
@@ -158,6 +164,9 @@ def card(title=None, *, trailing=None, margins=(16, 12, 16, 16), spacing=10):
         head.setSpacing(8)
         if title:
             box.title_label = overline(title)
+            # as tall as a chip, so two cards side by side -- one with a chip in
+            # its head, one without -- start their bodies on the same line
+            box.title_label.setMinimumHeight(chip("0").sizeHint().height())
             head.addWidget(box.title_label)
         head.addStretch(1)
         if trailing is not None:
@@ -249,19 +258,20 @@ def tinted_icon(name, role=None):
 class WheelGuard(QObject):
     """A hovered combo or spin box changes value under the wheel even without
     focus, so scrolling a table of them edits whatever the cursor crosses.
-    Unfocused ones pass the wheel to their parent instead (the table or the
-    scroll area scrolls); a focused one still takes it."""
+    For an unfocused one the event is IGNORED and eaten here: Qt then carries
+    the original, spontaneous wheel on up the parent chain to whatever scrolls
+    -- a table's viewport, a page's scroll area, at any depth. A focused one
+    still takes it.
+
+    Dream-World-IX's guard is exactly this. The first cut here forwarded a new
+    event to the parent instead, and Qt never propagates a synthesized wheel,
+    so the hostile pages stopped scrolling wherever the pointer crossed a combo."""
     GUARDED = (QComboBox, QAbstractSpinBox)
 
     def eventFilter(self, obj, ev):
         if (ev.type() == QEvent.Wheel and isinstance(obj, self.GUARDED)
                 and not obj.hasFocus()):
-            parent = obj.parentWidget()
-            if parent is not None:
-                pos = obj.mapTo(parent, ev.position().toPoint())
-                QApplication.sendEvent(parent, QWheelEvent(
-                    QPointF(pos), ev.globalPosition(), ev.pixelDelta(), ev.angleDelta(),
-                    ev.buttons(), ev.modifiers(), ev.phase(), ev.inverted()))
+            ev.ignore()
             return True
         return False
 

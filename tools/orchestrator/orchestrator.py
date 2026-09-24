@@ -76,14 +76,17 @@ import content        # noqa: E402
 import vaultpath      # noqa: E402
 
 try:
-    from PySide6.QtCore import (QElapsedTimer, QPoint, QPointF, QProcess,
+    from PySide6.QtCore import (QElapsedTimer, QEvent, QPoint, QPointF, QProcess,
                                 QProcessEnvironment, Qt, QTimer, Signal)
-    from PySide6.QtGui import QColor, QFont, QTextCharFormat, QTextCursor, QWheelEvent
-    from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComboBox,
+    from PySide6.QtGui import (QColor, QFont, QImage, QKeyEvent, QPainter, QTextCharFormat,
+                               QTextCursor, QWheelEvent)
+    from PySide6.QtWidgets import (QAbstractItemView, QApplication, QBoxLayout, QCheckBox,
+                                   QComboBox,
                                    QCompleter, QFileDialog, QFormLayout, QFrame,
                                    QGridLayout, QHBoxLayout, QHeaderView, QLabel,
-                                   QLineEdit, QListWidgetItem, QMainWindow, QMessageBox,
+                                   QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox,
                                    QPlainTextEdit, QPushButton, QScrollArea, QSpinBox,
+                                   QStyle, QStyleOptionButton, QStyleOptionComboBox,
                                    QDoubleSpinBox, QSplitter, QStackedWidget,
                                    QTableWidget, QTableWidgetItem, QTabWidget,
                                    QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
@@ -167,6 +170,19 @@ class Names:
         meta = f"{sid}  {prof}" + (f"  {attr}" if attr else "")
         return (self.skill.get(sid, f"skill {sid}"), meta, self.skill_grade(sid))
 
+    def slot_label(self, sid):
+        """A skill as a bar slot's picker shows it: the grade in the same words
+        as the Skills tab's pills, right after the name, so a narrow slot clips
+        the id and attribute before it clips the grade. The id and attribute
+        stay in the text because the picker filters on it (type '322')."""
+        name, meta, grade = self.skill_parts(sid)
+        word = {"hand": "  · modelled", "label": "  · label"}.get(grade, "")
+        return f"{name}{word}  [{meta.replace('  ', ' ')}]"
+
+    def skill_tip(self, sid):
+        name, meta, grade = self.skill_parts(sid)
+        return f"{name}   {meta.replace('  ', ' · ')}\n{GRADE_TIP[grade]}"
+
     def hero_name(self, idx):
         return self.hero.get(idx, f"hero {idx}")
 
@@ -217,22 +233,31 @@ class Picker(QComboBox):
         comp.setFilterMode(Qt.MatchContains)
         comp.setCompletionMode(QCompleter.PopupCompletion)
         comp.setCaseSensitivity(Qt.CaseInsensitive)
+        comp.popup().setProperty("role", "popup")
+        self.tips = {}
         self.currentIndexChanged.connect(self._show_start)
 
     def _show_start(self, *_a):
         le = self.lineEdit()
         if le is not None:
             le.setCursorPosition(0)
-        self.setToolTip(self.currentText())
+        self.setToolTip(self.tips.get(self.currentData(), self.currentText()))
 
-    def set_choices(self, pairs, keep=None):
-        """pairs: [(label, value)]. Keeps the current value when it is still offered."""
+    def set_choices(self, pairs, keep=None, parts=None, tips=None):
+        """pairs: [(label, value)]. Keeps the current value when it is still
+        offered. `parts` ({value: (name, meta, grade)}) makes the drop-down draw
+        its rows the way the Skills list does; `tips` gives each its hover."""
         current = keep if keep is not None else self.value()
         self.blockSignals(True)
         self.clear()
         for label, value in pairs:
             self.addItem(label, value)
+            if parts and value in parts:
+                self.setItemData(self.count() - 1, parts[value], ROLE_PARTS)
         self.blockSignals(False)
+        self.tips = dict(tips or {})
+        if parts and not isinstance(self.view().itemDelegate(), orchui.SkillDelegate):
+            self.view().setItemDelegate(orchui.SkillDelegate(self.view()))
         fm = self.fontMetrics()
         widest = max((fm.horizontalAdvance(label) for label, _v in pairs), default=0)
         self.view().setMinimumWidth(min(widest + 48, 760))
@@ -255,7 +280,7 @@ class Picker(QComboBox):
 
 def skill_choices(names, professions, empty=True):
     ids = sandbox.default_unlocks(names.world, professions)
-    pairs = sorted(((names.skill_label(s), s) for s in ids), key=lambda p: p[0].lower())
+    pairs = sorted(((names.slot_label(s), s) for s in ids), key=lambda p: p[0].lower())
     return ([("(empty)", 0)] if empty else []) + pairs
 
 
@@ -288,8 +313,10 @@ class Bar(QWidget):
 
     def set_professions(self, professions):
         pairs = skill_choices(self.names, professions)
+        parts = {s: self.names.skill_parts(s) for _l, s in pairs if s}
+        tips = {s: self.names.skill_tip(s) for s in parts}
         for pk in self.slots:
-            pk.set_choices(pairs)
+            pk.set_choices(pairs, parts=parts, tips=tips)
 
     def values(self):
         return [int(pk.value() or 0) for pk in self.slots]
@@ -303,8 +330,10 @@ class Bar(QWidget):
 class Ranks(QWidget):
     """One spin box per attribute of the given professions, two to a row, and
     the budget as a chip (the Enemies tab's; the party's ranks are in-game).
-    The chip is the NOTICE; the caption under the card stays the HINT, so an
-    over-budget spend never erases the sentence saying what a valid one is."""
+    The chip is the NOTICE; `hint`, a caption the card puts under the grid,
+    stays the HINT, so an over-budget spend never erases the sentence saying
+    what a valid one is. (The hint is not in the grid: set_professions wipes
+    the grid.)"""
 
     def __init__(self, names, parent=None):
         super().__init__(parent)
@@ -317,6 +346,7 @@ class Ranks(QWidget):
         self.spins = {}
         self.chip = chip("", "info")
         self.label = self.chip
+        self.hint = caption("")
         self.level = 3
         self.professions = ()
 
@@ -335,11 +365,14 @@ class Ranks(QWidget):
         self.professions = tuple(int(p) for p in professions if p)
         self.level = int(level)
         if self.rules is None:
-            self.grid.addWidget(caption("No attribute table (vault/content/attributes.toml): "
-                                        "ranks cannot be edited here."), 0, 0, 1, 6)
+            self.grid.addWidget(caption("No attribute table, so ranks cannot be edited here.",
+                                        tip="vault/content/attributes.toml is missing."),
+                                0, 0, 1, 6)
             self.chip.hide()
+            self.hint.hide()
             return
         self.chip.show()
+        self.hint.show()
         n = 0
         for aid, row in sorted(self.rules.attributes.items()):
             if row["profession"] not in self.professions:
@@ -375,14 +408,14 @@ class Ranks(QWidget):
             return
         spent = self.rules.total_spent({a: s.value() for a, s in self.spins.items()})
         budget = sandbox.points_for_level(self.level)
+        self.hint.setText(f"A level-{self.level} hostile has {budget} points to spend; the "
+                          f"compiler refuses more.")
+        self.hint.setToolTip("Attribute points by level, as GWW gives them.")
         if spent > budget:
-            set_chip(self.chip, f"{spent} of {budget} points — over budget", "crit",
-                     tip="The compiler refuses ranks the level cannot pay for "
-                         "(GWW's attribute points by level).")
+            set_chip(self.chip, f"{spent} of {budget} points — over budget", "crit")
         else:
             set_chip(self.chip, f"{spent} of {budget} points",
-                     "good" if spent == budget else "info",
-                     tip=f"A level-{self.level} hostile has {budget} attribute points.")
+                     "good" if spent == budget else "info")
 
     def set_level(self, level):
         self.level = int(level)
@@ -398,14 +431,18 @@ class Ranks(QWidget):
         self._budget()
 
 
-def profession_picker(none=False):
+def profession_picker(none=False, short=False):
+    """`short` drops the '(W)' -- for the heroes table, whose column already
+    says Profession and has no room for the abbreviation."""
     pk = QComboBox()
     pk.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
-    pk.setMinimumContentsLength(14)
+    pk.setMinimumContentsLength(10 if short else 14)
     if none:
         pk.addItem("(none)", 0)
     for pid, name in sandbox.PROFESSIONS.items():
-        pk.addItem(f"{name} ({sandbox.ABBREV[pid]})", pid)
+        pk.addItem(name if short else f"{name} ({sandbox.ABBREV[pid]})", pid)
+    pk.currentIndexChanged.connect(lambda _i: pk.setToolTip(pk.currentText()))
+    pk.setToolTip(pk.currentText())
     return pk
 
 
@@ -477,16 +514,19 @@ class SkillsTab(QWidget):
         for pid, name in sandbox.PROFESSIONS.items():
             self.prof.addItem(f"{name} ({sandbox.ABBREV[pid]})", pid)
         self.prof.addItem("Common (no profession)", -1)
-        self.modelled_only = QCheckBox("Modelled only")
+        # named with the pills' own two words: the filter keeps BOTH grades, and a
+        # label row must never read as modelled (deskwork D4 step 4)
+        self.modelled_only = QCheckBox("Modelled or label")
         self.modelled_only.setToolTip("Only the skills this server acts: a hand-verified row "
                                       "(modelled) or a parsed label (label).")
         self.all_b = button("Unlock shown", "quiet",
                             tip="Unlock every skill the filter shows.")
         self.none_b = button("Lock shown", "quiet",
                              tip="Lock every skill the filter shows.")
-        self.party_b = button("Party's professions", "quiet",
-                              tip="Unlock exactly the skills of the character's and the heroes' "
-                                  "professions, plus the common ones; lock the rest.")
+        self.party_b = button("Unlock party only", "quiet",
+                              tip="Unlock the character's and the heroes' professions plus the "
+                                  "common skills, and lock every other skill, including ones "
+                                  "the filter hides.")
         row.addWidget(self.filter, 3)
         row.addWidget(self.prof, 1)
         row.addSpacing(4)
@@ -500,17 +540,25 @@ class SkillsTab(QWidget):
         self.list.setUniformItemSizes(True)
         self.list.setAccessibleName("Skills")
         outer.addWidget(self.list, 1)
-        outer.addWidget(caption(
-            "modelled — this server acts it from a hand-verified row.     label — it acts "
-            "through a label parsed from the client's description, not hand-verified.     "
-            "Unmarked skills draw and time correctly and do nothing."))
+        # the key shows the pills themselves, each with a few words
+        key = QHBoxLayout()
+        key.setSpacing(8)
+        for grade, kind, gloss in (("hand", "good", "a hand-verified row"),
+                                   ("label", "info", "a parsed label, not hand-verified")):
+            key.addWidget(chip(orchui.GRADE_TEXT[grade], kind, tip=GRADE_TIP[grade]))
+            key.addWidget(role_label(gloss, "caption"))
+            key.addSpacing(12)
+        key.addWidget(role_label("unmarked: draws and times, does nothing more", "caption",
+                                 tip=GRADE_TIP[None]))
+        key.addStretch(1)
+        outer.addLayout(key)
         self.party_professions = set()
         every = sorted(int(k) for k in names.world.rows("skills"))
         for sid in sorted(every, key=lambda s: names.skill_label(s).lower()):
             it = QListWidgetItem(names.skill_label(sid))
             it.setData(ROLE_ID, sid)
             it.setData(ROLE_PARTS, names.skill_parts(sid))
-            it.setToolTip(f"{names.skill_label(sid)}\n{GRADE_TIP[names.skill_grade(sid)]}")
+            it.setToolTip(names.skill_tip(sid))
             it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
             it.setCheckState(Qt.Checked)
             self.list.addItem(it)
@@ -581,60 +629,74 @@ class PartyTab(QWidget):
     and a body). No bars, no ranks: those are the in-game panels' job."""
 
     COLS = ("", "#", "Hero", "Profession", "Body", "Level")
+    # Below this width the Character card goes ABOVE the table, as main laid it
+    # out: side by side, the table cannot hold a whole profession, a whole body
+    # and a readable name beside a 320 px card (measured: 1,114 px needed).
+    STACK_BELOW = 1120
+    CARD_W = 320
 
     def __init__(self, names, on_change, parent=None):
         super().__init__(parent)
         self.names = names
         self.on_change = on_change
         world = names.world
-        outer = QHBoxLayout(self)
-        outer.setContentsMargins(16, 16, 16, 12)
-        outer.setSpacing(16)
+        self.outer = QBoxLayout(QBoxLayout.LeftToRight, self)
+        self.outer.setContentsMargins(16, 16, 16, 12)
+        self.outer.setSpacing(16)
+        self.stacked = None
 
-        cc = card("Character")
-        cc.setFixedWidth(320)
-        form = form_layout()
+        self.character = cc = card("Character")
         self.primary = profession_picker()
         self.secondary = profession_picker(none=True)
         self.level = QSpinBox()
         self.level.setRange(1, sandbox.LEVEL_MAX)
         self.level.setValue(3)
+        self.level.setToolTip("Sets the attribute points and the health.")
         weapons = weapon_keys(world)
-        self.weapon = Picker(chars=16)
+        self.weapon = Picker(chars=12)
         self.weapon.set_choices([(k, k) for k in weapons])
-        self.offhand = Picker(chars=16)
+        self.offhand = Picker(chars=12)
         self.offhand.set_choices([("(none)", "")] + [(k, k) for k in weapons
                                                      if "shield" in k or "focus" in k])
-        form.addRow("Primary", self.primary)
-        form.addRow("Secondary", self.secondary)
-        form.addRow("Level", self.level)
-        form.addRow("Weapon", self.weapon)
-        form.addRow("Off-hand", self.offhand)
-        cc.body.addLayout(form)
+        self.fields = []
+        for text, w in (("Primary", self.primary), ("Secondary", self.secondary),
+                        ("Level", self.level), ("Weapon", self.weapon),
+                        ("Off-hand", self.offhand)):
+            lab = QLabel(text)
+            lab.setBuddy(w)
+            lab.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.fields.append((lab, w))
+        self.cgrid = QGridLayout()
+        self.cgrid.setHorizontalSpacing(14)
+        self.cgrid.setVerticalSpacing(10)
+        cc.body.addLayout(self.cgrid)
         cc.body.addSpacing(4)
         cc.body.addWidget(caption(
-            "Bars and attribute ranks are set in game, on the Skills panel (K), the "
-            "attribute panel and each hero's own, and kept between runs. The level sets "
-            "the points and the health.",
-            tip="Every sandbox run passes --persist; the store is vault/state/characters/."))
+            "Bars and ranks are set in game (K) and kept between runs.",
+            tip="The Skills panel (K), the attribute panel and each hero's own panel. Every "
+                "sandbox run passes --persist; the store is vault/state/characters/."))
         cc.body.addStretch(1)
-        outer.addWidget(cc, 0)
+        self.outer.addWidget(cc, 0)
 
         self.count = chip("", "info")
         hc = card("Heroes", trailing=self.count)
         hc.body.addWidget(caption(
-            f"Tick a hero to add them to the party, up to {sandbox.HEROES_MAX}. Their bars "
-            "and ranks are set in game too.",
-            tip=f"The client's cap is {sandbox.HEROES_MAX} heroes (PtPlayer:332)."))
+            f"Tick a hero to unlock them and add them to the party, up to "
+            f"{sandbox.HEROES_MAX}.",
+            tip=f"The client's cap is {sandbox.HEROES_MAX} heroes (PtPlayer:332). Their bars "
+                f"and ranks are set in game too."))
         self.table = QTableWidget(0, len(self.COLS))
         self.table.setProperty("role", "flat")
         self.table.setHorizontalHeaderLabels(self.COLS)
         hh = self.table.horizontalHeader()
         hh.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         hh.setHighlightSections(False)
+        # Profession and Body are sized for their longest item (a cell widget
+        # takes the cell's width whatever its hint, so a guess clips); the hero's
+        # NAME is what yields, as a text item with an honest ellipsis.
         for col, mode, width in ((0, QHeaderView.Fixed, 32), (1, QHeaderView.Fixed, 40),
-                                 (2, QHeaderView.Fixed, 150), (3, QHeaderView.Fixed, 150),
-                                 (4, QHeaderView.Stretch, 0), (5, QHeaderView.Fixed, 92)):
+                                 (2, QHeaderView.Stretch, 0), (3, QHeaderView.Fixed, 150),
+                                 (4, QHeaderView.Fixed, 256), (5, QHeaderView.Fixed, 88)):
             hh.setSectionResizeMode(col, mode)
             if width:
                 self.table.setColumnWidth(col, width)
@@ -649,7 +711,8 @@ class PartyTab(QWidget):
         self.table.setFocusPolicy(Qt.NoFocus)
         self.table.setAccessibleName("Heroes")
         hc.body.addWidget(self.table, 1)
-        outer.addWidget(hc, 1)
+        self.outer.addWidget(hc, 1)
+        self._arrange(False)
 
         self.rows = {}                         # hero index -> (check, prof, body, level)
         self.name_items = {}
@@ -660,8 +723,8 @@ class PartyTab(QWidget):
             self.table.insertRow(r)
             hero = names.hero_name(idx)
             chk = QCheckBox()
-            chk.setAccessibleName(f"Unlock {hero}")
-            prof = profession_picker()
+            chk.setAccessibleName(f"Add {hero} to the party")
+            prof = profession_picker(short=True)
             prof.setAccessibleName(f"{hero}'s profession")
             body = Picker(chars=20)
             body.set_choices(bodies)
@@ -697,6 +760,38 @@ class PartyTab(QWidget):
         self.level.valueChanged.connect(lambda _v: self.on_change())
         self._count()
 
+    def _arrange(self, stacked):
+        """Side by side (a 320 px card, five form rows) or stacked (a full-width
+        card, the form in two columns so it stays short)."""
+        if stacked == self.stacked:
+            return
+        self.stacked = stacked
+        while self.cgrid.count():
+            self.cgrid.takeAt(0)
+        cc = self.character
+        if stacked:
+            self.outer.setDirection(QBoxLayout.TopToBottom)
+            cc.setMinimumWidth(0)
+            cc.setMaximumWidth(16777215)
+            for i, (lab, w) in enumerate(self.fields):
+                r, c = (i, 0) if i < 3 else (i - 3, 2)
+                self.cgrid.addWidget(lab, r, c)
+                self.cgrid.addWidget(w, r, c + 1)
+            self.cgrid.setColumnStretch(1, 1)
+            self.cgrid.setColumnStretch(3, 1)
+        else:
+            self.outer.setDirection(QBoxLayout.LeftToRight)
+            cc.setFixedWidth(self.CARD_W)
+            for i, (lab, w) in enumerate(self.fields):
+                self.cgrid.addWidget(lab, i, 0)
+                self.cgrid.addWidget(w, i, 1)
+            self.cgrid.setColumnStretch(1, 1)
+            self.cgrid.setColumnStretch(3, 0)
+
+    def resizeEvent(self, ev):
+        super().resizeEvent(ev)
+        self._arrange(self.width() < self.STACK_BELOW)
+
     def unlocked(self):
         return [i for i, (chk, _p, _b, _l) in self.rows.items() if chk.isChecked()]
 
@@ -715,13 +810,14 @@ class PartyTab(QWidget):
     def _toggled(self, idx, on):
         if on and len(self.unlocked()) > sandbox.HEROES_MAX:
             self.rows[idx][0].setChecked(False)
-            set_chip(self.count, f"{sandbox.HEROES_MAX} of {sandbox.HEROES_MAX} — the "
-                                 f"client's cap", "warn",
+            set_chip(self.count, f"{sandbox.HEROES_MAX} of {sandbox.HEROES_MAX} in the party "
+                                 f"— the client's cap", "warn",
                      tip=f"The client allows {sandbox.HEROES_MAX} heroes (PtPlayer:332).")
             win = self.window()
             if isinstance(win, QMainWindow):
                 win.statusBar().showMessage(
-                    f"The client allows {sandbox.HEROES_MAX} heroes — untick one first.", 6000)
+                    f"The client allows {sandbox.HEROES_MAX} heroes in the party — untick one "
+                    f"first.", 6000)
             return
         self._style_row(idx)
         self._count()
@@ -729,7 +825,7 @@ class PartyTab(QWidget):
 
     def _count(self):
         n = len(self.unlocked())
-        set_chip(self.count, f"{n} of {sandbox.HEROES_MAX} unlocked", "info",
+        set_chip(self.count, f"{n} of {sandbox.HEROES_MAX} in the party", "info",
                  tip=f"The client's cap is {sandbox.HEROES_MAX} heroes (PtPlayer:332).")
 
     def _prof_changed(self, idx):
@@ -956,6 +1052,17 @@ class MemberEditor(QWidget):
             m["glow"] = self.glow.value()
         return m
 
+    def summary(self):
+        """One line the group page lists: what the tree beside it does not say."""
+        k = sum(1 for s in self.bar.values() if s)
+        bits = [f"L{self.level.value()}", f"{self.health.value()} hp",
+                f"{k} of {sandbox.BAR_SLOTS} skills"]
+        if self.ranks.rules is not None:
+            spent = self.ranks.rules.total_spent({a: s.value() for a, s in self.ranks.spins.items()})
+            bits.append(f"{spent} of {sandbox.points_for_level(self.ranks.level)} points")
+        bits.append(self.weapon_item.value() or "the template's swing")
+        return "  ·  ".join(bits)
+
     def from_spec(self, m):
         self.template.set_value(m.get("npc"))
         self._template()
@@ -983,7 +1090,9 @@ class GroupEditor(QWidget):
         self.index = index
         self.members = []
         page = QVBoxLayout(self)
-        page.setContentsMargins(0, 0, 8, 0)
+        # 8 + the 12 px a hostile page's scroll bar takes, so both kinds of page
+        # share one right edge
+        page.setContentsMargins(0, 0, 20, 0)
         page.setSpacing(12)
         head = QHBoxLayout()
         titles = QVBoxLayout()
@@ -998,11 +1107,23 @@ class GroupEditor(QWidget):
         self.remove_b.clicked.connect(lambda: owner.remove(self))
         head.addWidget(self.remove_b, 0, Qt.AlignTop)
         page.addLayout(head)
+        self.note = chip("", "warn")
+        self.note.hide()
+        nrow = QHBoxLayout()
+        nrow.addWidget(self.note)
+        nrow.addStretch(1)
+        page.addLayout(nrow)
         self.count = chip("", "info")
         box = card("Hostiles", trailing=self.count)
-        box.body.addWidget(caption(
-            "A group spawns together; its hostiles stand side by side. Select one in the "
-            "list to edit it."))
+        self.hint = caption("")
+        box.body.addWidget(self.hint)
+        self.roster = QListWidget()
+        self.roster.setProperty("role", "flat")
+        self.roster.setAccessibleName("This group's hostiles")
+        self.roster.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.roster.itemClicked.connect(lambda it: owner.select(it.data(Qt.UserRole)))
+        self.roster.itemActivated.connect(lambda it: owner.select(it.data(Qt.UserRole)))
+        box.body.addWidget(self.roster)
         row = QHBoxLayout()
         self.add = button("Add hostile", icon="plus")
         self.add.clicked.connect(lambda: owner.select(self.add_member()))
@@ -1017,12 +1138,43 @@ class GroupEditor(QWidget):
     def set_index(self, index):
         self.index = index
         self.title.setText(f"Group {index}")
-        last = index == len(self.owner.groups) or not self.owner.groups
-        self.subtitle.setText(f"{index} of {max(len(self.owner.groups), index)} along the "
-                              f"corridor, south to north"
-                              + ("  ·  holds the boss" if last else ""))
         for m, ed in enumerate(self.members, 1):
             ed.set_where(index, m)
+        self.refresh_note()
+
+    def refresh_note(self):
+        """Where the boss is, read off the MEMBERS: the first cut derived it from
+        the group's position, so '+ Group' labelled a new, boss-less group
+        'holds the boss' while the tree showed the boss in the group above."""
+        groups = self.owner.groups
+        last = not groups or self is groups[-1]
+        has_boss = any(m.boss.isChecked() for m in self.members)
+        boss_anywhere = any(m.boss.isChecked() for g in groups for m in g.members)
+        where = f"{self.index} of {max(len(groups), self.index)} along the corridor, south to north"
+        if has_boss and last:
+            where += "  ·  holds the boss"
+        elif last and not boss_anywhere:
+            where += "  ·  the boss belongs in this group"
+        self.subtitle.setText(where)
+        if has_boss and not last:
+            set_chip(self.note, "The boss must be in the last group", "warn",
+                     tip="The compiler refuses a boss outside the last group: the quest's kill "
+                         "stands at the corridor's north end.")
+            self.note.show()
+        else:
+            self.note.hide()
+
+    def refresh_roster(self):
+        self.roster.clear()
+        for ed in self.members:
+            boss = "Boss  ·  " if ed.boss.isChecked() else ""
+            it = QListWidgetItem(f"{boss}{ed.display_name()}   —   {ed.summary()}")
+            it.setData(Qt.UserRole, ed)
+            it.setToolTip("Select to edit this hostile.")
+            self.roster.addItem(it)
+        rows = max(1, self.roster.count())
+        self.roster.setFixedHeight(rows * (self.roster.fontMetrics().height() + 12) + 4)
+        self.roster.setVisible(bool(self.members))
 
     def setTitle(self, text):                 # the old QGroupBox call, kept for callers
         m = re.search(r"\d+", text)
@@ -1052,10 +1204,13 @@ class GroupEditor(QWidget):
 
     def _count(self):
         n = len(self.members)
+        empty = "An empty group can't run. Add a hostile or remove the group."
         set_chip(self.count, f"{n} of {sandbox.GROUP_SIZE_MAX}",
-                 "warn" if not n else "info",
-                 tip="An empty group spawns nothing." if not n else None)
+                 "warn" if not n else "info", tip=empty if not n else "")
+        self.hint.setText(empty if not n else
+                          "A group spawns together. Select a hostile to edit it.")
         self.add.setEnabled(n < sandbox.GROUP_SIZE_MAX)
+        self.refresh_roster()
 
     def to_spec(self):
         return {"members": [m.to_spec() for m in self.members]}
@@ -1168,13 +1323,17 @@ class EnemiesTab(QWidget):
         ed = GroupEditor(self, len(self.groups) + 1)
         self.groups.append(ed)
         self._attach(ed)
-        if spec:
-            ed.from_spec(spec)
-        else:
-            ed.add_member()
-        self._building = building
-        self._renumber()
-        self._structure_changed()
+        try:
+            if spec:
+                ed.from_spec(spec)
+            else:
+                ed.add_member()
+        finally:
+            # restored on EVERY path: a malformed member row used to leave the
+            # flag set, and the list, chips and summary froze for the session
+            self._building = building
+            self._renumber()
+            self._structure_changed()
         return ed
 
     def remove(self, ed):
@@ -1255,6 +1414,10 @@ class EnemiesTab(QWidget):
         for item in self._walk():
             if item.data(0, Qt.UserRole) is ed:
                 self._decorate(item, ed)
+        for g in self.groups:
+            g.refresh_note()
+            if ed in g.members:
+                g.refresh_roster()
         self.changed.emit()
 
     def _structure_changed(self, select=None):
@@ -1281,6 +1444,8 @@ class EnemiesTab(QWidget):
         self.tree.blockSignals(False)
         set_chip(self.count, f"{len(self.groups)} of {sandbox.GROUPS_MAX} groups",
                  "warn" if not self.groups else "info")
+        for g in self.groups:
+            g.refresh_note()
         self.add.setEnabled(len(self.groups) < sandbox.GROUPS_MAX)
         alive = [x for g in self.groups for x in [g] + g.members]
         target = keep if keep in alive else (self.groups[0].members[0] if self.groups
@@ -1305,21 +1470,30 @@ class EnemiesTab(QWidget):
 
     def from_spec(self, groups):
         self._building = True
-        for g in list(self.groups):
-            for m in list(g.members):
-                self._detach(m)
-            self._detach(g)
-        self.groups = []
-        for g in groups or []:
-            self.add_group(g)
-        self._building = False
-        self._renumber()
-        self._structure_changed(select=None)
+        try:
+            for g in list(self.groups):
+                for m in list(g.members):
+                    self._detach(m)
+                self._detach(g)
+            self.groups = []
+            for g in groups or []:
+                self.add_group(g)
+        finally:
+            # whatever loaded is what the list shows, even when a row raised
+            self._building = False
+            self._renumber()
+            self._structure_changed(select=None)
 
 
 # ---------------------------------------------------------------- Run
 
 LOG_ERROR = re.compile(r"^Traceback|\bERROR\b|\[FAIL\]|Error:|Exception\b")
+# What the harness prints that decides how a run ENDED (session.py, runwatch.py).
+RUN_MARKS = {"retracted": "RUN VERDICT RETRACTED", "crash": "ERROR DIALOG captured",
+             "fail": "RUN VERDICT: FAIL"}
+BUILD_SLICE = ("Build the slice archive with:  python toolkit/mapdata/compose.py --name slice "
+               "--build   (RUNBOOK.md, SLICE-B9); a new run directory needs the elevated cage "
+               "step once.")
 
 
 def write_lines(view, lines):
@@ -1327,7 +1501,13 @@ def write_lines(view, lines):
     never HTML, so a '<' in a process's output is a '<'. The registers are
     weight for structure and a state colour only where it is unambiguous."""
     pal = orchui.PAL
-    cur = view.textCursor()
+    bar = view.verticalScrollBar()
+    at_bottom = bar.value() >= bar.maximum() - 1
+    # a DETACHED cursor: the view's own cursor (and the operator's selection)
+    # stays put, and the view follows new output only if it was at the bottom --
+    # appendPlainText's behaviour, which the first cut lost
+    cur = QTextCursor(view.document())
+    cur.beginEditBlock()
     cur.movePosition(QTextCursor.End)
     for text, kind in lines:
         fmt = QTextCharFormat()
@@ -1337,8 +1517,9 @@ def write_lines(view, lines):
         if not view.document().isEmpty():
             cur.insertBlock()
         cur.insertText(text, fmt)
-    view.setTextCursor(cur)
-    view.ensureCursorVisible()
+    cur.endEditBlock()
+    if at_bottom:
+        bar.setValue(bar.maximum())
 
 
 def compiled_lines(compiled):
@@ -1384,9 +1565,8 @@ class RunTab(QWidget):
         self.hold.setFixedWidth(220)
         form.addRow("End after", self.hold)
         opts.body.addLayout(form)
-        opts.body.addWidget(caption("The harness logs the client in — hands off the keyboard "
-                                    "while it says so. Closing the game client ends the run "
-                                    "and the stack."))
+        self.hold.valueChanged.connect(self.mark_stale)
+        opts.body.addWidget(caption("Closing the game client ends the run and the servers."))
         opts.body.addStretch(1)
         store = card("Stored character")
         store.body.addWidget(caption(
@@ -1426,18 +1606,20 @@ class RunTab(QWidget):
         self.log.setReadOnly(True)
         self.log.setMaximumBlockCount(20000)
         self.log.setAccessibleName("Run output")
-        for title, note, view in (
-                ("Compiled", "what the server is told, what the store already holds, "
-                             "then the overlay", self.summary),
-                ("Output", "the harness, session.py, streamed", self.log)):
+        for title, note, tip, view in (
+                ("Compiled", "what the server is told, what the store holds, then the overlay",
+                 None, self.summary),
+                ("Output", "streamed from the harness", "session.py's merged output", self.log)):
             pane = QWidget()
             pv = QVBoxLayout(pane)
             pv.setContentsMargins(0, 0, 0, 0)
             pv.setSpacing(6)
             ph = QHBoxLayout()
+            # the card titles above sit inside a 16 px margin and a 1 px border
+            ph.setContentsMargins(17, 0, 0, 0)
             ph.setSpacing(10)
             ph.addWidget(overline(title))
-            ph.addWidget(role_label(note, "caption"))
+            ph.addWidget(role_label(note, "caption", tip=tip))
             ph.addStretch(1)
             pv.addLayout(ph)
             pv.addWidget(view, 1)
@@ -1449,7 +1631,9 @@ class RunTab(QWidget):
         self.reset_b.clicked.connect(self.reset)
         self.proc = None
         self.compiled = None
+        self._stale = False
         self._partial = ""
+        self._marks = set()
         self.clock = QElapsedTimer()
         self.ticker = QTimer(self)
         self.ticker.setInterval(1000)
@@ -1491,12 +1675,19 @@ class RunTab(QWidget):
                                                    "TOML (*.toml)")
         if not path:
             return
-        self.window.from_spec(sandbox.load_spec(path))
+        try:
+            spec = sandbox.load_spec(path)       # a TOML error leaves the tabs untouched
+            self.window.from_spec(spec)
+        except Exception as exc:                 # noqa: BLE001 -- said, not swallowed
+            self._say(f"Could not open {os.path.basename(path)}: {type(exc).__name__}: {exc}",
+                      15000)
+            return
         self._say(f"Opened {path}")
 
     def compile(self):
         spec = self.window.to_spec()
         self.compiled = None
+        self._stale = False
         try:
             exe, dat = sandbox.run_paths()
             missing = None
@@ -1514,6 +1705,9 @@ class RunTab(QWidget):
             set_chip(self.state, "Refused", "crit")
             self.status.setText("The compiler refused the spec; the reasons are below. Fix "
                                 "them and compile again.")
+            self.status.setToolTip("")
+            self.window.tabs.setCurrentWidget(self)
+            self._say(f"Refused: {max(1, len(text) - 1)} reason(s), shown on the Run tab.")
             return None
         self.summary.clear()
         write_lines(self.summary, compiled_lines(self.compiled))
@@ -1521,28 +1715,44 @@ class RunTab(QWidget):
         notes = len(self.compiled["store_warnings"])
         if missing:
             set_chip(self.state, "Compiled — no slice archive", "warn")
-            self.status.setText(missing)
+            self.status.setText("There is no slice archive yet, so this cannot launch. Build "
+                                "it first (hover here for how).")
+            self.status.setToolTip(f"{BUILD_SLICE}\n\n{missing}")
+            self._say("Compiled, but there is no slice archive yet; see the Run tab.")
         else:
             set_chip(self.state, "Compiled", "good")
             self.status.setText(f"The overlay goes to {self.compiled['overlay_path']}"
                                 + (f"; {notes} note(s) about the stored character below."
                                    if notes else "."))
+            self.status.setToolTip("")
+            self._say("Compiled. The overlay and the command are on the Run tab"
+                      + (f"; {notes} note(s) about the stored character." if notes else "."))
         return self.compiled
+
+    def mark_stale(self, *_a):
+        """The spec changed after a compile: the pane shows the OLD result, and
+        a green 'Compiled' would say otherwise. Launch always compiles again."""
+        if self._stale or self.proc is not None or self.state.text() == "Not compiled":
+            return
+        self._stale = True
+        set_chip(self.state, "Changed since compile", "warn")
+        self.status.setText("The pane below shows the previous compile; Launch compiles again.")
+        self.status.setToolTip("")
 
     def launch(self):
         if self.proc is not None:
             return
         if self.compile() is None:
-            self.window.tabs.setCurrentWidget(self)
             return
         try:
             sandbox.run_paths()
         except sandbox.SpecError as exc:
-            QMessageBox.warning(self, "No slice archive", str(exc))
+            QMessageBox.warning(self, "No slice archive", f"{BUILD_SLICE}\n\n{exc}")
             return
         sandbox.write_overlay(self.compiled)
         self.log.clear()
         self._partial = ""
+        self._marks = set()
         cmd = self.compiled["command"]
         write_lines(self.log, [("$ " + " ".join(cmd), "echo")])
         self.proc = QProcess(self)
@@ -1554,15 +1764,17 @@ class RunTab(QWidget):
         self.proc.setProcessChannelMode(QProcess.MergedChannels)
         self.proc.readyReadStandardOutput.connect(self._read)
         self.proc.finished.connect(self._done)
+        self.proc.errorOccurred.connect(self._proc_error)
         self.proc.start(cmd[0], cmd[1:])
         self._busy(True)
         self.clock.start()
         self.ticker.start()
         self._tick()
         self.window.tabs.setCurrentWidget(self)
-        self.status.setText("The game client is coming up. Play; closing it ends the run and "
-                            "the stack. Hands off the keyboard while the harness logs in "
-                            "(it says when).")
+        self.status.setText("The game client is coming up. Hands off the keyboard while the "
+                            "harness logs in (it says when); then play. Closing the client ends "
+                            "the run and the servers.")
+        self.status.setToolTip("")
 
     def _busy(self, on):
         """Mirror the run onto the verbs that started it: a re-click on a
@@ -1576,30 +1788,69 @@ class RunTab(QWidget):
         secs = self.clock.elapsed() // 1000
         set_chip(self.state, f"Running  {secs // 60}:{secs % 60:02d}", "info")
 
+    def _mark(self, line):
+        for key, needle in RUN_MARKS.items():
+            if needle in line:
+                self._marks.add(key)
+
     def _read(self):
         data = self._partial + bytes(self.proc.readAllStandardOutput()).decode("utf-8", "replace")
         lines = data.replace("\r\n", "\n").split("\n")
         self._partial = lines.pop()
+        for ln in lines:
+            self._mark(ln)
         write_lines(self.log, [(ln, "error" if LOG_ERROR.search(ln) else "body") for ln in lines])
+
+    def end_state(self, code):
+        """(chip text, kind) for a finished run. A hold-until-close run ends
+        with a non-zero code when the operator closes the client -- the
+        harness retracts its PASS, deliberately -- so the code alone would
+        paint every normal session amber."""
+        m = self._marks
+        if "stopped" in m:
+            return "Stopped", "info"
+        if "no start" in m:
+            return "Did not start", "crit"
+        if code == 0:
+            return "Ended  ·  exit 0", "good"
+        if "crash" in m:
+            return "Ended  ·  the client crashed", "crit"
+        if "retracted" in m:
+            return "Ended  ·  client closed", "good"
+        if "fail" in m:
+            return "Ended  ·  the run failed", "warn"
+        return f"Ended  ·  exit {code}", "warn"
 
     def _done(self, code, _status):
         if self._partial:
+            self._mark(self._partial)
             write_lines(self.log, [(self._partial, "error" if LOG_ERROR.search(self._partial)
                                     else "body")])
             self._partial = ""
         write_lines(self.log, [("", "body"), (f"[session.py exited with code {code}]", "echo")])
         self.ticker.stop()
-        set_chip(self.state, f"Ended  ·  exit {code}", "good" if code == 0 else "warn")
+        set_chip(self.state, *self.end_state(code))
         self.status.setText("The run ended; the report and the server logs are under "
                             "vault/captures/harness/.")
+        self.status.setToolTip("")
         self.proc = None
         self._busy(False)
 
+    def _proc_error(self, err):
+        """A harness that never started emits no `finished`, so Launch stayed
+        disabled beside a live-looking clock."""
+        if err == QProcess.FailedToStart and self.proc is not None:
+            write_lines(self.log, [(f"[the harness did not start: {self.proc.errorString()}]",
+                                    "error")])
+            self._marks.add("no start")
+            self._done(-1, None)
+
     def stop(self):
         if self.proc is not None:
+            self._marks.add("stopped")
             self.proc.kill()
-            self._say("Killed the harness; --replace stops any server that survived on the "
-                      "next launch.", 8000)
+            self._say("Stopped the harness. The next launch replaces any server still running.",
+                      8000)
 
     def reset(self, confirm=True):
         path = sandbox.store_path()
@@ -1636,7 +1887,7 @@ class Header(QFrame):
         row.setSpacing(8)
         row.addWidget(overline("Spec"))
         self.name = QLineEdit("slice")
-        self.name.setPlaceholderText("spec name")
+        self.name.setPlaceholderText("Spec name")
         self.name.setFixedWidth(220)
         self.name.setAccessibleName("Spec name")
         self.name.setToolTip("Names the overlay's directory, vault/sandbox/<name>/, and the "
@@ -1660,8 +1911,8 @@ class Header(QFrame):
         verbs = QHBoxLayout()
         verbs.setSpacing(8)
         self.compile_b = button("Compile", icon="compile",
-                                tip="Compile the spec: the overlay and the command, shown on the "
-                                    "Run tab before anything runs.")
+                                tip="Compile the spec. The overlay and the command show on the "
+                                    "Run tab before anything runs; a refusal opens it.")
         self.launch_b = button("Launch", "primary", icon="play",
                                tip="Compile, write the overlay and start the harness on the "
                                    "slice archive.")
@@ -1703,26 +1954,31 @@ class Window(QMainWindow):
         self.header.save_b.clicked.connect(lambda: self.run.save())
         self.header.slice_b.clicked.connect(lambda: self.from_spec(sandbox.example_spec()))
         if names.why:
-            names_chip = chip("ids only — names unresolved", "warn", tip=names.why)
+            names_chip = chip("Ids only — names unresolved", "warn", tip=names.why)
         else:
-            names_chip = chip("names from the owner's archive", "info",
+            names_chip = chip("Names from your client", "info",
                               tip="Skill, hero and attribute names are read from the pinned "
                                   "client at start; the spec on disk carries ids.")
-        self.statusBar().addPermanentWidget(names_chip)
-        self.statusBar().setSizeGripEnabled(False)
+        sb = self.statusBar()
+        sb.setSizeGripEnabled(False)
+        sb.setContentsMargins(0, 0, 16, 3)       # the page's own right gutter
+        sb.addPermanentWidget(names_chip)
+        self.names_chip = names_chip
         self._summary_timer = QTimer(self)
         self._summary_timer.setSingleShot(True)
         self._summary_timer.setInterval(50)
         self._summary_timer.timeout.connect(self._refresh_summary)
-        self.skills.changed.connect(self._summary_timer.start)
-        self.enemies.changed.connect(self._summary_timer.start)
-        self.header.name.textChanged.connect(self._summary_timer.start)
+        for sig in (self.skills.changed, self.enemies.changed, self.header.name.textChanged):
+            sig.connect(self._summary_timer.start)
+            sig.connect(self.run.mark_stale)
         self._refresh_summary()
 
     def _party_changed(self):
         prim, sec = self.party.professions()
         self.skills.set_party_professions({prim, sec} | set(self.party.hero_professions()))
         self._summary_timer.start()
+        if hasattr(self, "run"):
+            self.run.mark_stale()
 
     def spec_summary(self, spec=None):
         spec = spec or self.to_spec()
@@ -1770,9 +2026,82 @@ def _near(a, b, tol=14):
     return orchtheme.distance(a, b) <= tol
 
 
+def _count_near(img, colour, tol=24, box=None):
+    """Pixels of `img` within `tol` (raw channel distance) of `colour`."""
+    x0, y0, x1, y1 = box or (0, 0, img.width(), img.height())
+    target = orchtheme._rgb(colour)
+    n = 0
+    for y in range(max(0, y0), min(img.height(), y1)):
+        for x in range(max(0, x0), min(img.width(), x1)):
+            c = img.pixelColor(x, y)
+            if max(abs(c.red() - target[0]), abs(c.green() - target[1]),
+                   abs(c.blue() - target[2])) <= tol:
+                n += 1
+    return n
+
+
+def _diff(a, b):
+    w, h = min(a.width(), b.width()), min(a.height(), b.height())
+    return sum(1 for y in range(h) for x in range(w) if a.pixelColor(x, y) != b.pixelColor(x, y))
+
+
+def _field_width(combo):
+    """The px a combo's text actually gets: the edit field, or its line edit."""
+    if combo.isEditable() and combo.lineEdit() is not None:
+        return combo.lineEdit().width() - 4
+    opt = QStyleOptionComboBox()
+    combo.initStyleOption(opt)
+    return combo.style().subControlRect(QStyle.CC_ComboBox, opt,
+                                        QStyle.SC_ComboBoxEditField, combo).width()
+
+
+def _fits(combo, text):
+    return combo.fontMetrics().horizontalAdvance(text) <= _field_width(combo)
+
+
 def used_roles(win):
-    return {str(w.property("role")) for w in win.findChildren(QWidget)
+    # every widget, not only the window's children: a completer's popup is a
+    # top-level of its own
+    return {str(w.property("role")) for w in QApplication.allWidgets()
             if w.property("role") is not None}
+
+
+SURFACE_LORE = re.compile(r"--[a-z]|\.py\b|\.md\b|`|\b[A-Z]{3,}-[A-Z0-9]+\b|\b0x[0-9A-Fa-f]+\b")
+
+
+def surface_lore(win):
+    """Visible words that belong on hover: flags, file names, idents, hex ids."""
+    out = []
+    for w in win.findChildren(QWidget):
+        if not w.isVisibleTo(win) or isinstance(w, QPlainTextEdit):
+            continue
+        text = w.text() if isinstance(w, (QLabel, QPushButton, QCheckBox)) else ""
+        if text and SURFACE_LORE.search(text):
+            out.append(text[:80])
+    msg = win.statusBar().currentMessage()
+    if msg and SURFACE_LORE.search(msg):
+        out.append(msg[:80])
+    return out
+
+
+def _real_wheel(win, widget, delta=-120):
+    """A spontaneous wheel, the way the OS sends one (Windows): Qt never
+    propagates a synthesized wheel, so sendEvent cannot test the guard's
+    scrolling half. False when this platform cannot send one."""
+    if sys.platform != "win32":
+        return False
+    import ctypes
+    from ctypes import wintypes
+    user32 = ctypes.windll.user32
+    local = widget.mapTo(win, QPoint(widget.width() // 2, widget.height() // 2))
+    dpr = win.devicePixelRatioF()
+    pt = wintypes.POINT(int(local.x() * dpr), int(local.y() * dpr))
+    hwnd = wintypes.HWND(int(win.winId()))
+    user32.ClientToScreen(hwnd, ctypes.byref(pt))
+    lparam = ((pt.y & 0xFFFF) << 16) | (pt.x & 0xFFFF)
+    user32.SendMessageW(hwnd, 0x020A, wintypes.WPARAM((delta & 0xFFFF) << 16),
+                        wintypes.LPARAM(lparam))
+    return True
 
 
 def smoke(win, app, out_dir):
@@ -1787,22 +2116,42 @@ def smoke(win, app, out_dir):
     World-IX: "a law in a docstring is a wish"): both palettes clear their
     contrast floors, the sheet has none of the silent QSS faults, every role
     the window uses is styled and every styled role is used, there is exactly
-    one accent, and the accent, a checked box and a well are the colours the
-    tokens say -- measured off the rendered pixels, because a property is not
-    a rendered colour."""
+    one accent, text fits the combos that hold it, and the accent, a checked
+    box, a well, a hovered danger button, the list's pills and its placeholder
+    are what the tokens say -- measured off the rendered pixels, because a
+    property is not a rendered colour. Each law was a finding of the review
+    that came after the first cut; a check that needs keyboard focus, or a
+    real OS wheel, says [skip] when it cannot have that. The window is native
+    but never on the screen (WA_DontShowOnScreen, as --snap renders)."""
     out_dir = vaultpath.resolve_out(out_dir, what="smoke output")
     os.makedirs(out_dir, exist_ok=True)
     fails = []
+    pal = orchui.PAL
 
     def check(cond, label):
         print(f"  [{'ok' if cond else 'FAIL'}] {label}")
         if not cond:
             fails.append(label)
 
+    def skip(label, why):
+        print(f"  [skip] {label} -- {why}")
+
+    def settle(n=3):
+        for _ in range(n):
+            app.processEvents()
+
+    def focus(w):
+        w.setFocus(Qt.TabFocusReason)
+        settle()
+        return win.isActiveWindow() and w.hasFocus()
+
+    # native, but never on the screen: nothing flashes on a shared desktop, and
+    # no other window can take keyboard focus away in the middle of a run
+    win.setAttribute(Qt.WA_DontShowOnScreen, True)
     win.show()
-    app.processEvents()
+    settle()
     win.from_spec(sandbox.example_spec())
-    app.processEvents()
+    settle()
     spec = win.to_spec()
     check(spec["player"]["profession"] == 1 and spec["player"]["level"] == 3,
           "the slice loads into the Party tab")
@@ -1817,54 +2166,92 @@ def smoke(win, app, out_dir):
     check(n_all >= 1000 and len(spec["unlocks"]) == n_all,
           f"the Skills tab lists every player-usable skill ({n_all}), all unlocked by default")
     seen_roles = set()
+    lore = []
     for i in range(win.tabs.count()):
         win.tabs.setCurrentIndex(i)
-        app.processEvents()
+        settle()
         seen_roles |= used_roles(win)
-    # the Skills tab's GRADES (SKILLS-LT): a hand row is ` *`, a label-tier row
-    # ` ~label`, and the "modelled only" filter keeps both and nothing else.
+        lore += surface_lore(win)
+
+    # ---- the Skills tab's GRADES (SKILLS-LT): a hand row is ` *`, a label-tier
+    # row ` ~label`, and the "modelled or label" filter keeps both and nothing else
     listed = {int(it.data(ROLE_ID)) for it in win.skills._items()}
     hand_ids, label_ids = win.names.modelled & listed, win.names.labelled & listed
+    win.tabs.setCurrentWidget(win.skills)
+    settle()
     if hand_ids and label_ids:
         h0, l0 = sorted(hand_ids)[0], sorted(label_ids)[0]
         check(win.names.skill_label(h0).endswith(" *") and win.names.skill_label(l0).endswith(" ~label")
               and not win.names.skill_label(l0).endswith(" *"),
               f"a hand row ({h0}) is marked ' *', a label-tier row ({l0}) ' ~label' and never ' *'")
-        check(win.names.skill_parts(h0)[2] == "hand" and win.names.skill_parts(l0)[2] == "label",
-              "and the list's pills read the same grades (modelled / label)")
+        sh, sl = win.names.slot_label(h0), win.names.slot_label(l0)
+        check("· modelled" in sh and "· label" in sl and "modelled" not in sl,
+              "a bar slot names the grade in the pills' words, and a label row never "
+              "reads as modelled")
         win.skills.modelled_only.setChecked(True)
-        app.processEvents()
+        settle()
         shown_ids = {int(it.data(ROLE_ID)) for it in win.skills._items() if not it.isHidden()}
         check(shown_ids == hand_ids | label_ids,
-              f"'modelled only' shows the hand rows and the label rows and nothing else "
+              f"'modelled or label' shows the hand rows and the label rows and nothing else "
               f"({len(hand_ids)} + {len(label_ids)})")
+        # treatment and control on the SAME row: painted with its grade, then
+        # with the grade taken away. A colour count cannot do this -- in dark,
+        # the label pill's edge sits 4 from the hover fill.
+        lst, vp = win.skills.list, win.skills.list.viewport()
+        pill_px = {}
+        for grade in ("hand", "label"):
+            item = next((it for it in win.skills._items() if not it.isHidden()
+                         and it.data(ROLE_PARTS)[2] == grade
+                         and vp.rect().contains(lst.visualItemRect(it))), None)
+            if item is None:
+                continue
+            r = lst.visualItemRect(item)
+            band = r.adjusted(r.width() - 160, 0, 0, 0)
+            parts = item.data(ROLE_PARTS)
+            with_pill = vp.grab(band).toImage()
+            item.setData(ROLE_PARTS, (parts[0], parts[1], None))
+            settle()
+            without = vp.grab(band).toImage()
+            item.setData(ROLE_PARTS, parts)
+            pill_px[grade] = _diff(with_pill, without)
+        check(pill_px.get("hand", 0) > 40 and pill_px.get("label", 0) > 40,
+              f"the list RENDERS a pill for each grade (pixels a row loses without it: {pill_px})")
         win.skills.modelled_only.setChecked(False)
-        app.processEvents()
+        settle()
     else:
-        print(f"  [skip] the grade marks: hand {len(hand_ids)} / label {len(label_ids)} rows listed "
-              f"-- the vault overlay (skilldesc.py --emit-labels) is what puts label rows here")
+        skip("the grade marks", f"hand {len(hand_ids)} / label {len(label_ids)} rows listed; "
+                                f"the vault overlay (skilldesc.py --emit-labels) puts label rows here")
     # the Skills tab: filter, lock, the party's professions
     win.skills.prof.setCurrentIndex(3)              # Monk
-    app.processEvents()
+    settle()
     shown = [it for it in win.skills._items() if not it.isHidden()]
     check(shown and all(win.names.skill_profession(int(it.data(ROLE_ID))) == 3 for it in shown),
           f"filtering by Monk shows Monk skills only ({len(shown)})")
     win.skills.none_b.click()
     check(all(it.checkState() == Qt.Unchecked for it in shown), "lock all shown locks them")
     win.skills.filter.setText("no skill is called this")
-    app.processEvents()
-    check(win.skills.list.visible_count() == 0 and win.skills.list.placeholder,
-          "a filter that matches nothing leaves the list its placeholder, not a void")
+    settle()
+    vp = win.skills.list.viewport()
+    with_ph = _count_near(vp.grab().toImage(), pal["muted"], 24, (0, 0, vp.width(), 90))
+    keep_ph, win.skills.list.placeholder = win.skills.list.placeholder, ""
+    vp.update()
+    settle()
+    without_ph = _count_near(vp.grab().toImage(), pal["muted"], 24, (0, 0, vp.width(), 90))
+    win.skills.list.placeholder = keep_ph
+    check(win.skills.list.visible_count() == 0 and with_ph > 30 and without_ph < 5,
+          f"a filter that matches nothing RENDERS the placeholder, not a void "
+          f"({with_ph} px with it, {without_ph} without)")
     win.skills.filter.setText("")
     win.skills.prof.setCurrentIndex(0)
     win.skills.party_b.click()
     ids = set(win.skills.ids())
     check(ids and all(win.names.skill_profession(s) in {0, 1, 3} for s in ids)
           and any(win.names.skill_profession(s) == 3 for s in ids),
-          "'the party's professions' unlocks Warrior, Monk and common skills only")
-    # the Party tab: a secondary, a second hero, the cap
+          "'Unlock party only' unlocks Warrior, Monk and common skills only")
+
+    # ---- the Party tab: a secondary, a second hero, the cap, and text that fits
     set_combo(win.party.secondary, 6)
-    app.processEvents()
+    settle()
     check(6 in win.skills.party_professions, "the secondary reaches the Skills tab's party set")
     chk6, prof6, body6, _l = win.party.rows[6]
     check(not prof6.isEnabled() and not body6.isEnabled(),
@@ -1883,37 +2270,102 @@ def smoke(win, app, out_dir):
           "and the refusal is said, in the warning register")
     for idx in (1, 2, 4, 5, 7):
         win.party.rows[idx][0].setChecked(False)
-    # the Enemies tab
-    g = win.enemies.groups[0]
+    win.tabs.setCurrentWidget(win.party)
+    size = win.size()
+    for w, h, want in ((1280, 860, False), (1000, 720, True)):
+        win.resize(w, h)
+        settle(6)
+        _c, prof3, body3, _lv = win.party.rows[3]
+        profs = [prof3.itemText(i) for i in range(prof3.count())]
+        clipped = [t for t in profs if not _fits(prof3, t)]
+        bodies = [body3.itemText(i) for i in range(body3.count())
+                  if body3.itemData(i) in ("hatcher", "academy_monk", "bandit_raider")]
+        bclipped = [t for t in bodies if not _fits(body3, t)]
+        check(win.party.stacked is want and not clipped and bodies and not bclipped,
+              f"at {w} px the Character card is {'stacked above' if want else 'beside'} the "
+              f"table, every profession fits its combo ({len(profs)}; clipped {clipped}) and "
+              f"the common bodies fit theirs (clipped {bclipped})")
+    win.resize(size)
+    settle(6)
+
+    # ---- the Enemies tab
+    en = win.enemies
+    g = en.groups[0]
     g.add_member()
     g.add_member()
     check(len(g.members) == 4 and not g.add.isEnabled(), "a group fills to four and the add stops")
-    n_items = sum(1 for _ in win.enemies._walk())
+    n_items = sum(1 for _ in en._walk())
     check(n_items == 3 + 7, f"the encounter list holds 3 groups and 7 hostiles ({n_items} rows)")
-    boss = win.enemies.groups[2].members[0]
-    win.enemies.select(boss)
-    app.processEvents()
-    check(win.enemies.stack.currentWidget() is win.enemies._pages[boss],
-          "selecting a hostile shows its editor")
-    boss_rows = [it for it in win.enemies._walk() if it.data(0, Qt.UserRole) is boss]
-    check(boss_rows and boss_rows[0].text(1).startswith("boss"),
-          "the boss is marked in the list")
-    # a combo shows the START of its text (the old one read 'V Strength] *')
-    pk = win.enemies.groups[0].members[0].bar.slots[0]
+    boss = en.groups[2].members[0]
+    en.select(boss)
+    settle()
+    check(en.stack.currentWidget() is en._pages[boss], "selecting a hostile shows its editor")
+    boss_rows = [it for it in en._walk() if it.data(0, Qt.UserRole) is boss]
+    check(boss_rows and boss_rows[0].text(1).startswith("boss"), "the boss is marked in the list")
+    check(en.groups[0].roster.count() == 4, "a group's page lists its hostiles, one line each")
+    pk = en.groups[0].members[0].bar.slots[0]
     check(pk.lineEdit().cursorPosition() == 0, "a skill slot shows the start of its label")
-    # the wheel does not edit an unfocused combo
-    win.tabs.setCurrentWidget(win.enemies)
-    win.enemies.select(win.enemies.groups[0].members[0])
-    app.processEvents()
+    check(isinstance(pk.view().itemDelegate(), orchui.SkillDelegate),
+          "and its drop-down draws rows the way the Skills list does")
+    # the wheel: never edits an unfocused combo, and still scrolls the page
+    win.tabs.setCurrentWidget(en)
+    en.select(en.groups[0].members[0])
+    settle()
     before = pk.currentIndex()
     ev = QWheelEvent(QPointF(10, 10), QPointF(pk.mapToGlobal(QPoint(10, 10))), QPoint(0, 0),
                      QPoint(0, -120), Qt.NoButton, Qt.NoModifier, Qt.NoScrollPhase, False)
     QApplication.sendEvent(pk, ev)
-    app.processEvents()
+    settle()
     check(pk.currentIndex() == before, "the wheel over an unfocused combo does not change it")
+    page = en._pages[en.groups[0].members[0]]
+    bar = page.verticalScrollBar()
+    control = en.groups[0].members[0].subtitle
+    if bar.maximum() > 0 and sys.platform == "win32":
+        bar.setValue(0)
+        settle()
+        _real_wheel(win, control)
+        settle(5)
+        moved_control = bar.value()
+        if moved_control <= 0:
+            skip("a real wheel over a combo scrolls the page",
+                 "the OS wheel did not reach the window (control over a caption: 0 px)")
+        else:
+            bar.setValue(0)
+            pk.clearFocus()
+            settle()
+            _real_wheel(win, pk)
+            settle(5)
+            check(bar.value() > 0 and pk.currentIndex() == before,
+                  f"a real wheel over an unfocused combo scrolls the page ({bar.value()} px; the "
+                  f"control over a caption scrolled {moved_control}) and leaves the combo alone")
+            bar.setValue(0)
+    else:
+        skip("a real wheel over a combo scrolls the page",
+             "the page does not scroll at this size, or this is not Windows")
+    # the boss note is read off the members, not the position
+    g4 = en.add_group()
+    settle()
+    g3 = en.groups[2]
+    check(g4 is not None and "holds the boss" not in g4.subtitle.text()
+          and not g3.note.isHidden(),
+          "a group added after the boss's group is not labelled as holding it, and the boss's "
+          "group warns that it must be last")
+    en.remove(g4)
+    settle()
+    check("holds the boss" in g3.subtitle.text() and g3.note.isHidden(),
+          "and removing it puts the note back")
     seen_roles |= used_roles(win)
-    compiled = win.run.compile()
-    check(compiled is not None, "the changed spec COMPILES")
+
+    # ---- compile
+    win.tabs.setCurrentWidget(win.skills)
+    win.statusBar().clearMessage()
+    win.header.compile_b.click()
+    settle()
+    compiled = win.run.compiled
+    check(compiled is not None, "the changed spec COMPILES (pressed from the header)")
+    check(win.tabs.currentWidget() is win.skills and bool(win.statusBar().currentMessage()),
+          f"a compile pressed on another tab is answered in the status bar and keeps the tab "
+          f"({win.statusBar().currentMessage()!r})")
     if compiled:
         args = " ".join(compiled["args"])
         check("--spawn-secondary 6" in args and "--persist" in args,
@@ -1931,7 +2383,7 @@ def smoke(win, app, out_dir):
               "the compiled pane drops nothing: every gamesrv argument and the whole overlay")
     t_end = time.perf_counter() + 2.0            # the summary is debounced: let it land
     while win._summary_timer.isActive() and time.perf_counter() < t_end:
-        app.processEvents()
+        settle(1)
         time.sleep(0.01)
     check("2 heroes" in win.header.summary.text() and "7 hostiles" in win.header.summary.text(),
           f"the header's summary follows the spec ({win.header.summary.text()!r})")
@@ -1941,17 +2393,74 @@ def smoke(win, app, out_dir):
         back = sandbox.load_spec(path)
         check(back["player"]["secondary"] == 6 and len(back["heroes"]) == 2
               and len(back["unlocks"]) == len(ids), "and loads back with its unlocks")
+    was = win.run.state.text()
+    win.header.name.setText("smoke-stale")
+    check(was == "Compiled" and win.run.state.text() == "Changed since compile"
+          and win.run.state.property("kind") == "warn",
+          "an edit after a compile turns the green chip into 'Changed since compile'")
     win.header.name.setText("smoke-bad")
     win.enemies.groups[0].members[0].boss.setChecked(True)
-    check(win.run.compile() is None and "bosses" in win.run.summary.toPlainText(),
+    win.tabs.setCurrentWidget(win.enemies)
+    win.header.compile_b.click()
+    settle()
+    check(win.run.compiled is None and "bosses" in win.run.summary.toPlainText(),
           "two bosses are REFUSED at compile, and the reason is shown")
-    check(win.run.state.property("kind") == "crit", "and the run's state chip says Refused")
+    check(win.run.state.property("kind") == "crit" and win.tabs.currentWidget() is win.run,
+          "and a refusal opens the Run tab, its chip saying Refused")
     win.enemies.groups[0].members[0].boss.setChecked(False)
     seen_roles |= used_roles(win)
+    lore += surface_lore(win)
+    # a malformed spec must not latch the Enemies tab dead
+    saved = en.to_spec()
+    raised = False
+    try:
+        en.from_spec([{"members": [{"npc": "bandit_raider", "damage": [6]}]}])
+    except Exception:                                   # noqa: BLE001
+        raised = True
+    live = len(en.groups) + sum(len(x.members) for x in en.groups)
+    rows = sum(1 for _ in en._walk())
+    check(raised and not en._building and rows == live,
+          f"a malformed hostile row raises, and the list still shows what loaded "
+          f"({rows} rows for {live} editors)")
+    en.from_spec(saved)
+    settle()
+    # how a run ended is read from what the harness printed
+    rt = win.run
+    harness = ""
+    for name in ("session.py", "runwatch.py"):
+        with open(os.path.join(ROOT, "toolkit", "harness", name), encoding="utf-8") as fh:
+            harness += fh.read()
+    check(all(needle in harness for needle in RUN_MARKS.values()),
+          "every line the end-of-run chip reads is one the harness still prints")
+    table = ((set(), 0, "good"), ({"retracted"}, 1, "good"), ({"crash", "retracted"}, 1, "crit"),
+             ({"fail"}, 1, "warn"), ({"stopped"}, 1, "info"), (set(), 1, "warn"))
+    got = []
+    for marks, code, want in table:
+        rt._marks = set(marks)
+        got.append(rt.end_state(code)[1] == want)
+    rt._marks = set()
+    check(all(got), "a closed client ends 'client closed' (not amber), a crash crit, a failed "
+                    f"run warn, Stop 'Stopped' ({got})")
+    # the log follows only from the bottom, and keeps a selection
+    view = QPlainTextEdit()
+    view.resize(400, 200)
+    write_lines(view, [(f"line {i}", "body") for i in range(300)])
+    cur = view.textCursor()
+    cur.select(QTextCursor.Document)
+    view.setTextCursor(cur)                      # (this scrolls to the cursor itself)
+    view.verticalScrollBar().setValue(0)
+    write_lines(view, [("one more", "body")])
+    stayed = view.verticalScrollBar().value() == 0 and view.textCursor().hasSelection()
+    view.verticalScrollBar().setValue(view.verticalScrollBar().maximum())
+    write_lines(view, [("and another", "body")])
+    followed = view.verticalScrollBar().value() == view.verticalScrollBar().maximum()
+    check(stayed and followed, "the log keeps the operator's place and selection, and follows "
+                               "new output only from the bottom")
+    view.deleteLater()
 
     # ---- the look, as laws
-    for name, pal in orchtheme.PALETTES.items():
-        bad = orchtheme.failures(pal)
+    for name, p in orchtheme.PALETTES.items():
+        bad = orchtheme.failures(p)
         check(not bad, f"the {name} palette clears every contrast floor"
               + (f" -- {bad}" if bad else ""))
     sheet = app.styleSheet()
@@ -1961,10 +2470,10 @@ def smoke(win, app, out_dir):
     unused = styled - seen_roles
     check(not unstyled, f"every role the window uses has a rule ({sorted(unstyled) or 'all'})")
     check(not unused, f"every role the sheet styles is used somewhere ({sorted(unused) or 'all'})")
+    check(not lore, f"no flag, file name, ident or hex id on the visible surface ({lore[:4]})")
     primaries = [b for b in win.findChildren(QPushButton) if b.property("role") == "primary"]
     check(len(primaries) == 1 and primaries[0] is win.header.launch_b,
           f"exactly one accent in the window, and it is Launch ({len(primaries)})")
-    pal = orchui.PAL
     lb = win.header.launch_b
     got = _pixel(lb, 5, lb.height() // 2)
     check(_near(got, pal["accent"]), f"Launch RENDERS in the accent ({got} vs {pal['accent']})")
@@ -1972,10 +2481,10 @@ def smoke(win, app, out_dir):
     cb.setParent(win.run)
     cb.move(0, 0)
     cb.show()
-    app.processEvents()
+    settle()
     off = cb.grab().toImage()
     cb.setChecked(True)
-    app.processEvents()
+    settle()
     on = cb.grab().toImage()
     diff = sum(1 for x in range(min(20, on.width())) for y in range(on.height())
                if on.pixelColor(x, y) != off.pixelColor(x, y))
@@ -1988,14 +2497,60 @@ def smoke(win, app, out_dir):
     le = win.header.name
     got = _pixel(le, le.width() // 2, 4)
     check(_near(got, pal["field"], 10), f"a well renders as the field token ({got} vs {pal['field']})")
+    # a hovered danger button: its ink measured against the fill it is painted on
+    rb = win.run.reset_b
+    opt = QStyleOptionButton()
+    rb.initStyleOption(opt)
+    opt.state |= QStyle.State_MouseOver
+    img = QImage(rb.size(), QImage.Format_ARGB32)
+    img.fill(QColor(pal["surface"]))
+    painter = QPainter(img)
+    rb.style().drawControl(QStyle.CE_PushButton, opt, painter, rb)
+    painter.end()
+    fill = _count_near(img, pal["chip_crit_bg"], 6)
+    ink = _count_near(img, pal["chip_crit_fg"], 30)
+    check(fill > 100 and ink > 15,
+          f"a hovered danger button paints the ink solved for its hover fill ({fill} px fill, "
+          f"{ink} px ink)")
+    # focus you can see, where keyboard focus needs the window to be active
+    win.activateWindow()
+    win.raise_()
+    settle(5)
+    lost = "the window could not hold keyboard focus, so focus cannot be seen"
+    win.tabs.setCurrentWidget(en)
+    settle()
+    if focus(en.add):
+        rest = en.tree.grab().toImage()
+        if focus(en.tree):
+            n = _diff(rest, en.tree.grab().toImage())
+            check(n > 100, f"the encounter list SHOWS keyboard focus ({n} px change)")
+        else:
+            skip("the encounter list shows keyboard focus", lost)
+    else:
+        skip("the encounter list shows keyboard focus", lost)
+    tb = win.tabs.tabBar()
+    lb.clearFocus()
+    settle()
+    at_rest = lb.grab().toImage()
+    if focus(lb):
+        n = _diff(at_rest, lb.grab().toImage())
+        check(n > 30, f"Launch's focus ring shows inside its own fill ({n} px change)")
+        before_tab = tb.grab().toImage()
+        QApplication.sendEvent(lb, QKeyEvent(QEvent.KeyPress, Qt.Key_Tab, Qt.NoModifier))
+        settle()
+        n = _diff(before_tab, tb.grab().toImage())
+        check(tb.hasFocus() and n > 100,
+              f"Tab from Launch lands on the tab strip, and the strip SHOWS it ({n} px change)")
+    else:
+        skip("Launch and the tab strip show keyboard focus", lost)
     for i in range(win.tabs.count()):
         win.tabs.setCurrentIndex(i)
-        app.processEvents()
+        settle()
         w = win.minimumSizeHint().width()
         check(w <= 1180, f"tab {win.tabs.tabText(i)!r}: nothing floors the window wider than "
                          f"1180 px ({w})")
     win.tabs.setCurrentIndex(0)
-    app.processEvents()
+    settle()
     shot = os.path.join(out_dir, "smoke_screen.png")
     win.grab().save(shot)
     check(os.path.isfile(shot), f"screenshot {shot}")

@@ -4,7 +4,7 @@ Rurik contains no third-party code as a dependency — `toolkit/` is Python 3 st
 library only, with the `capstone`/`pefile` carve-out in [CLAUDE.md](CLAUDE.md) for
 read-only client analysis. Two consumers OUTSIDE `toolkit/` import a toolkit they do not
 derive from: `tools/blender/` runs inside Blender's `bpy`, and `tools/viewer/` is a
-PySide6 window (its notice is below). What it does contain is work **derived from** other people's
+PySide6 window, as is `tools/orchestrator/` (its notice is below). What it does contain is work **derived from** other people's
 reverse engineering: file-format layouts, constant tables, and algorithms.
 
 This file is where that is credited. It exists because one licence in this list
@@ -248,7 +248,10 @@ and also the thing that lets a reader check whether the page has moved under us 
 ## Qt for Python (PySide6) — The Qt Company
 
 **Used by:** `tools/viewer/modelviewer.py` and its launcher `apps/modelviewer.pyw`, as
-the GUI and OpenGL widget toolkit. Nothing is derived from it: no code copied, no layout
+the GUI and OpenGL widget toolkit; `tools/orchestrator/orchestrator.py`,
+`tools/orchestrator/orchui.py` and their launcher `apps/orchestrator.pyw`, as the GUI
+toolkit (`tools/orchestrator/orchtheme.py` is standard-library Python and imports nothing
+from Qt). Nothing is derived from it: no code copied, no layout
 taken, no constant read out of it. Every archive fact the viewer draws comes from
 `toolkit/mapdata/modelcatalog.py`, which is standard-library Python and imports nothing
 from Qt.

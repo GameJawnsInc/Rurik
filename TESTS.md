@@ -12583,6 +12583,22 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   guarded and commented. ~40 s default; nothing outside the vault is ever
   written -- the rebuilt archive and its journals live under
   `vault/exports/unitwrite/`),
+  `toolkit/test_orchtheme.py` (**2026-09-23, the orchestrator beautification's
+  review**: the run orchestrator's LOOK, the part that is arithmetic, checked on a
+  bare machine. `tools/orchestrator/orchtheme.py` is stdlib on purpose and is
+  imported BY PATH, nothing from Qt, the way `test_blenderimport.py` reaches into
+  `tools/blender/`; the rest of the look is `orchestrator.py --smoke`'s, which needs
+  PySide6 and the vault. §1 both palettes: exactly the base keys, every pair
+  `audit()` measures clears its floor (4.5:1 text, 3:1 marks, measured distances for
+  hover/pressed/selection), both real sheets lint clean, `derive()` idempotent, the
+  window's roles styled. §2 the lint goes RED on each planted fault Qt's parser
+  accepts silently -- a pseudo-class before a sub-control, its NEGATED form and its
+  chained and attribute-selector forms (the review found the negated one slipping
+  past), a leftover `$` token, unbalanced braces, an `em` font size -- and stays
+  clean on three known-good controls. §3 the audit can refuse: a muted grey that
+  fails on the card, a hover identical to rest. §4 pins the pairs the review found
+  missing (the danger button's hover ink was 4.22:1 in light while the audit printed
+  clean). Floor 25, <1 s),
   `toolkit/test_bareimport.py` (the SERVER must import on a machine with no
   vault -- proven in a subprocess, not argued. **What earns it: on 2026-08-15
   `probes.py` grew `GIVER_NPC = npc_template("def_1480")` at module level**, and
