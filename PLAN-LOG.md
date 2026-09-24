@@ -28,6 +28,21 @@ move back.
 
 ---
 
+### DESKWORK CONFIRM-2, the gold run -- 2026-09-24 -- **quest gold and the purse HELD on the client: 10 Gold offered, +10 paid inside the frame, the counter at 10 and at 10 again after a relaunch; the control pays none**
+
+Seven harness launches after pass 5 landed (studies/deskwork/CONFIRM-2026-09-24.md §6; the store
+backed up and restored byte-identical). DESKWORK-D9 step 5's runsheet (studies/quests §12.1)
+steps 1-4 HELD on our client: a zero purse sends no load credit; the offer screen draws
+`Reward: 100 Experience / 10 Gold`; the hand-in sends the reward between `0x0052` and `0x004A`
+with no assert, the quest leaves the log, and the counter reads exactly 10; a `--persist`
+relaunch loads `0x0140 [key, 10]` once (10, not 20); `--no-quest-gold` drops the offer's gold
+line (180 B against 194 B of dialog text), prints NOT GRANTED and leaves the counter at 10. Not
+run: Q1's in-session zone half (no reachable zone on this content, CONFIRM-2 §3). The runsheet's
+clicks were wrong for a two-quest giver; the record carries the working sequence (the harness's
+`interact:AGENT` mailbox, row 1 at (0.48, 0.522), Accept at (0.4649, 0.55)).
+
+---
+
 ### DESKWORK pass 5, landed -- 2026-09-24 -- **gold (D9), the warp row (MOVE-B) and the status sweep (INFRA-A) merged; the merged tree's sweep 95 of 95 green**
 
 Merged into `deskwork` in that order (`3bd7de5b`, `ca5e6d9d`, `9ab7b2f9`, only PLAN-LOG entries

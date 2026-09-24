@@ -2065,6 +2065,13 @@ refusal fires only when the server itself credited the balance (`purse_synced`) 
 the load's credit, cleared by a probe's own gold message — so `probemerchant`'s
 out-of-band `0x0140 [1, 2000]` is never refused, with or without a positive stored purse.
 
+**RUN 2026-09-24, harness-driven: steps 1-4 HELD** (studies/deskwork/CONFIRM-2026-09-24.md
+§6): the offer draws `10 Gold`, the hand-in pays +10 with the reward inside the `0x0052 ·
+0x004A` pair, the counter reads 10 and 10 again after a `--persist` relaunch, and the
+`--no-quest-gold` control draws no gold line and pays none. Not run: Q1's zone half. The
+clicks below do not survive as written -- the giver lists two quests; §6 has the working
+sequence.
+
 **RUNSHEET (owed, agent-pilotable — the inventory panel's gold counter is fixed UI, key
 `I`).** The orchestrator runs this after the merge. Pre-registered questions: (Q1) does the
 counter read the persisted purse after a zone, ONCE (10, not 20 — i.e. does the client's
