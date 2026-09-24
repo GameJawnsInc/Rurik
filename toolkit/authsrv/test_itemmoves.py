@@ -1231,13 +1231,18 @@ try:
            "LOCK: declare_weapon_sets places a set item at its decided cell")
     players_src = ast.get_source_segment(SRC, _func(TREE, "_handle_request_players"))
     pwa_src = ast.get_source_segment(SRC, _func(TREE, "player_worn_array"))
+    # The 0x006D's hand read moved one call out on the town weapon's CONFIRM-2 fix
+    # (2026-09-24): send_player_weapons reads the store and the load calls it.
+    spw_src = ast.get_source_segment(SRC, _func(TREE, "send_player_weapons"))
     led.ok("worn = visible_worn(player_worn_array(state), state, conn_id)" in players_src
            and "itemstore.worn_array(state[\"items\"], EQUIPPED_BAG_ID," in pwa_src
            and 'if state.get("items"):' in pwa_src
-           and "itemstore.hand_items(state[\"items\"], EQUIPPED_BAG_ID)[0]" in players_src,
+           and "itemstore.hand_items(state[\"items\"], EQUIPPED_BAG_ID)[0]" in spw_src
+           and "send_player_weapons(send, state, conn_id)" in players_src,
            "LOCK: the 0x006E build is player_worn_array (the ONE copy since the display-mode fix "
            "pass), which reads itemstore.worn_array when a layout exists (the constants' fill is "
-           "the fallback), and NPC_UPDATE_WEAPONS reads the hand")
+           "the fallback), and NPC_UPDATE_WEAPONS reads the hand (send_player_weapons, which the "
+           "load calls)")
     wsi = ast.get_source_segment(SRC, _func(TREE, "weapon_set_items"))
     led.ok(wsi.index("SET_ITEMS_OVERRIDE") < wsi.index("if k == 0:"),
            "LOCK: weapon_set_items reads SET_ITEMS_OVERRIDE before the constants")
