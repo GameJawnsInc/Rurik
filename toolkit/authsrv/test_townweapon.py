@@ -98,7 +98,7 @@ import townweapon as tw                                      # noqa: E402
 import itemstore                                             # noqa: E402
 import authsrv                                               # noqa: E402
 
-led = checks.Ledger("the town weapon (DESKWORK-D1)", floor=72)  # 2026-09-24 (CLEANUP-3's review), from the green run with RURIK_VAULT pointed at an empty directory (the bare-machine core, 1 declared skip); section 2's 15 ride the vault (87 vaulted). +6 bare / +6 vaulted at the review (the leaf's per-slot pin split in three, the commit-count lock, the TOWN ARMOUR log under Hide in Towns, the strip-off town hammer, the commit count, the both-off town head); +11 / +11 on CLEANUP-3 itself (the leaf's pair, three source locks, the town head out/back, the town hands beside it, the 0x0072 drag, the KNOWN-BAD arm, the field VACUITY, Hide in Towns) = 66 / 81. History: 55 bare / 70 vaulted on the field shield (2026-09-24); 35 bare / 46 vaulted on 2026-09-23; +1/+1 on the fix pass (the 0x006E label lock WEAP-R5, the 0x0022 cross-check WEAP-R6); +9 bare / +3 vaulted on the CONFIRM-2 carrier fix (send_player_weapons' four arms, vacuity, F2 with no 0x006D, three source locks; the own-0x006D, own-addressed and stranger-change census pins) = 45 / 60; +10 bare / +10 vaulted on the field shield (the leaf's player_weapons_sent x3, the field flag's source lock, the field KNOWN-BAD arm, the arms' VACUITY pair, the sword-and-shield load on both arms, the emptied lead's default, the field F2 with no 0x006D; the FIELD CONTROL became the field default, same count)
+led = checks.Ledger("the town weapon (DESKWORK-D1)", floor=73)  # 2026-09-24 (CLEANUP-3's review, round 2: +1, the RV2-3 discriminator -- a direct commit of a batch the gate shortens), from the green run with RURIK_VAULT pointed at an empty directory (the bare-machine core, 1 declared skip); section 2's 15 ride the vault (88 vaulted). 72 / 87 at the first review round: +6 bare / +6 vaulted at the review (the leaf's per-slot pin split in three, the commit-count lock, the TOWN ARMOUR log under Hide in Towns, the strip-off town hammer, the commit count, the both-off town head); +11 / +11 on CLEANUP-3 itself (the leaf's pair, three source locks, the town head out/back, the town hands beside it, the 0x0072 drag, the KNOWN-BAD arm, the field VACUITY, Hide in Towns) = 66 / 81. History: 55 bare / 70 vaulted on the field shield (2026-09-24); 35 bare / 46 vaulted on 2026-09-23; +1/+1 on the fix pass (the 0x006E label lock WEAP-R5, the 0x0022 cross-check WEAP-R6); +9 bare / +3 vaulted on the CONFIRM-2 carrier fix (send_player_weapons' four arms, vacuity, F2 with no 0x006D, three source locks; the own-0x006D, own-addressed and stranger-change census pins) = 45 / 60; +10 bare / +10 vaulted on the field shield (the leaf's player_weapons_sent x3, the field flag's source lock, the field KNOWN-BAD arm, the arms' VACUITY pair, the sword-and-shield load on both arms, the emptied lead's default, the field F2 with no 0x006D; the FIELD CONTROL became the field default, same count)
 
 VIS = authsrv.GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT           # 0x006F
 WORN = authsrv.GAME_SMSG_UPDATE_AGENT_VISUAL_EQUIPMENT               # 0x006E
@@ -732,9 +732,10 @@ try:
     authsrv.handle_item_move([MOVE, 0, BP, 10], send, st, 0)
     authsrv.handle_equip_item([EQUIP, W], send, st, 0)
     led.ok(sent == [(CHG, [1, W, BP, 10]), (CHG, [1, W, EQ, 0])],
-           "...and the hammer out and back in the SAME town state still ride 0x014B alone: a town hand's write "
-           "is never PLANNED (townweapon.visual_planned; retail 0 of 14) -- the armour and the hands part at "
-           "the slot")
+           "...and the hammer out and back in the SAME town state still ride 0x014B alone: the hands reach no "
+           "wire in a town (retail 0 of 14) -- the armour and the hands part at the slot. (Whether a town hand "
+           "is PLANNED is the leaf pin's and the strip-off hammer pin's to tell: this one is green whether the "
+           "leaf or the gate's strip kept it off the wire -- the review's RV2-3)")
     sent.clear()
     authsrv.handle_item_move_by_id([MOVE_ID, HEAD, BP, 9], send, st, 0)
     authsrv.handle_item_move_by_id([MOVE_ID, HEAD, EQ, HEAD_BAG], send, st, 0)
@@ -794,9 +795,29 @@ try:
     led.ok(len(sent_c) == 3 and len(logs_c) == 2
            and "equipped 0 -> bag 2 slot 10): 1 message(s)" in logs_c[0]
            and f"equipped {HEAD_BAG} -> bag 2 slot 9): 2 message(s)" in logs_c[1],
-           "the commit log counts what the gate RETURNED: the town hammer out '1 message(s)' (0x014B alone), "
-           "the head out '2 message(s)' (0x014B + 0x006F) -- the review's RV-3 (the lane logged the planned "
-           "count, 2 for a hammer that sent one)", f"{[l[:90] for l in logs_c]}")
+           "the commit log's counts for the two item changes: the town hammer out '1 message(s)' (0x014B alone), "
+           "the head out '2 message(s)' (0x014B + 0x006F). (Since RV-2 no handler batch holds a write the gate "
+           "drops, so these two counts are the same whether the log counts the planned batch or the gate's -- "
+           "RV-3's discriminator is the next check; the review's RV2-3)", f"{[l[:90] for l in logs_c]}")
+    # THE REVIEW'S SECOND ROUND, RV2-3: the count is the GATE's, shown on a batch the gate actually
+    # SHORTENS. No item change plans a town hand since RV-2, so a handler batch always has
+    # len(out) == len(batch) and the two counts above cannot tell RV-3's fix (len(out)) from its bug
+    # (len(batch)): under that bug planted in a scratch copy the whole test stayed green, 72 checks.
+    # A direct commit of a batch holding a town hand 0x006F (strip ON, the one kind the gate drops) can.
+    st_d, _id = fresh(outpost=True)
+    got_d = []
+    buf_d = io.StringIO()
+    with contextlib.redirect_stdout(buf_d):
+        authsrv._item_moves_commit(
+            lambda op, v, label=None, **_k: got_d.append((op, list(v))), st_d, 0,
+            [(CHG, [1, W, BP, 10], "chg"), (VIS, [P, 0, 0], "a town hand's write, planted in the batch")],
+            [(W, BP, 10)], "RV2-3 PROBE")
+    logs_d = [l for l in buf_d.getvalue().splitlines() if "RV2-3 PROBE:" in l]
+    led.ok(got_d == [(CHG, [1, W, BP, 10])] and len(logs_d) == 1
+           and "RV2-3 PROBE: 1 message(s)" in logs_d[0] and "2 message(s)" not in logs_d[0],
+           "RV2-3 DISCRIMINATOR: a direct _item_moves_commit of a batch the gate SHORTENS (0x014B + a town hand "
+           "0x006F, strip ON) sends the 0x014B alone and logs '1 message(s)' -- the planned count would say 2, "
+           "the count every handler batch above cannot tell apart", f"{got_d} {[l[:90] for l in logs_d]}")
     # THE REVIEW'S RV-5: with BOTH gates off in a town, the armour write is still labelled and logged.
     st_b, _ib = fresh(outpost=True, strip=False, vis=False)
     got_b = []
