@@ -28,6 +28,24 @@ move back.
 
 ---
 
+### DESKWORK-D1, the field shield CONFIRMED on the client -- 2026-09-24 -- **the shield stands at load and through a swing; `--field-player-weapons` erases it again; OBSERVED**
+
+Three harness launches on the landed tree (`41988b1d`; studies/deskwork/CONFIRM-2026-09-24.md §8),
+explorable, `--player-weapon starter_sword --player-offhand starter_shield --practice-target`:
+F1 `20260924T153739`, the default, the body with the sword AND the shield at load; F2
+`20260924T153945`, `C` + `Space`, the sword swinging through four frames with the shield on the
+arm, 37 hits on the practice target, no crash dialog; F3 `20260924T154209`,
+`--field-player-weapons`, the sword and no shield — `20260923T154229`'s picture on F1's own map and
+frame. The entry below's PREDICTION becomes OBSERVED, and the town fix's "swing path UNVERIFIED"
+closes: with no `0x006D` for the player at all the swing plays, lands and asserts nothing. The
+own body now gets no `0x006D` in either regime, as on retail. `PLAN.md` 8.1 loses the item. Before
+the runs an orphaned sandbox stack held 6112 — the orchestrator window, closed at ~14:35, kills
+`session.py` and not the servers it started; the owner cleared it (a separate task is flagged);
+`test_handshake` then ran green (24) on the landed tree, the one test the landing's sweep had
+left unrun.
+
+---
+
 ### DESKWORK-D1, the field shield -- 2026-09-24 -- **the load's player `0x006D` withheld in a FIELD too, as retail's wire does; `--field-player-weapons` the KNOWN-BAD arm; the client run owed**
 
 The defect the town fix's review opened (TF-R1, `PLAN.md` 8.1): our load sent the player's own
