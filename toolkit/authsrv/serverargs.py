@@ -910,7 +910,8 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "flag restores all three carriers at once; --town-player-weapons "
                          "restores the 0x006D alone. The equipped BAG, the paper "
                          "doll and the weapon-set panel are untouched; a field carries "
-                         "the hands as before. townweapon.py.")
+                         "the hands in its 0x006E as before (the field's 0x006D has its "
+                         "own arm, --field-player-weapons). townweapon.py.")
     ap.add_argument("--town-player-weapons", action="store_true",
                     help="THE REVERT ARM for the town weapon's CONFIRM-2 fix (DESKWORK-D1, "
                          "2026-09-24): send the load's player 0x006D NPC_UPDATE_WEAPONS in "
@@ -926,9 +927,28 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "setter 0x0081BE10, three callers: the 0x006D, 0x006E and 0x006F "
                          "workers) takes the last writer. The default withholds it in a "
                          "town (send_player_weapons), so the town body is bare at load and "
-                         "stays bare across F1-F4, as retail's is; a field still sends it, "
-                         "[player, lead, 0], and that ZERO off hand erases the shield the "
-                         "0x006E drew (a field defect of its own, PLAN.md 8.1's D1 line). "
+                         "stays bare across F1-F4, as retail's is (CONFIRMED on the client, "
+                         "CONFIRM-2 section 7); since the field shield (2026-09-24) a field "
+                         "withholds it too, and --field-player-weapons is that regime's own "
+                         "revert arm. townweapon.player_weapons_sent.")
+    ap.add_argument("--field-player-weapons", action="store_true",
+                    help="THE REVERT ARM for the FIELD SHIELD (DESKWORK-D1, 2026-09-24): send "
+                         "the load's player 0x006D NPC_UPDATE_WEAPONS [player, lead, 0] in a "
+                         "FIELD -- every run before that day, byte for byte. KNOWN-BAD: retail "
+                         "sends the own body no 0x006D there either (0 of 44 field connections "
+                         "with a controlled agent; the 0x0022 controlled agent over every live "
+                         "tape -- OBSERVED), and the client's one visual-equipment store per "
+                         "agent (record+0x24, setter 0x0081BE10; the 0x006D and 0x006E workers "
+                         "are one code body with a different slot count) takes the last "
+                         "writer, so this message's ZERO off hand, two frames after the "
+                         "0x006E, undresses the shield the 0x006E had drawn: a sword-and-shield "
+                         "field load stands with the sword and NO shield (run 20260923T154229, "
+                         "c1 seq 111/113, walk1-wait.png -- OBSERVED). The default withholds "
+                         "it in a field as in a town (send_player_weapons), leaving the 0x006E "
+                         "the last hand write; that the shield then stands, the swing "
+                         "animation is unchanged and nothing asserts is the client run's to "
+                         "observe (UNVERIFIED until it). The bag, the doll, the 0x006E's hands "
+                         "and send_attack_speed's interval are untouched. "
                          "townweapon.player_weapons_sent.")
     ap.add_argument("--no-load-purse", action="store_true",
                     help="THE REVERT ARM for DESKWORK-D9's LOAD PURSE: the "

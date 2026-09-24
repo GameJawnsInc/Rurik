@@ -84,8 +84,51 @@ no 0x0199; reproduced by test_townweapon.py section 2):
     strangers with more than one 0x006D never change hands (0 of 1,510
     bodies; a field's do, 6). So retail's town body is bare because every
     carrier leaves it bare -- there is no redraw to send, and the fix is to
-    withhold ours: player_weapons_sent. The regime-read negative below still
-    stands and is now moot for the hands.
+    withhold ours: player_weapons_sent. CONFIRMED on the client the same day
+    (CONFIRM-2 section 7, merge 2762740d): withholding the town 0x006D is the
+    whole difference on screen, so the carrier is OBSERVED for the town too.
+    The regime-read negative below still stands and is now moot for the hands.
+  * THE FIELD SHIELD (DESKWORK-D1, the field shield, 2026-09-24; the desk
+    read in the lane's scratch, its answer here). The same message in a FIELD
+    was never harmless: our load sent [player, lead, 0] two frames after the
+    0x006E, so its ZERO off hand was the last hand write and a sword-and-shield
+    field body lost its shield at load -- run 20260923T154229, c1 seq 111
+    0x006E [1, 1, 10, ...] (the shield at visual 1), seq 113 0x006D [1, 1, 0],
+    walk1-wait.png the warrior with no shield: OBSERVED. Read from the binary
+    (build 38797) on the fix: the 0x006D worker 0x00810B70 and the 0x006E
+    worker 0x00810E30 are ONE code body with a different slot count -- 228
+    instructions each, and a diff with every intra-function branch target
+    made relative shows exactly TWO differing rows, the default-arm assert
+    stub's address (`ja 0x810df1` / `ja 0x8110b1`, each function's own
+    ChCliApi.cpp:51 "No valid case for switch variable 'prop'") and the loop
+    bound (`cmp ebx, 2` at 0x00810DD7 / `cmp ebx, 9` at 0x00811097); every
+    call target and argument is the same (OBSERVED, a check over codescan's
+    own listing). Per slot both: resolve the agent (0x005FC380), store the
+    item through the setter 0x0081BE10 -- which ITSELF refreshes the lead's
+    type byte at record+0x48 on a slot-0 write (0x0081BE31 / 0x0081BE35, or
+    0x2E at 0x0081BE3D for an empty hand), so every writer keeps it current --
+    then for slot 0 the type-6 (bundle) pickup / putdown frame messages
+    0x10000031 / 0x10000032 through 0x00633D70 (never taken by our items:
+    hammer 15, sword 27, shield 24), then the AvApi dresser 0x007DFCE0(agent,
+    kind, item) for a non-zero item, even an unchanged one, or the UNDRESS
+    0x007E0510(agent, kind) for an item of 0. So there is NO per-agent state
+    the 0x006D path writes that the 0x006E path has not already written for
+    slots 0 and 1 (NOT FOUND, bounded to direct calls: the dresser's, the
+    undress's, the item lookup 0x008451E0's and the frame bus's listeners were
+    not descended, nor any indirect call; the reader of record+0x48 stays NOT
+    FOUND, studies/playercomposite) -- what our 0x006D ADDED was the undress
+    of the off hand, 0x007E0510(agent, 1), reached because its slot 1 was 0
+    and the 0x006E's was not. That is the erased shield's instruction. Retail
+    sends the own body none in a field (0 of 44) and its bodies swing, so the
+    default now withholds it in BOTH regimes (player_weapons_sent) and
+    --field-player-weapons is the field's own revert arm, [player, lead, 0]
+    byte for byte. What the client run must watch, because the desk cannot
+    certify it: the shield standing at visual 1 (the PREDICTION, UNVERIFIED
+    until the run), the swing animation (+0x48's consumer unknown, its value
+    the same either way), the attack interval (send_attack_speed's separate
+    message, untouched) and an assert-free log (ChCliApi.cpp:51 needs a prop
+    above 8; ItCliApi.cpp(400), the 2026-08-06 history, needs a bad item ID in
+    a message now absent).
   * THE REGIME READ (a bounded negative, kept): the 0x006E / 0x006F handlers
     (0x0091E1C0 / 0x0091E1E0) reach the AvApi dresser (0x007DFCE0) through
     the ChCliApi workers above, and those handlers, workers and every
@@ -127,25 +170,23 @@ def hands_shown(explorable):
     return bool(explorable)
 
 
-def player_weapons_sent(explorable):
-    """Does the load send the PLAYER a 0x006D NPC_UPDATE_WEAPONS here? In a
-    TOWN, no: retail sends the own body none (0 of 46 outpost connections
-    with a controlled agent -- and 0 of 44 field ones, OBSERVED, CONFIRM-2's
-    census), and on our client that message is the likeliest carrier that
-    armed the empty-handed town body and kept the OLD weapon standing across
-    F2 (the docstring's THE CARRIER: one store per agent, three writers, last
-    one wins -- CORROBORATED; the runsheet's ARM 1 is the observation). In a
-    FIELD ours still sends it, [player, lead, 0] -- and that is NOT harmless:
-    the zero off hand is the last hand write, so on a sword-and-shield field
-    load the body draws the sword and NO shield (run 20260923T154229, c1 seq
-    111/113, walk1-wait.png -- OBSERVED; CONFIRM-2 A4b draws the same shield
-    through a 0x006F). A field defect of its own (PLAN.md 8.1's D1 line):
-    carry the bag's off hand as the third field, or withhold the message as
-    retail does -- the second UNVERIFIED for the swing path (the send site's
-    ItCliApi.cpp(400) history of 2026-08-06 was about a wrong VALUE, not
-    absence, and the 0x006D worker does more than the setter for slot 0), so
-    it is a field run's choice, not this town fix's."""
-    return bool(explorable)
+def player_weapons_sent(explorable, town_arm=False, field_arm=False):
+    """Does the load send the PLAYER a 0x006D NPC_UPDATE_WEAPONS here? By
+    default NO, in either regime: retail sends the own body none -- 0 of 46
+    outpost connections with a controlled agent and 0 of 44 field ones
+    (OBSERVED, CONFIRM-2's census, test_townweapon section 2) -- and ours was
+    the last write into the client's one hand store: in a TOWN it re-armed the
+    body the empty-handed 0x006E had left bare and kept the OLD weapon standing
+    across F2 (THE CARRIER above; OBSERVED on CONFIRM-2 section 7, withholding
+    it the whole difference on screen), in a FIELD its zero off hand undressed
+    the shield the 0x006E had just drawn (THE FIELD SHIELD above; run
+    20260923T154229, OBSERVED). Only a revert arm sends it, and each arm is
+    its regime's alone: `town_arm` (--no-town-weapon-strip or
+    --town-player-weapons) in a town, `field_arm` (--field-player-weapons) in
+    a field -- the pre-fix [player, lead, 0] byte for byte, KNOWN-BAD, so a
+    client run can A/B the fix against it. That the withheld field message
+    leaves the shield standing is the run's to observe (UNVERIFIED)."""
+    return bool(field_arm) if explorable else bool(town_arm)
 
 
 def drops(slot, explorable):
