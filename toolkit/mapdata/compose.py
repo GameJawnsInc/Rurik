@@ -230,6 +230,46 @@ def exe_path(name):
     return os.path.join(run_dir(name), "Gw.exe")
 
 
+def row_budget(dat):
+    """(slack rows, claimable erased rows) of the archive at `dat`. READ ONLY.
+
+    The MFT row budget -- WORLDMAPS-W6's finding restated as a number a plan
+    prints: authored maps compress so well that bytes never bind (a 256x256
+    map is ten blocks), and what binds is ROWS. A new file takes one MFT row
+    (a map chain takes two), and the table may grow only into the slack of
+    its own last 512-byte block (`datalloc.mft_slack`: `-mft_size % 512`,
+    17 rows on a pristine 38833-line copy) plus whatever erased rows it
+    already holds (`datplan.free_rows`). Both numbers change under the
+    CLIENT: every file it patches or compiles spends a row, so the run
+    archive's budget only falls between builds, and `--fresh` -- which
+    re-copies the pristine source -- is the one thing that restores it
+    (DESKWORK-D11 step 7, 2026-09-24).
+    """
+    import datalloc                                              # noqa: E402
+    import datplan                                               # noqa: E402
+    from archive import ENTRY_SIZE                               # noqa: E402
+    with Archive(dat) as ar:
+        return datalloc.mft_slack(ar) // ENTRY_SIZE, len(datplan.free_rows(ar))
+
+
+def budget_lines(name, src_dat):
+    """The `--plan` lines that say how many rows a build can still spend."""
+    out = []
+    s_slack, s_erased = row_budget(src_dat)
+    dat = dat_path(name)
+    if os.path.isfile(dat):
+        r_slack, r_erased = row_budget(dat)
+        out.append(f"  MFT row budget of the run archive: {r_slack} slack row(s) "
+                   f"in the table's last block + {r_erased} claimable erased "
+                   f"row(s) = {r_slack + r_erased} new file(s) before the table "
+                   f"must move (a map chain is two)")
+    out.append(f"  MFT row budget of the pristine source: {s_slack} + {s_erased} "
+               f"= {s_slack + s_erased} row(s); --fresh re-copies it. Client "
+               f"sessions SPEND rows (every file the client patches or compiles "
+               f"takes one), so a run archive's budget only falls.")
+    return out
+
+
 def sources(row):
     """(canonical run dir, pristine archive path). Both must exist."""
     import drive_client                                          # noqa: E402
@@ -502,6 +542,8 @@ def main(argv=None):
         print(f"  would copy the client from {src_dir} ({why})")
         print(f"  would copy the archive from {src_dat}")
         print(f"  into {run_dir(args.name)}")
+        for line in budget_lines(args.name, src_dat):
+            print(line)
         if os.path.isfile(dat_path(args.name)):
             print("\n  the archive is already there; against it:")
             write_strings(args.name, exe_path(args.name), dat_path(args.name),

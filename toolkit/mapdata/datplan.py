@@ -34,6 +34,14 @@ the first three against the corpus rather than trusting this docstring):
      CONTAINER GENERATIONS as available space, and this file used to place new
      files directly on top of them -- see the block comment on free_runs().
 
+  7. A generation whose HEAD was overwritten is still a generation. The two
+     rules that find one -- the `Mft\x1a` signature and the extent it declares
+     -- both need the header, and on `vault/dat_study_38833` the live file-id
+     table sits exactly where a stale MFT generation's header was, so its
+     2,892,800-byte tail read as the largest usable run in the archive, 100.0%
+     of it live table rows. The third rule reads the ROWS: see mft_content()
+     and the block comment on classify_runs() (DESKWORK-Q4, 2026-09-24).
+
 AND THE ONE THAT IS NOT SETTLED: whether the client validates any of it on read,
 and whether a modification survives a play session. Both are open, and nothing
 here leans either way -- the one piece of evidence this docstring used to cite
@@ -81,6 +89,57 @@ MFT_HDR_COUNT = 0x0C
 CONTAINER_PROBE_PAIRS = 32
 CONTAINER_PROBE_BYTES = CONTAINER_PROBE_PAIRS * 8
 
+# The content detector (DESKWORK-Q4, 2026-09-24). A free run's bytes are parsed
+# as 24-byte MFT records at each of six 4-byte phases -- the table is 8-byte
+# aligned and 512 mod 24 = 8, so a generation's rows sit at phase 0, 8 or 16 of
+# whichever block a free run happens to start in; six covers every alignment a
+# 4-byte field can take and costs nothing -- and the phase with the most records
+# BYTE-IDENTICAL to a live row of this archive's own table is the run's score.
+# All-zero records are excluded: an erased row is zero and so is empty space.
+#
+# MEASURED 2026-09-24 over every usable free run of all 21 Gw.dat copies in
+# the vault (DESKWORK-Q4; the sweep is quoted in the PLAN-LOG entry). The runs
+# that are an overwritten-head generation score 0.997..1.000 of their non-zero
+# records identical -- dat_study_38833's 0xF5923800: 120,507 of 120,533; the
+# 38833-line archives' 0xF8A5E200: 11,859 of 11,882 and 0xF8FD7C00: 6,675 of
+# 6,698; the 38888-line archives' 0xFC84F200: 25,445 of 25,450 -- and on the
+# 38833 line every other usable run scores exactly zero.
+#
+# THE FLOOR IS NOT ZERO EVERYWHERE, and the first draft of this comment said
+# it was. On the 38797-line copies (dat_study_38797, dat_c2, reskin-roster,
+# the July run directories) a dozen small runs each carry 1..20 identical
+# records at 1%..76% -- and decoding them (the scratch inspect_fragments.py)
+# shows exactly what they are: CONTIGUOUS spans of table rows (72325..72340 in
+# a single 512-byte block at 0xDC29D800; 1267..1279 at 0x0731D000) with the
+# rest of the run decoding as junk, i.e. compressed payload. They are slivers
+# of an old table block that survived the client reusing the region for
+# files. That is why the trigger has TWO terms:
+#
+#   * the COUNT -- at least MFT_CONTENT_MIN_ROWS identical records, so that a
+#     lone row in a block of zeros does not withhold anything; and
+#   * the MAJORITY -- identical records at least MFT_CONTENT_MAJORITY of the
+#     NON-ZERO ones. Junk around old rows is the client's own evidence that it
+#     hands the region to files; a run that is rows end to end has never been
+#     reused and is the shape of a slot the table rotates through. Zeros are
+#     excluded from the denominator because a generation's growth area and
+#     empty space are both zero and say nothing either way.
+#
+# The line sits at one half. Every multi-block run in the vault is either
+# 99.7%+ (the targets) or under 3% (reused regions, 0xF9A62600's 20 of 22,144
+# is the largest); the only runs between 5% and 90% are single blocks and one
+# 5 KB run (0xF9EF4A00, 69 of 213 -- an old generation's last four rows-blocks
+# followed by six of payload), where a withheld block costs nothing and a
+# usable one risks nothing a 5 KB file could reach. Named here so the residue
+# is visible rather than tuned away.
+MFT_CONTENT_PHASES = tuple(range(0, ENTRY_SIZE, 4))
+MFT_CONTENT_MIN_ROWS = 8
+MFT_CONTENT_MAJORITY = 0.5
+MFT_CONTENT_CHUNK = 1536 * 683       # 1,049,088 B: a multiple of the 512-byte
+                                     # block AND the 24-byte record, so a
+                                     # phase keeps its alignment across chunks
+KIND_MFT_CONTENT = "stale MFT rows"
+ZERO_ROW = bytes(ENTRY_SIZE)
+
 
 def blocks_for(size, block):
     return -(-size // block)
@@ -126,7 +185,7 @@ class Plan:
             return
         held = sum(x.blocks for x in self.excluded) * block
         print(f"\n  withheld {len(self.excluded)} run(s), {held} bytes, as live "
-              f"container generations:")
+              f"container generations or stale MFT rows:")
         for x in sorted(self.excluded, key=lambda r: r.start_block):
             print(f"    0x{x.start_block * block:012X}  {x.blocks * block:>11} "
                   f"bytes  {x.why()}")
@@ -277,6 +336,79 @@ def scan_run(ar, start_block, nblocks):
     return marks
 
 
+def live_mft_rows(ar):
+    """Every non-zero 24-byte row of the LIVE table, as a set of raw bytes.
+
+    Raw bytes, not `Entry` objects: the identity test is "these 24 bytes sit in
+    the live table", and re-packing an entry would make the test compare our
+    packer against itself. The descriptor slot (row 0, the `Mft\\x1a` header)
+    is skipped; zero rows are skipped because empty space is zero too.
+    """
+    ar.fh.seek(ar.mft_offset)
+    table = ar.fh.read(ar.mft_size)
+    body = table[ENTRY_SIZE:len(table) - (len(table) % ENTRY_SIZE)]
+    return {rec for (rec,) in struct.iter_unpack(f"{ENTRY_SIZE}s", body)
+            if rec != ZERO_ROW}
+
+
+def mft_content(fh, offset, length, rows, phases=MFT_CONTENT_PHASES):
+    """How much of `length` bytes at `offset` is live MFT rows.
+
+    Returns (identical, nonzero, parsed, phase) at the phase with the most
+    identical records (ties to the lower phase). Reads in chunks that keep
+    every phase's alignment, and tests the one record per phase that straddles
+    a chunk boundary, so a run scores the same however it is chunked.
+    """
+    fmt = f"{ENTRY_SIZE}s"
+    tally = {p: [0, 0, 0] for p in phases}     # identical, nonzero, parsed
+    pos, tail = 0, b""
+    while pos < length:
+        fh.seek(offset + pos)
+        data = fh.read(min(MFT_CONTENT_CHUNK, length - pos))
+        if not data:
+            break                              # a run past EOF: score what is there
+        for p in phases:
+            t = tally[p]
+            straddle = ()
+            if p and len(tail) == ENTRY_SIZE and len(data) >= p:
+                straddle = ((tail[p:] + data[:p]),)
+            span = len(data) - p
+            span -= span % ENTRY_SIZE
+            body = data[p:p + span] if span > 0 else b""
+            for rec in straddle:
+                t[2] += 1
+                if rec != ZERO_ROW:
+                    t[1] += 1
+                    if rec in rows:
+                        t[0] += 1
+            for (rec,) in struct.iter_unpack(fmt, body):
+                t[2] += 1
+                if rec != ZERO_ROW:
+                    t[1] += 1
+                    if rec in rows:
+                        t[0] += 1
+        tail = data[-ENTRY_SIZE:]
+        pos += len(data)
+    best = max(phases, key=lambda p: (tally[p][0], tally[p][1], -p))
+    identical, nonzero, parsed = tally[best]
+    return identical, nonzero, parsed, best
+
+
+def content_mark(ar, start_block, nblocks, rows):
+    """The mark that withholds a run as stale MFT rows, or None."""
+    block = ar.block_size
+    identical, nonzero, parsed, phase = mft_content(
+        ar.fh, start_block * block, nblocks * block, rows)
+    if identical < MFT_CONTENT_MIN_ROWS or identical < MFT_CONTENT_MAJORITY * nonzero:
+        return None
+    return (0, KIND_MFT_CONTENT,
+            f"{identical} of {nonzero} non-zero 24-byte records "
+            f"({identical / nonzero:.1%}) are byte-identical to live MFT rows at "
+            f"phase {phase} (best of {len(MFT_CONTENT_PHASES)}); no header to "
+            f"project an extent from, so this is a generation whose head was "
+            f"overwritten")
+
+
 def classify_runs(ar, runs=None):
     """Split free runs into the ones a writer may use and the ones it may not.
 
@@ -331,6 +463,26 @@ def classify_runs(ar, runs=None):
     forward from its header, because forward is the only direction a
     self-describing table reaches -- and only the MFT signature participates,
     because the file-id-table test is a head heuristic that declares no length.
+
+    A HEADER THAT IS GONE PROJECTS NOTHING, and until 2026-09-24 (DESKWORK-Q4)
+    that was the gap left after the fix above. Both rules need the `Mft\\x1a`
+    at the generation's head; on `vault/dat_study_38833` the LIVE file-id
+    table now occupies 0xF57D5000..0xF5923800, which is exactly where a stale
+    generation's header used to be, and the generation's tail from 0xF5923800
+    -- 2,892,800 bytes, 120,507 of its 120,533 non-zero records byte-identical
+    to live rows -- carried no magic at any boundary and no extent reached it,
+    so it was the LARGEST USABLE RUN in the archive. On the slice archive the
+    same shape at 0xF8A5E200 (11,859 of 11,882) was the largest usable run and
+    the next compose would have written into it. The third rule reads the rows
+    themselves (`mft_content`): a run whose bytes parse, at the best of six
+    phases, as at least MFT_CONTENT_MIN_ROWS records identical to live table
+    rows AND a MFT_CONTENT_MAJORITY of its non-zero records is withheld as
+    KIND_MFT_CONTENT, whole, with the count and the fraction in its mark (the
+    two terms are argued at the constants). It runs only on runs the first two
+    rules left usable, and it can only ADD exclusions. Ordinary stale payload
+    and empty (all-zero) space stay usable -- `test_datplan` §10 has both as
+    controls beside the planted case, and a reused region carrying a sliver of
+    old rows as a third.
     """
     if runs is None:
         runs = free_runs(ar)
@@ -371,7 +523,21 @@ def classify_runs(ar, runs=None):
                 "generation at block 0x%X (%s)" % (reach[0][0], reach[0][2]))]))
         else:
             usable.append((start, n))
-    return usable, excluded
+
+    # The third rule: rows without a header. Only the runs the first two left
+    # usable are read, and the live table is read once, lazily, so an archive
+    # with nothing usable pays nothing.
+    rows = None
+    kept = []
+    for start, n in usable:
+        if rows is None:
+            rows = live_mft_rows(ar)
+        mark = content_mark(ar, start, n, rows)
+        if mark is not None:
+            excluded.append(Exclusion(start, n, [mark]))
+        else:
+            kept.append((start, n))
+    return kept, excluded
 
 
 def best_fit(runs, need):
@@ -629,8 +795,8 @@ def main():
             held = sum(x.blocks for x in excluded) * block
             print(f"unallocated by the gap measure: {gap + held} bytes in "
                   f"{len(usable) + len(excluded)} runs of whole blocks")
-            print(f"  withheld as live container generations: {held} bytes in "
-                  f"{len(excluded)} run(s)")
+            print(f"  withheld as live container generations or stale MFT rows: "
+                  f"{held} bytes in {len(excluded)} run(s)")
             for x in sorted(excluded, key=lambda r: -r.blocks):
                 print(f"    0x{x.start_block*block:012X}  {x.blocks:>7} blocks  "
                       f"{x.blocks*block:>11} bytes  {x.why()}")

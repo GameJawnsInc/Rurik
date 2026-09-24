@@ -912,9 +912,16 @@ Every one of these, in the order they were written:
   the archive -- and, since the second build of the day, that a plain `--build`
   KEEPS a present archive before any size test: every archive write changes its
   size, and the size test copied the pristine snapshot over a composed archive.
-  Floor 26, MEASURED 2026-09-12 (24 before the corridor joined the manifest and
-  the keep rule was pinned). No vault, no archive, no client;
-  ~2 s),
+  **Section 5 (2026-09-24, DESKWORK-D11 step 7, floor 26 -> 29): `--plan` prints
+  the MFT ROW BUDGET** -- WORLDMAPS-W6's "rows bind, bytes never do" as a number:
+  `row_budget` reads slack rows (`-mft_size % 512` over 24) plus claimable erased
+  rows off `test_datplan`'s two fixtures (1 + 4 on the 20-row table, 10 + 0 on
+  the 11-row one, both decided by the fixture's declared length, not by the
+  module), and `budget_lines` names `--fresh` as what restores it and says that
+  client sessions SPEND rows; on the slice archive the plan reads 0 + 1 where the
+  pristine source reads 17 + 0. Floor 26 MEASURED 2026-09-12 (24 before the
+  corridor joined the manifest and the keep rule was pinned). No vault, no
+  archive, no client; ~2 s),
   `toolkit/mapdata/test_skillnames.py` (the 188 authored skill names a custom
   profession needs -- the text sibling of `glyphs.py`, and like it the file is
   mostly about the INDEX ARITHMETIC, because "188 names came out and they are
@@ -1616,7 +1623,28 @@ Every one of these, in the order they were written:
   `(row - 1) * 24` kept as the control that must land on row N-1 -- and the bound is
   refused AS a bound, since row 0 reached `entries[-1]` and planned a write to the LAST
   row of the table, which a "some blocker" predicate passes because that row's
-  reservation is 0 bytes. Floor 30 -> 38),
+  reservation is 0 bytes. Floor 30 -> 38.
+  **§10 added 2026-09-24, floor 44 -> 60: a generation whose HEAD was overwritten
+  (DESKWORK-Q4).** Every check before it rests on the `Mft\x1a` header -- the
+  signature finds it, §9's projection reads its count -- and on `dat_study_38833`
+  the live file-id table sits where a stale generation's header was, so its
+  2,892,800 B tail carried no magic, no extent reached it, and it was the LARGEST
+  USABLE RUN in the archive, 100.0% live table rows (the slice archive's
+  0xF8A5E200 the same shape at 99.8%). The third rule, `datplan.mft_content`,
+  parses a run's bytes as 24-byte records at six 4-byte phases and withholds on
+  at least 8 records byte-identical to live rows AND a majority of the non-zero
+  ones. §10 plants that shape with no magic anywhere (a check asserts `scan_run`
+  finds nothing, so what follows is the third rule's alone) and puts a CONTROL
+  beside each term: the same rows amid payload junk stay usable (the majority --
+  junk is the client's own evidence it reused the region; the 38797-line copies
+  carry a dozen such slivers), three rows in zeros stay usable (the count), empty
+  space stays usable, and the six-phase search is shown load-bearing (phase 0
+  alone scores zero). The refutation: with §1-9's usable list a 6-block payload
+  is placed inside the tail; with the third rule it is BLOCKED, and the plan's
+  line for that run names the kind and the count. Four scratch sabotages redden
+  it -- the rule off (6), the majority off (4), the count off (4), one phase
+  (6); the last check's first version read the kind's words anywhere in the plan
+  and passed the first arm, so it reads the run's own line),
   `toolkit/mapdata/test_datalloc.py` (the THIRD write verb: rows that did not
   exist, and the file id that makes the client able to name them. `--replace`
   needs a row, `datmove` needs a row; both start from one ArenaNet made, which is
