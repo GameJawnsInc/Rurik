@@ -167,9 +167,13 @@ LEVEL_MAX = 20                # the PLAYER's and a HERO's (points_for_level's ta
 # (non-combatants 24); armour (3L + bonus) and the strike level (3L)
 # extrapolate linearly past 20 with no crash -- the operator's to use.
 HOSTILE_LEVEL_MAX = 255
-# A HOSTILE's rank: 21 is where retail and our own formulas agree. WIKI (weak:
-# search summaries of GWW talk / template pages -- foes' attributes up to 20,
-# +1 from skills; the skill progression template stops at 21), and MEASURED on
+# A HOSTILE's rank: 21 is where retail and our own formulas agree. WIKI (GWW,
+# "Attribute" §Notes, rev. 2026-09-02, revid 2739369; the owner's reading,
+# 2026-09-24): "Attributes are capped at rank 20, the maximum that can be
+# reached through runes and skill effects", and items with a 20% chance of +1
+# can pass that cap -- so 21. Player-visible, the wiki's strong kind (it was
+# first cited here from search summaries of talk / template pages, which said
+# the same: foes up to 20, +1 from skills). And MEASURED on
 # our side: the client is witnessed handling an NPC rank of 15 (0x0042 field 3,
 # Windborne Speed on map 280), every server consumer carries 0..21 without a
 # raise, and past 22.5 our formulas go wrong (Frenzy, 346, turns from double

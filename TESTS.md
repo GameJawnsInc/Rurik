@@ -6378,7 +6378,69 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   30/definition 9, hero bodies 200..206/definitions 10..16 -- refused at load
   rather than at spawn, with the test enemy's ids as the deliberate
   NON-example (an area replaces it, so reserving agent 10 would refuse a
-  collision that cannot happen). 51 checks, ~2 s),
+  collision that cannot happen). **Section 8 (2026-09-24, R-SANDBOX, the
+  server-load level guard)**: a content row whose EFFECTIVE level (its own, else
+  its template's -- the create path's own expression) is past `GAME_SMSG 0x0056`'s
+  level field is refused at LOAD with a `PopulationError` naming the row, the
+  template when the level came from it, the level, the range and why (the codec
+  packs the field `'<B'` and raises `struct.error` at 256 or -1 inside `send()`,
+  `handle()` catches only the socket errors, and the client's session drops
+  mid-population; the compiler refuses such a spec, a hand-written row never met
+  the compiler). The range is the WIRE's, read off the schema by the server
+  (`NPC_LEVEL_RANGE`, from `codec.fields_for` and the codec's `FIXED` width
+  table), and pinned three ways here: to `schema/overrides.json` read
+  independently plus the literal 0..255, to the width through `FIXED`, and to
+  the compiler's `sandbox.HOSTILE_LEVEL_MAX` (the server never imports the
+  harness, so the equality lives in the test). Served rows: 255 accepted, 256
+  and -1 refused, 20.0 refused as not an integer, a row with no level over a
+  template at 300 refused naming the template, the row's own valid level winning
+  over that template, a template the store lacks refused at load, and
+  `spawn_population` refusing before its first send. The fixture half,
+  `fixture_level_guards()` (called by `main()` once every flag is final): a
+  plain server checks exactly one path (the test enemy's `agents.HATCHER`); the
+  hatcher at 300 is refused for the test enemy and checked for neither under
+  `--area` or `--no-enemy`; **a `--probe` is BUILT as `run_probe` will build it
+  and every 0x0056 step that sends is checked at its level slot** (the
+  verifier's fix, later the same day -- the branch used to check
+  `agents.HATCHER` under any probe and the startup line then said a quest
+  probe's "fixture" fit while its vault `def_1480` sat at 300): `death` under
+  `--area` checks its one step at the hatcher's level naming "step 1/7", and
+  with no area BOTH the test enemy and the step (a probe never replaced the
+  test enemy); a raw literal list with 300 in the slot (`probes.py:359`'s
+  shape) is refused naming the probe, the step, its label, 300 and 0..255;
+  `npc_properties` at 255 is accepted; a step declared `sends=False` at 300 is
+  not checked; a probe whose build raises is refused naming the error; and the
+  verifier's reproduction, `quest_giver_def` with the store's `def_1480` at 300
+  (the hatcher's row re-keyed, so a bare machine has one) refused naming the
+  probe and step 1, at 20 accepted at 20 -- `probes.PROBES` takes the synthetic
+  probes for one call each and `probequest._VAULT_NPC_CACHE` is cleared around
+  them; `--henchman X --henchman-body` is refused for X's own 300 and unchecked
+  without the body; a hero's body is refused for the party row's 300, for
+  `--hero-level 300` and for the body template's 300 (naming it), the row's 20
+  wins over the flag, and nothing is checked without `--hero-body`. The last
+  line: `create_agent_world` raises `ValueError` naming the agent, the
+  definition and the level with nothing sent, its text naming THE SEND rather
+  than the startup guards' "refused at load instead" (the `where` tail), while
+  a body at 255 goes out with the byte in place -- and if a narrowed range
+  refuses that positive control at load, the block reports the
+  `PopulationError` as a red check instead of dying with no verdict. Wherever a
+  label says 255 or 256 the check tests the LITERAL, not `NPC_LEVEL_RANGE[1]`
+  (the verifier's nit: two controls said '255' and stayed green with the range
+  at 0..254). Three AST locks: `area_population` calls `wire_level_problem`,
+  `main()` calls `fixture_level_guards`, `create_agent_world` holds the last
+  line. Eight plants each proven red with a verdict banner: the area loop
+  removed (7 red), the range 0..256 (7), the template fallback ignored (2), the
+  hatcher / henchman / hero branches removed (3 / 2 / 4), `main()`'s call
+  removed (1), the last line removed (2); then the verifier's fixes' five: the
+  probe walk disabled (7), a declared refusal checked anyway (1), the `where`
+  tail dropped (1), the range narrowed to 0..254 (11, checks 5 and 26 among
+  them now), the old combined `PROBE_NAME or ...` condition restored (2).
+  `FakeWorld` and `StatWorld` carry an npc table now (the real store's,
+  overridable by key) because the guard reads a row's template. 75 -> 106 ->
+  114 checks, floor 114, ~25 s -- `authsrv.py` is parsed ONCE per run
+  (`authsrv_source()`, shared by sections 3 and 8; section 8 fell from 5.7 s to
+  0.2 s) and section 3's own parse plus its negative control's is the bulk of
+  it; 23-39 s measured across four runs on a loaded machine),
   `toolkit/authsrv/test_ping.py` (the `0x000C`→`0x0009`→`0x000D` round trip that
   drives the client's net graph, and the three places a plausible
   implementation quietly LIES: sending a second request while one is
