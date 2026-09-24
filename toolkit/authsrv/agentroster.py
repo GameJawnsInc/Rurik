@@ -255,7 +255,24 @@ def _jsonable(rosters):
     return out
 
 
+def console_safe(stream):
+    """Make `stream` escape what its encoding cannot hold instead of raising.
+
+    DESKWORK-Q1 (2026-09-24). A name token decoded off the wire can carry a code
+    point cp1252 has no byte for -- the tutorial's level-0 `ani\\x8f` creatures
+    (MONSTERAI-N10) -- and on a default Windows console, or any redirect to a
+    file, print() raised UnicodeEncodeError part-way through the census. The
+    token is ESCAPED rather than dropped, because it is evidence and `\\x8f`
+    still reads. A stream with no `reconfigure` (a test's StringIO) is left alone.
+    """
+    reconfigure = getattr(stream, "reconfigure", None)
+    if reconfigure is not None:
+        reconfigure(errors="backslashreplace")
+    return stream
+
+
 def main():
+    console_safe(sys.stdout)
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--capture", action="append", default=None,

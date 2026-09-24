@@ -101,7 +101,8 @@ first thing to do.** Three findings reorder the problem:
   2026-08-06** — the hole was a zero-length code that both reference
   implementations drop on the floor, and all 1,089 files now decompress and tile
   exactly (§2). The encoder is still missing; the argument against our
-  understanding is not.
+  understanding is not. **(The encoder landed 2026-08-18, `gwenc.py`, c4a9fe03 —
+  DESKWORK-Q1 note, 2026-09-24.)**
 - **A genuinely new skill id still needs a PE patch**, and it is harder than the
   prior study thought: all 3,443 rows are populated, the table base is referenced
   by **nine** relocated absolute addresses across three base constants plus a
@@ -1107,12 +1108,12 @@ reversibly, and route 1 narrows to the icon alone.
 
 | Question | What would answer it |
 |---|---|
-| **Does a hand-written entry survive a play session?** | Write one, play, diff. The decisive question and nothing here answers it. |
-| **Can the "Repairing corrupt archive" rescan rebuild the fileId→mftIndex map?** | Follow the rescan at `Gw.exe 0x47b7e2` to completion, or run Arm C on an expendable copy. Decides whether a bad write is recoverable. |
+| ~~**Does a hand-written entry survive a play session?**~~ | Write one, play, diff. The decisive question and nothing here answers it. **ANSWERED — §4 below: the write survived the session** (DESKWORK-Q1 note, 2026-09-24). |
+| ~~**Can the "Repairing corrupt archive" rescan rebuild the fileId→mftIndex map?**~~ | Follow the rescan at `Gw.exe 0x47b7e2` to completion, or run Arm C on an expendable copy. Decides whether a bad write is recoverable. **ANSWERED 2026-08-17, NO** — it adopts a surviving older MFT generation and deletes every mismatching row's chain ([archivewrite §5](../archivewrite/FINDINGS.md); the answer-in-one-page above). |
 | Are MFT rows 8315–8317 text rows? | Ten-minute set-membership check against the 1,077 resolved text rows. Gates the in-place text plan. |
-| Which `flags` class do skill-icon rows carry, and does that class ever ship stored? | Resolve the 3,439 icon file ids to MFT rows and histogram their flags and `extraBytes`. Decides whether the stored escape hatch exists for icons. |
+| ~~Which `flags` class do skill-icon rows carry, and does that class ever ship stored?~~ | Resolve the 3,439 icon file ids to MFT rows and histogram their flags and `extraBytes`. Decides whether the stored escape hatch exists for icons. **ANSWERED in the appendix below: `compression=8, flags=3` on all 1,981 distinct icon ids — never stored** (DESKWORK-Q1 note, 2026-09-24). |
 | How is an ATEX mip chain framed below the first level? | No simple stride closes it to EOF and the smallest levels use a shorter record. Needs the client's own decoder read, not more corpus fitting. |
-| Can a compression-8 encoder be written at all with stdlib Python? | Nobody has tried. The prerequisite this row named — "our decompressor fails on 12 of 1,089 text files with a huffman table hole" — is **done, 2026-08-06**: the hole was a zero-length code that both reference implementations drop, and all 1,089 files now decompress and tile. |
+| ~~Can a compression-8 encoder be written at all with stdlib Python?~~ **YES — `toolkit/mapdata/gwenc.py`, c4a9fe03, 2026-08-18: retail's own stored rows re-emit byte-identically** (DESKWORK-Q1 note, 2026-09-24). | Nobody has tried. The prerequisite this row named — "our decompressor fails on 12 of 1,089 text files with a huffman table hole" — is **done, 2026-08-06**: the hole was a zero-length code that both reference implementations drop, and all 1,089 files now decompress and tile. |
 | Are any of the 678 all-empty string ids genuinely unreferenced by every live table? | Cross-language emptiness is strong evidence, not proof. Cross-reference every skill, item, npc, quest and UI table that can hold a string id. |
 | Can the text-record decoder's output be **substituted**, or only observed? | Hook VA 0x007cb000 and try returning a different pointer. Tyria only reads there; nobody has written. |
 | Does hooking `GetRecObjectBytes` feed the game's own texture pipeline? | The only untried route to a genuinely new in-game icon. Py4GW calls those functions; nobody hooks them. |

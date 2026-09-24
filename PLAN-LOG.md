@@ -28,6 +28,68 @@ move back.
 
 ---
 
+### DESKWORK-Q1 (the study lines and small fixes) + DESKWORK-D12 step 4's first half -- 2026-09-24 -- **`PLAN.md` §3.2's content census refreshed and now CHECKED by `test_checks`; §3's R5m "elevation still open" struck; stale lines in eleven study documents corrected in place; `agentroster` prints on a cp1252 console; `effects.py`'s "none of them is modelled" corrected**
+
+The second half of the sweep the entry below opens (same lane, same day). **§3 moved, and
+only in wording**: no rung's status changes.
+* **§3.2's census** read "map 15, npc 56" (2026-08-27) against today's loader. Re-run
+  2026-09-24 with this machine's vault overlay: map 19, npc 63, item 28, spawn 23, area 25,
+  quest 2, skill_effect 113 (npc 54 and skill_effect 57 of those are the vault's). The
+  TRACKED half (`content/*.toml` + `content/overrides/`, no vault): **map 19, npc 9**,
+  quoted behind `The tracked census (...): kind N, ...` and **recomputed by
+  `toolkit/test_checks.py`** (floor 17 → 20: the marker found with map and npc, every quoted
+  count equal to `content.load(vault_dir=<empty>, extra_dirs=[])`, and a synthetic CONTROL
+  where a `map 15` quote against a loader reading 19 is caught). Only the tracked half,
+  because the overlay is machine state — a bare machine has none and a tree lagging main
+  drops label rows it does not know — so a check on it would redden on the machine rather
+  than the document. Sabotaged on the real document both ways: `map 19` → `map 15` reddens
+  the count check, a renamed marker reddens both. Bare run: the same 20.
+* **§3.2's spawn score** re-run (`spawncheck.py --flag-origin`, the study archive): **11 of
+  19** — PASS 9, SEAM 2, OFF-MESH 3, WRONG-PLANE 1, UNRESOLVED 4 (the created chains
+  165–168); the one `(0,0)` PASS is still Sparkfly Swamp's. Written beside the 2026-08-27
+  "8 of 15", with the caveat that the store's 19 rows are not the criterion's 19
+  Pre-Searing zones.
+* **§3's R5m row**: "elevation — a height field that is not flat, walked, is still open as §8
+  item 10(c)" struck — WORLDMAPS W16–W19 walked authored slopes on the retail client on
+  2026-08-21 (W19: S4 climbs a 41.5–42.5° strip to its plateau, max y 3,064; S5 stops below
+  46.45° at 1,728, to the unit). The old citation is left in place, struck.
+
+**Code (no server behaviour moves; `authsrv.py` untouched):** `effects.py`'s condition
+comment said none of the six non-degenerating conditions is modelled — Blind's miss,
+Crippled's speed, Deep Wound's maximum and heal cut and Weakness's damage and attribute
+are, elsewhere; Dazed and Cracked Armor are not (DESKWORK-D6). `agentroster.py` died with
+UnicodeEncodeError on any redirect (reproduced: the `ani` + U+008F token, MONSTERAI-N10's);
+`console_safe(stream)` escapes instead of raising, `main()` calls it, and the redirected
+census now completes (4,270 lines, 21 escaped tokens). `test_agentroster` §4b, vault-free,
+floor 27 → 29: a strict cp1252 stream must still RAISE on the token (the known-bad arm)
+and `console_safe`'s must write `ani\x8f`; sabotaging `console_safe` to the identity
+reddens it. `wireshells.py`'s docstring: definition 7809's exception is the cross-BUILD
+drift SUITE-FIXES measured (the 2026-07-29 vs 2026-09-01 builds), not "two maps".
+
+**Study lines, each corrected in place with a dated note, the old words struck or kept:**
+heroes §3.3 (the kick/add clicks ran 2026-09-23; hiring a HENCHMAN is found, c2s
+`0x009F`), heroes §40.6 and RUN-HEROLIB §12.6 (`0x0065` is sent, `0x001B` is
+PARTY_FLAG_PLACE), quests HANDOFF §1 (the experience reward is paid since SLICE-B5,
+3a12e4fd), daggers F18 and §8 (229 / 230 are Lightning Orb / Javelin; property 10 is
+decoded and sent), plansplit's three wrong "(confirmed)" tags (`0x0191`, the compressor,
+MORALE-Q6), unitexport §6 item 3 (node bases are ABSOLUTE, archivewrite C-10), minimap
+§6g.4 (A3 closed the "STILL OPEN" item the same day), crossbuild §4d item 3 (the restore
+verb, 95f550ef), datwrite's open-questions table (four rows answered: survival, the
+rescan, the icon flags, the encoder) and its "no compression-8 encoder" bullet, handshake
+PLAN §6 (the probes ran 2026-08-04), and the sandbox plan's N2 row (shipped, confirmed).
+`test_dispatch.py`'s EQUIP_ITEM comment and `chatdefs.py`'s 1961 were already corrected
+and were left alone.
+
+**Deferred on purpose — `authsrv.py`'s stale comments** wait for the next lane that edits
+that file (about 40 tests read it as text): `HERO_RIG_0065` "A hypothesis under test" (the
+block is retail's and ships), the leash comment "nothing has measured retail's leash"
+(MONSTERAI-N9 measured it 2026-09-15: a stander goes home, a patroller resumes its
+leg; the server models neither), and the DAGGERS-B8 note "land_skill's SINGLE
+TARGET, ALWAYS is still true of every NPC's cast" (a body's spell areas ship since weapons
+§37–§40).
+
+---
+
 ### DESKWORK-Q1 + DESKWORK-Q3, the status sweep (pass 5, INFRA-A) -- 2026-09-24 -- **fifteen `PLAN.md` §8 lines retired or reworded, each re-verified against the code or the study first; late stamps on OUR tapes MEASURED: 0 of 274 speed-arm hard rows over 1,582 captures**
 
 **Q3 (movement FINDINGS, the 2026-09-17 entry's new closing paragraph).**

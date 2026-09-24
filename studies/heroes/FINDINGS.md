@@ -316,6 +316,16 @@ dword, bit = hero index, CORROBORATED on 15 of the 17 live connections carrying 
 (`hero_unlock_mask`). Hiring remains NOT FOUND. The loopback click for both halves is
 owed; the runsheet is in the cmsg study, and the clicks happen in an outpost.
 
+**CORRECTED 2026-09-24 (DESKWORK-Q1) — two sentences above are stale, and are left as
+written.** (1) The loopback clicks RAN on 2026-09-23, in an outpost, and every prediction
+held: kick, add, the kick held across a relaunch, kick-add-kick-add, each with its revert
+flag as the control (studies/deskwork/CONFIRM-2026-09-23.md §1, R1–R5). That confirms the
+client ACCEPTS what we send; the add stays RECONSTRUCTION on the wire. (2) Hiring a
+HENCHMAN is FOUND: c2s `0x009F` HENCHMAN_ADD, OBSERVED 3 of 3 on `20260819T132414`
+(`:53419`) and armed 2026-09-23 (DESKWORK-D1 step 5, studies/cmsg "The party family"), so
+the first section's "Hiring: NOT FOUND" bullet is half answered. Hiring a fresh HERO from
+the outpost UI stays NOT FOUND.
+
 ---
 
 ## 4. Hero skill bars — the sharpest negative
@@ -3559,11 +3569,17 @@ operator used the hero for AI mode, lock-target and flags only — and that is
   UNOBSERVED (zero corpus sightings) and the client has already swapped
   locally; a refusal echoes both slots unchanged through `0x00D9`. Retail's
   reply is the remaining open half.
-* **`0x0065 SKILLBAR_SLOT_FLAGS`** rides beside the hero's bar (twice, both
-  `[agent, 0]`) and is still unmodelled.
-* **`0x001B`** appeared in this census as an unnamed hero-family c2s message
+* ~~**`0x0065 SKILLBAR_SLOT_FLAGS`** rides beside the hero's bar (twice, both
+  `[agent, 0]`) and is still unmodelled.~~ **SENT since (DESKWORK-Q1 note,
+  2026-09-24):** retail's `[hero, 0]` in the hero's block (`HERO_RIG_0065`), and
+  since DESKWORK-D1 step 6 (2026-09-23) the whole suppress mask answering a
+  Shift-click (`handle_hero_skill_toggle`, RECONSTRUCTION; drawn on our client,
+  studies/deskwork/CONFIRM-2026-09-23.md §2).
+* ~~**`0x001B`** appeared in this census as an unnamed hero-family c2s message
   carrying a position and a zero, with `(inf, inf)` clearing it — the
-  all-heroes sibling of `0x001A HERO_FLAG_PLACE`. Not named here.
+  all-heroes sibling of `0x001A HERO_FLAG_PLACE`. Not named here.~~ **NAMED
+  PARTY_FLAG_PLACE and handled since 2026-08-19** (7f0cd7c1; its `0x0067` echo
+  plants the party pennant, pvpui §28.6; DESKWORK-Q1 note, 2026-09-24).
 
 ### 40.7 The run, and the crash it cost — `GmSkSlot.cpp:206` fired for real
 

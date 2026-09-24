@@ -282,9 +282,14 @@ CONDITION_BY_NAME = {name: sid for sid, name in CONDITION_SKILLS.items()}
 #
 # THE OTHER SIX DEGENERATE NOTHING and their absence here is a fact rather than
 # a gap: Blind, Crippled, Deep Wound, Dazed, Weakness and Cracked Armor do
-# other things (miss chance, movement, maximum health, casting, damage, armour)
-# and none of them is modelled. A dict that gave every condition a pip would be
-# the easy wrong generalisation.
+# other things (miss chance, movement, maximum health, casting, damage, armour).
+# Four of those are modelled ELSEWHERE, not here: Blind's miss
+# (`episodemods.blind_miss`), Crippled's speed (`episodemods.CRIPPLED_FACTOR`,
+# SLICE-F48), Deep Wound's maximum and heal cut (authsrv's `DEEP_WOUND_*`) and
+# Weakness's damage and attribute (`WEAKNESS_DAMAGE_FACTOR`,
+# `episodemods.weakened_rank`); Dazed and Cracked Armor are not (DESKWORK-D6).
+# (This read "none of them is modelled" until 2026-09-24, DESKWORK-Q1.) A dict
+# that gave every condition a pip would be the easy wrong generalisation.
 CONDITION_PIPS = {478: 3, 480: 7, 483: 4, 484: 4}
 PIP_HEALTH_PER_SECOND = 2.0
 MAX_PIPS = 10.0

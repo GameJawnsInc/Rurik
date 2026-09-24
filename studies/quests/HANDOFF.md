@@ -23,8 +23,11 @@ is ~1,200 lines; do not read it front to back to start work.
 A quest we authored is **offered, accepted, tracked, advanced and turned in at a real
 retail client**, with a reward line on both screens and the marker moving between two
 NPCs. The protocol underneath it is named in `schema/overrides.json` with evidence
-chains. What is *not* done is the tail: no reward is actually granted, quest names are
+chains. What is *not* done is the tail: ~~no reward is actually granted~~, quest names are
 still ArenaNet's string ids, and two known bugs are open by the owner's decision.
+(**Corrected 2026-09-24, DESKWORK-Q1:** the EXPERIENCE reward is paid at turn-in since
+SLICE-B5, 3a12e4fd, 2026-09-12 — `grant_quest_reward` in `authsrv.py`, OURS by authorship;
+that function's docstring, not this line, says what else is paid.)
 
 ## 2. What will bite you, in the order it will bite
 
