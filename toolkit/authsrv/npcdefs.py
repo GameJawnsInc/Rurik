@@ -570,8 +570,13 @@ def require_one_build(capture_dirs):
         f"    {b or 'unknown (no exe in manifest.json)'}: {len(cs)} capture(s) "
         f"-- {', '.join(os.path.basename(c) for c in cs)}"
         for b, cs in groups.items())
+    # A pool that is ALL unknown is refused by the same rule, and the first
+    # line says so rather than counting "1 client builds" (RV2-5).
+    what = (f"{len(capture_dirs)} captures whose build cannot be read -- they "
+            f"may be {len(capture_dirs)} builds" if list(groups) == [None]
+            else f"captures of {len(groups)} client builds")
     raise NpcDefsError(
-        f"refusing to pool captures of {len(groups)} client builds:\n{lines}\n"
+        f"refusing to pool {what}:\n{lines}\n"
         f"A definition index is only a name within one build (7809 is a "
         f"different creature in 2026-07-29 and 2026-09-01). Pass --build KEY to "
         f"select one, --capture STAMP (repeatable) for captures that share one, "

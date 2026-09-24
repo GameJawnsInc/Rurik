@@ -96,10 +96,13 @@ import checks  # noqa: E402
 # it looked for the kind's words anywhere in the plan, and the withheld
 # header now says them on every plan; it reads the run's own line.
 # 60 -> 61 on 2026-09-24 (the lane's review, RV-10): the chunk-boundary check
-# -- mft_content read in 1,536-byte chunks scores the planted tail the same
-# tuple as in one piece; with the straddle branch disabled in a scratch copy
-# that check alone goes red (the default chunk is larger than any fixture run,
-# so nothing else exercised the branch).
+# -- mft_content read in small chunks scores the planted tail the same tuple
+# as in one piece (the default chunk is larger than any fixture run, so
+# nothing else exercised the straddle branch). Re-cut the same day (RV2-3):
+# at 1,536 B no LIVE row straddled a boundary, so the check caught the branch
+# missing and nothing about what it assembled; at 96 B two live rows do, and
+# three scratch mutations of the branch -- off, halves swapped, wrong tail
+# bytes -- each redden that check alone.
 LEDGER = checks.Ledger("dat planner", floor=61)
 check = checks.adopt(LEDGER)
 
@@ -667,20 +670,40 @@ def section_overwritten_head(tmp):
         # CHUNKING. mft_content reads a run in MFT_CONTENT_CHUNK-byte pieces
         # and tests the one record per phase that straddles each boundary. The
         # default chunk (1,049,088 B) is far larger than this run, so with it
-        # the straddle branch never executes here; at 1,536 B (3 blocks, still
-        # a multiple of 24) the planted tail crosses two boundaries, and the
-        # phase-8 records that straddle them are found only by that branch.
+        # the straddle branch never executes here. At 96 B (a multiple of 24,
+        # so every phase keeps its alignment) the boundaries fall at 96, 192,
+        # 288 and 384 from the run's start, and the phase-8 records at 8 + 24k
+        # cross them for k = 3, 7, 11, 15 -- body rows 4, 8, 12 and 16, of
+        # which 4 and 8 are LIVE rows and 12 and 16 the fixture's erased zeros.
+        # So two of the ten identical rows exist ONLY as straddled records,
+        # and the chunked tuple equals the whole one only if the branch
+        # assembles each from the right bytes in the right order. (The first
+        # version, RV-10, chunked at 1,536 B: the planted body ends at byte 464
+        # of the run, so every straddled record was zero, and two scratch
+        # mutations that mis-assembled the record -- halves swapped, the wrong
+        # tail bytes -- passed it; the review's RV2-3. The geometry is computed
+        # here, not assumed, so a fixture change that moved the rows off the
+        # boundaries would redden the check rather than hollow it.)
+        CHUNK = 96
+        straddlers = [k for k in range(len(live_rows))
+                      if (PHASE + ENTRY_SIZE * k) // CHUNK
+                      != (PHASE + ENTRY_SIZE * k + ENTRY_SIZE - 1) // CHUNK]
+        live_straddlers = [k for k in straddlers if live_rows[k] != bytes(ENTRY_SIZE)]
         saved = datplan.MFT_CONTENT_CHUNK
         try:
-            datplan.MFT_CONTENT_CHUNK = 1536
+            datplan.MFT_CONTENT_CHUNK = CHUNK
             small = datplan.mft_content(ar.fh, RUN_8 * BLOCK, 8 * BLOCK, rows)
         finally:
             datplan.MFT_CONTENT_CHUNK = saved
-        check(small == got and (8 * BLOCK) // 1536 >= 2,
-              f"read in 1,536-byte chunks the run scores the same tuple {got} "
-              f"-- the records that straddle a chunk boundary are counted, "
-              f"so a run scores the same however it is chunked",
-              f"chunked {small} vs whole {got}")
+        check(small == got and got[0] == len(nonzero_live) and len(live_straddlers) >= 2,
+              f"read in {CHUNK}-byte chunks the run scores the same tuple {got}: "
+              f"{len(live_straddlers)} of its {len(nonzero_live)} live rows (body "
+              f"rows {[k + 1 for k in live_straddlers]}) exist only as records "
+              f"that straddle a chunk boundary, and the branch that assembles "
+              f"them counts them, so a run scores the same however it is chunked",
+              f"chunked {small} vs whole {got}; body rows on a boundary "
+              f"{[k + 1 for k in straddlers]}, live among them "
+              f"{[k + 1 for k in live_straddlers]}")
 
         usable, excluded = datplan.classify_runs(ar)
         by_start = {x.start_block: x for x in excluded}
