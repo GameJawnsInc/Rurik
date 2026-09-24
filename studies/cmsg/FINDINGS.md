@@ -1976,6 +1976,14 @@ doll changes (A2); `--no-town-weapon-strip`'s `0x006F` redraws it (A4b). The fir
 (prediction (1) "no weapon in either hand" under the default; its `--walk` with `vk:` steps did
 not parse — `vk:` is an `--actions` step) is superseded by the carrier fix's runsheet below.
 
+**RUN 2026-09-24 after the merge (T1-T3, studies/deskwork/CONFIRM-2026-09-24.md §7): the
+carrier is OBSERVED.** Withholding the player's town `0x006D` alone makes the body stand
+EMPTY-HANDED at load (T1, the doll still holding the hammer) and after F2 (T2, the doll showing
+the sword and shield); `--town-player-weapons`, the same wire plus that one message, reproduces
+CONFIRM-2's stale hammer after F2 (T3). The rival below (the client arming the body from the
+equipped bag once at load) is refuted: with the message withheld nothing arms it. The
+CORROBORATED labels below stand as the record of what was known before this run.
+
 **(f) The carrier (the CONFIRM-2 desk fix, 2026-09-24).** The question the run left — WHAT
 draws a town body's weapon, and what does retail send when it changes — was put to the same
 96 connections with predictions stated first (`weaponcensus.py`'s "every NPC, never a player"

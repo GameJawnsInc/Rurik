@@ -28,6 +28,23 @@ move back.
 
 ---
 
+### DESKWORK-D1, the town weapon's carrier fix CONFIRMED on the client -- 2026-09-24 -- **the body empty-handed in a town at load and after F2; `--town-player-weapons` reproduces the stale hammer; the carrier is OBSERVED**
+
+Three harness launches on the merged tree (`2762740d`; studies/deskwork/CONFIRM-2026-09-24.md
+§7): T1 `20260924T123930`, the default, the body empty-handed at load with the doll holding the
+hammer; T2 `20260924T124139`, F2, the body still empty-handed while the doll shows the sword and
+shield; T3 `20260924T124357`, `--town-player-weapons`, the body holding the hammer after F2 —
+CONFIRM-2's A2. The fix pass's CORROBORATED (the entry below) becomes OBSERVED for the town
+lead: withholding one message is the whole difference, and the rival (the client arming the
+body from the bag) is refuted. CONFIRM-2's switch regression is closed. `PLAN.md` 8.1's D1 line
+now carries only the owner's question, town combat with no hand, and the FIELD `0x006D`.
+The merged tree's sweep: the lane's 87 affected tests plus test_itemmoves and test_srclint,
+4-wide (85 read green, 6,427 checks; test_attribspend 49 and test_pathmap 129 green with
+declared skips), then the four port-binders serially (webgate 9, handshake 24, harness 181,
+preflight_owner 30): 91 of 91, 6,849 checks.
+
+---
+
 ### DESKWORK-D1, the town weapon's carrier fix -- the fix pass -- 2026-09-24 -- **the carrier claim re-labelled CORROBORATED (no run has withheld the message; the runsheet's ARM 1 is the observation), with a field frame as the on-client control for last-writer-wins; the FIELD's player `0x006D` is a DEFECT, not a divergence -- its zero off hand erases the shield at every sword-and-shield field load -- opened as its own item; the own-addressed pin widened to all 14 outpost hand changes; the vacuity check that could not fail replaced**
 
 The review pass corrects the entry below. **The blockers.** (1) The entry below, the
