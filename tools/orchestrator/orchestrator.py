@@ -400,10 +400,15 @@ class Ranks(QWidget):
     in-game). A hostile is EXEMPT from a player's point budget -- the owner's
     ruling, 2026-09-24 (PLAN-LOG): retail foes and bosses exceed it -- so the
     chip counts and never judges (never crit, never 'over budget'), and the
-    compiler holds a hostile's ranks to validity alone: each rank within the
-    table (the spin's own range) in the template's profession (the only
-    attributes offered). The chip is the NOTICE; `hint`, a caption under the
-    grid, stays the HINT, the sentence saying what is and is not checked.
+    compiler holds a hostile's ranks to validity alone: each rank
+    0..sandbox.HOSTILE_RANK_MAX (the spin's own range; 21, retail's ceiling,
+    the owner's second ruling of the day lifting the caps for hostiles) in the
+    template's profession (the only attributes offered). The cost table stops
+    at 12 (its 13th row is the client's cap sentinel), so the chip prices the
+    ranks to 12 and says how many stand past it, unpriced -- a figure past 12
+    has no source, and attribspend saturates there in silence. The chip is
+    the NOTICE; `hint`, a caption under the grid, stays the HINT, the
+    sentence saying what is and is not checked.
     Ranks lays the hint out ITSELF, under the grid set_professions wipes:
     the first cut left that to the card, which forgot, and a label shown with
     no parent is a top-level window of its own -- one per hostile, and the
@@ -472,7 +477,7 @@ class Ranks(QWidget):
             if row["is_primary"] and row["profession"] != self.professions[0]:
                 continue                       # the secondary's primary attribute: never spendable
             sp = QSpinBox()
-            sp.setRange(0, self.rules.rank_max)
+            sp.setRange(0, sandbox.HOSTILE_RANK_MAX)     # NOT the table's 12: the compiler's cap
             sp.setValue(dict(keep).get(aid, 0))
             sp.setFixedWidth(92)
             sp.valueChanged.connect(self._spent)
@@ -496,22 +501,49 @@ class Ranks(QWidget):
         self.grid.setColumnStretch(5, 1)
         self._spent()
 
+    def spend(self):
+        """(points, past): what the ranks cost by the table, and how many of
+        them stand past its last row (rules.rank_max, 12). The table has no
+        row past 12 -- attribspend.spent_on adds only the ranks it holds, so
+        12, 15 and 21 all price at 97 -- and a figure past it has no source:
+        the count is the true part, and it is said as a count. Neither is a
+        verdict."""
+        vals = {a: s.value() for a, s in self.spins.items()}
+        return (self.rules.total_spent(vals),
+                sum(1 for v in vals.values() if v > self.rules.rank_max))
+
     def spent(self):
-        """The points the ranks cost, by the table -- a count, not a verdict."""
-        return self.rules.total_spent({a: s.value() for a, s in self.spins.items()})
+        """The points the ranks cost, by the table (to its last row) -- a
+        count, not a verdict."""
+        return self.spend()[0]
+
+    def spent_text(self):
+        """The chip's words, and the roster line's: 'N points' while every
+        rank is in the table; past it, 'N points to 12; K ranks past it, not
+        priced' -- never a number the table did not give."""
+        pts, past = self.spend()
+        if not past:
+            return n_of(pts, "point")
+        return (f"{n_of(pts, 'point')} to {self.rules.rank_max}; {n_of(past, 'rank')} past it, "
+                f"not priced")
 
     def _spent(self):
         if self.rules is None:
             return
-        self.hint.setText(f"Not held to a player's point budget; each rank 0..{self.rules.rank_max}, "
-                          f"in the template's profession.")
-        self.hint.setToolTip("A hostile is exempt from the attribute points a level grants a "
-                             "player (the owner's ruling, 2026-09-24): retail foes and bosses "
-                             "exceed them.\nThe compiler still refuses a rank past the table and "
-                             "an attribute of another profession, neither of which this card "
-                             "can hold.")
-        set_chip(self.chip, n_of(self.spent(), "point"), "info",
-                 tip="What these ranks would cost a player, by the attribute table.")
+        self.hint.setText(f"Not held to a player's point budget; each rank "
+                          f"0..{sandbox.HOSTILE_RANK_MAX}, in the template's profession.")
+        self.hint.setToolTip(f"A hostile is exempt from the attribute points a level grants a "
+                             f"player (the owner's ruling, 2026-09-24): retail foes and bosses "
+                             f"exceed them, and its ranks reach retail's own ceiling "
+                             f"({sandbox.HOSTILE_RANK_MAX}: foes' attributes up to 20, one more "
+                             f"from skills).\nThe compiler still refuses a rank past "
+                             f"{sandbox.HOSTILE_RANK_MAX} and an attribute of another "
+                             f"profession, neither of which this card can hold.")
+        set_chip(self.chip, self.spent_text(), "info",
+                 tip=f"What these ranks would cost a player, by the attribute table. The table "
+                     f"stops at {self.rules.rank_max} (its next row is the client's cap "
+                     f"sentinel), so a rank past {self.rules.rank_max} is priced to "
+                     f"{self.rules.rank_max} and counted as past it.")
 
     def ranks(self):
         return [[a, s.value()] for a, s in self.spins.items() if s.value()]
@@ -1239,7 +1271,11 @@ class MemberEditor(QWidget):
         pairs, full = template_choices(names.world, self.template.fontMetrics())
         self.template.set_choices(pairs, tips=full, full=full)
         self.level = QSpinBox()
-        self.level.setRange(0, sandbox.LEVEL_MAX)
+        # a HOSTILE's range, not the player's LEVEL_MAX: 0..255, the 0x0056
+        # level byte (the owner's ruling, 2026-09-24; sandbox.HOSTILE_LEVEL_MAX
+        # says why), and the same constant validate reads, so a file's value
+        # the spin cannot hold is one the compiler refuses and Open says so
+        self.level.setRange(0, sandbox.HOSTILE_LEVEL_MAX)
         self.level.setValue(2)
         self.health = QSpinBox()
         self.health.setRange(1, 10000)
@@ -1417,7 +1453,7 @@ class MemberEditor(QWidget):
         bits = [f"L{self.level.value()}", f"{self.health.value()} hp",
                 f"{k} of {sandbox.BAR_SLOTS} skills"]
         if self.ranks.rules is not None:
-            bits.append(n_of(self.ranks.spent(), "point"))    # spent; a hostile has no budget
+            bits.append(self.ranks.spent_text())    # the chip's words; a hostile has no budget
         bits.append(self.weapon_item.value() or "the template's swing")
         return "  ·  ".join(bits)
 
@@ -1425,11 +1461,12 @@ class MemberEditor(QWidget):
         self.template.set_value(m.get("npc"))
         self._template()
         # a member with no level is at its TEMPLATE's, the level spawn_rows
-        # and validate give the row: the spawn row's level and the 0..20
-        # range (a level-24 template opened at a constant 2 would compile
-        # here and be refused by the CLI -- one file, two verdicts, the way
-        # the constant once opened a level-10 template over a budget a
-        # hostile no longer has)
+        # and validate give the row: the spawn row's level and the
+        # 0..HOSTILE_LEVEL_MAX range (a level-300 template opened at a
+        # constant 2 would compile here and be refused by the CLI -- one
+        # file, two verdicts, the way the constant once opened a level-10
+        # template over a budget a hostile no longer has; and the spin's
+        # range is validate's, so a template past it clamps AND is said)
         tmpl = self.names.world.rows("npc").get(m.get("npc")) or {}
         self.level.setValue(int(m.get("level", tmpl.get("level", 0) or 0)))
         self.health.setValue(int(m.get("health", 120)))
@@ -2855,19 +2892,24 @@ def _real_wheel(win, widget, delta=-120):
 # skips"). The gated laws, by gate: the grade marks 5 (a vault overlay with
 # label rows), the inactive real wheel 1 (Windows, a page that scrolls), the
 # exempt hostile's compile, its roster line and the kept rules' refusal 3 (an
-# attribute table), the encounter list's focus 1, Launch's ring and the tab
-# strip's cue 3, the active-window wheel 3, the four popups 4 -- 20 of the
-# green run's 165 (164 before the roster-line law; 163 before the kept-rules
+# attribute table), the lifted caps' four -- the Ranks spins' 0..21, the chip
+# telling 12 from 15, a level-28 rank-16 file held whole, a level-300 rank-22
+# file refused and said -- 4 (the same table), the encounter list's focus 1,
+# Launch's ring and the tab strip's cue 3, the active-window wheel 3, the
+# four popups 4 -- 24 of the green run's 174 (165 before the lifted caps'
+# nine: those four and the five ungated -- the party's Level spins pinned at
+# 20, the hostile's at 255, the hostile page's spins fitting '255' and '21'
+# at three widths; 164 before the roster-line law; 163 before the kept-rules
 # law; 159 before the long-name laws: the bounded label, its hover, its
 # filter, the no-stray restore). A gated law
 # that skips is printed in the verdict; a run short of the floor is a FAIL
 # naming the shortfall, which "0 failure(s)" never was. What the floor cannot
-# see: on a machine where every gated law runs, up to 20 mandatory laws could
+# see: on a machine where every gated law runs, up to 24 mandatory laws could
 # stop before it names one -- so no mandatory law sits behind a STATE gate. A
 # precondition is a law of its own (`if m0.stacked:` once held the stacked
 # label law with no else, and the law vanished unnamed when the stack was
 # planted away, the re-polish law after it passing over no re-polish).
-SMOKE_FLOOR = 145
+SMOKE_FLOOR = 150
 
 # --smoke's own npc row: the content of tomorrow. The fit laws iterate the
 # content of today, which is how desk-hench's three 60-character names stacked
@@ -3404,6 +3446,24 @@ def smoke(win, app, out_dir):
           f"reads no budget off the level")
     m1.level.setValue(2)
     settle()
+    # the PLAYER's and every hero's Level spin keep the player's 1..20, and no
+    # rank spin is theirs (their ranks are the in-game panels': 0x003A /
+    # 0x003B carry them and the client asserts at CharData.cpp(202) past 12).
+    # The hostile's lift (255 / 21, the owner's ruling of 2026-09-24) went
+    # through constants of its own, and nothing before this law pinned these
+    # maxima: sandbox.LEVEL_MAX bumped would have lifted the three spins with
+    # the fit law green (any two digits fit). The literal 20, on purpose
+    lvls = [win.party.level] + [lv for _c, _p, _b, lv in win.party.rows.values()]
+    check(len(lvls) >= 2 and all(s.maximum() == 20 and s.minimum() == 1 for s in lvls)
+          and sandbox.LEVEL_MAX == 20 and not win.party.findChildren(Ranks),
+          f"the character's and every hero's Level spin is 1..20 ({len(lvls)} spins), and the "
+          f"Party tab has no rank spin (the panels' job, held to the table's 12 by the client)")
+    # ...while a hostile's Level spin is 0..255 -- sandbox.HOSTILE_LEVEL_MAX,
+    # the 0x0056 level byte, lifted from 20 by the ruling
+    check(m1.level.maximum() == 255 and m1.level.minimum() == 0
+          and sandbox.HOSTILE_LEVEL_MAX == 255,
+          f"a hostile's Level spin is 0..255 (HOSTILE_LEVEL_MAX, the 0x0056 level byte), "
+          f"lifted from the player's 20 by the owner's ruling")
     pk = en.groups[0].members[0].bar.slots[0]
     check(pk.lineEdit().cursorPosition() == 0, "a skill slot shows the start of its label")
     check(isinstance(pk.view().itemDelegate(), orchui.SkillDelegate)
@@ -3470,6 +3530,29 @@ def smoke(win, app, out_dir):
         settle(4)
         edges[w] = (m0.template.mapTo(win, QPoint(0, 0)).x(), m0.template.width(),
                     m0.weapon_item.mapTo(win, QPoint(0, 0)).x())
+        # ...and the hostile page's spins show their longest value whole:
+        # '255' in the Level spin and '21' in each Ranks spin, measured off
+        # the line edit as the Party tab's spin law measures (that law stops
+        # at its own tab, and the lift put a third digit in a field fitted
+        # to two). The value each spin is measured at is PINNED here too --
+        # the Level spin's at '255' and every Ranks spin's at '21' -- and the
+        # label prints the maxima measured, not the constants: with the Ranks
+        # spins planted back to 0..12 this law passed while printing "its
+        # '21'", having measured '12' (the verifier's plant, 2026-09-24)
+        hsp = [m0.level] + list(m0.ranks.spins.values())
+        rmax = sorted({s.textFromValue(s.maximum()) for s in m0.ranks.spins.values()})
+        hnarrow = [(s.accessibleName() or "Level", _spin_field(s).width(),
+                    s.fontMetrics().horizontalAdvance(s.textFromValue(s.maximum())))
+                   for s in hsp
+                   if _spin_field(s).width() - 4
+                   < s.fontMetrics().horizontalAdvance(s.textFromValue(s.maximum()))]
+        check(m0.level.textFromValue(m0.level.maximum()) == "255"
+              and rmax == [str(sandbox.HOSTILE_RANK_MAX)] and not hnarrow
+              and all(s.isVisibleTo(win) for s in hsp),
+              f"at {w} px the hostile page's Level spin shows its maximum "
+              f"'{m0.level.textFromValue(m0.level.maximum())}' whole and each of its "
+              f"{len(hsp) - 1} Ranks spins its maximum {rmax} (the constants say '255' and "
+              f"'{sandbox.HOSTILE_RANK_MAX}'; too narrow: {hnarrow[:3] or 'none'})")
         # the stack itself is a law, never a gate: behind `if m0.stacked:` the
         # two laws below vanished unnamed when the stack was planted away, and
         # the re-polish law after them passed over no re-polish
@@ -3953,10 +4036,14 @@ def smoke(win, app, out_dir):
         line, summ = g0.roster.item(0).text(), m0.summary()
         said = n_of(m0.ranks.spent(), "point")
         sp.setValue(keep)
+        # the spin's maximum is past the cost table (21 against 12), so the
+        # chip's words at it are the priced part and the count past the
+        # table; the 12-against-15 law below pins the wording
+        at_max = m0.ranks.rules.total_spent(
+            {a: (sp.maximum() if a == next(iter(m0.ranks.spins)) else s.value())
+             for a, s in m0.ranks.spins.items()})
         check(over and compiled and chip_said[1] == "info" and "over budget" not in chip_said[0]
-              and chip_said[0] == n_of(m0.ranks.rules.total_spent(
-                  {a: (sp.maximum() if a == next(iter(m0.ranks.spins)) else s.value())
-                   for a, s in m0.ranks.spins.items()}), "point")
+              and chip_said[0].startswith(n_of(at_max, "point")) and "past it, not priced" in chip_said[0]
               and "refuse" not in hint and "point budget" in hint,
               f"a hostile's ranks past its level's budget COMPILE (a hostile is exempt), the chip "
               f"counts the spend without judging it ({chip_said[0]!r}, {chip_said[1]}; "
@@ -3971,7 +4058,8 @@ def smoke(win, app, out_dir):
               f"points' -- a hostile has no budget to be 'of' ({summ!r})")
         # ...and the KEPT rules still refuse a hostile's ranks at compile: a
         # file whose first hostile carries an attribute of another profession
-        # and a rank past the table opens (the card offers neither -- the
+        # and a rank past HOSTILE_RANK_MAX (22: the cap is 21 since the lift,
+        # no longer the table's 12) opens (the card offers neither -- the
         # foreign id is dropped, the rank clamped by the spin), and the bar
         # says what the compiler refused, so the exemption opened nothing else
         rules = m0.ranks.rules
@@ -3982,7 +4070,8 @@ def smoke(win, app, out_dir):
         g1 = held_spec["groups"][0]
         bad = dict(held_spec, name="smoke-hostileranks",
                    groups=[dict(g1, members=[dict(g1["members"][0],
-                                                  attributes=[[foreign, 1], [mine, rules.rank_max + 1]])]
+                                                  attributes=[[foreign, 1],
+                                                              [mine, sandbox.HOSTILE_RANK_MAX + 1]])]
                                 + g1["members"][1:])] + held_spec["groups"][1:])
         bad_path = os.path.join(out_dir, "smoke_hostileranks.toml")
         with open(bad_path, "w", encoding="utf-8") as fh:
@@ -3993,20 +4082,126 @@ def smoke(win, app, out_dir):
         msg = win.statusBar().currentMessage()
         held_now = win.to_spec()
         check(len(kept) == 2 and any("belongs to profession" in q for q in kept)
-              and any(f"outside 0..{rules.rank_max}" in q for q in kept)
+              and any(f"outside 0..{sandbox.HOSTILE_RANK_MAX}" in q for q in kept)
               and not sandbox.validate(held_now, win.world)
               and held_now["groups"][0]["members"][0]["level"] == held_spec["groups"][0]["members"][0]["level"]
               and msg.startswith("Opened smoke_hostileranks, but the window could not hold all of "
                                  "it (2 changes: "),
               f"...and a hostile's ranks are still held to VALIDITY: a file with an attribute of "
-              f"another profession and a rank past {rules.rank_max} on one hostile is refused for "
-              f"both at compile, the card holds neither, and the bar says so ({msg[:88]!r})")
+              f"another profession and a rank past {sandbox.HOSTILE_RANK_MAX} on one hostile is "
+              f"refused for both at compile, the card holds neither, and the bar says so "
+              f"({msg[:88]!r})")
         win.from_spec(held_spec)
         settle()
     else:
         skip("an over-budget hostile compiles (exempt)", "no attribute table, so no ranks")
         skip("a hostile's roster line counts, never 'of'", "no attribute table, so no ranks")
         skip("the kept rules still refuse a hostile's ranks", "no attribute table, so no ranks")
+    # the hostile caps LIFTED -- the owner's second ruling of 2026-09-24, "lift
+    # the rank and level caps for hostiles too": the Ranks spins 0..21
+    # (sandbox.HOSTILE_RANK_MAX, retail's ceiling) and the Level spin 0..255
+    # (HOSTILE_LEVEL_MAX, the 0x0056 level byte), the same constants validate
+    # reads, so Open holds a high file WHOLE and says what it cannot hold.
+    # The editors are rebuilt by every from_spec, so m0 is re-fetched after
+    # each load
+    m0 = en.groups[0].members[0]
+    if m0.ranks.spins:
+        rules = m0.ranks.rules
+        check(all(s.maximum() == 21 and s.minimum() == 0 for s in m0.ranks.spins.values())
+              and sandbox.HOSTILE_RANK_MAX == 21 and "0..21" in m0.ranks.hint.text()
+              and "0..12" not in m0.ranks.hint.text(),
+              f"every Ranks spin on the hostile page is 0..21 (HOSTILE_RANK_MAX, lifted from the "
+              f"table's 12) and the hint says so ({m0.ranks.hint.text()!r})")
+        # ...and the chip tells rank 12 from rank 15, which the cost table
+        # cannot: attribspend prices both at the same points (no row past 12,
+        # the 13th is the client's cap sentinel), so a chip reading
+        # n_of(total_spent) alone said one figure for 12, 15 and 21 -- a
+        # number with no source past 12. Past the table the chip keeps the
+        # priced part, COUNTS the ranks past it, and the roster line follows
+        sp = next(iter(m0.ranks.spins.values()))
+        keep = sp.value()
+        sp.setValue(rules.rank_max)
+        settle()
+        at12, pts12 = m0.ranks.chip.text(), m0.ranks.spent()
+        sp.setValue(rules.rank_max + 3)
+        settle()
+        at15, pts15, summ15 = m0.ranks.chip.text(), m0.ranks.spent(), m0.summary()
+        tip15 = m0.ranks.chip.toolTip()
+        sp.setValue(keep)
+        settle()
+        check(pts12 == pts15 and at12 == n_of(pts12, "point")
+              and at15 == f"{n_of(pts12, 'point')} to {rules.rank_max}; 1 rank past it, not priced"
+              and at15 in summ15 and str(rules.rank_max) in tip15,
+              f"the chip tells rank {rules.rank_max} from rank {rules.rank_max + 3}, which the "
+              f"table prices alike ({pts12} = {pts15}): {at12!r} against {at15!r} -- the priced "
+              f"part and the count past the table, never a figure the table lacks -- and the "
+              f"roster line follows it ({summ15!r})")
+        # ...and a file with a level-28 boss-grade hostile carrying a rank of
+        # 16 opens WHOLE: compiles, the bar says 'Opened' alone, the spins
+        # hold 28 and 16 (Qt clamped a level-24 template to 20 in silence
+        # before the ruling, and 'Opened X' alone was the same false word)
+        mine = next(iter(m0.ranks.spins))
+        held_spec = win.to_spec()
+        g1 = held_spec["groups"][0]
+        high = dict(held_spec, name="smoke-hostilehigh",
+                    groups=[dict(g1, members=[dict(g1["members"][0], level=28,
+                                                   attributes=[[mine, 16]])]
+                                 + g1["members"][1:])] + held_spec["groups"][1:])
+        high_path = os.path.join(out_dir, "smoke_hostilehigh.toml")
+        with open(high_path, "w", encoding="utf-8") as fh:
+            fh.write(sandbox.spec_toml(high))
+        win.run.load(high_path)
+        settle()
+        msg = win.statusBar().currentMessage()
+        m0 = en.groups[0].members[0]
+        got = win.to_spec()["groups"][0]["members"][0]
+        check(not sandbox.validate(high, win.world) and msg == "Opened smoke_hostilehigh"
+              and got["level"] == 28 and [mine, 16] in (got.get("attributes") or [])
+              and m0.level.value() == 28 and m0.ranks.spins[mine].value() == 16,
+              f"a spec with a level-28 hostile carrying a rank of 16 compiles and opens WHOLE: "
+              f"the bar says {msg!r}, the window holds level {m0.level.value()} and rank "
+              f"{m0.ranks.spins[mine].value()} (a level-24 template clamped to 20 in silence "
+              f"before the ruling)")
+        # ...while a file past the new caps -- level 300 AND rank 22 on ONE
+        # hostile -- is refused for both at compile, the spins hold 255 and
+        # 21 (their ranges ARE the compiler's), and the bar says so, '2
+        # changes'. Both on one member, because that is the case the compiler
+        # once hid: its `elif` checked the ranks only when the level had
+        # passed, so this member was refused for the level alone and the bar
+        # said '1 change' while the window clamped both (this law had put the
+        # two values on two members and could not see it; the verifier's
+        # plant, 2026-09-24)
+        over = dict(held_spec, name="smoke-hostileover",
+                    groups=[dict(g1, members=[dict(g1["members"][0], level=300,
+                                                   attributes=[[mine, 22]])]
+                                 + g1["members"][1:])] + held_spec["groups"][1:])
+        over_path = os.path.join(out_dir, "smoke_hostileover.toml")
+        with open(over_path, "w", encoding="utf-8") as fh:
+            fh.write(sandbox.spec_toml(over))
+        refused = [q for q in sandbox.validate(over, win.world) if q.startswith("group 1 member")]
+        win.run.load(over_path)
+        settle()
+        msg = win.statusBar().currentMessage()
+        held_now = win.to_spec()
+        now = held_now["groups"][0]["members"]
+        m0 = en.groups[0].members[0]
+        check(refused == ["group 1 member 1: level 300 is outside 0..255",
+                          f"group 1 member 1.attributes: rank 22 on {mine} is outside 0..21"]
+              and not sandbox.validate(held_now, win.world)
+              and now[0]["level"] == 255 and [mine, 21] in (now[0].get("attributes") or [])
+              and m0.level.value() == 255 and m0.ranks.spins[mine].value() == 21
+              and msg.startswith("Opened smoke_hostileover, but the window could not hold all of "
+                                 "it (2 changes: "),
+              f"...and a file with level 300 AND rank 22 on ONE hostile is refused for BOTH at "
+              f"compile ({refused}), the window holds 255 and 21, and the bar says '2 changes' "
+              f"({msg[:86]!r})")
+        win.from_spec(held_spec)
+        settle()
+    else:
+        skip("the Ranks spins are 0..21 and the hint says so", "no attribute table, so no ranks")
+        skip("the chip tells rank 12 from rank 15", "no attribute table, so no ranks")
+        skip("a level-28, rank-16 hostile opens whole", "no attribute table, so no ranks")
+        skip("a level-300, rank-22 file is refused and said", "no attribute table, so no ranks")
     seen_roles |= used_roles(win)
     lore += surface_lore(win)
     # a malformed spec must not latch the Enemies tab dead

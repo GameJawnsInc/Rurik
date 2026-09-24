@@ -28,6 +28,169 @@ move back.
 
 ---
 
+### R-SANDBOX, hostile caps lifted: the verifier's fixes -- 2026-09-24 -- **one hostile past both caps was refused for one; the spin-fit law printed a constant it never measured; the two open residues were in the log and not in §8; and the client half of the definition defect was stated as fact**
+
+Corrects the entry below it, "R-SANDBOX, hostile level and rank caps lifted -- 2026-09-24"
+(that entry stands; this one names it). An independent verifier read the commit
+(`d36dfd93`) against the ruling and found the ruling held exactly -- 20,000 random specs
+through the old and the new `validate` differ only in a hostile's level and rank reasons,
+each version matching its own rule; the player's and each hero's lines identical -- and six
+smaller things, five taken, one declined:
+
+- **One member past BOTH caps was refused for ONE (`toolkit/harness/sandbox.py`).**
+  `validate`'s member branch checked a hostile's ranks only `elif` its level had passed. The
+  `elif` was the budget's: a level past the cap priced the ranks at 0 and `level 24 has 0`
+  named the wrong fault. A hostile has had no budget since the exemption ruling, so the
+  `elif` only hid a rank reason behind a level reason -- a member at level 300 with a rank
+  of 22 was refused for the level alone, and the window clamped BOTH and said `1 change`.
+  The lift's own smoke law had put level 300 and rank 22 on two different members and could
+  not see it. Now `if tmpl:`; the level-256 checks keep their single reason (the raider's
+  ranks are valid). `test_sandbox` +1 (both reasons, the level first; red under the `elif`
+  put back), and the smoke law reshaped onto ONE member expecting both reasons, the spins at
+  255 and 21, and the bar's `2 changes` (red under the same plant). Floor 139 → 140.
+- **The spin-fit law's '21' came from the constant, not the spin
+  (`tools/orchestrator/orchestrator.py`).** The law measured each Ranks spin's
+  `textFromValue(maximum())` for width and printed `sandbox.HOSTILE_RANK_MAX` in its label:
+  with the spins planted back to 0..12 it passed at all three widths saying "its '21'",
+  having measured '12' (the separate 0..21 law caught the plant, so nothing reached the
+  suite -- but a law's printed claim may not be false). The predicate now pins every Ranks
+  spin's maximum text at `str(HOSTILE_RANK_MAX)` and the label prints the maxima measured;
+  red under that plant, 3 of 3 widths.
+- **`PLAN.md` §3's R-SANDBOX row made two "now" claims about one bound.** The restyle
+  clause still said `validate` "now refuses a hostile level outside 0..20 ... each rank within
+  the table" ahead of the lift's clause in the same cell. Past tense, marked SUPERSEDED
+  with the new bounds, so the single status authority has one current statement.
+- **The two residues were in the log only.** The entry below records "Two things NOT done"
+  -- no server-load guard in `area_population` for a content row past 255, and the level-0
+  quirk (`agent_level` treats 0 as None) -- and `CLAUDE.md` puts what is OPEN in `PLAN.md`
+  §8. One §8.1 bullet under "The sandbox" now names both and points here.
+- **`TESTS.md`'s `test_sandbox` entry** ended "107 checks, floor 107" (stale since 129) and
+  its Section 2 still said "ONE definition per template". Tail 140 / 140; the phrase now
+  "one definition per (template, level)"; the dated head prepended for the +1.
+- **Three stale words and one label.** `test_sandbox.py`'s exemption comment ("each rank
+  within the table" → 0..HOSTILE_RANK_MAX); the kept-rules law's comment ("a rank past the
+  table" → past HOSTILE_RANK_MAX, 22); and the IDS paragraph of `sandbox.py` stated as fact
+  that "the client would show one level for both". The recon read the server's per-create
+  re-send of the definition (OBSERVED); that the client's displayed level (AvChar +0x110)
+  is copied from the slot at create is inferred -- RECONSTRUCTION, UNVERIFIED on the
+  client. The docstring, the test comment and this entry say so; the entry below and the
+  commit `d36dfd93` say "showed", and are corrected by this line, not edited.
+
+**Declined: nothing.** All six were real; the nit was cheap.
+
+**The gate.** `test_sandbox` 140 of 140 (floor 140); `--smoke` 174 of 174 in dark and in
+light, 0 skips (floor 150 = 174 − 24 gated, unchanged: one law reshaped, none added);
+`test_orchtheme` 37; the seven lints green. Records: `PLAN.md` §3's R-SANDBOX row (the
+superseded clause, the count) and §8.1; `TESTS.md`; `tools/orchestrator/README.md` (140;
+the one-member law).
+
+---
+
+### R-SANDBOX, hostile level and rank caps lifted -- 2026-09-24 -- **the owner's second ruling of the day: a hostile's level 0..255 (the wire's byte) and ranks 0..21 (retail's ceiling), constants of their own; the player's and a hero's 1..20 / 0..12 untouched and now pinned; one client definition per (template, level); the Attributes chip prices to the table's 12 and counts the ranks past it**
+
+The owner's ruling (2026-09-24, verbatim): "lift the rank and level caps for hostiles too".
+It follows the two R-SANDBOX entries of the same day -- "R-SANDBOX, hostiles exempt from the
+point budget" (the ruling "exempt hostiles from the rank budget", `validate` holding a
+hostile's ranks to validity alone) and "R-SANDBOX, hostiles exempt from the point budget:
+the verifier's fixes" (the roster line's law, the two kept-rule witnesses). Both stand as
+written; this entry names them. Under them a hostile was still refused outside the player's
+level 0..20 and the cost table's rank 0..12, and the window's spins clamped a file to those.
+
+**The bounds, and where each comes from.** A recon of every consumer (compiler, server, wire,
+client, the owner's retail tapes; three lanes, each with its probe scripts) chose them:
+
+- **Level 0..255 (`sandbox.HOSTILE_LEVEL_MAX`).** The ceiling is the WIRE: `GAME_SMSG 0x0056`'s
+  level field is a `byte` (`schema/overrides.json` "86"), our codec raises `struct.error` at
+  256 or -1 inside `send()` and the connection drops mid-population, and the client's
+  displayed level is a u8 store (AvChar +0x110, `movzx` at 0x007DF7D2, build 38797).
+  OBSERVED / MEASURED. Retail's tapes show hostiles 0..20 (non-combatants 24; 2,748 `0x0056`
+  declarations over 96 connections); armour (3L + bonus) and the strike level (3L)
+  extrapolate linearly past 20 with no crash -- the operator's to use, not refused, no
+  warning chip.
+- **Rank 0..21 (`sandbox.HOSTILE_RANK_MAX`).** WIKI, weak (search summaries of GWW talk /
+  template pages: foes' attributes up to 20, +1 from skills; the skill progression template
+  stops at 21), and MEASURED on our side: the client is witnessed handling an NPC rank of 15
+  (`0x0042` field 3, Windborne Speed on map 280, 108 applies over 15 captures); every server
+  consumer carries 0..21 without a raise; past 22.5 our own formulas go wrong (Frenzy, 346,
+  turns from double damage into damage reduction; strength penetration hits 100 % at 100).
+  So 21 is where retail and our formulas agree.
+- **UNCHANGED, and now pinned:** the PLAYER's and every HERO's level 1..20 (`LEVEL_MAX`) and
+  ranks 0..12 (`rules.rank_max`) -- `0x003A` / `0x003B` carry theirs and the client asserts at
+  CharData.cpp(202) on a base rank >= 13. `LEVEL_MAX` was shared by all three roles in the
+  compiler and the window's Level spins, and `_check_ranks` compared all three against
+  `rules.rank_max`; the lift went through NEW constants for the hostile branch only, and four
+  controls that did not exist (a player's and a hero's rank 13; a player and a hero at 21)
+  now go red if a shared bound moves.
+
+**The compiler (`toolkit/harness/sandbox.py`).** `validate`'s member branch refuses a level
+outside 0..`HOSTILE_LEVEL_MAX`; `_check_ranks` with no level (the hostile call) bounds a rank
+by `HOSTILE_RANK_MAX`, with a level by `rules.rank_max` as before. `spawn_rows` allocates one
+client definition per (template, LEVEL): `0x0056` carries the level inside the definition and
+is re-sent on every create, so two members of one template at different levels (an L28 boss
+and L2 minions of one body -- easy to write once the cap is lifted) overwrote one slot and
+the client showed one level for both. Retail declares each definition exactly once per
+connection (2,748 of 2,748 on the tapes); a slot per level is our RECONSTRUCTION of how
+retail would carry two levels of one body. Members at one level still share a slot; at most
+sixteen members, so definitions 60..75, inside the ranges the IDS paragraph and
+`area_population`'s startup checks require. The module docstring's REFUSES and IDS
+paragraphs say all of this.
+
+**The window (`tools/orchestrator/orchestrator.py`).** The hostile Level spin is
+0..`HOSTILE_LEVEL_MAX`, the Ranks spins 0..`HOSTILE_RANK_MAX`, the hint "each rank 0..21" --
+the same constants `validate` reads, so a file the spin cannot hold is one the compiler
+refuses and Open says so (Qt had clamped a level-24 template to 20 in silence, and "Opened X"
+alone was the false word). **The Attributes chip:** `attribspend.total_spent` saturates at
+rank 12 (no cost row past it -- 97 points at 12, 15 or 21), so a "points" figure past 12 has
+no source. The chip prices the ranks to the table's 12 and says how many stand past it, as a
+count: "97 points" while every rank is in the table, "97 points to 12; 1 rank past it, not
+priced" past it (`Ranks.spend`, `spent_text`); the roster line follows the chip. That is the
+decision: a true count in place of a fabricated figure.
+
+**Checks, each read off the defect's own operand and each proven red by a plant (scratch
+backups, `cp` restores, the file's hash checked after each).** `test_sandbox` 129 → 139: rank
+13 and 21 accepted on a hostile (the inverted check), 22 refused; a level-255 hostile
+accepted and 24 too, 256 refused (the level-24 plants replanted at 256), -1 refused naming
+0..255; the four controls above; `HOSTILE_LEVEL_MAX` tied to the wire two ways (the field's
+type read from the schema; the codec encoding 255 and raising at 256 -- planted at 254, the
+codec check reads `(254, 'encoded')`); the definition fix (an L3 and an L24 of one template
+get two definitions each carrying its own level; two at one level share one; every id in
+range). `--smoke` 165 → 174 laws, 24 gated (was 20), floor 150 (174 − 24): the character's
+and every hero's Level spin pinned at 1..20 with no rank spin theirs; a hostile's Level spin
+0..255; the hostile page's Level spin showing '255' whole and each Ranks spin '21' at 1,280,
+1,120 and 1,000 px; the Ranks spins 0..21 and the hint saying so; the chip telling rank 12
+from rank 15 (the table prices both at 97); a level-28, rank-16 file opening WHOLE with
+"Opened" alone; a level-300, rank-22 file refused for both at compile, the spins holding 255
+and 21, the bar saying "2 changes"; the exempt-compile law reading the new chip words and
+the kept-rules law planting 22. Plants and their reds: the old caps back (20 / 12: 10
+compiler checks, 9 laws); the shared `LEVEL_MAX` bumped to 255 (the two arithmetic checks,
+the two level-21 controls, the Party maxima law -- and the Party fit law, '255' overflowing
+the heroes' 24 px field); the rank lift applied to all roles (the two rank-13 controls);
+one definition per template (the definition law, `[(3, 60), (24, 60), (3, 60)]`); the chip
+priced past 12 (the 12-against-15 law and the exempt-compile law); the spin maxima back to
+20 / 12 (9 laws, the hold-whole law reading "the window holds level 20 and rank 12" under
+"Opened smoke_hostilehigh"). Both themes 174 of 174, 0 skips; `test_orchtheme` 37; the seven
+lints green; `--snap` of a lifted hostile page in both themes read.
+
+**Two things NOT done, and why.**
+
+- **No server-load guard in `area_population` for a content row past 255.** Content rows
+  bypass the compiler (`toolkit/content.py` checks no level), so a `[spawn.*]` row written by
+  hand at 256 first fails inside `send()` at spawn time and drops the connection. The recon
+  recommended a load-time refusal; this change is the compiler's and the window's, and the
+  server's population checks are `authsrv.py`'s own arc (their tests read that file). Open,
+  named here so it is not lost.
+- **The level-0 quirk.** `agent_level` treats 0 as None (authsrv.py, `agent_level` /
+  `agent_strike_level`), so a level-0 hostile armours at 0 (3L + bonus) but strikes as 20
+  (the fallback strike level 60). Level 0 is a real retail value (defs 1428 / 1433 / 1434 /
+  1442 on map 146) and the window offers it; the asymmetry predates the lift and is
+  unchanged by it. Not touched here: which arm is right needs a retail witness of a level-0
+  foe's damage, not a guess.
+
+Records: `tools/orchestrator/README.md` (the compiler paragraph, the smoke count, the state
+laws), `PLAN.md` §3's R-SANDBOX row, `TESTS.md`'s `test_sandbox` entry.
+
+---
+
 ### DESKWORK-D1, the town weapon: the owner's answer -- 2026-09-24 -- **on retail no weapon is shown on the body in a town, only on the doll**
 
 The one-word question the carrier fix left (the entry below and its fix pass): the owner,

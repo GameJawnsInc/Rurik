@@ -33,7 +33,7 @@ import checks   # noqa: E402
 import content  # noqa: E402
 import sandbox  # noqa: E402
 
-led = checks.Ledger("sandbox", floor=129)     # 88 from the green run 2026-09-20; +19 SANDBOX-B7 (2026-09-22); +2 SKILLS-LT sec.5, the hand / label split (2026-09-23); +2 the fix pass (one LABEL_TIER, gamesrv_args); +1 budget_for_level (2026-09-24); +4 a hostile's ranks checked (2026-09-24); +7 the pre-merge pass: a hostile's level range, the no-level fallback told from 2 and 20, no npc rows (2026-09-24); +4 hostiles exempt from the budget, the owner's ruling: two budget refusals inverted, three kept rules and a hero's budget as controls, the no-level fallback re-witnessed on spawn_rows and validate's level range (2026-09-24); +2 the verifier's fixes: a malformed pair and an id outside the table on a hostile, the two kept rules with no hostile witness (2026-09-24)
+led = checks.Ledger("sandbox", floor=140)     # 88 from the green run 2026-09-20; +19 SANDBOX-B7 (2026-09-22); +2 SKILLS-LT sec.5, the hand / label split (2026-09-23); +2 the fix pass (one LABEL_TIER, gamesrv_args); +1 budget_for_level (2026-09-24); +4 a hostile's ranks checked (2026-09-24); +7 the pre-merge pass: a hostile's level range, the no-level fallback told from 2 and 20, no npc rows (2026-09-24); +4 hostiles exempt from the budget, the owner's ruling: two budget refusals inverted, three kept rules and a hero's budget as controls, the no-level fallback re-witnessed on spawn_rows and validate's level range (2026-09-24); +2 the verifier's fixes: a malformed pair and an id outside the table on a hostile, the two kept rules with no hostile witness (2026-09-24); +10 the hostile caps lifted, the owner's ruling: rank 13 and 21 accepted, 22 refused, a level-255 hostile accepted and 24 too, 256 refused, the player's and a hero's rank 13 and level 21 refused (four controls that did not exist), HOSTILE_LEVEL_MAX tied to 0x0056's byte in the schema and to the codec's raise, a definition per (template, level) with its ids in range (2026-09-24); +1 the lift's verifier's fix: one member past both caps refused for both (`if tmpl:`, the elif hid the rank reason) (2026-09-24)
 
 
 # ---------------------------------------------------------------- the fixture
@@ -171,8 +171,9 @@ led.ok([k for k, _ in rows] == ["sandbox_g1_m1", "sandbox_g1_m2", "sandbox_g2_m1
 led.ok([r["agent_id"] for _, r in rows] == [110, 111, 112, 113, 114],
        "agent ids run from 110", [r["agent_id"] for _, r in rows])
 led.ok([r["definition"] for _, r in rows] == [60, 61, 60, 61, 60],
-       "one definition per TEMPLATE (raider 60, monk 61), shared by rows naming "
-       "the same body -- retail's own shape", [r["definition"] for _, r in rows])
+       "one definition per (template, level) -- raider 60, monk 61, every member at level 2 -- "
+       "shared by rows naming the same body at one level: retail's own shape",
+       [r["definition"] for _, r in rows])
 led.ok(sandbox.check_population(rows) == [], "the set checks pass")
 boss = dict(rows[4][1])
 led.ok(boss["glow"] == 5 and boss["max_health"] == 160 and boss["group"] == "g3",
@@ -339,7 +340,7 @@ led.ok(ok, "five groups are refused", why)
 # a hostile is EXEMPT from the point budget -- the owner's ruling (2026-09-24,
 # PLAN-LOG): retail foes and bosses exceed a player's. Its ranks are still
 # held to VALIDITY (a real attribute of the template's profession, each rank
-# within the table), and the player's and a hero's ranks keep their budget.
+# 0..HOSTILE_RANK_MAX), and the player's and a hero's ranks keep their budget.
 # (For one day validate refused a hostile past its budget, as the window's
 # hint had promised; these two checks are that rule's, inverted.)
 hot = dict(raider, attributes=[[17, 12], [19, 12], [20, 12], [21, 12]])
@@ -357,9 +358,31 @@ ok, why = refuses(spec(groups=[{"members": [dict(raider, attributes=[[13, 1]])]}
                   "attribute 13 belongs to profession 3, not to [1]")
 led.ok(ok, "a Monk attribute on a Warrior hostile is still refused (the template's profession)",
        why)
-ok, why = refuses(spec(groups=[{"members": [dict(raider, attributes=[[17, 13]])]}] + groups[1:]),
-                  "rank 13 on 17 is outside 0..12")
-led.ok(ok, "a rank past the table's 12 on a hostile is still refused", why)
+# ...the rank cap LIFTED for a hostile -- the owner's second ruling of the day,
+# "lift the rank and level caps for hostiles too": 0..HOSTILE_RANK_MAX (21,
+# retail's ceiling: foes' attributes reach 20, +1 from skills; the client is
+# witnessed at an NPC rank of 15 and our formulas hold to 21). This check read
+# "rank 13 ... is outside 0..12" for a hostile until then, and is inverted
+ps = problems(spec(groups=[{"members": [dict(raider, attributes=[[17, 13], [20, 21]])]}]
+                   + groups[1:]))
+led.ok(ps == [] and sandbox.HOSTILE_RANK_MAX == 21,
+       "a hostile's rank 13 (past the cost table's 12) and rank 21 (HOSTILE_RANK_MAX) are "
+       "ACCEPTED -- the caps lifted for a hostile, the owner's ruling", ps)
+ok, why = refuses(spec(groups=[{"members": [dict(raider, attributes=[[17, 22]])]}] + groups[1:]),
+                  "rank 22 on 17 is outside 0..21")
+led.ok(ok, "...and rank 22 on a hostile is refused past HOSTILE_RANK_MAX (21), named in the "
+           "reason", why)
+# ...the PLAYER's and a HERO's ranks keep the table's 12 (0x003A / 0x003B carry
+# theirs; the client asserts at CharData.cpp(202) on a base rank >= 13) -- the
+# controls the lift needs, since _check_ranks serves all three roles and a
+# naive bump of one shared ceiling would have lifted theirs unseen
+ok, why = refuses(spec(player=dict(S["player"], level=20, attributes=[[20, 13]])),
+                  "player.attributes: rank 13 on 20 is outside 0..12")
+led.ok(ok, "the PLAYER's rank 13 is still refused past the table's 12 (at level 20, where the "
+           "budget alone would not refuse it)", why)
+ok, why = refuses(spec(heroes=[dict(hero, level=20, attributes=[[13, 13]])]),
+                  "hero 1.attributes: rank 13 on 13 is outside 0..12")
+led.ok(ok, "...and a HERO's rank 13 is still refused past the table's 12 (at level 20)", why)
 ok, why = refuses(spec(groups=[{"members": [dict(raider, attributes=[[17, 1], [17, 2]])]}]
                        + groups[1:]), "attribute 17 twice")
 led.ok(ok, "one attribute twice on a hostile is still refused", why)
@@ -391,31 +414,89 @@ led.ok([r["level"] for _, r in sandbox.spawn_rows(spec(groups=[{"members": nolev
        [r["level"] for _, r in sandbox.spawn_rows(spec(groups=[{"members": nolevel}]
                                                         + groups[1:]), WORLD)][:3])
 # ...and validate reads the same level: a template past the cap fails a member
-# with no level for ITS level, and a member's own level wins over it
+# with no level for ITS level, and a member's own level wins over it. The cap
+# is HOSTILE_LEVEL_MAX (255, the wire's byte -- the owner's ruling of
+# 2026-09-24 lifted it from the player's 20), so the template is planted one
+# past it, where 24 stood
+past = sandbox.HOSTILE_LEVEL_MAX + 1
 elder = FakeWorld(dict(WORLD.tables, npc=dict(WORLD.tables["npc"],
-                                              elder={"profession": 1, "level": 24,
+                                              elder={"profession": 1, "level": past,
                                                      "file_id": 116366, "model_id": 1})))
 ps = sandbox.validate(spec(groups=[{"members": [{"npc": "elder", "health": 120}]}] + groups[1:]),
                       elder)
-led.ok(ps == ["group 1 member 1: level 24 is outside 0..20"],
-       "a member with no level on a level-24 template is refused for the TEMPLATE's level (the "
+led.ok(ps == [f"group 1 member 1: level {past} is outside 0..255"] and past == 256,
+       "a member with no level on a level-256 template is refused for the TEMPLATE's level (the "
        "fallback validate reads)", ps)
 ps = sandbox.validate(spec(groups=[{"members": [{"npc": "elder", "health": 120, "level": 3}]}]
                            + groups[1:]), elder)
-led.ok(ps == [], "...and its own level 3 wins over the template's 24", ps)
-# a hostile past LEVEL_MAX is refused for its LEVEL, the reason the window
-# acts on (its spin clamps 24 to 20), never for its ranks ('level 24 has 0'
-# once pointed the operator at ranks it may keep)
-for m, tag in ((dict(raider, level=24), "with its 5 points"),
-               (dict(raider, level=24, attributes=None), "with no ranks")):
+led.ok(ps == [], "...and its own level 3 wins over the template's 256", ps)
+# a hostile past HOSTILE_LEVEL_MAX is refused for its LEVEL, the reason the
+# window acts on (its spin clamps 256 to 255), never for its ranks ('level 24
+# has 0' once pointed the operator at ranks it may keep)
+for m, tag in ((dict(raider, level=256), "with its 5 points"),
+               (dict(raider, level=256, attributes=None), "with no ranks")):
     ps = problems(spec(groups=[{"members": [m]}] + groups[1:]))
-    led.ok(ps == ["group 1 member 1: level 24 is outside 0..20"],
-           f"a level-24 hostile {tag} is refused for its level, the one reason, never 'has 0'", ps)
-led.ok(problems(spec(groups=[{"members": [dict(raider, level=20)]}] + groups[1:])) == [],
-       "...and at 20, the cap, the raider's 5 points are accepted")
+    led.ok(ps == ["group 1 member 1: level 256 is outside 0..255"],
+           f"a level-256 hostile {tag} is refused for its level, the one reason, never 'has 0'", ps)
+led.ok(problems(spec(groups=[{"members": [dict(raider, level=255)]}] + groups[1:])) == [],
+       "...and at 255, the cap (the 0x0056 level byte's last value), the raider's 5 points are "
+       "accepted")
+led.ok(problems(spec(groups=[{"members": [dict(raider, level=24)]}] + groups[1:])) == [],
+       "...and at 24 -- refused as 'outside 0..20' until the ruling; the highest level on the "
+       "owner's retail tapes -- it is accepted")
 ok, why = refuses(spec(groups=[{"members": [dict(raider, level=-1)]}] + groups[1:]),
-                  "level -1 is outside 0..20")
-led.ok(ok, "...a level below 0 is refused by the same rule", why)
+                  "level -1 is outside 0..255")
+led.ok(ok, "...a level below 0 is refused by the same rule, the reason naming 0..255", why)
+# ...and a member past BOTH caps is refused for both: the ranks are checked
+# whether or not the level passed (`if tmpl:`, not `elif`). The elif was the
+# budget's -- a level past the cap priced the ranks at 0 and 'level 24 has 0'
+# named the wrong fault -- and with no budget it only hid the rank reason: a
+# level-300 member with a rank of 22 was refused for the level alone, and the
+# window clamped both and said '1 change' (the verifier's plant, 2026-09-24)
+ps = problems(spec(groups=[{"members": [dict(raider, level=300, attributes=[[17, 22]])]}]
+                   + groups[1:]))
+led.ok(ps == ["group 1 member 1: level 300 is outside 0..255",
+              "group 1 member 1.attributes: rank 22 on 17 is outside 0..21"],
+       "ONE member at level 300 with a rank of 22 is refused for BOTH, the level first (the "
+       "elif hid the rank behind the level)", ps)
+# ...the PLAYER's and a HERO's level keep 1..20 (points_for_level's table ends
+# there, and 0x003A / 0x003B carry their ranks): the controls the lift needs,
+# since sandbox.LEVEL_MAX served all three roles and a naive bump would have
+# lifted theirs -- no check ran validate on a player or hero at 21 before this
+ok, why = refuses(spec(player=dict(S["player"], level=21)), "player.level 21 is outside 1..20")
+led.ok(ok, "the PLAYER at level 21 is still refused (1..20)", why)
+ok, why = refuses(spec(heroes=[dict(hero, level=21)]), "hero 1: level 21 is outside 1..20")
+led.ok(ok, "...and a HERO at level 21 is still refused (1..20)", why)
+# HOSTILE_LEVEL_MAX is the WIRE, tied to it here so the constant cannot drift
+# from the schema: GAME_SMSG 0x0056's level field (the eighth after the header:
+# def, file, 0, scale, 0, flags, profession, LEVEL, name) is a `byte` in
+# schema/overrides.json, and the codec that builds the frame encodes the cap
+# and raises one past it -- the raise that would drop a live connection
+# mid-population, which is why validate refuses first
+import json
+with open(os.path.join(os.path.dirname(os.path.dirname(HERE)), "schema", "overrides.json"),
+          encoding="utf-8") as fh:
+    _fields = json.load(fh)["channels"]["GAME_SMSG"]["86"]["fields"]
+_payload = [f["type"] for f in _fields if f["type"] != "msg_header"]
+led.ok(_payload[7] == "byte" and sandbox.HOSTILE_LEVEL_MAX == (1 << 8) - 1 == 255,
+       "HOSTILE_LEVEL_MAX is the width of 0x0056's level field in the schema: a byte, so 255",
+       (_payload, sandbox.HOSTILE_LEVEL_MAX))
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "schema"))
+import codec    # noqa: E402  (toolkit/schema/codec.py)
+import agents   # noqa: E402  (toolkit/authsrv/agents.py, on sandbox's path)
+_codec = codec.Codec()
+_npc = {"file_id": 1, "scale": 0x64000000, "flags": 0x20C, "profession": 1, "enc_name": "脁"}
+_at_cap = _codec.encode("GAME_SMSG", 0x0056,
+                        agents.npc_properties(60, dict(_npc, level=sandbox.HOSTILE_LEVEL_MAX)))
+try:
+    _codec.encode("GAME_SMSG", 0x0056,
+                  agents.npc_properties(60, dict(_npc, level=sandbox.HOSTILE_LEVEL_MAX + 1)))
+    _past = "encoded"
+except Exception as exc:                        # noqa: BLE001
+    _past = type(exc).__name__
+led.ok(_at_cap[2 + 6 * 4 + 1] == 255 and _past == "error",
+       "...and the codec packs a level-255 0x0056 with the byte in place and raises struct.error "
+       "one past it (the drop validate exists to prevent)", (_at_cap[2 + 6 * 4 + 1], _past))
 # a world with attribute tables and no npc rows: no template to check the
 # ranks in, so they are unchecked, as the rest of validate treats an empty
 # npc table (in profession 0 every rank read 'belongs to ..., not to []')
@@ -465,6 +546,24 @@ led.ok(len(rows4) == 13 and sandbox.check_population(rows4) == [] and
        "twelve hostiles and a boss: ids 110..122, two definitions, no collision")
 led.ok(rows4[-1][0] == "corridor_boss" and rows4[-1][1]["y"] == sandbox.BOSS_Y,
        "the boss is still last and still at the north end")
+# a definition per (template, LEVEL): 0x0056 carries the level inside the
+# definition and is re-sent on every create, so one slot for an L3 and an L24
+# raider held whichever was declared last (OBSERVED on the server's sends) and
+# the client would show one level for both (RECONSTRUCTION, unverified on the
+# client -- sandbox's IDS paragraph; retail declares each definition once per
+# connection, 2,748 of 2,748 on the owner's tapes; a slot per level is
+# RECONSTRUCTION, 2026-09-24)
+lv = sandbox.spawn_rows(spec(groups=[{"members": [dict(raider, level=3), dict(raider, level=24),
+                                                  dict(raider, level=3)]}] + groups[1:]), WORLD)
+lvd = [(r["level"], r["definition"]) for _, r in lv[:3]]
+led.ok(lvd[0][1] != lvd[1][1] and lvd[0][0] == 3 and lvd[1][0] == 24,
+       "two members of one template at L3 and L24 get TWO definitions, each carrying its own "
+       "level (one slot showed the last-declared level for both)", lvd)
+led.ok(lvd[0][1] == lvd[2][1] and sandbox.check_population(lv) == []
+       and all(sandbox.DEFINITION_FIRST <= r["definition"] < sandbox.DEFINITION_FIRST + 16
+               and r["definition"] not in sandbox.RESERVED_DEFINITIONS for _, r in lv),
+       "...two at one level share one, and every definition sits in 60..75, clear of the reserves "
+       "(check_population clean)", [r["definition"] for _, r in lv])
 
 bossy = spec(groups=[{"members": [dict(raider), dict(raider, boss=True), dict(raider)]}])
 rb = sandbox.spawn_rows(bossy, WORLD)
