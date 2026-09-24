@@ -11484,8 +11484,10 @@ HERO_FOLLOW = True          # False (--no-hero-follow): the body stands where it
 HERO_FOLLOW_STOP = 200.0    # units, centre to centre.
 # math.inf, and deliberately not a number: a hero that leashed would be left
 # behind by a player crossing a map, and "my hero stopped following me" is not a
-# thing anyone should have to diagnose. The hostile leash (AGGRO_RANGE) exists
-# so a fight is escapable; nothing about a party member wants that.
+# thing anyone should have to diagnose. The hostile leash (LEASH_DISTANCE from
+# its anchor for LEASH_SECONDS since DESKWORK-D8; AGGRO_RANGE from the copy
+# under --no-leash-return) exists so a fight is escapable; nothing about a party
+# member wants that, and _npc_follow_tick reads the anchor for a HOSTILE only.
 HERO_FOLLOW_LEASH = math.inf
 # SLICE-H2 (studies/slice/FINDINGS.md F28): THE FORMATION IS MEASURED NOW, on
 # retail's own party bodies -- eleven henchmen across seven live connections
@@ -12440,6 +12442,10 @@ ENEMY_RESEND_DEFINITION = bool(_ENEMY.get("resend_definition", False))
 ENEMY_ATTACKS_BACK = bool(_ENEMY.get("attacks_back", True))
 ENEMY_PASSIVE = bool(_ENEMY.get("passive", False))        # MONSTERAI-J
 ENEMY_GROUP = _ENEMY.get("group")                          # MONSTERAI-J
+# DESKWORK-D8 step 3: the fixture hostile's own leash distance (u from its
+# anchor), or None for LEASH_DISTANCE. `--enemy-leash U` overrides for a run.
+ENEMY_LEASH = (float(_ENEMY["leash"]) if _ENEMY.get("leash") is not None
+               else None)
 ENEMY_MAX_HEALTH = _ENEMY["max_health"]
 
 # CREATURE ARMOUR moved to combatmath.py (REFACTOR-A12), wiki banner and all.
@@ -15096,7 +15102,8 @@ MOVE_ENDS_CHAIN = True        # False (--move-keeps-target): sec.32's keep.
 #
 # WHAT IS OURS RATHER THAN MEASURED: ENEMY_HIT_FRACTION below and the proximity
 # rule. Real Guild Wars aggro is a leash with a pull radius and a give-up distance;
-# the leash and the give-up distance are still ours.
+# the give-up and the walk home are a RECONSTRUCTION over three retail chases
+# since 2026-09-24 (the LEASH block below) -- ours, and a freeze, until then.
 #
 # AGGRO_RANGE: 1200 -> 1012 on 2026-09-15 (studies/monsterai/FINDINGS.md sec.11,
 # MONSTERAI-N3). CORROBORATED, not measured per creature: the wiki's Danger Zone
@@ -15105,8 +15112,12 @@ MOVE_ENDS_CHAIN = True        # False (--move-keeps-target): sec.32's keep.
 # the player running, bracket [992, 1105]; two more with the hostile dead-reckoned
 # along its patrol leg sit at 1,005 and 1,000. 1200 was outside all three, and it
 # was the owner's symptom: a hostile that noticed the player before the player saw
-# it cross the drawn circle. The leash reads this same constant and moved with it;
-# nothing has measured retail's leash (sec.9 Q8).
+# it cross the drawn circle. The leash READ this same constant until 2026-09-24
+# -- "nothing has measured retail's leash" was true when it was written here and
+# is not now: DESKWORK-D8 step 3 read three retail chases of one standing
+# creature (studies/monsterai/FINDINGS.md sec.15, MONSTERAI-L1..L4), and the
+# give-up and the return are the block below. Under --no-leash-return the leash
+# reads this constant again, from the copy, exactly as before.
 AGGRO_RANGE = 1012.0       # units. WIKI 1012, OBSERVED n=1 [992, 1105]. Inside ATTACK_RANGE.
 ENEMY_HIT_FRACTION = 0.10  # of the PLAYER's maximum, so ~10 swings to drop them
 # ...and `--enemy-hit` overrides it for a run. This constant is OURS -- invented,
@@ -15117,6 +15128,109 @@ ENEMY_HIT_FRACTION = 0.10  # of the PLAYER's maximum, so ~10 swings to drop them
 # actually notices could not be watched in a session at all. A harder swing puts
 # the second death inside the window. Module-level default, per the PERSIST
 # lesson.
+#
+# ---- DESKWORK-D8 step 3 (2026-09-24): THE LEASH IS A WALK HOME, NOT A FREEZE --
+#
+# THE OWNER'S SYMPTOM (2026-09-15): "the Bull had a much shorter return". Ours
+# had NO return: a kited hostile halted where its copy stood the moment the
+# target passed AGGRO_RANGE from it, and stood there for the rest of the
+# session -- 0x0028, nothing else, ever. Retail, re-read for this block on the
+# two aggro tapes (20260915T155656, 20260915T164906; studies/monsterai/
+# FINDINGS.md sec.15, instrument studies/monsterai/review/leashreturn.py):
+# one STANDING creature (def 1397, CORROBORATED the Rogue Bull, sec.14) chased
+# a player running straight away three times.
+#
+#   * THE ANCHOR IS THE CREATE POSITION. Each return's last 0x0029 ended 37 /
+#     14 / 65 u from the 0x0020's own point, and the next notice found the
+#     body parked there. OBSERVED, 3 of 3. So `anchor` is written ONCE at
+#     create_agent_world; a burrow re-create hands the same entry back and
+#     keeps it. Party bodies get one too and nothing reads it (HERO_FOLLOW_LEASH).
+#   * THE GIVE-UP IS NOT ONE NUMBER. The last outward order sat 1,850 / 2,111 /
+#     2,877 u from the anchor, 8 / 22 / 14 s after the notice (N9's "1,358 u"
+#     for the third was its FIRST RETURN LEG, misfiled as a chase leg; sec.15
+#     corrects it). The target was 1,936 / 2,066 / 2,877 u from the anchor at
+#     that instant and had crossed ~1,350 u of it 1.2-3.0 / 2.6 / 5.6 s earlier
+#     -- 1,350 being the farthest point at which every chase was still
+#     following (follows at 1,349 / 1,362 / 1,371 u). So the rule here is
+#     DISTANCE PLUS TIME: the target beyond LEASH_DISTANCE of the anchor for
+#     LEASH_SECONDS continuously. RECONSTRUCTION, n = 3: 1,350 is the largest
+#     distance no chase had ended inside, 3.0 s the middle dwell. A pure
+#     distance rule would end every chase at one distance and these did not
+#     (1,850-2,877); a pure clock from the notice would end the 22 s
+#     fight-then-run chase 12 s early. A landed hit does not reset the clock:
+#     retreat 2's last swing landed AS it gave up. A spawn row may carry its
+#     own `leash` (u), the fixture hostile --enemy-leash.
+#   * THE RETURN IS 0x0029 LEGS: NO HALT, NO SPEED WORD. 4-7 legs, each ~500 u
+#     nearer home (gap p50 1.75 s = 500 u at the body's own 288 u/s; 0.5-4.2 s),
+#     no 0x0028 at the give-up nor at the end -- the last leg's end IS the stop,
+#     as a party walk's is (SLICE-H2, F28) -- and no 0x002B: the stander ran
+#     home at the 1.0 it chased at (0 of 3 returns carry one). The plan's
+#     "0x002B down to walking speed" was the PATROLLER's resume (the
+#     Broodcaller's 0.33 rode its first patrol leg 4.7 s after its give-up),
+#     not the return. OBSERVED, 3 of 3. The legs here run the pathmap's
+#     corridor (route()), so a wall between the copy and home is walked round
+#     -- RECONSTRUCTION for that: the tapes' open ground never needed it.
+#   * WHILE IT WALKS HOME it picks nobody, chases nobody and opens no swing; a
+#     swing already in flight lands (F21). Whether a hit on the way turns it is
+#     UNVERIFIED (no tape has a player chasing a returning hostile); here it
+#     does not. Home, it is the stander it was: the next notice at AGGRO_RANGE.
+#
+# --no-leash-return: the pre-D8 arm byte for byte -- the halt where the copy
+# stands when the target passes AGGRO_RANGE from IT, no anchor read at all.
+LEASH_RETURN = True
+LEASH_DISTANCE = 1350.0    # u from the ANCHOR. RECONSTRUCTION, n = 3 (above).
+LEASH_SECONDS = 3.0        # s beyond it, continuously. RECONSTRUCTION, n = 3.
+RETURN_LEG_LENGTH = 500.0  # u per return leg. OBSERVED p50 (499 u, 1.75 s apart).
+LEASH_HOME_RADIUS = 100.0  # u: a copy this far from its anchor is ENGAGED (away
+                           # from home) even with no follow and no lock. Ours;
+                           # the three returns ended within 65 u of the anchor.
+RETURN_LEG_TIMEOUT = 8.0   # s: a leg the copy has not finished by then is
+                           # re-issued -- a guard, never fired by the model.
+#
+# ---- DESKWORK-D8 step 4 (2026-09-24): THE CASTER OPENING ---------------------
+#
+# THE OWNER'S SYMPTOM: "a monk charges into melee". Every hostile took the
+# same walk-in: a 0x002A naming the target, the client's resolver parking the
+# body at the 80 u disc (F14), a swing or a cast from there. A spell-bar
+# hostile with nothing to shoot did it too, so a Monk hostile ran up and
+# punched between heals. Retail (studies/monsterai/FINDINGS.md sec.15,
+# MONSTERAI-L5): def 4440 (a level-6 Elementalist, mid-patrol) HALTED its leg,
+# cast an untargeted enchantment (221), then cast a foe spell (222, 1.0 s
+# activation) at the player FROM WHERE IT STOOD ~1,010 u out and moved only
+# after the damage landed -- twice (positions RECON, it was on a leg; the
+# shape OBSERVED: no 0x0029, no 0x002A, no 0x002B before the first cast, 2 of
+# 2). The Broodcaller (def 1432, a wand) opened from beyond its preferred
+# distance with 0x002B 1.0 + one to four 0x0029 legs ending ~430-490 u from
+# the player, a halt (1 of 2), then its swing -- never a 0x002A before it
+# (2 of 2 tapes). So a CASTER here -- a HOSTILE of a non-melee profession
+# (PARTY_MELEE_PROFESSIONS' complement, the party's own rule, F30) whose bar
+# holds a spell and whose hands hold no ranged weapon -- stands and casts when
+# the target is inside its cast range, and otherwise walks a 0x0029 leg to the
+# point AT range (the corridor's vertex first when geometry intervenes), halts
+# on the follow's own clock, and casts. It sends NO 0x002A at all: the client
+# parks a 0x002A at the melee disc whatever the server's stop radius says
+# (F14, NPCTRACK-Q1), which is the charge the owner saw -- so the leg shape is
+# kept for every approach, not only the first (RECONSTRUCTION for the later
+# ones; retail's 4440 did follow after its first cast, with a wand to swing).
+# Between casts it HOLDS its ground: no punch from range (4440 "holds its
+# ground", 12.8 -- RECONSTRUCTION for the wait; a lone healer with nothing to
+# cast at a foe simply stands). THE RANGE IS ONE NUMBER: the client's skill
+# record carries no cast range (aoe_range only), so "the first ready spell's
+# range" is CASTER_CAST_RANGE for every spell -- the WIKI casting range
+# PARTY_RANGED_REACH already uses -- or a spawn row's own `cast_range`. With
+# AGGRO_RANGE (1012) inside it, a proximity notice always finds the target in
+# range and the leg branch runs on a row whose `cast_range` is under 1012
+# (the Broodcaller's ~450 u shape) or when the target withdraws mid-fight.
+# NOTE THE FIXTURE: the standing Hatcher is a Monk with four spells and no
+# weapon, so `--enemy` alone now spawns a caster that stands at 300 u and
+# casts; --enemy-weapon, --no-enemy-skills or --no-caster-opening give the
+# walk-in every run before today had.
+#
+# --no-caster-opening: the pre-D8 arm byte for byte -- the 0x002A to the
+# melee disc, the cast from 92 u, the punch between casts.
+CASTER_OPENING = True
+CASTER_CAST_RANGE = PARTY_RANGED_REACH   # 1248 u. WIKI casting range; a row's
+                                         # `cast_range` overrides per body.
 # ONE TICK between the death bit clearing and the two pool refills, and the value is
 # MEASURED rather than chosen. The client checks
 # `min(f32 @ +0x130, +0x134) == 0.0` when a character is resurrected and logs
@@ -23349,6 +23463,23 @@ def enemy_attack_tick(send, state, conn_id):
             agent["cast_lands_at"] = None
             agent["casting"] = None
             continue
+        if leash_returning(agent):
+            # DESKWORK-D8 step 3: on its way home it opens nothing. A swing or
+            # a cast already in flight still lands (F21: retreat 2's last
+            # swing landed AS the Bull gave up); once nothing is armed the
+            # bout is over and the next one opens at the anchor.
+            _armed = agent.get("swing_lands_at")
+            _cast = agent.get("cast_lands_at")
+            if _armed is not None and now >= _armed:
+                agent["swing_lands_at"] = None
+                land_or_launch(send, state, agent_id, agent, conn_id, _tid)
+            elif _cast is not None and now >= _cast:
+                agent["cast_lands_at"] = None
+                land_skill(send, state, agent_id, agent, conn_id)
+            if agent.get("swing_lands_at") is None and agent.get("cast_lands_at") is None:
+                agent["swinging"] = False
+                agent["casting"] = None
+            continue
         # SLICE-F21: AN ARMED SWING LANDS FIRST, wherever the player went and
         # whether or not the chase re-issued -- retail 7 of 7 swings at a
         # moving player, up to ~400 u away by the hit. Only the START below
@@ -23395,7 +23526,11 @@ def enemy_attack_tick(send, state, conn_id):
                  and agent.get("follow") is None)
         if _owed_at is not None and not _owed:
             agent["swing_owed_at"] = None            # expired, or re-following
-        if not _owed and (math.hypot(ax - px, ay - py) > body_reach(agent)
+        # DESKWORK-D8 step 4: a CASTER's reach is its cast range (the swing
+        # below still needs body_reach -- the hold after the skill pick).
+        _caster = hostile_caster(agent)
+        _reach_gate = caster_range(agent) if _caster else body_reach(agent)
+        if not _owed and (math.hypot(ax - px, ay - py) > _reach_gate
                           or (NPC_FOLLOW and agent.get("follow") is not None)):
             agent["swinging"] = False
             agent["swing_lands_at"] = None
@@ -23629,9 +23764,17 @@ def enemy_attack_tick(send, state, conn_id):
                 agent["cast_lands_at"] = now + activation
             print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) casts skill "
                   f"{skill_id} (slot {slot + 1} of "
-                  f"{len(agent['skills'])})", flush=True)
+                  f"{len(agent['skills'])})"
+                  + (f" from {math.hypot(ax - px, ay - py):.0f} u, standing "
+                     f"[DESKWORK-D8]" if _caster else ""), flush=True)
             continue
 
+        if _caster and math.hypot(ax - px, ay - py) > body_reach(agent):
+            # DESKWORK-D8 step 4: nothing ready and the target at range -- a
+            # caster HOLDS its ground rather than punching from 800 u (an owed
+            # swing from the halt at range expires unspent). RECONSTRUCTION
+            # for the wait between casts; 4440 "holds its ground" (12.8).
+            continue
         if now - agent.get("last_swing", 0.0) < interval:
             continue
         agent["last_swing"] = swing_clock_stamp(
@@ -24100,6 +24243,50 @@ def passive_unprovoked(agent):
     """MONSTERAI-J: a passive hostile nobody has hit yet. It notices nothing."""
     return bool(PASSIVE_HOSTILES and agent.get("passive")
                 and not agent.get("provoked"))
+
+
+def leash_returning(agent):
+    """DESKWORK-D8 step 3: this hostile is walking home from a chase it gave
+    up. On the way it picks nobody, chases nobody and opens no swing."""
+    return bool(LEASH_RETURN and (agent or {}).get("leash_return") is not None)
+
+
+def _leash_anchor(agent):
+    """The anchor the leash reads for a HOSTILE under the default arm, else
+    None: a party body's chase (SLICE-H4 hands the follow `leash=None` for a
+    melee hero too) never walks home, and a fixture with no create keeps the
+    pre-D8 arm."""
+    if not LEASH_RETURN or (agent or {}).get("allegiance") != agents.ALLEGIANCE_HOSTILE:
+        return None
+    a = agent.get("anchor")
+    if a is None:
+        return None
+    return float(a[0]), float(a[1])
+
+
+def hostile_caster(agent):
+    """DESKWORK-D8 step 4: a HOSTILE that fights from cast range -- a non-melee
+    profession (the party's own rule, PARTY_MELEE_PROFESSIONS, F30) with a
+    spell on its bar and no ranged weapon in hand. A party body never reads
+    this (party_reach / ally_cast_tick are theirs); a Warrior with a spell, an
+    archer, and a caster with an empty bar all take the walk-in as before."""
+    if not CASTER_OPENING or (agent or {}).get("allegiance") != agents.ALLEGIANCE_HOSTILE:
+        return False
+    # An UNKNOWN profession (a fixture with no `npc` row) is not a caster: the
+    # walk-in is the conservative arm, and every spawn path writes the row.
+    prof = (agent.get("npc") or {}).get("profession")
+    if prof is None or int(prof) in PARTY_MELEE_PROFESSIONS:
+        return False
+    if body_ranged(agent) is not None:
+        return False
+    return any(not _is_attack_skill(sk[0]) for sk in (agent.get("skills") or ()))
+
+
+def caster_range(agent):
+    """Where a caster stands to cast: its row's `cast_range`, else the WIKI
+    casting range. One number for every spell -- the client's skill record
+    carries no cast range (skilltable: aoe_range only)."""
+    return float((agent or {}).get("cast_range") or CASTER_CAST_RANGE)
 
 
 def provoke_hostile(state, tid, attacker_id, conn_id):
@@ -26840,6 +27027,12 @@ def enemy_move_tick(send, state, conn_id, rec=None):
             agent["moving"] = False
             agent["follow"] = None
             continue
+        if not _ally and leash_returning(agent):
+            # DESKWORK-D8 step 3: walking home -- no pick, no chase; the
+            # return's own legs, until the copy stands on its anchor.
+            _leash_return_tick(send, state, conn_id, agent_id, agent, now, pm,
+                               rec)
+            continue
         ax, ay = agent["pos"]
         _tid = PLAYER_AGENT_ID
         if not _ally and HOSTILE_TARGETS_PARTY:
@@ -26857,9 +27050,16 @@ def enemy_move_tick(send, state, conn_id, rec=None):
         if NPC_FOLLOW:
             _tgt = (tx, ty)
             _stop = HERO_FOLLOW_STOP if _ally else None
+            _opening = False
             if not _ally and body_ranged(agent) is not None:
                 # WEAPONS-W6a: an archer halts at its range, not at the disc.
                 _stop = body_ranged(agent)["range"]
+            elif not _ally and hostile_caster(agent):
+                # DESKWORK-D8 step 4: a caster stands at its cast range and
+                # walks there by 0x0029 legs, never a 0x002A (the client
+                # parks a follow at the melee disc whatever the stop says).
+                _stop = caster_range(agent)
+                _opening = True
             _slot = False
             _leash = HERO_FOLLOW_LEASH if _ally else None
             _ft = (party_fight_target(state, agent_id, agent, now)
@@ -26896,7 +27096,8 @@ def enemy_move_tick(send, state, conn_id, rec=None):
             _npc_follow_tick(send, state, conn_id, agent_id, agent,
                              _tgt, dist, now, pm, rec,
                              leash=_leash,
-                             stop_at=_stop, slot=_slot, target_id=_tid)
+                             stop_at=_stop, slot=_slot, target_id=_tid,
+                             opening=_opening)
             continue
         if _ally:
             # The legacy chase below is the hostile's pre-NPC_FOLLOW arm and
@@ -27878,10 +28079,215 @@ def _npc_model_advance(state, agent, now, elapsed=0.0, rec=None, agent_id=None,
     return not agent.get("cmodel_moving")
 
 
+def _point_plane(pm, x, y, fallback):
+    """The plane word for a leg's point: the mesh's answer at the point with
+    the mover's own plane preferred, else the mover's (1z-bz's fallback)."""
+    if not NPC_PLANE_TRACK or pm is None or not hasattr(pm, "plane_at"):
+        return fallback
+    try:
+        p = pm.plane_at(x, y, prefer=fallback)
+    except Exception:                                  # noqa: BLE001
+        return fallback
+    return fallback if p is None else p
+
+
+def _range_point(cx, cy, px, py, stop):
+    """DESKWORK-D8 step 4: the point on the copy->target line where a caster
+    stops -- NPC_LEG_DONE inside `stop`, so the arrival lands IN range rather
+    than on its edge. The copy's own point when it is already inside."""
+    d = math.hypot(px - cx, py - cy)
+    want = max(float(stop) - NPC_LEG_DONE, 0.0)
+    if d <= want or d <= 1e-9:
+        return float(cx), float(cy)
+    t = (d - want) / d
+    return float(cx + (px - cx) * t), float(cy + (py - cy) * t)
+
+
+def _return_leg(pm, ax, ay, anchor, plane):
+    """DESKWORK-D8 step 3: the next 0x0029 of a walk home -- RETURN_LEG_LENGTH
+    along the pathmap's corridor from the copy to the anchor (route(), solved
+    from the nearest mesh point when the copy is off it, exactly as
+    _follow_leg does), never past a corridor vertex, the anchor itself when
+    it is nearer than that. No mesh, no route, or a route the mesh refuses:
+    the straight line. Returns (x, y, plane)."""
+    gx, gy = float(anchor[0]), float(anchor[1])
+    path, planes = None, None
+    if pm is not None and hasattr(pm, "route"):
+        ox, oy = float(ax), float(ay)
+        if (hasattr(pm, "walkable") and not pm.walkable(ox, oy)
+                and hasattr(pm, "nearest_walkable")):
+            nw = pm.nearest_walkable(ox, oy, NPC_LEG_ORIGIN_STEP)
+            if nw is not None:
+                ox, oy = float(nw[0]), float(nw[1])
+        try:
+            r = pm.route(ox, oy, gx, gy, start_plane=plane, goal_plane=None,
+                         with_planes=True)
+        except TypeError:                              # a stub without kwargs
+            try:
+                r = pm.route(ox, oy, gx, gy)
+            except Exception:                          # noqa: BLE001
+                r = None
+        except Exception:                              # a mesh gap is not a crash
+            r = None
+        if isinstance(r, tuple) and len(r) == 2:
+            path, planes = r
+        else:
+            path = r
+    if not path or len(path) < 2:
+        path, planes = [(float(ax), float(ay)), (gx, gy)], None
+    # The leg is the corridor's FIRST segment, cut at RETURN_LEG_LENGTH: a leg
+    # never runs past a vertex (it would cut the corner the corridor exists to
+    # round -- retail's return legs were each a straight-clear segment on the
+    # client's own mesh, NPCTRACK-Q9's read of agent 160's 7 legs). A zero-
+    # length first segment (the copy standing on the vertex) is skipped.
+    qx, qy = float(path[0][0]), float(path[0][1])
+    for i in range(1, len(path)):
+        vx, vy = float(path[i][0]), float(path[i][1])
+        seg = math.hypot(vx - qx, vy - qy)
+        if seg <= NPC_LEG_DONE and i < len(path) - 1:
+            qx, qy = vx, vy
+            continue
+        wpl = plane
+        if planes and i < len(planes) and planes[i] is not None:
+            wpl = planes[i]
+        if seg > RETURN_LEG_LENGTH + 1e-9:
+            f = RETURN_LEG_LENGTH / seg
+            wx, wy = qx + (vx - qx) * f, qy + (vy - qy) * f
+            return wx, wy, _point_plane(pm, wx, wy, wpl)
+        return vx, vy, _point_plane(pm, vx, vy, wpl)
+    return gx, gy, _point_plane(pm, gx, gy, plane)
+
+
+def _leash_give_up(send, state, conn_id, agent_id, agent, now, pm, rec,
+                   d_anchor, limit, dwell, target_id):
+    """DESKWORK-D8 step 3: the chase ends and the walk home begins -- no
+    0x0028, no 0x002B (retail's stander: 0 of 3 give-ups carry either), the
+    first return leg at once. The follow and everything armed on it are
+    forgotten; a swing in flight lands from enemy_attack_tick (F21)."""
+    agent["follow"] = None
+    agent.pop("froute", None)
+    agent.pop("froute_at", None)
+    agent["swing_owed_at"] = None
+    agent["swinging"] = False
+    agent["cmodel_hold"] = False
+    agent["cmodel_slot"] = True        # a point lead: the model has no disc to park on
+    agent["leash_out_since"] = None
+    agent["leash_return"] = {"t0": now, "legs": 0, "leg": None, "leg_at": now,
+                             "from": (float(agent["pos"][0]), float(agent["pos"][1]))}
+    print(f"[c{conn_id}] agent {agent_id} ({agent.get('name', '?')}) GIVES UP: "
+          f"{target_label(state, target_id)} {d_anchor:.0f} u from its anchor "
+          f"for {dwell:.1f} s (leash {limit:.0f} u, {LEASH_SECONDS:.1f} s) -- "
+          f"walks home from ({agent['pos'][0]:.0f},{agent['pos'][1]:.0f}) "
+          f"[DESKWORK-D8, MONSTERAI-L2]", flush=True)
+    if rec is not None:
+        rec.event("npc_leash", agent=agent_id, act="give-up",
+                  d_anchor=round(float(d_anchor), 1), limit=float(limit),
+                  dwell=round(float(dwell), 2),
+                  at=[round(float(agent["pos"][0]), 1), round(float(agent["pos"][1]), 1)])
+    agent["moved_at"] = now
+    _leash_return_tick(send, state, conn_id, agent_id, agent, now, pm, rec)
+
+
+def _leash_home(conn_id, agent_id, agent, now, rec):
+    """The copy stands on its anchor: the stander it was. No 0x0028 -- the
+    last leg's end IS the stop (retail 3 of 3; the party walk's rule, F28)."""
+    ret = agent.get("leash_return") or {}
+    anchor = agent["anchor"]
+    agent["leash_return"] = None
+    agent["leash_out_since"] = None
+    agent["moving"] = False
+    agent["cmodel_slot"] = False
+    agent["target"] = None
+    agent["target_locked"] = False
+    agent["target_was"] = None
+    agent["swinging"] = False
+    agent["moved_at"] = now
+    d = math.hypot(agent["pos"][0] - anchor[0], agent["pos"][1] - anchor[1])
+    print(f"[c{conn_id}] agent {agent_id} ({agent.get('name', '?')}) is HOME: "
+          f"{d:.0f} u from its anchor after {ret.get('legs', 0)} legs, "
+          f"{now - ret.get('t0', now):.1f} s [DESKWORK-D8, MONSTERAI-L3]",
+          flush=True)
+    if rec is not None:
+        rec.event("npc_leash", agent=agent_id, act="home", legs=ret.get("legs", 0),
+                  secs=round(now - ret.get("t0", now), 2), d_anchor=round(d, 1))
+
+
+def _leash_return_tick(send, state, conn_id, agent_id, agent, now, pm, rec=None):
+    """DESKWORK-D8 step 3: one tick of the walk home. Retail's return is
+    0x0029 legs each ~500 u nearer the anchor, the next when the body reaches
+    the last (p50 1.75 s apart at 288 u/s), the last one AT the anchor, no
+    halt and no speed word (MONSTERAI-L3, 3 of 3). The copy walks each leg the
+    way it walks a chase -- the client's sync copy under NPC_CLIENT_MODEL, the
+    integrator under the revert -- and the next leg leaves when it stands on
+    the leg's end (NPC_LEG_DONE), or after RETURN_LEG_TIMEOUT if it never does."""
+    ret = agent.get("leash_return")
+    if ret is None:
+        return
+    anchor = agent["anchor"]
+    ax, ay = agent["pos"]
+    elapsed = max(0.0, now - agent.get("moved_at", now))
+    agent["moved_at"] = now
+    agent["cmodel_slot"] = True
+
+    def _send(op, vals, label):
+        send(op, vals, label)
+        _npc_model_emit(agent, op, vals, now)
+
+    leg = ret.get("leg")
+    if leg is not None:
+        if NPC_CLIENT_MODEL:
+            _npc_model_advance(state, agent, now, elapsed, rec, agent_id)
+        else:
+            budget = ENEMY_MOVE_RATE * npc_declared_speed(state, agent_id) * elapsed
+            d = math.hypot(leg[0] - ax, leg[1] - ay)
+            step = min(budget, d)
+            if step > 0.0 and d > 0.0:
+                nx = ax + (leg[0] - ax) / d * step
+                ny = ay + (leg[1] - ay) / d * step
+                if pm is not None:
+                    nx, ny = pm.clip(ax, ay, nx, ny)
+                agent["pos"] = (nx, ny)
+        ax, ay = agent["pos"]
+        agent["plane"] = _npc_plane(pm, ax, ay, agent.get("plane", 0), state=state)
+        if (math.hypot(ax - leg[0], ay - leg[1]) > NPC_LEG_DONE
+                and now - ret.get("leg_at", now) < RETURN_LEG_TIMEOUT):
+            return                                  # still walking this leg
+    if math.hypot(ax - anchor[0], ay - anchor[1]) <= NPC_LEG_DONE:
+        _leash_home(conn_id, agent_id, agent, now, rec)
+        return
+    plane = agent["plane"] = _npc_plane(pm, ax, ay, agent.get("plane", 0), state=state)
+    wx, wy, wpl = _return_leg(pm, ax, ay, anchor, plane)
+    ret["leg"] = (wx, wy)
+    ret["legs"] = ret.get("legs", 0) + 1
+    ret["leg_at"] = now
+    d_home = math.hypot(ax - anchor[0], ay - anchor[1])
+    if rec is not None:
+        rec.event("npc_order", agent=agent_id, act="return-leg", n=ret["legs"],
+                  solve_from=[round(float(ax), 1), round(float(ay), 1)],
+                  to=[round(wx, 1), round(wy, 1)], plane=plane, dest_plane=wpl,
+                  d_home=round(d_home, 1))
+    _send(GAME_SMSG_AGENT_MOVE_TO_POINT, [agent_id, (wx, wy), wpl, plane],
+          f"RETURN leg {ret['legs']}: agent {agent_id} -> ({wx:.0f},{wy:.0f}) "
+          f"plane {plane}->{wpl}, home ({anchor[0]:.0f},{anchor[1]:.0f}) "
+          f"{d_home:.0f} u out [DESKWORK-D8, MONSTERAI-L3]")
+
+
 def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, pm,
                      rec=None, leash=None, stop_at=None, slot=False,
-                     target_id=PLAYER_AGENT_ID):
+                     target_id=PLAYER_AGENT_ID, opening=False):
     """One hostile's chase, in retail's shape (ANIMREF-RE 40; NPC_FOLLOW).
+
+    DESKWORK-D8 (2026-09-24) added two things and moved one. `opening` is the
+    CASTER's approach: every order is a 0x0029 leg to the point at `stop_at`
+    from the target (the corridor's vertex first when geometry intervenes),
+    never a 0x002A (retail's Elementalist cast from where it stood, 2 of 2;
+    the Broodcaller walked legs to ~450 u, halted and swung, 2 of 2; the
+    client parks a 0x002A at the melee disc whatever `stop_at` says). The
+    LEASH for a HOSTILE no longer reads AGGRO_RANGE from the copy: it reads
+    the anchor (`agent["anchor"]`, the create position) -- the target beyond
+    LEASH_DISTANCE of it for LEASH_SECONDS -- and ends not in a halt but in
+    _leash_give_up's walk home (MONSTERAI-L1..L3). `leash` given (a party
+    body) or --no-leash-return: the paragraphs below, untouched.
 
     SLICE-B7b MADE TWO NUMBERS ARGUMENTS, and nothing else about this function
     moved. A PARTY body walks to the player through exactly this machinery --
@@ -28001,6 +28407,37 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
         f = agent["follow"]
         cx, cy = agent["pos"]
         leg = _follow_leg(pm, cx, cy, px, py, plane, dest_plane)
+        if opening and not slot:
+            # DESKWORK-D8 step 4: THE CASTER'S LEG TO RANGE. A 0x0029 to the
+            # point `stop` from the target on the copy's own line, never the
+            # agent-addressed follow -- unless the corridor's first vertex
+            # comes before that point, in which case the vertex leg below
+            # goes out as for any chase and the range leg follows it.
+            rx, ry = _range_point(cx, cy, px, py, stop)
+            if leg is None or (math.hypot(leg[0] - cx, leg[1] - cy)
+                               >= math.hypot(rx - cx, ry - cy)):
+                prev = f.get("leg")
+                f["leg"] = (rx, ry)
+                f["solve_from"] = (float(cx), float(cy))
+                if prev is not None and math.hypot(prev[0] - rx, prev[1] - ry) < 1.0 \
+                        and tag == " re-path":
+                    return              # the same leg is already in flight
+                rpl = _point_plane(pm, rx, ry, plane)
+                if rec is not None:
+                    _fr = _frame()
+                    rec.event("npc_order", agent=agent_id, act="range-leg",
+                              tag=tag.strip(), solve_from=[float(cx), float(cy)],
+                              to=[round(rx, 1), round(ry, 1)],
+                              frame=[round(_fr[0], 1), round(_fr[1], 1)],
+                              plane=plane, dest_plane=rpl, stop=float(stop),
+                              dist=round(float(dist), 1))
+                _send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+                      [agent_id, (rx, ry), rpl, plane],
+                      f"CASTER{tag} leg: agent {agent_id} -> range point "
+                      f"({rx:.0f},{ry:.0f}) plane {plane}->{rpl}, {stop:.0f} u "
+                      f"short of {'the player' if target_id == PLAYER_AGENT_ID else 'party agent %d' % target_id} "
+                      f"at ({px:.0f},{py:.0f}) {dist:.0f} u out [DESKWORK-D8]")
+                return
         if leg is not None:
             wx, wy, wpl, more = leg
             prev = f.get("leg")
@@ -28106,7 +28543,39 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
         leash_d = min(leash_d, math.hypot(px - fol["solve_from"][0],
                                           py - fol["solve_from"][1]))
     _leash = AGGRO_RANGE if leash is None else leash
-    if _tdead or leash_d > _leash:
+    _anchor = _leash_anchor(agent) if leash is None else None
+    if _anchor is not None and not _tdead:
+        # DESKWORK-D8 step 3: THE GIVE-UP READS THE ANCHOR, NOT THE COPY. A
+        # hostile standing at home that has not noticed its target keeps
+        # today's notice gate (AGGRO_RANGE from the copy); one that is ENGAGED
+        # -- a follow in flight, a bout opened (target_locked), or a copy away
+        # from home -- gives up only once the target has been beyond
+        # LEASH_DISTANCE of the anchor for LEASH_SECONDS (RECONSTRUCTION over
+        # retail's three chases: the target crossed ~1,350 u of home and the
+        # chase ran 1.2-5.6 s more), and then walks home instead of halting.
+        anx, any_ = _anchor
+        engaged = (fol is not None or bool(agent.get("target_locked"))
+                   or math.hypot(ax - anx, ay - any_) > LEASH_HOME_RADIUS)
+        if not engaged:
+            if leash_d > _leash:
+                agent["moved_at"] = now
+                return
+            agent["leash_out_since"] = None
+        else:
+            d_anchor = math.hypot(px - anx, py - any_)
+            limit = float(agent.get("leash") or LEASH_DISTANCE)
+            if d_anchor > limit:
+                since = agent.get("leash_out_since")
+                if since is None:
+                    agent["leash_out_since"] = since = now
+                if now - since >= LEASH_SECONDS:
+                    _leash_give_up(send, state, conn_id, agent_id, agent, now,
+                                   pm, rec, d_anchor, limit, now - since,
+                                   target_id)
+                    return
+            else:
+                agent["leash_out_since"] = None
+    elif _tdead or leash_d > _leash:
         if fol is not None:
             _halt("the target is dead" if _tdead
                   else f"{leash_d:.0f} u is past the {_leash:.0f} u leash")
@@ -29364,6 +29833,14 @@ def create_agent_world(send, state, agent_id, entry, why,
 
     send_attack_speed(send, agent_id, entry["attack_speed"], entry.get("name", "npc"))
 
+    # DESKWORK-D8 step 3: THE SPAWN ANCHOR -- where a leashed hostile walks
+    # home to. Retail's is the 0x0020's own position (three returns ended 14 /
+    # 37 / 65 u from it, MONSTERAI-L1). Written ONCE: a burrow re-create hands
+    # this same entry back and must not move home to wherever the body
+    # re-emerged. Every agent gets one; only a HOSTILE's leash reads it.
+    if entry.get("anchor") is None:
+        entry["anchor"] = (float(x), float(y))
+
     live[agent_id] = entry
     if conn_id is not None:
         print(f"[c{conn_id}] created agent {agent_id} ({entry.get('name', '?')}) "
@@ -29865,6 +30342,13 @@ def spawn_population(send, state, origin, conn_id, area=None):
             "passive": bool(row.get("passive", False)),
             "group": row.get("group"),
             "provoked": False,
+            # DESKWORK-D8: a row's own leash distance (u from its anchor) and
+            # cast range (u); None takes LEASH_DISTANCE / CASTER_CAST_RANGE.
+            # The row's provenance block covers both, as it covers `passive`.
+            "leash": (float(row["leash"]) if row.get("leash") is not None
+                      else None),
+            "cast_range": (float(row["cast_range"])
+                           if row.get("cast_range") is not None else None),
             "skills": bar,
             "skill_ready": [0.0] * len(bar),
             "attributes": {int(a_): int(r_) for a_, r_ in
@@ -29994,6 +30478,7 @@ def _spawn_one_enemy(send, state, agent_id, x, y, plane, conn_id, n_of=(1, 1)):
         "attacks_back": ENEMY_ATTACKS_BACK,
         "passive": ENEMY_PASSIVE, "group": ENEMY_GROUP,          # MONSTERAI-J
         "provoked": False,
+        "leash": ENEMY_LEASH,                                     # DESKWORK-D8
         "skills": ENEMY_SKILLS,
         # Per-SLOT rather than per-id: a bar may legitimately carry the same skill
         # twice, and keying recharge by id would make the second copy share the
@@ -37582,6 +38067,28 @@ def main():
         print("[enemy] --no-passive-hostiles: `passive` rows notice on proximity "
               "like every other hostile -- every run before MONSTERAI-J "
               "(2026-09-16).", flush=True)
+    if a.no_leash_return:
+        global LEASH_RETURN
+        LEASH_RETURN = False
+        print("[enemy] --no-leash-return: a kited hostile halts where its copy "
+              f"stands once the target passes {AGGRO_RANGE:.0f} u from IT and "
+              "never walks home -- every run before DESKWORK-D8 (2026-09-24); "
+              "retail's stander walks 0x0029 legs back to its create position.",
+              flush=True)
+    if a.no_caster_opening:
+        global CASTER_OPENING
+        CASTER_OPENING = False
+        print("[enemy] --no-caster-opening: a spell-bar hostile with no ranged "
+              "weapon walks to the melee disc by a 0x002A and casts from 92 u "
+              "-- every run before DESKWORK-D8 (2026-09-24); retail's caster "
+              "casts from where it stands inside its range.", flush=True)
+    if a.enemy_leash is not None:
+        global ENEMY_LEASH
+        ENEMY_LEASH = float(a.enemy_leash)
+        print(f"[enemy] --enemy-leash {ENEMY_LEASH:.0f}: the standing hostile "
+              f"gives up once its target has been {ENEMY_LEASH:.0f} u from its "
+              f"anchor for {LEASH_SECONDS:.1f} s (default {LEASH_DISTANCE:.0f}).",
+              flush=True)
     if a.party_body_in_outpost:
         global PARTY_BODY_IN_OUTPOST
         PARTY_BODY_IN_OUTPOST = True

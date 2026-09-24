@@ -1226,7 +1226,7 @@ Play the R1.5 tape of ArenaNet's own recorded monster behaviour into our client 
 | 5 | Does the tick clock agree with the wire clock on the **existing** captures? | **One analyser run**, no new session. | The `0x001E` integral against the wire span, ≤50 ms. If red, every timed claim in the repo is suspect. |
 | 6 | Does windup scale with declared speed, or is it per-creature? | **One session** targeting a third declared speed, n≥8. | A creature at 1.33 or 2.475. Predicts windup in [0.43, 0.46] × its own declared base. |
 | 7 | ~~Does unprovoked proximity aggro happen at all, and at what radius per creature?~~ **CLOSED 2026-09-16 by the owner's ruling (`PLAN.md` §7 Q18): it happens, and the radius is ONE GLOBAL NUMBER — the compass circle is a hardcoded visible mechanic, so it cannot differ per creature. The 10-point bar is retired unmet; three of the five points we had were one individual of a unique quest spawn (§14).** Originally: **PARTLY ANSWERED 2026-09-15, §11: it happens, and the one observed radius is 992–1105 u; the wiki's 1012 sits inside it, ours (1200) does not.** | *was:* **1–3 sessions**, the `approach` step, subjects that have not moved since create. Still needed for n. | 10 point measurements across ≥3 types. **Refuted if** two creature types' brackets do not overlap — then it is a field, not a constant, as GWW says. **Also refuted if** a subject never reacts down to contact, in which case `AGGRO_RANGE` dies as a concept rather than being retuned. **§12 (2026-09-16): 0 new observed points; two RECON points at 1,008 / 1,020 u from a level-6 caster, and a caster is the wrong subject (its opener cannot separate notice from reach).** |
-| 8 | Leash: home, stop, or none — and anchored where? **PARTLY ANSWERED 2026-09-15, §11 N9: a standing creature goes HOME (3/3, 1,358–2,886 u), a patroller resumes the leg it abandoned (2/2, ~5,200 u).** | *was:* **1–3 sessions**, the `retreat` step, aggroed by approach not by attack. | 6 disengagements across ≥2 types. All three outcomes are findings. 5 of 6 done. **§12: +3 hit-provoked level-1 patrollers at 4.4–5.4k u (the patrol arm, n = 5); the caster does not chase at all.** |
+| 8 | Leash: home, stop, or none — and anchored where? **PARTLY ANSWERED 2026-09-15, §11 N9: a standing creature goes HOME (3/3, 1,358–2,886 u), a patroller resumes the leg it abandoned (2/2, ~5,200 u).** **SHIPPED FOR THE STANDER 2026-09-24, §15 (DESKWORK-D8 step 3): the anchor is the create position, the give-up a distance-plus-time RECONSTRUCTION, the return 0x0029 legs with no halt and no speed word; `--no-leash-return` reverts. The patroller's resume waits on step 5's patrol rows.** | *was:* **1–3 sessions**, the `retreat` step, aggroed by approach not by attack. | 6 disengagements across ≥2 types. All three outcomes are findings. 5 of 6 done. **§12: +3 hit-provoked level-1 patrollers at 4.4–5.4k u (the patrol arm, n = 5); the caster does not chase at all.** |
 | 9 | Is ambient movement correlated with the player at all? | **Free** — a by-product of every control window. | Patrol destinations vs contemporaneous player position, clustered rather than merely catalogued. |
 | 10 | Absolute monster max health | **1–3 sessions**, if the character carries life-stealing skills. | Two skills of different published steal agreeing on 3 types GWW publishes. Would move HP off `PLAN.md` §1.7's server-only list. |
 | 11 | What are `band` and `anim`? | **One session**, the `narrate` step. | The operator saying in chat what they were looking at. |
@@ -1377,8 +1377,10 @@ untouched, and §9 Q7's stopping rule (10 points, ≥ 3 types) is still the bar.
 
 **Shipped on that:** `AGGRO_RANGE` **1200 → 1012** in `authsrv.py`, the pin in
 `test_agentlife.py` `section_constants` moved with it and its label changed from OURS to
-CORROBORATED, with this section as the citation. The leash reads the same constant and
-moves with it; nothing has measured retail's leash (§9 Q8 stands).
+CORROBORATED, with this section as the citation. The leash read the same constant and
+moved with it until 2026-09-24; "nothing has measured retail's leash" was true on this
+day and is not now — §15 reads N9's three chases for the server, and the give-up no
+longer reads `AGGRO_RANGE` (except under `--no-leash-return`).
 
 ### MONSTERAI-N4 — what a reaction looks like on the wire
 
@@ -1781,6 +1783,180 @@ half the patrollers'. It is a **unique quest spawn** — one per map, respawning
 the quest kills it — which is why three of this arc's five observed radius points came from
 the same body, and why §13's plan would have found at most one of it (see §9 Q7's closure
 and `PLAN.md` §7 Q18).
+
+---
+
+## 15. The leash return and the caster opening, re-read for the server (2026-09-24)
+
+**Identifiers.** `MONSTERAI-L<n>` — this section's facts (the word is this document's,
+§11; the series is new). **Instrument:** [review/leashreturn.py](review/leashreturn.py),
+which prints every number below from the vault's live captures at the resolution the
+server needs — every order of a chase with its distance from the create position, every
+combat word with the order before and after it, every return leg with its gap — and
+reuses `noticeradius.py`'s position rules unchanged. **Why:** DESKWORK-D8 steps 3 and 4
+([studies/deskwork/PLAN.md](../deskwork/PLAN.md)) ship the stander's leash and the
+caster's opening, and N9's table was one row per chase; the server needs the cadence,
+the speed word, the anchor and the swings' place in the chase. Predictions were written
+before the instrument ran (the lane's scratch, `step0_predictions.md`); each row below
+says which held.
+
+### MONSTERAI-L1 — the anchor is the create position, and the return ends on it
+
+Definition 1397 (§14, CORROBORATED the Rogue Bull), `20260915T155656`, one body, created
+at `(-5025, 4296)` at 188.6 s, three chases of a player running straight away:
+
+| retreat | notice at | hostile at the notice | last return leg's point | from the create |
+|---|---|---|---|---|
+| 1 | 227.0 s | `(-5025, 4296)` OBSERVED, 0 u from the create | `(-5052, 4322)` | **37 u** |
+| 2 | 273.7 s | `(-5052, 4322)` OBSERVED, 37 u (parked where retreat 1 ended) | `(-5038, 4301)` | **14 u** |
+| 3 | 316.0 s | `(-5038, 4301)` OBSERVED, 14 u | `(-4966, 4325)` | **65 u** |
+
+**OBSERVED, 3 of 3** (prediction (a) held: all within 150 u, one within 50). The anchor
+is the `0x0020`'s own position, not the notice position and not the previous return's
+end — the second and third notices found the body parked on the previous return's end,
+which drifted 14–65 u, and the next return still aimed at the create. **Shipped:**
+`create_agent_world` writes `entry["anchor"]` once (a burrow re-create keeps it).
+
+### MONSTERAI-L2 — the give-up is distance plus time, and N9's third row was a return leg
+
+Every order of the three chases, its point's distance from the anchor, and the player's
+newest self-report at the give-up:
+
+| retreat | chase | last outward order | player at that instant | crossed ~1,350 u of the anchor | dwell beyond it |
+|---|---|---|---|---|---|
+| 1 | 3 follows + 5 legs, 22.2 s from the notice (the fight at ~890 u first) | a leg **2,111 u** from the anchor at 22.2 s | 2,066 u | the follow at 1,349 u, 19.6 s | **2.6 s** |
+| 2 | 15 follows + 2 legs, 13.7 s | a follow **2,877 u** at 13.7 s | 2,877 u | the follow at 1,362 u, 8.1 s | **5.6 s** |
+| 3 | 4 follows + 4 legs | a leg **1,850 u** at 8.2 s; the "leg 1,358 u out at 10.0 s" N9 scored as the give-up points BACK toward home (1,850 → 1,350) and is the **first return leg**, filed as a chase leg because it sat 599 u from the player's report (`CHASE_NEAR` = 600) | 1,936 u | the follow at 1,371 u, 7.0 s | **1.2 s** to the last outward leg, 3.0 s to the first return leg |
+
+**OBSERVED on the shape, and a correction to N9:** the stander's three give-ups sit
+1,850 / 2,111 / 2,877 u from its home after 8 / 22 / 14 s (N9's 1,358 u was the return's
+first leg). Neither the distance nor the time is one number (prediction (c) held). What
+the three share is that every chase was still following at **1,349 / 1,362 / 1,371 u**
+from the anchor and none ended inside that, and each ended **1.2–5.6 s** after the target
+crossed it. A landed hit did not hold it: retreat 2's last swing (12.9 s) landed at 13.7 s,
+the give-up instant.
+
+**Shipped as a RECONSTRUCTION, n = 3:** the chase ends once the target has been beyond
+`LEASH_DISTANCE = 1350` u of the anchor for `LEASH_SECONDS = 3.0` s continuously (the
+largest distance no chase had ended inside; the middle of the three dwells). A pure
+distance rule would end every chase at one distance and these did not; a pure clock from
+the notice would end the 22 s fight-then-run chase 12 s early. A spawn row may carry its
+own `leash`; `--enemy-leash U` sets the fixture hostile's. What the rule does NOT model,
+said plainly: whatever made retreat 2 run 5.6 s beyond the circle where retreat 3 ran
+1.2 s (the player's path was keyboard-driven and not straight; the hostile's own distance
+from home at the give-up was 1,850–2,877 u), and the hostile's own position — the copy's
+distance from home plays no part.
+
+### MONSTERAI-L3 — the return: 0x0029 legs ~500 u apart, no halt, and NO speed word
+
+| retreat | legs | gaps (s) | leg steps (u from the anchor) | 0x002B | 0x0028 |
+|---|---|---|---|---|---|
+| 1 | 5 over 9.7 s | 0.49, 1.74, 3.74, 3.72 | 1,613 → 1,468 → 969 → 470 → **37** | none | none |
+| 2 | 7 over 12.4 s | 1.73, 0.50, 1.75, 0.49, 4.21, 3.74 | 2,184 → 1,684 → 1,540 → 1,040 → 896 → 396 → **14** | none | none |
+| 3 | 4 over 6.2 s | 1.75, 0.49, 3.97 | 1,207 → 707 → 563 → **65** | none | none |
+
+**OBSERVED, 3 of 3.** The legs step ~500 u nearer home each (1,468 → 969 → 470: 499 u
+steps) and the p50 gap is **1.75 s = 500 u at the body's 288 u/s** — a leg leaves when
+the body reaches the last. The 0.5 s pairs are a re-issue 145 u further along the same
+line (0.5 s × 288), the 3.7–4.2 s gaps a 500 u leg that took twice its time (unread; the
+body's speed word never changed). **No `0x002B` on any return** — prediction (b) is
+**REFUTED on the speed word**: the plan's "0x002B down to walking speed" is the
+*patroller's* resume (the Broodcaller's 0.33 rode its first patrol leg 4.7 s after its
+give-up; 4440's 0.35 likewise), and the stander ran home at the 1.0 it chased at (its
+`0x0020` declares f10 = 1.0; it never took a speed word in the session). **No `0x0028`
+at the give-up or at the end**: the last leg's end is the stop, as a party walk's is
+(SLICE-H2, F28).
+
+**Shipped:** the give-up sends no halt and no speed word; `RETURN_LEG_LENGTH = 500` u
+per leg along the pathmap's corridor (`route()`; RECONSTRUCTION for the corridor — the
+tapes' open ground never needed one, and retail's routed leash-return legs are each a
+straight-clear segment, NPCTRACK-Q9), the next leg when the copy stands on the last
+(1.74 s at 288 u/s), the last leg's point the anchor, no message at the end. While it
+walks it picks nobody and opens no swing; a swing already in flight lands (F21). Whether
+a hit on the way turns it is **UNVERIFIED** (no tape has a player chasing a returning
+hostile); here it does not. `--no-leash-return` is the pre-D8 freeze byte for byte.
+
+### MONSTERAI-L4 — the in-chase swings sit AFTER an arrival, and two of them conflict with F22's evidence base
+
+Prediction (d) — every swing after a `0x0028` halt — **did not hold**: there is no
+`0x0028` anywhere in the three chases. Where the swings sit:
+
+| retreat | swings | after | before |
+|---|---|---|---|
+| 1 | 8 (2.7 … 16.8 s) | the follow at 2.0 s (its point 0 u from the standing player), 0.67–14.8 s after it | the follow at 19.1 s (the player ran) |
+| 2 | 3 | two after the follow at 2.0 s (0.84, 2.75 s), the player standing; **one at 12.9 s, 0.30 s after the follow at 12.6 s whose point was 71 u from the player's report and 0.85 s before the next follow** — the runner caught mid-chase, the follows continuing on the half-second | |
+| 3 | 3 | one after the follow at 2.2 s; one 2.94 s after the follow at 2.2 (0.85 s before the 6.0 s follow); **one at 7.5 s, 0.46 s after the follow at 7.0 s** (its point 463 u from a 1.6 s-old report) | |
+| 1432 (`20260916T172025`, the wand) | 3 shown | 0.87 s after a leg; 0.00 s after a halt; 0.17 s after a halt | |
+
+**OBSERVED.** The standing-player swings (8 + 2 + 1) sit after a follow that had ARRIVED
+at a standing target, with no `0x0028` between — the "arrival, no halt" case §40.2 counted
+2 of 7 for, and exactly what our halt-on-the-clock plus the owed swing (SLICE-F22/F27)
+produce, one `0x0028` louder. **The two mid-run swings (retreat 2 at 12.9 s, retreat 3 at
+7.5 s) are a swing 0.3–0.5 s after a re-issued follow with the follows continuing at
+0.5 s** — the hostile had caught the runner and swung without the server halting it. That
+is **not** F22's mid-follow refusal ("retail opens no attack_started between the follows
+of a chase, 0 of 4 multi-follow chases" — chases where the hostile never caught up). It is
+reported here and **F22 is left as it is**, per the lane's instruction: ours halts on the
+clock when the copy parks, owes the swing, swings, re-follows — one halt and one 0.5 s
+beat more than retail's caught-runner shape, n = 2. Neither step of D8 changes it.
+
+### MONSTERAI-L5 — the caster opening: cast from where it stands; the leg-to-range half is the wand's shape
+
+Def 4440 (`20260916T150306`, a level-6 Elementalist, mid-patrol both times), the words
+around its two openings on the player (agent 29), read off the decoded stream directly:
+
+    296.572  0x009F [60, 48, 221]      an UNTARGETED spell (221: enchantment, target 0)
+    296.572  0x0028 [48]               its patrol leg halted, same instant
+    297.574  0x009F [58, 48, 0]        the cast closes; effects 392/393, 0x00F1
+    298.340  0x00A0 [60, 48, 29, 222]  the FOE spell at the player (222: target 5, activation 1.0 s)
+    299.334  [20, 29, 48, 395] + [16, 29, 48, ...]   the impact and the damage, 1.0 s later
+    300.076  0x002B 1.0 + 0x0029       the first movement -- AFTER the damage
+    300.614  0x002A naming the player; 301.110 attack_started + 0x0035 + 0x0028; 301.888 a projectile (its wand)
+
+The second opening (363.7–369.9 s) is the same shape: halt + 221, then 222 at the player
+1.75 s later, the damage 1.0 s after that, then `0x002B` 1.0 and three `0x0029` legs
+toward the player and no follow. The hostile stood ~1,008 / ~1,020 u from the player at
+the cast (RECON — it was on a leg; §12.5). **OBSERVED on the shape, 2 of 2: no `0x0029`,
+no `0x002A`, no `0x002B` before the first cast on the player; the cast from where it
+stood.** (Prediction (e)'s 4440 half held; the instrument's first cut missed the
+`0x00A0 [60]` because `noticeradius.hostile_acts` keys engagements on follows and combat
+words 4/16/17, so the activation 1.0 s earlier fell outside its window — the words above
+are the stream itself.)
+
+Def 1432 (the Skale Broodcaller, a wand): `20260915T164906` — `0x002B` 1.0 + ONE `0x0029`
+to a point 429 u from the player's report at the notice, `0x0028` 1.5 s later,
+`attack_started` 0.15 s after the halt, then swings every ~1.75 s with the damage ~1.2 s
+after each (a projectile's flight); `20260916T172025` — `0x002B` 1.0 + four `0x0029` legs
+over 1.8 s ending 489 u from the player (OBSERVED), `attack_started` 0.87 s after the last
+leg with no halt, then a follow only when the player ran. **OBSERVED, 2 of 2: no `0x002A`
+before the first strike; the approach is legs.** Its first act is a plain `attack_started`
+— a wand swing, not a spell — so the "leg to range, halt, cast" half of the plan's shape
+is a **ranged auto-attacker's** opening transplanted onto the caster (RECONSTRUCTION); no
+spell caster in the corpus opened from beyond its range. Two more things the tapes say
+against the plan's wording: a wand carrier stops at ~430–490 u, not at the WIKI's 1,248
+(unread here; the archer arm W6a stops at the item's range), and the client's skill record
+carries no cast range (`skilltable.py`: `aoe_range` only), so "the first ready spell's
+range" is one number per body.
+
+**Shipped (DESKWORK-D8 step 4):** a HOSTILE of a non-melee profession (the party's own
+rule, `PARTY_MELEE_PROFESSIONS`, F30) with a spell on its bar and no ranged weapon casts
+from where it stands when the target is inside `CASTER_CAST_RANGE` (1,248, the WIKI
+casting range, or the row's `cast_range`); outside it, one `0x0029` leg to the point at
+range (the corridor's vertex first when geometry intervenes), the halt on the follow's
+own clock, the cast; **never a `0x002A`** — for every approach, not only the first,
+because the client parks a `0x002A` at the melee disc whatever the server's stop radius
+says (F14, NPCTRACK-Q1), which is the charge the owner saw (RECONSTRUCTION for the later
+approaches; 4440 did follow after its first cast, with a wand to swing). Between casts it
+holds its ground (no punch from range; RECONSTRUCTION for the wait). With `AGGRO_RANGE`
+inside the range, a proximity notice always finds the target in range; the leg branch
+runs on a row whose `cast_range` is under 1,012 or when the target withdraws mid-fight.
+**The fixture hostile is a Monk with four spells and no weapon, so `--enemy` alone now
+spawns a caster** that stands at 300 u and casts; `--enemy-weapon`, `--no-enemy-skills`
+or `--no-caster-opening` give the walk-in every run before today had.
+
+**Not shipped, and why:** the patroller's resume (N9's two, 12.8's three) waits on patrol
+rows (step 5); the wand carrier's ~450 u stop is W6a's arm, not this lane's; a hit on a
+returning hostile is unexposed.
 
 ---
 
