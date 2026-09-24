@@ -40,7 +40,9 @@ import codedstr                                                  # noqa: E402
 import textwrite                                                 # noqa: E402
 
 # MEASURED from a green run, 2026-09-12. No optional section, so one number.
-LEDGER = checks.Ledger("archive composer", floor=26)
+LEDGER = checks.Ledger("archive composer", floor=29)
+# 26 -> 29 on 2026-09-24 with section 5, the MFT row budget line (DESKWORK-D11
+# step 7), measured from the green run.
 check = checks.adopt(LEDGER)
 
 
@@ -223,11 +225,47 @@ def section4():
           "named, never assumed")
 
 
+def section5():
+    print("\n5. --plan prints the MFT row budget, and names --fresh")
+    # The two archives test_datplan builds: A declares 20 rows (mft_size 480,
+    # so 32 B = 1 row of slack; erased rows 11..19 of which 16..19 are past
+    # FIRST_CLAIMABLE_ROW), B declares 11 (264 B, 248 B = 10 rows of slack, no
+    # erased row). Both numbers follow from the fixture's declared length and
+    # nothing else, so a budget that read the gap measure, or counted the
+    # reserved rows, lands on a different pair.
+    import tempfile
+    import shutil
+    from test_datplan import build_archive, COUNT_ERASED, COUNT_FULL
+    tmp = tempfile.mkdtemp(prefix="rurik-compose-")
+    try:
+        a = os.path.join(tmp, "a.dat")
+        b = os.path.join(tmp, "b.dat")
+        build_archive(a, COUNT_ERASED)
+        build_archive(b, COUNT_FULL)
+        check(compose.row_budget(a) == (1, 4),
+              "a 20-row table: 1 slack row in its last block + 4 claimable "
+              "erased rows (11..15 are reserved and do not count)",
+              repr(compose.row_budget(a)))
+        check(compose.row_budget(b) == (10, 0),
+              "an 11-row table: 10 slack rows, no erased row at all",
+              repr(compose.row_budget(b)))
+        lines = compose.budget_lines("no_such_run_dir_", b)
+        text = " ".join(lines)
+        check(len(lines) == 1 and "10 + 0 = 10 row(s)" in text
+              and "--fresh" in text and "SPEND" in text,
+              "with no run archive the plan prints the source's budget alone, "
+              "names --fresh as what restores it, and says sessions SPEND rows",
+              text[:120])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main():
     section1()
     section2()
     section3()
     section4()
+    section5()
     return LEDGER.verdict()
 
 

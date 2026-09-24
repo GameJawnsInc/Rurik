@@ -862,23 +862,133 @@ def resolve_template(ar, table, tmpl):
             "roles": res.role_counts(), "draw": draw}
 
 
-def content_map_models(ar, table, world=None):
+# ---------------------------------------------------------------------------
+# The map index: a map file's referenced model ids, cached per archive state
+# ---------------------------------------------------------------------------
+#
+# `modelexport.map_model_ids` decodes a map's Bloated props chunk and its
+# dependency list -- ~1 s a map, ~20 s for the content maps, which is what the
+# viewer's Maps tab paid on every first open (PLAN.md 8.1 MODELVIEWER, closed
+# 2026-09-24). The answer is a fact about the archive's bytes and nothing
+# else, so it is cached under the vault keyed by the SAME identity the catalog
+# uses (`refindex.stamp_of`: the MFT's sha256 plus its size and row count) and
+# refused against any other archive state. A map that will not decode is
+# cached as its problem: the same bytes fail the same way.
+#
+# KEYED BY FILE ID, NOT BY CONTENT KEY. The content rows name which maps to
+# show and may change between runs (a new row, a renamed key); the index
+# answers "what does map file F reference in this archive", so a row change
+# costs one decode for the new id and never a rebuild.
+
+MAP_INDEX_VERSION = 1
+
+
+def map_index_path(ar, stamp=None):
+    """Where this archive's map index lives: beside the catalog, same key."""
+    stamp = stamp or stamp_of(ar)
+    return os.path.join(cache_dir(), f"maps-{stamp['mft_sha256'][:16]}.json")
+
+
+def save_map_index(entries, stamp, path):
+    """Write `{file id: {"ids": [...]} | {"problem": "..."}}` under the vault."""
+    try:
+        out = vaultpath.resolve_out(path, what="a map model index cache")
+    except ValueError as exc:
+        raise Refused(str(exc))
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    doc = {"format_version": MAP_INDEX_VERSION, "stamp": stamp,
+           "maps": {str(fid): rec for fid, rec in sorted(entries.items())}}
+    tmp = out + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(doc, fh)
+    os.replace(tmp, out)
+    return out
+
+
+def load_map_index(path, ar=None):
+    """Read a map index back; with `ar`, refuse one built from another archive."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            doc = json.load(fh)
+    except (OSError, ValueError) as exc:
+        raise Refused(f"could not read the map index {path}: "
+                      f"{type(exc).__name__}: {exc}")
+    if not isinstance(doc, dict) or doc.get("format_version") != MAP_INDEX_VERSION:
+        raise Refused(f"{path} is not a format_version {MAP_INDEX_VERSION} map "
+                      f"index; rebuild rather than read across formats")
+    stamp = doc.get("stamp") or {}
+    if ar is not None:
+        now = stamp_of(ar)
+        bad = [k for k in refindex.IDENTITY_FIELDS if stamp.get(k) != now[k]]
+        if bad:
+            rows = "\n".join(f"    {k}: {stamp.get(k)!r} -> {now[k]!r}" for k in bad)
+            raise Refused(
+                f"REFUSING to answer for {now['archive']} with the map index {path}\n"
+                f"  It was built from a different archive state:\n{rows}")
+    try:
+        entries = {}
+        for key, rec in doc["maps"].items():
+            if not isinstance(rec, dict) or not ("ids" in rec) ^ ("problem" in rec):
+                raise ValueError(f"map {key}: neither ids nor problem")
+            entries[int(key)] = ({"ids": [int(i) for i in rec["ids"]]}
+                                 if "ids" in rec else {"problem": str(rec["problem"])})
+    except (KeyError, TypeError, ValueError) as exc:
+        raise Refused(f"{path} is malformed: {type(exc).__name__}: {exc}")
+    return entries, stamp
+
+
+def map_model_index(ar, table, fids, path=None, progress=None):
+    """`({file id: [model ids]}, {file id: problem}, path, decoded)` for `fids`.
+
+    Loads the archive's cached index, decodes only the ids it lacks, and saves
+    when anything was decoded. `decoded` is how many ids this call had to
+    read -- 0 on a warm cache, which is the number the viewer's Maps tab is
+    now allowed to pay.
+    """
+    stamp = stamp_of(ar)
+    path = path or map_index_path(ar, stamp)
+    entries = {}
+    if os.path.isfile(path):
+        try:
+            entries, _ = load_map_index(path, ar)
+        except Refused as exc:
+            print(f"map index rebuilt: {str(exc).splitlines()[0]}")
+            entries = {}
+    want = [int(f) for f in fids]
+    missing = [f for f in want if f not in entries]
+    for n, fid in enumerate(missing):
+        if progress:
+            progress(n, len(missing))
+        try:
+            entries[fid] = {"ids": [int(i) for i in
+                                    modelexport.map_model_ids(fid, ar, table)]}
+        except Exception as exc:                            # noqa: BLE001
+            entries[fid] = {"problem": f"{type(exc).__name__}: {exc}"}
+    if missing:
+        path = save_map_index(entries, stamp, path)
+    models = {f: entries[f]["ids"] for f in want if "ids" in entries[f]}
+    problems = {f: entries[f]["problem"] for f in want if "problem" in entries[f]}
+    return models, problems, path, len(missing)
+
+
+def content_map_models(ar, table, world=None, progress=None):
     """`{map key: (name, [model file ids])}` for every content map that
-    decodes; a map that does not is recorded under `problems`."""
+    decodes; a map that does not is recorded under `problems`. Through the
+    cached map index, so a warm open decodes nothing."""
     if world is None:
         import content
         world = content.load()
+    rows = {key: row for key, row in world.rows("map").items()
+            if row.get("file_id") is not None}
+    fids = sorted({int(row["file_id"]) for row in rows.values()})
+    models, bad, _path, _n = map_model_index(ar, table, fids, progress=progress)
     out, problems = {}, []
-    for key, row in world.rows("map").items():
-        fid = row.get("file_id")
-        if fid is None:
-            continue
-        try:
-            ids = modelexport.map_model_ids(int(fid), ar, table)
-        except Exception as exc:                            # noqa: BLE001
-            problems.append((key, f"{type(exc).__name__}: {exc}"))
-            continue
-        out[key] = (row.get("name") or key, ids)
+    for key, row in rows.items():
+        fid = int(row["file_id"])
+        if fid in models:
+            out[key] = (row.get("name") or key, models[fid])
+        else:
+            problems.append((key, bad[fid]))
     return out, problems
 
 

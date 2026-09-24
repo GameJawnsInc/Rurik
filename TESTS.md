@@ -912,9 +912,16 @@ Every one of these, in the order they were written:
   the archive -- and, since the second build of the day, that a plain `--build`
   KEEPS a present archive before any size test: every archive write changes its
   size, and the size test copied the pristine snapshot over a composed archive.
-  Floor 26, MEASURED 2026-09-12 (24 before the corridor joined the manifest and
-  the keep rule was pinned). No vault, no archive, no client;
-  ~2 s),
+  **Section 5 (2026-09-24, DESKWORK-D11 step 7, floor 26 -> 29): `--plan` prints
+  the MFT ROW BUDGET** -- WORLDMAPS-W6's "rows bind, bytes never do" as a number:
+  `row_budget` reads slack rows (`-mft_size % 512` over 24) plus claimable erased
+  rows off `test_datplan`'s two fixtures (1 + 4 on the 20-row table, 10 + 0 on
+  the 11-row one, both decided by the fixture's declared length, not by the
+  module), and `budget_lines` names `--fresh` as what restores it and says that
+  client sessions SPEND rows; on the slice archive the plan reads 0 + 1 where the
+  pristine source reads 17 + 0. Floor 26 MEASURED 2026-09-12 (24 before the
+  corridor joined the manifest and the keep rule was pinned). No vault, no
+  archive, no client; ~2 s),
   `toolkit/mapdata/test_skillnames.py` (the 188 authored skill names a custom
   profession needs -- the text sibling of `glyphs.py`, and like it the file is
   mostly about the INDEX ARITHMETIC, because "188 names came out and they are
@@ -1616,7 +1623,37 @@ Every one of these, in the order they were written:
   `(row - 1) * 24` kept as the control that must land on row N-1 -- and the bound is
   refused AS a bound, since row 0 reached `entries[-1]` and planned a write to the LAST
   row of the table, which a "some blocker" predicate passes because that row's
-  reservation is 0 bytes. Floor 30 -> 38),
+  reservation is 0 bytes. Floor 30 -> 38.
+  **§10 added 2026-09-24, floor 44 -> 60: a generation whose HEAD was overwritten
+  (DESKWORK-Q4).** Every check before it rests on the `Mft\x1a` header -- the
+  signature finds it, §9's projection reads its count -- and on `dat_study_38833`
+  the live file-id table sits where a stale generation's header was, so its
+  2,892,800 B tail carried no magic, no extent reached it, and it was the LARGEST
+  USABLE RUN in the archive, 100.0% live table rows (the slice archive's
+  0xF8A5E200 the same shape at 99.8%). The third rule, `datplan.mft_content`,
+  parses a run's bytes as 24-byte records at six 4-byte phases and withholds on
+  at least 8 records byte-identical to live rows AND a majority of the non-zero
+  ones. §10 plants that shape with no magic anywhere (a check asserts `scan_run`
+  finds nothing, so what follows is the third rule's alone) and puts a CONTROL
+  beside each term: the same rows amid payload junk stay usable (the majority --
+  junk is the client's own evidence it reused the region; the 38797-line copies
+  carry a dozen such slivers), three rows in zeros stay usable (the count), empty
+  space stays usable, and the six-phase search is shown load-bearing (phase 0
+  alone scores zero). The refutation: with §1-9's usable list a 6-block payload
+  is placed inside the tail; with the third rule it is BLOCKED, and the plan's
+  line for that run names the kind and the count. Four scratch sabotages redden
+  it -- the rule off (6), the majority off (4), the count off (4), one phase
+  (6); the last check's first version read the kind's words anywhere in the plan
+  and passed the first arm, so it reads the run's own line. **Floor 60 -> 61
+  (the lane's review, RV-10): the chunk-boundary check** -- `mft_content` reads
+  a run in `MFT_CONTENT_CHUNK` pieces and tests the one record per phase that
+  straddles each boundary, and the default chunk (1,049,088 B) is larger than
+  any fixture run, so nothing exercised that branch; read in 1,536-byte chunks
+  the planted tail crosses two boundaries and must score the same tuple, and
+  with the branch disabled in a scratch copy that check alone goes red. The
+  mark's text is neutral since the same review (RV-8): it states the count, the
+  fraction and the phase and asserts no mechanism, because the rule also
+  withholds one-block slivers at 57-86 % that are not overwritten heads),
   `toolkit/mapdata/test_datalloc.py` (the THIRD write verb: rows that did not
   exist, and the file id that makes the client able to name them. `--replace`
   needs a row, `datmove` needs a row; both start from one ArenaNet made, which is
@@ -7070,7 +7107,36 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   a level-20 one (shell 16271) in the 2026-09-01 build -- a real cross-build
   content drift, asserted as such (both identities read), NOT the instantaneous
   field-9 value. `capture_build`/`live_captures(build=)` scope the pool.
-  Floor 32→40→42),
+  **§8 (2026-09-24, DESKWORK-Q5, floor 42 → 55): the build is the scope, by
+  default.** `builds_of` partitions every keyed capture (the one with no exe in
+  its manifest keys as `None`, never vanishes); `require_one_build` REFUSES the
+  whole vault naming all five builds, the unknown capture by stamp and the
+  `--build` flag, and passes one build's pool naming it; a pool of ONE capture
+  passes whatever its build (the unknown capture alone returns `None` and gets
+  no stamp -- the first version refused it and told the operator to pass the
+  `--capture STAMP` they had passed, a regression from base with no flag to
+  restore it), while the same capture beside one of a known build is refused
+  naming both; `main([])` refuses, `main(["--build", "2026-07-29_221c13772c7a"])`
+  runs the census over its three captures to the 54 pinned definitions (main
+  takes argv, so the plumbing is exercised), `main(["--build", "NOSUCH"])` is
+  REFUSED naming the vault's builds with the unknown one included (the first
+  version crashed sorting `None` against `str`), and `--capture 20260817T180610`
+  alone runs as at base (8 declared, 0 hostile); `to_toml(build=)` stamps every
+  row's provenance and content.py reads it back off the row, with the CONTROL
+  that no build given writes none. Then the honest R4c-2 recount as literals:
+  the 2026-09-01 pool declares 294 / 40 hostile; **the September map-146 tapes
+  are READ as map 146** -- `agentroster.read_roster` over the build's 13
+  captures, connections with `map_id == 146` (5 in 4 captures), the hostile
+  definitions CREATED there equal to the 13 EXACTLY (the first version tested
+  only that the 13 were among the pool's 40, 21 of which are the Isle's, and an
+  Isle definition swapped in for 1397 passed it; it reddens this), six of the
+  original seven with 1434 absent; the four with a stat past the declaration --
+  three with a health reading (1431 56, 1432 96, 1437 64) and four with an attack
+  rate (1397 1.9, 1431 1.75, 1432 1.75, 1437 2.475); and of the 38 indices both
+  2026-07-29 and 2026-09-01 declare exactly ONE body differs (7809). Scratch
+  sabotages: `require_one_build` never refusing reddens 3, `to_toml` dropping
+  the stamp reddens 2, the whole new §8 against HEAD's pre-review `npcdefs.py`
+  reddens 3. Floor 32→40→42→55→59),
   `toolkit/authsrv/test_agentroster.py` (the per-agent roster reader —
   `studies/isle/PLAN.md` rung 1: every WORLD_CREATE_AGENT **with its coordinates**,
   partitioned by class tag before any masking, because field 2's low 16 bits are a
@@ -13606,8 +13672,20 @@ file_id (60), `shell_templates()` joins them onto 32 shell ids (the hatcher shel
 rows) -- the WIRE's pairing of skeleton and body, the only source that names a `skel`
 head as a creature; the hatcher resolves closed and draws its body, the worm draws itself,
 and a composited shell with NO body draws None -- the parade's white box, never
-invented; Kamadan's props chunk names >= 50 models (86, M4's count). Needs the study
-archive; sections 0-1 are bare-machine safe. 75 checks, floor 75. ~45 s)
+invented; Kamadan's props chunk names >= 50 models (86, M4's count). **Section 4b
+(2026-09-24, PLAN.md 8.1 MODELVIEWER, floor 75 -> 81): the map index cache.**
+`content_map_models` now answers through `map_model_index`, cached at
+`vault/cache/modelcatalog/maps-<mft sha>.json` and keyed by map FILE id (19 content rows
+name 17 files; a row change costs one decode, never a rebuild). The checks: the index
+sits under the vault cache, is stamped with this archive's MFT sha and holds every
+distinct content map file (the first version compared entry count to ROW count and
+went red on a correct cache); a second open answers the same maps and problems and
+DECODES NOTHING, under 5 s where a cold decode is ~20-30 s (what the viewer's Maps tab
+paid on every first open); the CONTROL that Kamadan's cached list equals a fresh
+`modelexport.map_model_ids` id for id; an index stamped from another archive state is
+REFUSED; and an id the index lacks costs exactly one decode and is appended -- as its
+problem, since the id is no map. Needs the study archive; sections 0-1 are
+bare-machine safe. 81 checks, floor 81. ~45 s warm, ~90 s the first time)
   `toolkit/mapdata/test_wireshells.py` (the WIRE-DERIVED SHELL INDEX, `wireshells.py`:
 which skeleton every keyed live tape dressed with which bodies, keyed per connection and
 stamped by the corpus. The archive never pairs a shell with a body -- `modelcatalog`

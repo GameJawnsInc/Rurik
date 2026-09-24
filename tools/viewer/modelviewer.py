@@ -535,12 +535,35 @@ class GLView(QOpenGLWidget):
 # ---------------------------------------------------------------------------
 
 class CatalogModel(QAbstractListModel):
-    def __init__(self, records, thumbs, shells=None, parent=None):
+    """The list behind the Models tab, with thumbnails rendered LAZILY.
+
+    A row's decoration is the PNG under the thumbs cache when one exists.
+    When none does and a `renderer` was given, the row is queued and a
+    zero-interval timer renders ONE per event-loop turn, so scrolling asks
+    for exactly the rows that came into view and the window stays live
+    between renders (~50-150 ms each). Rows that raise are remembered in
+    `failed` and never re-queued; a render that returns None (the GL context
+    not ready) is simply not remembered, so the next paint asks again.
+    Before 2026-09-24 thumbnails existed only through the menu action that
+    renders every listed model behind a progress dialog (still there).
+    """
+
+    def __init__(self, records, thumbs, shells=None, renderer=None, parent=None):
         super().__init__(parent)
         self.records = records
         self.thumbs = thumbs
         self.shells = shells or {}       # shell fid -> the SHELL tag to show
         self.icons = {}
+        self.renderer = renderer         # fid -> QImage | None
+        self.pending = []                # fids a paint asked for, FIFO
+        self.queued = set()
+        self.failed = set()
+        self.rendered = 0                # lazily rendered this session
+        self.rendered_fids = []          # ...and which, in render order
+        self.row_of = {r.fid: i for i, r in enumerate(records)}
+        self.timer = QTimer(self)
+        self.timer.setInterval(0)
+        self.timer.timeout.connect(self._render_one)
 
     def rowCount(self, parent=QModelIndex()):
         return 0 if parent.isValid() else len(self.records)
@@ -571,14 +594,49 @@ class CatalogModel(QAbstractListModel):
                 icon = QIcon(path)
                 self.icons[rec.fid] = icon
                 return icon
+            if (self.renderer is not None and rec.kind == mc.KIND_MODEL
+                    and rec.fid not in self.failed and rec.fid not in self.queued):
+                self.queued.add(rec.fid)
+                self.pending.append(rec.fid)
+                if not self.timer.isActive():
+                    self.timer.start()
             return None
         if role == Qt.UserRole:
             return rec
         return None
 
+    def _render_one(self):
+        if not self.pending:
+            self.timer.stop()
+            return
+        fid = self.pending.pop(0)
+        self.queued.discard(fid)
+        if os.path.isfile(self.thumbs.path_for(fid)):
+            img = False                      # rendered meanwhile (the menu action)
+        else:
+            try:
+                img = self.renderer(fid)
+            except Exception as exc:                        # noqa: BLE001
+                self.failed.add(fid)
+                print(f"thumbnail 0x{fid:X}: {type(exc).__name__}: {exc}")
+                return
+            if img is None:
+                return                       # not ready; the next paint asks again
+            self.thumbs.save(fid, img)
+            self.rendered += 1
+            self.rendered_fids.append(fid)
+        self.icons.pop(fid, None)
+        row = self.row_of.get(fid)
+        if row is not None:
+            idx = self.index(row)
+            self.dataChanged.emit(idx, idx, [Qt.DecorationRole])
+
     def set_records(self, records):
         self.beginResetModel()
         self.records = records
+        self.row_of = {r.fid: i for i, r in enumerate(records)}
+        self.pending.clear()
+        self.queued.clear()
         self.endResetModel()
 
     def forget_icon(self, fid):
@@ -658,7 +716,8 @@ class Viewer(QMainWindow):
         self.shell_rows = mc.shell_templates()
         self.wire = self._open_wire()
         self.shell_labels = self._shell_labels()
-        self.list_model = CatalogModel(self.catalog.models(), self.thumbs, self.shell_labels)
+        self.list_model = CatalogModel(self.catalog.models(), self.thumbs,
+                                       self.shell_labels, renderer=self._thumb_renderer)
         self.list = QListView()
         self.list.setModel(self.list_model)
         self.list.setIconSize(QSize(64, 64))
@@ -693,6 +752,15 @@ class Viewer(QMainWindow):
         dock.setMinimumWidth(420)
         self.addDockWidget(Qt.LeftDockWidgetArea, dock)
         self.refilter()
+
+    def _thumb_renderer(self, fid):
+        """One 96 px thumbnail for the lazy list, or None before the GL context
+        exists. Raises on a model that will not build, which the model
+        remembers as failed."""
+        if not self.gl.isValid():
+            return None
+        view = mc.build_view(self.ar, self.table, fid, textures=self.textures)
+        return self.gl.render_image(view, 96)
 
     def _open_wire(self):
         """The wire-derived shell index, or None with the reason printed."""
@@ -861,10 +929,14 @@ class Viewer(QMainWindow):
                 self.tpl_list.addItem(item)
         if index == 2 and self.maps is None:
             self.setCursor(Qt.WaitCursor)
+            t0 = time.time()
             try:
                 self.maps, problems = mc.content_map_models(self.ar, self.table)
             finally:
                 self.unsetCursor()
+            self.status.showMessage(f"maps: {len(self.maps)} read in "
+                                    f"{time.time() - t0:.1f} s through the map index "
+                                    f"cache ({mc.map_index_path(self.ar)})")
             item = QListWidgetItem("(all models)")
             item.setData(Qt.UserRole, None)
             self.map_list.addItem(item)
@@ -1214,9 +1286,18 @@ def smoke(win, app, out_dir):
          "forcing slot 0 decodes and binds its texture")
     win.slot_box.setCurrentIndex(0)
 
+    # on_tab runs synchronously inside setCurrentIndex (a direct signal), so
+    # the clock starts BEFORE it -- the first version started it after, timed
+    # processEvents alone, and printed 0.0 s with a 5 s sleep planted in the
+    # map read. The bound is what makes it a check: a cold or refused cache
+    # decodes 17 maps in 20-30 s and reddens it.
+    t0 = time.time()
     win.tabs.setCurrentIndex(2)
     app.processEvents()
-    step(win.maps is not None and "449" in win.maps, "Maps tab reads the content maps")
+    maps_secs = time.time() - t0
+    step(win.maps is not None and "449" in win.maps and maps_secs < 5,
+         f"Maps tab reads the content maps in {maps_secs:.2f} s (< 5 s: warm "
+         f"through the map index cache; a cold decode is 20-30 s)")
     for i in range(win.map_list.count()):
         d = win.map_list.item(i).data(Qt.UserRole)
         if d and d[0] == "449":
@@ -1297,6 +1378,55 @@ def smoke(win, app, out_dir):
         thumbs.save(rec.fid, win.gl.render_image(view, 96))
         done += os.path.isfile(thumbs.path_for(rec.fid))
     step(done == 3, f"three thumbnails rendered offscreen into {thumbs.dir}")
+
+    # LAZY thumbnails: point the list's cache at an empty directory outside
+    # the tree, show the Models tab, and let the event loop run -- the rows in
+    # view are queued by their own paint and rendered one per turn. Then
+    # scroll to the end and the rows there arrive too, without a menu action.
+    lazy = Thumbs(win.catalog.stamp)
+    lazy.dir = os.path.join(out_dir, "thumbs-lazy")
+    win.list_model.thumbs = lazy
+    win.list_model.icons.clear()
+    win.list_model.failed.clear()
+    win.search.setText("")
+    win.kind.setCurrentIndex(0)
+    app.processEvents()
+    win.list_model.set_records(win.filtered_records())
+    deadline = time.time() + 30
+    while time.time() < deadline and (len(os.listdir(lazy.dir)) < 3
+                                      if os.path.isdir(lazy.dir) else True):
+        app.processEvents()
+    first_batch = len(os.listdir(lazy.dir)) if os.path.isdir(lazy.dir) else 0
+    step(first_batch >= 3 and win.list_model.rendered >= 3,
+         f"the Models tab renders thumbnails for the rows in view on its own: "
+         f"{first_batch} PNGs in {lazy.dir} without the menu action")
+    # THE SCROLL. Drain what the first paint queued FIRST, so nothing left
+    # over from the top of the list can satisfy this step -- the first version
+    # counted "3 more rendered" after scrollToBottom, and with the scroll
+    # removed the rows still queued from the top rendered and passed it. Then
+    # only rows near the END of the list count: a fid whose row is within the
+    # last 50 was painted because the scroll brought it into view.
+    deadline = time.time() + 30
+    while win.list_model.pending and time.time() < deadline:
+        app.processEvents()
+    drained = not win.list_model.pending
+    seen = set(win.list_model.rendered_fids)
+    nrows = win.list_model.rowCount()
+    win.list.scrollToBottom()
+
+    def bottom_new():
+        return [f for f in win.list_model.rendered_fids
+                if f not in seen and win.list_model.row_of.get(f, -1) >= nrows - 50]
+    deadline = time.time() + 30
+    while time.time() < deadline and len(bottom_new()) < 3:
+        app.processEvents()
+    got = bottom_new()
+    step(drained and len(got) >= 3,
+         f"scrolling to the end queues the rows that came into view: "
+         f"{len(got)} rendered from the last 50 of {nrows} rows, none of them "
+         f"queued before the scroll (queue drained first: {drained})")
+    while win.list_model.pending and time.time() < deadline:
+        app.processEvents()
     print(f"smoke: {len(fails)} failure(s)")
     return 1 if fails else 0
 
