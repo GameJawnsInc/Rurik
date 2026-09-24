@@ -19926,3 +19926,128 @@ green.
 **A caveat on n, stated plainly:** 18 sends over 7 captures, 2 of them refereed by a tape. The
 chord verdict rests on those 2 plus the 0-of-5 in-regime clip result; the row is what makes the
 next session's census cheap and complete rather than a reconstruction.
+
+---
+
+## 1z-do. THE POST-SHIP WARPS, READ AT LAST — **1z-di.3's predicted corner-crawl-then-snap is NOT WITNESSED in the four 09-13 hard rows: two are click artifacts, one lands on our OWN grant, and the two re-grant-adjacent rows are a STRAIGHT wall (above the gate) and a corner row (below it, with a plane flip and a plain-lead nearest send).** The arrival re-grant is a SUSPECT in at most two rows and a cause in none the corpus can prove; the instrument that should have read this eleven days ago could not open the captures. Plus 1z-di.1's shape held OUT OF SAMPLE, and retail STILL has no wall-slide-then-silence witness
+
+**2026-09-24.** Ident `MOVECODE-1z-do` (DESKWORK-D10 steps 2, 3, 5). Desk only: `sessionscore.py`'s
+new warp row and `test_sessionscore.py` (its first test), `movesync.wire_only`, and
+`parkedcopy.silences` re-run out of sample. **An INSTRUMENT plus an ADJUDICATION, not a fix** —
+`authsrv.py` is untouched this pass. OBSERVED unless marked.
+
+### 1z-do.1 The prediction, pre-registered (1z-di.3's own words)
+
+1z-di.3 shipped `KBD_LEAD_ARRIVAL_REGRANT = True` and labelled the corner composition a
+**RECONSTRUCTION** — two observed rules (the arrival re-grant, the wall-slide clip) composed with
+no witness (0 slide-then-silence windows on retail, §1z-dh.2). Its stated risk, verbatim: *"a slide
+rule that turns the second wall's way would walk the copy past the corner the body stopped in, and
+the client's own separation gate would then snap the body onto it."* It named **"the next corner
+session"** as the measurement, predicting: at the corner, either `regrant-stop` rows (the wall, no
+slide) **or** a run of `regrant` rows with `wall-slide` clips (the crawl) — the tape to say whether
+the crawl reached the body. That session is `authsrv-20260913T190815-c5` (map 148) and
+`authsrv-20260913T174629-c4` (map 168), and it sat unread eleven days.
+
+My pre-registered predictions for this pass (NOTES, 2026-09-24, before the finished instrument ran;
+the wire was windowed first and this is said out loud): **P1** the warp row flags c4 and c5 and
+reads 0 on a 09-12 capture; **P2** the c5 t=172.59 jump lands NEAR, not onto, the re-grant's slide
+dest; **P3** — the discriminator likely to REFUTE the simple story — NOT all four hard rows are
+re-grant-adjacent (the click regime produces hard rows too); **P4** 1z-di.1's shape holds out of
+sample and the SLIDE class stays 0.
+
+### 1z-do.2 ★★★ The warp row, and why the exposure went unread
+
+`sessionscore.py` — the movement scorecard run on whatever the owner played — had every quantity
+the arc convicts a defect on **except a hard-jump row**, and its capture discovery globbed
+`authsrv-*-c1.jsonl`. A session re-dials on a map travel, so the corner regime's later connections
+are `-c4`/`-c5`, which the `-c1` glob **could not even open**. So the exposure went unread for two
+reasons at once: nothing scored hard jumps, and nothing could load the files they were in.
+
+The row (DESKWORK-D10 step 2) reuses `movesync.wire_only`'s repaired **two-arm bar** verbatim (a
+second reader would be a second chance to disagree with what the client said): implied speed
+> 400 u/s at dt ≥ 0.05 s, or displacement ≥ 520 u below that dt floor. **Retail scores 0 on both
+arms** (movesync header; the one 400 u/s firing is an 18 ms late capture stamp, `late_stamp`, not a
+displacement), and the quiet owner days **09-09 and 09-12 score 0**, so the band is 0 = OK and any
+hard row is a **LOOK, never a verdict**. Each row is a **SUSPECT**: it carries the nearest preceding
+`0x0029` send within 3 s; a wall-slide arrival re-grant in that window flagged **separately** (an
+ordinary lead can be nearer in time than the re-grant that is the reason to look); `on_grant` when
+the landing sits within 4 u of a point we granted in the last second (**the client obeying, not a
+separation snap** — the trap the arc paid for, §1z-ck); and `under_gate1` when the magnitude is
+below the client's own **299.33 u** separation gate, so a "snap" reading cannot even be that gate.
+
+**Positive/negative controls (P1 CONFIRMED):** `190815-c5` reads **RED, 2 hard**; `174629-c4` reads
+**RED, 2 hard**; `151709-c2` (09-12, **29 re-grants**) reads **OK, 0**. A whole-corpus census since
+09-09 (`census.py`, scratch) finds hard rows in **exactly** those two captures and **nowhere else** —
+including `190348-c4` (09-13, 27 re-grants, 0 hard). **Re-grant presence is not a warp.** The row's
+first test is `test_sessionscore.py` (28 vaulted / 21 bare): the bar reused with a known-bad walk
+arm, attribution independent of the re-grant flag with a known-bad re-grant-removed arm, `on_grant`
+and `under_gate1` with their controls, and these three real controls.
+
+### 1z-do.3 ★★★ The four hard rows adjudicated against 1z-di.3's prediction — SUSPECT, none proven
+
+Each row read on the client's own `0x003D`/`0x0047` self-report stream. **No `0x002C` was sent in
+any of the four windows**, so any body teleport is the client's OWN gate-1, which we do **not**
+directly observe: **no agenttap tape overlaps the 09-13 sessions**, so the drawn body is inferred
+from the reports the hard row is itself computed from. Said plainly.
+
+| row | mag / dt | regime | nearest send | wall-slide re-grant before | vs gate-1 | on our grant | verdict |
+|---|---|---|---|---|---|---|---|
+| **c5 t=142.57** | 649 u / 0.068 s | **click** (`0x003E`) | `kbd-lead` 0.06 s | none in 3 s | over | **YES** | a moving `0x003D` (10040,8177) then a `0x0047` STOP (9644,7663) 68 ms later; the stop point IS the `STOP-ECHO` we granted. Client obeying. **Not the re-grant, not a snap.** |
+| **c5 t=172.59** | 288.6 u / 0.202 s | **corner** (plane 0↔29) | `kbd-lead` 0.20 s | 1.06 s (wall-slide) | **under** | no | (11207,9402)→(10921,9366); lands **~49 u** from the slide dest (10876,9385), NOT onto it. Below gate-1; a plane flip straddles it. **SUSPECT, consistent in direction, not confirmed.** |
+| **c4 t=118.41** | 438.6 u / 0.253 s | **straight wall** (x=2208) | `grant` 0.10 s | 0.25 s (wall-slide) | over | no | 439 u SOUTH along the wall, 0.25 s after a wall-slide re-grant to (2208,9346). **The strongest suspect** — but a straight wall, **not the concave corner** the prediction named. |
+| **c4 t=142.55** | 121.7 u / 0.164 s | **click** (`0x003E`) | `click-kill` 0.11 s | 2.85 s (coincidental) | under | no | spam-click descent; nearest send a click-kill. The re-grant 2.85 s back is not the neighbour. **Not the re-grant.** |
+
+**So P2 and P3 are CONFIRMED, and the prediction is not.** Of four hard rows: **two are click
+artifacts** (c5 142.57, c4 142.55), **one lands on our own grant** (c5 142.57 again — the client
+obeying), and the **two re-grant-adjacent rows** are (a) a straight wall above the gate and (b) a
+corner row **below** the 299.33 u gate with a plane flip and a plain-lead nearest send. The clean
+concave-corner-crawl-then-snap 1z-di.3 described — a wall-slide re-grant walking the copy past the
+corner and the gate snapping the body onto the slide dest **above** 299.33 u — **is witnessed by
+none of them.** The one row over the gate is on a straight wall; the one at a corner is under the
+gate and lands 49 u off the dest. **CONTESTED, tending REFUTED for these four rows**; the arrival
+re-grant is a suspect in at most two and a proven cause in zero.
+
+### 1z-do.4 ★★ 1z-di.1's shape held OUT OF SAMPLE, and the SLIDE class is still 0 (P4 CONFIRMED)
+
+1z-di.1's per-grant shape table was fit on the 61 live connections as of 2026-09-10. Re-run
+(`parkedcopy.silences`, the same instrument, rows split by connection date — no re-implementation)
+on the **13 live connections after 09-10** (genuinely out of sample, added to the corpus since the
+fit):
+
+| | in sample (≤ 09-10) | **out of sample (post-09-10)** |
+|---|---|---|
+| true silences (straight) | 71 | **36** |
+| straight silences with an unprompted re-grant inside | 46 (65 %) | **26 (72 %)** |
+| first inside grant minus the copy's arrival | p50 +0.09 s | **p50 +0.06 s** |
+| same-instant pairs (restated point + next chord) | 16 of 46 | **10 of 26** |
+| **SLIDE class (> 20° off, RUN-1zDB leg 4's)** | **0** | **0** |
+
+The straight-walk premise the ship rested on **holds out of sample** — the re-grant fraction is 72 %
+against 65 % fitted (the D10 plan's estimate re-derives exactly), arrival-triggered at +0.06 s not
+clock-triggered, the pair ratio steady. And the **SLIDE class is still 0 out of sample**: across the
+whole live corpus, in sample and out, ArenaNet's players never produced a wall-slide-then-silence
+window. **The wall-slide composition remains a RECONSTRUCTION with no retail witness either way** —
+which is exactly why 1z-do.3's four rows cannot settle it, and why a gate would be choosing between
+two unwitnessed reconstructions.
+
+### 1z-do.5 What ships (nothing behavioural), and the gate as a REGISTERED PROPOSAL only
+
+**Nothing behavioural.** `authsrv.py` is untouched: the lane was scoped instrument-plus-adjudication
+and parallel-safe, and the evidence does not justify a gate. `KBD_LEAD_ARRIVAL_REGRANT` stays ON.
+
+**The gate, registered for a future pass, NOT justified now.** If the corner slide is ever gated,
+the shape is: flag `--no-corner-regrant-slide` (a wall-slide clip on an arrival re-grant stays a
+`regrant-stop` instead of crawling); **known-bad arm = today's default** (the wall-slide re-grant
+ON, crawling the copy along the wall). **Precondition, and it is not met:** an owner corner session
+**with an agenttap tape that overlaps it**, so the drawn body is measured rather than inferred, and
+the pre-registered read is *"a body snap onto a wall-slide-re-granted point, above 299.33 u, within
+one report of the crawl."* The 09-13 captures cannot supply it (no tape), and the corpus's only
+over-gate row is on a straight wall. Until that tape exists, gating trades a RECONSTRUCTION we
+shipped for a RECONSTRUCTION we did not — no improvement in witness.
+
+**What this pass banked:** the warp row and its test (every future owner session is now a scored
+regression check for the arc's headline defect, reaching every connection not just `-c1`); the four
+rows read and labelled; and the shape's out-of-sample confirmation. **A caveat on n, plainly:** four
+hard rows, two of them clicks, none tape-refereed; the adjudication rests on the wire's own reports
+and the 0-of-all SLIDE class, and it says *look here and stop calling it a snap*, not *the re-grant
+is safe*.

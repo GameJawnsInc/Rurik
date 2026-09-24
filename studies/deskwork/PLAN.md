@@ -915,26 +915,28 @@ movement HANDOFF §A ("current at 22bfe86", 917 commits behind).
    lock — MOV-verify's reading); replace the hardcoded line with a computed count; write
    1z-p "scored from the corpus" or withdraw R8 keeping R8b; rewrite Q14 item 1 with the
    numbers.
-2. **A warp row in `sessionscore`.** `resyncscore.track_from_capture` per capture; hard
-   rows (count, magnitude, per active minute against the quiet-day band — 0 on 09-09 and
-   09-12 — and the retail control's 0); attribute each to the nearest preceding movement
-   send within 3 s, labelled "suspect", never "cause"; positive control: `--since` on the
-   09-13 sessions must flag `authsrv-20260913T174629-c4` and `190815-c5`.
-3. **Adjudicate the post-ship warps.** For the 4 hard rows since 20260910T160000, causal
-   vs coincident (190815-c5 t=171.48: "KBD LEAD RE-GRANT 1" along the wall turning
-   north-west, the body kept north-east, drift 323 u past gate 1's 299.33, then a 288.6 u
-   snap at 172.59 onto the re-grant's destination; 174629-c4 t=118.15: sent while the
-   guard read gate1-red, jump 438.6 u 0.25 s later); the unattributed 190815-c5 t=142.57
-   (649 u in 68 ms); if causal, a gate behind a flag; the slide law's concave-corner
-   behaviour RECONSTRUCTION.
+2. **A warp row in `sessionscore`.** ✅ **LANDED 2026-09-24 (MOVE-B), PLAN-LOG DESKWORK-D10
+   steps 2/3/5, movecode §1z-do.2.** `movesync.wire_only`'s two-arm bar (not
+   `resyncscore` — it gives the grant labels attribution needs); band 0 (retail and
+   09-09/09-12 all 0); each row a SUSPECT with its nearest send, a wall-slide re-grant
+   flagged separately, `on_grant` and `under_gate1`. Positive controls c4/c5 RED, 09-12
+   OK; `captures()` now reaches every connection suffix; first test `test_sessionscore.py`.
+3. **Adjudicate the post-ship warps.** ✅ **LANDED 2026-09-24 (MOVE-B), movecode §1z-do.3.**
+   1z-di.3's corner-crawl-then-snap is NOT witnessed in the four rows: c5 142.57 lands on
+   our own STOP-ECHO grant (click regime); c5 172.59 is re-grant-adjacent but UNDER
+   gate-1 with a plane flip; c4 118.41 is over gate-1 but a STRAIGHT wall; c4 142.55 is a
+   click artifact. No `0x002C`, no overlapping tape. CONTESTED/REFUTED for these four; a
+   gate is a REGISTERED PROPOSAL (§1z-do.5), not built.
 4. **Tap rate.** Memoise `tls_blocks`/`_threads_of` per (pid, tls_index) in `movetap.py`,
    re-enumerating only when the TEB32 self-check fails; `calibrate()` times a full poll;
    both loops pace to a deadline (`agenttap.py:352`; at 30 Hz today 33 ms sleep + 57 ms
    snapshot ≈ 11 Hz); a fake-memory selftest shows reuse and invalidation. No agenttap
    tape exists since 09-10, so this pays when tape'd runs resume.
-5. **Out-of-sample re-grant.** 1z-di.1's per-grant SHAPE table on the 35 connections
-   after 09-10 only (36 new silences with 26 re-grants, 72 %, against 65 % fitted); a
-   1z-do section; the SLIDE class still 0 of 363.
+5. **Out-of-sample re-grant.** ✅ **LANDED 2026-09-24 (MOVE-B), movecode §1z-do.4.**
+   `parkedcopy.silences` re-run on the 13 live connections after 09-10: 26/36 (72 %)
+   straight silences carry a re-grant against 65 % fitted, +0.06 s arrival lag, pairs
+   10/26; the SLIDE class is **0 in sample and out** — retail still has no
+   wall-slide-then-silence witness, so the composition stays a RECONSTRUCTION.
 6. **`_reach_frame` through a client-walked follow.** The client's follow stop is decoded
    with no weapon term (park at (r1 + r2 + TABLE[kind])² with the target's world-0 as
    destination); a small follow model walks the mirror's copy toward the target and parks

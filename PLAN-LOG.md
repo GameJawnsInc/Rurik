@@ -28,6 +28,34 @@ move back.
 
 ---
 
+### DESKWORK-D10 (steps 2, 3, 5), MOVE-B -- 2026-09-24 -- **a warp row in the movement scorecard, and the adjudication it enabled: 1z-di.3's predicted corner-crawl-then-snap is NOT witnessed in the four post-ship hard rows -- two are click artifacts, one lands on our own grant, and the two re-grant-adjacent rows are a straight wall and a sub-gate corner; the arrival re-grant is a SUSPECT in at most two rows and a proven cause in none. No authsrv.py change; a gate is registered as a proposal, not built**
+
+`sessionscore.py` (studies/movecode/review), the movement regression scorecard, had every
+quantity the arc convicts a defect on **except hard jumps**, and its capture discovery globbed
+`authsrv-*-c1.jsonl` — so the four post-ship hard rows on 09-13 sat unread eleven days: nothing
+scored them and nothing could open the `-c4`/`-c5` corner connections they live in. **Step 2:** a
+warp row reusing `movesync.wire_only`'s two-arm bar verbatim on the client's own self-report
+stream — retail scores 0 on both arms and the quiet days 09-09/09-12 score 0, so any hard row is a
+LOOK; each row a SUSPECT carrying its nearest preceding `0x0029` send, a wall-slide re-grant in the
+3 s window flagged separately, `on_grant` (the client obeying, not a snap), and `under_gate1`
+(under the client's own 299.33 u gate). Positive controls `174629-c4` and `190815-c5` read RED (2
+hard each); `151709-c2` (09-12, 29 re-grants) reads 0 — re-grant presence is not a warp. `captures()`
+now globs every connection suffix, so `--since` reaches `-c4`/`-c5`. First test `test_sessionscore.py`
+(28 vaulted / 21 bare, 1 skip), its TESTS.md entry in the same commit. **Step 3:** adjudicated
+(movecode §1z-do.3) — c5 t=142.57 (649 u) is a click-move-then-STOP landing ON our STOP-ECHO grant;
+c5 t=172.59 (288.6 u) is re-grant-adjacent but UNDER gate-1 with a plane flip, landing 49 u off the
+slide dest; c4 t=118.41 (438.6 u) is the strongest suspect (over gate-1, wall-slide re-grant 0.25 s
+before) but on a STRAIGHT wall, not the concave corner; c4 t=142.55 is a click artifact. No `0x002C`
+in any window (any snap is the client's own gate-1) and no agenttap tape overlaps 09-13 (the body is
+inferred from reports). CONTESTED, tending REFUTED for these four rows. **Step 5:** 1z-di.1's shape
+re-run out of sample on the 13 live connections after 09-10 — 26/36 (72 %) straight silences carry a
+re-grant against 65 % fitted, +0.06 s arrival lag, and the **SLIDE class is 0 in sample and out**, so
+retail still has no wall-slide-then-silence witness and the composition stays a RECONSTRUCTION.
+Registered proposal for a future pass (movecode §1z-do.5), NOT built: `--no-corner-regrant-slide`,
+known-bad arm = today's default, precondition = an owner corner session with an overlapping agenttap
+tape (unmet). Full record: [studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1z-do;
+studies/deskwork/PLAN.md D10 steps 2/3/5 retired.
+
 ### DESKWORK-D1 (step 5), fix pass -- 2026-09-23 -- **ONE party count for the henchman add, the hero kick and the hero add (the blocker); the test's floor set from its bare run; every source lock paired with a mutation; the mark and the level in retail's pre-create position; the allegiance and the map recorded as divergences**
 
 Two reviews of the entry below — an evidence refuter that re-derived every tape claim
