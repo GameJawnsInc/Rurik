@@ -96,16 +96,22 @@ no client and no socket.
 #
 # 0x014F IS OBSERVED ONCE. One purchase was ever made in front of a capture, so
 # n = 1 -- a strong single observation (right moment, right amount, right
-# container, exact mirror of 0x0140's 31-sighting credit) and NOT corroborated.
-# The way to promote it is this arm plus a client whose funds fall by the quote.
+# container) and NOT corroborated. The DEBIT is the half that stays n=1; the
+# CREDIT it mirrors (0x0140) is not (see below). The way to promote the debit is
+# this arm plus a client whose funds fall by the quote.
 # studies/newopcodes/FINDINGS.md, the purchase-recipe section.
 GAME_SMSG_TRANSACTION_DONE = 0x00CC
 GAME_SMSG_GOLD_DEBIT = 0x014F
 GAME_SMSG_ITEM_REMOVED = 0x014D
-# The credit, and the debit's exact mirror: same field 1 (the
-# inventory key), same `add` shape in the client -- handler
-# 0x00846120 -> 0x00849FE0, `add [ecx+0x90], eax`. 31 sightings in
-# the live corpus against 0x014F's one.
+# The credit, and the debit's exact mirror: same field 1 (the inventory key),
+# same `add` shape in the client -- handler 0x00846120 -> 0x00849FE0,
+# `add [ecx+0x90], eax` (an accumulate, not a set). The CREDIT is now well
+# CORROBORATED (DESKWORK-D9, the purse census over every live game connection):
+# it rides the sell (0x004A), the quest hand-in (0x003B, n=8 for the batch) and
+# the gameplay-instance LOAD (keyed by that connection's 0x0144 stream key), and
+# the cross-connection chain `next_load = prev_load + credits - debits` closes on
+# every capture. So the message is a credit/delta, OBSERVED. It is the 0x014F
+# DEBIT alone (the buy) that stays n=1.
 GAME_SMSG_GOLD_CREDIT = 0x0140
 TRANSACTION_KIND_BUY = 1
 # 11, and it is a CONSTANT rather than a count: it rides `0x004A`'s field 1 on
@@ -124,7 +130,8 @@ PURCHASED_ITEM_ID_BASE = 5000
 
 def handle_item_purchase(values, send, state, conn_id, rec,
                          PLAYER_INVENTORY_KEY, GAME_SMSG_CREATE_NAMED_ITEM,
-                         GAME_SMSG_ITEM_MOVED_TO_LOCATION, place=None, avoid=()):
+                         GAME_SMSG_ITEM_MOVED_TO_LOCATION, place=None, avoid=(),
+                         purse_persist=None):
     """Answer one GAME_CMSG 0x004D: mint the item, place it, take the money.
 
     `place` (itemstore.place, handed in by authsrv's wrapper) registers the
@@ -132,6 +139,22 @@ def handle_item_purchase(values, send, state, conn_id, rec,
     of backpack slots the caller keeps EMPTY (the worn off hands' return
     cells). Both default to "no store" so test_purchase's bare recipe and the
     no-dress state keep working (the confirmation pass's fix, ENG-2).
+
+    THE PURSE (DESKWORK-D9). `state["purse"]` is the server's carried-gold
+    bookkeeping. The WIRE debit is the `0x014F [key, price]` this arm already
+    sends -- the client applies it to its own carried purse (0x00849FE0's
+    `add`, the mirror of 0x0140) -- so this does not send another message; it
+    tracks the balance so it persists and the next load's credit is right.
+    `purse_persist(state)` (passed by authsrv's wrapper under --persist) writes
+    it through. When `state` carries no purse the server is not modelling one
+    (the bare recipe) and nothing here gates or moves.
+
+    INSUFFICIENT FUNDS is a belt-and-suspenders refusal. The client debits its
+    OWN purse and will not send 0x004D for a purchase it cannot afford (retail's
+    server-side insufficient-funds reply is NOT FOUND -- 0 of the corpus), so
+    reaching this branch means our model and the client's disagree; we send
+    nothing (retail sends nothing either) and print it loudly rather than
+    minting an item the balance cannot cover.
 
     REFUSALS ARE LOUD AND COST NOTHING, which matters more here than usual: the
     client has already decided locally that it can afford this and has room for
@@ -160,6 +183,22 @@ def handle_item_purchase(values, send, state, conn_id, rec,
     if row is None:
         print(f"[c{conn_id}] BUY refused: item {stock_id} was never declared "
               f"by this session ({len(declared)} on file)", flush=True)
+        return
+    # THE PURSE GATE (DESKWORK-D9), before anything is minted or moved. It
+    # refuses ONLY when the server CREDITED this client's purse itself
+    # (`purse_synced`) and the balance cannot cover the price -- that is the one
+    # case where the server knows its number equals the client's. A probe that
+    # funds the client out-of-band (probemerchant's own 0x0140) leaves the
+    # server unsynced, so the gate stays inert and cannot refuse a buy the
+    # client already showed as affordable. The client gates locally either way,
+    # so this branch is a guard, not the primary check (retail's insufficient-
+    # funds reply is NOT FOUND).
+    _purse = state.get("purse")
+    if _purse is not None and state.get("purse_synced") \
+            and int(_purse) < int(price):
+        print(f"[c{conn_id}] BUY refused: purse {_purse} < price {price} "
+              f"(server-credited balance) -- nothing sent (retail's "
+              f"insufficient-funds reply is NOT FOUND).", flush=True)
         return
     # A MAP, not a cursor: a sale frees its slot and the next purchase must be
     # able to take it. A monotonic cursor would call a bag full after twenty
@@ -217,13 +256,32 @@ def handle_item_purchase(values, send, state, conn_id, rec,
          f"ITEM_MOVED_TO_LOCATION(bought {new_id} -> backpack slot {slot})")
     send(GAME_SMSG_TRANSACTION_DONE, [kind],
          f"TRANSACTION_DONE(kind {kind})")
+    # The purse follows the wire debit we just sent (0x014F). DESKWORK-D9. It
+    # never goes NEGATIVE: an unsynced client (funded out-of-band by a probe)
+    # can carry more than the server modelled, so a debit that would underflow
+    # is a known desync, logged and left rather than raised -- the item is
+    # authoritative (the client showed it bought), the number is not.
+    _desync = ""
+    if _purse is not None:
+        new = int(_purse) - int(price)
+        if new < 0:
+            _desync = (f" (purse {_purse} < {price}: unsynced, left as is -- "
+                       f"the client was funded out-of-band)")
+        else:
+            state["purse"] = new
+            if purse_persist is not None:
+                purse_persist(state)
     rec.event("purchase", stock_id=stock_id, new_id=new_id, price=price,
               quantity=quantity, bag=BACKPACK_BAG_ID, slot=slot)
     print(f"[c{conn_id}] BUY: stock {stock_id} -> item {new_id} x{quantity} "
-          f"into backpack slot {slot}, {price} gold debited", flush=True)
+          f"into backpack slot {slot}, {price} gold debited"
+          + (f", purse {state['purse']}" if _purse is not None and not _desync
+             else _desync),
+          flush=True)
 
 
-def handle_item_sale(values, send, state, conn_id, rec, PLAYER_INVENTORY_KEY):
+def handle_item_sale(values, send, state, conn_id, rec, PLAYER_INVENTORY_KEY,
+                     purse_persist=None):
     """Answer one GAME_CMSG 0x004A: take the item, pay for it, confirm.
 
     THE REQUEST IS NOT THE PURCHASE MESSAGE'S SHAPE, and assuming it was would
@@ -285,6 +343,14 @@ def handle_item_sale(values, send, state, conn_id, rec, PLAYER_INVENTORY_KEY):
          f"GOLD_CREDIT({price})")
     send(GAME_SMSG_TRANSACTION_DONE, [kind],
          f"TRANSACTION_DONE(kind {kind})")
+    # The purse follows the wire credit we just sent (0x0140). DESKWORK-D9.
+    _purse = state.get("purse")
+    if _purse is not None:
+        state["purse"] = int(_purse) + int(price)
+        if purse_persist is not None:
+            purse_persist(state)
     rec.event("sale", item_id=item_id, price=price, slot=slot)
     print(f"[c{conn_id}] SELL: item {item_id} out of backpack slot {slot}, "
-          f"{price} gold credited", flush=True)
+          f"{price} gold credited"
+          + (f", purse {state['purse']}" if _purse is not None else ""),
+          flush=True)

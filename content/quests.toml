@@ -99,19 +99,23 @@ objective_spawn = "errand_scout"
 
 # THE REWARD. Ours, and small on purpose. ArenaNet renders a reward as `Reward:`
 # followed by one line per slot, INSIDE the description string -- there is no
-# reward message. `reward_gold` is commented out rather than set to 0 because a
-# zero draws a line reading zero; omitting the key omits the line, exactly as
-# the stock "A Personal Vault" screen does with its lone `500 Experience`.
+# reward message for the TEXT. A row with no `reward_gold` at all still omits
+# the gold line (the stock "A Personal Vault" screen shows its lone
+# `500 Experience` the same way); this quest sets one, so its screen reads both.
 #
 # THE EXPERIENCE IS GRANTED, since SLICE-B5 (2026-09-12), and the grant is
-# OURS: the reward protocol is 0 of 23,495 messages in the corpus -- the
-# operator never completed a quest on a live capture -- so `grant_quest_reward`
+# OURS: the completion protocol is 0 of the corpus, so `grant_quest_reward`
 # pays this number through the kill's own 0x00EE [0, delta], the one message
-# the client is proven to apply to the sheet. Gold is NOT granted: no gold
-# message is identified, so `reward_gold` stays commented out -- a row that
-# set it would draw a line the server prints a loud NOT GRANTED for.
+# the client is proven to apply to the sheet.
+#
+# GOLD IS GRANTED, since DESKWORK-D9 (2026-09-24). A live hand-in DOES carry
+# gold -- `0x0140 [stream key, amount]` in the reward frame after the experience
+# 0x00EE, OBSERVED on 8 single-quest turn-ins across 6 captures (the amount
+# there was 25 on a STOCK quest). `grant_quest_reward` pays this row's own
+# number the same way. The amount below is OURS (invented, small); the MECHANISM
+# is OBSERVED. --no-quest-gold reverts to the pre-arc refusal.
 reward_experience = 100
-# reward_gold = 10
+reward_gold = 10
 
 [quest.rurik_first_errand.provenance]
 source = "invented"

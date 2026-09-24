@@ -23,8 +23,13 @@ is ~1,200 lines; do not read it front to back to start work.
 A quest we authored is **offered, accepted, tracked, advanced and turned in at a real
 retail client**, with a reward line on both screens and the marker moving between two
 NPCs. The protocol underneath it is named in `schema/overrides.json` with evidence
-chains. What is *not* done is the tail: no reward is actually granted, quest names are
-still ArenaNet's string ids, and two known bugs are open by the owner's decision.
+chains. The reward is now **granted**: experience since SLICE-B5 (2026-09-12) and **gold
+since DESKWORK-D9 (2026-09-24)** -- `grant_quest_reward` pays `reward_gold` as
+`0x0140 [key, gold]` in the hand-in frame after the experience `0x00EE`, the order
+OBSERVED on 8 live hand-ins (studies/quests §12.1), onto a persisted carried purse. What
+is *not* done is the fuller hand-in batch order (the `0x004D`/`0x004C` resends, the doubled
+`0x0052`, `0x00EE[10,0]` UNREAD -- deferred to a client run), the loot drop, quest names
+that are still ArenaNet's string ids, and two known bugs open by the owner's decision.
 
 ## 2. What will bite you, in the order it will bite
 

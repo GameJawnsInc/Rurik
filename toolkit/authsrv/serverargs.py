@@ -905,6 +905,26 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "townweapon.py). The equipped BAG, the paper "
                          "doll and the weapon-set panel are untouched; a field carries "
                          "the hands as before. townweapon.py.")
+    ap.add_argument("--no-load-purse", action="store_true",
+                    help="THE REVERT ARM for DESKWORK-D9's LOAD PURSE: the "
+                         "instance load sends no 0x0140 carried-gold credit, as "
+                         "every run before this arc, so the inventory window's "
+                         "gold counter stays 0. The default sends "
+                         "0x0140 [PLAYER_INVENTORY_KEY, purse] right after the "
+                         "last 0x0147 weapon set (skipped for a 0 purse) -- "
+                         "retail's own position and message, OBSERVED on every "
+                         "gameplay-instance load in the corpus, keyed by the "
+                         "connection's 0x0144 stream key, the cross-connection "
+                         "chain closing. purse.py.")
+    ap.add_argument("--no-quest-gold", action="store_true",
+                    help="THE REVERT ARM for DESKWORK-D9's QUEST GOLD: a "
+                         "turned-in quest's reward_gold is NOT paid (grant_quest_"
+                         "reward prints a NOT GRANTED line), as before this arc. "
+                         "The default pays it with 0x0140 [key, gold] in the "
+                         "reward frame after the experience 0x00EE -- OBSERVED, "
+                         "the hand-in batch on 8 single-quest turn-ins across 6 "
+                         "captures; the amount is the content row's own number. "
+                         "Also reverts the purse's persistence of that credit.")
     ap.add_argument("--no-map-travel", action="store_true",
                     help="THE REVERT ARM for DESKWORK-D1 step 7's world-map travel: "
                          "ignore c2s 0x00B1 MAP_TRAVEL, as today (it was "

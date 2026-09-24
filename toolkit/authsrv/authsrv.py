@@ -334,33 +334,37 @@ def complete_objective(send, state, qid, row, conn_id, why):
 
 
 def grant_quest_reward(send, state, qid, row, conn_id):
-    """Pay a turned-in quest's reward -- SLICE-B5, and OURS.
+    """Pay a turned-in quest's reward -- SLICE-B5, gold from DESKWORK-D9.
 
-    THE LABEL FIRST. The completion family (0x004E, 0x006C, 0x0096, 0x0097,
-    0x00FB) is 0 of 22,524 messages in the corpus: no live session ever
-    turned a quest in, so what ArenaNet sends at that moment is NOT FOUND, and
-    this is authorship rather than archaeology. What it is built from is
-    measured: the experience delta rides `0x00EE [0, delta]`, the message the
-    kill template carries as `[0, 26]` on 3 of 3 clean kills and the client
-    applies `+=` to the sheet (accrue_kill_rewards), and the offer screen has
-    already PROMISED this number -- `Reward: / 100 Experience` is in the
-    description string the client rendered (SLOT A IS EXPERIENCE, 2026-08-16).
-    Until today that line was a promise the server could not honour, and
-    content/quests.toml said so.
+    THE EXPERIENCE IS OURS. The completion family (0x004E, 0x006C, 0x0096,
+    0x0097, 0x00FB) is 0 of the corpus: a live hand-in uses NONE of it (a
+    hand-in is the remove pair plus reward lines -- studies/quests §12). The
+    experience delta rides `0x00EE [0, delta]`, the message the kill template
+    carries as `[0, 26]` on 3 of 3 clean kills and the client applies `+=` to
+    the sheet (accrue_kill_rewards), and the offer screen has already PROMISED
+    this number -- `Reward: / 100 Experience` is in the description string the
+    client rendered (SLOT A IS EXPERIENCE, 2026-08-16). The AMOUNT is the
+    content row's; the mechanism is the kill's.
 
-    ORDER, and it is ours: after the two removes, so the client has already
-    taken the quest out of its log when the sheet moves. Nothing measured
-    says otherwise, and nothing measured says this.
+    GOLD IS NOW GRANTED (DESKWORK-D9, 2026-09-24). A live hand-in DOES carry
+    gold: `0x0140 [stream key, amount]` in the reward frame, AFTER the
+    experience `0x00EE` -- OBSERVED on 8 single-quest turn-ins across 6 captures
+    (byte-offset order on 20260914T180058 :56301: ... 0x00EE[0,250], then
+    0x0140[key,25]). 0x0140 is a CREDIT (the client's `add [inv+0x90]`, purse.py),
+    so the row's `reward_gold` is paid onto the carried purse and persists.
+    --no-quest-gold reverts to the pre-D9 refusal.
 
-    GOLD IS NOT GRANTED. No gold message has been identified in the corpus,
-    so a row carrying `reward_gold` draws a line the server cannot pay --
-    the print names it loudly rather than paying it with an invented opcode,
-    and content/quests.toml keeps the key commented out for the same reason.
+    ORDER, PASS 1. The gold sits after the experience, as the tape shows. The
+    turn-in dispatch still sends its two removes (0x0052 then 0x004A) and then
+    this; the fuller OBSERVED batch -- 0x004D marker, the 0x004C re-send, the
+    reward lines BETWEEN a DOUBLED 0x0052 and before 0x004A, and 0x00EE [10, 0]
+    (UNREAD) -- is documented in studies/quests §12 and DEFERRED to a pass with
+    a client run. Nothing here is invented for those four chat lines or the
+    0x00EE [10, 0].
 
-    The same three consequences a kill's experience has: the wire delta, the
-    death-penalty credit (WIKI: 75 XP buys back 1%), and the persisted sheet
-    under --persist -- through the same functions, so the two paths cannot
-    drift.
+    The same consequences the experience has: the wire delta, the death-penalty
+    credit (WIKI: 75 XP buys back 1%), and the persisted sheet under --persist.
+    The purse rides the same persist write.
     """
     xp = row.get("reward_experience")
     gold = row.get("reward_gold")
@@ -370,29 +374,48 @@ def grant_quest_reward(send, state, qid, row, conn_id):
     for sid in row.get("reward_skills") or ():
         grant_skill(send, state, int(sid), conn_id,
                     unlocked=int(sid) in state.get("skills_known", set()))
-    if gold is not None:
+    xp_paid = 0
+    if xp is not None:
+        xp_paid = int(xp)
+        send(GAME_SMSG_AGENT_KILL_REWARD, [KILL_REWARD_ATTR, xp_paid],
+             f"quest {qid} reward: experience +{xp_paid} (SLICE-B5, ours)")
+        morale_experience(send, state, conn_id, xp_paid)
+    # THE GOLD, after the experience -- the tape's order (DESKWORK-D9).
+    gold_paid = 0
+    if gold is not None and QUEST_GOLD_ENABLED:
+        g = int(gold)
+        if g > 0:
+            send(merchant.GAME_SMSG_GOLD_CREDIT, [PLAYER_INVENTORY_KEY, g],
+                 f"quest {qid} reward: gold +{g} (DESKWORK-D9, OBSERVED)")
+            state["purse"] = player_purse(state) + g
+            gold_paid = g
+    elif gold is not None and not QUEST_GOLD_ENABLED:
         print(f"[c{conn_id}] quest {qid}: reward_gold = {gold} is NOT GRANTED "
-              f"-- no gold message is identified in the corpus, and the offer "
-              f"screen drew a line this server cannot pay. Omit the key.",
-              flush=True)
-    if xp is None:
-        print(f"[c{conn_id}] quest {qid} turned in: no reward_experience, "
-              f"nothing granted", flush=True)
+              f"(--no-quest-gold, the pre-DESKWORK-D9 behaviour).", flush=True)
+    if xp is None and not gold_paid:
+        print(f"[c{conn_id}] quest {qid} turned in: no reward_experience"
+              + ("" if gold is None else " and no gold paid")
+              + ", nothing granted", flush=True)
         return 0
-    xp = int(xp)
-    send(GAME_SMSG_AGENT_KILL_REWARD, [KILL_REWARD_ATTR, xp],
-         f"quest {qid} reward: experience +{xp} (SLICE-B5, ours)")
-    morale_experience(send, state, conn_id, xp)
     store = state.get("charstore_game")
     if PERSIST and store is not None:
         srow = store.character_by_uuid(state.get("char_uuid", ""))
         if srow is not None:
-            srow["xp"] += xp
-            store.save()
-            print(f"[c{conn_id}] PERSIST: quest {qid} reward accrued -- xp "
-                  f"{srow['xp']}", flush=True)
-    print(f"[c{conn_id}] quest {qid} turned in: +{xp} experience", flush=True)
-    return xp
+            changed = False
+            if xp_paid:
+                srow["xp"] += xp_paid
+                changed = True
+            if gold_paid:
+                srow["purse"] = int(state["purse"])
+                changed = True
+            if changed:
+                store.save()
+                print(f"[c{conn_id}] PERSIST: quest {qid} reward accrued -- xp "
+                      f"{srow['xp']}, purse {srow.get('purse', 0)}", flush=True)
+    print(f"[c{conn_id}] quest {qid} turned in: +{xp_paid} experience"
+          + (f", +{gold_paid} gold (purse {state.get('purse', 0)})"
+             if gold_paid else ""), flush=True)
+    return xp_paid
 
 
 def kill_completes_objective(send, state, dead_id, conn_id):
@@ -5400,6 +5423,10 @@ import maptravel                                               # noqa: E402
 # 0x00B0 + 0x01BF batch, the hireable-marker message and the party cap; read by
 # handle_henchman_add, spawn_population's hireable arm and test_henchparty.py.
 import henchparty                                              # noqa: E402
+# The carried purse -- DESKWORK-D9. Pure arithmetic and the 0x0140 load-credit
+# builder; read by player_purse, the load burst, grant_quest_reward and the
+# merchant wrappers (persist_purse), and by test_purse.py.
+import purse                                                   # noqa: E402
 from skillunlock import (                                      # noqa: F401,E402
     unlock_corpus_words, refuse_skill_zero,
     # The persisted skill library's two halves read these by bare name: the
@@ -11893,6 +11920,20 @@ ITEM_MOVE_BY_ID_ENABLED = True  # False (--no-item-move-by-id): c2s 0x0072
                                # the sword snapped back). Default ON: 0x014B
                                # into an empty cell, 0x0152 onto an occupied one
                                # (RECONSTRUCTION; no tape carries the request).
+LOAD_PURSE_ENABLED = True      # False (--no-load-purse): the load sends no
+                               # 0x0140 carried-gold credit, as every run before
+                               # DESKWORK-D9. Default ON: retail sends
+                               # 0x0140 [stream key, purse] right after the last
+                               # 0x0147 on every gameplay-instance load (OBSERVED
+                               # corpus-wide; the chain closes), so the inventory
+                               # window's gold counter fills. purse.py.
+QUEST_GOLD_ENABLED = True      # False (--no-quest-gold): a turned-in quest's
+                               # reward_gold is NOT paid (the print names it), as
+                               # before DESKWORK-D9. Default ON: grant_quest_reward
+                               # pays it with 0x0140 [key, gold] in the reward
+                               # frame after the experience 0x00EE (OBSERVED, the
+                               # hand-in batch, n=8 for the shape; the specific
+                               # amount is the content row's own number).
 MAP_TRAVEL_ENABLED = True      # False (--no-map-travel): c2s 0x00B1 MAP_TRAVEL
                                # is ignored, as today (DROPPED_ON_PURPOSE). The
                                # default answers it as retail does -- 0x01D9 then
@@ -19326,21 +19367,68 @@ def handle_attribute_load(values, send, state, conn_id, rec):
 import merchant  # noqa: E402
 
 
+def player_purse(state):
+    """The carried purse for this connection (DESKWORK-D9).
+
+    state's if it already holds one, else the character store's under --persist,
+    else purse.STARTING_PURSE. Cached into state['purse'] so the load, the buy,
+    the sell and a quest reward all read and move ONE number. An absent stored
+    purse is the starting purse, not zero-authored -- purse.py's rule.
+    """
+    if "purse" in state:
+        return int(state["purse"])
+    p = purse.start()
+    if PERSIST:
+        store = state.get("charstore_game")
+        if store is not None:
+            stored = store.character_purse(state.get("char_uuid", ""),
+                                           default=None)
+            if stored is not None:
+                p = int(stored)
+    state["purse"] = p
+    return p
+
+
+def persist_purse(state):
+    """Write state['purse'] to the character store, under --persist (DESKWORK-D9).
+
+    A no-op without --persist, without a cached store, or before a purse has
+    been resolved -- exactly like the xp accrual in grant_quest_reward. Passed to
+    the merchant wrappers so a buy or a sell survives a zone.
+    """
+    if not PERSIST or "purse" not in state:
+        return
+    store = state.get("charstore_game")
+    if store is None:
+        return
+    store.set_character_purse(state.get("char_uuid", ""), int(state["purse"]))
+
+
 def handle_item_purchase(values, send, state, conn_id, rec):
     # `place` / `avoid` (the confirmation pass's fix, ENG-2): a bought item is
     # registered in the item store the drag handlers read, and its cell is
     # chosen clear of the store's items and the off hands' reserved homes --
     # the merchant's own map alone let a 0x0072 answer 0x014B into a bought
     # item's cell (ItCliInv:105) and a purchase land on the dressed sword.
+    # DESKWORK-D9: the buy moves the purse, persisted under --persist -- but
+    # ONLY when the load already seeded state["purse"] (LOAD_PURSE_ENABLED).
+    # It is NOT seeded here: a bare recipe (test_purchase) and a probe that
+    # funds the client's purse out-of-band (probemerchant's own 0x0140) carry
+    # no server-side purse, so the gate stays inert and cannot refuse a buy the
+    # client already showed as affordable.
     return merchant.handle_item_purchase(
         values, send, state, conn_id, rec, PLAYER_INVENTORY_KEY,
         GAME_SMSG_CREATE_NAMED_ITEM, GAME_SMSG_ITEM_MOVED_TO_LOCATION,
-        place=itemstore.place, avoid=reserved_backpack_slots(state))
+        place=itemstore.place, avoid=reserved_backpack_slots(state),
+        purse_persist=persist_purse)
 
 
 def handle_item_sale(values, send, state, conn_id, rec):
+    # DESKWORK-D9: the sale credits the purse (when the load seeded one),
+    # persisted under --persist. Not seeded here -- see handle_item_purchase.
     return merchant.handle_item_sale(
-        values, send, state, conn_id, rec, PLAYER_INVENTORY_KEY)
+        values, send, state, conn_id, rec, PLAYER_INVENTORY_KEY,
+        purse_persist=persist_purse)
 
 
 def refuse_press(send, skill_id, copy, conn_id, reason_id=None):
@@ -32548,6 +32636,32 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                  f"WEAPON_SET[{slot}]"
                                  + (f" leadhand={lead}" if lead else "")
                                  + (f" offhand={off}" if off else ""))
+                        # THE CARRIED PURSE (DESKWORK-D9). Retail sends
+                        # 0x0140 [stream key, purse] as the message right after
+                        # the last 0x0147 and before the first quest message --
+                        # OBSERVED on every gameplay-instance load in the corpus,
+                        # keyed by that connection's own 0x0144 key, the balance
+                        # crediting onto the client's fresh (0) purse. Ours is
+                        # PLAYER_INVENTORY_KEY (1), registered by the
+                        # 0x0144 [1, 0] at the top of this burst so 0x0140's
+                        # handler finds the inventory (ItCliApi:1955). Skipped
+                        # for a 0 purse, which no gameplay load in the corpus
+                        # carried and which is a no-op on an already-0 client
+                        # purse. --no-load-purse reverts. purse.py.
+                        if LOAD_PURSE_ENABLED:
+                            _purse_credit = purse.load_credit(
+                                PLAYER_INVENTORY_KEY, player_purse(state))
+                            if _purse_credit is not None:
+                                send(merchant.GAME_SMSG_GOLD_CREDIT, _purse_credit,
+                                     f"GOLD_CREDIT(load purse "
+                                     f"{_purse_credit[1]}) -- DESKWORK-D9")
+                                # The server just credited the client's whole
+                                # balance, so the two now AGREE: the buy gate
+                                # may refuse an over-spend. A 0 purse credits
+                                # nothing and stays unsynced (the client's
+                                # default 0 already agrees, and a probe may fund
+                                # it out-of-band without the server knowing).
+                                state["purse_synced"] = True
                         send(GAME_SMSG_UPDATE_GOLD_STORAGE, [1, 0],
                              "UPDATE_GOLD_STORAGE")
                         send(GAME_SMSG_CHARACTER_UPDATE_INFO,
@@ -37107,6 +37221,20 @@ def main():
               "town -- every run before DESKWORK-D1's town weapon (2026-09-23). "
               "KNOWN-BAD: retail's outpost bodies are empty-handed (0 of 2,245) and "
               "its outpost switches carry no 0x006F (0 of 4).", flush=True)
+    if a.no_load_purse:
+        global LOAD_PURSE_ENABLED
+        LOAD_PURSE_ENABLED = False
+        print("[items] --no-load-purse: the load sends no 0x0140 carried-gold "
+              "credit -- the inventory window's gold counter stays 0, as every "
+              "run before DESKWORK-D9. Retail sends it on every gameplay-instance "
+              "load, so this is the pre-arc behaviour.", flush=True)
+    if a.no_quest_gold:
+        global QUEST_GOLD_ENABLED
+        QUEST_GOLD_ENABLED = False
+        print("[quests] --no-quest-gold: a turned-in quest's reward_gold is NOT "
+              "paid (the print names it) -- the pre-DESKWORK-D9 behaviour. "
+              "Default pays 0x0140 [key, gold] after the experience 0x00EE.",
+              flush=True)
     if a.no_map_travel:
         MAP_TRAVEL_ENABLED = False
         print("[map] --no-map-travel: c2s 0x00B1 MAP_TRAVEL is ignored, as "

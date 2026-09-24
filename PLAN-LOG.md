@@ -28,6 +28,53 @@ move back.
 
 ---
 
+### DESKWORK-D9 (step 5), pass 1 -- 2026-09-24 -- **the carried purse, quest gold PAID, and the hand-in order re-derived from the tape**
+
+The quest/gold step of DESKWORK-D9 (studies/deskwork/PLAN.md "DESKWORK-D9" step 5), and
+the promotion of studies/quests §12's `0x0140 [2, 25]` from "gold is the guess, UNVERIFIED"
+to **OBSERVED** (full write-up: studies/quests/FINDINGS.md §12.1, with the runsheet).
+
+**Re-derived first (livewire.decode_conn / codec.decode_stream_at over every origin=LIVE
+game connection).** `0x0140` is a **CREDIT** everywhere, not a set: on every
+gameplay-instance load it is `[stream key, purse]` immediately after the last `0x0147`
+(purses 10/22/38/60/85/108/164/500 across the corpus, keyed by the per-connection `0x0144`
+key), and the cross-connection chain `next_load = prev_load + Σcredits − Σdebits` **closes
+on every capture** (the one exception a character switch). So a load credit onto the
+client's fresh 0 purse equals the balance (the handler's `add [inv+0x90]`, `ItCliApi:1955`).
+The hand-in gold is **n=8, not n=1**: by byte offset the reward frame is `0x004D · 0x004C ·
+0x0052 · 0x009C · 0x00EE[10,0] · 0x00EE[0,xp] · **0x0140[key,gold]** · 0x0052 · 0x004A` --
+so the brief's "0x004A first" is **REFUTED** (0x004A is LAST), `0x0052` doubles, and the
+gold follows the experience `0x00EE`.
+
+**Shipped.** A persisted purse in `charstore` (optional `purse` field, **no STORE_VERSION
+bump** -- absent = the starting purse, so every prior store stays byte-identical); the load
+sends `0x0140 [PLAYER_INVENTORY_KEY, purse]` after the weapon sets when positive
+(`--no-load-purse` reverts); `grant_quest_reward` pays `reward_gold` as `0x0140 [key, gold]`
+**after** the experience `0x00EE`, as a DELTA, persisted (`--no-quest-gold` reverts); the
+merchant's buy debits and sell credits the purse (the wire already moves it via `0x014F`/
+`0x0140`), an unaffordable buy sends nothing **only when the server credited the balance**
+(`purse_synced`) so a probe funding the client out-of-band is never wrongly refused (retail's
+insufficient-funds reply is NOT FOUND); `content/quests.toml`'s `rurik_first_errand`
+`reward_gold` uncommented (amount OURS, mechanism OBSERVED); the stale "GOLD IS NOT GRANTED"
+docstrings corrected. New leaf `toolkit/authsrv/purse.py`; `test_purse.py` 24 bare / 30
+vaulted (KNOWN-BAD arms: gold missing, gold before xp, a balance where a delta belongs; a
+vacuity guard; the tape's load and hand-in bytes); `test_charstore.py` +5 (91 → 96);
+`test_quests.py` §23 rewritten (gold GRANTED, the order, the revert, gold-only).
+
+**PASS-1 scope, DEFERRED with evidence (studies/quests §12.1).** The gold is paid in the
+reward frame after the xp; the turn-in dispatch still sends its two removes then the reward.
+The fuller OBSERVED batch -- the `0x004D`/`0x004C` resends, the reward BETWEEN a doubled
+`0x0052` and before `0x004A`, `0x00EE[10,0]` (UNREAD) -- is deferred to a pass with a client
+run, because the current single-`0x0052` order is run-validated. **The client run is owed**
+(runsheet in studies/quests §12.1: load and read the `I`-panel gold counter, accept/hand in
+`rurik_first_errand`, watch the counter rise by 10, zone and relaunch under `--persist`, and
+the `--no-quest-gold` control). Affected tests: 60 green (test_purse, test_charstore,
+test_quests, test_mechanics, test_purchase, test_dispatch, test_agentlife, the load-burst and
+census readers of authsrv.py, and the five linters); the full suite and the client run are
+the orchestrator's at merge.
+
+---
+
 ### DESKWORK-D1 (step 5), fix pass -- 2026-09-23 -- **ONE party count for the henchman add, the hero kick and the hero add (the blocker); the test's floor set from its bare run; every source lock paired with a mutation; the mark and the level in retail's pre-create position; the allegiance and the map recorded as divergences**
 
 Two reviews of the entry below — an evidence refuter that re-derived every tape claim

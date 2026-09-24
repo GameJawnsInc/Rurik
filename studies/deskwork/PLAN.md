@@ -620,11 +620,16 @@ MANIFEST:707 (TIMER); quests HANDOFF §1; `content/quests.toml`'s commented `rew
    TIMER per MANIFEST:707 (a server-side schedule) or say why a countdown was chosen;
    each verb ships WITH a quest row using it (`authsrv.py:413-418` refuses a mechanism
    nothing exercises); 0x004C before 0x0054; `test_quests` per verb.
-5. **Gold.** Pay `reward_gold` with 0x0140 [key, gold] (`merchant.py:109`; the sell arm
-   already sends it); check field 1 of the tape's [2, 25] against that connection's
-   0x0144 stream key to make "gold is the guess" OBSERVED; reorder the hand-in to quests
-   §12's observed batch; a persisted purse in charstore or say there is none; fix
-   `authsrv.py:355/374`'s "NOT GRANTED" and quests HANDOFF §1.
+5. **Gold. LANDED 2026-09-24 (DESKWORK-D9 pass 1, PLAN-LOG; studies/quests §12.1).**
+   `reward_gold` is paid with `0x0140 [key, gold]` after the experience `0x00EE`; the
+   tape's `[2, 25]` was checked against that connection's `0x0144` key and "gold is the
+   guess" is now OBSERVED (n=8 for the batch shape, the chain closes); a persisted purse
+   is in charstore (optional field, no version bump) and the load credits it; the merchant
+   moves it; `authsrv.py`'s "NOT GRANTED" docstrings corrected; `--no-quest-gold` /
+   `--no-load-purse` revert. DEFERRED (needs a client run): the fuller hand-in order (the
+   `0x004D`/`0x004C` resends, the doubled `0x0052`, `0x00EE[10,0]` UNREAD) -- the byte-
+   offset order is `0x004D · 0x004C · 0x0052 · reward · 0x0052 · 0x004A`, so the option's
+   "0x004A first" was refuted. Loot (step 6) still open.
 6. **Loot** (low confidence). Census the death drop burst (0x0135, 0x0168, the kind-0
    create 25 u away; 12 records in 4 captures) and the pickup (c2s 0x003F, UPSTREAM; 4 in
    2 captures); a drop row on spawn or npc templates (rates are the operator's, not

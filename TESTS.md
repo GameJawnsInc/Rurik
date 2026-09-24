@@ -3319,6 +3319,29 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   item from the store and leaves the sword; `avoid` (the wrapper's reserved off-hand
   return cells) is skipped and with no `place` nothing is registered. Floor 27 → 35
   from the green run. No vault, no socket, no client. ~1 s),
+  `toolkit/authsrv/test_purse.py` (**2026-09-24, DESKWORK-D9: the carried purse, the
+  quest gold and the merchant's moves** -- `purse.py`, `charstore`'s optional `purse`
+  field, `grant_quest_reward`'s gold, and the load credit; `studies/quests/FINDINGS.md`
+  §12.1. §1 THE LEAF (bare): `load_credit` SKIPS a 0 purse (no gameplay load in the
+  corpus carried a 0-gold credit, and add-0 is a no-op on the client's 0 purse) and
+  builds `[key, N]` for a positive one, with that skip as a KNOWN-BAD; `can_afford` gates
+  and a None (unmodelled) purse always affords; `after_buy`/`after_sell`, and a purse
+  driven negative RAISES (vacuity). §2 THE QUEST GOLD (bare): `reward_gold` pays
+  `0x0140 [key, gold]` AFTER the experience `0x00EE` -- the tape's order -- as a DELTA and
+  not the new balance, with the three KNOWN-BAD arms the lane names (a reversed batch
+  fails the order predicate; a balance where a delta belongs; and `--no-quest-gold` pays
+  nothing); a gold-only reward still pays. §3 THE MERCHANT (bare): a buy debits and a sell
+  credits `state["purse"]` (the wire already moves it via `0x014F`/`0x0140`), an
+  unaffordable buy sends NOTHING (the client gates locally; retail's insufficient-funds
+  reply is NOT FOUND), a state with no purse is unchanged (vacuity -- the bare recipe),
+  and `purse_persist` is called with the moved balance. §4 THE STORE (temp dir): the field
+  is OPTIONAL so `STORE_VERSION` stayed 1, an absent purse reads the caller's default (not
+  a silent 0), a stored purse survives a reopen, a hand-in under `--persist` writes the new
+  balance to disk, and a negative purse is refused. §5 THE TAPE (vault-gated,
+  `livewire.decode_conn` over 20260914T180058, `LEDGER.skip` bare): the load's `0x0140`
+  follows the last `0x0147` and carries `[stream key, purse]`, and the hand-in's `0x0140`
+  follows the xp `0x00EE [0, xp]` and precedes `0x004A`. Floor 23 from the bare green run
+  (the tape adds 6). No socket, no client, temp stores only. ~5 s vaulted),
   `toolkit/authsrv/test_playerbags.py` (**2026-09-14: the JARIN tape (20260914T005758) carried a TENTH bag and the one-set check went red -- it was a second INVENTORY KEY, the hero's, with one type-2 bag; `invcensus.bag_shapes` now groups by field 1 and returns the other keys' bags as a fifth element, the one-set claim is about the player's inventory, and a new check pins the hero's extra to exactly `[(2, 21, 9)]` (n = 3 connections, one tape); floor 18 → 19.** the player's nine containers, and **WHERE**
   the burst sends them. Until 2026-08-19 this server created ONE bag, and the
   symptom was not a missing grid but a missing PURCHASE: with a funded purse, a
