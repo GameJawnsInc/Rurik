@@ -13628,3 +13628,42 @@ in another profession's attribute, and a party hero's stored bar that wins over 
 no store means no warnings; `compile_spec` carries them into the summary and an empty
 store passed in means none; `reset_store` removes the file once and answers None after.
 No vault, no client, no server. 140 checks, floor 140. ~1 s)
+
+  `toolkit/harness/test_childjob.py` (**2026-09-24, the servers die with `session.py`,
+  however it ends.** OBSERVED that day: the run orchestrator's Stop was `QProcess.kill()`
+  and its window had no `closeEvent`, so both ended the run by TerminateProcess on
+  `session.py` ALONE; `Stack.stop()` runs from a `finally` a terminated process never
+  reaches, Windows does not kill children with their parent, and two `authsrv.py --party
+  sandbox --persist` (pythonw, no console) held 6112 for hours after the owner closed the
+  window at ~14:35 -- every other worktree's launch and `test_handshake.py` refused behind
+  them, since `--replace` stops only its own tree's listeners (`test_preflight_owner.py`).
+  The fix is `toolkit/harness/childjob.py`: `Stack.start` puts each server in one Job
+  Object with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE whose only handle is `session.py`'s, so
+  the kernel's close of that handle at `session.py`'s death kills the job. §1 the kernel's
+  rule with no process dying: an adopted child is in THIS job and its non-adopted sibling
+  is not (the control), closing the handle kills the adopted child and leaves the sibling,
+  and adopting an exited pid raises naming the step. §2 `Stack.start` adopts the server it
+  starts (the listener proven by pid, as for the real stack) and `Stack.stop` still stops
+  it. **§3 is the load-bearing one**: a stand-in parent builds the REAL `session.Stack`
+  over a silent stand-in server on an ephemeral 127.0.0.1 port, the test TerminateProcesses
+  the parent, and the listener must be gone within 5 s and the server process dead -- and
+  the KNOWN-BAD arm, the same parent with `childjob.KillOnClose` swapped for one that
+  refuses (so the Stack takes its own no-job path), must leave the listener UP past the
+  same 5 s with the orphan alive: the defect, reproduced, and the only evidence here that
+  Windows really orphans the child. §4 `kill_tree` (`taskkill /T /F`, what the
+  orchestrator's Stop and window close now run before `kill()`, so the CLIENT goes too):
+  a parent and its child, no job anywhere, both dead; a tree already gone is not a
+  failure (taskkill's 128). §5 `alive()`, the reading §1-§4 rest on. SABOTAGED: `adopt()`
+  replaced by `pass` in `Stack.start` reddens exactly 4 (§2's and §3's membership, §3's
+  listener-gone and process-dead) with the known-bad arm and §1/§4/§5 green. Checked the
+  same day against the REAL stack, outside the suite: `session.py --serve` on private
+  aliases 127.0.0.71/.72/.73, TerminateProcess on it -- all four endpoints (the gamesrv's
+  transfer alias .103 included) gone at the first poll; main's pre-fix `session.py`, the
+  same kill -- all three servers alive and listening at 5 s. The orchestrator's half is
+  `--smoke`'s: Stop kills a stand-in harness AND its child and says so, the control (the
+  old `kill()` alone) leaves the child running, and the window's `closeEvent` kills the
+  tree before the window goes; the two treatment laws red and the control green with
+  the old `stop` and no `closeEvent` patched in. Ephemeral ports only, so it runs beside
+  a live stack. No vault, no client. 28 checks, floor 28 (+1 the same day: a CLOSED job
+  answers None for membership, since IsProcessInJob with a NULL job asks "any job";
+  red with the guard removed). ~7 s)

@@ -77,6 +77,7 @@ for p in (os.path.join(ROOT, "toolkit"), os.path.join(ROOT, "toolkit", "harness"
         sys.path.insert(0, p)
 
 import sandbox        # noqa: E402  (toolkit/harness/sandbox.py)
+import childjob       # noqa: E402  (toolkit/harness/childjob.py: Stop's tree kill)
 import checks         # noqa: E402  (toolkit/checks.py: the smoke's verdict, floored)
 import content        # noqa: E402
 import vaultpath      # noqa: E402
@@ -84,8 +85,8 @@ import vaultpath      # noqa: E402
 try:
     from PySide6.QtCore import (QElapsedTimer, QEvent, QPoint, QPointF, QProcess,
                                 QProcessEnvironment, QRect, Qt, QTimer, Signal)
-    from PySide6.QtGui import (QColor, QFont, QFontMetricsF, QIcon, QImage, QKeyEvent, QPainter,
-                               QTextCharFormat, QTextCursor, QWheelEvent)
+    from PySide6.QtGui import (QCloseEvent, QColor, QFont, QFontMetricsF, QIcon, QImage,
+                               QKeyEvent, QPainter, QTextCharFormat, QTextCursor, QWheelEvent)
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import (QAbstractItemView, QAbstractSpinBox, QApplication,
                                    QBoxLayout, QCheckBox, QComboBox,
@@ -2454,12 +2455,41 @@ class RunTab(QWidget):
             self._marks.add("no start")
             self._done(-1, None)
 
-    def stop(self):
+    def stop(self, wait_ms=0):
+        """Kill the run's whole tree: session.py, its servers and the client.
+
+        QProcess.kill() alone is TerminateProcess on session.py, whose own
+        teardown then never runs; on 2026-09-24 that left two authsrv.py
+        processes holding 6112 for hours after the window closed, and every
+        other worktree's launch was refused behind them. The servers now die
+        with session.py however it ends (its kill-on-close job, childjob.py);
+        the tree kill here is what also takes the CLIENT, which session.py
+        would have closed itself. It runs while session.py is alive, because
+        taskkill finds children by their parent's pid. The old message
+        promised the next launch would replace any server left -- true only
+        from this worktree. `wait_ms` lets a closing window see `finished`
+        before it goes."""
+        if self.proc is None:
+            return
+        self._marks.add("stopped")
+        pid = self.proc.processId()
+        ok, detail = childjob.kill_tree(pid) if pid else (True, "no pid: not started")
+        self.proc.kill()
+        if wait_ms:
+            self.proc.waitForFinished(wait_ms)
+        if ok:
+            self._say("Stopped the harness, its servers and the client.", 8000)
+        else:
+            # the servers still die with the harness (its job); only the
+            # client can be left, and the reason goes to the run's log
+            write_lines(self.log, [(f"[the tree kill failed: {detail}]", "error")])
+            self._say("Stopped the harness and its servers; the client may still be open. "
+                      "Close it yourself.", 15000)
+
+    def stop_for_close(self):
+        """The window is closing: stop a live run first, and wait for it."""
         if self.proc is not None:
-            self._marks.add("stopped")
-            self.proc.kill()
-            self._say("Stopped the harness. The next launch replaces any server still running.",
-                      8000)
+            self.stop(wait_ms=3000)
 
     def reset(self, confirm=True):
         path = sandbox.store_path()
@@ -2526,7 +2556,8 @@ class Header(QFrame):
                                tip="Compile, write the overlay and start the harness on the "
                                    "slice archive.")
         self.launch_b.setMinimumWidth(116)
-        self.stop_b = button("Stop", "quiet", icon="stop", tip="Kill the harness.")
+        self.stop_b = button("Stop", "quiet", icon="stop",
+                             tip="Stop the run: the harness, its servers and the client.")
         for b in (self.compile_b, self.launch_b, self.stop_b):
             verbs.addWidget(b)
         right = QVBoxLayout()
@@ -2623,6 +2654,14 @@ class Window(QMainWindow):
             sig.connect(self._summary_timer.start)
             sig.connect(self.run.mark_stale)
         self._refresh_summary()
+
+    def closeEvent(self, event):
+        """Closing the window stops the run it launched -- the whole tree.
+
+        Without this the QProcess destructor killed session.py ALONE, which
+        is how the servers of 2026-09-24 outlived the window (RunTab.stop)."""
+        self.run.stop_for_close()
+        super().closeEvent(event)
 
     def _party_changed(self):
         prim, sec = self.party.professions()
@@ -2896,7 +2935,10 @@ def _real_wheel(win, widget, delta=-120):
 # telling 12 from 15, a level-28 rank-16 file held whole, a level-300 rank-22
 # file refused and said -- 4 (the same table), the encounter list's focus 1,
 # Launch's ring and the tab strip's cue 3, the active-window wheel 3, the
-# four popups 4 -- 24 of the green run's 174 (165 before the lifted caps'
+# four popups 4 -- 24 of the green run's 177 (174 before Stop's three
+# ungated laws, 2026-09-24: Stop kills the run's tree, the kill()-alone
+# control orphans a child, the window's close kills the tree; 165 before
+# the lifted caps'
 # nine: those four and the five ungated -- the party's Level spins pinned at
 # 20, the hostile's at 255, the hostile page's spins fitting '255' and '21'
 # at three widths; 164 before the roster-line law; 163 before the kept-rules
@@ -2909,7 +2951,7 @@ def _real_wheel(win, widget, delta=-120):
 # precondition is a law of its own (`if m0.stacked:` once held the stacked
 # label law with no else, and the law vanished unnamed when the stack was
 # planted away, the re-polish law after it passing over no re-polish).
-SMOKE_FLOOR = 150
+SMOKE_FLOOR = 153
 
 # --smoke's own npc row: the content of tomorrow. The fit laws iterate the
 # content of today, which is how desk-hench's three 60-character names stacked
@@ -2934,6 +2976,15 @@ def plant_long_template(world):
                       "npc", SMOKE_LONG_KEY, {"source": "smoke"})
     world.tables.setdefault("npc", {})[SMOKE_LONG_KEY] = row
     return row
+
+
+# The stand-in harness Stop's laws launch: one child of its own, its pid said
+# on a line the laws read out of the Run tab's log, then both sleep until
+# killed. No job anywhere, so only a tree kill can reach the child.
+STANDIN_TREE = ("import subprocess, sys, time\n"
+                "c = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(600)'])\n"
+                "print('TREE', c.pid, flush=True)\n"
+                "time.sleep(600)\n")
 
 
 def smoke(win, app, out_dir):
@@ -4451,6 +4502,60 @@ def smoke(win, app, out_dir):
     check(unpainted and rt.state.text() == "Ended  ·  exit 0" and rt.state.toolTip() == ""
           and "changed since" in rt.status.text(),
           "an edit during a run is not painted over the clock, and is said when the run ends")
+    # Stop and the window's close take the run's WHOLE tree (2026-09-24: two
+    # authsrv.py outlived a closed window by hours, holding 6112, because the
+    # QProcess destructor and the old Stop killed session.py alone). A stand-in
+    # harness with one child of its own, through the real start path; the
+    # middle law is the control -- kill() alone, the old Stop, must ORPHAN the
+    # child, or the laws either side of it could pass on a child that died of
+    # something else.
+    def tree_run():
+        rt._start([sys.executable, "-u", "-c", STANDIN_TREE], {})
+        child, t_end = None, time.perf_counter() + 15.0
+        while child is None and rt.proc is not None and time.perf_counter() < t_end:
+            settle(1)
+            time.sleep(0.02)
+            m = re.search(r"^TREE (\d+)$", rt.log.toPlainText(), re.M)
+            child = int(m.group(1)) if m else None
+        return child, (rt.proc.processId() if rt.proc is not None else 0)
+
+    def run_ended(secs=10.0):
+        t_end = time.perf_counter() + secs
+        while rt.proc is not None and time.perf_counter() < t_end:
+            settle(1)
+            time.sleep(0.01)
+        settle(3)
+
+    child, root = tree_run()
+    rt.stop()
+    run_ended()
+    said = win.statusBar().currentMessage()
+    gone = bool(child and root) and not childjob.alive(child) and not childjob.alive(root)
+    check(gone and rt.proc is None and rt.state.text() == "Stopped"
+          and said == "Stopped the harness, its servers and the client.",
+          f"Stop kills the harness AND its child, and says so (child {child} "
+          f"{'dead' if child and not childjob.alive(child) else 'ALIVE'}, {rt.state.text()!r}, "
+          f"{said!r})")
+    childjob.kill_tree(child or 0)
+    child, root = tree_run()
+    if rt.proc is not None:
+        rt.proc.kill()
+    run_ended()
+    orphan = bool(child) and childjob.alive(child)
+    check(orphan, f"the control: kill() alone -- the old Stop -- leaves the child running "
+                  f"(child {child} {'alive' if orphan else 'DEAD'})")
+    childjob.kill_tree(child or 0)
+    child, root = tree_run()
+    win.closeEvent(QCloseEvent())           # the override, not a close: the smoke goes on
+    closed = bool(child and root) and not childjob.alive(child) and not childjob.alive(root)
+    check(closed and rt.proc is None,
+          f"closing the window kills the run's tree before the window goes (child {child} "
+          f"{'dead' if child and not childjob.alive(child) else 'ALIVE'}, harness "
+          f"{'ended' if rt.proc is None else 'STILL RUNNING'})")
+    childjob.kill_tree(child or 0)
+    if rt.proc is not None:
+        rt.proc.kill()
+        run_ended()
     # a harness that cannot start, through the real start path with a program
     # that does not exist (Windows emits FailedToStart inside start() itself,
     # so the cleanup has to be the last thing launch does)

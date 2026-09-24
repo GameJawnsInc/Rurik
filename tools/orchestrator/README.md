@@ -34,7 +34,7 @@ python tools/orchestrator/orchestrator.py --theme light            # dark / ligh
 in one palette only (the light tab strip's focus fill was) is seen by running it with `--theme
 dark` and again with `--theme light`. Its verdict is the house ledger's (`toolkit/checks.py`):
 a law that cannot run declares a skip, printed in the verdict, and a run that executes fewer
-than its floor of 150 laws (the green run's 174 less the 24 behind a declared skip) fails naming
+than its floor of 153 laws (the green run's 177 less the 24 behind a declared skip) fails naming
 the shortfall. No mandatory law sits behind a state gate: a precondition (the hostile page
 stacked at 1,000 px) is a law of its own, since the floor cannot see a law that stops running
 while the gated ones do run.
@@ -63,7 +63,12 @@ the tree for this launch only) and at the slice archive (`RURIK_DAT`), and start
 harness: `session.py --replace --keep-open` on `vault/run/slice/Gw.exe` with
 `--game-args "--map 148 --party sandbox --area errand,sandbox --unlocks … --spawn-profession N"`.
 The harness logs the client in (hands off the keyboard while it says so), and then the run
-is yours. **Closing the game client ends the run and the servers.** The report and the server
+is yours. **Closing the game client ends the run and the servers.** **Stop**, or closing the
+window, ends the whole run — the harness, its servers and the client (a client stopped this
+way may lose the tail of its `Gw.log`, which a clean close would have flushed). The servers
+die with the harness however it ends, even killed from Task Manager: they sit in a
+kill-on-close job the harness holds (`toolkit/harness/childjob.py`, 2026-09-24, after two
+of them outlived a closed window by hours holding 6112). The report and the server
 logs land in `vault/captures/harness/<stamp>/` as for every harness run. How the run ended is
 read off what the harness printed: a closed client is **client closed** (the harness retracts
 its PASS by design, so the exit code alone would paint every session amber), a captured crash
