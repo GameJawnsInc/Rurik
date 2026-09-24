@@ -752,7 +752,13 @@ def report(cap_path, tape, mesh, mid, c, t):
 
 def captures(argv):
     root = vaultpath.require_dir("captures", "gamesrv", why="the session scorer reads our own captures")
-    caps = sorted(glob.glob(os.path.join(root, "authsrv-*-c1.jsonl")))
+    # EVERY connection, not just `-c1` (DESKWORK-D10 step 2). A session re-dials on
+    # a map travel, so its later connections carry a DIFFERENT suffix -- and the
+    # 09-13 corner regime lives in `-c4`/`-c5`, which the old `-c1` glob could not
+    # even open, half of why four post-ship hard rows sat unread for eleven days.
+    # Each connection is scored on its own, which is what a per-connection warp
+    # census wants.
+    caps = sorted(glob.glob(os.path.join(root, "authsrv-*-c*.jsonl")))
     if "--cap" in argv:
         return [argv[argv.index("--cap") + 1]]
     if "--since" in argv:
