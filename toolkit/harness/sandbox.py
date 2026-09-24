@@ -45,11 +45,19 @@ OBSERVED n=1), so a group pulls together; groups are never nearer than 2,100 u,
 so no group is inside another's aggro when the player reaches it.
 
 IDS. Agent ids run from 110 and definitions from 60, one definition per
-template -- a definition is a raw array index on the client and two rows sharing
-one must name the same body (area_population). Both ranges are clear of the
-errand rows the same process serves (agents 98 / 99, definitions 50 / 51) and of
-the party's reserve (player 1, henchman 30, heroes 200..206, definitions
-9..16), which area_population refuses at startup rather than at the fourth body.
+(template, LEVEL) -- a definition is a raw array index on the client and two
+rows sharing one must name the same body (area_population); and since GAME_SMSG
+0x0056 carries the level inside the definition and is re-sent on every create,
+two members of one template at different levels sharing a slot would overwrite
+each other's byte and the client would show one level for both (retail declares
+each definition exactly once per connection: 2,748 of 2,748 on the owner's
+tapes; a slot per level is our RECONSTRUCTION of how retail would carry two
+levels of one body, 2026-09-24). Members of one template at one level still
+share a slot. At most sixteen members, so definitions 60..75; both ranges are
+clear of the errand rows the same process serves (agents 98 / 99, definitions
+50 / 51) and of the party's reserve (player 1, henchman 30, heroes 200..206,
+definitions 9..16), which area_population refuses at startup rather than at
+the fourth body.
 
 WHAT THIS MODULE REFUSES, before a client is launched, because each of these
 was found by a run once: a bar skill outside the character's own professions
@@ -59,8 +67,13 @@ client's cap, PtPlayer:332); a boss that is not in the last group, or two of
 them, or none (the quest's kill objective binds ONE spawn key); ranks the
 player's or a hero's level cannot pay for (a hostile is exempt, the owner's
 ruling 2026-09-24 -- retail foes and bosses exceed a player's budget; its ranks
-are held to validity alone); a hostile level outside 0..20; a weapon key the
-rates table lacks.
+are held to validity alone); a hostile rank outside 0..HOSTILE_RANK_MAX (21) or
+a hostile level outside 0..HOSTILE_LEVEL_MAX (255) -- the owner's second ruling
+the same day, "lift the rank and level caps for hostiles too", the ceilings
+being where the wire and our formulas stop carrying the number (the constants
+say which); a weapon key the rates table lacks. The player's and a hero's level
+1..20 and ranks 0..12 stay: 0x003A / 0x003B carry theirs and the client asserts
+at CharData.cpp(202) on a base rank of 13 or more.
 
 Standard library only. Loads content through toolkit/content.py; runs nothing
 unless --launch.
@@ -137,7 +150,30 @@ HERO_INDEX_MAX = 39           # s_heroClientData is 40 rows, row 0 HERO_UNUSED
 GROUPS_MAX = 4
 GROUP_SIZE_MAX = 4
 BAR_SLOTS = 8
-LEVEL_MAX = 20
+LEVEL_MAX = 20                # the PLAYER's and a HERO's (points_for_level's table
+                              # ends there; 0x003A / 0x003B carry their ranks and the
+                              # client asserts at CharData.cpp(202) on a base rank
+                              # >= 13). NOT a hostile's: the two constants below are.
+# A HOSTILE's level: the owner's ruling, 2026-09-24 ("lift the rank and level
+# caps for hostiles too"). 255 is the WIRE -- GAME_SMSG 0x0056's level field is
+# a `byte` (schema/overrides.json "86"; test_sandbox ties this constant to that
+# width), and our codec raises struct.error at 256 or -1 inside send(), which
+# drops the connection mid-population; the client's displayed level is a u8
+# store too (AvChar +0x110, movzx at 0x007DF7D2, build 38797). OBSERVED /
+# MEASURED, the recon of 2026-09-24. Retail's tapes show hostiles 0..20
+# (non-combatants 24); armour (3L + bonus) and the strike level (3L)
+# extrapolate linearly past 20 with no crash -- the operator's to use.
+HOSTILE_LEVEL_MAX = 255
+# A HOSTILE's rank: 21 is where retail and our own formulas agree. WIKI (weak:
+# search summaries of GWW talk / template pages -- foes' attributes up to 20,
+# +1 from skills; the skill progression template stops at 21), and MEASURED on
+# our side: the client is witnessed handling an NPC rank of 15 (0x0042 field 3,
+# Windborne Speed on map 280), every server consumer carries 0..21 without a
+# raise, and past 22.5 our formulas go wrong (Frenzy, 346, turns from double
+# damage into damage reduction; strength penetration hits 100 % at 100). The
+# player's and a hero's ranks keep rules.rank_max (12, the cost table's last
+# row): the client asserts past it.
+HOSTILE_RANK_MAX = 21
 GLOW_MAX = 10                 # ConstGlow.cpp(42): the client asserts past it
 DEFAULT_GLOW = 5              # SLICE-F2's red, the slice boss's own
 
@@ -512,11 +548,13 @@ def validate(spec, world):
             wi = m.get("weapon_item")
             if wi and items and wi not in items:
                 p.append(f"{who}: weapon_item {wi!r} is not a content item")
-            # its level is one the window's spin offers, 0..LEVEL_MAX (content
-            # rows default to 0), read where spawn_rows reads it: the member's,
+            # its level is one the window's spin offers, 0..HOSTILE_LEVEL_MAX
+            # (content rows default to 0; the ceiling is the wire's byte, said
+            # at the constant -- NOT the player's LEVEL_MAX, the owner's ruling
+            # of 2026-09-24), read where spawn_rows reads it: the member's,
             # else its template's. Its ranks are checked for VALIDITY only --
             # well-formed pairs, a real attribute of the template's own
-            # profession, each rank within the table -- and never against a
+            # profession, each rank 0..HOSTILE_RANK_MAX -- and never against a
             # point budget: a hostile is EXEMPT, the owner's ruling (2026-09-24,
             # PLAN-LOG), since retail foes and bosses exceed a player's budget;
             # the player's and a hero's ranks keep theirs. (The budget was
@@ -527,8 +565,8 @@ def validate(spec, world):
             # profession 0 every rank read 'not to []')
             tmpl = npcs.get(npc) or {}
             lvl = int(m.get("level", tmpl.get("level", 0) or 0))
-            if not 0 <= lvl <= LEVEL_MAX:
-                p.append(f"{who}: level {lvl} is outside 0..{LEVEL_MAX}")
+            if not 0 <= lvl <= HOSTILE_LEVEL_MAX:
+                p.append(f"{who}: level {lvl} is outside 0..{HOSTILE_LEVEL_MAX}")
             elif tmpl:
                 _check_ranks(p, who, m.get("attributes"),
                              (int(tmpl.get("profession") or 0),), rules)
@@ -546,9 +584,11 @@ def validate(spec, world):
 def _check_ranks(p, who, pairs, professions, rules, level=None):
     """Append to `p` every reason `pairs` ([attribute, rank] rows) cannot stand
     on a row of `professions` (the primary first). With a `level` the ranks go
-    against that level's point budget too (the player's and a hero's rule);
-    None is no budget at all -- a hostile's ranks are validity-checked only,
-    the owner's ruling (2026-09-24, PLAN-LOG)."""
+    against that level's point budget too, and each rank against the cost
+    table's rules.rank_max (the player's and a hero's rule: the client asserts
+    past 12); None is no budget at all and the ceiling is HOSTILE_RANK_MAX --
+    a hostile's ranks are validity-checked only, the owner's rulings
+    (2026-09-24, PLAN-LOG: exempt from the budget; the caps lifted)."""
     if not pairs:
         return
     ranks = {}
@@ -564,6 +604,7 @@ def _check_ranks(p, who, pairs, professions, rules, level=None):
     if rules is None:
         return                                  # no vault tables: unchecked, said by the caller
     want = set(int(x) for x in professions if x)
+    rank_max = rules.rank_max if level is not None else HOSTILE_RANK_MAX
     for a, r in ranks.items():
         row = rules.attributes.get(a)
         if row is None:
@@ -575,8 +616,8 @@ def _check_ranks(p, who, pairs, professions, rules, level=None):
         elif row["is_primary"] and row["profession"] != professions[0]:
             p.append(f"{who}.attributes: attribute {a} is profession {row['profession']}'s "
                      f"PRIMARY attribute, spendable only as a primary")
-        if not 0 <= r <= rules.rank_max:
-            p.append(f"{who}.attributes: rank {r} on {a} is outside 0..{rules.rank_max}")
+        if not 0 <= r <= rank_max:
+            p.append(f"{who}.attributes: rank {r} on {a} is outside 0..{rank_max}")
     if level is None:
         return                                  # a hostile: no budget, by the owner's ruling
     budget = budget_for_level(level)
@@ -705,19 +746,23 @@ def spawn_rows(spec, world):
     for gi, members in enumerate(ordered, 1):
         for mi, m in enumerate(members, 1):
             npc = m["npc"]
-            if npc not in defs:
-                defs[npc] = DEFINITION_FIRST + len(defs)
-            x, y = positions[pi]
-            pi += 1
             template = npcs.get(npc) or {}
             level = int(m.get("level", template.get("level", 0) or 0))
+            # a definition per (template, LEVEL), the docstring's IDS paragraph:
+            # 0x0056 carries the level in the definition and is re-sent on
+            # every create, so one slot for an L3 and an L24 of one body held
+            # whichever was declared last (RECONSTRUCTION, 2026-09-24)
+            if (npc, level) not in defs:
+                defs[npc, level] = DEFINITION_FIRST + len(defs)
+            x, y = positions[pi]
+            pi += 1
             wi = m.get("weapon_item")
             speed = m.get("attack_speed")
             if speed is None and wi:
                 speed = weapon_rate_for_item(world, wi)
             row = {
                 "area": AREA_KEY, "map": CORRIDOR_MAP, "npc": npc,
-                "agent_id": aid, "definition": defs[npc],
+                "agent_id": aid, "definition": defs[npc, level],
                 "x": float(x), "y": float(y),
                 "allegiance": "hostile", "attacks_back": True,
                 "max_health": int(m.get("health", 120)), "level": level,
