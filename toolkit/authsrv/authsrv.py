@@ -11962,7 +11962,8 @@ TOWN_WEAPON_STRIP_ENABLED = True  # False (--no-town-weapon-strip): the town
                                # are untouched.
 TOWN_PLAYER_WEAPONS_ENABLED = False  # True (--town-player-weapons): the load's
                                # player 0x006D NPC_UPDATE_WEAPONS goes out in a
-                               # TOWN too -- CONFIRM-2's picture (2026-09-24),
+                               # TOWN, and a town only -- CONFIRM-2's picture
+                               # (2026-09-24),
                                # KNOWN-BAD: retail sends the own body no 0x006D
                                # in either regime (0 of 46 outpost connections
                                # with a controlled agent, 0 of 44 field), and
@@ -11970,12 +11971,32 @@ TOWN_PLAYER_WEAPONS_ENABLED = False  # True (--town-player-weapons): the load's
                                # per agent (record+0x24, the setter 0x0081BE10)
                                # that 0x006D, 0x006E and 0x006F all write -- so
                                # this message, two after the empty-handed town
-                               # 0x006E, is the likeliest re-arming of the body
+                               # 0x006E, is the re-arming of the body
                                # (A1 = A4) that the dropped town 0x006F then
-                               # left standing after F2 (A2): CORROBORATED, the
-                               # runsheet's ARM 1 the observation. Default
-                               # OFF: send_player_weapons withholds it in a
-                               # town under the strip. townweapon.py.
+                               # left standing after F2 (A2): OBSERVED since
+                               # CONFIRM-2 section 7 (withholding it was the
+                               # whole difference on screen). Default OFF:
+                               # send_player_weapons withholds it in a town
+                               # under the strip; the field's own arm is
+                               # --field-player-weapons. townweapon.py.
+FIELD_PLAYER_WEAPONS_ENABLED = False  # True (--field-player-weapons): the load's
+                               # player 0x006D NPC_UPDATE_WEAPONS [player, lead,
+                               # 0] goes out in a FIELD -- every run before
+                               # DESKWORK-D1's field shield (2026-09-24), byte
+                               # for byte. KNOWN-BAD: retail sends the own body
+                               # none there either (0 of 44 field connections
+                               # with a controlled agent, OBSERVED), and the
+                               # message's ZERO off hand was the last hand write
+                               # into the client's one store, so a sword-and-
+                               # shield load drew the sword and NO shield (run
+                               # 20260923T154229, c1 seq 111 0x006E with the
+                               # shield at visual 1, seq 113 0x006D [1, 1, 0]
+                               # -- OBSERVED; the 0x006D and 0x006E workers are
+                               # one code body, townweapon.py THE FIELD
+                               # SHIELD). Default OFF: send_player_weapons
+                               # withholds it, the 0x006E is the last hand
+                               # write; that the shield then stands is the
+                               # client run's to observe (UNVERIFIED).
 ITEM_MOVE_BY_ID_ENABLED = True  # False (--no-item-move-by-id): c2s 0x0072
                                # ITEM_MOVE_BY_ID -- a drag between two cells of
                                # the non-equipped bags -- is ignored, as on the
@@ -26036,8 +26057,8 @@ def visible_slot_writes(batch, state, conn_id=None):
     item batch, select_weapon_set), so the gate is ONE. Untouched under
     --no-town-weapon-strip. A dropped write leaves the body AS IT WAS -- on
     CONFIRM-2 (2026-09-24) that was the OLD weapon, most likely because the
-    load's own player 0x006D had armed it (CORROBORATED by the binary's one
-    store; the runsheet's ARM 1 is the observation); the fix is that
+    load's own player 0x006D had armed it (OBSERVED, CONFIRM-2 section 7:
+    withholding it was the whole difference on screen); the fix is that
     message's town gate (send_player_weapons), not a redraw here: retail's
     fourteen outpost hand changes address nothing to the own agent within
     5 s but movement rows."""
@@ -26095,11 +26116,12 @@ def visible_worn(worn, state, conn_id=None):
     wins -- read from the binary, and OBSERVED on our client in a field frame,
     run 20260923T154229), NOT the only channel -- the first record here said
     it was, and CONFIRM-2 (2026-09-24) refuted that on the client: the load's
-    own player 0x006D, sent two frames later, is the likeliest re-arming of
-    the body this array had left bare (A1 = A4; CORROBORATED, the runsheet's
-    ARM 1 the observation). That message is now withheld in a town too
-    (send_player_weapons); with all three carriers empty-handed the body is
-    what retail's is. The client applies no regime of its own on the path
+    own player 0x006D, sent two frames later, is the re-arming of the body
+    this array had left bare (A1 = A4; OBSERVED, CONFIRM-2 section 7:
+    withholding it was the whole difference on screen). That message is now
+    withheld in a town (send_player_weapons -- and in a field since the field
+    shield, the same day); with all three carriers empty-handed the town body
+    is what retail's is. The client applies no regime of its own on the path
     (no direct MissionCliGetMap 0x0084D9B0 / map-flags 0x0084D950 call to
     depth 2 -- townweapon.py, a bounded negative). Untouched under
     --no-town-weapon-strip). The equipped BAG -- the doll -- is not touched
@@ -26130,67 +26152,96 @@ def visible_worn(worn, state, conn_id=None):
 
 def send_player_weapons(send, state, conn_id=None):
     """The load's 0x006D NPC_UPDATE_WEAPONS [agent, lead, off] for the PLAYER
-    -- and, in a TOWN, its absence (DESKWORK-D1, the town weapon's CONFIRM-2
-    fix, 2026-09-24; townweapon.player_weapons_sent). Returns the values sent,
-    or None.
+    -- and, by default, its ABSENCE in either regime (DESKWORK-D1: the town
+    weapon's CONFIRM-2 fix and the field shield, both 2026-09-24;
+    townweapon.player_weapons_sent). Returns the values sent, or None.
 
     Retail sends the OWN body no 0x006D in either regime: 0 of 46 outpost
     connections with a controlled agent (47 with a 0x0199) and 0 of 44 field
     carry one addressed to 0x0022's controlled agent (OBSERVED; test_townweapon
-    section 2 pins it). Ours has sent one since 2026-08-06 (the call site's
+    section 2 pins it). Ours sent one from 2026-08-06 (the call site's
     history: ITEM IDS, not types -- ItCliApi.cpp(400) asserted on a type), and
-    in a town it is the likeliest carrier that armed the body: the client keeps
-    one visual-equipment store per agent (record+0x24, slots 0..8), written
-    through the one setter 0x0081BE10 by the 0x006D (slots 0..1, both
-    unconditionally), 0x006E and 0x006F workers alike (`codescan --xrefs`:
-    exactly three callers), so this message, sent two frames after the
-    empty-handed town 0x006E, re-armed the body (CONFIRM-2 A1 = A4) and, with
-    the town switch's 0x006F dropped, left the OLD weapon standing after F2
-    (A2) -- CORROBORATED: the binary, plus last-writer-wins OBSERVED on our
-    client in a FIELD frame (run 20260923T154229, c1 seq 111/113: this
-    message's zero off hand erased the shield the 0x006E had drawn); OBSERVED
-    for the town lead is owed to the runsheet's ARM 1, the first run to
-    withhold it (a client arming the body from the equipped bag once at load
-    is the rival). Retail's own outpost hand changes address nothing to the
-    own agent but movement (14 of 14 within 5 s), so there is no redraw to
-    send; the fix is to withhold this. Sent in a FIELD as before, [player,
-    lead, 0] -- untouched by this fix and NOT harmless: that zero is the last
-    hand write, so a sword-and-shield field body loses its shield at load
-    (townweapon.player_weapons_sent; the field item in PLAN.md 8.1 -- carry
-    the bag's off hand, or withhold as retail does, the swing path
-    UNVERIFIED). Sent in a town under --no-town-weapon-strip (every run before
-    2026-09-23, the whole pre-strip picture) or --town-player-weapons
-    (CONFIRM-2's arm, KNOWN-BAD). The lead is whatever the dress put in
+    it was never harmless: the client keeps one visual-equipment store per
+    agent (record+0x24, slots 0..8), written through the one setter 0x0081BE10
+    by the 0x006D (slots 0..1, both unconditionally), 0x006E and 0x006F
+    workers alike (`codescan --xrefs`: exactly three callers), last writer
+    wins. IN A TOWN this message, sent two frames after the empty-handed town
+    0x006E, re-armed the body (CONFIRM-2 A1 = A4) and, with the town switch's
+    0x006F dropped, left the OLD weapon standing after F2 (A2) -- OBSERVED
+    since CONFIRM-2 section 7: withholding it was the whole difference on
+    screen (retail's own outpost hand changes address nothing to the own agent
+    but movement, 14 of 14 within 5 s, so there was no redraw to send). IN A
+    FIELD its ZERO off hand was the last hand write, so a sword-and-shield
+    field body lost its shield at load (run 20260923T154229, c1 seq 111 0x006E
+    [1, 1, 10, ...], seq 113 0x006D [1, 1, 0], walk1-wait.png -- OBSERVED).
+    The field shield's desk read (townweapon.py, THE FIELD SHIELD) found the
+    0x006D worker and the 0x006E worker to be ONE code body with a different
+    slot count (228 instructions each; with each function's branch targets
+    and its jump-table base made relative, two rows differ: the assert stub's
+    address and `cmp ebx, 2` vs `cmp ebx, 9`; and the two nine-entry
+    slot-to-kind tables the base hides, 0x00810E04 / 0x008110C4, are
+    identical relative to each base), so nothing the 0x006D writes --
+    the store, the lead's type byte at record+0x48 (the setter's own doing),
+    the AvApi dresser 0x007DFCE0 -- the 0x006E has not already written for
+    slots 0 and 1; what ours ADDED was the UNDRESS of the off hand
+    (0x007E0510(agent, 1), reached because its slot 1 was 0 and the 0x006E's
+    was not). So the default withholds it in BOTH regimes, as retail's wire
+    does (OBSERVED, 0 of 46 / 0 of 44); that the shield then stands on the
+    field body is the client run's to observe (UNVERIFIED -- and with it the
+    swing animation, whose +0x48 consumer is NOT FOUND, and the attack
+    interval, which send_attack_speed's separate message still sets). Sent in
+    a town under --no-town-weapon-strip (every run before 2026-09-23, the whole
+    pre-strip picture) or --town-player-weapons (CONFIRM-2's arm); sent in a
+    field under --field-player-weapons (every run before 2026-09-24, [player,
+    lead, 0] byte for byte -- the KNOWN-BAD arm a run A/Bs the fix against).
+    Each arm is its regime's alone. The lead is whatever the dress put in
     equipped slot 0 (DESKWORK-D1 step 8: WEAPON_ITEM_ID unless a stored cell
     moved it; the read is here so the two can never disagree); an EMPTIED
     slot 0 falls back to WEAPON_ITEM_ID -- the pre-existing fallback,
-    unreachable at load, pinned by the test and filed with the field item."""
+    unreachable at load and reached only under a revert arm now, pinned by
+    the test."""
     lead_now = (itemstore.hand_items(state["items"], EQUIPPED_BAG_ID)[0]
                 if state.get("items") else WEAPON_ITEM_ID) or WEAPON_ITEM_ID
     field = instance_is_field(state)
-    if (TOWN_WEAPON_STRIP_ENABLED and not TOWN_PLAYER_WEAPONS_ENABLED
-            and not townweapon.player_weapons_sent(field)):
-        if conn_id is not None:
+    town_arm = (not TOWN_WEAPON_STRIP_ENABLED) or TOWN_PLAYER_WEAPONS_ENABLED
+    if not townweapon.player_weapons_sent(field, town_arm=town_arm,
+                                         field_arm=FIELD_PLAYER_WEAPONS_ENABLED):
+        if conn_id is not None and field:
+            print(f"[c{conn_id}] FIELD SHIELD: the player's 0x006D (lead item {lead_now}) "
+                  f"is not sent -- a field; retail sends the own body none (0 of 44 field "
+                  f"connections with a controlled agent, OBSERVED), and ours was the last "
+                  f"hand write into the client's one store, its zero off hand undressing "
+                  f"the shield the 0x006E had just drawn (run 20260923T154229, OBSERVED); "
+                  f"the 0x006E is the last write now, and the shield standing is this "
+                  f"run's to observe (UNVERIFIED) [DESKWORK-D1]", flush=True)
+        elif conn_id is not None:
             print(f"[c{conn_id}] TOWN WEAPON: the player's 0x006D (lead item {lead_now}) "
                   f"is not sent -- a town; retail sends the own body none (0 of 46 outpost "
-                  f"connections with a controlled agent, OBSERVED), and it is the likeliest "
-                  f"carrier that re-armed the empty-handed body on CONFIRM-2 (one store per "
-                  f"agent, last writer wins: CORROBORATED, this run the observation) "
-                  f"[DESKWORK-D1]", flush=True)
+                  f"connections with a controlled agent, OBSERVED), and it was the carrier "
+                  f"that re-armed the empty-handed body on CONFIRM-2 (one store per agent, "
+                  f"last writer wins: OBSERVED, CONFIRM-2 section 7) [DESKWORK-D1]", flush=True)
         return None
     vals = [PLAYER_AGENT_ID, lead_now, 0]
     send(GAME_SMSG_NPC_UPDATE_WEAPONS, vals,
          f"NPC_UPDATE_WEAPONS(leadhand = item {lead_now})")
-    if not field and conn_id is not None:
-        # The fix pass (EVREF-TF-5): the two arms differ in what the 0x006E carried.
-        if not TOWN_WEAPON_STRIP_ENABLED:
-            why = ("--no-town-weapon-strip; KNOWN-BAD: retail sends the own body none, and it goes "
-                   "out on top of the ARMED 0x006E -- the pre-strip picture, every run before 2026-09-23")
+    if conn_id is not None:
+        # Each arm names itself: the client run reads gamesrv.log to see which one ran.
+        if field:
+            print(f"[c{conn_id}] FIELD SHIELD: the player's 0x006D goes out in a field -- "
+                  f"--field-player-weapons; KNOWN-BAD: retail sends the own body none (0 of 44), "
+                  f"and this message's zero off hand is the last hand write, undressing the shield "
+                  f"the 0x006E drew -- every run before 2026-09-24, run 20260923T154229's picture "
+                  f"[DESKWORK-D1]", flush=True)
         else:
-            why = ("--town-player-weapons; KNOWN-BAD: retail sends the own body none, and the client "
-                   "draws this item into the hands the 0x006E left empty -- CONFIRM-2's own arm")
-        print(f"[c{conn_id}] TOWN WEAPON: the player's 0x006D goes out in a town -- {why} [DESKWORK-D1]",
-              flush=True)
+            # The fix pass (EVREF-TF-5): the two town arms differ in what the 0x006E carried.
+            if not TOWN_WEAPON_STRIP_ENABLED:
+                why = ("--no-town-weapon-strip; KNOWN-BAD: retail sends the own body none, and it goes "
+                       "out on top of the ARMED 0x006E -- the pre-strip picture, every run before 2026-09-23")
+            else:
+                why = ("--town-player-weapons; KNOWN-BAD: retail sends the own body none, and the client "
+                       "draws this item into the hands the 0x006E left empty -- CONFIRM-2's own arm")
+            print(f"[c{conn_id}] TOWN WEAPON: the player's 0x006D goes out in a town -- {why} [DESKWORK-D1]",
+                  flush=True)
     return vals
 
 
@@ -31285,16 +31336,20 @@ def _handle_request_players(send, state, conn_id, stop, rec):
         # derives weapon_type from the item's own
         # ItemType, the same way it derives the mesh from
         # file_id.
-        # DESKWORK-D1, the town weapon's CONFIRM-2 fix (2026-09-24): retail
-        # never sends the OWN body this message (0 of 46 outpost connections
-        # with a controlled agent, 0 of 44 field), and in a town it is the
-        # likeliest carrier that drew the weapon the empty-handed 0x006E above
-        # had left out -- the client's one visual-equipment store per agent
-        # takes the last writer (CORROBORATED; the runsheet's ARM 1 is the
-        # observation). So it goes through
-        # send_player_weapons: withheld in a town under the strip, sent in a
-        # field, sent in a town under --no-town-weapon-strip (every run before
-        # 2026-09-23) or --town-player-weapons (CONFIRM-2's arm). The lead it
+        # DESKWORK-D1, the town weapon's CONFIRM-2 fix and the field shield
+        # (both 2026-09-24): retail never sends the OWN body this message (0
+        # of 46 outpost connections with a controlled agent, 0 of 44 field --
+        # OBSERVED), and the client's one visual-equipment store per agent
+        # takes the last writer: in a town it drew the weapon the empty-handed
+        # 0x006E above had left out (OBSERVED, CONFIRM-2 section 7), in a
+        # field its zero off hand undressed the shield the 0x006E had drawn
+        # (run 20260923T154229, OBSERVED; the 0x006D and 0x006E workers are
+        # one code body, townweapon.py). So it goes through
+        # send_player_weapons: withheld in BOTH regimes by default, sent in a
+        # town under --no-town-weapon-strip (every run before 2026-09-23) or
+        # --town-player-weapons (CONFIRM-2's arm), sent in a field under
+        # --field-player-weapons (every run before 2026-09-24, byte for byte;
+        # the shield standing without it is the run's to observe). The lead it
         # names is whatever the dress put in equipped slot 0 (step 8).
         send_player_weapons(send, state, conn_id)
         # And how fast that weapon swings, which the client
@@ -37427,11 +37482,22 @@ def main():
         global TOWN_PLAYER_WEAPONS_ENABLED
         TOWN_PLAYER_WEAPONS_ENABLED = True
         print("[items] --town-player-weapons: the load's player 0x006D NPC_UPDATE_WEAPONS "
-              "goes out in a TOWN too -- CONFIRM-2's picture (2026-09-24): the body armed, "
-              "most likely from this message after the empty-handed 0x006E, and the OLD "
-              "weapon kept across F2 (CORROBORATED; the run without this flag is the "
-              "observation). KNOWN-BAD: retail sends the own body no 0x006D (0 of 46 "
+              "goes out in a TOWN, and a town only -- CONFIRM-2's picture (2026-09-24): the body armed, "
+              "from this message after the empty-handed 0x006E, and the OLD "
+              "weapon kept across F2 (OBSERVED, CONFIRM-2 section 7: the run without this "
+              "flag was the whole difference on screen). KNOWN-BAD: retail sends the own "
+              "body no 0x006D (0 of 46 "
               "outpost connections with a controlled agent, 0 of 44 field).", flush=True)
+    if a.field_player_weapons:
+        global FIELD_PLAYER_WEAPONS_ENABLED
+        FIELD_PLAYER_WEAPONS_ENABLED = True
+        print("[items] --field-player-weapons: the load's player 0x006D NPC_UPDATE_WEAPONS "
+              "[player, lead, 0] goes out in a FIELD -- every run before DESKWORK-D1's field "
+              "shield (2026-09-24), byte for byte. KNOWN-BAD: retail sends the own body none "
+              "there either (0 of 44 field connections with a controlled agent), and the "
+              "message's ZERO off hand is the last hand write into the client's one store, so "
+              "a sword-and-shield load draws the sword and NO shield (run 20260923T154229).",
+              flush=True)
     if a.no_load_purse:
         global LOAD_PURSE_ENABLED
         LOAD_PURSE_ENABLED = False

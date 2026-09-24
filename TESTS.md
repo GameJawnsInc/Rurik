@@ -6762,7 +6762,10 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   slots; `hands_shown` per regime; `strip_hands` in a town (both hands, a lead alone, a short
   array) and a field (untouched) with a VACUITY guard and a KNOWN-BAD (the unstripped town
   array disagrees); `drops` / `filter_hand_writes` (the hands and an emptied hand's zero
-  dropped in a town, armour and a field untouched, order kept). §2 RETAIL'S WIRE (vault-gated,
+  dropped in a town, armour and a field untouched, order kept); `player_weapons_sent` (the
+  field shield, 2026-09-24): none in either regime by default, a revert arm only in its own
+  regime, the VACUITY pair (the town arm nothing in a field, the field arm nothing in a
+  town). §2 RETAIL'S WIRE (vault-gated,
   `livewire.decode_conn` over every live game connection, ~10 s; `LEDGER.skip` on a bare
   machine): every outpost `0x006E` empty-handed on BOTH visuals (0 of 2,245 messages, 1,981
   distinct bodies; the OWN
@@ -6787,7 +6790,9 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   (0) while field bodies do (6). §3 THE SERVER:
   source locks (the leaf imported, the flag in `serverargs.py` and `main()`, the load's player
   `0x006D` routed through `send_player_weapons` — the only `*send(0x006D)` naming the player —
-  behind the leaf's rule and its own revert flag `--town-player-weapons`, declared and wired;
+  behind the leaf's rule asked with the town arm and the field arm before the one send, the
+  revert flags `--town-player-weapons` and `--field-player-weapons` declared beside each other
+  and wired;
   `visible_worn` and `visible_slot_writes` gated, `select_weapon_set`'s three hand `0x006F`
   built into a batch that passes `visible_slot_writes` with no direct send left, the only
   direct `*send(0x006F)` in `authsrv.py` — in any wrapper's spelling — being
@@ -6796,26 +6801,37 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   (`--weapon-set 1=starter_sword+starter_shield`) in a TOWN — the dressed array keeps the
   hammer at visual 0 (the doll) while `visible_worn` zeroes 0 and 1; the FIELD control; the
   KNOWN-BAD revert arm (the weapon kept, and it disagrees); VACUITY (the hammer dragged out);
-  the load's player `0x006D` through `send_player_weapons` — NOT sent in a town, sent in a
-  field, sent in a town under either revert flag (KNOWN-BAD both: `--no-town-weapon-strip`
-  the pre-strip picture exactly, `--town-player-weapons` CONFIRM-2's own), and the FIELD's
-  emptied lead PINNED — still sent, naming the hammer through the send site's pre-existing
-  `or WEAPON_ITEM_ID` fallback, the gate being the regime and never the hand (the fix pass
-  replaced a VACUITY check the town gate had made unable to fail on its own; the pin reddens
-  when the fallback is fixed);
+  the load's player `0x006D` through `send_player_weapons` — NOT sent in a town and (the
+  field shield, 2026-09-24) NOT sent in a field, the bag still holding the hand; sent in a
+  town under either town revert flag (KNOWN-BAD both: `--no-town-weapon-strip` the pre-strip
+  picture exactly, `--town-player-weapons` CONFIRM-2's own) and in a field under
+  `--field-player-weapons` (`[P, W, 0]`, the pre-fix bytes exactly, KNOWN-BAD — the arm a
+  client run A/Bs the fix against); the arms' VACUITY pair (the field flag sends nothing in
+  a town, either town flag nothing in a field, so a gate that ignored the regime — any arm
+  sending anywhere — could not pass; the KNOWN-BAD sends are what refuse one answering None
+  regardless); THE FIELD SHIELD itself (set 0 = sword + shield, run `20260923T154229`'s layout):
+  the `0x006E` carries the shield at visual 1 and by default no `0x006D` follows to zero it,
+  while the flag arm's `0x006D` has 0 at the off hand with the shield still in the bag — the
+  two arms disagree exactly at the off hand; the FIELD's emptied lead PINNED under the flag
+  arm (naming the hammer through the send site's pre-existing `or WEAPON_ITEM_ID` fallback,
+  the gate being the regime and the arm, never the hand; the pin reddens when the fallback is
+  fixed) and withheld by default;
   F2/F1 in a TOWN — `0x0148` + `0x014B` + `0x0152` and NO `0x006F` and no `0x006D`, the bag and the doll's
   array swapped — and in a FIELD — the same rows plus `0x006F [player, 0, sword]`,
   `[player, 1, shield]` and on F1 `[player, 1, 0]` before `[player, 0, hammer]`, retail's
-  order; the revert arm's town F2 carrying them (KNOWN-BAD); the equip path (`0x004F` out,
+  order, and no `0x006D` in the field switch or re-sent after it; the revert arm's town F2
+  carrying them (KNOWN-BAD); the equip path (`0x004F` out,
   `0x0030` back) with `0x014B` alone in a town and `0x014B` + `0x006F` in a field; the
   composition with the display mode (Hide in Towns helm in a town: 0, 1 and 6 zeroed; each
   flag alone its own slots); `visible_slot_writes` leaving another agent's hand and the
   player's head alone in a town, dropping the player's hand under either display-mode
   setting, and passing the batch whole with both flags off. Drives the real handlers,
-  launches nothing. Floor 45 from the green run with `RURIK_VAULT` pointed at an empty
-  directory (the bare-machine core; §2's 15 ride the vault, 60 vaulted; 36/48 before the
-  CONFIRM-2 carrier fix of 2026-09-24, re-set from its own bare run; the fix pass the same
-  day replaced one check and added conjuncts, the counts unchanged), ~10 s),
+  launches nothing. Floor 55 from the green run with `RURIK_VAULT` pointed at an empty
+  directory (the bare-machine core; §2's 15 ride the vault, 70 vaulted; 45/60 before the
+  field shield of 2026-09-24 and 36/48 before the CONFIRM-2 carrier fix the same day, each
+  re-set from its own bare run; the CONFIRM-2 fix pass replaced one check and added
+  conjuncts, and the field shield's fix pass added the `global` conjunct to both flag
+  locks, the counts unchanged both times), ~10 s),
   `toolkit/authsrv/test_maptravel.py` (**2026-09-23, DESKWORK-D1 step 7: world-map travel**,
   rebuilt by the fix pass the same day — c2s `0x00B1` MAP_TRAVEL and the s2c `0x0094` unlock
   state that makes the client's world map offer our outposts; `toolkit/authsrv/maptravel.py`,

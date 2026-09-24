@@ -12,7 +12,10 @@ census).
     (untouched) with a VACUITY guard (empty hands report nothing) and a KNOWN-BAD
     (the unstripped town array disagrees); drops / filter_hand_writes (the hands
     dropped in a town, an emptied hand's zero too, armour and a field untouched,
-    order kept).
+    order kept); player_weapons_sent (the field shield, 2026-09-24): none in
+    either regime by default, a revert arm only in its own regime, and the
+    VACUITY pair (the town arm sends nothing in a field, the field arm nothing
+    in a town).
   * §2 RETAIL'S WIRE (vault-gated; LEDGER.skip on a bare machine, ~10 s): over
     every origin=LIVE game connection -- every outpost 0x006E empty-handed on
     BOTH visuals (>= 2,000 bodies; the OWN body, the 0x006E whose armour ids all
@@ -49,15 +52,25 @@ census).
     (the doll) while visible_worn zeroes 0 and 1; the FIELD control; the
     KNOWN-BAD revert arm (the weapon kept in a town, and it disagrees); VACUITY
     (empty hands); the load's player 0x006D through send_player_weapons --
-    NOT sent in a town, sent in a field, sent in a town under either revert
+    NOT sent in a town and (the field shield, 2026-09-24) NOT sent in a field,
+    the bag still holding the hand; sent in a town under either town revert
     flag (KNOWN-BAD both: --no-town-weapon-strip the pre-strip picture,
-    --town-player-weapons CONFIRM-2's), and the FIELD's emptied lead PINNED
-    (still sent, naming the hammer through the pre-existing `or WEAPON_ITEM_ID`
-    fallback -- the gate is the regime, never the hand; a bounded defect of the
-    field send, filed with its open item);
+    --town-player-weapons CONFIRM-2's) and in a field under
+    --field-player-weapons ([P, W, 0], the pre-fix bytes exactly, KNOWN-BAD);
+    the VACUITY pair (the field flag sends nothing in a town, either town flag
+    nothing in a field -- the arms disagree where they should, so a gate that
+    ignored the regime, any arm sending anywhere, could not pass; the KNOWN-BAD
+    sends are what refuse one answering None regardless); THE FIELD SHIELD itself (set 0
+    = sword + shield, run 20260923T154229's layout): the 0x006E carries the
+    shield at visual 1 and, by default, no 0x006D follows to zero it, while the
+    flag arm's 0x006D has 0 at the off hand with the shield still in the bag;
+    the FIELD's emptied lead PINNED under the flag arm (naming the hammer
+    through the pre-existing `or WEAPON_ITEM_ID` fallback -- the gate is the
+    regime and the arm, never the hand) and withheld by default;
     F2/F1 (--weapon-set 1=sword+shield) in a TOWN -- 0x0148 +
     0x014B + 0x0152 and NO 0x006F and no 0x006D, the bag and the doll's array swapped -- and
-    in a FIELD -- the same rows plus the two hand 0x006F in retail's order; the
+    in a FIELD -- the same rows plus the two hand 0x006F in retail's order and
+    no 0x006D re-sent after them; the
     revert arm's town F2 carrying them (KNOWN-BAD); the equip path (0x004F out,
     0x0030 back) in a town with no 0x006F and in a field with them; the
     composition with the display mode (Hide in Towns helm + the town: 0, 1 and
@@ -83,7 +96,7 @@ import townweapon as tw                                      # noqa: E402
 import itemstore                                             # noqa: E402
 import authsrv                                               # noqa: E402
 
-led = checks.Ledger("the town weapon (DESKWORK-D1)", floor=45)  # 2026-09-24, from the green run with RURIK_VAULT pointed at an empty directory (the bare-machine core, 1 declared skip); section 2's 15 ride the vault (60 vaulted). History: 35 bare / 46 vaulted on 2026-09-23; +1/+1 on the fix pass (the 0x006E label lock WEAP-R5, the 0x0022 cross-check WEAP-R6); +9 bare / +3 vaulted on the CONFIRM-2 carrier fix (send_player_weapons' four arms, vacuity, F2 with no 0x006D, three source locks; the own-0x006D, own-addressed and stranger-change census pins)
+led = checks.Ledger("the town weapon (DESKWORK-D1)", floor=55)  # 2026-09-24 (the field shield), from the green run with RURIK_VAULT pointed at an empty directory (the bare-machine core, 1 declared skip); section 2's 15 ride the vault (70 vaulted). History: 35 bare / 46 vaulted on 2026-09-23; +1/+1 on the fix pass (the 0x006E label lock WEAP-R5, the 0x0022 cross-check WEAP-R6); +9 bare / +3 vaulted on the CONFIRM-2 carrier fix (send_player_weapons' four arms, vacuity, F2 with no 0x006D, three source locks; the own-0x006D, own-addressed and stranger-change census pins) = 45 / 60; +10 bare / +10 vaulted on the field shield (the leaf's player_weapons_sent x3, the field flag's source lock, the field KNOWN-BAD arm, the arms' VACUITY pair, the sword-and-shield load on both arms, the emptied lead's default, the field F2 with no 0x006D; the FIELD CONTROL became the field default, same count)
 
 VIS = authsrv.GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT           # 0x006F
 WORN = authsrv.GAME_SMSG_UPDATE_AGENT_VISUAL_EQUIPMENT               # 0x006E
@@ -136,6 +149,15 @@ led.ok(tw.filter_hand_writes([(1, 0)], False) == ([], [(1, 0)]) and tw.filter_ha
        "an emptied hand's zero is dropped in a town too (retail's outpost off-hand unequip carried no "
        "0x006F) and kept in a field (the tape's [25, 1, 0])")
 led.ok(tw.filter_hand_writes([], False) == ([], []), "CONTROL: an empty batch stays empty")
+# THE FIELD SHIELD (2026-09-24): the load's player 0x006D is nobody's by default
+led.ok(tw.player_weapons_sent(True) is False and tw.player_weapons_sent(False) is False,
+       "player_weapons_sent: retail sends the own body no 0x006D in either regime (0 of 46 outpost, 0 of 44 "
+       "field) -- the default is none, in a field as in a town")
+led.ok(tw.player_weapons_sent(False, town_arm=True) is True and tw.player_weapons_sent(True, field_arm=True) is True,
+       "...a revert arm sends it in its own regime: the town arm in a town, the field arm in a field")
+led.ok(tw.player_weapons_sent(True, town_arm=True) is False and tw.player_weapons_sent(False, field_arm=True) is False,
+       "VACUITY: an arm is its regime's alone -- the town arm sends nothing in a field and the field arm nothing in "
+       "a town, so a gate that answered one way regardless of the regime could not pass this pair with the last")
 
 # ---- §2 retail's wire ------------------------------------------------------------------
 import vaultpath                                             # noqa: E402
@@ -325,9 +347,9 @@ if conns:
            and witness[("outpost", True)] >= 45 and witness[("outpost", False)] <= 1 and witness[("field", True)] >= 40,
            f"OBSERVED: retail sends the OWN body NO 0x006D -- 0 of {witness[('outpost', True)]} outpost connections "
            f"with a controlled agent ({own6d[('outpost', 0)]} with a 0x0199) and 0 of {witness[('field', True)]} field "
-           f"carry one addressed to it; our load's player 0x006D is a divergence, and in a town the likeliest "
-           f"carrier of CONFIRM-2's armed body (CORROBORATED: the binary's one store, a field frame; the run's ARM 1 "
-           f"is the observation)", f"{dict(own6d)} witness {dict(witness)}")
+           f"carry one addressed to it; our load's player 0x006D is a divergence, and in a town the carrier of "
+           f"CONFIRM-2's armed body (OBSERVED: the binary's one store, a field frame, and CONFIRM-2 section 7 -- "
+           f"withholding it was the whole difference on screen)", f"{dict(own6d)} witness {dict(witness)}")
     o_changes = sum(n for (r, _op, _a), n in own_addr.items() if r == "outpost")
     o_quiet = sum(n for (r, _op, a), n in own_addr.items() if r == "outpost" and not a)
     led.ok(own_addr[("outpost", 0x0032, False)] >= 3 and own_addr[("outpost", 0x0086, False)] >= 4
@@ -389,19 +411,32 @@ led.ok(senders == ["handle_visibility_flags"],
 # THE CARRIER (CONFIRM-2's fix, 2026-09-24): the load's player 0x006D has ONE sender, behind the leaf's rule
 spw = func_src("send_player_weapons")
 players = func_src("_handle_request_players")
-led.ok(spw and "townweapon.player_weapons_sent(field)" in spw and "not TOWN_PLAYER_WEAPONS_ENABLED" in spw
-       and "TOWN_WEAPON_STRIP_ENABLED and" in spw and "send(GAME_SMSG_NPC_UPDATE_WEAPONS, vals" in spw
+led.ok(spw and "townweapon.player_weapons_sent(field, town_arm=town_arm," in spw
+       and "field_arm=FIELD_PLAYER_WEAPONS_ENABLED)" in spw
+       and "town_arm = (not TOWN_WEAPON_STRIP_ENABLED) or TOWN_PLAYER_WEAPONS_ENABLED" in spw
+       and spw.count("send(GAME_SMSG_NPC_UPDATE_WEAPONS, vals") == 1
+       and spw.index("player_weapons_sent(field") < spw.index("send(GAME_SMSG_NPC_UPDATE_WEAPONS, vals")
        and "send_player_weapons(send, state, conn_id)" in players and "GAME_SMSG_NPC_UPDATE_WEAPONS" not in players,
-       "SOURCE LOCK: the load's player 0x006D goes through send_player_weapons -- the leaf's rule under the strip "
-       "flag, --town-player-weapons the override -- and _handle_request_players holds no direct 0x006D send")
+       "SOURCE LOCK: the load's player 0x006D goes through send_player_weapons -- the leaf's rule, asked with the "
+       "town arm (--no-town-weapon-strip or --town-player-weapons) and the field arm (--field-player-weapons) and "
+       "asked BEFORE the one send -- and _handle_request_players holds no direct 0x006D send")
 p6d_senders = sorted({func_at(m.start())[1] for m in re.finditer(r"\w*send\(GAME_SMSG_NPC_UPDATE_WEAPONS", SRC)
                       if "PLAYER_AGENT_ID" in SRC[max(0, m.start() - 160):m.start() + 160]})
 led.ok(p6d_senders == ["send_player_weapons"],
        "SOURCE LOCK: the only `*send(0x006D ...)` in authsrv.py naming PLAYER_AGENT_ID, in any wrapper's spelling, is "
        "send_player_weapons'; the hero, spawn, hostile and shrine 0x006D name their own agents", f"{p6d_senders}")
 led.ok('"--town-player-weapons"' in ARGS and "a.town_player_weapons" in SRC
-       and "TOWN_PLAYER_WEAPONS_ENABLED = False" in SRC and "TOWN_PLAYER_WEAPONS_ENABLED = True" in SRC,
-       "SOURCE LOCK: the 0x006D revert arm is declared in serverargs.py, defaults OFF and is wired in main()")
+       and "TOWN_PLAYER_WEAPONS_ENABLED = False" in SRC and "TOWN_PLAYER_WEAPONS_ENABLED = True" in SRC
+       and "global TOWN_PLAYER_WEAPONS_ENABLED" in func_src("main"),
+       "SOURCE LOCK: the 0x006D revert arm is declared in serverargs.py, defaults OFF and is wired in main() "
+       "through a `global` -- without one the assignment binds a local and the flag parses but never takes "
+       "effect (the fix pass, 2026-09-24)")
+led.ok('"--field-player-weapons"' in ARGS and "a.field_player_weapons" in SRC
+       and "FIELD_PLAYER_WEAPONS_ENABLED = False" in SRC and "FIELD_PLAYER_WEAPONS_ENABLED = True" in SRC
+       and "global FIELD_PLAYER_WEAPONS_ENABLED" in func_src("main")
+       and ARGS.index('"--field-player-weapons"') > ARGS.index('"--town-player-weapons"'),
+       "SOURCE LOCK: the FIELD's 0x006D revert arm (--field-player-weapons, the field shield) is declared in "
+       "serverargs.py beside the town's, defaults OFF and is wired in main() through a `global`")
 led.ok('"weapon" if EQUIP_WEAPON else ""' not in players and '"weapon" if _hands else ""' in players
        and "[hands empty: a town]" in players
        and 0 < players.find("worn = visible_worn(player_worn_array(state), state, conn_id)") < players.find('"weapon" if _hands'),
@@ -418,7 +453,7 @@ _saved = {k: getattr(authsrv, k) for k in
            "EQUIP_ARMOUR", "EQUIP_COSTUME", "EQUIP_COSTUME_HEAD", "WEAPON_SETS",
            "PLAYER_SWING_DAMAGE", "WEAPON_ATTACK_SPEED", "ATTACK_INTERVAL",
            "EQUIPPED_VISUAL_ORDER", "VISIBILITY_STATUS_ENABLED", "TOWN_WEAPON_STRIP_ENABLED",
-           "TOWN_PLAYER_WEAPONS_ENABLED")}
+           "TOWN_PLAYER_WEAPONS_ENABLED", "FIELD_PLAYER_WEAPONS_ENABLED")}
 _saved_off, _saved_wpn = authsrv.agents.PLAYER_OFFHAND, authsrv.agents.PLAYER_WEAPON
 _saved_slots, _saved_over = dict(authsrv.WEAPON_SET_BACKPACK_SLOTS), dict(authsrv.SET_ITEMS_OVERRIDE)
 try:
@@ -430,16 +465,20 @@ try:
     W, EQ, BP = authsrv.WEAPON_ITEM_ID, authsrv.EQUIPPED_BAG_ID, authsrv.BACKPACK_BAG_ID
     MOVE, EQUIP = authsrv.GAME_CMSG_ITEM_MOVE, authsrv.GAME_CMSG_EQUIP_ITEM
 
-    def fresh(outpost, strip=True, vis=True, flags=None, p6d=False):
+    def fresh(outpost, strip=True, vis=True, flags=None, p6d=False, f6d=False, shield=False):
         """A real item layout (--weapon-set 1=starter_sword+starter_shield) in a town or a field;
-        `p6d` is --town-player-weapons (the town 0x006D sent, CONFIRM-2's arm)."""
-        authsrv.WEAPON_SETS = [{"lead": "starter_hammer", "off": None}, None, None, None]
+        `p6d` is --town-player-weapons (the town 0x006D sent, CONFIRM-2's arm), `f6d` is
+        --field-player-weapons (the field 0x006D sent, the pre-fix arm), and `shield` puts
+        starter_sword + starter_shield in SET 0 so both hands are held AT LOAD (the slice's
+        `WEAPON_SET[0] leadhand=1 offhand=10` -- run 20260923T154229's layout)."""
+        authsrv.WEAPON_SETS = [{"lead": "starter_sword", "off": "starter_shield"} if shield
+                               else {"lead": "starter_hammer", "off": None}, None, None, None]
         authsrv.agents.PLAYER_OFFHAND = None
         authsrv.SET_ITEMS_OVERRIDE.clear()
         authsrv.configure_weapon_sets(["1=starter_sword+starter_shield"])
         authsrv.OUTPOST, authsrv.EXPLORABLE = outpost, not outpost
         authsrv.TOWN_WEAPON_STRIP_ENABLED, authsrv.VISIBILITY_STATUS_ENABLED = strip, vis
-        authsrv.TOWN_PLAYER_WEAPONS_ENABLED = p6d
+        authsrv.TOWN_PLAYER_WEAPONS_ENABLED, authsrv.FIELD_PLAYER_WEAPONS_ENABLED = p6d, f6d
         st = {"agents": {}, "char_uuid": UUID, "map_id": 145}
         if flags is not None:
             st["vis_flags"] = flags
@@ -482,37 +521,84 @@ try:
            f"carry one) while "
            f"the bag still holds the hammer (item {W}) -- the third carrier into the client's hand store stays "
            f"empty with the 0x006E's two, so the body is bare as retail's")
-    stf, _if = fresh(outpost=False)
+    # ...and, since THE FIELD SHIELD (2026-09-24), withheld in a FIELD too
+    stf, itemsf = fresh(outpost=False)
     sentf, sendf = fake_send_factory()
-    led.ok(authsrv.send_player_weapons(sendf, stf, 0) == [P, W, 0] and sentf == [(W6D, [P, W, 0])],
-           f"FIELD CONTROL: the load's 0x006D [player, hammer {W}, 0] goes out as every run before -- the field path "
-           f"untouched by this fix; its ZERO off hand is a field defect of its own (it is the last hand write and "
-           f"erased the shield the 0x006E drew on run 20260923T154229; PLAN.md 8.1's field item)", f"{sentf}")
+    led.ok(authsrv.send_player_weapons(sendf, stf, 0) is None and sentf == []
+           and itemstore.hand_items(itemsf, EQ) == (W, 0) and authsrv.player_worn_array(stf)[0] == W,
+           f"FIELD load (the default): the player's 0x006D is NOT sent -- retail sends the own body none in a field "
+           f"either (0 of 44 field connections with a controlled agent) -- while the bag holds the hammer (item {W}) "
+           f"and the 0x006E carries it at visual 0: the 0x006E is the last hand write now", f"{sentf}")
+    stff, _iff = fresh(outpost=False, f6d=True)
+    sentff, sendff = fake_send_factory()
+    led.ok(authsrv.send_player_weapons(sendff, stff, 0) == [P, W, 0] and sentff == [(W6D, [P, W, 0])],
+           f"KNOWN-BAD (--field-player-weapons): the load's 0x006D [player, hammer {W}, 0] goes out as every run "
+           f"before 2026-09-24, byte for byte -- the pre-fix arm the client run A/Bs the fix against; it differs "
+           f"from the default's nothing, so the pin can tell the arms apart", f"{sentff}")
     stk, _ik = fresh(outpost=True, strip=False)
     sentk, sendk = fake_send_factory()
-    led.ok(authsrv.send_player_weapons(sendk, stk, 0) == [P, W, 0] and sentk == sentf,
+    led.ok(authsrv.send_player_weapons(sendk, stk, 0) == [P, W, 0] and sentk == sentff,
            "KNOWN-BAD (--no-town-weapon-strip): the town 0x006D goes out -- the pre-strip picture restored "
-           "exactly (the same values as the field's), with the hands in the 0x006E and the switch's 0x006F")
+           "exactly (the same values as the field arm's), with the hands in the 0x006E and the switch's 0x006F")
     stp, _ip = fresh(outpost=True, p6d=True)
     sentp, sendp = fake_send_factory()
-    led.ok(authsrv.send_player_weapons(sendp, stp, 0) == [P, W, 0] and sentp == sentf
+    led.ok(authsrv.send_player_weapons(sendp, stp, 0) == [P, W, 0] and sentp == sentff
            and authsrv.visible_worn(authsrv.player_worn_array(stp), stp, 0)[:2] == [0, 0],
            "KNOWN-BAD (--town-player-weapons): the strip on, the 0x006E bare, and the town 0x006D sent -- "
            "CONFIRM-2's own arm (runs 084418 / 084811: the body armed at load, the OLD weapon kept across F2), "
            "which is what every run before this fix sent; it differs from the fixed default's nothing, so the "
            "pin can tell the arms apart")
-    # The fix pass (TF-R3 / EVREF-TF-3): the check this replaces dragged the hammer out in a TOWN and asserted
-    # None -- which the regime gate returns whatever the hand holds, so it could not fail on its own. The hand
-    # never decides the gate; in a FIELD an emptied lead is still sent, and what it sends is pinned.
-    stf_e, itemsf_e = fresh(outpost=False)
+    # VACUITY, the arms: every arm above was asked in its own regime, so a gate that ignored the regime (any
+    # arm sending anywhere) would pass all of them; this pair asks each arm in the OTHER regime and refuses
+    # that gate. The other inversion, a gate answering None regardless, passes this pair -- the three
+    # KNOWN-BAD sends above are what refuse it.
+    st_x, _ix = fresh(outpost=True, f6d=True)
+    st_y, _iy = fresh(outpost=False, p6d=True)
+    st_z, _iz = fresh(outpost=False, strip=False)
+    led.ok(authsrv.send_player_weapons(fake_send_factory()[1], st_x, 0) is None
+           and authsrv.send_player_weapons(fake_send_factory()[1], st_y, 0) is None
+           and authsrv.send_player_weapons(fake_send_factory()[1], st_z, 0) is None,
+           "VACUITY: each arm is its regime's alone -- --field-player-weapons sends nothing in a TOWN, and neither "
+           "--town-player-weapons nor --no-town-weapon-strip sends anything in a FIELD; the arms disagree exactly "
+           "where retail's two regimes are the same (none), so the gate is read per regime and per arm")
+
+    # THE FIELD SHIELD itself: sword + shield in the hands AT LOAD (run 20260923T154229's layout)
+    OFF = authsrv.OFFHAND_ITEM_ID
+    sts, itemss = fresh(outpost=False, shield=True)
+    worn_s = authsrv.visible_worn(authsrv.player_worn_array(sts), sts, 0)
+    sents, sends = fake_send_factory()
+    led.ok(itemstore.hand_items(itemss, EQ) == (W, OFF) and worn_s[:2] == [W, OFF]
+           and authsrv.send_player_weapons(sends, sts, 0) is None and sents == [],
+           f"THE FIELD SHIELD (set 0 = sword + shield): the world's 0x006E carries the sword (item {W}) at visual 0 "
+           f"and the shield (item {OFF}) at visual 1 -- c1 seq 111's [1, 1, 10, ...] -- and NO 0x006D follows to zero "
+           f"visual 1: the 0x006E is the last hand write, so the client's one store keeps the shield (the PREDICTION "
+           f"the run owes: the shield stands)", f"{worn_s} {sents}")
+    stsk, itemssk = fresh(outpost=False, shield=True, f6d=True)
+    sentsk, sendsk = fake_send_factory()
+    led.ok(authsrv.send_player_weapons(sendsk, stsk, 0) == [P, W, 0] and sentsk == [(W6D, [P, W, 0])]
+           and itemstore.hand_items(itemssk, EQ) == (W, OFF)
+           and authsrv.visible_worn(authsrv.player_worn_array(stsk), stsk, 0)[:2] == [W, OFF],
+           f"KNOWN-BAD (--field-player-weapons) with the shield in hand: the 0x006D [player, sword {W}, 0] goes out "
+           f"with 0 at the off hand while the bag and the 0x006E hold the shield (item {OFF}) -- c1 seq 113's "
+           f"[1, 1, 0], the last hand write that undressed visual 1 (OBSERVED on the run); the two arms disagree "
+           f"exactly at the off hand", f"{sentsk}")
+    # The fix pass (TF-R3 / EVREF-TF-3) pinned what an emptied FIELD lead sends; the field shield moves the pin
+    # under the flag arm, the only place the message goes out in a field now. The hand never decides the gate.
+    stf_e, itemsf_e = fresh(outpost=False, f6d=True)
     authsrv.handle_item_move([MOVE, 0, BP, 9], fake_send_factory()[1], stf_e, 0)   # the hammer out, in a FIELD
     sentf_e, sendf_e = fake_send_factory()
     led.ok(itemstore.hand_items(itemsf_e, EQ) == (0, 0) and authsrv.send_player_weapons(sendf_e, stf_e, 0) == [P, W, 0]
            and sentf_e == [(W6D, [P, W, 0])],
-           f"PINNED, the FIELD's emptied lead: the 0x006D still goes out and still names the hammer (item {W}, now in "
-           f"the backpack) through the pre-existing `or WEAPON_ITEM_ID` fallback -- the gate is the REGIME, never the "
-           f"hand; unreachable at load (the dress puts the set's lead in the hand) and a bounded defect of the field "
-           f"send, filed with its open item, not this town fix's", f"{sentf_e}")
+           f"PINNED, the FIELD's emptied lead under --field-player-weapons: the 0x006D still goes out and still names "
+           f"the hammer (item {W}, now in the backpack) through the pre-existing `or WEAPON_ITEM_ID` fallback -- the "
+           f"gate is the REGIME and the ARM, never the hand; unreachable at load (the dress puts the set's lead in the "
+           f"hand) and reachable only under the revert arm now", f"{sentf_e}")
+    stf_d, itemsf_d = fresh(outpost=False)
+    authsrv.handle_item_move([MOVE, 0, BP, 9], fake_send_factory()[1], stf_d, 0)   # the hammer out, the default
+    led.ok(itemstore.hand_items(itemsf_d, EQ) == (0, 0)
+           and authsrv.send_player_weapons(fake_send_factory()[1], stf_d, 0) is None,
+           "...and by default the emptied FIELD lead sends nothing, like the held one: the fallback is unreachable "
+           "unless a revert arm is on")
 
     # F2 / F1 in a TOWN: retail's outpost shape (0 of 4 switches carried a 0x006F)
     st, items = fresh(outpost=True)
@@ -544,6 +630,10 @@ try:
            and sentf[3][1] == [P, 0, 11] and sentf[4][1] == [P, 1, 12],
            "FIELD F2: the same three rows THEN 0x006F [player, 0, sword], [player, 1, shield] -- retail's "
            "[25, 0, 208] / [25, 1, 207] (:56576)", f"{sentf}")
+    led.ok(all(op != W6D for op, _v in sentf) and authsrv.send_player_weapons(fake_send_factory()[1], stf, 0) is None
+           and itemstore.hand_items(itemsf, EQ) == (11, 12),
+           "...and no 0x006D in the field switch or re-sent after it (the field shield): the shield's 0x006F "
+           "[player, 1, shield] stays the last hand write, with the sword and shield in the bag")
     sentf.clear()
     authsrv.select_weapon_set(sendf, stf, 0, 0)
     led.ok([op for op, _v in sentf] == [ACTIVE, CHG, SWAP, VIS, VIS]
