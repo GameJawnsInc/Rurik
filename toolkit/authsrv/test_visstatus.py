@@ -369,10 +369,16 @@ led.ok('"--no-visibility-status"' in ARGS and "a.no_visibility_status" in SRC
        and "VISIBILITY_STATUS_ENABLED = False" in SRC,
        "SOURCE LOCK: the revert flag is declared in serverargs.py and wired in main()")
 
-saved = (authsrv.OUTPOST, authsrv.EXPLORABLE, authsrv.PERSIST, authsrv.VISIBILITY_STATUS_ENABLED)
+saved = (authsrv.OUTPOST, authsrv.EXPLORABLE, authsrv.PERSIST, authsrv.VISIBILITY_STATUS_ENABLED,
+         authsrv.TOWN_WEAPON_STRIP_ENABLED)
 try:
     authsrv.OUTPOST, authsrv.EXPLORABLE, authsrv.PERSIST = True, False, False
     authsrv.VISIBILITY_STATUS_ENABLED = True
+    # The TOWN WEAPON (DESKWORK-D1, 2026-09-23; townweapon.py) shares visible_worn and
+    # visible_slot_writes with the display mode and zeroes the hands in a town. This
+    # section's subject is the display mode's own slots (6/7/8), so the hands' rule is
+    # held off here and its composition with the mode is test_townweapon.py's §3.
+    authsrv.TOWN_WEAPON_STRIP_ENABLED = False
     st = {"map_id": 148}
     dressed = authsrv.player_worn_array(st)
     head_item = dressed[6]
@@ -523,7 +529,7 @@ try:
         shutil.rmtree(base, ignore_errors=True)
 finally:
     (authsrv.OUTPOST, authsrv.EXPLORABLE, authsrv.PERSIST,
-     authsrv.VISIBILITY_STATUS_ENABLED) = saved
+     authsrv.VISIBILITY_STATUS_ENABLED, authsrv.TOWN_WEAPON_STRIP_ENABLED) = saved
 
 ov = json.load(open(os.path.join(os.path.dirname(HERE), "..", "schema", "overrides.json"),
                     encoding="utf-8"))["channels"]

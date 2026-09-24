@@ -2836,15 +2836,24 @@ def select_weapon_set(send, state, k, conn_id):
             itemstore.apply(state.get("items") or {}, [(old_lead, BACKPACK_BAG_ID, _free)])
             if old_lead in WEAPON_SET_BACKPACK_SLOTS or old_lead != WEAPON_ITEM_ID:
                 WEAPON_SET_BACKPACK_SLOTS[old_lead] = _free
+    # The hands' visuals go through the ONE gate every player 0x006F passes
+    # (visible_slot_writes; DESKWORK-D1, the town weapon, 2026-09-23): in a
+    # TOWN they are dropped -- retail's four outpost switches carried no
+    # 0x006F (0 of 4, 20260919T103604 :58638) while the field's four all did
+    # (4 of 4, :56576 -- the batches test_weapons 18 replays). The display
+    # mode never touches a hand. --no-town-weapon-strip sends them in a town.
+    _vis = []
     if old_off and not new_off:
-        _send(GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT, [PLAYER_AGENT_ID, EQUIPPED_SLOT_OFFHAND, 0],
-              "AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT(off hand emptied) [WEAPONS-W9]")
+        _vis.append((GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT, [PLAYER_AGENT_ID, EQUIPPED_SLOT_OFFHAND, 0],
+                     "AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT(off hand emptied) [WEAPONS-W9]"))
     if old_lead != new_lead:
-        _send(GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT, [PLAYER_AGENT_ID, EQUIPPED_SLOT_WEAPON, new_lead],
-              f"AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT(lead hand = item {new_lead}) [WEAPONS-W9]")
+        _vis.append((GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT, [PLAYER_AGENT_ID, EQUIPPED_SLOT_WEAPON, new_lead],
+                     f"AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT(lead hand = item {new_lead}) [WEAPONS-W9]"))
     if new_off and new_off != old_off:
-        _send(GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT, [PLAYER_AGENT_ID, EQUIPPED_SLOT_OFFHAND, new_off],
-              f"AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT(off hand = item {new_off}) [WEAPONS-W9]")
+        _vis.append((GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT, [PLAYER_AGENT_ID, EQUIPPED_SLOT_OFFHAND, new_off],
+                     f"AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT(off hand = item {new_off}) [WEAPONS-W9]"))
+    for _vop, _vvals, _vwhy in visible_slot_writes(_vis, state, conn_id):
+        _send(_vop, _vvals, _vwhy)
     # The server's own hands: the same door a party row's weapon comes
     # through, so nothing that reads the weapon can be left pointing at the
     # old one. The off hand is cleared FIRST because the door only sets it.
@@ -5311,6 +5320,7 @@ import itemstore                                               # noqa: E402
 # Read by the burst, the 0x006E build, handle_visibility_flags and
 # test_visstatus.py.
 import visstatus                                               # noqa: E402
+import townweapon                                              # noqa: E402
 from skillunlock import (                                      # noqa: F401,E402
     unlock_corpus_words, refuse_skill_zero,
     # The persisted skill library's two halves read these by bare name: the
@@ -11728,6 +11738,19 @@ VISIBILITY_STATUS_ENABLED = True  # False (--no-visibility-status): today's
                                # four slots, the doll bare-headed in town), c2s
                                # 0x0057 ignored, the world's body dressed with
                                # every piece whatever the mode. visstatus.py.
+TOWN_WEAPON_STRIP_ENABLED = True  # False (--no-town-weapon-strip): the town
+                               # body's 0x006E carries the hands (visuals 0/1)
+                               # and a weapon-set switch's 0x006F goes out in a
+                               # town -- every run before DESKWORK-D1's town
+                               # weapon (2026-09-23). Default ON: retail's
+                               # outpost 0x006E never carries a weapon (0 of
+                               # 2,245 bodies; the owner's own 50 loads with a
+                               # weapon in the equipped bag among them) and no
+                               # outpost hand change is answered with a 0x006F
+                               # (0 of 14) while the field carries both (40/40
+                               # leads, 23/23 off hands; 4/4 switches) --
+                               # OBSERVED, townweapon.py. The bag and the doll
+                               # are untouched.
 ITEM_MOVE_BY_ID_ENABLED = True  # False (--no-item-move-by-id): c2s 0x0072
                                # ITEM_MOVE_BY_ID -- a drag between two cells of
                                # the non-equipped bags -- is ignored, as on the
@@ -25502,15 +25525,29 @@ def visible_slot_writes(batch, state, conn_id=None):
     while the doll and the load's 0x006E hid it). Untouched under
     --no-visibility-status. Other agents' writes and the hands (slots 0/1)
     pass through. Says what it hid. RECONSTRUCTION: retail's reply to an
-    equip under a hiding mode is on no tape."""
-    if not VISIBILITY_STATUS_ENABLED:
+    equip under a hiding mode is on no tape.
+
+    AND THE TOWN'S HANDS (DESKWORK-D1, the town weapon, 2026-09-23;
+    townweapon.py): in a town a player write into visual 0 or 1 -- a
+    weapon-set switch's, an equip's -- is DROPPED, not zeroed: retail sent no
+    hand 0x006F on any of its fourteen outpost hand changes (four switches,
+    four double-click weapon equips, one off-hand unequip, five PvP-panel
+    placements into equipped 0/1) while every field switch carried one (4 of
+    4) -- OBSERVED shape. Every consumer of a player 0x006F passes here (the
+    item batch, select_weapon_set), so the gate is ONE. Untouched under
+    --no-town-weapon-strip."""
+    if not VISIBILITY_STATUS_ENABLED and not TOWN_WEAPON_STRIP_ENABLED:
         return list(batch)
     flags = int(state.get("vis_flags", visstatus.DEFAULT_FLAGS))
     field = instance_is_field(state)
-    out, hid = [], []
+    out, hid, dropped = [], [], []
     for op, vals, label in batch:
-        if (op == GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT and len(vals) >= 3
-                and int(vals[0]) == PLAYER_AGENT_ID):
+        mine = (op == GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT and len(vals) >= 3
+                and int(vals[0]) == PLAYER_AGENT_ID)
+        if mine and TOWN_WEAPON_STRIP_ENABLED and townweapon.drops(vals[1], field):
+            dropped.append((int(vals[1]), int(vals[2])))
+            continue
+        if mine and VISIBILITY_STATUS_ENABLED:
             writes, h = visstatus.filter_slot_writes([(vals[1], vals[2])], flags, field)
             slot, item = writes[0]
             if h:
@@ -25527,25 +25564,50 @@ def visible_slot_writes(batch, state, conn_id=None):
                           for k, s, iid in hid)
               + f" -- {'a field' if field else 'a town'}, flags 0x{flags:02x} "
                 f"({visstatus.describe(flags)}) [DESKWORK-D1, RECONSTRUCTION]", flush=True)
+    if dropped and conn_id is not None:
+        print(f"[c{conn_id}] TOWN WEAPON: the body's 0x006F for "
+              + ", ".join(f"the {townweapon.HAND_NAMES[s]} ({f'item {i}' if i else 'emptied'})"
+                          for s, i in dropped)
+              + " is not sent -- a town; retail sent none on 14 of 14 outpost hand "
+                "changes, the field's switches all carry one [DESKWORK-D1, OBSERVED]",
+              flush=True)
     return out
 
 
 def visible_worn(worn, state, conn_id=None):
     """The 0x006E array the WORLD gets: `worn` with each piece the display
     mode hides under the current regime zeroed (visstatus.strip_visual; the
-    regime is instance_is_field's, the 0x0199 byte's own rule). Untouched
-    under --no-visibility-status. Says which pieces it hid."""
-    if not VISIBILITY_STATUS_ENABLED:
-        return list(worn)
-    flags = int(state.get("vis_flags", visstatus.DEFAULT_FLAGS))
-    shown, hid = visstatus.strip_visual(worn, flags, instance_is_field(state))
-    if hid and conn_id is not None:
-        print(f"[c{conn_id}] DISPLAY MODE: the body's 0x006E leaves out "
-              + ", ".join(f"the {visstatus.KIND_NAMES[k]} (item {iid}, visual {s})"
-                          for k, s, iid in hid)
-              + f" -- {'a field' if instance_is_field(state) else 'a town'}, flags "
-                f"0x{flags:02x} ({visstatus.describe(flags)}) [DESKWORK-D1, "
-                f"RECONSTRUCTION]", flush=True)
+    regime is instance_is_field's, the 0x0199 byte's own rule; untouched
+    under --no-visibility-status) AND, in a TOWN, with the hands (visuals 0
+    and 1) zeroed (townweapon.strip_hands; DESKWORK-D1, the town weapon,
+    2026-09-23: retail's outpost 0x006E never carries a weapon, 0 of 2,245
+    bodies, the owner's own 50 loads with a weapon in the equipped bag among
+    them, while the own field body carries every hand its bag holds, 40 of 40
+    leads and 23 of 23 off hands -- OBSERVED; the client's dresser reads no
+    regime, so the server's array is the channel; untouched under
+    --no-town-weapon-strip). The equipped BAG -- the doll -- is not touched
+    here. Says which pieces it hid."""
+    shown = list(worn)
+    field = instance_is_field(state)
+    if VISIBILITY_STATUS_ENABLED:
+        flags = int(state.get("vis_flags", visstatus.DEFAULT_FLAGS))
+        shown, hid = visstatus.strip_visual(shown, flags, field)
+        if hid and conn_id is not None:
+            print(f"[c{conn_id}] DISPLAY MODE: the body's 0x006E leaves out "
+                  + ", ".join(f"the {visstatus.KIND_NAMES[k]} (item {iid}, visual {s})"
+                              for k, s, iid in hid)
+                  + f" -- {'a field' if field else 'a town'}, flags "
+                    f"0x{flags:02x} ({visstatus.describe(flags)}) [DESKWORK-D1, "
+                    f"RECONSTRUCTION]", flush=True)
+    if TOWN_WEAPON_STRIP_ENABLED:
+        shown, hands = townweapon.strip_hands(shown, field)
+        if hands and conn_id is not None:
+            print(f"[c{conn_id}] TOWN WEAPON: the body's 0x006E leaves out "
+                  + ", ".join(f"the {townweapon.HAND_NAMES[s]} (item {i}, visual {s})"
+                              for s, i in hands)
+                  + " -- a town; retail's outpost bodies carry none (0 of 2,245), the "
+                    "equipped bag and the doll keep the weapon [DESKWORK-D1, OBSERVED]",
+                  flush=True)
     return shown
 
 
@@ -36608,6 +36670,14 @@ def main():
               "headgear and both costume slots, the doll bare-headed in a "
               "town, 20260923T185124), c2s 0x0057 ignored, the body's 0x006E "
               "carries every piece whatever the mode.", flush=True)
+    if a.no_town_weapon_strip:
+        global TOWN_WEAPON_STRIP_ENABLED
+        TOWN_WEAPON_STRIP_ENABLED = False
+        print("[items] --no-town-weapon-strip: the town body's 0x006E carries the "
+              "hands (visuals 0/1) and a weapon-set switch's 0x006F goes out in a "
+              "town -- every run before DESKWORK-D1's town weapon (2026-09-23). "
+              "KNOWN-BAD: retail's outpost bodies are empty-handed (0 of 2,245) and "
+              "its outpost switches carry no 0x006F (0 of 4).", flush=True)
     if a.party_no_fight:
         global PARTY_FIGHTS
         PARTY_FIGHTS = False

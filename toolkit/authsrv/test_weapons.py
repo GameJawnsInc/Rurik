@@ -1523,12 +1523,21 @@ def section_weapon_sets():
     print("\n18. WEAPONS-W9: the weapon-set switch -- retail's one batch, from the 1A tape")
     saved = (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
              authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,
-             list(authsrv.WEAPON_SETS), dict(authsrv.WEAPON_SET_BACKPACK_SLOTS))
+             list(authsrv.WEAPON_SETS), dict(authsrv.WEAPON_SET_BACKPACK_SLOTS),
+             authsrv.EXPLORABLE)
     sent = []
     send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
     P = authsrv.PLAYER_AGENT_ID
     rate = lambda t: float(agents.ATTACK_SPEED[authsrv.WEAPON_TYPE_RATE[t]])       # noqa: E731
     try:
+        # The batches below are the 1A observer's FIELD connection's (20260919T103604
+        # :56576, agent 25), and its hands' 0x006F ride only there: the same capture's
+        # OUTPOST connection (:58638) answered its four switches with 0x0148 and the
+        # 0x014B/0x0152 rows and NO 0x006F (0 of 4), which the server now reproduces
+        # (DESKWORK-D1, the town weapon, 2026-09-23; test_townweapon.py). The states
+        # below carry no map_id, so the regime is declared here rather than left to
+        # map_explorable(None) -- a town -- as every run before that day did.
+        authsrv.EXPLORABLE = True
         # the 1A observer's four sets: axe; scythe; spear; spear + shield
         authsrv.WEAPON_SETS[:] = [{"lead": "starter_hammer", "off": None}, None, None, None]
         authsrv.apply_party_character({"player_weapon": "starter_axe"})
@@ -1819,6 +1828,7 @@ def section_weapon_sets():
         (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
          authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE) = saved[:5]
         authsrv.WEAPON_SETS[:] = saved[5]
+        authsrv.EXPLORABLE = saved[7]
         authsrv.WEAPON_SET_BACKPACK_SLOTS.clear()
         authsrv.WEAPON_SET_BACKPACK_SLOTS.update(saved[6])
 
