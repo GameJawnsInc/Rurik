@@ -40,7 +40,7 @@ WHAT THE WINDOW IS. A header over four tabs, all over one spec:
            compiled result (the overlay and the command, shown before
            anything runs, with what the character store already holds); the
            harness's output, streamed
-The operator plays; closing the game client ends the run and the stack.
+The operator plays; closing the game client ends the run and the servers.
 
 NAMES. Skill names come off the pinned client's own skill table (the record's
 name string id, `skilltable.parse_record`) and the archive's text files; hero
@@ -1528,6 +1528,21 @@ RUN_MARKS = {"retracted": "RUN VERDICT RETRACTED", "crash": "ERROR DIALOG captur
 BUILD_SLICE = ("Build the slice archive with:  python toolkit/mapdata/compose.py --name slice "
                "--build   (RUNBOOK.md, SLICE-B9); a new run directory needs the elevated cage "
                "step once.")
+# The one dialog: its own sentence and the command to type, nothing else on its
+# face; the citation and the compiler's words sit behind Show Details.
+NO_ARCHIVE = ("There is no slice archive yet, so this cannot launch. Build it with:\n\n"
+              "python toolkit/mapdata/compose.py --name slice --build")
+# What the Run tab says while the harness comes up. The closing fact is the
+# Launch options caption's, on screen before, during and after the run, so it
+# is not repeated here (--smoke: no run of four words shared with a caption).
+LAUNCH_STATUS = ("The game client is coming up. Hands off the keyboard while the harness "
+                 "logs in (it says when); then play.")
+STALE_NOTE = "  The spec has changed since; Launch compiles again."
+
+
+def n_of(n, word, plural=None):
+    """'1 note', '2 notes': the count with its noun, never 'note(s)'."""
+    return f"{n} {word if n == 1 else (plural or word + 's')}"
 
 
 def write_lines(view, lines):
@@ -1535,12 +1550,21 @@ def write_lines(view, lines):
     never HTML, so a '<' in a process's output is a '<'. The registers are
     weight for structure and a state colour only where it is unambiguous."""
     pal = orchui.PAL
+    doc = view.document()
     bar = view.verticalScrollBar()
     at_bottom = bar.value() >= bar.maximum() - 1
+    # at the block cap the document trims the top as these go in, and the view
+    # keeps its top block NUMBER, so a scrolled-back reader sees the text creep
+    # up under them (appendPlainText moves its top block back; this cursor does
+    # not). Count the lines about to go, in the bar's own units.
+    cap = doc.maximumBlockCount()
+    new_blocks = len(lines) - (1 if doc.isEmpty() else 0)
+    trimmed = max(0, doc.blockCount() + new_blocks - cap) if cap else 0
+    lost = sum(doc.findBlockByNumber(i).lineCount() for i in range(trimmed))
     # a DETACHED cursor: the view's own cursor (and the operator's selection)
     # stays put, and the view follows new output only if it was at the bottom --
     # appendPlainText's behaviour, which the first cut lost
-    cur = QTextCursor(view.document())
+    cur = QTextCursor(doc)
     cur.beginEditBlock()
     cur.movePosition(QTextCursor.End)
     for text, kind in lines:
@@ -1548,12 +1572,14 @@ def write_lines(view, lines):
         fmt.setForeground(QColor(pal[{"head": "text", "note": "warn_text", "error": "error_text",
                                       "quiet": "muted"}.get(kind, "log_fg")]))
         fmt.setFontWeight(QFont.DemiBold if kind in ("head", "echo") else QFont.Normal)
-        if not view.document().isEmpty():
+        if not doc.isEmpty():
             cur.insertBlock()
         cur.insertText(text, fmt)
     cur.endEditBlock()
     if at_bottom:
         bar.setValue(bar.maximum())
+    elif lost:
+        bar.setValue(bar.value() - lost)
 
 
 def compiled_lines(compiled):
@@ -1634,7 +1660,9 @@ class RunTab(QWidget):
         self.summary = QPlainTextEdit()
         self.summary.setReadOnly(True)
         self.summary.setMaximumBlockCount(4000)
-        self.summary.setLineWrapMode(QPlainTextEdit.NoWrap)
+        # wraps (main's behaviour): unwrapped, the command and --unlocks are
+        # 45,000 px wide, and a horizontal bar sized by those two lines moved
+        # 39 px of text per pixel of thumb for the six that overflow by 254
         self.summary.setAccessibleName("Compiled spec")
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
@@ -1666,8 +1694,10 @@ class RunTab(QWidget):
         self.proc = None
         self.compiled = None
         self._stale = False
+        self._ended = False        # a run's verdict is on the chip, not a compile's
         self._partial = ""
         self._marks = set()
+        self._assert = None        # the '>>> Assertion:' line of a captured crash
         self.clock = QElapsedTimer()
         self.ticker = QTimer(self)
         self.ticker.setInterval(1000)
@@ -1733,7 +1763,7 @@ class RunTab(QWidget):
     def compile(self):
         spec = self.window.to_spec()
         self.compiled = None
-        self._stale = False
+        self._stale = self._ended = False
         try:
             exe, dat = sandbox.run_paths()
             missing = None
@@ -1748,42 +1778,73 @@ class RunTab(QWidget):
             self.summary.clear()
             text = str(exc).splitlines() or ["refused"]
             write_lines(self.summary, [(text[0], "head")] + [(t, "error") for t in text[1:]])
-            set_chip(self.state, "Refused", "crit")
+            set_chip(self.state, "Refused", "crit", tip="")
             self.status.setText("The compiler refused the spec; the reasons are below. Fix "
                                 "them and compile again.")
             self.status.setToolTip("")
-            self.window.tabs.setCurrentWidget(self)
-            self._say(f"Refused: {max(1, len(text) - 1)} reason(s), shown on the Run tab.")
+            self.window.tabs.setCurrentWidget(self)      # ...so the bar need not say where
+            self._say(f"Refused: {n_of(max(1, len(text) - 1), 'reason')}.")
             return None
         self.summary.clear()
         write_lines(self.summary, compiled_lines(self.compiled))
         self.summary.moveCursor(QTextCursor.Start)
         notes = len(self.compiled["store_warnings"])
+        about = f"; {n_of(notes, 'note')} about the stored character" if notes else ""
+        here = self.window.tabs.currentWidget() is self
         if missing:
-            set_chip(self.state, "Compiled — no slice archive", "warn")
+            set_chip(self.state, "Compiled — no slice archive", "warn", tip="")
             self.status.setText("There is no slice archive yet, so this cannot launch. Build "
                                 "it first (hover here for how).")
             self.status.setToolTip(f"{BUILD_SLICE}\n\n{missing}")
-            self._say("Compiled, but there is no slice archive yet; see the Run tab.")
+            self._say("Compiled, but there is no slice archive yet"
+                      + ("." if here else "; the Run tab says how to build it."))
         else:
-            set_chip(self.state, "Compiled", "good")
-            self.status.setText(f"The overlay goes to {self.compiled['overlay_path']}"
-                                + (f"; {notes} note(s) about the stored character below."
-                                   if notes else "."))
-            self.status.setToolTip("")
-            self._say("Compiled. The overlay and the command are on the Run tab"
-                      + (f"; {notes} note(s) about the stored character." if notes else "."))
+            set_chip(self.state, "Compiled", "good", tip="")
+            # the path is the pane's (its 'overlay ->' line) and the hover's,
+            # not the status line's
+            self.status.setText(f"The overlay and the command are below{about}.")
+            self.status.setToolTip(f"The overlay goes to {self.compiled['overlay_path']}")
+            self._say(f"Compiled{about}"
+                      + ("." if here else "; the overlay and the command are on the Run tab."))
         return self.compiled
 
     def mark_stale(self, *_a):
         """The spec changed after a compile: the pane shows the OLD result, and
-        a green 'Compiled' would say otherwise. Launch always compiles again."""
-        if self._stale or self.proc is not None or self.state.text() == "Not compiled":
+        a green 'Compiled' would say otherwise. Launch always compiles again.
+        A run's verdict is not a compile's: it stays on the chip, with a note
+        on the status line; an edit DURING a run is remembered and said when
+        the run ends (the first cut let the first keystroke after a crash paint
+        'Changed since compile' over 'the client crashed')."""
+        if self._stale or self.state.text() == "Not compiled":
             return
         self._stale = True
+        if self.proc is not None:
+            return
+        if self._ended:
+            self.status.setText(self.status.text() + STALE_NOTE)
+            return
+        was = self.state.text()
         set_chip(self.state, "Changed since compile", "warn")
-        self.status.setText("The pane below shows the previous compile; Launch compiles again.")
+        if was == "Refused":
+            self.status.setText("The reasons below are from the previous compile; Launch "
+                                "compiles again.")
+        elif was.endswith("no slice archive"):    # the build hint stays on hover
+            self.status.setText("There is still no slice archive (hover here for how), and "
+                                "the pane below shows the previous compile; Launch compiles "
+                                "again.")
+            return
+        else:
+            self.status.setText("The pane below shows the previous compile; Launch compiles "
+                                "again.")
         self.status.setToolTip("")
+
+    def no_archive_box(self, exc):
+        """The dialog a launch with no archive shows (built, not shown: --smoke
+        reads its face). One sentence and the command; the citation and the
+        compiler's own words behind Show Details."""
+        box = QMessageBox(QMessageBox.Warning, "No slice archive", NO_ARCHIVE, parent=self)
+        box.setDetailedText(f"{BUILD_SLICE}\n\n{exc}")
+        return box
 
     def launch(self):
         if self.proc is not None:
@@ -1793,34 +1854,40 @@ class RunTab(QWidget):
         try:
             sandbox.run_paths()
         except sandbox.SpecError as exc:
-            QMessageBox.warning(self, "No slice archive", f"{BUILD_SLICE}\n\n{exc}")
+            self.no_archive_box(exc).exec()
             return
         sandbox.write_overlay(self.compiled)
+        self._start(self.compiled["command"], self.compiled["env"])
+
+    def _start(self, cmd, env):
+        """Arm the run's state, switch to the tab, THEN start the harness. On
+        Windows a start that fails emits errorOccurred INSIDE start(), so
+        _done's cleanup has to be the last thing that runs, not the first:
+        the first cut started first and then re-armed the clock and the verbs
+        over a harness that never ran, and Stop could not undo it."""
         self.log.clear()
         self._partial = ""
         self._marks = set()
-        cmd = self.compiled["command"]
+        self._assert = None
         write_lines(self.log, [("$ " + " ".join(cmd), "echo")])
         self.proc = QProcess(self)
-        env = QProcessEnvironment.systemEnvironment()
-        for k, v in self.compiled["env"].items():
-            env.insert(k, v)
-        self.proc.setProcessEnvironment(env)
+        penv = QProcessEnvironment.systemEnvironment()
+        for k, v in env.items():
+            penv.insert(k, v)
+        self.proc.setProcessEnvironment(penv)
         self.proc.setWorkingDirectory(ROOT)
         self.proc.setProcessChannelMode(QProcess.MergedChannels)
         self.proc.readyReadStandardOutput.connect(self._read)
         self.proc.finished.connect(self._done)
         self.proc.errorOccurred.connect(self._proc_error)
-        self.proc.start(cmd[0], cmd[1:])
         self._busy(True)
         self.clock.start()
         self.ticker.start()
         self._tick()
         self.window.tabs.setCurrentWidget(self)
-        self.status.setText("The game client is coming up. Hands off the keyboard while the "
-                            "harness logs in (it says when); then play. Closing the client ends "
-                            "the run and the servers.")
+        self.status.setText(LAUNCH_STATUS)
         self.status.setToolTip("")
+        self.proc.start(cmd[0], cmd[1:])
 
     def _busy(self, on):
         """Mirror the run onto the verbs that started it: a re-click on a
@@ -1838,6 +1905,8 @@ class RunTab(QWidget):
         for key, needle in RUN_MARKS.items():
             if needle in line:
                 self._marks.add(key)
+        if line.strip().startswith(">>> "):      # the dialog's own line, for the chip's hover
+            self._assert = line.strip()[4:]
 
     def _read(self):
         data = self._partial + bytes(self.proc.readAllStandardOutput()).decode("utf-8", "replace")
@@ -1851,16 +1920,18 @@ class RunTab(QWidget):
         """(chip text, kind) for a finished run. A hold-until-close run ends
         with a non-zero code when the operator closes the client -- the
         harness retracts its PASS, deliberately -- so the code alone would
-        paint every normal session amber."""
+        paint every normal session amber. A captured crash outranks exit 0:
+        a timed hold whose client asserted ends PASS, exit 0, with the dialog
+        captured and nothing retracted (runwatch.hold_open's timer branch)."""
         m = self._marks
         if "stopped" in m:
             return "Stopped", "info"
         if "no start" in m:
             return "Did not start", "crit"
-        if code == 0:
-            return "Ended  ·  exit 0", "good"
         if "crash" in m:
             return "Ended  ·  the client crashed", "crit"
+        if code == 0:
+            return "Ended  ·  exit 0", "good"
         if "retracted" in m:
             return "Ended  ·  client closed", "good"
         if "fail" in m:
@@ -1873,12 +1944,21 @@ class RunTab(QWidget):
             write_lines(self.log, [(self._partial, "error" if LOG_ERROR.search(self._partial)
                                     else "body")])
             self._partial = ""
-        write_lines(self.log, [("", "body"), (f"[session.py exited with code {code}]", "echo")])
+        never_ran = "no start" in self._marks
+        if not never_ran:                        # nothing exited: the log already says why
+            write_lines(self.log, [("", "body"), (f"[session.py exited with code {code}]",
+                                                  "echo")])
         self.ticker.stop()
-        set_chip(self.state, *self.end_state(code))
-        self.status.setText("The run ended; the report and the server logs are under "
+        text, kind = self.end_state(code)
+        set_chip(self.state, text, kind, tip=self._assert if "crash" in self._marks else "")
+        self.status.setText("The harness did not start; the reason is in the log below."
+                            if never_ran else
+                            "The run ended; the report and the server logs are under "
                             "vault/captures/harness/.")
+        if self._stale:                          # edited during the run: say it now
+            self.status.setText(self.status.text() + STALE_NOTE)
         self.status.setToolTip("")
+        self._ended = True
         self.proc = None
         self._busy(False)
 
@@ -2112,11 +2192,13 @@ def used_roles(win):
             if w.property("role") is not None}
 
 
-SURFACE_LORE = re.compile(r"--[a-z]|\.py\b|\.md\b|`|\b[A-Z]{3,}-[A-Z0-9]+\b|\b0x[0-9A-Fa-f]+\b")
+SURFACE_LORE = re.compile(r"--[a-z]|\.py\b|\.md\b|\.toml\b|\b[A-Za-z]:[\\/]|`|\b[A-Z]{3,}-[A-Z0-9]+\b"
+                          r"|\b0x[0-9A-Fa-f]+\b")
 
 
 def surface_lore(win):
-    """Visible words that belong on hover: flags, file names, idents, hex ids."""
+    """Visible words that belong on hover: flags, file names and drive paths,
+    idents, hex ids."""
     out = []
     for w in win.findChildren(QWidget):
         if not w.isVisibleTo(win) or isinstance(w, QPlainTextEdit):
@@ -2488,6 +2570,41 @@ def smoke(win, app, out_dir):
         text = win.run.summary.toPlainText()
         check(all(tok in text for tok in compiled["args"]) and compiled["overlay"].strip() in text,
               "the compiled pane drops nothing: every gamesrv argument and the whole overlay")
+    # the Run tab in its COMPILED state, which no scan saw before (a compile
+    # keeps the tab it was pressed on): the status line names no path, the bar
+    # points at the tab only from elsewhere and counts in words, and the pane
+    # wraps -- unwrapped, two lines are 45,000 px wide and the horizontal bar
+    # they size is useless for the rest
+    rt = win.run
+    away = win.statusBar().currentMessage()      # pressed from Skills, above
+    win.tabs.setCurrentWidget(rt)
+    settle()
+    lore += surface_lore(win)
+    rt.compile()                                 # pressed here
+    here = win.statusBar().currentMessage()
+    check(not SURFACE_LORE.search(rt.status.text()) and "overlay goes to" in rt.status.toolTip(),
+          f"the compiled status line names no path; the overlay's is on hover "
+          f"({rt.status.text()!r})")
+    check("Run tab" in away and "Run tab" not in here and "(s)" not in away + here + rt.status.text(),
+          f"the bar points at the Run tab only from another tab, and counts in words ({here!r})")
+    rt.summary.moveCursor(QTextCursor.End)       # lays the widest lines out
+    settle()
+    hmax = rt.summary.horizontalScrollBar().maximum()
+    rt.summary.moveCursor(QTextCursor.Start)
+    check(hmax == 0, f"the Compiled pane wraps: nothing to scroll sideways ({hmax} px)")
+    # the live status says nothing a Run-tab caption already says: the closing
+    # fact is the Launch options caption's, on screen throughout
+
+    def shingles(text, n=4):
+        words = re.findall(r"[a-z']+", text.lower())
+        return {" ".join(words[i:i + n]) for i in range(len(words) - n + 1)}
+
+    caps = [w.text() for w in rt.findChildren(QLabel)
+            if w.property("role") == "caption" and w.isVisibleTo(rt)]
+    shared = sorted(s for c in caps for s in shingles(c) & shingles(LAUNCH_STATUS))
+    check(caps and not shared,
+          f"the live status repeats no Run-tab caption ({len(caps)} captions; a run of four "
+          f"words shared: {shared[:2] or 'none'})")
     t_end = time.perf_counter() + 2.0            # the summary is debounced: let it land
     while win._summary_timer.isActive() and time.perf_counter() < t_end:
         settle(1)
@@ -2592,6 +2709,10 @@ def smoke(win, app, out_dir):
           "two bosses are REFUSED at compile, and the reason is shown")
     check(win.run.state.property("kind") == "crit" and win.tabs.currentWidget() is win.run,
           "and a refusal opens the Run tab, its chip saying Refused")
+    msg = win.statusBar().currentMessage()
+    check(re.fullmatch(r"Refused: \d+ reasons?\.", msg) is not None,
+          f"the refusal's count is words, and it does not point at the tab it just opened "
+          f"({msg!r})")
     win.enemies.groups[0].members[0].boss.setChecked(False)
     settle()
     check(g0.note.isHidden() and g3.note.isHidden(), "and unticking it clears both notes")
@@ -2636,23 +2757,109 @@ def smoke(win, app, out_dir):
           f"a spec file whose row fails to load leaves the spec unchanged, and says so "
           f"({msg!r})")
     check(not strays(), f"and after every load, still one window ({len(strays())} stray)")
-    # how a run ended is read from what the harness printed
-    rt = win.run
+    # how a run ended is read from what the harness PRINTS -- print sites, not
+    # the source whole: the same files quote the old lines in comments
     harness = ""
     for name in ("session.py", "runwatch.py"):
         with open(os.path.join(ROOT, "toolkit", "harness", name), encoding="utf-8") as fh:
             harness += fh.read()
-    check(all(needle in harness for needle in RUN_MARKS.values()),
-          "every line the end-of-run chip reads is one the harness still prints")
+    printed = {key: bool(re.search(r"print\([^\n]*" + re.escape(needle), harness))
+               for key, needle in RUN_MARKS.items()}
+    check(all(printed.values()),
+          f"every line the end-of-run chip reads is one the harness still PRINTS ({printed})")
     table = ((set(), 0, "good"), ({"retracted"}, 1, "good"), ({"crash", "retracted"}, 1, "crit"),
-             ({"fail"}, 1, "warn"), ({"stopped"}, 1, "info"), (set(), 1, "warn"))
+             ({"crash"}, 0, "crit"), ({"fail"}, 1, "warn"), ({"stopped"}, 1, "info"),
+             ({"no start"}, -1, "crit"), (set(), 1, "warn"))
     got = []
     for marks, code, want in table:
         rt._marks = set(marks)
         got.append(rt.end_state(code)[1] == want)
     rt._marks = set()
-    check(all(got), "a closed client ends 'client closed' (not amber), a crash crit, a failed "
-                    f"run warn, Stop 'Stopped' ({got})")
+    check(all(got), "a closed client ends 'client closed' (not amber), a crash crit -- on exit "
+                    f"0 too (a timed hold's) -- a failed run warn, Stop 'Stopped', no start crit "
+                    f"({got})")
+    # a run's verdict outlives the first edit after it, and an edit DURING the
+    # run is said when it ends. A stand-in for proc: nothing is launched, and
+    # _done never touches it
+    win.tabs.setCurrentWidget(rt)
+    rt.compile()
+    rt.proc = object()
+    for ln in ("  ERROR DIALOG captured -> smoke", "  >>> Assertion: smoke <= 1.0f",
+               "RUN VERDICT: PASS  (target: map)"):
+        rt._mark(ln)
+    rt._done(0, None)
+    ended, kind, tip = rt.state.text(), rt.state.property("kind"), rt.state.toolTip()
+    win.header.name.setText("smoke-after-run")
+    settle()
+    check(ended == "Ended  ·  the client crashed" and kind == "crit" and rt.state.text() == ended
+          and rt.state.property("kind") == "crit" and "vault/captures/harness" in rt.status.text()
+          and "changed since" in rt.status.text() and rt.launch_b.isEnabled(),
+          f"a crash captured on an exit-0 run reads crit, and the first edit after it keeps the "
+          f"verdict and says the spec changed ({rt.state.text()!r})")
+    check(tip == "Assertion: smoke <= 1.0f", f"the chip's hover is the dialog's own line ({tip!r})")
+    rt.compile()
+    rt._marks, rt._assert = set(), None
+    rt.proc = object()
+    win.header.name.setText("smoke-during-run")
+    settle()
+    unpainted = rt.state.text() == "Compiled" and rt._stale
+    rt._done(0, None)
+    check(unpainted and rt.state.text() == "Ended  ·  exit 0" and rt.state.toolTip() == ""
+          and "changed since" in rt.status.text(),
+          "an edit during a run is not painted over the clock, and is said when the run ends")
+    # a harness that cannot start, through the real start path with a program
+    # that does not exist (Windows emits FailedToStart inside start() itself,
+    # so the cleanup has to be the last thing launch does)
+    rt._start([os.path.join(out_dir, "no_such_harness.exe"), "--smoke"], {})
+    t_end = time.perf_counter() + 3.0
+    while rt.proc is not None and time.perf_counter() < t_end:
+        settle(1)
+        time.sleep(0.01)
+    settle(5)
+    log = rt.log.toPlainText()
+    check(rt.proc is None and not rt.ticker.isActive() and rt.launch_b.isEnabled()
+          and rt.launch_b.text() == "Launch" and rt.compile_b.isEnabled()
+          and not rt.stop_b.isEnabled() and rt.state.text() == "Did not start"
+          and rt.state.property("kind") == "crit" and "did not start" in rt.status.text()
+          and "did not start" in log and "exited with code" not in log,
+          f"a harness that cannot start leaves Launch enabled, the clock stopped, the chip "
+          f"'Did not start' and no 'exited' line ({rt.state.text()!r}, Launch "
+          f"{rt.launch_b.isEnabled()}, ticker {rt.ticker.isActive()})")
+    # the no-archive dialog's face: one sentence and the command; the citation
+    # and the compiler's words behind Show Details (a modal is no child the
+    # lore scan can see, so its text is read here, unshown)
+    try:
+        sandbox.run_paths(os.path.join(out_dir, "no_vault"))
+        exc = None
+    except sandbox.SpecError as e:
+        exc = e
+    box = rt.no_archive_box(exc)
+    face = [ln for ln in box.text().splitlines() if SURFACE_LORE.search(ln)]
+    check(exc is not None and face == ["python toolkit/mapdata/compose.py --name slice --build"]
+          and "RUNBOOK" not in box.text() and str(exc) in box.detailedText(),
+          f"the no-archive dialog's face is a sentence and the command; the citation and the "
+          f"compiler's words are behind Show Details ({face})")
+    box.deleteLater()
+    # after a refusal, an edit says the pane holds REASONS; after a no-archive
+    # compile, it keeps the build hint on hover
+    win.enemies.groups[0].members[0].boss.setChecked(True)
+    rt.compile()
+    win.header.name.setText("smoke-stale-refused")
+    settle()
+    refused_words = rt.status.text()
+    win.enemies.groups[0].members[0].boss.setChecked(False)
+    real = sandbox.run_paths
+    sandbox.run_paths = lambda *a, **k: real(os.path.join(out_dir, "no_vault"))   # raises
+    try:
+        rt.compile()
+    finally:
+        sandbox.run_paths = real
+    win.header.name.setText("smoke-stale-noarchive")
+    settle()
+    check("reasons below" in refused_words and rt.state.text() == "Changed since compile"
+          and "no slice archive" in rt.status.text() and "compose.py" in rt.status.toolTip(),
+          f"the stale line says what the pane holds -- reasons after a refusal -- and keeps the "
+          f"build hint on hover ({rt.status.text()[:40]!r})")
     # the log follows only from the bottom, and keeps a selection
     view = QPlainTextEdit()
     view.resize(400, 200)
@@ -2668,6 +2875,23 @@ def smoke(win, app, out_dir):
     followed = view.verticalScrollBar().value() == view.verticalScrollBar().maximum()
     check(stayed and followed, "the log keeps the operator's place and selection, and follows "
                                "new output only from the bottom")
+    view.deleteLater()
+    # ...and at the block cap, the line under a scrolled-back reader stays there
+    # (rendered: firstVisibleBlock needs a laid-out view)
+    view = QPlainTextEdit()
+    view.setAttribute(Qt.WA_DontShowOnScreen, True)
+    view.resize(400, 200)
+    view.setMaximumBlockCount(100)
+    view.show()
+    write_lines(view, [(f"row {i}", "body") for i in range(100)])
+    view.verticalScrollBar().setValue(40)
+    settle()
+    top = view.firstVisibleBlock().text()
+    write_lines(view, [(f"row {i}", "body") for i in range(100, 110)])
+    settle()
+    check(top == "row 40" and view.firstVisibleBlock().text() == top and view.blockCount() == 100,
+          f"at the block cap the scrolled-back reader's line stays under them ({top!r} -> "
+          f"{view.firstVisibleBlock().text()!r}, {view.blockCount()} blocks)")
     view.deleteLater()
 
     # ---- the look, as laws

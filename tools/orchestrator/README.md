@@ -49,8 +49,14 @@ the tree for this launch only) and at the slice archive (`RURIK_DAT`), and start
 harness: `session.py --replace --keep-open` on `vault/run/slice/Gw.exe` with
 `--game-args "--map 148 --party sandbox --area errand,sandbox --unlocks … --spawn-profession N"`.
 The harness logs the client in (hands off the keyboard while it says so), and then the run
-is yours. **Closing the game client ends the run and the stack.** The report and the server
-logs land in `vault/captures/harness/<stamp>/` as for every harness run.
+is yours. **Closing the game client ends the run and the servers.** The report and the server
+logs land in `vault/captures/harness/<stamp>/` as for every harness run. How the run ended is
+read off what the harness printed: a closed client is **client closed** (the harness retracts
+its PASS by design, so the exit code alone would paint every session amber), a captured crash
+dialog is **the client crashed** whatever the exit code — a timed hold whose client asserted
+exits 0 — with the dialog's own line on the chip's hover, and a harness that could not start
+says so and gives the verbs back. The verdict stays on the chip through the edits you make
+next; the status line notes that the spec has changed since.
 
 The corridor lives only in the slice archive: `python toolkit/mapdata/compose.py --name slice
 --build` makes it if `vault/run/slice/` is missing (`RUNBOOK.md`, SLICE-B9), and a NEW run
@@ -128,8 +134,16 @@ opens one window and adding hostiles opens none (a label shown with no parent is
 its own), every input the compiler reads turns a fresh green **Compiled** into **Changed since
 compile** while the Skills filters leave it green, a hostile's edit reaches its group's roster
 line at once, a hostile at level 0 keeps that roster and the change signal, and a spec file
-whose row fails inside the load leaves the spec as it was and says so. `--snap` renders every
-surface to a PNG for a person to read; a visual claim nobody looked at is a guess.
+whose row fails inside the load leaves the spec as it was and says so. The Run tab's lifecycle
+has its own: every line the end chip reads is one the harness still PRINTS (its print sites,
+not its comments), a crash reads crit on exit 0 too, a run's verdict outlives the first edit
+after it and an edit during the run is said when it ends, a harness that cannot start (the
+real start path, a program that does not exist) leaves Launch enabled and the clock stopped,
+the no-archive dialog's face is a sentence and the command with the citation behind Show
+Details, the compiled status line names no path, the Compiled pane wraps, the live status
+repeats no caption on the tab, and the Output log keeps a scrolled-back reader's line under
+them at its block cap. `--snap` renders every surface to a PNG for a person to read; a visual
+claim nobody looked at is a guess.
 
 ## Open on the client
 
