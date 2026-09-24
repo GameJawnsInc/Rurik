@@ -3319,6 +3319,48 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   item from the store and leaves the sword; `avoid` (the wrapper's reserved off-hand
   return cells) is skipped and with no `place` nothing is registered. Floor 27 → 35
   from the green run. No vault, no socket, no client. ~1 s),
+  `toolkit/authsrv/test_purse.py` (**2026-09-24, DESKWORK-D9: the carried purse, the
+  quest gold, the hand-in ORDER and the merchant's moves** -- `purse.py`, `charstore`'s
+  optional `purse` field, `grant_quest_reward`'s gold, `turn_in_quest`, and the load
+  credit (`load_purse_messages`); `studies/quests/FINDINGS.md` §12.1. **Rewritten by the
+  D9 fix pass** after two reviews showed its tape section could not fail (a present tape
+  that mismatched became a `skip`) and that the load arm, the revert flag and
+  `player_purse`'s store read had no test. §1 THE LEAF (bare): `load_credit` SKIPS a 0
+  purse (retail's own rule -- 55 of 96 live loads carry no `0x0140`, none credits 0) and
+  builds `[key, N]` for a positive one, with that skip as a KNOWN-BAD; `can_afford`,
+  `after_buy`/`after_sell` (now the merchant's own arithmetic), a purse driven negative
+  RAISES (vacuity). §2 THE QUEST GOLD (bare): `reward_gold` pays `0x0140 [key, gold]` AFTER
+  the experience `0x00EE` as a DELTA, not the new balance (KNOWN-BAD), `--no-quest-gold`
+  pays nothing and ALSO drops the offer screen's slot-B gold line, a gold-only reward
+  pays. §2b THE HAND-IN BATCH (bare): `turn_in_quest` sends `0x0052 · 0x00EE · 0x0140 ·
+  0x004A` -- retail's relative order on 10 of 10 hand-ins -- and `--no-reward-in-frame`
+  is the MUTANT (pass 1's reward-after-`0x004A`, which no tape shows) that reddens the
+  same predicate. §3 THE MERCHANT (bare): a buy debits and a sell credits
+  `state["purse"]` through `purse.py`, an unaffordable buy against a SERVER-CREDITED
+  balance sends NOTHING (the client greys Buy at zero funds, 20260818T235130; retail's
+  reply NOT FOUND), an unsynced one completes, no purse = the bare recipe (vacuity),
+  `purse_persist` is called with the moved balance, and a probe's own `0x0140` clears
+  `purse_synced` (`desync_purse_for_probe`). §4 THE STORE (temp dir; `find_character`
+  redirected to it): `STORE_VERSION` stayed 1, an absent purse reads the caller's default,
+  a stored purse survives a reopen, a STALE `set_character_purse` returns False and the
+  disk keeps the other writer's value, a hand-in under `--persist` writes to disk, a
+  negative purse is refused; §4b `player_purse` with NO cached store under `--persist`
+  looks the character up lazily and a hand-in right after the load accumulates onto the
+  stored 85 (95, not the pass-1 10); §4c `load_purse_messages` credits `[1, stored]` from
+  the store and marks the sync, `[]` for 0, `[]` under `--no-load-purse`, plus a SOURCE
+  LOCK on its position (after the weapon-set loop, before `UPDATE_GOLD_STORAGE`); §4d
+  `authsrv.handle_item_sale`/`handle_item_purchase` under `--persist` write the temp
+  store. §5 THE TAPE (vault-gated, `livewire.decode_conn`; **`led.ok` throughout once the
+  capture directory exists -- only a MISSING capture skips**): 20260914T180058's five
+  loads credit `[own 0x0144 key, 60/60/60/60/85]` right after the last `0x0147`; the
+  :56301 hand-in batch (same timestamp as `0x0140 [2, 25]`) is `0x0052 · 0x00EE [0, 250]
+  · 0x0140 · 0x0052 · 0x004A` with `0x004A` the last quest-family message and
+  `0x00EE [10, 0]` present (UNREAD); OURS vs TAPE: `turn_in_quest`'s order equals the
+  tape's with the doubled `0x0052` collapsed, the pass-1 order does NOT (KNOWN-BAD), and a
+  sabotaged tape (gold before xp) fails the predicate (KNOWN-BAD); 20260807T143055's
+  :60935 loads with NO `0x0140`, earns `[k, 10]` at a `0x003B` hand-in, and :62994 loads
+  `[k, 10]` -- the 0-purse load chain-closed. Floor 45 from the bare green run (the tape
+  adds 13: 58 vaulted). No socket, no client, temp stores only. ~8 s vaulted),
   `toolkit/authsrv/test_playerbags.py` (**2026-09-14: the JARIN tape (20260914T005758) carried a TENTH bag and the one-set check went red -- it was a second INVENTORY KEY, the hero's, with one type-2 bag; `invcensus.bag_shapes` now groups by field 1 and returns the other keys' bags as a fifth element, the one-set claim is about the player's inventory, and a new check pins the hero's extra to exactly `[(2, 21, 9)]` (n = 3 connections, one tape); floor 18 → 19.** the player's nine containers, and **WHERE**
   the burst sends them. Until 2026-08-19 this server created ONE bag, and the
   symptom was not a missing grid but a missing PURCHASE: with a funded purse, a

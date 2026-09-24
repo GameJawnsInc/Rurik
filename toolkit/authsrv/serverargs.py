@@ -905,6 +905,36 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "townweapon.py). The equipped BAG, the paper "
                          "doll and the weapon-set panel are untouched; a field carries "
                          "the hands as before. townweapon.py.")
+    ap.add_argument("--no-load-purse", action="store_true",
+                    help="THE REVERT ARM for DESKWORK-D9's LOAD PURSE: the "
+                         "instance load sends no 0x0140 carried-gold credit, as "
+                         "every run before this arc, so the inventory window's "
+                         "gold counter stays 0. The default sends "
+                         "0x0140 [PLAYER_INVENTORY_KEY, purse] right after the "
+                         "last 0x0147 weapon set for a POSITIVE purse and nothing "
+                         "for 0 -- retail's own rule, both halves OBSERVED over "
+                         "the 96 live game connections (41 credit a positive "
+                         "purse keyed by the connection's 0x0144 key; 55 load a "
+                         "0 purse and carry none, chain-proven: no credit, +10 at "
+                         "a hand-in, the next load credits 10). purse.py.")
+    ap.add_argument("--no-quest-gold", action="store_true",
+                    help="THE REVERT ARM for DESKWORK-D9's QUEST GOLD: a "
+                         "turned-in quest's reward_gold is NOT paid (grant_quest_"
+                         "reward prints a NOT GRANTED line) and the offer screen "
+                         "draws no gold line, as before this arc. The default "
+                         "pays it with 0x0140 [key, gold] in the reward frame "
+                         "after the experience 0x00EE -- OBSERVED on 10 hand-ins "
+                         "(6 connections, 4 captures; amounts 10/25/50); the "
+                         "amount is the content row's own number. Also reverts "
+                         "the purse's persistence of that credit.")
+    ap.add_argument("--no-reward-in-frame", action="store_true",
+                    help="THE REVERT ARM for the D9 fix pass's hand-in ORDER: the "
+                         "reward lines (skills, 0x00EE, 0x0140) go AFTER the "
+                         "closing 0x004A, as SLICE-B5 and D9 pass 1 sent them. "
+                         "The default sends them BETWEEN 0x0052 and 0x004A "
+                         "(turn_in_quest) -- retail's relative order on 10 of 10 "
+                         "hand-ins, where 0x004A is the last quest-family message "
+                         "of the batch. KNOWN-BAD against the tape; for an A/B.")
     ap.add_argument("--no-map-travel", action="store_true",
                     help="THE REVERT ARM for DESKWORK-D1 step 7's world-map travel: "
                          "ignore c2s 0x00B1 MAP_TRAVEL, as today (it was "
