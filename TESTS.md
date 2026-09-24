@@ -6588,10 +6588,31 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   `handle_hero_add` size through `party_size_on_wire` (the old sum is the mutation) and
   the hero add refuses at the same cap; `party_size_on_wire` reads
   PARTY_SIZE_COUNTS_HEROES; 0x009F is OFF the DROPPED_ON_PURPOSE allowlist (put back in
-  memory as the mutation). Drives the real functions with a fake send and a scratch
-  state. Floor 49 = the bare-machine core, measured with RURIK_VAULT at an empty
-  directory (64 with the vault; the landing's floor of 27 was above its own bare run of
-  23 -- HENCH-EVR-2 / ENG-HENCH-2), ~9 s),
+  memory as the mutation). THE KICK (the CLEANUP-3 lane, 2026-09-24; `henchparty.py` THE
+  KICK, `studies/cmsg/FINDINGS.md` "The party family", the kick): §1k the batch
+  `henchman_kick_batch` is 0x01C0 PARTY_HENCHMAN_REMOVE [party, agent] THEN 0x00B0 -- row
+  before size, the hero kick's shape, RECONSTRUCTION (no tape carries c2s 0x00A8 or its
+  reply; the request is named on OUR client, CONFIRM-2 §2 step 6) -- encoded through the
+  codec to the schema's 6 + 5 bytes, the KNOWN-BAD arm the add's size-then-row through the
+  same encoder, the builder refusing agent 0 / party 0 / a negative agent, `kick_refusal`'s
+  six answers; §2 (g)-(k) the real `handle_henchman_kick`: a hired henchman's kick sends
+  exactly 0x01C0 [1, agent] then 0x00B0, the henchman leaves the party, the standing NPC
+  stays (no 0x0021), stays hireable and can be re-added; six refusals (never hired, a
+  stranger, malformed, a hero's agent, zero, a non-int) and a second kick send NOTHING;
+  with a hero and two henchmen (4 of 4) a kick's 0x00B0 says 3 and the freed slot takes
+  the third henchman; under `--party-size-no-heroes` the kick's 0x00B0 leaves the hero out
+  while the cap counts it; under `--persist` with an opaque store attached the handler
+  touches it not at all (the hire is not persisted, so neither is the kick); the leaf's
+  0x01C0 equals authsrv's and the c2s is 0x00A8. §4 gains four locks with mutations: the
+  0x00A8 arm gated on HENCHMAN_KICK_ENABLED and the constant 0x00A8; `main()` wires
+  `--no-henchman-kick` through a `global`; `handle_henchman_kick` refuses through
+  `kick_refusal`, pops the party, sizes through `party_size_on_wire`, sends
+  `henchman_kick_batch` and names no store (a store write added is the mutation);
+  `serverargs.py` declares the flag beside `--no-henchman-add`; 0x00A8 is OFF the
+  allowlist. Drives the real functions with a fake send and a scratch
+  state. Floor 79 = the bare-machine core, measured with RURIK_VAULT at an empty
+  directory (94 with the vault; 49 / 64 before the kick; the landing's floor of 27 was
+  above its own bare run of 23 -- HENCH-EVR-2 / ENG-HENCH-2), ~9 s),
   `toolkit/authsrv/test_itemmoves.py` (**2026-09-23, DESKWORK-D1 step 8: the inventory
   messages, c2s 0x004F ITEM_MOVE, 0x0030 EQUIP_ITEM and 0x0072 ITEM_MOVE_BY_ID, and the
   item store behind them**, `toolkit/authsrv/itemstore.py`, `studies/cmsg/FINDINGS.md`
@@ -6636,7 +6657,10 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   whole store. §4 THE SERVER: `item_layout_begin`'s default layout is the constants'
   and `itemstore.worn_array` over it equals the 0x006E fill the load path built before
   this step; `--outpost` WINS over `--explorable` (ENG-M3); the real handlers with a fake
-  send in a field (visual) and a town (none); the DAMAGE MODEL follows the store — a head
+  send in a field (visual) and a town (the ARMOUR's visual too since the CLEANUP-3 lane,
+  2026-09-24 — `0x014B` + `0x006F [player, 6, x]` for the head's move and equip, RECONSTRUCTION
+  from retail's outpost armour writes; `--no-town-armour-visuals` the KNOWN-BAD arm, the
+  `0x014B` rows alone as before); the DAMAGE MODEL follows the store — a head
   in the backpack leaves `player_armour_at('warrior_head')` at 0.0 while the chest keeps
   its rating, with the no-layout control (ENG-B5); six refusals send nothing; the hands
   mirror (the weapon moved out → `SET_ITEMS_OVERRIDE[0] == (0, 0)`; `select_weapon_set`
@@ -6696,8 +6720,9 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   a bare `0x014B` into a FILLED cell); §1c is scored over the connections that decode
   closed (ENG-8); locks for `equipped_bag_slot`'s one argument, `OFF_HAND_ITEM_IDS`,
   `storage_bag_ids()`, the wrapper's `place` / `avoid` and the commit's two merchant
-  rules. Floor 78 -> 102 -> 137 -> 159 from the green run with `RURIK_VAULT` pointed at
-  an empty directory (the bare-machine core; §1b's 17 and §1c's 8 ride the vault, 184
+  rules. Floor 78 -> 102 -> 137 -> 159 -> 160 (the CLEANUP-3 lane's KNOWN-BAD town arm,
+  2026-09-24) from the green run with `RURIK_VAULT` pointed at
+  an empty directory (the bare-machine core; §1b's 17 and §1c's 8 ride the vault, 185
   vaulted), ~13 s),
   `toolkit/authsrv/test_visstatus.py` (**2026-09-23, DESKWORK-D1, the owner's answer: the
   inventory panel's per-slot DISPLAY MODE** — s2c `0x00EF` CHAR_VISIBILITY_FLAGS, c2s
@@ -6825,9 +6850,25 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   composition with the display mode (Hide in Towns helm in a town: 0, 1 and 6 zeroed; each
   flag alone its own slots); `visible_slot_writes` leaving another agent's hand and the
   player's head alone in a town, dropping the player's hand under either display-mode
-  setting, and passing the batch whole with both flags off. Drives the real handlers,
-  launches nothing. Floor 55 from the green run with `RURIK_VAULT` pointed at an empty
-  directory (the bare-machine core; §2's 15 ride the vault, 70 vaulted; 45/60 before the
+  setting, and passing the batch whole with both flags off. THE TOWN ARMOUR (the CLEANUP-3
+  lane, 2026-09-24; `townweapon.visuals_planned`): §1 the leaf plans the player's `0x006F`
+  in a field and in a town by default (retail writes outpost ARMOUR visuals — the own PvP
+  head `[336, 6, 23284]`, 31 strangers'; RECONSTRUCTION for a town armour EQUIP, none on
+  tape), `town_armour=False` the KNOWN-BAD pre-lane arm with the field untouched (VACUITY);
+  §3 source locks (`--no-town-armour-visuals` declared beside `--field-player-weapons`,
+  default ON, wired through a `global`; the three item handlers plan through
+  `item_visuals_planned` and none is handed `visuals=instance_is_field(state)` any more;
+  `visible_slot_writes` labels a town armour write RECONSTRUCTION after the hands' drop and
+  never labels a hand), and the real handlers in a TOWN: the head out (`0x004F`) and back
+  (`0x0030`) carry `0x006F [player, 6, 0]` / `[player, 6, head]` while the hammer out and back
+  in the SAME state still ride `0x014B` alone (the gate drops the planned hand writes); the
+  `0x0072` drag of the head carries the same two; the KNOWN-BAD arm (`0x014B` alone, every run
+  before the lane, and it disagrees); the flag leaving the FIELD's head visual alone; Hide in
+  Towns + a town head equip going out ZEROED `[player, 6, 0]`; the town-edge check's head label
+  now tagged. Drives the real handlers,
+  launches nothing. Floor 66 from the green run with `RURIK_VAULT` pointed at an empty
+  directory (the bare-machine core; §2's 15 ride the vault, 81 vaulted; 55/70 before the town
+  armour, 45/60 before the
   field shield of 2026-09-24 and 36/48 before the CONFIRM-2 carrier fix the same day, each
   re-set from its own bare run; the CONFIRM-2 fix pass replaced one check and added
   conjuncts, and the field shield's fix pass added the `global` conjunct to both flag

@@ -59,9 +59,44 @@ WHAT THE TAPE SAYS (studies/cmsg/FINDINGS.md "The party family", capture
     fight; a `standing` gate on those paths is the next increment
     (content/world.toml's rows say so).
 
+  * THE KICK (CLEANUP-3, 2026-09-24). c2s `0x00A8 [agent]` is the party
+    window's Kick on a hired henchman -- named on OUR client (CONFIRM-2 section
+    2 step 6: plaintext `a8 80 1f 00`, one word, the hired henchman's agent id;
+    the UPSTREAM reading KICK_NPC CORROBORATED), on NO retail tape (0 of 96
+    live connections send it, none carries the reply). Read from the binary
+    (build 38797): the 0xA8 wrapper 0x0085BF50 has ONE caller, 0x0085A84A in
+    0x0085A820, which asserts PyCliParty:1650 `m_partyClient`, tests the
+    party's "is mine" bit 0x80 and sends -- it removes NO row itself, so the
+    client keeps the row until a reply (OBSERVED on the run, and now read).
+    The reply that removes it: `0x01C0 [party, agent]` (UPSTREAM-named
+    PARTY_HENCHMAN_REMOVE; the schema's two words CORROBORATED by the
+    handler reading exactly [msg+4] and [msg+8]). Its handler 0x00856B30 sits
+    in RECV table 0x00bcb788 with 0x01BF's (0x00856B00) and 0x01C3's
+    (0x00856BB0), resolves the SAME party manager ([ctx+0x4c]+4) and calls
+    worker 0x00858DE0, which finds the party (id 0 -> the own party at
+    [mgr+0x50], else [mgr+0x3c][id]; unknown -> returns silently), walks the
+    party's stride-0x34 row array at [party+0x14] x [party+0x1c] -- the
+    array 0x01BF's worker 0x00858CB0 INSERTS into -- for the agent id (no
+    match -> returns silently), memmoves the tail down, decrements the
+    count, sets the dirty flag [party+0x78], raises frame-bus event
+    0x1000011c and refreshes the agent through 0x007DFED0 (shared by all four
+    roster workers; returns when the agent is not found). 0x01C3's worker
+    0x00859030 uses the IDENTICAL party lookup and our 0x01C3 [1, ...] is
+    CONFIRMED on the client (the hero kick, 2026-09-23), so party id 1
+    resolves for 0x01C0 too. `henchman_kick_batch` is 0x01C0 then 0x00B0 --
+    ROW THEN SIZE, the hero kick's shape (the only OBSERVED kick; the add is
+    size-then-row). RECONSTRUCTION: no tape carries the batch. No 0x0075 /
+    0x00F8 / 0x003E / 0x0145 -- those tear down a hero's agent record and
+    container; the henchman's NPC keeps standing (the add created no body
+    and destroyed none), and a 0x00F8 / 0x003E for a standing agent would
+    sweep a body the client draws. Nothing is persisted, because the hire is
+    not (a zone starts a fresh instance without it -- the deferred field
+    carry).
+
 Read-only of the tape; the batch itself is what the server sends. authsrv.py
-mirrors the two opcodes below as GAME_SMSG_PARTY_HENCHMAN_HIREABLE and
-GAME_SMSG_PLAYER_PARTY_SIZE; test_henchparty locks the pairs equal.
+mirrors the opcodes below as GAME_SMSG_PARTY_HENCHMAN_HIREABLE,
+GAME_SMSG_PLAYER_PARTY_SIZE and GAME_SMSG_PARTY_HENCHMAN_REMOVE;
+test_henchparty locks the pairs equal.
 """
 import os
 import sys
@@ -83,6 +118,12 @@ PLAYER_PARTY_SIZE = 0x00B0
 # 0x009F AGENT_PROPERTY_UPDATE_INT -- the int-property channel the displayed
 # level (agents.PROP_LEVEL) rides; authsrv's GAME_SMSG_AGENT_PROPERTY_UPDATE_INT.
 AGENT_PROPERTY_UPDATE_INT = 0x009F
+# 0x01C0 -- the roster-REMOVE mirror of 0x01BF: [party, agent], two words. The
+# client's worker 0x00858DE0 deletes the row whose first dword is the agent id
+# from the SAME stride-0x34 array 0x01BF's worker inserts into (the module
+# docstring, THE KICK). UPSTREAM name PARTY_HENCHMAN_REMOVE; the handler read
+# is ours. On no retail tape (0 of 96). authsrv's GAME_SMSG_PARTY_HENCHMAN_REMOVE.
+PARTY_HENCHMAN_REMOVE = 0x01C0
 
 
 def hireable_mark(agent_id):
@@ -134,6 +175,53 @@ def henchman_add_batch(party_id, player_number, party_size, agent_id,
         agents.party_henchman_add(party_id, agent_id, enc_name,
                                   profession, level),
     ]
+
+
+def henchman_kick_batch(party_id, player_number, party_size, agent_id):
+    """The reply to c2s 0x00A8 HENCHMAN_KICK: [0x01C0 row-remove, 0x00B0
+    size] -- ROW THEN SIZE, the hero kick's shape (0x01C3 then 0x00B0, the one
+    kick on any tape, OBSERVED n=1 on 20260916T150306). RECONSTRUCTION: no
+    tape carries a 0x00A8 or a 0x01C0 (0 of 96 live connections), so the
+    order is modelled, not measured; the two messages are the client's own
+    table operations (the module docstring, THE KICK) and 0x00B0 is the add's
+    own size message through agents.py's tested builder. `party_size` is the
+    party AFTER the kick. Each element is (op, vals, label)."""
+    if not isinstance(agent_id, int) or agent_id <= 0:
+        raise ValueError(
+            f"kicked agent_id {agent_id!r} must be a positive int -- it is the "
+            f"hired henchman's standing agent, 0x01BF's own second word")
+    if not isinstance(party_id, int) or party_id <= 0:
+        raise ValueError(
+            f"party_id {party_id!r} must be a positive int -- 0 means 'the own "
+            f"party' to the client's worker and is not the id 0x01BF declared")
+    return [
+        (PARTY_HENCHMAN_REMOVE, [int(party_id), int(agent_id)],
+         f"PARTY_HENCHMAN_REMOVE(party {party_id}, agent {agent_id}) "
+         f"[RECONSTRUCTION: the hero kick's row-then-size; on no retail tape]"),
+        (PLAYER_PARTY_SIZE,
+         agents.player_party_size(player_number, party_size),
+         f"PLAYER_PARTY_SIZE({party_size}) -- after the henchman kick"),
+    ]
+
+
+def kick_refusal(party, agent_id):
+    """Why a c2s 0x00A8 for `agent_id` is refused (a string), or None when it
+    is a hired henchman of `party` ({agent id: record}, the server's
+    state["party_henchmen"]). Nothing is sent for a refusal: retail's refusal
+    reply is NOT FOUND (no tape carries the request at all). A hireable
+    henchman that was never hired, a stranger, a hero's agent and the player's
+    own agent all fail the one test -- the roster row is the only thing the
+    reply removes, so an agent with no row has nothing to kick."""
+    try:
+        aid = int(agent_id)
+    except (TypeError, ValueError):
+        return f"agent {agent_id!r} is not an integer"
+    if aid <= 0:
+        return f"agent {aid} is not a positive agent id"
+    if aid not in (party or {}):
+        return (f"agent {aid} is not a hired henchman of this party "
+                f"{sorted(party or {})} -- no 0x01BF row to remove")
+    return None
 
 
 def party_is_full(member_count, cap):

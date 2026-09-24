@@ -5348,6 +5348,13 @@ GAME_SMSG_HERO_UNLINK = 0x0075
 # PARTY_HERO_ADD: RECV table 0x00bcb788, the SAME table 0x01C2 uses
 # (agents.party_hero_add's docstring), so this is medium-high.
 GAME_SMSG_PARTY_HERO_REMOVE = 0x01C3
+# 0x01C0 [party, agent] -- the roster-remove mirror of 0x01BF PARTY_HENCHMAN_ADD
+# (CLEANUP-3, 2026-09-24): handler 0x00856B30 in the SAME RECV table
+# 0x00bcb788, worker 0x00858DE0 deletes the row whose first dword is the agent
+# from the stride-0x34 array 0x01BF's worker 0x00858CB0 inserts into; an
+# unknown party or agent returns silently. UPSTREAM-named; the handler read is
+# ours (henchparty.py THE KICK). On no retail tape (0 of 96).
+GAME_SMSG_PARTY_HENCHMAN_REMOVE = 0x01C0
 # 0x00F8 [agent] -- the despawn sweep (studies/pvpui/FINDINGS.md 31.3,
 # skillcast 1004: it clears the agent's entry from seven per-agent containers).
 GAME_SMSG_AGENT_DESPAWN_SWEEP = 0x00F8
@@ -10562,6 +10569,13 @@ GAME_CMSG_HERO_UNNAMED_0017 = 0x0017
 # "is mine" flag bit 0x80 (0x01B2 sets it). No loopback arrival: this server
 # had no hireable outpost henchman to click until this step. handle_henchman_add.
 GAME_CMSG_HENCHMAN_ADD = 0x009F
+# CLEANUP-3 (2026-09-24): the party window's KICK on a hired henchman -- one
+# word, the hired henchman's agent id. Named on OUR client (CONFIRM-2 section 2
+# step 6: `a8 80 1f 00`, UNHANDLED until now; the UPSTREAM reading KICK_NPC
+# CORROBORATED); on NO retail tape (0 of 96). Send wrapper 0x0085BF50 on 38797,
+# one caller (0x0085A84A in 0x0085A820: asserts PyCliParty:1650 m_partyClient,
+# tests the "is mine" bit 0x80, removes no row itself). handle_henchman_kick.
+GAME_CMSG_HENCHMAN_KICK = 0x00A8
 # The message that MARKS an agent as a hireable henchman, so the party window's
 # henchman list offers it: the client's handler 0x0091E220 -> 0x008113D0
 # BINARY-SEARCH-INSERTS the agent id into a sorted dword set at
@@ -11997,6 +12011,27 @@ FIELD_PLAYER_WEAPONS_ENABLED = False  # True (--field-player-weapons): the load'
                                # withholds it, the 0x006E is the last hand
                                # write; that the shield then stands is the
                                # client run's to observe (UNVERIFIED).
+TOWN_ARMOUR_VISUALS_ENABLED = True  # False (--no-town-armour-visuals): an
+                               # equip, unequip or drag of an ARMOUR piece in
+                               # a TOWN plans no 0x006F at all -- every run
+                               # before CLEANUP-3 (2026-09-24): the planners
+                               # were handed visuals=instance_is_field(state),
+                               # so a town helm equip rode 0x014B alone and the
+                               # world body kept the old helm (measured on the
+                               # real handlers, the lane's scratch). Default
+                               # ON: the visuals are planned in BOTH regimes
+                               # (townweapon.visuals_planned) and the one gate,
+                               # visible_slot_writes, still DROPS the town's
+                               # hands (visuals 0/1) and zeroes a hidden kind.
+                               # RECONSTRUCTION for a town armour EQUIP: retail
+                               # writes armour visuals in an outpost -- the one
+                               # own-body outpost 0x006F on tape is the head's
+                               # ([336, 6, 23284], the PvP panel's creation
+                               # into equipped (843, 4), 20260917T160915
+                               # :58557) and 31 strangers' outpost armour
+                               # writes -- but no own outpost 0x0030 of an
+                               # armour piece is on any tape (the five outpost
+                               # equips are all weapons). townweapon.py.
 ITEM_MOVE_BY_ID_ENABLED = True  # False (--no-item-move-by-id): c2s 0x0072
                                # ITEM_MOVE_BY_ID -- a drag between two cells of
                                # the non-equipped bags -- is ignored, as on the
@@ -12058,6 +12093,16 @@ HENCHMAN_ADD_ENABLED = True    # False (--no-henchman-add): c2s 0x009F is ignore
                                # every standing henchman is one this server
                                # marked hireable, so what reaches us is an id we
                                # placed. handle_henchman_add.
+HENCHMAN_KICK_ENABLED = True   # False (--no-henchman-kick): c2s 0x00A8 is
+                               # ignored -- CONFIRM-2's picture (2026-09-24,
+                               # section 2 step 6: the Kick sends the word, the
+                               # row stays, UNHANDLED in the census). Default
+                               # ON: the reply is 0x01C0 [party, agent] then
+                               # 0x00B0 -- RECONSTRUCTION, the hero kick's
+                               # row-then-size; the client's 0x01C0 worker
+                               # removes the 0x01BF row and returns silently on
+                               # an unknown party or agent (henchparty.py THE
+                               # KICK). handle_henchman_kick.
 OUTPOST_PARTY_CAP = 4          # The party cap a henchman add AND a hero add
                                # refuse at. ONE CONSTANT for every served map,
                                # not a per-map read: it is the client's own
@@ -25355,6 +25400,56 @@ def handle_henchman_add(values, send, state, conn_id):
           f"joined the party; size now {size} [DESKWORK-D1]", flush=True)
 
 
+def handle_henchman_kick(values, send, state, conn_id):
+    """GAME_CMSG 0x00A8 HENCHMAN_KICK: the party window's Kick on a hired
+    henchman -- drop it from the party (CLEANUP-3, 2026-09-24).
+
+    THE REQUEST is named on OUR client (CONFIRM-2 section 2 step 6, run
+    20260924T090622: `a8 80 1f 00`, one word = the hired henchman's agent id,
+    the row kept until a reply): values[1] is that agent id. THE REPLY is
+    RECONSTRUCTION -- no retail tape carries 0x00A8 or 0x01C0 (0 of 96 live
+    connections) -- modelled on the one OBSERVED kick, the hero's (0x01C3 row
+    then 0x00B0 size, 20260916T150306): 0x01C0 [party 1, agent] then 0x00B0
+    PLAYER_PARTY_SIZE, henchparty.henchman_kick_batch. Read from the binary
+    (build 38797; henchparty.py THE KICK): the client's 0x01C0 worker
+    0x00858DE0 removes the row 0x01BF inserted from the same stride-0x34 array
+    and returns silently on an unknown party or agent; its party lookup is the
+    0x01C3 worker's own, and our 0x01C3 [1, ...] is CONFIRMED on the client,
+    so party id 1 resolves. The standing NPC is NOT destroyed (no 0x0021; the
+    add created no body) and it stays hireable, so the panel can re-add it.
+    No 0x0075 / 0x00F8 / 0x003E / 0x0145: those are the hero's agent-record
+    and container teardown; a 0x00F8 or 0x003E on a standing agent would sweep
+    a body the client draws.
+
+    THE REFUSALS send NOTHING (retail's refusal reply is NOT FOUND, as is the
+    request): a malformed request (no word) and an agent that is not a hired
+    henchman of this party -- a hireable that was never hired, a stranger, a
+    hero's agent, the player's own (henchparty.kick_refusal). Nothing is
+    persisted: the hire is not either (a zone starts a fresh instance without
+    it -- the deferred field carry), so a stored kick would outlive the thing
+    it kicked."""
+    if len(values) < 2:
+        print(f"[c{conn_id}] HENCHMAN_KICK refused: malformed request "
+              f"{list(values[1:])!r} -- the client sends one word, the agent id; "
+              f"nothing sent [CLEANUP-3]", flush=True)
+        return
+    party = state.setdefault("party_henchmen", {})
+    why = henchparty.kick_refusal(party, values[1])
+    if why is not None:
+        print(f"[c{conn_id}] HENCHMAN_KICK({values[1]!r}) refused: {why}; nothing "
+              f"sent (retail's refusal reply NOT FOUND) [CLEANUP-3]", flush=True)
+        return
+    aid = int(values[1])
+    hench = party.pop(aid)
+    size = party_size_on_wire(state)
+    for op, vals, label in henchparty.henchman_kick_batch(1, PLAYER_NUMBER, size, aid):
+        send(op, vals, label + " [HENCHMAN_KICK]")
+    print(f"[c{conn_id}] HENCHMAN_KICK: {hench.get('name', aid)} (agent {aid}) left "
+          f"the party; size now {size}; the NPC keeps standing and stays hireable "
+          f"(0x01C0 then 0x00B0 -- RECONSTRUCTION, the hero kick's shape; not "
+          f"persisted, as the hire is not) [CLEANUP-3]", flush=True)
+
+
 def hero_panel_bar_ids(state, hid, stored_bar=None):
     """The eight slots the hero PANEL shows -- 0x00DA's array for this hero:
     the STORED bar under --persist, else the row's own (an authored empty bar
@@ -25563,12 +25658,27 @@ def storage_bag_ids():
 def instance_is_field(state):
     """The 0x0199 is_explorable byte's own rule (INSTANCE_LOAD_INFO): --outpost
     forces a town, else --explorable or the map's content row. DESKWORK-D1 step
-    8 reads it for the item visuals: retail rode 0x006F on every own-agent equip
+    8 read it for the item visuals: retail rode 0x006F on every own-agent equip
     and unequip in a FIELD (7 of 7) and on none in an OUTPOST (0 of 5) --
-    itemstore.py's docstring, VISUALS."""
+    itemstore.py's docstring, VISUALS -- and those five outpost requests were
+    all HAND changes, so since CLEANUP-3 (2026-09-24) the planners ask
+    item_visuals_planned instead and the town's hands are dropped at the gate."""
     if OUTPOST:
         return False
     return bool(EXPLORABLE or map_explorable(state.get("map_id")))
+
+
+def item_visuals_planned(state):
+    """Does an equip / unequip / drag PLAN the player's 0x006F writes on this
+    connection? townweapon.visuals_planned: a field always (retail 7 of 7);
+    a town under TOWN_ARMOUR_VISUALS_ENABLED (the default -- CLEANUP-3,
+    2026-09-24, RECONSTRUCTION from retail's outpost armour writes: the own
+    PvP head, 31 strangers'), where visible_slot_writes then DROPS the hands
+    (retail's 0 of 14 outpost hand changes) and zeroes a hidden kind, so what
+    reaches the wire in a town is the armour's write alone. --no-town-armour-
+    visuals is the pre-CLEANUP-3 arm: nothing planned in a town."""
+    return townweapon.visuals_planned(instance_is_field(state),
+                                      town_armour=TOWN_ARMOUR_VISUALS_ENABLED)
 
 
 def item_hands_of_type():
@@ -25922,7 +26032,7 @@ def handle_item_move(values, send, state, conn_id):
     batch, changes, why = itemstore.plan_move(
         state["items"], player_bags(), src, bag, slot, key=PLAYER_INVENTORY_KEY,
         equipped_bag=EQUIPPED_BAG_ID, agent=PLAYER_AGENT_ID,
-        visuals=instance_is_field(state), visual_of=item_visual_of(),
+        visuals=item_visuals_planned(state), visual_of=item_visual_of(),
         reserved_cells=reserved_backpack_cells(state))   # the fix pass, ENG-B3
     if why is not None:
         print(f"[c{conn_id}] ITEM_MOVE(slot {src} -> bag {bag} slot {slot}) refused: "
@@ -25951,7 +26061,7 @@ def handle_equip_item(values, send, state, conn_id):
     batch, changes, why = itemstore.plan_equip(
         state["items"], player_bags(), item_id, key=PLAYER_INVENTORY_KEY,
         equipped_bag=EQUIPPED_BAG_ID, backpack_bag=BACKPACK_BAG_ID,
-        agent=PLAYER_AGENT_ID, visuals=instance_is_field(state),
+        agent=PLAYER_AGENT_ID, visuals=item_visuals_planned(state),
         hands_of_type=item_hands_of_type(), visual_of=item_visual_of(),
         bag_slot_of_type=item_bag_slot_table(),
         reserved_cells=reserved_backpack_cells(state))   # the fix pass, ENG-B3
@@ -25989,7 +26099,7 @@ def handle_item_move_by_id(values, send, state, conn_id):
     batch, changes, why = itemstore.plan_move_by_id(
         state["items"], player_bags(), item_id, bag, slot, key=PLAYER_INVENTORY_KEY,
         equipped_bag=EQUIPPED_BAG_ID, backpack_bag=BACKPACK_BAG_ID,
-        agent=PLAYER_AGENT_ID, visuals=instance_is_field(state),
+        agent=PLAYER_AGENT_ID, visuals=item_visuals_planned(state),
         hands_of_type=item_hands_of_type(), visual_of=item_visual_of(),
         bag_slot_of_type=item_bag_slot_table(),
         reserved_cells=reserved_backpack_cells(state),
@@ -26066,13 +26176,21 @@ def visible_slot_writes(batch, state, conn_id=None):
         return list(batch)
     flags = int(state.get("vis_flags", visstatus.DEFAULT_FLAGS))
     field = instance_is_field(state)
-    out, hid, dropped = [], [], []
+    out, hid, dropped, town_armour = [], [], [], []
     for op, vals, label in batch:
         mine = (op == GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT and len(vals) >= 3
                 and int(vals[0]) == PLAYER_AGENT_ID)
         if mine and TOWN_WEAPON_STRIP_ENABLED and townweapon.drops(vals[1], field):
             dropped.append((int(vals[1]), int(vals[2])))
             continue
+        if mine and not field and int(vals[1]) not in townweapon.HAND_SLOTS:
+            # CLEANUP-3 (2026-09-24): a TOWN armour visual reaches the wire
+            # (townweapon.visuals_planned) -- the label says what it rests on.
+            town_armour.append((int(vals[1]), int(vals[2])))
+            label = (label + " [a town's armour visual -- RECONSTRUCTION: retail "
+                             "writes outpost armour 0x006F (the own PvP head, 31 "
+                             "strangers'); no own outpost armour EQUIP is on tape; "
+                             "CLEANUP-3]")
         if mine and VISIBILITY_STATUS_ENABLED:
             writes, h = visstatus.filter_slot_writes([(vals[1], vals[2])], flags, field)
             slot, item = writes[0]
@@ -26096,6 +26214,15 @@ def visible_slot_writes(batch, state, conn_id=None):
                           for s, i in dropped)
               + " is not sent -- a town; retail sent none on 14 of 14 outpost hand "
                 "changes, the field's switches all carry one [DESKWORK-D1, OBSERVED]",
+              flush=True)
+    if town_armour and conn_id is not None:
+        print(f"[c{conn_id}] TOWN ARMOUR: the body's 0x006F for "
+              + ", ".join(f"visual {s} ({f'item {i}' if i else 'emptied'})"
+                          for s, i in town_armour)
+              + " goes out in a town -- retail writes outpost armour visuals (the "
+                "one own-body outpost 0x006F on tape is the PvP panel's head "
+                "[336, 6, 23284]; 31 strangers'), no own outpost armour EQUIP is on "
+                "tape; --no-town-armour-visuals plans none [CLEANUP-3, RECONSTRUCTION]",
               flush=True)
     return out
 
@@ -33336,6 +33463,16 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         else:
                             print(f"[c{conn_id}] HENCHMAN_ADD ignored "
                                   f"(--no-henchman-add) [DESKWORK-D1]", flush=True)
+                    elif opcode == GAME_CMSG_HENCHMAN_KICK:
+                        # CLEANUP-3: the party window's Kick on a hired
+                        # henchman. Named on our client (CONFIRM-2 step 6);
+                        # the reply 0x01C0 + 0x00B0 is RECONSTRUCTION, on no
+                        # retail tape (henchparty.py THE KICK).
+                        if HENCHMAN_KICK_ENABLED:
+                            handle_henchman_kick(values, send, state, conn_id)
+                        else:
+                            print(f"[c{conn_id}] HENCHMAN_KICK ignored "
+                                  f"(--no-henchman-kick) [CLEANUP-3]", flush=True)
                     elif opcode == GAME_CMSG_SET_CHAR_VISIBILITY_FLAGS:
                         # The owner's answer (2026-09-23): the inventory
                         # panel's DISPLAY MODE drop-down. On no retail tape;
@@ -37498,6 +37635,15 @@ def main():
               "message's ZERO off hand is the last hand write into the client's one store, so "
               "a sword-and-shield load draws the sword and NO shield (run 20260923T154229).",
               flush=True)
+    if a.no_town_armour_visuals:
+        global TOWN_ARMOUR_VISUALS_ENABLED
+        TOWN_ARMOUR_VISUALS_ENABLED = False
+        print("[items] --no-town-armour-visuals: an equip, unequip or drag of an ARMOUR "
+              "piece in a TOWN plans no 0x006F -- 0x014B / 0x0152 alone, the world body "
+              "keeping the old piece -- every run before CLEANUP-3 (2026-09-24). "
+              "KNOWN-BAD against retail's outpost armour writes (the own PvP head, 31 "
+              "strangers'); the hands were never at issue (dropped at the gate either way).",
+              flush=True)
     if a.no_load_purse:
         global LOAD_PURSE_ENABLED
         LOAD_PURSE_ENABLED = False
@@ -37540,6 +37686,14 @@ def main():
               "no standing henchman is marked hireable (no 0x0071) -- the party "
               "window's Add Henchman does nothing, the behaviour before "
               "DESKWORK-D1 step 5.", flush=True)
+    if a.no_henchman_kick:
+        global HENCHMAN_KICK_ENABLED
+        HENCHMAN_KICK_ENABLED = False
+        print("[party] --no-henchman-kick: c2s 0x00A8 HENCHMAN_KICK is ignored -- "
+              "the party window's Kick on a hired henchman sends its word and the "
+              "row stays (UNHANDLED in the census), CONFIRM-2's picture "
+              "(2026-09-24, section 2 step 6) and every run before CLEANUP-3.",
+              flush=True)
     if a.henchman_cap is not None:
         global OUTPOST_PARTY_CAP
         if int(a.henchman_cap) < 1:

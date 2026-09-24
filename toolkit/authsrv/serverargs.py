@@ -951,6 +951,19 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "observe (UNVERIFIED until it). The bag, the doll, the 0x006E's hands "
                          "and send_attack_speed's interval are untouched. "
                          "townweapon.player_weapons_sent.")
+    ap.add_argument("--no-town-armour-visuals", action="store_true",
+                    help="THE REVERT ARM for CLEANUP-3's town armour (2026-09-24): an "
+                         "equip, unequip or drag of an ARMOUR piece in a TOWN plans no "
+                         "0x006F -- 0x014B / 0x0152 alone, the world body keeping the old "
+                         "piece while the doll changes -- every run before that day (the "
+                         "planners were handed visuals=instance_is_field). The default "
+                         "plans the visual in both regimes (townweapon.visuals_planned) and "
+                         "the one gate, visible_slot_writes, still drops the town's hands "
+                         "and zeroes a hidden kind, so a town helm equip sends 0x014B + "
+                         "0x006F [player, 6, item]. RECONSTRUCTION: retail writes outpost "
+                         "armour visuals (the own PvP head [336, 6, 23284], 31 strangers') "
+                         "but no own outpost 0x0030 of an armour piece is on any tape. "
+                         "KNOWN-BAD arm.")
     ap.add_argument("--no-load-purse", action="store_true",
                     help="THE REVERT ARM for DESKWORK-D9's LOAD PURSE: the "
                          "instance load sends no 0x0140 carried-gold credit, as "
@@ -1037,6 +1050,18 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "henchman, one already in the party and one that would put "
                          "the party over the map's cap (--henchman-cap) are refused "
                          "with nothing sent (retail's refusal reply NOT FOUND).")
+    ap.add_argument("--no-henchman-kick", action="store_true",
+                    help="THE REVERT ARM for CLEANUP-3 (2026-09-24): ignore c2s 0x00A8 "
+                         "HENCHMAN_KICK -- the party window's Kick on a hired henchman "
+                         "sends its word and the row stays, CONFIRM-2's picture "
+                         "(section 2 step 6). The default answers it with 0x01C0 "
+                         "PARTY_HENCHMAN_REMOVE [party, agent] then 0x00B0 "
+                         "PLAYER_PARTY_SIZE -- RECONSTRUCTION, the hero kick's "
+                         "row-then-size (no retail tape carries the request or the "
+                         "reply); the client's 0x01C0 worker removes the 0x01BF row "
+                         "(henchparty.py). The standing NPC keeps standing and can be "
+                         "re-hired; an agent that is not a hired henchman is refused "
+                         "with nothing sent. Not persisted, as the hire is not.")
     ap.add_argument("--henchman-cap", type=int, default=None, metavar="N",
                     help="Override the party cap the henchman add AND the hero add "
                          "refuse at (DESKWORK-D1 step 5). The default is a CONSTANT "

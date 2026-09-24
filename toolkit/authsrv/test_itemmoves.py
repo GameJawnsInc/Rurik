@@ -68,8 +68,9 @@ docstring for the tapes).
   * §4 THE SERVER: item_layout_begin's default layout is the constants' and
     itemstore.worn_array over it equals the 0x006E fill the load path built
     before this step; --outpost wins over --explorable (ENG-M3); the real
-    handlers with a fake send in a field and in a town (the visual rides the
-    field only); the DAMAGE MODEL follows the store (a head in the backpack
+    handlers with a fake send in a field and in a town (the ARMOUR's visual
+    rides both since CLEANUP-3, 2026-09-24, with --no-town-armour-visuals the
+    KNOWN-BAD town arm); the DAMAGE MODEL follows the store (a head in the backpack
     leaves a bare location, ENG-B5); the hands mirror (a weapon moved out
     empties SET_ITEMS_OVERRIDE[0] and says so; equipped back, the swing model
     follows while the LAUNCH RECORDS stand, ENG-B4; a set switch after an
@@ -113,7 +114,7 @@ import charstore                                             # noqa: E402
 import itemstore                                             # noqa: E402
 import authsrv                                               # noqa: E402
 
-led = checks.Ledger("inventory moves (DESKWORK-D1 step 8)", floor=159)   # 2026-09-23, from the green run with RURIK_VAULT pointed at an empty directory: the bare-machine core (78 -> 102 at the fix pass -> 137 at the owner's confirmation pass -> 159 at its fix pass); §1b's 17 and §1c's 8 ride the vault (184 vaulted)
+led = checks.Ledger("inventory moves (DESKWORK-D1 step 8)", floor=160)   # 2026-09-24 (CLEANUP-3, the town armour: +1, the KNOWN-BAD arm beside the re-cut town check), from the green run with RURIK_VAULT pointed at an empty directory: the bare-machine core (78 -> 102 at the fix pass -> 137 at the owner's confirmation pass -> 159 at its fix pass -> 160); §1b's 17 and §1c's 8 ride the vault (185 vaulted)
 
 CHG, SWAP, VIS = 0x014B, 0x0152, 0x006F
 MOVE, EQUIP = authsrv.GAME_CMSG_ITEM_MOVE, authsrv.GAME_CMSG_EQUIP_ITEM
@@ -639,14 +640,29 @@ try:
            or authsrv.player_armour_at("warrior_head", state=st) not in (None, 0.0),
            "...and equipped back, the head protects again",
            f"{authsrv.player_armour_at('warrior_head', state=st)}")
-    # the same two in a TOWN: no visual
+    # the same two in a TOWN: the ARMOUR's visual rides there too since CLEANUP-3
+    # (2026-09-24; townweapon.visuals_planned -- retail's rule is the SLOT: outpost
+    # armour 0x006F are on tape, outpost hand 0x006F are not, and the five outpost
+    # own-agent requests this check used to cite were all HAND changes).
     authsrv.EXPLORABLE, authsrv.OUTPOST = False, True
+    _saved_tav = authsrv.TOWN_ARMOUR_VISUALS_ENABLED
+    authsrv.TOWN_ARMOUR_VISUALS_ENABLED = True
     sent3, send3 = fake_send_factory()
     authsrv.handle_item_move([MOVE, HEAD_BAG, BP, 1], send3, st, 0)
     authsrv.handle_equip_item([EQUIP, 7], send3, st, 0)
-    led.ok(sent3 == [(CHG, [1, 7, BP, 1]), (CHG, [1, 7, EQ, HEAD_BAG])],
-           "in a TOWN (--outpost) the same move and equip send the 0x014B rows and NO 0x006F "
-           "(retail: 0 of 5 own-agent visuals in outposts)", f"{sent3}")
+    led.ok(sent3 == [(CHG, [1, 7, BP, 1]), (VIS, [authsrv.PLAYER_AGENT_ID, 6, 0]),
+                     (CHG, [1, 7, EQ, HEAD_BAG]), (VIS, [authsrv.PLAYER_AGENT_ID, 6, 7])],
+           "in a TOWN (--outpost) the same move and equip of the HEAD send the 0x014B rows AND the "
+           "0x006F [player, 6, x] (CLEANUP-3: retail writes outpost armour visuals -- the own PvP "
+           "head, 31 strangers'; RECONSTRUCTION for the equip)", f"{sent3}")
+    authsrv.TOWN_ARMOUR_VISUALS_ENABLED = False
+    sent3k, send3k = fake_send_factory()
+    authsrv.handle_item_move([MOVE, HEAD_BAG, BP, 1], send3k, st, 0)
+    authsrv.handle_equip_item([EQUIP, 7], send3k, st, 0)
+    led.ok(sent3k == [(CHG, [1, 7, BP, 1]), (CHG, [1, 7, EQ, HEAD_BAG])],
+           "KNOWN-BAD (--no-town-armour-visuals): the town move and equip send the 0x014B rows and NO "
+           "0x006F -- every run before CLEANUP-3", f"{sent3k}")
+    authsrv.TOWN_ARMOUR_VISUALS_ENABLED = _saved_tav
     authsrv.EXPLORABLE, authsrv.OUTPOST = True, False
     # refusals through the handler send nothing
     sent4, send4 = fake_send_factory()

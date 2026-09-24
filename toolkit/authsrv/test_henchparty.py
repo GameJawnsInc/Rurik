@@ -58,6 +58,28 @@ WHAT THIS PINS.
     edits the extracted function's text, so the lock is re-run on the text it
     would see.
 
+  * THE KICK (CLEANUP-3, 2026-09-24; henchparty.py THE KICK): §1k the batch
+    `henchman_kick_batch` is 0x01C0 [party, agent] THEN 0x00B0 -- row before
+    size, the hero kick's shape, RECONSTRUCTION (no tape carries it), encoded
+    through the codec to the schema's 6 + 5 bytes; the KNOWN-BAD arm is the
+    add's size-then-row through the same encoder; the builder refuses agent 0
+    and party 0 (0 means 'the own party' to the client's worker). §2 (g)-(k)
+    the real `handle_henchman_kick`: a hired henchman's kick sends exactly
+    0x01C0 [1, agent] then 0x00B0, the henchman leaves the party, the standing
+    NPC stays (no 0x0021), stays hireable and can be re-added; six refusals
+    (never hired, a stranger, malformed, a hero's agent, zero, a non-int) and a
+    second kick send NOTHING; with a hero and two henchmen (4 of 4) a kick's
+    0x00B0 says 3 and the freed slot takes the third henchman; under
+    --party-size-no-heroes the kick's 0x00B0 leaves the hero out while the cap
+    counts it; under --persist with an opaque store attached the handler
+    touches it not at all (the hire is not persisted, so neither is the kick).
+    §4 locks: the 0x00A8 arm gated on HENCHMAN_KICK_ENABLED; main() wires
+    --no-henchman-kick through a `global`; handle_henchman_kick refuses through
+    kick_refusal, pops the party, sizes through party_size_on_wire and sends
+    henchman_kick_batch, and names no store; serverargs.py declares the flag;
+    0x00A8 is OFF the DROPPED_ON_PURPOSE allowlist; the leaf's 0x01C0 equals
+    authsrv's. Each lock with a mutation that reddens it.
+
 Floor = the bare-machine core, measured with RURIK_VAULT pointed at an empty
 directory (§1 and the two accepting hero adds declare skips there); the vault
 adds 15.
@@ -79,7 +101,7 @@ import henchparty                                            # noqa: E402
 import authsrv                                               # noqa: E402
 import livewire                                              # noqa: E402
 
-led = checks.Ledger("henchman add (DESKWORK-D1 step 5)", floor=49)
+led = checks.Ledger("henchman add (DESKWORK-D1 step 5)", floor=79)   # 2026-09-24 (CLEANUP-3, the kick): the bare-machine core from the green run with RURIK_VAULT pointed at an empty directory (49 before; +30: the kick batch and its refusals, the handler's (g)-(k), the locks and their mutations); the vault adds 15 (94 vaulted)
 
 COD = codecmod.Codec()
 SRC_PATH = os.path.join(HERE, "authsrv.py")
@@ -136,6 +158,37 @@ else:
     led.skip("§1 tape replay", f"{CAPTURE} {CONN} not in the vault")
 
 
+# -- §1k the KICK batch (bare-machine: no tape carries it) -------------------
+kb = henchparty.henchman_kick_batch(1, 14, 1, 4)
+led.ok([op for op, _v, _l in kb] == [0x01C0, 0x00B0] and kb[0][1] == [1, 4] and kb[1][1] == [14, 1]
+       and "RECONSTRUCTION" in kb[0][2],
+       "(§1k) the kick batch is 0x01C0 [party 1, agent 4] THEN 0x00B0 [player 14, size 1] -- row "
+       "before size, the hero kick's shape, labelled RECONSTRUCTION (no tape carries it)",
+       f"{[(hex(o), v) for o, v, _l in kb]}")
+wire_k = encode_batch(kb)
+led.ok(len(wire_k) == 11 and wire_k[:6] == bytes.fromhex("c001" "0100" "0400")
+       and wire_k[6:] == bytes.fromhex("b000" "0e00" "01"),
+       "(§1k) ...it encodes through the codec: 0x01C0 is the schema's 6 bytes (header + two words) "
+       "and 0x00B0 its 5 (header + word + byte), 11 in all", f"{wire_k.hex()}")
+led.ok(encode_batch([kb[1], kb[0]]) != wire_k,
+       "(§1k) KNOWN-BAD: the add's shape (size before row) through the same encoder differs")
+for bad_args in ((1, 14, 1, 0), (0, 14, 1, 4), (1, 14, 1, -3)):
+    try:
+        henchparty.henchman_kick_batch(*bad_args)
+        led.ok(False, f"(§1k) henchman_kick_batch{bad_args} is refused")
+    except ValueError:
+        led.ok(True, f"(§1k) henchman_kick_batch{bad_args} is refused (agent 0 / party 0 / a negative "
+                     f"agent: 0 means 'the own party' to the client's worker, not our declared id)")
+led.ok(henchparty.kick_refusal({4: {}}, 4) is None
+       and henchparty.kick_refusal({4: {}}, 2) is not None
+       and henchparty.kick_refusal({}, 4) is not None
+       and henchparty.kick_refusal({4: {}}, 0) is not None
+       and henchparty.kick_refusal({4: {}}, "x") is not None
+       and henchparty.kick_refusal(None, 4) is not None,
+       "(§1k) kick_refusal: a hired henchman passes; an unhired agent, an empty party, zero, a "
+       "non-int and no party at all are each refused with a reason")
+
+
 # -- §2 the real handlers ----------------------------------------------------
 def fake_send():
     sent = []
@@ -169,9 +222,10 @@ def hero_add_or_skip(what, send, state):
 
 ADD, KICK = authsrv.GAME_CMSG_HENCHMAN_ADD, authsrv.GAME_CMSG_HERO_KICK
 HADD = authsrv.GAME_CMSG_HERO_ADD
+KICKH = authsrv.GAME_CMSG_HENCHMAN_KICK
 
 _saved = {k: getattr(authsrv, k) for k in
-          ("HERO_IDS", "HENCHMAN", "PLAYER_NUMBER", "HENCHMAN_ADD_ENABLED",
+          ("HERO_IDS", "HENCHMAN", "PLAYER_NUMBER", "HENCHMAN_ADD_ENABLED", "HENCHMAN_KICK_ENABLED",
            "OUTPOST_PARTY_CAP", "PARTY_SIZE_COUNTS_HEROES", "HERO_AGENT_ID",
            "PERSIST", "HERO_KICK_ENABLED", "HERO_ADD_ENABLED", "RESET_HERO_KICKS",
            "PARTY_COMMANDS", "HERO_BAGS", "HERO_INVENTORY", "HERO_CHAR",
@@ -182,6 +236,7 @@ try:
     authsrv.HENCHMAN = None
     authsrv.PLAYER_NUMBER = 14
     authsrv.HENCHMAN_ADD_ENABLED = True
+    authsrv.HENCHMAN_KICK_ENABLED = True
     authsrv.OUTPOST_PARTY_CAP = 4
     authsrv.PARTY_SIZE_COUNTS_HEROES = True
     # the commander rig the hero kick/add are armed for (test_heroadd's own
@@ -333,13 +388,94 @@ try:
     authsrv.PARTY_SIZE_COUNTS_HEROES = True
     authsrv.HERO_IDS = []
 
+    # (g) THE KICK (CLEANUP-3): hire 4, kick 4 -> 0x01C0 [1, 4] then 0x00B0 [14, 1];
+    #     the henchman out of the party, the NPC still standing and hireable, re-addable.
+    sent, send = fake_send()
+    st = seeded(HENCH)
+    authsrv.handle_henchman_add([ADD, 4], send, st, 0)
+    sent.clear()
+    authsrv.handle_henchman_kick([KICKH, 4], send, st, 0)
+    led.ok(ops_of(sent) == [0x01C0, 0x00B0] and sent[0][1] == [1, 4] and sizes_of(sent) == [1],
+           "(g) kicking the hired henchman sends exactly 0x01C0 [party 1, agent 4] then 0x00B0 "
+           "[player 14, 1] -- row then size, the hero kick's shape (RECONSTRUCTION)",
+           f"{[(hex(o), v) for o, v in sent]}")
+    led.ok(4 not in st["party_henchmen"] and 4 in st["agents"] and 4 in st["hireable_henchmen"]
+           and 0x0021 not in ops_of(sent) and authsrv.party_member_count(st) == 1,
+           "(g) ...the henchman leaves the party (count 1), the standing NPC stays in the world "
+           "(no 0x0021) and stays hireable")
+    sent.clear()
+    authsrv.handle_henchman_add([ADD, 4], send, st, 0)
+    led.ok(ops_of(sent) == [0x00B0, 0x01BF] and sizes_of(sent) == [2] and 4 in st["party_henchmen"],
+           "(g) ...and can be hired again: the add goes through, size 2", f"{sizes_of(sent)}")
+
+    # (h) refusals send NOTHING and leave the party alone.
+    sent, send = fake_send()
+    st = seeded(HENCH)
+    authsrv.handle_henchman_add([ADD, 4], send, st, 0)
+    n = len(sent)
+    authsrv.handle_henchman_kick([KICKH, 2], send, st, 0)        # hireable, never hired
+    authsrv.handle_henchman_kick([KICKH, 99], send, st, 0)       # a stranger
+    authsrv.handle_henchman_kick([KICKH], send, st, 0)           # malformed: no word
+    authsrv.handle_henchman_kick([KICKH, 200], send, st, 0)      # the hero's agent
+    authsrv.handle_henchman_kick([KICKH, 0], send, st, 0)        # zero
+    authsrv.handle_henchman_kick([KICKH, "x"], send, st, 0)      # not an int
+    led.ok(len(sent) == n and sorted(st["party_henchmen"]) == [4] and 2 in st["hireable_henchmen"],
+           "(h) six refusals -- a hireable never hired, a stranger, a malformed request, the "
+           "hero's agent, zero, a non-int -- send NOTHING and the party is untouched",
+           f"sent {len(sent) - n} more")
+    authsrv.handle_henchman_kick([KICKH, 4], send, st, 0)
+    m = len(sent)
+    authsrv.handle_henchman_kick([KICKH, 4], send, st, 0)
+    led.ok(m == n + 2 and len(sent) == m and not st["party_henchmen"],
+           "(h) a second kick of the same henchman is refused, nothing more sent")
+
+    # (i) the count: a hero and two henchmen (4 of 4); kick one -> 0x00B0 says 3;
+    #     the freed slot takes the third henchman.
+    authsrv.HERO_IDS = [6]
+    sent, send = fake_send()
+    st = seeded(HENCH)
+    for a in (4, 2):
+        authsrv.handle_henchman_add([ADD, a], send, st, 0)
+    sent.clear()
+    authsrv.handle_henchman_kick([KICKH, 4], send, st, 0)
+    led.ok(sizes_of(sent) == [3] and authsrv.party_member_count(st) == 3,
+           "(i) with a hero and two henchmen (4 of 4), kicking one henchman: 0x00B0 says 3 "
+           "(player + hero + 1) -- the ONE count", f"sizes {sizes_of(sent)}")
+    sent.clear()
+    authsrv.handle_henchman_add([ADD, 6], send, st, 0)
+    led.ok(sizes_of(sent) == [4] and authsrv.party_member_count(st) == 4,
+           "(i) ...and the freed slot takes the third henchman: 4 of 4 again", f"{sizes_of(sent)}")
+    # (j) --party-size-no-heroes: the kick's wire size leaves the hero out, the cap counts it.
+    authsrv.PARTY_SIZE_COUNTS_HEROES = False
+    sent.clear()
+    authsrv.handle_henchman_kick([KICKH, 2], send, st, 0)
+    led.ok(sizes_of(sent) == [2] and authsrv.party_member_count(st) == 3,
+           "(j) --party-size-no-heroes: the kick's 0x00B0 says 2 (player + one henchman, the "
+           "hero left out as at load) while the count is 3", f"sizes {sizes_of(sent)}")
+    authsrv.PARTY_SIZE_COUNTS_HEROES = True
+    authsrv.HERO_IDS = []
+    # (k) not persisted: under --persist with an OPAQUE store attached, the handler
+    #     touches it not at all (any method call would raise AttributeError).
+    authsrv.PERSIST = True
+    sent, send = fake_send()
+    st = seeded(HENCH, charstore_game=object())
+    authsrv.handle_henchman_add([ADD, 4], send, st, 0)
+    sent.clear()
+    authsrv.handle_henchman_kick([KICKH, 4], send, st, 0)
+    led.ok(ops_of(sent) == [0x01C0, 0x00B0] and not st["party_henchmen"],
+           "(k) under --persist with a store attached the kick writes nothing to it (an opaque "
+           "object would raise): the hire is not persisted, so neither is the kick")
+    authsrv.PERSIST = False
+
     led.ok(henchparty.party_is_full(4, 4) and not henchparty.party_is_full(3, 4),
            "party_is_full: 4/4 full, 3/4 not -- the boundary the cap refuses on")
     led.ok(authsrv.GAME_SMSG_PARTY_HENCHMAN_HIREABLE == henchparty.HENCHMAN_HIREABLE == 0x0071
            and authsrv.GAME_SMSG_PLAYER_PARTY_SIZE == henchparty.PLAYER_PARTY_SIZE == 0x00B0
-           and authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT == henchparty.AGENT_PROPERTY_UPDATE_INT == 0x009F,
-           "the leaf's three opcode constants equal authsrv's (one value per opcode, "
-           "0x0071 / 0x00B0 / 0x009F)")
+           and authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT == henchparty.AGENT_PROPERTY_UPDATE_INT == 0x009F
+           and authsrv.GAME_SMSG_PARTY_HENCHMAN_REMOVE == henchparty.PARTY_HENCHMAN_REMOVE == 0x01C0
+           and authsrv.GAME_CMSG_HENCHMAN_KICK == 0x00A8,
+           "the leaf's four opcode constants equal authsrv's (one value per opcode, "
+           "0x0071 / 0x00B0 / 0x009F / 0x01C0) and the kick's c2s is 0x00A8")
 
     # -- §3 the spawn wiring -------------------------------------------------
     class _Mesh:
@@ -433,7 +569,10 @@ TREE = ast.parse(SRC)
 FUNCS = {n.name: (ast.get_source_segment(SRC, n) or "")
          for n in ast.walk(TREE) if isinstance(n, ast.FunctionDef)
          and n.name in ("main", "spawn_population", "handle_henchman_add",
-                        "handle_hero_kick", "handle_hero_add", "party_size_on_wire")}
+                        "handle_hero_kick", "handle_hero_add", "party_size_on_wire",
+                        "handle_henchman_kick")}
+with open(os.path.join(HERE, "serverargs.py"), encoding="utf-8") as _fh:
+    ARGS = _fh.read()
 
 
 def _mut(text, old, new):
@@ -493,15 +632,73 @@ def lock_allowlist(dropped):
     return 0x009F not in dropped
 
 
+# THE KICK's locks (CLEANUP-3)
+def lock_kick_arm(src):
+    at = src.find("elif opcode == GAME_CMSG_HENCHMAN_KICK:")
+    arm = src[at:at + 500] if at >= 0 else ""
+    return (at >= 0 and "if HENCHMAN_KICK_ENABLED:" in arm
+            and "handle_henchman_kick(values, send, state, conn_id)" in arm
+            and src.count("def handle_henchman_kick(") == 1
+            and "GAME_CMSG_HENCHMAN_KICK = 0x00A8" in src)
+
+
+def lock_main_kick(m):
+    return ("a.no_henchman_kick" in m and "HENCHMAN_KICK_ENABLED = False" in m
+            and "global HENCHMAN_KICK_ENABLED" in m)
+
+
+KICK_REFUSAL = "henchparty.kick_refusal(party, values[1])"
+KICK_BATCH = "henchparty.henchman_kick_batch(1, PLAYER_NUMBER, size, aid)"
+
+
+def lock_hench_kick(s):
+    return (KICK_REFUSAL in s and "hench = party.pop(aid)" in s
+            and "size = party_size_on_wire(state)" in s and KICK_BATCH in s
+            and "charstore" not in s and "set_hero_kicked" not in s
+            and 'state.setdefault("party_henchmen"' in s)
+
+
+def lock_kick_allowlist(dropped):
+    return 0x00A8 not in dropped
+
+
 # the arm's gate: mutate the first "if HENCHMAN_ADD_ENABLED:" AFTER the anchor.
 _at = SRC.find("elif opcode == GAME_CMSG_HENCHMAN_ADD:")
 _g = SRC.find("if HENCHMAN_ADD_ENABLED:", _at) if _at >= 0 else -1
 MUT_ARM = (SRC[:_g] + "if True:" + SRC[_g + len("if HENCHMAN_ADD_ENABLED:"):]) if _g >= 0 else SRC
+_atk = SRC.find("elif opcode == GAME_CMSG_HENCHMAN_KICK:")
+_gk = SRC.find("if HENCHMAN_KICK_ENABLED:", _atk) if _atk >= 0 else -1
+MUT_KICK_ARM = (SRC[:_gk] + "if True:" + SRC[_gk + len("if HENCHMAN_KICK_ENABLED:"):]) if _gk >= 0 else SRC
 
-M, SP, HA, HK, HD, PW = (FUNCS.get(k, "") for k in
-                          ("main", "spawn_population", "handle_henchman_add",
-                           "handle_hero_kick", "handle_hero_add", "party_size_on_wire"))
+M, SP, HA, HK, HD, PW, HKK = (FUNCS.get(k, "") for k in
+                               ("main", "spawn_population", "handle_henchman_add",
+                                "handle_hero_kick", "handle_hero_add", "party_size_on_wire",
+                                "handle_henchman_kick"))
 LOCKS = [
+    ("the 0x00A8 arm exists, is gated on HENCHMAN_KICK_ENABLED, calls the handler once, and the "
+     "constant is 0x00A8 (CLEANUP-3)",
+     lock_kick_arm, SRC, [("the gate removed", MUT_KICK_ARM),
+                          ("the constant renumbered", _mut(SRC, "GAME_CMSG_HENCHMAN_KICK = 0x00A8",
+                                                            "GAME_CMSG_HENCHMAN_KICK = 0x00A9"))]),
+    ("main() reads --no-henchman-kick and turns the arm off through a `global`",
+     lock_main_kick, M,
+     [("the assignment inverted", _mut(M, "HENCHMAN_KICK_ENABLED = False",
+                                       "HENCHMAN_KICK_ENABLED = True")),
+      ("the global dropped", _mut(M, "global HENCHMAN_KICK_ENABLED", "pass"))]),
+    ("handle_henchman_kick refuses through kick_refusal, pops the party, sizes through "
+     "party_size_on_wire, sends henchman_kick_batch and names no store",
+     lock_hench_kick, HKK,
+     [("the refusal removed", _mut(HKK, KICK_REFUSAL, "None")),
+      ("the pop made a get", _mut(HKK, "hench = party.pop(aid)", "hench = party.get(aid)")),
+      ("the size taken from the count", _mut(HKK, "size = party_size_on_wire(state)",
+                                              "size = party_member_count(state)")),
+      ("a store write added", HKK.replace("hench = party.pop(aid)",
+                                          "hench = party.pop(aid)\n    "
+                                          "state['charstore_game'].set_hero_kicked(0, aid)", 1))]),
+]
+led.ok('"--no-henchman-kick"' in ARGS and ARGS.index('"--no-henchman-kick"') > ARGS.index('"--no-henchman-add"'),
+       "LOCK: serverargs.py declares --no-henchman-kick, beside --no-henchman-add")
+LOCKS += [
     ("the 0x009F arm exists, is gated on HENCHMAN_ADD_ENABLED, and calls the handler once",
      lock_arm, SRC, [("the gate removed", MUT_ARM)]),
     ("main() reads --no-henchman-add and turns the arm off",
@@ -551,5 +748,9 @@ led.ok(lock_allowlist(test_dispatch.DROPPED_ON_PURPOSE),
        "on the allowlist would silently re-permit the drop (test_dispatch section 7)")
 led.ok(not lock_allowlist(set(test_dispatch.DROPPED_ON_PURPOSE) | {0x009F}),
        "KNOWN-BAD: 0x009F back on the allowlist reddens the lock")
+led.ok(lock_kick_allowlist(test_dispatch.DROPPED_ON_PURPOSE),
+       "LOCK: 0x00A8 HENCHMAN_KICK is off DROPPED_ON_PURPOSE (its arm landed, CLEANUP-3)")
+led.ok(not lock_kick_allowlist(set(test_dispatch.DROPPED_ON_PURPOSE) | {0x00A8}),
+       "KNOWN-BAD: 0x00A8 on the allowlist reddens the lock")
 
 sys.exit(led.verdict())
