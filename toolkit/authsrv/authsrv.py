@@ -35465,6 +35465,7 @@ def main():
     global SPAWN_SECONDARY                                    # SANDBOX-B4
     global DEATH_PENALTY_FORCED, ENEMY_HIT_FRACTION
     global PORTALS, TRANSFER_ALT        # read by the pre-warm before the flags
+    global MAP_TRAVEL_ENABLED, MAP_UNLOCK_ENABLED   # unlock read by the pre-warm
     global CLIENT_BUILD, MAP_ID_COUNT, NO_MARKER_MAP   # --client-build
 
     # THE ARGPARSE BLOCK IS `build_parser()`, now in `serverargs.py`: 1,785 lines
@@ -35759,6 +35760,19 @@ def main():
         if PORTALS:
             for _dest in portal_reachable(a.map if known else FALLBACK_MAP_ID):
                 print(f"[map] pre-warming map {_dest}: a portal destination")
+                prewarm_pathmap(_dest)
+
+    # DESKWORK-D1 step 7: and every map the world map offers as a travel
+    # destination, for the SAME reason as the portal set above -- a travel
+    # re-entry's map would otherwise load with no mesh (the client holds the
+    # archive by then). Gated with the offer itself: if the map is not offered
+    # (--no-map-unlock), its mesh is not needed at startup.
+    if MAP_UNLOCK_ENABLED:
+        _start = (a.map if (a.map and MAP_STATIC_CONFIG.get(a.map))
+                  else FALLBACK_MAP_ID)
+        for _dest in maptravel.travelable_maps(agents.WORLD):
+            if _dest != _start:
+                print(f"[map] pre-warming map {_dest}: a travel destination")
                 prewarm_pathmap(_dest)
 
     if a.area:
@@ -36725,13 +36739,11 @@ def main():
               "town, 20260923T185124), c2s 0x0057 ignored, the body's 0x006E "
               "carries every piece whatever the mode.", flush=True)
     if a.no_map_travel:
-        global MAP_TRAVEL_ENABLED
         MAP_TRAVEL_ENABLED = False
         print("[map] --no-map-travel: c2s 0x00B1 MAP_TRAVEL is ignored, as "
               "today (DROPPED_ON_PURPOSE) -- the world map's travel click does "
               "nothing. DESKWORK-D1 step 7.", flush=True)
     if a.no_map_unlock:
-        global MAP_UNLOCK_ENABLED
         MAP_UNLOCK_ENABLED = False
         print("[map] --no-map-unlock: no s2c 0x0094 at load -- the client's "
               "unlocked-outpost set stays empty and the world map offers "
