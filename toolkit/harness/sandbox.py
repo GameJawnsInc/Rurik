@@ -389,6 +389,57 @@ def attribute_rules(world):
                   "is_primary": bool(r["is_primary"])} for k, r in attrs.items()})
 
 
+# The rank a HOSTILE's skill acts at, mirrored from the server so the
+# orchestrator's Skill bar can say the number the gamesrv will use (SANDBOX-N1).
+# authsrv.agent_attributes reads a body's ranks as the spawn row's `attributes`,
+# else its npc template's, else none; authsrv.agent_skill_rank then scales a
+# skill at ranks.get(its attribute, 0) when the body has ANY rank, and at
+# ENEMY_SKILL_RANK when it has none. So a hostile with no ranks casts every
+# skill at 12, and with any rank set an attribute it omits -- another
+# profession's included, which a hostile's ranks can never hold (validate
+# refuses it) -- acts at 0. ENEMY_SKILL_RANK is OURS, a stand-in: no capture
+# and no table gives a monster's ranks (authsrv.py's comment on it), so this
+# is the same choice said twice, and test_sandbox.py text-locks the two
+# constants and the fallback lines to each other -- without that lock the
+# window's number would be one our own tool produced.
+UNRANKED_SKILL_RANK = 12
+# What a skill row's `attribute` holds for "no attribute": one past the client's
+# attribute table, which is 0..50 (s_attrib) on 38797 -- every common skill and
+# 161 rows in all carry 51. A row with no key reads -1, agent_skill_rank's own
+# default; neither is an attribute a rank can be given.
+NO_ATTRIBUTE = 51
+
+
+def _rank_pairs(pairs):
+    """{attribute: rank} from [[a, r], ...] or {a: r} (both shapes
+    agent_attributes reads), {} for None or empty."""
+    if not pairs:
+        return {}
+    items = pairs.items() if isinstance(pairs, dict) else pairs
+    return {int(a): int(r) for a, r in items}
+
+
+def effective_rank(member_pairs, template_pairs, attribute):
+    """The rank a hostile's skill in `attribute` acts at: the member's own
+    ranks if it has any, else its template's, else UNRANKED_SKILL_RANK; and
+    within a set of ranks an attribute the set omits is 0 -- agent_attributes
+    and agent_skill_rank, in that order."""
+    ranks = _rank_pairs(member_pairs) or _rank_pairs(template_pairs)
+    if not ranks:
+        return UNRANKED_SKILL_RANK
+    return ranks.get(int(attribute), 0)
+
+
+def skill_attribute(world, sid):
+    """The attribute id a skill row scales by, or None: no row, or no
+    attribute (NO_ATTRIBUTE, or a missing key)."""
+    row = skill_row(world, sid)
+    if row is None:
+        return None
+    a = int(row.get("attribute", -1))
+    return None if a < 0 or a == NO_ATTRIBUTE else a
+
+
 def weapon_rate_for_item(world, item_key):
     """The attack_speed rate (seconds) of a content item, by its item_type's
     [weapon_type.*] row; None when unknown."""

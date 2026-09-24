@@ -21,6 +21,7 @@ No vault, no client, no server. Needs the repo's content only for one section
 when even that is absent.
 """
 import os
+import re
 import sys
 import tempfile
 import tomllib
@@ -33,7 +34,7 @@ import checks   # noqa: E402
 import content  # noqa: E402
 import sandbox  # noqa: E402
 
-led = checks.Ledger("sandbox", floor=140)     # 88 from the green run 2026-09-20; +19 SANDBOX-B7 (2026-09-22); +2 SKILLS-LT sec.5, the hand / label split (2026-09-23); +2 the fix pass (one LABEL_TIER, gamesrv_args); +1 budget_for_level (2026-09-24); +4 a hostile's ranks checked (2026-09-24); +7 the pre-merge pass: a hostile's level range, the no-level fallback told from 2 and 20, no npc rows (2026-09-24); +4 hostiles exempt from the budget, the owner's ruling: two budget refusals inverted, three kept rules and a hero's budget as controls, the no-level fallback re-witnessed on spawn_rows and validate's level range (2026-09-24); +2 the verifier's fixes: a malformed pair and an id outside the table on a hostile, the two kept rules with no hostile witness (2026-09-24); +10 the hostile caps lifted, the owner's ruling: rank 13 and 21 accepted, 22 refused, a level-255 hostile accepted and 24 too, 256 refused, the player's and a hero's rank 13 and level 21 refused (four controls that did not exist), HOSTILE_LEVEL_MAX tied to 0x0056's byte in the schema and to the codec's raise, a definition per (template, level) with its ids in range (2026-09-24); +1 the lift's verifier's fix: one member past both caps refused for both (`if tmpl:`, the elif hid the rank reason) (2026-09-24)
+led = checks.Ledger("sandbox", floor=150)     # 88 from the green run 2026-09-20; +19 SANDBOX-B7 (2026-09-22); +2 SKILLS-LT sec.5, the hand / label split (2026-09-23); +2 the fix pass (one LABEL_TIER, gamesrv_args); +1 budget_for_level (2026-09-24); +4 a hostile's ranks checked (2026-09-24); +7 the pre-merge pass: a hostile's level range, the no-level fallback told from 2 and 20, no npc rows (2026-09-24); +4 hostiles exempt from the budget, the owner's ruling: two budget refusals inverted, three kept rules and a hero's budget as controls, the no-level fallback re-witnessed on spawn_rows and validate's level range (2026-09-24); +2 the verifier's fixes: a malformed pair and an id outside the table on a hostile, the two kept rules with no hostile witness (2026-09-24); +10 the hostile caps lifted, the owner's ruling: rank 13 and 21 accepted, 22 refused, a level-255 hostile accepted and 24 too, 256 refused, the player's and a hero's rank 13 and level 21 refused (four controls that did not exist), HOSTILE_LEVEL_MAX tied to 0x0056's byte in the schema and to the codec's raise, a definition per (template, level) with its ids in range (2026-09-24); +1 the lift's verifier's fix: one member past both caps refused for both (`if tmpl:`, the elif hid the rank reason) (2026-09-24); +10 SANDBOX-N1 sec. 6: the rank a hostile's skill acts at (effective_rank, skill_attribute, UNRANKED_SKILL_RANK) and the text locks to authsrv.py (2026-09-24)
 
 
 # ---------------------------------------------------------------- the fixture
@@ -65,9 +66,12 @@ ATTRS = {"13": {"profession": 3, "is_primary": False},   # Healing Prayers
          "20": {"profession": 1, "is_primary": False},   # Swordsmanship
          "21": {"profession": 1, "is_primary": False}}   # Tactics
 WORLD = FakeWorld({
-    "skills": {"1": skill(1, 2.0, 4), "2": skill(0, 3.0, 20), "322": skill(1, 0.0, 3),
-               "382": skill(1, 0.0, 6), "281": skill(3, 1.0, 8), "276": skill(3, 0.75, 2),
-               "252": skill(3, 1.0, 10), "323": skill(1, 0.0, 6), "170": skill(6, 2.0, 5)},
+    "skills": {"1": skill(1, 2.0, 4), "2": dict(skill(0, 3.0, 20), attribute=51),
+               "322": dict(skill(1, 0.0, 3), attribute=17),
+               "382": skill(1, 0.0, 6), "281": dict(skill(3, 1.0, 8), attribute=13),
+               "276": skill(3, 0.75, 2),
+               "252": skill(3, 1.0, 10), "323": dict(skill(1, 0.0, 6), attribute=21),
+               "170": skill(6, 2.0, 5)},
     "skill_effect": {"1": {}, "281": {}, "322": {}},
     "npc": {"bandit_raider": {"name": "Bandit Raider", "profession": 1, "level": 2,
                               "file_id": 141267, "model_id": 116647},
@@ -720,5 +724,57 @@ led.ok(_ctl[-1] == "--no-skill-labels" and _ctl[:-1] == _plain and "--no-skill-l
        "gamesrv_args passes a flag through to the gamesrv, LAST -- the label tier's control arm "
        "(skills 55.5's runsheet: --no-skill-labels) -- and adds nothing by default (ENG-8)",
        (_ctl, _plain))
+
+# ---------------------------------------------------------------- 6. SANDBOX-N1: the rank a hostile's skill ACTS at
+# The orchestrator's Skill bar says the number the server will use, so the
+# rule is mirrored here in stdlib and TEXT-LOCKED to the server: read as text,
+# not imported (authsrv.py binds content at import). Without the lock the
+# window's "12" would be a number our own tool produced.
+led.ok(sandbox.effective_rank([], [], 17) == 12 == sandbox.UNRANKED_SKILL_RANK,
+       "a hostile with no ranks of its own and none on its template acts at UNRANKED_SKILL_RANK, 12")
+led.ok(sandbox.effective_rank([[19, 2]], [], 17) == 0,
+       "...with ANY rank set, an attribute the ranks omit acts at 0 (Hammer Mastery ranked, "
+       "Strength forgotten: Power Attack drops from 12 to 0)")
+led.ok(sandbox.effective_rank([[17, 4], [19, 2]], [], 17) == 4,
+       "...and a ranked attribute acts at its rank")
+led.ok(sandbox.effective_rank([], [[17, 3]], 17) == 3
+       and sandbox.effective_rank([], [[19, 3]], 17) == 0,
+       "a member with no ranks takes its TEMPLATE's (agent_attributes' fallback), 0 for one "
+       "the template omits")
+led.ok(sandbox.effective_rank([[19, 1]], [[17, 3]], 17) == 0
+       and sandbox.effective_rank({19: 1}, None, 19) == 1
+       and sandbox.effective_rank(None, {"17": 5}, 17) == 5,
+       "the member's ranks win over the template's when it has any, and both shapes "
+       "agent_attributes reads ([[a, r]] and {a: r}) are read here")
+led.ok(sandbox.skill_attribute(WORLD, 322) == 17 and sandbox.skill_attribute(WORLD, 281) == 13,
+       "skill_attribute reads the row's attribute (Power Attack 17, Orison 13)")
+led.ok(sandbox.skill_attribute(WORLD, 2) is None and sandbox.skill_attribute(WORLD, 382) is None
+       and sandbox.skill_attribute(WORLD, 99999) is None and sandbox.NO_ATTRIBUTE == 51,
+       "...and None for a no-attribute row (51, the table's own value), a row with no key, "
+       "and an id with no row")
+_authsrv = os.path.join(os.path.dirname(HERE), "authsrv", "authsrv.py")
+with open(_authsrv, encoding="utf-8") as fh:
+    _src = fh.read()
+_m = re.search(r"^ENEMY_SKILL_RANK = (\d+)$", _src, re.M)
+led.ok(_m is not None and int(_m.group(1)) == sandbox.UNRANKED_SKILL_RANK,
+       "UNRANKED_SKILL_RANK is authsrv.ENEMY_SKILL_RANK, read out of authsrv.py as text "
+       "(one choice, said twice)", _m.group(0) if _m else "no ENEMY_SKILL_RANK line")
+
+
+def _body(name):
+    m = re.search(rf"^def {name}\(.*?(?=^def |\Z)", _src, re.M | re.S)
+    return m.group(0) if m else ""
+
+
+_attrs, _rank = _body("agent_attributes"), _body("agent_skill_rank")
+led.ok('ranks = agent.get("attributes")' in _attrs
+       and 'ranks = (agent.get("npc") or {}).get("attributes")' in _attrs
+       and "if not ranks:\n        return {}" in _attrs,
+       "agent_attributes still reads the spawn row's ranks, else the template's, else none "
+       "(the fallback effective_rank mirrors, locked to the source)")
+led.ok("if not ranks:\n        return ENEMY_SKILL_RANK" in _rank
+       and 'return ranks.get(int(row.get("attribute", -1)), 0)' in _rank,
+       "agent_skill_rank still acts at ENEMY_SKILL_RANK with no ranks and at "
+       "ranks.get(attribute, 0) with any (the two lines the window's cell text rests on)")
 
 sys.exit(led.verdict())
