@@ -56,7 +56,10 @@ DEADLINE = 5.0
 # replaced by `pass` -- and 4 went red: section 2's membership, section 3's
 # membership, its listener-gone and its process-dead; the known-bad arm and
 # sections 1, 4 and 5 stayed green, as they must (none of them reads Stack).
-LEDGER = checks.Ledger("child job", floor=27)
+# 27 -> 28 the same day: a closed job answers None for membership (holds()
+# guarded; without the guard IsProcessInJob(NULL) asks "any job" -- red when
+# the guard is removed).
+LEDGER = checks.Ledger("child job", floor=28)
 check = checks.adopt_named(LEDGER)
 
 HOST = "127.0.0.1"
@@ -190,6 +193,8 @@ def test_kernel_rule():
         check("closing the job's last handle kills the adopted child", dead,
               f"{took:.2f}s")
         check("and leaves the sibling alive", b.poll() is None)
+        check("a closed job answers None for membership, never 'any job's' bool",
+              job.holds(b.pid) is None)
         refused = None
         try:
             childjob.KillOnClose().adopt(a.pid)

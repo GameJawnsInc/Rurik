@@ -28,6 +28,51 @@ move back.
 
 ---
 
+### R-SANDBOX, the run's servers die with the harness -- 2026-09-24 -- **a closed orchestrator left two `authsrv.py` holding 6112 for hours; the servers now sit in a kill-on-close Job Object, and Stop and the window's close kill the whole tree**
+
+OBSERVED 2026-09-24: the owner closed the run orchestrator at ~14:35 and two `authsrv.py --party
+sandbox --persist` processes, parent gone, kept 6112 bound for hours, refusing every other worktree's
+harness launch and `test_handshake.py` (the DESKWORK-D1 landing, `41988b1d`, records its
+`test_handshake` NOT RUN for exactly this, and its confirmation, `054b2c15`, ran it only once the
+owner had cleared the orphaned stack by hand). The orchestrator's Stop was `QProcess.kill()` and its
+window had no `closeEvent`, so the QProcess destructor did the same: on Windows both are
+TerminateProcess on `session.py` ALONE. `Stack.stop()` runs from `main()`'s `finally`, which a
+terminated process never reaches; Windows does not kill children with their parent; and under the
+orchestrator the servers run as `pythonw.exe`, with no console to notice. The webgate had died on
+its own (a broken stdout pipe, likely). Stop's message said "the next launch replaces any server
+still running" -- true only from the same tree, since `--replace` stops only its own tree's
+listeners by design (`test_preflight_owner.py`, the 2026-08-20 incident), and that rule is kept.
+
+The fix, in two halves. **`toolkit/harness/childjob.py`** (stdlib, ctypes): `Stack.start` creates
+one Job Object with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE and adopts each server right after its
+`Popen`; the handle is non-inheritable and held for `session.py`'s life, so the kernel's close of it
+at `session.py`'s death -- however it dies -- kills every server. A job that cannot be made, or a
+live server that cannot be adopted, is printed as a WARNING, not refused. **The orchestrator**:
+`RunTab.stop` runs `childjob.kill_tree` (`taskkill /T /F`) on `session.py` while it is still alive,
+then `kill()`, so the CLIENT goes too (a client killed this way may lose the tail of `Gw.log`,
+which `drive_client.close_client` would have flushed -- a Stop is an abort); `Window.closeEvent`
+does the same and waits up to 3 s for the run to end; the message now reads "Stopped the harness,
+its servers and the client.", and a failed tree kill says the client may still be open.
+
+Evidence. `test_childjob.py` (new, 28 checks, floor 28, ~7 s): a stand-in parent builds the REAL
+`session.Stack`, the test TerminateProcesses it, and the server's listener is gone at the first
+poll; the KNOWN-BAD arm (the job refused, the Stack's own no-job path) leaves the listener up and
+the orphan alive past 5 s. Sabotaged, `adopt()` replaced by `pass`: exactly 4 red, the known-bad
+arm green. Against the real stack, outside the suite: `session.py --serve` on private aliases
+127.0.0.71/.72/.73 killed by TerminateProcess -- all four endpoints (the gamesrv's transfer alias
+.103 included) gone at the first poll; main's pre-fix `session.py`, the same kill -- all three
+servers alive and listening at 5 s, reaped after. `orchestrator.py --smoke` 174 -> 177 (floor
+150 -> 153; the 24 gated laws unchanged): Stop kills a stand-in harness AND its child and says so,
+the control (the old `kill()` alone) orphans the child, and `closeEvent` kills the tree; with the
+old `stop` and no `closeEvent` patched in, the two treatment laws red and the control green.
+
+Not done, and not needed for the incident: the CLIENT is not in the job, so `session.py` killed
+from anywhere but the orchestrator (Task Manager, a closed terminal) still leaves Gw.exe open
+against dead servers -- a window the operator sees, unlike a pythonw server. Putting it in the job
+too is one line in `run_client` and a behaviour change for every harness run; not taken here.
+
+---
+
 ### DESKWORK-D1, the field shield CONFIRMED on the client -- 2026-09-24 -- **the shield stands at load and through a swing; `--field-player-weapons` erases it again; OBSERVED**
 
 Three harness launches on the landed tree (`41988b1d`; studies/deskwork/CONFIRM-2026-09-24.md §8),

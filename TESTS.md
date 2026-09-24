@@ -13664,4 +13664,6 @@ No vault, no client, no server. 140 checks, floor 140. ~1 s)
   old `kill()` alone) leaves the child running, and the window's `closeEvent` kills the
   tree before the window goes; the two treatment laws red and the control green with
   the old `stop` and no `closeEvent` patched in. Ephemeral ports only, so it runs beside
-  a live stack. No vault, no client. 27 checks, floor 27. ~7 s)
+  a live stack. No vault, no client. 28 checks, floor 28 (+1 the same day: a CLOSED job
+  answers None for membership, since IsProcessInJob with a NULL job asks "any job";
+  red with the guard removed). ~7 s)

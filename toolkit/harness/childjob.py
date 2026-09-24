@@ -172,7 +172,14 @@ class KillOnClose:
             kernel32.CloseHandle(hp)
 
     def holds(self, pid):
-        """True/False: is `pid` in THIS job. None when the pid cannot be opened."""
+        """True/False: is `pid` in THIS job. None when the pid cannot be opened.
+
+        A closed job answers None, never a bool: IsProcessInJob with a NULL job
+        asks "is it in ANY job", which is a different question with a True answer
+        for every process a terminal or a QProcess host has put in one.
+        """
+        if not self.handle:
+            return None
         hp = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
         if not hp:
             return None
