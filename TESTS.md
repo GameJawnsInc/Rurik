@@ -5490,6 +5490,26 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   code a mean estimator reddens 7 checks, a bound without the tick 6, the old label
   4. Floor 11, measured bare (2 declared skips); 31 with the vault. No client. ~80 s,
   most of it loading ~1,560 captures),
+  `toolkit/clientscan/test_sessionscore.py` (**2026-09-24, DESKWORK-D10 step 2 / MOVECODE-1z-do:
+  the WARP ROW's first test, and `sessionscore.py`'s first test at all — the movement scorecard
+  (`studies/movecode/review/sessionscore.py`) had every metric scored by a per-arc script except
+  hard jumps, which is why four post-ship hard rows on 09-13 sat unread eleven days. Sections 1–4
+  are bare-machine (synthetic `movesync`-format wire rows in a temp file): §1 the two-arm bar is
+  REUSED and discriminates (a planted 600 u / 0.1 s speed-arm jump and a 540 u / 0.03 s
+  distance-arm jump are caught; a 150 u/s walk is not — the **known-bad arm**), §2 attribution is a
+  SUSPECT (the nearest preceding 0x0029 send within 3 s, and a wall-slide re-grant in that window
+  flagged SEPARATELY because an ordinary lead can be nearer in time; the known-bad arm removes the
+  re-grant and `regrant_before` clears while the nearest send is unchanged; a send older than 3 s is
+  not attributed), §3 the traps the arc paid for — a jump landing on a point we granted is
+  `on_grant` (the client obeying, not a separation snap) with its no-grant control, and a magnitude
+  under the 299.33 u gate reads `under_gate1` with its over-gate control, §4 `score_capture` threads
+  `cap_path` and a rows-only caller still works. §5 (vault-gated, declares a skip bare) is the three
+  REAL controls: the 09-13 corner captures `174629-c4` and `190815-c5` each read 2 hard rows with the
+  attribution 1z-do adjudicates (c5 t=172.59 re-grant-adjacent + under gate-1 + plane flip; c5
+  t=142.57's 649 u ON our grant; c4 t=118.41's 439 u over gate-1 on a straight wall), and the 09-12
+  `151709-c2` — 29 re-grants — reads 0, so re-grant presence is NOT a warp and a metric that passed
+  the corner captures would be measuring nothing. Floor 21, measured bare (1 declared skip); 28 with
+  the vault. No client, no server bind, stdlib only),
   `toolkit/clientscan/test_resyncscore.py` (**2026-09-17: §15's "retail scores 0 hard jumps" is the same late-stamp row as test_movesync §16 seen through the control — split the same way (zero firings that are displacements; every firing a `movesync.late_stamp`, the 09-16 row required among them). 116 → 117 checks, floor 50 unchanged.** **2026-09-14: retail tracks carry `server_sets` (the same flag as test_movesync §16, skipped where `hard_idx` is built and in `fires()`; the JARIN shrine was scored as retail's one hard jump), and §17's `70 < p50` bound widened to 50 -- p50 read 69.5 u whole-corpus against 80.9 u as of the August pin, a bound one unit above the median being a pin on the vault's size.** WHAT WOULD THE 0x002C RESYNC HAVE
   DONE -- the guard on `toolkit/clientscan/resyncscore.py`, which prices a
   server change nobody has made against captures already on disk. The proposal:

@@ -59,6 +59,7 @@ for sub in ("toolkit", "toolkit/clientscan", "toolkit/mapdata", "toolkit/authsrv
 import vaultpath                                   # noqa: E402
 import w0score as W                                # noqa: E402
 import stalepair                                   # noqa: E402
+import movesync                                    # noqa: E402
 
 # ---- bands: (ok_max, red_min) per metric; between them is WATCH ------------
 REPIN_OK, REPIN_RED = 1, 4                # 0x002C sent to the player
@@ -80,6 +81,15 @@ FAR = 2.0
 FOLLOW_STOP = 80.0                        # authsrv.follow_stop_radius(): r + r + 56
 ENEMY_REACH = 92.0                        # authsrv.enemy_reach(): the disc + one radius
 FOLLOW_RE = None
+# THE WARP ROW (DESKWORK-D10 step 2 / MOVECODE-1z-do). A hard jump in the
+# CLIENT's own self-report stream (movesync's repaired two-arm bar, reused),
+# attributed to the nearest preceding movement SEND and flagged for a wall-slide
+# re-grant in a window before it -- SUSPECT, never a cause.
+WARP_ATTRIB_S = 3.0                       # s: the send-attribution window (DESKWORK-D10 step 2)
+GATE1_UNITS = 299.332591                  # u: the client's OWN separation gate (movement HANDOFF §8);
+#                                           a report jump under this may be that gate, or nothing
+WARP_ON_GRANT_U = 4.0                     # u: a landing this close to a point we granted...
+WARP_ON_GRANT_S = 1.0                     # s: ...this recently is arrival ON our grant, not a snap
 
 
 def _v(x, ok, red, lower_is_better=True):
@@ -142,7 +152,113 @@ def find_tape(rows):
     return best
 
 
-def score_capture(rows, mesh):
+def _warp_send_tag(label):
+    """One tag for a 0x0029 send, from its label. Re-grant detection lives here."""
+    lab = str(label or "")
+    if "RE-GRANT" in lab:
+        return ("re-grant", "wall-slide" in lab)
+    if "KILLED on click" in lab:
+        return ("click-kill", False)
+    if "ROUTER" in lab:
+        return ("router", False)
+    if "STOP-ECHO" in lab:
+        return ("stop-echo", False)
+    if "KBD LEAD" in lab:
+        return ("kbd-lead", False)
+    return ("grant", False)
+
+
+def warp_rows(cap_path, rows):
+    """THE WARP ROW (DESKWORK-D10 step 2 / MOVECODE-1z-do). Hard jumps in the
+    CLIENT's own self-report stream, and what each sits near.
+
+    THE BAR IS REUSED, NEVER RE-IMPLEMENTED: `movesync.wire_only` splices the
+    c2s 0x003D+0x0047 stream and runs the repaired TWO-ARM hard bar (implied
+    speed > 400 u/s at dt >= 0.05 s; displacement >= 520 u below that floor).
+    Retail scores ZERO on both arms (movesync header), and the quiet owner days
+    09-09 / 09-12 score 0, so the band is 0 = OK and any hard row is a LOOK.
+
+    ATTRIBUTION IS A SUSPECT, NEVER A CAUSE. Each hard row carries:
+      * `nearest_send` -- the nearest preceding 0x0029 we sent within
+        WARP_ATTRIB_S, with its tag and age. A temporal neighbour.
+      * `regrant_before` -- whether a wall-slide arrival re-grant fired in that
+        same window, and how long before, because 1z-di.3's predicted failure is
+        exactly a wall-slide re-grant walking the copy past the corner. This is
+        SEPARATE from `nearest_send`: an ordinary lead can be nearer in time than
+        the re-grant that is the reason to look.
+      * `on_grant` -- the landing sits within WARP_ON_GRANT_U of a point we
+        granted in the last WARP_ON_GRANT_S. A jump onto our OWN outstanding
+        grant is the client obeying us, NOT a separation snap (the trap the arc
+        already paid for), so it is booked and printed, never silently counted.
+      * `under_gate1` -- the magnitude is under the client's own 299.33 u
+        separation gate, so a "snap" reading cannot even be that gate firing.
+    """
+    w = movesync.wire_only(cap_path)
+    hard = w["hard"]
+    den = w["den"]
+    grants = movesync.load_grants(cap_path)        # (t, [x, y]) from the wire bytes
+    gt = [g[0] for g in grants]
+    sends = []                                     # (t, tag, is_wall_slide)
+    for r in rows:
+        if r.get("kind") == "sent" and r.get("opcode") == 0x29:
+            tag, ws = _warp_send_tag(r.get("label"))
+            sends.append((r["t"], tag, ws))
+    sends.sort()
+    st_ = [s[0] for s in sends]
+    out_rows = []
+    n_regrant = n_on_grant = n_under_gate1 = 0
+    for h in hard:
+        t, land = h["t"], h["p"]
+        # nearest preceding send within the window
+        i = bisect.bisect_right(st_, t) - 1
+        nearest = None
+        if i >= 0 and t - sends[i][0] <= WARP_ATTRIB_S:
+            nearest = {"tag": sends[i][1], "age": round(t - sends[i][0], 2),
+                       "wall_slide": sends[i][2]}
+        # a wall-slide re-grant anywhere in the window before it
+        regrant_age = None
+        for s in reversed(sends):
+            if s[0] > t or t - s[0] > WARP_ATTRIB_S:
+                if t - s[0] > WARP_ATTRIB_S:
+                    break
+                continue
+            if s[1] == "re-grant" and s[2]:
+                regrant_age = round(t - s[0], 2)
+                break
+        # landing on our own outstanding grant?
+        lo = bisect.bisect_left(gt, t - WARP_ON_GRANT_S)
+        hi = bisect.bisect_right(gt, t + 0.05)
+        on_grant = any(math.hypot(grants[k][1][0] - land[0],
+                                  grants[k][1][1] - land[1]) <= WARP_ON_GRANT_U
+                       for k in range(lo, hi))
+        under = h["dist"] < GATE1_UNITS
+        if regrant_age is not None:
+            n_regrant += 1
+        if on_grant:
+            n_on_grant += 1
+        if under:
+            n_under_gate1 += 1
+        out_rows.append({
+            "t": round(t, 2), "dist": round(h["dist"], 1), "dt": round(h["dt"], 3),
+            "speed": round(h["speed"]), "plane_flip": bool(h.get("plane_flip")),
+            "nearest_send": nearest, "regrant_before": regrant_age,
+            "on_grant": on_grant, "under_gate1": under})
+    span = den["span"]
+    active = den["active"]
+    return {
+        "n": len(hard),
+        "intervals": den["intervals"],
+        "refuse_all": w["refuse_all"],
+        "mag_p50": (movesync.magnitude(hard) or (None, None))[0],
+        "mag_max": (movesync.magnitude(hard) or (None, None))[1],
+        "rate_span": (60.0 * len(hard) / span) if span > 0 else None,
+        "rate_active": (60.0 * len(hard) / active) if active > 0 else None,
+        "n_regrant": n_regrant, "n_on_grant": n_on_grant, "n_under_gate1": n_under_gate1,
+        "rows": out_rows,
+    }
+
+
+def score_capture(rows, mesh, cap_path=None):
     out = {}
     reps = [r for r in rows if r.get("kind") == "position_report" and r.get("accepted")]
     out["reports"] = len(reps)
@@ -279,6 +395,16 @@ def score_capture(rows, mesh):
     out["halts_in_reach"] = inreach
     out["parks_off_mesh"] = parks_off
     out["plane_corrections"] = sum(1 for r in sent if str(r.get("label", "")).startswith("PLANE CORRECT"))
+    # THE WARP ROW (DESKWORK-D10 step 2 / MOVECODE-1z-do): hard jumps in the
+    # client's self-report stream, from movesync's two-arm bar, each attributed
+    # to the nearest preceding send and flagged for a wall-slide re-grant before
+    # it. SUSPECT, never a cause. `cap_path` is optional so a caller with only
+    # rows still gets everything above.
+    if cap_path is not None:
+        try:
+            out["warp"] = warp_rows(cap_path, rows)
+        except Exception as e:                    # noqa: BLE001
+            out["warp"] = {"error": str(e)}
     return out
 
 
@@ -536,6 +662,41 @@ def report(cap_path, tape, mesh, mid, c, t):
     line("halt points off our mesh beyond %.0f u" % FAR, "%d%s" % (len(po), (" worst %.1f u" % max(po)) if po else ""),
          "OK   " if not po else "RED  ", "the copy is the client's (Q1): off-mesh = walked through (Q9) or ordered off (1z-cf)")
     line("plane corrections sent", "%d" % c["plane_corrections"], "  -  ", "GROUNDZ-Q5/F11")
+    wp = c.get("warp")
+    if wp is not None and "error" not in wp:
+        # retail scores 0 on both arms and the quiet days 09-09/09-12 score 0,
+        # so any hard row is a LOOK. The attribution is printed so the LOOK can
+        # be read, never so it can be believed.
+        if wp["refuse_all"]:
+            line("client-report warps (hard jumps, two-arm bar)",
+                 "not rated (%d intervals < %d)" % (wp["intervals"], movesync.MIN_INTERVALS),
+                 "  -  ", "too few report intervals to rate")
+        else:
+            mag = "" if wp["mag_max"] is None else " mag p50 %.0f / max %.0f u" % (wp["mag_p50"], wp["mag_max"])
+            rate = "" if wp["rate_active"] is None else "  %.2f/active-min" % wp["rate_active"]
+            line("client-report warps (hard jumps, two-arm bar)",
+                 "%d%s" % (wp["n"], mag),
+                 "OK   " if wp["n"] == 0 else "RED  ",
+                 "retail 0, quiet 09-09/09-12 0; %d re-grant-adjacent, %d ON our grant, "
+                 "%d under gate-1 (%.0f u)%s" % (
+                     wp["n_regrant"], wp["n_on_grant"], wp["n_under_gate1"], GATE1_UNITS, rate))
+            for r in wp["rows"]:
+                ns = r["nearest_send"]
+                tag = ("send %s@%.2fs%s" % (ns["tag"], ns["age"], " wall-slide" if ns["wall_slide"] else "")
+                       if ns else "no send within %.0fs" % WARP_ATTRIB_S)
+                extra = []
+                if r["regrant_before"] is not None:
+                    extra.append("wall-slide re-grant %.2fs before" % r["regrant_before"])
+                if r["on_grant"]:
+                    extra.append("ON our grant (client obeying, not a snap)")
+                if r["under_gate1"]:
+                    extra.append("under gate-1")
+                if r["plane_flip"]:
+                    extra.append("plane flip")
+                line("  warp t=%.2f %.0f u / %.3f s (%.0f u/s)" % (
+                    r["t"], r["dist"], r["dt"], r["speed"]),
+                    "SUSPECT", "  -  ",
+                    "nearest %s%s" % (tag, ("; " + ", ".join(extra)) if extra else ""))
     if t:
         print("TAPE")
         tm = t["tape_moving"] >= FLOOR_TAPE_MOVING
@@ -606,7 +767,7 @@ def main(argv):
         rows = load_cap(cap)
         mesh, mid = mesh_for(rows)
         tape = argv[argv.index("--tape") + 1] if "--tape" in argv else find_tape(rows)
-        c = score_capture(rows, mesh)
+        c = score_capture(rows, mesh, cap)
         t = score_tape(tape, mesh, cap, c.get("_reps")) if tape and os.path.exists(tape) else None
         red, _w = report(cap, tape, mesh, mid, c, t)
         total_red += red
