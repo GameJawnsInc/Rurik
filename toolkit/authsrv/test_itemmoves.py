@@ -1230,11 +1230,14 @@ try:
     led.ok("item_cell(state, item_id, BACKPACK_BAG_ID, slot)" in dws,
            "LOCK: declare_weapon_sets places a set item at its decided cell")
     players_src = ast.get_source_segment(SRC, _func(TREE, "_handle_request_players"))
-    led.ok("itemstore.worn_array(state[\"items\"], EQUIPPED_BAG_ID," in players_src
-           and 'if state.get("items"):' in players_src
+    pwa_src = ast.get_source_segment(SRC, _func(TREE, "player_worn_array"))
+    led.ok("worn = visible_worn(player_worn_array(state), state, conn_id)" in players_src
+           and "itemstore.worn_array(state[\"items\"], EQUIPPED_BAG_ID," in pwa_src
+           and 'if state.get("items"):' in pwa_src
            and "itemstore.hand_items(state[\"items\"], EQUIPPED_BAG_ID)[0]" in players_src,
-           "LOCK: the 0x006E build reads itemstore.worn_array when a layout exists (the constants' "
-           "fill is the fallback) and NPC_UPDATE_WEAPONS reads the hand")
+           "LOCK: the 0x006E build is player_worn_array (the ONE copy since the display-mode fix "
+           "pass), which reads itemstore.worn_array when a layout exists (the constants' fill is "
+           "the fallback), and NPC_UPDATE_WEAPONS reads the hand")
     wsi = ast.get_source_segment(SRC, _func(TREE, "weapon_set_items"))
     led.ok(wsi.index("SET_ITEMS_OVERRIDE") < wsi.index("if k == 0:"),
            "LOCK: weapon_set_items reads SET_ITEMS_OVERRIDE before the constants")
@@ -1312,7 +1315,7 @@ try:
     he_src = ast.get_source_segment(SRC, _func(TREE, "handle_equip_item"))
     hb_src = ast.get_source_segment(SRC, _func(TREE, "handle_item_move_by_id"))
     led.ok(ild.count("equipped_bag_slot(") == 3
-           and "itemstore.worn_array(state[\"items\"], EQUIPPED_BAG_ID,\n                                        VISUAL_EQUIPMENT_SLOTS,\n                                        visual_of=item_visual_of())" in players_src
+           and "itemstore.worn_array(state[\"items\"], EQUIPPED_BAG_ID,\n                                    VISUAL_EQUIPMENT_SLOTS,\n                                    visual_of=item_visual_of())" in pwa_src
            and "visual_of=item_visual_of()" in hm_src
            and "visual_of=item_visual_of()" in he_src and "bag_slot_of_type=item_bag_slot_table()" in he_src
            and "visual_of=item_visual_of()" in hb_src and "bag_slot_of_type=item_bag_slot_table()" in hb_src,

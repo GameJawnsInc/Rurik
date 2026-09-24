@@ -2,7 +2,7 @@
 c2s 0x0057 SET_CHAR_VISIBILITY_FLAGS, and the regime rule that strips a hidden
 piece from the body's 0x006E (DESKWORK-D1, the owner's answer, 2026-09-23;
 studies/cmsg/FINDINGS.md "The display mode"; visstatus.py's docstring for the
-binary reads).
+binary reads; the fix pass of the same day for what the two reviews moved).
 
     python toolkit/authsrv/test_visstatus.py
 
@@ -12,22 +12,33 @@ binary reads).
     retail's default 0xFF draws the eye on all four and the unsent zero draws
     the circled bar on all four (the defect reproduced); the regime rule (the
     high bit in a town, the low bit in a field) with a KNOWN-BAD swapped rule
-    that disagrees; the drop-down's own sends pass check_request and three
-    malformed ones are refused; strip_visual and slot_changes in both regimes
-    with a no-change control.
-  * §2 RETAIL'S WIRE (vault-gated; LEDGER.skip on a bare machine, ~60 s): over
+    that disagrees; the code->string table read through its jump table against
+    the KNOWN-BAD address order; the drop-down's own sends pass check_request
+    and three malformed ones are refused; strip_visual and slot_changes in both
+    regimes with a no-change control; load_flags (the store's int, else 0xFF,
+    never zero -- the KNOWN-BAD zero draws the defect) and load_message; the
+    0x006F write filter with a KNOWN-BAD unfiltered arm.
+  * §2 RETAIL'S WIRE (vault-gated; LEDGER.skip on a bare machine, ~10 s): over
     every origin=LIVE game connection, 0x00EF once per connection on >= 90,
     never twice, always [0xFF, 0xFF], always right after 0x00E9; c2s 0x0057
-    absent; the regime census -- outpost bodies bare-headed >= 500 times, field
-    bodies never (n >= 40); the same for 0x0048's cape bit.
+    absent; the OWN body (its armour ids all in the connection's equipped bag)
+    carries its helm on every outpost and field load under Always Show --
+    consistent with the strip, not discriminating; the confound named (every
+    bare-headed outpost body is a stranger, every field body the owner's own);
+    the OBSERVED per-regime tailoring of the own array: no outpost 0x006E
+    carries a weapon, every field body whose bag holds one carries it.
   * §3 THE SERVER: source locks (the dispatch arm behind VISIBILITY_STATUS_ENABLED,
-    the 0x00EF send right after 0x00E9's, the 0x006E build through visible_worn,
-    the flag in serverargs.py and main()); the real handler driven with a fake
-    send in a town and in a field -- the 0x00EF echo, the 0x006F for the head
-    when the current regime's view changed and nothing when it did not, three
-    refusals sending nothing; the revert arm (KNOWN-BAD: the helm stays on the
-    body under a mode that hides it, and no 0x0057 arm); --persist through a
-    scratch store, the byte restored by the burst's rule, the store's validation
+    the 0x00EF send right after 0x00E9's through load_message, the byte loaded
+    through load_flags, the 0x006E build through visible_worn over the ONE
+    worn-array copy, the item batch through visible_slot_writes, the flag in
+    serverargs.py and main()); the real handler driven with a fake send in a
+    town and in a field -- the 0x00EF echo, the 0x006F for the head when the
+    current regime's view changed and nothing when it did not, three refusals
+    sending nothing; the EQUIP PATH in a field under Hide in Combat Areas: an
+    unequip and re-equip of the helm sends its 0x006F as item 0 (the revert arm
+    KNOWN-BAD: item back on the body), an Always-Show helm passes, a town equip
+    has no 0x006F to filter; the revert arm on the 0x006E; --persist through a
+    scratch store, the byte restored by load_flags, the store's validation
     refusing 256 and a string; the two schema names.
 """
 import collections
@@ -49,7 +60,7 @@ import charstore                                             # noqa: E402
 import visstatus as vs                                       # noqa: E402
 import authsrv                                               # noqa: E402
 
-led = checks.Ledger("display mode (DESKWORK-D1, the owner's answer)", floor=47)  # 2026-09-23, from the green run with RURIK_VAULT pointed at an empty directory (the bare-machine core); section 2's 9 ride the vault (56 vaulted)
+led = checks.Ledger("display mode (DESKWORK-D1, the owner's answer)", floor=63)  # 2026-09-23 fix pass, from the green run with RURIK_VAULT pointed at an empty directory (the bare-machine core); section 2's 10 ride the vault (73 vaulted)
 
 VIS_S2C, VIS_C2S = 0x00EF, 0x0057
 assert (VIS_S2C, VIS_C2S) == (authsrv.GAME_SMSG_CHAR_VISIBILITY_FLAGS,
@@ -90,14 +101,30 @@ led.ok([vs.mode_code(0xFF, k) for k in range(4)] == [0, 0, 1, 1]
        "0xFF (retail's load) draws icon 0, the eye, beside all four slots -- the owner's retail "
        "screenshot")
 led.ok([vs.mode_code(0x00, k) for k in range(4)] == [6, 3, 3, 3]
-       and all(vs.CODE_ICON[vs.mode_code(0x00, k)] == 3 for k in range(4))
-       and vs.mode_code(vs.CODE_NONE and 0x00, HEAD) != vs.CODE_NONE,
+       and all(vs.CODE_ICON[vs.mode_code(0x00, k)] == 3 for k in range(4)),
        "the UNSENT ZERO draws icon 3, the circled bar (Always Hide), beside all four -- ours on "
        "20260923T185124, reproduced")
 led.ok([vs.CODE_ICON[c] for c, _b in vs.KIND_MENU[HEAD]] == [0, 1, 2, 3]
        and [vs.ICON_LABEL[i] for i in range(4)] == ["Always Show", "Hide in Towns and Outposts",
                                                     "Hide in Combat Areas", "Always Hide"],
        "the headgear menu's four rows draw the four icons in the owner's screenshot order")
+# the code->string table THROUGH the jump table (0x008ECE3C; the menu builder's copy at
+# 0x008ED080 agrees): the headgear's rows read 0x32C, 0x32D, 0x32E, 0x330 and the cape's
+# own third and fourth rows 0x32F, 0x331. KNOWN-BAD: the case bodies in ADDRESS order,
+# which is what the landing shipped for codes 3/4/5 (the fix pass, EVR-VIS-3).
+head_strings = [vs.CODE_STRING_ID[c] for c, _b in vs.KIND_MENU[HEAD]]
+cape_strings = [vs.CODE_STRING_ID[c] for c, _b in vs.KIND_MENU[vs.KIND_CAPE]]
+led.ok(head_strings == [0x32C, 0x32D, 0x32E, 0x330] and cape_strings == [0x32C, 0x32D, 0x32F, 0x331]
+       and vs.CODE_STRING_ID[1] == 0x15BDE and len(set(vs.CODE_STRING_ID.values())) == 7,
+       "CODE_STRING_ID through the jump table: the headgear menu 0x32C/0x32D/0x32E/0x330, the "
+       "cape's third and fourth 0x32F/0x331, seven distinct strings", f"{head_strings} {cape_strings}")
+led.ok(tuple(vs.CODE_STRING_ID[c] for c in range(7)) != vs.CODE_STRING_ADDRESS_ORDER
+       and sorted(vs.CODE_STRING_ID.values()) == sorted(vs.CODE_STRING_ADDRESS_ORDER)
+       and [c for c in range(7) if vs.CODE_STRING_ID[c] != vs.CODE_STRING_ADDRESS_ORDER[c]] == [3, 4, 5],
+       "KNOWN-BAD: the address order is the same seven strings with codes 3, 4 and 5 permuted -- "
+       "the landing's table, and the pin can tell them apart")
+
+
 def swapped_shown(flags, kind, explorable):
     """KNOWN-BAD: the pair read the other way round (low bit = town)."""
     bit = 2 * int(kind) + (1 if explorable else 0)
@@ -168,6 +195,38 @@ led.ok(vs.describe(0xFF) == "cape Always Show, headgear Always Show, costume bod
        "the log labels name the four modes")
 led.ok(vs.kinds_in(0xC) == [HEAD] and vs.kinds_in(0xFF) == [0, 1, 2, 3] and vs.kinds_in(0x30) == [C_BODY],
        "kinds_in reads a mask back to its kinds")
+# the load (the fix pass, ENG-VIS-4): what the burst starts a connection with
+led.ok(vs.load_flags(None) == 0xFF and vs.load_flags(0xF7) == 0xF7 and vs.load_flags(0) == 0
+       and vs.load_flags("eye") == 0xFF and vs.load_flags(True) == 0xFF and vs.load_flags(0x1F7) == 0xF7,
+       "load_flags: no row value -> 0xFF (retail's 95 of 95), a stored int kept to the eight bits, "
+       "a string or a bool -> the default; a stored 0 is honoured (Always Hide everywhere is a mode)")
+led.ok(vs.load_message(vs.load_flags(None)) == [0xFF, 0xFF] and vs.load_message(0xF7) == [0xF7, 0xFF]
+       and vs.load_message(0x1F7) == [0xF7, 0xFF],
+       "load_message: [flags, 0xFF] -- retail's own [0xFF, 0xFF] for a fresh character, the "
+       "stored byte under the full mask otherwise")
+bad_default = vs.load_message(0)
+led.ok(bad_default == [0, 0xFF] and all(vs.CODE_ICON[vs.mode_code(bad_default[0], k)] == 3 for k in range(4))
+       and vs.load_message(vs.load_flags(None)) != bad_default,
+       "KNOWN-BAD: a burst defaulting to ZERO would send [0, 0xFF] -- the circled bar on all four, "
+       "the defect's own bytes -- and the default the burst loads is not that")
+# the 0x006F write filter (the fix pass, ENG-VIS-1/EVR-VIS-2)
+led.ok(vs.slot_kind(6) == HEAD and vs.slot_kind(7) == C_BODY and vs.slot_kind(8) == C_HEAD
+       and vs.slot_kind(0) is None and vs.slot_kind(1) is None and vs.slot_kind(5) is None,
+       "slot_kind: visuals 6/7/8 belong to the headgear and the two costumes; the hands and the "
+       "armour carry no display mode")
+led.ok(vs.filter_slot_writes([(6, 7), (0, 1), (7, 8)], 0xFB, True) == ([(6, 0), (0, 1), (7, 8)], [(HEAD, 6, 7)])
+       and vs.filter_slot_writes([(6, 7), (0, 1), (7, 8)], 0xFB, False) == ([(6, 7), (0, 1), (7, 8)], [])
+       and vs.filter_slot_writes([(6, 7)], 0xF7, False) == ([(6, 0)], [(HEAD, 6, 7)])
+       and vs.filter_slot_writes([(7, 8), (8, 9)], 0xCF, True) == ([(7, 0), (8, 9)], [(C_BODY, 7, 8)]),
+       "filter_slot_writes: a helm entering visual 6 in a field under Hide in Combat Areas goes out "
+       "as 0 while the weapon and a costume pass; the same helm passes in a town; Hide in Towns "
+       "withholds it in a town; a hidden costume body's slot 7 goes out as 0")
+led.ok(vs.filter_slot_writes([(6, 7), (7, 8)], 0xFF, True) == ([(6, 7), (7, 8)], [])
+       and vs.filter_slot_writes([(6, 0)], 0x00, True) == ([(6, 0)], []),
+       "CONTROL and VACUITY: Always Show passes every write; an unequip's 0 is never 'hidden'")
+led.ok([(s, i) for s, i in [(6, 7)]] != vs.filter_slot_writes([(6, 7)], 0xFB, True)[0],
+       "KNOWN-BAD: the unfiltered batch (the landing's equip path) disagrees with the filter -- the "
+       "item stays in the write")
 
 # ---- §2 retail's wire ------------------------------------------------------------------
 import vaultpath                                             # noqa: E402
@@ -178,13 +237,16 @@ if not conns:
     led.skip("section 2, retail's wire", f"no live captures under {live_root}")
 if conns:
     per_conn = []
+    decoded = 0
     ef_vals = collections.Counter()
     prev_ops = collections.Counter()
     c2s_vis = 0
-    head0 = collections.Counter()
-    cape0 = collections.Counter()
+    own_head = collections.Counter()      # (regime, own helm carried?)
+    who_bare = collections.Counter()      # (regime, own/other, head0?)
+    weapon = collections.Counter()        # (regime, own/other, bag has weapon?, visual 0 carries?)
     for capdir, gf in conns:
         _conn, merged, ok = livewire.decode_conn(capdir, gf)
+        decoded += 1 if ok else 0
         s2c = [(op, v) for (_t, d, op, v) in merged if d == "s2c"]
         c2s_vis += sum(1 for (_t, d, op, _v) in merged if d == "c2s" and op == VIS_C2S)
         regime = next((v[3] for op, v in s2c if op == 0x0199 and len(v) > 3), None)
@@ -193,11 +255,32 @@ if conns:
         for i in efs:
             ef_vals[(s2c[i][1][1], s2c[i][1][2])] += 1
             prev_ops[s2c[i - 1][0] if i else None] += 1
+        # the OWN body: the 0x006E whose armour ids (visual 2..5) all sit in this
+        # connection's EQUIPPED bag (0x013F type 2 declares it; 0x013E/0x014B place
+        # items; 0x0152 swaps two) -- the item study's join, test_itemmoves 1c
+        equipped, cells, own_ids = set(), {}, set()
         for op, v in s2c:
-            if op == 0x006E and len(v) > 10:
-                head0[(regime, v[8] == 0)] += 1
-            if op == 0x0048 and len(v) > 2:
-                cape0[(regime, v[2] == 0)] += 1
+            if op == 0x013F and int(v[2]) == 2:
+                equipped.add(int(v[4]))
+            elif op in (0x013E, 0x014B):
+                cells[int(v[2])] = (int(v[3]), int(v[4]))
+            elif op == 0x0152:
+                a, b = cells.get(int(v[2])), cells.get(int(v[3]))
+                if a and b:
+                    cells[int(v[2])], cells[int(v[3])] = b, a
+            elif op == 0x006E and len(v) > 10:
+                eq = {i: s for i, (b, s) in cells.items() if b in equipped}
+                armour = [int(x) for x in v[4:8] if int(x)]
+                is_own = bool(armour) and all(a in eq for a in armour)
+                if is_own:
+                    own_ids.add(v[1])
+                own = is_own or v[1] in own_ids
+                who_bare[(regime, "own" if own else "other", int(v[8]) == 0)] += 1
+                bag_weapon = [i for i, s in eq.items() if s == 0] if own else []
+                weapon[(regime, "own" if own else "other", bool(bag_weapon), int(v[2]) != 0)] += 1
+                if own:
+                    bag_head = [i for i, s in eq.items() if s == 4]
+                    own_head[(regime, int(v[8]) in bag_head if bag_head else None)] += 1
     n_one = sum(1 for n in per_conn if n == 1)
     led.ok(len(conns) >= 90 and n_one >= 90 and max(per_conn) == 1 and per_conn.count(0) <= 2,
            f"0x00EF once per connection: {n_one} of {len(conns)} live connections carry exactly one, "
@@ -211,41 +294,77 @@ if conns:
            f"({prev_ops[0x00E9]} of {sum(prev_ops.values())})", f"{prev_ops}")
     led.ok(c2s_vis == 0, "c2s 0x0057 is on NO retail tape (the drop-down was never used live): the "
                          "reply is RECONSTRUCTION", f"{c2s_vis}")
-    o_head0, o_head = head0[(0, True)], head0[(0, False)]
-    f_head0, f_head = head0[(1, True)], head0[(1, False)]
-    led.ok(o_head0 >= 500 and f_head0 == 0 and f_head >= 40,
-           f"0x006E's head slot is empty on {o_head0} of {o_head0 + o_head} OUTPOST bodies and "
-           f"{f_head0} of {f_head0 + f_head} FIELD bodies -- the regime pattern of a server-side "
-           f"strip", f"{dict(head0)}")
-    o_c0, o_c = cape0[(0, True)], cape0[(0, False)]
-    f_c0, f_c = cape0[(1, True)], cape0[(1, False)]
-    led.ok(o_c0 >= 500 and f_c0 == 0 and f_c >= 40,
-           f"0x0048's cape bit is 0 on {o_c0} of {o_c0 + o_c} OUTPOST bodies and {f_c0} of "
-           f"{f_c0 + f_c} FIELD bodies -- the same pattern on the cape's own message",
-           f"{dict(cape0)}")
-    led.ok(o_head0 < o_head0 + o_head and o_c0 < o_c0 + o_c,
-           "and neither outpost share is 100% -- the strip is per player, not per regime alone")
-    led.ok(sum(per_conn) == sum(ef_vals.values()) == sum(prev_ops.values()),
-           "the three 0x00EF tallies agree")
-    led.ok(len(per_conn) == len(conns), f"every connection was decoded ({len(conns)})")
+    o_own, f_own = own_head[(0, True)], own_head[(1, True)]
+    led.ok(o_own >= 40 and f_own >= 40 and own_head[(0, False)] == 0 and own_head[(1, False)] == 0
+           and own_head[(0, None)] == 0 and own_head[(1, None)] == 0,
+           f"the OWN body carries its equipped helm on {o_own} of {o_own + own_head[(0, False)]} "
+           f"outpost loads and {f_own} of {f_own + own_head[(1, False)]} field loads, all under "
+           f"[0xFF, 0xFF] -- consistent with the regime strip, NOT discriminating", f"{dict(own_head)}")
+    bare_other = who_bare[(0, "other", True)]
+    led.ok(bare_other >= 500 and who_bare[(0, "own", True)] == 0
+           and who_bare[(1, "other", True)] + who_bare[(1, "other", False)] == 0
+           and who_bare[(1, "own", False)] >= 40,
+           f"THE CONFOUND named: every bare-headed outpost body ({bare_other}) is a STRANGER whose "
+           f"mode the tape does not carry, and every field body ({who_bare[(1, 'own', False)]}) is the "
+           f"owner's own Always-Show body -- the landing's 756-vs-0 compared strangers in towns with "
+           f"the owner in fields", f"{dict(who_bare)}")
+    o_bodies = sum(n for (r, _w, _b, _c), n in weapon.items() if r == 0)
+    o_armed = sum(n for (r, _w, _b, c), n in weapon.items() if r == 0 and c)
+    o_own_bag = weapon[(0, "own", True, False)]
+    f_carry = weapon[(1, "own", True, True)]
+    f_miss = weapon[(1, "own", True, False)]
+    led.ok(o_bodies >= 2000 and o_armed == 0 and o_own_bag >= 40 and f_carry >= 30 and f_miss == 0,
+           f"OBSERVED per-regime tailoring of the own array, on the WEAPON: no outpost 0x006E carries "
+           f"one ({o_armed} of {o_bodies} bodies; the owner's own {o_own_bag} with a weapon in the "
+           f"equipped bag among them), and every field body whose bag holds one carries it "
+           f"({f_carry} of {f_carry + f_miss})", f"{dict(weapon)}")
+    led.ok(weapon[(1, "own", False, False)] >= 1 and weapon[(1, "own", False, True)] == 0,
+           f"...and a field load with NO bag weapon carries none ({weapon[(1, 'own', False, False)]}): "
+           f"the array reflects the bag, not a constant")
+    led.ok(decoded == len(conns), f"every connection decoded ok ({decoded} of {len(conns)})")
+    led.ok(o_own + f_own == who_bare[(0, "own", False)] + who_bare[(1, "own", False)],
+           "the own-body tallies agree between the head join and the census (one identification)")
 
 # ---- §3 the server ---------------------------------------------------------------------
 SRC = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
 ARGS = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
+
+
+def func_src(name):
+    start = SRC.find(f"\ndef {name}(")
+    end = SRC.find("\ndef ", start + 1)
+    return SRC[start:end] if start > 0 else ""
+
+
 arm = SRC.find("elif opcode == GAME_CMSG_SET_CHAR_VISIBILITY_FLAGS:")
 led.ok(arm > 0 and "if VISIBILITY_STATUS_ENABLED:" in SRC[arm:arm + 500]
        and "handle_visibility_flags(values, send, state, conn_id)" in SRC[arm:arm + 600]
        and "--no-visibility-status" in SRC[arm:arm + 900],
        "SOURCE LOCK: the dispatch arm for 0x0057 exists, is gated by VISIBILITY_STATUS_ENABLED and "
        "names the revert flag when it ignores")
-e9 = SRC.find("send(GAME_SMSG_CHARACTER_UPDATE_FACTIONS, player_attrs,")
-ef = SRC.find("send(GAME_SMSG_CHAR_VISIBILITY_FLAGS,", e9)
-led.ok(0 < e9 < ef < e9 + 1200 and "if VISIBILITY_STATUS_ENABLED:" in SRC[e9:ef],
-       "SOURCE LOCK: the load's 0x00EF send sits right after the 0x00E9 send (retail's position, "
-       "95 of 95) and behind the flag", f"e9 {e9} ef {ef}")
-w6e = SRC.find("send(GAME_SMSG_UPDATE_AGENT_VISUAL_EQUIPMENT,\n             [PLAYER_AGENT_ID] + worn,")
-led.ok(w6e > 0 and "worn = visible_worn(worn, state, conn_id)" in SRC[w6e - 800:w6e],
-       "SOURCE LOCK: the player's 0x006E array goes through visible_worn just before its send")
+players = func_src("_handle_request_players")
+e9 = players.find("send(GAME_SMSG_CHARACTER_UPDATE_FACTIONS, player_attrs,")
+ef = players.find("send(GAME_SMSG_CHAR_VISIBILITY_FLAGS,", e9)
+led.ok(0 < e9 < ef < e9 + 1400 and "if VISIBILITY_STATUS_ENABLED:" in players[e9:ef]
+       and 'visstatus.load_message(state["vis_flags"])' in players[ef:ef + 200],
+       "SOURCE LOCK: the load's 0x00EF send sits right after the 0x00E9 send (retail's position "
+       "relative to 0x00E9, 95 of 95), behind the flag, and its payload is load_message's",
+       f"e9 {e9} ef {ef}")
+led.ok('state["vis_flags"] = visstatus.load_flags((_ps_row or {}).get("vis_flags"))' in players
+       and players.find("visstatus.load_flags(") < e9,
+       "SOURCE LOCK: the burst loads the byte through load_flags from the store row, before the send")
+w6e = players.find("send(GAME_SMSG_UPDATE_AGENT_VISUAL_EQUIPMENT,\n             [PLAYER_AGENT_ID] + worn,")
+led.ok(w6e > 0 and "worn = visible_worn(player_worn_array(state), state, conn_id)" in players[w6e - 1200:w6e]
+       and "itemstore.worn_array(" not in players
+       and 'itemstore.worn_array(state["items"], EQUIPPED_BAG_ID,' in func_src("player_worn_array"),
+       "SOURCE LOCK: the player's 0x006E is visible_worn over player_worn_array -- the ONE copy of "
+       "the dressed array, which reads itemstore.worn_array; the burst has no inline copy left")
+led.ok("visible_slot_writes(batch, state, conn_id)" in func_src("_item_moves_commit")
+       and "for op, vals, label in visible_slot_writes(batch, state, conn_id):" in func_src("_item_moves_commit")
+       and all("_item_moves_commit(send, state, conn_id, batch, changes," in func_src(h)
+               for h in ("handle_item_move", "handle_equip_item", "handle_item_move_by_id")),
+       "SOURCE LOCK: every item handler commits through _item_moves_commit, which sends the batch "
+       "through visible_slot_writes -- one gate for every consumer")
 led.ok('"--no-visibility-status"' in ARGS and "a.no_visibility_status" in SRC
        and "VISIBILITY_STATUS_ENABLED = False" in SRC,
        "SOURCE LOCK: the revert flag is declared in serverargs.py and wired in main()")
@@ -304,7 +423,52 @@ try:
            and authsrv.visible_worn(dressed, stf)[6] == 0,
            "FIELD, Hide in Combat Areas [0x8, 0xC]: 0x00EF then the head's 0x006F to 0, and the "
            "field's 0x006E leaves it out", f"{sent}")
-    # the revert arm
+
+    # THE EQUIP PATH (the fix pass, ENG-VIS-1/EVR-VIS-2): a field, the dress's layout,
+    # headgear Hide in Combat Areas; the helm dragged to the backpack (0x004F) and
+    # double-clicked back (0x0030). The landing sent the re-equip's 0x006F with the
+    # helm in it -- the world body re-helmed while the doll and the load hid it.
+    MOVE, EQUIP = authsrv.GAME_CMSG_ITEM_MOVE, authsrv.GAME_CMSG_EQUIP_ITEM
+    ITEM_LOC = authsrv.GAME_SMSG_ITEM_CHANGE_LOCATION
+
+    def drive_reequip(flags, enabled, outpost):
+        authsrv.VISIBILITY_STATUS_ENABLED = enabled
+        authsrv.OUTPOST, authsrv.EXPLORABLE = outpost, not outpost
+        s = {"agents": {}, "char_uuid": UUID, "map_id": 145}
+        authsrv.item_layout_begin(s, 0)
+        s["vis_flags"] = flags
+        helm = authsrv.player_worn_array(s)[6]
+        got, snd = fake_send_factory()
+        authsrv.handle_item_move([MOVE, 4, 2, 1], snd, s, 0)       # the head's bag cell 4 -> backpack 1
+        authsrv.handle_equip_item([EQUIP, helm], snd, s, 0)         # and back on
+        return helm, got, authsrv.player_worn_array(s), authsrv.visible_worn(authsrv.player_worn_array(s), s)
+
+    helm, got, after, vis = drive_reequip(0xFB, True, outpost=False)
+    led.ok(helm and after[6] == helm and vis[6] == 0
+           and [op for op, _v in got] == [ITEM_LOC, SLOT_VIS, ITEM_LOC, SLOT_VIS]
+           and got[1][1] == [1, 6, 0] and got[3][1] == [1, 6, 0],
+           f"FIELD, Hide in Combat Areas, unequip then re-equip the helm (item {helm}): the bag "
+           f"wears it again, the load's array would hide it, and the re-equip's 0x006F goes out as "
+           f"[player, 6, 0] -- the body stays bare", f"{got}")
+    helm2, got2, _after2, _vis2 = drive_reequip(0xFB, False, outpost=False)
+    led.ok(helm2 == helm and [op for op, _v in got2] == [ITEM_LOC, SLOT_VIS, ITEM_LOC, SLOT_VIS]
+           and got2[3][1] == [1, 6, helm],
+           "KNOWN-BAD (--no-visibility-status, the landing's path): the same re-equip sends 0x006F "
+           "[player, 6, helm] -- the world body re-helmed under a mode that hides it", f"{got2}")
+    helm3, got3, _a3, vis3 = drive_reequip(0xFF, True, outpost=False)
+    led.ok(helm3 == helm and got3[3][1] == [1, 6, helm] and vis3[6] == helm,
+           "CONTROL: under Always Show the re-equip's 0x006F carries the helm -- the filter passes "
+           "a shown piece", f"{got3}")
+    helm4, got4, _a4, vis4 = drive_reequip(0xF7, True, outpost=True)
+    led.ok(helm4 == helm and [op for op, _v in got4] == [ITEM_LOC, ITEM_LOC] and vis4[6] == 0,
+           "TOWN, Hide in Towns: an outpost equip rides no 0x006F (retail's 0 of 5), so the filter "
+           "has nothing to withhold and the load's array hides the helm on its own", f"{got4}")
+    authsrv.OUTPOST, authsrv.EXPLORABLE = False, True
+    plain = [(ITEM_LOC, [1, 2, 3, 4], "x"), (SLOT_VIS, [1, 0, 9], "hand"), (SLOT_VIS, [2, 6, 9], "npc")]
+    led.ok(authsrv.visible_slot_writes(plain, {"vis_flags": 0x00}) == plain,
+           "visible_slot_writes leaves the hands and another agent's slot 6 alone even under Always "
+           "Hide everywhere -- the filter is the PLAYER's visuals 6/7/8 only")
+    # the revert arm on the load's array
     authsrv.VISIBILITY_STATUS_ENABLED = False
     stx = {"map_id": 148, "vis_flags": 0x00}
     led.ok(authsrv.visible_worn(dressed, stx) == dressed,
@@ -317,8 +481,9 @@ try:
         store = charstore.Store.open("visstatus@rurik.invalid", base=base)
         store.ensure_character(UUID, "Vis Tester")
         store.save()
-        led.ok(store.character_vis_flags(UUID) is None,
-               "a fresh row stores no byte: absence is retail's default, not zero")
+        led.ok(store.character_vis_flags(UUID) is None
+               and vs.load_flags(store.character_by_uuid(UUID).get("vis_flags")) == 0xFF,
+               "a fresh row stores no byte, and load_flags reads that as retail's default, not zero")
         authsrv.OUTPOST, authsrv.EXPLORABLE, authsrv.PERSIST = True, False, True
         stp = {"map_id": 148, "char_uuid": UUID, "charstore_game": store}
         sent.clear()
@@ -327,10 +492,10 @@ try:
         led.ok(back.character_vis_flags(UUID) == 0xF7,
                "--persist: the handler writes vis_flags 0xF7 and a fresh open reads it back")
         row = back.character_by_uuid(UUID)
-        restored = vs.DEFAULT_FLAGS
-        if row is not None and isinstance(row.get("vis_flags"), int):
-            restored = int(row["vis_flags"]) & vs.FLAG_BITS
-        led.ok(restored == 0xF7, "the burst's rule (the store's int, else the default) restores 0xF7")
+        led.ok(vs.load_flags(row.get("vis_flags")) == 0xF7
+               and vs.load_message(vs.load_flags(row.get("vis_flags"))) == [0xF7, 0xFF],
+               "the burst's own load (load_flags over the row, load_message) restores 0xF7 and "
+               "would send 0x00EF [0xF7, 0xFF]")
         led.ok(store.set_character_vis_flags("no-such-uuid", 0x10) is None,
                "no row, nothing stored, None")
         try:

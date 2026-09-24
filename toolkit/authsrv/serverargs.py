@@ -862,9 +862,10 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
     ap.add_argument("--no-visibility-status", action="store_true",
                     help="THE REVERT ARM for the inventory panel's per-slot DISPLAY "
                          "MODE (the owner's answer, 2026-09-23): send no 0x00EF at "
-                         "load, ignore c2s 0x0057, and dress the body's 0x006E with "
-                         "every piece whatever the mode -- every run before that "
-                         "day. KNOWN-BAD: the client reads an unsent zero, so the "
+                         "load, ignore c2s 0x0057, dress the body's 0x006E with "
+                         "every piece whatever the mode, and pass an equip's 0x006F "
+                         "unfiltered -- every run before that day. KNOWN-BAD: the "
+                         "client reads an unsent zero, so the "
                          "drop-down shows the circled bar (Always Hide) beside the "
                          "cape, the headgear and both costume slots and the paper "
                          "doll's figure is bare-headed in a town (20260923T185124) "
@@ -877,8 +878,10 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "slot whose view in the current regime changed, leaves a "
                          "hidden piece out of the body's 0x006E per regime (the low "
                          "bit of a kind's pair shows it in a field, the high bit in "
-                         "a town -- the doll's own rule), and persists the byte per "
-                         "character under --persist.")
+                         "a town -- the doll's own rule), sends an equip's 0x006F "
+                         "into a slot the mode hides here as item 0 (the fix pass: "
+                         "re-equipping a hidden helm in a field re-helmed the body), "
+                         "and persists the byte per character under --persist.")
     ap.add_argument("--hero-skill-toggle-per-bit", action="store_true",
                     help="THE ALTERNATIVE REPLY for DESKWORK-D1 step 6: answer a "
                          "suppress click with 0x0064 [agent, slot, value] -- one bit "

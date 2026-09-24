@@ -25323,7 +25323,9 @@ def _item_moves_commit(send, state, conn_id, batch, changes, what):
     and the store current, and mirror the hands."""
     items = state["items"]
     before = itemstore.hand_items(items, EQUIPPED_BAG_ID)
-    for op, vals, label in batch:
+    # Every consumer of the item batch passes here, so the display mode
+    # gates the batch's 0x006F ONCE (visible_slot_writes; the fix pass).
+    for op, vals, label in visible_slot_writes(batch, state, conn_id):
         send(op, vals, label)
     moved = itemstore.apply(items, changes)
     held = state.get("backpack") or {}           # the merchant's {slot: bought id}
@@ -25460,9 +25462,13 @@ def handle_item_move_by_id(values, send, state, conn_id):
 
 def player_worn_array(state):
     """The player's 0x006E array as DRESSED -- every worn piece, no display
-    mode applied: the item store's equipped bag through the bag->visual
-    permutation when the dress has run, else the launch constants (the same
-    two branches the load's 0x006E build takes)."""
+    mode applied. THE one copy (the fix pass, ENG-VIS-6): the load's 0x006E
+    build and handle_visibility_flags' 0x006F both read it, so a mode change
+    restores the item the body was dressed with. The item store's equipped
+    bag through the bag->visual permutation when the dress has run (the bag
+    cell and the visual position are TWO orders, the owner's confirmation
+    pass: item_visual_of maps retail's bag slot to its 0x006E position, bag 4
+    the head -> visual 6), else the launch constants."""
     if state.get("items"):
         return itemstore.worn_array(state["items"], EQUIPPED_BAG_ID,
                                     VISUAL_EQUIPMENT_SLOTS,
@@ -25470,7 +25476,7 @@ def player_worn_array(state):
     worn = [0] * VISUAL_EQUIPMENT_SLOTS
     if EQUIP_WEAPON:
         worn[0] = WEAPON_ITEM_ID
-        if agents.PLAYER_OFFHAND:
+        if agents.PLAYER_OFFHAND:                    # SLICE-H9: position 1
             worn[EQUIPPED_SLOT_OFFHAND] = OFFHAND_ITEM_ID
     if EQUIP_ARMOUR:
         for item_id, _key, slot in STARTER_ARMOUR:
@@ -25478,8 +25484,50 @@ def player_worn_array(state):
     if EQUIP_COSTUME_HEAD:
         worn[COSTUME_HEAD_SLOT] = COSTUME_HEAD_ITEM_ID
     if EQUIP_COSTUME:
+        # Slot 7, the costume BODY cell. The whole point is that this slot
+        # is not additive: studies/playercomposite 9.2 read an override
+        # array at CpsBase+0xD8 that REPLACES the armour slots' cached rows
+        # at build time, so wearing this should change what the ARMOUR
+        # components draw rather than adding a piece.
         worn[COSTUME_SLOT] = COSTUME_ITEM_ID
     return worn
+
+
+def visible_slot_writes(batch, state, conn_id=None):
+    """An item batch with each of the PLAYER's 0x006F writes into a visual
+    slot the display mode hides under the current regime sent as item 0
+    (visstatus.filter_slot_writes; the fix pass, ENG-VIS-1/EVR-VIS-2: the
+    equip path's writes went out unfiltered, so in a field under Hide in
+    Combat Areas an unequip and re-equip of the helm re-helmed the world body
+    while the doll and the load's 0x006E hid it). Untouched under
+    --no-visibility-status. Other agents' writes and the hands (slots 0/1)
+    pass through. Says what it hid. RECONSTRUCTION: retail's reply to an
+    equip under a hiding mode is on no tape."""
+    if not VISIBILITY_STATUS_ENABLED:
+        return list(batch)
+    flags = int(state.get("vis_flags", visstatus.DEFAULT_FLAGS))
+    field = instance_is_field(state)
+    out, hid = [], []
+    for op, vals, label in batch:
+        if (op == GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT and len(vals) >= 3
+                and int(vals[0]) == PLAYER_AGENT_ID):
+            writes, h = visstatus.filter_slot_writes([(vals[1], vals[2])], flags, field)
+            slot, item = writes[0]
+            if h:
+                hid.extend(h)
+                label = (label + f" -- item {h[0][2]} withheld: the "
+                         f"{visstatus.KIND_NAMES[h[0][0]]} is hidden in "
+                         f"{'a field' if field else 'a town'} by the display mode "
+                         f"[DESKWORK-D1, RECONSTRUCTION]")
+                vals = [vals[0], slot, item]
+        out.append((op, vals, label))
+    if hid and conn_id is not None:
+        print(f"[c{conn_id}] DISPLAY MODE: the body's 0x006F leaves out "
+              + ", ".join(f"the {visstatus.KIND_NAMES[k]} (item {iid}, visual {s})"
+                          for k, s, iid in hid)
+              + f" -- {'a field' if field else 'a town'}, flags 0x{flags:02x} "
+                f"({visstatus.describe(flags)}) [DESKWORK-D1, RECONSTRUCTION]", flush=True)
+    return out
 
 
 def visible_worn(worn, state, conn_id=None):
@@ -30109,9 +30157,10 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     # Always Show, 95 of 95 live loads). Read by the 0x006E build below and
     # by handle_visibility_flags; the 0x00EF that carries it to the client
     # goes out right after 0x00E9, where retail's does.
-    state["vis_flags"] = visstatus.DEFAULT_FLAGS
-    if _ps_row is not None and isinstance(_ps_row.get("vis_flags"), int):
-        state["vis_flags"] = int(_ps_row["vis_flags"]) & visstatus.FLAG_BITS
+    # visstatus.load_flags: an int row value kept to the eight bits, else
+    # 0xFF -- test_visstatus drives it with a KNOWN-BAD zero (the fix pass,
+    # ENG-VIS-4: the defect itself, a burst defaulting to 0, passed green).
+    state["vis_flags"] = visstatus.load_flags((_ps_row or {}).get("vis_flags"))
     if PLAYER_LEVEL_AUTHORED and _ps_row is not None \
             and int(_ps_row.get("level", -1)) != int(agents.PLAYER_LEVEL):
         # SANDBOX-B7: a [party.KEY] row's `player_level` is the SPEC's knob
@@ -30334,19 +30383,22 @@ def _handle_request_players(send, state, conn_id, stop, rec):
                     _fxr[_fac].get("total", 0)
     send(GAME_SMSG_CHARACTER_UPDATE_FACTIONS, player_attrs,
          f"CHARACTER_UPDATE_FACTIONS(level {_ps_level})")
-    # The per-slot DISPLAY MODE byte, in retail's position: 0x00EF
-    # [flags, 0xFF] immediately after 0x00E9 on 95 of 95 live loads
-    # (visstatus.py). Without it the client reads an unsent zero -- the
-    # circled bar (Always Hide) beside the cape, the headgear and both
+    # The per-slot DISPLAY MODE byte: 0x00EF [flags, 0xFF] immediately
+    # after our 0x00E9 -- retail's position RELATIVE TO 0x00E9 (95 of 95
+    # live loads; retail's whole load runs 0x00E9, 0x00EF, 0x006E, 0x018E
+    # while our burst sends 0x018E earlier, a pre-existing order the
+    # client's context resets at 0x00823B59/0x00824E3F do not disturb --
+    # the fix pass, EVR-VIS-7). visstatus.load_message builds the payload
+    # (test_visstatus drives it). Without it the client reads an unsent zero
+    # -- the circled bar (Always Hide) beside the cape, the headgear and both
     # costume slots, and the paper doll bare-headed in a town
-    # (20260923T185124, the owner's answer). --no-visibility-status
-    # keeps that.
+    # (20260923T185124, the owner's answer). --no-visibility-status keeps
+    # that.
     if VISIBILITY_STATUS_ENABLED:
         send(GAME_SMSG_CHAR_VISIBILITY_FLAGS,
-             [int(state.get("vis_flags", visstatus.DEFAULT_FLAGS)),
-              visstatus.FLAG_BITS],
-             f"CHAR_VISIBILITY_FLAGS(0x{int(state.get('vis_flags', visstatus.DEFAULT_FLAGS)):02x}: "
-             f"{visstatus.describe(state.get('vis_flags', visstatus.DEFAULT_FLAGS))})")
+             visstatus.load_message(state["vis_flags"]),
+             f"CHAR_VISIBILITY_FLAGS(0x{int(state['vis_flags']):02x}: "
+             f"{visstatus.describe(state['vis_flags'])})")
     if _ps_acct is not None and _ps_acct["factions"]:
         # The caps have their own messages -- OBSERVED
         # end to end 2026-08-18 (RUNS.md §Run 1): filled
@@ -30506,45 +30558,20 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     # them).
     if (EQUIP_WEAPON or EQUIP_ARMOUR or EQUIP_COSTUME
             or EQUIP_COSTUME_HEAD):
-        if state.get("items"):
-            # DESKWORK-D1 step 8: what the EQUIPPED BAG holds, by visual
-            # position -- the dress's item cells (item_layout_begin), which
-            # are the constants' below unless a stored cell moved a piece.
-            # The bag cell and the visual position are TWO orders (the
-            # owner's confirmation pass): item_visual_of maps retail's bag
-            # slot to its 0x006E position (bag 4, the head -> visual 6), so
-            # with the default layout this array is byte-identical to the one
-            # the else-branch has always built; test_itemmoves pins that.
-            worn = itemstore.worn_array(state["items"], EQUIPPED_BAG_ID,
-                                        VISUAL_EQUIPMENT_SLOTS,
-                                        visual_of=item_visual_of())
-        else:
-            worn = [0] * VISUAL_EQUIPMENT_SLOTS
-            if EQUIP_WEAPON:
-                worn[0] = WEAPON_ITEM_ID
-                if agents.PLAYER_OFFHAND:            # SLICE-H9: position 1
-                    worn[EQUIPPED_SLOT_OFFHAND] = OFFHAND_ITEM_ID
-            if EQUIP_ARMOUR:
-                for item_id, _key, slot in STARTER_ARMOUR:
-                    worn[slot] = item_id
-            if EQUIP_COSTUME_HEAD:
-                worn[COSTUME_HEAD_SLOT] = COSTUME_HEAD_ITEM_ID
-            if EQUIP_COSTUME:
-                # Slot 7, the costume BODY cell. The whole
-                # point is that this slot is not additive:
-                # studies/playercomposite 9.2 read an override
-                # array at CpsBase+0xD8 that REPLACES the
-                # armour slots' cached rows at build time, so
-                # wearing this should change what the ARMOUR
-                # components draw rather than adding a piece.
-                worn[COSTUME_SLOT] = COSTUME_ITEM_ID
-        # The DISPLAY MODE's world half: a piece the mode hides in THIS
+        # ONE copy of the dressed array (player_worn_array; the fix pass,
+        # ENG-VIS-6 -- this build and handle_visibility_flags' 0x006F used
+        # to re-type it separately): the item store's equipped bag through
+        # the bag->visual permutation when the dress has run (DESKWORK-D1
+        # step 8; with the default layout byte-identical to the constants'
+        # fill, test_itemmoves pins that), else the launch constants.
+        # Then the DISPLAY MODE's world half: a piece the mode hides in THIS
         # regime leaves the array (visible_worn; RECONSTRUCTION -- the
-        # client's dresser never reads the flags, and retail's outpost
-        # bodies are bare-headed 756 of 2,245 times against 0 of 48 in
-        # a field). The doll is untouched: it reads the equipped BAG and
-        # the flags itself.
-        worn = visible_worn(worn, state, conn_id)
+        # client's dresser never reads the flags; retail's own per-regime
+        # tailoring of this array is OBSERVED on the WEAPON, absent from
+        # every outpost 0x006E and carried in every field one --
+        # visstatus.py's docstring). The doll is untouched: it reads the
+        # equipped BAG and the flags itself.
+        worn = visible_worn(player_worn_array(state), state, conn_id)
         send(GAME_SMSG_UPDATE_AGENT_VISUAL_EQUIPMENT,
              [PLAYER_AGENT_ID] + worn,
              "UPDATE_AGENT_VISUAL_EQUIPMENT("
