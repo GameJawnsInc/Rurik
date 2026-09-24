@@ -1896,12 +1896,14 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 **Desk routes the owner took, 2026-09-22** — [studies/deskwork/PLAN.md](studies/deskwork/PLAN.md) §3
 
-* **DESKWORK-D1**: steps 1–4 and 6–8 landed (PLAN-LOG) — the bare-machine c2s
+* **DESKWORK-D1**: steps 1–8 landed (PLAN-LOG) — the bare-machine c2s
   send-site census over both framers (`sendsites.py`, 214 sites), SANDBOX-N2's hero kick
   armed from retail's one batch (c2s `0x001F`), retail's c2s triaged (`c2striage.py`: 57
   opcodes over 96 live connections, zero undecided; `test_dispatch` §10 is the reverse
-  guard; `0x009F` HENCHMAN_ADD and `0x00B1` MAP_TRAVEL named medium and dropped until
-  their arms), the hero ADD armed as RECONSTRUCTION (c2s `0x001E`, `--no-hero-add`, for
+  guard; `0x00B1` MAP_TRAVEL named medium and dropped until its arm), the party family's
+  henchman ADD armed (c2s `0x009F`, `--no-henchman-add`; PLAN-LOG step 5 and its fix
+  pass, studies/cmsg "The party family"),
+  the hero ADD armed as RECONSTRUCTION (c2s `0x001E`, `--no-hero-add`, for
   the commander rig — `--party` — where it re-declares the inventory a kick destroyed
   and refuses in the legacy rig; `0x0018` from the owned set as a labelled policy,
   `--no-hero-unlock-mask`; the client sends both hero commands from an OUTPOST only),
@@ -1928,15 +1930,19 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   and after the owner's-answer fixes (PLAN-LOG: the doll order, the display mode
   `0x00EF`/`0x0057`, the backpack drag `0x0072`) the doll's order, the eye and the helm,
   Hide in Towns hiding the helm on the doll AND the world body, and the drag staying.
-  **Open**: the party family from HENCHMAN_ADD's witness (step 5); travel's client
-  confirmation (the owner's `M` press and one click; runsheet in studies/cmsg "World-map
-  travel" — its `--no-map-unlock` control predicts the current map's pin alone, not an
-  empty map); the display mode's field step under `--persist` (studies/cmsg "The display
-  mode"); the town weapon's client check (LANDED 2026-09-23, PLAN-LOG: the town body's
-  hands stripped, `--no-town-weapon-strip`; runsheet in studies/cmsg "The town weapon"); a
-  town ARMOUR equip's `0x006F` — retail writes armour visuals in outposts (31 strangers',
-  the own PvP head), ours sends none there (RECONSTRUCTION; studies/cmsg "The town
-  weapon", Open).
+  **Open**: step 5's outpost henchman add owes its client run (the runsheet in
+  studies/cmsg "The party family": the list on a type-10 map and the `noncombatant`
+  allegiance are the two UNVERIFIED points); the henchman FIELD-body carry, the outpost
+  re-join and the `'play'` allegiance behind a `standing` gate (step 5's deferred half —
+  the `0x00B0`-climbs-by-2 field size is NOT FOUND); a per-map party cap
+  (`OUTPOST_PARTY_CAP` is a constant 4); travel's client confirmation (the owner's `M`
+  press and one click; runsheet in studies/cmsg "World-map travel" — its
+  `--no-map-unlock` control predicts the current map's pin alone, not an empty map); the
+  display mode's field step under `--persist` (studies/cmsg "The display mode"); the town
+  weapon's client check (LANDED 2026-09-23, PLAN-LOG: the town body's hands stripped,
+  `--no-town-weapon-strip`; runsheet in studies/cmsg "The town weapon"); a town ARMOUR
+  equip's `0x006F` — retail writes armour visuals in outposts (31 strangers', the own PvP
+  head), ours sends none there (RECONSTRUCTION; studies/cmsg "The town weapon", Open).
 * **DESKWORK-D5**: the combat rules retail's tapes on disk already settle. LANDED
   2026-09-22: the adrenaline gate (SKILLS-B1's gate half, skills §34.11); property 10
   and the `[42]` residue (§16.6, self-scoped; `[42]` only when the maximum moved); the

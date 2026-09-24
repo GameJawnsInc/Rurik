@@ -6477,6 +6477,50 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   stored mask (the `0x00DA` setter zeroes the client's mask, EVID-D1C-3),
   `hero_panel_bar_ids` reads the session's bar first. Drives the real handlers with a
   fake send and a scratch store. Floor 53 -> 71 from the green run, ~2 s),
+  `toolkit/authsrv/test_henchparty.py` (**2026-09-23, DESKWORK-D1 step 5: the party
+  family's henchman add, c2s 0x009F HENCHMAN_ADD, and the ONE party count it shares
+  with the hero kick and hero add since the fix pass**, `studies/cmsg/FINDINGS.md` "The
+  party family". OBSERVED end to end (capture 20260819T132414 :53419, an outpost).
+  §1 the batch, byte for byte against the TAPE: `henchparty.henchman_add_batch` encodes
+  to the 23-byte prefix that answers each of the three c2s 0x009F adds -- 0x00B0
+  PLAYER_PARTY_SIZE then the 0x01BF roster row, SIZE BEFORE ROW -- with enc_name,
+  profession and level read from the tape's own 0x01BF (nothing ArenaNet authored is
+  committed in the test); the KNOWN-BAD arm is the KICK's row-before-size shape through
+  the same comparator, which must NOT match (13 checks, vault-gated, outside the floor).
+  §2 the real handlers with a fake send: a valid `handle_henchman_add` sends exactly
+  0x00B0 then 0x01BF and no 0x0021 (the standing NPC is SEEDED into state[agents] and is
+  still there after -- the landing's empty-agents version could not see a destroy), the
+  size counts player + henchman, and the refusals (not hireable, already in the party,
+  over the cap) send NOTHING; three adds fill the cap of 4 and the fourth is refused;
+  the cap counts HEROES too. THE FIX PASS'S CASES (HENCH-EVR-1 / ENG-HENCH-1): with a
+  hero and two hired henchmen in the party, `handle_hero_kick`'s 0x00B0 says 3 (the
+  landing's own `1 + henchman + heroes` said 1 -- run as the KNOWN-BAD value), the hero
+  ADD back says 4, and a hero add into a party the henchmen filled to the cap is
+  REFUSED with the same add accepted under `--henchman-cap 8` (the vacuity guard: the
+  refusal is the cap's). Under `--party-size-no-heroes` the henchman add's 0x00B0
+  leaves the hero out as the load does while the cap still counts it. The leaf's three
+  opcode constants are locked equal to authsrv's. The two ACCEPTING hero adds build the
+  hero character block, which reads the vault's attribute-cost rows, so on a bare
+  machine they declare a skip (2 checks). §3 the spawn wiring: `spawn_population` over
+  the shipped `outpost_henchmen` rows sends, for each hireable row and BEFORE its
+  0x0020 create, the displayed level (0x009F [36, agent, 3]) then 0x0071 -- retail's
+  position, 24 of 24 sends -- and records `state["hireable_henchmen"]` with each one's
+  profession and level (the 0x01BF row carries them); the KNOWN-BAD `--no-henchman-add`
+  marks nothing; a FIELD (`--explorable`) creates the bodies but sends neither message
+  (retail marks henchmen in outposts only, 11 of 96 live connections). §4 SOURCE LOCKS
+  on authsrv.py, EACH PAIRED WITH A MUTATION THAT REDDENS IT (the source parsed once,
+  the extracted function's text mutated): the 0x009F arm is gated on
+  HENCHMAN_ADD_ENABLED; `main()` wires --no-henchman-add and --henchman-cap and refuses
+  N < 1; spawn_population's hireable arm is flag-gated, sends `hireable_bringup` and
+  skips a field; `handle_henchman_add` caps on `party_member_count` vs
+  `OUTPOST_PARTY_CAP` and sizes through `party_size_on_wire`; `handle_hero_kick` and
+  `handle_hero_add` size through `party_size_on_wire` (the old sum is the mutation) and
+  the hero add refuses at the same cap; `party_size_on_wire` reads
+  PARTY_SIZE_COUNTS_HEROES; 0x009F is OFF the DROPPED_ON_PURPOSE allowlist (put back in
+  memory as the mutation). Drives the real functions with a fake send and a scratch
+  state. Floor 49 = the bare-machine core, measured with RURIK_VAULT at an empty
+  directory (64 with the vault; the landing's floor of 27 was above its own bare run of
+  23 -- HENCH-EVR-2 / ENG-HENCH-2), ~9 s),
   `toolkit/authsrv/test_itemmoves.py` (**2026-09-23, DESKWORK-D1 step 8: the inventory
   messages, c2s 0x004F ITEM_MOVE, 0x0030 EQUIP_ITEM and 0x0072 ITEM_MOVE_BY_ID, and the
   item store behind them**, `toolkit/authsrv/itemstore.py`, `studies/cmsg/FINDINGS.md`

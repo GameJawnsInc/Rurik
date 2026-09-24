@@ -251,6 +251,14 @@ try:
     led.ok(s3 == [],
            "a hero ALREADY IN THE PARTY sends nothing (the kick's 'already "
            "kicked' mirror)")
+    # A party of eight needs an EIGHT-cap map: since DESKWORK-D1 step 5's fix
+    # pass the hero add also refuses at the served map's party cap
+    # (OUTPOST_PARTY_CAP, a constant 4 = the AreaInfo max_party of the maps we
+    # serve; --henchman-cap overrides), with heroes AND hired henchmen counted
+    # -- test_henchparty drives that refusal. These two checks are about the
+    # client's own hero cap, so they run under the largest max_party (8).
+    _saved_cap = authsrv.OUTPOST_PARTY_CAP
+    authsrv.OUTPOST_PARTY_CAP = 8
     authsrv.HERO_IDS = [1, 2, 3, 4, 5, 6, 7, 8]
     s4, send4 = fake_send_factory()
     st4 = {"agents": {}, "char_uuid": UUID, "kicked_heroes": {8}}
@@ -269,6 +277,7 @@ try:
     led.ok(add_order(ops(s5)) and dict(s5).get(PARTY_SIZE) == [68, 8],
            "CONTROL: the SEVENTH is accepted -- party 8 (player + 7 heroes)",
            f"size {dict(s5).get(PARTY_SIZE)}")
+    authsrv.OUTPOST_PARTY_CAP = _saved_cap
     authsrv.HERO_IDS = [6]
 
     # -- §3 the round trip under --persist ---------------------------------------
