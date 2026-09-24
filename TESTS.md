@@ -6684,6 +6684,44 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   launches nothing. Floor 36 from the green run with `RURIK_VAULT` pointed at an empty
   directory (the bare-machine core; §2's 12 ride the vault, 48 vaulted; re-set on the fix
   pass from its own bare run), ~10 s),
+  `toolkit/authsrv/test_maptravel.py` (**2026-09-23, DESKWORK-D1 step 7: world-map travel**,
+  rebuilt by the fix pass the same day — c2s `0x00B1` MAP_TRAVEL and the s2c `0x0094` unlock
+  state that makes the client's world map offer our outposts; `toolkit/authsrv/maptravel.py`,
+  `studies/cmsg/FINDINGS.md` §"World-map travel". §1 THE LEAF (bare-machine): `travelable_maps`
+  is exactly our enabled non-explorable content maps with a KNOWN spawn — the `(0, 0)`
+  placeholder rows (194, 55) withheld, and a KNOWN-BAD fake world that writes a spawn into one
+  puts it back; an exclusion dict withholds an unwarmed destination; `unlock_bitmap_words` sets
+  bit == map id at the SERVER's own width (`mission_mask_bytes(MAP_ID_COUNT)//4`, 28 on 38797;
+  retail's 27 labelled), with a VACUITY guard and a KNOWN-BAD 1-dword overflow; `unlock_message`
+  puts the words in arr4 and `unlock_payload_ok` refuses them in arr0 (KNOWN-BAD); `plan_travel`
+  accepts a served destination and refuses the map you are on, an unserved id, an explorable, a
+  placeholder spawn and an unwarmed destination each with a reason — and a KNOWN-BAD fake world
+  with the explorable flag STRIPPED is accepted, so the refusal reads the flag; `travel_batch_ok`
+  True on retail's batch, False reordered / without `0x01D9` / with a `0x0028`;
+  `arrival_skips_unlock` one-shot, map-checked, TTL-aware (4 checks). §2 THE SERVER
+  (bare-machine): the dispatch arm behind `MAP_TRAVEL_ENABLED`; the login's `0x0094` gate locked
+  by CONTEXT (`if MAP_UNLOCK_ENABLED and not _zoned_in:` immediately before `unlock_message`,
+  the send taking its payload and label; a KNOWN-BAD text with `if True:` fails the same
+  predicate); EXACTLY ONE `0x0094` send site across `toolkit/authsrv/*.py` counted over EVERY
+  spelling (`GAME_SMSG_MAP_TRAVEL_UNLOCK`, `0x0094`, `0x94`, `148`; the pattern proven on all
+  four); BOTH writers of arr4 present once each and ORDERED — `0x0199`, `0x0094`, the fog pair,
+  the burst's `0x0099` (a KNOWN-BAD swapped text fails); the revert flags applied CONTIGUOUSLY
+  (a commented-out assignment fails); the prewarm gated on `--map` and `a.no_map_travel` and
+  recording `TRAVEL_UNSERVABLE`; the transfer's one-shot arrival marker written and read;
+  `handle_map_travel` driven with a fake send and the real `send_transfer` (`send_stop=False`)
+  passes `travel_batch_ok` with `0x01D9` first and `[2, 1, '']`, records the marker (which the
+  re-entry check then consumes), and the SAME predicate goes False when the send wrapper DROPS
+  `0x01D9` from the real handler's output (KNOWN-BAD); five refusals (explorable, no row, already
+  here, placeholder spawn, unwarmed) return False and send nothing. §3 THE TAPE (vault-gated,
+  `livewire.decode_conn`; `LEDGER.skip` on a bare machine): every live c2s `0x00B1` is `[map_id,
+  0, 0, 0, 1]`; its s2c batch `0x01D9`, `0x01A5`, `0x0099` in order (10 of 10), `0x01D9` first
+  on 9 of 10, the transfer NEVER first (KNOWN-BAD); s2c `0x0094` 29 of 29 with a non-empty arr4,
+  on a LOGIN's first map-loading connection (28) or a second login (1) and on 0 transfer
+  arrivals, after `0x0199` and before `0x008B` (29 of 29), 27 dwords (29 of 29); THE JOIN: every
+  `0x00B1` destination's bit set before the click by the login's `0x0094` or a prior `0x0099`
+  (10 of 10), at load alone 9 of 10, and a `0x0099 [map, 1]` exists. Drives the real handler and
+  `send_transfer`, launches nothing. Floor 45 (§1+§2 bare-machine core, from the green run with
+  `RURIK_VAULT` empty; §3 adds 10 on the vault, 55), ~15 s),
   `toolkit/authsrv/test_labelrun.py` (the labelled input run, which names GAME_CMSG
   opcodes from what a human was told to do: a message lands in exactly one step's
   window, instance-load traffic is never folded into step 1, and a dirty idle CONTROL

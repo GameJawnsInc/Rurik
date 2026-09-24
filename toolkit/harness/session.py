@@ -198,7 +198,12 @@ class Stack:
                     pass                # never stop reading the pipe: see above
         logf.close()
 
-    def start(self, timeout=20):
+    def start(self, timeout=60):
+        # 60 s, not 20 (2026-09-23, DESKWORK-D1 step 7's fix pass): the gamesrv
+        # now pre-warms every travel destination's navmesh at startup -- MEASURED
+        # ~13 s for the 12-map content set on top of a ~3.6 s bare start, ~17 s
+        # in all, and it grows with each enabled non-explorable content row. The
+        # deadline is here to catch a child that NEVER listens; 60 s still does.
         os.makedirs(self.logdir, exist_ok=True)
         for name, host, port, cmd in self.specs:
             self.logs[name] = os.path.join(self.logdir, f"{name}.log")

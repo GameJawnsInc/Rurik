@@ -2013,3 +2013,238 @@ process — the fix pass's own sweep does). `itemstore.py`'s "the same outpost s
 "the same outpost (map 248) on two sessions" — `0x0199 [.., 248, 0, ..]` on both `:58638`
 (20260919) and `:58557` (20260917) (R8). `test_townweapon`: floor 35 → 36 bare (the label
 lock), 46 → 48 vaulted (the cross-check), each from a real green run.
+
+### World-map travel — `c2s 0x00B1 MAP_TRAVEL`, the `s2c 0x0094` unlock state, and the transfer it hands off (DESKWORK-D1 step 7, 2026-09-23)
+
+**The question.** The retail c2s triage (step 3) named `0x00B1` MAP_TRAVEL medium
+and left it `DROPPED_ON_PURPOSE`: an arm that transferred the client to an unbuilt
+map would strand it, and the route asked two prior things — what the world map's
+click gates on, and the unlocked-outpost state nothing models. Both are answered
+here from the tapes and the binary, and the arm ships.
+
+**The request, re-derived from the tapes (OBSERVED, 10 of 10 on 10 connections over
+6 captures; `livewire.decode_conn`).** Every c2s `0x00B1` is `[map_id, 0, 0, 0, 1]`
+(word map_id, byte, word, byte, byte). The destination map varies (248 ×5, 148 ×2,
+281, 242, 449); **the trailing four fields were `0, 0, 0, 1` on all ten and never
+varied** — region / district / language / a flag are the candidates the field widths
+suggest, UNVERIFIED because nothing on the tape moves them. The reply is
+`0x01D9 [2, 1, '']` then the transfer pair `0x01A5` GAME_SERVER_TRANSFER and `0x0099`
+MAP_UPDATE_CURRENT — **10 of 10 in sequence, 9 of 10 with `0x01D9` the first non-clock
+s2c** (the tenth interleaves an ambient `0x001E`/`0x0029` first, the same busy-wire
+effect the kick's row shows) — then the server hangs up and the client re-dials the
+transfer address, sending c2s `0x0008` every time. **No `0x0028` AGENT_STOP_MOVING
+precedes it** (the player is standing in an outpost), unlike a portal transfer where
+the moving body is stopped first (SLICE-B8). The `0x01D9` batch is OBSERVED; the two
+bytes' and the empty string's meaning is UNVERIFIED — its worker `0x0085a290` sets a
+state at `[ctx+0x54]` and fires UI notifications (`0x1000012a`/`12d`/`130`), with no
+assert gating it, so a bare send is accepted (RECONSTRUCTION that it is; the
+client-confirmation run is the witness). Retail's `0x01D9` rides its own TCP segment
+18.6–42.2 ms before the pair's (10 of 10); ours go out back to back — the gap is
+UNREPRODUCED, worth reproducing only if the client run shows a UI race.
+
+**The send gate, statically (38797; `sendsites.py`, `codescan.py --xrefs/--dis`,
+`asserts.py`; corrected by the fix pass).** The travel wrapper `0x0085C280` has no
+direct CALL — `sendsites.py` counts calls — and is NOT "reached through a pointer":
+`codescan --xrefs` finds 0 stored words holding its VA and exactly one direct reference,
+the one-instruction thunk `0x008576E0` (`jmp 0x85c280`), whose one caller is the `call`
+at `0x004A791F`. **The route's "one caller `0x004A791F`" was right**; the landing's
+pointer sentence was wrong. That call sits in `0x004A78C0`, which reads a UI record's
+`[+0x20]`: `== 1` sends `0x00B1` (the travel path), `== 0` and `== 2` take sibling thunks
+`0x008576D0`/`0x008576F0`. Before that switch, `0x004A78C0` ITSELF calls the three
+map-state getters at `0x004A78ED`/`F6`/`FF` — `0x0084DE70` (`missionContext+0x2a8`
+bit 1), `0x0084DF60` (bit 4) and `0x0084DEC0` (`missionContext+0x190` bit 0) — and a
+failed getter branches to `0x004A795A`, which continues into further calls rather than
+returning (the refuter read it as a UI-frame confirm path): an immediate-vs-deferred
+branch, not send-vs-drop. `0x004A78C0` has three direct callers. What the world map
+OFFERS as a clickable destination is the unlock state below; the send itself carries
+whatever record the UI built.
+
+**The unlock state nothing modelled — `s2c 0x0094` (schema 148: five `array32`) — and
+the SECOND writer the fix pass found.** Our server sent no `0x0094` (grep `authsrv.py` at
+`3b2df394`), but the client's set was NOT empty: **`s2c 0x0099` MAP_UPDATE_CURRENT's
+handler `0x0091ec20` pushes `[msg+8]`, `[msg+4]` and calls `0x00812600`, which loads
+`[[ctx]+0x2c] + 0x60c` — the SAME store `0x0094`'s fifth CopyBits fills (`lea ecx,
+[esi+0x60c]` at `0x00812343`) — and calls `0x0059d130`, which ends `bts eax, edx` at
+`0x0059d239` (word `map>>5`, bit `map&31`).** OBSERVED in the binary. Our server has
+always sent `0x0099 [map, 0]` at every load and in every transfer, so before this arc
+the client's arr4 held the current map plus every map zoned into; what `0x0094` adds is
+the OTHER served outposts, all at once. `0x0094`'s handler `0x0091eb10 -> 0x008122f0`
+copies the five arrays into `charCtx +0x5cc/+0x5dc/+0x5ec/+0x5fc/+0x60c` through
+Array::CopyBits `0x00473550` — a REPLACE, **no create-once, no ordering gate**,
+`Array:130` `Bytes() >= bytes` the only assert on the path (`ChCliApi:1641` sits at
+`0x00811AB9`, the fog accumulator — the landing misplaced it here) — so it is safe to
+send in any load state; and CopyBits grows the store before that check, so our 28-dword
+(38797) / 29-dword (38888) arr4 against retail's constant 27 cannot assert
+(RECONSTRUCTION; the width is ours).
+**MEASURED over the 96 live connections, 29 sightings on 29 connections:** arr4 is a
+map-id bitmap, bit index == map id, 27 dwords on 29 of 29; arr0-3 are EMPTY on 27 of 29,
+and on the two Kamadan-character logins (`20260914T005758`, `20260916T150306`) arr0 and
+arr1 carry 18 dwords with bit 544 set — UNVERIFIED what they are (mission completion is a
+candidate); all four are sent empty as a labelled choice. **arr4 is the client's
+KNOWN-MAPS set, not an outpost list:** ids our content marks explorable are set in it —
+280 Isle of the Nameless on 14 of 29, 146 Lakeside County on 5 of 29 (168 is set on 29 of
+29, but our row 168 is a created chain in a reused slot and says nothing of retail's
+type). Offering only enabled non-explorable content maps is OUR policy, RECONSTRUCTION.
+**Cadence:** retail sends `0x0094` ONCE PER LOGIN — on a login's first map-loading
+connection (28 of 29 first of their capture; the 29th is `20260919T103604`'s second
+login), on 0 of 61 connections that arrive from a transfer, all 10 world-map-travel
+arrivals included — after `0x0199` and before the fog pair `0x008B`/`0x008A` on 29 of 29
+(and after the connection's first `0x0099`, 29 of 29). In-session unlocks then arrive as
+`0x0099 [map, 1]`: one on the corpus, `[281, 1]` on `20260817T231139` conn `54071`
+(map 310) at +783.2 s, the second field's only non-zero in 268 `0x0099`. **THE JOIN,
+which replaces the landing's "across 22 connections EVERY map the client then sent
+`0x00B1` to had its arr4 bit set at load" (9 of 10, and no 22 exists):** every one of the
+10 `0x00B1` destinations had its arr4 bit set BEFORE the click — 9 by the login's
+`0x0094` (248 ×5, 242, 148 ×2, 449), and 281 by that `0x0099 [281, 1]` 24 s before the
+owner clicked it (its bit was CLEAR in the login's `0x0094`, which the landing's own
+parenthetical admitted while the sentence claimed the opposite). The client already
+models this id space: `c2s 0x0092` MISSION_MASK_REPORT reports one bit per map id back
+(`authsrv.mission_mask_bytes`). **LABELS:** arr4 == the known-maps bitmap, bit == map
+id — OBSERVED (29 sightings, both handlers' offsets); its two writers (`0x0094` replaces,
+`0x0099` sets one bit) — OBSERVED in the binary; arr0-3 — UNVERIFIED; **that a set arr4
+bit is what the world map offers as a pin — CORROBORATED by the join (a set bit preceded
+every click, by one writer or the other) and RECONSTRUCTION** until the owner opens `M`
+on our client and sees our outposts; the click's other preconditions are the getters
+inside `0x004A78C0` above.
+
+**What the server now does (`handle_map_travel`, `maptravel.py`, behind
+`--no-map-travel`; the login's `0x0094` behind `--no-map-unlock`; as corrected by the
+fix pass).**
+
+- **At LOGIN, once — not on every load.** Right after `INSTANCE_LOAD_INFO` and before
+  the fog-init pair (retail's bracket, 29 of 29), `send(0x0094, payload)` from
+  `maptravel.unlock_message`: arr0-3 empty, arr4 with bit == map id for every travelable
+  content map. **Travelable = enabled, NOT explorable, with a KNOWN spawn, and warmed** —
+  the `(0, 0)` placeholder rows (`[map.194]`, `[map.55]`: "not a coordinate") are
+  withheld, and so is any destination whose navmesh did not load at startup
+  (`TRAVEL_UNSERVABLE`, filled by `main()`'s prewarm: 165, 166, 167 on this archive
+  generation, whose created-chain files are not installed). The offer on this archive is
+  therefore `[143, 144, 148, 242, 248, 310, 449]`. The bitmap is
+  `mission_mask_bytes(MAP_ID_COUNT) // 4` dwords wide (28 on 38797; retail's 27, labelled);
+  an id past the width is logged as overflow, never dropped silently. **Not resent on a
+  re-entry after our own transfer**: `send_transfer` writes a one-shot
+  `TRANSFER_ARRIVALS[(world, player)] = (dest, issued_at)` and the load pops it
+  (`maptravel.arrival_skips_unlock`, TTL 300 s; consumed whatever the answer, so a later
+  relaunch on the same map gets its `0x0094` — `TRANSFERS_ISSUED` is never popped, which
+  is why it could not serve). A resend would REPLACE arr4 and wipe what `0x0099`
+  accumulated for maps outside our set. **The order matters because of the second
+  writer**: our `0x0094` precedes the burst's `0x0099 [map, 0]`, so the replace comes
+  first and the current map's bit is set after it — our bitmap may omit the map you are on
+  (an explorable under `--map 168`). **One `0x0094` site in the server**, counted over
+  every spelling across `toolkit/authsrv/*.py` by `test_maptravel` (a duplicate sender of
+  unlock state wiped a library and crashed a client on 2026-09-15). A labelled policy
+  (RECONSTRUCTION of the offer from our content), the shape of the hero add's `0x0018`
+  from the owned set.
+- **On `c2s 0x00B1`**, `plan_travel(WORLD, cur_map, dest, exclude=TRAVEL_UNSERVABLE)`
+  decides: **accept** a travelable map that is not the one you are on → `send(0x01D9,
+  [2, 1, ''])` then `send_transfer(..., send_stop=False)` (the pair `0x01A5`/`0x0099`, no
+  `0x0028`) then a graceful close; the client re-dials and the re-entry serves the
+  destination. The transfer carries the party, heroes and kicked-hero store through
+  `zone_carry_store`, exactly as a portal does (SLICE-B8 / JARIN). **refuse, with NOTHING
+  sent** (retail's refusal reply is NOT FOUND on any tape — no live `0x00B1` went
+  unanswered, none targeted the current map): the map you are already on, a map with no
+  served content row, an explorable, a `(0, 0)`-placeholder row, an unwarmed destination.
+  Each refusal logs its reason.
+- **The prewarm** (`83754cc6`, corrected): every travelable destination's navmesh is read
+  at startup through ONE shared archive and file table, gated as the portal prewarm is on
+  `--map` (the harness hands `--map` to the gamesrv alone, so the auth-only instance pays
+  nothing) and on the ARM (`a.no_map_travel`, read off the argparse namespace — the
+  landing's `MAP_UNLOCK_ENABLED` gate was read ~1,000 lines before the flag block set it
+  and never acted). MEASURED: 17.4 s → 13.0 s over the 12-map content set with the shared
+  archive (the rest is each map's own decompression), and startup to the listening line
+  17.7 s → **8.1 s** with `--map 449` once the placeholder rows left the set; 2.9 s under
+  `--no-map-travel`; 1.8 s without `--map`. The harness's listen deadline
+  (`session.Stack.start`) 20 → 60 s with this as the reason. A failed prewarm is worded
+  as "unwarmed, WITHHELD as a destination", not "this run serves NO collision".
+- `0x00B1` came OFF the `DROPPED_ON_PURPOSE` allowlist in the landing (`test_dispatch`
+  §10, `test_c2striage`); `overrides.json` GAME_CMSG 177's `why` records the arm and, now,
+  the two writers, the join and the thunk.
+
+**What a run cannot settle alone, and the runsheet exists for.** Whether a set arr4 bit
+is SUFFICIENT for the world map to offer a pin (the join shows one preceded every click;
+sufficiency is the owner's `M` press); retail's acceptance of a bare `0x01D9`
+(RECONSTRUCTION, no tape shows one out of the travel sequence); the three trailing
+`0x00B1` fields' meaning (UNVERIFIED); the `0x01D9` → pair segment gap (UNREPRODUCED).
+The landing said maps 194 and 310 "would strand the body": 194 and **55** carry the
+`(0, 0)` placeholder and the gate now withholds both; **310's spawn is retail's own
+measured arrival** (`(5089, 940)` on plane 4, one trapezoid — its row's provenance), not a
+placeholder, and it is offered.
+
+**Runsheet (the orchestrator runs it after the merge; loopback client, caged; the
+owner's hands for `M` and the click — a world-map click on an outpost is a travel
+order).** Through the harness, which supplies the gamesrv's `--transfer-alt` (every proven
+transfer used a second alias; re-dialling the endpoint just cut is NOT FOUND, tape T9):
+
+    python toolkit/harness/session.py --replace --keep-open --hold 900 --game-args "--map 449 --persist"
+
+or standalone, then a caged loopback client:
+
+    python toolkit/authsrv/authsrv.py --map 449 --persist --transfer-alt 127.0.0.31
+
+The gamesrv log at startup prints `pre-warming map N: a travel destination` for 143, 144,
+148, 165, 166, 167, 242, 248 and 310, then `travel destinations WITHHELD (unwarmed):
+[165, 166, 167]`; at the login's load, `MAP_TRAVEL_UNLOCK [7 destination(s) in arr4]`
+right after `INSTANCE_LOAD_INFO` and before `MAP_EXPLORATION_INIT_BEGIN`. PREDICTIONS:
+
+1. **Press `M` in Kamadan.** The world map offers our served outposts as clickable pins,
+   each on whichever continent view the client files it under: Great Temple of Balthazar
+   (248), Pre-Searing Ascalon (148), map 242, map 310, the two test slots 143/144 — and
+   Kamadan itself (its bit from the burst's `0x0099`). Lion's Arch and Kaineng Center do
+   NOT appear (withheld: placeholder spawns); 165/166/167 do NOT appear (withheld:
+   unwarmed). If NO pin but Kamadan's appears, a set arr4 bit is not sufficient — record
+   it. (Fog init must be on, the default; never press `M` on a map whose fog init was
+   skipped — `GmMapView.cpp(1731)`.)
+2. **Click Great Temple of Balthazar (248).** The gamesrv log prints `MAP_TRAVEL to map
+   248: 0x01D9 then the transfer pair; the client re-dials`, then on the new connection
+   `MAP UNLOCK: a re-entry after our own transfer -- 0x0094 NOT resent`; the client fades
+   and loads the Great Temple; the party, any heroes and a stored kick survive (the
+   carry). Press `M` there: the same pins (Kamadan's bit stays — the load's `0x0099` set
+   it and nothing replaced arr4).
+3. **Travel back to Kamadan, then relaunch the client** (`--persist`): the fresh login's
+   load prints `MAP_TRAVEL_UNLOCK [...]` again (the one-shot marker was consumed) and `M`
+   shows every pin. If it shows only Kamadan, the marker was not consumed — record it.
+4. **If the UI lets you select the map you are on**: the log prints `MAP_TRAVEL(map 449)
+   refused: already on map 449; nothing sent`, and nothing happens.
+5. **Control, `--no-map-travel`** (`--game-args "--map 449 --persist --no-map-travel"`):
+   the pins are unchanged (the unlock is still sent; no prewarm lines at startup); a click
+   on Great Temple logs `MAP_TRAVEL ignored (--no-map-travel)` and nothing happens — the
+   arm is the lever.
+6. **Control, `--no-map-unlock`** (`--game-args "--map 449 --persist --no-map-unlock"`):
+   the world map shows **Kamadan's pin and no other** — arr4 holds only what `0x0099` set.
+   (The landing predicted an EMPTY map; that was wrong, and an owner seeing one pin would
+   have been scored against the wrong expectation.) If a pin appears for a map never
+   zoned into, `0x0099` is not arr4's only other writer — record it.
+
+**The fix pass (2026-09-23, the same day).** Two reviews of the landing — an evidence
+refuter that re-derived the lane from the 96 live connections and the pinned client before
+reading the notes, and an engineering review with ten mutation arms and startup timings —
+found the ARM sound (the `0x00B1` shape, the `0x01D9` → `0x01A5` → `0x0099` batch, the
+refusals, the allowlist move; 10 of 10 reproduced) and the UNLOCK half's evidence not.
+Every contested measurement was re-derived here before a line changed, and every one of
+theirs held. Moved: the second writer of arr4, `0x0099`'s `bts`, named and its order
+against `0x0094` locked (TRAV-EV-1, blocker); "every destination set at load across 22
+connections" restated as 9 of 10 at load and 10 of 10 counting `0x0099`, the 22 dropped,
+the join added to the tape section (TRAV-EV-2 / ENG-TRAV-1, blockers); "arr0-3 empty on
+every tape" restated as 27 of 29 (ENG-TRAV-2, blocker); the per-load resend after the fog
+pair, labelled "as retail does", replaced by once-per-login before the fog pair with the
+one-shot arrival marker (TRAV-EV-3 / ENG-TRAV-3); arr4 relabelled the known-maps set with
+the explorables it carries, and the width divergence named (TRAV-EV-5 / ENG-TRAV-11); the
+constant-against-constant KNOWN-BAD replaced by `travel_batch_ok` on the real handler's
+output with `0x01D9` dropped, the gate locked by context, the one-sender guard widened to
+every spelling, the payload pinned, the flags locked contiguously — the engineer's four
+uncaught mutations (M5–M7, M9) now redden (TRAV-EV-4 / ENG-TRAV-6/7); the offer and the
+arm withhold `(0, 0)`-placeholder rows and unwarmed destinations (ENG-TRAV-8 /
+TRAV-EV-9); the prewarm gated on `--map` and the arm, shared, costed, and the harness
+deadline raised (ENG-TRAV-4/5, TRAV-EV-8); the runsheet given `--transfer-alt` through the
+harness and `--map 449`, its `--no-map-unlock` prediction corrected (ENG-TRAV-9);
+`ChCliApi:1641` dropped from the `0x0094` path (TRAV-EV-6); "reached through a pointer"
+corrected to the direct jmp thunk and the route's caller credited (TRAV-EV-7 /
+ENG-TRAV-10); the timing gap labelled (TRAV-EV-10); PLAN.md §8.1 trimmed to the open
+confirmation, the sweep count named, the prewarm recorded (ENG-TRAV-12). **Declined**:
+relabelling "arr4 gates the world map" CONTESTED (ENG-TRAV-1's suggestion) — the 281 case
+does not contest it once the second writer is counted, since 281's bit WAS set before the
+click, by `0x0099`; CORROBORATED-by-the-join and RECONSTRUCTION-until-`M` is the honest
+pair. Also declined: reproducing the 18.6–42.2 ms segment gap (TRAV-EV-10, a nit —
+labelled instead), and an explicit `travel = true` content column (ENG-TRAV-8's
+alternative) — the mechanical gates (spawn known, mesh warmed) withhold exactly the rows
+the reviews named without a schema change to a shared content file.

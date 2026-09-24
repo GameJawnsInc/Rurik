@@ -28,6 +28,128 @@ move back.
 
 ---
 
+### DESKWORK-D1 (step 7), the fix pass -- 2026-09-23 -- **the SECOND writer of arr4 (`0x0099`'s `bts`) named and ordered against `0x0094`; `0x0094` once per LOGIN before the fog pair, never on a re-entry; the landing's tape claims restated (9 of 10 at load, 10 of 10 with `0x0099`; arr0-3 empty on 27 of 29); unservable destinations withheld; the prewarm gated, shared and costed (17.7 s → 8.1 s); real known-bad arms**
+
+Two reviews of the entry below — an evidence refuter over the 96 live connections and the
+pinned 38797 client, and an engineering review with ten mutation arms and startup timings —
+found the ARM sound (10 of 10 reproduced) and the UNLOCK half's evidence not. Every contested
+measurement re-derived before a line changed; every one of theirs held.
+[studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md) §"World-map travel", rewritten in place
+with a "The fix pass" paragraph; `toolkit/authsrv/maptravel.py`; `toolkit/authsrv/test_maptravel.py`.
+
+**The second writer (blocker).** "EXACTLY ONE sender of unlock state" and "the client's
+unlocked set starts empty today" were both false: `s2c 0x0099` MAP_UPDATE_CURRENT's handler
+`0x0091ec20 -> 0x00812600` loads the SAME store `0x0094`'s CopyBits fills (`charCtx+0x2c +
+0x60c`) and calls `0x0059d130`, which ends `bts eax, edx` at `0x0059d239` — one bit per
+message. Our server has always sent `0x0099 [map, 0]` at every load and transfer, so arr4 held
+the current map and every map zoned into; `0x0094` adds the OTHER served outposts. The login's
+`0x0094` now precedes the burst's `0x0099` (replace, then set), locked with a KNOWN-BAD swap.
+
+**Once per login (major).** Retail: 28 of 29 sightings on a login's first map-loading
+connection (the 29th a second login), 0 of 61 transfer arrivals, after `0x0199` and before
+`0x008B` on 29 of 29. Ours went on EVERY load after the fog pair, labelled "as retail does". Now
+after `INSTANCE_LOAD_INFO`, before the fog pair, and skipped on a re-entry after our own
+transfer via a one-shot `TRANSFER_ARRIVALS` marker written by `send_transfer` and popped by
+the load (`arrival_skips_unlock`, TTL 300 s; `TRANSFERS_ISSUED` is never popped, so a relaunch
+asking for the last destination would have read as a re-entry).
+
+**The claims (blockers).** "Across 22 connections EVERY destination's bit was set at load" is 9
+of 10 — 281 was clear in the login's `0x0094` and set by `0x0099 [281, 1]` on `20260817T231139`
+24 s before the click; 10 of 10 counting both writers; no 22 exists (29 sightings on 29
+connections). "arr0-3 empty on every tape" is 27 of 29 (arr0/arr1 carry bit 544 on the two
+Kamadan logins; UNVERIFIED, still sent empty). arr4 is the KNOWN-MAPS set — explorables 280 and
+146 are set in retail's — so "outposts only" is our RECONSTRUCTION; retail's width is 27 against
+our 28/29. Restated in `maptravel.py`, the constants, the send site, the flags, `serverargs`,
+`overrides.json` GAME_CMSG 177 and the study. `ChCliApi:1641` is the fog accumulator's, not the
+`0x0094` path's. The wrapper `0x0085C280` is reached by a direct jmp thunk `0x008576E0` <- call
+`0x004A791F` (0 stored words), not "through a pointer"; the route's caller stands.
+
+**Unservable destinations (major).** The offer and the arm withhold `(0, 0)`-placeholder rows
+(`[map.194]`, `[map.55]` — the landing's runsheet pointed the owner at Lion's Arch) and any
+destination whose navmesh did not load at the prewarm (`TRAVEL_UNSERVABLE`: 165/166/167 on
+this archive). Map 310's spawn is retail's measured arrival, not a placeholder; "310 strands
+the body" is withdrawn. The offer on this archive: `[143, 144, 148, 242, 248, 310, 449]`.
+
+**The prewarm (major).** It read `MAP_UNLOCK_ENABLED` ~1,000 lines before the flag block set
+it (the gate never acted), ran on the auth-only harness instance too, and cost ~14 s against a
+20 s listen deadline. Now gated on `--map` (the portal convention) and on `a.no_map_travel`
+read off the namespace, with one shared archive and file table (`load_pathmap`/
+`prewarm_pathmap` take `archive=`/`table=`/`role=`). MEASURED startup, `--map 449`: 17.7 s →
+8.1 s; `--no-map-travel` 2.9 s; no `--map` 1.8 s. `session.Stack.start` 20 → 60 s, with the
+reason. A destination's failure reads "unwarmed, WITHHELD", not "this run serves NO collision".
+
+**The tests (major).** The landing's "KNOWN-BAD transfer-first" compared a constant with a
+constant, and four unlock mutations stayed green. `test_maptravel` rebuilt: `travel_batch_ok`
+on the real handler's batch AND on its output with `0x01D9` DROPPED by the send wrapper; the
+gate locked by context (an `if True:` text reddens); the one-sender guard over every spelling
+across `toolkit/authsrv/*.py`, its pattern proven on all four; the payload pinned against a
+words-in-arr0 variant; the flags locked contiguously; the explorable refusal proven to read
+the FLAG; the placeholder and unwarmed refusals; the arrival marker's four behaviours; the tape
+section's JOIN (10 of 10 before the click, 9 at load, one by `0x0099`), login/arrival census
+(28+1 / 0), position bracket (29 of 29), width (27). Floor 23 → 45 bare (a declared 47 reddened
+the guard), 55 vaulted; TESTS.md rewritten. **Declined**: CONTESTED for "arr4 gates the world
+map" (281's bit WAS set before the click, by the second writer); reproducing the 18.6–42.2 ms
+segment gap (labelled UNREPRODUCED); a `travel = true` content column (the mechanical gates
+withhold exactly the named rows without a shared-schema change).
+
+**The runsheet** (in the study) now runs through the harness (which supplies
+`--transfer-alt`; T9 is NOT FOUND) with `--map 449`, and its `--no-map-unlock` control
+predicts **Kamadan's pin alone**, not an empty map — the prediction the owner's `M` press
+would otherwise have been scored against. Affected sweep on the code commit's tree
+(`2d6ee72e`): the pass's own gates green — `test_maptravel` 45 bare / 55 vaulted,
+`test_transfer` 28, `test_dispatch` 54, `test_c2striage` 36, `test_srclint` 26, `test_checks`
+17, `test_citelint` 50, `test_identlint` 28, `test_provlint` 19 (9 tests, 358 checks); the
+95-test affected sweep (the engineering review's list, `scratchpad/fix-desk-trav/affected.txt`)
+was launched on that tree and CUT OFF by the report deadline before its summary printed — the
+orchestrator runs it at merge, as the display-mode fix pass's was. CLIENT CONFIRMATION STILL
+OWED (the owner's `M` press and one click).
+
+### DESKWORK-D1 (step 7) -- 2026-09-23 -- **world-map travel armed: `c2s 0x00B1 MAP_TRAVEL` answered with `0x01D9` then the transfer pair, and the unlocked-outpost state nothing modelled built and sent (`s2c 0x0094` arr4, bit == map id)**
+
+Travel comes OFF the step-3 allowlist. Two halves, both behind revert flags.
+[studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md) §"World-map travel"; `toolkit/authsrv/maptravel.py`;
+`toolkit/authsrv/test_maptravel.py`.
+
+**The unlock state (`--no-map-unlock`).** Our server sent no `s2c 0x0094` at all (grep
+`authsrv.py`), so the client's unlocked-map set started empty and the world map offered
+nothing to travel to -- the reason the arm alone was not enough. `0x0094` carries five
+map-id bitmaps (schema 148, five `array32`; handler `0x0091eb10 -> 0x008122f0` copies them
+into `charCtx +0x5cc..+0x60c` via `Array::CopyBits`, no create-once, no ordering gate).
+MEASURED on every live tape: arr0-3 empty, arr4 a map-id bitmap (bit == map id), and
+across 22 connections EVERY map the client then sent `0x00B1` to had its arr4 bit set at
+load, the set growing as the session unlocked more (map 281 clear on `20260817T231139`,
+set the next day). OBSERVED for arr4; arr0-3 UNVERIFIED and sent empty; that arr4 IS the
+world map's clickability gate is CORROBORATED by the correlation, RECONSTRUCTION until the
+owner's `M` press. The load now sends `0x0094` once per instance (right after the fog-init
+pair) with arr4's bit set for every travelable content map -- enabled and not explorable,
+the 12-map set `[55, 143, 144, 148, 165, 166, 167, 194, 242, 248, 310, 449]` -- a labelled
+policy built from our content rows, the shape of the hero add's `0x0018`. EXACTLY ONE
+sender (a duplicate sender of unlock state crashed a client on 2026-09-15; `test_maptravel`
+pins the site).
+
+**The arm (`--no-map-travel`).** `c2s 0x00B1 [map_id, 0, 0, 0, 1]` (OBSERVED 10 of 10 on
+10 connections over 6 captures; the trailing four fields `0, 0, 0, 1` on all ten,
+UNVERIFIED). `handle_map_travel` answers a served, non-explorable destination that is not
+the one you are on with `0x01D9 [2, 1, '']` then the transfer pair `0x01A5`/`0x0099`
+(retail's batch, 10 of 10 in sequence, no `0x0028` -- `send_transfer(send_stop=False)`,
+new kwarg) then a graceful close; the client re-dials and the re-entry serves the
+destination, the party/heroes/kicked-hero store carried by `zone_carry_store` as a portal
+does. Refuses -- with nothing sent, retail's refusal reply NOT FOUND -- the map you are on,
+a map with no served content row, an explorable. `0x00B1` off `DROPPED_ON_PURPOSE`
+(`test_dispatch` §10, `test_c2striage`), named in `overrides.json` GAME_CMSG 177's `why`.
+
+`test_maptravel.py` (floor 23 bare-machine core + 6 on the vault): the leaf's travelable
+set, the bitmap with a VACUITY guard and a KNOWN-BAD too-narrow overflow, the four
+plan_travel outcomes with a KNOWN-BAD accept-an-explorable arm; the source locks and the
+one-sender guard; the real handler emitting `[0x01D9, 0x01A5, 0x0099]` in order (KNOWN-BAD
+transfer-first) and the refusals sending nothing; the tape anchor (`0x00B1` shape, the
+batch order 10 of 10, `0x01D9` first 9 of 10, KNOWN-BAD transfer-never-first, `0x0094`
+arr4 non-empty 29 of 29). Affected sweep: green (count in the merge notes). CLIENT
+CONFIRMATION OWED -- the runsheet is in the study; the owner's `M` press settles whether
+arr4 populates the map.
+
+---
+
 ### DESKWORK-D1, the town weapon -- the fix pass -- 2026-09-23 -- **the mechanism claim re-labelled and measured; the strangers' 31 outpost armour `0x006F` cited; the town armour-equip gap recorded open; the `0x006E` label built from the array; the own body cross-checked against `0x0022`; NPC counts made message counts**
 
 The combined review of the entry below (WEAP-R1–R8: no blocker, no major; every finding's
