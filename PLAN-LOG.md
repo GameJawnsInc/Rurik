@@ -28,6 +28,87 @@ move back.
 
 ---
 
+### DESKWORK-Q1 + DESKWORK-Q3, the status sweep (pass 5, INFRA-A) -- 2026-09-24 -- **fifteen `PLAN.md` §8 lines retired or reworded, each re-verified against the code or the study first; late stamps on OUR tapes MEASURED: 0 of 274 speed-arm hard rows over 1,582 captures**
+
+**Q3 (movement FINDINGS, the 2026-09-17 entry's new closing paragraph).**
+`studies/movement/review/latestamps.py` (new, read-only) runs `movesync.late_stamp` over every
+recorder capture `origin.origin_of` calls OURS: 1,582 of 1,583 files in
+`vault/captures/gamesrv/`, 25,400 self-report intervals, 208 spanning a `0x002C` we sent the
+player (marked as `mark_server_sets` marks retail's shrine). **274 speed-arm hard rows in 71
+captures; 0 late stamps within the 67 ms bound.** Refusals in the predicate's own order: 207
+pairs still over the arm (a real displacement), 57 pairs under it with the implied delay
+outside (0, 67] ms (10 at 85–246 ms, the rest 289 ms–108 s), 5 with a neighbour under the dt
+floor, 3 with no predecessor, 2 whose flanks disagree; not one of the 57 has flanks within
+2 u/s of its pair, so none is the stamp SHAPE with a longer delay. Prediction first (zero of
+~270–290 in ~70), held; positive control first (retail's `20260916T213125` t = 197.760 named,
+18.3 ms) or the census stops; it refuses to print if its classification disagrees with the
+committed predicate on any row. Reproduces the survey's single-witness 0 of 274 in 71
+(`studies/deskwork/PLAN.md` §4); the survey's "11 stamp-shaped rows at 85–250 ms" reads here
+as 10 rows in 85–246 ms, none passing the flank test. Caveat recorded with it: our recorder
+stamps at RECEIVE time on one clock over loopback, so the artifact may be structurally rarer
+on our tapes. The §8.1 line "Late stamps on OUR tapes" is removed. (The task named
+`studies/movecode/FINDINGS.md`; the 2026-09-17 entry is in `studies/movement/FINDINGS.md`,
+which is where §8 pointed, so that is where it went.)
+
+**Q1's §8 lines, each checked before it was touched** (`studies/deskwork/PLAN.md` §6.1 is the
+survey's table; its numbers were re-derived, not copied):
+* §8.1 Skills, **Mend Condition (275) "not modelled" — REMOVED.** Shipped as skills §58
+  SKILLS-MC: `content/world.toml` `[skill_effect.275]` `heal_if_removed = true`,
+  `resolve_heal`'s branch (`authsrv.py` 21971 / 22037), `test_mechanics` §34; the same
+  section's D5 bullet already listed it landed, so §8.1 contradicted itself.
+* §8.1 Daggers, **"an NPC's cast is still single-target" — REWORDED.** A body's Fireball bursts
+  at the aim (`land_body_spell_area`, weapons §37–§38), the point-blank bursts
+  (`burst_body_spell`, §40), the caster-centred area (`body_caster_area_condition`, skills
+  §59.1) and party heal (§59.2). Still open, restated: B8's adjacent damage is the player's
+  strike only; 185 and 179 have no row; 197's label row reaches ONE target
+  (`AREA_ONE_TARGET` in `vault/content/skill_labels.toml`); the areas over time and hexes.
+* §8.1 Monster AI, **MONSTERAI-J "nothing uses them" — REWORDED.** `toolkit/harness/sandbox.py`
+  writes `group` on every generated hostile and `passive` on request; no `content/*.toml` or
+  vault row sets either (grep), so "no content rows" stands.
+* §8.1 Heroes, **"`0x0065` and the hero-family `0x001B` are unmodelled" — REWORDED to `0x005E`'s
+  retail reply alone.** `0x001B` is PARTY_FLAG_PLACE (`authsrv.py` 24598, the `0x0067` echo,
+  `git log -S` 7f0cd7c1 2026-08-19); `0x0065` is sent (the hero block, D1 step 6's mask).
+* §8.1 Movement, **§1z-dj leg B — REMOVED**: decoded at the desk in MOVECODE-1z-dk (the log's
+  2026-09-10 entry; 1z-dk.4 re-reads leg B as agenttap's sample-and-hold, the residue is
+  §1z-dl's lip, which keeps its own line). **§1z-cw.5 — REMOVED**: explained by §1z-cw.6 (the
+  copy arrived at a lead the wall or fence cut short; 255 episodes, 172 on the granted point).
+  **NPCTRACK Q3's clause — REMOVED** (npctrack FINDINGS: "CLOSED on the owner's own route,
+  2026-09-06 15:48", corrected by GROUNDZ-F12, the corridor shipped as Q9 / F16); Q10 and Q8
+  stay. **§1z-dd.8 — REWORDED** "registered, no run" → "retail half needs a live corner": the
+  check ran at the desk as §1z-dh, SLIDE 0 of 236 — NOT FOUND, not unrun.
+* §8.1 The sandbox, **N2's "Owed: one loopback click each, in an OUTPOST" — REMOVED**:
+  confirmed on our client in an outpost 2026-09-23 (`studies/deskwork/CONFIRM-2026-09-23.md`
+  R1–R5, runs `20260923T155339` … `160232`), and the bullet's description of the shipped N2
+  (which the DESKWORK-D1 bullet already carries) cut to one sentence. N1 stays open
+  (`studies/sandbox/PLAN.md`: NEXT).
+* §8.2, **MORALE-Q6 "the corpus holds no death followed by a zone" — REWORDED**, re-counted
+  over the 36 live captures: 7 connections carry an own-agent `0x009C` below 100, 3 have a
+  next hop in `tape.chain`, and all 3 zone into an OUTPOST loading 100 on `0x009C` and
+  `0x00E9` field 10 (`20260913T210901` 212 → 242, `20260914T005758` 430 → 449,
+  `20260916T150306` 430 → 449). The field-to-field half and Q5 stay. morale FINDINGS §6's Q6
+  row corrected the same way (struck, not erased).
+* §8.3 Skills, **"the reason ids for the rest of the 1934–1993 refusal strings are undecoded"
+  — REWORDED**: `chatdefs.REFUSAL_REASONS` holds all 60, four OBSERVED (1934, 1960, 1961,
+  1988), the rest RECONSTRUCTION-labelled behind the default-off `--refusal-reasons` (skills
+  §57). The `EFFECT_TYPES` and `GmSkSlot` clauses stay (D4 step 6's).
+* §8.3 **The archive — 3 of 4 clauses REMOVED**: the restore verb (`datwrite.restore`,
+  95f550ef, 2026-08-14), the compressor (`gwenc.py`, c4a9fe03, 2026-08-18; WORLDMAPS W1/W2
+  installed and a retail client read a compression-8 row), and option C's durable key
+  REFUTED (b8d5ecf2, maprows §10.11–§10.12). Allocator pressure stays.
+* §8.3 **The silent-opcode sweep — REWORDED to its residue**: `0x0191` was READ 2026-08-13 (a
+  map change, smsgsweep §7.5) and 22 CHANGED rows named with 13 the operator's mouse (§7.6).
+  What stays: the five account-name selectors (§7.9) and `0x0191`'s missing
+  `schema/overrides.json` row (checked: GAME_SMSG 401 has none).
+* §8.3 ANIMREF, **"§15's movement-start gate" — REMOVED**: animref §22 REFUTES §15's mechanism
+  (gate B's writer is property 8), confirmed in the client in §23. §19's gate and §16 stay.
+
+**Not touched, by instruction**: the DESKWORK-D1 bullet and the pass-4 confirmations (the
+orchestrator's pass), and RUN-R8 / §7 Q14 (D10's). §8 is 31,505 bytes after this, from
+33,308 (`test_checks`' ceiling is 40,000); the reworded lines were cut to what is open, the
+evidence being here.
+
+---
+
 ### DESKWORK-D1 (step 5), fix pass -- 2026-09-23 -- **ONE party count for the henchman add, the hero kick and the hero add (the blocker); the test's floor set from its bare run; every source lock paired with a mutation; the mark and the level in retail's pre-create position; the allegiance and the map recorded as divergences**
 
 Two reviews of the entry below — an evidence refuter that re-derived every tape claim

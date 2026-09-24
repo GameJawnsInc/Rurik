@@ -2010,8 +2010,6 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   observed hits (skills §48.8). Needs a tape where they diverge, not more of the same.
 * **One Javelin for 45**, n = 1, unexplained; an effective +8 armour at that instant and
   not a differently rated piece (skills §50). Recorded, not chased.
-* **Mend Condition (275)** is a third shape — heal IF removed — and is not modelled
-  (skills §46).
 * **The skill library has no writers**: trainers (`VnLearnSkill`), tomes (`0x006D`) and
   capture signets are all unanswered, and the `GmDeckBuilder` flag that picks which set
   the panel enumerates is unread — "is this a PvP character" is a guess (skills §47).
@@ -2029,13 +2027,11 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 **Daggers** — [studies/daggers/FINDINGS.md](studies/daggers/FINDINGS.md)
 
-* **Area damage beyond Death Blossom.** DAGGERS-B8 sends ONE attack skill's adjacent damage,
-  opt-in per row; `aoe_range` is now on every skills row (147 at 156, 103 at 240, 64 at
-  312), and an NPC's cast is still single-target (`land_skill`). The corpus holds the next
-  regime already: 73 multi-target instants of Fire Magic spells 186 / 185 / 179 / 197 on
-  `20260817T231139`, armour-respecting on property 16 with a value per target (daggers F13,
-  last paragraph) — an Elementalist arc's seed. Cyclone Axe's per-foe attack and scatter
-  are unmeasured.
+* **Area damage beyond Death Blossom.** Of the 73 multi-target Fire Magic instants on
+  `20260817T231139` (daggers F13), 185 and 179 have no row and 197's label row reaches one
+  target; the areas over time and area hexes are unbuilt; B8's adjacent damage is the
+  player's strike only (a body's spell areas ship: weapons §37–§40, skills §59). Cyclone
+  Axe's per-foe attack and scatter are unmeasured.
 * **DAGGERS, after RUN-2** (daggers §8, last paragraph). A dual whose first strike
   lands and whose second misses (is 3 sent?); ~~property 10 on the victim~~ (decoded, skillcast §16.6, and SENT since 2026-09-22: `[10, me, skill]` ahead of a skill's word at the observer, self-scoped 92 of 92; 229 / 230 are Lightning Orb / Javelin); the short gap
   after a skill's hit on SWORDS (9 of 21, an eighth of the interval off) and the three
@@ -2157,15 +2153,15 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 **Monster AI** — [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md)
 
-* **MONSTERAI-J has no content rows.** `passive` and `group` are built and tested and
-  nothing uses them; the tapes name five retail definitions that would (§12.9). Which
-  rows is the operator's call.
+* **MONSTERAI-J has no content rows.** `passive` and `group` are built and tested and only
+  the sandbox compiler writes them; the tapes name five retail definitions that would
+  (§12.9). Which rows is the operator's call.
 
 **Heroes** — [studies/heroes/RUN-HEROLIB.md](studies/heroes/RUN-HEROLIB.md)
 
-* **Retail's reply to `0x005E`** (a live-account swap at human cadence) is unobserved,
-  and `0x0065` and the hero-family `0x001B` are unmodelled (§11–12). The settings
-  blob's five `5a`–`5e` groups read like an appearance record, and that is a guess.
+* **Retail's reply to `0x005E`** (a live-account swap at human cadence) is unobserved
+  (§12.6). The settings blob's five `5a`–`5e` groups read like an appearance record, and
+  that is a guess.
 
 **Quests and the schema** — [studies/quests/FINDINGS.md](studies/quests/FINDINGS.md),
 [studies/divergence/FINDINGS.md](studies/divergence/FINDINGS.md)
@@ -2178,22 +2174,14 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 **Movement** — [studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md),
 [studies/npctrack/FINDINGS.md](studies/npctrack/FINDINGS.md)
 
-* **§1z-dj, leg B**: the mirror still diverges 514 u — a client rule refusing a clear
-  long lead while parked, undecoded; registered as a `codescan` question.
-* **§1z-dd.8, registered, no run**: after a retail wall-cut grant the client slid past,
-  do retail's `0x002A` follow points advance along the wall before the next report?
-  It decides server-side slide integration against client silence.
+* **§1z-dd.8's retail half needs a live corner**: at the desk the slide-then-silence class
+  is NOT FOUND on retail, 0 of 236 (§1z-dh). It decides server-side slide integration
+  against client silence.
 * **§1z-dl**: a `datplan` check of the mesh lip at the corner, ONLY if the corner
   recurs as a felt defect. Conditional on the owner's sessions.
-* **§1z-cw.5**: 39 % of refused-lag accrued with the copy PARKED under a steering
-  re-report. Unexplained.
 * **NPCTRACK**: two hostiles park in one body (Q10 — retail does too; a per-chaser
   bearing would be a reconstruction with no witness, so it is a lever for the owner's
-  eye, not a defect); Q3 needs a wedge run with the tape; Q8 is an observation.
-* **Late stamps on OUR tapes.** Retail's one firing of the 400 u/s arm is an 18 ms
-  late capture stamp (`movesync.late_stamp`, analysis only, no verdict moved). Whether
-  our own boosted or short-cadence hard-jump counts include the same artifact is not
-  measured (movement FINDINGS, 2026-09-17).
+  eye, not a defect); Q8 is an observation.
 * **`movetap` cannot certify a capture under the harness** — 10–12 Hz against its own
   50 Hz floor (§1z-ag). Instrument debt; nulls taken that way do not count.
 * **RUN-R8** ([studies/movecode/RUN-R8.md](studies/movecode/RUN-R8.md)) is a
@@ -2224,18 +2212,10 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   entirely in-game from empty bars and unspent points keep the build across a run) —
   predictions in §3 there.
 * **SANDBOX-N1**: a filterable skill and attribute picker for the Enemies tab (the
-  owner, 2026-09-22), then **N2**: adding heroes from the in-game party panel. **Both
-  halves shipped** (DESKWORK-D1 steps 1 + 4, PLAN-LOG): c2s `0x001F` HERO_KICK is
-  OBSERVED with retail's own teardown batch (`--no-hero-kick`; a kick of a hero WITH a
-  body is UNOBSERVED, RECONSTRUCTION); c2s `0x001E` HERO_ADD is RECONSTRUCTION end to
-  end — no tape and no loopback log carries the request — answered in the COMMANDER
-  rig (`--party`) with that rig's own load messages in its order, the inventory a kick
-  destroyed re-declared first (`--no-hero-add`; the legacy rig is refused), the stored
-  kick clearing under `--persist`; `--reset-hero-kicks` stays as the bulk un-kick; the
-  load's `0x00B0` counts heroes (`--party-size-no-heroes` reverts). **Owed: one
-  loopback click each, in an OUTPOST** (the client's `MissionCliGetMap()` gate) — the
-  runsheet (command, clicks, what each outcome means) is in studies/cmsg §DESKWORK-D1
-  "The hero add".
+  owner, 2026-09-22). (N2, adding and kicking heroes from the in-game party panel,
+  shipped as DESKWORK-D1 steps 1 + 4 and was CONFIRMED on our client in an outpost
+  2026-09-23 — studies/deskwork/CONFIRM-2026-09-23.md R1–R5; the hero ADD stays
+  RECONSTRUCTION, heroes §3.3.)
 * **SANDBOX: `ENERGY_BY_PROFESSION` is WIKI recalled, unread** — eight of ten rows in
   `toolkit/harness/sandbox.py` want GWW "Energy" read back before they are quoted as
   facts; the window shows them as editable defaults.
@@ -2255,9 +2235,10 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 * **SKILLS-B1**, the rounding half only (the gate half closed at the desk 2026-09-22,
   skills §34.11): ceil is dead, round holds k = 1 (skills §53.1), and what is left is a
   hit in (0, 0.5 %): a `0x00CF` carrying 0, or nothing.
-* **MORALE-Q5 and Q6**: morale BOOSTS have zero sightings on retail's wire, and the
-  corpus holds no death followed by a zone, so what resets a penalty is WIKI only
-  ([studies/morale/FINDINGS.md](studies/morale/FINDINGS.md)).
+* **MORALE-Q5 and Q6's field-to-field half**: morale BOOSTS have zero sightings on
+  retail's wire, and all 3 deaths-then-zone in the corpus zone into an OUTPOST, so what a
+  field-to-field zone does with a penalty is WIKI only
+  ([studies/morale/FINDINGS.md](studies/morale/FINDINGS.md) §6).
 * **The account-posture call**: whether a live session may run against an archive
   holding an authored map is the owner's, unmade, and "launch and quit is enough" is
   UNVERIFIED ([studies/crossbuild/FINDINGS.md](studies/crossbuild/FINDINGS.md)).
@@ -2273,23 +2254,20 @@ the log alone.
 * **Skills** (skills §35.6, §37.6, §38.8): `effects.py`'s `EFFECT_TYPES` still lists
   five types while Well, Ward, Item and Weapon Spell, Form, Chant and Echo are plainly
   timed; the character's own cast-animation duration is NOT FOUND; `GmSkSlot`'s refresh
-  at `0x00543020` is an UNVERIFIED second way to clear the overlay; the reason ids for
-  the rest of the 1934–1993 refusal strings are undecoded. The unmet-weapon-requirement
+  at `0x00543020` is an UNVERIFIED second way to clear the overlay; 56 of the 60 refusal
+  ids 1934–1993 are RECONSTRUCTION-labelled, not OBSERVED (skills §57). The unmet-weapon-requirement
   term is unmodelled on purpose ([studies/isle/FINDINGS.md](studies/isle/FINDINGS.md) §7).
 * **Authored places** ([studies/worldmaps/FINDINGS.md](studies/worldmaps/FINDINGS.md)):
   water and shore, slope materials, narrow-gate clearance and a minimap for a created
   map are untouched. The engine half is green; the presentation half is why the arc
   is paused.
 * **The archive** ([studies/crossbuild/FINDINGS.md](studies/crossbuild/FINDINGS.md)):
-  nothing has pressured the allocator with many sessions over many maps, `datwrite` has
-  no explicit-restore verb, and there is no compressor, so the rows too large for any
-  run `datplan` can hand over stay unwritable. Content keyed to a durable per-map key
-  (maprows §10.11, option C) is PLANNED, NOT BUILT, and waits for a second archive state.
-* **The silent-opcode sweep** ([studies/smsgsweep/FINDINGS.md](studies/smsgsweep/FINDINGS.md)
-  §7.4–7.5): 3 of the 34 CHANGED screens have been read and named; `0x0191` has no
-  usable run.
+  nothing has pressured the allocator with many sessions over many maps.
+* **The silent-opcode sweep's residue** ([studies/smsgsweep/FINDINGS.md](studies/smsgsweep/FINDINGS.md)):
+  the five account-name selectors (§7.9), and `0x0191` — READ as a map change (§7.5) —
+  has no `schema/overrides.json` row.
 * **ANIMREF's desk queue** ([studies/animref/FINDINGS.md](studies/animref/FINDINGS.md)):
   §19's second refusal gate — 20 of 39 reason-1960 refusals arrive with the client-rule
   slot exactly at cost (`adrenreplay.py`, 2026-09-22; the simulation is built, the
-  variable is not found); §15's movement-start gate; §16's visual ids are wired and
-  their appearance is the owner's verdict to give.
+  variable is not found); §16's visual ids are wired and their appearance is the owner's
+  verdict to give.
