@@ -33,7 +33,7 @@ import checks   # noqa: E402
 import content  # noqa: E402
 import sandbox  # noqa: E402
 
-led = checks.Ledger("sandbox", floor=111)     # 88 from the green run 2026-09-20; +19 SANDBOX-B7 (2026-09-22); +2 SKILLS-LT sec.5, the hand / label split (2026-09-23); +2 the fix pass (one LABEL_TIER, gamesrv_args)
+led = checks.Ledger("sandbox", floor=123)     # 88 from the green run 2026-09-20; +19 SANDBOX-B7 (2026-09-22); +2 SKILLS-LT sec.5, the hand / label split (2026-09-23); +2 the fix pass (one LABEL_TIER, gamesrv_args); +1 budget_for_level (2026-09-24); +4 a hostile's ranks checked (2026-09-24); +7 the pre-merge pass: a hostile's level range, the no-level fallback told from 2 and 20, no npc rows (2026-09-24)
 
 
 # ---------------------------------------------------------------- the fixture
@@ -116,6 +116,10 @@ try:
     led.ok(False, "level 21 is refused")
 except ValueError:
     led.ok(True, "level 21 is refused (1..20)")
+led.ok([sandbox.budget_for_level(l) for l in (0, 1, 2, 20, 21)] == [0, 0, 5, 170, 0],
+       "budget_for_level is the compiler's rule for the player, a hero and a hostile alike: "
+       "points_for_level inside 1..20 and 0 outside (a level-0 row spends nothing, and raises "
+       "nowhere -- the window's hint and roster line read it)")
 
 # ---------------------------------------------------------------- 1. geometry
 pos = sandbox.group_positions(3, [2, 2, 1], 2)
@@ -332,6 +336,56 @@ led.ok(problems(spec(groups=[{"members": [dict(raider)] * 4}] + groups[1:])) == 
        "...four are accepted")
 ok, why = refuses(spec(groups=[{"members": [dict(raider)]}] * 5), "the corridor holds 4")
 led.ok(ok, "five groups are refused", why)
+# a hostile's ranks go through the same rule as the player's and a hero's: the
+# window's Attributes hint said 'the compiler refuses more' while validate
+# never looked at a member's attributes
+hot = dict(raider, attributes=[[17, 12], [19, 12], [20, 12], [21, 12]])
+ok, why = refuses(spec(groups=[{"members": [hot]}] + groups[1:]), "spend 388 points; level 2 has 5")
+led.ok(ok, "a hostile's ranks past its level's budget are refused (388 of 5 at level 2)", why)
+ok, why = refuses(spec(groups=[{"members": [dict(raider, level=0, attributes=[[17, 1]])]}]
+                       + groups[1:]), "level 0 has 0")
+led.ok(ok, "a level-0 hostile with a rank is refused (its budget is 0)", why)
+led.ok(problems(spec(groups=[{"members": [dict(raider, level=0, attributes=None)]}]
+                     + groups[1:])) == [],
+       "...and with none it is accepted (content rows default to level 0)")
+unlevelled = {k: v for k, v in raider.items() if k != "level"}
+led.ok(problems(spec(groups=[{"members": [unlevelled]}] + groups[1:])) == [],
+       "a member with no level is checked at its TEMPLATE's level, the one spawn_rows gives "
+       "it: the raider's 5 points pass at the template's 2 -- not at 0 or 1, which is all this "
+       "check tells; the two after it tell the template's level from 2 and from 20")
+# ...on templates whose level is NOT the window's old default of 2: a fallback
+# of 2 (or 3) refuses the monk's 20 points and accepts the hatcher's rank, a
+# fallback of LEVEL_MAX accepts both
+monk_nolevel = {k: v for k, v in groups[0]["members"][1].items() if k != "level"}
+monk_nolevel["attributes"] = [[13, 4], [14, 4]]
+led.ok(problems(spec(groups=[{"members": [monk_nolevel]}] + groups[1:])) == [],
+       "...a monk with no level spending its template's whole budget is accepted (academy_monk "
+       "is level 5: 20 points; a fallback of 2 or 0 refuses it)")
+ok, why = refuses(spec(groups=[{"members": [{"npc": "hatcher", "health": 120, "skills": [281],
+                                             "attributes": [[13, 1]]}]}] + groups[1:]),
+                  "level 1 has 0")
+led.ok(ok, "...and a hatcher with no level and one rank is refused at its template's 1 (budget "
+           "0; a fallback of 2 or 20 accepts it)", why)
+# a hostile past LEVEL_MAX is refused for its LEVEL, the reason the window
+# acts on (its spin clamps 24 to 20), never for its ranks: past 20 the budget
+# is 0, and 'level 24 has 0' pointed the operator at ranks it may keep
+for m, tag in ((dict(raider, level=24), "with its 5 points"),
+               (dict(raider, level=24, attributes=None), "with no ranks")):
+    ps = problems(spec(groups=[{"members": [m]}] + groups[1:]))
+    led.ok(ps == ["group 1 member 1: level 24 is outside 0..20"],
+           f"a level-24 hostile {tag} is refused for its level, the one reason, never 'has 0'", ps)
+led.ok(problems(spec(groups=[{"members": [dict(raider, level=20)]}] + groups[1:])) == [],
+       "...and at 20, the cap, the raider's 5 points are accepted")
+ok, why = refuses(spec(groups=[{"members": [dict(raider, level=-1)]}] + groups[1:]),
+                  "level -1 is outside 0..20")
+led.ok(ok, "...a level below 0 is refused by the same rule", why)
+# a world with attribute tables and no npc rows: no template to check the
+# ranks in, so they are unchecked, as the rest of validate treats an empty
+# npc table (in profession 0 every rank read 'belongs to ..., not to []')
+bare = FakeWorld(dict(WORLD.tables, npc={}))
+led.ok(not [q for q in sandbox.validate(spec(groups=[{"members": [dict(raider)]}] + groups[1:]),
+                                        bare) if ".attributes" in q],
+       "with no npc rows a hostile's ranks are unchecked, not refused as another profession's")
 ok, why = refuses(spec(groups=groups[:2]), "0 bosses")
 led.ok(ok, "no boss is refused (the quest binds one kill)", why)
 ok, why = refuses(spec(groups=[groups[2], groups[0]]), "must be the LAST")
