@@ -396,10 +396,15 @@ class Bar(QWidget):
 
 class Ranks(QWidget):
     """One spin box per attribute of the given professions, two to a row, and
-    the budget as a chip (the Enemies tab's; the party's ranks are in-game).
-    The chip is the NOTICE; `hint`, a caption under the grid, stays the HINT,
-    so an over-budget spend never erases the sentence saying what a valid one
-    is. Ranks lays the hint out ITSELF, under the grid set_professions wipes:
+    the points spent as a chip (the Enemies tab's; the party's ranks are
+    in-game). A hostile is EXEMPT from a player's point budget -- the owner's
+    ruling, 2026-09-24 (PLAN-LOG): retail foes and bosses exceed it -- so the
+    chip counts and never judges (never crit, never 'over budget'), and the
+    compiler holds a hostile's ranks to validity alone: each rank within the
+    table (the spin's own range) in the template's profession (the only
+    attributes offered). The chip is the NOTICE; `hint`, a caption under the
+    grid, stays the HINT, the sentence saying what is and is not checked.
+    Ranks lays the hint out ITSELF, under the grid set_professions wipes:
     the first cut left that to the card, which forgot, and a label shown with
     no parent is a top-level window of its own -- one per hostile, and the
     app no longer quit when the main window closed."""
@@ -427,7 +432,6 @@ class Ranks(QWidget):
         self.label = self.chip
         self.hint = caption("")
         outer.addWidget(self.hint)
-        self.level = 3
         self.professions = ()
 
     def _clear(self):
@@ -447,12 +451,11 @@ class Ranks(QWidget):
                 w.setParent(None)
                 w.deleteLater()
 
-    def set_professions(self, professions, level):
+    def set_professions(self, professions):
         keep = self.ranks()
         self._clear()
         self.spins = {}
         self.professions = tuple(int(p) for p in professions if p)
-        self.level = int(level)
         if self.rules is None:
             self.grid.addWidget(caption("No attribute table, so ranks cannot be edited here.",
                                         tip="vault/content/attributes.toml is missing."),
@@ -472,7 +475,7 @@ class Ranks(QWidget):
             sp.setRange(0, self.rules.rank_max)
             sp.setValue(dict(keep).get(aid, 0))
             sp.setFixedWidth(92)
-            sp.valueChanged.connect(self._budget)
+            sp.valueChanged.connect(self._spent)
             sp.valueChanged.connect(lambda _v: self.changed.emit())
             name = self.names.attr_label(aid)
             lab = QLabel(name + (f'  <span style="color:{orchui.PAL["muted"]}">primary</span>'
@@ -491,25 +494,24 @@ class Ranks(QWidget):
                                         "attributes."), 0, 0, 1, 6)
         self.grid.setColumnMinimumWidth(2, 24)
         self.grid.setColumnStretch(5, 1)
-        self._budget()
+        self._spent()
 
-    def _budget(self):
+    def spent(self):
+        """The points the ranks cost, by the table -- a count, not a verdict."""
+        return self.rules.total_spent({a: s.value() for a, s in self.spins.items()})
+
+    def _spent(self):
         if self.rules is None:
             return
-        spent = self.rules.total_spent({a: s.value() for a, s in self.spins.items()})
-        budget = sandbox.budget_for_level(self.level)   # 0 at level 0: the spin offers it
-        self.hint.setText(f"A level-{self.level} hostile has {budget} points to spend; the "
-                          f"compiler refuses more.")
-        self.hint.setToolTip("Attribute points by level, as GWW gives them.")
-        if spent > budget:
-            set_chip(self.chip, f"{spent} of {budget} points — over budget", "crit")
-        else:
-            set_chip(self.chip, f"{spent} of {budget} points",
-                     "good" if spent == budget else "info")
-
-    def set_level(self, level):
-        self.level = int(level)
-        self._budget()
+        self.hint.setText(f"Not held to a player's point budget; each rank 0..{self.rules.rank_max}, "
+                          f"in the template's profession.")
+        self.hint.setToolTip("A hostile is exempt from the attribute points a level grants a "
+                             "player (the owner's ruling, 2026-09-24): retail foes and bosses "
+                             "exceed them.\nThe compiler still refuses a rank past the table and "
+                             "an attribute of another profession, neither of which this card "
+                             "can hold.")
+        set_chip(self.chip, n_of(self.spent(), "point"), "info",
+                 tip="What these ranks would cost a player, by the attribute table.")
 
     def ranks(self):
         return [[a, s.value()] for a, s in self.spins.items() if s.value()]
@@ -518,7 +520,7 @@ class Ranks(QWidget):
         for a, r in pairs or []:
             if int(a) in self.spins:
                 self.spins[int(a)].setValue(int(r))
-        self._budget()
+        self._spent()
 
 
 def profession_picker(none=False, short=False):
@@ -1307,7 +1309,6 @@ class MemberEditor(QWidget):
         page.addStretch(1)
 
         self.template.currentIndexChanged.connect(self._template)
-        self.level.valueChanged.connect(self.ranks.set_level)
         self.level.valueChanged.connect(lambda _v: self._changed())
         self.boss.toggled.connect(self._boss)
         # every input to_spec reads, not only the three the list shows: the
@@ -1386,7 +1387,7 @@ class MemberEditor(QWidget):
     def _template(self):
         prof = self.profession()
         self.bar.set_professions((prof,))
-        self.ranks.set_professions((prof,), self.level.value())
+        self.ranks.set_professions((prof,))
         self._changed()
 
     def _boss(self, on):
@@ -1416,8 +1417,7 @@ class MemberEditor(QWidget):
         bits = [f"L{self.level.value()}", f"{self.health.value()} hp",
                 f"{k} of {sandbox.BAR_SLOTS} skills"]
         if self.ranks.rules is not None:
-            spent = self.ranks.rules.total_spent({a: s.value() for a, s in self.ranks.spins.items()})
-            bits.append(f"{spent} of {sandbox.budget_for_level(self.ranks.level)} points")
+            bits.append(n_of(self.ranks.spent(), "point"))    # spent; a hostile has no budget
         bits.append(self.weapon_item.value() or "the template's swing")
         return "  ·  ".join(bits)
 
@@ -2851,10 +2851,11 @@ def _real_wheel(win, widget, delta=-120):
 # "set the floor to its mandatory core and let the optional sections declare
 # skips"). The gated laws, by gate: the grade marks 5 (a vault overlay with
 # label rows), the inactive real wheel 1 (Windows, a page that scrolls), the
-# over-budget hostile 1 (an attribute table), the encounter list's focus 1,
-# Launch's ring and the tab strip's cue 3, the active-window wheel 3, the
-# four popups 4 -- 18 of the green run's 163 (159 before the long-name laws:
-# the bounded label, its hover, its filter, the no-stray restore). A gated law
+# exempt hostile's compile and the kept rules' refusal 2 (an attribute table),
+# the encounter list's focus 1, Launch's ring and the tab strip's cue 3, the
+# active-window wheel 3, the four popups 4 -- 19 of the green run's 164 (163
+# before the kept-rules law; 159 before the long-name laws: the bounded label,
+# its hover, its filter, the no-stray restore). A gated law
 # that skips is printed in the verdict; a run short of the floor is a FAIL
 # naming the shortfall, which "0 failure(s)" never was. What the floor cannot
 # see: on a machine where every gated law runs, up to 18 mandatory laws could
@@ -2964,7 +2965,7 @@ def smoke(win, app, out_dir):
         """The Attributes hint lives in the hostile's own page, with words."""
         h = ed.ranks.hint
         return (h.window() is win and h.isVisibleTo(win.enemies._pages[ed])
-                and "points to spend" in h.text())
+                and "point budget" in h.text())
 
     # native, but never on the screen: nothing flashes on a shared desktop, and
     # no other window can take keyboard focus away in the middle of a run
@@ -3337,7 +3338,7 @@ def smoke(win, app, out_dir):
     # ...nor does a Ranks built by any caller: its chip is housed from birth (a
     # card re-homes it; shown with no parent, it was the hint's trap one over)
     lone = Ranks(win.names)
-    lone.set_professions((1,), 5)
+    lone.set_professions((1,))
     settle()
     check(not strays() and lone.chip.parentWidget() is lone,
           f"a Ranks on its own houses its chip ({len(strays())} stray)")
@@ -3380,17 +3381,23 @@ def smoke(win, app, out_dir):
           f"{starts}; names {names} px wide)")
     # level 0 is a value the spin offers and the compiler accepts: the roster
     # and the change signal survive it (the fix pass's summary() raised there,
-    # emptying the roster and losing the signal)
+    # emptying the roster and losing the signal), and the Attributes card
+    # reads no budget off the level -- a hostile has none (the owner's ruling,
+    # 2026-09-24): its chip counts what is spent, its hint says so
     m1 = en.groups[1].members[0]
     emits = []
     en.changed.connect(lambda: emits.append(1))
     m1.level.setValue(0)
     settle()
+    spent1 = n_of(m1.ranks.spent(), "point") if m1.ranks.rules is not None else None
     check(en.groups[1].roster.count() == len(en.groups[1].members) and emits
-          and "level-0" in m1.ranks.hint.text() and " 0 points" in m1.ranks.hint.text(),
+          and spent1 is not None and m1.ranks.chip.text() == spent1
+          and m1.ranks.chip.property("kind") == "info"
+          and "point budget" in m1.ranks.hint.text() and "0 points" not in m1.ranks.hint.text(),
           f"a hostile at level 0 keeps its group's roster ({en.groups[1].roster.count()} of "
-          f"{len(en.groups[1].members)} rows), emits the change ({len(emits)}) and its hint "
-          f"says 0 points")
+          f"{len(en.groups[1].members)} rows), emits the change ({len(emits)}), its chip counts "
+          f"the spend ({m1.ranks.chip.text()!r}, {m1.ranks.chip.property('kind')}) and its hint "
+          f"reads no budget off the level")
     m1.level.setValue(2)
     settle()
     pk = en.groups[0].members[0].bar.slots[0]
@@ -3842,9 +3849,8 @@ def smoke(win, app, out_dir):
              ("template", lambda: m0.template.set_value("academy_monk"))]
     if m0.ranks.spins:
         # a rank, and a rank on the spins a template change REBUILDS -- down
-        # where it can: this hostile stands at its budget, and one more point
-        # is a spec the compiler refuses, which the next three edits would
-        # then read as 'not fresh'
+        # where it can, up from 0 (either is an edit; a hostile has no budget
+        # for one more point to breach)
         def rank():
             sp = next(iter(m0.ranks.spins.values()))
             sp.setValue(sp.value() - 1 if sp.value() else 1)
@@ -3924,23 +3930,67 @@ def smoke(win, app, out_dir):
     win.enemies.groups[0].members[0].boss.setChecked(False)
     settle()
     check(g0.note.isHidden() and g3.note.isHidden(), "and unticking it clears both notes")
-    # ranks past a hostile's budget are REFUSED at compile, as its Attributes
-    # hint promises (validate checked the player's and the heroes' ranks and
-    # never a member's, so the crit chip was the only sign)
+    # a hostile is EXEMPT from a player's point budget (the owner's ruling,
+    # 2026-09-24, PLAN-LOG: retail foes and bosses exceed it): ranks past its
+    # level's budget COMPILE, the chip counts the spend and never judges it,
+    # and the hint claims no refusal. (For one day this law read the reverse,
+    # the rule the hint had promised before validate had it.)
     if m0.ranks.spins:
         sp = next(iter(m0.ranks.spins.values()))
         keep = sp.value()
         sp.setValue(sp.maximum())
         win.run.compile()
         chip_said = (m0.ranks.chip.text(), m0.ranks.chip.property("kind"), win.run.state.text())
-        refused = (win.run.compiled is None and chip_said[2] == "Refused"
-                   and "points; level" in win.run.summary.toPlainText())
+        over = m0.ranks.spent() > sandbox.budget_for_level(m0.level.value())
+        compiled = (win.run.compiled is not None and chip_said[2].startswith("Compiled")
+                    and "points; level" not in win.run.summary.toPlainText())
+        hint = m0.ranks.hint.text()
         sp.setValue(keep)
-        check(chip_said[1] == "crit" and "over budget" in chip_said[0] and refused,
-              f"a hostile's ranks past its level's budget are refused at compile, as the hint "
-              f"promises ({chip_said[0]!r}; {chip_said[2]!r})")
+        check(over and compiled and chip_said[1] == "info" and "over budget" not in chip_said[0]
+              and chip_said[0] == n_of(m0.ranks.rules.total_spent(
+                  {a: (sp.maximum() if a == next(iter(m0.ranks.spins)) else s.value())
+                   for a, s in m0.ranks.spins.items()}), "point")
+              and "refuse" not in hint and "point budget" in hint,
+              f"a hostile's ranks past its level's budget COMPILE (a hostile is exempt), the chip "
+              f"counts the spend without judging it ({chip_said[0]!r}, {chip_said[1]}; "
+              f"{chip_said[2]!r}) and the hint claims no refusal")
+        # ...and the KEPT rules still refuse a hostile's ranks at compile: a
+        # file whose first hostile carries an attribute of another profession
+        # and a rank past the table opens (the card offers neither -- the
+        # foreign id is dropped, the rank clamped by the spin), and the bar
+        # says what the compiler refused, so the exemption opened nothing else
+        rules = m0.ranks.rules
+        foreign = next(a for a, row in sorted(rules.attributes.items())
+                       if row["profession"] not in m0.ranks.professions and not row["is_primary"])
+        mine = next(iter(m0.ranks.spins))
+        held_spec = win.to_spec()
+        g1 = held_spec["groups"][0]
+        bad = dict(held_spec, name="smoke-hostileranks",
+                   groups=[dict(g1, members=[dict(g1["members"][0],
+                                                  attributes=[[foreign, 1], [mine, rules.rank_max + 1]])]
+                                + g1["members"][1:])] + held_spec["groups"][1:])
+        bad_path = os.path.join(out_dir, "smoke_hostileranks.toml")
+        with open(bad_path, "w", encoding="utf-8") as fh:
+            fh.write(sandbox.spec_toml(bad))
+        kept = [q for q in sandbox.validate(bad, win.world) if "member 1.attributes" in q]
+        win.run.load(bad_path)
+        settle()
+        msg = win.statusBar().currentMessage()
+        held_now = win.to_spec()
+        check(len(kept) == 2 and any("belongs to profession" in q for q in kept)
+              and any(f"outside 0..{rules.rank_max}" in q for q in kept)
+              and not sandbox.validate(held_now, win.world)
+              and held_now["groups"][0]["members"][0]["level"] == held_spec["groups"][0]["members"][0]["level"]
+              and msg.startswith("Opened smoke_hostileranks, but the window could not hold all of "
+                                 "it (2 changes: "),
+              f"...and a hostile's ranks are still held to VALIDITY: a file with an attribute of "
+              f"another profession and a rank past {rules.rank_max} on one hostile is refused for "
+              f"both at compile, the card holds neither, and the bar says so ({msg[:88]!r})")
+        win.from_spec(held_spec)
+        settle()
     else:
-        skip("an over-budget hostile is refused at compile", "no attribute table, so no ranks")
+        skip("an over-budget hostile compiles (exempt)", "no attribute table, so no ranks")
+        skip("the kept rules still refuse a hostile's ranks", "no attribute table, so no ranks")
     seen_roles |= used_roles(win)
     lore += surface_lore(win)
     # a malformed spec must not latch the Enemies tab dead

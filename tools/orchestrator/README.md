@@ -34,7 +34,7 @@ python tools/orchestrator/orchestrator.py --theme light            # dark / ligh
 in one palette only (the light tab strip's focus fill was) is seen by running it with `--theme
 dark` and again with `--theme light`. Its verdict is the house ledger's (`toolkit/checks.py`):
 a law that cannot run declares a skip, printed in the verdict, and a run that executes fewer
-than its floor of 145 laws (the green run's 163 less the 18 behind a declared skip) fails naming
+than its floor of 145 laws (the green run's 164 less the 19 behind a declared skip) fails naming
 the shortfall. No mandatory law sits behind a state gate: a precondition (the hostile page
 stacked at 1,000 px) is a law of its own, since the floor cannot see a law that stops running
 while the gated ones do run.
@@ -78,14 +78,18 @@ directory needs the elevated cage step once.
 
 ## What it refuses, and why
 
-The compiler (`toolkit/harness/sandbox.py`, stdlib, 116 checks in `test_sandbox.py`) refuses
+The compiler (`toolkit/harness/sandbox.py`, stdlib, 127 checks in `test_sandbox.py`) refuses
 before a client is launched: a bar skill outside the character's own professions (the
 client's template rule); a hero body the content lacks; an eighth hero (the client's cap);
 a fifth member or group; no boss, two bosses, or a boss not in the last group; ranks the
-level cannot pay for (GWW's attribute points by level), for the character, each hero and
-each hostile alike; a weapon class the rates table lacks. The window's pickers only offer
-what the pair or the profession owns, so most of those cannot be reached from it; the
-level/ranks one can, and the reason is shown.
+level cannot pay for (GWW's attribute points by level), for the character and each hero —
+**a hostile is exempt from the point budget** (the owner's ruling, 2026-09-24: retail foes and
+bosses exceed a player's), its ranks held to validity alone (a real attribute of its
+template's profession, each rank within the table) and its Attributes chip a count, never a
+verdict; a hostile level outside 0..20; a weapon class the rates table lacks. The window's
+pickers and spins only offer what the pair, the profession or the table owns, so those
+cannot be reached from it; a file can carry them, and the bar says what the window could
+not hold.
 
 **Open** is not the compiler. A file past the caps, or naming a template the content lacks,
 opens with what the window can hold — a fifth group or hostile dropped, the template replaced
@@ -233,8 +237,10 @@ opens as one it accepts and the bar says what the window could not hold, a spec 
 no off-hand opens with none, Open, Save and a failed Open say the file's name and never its
 path (a reset never the store's), one bulk write of the Skills list (Unlock party only, a
 load) is one count and one change signal, a low damage bound typed with the high at 0 is not
-an edit, ranks past a hostile's budget are refused at compile as its hint promises, and a
-Ranks built by any caller houses its chip. The Run tab's lifecycle
+an edit, a hostile's ranks past a player's budget compile (a hostile is exempt: its chip
+counts the spend and never judges it, its hint claims no refusal) while a file carrying an
+attribute of another profession or a rank past the table on a hostile is still refused for
+both and said in the bar, and a Ranks built by any caller houses its chip. The Run tab's lifecycle
 has its own: every line the end chip reads, and the crash line's prefix, is one the harness
 still PRINTS (its print calls read off the syntax tree, so a comment or a docstring quoting an
 old line is not one), a crash reads crit on exit 0 too, a run's verdict outlives the first edit

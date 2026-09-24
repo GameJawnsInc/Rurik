@@ -179,12 +179,14 @@ def points_for_level(level):
 
 
 def budget_for_level(level):
-    """The points a row of `level` may spend: points_for_level inside
-    1..LEVEL_MAX and 0 outside it -- the compiler's own rule (_check_ranks,
-    for the player, each hero and each hostile), so a level-0 hostile row
-    (content rows default to 0) spends nothing and raises nowhere. The
-    window's budget hint and roster line share it, so a level its spin offers
-    never raises under them."""
+    """The points the PLAYER and a HERO of `level` may spend: points_for_level
+    inside 1..LEVEL_MAX and 0 outside it -- the compiler's own rule
+    (_check_ranks, with a level). A HOSTILE is exempt, the owner's ruling
+    (2026-09-24, PLAN-LOG): retail foes and bosses exceed a player's budget,
+    so a member's ranks are checked for validity (_check_ranks with no level)
+    and never for points -- the window's Attributes card counts what is spent
+    and reads no budget. Total outside 1..20 so a caller may pass a level the
+    window's spin offers (0) without a raise."""
     level = int(level)
     return points_for_level(level) if 1 <= level <= LEVEL_MAX else 0
 
@@ -439,7 +441,7 @@ def validate(spec, world):
     for key, slot in ((player.get("weapon"), "weapon"), (player.get("offhand"), "offhand")):
         if key and items and key not in items:
             p.append(f"player.{slot} {key!r} is not a content item")
-    _check_ranks(p, "player", player.get("attributes"), level, (prim, sec), rules)
+    _check_ranks(p, "player", player.get("attributes"), (prim, sec), rules, level=level)
 
     # -- the heroes
     if len(heroes) > HEROES_MAX:
@@ -475,7 +477,7 @@ def validate(spec, world):
         wkey = h.get("weapon") or HERO_WEAPON_BY_PROFESSION.get(hp)
         if rates and wkey and wkey not in rates:
             p.append(f"hero {i}: weapon {wkey!r} is not an [attack_speed.rates] key")
-        _check_ranks(p, f"hero {i}", h.get("attributes"), hl, (hp,), rules)
+        _check_ranks(p, f"hero {i}", h.get("attributes"), (hp,), rules, level=hl)
 
     # -- the groups
     if not groups:
@@ -508,21 +510,24 @@ def validate(spec, world):
             if wi and items and wi not in items:
                 p.append(f"{who}: weapon_item {wi!r} is not a content item")
             # its level is one the window's spin offers, 0..LEVEL_MAX (content
-            # rows default to 0; past 20 the budget is 0, and 'level 24 has 0'
-            # named the ranks when the level was what the window had clamped),
-            # and its ranks go against that level's budget, the player's and
-            # the heroes' rule -- at the level spawn_rows gives the row (the
-            # member's, else its template's), in the template's own profession.
-            # The window's Attributes hint promised this refusal before the
-            # loop had it. No template, no check: an unknown one is refused
-            # above, and with no npc rows at all the rest of this loop is
-            # unchecked too (in profession 0 every rank read 'not to []')
+            # rows default to 0), read where spawn_rows reads it: the member's,
+            # else its template's. Its ranks are checked for VALIDITY only --
+            # well-formed pairs, a real attribute of the template's own
+            # profession, each rank within the table -- and never against a
+            # point budget: a hostile is EXEMPT, the owner's ruling (2026-09-24,
+            # PLAN-LOG), since retail foes and bosses exceed a player's budget;
+            # the player's and a hero's ranks keep theirs. (The budget was
+            # checked here for one day, as the window's hint had promised, and
+            # 'level 24 has 0' named the ranks when the level was the fault.)
+            # No template, no check: an unknown one is refused above, and with
+            # no npc rows at all the rest of this loop is unchecked too (in
+            # profession 0 every rank read 'not to []')
             tmpl = npcs.get(npc) or {}
             lvl = int(m.get("level", tmpl.get("level", 0) or 0))
             if not 0 <= lvl <= LEVEL_MAX:
                 p.append(f"{who}: level {lvl} is outside 0..{LEVEL_MAX}")
             elif tmpl:
-                _check_ranks(p, who, m.get("attributes"), lvl,
+                _check_ranks(p, who, m.get("attributes"),
                              (int(tmpl.get("profession") or 0),), rules)
             if int(m.get("health", 1)) < 1:
                 p.append(f"{who}: health below 1")
@@ -535,10 +540,14 @@ def validate(spec, world):
     return p
 
 
-def _check_ranks(p, who, pairs, level, professions, rules):
+def _check_ranks(p, who, pairs, professions, rules, level=None):
+    """Append to `p` every reason `pairs` ([attribute, rank] rows) cannot stand
+    on a row of `professions` (the primary first). With a `level` the ranks go
+    against that level's point budget too (the player's and a hero's rule);
+    None is no budget at all -- a hostile's ranks are validity-checked only,
+    the owner's ruling (2026-09-24, PLAN-LOG)."""
     if not pairs:
         return
-    budget = budget_for_level(level)
     ranks = {}
     for pair in pairs:
         try:
@@ -565,6 +574,9 @@ def _check_ranks(p, who, pairs, level, professions, rules):
                      f"PRIMARY attribute, spendable only as a primary")
         if not 0 <= r <= rules.rank_max:
             p.append(f"{who}.attributes: rank {r} on {a} is outside 0..{rules.rank_max}")
+    if level is None:
+        return                                  # a hostile: no budget, by the owner's ruling
+    budget = budget_for_level(level)
     spent = rules.total_spent({a: min(r, rules.rank_max) for a, r in ranks.items()})
     if spent > budget:
         p.append(f"{who}.attributes spend {spent} points; level {level} has {budget}")

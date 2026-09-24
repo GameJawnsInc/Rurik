@@ -28,6 +28,57 @@ move back.
 
 ---
 
+### R-SANDBOX, hostiles exempt from the point budget -- 2026-09-24 -- **the owner's ruling on the question the restyle entry recorded: a hostile's ranks are never held to a player's attribute-point budget; validity (the template's profession, each rank within the table) and the level range stay; the player's and a hero's budget stay; the window's Attributes chip counts and never judges**
+
+The owner's ruling (2026-09-24, verbatim): "exempt hostiles from the rank budget". It
+answers the question "R-SANDBOX, the window restyled (branch `orch-beauty`) -- 2026-09-24"
+recorded rather than decided -- `validate` had for one day refused a HOSTILE whose ranks
+spent more points than a player of its level has (`budget_for_level`), the rule the
+window's Attributes hint had always promised, while retail foes and bosses exceed a
+player's budget. That entry stands as written; this one names it.
+
+**The compiler (`toolkit/harness/sandbox.py`).** `_check_ranks(p, who, pairs,
+professions, rules, level=None)`: with a `level` the ranks go against that level's budget
+(the player's and each hero's call sites pass theirs, unchanged); `None` is no budget at
+all, and the member loop passes none. What a hostile is STILL refused for, because the
+owner did not rule on validity: a malformed `[attribute, rank]` pair, an attribute twice,
+an id outside the table, an attribute of another profession than its template's (and the
+primary rule), a rank outside `0..rank_max`, and a level outside `0..20`.
+`budget_for_level`'s docstring and the loop's comment say whose the budget is.
+
+**The window (`tools/orchestrator/orchestrator.py`, class `Ranks`).** No budget is computed
+for a hostile anywhere: the chip is the spend alone (`n_of(spent, "point")`, kind `info`,
+never `crit`, never "over budget"); the hint is "Not held to a player's point budget; each
+rank 0..12, in the template's profession." (the tooltip carries the ruling and what the
+compiler still refuses); `Ranks` no longer carries a level (`set_professions(professions)`,
+`set_level` gone, the level spin's hook to it gone); `MemberEditor.summary`'s roster line is
+the spent count.
+
+**Checks, each read off the defect's own operand and each proven red by planting the old
+rule back (the scratch backups, `cp`, `git diff --stat` clean after).** `test_sandbox`
+123 → 127: the two budget refusals INVERTED (388 points at level 2 accepted; a level-0
+hostile with a rank accepted); the kept rules on a hostile (a Monk attribute on a Warrior
+hostile refused; rank 13 refused past the table's 12; one attribute twice refused); the
+budget as a control (the player's 194-of-10 check kept; a hero's 194-of-10 at level 3
+added); and the no-level fallback, which had used the budget as its witness, re-witnessed
+where it still matters -- `spawn_rows` gives a member with no level its TEMPLATE's level
+(the raider's 2, the monk's 5, the hatcher's 1: told from 0, from the window's old 2 and
+from 20), and `validate` reads the same level (a level-24 template fails a member with no
+level for the template's level; the member's own 3 wins). `--smoke` 163 → 164 laws, floor
+145 (19 gated now, both hostile-ranks laws behind the attribute table): the over-budget
+law inverted -- a hostile's ranks past its level's budget COMPILE, the chip `info` and
+counting, no "over budget", the hint claiming no refusal; the level-0 law reads the chip's
+count and the hint's "point budget" where it read "0 points"; `hint_housed` looks for
+"point budget"; and a new law that a file with an attribute of another profession and a
+rank past the table on one hostile is refused for BOTH at compile, the card holds neither
+(the foreign id dropped, the rank clamped) and the bar says "2 changes". Both themes 164
+of 164, 0 skips.
+
+Records: `tools/orchestrator/README.md` (the compiler paragraph, the smoke count, the
+state laws); `PLAN.md` §3's R-SANDBOX row; `TESTS.md`'s `test_sandbox` entry.
+
+---
+
 ### DESKWORK CONFIRM-2 -- 2026-09-24 -- **the pass-4 client runs: the henchman add HELD; the town weapon's load strip is INVISIBLE and its switch half a VISIBLE REGRESSION; travel BLOCKED on content; the display mode's field step is the owner's**
 
 Sixteen harness launches, loopback, build 38797, main at `09126d4a` (verdicts read as
