@@ -2620,3 +2620,74 @@ target-16 casts are Fire Storm's seventeen, an area over time -- so the burst's 
 Fireball's arrival without the flight (RECONSTRUCTION): per foe inside 240 u of the target the \
 word then [20, foe, caster, 304], the knock-down on each. NOT modelled, said here: the overcast \
 (exhaustion), the burst on a foe out of the caster's line of sight."""
+
+# ---------------------------------------------------------------------------
+# THE OUTPOST HENCHMEN -- DESKWORK-D1 step 5 (2026-09-23). Three standing NPCs
+# in our served outpost (Ascalon City, map 148) that the party window offers for
+# hire: `hireable = true` makes spawn_population send 0x0071 after each create
+# and record the agent, so c2s 0x009F HENCHMAN_ADD can hire it (henchparty.py).
+# The NPC templates and their professions/level are the retail Shing Jea
+# henchmen the tape's three adds witnessed (content/npcs.toml); the PLACEMENT is
+# ours, chosen near the arrival point and checked against the navmesh, so the
+# rows are `invented` like every other placement here. Ids 31/32/33 and
+# definitions 70/71/72 are clear of the party-reserved block.
+# Served with `--area outpost_henchmen`.
+
+[spawn.hench_warrior_stand]
+area = "outpost_henchmen"
+map = 148
+npc = "hench_warrior"
+agent_id = 31
+definition = 70
+allegiance = "noncombatant"
+attacks_back = false
+hireable = true
+x = 9926.0
+y = 8177.0
+enabled = true
+
+[spawn.hench_warrior_stand.provenance]
+source = "invented"
+verified = """Ours: a standing spot near Ascalon City's arrival point, to be \
+checked walkable against the compiled navmesh at spawn (place_on_mesh). The NPC \
+template, its profession and level are the retail Warrior henchman's \
+(content/npcs.toml hench_warrior, capture 20260819T132414); only the position \
+and the allocator ids are chosen here."""
+
+[spawn.hench_ranger_stand]
+area = "outpost_henchmen"
+map = 148
+npc = "hench_ranger"
+agent_id = 32
+definition = 71
+allegiance = "noncombatant"
+attacks_back = false
+hireable = true
+x = 9976.0
+y = 8127.0
+enabled = true
+
+[spawn.hench_ranger_stand.provenance]
+source = "invented"
+verified = """Ours: a standing spot near Ascalon City's arrival point, checked \
+walkable at spawn. The template is the retail Ranger henchman's (hench_ranger, \
+capture 20260819T132414); position and ids are chosen here."""
+
+[spawn.hench_assassin_stand]
+area = "outpost_henchmen"
+map = 148
+npc = "hench_assassin"
+agent_id = 33
+definition = 72
+allegiance = "noncombatant"
+attacks_back = false
+hireable = true
+x = 10026.0
+y = 8227.0
+enabled = true
+
+[spawn.hench_assassin_stand.provenance]
+source = "invented"
+verified = """Ours: a standing spot near Ascalon City's arrival point, checked \
+walkable at spawn. The template is the retail Assassin henchman's \
+(hench_assassin, capture 20260819T132414); position and ids are chosen here."""

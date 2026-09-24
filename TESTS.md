@@ -6477,6 +6477,28 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   stored mask (the `0x00DA` setter zeroes the client's mask, EVID-D1C-3),
   `hero_panel_bar_ids` reads the session's bar first. Drives the real handlers with a
   fake send and a scratch store. Floor 53 -> 71 from the green run, ~2 s),
+  `toolkit/authsrv/test_henchparty.py` (**2026-09-23, DESKWORK-D1 step 5: the party
+  family's henchman add, c2s 0x009F HENCHMAN_ADD**, `studies/cmsg/FINDINGS.md` "The
+  party family". OBSERVED end to end (capture 20260819T132414 :53419, an outpost).
+  §1 the batch, byte for byte against the TAPE: `henchparty.henchman_add_batch` encodes
+  to the 23-byte prefix that answers each of the three c2s 0x009F adds -- 0x00B0
+  PLAYER_PARTY_SIZE then the 0x01BF roster row, SIZE BEFORE ROW -- with enc_name,
+  profession and level read from the tape's own 0x01BF (nothing ArenaNet authored is
+  committed in the test); the KNOWN-BAD arm is the KICK's row-before-size shape through
+  the same comparator, which must NOT match. §2 the real `handle_henchman_add` with a
+  fake send: a valid add sends exactly 0x00B0 then 0x01BF and no 0x0021 (the standing
+  NPC is kept), the size counts player + henchman, and the refusals (not hireable,
+  already in the party, over the map cap) send NOTHING; three adds fill the cap of 4
+  and the fourth is refused; the cap counts HEROES too (one hero + two henchmen = 4).
+  §3 the spawn wiring: `spawn_population` over the shipped `outpost_henchmen` rows
+  sends 0x0071 for agents 31/32/33 and records `state["hireable_henchmen"]` with each
+  one's profession, and the KNOWN-BAD `--no-henchman-add` marks nothing. §4 SOURCE
+  LOCKS on authsrv.py (syntax tree): the 0x009F arm is gated on HENCHMAN_ADD_ENABLED,
+  `main()` wires --no-henchman-add and --henchman-cap, spawn_population's hireable arm
+  is flag-gated, the handler caps on `party_member_count` vs `OUTPOST_PARTY_CAP`, and
+  0x009F is OFF the DROPPED_ON_PURPOSE allowlist. Drives the real functions with a fake
+  send and a scratch state; vault-gated (§1 skips whole if the capture is absent).
+  Floor 27 from the green run (36 with the vault), ~2 s),
   `toolkit/authsrv/test_itemmoves.py` (**2026-09-23, DESKWORK-D1 step 8: the inventory
   messages, c2s 0x004F ITEM_MOVE, 0x0030 EQUIP_ITEM and 0x0072 ITEM_MOVE_BY_ID, and the
   item store behind them**, `toolkit/authsrv/itemstore.py`, `studies/cmsg/FINDINGS.md`

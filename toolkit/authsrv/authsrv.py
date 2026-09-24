@@ -5311,6 +5311,10 @@ import itemstore                                               # noqa: E402
 # Read by the burst, the 0x006E build, handle_visibility_flags and
 # test_visstatus.py.
 import visstatus                                               # noqa: E402
+# The party family's henchman add -- DESKWORK-D1 step 5. The tape-locked
+# 0x00B0 + 0x01BF batch, the hireable-marker message and the party cap; read by
+# handle_henchman_add, spawn_population's hireable arm and test_henchparty.py.
+import henchparty                                              # noqa: E402
 from skillunlock import (                                      # noqa: F401,E402
     unlock_corpus_words, refuse_skill_zero,
     # The persisted skill library's two halves read these by bare name: the
@@ -10371,6 +10375,27 @@ GAME_CMSG_HERO_SKILL_TOGGLE = 0x0019
 # that reading is inference and the wrong name already cost one correction.
 # No server arm: nothing we can send moves +0x24, so it cannot fire here.
 GAME_CMSG_HERO_UNNAMED_0017 = 0x0017
+# The party window's ADD-HENCHMAN click -- DESKWORK-D1 step 5 (2026-09-23).
+# [word agent_id] of a standing outpost henchman, OBSERVED 3 of 3 on capture
+# 20260819T132414 :53419 (an outpost, map 242): c2s 0x009F [4]/[2]/[6] each
+# answered 31-132 ms later by 0x00B0 PLAYER_PARTY_SIZE THEN the 0x01BF roster
+# row, in one chunk -- SIZE BEFORE ROW (the hero KICK answers row-then-size).
+# The client offers the click only for agents it was told are hireable, which
+# is what GAME_SMSG_PARTY_HENCHMAN_HIREABLE (0x0071) below marks. Send wrapper
+# 0x0085BE40 on 38797, one caller inside PyCliParty, gated on the party's
+# "is mine" flag bit 0x80 (0x01B2 sets it). No loopback arrival: this server
+# had no hireable outpost henchman to click until this step. handle_henchman_add.
+GAME_CMSG_HENCHMAN_ADD = 0x009F
+# The message that MARKS an agent as a hireable henchman, so the party window's
+# henchman tab lists it: the client's handler 0x0091E220 -> 0x008113D0
+# BINARY-SEARCH-INSERTS the agent id into a sorted dword set at the party
+# context +0x574. OBSERVED it was sent for exactly the six henchman NPCs (agents
+# 1..6) of 20260819T132414 :53419 and NO other of the ~45 kind-9 NPCs, in both
+# outpost connections and NEVER in the field -- so it is the hireable marker
+# (henchparty.hireable_mark). We SEND it after a hireable NPC's create; there
+# is no reply. (GWCA's offset numbering names its own 0x0071 differently; the
+# name here is from our own handler read and the 6-of-6 correlation.)
+GAME_SMSG_PARTY_HENCHMAN_HIREABLE = 0x0071
 # The flag placements the 2026-08-19 clicks measured (pvpui 28.5): hero flag
 # [agent, vec2, plane], party flag [vec2, plane]. The client draws NOTHING on
 # send -- the draw is the s2c echo pair below (pvpui 28.6).
@@ -11735,6 +11760,26 @@ ITEM_MOVE_BY_ID_ENABLED = True  # False (--no-item-move-by-id): c2s 0x0072
                                # the sword snapped back). Default ON: 0x014B
                                # into an empty cell, 0x0152 onto an occupied one
                                # (RECONSTRUCTION; no tape carries the request).
+HENCHMAN_ADD_ENABLED = True    # False (--no-henchman-add): c2s 0x009F is ignored
+                               # -- the pre-DESKWORK-D1-step-5 behaviour (the
+                               # party window's Add Henchman did nothing; only
+                               # the launch --henchman single roster row
+                               # existed). Default ON: the reply is OBSERVED,
+                               # retail's own 0x00B0 + 0x01BF in that order, 3 of
+                               # 3 (20260819T132414 :53419; henchparty.py), and
+                               # every standing henchman is one this server
+                               # marked hireable, so what reaches us is an id we
+                               # placed. handle_henchman_add.
+OUTPOST_PARTY_CAP = 4          # The party window refuses a further henchman at
+                               # the map's max_party. This is the client's own
+                               # AreaInfo max_party, read with
+                               # toolkit/clientscan/areatable.py (build 38797):
+                               # 4 for Ascalon City (148), Lakeside (146), Shing
+                               # Jea (242 -- the tape's outpost, where 3 adds
+                               # fill 1 player -> 4) and Kamadan (449). OBSERVED.
+                               # A per-map table (some outposts read 6 or 8) is
+                               # the next step; --henchman-cap overrides. Heroes
+                               # AND henchmen count against it.
 AI_MODE_FIGHT, AI_MODE_GUARD, AI_MODE_AVOID = 0, 1, 2   # 0x0015's byte (pvpui 28.5)
 AI_MODE_NAMES = {0: "Fight", 1: "Guard", 2: "Avoid Combat"}
 SPIRIT_RANGE = 2512.0          # u -- WIKI (GWW "Range"): binding rituals /
@@ -24812,6 +24857,63 @@ def handle_hero_add(values, send, state, conn_id):
     print(f"[c{conn_id}] HERO_ADD: hero {hid} (agent {_haid}) back in the party; "
           f"size now {party_size} [SANDBOX-N2]", flush=True)
 
+
+def party_member_count(state):
+    """How many the party holds: the player, its heroes, the launch henchman
+    and every henchman hired in game. The value the map's cap is compared to and
+    the size 0x00B0 carries -- DESKWORK-D1 step 5."""
+    return (1
+            + len(party_hero_slots(state))
+            + (1 if HENCHMAN is not None else 0)
+            + len(state.get("party_henchmen", {})))
+
+
+def handle_henchman_add(values, send, state, conn_id):
+    """GAME_CMSG 0x009F HENCHMAN_ADD: the party window's Add Henchman click --
+    hire a standing outpost henchman into the party (DESKWORK-D1 step 5).
+
+    OBSERVED end to end (studies/cmsg/FINDINGS.md "The party family", capture
+    20260819T132414 :53419): values[1] is the standing henchman's AGENT ID (the
+    client offers only agents this server marked hireable, 0x0071); the reply is
+    0x00B0 PLAYER_PARTY_SIZE then the 0x01BF roster row, SIZE BEFORE ROW, 3 of 3
+    -- henchparty.henchman_add_batch, tape-locked in test_henchparty. The
+    standing NPC is NOT destroyed (no 0x0021 follows on the tape); it keeps
+    standing and its record moves into the party.
+
+    THE REFUSALS send NOTHING (retail's refusal reply is NOT FOUND -- no tape
+    carries a refused add): an agent that is not a hireable henchman of this
+    outpost; one already in the party; and one that would put the party over the
+    map's cap (OUTPOST_PARTY_CAP -- heroes count against it too, the same value
+    the load's 0x00B0 carries)."""
+    aid = int(values[1])
+    hench = (state.get("hireable_henchmen") or {}).get(aid)
+    if hench is None:
+        print(f"[c{conn_id}] HENCHMAN_ADD({aid}) refused: not a hireable henchman "
+              f"of this outpost {sorted(state.get('hireable_henchmen') or {})}; "
+              f"nothing sent (retail's refusal reply NOT FOUND) [DESKWORK-D1]",
+              flush=True)
+        return
+    party = state.setdefault("party_henchmen", {})
+    if aid in party:
+        print(f"[c{conn_id}] HENCHMAN_ADD({aid}) refused: already in the party; "
+              f"nothing sent [DESKWORK-D1]", flush=True)
+        return
+    if henchparty.party_is_full(party_member_count(state), OUTPOST_PARTY_CAP):
+        print(f"[c{conn_id}] HENCHMAN_ADD({aid}) refused: the party already holds "
+              f"{party_member_count(state)} members, the map's cap "
+              f"(OUTPOST_PARTY_CAP={OUTPOST_PARTY_CAP}); nothing sent (retail's "
+              f"refusal reply NOT FOUND) [DESKWORK-D1]", flush=True)
+        return
+    party[aid] = hench
+    size = party_member_count(state)
+    for op, vals, label in henchparty.henchman_add_batch(
+            1, PLAYER_NUMBER, size, aid, hench["enc_name"],
+            hench["profession"], hench["level"]):
+        send(op, vals, label + " [HENCHMAN_ADD]")
+    print(f"[c{conn_id}] HENCHMAN_ADD: {hench.get('name', aid)} (agent {aid}) "
+          f"joined the party; size now {size} [DESKWORK-D1]", flush=True)
+
+
 def hero_panel_bar_ids(state, hid, stored_bar=None):
     """The eight slots the hero PANEL shows -- 0x00DA's array for this hero:
     the STORED bar under --persist, else the row's own (an authored empty bar
@@ -29195,6 +29297,22 @@ def spawn_population(send, state, origin, conn_id, area=None):
             send(GAME_SMSG_NPC_UPDATE_WEAPONS, [int(row["agent_id"]), _wid, 0],
                  f"NPC_UPDATE_WEAPONS(agent {int(row['agent_id'])}: leadhand = "
                  f"item {_wid}, {row['weapon_item']}) [SLICE-H11]")
+        # DESKWORK-D1 step 5: a `hireable` row is an outpost henchman the party
+        # window offers. After its create, mark it hireable (0x0071 -- the set
+        # the panel's henchman tab lists) and record what its 0x01BF roster row
+        # will need: the proper name, the profession and the level. c2s 0x009F
+        # then hires it (handle_henchman_add). OBSERVED the marker is sent for
+        # exactly the hireable henchmen and nowhere else (henchparty.py).
+        if row.get("hireable") and HENCHMAN_ADD_ENABLED:
+            _haid = int(row["agent_id"])
+            op, vals, lbl = henchparty.hireable_mark(_haid)
+            send(op, vals, lbl)
+            state.setdefault("hireable_henchmen", {})[_haid] = {
+                "enc_name": npc["enc_name"],
+                "profession": int(npc.get("profession") or 0),
+                "level": int(row.get("level", npc.get("level", 0)) or 0),
+                "name": label,
+            }
         # SLICE-B6: THE BOSS AURA is one int property on the body, sent after
         # its create (the setter looks the agent up by id and returns silently
         # if it is not there yet -- SLICE-F1's `0x007DFD70`). The range is
@@ -32540,6 +32658,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         else:
                             print(f"[c{conn_id}] ITEM_MOVE_BY_ID ignored "
                                   f"(--no-item-move-by-id) [DESKWORK-D1]", flush=True)
+                    elif opcode == GAME_CMSG_HENCHMAN_ADD:
+                        # DESKWORK-D1 step 5: the party window's Add Henchman
+                        # click. OBSERVED 3 of 3 on retail with the 0x00B0 +
+                        # 0x01BF reply (henchparty.py).
+                        if HENCHMAN_ADD_ENABLED:
+                            handle_henchman_add(values, send, state, conn_id)
+                        else:
+                            print(f"[c{conn_id}] HENCHMAN_ADD ignored "
+                                  f"(--no-henchman-add) [DESKWORK-D1]", flush=True)
                     elif opcode == GAME_CMSG_SET_CHAR_VISIBILITY_FLAGS:
                         # The owner's answer (2026-09-23): the inventory
                         # panel's DISPLAY MODE drop-down. On no retail tape;
@@ -36608,6 +36735,19 @@ def main():
               "headgear and both costume slots, the doll bare-headed in a "
               "town, 20260923T185124), c2s 0x0057 ignored, the body's 0x006E "
               "carries every piece whatever the mode.", flush=True)
+    if a.no_henchman_add:
+        global HENCHMAN_ADD_ENABLED
+        HENCHMAN_ADD_ENABLED = False
+        print("[party] --no-henchman-add: c2s 0x009F HENCHMAN_ADD is ignored and "
+              "no standing henchman is marked hireable (no 0x0071) -- the party "
+              "window's Add Henchman does nothing, the behaviour before "
+              "DESKWORK-D1 step 5.", flush=True)
+    if a.henchman_cap is not None:
+        global OUTPOST_PARTY_CAP
+        OUTPOST_PARTY_CAP = int(a.henchman_cap)
+        print(f"[party] --henchman-cap {OUTPOST_PARTY_CAP}: the henchman add "
+              f"refuses at {OUTPOST_PARTY_CAP} party members (heroes counted), "
+              f"overriding the map's AreaInfo max_party.", flush=True)
     if a.party_no_fight:
         global PARTY_FIGHTS
         PARTY_FIGHTS = False
