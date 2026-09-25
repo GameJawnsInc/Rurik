@@ -2471,9 +2471,11 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "knock-downs (Hammer Bash, Heavy Blow, Earthquake) are "
                          "untouched. The default knocks each landed, living foe "
                          "down for KNOCK_DOWN_SECONDS -- on the burst arms as "
-                         "before, and on the single-target non-attack land "
-                         "(new: retail's 784 completion carries [63, target, "
-                         "2.0] ahead of the Poison, OBSERVED 4 of 5).")
+                         "before, and on the single-target non-attack land, a "
+                         "term that is the TIER's only (a hand row on that path "
+                         "keeps its pre-pass shape: Earthquake under "
+                         "--no-spell-areas) -- retail's 784 completion carries "
+                         "[63, target, 2.0] ahead of the Poison, OBSERVED 4 of 5.")
     ap.add_argument("--no-condition-flat-constants", action="store_true",
                     help="skill_condition refuses every bit-clear slot again, "
                          "as until 2026-09-25: the default reads a bit-clear "

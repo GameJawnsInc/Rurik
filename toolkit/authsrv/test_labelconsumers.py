@@ -54,15 +54,15 @@ import effects  # noqa: E402
 # a hero's and a hostile's chain-gated casts + the flag on the body path + the positive
 # control, 5a's two hand-row sweeps; 1643's record is a declared skip on a bare machine);
 # 41 with the vault's skills table, 44 with the marks loaded.
-# SKILLS-LV (2026-09-25, skills 60): +25 -> FLOOR 65 from the bare run (RURIK_VAULT at an
-# empty dir: 65 + 3 skips) -- section 6 the on-hit rider (the class readers, the player's
+# SKILLS-LV (2026-09-25, skills 60): +26 -> FLOOR 66 from the bare run (RURIK_VAULT at an
+# empty dir: 66 + 3 skips) -- section 6 the on-hit rider (the class readers, the player's
 # sword / wand / bow swings, the flag, a spell's null, a hero's sword and staff, a
 # hostile's axe at the player, the source lock), section 7 the single-target knock-down
-# (231's, 784's, 294's shapes for the player and a hostile, the flag against a hand
-# row, the source lock), section 8 the flat constant (the reader, the flag, the wire,
-# the hand-row census), section 5's three flags; 69 + 1 skip with the vault's 57-row
-# overlay, 72 with the 60-row emit loaded (5c's marks).
-LEDGER = checks.Ledger("label consumers", floor=65)
+# (231's, 784's, 294's shapes for the player and a hostile, the flag, the term being the
+# tier's only, the source lock), section 8 the flat constant (the reader, the flag, the
+# wire, the hand-row census), section 5's three flags; 70 + 1 skip with the vault's
+# 57-row overlay, 73 with the 60-row emit loaded (5c's marks).
+LEDGER = checks.Ledger("label consumers", floor=66)
 check = LEDGER.ok
 
 PLAYER = authsrv.PLAYER_AGENT_ID
@@ -765,14 +765,21 @@ def main():
         authsrv.LABEL_KNOCKDOWNS = False
         st, (sent, send) = _world(), _sender()
         _press_and_land(st, send, S_TOUCH, FOE)
-        st2, (sent2, send2) = _world(), _sender()
-        _press_and_land(st2, send2, S_HANDKD, FOE)
+        reads_off = (authsrv.skill_knocks_down(S_TOUCH), authsrv.skill_knocks_down(S_HANDKD))
         authsrv.LABEL_KNOCKDOWNS = True
         check(kd_words(sent) == [] and st["agents"][FOE]["health"] < 9000.0
-              and not st["agents"][FOE].get("knocked_until")
-              and len(kd_words(sent2)) == 1 and st2["agents"][FOE].get("knocked_until", 0) > time.time(),
+              and not st["agents"][FOE].get("knocked_until") and reads_off == (False, True),
               "KNOWN-BAD ARM --no-label-knockdowns: the LABEL row's word lands and nobody falls; the "
-              "same shape as a HAND row (no tier) still knocks down -- the flag is the tier's")
+              "reader still answers True for a HAND-shaped row (no tier) -- the flag is the tier's, the "
+              "hand rows' knock-downs (the attack path, the bursts) stand", reads_off)
+        st2, (sent2, send2) = _world(), _sender()
+        _press_and_land(st2, send2, S_HANDKD, FOE)
+        check(kd_words(sent2) == [] and st2["agents"][FOE]["health"] < 9000.0
+              and not st2["agents"][FOE].get("knocked_until"),
+              "the single-target term is the TIER's only: a HAND-shaped row with knocks_down on this "
+              "path keeps the pre-pass shape (its word, no fall) -- Earthquake under --no-spell-areas "
+              "is that case and test_weapons pins it; so --no-label-knockdowns reverts every fall this "
+              "pass added and nothing else")
         check(src.count("        nonattack_knock_down(send, state,") == 4
               and src.index("_st_res = hit_enemy(send, state, target, conn_id, exact=float(found[0]),")
               < src.index("nonattack_knock_down(send, state, cast[\"skill_id\"], target,"),

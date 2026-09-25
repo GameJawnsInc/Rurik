@@ -22089,14 +22089,19 @@ def apply_episode_riders(send, state, attacker_id, target_id, item, conn_id, who
 
 
 def nonattack_knock_down(send, state, skill_id, target_id, conn_id, who):
-    """SKILLS-LV: a NON-attack, single-target row's `knocks_down` (231's touch,
-    294's Signet on its target, 784's Spell) on a living target -- the term the
-    burst arms and the attack path already carry, on the one path that lacked
-    it. Retail's 784 completion (OBSERVED, 4 of 5 live: 20260819T132414 x3,
-    20260913T210901 x1): [58, caster], [20, target, caster, impact],
-    [63, target, 2.0], then the Poison (the status word 0x00F1 and the
-    degeneration) -- the knock-down BEFORE the condition, 2.0 s. Returns True
-    when the target fell."""
+    """SKILLS-LV: a NON-attack, single-target LABEL row's `knocks_down` (231's
+    touch, 294's Signet on its target, 784's Spell) on a living target -- the
+    term the burst arms and the attack path already carry, on the one path that
+    lacked it. THE TIER'S ONLY: a HAND row keeps the pre-pass behaviour on this
+    path (Earthquake 170 under --no-spell-areas falls back to one target with no
+    fall, the arm test_weapons pins), so --no-label-knockdowns reverts every
+    fall this pass added and nothing else moves. Retail's 784 completion
+    (OBSERVED, 4 of 5 live: 20260819T132414 x3, 20260913T210901 x1): [58,
+    caster], [20, target, caster, impact], [63, target, 2.0], then the Poison
+    (the status word 0x00F1 and the degeneration) -- the knock-down BEFORE the
+    condition, 2.0 s. Returns True when the target fell."""
+    if skill_effect_row(skill_id).get("tier") != agents.content.LABEL_TIER:
+        return False
     if not skill_knocks_down(skill_id) or target_dead(state, target_id):
         return False
     return knock_down(send, state, target_id, conn_id, f"{who} skill {skill_id} [SKILLS-LV]",

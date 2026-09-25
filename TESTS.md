@@ -12723,17 +12723,20 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   the Poison (the log's order for a foe); 294's — one target falls, the other adjacent hostile
   untouched; a hostile casting 784's shape at the player — `[63, player, 2.0]` before the
   Poison's 0x0042 on the wire — and 231's — the word then the fall; `--no-label-knockdowns`
-  drops the LABEL row's fall while a HAND-shaped row still knocks down; SOURCE: four sites.
-  §8 (F) the flat constant: 167's shape resolves Blind 10 s at any rank, 1033's None,
-  `--no-condition-flat-constants` refuses both; the real cast deals the word then Blinds for
-  10 s; no loaded HAND row's condition means sits on a bit-clear slot (a skip on a bare
-  machine). §5: the three flags parse and main() rebinds each before the listener; §5c with
-  the marks loaded: every CONDITION_RIDER_ON_HIT row carries `condition_rider`, lands nothing
-  at the cast, reads a rider condition, is an episode type with a readable class; every
-  KNOCKDOWN_APPLIED row is exactly one `skill_knocks_down` reads and none under the flag, each
-  untimed; every CONDITION_FLAT_CONSTANT row resolves ONLY through the flat reader. Floor 40 →
-  65 from the bare run (65 + 3 skips); 69 + 1 skip with the vault's 57-row overlay, 72 with
-  the 60-row emit under RURIK_CONTENT_EXTRA.** Earlier: **2026-09-23 fix pass, SKILLS-LU §59.7 (the
+  drops the LABEL row's fall while the reader still answers True for a HAND-shaped row (the
+  flag is the tier's); the single-target term is the TIER's only — a HAND-shaped row on that
+  path keeps its word and no fall (Earthquake under `--no-spell-areas` is that case, pinned by
+  `test_weapons`); SOURCE: four sites. §8 (F) the flat constant: 167's shape resolves Blind
+  10 s at any rank, 1033's None, `--no-condition-flat-constants` refuses both; the real cast
+  deals the word then Blinds for 10 s; no loaded HAND row's condition means sits on a
+  bit-clear slot (a skip on a bare machine). §5: the three flags parse and main() rebinds each
+  before the listener; §5c with the marks loaded: every CONDITION_RIDER_ON_HIT row carries
+  `condition_rider`, lands nothing at the cast, reads a rider condition, is an episode type
+  with a readable class; every KNOCKDOWN_APPLIED row is exactly one `skill_knocks_down` reads
+  and none under the flag, each untimed; every CONDITION_FLAT_CONSTANT row resolves ONLY
+  through the flat reader. Floor 40 → 66 from the bare run (66 + 3 skips); 70 + 1 skip with
+  the vault's 57-row overlay, 73 with the 60-row emit under RURIK_CONTENT_EXTRA.** Earlier:
+  **2026-09-23 fix pass, SKILLS-LU §59.7 (the
   reviewers' findings): a BODY's cast of a chain-gated row lands on NOBODY — a hero casting
   784's shape at a hostile and a hostile casting 784's and 1033's shapes at the player land
   no Poison, no damage word and no fail word, the 58 closes the cast and the log names the
