@@ -3386,11 +3386,33 @@ GAME_SMSG_PLAYER_FLAGS = 0x003C
 # 0x00B6, the client's own OnProfessionSecondaryBits: which professions this
 # agent may take as a SECONDARY. MUST be sent AFTER that agent's 0x00B7 -- the
 # handler looks the record up and drops the message silently if it is not there
-# yet (studies/profession/RUNS.md §13). Default 0, which is what ArenaNet's own
-# server sends for a character with nothing unlocked: 11 of 11 samples in our
-# live corpus carry mask 0.
+# yet (studies/profession/RUNS.md §13). SECONDARY_BITS is the --secondary-bits
+# OVERRIDE, 0 = none given. Until 2026-09-25 it was also the only way the
+# message was sent at all, on the belief that "11 of 11 live samples carry mask
+# 0" -- CORRECTED by the SECONDARY-F1 census (studies/profession/SECONDARY.md):
+# retail sends 0x00B6 on 95 of 95 live game connections, right after the
+# player's 0x00B7, value 0 on PvE characters (45) and 0x7FF & ~(1 << primary)
+# on PvP characters (2045 = 0x7FD for a Warrior x46, 1919 = 0x77F for an
+# Assassin x4). With the mask 0 the K panel's drop-down holds one entry and
+# is greyed; the default mask below is retail's PvP form, the owner's
+# decision (all nine other professions offered). secondary_offer_mask() /
+# load_secondary_offer() beside spawn_profession_values().
 GAME_SMSG_AGENT_PROFESSION_BITS = 0x00B6
 SECONDARY_BITS = 0
+# SECONDARY-B1 (2026-09-25): the K panel's secondary-profession change. c2s
+# 0x0041 [agent_id, u8 profession] is the drop-down's send (GmDeckBuilder
+# 0x00500533..0x0050058D -> API 0x00816D70 -> wrapper 0x00920800, OBSERVED
+# static on 38797) and the template loader's (0x0058ADB0); retail answered
+# the one witness (20260824T074002 :61329, map 248, [568, 4]) 44 ms later
+# with ONE segment 0x00B7 [568,1,4,1] -> 0x00A6 [568,1,4] -> 0x00DB (the
+# character library, byte-identical to the load's). handle_secondary_change
+# is the arm. --no-secondary-change is the master revert: 0x00B6 only under
+# --secondary-bits and 0x0041 dropped, 57e89956's bytes. --no-secondary-cleanup
+# keeps the OLD secondary's attribute ranks and bar skills (RECONSTRUCTION:
+# retail's only witness changed from none, so it had nothing to clean).
+GAME_CMSG_SET_SECONDARY_PROFESSION = 0x0041
+SECONDARY_CHANGE_ENABLED = True
+SECONDARY_CLEANUP_ENABLED = True
 
 # The 15-dword player attribute set. OBSERVED 2026-08-05: sending this with
 # field 9 = 15 moved the Hero window to Level 15 and it stayed there, so field 9
@@ -3522,7 +3544,7 @@ SPAWN_SECONDARY = 0
 PLAYER_LEVEL_AUTHORED = False
 
 
-def spawn_profession_values(profession=None, agent_id=None):
+def spawn_profession_values(profession=None, agent_id=None, secondary=None):
     """The 0x00B7 payload for the spawn burst, built THROUGH the guard.
 
     agents.agent_set_profession is the server's own bound check; building the
@@ -3536,14 +3558,166 @@ def spawn_profession_values(profession=None, agent_id=None):
     an agent missing from it yields an out-of-range profession and asserts
     ConstChar:1296. Defaulting to the player leaves every existing caller
     unchanged.
+
+    `secondary` (SECONDARY-B4, 2026-09-25): the pair's second half when the
+    caller has resolved it -- player_secondary(state) / hero_secondary(state,
+    hid), the STORED change over the launch value. None keeps the pre-arc
+    answer: SPAWN_SECONDARY for the player, 0 for a hero.
+
+    THE TRAILING FLAG STAYS 0, and it was decided rather than defaulted
+    (SECONDARY-F6, the bounded static read of record+0x10's readers on 38797):
+    retail pairs flag 1 with a non-zero 0x00B6 (51 of 130 sightings, all on
+    the two PvP characters), but the flag's ONLY rel32 reader is the
+    attribute-list rebuild 0x00819EA0 at 0x00819EFE, local player only, where
+    bit 0 selects the CHAPTER-OWNERSHIP mask the rebuild keeps and inserts
+    attribute rows by -- [ctx+0x44]+0x60 under flag 1 versus +0x5C|+0x54 under
+    flag 0, both filled by 0x00927690 from the account's 64-bit product bits
+    (0x0048EF60(1) / 0x0048EF30(1), globals 0xC03330..0xC0334C) against the
+    table at 0xBCB568. With an EMPTY mask the rebuild inserts NO attribute for
+    the primary (0x0081A056 `test esi, edx / je`), and what this server's
+    account data leaves in +0x60 is UNVERIFIED -- so 1 could take every
+    attribute row off the panel, and 0 is what every run to date, RUNS §14's
+    ungreyed drop-down included, has worked under. The drop-down itself never
+    reads the flag (0x00502380 reads +4, +8 and +0xC only).
     """
     p = SPAWN_PROFESSION if profession is None else profession
     # SANDBOX-B4: the player's own pair carries SPAWN_SECONDARY; a hero's
-    # secondary stays 0 (not modelled).
-    s = SPAWN_SECONDARY if agent_id is None else 0
+    # secondary stays 0 unless the caller resolved a stored one (SECONDARY-B4).
+    if secondary is None:
+        s = SPAWN_SECONDARY if agent_id is None else 0
+    else:
+        s = int(secondary)
     return agents.agent_set_profession(
         PLAYER_AGENT_ID if agent_id is None else agent_id, p, s,
         custom=p > agents.CHAR_PROFESSIONS - 1) + [0]
+
+
+def secondary_offer_mask(primary):
+    """0x00B6's DEFAULT mask for a character whose primary is `primary`:
+    retail's PvP-character form, 0x7FF & ~(1 << primary) -- every profession
+    id 0..10 but the primary, bit 0 ("None") kept. OBSERVED (SECONDARY-F1):
+    2045 = 0x7FD on all 46 loads of the Warrior 'Jack Jawnson', 1919 = 0x77F
+    on all 4 of the Assassin 'Strikey Blikey'; the drop-down builder never
+    adds id 0 from the mask (0x00502404 skips it unless it IS the current
+    secondary), so bit 0 is harmless and is kept for fidelity. A custom
+    primary past 10 has no bit to clear and gets the full 0x7FF."""
+    return 0x7FF & ~(1 << int(primary))
+
+
+def load_secondary_offer():
+    """The mask the load's 0x00B6 carries for the PLAYER, or 0 for "not sent".
+
+    Three regimes, one expression, so the change handler and the burst agree
+    on what was offered (the handler refuses a profession outside it):
+      * --secondary-bits N     -> N, the operator's override (as before);
+      * the feature on         -> secondary_offer_mask(SPAWN_PROFESSION);
+      * --no-secondary-change  -> 0: no 0x00B6 at all, 57e89956's bytes.
+    Heroes never get one (retail 0 of 4; the client offers a hero 0x7FF on
+    its own, 0x005023DE)."""
+    if SECONDARY_BITS:
+        return int(SECONDARY_BITS)
+    if SECONDARY_CHANGE_ENABLED:
+        return secondary_offer_mask(SPAWN_PROFESSION)
+    return 0
+
+
+def instance_is_explorable(state):
+    """0x0199 INSTANCE_LOAD_INFO field 3 as this connection was sent it: the
+    same three-way expression the burst's send site evaluates (OUTPOST forces
+    0, --explorable forces 1, else the map row's kind). The K panel's drop-down
+    enables only when the client's copy of this field reads 0 (0x0084D9B0 =
+    [ctx+0x44]+0x238, filled from msg+0xC by handler 0x0084EE40; the enable
+    test at 0x00502543..0x00502568, OBSERVED static 38797), so the change
+    handler asks the same question before answering."""
+    if OUTPOST:
+        return False
+    return bool(EXPLORABLE or map_explorable(state.get("map_id")))
+
+
+def session_store(state):
+    """This connection's charstore.Store under --persist, opening it on first
+    ask exactly as hero_build does (ORDER-INDEPENDENT: the block that first
+    needs it may run before the instance-load opens it). None without
+    --persist or without a row for this character."""
+    store = state.get("charstore_game")
+    if store is None and PERSIST:
+        store, _row = charstore.find_character(state.get("char_uuid", ""))
+        if store is not None:
+            state["charstore_game"] = store
+    return store
+
+
+def player_secondary(state):
+    """The PLAYER's secondary for this connection: the session's value once a
+    change has been accepted, else the STORED one under --persist, else the
+    launch value (--spawn-secondary / a [party.KEY] row's player_secondary,
+    which set SPAWN_SECONDARY).
+
+    PRECEDENCE, and it follows the store's own precedents for the bar and the
+    ranks (SECONDARY-B4): a stored value WINS over the launch value, the way
+    a stored `skillbar` wins over --skills and the persisted ranks win over
+    the content row -- the launch value is the SEED a character starts from
+    and the store is what the character has since done. Absent in the store
+    means "never changed" and the launch value answers, so every store written
+    before this field is byte-identical on the wire. Under --no-secondary-change
+    the store is NOT read (the revert arm, as --no-hero-kick's): a saved change
+    is not in force when the feature is off.
+
+    A stored secondary EQUAL to the launch primary is ignored, loudly: the
+    primary is a launch setting and can be moved under a stored pair, and the
+    client asserts on an equal pair (GmDeckBuilder:2321)."""
+    s = state.get("player_secondary")
+    if s is not None:
+        return int(s)
+    s = None
+    if SECONDARY_CHANGE_ENABLED:
+        store = session_store(state)
+        if store is not None:
+            s = store.character_secondary(state.get("char_uuid", ""))
+            if s is not None and int(s) == int(SPAWN_PROFESSION):
+                print(f"[secondary] the store's secondary {s} equals this "
+                      f"launch's primary {SPAWN_PROFESSION}; ignored -- the "
+                      f"launch value {SPAWN_SECONDARY} answers (GmDeckBuilder:"
+                      f"2321 asserts on an equal pair) [SECONDARY-B4]",
+                      flush=True)
+                s = None
+    if s is None:
+        s = SPAWN_SECONDARY
+    state["player_secondary"] = int(s)
+    return int(s)
+
+
+def hero_secondary(state, hero_index):
+    """One hero's secondary for this connection: the session's value once a
+    change was accepted, else the STORED one under --persist (the hero row's
+    `secondary`), else 0 -- retail's 4 of 4 and every run before SECONDARY-B4.
+    Same precedence and the same equal-pair guard as player_secondary."""
+    cache = state.setdefault("hero_secondary", {})
+    hid = int(hero_index)
+    if hid in cache:
+        return int(cache[hid])
+    s = None
+    if SECONDARY_CHANGE_ENABLED:
+        store = session_store(state)
+        if store is not None:
+            s = store.hero_secondary(state.get("char_uuid", ""), hid)
+            if s is not None and int(s) == int(hero_profession(hid)):
+                print(f"[secondary] the store's secondary {s} for hero {hid} "
+                      f"equals its primary {hero_profession(hid)}; ignored "
+                      f"[SECONDARY-B4]", flush=True)
+                s = None
+    cache[hid] = int(s) if s is not None else 0
+    return cache[hid]
+
+
+def skill_profession(skill_id):
+    """A skill's profession byte (s_skill +0x28, skilltable.py) from the
+    content rows, or None when this machine holds no row for it (the
+    bare-machine rule: no vault overlay, no skill rows). 0 is "common"."""
+    try:
+        return int(agents.WORLD.get("skills", str(int(skill_id)))["profession"])
+    except (agents.content.ContentError, KeyError, TypeError, ValueError):
+        return None
 
 
 # Which of GWW's own progression labels this server treats as damage to a foe.
@@ -19601,8 +19775,10 @@ def attribute_state(state):
         # SANDBOX-B4: the secondary, when a row or --spawn-secondary gives one
         # (0 before 2026-09-20). With it the is_primary rule refuses the other
         # profession's primary attribute on its own and its other attributes
-        # become spendable.
-        secondary=SPAWN_SECONDARY)
+        # become spendable. SECONDARY-B4: the STORED change over the launch
+        # value (player_secondary says the precedence); a change made this
+        # session rewrites st.secondary in place (handle_secondary_change).
+        secondary=player_secondary(state))
     state["attributes"] = st
     return st
 
@@ -19724,7 +19900,7 @@ def hero_attribute_state(state, hero_index):
         player.rules, ranks,
         int(points) if points is not None else spent,
         primary=hero_profession(hero_index),        # SANDBOX-B3: this hero's own
-        secondary=0)
+        secondary=hero_secondary(state, hero_index))   # SECONDARY-B4: stored, else 0
     cache[hero_index] = st
     return st
 
@@ -20064,6 +20240,242 @@ def handle_attribute_load(values, send, state, conn_id, rec):
     persist_attributes(state, conn_id)
     rec.event("attribute_load", pairs=[[int(a), int(r)] for a, r in pairs],
               available=st.available)
+
+
+def handle_secondary_change(values, send, state, conn_id, rec):
+    """Answer one GAME_CMSG 0x0041 SET_SECONDARY_PROFESSION [agent_id, u8].
+
+    SECONDARY-B2/B3 (2026-09-25, studies/profession/SECONDARY.md). The K
+    panel's secondary drop-down sends this (GmDeckBuilder 0x00500533..
+    0x0050058D -> 0x00816D70 -> wrapper 0x00920800, OBSERVED static 38797),
+    and so does the template loader (0x0058ADB0). AGENT-KEYED: the player's
+    own agent, or a party hero's -- the hero's drop-down carries the hero's
+    agent id (0x0050057F pushes the deck builder's agent) and ignores 0x00B6,
+    offering 0x7FF minus the primary on its own (0x005023DE).
+
+    WHAT RETAIL ANSWERED, n=1 (capture 20260824T074002 :61329, map 248, a
+    PvP Warrior going from no secondary to Necromancer): ONE segment 44 ms
+    later, 0x00B7 [568, 1, 4, 1] -> 0x00A6 [568, 1, 4] -> 0x00DB (the character
+    library, byte-identical to the load's) -> a tick. No 0x00B6 re-send, no
+    attribute message, no bar message. The reply here is that batch in that
+    order; the 0x00B7 flag stays 0 (spawn_profession_values says why).
+
+    ACCEPTANCE (RECONSTRUCTION -- retail's refusal is unobserved, so a refusal
+    sends NOTHING and says why in the log): the agent is this connection's
+    player or one of its party heroes; the instance is a town (0x0199 field 3
+    == 0 -- the client's own enable rule, 0x00502543..0x00502568); the
+    profession is 1..10, not the primary (GmDeckBuilder:2321 asserts on an
+    equal pair), and inside the mask the load offered (load_secondary_offer;
+    a hero's is the client's own 0x7FF minus its primary). The CURRENT
+    secondary re-picked is a no-op: the batch is answered, nothing else moves.
+
+    THE OLD SECONDARY'S STATE (SECONDARY-B3, RECONSTRUCTION: the witness had
+    none, so nothing was on its bar or in its attributes). On 0x00B7 the client
+    REBUILDS the agent's attribute-id list itself (0x00813AE0 -> 0x00819E60):
+    it inserts the new secondary's attributes and drops a lost profession's
+    row ONLY when the entry's +8 and +0xC are both zero (0x00819FC1 /
+    0x00819FC8). So the old secondary's ranks are zeroed and their points
+    refunded BEFORE the 0x00B7, through the mid-session half of the attribute
+    family -- 0x0038 [agent, unspent] then one 0x003B [agent, attr, 0,
+    effective] per zeroed attribute, the shapes retail sends for every spend
+    (14 of 14, pvpui 32) -- and NOT 0x0037 + 0x003A: 0x0037 is the CREATOR
+    and asserts `!attribState` (ChCliAttrib:313) on an agent that already has
+    one, and 0x003A is the load's bulk fill that drains the pending-modifier
+    queue (pvpui 31.1). A gear bonus on such an attribute keeps its row (the
+    rebuild's own rule; effective is sent as the truth). Then the old
+    secondary's skills leave the bar -- 0x00D9 [agent, slot, 0, 0] per slot,
+    the one per-slot message the client is known to accept, after the 0x00DB
+    so retail's observed triple stays contiguous -- because a skill of a
+    profession the character no longer has cannot stay usable; a hero's body
+    casts the edited bar from then on (sync_hero_body_bar). --no-secondary-
+    cleanup keeps both. A skill with no content row on this machine (the
+    bare-machine rule) is kept and named in the log.
+
+    PERSISTENCE (SECONDARY-B4): the pair is written to the store when one is
+    attached (charstore.set_character_secondary / set_hero_secondary), so the
+    next load's 0x00B7 / 0x00A6 / 0x0073 / attribute state carry it.
+    """
+    if not SECONDARY_CHANGE_ENABLED:
+        print(f"[c{conn_id}] SECONDARY CHANGE dropped (--no-secondary-change): "
+              f"c2s 0x0041 {list(values[1:])!r} -- nothing sent, 57e89956's "
+              f"bytes [SECONDARY-B5]", flush=True)
+        rec.event("secondary_change", values=list(values[1:]),
+                  refused="--no-secondary-change")
+        return
+    if len(values) < 3:
+        print(f"[c{conn_id}] SECONDARY CHANGE refused: malformed request "
+              f"{list(values[1:])!r} (expected [agent_id, profession])",
+              flush=True)
+        rec.event("secondary_change", values=list(values[1:]),
+                  refused="malformed")
+        return
+    agent_id, prof = int(values[1]), int(values[2])
+
+    def _refuse(why):
+        print(f"[c{conn_id}] SECONDARY CHANGE REFUSED (agent {agent_id} -> "
+              f"profession {prof}): {why} -- nothing sent (retail's refusal "
+              f"is unobserved; RECONSTRUCTION) [SECONDARY-B2]", flush=True)
+        rec.event("secondary_change", agent=agent_id, profession=prof,
+                  refused=why)
+
+    hero_index = hero_index_for_agent(agent_id)
+    if agent_id == PLAYER_AGENT_ID:
+        who, primary = "player", int(SPAWN_PROFESSION)
+        current = player_secondary(state)
+        offered = load_secondary_offer()
+    elif hero_index is not None and not hero_kicked(state, hero_index):
+        who, primary = f"hero {hero_index}", int(hero_profession(hero_index))
+        current = hero_secondary(state, hero_index)
+        # The client's own mask for a hero: 0x7FF with the primary excluded
+        # by the builder's `cmp esi, edi` (0x00502380), never 0x00B6.
+        offered = 0x7FF & ~(1 << primary)
+    else:
+        _refuse(f"agent {agent_id} is neither this connection's player "
+                f"({PLAYER_AGENT_ID}) nor a hero in its party "
+                f"{[h for h, _a, _d in party_hero_slots(state)]}")
+        return
+    if instance_is_explorable(state):
+        _refuse("this instance is explorable (0x0199 field 3 = 1); the "
+                "client's own drop-down is disabled there, so a change is "
+                "answered only in a town")
+        return
+    changed = prof != current
+    if changed:
+        if not 1 <= prof <= agents.CHAR_PROFESSIONS - 1:
+            _refuse(f"profession {prof} outside 1..{agents.CHAR_PROFESSIONS - 1}")
+            return
+        if prof == primary:
+            _refuse(f"profession {prof} IS the {who}'s primary "
+                    f"(GmDeckBuilder:2321 asserts on an equal pair)")
+            return
+        if not (offered >> prof) & 1:
+            _refuse(f"profession {prof} is outside the mask offered "
+                    f"(0x{offered:04X})")
+            return
+    old = current
+    uuid_hex = state.get("char_uuid", "")
+    store = session_store(state)
+
+    # -- SECONDARY-B3a: the old secondary's ranks, BEFORE the 0x00B7 --------
+    zeroed, refunded = [], 0
+    if changed and SECONDARY_CLEANUP_ENABLED and old:
+        st = (attribute_state(state) if hero_index is None
+              else hero_attribute_state(state, hero_index))
+        zeroed = sorted(
+            int(a) for a, r in st.ranks.items() if int(r) > 0
+            and int((st.rules.attributes.get(int(a)) or {}).get("profession", 0))
+            == old)
+        if zeroed:
+            was_avail = st.available
+            for a in zeroed:
+                st.ranks.pop(a, None)
+            refunded = st.available - was_avail
+            send(GAME_SMSG_ATTRIBUTE_POINTS_AVAILABLE, [agent_id, st.available],
+                 f"ATTRIBUTE_POINTS_AVAILABLE({st.available} of "
+                 f"{st.points_total}: +{refunded} refunded from profession "
+                 f"{old}'s ranks) [SECONDARY-B3]")
+            for a in zeroed:
+                send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTE,
+                     [agent_id, a, 0, st.effective_of(a)],
+                     f"AGENT_UPDATE_ATTRIBUTE({who} attr {a} = 0"
+                     + (f" +{st.bonus_of(a)}" if st.bonus_of(a) else "")
+                     + ") [SECONDARY-B3]")
+            if hero_index is None:
+                persist_attributes(state, conn_id)
+            else:
+                persist_hero_attributes(state, hero_index, conn_id)
+
+    # -- the pair itself: session, live attribute state, store ---------------
+    if hero_index is None:
+        state["player_secondary"] = prof
+        _ast = state.get("attributes")
+        if _ast is not None:
+            _ast.secondary = prof
+    else:
+        state.setdefault("hero_secondary", {})[hero_index] = prof
+        _hst = (state.get("hero_attributes") or {}).get(hero_index)
+        if _hst is not None:
+            _hst.secondary = prof
+    persisted = False
+    if changed and store is not None:
+        # The setter answers the purse's contract: the int written, None for
+        # no row, False for a STALE write save() refused (and printed).
+        _wrote = (store.set_character_secondary(uuid_hex, prof) if hero_index is None
+                  else store.set_hero_secondary(uuid_hex, hero_index, prof))
+        persisted = _wrote not in (None, False)
+
+    # -- retail's batch, in retail's order: 0x00B7 -> 0x00A6 -> 0x00DB ------
+    send(GAME_SMSG_AGENT_PROFESSIONS,
+         spawn_profession_values(primary, None if hero_index is None else agent_id,
+                                 secondary=prof),
+         f"AGENT_PROFESSIONS({who} {primary}/{prof}) [SECONDARY-B2]")
+    send(GAME_SMSG_AGENT_SET_PROFESSION,
+         agents.agent_set_profession(agent_id, primary, prof,
+                                     custom=primary > agents.CHAR_PROFESSIONS - 1),
+         f"AGENT_SET_PROFESSION({who} {primary}/{prof}) [SECONDARY-B2]")
+    if hero_index is None:
+        # The player's CHARACTER library, unchanged: retail's re-send was
+        # byte-identical to the load's (the client filters the list itself,
+        # SECONDARY-F4). A hero's list re-enumerates on 0x00B7's own event
+        # (0x1000004E) from heroData + the account set, so it needs nothing.
+        _aw, _al, _cw, _cl = skillunlock.resolve_library(
+            store, uuid_hex, UNLOCKED, UNLOCK_LABEL)
+        send(GAME_SMSG_UPDATE_UNLOCKED_SKILLS, [_cw],
+             f"UPDATE_UNLOCKED_SKILLS({_cl}; unchanged, as retail's) [SECONDARY-B2]")
+
+    # -- SECONDARY-B3b: the old secondary's skills leave the bar --------------
+    stripped, unknown = [], []
+    if changed and SECONDARY_CLEANUP_ENABLED and old:
+        if hero_index is None:
+            bar = list(SKILLBAR)[:SKILLBAR_SLOTS]
+            bar += [0] * (SKILLBAR_SLOTS - len(bar))
+        else:
+            bar = hero_panel_bar_ids(state, hero_index)
+        for slot, sid in enumerate(bar):
+            if not sid:
+                continue
+            sp = skill_profession(sid)
+            if sp is None:
+                unknown.append(int(sid))
+            elif sp == old:
+                stripped.append((slot, int(sid)))
+        if stripped:
+            after = list(bar)
+            for slot, sid in stripped:
+                after[slot] = 0
+                send(GAME_SMSG_SKILLBAR_UPDATE_SKILL, [agent_id, slot, 0, 0],
+                     f"SKILLBAR_UPDATE_SKILL({who} slot {slot}: skill {sid} of "
+                     f"profession {old} leaves) [SECONDARY-B3]")
+            if hero_index is None:
+                del SKILLBAR[:]
+                SKILLBAR.extend(after)
+                if store is not None:
+                    store.set_character_skillbar(uuid_hex, after)
+            else:
+                if store is not None:
+                    store.set_hero_skillbar(uuid_hex, hero_index, after)
+                state.setdefault("hero_bars", {})[hero_index] = list(after)
+                sync_hero_body_bar(state, agent_id, after, conn_id)
+        if unknown:
+            print(f"[c{conn_id}] SECONDARY CHANGE: bar skills {unknown} have no "
+                  f"content row on this machine (no vault overlay?), so their "
+                  f"profession is unknown and they stay on the bar",
+                  flush=True)
+
+    print(f"[c{conn_id}] SECONDARY CHANGE ({who}): {primary}/{old} -> "
+          f"{primary}/{prof}"
+          + ("" if changed else " (the current secondary re-picked: a no-op, "
+                                 "the batch answered)")
+          + (f"; attributes {zeroed} zeroed, {refunded} point(s) refunded"
+             if zeroed else "")
+          + (f"; bar slots {[s for s, _i in stripped]} emptied "
+             f"(skills {[i for _s, i in stripped]})" if stripped else "")
+          + ("; persisted" if persisted else
+             ("" if not changed else "  [not persisted: no store]"))
+          + " [SECONDARY-B2]", flush=True)
+    rec.event("secondary_change", agent=agent_id, who=who, primary=primary,
+              old=old, new=prof, refused=None, zeroed=zeroed, refunded=refunded,
+              stripped=[[s, i] for s, i in stripped], persisted=persisted)
 
 
 # Both handlers moved to merchant.py on 2026-09-11 with their docstrings, their
@@ -25920,8 +26332,9 @@ def hero_character_block(state, haid, hid):
         _havail, _htotal = _hattr.available, _hattr.points_total
     out.append((GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS, [haid, _havail, _htotal],
                 f"AGENT_ATTRIBUTE_POINTS(hero agent {haid}: {_havail} of {_htotal}) [JARIN rig]"))
-    out.append((GAME_SMSG_AGENT_PROFESSIONS, spawn_profession_values(_hprof, haid),
-                f"AGENT_PROFESSIONS(hero agent {haid}, prof {_hprof}) [JARIN rig]"))
+    _hsec = hero_secondary(state, hid)                  # SECONDARY-B4: stored, else 0
+    out.append((GAME_SMSG_AGENT_PROFESSIONS, spawn_profession_values(_hprof, haid, secondary=_hsec),
+                f"AGENT_PROFESSIONS(hero agent {haid}, prof {_hprof}/{_hsec}) [JARIN rig]"))
     if HERO_SKILLBAR:
         # The hero's OWN bar (retail: [322, 382, 348, 1, 385, 346, 0, 2] on
         # the panel); the player's SKILLBAR only when the hero has none.
@@ -25960,8 +26373,8 @@ def hero_character_block(state, haid, hid):
         out.append((GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [agents.PROP_LEVEL, haid, hero_level(hid)],
                     f"hero agent {haid} at level {hero_level(hid)} [JARIN rig]"))
     out.append((GAME_SMSG_AGENT_SET_PROFESSION,
-                agents.agent_set_profession(haid, int(_hprof)),
-                f"0x00A6 for hero agent {haid} (prof {_hprof}) [JARIN rig]"))
+                agents.agent_set_profession(haid, int(_hprof), _hsec),   # SECONDARY-B4
+                f"0x00A6 for hero agent {haid} (prof {_hprof}/{_hsec}) [JARIN rig]"))
     _hcols = attribute_columns(
         ranks=sorted(_h_ranks.items()) if _h_ranks else None)
     out.append((GAME_SMSG_AGENT_UPDATE_ATTRIBUTES, [haid, _hcols],
@@ -32879,7 +33292,8 @@ def _handle_request_players(send, state, conn_id, stop, rec):
             # has one.
             _hi_skills, _, _, _ = hero_build(state, _hid)
             _seq.append(agents.hero_info(
-                _hid, int(hero_level(_hid) or 1), int(_hprof_info), 0,
+                _hid, int(hero_level(_hid) or 1), int(_hprof_info),
+                hero_secondary(state, _hid),           # SECONDARY-B4: field 4, the pair's second half (retail (1, 0) for Koss)
                 _hap[0], _hap[1],
                 list(_hi_skills) if _hi_skills is not None
                 else hero_bar_ids(_hid)))               # SANDBOX-B3: per hero
@@ -33076,9 +33490,34 @@ def _handle_request_players(send, state, conn_id, stop, rec):
           _attrst.points_total],
          f"AGENT_ATTRIBUTE_POINTS({_attrst.available} "
          f"of {_attrst.points_total})")
+    # SECONDARY-B4: the pair's second half is the STORED change when the
+    # store holds one, else the launch value (player_secondary's precedence).
+    _psec = player_secondary(state)
     send(GAME_SMSG_AGENT_PROFESSIONS,
-         spawn_profession_values(),
-         f"AGENT_PROFESSIONS(prof {SPAWN_PROFESSION})")
+         spawn_profession_values(secondary=_psec),
+         f"AGENT_PROFESSIONS(prof {SPAWN_PROFESSION}/{_psec})")
+    # STRICTLY AFTER the 0x00B7 above, which CREATES the
+    # per-agent record 0x00B6 writes into. Reversed, the
+    # client drops it with no error (RUNS.md §13).
+    # SECONDARY-B1: sent on EVERY load now, as retail does
+    # -- 95 of 95 live game connections, and IMMEDIATELY
+    # after the player's 0x00B7 on all 95 (retail's block
+    # is 0x0037, 0x00B7, 0x00B6, 0x00DA), which is why it
+    # sits here and not after the 0x00A6 below, where it
+    # sat under --secondary-bits from 2026-08-13. Retail's
+    # PvP mask by default; load_secondary_offer() is the
+    # three regimes in one expression, 0 meaning "not sent"
+    # (--no-secondary-change without --secondary-bits:
+    # 57e89956's bytes).
+    _offer = load_secondary_offer()
+    if _offer:
+        send(GAME_SMSG_AGENT_PROFESSION_BITS,
+             agents.agent_set_secondary_bits(
+                 PLAYER_AGENT_ID, _offer),
+             f"AGENT_PROFESSION_BITS"
+             f"(0x{_offer:04X})"
+             + (" [--secondary-bits]" if SECONDARY_BITS
+                else " [default: all but the primary, SECONDARY-B1]"))
     # ...and the AGENT-side pair, which we had never sent
     # for the player's own agent -- only for NPCs.
     #
@@ -33093,19 +33532,10 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     # studies/profession/RESKIN.md s14.
     send(GAME_SMSG_AGENT_SET_PROFESSION,
          agents.agent_set_profession(
-             PLAYER_AGENT_ID, SPAWN_PROFESSION, SPAWN_SECONDARY,   # SANDBOX-B4
+             PLAYER_AGENT_ID, SPAWN_PROFESSION, _psec,   # SANDBOX-B4 / SECONDARY-B4
              custom=SPAWN_PROFESSION
              > agents.CHAR_PROFESSIONS - 1),
-         f"AGENT_SET_PROFESSION(player, {SPAWN_PROFESSION}/{SPAWN_SECONDARY})")
-    # STRICTLY AFTER the 0x00B7 above, which CREATES the
-    # per-agent record 0x00B6 writes into. Reversed, the
-    # client drops it with no error (RUNS.md §13).
-    if SECONDARY_BITS:
-        send(GAME_SMSG_AGENT_PROFESSION_BITS,
-             agents.agent_set_secondary_bits(
-                 PLAYER_AGENT_ID, SECONDARY_BITS),
-             f"AGENT_PROFESSION_BITS"
-             f"(0x{SECONDARY_BITS:04X})")
+         f"AGENT_SET_PROFESSION(player, {SPAWN_PROFESSION}/{_psec})")
     # The skill block. Upstream's SendSkillsAndAttributes
     # sends the bar (218) BEFORE the unlock list (219); we
     # send the unlocks first, deliberately. Upstream never
@@ -37937,6 +38367,14 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                                rec, raise_it=False)
                     elif opcode == GAME_CMSG_ATTRIBUTE_LOAD:
                         handle_attribute_load(values, send, state, conn_id, rec)
+                    elif opcode == GAME_CMSG_SET_SECONDARY_PROFESSION:
+                        # SECONDARY-B2: the K panel's secondary drop-down
+                        # (and the template loader). Dropped on purpose
+                        # until 2026-09-25 under a stale note ("followed
+                        # by movement only"); retail's reply is the
+                        # 0x00B7/0x00A6/0x00DB batch at +44 ms.
+                        handle_secondary_change(values, send, state,
+                                                conn_id, rec)
                     elif opcode == GAME_CMSG_ITEM_PURCHASE:
                         handle_item_purchase(values, send, state,
                                              conn_id, rec)
@@ -41499,8 +41937,30 @@ def main():
             raise SystemExit(f"--secondary-bits {spec!r}: {ex}")
         offered = [p for p in range(1, 32) if SECONDARY_BITS >> p & 1]
         print(f"SECONDARY BITS: 0x{SECONDARY_BITS:04X} -- offers professions "
-              f"{offered} as secondaries. The drop-down that reads this exists "
-              f"ONLY in maps 796 and 823-836; elsewhere it is not built at all.")
+              f"{offered} as secondaries, OVERRIDING the default mask "
+              f"(0x{secondary_offer_mask(SPAWN_PROFESSION):04X}, every "
+              f"profession but the primary). The K panel's drop-down reads it "
+              f"in EVERY town (0x0199 field 3 == 0 and >= 2 entries is the whole "
+              f"enable rule, GmDeckBuilder 0x00502543; retail used it in map 248) "
+              f"-- RUNS.md 13's '15 arena maps only' is CONTESTED, "
+              f"studies/profession/SECONDARY.md.")
+    if a.no_secondary_change:
+        global SECONDARY_CHANGE_ENABLED
+        SECONDARY_CHANGE_ENABLED = False
+        print("NO SECONDARY CHANGE: 0x00B6 only under --secondary-bits, c2s 0x0041 "
+              "dropped with nothing sent, the stored secondary not read -- this "
+              "server's bytes until 2026-09-25 (57e89956). Retail: 0x00B6 on 95 of "
+              "95 live loads; the one 0x0041 answered at +44 ms with 0x00B7 -> "
+              "0x00A6 -> 0x00DB [SECONDARY-B5]", flush=True)
+    if a.no_secondary_cleanup:
+        global SECONDARY_CLEANUP_ENABLED
+        SECONDARY_CLEANUP_ENABLED = False
+        print("NO SECONDARY CLEANUP: a secondary change keeps the OLD secondary's "
+              "attribute ranks (no 0x0038 / 0x003B before the 0x00B7) and its bar "
+              "skills (no 0x00D9 after the 0x00DB) -- retail's one witness changed "
+              "from none and had nothing to clean, so both halves are "
+              "RECONSTRUCTION and this is their own revert [SECONDARY-B3]",
+              flush=True)
 
     warning = spawn_probe_warning(
         a.probe, a.spawn_profession is not None,

@@ -971,6 +971,12 @@ entry ⇒ greyed. **This fully explains the observed state with nothing else mis
 and ArenaNet's own server reproduces it: **11 of 11 live `0x00B6` samples carry mask 0**,
 because both captured characters are early-Prophecies with no secondary unlocked.
 
+> **STALE COUNT, 2026-09-25 (SECONDARY-F1, [SECONDARY.md](SECONDARY.md)).** The corpus
+> now holds **95** `0x00B6` samples on 95 of 96 live game connections: **0 on 45** (the
+> PvE characters), **2045 = 0x7FD on 46** (the PvP Warrior — every bit but the primary's,
+> bit 0 kept) and **1919 = 0x77F on 4** (the PvP Assassin). The mechanism above is
+> unchanged; the "11 of 11 mask 0" was the corpus of the day, not a rule.
+
 ### Two silent failure modes, both now guarded
 
 1. **ORDER.** `0x0081FD00` on a lookup MISS logs and **returns without storing**. The
@@ -1010,6 +1016,23 @@ Shiverpeak Arena). Outside them panel init **zeroes the gate** and the builder r
 immediately. **Sending `0x00B6` in an ordinary outpost changes nothing, and that is not
 evidence against the opcode.** This is very likely the *arena* variant of the drop-down;
 which builder serves roleplaying characters is the largest open question.
+
+> **CONTESTED, 2026-09-25 — refuted on two independent legs, kept here as history
+> (SECONDARY-F3, [SECONDARY.md](SECONDARY.md)).** (1) **Retail used the drop-down in map
+> 248**, the Great Temple of Balthazar — an ordinary outpost (areatable type 13, flags
+> `0x8000`, not one of the `0x40000`-flag arenas above): capture `20260824T074002`
+> :61329 carries c2s `0x0041 [568, 4]` and the `0x00B7`/`0x00A6`/`0x00DB` reply 44 ms later.
+> (2) **The static re-read finds no whitelist**: the builder's `[obj+8] & 0x10` test is the
+> CREATE FLAG the Skills & Attributes window (AttribFrame) passes when it creates its third
+> GmDeckBuilder child, unconditionally, and nothing in GmDeckBuilder clears it; the enable
+> rule is `>= 2 entries` (`0x00502557`) **and** `0x0199` field 3 == 0 (`0x0084D9B0` =
+> `[ctx+0x44]+0x238`, `0x00502543..0x00502568`) — the two gates this section already named,
+> and nothing else. The "15-map whitelist" most likely came from the `0x40000` area bit,
+> which governs the PvP-skill SUBSTITUTION in the list (`0x0050258D`), not the drop-down.
+> §14's run in 796 stands; it just did not need 796. Since 2026-09-25 the server sends
+> `0x00B6` on every load with every profession but the primary offered (SECONDARY-B1), and
+> answers the pick (SECONDARY-B2). `probecharacter.py`'s "RUN IT IN AN ARENA MAP" carries
+> the same note.
 
 ### The probe
 

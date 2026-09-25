@@ -112,6 +112,11 @@ MAX_HERO_INDEX = 39
 # test_charstore checks the two agree so the copies cannot drift.
 CHAR_ATTRIBS = 51
 ATTRIBUTE_RANK_MAX = 12
+# Mirrored from agents.CHAR_PROFESSIONS for the same bare-machine reason: the
+# client's compiled bound on a profession id (AcctTemplate:411/412, ConstChar:
+# 1296's `cmp esi, 0xb`); ids 0..10, 0 meaning "no secondary". test_secondary
+# checks the two copies agree (SECONDARY-B4).
+CHAR_PROFESSIONS = 11
 
 
 def store_dir():
@@ -268,6 +273,27 @@ def _validate_heroes(path, who, heroes):
                 _refuse(path, f"{where}: disabled_slots must be an int 0..255 "
                               f"(the hero panel's suppress mask, one bit per "
                               f"slot; DESKWORK-D1 step 6)")
+        if "secondary" in row:
+            _validate_secondary(path, where, row["secondary"])
+
+
+def _validate_secondary(path, where, sec):
+    """A stored SECONDARY profession (SECONDARY-B4): an int 0..10, 0 = none.
+
+    OPTIONAL, so STORE_VERSION did NOT bump (the purse's precedent): absent
+    means "never changed in game" and the launch value answers, which keeps
+    every store written before this field byte-identical on the wire. The
+    PRIMARY is not stored -- it is a launch setting (--spawn-profession / a
+    [party.KEY] row), the owner's decision -- so a stored secondary EQUAL to
+    the launch primary cannot be refused here; authsrv.player_secondary
+    ignores it loudly at load instead (GmDeckBuilder:2321 asserts on an
+    equal pair).
+    """
+    if isinstance(sec, bool) or not isinstance(sec, int) \
+            or not 0 <= sec <= CHAR_PROFESSIONS - 1:
+        _refuse(path, f"{where}: secondary must be an int 0..{CHAR_PROFESSIONS - 1} "
+                      f"(0 = none; the client's compiled bound on a profession "
+                      f"id is {CHAR_PROFESSIONS}, ConstChar:1296), not {sec!r}")
 
 
 def validate(data, path):
@@ -393,6 +419,11 @@ def validate(data, path):
                 _refuse(path, f"character {row['name']!r}: purse must be a "
                               f"non-negative int (the carried-gold accumulator, "
                               f"0x0140 +0x90; DESKWORK-D9)")
+        # The SECONDARY profession the character changed to in game
+        # (SECONDARY-B4). Optional; _validate_secondary says the rule.
+        if "secondary" in row:
+            _validate_secondary(path, f"character {row['name']!r}",
+                                row["secondary"])
         blob = row.get("settings_blob", "")
         if blob:
             try:
@@ -932,6 +963,58 @@ class Store:
             return False
         return amount
 
+    # ---- the SECONDARY profession, player and heroes (SECONDARY-B4) ---------
+    # Written when the K panel's change (c2s 0x0041) is accepted, read by the
+    # next load's 0x00B7 / 0x00A6 / 0x0073 and the attribute state. ABSENT is
+    # "never changed": the launch value (--spawn-secondary, a [party.KEY]
+    # row's player_secondary, a hero's 0) answers, so a store written before
+    # this field is byte-identical on the wire. Present, it WINS over the
+    # launch value -- the bar's and the ranks' precedent: the launch value is
+    # the seed, the store is what the character has since done. The primary
+    # is NOT stored (a launch setting, the owner's decision), so the equal-
+    # pair guard lives at the reader (authsrv.player_secondary), not here.
+    def character_secondary(self, uuid_hex):
+        """The stored secondary, or None when the row exists but never
+        stored one (and None when there is no such character)."""
+        row = self.character_by_uuid(uuid_hex)
+        if row is None:
+            return None
+        s = row.get("secondary")
+        return int(s) if isinstance(s, int) and not isinstance(s, bool) else None
+
+    def set_character_secondary(self, uuid_hex, secondary):
+        """Record the secondary (0..10, 0 = none); saves. Returns the stored
+        int, None when there is no row, or False when save() refused a stale
+        write (the purse's contract)."""
+        row = self.character_by_uuid(uuid_hex)
+        if row is None:
+            return None
+        _validate_secondary(self.path, f"character {row['name']!r}", secondary)
+        row["secondary"] = int(secondary)
+        if not self.save():
+            return False
+        return int(secondary)
+
+    def hero_secondary(self, uuid_hex, hero_index):
+        """One hero's stored secondary, or None when none is stored."""
+        hero = self.hero_row(uuid_hex, hero_index)
+        if hero is None:
+            return None
+        s = hero.get("secondary")
+        return int(s) if isinstance(s, int) and not isinstance(s, bool) else None
+
+    def set_hero_secondary(self, uuid_hex, hero_index, secondary):
+        """Record one hero's secondary; saves. Same contract as the
+        character's setter."""
+        hero = self.ensure_hero(uuid_hex, hero_index)
+        if hero is None:
+            return None
+        _validate_secondary(self.path, f"hero {int(hero_index)}", secondary)
+        hero["secondary"] = int(secondary)
+        if not self.save():
+            return False
+        return int(secondary)
+
     def drop_item_location(self, uuid_hex, item_id):
         """Forget one item's stored cell; saves. True when a row was removed.
         The dress calls this for a stored EQUIPPED cell that is not the piece's
@@ -1031,6 +1114,13 @@ def _main(argv=None):
                          "cost, so nothing is spendable; retail's level-3 "
                          "Koss carries 10 against 4 spent")
     ap.add_argument("--bar", help="replace the CHARACTER's own eight slots")
+    ap.add_argument("--secondary", type=int, metavar="N",
+                    help="set THIS CHARACTER's stored secondary profession "
+                         "(0..10, 0 = none) -- what the K panel's change wrote; "
+                         "it wins over --spawn-secondary at the next load "
+                         "(SECONDARY-B4)")
+    ap.add_argument("--hero-secondary", type=int, metavar="N",
+                    help="set the hero's stored secondary (requires --hero)")
     a = ap.parse_args(argv)
 
     if a.list:
@@ -1109,9 +1199,13 @@ def _main(argv=None):
     # what the file now says. `--show` is the no-mutation spelling of it.
     if a.bar is not None:
         st.set_character_skillbar(uuid_hex_required(ap, uuid_hex), _ids_arg(a.bar))
+    if a.secondary is not None:
+        st.set_character_secondary(uuid_hex_required(ap, uuid_hex), a.secondary)
 
     if a.hero is not None:
         uuid_hex_required(ap, uuid_hex)
+        if a.hero_secondary is not None:
+            st.set_hero_secondary(uuid_hex, a.hero, a.hero_secondary)
         if a.hero_skills is not None:
             st.set_hero_skills(uuid_hex, a.hero, _ids_arg(a.hero_skills))
         if a.hero_bar is not None:
@@ -1126,7 +1220,8 @@ def _main(argv=None):
             hero["attribute_points"] = int(a.hero_points)
             st.save()
     elif any(v is not None for v in (a.hero_skills, a.hero_bar,
-                                     a.hero_attributes, a.hero_points)):
+                                     a.hero_attributes, a.hero_points,
+                                     a.hero_secondary)):
         ap.error("--hero INDEX is required for the --hero-* options")
 
     acct = st.account_unlocked_skills()
@@ -1140,11 +1235,14 @@ def _main(argv=None):
         bar = st.character_skillbar(u)
         if bar is not None:
             print(f"  {row['name']} skillbar: {bar}")
+        if st.character_secondary(u) is not None:
+            print(f"  {row['name']} secondary: {st.character_secondary(u)}")
         for hid, hero in sorted(st.heroes(u).items(), key=lambda kv: int(kv[0])):
             print(f"  {row['name']} hero {hid}: "
                   f"skills={hero.get('skills')} bar={hero.get('skillbar')} "
                   f"attributes={hero.get('attributes')} "
-                  f"points={hero.get('attribute_points')}")
+                  f"points={hero.get('attribute_points')}"
+                  + (f" secondary={hero['secondary']}" if "secondary" in hero else ""))
     return 0
 
 

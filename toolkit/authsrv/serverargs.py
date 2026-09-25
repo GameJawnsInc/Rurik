@@ -205,16 +205,21 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "rather than a lie in content/maps.toml. "
                          "studies/morale/FINDINGS.md.")
     ap.add_argument("--secondary-bits", default=None, metavar="MASK|all|ids",
-                    help="Send GAME_SMSG 0x00B6 in the spawn burst: which "
-                         "professions the character may take as a SECONDARY. "
-                         "'all' = ids 1..10, or a comma-separated id list, or "
-                         "an integer mask (0x.. accepted). Default: not sent "
-                         "at all, which reproduces ArenaNet -- 11 of 11 live "
-                         "samples carry mask 0 for characters with nothing "
-                         "unlocked. THE DROP-DOWN THAT READS THIS ONLY EXISTS "
-                         "IN 15 ARENA MAPS (796 Codex Arena, 823-836), so "
-                         "expect no visible effect anywhere else "
-                         "(studies/profession/RUNS.md §13).")
+                    help="OVERRIDE the mask GAME_SMSG 0x00B6 carries in the spawn "
+                         "burst: which professions the character may take as a "
+                         "SECONDARY. 'all' = ids 1..10, or a comma-separated id "
+                         "list, or an integer mask (0x.. accepted). Default since "
+                         "2026-09-25 (SECONDARY-B1): every profession but the "
+                         "primary, 0x7FF & ~(1 << primary) -- retail's PvP form, "
+                         "OBSERVED 2045 (Warrior) x46 and 1919 (Assassin) x4; a "
+                         "PvE character gets 0 (x45) and a greyed drop-down. Sent "
+                         "on 95 of 95 live loads right after the player's 0x00B7 "
+                         "(the 'not sent at all / 11 of 11 mask 0' this help used "
+                         "to claim was a stale count). The K panel's drop-down "
+                         "reads it in EVERY town -- 0x0199 field 3 == 0 and >= 2 "
+                         "entries is the whole enable rule (GmDeckBuilder "
+                         "0x00502543); RUNS.md §13's '15 arena maps only' is "
+                         "CONTESTED, studies/profession/SECONDARY.md.")
     ap.add_argument("--spawn-profession", type=int, default=None, metavar="N",
                     help="Primary profession the SPAWN BURST's 0x00B7 carries "
                          f"(default {PROF_WARRIOR}). The clean delivery for a "
@@ -234,8 +239,14 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "primary (GmDeckBuilder:2321). The harness forwards it "
                          "to the authsrv beside --spawn-profession. A [party.KEY] "
                          "row's `player_secondary` sets it too; this flag wins. "
+                         "BOTH ARE THE SEED (SECONDARY-B4, 2026-09-25): under "
+                         "--persist a secondary the character changed to in the "
+                         "K panel is stored and WINS over this value at the next "
+                         "load, the way a stored bar wins over --skills; reset it "
+                         "with `charstore.py --account E --character N --secondary 0`. "
                          "What the client DRAWS for the pair is SANDBOX-U1 "
-                         "(studies/sandbox/PLAN.md), unrun.")
+                         "(studies/sandbox/PLAN.md), unrun; the pair's own panel "
+                         "run is studies/profession/SECONDARY.md's runsheet.")
     ap.add_argument("--click-echo", action="store_true",
                     help="MOVECODE-K2. When a click is refused for STALENESS "
                          "(geo-stale) -- which during click-moving is "
@@ -2433,6 +2444,25 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "never a 60 (0 of 133), then the caster's [21] visual, "
                          "then for a shout 0x00A5 [caster, coded id] (67 of 67), "
                          "then the applies, then (a hero, the player) the E3.")
+    ap.add_argument("--no-secondary-change", action="store_true",
+                    help="SECONDARY-B5, the master revert of the K panel's "
+                         "secondary-profession change (studies/profession/"
+                         "SECONDARY.md): 0x00B6 AGENT_PROFESSION_BITS only under "
+                         "--secondary-bits (so the drop-down stays greyed), c2s "
+                         "0x0041 SET_SECONDARY_PROFESSION dropped with nothing "
+                         "sent, and a STORED secondary not read -- this server's "
+                         "bytes until 2026-09-25 (57e89956). Retail: 0x00B6 on 95 "
+                         "of 95 live loads (0x7FD / 0x77F / 0), and the one 0x0041 "
+                         "on tape (map 248, [568, 4]) answered at +44 ms with "
+                         "0x00B7 -> 0x00A6 -> 0x00DB in one segment.")
+    ap.add_argument("--no-secondary-cleanup", action="store_true",
+                    help="SECONDARY-B3's own revert: an accepted secondary change "
+                         "KEEPS the old secondary's attribute ranks (no 0x0038 / "
+                         "0x003B before the 0x00B7, so the client's own rebuild "
+                         "keeps those rows while their rank is non-zero) and its "
+                         "skills on the bar (no 0x00D9 after the 0x00DB). Both "
+                         "halves are RECONSTRUCTION -- retail's one witness "
+                         "changed from no secondary and had nothing to clean.")
     ap.add_argument("--per-wearer-batch-order", action="store_true",
                     help="send a party-wide shout's batch per wearer -- apply, "
                          "status, speed, apply, status, speed, the caster's "

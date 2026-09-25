@@ -764,7 +764,7 @@ retail, unhandled, unnamed, and not dropped on purpose (the route estimated ~19)
 | `0x000D` | 31 | 30 | header only | `0x019F` 11 | NOT FOUND on the game channel | dropped — a load-sequence marker between `0x0090` and `0x0092` |
 | `0x0013` | 2 | 1 | header only | `0x00A2` 1 | `0x0091FC30` CharMsg ← `jmp` at `0x0080DAC3`, the tail of `0x0080DAA0` (no prologue: `call 0x47f660`, `[[eax+0x2c]+0x528] = -1`, `call 0x633d70(0x10000150, 0, 0)`, then the `jmp`), whose one caller is `0x0057BE06`; "0 direct callers" until 2026-09-25, when `sendsites.py` counted `call` only | dropped, n=2 |
 | `0x0023` | 1 | 1 | byte, agent_id | `0x0034` | `0x00920030` CharMsg | dropped, n=1 |
-| `0x0041` | 1 | 1 | agent_id, byte | movement | `0x00920800` CharMsg | dropped, n=1 |
+| `0x0041` | 1 | 1 | agent_id, byte | ~~movement~~ → **`0x00B7` → `0x00A6` → `0x00DB` in ONE segment at +44 ms** (the triage's first-reply column caught the `0x001E` tick at 4.4 ms) | `0x00920800` CharMsg ← API `0x00816D70` ← GmDeckBuilder's secondary drop-down `0x00500533..0x0050058D` and the template loader `0x0058ADB0` | **NAMED `SET_SECONDARY_PROFESSION` (medium), 2026-09-25; HANDLED** (`handle_secondary_change`, SECONDARY-B2, [studies/profession/SECONDARY.md](../profession/SECONDARY.md)); the witness is a PvP Warrior in map 248 picking Necromancer, `[568, 4]` |
 | `0x0044` | 1 | 1 | dword | `0x009F` | `0x009208B0` CharMsg | dropped, n=1 |
 | `0x0045` | 5 | 3 | array8, 50 bytes; 4 distinct over 5 (bytes 14–15 vary) | none 2 of 5 | `0x00920980` CharMsg, 1 caller | dropped — a client-state report |
 | **`0x004F`** | 4 | 2 | byte, word, byte | **`0x014B` 3 of 4 first, 4 of 4 in sequence; `0x006F` beside it 3 of 4** | `0x00920DE0` CharMsg | **NAMED `ITEM_MOVE` (medium)**; dropped until step 8 |

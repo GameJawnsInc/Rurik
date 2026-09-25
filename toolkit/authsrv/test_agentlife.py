@@ -5659,10 +5659,14 @@ def section_secondary_bits():
               f"reversed, the client logs 'Agent not found in sort array' and "
               f"drops the mask with no wire error and no visible effect")
     LEDGER.ok(authsrv.SECONDARY_BITS == 0,
-              "and the default is 0 -- not sent at all",
-              f"{authsrv.SECONDARY_BITS} -- ArenaNet's own server sends mask 0 "
-              f"in 11 of 11 live samples, so an unlocked-by-default character "
-              f"would be us inventing state retail does not send")
+              "and the --secondary-bits OVERRIDE defaults to 0 (none given)",
+              f"{authsrv.SECONDARY_BITS} -- since 2026-09-25 (SECONDARY-B1) 0 "
+              f"means 'send the default mask', every profession but the "
+              f"primary, retail's PvP form (0x7FD on 46 of 46 Warrior loads); "
+              f"the load's three regimes are load_secondary_offer(), pinned by "
+              f"test_secondary.py. This detail used to cite '11 of 11 live "
+              f"samples carry mask 0' -- a stale count: 95 of 95 live loads "
+              f"carry a 0x00B6, 50 of them non-zero")
 
 
 def section_party_of_one():

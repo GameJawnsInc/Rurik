@@ -253,9 +253,11 @@ DROPPED_ON_PURPOSE = {
             "sent right after 0x0033 INTERACT_PLAYER at 39 s and followed 30 ms "
             "later by 0x0034 then chat (0x005D/0x0061). Wrapper 0x00920030 "
             "(CharMsg, zero direct callers). n=1; a name needs a labelled run.",
-    0x0041: "UNNAMED -- [agent_id, byte] = [568, 4], n=1 at 8.7 s (0 loopback), "
-            "followed by movement only. Wrapper 0x00920800 (CharMsg, zero direct "
-            "callers). n=1.",
+    # 0x0041 SET_SECONDARY_PROFESSION left this list on 2026-09-25 (SECONDARY-B2,
+    # studies/profession/SECONDARY.md): its row said "followed by movement
+    # only", which was the triage's tick column -- retail's reply is the
+    # 0x00B7 -> 0x00A6 -> 0x00DB batch 44 ms later. handle_secondary_change is
+    # the arm; test_secondary.py drives it.
     0x0044: "UNNAMED -- [dword] = [1], n=1 at 511 s after a TARGET_SELECT (1 "
             "loopback connection), followed 118 ms later by property updates "
             "0x009F/0x00A3/0x00A4. Wrapper 0x009208B0 on 38797 (CharMsg, zero "
