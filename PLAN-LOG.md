@@ -28,6 +28,25 @@ move back.
 
 ---
 
+### DESKWORK-D1, the town armour CONFIRMED on the client -- 2026-09-25 -- **in a town the body's helm now comes off and goes back on with the equip; `--no-town-armour-visuals` reproduces the old picture; the field is unchanged; the harness's new `drag:` / `dclick:` drove all three**
+
+CLEANUP-3's runsheet A1–A3 had waited on the owner's hands because the harness could not drag
+or double-click. The entry below landed those verbs, and the owner's go-ahead ran the three
+arms with them on main `6bbdd8a8` (CONFIRM-2 §10). A1, the default town
+(`20260925T124927`): dragging the helm to the backpack sends `0x004F` and our reply is `0x014B`
+plus `0x006F [slot 6 emptied]` with the `TOWN ARMOUR` line, and the body goes bare-headed. The
+double-click back sends `0x0030` and our reply is `0x014B` plus `0x006F [slot 6 = item 7]`, and
+the body is helmed again. A2, `--no-town-armour-visuals` (`125138`): `0x014B` alone, and the
+body keeps the helm while the doll is bare, the KNOWN-BAD picture. A3, the field (`125334`):
+the same `0x006F` pair with no `TOWN ARMOUR` line. The hands: only the load's `TOWN WEAPON`
+lines print, none for a helm change (RV2-2 held). No assert. The character store was backed up
+and restored. **This is also the harness verbs' client verification**: the drag was accepted as
+a drag (an `ITEM_MOVE` to the aimed cell, bag 2 slot 1) and the double-click as a double-click
+(an `EQUIP_ITEM`), both landing on target with no correction. PLAN.md 8.1's town armour item
+closes. The Hide in Towns leg was not re-run.
+
+---
+
 ### The harness can drag and double-click -- 2026-09-25 -- **`drag:FX0,FY0,FX1,FY1[,SECONDS]` and `dclick:FX,FY`, as `--walk` steps and `--actions` entries; whether the client takes them as a drag and a double-click is UNVERIFIED until the town armour runsheet runs**
 
 The owner asked for it after pass 6 left the town armour's equip (CLEANUP-3's runsheet A1–A3:

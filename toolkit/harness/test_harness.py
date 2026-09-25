@@ -1575,9 +1575,10 @@ def section_drag_dclick():
     What a unit test CAN pin here is the event shape -- one press, absolute
     moves, one release, the landing read back; two presses at one point
     inside the system time -- and what it cannot is whether the Guild Wars
-    client reads that shape as a drag or a double-click. That is UNVERIFIED
-    until a client run, exactly as orbit() was on 2026-08-11, when a version
-    whose test passed moved the pointer and not the camera. The lesson from
+    client reads that shape as a drag or a double-click -- a client run
+    settles that (CONFIRMED 2026-09-25, CONFIRM-2 section 10), as it did for
+    orbit() on 2026-08-11, when a version whose test passed moved the pointer
+    and not the camera. The lesson from
     that day is the load-bearing check below: every move is a real input
     event, and for a DROP it is an ABSOLUTE one.
 
