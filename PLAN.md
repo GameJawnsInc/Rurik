@@ -1958,8 +1958,9 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   The henchman kick CONFIRMED on the client (CONFIRM-2 §9: the row leaves, the count drops, a
   re-add restores both, `--no-henchman-kick` keeps the row). **Open**: the town armour's CLIENT
   CLICK (the owner's hands — the harness cannot drag or double-click; PLAN-LOG "CLEANUP-3"'s
-  runsheet A1–A3, `--no-town-armour-visuals` the A/B); the launch henchman's Kick (weakly not
-  offered, CONFIRM-2 §9 K5); travel's confirmation BLOCKED on content (no fog-initialised view
+  runsheet A1–A3, `--no-town-armour-visuals` the A/B); the full-party add's feedback (the
+  client sends the add at its own max_party and our cap refuses it SILENTLY — CONFIRM-2 §2's
+  correction; retail's reply NOT FOUND, desk study on `desk-partyfull`); travel's confirmation BLOCKED on content (no fog-initialised view
   carries a second pin; `M` on 449 / 242 / 248 / 310 asserts, CONFIRM-2 §3); the display
   mode's field step (the owner's hands, the harness cannot open the drop-down); the
   henchman FIELD-body carry, the outpost re-join and the `'play'` allegiance behind a

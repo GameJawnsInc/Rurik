@@ -334,6 +334,29 @@ too is one line in `run_client` and a behaviour change for every harness run; no
 
 ---
 
+### DESKWORK pass 6's run records CORRECTED -- 2026-09-25 -- **the backpedal works (ARM A's player was already dead), the party panel's Kick works (it needs a selected row), and the client does send a full-party add (CONFIRM-2 step 4 misread it)**
+
+The owner asked for the three issues the kick and leash runs reported to be fixed. Re-reading the
+captures and four launches on `069635de` (CONFIRM-2 §2's and §9's CORRECTED notes) show two were
+the orchestrator's misreadings, and they correct the entry "DESKWORK pass 6, the kick and leash
+runs on the client" below: (1) its "the runsheet's backpedal (`S:9`) sent no movement message at
+all and the Hatcher killed a player the server never saw move" is backwards -- the player died
+0.9 s BEFORE the hold (`205858`); on a live player the `S` keydown sends `MOVE_SET_HEADING`
+(−766.8, 0) at once (`20260925T083808`). (2) Its "the party panel has no X on a henchman row (the
+Henchmen tab's Kick is the route)" missed that the panel's Kick is greyed only without a
+selection: clicking the row enables it and it sends `0x00A8` (`20260925T084415`); there is no X
+on hover (`084210`). The launch henchman's Kick stays greyed under the same click -- not offered,
+OBSERVED. (3) The one real item: CONFIRM-2 §2 step 4 recorded that the client refuses a
+henchman add at max_party itself; its own run's log shows the client SENT it and our cap refused
+it, as K3 did. The server's refusal is correct (map 148's max_party is 4, OBSERVED from the
+client's AreaInfo) but silent; what retail sends back is NOT FOUND and is a desk study on
+`desk-partyfull`. One new defect found on the way: the backpedal run zoned through the
+`ascalon_to_corridor` portal into map 168 (no navmesh in the archive), where the server's
+`[no-mesh]` re-grants walked the body past the map's rect and the client asserted
+`MapQueryAltitude() invalid params` -- filed as its own task.
+
+---
+
 ### DESKWORK-D8 step 4, the stall's fix CONFIRMED on the client -- 2026-09-25 -- **the caster cycles past its held touch skill: 16 casts from 300 u, 13 from its 450 u range point**
 
 Two harness launches on `1926a31f` (studies/deskwork/CONFIRM-2026-09-24.md §9, the addendum), the
