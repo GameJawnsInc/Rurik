@@ -1958,9 +1958,14 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   The henchman kick CONFIRMED on the client (CONFIRM-2 §9: the row leaves, the count drops, a
   re-add restores both, `--no-henchman-kick` keeps the row). **Open**: the town armour's CLIENT
   CLICK (the owner's hands — the harness cannot drag or double-click; PLAN-LOG "CLEANUP-3"'s
-  runsheet A1–A3, `--no-town-armour-visuals` the A/B); the full-party add's feedback (the
-  client sends the add at its own max_party and our cap refuses it SILENTLY — CONFIRM-2 §2's
-  correction; retail's reply NOT FOUND, desk study on `desk-partyfull`); travel's confirmation BLOCKED on content (no fog-initialised view
+  runsheet A1–A3, `--no-town-armour-visuals` the A/B); **the refusal at the cap** (PLAN-LOG
+  "DESKWORK-D1, the refusal at the cap", 2026-09-25): retail's reply is NOT FOUND on 96 live
+  connections, the client's party error table (81 rows at `0x00B97968`, carriers `0x01B8` /
+  `0x01BC` / `0x01D6` / `0x01E3`) has no "party is full" row, and the sentence a player expects
+  (#57757) is CLIENT const text — so retail's client may refuse locally, and why ours does not is
+  UNVERIFIED; `--party-full-reply CODE` (one `0x01BC [CODE]`) ships OPT-IN, default silent; owed:
+  the owner's loopback runsheet (studies/cmsg "The refusal at the cap") and, in any live session,
+  ONE Add click at a full party; travel's confirmation BLOCKED on content (no fog-initialised view
   carries a second pin; `M` on 449 / 242 / 248 / 310 asserts, CONFIRM-2 §3); the display
   mode's field step (the owner's hands, the harness cannot open the drop-down); the
   henchman FIELD-body carry, the outpost re-join and the `'play'` allegiance behind a
