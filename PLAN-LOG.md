@@ -28,6 +28,25 @@ move back.
 
 ---
 
+### `codescan --xrefs` scans conditional branches -- 2026-09-25 -- **`jcc rel32` (`0F 80..8F`) is searched beside `call` and `jmp`, each row says which of the three it is; the `0x00AB` row in studies/cmsg's party table corrected**
+
+`--xrefs` searched `E8` and `E9` only, so a function reached only by a conditional tail-jump
+answered "0 direct rel32 reference(s), 0 word(s)". The desk-partycap lane found it on the c2s
+`0x00A2` wrapper `0x0085BEF0` (`ja` at `0x008585FD`), which studies/cmsg/FINDINGS.md's party
+table had read as "pointer-reached"; the `0x00AB` wrapper `0x0085C010` is the same case
+(`jne` at `0x0085A8C4`, in the `&0x80` gate `0x0085A8C0`, reached by a `jmp` from the thunk
+`0x008574C0`), and its row said "0 direct callers" until this entry. The scan and the footer's
+scope statement are built from one tuple (`_REL32_BRANCHES`), the footer is readable as data
+(`Image.xref_forms()`), and it names the rel8 short branches it still does not search.
+`test_codescan.py` §13 pins both sites as `jcc`, reproduces the call/jmp-only rule inline as
+the KNOWN-BAD arm (it misses both; its positive control finds `0x007E06CB`), and holds the
+fixed scan minus jcc equal to the old one on a `call` and a `jmp` target. 152 checks green
+(was 135); dropping the jcc rows reddens three. **Not changed:** `sendsites.py` still lists
+`E8` callers only, by its own docstring, so the table's `0xB0`/`0xB1`/`0xB2` "0 direct callers"
+mean "no `call`": each has one `jmp` thunk caller (`0x008576D0`/`E0`/`F0`).
+
+---
+
 ### DESKWORK-D1, the town armour CONFIRMED on the client -- 2026-09-25 -- **in a town the body's helm now comes off and goes back on with the equip; `--no-town-armour-visuals` reproduces the old picture; the field is unchanged; the harness's new `drag:` / `dclick:` drove all three**
 
 CLEANUP-3's runsheet A1–A3 had waited on the owner's hands because the harness could not drag

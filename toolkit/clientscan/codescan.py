@@ -93,11 +93,26 @@ computed pointer is an `A` row here and a `W` row at some other displacement --
 so `--writes` says how many address-taking rows it dropped rather than dropping
 them quietly.
 
+**A FIFTH, 2026-09-25, and `--xrefs` this time** (the fourth, 2026-08-26, is
+the narrowed-width hole `--bit` exists for -- see the comment above
+`bit_views`). Its branch half knew two opcodes, `E8` and `E9`, so a function
+reached only by a CONDITIONAL tail-jump -- `0F 80..8F rel32`, sixteen
+condition codes -- answered a clean zero:
+
+  * `--xrefs 0x0085BEF0`, the c2s `0x00A2` send wrapper, said "0 direct rel32
+    reference(s), 0 word(s)", and studies/cmsg/FINDINGS.md's party table read
+    that zero as "pointer-reached". Its one reference in the image is
+    `0x008585FD ja 0x85bef0`, the tail of `0x008585D0`; the `0xAB` wrapper
+    `0x0085C010` is the same shape (`0x0085A8C4 jne 0x85c010`). Fixed: `jcc
+    rel32` is scanned beside `call` and `jmp`, every row says which of the
+    three it is, and the footer names the rel8 short forms it still does not
+    search.
+
 So the range is no longer the only thing said out loud. `--field` prints which
 ENCODINGS and which ADDRESS FORMS it searched and which it provably cannot
-reach; `--xrefs` prints which alignments and sections. A zero now carries the
-discipline that produced it, because a reader cannot otherwise tell "not encoded
-that way" from "not there."
+reach; `--xrefs` prints which branch forms, alignments and sections. A zero
+now carries the discipline that produced it, because a reader cannot otherwise
+tell "not encoded that way" from "not there."
 
 The one encoding no anchored scan can reach is mod=00 `[reg]` -- displacement
 zero, written as no bytes at all. `--field 0x0` says so rather than implying its
@@ -163,8 +178,8 @@ two independent decoders and no statement about which to use. Reconciled
 What was genuinely redundant has gone: `avevents.py` used to carry a third copy
 of the `call rel32` scan that `asserts.direct_callers` already had, with
 byte-identical results. It now calls that. `xrefs()` here is the one that is
-not redundant -- it also finds `jmp rel32` and data words holding the VA, which
-is what §6o's four rel32-only searches missed.
+not redundant -- it also finds `jmp rel32`, `jcc rel32` and data words holding
+the VA, which is what §6o's four rel32-only searches missed.
 
 READ ONLY. Opens the exe for reading and does nothing else. `C:\\gw` is the
 owner's own install and is never written, patched or launched from here.
@@ -197,6 +212,14 @@ FALLBACK_EXE = _pinned.LIVE_INSTALL
 
 # Legacy prefixes that make one instruction decode twice at consecutive offsets.
 _PREFIXES = (0x66, 0x67, 0xF2, 0xF3)
+
+# Every rel32 branch `xrefs` searches, as (opcode bytes, kind). ONE tuple, and
+# `xref_forms` builds the footer's scope sentence from it, so what `--xrefs`
+# says it searched cannot drift from what it did. `0F 80..8F` is jcc: sixteen
+# condition codes, one rel32 form. It was missing until 2026-09-25 -- see the
+# module docstring's FIFTH defect.
+_REL32_BRANCHES = ((b"\xE8", "call"), (b"\xE9", "jmp")) + tuple(
+    (bytes([0x0F, cc]), "jcc") for cc in range(0x80, 0x90))
 
 # x87 memory stores. capstone marks their memory operand as a READ, so the
 # access flag alone would hide every floating-point store in the image.
@@ -1014,12 +1037,52 @@ class Image:
             return (ins.address, f"{ins.mnemonic} {ins.op_str}")
         return None
 
+    @staticmethod
+    def xref_forms():
+        """(searched, blind) for `--xrefs`, each [(name, detail)].
+
+        The scope statement, as data rather than a sentence in `main()`, for the
+        same reason `field_encodings` is: a zero is only as good as the list of
+        forms it was looked for in, and a list in a print statement is one that
+        no test can read. The branch rows are built from `_REL32_BRANCHES`, the
+        tuple the scan itself walks.
+        """
+        ops = {}
+        for op, kind in _REL32_BRANCHES:
+            ops.setdefault(kind, []).append(op.hex(" ").upper())
+        searched = []
+        for kind, spell in ops.items():
+            detail = (spell[0] if len(spell) == 1 else
+                      f"{spell[0]}..{spell[-1]}, all {len(spell)} conditions")
+            searched.append((f"{kind} rel32", f"{detail}, over .text"))
+        searched.append(("the VA as a four-byte word",
+                         "at EVERY alignment, in every section"))
+        blind = [
+            ("rel8 short branches",
+             "`jmp short` (EB), `jcc short` (70..7F), `loop`/`jecxz` -- a "
+             "one-byte displacement reaches only 128 bytes either side, so "
+             "`--dis` the neighbourhood when the answer is zero"),
+            ("indirect calls", "through a register or a vtable"),
+            ("computed addresses",
+             "any address the image computes rather than stores"),
+        ]
+        return searched, blind
+
     def xrefs(self, target):
-        """(rel32 call/jmp sites, four-byte windows holding the VA).
+        """(rel32 call/jmp/jcc sites, four-byte windows holding the VA).
 
         BOTH, because either alone misses real callers: the client reaches
         plenty of code through tables and callbacks, and §6o's four failed
         searches for a send site were all rel32-only.
+
+        EVERY REL32 BRANCH, and each site says which: `call`, `jmp` or `jcc`.
+        This scanned `E8` and `E9` only until 2026-09-25, and the c2s `0x00A2`
+        send wrapper `0x0085BEF0` came back "0 direct rel32 reference(s), 0
+        word(s)" -- its one reference in the image is `ja 0x85bef0` at
+        0x008585FD, a conditional tail-jump. studies/cmsg/FINDINGS.md read that
+        zero as "pointer-reached". A compiler tail-calls through a jcc whenever
+        the call is the last thing on one arm of a test, so a function reached
+        ONLY that way is ordinary, not exotic.
 
         EVERY ALIGNMENT. This swept `if p % 4 == 0` until 2026-08-10, which
         examined one alignment in four and answered a clean "0 data word(s)"
@@ -1031,18 +1094,22 @@ class Image:
         instruction that carries it, so a table entry and an immediate stay
         distinguishable without the filter that was hiding one of them.
 
-        Words are [(va, section, aligned, carrier_or_None)].
+        Sites are [(va, kind)], va the branch's first opcode byte. Words are
+        [(va, section, aligned, carrier_or_None)].
         """
         calls = []
         blob, tva = self.tdata, self.tva
-        for opcode, kind in ((0xE8, "call"), (0xE9, "jmp")):
-            p = blob.find(bytes([opcode]))
+        for op, kind in _REL32_BRANCHES:
+            # The rel32 follows the opcode, and the branch is relative to the
+            # END of the instruction: 5 bytes for E8/E9, 6 for 0F 8x.
+            end = len(op) + 4
+            p = blob.find(op)
             while p != -1:
-                if p + 5 <= len(blob):
-                    rel = struct.unpack_from("<i", blob, p + 1)[0]
-                    if tva + p + 5 + rel == target:
+                if p + end <= len(blob):
+                    rel = struct.unpack_from("<i", blob, p + len(op))[0]
+                    if tva + p + end + rel == target:
                         calls.append((tva + p, kind))
-                p = blob.find(bytes([opcode]), p + 1)
+                p = blob.find(op, p + 1)
 
         words, needle = [], struct.pack("<I", target)
         for s in self.pe.sections:
@@ -1139,7 +1206,8 @@ def main():
                     help="one BIT of one field, e.g. 0x20:18 -- every "
                          "instruction that sets, clears, tests or moves it, "
                          "including the narrowed byte/word spellings")
-    ap.add_argument("--xrefs", help="VA: every call/jmp and data word to it")
+    ap.add_argument("--xrefs",
+                    help="VA: every call/jmp/jcc rel32 and data word to it")
     ap.add_argument("--dis", help="VA: disassemble from here")
     ap.add_argument("--upto", help="VA: disassemble the instructions ENDING "
                                    "at this VA, aligned onto it by search "
@@ -1323,22 +1391,32 @@ def main():
         t = int(a.xrefs, 0)
         calls, words = img.xrefs(t)
         naligned = sum(1 for w in words if w[2])
-        print(f"0x{t:08X}: {len(calls)} direct rel32 reference(s), "
+        per = collections.Counter(kind for _va, kind in calls)
+        split = ", ".join(f"{per[k]} {k}"
+                          for k in dict.fromkeys(k for _o, k in _REL32_BRANCHES))
+        print(f"0x{t:08X}: {len(calls)} direct rel32 reference(s) ({split}), "
               f"{len(words)} word(s) holding the VA "
               f"({naligned} aligned, {len(words) - naligned} not)")
         for va, kind in calls:
-            print(f"  {va:08X}  {kind}")
+            # A jcc row names its condition; "jcc" alone would drop which arm
+            # of the test the target sits on.
+            ins = (next(iter(img.dis(va, count=1)), None)
+                   if kind == "jcc" else None)
+            cond = f"  {ins.mnemonic} {ins.op_str}" if ins else ""
+            print(f"  {va:08X}  {kind:<4}{cond}")
         for va, sec, aligned, carried in words:
             note = f"  <- {carried[0]:08X}  {carried[1]}" if carried else ""
             print(f"  {va:08X}  in {sec:<8} "
                   f"{'aligned' if aligned else f'+{va % 4} off':<9}{note}")
-        print(f"\nsearched: `call rel32` and `jmp rel32` over .text; the four "
-              f"bytes of 0x{t:08X} at EVERY alignment across all "
-              f"{len(img.pe.sections)} sections.")
-        print("NOT searched: indirect calls through a register or vtable, and "
-              "any address the image computes rather than stores. An empty "
-              "result is 'nothing stores or directly branches to it', not "
-              "'nothing reaches it'.")
+        searched, blind = img.xref_forms()
+        print(f"\nsearched, for 0x{t:08X} across all {len(img.pe.sections)} "
+              f"sections:")
+        for n, d in searched:
+            print(f"  {n} -- {d}")
+        for n, d in blind:
+            print(f"NOT searched: {n} -- {d}")
+        print("An empty result is 'nothing stores it or reaches it by a rel32 "
+              "branch', not 'nothing reaches it'.")
         return 0
 
     if a.upto:
