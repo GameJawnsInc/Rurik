@@ -1970,8 +1970,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   mode's field step (the owner's hands, the harness cannot open the drop-down); the
   henchman FIELD-body carry, the outpost re-join and the `'play'` allegiance behind a
   `standing` gate (step 5's deferred half — the `0x00B0`-climbs-by-2 field size is NOT
-  FOUND); a per-map party cap (`OUTPOST_PARTY_CAP` is a constant 4); the henchman LEAVE
-  (`0xA2`, unnamed — no run has sent it).
+  FOUND); the per-map party cap and the henchman LEAVE (`0xA2`) landed at the desk (PLAN-LOG "DESKWORK-D1, the per-map party cap and the henchman LEAVE", 2026-09-25), each owing one client launch (studies/cmsg "The leave": 248 with `--area outpost_henchmen_248`; the Leave click on 148).
 * **DESKWORK-D5**: the combat rules retail's tapes on disk already settle. LANDED
   2026-09-22: the adrenaline gate (SKILLS-B1's gate half, skills §34.11); property 10
   and the `[42]` residue (§16.6, self-scoped; `[42]` only when the maximum moved); the
@@ -1991,14 +1990,12 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   plain ids 1934–1993 by label, four OBSERVED — 1988 the recharge refusal, witnessed once,
   the fix pass — `--refusal-reasons` DEFAULT OFF, the weapon
   gate's #1985 its one consumer); 3(d) Mend Condition (skills §58, `heal_if_removed`). Still
-  OPEN: the shout ANNOUNCE — retail's `[48, caster, skill]` for every instant skill (stances
-  and shouts, 133 in the corpus), ours prop 60; a 348 row (no armour-bonus mechanic to hang
+  OPEN: the instant announce and the batch order's client run (PLAN-LOG "SKILLS-IA", 2026-09-25; skills §56.9's runsheet) and §56.9's residuals (the instant E3's slot and the `[8]` hold pair, the E4→E5 tick gap, a hero's E4 and debit at its start); a 348 row (no armour-bonus mechanic to hang
   it on); the hero's cure on screen (final-confirmation-needs-run; the hero's apply itself
   CONFIRMED on our wire 2026-09-23, 2 of 2 vs 0 of 2, as was the interrupt at the PLAYER,
   2 of 2 with the 24 s disable drawn — studies/deskwork/CONFIRM-2026-09-23.md; the player-to-hero
   direction is unwitnessed on every tape); the allied NONCOMBATANT retail's shout boosts
-  and `allies_of` excludes (§56.7); the batch order (retail
-  all applies then all speed words, ours per wearer); 3(e) a hero's zero gain;
+  and `allies_of` excludes (§56.7); 3(e) a hero's zero gain;
   the `[62]` energy word (read, own-party-scoped, not shipped); the second refusal gate's
   variable (the recharge refusal's id is 1988, witnessed once on `20260913T210901`, §57);
   the armed-EMPTY death clear (a one-witness divergence, skills §34.11.4); a body
@@ -2016,13 +2013,10 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   client, nothing under `--no-skill-labels`; 183's caster-centred area 30 on the near foe
   only, nothing under `--no-caster-areas`. **Still open:** (ii) **the
   residue per skill** — pass 1 and its fix pass landed 2026-09-23 (skills §59–§59.7,
-  SKILLS-LU; PLAN-LOG): 57 label rows, the vault overlay regenerated at the merge
-  (`57ae1dbe`). Still out: a BODY's own chain (a body's chain-gated cast lands on NOBODY;
-  retail's bodies meet the requirement, 5 of 5 live 784s); 770's ally-centred adjacency; a
-  condition rider on episodes 6; byte 1's resolution (769 917 1468) and its 3 heals; 292's
+  SKILLS-LU; PLAN-LOG): 57 label rows (`57ae1dbe`); pass 2 landed 2026-09-25 (skills §60, SKILLS-LV; PLAN-LOG): 60 rows, the overlay installed at the merge, its client run owed (§60.6). Still out: a BODY's own chain (a body's chain-gated cast lands on NOBODY;
+  retail's bodies meet the requirement, 5 of 5 live 784s); 770's ally-centred adjacency; the ON-STRUCK riders (2136; 113) and 926 (a tooltip run); byte 1's resolution (769 917 1468) and its 3 heals; 292's
   percent-of-loss heal; 943's conditioned heal, 1262's "creatures"; the 210 conditional
-  SERVED rows, the marked clauses (7 knock-downs on label rows first), a flat-constant
-  reader in `skill_condition` (167, 1033), then the 924 RECOGNISED and §54.4's two-consumer
+  SERVED rows, the two knock-downs left marked (192, 3425), 840's self-Poison, 1113's four ticks, 1033 (a tooltip run), 784's Poison CONTESTED 2 of 4 (§60.8), then the 924 RECOGNISED and §54.4's two-consumer
   proposal (still the owner's call); (iii) step 5, the 68 no-slot rows; (iv)
   step 6, the timed effect types 16 / 24–28; (v) the 141 INDETERMINATE slots wait on a
   client tooltip run (§54.3).
