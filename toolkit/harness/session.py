@@ -433,6 +433,14 @@ def parse_walk(text):
                     operator's own regime, a body that keeps moving while its
                     heading changes, which no sequence of single steps can
                     produce (RUN-1zCW pair 1: every leg ends in a stop)
+        dclick:0.411,0.609     DOUBLE-click one window-relative point -- the
+                    helm in the backpack, to equip it (dc.double_click: two
+                    presses at one point inside the system double-click time)
+        drag:0.30,0.25,0.62,0.71[,0.6]   LEFT-drag from one window-relative
+                    point to another over SECONDS (default 0.6) -- the helm
+                    from the doll's head slot to a backpack cell. The moves
+                    are ABSOLUTE input events and the landing is read back
+                    (dc.drag); the walk row carries where the pointer ended
 
     -> [('key', 'W', 6.0), ('zoom', '', -14.0), ...]
 
@@ -508,11 +516,14 @@ def parse_walk(text):
                 raise SystemExit(f"walk step {spec!r} holds for {secs}s")
             steps.append(("steer", f"{kname},{px:g}", secs))
             continue
-        if head in ("hover", "click"):
+        if head in ("hover", "click", "dclick"):
             # hover:FX,FY,SECONDS -- park the cursor over a window-relative
             # point, no click. Three numbers because the point matters as much
             # as the duration, and a fixed HUD element's fractions are the
             # whole reason the verb is usable unattended.
+            # dclick:FX,FY (2026-09-25) takes click's parse and click's
+            # refusals exactly -- same point, same edges -- and differs only
+            # in the executor (dc.double_click).
             parts = arg.split(",")
             want = 3 if head == "hover" else 2
             if len(parts) != want:
@@ -530,6 +541,32 @@ def parse_walk(text):
             if secs <= 0:
                 raise SystemExit(f"walk step {spec!r} hovers for {secs}s")
             steps.append((head, f"{fx:g},{fy:g}", secs))
+            continue
+        if head == "drag":
+            # drag:FX0,FY0,FX1,FY1[,SECONDS] -- a LEFT drag between two
+            # window-relative points. All four fractions strictly inside the
+            # window (click's rule, twice), SECONDS positive and 0.6 by
+            # default, and a drag whose start IS its end refused: dc.drag
+            # would press and release on one cell, which is a click that the
+            # client may read as "pick the helm up", not the no-op it looks.
+            parts = arg.split(",")
+            if len(parts) not in (4, 5):
+                raise SystemExit(f"walk step {spec!r}: drag wants "
+                                 f"FX0,FY0,FX1,FY1[,SECONDS]")
+            try:
+                nums = [float(p) for p in parts]
+            except ValueError:
+                raise SystemExit(f"walk step {spec!r}: drag wants numbers")
+            fx0, fy0, fx1, fy1 = nums[:4]
+            secs = nums[4] if len(nums) == 5 else 0.6
+            if not all(0.0 < f < 1.0 for f in nums[:4]):
+                raise SystemExit(f"walk step {spec!r}: drag fractions must sit "
+                                 f"inside the window, exclusive 0..1")
+            if (fx0, fy0) == (fx1, fy1):
+                raise SystemExit(f"walk step {spec!r} drags nowhere")
+            if secs <= 0:
+                raise SystemExit(f"walk step {spec!r} drags for {secs}s")
+            steps.append(("drag", f"{fx0:g},{fy0:g},{fx1:g},{fy1:g}", secs))
             continue
         try:
             value = float(arg)
@@ -556,7 +593,8 @@ def parse_walk(text):
         else:
             raise SystemExit(f"walk step {spec!r}: {head!r} is not a key, "
                              f"a named key ({', '.join(sorted(dc.NAMED_KEYS))}), "
-                             f"zoom, pitch, yaw, shot, wait, hover, click or steer")
+                             f"zoom, pitch, yaw, shot, wait, hover, click, "
+                             f"dclick, drag or steer")
     return steps
 
 
@@ -624,6 +662,7 @@ def walk_legs(proc, legs, outdir, warn=3.0, settle=1.5, shot_every=0.0):
 
     out = []
     for i, (kind, key, value) in enumerate(legs):
+        extra = {}          # per-kind facts for the row: a drag's landing
         # THE CLIENT MAY HAVE DIED SINCE THE LAST STEP, and until 2026-08-11
         # nothing here noticed. OBSERVED: a portal chunk with a bad index
         # crashed the client 17 s into a run -- `Assertion: index < m_count,
@@ -711,6 +750,25 @@ def walk_legs(proc, legs, outdir, warn=3.0, settle=1.5, shot_every=0.0):
             # before it presses anything, the same guard every key takes.
             fx, fy = (float(p) for p in key.split(","))
             did = 1.0 if dc.click(hwnd, proc.pid, fx, fy) else 0.0
+        elif kind == "dclick":
+            # Two presses at ONE point inside the system double-click time;
+            # dc.double_click reports False if the pointer left the
+            # double-click rectangle, so a 0.0 here can mean "two clicks".
+            fx, fy = (float(p) for p in key.split(","))
+            did = 1.0 if dc.double_click(hwnd, proc.pid, fx, fy) else 0.0
+        elif kind == "drag":
+            # A LEFT drag, `value` seconds long. The row carries where the
+            # pointer really was before the release and whether that had to
+            # be corrected -- a drop on the wrong cell must not read as a
+            # clean drag (dc.drag).
+            fx0, fy0, fx1, fy1 = (float(p) for p in key.split(","))
+            rep = dc.drag(hwnd, proc.pid, fx0, fy0, fx1, fy1, seconds=value)
+            did = 1.0 if rep else 0.0
+            if rep:
+                extra = {"target": "{},{}".format(*rep["target"]),
+                         "landed": ("{},{}".format(*rep["landed"])
+                                    if rep["landed"] else None),
+                         "corrected": rep["corrected"]}
         else:
             raise SystemExit(f"unknown walk step kind {kind!r}")
         ended_unix = time.time()
@@ -723,7 +781,8 @@ def walk_legs(proc, legs, outdir, warn=3.0, settle=1.5, shot_every=0.0):
         out.append({"kind": kind, "key": key, "asked": value,
                     "did": round(did, 2), "started": started, "ended": ended,
                     "settled": settled, "started_unix": started_unix,
-                    "ended_unix": ended_unix, "settled_unix": settled_unix})
+                    "ended_unix": ended_unix, "settled_unix": settled_unix,
+                    **extra})
         print(f"  walk {label}: {did:g} of {value:g} "
               f"({started} -> {ended})", flush=True)
         shot_if_foreground(hwnd, proc.pid,
@@ -830,6 +889,23 @@ def run_client(a, outdir):
             elif kind == "click":
                 fx, fy = (float(v) for v in parts[2].split(","))
                 delivered = dc.click(hwnd, proc.pid, fx, fy)
+            elif kind in ("dclick", "drag"):
+                # "N:dclick:fx,fy" and "N:drag:fx0,fy0,fx1,fy1[,seconds]",
+                # delivered like click. The spec is validated by parse_walk's
+                # OWN rules, so the action and the walk step cannot drift
+                # apart, and a malformed one exits loudly here rather than
+                # dying in a float() traceback with the client already up.
+                arg = parts[2] if len(parts) > 2 else ""
+                try:
+                    _, key, secs = parse_walk(f"{kind}:{arg}")[0]
+                except SystemExit as e:
+                    raise SystemExit(f"action {spec!r}: {e}")
+                nums = [float(v) for v in key.split(",")]
+                if kind == "dclick":
+                    delivered = dc.double_click(hwnd, proc.pid, *nums)
+                else:
+                    delivered = bool(dc.drag(hwnd, proc.pid, *nums,
+                                             seconds=secs))
             elif kind == "enter":
                 delivered = dc.press_enter(hwnd, proc.pid)
             elif kind == "play":

@@ -67,7 +67,16 @@ import checks  # noqa: E402
 # 2026-09-24: 174 -> 181, MEASURED from a green run: +7 for the verdict leak on
 # the hold's timer branch and at teardown (3 truth-table rows, the real
 # hold_open timer path and its control, the finally's fold and its control).
-LEDGER = checks.Ledger("harness", floor=181)   # 1z-cw: +2, the steer verb; 2026-09-14: +6, test_client_build; +5, the skill slot; 2026-09-15: +4, dashed values
+# 2026-09-25: 181 -> 201, MEASURED from a green run: +20 for drag() and
+# double_click() (sections 11b, 11c and 10b) -- the event shapes, the absolute
+# normalisation on a desk with a negative origin, the landing read-back and
+# its correction, the release on failure, the double-click gap read from
+# GetDoubleClickTime, and both verbs' parses and refusals. None of the twenty
+# can skip: the fake supplies the desk, the clock and the pointer, so the
+# count is deterministic and the floor is the total. Every one of eleven
+# sabotages reddened at least one of them before the floor moved (the commit
+# message lists which).
+LEDGER = checks.Ledger("harness", floor=201)   # 1z-cw: +2, the steer verb; 2026-09-14: +6, test_client_build; +5, the skill slot; 2026-09-15: +4, dashed values; 2026-09-25: +20, drag and double_click
 check = checks.adopt_named(LEDGER)
 
 
@@ -1138,12 +1147,25 @@ class FakeUser32:
     `owner` is the pid the foreground window belongs to. Setting it to something
     else mid-run is how the "operator alt-tabbed away" case is reproduced without
     an operator.
+
+    2026-09-25, for drag() and double_click(): the fake also keeps a POINTER,
+    moved by SetCursorPos and by every move event -- an ABSOLUTE one is mapped
+    back to a pixel over `desk` (the virtual desktop as GetSystemMetrics would
+    report it: left, top, width, height), a relative one is added -- and
+    GetCursorPos answers with it. So the landing check in drag() is exercised
+    against what the moves IMPLY, not against a constant, and a desk whose
+    origin is not (0, 0) is one constructor argument away. `timeline` holds
+    every mouse event AND every recorded sleep (FakeClock) in order, which is
+    how a gap between two presses is measured without sleeping it.
     """
 
-    def __init__(self, owner=4321, scan=0x11):
+    def __init__(self, owner=4321, scan=0x11, desk=(0, 0, 1920, 1080),
+                 dclick_ms=500):
         self.owner, self.scan, self.events = owner, scan, []
         self.wheel, self.buttons, self.cursor = [], [], []
         self.raise_on_nth = None
+        self.desk, self.dclick_ms = desk, dclick_ms
+        self.pointer, self.pos_reads, self.timeline = (0, 0), 0, []
 
     # -- the parts scroll() and orbit() use
     def GetWindowRect(self, hwnd, out):
@@ -1153,9 +1175,17 @@ class FakeUser32:
 
     def SetCursorPos(self, x, y):
         self.cursor.append((x, y))
+        self.pointer = (x, y)
         return 1
 
     def mouse_event(self, flags, dx, dy, data, extra):
+        self.timeline.append(("mouse", flags, dx, dy))
+        if flags & 0x0001:                        # MOUSEEVENTF_MOVE
+            if flags & 0x8000:                    # ...ABSOLUTE: 0..65535 over the desk
+                vx, vy, cx, cy = self.desk
+                self.pointer = (vx + dx * cx // 65536, vy + dy * cy // 65536)
+            else:                                 # relative: a delta
+                self.pointer = (self.pointer[0] + dx, self.pointer[1] + dy)
         if flags == 0x0800:                       # MOUSEEVENTF_WHEEL
             self.wheel.append(data)
         else:
@@ -1163,6 +1193,21 @@ class FakeUser32:
         if self.raise_on_nth is not None \
                 and len(self.buttons) + len(self.wheel) == self.raise_on_nth:
             raise RuntimeError("something blew up mid-drag")
+
+    # -- the parts drag() and double_click() use
+    def GetSystemMetrics(self, index):
+        vx, vy, cx, cy = self.desk
+        # 76..79 the virtual desktop; 36/37 the double-click rectangle, at
+        # Windows' default of 4 px.
+        return {76: vx, 77: vy, 78: cx, 79: cy, 36: 4, 37: 4}.get(index, 0)
+
+    def GetDoubleClickTime(self):
+        return self.dclick_ms
+
+    def GetCursorPos(self, out):
+        self.pos_reads += 1
+        out._obj.x, out._obj.y = self.pointer
+        return 1
 
     # -- the parts hold_key uses
     def SetForegroundWindow(self, hwnd):
@@ -1182,6 +1227,32 @@ class FakeUser32:
         self.events.append((vk, scan, flags))
         if self.raise_on_nth is not None and len(self.events) == self.raise_on_nth:
             raise RuntimeError("something blew up mid-hold")
+
+
+_real_time = time
+
+
+class FakeClock:
+    """Stands in for dc.time while a drag or a double-click runs.
+
+    Sleeps are RECORDED on the fake's timeline, in order with its mouse
+    events, and never slept: the gap between two presses is then the sum of
+    the sleeps between them, measured rather than timed, and the suite does
+    not wait 0.6 s per drag. Everything else defers to the real module.
+    """
+
+    def __init__(self, timeline):
+        self.timeline = timeline
+
+    def sleep(self, seconds):
+        self.timeline.append(("sleep", seconds))
+
+    # Through the alias: the class body rebinds `time` on the line below,
+    # so `time.strftime` after it would read the staticmethod, not the module.
+    perf_counter = staticmethod(_real_time.perf_counter)
+    time = staticmethod(_real_time.time)
+    strftime = staticmethod(_real_time.strftime)
+    gmtime = staticmethod(_real_time.gmtime)
 
 
 def section_press_key():
@@ -1461,6 +1532,303 @@ def section_hold_key():
               "cannot fail")
 
 
+def section_drag_dclick():
+    """drag() and double_click(), 2026-09-25, for the town armour runsheet.
+
+    What a unit test CAN pin here is the event shape -- one press, absolute
+    moves, one release, the landing read back; two presses at one point
+    inside the system time -- and what it cannot is whether the Guild Wars
+    client reads that shape as a drag or a double-click. That is UNVERIFIED
+    until a client run, exactly as orbit() was on 2026-08-11, when a version
+    whose test passed moved the pointer and not the camera. The lesson from
+    that day is the load-bearing check below: every move is a real input
+    event, and for a DROP it is an ABSOLUTE one.
+    """
+    print("\n11b. drag: a LEFT drag through ABSOLUTE move events, landing read back")
+    real_u32, real_fg, real_time = dc.user32, dc._force_foreground, dc.time
+    ABS = 0x0001 | 0x4000 | 0x8000      # MOVE | VIRTUALDESK | ABSOLUTE, as literals
+    try:
+        dc._force_foreground = lambda hwnd: True
+
+        def run(fn, fake, *args, **kw):
+            dc.user32, dc.time = fake, FakeClock(fake.timeline)
+            return fn(*args, **kw)
+
+        def mouse(fake):
+            return [e for e in fake.timeline if e[0] == "mouse"]
+
+        # THE PLAIN CASE, hand-computed. (0.25, 0.5) -> (0.75, 0.5) in the
+        # fake's 1920x1080 window on a 1920x1080 desk at the origin: start
+        # pixel (480, 540), target (1440, 540). A correct absolute move for
+        # the target maps BACK to it as dx * 1920 // 65536 == 1440 and
+        # dy * 1080 // 65536 == 540; the naive figure 1440 * 65535 // 1920
+        # = 49151 maps back to 1439, one cell's edge over.
+        fake = FakeUser32()
+        rep = run(dc.drag, fake, 1, 4321, 0.25, 0.5, 0.75, 0.5, seconds=0.6)
+        ev = mouse(fake)
+        downs = [i for i, e in enumerate(ev) if e[1] == dc.MOUSEEVENTF_LEFTDOWN]
+        ups = [i for i, e in enumerate(ev) if e[1] == dc.MOUSEEVENTF_LEFTUP]
+        moves = [i for i, e in enumerate(ev) if e[1] & dc.MOUSEEVENTF_MOVE]
+        steps = [m for m in moves if downs and m > downs[0]]
+        LEDGER.ok(bool(rep) and len(downs) == 1 and len(ups) == 1 and steps
+                  and downs[0] < steps[0] and ups[0] > moves[-1]
+                  and ups[0] == len(ev) - 1,
+                  "a drag presses LEFTDOWN once and LEFTUP once: the down "
+                  "before the first drag step, the up after the last move",
+                  f"{len(downs)} down at {downs}, {len(ups)} up at {ups}, "
+                  f"moves at {moves} of {len(ev)} events")
+        LEDGER.ok(len(steps) >= 2 and all(ev[m][1] == ABS for m in steps),
+                  "and EVERY drag step is an ABSOLUTE|VIRTUALDESK move event",
+                  f"{len(steps)} step(s), flags "
+                  f"{sorted({hex(ev[m][1]) for m in steps})} -- a relative "
+                  f"delta is scaled by pointer speed and acceleration before "
+                  f"the pointer moves, so a relative drag drops the item "
+                  f"wherever the mouse settings say; 0xc001 is the literal")
+        last = ev[steps[-1]] if steps else ("mouse", 0, -1, -1)
+        first = ev[steps[0]] if steps else ("mouse", 0, -1, -1)
+        placed = ev[moves[0]] if moves else ("mouse", 0, -1, -1)
+        LEDGER.ok(abs(last[2] * 1920 // 65536 - 1440) <= 1
+                  and abs(last[3] * 1080 // 65536 - 540) <= 1
+                  and 0 <= last[2] <= 65535 and 0 <= last[3] <= 65535
+                  and (first[2], first[3]) != (placed[2], placed[3]),
+                  "the last step maps back to the target pixel (1440, 540) "
+                  "within 1 px, and the first step really MOVES",
+                  f"last normalised ({last[2]}, {last[3]}) -> "
+                  f"({last[2] * 1920 // 65536}, {last[3] * 1080 // 65536}); "
+                  f"placed at ({placed[2]}, {placed[3]}), first step "
+                  f"({first[2]}, {first[3]}) -- the client decides a drag "
+                  f"has begun only once the pointer moves with the button down")
+        LEDGER.ok(rep and rep["start"] == (480, 540)
+                  and rep["target"] == (1440, 540)
+                  and rep["landed"] == (1440, 540) and rep["corrected"] is False
+                  and fake.pos_reads >= 1 and len(fake.cursor) == 1,
+                  "the landing is READ BACK (GetCursorPos) and reported: on "
+                  "target, nothing corrected, one SetCursorPos to place",
+                  f"{rep!r}, GetCursorPos read {fake.pos_reads} time(s), "
+                  f"SetCursorPos {fake.cursor}")
+
+        # A DESK WHOSE ORIGIN IS NOT (0, 0): a second monitor to the LEFT of
+        # the primary, so the virtual desktop is 3840 wide and starts at
+        # x = -1920. Hand-computed: target (960, 540); a correct normalised x
+        # maps back as -1920 + dx * 3840 // 65536 == 960. The figure that
+        # ignores the origin -- 960 * 65536 // 1920 + 1 = 32769 -- maps back
+        # to -1920 + 1920 = 0: the far edge of the OTHER monitor.
+        fake = FakeUser32(desk=(-1920, 0, 3840, 1080))
+        rep = run(dc.drag, fake, 1, 4321, 0.25, 0.5, 0.5, 0.5, seconds=0.6)
+        ev = mouse(fake)
+        downs = [i for i, e in enumerate(ev) if e[1] == dc.MOUSEEVENTF_LEFTDOWN]
+        steps = [i for i, e in enumerate(ev)
+                 if e[1] & dc.MOUSEEVENTF_MOVE and downs and i > downs[0]]
+        last = ev[steps[-1]] if steps else ("mouse", 0, -1, -1)
+        LEDGER.ok(abs(-1920 + last[2] * 3840 // 65536 - 960) <= 1
+                  and abs(last[3] * 1080 // 65536 - 540) <= 1
+                  and last[2] != 32769
+                  and rep and rep["landed"] == (960, 540) and not rep["corrected"],
+                  "on a desk whose origin is (-1920, 0) the target still maps "
+                  "back to (960, 540), and the landing agrees",
+                  f"normalised x {last[2]} -> {-1920 + last[2] * 3840 // 65536}; "
+                  f"32769 would be the origin-blind answer and lands at x=0, "
+                  f"a monitor away; {rep!r}")
+
+        # A LANDING THAT IS OFF: GetCursorPos lies by 5 px on its first read
+        # (an operator's hand on the mouse). The drag must correct it BEFORE
+        # the release -- SetCursorPos + one more absolute move -- and SAY so.
+        fake = FakeUser32()
+        truth, lies = fake.GetCursorPos, {"n": 0}
+
+        def nudged(out):
+            lies["n"] += 1
+            truth(out)
+            if lies["n"] == 1:
+                out._obj.x += 5
+            return 1
+        fake.GetCursorPos = nudged
+        rep = run(dc.drag, fake, 1, 4321, 0.25, 0.5, 0.75, 0.5, seconds=0.6)
+        ev = mouse(fake)
+        ups = [i for i, e in enumerate(ev) if e[1] == dc.MOUSEEVENTF_LEFTUP]
+        moves = [i for i, e in enumerate(ev) if e[1] & dc.MOUSEEVENTF_MOVE]
+        fixup = ev[moves[-1]] if moves else ("mouse", 0, -1, -1)
+        LEDGER.ok(rep and rep["corrected"] is True and rep["landed"] == (1440, 540)
+                  and fake.cursor == [(480, 540), (1440, 540)]
+                  and ups and moves[-1] < ups[0] and fixup[1] == ABS
+                  and fixup[2] * 1920 // 65536 == 1440,
+                  "a pointer found 5 px off after the last move is corrected "
+                  "before the release -- SetCursorPos, one more ABSOLUTE move "
+                  "-- and the return says corrected",
+                  f"{rep!r}, SetCursorPos {fake.cursor}, last move "
+                  f"{fixup[1]:#x} -> x {fixup[2] * 1920 // 65536}, up at "
+                  f"{ups} -- a drop at the wrong cell must not look clean")
+
+        # A FAILURE MID-DRAG STILL RELEASES. raise_on_nth counts non-wheel
+        # events: the placement move (1), LEFTDOWN (2), the first step (3).
+        fake = FakeUser32()
+        fake.raise_on_nth = 3
+        try:
+            run(dc.drag, fake, 1, 4321, 0.25, 0.5, 0.75, 0.5)
+            blew = False
+        except RuntimeError:
+            blew = True
+        LEDGER.ok(blew and fake.buttons and fake.buttons[-1] == dc.MOUSEEVENTF_LEFTUP
+                  and fake.buttons.count(dc.MOUSEEVENTF_LEFTDOWN) == 1,
+                  "a failure on the first drag step still releases the LEFT button",
+                  f"raised={blew}, buttons={[hex(b) for b in fake.buttons]} "
+                  f"-- a button left down is stuck for the whole desktop")
+
+        # NOTHING WITHOUT FOCUS: not a press, not a move, not even the warp.
+        fake = FakeUser32(owner=1111)
+        rep = run(dc.drag, fake, 1, 4321, 0.25, 0.5, 0.75, 0.5)
+        LEDGER.ok(rep is False and not mouse(fake) and not fake.cursor,
+                  "a client that does not own the foreground gets no drag at all",
+                  f"returned {rep!r}, {len(mouse(fake))} mouse event(s), "
+                  f"SetCursorPos {fake.cursor}")
+
+        # A DRAG THAT ROUNDS TO ZERO PIXELS is refused before the press:
+        # 0.5 and 0.5001 are both pixel 960 in a 1920-wide window, and a
+        # press-and-release on one cell is a click, not a drag.
+        fake = FakeUser32()
+        rep = run(dc.drag, fake, 1, 4321, 0.5, 0.5, 0.5001, 0.5)
+        LEDGER.ok(rep is False and not fake.buttons and not fake.cursor,
+                  "a drag whose start and end round to one pixel sends nothing",
+                  f"returned {rep!r}, buttons={fake.buttons}")
+
+        LEDGER.ok(dc.MOUSEEVENTF_ABSOLUTE == 0x8000
+                  and dc.MOUSEEVENTF_VIRTUALDESK == 0x4000
+                  and dc.MOUSEEVENTF_MOVE == 0x0001
+                  and (dc.SM_XVIRTUALSCREEN, dc.SM_YVIRTUALSCREEN,
+                       dc.SM_CXVIRTUALSCREEN, dc.SM_CYVIRTUALSCREEN) == (76, 77, 78, 79)
+                  and (dc.SM_CXDOUBLECLK, dc.SM_CYDOUBLECLK) == (36, 37),
+                  "the mouse_event flags and GetSystemMetrics indices are "
+                  "Windows' own, asserted against LITERALS",
+                  "the fake maps 0x8000 and 76..79 the way the OS does; a "
+                  "constant that drifted would pass every check above")
+
+        print("\n11c. double_click: two presses at ONE point, inside the system time")
+        # The fake's double-click time is 80 ms, NOT the 500 ms default: a
+        # double_click that assumed 500 and paced its pair at 100 ms would
+        # go red here, which is the point -- the bound is READ, not assumed.
+        fake = FakeUser32(dclick_ms=80)
+        ok = run(dc.double_click, fake, 1, 4321, 0.5, 0.5)
+        ev = mouse(fake)
+        presses = [e[1] for e in ev
+                   if e[1] in (dc.MOUSEEVENTF_LEFTDOWN, dc.MOUSEEVENTF_LEFTUP)]
+        downs = [i for i, e in enumerate(ev) if e[1] == dc.MOUSEEVENTF_LEFTDOWN]
+        ups = [i for i, e in enumerate(ev) if e[1] == dc.MOUSEEVENTF_LEFTUP]
+        moves = [i for i, e in enumerate(ev) if e[1] & dc.MOUSEEVENTF_MOVE]
+        LEDGER.ok(ok is True and presses == [dc.MOUSEEVENTF_LEFTDOWN,
+                                             dc.MOUSEEVENTF_LEFTUP,
+                                             dc.MOUSEEVENTF_LEFTDOWN,
+                                             dc.MOUSEEVENTF_LEFTUP],
+                  "a double-click is down, up, down, up -- two of each, in order",
+                  f"returned {ok!r}, presses {[hex(p) for p in presses]}")
+        LEDGER.ok(len(downs) == 2 and len(ups) == 2
+                  and not any(ev[i][1] & dc.MOUSEEVENTF_MOVE
+                              for i in range(downs[0], ups[-1] + 1))
+                  and moves == [0] and ev[0][1] == ABS
+                  and ev[0][2] * 1920 // 65536 == 960
+                  and ev[0][3] * 1080 // 65536 == 540
+                  and fake.cursor == [(960, 540)] and fake.pointer == (960, 540),
+                  "ZERO movement between the presses: the pointer is placed "
+                  "once (SetCursorPos + one absolute move at (960, 540)) "
+                  "before the first down and never moves again",
+                  f"moves at {moves}, downs {downs}, ups {ups}, SetCursorPos "
+                  f"{fake.cursor}, pointer ends at {fake.pointer} -- a move "
+                  f"between the clicks is what SM_CXDOUBLECLK forbids")
+        # The gap: every recorded sleep between the first down and the
+        # second down, summed. 80 ms is the fake's literal.
+        tl = fake.timeline
+        idx = [i for i, e in enumerate(tl) if e[0] == "mouse"
+               and e[1] == dc.MOUSEEVENTF_LEFTDOWN]
+        gap = sum(e[1] for e in tl[idx[0]:idx[1]] if e[0] == "sleep") \
+            if len(idx) == 2 else 99.0
+        LEDGER.ok(0 < gap < 0.08,
+                  "the second down follows the first inside GetDoubleClickTime "
+                  "(80 ms here), and the bound is READ from it",
+                  f"gap {gap * 1000:.0f} ms -- an implementation pacing the pair "
+                  f"for the 500 ms default would sit at 100 ms and fail this")
+
+        fake = FakeUser32(owner=1111, dclick_ms=80)
+        ok = run(dc.double_click, fake, 1, 4321, 0.5, 0.5)
+        LEDGER.ok(ok is False and not mouse(fake) and not fake.cursor,
+                  "a client that does not own the foreground gets no double-click",
+                  f"returned {ok!r}, {len(mouse(fake))} mouse event(s)")
+
+        # THE POINTER LEFT THE RECTANGLE: GetCursorPos reports 10 px right of
+        # where the pair was placed (the rectangle is 4 px). That pair was two
+        # clicks as far as Windows is concerned, and the verb must say so --
+        # False, loudly -- while still releasing both presses.
+        fake = FakeUser32(dclick_ms=80)
+        truth = fake.GetCursorPos
+
+        def wandered(out):
+            truth(out)
+            out._obj.x += 10
+            return 1
+        fake.GetCursorPos = wandered
+        ok = run(dc.double_click, fake, 1, 4321, 0.5, 0.5)
+        LEDGER.ok(ok is False
+                  and fake.buttons.count(dc.MOUSEEVENTF_LEFTUP) == 2
+                  and fake.buttons.count(dc.MOUSEEVENTF_LEFTDOWN) == 2,
+                  "a pointer found outside the double-click rectangle afterwards "
+                  "is reported as NOT a double-click, with both presses released",
+                  f"returned {ok!r}, buttons {[hex(b) for b in fake.buttons]} "
+                  f"-- two clicks reported as a double would hide a helm that "
+                  f"never went on")
+    finally:
+        dc.user32, dc._force_foreground, dc.time = real_u32, real_fg, real_time
+
+    print("\n10b. --walk parses dclick and drag, and refuses the malformed ones")
+    LEDGER.ok(session.parse_walk("dclick:0.411,0.561")
+              == [("dclick", "0.411,0.561", 1.0)]
+              and all(refused(session.parse_walk, bad)
+                      for bad in ("dclick:0.5", "dclick:0.5,0.5,0.5",
+                                  "dclick:1.5,0.5", "dclick:0,0.5",
+                                  "dclick:0.5,1", "dclick:a,b", "dclick:")),
+              "dclick parses as click does, and refuses one number, three, "
+              "fractions on or outside the edge, non-numbers and no argument",
+              "the same point rule as click -- a double-click at a wrong "
+              "literal equips whatever is there, or opens nothing, and both "
+              "look like a run")
+    LEDGER.ok(session.parse_walk("drag:0.2,0.3,0.6,0.7 drag:0.2,0.3,0.6,0.7,1.5")
+              == [("drag", "0.2,0.3,0.6,0.7", 0.6),
+                  ("drag", "0.2,0.3,0.6,0.7", 1.5)],
+              "drag parses four fractions with SECONDS defaulting to 0.6, "
+              "and five with the seconds given",
+              "the runsheet's helm move is one such line; the seconds are "
+              "the leg's `asked`, as a hold's are")
+    LEDGER.ok(all(refused(session.parse_walk, bad)
+                  for bad in ("drag:0.2,0.3,0.6", "drag:0.2,0.3,0.6,0.7,1,2",
+                              "drag:0,0.3,0.6,0.7", "drag:0.2,0.3,1,0.7",
+                              "drag:0.2,1.5,0.6,0.7", "drag:0.5,0.5,0.5,0.5",
+                              "drag:0.2,0.3,0.6,0.7,0", "drag:0.2,0.3,0.6,0.7,-1",
+                              "drag:a,0.3,0.6,0.7", "drag:0.2,0.3,0.6,x",
+                              "drag:0.2,0.3,0.6,0.7,x", "drag:")),
+              "drag refuses three and six fields, fractions on or outside "
+              "the edge, a zero-length drag, non-positive seconds, "
+              "non-numbers and no argument",
+              "a zero-length drag is a press-and-release on one cell, which "
+              "the client may read as 'pick the helm up' -- refused at parse "
+              "AND again in dc.drag when the fractions round to one pixel")
+    try:
+        session.parse_walk("wibble:3")
+        unknown = ""
+    except SystemExit as e:
+        unknown = str(e)
+    LEDGER.ok("dclick" in unknown and "drag" in unknown and "click" in unknown,
+              "the unknown-verb refusal names dclick and drag among the verbs",
+              f"{unknown!r}")
+    acts = inspect.getsource(session.run_client)
+    legs = inspect.getsource(session.walk_legs)
+    LEDGER.ok('"dclick"' in acts and "dc.double_click(" in acts
+              and "dc.drag(" in acts and "parse_walk(" in acts
+              and '"dclick"' in legs and "dc.double_click(" in legs
+              and "dc.drag(" in legs and '"landed"' in legs,
+              "both the --actions loop and the walk executor dispatch dclick "
+              "and drag to dc, the action through parse_walk's refusals, and "
+              "the walk row carries the landing",
+              "a verb that parses to nothing runs as nothing and the run "
+              "looks like the control arm")
+
+
 def section_window_geometry():
     """The Play click's aspect guard -- the rule that a fraction is only a
     position in the window shape it was measured in.
@@ -1511,5 +1879,6 @@ def section_window_geometry():
 
 section_press_key()
 section_hold_key()
+section_drag_dclick()
 section_window_geometry()
 sys.exit(LEDGER.verdict())
