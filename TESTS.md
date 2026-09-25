@@ -7783,8 +7783,10 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   hero or the foe; the 0x0042 goes out for the player and the hero and is SUPPRESSED for
   the henchman (MANTID, counted once); each wearer gets exactly one 0x0027 at base × 1.33
   and its apply precedes its speed word; a Crippled hero is cured by the shout (its 0x0044,
-  its speed restored to the boost); a HERO shouting reaches the PLAYER (the hero's 0x0042
-  then the player's — retail's six hero-to-player applies; the reverse direction is
+  its speed restored to the boost); a HERO shouting reaches the PLAYER (the PLAYER's 0x0042
+  then the hero's own — ascending agent id, the order of all six hero-to-player batches on
+  `20260914T005758`, 29 before 30; this pinned the caster's first until SKILLS-IA's review
+  pass of 2026-09-25 refuted it on those six; the reverse direction is
   unwitnessed); the boundary is inclusive (1000 in, 1000.5 out); Frenzy (a stance) reaches
   nobody; `shout_wearers` on a row without a radius, without the key, or a caster without a
   position reaches nobody; the primary wearer is excluded even as an ALLY in range (the
@@ -7806,6 +7808,73 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   hero applies attributed to the hero; 86 boost words on other agents — 71 team, 15 on the
   noncombatant token, 0 on a foe token — and the 0–5 distribution. 47 checks, floor 30 (§1;
   42 before the fix pass). Read-only on the vault),
+  `toolkit/authsrv/test_instantannounce.py` (**2026-09-25, DESKWORK-D5 / SKILLS-IA (skills
+  §56.9) — the INSTANT skill's announce and the shout batch order, as retail sends them;
+  the review pass of the same day.** Until today every cast rode `cast_anim_msg`'s property
+  60 / 50; `instantjoin.py` reads the live corpus: 133 stance / shout / type-16 announces,
+  every one `0x009F [48, caster, skill]`, 0 on property 60, each followed by the caster's
+  `[21]` visual and — a SHOUT alone — the speech bubble `0x00A5 [caster, one coded string
+  id]`, then the applies, then every speed word, each run in ASCENDING AGENT ID. THE
+  LITERALS ARE THE TAPE'S: `[48, 1, 364]`, `[21, 1, 622]`, the bubble's word 0x6658 (id
+  25944) from the 56 casts of 364 on seven captures; `[48, 30, 348]`, `[21, 30, 596]`, word
+  0x6637 (25911) from the hero's 7 casts on `20260914T005758`; `[21, c, 601]` from 43 casts
+  of Frenzy. THE KNOWN-BAD ARM'S LITERALS ARE b50da5c8's OWN, recorded from a `git archive
+  b50da5c8` export driven through the file's fixture (the first cut compared the arm against
+  the new tree's output and pinned a `[21]` b50da5c8 never sent). §1 (needs the vault's rows
+  for 346 / 364 / 348; declared skip without) drives the PLAYER's stance and shout through
+  `handle_skill_press` + `cast_tick` with a hero at 500 u, a henchman at 300 u and a foe: the
+  press is E4, the debit, `[8 -> 1]` and NO 60; the completion opens E5, `[48]`, `[21]`, (the
+  bubble), the applies — the player's then the hero's — THEN the speed words ascending (the
+  player IS agent 1); the bubble through the real codec is `a5 00 01 00 00 00 01 00 58 66`;
+  one `[48]`, on 0x009F, the value the skill id; no `[58]`, no 60. §2 a HERO's 348, 346 and
+  364 through `land_skill`: E5, `[48]`, `[21]`, the bubble / the applies ASCENDING (the
+  player's 1 BEFORE the caster's own 30 — the tape's 6 two-apply batches, 6 of 6), the words
+  1, 30, 31, the E3 LAST; the target-dead exit keeps the E3 (E5, `[48]`, E3; b50da5c8 sent
+  E5, E3, `[58]`, the first cut dropped the E3); a hero's spell keeps its E3 beside the E5
+  (control). §3 a HOSTILE's stance through `land_skill`: `[48, 40, 346]`, `[21, 40, 601]` and
+  nothing else; THE START SITES through the REAL ticks — `enemy_attack_tick` (a hostile's
+  Frenzy starts with no 60 and lands on the next tick as `[48]` `[21]`), `ally_cast_tick` (a
+  hurt party body's likewise), `begin_cast` (Frenzy pressed behind a 2 s spell queues,
+  begins with no `[60, 1, 346]`, completes with `[48, 1, 346]`; the spell's own 60 still goes
+  out); THE WINDOW — a movement mark between a shout's press and its completion tick marks
+  nothing and the batch goes out whole, `interrupt_player` and `interrupt_body` (a hostile's
+  armed stance) find nothing to interrupt, while a QUEUED instant cast is still un-queued
+  (control). §4 the KNOWN-BAD ARMS: the flag globals default as documented and `main()` flips
+  each through a `global` (a source lock), both flags parse through `serverargs.build_parser`;
+  with BOTH flags flipped every fixture equals b50da5c8's recorded literal — the shout's
+  press with `[60, 1, 364]`, its completion with `[58, 1, 0]`, interleaved, NO `[21, 1, 622]`
+  (the seven rows the lane added carry `since = "SKILLS-IA"` and `send_skill_visual` skips a
+  marked row under the flag; Frenzy's unmarked row still sends `[21, 1, 601]`), the hero's
+  348 / 346 / 364 / dead-target batches, the hostile's `[58]` `[21]`, the three start sites'
+  60, the cancellable window (`[8 -> 0]`, `[59]`, E2; the body's `[59]` `[35]`);
+  `--no-instant-announce` alone keeps retail's apply-then-speed order (the runsheet's A2);
+  `--per-wearer-batch-order` alone interleaves apply / speed / apply / speed (a 0x0027
+  before the last 0x0042, the shape retail never sends). §5 a NON-instant spell (42, targeted
+  and not) and an attack-skill (394, the WEAPON GATE off, the damage roll seeded) press + two
+  ticks are byte-identical to b50da5c8's own literals — the attack literal now REACHES the
+  strike (`[50]` at the press, `[46]` then the seeded 0x00A3; the first cut's literal was the
+  gate's refusal, so a property-99 announce on the attack press left it green) and is a
+  declared skip on a bare machine (the strike reads the 394 row); identical under both arms;
+  a hero's SPELL through `land_skill` identical under both arms with no `[48]`. §6 the corpus
+  through `instantjoin.census(cutoff="20260925T235959")` (declared skip without the vault):
+  95 connections / 1 refused / 133 announces (67 / 64 / 2); by caster the observer 62, a
+  hero 24, a team-mate 20, a foe 27; 364 × 56 and 348 × 11; property 60 for an instant id 0,
+  `[48]` on 0x00A0 0; the bubble beside 67 of 67 shouts and 0 of 66 others, one coded id each
+  (25944 × 56, 25911 × 11); the `[21]` beside 133 of 133 with the eight `skill_visual` ids;
+  the observer's 62 own casts at dt = 0 for E4, E5 and E3 with no property 8; the order
+  counts (`[48]` < `[21]` 133, `[21]` < 0x00A5 67, 0x00A5 < 0x0042 59, the caster's OWN E5 <
+  `[48]` 86 with 47 casters sending no E5, 0x0042 < E3 86, E3 < 0x0027 29, 0x00F1 < E3 8, no
+  inversion); every speed word after the last apply 43 of 43, the 6 two-apply batches
+  adjacent, ascending with the caster's apply first 0 of 6, none with a speed word; the
+  words ASCENDING BY AGENT ID over every caster kind (`multi_word_by_kind`: ally 14 / 14
+  ascending, caster first 0; foe 8 / 8, 0; observer 17 / 17, caster first 16 of 16 and the
+  lowest id in every one — "wearer first" was the first cut's misreading); 207 bubbles, 67
+  beside a `[48]`. 67 checks with the vault; floor 6, the BARE-MACHINE number (§4's two
+  source checks, §5's two spell literals, the arms agreeing, the hero's spell), from a green
+  run with `RURIK_VAULT` pointed at an empty directory. Every new check was inverted in a
+  scratch copy and reddened (the since gate, the applies' and the words' order, the attack's
+  property 99, the dead-target E3, the three start guards, the two window doors, the
+  reader's E5 filter). Read-only on the vault),
   `toolkit/authsrv/test_recharge.py` (**2026-09-23, DESKWORK-D5 step 4 — an NPC's per-slot
   recharge runs from the cast's COMPLETION, not its start.** §1 is the sender, fixture-less:
   `npc_recharge_anchor` returns the activation under the completion anchor and 0 under

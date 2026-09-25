@@ -1738,6 +1738,109 @@ extractor = "toolkit/clientscan/skilltable.py"
 build = 38797
 verified = "s_skill row 346, +0x78 = 601; extracted 2026-08-31, corroborated against the live corpus's property 20/21 events (99.7% over n=658)."
 
+# The seven other INSTANT skills the live corpus announces (SKILLS-IA, studies/skills
+# 56.9, instantjoin.py, 2026-09-25): retail's announce batch is [48, caster, skill]
+# then [21, caster, +0x78] for 133 of 133 stances / shouts / type-16 casts, and each
+# of these rows is the +0x78 the wire showed beside that skill's own announces.
+# `since = "SKILLS-IA"` marks them as the lane's: `send_skill_visual` sends nothing
+# for a marked row under --no-instant-announce, so that arm is b50da5c8's bytes
+# exactly (that server had no row for these seven; 346's row predates the lane and
+# is unmarked). A marker, not a fact about the client -- the value is the table's.
+
+[skill_visual.364]
+caster = 622
+since = "SKILLS-IA"
+[skill_visual.364.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38797
+verified = "s_skill row 364, +0x78 = 622; extracted 2026-09-25 from the pinned 38797 snapshot, corroborated by [21, caster, 622] beside 56 of 56 live announces of 364 (instantjoin.py)."
+
+[skill_visual.348]
+caster = 596
+since = "SKILLS-IA"
+[skill_visual.348.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38797
+verified = "s_skill row 348, +0x78 = 596; extracted 2026-09-25, corroborated by [21, caster, 596] beside 11 of 11 live announces of 348 (instantjoin.py)."
+
+[skill_visual.10]
+caster = 21
+since = "SKILLS-IA"
+[skill_visual.10.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38797
+verified = "s_skill row 10, +0x78 = 21; extracted 2026-09-25, corroborated by [21, caster, 21] beside 12 of 12 live announces of 10 (instantjoin.py)."
+
+[skill_visual.349]
+caster = 598
+since = "SKILLS-IA"
+[skill_visual.349.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38797
+verified = "s_skill row 349, +0x78 = 598; extracted 2026-09-25, corroborated by [21, caster, 598] beside 3 of 3 live announces of 349 (instantjoin.py)."
+
+[skill_visual.379]
+caster = 638
+since = "SKILLS-IA"
+[skill_visual.379.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38797
+verified = "s_skill row 379, +0x78 = 638; extracted 2026-09-25, corroborated by [21, caster, 638] beside 5 of 5 live announces of 379 (instantjoin.py)."
+
+[skill_visual.455]
+caster = 767
+since = "SKILLS-IA"
+[skill_visual.455.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38797
+verified = "s_skill row 455, +0x78 = 767; extracted 2026-09-25, corroborated by [21, caster, 767] beside 1 of 1 live announce of 455 (instantjoin.py)."
+
+[skill_visual.1217]
+caster = 1083
+since = "SKILLS-IA"
+[skill_visual.1217.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38797
+verified = "s_skill row 1217, +0x78 = 1083; extracted 2026-09-25, corroborated by [21, caster, 1083] beside 2 of 2 live announces of 1217 (instantjoin.py)."
+
+# ---------------------------------------------------------------- skill_speech
+# THE SPEECH BUBBLE a SHOUT puts over its caster: `0x00A5 [caster, coded string]`
+# carrying ONE string id and no marker (SKILLS-IA, studies/skills 56.9,
+# toolkit/authsrv/instantjoin.py, 2026-09-25). The id is the archive's, committed
+# as an id and resolved by the CLIENT from its own Gw.dat -- "commit the id,
+# resolve the string at run time". It is NOT the skill's name id: for both
+# witnessed shouts it is the THIRD record of the skill's string block (the name,
+# the description, the spoken line -- name_id + 2), and that offset is not a
+# rule this table can apply blind: 10 of the 52 corpus shouts (name_id spaced 1
+# or 2 from the next skill's, skilltable.py on the pinned 38797 snapshot) have no
+# room for a third record, 36 are spaced 3 like these two, and the 6 spaced 4 or
+# wider are untested -- so a shout with no row here sends NO bubble and the
+# server says so once.
+# Retail sends no bubble for a stance or a type-16 (0 of 66), so none get rows.
+
+[skill_speech.364]
+string_id = 25944
+[skill_speech.364.provenance]
+source = "capture"
+capture = "20260817T231139"
+origin = "live"
+verified = "0x00A5 [caster, 0x6658] -- one coded word, decoding (codedstr) to 25944 -- beside 56 of 56 live announces of 364 across seven captures (20260817T231139 the arena 43, 20260818T094648 5, 20260818T132739 1, 20260821T155022 1, 20260821T184758 1, 20260916T213125 2, 20260917T090355 3), no other id; instantjoin.py. The pinned 38797 s_skill row 364 names 25942 at +0x98 (name) and 25943 at +0xA0 (description); 25944 is the block's third record."
+
+[skill_speech.348]
+string_id = 25911
+[skill_speech.348.provenance]
+source = "capture"
+capture = "20260914T005758"
+origin = "live"
+verified = "0x00A5 [caster, 0x6637] -- one coded word, decoding to 25911 -- beside 11 of 11 live announces of 348 (7 the hero's on 20260914T005758, 3 a team-mate's on 20260819T132414, 1 the observer's on 20260821T205552), no other id; instantjoin.py. The 38797 s_skill row 348 names 25909 at +0x98 and 25910 at +0xA0; 25911 is the block's third record."
+
 # ---------------------------------------------------------------------------
 # THE ERRAND: the quest's own two NPCs, as CONTENT. SLICE-B1, 2026-09-12.
 #
