@@ -74,7 +74,7 @@ from codec import Codec  # noqa: E402
 # vault-dependent section declares its skips, so a run without the live captures lands
 # below the floor and goes RED -- which is the point, since a compiler checked against
 # nothing is the failure checks.py exists for.
-LEDGER = checks.Ledger("npcdefs: capture -> content rows", floor=59)
+LEDGER = checks.Ledger("npcdefs: capture -> content rows", floor=60)
 # floor 25 -> 32 on 2026-08-16, measured from the green run that added the
 # named-capture selection, the fourth-capture proof and the mode plumbing;
 # 32 -> 40 on 2026-08-22 with section 7 (field 9 is per-instance, the full
@@ -92,6 +92,10 @@ LEDGER = checks.Ledger("npcdefs: capture -> content rows", floor=59)
 # roster check now READS map 146 (agentroster, map_id == 146, exact set) where
 # it tested a subset of the whole pool -- 129 swapped in for 1397 passed that
 # and reddens this. The new test run against HEAD's old npcdefs.py reddens 3.
+# 59 -> 60 on 2026-09-24 (the review's RV2-5): two captures of UNKNOWN build
+# together are refused -- the `None not in groups` conjunct had no witness
+# (the mixed pool is refused by the group count alone), and a scratch copy of
+# npcdefs.py with the conjunct dropped ran 59/59; it reddens this check alone.
 
 # Measured 2026-08-11 over the three keyed captures. Written as literals rather than
 # computed from the module under test, because a symbol appearing in a test file is not
@@ -498,6 +502,24 @@ def main():
               "and the same capture beside ONE of a known build is refused "
               "naming both -- an unknown build is not 'any build'",
               mixed.splitlines()[0] if mixed else "not refused")
+    # The `None not in groups` conjunct on its own: a pool of two or more
+    # captures ALL of unknown build is refused too, because two unknown
+    # captures may be two builds. The one unknown capture listed twice is two
+    # entries in one None group -- the exact shape the conjunct exists for
+    # (the mixed pool above is refused by the group count alone, so until
+    # this check a copy of npcdefs.py with the conjunct dropped ran 59/59;
+    # the review's RV2-5).
+    try:
+        npcdefs.require_one_build(unknown * 2)
+        twice = ""
+    except npcdefs.NpcDefsError as exc:
+        twice = str(exc)
+    LEDGER.ok(len(unknown) == 1 and "unknown" in twice
+              and "2 captures whose build cannot be read" in twice
+              and "2 capture(s)" in twice,
+              "two captures of UNKNOWN build together are REFUSED, naming the "
+              "unknown build and saying why -- an unknown build is not one build",
+              twice.splitlines()[0][:90] if twice else "not refused")
     # The CLI: a bare census refuses; --build selects. main() takes argv so
     # the plumbing is exercised, not re-derived.
     import contextlib

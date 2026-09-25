@@ -96,7 +96,11 @@ of the on-screen frame scored for coverage, three offscreen thumbnails, and the 
 thumbnails arriving for the rows in view and again after a scroll to the end -- 20
 steps, `[PASS]`/`[FAIL]` per line, non-zero exit on any failure. Run it before
 committing a viewer change, always with a timeout (the offscreen QPA hangs outside
-`--smoke`); `--shot` renders one frame the same way for a look.
+`--smoke`); `--shot` renders one frame the same way for a look. The run is
+self-contained: the Maps step opens the tab once untimed (building the map index if
+the vault cache lacks it, 20-30 s) and holds the SECOND open under 5 s, and the lazy
+step empties its own `thumbs-lazy` directory first -- so the same `DIR` can be reused
+and a fresh vault cache is not a failure.
 
 ## Where files go
 

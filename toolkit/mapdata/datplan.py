@@ -136,22 +136,43 @@ CONTAINER_PROBE_BYTES = CONTAINER_PROBE_PAIRS * 8
 #     0xF53F9C00 (57%, run-live/2026-07-29) and 0xFAAE2000 (18 of 21, 86%, the
 #     38888 line; 3 junk records then rows 177774..177791). A block each; the
 #     mark states the count and nothing about how the rows got there.
-#   * LEFT USABLE by it although they carry at least 8 identical rows:
-#     0xF542FE00 (18 blocks, 13 of 383, 3.4%), 0xF5595400 (5 blocks, 5.7%),
-#     0xF6DD5400 (2 blocks, 9.5%), 0x9662A00 (1 block, 8 of 20, 40%),
-#     0xF567E200 (3 blocks, 20 of 63, 32%, rows 173569..173588 at the run's
-#     end) and 0xF9EF4A00 (10 blocks, 69 of 213, 32%, on the 38888 line): 135
-#     records of payload FOLLOWED by a contiguous tail of rows 177714..177791
-#     running to the run's end -- and best_fit writes a payload from the run's
-#     START, so any 7..10-block file (3.1..5.1 KB; WORLDMAPS-W6's 4,820 B map
-#     is one) would overwrite those rows. That is the honest cost of the
-#     whole-run fraction: the rows are stale (their generation's head is under
-#     the file in front of them), and whether the client can ever return to
-#     such a generation is studies/archivewrite's standing UNVERIFIED, so this
-#     rule does not claim that overwriting them is safe -- only that the region
-#     already went to a file once. A per-BLOCK rule (withhold the row-bearing
-#     blocks, keep the payload blocks) would catch both lists consistently and
-#     is the next refinement if that question ever gets an answer.
+#   * LEFT USABLE by the majority term ALONE (at least 8 identical rows, under
+#     one half of the non-zero records) -- the complete set, every usable run
+#     of the 21 Gw.dat copies re-scored through classify_runs on 2026-09-24
+#     (the review's RV2-2: the first list here named two runs the COUNT term
+#     spares, 0xF5595400 at 6 of 106 and 0xF6DD5400 at 4 of 42, and missed
+#     nine of these). On the 38797 line -- client/2026-07-29 and the seven
+#     copies made from it (dat_c2, dat_durability, dat_study_38797,
+#     reskin-roster, the -c2 and -probe run copies, run-live): 0x323A400 (25
+#     blocks, 9 of 533), 0x731D000 (41, 13 of 874), 0x9662A00 (1 block, 8 of
+#     20, 40%), 0xF53F7800 (19, 12 of 405), 0xF542FE00 (18, 13 of 383) and
+#     0xF567E200 (3, 20 of 63, 32%, rows 173569..173588 at the run's end),
+#     the union over those copies: the -probe copy lacks 0xF567E200, the
+#     run-live copy keeps only 0x731D000 (its live sessions wrote over the
+#     rest), and 0xF5731C00 (39, 11 of 832) appears ONLY on copies the client
+#     has run (dat_c2, dat_durability, dat_study_38797, -c2, run-live), never
+#     on the pristine one. On client/2026-04-30: 0x731D000 again, 0x9660C00 (16, 8 of 340),
+#     0xDC280800 (233, 16 of 4,970), 0xF53F6E00 (24, 12 of 511), 0xF5677800
+#     (56, 20 of 1,194) and 0xF8449200 (921, 19 of 19,647). On the 38888 line:
+#     0xF9A62600 (1,038 blocks, 20 of 22,144) and 0xF9EF4A00 (10 blocks, 69 of
+#     213, 32%): 135 records of payload FOLLOWED by a contiguous tail of rows
+#     177714..177791 running to the run's end -- and best_fit writes a payload
+#     from the run's START, so any 7..10-block file (3.1..5.1 KB;
+#     WORLDMAPS-W6's 4,820 B map is one) would overwrite those rows. That is
+#     the honest cost of the whole-run fraction: the rows are stale (their
+#     generation's head is under the file in front of them), and whether the
+#     client can ever return to such a generation is studies/archivewrite's
+#     standing UNVERIFIED, so this rule does not claim that overwriting them
+#     is safe -- only that the region already went to a file once. Everything
+#     below one percent in that list is payload with a few row-shaped records
+#     in it; the 38833 and 08-20 lines have NO usable run with a single
+#     identical row. A per-BLOCK rule (withhold the row-bearing blocks, keep
+#     the payload blocks) would catch both lists consistently and is the next
+#     refinement if that question ever gets an answer.
+#   * BELOW THE COUNT, whatever their fraction: a dozen single blocks and small
+#     runs with 1..7 identical rows -- 0xF56B3400 (6 of 21, 29%), 0xF5595C00 (6
+#     of 21), 0xF5595400 (5 blocks, 6 of 106), 0xF6DD5400 (2 blocks, 4 of 42),
+#     0xF5379A00 (4 of 20) and the like -- usable by the count term alone.
 MFT_CONTENT_PHASES = tuple(range(0, ENTRY_SIZE, 4))
 MFT_CONTENT_MIN_ROWS = 8
 MFT_CONTENT_MAJORITY = 0.5

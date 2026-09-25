@@ -238,17 +238,28 @@ def row_budget(dat):
     map is ten blocks), and what binds is ROWS. A new file takes one MFT row
     (a map chain takes two), and the table may grow only into the slack of
     its own last 512-byte block (`datalloc.mft_slack`: `-mft_size % 512`,
-    17 rows on a pristine 38833-line copy) plus whatever erased rows it
-    already holds (`datplan.free_rows`). Both numbers change under the
-    CLIENT, and `--fresh` -- which re-copies the pristine source -- is the
-    one thing that restores them (DESKWORK-D11 step 7, 2026-09-24).
-    RECONSTRUCTION, from one measurement: WORLDMAPS-W6 read the slice's
-    slack at 17 rows on the pristine copy and 0 after client sessions, so
-    "a session spends rows" is the reading of that fall, not a mechanism
-    anything here traced -- and the slice's 1 claimable erased row where its
-    source has 0 is a component that ROSE under the client, by an actor
-    nothing here identified. The budget has only fallen so far; nothing
-    says it can only fall.
+    17 rows on a pristine 38833-line copy -- W6 measured exactly that, 424 B
+    on the 38833 study copy, and measured nothing after it) plus whatever
+    erased rows it already holds (`datplan.free_rows`). Both numbers change
+    under the CLIENT, and `--fresh` -- which re-copies the pristine source
+    -- is the one thing that restores them (DESKWORK-D11 step 7, 2026-09-24).
+
+    Where the slice's 17 went, read off its own records (2026-09-24, the
+    lane's review RV2-1 -- the first version of this paragraph credited the
+    whole fall to a W6 measurement W6 never made, and to client sessions,
+    when four of the rows were ours). OBSERVED: the source
+    `client/2026-08-13` declares 177753 rows with 17 of slack; the slice's
+    two datalloc journals, `frontier_alloc.json` and `corridor_alloc.json`,
+    grow the table IN PLACE at the source's 0xFA227A00 -- entry count
+    177753 -> 177755 -> 177757, two map chains, 4 rows -- leaving 13; the
+    archive today declares 177770 rows (13 more) in a table RELOCATED to
+    0xF9AE4200, with 16 B of slack, 0 rows. RECONSTRUCTION: the 13 were
+    spent by client sessions, because no journal of ours grows a table past
+    its slack or moves one, and only the client was left in the room -- a
+    reading of "nothing else wrote here", not a mechanism anything traced.
+    The slice's 1 claimable erased row where its source has 0 ROSE under the
+    same actor. The budget has only fallen so far; nothing says it can only
+    fall.
     """
     import datalloc                                              # noqa: E402
     import datplan                                               # noqa: E402
@@ -270,8 +281,10 @@ def budget_lines(name, src_dat):
                    f"must move (a map chain is two)")
     out.append(f"  MFT row budget of the pristine source: {s_slack} + {s_erased} "
                f"= {s_slack + s_erased} row(s); --fresh re-copies it. Client "
-               f"sessions SPEND rows (RECONSTRUCTION from WORLDMAPS-W6: slack "
-               f"17 -> 0 across sessions on the slice), so a run archive's "
+               f"sessions SPEND rows (on the slice: slack 17 -> 13 by our two "
+               f"map installs, OBSERVED in their _alloc.json journals, -> 0 "
+               f"across client sessions that also relocated the table, "
+               f"RECONSTRUCTION -- no journal of ours did), so a run archive's "
                f"budget has only fallen so far.")
     return out
 

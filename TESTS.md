@@ -1648,9 +1648,17 @@ Every one of these, in the order they were written:
   (the lane's review, RV-10): the chunk-boundary check** -- `mft_content` reads
   a run in `MFT_CONTENT_CHUNK` pieces and tests the one record per phase that
   straddles each boundary, and the default chunk (1,049,088 B) is larger than
-  any fixture run, so nothing exercised that branch; read in 1,536-byte chunks
-  the planted tail crosses two boundaries and must score the same tuple, and
-  with the branch disabled in a scratch copy that check alone goes red. The
+  any fixture run, so nothing exercised that branch; read in 96-byte chunks (a
+  multiple of 24, so phases keep alignment) two of the planted LIVE rows -- body
+  rows 4 and 8, at phase 8 -- straddle the boundaries at 96 and 192 and exist
+  only as records that branch assembles, so the chunked tuple must equal the
+  whole-run tuple with all 10 identical; the geometry is computed in the check,
+  and three scratch mutations of the branch -- off, halves swapped, the wrong
+  tail bytes -- each redden that check alone. (Re-cut 2026-09-24 for the
+  review's RV2-3: the first version chunked at 1,536 B, but the planted body
+  ends at byte 464 of the run, so every straddled record was zero and the two
+  mis-assembly mutations passed it -- it caught the branch missing and nothing
+  about what it assembled.) The
   mark's text is neutral since the same review (RV-8): it states the count, the
   fraction and the phase and asserts no mechanism, because the rule also
   withholds one-block slivers at 57-86 % that are not overwritten heads),
@@ -7195,7 +7203,13 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   2026-07-29 and 2026-09-01 declare exactly ONE body differs (7809). Scratch
   sabotages: `require_one_build` never refusing reddens 3, `to_toml` dropping
   the stamp reddens 2, the whole new §8 against HEAD's pre-review `npcdefs.py`
-  reddens 3. Floor 32→40→42→55→59),
+  reddens 3. **+1 (2026-09-24, the review's RV2-5): two captures of UNKNOWN
+  build together** (the one unknown capture listed twice -- two entries in one
+  `None` group) **are REFUSED** naming the unknown build and "2 captures whose
+  build cannot be read"; the `None not in groups` conjunct had no witness, since
+  the mixed pool is refused by the group count alone, and a scratch copy with
+  the conjunct dropped ran 59/59 -- it reddens this check alone. Floor
+  32→40→42→55→59→60),
   `toolkit/authsrv/test_agentroster.py` (the per-agent roster reader —
   `studies/isle/PLAN.md` rung 1: every WORLD_CREATE_AGENT **with its coordinates**,
   partitioned by class tag before any masking, because field 2's low 16 bits are a

@@ -47,6 +47,7 @@ which refuse the tree themselves.
 import argparse
 import math
 import os
+import shutil
 import sys
 import time
 from array import array
@@ -1286,18 +1287,38 @@ def smoke(win, app, out_dir):
          "forcing slot 0 decodes and binds its texture")
     win.slot_box.setCurrentIndex(0)
 
-    # on_tab runs synchronously inside setCurrentIndex (a direct signal), so
-    # the clock starts BEFORE it -- the first version started it after, timed
+    # The Maps tab is timed on its SECOND open in this process. The first open
+    # builds the index if the vault cache lacks it (or refuses a stale one and
+    # rebuilds), untimed -- 20-30 s cold, under a second warm; then win.maps
+    # is reset so on_tab reads the cache again, and THAT open is held under
+    # 5 s. The first version timed the first open, so the smoke was red by
+    # construction on a fresh vault cache or a new archive state while the
+    # viewer was correct (the review's RV2-4); this version checks the cache
+    # without depending on what an earlier run left behind. on_tab runs
+    # synchronously inside setCurrentIndex (a direct signal), so the clock
+    # starts BEFORE it -- an earlier version started it after, timed
     # processEvents alone, and printed 0.0 s with a 5 s sleep planted in the
-    # map read. The bound is what makes it a check: a cold or refused cache
-    # decodes 17 maps in 20-30 s and reddens it.
+    # map read. The bound is what makes it a check: a read that decodes the 17
+    # maps instead of reading the index reddens it.
+    t_first = time.time()
+    win.tabs.setCurrentIndex(2)
+    app.processEvents()
+    first_secs = time.time() - t_first
+    first_maps = win.maps
+    win.tabs.setCurrentIndex(0)
+    app.processEvents()
+    win.maps = None
+    win.map_list.clear()
     t0 = time.time()
     win.tabs.setCurrentIndex(2)
     app.processEvents()
     maps_secs = time.time() - t0
-    step(win.maps is not None and "449" in win.maps and maps_secs < 5,
-         f"Maps tab reads the content maps in {maps_secs:.2f} s (< 5 s: warm "
-         f"through the map index cache; a cold decode is 20-30 s)")
+    step(win.maps is not None and "449" in win.maps and maps_secs < 5
+         and win.maps == first_maps,
+         f"Maps tab reads the content maps in {maps_secs:.2f} s on its second "
+         f"open (< 5 s: through the map index cache; the first open took "
+         f"{first_secs:.1f} s, which builds the index when the vault lacks it) "
+         f"and answers the same {len(win.maps or ())} maps both times")
     for i in range(win.map_list.count()):
         d = win.map_list.item(i).data(Qt.UserRole)
         if d and d[0] == "449":
@@ -1379,12 +1400,16 @@ def smoke(win, app, out_dir):
         done += os.path.isfile(thumbs.path_for(rec.fid))
     step(done == 3, f"three thumbnails rendered offscreen into {thumbs.dir}")
 
-    # LAZY thumbnails: point the list's cache at an empty directory outside
+    # LAZY thumbnails: point the list's cache at an EMPTY directory outside
     # the tree, show the Models tab, and let the event loop run -- the rows in
     # view are queued by their own paint and rendered one per turn. Then
     # scroll to the end and the rows there arrive too, without a menu action.
+    # Emptied first: the directory is under out_dir, and a second run into the
+    # same out_dir found every row's PNG already there, queued nothing, and
+    # reddened both lazy steps against a correct viewer (the review's RV2-4).
     lazy = Thumbs(win.catalog.stamp)
     lazy.dir = os.path.join(out_dir, "thumbs-lazy")
+    shutil.rmtree(lazy.dir, ignore_errors=True)
     win.list_model.thumbs = lazy
     win.list_model.icons.clear()
     win.list_model.failed.clear()
