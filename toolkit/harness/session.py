@@ -44,6 +44,7 @@ wired into it.
 
 import argparse
 import json
+import math
 import os
 import subprocess
 import sys
@@ -409,6 +410,13 @@ def _play(tails, proc, outdir, warn=3.0):
 # -- we are not naming a point"). The server's own integrator broadcasts nothing
 # at all. So where a keyboard walk stops is the client's own collision, measured
 # through the position the client reports back four times a second.
+# The longest LEFT drag a plan may ask for, in seconds. A helm moves across a
+# panel in well under one; ten leaves room for a deliberately slow gesture
+# and stops "600" (meant as milliseconds) from holding the global left button
+# down for ten minutes across whatever takes the foreground.
+DRAG_SECONDS_MAX = 10.0
+
+
 def parse_walk(text):
     """A plan of ordered steps. Movement and CAMERA in one script, because order matters.
 
@@ -437,10 +445,11 @@ def parse_walk(text):
                     helm in the backpack, to equip it (dc.double_click: two
                     presses at one point inside the system double-click time)
         drag:0.30,0.25,0.62,0.71[,0.6]   LEFT-drag from one window-relative
-                    point to another over SECONDS (default 0.6) -- the helm
-                    from the doll's head slot to a backpack cell. The moves
-                    are ABSOLUTE input events and the landing is read back
-                    (dc.drag); the walk row carries where the pointer ended
+                    point to another over SECONDS (default 0.6; finite, and
+                    at most DRAG_SECONDS_MAX) -- the helm from the doll's
+                    head slot to a backpack cell. The moves are ABSOLUTE
+                    input events and the landing is read back (dc.drag); the
+                    walk row carries where the pointer ended
 
     -> [('key', 'W', 6.0), ('zoom', '', -14.0), ...]
 
@@ -564,8 +573,16 @@ def parse_walk(text):
                                  f"inside the window, exclusive 0..1")
             if (fx0, fy0) == (fx1, fy1):
                 raise SystemExit(f"walk step {spec!r} drags nowhere")
-            if secs <= 0:
-                raise SystemExit(f"walk step {spec!r} drags for {secs}s")
+            # FINITE and CAPPED, not merely positive. float() accepts "inf"
+            # and "nan", and `<= 0` passes both: inf reached dc.drag and
+            # died in int() mid-walk, after the map had loaded, which is
+            # what this pre-launch parse exists to prevent; nan went into
+            # the row as asked=NaN. And "600" from someone thinking in
+            # milliseconds is ten minutes with the global left button down.
+            if not math.isfinite(secs) or not 0 < secs <= DRAG_SECONDS_MAX:
+                raise SystemExit(f"walk step {spec!r}: drag SECONDS is a "
+                                 f"finite number of SECONDS in "
+                                 f"0 < s <= {DRAG_SECONDS_MAX:g}, not {secs}")
             steps.append(("drag", f"{fx0:g},{fy0:g},{fx1:g},{fy1:g}", secs))
             continue
         try:
@@ -626,6 +643,106 @@ def steer(hwnd, pid, vk, px, seconds, slice_s=0.25):
             time.sleep(0.01)
     th.join(seconds + 2.0)
     return held[0]
+
+
+def _px(pair):
+    """A pointer pair as the row spells it -- "x,y" -- or None."""
+    return "{},{}".format(*pair) if pair else None
+
+
+def pointer_row(kind, rep):
+    """The report's view of a dc.drag / dc.double_click return, one shape.
+
+    `rep` is False (nothing pressed) or the verb's dict. The walk row and the
+    --actions row both take these fields, so a reader looking for where the
+    helm went reads the same keys in either. `on_target` is the verdict and
+    is spelled out even when nothing was pressed, so a row never has to be
+    read as "no key means it worked".
+    """
+    if not rep:
+        return {"on_target": False}
+    if kind == "dclick":
+        return {"at": _px(rep["at"]), "pressed_at": _px(rep["pressed_at"]),
+                "after": _px(rep["after"]), "on_target": rep["on_target"]}
+    return {"target": _px(rep["target"]), "pressed_at": _px(rep["pressed_at"]),
+            "landed": _px(rep["landed"]), "corrected": rep["corrected"],
+            "interrupted": rep["interrupted"], "on_target": rep["on_target"]}
+
+
+# What the --actions loop prints for a pointer verb, by its three-valued
+# `sent`. A dclick whose pointer moved between the presses was DELIVERED --
+# the client got two presses -- and until 2026-09-25's review the loop printed
+# "NOT SENT (no focus)" for it, the opposite of what happened.
+POINTER_HOW = {
+    True: "sent",
+    False: "NOT SENT (no focus, or the pointer was not where asked before the press)",
+    "two-clicks": "SENT AS TWO CLICKS -- the pointer moved between or after the presses",
+    "off-target": "SENT, BUT LANDED OFF TARGET -- the drop is on the wrong cell",
+    "interrupted": "SENT, BUT INTERRUPTED -- the client lost the foreground mid-drag",
+}
+
+
+def parse_pointer_action(kind, arg):
+    """(key, secs) for one dclick/drag action, through parse_walk's OWN rules.
+
+    So the action and the walk step cannot drift apart, and a malformed one
+    exits loudly with the action named rather than dying in a float()
+    traceback.
+    """
+    try:
+        _, key, secs = parse_walk(f"{kind}:{arg}")[0]
+    except SystemExit as e:
+        raise SystemExit(f"action {kind}:{arg}: {e}")
+    return key, secs
+
+
+def prevalidate_actions(actions):
+    """Parse every dclick/drag entry of --actions BEFORE the stack starts.
+
+    Returns how many there were. --walk has had this pass since it existed,
+    for the reason main() gives: a typo found after the map has loaded costs
+    the whole run and a client session. The pointer verbs were parsed only
+    when their turn came, so "3:click:0.5,0.5 8:drag:0.2,0.3,0.6" launched
+    the client, delivered the click, and then exited. Other action kinds
+    keep their own in-loop checks; this pass is the two that share
+    parse_walk.
+    """
+    n = 0
+    for spec in (actions or "").split():
+        parts = spec.split(":")
+        if len(parts) >= 2 and parts[1] in ("dclick", "drag"):
+            parse_pointer_action(parts[1], parts[2] if len(parts) > 2 else "")
+            n += 1
+    return n
+
+
+def deliver_pointer_action(kind, arg, hwnd, pid):
+    """One dclick/drag --actions entry, through dc; the report row for it.
+
+    The row's `sent` is THREE-valued: True (delivered where asked), False
+    (nothing pressed: no focus, or the pointer was not on the point after
+    placement), or a word for "the button went down but not as asked" --
+    "two-clicks" (the pointer moved between a double-click's presses),
+    "off-target" (a drag's landing could not be corrected), "interrupted"
+    (the client lost the foreground mid-drag). The pointer facts ride along
+    (pointer_row), so a report reader sees where the helm went.
+    """
+    key, secs = parse_pointer_action(kind, arg)
+    nums = [float(v) for v in key.split(",")]
+    if kind == "dclick":
+        rep = dc.double_click(hwnd, pid, *nums)
+    else:
+        rep = dc.drag(hwnd, pid, *nums, seconds=secs)
+    row = pointer_row(kind, rep)
+    if not rep:
+        row["sent"] = False
+    elif rep["on_target"]:
+        row["sent"] = True
+    elif kind == "dclick":
+        row["sent"] = "two-clicks"
+    else:
+        row["sent"] = "interrupted" if rep["interrupted"] else "off-target"
+    return row
 
 
 def walk_legs(proc, legs, outdir, warn=3.0, settle=1.5, shot_every=0.0):
@@ -750,25 +867,23 @@ def walk_legs(proc, legs, outdir, warn=3.0, settle=1.5, shot_every=0.0):
             # before it presses anything, the same guard every key takes.
             fx, fy = (float(p) for p in key.split(","))
             did = 1.0 if dc.click(hwnd, proc.pid, fx, fy) else 0.0
-        elif kind == "dclick":
-            # Two presses at ONE point inside the system double-click time;
-            # dc.double_click reports False if the pointer left the
-            # double-click rectangle, so a 0.0 here can mean "two clicks".
-            fx, fy = (float(p) for p in key.split(","))
-            did = 1.0 if dc.double_click(hwnd, proc.pid, fx, fy) else 0.0
-        elif kind == "drag":
-            # A LEFT drag, `value` seconds long. The row carries where the
-            # pointer really was before the release and whether that had to
-            # be corrected -- a drop on the wrong cell must not read as a
-            # clean drag (dc.drag).
-            fx0, fy0, fx1, fy1 = (float(p) for p in key.split(","))
-            rep = dc.drag(hwnd, proc.pid, fx0, fy0, fx1, fy1, seconds=value)
-            did = 1.0 if rep else 0.0
-            if rep:
-                extra = {"target": "{},{}".format(*rep["target"]),
-                         "landed": ("{},{}".format(*rep["landed"])
-                                    if rep["landed"] else None),
-                         "corrected": rep["corrected"]}
+        elif kind in ("dclick", "drag"):
+            # dclick: two presses at ONE point inside the system double-click
+            # time. drag: a LEFT drag, `value` seconds long. For BOTH, the
+            # dict dc returns means "the button went down", and `on_target`
+            # is the verdict: a double-click whose pointer moved between the
+            # presses may have been two clicks, and a drag whose landing
+            # could not be corrected dropped the item on the wrong cell --
+            # each is did=0.0 here, with the row carrying the pointer facts
+            # (pointer_row) so the report says WHICH. Until 2026-09-25's
+            # review a truthy dict was did=1.0 whatever it carried.
+            nums = [float(p) for p in key.split(",")]
+            if kind == "dclick":
+                rep = dc.double_click(hwnd, proc.pid, *nums)
+            else:
+                rep = dc.drag(hwnd, proc.pid, *nums, seconds=value)
+            did = 1.0 if rep and rep["on_target"] else 0.0
+            extra = pointer_row(kind, rep)
         else:
             raise SystemExit(f"unknown walk step kind {kind!r}")
         ended_unix = time.time()
@@ -858,6 +973,7 @@ def run_client(a, outdir):
         for i, spec in enumerate(actions.split()):
             parts = spec.split(":")
             delay, kind = float(parts[0]), parts[1]
+            extra, how = {}, None   # a pointer verb's row facts and its verdict line
             time.sleep(delay)
             hwnd, _ = dc.wait_window(proc.pid, timeout=5)
             if not hwnd:
@@ -891,21 +1007,16 @@ def run_client(a, outdir):
                 delivered = dc.click(hwnd, proc.pid, fx, fy)
             elif kind in ("dclick", "drag"):
                 # "N:dclick:fx,fy" and "N:drag:fx0,fy0,fx1,fy1[,seconds]",
-                # delivered like click. The spec is validated by parse_walk's
-                # OWN rules, so the action and the walk step cannot drift
-                # apart, and a malformed one exits loudly here rather than
-                # dying in a float() traceback with the client already up.
-                arg = parts[2] if len(parts) > 2 else ""
-                try:
-                    _, key, secs = parse_walk(f"{kind}:{arg}")[0]
-                except SystemExit as e:
-                    raise SystemExit(f"action {spec!r}: {e}")
-                nums = [float(v) for v in key.split(",")]
-                if kind == "dclick":
-                    delivered = dc.double_click(hwnd, proc.pid, *nums)
-                else:
-                    delivered = bool(dc.drag(hwnd, proc.pid, *nums,
-                                             seconds=secs))
+                # delivered like click -- through deliver_pointer_action, so
+                # the arm is testable without a client. Its row carries the
+                # three-valued `sent` (True, False, or a word for "sent but
+                # not where asked") and the pointer facts; `delivered` here
+                # is the strict reading.
+                row = deliver_pointer_action(
+                    kind, parts[2] if len(parts) > 2 else "", hwnd, proc.pid)
+                delivered = row["sent"] is True
+                extra = row
+                how = POINTER_HOW.get(row["sent"])
             elif kind == "enter":
                 delivered = dc.press_enter(hwnd, proc.pid)
             elif kind == "play":
@@ -945,12 +1056,13 @@ def run_client(a, outdir):
                     delivered = False
             else:
                 raise SystemExit(f"unknown action kind {kind!r} in {spec!r}")
-            sent.append({"spec": spec, "sent": delivered})
+            sent.append({"spec": spec, "sent": delivered, **extra})
             time.sleep(0.6)
             shot_if_foreground(hwnd, proc.pid,
                                os.path.join(outdir, f"{i + 1}-{kind}.png"))
             print(f"  action {spec}: "
-                  f"{'sent' if delivered else 'NOT SENT (no focus)'}", flush=True)
+                  f"{how or ('sent' if delivered else 'NOT SENT (no focus)')}",
+                  flush=True)
 
         checkpoints = (LOGIN_CHECKPOINTS if a.until == "login"
                        else LOGIN_CHECKPOINTS + MAP_CHECKPOINTS)
@@ -1299,7 +1411,14 @@ def main():
 
     # Before the stack starts and long before a client launches: a typo in
     # --walk would otherwise be found after the map has loaded, which costs the
-    # whole run and a client session.
+    # whole run and a client session. The pointer verbs in --actions take the
+    # same parse, so they get the same pass (they did not until 2026-09-25's
+    # review: a malformed "8:drag:0.2,0.3,0.6" launched the client, delivered
+    # the actions before it, and only then exited).
+    pointer_acts = prevalidate_actions(a.actions)
+    if pointer_acts:
+        print(f"actions: {pointer_acts} pointer action(s) (dclick/drag) parsed "
+              f"before launch")
     if a.walk:
         legs = parse_walk(a.walk)
         held = sum(v for k, _, v in legs if k in ("key", "wait"))
