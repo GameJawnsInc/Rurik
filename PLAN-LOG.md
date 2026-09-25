@@ -28,6 +28,55 @@ move back.
 
 ---
 
+### NOMESH-RECT, a meshless map's leads stop at the client's own map edge -- 2026-09-25 -- **the no-mesh door bounds the lead to the map's rect; send() clamps every other point; a portal into a map whose FILE the archive lacks is refused; both confirmation runs PASS on the client**
+
+The defect, OBSERVED on harness `20260925T083808` (loopback, 38797, `069635de`) and filed by
+`14d497e1`: the player backpedalled into `ascalon_to_corridor`, zoned to map 168 (file 0x5F0B3,
+which only the slice archive holds), the client logged `Creating default map`, and a W hold's
+lead plus the 1z-di re-grant chain walked the copy east 520 u per arrival, `[no-mesh]`, unbounded,
+until the client asserted `pos.x <= worldDims.x1` (agint.h(929)) **inside the 0x0029 handler on
+RE-GRANT 4's own point (4136, 1536)** -- the crash's `esi`. The study is
+[studies/nomesh/FINDINGS.md](studies/nomesh/FINDINGS.md) (NOMESH-F1..F7): the default map's rect
+(-3072, -3072, 3072, 3072), OBSERVED in the client's own log in 083808 and in the second witness
+`20260914T085004` (which died on a CREATE, the corridor boss at y = 10400); `worldDims.x1` bracketed
+in [3616, 4136); 108 frames of `MapQueryAltitude() invalid params` between the two.
+
+**What landed.** (1) `toolkit/authsrv/maprect.py` (stdlib, pure) and the no-mesh door in
+`_a2_clip_lead_ray`: with no mesh the ray stops 32 u inside the rect (RECONSTRUCTION), heading
+kept, word `no-mesh-rect`; the re-grant from the bound makes no progress and the chain stops
+(`regrant-stop`). The rect is read where the mesh fails, in `load_pathmap`, while the archive is
+still ours: `client-default` for a file id the archive lacks (OBSERVED), `map-params` for a present
+file whose mesh is missing (its own Map Parameters rect via `mapexport.map_rect`, which the client
+copies verbatim); a client-held archive records none and says why. No rect known = the historical
+unbounded answer; a meshed instance never reads it. (2) `_rect_bound_wire_point`, `send()`'s first
+statement: any 0x0029 / 0x002A / 0x002C point past the rect is CLAMPED (not dropped -- a withheld
+0x0029 after its 0x002B is MOVECODE-1z-cm's AgAgent:1198), labelled `RECT-CLAMPED`, recorded as
+`rect_clamp`; creates untouched; the same object back on a meshed instance. (3) `PORTAL_UNSERVABLE`:
+at startup, with or without `--map`, one file-id-table read (~0.15 s) withholds every enabled portal
+destination whose map FILE the archive lacks; `portal_tick` refuses it with nothing sent and disarms
+until the player leaves. A present file with a missing mesh is not withheld. On `RURIK_DAT=
+vault/run/slice/Gw.dat` nothing is.
+
+**Tests.** `toolkit/authsrv/test_nomeshrect.py`, floor 37 (the vault-free core), **45 MEASURED** with
+the vault: section 4 replays the capture's leg through the real `kbd_lead_chain_tick` -- the
+known-bad arm reproduces 083808's eight wire points exactly, the bounded arm sends 2576 then 3040
+and stops; section 6's positive control puts all 6,120 trapezoids of map 148's mesh inside the rect
+its own file declares. The graph-selected set for the Python change: **171 of 171 green, 11,715
+checks** (the four port-binders serially: handshake 24, harness 181, preflight_owner 30, webgate 9).
+
+**Client confirmation, the owner's go-ahead, questions registered first -- both PASS.** Run A,
+`20260925T095407`, the owner's own command (`--game-args "--explorable" --walk "wait:3 S:3 W:3"`):
+168 WITHHELD at startup, `PORTAL 'ascalon_to_corridor' REFUSED: the player is 120 u in`, no transfer,
+one connection, no crash dialog. Run B, `20260925T095537` (`--game-args "--explorable --map 168"
+--walk "wait:3 W:3"`): `NO-MESH BOUND ... [client-default`, the client's `Creating default map`, lead
+2056 then re-grants 2576 and **3040 `[no-mesh-rect]`**, then `regrant-stop`; zero `rect_clamp`, **zero
+MapQueryAltitude lines** (083808 had 108), no crash dialog.
+
+**Left open.** NOMESH-F7: on the default map a W key-up sends no movement report (083808 and
+095537), while map 148's did in Run A -- cause NOT FOUND, now harmless. `--map 168` from an archive
+without the file still serves the client its default map: the lead is bounded, but an `--area`
+whose rows lie past (-3072, 3072) would still assert on create (F4).
+
 ### SANDBOX-N1, the Enemies tab's skill and attribute selector -- 2026-09-24 -- **eight wells over an inline, filterable library in place of eight combos; each skill's cell shows the rank the server ACTS at; the window holds what the compiler accepts; `--smoke` 177 → 208, floor 170**
 
 The owner, 2026-09-22 (verbatim): "the enemies and run tab can remain the same for now, but I'd like a
