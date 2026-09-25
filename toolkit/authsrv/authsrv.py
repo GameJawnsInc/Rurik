@@ -11932,6 +11932,36 @@ HERO_SKILLS = ((281, 1.0, 2.0), (276, 0.75, 2.0))
 HERO_ROWS = {}
 HERO_ROW_BARS = {}             # hero index -> ((id, activation, recharge), ...)
 
+# The SLICE-H2 single-hero row's own fields (content/world.toml [party.slice]);
+# the player's are all `player_*`.
+PARTY_SINGLE_HERO_FIELDS = ("hero", "body", "skills", "level", "health", "energy",
+                            "weapon", "attributes", "armor", "damage",
+                            "weapon_attribute")
+
+
+def party_heroes(prow, key):
+    """A [party.KEY] row's hero list: the `heroes` tables as dicts, or None for
+    the SLICE-H2 single-hero shape (the row's own `hero`).
+
+    A row with NEITHER is the player alone, [] -- the same as `heroes = []`.
+    TOML has no empty array-of-tables: zero `[[party.KEY.heroes]]` headers
+    write no `heroes` key at all, so a heroless row reaches main() with no list
+    and no `hero`, and main() read `_prow["hero"]` and died on KeyError
+    (harness 20260925T161150, a heroless sandbox spec). A row carrying a
+    single-hero field WITHOUT `hero` is refused rather than read as heroless:
+    that is a hero with its index missing, and dropping it would be a guess."""
+    heroes = prow.get("heroes")
+    if heroes is not None:
+        return [dict(h) for h in heroes]
+    if prow.get("hero") is not None:
+        return None
+    stray = [f for f in PARTY_SINGLE_HERO_FIELDS if prow.get(f) is not None]
+    if stray:
+        raise SystemExit(f"--party {key!r}: the row has {', '.join(stray)} but no "
+                         f"`hero`; a single-hero row names its catalogue index, "
+                         f"a heroless one carries none of the hero's fields")
+    return []
+
 
 def hero_row(hid):
     return HERO_ROWS.get(int(hid)) or {}
@@ -38366,11 +38396,11 @@ def main():
         # profession through HERO_ROWS and the hero_*() readers; the
         # single-hero fields below are then the FIRST hero's, for the sites
         # that still read a global. A row without the list is the SLICE-H2
-        # shape, unchanged. An EMPTY list is a party of the player alone.
+        # shape, unchanged. An EMPTY list is a party of the player alone, and
+        # so is a row with neither (party_heroes: TOML writes no empty list).
         global HERO_ROWS
-        _pheroes = _prow.get("heroes")
+        _pheroes = party_heroes(_prow, a.party)
         if _pheroes is not None:
-            _pheroes = [dict(h) for h in _pheroes]
             if len(_pheroes) > HEROES_PARTY_MAX:
                 raise SystemExit(f"--party {a.party!r}: {len(_pheroes)} heroes; "
                                  f"the client's cap is 7 (PtPlayer:332)")
