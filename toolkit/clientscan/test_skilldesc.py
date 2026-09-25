@@ -585,28 +585,30 @@ check(KR("target foe is knocked down and takes 5 damage.") == LT.KD_FOE
       "knockdown_kind on OUR OWN phrases: the foe(s) the row lands on, the caster's own fall, a "
       "qualified class of foes ('attacking foes', 3425's shape), a negation, none")
 CR = LT.condition_rider
-check(CR("foes struck by your physical attacks become poisoned for  n  seconds.") == (LT.RIDER_ON_HIT, "physical")
-      and CR("target ally's melee attacks cause weakness for  n  seconds.") == (LT.RIDER_ON_HIT, "melee")
-      and CR("your dagger attacks cause bleeding for  n  seconds.") == (LT.RIDER_ON_HIT, "dagger")
-      and CR("your attacks inflict bleeding for  n  seconds.") == (LT.RIDER_ON_HIT, LT.RIDER_WEAPON_ANY)
-      and CR("the next time you are struck, all adjacent foes are blinded for  n  seconds.") == (LT.RIDER_ON_STRUCK, None)
-      and CR("anyone striking those allies in melee becomes diseased for  n  seconds.") == (LT.RIDER_ON_STRUCK, None)
-      and CR("all adjacent foes are blinded for  n  seconds.") == (None, None)
-      and CR("target foe is struck for  n  earth damage and suffers from a deep wound for  n  seconds.") == (None, None),
+# the fix pass (skills 60.8 #4): INVENTED sentences that trip the same regexes -- never a
+# template's clause (the 59.7 #9 rule: fixtures are our own words)
+check(CR("creatures hit by your physical attacks are dazed for  n  seconds.") == (LT.RIDER_ON_HIT, "physical")
+      and CR("that ally's melee attacks cripple whatever they land on for  n  seconds.") == (LT.RIDER_ON_HIT, "melee")
+      and CR("your dagger attacks also set foes on fire for  n  seconds.") == (LT.RIDER_ON_HIT, "dagger")
+      and CR("enemies struck by their attacks start burning for  n  seconds.") == (LT.RIDER_ON_HIT, LT.RIDER_WEAPON_ANY)
+      and CR("whenever that ally is hit, nearby foes are dazed for  n  seconds.") == (LT.RIDER_ON_STRUCK, None)
+      and CR("a foe that strikes you is set ablaze for  n  seconds.") == (LT.RIDER_ON_STRUCK, None)
+      and CR("every nearby foe is crippled for  n  seconds.") == (None, None)
+      and CR("target creature is hit for  n  chaos damage and becomes dazed for  n  seconds.") == (None, None),
       "condition_rider on OUR OWN sentences: an on-hit rider with its weapon class (physical, melee, "
-      "dagger; ANY when unqualified), an on-struck rider ('the next time you are struck', 'anyone "
-      "striking'), and none for a condition in its own sentence or for 'target foe is struck for N "
-      "damage' (1033's shape is not a rider)")
-check(LT.sentence_governed("for 24 seconds, foes become poisoned for  n  seconds.", set())
-      and LT.sentence_governed("for  n  seconds, your attacks cause bleeding.", {Label.DURATION})
-      and not LT.sentence_governed("all adjacent foes are blinded for  n  seconds.", {Label.CONDITION_DURATION})
+      "dagger; ANY when unqualified), an on-struck rider ('whenever ... is hit', 'a foe that "
+      "strikes'), and none for a condition in its own sentence or for a damage sentence with 'hit' "
+      "in it (1033's shape is not a rider)")
+check(LT.sentence_governed("for 12 seconds, your arrows cause burning for  n  seconds.", set())
+      and LT.sentence_governed("for  n  seconds, your blows leave a mark.", {Label.DURATION})
+      and not LT.sentence_governed("every nearby foe is crippled for  n  seconds.", {Label.CONDITION_DURATION})
       and LT.slot_sentences(LT.normalise("A first %str1% one. For %str3% seconds, a second %str2% one.")) == {
           0: (0, "a first  n  one.", (1,)), 1: (1, "for  n  seconds, a second  n  one.", (3, 2)),
           2: (1, "for  n  seconds, a second  n  one.", (3, 2))},
       "a sentence is GOVERNED by the episode when it opens with a literal 'for N seconds' (435's flat "
       "24) or holds a DURATION slot; slot_sentences puts each occurrence in its own sentence beside "
       "its neighbours")
-check("CLAUSE_UNBLOCKABLE" in rf("for 10 seconds you cannot be blocked by blinded foes")
+check("CLAUSE_UNBLOCKABLE" in rf("for 10 seconds your strikes cannot be blocked")
       and "CLAUSE_UNBLOCKABLE" in LT.DETAILS and "CLAUSE_UNBLOCKABLE" not in LT.COMPOUND_FLAGS
       and {LT.DETAIL_CONDITION_RIDER_ON_HIT, LT.DETAIL_KNOCKDOWN_APPLIED, LT.DETAIL_CONDITION_FLAT_CONSTANT}
       <= _content.LABEL_DETAILS_KNOWN

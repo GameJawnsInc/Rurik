@@ -14453,8 +14453,9 @@ SELF_TARGET_BYTE = effects.SELF_TARGET     # 0: the record's byte for "the caste
 def caster_area_row(skill_id):
     """Is this skill's RECORD a caster-centred area: byte 0, a Spell -- or,
     SKILLS-LV (studies/skills 60), an EPISODE type whose row's condition fires
-    at the activation (1041's Stance: "All adjacent foes are Blinded", then the
-    stance opens; the gate ships such a row AREA_CASTER only when the condition
+    at the activation (1041's Stance: its Blind on the adjacent foes sits in a
+    sentence of its own ahead of the stance's, so it lands as the stance
+    opens; the gate ships such a row AREA_CASTER only when the condition
     sits in its own ungoverned sentence, and a rider row's skill_condition is
     None so this arm never bursts one) -- an aoe_range, no projectile of its
     own? Flag-free -- what the revert must still recognise, so it can refuse
@@ -21282,8 +21283,9 @@ def cast_tick(send, state, conn_id):
                     if not _is_attack_skill(cast["skill_id"]) and not (
                             found and found[1] == "standalone"):
                         # SKILLS-LV: a condition-only non-attack row's
-                        # knock-down (784) BEFORE its condition -- retail's
-                        # completion order, OBSERVED 4 of 5 (nonattack_knock_down)
+                        # knock-down (784) BEFORE its condition -- the fall
+                        # OBSERVED 4 of 5 live 784s, ahead of the Poison on
+                        # the 2 that show one (nonattack_knock_down)
                         nonattack_knock_down(send, state, cast["skill_id"], target,
                                              conn_id, "the player's")
                     if _na_combo and NONATTACK_CHAIN_GATE and CHAIN_STATE:
@@ -21998,9 +22000,9 @@ def _condition_terms(skill_id, row, rank):
 # The gate's CONDITION_ON_EPISODE (skills 55.2) held back six rows because
 # `skill_condition` reads any type at the CAST while the text puts the
 # condition on a LATER event. The sentence says which event (skilldesc's
-# condition_rider): an ON-HIT rider -- "foes struck by your physical attacks
-# become Poisoned" (435, a Preparation), "target ally's melee attacks cause
-# Weakness" (1997, an Enchantment on the ally) -- rides the WEARER's landed
+# condition_rider): an ON-HIT rider -- the wearer's PHYSICAL attacks Poison
+# what they strike (435, a Preparation), the target ALLY's MELEE attacks
+# Weaken (1997, an Enchantment on the ally) -- rides the WEARER's landed
 # attacks. This arm reads the wearer's OPEN episodes at every landed weapon
 # hit (hit_enemy for the player; land_swing and land_swing_on_body for a
 # body, arrows included through their arrivals) and puts the row's condition
@@ -22066,6 +22068,20 @@ def episode_condition_riders(state, agent_id, item):
             continue
         if row.get("condition_rider") != RIDER_ON_HIT:
             continue
+        # THE SIDE (the fix pass, skills 60.8 #1): a rider rides the wearer the
+        # template names -- the caster's own attacks or its target ALLY's --
+        # so the wearer must be the episode's caster or one of the caster's
+        # living allies (`allies_of`). `effect_recipient` places a byte-3
+        # enchantment aimed at a FOE on that foe (an inert icon, the shape
+        # every byte-3 row had before this pass), and without this line the
+        # foe's own hits would carry the caster's condition back at the
+        # caster's party. An episode with no caster recorded rides nothing;
+        # a caster whose row has left the table has no allies (`set()`), so
+        # its enchantment on a survivor rides nothing either -- LESS, said.
+        caster = ep.get("caster")
+        if caster is None or (agent_id != caster
+                              and agent_id not in allies_of(state, caster)):
+            continue
         if not weapon_in_rider_class(item, row.get("rider_weapon")):
             continue
         terms = _condition_terms(int(ep["skill"]), row, int(ep.get("rank", 0)))
@@ -22096,10 +22112,16 @@ def nonattack_knock_down(send, state, skill_id, target_id, conn_id, who):
     path (Earthquake 170 under --no-spell-areas falls back to one target with no
     fall, the arm test_weapons pins), so --no-label-knockdowns reverts every
     fall this pass added and nothing else moves. Retail's 784 completion
-    (OBSERVED, 4 of 5 live: 20260819T132414 x3, 20260913T210901 x1): [58,
-    caster], [20, target, caster, impact], [63, target, 2.0], then the Poison
-    (the status word 0x00F1 and the degeneration) -- the knock-down BEFORE the
-    condition, 2.0 s. Returns True when the target fell."""
+    (skills 60.3; 5 live casts, 20260819T132414 x3 + 20260913T210901 x2): the
+    FALL `[63, target, 2.0]` is OBSERVED 4 of 5 (the fifth's target died
+    first), 2.0 s, in the batch [58, caster], [20, target, caster, impact],
+    [63, target, 2.0]; the Poison (property 6, the status word 0x00F1,
+    property 44) follows the fall on the 2 completions that show one (182.103,
+    703.527) -- so fall-BEFORE-condition is OBSERVED 2 of 2 where a condition
+    is visible -- and the other 2 landed casts (235.789, 259.798) put NO
+    visible Poison on a target whose status was 0 before: CONTESTED for the
+    always-Poison land, recorded, not resolved here. Returns True when the
+    target fell."""
     if skill_effect_row(skill_id).get("tier") != agents.content.LABEL_TIER:
         return False
     if not skill_knocks_down(skill_id) or target_dead(state, target_id):
@@ -30247,7 +30269,8 @@ def land_skill(send, state, agent_id, agent, conn_id):
     elif inflicted and _burst_terms is None and not target_dead(state, _tid):
         if damage is None and _tid != agent_id:
             # SKILLS-LV: a body's condition-only row's knock-down (784's shape)
-            # BEFORE its condition -- retail's completion order, OBSERVED 4 of 5
+            # BEFORE its condition -- the fall OBSERVED 4 of 5 live 784s, ahead
+            # of the Poison on the 2 that show one (nonattack_knock_down)
             nonattack_knock_down(send, state, skill_id, _tid, conn_id, f"agent {agent_id}'s")
         apply_condition(send, state, _tid, inflicted[0],
                         inflicted[1], _rank, conn_id, skill_id)

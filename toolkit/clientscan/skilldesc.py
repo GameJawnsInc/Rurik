@@ -467,16 +467,19 @@ def row_flags(text):
 #
 # A LABEL DOES NOT SAY WHEN, and for a condition on an EPISODE type the six
 # rows of 55.2's CONDITION_ON_EPISODE are three shapes the words separate:
-#   ON-HIT rider     the WEARER's attacks inflict it on the foe struck -- "foes
-#                    struck by your physical attacks become Poisoned" (435),
-#                    "your dagger attacks cause Bleeding" (926), "target
-#                    ally's melee attacks cause Weakness" (1997)
-#   ON-STRUCK rider  whoever strikes the wearer gets it -- "anyone striking
-#                    those allies in melee becomes Diseased" (113), "the next
-#                    time you are struck ... adjacent foes are Blinded" (2136)
+#   ON-HIT rider     the WEARER's attacks inflict it on the foe struck -- the
+#                    wearer's physical attacks (435, Poison), its dagger
+#                    attacks (926, Bleeding), the target ally's melee attacks
+#                    (1997, Weakness)
+#   ON-STRUCK rider  whoever strikes the wearer gets it -- a melee strike on
+#                    the enchanted allies (113, Disease); the next strike on
+#                    the wearer, which also Blinds the adjacent foes (2136)
 #   AT ACTIVATION    its own sentence, no "for N seconds" governing it, no
-#                    attack word -- "All adjacent foes are Blinded for N
-#                    seconds." then "For N seconds, you cannot be blocked" (1041)
+#                    attack word -- a Blind on the adjacent foes in a sentence
+#                    of its own, then the stance's own governed sentence with
+#                    its unblockable clause (1041)
+# (Shapes keyed by id, read at run time -- no template clause is carried here;
+# the fix pass of 2026-09-25, skills 60.8 #4.)
 # A sentence is GOVERNED by the episode when it holds a DURATION-labelled slot
 # or opens with a literal "for <n> seconds" (435's flat 24). The rider WEAPON
 # CLASS is the qualifier before "attacks" ("physical", "melee", "dagger"; none

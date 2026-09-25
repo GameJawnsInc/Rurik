@@ -62,7 +62,12 @@ import effects  # noqa: E402
 # tier's only, the source lock), section 8 the flat constant (the reader, the flag, the
 # wire, the hand-row census), section 5's three flags; 70 + 1 skip with the vault's
 # 57-row overlay, 73 with the 60-row emit loaded (5c's marks).
-LEDGER = checks.Ledger("label consumers", floor=66)
+# The fix pass of the same day (skills 60.8): +4 -> FLOOR 70 from the bare run (70 + 3
+# skips) -- 1041's shape through the widened caster arm (the predicate and the E5 burst,
+# bare-capable), a killing blow carrying no rider, and the rider's SIDE (the player's
+# 1997-shape at a FOE arms nothing); 74 + 1 skip with the vault's 57-row overlay, 77 with
+# the 60-row emit.
+LEDGER = checks.Ledger("label consumers", floor=70)
 check = LEDGER.ok
 
 PLAYER = authsrv.PLAYER_AGENT_ID
@@ -70,15 +75,17 @@ FOE, FOE2, FAR = 10, 11, 12          # hostiles: adjacent, adjacent, 400 u off
 HERO, HERO2 = 200, 201               # party bodies: 110 u off, 6000 u off
 POISON = effects.CONDITION_BY_NAME["Poison"]
 CRIPPLED = effects.CONDITION_BY_NAME["Crippled"]
+BLIND = effects.CONDITION_BY_NAME["Blind"]
 
 # ---- synthetic rows: the shapes of 183 / 840 / 287 / 784 / 974 / a plain self heal,
 # and (the fix pass) 1033's damage shape, a chained self heal, a chained stance
 S_FIRE, S_POISON, S_PARTY, S_CHAIN, S_STEP, S_SELF = 900001, 900002, 900003, 900004, 900005, 900006
 S_CHAINDMG, S_CHAINHEAL, S_CHAINSTANCE = 900007, 900008, 900009
 # SKILLS-LV (2026-09-25, skills 60): 435's and 1997's rider shapes, 231's / 784's /
-# 294's knock-down shapes, a HAND-shaped knock-down row, 167's and 1033's slot shapes
-S_PREP, S_ENCH, S_TOUCH, S_KDCOND, S_SIGNET, S_HANDKD, S_FLAT, S_INDET = (
-    900010, 900011, 900012, 900013, 900014, 900015, 900016, 900017)
+# 294's knock-down shapes, a HAND-shaped knock-down row, 167's and 1033's slot shapes;
+# the fix pass (skills 60.8): 1041's shape, a byte-0 Stance over 156 u with a Blind slot
+S_PREP, S_ENCH, S_TOUCH, S_KDCOND, S_SIGNET, S_HANDKD, S_FLAT, S_INDET, S_STANCEAREA = (
+    900010, 900011, 900012, 900013, 900014, 900015, 900016, 900017, 900018)
 
 
 def _skill(target, tc=5, aoe=0.0, s=(30, 30), args=2, d=(0, 0), combo=0, combo_req=0):
@@ -108,6 +115,8 @@ SKILLS = {
     str(S_HANDKD): _skill(5, tc=10, s=(10, 60)),                          # a HAND row's shape
     str(S_FLAT): dict(_skill(5, s=(10, 40)), bonus_scale0=10, bonus_scale15=10),   # 167's shape
     str(S_INDET): dict(_skill(5, s=(10, 40)), bonus_scale0=5, bonus_scale15=20),   # 1033's slot shape
+    str(S_STANCEAREA): dict(_skill(0, tc=3, aoe=156.0, s=(0, 0), args=5, d=(10, 30)),
+                            bonus_scale0=5, bonus_scale15=20),                      # 1041's shape
 }
 EFFECTS = {
     str(S_FIRE): {"scale_means": "Fire damage", "tier": "label", "tier_detail": ["AREA_CASTER"]},
@@ -133,6 +142,8 @@ EFFECTS = {
                   "tier_detail": ["CONDITION_FLAT_CONSTANT"]},
     str(S_INDET): {"scale_means": "Earth damage", "bonus_scale_means": "Deep Wound", "tier": "label",
                    "tier_detail": ["INDETERMINATE_SLOT", "CONDITION_BIT_CLEAR_REFUSED"]},
+    str(S_STANCEAREA): {"bonus_scale_means": "Blind", "tier": "label",
+                        "tier_detail": ["AREA_CASTER", "CLAUSE_UNBLOCKABLE"]},
 }
 
 
@@ -265,6 +276,27 @@ def main():
         _press_and_land(st, send, S_SELF, FOE)
         check(_words(sent) == [] and st["agents"][FOE]["health"] == 9000.0,
               "CONTROL: a byte-0 row with NO radius takes no area arm (a self heal: no word, no hit)")
+        # the fix pass (skills 60.8 #5): the caster arm WIDENED to an EPISODE type -- 1041's
+        # shape, a byte-0 Stance over 156 u with a Blind bonus slot, marked AREA_CASTER. Before
+        # this arm only 5c (the fresh emit) could redden a Spell-only predicate; bare could not.
+        check(authsrv.caster_area_row(S_STANCEAREA) and authsrv.caster_area(S_STANCEAREA) == 156.0
+              and not authsrv.caster_area_row(S_CHAINSTANCE) and authsrv.caster_area(S_CHAINSTANCE) is None,
+              "caster_area_row admits an EPISODE type (a byte-0 Stance with a radius, 1041's shape) "
+              "and still refuses a stance with NO radius")
+        st, (sent, send) = _world(), _sender()
+        log = _press_and_land(st, send, S_STANCEAREA, FAR)     # the SELECTED target is 400 u off
+        eps_p = [ep["skill"] for ep in authsrv.effect_table(st).on_agent(PLAYER)]
+        ep_b = [e for e in authsrv.effect_table(st).on_agent(FOE) if e["skill"] == BLIND]
+        i_blind = log.find("Blind on agent 11")
+        i_stance = log.find(f"stance {S_STANCEAREA} on agent")
+        check(_conditioned(st, FOE, BLIND) and _conditioned(st, FOE2, BLIND) and ep_b and ep_b[0]["duration"] == 5.0
+              and not _conditioned(st, FAR, BLIND) and not _conditioned(st, HERO, BLIND)
+              and eps_p == [S_STANCEAREA] and _words(sent) == []
+              and 0 <= i_blind < i_stance,
+              "1041's shape at the player's E5: Blind 5 s (the bonus slot at rank 0) on BOTH hostiles "
+              "within 156 u of the PLAYER and on neither the far selected one nor the ally, no damage "
+              "word, then the STANCE opens on the player -- the Blind ahead of the stance in the log",
+              (eps_p, ep_b, i_blind, i_stance, log[-400:]))
         src = open(authsrv.__file__, encoding="utf-8").read()
         i_gate = src.index("_carea_row = caster_area_row(cast[\"skill_id\"]) and not _na_fail")
         i_att = src.index("elif target and _is_attack_skill(cast[\"skill_id\"]):", i_gate)
@@ -577,7 +609,6 @@ def main():
         # ------------------------------------------------------------------
         print("\n6. (D) SKILLS-LV: the ON-HIT condition rider on the wearer's landed attacks")
         WEAKNESS = effects.CONDITION_BY_NAME["Weakness"]
-        BLIND = effects.CONDITION_BY_NAME["Blind"]
         WIC, IT = authsrv.weapon_in_rider_class, agents.item_template
         check(WIC(IT("starter_sword"), "physical") and WIC(IT("starter_bow"), "physical")
               and WIC(IT("starter_daggers"), "physical") and not WIC(IT("starter_wand"), "physical")
@@ -657,6 +688,22 @@ def main():
             res = authsrv.hit_enemy(send, st, FOE, 1)
         check(res == "landed" and not _conditioned(st, FOE, POISON),
               "CONTROL: no episode, no rider -- the null above is the flag, not a dead swing")
+        # the fix pass (skills 60.8 #5): a KILLING BLOW carries no rider -- hit_enemy's
+        # `never a corpse` guard, which no arm reddened before this one (apply_condition does
+        # not refuse a corpse on its own, so the guard is the only thing between the rider and
+        # a Poison episode on a body the death just stripped)
+        st, (sent, send) = _world(), _sender()
+        _press_and_land(st, send, S_PREP, FOE)
+        st["agents"][FOE]["health"] = 1.0
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            res = authsrv.hit_enemy(send, st, FOE, 1)
+        check(res == "landed" and st["agents"][FOE]["dead"] and not _conditioned(st, FOE, POISON)
+              and authsrv.effect_table(st).on_agent(FOE) == [] and "[SKILLS-LV]" not in buf.getvalue()
+              and [ep["skill"] for ep in authsrv.effect_table(st).on_agent(PLAYER)] == [S_PREP],
+              "a KILLING BLOW with the preparation open: the foe dies and carries NO Poison -- no "
+              "episode on the corpse, no rider line; the preparation is still open on the player",
+              buf.getvalue()[-300:])
         # a BODY wearing 1997's shape: the enchantment on the ALLY (byte 3), its melee attacks Weaken
         st, (sent, send) = _world(), _sender()
         hero = st["agents"][HERO]
@@ -690,7 +737,30 @@ def main():
             res = authsrv.land_swing(send, st, FOE, foe, 1)
         check(res == "landed" and _conditioned(st, PLAYER, WEAKNESS) and st["player_health"] < 480.0,
               "a HOSTILE wearing it (cast by its ally) swings an AXE at the player: the player is "
-              "Weakened (land_swing's seam)")
+              "Weakened (land_swing's seam) -- the wearer is the caster's ally, the side the "
+              "template names")
+        # the fix pass (skills 60.8 #1, the reviewers' RV-1): the player's byte-3 rider
+        # enchantment pressed with a FOE selected -- effect_recipient puts the episode on the
+        # FOE (the inert icon every byte-3 row wore before this pass; here the VACUITY GUARD:
+        # the reader has an episode to refuse) -- and the foe's axe swing at the player carries
+        # NO Weakness: a rider rides the caster's side only, never a foe wearing a misplaced
+        # ally enchantment
+        st, (sent, send) = _world(), _sender()
+        st["player_health"] = 480.0
+        _press_and_land(st, send, S_ENCH, FOE)
+        foe = st["agents"][FOE]
+        foe["weapon_item"] = "starter_axe"
+        on_foe = [ep["skill"] for ep in authsrv.effect_table(st).on_agent(FOE)]
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            res = authsrv.land_swing(send, st, FOE, foe, 1)
+        check(on_foe == [S_ENCH] and res == "landed" and st["player_health"] < 480.0
+              and not _conditioned(st, PLAYER, WEAKNESS) and "[SKILLS-LV]" not in buf.getvalue()
+              and authsrv.episode_condition_riders(st, FOE, IT("starter_axe")) == [],
+              "the player's 1997-shape pressed at a HOSTILE: the enchantment lands on the hostile (the "
+              "pre-pass inert icon -- the episode the reader must refuse), its axe swing lands on the "
+              "player and carries NO Weakness, the reader answers nothing for the foe: the rider rides "
+              "the SIDE the template names (the caster or its allies)", (on_foe, res, buf.getvalue()[-300:]))
         check(src.count("        apply_episode_riders(send, state,") == 3
               and 'if row.get("condition_rider"):' in src
               and src.index("def skill_condition(") < src.index('if row.get("condition_rider"):')
@@ -730,7 +800,8 @@ def main():
               and log.index("KNOCKED DOWN") < log.index("Poison on agent 10"),
               "784's shape (a condition-only Spell, knocks_down): [63, foe, 2.0] BEFORE the Poison "
               "(the foe's 0x0042 is suppressed; the log carries the order) -- retail's completion "
-              "order, OBSERVED 4 of 5 live 784s", (kds, log[-300:]))
+              "order: the fall OBSERVED 4 of 5 live 784s, ahead of the Poison on the 2 that show one "
+              "(skills 60.3; the 2 that show none are CONTESTED there)", (kds, log[-300:]))
         st, (sent, send) = _world(), _sender()
         _press_and_land(st, send, S_SIGNET, FOE)
         kds = kd_words(sent)

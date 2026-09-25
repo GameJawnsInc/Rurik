@@ -2475,7 +2475,10 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "term that is the TIER's only (a hand row on that path "
                          "keeps its pre-pass shape: Earthquake under "
                          "--no-spell-areas) -- retail's 784 completion carries "
-                         "[63, target, 2.0] ahead of the Poison, OBSERVED 4 of 5.")
+                         "[63, target, 2.0] on 4 of 5 live casts (the fifth's "
+                         "target died first), ahead of the Poison on the 2 that "
+                         "show one; the other 2 landed casts show NO Poison on a "
+                         "clean target (CONTESTED, skills 60.3).")
     ap.add_argument("--no-condition-flat-constants", action="store_true",
                     help="skill_condition refuses every bit-clear slot again, "
                          "as until 2026-09-25: the default reads a bit-clear "

@@ -8618,7 +8618,8 @@ non-attack (retail's one witness is an attack); whether 784's Poison lands on re
 met lead (the five witnesses are announcements; the completion's words were not scored);
 what a monster's party is. **Owed:** a body chain (so a body's 784 can land after its own
 782, as retail's did 5 of 5); §59.5's client run. (The 784 completions' knock-down IS
-re-measured in §60.3: 4 of 5 carry `[63, target, 2.0]` ahead of the Poison.)
+re-measured in §60.3: 4 of 5 carry `[63, target, 2.0]`, ahead of the Poison on the 2 that
+show one — and 2 of the 4 show no Poison at all, CONTESTED there.)
 
 ---
 
@@ -8629,8 +8630,8 @@ DESKWORK-D4's residue per skill, pass 2 — the next three items of §59.6's lis
 order of cheapness: the condition rider on episodes (six rows), the marked knock-down
 clauses (seven rows), a flat-constant reader in `skill_condition` (two rows). Build 38797,
 snapshot `vault/client/2026-07-29_221c13772c7a`. Locks: `toolkit/authsrv/test_labelconsumers.py`
-§6–§8 + §5c (66 bare + 3 skips; 70 + 1 skip with the vault's 57-row overlay; 73 with the
-60-row emit), `toolkit/clientscan/test_skilldesc.py` §1b + §3 (91 bare + 1 skip; 162 with the
+§1 + §6–§8 + §5c (70 bare + 3 skips; 74 + 1 skip with the vault's 57-row overlay; 77 with the
+60-row emit — four of them the fix pass's, §60.8), `toolkit/clientscan/test_skilldesc.py` §1b + §3 (91 bare + 1 skip; 162 with the
 vault and the emit), `toolkit/authsrv/test_skilldamage.py` §14 (86 with the emit),
 `toolkit/test_content.py` (58), `toolkit/authsrv/test_effects.py` (85), `test_guards.py` (45),
 `test_weapons.py` (276 — its `--no-spell-areas` arm is what scoped the single-target
@@ -8647,10 +8648,10 @@ into ON-HIT riders (435, 926, 1997), an ON-STRUCK rider (113) and two stances wh
 lands at the activation (1041, 2136); (b) all seven knock-down clauses unconditional, with
 192's shower duration the one trap; (c) 167 a flat 10/10 the reader takes and 1033 still
 refused. The templates (read at run time, `--row`; none carried): **2136 is NOT at the
-activation** — its Blind sits inside "the next time you are struck", an on-struck rider;
-**926's episode never opens here** — its duration is 5..30 with the bit clear, §12's
-INDETERMINATE shape, so a rider on it would ride nothing; **3425's knock-down is
-QUALIFIED** ("knocks down attacking foes"), a foe state the server cannot test; the rest
+activation** — its Blind sits inside the on-struck clause (the next strike on the wearer),
+an on-struck rider; **926's episode never opens here** — its duration is 5..30 with the bit
+clear, §12's INDETERMINATE shape, so a rider on it would ride nothing; **3425's knock-down
+is QUALIFIED** (attacking foes only), a foe state the server cannot test; the rest
 held. The corpus prediction (435 likeliest to be FOUND) was wrong too: none of the six is
 on any tape.
 
@@ -8675,22 +8676,25 @@ EPISODE governs the sentence (it holds a DURATION-labelled slot, or opens with a
 "attacks" (none = `any`). Each row, its record and its ruling (RECONSTRUCTION throughout;
 the corpus holds none of the six, §60.5):
 
-| id | type | byte | `aoe` | duration | the condition's sentence (read, not carried) | ruling |
+| id | type | byte | `aoe` | duration | the condition's sentence, as a SHAPE (read at run time; no clause carried — §60.8 #4) | ruling |
 |---|---|---|---|---|---|---|
-| 435 | Preparation | 0 | 0 | 24/24 flat | foes struck by YOUR PHYSICAL attacks become Poisoned; governed by a literal 24 s | **SHIPS**, `condition_rider = on_hit`, `rider_weapon = physical`, mark `CONDITION_RIDER_ON_HIT` |
-| 1997 | Enchantment | 3 | 0 | 5..20 | target ALLY's MELEE attacks cause Weakness; governed | **SHIPS**, `on_hit` / `melee`; the enchantment goes on the ally (byte 3, `effect_recipient`), the rider on the ALLY's hits |
-| 926 | Enchantment | 0 | 0 | 5..30, bit CLEAR | your DAGGER attacks cause Bleeding; governed | stays out, `EPISODE_REFUSED` — `effects.resolve_duration` refuses the pair (§12), so the episode never opens and the rider would ride nothing; the dagger class has no reader either (`CONDITION_RIDER_CLASS` would take it next) |
-| 1041 | Stance | 0 | 156 | 10..30 | ALL ADJACENT FOES are Blinded — its OWN sentence, ungoverned, no attack word; then "for N seconds you cannot be blocked" | **SHIPS** at the ACTIVATION through the caster arm: `AREA_CASTER` (the predicate widened to episode types, §60.2), the unblockable clause marked `CLAUSE_UNBLOCKABLE` (a new flag) |
-| 2136 | Stance | 0 | 156 | 8/8 | the NEXT TIME YOU ARE STRUCK you take half damage and all adjacent foes are Blinded; governed | stays out, `CONDITION_ON_EPISODE` — an on-struck rider, once, with a half-damage clause: two consumers the server lacks |
-| 113 | Enchantment | 3 | 312 | 20..44 | allies in the area are immune to Disease and ANYONE STRIKING those allies in melee becomes Diseased; governed | stays out, `CONDITION_ON_EPISODE` — an on-struck rider on an AREA of allies with an immunity: three consumers the server lacks |
+| 435 | Preparation | 0 | 0 | 24/24 flat | on-hit: the wearer's PHYSICAL attacks Poison what they strike; the sentence governed by a literal 24 s | **SHIPS**, `condition_rider = on_hit`, `rider_weapon = physical`, mark `CONDITION_RIDER_ON_HIT` |
+| 1997 | Enchantment | 3 | 0 | 5..20 | on-hit: the target ALLY's MELEE attacks Weaken; governed | **SHIPS**, `on_hit` / `melee`; the enchantment goes on the ally (byte 3, `effect_recipient`), the rider on the ALLY's hits — and on the caster's SIDE only (§60.2, the fix pass) |
+| 926 | Enchantment | 0 | 0 | 5..30, bit CLEAR | on-hit: the wearer's DAGGER attacks Bleed; governed | stays out, `EPISODE_REFUSED` — `effects.resolve_duration` refuses the pair (§12), so the episode never opens and the rider would ride nothing; the dagger class has no reader either (`CONDITION_RIDER_CLASS` would take it next) |
+| 1041 | Stance | 0 | 156 | 10..30 | at the activation: a Blind on ALL ADJACENT FOES in a sentence of its OWN, ungoverned, no attack word; then the stance's own governed sentence with its unblockable clause | **SHIPS** at the ACTIVATION through the caster arm: `AREA_CASTER` (the predicate widened to episode types, §60.2), the unblockable clause marked `CLAUSE_UNBLOCKABLE` (a new flag) |
+| 2136 | Stance | 0 | 156 | 8/8 | on-struck: the NEXT strike on the wearer halves its damage and Blinds the adjacent foes, once; governed | stays out, `CONDITION_ON_EPISODE` — an on-struck rider, once, with a half-damage clause: two consumers the server lacks |
+| 113 | Enchantment | 3 | 312 | 20..44 | on-struck: the allies in the area are immune to Disease and a MELEE strike on them Diseases the striker; governed | stays out, `CONDITION_ON_EPISODE` — an on-struck rider on an AREA of allies with an immunity: three consumers the server lacks |
 
 Two more rules fell out and both are tested on synthetic rows because the corpus has no
 case for them on this build: rider wording on a NON-episode type is refused
 (`CONDITION_RIDER_NO_EPISODE` — the at-cast consumer would inflict it at the cast; 0 plain
 rows carry it), and an on-hit rider whose class has no reader is refused
 (`CONDITION_RIDER_CLASS`; 926 is caught one rule earlier). The whole corpus, for scale:
-of the 215 condition slots, 4 are on-hit riders (physical, dagger, melee, and one "next"
-— "your next attack", outside the plain set), 3 on-struck, the rest neither.
+of the 216 condition-slot occurrences (212 distinct (id, slot) pairs), 5 are on-hit riders
+— 435 physical, 926 dagger, 1997 melee, 2199 "next" (the wearer's next attack) and 1518
+unqualified (`any`), the last two RECOGNISED and outside the plain set — 3 are on-struck
+(113, 2136, and 983, RECOGNISED), the rest neither. (The first write-up said 215 and 4;
+the fix pass re-counted, §60.8 #6.)
 
 ### 60.2 SKILLS-LV2 — the on-hit rider consumer, and the caster arm widened to a Stance
 
@@ -8716,6 +8720,21 @@ every landed attack. A body with no item row, or an item with no 587 word, is re
 LESS than retail, said at the banner. NOT modelled, named: a scythe's extra targets
 (`scythe_extra_hit`) take no rider. `--no-condition-riders` reverts to the excluded state:
 the episode opens (icon and timer) and no hit carries a condition.
+
+**The SIDE (the fix pass, §60.8 #1 — the reviewers' RV-1).** A rider rides the wearer the
+template names: the caster's own attacks (435) or the target ALLY's (1997). So
+`episode_condition_riders` refuses an episode whose wearer is neither its recorded caster
+nor one of that caster's living allies (`allies_of`). This is needed because
+`effect_recipient` honours byte 0 only and places a byte-3 enchantment aimed at a FOE on
+that foe — an inert icon, the shape every byte-3 row wore before this pass and not moved
+here — and without the rule the foe's own axe hits carried 1997's Weakness back at the
+caster's party, a new over-application (retail never places an ally enchantment on a foe;
+`skillread.cast_recipient` says an ally spell aimed at a foe self-targets, but
+`apply_effect` never asks it). An episode with no caster recorded, or whose caster's row
+has left the table, rides nothing — LESS, said. `test_labelconsumers` §6 presses 1997's
+shape at a hostile and reads its swing: the episode on the hostile (the vacuity guard —
+the reader had one to refuse), no Weakness on the player, the reader answering `[]`; the
+positive controls (a hero wearing the player's cast; a hostile wearing its ally's) stand.
 
 **1041 through the caster arm.** `caster_area_row` now admits an EPISODE type beside a
 Spell (byte 0, a radius, no projectile). It is still the flag-free record predicate the
@@ -8745,7 +8764,7 @@ or the caster area). The mark `KNOCKDOWN_APPLIED` replaces `CLAUSE_KNOCKDOWN` on
 | 187 | Spell | 16 | 0/0 | foe | **`knocks_down`** — `burst_player_spell` / `burst_body_spell` read it |
 | 1086 | Spell | 16 | 0/0 | foe | **`knocks_down`** — the same burst arms |
 | 231 | Skill | 5 | 0/0 | foe | **`knocks_down`** — the single-target term (below) |
-| 294 | Signet | 5 | 0/0 | foe | **`knocks_down`** — "target foe is knocked down; that foe and all adjacent foes take damage": the one-target path knocks down exactly the foe retail names |
+| 294 | Signet | 5 | 0/0 | foe | **`knocks_down`** — the target alone is knocked down, then it and the adjacent foes take the damage: the one-target path knocks down exactly the foe the template names |
 | 784 | Spell | 5 | 0/0 | foe | **`knocks_down`** — behind the chain gate; OBSERVED below |
 | 192 | Spell | 16 | 9/9 | foe | stays `CLAUSE_KNOCKDOWN`: a TIMED record (its 9 s shower; ONE_TARGET + DURATION_UNMODELLED besides) |
 | 3425 | attack | 5 | 0/0 | qualified | stays `CLAUSE_KNOCKDOWN`: "attacking foes" is a foe state the server does not test |
@@ -8763,21 +8782,33 @@ promised hand rows would not — so the term reads the row's tier first.
 path, and with the term scoped that flag reverts every fall this pass added and nothing
 else; the hand rows' (Hammer Bash, Heavy Blow, Earthquake's burst) stand.
 
-**OBSERVED — retail's 784 completion, 4 of 5 live casts (TAPE; the scan re-derived with
-the repo's own decoder, 96 connections; the instrument's positive controls read 185: 27
-and 780: 31, the fix pass's numbers to the announcement):** `[58, caster, 0]`, `[20,
-target, caster, 937]` (the impact), **`0x00A2 [63, target, 2.0]`**, `[6, target, 27]`, the
-status word `0x00F1 [target, 67]` and the degeneration `[44, target, −x]` — all in one
-batch 0.99–1.02 s after the announce (`20260819T132414` at 182.103 / 235.789 / 259.798 on
-agent 30; `20260913T210901` at 703.527 on agent 17). So a Spell's knock-down is
-**2.0 s = `KNOCK_DOWN_SECONDS`** and it comes **BEFORE the condition**, and a foe's
-Poison is NOT a `0x0042` on the wire — it rides the status word and property 44, which is
+**OBSERVED — retail's 784 completion (TAPE; the scan re-derived with the repo's own
+decoder, 96 connections; the instrument's positive controls read 185: 27 and 780: 31, the
+fix pass's numbers to the announcement; restated by the fix pass, §60.8 #2, after a
+reviewer read the batches the first write-up had summed).** Five live casts, every one
+announced by a body 1.0 s before its completion (`20260819T132414` at 182.103 / 235.789 /
+259.798 on agent 30; `20260913T210901` at 656.460 and 703.527 on agent 17). **The FALL is
+OBSERVED 4 of 5:** `[58, caster, 0]`, `[20, target, caster, 937]` (the impact) and
+**`0x00A2 [63, target, 2.0]`** in one batch 0.99–1.02 s after the announce — so a Spell's
+knock-down is **2.0 s = `KNOCK_DOWN_SECONDS`**; the fifth (656.460) landed on nothing: its
+target 34 died 0.85 s after the announce to agent 9's hit, and the caster's `[59, 17, 0]`
+closed the cast at +0.999 with no 58. **The POISON shows on 2 of those 4** — at 182.103
+(target 36) and 703.527 (target 22) the same batch continues `[6, target, 27]`, the status
+word `0x00F1 [target, 67]` and the degeneration `[44, target, −x]` — **so
+fall-BEFORE-condition is OBSERVED 2 of 2 where a condition is visible**, and a foe's
+Poison is NOT a `0x0042` on the wire: it rides the status word and property 44, which is
 what `effect_list_send` already does for a foe (MANTID) and why the corpus holds only 10
-Poison applies on 3 (capture, agent) pairs. The fifth cast (`20260913T210901` at 656.460)
-landed on nothing: its target 34 died 0.85 s after the announce to agent 9's hit, and the
-caster's `[59, 17, 0]` closed the cast at +0.999 with no 58. The ORDER for a damage row
-(231, 294: the word, then the fall) is RECONSTRUCTION — `burst_body_spell`'s order; no
-tape holds a 231 or a 294.
+Poison applies on 3 (capture, agent) pairs. **CONTESTED — the other 2 landed casts put no
+visible Poison on a clean target:** at 235.789 (target 217) and 259.798 (target 194) the
+batch is the fall alone, with no property 6, no `0x00F1` and no property 44 for the target
+out to +3.5 s (217's next status word is its death at +2.326; 194's is none), and the
+same connection had sent `0x00F1 [217, 0]` at −0.959 and `[194, 0]` at −0.344, so both
+were clean and the observer was receiving their status words. Why retail's 784 Poisons
+one target and not the next is NOT FOUND here (the template is plain — the gate ships it
+unconditional — and nothing in the batch names a refusal); the server's always-Poison land
+on a met lead is therefore CONTESTED by 2 of 4, recorded in §60.7 and left for the
+per-skill residue. The ORDER for a damage row (231, 294: the word, then the fall) is
+RECONSTRUCTION — `burst_body_spell`'s order; no tape holds a 231 or a 294.
 
 ### 60.4 SKILLS-LV4 — the flat-constant condition slot: 167 lands its Blind, 1033 stays refused
 
@@ -8824,19 +8855,25 @@ the rows that carry them at load (§59.7 #3's guard) — 187 231 294 784 1086 16
 
 **The corpus search (owed evidence; the tool is a scratch scan over
 `livewire.live_captures` + `deepwoundjoin.sequence`, every one of the 96 connections
-framing whole).** Announcements: 784 ×5 (§60.3), **113 435 926 1041 1997 2136 187 192
-231 294 1086 3425 167 1033 — 0 each, NOT FOUND**, as announcement, E3 or E5; the positive
-controls 185 ×27, 780 ×31 (+782 ×37) — the first cut of the scan indexed the decoded
-values one place off and read 0 for the controls too, which is what a blind instrument
-looks like, and was thrown away. The knock-down of every 784 was read from the same
-tapes with the same decoder.
+framing whole).** The channels read, each with a positive control on the same tapes
+(the fix pass named them, §60.8 #7 — the pass's first instrument read the cast announce
+and E3/E5 only, which cannot see a STANCE, §56.2): the cast announce `0x00A0 [60|50,
+caster, target, skill]` (controls 185 ×27, 780 ×31, 782 ×37), the INSTANT announce
+`0x009F [48, caster, skill]` (control: by the loaded type code, Stance 64 / Shout 67 /
+type-16 2 — §56.2's own figures), `0x00E3` / `0x00E5` (780: 26 / 38, 782: 17 / 17) and
+the `0x0042` apply by skill. Findings: 784 ×5 as a cast announce (§60.3); **113 435 926
+1041 1997 2136 187 192 231 294 1086 3425 167 1033 — 0 each on every channel, NOT FOUND**
+(the two stances on the instant channel included). The first cut of the scan indexed the
+decoded values one place off and read 0 for the controls too, which is what a blind
+instrument looks like, and was thrown away. The knock-down of every 784 was read from the
+same tapes with the same decoder.
 
 ### 60.6 Regeneration, what the merge owes, and the owed client confirmation (a runsheet, not a run)
 
 ```
 python toolkit/clientscan/skilldesc.py --emit-labels        # AT THE MERGE, on main: -> vault/content/skill_labels.toml (60 rows)
 python toolkit/clientscan/test_skilldesc.py                 # 162 with the vault; the on-disk arm is red until that emit lands
-python toolkit/authsrv/test_labelconsumers.py               # 72 once the marks are loaded (69 + a declared skip before)
+python toolkit/authsrv/test_labelconsumers.py               # 77 with the 60-row emit loaded (74 + a declared skip on the vault's 57 rows; 70 + 3 skips bare)
 ```
 
 The order rule of §59.5 stands (regenerate from `main`, after every live tree has merged
@@ -8844,21 +8881,29 @@ it); this pass's emit is staged beside its tests, and a tree older than it drops
 nine rows above rather than serving them (`CONTENT DROPPED:` at startup).
 
 **OWED: the client confirmation.** Not run this pass (no client). Prediction first, each
-with its A/B: **(1)** 435 pressed by a Ranger holding the starter bow, then one auto-attack
-on the practice target: the E5 opens the preparation (its icon on the player, nothing on
-the target), and the ARROW's landing puts Poison on the target — the log line `the player's
-landed attack carries skill 435's Poison (3s) on agent N: the open episode's rider on a
-physical attack [SKILLS-LV]`, the target's status word carrying Poison; under
-`gamesrv_args = ["--no-condition-riders"]` the icon and no Poison; with a WAND equipped
-instead, the icon and no Poison (the class). **(2)** 231 at a Skill's rank 0 on the
-practice target: the word −10 (before armour) then `[63, target, 2.0]` — the target falls
-for two seconds on screen; under `["--no-label-knockdowns"]` the word alone. **(3)** 167
-(Earth Magic, rank 0) on the target: earth 10 then the target Blinded 10 s (the icon over
-it, its status word); under `["--no-condition-flat-constants"]` the word alone. And the
-tier's own control, `["--no-skill-labels"]`, for each: nothing. Specs for the three are
-staged beside this pass's emit; `skill:ID` is the harness's mailbox for a player cast
-(`--enemy` spawns a caster Hatcher — `--no-enemy-skills` or `--enemy-weapon` for a plain
-target).
+with its A/B — **numbered from the staged specs' own attribute ranks** (the fix pass, §60.8
+#3: the first write-up predicted rank-0 numbers against specs that set
+`player_attributes`, so a correct run would have looked like a refutation; re-derived with
+`player_rank_for_skill` / `skill_damage` / `_condition_terms` on the emit): **(1)**
+`lv_rider` — a Ranger at Wilderness Survival 3, the starter bow: 435 pressed, then one
+auto-attack on the practice target. The E5 opens the preparation (its icon on the player,
+nothing on the target), and the ARROW's landing puts Poison on the target for **5 s** (rank
+3) — the log line `the player's landed attack carries skill 435's Poison (5s) on agent N:
+the open episode's rider on a physical attack [SKILLS-LV]`, the target's status word
+carrying Poison; under `gamesrv_args = ["--no-condition-riders"]` the icon and no Poison;
+with a WAND equipped instead, the icon and no Poison (the class); under
+`["--no-skill-labels"]` **the icon still opens** (the preparation is the skills RECORD's,
+`apply_effect` needs no row) **and no Poison**. **(2)** `lv_kd` — an Elementalist at Air
+Magic 3 / Fire Magic 2: 231 on the practice target from adjacent (a touch): the word **20**
+lightning before armour, then `[63, target, 2.0]` — the target falls for two seconds on
+screen; then 187 with the target adjacent: **21** fire and the fall (the burst arm reads
+the same field); under `["--no-label-knockdowns"]` the words alone; under
+`["--no-skill-labels"]` no word and no fall (no row). **(3)** `lv_flat` — an Elementalist
+at Earth Magic 3: 167 on the target: earth **16** before armour, then the target Blinded
+10 s (the icon over it, its status word); under `["--no-condition-flat-constants"]` the
+word alone; under `["--no-skill-labels"]` nothing. Specs for the three are staged beside
+this pass's emit; `skill:ID` is the harness's mailbox for a player cast (`--enemy` spawns
+a caster Hatcher — `--no-enemy-skills` or `--enemy-weapon` for a plain target).
 
 ### 60.7 What this refutes or changes, and what is next
 
@@ -8872,9 +8917,18 @@ target).
   field; 192 is a timed shower and 3425 a qualified class, and neither is a knock-down the
   server can honour without over-applying.
 - **Changed: `KNOCK_DOWN_SECONDS` for a Spell's knock-down is OBSERVED**, not only the
-  wiki's (§60.3, 4 of 5) — and a foe's condition is the status word on retail's wire, which
-  `effect_list_send`'s MANTID rule already produces.
-- **Open, per skill (the residue, in order of cheapness):** 770's ally-centred adjacency
+  wiki's (§60.3: the fall 4 of 5, ahead of the Poison on the 2 completions that show one)
+  — and a foe's condition is the status word on retail's wire, which `effect_list_send`'s
+  MANTID rule already produces. **CONTESTED beside it (the fix pass, §60.8 #2): 2 of the 4
+  landed 784s put no visible Poison on a clean target** — the server's always-Poison land
+  after a met lead has retail against it half the time, for a reason the tapes do not name.
+- **Refuted (the fix pass, §60.8 #1): "the rider rides whoever wears the episode".** A
+  byte-3 rider aimed at a FOE is worn by the foe (`effect_recipient`), and the first cut let
+  the foe's hits carry the caster's condition back at the caster's party. The rider rides
+  the caster's SIDE — the caster or its living allies — and nothing else (§60.2).
+- **Open, per skill (the residue, in order of cheapness):** 784's always-Poison land
+  against the 2 of 4 live completions that show none (§60.3 — a body chain, then a
+  re-read of the batches); 770's ally-centred adjacency
   (1); an ON-STRUCK rider (2136, and 113 with its area of allies and its immunity); 926 on a
   client tooltip run (its 5..30 is one of the 141 INDETERMINATE slots — §54.3); byte 1's
   three heals (918 1032 1354) and its resolution (769 917 1468); 292's percent-of-loss heal;
@@ -8890,7 +8944,41 @@ CAST, or on a hit by a weapon outside the class the sentence names, or on a hit 
 missed (the rider's whole claim); a 1041 whose Blind lands later than the activation, or on
 foes around the target rather than the caster; a knock-down word on a 231 / 294 / 1086
 completion with a length other than 2.0 s, or AFTER a condition on a row that carries one
-(the 784 order is the family's until a second row is read); a foe's `0x0042` apply on
+(the 784 order is the family's until a second row is read — 2 of 2 where the condition
+shows); a 1997 whose Weakness rides a FOE's hits after the enchantment was aimed at that
+foe (the side rule's whole claim); a foe's `0x0042` apply on
 retail's wire (the status-word reading was 10 applies on 3 pairs, all on the observer's
 side); 167's tooltip printing a Blind other than 10 s; a shipped row whose template a
 person reads as firing on someone else — §55.3's standing weakness, unchanged.
+
+### 60.8 SKILLS-LV6 — the fix pass: what the reviewers refuted, and how each is answered (2026-09-25)
+
+Two reviewers read pass 2 (an evidence refuter and an engineering reviewer); every finding
+below was re-derived on this tree before it was acted on — the batches with the repo's own
+decoder (a fresh window scan to +3.5 s around each 784 completion), the templates at run
+time only, the mechanism by reading `apply_effect` → `effect_recipient`, the counts by
+re-running the census. Locks: `test_labelconsumers` (+4, floor 66 → 70 from the bare run:
+70 + 3 skips; 74 + 1 skip on the vault's overlay, 77 with the emit), `test_skilldesc`
+(fixtures rewritten, counts unchanged: 91 + 1 skip bare, 162 with the emit). Each new check
+was shown to redden by one mutation of the thing it guards, on a scratch copy.
+
+| # | finding | verdict on this tree | answer |
+|---|---|---|---|
+| 1 | **MAJOR** (engineer): 1997's shape pressed with a FOE selected puts the enchantment on the foe (`effect_recipient` honours byte 0 only; `cast_recipient`'s self-target rule is never asked by `apply_effect`), and the rider consumer then arms the foe's melee hits with Weakness against the player — new over-application; before this pass the foe wore an inert icon | **CONFIRMED** — the reviewer's probe reproduced on this tree: the episode on the foe, the axe swing Weakening the player | the rider rides the caster's SIDE: `episode_condition_riders` refuses an episode whose wearer is neither its recorded caster nor one of the caster's living allies (`allies_of`); the misplaced icon is left where every byte-3 row put it before (moving it is a different change with its own flag). Tested: the press at a hostile, its swing, the reader's `[]`; the mutation dropping the guard reddens it; the two positive controls (a hero wearing the player's cast, a hostile wearing its ally's) stand |
+| 2 | **MAJOR** (refuter): "fall then Poison, OBSERVED 4 of 5" summed four batches of which only two carry a Poison; the other two are a fall on a clean target with no condition to +3 s, which contests the always-Poison land and went unreported | **CONFIRMED** — re-derived here to +3.5 s: 182.103 and 703.527 carry `[6]`, `0x00F1 [t, 67]`, `[44]`; 235.789 and 259.798 carry the fall alone after `0x00F1 [t, 0]` | restated everywhere (§60.3, §60.7, the three call-site comments, `serverargs`' help, the test's message, the PLAN-LOG entry): the fall 4 of 5; fall-before-Poison 2 of 2 where a Poison shows; CONTESTED 2 of 4 with no Poison on a clean target, an open item for the residue |
+| 3 | **MAJOR** (refuter): the runsheet's predictions were rank-0 numbers while the staged specs set attributes (`player_attributes` → `player_rank_for_skill`): 435 rank 3 → Poison 5 s, 231 rank 3 → 20, 187 rank 2 → 21, 167 rank 3 → 16; and under `--no-skill-labels` 435's icon still opens (the preparation is the record's) | **CONFIRMED** — re-derived with `skill_damage` / `_condition_terms` on the emit and a press with no row | §60.6 and the returned runsheet predict from the specs' ranks; the tier arm for 435 predicts the icon and no Poison |
+| 4 | minor (engineer): six `condition_rider` / `sentence_governed` fixtures and the unblockable fixture were template clauses verbatim (after lower-casing and slot replacement), labelled "our own sentences"; the readings comment in `skilldesc.py`, two `authsrv.py` comments and §60.1's sentence column carried the same clauses | **CONFIRMED** — compared locally against the normalised templates | the fixtures are INVENTED sentences that trip the same regexes (each rider regex mutated out on a copy reddens the check); the comments and §60.1's column say the SHAPE keyed by id; `TESTS.md` says so |
+| 5 | minor (engineer): no bare test could redden the `caster_area_row` widening (only 5c with a fresh emit) or `hit_enemy`'s `never a corpse` guard | **CONFIRMED** — the reviewer's mutations M1 / M12 left the bare run green | §1 drives 1041's shape (a synthetic byte-0 Stance over 156 u with a Blind slot, `AREA_CASTER`) through the predicate and the real E5 — Blind on both adjacent hostiles, none on the far selected one or the ally, then the stance on the player, the Blind ahead of it in the log; §6 a killing blow with the preparation open leaves no Poison on the corpse (`apply_condition` does not refuse a corpse on its own, so the guard is load-bearing). Both reddened bare under M1 / M12 |
+| 6 | nit (refuter): §60.1 said 215 condition slots and 4 on-hit riders; the census gives 216 (212 distinct) and 5 — 1518's unqualified rider was left out; §60.6's code block said 72 / 69 + 1 | **CONFIRMED** — re-run | figures corrected; 1518 and 2199 named as RECOGNISED riders |
+| 7 | nit (refuter): the corpus instrument behind the stances' NOT FOUND read `0x00A0 [60|50]` + E3/E5 only and could not see a Stance (§56.2: `0x009F [48]`); a scan adding that channel and `0x0042` still finds 0 | **CONFIRMED** — the reviewer's scan re-run on this tree: the `0x009F [48]` control reproduces §56.2 (Stance 64, Shout 67, type-16 2), 0 for 1041 / 2136 | §60.5 names every channel read with its control |
+
+**Declined: nothing.** The one alternative not taken as offered is #1's second option
+(opening byte-3 rider episodes on `cast_recipient`'s answer, so an ally spell aimed at a
+foe self-targets): that moves where EVERY byte-3 enchantment lands, which is a change to
+rows that already ship and wants its own flag and its own confirmation; the side guard is
+the rider's own and touches nothing else.
+
+**What is still RECONSTRUCTION after this pass, unchanged in kind:** the rider arm (no
+capture of 435 or 1997); the order word-then-fall for a damage row; why retail's 784 Poisons
+one clean target and not the next (CONTESTED, §60.3). **Owed:** §60.6's confirmation run
+with the corrected predictions; a body chain, then the 784 question.
