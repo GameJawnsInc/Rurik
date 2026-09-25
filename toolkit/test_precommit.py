@@ -311,7 +311,7 @@ def main():
                       "a blob over the size ceiling is refused under any extension",
                       str(big[0][2])[:70] if big else "not refused")
         finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+            _rmtree(tmp)
 
     # ---- 4. the wrapper, and that this clone has it installed --------------------------
     print("\n4. the wrapper git actually runs, and its installation here")
