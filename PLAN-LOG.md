@@ -28,6 +28,30 @@ move back.
 
 ---
 
+### DESKWORK pass 7, CONFIRMED on the client -- 2026-09-25 -- **the shout's bubble over the head, the 248 party at 5/8, the Leave emptying the party through the client's own `0x00A2` + `0x001F [40]`, the label knock-down on the ground, the Poison green on the targeting bar; a heroless sandbox spec crashes the server**
+
+The owner's go-ahead ran pass 7's runsheet on `main` `8c97d37f` (CONFIRM-2 §11, twelve scored
+launches). **SKILLS-IA**: the default arm draws a "Charge!" speech bubble over the player and no
+cast animation; `--no-instant-announce` brings back property 60, and with it the body's cast
+animation for a shout, which retail's instant skills never send; `--per-wearer-batch-order`
+interleaves as before. **The per-map cap**: 248 admits three hires to (5/8) under its own AreaInfo
+8; `--constant-party-cap` refuses the third at (4/8). **The Leave**: the party panel's Leave sends
+`0x00A2` then `0x001F [40]`, and our reply empties the party to (1/4), hero 3 included, with the
+henchmen still standing in town; under `--no-party-leave` the rows stay, so the client removes
+nothing itself. A field party's panel has no Leave button, so the field refusal is unreachable
+from the panel. At a full party the panel drops its "+" row and the buttons rise one row, which
+cost one launch. **SKILLS-LV**: 231's fall is on screen (the Hatcher down 0.6 s after the
+completion, up in the next frame) and 187's is in the log; 167's Blind makes the next swing miss;
+435's rider poisons every landed arrow, drawn as the TARGETING bar going green with the
+degeneration arrow (the owner's correction: the overhead model bar stays red, and the harness's
+`attack:N` selects nothing client-side -- press `c` first). Each flag's control changed only its
+own piece. **Found**: a sandbox spec with no heroes crashes `authsrv.py` at startup (`KeyError:
+'hero'`, the compiler writes no `heroes` key for an empty list); the runs patched the three
+overlays with `heroes = []`, and the fix is filed as its own task. Not run: the wand class arm,
+the tier arms, the hero's shout.
+
+---
+
 ### SKILLS-LV (DESKWORK-D4), the skill-label residue pass 2 -- 2026-09-25 -- **the on-hit condition rider (435, 1997), 1041 at its activation, five knock-down clauses as `knocks_down`, 167's flat Blind: 60 label rows (57 before); retail's 784 falls 2.0 s ahead of its condition, and its Poison is CONTESTED 2 of 4**
 
 **Branch desk-labels, b95a1632 + 65c904da + the fix pass 1c27ebe9; studies/skills/FINDINGS.md §60 (§60.8 the fix pass).** The next three items of §59.6's residue, in its order: **(1) the condition rider on episodes** — the six CONDITION_ON_EPISODE rows are three shapes the SENTENCE tells apart (`skilldesc.slot_sentences` / `condition_rider` / `sentence_governed`): an ON-HIT rider (the wearer's attacks) ships carrying `condition_rider = "on_hit"` and `rider_weapon` — 435 (physical) and 1997 (melee) — for `authsrv.episode_condition_riders`, which reads the ATTACKER's open episodes at the three landing seams (`hit_enemy`, `land_swing`, `land_swing_on_body`) and puts the condition on the foe the hit landed on, the class read off the attacker's ITEM (its 587 word for physical, its `[weapon_type]` delivery for melee; no item or no type line = nothing, less) — **and only on the caster's SIDE (the fix pass, §60.8 #1): the wearer must be the episode's caster or one of its living allies**, because `effect_recipient` places a byte-3 enchantment aimed at a FOE on that foe (an inert icon, unchanged) and the first cut let the foe's hits carry 1997's Weakness back at the caster's party; a rider row's `skill_condition` is None, so nothing lands at the cast. 926 stays out as `EPISODE_REFUSED` (its 5..30 bit-clear duration never opens); 113 and 2136 are ON-STRUCK riders and stay `CONDITION_ON_EPISODE`; 1041's Blind is in its own ungoverned sentence — AT the activation — and ships through the caster arm (`caster_area_row` admits an episode type; no hand or label row was such a record; now driven bare on a synthetic Stance) marked `AREA_CASTER` + the new `CLAUSE_UNBLOCKABLE`. **(2) the knock-down clauses** — an unconditional knock-down of the foe(s) the row lands on becomes the hand rows' own `knocks_down = true` (187 231 294 784 1086, marked `KNOCKDOWN_APPLIED`); 192 stays marked (a timed record: `skill_knock_down_seconds` would read its 9 s shower as the fall) and 3425 stays marked ("attacking foes", a foe state the server cannot test). `nonattack_knock_down` adds the single-target non-attack term at four sites — **the TIER's only**: the first cut took hand rows too and `test_weapons`' `--no-spell-areas` arm (Earthquake falling back to one target with no fall) went red, so the term reads the tier first and `--no-label-knockdowns` reverts every fall this pass added and nothing else. **(3) the flat constant** — `skill_condition` (through `_condition_terms`) reads a bit-clear slot with EQUAL endpoints via `skill_flat_constant`: 167's Blind 10 s lands (`CONDITION_FLAT_CONSTANT`); 1033's 5..20 stays refused (a tooltip run's, §54.3); a census of the loaded condition slots finds no hand row bit-clear. **60 = 131 − 10 − 61** (57 before), 49 of 60 marked, the same eleven unmarked; `content.LABEL_DETAILS_KNOWN` gains four tokens, so an older tree DROPS the nine rows that carry them rather than serving them. Three flags: `--no-condition-riders`, `--no-label-knockdowns`, `--no-condition-flat-constants`; `--no-skill-labels` still drops the tier.
