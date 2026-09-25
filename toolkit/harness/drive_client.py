@@ -326,6 +326,62 @@ MOUSEEVENTF_RIGHTUP = 0x0010
 MOUSEEVENTF_MOVE = 0x0001         # RELATIVE motion, and it generates an event
 MOUSEEVENTF_WHEEL = 0x0800
 WHEEL_DELTA = 120                 # one notch, as the API defines it
+# ABSOLUTE motion, for a drag that has to END on one inventory cell. A relative
+# MOUSEEVENTF_MOVE delta is run through the user's pointer speed and "enhance
+# pointer precision" acceleration before the pointer moves, so where it lands
+# is a function of the mouse settings -- harmless for a camera orbit, which
+# only wants motion, and wrong for a drop. With ABSOLUTE the dx/dy are the
+# destination itself, normalised 0..65535 over the screen; with VIRTUALDESK as
+# well, over the whole virtual desktop, so a multi-monitor desk with a monitor
+# LEFT of the primary (a negative SM_XVIRTUALSCREEN) still resolves. Added
+# 2026-09-25 with drag() and double_click().
+MOUSEEVENTF_ABSOLUTE = 0x8000
+MOUSEEVENTF_VIRTUALDESK = 0x4000
+# GetSystemMetrics indices: the virtual desktop's origin and size, the
+# rectangle Windows lets a pointer wander inside between the two clicks of a
+# double-click (SM_CXDOUBLECLK/SM_CYDOUBLECLK, 4 px by default), and the
+# rectangle a pressed pointer may move inside before Windows' own DragDetect
+# calls it a drag (SM_CXDRAG/SM_CYDRAG, 4 px by default).
+SM_CXDOUBLECLK, SM_CYDOUBLECLK = 36, 37
+SM_CXDRAG, SM_CYDRAG = 68, 69
+SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN = 76, 77
+SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN = 78, 79
+# Declared for the same reason the block above declares GetWindowRect: a
+# POINT* marshalled as a truncated int reads back garbage, and a 64-bit desk
+# would report the pointer somewhere it is not.
+user32.GetCursorPos.argtypes = [ctypes.POINTER(wintypes.POINT)]
+user32.GetCursorPos.restype = wintypes.BOOL
+user32.GetSystemMetrics.argtypes = [ctypes.c_int]
+user32.GetSystemMetrics.restype = ctypes.c_int
+user32.GetDoubleClickTime.argtypes = []
+user32.GetDoubleClickTime.restype = wintypes.UINT
+# PHYSICAL PIXELS FOR THE DURATION OF A DRAG. This interpreter carries no DPI
+# manifest, so its threads are DPI-UNAWARE and Windows VIRTUALISES what they
+# read: GetSystemMetrics, GetWindowRect, GetCursorPos and SetCursorPos all
+# speak a logical space scaled to the primary monitor. Injected ABSOLUTE
+# input is NOT virtualised per caller -- the 0..65535 pair is mapped over the
+# physical display surface (RECONSTRUCTION; not tested by injecting). On a
+# desk where every monitor shares one scale the two spaces coincide and the
+# question never arises; on a MIXED-DPI desk they differ, and the review of
+# 2026-09-25 MEASURED this one: two monitors, the primary 1920x1080 at 96 DPI,
+# the secondary at 120 DPI, and GetSystemMetrics(SM_CXVIRTUALSCREEN) answers
+# 3456 to an unaware thread and 3840 to a per-monitor-aware one. A drag that
+# normalised over 3456 and was mapped over 3840 would put every move 11 % too
+# far right: LEFTDOWN on the wrong slot, LEFTUP several cells past the
+# target. So drag() and double_click() switch THIS THREAD to
+# PER_MONITOR_AWARE_V2 before the first read and restore the previous context
+# in a finally: every figure they read is then physical, the same space the
+# injected input is mapped over, and the logical-vs-physical question cannot
+# arise either way. Windows 10 1607+ has the call; where it is missing the
+# verbs proceed unaware and say so once. click()/hover() only warp with
+# SetCursorPos, which is virtualised consistently with GetWindowRect, so they
+# are left alone.
+DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4
+try:
+    user32.SetThreadDpiAwarenessContext.argtypes = [ctypes.c_void_p]
+    user32.SetThreadDpiAwarenessContext.restype = ctypes.c_void_p
+except AttributeError:                     # pre-1607 Windows: no such export
+    pass
 
 
 # ---------------------------------------------------------------- safety ----
@@ -742,6 +798,413 @@ def orbit(hwnd, pid, dx, dy, steps=12):
     finally:
         user32.mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, None)
     return True
+
+
+# ------------------------------------------------- drag and double-click ----
+# Added 2026-09-25 for the town armour runsheet (A1-A3): "drag the helm from
+# the doll's head slot to a free backpack cell" and "double-click the helm in
+# the backpack to equip it". Until then the harness could single-click
+# (click), hover (hover) and right-drag the camera (orbit), and none of the
+# three can carry an item or equip one. WHETHER THE GUILD WARS CLIENT ACCEPTS
+# THESE AS A DRAG AND A DOUBLE-CLICK IS UNVERIFIED until a client run: the
+# unit tests pin the API and the event shapes, and only the client can say the
+# helm moved. That is the same position orbit() was in on 2026-08-11, and the
+# lesson from that day is built in below -- every motion is a real input event.
+
+def _virtual_desk():
+    """(left, top, width, height) of the virtual desktop, or None.
+
+    The space an ABSOLUTE|VIRTUALDESK move normalises over. Read fresh per
+    call rather than cached: a monitor plugged in mid-session changes it, and
+    a stale width would put every drop one monitor's worth of pixels off.
+    """
+    vx = user32.GetSystemMetrics(SM_XVIRTUALSCREEN)
+    vy = user32.GetSystemMetrics(SM_YVIRTUALSCREEN)
+    cx = user32.GetSystemMetrics(SM_CXVIRTUALSCREEN)
+    cy = user32.GetSystemMetrics(SM_CYVIRTUALSCREEN)
+    if cx <= 0 or cy <= 0:
+        return None
+    return vx, vy, cx, cy
+
+
+def normalise_point(x, y, desk):
+    """Screen pixel -> the 0..65535 pair an ABSOLUTE|VIRTUALDESK move takes.
+
+    Windows turns a normalised value back into a pixel as (n * width) / 65536,
+    truncated. RECONSTRUCTION: the mapping is documented as "0 is the left
+    edge and 65535 the right"; the rounding is not, and this file does not
+    read win32k. So the pixel's own share, (px * 65536) // width, can fall one
+    short on the way back whenever that division was inexact, and the +1 is
+    what lands on px -- under truncation AND under rounding, because the
+    excess is width / 65536 of a pixel, under one for any desk narrower than
+    65536 px. That is the standard trick, and it is why the figure is not
+    px * 65535 / width. The origin is subtracted first, so a monitor to the
+    LEFT of the primary (a negative SM_XVIRTUALSCREEN) normalises correctly:
+    the pixel x=0 is not the desk's left edge on such a desk. Clamped, because
+    a point outside the desk is not one the caller meant. drag() reads the
+    pointer back afterwards regardless, so an off-by-one that survives this
+    is corrected rather than trusted.
+    """
+    vx, vy, cx, cy = desk
+    nx = (int(x) - vx) * 65536 // cx + 1
+    ny = (int(y) - vy) * 65536 // cy + 1
+    return max(0, min(65535, nx)), max(0, min(65535, ny))
+
+
+def _move_absolute(x, y, desk):
+    """One REAL input event that puts the pointer on screen pixel (x, y)."""
+    nx, ny = normalise_point(x, y, desk)
+    user32.mouse_event(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE
+                       | MOUSEEVENTF_VIRTUALDESK, nx, ny, 0, None)
+    return nx, ny
+
+
+def _place_pointer(x, y, desk):
+    """Warp the pointer to (x, y) AND tell the client it arrived.
+
+    SetCursorPos alone is orbit()'s scar: it moves the pointer and synthesises
+    no input event, so a client that hit-tests on mouse motion never learns
+    which slot is now under it. The absolute move at the same point IS the
+    event; the warp first means the move is a zero-length one on the desk,
+    which the client still receives as motion to that point.
+    """
+    user32.SetCursorPos(int(x), int(y))
+    return _move_absolute(x, y, desk)
+
+
+def _pointer():
+    """Where the pointer really is, or None if Windows would not say."""
+    pt = wintypes.POINT()
+    if not user32.GetCursorPos(ctypes.byref(pt)):
+        return None
+    return pt.x, pt.y
+
+
+def _physical_pixels(verb):
+    """Put THIS THREAD in per-monitor-v2 DPI awareness; return what to restore.
+
+    See the comment at DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2. None means
+    there is nothing to restore -- the export is missing (pre-1607 Windows)
+    or the switch failed -- and the verb proceeds in the unaware space, said
+    once, because on a mixed-DPI desk that space is the wrong one.
+    """
+    fn = getattr(user32, "SetThreadDpiAwarenessContext", None)
+    prev = fn(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) if fn else None
+    if not prev:
+        print(f"  {verb}: SetThreadDpiAwarenessContext unavailable -- the "
+              f"pointer figures below are the DPI-UNAWARE ones, which differ "
+              f"from the physical desk on a mixed-DPI desk", flush=True)
+    return prev
+
+
+def _restore_dpi(prev):
+    if prev:
+        user32.SetThreadDpiAwarenessContext(prev)
+
+
+def _still_foreground(pid):
+    """The mid-gesture focus re-check, hold_key's: READ only, never raise."""
+    fg = user32.GetForegroundWindow()
+    owner = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(fg, ctypes.byref(owner))
+    return owner.value == pid
+
+
+def _off(where, x, y, tol=1):
+    """True if `where` (a pointer read, or None) is not within `tol` px of (x, y)."""
+    return where is None or abs(where[0] - x) > tol or abs(where[1] - y) > tol
+
+
+def drag(hwnd, pid, fx0, fy0, fx1, fy1, seconds=0.6, steps=None):
+    """LEFT-drag from one window fraction to another, and say where it ended.
+
+    Fractions rather than pixels, exactly as click(): the same script
+    survives a resized window. Focus through _own_foreground, so NOTHING is
+    sent unless the client owns the foreground -- mouse_event is global, and
+    a drag delivered into the operator's desktop moves whatever it finds.
+
+    THE SHAPE, and why each part is there:
+      1. the pointer is PLACED on the start point (SetCursorPos plus one
+         absolute move event, so the client's hit-test sees it arrive) and
+         given a moment -- the UI has to know which slot is under the pointer
+         BEFORE the button goes down, or the press picks up nothing;
+      2. THE POINTER IS READ BACK BEFORE THE PRESS. Off the start point by
+         more than a pixel -- the operator's hand, a DPI space this file got
+         wrong -- and NOTHING is pressed: a LEFTDOWN on the wrong slot picks
+         up the wrong item, and no landing check afterwards can undo that;
+      3. LEFTDOWN, held briefly, as a hand holds before it pulls;
+      4. the pointer MOVES IN STEPS to the end point, each step a real input
+         event, and the client's ownership of the foreground is re-read
+         before EVERY step (hold_key's rule for a held key: a left button
+         held across a window that took the foreground is a text-select or a
+         file-move in whatever that window is). The client decides a drag
+         has begun only once the pointer moves with the button down, so the
+         first step really moves: a zero-pixel drag and one inside Windows'
+         own SM_CXDRAG x SM_CYDRAG drag threshold are refused before the
+         press, because a press-move-release that short is a click to any UI
+         using the standard threshold (RECONSTRUCTION for this client);
+      5. a dwell at the end so the drop target highlights, the landing check,
+         then LEFTUP.
+
+    ABSOLUTE MOVES, NOT RELATIVE. orbit() sends relative deltas and that is
+    right for a camera, which wants motion and does not care where the
+    pointer ends. A relative delta is scaled by the pointer speed and by
+    "enhance pointer precision" before the pointer moves, so a relative drag
+    ends wherever the mouse settings put it -- one cell over is the likely
+    miss, and an item dropped on the wrong cell looks exactly like a clean
+    run. With MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK the event names
+    the destination itself, normalised over the virtual desktop; the rounding
+    is normalise_point's. The desk it normalises over is read in PHYSICAL
+    pixels (the thread is switched to per-monitor-v2 DPI awareness for the
+    call, and switched back in a finally) because that is the space injected
+    absolute input is mapped over; the fraction argument -- "a normalised
+    value is a fraction of the desk, which scaling leaves alone" -- holds
+    only for a uniformly scaled desk, and the owner's is not one. See the
+    comment at DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2.
+
+    THE LANDING IS READ BACK. After the last move, GetCursorPos says where
+    the pointer really is. Off the target by more than a pixel -- the
+    operator's hand on the mouse, a rounding this file got wrong, anything
+    -- and it is corrected BEFORE the release: SetCursorPos to the target,
+    then one ZERO-LENGTH RELATIVE move. Not another absolute move: when the
+    miss is systematic (a mapping error rather than a hand), re-sending the
+    same absolute event undoes the warp; a relative delta of zero is a real
+    input event that no pointer speed or acceleration can scale and no
+    mapping can misplace. The landing is then read AGAIN, and if it is still
+    off, the return says so (`on_target` False, and "NOT corrected" printed)
+    -- a drop at the wrong cell must not read as a clean drag, and until
+    2026-09-25's review it did, because the correction was trusted unread.
+
+    THE BUTTON IS ALWAYS RELEASED, for orbit()'s reason: mouse_event sets
+    global button state, and a left button left down is stuck for the whole
+    desktop and outlives this process.
+
+    Returns False when NOTHING WAS PRESSED: no focus, no window rect, no
+    desk metrics, a drag inside the drag threshold, or a pointer found off
+    the start point after placement. Otherwise a dict, and the dict is NOT
+    the verdict -- it means the button went down; `on_target` is the
+    verdict, and both callers (walk_legs, deliver_pointer_action) read it.
+    The dict carries `start` and `target` (the pixels asked for),
+    `pressed_at` (the pointer at the press), `landed` (the pointer just
+    before the release), `corrected`, `interrupted` (the client lost the
+    foreground mid-drag: released at once, the item is wherever the pointer
+    was) and `steps`. A dict rather than a bare bool because the walk row
+    wants where the pointer landed, and a print alone would not survive
+    into the report.
+
+    UNVERIFIED against the client until a run -- see the comment above.
+    """
+    if not _own_foreground(hwnd, pid):
+        return False
+    prev_dpi = _physical_pixels("drag")
+    try:
+        return _drag(hwnd, pid, fx0, fy0, fx1, fy1, seconds, steps)
+    finally:
+        _restore_dpi(prev_dpi)
+
+
+def _drag(hwnd, pid, fx0, fy0, fx1, fy1, seconds, steps):
+    """drag()'s body, run with the thread in physical pixels."""
+    rect = wintypes.RECT()
+    if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+        return False
+    desk = _virtual_desk()
+    if desk is None:
+        print("  drag: Windows reports no virtual desktop size; nothing sent",
+              flush=True)
+        return False
+    w, h = rect.right - rect.left, rect.bottom - rect.top
+    x0, y0 = int(rect.left + w * fx0), int(rect.top + h * fy0)
+    x1, y1 = int(rect.left + w * fx1), int(rect.top + h * fy1)
+    dx, dy = x1 - x0, y1 - y0
+    if (dx, dy) == (0, 0):
+        # parse_walk refuses EQUAL fractions; fractions a hair apart can still
+        # round to one pixel in a window this size, and a drag that cannot
+        # move would press and release on one cell -- a click wearing a
+        # drag's name, which the client may read as "pick up the helm".
+        print(f"  drag: start and end are the same pixel ({x0},{y0}); "
+              f"nothing sent", flush=True)
+        return False
+    # Windows' own threshold: DragDetect calls it a drag only once the
+    # pointer leaves an SM_CXDRAG x SM_CYDRAG rectangle around the press
+    # (4 x 4 by default). Whether the client uses DragDetect is UNVERIFIED;
+    # what is certain is that a 1..4 px drag is not one the runsheet ever
+    # asks for (a cell is ~40 px), and a press-move-release that short is
+    # the click the zero-pixel refusal above exists to prevent -- with a
+    # 1 px drag the first step rounded onto the pressed pixel and did not
+    # move at all (the review's N14).
+    drag_w = user32.GetSystemMetrics(SM_CXDRAG) or 4
+    drag_h = user32.GetSystemMetrics(SM_CYDRAG) or 4
+    if abs(dx) <= drag_w and abs(dy) <= drag_h:
+        print(f"  drag: ({x0},{y0}) -> ({x1},{y1}) moves {abs(dx)}x{abs(dy)} "
+              f"px, inside the {drag_w}x{drag_h} px drag threshold "
+              f"(SM_CXDRAG/SM_CYDRAG) -- a click wearing a drag's name; "
+              f"nothing sent", flush=True)
+        return False
+    dist = (dx ** 2 + dy ** 2) ** 0.5
+    seconds = max(0.05, float(seconds))
+    if steps is None:
+        # One step per ~6 px, so the client sees a pointer TRAVELLING rather
+        # than jumping, but never faster than one event per 15 ms; and at
+        # least two, so the first step is a move and the last is the landing.
+        steps = max(2, min(int(dist // 6) + 1, int(seconds / 0.015)))
+    steps = max(2, int(steps))
+    pause = seconds / steps
+
+    _place_pointer(x0, y0, desk)
+    time.sleep(0.12)                  # let the UI hit-test the start slot
+    at = _pointer()
+    if _off(at, x0, y0):
+        print(f"  drag: the pointer is at {at} after placement, not "
+              f"({x0},{y0}) -- nothing pressed; a LEFTDOWN there would pick "
+              f"up whatever sits under it", flush=True)
+        return False
+    rep = {"start": (x0, y0), "target": (x1, y1), "pressed_at": at,
+           "landed": None, "corrected": False, "on_target": False,
+           "interrupted": False, "steps": steps}
+    # The LEFTDOWN is INSIDE the try, for hold_key's reason: the one path
+    # that leaves a button stuck is a press whose failure skips the finally.
+    try:
+        user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, None)
+        time.sleep(0.10)              # a hold before motion, as a hand does
+        for i in range(1, steps + 1):
+            if not _still_foreground(pid):
+                rep["interrupted"] = True
+                print(f"  drag: the client lost the foreground after step "
+                      f"{i - 1} of {steps} -- released at once; the item is "
+                      f"wherever the pointer was", flush=True)
+                return rep
+            _move_absolute(int(round(x0 + dx * i / steps)),
+                           int(round(y0 + dy * i / steps)), desk)
+            time.sleep(pause)
+        time.sleep(0.12)              # dwell, so the drop target highlights
+        landed = _pointer()
+        if _off(landed, x1, y1):
+            rep["corrected"] = True
+            if not _still_foreground(pid):
+                rep["interrupted"] = True
+                print(f"  drag: pointer at {landed} after the last move, not "
+                      f"({x1},{y1}), and the client lost the foreground -- "
+                      f"released at once", flush=True)
+                return rep
+            before = landed
+            user32.SetCursorPos(int(x1), int(y1))
+            user32.mouse_event(MOUSEEVENTF_MOVE, 0, 0, 0, None)
+            time.sleep(0.05)
+            landed = _pointer()
+            rep["on_target"] = not _off(landed, x1, y1)
+            print(f"  drag: pointer at {before} after the last move, not "
+                  f"({x1},{y1}) -- "
+                  + (f"corrected before the release (now at {landed})"
+                     if rep["on_target"] else
+                     f"NOT corrected: pointer still at {landed} before the "
+                     f"release; the drop is NOT on target"), flush=True)
+        else:
+            rep["on_target"] = True
+        rep["landed"] = landed
+        return rep
+    finally:
+        user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, None)
+
+
+def double_click(hwnd, pid, fx, fy):
+    """Double-click one window fraction: two presses at ONE point, fast enough.
+
+    Two click() calls in a row are not a double-click -- each warps the
+    pointer and sleeps on its own clock, and whether the pair lands inside
+    the system double-click time is luck. Windows' rule is precise: a second
+    press within GetDoubleClickTime() ms of the first, inside a
+    SM_CXDOUBLECLK x SM_CYDOUBLECLK rectangle around it, and the pair is one
+    double-click. (Whether the CLIENT applies that rule or its own is part of
+    what a run has to show; this sends the pair Windows itself would accept.)
+
+    The pointer is PLACED once (SetCursorPos, then one absolute move event at
+    the same point so the client sees it arrive -- orbit()'s lesson), then
+    down/up, down/up with nothing else between: no move, no warp. The gap is
+    taken from GetDoubleClickTime(), never assumed to be 500 ms: an operator
+    who set a fast double-click would otherwise get two single clicks from a
+    harness that reported a double. Each press is released in a finally.
+
+    THE POINTER IS READ BACK BEFORE THE FIRST PRESS, as drag()'s is: found
+    outside the double-click rectangle around the point after placement,
+    NOTHING is pressed -- a double-click at the wrong point equips whatever
+    sits there, and no check afterwards can un-equip it. It is read again
+    after the second release: a pointer that left the rectangle between or
+    after the presses (the operator's hand on the mouse) MAY have turned the
+    pair into two clicks, and the return says so (`on_target` False) rather
+    than reporting a double-click the client cannot have seen -- without
+    asserting Windows' verdict, which this file cannot read.
+
+    Focus through _own_foreground; nothing is sent without it. The thread is
+    in physical pixels for the call, for drag()'s reason. Returns False when
+    nothing was pressed; otherwise a dict -- `at` (the pixel asked for),
+    `pressed_at`, `after` and `on_target` -- and as with drag() the dict is
+    not the verdict, `on_target` is. UNVERIFIED against the client until a
+    run -- see the comment above drag().
+    """
+    if not _own_foreground(hwnd, pid):
+        return False
+    prev_dpi = _physical_pixels("double_click")
+    try:
+        return _double_click(hwnd, pid, fx, fy)
+    finally:
+        _restore_dpi(prev_dpi)
+
+
+def _double_click(hwnd, pid, fx, fy):
+    """double_click()'s body, run with the thread in physical pixels."""
+    rect = wintypes.RECT()
+    if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+        return False
+    desk = _virtual_desk()
+    if desk is None:
+        print("  double_click: Windows reports no virtual desktop size; "
+              "nothing sent", flush=True)
+        return False
+    x = int(rect.left + (rect.right - rect.left) * fx)
+    y = int(rect.top + (rect.bottom - rect.top) * fy)
+    # The system's own limit, in ms. A zero answer falls back to Windows'
+    # default of 500 rather than to a gap of nothing.
+    limit = (user32.GetDoubleClickTime() or 500) / 1000.0
+    # Press and gap sized FROM the limit: the second down follows the first
+    # by at most 3/8 of it (40 + 60 ms under the 500 ms default).
+    press = min(0.04, limit / 8)
+    between = min(0.06, limit / 4)
+    half_w = max(1, user32.GetSystemMetrics(SM_CXDOUBLECLK) // 2)
+    half_h = max(1, user32.GetSystemMetrics(SM_CYDOUBLECLK) // 2)
+
+    def outside(where):
+        return (where is None or abs(where[0] - x) > half_w
+                or abs(where[1] - y) > half_h)
+    _place_pointer(x, y, desk)
+    time.sleep(0.08)                  # let the UI hit-test the slot
+    at = _pointer()
+    if outside(at):
+        print(f"  double_click: the pointer is at {at} after placement, "
+              f"outside the {2 * half_w}x{2 * half_h} px double-click "
+              f"rectangle around ({x},{y}) -- nothing pressed; a pair there "
+              f"would equip whatever sits under it", flush=True)
+        return False
+    try:
+        user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, None)
+        time.sleep(press)
+    finally:
+        user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, None)
+    time.sleep(between)
+    try:
+        user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, None)
+        time.sleep(press)
+    finally:
+        user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, None)
+    after = _pointer()
+    on_target = not outside(after)
+    if not on_target:
+        print(f"  double_click: the pointer moved between or after the "
+              f"presses -- at {after}, outside the {2 * half_w}x{2 * half_h} "
+              f"px double-click rectangle around ({x},{y}); the client may "
+              f"have read TWO clicks", flush=True)
+    return {"at": (x, y), "pressed_at": at, "after": after,
+            "on_target": on_target}
 
 
 VK_SHIFT, VK_CONTROL, VK_MENU = 0x10, 0x11, 0x12
