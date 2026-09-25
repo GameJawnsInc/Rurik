@@ -3607,7 +3607,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   rect its file declares** -- and a client-held archive recording no rect with the reason; §7 the
   portal refusal on the real `ascalon_to_corridor` row (withheld: nothing sent, disarmed, re-armed
   by leaving) with the firing control, and the startup scan's lock (outside the `--map` branch).
-  Floor 37, the vault-free core; 45 MEASURED 2026-09-25 with the vault. ~3 s),
+  Floor 37, the vault-free core; 45 MEASURED 2026-09-25 with the vault. ~12 s),
   `toolkit/authsrv/test_interact.py` (the interact path — the walk order and the
   interact that is HELD rather than dropped. **Nothing exercised
   `_handle_interact` at all before 2026-08-19**; `test_dispatch.py` named it once
