@@ -28,6 +28,42 @@ move back.
 
 ---
 
+### The harness can drag and double-click -- 2026-09-25 -- **`drag:FX0,FY0,FX1,FY1[,SECONDS]` and `dclick:FX,FY`, as `--walk` steps and `--actions` entries; whether the client takes them as a drag and a double-click is UNVERIFIED until the town armour runsheet runs**
+
+The owner asked for it after pass 6 left the town armour's equip (CLEANUP-3's runsheet A1–A3:
+drag the helm from the doll's head slot to a backpack cell, double-click it back) to the owner's
+hands because the harness could only click, hover and right-drag the camera. `dc.drag` and
+`dc.double_click` (toolkit/harness/drive_client.py), their `drag:` / `dclick:` walk steps and
+`--actions` entries (session.py), commits `6f729ed3` + `cb182b57` on `harness-drag`.
+
+* **Every motion is a real ABSOLUTE input event** (`MOUSEEVENTF_MOVE|ABSOLUTE|VIRTUALDESK`,
+  normalised over the virtual desktop), not `orbit()`'s relative deltas: a relative delta is
+  scaled by the pointer speed and "enhance pointer precision", so a relative drag drops wherever
+  the mouse settings put it -- one cell over, looking exactly like a clean run. And not a bare
+  `SetCursorPos`, which is `orbit()`'s 2026-08-11 scar (it warps the pointer and synthesises no
+  input event).
+* **The owner's desk is mixed-DPI** (MEASURED by the review: a 1920×1080 primary at 96 DPI and a
+  125 % secondary; the virtual desk is 3456 px wide to this DPI-unaware process and 3840 px
+  physical), so the absolute mapping computed in the unaware space lands 11 % off. Both verbs
+  switch the thread to per-monitor-v2 awareness for the call and restore it in a `finally`.
+* **The pointer is read back before the press and after the last move.** Off the start point
+  and nothing is pressed; off the target and it is corrected with a real event and read again,
+  and the return's `on_target` is the verdict both callers record (`did` / `sent`). The left
+  button is released in a `finally`; focus is re-read before every step; a drag inside Windows'
+  `SM_CXDRAG`×`SM_CYDRAG` threshold is refused as a click wearing a drag's name; the double-click
+  gap comes from `GetDoubleClickTime()`, with no move between the presses. `--actions` entries are
+  validated before the stack starts (`prevalidate_actions`), as `--walk` already was.
+
+Fable implemented, two Opus reviewers (Win32 input; tests and vacuity) raised fifteen findings,
+and Fable applied all fifteen. `test_harness.py` 181 → 216 checks, floor measured; each of the 35
+sabotages run across both rounds reddened a named check (the commit messages map them). The branch's
+sweep: the 18 tests that read `session.py` / `drive_client.py`, 1,703 checks, and
+`test_harness` 216 + `test_preflight_owner` 30, all green. **Open**: the client's acceptance --
+the unit tests pin the API and the event shapes, and only a run can say the helm moved (PLAN.md
+§8.1 DESKWORK-D1's town armour item, which the harness can now drive).
+
+---
+
 ### NOMESH-RECT, a meshless map's leads stop at the client's own map edge -- 2026-09-25 -- **the no-mesh door bounds the lead to the map's rect; send() clamps every other point; a portal into a map whose FILE the archive lacks is refused; both confirmation runs PASS on the client**
 
 The defect, OBSERVED on harness `20260925T083808` (loopback, 38797, `069635de`) and filed by

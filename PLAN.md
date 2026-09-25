@@ -1957,8 +1957,9 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   player's own `0x006D` withheld in a field too, the shield standing at load and through a swing.
   The henchman kick CONFIRMED on the client (CONFIRM-2 §9: the row leaves, the count drops, a
   re-add restores both, `--no-henchman-kick` keeps the row). **Open**: the town armour's CLIENT
-  CLICK (the owner's hands — the harness cannot drag or double-click; PLAN-LOG "CLEANUP-3"'s
-  runsheet A1–A3, `--no-town-armour-visuals` the A/B); **the refusal at the cap** (PLAN-LOG
+  CLICK (PLAN-LOG "CLEANUP-3"'s runsheet A1–A3, `--no-town-armour-visuals` the A/B; the harness
+  can drive it since 2026-09-25 with `drag:` / `dclick:`, PLAN-LOG "The harness can drag and
+  double-click", whose acceptance by the client that run also settles); **the refusal at the cap** (PLAN-LOG
   "DESKWORK-D1, the refusal at the cap", 2026-09-25): retail's reply is NOT FOUND on 96 live
   connections, the client's party error table (81 rows at `0x00B97968`, carriers `0x01B8` /
   `0x01BC` / `0x01D6` / `0x01E3`) has no "party is full" row, and the sentence a player expects
