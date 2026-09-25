@@ -103,7 +103,7 @@ import henchparty                                            # noqa: E402
 import authsrv                                               # noqa: E402
 import livewire                                              # noqa: E402
 
-led = checks.Ledger("henchman add (DESKWORK-D1 step 5)", floor=82)   # 2026-09-24 (CLEANUP-3's review): the bare-machine core from the green run with RURIK_VAULT pointed at an empty directory (79 at the lane's commit, +3 at the review: (l) the launch henchman's refusal x2 and the launch-guard mutation; 49 before the kick; +30 on the kick: the batch and its refusals, the handler's (g)-(k), the locks and their mutations); the vault adds 15 (97 vaulted)
+led = checks.Ledger("henchman add (DESKWORK-D1 step 5)", floor=108)   # 2026-09-25 (desk-partyfull, its review): the bare-machine core from the green run with RURIK_VAULT pointed at an empty directory -- 107 at the lane's commit, +1 at the review (code 81 joins the bad codes; the hero-half vacuity guard is vaulted, a declared skip bare); 82 at CLEANUP-3's review (79 at the lane's commit, +3 at the review: (l) the launch henchman's refusal x2 and the launch-guard mutation; 49 before the kick; +30 on the kick), +25 on the refusal at the cap: (m) the reply's bytes, the off arm, five bad codes, both handlers ARMED, the line, the two silent refusals, the vacuity guard, the OFF arm, and the locks (serverargs, the module default, HA x4, HD x3, main x3); the vault adds 16 (124 vaulted)
 
 COD = codecmod.Codec()
 SRC_PATH = os.path.join(HERE, "authsrv.py")
@@ -228,7 +228,7 @@ KICKH = authsrv.GAME_CMSG_HENCHMAN_KICK
 
 _saved = {k: getattr(authsrv, k) for k in
           ("HERO_IDS", "HENCHMAN", "PLAYER_NUMBER", "HENCHMAN_ADD_ENABLED", "HENCHMAN_KICK_ENABLED",
-           "OUTPOST_PARTY_CAP", "PARTY_SIZE_COUNTS_HEROES", "HERO_AGENT_ID",
+           "OUTPOST_PARTY_CAP", "PARTY_SIZE_COUNTS_HEROES", "HERO_AGENT_ID", "PARTY_FULL_REPLY_CODE",
            "PERSIST", "HERO_KICK_ENABLED", "HERO_ADD_ENABLED", "RESET_HERO_KICKS",
            "PARTY_COMMANDS", "HERO_BAGS", "HERO_INVENTORY", "HERO_CHAR",
            "HERO_BODY", "EXPLORABLE", "OUTPOST", "PARTY_BODY_IN_OUTPOST",
@@ -507,6 +507,115 @@ try:
            "the leaf's four opcode constants equal authsrv's (one value per opcode, "
            "0x0071 / 0x00B0 / 0x009F / 0x01C0) and the kick's c2s is 0x00A8")
 
+    # (m) THE REFUSAL AT THE CAP (desk-partyfull, 2026-09-25): --party-full-reply
+    #     CODE answers a cap refusal with ONE 0x01BC [CODE]; the default sends
+    #     nothing. RECONSTRUCTION -- retail's reply is NOT FOUND (0 of 96), the
+    #     client's mechanism is what is measured (studies/cmsg "The refusal at the cap").
+    fr = henchparty.party_full_reply(64)
+    led.ok([op for op, _v, _l in fr] == [0x01BC] and fr[0][1] == [64]
+           and encode_batch(fr) == bytes.fromhex("bc0140"),
+           "(m) party_full_reply(64) is ONE 0x01BC [64] and encodes through the codec to "
+           "the client's 3-byte [header, byte] shape bc 01 40", f"{encode_batch(fr).hex()}")
+    try:
+        _ends = (henchparty.party_full_reply(None) == [] and henchparty.party_full_reply(0) != []
+                 and encode_batch(henchparty.party_full_reply(80)) == bytes.fromhex("bc0150"))
+        _why = ""
+    except ValueError as exc:          # a renumbered table max would refuse row 80: score it, do not die
+        _ends, _why = False, str(exc)[:80]
+    led.ok(_ends, "(m) None is the off arm (nothing), 0 and 80 are the table's first and last rows "
+                  "(81 rows: 0x00B97AAC is the NEXT table's row 0 and 81 the client's no-error sentinel "
+                  "-- the review of 2026-09-25 corrected 82 / 0..81)", _why)
+    # 81 leads the bad codes: it is the sentinel the lane's max let through (the review's RV-1).
+    for bad in (81, 82, -1, True, "64", 3.0):
+        try:
+            henchparty.party_full_reply(bad)
+            led.ok(False, f"(m) party_full_reply({bad!r}) is refused (outside the client's 81-row table)")
+        except ValueError as exc:
+            led.ok("0..80" in str(exc),
+                   f"(m) party_full_reply({bad!r}) is refused with the table's range named", str(exc)[:80])
+    # the two handlers, ARMED: a party at the cap (player + 3 henchmen = 4 of 4).
+    authsrv.HERO_IDS = []
+    authsrv.PARTY_FULL_REPLY_CODE = 64
+    stm = seeded(HENCH)
+    for a in (4, 2, 6):
+        authsrv.handle_henchman_add([ADD, a], fake_send()[1], stm, 0)
+    stm["hireable_henchmen"][8] = {"enc_name": "DDDD", "profession": 3, "level": 3, "name": "M"}
+    stm["agents"][8] = {"name": "M"}
+    sm, sendm = fake_send()
+    with contextlib.redirect_stdout(io.StringIO()) as _bufm:
+        authsrv.handle_henchman_add([ADD, 8], sendm, stm, 0)
+    linem = _bufm.getvalue().strip()
+    led.ok(sm == [(0x01BC, [64])] and 8 not in stm["party_henchmen"]
+           and authsrv.party_member_count(stm) == 4,
+           "(m) ARMED: the henchman add refused at the cap sends exactly ONE 0x01BC [64] and adds "
+           "nothing (count stays 4)", f"sent {[(hex(o), v) for o, v in sm]}")
+    led.ok("0x01BC PARTY_ERROR_PROMPT [code 64] follows" in linem and "RECONSTRUCTION" in linem
+           and "nothing sent" not in linem,
+           "(m) ARMED: the refusal line says the 0x01BC follows and labels it RECONSTRUCTION, not "
+           "'nothing sent'", linem[:160])
+    # the hero add at the same cap: hero 6 kicked, party = player + 3 henchmen.
+    authsrv.HERO_IDS = [6]
+    sth = seeded(HENCH)
+    authsrv.kicked_heroes_set(sth).add(6)
+    for a in (4, 2, 6):
+        authsrv.handle_henchman_add([ADD, a], fake_send()[1], sth, 0)
+    sh, sendh = fake_send()
+    authsrv.handle_hero_add([HADD, 6], sendh, sth, 0)
+    led.ok(sh == [(0x01BC, [64])] and authsrv.hero_kicked(sth, 6)
+           and authsrv.party_member_count(sth) == 4,
+           "(m) ARMED: the hero add refused at the cap sends exactly ONE 0x01BC [64], the hero "
+           "stays kicked, the count stays 4", f"sent {[(hex(o), v) for o, v in sh]}")
+    # the HERO half of "a non-full add is untouched" while ARMED (the review's RV-3: a 0x01BC
+    # sent after a SUCCESSFUL hero add survived every check above, since the hero cap lock
+    # counts only the cap branch's string): the kicked hero re-added into a party BELOW the
+    # cap (player + 2 henchmen = 3 of 4) goes through with NO 0x01BC. Vaulted -- the
+    # accepting path builds the hero block from the vault's attribute-cost rows; a bare
+    # machine declares the skip, as (e)'s hero adds do.
+    stv_h = seeded(HENCH)
+    authsrv.kicked_heroes_set(stv_h).add(6)
+    for a in (4, 2):
+        authsrv.handle_henchman_add([ADD, a], fake_send()[1], stv_h, 0)
+    sv_h, sendv_h = fake_send()
+    if hero_add_or_skip("(m) VACUITY GUARD (hero): armed, the kicked hero re-added BELOW the cap",
+                        sendv_h, stv_h):
+        led.ok(0x01C2 in ops_of(sv_h) and sizes_of(sv_h) == [4] and 0x01BC not in ops_of(sv_h)
+               and not authsrv.hero_kicked(stv_h, 6) and authsrv.party_member_count(stv_h) == 4,
+               "(m) VACUITY GUARD (hero): armed, the kicked hero re-added into a party BELOW the cap "
+               "(player + 2 henchmen = 3 of 4) goes through as 0x00B0 = 4 + the 0x01C2 row with NO "
+               "0x01BC -- the reply is the CAP refusal's, not the flag's on every hero add",
+               f"{[hex(o) for o in ops_of(sv_h)]} sizes {sizes_of(sv_h)}")
+    # the reply rides the CAP refusal only: the other two refusals stay silent when armed.
+    s_nh, send_nh = fake_send()
+    authsrv.handle_henchman_add([ADD, 99], send_nh, stm, 0)
+    s_dup, send_dup = fake_send()
+    authsrv.handle_henchman_add([ADD, 4], send_dup, stm, 0)
+    led.ok(s_nh == [] and s_dup == [],
+           "(m) ARMED: 'not hireable' and 'already in the party' still send nothing -- the reply "
+           "is the CAP refusal's alone")
+    # VACUITY GUARD: the same add under a raised cap goes THROUGH with no 0x01BC, so the
+    # 0x01BC above was the refusal's and not something the armed flag sends on every add.
+    authsrv.OUTPOST_PARTY_CAP = 8
+    sv2, sendv2 = fake_send()
+    authsrv.handle_henchman_add([ADD, 8], sendv2, stm, 0)
+    led.ok(ops_of(sv2) == [0x00B0, 0x01BF] and 0x01BC not in ops_of(sv2) and 8 in stm["party_henchmen"],
+           "(m) VACUITY GUARD: armed, the same add under --henchman-cap 8 goes through as 0x00B0 + "
+           "0x01BF with NO 0x01BC", f"{[hex(o) for o in ops_of(sv2)]}")
+    authsrv.OUTPOST_PARTY_CAP = 4
+    # THE OFF ARM (the default): the same two refusals send nothing.
+    authsrv.PARTY_FULL_REPLY_CODE = None
+    stm["hireable_henchmen"][9] = {"enc_name": "EEEE", "profession": 4, "level": 3, "name": "N"}
+    stm["agents"][9] = {"name": "N"}
+    so, sendo = fake_send()
+    with contextlib.redirect_stdout(io.StringIO()) as _bufo:
+        authsrv.handle_henchman_add([ADD, 9], sendo, stm, 0)
+    so_h, sendo_h = fake_send()
+    authsrv.handle_hero_add([HADD, 6], sendo_h, sth, 0)
+    led.ok(so == [] and so_h == [] and "nothing sent (retail's refusal reply NOT FOUND)" in _bufo.getvalue()
+           and 9 not in stm["party_henchmen"] and authsrv.hero_kicked(sth, 6),
+           "(m) OFF (the default): both cap refusals send nothing and the line says 'nothing sent "
+           "(retail's refusal reply NOT FOUND)' -- today's silent refusal is the default arm")
+    authsrv.HERO_IDS = []
+
     # -- §3 the spawn wiring -------------------------------------------------
     class _Mesh:
         def walkable(self, x, y):
@@ -767,6 +876,55 @@ LOCKS += [
      lock_wire, PW,
      [("the flag ignored", _mut(PW, "count_heroes=PARTY_SIZE_COUNTS_HEROES", "count_heroes=True"))]),
 ]
+
+
+# -- the refusal at the cap (desk-partyfull): the reply rides the CAP branch of BOTH
+# handlers, through the leaf, off PARTY_FULL_REPLY_CODE; main() wires the flag.
+FULL_REPLY = "henchparty.party_full_reply(PARTY_FULL_REPLY_CODE)"
+
+
+def lock_full_reply(s):
+    at = s.find(CAP_CHECK)
+    branch = s[at:at + 900] if at >= 0 else ""
+    return (at >= 0 and FULL_REPLY in branch and s.count(FULL_REPLY) == 1
+            and "party_full_refusal_note()" in branch
+            and s.find(FULL_REPLY) > at)
+
+
+def lock_main_full(m):
+    return ("a.party_full_reply" in m and "PARTY_FULL_REPLY_CODE = int(a.party_full_reply)" in m
+            and "henchparty.party_full_reply(int(a.party_full_reply))" in m)
+
+
+LOCKS += [
+    ("handle_henchman_add's CAP branch sends party_full_reply(PARTY_FULL_REPLY_CODE) once and "
+     "prints party_full_refusal_note()",
+     lock_full_reply, HA,
+     [("the reply dropped", _mut(HA, FULL_REPLY, "[]")),
+      ("the reply moved before the cap check", HA.replace(FULL_REPLY, "[]", 1).replace(
+          "if " + CAP_CHECK, "for op, vals, label in " + FULL_REPLY + ":\n        send(op, vals, label)\n    if " + CAP_CHECK, 1)),
+      ("the note replaced by the old constant", _mut(HA, "party_full_refusal_note()",
+                                                    "'nothing sent'"))]),
+    ("handle_hero_add's CAP branch sends party_full_reply(PARTY_FULL_REPLY_CODE) once and "
+     "prints party_full_refusal_note()",
+     lock_full_reply, HD,
+     [("the reply dropped", _mut(HD, FULL_REPLY, "[]")),
+      ("the note replaced by the old constant", _mut(HD, "party_full_refusal_note()",
+                                                    "'nothing sent'"))]),
+    ("main() reads --party-full-reply, validates the code through the leaf and sets the global",
+     lock_main_full, M,
+     [("the assignment dropped", _mut(M, "PARTY_FULL_REPLY_CODE = int(a.party_full_reply)",
+                                      "pass")),
+      ("the validation dropped", _mut(M, "henchparty.party_full_reply(int(a.party_full_reply))",
+                                      "pass"))]),
+]
+led.ok('"--party-full-reply"' in ARGS and ARGS.index('"--party-full-reply"') > ARGS.index('"--henchman-cap"')
+       and "default=None" in ARGS[ARGS.index('"--party-full-reply"'):ARGS.index('"--party-full-reply"') + 120],
+       "LOCK: serverargs.py declares --party-full-reply beside --henchman-cap, default None (OFF)")
+led.ok(authsrv.PARTY_FULL_REPLY_CODE is None and henchparty.PARTY_ERROR_PROMPT == 0x01BC
+       and henchparty.PARTY_ERROR_CODE_MAX == 80,
+       "LOCK: the module default is OFF (None), the carrier is 0x01BC and the table's last row 80 "
+       "(81 rows; 81 is the client's no-error sentinel -- the review of 2026-09-25 corrected 82)")
 for what, lock, text, muts in LOCKS:
     led.ok(bool(text) and lock(text), f"LOCK: {what}")
     for mname, mtext in muts:
