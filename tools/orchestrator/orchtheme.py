@@ -353,7 +353,6 @@ QLabel[role="title"] { font-size: ${head}px; font-weight: 600; color: $text; }
 QLabel[role="subtitle"] { font-size: ${caption}px; color: $muted; }
 QLabel[role="overline"] { font-size: ${caption}px; font-weight: 600; color: $muted; }
 QLabel[role="caption"] { font-size: ${caption}px; color: $muted; }
-QLabel[role="slot"] { font-family: $font_mono; font-size: ${caption}px; color: $muted; }
 QLabel[role="empty_title"] { font-size: ${head}px; font-weight: 600; color: $text; }
 QLabel[role="chip"] { font-size: ${caption}px; font-weight: 600; border-radius: 10px; padding: 2px 9px; }
 QLabel[role="chip"][kind="info"] { background: $chip_info_bg; color: $chip_info_fg; border: 1px solid $chip_info_edge; }

@@ -52,7 +52,7 @@ import pathmap  # noqa: E402
 # party-reserved ids, studies/unitsetup/FINDINGS.md 8 Q9). Every section is
 # synthetic -- no vault, no socket, no client -- so there is nothing here that
 # may skip.
-LEDGER = checks.Ledger("test_population", floor=114)  # R-SANDBOX 2026-09-24 +30 (section 8: the level guard) then +8 (the verifier's fixes: a --probe's own 0x0056 steps, the last line's tail), from the green run; SLICE-H11 +2 (section 7: the held weapon); SLICE-B2 +7, SLICE-B6 glow +4 (section 6)
+LEDGER = checks.Ledger("test_population", floor=116)  # SANDBOX-N1 repair 2026-09-24 +2 (section 6: a template's ranks in both shapes reach the body); R-SANDBOX 2026-09-24 +30 (section 8: the level guard) then +8 (the verifier's fixes: a --probe's own 0x0056 steps, the last line's tail), from the green run; SLICE-H11 +2 (section 7: the held weapon); SLICE-B2 +7, SLICE-B6 glow +4 (section 6)
 check = checks.adopt(LEDGER)
 
 AREA = "sculpt"
@@ -482,6 +482,31 @@ def section6():
           "fall through to the global, and the second conjunct proves the "
           "global was non-empty so the check could have failed",
           f"{quiet['skills']} vs global {len(authsrv.ENEMY_SKILLS)}")
+
+    # THE RANKS a body carries are the ROW's, else its TEMPLATE's, in EITHER
+    # shape a TOML row can write (SANDBOX-N1's verifier, 2026-09-24): the
+    # create path iterated a dict-shaped template's KEYS, so `{"13" = 9}`
+    # reached the body as {1: 3} and Orison acted at rank 0 while the
+    # orchestrator's cell said 9. Two templates, one dict-shaped and one
+    # list-shaped, and a row with ranks of its own on the dict-shaped one.
+    tmpl = dict(authsrv.agents.WORLD.get("npc", "hatcher"))   # the RAW row: the template table's shape
+    ranked = place({"d": row(agent_id=20, definition=5, npc="tmpl_dict"),
+                    "l": row(agent_id=21, definition=6, npc="tmpl_list"),
+                    "own": row(agent_id=22, definition=5, npc="tmpl_dict",
+                               attributes=[[17, 4]])},
+                   npc={"tmpl_dict": dict(tmpl, attributes={"13": 9}),
+                        "tmpl_list": dict(tmpl, attributes=[[13, 9]])})
+    check(ranked[20]["attributes"] == {13: 9} == ranked[21]["attributes"]
+          and authsrv.agent_skill_rank(ranked[20], 281) == 9,
+          "a row with no ranks takes its TEMPLATE's, whether the template writes "
+          "them {a = r} or [[a, r]] -- {13: 9} on the body either way, and Orison "
+          "(attribute 13) acts at 9 (the dict shape reached the body as {1: 3})",
+          f"dict {ranked[20]['attributes']}, list {ranked[21]['attributes']}")
+    check(ranked[22]["attributes"] == {17: 4}
+          and authsrv.agent_skill_rank(ranked[22], 281) == 0,
+          "and a row's OWN ranks win over its template's outright -- {17: 4}, "
+          "under which Orison acts at 0 (the template's 13 is not merged in)",
+          f"{ranked[22]['attributes']}")
 
     # THE BOSS AURA (SLICE-B6 / SLICE-F1): one int property 29 after the
     # create, and never for a row that does not ask.
