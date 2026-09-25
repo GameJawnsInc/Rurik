@@ -23707,15 +23707,36 @@ def enemy_attack_tick(send, state, conn_id):
         # So a hold that waits on the WORLD -- nobody hurt, the target beyond
         # THIS skill's reach -- steps the cursor past the slot and re-picks on
         # the same tick, and every re-pick comes back through the top of this
-        # loop: the resource gate, the heal/target gate, the swing clock and
-        # the reach gate each see it, in that order, exactly as the first pick
-        # did (before this the heal gate's own re-pick skipped the resource
-        # gate). `_held` bounds the search -- never a count; the heal gate's
-        # comment below records the un-targeted heal a count once cast. A hold
-        # that waits on the CLOCK -- an unpayable slot, an attack skill inside
-        # its swing interval -- keeps the cursor where it is and retries next
-        # tick, as before: the pool fills and the interval runs out, so those
-        # resolve on their own; a player who never comes closer does not.
+        # loop: the heal/target gate, the reach gate, the resource gate and
+        # the swing clock each see it, in that order, exactly as the first
+        # pick did (before this the heal gate's own re-pick skipped the
+        # resource gate, and the cast site's spend() raised PoolError on an
+        # unpayable re-pick). `_held` bounds the search -- never a count; the
+        # heal gate's comment below records the un-targeted heal a count once
+        # cast. A hold that waits on the CLOCK -- an unpayable slot, an attack
+        # skill inside its swing interval -- keeps the cursor where it is and
+        # retries next tick, as before: the pool fills and the interval runs
+        # out, so those resolve on their own; a player who never comes closer
+        # does not.
+        #
+        # THE WORLD GATES RUN BEFORE THE CLOCK GATES, on the first pick and on
+        # every re-pick alike (the review of this fix, RV-1, 2026-09-25). The
+        # first version kept the straight line's order -- the resource gate
+        # first -- so a slot the world would refuse anyway was WAITED ON for
+        # energy before the world gate got to step past it: a Warrior whose
+        # heal hold re-picked an unpayable heal nobody needed clock-held the
+        # whole bar until the pool could pay for a cast the heal gate would
+        # then hold (bb84484e stepped past it -- its heal re-pick never met the
+        # resource gate), and a heal it could never pay for held the bar for
+        # good: the stall this fix exists for, one gate over. A slot that
+        # cannot be cast FROM HERE is never waited on. Against bb84484e this
+        # changes two non-caster arms, both said here so nobody reads them as
+        # drift: a FIRST pick that is an unpayable heal nobody needs is stepped
+        # past (bb84484e waited for the energy and then held it), and a lone
+        # hostile's unpayable other-ally skill is refused as "has none" rather
+        # than as unpayable. With no energy pressure the two trees are
+        # byte-identical on every non-caster bar (the review's differential:
+        # 1,190 of 1,190 traces with every cost zeroed).
         #
         # RECONSTRUCTION, like the rest of the caster. `pick_skill` stays the
         # testing fixture its docstring declares: stepping past a slot that
@@ -23729,47 +23750,10 @@ def enemy_attack_tick(send, state, conn_id):
         while slot is not None:
             cast_target = _tid
             _sid = agent["skills"][slot][0]
-            # ---- THE RESOURCE GATE, which is NOT an AI rule ---------------
-            #
-            # `pick_skill` is declared in its own docstring to be a testing
-            # fixture and not a decision about AI, and nothing about the
-            # selector changes here: it still returns the next ready slot,
-            # round robin, and this asks a different question about the slot
-            # it returned -- can this agent PAY for it. A resource check
-            # belongs on the cast path for the same reason the player's does;
-            # putting it in the selector would make the selector a policy.
-            #
-            # AND IT INCIDENTALLY RATE-LIMITS THE HEAL SPAM `PLAN.md` section
-            # 8 item 4 complains about: Restore Condition costs 5 energy on a
-            # 2.0 s recharge, and 5 pips over a 30-energy pool is 1.65 energy
-            # a second, so the pool -- not the recharge -- is what paces it,
-            # which is how retail paces it too. An unpayable slot is skipped
-            # and stays ready, so the agent retries it as the pool fills
-            # rather than skipping down the bar; advancing the cursor here
-            # would be exactly the AI decision this comment says is not being
-            # made.
-            if ENERGY:
-                _cost, _units = skill_cost(_sid)
-                _pool = agent_energy(agent)
-                _pool.tick(now)
-                _short = None
-                if _units > 0 and not agent_adrenaline(agent).charged(_sid):
-                    _short = (f"{_units} adrenaline, has "
-                              f"{agent_adrenaline(agent).units.get(_sid, 0)}")
-                elif _cost > 0 and not _pool.can_pay(_cost):
-                    _short = f"{_cost} energy, has {_pool.current:.2f}"
-                if _short is not None:
-                    slot = None
-                    # Once every few seconds, not once per tick: at 20 ticks a
-                    # second a broke agent would fill the log with the same line.
-                    if now - agent.get("cast_refused_at", 0.0) >= 5.0:
-                        agent["cast_refused_at"] = now
-                        print(f"[c{conn_id}] agent {agent_id} cannot cast skill "
-                              f"{_sid}: needs {_short}", flush=True)
-                    break
-            # ---- AND THE TARGET GATE, which is the same class as the resource
-            # gate above (SKILLS-RC): not "which slot" -- that stays the
-            # fixture's -- but "can this agent legally cast the slot it picked".
+            # ---- THE TARGET GATE (a WORLD gate), which is the same class as
+            # the resource gate below (SKILLS-RC): not "which slot" -- that
+            # stays the fixture's -- but "can this agent legally cast the slot
+            # it picked".
             # The client's own target byte says a code-4 skill lands on an OTHER
             # ally and never on the caster (effects.OTHER_ALLY_TARGET, eleven
             # skills corroborated on the wiki), so a lone hostile cannot cast
@@ -23841,25 +23825,17 @@ def enemy_attack_tick(send, state, conn_id):
                             _next = pick_skill(agent, now)
                             slot = None if (_next is None or _next in _held) else _next
                             continue
-            # SLICE-F24: an ATTACK skill is a swing -- it waits for the swing
-            # clock like the plain swing below does, so a bar with two ready
-            # attack skills fires one per interval (retail: two [50]s by one
-            # NPC inside 1 s once in 177), not both on consecutive ticks. A
-            # CLOCK hold: the cursor stays, the slot is retried next tick.
-            if (NPC_ATTACK_SKILL_SWINGS and _is_attack_skill(_sid)
-                    and now - agent.get("last_swing", 0.0) < interval):
-                slot = None
-                break
-            # EV-1: a CASTER does not lob a skill from beyond ITS OWN reach. A
-            # touch skill needs melee and a half-range skill half the cast
-            # range (_caster_skill_reach reads the row's FLAG_TOUCH_RANGE /
-            # FLAG_HALF_RANGE bits). The slot is HELD -- ready and uncharged --
-            # not cast from across the field, and the bar is re-picked past it
-            # by the loop's rule: the first version left the cursor on the held
-            # slot, and with 312 (Holy Strike, touch) on the default bar the
-            # caster stalled for the rest of run 20260924T210744. The table
-            # re-emitted at the pass-6 landing carries the bits, so this fires
-            # on the default bar every time the player stands off.
+            # EV-1 (a WORLD gate): a CASTER does not lob a skill from beyond
+            # ITS OWN reach. A touch skill needs melee and a half-range skill
+            # half the cast range (_caster_skill_reach reads the row's
+            # FLAG_TOUCH_RANGE / FLAG_HALF_RANGE bits). The slot is HELD --
+            # ready and uncharged -- not cast from across the field, and the
+            # bar is re-picked past it by the loop's rule: the first version
+            # left the cursor on the held slot, and with 312 (Holy Strike,
+            # touch) on the default bar the caster stalled for the rest of run
+            # 20260924T210744. The table re-emitted at the pass-6 landing
+            # carries the bits, so this fires on the default bar every time
+            # the player stands off.
             if _caster and cast_target is not None:
                 _ctx, _cty = ((px, py) if cast_target == _tid
                               else target_pos(state, cast_target))
@@ -23870,14 +23846,76 @@ def enemy_attack_tick(send, state, conn_id):
                     agent["last_slot"] = slot
                     # Its own stamp, not `cast_refused_at`: a heal hold and a
                     # reach hold on one tick are two facts a run reader needs.
+                    # And the target is labelled by ITS side: a hostile's heal
+                    # aims at a fellow hostile (SLICE-B3), which `target_label`
+                    # would call a party agent (the review's RV-5).
                     if now - agent.get("reach_held_at", 0.0) >= 5.0:
                         agent["reach_held_at"] = now
                         print(f"[c{conn_id}] agent {agent_id} holds skill {_sid}: "
-                              f"{_dist:.0f} u from {target_label(state, cast_target)}, "
+                              f"{_dist:.0f} u from "
+                              f"{cast_target_label(state, cast_target)}, "
                               f"its reach {_reach:.0f} u [DESKWORK-D8]", flush=True)
                     _next = pick_skill(agent, now)
                     slot = None if (_next is None or _next in _held) else _next
                     continue
+            # ---- THE RESOURCE GATE (a CLOCK gate), which is NOT an AI rule --
+            #
+            # `pick_skill` is declared in its own docstring to be a testing
+            # fixture and not a decision about AI, and nothing about the
+            # selector changes here: it still returns the next ready slot,
+            # round robin, and this asks a different question about the slot
+            # it returned -- can this agent PAY for it. A resource check
+            # belongs on the cast path for the same reason the player's does;
+            # putting it in the selector would make the selector a policy.
+            #
+            # AND IT INCIDENTALLY RATE-LIMITS THE HEAL SPAM `PLAN.md` section
+            # 8 item 4 complains about: Restore Condition costs 5 energy on a
+            # 2.0 s recharge, and 5 pips over a 30-energy pool is 1.65 energy
+            # a second, so the pool -- not the recharge -- is what paces it,
+            # which is how retail paces it too. An unpayable slot is skipped
+            # and stays ready, so the agent retries it as the pool fills
+            # rather than skipping down the bar; advancing the cursor here
+            # would be exactly the AI decision this comment says is not being
+            # made.
+            #
+            # It runs AFTER the world gates (the loop's rule above), so what
+            # it refuses is a slot the agent could cast from here if it could
+            # pay -- never a heal nobody needs or a touch skill at 300 u.
+            if ENERGY:
+                _cost, _units = skill_cost(_sid)
+                _pool = agent_energy(agent)
+                _pool.tick(now)
+                _short = None
+                if _units > 0 and not agent_adrenaline(agent).charged(_sid):
+                    _short = (f"{_units} adrenaline, has "
+                              f"{agent_adrenaline(agent).units.get(_sid, 0)}")
+                elif _cost > 0 and not _pool.can_pay(_cost):
+                    _short = f"{_cost} energy, has {_pool.current:.2f}"
+                if _short is not None:
+                    slot = None
+                    # Once every few seconds, not once per tick: at 20 ticks a
+                    # second a broke agent would fill the log with the same line.
+                    # On ITS OWN stamp since the world gates moved ahead of it:
+                    # a heal hold on the same tick stamps `cast_refused_at`, and
+                    # a hold ahead of a refusal is now the common tick -- on the
+                    # shared stamp a broke agent behind a held heal would print
+                    # the hold every 5 s and the refusal never, and a run reader
+                    # would see no cast and never learn the pool was empty.
+                    if now - agent.get("pay_refused_at", 0.0) >= 5.0:
+                        agent["pay_refused_at"] = now
+                        print(f"[c{conn_id}] agent {agent_id} cannot cast skill "
+                              f"{_sid}: needs {_short}", flush=True)
+                    break
+            # SLICE-F24 (a CLOCK gate): an ATTACK skill is a swing -- it waits
+            # for the swing clock like the plain swing below does, so a bar
+            # with two ready attack skills fires one per interval (retail: two
+            # [50]s by one NPC inside 1 s once in 177), not both on
+            # consecutive ticks. A CLOCK hold: the cursor stays, the slot is
+            # retried next tick.
+            if (NPC_ATTACK_SKILL_SWINGS and _is_attack_skill(_sid)
+                    and now - agent.get("last_swing", 0.0) < interval):
+                slot = None
+                break
             break                       # every gate passed: this slot is cast
         if slot is not None:
             skill_id, activation, recharge = agent["skills"][slot]
@@ -24406,6 +24444,24 @@ def target_label(state, tid):
         return "the player"
     row = state.get("agents", {}).get(tid) or {}
     return f"party agent {tid} ({row.get('name', '?')})"
+
+
+def cast_target_label(state, tid):
+    """The label for a CAST's target, which may be a fellow hostile.
+
+    `target_label` calls every non-player id a party agent, which is true at
+    its own call sites -- an attack's target is the player or a party body --
+    and false for a hostile's heal, which aims at its own side (SLICE-B3,
+    `hostile_heal_target`). So the reach-hold line reads the target's
+    allegiance instead (the DESKWORK-D8 step 4 review, RV-5): "party agent
+    N (name)" for a party body, "agent N (name)" for anybody else.
+    """
+    if tid == PLAYER_AGENT_ID:
+        return "the player"
+    row = state.get("agents", {}).get(tid) or {}
+    side = ("party agent" if row.get("allegiance") == agents.ALLEGIANCE_PLAYER
+            else "agent")
+    return f"{side} {tid} ({row.get('name', '?')})"
 
 
 def passive_unprovoked(agent):
