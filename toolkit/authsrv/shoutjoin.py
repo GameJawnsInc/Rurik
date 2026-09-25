@@ -38,7 +38,8 @@ every apply came out unattributed. The batch context (scratch, the same day) sho
 shout rides instead: `0x009F [48, caster, skill]` in the apply's own batch, beside a
 `0x009F [21, caster, 622]` and an `0x00A5 [caster, text]` (the speech bubble), and for
 the observer's own shout E4 / E5 / E3 with no E4-to-E5 gap (activation 0). Property 48
-(`agents.GV_INSTANT_SKILL_ACTIVATED`, named there and sent by this server nowhere) is the
+(`agents.GV_INSTANT_SKILL_ACTIVATED`, named there; sent by this server nowhere until
+2026-09-25, when `authsrv.instant_open` took it up -- instantjoin.py, skills 56.9) is the
 INSTANT skill's announce, not the shout's alone: the corpus census by skill type is
 printed (364 and 348 are Shouts; 346, 10, 379, 349, 455 are Stances; 1217 is type 16).
 The prop-60 form is kept as a counted control and expected at zero for a Shout id.

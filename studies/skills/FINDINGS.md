@@ -8116,7 +8116,8 @@ observer's own shout E4 / E5 / E3 with no E4→E5 gap (activation 0). The corpus
 of property 48 by the skill's type: **Stance (3) 64, Shout (15) 67, type 16 2** — 48 is
 the INSTANT skill's announce, not the shout's alone. Every one of the 65 applies has
 its 48 inside 1.5 s (P2), all at dt = 0. **Divergence, OPEN:** ours announces a shout
-through `cast_anim_msg`'s property 60.
+through `cast_anim_msg`'s property 60. (**CLOSED 2026-09-25, §56.9**: the whole batch
+re-derived per type and per caster, and shipped.)
 
 ### 56.3 Sides: a shout reaches allies and never foes — OBSERVED
 
@@ -8204,6 +8205,8 @@ at EVERY episode change" was read off the cure batch, where both words were chan
 * **The hero's cure on screen** is final-confirmation-needs-run (D5's own cost line).
 * **The announce property** (56.2) and **the batch order** — retail sends every apply,
   then every speed word; ours interleaves per wearer — are named divergences, unshipped.
+  (**Both SHIPPED 2026-09-25, §56.9**, `--no-instant-announce` and
+  `--per-wearer-batch-order` the known-bad arms.)
 * **Retail's party shout reaches the allied NONCOMBATANT; ours does not** (§56.3: 15
   boost words on the 'nonc' agent in the arena batches, three at once on conn 63805).
   `skillread.allies_of` admits `ALLEGIANCE_PLAYER` alone. An under-application, open.
@@ -8263,6 +8266,125 @@ episodes; `--no-party-wide-shouts`).
   fail; it now names the hero. Its cutoff filtered rows after the census counted
   connections and refusals over every tape; `census(cutoff=…)` now skips a later tape
   before reading it, so every pin is exact by construction. 47 checks, floor 30.
+
+### 56.9 SKILLS-IA — the instant skill's announce re-derived per type and per caster (a property, a visual, a bubble), and the batch order; both shipped (2026-09-25)
+
+**Desk, no run.** The two divergences §56.7 left named — the announce property and
+the batch order — re-derived by `toolkit/authsrv/instantjoin.py` over every live
+capture on disk (95 connections whole with one observer; the 96th refused as in §56.8),
+the predictions registered before the first run (the lane's scratch record, repeated in
+the reader's docstring beside each verdict). The reader anchors on every s2c
+`0x009F [48, caster, skill]`, reports the batch inside 60 ms of it in wire order, names
+the caster's kind — the OBSERVER; a HERO (the observer's token and its effect list on
+the wire: agent 30 of `20260914T005758`, a kind-8 create); an ALLY with no list (on the
+arena tape the observer's human team-mates, kind-9 creates); a FOE by token — decodes
+the `0x00A5`'s words as coded ids, and counts the relative order of every part. Every
+number below is the reader's; `test_instantannounce.py` §6 pins them.
+
+**The announce — OBSERVED.** 133 announces: Stance (3) 64, Shout (15) 67, type 16 2 —
+§56.2's census to the unit; by caster the observer 62, a hero 24, a team-mate 20, a foe
+27. **No henchman casts an instant skill on any tape** (a body is RECONSTRUCTION by the
+foe's shape). Every one rides `0x009F`, 0 on `0x00A0` (an instant skill names no
+target); **property 60 for an instant-type id: 0 of 133** (SKILLS-IA-A1); every 48 names
+a skill whose table activation is 0.0. The corpus casts no activation-0 non-attack skill
+of any OTHER type — 53 such rows exist (types 4, 6, 7, 10, 20, 26) — so "by type" and "by
+activation 0" are one rule on tape and UNDECIDABLE between; the server keys on the three
+witnessed types (`INSTANT_TYPE_CODES`) and names an activation-0 skill outside them once
+when one is cast.
+
+**The batch, verbatim** (`instantjoin.py --rows`). The arena's observer (agent 25, conn
+63805, t = 1403.226): `0x00E4 [25, 364, 0]`, `0x00A2 [62, 25, …]`, `0x00E5 [25, 364, 0,
+20]`, `0x009F [48, 25, 364]`, `0x009F [21, 25, 622]`, `0x00A5 [25, (0x6658)]`, `0x0042
+[25, 364, 10, 101, 10.0]`, `0x00E3 [25, 364, 0]`, then `0x0027 [25, 385.92]`, `[51,
+383.04]`, `[52, 383.04]`, `[53, 383.04]`. The hero's 348 (conn 56011, t = 178.496):
+`0x00E4 [30, 348, 0]`, `0x00D2 [30, 348, 0]`, `0x00E5 [30, 348, 0, 4]`, `[48, 30, 348]`,
+`[21, 30, 596]`, `0x00A5 [30, (0x6637)]`, `0x0042 [29, 348, 1, 5, 10.0]`, `0x0042 [30,
+348, 1, 6, 10.0]`, `0x00E3 [30, 348, 0]`. A foe's stance (agent 101, t = 1348.673):
+`[48, 101, 10]`, `[21, 101, 21]` and nothing else. A team-mate's 364 (conn 54071,
+t = 576.967): `[48, 13, 364]`, `[21, 13, 622]`, `0x00A5 [13, (0x6658)]`, `0x0042 [11, 364,
+13, 52, 12.0]` (the observer wears it), then five `0x0027`s. **Order over all 133:**
+`[48]` < `[21]` 133 / 133; `[21]` < `0x00A5` 67 / 67; `0x00A5` < `0x0042` 59 / 59; `[48]`
+< `0x0042` 103 / 103; `0x00E5` < `[48]` 93 / 93; `0x0042` < `0x00E3` 86 / 86; `0x00F1` <
+`0x00E3` 8 / 8; `0x00E3` < `0x0027` 29 / 29; no batch inverts any part. The observer's
+own 62: E4, E5 and E3 all at dt = 0 from the 48 (an instant skill has no E4→E5 gap and no
+aftercast on the wire, SKILLS-IA-A8), and **not one carries a property 8** (0 of 62).
+
+**What 622 is — OBSERVED on the wire, CORROBORATED by the table.** The `[21, caster, v]`
+beside every announce is ANIMREF-R8's caster visual, the `s_skill` record's +0x78: 364 →
+622 (56 / 56), 348 → 596 (11 / 11), 346 → 601 (43 / 43 — the row `content/world.toml`
+already carried), 10 → 21 (12 / 12), 349 → 598 (3 / 3), 379 → 638 (5 / 5), 455 → 767
+(1 / 1), 1217 → 1083 (2 / 2); `skilltable.py` on the pinned 38797 snapshot reads exactly
+those eight values at +0x78. SKILLS-IA-A4 predicted "present for some ids, absent for
+others": it is present for **every** instant skill on tape — none of the eight holds the
+table's 2077. Seven `skill_visual` rows added (client-table, build 38797, each verified
+against its own wire count).
+
+**The bubble — OBSERVED, and it is the SHOUT's alone.** `0x00A5 [caster, string16]`
+(the schema's unnamed GAME_SMSG_0165; ours: `GAME_SMSG_AGENT_SPEECH_BUBBLE`) rides 67 of
+67 shout announces and 0 of 66 stance / type-16 announces (SKILLS-IA-A5). The string16
+is ONE coded word and no marker — `codedstr`: 0x6658 → id 25944 for 364 (56 / 56), 0x6637
+→ 25911 for 348 (11 / 11); an id, not text (SKILLS-IA-A6). **It is not the skill's name
+id.** The 38797 table names 25942 (+0x98) and 25943 (+0xA0, the description) for 364,
+25909 / 25910 for 348: the wire's id is the block's THIRD record, name_id + 2 on both,
+and the owner's archive (`textrec.py`, read locally) resolves it to the spoken line — the
+name without its quotation marks; for 348 the line differs from the name in case. That
+offset is **not a rule the table can apply blind**: over the 52 corpus shouts the spacing
+from a shout's name id to the next skill's is 3 for 36 of them and 1, 2, 4, 5, 6, 30 or
+more for the other 16 (a stance's block is two records — 346: 25905, 25906; 25907 is
+the next skill's name), so name_id + 2 is another skill's string for at least ten
+shouts. The id is therefore a per-row fact: `content/world.toml`'s new `skill_speech`
+block carries the two witnessed ids (source capture, live, the stamp and the counts),
+the server sends the bubble for a shout with a row, and a shout with none sends no
+bubble and says so once. This is the gate's own pattern — commit the id, the CLIENT
+resolves the string from its own archive. The 140 other `0x00A5`s in the corpus (NPC
+lines) are not read here.
+
+**The batch order — OBSERVED in two halves, RECONSTRUCTION as composed.** Retail sends
+every `0x0042` (each with its own `0x0044` cure and `0x00F1` status word), then the
+caster's E3, then every `0x0027`: 43 of 43 batches with an apply and a speed word put
+every word after the last apply; the wearer's own word leads, 16 of 16 multi-word
+batches whose wearer has a word (the 17th, t = 745.231, is a re-cast over an open shout —
+no own word, §56.5); the other allies follow in ascending agent id; a Crippled ally gets
+two words (199.5 then 399.0 — the boost over the still-open Crippled, then the cure's
+restore, §48.2's pair, both behind the E3). The 6 two-apply batches (the hero's 348
+landing on the player and on itself) hold the applies adjacent, 6 of 6 — and none
+carries a speed word (348 moves no speed), so "two applies AND speed words", the exact
+case where ours interleaved, is **UNWITNESSED**; the composed rule is RECONSTRUCTION
+from two OBSERVED halves and is labelled so at the call site.
+
+**Shipped (`INSTANT_ANNOUNCE`, `PER_WEARER_BATCH_ORDER`; `test_instantannounce.py`, 45
+checks, floor 6, TESTS.md):**
+
+* `authsrv._is_instant_skill` (types 3 / 15 / 16); no property 60 at the player's press
+  or cast-begin, a hostile's start or a party body's start; at the completion
+  `instant_open` sends `[48, caster, skill]` in the `[58]`'s slot (the player's E5
+  branch, `land_skill` for a hero or a body), `send_skill_visual` the `[21]` behind it,
+  `instant_speech` the bubble for a shout with a `skill_speech` row, then the applies;
+  a HERO's E3 closes the instant batch behind the applies (`hero_skill_e3`, 24 / 24)
+  where a spell's rides beside its E5. OBSERVED for the player, the hero and (as a foe)
+  a body; a henchman's shout is the same shape by RECONSTRUCTION.
+* `apply_effect`'s party-wide path defers `push_speed` (`state["speed_deferred"]`, the
+  cure's restore included) across every wearer's apply and flushes once, wearer first —
+  every `0x0042`, then every `0x0027`.
+* `content/world.toml`: seven `skill_visual` rows (364, 348, 10, 349, 379, 455, 1217)
+  and the `skill_speech` block (364 → 25944, 348 → 25911).
+* `--no-instant-announce` restores property 60 at the press, `[58]` at the completion,
+  the hero's E3 beside its E5 and no bubble; `--per-wearer-batch-order` restores the
+  interleave — each today's bytes exactly (§4 of the test; the spell and attack paths are
+  byte-identical to b50da5c8 under both arms, §5).
+
+**Residuals, named and NOT shipped** (the cast cycle's and JARIN's, not this lane's):
+(1) the E4→E5 tick gap — ours sends E4 at the press and the announce batch on the next
+tick (≤ 50 ms), retail's is one batch at dt = 0; (2) the E3's slot — retail puts the
+player's E3 between the applies and the speed words, ours sends the speed words in the
+apply's tick and the E3 behind them in the same pass, with ANIMREF's `[8→0]` / `[8→1]`
+pair beside it, which retail never sends for an instant skill (0 of 62; the press's
+`[8→1]` likewise); (3) a hero's E4 and debit at the start (retail: E4, `0x00D2` / `0x00A2`,
+24 / 24; ours sends neither); (4) a 348 apply (no `skill_effect` row, §56.7 unchanged, so
+the hero's 348 batch carries no `0x0042` on our wire); (5) three of the twenty team-mate
+batches on conn 54071 open with an `0x00E5 [observer, 364, 0, 3]` and a `[21, observer,
+11]` — unread here. **Client confirmation** (the bubble drawn over the caster, the stance
+animation, no assert) is the runsheet's, after landing.
 
 ---
 

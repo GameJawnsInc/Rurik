@@ -2382,6 +2382,26 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "on the observer and 6 on a hero, 0 on a foe -- and "
                          "re-declares each ally's speed. With this flag the "
                          "heroes and party bodies get nothing.")
+    ap.add_argument("--no-instant-announce", action="store_true",
+                    help="announce a Stance / Shout / type-16 skill the way this "
+                         "server did until 2026-09-25: property 60 at the press "
+                         "or the start, [58, caster, 0] at the completion, no "
+                         "speech bubble, a hero's E3 beside its E5. The known-bad "
+                         "arm of DESKWORK-D5's announce item (skills 56.9, "
+                         "instantjoin.py): retail sends [48, caster, skill] at "
+                         "the completion, 133 of 133 across 95 connections, never "
+                         "a 60 (0 of 133), then the caster's [21] visual, then for "
+                         "a shout 0x00A5 [caster, coded id] (67 of 67), then the "
+                         "applies, then (a hero, the player) the E3.")
+    ap.add_argument("--per-wearer-batch-order", action="store_true",
+                    help="send a party-wide shout's batch per wearer -- apply, "
+                         "status, speed, apply, status, speed -- as this server "
+                         "did until 2026-09-25. The known-bad arm of DESKWORK-D5's "
+                         "batch-order item (skills 56.9): retail sends every 0x0042 "
+                         "and only then every 0x0027, the wearer's first (43 of 43 "
+                         "apply+speed batches, 16 of 16 multi-word batches; the "
+                         "two-apply-plus-speed case is on no tape and is "
+                         "RECONSTRUCTION from those two halves).")
     ap.add_argument("--refusal-reasons", action="store_true",
                     help="name the reason on refusals whose id this server can "
                          "only RECONSTRUCT from the client's own refusal block "

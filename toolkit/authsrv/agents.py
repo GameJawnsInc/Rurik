@@ -1168,6 +1168,10 @@ GV_MAX_HP_REACHED = 32
 # auto-attack ([8,0] [3] [35] [8,1]). `authsrv.interrupt_player` / `interrupt_body`.
 GV_INTERRUPTED = 35
 GV_ATTACK_SKILL_FINISHED = 46
+# SKILLS-IA (2026-09-25, skills 56.9): the INSTANT skill's announce -- [48, caster,
+# skill] on 0x009F for every Stance, Shout and type-16 cast in the live corpus (133
+# of 133, 0 on property 60), followed by the caster's [21] visual and, for a shout,
+# the 0x00A5 bubble. OBSERVED; `authsrv.instant_open` sends it since today.
 GV_INSTANT_SKILL_ACTIVATED = 48
 # SLICE-F1: int property 29 [agent, index] selects a row of the client's own
 # s_glow (11 rows, asserted `index < arrsize(s_glow)` at ConstGlow.cpp(42)) --

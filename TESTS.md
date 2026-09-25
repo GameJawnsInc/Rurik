@@ -7806,6 +7806,46 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   hero applies attributed to the hero; 86 boost words on other agents — 71 team, 15 on the
   noncombatant token, 0 on a foe token — and the 0–5 distribution. 47 checks, floor 30 (§1;
   42 before the fix pass). Read-only on the vault),
+  `toolkit/authsrv/test_instantannounce.py` (**2026-09-25, DESKWORK-D5 / SKILLS-IA (skills
+  §56.9) — the INSTANT skill's announce and the shout batch order, as retail sends them.**
+  Until today every cast rode `cast_anim_msg`'s property 60 / 50; `instantjoin.py` reads the
+  live corpus: 133 stance / shout / type-16 announces, every one `0x009F [48, caster, skill]`,
+  0 on property 60, each followed by the caster's `[21]` visual and — a SHOUT alone — the
+  speech bubble `0x00A5 [caster, one coded string id]`, then the applies, then every speed
+  word. THE LITERALS ARE THE TAPE'S: `[48, 1, 364]`, `[21, 1, 622]`, the bubble's word 0x6658
+  (id 25944) from the arena's 56 casts of 364; `[48, 30, 348]`, `[21, 30, 596]`, word 0x6637
+  (25911) from the hero's 7 casts on `20260914T005758`; `[21, c, 601]` from 43 casts of Frenzy.
+  §1 (needs the vault's rows for 346 and 364; declared skip without) drives the PLAYER's
+  stance and shout through `handle_skill_press` + `cast_tick` with a hero at 500 u, a
+  henchman at 300 u and a foe: the press is E4, the debit, `[8 -> 1]` and NO 60; the
+  completion opens E5, `[48]`, `[21]`, (the bubble), the applies — the player's then the
+  hero's — THEN the speed words, the player's first; the bubble through the real codec is
+  `a5 00 01 00 00 00 01 00 58 66`; one `[48]`, on 0x009F, the value the skill id; no `[58]`,
+  no 60. §2 a HERO's 348 and 346 through `land_skill`: E5, `[48]`, `[21]`, the bubble / the
+  apply, the E3 LAST. §3 a HOSTILE's stance: `[48, 40, 346]`, `[21, 40, 601]` and nothing
+  else. §4 the KNOWN-BAD ARMS: the flag globals default as documented and `main()` flips
+  each through a `global` (a source lock), both flags parse through `serverargs.build_parser`;
+  `--no-instant-announce` restores `[60, 1, 364]` at the press, `[58, 1, 0]` at the
+  completion, the hero's E3 beside its E5 and no bubble; `--per-wearer-batch-order`
+  interleaves apply / speed / apply / speed (a 0x0027 before the last 0x0042, the shape retail
+  never sends). §5 a NON-instant spell (42, targeted and not) and an attack-skill press +
+  two ticks are byte-identical to b50da5c8's own literals (recorded from the unmodified tree
+  with test_castcycle's stubs; the attack literal is the weapon gate's refusal and is a
+  declared skip on a bare machine), identical under both arms, and a hero's SPELL through
+  `land_skill` is identical under both arms with no `[48]`. §6 the corpus through
+  `instantjoin.census(cutoff="20260925T235959")` (declared skip without the vault): 95
+  connections / 1 refused / 133 announces (67 / 64 / 2); by caster the observer 62, a hero
+  24, a team-mate 20, a foe 27; property 60 for an instant id 0, `[48]` on 0x00A0 0; the
+  bubble beside 67 of 67 shouts and 0 of 66 others, one coded id each (25944 × 56, 25911 ×
+  11); the `[21]` beside 133 of 133 with the eight `skill_visual` ids; the observer's 62 own
+  casts at dt = 0 for E4, E5 and E3 with no property 8; the order counts (`[48]` < `[21]`
+  133, `[21]` < 0x00A5 67, 0x00A5 < 0x0042 59, E5 < `[48]` 93, 0x0042 < E3 86, E3 < 0x0027
+  29, 0x00F1 < E3 8, no inversion); every speed word after the last apply 43 of 43, the 6
+  two-apply batches adjacent and none with a speed word; the wearer's word first 16 of 16;
+  207 bubbles, 67 beside a `[48]`. 45 checks with the vault; floor 6, the BARE-MACHINE
+  number (§4's two source checks, §5's two spell literals, the arms agreeing, the hero's
+  spell), from a green run with `RURIK_VAULT` pointed at an empty directory. Read-only on
+  the vault),
   `toolkit/authsrv/test_recharge.py` (**2026-09-23, DESKWORK-D5 step 4 — an NPC's per-slot
   recharge runs from the cast's COMPLETION, not its start.** §1 is the sender, fixture-less:
   `npc_recharge_anchor` returns the activation under the completion anchor and 0 under
