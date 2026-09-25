@@ -267,6 +267,30 @@ too is one line in `run_client` and a behaviour change for every harness run; no
 
 ---
 
+### DESKWORK pass 6, the kick and leash runs on the client -- 2026-09-24 -- **the henchman kick CONFIRMED; the leash return, the caster opening and its notice gate HELD; a caster stall found**
+
+Eleven harness launches on the landed tree `bb84484e` (studies/deskwork/CONFIRM-2026-09-24.md §9),
+the owner's go-ahead, hands off. **The kick:** c2s `0x00A8`, our `0x01C0` + `0x00B0`, the row
+leaving the party panel and the count dropping 3/4 -> 2/4, a re-add restoring both, the count
+holding with the hero (4/4 -> 3/4 -> 4/4), `--no-henchman-kick` keeping the row (K0-K4:
+`204559`, `204808`, `205051`, `205355`). Two runsheet deviations: the party panel has no X on a
+henchman row (the Henchmen tab's Kick is the route), and at 4/4 the client DID send a third add,
+which our cap refused. K5 (`205640`): the launch henchman's Kick stayed greyed, weakly "not
+offered". **The leash:** the runsheet's backpedal (`S:9`) sent no movement message at all and the
+Hatcher killed a player the server never saw move (`205858`, void); re-shaped with the Hatcher
+behind and `W` away, the stander GIVES UP at 1,014 u from its anchor after 3.0 s and walks home in
+two `0x0029` legs 1.75 s apart with no halt, `is HOME` at 0 u (`210317`); `--no-leash-return`
+keeps it following (`210543`). **The caster:** it stands and casts from 300 u with no follow and
+does not lob the touch skill 312 (`210744`), takes one `0x0029` leg to its 450 u range and casts
+(`211150`), and makes no notice at 1,100 u (`211323`) -- and in both casting runs it **stalls
+after its first cast** (253 recharges in 5 s; nothing for ~57 s), which `--no-caster-opening`
+does not (`210957`). The cause, read at the desk: the EV-1 reach gate holds the out-of-reach touch
+slot without stepping past it, and round robin re-picks it on every tick -- exposed only once the
+landing's `skills.toml` re-emit carried the touch bit. The fix is on `desk-casterfix`; ARMs B and C
+re-run after it. The town armour's clicks remain the owner's.
+
+---
+
 ### CLEANUP-3 (DESKWORK-D1), review round 2 -- 2026-09-24 -- **five more findings, all fixed; the commit-count check given a discriminator it lacked; the launch row's Kick labelled UNVERIFIED; `f93a4cac`**
 
 Corrects and extends the entry "CLEANUP-3 (DESKWORK-D1)" below (its heading's "nine findings, all

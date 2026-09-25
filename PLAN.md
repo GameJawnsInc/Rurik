@@ -1955,9 +1955,11 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   (2026-09-24): on retail no weapon is shown on the body in a town, only on the doll — the fix's
   picture. The field shield's fix CONFIRMED on the client (CONFIRM-2 §8, PLAN-LOG): the
   player's own `0x006D` withheld in a field too, the shield standing at load and through a swing.
-  **Open**: the henchman kick's and the town armour's CLIENT CLICKS (armed at the desk
-  2026-09-24, PLAN-LOG "CLEANUP-3", its runsheet; `--no-henchman-kick` and
-  `--no-town-armour-visuals` the A/B arms); travel's confirmation BLOCKED on content (no fog-initialised view
+  The henchman kick CONFIRMED on the client (CONFIRM-2 §9: the row leaves, the count drops, a
+  re-add restores both, `--no-henchman-kick` keeps the row). **Open**: the town armour's CLIENT
+  CLICK (the owner's hands — the harness cannot drag or double-click; PLAN-LOG "CLEANUP-3"'s
+  runsheet A1–A3, `--no-town-armour-visuals` the A/B); the launch henchman's Kick (weakly not
+  offered, CONFIRM-2 §9 K5); travel's confirmation BLOCKED on content (no fog-initialised view
   carries a second pin; `M` on 449 / 242 / 248 / 310 asserts, CONFIRM-2 §3); the display
   mode's field step (the owner's hands, the harness cannot open the drop-down); the
   henchman FIELD-body carry, the outpost re-join and the `'play'` allegiance behind a
@@ -2178,9 +2180,10 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   the sandbox compiler writes them; the tapes name five retail definitions that would
   (§12.9). Which rows is the operator's call.
 * **DESKWORK-D8 steps 3 and 4 SHIPPED at the desk (2026-09-24, PLAN-LOG "DESKWORK-D8 steps 3
-  and 4" and its fix pass); the client run is owed** (the runsheet in the lane's report, ARMs
-  A-D): the stander's leash return and the caster opening, `--no-leash-return` /
-  `--no-caster-opening`. Residues: (i) **SLICE-F22's "no swing mid-follow" is contradicted at
+  and 4" and its fix pass); the client run 2026-09-24 (CONFIRM-2 §9): the return, the caster
+  opening and its notice gate HELD, and it found a DEFECT — the caster STALLS after its first
+  cast** (a touch slot held out of reach is never stepped past; fix on branch `desk-casterfix`,
+  then ARMs B and C re-run). `--no-leash-return` / `--no-caster-opening`. Residues: (i) **SLICE-F22's "no swing mid-follow" is contradicted at
   n = 2 on the caught-runner case** — retail opened an `attack_started` between two follows with
   the follow re-issue PAUSED ~1.15–1.21 s, one swing landing and one STOPPED without landing,
   both under a 1.5× Bull's Charge burst (monsterai §15 L4); ours halts on the clock, owes the
