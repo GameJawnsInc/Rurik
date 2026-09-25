@@ -37,8 +37,9 @@ at 42 ms, 1 of 1) and the henchman add (0x009F -> 0x00B0 at 31-132 ms, 3 of
 at `values[1]` (livewire prints 32799 = 0x801F first for the kick).
 
 `--static` joins the send-site census (`toolkit/clientscan/sendsites.py`,
-bare-machine) on the pinned build: the wrapper VA, its caller count, the
-nearest assert module. That is a LABEL for where the client sends the opcode
+bare-machine) on the pinned build: the wrapper VA, its caller count (every
+rel32 `call`/`jmp`/`jcc` since 2026-09-25; `call` alone before, when a
+thunk-reached wrapper read 0), the nearest assert module. That is a LABEL for where the client sends the opcode
 from, not a name -- a name still needs a witness or a read of the caller.
 
 A run over ZERO live connections is refused (exit 2), never printed as a clean
