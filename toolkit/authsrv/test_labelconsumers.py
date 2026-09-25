@@ -54,7 +54,20 @@ import effects  # noqa: E402
 # a hero's and a hostile's chain-gated casts + the flag on the body path + the positive
 # control, 5a's two hand-row sweeps; 1643's record is a declared skip on a bare machine);
 # 41 with the vault's skills table, 44 with the marks loaded.
-LEDGER = checks.Ledger("label consumers", floor=40)
+# SKILLS-LV (2026-09-25, skills 60): +26 -> FLOOR 66 from the bare run (RURIK_VAULT at an
+# empty dir: 66 + 3 skips) -- section 6 the on-hit rider (the class readers, the player's
+# sword / wand / bow swings, the flag, a spell's null, a hero's sword and staff, a
+# hostile's axe at the player, the source lock), section 7 the single-target knock-down
+# (231's, 784's, 294's shapes for the player and a hostile, the flag, the term being the
+# tier's only, the source lock), section 8 the flat constant (the reader, the flag, the
+# wire, the hand-row census), section 5's three flags; 70 + 1 skip with the vault's
+# 57-row overlay, 73 with the 60-row emit loaded (5c's marks).
+# The fix pass of the same day (skills 60.8): +4 -> FLOOR 70 from the bare run (70 + 3
+# skips) -- 1041's shape through the widened caster arm (the predicate and the E5 burst,
+# bare-capable), a killing blow carrying no rider, and the rider's SIDE (the player's
+# 1997-shape at a FOE arms nothing); 74 + 1 skip with the vault's 57-row overlay, 77 with
+# the 60-row emit.
+LEDGER = checks.Ledger("label consumers", floor=70)
 check = LEDGER.ok
 
 PLAYER = authsrv.PLAYER_AGENT_ID
@@ -62,11 +75,17 @@ FOE, FOE2, FAR = 10, 11, 12          # hostiles: adjacent, adjacent, 400 u off
 HERO, HERO2 = 200, 201               # party bodies: 110 u off, 6000 u off
 POISON = effects.CONDITION_BY_NAME["Poison"]
 CRIPPLED = effects.CONDITION_BY_NAME["Crippled"]
+BLIND = effects.CONDITION_BY_NAME["Blind"]
 
 # ---- synthetic rows: the shapes of 183 / 840 / 287 / 784 / 974 / a plain self heal,
 # and (the fix pass) 1033's damage shape, a chained self heal, a chained stance
 S_FIRE, S_POISON, S_PARTY, S_CHAIN, S_STEP, S_SELF = 900001, 900002, 900003, 900004, 900005, 900006
 S_CHAINDMG, S_CHAINHEAL, S_CHAINSTANCE = 900007, 900008, 900009
+# SKILLS-LV (2026-09-25, skills 60): 435's and 1997's rider shapes, 231's / 784's /
+# 294's knock-down shapes, a HAND-shaped knock-down row, 167's and 1033's slot shapes;
+# the fix pass (skills 60.8): 1041's shape, a byte-0 Stance over 156 u with a Blind slot
+S_PREP, S_ENCH, S_TOUCH, S_KDCOND, S_SIGNET, S_HANDKD, S_FLAT, S_INDET, S_STANCEAREA = (
+    900010, 900011, 900012, 900013, 900014, 900015, 900016, 900017, 900018)
 
 
 def _skill(target, tc=5, aoe=0.0, s=(30, 30), args=2, d=(0, 0), combo=0, combo_req=0):
@@ -88,6 +107,16 @@ SKILLS = {
     str(S_CHAINDMG): _skill(5, tc=10, s=(25, 25), combo_req=1),          # 1033's: a dual, earth damage
     str(S_CHAINHEAL): _skill(0, aoe=0.0, s=(40, 40), combo_req=2),       # a self heal that must follow a lead
     str(S_CHAINSTANCE): _skill(0, tc=3, s=(0, 0), d=(5, 5), combo_req=2),  # a stance that must follow a lead
+    str(S_PREP): dict(_skill(0, tc=19, s=(0, 0), args=4, d=(24, 24)), bonus_scale0=3, bonus_scale15=15),  # 435
+    str(S_ENCH): _skill(3, tc=6, s=(5, 20), args=3, d=(5, 20)),           # 1997's shape
+    str(S_TOUCH): _skill(5, tc=10, s=(10, 60)),                           # 231's shape
+    str(S_KDCOND): _skill(5, s=(5, 5)),                                   # 784's shape, unchained
+    str(S_SIGNET): _skill(5, tc=7, aoe=156.0, s=(15, 75)),                # 294's shape
+    str(S_HANDKD): _skill(5, tc=10, s=(10, 60)),                          # a HAND row's shape
+    str(S_FLAT): dict(_skill(5, s=(10, 40)), bonus_scale0=10, bonus_scale15=10),   # 167's shape
+    str(S_INDET): dict(_skill(5, s=(10, 40)), bonus_scale0=5, bonus_scale15=20),   # 1033's slot shape
+    str(S_STANCEAREA): dict(_skill(0, tc=3, aoe=156.0, s=(0, 0), args=5, d=(10, 30)),
+                            bonus_scale0=5, bonus_scale15=20),                      # 1041's shape
 }
 EFFECTS = {
     str(S_FIRE): {"scale_means": "Fire damage", "tier": "label", "tier_detail": ["AREA_CASTER"]},
@@ -98,6 +127,23 @@ EFFECTS = {
     str(S_SELF): {"scale_means": "Heal", "tier": "label", "tier_detail": []},
     str(S_CHAINDMG): {"scale_means": "Earth damage", "tier": "label", "tier_detail": ["CHAIN_GATED"]},
     str(S_CHAINHEAL): {"scale_means": "Heal", "tier": "label", "tier_detail": ["CHAIN_GATED"]},
+    str(S_PREP): {"bonus_scale_means": "Poison", "condition_rider": "on_hit", "rider_weapon": "physical",
+                  "tier": "label", "tier_detail": ["CONDITION_RIDER_ON_HIT"]},
+    str(S_ENCH): {"scale_means": "Weakness", "condition_rider": "on_hit", "rider_weapon": "melee",
+                  "tier": "label", "tier_detail": ["TARGET_ALLY", "CONDITION_RIDER_ON_HIT"]},
+    str(S_TOUCH): {"scale_means": "Lightning damage", "knocks_down": True, "tier": "label",
+                   "tier_detail": ["TOUCH", "AREA_ONE_TARGET", "KNOCKDOWN_APPLIED"]},
+    str(S_KDCOND): {"scale_means": "Poison", "knocks_down": True, "tier": "label",
+                    "tier_detail": ["TARGET_FOE", "KNOCKDOWN_APPLIED"]},
+    str(S_SIGNET): {"scale_means": "Holy damage", "knocks_down": True, "tier": "label",
+                    "tier_detail": ["ALL_FOES", "AREA_ADJACENT", "TARGET_FOE", "AREA_ONE_TARGET", "KNOCKDOWN_APPLIED"]},
+    str(S_HANDKD): {"scale_means": "Lightning damage", "knocks_down": True},     # no tier: a hand row
+    str(S_FLAT): {"scale_means": "Earth damage", "bonus_scale_means": "Blind", "tier": "label",
+                  "tier_detail": ["CONDITION_FLAT_CONSTANT"]},
+    str(S_INDET): {"scale_means": "Earth damage", "bonus_scale_means": "Deep Wound", "tier": "label",
+                   "tier_detail": ["INDETERMINATE_SLOT", "CONDITION_BIT_CLEAR_REFUSED"]},
+    str(S_STANCEAREA): {"bonus_scale_means": "Blind", "tier": "label",
+                        "tier_detail": ["AREA_CASTER", "CLAUSE_UNBLOCKABLE"]},
 }
 
 
@@ -155,6 +201,7 @@ def main():
     saved = (authsrv.skill_timing, authsrv.skill_cost, authsrv.weapon_satisfies,
              authsrv.CASTER_AREAS, authsrv.PARTY_HEALS, authsrv.NONATTACK_CHAIN_GATE,
              agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND)
+    saved_lv = (authsrv.CONDITION_RIDERS, authsrv.LABEL_KNOCKDOWNS, authsrv.CONDITION_FLAT_CONSTANTS)
     tables.setdefault("skills", {}).update(SKILLS)
     tables.setdefault("skill_effect", {}).update(EFFECTS)
     authsrv.skill_timing = lambda sid: (1.0, 0.75, 0.0)
@@ -229,6 +276,27 @@ def main():
         _press_and_land(st, send, S_SELF, FOE)
         check(_words(sent) == [] and st["agents"][FOE]["health"] == 9000.0,
               "CONTROL: a byte-0 row with NO radius takes no area arm (a self heal: no word, no hit)")
+        # the fix pass (skills 60.8 #5): the caster arm WIDENED to an EPISODE type -- 1041's
+        # shape, a byte-0 Stance over 156 u with a Blind bonus slot, marked AREA_CASTER. Before
+        # this arm only 5c (the fresh emit) could redden a Spell-only predicate; bare could not.
+        check(authsrv.caster_area_row(S_STANCEAREA) and authsrv.caster_area(S_STANCEAREA) == 156.0
+              and not authsrv.caster_area_row(S_CHAINSTANCE) and authsrv.caster_area(S_CHAINSTANCE) is None,
+              "caster_area_row admits an EPISODE type (a byte-0 Stance with a radius, 1041's shape) "
+              "and still refuses a stance with NO radius")
+        st, (sent, send) = _world(), _sender()
+        log = _press_and_land(st, send, S_STANCEAREA, FAR)     # the SELECTED target is 400 u off
+        eps_p = [ep["skill"] for ep in authsrv.effect_table(st).on_agent(PLAYER)]
+        ep_b = [e for e in authsrv.effect_table(st).on_agent(FOE) if e["skill"] == BLIND]
+        i_blind = log.find("Blind on agent 11")
+        i_stance = log.find(f"stance {S_STANCEAREA} on agent")
+        check(_conditioned(st, FOE, BLIND) and _conditioned(st, FOE2, BLIND) and ep_b and ep_b[0]["duration"] == 5.0
+              and not _conditioned(st, FAR, BLIND) and not _conditioned(st, HERO, BLIND)
+              and eps_p == [S_STANCEAREA] and _words(sent) == []
+              and 0 <= i_blind < i_stance,
+              "1041's shape at the player's E5: Blind 5 s (the bonus slot at rank 0) on BOTH hostiles "
+              "within 156 u of the PLAYER and on neither the far selected one nor the ally, no damage "
+              "word, then the STANCE opens on the player -- the Blind ahead of the stance in the log",
+              (eps_p, ep_b, i_blind, i_stance, log[-400:]))
         src = open(authsrv.__file__, encoding="utf-8").read()
         i_gate = src.index("_carea_row = caster_area_row(cast[\"skill_id\"]) and not _na_fail")
         i_att = src.index("elif target and _is_attack_skill(cast[\"skill_id\"]):", i_gate)
@@ -539,6 +607,299 @@ def main():
               "land_skill reads a body's requirement once (the NOBODY arm)")
 
         # ------------------------------------------------------------------
+        print("\n6. (D) SKILLS-LV: the ON-HIT condition rider on the wearer's landed attacks")
+        WEAKNESS = effects.CONDITION_BY_NAME["Weakness"]
+        WIC, IT = authsrv.weapon_in_rider_class, agents.item_template
+        check(WIC(IT("starter_sword"), "physical") and WIC(IT("starter_bow"), "physical")
+              and WIC(IT("starter_daggers"), "physical") and not WIC(IT("starter_wand"), "physical")
+              and not WIC(IT("caster_staff"), "physical")
+              and WIC(IT("starter_sword"), "melee") and WIC(IT("starter_axe"), "melee")
+              and not WIC(IT("starter_bow"), "melee") and not WIC(IT("starter_spear"), "melee")
+              and not WIC(IT("caster_staff"), "melee")
+              and WIC(None, "any") and WIC(IT("starter_wand"), "any")
+              and not WIC(None, "physical") and not WIC(None, "melee") and not WIC(IT("starter_sword"), "dagger"),
+              "weapon_in_rider_class: 'physical' by the item's 587 word (a sword, a bow, daggers are; a "
+              "wand's chaos and a staff are not), 'melee' by its [weapon_type] delivery (a sword, an axe "
+              "are; a bow, a spear, a staff are not), 'any' everything including no item; no item is "
+              "neither physical nor melee, and a class with no reader is nothing")
+        authsrv.apply_party_character({"player_weapon": "starter_sword"})
+        st, (sent, send) = _world(), _sender()
+        log = _press_and_land(st, send, S_PREP, FOE)
+        eps = [ep["skill"] for ep in authsrv.effect_table(st).on_agent(PLAYER)]
+        check(eps == [S_PREP] and not _conditioned(st, FOE, POISON) and not _conditioned(st, PLAYER, POISON)
+              and authsrv.skill_condition(S_PREP, 0) is None and "CONDITION_RIDER_ON_HIT" in log,
+              "the player's cast of 435's shape at a selected foe opens the PREPARATION on the player "
+              "and puts NOTHING on the foe -- skill_condition is None for a rider row (the "
+              "over-application CONDITION_ON_EPISODE refused); the log names the tier", (eps, log[-300:]))
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            res = authsrv.hit_enemy(send, st, FOE, 1)
+        ep_p = [e for e in authsrv.effect_table(st).on_agent(FOE) if e["skill"] == POISON]
+        check(res == "landed" and _conditioned(st, FOE, POISON) and len(ep_p) == 1
+              and ep_p[0]["duration"] == 3.0 and "rider on a physical attack [SKILLS-LV]" in buf.getvalue()
+              and st.get("effect_list_suppressed", 0) >= 1,
+              "then a SWORD swing lands: the foe is Poisoned for 3 s (the row's bonus slot at rank 0) "
+              "through apply_condition -- one episode on the foe, its 0x0042 suppressed as every "
+              "foe's is (effect_list_send; retail shows a foe's condition as the status word) -- and "
+              "the log names the rider", (res, ep_p, buf.getvalue()[-300:]))
+        st["agents"][FOE2]["last_hit"] = 0.0
+        with contextlib.redirect_stdout(io.StringIO()):
+            res2 = authsrv.hit_enemy(send, st, FOE2, 1)
+        check(res2 == "landed" and _conditioned(st, FOE2, POISON) and not _conditioned(st, FAR, POISON),
+              "every landed hit carries it: a second foe struck is Poisoned too; the one never hit is not")
+        with contextlib.redirect_stdout(io.StringIO()):
+            res3 = authsrv.hit_enemy(send, st, FAR, 1, exact=20.0, swing=False, label="a spell")
+        check(res3 == "landed" and not _conditioned(st, FAR, POISON),
+              "VACUITY: a SPELL's damage through hit_enemy (exact, no swing) is not an attack and "
+              "carries no rider")
+        authsrv.apply_party_character({"player_weapon": "starter_wand"})
+        st, (sent, send) = _world(), _sender()
+        _press_and_land(st, send, S_PREP, FOE)
+        with contextlib.redirect_stdout(io.StringIO()):
+            res = authsrv.hit_enemy(send, st, FOE, 1)
+        check(res == "landed" and not _conditioned(st, FOE, POISON)
+              and [ep["skill"] for ep in authsrv.effect_table(st).on_agent(PLAYER)] == [S_PREP],
+              "KNOWN-BAD ARM (the class): the same episode and a WAND (587 = 6, not physical): the "
+              "swing lands and no Poison rides it -- the episode is open, the item fails the class")
+        authsrv.apply_party_character({"player_weapon": "starter_bow"})
+        st, (sent, send) = _world(), _sender()
+        _press_and_land(st, send, S_PREP, FOE)
+        with contextlib.redirect_stdout(io.StringIO()):
+            res = authsrv.hit_enemy(send, st, FOE, 1)
+        check(res == "landed" and _conditioned(st, FOE, POISON),
+              "a BOW (piercing, physical) carries it: 'physical attacks' is the damage type, not melee")
+        authsrv.apply_party_character({"player_weapon": "starter_sword"})
+        authsrv.CONDITION_RIDERS = False
+        st, (sent, send) = _world(), _sender()
+        _press_and_land(st, send, S_PREP, FOE)
+        with contextlib.redirect_stdout(io.StringIO()):
+            res = authsrv.hit_enemy(send, st, FOE, 1)
+        riders_off = authsrv.episode_condition_riders(st, PLAYER, agents.PLAYER_WEAPON)
+        authsrv.CONDITION_RIDERS = True
+        riders_on = authsrv.episode_condition_riders(st, PLAYER, agents.PLAYER_WEAPON)
+        check(res == "landed" and not _conditioned(st, FOE, POISON)
+              and [ep["skill"] for ep in authsrv.effect_table(st).on_agent(PLAYER)] == [S_PREP]
+              and riders_off == [] and [r[2] for r in riders_on] == [S_PREP],
+              "KNOWN-BAD ARM --no-condition-riders: the episode still opens (icon and timer, the "
+              "excluded state), the reader answers nothing under the flag and the rider again "
+              "with it, and the sword swing carried no Poison", (riders_off, riders_on))
+        st, (sent, send) = _world(), _sender()
+        with contextlib.redirect_stdout(io.StringIO()):
+            res = authsrv.hit_enemy(send, st, FOE, 1)
+        check(res == "landed" and not _conditioned(st, FOE, POISON),
+              "CONTROL: no episode, no rider -- the null above is the flag, not a dead swing")
+        # the fix pass (skills 60.8 #5): a KILLING BLOW carries no rider -- hit_enemy's
+        # `never a corpse` guard, which no arm reddened before this one (apply_condition does
+        # not refuse a corpse on its own, so the guard is the only thing between the rider and
+        # a Poison episode on a body the death just stripped)
+        st, (sent, send) = _world(), _sender()
+        _press_and_land(st, send, S_PREP, FOE)
+        st["agents"][FOE]["health"] = 1.0
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            res = authsrv.hit_enemy(send, st, FOE, 1)
+        check(res == "landed" and st["agents"][FOE]["dead"] and not _conditioned(st, FOE, POISON)
+              and authsrv.effect_table(st).on_agent(FOE) == [] and "[SKILLS-LV]" not in buf.getvalue()
+              and [ep["skill"] for ep in authsrv.effect_table(st).on_agent(PLAYER)] == [S_PREP],
+              "a KILLING BLOW with the preparation open: the foe dies and carries NO Poison -- no "
+              "episode on the corpse, no rider line; the preparation is still open on the player",
+              buf.getvalue()[-300:])
+        # a BODY wearing 1997's shape: the enchantment on the ALLY (byte 3), its melee attacks Weaken
+        st, (sent, send) = _world(), _sender()
+        hero = st["agents"][HERO]
+        hero.update({"weapon_item": "starter_sword", "pos": (60.0, 0.0)})
+        with contextlib.redirect_stdout(io.StringIO()):
+            authsrv.apply_effect(send, st, PLAYER, S_ENCH, 0, HERO, 1)
+        eps_h = [ep["skill"] for ep in authsrv.effect_table(st).on_agent(HERO)]
+        with contextlib.redirect_stdout(io.StringIO()):
+            res = authsrv.land_swing_on_body(send, st, HERO, hero, FOE, 1)
+        ep_w = [e for e in authsrv.effect_table(st).on_agent(FOE) if e["skill"] == WEAKNESS]
+        check(eps_h == [S_ENCH] and not _conditioned(st, HERO, WEAKNESS) and res == "landed"
+              and ep_w and ep_w[0]["duration"] == 5.0 and not _conditioned(st, PLAYER, WEAKNESS),
+              "the player's cast of 1997's shape at a hero puts the ENCHANTMENT on the hero (byte 3) "
+              "and no Weakness on anyone; the hero's SWORD swing at a hostile then Weakens it for 5 s "
+              "(land_swing_on_body's seam)", (eps_h, res, ep_w))
+        st, (sent, send) = _world(), _sender()
+        hero = st["agents"][HERO]
+        hero.update({"weapon_item": "caster_staff", "pos": (60.0, 0.0)})
+        with contextlib.redirect_stdout(io.StringIO()):
+            authsrv.apply_effect(send, st, PLAYER, S_ENCH, 0, HERO, 1)
+            res = authsrv.land_swing_on_body(send, st, HERO, hero, FOE, 1)
+        check(res == "landed" and not _conditioned(st, FOE, WEAKNESS),
+              "KNOWN-BAD ARM (the class): the same enchantment on a hero holding a STAFF -- not melee "
+              "-- carries no Weakness")
+        st, (sent, send) = _world(), _sender()
+        st["player_health"] = 480.0
+        foe = st["agents"][FOE]
+        foe["weapon_item"] = "starter_axe"
+        with contextlib.redirect_stdout(io.StringIO()):
+            authsrv.apply_effect(send, st, FOE2, S_ENCH, 0, FOE, 1)
+            res = authsrv.land_swing(send, st, FOE, foe, 1)
+        check(res == "landed" and _conditioned(st, PLAYER, WEAKNESS) and st["player_health"] < 480.0,
+              "a HOSTILE wearing it (cast by its ally) swings an AXE at the player: the player is "
+              "Weakened (land_swing's seam) -- the wearer is the caster's ally, the side the "
+              "template names")
+        # the fix pass (skills 60.8 #1, the reviewers' RV-1): the player's byte-3 rider
+        # enchantment pressed with a FOE selected -- effect_recipient puts the episode on the
+        # FOE (the inert icon every byte-3 row wore before this pass; here the VACUITY GUARD:
+        # the reader has an episode to refuse) -- and the foe's axe swing at the player carries
+        # NO Weakness: a rider rides the caster's side only, never a foe wearing a misplaced
+        # ally enchantment
+        st, (sent, send) = _world(), _sender()
+        st["player_health"] = 480.0
+        _press_and_land(st, send, S_ENCH, FOE)
+        foe = st["agents"][FOE]
+        foe["weapon_item"] = "starter_axe"
+        on_foe = [ep["skill"] for ep in authsrv.effect_table(st).on_agent(FOE)]
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            res = authsrv.land_swing(send, st, FOE, foe, 1)
+        check(on_foe == [S_ENCH] and res == "landed" and st["player_health"] < 480.0
+              and not _conditioned(st, PLAYER, WEAKNESS) and "[SKILLS-LV]" not in buf.getvalue()
+              and authsrv.episode_condition_riders(st, FOE, IT("starter_axe")) == [],
+              "the player's 1997-shape pressed at a HOSTILE: the enchantment lands on the hostile (the "
+              "pre-pass inert icon -- the episode the reader must refuse), its axe swing lands on the "
+              "player and carries NO Weakness, the reader answers nothing for the foe: the rider rides "
+              "the SIDE the template names (the caster or its allies)", (on_foe, res, buf.getvalue()[-300:]))
+        check(src.count("        apply_episode_riders(send, state,") == 3
+              and 'if row.get("condition_rider"):' in src
+              and src.index("def skill_condition(") < src.index('if row.get("condition_rider"):')
+              < src.index("def _condition_terms("),
+              "SOURCE: the riders ride the three landing seams (hit_enemy, land_swing, "
+              "land_swing_on_body), and skill_condition returns None for a rider row before the "
+              "shared reader")
+
+        # ------------------------------------------------------------------
+        print("\n7. (E) SKILLS-LV: a label row's knock-down on the single-target non-attack land")
+
+        def kd_words(batch):
+            return [(i, v) for i, (op, v) in enumerate(batch)
+                    if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT and v[0] == 63]
+
+        def word_idx(batch):
+            return [i for i, (op, v) in enumerate(batch) if op == 0x00A3 and v[0] in (16, 17)]
+
+        def apply_idx(batch, cond):
+            return [i for i, (op, v) in enumerate(batch)
+                    if op == authsrv.GAME_SMSG_EFFECT_APPLY and v[1] == cond]
+
+        TWO_S = authsrv._f32(2.0)
+        st, (sent, send) = _world(), _sender()
+        log = _press_and_land(st, send, S_TOUCH, FOE)
+        kds, ws = kd_words(sent), word_idx(sent)
+        check(len(kds) == 1 and kds[0][1][1] == FOE and kds[0][1][2] == TWO_S and ws and ws[-1] < kds[0][0]
+              and st["agents"][FOE].get("knocked_until", 0) > time.time()
+              and st["agents"][FOE]["health"] < 9000.0 and "[SKILLS-LV]" in log,
+              "231's shape (a touch Skill, Lightning damage, knocks_down) at the player's E5: the word, "
+              "then [63, foe, 2.0] -- the foe is down for KNOCK_DOWN_SECONDS", (kds, ws, log[-200:]))
+        st, (sent, send) = _world(), _sender()
+        log = _press_and_land(st, send, S_KDCOND, FOE)
+        kds = kd_words(sent)
+        check(len(kds) == 1 and kds[0][1][1] == FOE and kds[0][1][2] == TWO_S and _conditioned(st, FOE, POISON)
+              and "KNOCKED DOWN" in log and "Poison on agent 10" in log
+              and log.index("KNOCKED DOWN") < log.index("Poison on agent 10"),
+              "784's shape (a condition-only Spell, knocks_down): [63, foe, 2.0] BEFORE the Poison "
+              "(the foe's 0x0042 is suppressed; the log carries the order) -- retail's completion "
+              "order: the fall OBSERVED 4 of 5 live 784s, ahead of the Poison on the 2 that show one "
+              "(skills 60.3; the 2 that show none are CONTESTED there)", (kds, log[-300:]))
+        st, (sent, send) = _world(), _sender()
+        _press_and_land(st, send, S_SIGNET, FOE)
+        kds = kd_words(sent)
+        check(len(kds) == 1 and kds[0][1][1] == FOE and st["agents"][FOE]["health"] < 9000.0
+              and st["agents"][FOE2]["health"] == 9000.0 and not st["agents"][FOE2].get("knocked_until"),
+              "294's shape (a Signet with area words, AREA_ONE_TARGET): ONE target takes the word and "
+              "falls; the other adjacent hostile is untouched -- the one-target path, marked as such")
+        st, (sent, send) = _world(), _sender()
+        st["player_health"] = 480.0
+        foe = st["agents"][FOE]
+        foe.update({"skills": [[S_KDCOND, 1.0, 5.0]], "skill_ready": [0.0], "casting": 0, "cast_target": PLAYER})
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            authsrv.land_skill(send, st, FOE, foe, 1)
+        kds, ai = kd_words(sent), apply_idx(sent, POISON)
+        check(len(kds) == 1 and kds[0][1][1] == PLAYER and kds[0][1][2] == TWO_S and ai and kds[0][0] < ai[0]
+              and st.get("player_knocked_until", 0) > time.time() and _conditioned(st, PLAYER, POISON),
+              "a HOSTILE casting 784's shape at the player: [63, player, 2.0] before the Poison's "
+              "0x0042 (the player's list is shown, so the order is on the wire) -- the player is down "
+              "and Poisoned (land_skill's condition-only seam)", (kds, ai))
+        st, (sent, send) = _world(), _sender()
+        st["player_health"] = 480.0
+        foe = st["agents"][FOE]
+        foe.update({"skills": [[S_TOUCH, 1.0, 5.0]], "skill_ready": [0.0], "casting": 0, "cast_target": PLAYER})
+        with contextlib.redirect_stdout(io.StringIO()):
+            authsrv.land_skill(send, st, FOE, foe, 1)
+        kds, ws = kd_words(sent), word_idx(sent)
+        check(len(kds) == 1 and kds[0][1][1] == PLAYER and ws and ws[-1] < kds[0][0]
+              and st["player_health"] < 480.0,
+              "a HOSTILE casting 231's shape at the player: the word, then the fall (land_skill's "
+              "damage seam)", (kds, ws))
+        authsrv.LABEL_KNOCKDOWNS = False
+        st, (sent, send) = _world(), _sender()
+        _press_and_land(st, send, S_TOUCH, FOE)
+        reads_off = (authsrv.skill_knocks_down(S_TOUCH), authsrv.skill_knocks_down(S_HANDKD))
+        authsrv.LABEL_KNOCKDOWNS = True
+        check(kd_words(sent) == [] and st["agents"][FOE]["health"] < 9000.0
+              and not st["agents"][FOE].get("knocked_until") and reads_off == (False, True),
+              "KNOWN-BAD ARM --no-label-knockdowns: the LABEL row's word lands and nobody falls; the "
+              "reader still answers True for a HAND-shaped row (no tier) -- the flag is the tier's, the "
+              "hand rows' knock-downs (the attack path, the bursts) stand", reads_off)
+        st2, (sent2, send2) = _world(), _sender()
+        _press_and_land(st2, send2, S_HANDKD, FOE)
+        check(kd_words(sent2) == [] and st2["agents"][FOE]["health"] < 9000.0
+              and not st2["agents"][FOE].get("knocked_until"),
+              "the single-target term is the TIER's only: a HAND-shaped row with knocks_down on this "
+              "path keeps the pre-pass shape (its word, no fall) -- Earthquake under --no-spell-areas "
+              "is that case and test_weapons pins it; so --no-label-knockdowns reverts every fall this "
+              "pass added and nothing else")
+        check(src.count("        nonattack_knock_down(send, state,") == 4
+              and src.index("_st_res = hit_enemy(send, state, target, conn_id, exact=float(found[0]),")
+              < src.index("nonattack_knock_down(send, state, cast[\"skill_id\"], target,"),
+              "SOURCE: the single-target term sits at four sites (the player's standalone word and "
+              "condition-only land, a body's condition-only land and its word) and the player's "
+              "damage site reads hit_enemy's verdict first")
+
+        # ------------------------------------------------------------------
+        print("\n8. (F) SKILLS-LV: the flat-constant condition slot")
+        check(authsrv.skill_condition(S_FLAT, 0) == (BLIND, 10.0) and authsrv.skill_condition(S_FLAT, 15) == (BLIND, 10.0)
+              and authsrv.skill_condition(S_INDET, 0) is None and authsrv.skill_condition(S_INDET, 15) is None,
+              "skill_condition reads a bit-clear slot with EQUAL endpoints as the flat constant (167's "
+              "shape: Blind 10 s at any rank) and still refuses DIFFERING ones (1033's shape: None)")
+        authsrv.CONDITION_FLAT_CONSTANTS = False
+        off = (authsrv.skill_condition(S_FLAT, 0), authsrv.skill_condition(S_INDET, 0))
+        authsrv.CONDITION_FLAT_CONSTANTS = True
+        check(off == (None, None),
+              "KNOWN-BAD ARM --no-condition-flat-constants: both refuse, as until 2026-09-25")
+        st, (sent, send) = _world(), _sender()
+        log = _press_and_land(st, send, S_FLAT, FOE)
+        ep_b = [e for e in authsrv.effect_table(st).on_agent(FOE) if e["skill"] == BLIND]
+        check(st["agents"][FOE]["health"] < 9000.0 and len(ep_b) == 1 and ep_b[0]["duration"] == 10.0
+              and word_idx(sent) and "hit agent 10" in log and "Blind on agent 10" in log
+              and log.index("hit agent 10") < log.index("Blind on agent 10"),
+              "through the real cast: 167's shape deals its earth damage (the word on the wire) and "
+              "then Blinds the target for 10 s (the foe's episode; its 0x0042 suppressed as a foe's)",
+              (ep_b, log[-300:]))
+        # every loaded HAND row with a condition means has its slot's bit SET, so the reader
+        # changes no hand row (a census, 24 loaded slots on 2026-09-25: only 167 and 1033 are
+        # bit-clear, both label rows)
+        hand_rows_loaded = {int(k): r for k, r in saved_tables["skill_effect"].items()
+                            if r.get("tier") != "label" and str(k).isdigit()}
+        skills_loaded = agents.WORLD.tables.get("skills", {})
+        hand_clear = []
+        for k, r in hand_rows_loaded.items():
+            for means, bit in (("scale_means", 2), ("bonus_scale_means", 4)):
+                if effects.condition_id(r.get(means)) is None:
+                    continue
+                srow_ = skills_loaded.get(str(k))
+                if srow_ is not None and not int(srow_["skill_arguments"]) & bit:
+                    hand_clear.append(k)
+        if any(str(k) in skills_loaded for k in hand_rows_loaded):
+            check(hand_clear == [],
+                  "no HAND row's condition means sits on a bit-clear slot -- the flat reader moves no "
+                  "hand row (the census of 2026-09-25)", hand_clear)
+        else:
+            LEDGER.skip("8. the hand rows' condition slots (1 check)", "no skills table (a bare machine)")
+
+        # ------------------------------------------------------------------
         print("\n5. the flags parse and rebind; the loaded overlay's marks agree with the predicates")
         import serverargs
         ap = serverargs.build_parser(
@@ -558,6 +919,15 @@ def main():
               and (authsrv.CASTER_AREAS, authsrv.PARTY_HEALS, authsrv.NONATTACK_CHAIN_GATE) == (True, True, True),
               "--no-caster-areas / --no-party-heals / --no-nonattack-chain-gate parse (default off) "
               "and main() rebinds each global to False before the listener; the defaults are on")
+        a2 = ap.parse_args(["--no-condition-riders", "--no-label-knockdowns", "--no-condition-flat-constants"])
+        binds_lv = [src.index(f"        global {g}\n        {g} = False", i_main)
+                    for g in ("CONDITION_RIDERS", "LABEL_KNOCKDOWNS", "CONDITION_FLAT_CONSTANTS")]
+        check((a0.no_condition_riders, a0.no_label_knockdowns, a0.no_condition_flat_constants) == (False, False, False)
+              and (a2.no_condition_riders, a2.no_label_knockdowns, a2.no_condition_flat_constants) == (True, True, True)
+              and all(i_main < b < i_listen for b in binds_lv)
+              and (authsrv.CONDITION_RIDERS, authsrv.LABEL_KNOCKDOWNS, authsrv.CONDITION_FLAT_CONSTANTS) == (True, True, True),
+              "SKILLS-LV: --no-condition-riders / --no-label-knockdowns / --no-condition-flat-constants "
+              "parse (default off) and main() rebinds each global before the listener; the defaults are on")
         lab = {int(k): r for k, r in saved_tables["skill_effect"].items() if r.get("tier") == "label"}
         hand = {int(k): r for k, r in saved_tables["skill_effect"].items()
                 if r.get("tier") != "label" and str(k).isdigit()}
@@ -615,12 +985,51 @@ def main():
             check(marks["CHAIN_GATED"] == gated_pred and len(gated_pred) >= 3,
                   f"every loaded CHAIN_GATED row ({len(gated_pred)}) is exactly a non-attack with "
                   f"combo_req -- and no other label row is", (marks["CHAIN_GATED"], gated_pred))
+        # SKILLS-LV's marks against the server's own readers (a skip on an overlay
+        # that predates pass 2)
+        marks_lv = {m: sorted(s for s, r in lab.items() if m in (r.get("tier_detail") or ()))
+                    for m in ("CONDITION_RIDER_ON_HIT", "KNOCKDOWN_APPLIED", "CONDITION_FLAT_CONSTANT")}
+        if not any(marks_lv.values()):
+            LEDGER.skip("5c. the loaded overlay's SKILLS-LV marks (3 checks)",
+                        "no CONDITION_RIDER_ON_HIT / KNOCKDOWN_APPLIED / CONDITION_FLAT_CONSTANT row is "
+                        "loaded -- the vault's overlay predates SKILLS-LV; regenerate it or point "
+                        "RURIK_CONTENT_EXTRA at a fresh emit")
+        else:
+            riders_pred = sorted(s for s in lab if lab[s].get("condition_rider"))
+            check(marks_lv["CONDITION_RIDER_ON_HIT"] == riders_pred and len(riders_pred) >= 2
+                  and all(authsrv.skill_condition(s, 0) is None
+                          and authsrv._condition_terms(s, lab[s], 0) is not None
+                          and int(agents.WORLD.get("skills", str(s))["type_code"]) in effects.EFFECT_TYPES
+                          and lab[s].get("rider_weapon") in ("any", "physical", "melee") for s in riders_pred),
+                  f"every loaded CONDITION_RIDER_ON_HIT row ({len(riders_pred)}) carries condition_rider, "
+                  f"lands nothing at the cast, reads a condition for the rider, is an episode type and "
+                  f"names a class the server reads -- and no other label row does",
+                  (marks_lv["CONDITION_RIDER_ON_HIT"], riders_pred))
+            kd_pred = sorted(s for s in lab if authsrv.skill_knocks_down(s))
+            authsrv.LABEL_KNOCKDOWNS = False
+            kd_off = sorted(s for s in lab if authsrv.skill_knocks_down(s))
+            authsrv.LABEL_KNOCKDOWNS = True
+            check(marks_lv["KNOCKDOWN_APPLIED"] == kd_pred and len(kd_pred) >= 5 and kd_off == []
+                  and all(int(agents.WORLD.get("skills", str(s))["duration0"]) == 0 for s in kd_pred),
+                  f"every loaded KNOCKDOWN_APPLIED row ({len(kd_pred)}) is exactly one skill_knocks_down "
+                  f"reads, none under --no-label-knockdowns, each on an untimed record",
+                  (marks_lv["KNOCKDOWN_APPLIED"], kd_pred, kd_off))
+            flat_on = sorted(s for s in lab if authsrv.skill_condition(s, 0) is not None)
+            authsrv.CONDITION_FLAT_CONSTANTS = False
+            flat_off = sorted(s for s in lab if authsrv.skill_condition(s, 0) is not None)
+            authsrv.CONDITION_FLAT_CONSTANTS = True
+            flat_pred = sorted(set(flat_on) - set(flat_off))
+            check(marks_lv["CONDITION_FLAT_CONSTANT"] == flat_pred and len(flat_pred) >= 1,
+                  f"every loaded CONDITION_FLAT_CONSTANT row ({len(flat_pred)}) is exactly a row whose "
+                  f"condition resolves ONLY through the flat reader (the flag off removes it) -- and no "
+                  f"other label row is", (marks_lv["CONDITION_FLAT_CONSTANT"], flat_on, flat_off))
     finally:
         tables["skills"] = saved_tables["skills"]
         tables["skill_effect"] = saved_tables["skill_effect"]
         (authsrv.skill_timing, authsrv.skill_cost, authsrv.weapon_satisfies,
          authsrv.CASTER_AREAS, authsrv.PARTY_HEALS, authsrv.NONATTACK_CHAIN_GATE,
          agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND) = saved
+        (authsrv.CONDITION_RIDERS, authsrv.LABEL_KNOCKDOWNS, authsrv.CONDITION_FLAT_CONSTANTS) = saved_lv
     return LEDGER.verdict()
 
 

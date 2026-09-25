@@ -2509,6 +2509,50 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "nothing. The ungated landing (the row landing with no "
                          "chain) is the over-application the exclusion refused and "
                          "no flag produces it.")
+    # SKILLS-LV (2026-09-25, studies/skills 60; DESKWORK-D4's residue, pass 2):
+    # three more consumers, one flag each.
+    ap.add_argument("--no-condition-riders", action="store_true",
+                    help="drop the ON-HIT condition rider: a label row whose "
+                         "condition the template puts on the WEARER's attacks "
+                         "(435's Poison on physical attacks, 1997's Weakness on "
+                         "the target ally's melee attacks) still opens its "
+                         "episode -- icon and timer, the excluded state until "
+                         "2026-09-25 -- and no landed weapon hit carries the "
+                         "condition. The default reads the attacker's open "
+                         "episodes at every landed hit (hit_enemy, land_swing, "
+                         "land_swing_on_body) and gates each rider on the item's "
+                         "class: 'physical' by its 587 damage-type word, 'melee' "
+                         "by its [weapon_type] delivery (RECONSTRUCTION: no "
+                         "capture of either skill was read). A rider row lands "
+                         "nothing at the cast either way (skill_condition is "
+                         "None for it).")
+    ap.add_argument("--no-label-knockdowns", action="store_true",
+                    help="ignore `knocks_down` on LABEL-tier rows (187, 231, "
+                         "294, 784, 1086 -- the gate turns an unconditional "
+                         "'knocked down' clause on the foe(s) the row lands on "
+                         "into the hand rows' own field): nobody falls to a "
+                         "label row, as until 2026-09-25; the hand rows' "
+                         "knock-downs (Hammer Bash, Heavy Blow, Earthquake) are "
+                         "untouched. The default knocks each landed, living foe "
+                         "down for KNOCK_DOWN_SECONDS -- on the burst arms as "
+                         "before, and on the single-target non-attack land, a "
+                         "term that is the TIER's only (a hand row on that path "
+                         "keeps its pre-pass shape: Earthquake under "
+                         "--no-spell-areas) -- retail's 784 completion carries "
+                         "[63, target, 2.0] on 4 of 5 live casts (the fifth's "
+                         "target died first), ahead of the Poison on the 2 that "
+                         "show one; the other 2 landed casts show NO Poison on a "
+                         "clean target (CONTESTED, skills 60.3).")
+    ap.add_argument("--no-condition-flat-constants", action="store_true",
+                    help="skill_condition refuses every bit-clear slot again, "
+                         "as until 2026-09-25: the default reads a bit-clear "
+                         "slot with EQUAL endpoints as the flat constant the "
+                         "client prints (skill_flat_constant: 167's Blind "
+                         "10/10, numbered by its own template), and still "
+                         "refuses differing endpoints (1033's Deep Wound 5..20, "
+                         "the INDETERMINATE contest of skills 54.3). No hand row "
+                         "carries a bit-clear condition slot (a census of the "
+                         "24 loaded, 2026-09-25), so only 167 changes.")
     ap.add_argument("--player-max-always", action="store_true",
                     help="declare the player's property 42 before EVERY "
                          "armour-ignoring damage word at the player, as until "
