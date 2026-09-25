@@ -34,8 +34,13 @@ WHAT THE WINDOW IS. A header over four tabs, all over one spec:
            run to the next.
   Enemies  up to four groups of up to four hostiles, one of them the boss:
            the groups and hostiles as a list on the left, the selected
-           hostile's template, weapon, bar and ranks on the right (a
-           filterable picker for these is the next step, SANDBOX-N1)
+           hostile's template, weapon, bar and ranks on the right. The bar
+           (SANDBOX-N1) is eight wells over an inline, filterable library
+           -- the template's profession and the common skills by default,
+           every profession on request, flagged and never refused, since
+           the compiler accepts any skill on a hostile -- and each cell
+           says the rank the server will ACT at; the ranks are one
+           attribute to a row, each row a bar skill uses counting them
   Run      the launch options; the stored character and its reset; the
            compiled result (the overlay and the command, shown before
            anything runs, with what the character store already holds); the
@@ -83,10 +88,12 @@ import content        # noqa: E402
 import vaultpath      # noqa: E402
 
 try:
-    from PySide6.QtCore import (QElapsedTimer, QEvent, QPoint, QPointF, QProcess,
+    from PySide6.QtCore import (QElapsedTimer, QEvent, QMimeData, QPoint, QPointF, QProcess,
                                 QProcessEnvironment, QRect, Qt, QTimer, Signal)
-    from PySide6.QtGui import (QCloseEvent, QColor, QFont, QFontMetricsF, QIcon, QImage,
-                               QKeyEvent, QPainter, QTextCharFormat, QTextCursor, QWheelEvent)
+    from PySide6.QtGui import (QCloseEvent, QColor, QDragEnterEvent, QDragLeaveEvent, QDragMoveEvent,
+                               QDropEvent, QEnterEvent, QFont, QFontMetrics, QFontMetricsF, QIcon,
+                               QImage, QKeyEvent, QMouseEvent, QPainter, QTextCharFormat,
+                               QTextCursor, QWheelEvent)
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import (QAbstractItemView, QAbstractSpinBox, QApplication,
                                    QBoxLayout, QCheckBox, QComboBox,
@@ -104,8 +111,8 @@ except ImportError as exc:                                  # pragma: no cover
 
 import orchtheme      # noqa: E402  (tools/orchestrator: palettes, sheet, audit)
 import orchui         # noqa: E402  (tools/orchestrator: the widget helpers)
-from orchui import (ROLE_FULL, ROLE_ID, ROLE_PARTS, ROLE_ROSTER, button, caption,  # noqa: E402
-                    card, chip, overline, role_label, set_chip)
+from orchui import (ROLE_FULL, ROLE_ID, ROLE_PARTS, ROLE_ROSTER, ROLE_SLOT, button,  # noqa: E402
+                    caption, card, chip, overline, role_label, set_chip)
 
 
 # ---------------------------------------------------------------- names
@@ -262,12 +269,13 @@ class Picker(QComboBox):
             le.setCursorPosition(0)
         self.setToolTip(self.tips.get(self.currentData(), self.currentText()))
 
-    def set_choices(self, pairs, keep=None, parts=None, tips=None, full=None):
+    def set_choices(self, pairs, keep=None, tips=None, full=None):
         """pairs: [(label, value)]. Keeps the current value when it is still
-        offered. `parts` ({value: (name, meta, grade)}) makes the drop-down draw
-        its rows the way the Skills list does; `tips` gives each its hover;
-        `full` ({value: the label whole}) is what the type-to-filter matches
-        where the shown label is elided, and the row's own hover there."""
+        offered. `tips` gives each its hover; `full` ({value: the label
+        whole}) is what the type-to-filter matches where the shown label is
+        elided, and the row's own hover there. (A `parts` argument once drew
+        the rows with SkillDelegate for the skill Pickers; the Skill bar's
+        strip replaced them, SANDBOX-N1, and no caller passed it since.)"""
         current = keep if keep is not None else self.value()
         self.blockSignals(True)
         self.clear()
@@ -278,18 +286,8 @@ class Picker(QComboBox):
             self.setItemData(i, whole, ROLE_FULL)
             if whole != label:
                 self.setItemData(i, whole, Qt.ToolTipRole)
-            if parts and value in parts:
-                self.setItemData(i, parts[value], ROLE_PARTS)
         self.blockSignals(False)
         self.tips = dict(tips or {})
-        if parts:
-            # the drop-down AND the type-to-filter popup (the completer's own
-            # view, which draws plain text unless told): the same rows in one
-            # style, their pills in one column
-            for view in (self.view(), self.completer().popup()):
-                if not isinstance(view.itemDelegate(), orchui.SkillDelegate):
-                    view.setItemDelegate(orchui.SkillDelegate(view))
-                view.itemDelegate().set_column(parts.values())
         fm = self.fontMetrics()
         widest = max((fm.horizontalAdvance(label) for label, _v in pairs), default=0)
         self.view().setMinimumWidth(min(widest + 48, 760))
@@ -310,95 +308,569 @@ class Picker(QComboBox):
         return False
 
 
-def skill_choices(names, professions, empty=True):
-    ids = sandbox.default_unlocks(names.world, professions)
-    pairs = sorted(((names.slot_label(s), s) for s in ids), key=lambda p: p[0].lower())
-    return ([("(empty)", 0)] if empty else []) + pairs
+class SkillBar(QWidget):
+    """A hostile's eight skill slots as a strip of wells over an inline,
+    filterable library (SANDBOX-N1, the owner's ask: "a better/filterable
+    skill/attribute selector"). The model is `ids`, eight ints in slot
+    order, 0 for empty; the strip and the library are views of it, and
+    EVERY write goes through set_slot / swap / set_values / untick, each
+    emitting `changed` exactly once and re-syncing the cells, the library's
+    checks and the chip. A filter, the offered-set combo or the checkbox
+    never emits: a view of the same spec (the Skills tab's law).
 
+    THE RANGE IS THE COMPILER'S. validate never checks a hostile's skills
+    against its profession, so the library offers the template's profession
+    plus the common skills BY DEFAULT and every other profession on request,
+    flagged and never refused; and a file is HELD VERBATIM -- an id of another
+    profession, an id the table lacks, a duplicate, a 0 (an empty slot, held
+    in place and dropped on save) -- where the eight Pickers this replaces
+    landed on '(empty)' in silence with the bar saying 'Opened X' alone (the
+    same false word the level and rank lifts removed). A ninth id is the
+    compiler's to refuse (validate, the bar is 8 wide), so Open says so. The
+    one-copy rule governs the window's own writes only.
 
-class Bar(QWidget):
-    """Eight skill slots, two columns of four (the Enemies tab's; the party's
-    bars are in-game) -- one column of eight when the bar is too narrow for
-    two to hold the widest label among the choices it holds NOW."""
+    WHAT A CELL SAYS is the rank the server will ACT AT
+    (sandbox.effective_rank, the mirror of the area create path's fallback +
+    authsrv.agent_skill_rank): a hostile with no ranks casts every skill at
+    12 (a stand-in, OURS); with any rank set, an attribute its ranks omit --
+    another profession's included, which its ranks can never hold -- acts at
+    0. Rank Hammer Mastery and forget Strength, and Power Attack drops from
+    12 to 0: the cell says so at once, the Attributes row chip too. A skill
+    with NO attribute whose numbers still vary (sandbox.skill_varies: Light of
+    Deldrimor, 55..80) is scaled by the same rule at the no-attribute id --
+    0 with any rank set, 12 with none -- and its cell says that rank; only a
+    row with nothing varying says nothing scales.
 
-    changed = Signal()                          # a slot edited
+    The chip (the card's trailing NOTICE), Clear slot (beside it in the
+    card's head, so the filter row keeps its search box wide enough for a
+    typed query at 1,000 px: measured 2026-09-24, 122 px with the button in
+    the row against the ~135 a 12-character query needs, 234 without) and
+    the hint (the caption under the library) are housed HERE from birth:
+    shown with no parent, a label is a window of its own (the Ranks trap,
+    twice over)."""
+
+    changed = Signal()                          # a slot written (never a filter)
+    ROWS = 6                                    # the library's visible rows
 
     def __init__(self, names, parent=None):
         super().__init__(parent)
         self.names = names
-        self.need = 0                           # the widest choice, px (set_professions)
-        self.grid = QGridLayout(self)
-        self.grid.setContentsMargins(0, 0, 0, 0)
-        self.grid.setHorizontalSpacing(10)
-        self.grid.setVerticalSpacing(8)
-        self.slots = []
-        self.nums = []
-        for i in range(sandbox.BAR_SLOTS):
-            num = role_label(str(i + 1), "slot")
-            num.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            num.setFixedWidth(14)
-            pk = Picker(chars=16)
-            pk.setAccessibleName(f"Skill slot {i + 1}")
-            num.setBuddy(pk)
-            pk.currentIndexChanged.connect(lambda _i: self.changed.emit())
-            self.slots.append(pk)
-            self.nums.append(num)
-        self.columns = 0
-        self._arrange(2)
+        self.world = names.world
+        self.ids = [0] * sandbox.BAR_SLOTS
+        self.professions = ()
+        self.ranks_pairs = []
+        self.template_pairs = []
+        self._every = sorted(int(k) for k in self.world.rows("skills"))
+        self.has_table = sandbox.has_skill_table(self.world)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(10)
+        # housed from birth (a card's `trailing` re-homes both in its own header)
+        self.chip = chip("", "info")
+        self.chip.setParent(self)
+        self.clear_b = button("Clear slot", "quiet", tip="Empty the selected slot.")
+        self.clear_b.setParent(self)
+        self.clear_b.clicked.connect(lambda: self.clear_slot(self.current_slot()))
 
-    def _arrange(self, columns):
-        """Two columns of four, or one of eight."""
-        if columns == self.columns:
-            return
-        self.columns = columns
-        while self.grid.count():
-            self.grid.takeAt(0)
-        per = sandbox.BAR_SLOTS // columns
-        for i, (num, pk) in enumerate(zip(self.nums, self.slots)):
-            row, col = i % per, (i // per) * 3
-            self.grid.addWidget(num, row, col)
-            self.grid.addWidget(pk, row, col + 1)
-        self.grid.setColumnMinimumWidth(2, 16 if columns == 2 else 0)
-        self.grid.setColumnStretch(1, 1)
-        self.grid.setColumnStretch(4, 1 if columns == 2 else 0)
+        self.strip = orchui.SlotStrip()
+        self.strip.setItemDelegate(orchui.SlotDelegate(self.strip))
+        self.strip.on_drop = self._dropped
+        self.strip.installEventFilter(self)
+        self.strip.currentRowChanged.connect(self._selection)
+        outer.addWidget(self.strip)
 
-    def _columns(self):
-        """Two while each slot's field would hold the widest choice, else one.
-        Two columns give a slot (bar - 166) / 2 px: 2 x 14 of numbers, 4 x 10
-        of spacing, the 16 px gutter and 41 of each combo's own chrome
-        (measured 356 / 371 / 416 / 516 at bars of 878 / 908 / 998 / 1198).
-        A threshold fitted to ONE list -- 840, the Warrior's 335 px -- cut a
-        Monk's 371 ('… [307 Mo Protection Prayers]') mid-word at the default
-        1,280, on the example's own second hostile."""
-        return 2 if (self.width() - 166) // 2 >= self.need else 1
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        self.filter = QLineEdit()
+        # the placeholder 'Find a skill' whole (72 px); a typed query's room
+        # comes from Clear slot living in the card's head, not this row
+        self.filter.setMinimumWidth(96)
+        self.filter.setPlaceholderText("Find a skill")
+        self.filter.setToolTip("Matches a skill's name, id, profession abbreviation (W, Mo …) or "
+                               "attribute, or its grade in the pills' words (modelled, label). "
+                               "Return puts the first shown skill on the bar; Down moves to the "
+                               "list; Escape clears.")
+        self.filter.setClearButtonEnabled(True)
+        self.filter.addAction(orchui.tinted_icon("search"), QLineEdit.LeadingPosition)
+        self.filter.setAccessibleName("Find a skill for the bar")
+        self.filter.setMaximumWidth(480)
+        self.filter.installEventFilter(self)
+        self.prof = QComboBox()
+        self.prof.setAccessibleName("Skills offered")
+        self.prof.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.prof.setMinimumContentsLength(14)
+        self.prof.addItem("Common", -2)
+        self.prof.addItem("Every profession", 0)
+        for pid, name in sandbox.PROFESSIONS.items():
+            self.prof.addItem(f"{name} ({sandbox.ABBREV[pid]})", pid)
+        self.prof.addItem("Common (no profession)", -1)
+        self.prof.setMaxVisibleItems(self.prof.count())    # every row, none scrolled (the census)
+        # a plain combo CLIPS a text wider than its field, with no ellipsis
+        # (the first cut showed 'Warrior and common' with its tail cut, in
+        # --snap): sized to the widest label row 0 can ever carry
+        self.prof.ensurePolished()
+        fm = self.prof.fontMetrics()
+        widest = max(fm.horizontalAdvance(self.row0_label(p)) for p in list(sandbox.PROFESSIONS) + [0])
+        widest = max(widest, max(fm.horizontalAdvance(self.prof.itemText(i))
+                                 for i in range(self.prof.count())))
+        self.prof.setMinimumWidth(widest + 44)          # the field's padding and the arrow
+        self.prof.setToolTip("Which skills the list offers: the template's profession and the "
+                            "common skills, or every profession, or one. The compiler accepts any "
+                            "skill on a hostile; its ranks must be its template's profession's, so "
+                            "a skill in another profession's attribute acts at rank 0 once any "
+                            "rank is set, at 12 with none (one with no attribute loses nothing).")
+        # named with the pills' own two words, as the Skills tab's; TICKED here:
+        # eight slots, and a skill this server does nothing with is a wasted one
+        self.acts = QCheckBox("Modelled or label")
+        self.acts.setChecked(True)
+        self.acts.setToolTip("Only the skills this server acts: a hand-verified row (modelled) or "
+                             "a parsed label (label). Untick to see every skill offered.")
+        row.addWidget(self.filter, 1)
+        row.addWidget(self.prof, 0)
+        row.addWidget(self.acts)
+        row.addStretch(0)
+        outer.addLayout(row)
 
-    def resizeEvent(self, ev):
-        super().resizeEvent(ev)
-        self._arrange(self._columns())
+        self.list = orchui.SkillLibrary("No skill matches this filter.")
+        self.delegate = orchui.SkillDelegate(self.list)
+        self.list.setItemDelegate(self.delegate)
+        self.list.setUniformItemSizes(True)
+        self.list.setAccessibleName("Skills to slot")
+        self.list.on_clear = self.clear_slot
+        self.list.strip_token = self.strip.token    # only THIS strip's cells clear a slot here
+        self.list.installEventFilter(self)          # Return / Enter on a row toggles it
+        self.list.itemChanged.connect(self._box_moved)
+        self.list.itemDoubleClicked.connect(self._double)
+        # the pill column set ONCE from every skill's parts, so it never jumps
+        # between templates or filters
+        self.delegate.column = self._pill_column()
+        fm = self.list.fontMetrics()
+        self.list.setFixedHeight(self.ROWS * (fm.height() + orchui.SkillDelegate.PAD_V)
+                                 + 2 * self.list.frameWidth() + 2)
+        outer.addWidget(self.list)
+        self.hint = caption("Tick or double-click a skill to fill the selected slot, or the first "
+                            "empty one; drag to place or reorder.")
+        outer.addWidget(self.hint)
+        if not self.has_table:
+            self.list.placeholder = "No skill table, so skills cannot be picked here."
+            self.list.setToolTip("vault/content/skills.toml is missing.")
+            for w in (self.filter, self.prof, self.acts):
+                w.setEnabled(False)
+        self.filter.textChanged.connect(self._filter)
+        self.prof.currentIndexChanged.connect(self._populate)
+        self.acts.toggled.connect(self._filter)
+        self.strip.setCurrentRow(0)
+        self._populate()
+        self._sync()
 
-    def set_professions(self, professions):
-        pairs = skill_choices(self.names, professions)
-        parts = {s: self.names.skill_parts(s) for _l, s in pairs if s}
-        tips = {s: self.names.skill_tip(s) for s in parts}
-        for pk in self.slots:
-            pk.set_choices(pairs, parts=parts, tips=tips)
-        fm = self.slots[0].fontMetrics()
-        self.need = max((fm.horizontalAdvance(label) for label, _s in pairs), default=0)
-        self._arrange(self._columns())          # a template change, at one width
+    def _pill_column(self):
+        cache = getattr(self.names, "_pill_column", None)
+        if cache is None:
+            self.delegate.set_column(self.names.skill_parts(s) for s in self._every)
+            cache = self.names._pill_column = self.delegate.column
+        return cache
+
+    # ---- the model, and the ONE write path
 
     def values(self):
-        return [int(pk.value() or 0) for pk in self.slots]
+        return list(self.ids)
+
+    def current_slot(self):
+        return max(0, self.strip.currentRow())
+
+    def select_slot(self, i):
+        self.strip.setCurrentRow(int(i))
 
     def set_values(self, ids):
-        ids = list(ids or []) + [0] * sandbox.BAR_SLOTS
-        for pk, sid in zip(self.slots, ids):
-            pk.set_value(int(sid))
+        """A load: HELD VERBATIM -- an off-profession id, an unknown id, a
+        duplicate -- padded to eight; the one-copy rule is for the window's
+        own writes. Emits once when anything moved."""
+        want = [int(s) for s in (ids or [])][:sandbox.BAR_SLOTS]
+        want += [0] * (sandbox.BAR_SLOTS - len(want))
+        if want != self.ids:
+            self.ids = want
+            self._wrote()
+
+    def set_slot(self, i, sid):
+        """Slot `i` takes `sid` (0 clears), replacing what it held; a skill
+        already on the bar elsewhere MOVES (its old slot empties: one copy for
+        the window's own writes). No change, no signal."""
+        i, sid = int(i), int(sid)
+        if self.ids[i] == sid:
+            return
+        if sid:
+            for j, other in enumerate(self.ids):
+                if other == sid and j != i:
+                    self.ids[j] = 0
+        self.ids[i] = sid
+        self._wrote()
+
+    def clear_slot(self, i):
+        self.set_slot(i, 0)
+
+    def swap(self, i, j):
+        i, j = int(i), int(j)
+        if i == j or self.ids[i] == self.ids[j]:
+            return
+        self.ids[i], self.ids[j] = self.ids[j], self.ids[i]
+        self._wrote()
+
+    def tick(self, sid):
+        """The library's tick: already on the bar -> nothing; else the selected
+        slot if empty, else the first empty, else (bar full) the selected slot
+        REPLACED; then the selection moves to the next empty slot after it."""
+        sid = int(sid)
+        if not sid or sid in self.ids:
+            self._sync_checks()
+            return
+        cur = self.current_slot()
+        empties = [i for i, s in enumerate(self.ids) if not s]
+        target = cur if not self.ids[cur] else (empties[0] if empties else cur)
+        self.set_slot(target, sid)
+        after = [i for i in list(range(target + 1, sandbox.BAR_SLOTS)) + list(range(0, target))
+                 if not self.ids[i]]
+        if after:
+            self.select_slot(after[0])
+
+    def untick(self, sid):
+        """Clears EVERY slot holding `sid` (a file may carry a duplicate)."""
+        sid = int(sid)
+        if sid not in self.ids:
+            self._sync_checks()
+            return
+        self.ids = [0 if s == sid else s for s in self.ids]
+        self._wrote()
+
+    def _wrote(self):
+        self._sync()
+        self.changed.emit()
+
+    # ---- what the template gives: the offered set, the ranks in view
+
+    def set_professions(self, professions):
+        """A template change: the bar's ids are KEPT (they may now be another
+        profession's: the chip warns, the cells say so, a Delete each removes
+        them), combo row 0 is relabelled and re-selected, the search cleared,
+        the checkbox kept, the library repopulated. Never emits."""
+        self.professions = tuple(int(p) for p in professions if p)
+        prof0 = self.professions[0] if self.professions else 0
+        self.prof.blockSignals(True)
+        self.prof.setItemText(0, self.row0_label(prof0))
+        # a template with no profession the table knows (five profession-11
+        # bodies) offers the common skills on row 0 already, so the last row,
+        # 'Common (no profession)', would offer the same 59 twice: it comes
+        # off while row 0 stands for it, and back with a known profession
+        last = self.prof.count() - 1
+        if sandbox.PROFESSIONS.get(prof0) is None and self.prof.itemData(last) == -1:
+            self.prof.removeItem(last)
+        elif sandbox.PROFESSIONS.get(prof0) is not None and self.prof.itemData(last) != -1:
+            self.prof.addItem("Common (no profession)", -1)
+        self.prof.setMaxVisibleItems(self.prof.count())
+        self.prof.setCurrentIndex(0)
+        self.prof.blockSignals(False)
+        self.filter.blockSignals(True)
+        self.filter.clear()
+        self.filter.blockSignals(False)
+        self._populate()
+        self._sync()
+
+    @staticmethod
+    def row0_label(prof):
+        """Combo row 0, the template's profession and the common skills:
+        'Warrior and common'; a template with no profession (or one the table
+        lacks) offers the common skills alone, and then the 'Common (no
+        profession)' row is dropped (set_professions) rather than offered
+        twice."""
+        name = sandbox.PROFESSIONS.get(int(prof or 0))
+        return f"{name} and common" if name else "Common"
+
+    def set_ranks_view(self, pairs, template_pairs=None):
+        """The ranks each cell's line 2 reads (the member's; the template's as
+        the fallback, as the server reads them). Never emits."""
+        self.ranks_pairs = [[int(a), int(r)] for a, r in (pairs or [])]
+        if template_pairs is not None:
+            self.template_pairs = list(template_pairs or [])
+        self._sync_cells()
+
+    def off_profession(self, sid):
+        """A skill of neither the template's profession nor common: its
+        attribute is one this hostile's ranks can never hold."""
+        if not sid or sandbox.skill_row(self.world, sid) is None:
+            return False
+        return self.names.skill_profession(sid) not in set(self.professions) | {0}
+
+    def _offered(self):
+        sel = int(self.prof.currentData() if self.prof.currentData() is not None else -2)
+        prof = self.names.skill_profession
+        if sel == -2:
+            want = set(self.professions) | {0}
+            return [s for s in self._every if prof(s) in want]
+        if sel == 0:
+            return list(self._every)
+        if sel == -1:
+            return [s for s in self._every if prof(s) == 0]
+        return [s for s in self._every if prof(s) == sel]
+
+    def _items(self):
+        return [self.list.item(i) for i in range(self.list.count())]
+
+    def _populate(self, *_a):
+        """The library for the offered set, sorted as the Skills tab sorts;
+        ~200 rows for a profession and common, every one (1,333) only when
+        chosen. Check states follow the bar; nothing emits."""
+        self.list.blockSignals(True)
+        try:
+            self.list.clear()
+            on = set(self.ids)
+            for sid in sorted(self._offered(), key=lambda s: self.names.slot_label(s).lower()):
+                it = QListWidgetItem(self.names.slot_label(sid))
+                it.setData(ROLE_ID, sid)
+                it.setData(ROLE_PARTS, self.names.skill_parts(sid))
+                it.setToolTip(self.names.skill_tip(sid))
+                it.setFlags(it.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsDragEnabled)
+                it.setCheckState(Qt.Checked if sid in on else Qt.Unchecked)
+                self.list.addItem(it)
+        finally:
+            self.list.blockSignals(False)
+        self._filter()
+
+    def _filter(self, *_a):
+        text = self.filter.text().lower()
+        only = self.acts.isChecked()
+        acting = self.names.modelled | self.names.labelled
+        matching = 0
+        for it in self._items():
+            sid = int(it.data(ROLE_ID))
+            hit = not text or text in it.text().lower()
+            matching += hit
+            it.setHidden(not hit or (only and sid not in acting))
+        if self.has_table:
+            if only and matching and not self.list.visible_count():
+                self.list.placeholder = self.untick_sentence(matching)
+            else:
+                self.list.placeholder = "No skill matches this filter."
+        self.list.viewport().update()
+
+    @staticmethod
+    def untick_sentence(matching):
+        """The placeholder's way out when the box hides every match: 'to see
+        it' for one, 'to see all N' for more (never 'all 1')."""
+        return (f"No acting skill matches; untick Modelled or label to see "
+                f"{'it' if matching == 1 else f'all {matching}'}.")
+
+    def visible_ids(self):
+        return [int(it.data(ROLE_ID)) for it in self._items() if not it.isHidden()]
+
+    # ---- the views, re-derived from the model
+
+    def _sync(self):
+        self._sync_cells()
+        self._sync_checks()
+        self._chip()
+        self._selection()
+
+    def _sync_checks(self):
+        on = set(self.ids)
+        self.list.blockSignals(True)
+        try:
+            for it in self._items():
+                want = Qt.Checked if int(it.data(ROLE_ID)) in on else Qt.Unchecked
+                if it.checkState() != want:
+                    it.setCheckState(want)
+        finally:
+            self.list.blockSignals(False)
+        self.list.viewport().update()
+
+    def rank_line(self, sid):
+        """(line 2, its hover sentence, the off-profession abbreviation or '')
+        for a slotted skill: the attribute and the rank it ACTS at."""
+        row = sandbox.skill_row(self.world, sid)
+        if row is None:
+            return f"{sid}  -", "Not in the skill table; the compiler passes the id through.", ""
+        sp = self.names.skill_profession(sid)
+        off = self.off_profession(sid)
+        abbr = sandbox.ABBREV.get(sp, "-") if off else ""
+        head = f"{abbr} · " if off else ""
+        attr = sandbox.skill_attribute(self.world, sid)
+        ranked = bool(self.ranks_pairs or self.template_pairs)
+        if attr is None:
+            if not sandbox.skill_varies(self.world, sid):
+                return head + "No attribute", "No attribute: nothing about it scales with a rank.", abbr
+            # no attribute, but its numbers move with a rank: the server
+            # scales it by the same rule at the no-attribute id -- 0 while
+            # any rank is set, 12 with none (Light of Deldrimor: 55 or 75)
+            rank = sandbox.effective_rank(self.ranks_pairs, self.template_pairs, sandbox.NO_ATTRIBUTE)
+            tip = (f"No attribute, but its numbers vary with a rank, and the server scales it at "
+                   f"{rank}: " + ("0 while any rank is set on this hostile or its template"
+                                  if ranked else
+                                  f"{sandbox.UNRANKED_SKILL_RANK} with no rank set anywhere, this "
+                                  f"server's stand-in for a foe's ranks") + ".")
+            return head + f"No attribute {rank}", tip, abbr
+        rank = sandbox.effective_rank(self.ranks_pairs, self.template_pairs, attr)
+        label = self.names.attr_label(attr)
+        if off:
+            tip = (f"{label} is a {sandbox.PROFESSIONS.get(sp, 'profession-' + str(sp))} attribute "
+                   f"this hostile's ranks cannot hold: acts at {rank} "
+                   + ("while any rank is set." if ranked
+                      else f"with no rank set ({sandbox.UNRANKED_SKILL_RANK}, this server's "
+                           f"stand-in for a foe's ranks)."))
+        elif not ranked:
+            tip = (f"No rank set on this hostile or its template: acts at "
+                   f"{sandbox.UNRANKED_SKILL_RANK}, this server's stand-in for a foe's ranks.")
+        elif not self.ranks_pairs:
+            tip = f"{label} {rank} on this hostile, its template's own rank."
+        else:
+            tip = f"{label} {rank} on this hostile."
+        return head + f"{label} {rank}", tip, abbr
+
+    def _sync_cells(self):
+        for i, sid in enumerate(self.ids):
+            it = self.strip.item(i)
+            if not sid:
+                it.setData(ROLE_ID, 0)
+                it.setData(ROLE_PARTS, None)
+                it.setData(ROLE_SLOT, (i, "", ""))
+                it.setText(f"Slot {i + 1}: empty")
+                it.setToolTip("An empty slot.")
+                continue
+            parts = self.names.skill_parts(sid)
+            line2, why, abbr = self.rank_line(sid)
+            it.setData(ROLE_ID, sid)
+            it.setData(ROLE_PARTS, parts)
+            it.setData(ROLE_SLOT, (i, line2, abbr))
+            it.setText(f"Slot {i + 1}: {self.names.slot_label(sid)}, {line2}")
+            known = sandbox.skill_row(self.world, sid) is not None
+            it.setToolTip((self.names.skill_tip(sid) if known else f"Skill {sid}") + "\n" + why)
+        self.strip.viewport().update()
+
+    def _chip(self):
+        """'N of 8 slots'; WARN with '· K of another profession' and/or '· J
+        not in the skill table' after it. The hover's cost sentence is
+        conditional on the skills that CARRY an attribute -- 102 profession
+        skills have none, and for those nothing is lost (the verifier's c5)."""
+        n = sum(1 for s in self.ids if s)
+        off = [s for s in self.ids if self.off_profession(s)]
+        unknown = sum(1 for s in self.ids if s and sandbox.skill_row(self.world, s) is None)
+        text = f"{n} of {sandbox.BAR_SLOTS} slots"
+        if off or unknown:
+            parts, tips = [text], []
+            if off:
+                parts.append(f"{len(off)} of another profession")
+                with_attr = [s for s in off if sandbox.skill_attribute(self.world, s) is not None]
+                if with_attr:
+                    tips.append(f"A skill of another profession in that profession's attribute "
+                                f"({len(with_attr)} of {len(off)} here): one this hostile's ranks "
+                                f"cannot hold (the compiler refuses the rank), so it acts at rank 0 "
+                                f"while any rank is set, at 12 with none.")
+                else:
+                    tips.append("A skill of another profession with no attribute: nothing about it "
+                                "scales with a rank this hostile could hold, so no rank is lost.")
+                tips.append("The compiler accepts the skill.")
+            if unknown:
+                parts.append(f"{unknown} not in the skill table")
+                tips.append(f"{n_of(unknown, 'id')} the skill table lacks: the compiler passes "
+                            f"{'it' if unknown == 1 else 'them'} through unexamined, and the "
+                            f"gamesrv would try to cast {'it' if unknown == 1 else 'each'}.")
+            set_chip(self.chip, "  ·  ".join(parts), "warn", tip=" ".join(tips))
+        else:
+            set_chip(self.chip, text, "info",
+                     tip="Up to eight skills, in slot order; a hostile with none only swings.")
+
+    def _selection(self, *_a):
+        self.clear_b.setEnabled(bool(self.ids[self.current_slot()]))
+        self.strip.viewport().update()
+
+    # ---- the library's own paths, and a drop
+
+    def _box_moved(self, it):
+        sid = int(it.data(ROLE_ID))
+        if it.checkState() == Qt.Checked:
+            self.tick(sid)
+        else:
+            self.untick(sid)
+
+    def _double(self, it):
+        at = getattr(self.list, "dbl_at", None)
+        if at is not None and self.list.check_rect(it).contains(at):
+            return                              # Qt's own toggle on the box; not a second one
+        self._toggle(it)
+
+    def _dropped(self, slot, sid, from_slot):
+        # from_slot is THIS strip's (parse_skill_mime keeps it only under the
+        # strip's own token and inside 0..7); anything else is a place of sid
+        if from_slot is not None and 0 <= int(from_slot) < sandbox.BAR_SLOTS:
+            self.swap(from_slot, slot)          # a cell onto another cell
+        else:
+            self.set_slot(slot, sid)            # a library row (or another window's cell): placed, or MOVED
+
+    def _tick_first_shown(self):
+        for it in self._items():
+            if not it.isHidden() and it.checkState() != Qt.Checked:
+                self.tick(int(it.data(ROLE_ID)))
+                return True
+        return False
+
+    def eventFilter(self, obj, ev):
+        if ev.type() == QEvent.KeyPress:
+            key, mods = ev.key(), ev.modifiers()
+            if obj is self.filter:
+                if key in (Qt.Key_Return, Qt.Key_Enter):
+                    self._tick_first_shown()
+                    return True
+                if key == Qt.Key_Escape:
+                    self.filter.clear()
+                    return True
+                if key == Qt.Key_Down:
+                    first = next((it for it in self._items() if not it.isHidden()), None)
+                    if first is not None:
+                        self.list.setCurrentItem(first)
+                        self.list.setFocus(Qt.TabFocusReason)
+                    return True
+            elif obj is self.strip:
+                cur = self.current_slot()
+                if Qt.Key_1 <= key <= Qt.Key_8 and not mods & (Qt.ControlModifier | Qt.AltModifier):
+                    self.select_slot(key - Qt.Key_1)
+                    return True
+                if key in (Qt.Key_Delete, Qt.Key_Backspace):
+                    self.clear_slot(cur)
+                    return True
+                if key in (Qt.Key_Left, Qt.Key_Right) and mods & Qt.ControlModifier:
+                    to = cur + (1 if key == Qt.Key_Right else -1)
+                    if 0 <= to < sandbox.BAR_SLOTS:
+                        self.swap(cur, to)
+                        self.select_slot(to)
+                    return True
+                if key in (Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space):
+                    self.filter.setFocus(Qt.TabFocusReason)
+                    return True
+            elif obj is self.list and key in (Qt.Key_Return, Qt.Key_Enter):
+                # DESIGN s2: Space AND Return toggle a focused row (Qt gives
+                # Return to `activated` and ticks nothing; the verifier's a5)
+                it = self.list.currentItem()
+                if it is not None and not it.isHidden():
+                    self._toggle(it)
+                return True
+        return super().eventFilter(obj, ev)
+
+    def _toggle(self, it):
+        sid = int(it.data(ROLE_ID))
+        if sid in self.ids:
+            self.untick(sid)
+        else:
+            self.tick(sid)
 
 
 class Ranks(QWidget):
-    """One spin box per attribute of the given professions, two to a row, and
-    the points spent as a chip (the Enemies tab's; the party's ranks are
-    in-game). A hostile is EXEMPT from a player's point budget -- the owner's
+    """One spin box per attribute of the given professions, ONE to a row --
+    the label column fixed from the widest attribute label over EVERY
+    profession, measured once at build, so the spins stand at one x for every
+    template and Tab order is reading order -- with a ROW CHIP on each row a
+    bar skill uses ('N on the bar'; WARN 'N on the bar, at rank 0' while its
+    rank is 0 and any rank is set, since the server acts it at 0; 'N on the
+    bar, acting at 12' with no rank anywhere, member or template: the
+    stand-in). set_bar(ids) recounts and never emits `changed` (a count, not
+    an edit). And the points spent as a chip (the Enemies tab's; the party's
+    ranks are in-game). A hostile is EXEMPT from a player's point budget -- the owner's
     ruling, 2026-09-24 (PLAN-LOG): retail foes and bosses exceed it -- so the
     chip counts and never judges (never crit, never 'over budget'), and the
     compiler holds a hostile's ranks to validity alone: each rank
@@ -430,6 +902,10 @@ class Ranks(QWidget):
         self.grid.setVerticalSpacing(8)
         outer.addLayout(self.grid)
         self.spins = {}
+        self.row_chips = {}                     # aid -> the 'N on the bar' chip (SANDBOX-N1)
+        self.counts = {}                        # aid -> bar skills using it
+        self.bar_ids = []
+        self.template_pairs = []                # the template's own ranks, the server's fallback
         # housed HERE from birth (a card's `trailing` re-homes it in its own
         # header): set_professions shows it, and shown with no parent it would
         # be a window of its own -- the hint's trap, one widget over
@@ -439,6 +915,7 @@ class Ranks(QWidget):
         self.hint = caption("")
         outer.addWidget(self.hint)
         self.professions = ()
+        self.label_col = self._label_column()
 
     def _clear(self):
         """Hidden BEFORE it is un-parented: a widget the grid queued a show
@@ -457,11 +934,33 @@ class Ranks(QWidget):
                 w.setParent(None)
                 w.deleteLater()
 
-    def set_professions(self, professions):
+    def _label_text(self, aid, primary):
+        return self.names.attr_label(aid) + (
+            f'  <span style="color:{orchui.PAL["muted"]}">primary</span>' if primary else "")
+
+    def _label_column(self):
+        """The widest attribute label over EVERY profession, in the label's own
+        font: one column width for every template, so the spins never move
+        between a Ranger's and a Warrior's."""
+        if self.rules is None:
+            return 0
+        probe = QLabel(self)
+        widest = 0
+        for aid, row in self.rules.attributes.items():
+            probe.setText(self._label_text(aid, row["is_primary"]))
+            widest = max(widest, probe.sizeHint().width())
+        probe.hide()
+        probe.deleteLater()
+        return widest
+
+    def set_professions(self, professions, template_pairs=None):
         keep = self.ranks()
         self._clear()
         self.spins = {}
+        self.row_chips = {}
         self.professions = tuple(int(p) for p in professions if p)
+        if template_pairs is not None:
+            self.template_pairs = list(template_pairs or [])
         if self.rules is None:
             self.grid.addWidget(caption("No attribute table, so ranks cannot be edited here.",
                                         tip="vault/content/attributes.toml is missing."),
@@ -484,23 +983,70 @@ class Ranks(QWidget):
             sp.valueChanged.connect(self._spent)
             sp.valueChanged.connect(lambda _v: self.changed.emit())
             name = self.names.attr_label(aid)
-            lab = QLabel(name + (f'  <span style="color:{orchui.PAL["muted"]}">primary</span>'
-                                 if row["is_primary"] else ""))
+            lab = QLabel(self._label_text(aid, row["is_primary"]))
             lab.setToolTip(f"Attribute {aid}" + (" — the primary's own attribute"
                                                  if row["is_primary"] else ""))
             lab.setBuddy(sp)
             sp.setAccessibleName(name)
-            r, c = n // 2, (n % 2) * 3
-            self.grid.addWidget(lab, r, c)
-            self.grid.addWidget(sp, r, c + 1)
+            # the row chip: hidden EXPLICITLY before the grid takes it, so the
+            # grid's queued show (addWidget on a visible Ranks) leaves it be;
+            # set_bar shows the rows a bar skill uses
+            rc = chip("", "info")
+            rc.hide()
+            self.grid.addWidget(lab, n, 0)
+            self.grid.addWidget(sp, n, 1)
+            self.grid.addWidget(rc, n, 2, Qt.AlignLeft | Qt.AlignVCenter)
             self.spins[aid] = sp
+            self.row_chips[aid] = rc
             n += 1
         if not n:
             self.grid.addWidget(caption("This template's profession has no spendable "
-                                        "attributes."), 0, 0, 1, 6)
-        self.grid.setColumnMinimumWidth(2, 24)
-        self.grid.setColumnStretch(5, 1)
+                                        "attributes."), 0, 0, 1, 4)
+        self.grid.setColumnMinimumWidth(0, self.label_col)
+        self.grid.setColumnStretch(3, 1)
         self._spent()
+
+    def set_bar(self, ids):
+        """The bar's ids (MemberEditor wires bar.changed here): recounts the
+        row chips. Never emits -- a count, not an edit."""
+        self.bar_ids = [int(s) for s in (ids or []) if s]
+        self.counts = {}
+        for sid in self.bar_ids:
+            a = sandbox.skill_attribute(self.names.world, sid)
+            if a is not None:
+                self.counts[a] = self.counts.get(a, 0) + 1
+        self._row_chips()
+
+    def effective(self, aid):
+        """The rank a skill in `aid` acts at on this hostile: the spins' if any
+        is set, else the template's own, else the stand-in (sandbox.effective_rank)."""
+        return sandbox.effective_rank(self.ranks(), self.template_pairs, aid)
+
+    def _row_chips(self):
+        ranked = bool(self.ranks() or self.template_pairs)
+        for aid, rc in self.row_chips.items():
+            n = self.counts.get(aid, 0)
+            if not n:
+                rc.hide()
+                continue
+            using = ", ".join(self.names.skill_parts(s)[0] for s in self.bar_ids
+                              if sandbox.skill_attribute(self.names.world, s) == aid)
+            label, rank = self.names.attr_label(aid), self.effective(aid)
+            if not ranked:
+                set_chip(rc, f"{n} on the bar, acting at {sandbox.UNRANKED_SKILL_RANK}", "info",
+                         tip=f"No rank set on this hostile or its template, so every skill acts "
+                             f"at {sandbox.UNRANKED_SKILL_RANK}, this server's stand-in for a "
+                             f"foe's ranks: {using}.")
+            elif rank == 0:
+                set_chip(rc, f"{n} on the bar, at rank 0", "warn",
+                         tip=f"{label} is 0 while another rank is set, so the server acts these "
+                             f"at rank 0: {using}.")
+            else:
+                set_chip(rc, f"{n} on the bar", "info",
+                         tip=f"{label} {rank}"
+                             + (" (the template's own rank)" if not self.ranks() else "")
+                             + f": {using}.")
+            rc.show()
 
     def spend(self):
         """(points, past): what the ranks cost by the table, and how many of
@@ -545,6 +1091,7 @@ class Ranks(QWidget):
                      f"stops at {self.rules.rank_max} (its next row is the client's cap "
                      f"sentinel), so a rank past {self.rules.rank_max} is priced to "
                      f"{self.rules.rank_max} and counted as past it.")
+        self._row_chips()                       # a rank edit changes what a row chip says
 
     def ranks(self):
         return [[a, s.value()] for a, s in self.spins.items() if s.value()]
@@ -1227,9 +1774,9 @@ def scrolled(widget):
 
 class MemberEditor(QWidget):
     """One hostile: its body, its weapon, its bar, its ranks -- one page of the
-    Enemies tab's detail pane. Narrow, the Body and Weapon cards stack and the
-    bar's slots go to one column, so no picker clips (at 1,000 px two columns
-    cut a skill id through its last digit and the weapon's '(none…)' row)."""
+    Enemies tab's detail pane. Narrow, the Body and Weapon cards stack (so no
+    picker clips: at 1,000 px two columns cut the weapon's '(none…)' row) and
+    the Skill bar's strip goes from four cells a row to two."""
 
     # Below this width (the editor's own) the Body and Weapon cards' pickers
     # cannot hold the widest template (TEMPLATE_LABEL_PX, 202: a label is
@@ -1333,11 +1880,16 @@ class MemberEditor(QWidget):
         top.addWidget(weapon, 1)
         page.addLayout(top)
 
-        bar = card("Skill bar")
-        bar.body.addWidget(caption("From the template's profession and the common skills."))
-        self.bar = Bar(names)
+        self.bar = SkillBar(names)
+        bar = card("Skill bar", trailing=(self.bar.clear_b, self.bar.chip))
         bar.body.addWidget(self.bar)
         page.addWidget(bar)
+        # what a file says that this page does not edit -- weapon_attribute
+        # (the example raider's 19, the monk's 14: the swing rank), passive --
+        # is HELD from from_spec and written back by to_spec; dropping it
+        # moved the monk's swing rank from 1 to 2 through the window (the
+        # verifier's a8, 2026-09-24)
+        self.held = {}
 
         self.ranks = Ranks(names)
         ranks = card("Attributes", trailing=self.ranks.chip)
@@ -1357,8 +1909,12 @@ class MemberEditor(QWidget):
         # natural order) it changes nothing, and must not paint the chip amber
         self.dlo.valueChanged.connect(lambda *_a: self._changed() if self.dhi.value() else None)
         self.weapon_item.currentIndexChanged.connect(lambda _i: self._changed())
+        # the bar and the ranks read each other, one signal each way: a slot
+        # write recounts the Attributes row chips, a rank edit rewrites each
+        # cell's line 2 (the rank the server will act at) at once
+        self.bar.changed.connect(lambda: self.ranks.set_bar(self.bar.values()))
         self.bar.changed.connect(self._changed)
-        self.ranks.changed.connect(self._changed)
+        self.ranks.changed.connect(self._ranks_moved)
         # the two forms' labels, right-aligned as labels (the form right-aligns
         # the CELL, and a label widened past its text -- _arrange, stacked --
         # would fall back to its own left alignment, 72 px from its field)
@@ -1421,10 +1977,38 @@ class MemberEditor(QWidget):
         self.subtitle.setText(f"{prof}  ·  group {g}, hostile {m}"
                               + ("  ·  the boss" if self.boss.isChecked() else ""))
 
+    def template_pairs(self):
+        """The template's own ranks (an npc row's `attributes`, if any): the
+        server's fallback for a member with none (authsrv.agent_attributes)."""
+        row = self.names.world.rows("npc").get(self.template.value()) or {}
+        pairs = row.get("attributes") or []
+        return [[int(a), int(r)] for a, r in (pairs.items() if isinstance(pairs, dict) else pairs)]
+
+    # the member keys this page EDITS; every other key a file carries is held
+    # (self.held) and written back, so Save never loses what Open read
+    EDITED = frozenset(("npc", "level", "health", "skills", "attributes", "weapon_item",
+                        "attack_speed", "damage", "boss", "glow"))
+
     def _template(self):
         prof = self.profession()
-        self.bar.set_professions((prof,))
-        self.ranks.set_professions((prof,))
+        tp = self.template_pairs()
+        self.bar.set_professions((prof,))       # the bar's ids are KEPT
+        self.ranks.set_professions((prof,), tp)
+        self.bar.set_ranks_view(self.ranks.ranks(), tp)
+        self.ranks.set_bar(self.bar.values())
+        # a held weapon_attribute of another profession than the new
+        # template's is dropped: the compiler would never see it ranked
+        # (validate holds a hostile's ranks to its template's profession)
+        wa = self.held.get("weapon_attribute")
+        rules = self.ranks.rules
+        if wa is not None and rules is not None:
+            owner = (rules.attributes.get(int(wa)) or {}).get("profession")
+            if owner is not None and owner != prof:
+                del self.held["weapon_attribute"]
+        self._changed()
+
+    def _ranks_moved(self):
+        self.bar.set_ranks_view(self.ranks.ranks())
         self._changed()
 
     def _boss(self, on):
@@ -1446,6 +2030,7 @@ class MemberEditor(QWidget):
         if self.boss.isChecked():
             m["boss"] = True
             m["glow"] = self.glow.value()
+        m.update({k: v for k, v in self.held.items() if k not in self.EDITED})
         return m
 
     def summary(self):
@@ -1459,8 +2044,10 @@ class MemberEditor(QWidget):
         return "  ·  ".join(bits)
 
     def from_spec(self, m):
+        self.held = {}                          # the file's template is not a CHANGE of template
         self.template.set_value(m.get("npc"))
         self._template()
+        self.held = {k: v for k, v in m.items() if k not in self.EDITED}
         # a member with no level is at its TEMPLATE's, the level spawn_rows
         # and validate give the row: the spawn row's level and the
         # 0..HOSTILE_LEVEL_MAX range (a level-300 template opened at a
@@ -2934,11 +3521,36 @@ def _real_wheel(win, widget, delta=-120):
 # attribute table), the lifted caps' four -- the Ranks spins' 0..21, the chip
 # telling 12 from 15, a level-28 rank-16 file held whole, a level-300 rank-22
 # file refused and said -- 4 (the same table), the encounter list's focus 1,
-# Launch's ring and the tab strip's cue 3, the active-window wheel 3, the
-# four popups 4 -- 24 of the green run's 177 (174 before Stop's three
-# ungated laws, 2026-09-24: Stop kills the run's tree, the kill()-alone
-# control orphans a child, the window's close kills the tree; 165 before
-# the lifted caps'
+# Launch's ring and the tab strip's cue 3, the active-window wheel 4 (the
+# Skill bar's nested wheel among them, SANDBOX-N1; the one skip line names
+# all four), the four popups 4, and the Skill bar's own (SANDBOX-N1,
+# 2026-09-24): the strip's pills 2 (the render and the grade: a hand and a
+# label row among the Warrior's and common), the search box's and the
+# strip's keyboard 2 (focus), the placeholder's way out 1 (an unmarked
+# Warrior skill), the Attributes row chips 3 (the count, the rank, the
+# template's own ranks planted in memory) and the widest label at 1,000 px 1
+# (the attribute table; a body of the widest profession), line 2 painted
+# through elide_rank_line 1 (a Monk cell that elides at 1,280), a
+# no-attribute skill that varies and the chip's conditional hover 2 (the
+# table's rows), the hostile page not scrolling at its own height 1 (an OS
+# that lets a hidden window outgrow the screen) -- 38 of the green run's
+# 208, dark and light (195 with 33 gated before the repair of 2026-09-24,
+# which added thirteen laws, five of them gated: the pill's grade, the
+# library's fixed height, the selected well's fill, the hover fill, the
+# drop-target edge, the drag sources' mime and pixmap, the Pickers' start of
+# text, line 2 through the helper, the template's own ranks, the varying
+# no-attribute skill and the chip's hover, a nine-skill file said, the held
+# weapon_attribute; 177 with 24 gated before the Skill bar: two Picker laws
+# retired, the slot arms of the fit laws rewritten for the strip, and TWENTY
+# laws added, net +18 -- the strip's pills, housing, columns and height at
+# three widths, the offered set and the spins' one x across one body per
+# profession, ticks, drops, the keyboard twice, a 200-character skill name,
+# the placeholder, the row chips twice, the widest label, the nested wheel,
+# the write paths' one signal, Open holding what the compiler accepts and a
+# template change keeping the bar, the tall arm of the right-edge law; 174
+# before Stop's three ungated laws, 2026-09-24: Stop
+# kills the run's tree, the kill()-alone control orphans a child, the
+# window's close kills the tree; 165 before the lifted caps'
 # nine: those four and the five ungated -- the party's Level spins pinned at
 # 20, the hostile's at 255, the hostile page's spins fitting '255' and '21'
 # at three widths; 164 before the roster-line law; 163 before the kept-rules
@@ -2946,12 +3558,14 @@ def _real_wheel(win, widget, delta=-120):
 # filter, the no-stray restore). A gated law
 # that skips is printed in the verdict; a run short of the floor is a FAIL
 # naming the shortfall, which "0 failure(s)" never was. What the floor cannot
-# see: on a machine where every gated law runs, up to 24 mandatory laws could
+# see: on a machine where every gated law runs, up to 38 mandatory laws could
 # stop before it names one -- so no mandatory law sits behind a STATE gate. A
 # precondition is a law of its own (`if m0.stacked:` once held the stacked
 # label law with no else, and the law vanished unnamed when the stack was
-# planted away, the re-polish law after it passing over no re-polish).
-SMOKE_FLOOR = 153
+# planted away, the re-polish law after it passing over no re-polish; the
+# library's fixed height is a law of its own for the same reason, since the
+# nested-wheel law sits behind `lbar.maximum() > 0`).
+SMOKE_FLOOR = 170
 
 # --smoke's own npc row: the content of tomorrow. The fit laws iterate the
 # content of today, which is how desk-hench's three 60-character names stacked
@@ -2968,6 +3582,14 @@ SMOKE_LONG_KEY = "smoke_long_name"
 SMOKE_LONG_NAME = ("Tomorrow's hostile, whose name runs far past any field the window fits: a "
                    "row an operator may write, its label elided by the window, its tag kept "
                    "whole, the name whole on hover, and found by gravelbeard from its middle")
+
+
+# ...and a skill's: the same idea for the Skill bar's cells, planted into the
+# names IN MEMORY by the smoke itself for one law and put back (never the
+# vault, never content/), 'gravelbeard' past where the cell's ellipsis falls.
+SMOKE_LONG_SKILL = ("Tomorrow's skill, whose name runs far past any cell the strip draws: a name "
+                    "an operator's mod row may carry, elided by the cell, the whole on hover, and "
+                    "found by gravelbeard from its middle, typed into the bar's own search box")
 
 
 def plant_long_template(world):
@@ -3515,11 +4137,193 @@ def smoke(win, app, out_dir):
           and sandbox.HOSTILE_LEVEL_MAX == 255,
           f"a hostile's Level spin is 0..255 (HOSTILE_LEVEL_MAX, the 0x0056 level byte), "
           f"lifted from the player's 20 by the owner's ruling")
-    pk = en.groups[0].members[0].bar.slots[0]
-    check(pk.lineEdit().cursorPosition() == 0, "a skill slot shows the start of its label")
-    check(isinstance(pk.view().itemDelegate(), orchui.SkillDelegate)
-          and isinstance(pk.completer().popup().itemDelegate(), orchui.SkillDelegate),
-          "and its drop-down and its type-to-filter popup draw rows the way the Skills list does")
+    # ---- the Skill bar (SANDBOX-N1): eight wells over an inline library.
+    # The strip RENDERS its pills through SlotDelegate and the one painter the
+    # Skills list uses (paint_pill): treatment and control on the SAME cell --
+    # painted with its grade, then with the grade taken away -- off grabs of the
+    # WINDOW (a widget's own grab is a transparent canvas); an empty cell loses
+    # nothing when its (absent) grade is taken away
+    m0 = en.groups[0].members[0]
+    en.select(m0)
+    settle(4)
+    bar0 = m0.bar
+    keep_ids = bar0.values()
+    hand_w = next((s for s in sorted(win.names.modelled) if win.names.skill_profession(s) in (0, 1)), None)
+    label_w = next((s for s in sorted(win.names.labelled) if win.names.skill_profession(s) in (0, 1)), None)
+    if hand_w and label_w:
+        bar0.set_values([hand_w, label_w, 0])
+        bar0.select_slot(3)                     # the measured cells keep the field fill
+        settle(4)
+        lost = {}
+        real_pill = orchui.paint_pill
+
+        def no_pill(_p, x, cy, grade, font=None):
+            """paint_pill's rect without its paint (the Skills list's delegate,
+            painted in the same grab, reads the rect back)."""
+            if grade not in orchui.GRADE_TEXT:
+                return None
+            w, h = orchui.pill_size(grade, font)
+            return QRect(x, cy - h // 2, w, h)
+
+        grade_px = {}
+        for i, tag in ((0, "modelled"), (1, "label"), (2, "empty")):
+            it = bar0.strip.item(i)
+            cell = bar0.strip.cell_rect(i)
+            # the CONTROL is the same cell with the one painter made a no-op --
+            # not the grade taken away, which also widens line 2 (a cell then
+            # changed for another reason, and a delegate that skipped the
+            # pill passed); measured inside the pill's own rect
+            pill_r = orchui.SlotStrip.layout(cell, it.data(ROLE_PARTS))[4]
+            box_r = pill_r if pill_r is not None else cell
+            at = bar0.strip.viewport().mapTo(win, box_r.topLeft())
+            box = QRect(at, box_r.size())
+            with_pill = win.grab().toImage().copy(box)
+            # ...and the pill's GRADE, told by its INK: a modelled cell's pill
+            # writes its word in the good chip's ink and none of the info
+            # chip's, a label cell's the reverse -- the loss below is blind to
+            # the grade (every pill painted 'label' passed it; the verifier's
+            # b3, 2026-09-24). The ink, not the fill: in dark the good fill
+            # sits 10 from the info edge and 15 from the info fill (measured),
+            # while the two inks are 68 apart in both palettes
+            grade_px[tag] = (_count_near(with_pill, pal["chip_good_fg"], 12),
+                             _count_near(with_pill, pal["chip_info_fg"], 12))
+            orchui.paint_pill = no_pill
+            bar0.strip.viewport().update()
+            settle(3)
+            without = win.grab().toImage().copy(box)
+            orchui.paint_pill = real_pill
+            bar0.strip.viewport().update()
+            settle(2)
+            lost[tag] = _diff(with_pill, without)
+        check(lost["modelled"] > 40 and lost["label"] > 40 and lost["empty"] == 0,
+              f"the strip RENDERS a grade pill in a modelled skill's cell and a label skill's, and "
+              f"none in an empty one (pixels a cell's pill rect loses with paint_pill made a no-op: "
+              f"{lost})")
+        check(grade_px["modelled"][0] >= 15 and grade_px["modelled"][1] <= 2
+              and grade_px["label"][1] >= 10 and grade_px["label"][0] <= 2,
+              f"and the pill tells the GRADES apart: the modelled cell's pill writes its word in the "
+              f"good chip's ink and none of the info chip's, the label cell's the reverse (good, "
+              f"info ink px: {grade_px})")
+        bar0.set_values(keep_ids)
+        settle()
+    else:
+        skip("the strip renders its pills", f"hand {hand_w} / label {label_w}: no Warrior or common "
+                                            f"row of each grade in the table")
+        skip("the pill tells the grades apart", "the same")
+    # ...and a SkillBar built by any caller houses its chip and its hint from
+    # birth (a card re-homes the chip; shown with no parent, a label is a window
+    # of its own -- the Ranks trap, twice over), and every hostile's are children
+    # of its page
+    lone_bar = SkillBar(win.names)
+    lone_bar.set_professions((1,))
+    lone_bar.set_values([322])
+    settle()
+    housed = [(ed.bar.chip.window() is win and ed.bar.clear_b.window() is win
+               and ed.bar.hint.isVisibleTo(en._pages[ed])
+               and "slot" in ed.bar.hint.text()) for gg in en.groups for ed in gg.members]
+    check(not strays() and lone_bar.chip.parentWidget() is lone_bar
+          and lone_bar.clear_b.parentWidget() is lone_bar
+          and lone_bar.hint.parentWidget() is lone_bar and all(housed),
+          f"a Skill bar on its own houses its chip, its Clear slot and its hint ({len(strays())} "
+          f"stray), and every hostile's are children of its page ({sum(housed)} of {len(housed)})")
+    lone_bar.deleteLater()
+    # the library is ROWS rows tall and SCROLLS on the template's own set --
+    # ungated, because the nested-wheel law below sits behind `lbar.maximum()
+    # > 0`, a property of the code under test: with the height regressed to
+    # every row that law became a declared skip and the verdict stayed green
+    # (the verifier's b8, 2026-09-24). Only the OS gate stays on that law.
+    lib, lbar = bar0.list, bar0.list.verticalScrollBar()
+    rows_fit = lib.viewport().height() / max(1, lib.sizeHintForRow(0))
+    check(SkillBar.ROWS in (6, 7) and abs(rows_fit - SkillBar.ROWS) < 0.5
+          and lib.minimumHeight() == lib.height() == lib.maximumHeight()
+          and lib.visible_count() > SkillBar.ROWS and lbar.maximum() > 0,
+          f"the library is a fixed {SkillBar.ROWS} rows tall ({lib.height()} px: {rows_fit:.2f} rows "
+          f"of {lib.sizeHintForRow(0)} in its viewport) and scrolls on the Warrior-and-common set "
+          f"({lib.visible_count()} rows shown, {lbar.maximum()} px to scroll)")
+    # the SELECTED well is filled in the selection tint and never the accent
+    # (the one-accent law is a census of button roles, and the strip paints
+    # its own fills: a well filled PAL['accent'] passed it -- the verifier's
+    # c2 plant, 2026-09-24); the well under the POINTER takes the hover fill
+    # every list row has from the sheet, the strip painting its own (c7); and
+    # the well a DRAG is over takes the focus edge -- the ring a rounded 1 px
+    # pen leaves is the 50 % blend of the ink and the ground it crosses, so
+    # the count is of pixels near mix(focus, field) and mix(focus, surface)
+    vp = bar0.strip.viewport()
+    bar0.select_slot(0)
+    settle(3)
+
+    def well_box(i):
+        well = orchui.SlotStrip.layout(bar0.strip.cell_rect(i), None)[0]
+        return QRect(vp.mapTo(win, well.topLeft()), well.size())
+
+    def fill_px(i, key, img=None):
+        b = well_box(i)
+        img = img or win.grab().toImage()
+        return _count_near(img, pal[key], 6, (b.left() + 4, b.top() + 4, b.right() - 3, b.bottom() - 3))
+
+    def edge_px(i, ink, img=None):
+        b = well_box(i)
+        img = img or win.grab().toImage()
+        ring = lambda colour: (_count_near(img, colour, 12, (b.left(), b.top(), b.right() + 1, b.bottom() + 1))  # noqa: E731
+                               - _count_near(img, colour, 12, (b.left() + 3, b.top() + 3, b.right() - 2, b.bottom() - 2)))
+        return ring(orchtheme.mix(pal[ink], pal["field"], 0.5)) + ring(orchtheme.mix(pal[ink], pal["surface"], 0.5))
+
+    sel = (fill_px(0, "selection_bg"), fill_px(0, "accent"), fill_px(5, "field"))
+    check(sel[0] > 1000 and sel[1] == 0 and sel[2] > 1000,
+          f"the selected well is filled in the selection tint and holds no accent pixel, an "
+          f"unselected one in the field fill (selection, accent, field px: {sel})")
+    c5, c6 = bar0.strip.cell_rect(5).center(), bar0.strip.cell_rect(6).center()
+    QApplication.sendEvent(vp, QEnterEvent(QPointF(c5), QPointF(vp.mapToGlobal(c5)), QPointF(vp.mapToGlobal(c5))))
+    QApplication.sendEvent(vp, QMouseEvent(QEvent.MouseMove, QPointF(c5), QPointF(vp.mapToGlobal(c5)),
+                                           Qt.NoButton, Qt.NoButton, Qt.NoModifier))
+    settle(3)
+    hov = [fill_px(5, "hover"), fill_px(5, "field"), fill_px(6, "hover")]
+    QApplication.sendEvent(vp, QMouseEvent(QEvent.MouseMove, QPointF(c6), QPointF(vp.mapToGlobal(c6)),
+                                           Qt.NoButton, Qt.NoButton, Qt.NoModifier))
+    settle(3)
+    hov += [fill_px(5, "hover"), fill_px(6, "hover")]
+    QApplication.sendEvent(vp, QEvent(QEvent.Leave))
+    settle(3)
+    hov.append(fill_px(6, "hover"))
+    check(hov[0] > 1000 and hov[1] == 0 and hov[2] == 0 and hov[3] == 0 and hov[4] > 1000 and hov[5] == 0,
+          f"the well under the pointer takes the hover fill and its neighbour does not, the fill "
+          f"following the pointer and leaving with it (hover px on 5, field on 5, hover on 6; then "
+          f"on 5, on 6; after leave on 6: {hov})")
+    c3 = bar0.strip.cell_rect(3).center()
+    md3 = orchui.skill_mime(next(s for s in sorted(win.names.modelled)
+                                 if win.names.skill_profession(s) == 1 and s not in bar0.values()))
+    before_edge = (edge_px(3, "focus"), edge_px(3, "border"))
+    QApplication.sendEvent(vp, QDragEnterEvent(c3, Qt.CopyAction, md3, Qt.LeftButton, Qt.NoModifier))
+    QApplication.sendEvent(vp, QDragMoveEvent(c3, Qt.CopyAction, md3, Qt.LeftButton, Qt.NoModifier))
+    settle(3)
+    under = (bar0.strip.drop_row, edge_px(3, "focus"), edge_px(3, "border"), edge_px(2, "focus"))
+    QApplication.sendEvent(vp, QDragLeaveEvent())
+    settle(3)
+    after_edge = (bar0.strip.drop_row, edge_px(3, "focus"), bar0.values())
+    check(before_edge[0] == 0 and before_edge[1] > 200 and under[0] == 3 and under[1] > 200
+          and under[2] < before_edge[1] // 4 and under[3] == 0 and after_edge == (-1, 0, keep_ids),
+          f"the well a drag is over takes the focus edge (its border ring gone but for the corners) "
+          f"and its neighbour keeps the border, and the edge leaves with the drag, nothing written "
+          f"(focus / border ring px before {before_edge}, under the drag {under[1:]} on row "
+          f"{under[0]}, after {after_edge[:2]})")
+    # the drag SOURCES: what each builds is read here without a QDrag.exec (a
+    # nested event loop) -- a library row's mime carries the id ALONE, so the
+    # strip PLACES it (one carrying a slot made every place a swap, the
+    # verifier's b9 plant, 2026-09-24); a cell's carries its id, its slot and
+    # THIS strip's token; an empty cell drags nothing; and each drag's pixmap
+    # is the cell or the row itself, so the skill travels with the cursor
+    lib_row = next(it for it in bar0._items() if not it.isHidden())
+    src = (orchui.parse_skill_mime(orchui.SkillLibrary.drag_mime(lib_row), bar0.strip.token),
+           orchui.parse_skill_mime(bar0.strip.drag_mime(0), bar0.strip.token),
+           orchui.parse_skill_mime(bar0.strip.drag_mime(0), "another strip's token"),
+           bar0.strip.drag_mime(5),
+           bar0.strip.drag_pixmap(0).size() == bar0.strip.cell_rect(0).size(),
+           bar0.list.drag_pixmap(lib_row).size() == bar0.list.visualItemRect(lib_row).size())
+    check(src[0] == (int(lib_row.data(ROLE_ID)), None) and src[1] == (keep_ids[0], 0)
+          and src[2] == (keep_ids[0], None) and src[3] is None and src[4] and src[5],
+          f"a library row's drag carries its id and no slot, a cell's its id, its slot and the "
+          f"strip's own token (read under another token, a place), an empty cell drags nothing, "
+          f"and each pixmap is the cell or row itself ({src})")
     # the hostile page at three widths, for EVERY hostile in the example: every
     # choice in every slot, the Template and the Weapon (the '(none: the
     # template's swing)' row every new hostile starts with among them) fits its
@@ -3535,12 +4339,41 @@ def smoke(win, app, out_dir):
 
     def cut_choices(ed):
         cut = []
-        for tag, combo in ([(f"slot {i + 1}", pk) for i, pk in enumerate(ed.bar.slots)]
-                           + [("Template", ed.template), ("Weapon", ed.weapon_item)]):
+        for tag, combo in (("Template", ed.template), ("Weapon", ed.weapon_item),
+                           ("Skills offered", ed.bar.prof)):
             for i in range(combo.count()):
                 if not _fits(combo, combo.itemText(i)):
                     cut.append((ed.template.value(), tag, combo.itemText(i)[:40],
                                 _field_width(combo)))
+        return cut
+
+    meta_fm = QFontMetrics(orchui.mono_font(orchtheme.TYPE["caption"]))
+
+    def cut_cells(ed):
+        """Every filled cell of the strip whose NAME neither fits its name rect
+        nor is whole on the cell's hover, whose rank line is not whole in the
+        item's text, or whose pill or rects leave the cell -- through
+        SlotStrip.layout on the rect the view reports, the delegate's own."""
+        cut = []
+        st = ed.bar.strip
+        fm = st.fontMetrics()
+        for i, sid in enumerate(ed.bar.values()):
+            if not sid:
+                continue
+            it = st.item(i)
+            parts = it.data(ROLE_PARTS)
+            cell = st.cell_rect(i)
+            _well, num_r, name_r, meta_r, pill_r = orchui.SlotStrip.layout(
+                cell, parts, body_fm=fm, meta_fm=meta_fm)
+            name, line2 = parts[0], it.data(ROLE_SLOT)[1]
+            if fm.horizontalAdvance(name) > name_r.width() and name not in it.toolTip():
+                cut.append((ed.template.value(), f"slot {i + 1}", name[:40], name_r.width()))
+            if line2 and line2 not in it.text():
+                cut.append((ed.template.value(), f"slot {i + 1} line 2", line2[:40]))
+            for tag, r in (("number", num_r), ("name", name_r), ("line 2", meta_r), ("pill", pill_r)):
+                if r is not None and not cell.contains(r):
+                    cut.append((ed.template.value(), f"slot {i + 1} {tag} leaves the cell",
+                                r.getRect(), cell.getRect()))
         return cut
 
     def label_edges(ed):
@@ -3560,19 +4393,79 @@ def smoke(win, app, out_dir):
                 out.append((lab.text(), ink, f.parentWidget().mapTo(win, fi.geometry().topLeft()).x()))
         return out
 
+    def query_room(ed, text):
+        """(the px the search box gives its text, the px `text` needs) with
+        `text` typed -- the Skills filter's own measure (SE_LineEditContents
+        less the visible tool buttons), the clear button counted since a
+        typed query shows it."""
+        fl = ed.bar.filter
+        fl.setText(text)
+        settle(3)
+        opt = QStyleOptionFrame()
+        fl.initStyleOption(opt)
+        room = (fl.style().subElementRect(QStyle.SE_LineEditContents, opt, fl).width()
+                - sum(b.width() for b in fl.findChildren(QToolButton) if b.isVisibleTo(fl)) - 4)
+        want = fl.fontMetrics().horizontalAdvance(text)
+        fl.setText("")
+        settle(2)
+        return room, want
+
     for w, h in ((1280, 860), (1120, 760), (1000, 720)):
         win.resize(w, h)
         settle(8)
-        cut, cols = [], {}
-        for ed in eds:
+        cut, cols, heights, fits2, rooms = [], {}, {}, {}, {}
+        for n_ed, ed in enumerate(eds):
             en.select(ed)
             settle(4)
-            cut += cut_choices(ed)
-            cols[ed.template.value()] = ed.bar.columns
-        check(not cut and all(ed.weapon_item.itemText(0).startswith("(none") for ed in eds),
-              f"at {w} px every choice in each example hostile's eight slots, its Template and "
-              f"its Weapon fits its field (the bars in {cols} column(s), the cards "
-              f"{'stacked' if m0.stacked else 'side by side'}; cut: {cut[:2] or 'none'})")
+            cut += cut_choices(ed) + cut_cells(ed)
+            cols[ed.template.value()] = ed.bar.strip.columns
+            heights[ed.template.value()] = ed.bar.strip.height()
+            # a typed 12-character query whole in the search box (at 1,000 px
+            # the box was 122 px with Clear slot in its row and showed the
+            # last seven characters of 'gravelbeard'; the verifier's c4)
+            rooms[n_ed] = query_room(ed, "gravelbeard ")
+            # line 2 whole in its rect at 1,000 (two columns); at 1,280 and
+            # 1,120 a Monk's 'Protection Prayers 1' (144 px, measured) elides
+            # in a 131 px room, so there the RANK must survive the elision --
+            # the delegate's own rule (elide_rank_line), the whole line being
+            # the item's text (checked by cut_cells)
+            for i, sid in enumerate(ed.bar.values()):
+                if sid:
+                    it = ed.bar.strip.item(i)
+                    r = orchui.SlotStrip.layout(ed.bar.strip.cell_rect(i), it.data(ROLE_PARTS),
+                                                body_fm=ed.bar.strip.fontMetrics(), meta_fm=meta_fm)[3]
+                    line2 = it.data(ROLE_SLOT)[1]
+                    shown2 = orchui.elide_rank_line(meta_fm, line2, r.width())
+                    fits2[(ed.template.value(), i)] = (
+                        meta_fm.horizontalAdvance(line2) <= r.width(),
+                        shown2.split(" ")[-1] == line2.split(" ")[-1]
+                        and meta_fm.horizontalAdvance(shown2) <= r.width())
+        narrow_q = {k: v for k, v in rooms.items() if v[0] < v[1]}
+        check(not cut and all(ed.weapon_item.itemText(0).startswith("(none") for ed in eds)
+              and len(rooms) == len(eds) and not narrow_q,
+              f"at {w} px every choice in each example hostile's Template, Weapon and Skills "
+              f"offered combos fits its field, every slotted skill's name fits its cell, its "
+              f"rank line whole in the cell's text and its pill inside the cell, and the search "
+              f"box holds a typed 12-character query whole (the strips {cols} cells a row, the "
+              f"cards {'stacked' if m0.stacked else 'side by side'}; cut: {cut[:2] or 'none'}; "
+              f"query room, need: {next(iter(rooms.values()))}; short: {narrow_q or 'none'})")
+        # the strip's columns come off its OWN width (four while the viewport
+        # holds four cells a name can live in, else two), never off its content
+        # -- the 840-constant defect -- so every hostile's strip is one shape
+        # at one width; its height is the rows' and no more
+        st = m0.bar.strip
+        want_cols = 4 if w > 1000 else 2
+        rows_ = sandbox.BAR_SLOTS // want_cols
+        whole2 = sum(1 for wh, _k in fits2.values() if wh)
+        check(set(cols.values()) == {want_cols} and len(set(heights.values())) == 1
+              and st.height() == rows_ * st.CELL_H + 2 * st.frameWidth()
+              and st.cell.width() * want_cols <= st.viewport().width()
+              and all(kept for _wh, kept in fits2.values()) and (w != 1000 or whole2 == len(fits2)),
+              f"at {w} px the strip is {want_cols} cells a row for every hostile ({rows_} rows, "
+              f"{st.height()} px tall, cells {st.cell.width()} px in a {st.viewport().width()} px "
+              f"viewport); every cell's rank survives its line's elision, and the line is whole "
+              f"{'as it must be at two columns' if w == 1000 else 'where it fits'} ({whole2} of "
+              f"{len(fits2)} whole)")
         # stacked, the Body and Weapon cards' inputs start at one x, their
         # labels right-aligned up to it (each form sized its own label column:
         # 'Template' and 'Attack interval' put the two cards' inputs 32 px
@@ -3633,32 +4526,73 @@ def smoke(win, app, out_dir):
           f"wide as it was, the Weapon's in its own card (x, width, weapon x: {back} was "
           f"{edges[1280]})")
     # ...and one body per profession the Template picker offers, at the default
-    # width: the bar picks its columns from the list a template gives it, at a
-    # constant width -- Warrior 2, Monk 1, Warrior 2 (a threshold read only on
-    # resize would hold the Warrior's columns for the Monk's list)
+    # width: the Template and Weapon choices fit, the strip's columns do NOT
+    # move with the template (the old bar re-picked them from each list, and
+    # a threshold fitted to one list cut another's), the library OFFERS that
+    # profession's acting skills plus the common ones with the box ticked and
+    # all of them unticked, combo row 0 names the profession as the template's,
+    # the search is cleared, and the Attributes spins stand at ONE x whatever
+    # the profession's widest label (the label column is measured over every
+    # profession once, not per template)
     m0_spec = m0.to_spec()
     rows = win.names.world.rows("npc")
     byprof = {}
     for i in range(m0.template.count()):
         k = m0.template.itemData(i)
         byprof.setdefault(int((rows.get(k) or {}).get("profession", 0) or 0), k)
-    cut, cols = [], {}
+    acting = win.names.modelled | win.names.labelled
+    cut, cols, offered, spin_x = [], {}, {}, {}
     for p, k in sorted(byprof.items()):
+        # the search AND the combo disturbed before each change, so the reset
+        # of both is observable (the combo left at row 0 made its reset arm
+        # unfalsifiable: the verifier's b5 plant, 2026-09-24)
+        m0.bar.filter.setText("heal")
+        set_combo(m0.bar.prof, 0)
+        settle()
         m0.template.set_value(k)
         settle(4)
-        cols[p] = m0.bar.columns
-        cut += cut_choices(m0)
+        cols[p] = m0.bar.strip.columns
+        cut += cut_choices(m0) + cut_cells(m0)
+        want = sandbox.default_unlocks(win.names.world, (p,))
+        ticked = m0.bar.visible_ids()
+        m0.bar.acts.setChecked(False)
+        settle()
+        untied = m0.bar.visible_ids()
+        m0.bar.acts.setChecked(True)
+        settle()
+        pname = sandbox.PROFESSIONS.get(p)      # a template may carry a profession the table lacks (11)
+        label0 = f"{pname} and common" if pname else "Common"
+        # ...and a template with no known profession, whose row 0 is the
+        # common skills already, offers no 'Common (no profession)' row (the
+        # same 59 twice: the verifier's c11); every known profession keeps it
+        datas = [m0.bar.prof.itemData(i) for i in range(m0.bar.prof.count())]
+        offered[p] = (sorted(ticked) == sorted(s for s in want if s in acting),
+                      sorted(untied) == sorted(want), m0.bar.prof.itemText(0) == label0,
+                      m0.bar.prof.currentIndex() == 0, m0.bar.filter.text() == "",
+                      (-1 in datas) is (pname is not None),
+                      m0.bar.prof.maxVisibleItems() == m0.bar.prof.count())
+        spin_x[p] = sorted({s.mapTo(win, QPoint(0, 0)).x() for s in m0.ranks.spins.values()})
     swing = []
     for k in ("bandit_raider", "academy_monk", "bandit_raider"):
         m0.template.set_value(k)
         settle(4)
-        swing.append(m0.bar.columns)
+        swing.append(m0.bar.strip.columns)
     m0.from_spec(m0_spec)
     settle(4)
-    check(len(byprof) >= 6 and not cut and swing == [2, 1, 2] and m0.to_spec() == m0_spec,
-          f"at 1,280 px a hostile in any of {len(byprof)} professions' bodies fits every slot "
-          f"choice, the bar re-picking its columns from each list at one width (by profession "
-          f"{cols}; Warrior, Monk, Warrior: {swing}; cut: {cut[:2] or 'none'})")
+    bad_offer = {p: v for p, v in offered.items() if not all(v)}
+    check(len(byprof) >= 6 and not cut and swing == [4, 4, 4] and not bad_offer
+          and m0.to_spec() == m0_spec and 11 in byprof,
+          f"at 1,280 px a hostile in any of {len(byprof)} professions' bodies fits its Template and "
+          f"Weapon choices and every slotted name, the strip keeps four cells a row (Warrior, "
+          f"Monk, Warrior: {swing}), and the library offers that profession's acting skills plus "
+          f"the common ones (all of them unticked), combo row 0 named as the template's with the "
+          f"combo and the search RESET to it, and the 'Common (no profession)' row offered for a "
+          f"known profession only (a profession-11 body among them: {11 in byprof}; wrong: "
+          f"{bad_offer or 'none'}; cut: {cut[:2] or 'none'})")
+    check(len(spin_x) >= 6 and all(len(v) == 1 for v in spin_x.values())
+          and len({v[0] for v in spin_x.values()}) == 1,
+          f"the Attributes spins stand at ONE x across one body per profession, one attribute to "
+          f"a row (spin x by profession: {spin_x})")
     # ...and a label no field was fitted to: --smoke's own row (SMOKE_LONG_NAME,
     # planted by main), 200 characters against a budget of TEMPLATE_LABEL_PX.
     # The three fit laws above iterate today's content; this row is tomorrow's.
@@ -3729,6 +4663,32 @@ def smoke(win, app, out_dir):
           f"finds that row alone by its label whole (the shown one lost the word to the "
           f"ellipsis) and completes with the shown label ({hits} hit, {hit[-16:]!r}; a word in "
           f"no name: {none})")
+    # ...and a Picker shows the START of its text -- the field's cursor at 0
+    # once a value is picked, never scrolled to the end (a skill once read
+    # 'V Strength] *') -- on the long template's bounded label and on the
+    # Weapon picker, at each of the three widths. The law that held this was
+    # retired with the skill Pickers and the behaviour lives on in the two
+    # that remain (the verifier's b4, 2026-09-24). Measured on the way: no
+    # label is wider than its field today (the Template field is 299 / 219 /
+    # 449 px, stacked at 1,000; the bounded label 199), so the cursor is the
+    # whole of what a scrolled field would show
+    starts = {}
+    for w, h in ((1280, 860), (1120, 760), (1000, 720)):
+        win.resize(w, h)
+        settle(8)
+        en.select(m0)
+        settle(4)
+        m0.template.set_value(SMOKE_LONG_KEY)
+        m0.weapon_item.set_value(m0.weapon_item.itemData(1))
+        settle(4)
+        starts[w] = (m0.template.lineEdit().cursorPosition(), m0.weapon_item.lineEdit().cursorPosition(),
+                     m0.template.fontMetrics().horizontalAdvance(m0.template.currentText()),
+                     _field_width(m0.template))
+    win.resize(1280, 860)                       # m0 stays on the long template: the restore law's subject
+    settle(8)
+    check(len(starts) == 3 and all(c == 0 and wc == 0 for c, wc, _a, _f in starts.values()),
+          f"the Template picker shows the START of the long label and the Weapon picker its own at "
+          f"1,280, 1,120 and 1,000 px (cursor, weapon cursor, label px, field px: {starts})")
     # ...and the restore, a VISIBLE editor's from_spec to a different template
     # (set_professions twice in one turn), opens no window of its own: the
     # first turn's Attributes widgets, un-parented before the grid's queued
@@ -3738,12 +4698,532 @@ def smoke(win, app, out_dir):
     settle(4)
     check(m0.to_spec() == m0_spec and not strays(),
           f"a visible hostile's from_spec to a different template (its ranks rebuilt twice in "
-          f"one turn) opens no window of its own ({len(strays())} stray)")
+          f"one turn, its library repopulated) opens no window of its own ({len(strays())} stray)")
+
+    # ---- the Skill bar's own laws (SANDBOX-N1): one write path, and every
+    # view of the model -- the strip, the library's checks, the chip, the
+    # Attributes row chips -- re-derived from it
+    def drop_on(view, sid, from_slot, at, token=None):
+        """A drop as the OS delivers one: enter, then drop, on the VIEWPORT
+        (a scroll area refuses drag events on its frame), carrying the bar's
+        own mime -- a cell's under the strip's own token unless another is
+        given (a cell from ANOTHER window's strip)."""
+        md = orchui.skill_mime(sid, from_slot, bar0.strip.token if token is None else token)
+        QApplication.sendEvent(view.viewport(), QDragEnterEvent(at, Qt.CopyAction, md, Qt.LeftButton,
+                                                                Qt.NoModifier))
+        QApplication.sendEvent(view.viewport(), QDropEvent(QPointF(at), Qt.CopyAction, md,
+                                                           Qt.LeftButton, Qt.NoModifier))
+
+    def key_on(w, key, mods=Qt.NoModifier):
+        QApplication.sendEvent(w, QKeyEvent(QEvent.KeyPress, key, mods))
+
+    bar0 = m0.bar
+    hits = []                                    # NOT `emits`: the level-0 law's lambda still
+    tally = lambda: hits.append(1)               # noqa: E731 -- appends to `emits` (late binding)
+    bar0.changed.connect(tally)
+    acting_w = [s for s in sorted(win.names.modelled) if win.names.skill_profession(s) == 1
+                and s != 322]
+    # TICKS: a tick fills the selected slot if empty, else the first empty, and
+    # the selection moves on to the next empty slot; with the bar full it
+    # REPLACES the selected slot; a tick of an id already on the bar changes
+    # nothing and emits nothing; an untick clears EVERY slot holding the id (a
+    # file may carry a duplicate); and to_spec is the slot order with the gaps
+    # collapsed -- the file format the compiler reads, unchanged
+    a_w, b_w, c_w = acting_w[:3]
+    bar0.set_values([322])
+    bar0.select_slot(0)
+    del hits[:]
+    # the first tick through the library row's BOX -- setCheckState, the
+    # itemChanged path Qt's own click takes -- not the model method (the
+    # verifier's b2: the box's branch made dead left every law green)
+    next(it for it in bar0._items() if int(it.data(ROLE_ID)) == a_w).setCheckState(Qt.Checked)
+    settle()
+    step1 = (bar0.values(), bar0.current_slot(), len(hits))
+    bar0.select_slot(4)
+    del hits[:]
+    bar0.tick(b_w)
+    step2 = (bar0.values()[4], bar0.current_slot(), len(hits))
+    del hits[:]
+    bar0.tick(322)
+    step3 = (bar0.values()[:2], len(hits))
+    bar0.set_values([322, 322])
+    del hits[:]
+    bar0.untick(322)
+    step4 = (bar0.values(), len(hits))
+    full = acting_w[:8]
+    bar0.set_values(full)
+    bar0.select_slot(2)
+    del hits[:]
+    bar0.tick(acting_w[8])
+    step5 = (bar0.values()[2] == acting_w[8], sorted(bar0.values()) == sorted(full[:2] + full[3:] + [acting_w[8]]),
+             len(hits))
+    bar0.set_values([322, 0, 323])
+    saved = m0.to_spec()["skills"]
+    check(len(acting_w) >= 9 and step1 == ([322, a_w, 0, 0, 0, 0, 0, 0], 2, 1) and step2 == (b_w, 5, 1)
+          and step3 == ([322, a_w], 0) and step4 == ([0] * 8, 1) and step5 == (True, True, 1)
+          and saved == [322, 323],
+          f"a tick fills the selected slot if empty, else the first empty, and moves the selection "
+          f"on ({step1[1:]}; slot 5 selected: {step2[1:]}); an id already on the bar ticks to "
+          f"nothing ({step3[1]} signals); an untick clears both copies of a planted duplicate "
+          f"({step4}); a full bar's tick replaces the selected slot ({step5}); and to_spec collapses "
+          f"the gaps ({saved})")
+    # DROPS (the Guild Wars idiom), as synthetic enter+drop events carrying the
+    # bar's mime: a library row onto a cell places it, replacing; a skill
+    # already on the bar MOVES (one copy); a cell onto another cell SWAPS; a
+    # cell onto the library clears its slot; a foreign mime is ignored
+    bar0.set_values([322, 0, 323])
+    del hits[:]
+    drop_on(bar0.strip, a_w, None, bar0.strip.cell_rect(3).center())
+    d1 = (bar0.values()[3] == a_w, len(hits))
+    drop_on(bar0.strip, 322, None, bar0.strip.cell_rect(5).center())
+    d2 = (bar0.values()[0] == 0 and bar0.values()[5] == 322, len(hits))
+    drop_on(bar0.strip, 323, 2, bar0.strip.cell_rect(5).center())
+    d3 = (bar0.values()[2] == 322 and bar0.values()[5] == 323, len(hits))
+    drop_on(bar0.list, 323, 5, QPoint(20, 20))
+    d4 = (bar0.values()[5] == 0, len(hits))
+    md = QMimeData()
+    md.setText("hello")
+    at = bar0.strip.cell_rect(0).center()
+    QApplication.sendEvent(bar0.strip.viewport(), QDragEnterEvent(at, Qt.CopyAction, md, Qt.LeftButton,
+                                                                  Qt.NoModifier))
+    QApplication.sendEvent(bar0.strip.viewport(), QDropEvent(QPointF(at), Qt.CopyAction, md,
+                                                             Qt.LeftButton, Qt.NoModifier))
+    d5 = (bar0.values(), len(hits))
+    # ...a cell mime naming a slot the strip has not (a crafted '322,12' once
+    # raised inside dropEvent, '322,-1' swapped with slot 8) changes nothing;
+    # and a cell from ANOTHER strip (its token, not this one's) is a PLACE of
+    # its skill on the target, this strip's own slot 1 untouched -- not a
+    # swap of this strip's two slots (the verifier's a9, 2026-09-24)
+    raised = []
+    for bad in (12, -1):
+        try:
+            drop_on(bar0.strip, 322, bad, bar0.strip.cell_rect(1).center())
+        except Exception as exc:                 # noqa: BLE001
+            raised.append(type(exc).__name__)
+    d6 = (bar0.values(), len(hits), raised or None)
+    drop_on(bar0.strip, b_w, 1, bar0.strip.cell_rect(6).center(), token="another window's strip")
+    d7 = (bar0.values(), len(hits))
+    check(d1 == (True, 1) and d2 == (True, 2) and d3 == (True, 3) and d4 == (True, 4)
+          and d5 == ([0, 0, 322, a_w, 0, 0, 0, 0], 4) and d6 == ([0, 0, 322, a_w, 0, 0, 0, 0], 4, None)
+          and d7 == ([0, 0, 322, a_w, 0, 0, b_w, 0], 5),
+          f"a library row dropped on a cell is placed ({d1}), one already on the bar MOVES "
+          f"({d2}), a cell on a cell swaps ({d3}), a cell on the library clears ({d4}), a "
+          f"foreign mime changes nothing ({d5[1]} signals), a cell mime naming slot 12 or -1 "
+          f"changes nothing and raises nothing ({d6[1:]}), and a cell from ANOTHER strip is a "
+          f"place of its skill, not a swap ({d7[0]}, {d7[1]} signals); each write one signal")
+    # the KEYBOARD path, which needs focus (a declared skip when the window
+    # cannot hold it): Return in the search fills the first shown unticked row
+    # and keeps the text and the focus, so Return again takes the next; Escape
+    # clears; Down moves to the list, where Space toggles; on the strip 1..8
+    # select, Delete clears, Ctrl+Right swaps, Return goes to the search
+    no_focus = "the window could not hold keyboard focus"
+    activate()
+    bar0.set_values([])
+    bar0.select_slot(0)
+    bar0.filter.setText("")
+    bar0.acts.setChecked(True)
+    settle()
+    if focus(bar0.filter):
+        QTest.keyClicks(bar0.filter, "power att")
+        QTest.keyClick(bar0.filter, Qt.Key_Return)
+        settle()
+        k1 = (bar0.values()[0], bar0.filter.text(), bar0.filter.hasFocus(), bar0.current_slot())
+        bar0.filter.setText("")
+        settle()
+        expect = [s for s in bar0.visible_ids() if s != 322][:2]
+        QTest.keyClick(bar0.filter, Qt.Key_Return)
+        QTest.keyClick(bar0.filter, Qt.Key_Return)
+        settle()
+        k2 = bar0.values()[1:3]
+        QTest.keyClicks(bar0.filter, "xyz")
+        QTest.keyClick(bar0.filter, Qt.Key_Escape)
+        k3 = bar0.filter.text()
+        QTest.keyClick(bar0.filter, Qt.Key_Down)
+        settle()
+        first_row = next((it for it in bar0._items() if not it.isHidden()), None)
+        k4 = (bar0.list.hasFocus(), bar0.list.currentItem() is first_row)
+        QTest.keyClick(bar0.list, Qt.Key_Space)
+        settle()
+        k5 = int(first_row.data(ROLE_ID)) in bar0.values() if first_row is not None else None
+        # ...and RETURN toggles the focused row too (DESIGN s2: Space / Return;
+        # Qt gives Return to `activated` and ticked nothing -- the verifier's
+        # a5), each press one signal
+        del hits[:]
+        QTest.keyClick(bar0.list, Qt.Key_Return)
+        settle()
+        k6 = (int(first_row.data(ROLE_ID)) in bar0.values(), len(hits))
+        QTest.keyClick(bar0.list, Qt.Key_Return)
+        settle()
+        k6 += (int(first_row.data(ROLE_ID)) in bar0.values(), len(hits))
+        check(k1 == (322, "power att", True, 1) and k2 == expect and k3 == "" and k4 == (True, True)
+              and k5 is False and k6 == (True, 1, False, 2),
+              f"Return in the search fills the first shown skill and keeps the text and the focus "
+              f"({k1}), Return again takes the next two ({k2} = {expect}), Escape clears "
+              f"({k3!r}), Down moves to the list's first shown row ({k4}) where Space unticks it "
+              f"({k5}) and Return ticks it again and unticks it, one signal each ({k6})")
+    else:
+        skip("the search box's Return, Escape and Down", no_focus)
+    bar0.set_values([322, 0, 323, a_w])
+    if focus(bar0.strip):
+        QTest.keyClick(bar0.strip, Qt.Key_3)
+        s1 = bar0.current_slot()
+        QTest.keyClick(bar0.strip, Qt.Key_Right, Qt.ControlModifier)
+        s2 = (bar0.values(), bar0.current_slot())
+        QTest.keyClick(bar0.strip, Qt.Key_Delete)
+        s3 = bar0.values()
+        QTest.keyClick(bar0.strip, Qt.Key_Return)
+        settle()
+        s4 = bar0.filter.hasFocus()
+        check(s1 == 2 and s2 == ([322, 0, a_w, 323, 0, 0, 0, 0], 3) and s3 == [322, 0, a_w, 0, 0, 0, 0, 0]
+              and s4,
+              f"on the strip 3 selects slot 3 ({s1 + 1}), Ctrl+Right swaps it with slot 4 and follows "
+              f"it ({s2}), Delete empties it ({s3}) and Return moves to the search ({s4})")
+    else:
+        skip("the strip's 1..8, Delete, Ctrl+Right and Return", no_focus)
+    # A 200-CHARACTER SKILL NAME, planted in memory (--smoke only, restored
+    # after): tomorrow's content, which the fit laws over today's cannot see.
+    # It draws elided in its cell -- the ink stops inside the name rect, read
+    # off the window -- the strip's height unchanged, the whole on the cell's
+    # hover and the library row's, and a word from its middle finds the row
+    keep_name = win.names.skill.get(322)
+    win.names.skill[322] = SMOKE_LONG_SKILL
+    bar0.set_values([322])
+    bar0.select_slot(1)
+    bar0.set_professions((1,))                   # the library's rows carry the planted name
+    settle(4)
+    h_before = bar0.strip.height()
+    it0 = bar0.strip.item(0)
+    parts0 = it0.data(ROLE_PARTS)
+    cell0 = bar0.strip.cell_rect(0)
+    _w0, _n, name0, _m, _p = orchui.SlotStrip.layout(cell0, parts0, body_fm=bar0.strip.fontMetrics(),
+                                                     meta_fm=meta_fm)
+    # elided, not CLIPPED: drawText clips to its rect, so the ink of an unelided
+    # name ends inside the rect too. The cell painted with the long name must
+    # equal, pixel for pixel, the cell painted with its elided string -- the
+    # ellipsis, where a clipped name shows a cut glyph
+    box = QRect(bar0.strip.viewport().mapTo(win, name0.topLeft()), name0.size())
+    long_img = win.grab().toImage().copy(box)
+    shown0 = bar0.strip.fontMetrics().elidedText(SMOKE_LONG_SKILL, Qt.ElideRight, name0.width())
+    it0.setData(ROLE_PARTS, (shown0, parts0[1], parts0[2]))
+    settle(3)
+    elided_img = win.grab().toImage().copy(box)
+    it0.setData(ROLE_PARTS, parts0)
+    settle(2)
+    same = _diff(long_img, elided_img)
+    # ...with a POSITIVE floor: a blank name rect equals a blank name rect (0
+    # px apart), so the equality alone passed a delegate that painted no name
+    # (the verifier's b1, 2026-09-24) -- the rect must carry the glyphs' ink
+    name_ink = _ink_pixels(long_img, pal["field"], orchtheme.TEXT_FLOOR)
+    lib_row = next((it for it in bar0._items() if int(it.data(ROLE_ID)) == 322), None)
+    bar0.filter.setText("gravelbeard")
+    settle()
+    found = bar0.visible_ids()
+    bar0.filter.setText("")
+    check(len(SMOKE_LONG_SKILL) >= 200 and same == 0 and name_ink > 60 and shown0.endswith("…")
+          and shown0 != SMOKE_LONG_SKILL and bar0.strip.height() == h_before
+          and SMOKE_LONG_SKILL in it0.toolTip()
+          and lib_row is not None and SMOKE_LONG_SKILL in lib_row.toolTip() and found == [322],
+          f"a {len(SMOKE_LONG_SKILL)}-character skill name draws ELIDED in its cell (painted as its "
+          f"elided string is, {same} px apart, {name_ink} px of ink; {shown0[-8:]!r}), the strip's "
+          f"height unchanged ({bar0.strip.height()}), the whole name on the cell's and the library "
+          f"row's hover, and 'gravelbeard' typed into the search finds that row alone ({found})")
+    # LINE 2 off the pixels, the pill law's treatment and control: the meta
+    # rect loses ink when orchui.elide_rank_line answers '' (so the painter
+    # draws line 2 THROUGH the helper: a delegate painting no line 2 passed
+    # every law, the verifier's b1); and on the Monk's 'Protection Prayers 1'
+    # -- 141 px in a 131 px room at 1,280, measured -- the painted rect
+    # EQUALS the rect painted with the helper's own output as the line (a
+    # string that fits, so the helper leaves it), and DIFFERS from the rect
+    # painted with the right-elided string: the rank the cell shows is the
+    # one law 2 scores, not a right elision that took the digits
+    m1 = en.groups[0].members[1]
+    en.select(m1)
+    settle(4)
+    bar1 = m1.bar
+    monk_i = next((i for i, s in enumerate(bar1.values())
+                   if s and meta_fm.horizontalAdvance(bar1.strip.item(i).data(ROLE_SLOT)[1])
+                   > orchui.SlotStrip.layout(bar1.strip.cell_rect(i), bar1.strip.item(i).data(ROLE_PARTS),
+                                             body_fm=bar1.strip.fontMetrics(), meta_fm=meta_fm)[3].width()),
+                  None)
+    if monk_i is not None:
+        it1 = bar1.strip.item(monk_i)
+        slot1, parts1 = it1.data(ROLE_SLOT), it1.data(ROLE_PARTS)
+        meta1 = orchui.SlotStrip.layout(bar1.strip.cell_rect(monk_i), parts1,
+                                        body_fm=bar1.strip.fontMetrics(), meta_fm=meta_fm)[3]
+        mbox = QRect(bar1.strip.viewport().mapTo(win, meta1.topLeft()), meta1.size())
+        painted = win.grab().toImage().copy(mbox)
+        real_elide = orchui.elide_rank_line
+        orchui.elide_rank_line = lambda _fm, _t, _w: ""
+        bar1.strip.viewport().update()
+        settle(3)
+        blank = win.grab().toImage().copy(mbox)
+        orchui.elide_rank_line = real_elide
+        kept = real_elide(meta_fm, slot1[1], meta1.width())
+        it1.setData(ROLE_SLOT, (slot1[0], kept, slot1[2]))
+        settle(3)
+        as_kept = win.grab().toImage().copy(mbox)
+        it1.setData(ROLE_SLOT, (slot1[0], meta_fm.elidedText(slot1[1], Qt.ElideRight, meta1.width()), slot1[2]))
+        settle(3)
+        as_right = win.grab().toImage().copy(mbox)
+        it1.setData(ROLE_SLOT, slot1)
+        settle(2)
+        l2 = (_diff(painted, blank), _diff(painted, as_kept), _diff(painted, as_right),
+              kept.split(" ")[-1] == slot1[1].split(" ")[-1], kept != slot1[1])
+        check(l2[0] > 60 and l2[1] == 0 and l2[2] > 20 and l2[3] and l2[4],
+              f"line 2 is painted through elide_rank_line: the Monk's {slot1[1]!r} loses {l2[0]} px "
+              f"of ink with the helper answering '', and the painted rect equals one painted with "
+              f"the helper's own {kept!r} ({l2[1]} px apart) and differs from a right elision "
+              f"({l2[2]} px) -- the rank on screen is the one the fit law scores")
+    else:
+        skip("line 2 is painted through elide_rank_line", "no Monk cell whose line 2 elides at 1,280")
+    en.select(m0)
+    settle(4)
+    if keep_name is None:
+        del win.names.skill[322]
+    else:
+        win.names.skill[322] = keep_name
+    bar0.set_professions((1,))
+    # the empty-filter PLACEHOLDER names the way out: with the box ticked and a
+    # search matching no acting row but some unmarked one, the untick sentence
+    # with the count (the rows the search matches with the box off), rendered;
+    # unticked, the rows show; a search matching nothing, the plain sentence
+    unmarked = next((s for s in sandbox.default_unlocks(win.names.world, (1,))
+                     if s not in acting and win.names.skill.get(s)
+                     and list(win.names.skill.values()).count(win.names.skill[s]) == 1), None)
+    if unmarked:
+        bar0.acts.setChecked(True)
+        bar0.filter.setText(win.names.skill_parts(unmarked)[0])
+        settle(3)
+        vp = bar0.list.viewport()
+        ph_text, ph_shown = bar0.list.placeholder, bar0.list.visible_count()
+        ph_px = _count_near(vp.grab().toImage(), pal["muted"], 24, (0, 0, vp.width(), 60))
+        bar0.acts.setChecked(False)
+        settle()
+        n_off = bar0.list.visible_count()
+        bar0.filter.setText("no skill is called this")
+        settle()
+        ph_none = bar0.list.placeholder
+        bar0.filter.setText("")
+        bar0.acts.setChecked(True)
+        settle()
+        # ...'to see it' for one match, 'to see all N' for more (never 'all 1':
+        # the verifier's c10); the one-match arm searched by the row's exact
+        # name, the item text's 'name  [' prefix
+        bar0.acts.setChecked(True)
+        bar0.filter.setText(win.names.skill_parts(unmarked)[0] + "  [")
+        settle(3)
+        bar0.acts.setChecked(False)
+        settle()
+        one = (bar0.list.visible_count(), None)
+        bar0.acts.setChecked(True)
+        settle()
+        one = (one[0], bar0.list.placeholder)
+        bar0.filter.setText("")
+        settle()
+        sentence = lambda n: f"No acting skill matches; untick Modelled or label to see {'it' if n == 1 else f'all {n}'}."  # noqa: E731
+        check(ph_shown == 0 and n_off >= 1 and ph_text == sentence(n_off)
+              and ph_px > 30 and ph_none == "No skill matches this filter."
+              and one == (1, sentence(1)) and one[1].endswith("to see it.")
+              and SkillBar.untick_sentence(3).endswith("to see all 3."),
+              f"with the box ticked and a search matching only unmarked rows the library paints "
+              f"the way out ({ph_text!r}, {ph_px} px of it; unticked shows {n_off}), 'to see it' "
+              f"for one match ({one}), and a search matching nothing the plain sentence "
+              f"({ph_none!r})")
+    else:
+        skip("the placeholder names the way out", "no unmarked Warrior or common skill with a name")
+    # the ATTRIBUTES ROW CHIPS count the bar and say the rank the server acts
+    # at: the raider [322] gives Strength '1 on the bar' and no other chip, the
+    # boss [322, 323] Strength and Tactics; no example chip is WARN (every used
+    # attribute is ranked: the control); clearing the slot removes it; every
+    # spin at 0 (a template with no ranks) gives 'acting at 12' and
+    # sandbox.effective_rank agrees; then Hammer Mastery 3 alone turns
+    # Strength's chip WARN 'at rank 0' and the cell's line 2 'Strength 0' --
+    # the trap worth showing; and a rank edit updates line 2 at once
+    bar0.changed.disconnect(tally)
+    m0.from_spec(m0_spec)
+    settle(4)
+    if m0.ranks.spins:
+        boss0 = en.groups[2].members[0]
+        rows_of = lambda ed: {a: (rc.text(), rc.property("kind")) for a, rc in ed.ranks.row_chips.items()  # noqa: E731
+                              if not rc.isHidden()}       # the flag: a page off the stack is not visible
+        raider_chips, boss_chips = rows_of(m0), rows_of(boss0)
+        no_warn = all(kind == "info" for ed in eds for _t, kind in rows_of(ed).values())
+        one_per_row = len({m0.ranks.grid.getItemPosition(m0.ranks.grid.indexOf(sp))[0]
+                           for sp in m0.ranks.spins.values()}) == len(m0.ranks.spins)
+        m0.bar.clear_slot(0)
+        settle()
+        after_clear = rows_of(m0)
+        m0.bar.set_values([322])
+        for sp in m0.ranks.spins.values():
+            sp.setValue(0)
+        settle()
+        at12 = (rows_of(m0), m0.bar.strip.item(0).data(ROLE_SLOT)[1],
+                sandbox.effective_rank([], m0.template_pairs(), 17))
+        m0.ranks.spins[19].setValue(3)
+        settle()
+        at0 = (rows_of(m0), m0.bar.strip.item(0).data(ROLE_SLOT)[1])
+        m0.ranks.spins[17].setValue(5)
+        settle()
+        at5 = (m0.bar.strip.item(0).data(ROLE_SLOT)[1], m0.bar.strip.item(0).text())
+        # ...and the TEMPLATE's own ranks as the fallback: no content npc row
+        # carries `attributes` (the `attributes =` lines in world.toml are
+        # spawn rows), so the only state the smoke reached was 'no ranks
+        # anywhere' and template_pairs answering [] passed every law (the
+        # verifier's b7). Planted IN MEMORY on the raider's template row and
+        # put back: with every spin at 0 the cell reads the template's rank,
+        # the row chip counts with no WARN, and sandbox.effective_rank agrees
+        tmpl_row = win.names.world.rows("npc")["bandit_raider"]
+        kept_attrs = tmpl_row.get("attributes", None)      # None: no such key today (0 of 63 rows)
+        tmpl_row["attributes"] = [[17, 4]]
+        m0.from_spec(dict(m0_spec, attributes=None))
+        settle(4)
+        for sp in m0.ranks.spins.values():
+            sp.setValue(0)
+        settle()
+        via_tmpl = (rows_of(m0), m0.bar.strip.item(0).data(ROLE_SLOT)[1],
+                    sandbox.effective_rank([], m0.template_pairs(), 17), m0.template_pairs(),
+                    m0.bar.strip.item(0).toolTip().splitlines()[-1])
+        if kept_attrs is None:
+            del tmpl_row["attributes"]
+        else:
+            tmpl_row["attributes"] = kept_attrs
+        m0.from_spec(m0_spec)
+        settle(4)
+        check(raider_chips == {17: ("1 on the bar", "info")}
+              and boss_chips == {17: ("1 on the bar", "info"), 21: ("1 on the bar", "info")}
+              and no_warn and one_per_row and after_clear == {},
+              f"the Attributes row chips count the bar, one attribute to a row: the raider's "
+              f"Strength '1 on the bar' and no other ({raider_chips}), the boss's Strength and "
+              f"Tactics ({boss_chips}), none WARN on the example (the control), and clearing the "
+              f"slot removes it ({after_clear})")
+        check(at12 == ({17: ("1 on the bar, acting at 12", "info")}, "Strength 12", 12)
+              and at0 == ({17: ("1 on the bar, at rank 0", "warn")}, "Strength 0")
+              and at5 == ("Strength 5", f"Slot 1: {win.names.slot_label(322)}, Strength 5"),
+              f"with every rank at 0 Strength's chip reads 'acting at 12' and the cell 'Strength "
+              f"12' as sandbox.effective_rank says ({at12}); Hammer Mastery 3 alone turns it WARN "
+              f"'at rank 0' and the cell 'Strength 0' ({at0}); Strength 5 rewrites line 2 at once "
+              f"({at5[0]!r})")
+        check(via_tmpl[:4] == ({17: ("1 on the bar", "info")}, "Strength 4", 4, [[17, 4]])
+              and "template's own rank" in via_tmpl[4] and m0.template_pairs() == [],
+              f"with every spin at 0 and `attributes = [[17, 4]]` planted on the raider's TEMPLATE "
+              f"(in memory, put back), the cell reads 'Strength 4', the row chip '1 on the bar' "
+              f"with no WARN, the hover says it is the template's, and sandbox.effective_rank "
+              f"agrees ({via_tmpl[:3]}; the template's ranks after the restore: {m0.template_pairs()})")
+        # ...and the label column holds the widest label of any profession the
+        # content offers a BODY for whole at 1,000 px -- today the
+        # Elementalist's 'Energy Storage  primary' (145 px, measured). The
+        # widest label over EVERY profession is the Ritualist's 'Spawning
+        # Power  primary' (154 px, the column's own width), and no template
+        # has a Ritualist body; the column's floor covers it all the same
+        # (the verifiers' b11 / c3: this comment once named the Ranger's
+        # 'Wilderness Survival', neither the widest nor a primary)
+        probe = QLabel(m0.ranks)
+        by_prof = {}
+        for aid, arow in m0.ranks.rules.attributes.items():
+            probe.setText(m0.ranks._label_text(aid, arow["is_primary"]))
+            by_prof.setdefault(arow["profession"], []).append((probe.sizeHint().width(), aid))
+        probe.deleteLater()
+        widest_p = max((p for p in byprof if p in by_prof), key=lambda p: max(by_prof[p]), default=None)
+        if widest_p is not None:
+            want_w, want_aid = max(by_prof[widest_p])
+            win.resize(1000, 720)
+            settle(8)
+            m0.template.set_value(byprof[widest_p])
+            settle(4)
+            en.select(m0)
+            settle(4)
+            labs = [m0.ranks.grid.itemAtPosition(r, 0).widget() for r in range(len(m0.ranks.spins))]
+            widest = max(labs, key=lambda lab: lab.sizeHint().width())
+            whole = [(lab.text()[:24], lab.width(), lab.sizeHint().width()) for lab in labs
+                     if lab.width() < lab.sizeHint().width()]
+            over_all = max(w for rows_ in by_prof.values() for w, _a in rows_)
+            check(not whole and widest.sizeHint().width() == want_w and win.names.attr_label(want_aid)
+                  in widest.text() and widest.width() >= widest.sizeHint().width()
+                  and m0.ranks.label_col >= over_all,
+                  f"at 1,000 px the widest attribute label among the bodies the content offers "
+                  f"({widest.text()[:30]!r}, {want_w} px, {sandbox.PROFESSIONS.get(widest_p)}) "
+                  f"stands whole in the {m0.ranks.label_col} px column, which is measured over "
+                  f"every profession ({over_all} px; cut: {whole or 'none'})")
+            m0.from_spec(m0_spec)
+            win.resize(1280, 860)
+            settle(8)
+        else:
+            skip("the widest attribute label at 1,000 px", "no profession body among the templates")
+    else:
+        skip("the Attributes row chips count the bar", "no attribute table, so no ranks")
+        skip("the row chips say the rank the server acts at", "no attribute table, so no ranks")
+        skip("a template's own ranks are the cell's fallback", "no attribute table, so no ranks")
+        skip("the widest attribute label at 1,000 px", "no attribute table, so no ranks")
+    en.select(m0)
+    settle(4)
+    # a skill with NO attribute whose numbers still VARY with a rank (Light of
+    # Deldrimor 2212: 55..80 Holy damage, attribute 51; four acting rows) is
+    # scaled by the server at the no-attribute id -- 0 with any rank set, 12
+    # with none -- and its cell says that rank, where 'nothing about it
+    # scales' was a false sentence over a 55-or-75 (the verifier's a2); a
+    # no-attribute skill with nothing varying keeps that sentence; and the
+    # chip's hover claims 'rank 0' only for an off-profession skill that
+    # CARRIES an attribute -- 102 profession skills have none (c5)
+    varying = next((s for s in sorted(acting) if sandbox.skill_attribute(win.world, s) is None
+                    and sandbox.skill_varies(win.world, s) and win.names.skill_profession(s) in (0, 1)), None)
+    flat = next((s for s in sorted(acting) if sandbox.skill_attribute(win.world, s) is None
+                 and not sandbox.skill_varies(win.world, s) and win.names.skill_profession(s) in (0, 1)), None)
+    off_noattr = next((s for s in sorted(win.world.rows("skills"), key=int)
+                       if win.names.skill_profession(int(s)) not in (0, 1)
+                       and sandbox.skill_attribute(win.world, int(s)) is None), None)
+    if varying and flat and off_noattr and m0.ranks.spins:
+        m0.bar.set_values([322, varying, flat])
+        settle()
+        cells = lambda: (m0.bar.strip.item(1).data(ROLE_SLOT)[1], m0.bar.strip.item(1).toolTip().splitlines()[-1],  # noqa: E731
+                         m0.bar.strip.item(2).data(ROLE_SLOT)[1], m0.bar.strip.item(2).toolTip().splitlines()[-1])
+        ranked_c = cells() + (sandbox.effective_rank(m0.ranks.ranks(), m0.template_pairs(), sandbox.NO_ATTRIBUTE),)
+        for sp in m0.ranks.spins.values():
+            sp.setValue(0)
+        settle()
+        none_c = cells() + (sandbox.effective_rank(m0.ranks.ranks(), m0.template_pairs(), sandbox.NO_ATTRIBUTE),)
+        m0.bar.set_values([322, int(off_noattr)])
+        settle()
+        tip_noattr = (m0.bar.chip.text(), m0.bar.chip.toolTip())
+        m0.bar.set_values([322, 281])
+        settle()
+        tip_attr = (m0.bar.chip.text(), m0.bar.chip.toolTip())
+        m0.from_spec(m0_spec)
+        settle(4)
+        check(ranked_c[0] == "No attribute 0" and "scales it at 0" in ranked_c[1] and ranked_c[4] == 0
+              and none_c[0] == "No attribute 12" and "scales it at 12" in none_c[1] and none_c[4] == 12
+              and ranked_c[2] == "No attribute" == none_c[2]
+              and ranked_c[3] == "No attribute: nothing about it scales with a rank." == none_c[3],
+              f"a no-attribute skill that VARIES (skill {varying}) reads 'No attribute 0' with the "
+              f"raider's ranks set and 'No attribute 12' with none, its hover saying the server "
+              f"scales it so, as sandbox.effective_rank at NO_ATTRIBUTE says ({ranked_c[4]}, "
+              f"{none_c[4]}); a flat one (skill {flat}) reads 'No attribute' and 'nothing scales' "
+              f"either way ({ranked_c[0]!r}, {none_c[0]!r}, {ranked_c[2]!r})")
+        check(tip_noattr[0].endswith("1 of another profession") and "no rank is lost" in tip_noattr[1]
+              and "rank 0" not in tip_noattr[1]
+              and tip_attr[0].endswith("1 of another profession") and "acts at rank 0" in tip_attr[1],
+              f"the chip's hover claims rank 0 only for an off-profession skill that carries an "
+              f"attribute (Orison: {tip_attr[1][:60]!r}); for one with none (skill {off_noattr}) "
+              f"it says no rank is lost ({tip_noattr[1][:70]!r})")
+    else:
+        skip("a no-attribute skill that varies shows the rank the server scales it at",
+             f"no such rows in the table (varying {varying}, flat {flat}, off-profession "
+             f"no-attribute {off_noattr}) or no ranks")
+        skip("the chip's hover claims rank 0 only for a skill with an attribute", "the same")
     # a group page and a hostile page share one right edge whether or not the
-    # hostile's page scrolls: at 860 tall it does, at 1080 (a maximized 1080p
-    # window) it does not, and a fixed reserve matched only the first
+    # hostile's page scrolls: at 860 tall it does, and at its OWN height plus
+    # the window's chrome it does not (the inline library made the page taller
+    # than a 1080p screen, so the no-scroll arm is run at the height the page
+    # fits: a hidden window resizes past the screen here -- measured -- and a
+    # machine whose OS clamps it declares the skip); a fixed reserve matched
+    # only the first
+    page0 = en._pages[m0]
+    win.resize(1280, 860)
+    settle(8)
+    en.select(m0)
+    settle(4)
+    tall = page0.widget().sizeHint().height() + (win.height() - page0.viewport().height()) + 8
     edges = {}
-    for h in (860, 1080):
+    for h in (860, tall):
         win.resize(1280, h)
         settle(8)
         got = []
@@ -3751,10 +5231,17 @@ def smoke(win, app, out_dir):
             en.select(ed)
             settle(4)
             got.append(ed.remove_b.mapTo(win, QPoint(ed.remove_b.width(), 0)).x())
-        edges[h] = (got[0], got[1], en._pages[m0].verticalScrollBar().maximum() > 0)
-    check(all(v[0] == v[1] for v in edges.values()) and edges[860][2] and not edges[1080][2],
-          f"a group page's Remove and a hostile page's end at one x, the hostile page scrolling "
-          f"and not (group, hostile, scrolls: {edges})")
+        edges[h] = (got[0], got[1], page0.verticalScrollBar().maximum() > 0, win.height())
+    check(edges[860][0] == edges[860][1] and edges[860][2],
+          f"a group page's Remove and a hostile page's end at one x at 860 tall, the hostile page "
+          f"scrolling (group, hostile, scrolls: {edges[860][:3]})")
+    if edges[tall][3] >= tall:
+        check(edges[tall][0] == edges[tall][1] and not edges[tall][2],
+              f"...and at the hostile page's own height ({tall} px) they end at one x with the "
+              f"page NOT scrolling (group, hostile, scrolls: {edges[tall][:3]})")
+    else:
+        skip("the two pages end at one x with the hostile page not scrolling",
+             f"the OS clamped the hidden window to {edges[tall][3]} px of the {tall} the page needs")
     win.resize(size)
     settle(8)
     # one verb each on the tab: the adds on the list, ONE labelled Remove on the
@@ -3777,6 +5264,7 @@ def smoke(win, app, out_dir):
     win.tabs.setCurrentWidget(en)
     en.select(en.groups[0].members[0])
     settle()
+    pk = en.groups[0].members[0].weapon_item      # a Picker on the page (the slots are cells now)
     before = pk.currentIndex()
     ev = QWheelEvent(QPointF(10, 10), QPointF(pk.mapToGlobal(QPoint(10, 10))), QPoint(0, 0),
                      QPoint(0, -120), Qt.NoButton, Qt.NoModifier, Qt.NoScrollPhase, False)
@@ -3973,6 +5461,32 @@ def smoke(win, app, out_dir):
         combo.setCurrentIndex((combo.currentIndex() - (1 if skip_first else 0) + 1) % n
                               + (1 if skip_first else 0))
 
+    # five acting Warrior skills not on the raider's bar, for the bar's edits
+    spare_w = [s for s in sorted(win.names.modelled) if win.names.skill_profession(s) == 1
+               and s not in m0.bar.values()][:5]
+    bar_emits = []
+    m0.bar.changed.connect(lambda: bar_emits.append(1))
+
+    def lib_item(sid):
+        return next(it for it in m0.bar._items() if int(it.data(ROLE_ID)) == sid)
+
+    def os_double_click(where, sid):
+        """A double-click as Windows delivers one -- press, release, double-
+        click, release -- on the row's TEXT (past the box) or on its BOX, sent
+        to the library's viewport; QTest.mouseDClick sends the double-click
+        alone, which is not the owner's sequence (the verifiers' a6 / c6)."""
+        it = lib_item(sid)
+        m0.bar.list.scrollToItem(it)
+        settle(2)
+        r = m0.bar.list.visualItemRect(it)
+        pos = QPoint(r.right() - 40, r.center().y()) if where == "text" else m0.bar.list.check_rect(it).center()
+        vp = m0.bar.list.viewport()
+        g = vp.mapToGlobal(pos)
+        for kind, buttons in ((QEvent.MouseButtonPress, Qt.LeftButton), (QEvent.MouseButtonRelease, Qt.NoButton),
+                              (QEvent.MouseButtonDblClick, Qt.LeftButton), (QEvent.MouseButtonRelease, Qt.NoButton)):
+            QApplication.sendEvent(vp, QMouseEvent(kind, QPointF(pos), QPointF(g), Qt.LeftButton, buttons,
+                                                   Qt.NoModifier))
+        settle(2)
     edits = [("party weapon", lambda: turn(win.party.weapon)),
              ("party off-hand", lambda: turn(win.party.offhand, skip_first=True)),
              ("a hero's body", lambda: win.party.rows[3][2].set_value("hatcher")),
@@ -3981,10 +5495,28 @@ def smoke(win, app, out_dir):
              ("attack interval", lambda: m0.speed.setValue(1.25)),
              ("damage high", lambda: m0.dhi.setValue(40)),
              ("damage low", lambda: m0.dlo.setValue(7)),
-             ("skill slot 8", lambda: m0.bar.slots[7].setCurrentIndex(1)),
+             ("skill slot 8", lambda: m0.bar.set_slot(7, spare_w[0])),
+             # the owner's MOUSE paths, as Qt delivers them -- the row's box
+             # through setCheckState (itemChanged, exactly as a click), a
+             # double-click on the row's text, and one on its box (Qt's own
+             # toggle, which _double must not double: a net single toggle) --
+             # not the model method, which left both paths' wiring unread
+             # (the verifiers' b2 / a6 / c6, 2026-09-24)
+             ("a tick of a library row's box", lambda: lib_item(spare_w[1]).setCheckState(Qt.Checked)),
+             ("a double-click on a library row's text", lambda: os_double_click("text", spare_w[3])),
+             ("a double-click on a library row's box", lambda: os_double_click("box", spare_w[4])),
+             ("Clear slot", lambda: (m0.bar.select_slot(7), m0.bar.clear_b.click())),
+             ("a slot swap", lambda: m0.bar.swap(0, 1)),
+             ("a drop on slot 3", lambda: drop_on(m0.bar.strip, spare_w[2], None,
+                                                  m0.bar.strip.cell_rect(2).center())),
+             ("Delete on the strip", lambda: (m0.bar.select_slot(2), key_on(m0.bar.strip, Qt.Key_Delete))),
              ("the boss's glow", lambda: boss.glow.setValue(boss.glow.value() + 1)),
              ("hold", lambda: win.run.hold.setValue(30)),
              ("template", lambda: m0.template.set_value("academy_monk"))]
+    BAR_EDITS = {"skill slot 8", "a tick of a library row's box", "a double-click on a library row's text",
+                 "a double-click on a library row's box", "Clear slot", "a slot swap", "a drop on slot 3",
+                 "Delete on the strip"}
+    took = {}                                    # what each double-click wrote (a tick, never two)
     if m0.ranks.spins:
         # a rank, and a rank on the spins a template change REBUILDS -- down
         # where it can, up from 0 (either is an edit; a hostile has no budget
@@ -3994,10 +5526,11 @@ def smoke(win, app, out_dir):
             sp.setValue(sp.value() - 1 if sp.value() else 1)
         edits.insert(9, ("attribute rank", rank))
         edits.append(("attribute rank after the template change", rank))
-    stayed, stale_rows = [], []
+    stayed, stale_rows, twice = [], [], []
     for label, edit in edits:
         win.run.compile()
         fresh = win.run.state.text().startswith("Compiled")
+        del bar_emits[:]
         edit()
         settle()
         if not (fresh and win.run.state.text() == "Changed since compile"):
@@ -4005,27 +5538,44 @@ def smoke(win, app, out_dir):
         if label not in ("party weapon", "party off-hand", "a hero's body", "hold") \
                 and not g0.roster.item(0).text().endswith(m0.summary()):
             stale_rows.append(label)
+        if label in BAR_EDITS and len(bar_emits) != 1:
+            twice.append((label, len(bar_emits)))
+        if label.startswith("a double-click"):
+            took[label] = (spare_w[3] if label.endswith("text") else spare_w[4]) in m0.bar.values()
     check(not stayed, f"each of {len(edits)} spec inputs turns a fresh 'Compiled' into 'Changed "
                       f"since compile' (left green: {stayed or 'none'})")
     check(not stale_rows, f"and a hostile's edit reaches its roster line at once "
                           f"(stale after: {stale_rows or 'none'})")
+    check(len(spare_w) == 5 and not twice and len(took) == 2 and all(took.values()),
+          f"and each of the Skill bar's {len(BAR_EDITS)} write paths -- a slot set, a row's box "
+          f"ticked, a double-click on a row's text and on its box, Clear slot, a swap, a drop, "
+          f"Delete -- emits `changed` exactly once, each double-click a single tick (not once: "
+          f"{twice or 'none'}; ticked: {took})")
     win.run.hold.setValue(0)
     # a view of the same spec is not an edit: the Skills filters leave the chip
-    # green, while an unlock still turns it
+    # green, and so do the Skill bar's search, offered-set combo and checkbox
+    # (and none of them emits the bar's `changed`), while an unlock still turns it
     win.tabs.setCurrentWidget(win.skills)
     turned = []
     for label, act in (("filter text", lambda: win.skills.filter.setText("heal")),
                        ("profession filter", lambda: win.skills.prof.setCurrentIndex(1)),
-                       ("'modelled or label'", lambda: win.skills.modelled_only.setChecked(True))):
+                       ("'modelled or label'", lambda: win.skills.modelled_only.setChecked(True)),
+                       ("the Skill bar's search", lambda: m0.bar.filter.setText("heal")),
+                       ("the Skill bar's offered set", lambda: set_combo(m0.bar.prof, 0)),
+                       ("the Skill bar's 'Modelled or label'", lambda: m0.bar.acts.setChecked(False))):
         win.run.compile()
         before = win.to_spec()
+        del bar_emits[:]
         act()
         settle()
-        if not win.run.state.text().startswith("Compiled") or win.to_spec() != before:
+        if not win.run.state.text().startswith("Compiled") or win.to_spec() != before or bar_emits:
             turned.append(label)
     win.skills.filter.setText("")
     win.skills.prof.setCurrentIndex(0)
     win.skills.modelled_only.setChecked(False)
+    m0.bar.filter.setText("")
+    set_combo(m0.bar.prof, -2)
+    m0.bar.acts.setChecked(True)
     settle()
     win.run.compile()
     first = next(it for it in win.skills._items() if not it.isHidden())
@@ -4035,8 +5585,9 @@ def smoke(win, app, out_dir):
     first.setCheckState(Qt.Unchecked if first.checkState() == Qt.Checked else Qt.Checked)
     settle()
     check(not turned and unlock_turned,
-          f"the Skills filters leave a fresh 'Compiled' green (turned it: {turned or 'none'}), "
-          f"and one unlock turns it")
+          f"the Skills filters and the Skill bar's search, offered set and checkbox leave a fresh "
+          f"'Compiled' green and emit no change (turned it: {turned or 'none'}), and one unlock "
+          f"turns it")
     # the low damage bound with the high at 0 is not in the spec either: typed
     # first, the natural order, it painted a false amber
     m0.dhi.setValue(0)
@@ -4253,6 +5804,106 @@ def smoke(win, app, out_dir):
         skip("the chip tells rank 12 from rank 15", "no attribute table, so no ranks")
         skip("a level-28, rank-16 hostile opens whole", "no attribute table, so no ranks")
         skip("a level-300, rank-22 file is refused and said", "no attribute table, so no ranks")
+    # OPEN HOLDS WHAT THE COMPILER ACCEPTS (SANDBOX-N1): validate never checks a
+    # hostile's skills against its profession, so a file with a Monk skill on
+    # the Warrior raider, and one with an id the table lacks, both pass it --
+    # and both open WHOLE with the bar saying 'Opened X' alone, to_spec carrying
+    # them back. (The eight Pickers landed on '(empty)' in silence and said
+    # 'Opened' all the same: measured on the tree before this, [322] held.)
+    # A template change then KEEPS the bar: the chip warns 'of another
+    # profession' and the cell's line 2 begins with the abbreviation
+    held_spec = win.to_spec()
+    g1 = sandbox.example_spec()["groups"][0]       # the raider's group, whatever the window holds now
+    got = {}
+    paths = {}
+    for tag, sid in (("offprof", 281), ("unknown", 99999)):
+        f = dict(held_spec, name=f"smoke-{tag}",
+                 groups=[dict(g1, members=[dict(g1["members"][0], skills=[322, sid])]
+                              + g1["members"][1:])] + sandbox.example_spec()["groups"][1:])
+        paths[tag] = os.path.join(out_dir, f"smoke_{tag}.toml")
+        with open(paths[tag], "w", encoding="utf-8") as fh:
+            fh.write(sandbox.spec_toml(f))
+        accepted = not sandbox.validate(f, win.world)
+        win.run.load(paths[tag])
+        settle()
+        m0 = en.groups[0].members[0]
+        got[tag] = (accepted, win.statusBar().currentMessage(),
+                    win.to_spec()["groups"][0]["members"][0]["skills"], m0.bar.values()[:3],
+                    m0.bar.strip.item(1).data(ROLE_SLOT)[1], m0.bar.chip.text(), m0.bar.chip.property("kind"))
+    o, u = got["offprof"], got["unknown"]
+    check(o[0] and u[0] and o[1] == "Opened smoke_offprof" and o[2] == [322, 281] and o[3] == [322, 281, 0]
+          and o[4].startswith("Mo · ") and o[4].endswith(" 0") and o[6] == "warn"
+          and o[5] == "2 of 8 slots  ·  1 of another profession"
+          and u[1] == "Opened smoke_unknown" and u[2] == [322, 99999] and u[4] == "99999  -"
+          and u[5] == "2 of 8 slots  ·  1 not in the skill table" and u[6] == "warn",
+          f"a file with a Monk skill on the Warrior raider and one with an id the table lacks both "
+          f"pass validate and open WHOLE, 'Opened' alone, to_spec carrying them, the chip counting "
+          f"each (Monk: {o[1]!r}, {o[2]}, the cell {o[4]!r}, the chip {o[5]!r} {o[6]}; unknown: "
+          f"{u[1]!r}, {u[2]}, the cell {u[4]!r}, the chip {u[5]!r} {u[6]})")
+    # ...while a NINTH skill is the compiler's to refuse (validate: 'the bar
+    # is 8 wide', the player's and a hero's rule), so a nine-skill file opens
+    # holding eight and the bar SAYS so -- it said 'Opened X' alone and Save
+    # wrote eight (the verifiers' a3 / c1, 2026-09-24); a 0 inside a file's
+    # list is an empty slot, held in place and dropped on save
+    nine = [322, 323, 0] + [s for s in sorted(win.names.modelled)
+                            if win.names.skill_profession(s) == 1 and s not in (322, 323)][:6]
+    f9 = dict(held_spec, name="smoke-nine",
+              groups=[dict(g1, members=[dict(g1["members"][0], skills=nine)] + g1["members"][1:])]
+              + sandbox.example_spec()["groups"][1:])
+    p9 = os.path.join(out_dir, "smoke_nine.toml")
+    with open(p9, "w", encoding="utf-8") as fh:
+        fh.write(sandbox.spec_toml(f9))
+    refused9 = sandbox.validate(f9, win.world)
+    win.run.load(p9)
+    settle()
+    m0 = en.groups[0].members[0]
+    said9 = win.statusBar().currentMessage()
+    held9 = (m0.bar.values(), win.to_spec()["groups"][0]["members"][0]["skills"])
+    check(len(nine) == 9 and refused9 == ["group 1 member 1: 9 skills; the bar is 8 wide"]
+          and said9.startswith("Opened smoke_nine, but the window could not hold all of it (1 change: "
+                               "group 1 member 1: 9 skills; the bar is 8 wide)")
+          and held9[0] == nine[:8] and held9[1] == [s for s in nine[:8] if s],
+          f"a file with NINE skills on the raider is refused by validate ({refused9}) and opens "
+          f"holding eight with the bar saying so ({said9[:80]!r}); the 0 inside is held as an "
+          f"empty slot and dropped by to_spec ({held9})")
+    # ...and what a file says that the page does not edit rides through Open
+    # and Save: the example raider's weapon_attribute 19 and the monk's 14
+    # (the swing rank; dropped, the monk swung at rank 2 instead of 1 -- the
+    # verifier's a8), while a template change to another PROFESSION drops a
+    # weapon_attribute that profession's ranks could never hold
+    pex = os.path.join(out_dir, "smoke_example.toml")
+    with open(pex, "w", encoding="utf-8") as fh:
+        fh.write(sandbox.spec_toml(dict(sandbox.example_spec(), name="smoke-example")))
+    win.run.load(pex)
+    settle()
+    psaved = win.run.save(os.path.join(out_dir, "smoke_example_saved.toml"))
+    back = sandbox.load_spec(psaved)["groups"][0]["members"]
+    m0 = en.groups[0].members[0]
+    wa_before = m0.to_spec().get("weapon_attribute")
+    m0.template.set_value("academy_monk")
+    settle(4)
+    wa_after = m0.to_spec().get("weapon_attribute")
+    m0.template.set_value("bandit_raider")
+    settle(4)
+    check([m.get("weapon_attribute") for m in back] == [19, 14] and wa_before == 19 and wa_after is None
+          and "weapon_attribute" not in MemberEditor.EDITED,
+          f"the example opened and saved keeps the raider's weapon_attribute 19 and the monk's 14 "
+          f"({[m.get('weapon_attribute') for m in back]}), and a template change to the Monk drops "
+          f"the Warrior's ({wa_before} -> {wa_after})")
+    win.run.load(paths["offprof"])
+    settle()
+    m0 = en.groups[0].members[0]
+    m0.template.set_value("academy_monk")
+    settle(4)
+    kept = (m0.bar.values()[:2], m0.bar.chip.text(), m0.bar.chip.property("kind"),
+            m0.bar.strip.item(0).data(ROLE_SLOT)[1], m0.bar.prof.itemText(0))
+    check(kept[0] == [322, 281] and kept[2] == "warn" and kept[1].endswith("1 of another profession")
+          and kept[3].startswith("W · Strength ") and kept[4] == "Monk and common",
+          f"a template change to the Monk KEEPS the bar, the chip warning of the Warrior skill now "
+          f"of another profession and its cell's line 2 beginning with the abbreviation ({kept})")
+    win.from_spec(held_spec)
+    settle()
+    m0 = en.groups[0].members[0]
     seen_roles |= used_roles(win)
     lore += surface_lore(win)
     # a malformed spec must not latch the Enemies tab dead
@@ -4939,11 +6590,11 @@ def smoke(win, app, out_dir):
     m0 = en.groups[0].members[0]
     en.select(m0)
     settle()
-    page, bar, pk = en._pages[m0], en._pages[m0].verticalScrollBar(), m0.bar.slots[0]
+    page, bar, pk = en._pages[m0], en._pages[m0].verticalScrollBar(), m0.weapon_item
     scrolls = sys.platform == "win32" and bar.maximum() > 0
     if scrolls and focus(en.tree):
         rolled = []
-        for tag, w, value in (("skill slot", pk, pk.currentIndex), ("Level", m0.level, m0.level.value)):
+        for tag, w, value in (("Weapon picker", pk, pk.currentIndex), ("Level", m0.level, m0.level.value)):
             bar.setValue(0)
             settle()
             v0 = value()
@@ -4951,7 +6602,7 @@ def smoke(win, app, out_dir):
             settle(5)
             rolled.append((tag, bar.value(), v0, value(), w.hasFocus()))
         check(all(px > 0 and v0 == v1 and not took for _t, px, v0, v1, took in rolled),
-              f"in the ACTIVE window a real wheel over an unfocused skill slot and Level spin "
+              f"in the ACTIVE window a real wheel over an unfocused Weapon picker and Level spin "
               f"scrolls the page and leaves both alone, unfocused ({rolled})")
         bar.setValue(0)
         if focus(pk):
@@ -4965,6 +6616,38 @@ def smoke(win, app, out_dir):
         else:
             skip("a focused combo takes the wheel", lost)
         pk.clearFocus()
+        # the NESTED wheel: the Skill bar's library scrolls under the wheel
+        # while its bar can move that way and the page stays; at the list's
+        # end the same wheel goes on to the page (Qt's own chaining: a list
+        # leaves an unchanged wheel unaccepted, measured before the library
+        # was written -- so this law guards that nobody "fixes" it by
+        # accepting the wheel, and that the list is not guarded like a combo)
+        lib, lbar = m0.bar.list, m0.bar.list.verticalScrollBar()
+        page.ensureWidgetVisible(lib, 0, 0)
+        settle(4)
+        p0 = bar.value()
+        lbar.setValue(0)
+        settle()
+        if lbar.maximum() > 0 and page.viewport().rect().contains(
+                lib.mapTo(page.viewport(), QPoint(lib.width() // 2, lib.height() // 2))):
+            _real_wheel(win, lib)
+            settle(5)
+            first_arm = (lbar.value(), bar.value())
+            lbar.setValue(lbar.maximum())
+            settle()
+            _real_wheel(win, lib)
+            settle(5)
+            second_arm = (lbar.value(), bar.value())
+            check(first_arm[0] > 0 and first_arm[1] == p0 and second_arm[0] == lbar.maximum()
+                  and second_arm[1] > p0,
+                  f"a real wheel over the Skill bar's library scrolls the LIST and not the page "
+                  f"(list, page: {first_arm}, the page at {p0}), and at the list's end the same "
+                  f"wheel scrolls the page ({second_arm})")
+            lbar.setValue(0)
+        else:
+            skip("the nested wheel over the Skill bar's library",
+                 f"the library does not scroll ({lbar.maximum()}) or is not in the viewport")
+        bar.setValue(0)
         win.tabs.setCurrentWidget(win.party)
         settle()
         tbar = win.party.table.verticalScrollBar()
@@ -4978,8 +6661,14 @@ def smoke(win, app, out_dir):
               f"a real wheel over an unlocked hero's Level spin scrolls the heroes table "
               f"({tbar.value()} rows) and leaves the level at {v0}")
     else:
-        skip("the wheel in the active window",
-             lost if scrolls else "the page does not scroll at this size, or this is not Windows")
+        # one gate, four laws: each named, so a skipped run says what it
+        # did not measure (one line stood for all four, the nested wheel
+        # among them: the verifier's b10)
+        why = lost if scrolls else "the page does not scroll at this size, or this is not Windows"
+        skip("the wheel in the active window over an unfocused picker and spin", why)
+        skip("a focused combo takes the wheel", why)
+        skip("the nested wheel over the Skill bar's library", why)
+        skip("a real wheel over a hero's Level spin scrolls the heroes table", why)
     # a popup keeps its own edge: a non-editable combo's (the profession pickers
     # and the Skills filter -- Fusion's menu mode framed the view a second
     # time, top and bottom, and the list mode shows ten rows unless told the
@@ -5136,10 +6825,41 @@ def snap(win, app, out_dir, theme):
         win.tabs.setCurrentIndex(i)
         grab(tag)
     win.tabs.setCurrentWidget(win.enemies)
+
+    def bar_surface(tag):
+        """The boss's page scrolled to its Skill bar card, 'ham' in the
+        search, the card WHOLE: at 1,000 px the card (a four-row strip over
+        the library) is taller than a 720 px window's viewport, so scrolling
+        to its foot cut the title and the chip (the verifier's c13) -- the
+        window is grown to hold the card, as the right-edge law's tall arm
+        grows it, and put back."""
+        boss = win.enemies.groups[-1].members[0]
+        win.enemies.select(boss)
+        boss.bar.filter.setText("ham")
+        page = win.enemies._pages[boss]
+        card_w = boss.bar.parentWidget()
+        for _ in range(3):
+            app.processEvents()
+        size = win.size()
+        need = card_w.height() + (win.height() - page.viewport().height()) + 48
+        if win.height() < need:
+            win.resize(win.width(), need)
+            for _ in range(6):
+                app.processEvents()
+        page.ensureWidgetVisible(card_w, 0, 24)
+        grab(tag)
+        boss.bar.filter.setText("")
+        page.verticalScrollBar().setValue(0)
+        win.resize(size)
+        for _ in range(3):
+            app.processEvents()
+
     if win.enemies.groups:
         win.enemies.select(win.enemies.groups[-1].members[0] if win.enemies.groups[-1].members
                            else win.enemies.groups[-1])
         grab("enemies_boss")
+        if win.enemies.groups[-1].members:
+            bar_surface("enemies_bar")
         win.enemies.select(win.enemies.groups[0])
         grab("enemies_group")
     win.tabs.setCurrentWidget(win.run)
@@ -5163,6 +6883,9 @@ def snap(win, app, out_dir, theme):
     for i, tag in enumerate(("skills", "party", "enemies", "run")):
         win.tabs.setCurrentIndex(i)
         grab(f"narrow_{tag}")
+    if win.enemies.groups and win.enemies.groups[-1].members:
+        win.tabs.setCurrentWidget(win.enemies)
+        bar_surface("narrow_enemies_bar")
     return 0
 
 
