@@ -2537,7 +2537,7 @@ other `0x98–0xB2` c2s was ever sent, so every other row below is static only.
 | **`0xA8`** | `[u16]` agent | `0x0085BF50` ← `0x0085A84A` (in `0x0085A820`, PyCliParty:1650, `&0x80`) | 0 (**1 on our client**, CONFIRM-2 §2 step 6) | KICK_NPC | **HENCHMAN_KICK, CORROBORATED on our client; armed as RECONSTRUCTION** (the kick, below) |
 | `0xA9` | `[u16]` | `0x0085BF80` ← `0x0085A88A` | 0 | KICK_PLAYER | UNVERIFIED (a second player) |
 | `0xAA` | `[u8, string16(32), u16]` (76 B) | `0x0085BFB0` ← `0x0085A8B2` | 0 | — | UNVERIFIED |
-| `0xAB` | `[]` | `0x0085C010`, 0 direct callers | 0 | SEARCH_CANCEL | UNVERIFIED |
+| `0xAB` | `[]` | `0x0085C010` ← `jne` at `0x0085A8C4` (in `0x0085A8C0`, the `&0x80` gate and nothing else: `test byte [ecx+0x10], 0x80; jne; ret`; that gate's one caller is the thunk `0x008574C0` — `call 0x47f660; ecx = [eax+0x4c]+4; jmp` — itself called from `0x0056330E`). The one reference in the image is a conditional tail-jump, which `codescan --xrefs` did not scan until 2026-09-25; the row said "0 direct callers" until then | 0 | SEARCH_CANCEL | UNVERIFIED |
 | `0xAC` | `[u16]` | `0x0085C040` ← `0x0085B4E9` | 0 | — | UNVERIFIED |
 | `0xAD` | `[u16]` | `0x0085C070` ← `0x0085B519` | 0 | — | UNVERIFIED |
 | `0xAE` | `[u8]` | `0x0085C0A0` ← `0x0085BB4B` | 0 | — | UNVERIFIED |

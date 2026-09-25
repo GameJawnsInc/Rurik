@@ -64,6 +64,13 @@ Nine of the ten sections can fail for the right reason:
     negative control is that the routine's own prologue is NOT unique -- 56 hits
     -- which is why the byte signature anchors elsewhere and the delta is
     verified after a match rather than searched for.
+  * §13 is §7's `--xrefs` defect from a new direction, found 2026-09-25: the
+    branch half knew `E8`/`E9` and not the conditional `0F 80..8F rel32`, so
+    the c2s 0x00A2 and 0x00AB send wrappers, each reached only by a jcc
+    tail-jump, answered "0 direct rel32 reference(s)" and studies/cmsg read
+    the first as "pointer-reached". The call/jmp-only rule is reproduced
+    inline and required to MISS both sites, with a positive control so its
+    zero is the defect and not a broken copy.
 
 §1 is a guard, not a check: everything below is measured against one build.
 
@@ -143,7 +150,10 @@ EXE_BYTES = 10_483_904
 # 135 and the stdlib floor does NOT move: `skip()` lowers a floor by zero, which
 # a session once lost a day to believing otherwise. Both MEASURED on a green run
 # of this file against the pinned pristine 38797, never computed by addition.
-FLOOR_WITH_CAPSTONE = 135
+# 2026-09-25: §13 (`--xrefs`' jcc rel32 form) adds 17 checks with capstone and
+# declares ONE skip without it, so 135 -> 152 and the stdlib floor stays. 152 is
+# the banner of a green run against the pinned pristine 38797.
+FLOOR_WITH_CAPSTONE = 152
 FLOOR_STDLIB_ONLY = 45
 
 LEDGER = checks.Ledger(
@@ -963,6 +973,108 @@ def section_12(img):
           "12f. and names the mask-held-in-a-register blind spot")
 
 
+def _call_jmp_only(img, target):
+    """The branch half of `xrefs` as it stood until 2026-09-25: E8 and E9, no jcc.
+
+    §13's KNOWN-BAD arm, reproduced inline rather than imported -- the same move
+    §10 makes with the displacement-only rule -- so the fixed scan's answer is a
+    difference between two live answers and not a number compared with a memory
+    of one.
+    """
+    out, blob, tva = [], img.tdata, img.tva
+    for opcode in (0xE8, 0xE9):
+        p = blob.find(bytes([opcode]))
+        while p != -1:
+            if p + 5 <= len(blob):
+                rel = struct.unpack_from("<i", blob, p + 1)[0]
+                if tva + p + 5 + rel == target:
+                    out.append(tva + p)
+            p = blob.find(bytes([opcode]), p + 1)
+    return sorted(out)
+
+
+def section_13(exe, img):
+    """`--xrefs` sees a conditional tail-jump -- the FIFTH under-reporting defect.
+
+    `--xrefs 0x0085BEF0`, the c2s `0x00A2` send wrapper, answered "0 direct
+    rel32 reference(s), 0 word(s)" until 2026-09-25, and studies/cmsg's party
+    table read that zero as "pointer-reached". The one reference in the image is
+    `ja 0x85bef0` at 0x008585FD: the scan knew `E8` and `E9` and not `0F 80..8F`.
+    The `0xAB` wrapper 0x0085C010 is the same case, `jne` at 0x0085A8C4.
+
+    Both directions, as §10 does it. The fixed scan must find each site AS a jcc
+    and the inline call/jmp-only rule must MISS it; the old rule is then required
+    to find a known `call`, so its zero is the defect and not a broken
+    reproduction, and the fixed scan minus its jcc rows must equal the old rule
+    on a `call` target and a `jmp` target -- the change added a form and moved
+    nothing else.
+
+    Vault-gated on the PRISTINE pinned client, not whatever `pinned.find()`
+    fell back to: every address here was read off that one image.
+    """
+    print("\n13. --xrefs sees a conditional tail-jump")
+    if img is None:
+        LEDGER.skip("13. --xrefs' jcc rel32 form", NO_CAPSTONE)
+        return
+    try:
+        d = vaultpath.require_dir("client", pinned.PINNED.stamp,
+                                  why="--xrefs' jcc sites, read on the pristine")
+    except BaseException as exc:                             # noqa: BLE001
+        # require_dir raises SystemExit -- see §11 for why this is BaseException.
+        LEDGER.skip("13. --xrefs' jcc rel32 form",
+                    f"the pinned pristine client is not in the vault: {exc}")
+        return
+    pristine = os.path.join(d, "Gw.exe")
+    if not (os.path.isfile(pristine) and os.path.samefile(exe, pristine)):
+        LEDGER.skip("13. --xrefs' jcc rel32 form",
+                    f"reading {exe}, not the pristine {pristine}")
+        return
+
+    for target, site, cond, what in (
+            (0x0085BEF0, 0x008585FD, "ja", "c2s 0x00A2's wrapper"),
+            (0x0085C010, 0x0085A8C4, "jne", "c2s 0x00AB's wrapper")):
+        calls, words = img.xrefs(target)
+        eq(calls, [(site, "jcc")],
+           f"13a. {what} 0x{target:08X} has one rel32 reference, the jcc at "
+           f"0x{site:08X}")
+        # Why the zero was read as "pointer-reached": nothing stores the VA
+        # either, so the jcc is the image's only reference of any kind.
+        eq(words, [], f"13a. and no word in any section holds 0x{target:08X}")
+        ins = img.dis(site, count=1)
+        eq(f"{ins[0].mnemonic} {ins[0].op_str}" if ins else None,
+           f"{cond} 0x{target:x}",
+           f"13b. 0x{site:08X} decodes as `{cond} 0x{target:x}`")
+        # The byte scan does not decode. A 0F 8x inside a longer instruction
+        # would match it just as well, so the hit is walked from its function's
+        # own start before it is believed.
+        eq(img.boundary_status(site), "confirmed",
+           f"13b. and 0x{site:08X} is a real instruction boundary")
+        eq(_call_jmp_only(img, target), [],
+           f"13c. KNOWN-BAD: the call/jmp-only scan finds nothing for "
+           f"0x{target:08X} -- the zero the table read")
+
+    # The known-bad arm's positive control: it finds §3's first hop.
+    eq(_call_jmp_only(img, 0x007FBD30), [0x007E06CB],
+       "13c. and it does find a call -- AvChar::SetAttackSpeed <- 0x007E06CB")
+    # Each kind labelled, and nothing but jcc added. 0x0085A8C0 is the 0xAB
+    # gate (`test byte [ecx+0x10], 0x80; jne; ret`), reached by a `jmp` from
+    # the thunk at 0x008574C0.
+    for target, site, kind in ((0x007FBD30, 0x007E06CB, "call"),
+                               (0x0085A8C0, 0x008574CB, "jmp")):
+        calls, _words = img.xrefs(target)
+        eq(calls, [(site, kind)],
+           f"13d. 0x{target:08X}'s caller 0x{site:08X} is labelled {kind}")
+        eq([c[0] for c in calls if c[1] != "jcc"], _call_jmp_only(img, target),
+           f"13d. and on 0x{target:08X} the fixed scan minus jcc IS the old one")
+
+    searched, blind = CS.Image.xref_forms()
+    eq([n for n, _d in searched],
+       ["call rel32", "jmp rel32", "jcc rel32", "the VA as a four-byte word"],
+       "13e. --xrefs states the three rel32 branch forms it searched")
+    check(any("rel8" in n for n, _d in blind),
+          "13e. and names the rel8 short branches it does not")
+
+
 def main():
     # The build guard. `pinned` is stdlib -- `CS.find_exe` is literally
     # `pinned.find` -- so which client we are reading gets said out loud even on a
@@ -990,6 +1102,7 @@ def main():
     section_10(exe, img)
     section_11()
     section_12(img)
+    section_13(exe, img)
 
     return LEDGER.verdict()
 

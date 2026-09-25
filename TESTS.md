@@ -10421,7 +10421,28 @@ the same-tick ALIAS**: the
   (`add byte ptr [ebx - 0x7c76f3bf], cl`) for two of five call sites being read
   for their pushed arguments, and the `push 0` it recovers at 0x00602A7F is the
   hardcoded `isWaypoint` the whole arc turns on. 135 checks with capstone (was
-  116) and 45 without — §12 declares one skip, so the stdlib floor is unmoved),
+  116) and 45 without — §12 declares one skip, so the stdlib floor is unmoved.
+  **§13 (2026-09-25) is the defect a FIFTH time, in `--xrefs`' branch half.**
+  The scan knew `call rel32` (`E8`) and `jmp rel32` (`E9`) and not the
+  conditional `0F 80..8F rel32`, so a function reached only by a jcc tail-jump
+  answered "0 direct rel32 reference(s), 0 word(s)" — the c2s `0x00A2` send
+  wrapper 0x0085BEF0, whose one reference in the image is `ja` at 0x008585FD
+  and which studies/cmsg's party table read as "pointer-reached", and the
+  `0x00AB` wrapper 0x0085C010 (`jne` at 0x0085A8C4). §13a requires each to come
+  back as exactly one `jcc` row and no word; §13b decodes the site and walks it
+  from its function's own `int3` boundary, because the byte scan does not
+  decode and a `0F 8x` inside a longer instruction would match it just as well;
+  §13c is the KNOWN-BAD arm — the call/jmp-only rule REPRODUCED inline (§10's
+  pattern) and required to MISS both sites, with its positive control (it finds
+  §3's `0x007E06CB` call) so its zero is the defect and not a broken copy; §13d
+  pins the kind labels on a `call` and a `jmp` target and requires the fixed
+  scan minus its jcc rows to equal the old rule there, so the change added a
+  form and moved nothing else; §13e reads the scope statement off
+  `Image.xref_forms()`, built from the same tuple the scan walks — the three
+  rel32 forms searched, the rel8 short branches named as not. Vault-gated on the
+  PRISTINE pinned client, skipped otherwise. Sabotage run: dropping the jcc rows
+  from the tuple reddens 13a twice and 13e. 152 checks with capstone (was 135)
+  and 45 without — §13 declares one skip, so the stdlib floor is unmoved),
   `toolkit/clientscan/test_consttable.py` (the `Gw\Const\*.cpp` table locator, and
   the correction it made to the recon that commissioned it. MSVC emits a translation
   unit's static data and its string literals in source order, so every one of these
