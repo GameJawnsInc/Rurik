@@ -11,7 +11,12 @@ Section 3 is the gate as git runs it: temporary repositories with real indexes, 
 module invoked the way the wrapper invokes it, exit codes and the printed refusal read
 back. Section 4 pins the wrapper -- shebang, the module it execs, its mode in the index
 -- and that THIS clone has it installed, because a hook on disk that `core.hooksPath`
-does not name is the audit's own definition of a wish.
+does not name is the audit's own definition of a wish. "Installed" is read the way git
+reads it -- the merged value, a relative one resolved against the worktree root -- and
+means it names a directory holding the wrapper, NOT that it equals the string
+`.githooks`: an app-made worktree carries main's absolute path instead and is gated all
+the same. Section 4b rebuilds that config in a temporary repository, commits through it
+to read back which copy of what ran, and holds the check able to go red.
 
 **EVERY FIXTURE BELOW IS ASSEMBLED FROM PARTS, AND THAT IS NOT A STYLE CHOICE.**
 Section 2 sweeps every tracked text file, and this file is one of them. A secret written
@@ -68,6 +73,56 @@ def tracked():
     out = subprocess.run(["git", "-C", ROOT, "ls-files", "-z"], capture_output=True,
                          text=True, check=True).stdout
     return [p for p in out.split("\0") if p]
+
+
+# What makes a pre-commit OUR wrapper: the module it execs, cwd-relative.
+WRAPPER_EXEC = b"toolkit/githooks/pre_commit.py"
+# The hook_install states in which a commit here is judged by this tree's rules.
+INSTALLED = ("own", "shared", "differs")
+
+
+def hook_install(root, env=None):
+    """(state, configured, hooks_dir): what `core.hooksPath` makes git run at `root`.
+
+    Read MERGED -- worktree, local, global, system -- because that is the value git uses,
+    and a relative path resolves against `root`, the directory git runs hooks from
+    (githooks(5)). States: "unset"; "missing", no pre-commit there; "foreign", a
+    pre-commit that is not our wrapper; "own", `root`'s own `.githooks`; "shared", another
+    tree's, its wrapper byte-identical to `root`'s; "differs", another tree's, not.
+    """
+    configured = subprocess.run(["git", "-C", root, "config", "--type=path",
+                                 "core.hooksPath"], capture_output=True, text=True,
+                                env=env).stdout.strip()
+    if not configured:
+        return "unset", configured, None
+    hooks_dir = configured if os.path.isabs(configured) else os.path.join(root, configured)
+    try:
+        with open(os.path.join(hooks_dir, "pre-commit"), "rb") as fh:
+            runs = fh.read()
+    except OSError:
+        return "missing", configured, hooks_dir
+    if WRAPPER_EXEC not in runs:
+        return "foreign", configured, hooks_dir
+    own_dir = os.path.join(root, ".githooks")
+    if os.path.isdir(own_dir) and os.path.samefile(hooks_dir, own_dir):
+        return "own", configured, hooks_dir
+    try:
+        with open(os.path.join(own_dir, "pre-commit"), "rb") as fh:
+            carried = fh.read()
+    except OSError:
+        carried = None
+    return ("shared" if runs == carried else "differs"), configured, hooks_dir
+
+
+def _rmtree(path):
+    """rmtree that also removes git's read-only object files, which Windows keeps."""
+    for dirpath, _, files in os.walk(path):
+        for f in files:
+            try:
+                os.chmod(os.path.join(dirpath, f), 0o666)
+            except OSError:
+                pass
+    shutil.rmtree(path, ignore_errors=True)
 
 
 def main():
@@ -268,7 +323,7 @@ def main():
             src = fh.read()
         LEDGER.ok(src.startswith(b"#!/bin/sh"),
                   "the wrapper is POSIX sh -- what git runs, on Windows too")
-        LEDGER.ok(b"toolkit/githooks/pre_commit.py" in src,
+        LEDGER.ok(WRAPPER_EXEC in src,
                   "and it execs THIS module, not some other copy",
                   "two gates in one tree is how one of them goes stale unnoticed")
         LEDGER.ok(b"exit 1" in src,
@@ -283,12 +338,163 @@ def main():
             LEDGER.ok(mode[0] == "100755",
                       "and it is executable IN THE INDEX, so a fresh clone can run it",
                       f"index mode {mode[0]} -- fix with git update-index --chmod=+x")
-        installed = subprocess.run(["git", "-C", ROOT, "config", "core.hooksPath"],
-                                   capture_output=True, text=True).stdout.strip()
-        LEDGER.ok(installed == ".githooks",
+        # This used to require core.hooksPath == ".githooks" and was red in every
+        # worktree the desktop app makes: the app writes main's ABSOLUTE hooks path into
+        # .git/worktrees/<name>/config.worktree (observed 2026-09-25), so git runs MAIN's
+        # wrapper there. That clone is gated, and by THIS tree's rules: git runs a hook
+        # from the worktree root, the wrapper execs a cwd-relative WRAPPER_EXEC, and that
+        # module judges the cwd's index -- only the dozen lines of sh are borrowed. 4b
+        # commits through exactly that config and reads back which copy of each ran.
+        #   * "shared", main's wrapper byte-identical to this one: a PASS, noted -- what
+        #     git runs is what this tree carries.
+        #   * "differs", this branch has edited the wrapper: a PASS on installation plus a
+        #     declared SKIP. Not a pass on the wrapper, because the three checks above
+        #     then describe a file git does not run here and no commit made in this
+        #     worktree exercises the edit. Not a FAIL, because the clone is gated by this
+        #     tree's rules and the difference is the app's config meeting an unlanded
+        #     branch, gone when it lands; red there would say "unguarded" of a guarded
+        #     clone. The skip prints under "not measured" with the one-line fix.
+        state, configured, hooks_dir = hook_install(ROOT)
+        fix = "install with `git config core.hooksPath .githooks` (RUNBOOK.md)"
+        whose = "ANOTHER tree's hooks"
+        if state in ("shared", "differs"):
+            common = subprocess.run(["git", "-C", ROOT, "rev-parse", "--path-format=absolute",
+                                     "--git-common-dir"], capture_output=True,
+                                    text=True).stdout.strip()
+            main_hooks = os.path.join(os.path.dirname(common), ".githooks")
+            if os.path.isdir(main_hooks) and os.path.samefile(hooks_dir, main_hooks):
+                whose = "MAIN's hooks (an app-made worktree)"
+        LEDGER.ok(state in INSTALLED,
                   "and THIS clone has it installed (core.hooksPath)",
-                  f"core.hooksPath is {installed!r}; install with "
-                  "`git config core.hooksPath .githooks` (RUNBOOK.md)")
+                  {"unset": f"core.hooksPath is unset; {fix}",
+                   "missing": f"core.hooksPath={configured!r} holds no pre-commit; {fix}",
+                   "foreign": f"core.hooksPath={configured!r} holds a pre-commit that is "
+                              f"not this wrapper (no {WRAPPER_EXEC.decode()}); {fix}",
+                   "own": f"core.hooksPath={configured!r}: this tree's own .githooks",
+                   "shared": f"core.hooksPath={configured!r}: {whose}, not this tree's "
+                             ".githooks -- the wrapper is byte-identical to this tree's "
+                             "and execs this tree's rules",
+                   "differs": f"core.hooksPath={configured!r}: {whose}, whose wrapper "
+                              "DIFFERS from this tree's -- see the skip"}[state])
+        if state == "differs":
+            LEDGER.skip("4. this branch's wrapper, as git runs it here",
+                        f"git runs {os.path.join(hooks_dir, 'pre-commit')}, not this "
+                        "tree's edited .githooks/pre-commit (the rules module is still "
+                        "this tree's); run the edit with "
+                        "`git config --worktree core.hooksPath .githooks`")
+
+        # ---- 4b. that check against the app's config rebuilt, and able to go red ------
+        print("\n4b. core.hooksPath as git reads it: the app's worktree config committed "
+              "through, and the states that are not installed")
+        tmp = tempfile.mkdtemp(prefix="rurik-hookspath-")
+        try:
+            # The owner's global and system config must not decide a fixture: a global
+            # core.hooksPath would make "unset" unreachable.
+            quiet = os.path.join(tmp, "empty.gitconfig")
+            open(quiet, "wb").close()
+            env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+            env.update(GIT_CONFIG_GLOBAL=quiet, GIT_CONFIG_NOSYSTEM="1")
+            main_tree, wt = os.path.join(tmp, "main"), os.path.join(tmp, "wt")
+
+            def git(repo, *a, check=True):
+                return subprocess.run(["git", "-C", repo] + list(a), capture_output=True,
+                                      text=True, env=env, check=check)
+
+            def write(path, data, mode=0o644):
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, "wb") as fh:
+                    fh.write(data)
+                os.chmod(path, mode)
+
+            def rules(who):
+                # Stands in for the rules module: names whose copy ran, then refuses --
+                # so a commit that goes THROUGH ran no rules at all.
+                return f"print('rules: {who}')\nraise SystemExit(1)\n".encode()
+
+            def commit():
+                r = git(wt, "commit", "-q", "--allow-empty", "-m", "probe", check=False)
+                return r.returncode, (r.stdout + r.stderr).strip()
+
+            def point(value):
+                git(wt, "config", "--worktree", "core.hooksPath", value)
+                return hook_install(wt, env)[0]
+
+            os.makedirs(main_tree)
+            git(main_tree, "init", "-q")
+            git(main_tree, "config", "user.email", "t@example.invalid")
+            git(main_tree, "config", "user.name", "t")
+            git(main_tree, "config", "extensions.worktreeConfig", "true")
+            write(os.path.join(main_tree, ".githooks", "pre-commit"), src, 0o755)
+            write(os.path.join(main_tree, "toolkit", "githooks", "pre_commit.py"),
+                  rules("main"))
+            git(main_tree, "add", "-A")
+            git(main_tree, "commit", "-q", "-m", "seed")
+            git(main_tree, "worktree", "add", "-q", "-b", "wt", wt)
+            write(os.path.join(wt, "toolkit", "githooks", "pre_commit.py"),
+                  rules("worktree"))
+
+            # The app's config, verbatim in shape: main's absolute path, worktree scope.
+            state = point(os.path.join(main_tree, ".githooks"))
+            LEDGER.ok(state == "shared",
+                      "the app's config -- main's absolute .githooks in config.worktree -- "
+                      "reads as installed, and as MAIN's", state)
+            code, out = commit()
+            hooks_run = "no python on PATH" not in out
+            if not hooks_run:
+                LEDGER.skip("4b. commits through the hook",
+                            "the wrapper found no python on git's sh PATH")
+            else:
+                LEDGER.ok(code != 0 and "rules: worktree" in out and "rules: main" not in out,
+                          "and a commit there is refused by THIS tree's rules, run through "
+                          "main's wrapper -- why SHARED is a pass", f"exit {code}: {out[:80]!r}")
+
+            # This branch edits its wrapper: the same config no longer runs what it carries.
+            write(os.path.join(wt, ".githooks", "pre-commit"),
+                  src.replace(b"\n", b"\necho 'wrapper: worktree' >&2\n", 1), 0o755)
+            state = hook_install(wt, env)[0]
+            LEDGER.ok(state == "differs",
+                      "with this tree's wrapper edited, the same config reads as DIFFERS",
+                      state)
+            if hooks_run:
+                code, out = commit()
+                LEDGER.ok(code != 0 and "rules: worktree" in out
+                          and "wrapper: worktree" not in out,
+                          "and git runs MAIN's wrapper, not the edit -- why DIFFERS is a "
+                          "declared skip, not a pass", f"exit {code}: {out[:80]!r}")
+
+            # The fix the skip names: relative, resolved against the worktree root.
+            state = point(".githooks")
+            LEDGER.ok(state == "own",
+                      "`.githooks` resolves against the worktree root: this tree's own",
+                      state)
+            if hooks_run:
+                code, out = commit()
+                LEDGER.ok(code != 0 and "wrapper: worktree" in out
+                          and "rules: worktree" in out,
+                          "and git then runs this tree's edited wrapper -- the skip's fix works",
+                          f"exit {code}: {out[:80]!r}")
+
+            # The negatives: each must fail the check above, not merely read differently.
+            git(wt, "config", "--worktree", "--unset", "core.hooksPath")
+            state = hook_install(wt, env)[0]
+            LEDGER.ok(state == "unset" and state not in INSTALLED,
+                      "UNSET is refused -- the check goes red", state)
+            if hooks_run:
+                code, out = commit()
+                LEDGER.ok(code == 0 and "rules:" not in out,
+                          "and a commit then goes through with no rules run -- the control: "
+                          "the refusals above WERE the hook", f"exit {code}: {out[:80]!r}")
+            os.makedirs(os.path.join(tmp, "nohooks"))
+            state = point(os.path.join(tmp, "nohooks"))
+            LEDGER.ok(state == "missing" and state not in INSTALLED,
+                      "a directory holding no pre-commit is refused", state)
+            write(os.path.join(tmp, "otherhooks", "pre-commit"), b"#!/bin/sh\nexit 0\n",
+                  0o755)
+            state = point(os.path.join(tmp, "otherhooks"))
+            LEDGER.ok(state == "foreign" and state not in INSTALLED,
+                      "and so is one whose pre-commit is not this wrapper", state)
+        finally:
+            _rmtree(tmp)
 
     # ---- 5. the rules are independent, proved by breaking each one ---------------------
     print("\n5. sabotage: with one rule removed, only its own control stops refusing")
