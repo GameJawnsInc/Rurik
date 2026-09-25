@@ -34,7 +34,7 @@ import checks   # noqa: E402
 import content  # noqa: E402
 import sandbox  # noqa: E402
 
-led = checks.Ledger("sandbox", floor=150)     # 88 from the green run 2026-09-20; +19 SANDBOX-B7 (2026-09-22); +2 SKILLS-LT sec.5, the hand / label split (2026-09-23); +2 the fix pass (one LABEL_TIER, gamesrv_args); +1 budget_for_level (2026-09-24); +4 a hostile's ranks checked (2026-09-24); +7 the pre-merge pass: a hostile's level range, the no-level fallback told from 2 and 20, no npc rows (2026-09-24); +4 hostiles exempt from the budget, the owner's ruling: two budget refusals inverted, three kept rules and a hero's budget as controls, the no-level fallback re-witnessed on spawn_rows and validate's level range (2026-09-24); +2 the verifier's fixes: a malformed pair and an id outside the table on a hostile, the two kept rules with no hostile witness (2026-09-24); +10 the hostile caps lifted, the owner's ruling: rank 13 and 21 accepted, 22 refused, a level-255 hostile accepted and 24 too, 256 refused, the player's and a hero's rank 13 and level 21 refused (four controls that did not exist), HOSTILE_LEVEL_MAX tied to 0x0056's byte in the schema and to the codec's raise, a definition per (template, level) with its ids in range (2026-09-24); +1 the lift's verifier's fix: one member past both caps refused for both (`if tmpl:`, the elif hid the rank reason) (2026-09-24); +10 SANDBOX-N1 sec. 6: the rank a hostile's skill acts at (effective_rank, skill_attribute, UNRANKED_SKILL_RANK) and the text locks to authsrv.py (2026-09-24)
+led = checks.Ledger("sandbox", floor=156)     # 88 from the green run 2026-09-20; +19 SANDBOX-B7 (2026-09-22); +2 SKILLS-LT sec.5, the hand / label split (2026-09-23); +2 the fix pass (one LABEL_TIER, gamesrv_args); +1 budget_for_level (2026-09-24); +4 a hostile's ranks checked (2026-09-24); +7 the pre-merge pass: a hostile's level range, the no-level fallback told from 2 and 20, no npc rows (2026-09-24); +4 hostiles exempt from the budget, the owner's ruling: two budget refusals inverted, three kept rules and a hero's budget as controls, the no-level fallback re-witnessed on spawn_rows and validate's level range (2026-09-24); +2 the verifier's fixes: a malformed pair and an id outside the table on a hostile, the two kept rules with no hostile witness (2026-09-24); +10 the hostile caps lifted, the owner's ruling: rank 13 and 21 accepted, 22 refused, a level-255 hostile accepted and 24 too, 256 refused, the player's and a hero's rank 13 and level 21 refused (four controls that did not exist), HOSTILE_LEVEL_MAX tied to 0x0056's byte in the schema and to the codec's raise, a definition per (template, level) with its ids in range (2026-09-24); +1 the lift's verifier's fix: one member past both caps refused for both (`if tmpl:`, the elif hid the rank reason) (2026-09-24); +10 SANDBOX-N1 sec. 6: the rank a hostile's skill acts at (effective_rank, skill_attribute, UNRANKED_SKILL_RANK) and the text locks to authsrv.py (2026-09-24); +6 the repair (2026-09-24): a hostile's nine skills refused, skill_varies twice, spawn_rows' [] -> None, the locks re-pointed at the create path's fallback and agent_attributes' contiguous block (+2 net)
 
 
 # ---------------------------------------------------------------- the fixture
@@ -71,7 +71,13 @@ WORLD = FakeWorld({
                "382": skill(1, 0.0, 6), "281": dict(skill(3, 1.0, 8), attribute=13),
                "276": skill(3, 0.75, 2),
                "252": skill(3, 1.0, 10), "323": dict(skill(1, 0.0, 6), attribute=21),
-               "170": skill(6, 2.0, 5)},
+               "170": skill(6, 2.0, 5),
+               # three NO-attribute rows whose progression pairs vary (skill_varies):
+               # Elementalist, as 170 is, so the Warrior/Monk unlock sets below stay
+               "9001": dict(skill(6, 1.0, 5), attribute=51, scale0=55, scale15=80),
+               "9002": dict(skill(6, 1.0, 5), attribute=51, bonus_scale0=1, bonus_scale15=3),
+               "9003": dict(skill(6, 1.0, 5), attribute=51, duration0=5, duration15=10),
+               "9004": dict(skill(6, 1.0, 5), attribute=51, scale0=7, scale15=7)},
     "skill_effect": {"1": {}, "281": {}, "322": {}},
     "npc": {"bandit_raider": {"name": "Bandit Raider", "profession": 1, "level": 2,
                               "file_id": 141267, "model_id": 116647},
@@ -289,6 +295,17 @@ ok, why = refuses(spec(player=dict(S["player"], profession=11)), "not 1..10")
 led.ok(ok, "profession 11 is refused", why)
 ok, why = refuses(spec(player=dict(S["player"], skills=list(range(1, 10)))), "the bar is 8 wide")
 led.ok(ok, "nine bar skills are refused", why)
+# ...and on a HOSTILE (the verifiers' a3/c1, 2026-09-24): the gamesrv round-robins
+# over the whole list and the window holds eight, so a ninth was dropped on
+# Open with 'Opened X' alone; eight, and eight with a 0 (an empty slot), pass
+_raider9 = dict(S["groups"][0]["members"][0], skills=list(range(1, 10)))
+_raider8 = dict(S["groups"][0]["members"][0], skills=[322, 0, 323, 1, 2, 382, 0, 380])
+ok, why = refuses(spec(groups=[{"members": [_raider9]}] + S["groups"][1:]), "the bar is 8 wide")
+led.ok(ok and why == "group 1 member 1: 9 skills; the bar is 8 wide"
+       and not [q for q in problems(spec(groups=[{"members": [_raider8]}] + S["groups"][1:]))
+                if "the bar is" in q],
+       "nine skills on a HOSTILE are refused naming the member and the count, as the "
+       "player's and a hero's are; eight with a 0 inside (an empty slot) pass", why)
 ok, why = refuses(spec(player=dict(S["player"], attributes=[[20, 12], [17, 12]])), "spend")
 led.ok(ok, "ranks a level-3 character cannot pay for are refused (194 of 10)", why)
 ok, why = refuses(spec(player=dict(S["player"], attributes=[[13, 1]])), "belongs to profession 3")
@@ -752,6 +769,33 @@ led.ok(sandbox.skill_attribute(WORLD, 2) is None and sandbox.skill_attribute(WOR
        and sandbox.skill_attribute(WORLD, 99999) is None and sandbox.NO_ATTRIBUTE == 51,
        "...and None for a no-attribute row (51, the table's own value), a row with no key, "
        "and an id with no row")
+# a NO-attribute skill can still VARY with a rank (Light of Deldrimor 2212: Holy
+# damage 55..80, attribute 51; four acting rows in the table), and the server
+# scales it at the rank agent_skill_rank gives -- 0 while any rank is set, 12
+# with none -- so the window's cell shows that rank, never 'nothing scales'
+# (the verifier's a2, 2026-09-24)
+led.ok([sandbox.skill_varies(WORLD, s) for s in (9001, 9002, 9003)] == [True] * 3
+       and sandbox.SKILL_SCALE_PAIRS == ("scale", "bonus_scale", "duration"),
+       "skill_varies is True for a no-attribute row whose scale, bonus_scale or duration pair "
+       "differs at rank 0 and 15 (one row each)")
+led.ok([sandbox.skill_varies(WORLD, s) for s in (9004, 2, 382, 99999)] == [False] * 4
+       and sandbox.effective_rank([[19, 2]], [], sandbox.NO_ATTRIBUTE) == 0
+       and sandbox.effective_rank([], [], sandbox.NO_ATTRIBUTE) == 12,
+       "...and False for a flat pair, a row with none of the six keys, a row with no key at "
+       "all and an id with no row; and effective_rank at NO_ATTRIBUTE is 0 with any rank set, "
+       "12 with none (what the server passes such a skill)")
+# spawn_rows writes a member's EMPTY ranks as None: the step that makes the
+# create path's `or` fall to the template exactly where effective_rank does
+# (the verifier's b6, 2026-09-24) -- a member with none, one with [], one with
+# ranks, side by side
+_r3 = sandbox.spawn_rows(spec(groups=[{"members": [dict(S["groups"][0]["members"][0], attributes=None),
+                                                   dict(S["groups"][0]["members"][0], attributes=[]),
+                                                   dict(S["groups"][0]["members"][0])]}]
+                              + S["groups"][1:]), WORLD)
+led.ok([r["attributes"] for _k, r in _r3[:3]] == [None, None, [[19, 2], [17, 1], [21, 1]]],
+       "spawn_rows writes None for a member with no ranks AND for one with [] (so the create "
+       "path's `or` and agent_attributes' `is None` fall to the template alike), and a member's "
+       "own pairs verbatim", [r["attributes"] for _k, r in _r3[:3]])
 _authsrv = os.path.join(os.path.dirname(HERE), "authsrv", "authsrv.py")
 with open(_authsrv, encoding="utf-8") as fh:
     _src = fh.read()
@@ -766,12 +810,30 @@ def _body(name):
     return m.group(0) if m else ""
 
 
-_attrs, _rank = _body("agent_attributes"), _body("agent_skill_rank")
-led.ok('ranks = agent.get("attributes")' in _attrs
-       and 'ranks = (agent.get("npc") or {}).get("attributes")' in _attrs
-       and "if not ranks:\n        return {}" in _attrs,
-       "agent_attributes still reads the spawn row's ranks, else the template's, else none "
-       "(the fallback effective_rank mirrors, locked to the source)")
+_attrs, _rank, _pairs = _body("agent_attributes"), _body("agent_skill_rank"), _body("rank_pairs")
+# the CONTIGUOUS block, not three lines found anywhere in the body: a fallback
+# kept on its line but made dead (`if ranks is None and False:`) passed a lock
+# that looked for each line alone (the verifier's b6, 2026-09-24)
+led.ok('    ranks = agent.get("attributes")\n    if ranks is None:\n'
+       '        ranks = (agent.get("npc") or {}).get("attributes")\n'
+       '    return rank_pairs(ranks)\n' in _attrs,
+       "agent_attributes still reads the spawn row's ranks, else the template's, through "
+       "rank_pairs -- the contiguous block, locked to the source")
+led.ok("    if not pairs:\n        return {}\n" in _pairs
+       and "pairs.items() if isinstance(pairs, dict) else pairs" in _pairs,
+       "rank_pairs still answers {} for none and reads BOTH shapes ([[a, r]] and {a: r}), "
+       "the two shapes effective_rank reads")
+# the OPERATIVE fallback for an area body is the CREATE PATH's, not
+# agent_attributes' (an area entry is always a dict, so `is None` never runs
+# there): the row's ranks, else its template's, through rank_pairs -- exactly
+# once in the source. Dropping `or npc.get("attributes")` there left
+# test_sandbox green while a member with no ranks acted at 12 on a template
+# with ranks (the verifier's a1 plant, 2026-09-24)
+_create = 'rank_pairs(row.get("attributes") or npc.get("attributes"))'
+led.ok(_src.count(_create) == 1,
+       "the area create path reads the spawn row's ranks, else its npc template's, through "
+       "rank_pairs (the operative fallback for every body this compiler emits; effective_rank's "
+       "`or` mirrors it), locked to the source", _src.count(_create))
 led.ok("if not ranks:\n        return ENEMY_SKILL_RANK" in _rank
        and 'return ranks.get(int(row.get("attribute", -1)), 0)' in _rank,
        "agent_skill_rank still acts at ENEMY_SKILL_RANK with no ranks and at "

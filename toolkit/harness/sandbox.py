@@ -391,17 +391,25 @@ def attribute_rules(world):
 
 # The rank a HOSTILE's skill acts at, mirrored from the server so the
 # orchestrator's Skill bar can say the number the gamesrv will use (SANDBOX-N1).
-# authsrv.agent_attributes reads a body's ranks as the spawn row's `attributes`,
-# else its npc template's, else none; authsrv.agent_skill_rank then scales a
-# skill at ranks.get(its attribute, 0) when the body has ANY rank, and at
-# ENEMY_SKILL_RANK when it has none. So a hostile with no ranks casts every
+# For an AREA body -- every body this compiler emits -- the fallback is applied
+# by the CREATE PATH (authsrv.spawn_population's entry: `row.get("attributes")
+# or npc.get("attributes")`, through authsrv.rank_pairs, which reads both the
+# [[a, r]] and the {a: r} shape): the spawn row's ranks, else its npc
+# template's, else none. authsrv.agent_attributes carries the same fallback
+# on `is None`, but an area body's entry is always a dict, so for these bodies
+# that branch never runs -- the create path's `or` is the operative rule, and
+# spawn_rows writes `[] -> None` so a member with no nonzero ranks falls to its
+# template's (the verifier's a1/b6, 2026-09-24). authsrv.agent_skill_rank then
+# scales a skill at ranks.get(its attribute, 0) when the body has ANY rank, and
+# at ENEMY_SKILL_RANK when it has none. So a hostile with no ranks casts every
 # skill at 12, and with any rank set an attribute it omits -- another
 # profession's included, which a hostile's ranks can never hold (validate
 # refuses it) -- acts at 0. ENEMY_SKILL_RANK is OURS, a stand-in: no capture
 # and no table gives a monster's ranks (authsrv.py's comment on it), so this
 # is the same choice said twice, and test_sandbox.py text-locks the two
-# constants and the fallback lines to each other -- without that lock the
-# window's number would be one our own tool produced.
+# constants, the create path's fallback and agent_attributes' block to each
+# other -- without that lock the window's number would be one our own tool
+# produced.
 UNRANKED_SKILL_RANK = 12
 # What a skill row's `attribute` holds for "no attribute": one past the client's
 # attribute table, which is 0..50 (s_attrib) on 38797 -- every common skill and
@@ -438,6 +446,28 @@ def skill_attribute(world, sid):
         return None
     a = int(row.get("attribute", -1))
     return None if a < 0 or a == NO_ATTRIBUTE else a
+
+
+# The three progression pairs a skill row carries (the client's own table:
+# scale0/scale15, bonus_scale0/bonus_scale15, duration0/duration15), which
+# authsrv interpolates by the rank agent_skill_rank gives.
+SKILL_SCALE_PAIRS = ("scale", "bonus_scale", "duration")
+
+
+def skill_varies(world, sid):
+    """Does anything about this skill move with a rank -- any of its three
+    progression pairs differing at rank 0 and rank 15? A skill with NO
+    attribute can still vary (Light of Deldrimor 2212: Holy damage 55..80,
+    attribute 51), and the server scales it all the same at the rank
+    agent_skill_rank gives -- ranks.get(51, 0) = 0 while the body has any
+    rank, ENEMY_SKILL_RANK with none -- so the orchestrator's cell shows that
+    rank rather than 'nothing scales' (the verifier's a2, 2026-09-24). False
+    for no row, and for a row whose three pairs are flat."""
+    row = skill_row(world, sid)
+    if row is None:
+        return False
+    return any(int(row.get(f"{f}0", 0) or 0) != int(row.get(f"{f}15", 0) or 0)
+               for f in SKILL_SCALE_PAIRS)
 
 
 def weapon_rate_for_item(world, item_key):
@@ -606,6 +636,15 @@ def validate(spec, world):
             wi = m.get("weapon_item")
             if wi and items and wi not in items:
                 p.append(f"{who}: weapon_item {wi!r} is not a content item")
+            # the bar is eight wide for a hostile as for the player and a hero:
+            # the server's pick_skill round-robins over the WHOLE list, and the
+            # orchestrator holds eight, so a ninth id was held by the gamesrv
+            # and dropped by the window with 'Opened X' alone (the verifiers'
+            # a3/c1, 2026-09-24). A 0 inside the list is an empty slot, held
+            # in place by the window and dropped on save; it counts here
+            hbar = _ints(m.get("skills"))
+            if len(hbar) > BAR_SLOTS:
+                p.append(f"{who}: {len(hbar)} skills; the bar is {BAR_SLOTS} wide")
             # its level is one the window's spin offers, 0..HOSTILE_LEVEL_MAX
             # (content rows default to 0; the ceiling is the wire's byte, said
             # at the constant -- NOT the player's LEVEL_MAX, the owner's ruling

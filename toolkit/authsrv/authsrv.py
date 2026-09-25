@@ -26495,15 +26495,27 @@ def apply_party_character(prow, record_set0=True):
     return changed
 
 
+def rank_pairs(pairs):
+    """{attribute_id: rank} from a content row's `attributes` in EITHER shape
+    a TOML row can write -- `[[a, r], ...]` or `{a = r}` -- and {} for None or
+    empty. The ONE reader for agent_attributes and the area create path: the
+    create path iterated a dict-shaped template's KEYS, so `{"13" = 9}`
+    reached the body as {1: 3} and Orison acted at rank 0 while the
+    orchestrator's cell said 9 (SANDBOX-N1's verifier, 2026-09-24)."""
+    if not pairs:
+        return {}
+    return {int(a): int(r) for a, r in (pairs.items() if isinstance(pairs, dict) else pairs)}
+
+
 def agent_attributes(agent):
-    """{attribute_id: rank} a body carries, or {} (SLICE-H8)."""
+    """{attribute_id: rank} a body carries, or {} (SLICE-H8). An AREA body
+    never reaches the `is None` fallback here: the create path writes its
+    entry a dict (the row's ranks, else its template's), so that fallback is
+    the create path's; this one serves a body built elsewhere."""
     ranks = agent.get("attributes")
     if ranks is None:
         ranks = (agent.get("npc") or {}).get("attributes")
-    if not ranks:
-        return {}
-    return {int(a): int(r) for a, r in (ranks.items() if isinstance(ranks, dict)
-                                        else ranks)}
+    return rank_pairs(ranks)
 
 
 def agent_skill_rank(agent, skill_id):
@@ -30052,8 +30064,13 @@ def spawn_population(send, state, origin, conn_id, area=None):
             "provoked": False,
             "skills": bar,
             "skill_ready": [0.0] * len(bar),
-            "attributes": {int(a_): int(r_) for a_, r_ in
-                           (row.get("attributes") or npc.get("attributes") or ())},
+            # the row's ranks, else its TEMPLATE's (the fallback an AREA body
+            # gets HERE, never in agent_attributes: this is always a dict), in
+            # both shapes rank_pairs reads -- the dict comprehension that stood
+            # here iterated a dict-shaped template's keys (SANDBOX-N1's
+            # verifier, 2026-09-24); the orchestrator's sandbox.effective_rank
+            # mirrors this `or`, and test_sandbox.py text-locks the line
+            "attributes": rank_pairs(row.get("attributes") or npc.get("attributes")),
             # SLICE-H8c: an area body stays dead unless its row says otherwise.
             "revives": bool(row.get("revives", False)),
             "damage": (list(row["damage"]) if row.get("damage") else None),
