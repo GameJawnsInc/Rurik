@@ -6841,9 +6841,25 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   nine inversions -- map 248's row forced to 4, `party_cap` made the constant, the leave
   handler silenced, HEROES_ALL renumbered, the field gate blinded, the per-map flag
   ignored, a content row mis-recorded, the `[40]` gate ignored, the once-guard dropped)
-  and each went red. Drives the real functions with a fake send and a scratch
-  state. Floor 176 = the bare-machine core, measured with RURIK_VAULT at an empty
-  directory (199 with the vault; 108 / 124 at desk-partyfull's review; 107 / 122 at the desk-partyfull lane's commit, +1 bare
+  and each went red. THE 248 SET (the lane's review, RV-1, 2026-09-25;
+  `content/world.toml` `outpost_henchmen_248`): the per-map cap's client run needs an
+  add on a map whose cap is not 4, and the `outpost_henchmen` rows pin `map = 148`
+  (`spawn_row_on_map` places a row on its own map only), so the runsheet's launch on 248
+  would have had an empty Henchmen tab and its `--constant-party-cap` control would have
+  looked identical. §2 (n) map 248 HAS a hireable set: three rows on 248 in that area,
+  fresh agent ids 34/35/36 disjoint from the 148 set's, the 148 set's three templates,
+  each provenance naming the mesh it was checked on; §3 `spawn_population` over the new
+  area on 248 creates and marks 34/35/36 (W/R/A) and, served on 148, creates and marks
+  NOTHING (the SLICE-B8 filter); §5 (vaulted: the archive through `vaultpath`, a bare
+  machine declares the skip) the three rows stand on map 248's OWN mesh -- file 165811
+  opened from the vault, `place_on_mesh` moving none of them -- with 248's arrival as
+  the control. Three inversions in a scratch copy (the fixer's `fix_redden.py`: a row's
+  map forced to 148 reddens (n) and both §3 checks; a row nudged to x = -15000 reddens
+  the mesh check; a row's agent id set to 31 reddens (n) and the 248 wiring) each went
+  red and the unmutated control stayed green. Drives the real functions with a fake send
+  and a scratch state. Floor 179 = the bare-machine core, measured with RURIK_VAULT at
+  an empty directory (204 with the vault; 176 / 199 at the desk-partycap lane's commit,
+  +3 bare and +2 vaulted at its review; 108 / 124 at desk-partyfull's review; 107 / 122 at the desk-partyfull lane's commit, +1 bare
   for code 81 and +1 vaulted for the hero half at its review; 82 / 97 at CLEANUP-3's
   review, +25 on the refusal at the cap; 79 / 94 at the kick lane's commit, +3 at its review; 49 / 64
   before the kick; the landing's floor of 27 was

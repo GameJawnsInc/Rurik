@@ -9,12 +9,16 @@
 # wrong for every 6- and 8-cap map the server can serve; `--constant-party-cap`
 # restores that exactly, `--henchman-cap N` still overrides every map.
 #
-# WHY THE CLIENT'S NUMBER IS THE RIGHT ONE. The party window's counter is the client's
-# own reading of this field: on 148 it drew "(2/4)" for the player and one hero
-# (studies/deskwork/CONFIRM-2026-09-24.md section 2), and 148's row below reads 4; on
-# retail's 242 (also 4) three henchman adds filled 1 -> 4 and nothing was attempted past
-# it (studies/cmsg/FINDINGS.md "The party family"). CORROBORATED, two maps; the
-# denominator's reader in the client is not traced here.
+# WHY THE CLIENT'S NUMBER IS THE ONE TO REFUSE AT -- RECONSTRUCTION, consistent with
+# two witnesses that are NOT a refusal: the party window's counter is the client's own
+# reading of this field (on 148 it drew "(2/4)" for the player and one hero,
+# studies/deskwork/CONFIRM-2026-09-24.md section 2, and 148's row below reads 4 -- the
+# same client table, and the denominator's reader is not traced, so this is the table
+# counted once more, not a second lineage); and on retail's 242 (also 4) three henchman
+# adds filled 1 -> 4 and nothing was attempted past it (studies/cmsg/FINDINGS.md "The
+# party family" -- reachable, not refused). Retail's refusal AT max_party is NOT FOUND
+# (henchparty.py THE REFUSAL AT THE CAP; no tape carries a refused add). The lane's
+# first cut said CORROBORATED; its review (RV-5, 2026-09-25) corrected the label.
 #
 # A MAP WITH NO ROW falls back to the constant 4 and the server prints why, labelled
 # UNVERIFIED for that map -- extract its row (below) rather than trusting the fallback.
@@ -193,7 +197,7 @@ max_party = 8
 source = "client-table"
 extractor = "toolkit/clientscan/areatable.py"
 build = 38797
-verified = "s_missionClientData row 167 (the slice's slot; retail's row is campaign 7, type 3), OFF_MAX_PARTY (+0x1C) = 8, OFF_MIN_PARTY (+0x18) = 7 -- the one pair of served rows whose minimum is not 1; areatable.py --out; extracted 2026-09-25."
+verified = "s_missionClientData row 167 (the slice's slot; retail's row is campaign 0, continent 3, type 3 -- the lane's first cut wrote 'campaign 7', which is the min_party value misfiled; the review's RV-3), OFF_MAX_PARTY (+0x1C) = 8, OFF_MIN_PARTY (+0x18) = 7 -- the one pair of served rows whose minimum is not 1; areatable.py --out; extracted 2026-09-25."
 
 [map_party_cap.168]
 min_party = 7
@@ -202,4 +206,4 @@ max_party = 8
 source = "client-table"
 extractor = "toolkit/clientscan/areatable.py"
 build = 38797
-verified = "s_missionClientData row 168 (the slice's corridor slot; retail's row is campaign 7, type 3), OFF_MAX_PARTY (+0x1C) = 8, OFF_MIN_PARTY (+0x18) = 7 -- the one pair of served rows whose minimum is not 1; areatable.py --out; extracted 2026-09-25."
+verified = "s_missionClientData row 168 (the slice's corridor slot; retail's row is campaign 0, continent 3, type 3 -- 'campaign 7' in the first cut was min_party misfiled; the review's RV-3), OFF_MAX_PARTY (+0x1C) = 8, OFF_MIN_PARTY (+0x18) = 7 -- the one pair of served rows whose minimum is not 1; areatable.py --out; extracted 2026-09-25."

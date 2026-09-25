@@ -11549,11 +11549,21 @@ HEROES_ALL = 40                # 0x28, the client's HEROES bound. The hero-KICK
                                # the ADD's 0x0080E250 asserts `hero < HEROES`
                                # (:4446), and the party window's Leave (PtJoin
                                # 0x0056E900 case 1) pushes exactly 0x28 into
-                               # the kick sender right after its 0x00A2: an
-                               # index EQUAL to the bound means EVERY hero.
-                               # OBSERVED from the binary (build 38797) and on
-                               # our client (20260913T093718 c1: 0x001F [40]
-                               # beside the 0x00A2, both unhandled then).
+                               # the kick sender right after its 0x00A2. The
+                               # LABELS, split (the review's RV-6): the bytes
+                               # (`6a28` at 0x0056E95D, `83fe28 7e` at
+                               # 0x0080E2A7) and the wire word are OBSERVED
+                               # (build 38797; 20260913T093718 c1: 0x001F [40]
+                               # beside the 0x00A2, both unhandled then); that
+                               # an index EQUAL to the bound means EVERY hero
+                               # is RECONSTRUCTION from them, CORROBORATED by
+                               # GWCA's own KickAllHeroes() = KickHero(0x26)
+                               # (UPSTREAM, MIT -- vault/mirrors
+                               # GregLando113__GWCA Source/PartyMgr.cpp:360;
+                               # its HeroID enum ends at ZeiRi = 37, so 0x26 =
+                               # 38 is one past ITS last hero: the same
+                               # sentinel shape at an older bound). Retail's
+                               # server-side answer to [40] is NOT FOUND.
                                # handle_hero_kick's HEROES_ALL arm, gated on
                                # PARTY_LEAVE_ENABLED. desk-partycap 2026-09-25.
 
@@ -25764,9 +25774,11 @@ def handle_hero_kick(values, send, state, conn_id):
         # THE LEAVE'S COMPANION (desk-partycap, 2026-09-25): the party window's
         # Leave sends 0x00A2 and then 0x001F [HEROES = 40] -- an index equal
         # to the client's own bound (ChCliApi:4459 `hero <= HEROES`, where the
-        # add's is `<`), which means EVERY hero. OBSERVED on our client
-        # (20260913T093718 c1, unhandled then: "names no hero, UNEXPLAINED")
-        # and read from the binary (HEROES_ALL). Retail's answer to [40] is
+        # add's is `<`). The word is OBSERVED on our client (20260913T093718
+        # c1, unhandled then: "names no hero, UNEXPLAINED") and the push read
+        # from the binary; that it means EVERY hero is RECONSTRUCTION,
+        # CORROBORATED by GWCA's KickAllHeroes() = KickHero(0x26), one past
+        # ITS last HeroID (HEROES_ALL's comment). Retail's answer to [40] is
         # NOT FOUND (its one 0x001F carried [6]); RECONSTRUCTION: each party
         # hero leaves through its own kick -- the OBSERVED batch, the kick
         # persisted -- exactly as N clicks would. Gated with the leave.
@@ -26127,8 +26139,10 @@ def handle_henchman_add(values, send, state, conn_id):
     default off; the review of 2026-09-25, RV-4). The three: an agent that is
     not a hireable henchman of this
     outpost; one already in the party; and one that would put the party over the
-    map's cap (OUTPOST_PARTY_CAP -- heroes count against it too, the same value
-    the load's 0x00B0 carries)."""
+    map's cap (party_cap(state): the served map's own max_party from
+    content/partycap.toml, OUTPOST_PARTY_CAP for a map with no row or under
+    --constant-party-cap / --henchman-cap -- heroes count against it too, the
+    same value the load's 0x00B0 carries)."""
     aid = int(values[1])
     hench = (state.get("hireable_henchmen") or {}).get(aid)
     if hench is None:

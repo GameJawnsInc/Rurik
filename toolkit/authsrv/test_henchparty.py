@@ -43,7 +43,12 @@ WHAT THIS PINS.
     something to hire. Under --no-henchman-add nothing is marked; in a FIELD
     (--explorable) the bodies are created but neither message goes out
     (retail marks henchmen in outposts only, 11 of 96 live connections, all
-    outposts -- ENG-HENCH-11).
+    outposts -- ENG-HENCH-11). THE 248 SET (the review's RV-1): the same
+    wiring over `outpost_henchmen_248` on map 248 creates and marks 34/35/36,
+    and that area served on 148 places nothing (spawn_row_on_map) -- the
+    per-map cap's client run needs an add on a map whose cap is not 4, and
+    the 148 rows could not give it one; §2 (n) checks the set exists and §5
+    (vaulted) that its three rows stand on 248's own mesh.
   * §4 SOURCE LOCKS on authsrv.py, EACH WITH A MUTATION THAT REDDENS IT (the
     landing claimed mutations it did not carry -- HENCH-EVR-3 / ENG-HENCH-8):
     the 0x009F arm is gated on HENCHMAN_ADD_ENABLED; main() wires
@@ -146,7 +151,7 @@ import henchparty                                            # noqa: E402
 import authsrv                                               # noqa: E402
 import livewire                                              # noqa: E402
 
-led = checks.Ledger("henchman add (DESKWORK-D1 step 5)", floor=176)   # 2026-09-25 (desk-partycap): the bare-machine core from the green run with RURIK_VAULT pointed at an empty directory (199 vaulted: +1 hero add on 248, +6 in section 5 against the pinned client, +16 the tape and the two hero adds as before) -- +68 bare on the per-map cap ((n): the rows, the join, the provenance, the pure rule x6, 248/148/999, the flag arm, --henchman-cap 6, the zone, the hero add refused on 148) and the leave (section 1l x7, (o) x15, the locks: the arm x4, main x3, handle_party_leave x5, the HEROES_ALL arm x4, --constant-party-cap x4, party_cap x3, the caps load x3, serverargs, the allowlist x2, and +2 mutations each on HA and HD); 108 at desk-partyfull's review (124 vaulted; 107 at that lane's commit, +1 at the review: code 81 joins the bad codes; the hero-half vacuity guard is vaulted, a declared skip bare); 82 at CLEANUP-3's review (79 at the lane's commit, +3 at the review: (l) the launch henchman's refusal x2 and the launch-guard mutation; 49 before the kick; +30 on the kick), +25 on the refusal at the cap: (m) the reply's bytes, the off arm, five bad codes, both handlers ARMED, the line, the two silent refusals, the vacuity guard, the OFF arm, and the locks (serverargs, the module default, HA x4, HD x3, main x3)
+led = checks.Ledger("henchman add (DESKWORK-D1 step 5)", floor=179)   # 2026-09-25 (desk-partycap's review, RV-1): 179 bare from the green run with RURIK_VAULT at an empty directory (204 vaulted: +2 in section 5, the 248 set on 165811's mesh and the arrival control, a declared skip bare) -- +3 bare: (n) the 248 hireable set exists, section 3 the set creates and marks 34/35/36 on 248 and nothing on 148; 176 at the lane's commit (desk-partycap): the bare-machine core from the green run with RURIK_VAULT pointed at an empty directory (199 vaulted: +1 hero add on 248, +6 in section 5 against the pinned client, +16 the tape and the two hero adds as before) -- +68 bare on the per-map cap ((n): the rows, the join, the provenance, the pure rule x6, 248/148/999, the flag arm, --henchman-cap 6, the zone, the hero add refused on 148) and the leave (section 1l x7, (o) x15, the locks: the arm x4, main x3, handle_party_leave x5, the HEROES_ALL arm x4, --constant-party-cap x4, party_cap x3, the caps load x3, serverargs, the allowlist x2, and +2 mutations each on HA and HD); 108 at desk-partyfull's review (124 vaulted; 107 at that lane's commit, +1 at the review: code 81 joins the bad codes; the hero-half vacuity guard is vaulted, a declared skip bare); 82 at CLEANUP-3's review (79 at the lane's commit, +3 at the review: (l) the launch henchman's refusal x2 and the launch-guard mutation; 49 before the kick; +30 on the kick), +25 on the refusal at the cap: (m) the reply's bytes, the off arm, five bad codes, both handlers ARMED, the line, the two silent refusals, the vacuity guard, the OFF arm, and the locks (serverargs, the module default, HA x4, HD x3, main x3)
 
 COD = codecmod.Codec()
 SRC_PATH = os.path.join(HERE, "authsrv.py")
@@ -709,6 +714,23 @@ try:
            f"(n) every served map (content/maps.toml, {len(authsrv.MAP_STATIC_CONFIG)} rows) has a "
            f"map_party_cap row -- the join party_cap performs; a map added without one would fall "
            f"back to 4 in silence but for this check", f"missing {_missing}")
+    # THE RUN'S PRECONDITION (the review's RV-1): a cap other than 4 is only
+    # observable through an add, and an add needs a hireable row ON THAT MAP --
+    # the 148 set pins map = 148 and spawn_row_on_map places it nowhere else.
+    _spawns = authsrv.agents.WORLD.rows("spawn")
+    _h248 = {k: r for k, r in _spawns.items() if r.get("hireable") and int(r.get("map") or 0) == 248}
+    _h148 = {k: r for k, r in _spawns.items() if r.get("hireable") and int(r.get("map") or 0) == 148}
+    led.ok(len(_h248) == 3 and {r["area"] for r in _h248.values()} == {"outpost_henchmen_248"}
+           and sorted(int(r["agent_id"]) for r in _h248.values()) == [34, 35, 36]
+           and not ({int(r["agent_id"]) for r in _h248.values()} & {int(r["agent_id"]) for r in _h148.values()})
+           and {r["npc"] for r in _h248.values()} == {r["npc"] for r in _h148.values()}
+           and all(r.provenance["source"] == "invented" and "165811" in r.provenance["verified"]
+                   for r in _h248.values()),
+           "(n) map 248 (cap 8) HAS a hireable set -- content/world.toml's outpost_henchmen_248: three "
+           "rows on map 248, fresh agent ids 34/35/36 disjoint from the 148 set's, the 148 set's three "
+           "templates, each provenance naming the mesh it was checked on -- so the runsheet's launch "
+           "can send an add there at all (RV-1: on 248 the 148 rows place nothing)",
+           f"248: {sorted((k, int(r['agent_id'])) for k, r in _h248.items())}")
     pc = henchparty.party_cap
     led.ok(pc({248: 8}, 248, 4) == (8, pc({248: 8}, "248", 4)[1]) and "max_party" in pc({248: 8}, 248, 4)[1]
            and pc({248: 8}, "248", 4)[0] == 8,
@@ -1026,6 +1048,32 @@ try:
                "marked or levelled: retail offers henchmen in outposts only",
                f"creates {sorted(creates4)} ops {sorted(set(hex(o) for o in ops_of(sent4)))}")
         authsrv.EXPLORABLE = False
+
+        # THE 248 SET (the review's RV-1): the same wiring on the 8-cap map, and
+        # the SLICE-B8 map filter that kept the 148 set OFF 248 keeps the 248
+        # set off 148 -- the reason the per-map cap's run needed its own rows.
+        authsrv.AREA_NAME = "outpost_henchmen_248"
+        sent5, send5 = fake_send()
+        st5 = {"agents": {}, "map_id": 248, "pathmap": _Mesh()}
+        authsrv.spawn_population(send5, st5, (-5574.0, -4945.0, 0), 0)
+        marks5 = [v[0] for op, v in sent5 if op == henchparty.HENCHMAN_HIREABLE]
+        creates5 = [v[0] for op, v in sent5 if op == authsrv.GAME_SMSG_WORLD_CREATE_AGENT]
+        profs5 = {a: r["profession"] for a, r in (st5.get("hireable_henchmen") or {}).items()}
+        led.ok(sorted(marks5) == [34, 35, 36] and sorted(creates5) == [34, 35, 36]
+               and profs5 == {34: 1, 35: 2, 36: 7},
+               "(§3) on map 248 the outpost_henchmen_248 set creates and marks 34/35/36 hireable "
+               "(W/R/A, the 148 set's templates) -- the per-map cap's run has something to add",
+               f"marks {sorted(marks5)} creates {sorted(creates5)} profs {profs5}")
+        sent6, send6 = fake_send()
+        st6 = {"agents": {}, "map_id": 148, "pathmap": _Mesh()}
+        authsrv.spawn_population(send6, st6, (9826.0, 8077.0, 0), 0)
+        led.ok(not [v for op, v in sent6 if op == henchparty.HENCHMAN_HIREABLE]
+               and not [v for op, v in sent6 if op == authsrv.GAME_SMSG_WORLD_CREATE_AGENT]
+               and not st6.get("hireable_henchmen"),
+               "(§3) ...and the same area served on 148 creates and marks NOTHING (spawn_row_on_map: "
+               "a row stands on its own map only -- why the 148 set could not serve the 248 run)",
+               f"ops {sorted(set(hex(o) for o in ops_of(sent6)))}")
+        authsrv.AREA_NAME = "outpost_henchmen"
     finally:
         authsrv.place_on_mesh = _saved_place
         authsrv.AREA_NAME = _saved_area
@@ -1473,5 +1521,45 @@ else:
     led.ok(0x008585FD + 6 + _rel == 0x0085BEF0,
            "(§5) ...and the `ja` lands on the 0xA2 wrapper 0x0085BEF0 -- the one reference codescan "
            "--xrefs (call/jmp only) reported as none", f"target 0x{0x008585FD + 6 + _rel:08X}")
+
+# -- §5 the 248 set stands on 248's OWN mesh (vaulted: the archive) -----------------
+# A check the archive can refute (the review's RV-1): each outpost_henchmen_248 row
+# is walkable on file 165811's compiled pathing chunk with place_on_mesh moving it
+# 0 u -- the rows' provenance says so, and this is what says so about the provenance.
+# The archive is found through vaultpath (RURIK_VAULT), so a bare machine declares
+# the skip and the floor excludes these.
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "mapdata"))
+try:
+    import vaultpath                                          # noqa: E402
+    from archive import Archive                               # noqa: E402
+    from pathmap import PathingMap                            # noqa: E402
+    import population                                         # noqa: E402
+    _dat = vaultpath.vault_path("dat_study", "Gw.dat")
+    if not os.path.exists(_dat):
+        raise FileNotFoundError(_dat)
+    _ar = Archive(_dat)
+    try:
+        _pm248 = PathingMap.load(165811, archive=_ar)
+    finally:
+        _ar.close()
+except (SystemExit, Exception) as exc:                        # noqa: BLE001
+    led.skip("§5 the 248 set on its mesh", f"no archive with file 165811 in the vault: {str(exc)[:80]}")
+else:
+    _rows248 = {k: r for k, r in authsrv.agents.WORLD.rows("spawn").items()
+                if r.get("area") == "outpost_henchmen_248"}
+    _moved = {}
+    for _k, _r in sorted(_rows248.items()):
+        _res = population.place_on_mesh(_pm248, float(_r["x"]), float(_r["y"]), _k)
+        if _res is None or _res[2] != 0.0:
+            _moved[_k] = _res
+    led.ok(len(_rows248) == 3 and not _moved,
+           "(§5) the three outpost_henchmen_248 rows stand on map 248's own mesh (file 165811, "
+           f"{len(_pm248.planes)} planes / {len(_pm248.trapezoids)} trapezoids): place_on_mesh "
+           "moves none of them -- re-read out of the archive, as the rows' provenance claims",
+           f"nudged/refused {_moved}")
+    _arr = authsrv.MAP_STATIC_CONFIG[248][1]
+    led.ok(_pm248.walkable(float(_arr[0]), float(_arr[1])),
+           "(§5) CONTROL: 248's own arrival (maps.toml spawn_x/spawn_y) is walkable on that mesh -- "
+           "the point the three offsets are measured from", f"arrival {_arr}")
 
 sys.exit(led.verdict())

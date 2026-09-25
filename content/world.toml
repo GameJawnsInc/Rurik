@@ -2650,7 +2650,10 @@ word then [20, foe, caster, 304], the knock-down on each. NOT modelled, said her
 #     henchmen: 0x0071 appears on 11 of 96 live connections, all on maps 242,
 #     281 and 449 (types 13/11), and on 0 of the 11 connections to 148. That
 #     the client's list works on a type-10 map is UNVERIFIED until the run.
-# Served with `--area outpost_henchmen`.
+# Served with `--area outpost_henchmen`. The SAME THREE on the Great Temple (248,
+# max_party 8) are the `outpost_henchmen_248` set at the end of this file -- the
+# per-map party cap's client run needs an add on a map whose cap is not 4, and
+# these rows pin `map = 148` (spawn_row_on_map places a row on its own map only).
 
 [spawn.hench_warrior_stand]
 area = "outpost_henchmen"
@@ -2715,3 +2718,84 @@ walkable at spawn. The template is the retail Assassin henchman's \
 (hench_assassin, capture 20260819T132414); position, ids, map and allegiance \
 (`noncombatant`, RECONSTRUCTION -- retail's is 'play'; the header above) are \
 chosen here."""
+
+# THE 248 SET (desk-partycap's review, RV-1, 2026-09-25). The per-map party cap
+# (content/partycap.toml, authsrv.party_cap) needs a client run on a map whose cap
+# is not 4, and the three `outpost_henchmen` rows above pin `map = 148` --
+# spawn_row_on_map places a row on its own map only -- so on 248 the Henchmen tab
+# was empty, no 0x009F could leave the client, and the per-map arm and its
+# --constant-party-cap control would have looked identical. These are the same
+# three templates standing in the Great Temple of Balthazar (248, AreaInfo
+# max_party 8, file 165811) at the 148 set's own offsets from ITS arrival --
+# (+100, 0), (+150, -50), (+200, +50) from content/maps.toml [map.248]'s spawn
+# (-5574.08, -4944.68) -- each probed walkable on 165811's compiled pathing chunk
+# with place_on_mesh moving none (prediction first; test_henchparty section 5
+# re-reads the three against the archive and goes red on a nudge). Fresh agent
+# ids 34/35/36 (30 is the launch henchman, 31-33 the 148 set); the definitions
+# are the 148 set's, which area_population allows for rows naming the SAME
+# template, and one process serves one of the two areas on one map.
+# Served with `--area outpost_henchmen_248`.
+
+[spawn.hench_warrior_stand_248]
+area = "outpost_henchmen_248"
+map = 248
+npc = "hench_warrior"
+agent_id = 34
+definition = 70
+allegiance = "noncombatant"
+attacks_back = false
+hireable = true
+x = -5474.0
+y = -4945.0
+enabled = true
+
+[spawn.hench_warrior_stand_248.provenance]
+source = "invented"
+verified = """Ours: the Warrior henchman's standing spot in the Great Temple (248), \
+100 u east of maps.toml [map.248]'s arrival, walkable on file 165811's compiled \
+mesh (place_on_mesh moved 0.0 u; desk-partycap review RV-1, 2026-09-25). The \
+template is the retail Warrior henchman's (content/npcs.toml hench_warrior, capture \
+20260819T132414); the position, the agent id, the map and the allegiance \
+(`noncombatant`, RECONSTRUCTION -- the 148 set's header) are chosen here."""
+
+[spawn.hench_ranger_stand_248]
+area = "outpost_henchmen_248"
+map = 248
+npc = "hench_ranger"
+agent_id = 35
+definition = 71
+allegiance = "noncombatant"
+attacks_back = false
+hireable = true
+x = -5424.0
+y = -4995.0
+enabled = true
+
+[spawn.hench_ranger_stand_248.provenance]
+source = "invented"
+verified = """Ours: the Ranger henchman's standing spot in the Great Temple (248), \
+(+150, -50) from the arrival, walkable on 165811's mesh (moved 0.0 u; RV-1, \
+2026-09-25). The template is the retail Ranger henchman's (hench_ranger, capture \
+20260819T132414); position, id, map and allegiance (`noncombatant`, RECONSTRUCTION) \
+are chosen here."""
+
+[spawn.hench_assassin_stand_248]
+area = "outpost_henchmen_248"
+map = 248
+npc = "hench_assassin"
+agent_id = 36
+definition = 72
+allegiance = "noncombatant"
+attacks_back = false
+hireable = true
+x = -5374.0
+y = -4895.0
+enabled = true
+
+[spawn.hench_assassin_stand_248.provenance]
+source = "invented"
+verified = """Ours: the Assassin henchman's standing spot in the Great Temple (248), \
+(+200, +50) from the arrival, walkable on 165811's mesh (moved 0.0 u; RV-1, \
+2026-09-25). The template is the retail Assassin henchman's (hench_assassin, \
+capture 20260819T132414); position, id, map and allegiance (`noncombatant`, \
+RECONSTRUCTION) are chosen here."""
