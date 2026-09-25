@@ -103,7 +103,7 @@ import henchparty                                            # noqa: E402
 import authsrv                                               # noqa: E402
 import livewire                                              # noqa: E402
 
-led = checks.Ledger("henchman add (DESKWORK-D1 step 5)", floor=107)   # 2026-09-25 (desk-partyfull): the bare-machine core from the green run with RURIK_VAULT pointed at an empty directory -- 82 at CLEANUP-3's review (79 at the lane's commit, +3 at the review: (l) the launch henchman's refusal x2 and the launch-guard mutation; 49 before the kick; +30 on the kick), +25 on the refusal at the cap: (m) the reply's bytes, the off arm, five bad codes, both handlers ARMED, the line, the two silent refusals, the vacuity guard, the OFF arm, and the locks (serverargs, the module default, HA x4, HD x3, main x3); the vault adds 15 (122 vaulted)
+led = checks.Ledger("henchman add (DESKWORK-D1 step 5)", floor=108)   # 2026-09-25 (desk-partyfull, its review): the bare-machine core from the green run with RURIK_VAULT pointed at an empty directory -- 107 at the lane's commit, +1 at the review (code 81 joins the bad codes; the hero-half vacuity guard is vaulted, a declared skip bare); 82 at CLEANUP-3's review (79 at the lane's commit, +3 at the review: (l) the launch henchman's refusal x2 and the launch-guard mutation; 49 before the kick; +30 on the kick), +25 on the refusal at the cap: (m) the reply's bytes, the off arm, five bad codes, both handlers ARMED, the line, the two silent refusals, the vacuity guard, the OFF arm, and the locks (serverargs, the module default, HA x4, HD x3, main x3); the vault adds 16 (124 vaulted)
 
 COD = codecmod.Codec()
 SRC_PATH = os.path.join(HERE, "authsrv.py")
@@ -518,17 +518,20 @@ try:
            "the client's 3-byte [header, byte] shape bc 01 40", f"{encode_batch(fr).hex()}")
     try:
         _ends = (henchparty.party_full_reply(None) == [] and henchparty.party_full_reply(0) != []
-                 and encode_batch(henchparty.party_full_reply(81)) == bytes.fromhex("bc0151"))
+                 and encode_batch(henchparty.party_full_reply(80)) == bytes.fromhex("bc0150"))
         _why = ""
-    except ValueError as exc:          # a renumbered table max would refuse row 81: score it, do not die
+    except ValueError as exc:          # a renumbered table max would refuse row 80: score it, do not die
         _ends, _why = False, str(exc)[:80]
-    led.ok(_ends, "(m) None is the off arm (nothing), 0 and 81 are the table's first and last rows", _why)
-    for bad in (82, -1, True, "64", 3.0):
+    led.ok(_ends, "(m) None is the off arm (nothing), 0 and 80 are the table's first and last rows "
+                  "(81 rows: 0x00B97AAC is the NEXT table's row 0 and 81 the client's no-error sentinel "
+                  "-- the review of 2026-09-25 corrected 82 / 0..81)", _why)
+    # 81 leads the bad codes: it is the sentinel the lane's max let through (the review's RV-1).
+    for bad in (81, 82, -1, True, "64", 3.0):
         try:
             henchparty.party_full_reply(bad)
-            led.ok(False, f"(m) party_full_reply({bad!r}) is refused (outside the client's 82-row table)")
+            led.ok(False, f"(m) party_full_reply({bad!r}) is refused (outside the client's 81-row table)")
         except ValueError as exc:
-            led.ok("0..81" in str(exc),
+            led.ok("0..80" in str(exc),
                    f"(m) party_full_reply({bad!r}) is refused with the table's range named", str(exc)[:80])
     # the two handlers, ARMED: a party at the cap (player + 3 henchmen = 4 of 4).
     authsrv.HERO_IDS = []
@@ -562,6 +565,25 @@ try:
            and authsrv.party_member_count(sth) == 4,
            "(m) ARMED: the hero add refused at the cap sends exactly ONE 0x01BC [64], the hero "
            "stays kicked, the count stays 4", f"sent {[(hex(o), v) for o, v in sh]}")
+    # the HERO half of "a non-full add is untouched" while ARMED (the review's RV-3: a 0x01BC
+    # sent after a SUCCESSFUL hero add survived every check above, since the hero cap lock
+    # counts only the cap branch's string): the kicked hero re-added into a party BELOW the
+    # cap (player + 2 henchmen = 3 of 4) goes through with NO 0x01BC. Vaulted -- the
+    # accepting path builds the hero block from the vault's attribute-cost rows; a bare
+    # machine declares the skip, as (e)'s hero adds do.
+    stv_h = seeded(HENCH)
+    authsrv.kicked_heroes_set(stv_h).add(6)
+    for a in (4, 2):
+        authsrv.handle_henchman_add([ADD, a], fake_send()[1], stv_h, 0)
+    sv_h, sendv_h = fake_send()
+    if hero_add_or_skip("(m) VACUITY GUARD (hero): armed, the kicked hero re-added BELOW the cap",
+                        sendv_h, stv_h):
+        led.ok(0x01C2 in ops_of(sv_h) and sizes_of(sv_h) == [4] and 0x01BC not in ops_of(sv_h)
+               and not authsrv.hero_kicked(stv_h, 6) and authsrv.party_member_count(stv_h) == 4,
+               "(m) VACUITY GUARD (hero): armed, the kicked hero re-added into a party BELOW the cap "
+               "(player + 2 henchmen = 3 of 4) goes through as 0x00B0 = 4 + the 0x01C2 row with NO "
+               "0x01BC -- the reply is the CAP refusal's, not the flag's on every hero add",
+               f"{[hex(o) for o in ops_of(sv_h)]} sizes {sizes_of(sv_h)}")
     # the reply rides the CAP refusal only: the other two refusals stay silent when armed.
     s_nh, send_nh = fake_send()
     authsrv.handle_henchman_add([ADD, 99], send_nh, stm, 0)
@@ -900,8 +922,9 @@ led.ok('"--party-full-reply"' in ARGS and ARGS.index('"--party-full-reply"') > A
        and "default=None" in ARGS[ARGS.index('"--party-full-reply"'):ARGS.index('"--party-full-reply"') + 120],
        "LOCK: serverargs.py declares --party-full-reply beside --henchman-cap, default None (OFF)")
 led.ok(authsrv.PARTY_FULL_REPLY_CODE is None and henchparty.PARTY_ERROR_PROMPT == 0x01BC
-       and henchparty.PARTY_ERROR_CODE_MAX == 81,
-       "LOCK: the module default is OFF (None), the carrier is 0x01BC and the table's last row 81")
+       and henchparty.PARTY_ERROR_CODE_MAX == 80,
+       "LOCK: the module default is OFF (None), the carrier is 0x01BC and the table's last row 80 "
+       "(81 rows; 81 is the client's no-error sentinel -- the review of 2026-09-25 corrected 82)")
 for what, lock, text, muts in LOCKS:
     led.ok(bool(text) and lock(text), f"LOCK: {what}")
     for mname, mtext in muts:

@@ -12132,7 +12132,7 @@ PARTY_FULL_REPLY_CODE = None   # --party-full-reply CODE (desk-partyfull,
                                # DEFAULT OFF = today's silent refusal: retail's
                                # reply is NOT FOUND (no tape carries a refused
                                # add or any error carrier, 0 of 96), the
-                               # client's 82-row error table has no "party is
+                               # client's 81-row error table (0..80) has no "party is
                                # full" row, and the sentence a player expects
                                # (#57757) is a CLIENT-side const text -- so
                                # retail's client may refuse locally and its
@@ -25570,8 +25570,10 @@ def handle_hero_add(values, send, state, conn_id):
     values[1] is the hero INDEX -- by the wrapper's own bounds and the kick's
     two witnesses ([6] retail, [3] loopback), the shape 0x001F shares.
 
-    THE REFUSALS send NOTHING. What retail's client expects back from a refused
-    add is NOT FOUND (no tape); the client's own asserts already refuse index 0
+    THE REFUSALS send NOTHING -- except the CAP refusal under the opt-in
+    --party-full-reply CODE, which sends ONE 0x01BC [CODE] (RECONSTRUCTION,
+    default off; the review of 2026-09-25, RV-4). What retail's client expects
+    back from a refused add is NOT FOUND (no tape); the client's own asserts already refuse index 0
     and >= 40 before sending, so what reaches us is a legal index that is
     either not ours, already in, one too many, or arrives in a rig the add has
     no arm for:
@@ -25808,7 +25810,10 @@ def handle_henchman_add(values, send, state, conn_id):
     standing and its record moves into the party.
 
     THE REFUSALS send NOTHING (retail's refusal reply is NOT FOUND -- no tape
-    carries a refused add): an agent that is not a hireable henchman of this
+    carries a refused add) -- except the CAP refusal under the opt-in
+    --party-full-reply CODE, which sends ONE 0x01BC [CODE] (RECONSTRUCTION,
+    default off; the review of 2026-09-25, RV-4). The three: an agent that is
+    not a hireable henchman of this
     outpost; one already in the party; and one that would put the party over the
     map's cap (OUTPOST_PARTY_CAP -- heroes count against it too, the same value
     the load's 0x00B0 carries)."""

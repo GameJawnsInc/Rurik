@@ -6734,29 +6734,40 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   reply to an add refused at the cap is NOT FOUND (no tape carries a refused add, a
   party-block string id or any of the four one-byte party error carriers, 0 of 96 live
   connections), so `--party-full-reply CODE` ships OPT-IN, RECONSTRUCTION -- ONE 0x01BC
-  [CODE], the client's party error prompt whose worker indexes an 82-row string-id table
-  by the byte (CONFIRMED on our client for row 0 by the 2026-08-13 sweep; the table has
+  [CODE], the client's party error prompt whose worker indexes an 81-row string-id table
+  (0..80 -- the lane wrote 82; its review corrected it: row 81 is the NEXT table's row 0
+  and 81 the client's own no-error sentinel) by the byte (CONFIRMED on our client for row
+  0 by the 2026-08-13 sweep; the table has
   no "party is full" row, and the sentence a player expects, #57757, is a CLIENT const
   text). §2 (m): `party_full_reply(64)` is one 0x01BC [64] encoding to `bc 01 40`; None
-  is the off arm and 0 / 81 the table's ends; five bad codes (82, -1, True, '64', 3.0)
-  refused with the range named; ARMED, the henchman add and the hero add refused at the
+  is the off arm and 0 / 80 the table's ends; six bad codes (81 first -- the sentinel the
+  lane's max let through -- then 82, -1, True, '64', 3.0) refused with the range named; ARMED, the henchman add and the hero add refused at the
   cap each send exactly ONE 0x01BC [64] (nothing added, the hero stays kicked, the count
   stays 4) and the refusal line says the 0x01BC follows and RECONSTRUCTION; "not
   hireable" and "already in the party" stay silent when armed (the reply is the CAP's
   alone); VACUITY GUARD: armed, the same add under `--henchman-cap 8` goes through with
-  NO 0x01BC; OFF (the default): both cap refusals send nothing and the line says
+  NO 0x01BC, and its HERO half (the review's RV-3): armed, the kicked hero re-added into
+  a party BELOW the cap (3 of 4) goes through as 0x00B0 = 4 + 0x01C2 with NO 0x01BC
+  (vaulted; a bare machine declares the skip -- a 0x01BC after a successful hero add had
+  survived every other check); OFF (the default): both cap refusals send nothing and the line says
   "nothing sent (retail's refusal reply NOT FOUND)". §4 gains three locks with mutations:
   both handlers' CAP branches send `party_full_reply(PARTY_FULL_REPLY_CODE)` once, after
   the cap check, and print `party_full_refusal_note()` (the reply dropped, moved ahead of
   the check, the note replaced by the old constant); `main()` wires `--party-full-reply`
   through the leaf's validation and a `global` (assignment and validation dropped);
   `serverargs.py` declares it beside `--henchman-cap` with default None; and the module
-  default is None with the carrier 0x01BC and the table's last row 81. Every new check
-  was inverted in a scratch COPY (the lane's `redden.py`, nine inversions) and went red.
+  default is None with the carrier 0x01BC and the table's last row 80. Every new check
+  was inverted in a scratch COPY (the lane's `redden.py`, nine inversions; the fixer's
+  `fix_redden.py` for the review's two -- the max back at 81 reddens the 81-refused check,
+  the five range checks and the module lock, 7 bare, and the table one row short (79)
+  those plus the ends check, 8; the reviewer's own 0x01BC after the hero add's bare batch
+  reddens the hero half vaulted and nothing else, and nothing bare where it is a declared
+  skip) and went red.
   Drives the real functions with a fake send and a scratch
-  state. Floor 107 = the bare-machine core, measured with RURIK_VAULT at an empty
-  directory (122 with the vault; 82 / 97 at CLEANUP-3's review, +25 on the refusal at
-  the cap; 79 / 94 at the kick lane's commit, +3 at its review; 49 / 64
+  state. Floor 108 = the bare-machine core, measured with RURIK_VAULT at an empty
+  directory (124 with the vault; 107 / 122 at the desk-partyfull lane's commit, +1 bare
+  for code 81 and +1 vaulted for the hero half at its review; 82 / 97 at CLEANUP-3's
+  review, +25 on the refusal at the cap; 79 / 94 at the kick lane's commit, +3 at its review; 49 / 64
   before the kick; the landing's floor of 27 was
   above its own bare run of 23 -- HENCH-EVR-2 / ENG-HENCH-2), ~9 s),
   `toolkit/authsrv/test_itemmoves.py` (**2026-09-23, DESKWORK-D1 step 8: the inventory

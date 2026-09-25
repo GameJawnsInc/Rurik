@@ -1078,8 +1078,8 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                     help="OPT-IN (desk-partyfull, 2026-09-25): answer an add refused "
                          "at the cap -- henchman 0x009F or hero 0x001E -- with ONE "
                          "0x01BC PARTY_ERROR_PROMPT [CODE], the client's party "
-                         "error message: its worker indexes an 82-row string-id "
-                         "table (rows 0..81, build 38797) by the byte and shows the "
+                         "error message: its worker indexes an 81-row string-id "
+                         "table (rows 0..80, build 38797) by the byte and shows the "
                          "row on channel 10 with a centre-screen popup (CONFIRMED on "
                          "our client for row 0 by the 2026-08-13 sweep). The DEFAULT "
                          "sends nothing, which is today's silent refusal: retail's "
@@ -1093,7 +1093,8 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "the merged party would be too large, 78 the row for no "
                          "more than 4 henchmen; read the screen and record it "
                          "(studies/cmsg/FINDINGS.md 'The refusal at the cap'). A "
-                         "CODE outside 0..81 is refused at launch.")
+                         "CODE outside 0..80 is refused at launch (81 is the client's own "
+                         "no-error sentinel and would show the next table's row 0).")
     ap.add_argument("--no-zone-carry", action="store_true",
                     help="THE REVERT ARM for JARIN: a zone forgets the death "
                          "penalty and the hero's stance. Retail carries the "
