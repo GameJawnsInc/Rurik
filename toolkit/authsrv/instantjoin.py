@@ -43,16 +43,27 @@ predictions above were written first, in the lane's scratch record):
   P-A5 HELD, 67 of 67 shouts, 0 of 66 others. P-A6 HELD: one coded word, no marker,
        25944 for 364 (56) and 25911 for 348 (11) -- NOT the name id (25942 / 25909 at
        +0x98) but the block's third record (name_id + 2 on both), which the table's
-       name_id spacing says cannot hold for 16 of the 52 corpus shouts.
-  P-A7 HELD: [48] < [21] 133/133, [21] < 0x00A5 67/67, 0x00A5 < 0x0042 59/59, E5 <
-       [48] 93/93, 0x0042 < E3 86/86, E3 < 0x0027 29/29, 0x00F1 < E3 8/8.
+       name_id spacing says cannot hold for 10 of the 52 corpus shouts (spaced 1 or
+       2 from the next skill's name; 36 spaced 3, 6 spaced 4 or wider untested).
+  P-A7 HELD: [48] < [21] 133/133, [21] < 0x00A5 67/67, 0x00A5 < 0x0042 59/59, the
+       CASTER'S OWN E5 < [48] 86/86 (62 observer + 24 hero; the first cut counted
+       93 by taking any E5 in the batch, and 7 team-mate batches carry the
+       observer's own E5 -- the review's EV-6), 0x0042 < E3 86/86, E3 < 0x0027
+       29/29, 0x00F1 < E3 8/8.
   P-A8 HELD, 62 of 62 at dt = 0 (E4, E5 and E3 alike).
   P-A9 REFUTED in the label: the arena's same-token casters are team-mates, 20 of
        them; a hero 24; a foe 27; no henchman. No property 8 in any of the 62.
   P-B1 UNWITNESSED: the 6 two-apply batches are all 348 (the hero's), which moves
        no speed, so no batch has two applies AND a speed word; the applies are
-       adjacent 6 of 6. P-B2 HELD, 16 of 16 multi-word batches whose wearer has a
-       word lead with it (the 17th re-cast over an open shout: no own word, 56.5).
+       adjacent 6 of 6 -- and ASCENDING by agent id 6 of 6, the observer's 29
+       ahead of the caster's 30 (the caster's apply is NOT first).
+  P-B2 REFUTED AS WORDED (the review's EV-2): the first cut scored "the wearer's
+       word first" over the observer's batches alone, 16 of 16 -- and in every
+       one the wearer is also the LOWEST agent id. Over all 39 multi-word
+       batches the rule is ASCENDING AGENT ID, 39 of 39: the team-mates' 14 and
+       the foes' 8 put the caster's word in its id's place, 0 of 22 first
+       (`multi_word_by_kind`). The observer's 17th (a re-cast over an open shout:
+       no own word, 56.5) is ascending too.
   P-B3 HELD, 29 of 29.
 
 THE PREDICTIONS, registered before the first run (the scratch file of 2026-09-25 is
@@ -340,7 +351,12 @@ def score(c):
                  and b[2] == r["caster"]]
         posA5 = ix.get(hex(OP_SPEECH), [])
         posE4 = ix.get(hex(OP_E4), [])
-        posE5 = ix.get(hex(OP_E5), [])
+        # The CASTER'S OWN E5 -- an E5 for this caster and this skill. Seven
+        # team-mate batches on the arena tape open with the OBSERVER's own E5
+        # (the observer shouting inside the same 60 ms), and reading any E5
+        # counted them (93, not 86 -- the review's EV-6).
+        posE5 = [p for p, b in enumerate(r["batch"]) if b[0] == OP_E5 and len(b) > 2
+                 and b[1] == r["caster"] and b[2] == r["skill"]]
         posE3 = ix.get(hex(OP_E3), [])
         posApply = ix.get(hex(OP_APPLY), [])
         posSpeed = ix.get(hex(OP_SPEED), [])
@@ -369,9 +385,33 @@ def score(c):
     own_multi = [r for r in own if len(r["speeds"]) >= 2]
     own_multi_with_word = [r for r in own_multi
                            if any(a == r["caster"] for a, _s in r["speeds"])]
+    # THE ORDER OF THE WORDS, over EVERY caster kind (the review's EV-2): per
+    # kind, how many multi-word batches are ascending by agent id, how many
+    # put the caster's own word first, and whether the caster is the lowest
+    # id among the worded agents -- the two are one thing for the observer.
+    multi_word_by_kind = collections.defaultdict(collections.Counter)
+    for r in an:
+        sp = [a for a, _s in r["speeds"]]
+        if len(sp) < 2:
+            continue
+        own_word = r["caster"] in sp
+        multi_word_by_kind[r["kind"]]["batches"] += 1
+        multi_word_by_kind[r["kind"]]["ascending"] += sp == sorted(sp)
+        multi_word_by_kind[r["kind"]]["own_word"] += own_word
+        multi_word_by_kind[r["kind"]]["caster_first"] += own_word and sp[0] == r["caster"]
+        multi_word_by_kind[r["kind"]]["caster_lowest"] += own_word and r["caster"] == min(sp)
+    # ...and of the APPLIES in a multi-apply batch: ascending, and is the
+    # caster's own apply first?
+    multi_apply_order = collections.Counter()
+    for r in multi:
+        ap = [a for a, _s in r["applies"]]
+        multi_apply_order["ascending"] += ap == sorted(ap)
+        multi_apply_order["caster_first"] += ap[0] == r["caster"]
     return {
         "multi_apply_adjacent": sum(1 for r in multi if adjacent(r)),
         "multi_apply_with_speed": sum(1 for r in multi if r["speeds"]),
+        "multi_apply_order": dict(multi_apply_order),
+        "multi_word_by_kind": {k: dict(v) for k, v in sorted(multi_word_by_kind.items())},
         "own_multi_speed": len(own_multi),
         "own_multi_speed_with_word": len(own_multi_with_word),
         "own_multi_speed_wearer_first": sum(1 for r in own_multi_with_word
@@ -443,10 +483,14 @@ def main():
     print(f"  applies before speeds per batch: {s['applies_before_speeds']}")
     print(f"  the observer's batches with >= 2 speed words: {s['own_multi_speed']}, of "
           f"them with the wearer's own word {s['own_multi_speed_with_word']}, wearer's "
-          f"word FIRST {s['own_multi_speed_wearer_first']}; the observer's batches with "
+          f"word FIRST {s['own_multi_speed_wearer_first']} (and the wearer the LOWEST id "
+          f"in every one -- see by kind); the observer's batches with "
           f"no property 8 for the caster: {s['own_no_prop8']} of {s['own']}")
+    print(f"  multi-word batches by caster kind (ascending by agent id / caster's own "
+          f"word first / caster the lowest id): {s['multi_word_by_kind']}")
     print(f"  batches with >= 2 applies: {len(s['multi_apply'])} (applies adjacent "
-          f"{s['multi_apply_adjacent']}, with a speed word {s['multi_apply_with_speed']})")
+          f"{s['multi_apply_adjacent']}, with a speed word {s['multi_apply_with_speed']}, "
+          f"order {s['multi_apply_order']})")
     for row in s["multi_apply"]:
         print(f"    {row}")
     print("  batch shapes by type/kind (count, opcodes; [n] = 0x009F prop n):")

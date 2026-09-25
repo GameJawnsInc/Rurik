@@ -3679,7 +3679,16 @@ _INSTANT_UNWITNESSED = set()
 def _is_instant_skill(skill_id):
     """True for a skill retail announces with property 48 (the three witnessed
     types). An activation-0 NON-attack skill of another type answers False and
-    is named once, because its announce is unwitnessed either way."""
+    is named once, because its announce is unwitnessed either way.
+
+    THE TARGET IS THE OTHER AXIS, and the tape covers one side of it: the
+    eight skills cast on tape are all SELF-kind (target byte 0), so the
+    no-target `[48]` form on 0x009F is OBSERVED for a self-kind instant skill
+    and RECONSTRUCTION for the 15 vault rows of these types whose target kind
+    is foe / ally / other_ally (365, 869, 1141, 1412, 2353, 2358, 2359 foe;
+    1590, 1594, 1781 ally; 1572, 1591, 1599 other_ally; 1650 a foe stance;
+    1468 unkeyed) -- `instant_open` names one once when it is cast (the
+    review's CD-6)."""
     try:
         row = agents.WORLD.get("skills", str(skill_id))
     except Exception:                                          # noqa: BLE001
@@ -3695,6 +3704,17 @@ def _is_instant_skill(skill_id):
               f"spell's -- no tape shows which announce such a skill takes "
               f"[SKILLS-IA]", flush=True)
     return False
+
+
+def _instant_cast_open(cast):
+    """The player's BEGUN, uncompleted instant-skill entry (SKILLS-IA): the
+    one-tick window between its press or begin and its completion, which
+    retail does not have (the observer's E4, E5 and [48] share one stamp, 62
+    of 62). `_mark_cancelled` and `interrupt_player` treat it as no cast at
+    all (RECONSTRUCTION: no window, nothing to cancel); under
+    --no-instant-announce it answers False and the window is today's."""
+    return bool(INSTANT_ANNOUNCE and cast.get("begun", True) and not cast["e5_sent"]
+                and not cast["attack"] and _is_instant_skill(cast["skill_id"]))
 
 
 def _resolves_at_cast(skill_id):
@@ -5103,14 +5123,19 @@ PARTY_WIDE_SHOUTS = True
 INSTANT_ANNOUNCE = True
 # ...and the BATCH ORDER of a party-wide shout (56.7's other divergence): retail
 # sends every 0x0042 (each with its own cure and status word), and only then
-# every 0x0027 -- the wearer's word first, the other allies' after it. OBSERVED
-# 43 of 43 batches with an apply and a speed word (every word after the last
-# apply), 16 of 16 multi-word batches wearer-first, and 6 of 6 two-apply batches
-# with the applies adjacent; a batch with two applies AND speed words is on no
-# tape (348 moves no speed), so the composed order is RECONSTRUCTION from two
-# OBSERVED halves. `push_speed` is deferred across the wearers and flushed once.
+# every 0x0027 -- each run in ASCENDING AGENT ID. OBSERVED 43 of 43 batches with
+# an apply and a speed word (every word after the last apply); 39 of 39
+# multi-word batches ascending by agent id -- the caster's word is first ONLY
+# when the caster has the lowest id (the observer's 16 of 16; the team-mates'
+# 0 of 14 and the foes' 0 of 8 put the caster's word in its id's place); the
+# 6 two-apply batches (the hero's 348, caster 30) ascending too, the observer's
+# 29 ahead of the caster's 30, 6 of 6. A batch with two applies AND speed words
+# is on no tape (348 moves no speed), so the composed order is RECONSTRUCTION
+# from two OBSERVED halves. (The first cut read "wearer first" off the
+# observer's 16, where the wearer IS the lowest id -- the review's EV-2.)
+# `push_speed` is deferred across the wearers and flushed once, ascending.
 # --per-wearer-batch-order is the server as it was until today: apply, status,
-# speed per wearer, interleaved.
+# speed per wearer, interleaved, the caster's wearer first.
 PER_WEARER_BATCH_ORDER = False
 #
 # THE HEAL NUMBER (SKILLS-HN, studies/skills 42). Retail sends property 55
@@ -16710,6 +16735,16 @@ def _mark_cancelled(state, reason, now, spare_mid_attack):
             continue
         if spare_mid_attack and cast["attack"] and now >= cast["begin_at"]:
             continue                       # mid-activation attack skill
+        if _instant_cast_open(cast):
+            # SKILLS-IA: a BEGUN instant skill has no window on retail -- the
+            # observer's E4, E5 and [48] share one stamp, 62 of 62 -- so
+            # nothing can cancel it there; ours completes on the next tick
+            # (<= 50 ms, a named residual) and until 2026-09-25 that tick
+            # could be cancelled by movement, Esc or a knock-down, sending a
+            # [59] + E2 for a cast the client never saw start (the review's
+            # CD-5). RECONSTRUCTION: no window, no cancel. A QUEUED instant
+            # cast (begun False) is still un-queued like any other.
+            continue
         cast["cancelled"] = reason
         dropped += 1
     if dropped:
@@ -18881,6 +18916,11 @@ def interrupt_player(send, state, conn_id, by_skill, by_agent, mode=None):
         return None
     now = time.time()
     cast = _open_player_cast(state)
+    if cast is not None and _instant_cast_open(cast):
+        # SKILLS-IA: an instant skill is never "in activation" on retail (the
+        # E4 / E5 / [48] share one stamp, 62 of 62); our one-tick window is
+        # not a cast to interrupt. RECONSTRUCTION (_mark_cancelled's rule).
+        cast = None
     if cast is not None:
         if not (mode == "action" or (mode == "attacking" and cast.get("attack"))):
             return None
@@ -18986,6 +19026,12 @@ def interrupt_body(send, state, agent_id, agent, conn_id, by_skill, by_agent,
         skill_id = skills[slot][0]
         _atk = _is_attack_skill(skill_id)
         if not (mode == "action" or (mode == "attacking" and _atk)):
+            return None
+        if INSTANT_ANNOUNCE and not _atk and _is_instant_skill(skill_id):
+            # SKILLS-IA: a body's armed instant skill lands on the next tick
+            # and has no window on retail (the foes' 27 [48] batches carry no
+            # start at all); nothing to interrupt. RECONSTRUCTION, the
+            # player's rule (interrupt_player, _mark_cancelled).
             return None
         extra = skill_interrupt_disable(by_skill)
         recharge = float(agent.pop("cast_recharge",
@@ -21479,18 +21525,35 @@ def effect_table(state):
     return table
 
 
+_INSTANT_TARGETED_NAMED = set()
+
+
 def instant_open(send, caster_id, skill_id, who):
     """`0x009F [48, caster, skill]` -- agents.GV_INSTANT_SKILL_ACTIVATED, the
     INSTANT skill's announce (SKILLS-IA, studies/skills 56.9; instantjoin.py).
 
     OBSERVED 133 of 133 for the three instant types across 95 live
-    connections, every one on 0x009F (0 on 0x00A0: an instant skill names no
-    target), every one in the completion's batch -- for the observer's own
-    casts E4, the debit, E5, [48] at dt = 0, 62 of 62 -- and every one
-    followed by the caster's [21] visual. The value is the SKILL id, where
-    the spell's [58, agent, 0] carries nothing; sent by this server nowhere
-    until 2026-09-25 (the shout rode property 60, the spell's).
+    connections, every one on 0x009F and 0 on 0x00A0 -- for the eight SELF-kind
+    skills the tape carries; a targeted instant skill (15 rows of these types
+    in the vault's table: a foe shout, an ally shout) is cast on no tape, so
+    the no-target form for one is RECONSTRUCTION and is named once below
+    (the review's CD-6). Every one is in the completion's batch -- for the
+    observer's own casts E4, the debit, E5, [48] at dt = 0, 62 of 62 -- and
+    every one is followed by the caster's [21] visual. The value is the SKILL
+    id, where the spell's [58, agent, 0] carries nothing; sent by this server
+    nowhere until 2026-09-25 (the shout rode property 60, the spell's).
     """
+    if skill_id not in _INSTANT_TARGETED_NAMED:
+        try:
+            kind = skill_target_kind(int(skill_id))
+        except Exception:                                      # noqa: BLE001
+            kind = "self"
+        if kind != "self":
+            _INSTANT_TARGETED_NAMED.add(skill_id)
+            print(f"[skills] instant skill {skill_id} targets {kind!r}: announced "
+                  f"with the no-target [48] the eight self-kind skills on tape "
+                  f"take -- no targeted instant skill is on any tape "
+                  f"(RECONSTRUCTION) [SKILLS-IA]", flush=True)
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
          [agents.GV_INSTANT_SKILL_ACTIVATED, caster_id, int(skill_id)],
          f"instant skill: {who} uses {skill_id}")
@@ -21507,8 +21570,9 @@ def instant_speech(send, state, caster_id, skill_id, conn_id, who):
     and type-16 announces: the bubble is the SHOUT's, not the instant skill's.
     The string16 is ONE coded id (codedstr, no marker): 25944 for 364 and
     25911 for 348, each the archive's third record of the skill's block, NOT
-    its name id (name_id + 2 on both, and that offset is no rule -- 16 of the
-    52 corpus shouts have no third record before the next skill's name). So
+    its name id (name_id + 2 on both, and that offset is no rule -- 10 of the
+    52 corpus shouts, spaced 1 or 2 from the next skill's name, have no room
+    for a third record, and the 6 spaced 4 or wider are untested). So
     the id is a per-row fact in content/world.toml's `skill_speech` block,
     committed as an id and resolved by the CLIENT from its own archive; a
     shout with no row sends no bubble and says so once, never a guessed id.
@@ -21569,6 +21633,14 @@ def send_skill_visual(send, state, caster_id, skill_id, target_id, conn_id):
     try:
         row = agents.WORLD.get("skill_visual", str(skill_id))
     except Exception:
+        return
+    if not INSTANT_ANNOUNCE and row.get("since") == "SKILLS-IA":
+        # THE REVERT ARM IS EXACT. The seven instant-skill rows (364, 348, 10,
+        # 349, 379, 455, 1217) came in with SKILLS-IA and carry `since =
+        # "SKILLS-IA"`; --no-instant-announce is "the server as it was until
+        # 2026-09-25", and that server had no row for them, so under the flag
+        # they send nothing. (The review's EV-1 / CD-1: the first cut sent
+        # the [21] under both arms and called the arm "today's bytes".)
         return
     caster_vis = row.get("caster")
     if caster_vis is not None:
@@ -21890,33 +21962,37 @@ def apply_effect(send, state, caster_id, skill_id, rank, target_id, conn_id):
     if party and not PER_WEARER_BATCH_ORDER:
         # SKILLS-IA (2026-09-25, skills 56.9): RETAIL'S BATCH ORDER -- every
         # 0x0042 (each with its own cure and status word), THEN every 0x0027,
-        # the wearer's word first and the other allies' after it. 43 of 43
-        # apply+speed batches put every word after the last apply, 16 of 16
-        # multi-word batches lead with the wearer's, 6 of 6 two-apply batches
-        # hold the applies adjacent; a two-apply batch WITH speed words is on
+        # each run in ASCENDING AGENT ID. OBSERVED: 43 of 43 apply+speed
+        # batches put every word after the last apply; 39 of 39 multi-word
+        # batches are ascending by agent id, and the caster's word leads
+        # only when the caster is the lowest id (the observer's 16 of 16;
+        # 0 of the 22 team-mate and foe casts); the 6 two-apply batches (the
+        # hero's 348, caster 30) are ascending too -- the observer's 29
+        # ahead of the caster's 30, 6 of 6. The first cut sent the wearer's
+        # own apply and word first, read off the observer's batches where
+        # the wearer IS the lowest id (the review's EV-2); for the player
+        # (agent 1) the bytes are the same either way, for a hero or a body
+        # they now follow the tape. A two-apply batch WITH speed words is on
         # no tape (348 moves no speed), so the composition is RECONSTRUCTION
         # from two OBSERVED halves. push_speed defers into `speed_deferred`
         # while the applies go out (the cure's own restore word included --
         # retail's 191.52 / 383.04 pair sits behind the E3 too, slice 48.2)
-        # and the words are flushed here, once per agent, in wearer order.
+        # and the words are flushed here, once per agent, ascending.
         # --per-wearer-batch-order is the interleave this server sent until
-        # today.
+        # today, the caster's wearer first.
+        wearers = sorted({wearer, *shout_wearers(state, caster_id, row, wearer,
+                                                 conn_id)})
         state["speed_deferred"] = []
+        eps = {}
         try:
-            ep = _apply_effect_on(send, state, caster_id, skill_id, rank, wearer,
-                                  conn_id, row, erow, family, duration)
-            for ally in shout_wearers(state, caster_id, row, wearer, conn_id):
-                _apply_effect_on(send, state, caster_id, skill_id, rank, ally,
-                                 conn_id, row, erow, family, duration)
+            for w in wearers:
+                eps[w] = _apply_effect_on(send, state, caster_id, skill_id, rank, w,
+                                          conn_id, row, erow, family, duration)
         finally:
             deferred = state.pop("speed_deferred", [])
-        flushed = set()
-        for aid in deferred:
-            if aid in flushed:
-                continue
-            flushed.add(aid)
+        for aid in sorted(set(deferred)):
             push_speed(send, state, aid, conn_id)
-        return ep
+        return eps.get(wearer)
     ep = _apply_effect_on(send, state, caster_id, skill_id, rank, wearer, conn_id,
                           row, erow, family, duration)
     if party:
@@ -30048,6 +30124,11 @@ def land_skill(send, state, agent_id, agent, conn_id):
              f"agent {agent_id} finishes casting {skill_id}")
         resurrect_target(send, state, agent.get("cast_target"), conn_id,
                          agent_id, skill_id)
+        if _inst and slot is not None and slot < len(skills):
+            # SKILLS-IA: the deferred E3 closes every exit (no instant-type
+            # row resurrects in the vault's table, 0 of 149; the review's EV-4
+            # / CD-4 found the dead-target exit below dropping it).
+            hero_skill_e3(send, agent_id, agent, skill_id)
         return
     # SLICE-H3: the cast's target may be a party body (a hostile's pick).
     _tid = agent.get("cast_target") or PLAYER_AGENT_ID
@@ -30067,11 +30148,22 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # returned above, and a corpse is exactly what it wants.
     if _tid != agent_id and target_dead(state, _tid):
         agent["casting"] = None
-        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-             [agents.GV_SKILL_FINISHED, agent_id, 0],
-             f"agent {agent_id} finishes casting {skill_id} (its target died)")
+        if _inst:
+            # SKILLS-IA: the close an instant skill sends for every finished
+            # cast is the [48] (the rule the [58] line below states for a
+            # spell); no targeted instant skill is cast on any tape, so this
+            # exit is RECONSTRUCTION twice over -- the [48] by that rule, and
+            # the hero's E3 behind it because b50da5c8 sent the E3 here and
+            # the first cut dropped it (the review's EV-4 / CD-4).
+            instant_open(send, agent_id, skill_id, f"agent {agent_id}")
+        else:
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                 [agents.GV_SKILL_FINISHED, agent_id, 0],
+                 f"agent {agent_id} finishes casting {skill_id} (its target died)")
         print(f"[c{conn_id}] agent {agent_id}'s skill {skill_id} lands on "
               f"NOTHING: agent {_tid} died during the cast", flush=True)
+        if _inst and slot is not None and slot < len(skills):
+            hero_skill_e3(send, agent_id, agent, skill_id)
         return
     _tbody = _tid != PLAYER_AGENT_ID and _tid in state.get("agents", {})
     # SLICE-H8: the caster's OWN rank in this skill's attribute when its row
@@ -30182,9 +30274,16 @@ def land_skill(send, state, agent_id, agent, conn_id):
     _na_body_req = 0 if _is_attack_skill(skill_id) else skill_chain_fields(skill_id)[1]
     if _na_body_req:
         agent["casting"] = None
-        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-             [agents.GV_SKILL_FINISHED, agent_id, 0],
-             f"agent {agent_id} finishes casting {skill_id}")
+        if _inst:
+            # SKILLS-IA: the same two RECONSTRUCTIONs as the dead-target exit
+            # (no instant-type row carries a chain requirement, 0 of 149).
+            instant_open(send, agent_id, skill_id, f"agent {agent_id}")
+            if slot is not None and slot < len(skills):
+                hero_skill_e3(send, agent_id, agent, skill_id)
+        else:
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                 [agents.GV_SKILL_FINISHED, agent_id, 0],
+                 f"agent {agent_id} finishes casting {skill_id}")
         print(f"[c{conn_id}] agent {agent_id}'s skill {skill_id} must follow "
               f"{chain.requirement_name(_na_body_req)} and a body carries no chain: it "
               f"lands on NOBODY ("
@@ -40462,8 +40561,11 @@ def main():
         INSTANT_ANNOUNCE = False
         print("NO INSTANT ANNOUNCE: a stance / shout / type-16 skill is announced "
               "with property 60 at the press and [58] at the completion, no [48], "
-              "no [21] for the seven new skill_visual rows' ids, no speech bubble, "
-              "as this server did until 2026-09-25 (retail: 133 of 133 on [48], "
+              "no [21] for the seven skill_visual rows marked since = SKILLS-IA "
+              "(364, 348, 10, 349, 379, 455, 1217; 346's row predates the lane and "
+              "still sends), no speech bubble, a hero's E3 beside its E5, and the "
+              "one-tick window before the completion cancellable again -- this "
+              "server's bytes until 2026-09-25 (retail: 133 of 133 on [48], "
               "instantjoin.py) [SKILLS-IA]", flush=True)
 
     if a.per_wearer_batch_order:

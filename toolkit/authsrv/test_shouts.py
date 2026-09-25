@@ -196,9 +196,15 @@ def section_sender():
               "a hero at (500, 0) shouting reaches the player at 500 u and the henchman "
               "at 200 u; the hero at 1100 u away is out of earshot",
               f"{_wearing(st, CHARGE)}")
-        check([v[0] for v in [v for o, v in sent if o == APPLY]] == [HERO, P],
-              "the hero's 0x0042 then the PLAYER's 0x0042 -- the hero-to-player apply "
-              "retail shows 6 times", f"{[v for o, v in sent if o == APPLY]}")
+        # THE ORDER IS THE TAPE'S (SKILLS-IA's review pass, 2026-09-25): all six
+        # hero-to-player batches put the OBSERVER's 0x0042 (agent 29) ahead of the
+        # hero's own (30) -- ascending agent id, 6 of 6 -- so the player's apply
+        # comes first here, not the caster's. This check pinned [HERO, P] until
+        # that day, the shape those six batches refute.
+        check([v[0] for v in [v for o, v in sent if o == APPLY]] == [P, HERO],
+              "the PLAYER's 0x0042 then the hero's own -- ascending agent id, the order "
+              "of all 6 hero-to-player batches on 20260914T005758 (29 before 30)",
+              f"{[v for o, v in sent if o == APPLY]}")
 
         # THE BOUNDARY IS INCLUSIVE.
         sent, send, st = _fake(far=(1000.0, 0.0))
