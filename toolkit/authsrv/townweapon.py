@@ -152,6 +152,23 @@ no 0x0199; reproduced by test_townweapon.py section 2):
     nothing about a regime read). Our own town 0x006E carried the hand (run
     20260923T210546, c1 seq 100: visual 0 = item 1 under a map-148 outpost
     load) and the body stood armed -- consistent with the shared store above.
+  * THE TOWN ARMOUR (CLEANUP-3, 2026-09-24). Until this day the item
+    planners were handed `visuals=instance_is_field(state)`, so an equip,
+    unequip or drag of an ARMOUR piece in a town planned no 0x006F at all --
+    0x014B / 0x0152 alone -- and the world body kept the old piece while the
+    doll changed (measured on the real handlers: TOWN 0x0030 head -> 0x014B
+    [1, 7, 1, 4]; FIELD -> 0x014B + 0x006F [1, 6, 7]). Retail's rule is THE
+    SLOT (above): armour visuals ARE written in a town (the own PvP head, 31
+    strangers'), the hands are not. `visual_planned` is that rule PER SLOT
+    for the planners (itemstore's `visuals` takes a callable): a field plans
+    every slot, a town plans an armour or costume slot and NEVER a hand --
+    the lane first planned the town's hands too and left them to `drops`,
+    and under --no-town-weapon-strip (the gate's revert arm) a town hammer
+    equip then sent 0x006F [player, 0, item], which no run ever did (the
+    review's RV-2); now the strip governs the weapon-set switch alone, as
+    its contract says. visstatus still zeroes a hidden kind. RECONSTRUCTION
+    for the town armour EQUIP (no own outpost 0x0030 of an armour piece is
+    on any tape); the revert is --no-town-armour-visuals.
   * WHAT THIS DOES NOT TOUCH: the equipped BAG (0x013E / 0x014B / 0x0152 --
     the doll and the weapon-set panel read it, and retail's outpost switches
     still moved the items), the 0x0147 / 0x0148 set declarations, the
@@ -205,6 +222,30 @@ def drops(slot, explorable):
     field; never an armour or costume slot (the town's one own-body 0x006F
     was the head's)."""
     return int(slot) in HAND_SLOTS and not hands_shown(explorable)
+
+
+def visual_planned(slot, explorable, town_armour=True):
+    """Does an equip / unequip / drag PLAN the player's 0x006F into VISUAL
+    `slot` in this regime? A field: every slot -- retail rode one on every
+    own-agent equip and unequip there (7 of 7, itemstore.py). A town: an
+    ARMOUR or costume slot when `town_armour` (the default; CLEANUP-3,
+    2026-09-24) -- retail writes armour visuals in an outpost, the one
+    own-body outpost 0x006F on tape being the head's ([336, 6, 23284], the
+    PvP panel's creation straight into equipped (843, 4), 20260917T160915
+    :58557) and 31 strangers' outpost armour writes; no own outpost 0x0030 of
+    an armour piece is on any tape (the five outpost equips/moves were all
+    weapons), so a town armour equip's 0x006F is RECONSTRUCTION from the
+    head's precedent -- and NEVER a hand, whatever `town_armour` says: every
+    own outpost hand change is silent on retail (0 of 14) and no run of ours
+    sent one either, so it is not the strip's to drop (the CLEANUP-3 review,
+    RV-2: with the town's hands planned and left to `drops`, the gate's own
+    revert arm --no-town-weapon-strip sent a town hammer equip's [player, 0,
+    item], which that arm's contract -- the switch's 0x006F, every run before
+    2026-09-23 -- never included). `town_armour=False` is the pre-CLEANUP-3
+    arm (--no-town-armour-visuals): nothing planned in a town."""
+    if explorable:
+        return True
+    return int(slot) not in HAND_SLOTS and bool(town_armour)
 
 
 def strip_hands(worn, explorable):

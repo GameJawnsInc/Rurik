@@ -15,10 +15,14 @@ python tools/viewer/modelviewer.py --smoke C:\scratch\out  # drive every panel o
 ```
 
 Left: **Models** (search by id, hex or decimal; `row N`; filters for skeletons, for the
-skeletons the wire names as creature shells, and for collision), **Templates** (`content/npcs.toml` rows, drawn as the client composes them:
-body mesh, shell skeleton), **Maps** (`content/maps.toml` rows; picking one lists only
-the props that map references). Right: toggles, a per-slot texture override, the info
-pane, export and screenshot. Drag orbits, right-drag pans, wheel zooms, double-click fits.
+skeletons the wire names as creature shells, and for collision; thumbnails render
+lazily for the rows in view, one per event-loop turn, and the menu action still renders
+every listed model at once), **Templates** (`content/npcs.toml` rows, drawn as the
+client composes them: body mesh, shell skeleton), **Maps** (`content/maps.toml` rows;
+picking one lists only the props that map references; the map → model index is cached
+under the vault, so the tab opens in about a second after its first ~20 s build). Right:
+toggles, a per-slot texture override, the info pane, export and screenshot. Drag orbits,
+right-drag pans, wheel zooms, double-click fits.
 
 ## Why `PySide6` is allowed here and nowhere under `toolkit/`
 
@@ -88,14 +92,22 @@ generic human male skeleton: 36 bodies over 18 tapes, "Hatcher [Collector]" one 
 `test_modelcatalog.py` covers the stdlib half in the suite. The window itself is not a
 suite test (PySide6 is not bare-machine), so `--smoke DIR` drives it by hand: every tab,
 the hatcher template join, the Kamadan map filter, the search and shell filters, a grab
-of the on-screen frame scored for coverage, and three offscreen thumbnails -- 18 steps,
-`[PASS]`/`[FAIL]` per line, non-zero exit on any failure. Run it before committing a
-viewer change; `--shot` renders one frame the same way for a look.
+of the on-screen frame scored for coverage, three offscreen thumbnails, and the lazy
+thumbnails arriving for the rows in view and again after a scroll to the end -- 20
+steps, `[PASS]`/`[FAIL]` per line, non-zero exit on any failure. Run it before
+committing a viewer change, always with a timeout (the offscreen QPA hangs outside
+`--smoke`); `--shot` renders one frame the same way for a look. The run is
+self-contained: the Maps step opens the tab once untimed (building the map index if
+the vault cache lacks it, 20-30 s) and holds the SECOND open under 5 s, and the lazy
+step empties its own `thumbs-lazy` directory first -- so the same `DIR` can be reused
+and a fresh vault cache is not a failure.
 
 ## Where files go
 
 The catalog cache (`vault/cache/modelcatalog/catalog-<mft sha>.json`, ~15 s to build on
-first run, stamped and refused against another archive state) and thumbnails
+first run, stamped and refused against another archive state), the map index
+(`.../maps-<mft sha>.json`, keyed by map FILE id so a content-row change costs one decode
+and never a rebuild; `test_modelcatalog.py` §4b) and thumbnails
 (`.../thumbs/<sha>/<fid>.png`) live under the vault. Screenshots go through
 `vaultpath.resolve_out` — the vault or a scratch directory, never the working tree.
 Exports call `modelexport` / `unitexport`, which refuse the tree themselves.

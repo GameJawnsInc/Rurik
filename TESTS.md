@@ -912,9 +912,16 @@ Every one of these, in the order they were written:
   the archive -- and, since the second build of the day, that a plain `--build`
   KEEPS a present archive before any size test: every archive write changes its
   size, and the size test copied the pristine snapshot over a composed archive.
-  Floor 26, MEASURED 2026-09-12 (24 before the corridor joined the manifest and
-  the keep rule was pinned). No vault, no archive, no client;
-  ~2 s),
+  **Section 5 (2026-09-24, DESKWORK-D11 step 7, floor 26 -> 29): `--plan` prints
+  the MFT ROW BUDGET** -- WORLDMAPS-W6's "rows bind, bytes never do" as a number:
+  `row_budget` reads slack rows (`-mft_size % 512` over 24) plus claimable erased
+  rows off `test_datplan`'s two fixtures (1 + 4 on the 20-row table, 10 + 0 on
+  the 11-row one, both decided by the fixture's declared length, not by the
+  module), and `budget_lines` names `--fresh` as what restores it and says that
+  client sessions SPEND rows; on the slice archive the plan reads 0 + 1 where the
+  pristine source reads 17 + 0. Floor 26 MEASURED 2026-09-12 (24 before the
+  corridor joined the manifest and the keep rule was pinned). No vault, no
+  archive, no client; ~2 s),
   `toolkit/mapdata/test_skillnames.py` (the 188 authored skill names a custom
   profession needs -- the text sibling of `glyphs.py`, and like it the file is
   mostly about the INDEX ARITHMETIC, because "188 names came out and they are
@@ -1616,7 +1623,45 @@ Every one of these, in the order they were written:
   `(row - 1) * 24` kept as the control that must land on row N-1 -- and the bound is
   refused AS a bound, since row 0 reached `entries[-1]` and planned a write to the LAST
   row of the table, which a "some blocker" predicate passes because that row's
-  reservation is 0 bytes. Floor 30 -> 38),
+  reservation is 0 bytes. Floor 30 -> 38.
+  **§10 added 2026-09-24, floor 44 -> 60: a generation whose HEAD was overwritten
+  (DESKWORK-Q4).** Every check before it rests on the `Mft\x1a` header -- the
+  signature finds it, §9's projection reads its count -- and on `dat_study_38833`
+  the live file-id table sits where a stale generation's header was, so its
+  2,892,800 B tail carried no magic, no extent reached it, and it was the LARGEST
+  USABLE RUN in the archive, 100.0% live table rows (the slice archive's
+  0xF8A5E200 the same shape at 99.8%). The third rule, `datplan.mft_content`,
+  parses a run's bytes as 24-byte records at six 4-byte phases and withholds on
+  at least 8 records byte-identical to live rows AND a majority of the non-zero
+  ones. §10 plants that shape with no magic anywhere (a check asserts `scan_run`
+  finds nothing, so what follows is the third rule's alone) and puts a CONTROL
+  beside each term: the same rows amid payload junk stay usable (the majority --
+  junk is the client's own evidence it reused the region; the 38797-line copies
+  carry a dozen such slivers), three rows in zeros stay usable (the count), empty
+  space stays usable, and the six-phase search is shown load-bearing (phase 0
+  alone scores zero). The refutation: with §1-9's usable list a 6-block payload
+  is placed inside the tail; with the third rule it is BLOCKED, and the plan's
+  line for that run names the kind and the count. Four scratch sabotages redden
+  it -- the rule off (6), the majority off (4), the count off (4), one phase
+  (6); the last check's first version read the kind's words anywhere in the plan
+  and passed the first arm, so it reads the run's own line. **Floor 60 -> 61
+  (the lane's review, RV-10): the chunk-boundary check** -- `mft_content` reads
+  a run in `MFT_CONTENT_CHUNK` pieces and tests the one record per phase that
+  straddles each boundary, and the default chunk (1,049,088 B) is larger than
+  any fixture run, so nothing exercised that branch; read in 96-byte chunks (a
+  multiple of 24, so phases keep alignment) two of the planted LIVE rows -- body
+  rows 4 and 8, at phase 8 -- straddle the boundaries at 96 and 192 and exist
+  only as records that branch assembles, so the chunked tuple must equal the
+  whole-run tuple with all 10 identical; the geometry is computed in the check,
+  and three scratch mutations of the branch -- off, halves swapped, the wrong
+  tail bytes -- each redden that check alone. (Re-cut 2026-09-24 for the
+  review's RV2-3: the first version chunked at 1,536 B, but the planted body
+  ends at byte 464 of the run, so every straddled record was zero and the two
+  mis-assembly mutations passed it -- it caught the branch missing and nothing
+  about what it assembled.) The
+  mark's text is neutral since the same review (RV-8): it states the count, the
+  fraction and the phase and asserts no mechanism, because the rule also
+  withholds one-block slivers at 57-86 % that are not overwritten heads),
   `toolkit/mapdata/test_datalloc.py` (the THIRD write verb: rows that did not
   exist, and the file id that makes the client able to name them. `--replace`
   needs a row, `datmove` needs a row; both start from one ArenaNet made, which is
@@ -3392,7 +3437,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   cannot mean the detector is blind. Floor 16; sections 1-4 print a `skip`
   without the vault. No socket, no client. ~4 s),
   `toolkit/authsrv/test_movement_fidelity.py`,
-  `toolkit/authsrv/test_agentlife.py` (**2026-09-20, SANDBOX-B3: two locks moved with the code, no new checks -- the SLICE-H2c order lock now finds the per-hero level print (`level {_hlv} on hero agent`), and the SLICE-H7 weapon check expects a Warrior party body to hold `starter_sword` (the row landed at SLICE-H9; `PARTY_WEAPON_ITEMS` said `None` until today) and a row's own class (`party_weapon_item(npc, "hammer")`) to win; floor 551 unchanged. 2026-09-23, DESKWORK-D1 step 4 / SANDBOX-N2: +1 -- the PLAYER_CREATE -> SIZE -> LEADER order walk is scoped to `_handle_request_players` (the add's 0x00B0 read as load order otherwise) and the `party_bodies_here(state)` site count is 7 (the add's); floor 551 -> 552.** Earlier: **2026-09-17, CAST-TARGET-DIED: `section_cast_target_died` -- the owner saw Restore Condition cast on a dead bandit. The pick never chooses a corpse; the LANDING never re-asked, so an ally-target cast whose target died during its second resolved anyway (the pre-fix tree sent Orison's heal word at the CASTER and played 276's visual on the body -- reproduced on main before the fix). Through the real `land_skill`: the living hurt ally gets `[55, ally, caster, +h]` (the arm that can fail), a dead target gets the caster's close and nothing else for 281 and for 276, and a resurrection still stands its corpse up. Floor 547 -> 551.** Earlier: **2026-09-16, MONSTERAI-J: `section_passive_hostiles` -- a row's `passive = true` notices nothing until the player or a party body hits it (no pick, no chase, no swing, no cast; the arm that makes each mean something is the same row after the hit), the hit provokes the row AND every passive row sharing its `group` unhit while another group stands, armour-ignoring damage provokes, a HOSTILE's hit does not, a row that says nothing picks at proximity as before, and `--no-passive-hostiles` reverts. Retail: four level-1 definitions and a level-2 Warrior let the player stand inside 170-950 u (`studies/monsterai/FINDINGS.md` 12.6-12.7). +11; floor 536 -> 547.** **2026-09-15 (probe-walk noise): a green run printed 97 lines reading `[FAIL] <probe>: malformed -> ValueError: GAME_SMSG 0x0000 wants 1 values, got 0`. None was a broken probe: `section_probe_encoding`'s CONTROL monkeypatches `probes.get` to hand ONE deliberately malformed step (label `malformed`, opcode 0x0000, no values, `sends=True`) to the walk under `quiet=True`, only `get` was patched so the walk fed it to all 97 names in `probes.names()`, and `check_encodable`'s `[FAIL]` print ignored `quiet`. The verdict never saw them -- the real walk runs on the real registry BEFORE the patch, so `checked=552` was and is correct to exclude them, and the ledger reads no stdout. Fix: `check_encodable` honours `quiet` for failures and returns them by name in `counts['failures']` (probe, label, refusal), which the red line now prints so silence costs no diagnostic; the CONTROL pins `probes.names` to one synthetic name and runs under `redirect_stdout`. +2: the captured output is EMPTY (sabotage -- the print made unconditional again -- reddens this one check and nothing else) and `counts['failures']` names `('control', 'malformed', ...)`; floor 534 -> 536 from the green run.** **2026-09-15 (later): `offset_y` is HONOURED -- `population.enemy_spots` tries the exact (offset_x, offset_y) point first, then the compass ring at that point's distance; until now only offset_x was read, as the radius, and the owner's (300, -1200) spawned the hostile due east. +2; the existing ring check pins ENEMY_OFFSET at (300, 0) itself instead of reading world.toml; floor 530 -> 532.** **2026-09-15, MONSTERAI-N3: the `section_constants` pin for `AGGRO_RANGE` moves 1200 -> 1012 and its label OURS -> CORROBORATED (the wiki's Danger Zone radius, and the one unprovoked retail reaction with both positions on the wire brackets it at [992, 1105], `studies/monsterai/FINDINGS.md` 11); the ANIMREF-RE 42.5 off-mesh fixture point moves from (600, 950) = 1,123 u to (300, 950) = 996 u so the follow still opens inside the new radius -- the two checks that reddened were the fixture standing outside it, not the plane words; floor 530 unchanged.** **2026-09-14 (late night), DAMAGE-INT: the party body's swing takes 11 off the foe at AR 35 — 11.7 truncated; floor 530 unchanged.** **SKILLS-HN (2026-09-09): `dmg_floats`
+  `toolkit/authsrv/test_agentlife.py` (**2026-09-24, DESKWORK-D8 steps 3 and 4 FIXER: `section_leash_caster_review` (+23, floor 596 -> 619 from the green run) folds in the review's corrections, each reddened under a sabotage of its guard (the lane's `sabotage2.py` in scratch): CD-1/EV-4 a not-engaged caster casts no further than AGGRO_RANGE (1100 u silent, 1000 u casts, engaged uses the full range); CD-2 a leash under AGGRO_RANGE does not loop (a player standing 800 u from the anchor with leash 600 is never noticed, 500 u is); EV-2 a displaced body with no bout and a target beyond AGGRO_RANGE of the copy walks HOME (a RETURN leg, not a chase), a locked bout still chases; CD-8 a body killed while returning drops the return in the dead branch (no revive jump); CD-9 `hostile_caster` is False under `--legacy-npc-chase`; EV-1 `_caster_skill_reach` reads a row's `touch_range`/`half_range` (FLAG_TOUCH_RANGE 0x2 / FLAG_HALF_RANGE 0x8, added to `skilltable.py`) -- a touch skill is a melee reach, a half skill half the cast range, neither present in the build-38797 table so full range today, and an engaged caster HOLDS a melee-reach skill rather than lobbing it; CD-5 the engaged terms (`_hostile_engaged` via LEASH_HOME_RADIUS and via target_locked), HOME clearing the bout with the lock SET first, the dwell clock continuous (out 2.9 s, back, out again does not give up 0.15 s later), and the row/fixture plumbing functional (a patched ENEMY_LEASH/ENEMY_CAST_RANGE reaches a spawned body; `--enemy-cast-range` wired in main() through a global); EV-8 a standing fight 1400 u from home gives up ~3 s later (RECONSTRUCTION outside the fleeing-target regime). Also the pre-existing `section_leash_return` planted-record check was rewritten from the vacuous `not _swings(st) is None` to drive both ticks (EV-9/CD-4), and the row-leash check now NOTICES inside the leash then runs out (CD-2 clamps the notice). Study: studies/monsterai/FINDINGS.md 15 MONSTERAI-L1..L6.** **2026-09-24, DESKWORK-D8 steps 3 and 4: `section_leash_return` (+26) and `section_caster_opening` (+18); floor 552 -> 596 from the green run.** The leash: `create_agent_world` records the SPAWN ANCHOR once (a burrow re-create keeps it); a fleeing player is chased past AGGRO_RANGE from the copy while inside 1,350 u of the anchor, the dwell clock starts at the crossing, 0.1 s short of 3.0 s it is still chasing, and at the dwell the chase ends in ONE 0x0029 toward home -- no 0x0028, no 0x002B; the legs home are 500 u apart and leave when the copy reaches the last (1.74 s at 288 u/s; retail p50 1.75), the last leg's point IS the anchor, nothing else rides the return, HOME clears the bout; on the way it opens no swing at a player in reach and picks nobody, a swing armed at the give-up lands (F21); a row's `leash = 600` is read (the default 1350 does not fire at 700); the constants are pinned as literals; the return runs the corridor's vertex (route()) never past it; party bodies untouched (the hero follow at leash = inf follows forever; a melee hero's chase at leash = None still halts with the OLD 1012 u leash; HERO_FOLLOW_LEASH inf); an anchor-less fixture keeps the old halt; a target past AGGRO_RANGE from the copy but inside the circle is chased; `--no-leash-return` reverts byte for byte and ignores a planted record; the stale "nothing has measured retail's leash" is gone from the source. The caster: a Monk hostile with a spell and empty hands is a caster at the WIKI 1,248 (a row's `cast_range` overrides) and NOT a Warrior with the same bar, an archer, an attack-skill bar, an empty bar, a party body or a body with no `npc` row (`party_reach` untouched); inside range the move tick sends nothing and the attack tick casts [60, npc, player, skill] with no attack_started; a Warrior with the same bar walks in (the profession is the arm); outside a 600 u range the opening is a rate and ONE 0x0029 to 596 u (NPC_LEG_DONE inside range), one bare 0x0028 on the clock, no 0x002A ever, the copy 596 u out (never the 80 u disc), then the cast; with its spell recharging it holds at 900 u and punches at 85; a corridor's vertex comes first, still a 0x0029; `--no-caster-opening` charges by a 0x002A and refuses the cast from 900 u. Each check was reddened under a sabotage of the thing it guards (no anchor, no dwell, one long leg, a halt at the give-up, the anchor read for allies, the return ignored by the attack tick, the row's leash dropped, the chord for the corridor, nobody a caster, the caster following, the caster punching, the range point on the player, the old sentence restored) -- the lane's `run_sections.py` in its scratch. Retail: studies/monsterai/FINDINGS.md 15, MONSTERAI-L1..L5.** Earlier: **2026-09-20, SANDBOX-B3: two locks moved with the code, no new checks -- the SLICE-H2c order lock now finds the per-hero level print (`level {_hlv} on hero agent`), and the SLICE-H7 weapon check expects a Warrior party body to hold `starter_sword` (the row landed at SLICE-H9; `PARTY_WEAPON_ITEMS` said `None` until today) and a row's own class (`party_weapon_item(npc, "hammer")`) to win; floor 551 unchanged. 2026-09-23, DESKWORK-D1 step 4 / SANDBOX-N2: +1 -- the PLAYER_CREATE -> SIZE -> LEADER order walk is scoped to `_handle_request_players` (the add's 0x00B0 read as load order otherwise) and the `party_bodies_here(state)` site count is 7 (the add's); floor 551 -> 552.** Earlier: **2026-09-17, CAST-TARGET-DIED: `section_cast_target_died` -- the owner saw Restore Condition cast on a dead bandit. The pick never chooses a corpse; the LANDING never re-asked, so an ally-target cast whose target died during its second resolved anyway (the pre-fix tree sent Orison's heal word at the CASTER and played 276's visual on the body -- reproduced on main before the fix). Through the real `land_skill`: the living hurt ally gets `[55, ally, caster, +h]` (the arm that can fail), a dead target gets the caster's close and nothing else for 281 and for 276, and a resurrection still stands its corpse up. Floor 547 -> 551.** Earlier: **2026-09-16, MONSTERAI-J: `section_passive_hostiles` -- a row's `passive = true` notices nothing until the player or a party body hits it (no pick, no chase, no swing, no cast; the arm that makes each mean something is the same row after the hit), the hit provokes the row AND every passive row sharing its `group` unhit while another group stands, armour-ignoring damage provokes, a HOSTILE's hit does not, a row that says nothing picks at proximity as before, and `--no-passive-hostiles` reverts. Retail: four level-1 definitions and a level-2 Warrior let the player stand inside 170-950 u (`studies/monsterai/FINDINGS.md` 12.6-12.7). +11; floor 536 -> 547.** **2026-09-15 (probe-walk noise): a green run printed 97 lines reading `[FAIL] <probe>: malformed -> ValueError: GAME_SMSG 0x0000 wants 1 values, got 0`. None was a broken probe: `section_probe_encoding`'s CONTROL monkeypatches `probes.get` to hand ONE deliberately malformed step (label `malformed`, opcode 0x0000, no values, `sends=True`) to the walk under `quiet=True`, only `get` was patched so the walk fed it to all 97 names in `probes.names()`, and `check_encodable`'s `[FAIL]` print ignored `quiet`. The verdict never saw them -- the real walk runs on the real registry BEFORE the patch, so `checked=552` was and is correct to exclude them, and the ledger reads no stdout. Fix: `check_encodable` honours `quiet` for failures and returns them by name in `counts['failures']` (probe, label, refusal), which the red line now prints so silence costs no diagnostic; the CONTROL pins `probes.names` to one synthetic name and runs under `redirect_stdout`. +2: the captured output is EMPTY (sabotage -- the print made unconditional again -- reddens this one check and nothing else) and `counts['failures']` names `('control', 'malformed', ...)`; floor 534 -> 536 from the green run.** **2026-09-15 (later): `offset_y` is HONOURED -- `population.enemy_spots` tries the exact (offset_x, offset_y) point first, then the compass ring at that point's distance; until now only offset_x was read, as the radius, and the owner's (300, -1200) spawned the hostile due east. +2; the existing ring check pins ENEMY_OFFSET at (300, 0) itself instead of reading world.toml; floor 530 -> 532.** **2026-09-15, MONSTERAI-N3: the `section_constants` pin for `AGGRO_RANGE` moves 1200 -> 1012 and its label OURS -> CORROBORATED (the wiki's Danger Zone radius, and the one unprovoked retail reaction with both positions on the wire brackets it at [992, 1105], `studies/monsterai/FINDINGS.md` 11); the ANIMREF-RE 42.5 off-mesh fixture point moves from (600, 950) = 1,123 u to (300, 950) = 996 u so the follow still opens inside the new radius -- the two checks that reddened were the fixture standing outside it, not the plane words; floor 530 unchanged.** **2026-09-14 (late night), DAMAGE-INT: the party body's swing takes 11 off the foe at AR 35 — 11.7 truncated; floor 530 unchanged.** **SKILLS-HN (2026-09-09): `dmg_floats`
   reads DAMAGE properties only** — it read every `0x00A3` float, which was fine
   while an overheal sent nothing; the enemy's Restore Condition on its own full
   pool now sends one positive 55 (retail does), and the cast section pins that
@@ -6658,10 +6703,37 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   `handle_hero_add` size through `party_size_on_wire` (the old sum is the mutation) and
   the hero add refuses at the same cap; `party_size_on_wire` reads
   PARTY_SIZE_COUNTS_HEROES; 0x009F is OFF the DROPPED_ON_PURPOSE allowlist (put back in
-  memory as the mutation). Drives the real functions with a fake send and a scratch
-  state. Floor 49 = the bare-machine core, measured with RURIK_VAULT at an empty
-  directory (64 with the vault; the landing's floor of 27 was above its own bare run of
-  23 -- HENCH-EVR-2 / ENG-HENCH-2), ~9 s),
+  memory as the mutation). THE KICK (the CLEANUP-3 lane, 2026-09-24; `henchparty.py` THE
+  KICK, `studies/cmsg/FINDINGS.md` "The party family", the kick): §1k the batch
+  `henchman_kick_batch` is 0x01C0 PARTY_HENCHMAN_REMOVE [party, agent] THEN 0x00B0 -- row
+  before size, the hero kick's shape, RECONSTRUCTION (no tape carries c2s 0x00A8 or its
+  reply; the request is named on OUR client, CONFIRM-2 §2 step 6) -- encoded through the
+  codec to the schema's 6 + 5 bytes, the KNOWN-BAD arm the add's size-then-row through the
+  same encoder, the builder refusing agent 0 / party 0 / a negative agent, `kick_refusal`'s
+  six answers; §2 (g)-(k) the real `handle_henchman_kick`: a hired henchman's kick sends
+  exactly 0x01C0 [1, agent] then 0x00B0, the henchman leaves the party, the standing NPC
+  stays (no 0x0021), stays hireable and can be re-added; six refusals (never hired, a
+  stranger, malformed, a hero's agent -- with a hero IN the party for that one, the review's
+  RV-9 -- zero, a non-int) and a second kick send NOTHING; (l) the LAUNCH henchman
+  (`--henchman`: the load's `0x01BF` row, counted in the party) is refused with ITS reason --
+  "the LAUNCH henchman ... not modelled", not "no `0x01BF` row" -- and nothing sent, and
+  `kick_refusal(launch_agent=)` names it while a hired agent still passes (RV-6);
+  with a hero and two henchmen (4 of 4) a kick's 0x00B0 says 3 and the freed slot takes
+  the third henchman; under `--party-size-no-heroes` the kick's 0x00B0 leaves the hero out
+  while the cap counts it; under `--persist` with an opaque store attached the handler
+  touches it not at all (the hire is not persisted, so neither is the kick); the leaf's
+  0x01C0 equals authsrv's and the c2s is 0x00A8. §4 gains four locks with mutations: the
+  0x00A8 arm gated on HENCHMAN_KICK_ENABLED and the constant 0x00A8; `main()` wires
+  `--no-henchman-kick` through a `global`; `handle_henchman_kick` refuses through
+  `kick_refusal` with the launch henchman named to it (the launch guard dropped is a
+  mutation, RV-6), pops the party, sizes through `party_size_on_wire`, sends
+  `henchman_kick_batch` and names no store (a store write added is the mutation);
+  `serverargs.py` declares the flag beside `--no-henchman-add`; 0x00A8 is OFF the
+  allowlist. Drives the real functions with a fake send and a scratch
+  state. Floor 82 = the bare-machine core, measured with RURIK_VAULT at an empty
+  directory (97 with the vault; 79 / 94 at the lane's commit, +3 at its review; 49 / 64
+  before the kick; the landing's floor of 27 was
+  above its own bare run of 23 -- HENCH-EVR-2 / ENG-HENCH-2), ~9 s),
   `toolkit/authsrv/test_itemmoves.py` (**2026-09-23, DESKWORK-D1 step 8: the inventory
   messages, c2s 0x004F ITEM_MOVE, 0x0030 EQUIP_ITEM and 0x0072 ITEM_MOVE_BY_ID, and the
   item store behind them**, `toolkit/authsrv/itemstore.py`, `studies/cmsg/FINDINGS.md`
@@ -6706,7 +6778,10 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   whole store. §4 THE SERVER: `item_layout_begin`'s default layout is the constants'
   and `itemstore.worn_array` over it equals the 0x006E fill the load path built before
   this step; `--outpost` WINS over `--explorable` (ENG-M3); the real handlers with a fake
-  send in a field (visual) and a town (none); the DAMAGE MODEL follows the store — a head
+  send in a field (visual) and a town (the ARMOUR's visual too since the CLEANUP-3 lane,
+  2026-09-24 — `0x014B` + `0x006F [player, 6, x]` for the head's move and equip, RECONSTRUCTION
+  from retail's outpost armour writes; `--no-town-armour-visuals` the KNOWN-BAD arm, the
+  `0x014B` rows alone as before); the DAMAGE MODEL follows the store — a head
   in the backpack leaves `player_armour_at('warrior_head')` at 0.0 while the chest keeps
   its rating, with the no-layout control (ENG-B5); six refusals send nothing; the hands
   mirror (the weapon moved out → `SET_ITEMS_OVERRIDE[0] == (0, 0)`; `select_weapon_set`
@@ -6766,8 +6841,9 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   a bare `0x014B` into a FILLED cell); §1c is scored over the connections that decode
   closed (ENG-8); locks for `equipped_bag_slot`'s one argument, `OFF_HAND_ITEM_IDS`,
   `storage_bag_ids()`, the wrapper's `place` / `avoid` and the commit's two merchant
-  rules. Floor 78 -> 102 -> 137 -> 159 from the green run with `RURIK_VAULT` pointed at
-  an empty directory (the bare-machine core; §1b's 17 and §1c's 8 ride the vault, 184
+  rules. Floor 78 -> 102 -> 137 -> 159 -> 160 (the CLEANUP-3 lane's KNOWN-BAD town arm,
+  2026-09-24) from the green run with `RURIK_VAULT` pointed at
+  an empty directory (the bare-machine core; §1b's 17 and §1c's 8 ride the vault, 185
   vaulted), ~13 s),
   `toolkit/authsrv/test_visstatus.py` (**2026-09-23, DESKWORK-D1, the owner's answer: the
   inventory panel's per-slot DISPLAY MODE** — s2c `0x00EF` CHAR_VISIBILITY_FLAGS, c2s
@@ -6816,14 +6892,17 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   Areas, `item_layout_begin`'s layout, the helm dragged out (`0x004F`) and double-clicked
   back (`0x0030`) → the re-equip's `0x006F` goes out as `[player, 6, 0]` (KNOWN-BAD, the
   revert arm: `[player, 6, helm]`, the landing's re-helmed body); the CONTROL under Always
-  Show carries the helm; a town equip rides no `0x006F` to filter; the filter leaves the
+  Show carries the helm; a town equip under Hide in Towns plans its ARMOUR `0x006F` since
+  CLEANUP-3 (2026-09-24) and both writes go out ZEROED `[player, 6, 0]`, with
+  `--no-town-armour-visuals` the KNOWN-BAD arm riding no `0x006F` at all (the review's RV-1:
+  this pin held the pre-lane `0x014B` alone and was red at the lane's commit); the filter leaves the
   hands and another agent's slot alone; the revert arm on the load (KNOWN-BAD: every mode
   Always Hide and the body still wears the helm); `--persist` through a scratch store
   (`vis_flags` written, re-read, restored by `load_flags`/`load_message` to `[0xF7, 0xFF]`;
   the setter refuses 256; validation refuses a string and 300); the two schema names.
-  Drives the real handlers and a scratch store, launches nothing. Floor 63 from the green
+  Drives the real handlers and a scratch store, launches nothing. Floor 64 from the green
   run with `RURIK_VAULT` pointed at an empty directory (the bare-machine core; §2's 10 ride
-  the vault, 73 vaulted), ~10 s),
+  the vault, 74 vaulted; 63 / 73 at the 2026-09-23 fix pass), ~10 s),
   `toolkit/authsrv/test_townweapon.py` (**2026-09-23, DESKWORK-D1, the town weapon: in an
   outpost the player's WORLD body carries no weapon** — the hands (visuals 0 and 1) leave the
   town body's `0x006E` and a town's hand `0x006F` is never sent, while the equipped BAG (the
@@ -6895,9 +6974,40 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   composition with the display mode (Hide in Towns helm in a town: 0, 1 and 6 zeroed; each
   flag alone its own slots); `visible_slot_writes` leaving another agent's hand and the
   player's head alone in a town, dropping the player's hand under either display-mode
-  setting, and passing the batch whole with both flags off. Drives the real handlers,
-  launches nothing. Floor 55 from the green run with `RURIK_VAULT` pointed at an empty
-  directory (the bare-machine core; §2's 15 ride the vault, 70 vaulted; 45/60 before the
+  setting, and passing the batch whole with both flags off. THE TOWN ARMOUR (the CLEANUP-3
+  lane, 2026-09-24, re-cut at its review; `townweapon.visual_planned`, PER SLOT): §1 the leaf
+  plans every slot in a field, an ARMOUR slot in a town by default (retail writes outpost
+  armour visuals — the own PvP head `[336, 6, 23284]`, 31 strangers'; RECONSTRUCTION for a town
+  armour EQUIP, none on tape) and NEVER a town hand under either arm (retail 0 of 14; the
+  review's RV-2), `town_armour=False` the KNOWN-BAD pre-lane arm with the field untouched
+  (VACUITY); §3 source locks (`--no-town-armour-visuals` declared beside
+  `--field-player-weapons`, default ON, wired through a `global`; the three item handlers plan
+  through `item_visuals_planned` — a callable itemstore's planners call per visual slot — and
+  none is handed `visuals=instance_is_field(state)` any more; `visible_slot_writes` labels a
+  town armour write RECONSTRUCTION after the hands' drop AND after the display mode's zero so
+  the log names the item as sent (RV-4), never labels a hand, and its both-flags-off shortcut
+  applies to a field only (RV-5); `_item_moves_commit` counts what the gate returned (RV-3)),
+  and the real handlers in a TOWN: the head out (`0x004F`) and back (`0x0030`) carry `0x006F
+  [player, 6, 0]` / `[player, 6, head]` while the hammer out and back in the SAME state still
+  ride `0x014B` alone (the hands reach no wire in a town; whether they are PLANNED is the leaf
+  pin's and the strip-off pin's to tell, RV2-3); the `0x0072` drag of the head
+  carries the same two; the KNOWN-BAD arm (`0x014B` alone, every run before the lane, and it
+  disagrees); the flag leaving the FIELD's head visual alone; Hide in Towns + a town head equip
+  going out ZEROED `[player, 6, 0]` with the TOWN ARMOUR log saying "item 7 hidden by the
+  display mode, sent 0" (RV-4); `--no-town-weapon-strip` + a town hammer out and back still
+  `0x014B` alone — that arm's own picture, which the lane's planned-then-dropped hands broke
+  (RV-2); the commit log's "1 message(s)" for the town hammer and "2" for the head, and the
+  RV2-3 DISCRIMINATOR — a direct `_item_moves_commit` of a batch the gate SHORTENS (`0x014B` + a
+  town hand `0x006F`, strip ON) sends the `0x014B` alone and logs "1 message(s)" where the
+  planned count would say 2: since RV-2 no handler batch holds a dropped write, so the two
+  handler counts alone could not tell RV-3's fix from its bug (the bug planted in a scratch copy
+  left the whole test green, 72 checks) (RV-3, RV2-3);
+  both gates off + a town head out still labelled and logged (RV-5); the town-edge check's head
+  label tagged, and the both-off edge check re-cut to the same. Drives the real handlers,
+  launches nothing. Floor 73 from the green run with `RURIK_VAULT` pointed at an empty
+  directory (the bare-machine core; §2's 15 ride the vault, 88 vaulted; 72/87 at the first
+  review round, 66/81 at the lane's commit, 55/70 before the town
+  armour, 45/60 before the
   field shield of 2026-09-24 and 36/48 before the CONFIRM-2 carrier fix the same day, each
   re-set from its own bare run; the CONFIRM-2 fix pass replaced one check and added
   conjuncts, and the field shield's fix pass added the `global` conjunct to both flag
@@ -7078,7 +7188,42 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   a level-20 one (shell 16271) in the 2026-09-01 build -- a real cross-build
   content drift, asserted as such (both identities read), NOT the instantaneous
   field-9 value. `capture_build`/`live_captures(build=)` scope the pool.
-  Floor 32→40→42),
+  **§8 (2026-09-24, DESKWORK-Q5, floor 42 → 55): the build is the scope, by
+  default.** `builds_of` partitions every keyed capture (the one with no exe in
+  its manifest keys as `None`, never vanishes); `require_one_build` REFUSES the
+  whole vault naming all five builds, the unknown capture by stamp and the
+  `--build` flag, and passes one build's pool naming it; a pool of ONE capture
+  passes whatever its build (the unknown capture alone returns `None` and gets
+  no stamp -- the first version refused it and told the operator to pass the
+  `--capture STAMP` they had passed, a regression from base with no flag to
+  restore it), while the same capture beside one of a known build is refused
+  naming both; `main([])` refuses, `main(["--build", "2026-07-29_221c13772c7a"])`
+  runs the census over its three captures to the 54 pinned definitions (main
+  takes argv, so the plumbing is exercised), `main(["--build", "NOSUCH"])` is
+  REFUSED naming the vault's builds with the unknown one included (the first
+  version crashed sorting `None` against `str`), and `--capture 20260817T180610`
+  alone runs as at base (8 declared, 0 hostile); `to_toml(build=)` stamps every
+  row's provenance and content.py reads it back off the row, with the CONTROL
+  that no build given writes none. Then the honest R4c-2 recount as literals:
+  the 2026-09-01 pool declares 294 / 40 hostile; **the September map-146 tapes
+  are READ as map 146** -- `agentroster.read_roster` over the build's 13
+  captures, connections with `map_id == 146` (5 in 4 captures), the hostile
+  definitions CREATED there equal to the 13 EXACTLY (the first version tested
+  only that the 13 were among the pool's 40, 21 of which are the Isle's, and an
+  Isle definition swapped in for 1397 passed it; it reddens this), six of the
+  original seven with 1434 absent; the four with a stat past the declaration --
+  three with a health reading (1431 56, 1432 96, 1437 64) and four with an attack
+  rate (1397 1.9, 1431 1.75, 1432 1.75, 1437 2.475); and of the 38 indices both
+  2026-07-29 and 2026-09-01 declare exactly ONE body differs (7809). Scratch
+  sabotages: `require_one_build` never refusing reddens 3, `to_toml` dropping
+  the stamp reddens 2, the whole new §8 against HEAD's pre-review `npcdefs.py`
+  reddens 3. **+1 (2026-09-24, the review's RV2-5): two captures of UNKNOWN
+  build together** (the one unknown capture listed twice -- two entries in one
+  `None` group) **are REFUSED** naming the unknown build and "2 captures whose
+  build cannot be read"; the `None not in groups` conjunct had no witness, since
+  the mixed pool is refused by the group count alone, and a scratch copy with
+  the conjunct dropped ran 59/59 -- it reddens this check alone. Floor
+  32→40→42→55→59→60),
   `toolkit/authsrv/test_agentroster.py` (the per-agent roster reader —
   `studies/isle/PLAN.md` rung 1: every WORLD_CREATE_AGENT **with its coordinates**,
   partitioned by class tag before any masking, because field 2's low 16 bits are a
@@ -13614,8 +13759,20 @@ file_id (60), `shell_templates()` joins them onto 32 shell ids (the hatcher shel
 rows) -- the WIRE's pairing of skeleton and body, the only source that names a `skel`
 head as a creature; the hatcher resolves closed and draws its body, the worm draws itself,
 and a composited shell with NO body draws None -- the parade's white box, never
-invented; Kamadan's props chunk names >= 50 models (86, M4's count). Needs the study
-archive; sections 0-1 are bare-machine safe. 75 checks, floor 75. ~45 s)
+invented; Kamadan's props chunk names >= 50 models (86, M4's count). **Section 4b
+(2026-09-24, PLAN.md 8.1 MODELVIEWER, floor 75 -> 81): the map index cache.**
+`content_map_models` now answers through `map_model_index`, cached at
+`vault/cache/modelcatalog/maps-<mft sha>.json` and keyed by map FILE id (19 content rows
+name 17 files; a row change costs one decode, never a rebuild). The checks: the index
+sits under the vault cache, is stamped with this archive's MFT sha and holds every
+distinct content map file (the first version compared entry count to ROW count and
+went red on a correct cache); a second open answers the same maps and problems and
+DECODES NOTHING, under 5 s where a cold decode is ~20-30 s (what the viewer's Maps tab
+paid on every first open); the CONTROL that Kamadan's cached list equals a fresh
+`modelexport.map_model_ids` id for id; an index stamped from another archive state is
+REFUSED; and an id the index lacks costs exactly one decode and is appended -- as its
+problem, since the id is no map. Needs the study archive; sections 0-1 are
+bare-machine safe. 81 checks, floor 81. ~45 s warm, ~90 s the first time)
   `toolkit/mapdata/test_wireshells.py` (the WIRE-DERIVED SHELL INDEX, `wireshells.py`:
 which skeleton every keyed live tape dressed with which bodies, keyed per connection and
 stamped by the corpus. The archive never pairs a shell with a body -- `modelcatalog`

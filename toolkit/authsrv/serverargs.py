@@ -951,6 +951,20 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "observe (UNVERIFIED until it). The bag, the doll, the 0x006E's hands "
                          "and send_attack_speed's interval are untouched. "
                          "townweapon.player_weapons_sent.")
+    ap.add_argument("--no-town-armour-visuals", action="store_true",
+                    help="THE REVERT ARM for CLEANUP-3's town armour (2026-09-24): an "
+                         "equip, unequip or drag of an ARMOUR piece in a TOWN plans no "
+                         "0x006F -- 0x014B / 0x0152 alone, the world body keeping the old "
+                         "piece while the doll changes -- every run before that day (the "
+                         "planners were handed visuals=instance_is_field). The default "
+                         "plans an armour or costume slot's visual in both regimes and "
+                         "never a town hand's (townweapon.visual_planned, per slot), and "
+                         "the gate, visible_slot_writes, zeroes a hidden kind, so a town "
+                         "helm equip sends 0x014B + 0x006F [player, 6, item] and a town "
+                         "hammer equip 0x014B alone under every arm. RECONSTRUCTION: retail writes outpost "
+                         "armour visuals (the own PvP head [336, 6, 23284], 31 strangers') "
+                         "but no own outpost 0x0030 of an armour piece is on any tape. "
+                         "KNOWN-BAD arm.")
     ap.add_argument("--no-load-purse", action="store_true",
                     help="THE REVERT ARM for DESKWORK-D9's LOAD PURSE: the "
                          "instance load sends no 0x0140 carried-gold credit, as "
@@ -1037,6 +1051,20 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "henchman, one already in the party and one that would put "
                          "the party over the map's cap (--henchman-cap) are refused "
                          "with nothing sent (retail's refusal reply NOT FOUND).")
+    ap.add_argument("--no-henchman-kick", action="store_true",
+                    help="THE REVERT ARM for CLEANUP-3 (2026-09-24): ignore c2s 0x00A8 "
+                         "HENCHMAN_KICK -- the party window's Kick on a hired henchman "
+                         "sends its word and the row stays, CONFIRM-2's picture on the "
+                         "wire (section 2 step 6); the word is dispatched and ignored, "
+                         "not left to the unhandled census that run put it in. The "
+                         "default answers it with 0x01C0 "
+                         "PARTY_HENCHMAN_REMOVE [party, agent] then 0x00B0 "
+                         "PLAYER_PARTY_SIZE -- RECONSTRUCTION, the hero kick's "
+                         "row-then-size (no retail tape carries the request or the "
+                         "reply); the client's 0x01C0 worker removes the 0x01BF row "
+                         "(henchparty.py). The standing NPC keeps standing and can be "
+                         "re-hired; an agent that is not a hired henchman is refused "
+                         "with nothing sent. Not persisted, as the hire is not.")
     ap.add_argument("--henchman-cap", type=int, default=None, metavar="N",
                     help="Override the party cap the henchman add AND the hero add "
                          "refuse at (DESKWORK-D1 step 5). The default is a CONSTANT "
@@ -1320,6 +1348,52 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "level-2 Warrior let the player stand inside 170-950 u "
                          "and reacted only to the swing (studies/monsterai/"
                          "FINDINGS.md 12).")
+    ap.add_argument("--no-leash-return", action="store_true",
+                    help="DESKWORK-D8 REVERT (step 3): a kited hostile halts "
+                         "where its copy stands once its target passes "
+                         "AGGRO_RANGE from it, and never walks home -- every "
+                         "run before 2026-09-24. By default the give-up reads "
+                         "the SPAWN ANCHOR (the target beyond LEASH_DISTANCE "
+                         "of it for LEASH_SECONDS) and the hostile then walks "
+                         "0x0029 legs back to its create position through the "
+                         "pathmap's corridor, no halt and no speed word: "
+                         "retail's standing Rogue Bull, 3 of 3 returns "
+                         "(studies/monsterai/FINDINGS.md 15).")
+    ap.add_argument("--no-caster-opening", action="store_true",
+                    help="DESKWORK-D8 REVERT (step 4): a spell-bar hostile "
+                         "with no ranged weapon walks to the melee disc by a "
+                         "0x002A and casts from 92 u -- every run before "
+                         "2026-09-24 ('a monk charges into melee'). By "
+                         "default a non-melee-profession hostile with a spell "
+                         "on its bar and nothing to shoot casts from where it "
+                         "stands inside AGGRO_RANGE, then its cast range once "
+                         "the bout opens (the stand-and-cast shape is retail's "
+                         "4440, 2 of 2 -- but 4440 and the other witness both "
+                         "held a WAND, so the weaponless class is RECONSTRUCTION "
+                         "with no exact witness), walks ONE 0x0029 leg to range "
+                         "and halts when outside it, and never sends a 0x002A. "
+                         "The standing Hatcher is a Monk with four spells, so "
+                         "`--enemy` alone spawns a caster now (--enemy-weapon, "
+                         "--no-enemy-skills or this flag give the walk-in).")
+    ap.add_argument("--enemy-leash", type=float, default=None, metavar="U",
+                    help="DESKWORK-D8: the standing hostile's own leash "
+                         "distance in units from its anchor (default "
+                         "LEASH_DISTANCE, 1350 -- retail's stander, n=3). A "
+                         "smaller number makes the walk home visible in a "
+                         "short run: --enemy-leash 600 with the player "
+                         "walking 700 u away. A leash under AGGRO_RANGE (1012) "
+                         "no longer loops: the notice that starts a chase is "
+                         "clamped to the leash (CD-2), so the hostile only "
+                         "notices a target it will not immediately leash.")
+    ap.add_argument("--enemy-cast-range", type=float, default=None, metavar="U",
+                    help="DESKWORK-D8 step 4: the fixture caster's own cast "
+                         "range in units (default CASTER_CAST_RANGE, 1248 -- "
+                         "the WIKI casting range). A value UNDER AGGRO_RANGE "
+                         "(1012) makes the leg-to-range opening visible: "
+                         "--enemy-cast-range 450 with the player standing 900 "
+                         "u away shows the caster walk a 0x0029 leg to ~450 u, "
+                         "halt, and cast (the Broodcaller's shape). Needs a "
+                         "spell-bar caster (the default Hatcher, or a row).")
     ap.add_argument("--party-body-in-outpost", action="store_true",
                     help="SLICE-H2b REVERT: create the party's world bodies "
                          "in a town as well. Stock shows a hero's model in a "

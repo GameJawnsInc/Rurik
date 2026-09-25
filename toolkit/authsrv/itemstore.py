@@ -102,12 +102,17 @@ equipped 0/1 with no 0x006F (20260919T103604 :58638) and one HEAD piece with a
 0x006F [agent, 6, item] (20260917T160915 :58557), and strangers' armour visuals
 are written in outposts 31 times over the 47 live outpost connections (slots 2
 to 7; never a hand), so an outpost does write armour visuals and never the
-hands. The server strips the hands from every town 0x006F at
-visible_slot_writes, so a planner's `visuals` flag is moot for slots 0/1 in a
-town either way. For an ARMOUR equip in a town `visuals` = False is then
-probably one 0x006F SHORT of retail -- RECONSTRUCTION, no own armour equip in
-an outpost is on tape and the PvP head is the nearest witness; open in PLAN.md
-section 8.1's DESKWORK-D1 bullet, not built.
+hands. BUILT by the CLEANUP-3 lane (2026-09-24) and re-cut at its review:
+`visuals` is a bool (every slot or none -- a field, or the pre-lane town) OR a
+callable `visual slot -> bool` (`_plans`), and the server hands the planners
+townweapon.visual_planned, which in a town plans an ARMOUR slot's write and
+NEVER a hand's -- so a town hand 0x006F is not planned-then-dropped at
+visible_slot_writes but never planned at all, and --no-town-weapon-strip (the
+gate's revert) restores the weapon-set switch's town 0x006F, as its contract
+says, and not an equip's, which no run ever sent (the review's RV-2). For an
+ARMOUR equip in a town the write is RECONSTRUCTION -- no own armour equip in
+an outpost is on tape and the PvP head is the nearest witness;
+--no-town-armour-visuals is the arm that plans none.
 
 TWO SLOT ORDERS, and both lineages were right about DIFFERENT arrays. The
 equipped BAG's cells on retail follow ldufr's order (Body 2, Legs 3, Head 4,
@@ -311,6 +316,14 @@ def hand_items(items, equipped_bag):
             at(items, equipped_bag, SLOT_OFFHAND) or 0)
 
 
+def _plans(visuals, visual_slot):
+    """Does this batch plan the 0x006F into `visual_slot`? `visuals` is a bool
+    (every slot or none) or a callable visual slot -> bool (the CLEANUP-3
+    review, RV-2: a town plans its armour's write and never its hands' --
+    townweapon.visual_planned; the module docstring, VISUALS)."""
+    return bool(visuals(int(visual_slot))) if callable(visuals) else bool(visuals)
+
+
 def plan_move(items, bags, src_slot, dst_bag, dst_slot, *, key, equipped_bag,
               agent, visuals, visual_of=retail_visual_of_bag_slot, reserved_cells=()):
     """c2s 0x004F [src_slot, dst_bag, dst_slot] -> (batch, changes, None) or
@@ -354,7 +367,7 @@ def plan_move(items, bags, src_slot, dst_bag, dst_slot, *, key, equipped_bag,
     batch = [(GAME_SMSG_ITEM_CHANGE_LOCATION, [int(key), item, dst_bag, dst_slot],
               f"ITEM_CHANGE_LOCATION(item {item}: equipped {src_slot} -> bag "
               f"{dst_bag} slot {dst_slot}) [DESKWORK-D1 step 8]")]
-    if visuals:
+    if _plans(visuals, visual_of(src_slot)):
         batch.append((GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT,
                       [int(agent), visual_of(src_slot), 0],
                       f"AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT(slot {visual_of(src_slot)} "
@@ -409,7 +422,7 @@ def plan_equip(items, bags, item_id, *, key, equipped_bag, backpack_bag, agent,
         batch.append((GAME_SMSG_ITEM_CHANGE_LOCATION, [int(key), off, int(backpack_bag), free],
                       f"ITEM_CHANGE_LOCATION(off hand {off} -> backpack {free}; a "
                       f"two-handed lead enters) [DESKWORK-D1 step 8, RECONSTRUCTION]"))
-        if visuals:
+        if _plans(visuals, visual_of(SLOT_OFFHAND)):
             batch.append((GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT,
                           [int(agent), visual_of(SLOT_OFFHAND), 0],
                           "AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT(off hand emptied) "
@@ -426,7 +439,7 @@ def plan_equip(items, bags, item_id, *, key, equipped_bag, backpack_bag, agent,
         batch.append((GAME_SMSG_ITEM_CHANGE_LOCATION, [int(key), item_id, int(equipped_bag), slot],
                       f"ITEM_CHANGE_LOCATION(item {item_id}: bag {row['bag']} slot "
                       f"{row['slot']} -> equipped {slot}) [DESKWORK-D1 step 8]"))
-    if visuals:
+    if _plans(visuals, visual_of(slot)):
         batch.append((GAME_SMSG_AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT,
                       [int(agent), visual_of(slot), item_id],
                       f"AGENT_UPDATE_VISUAL_EQUIPMENT_SLOT(slot {visual_of(slot)} = item "

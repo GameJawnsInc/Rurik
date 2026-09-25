@@ -1950,6 +1950,42 @@ whether retail answers a town `0x0030` of a helm with `0x006F [agent, 6, item]` 
 RECONSTRUCTION from the PvP head's precedent — probably one message short of retail, and the
 display mode's hiding-mode equip in a town ((c) of that section, its open (b)) is the same
 question. `PLAN.md` §8.1's D1 bullet carries it.
+**SHIPPED (the CLEANUP-3 lane, 2026-09-24; `townweapon.visual_planned`,
+`authsrv.item_visuals_planned`, `--no-town-armour-visuals`).** Established first on the real
+handlers (the lane's scratch, tree `054b2c15`): a TOWN `0x0030` of the head rode `0x014B [1, 7, 1,
+4]` alone and a `0x004F` out `0x014B [1, 7, 2, 9]` alone, the `0x0072` drag likewise, while the
+FIELD carried `0x006F [1, 6, 7]` / `[1, 6, 0]` — the planners were handed
+`visuals=instance_is_field(state)`, so a town armour change never reached the world body (the
+doll changed, the body kept the old piece). The fix plans the visuals PER SLOT (`visual_planned`,
+handed to `itemstore` as a callable: a field every slot; a town an armour or costume slot by
+default and NEVER a hand — the lane first planned the town's hands too and left them to the gate's
+strip, and under `--no-town-weapon-strip` a town hammer equip then sent `0x006F [player, 0, item]`,
+which no run ever did: the review's RV-2, re-cut so the strip governs the weapon-set switch alone,
+as its contract says) and leaves the one gate as it was: `visstatus` still zeroes a hidden kind,
+and `_item_moves_commit` now counts what the gate returned (RV-3), so a town head equip now sends `0x014B` + `0x006F
+[player, 6, 7]`, the hammer beside it still `0x014B` alone, and under Hide in Towns the head's
+visual goes out ZEROED `[player, 6, 0]`. The town armour write is labelled RECONSTRUCTION at the
+send and logged (`TOWN ARMOUR: …`, naming the item as SENT — `item 7 hidden by the display mode,
+sent 0` under a hiding mode, the review's RV-4 — and in every flag combination, the gate's
+both-flags-off shortcut now applying to a field only, RV-5): retail writes outpost armour visuals
+(the own PvP head `[336, 6, 23284]`, 31 strangers'), but no own outpost `0x0030` of an armour
+piece is on any tape.
+`--no-town-armour-visuals` is the pre-lane arm (`0x014B` alone, KNOWN-BAD). Tests:
+`test_townweapon.py` §1 / §3 (floor 55 → 66 → 72 → 73 bare, 88 vaulted: 66/81 at the lane's commit,
+72/87 after the review's six, 73/88 with the review's second round — the figure here said 66/81
+until RV2-1), `test_itemmoves.py` §4's town check re-cut with the KNOWN-BAD arm beside it (floor
+159 → 160), `test_visstatus.py` 63 → 64 bare / 74 vaulted (RV-1); each new check inverted in a
+scratch copy and red. The display mode's hiding-mode equip in a town is now pinned (zeroed, not
+dropped) in `test_townweapon.py`'s BOTH RULES check and in `test_visstatus.py`'s town equip — the
+latter pinned the pre-lane `0x014B` alone and was RED at the lane's commit until the review re-cut
+it (RV-1). RV-3's commit count has a discriminator since the second round (RV2-3): since RV-2 no
+handler batch holds a write the gate drops, so the two handler counts were the same whether the log
+counted the planned batch or the gate's (the bug planted in a scratch copy left the whole test
+green, 72 checks); a direct `_item_moves_commit` of a batch holding a town hand `0x006F` (strip ON)
+now pins "1 message(s)" where the planned count says 2, and that check alone reddens under the
+plant.
+**Owed: one client run** — a town helm change with the body watched (the PLAN-LOG entry's
+runsheet).
 
 **Shipped** ([`toolkit/authsrv/townweapon.py`](../../toolkit/authsrv/townweapon.py) is the
 leaf — `strip_hands`, `drops`, `filter_hand_writes`, stdlib, no repo import;
@@ -2498,7 +2534,7 @@ other `0x98–0xB2` c2s was ever sent, so every other row below is static only.
 | `0xA5` | `[u8]` | `0x0085C140` ← `0x0085ABFA` | 0 | — | UNVERIFIED |
 | `0xA6` | `[u16, u32, u8]` (16 B) | `0x0085C170` ← `0x0085ABE7` | 0 | — | UNVERIFIED |
 | `0xA7` | `[]` | `0x0085C1C0` ← `0x0085AC25` | 0 | RETURN_TO_OUTPOST | UNVERIFIED; a run in a field could name it |
-| `0xA8` | `[u16]` | `0x0085BF50` ← `0x0085A84A` | 0 | KICK_NPC | UNVERIFIED — the henchman KICK candidate |
+| **`0xA8`** | `[u16]` agent | `0x0085BF50` ← `0x0085A84A` (in `0x0085A820`, PyCliParty:1650, `&0x80`) | 0 (**1 on our client**, CONFIRM-2 §2 step 6) | KICK_NPC | **HENCHMAN_KICK, CORROBORATED on our client; armed as RECONSTRUCTION** (the kick, below) |
 | `0xA9` | `[u16]` | `0x0085BF80` ← `0x0085A88A` | 0 | KICK_PLAYER | UNVERIFIED (a second player) |
 | `0xAA` | `[u8, string16(32), u16]` (76 B) | `0x0085BFB0` ← `0x0085A8B2` | 0 | — | UNVERIFIED |
 | `0xAB` | `[]` | `0x0085C010`, 0 direct callers | 0 | SEARCH_CANCEL | UNVERIFIED |
@@ -2514,12 +2550,13 @@ The `0xA3..0xAF` callers carry `PyCliParty` `m_partyClient` asserts
 (`:1650/:1659/:1692/:1719/:1755/:1797`). **INVITE and ACCEPT (a player joining)
 need a second player and are out of scope for a single-player server.** The
 henchman **KICK** (`0xA8` by the UPSTREAM reading) and **LEAVE PARTY** (`0xA2`)
-are named only UPSTREAM — no tape carries either c2s or its reply (`0x01C0`,
-UPSTREAM-named PARTY_HENCHMAN_REMOVE, is 0 of 96 live connections) — so neither
-is armed here; arming would be RECONSTRUCTION with no witnessed reply, and the
-route says refuse to guess. They are the next step if the owner wants a kick,
-with a labelled loopback run to name the opcode (the runsheet says what a kick
-click does today).
+were named only UPSTREAM at this step — no tape carries either c2s or its reply
+(`0x01C0`, UPSTREAM-named PARTY_HENCHMAN_REMOVE, is 0 of 96 live connections) —
+so neither was armed here; arming would be RECONSTRUCTION with no witnessed
+reply, and the route says refuse to guess. The KICK was then named on our own
+client (CONFIRM-2 §2 step 6, 2026-09-24) and armed as a labelled RECONSTRUCTION
+the same day — "The kick" below; the LEAVE (`0xA2`) stays unarmed and unnamed
+(no run has sent it).
 
 **Shipped.** `henchparty.py` (leaf): `henchman_add_batch` (0x00B0 + 0x01BF, the
 tape order, `agents.py`'s own builders), `hireable_bringup` (the level property
@@ -2610,6 +2647,81 @@ row per map with its build, its own increment.
 **RUN 2026-09-24, harness-driven: steps 1–5 and 7 HELD, step 6 named the kick c2s `0x00A8
 [agent]`** (studies/deskwork/CONFIRM-2026-09-24.md §2); the list shows on type-10 map 148 and
 `noncombatant` blocks nothing; at max_party the client refuses a henchman add itself.
+
+**The kick — `c2s 0x00A8 HENCHMAN_KICK`, armed as RECONSTRUCTION (the CLEANUP-3 lane,
+2026-09-24; `henchparty.py` THE KICK, `handle_henchman_kick`, `--no-henchman-kick`).**
+The prediction was written before the client was read (the lane's scratch): the schema's
+`0x01C0` is two words; its handler removes a roster row keyed by agent id from the object
+`0x01BF` writes; an unknown party or agent returns silently; the reply is row-then-size after
+the hero kick; no teardown rows; nothing persisted because the hire is not. All held.
+
+*The request — OBSERVED on our client, read from the sender.* CONFIRM-2 §2 step 6 (run
+`20260924T090622`): the Henchmen tab's Kick on the hired Lukas sent `a8 80 1f 00` — one word,
+agent 31, the id the `0x009F` add had hired — and the client kept the row. The `0xA8` wrapper
+`0x0085BF50` has ONE direct caller (`codescan --xrefs`), `0x0085A84A` inside `0x0085A820`, which
+asserts PyCliParty:1650 `m_partyClient`, tests the party-client "is mine" bit `0x80` at
+`[this+0x10]` and sends the agent; it removes no row itself — the row stays until a reply, which
+is what the screen showed. The UPSTREAM name KICK_NPC is CORROBORATED by the click. 0 of 96 live
+connections carry it (c2striage), so its reply is on no tape.
+
+*The reply that removes the row — read from the handler, build 38797.* `msghandler.py 0x01C0
+--follow`: handler `0x00856B30` sits in RECV table `0x00bcb788` with `0x01BF`'s (`0x00856B00`)
+and `0x01C3`'s (`0x00856BB0`), resolves the same party manager (`[ctx+0x4c]+4`) and calls worker
+`0x00858DE0(party = [msg+4], agent = [msg+8])` — the schema's two words, CORROBORATED. The worker
+finds the party (id 0 → the own party at `[mgr+0x50]`, else `[mgr+0x3c][id]`; past the count or
+null → returns silently), walks the party's stride-`0x34` row array at `[party+0x14]` ×
+`[party+0x1c]` — the array `0x01BF`'s worker `0x00858CB0` inserts into (its `[edi+0x14]` /
+`[edi+0x1c]`, stride `0x34`) — for a row whose first dword is the agent (no match → returns
+silently; the only assert in the loop is Array:587 `index < m_count`, the count re-read each
+iteration, unreachable by wire input), then Array:942, a memmove of the tail down one row
+(`0x0046DBB0`), `dec [party+0x1c]`, the dirty flag `[party+0x78] = 1` (the flag `0x01C3`'s worker
+sets too), and then — unless the party is the manager's `[mgr+0x4c]` one (`cmp esi, [eax+0x4c];
+je` at `0x00858EB3`/`B6`, jumping past both calls; `0x01BF`'s worker carries the same guard at
+`0x00858D9D`; the review's RV-8) — frame-bus event `0x1000011c` through `0x00633D70` with `{party
+or 0 when it is the own party, agent}`, and `0x007DFED0(agent)` — a per-agent refresh called by all four roster workers
+(`0x01BF` at `0x00858DC9`, `0x01C0` at `0x00858EDF`, `0x01C2` at `0x0085901A`, `0x01C3` at
+`0x0085916E`) that looks the agent up (`0x00802160`) and returns when it is not found. OBSERVED
+(the disassembly). The party lookup is `0x01C3`'s worker `0x00859030`'s — the same logic on `esi`
+where `0x01C3`'s is on `ecx`, not the same bytes — and that pairing is what makes `0x01C3` the
+witness: `0x01BF`'s and `0x01C2`'s workers look the party up through the manager's `[mgr+0x4c]`
+FIRST (`mov edi, [esi+0x4c]; cmp [edi], ebx` at `0x00858CC1`–`C8`; `mov edi, [ebx+0x4c]; cmp
+[edi], esi` at `0x00858F5E`–`65`) and only then `[mgr+0x50]` / `[mgr+0x3c][id]`, while `0x01C0`'s
+and `0x01C3`'s go straight to `[mgr+0x50]` / `[mgr+0x3c][id]` (`0x00858DF0`–`E0A`;
+`0x0085904B`–`65`) with no `[mgr+0x4c]` step. Our `0x01C2 [1, …]` add AND `0x01C3 [1, …]` kick are
+both CONFIRMED on the client (the hero pair, CONFIRM 2026-09-23), so `[mgr+0x3c][1]` is the object
+the first-lookup path used too: the two lookups agree for our id, and party id 1 resolves for
+`0x01C0` — CORROBORATED (the review's second round, RV2-5). `schema/overrides.json` now names GAME_CMSG 168
+HENCHMAN_KICK and GAME_SMSG 448 PARTY_HENCHMAN_REMOVE, both medium.
+
+*What the server sends — RECONSTRUCTION.* `henchparty.henchman_kick_batch`: `0x01C0 [1, agent]`
+THEN `0x00B0 PLAYER_PARTY_SIZE` — row before size, the hero kick's shape (the only kick on any
+tape); the add is size-then-row, and no tape decides the henchman kick's order. No `0x0075` /
+`0x00F8` / `0x003E` / `0x0145`: those tear down a hero's agent record and container, the
+henchman's NPC keeps standing (the add created no body and destroyed none), and a `0x00F8` or
+`0x003E` for a standing agent would sweep a body the client draws. The henchman leaves
+`state["party_henchmen"]` (the ONE count: with a hero and two henchmen a kick's `0x00B0` says 3,
+and the freed slot takes the third henchman), stays hireable, can be re-added. Refused with
+nothing sent (`henchparty.kick_refusal`; retail's refusal reply NOT FOUND, as is the request): a
+malformed request, an agent that is not a hired henchman of this party — a hireable never hired,
+a stranger, a hero's agent, the player's own — and the LAUNCH henchman (`--henchman`), refused with
+its own reason: its `0x01BF` row is the load's, not a hire; its count is a launch global and no
+`0x0071` marks it hireable, so a kick could neither be counted per connection nor undone by the
+panel; not modelled (the review's RV-6). Whether the panel offers a Kick on the launch row at all
+is UNVERIFIED: nothing in the sender `0x0085A820` excludes it (after the PyCliParty:1650 assert it
+tests only the party's "is mine" bit, `[esi+0x10] & 0x80`, and calls the `0xA8` wrapper with the
+agent it was given; one direct caller, `0x00857451`), but no run has clicked one, and the refusal
+holds either way (RV2-4). Not persisted: the hire is not (a zone starts a
+fresh instance without it — the deferred field carry), so a stored kick would outlive the thing
+it kicked. Default ON — the reply is two table operations the client already performs for our
+party id and the add's own size message; `--no-henchman-kick` is CONFIRM-2's picture (the word
+sent, the row stays). Tests: `test_henchparty.py` §1k, §2 (g)–(l) ((l) the launch henchman's
+refusal, the review's RV-6), §4 (four locks, each with a mutation that reddens it; a store write
+added is one, the launch guard dropped another), floor 49 → 79 → 82 bare / 97 vaulted (the review
+added (l) ×2 and the launch-guard mutation; the figure here said 79 / 94 until RV2-1); each new
+check was inverted in a scratch copy and went red (the lane's `redden.py`, the review's
+`fixer_redden.py`). **Owed: one client
+click** — the runsheet's kick launch (the PLAN-LOG entry): the row leaving the panel, the counter
+down one, the NPC still standing, and the re-add.
 
 **Runsheet (owner's hands, one loopback session — not run here).** Each step
 names what the log and the screen should show; the questions are pre-registered.

@@ -206,3 +206,63 @@ it is non-hostile and does not appear in a `--hostile-only` census. The
 underlying point of the original observation survives and is strengthened:
 **hostility is a spawn fact, not a property of the definition**, which is why
 `npcdefs.py` emits no allegiance key.
+
+### 7.4 RE-COUNTED 2026-09-24, PER BUILD — the pool §7 quoted spanned builds, and the honest roster is a September map-146 number (DESKWORK-Q5)
+
+§7's "16 captures, 266 definitions" pooled three client builds by definition
+index, and SUITE-FIXES (2026-09-16) measured that an index is only a name within
+one build: 7809 is a level-5 creature on shell 141285 in the 2026-07-29 build and
+a level-20 one on shell 16271 in 2026-09-01. `npcdefs.py` now takes `--build`
+and refuses a pool that spans builds, naming them. Read per build, never pooled
+across [OBSERVED, `npcdefs.read` per `capture_build`, 29 keyed live captures]:
+
+| build (client dir) | captures | declared | hostile | with health | with attack | with model |
+|---|---|---|---|---|---|---|
+| 2026-07-29 (38797) | 3 | 54 | 7 | 3 | 4 | 43 |
+| 2026-08-13 (38833) | 6 | 184 | 24 | 12 | 16 | 176 |
+| 2026-08-20 | 6 | 117 | 12 | 3 | 0 | 110 |
+| 2026-09-01 (38888) | 13 | 294 | 40 | 17 | 16 | 267 |
+| unknown (no exe in manifest) | 1 | — | — | — | — | — |
+
+Of the indices two builds both declare, **exactly one** has a different body
+(7809, 2026-07-29 vs 2026-09-01); every other shared index is byte-identical
+across builds, so the drift is real and rare, not a reason to distrust the slots.
+
+**The pre-Searing hostile roster, honestly.** The rung grades pre-Searing
+content, and the 2026-09-01 build's tapes visit map 146 in five connections of
+four captures (20260914T180058, 20260915T155656, 20260915T164906,
+20260916T172025). Hostile definitions CREATED there (`mon1`/`band` on an NPC-tag
+create, `agentroster`), with what the build's own pool declares for each
+[OBSERVED]:
+
+| def | file | lvl | prof | creates | tapes | health | attack | note |
+|---|---|---|---|---|---|---|---|---|
+| 1346 | 128483 | 2 | 2 | 1 | 1 | — | — | original seven |
+| 1397 | 116295 | 5 | 1 | 1 | 1 | — | (1.9, 1.0) | new |
+| 1405 | 17397 | 1 | 2 | 12 | 3 | — | — | new |
+| 1409 | 17400 | 1 | 2 | 6 | 2 | — | — | new |
+| 1411 | 128526 | 5 | 6 | 3 | 2 | — | — | new |
+| 1420 | 116226 | 1 | 6 | 27 | 2 | — | — | original seven |
+| 1421 | 141267 | 2 | 1 | 9 | 1 | — | — | original seven |
+| 1428 | 128619 | 0 | 1 | 1 | 1 | — | — | new |
+| 1431 | 82023 | 1 | 6 | 104 | 4 | 56 | (1.75, 1.0) | original seven |
+| 1432 | 82023 | 2 | 6 | 22 | 3 | 96 | (1.75, 1.0) | original seven |
+| 1433 | 82023 | 0 | 6 | 50 | 4 | — | — | new |
+| 1437 | 141274 | 1 | 2 | 12 | 1 | 64 | (2.475, 1.0) | new |
+| 1442 | 116366 | 0 | 1 | 1 | 1 | — | — | original seven |
+
+**13 hostile definition slots on the September map-146 tapes**: six of the
+original seven (1434 was not created in any September session) and seven the
+2026-08-11 corpus never saw. Four carry a stat past the declaration — three a
+health reading (1431 56, 1432 96, 1437 64) and four an attack rate (1397 1.9,
+1431 1.75, 1432 1.75, 1437 2.475), as the table says; the first draft of this
+sentence left 1431's and 1432's rates out — and that is the number R4c-2b's
+"real stats" clause can honestly cite for pre-Searing today: 4 of 13. The 40
+hostile in the whole September pool are, as §7.1 warned, mostly the Isle's
+furniture (129–165, 2937) and map 430's (4389–4440); reporting 40 against the
+rung's 35 counts the training dummies again. `test_npcdefs` §8 pins the 13 as
+the hostile definitions CREATED on the map-146 connections of the September
+roster (`agentroster.read_roster`, `map_id == 146`, exact set equality — the
+first version tested only that the 13 were among the pool's 40, which an Isle
+definition swapped in would have passed), the absent 1434, the four stats and
+the one drift as literals.

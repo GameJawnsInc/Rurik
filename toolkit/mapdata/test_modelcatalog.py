@@ -49,11 +49,17 @@ sys.path.insert(0, os.path.dirname(HERE))
 from archive import Archive, DEFAULT_DAT, ffna_chunks, \
     file_id_table  # noqa: E402
 import modelcatalog as mc  # noqa: E402
+import modelexport  # noqa: E402
 import modelfile  # noqa: E402
 import skelfile  # noqa: E402
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("model catalog", floor=75)
+# 75 -> 81 on 2026-09-24 with section 4b, the map index cache (PLAN.md 8.1
+# MODELVIEWER): the index under the vault stamped by MFT sha, a warm open that
+# decodes nothing in under 5 s where the cold decode took ~20, the CONTROL that
+# the cached list equals a fresh decode id for id, a stale stamp refused, and an
+# id the index lacks costing exactly one decode. Measured from the green run.
+LEDGER = checks.Ledger("model catalog", floor=81)
 check = checks.adopt(LEDGER)
 
 HATCHER_BODY = 116703
@@ -480,11 +486,66 @@ def section4(ar, table):
           "never invented")
     t0 = time.time()
     maps, problems = mc.content_map_models(ar, table, world)
+    first = time.time() - t0
     check("449" in maps and len(maps["449"][1]) >= 50,
           f"Kamadan (map 449) references {len(maps.get('449', ('', []))[1])} models "
-          f"(>= 50; M4 counted 86)", f"{time.time() - t0:.1f} s, {len(problems)} problem(s)")
+          f"(>= 50; M4 counted 86)", f"{first:.1f} s, {len(problems)} problem(s)")
     check(all(isinstance(f, int) for _n, ids in maps.values() for f in ids),
           "every referenced id is an int")
+
+    # ---- 4b. the map index cache (2026-09-24, PLAN.md 8.1 MODELVIEWER) ------
+    print("\n4b. the map index is cached per archive state")
+    path = mc.map_index_path(ar)
+    # By FILE ID, not by row: 19 content rows name 17 distinct map files (two
+    # keys share a chain), and the index answers for files. The first version
+    # of this check compared counts and went red on a correct cache.
+    fids = sorted({int(r["file_id"]) for r in world.rows("map").values()
+                   if r.get("file_id") is not None})
+    entries, stamp = mc.load_map_index(path, ar)
+    check(os.path.isfile(path) and path.startswith(mc.cache_dir())
+          and set(fids) <= set(entries)
+          and stamp["mft_sha256"] == mc.stamp_of(ar)["mft_sha256"],
+          f"the index sits under the vault cache, stamped with this archive's MFT "
+          f"sha, and holds every distinct content map file ({len(fids)} of "
+          f"{len(entries)} entries)", path)
+    t0 = time.time()
+    again, problems2 = mc.content_map_models(ar, table, world)
+    warm = time.time() - t0
+    _m, _p, _path, decoded = mc.map_model_index(ar, table, fids)
+    check(again == maps and problems2 == problems and decoded == 0,
+          "a second open answers the same maps and problems and DECODES NOTHING",
+          f"{decoded} decoded")
+    check(warm < 5.0,
+          f"and takes under 5 s (this run's first call {first:.1f} s; a cold "
+          f"decode is ~20-30 s, which the Maps tab paid on every first open)",
+          f"{warm:.2f} s")
+    kam = int(world.get("map", "449")["file_id"])
+    check(maps["449"][1] == modelexport.map_model_ids(kam, ar, table),
+          "CONTROL: the cached list for Kamadan equals a fresh decode, id for id "
+          "-- the cache reproduces the decoder rather than remembering something else")
+    with tempfile.TemporaryDirectory() as tmp:
+        stale = dict(stamp)
+        stale["mft_sha256"] = "0" * 64
+        p = mc.save_map_index(entries, stale, os.path.join(tmp, "maps.json"))
+        try:
+            mc.load_map_index(p, ar)
+            ok = False
+        except mc.Refused as exc:
+            ok = "different archive state" in str(exc)
+        check(ok, "an index stamped from another archive state is REFUSED against "
+                  "this one")
+        # An id the index lacks is decoded and APPENDED, a problem included:
+        # the copy below starts from the real entries and gains one row for a
+        # file id that is no map.
+        p2 = mc.save_map_index(entries, stamp, os.path.join(tmp, "maps2.json"))
+        bogus = 0x7FFFFFF0
+        _m, probs, _path, decoded = mc.map_model_index(ar, table, fids + [bogus], path=p2)
+        after, _s = mc.load_map_index(p2, ar)
+        check(decoded == 1 and bogus in probs and "problem" in after.get(bogus, {})
+              and len(after) == len(entries) + 1,
+              "an id the index lacks costs exactly one decode and is appended -- "
+              "here as its problem, since it is no map",
+              f"{decoded} decoded; {probs.get(bogus, '')[:50]}")
 
 
 def main():

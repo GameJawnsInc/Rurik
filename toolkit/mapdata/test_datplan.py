@@ -78,7 +78,32 @@ import checks  # noqa: E402
 # are CONTROLS (runs past the extent still usable, the run before it untouched,
 # the untouched fixture unchanged), because a projection that swallowed
 # everything downstream would withhold the archive and protect nothing.
-LEDGER = checks.Ledger("dat planner", floor=44)
+#
+# RAISED 44 -> 60 on 2026-09-24 with section 10, the overwritten head
+# (DESKWORK-Q4). Sections 1-9 all rest on the `Mft\x1a` header: the signature
+# finds it, the projection reads its count. A generation whose header the live
+# file-id table has since been written over has neither, and on
+# vault/dat_study_38833 its 2,892,800-byte tail was the LARGEST USABLE RUN in
+# the archive, 100.0% live table rows. Section 10 plants that shape -- rows at
+# a non-zero phase, no magic anywhere, zeros after -- and puts a CONTROL beside
+# each of the rule's two terms: a run with the same rows but a majority of
+# payload junk around them (the client reused it; usable), a run with three
+# rows in zeros (below the count; usable), empty space (usable), and the plain
+# fixture (unchanged, section 9's last check). Reddened in a scratch driver
+# before the floor was set: the rule disabled (6 red), the majority term
+# disabled (4), the count term disabled (4), the phase search reduced to
+# phase 0 (6). The first version of the last check passed the first arm --
+# it looked for the kind's words anywhere in the plan, and the withheld
+# header now says them on every plan; it reads the run's own line.
+# 60 -> 61 on 2026-09-24 (the lane's review, RV-10): the chunk-boundary check
+# -- mft_content read in small chunks scores the planted tail the same tuple
+# as in one piece (the default chunk is larger than any fixture run, so
+# nothing else exercised the straddle branch). Re-cut the same day (RV2-3):
+# at 1,536 B no LIVE row straddled a boundary, so the check caught the branch
+# missing and nothing about what it assembled; at 96 B two live rows do, and
+# three scratch mutations of the branch -- off, halves swapped, wrong tail
+# bytes -- each redden that check alone.
+LEDGER = checks.Ledger("dat planner", floor=61)
 check = checks.adopt(LEDGER)
 
 FILE_MAGIC = b"3AN\x1a"
@@ -568,6 +593,188 @@ def section_extent_projection(tmp):
               "unchanged", f"got {usable}")
 
 
+def section_overwritten_head(tmp):
+    """A generation whose HEAD is gone is found by its ROWS (DESKWORK-Q4).
+
+    The signature rule needs `Mft\\x1a` at a block boundary; the projection
+    rule needs the count that header carries. When the live file-id table is
+    written over the head of a stale generation, the generation's tail keeps
+    every row and loses both tells -- studies/archivewrite FINDINGS 1.5's
+    0xF5923800 on the 38833 study copy, 2,892,800 bytes, which the 08-17 fix
+    could not reach because there was no header to project from. The third
+    rule parses the run's bytes as records at six phases and withholds on
+    rows identical to the live table.
+
+    Four fixtures, one archive: the planted tail (withheld), and three
+    controls that each defeat one term of the rule and must stay usable.
+    """
+    print("\n10. a generation whose head was OVERWRITTEN is withheld on its rows")
+    path = fresh(tmp, "overwritten.dat", COUNT_ERASED)
+    with open(path, "rb") as fh:
+        fh.seek(MFT_BLOCK * BLOCK + ENTRY_SIZE)
+        body = fh.read((COUNT_ERASED - 1) * ENTRY_SIZE)       # rows 1..19, no header
+    live_rows = [body[i:i + ENTRY_SIZE] for i in range(0, len(body), ENTRY_SIZE)]
+    nonzero_live = [r for r in live_rows if r != bytes(ENTRY_SIZE)]
+    PHASE = 8                        # 512 mod 24 = 8: the phase a real tail lands on
+
+    with open(path, "r+b") as fh:
+        # THE CASE: RUN_8 becomes the tail of a stale generation -- the whole run
+        # zeroed (a generation's growth area is zero), the table body at phase
+        # 8, and the 8 bytes before it the 0xCC the fixture uses for "something
+        # else was written here". No magic anywhere in the run.
+        fh.seek(RUN_8 * BLOCK)
+        fh.write(bytes(8 * BLOCK))
+        fh.seek(RUN_8 * BLOCK + PHASE)
+        fh.write(body)
+        # CONTROL 1, the majority term: the same ten live rows in RUN_4A, but
+        # the rest of the run left as the fixture's 0xCC slack -- non-zero
+        # records that match nothing, the shape of a region the client reused
+        # for payloads after a table lived there.
+        fh.seek(RUN_4A * BLOCK + 16)
+        fh.write(b"".join(nonzero_live))
+        # CONTROL 2, the count term: three live rows in zeros in RUN_4B --
+        # 100% of the non-zero records, and below MFT_CONTENT_MIN_ROWS.
+        fh.seek(RUN_4B * BLOCK)
+        fh.write(bytes(4 * BLOCK))
+        fh.seek(RUN_4B * BLOCK)
+        fh.write(b"".join(nonzero_live[3:6]))
+        # CONTROL 3, empty space: RUN_2 all zero.
+        fh.seek(RUN_2 * BLOCK)
+        fh.write(bytes(2 * BLOCK))
+
+    with Archive(path) as ar:
+        ar.fh.seek(RUN_8 * BLOCK)
+        run_bytes = ar.fh.read(8 * BLOCK)
+        check(MFT_MAGIC not in run_bytes
+              and datplan.scan_run(ar, RUN_8, 8) == [],
+              "the planted run carries NO container signature at any boundary "
+              "-- sections 1-9's rules cannot see it, so what follows is the "
+              "third rule's alone")
+        rows = datplan.live_mft_rows(ar)
+        check(len(rows) == len(nonzero_live) and set(nonzero_live) == rows,
+              f"live_mft_rows reads the {len(rows)} non-zero rows of the live "
+              f"table as raw bytes, header and zero rows skipped")
+        got = datplan.mft_content(ar.fh, RUN_8 * BLOCK, 8 * BLOCK, rows)
+        check(got[0] == len(nonzero_live) and got[1] == len(nonzero_live)
+              and got[3] == PHASE,
+              f"mft_content finds all {len(nonzero_live)} rows at phase {PHASE}, "
+              f"and no other non-zero record in the run (zeros excluded)",
+              f"(identical, nonzero, parsed, phase) = {got}")
+        # The phase search is load-bearing: at phase 0 the same bytes parse as
+        # straddled records and match nothing.
+        got0 = datplan.mft_content(ar.fh, RUN_8 * BLOCK, 8 * BLOCK, rows, phases=(0,))
+        check(got0[0] == 0 and got0[1] > 0,
+              "and at phase 0 alone the same run scores ZERO identical -- the "
+              "six-phase search is what finds a tail that starts mid-block",
+              f"{got0}")
+        # CHUNKING. mft_content reads a run in MFT_CONTENT_CHUNK-byte pieces
+        # and tests the one record per phase that straddles each boundary. The
+        # default chunk (1,049,088 B) is far larger than this run, so with it
+        # the straddle branch never executes here. At 96 B (a multiple of 24,
+        # so every phase keeps its alignment) the boundaries fall at 96, 192,
+        # 288 and 384 from the run's start, and the phase-8 records at 8 + 24k
+        # cross them for k = 3, 7, 11, 15 -- body rows 4, 8, 12 and 16, of
+        # which 4 and 8 are LIVE rows and 12 and 16 the fixture's erased zeros.
+        # So two of the ten identical rows exist ONLY as straddled records,
+        # and the chunked tuple equals the whole one only if the branch
+        # assembles each from the right bytes in the right order. (The first
+        # version, RV-10, chunked at 1,536 B: the planted body ends at byte 464
+        # of the run, so every straddled record was zero, and two scratch
+        # mutations that mis-assembled the record -- halves swapped, the wrong
+        # tail bytes -- passed it; the review's RV2-3. The geometry is computed
+        # here, not assumed, so a fixture change that moved the rows off the
+        # boundaries would redden the check rather than hollow it.)
+        CHUNK = 96
+        straddlers = [k for k in range(len(live_rows))
+                      if (PHASE + ENTRY_SIZE * k) // CHUNK
+                      != (PHASE + ENTRY_SIZE * k + ENTRY_SIZE - 1) // CHUNK]
+        live_straddlers = [k for k in straddlers if live_rows[k] != bytes(ENTRY_SIZE)]
+        saved = datplan.MFT_CONTENT_CHUNK
+        try:
+            datplan.MFT_CONTENT_CHUNK = CHUNK
+            small = datplan.mft_content(ar.fh, RUN_8 * BLOCK, 8 * BLOCK, rows)
+        finally:
+            datplan.MFT_CONTENT_CHUNK = saved
+        check(small == got and got[0] == len(nonzero_live) and len(live_straddlers) >= 2,
+              f"read in {CHUNK}-byte chunks the run scores the same tuple {got}: "
+              f"{len(live_straddlers)} of its {len(nonzero_live)} live rows (body "
+              f"rows {[k + 1 for k in live_straddlers]}) exist only as records "
+              f"that straddle a chunk boundary, and the branch that assembles "
+              f"them counts them, so a run scores the same however it is chunked",
+              f"chunked {small} vs whole {got}; body rows on a boundary "
+              f"{[k + 1 for k in straddlers]}, live among them "
+              f"{[k + 1 for k in live_straddlers]}")
+
+        usable, excluded = datplan.classify_runs(ar)
+        by_start = {x.start_block: x for x in excluded}
+        usable_starts = [s for s, _n in usable]
+        hit = by_start.get(RUN_8)
+        check(hit is not None and hit.marks[0][1] == datplan.KIND_MFT_CONTENT
+              and hit.marks[0][0] == 0,
+              f"RUN_8 is withheld as {datplan.KIND_MFT_CONTENT!r}, marked at "
+              f"its head", f"withheld {sorted(by_start)}")
+        detail = hit.marks[0][2] if hit else ""
+        check(f"{len(nonzero_live)} of {len(nonzero_live)}" in detail
+              and "100.0%" in detail and f"phase {PHASE}" in detail,
+              "and the mark carries the count, the fraction and the phase, so "
+              "a reader can audit the withholding without re-running it",
+              detail[:80])
+        check(RUN_4A in usable_starts,
+              "CONTROL (majority): the same ten rows amid a run of payload junk "
+              "stay USABLE -- junk around old rows is the client's own evidence "
+              "that it reuses the region",
+              f"usable {usable_starts}")
+        c1 = datplan.mft_content(ar.fh, RUN_4A * BLOCK, 4 * BLOCK, rows)
+        check(c1[0] == len(nonzero_live) >= datplan.MFT_CONTENT_MIN_ROWS
+              and c1[0] < datplan.MFT_CONTENT_MAJORITY * c1[1],
+              f"and that control is decided by the MAJORITY term alone: "
+              f"{c1[0]} identical clears the count, {c1[0]}/{c1[1]} does not "
+              f"clear one half", f"{c1}")
+        check(RUN_4B in usable_starts,
+              "CONTROL (count): three live rows in zeros stay USABLE -- 100% "
+              "of nothing much", f"usable {usable_starts}")
+        c2 = datplan.mft_content(ar.fh, RUN_4B * BLOCK, 4 * BLOCK, rows)
+        check(c2[0] == 3 and c2[1] == 3 and 3 < datplan.MFT_CONTENT_MIN_ROWS,
+              f"and that control is decided by the COUNT term alone: 3 of 3 "
+              f"clears the majority, 3 < {datplan.MFT_CONTENT_MIN_ROWS} does "
+              f"not clear the count", f"{c2}")
+        check(RUN_2 in usable_starts and RUN_1 in usable_starts,
+              "CONTROL: empty (all-zero) space and untouched slack stay usable")
+        check(usable == [(RUN_2, 2), (RUN_4A, 4), (RUN_1, 1), (RUN_4B, 4)],
+              "the usable list is exactly the four controls, still in address "
+              "order", f"got {usable}")
+        held = sum(x.blocks for x in excluded) * BLOCK
+        free = sum(n for _, n in usable) * BLOCK
+        check(held + free == 28160 and held == (36 + 8) * BLOCK,
+              f"accounting closes: {held} withheld (the two containers + the "
+              f"8-block tail) + {free} usable = 28160")
+
+        # THE REFUTATION. Before this rule RUN_8 was the best fit for any
+        # 5..8-block payload -- the exact placement `plan_move` chose on the
+        # 38833 copy -- and the signature/extent rules alone still choose it.
+        need = datplan.blocks_for(3000, BLOCK)
+        check(need == 6 and datplan.best_fit(USABLE_RUNS, need) == (RUN_8, 8),
+              "with only the header rules (sections 1-9's usable list) a "
+              "6-block payload is placed INSIDE the stale tail",
+              f"best_fit -> {datplan.best_fit(USABLE_RUNS, need)}")
+        plan = datplan.plan_insert(ar, 3000, classified=(usable, excluded))
+        check(plan.blockers and not plan.edits
+              and any("WOULD have fit" in b for b in plan.blockers),
+              "and with the third rule the same payload is BLOCKED, naming the "
+              "withheld run that would have taken it",
+              "; ".join(plan.blockers)[:100])
+        # ON THE RUN'S OWN LINE. The withheld header names the kind on every
+        # plan, so `kind in text` is true with the rule disabled -- the first
+        # version of this check was exactly that, and a sabotage passed it.
+        lines = [ln for ln in rendered(plan).splitlines()
+                 if f"0x{RUN_8 * BLOCK:012X}" in ln]
+        check(len(lines) == 1 and datplan.KIND_MFT_CONTENT in lines[0]
+              and "10 of 10" in lines[0],
+              "the plan's withheld list says WHY on the run's own line: the "
+              "kind and the count beside its offset", lines[0][:100] if lines
+              else "no line names the run")
+
+
 def main():
     tmp = tempfile.mkdtemp(prefix="rurik-datplan-")
     print(f"synthetic archive: {FILE_SIZE} B, {len(DESIGNED_RUNS)} free runs, "
@@ -575,6 +782,7 @@ def main():
     try:
         sections(tmp)
         section_extent_projection(tmp)
+        section_overwritten_head(tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     return LEDGER.verdict()

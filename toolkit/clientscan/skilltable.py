@@ -207,6 +207,15 @@ def parse_record(data: bytes, base: int, skill_id: int) -> dict:
         "pve_only": bool(flags & FLAG_PVE_ONLY),
         "pvp_only": bool(flags & FLAG_PVP_ONLY),
         "not_playable": bool(flags & FLAG_NOT_PLAYABLE),
+        # THE CAST-RANGE CLASS (DESKWORK-D8 step 4). The record has no range in
+        # units, but two flag bits at +0x10 name the class: FLAG_TOUCH_RANGE
+        # (0x2) a skill used at touch/melee range, FLAG_HALF_RANGE (0x8) at half
+        # the spellcasting range. UPSTREAM (Tyria-Extractor / GWCA name these
+        # bits); a body reads them (authsrv `_caster_skill_reach`) so a caster
+        # does not lob a touch spell from across the field. Emitted to
+        # vault/content/skills.toml so the server can read them per row.
+        "touch_range": bool(flags & FLAG_TOUCH_RANGE),
+        "half_range": bool(flags & FLAG_HALF_RANGE),
         # THE CHAIN AND THE WEAPON (studies/daggers/FINDINGS.md F1-F3). The
         # NAMES are UPSTREAM (GWCA Skill.h); the meanings are checked by
         # test_skilltable section 8 against things that could refute them.
@@ -403,7 +412,8 @@ CONTENT_FIELDS = ("activation", "aftercast", "recharge",
                   "combo", "combo_req", "weapon_req", "aoe_range",
                   "skill_arguments", "duration0", "duration15",
                   "scale0", "scale15", "bonus_scale0", "bonus_scale15",
-                  "projectile", "impact_visual")      # WEAPONS-C10, +0x88 / +0x84
+                  "projectile", "impact_visual",      # WEAPONS-C10, +0x88 / +0x84
+                  "touch_range", "half_range")        # DESKWORK-D8, +0x10 bits
 
 
 def emit_content(rows, ids, build, exe, out_path) -> int:
@@ -433,8 +443,12 @@ def emit_content(rows, ids, build, exe, out_path) -> int:
         lines.append(f"[skills.{skill_id}]")
         for f in CONTENT_FIELDS:
             v = r[f]
-            lines.append(f"{f} = {v!r}" if isinstance(v, float)
-                         else f"{f} = {int(v)}")
+            if isinstance(v, bool):                  # before int: bool IS an int
+                lines.append(f"{f} = {'true' if v else 'false'}")
+            elif isinstance(v, float):
+                lines.append(f"{f} = {v!r}")
+            else:
+                lines.append(f"{f} = {int(v)}")
         lines.append(f"[skills.{skill_id}.provenance]")
         lines.append('source = "client-table"')
         lines.append('extractor = "toolkit/clientscan/skilltable.py"')
