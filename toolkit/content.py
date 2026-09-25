@@ -223,6 +223,9 @@ LABEL_DETAILS_KNOWN = frozenset({
     "CONDITION_BIT_CLEAR_REFUSED", "CONDITION_UNNUMBERED", "DURATION_UNMODELLED", "HEAL_PARTY",
     "INDETERMINATE_SLOT", "LITERAL_DROPPED", "SECOND_CONDITION_DROPPED", "TARGET_ALLY",
     "TARGET_FOE", "TOUCH",
+    # SKILLS-LV (2026-09-25, skills 60): the on-hit condition rider, the applied
+    # knock-down, the flat-constant condition slot, and the unblockable clause
+    "CLAUSE_UNBLOCKABLE", "CONDITION_FLAT_CONSTANT", "CONDITION_RIDER_ON_HIT", "KNOCKDOWN_APPLIED",
 })
 # (A client-table skill_effect row with NO tier is a legitimate HAND row -- world.toml's
 # 346 measures its number from the client's table and is hand-placed -- so the other

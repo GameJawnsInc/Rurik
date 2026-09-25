@@ -63,7 +63,7 @@ from skilldesc import Label, SLOT_FIELD, shifted, referee_slot   # noqa: E402
 # 61 checks, 1 declared skip ("2. the corpus"), rc=0 -- the mandatory core per
 # checks.py (2026-09-23, SKILLS-LT: +21 in section 1b, the label tier's gate on
 # synthetic rows; 40 on 2026-09-22). A whole green run with the vault is 124.
-LEDGER = checks.Ledger("skill description templates", floor=77)   # 77 from the bare run of 2026-09-23 (SKILLS-LU: +5 in 1b; the fix pass before it: +11); 146 with the vault
+LEDGER = checks.Ledger("skill description templates", floor=91)   # 91 from the bare run of 2026-09-25 (SKILLS-LV: +14 in 1b; SKILLS-LU: +5; the fix pass before it: +11); 162 with the vault and the 60-row emit
 check = checks.adopt(LEDGER)
 
 
@@ -326,12 +326,17 @@ flat = srow(7, 5, [(1, Label.EARTH_DAMAGE, "", AP, 10, 40),
                    (2, Label.CONDITION_DURATION, "Blind", "AGREE_FLAT", 10, 10)], ["TARGET_FOE"])
 why, det, fields, _v = G(flat, srec(5, args=2, b=(10, 10)), set())
 check(why is None and fields == {"scale_means": "Earth damage", "bonus_scale_means": "Blind"}
-      and LT.DETAIL_CONDITION_BIT_CLEAR in det,
-      "a condition on a BIT-CLEAR slot ships labelled and MARKED: skill_scale_value refuses the "
-      "slot, so the damage lands and the Blind does not (under-applied, counted)", (det, fields))
+      and LT.DETAIL_CONDITION_FLAT_CONSTANT in det and LT.DETAIL_CONDITION_BIT_CLEAR not in det,
+      "SKILLS-LV: a condition on a BIT-CLEAR slot with EQUAL endpoints ships labelled and marked "
+      "CONDITION_FLAT_CONSTANT -- skill_condition reads the flat constant the client prints (167's "
+      "Blind 10/10; until 2026-09-25 CONDITION_BIT_CLEAR_REFUSED, the Blind landing nothing)",
+      (det, fields))
 indet = srow(8, 10, [(2, Label.CONDITION_DURATION, "Deep Wound", "INDETERMINATE", 5, 20)], ["TARGET_FOE"])
-check(LT.DETAIL_INDETERMINATE in G(indet, srec(5, args=2, b=(5, 20), tc=10), set())[1],
-      "an INDETERMINATE slot ships MARKED (54.3's contest; the consumer refuses the bit-clear pair)")
+det_i = G(indet, srec(5, args=2, b=(5, 20), tc=10), set())[1]
+check(LT.DETAIL_INDETERMINATE in det_i and LT.DETAIL_CONDITION_BIT_CLEAR in det_i
+      and LT.DETAIL_CONDITION_FLAT_CONSTANT not in det_i,
+      "an INDETERMINATE slot ships MARKED (54.3's contest; the consumer still refuses the bit-clear "
+      "DIFFERING pair -- CONDITION_BIT_CLEAR_REFUSED stays 1033's, never the flat reader's)")
 two = srow(12, 15, [(2, Label.CONDITION_DURATION, "Bleeding", AP, 5, 15),
                     (1, Label.CONDITION_DURATION, "Crippled", AP, 5, 15)], ["TARGET_FOE"])
 check(LT.DETAIL_SECOND_CONDITION in G(two, srec(5, args=6, s=(5, 15), b=(5, 15), tc=15), set())[1],
@@ -566,6 +571,177 @@ with tempfile.TemporaryDirectory() as tmp:
     except ValueError:
         raised = True
     check(raised, "the writer refuses a value that is not a plain token (a newline inside a string)")
+
+# ---- SKILLS-LV (2026-09-25, skills 60): the condition rider on episodes, the
+# knock-down clause as a field, the flat-constant condition slot -- each rule
+# with its known-bad arm, on our own sentences and synthetic rows
+KR = LT.knockdown_kind
+check(KR("target foe is knocked down and takes 5 damage.") == LT.KD_FOE
+      and KR("all nearby foes are knocked down.") == LT.KD_FOE
+      and KR("you are knocked down after the blow.") == LT.KD_SELF
+      and KR("this strike knocks down attacking foes.") == LT.KD_QUALIFIED
+      and KR("for 8 seconds you cannot be knocked down.") == LT.KD_NEGATED
+      and KR("a plain sentence with no fall in it.") is None,
+      "knockdown_kind on OUR OWN phrases: the foe(s) the row lands on, the caster's own fall, a "
+      "qualified class of foes ('attacking foes', 3425's shape), a negation, none")
+CR = LT.condition_rider
+check(CR("foes struck by your physical attacks become poisoned for  n  seconds.") == (LT.RIDER_ON_HIT, "physical")
+      and CR("target ally's melee attacks cause weakness for  n  seconds.") == (LT.RIDER_ON_HIT, "melee")
+      and CR("your dagger attacks cause bleeding for  n  seconds.") == (LT.RIDER_ON_HIT, "dagger")
+      and CR("your attacks inflict bleeding for  n  seconds.") == (LT.RIDER_ON_HIT, LT.RIDER_WEAPON_ANY)
+      and CR("the next time you are struck, all adjacent foes are blinded for  n  seconds.") == (LT.RIDER_ON_STRUCK, None)
+      and CR("anyone striking those allies in melee becomes diseased for  n  seconds.") == (LT.RIDER_ON_STRUCK, None)
+      and CR("all adjacent foes are blinded for  n  seconds.") == (None, None)
+      and CR("target foe is struck for  n  earth damage and suffers from a deep wound for  n  seconds.") == (None, None),
+      "condition_rider on OUR OWN sentences: an on-hit rider with its weapon class (physical, melee, "
+      "dagger; ANY when unqualified), an on-struck rider ('the next time you are struck', 'anyone "
+      "striking'), and none for a condition in its own sentence or for 'target foe is struck for N "
+      "damage' (1033's shape is not a rider)")
+check(LT.sentence_governed("for 24 seconds, foes become poisoned for  n  seconds.", set())
+      and LT.sentence_governed("for  n  seconds, your attacks cause bleeding.", {Label.DURATION})
+      and not LT.sentence_governed("all adjacent foes are blinded for  n  seconds.", {Label.CONDITION_DURATION})
+      and LT.slot_sentences(LT.normalise("A first %str1% one. For %str3% seconds, a second %str2% one.")) == {
+          0: (0, "a first  n  one.", (1,)), 1: (1, "for  n  seconds, a second  n  one.", (3, 2)),
+          2: (1, "for  n  seconds, a second  n  one.", (3, 2))},
+      "a sentence is GOVERNED by the episode when it opens with a literal 'for N seconds' (435's flat "
+      "24) or holds a DURATION slot; slot_sentences puts each occurrence in its own sentence beside "
+      "its neighbours")
+check("CLAUSE_UNBLOCKABLE" in rf("for 10 seconds you cannot be blocked by blinded foes")
+      and "CLAUSE_UNBLOCKABLE" in LT.DETAILS and "CLAUSE_UNBLOCKABLE" not in LT.COMPOUND_FLAGS
+      and {LT.DETAIL_CONDITION_RIDER_ON_HIT, LT.DETAIL_KNOCKDOWN_APPLIED, LT.DETAIL_CONDITION_FLAT_CONSTANT}
+      <= _content.LABEL_DETAILS_KNOWN
+      and {LT.RIDER_ON_HIT} | LT.RIDER_WEAPON_READERS <= LT.OVERLAY_VOCABULARY,
+      "row_flags raises CLAUSE_UNBLOCKABLE on 'cannot be blocked' (1041's second sentence) -- a "
+      "dropped clause, not a compound flag; the three new marks are in content's known set and the "
+      "rider tokens in the overlay vocabulary")
+
+
+def rslot(n, cond, v, lo, hi, rider, cls, governed=True):
+    return {"index": n, "field": SLOT_FIELD[n], "verdict": v, "lo": lo, "hi": hi,
+            "label": Label.CONDITION_DURATION, "detail": cond, "rider": rider,
+            "rider_weapon": cls, "governed": governed, "sentence": 0}
+
+
+rider = {"id": 40, "type_code": 19, "flags": [], "tier": "SERVED",
+         "slots": [rslot(2, "Poison", AP, 3, 15, LT.RIDER_ON_HIT, "physical")]}
+r_rider = srec(0, args=4, b=(3, 15), d=(24, 24), tc=19)              # 435's shape
+why_r, det_r, f_r, v_r = G(rider, r_rider, set())
+check(why_r is None
+      and f_r == {"bonus_scale_means": "Poison", "condition_rider": "on_hit", "rider_weapon": "physical"}
+      and det_r == [LT.DETAIL_CONDITION_RIDER_ON_HIT] and [v["slot"] for v in v_r] == [2],
+      "SKILLS-LV: an ON-HIT rider on a Preparation (435's shape: the wearer's physical attacks "
+      "Poison) SHIPS with condition_rider = on_hit and rider_weapon = physical, marked "
+      "CONDITION_RIDER_ON_HIT -- authsrv.episode_condition_riders is its consumer; its byte 0 is not "
+      "a foe byte and does not exclude it (the condition is not at the cast)", (why_r, det_r, f_r))
+ench = {"id": 41, "type_code": 6, "flags": ["TARGET_ALLY"], "tier": "SERVED",
+        "slots": [{"index": 3, "field": "duration", "verdict": AP, "lo": 5, "hi": 20,
+                   "label": Label.DURATION, "detail": ""},
+                  rslot(1, "Weakness", AP, 5, 20, LT.RIDER_ON_HIT, "melee")]}
+r_ench = srec(3, args=3, s=(5, 20), d=(5, 20), tc=6)                # 1997's shape
+why_e, det_e, f_e, _v = G(ench, r_ench, set())
+check(why_e is None and f_e == {"scale_means": "Weakness", "condition_rider": "on_hit", "rider_weapon": "melee"}
+      and LT.DETAIL_CONDITION_RIDER_ON_HIT in det_e,
+      "an on-hit rider on an ENCHANTMENT aimed at an ally (1997's shape: the ally's melee attacks "
+      "Weaken) ships with rider_weapon = melee", (why_e, det_e, f_e))
+check(G(rider, srec(0, args=0, b=(3, 15), d=(5, 30), tc=19), set())[0] == LT.EXCL_EPISODE_REFUSED
+      and G(dict(rider, slots=[rslot(2, "Poison", AP, 3, 15, LT.RIDER_ON_HIT, "dagger")]), r_rider, set())[0]
+      == LT.EXCL_CONDITION_RIDER_CLASS
+      and G(dict(rider, slots=[rslot(2, "Poison", AP, 3, 15, LT.RIDER_ON_STRUCK, None)]), r_rider, set())[0]
+      == LT.EXCL_CONDITION_ON_EPISODE
+      and G(dict(rider, slots=[rslot(2, "Poison", AP, 3, 15, None, None, governed=True)]), r_rider, set())[0]
+      == LT.EXCL_CONDITION_ON_EPISODE
+      and G(dict(rider, type_code=5), srec(5, args=4, b=(3, 15)), set())[0] == LT.EXCL_CONDITION_RIDER_NO_EPISODE,
+      "KNOWN-BAD ARMS: the same rider whose EPISODE never opens (926's 5..30 bit-clear duration) is "
+      "EPISODE_REFUSED; a weapon class with no reader ('dagger') is CONDITION_RIDER_CLASS; an ON-STRUCK "
+      "rider (2136, 113) and a governed sentence with no rider words stay CONDITION_ON_EPISODE; rider "
+      "wording on a NON-episode type is CONDITION_RIDER_NO_EPISODE -- none ships")
+act = {"id": 42, "type_code": 3, "flags": ["ALL_FOES", "AREA_ADJACENT", "CLAUSE_UNBLOCKABLE"], "tier": "SERVED",
+       "slots": [rslot(2, "Blind", AP, 3, 10, None, None, governed=False),
+                 {"index": 3, "field": "duration", "verdict": AP, "lo": 10, "hi": 30,
+                  "label": Label.DURATION, "detail": ""}]}
+r_act = srec(0, args=5, b=(3, 10), d=(10, 30), tc=3)
+r_act["aoe_range"] = 156.0
+why_a2, det_a2, f_a2, _v = G(act, r_act, set())
+check(why_a2 is None and f_a2 == {"bonus_scale_means": "Blind"}
+      and {LT.DETAIL_AREA_CASTER, "CLAUSE_UNBLOCKABLE"} <= set(det_a2)
+      and LT.DETAIL_DURATION_UNMODELLED not in det_a2
+      and G(act, dict(r_act, aoe_range=0.0), set())[0] == LT.EXCL_CONDITION_ON_EPISODE,
+      "a condition in its OWN ungoverned sentence on a byte-0 Stance with a radius (1041's shape: "
+      "'All adjacent foes are Blinded', then the stance) fires at the ACTIVATION through the caster "
+      "arm -- AREA_CASTER, its 'cannot be blocked' clause marked, the stance's own duration no "
+      "under-application; the same row with NO radius has no arm and stays CONDITION_ON_EPISODE",
+      (why_a2, det_a2, f_a2))
+kd = srow(43, 5, [(1, Label.LIGHTNING_DAMAGE, "", AP, 10, 60)], ["TOUCH", "CLAUSE_KNOCKDOWN"])
+kd["knockdown"] = LT.KD_FOE
+why_k, det_k, f_k, _v = G(kd, srec(5), set())
+check(why_k is None and f_k == {"scale_means": "Lightning damage", "knocks_down": True}
+      and LT.DETAIL_KNOCKDOWN_APPLIED in det_k and "CLAUSE_KNOCKDOWN" not in det_k,
+      "SKILLS-LV: an unconditional knock-down of the foe the row lands on (231's shape) becomes the "
+      "hand rows' own `knocks_down = true`, marked KNOCKDOWN_APPLIED and no longer CLAUSE_KNOCKDOWN",
+      (why_k, det_k, f_k))
+kd_area = srow(44, 5, [(1, Label.FIRE_DAMAGE, "", AP, 7, 112)],
+               ["ALL_FOES", "AREA_ADJACENT", "TARGET_FOE", "CLAUSE_KNOCKDOWN"])
+kd_area["knockdown"] = LT.KD_FOE
+kd_c = dict(kd_area, flags=["ALL_FOES", "AREA_ADJACENT", "CLAUSE_KNOCKDOWN"])
+check(G(kd_area, srec(16), set())[2].get("knocks_down") is True
+      and G(kd_c, r_c, set())[2].get("knocks_down") is True and LT.DETAIL_AREA_CASTER in G(kd_c, r_c, set())[1],
+      "a burst (187's shape, byte 16) and a caster-centred area (byte 0 with a radius) carry the "
+      "knock-down too -- burst_player_spell and burst_player_caster_area read the field")
+kd_timed = G(kd_area, srec(16, d=(9, 9)), set())
+kd_q = G(dict(kd, knockdown=LT.KD_QUALIFIED), srec(5), set())
+kd_s = G(dict(kd, knockdown=LT.KD_SELF), srec(5), set())
+kd_n = G(dict(kd, knockdown=LT.KD_NEGATED), srec(5), set())
+kd_p = G(kd, dict(srec(5), projectile=199), set())
+check(all(w is None and "knocks_down" not in f and "CLAUSE_KNOCKDOWN" in d
+          and LT.DETAIL_KNOCKDOWN_APPLIED not in d for w, d, f, _v in (kd_timed, kd_q, kd_s, kd_n, kd_p)),
+      "KNOWN-BAD ARMS: a TIMED record (192's 9 s shower -- skill_knock_down_seconds would read the "
+      "slot as the fall's length), a qualified class ('attacking foes', 3425), the caster's own fall, "
+      "a negation and a projectile of its own each keep CLAUSE_KNOCKDOWN and carry no field")
+f7 = G(flat, srec(5, args=2, b=(10, 10)), set())
+rep_lv = {"rows": {40: rider, 42: act, 43: kd, 44: kd_area, 7: flat}, "self_conflicts": []}
+recs_lv = {40: r_rider, 42: r_act, 43: srec(5), 44: srec(16), 7: srec(5, args=2, b=(10, 10))}
+good = {40: {"fields": f_r, "type_code": 19, "tier": "label", "tier_detail": det_r, "verified": v_r},
+        42: {"fields": f_a2, "type_code": 3, "tier": "label", "tier_detail": det_a2, "verified": [{"slot": 2}]},
+        43: {"fields": f_k, "type_code": 5, "tier": "label", "tier_detail": det_k, "verified": [{"slot": 1}]},
+        7: {"fields": f7[2], "type_code": 5, "tier": "label", "tier_detail": f7[1], "verified": f7[3]}}
+check(LT.check_label_rows(good, rep_lv, set(), recs_lv) == [],
+      "the three consumers' rows pass the checker with their records",
+      LT.check_label_rows(good, rep_lv, set(), recs_lv))
+
+
+def _one(sid, recs=None, **mod):
+    r = dict(good[sid])
+    r.update(mod)
+    return LT.check_label_rows({sid: r}, rep_lv, set(), recs or recs_lv)
+
+
+arms_lv = {
+    "CONDITION_RIDER_ON_HIT mark": _one(40, tier_detail=[]),
+    "rider_weapon": _one(40, fields=dict(f_r, rider_weapon="melee")),
+    "never opens": _one(40, recs={**recs_lv, 40: srec(0, args=0, b=(3, 15), d=(5, 30), tc=19)}),
+    "timed record": _one(43, recs={**recs_lv, 43: srec(5, d=(9, 9))}),
+    "KNOCKDOWN_APPLIED mark without": _one(43, fields={"scale_means": "Lightning damage"}),
+    "neither applied nor marked": _one(43, fields={"scale_means": "Lightning damage"}, tier_detail=["TOUCH"]),
+    "at-cast condition": _one(42, tier_detail=["ALL_FOES", "AREA_ADJACENT"]),
+    "CONDITION_FLAT_CONSTANT mark": _one(7, recs={**recs_lv, 7: srec(5, args=6, b=(10, 10))}),
+}
+check(all(f and any(want in x for x in f) for want, f in arms_lv.items()),
+      "KNOWN-BAD ARMS (the checker): a rider row with its mark stripped, a rider_weapon that is not "
+      "the sentence's class, a rider on a record whose episode never opens, knocks_down on a timed "
+      "record, the KNOCKDOWN_APPLIED mark with no field, a knock-down clause neither applied nor "
+      "marked, an episode-type condition shipped as an at-cast one (no rider, no caster area), and a "
+      "CONDITION_FLAT_CONSTANT mark on a bit-SET slot are each NAMED", arms_lv)
+with tempfile.TemporaryDirectory() as tmp:
+    p = os.path.join(tmp, "lv.toml")
+    LT.emit_labels({40: good[40], 43: good[43]}, [], 38797, "exe", p, plain=[40, 43])
+    with open(p, "rb") as fh:
+        table = tomllib.load(fh)
+    se = table["skill_effect"]
+    check(se["40"]["condition_rider"] == "on_hit" and se["40"]["rider_weapon"] == "physical"
+          and se["43"]["knocks_down"] is True and "knocks_down" not in se["40"]
+          and LT.text_leak(table) == [],
+          "emit_labels writes the rider fields and the knock-down boolean, tomllib reads them back "
+          "typed, and no string leaves the vocabulary", se)
 
 # ---------------------------------------------------------------- section 2
 print("\n== 2. the corpus (pinned exe + Gw.dat) ==")
@@ -827,16 +1003,20 @@ if records is not None:
           f"the plain rows a hand row already covers are excluded as HAND_ROW ({n_hand_plain}; 10 "
           f"on 2026-09-23), every reason from the enum", dict(tally))
     check(tally.get("DURATION_ONLY") == 41
-          and by_reason.get("CONDITION_ON_EPISODE") == [113, 435, 926, 1041, 1997, 2136]
+          and by_reason.get("CONDITION_ON_EPISODE") == [113, 2136]
+          and by_reason.get("EPISODE_REFUSED") == [926]
+          and "CONDITION_RIDER_CLASS" not in by_reason and "CONDITION_RIDER_NO_EPISODE" not in by_reason
           and by_reason.get("PET_ATTACK") == [441]
           and by_reason.get("RECIPIENT_NOT_A_FOE") == [769, 770, 917, 1364, 1468]
           and by_reason.get("RECIPIENT_NOT_AN_ALLY") == [918, 1032, 1354],
-          "THE EXCLUSIONS, client-side: 41 duration-only; 6 conditions an episode inflicts later "
-          "(113, 435, 926, 1041, 1997, 2136); the pet attack 441; 5 at-cast damages / conditions "
-          "whose target byte is unresolved (769 917 1468), another ally (770) or self with no area "
-          "words and no radius (1364) -- SKILLS-LU moved 183 188 840 1113 2212 to the caster arm "
-          "and 97 to UNMODELLED_CLASS; 3 heals byte 1 would hand to the selected agent (918 1032 "
-          "1354)", by_reason)
+          "THE EXCLUSIONS, client-side: 41 duration-only; SKILLS-LV split the 6 conditions an "
+          "episode inflicts later -- 113 and 2136 stay (ON-STRUCK riders: whoever strikes the wearer), "
+          "926 is EPISODE_REFUSED (an on-hit rider whose 5..30 bit-clear duration never opens), 435 "
+          "and 1997 ship as on-hit riders and 1041 at its activation through the caster arm; no rider "
+          "class without a reader and no rider on a non-episode type on this build; the pet attack "
+          "441; 5 at-cast damages / conditions whose target byte is unresolved (769 917 1468), another "
+          "ally (770) or self with no area words and no radius (1364); 3 heals byte 1 would hand to "
+          "the selected agent (918 1032 1354)", by_reason)
     check(by_reason.get("PERCENT_SLOT") == [292]
           and "CHAIN_REQUIREMENT" not in by_reason
           and by_reason.get("UNMODELLED_CLASS") == [96, 97, 106, 2051, 2100]
@@ -847,10 +1027,11 @@ if records is not None:
           "fleshiness, the spirits of 2051 and 2100; the two class heals a person read as NOT "
           "including the caster -- 1262 excludes it, 943 heals only the relieved (287 and 2221 ship "
           "HEAL_PARTY)", by_reason)
-    check(len(lrows) == 131 - n_hand_plain - 64 and len(lrows) + len(excluded) == 131,
-          f"THE SET: {len(lrows)} label-tier rows = 131 plain - {n_hand_plain} hand - 64 excluded "
-          f"(57 on 2026-09-23 after SKILLS-LU's three consumers; 47 after the fix pass, 59 before "
-          f"it); nothing shrinks silently", (len(lrows), len(excluded)))
+    check(len(lrows) == 131 - n_hand_plain - 61 and len(lrows) + len(excluded) == 131,
+          f"THE SET: {len(lrows)} label-tier rows = 131 plain - {n_hand_plain} hand - 61 excluded "
+          f"(60 on 2026-09-25 after SKILLS-LV's riders and 1041's activation; 57 on 2026-09-23 after "
+          f"SKILLS-LU; 47 after the fix pass, 59 before it); nothing shrinks silently",
+          (len(lrows), len(excluded)))
     check(not (set(lrows) & hand_ids) and skilldesc.check_label_rows(lrows, rep, hand_ids, records) == [],
           "no emitted row keys a hand-row id, and the set passes its own checker (records included)")
     arms = {}
@@ -879,6 +1060,52 @@ if records is not None:
           "with the mark stripped is the ONE fault the checker names -- a chain requirement with no "
           "gate, a byte-0 damage outside the caster arm, a class heal without its reading",
           {s: a[1] for s, a in stripped.items()})
+    # SKILLS-LV: the pass-2 rows carry their marks; each mark STRIPPED is named, and the
+    # rows the gate refused are named when forced in with the consumer's own field
+    lv = {}
+    for sid, mark, want in ((435, "CONDITION_RIDER_ON_HIT", "CONDITION_RIDER_ON_HIT mark"),
+                            (187, "KNOCKDOWN_APPLIED", "KNOCKDOWN_APPLIED"),
+                            (167, "CONDITION_FLAT_CONSTANT", "CONDITION_FLAT_CONSTANT")):
+        r = dict(lrows[sid])
+        r["tier_detail"] = [d for d in r["tier_detail"] if d != mark]
+        lv[sid] = (mark in lrows[sid]["tier_detail"],
+                   skilldesc.check_label_rows({sid: r}, rep, hand_ids, records), want)
+    r926 = {"fields": {"scale_means": "Bleeding", "condition_rider": "on_hit", "rider_weapon": "any"},
+            "type_code": 6, "tier": "label", "tier_detail": ["CONDITION_RIDER_ON_HIT"], "verified": [{"slot": 1}]}
+    f926 = skilldesc.check_label_rows({926: r926}, rep, hand_ids, records)
+    r2136 = {"fields": {"scale_means": "Blind"}, "type_code": 3, "tier": "label",
+             "tier_detail": ["ALL_FOES", "AREA_ADJACENT", "AREA_CASTER"], "verified": [{"slot": 1}]}
+    f2136 = skilldesc.check_label_rows({2136: r2136}, rep, hand_ids, records)
+    r192 = dict(lrows[192], fields={"scale_means": "Fire damage", "knocks_down": True},
+                tier_detail=[d for d in lrows[192]["tier_detail"] if d != "CLAUSE_KNOCKDOWN"] + ["KNOCKDOWN_APPLIED"])
+    f192 = skilldesc.check_label_rows({192: r192}, rep, hand_ids, records)
+    r3425 = dict(lrows[3425], fields={"scale_means": "+ Damage", "knocks_down": True},
+                 tier_detail=[d for d in lrows[3425]["tier_detail"] if d != "CLAUSE_KNOCKDOWN"] + ["KNOCKDOWN_APPLIED"])
+    f3425 = skilldesc.check_label_rows({3425: r3425}, rep, hand_ids, records)
+    check(all(had and f and any(want in x for x in f) and str(sid) in f[0] for sid, (had, f, want) in lv.items())
+          and any("never opens" in x for x in f926) and any("at-cast condition" in x for x in f2136)
+          and any("timed record" in x for x in f192) and any("knock-down kind qualified" in x for x in f3425),
+          "KNOWN-BAD ARMS (SKILLS-LV): 435, 187 and 167 ship WITH their marks and each stripped is "
+          "named; 926 forced in as a rider is named for its episode that never opens; 2136 forced in "
+          "with AREA_CASTER is named as an on-struck rider shipped at the cast; 192 forced to carry "
+          "knocks_down is named for its 9 s shower; 3425 for its qualified 'attacking foes'",
+          ({s: a[1] for s, a in lv.items()}, f926, f2136, f192, f3425))
+    check(lrows[435]["fields"] == {"bonus_scale_means": "Poison", "condition_rider": "on_hit", "rider_weapon": "physical"}
+          and lrows[435]["type_code"] == 19 and records[435]["target"] == 0
+          and lrows[1997]["fields"] == {"scale_means": "Weakness", "condition_rider": "on_hit", "rider_weapon": "melee"}
+          and lrows[1997]["type_code"] == 6 and records[1997]["target"] == 3
+          and lrows[1041]["fields"] == {"bonus_scale_means": "Blind"} and lrows[1041]["type_code"] == 3
+          and records[1041]["aoe_range"] == 156.0 and "CLAUSE_UNBLOCKABLE" in lrows[1041]["tier_detail"]
+          and all(lrows[s]["fields"].get("knocks_down") is True for s in (187, 231, 294, 784, 1086))
+          and all("knocks_down" not in lrows[s]["fields"] for s in (192, 3425))
+          and records[192]["duration0"] == 9 and rep["rows"][3425]["knockdown"] == skilldesc.KD_QUALIFIED
+          and rep["rows"][926]["slots"][1]["rider"] == skilldesc.RIDER_ON_HIT and records[926]["skill_arguments"] == 2
+          and all(rep["rows"][s]["slots"][-1]["rider"] == skilldesc.RIDER_ON_STRUCK for s in (113, 2136)),
+          "SKILLS-LV's rows against the records: 435 a Preparation on the caster (byte 0), Poison on "
+          "physical attacks; 1997 an Enchantment on an ally (byte 3), Weakness on melee attacks; 1041 "
+          "a Stance over 156 with its unblockable clause marked; knocks_down on 187 231 294 784 1086 "
+          "and not on 192 (duration 9) or 3425 (a qualified class); 926's rider sentence read on a "
+          "bit-clear 5..30 record; 113 and 2136 read as on-struck")
     r97 = dict(lrows[183], tier_detail=["ALL_FOES", "AREA_NEARBY", "AREA_CASTER"])
     f97 = skilldesc.check_label_rows({97: r97}, rep, hand_ids, records)
     r1262 = {"fields": {"scale_means": "Heal"}, "type_code": 5, "tier": "label",
@@ -904,38 +1131,45 @@ if records is not None:
           f"KNOWN-BAD ARM: a conditional SERVED row ({forced}) forced through the gate is the one "
           f"fault the checker names", faults)
     dt = collections.Counter(d for r in lrows.values() for d in r["tier_detail"] if d in skilldesc.DETAILS)
-    check(dt == {"AREA_BURST": 3, "AREA_CASTER": 5, "HEAL_PARTY": 2, "CHAIN_GATED": 3,
-                 "CHAIN_STEP_ADVANCES": 1, "AREA_ONE_TARGET": 21, "CONDITION_BIT_CLEAR_REFUSED": 2,
+    check(dt == {"AREA_BURST": 3, "AREA_CASTER": 6, "HEAL_PARTY": 2, "CHAIN_GATED": 3,
+                 "CHAIN_STEP_ADVANCES": 1, "AREA_ONE_TARGET": 21, "CONDITION_BIT_CLEAR_REFUSED": 1,
+                 "CONDITION_FLAT_CONSTANT": 1, "CONDITION_RIDER_ON_HIT": 2, "KNOCKDOWN_APPLIED": 5,
                  "INDETERMINATE_SLOT": 1, "DURATION_UNMODELLED": 10, "CONDITION_UNNUMBERED": 2,
-                 "LITERAL_DROPPED": 5, "CLAUSE_MOVE_SPEED": 1, "CLAUSE_KNOCKDOWN": 7,
+                 "LITERAL_DROPPED": 5, "CLAUSE_MOVE_SPEED": 1, "CLAUSE_KNOCKDOWN": 2,
                  "CLAUSE_SHADOW_STEP": 4, "CLAUSE_INTERRUPT": 2, "CLAUSE_REMOVAL": 3,
                  "CLAUSE_ALSO_CASTER": 3, "CLAUSE_DISABLE": 1, "CLAUSE_DOUBLE_DAMAGE": 1,
-                 "CLAUSE_CAST_SPEED": 1, "CLAUSE_RANGE": 4, "CLAUSE_REVEAL": 1},
-          "MARKED, counted: 3 bursts spell_burst covers (187 189 1086), 5 caster-centred areas "
-          "(183 188 840 1113 2212), 2 party heals (287 2221), 3 chain-gated non-attacks (784 973 "
-          "1033), 974's chain step now ADVANCING, 21 area wordings the server reaches one recipient "
-          "of (973's adjacent Blind joined), 2 bit-clear conditions (167, 1033's Deep Wound -- also "
-          "the 1 INDETERMINATE slot), 10 non-episode durations the at-cast path never runs (840 1033 "
-          "1113 joined 167 192 197 and the rest), 2 unnumbered conditions (228's Cracked Armor, "
-          "2221's Burning), 5 literal constants, and the dropped clauses by kind: 7 knock-downs "
-          "(784 joined), 4 shadow steps, 2 interrupts, 3 removals (2221's 'relieved of'), 3 'you "
-          "and' (840's 'you and all'), a disable, a double damage, 1996's cast and move slows, 4 half "
-          "ranges, 2212's compass reveal", dict(dt))
+                 "CLAUSE_CAST_SPEED": 1, "CLAUSE_RANGE": 4, "CLAUSE_REVEAL": 1, "CLAUSE_UNBLOCKABLE": 1},
+          "MARKED, counted: 3 bursts spell_burst covers (187 189 1086), 6 caster-centred areas "
+          "(183 188 840 1113 2212 and, SKILLS-LV, 1041's Stance at its activation), 2 party heals "
+          "(287 2221), 3 chain-gated non-attacks (784 973 1033), 974's chain step ADVANCING, 21 area "
+          "wordings the server reaches one recipient of, SKILLS-LV's 2 on-hit riders (435 1997), 5 "
+          "knock-downs APPLIED (187 231 294 784 1086) with 2 still dropped (192's shower would fall "
+          "for its 9 s, 3425's 'attacking foes' is a class the server cannot test), 167's Blind now "
+          "a FLAT CONSTANT and 1033's Deep Wound the 1 bit-clear refusal (the 1 INDETERMINATE slot), "
+          "10 non-episode durations, 2 unnumbered conditions, 5 literal constants, and the dropped "
+          "clauses by kind: 4 shadow steps, 2 interrupts, 3 removals, 3 'you and', a disable, a "
+          "double damage, 1996's cast and move slows, 4 half ranges, 2212's compass reveal, 1041's "
+          "'cannot be blocked'", dict(dt))
     under = sorted(s for s in lrows if set(lrows[s]["tier_detail"]) & set(skilldesc.DETAILS))
-    check(len(under) == 46
+    check(len(under) == 49
           and sorted(set(lrows) - set(under)) == [117, 191, 220, 286, 293, 959, 1043, 1120, 1404, 1686, 1762]
           and [s for s in sorted(lrows) if "AREA_BURST" in lrows[s]["tier_detail"]] == [187, 189, 1086]
-          and [s for s in sorted(lrows) if "AREA_CASTER" in lrows[s]["tier_detail"]] == [183, 188, 840, 1113, 2212]
+          and [s for s in sorted(lrows) if "AREA_CASTER" in lrows[s]["tier_detail"]] == [183, 188, 840, 1041, 1113, 2212]
           and [s for s in sorted(lrows) if "HEAL_PARTY" in lrows[s]["tier_detail"]] == [287, 2221]
           and [s for s in sorted(lrows) if "CHAIN_GATED" in lrows[s]["tier_detail"]] == [784, 973, 1033]
+          and [s for s in sorted(lrows) if "CONDITION_RIDER_ON_HIT" in lrows[s]["tier_detail"]] == [435, 1997]
+          and [s for s in sorted(lrows) if "KNOCKDOWN_APPLIED" in lrows[s]["tier_detail"]] == [187, 231, 294, 784, 1086]
+          and [s for s in sorted(lrows) if "CLAUSE_KNOCKDOWN" in lrows[s]["tier_detail"]] == [192, 3425]
           and {"AREA_ONE_TARGET", "DURATION_UNMODELLED"} <= set(lrows[192]["tier_detail"])
           and {"AREA_ONE_TARGET", "DURATION_UNMODELLED"} <= set(lrows[197]["tier_detail"]),
-          "46 of 57 rows carry a mark; the eleven without one are the same single-clause templates "
+          "49 of 60 rows carry a mark; the eleven without one are the same single-clause templates "
           "as before SKILLS-LU (every new row rides a consumer that is named); AREA_BURST is exactly "
-          "187 189 1086, AREA_CASTER 183 188 840 1113 2212, HEAL_PARTY 287 2221, CHAIN_GATED 784 973 "
-          "1033; the areas over time 192 and 197 that spell_burst refuses say ONE_TARGET + "
-          "DURATION_UNMODELLED (ENG-2, LT-R7)", sorted(set(lrows) - set(under)))
-    check(lrows[187]["fields"] == {"scale_means": "Fire damage"} and "AREA_BURST" in lrows[187]["tier_detail"]
+          "187 189 1086, AREA_CASTER 183 188 840 1041 1113 2212, HEAL_PARTY 287 2221, CHAIN_GATED 784 "
+          "973 1033, CONDITION_RIDER_ON_HIT 435 1997, KNOCKDOWN_APPLIED 187 231 294 784 1086 with "
+          "CLAUSE_KNOCKDOWN left on 192 and 3425; the areas over time 192 and 197 that spell_burst "
+          "refuses say ONE_TARGET + DURATION_UNMODELLED (ENG-2, LT-R7)", sorted(set(lrows) - set(under)))
+    check(lrows[187]["fields"] == {"scale_means": "Fire damage", "knocks_down": True}
+          and "AREA_BURST" in lrows[187]["tier_detail"]
           and lrows[220]["fields"] == {"bonus_scale_means": "Blind"}
           and lrows[831]["fields"] == {"scale_means": "Attack speed increase",
                                        "bonus_scale_means": "Movement speed increase"}
@@ -943,15 +1177,15 @@ if records is not None:
           and lrows[434]["fields"] == {"scale_means": "+ Damage"} and lrows[434]["type_code"] == 19
           and lrows[3425]["fields"] == {"scale_means": "+ Damage"}
           and lrows[167]["fields"] == {"scale_means": "Earth damage", "bonus_scale_means": "Blind"}
-          and {"AREA_NEAR", "AREA_ONE_TARGET", "CONDITION_BIT_CLEAR_REFUSED", "DURATION_UNMODELLED"}
-          <= set(lrows[167]["tier_detail"])
+          and {"AREA_NEAR", "AREA_ONE_TARGET", "CONDITION_FLAT_CONSTANT", "DURATION_UNMODELLED"}
+          <= set(lrows[167]["tier_detail"]) and "CONDITION_BIT_CLEAR_REFUSED" not in lrows[167]["tier_detail"]
           and {"CLAUSE_MOVE_SPEED", "CLAUSE_CAST_SPEED"} <= set(lrows[1996]["tier_detail"])
           and "CHAIN_STEP_ADVANCES" in lrows[974]["tier_detail"]
           and "CHAIN_STEP_NOT_ADVANCED" not in lrows[974]["tier_detail"],
           "spot rows: 187 fire (burst), 220 Blind at str2, 831 both speeds + its double damage named, "
           "434 a preparation's +damage, 3425's +holy is the additive '+ Damage', 167 earth + a "
-          "bit-clear Blind over an area near a location for 5 s, 1996's dropped slows, 974's chain "
-          "step ADVANCES (SKILLS-LU)")
+          "bit-clear Blind (a FLAT constant since SKILLS-LV) over an area near a location for 5 s, "
+          "1996's dropped slows, 974's chain step ADVANCES (SKILLS-LU)")
     # SKILLS-LU's rows, read off the corpus: the record each consumer keys on
     check(lrows[183]["fields"] == {"scale_means": "Fire damage"} and lrows[183]["type_code"] == 5
           and records[183]["target"] == 0 and records[183]["aoe_range"] == 156.0
@@ -962,8 +1196,9 @@ if records is not None:
           and lrows[287]["fields"] == {"scale_means": "Heal"} and records[287]["aoe_range"] == 5000.0
           and records[2221]["aoe_range"] == 5000.0
           and {"HEAL_PARTY", "CLAUSE_REMOVAL", "CONDITION_UNNUMBERED"} <= set(lrows[2221]["tier_detail"])
-          and lrows[784]["fields"] == {"scale_means": "Poison"} and records[784]["combo_req"] == 2
-          and {"CHAIN_GATED", "CLAUSE_KNOCKDOWN"} <= set(lrows[784]["tier_detail"])
+          and lrows[784]["fields"] == {"scale_means": "Poison", "knocks_down": True} and records[784]["combo_req"] == 2
+          and {"CHAIN_GATED", "KNOCKDOWN_APPLIED"} <= set(lrows[784]["tier_detail"])
+          and "CLAUSE_KNOCKDOWN" not in lrows[784]["tier_detail"]
           and records[973]["combo_req"] == 4 and {"CHAIN_GATED", "AREA_ONE_TARGET"} <= set(lrows[973]["tier_detail"])
           and records[1033]["combo_req"] == 1 and lrows[1033]["type_code"] == 10
           and {"CHAIN_GATED", "INDETERMINATE_SLOT", "CONDITION_BIT_CLEAR_REFUSED"} <= set(lrows[1033]["tier_detail"])
@@ -979,9 +1214,10 @@ if records is not None:
           "(combo 2); and the four class-heal READINGS still match their templates' digests on this "
           "build (a changed template voids the reading and the row falls back to the exclusion)")
     types = collections.Counter(r["type_code"] for r in lrows.values())
-    check(set(types) <= {3, 4, 5, 7, 10, 14, 19} and types[5] >= 20,
-          "the shipped types: Stances, Hexes, Spells (20+), Signets, Skills, attacks, a Preparation "
-          "-- no Enchantment, no Shout, no pet attack, no Glyph", dict(types))
+    check(set(types) <= {3, 4, 5, 6, 7, 10, 14, 19} and types[5] >= 20 and types[6] == 1 and types[19] == 2,
+          "the shipped types: Stances, Hexes, Spells (20+), Signets, Skills, attacks, two "
+          "Preparations (434, 435) and ONE Enchantment (1997, SKILLS-LV's rider) -- no Shout, no pet "
+          "attack, no Glyph", dict(types))
     build = skilltable.build_of(data)
     check(build == 38797, "the build stamp is derived from the image's bytes: 38797", build)
     with tempfile.TemporaryDirectory() as tmp:

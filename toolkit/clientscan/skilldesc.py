@@ -398,6 +398,10 @@ FLAG_SPEED_MOVE = "SPEED_MOVE"
 # SKILLS-LU (2026-09-23, the first residue consumers, skills 59): a compass /
 # hidden-object clause a combat consumer never reads (2212's second sentence).
 FLAG_CLAUSE_REVEAL = "CLAUSE_REVEAL"
+# SKILLS-LV (2026-09-25, pass 2 of the residue, skills 60): "you cannot be
+# blocked" (1041's second sentence) -- no block reader honours it, so a row
+# that carries it says so.
+FLAG_CLAUSE_UNBLOCKABLE = "CLAUSE_UNBLOCKABLE"
 FLAG_PATTERNS = (
     (FLAG_IF, r"\bif\b"),
     (FLAG_FOR_EACH, r"\bfor (each|every)\b|\bper\b"),
@@ -439,6 +443,7 @@ FLAG_PATTERNS = (
     (FLAG_CLAUSE_RANGE, r"\bhalf (the normal |its normal )?range\b|\b(shorter|longer|reduced|increased) range\b"),
     (FLAG_SPEED_MOVE, r"\bmoves?\b[^.]{0,40}?\b(slower|faster)\b"),
     (FLAG_CLAUSE_REVEAL, r"\bhidden objects?\b|\bare revealed\b"),
+    (FLAG_CLAUSE_UNBLOCKABLE, r"\bcannot be blocked\b"),
 )
 FLAGS = tuple(f for f, _ in FLAG_PATTERNS)
 AREA_FLAGS = frozenset({FLAG_AREA_ADJACENT, FLAG_AREA_NEARBY,
@@ -453,6 +458,124 @@ def row_flags(text):
     """The classifier flags a template's wording raises. A frozenset of FLAG_*."""
     low = text.lower()
     return frozenset(f for f, pat in FLAG_PATTERNS if re.search(pat, low))
+
+
+# --------------------------------------------------------------------------
+# SKILLS-LV (2026-09-25, skills 60): WHEN a condition slot fires, read off its
+# own SENTENCE -- and what a knock-down clause knocks down
+# --------------------------------------------------------------------------
+#
+# A LABEL DOES NOT SAY WHEN, and for a condition on an EPISODE type the six
+# rows of 55.2's CONDITION_ON_EPISODE are three shapes the words separate:
+#   ON-HIT rider     the WEARER's attacks inflict it on the foe struck -- "foes
+#                    struck by your physical attacks become Poisoned" (435),
+#                    "your dagger attacks cause Bleeding" (926), "target
+#                    ally's melee attacks cause Weakness" (1997)
+#   ON-STRUCK rider  whoever strikes the wearer gets it -- "anyone striking
+#                    those allies in melee becomes Diseased" (113), "the next
+#                    time you are struck ... adjacent foes are Blinded" (2136)
+#   AT ACTIVATION    its own sentence, no "for N seconds" governing it, no
+#                    attack word -- "All adjacent foes are Blinded for N
+#                    seconds." then "For N seconds, you cannot be blocked" (1041)
+# A sentence is GOVERNED by the episode when it holds a DURATION-labelled slot
+# or opens with a literal "for <n> seconds" (435's flat 24). The rider WEAPON
+# CLASS is the qualifier before "attacks" ("physical", "melee", "dagger"; none
+# is ANY); the server reads three (RIDER_WEAPON_READERS) off the attacker's
+# item row -- "physical" from its 587 damage-type word, "melee" from its
+# [weapon_type] delivery -- and a class with no reader keeps the row out.
+RIDER_ON_HIT = "on_hit"
+RIDER_ON_STRUCK = "on_struck"
+RIDER_WEAPON_ANY = "any"
+RIDER_WEAPON_PHYSICAL = "physical"
+RIDER_WEAPON_MELEE = "melee"
+RIDER_WEAPON_READERS = frozenset({RIDER_WEAPON_ANY, RIDER_WEAPON_PHYSICAL, RIDER_WEAPON_MELEE})
+_WEARER = r"(?:your|that ally's|target ally's|an ally's|allies'|their)"
+_ON_HIT_RE = re.compile(
+    r"\b(?:foes?|creatures?|targets?|enemies|anyone) (?:struck|hit) by " + _WEARER
+    + r" (?:(?P<cls>[a-z]+) )?attacks?\b"
+    r"|\b" + _WEARER + r" (?:(?P<cls2>[a-z]+) )?attacks? (?:cause|inflict|deal|also|poison|blind|cripple|weaken)\b")
+_ON_STRUCK_RE = re.compile(
+    r"\b(?:the next time|whenever|each time|every time) (?:you|that ally|target ally|they|those allies|it)"
+    r" (?:are|is) (?:struck|hit|attacked)\b"
+    r"|\b(?:anyone|whoever|foes?|creatures?|a foe|enemies) (?:striking|attacking|hitting"
+    r"|that strikes?|who strikes?|that hits?|that attacks?)\b")
+_GOVERNED_RE = re.compile(r"^\s*for \d+ seconds?\b")
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
+
+
+def sentences_of(norm):
+    """[(start, end, text)] -- the normalised template split at a sentence break
+    (punctuation then whitespace, `_sentence_before`'s convention), offsets
+    into `norm` so a slot's position finds its own sentence."""
+    out, pos = [], 0
+    for part in _SENTENCE_SPLIT.split(norm):
+        start = norm.index(part, pos)
+        out.append((start, start + len(part), part))
+        pos = start + len(part)
+    return out
+
+
+def slot_sentences(norm):
+    """{occurrence: (sentence index, sentence text with slots as ' N ', the
+    slot indices in that sentence)} for every %strN% in NORMALISED text."""
+    sents = sentences_of(norm)
+    by_sentence = {}
+    occ = {}
+    for k, m in enumerate(SLOT_RE.finditer(norm)):
+        si = next((i for i, (s, e, _t) in enumerate(sents) if s <= m.start() < e), len(sents) - 1)
+        by_sentence.setdefault(si, []).append(int(m.group(1)))
+        occ[k] = si
+    return {k: (si, SLOT_RE.sub(" N ", sents[si][2]).lower(), tuple(by_sentence[si]))
+            for k, si in occ.items()}
+
+
+def condition_rider(sentence):
+    """(rider, weapon class) for one CONDITION slot's sentence: (RIDER_ON_HIT,
+    'physical' | 'melee' | 'dagger' | ... | 'any'), (RIDER_ON_STRUCK, None) or
+    (None, None). Read from the words; never fitted to a record."""
+    m = _ON_HIT_RE.search(sentence)
+    if m:
+        cls = m.group("cls") or m.group("cls2")
+        return RIDER_ON_HIT, (cls if cls else RIDER_WEAPON_ANY)
+    if _ON_STRUCK_RE.search(sentence):
+        return RIDER_ON_STRUCK, None
+    return None, None
+
+
+def sentence_governed(sentence, labels_in_sentence):
+    """Is this sentence the EPISODE's -- does it hold a DURATION-labelled slot,
+    or open with a literal 'for <n> seconds'?"""
+    return Label.DURATION in labels_in_sentence or bool(_GOVERNED_RE.match(sentence))
+
+
+# What a knock-down clause knocks down, read from the text: the FOE(S) the row
+# lands on (the only kind the emitter turns into `knocks_down`), the CASTER
+# ("you are knocked down" -- Desperation Blow's hand field, never emitted), a
+# QUALIFIED class of foes the server cannot test ("knocks down attacking foes",
+# 3425), or a NEGATION ("cannot be knocked down").
+KD_FOE, KD_SELF, KD_QUALIFIED, KD_NEGATED = "foe", "self", "qualified", "negated"
+_KD_ANY_RE = re.compile(r"\bknock(?:ed|s)? down\b|\bknockdown\b")
+_KD_NEGATED_RE = re.compile(r"\b(?:cannot|can't|not|never) be knocked down\b")
+_KD_SELF_RE = re.compile(r"\byou are knocked down\b|\byou (?:fall|are) knocked\b")
+_KD_QUALIFIED_RE = re.compile(
+    r"\bknocks? down (?!target foe\b|that foe\b|all\b|adjacent\b|nearby\b|foes\b|the\b)"
+    r"[a-z]+ (?:foes?|creatures?|targets?|enemies)\b"
+    r"|\b(?:attacking|moving|fleeing|casting|blinded|hexed|enchanted|knocked) (?:foes?|creatures?|targets?) are knocked down\b")
+
+
+def knockdown_kind(text):
+    """KD_FOE / KD_SELF / KD_QUALIFIED / KD_NEGATED for a NORMALISED template
+    with a knock-down clause, or None when it has none."""
+    low = text.lower()
+    if not _KD_ANY_RE.search(low):
+        return None
+    if _KD_NEGATED_RE.search(low):
+        return KD_NEGATED
+    if _KD_SELF_RE.search(low):
+        return KD_SELF
+    if _KD_QUALIFIED_RE.search(low):
+        return KD_QUALIFIED
+    return KD_FOE
 
 
 # --------------------------------------------------------------------------
@@ -950,7 +1073,9 @@ def analyse(records, texts, hand=None, mapping=None):
                # SKILLS-LU: a per-row measurement of the template (sha256[:16] of
                # the raw text), so a reading recorded against one template
                # (CLASS_HEAL_READINGS) is void the day the text changes
-               "template_sha16": template_sha16(text)}
+               "template_sha16": template_sha16(text),
+               # SKILLS-LV: what a knock-down clause knocks down (a token or None)
+               "knockdown": knockdown_kind(norm)}
         labels_at = collections.defaultdict(set)
         for n, label, _detail in slots:
             labels_at[n].add(label)
@@ -961,11 +1086,23 @@ def analyse(records, texts, hand=None, mapping=None):
         row["literals"] = literal_check(rec, text, {n for n, _l, _d in slots}, mapping)
         for lit in row["literals"]:
             literals[lit[-1]] += 1
-        for n, label, detail in slots:
+        # SKILLS-LV: each slot's own sentence -- which slots share it (so a
+        # condition slot knows whether a DURATION slot governs it), and for a
+        # condition slot whether its wording is a rider and of which class
+        sent_of = slot_sentences(norm)
+        label_of_index = {n: label for n, label, _d in slots}
+        for k, (n, label, detail) in enumerate(slots):
             verdict, field, lo, hi = referee_slot(n, rec, mapping)
+            si, sentence, idx_here = sent_of.get(k, (None, "", ()))
+            rider, rider_weapon = (condition_rider(sentence) if label == Label.CONDITION_DURATION
+                                   else (None, None))
             row["slots"].append({"index": n, "field": field, "verdict": verdict,
                                  "lo": lo, "hi": hi, "label": label, "detail": detail,
-                                 "percent": n in percent_at})
+                                 "percent": n in percent_at,
+                                 "sentence": si,
+                                 "governed": sentence_governed(sentence, {label_of_index[i] for i in idx_here
+                                                                          if i in label_of_index}),
+                                 "rider": rider, "rider_weapon": rider_weapon})
             labels[label] += 1
             label_by_index[(n, label)] += 1
             if n in seen:
@@ -1205,8 +1342,13 @@ EXCL_UNMODELLED_CLASS = "UNMODELLED_CLASS"    # spirits / minions / a pet / a co
 EXCL_RECIPIENT_NOT_A_FOE = "RECIPIENT_NOT_A_FOE"     # damage / condition; target byte not 5 / 16
 EXCL_RECIPIENT_NOT_AN_ALLY = "RECIPIENT_NOT_AN_ALLY"  # heal; target byte not 0 / 3 / 4
 EXCL_HEAL_RECIPIENT_CLASS = "HEAL_RECIPIENT_CLASS"    # a byte-0 heal on a CLASS (party, adjacent): the caster may not be in it (1262, 943)
+# SKILLS-LV (2026-09-25, skills 60): the condition-on-episode class split three ways
+EXCL_EPISODE_REFUSED = "EPISODE_REFUSED"              # an on-hit rider whose EPISODE never opens here (926: its duration is INDETERMINATE) -- a rider with nothing to ride
+EXCL_CONDITION_RIDER_CLASS = "CONDITION_RIDER_CLASS"  # an on-hit rider whose weapon class has no reader (RIDER_WEAPON_READERS: any / physical / melee)
+EXCL_CONDITION_RIDER_NO_EPISODE = "CONDITION_RIDER_NO_EPISODE"   # rider wording on a NON-episode type: the at-cast consumer would inflict it at the cast
 EXCLUSIONS = (EXCL_HAND_ROW, EXCL_SELF_CONFLICT, EXCL_DURATION_ONLY, EXCL_PERCENT_SLOT,
-              EXCL_CONDITION_ON_EPISODE, EXCL_PET_ATTACK, EXCL_CHAIN_REQUIREMENT,
+              EXCL_CONDITION_ON_EPISODE, EXCL_EPISODE_REFUSED, EXCL_CONDITION_RIDER_CLASS,
+              EXCL_CONDITION_RIDER_NO_EPISODE, EXCL_PET_ATTACK, EXCL_CHAIN_REQUIREMENT,
               EXCL_UNMODELLED_CLASS, EXCL_RECIPIENT_NOT_A_FOE, EXCL_RECIPIENT_NOT_AN_ALLY,
               EXCL_HEAL_RECIPIENT_CLASS)
 
@@ -1227,13 +1369,26 @@ DETAIL_AREA_CASTER = "AREA_CASTER"            # authsrv.caster_area: byte 0, a S
 DETAIL_HEAL_PARTY = "HEAL_PARTY"              # authsrv.party_heal_radius: the caster and its allies within the record's radius (a byte-0 class heal read INCLUDES_CASTER)
 DETAIL_CHAIN_GATED = "CHAIN_GATED"            # combo_req on a non-attack: judged at the PLAYER's E5; a BODY's cast lands on NOBODY (no body chain: unmet by construction, retail's bodies meet it -- less)
 DETAIL_CHAIN_STEP_ADVANCES = "CHAIN_STEP_ADVANCES"     # "counts as an off-hand attack" on a non-attack WITH a condition: the chain moves as it lands
+# SKILLS-LV (2026-09-25, skills 60): pass 2 of the residue -- three consumers, one mark each
+DETAIL_CONDITION_RIDER_ON_HIT = "CONDITION_RIDER_ON_HIT"   # authsrv.episode_condition_riders: the WEARER's landed attacks (of the row's rider_weapon class) inflict it; never the cast
+DETAIL_KNOCKDOWN_APPLIED = "KNOCKDOWN_APPLIED"             # the row carries `knocks_down`: the foe(s) it lands on fall for KNOCK_DOWN_SECONDS (replaces CLAUSE_KNOCKDOWN on the row)
+DETAIL_CONDITION_FLAT_CONSTANT = "CONDITION_FLAT_CONSTANT" # a bit-clear EQUAL condition slot: skill_condition reads it as the flat constant it is (167's Blind 10/10)
 DETAILS = (DETAIL_AREA_BURST, DETAIL_AREA_ONE_TARGET, DETAIL_INDETERMINATE,
            DETAIL_CONDITION_BIT_CLEAR, DETAIL_SECOND_CONDITION, DETAIL_DURATION_UNMODELLED,
            DETAIL_CONDITION_UNNUMBERED, DETAIL_LITERAL_DROPPED, DETAIL_CHAIN_STEP_NOT_ADVANCED,
            DETAIL_CLAUSE_MOVE_SPEED, DETAIL_AREA_CASTER, DETAIL_HEAL_PARTY, DETAIL_CHAIN_GATED,
-           DETAIL_CHAIN_STEP_ADVANCES) + tuple(sorted(CLAUSE_FLAGS))
+           DETAIL_CHAIN_STEP_ADVANCES, DETAIL_CONDITION_RIDER_ON_HIT, DETAIL_KNOCKDOWN_APPLIED,
+           DETAIL_CONDITION_FLAT_CONSTANT) + tuple(sorted(CLAUSE_FLAGS))
 AREA_WORDING = AREA_FLAGS | {FLAG_ALL_FOES, FLAG_ALL_ALLIES, FLAG_TOUCH}
 CASTER_AREA_WORDING = AREA_FLAGS | {FLAG_ALL_FOES}    # the foe-area words a byte-0 Spell bursts on
+# The fields a label row may carry beyond the two means (SKILLS-LV): the rider
+# kind and its weapon class (strings from our own vocabulary) and the
+# knock-down boolean -- the hand rows' own field name, so the consumer is the
+# hand rows' consumer.
+FIELD_CONDITION_RIDER = "condition_rider"
+FIELD_RIDER_WEAPON = "rider_weapon"
+FIELD_KNOCKS_DOWN = "knocks_down"
+EXTRA_FIELDS = (FIELD_CONDITION_RIDER, FIELD_RIDER_WEAPON, FIELD_KNOCKS_DOWN)
 
 
 def label_detail_vocabulary():
@@ -1276,9 +1431,44 @@ def _own_projectile(rec):
 
 def caster_area_record(rec, tc, target, flags):
     """authsrv.caster_area_row's predicate plus the wording: the record's byte 0,
-    a Spell, a radius, no projectile of its own, and foe-area words."""
-    return (target == SELF_TARGET_BYTE and tc == SPELL_TYPE and _radius(rec) > 0
-            and not _own_projectile(rec) and bool(flags & CASTER_AREA_WORDING))
+    a Spell -- or, SKILLS-LV, an episode type whose condition fires at the
+    ACTIVATION (1041's Stance: the gate decides that from the sentence, this
+    predicate only admits the type) -- a radius, no projectile of its own,
+    and foe-area words."""
+    import effects
+    return (target == SELF_TARGET_BYTE and (tc == SPELL_TYPE or tc in effects.EFFECT_TYPES)
+            and _radius(rec) > 0 and not _own_projectile(rec) and bool(flags & CASTER_AREA_WORDING))
+
+
+def episode_opens(rec, rank=12):
+    """Does this record's EPISODE resolve a duration at `rank` (effects.resolve_duration
+    neither refuses nor answers None)? A rider on an episode that never opens
+    rides nothing (926: 5/30 with the bit clear, FINDINGS 12's shape)."""
+    import effects
+    try:
+        return effects.resolve_duration(rec, rank) is not None
+    except effects.EffectError:
+        return False
+
+
+def knockdown_emittable(row, rec, target, caster_area):
+    """Why a CLAUSE_KNOCKDOWN row may NOT carry `knocks_down`, or None when it may:
+    the clause must knock down the FOE(S) the row lands on (not the caster, not a
+    qualified class the server cannot test, not a negation), the record's duration
+    field must be 0/0 (skill_knock_down_seconds reads a flat duration as the
+    knock-down's length -- 192's 9 s shower would fall for 9 s), no projectile of
+    its own (the arrival paths carry a strike's knock-down, not a row's), and the
+    recipients must be foes (byte 5 / 16, or the caster-centred area)."""
+    kind = row.get("knockdown")
+    if kind != KD_FOE:
+        return f"knock-down kind {kind}"
+    if int(rec.get("duration0", 0) or 0) or int(rec.get("duration15", 0) or 0):
+        return "a timed record (the duration slot would be read as the knock-down's length)"
+    if _own_projectile(rec):
+        return "a projectile of its own"
+    if target not in FOE_TARGET_BYTES and not caster_area:
+        return "recipients are not foes"
+    return None
 
 
 def party_heal_record(sid, row, rec, tc, target, flags):
@@ -1294,7 +1484,8 @@ def party_heal_record(sid, row, rec, tc, target, flags):
 # EVERY string the overlay may contain. `text_leak()` is the tripwire: a
 # description word reaching the vault would be a string outside this set.
 OVERLAY_VOCABULARY = frozenset(
-    {LABEL_TIER, SOURCE, EXTRACTOR, DETAIL_PLUS}
+    {LABEL_TIER, SOURCE, EXTRACTOR, DETAIL_PLUS, RIDER_ON_HIT}
+    | RIDER_WEAPON_READERS
     | set(MEANS_OF.values()) | set(CONDITION_NAMES)
     | {v for k, v in vars(Label).items() if k.isupper()}
     | set(VERDICTS) | set(SLOT_FIELD.values()) | set(FLAGS) | set(DETAILS))
@@ -1370,8 +1561,39 @@ def build_label_row(row, rec, hand_ids, self_conflict_ids=frozenset()):
     episode = tc in effects.EFFECT_TYPES
     conditions = [l for l in labels if l[0] == Label.CONDITION_DURATION]
     heals = [l for l in labels if l[0] == Label.HEAL]
+    # SKILLS-LV: WHEN the condition fires, read off its own sentence (the
+    # module block above condition_rider). An ON-HIT rider on an episode type
+    # SHIPS carrying `condition_rider` + `rider_weapon` for
+    # authsrv.episode_condition_riders (435's Poison on the wearer's physical
+    # attacks, 1997's Weakness on the ally's melee attacks); skill_condition
+    # returns None for such a row, so nothing lands at the cast. A rider whose
+    # episode never opens (926) or whose weapon class has no reader stays out
+    # by its own reason; an on-struck rider (113, 2136) and a governed
+    # condition with no rider words stay CONDITION_ON_EPISODE; a condition in
+    # its OWN sentence, ungoverned (1041), fires at the activation and takes the
+    # at-cast path below (the caster area, for a byte-0 Stance with a radius).
+    # Rider wording on a NON-episode type is refused too: its at-cast consumer
+    # would inflict the condition at the cast.
+    cslots = [s for s in row["slots"] if s["label"] == Label.CONDITION_DURATION
+              and int(s["index"]) in {l[1] for l in conditions}]
+    riders = {s.get("rider") for s in cslots}
+    rider_fields = {}
+    if conditions and not episode and riders - {None}:
+        return EXCL_CONDITION_RIDER_NO_EPISODE, [], {}, verified
     if conditions and episode:
-        return EXCL_CONDITION_ON_EPISODE, [], {}, verified
+        if riders == {RIDER_ON_HIT}:
+            classes = {s.get("rider_weapon") for s in cslots}
+            if not episode_opens(rec):
+                return EXCL_EPISODE_REFUSED, [], {}, verified
+            if len(classes) != 1 or not classes <= RIDER_WEAPON_READERS:
+                return EXCL_CONDITION_RIDER_CLASS, [], {}, verified
+            rider_fields = {FIELD_CONDITION_RIDER: RIDER_ON_HIT, FIELD_RIDER_WEAPON: classes.pop()}
+        elif riders != {None} or any(s.get("governed") for s in cslots):
+            return EXCL_CONDITION_ON_EPISODE, [], {}, verified
+        elif not caster_area_record(rec, tc, target, flags):
+            # at the activation, but on the cast's target with no area arm:
+            # the one-target path would land it on the selected agent
+            return EXCL_CONDITION_ON_EPISODE, [], {}, verified
     if tc == PET_ATTACK_TYPE:
         return EXCL_PET_ATTACK, [], {}, verified
     # DAGGERS-B5's chain gate -- "must follow a lead / off-hand / dual" fails the
@@ -1382,7 +1604,7 @@ def build_label_row(row, rec, hand_ids, self_conflict_ids=frozenset()):
     # every type's requirement (authsrv NONATTACK_CHAIN_GATE), so the row
     # ships marked CHAIN_GATED; the constant stays for the checker's arm.
     chain_gated = bool(int(rec.get("combo_req", 0) or 0)) and tc != ATTACK_TYPE
-    at_cast_on_foe = bool(conditions) or any(
+    at_cast_on_foe = (bool(conditions) and not rider_fields) or any(
         l[0] in DAMAGE_LABELS and not episode for l in labels)
     # SKILLS-LU: a byte-0 Spell with a radius and foe-area words rides the
     # CASTER-centred arm (authsrv.caster_area) instead of the one-target path
@@ -1429,10 +1651,30 @@ def build_label_row(row, rec, hand_ids, self_conflict_ids=frozenset()):
             detail.append(DETAIL_AREA_ONE_TARGET)
     if any(l[2] == INDETERMINATE for l in labels):
         detail.append(DETAIL_INDETERMINATE)
-    if any(not field_endpoints(rec, l[3])[2] for l in conditions):
-        detail.append(DETAIL_CONDITION_BIT_CLEAR)
+    # SKILLS-LV: a bit-clear condition slot is two shapes -- EQUAL endpoints
+    # are the flat constant skill_condition now reads (167's Blind 10/10,
+    # CONDITION_FLAT_CONSTANT); DIFFERING ones are still refused (1033's Deep
+    # Wound 5..20, the INDETERMINATE contest of 54.3)
+    for l in conditions:
+        lo, hi, on = field_endpoints(rec, l[3])
+        if on:
+            continue
+        detail.append(DETAIL_CONDITION_FLAT_CONSTANT if (lo == hi and lo)
+                      else DETAIL_CONDITION_BIT_CLEAR)
     if len(conditions) > 1:
         detail.append(DETAIL_SECOND_CONDITION)
+    if rider_fields:
+        fields.update(rider_fields)
+        detail.append(DETAIL_CONDITION_RIDER_ON_HIT)
+    # SKILLS-LV: a knock-down clause on the FOE(S) the row lands on becomes the
+    # hand rows' own `knocks_down` (the burst arms and the attack path read it
+    # already; the single-target non-attack land reads it since this pass);
+    # one the emitter must not turn into a field keeps its CLAUSE_KNOCKDOWN mark
+    knockdown_applied = False
+    if FLAG_CLAUSE_KNOCKDOWN in flags and knockdown_emittable(row, rec, target, caster_area) is None:
+        fields[FIELD_KNOCKS_DOWN] = True
+        detail.append(DETAIL_KNOCKDOWN_APPLIED)
+        knockdown_applied = True
     if timed and not episode:
         detail.append(DETAIL_DURATION_UNMODELLED)
     slotted = {v.get("detail") for v in verified if v.get("detail") in CONDITION_NAMES}
@@ -1449,7 +1691,8 @@ def build_label_row(row, rec, hand_ids, self_conflict_ids=frozenset()):
                       else DETAIL_CHAIN_STEP_NOT_ADVANCED)
     if FLAG_SPEED_MOVE in flags and not any(l[0] in MOVE_SPEED_LABELS for l in labels):
         detail.append(DETAIL_CLAUSE_MOVE_SPEED)
-    detail.extend(sorted(flags & CLAUSE_FLAGS))
+    detail.extend(sorted((flags & CLAUSE_FLAGS)
+                         - ({FLAG_CLAUSE_KNOCKDOWN} if knockdown_applied else set())))
     return None, detail, fields, verified
 
 
@@ -1530,13 +1773,70 @@ def check_label_rows(rows, report, hand_ids, records=None):
                         or reading[1] != rep.get("template_sha16") or _radius(rec) <= 0:
                     out.append(f"{sid}: a byte-0 class heal without a matching INCLUDES_CASTER "
                                f"reading of its template (HEAL_PARTY)")
+            # SKILLS-LV: the three consumers of pass 2, each mark tied to the
+            # record's shape and the slots' own wording
+            fields = r.get("fields") or {}
+            cslots = [s for s in rep["slots"] if s["label"] == Label.CONDITION_DURATION]
+            cond_means = bool(means & set(CONDITION_NAMES))
+            rider = fields.get(FIELD_CONDITION_RIDER)
+            if rider is not None:
+                if DETAIL_CONDITION_RIDER_ON_HIT not in det:
+                    out.append(f"{sid}: condition_rider without the CONDITION_RIDER_ON_HIT mark")
+                if not episode:
+                    out.append(f"{sid}: a condition rider on a non-episode type")
+                elif not episode_opens(rec):
+                    out.append(f"{sid}: a condition rider whose episode never opens (the duration refuses)")
+                if not cslots or any(s.get("rider") != RIDER_ON_HIT for s in cslots):
+                    out.append(f"{sid}: condition_rider but a condition slot's sentence is not an on-hit rider")
+                if {s.get("rider_weapon") for s in cslots} != {fields.get(FIELD_RIDER_WEAPON)}:
+                    out.append(f"{sid}: rider_weapon {fields.get(FIELD_RIDER_WEAPON)!r} is not the "
+                               f"sentence's class")
+            elif DETAIL_CONDITION_RIDER_ON_HIT in det:
+                out.append(f"{sid}: the CONDITION_RIDER_ON_HIT mark without a condition_rider field")
+            elif cond_means and episode and (
+                    any(s.get("rider") or s.get("governed") for s in cslots)
+                    or DETAIL_AREA_CASTER not in det):
+                out.append(f"{sid}: a condition on an episode type shipped as an at-cast condition "
+                           f"(a rider or a governed sentence, or no caster area)")
+            elif cond_means and not episode and any(s.get("rider") for s in cslots):
+                out.append(f"{sid}: rider wording on a non-episode type shipped as an at-cast condition")
+            kd = fields.get(FIELD_KNOCKS_DOWN)
+            if kd is not None:
+                if kd is not True:
+                    out.append(f"{sid}: knocks_down = {kd!r} (only true is emitted)")
+                if FLAG_CLAUSE_KNOCKDOWN not in rep["flags"]:
+                    out.append(f"{sid}: knocks_down without knock-down wording")
+                why_not = knockdown_emittable(rep, rec, tgt, DETAIL_AREA_CASTER in det)
+                if why_not is not None:
+                    out.append(f"{sid}: knocks_down on {why_not}")
+                if DETAIL_KNOCKDOWN_APPLIED not in det or FLAG_CLAUSE_KNOCKDOWN in det:
+                    out.append(f"{sid}: knocks_down must carry KNOCKDOWN_APPLIED and not CLAUSE_KNOCKDOWN")
+            elif DETAIL_KNOCKDOWN_APPLIED in det:
+                out.append(f"{sid}: the KNOCKDOWN_APPLIED mark without a knocks_down field")
+            elif FLAG_CLAUSE_KNOCKDOWN in rep["flags"] and FLAG_CLAUSE_KNOCKDOWN not in det:
+                out.append(f"{sid}: a knock-down clause neither applied nor marked dropped")
+            flat_slots = [s for s in cslots if s["verdict"] == AGREE_FLAT
+                          and not field_endpoints(rec, s["field"])[2]]
+            indet_slots = [s for s in cslots if s["verdict"] == INDETERMINATE]
+            if bool(flat_slots) != (DETAIL_CONDITION_FLAT_CONSTANT in det):
+                out.append(f"{sid}: CONDITION_FLAT_CONSTANT mark does not match a bit-clear equal "
+                           f"condition slot")
+            if bool(indet_slots) != (DETAIL_CONDITION_BIT_CLEAR in det):
+                out.append(f"{sid}: CONDITION_BIT_CLEAR_REFUSED mark does not match a bit-clear "
+                           f"differing condition slot")
         if r.get("tier") != LABEL_TIER:
             out.append(f"{sid}: tier {r.get('tier')!r}")
         if not r.get("fields"):
             out.append(f"{sid}: no means field")
         for k, v in r.get("fields", {}).items():
-            if k not in FIELD_OF_INDEX.values() or v not in OVERLAY_VOCABULARY:
+            if k == FIELD_KNOCKS_DOWN:
+                continue                     # a boolean, judged above with the record
+            if k not in FIELD_OF_INDEX.values() and k not in EXTRA_FIELDS:
+                out.append(f"{sid}: {k} is not a field a label row may carry")
+            elif v not in OVERLAY_VOCABULARY:
                 out.append(f"{sid}: {k} = {v!r} outside the consumers' vocabulary")
+        if not (set(r.get("fields", {})) & set(FIELD_OF_INDEX.values())):
+            out.append(f"{sid}: no means field")
         if int(r.get("type_code", -1)) != int(rep["type_code"]):
             out.append(f"{sid}: type_code {r.get('type_code')} != {rep['type_code']}")
         if not r.get("verified"):
@@ -1642,9 +1942,9 @@ def emit_labels(rows, excluded, build, exe, out_path, plain=(), dat=None, digest
     for sid in sorted(rows):
         r = rows[sid]
         lines.append(f"[skill_effect.{sid}]")
-        for field in ("scale_means", "bonus_scale_means"):
+        for field in ("scale_means", "bonus_scale_means") + EXTRA_FIELDS:
             if field in r["fields"]:
-                lines.append(f"{field} = {_toml_str(r['fields'][field])}")
+                lines.append(f"{field} = {_toml_value(r['fields'][field])}")
         lines.append(f"type_code = {int(r['type_code'])}")
         lines.append(f"tier = {_toml_str(r['tier'])}")
         lines.append(f"tier_detail = {_toml_value(list(r['tier_detail']))}")
@@ -1835,7 +2135,12 @@ def main(argv=None):
                 v = referee_slot(n, rec, mapping)
                 print(f"   str{n} -> {v[1]} {v[0]} {v[2]}/{v[3]}  {label}{':' + detail if detail else ''}")
                 print(f"        ...{b[-32:]!r} [] {af[:32]!r}")
-            print(f"   flags: {sorted(rep['rows'][sid]['flags'])}")
+            for s in rep["rows"][sid]["slots"]:
+                if s["label"] == Label.CONDITION_DURATION:
+                    print(f"   str{s['index']} sentence {s['sentence']}: governed={s['governed']} "
+                          f"rider={s['rider']} class={s['rider_weapon']}")
+            print(f"   flags: {sorted(rep['rows'][sid]['flags'])}"
+                  f"  knock-down: {rep['rows'][sid]['knockdown']}")
             if sid in hand:
                 print(f"   hand: {referee_hand_row(parse_row(text)[0], hand[sid], mapping)}")
         print()

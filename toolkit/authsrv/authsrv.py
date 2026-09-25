@@ -14451,15 +14451,22 @@ SELF_TARGET_BYTE = effects.SELF_TARGET     # 0: the record's byte for "the caste
 
 
 def caster_area_row(skill_id):
-    """Is this skill's RECORD a caster-centred area: byte 0, a Spell, an
-    aoe_range, no projectile of its own? Flag-free -- what the revert must
-    still recognise, so it can refuse the one-target path."""
+    """Is this skill's RECORD a caster-centred area: byte 0, a Spell -- or,
+    SKILLS-LV (studies/skills 60), an EPISODE type whose row's condition fires
+    at the activation (1041's Stance: "All adjacent foes are Blinded", then the
+    stance opens; the gate ships such a row AREA_CASTER only when the condition
+    sits in its own ungoverned sentence, and a rider row's skill_condition is
+    None so this arm never bursts one) -- an aoe_range, no projectile of its
+    own? Flag-free -- what the revert must still recognise, so it can refuse
+    the one-target path. No hand row is a byte-0 episode-type record with a
+    radius (test_labelconsumers 5a names any that appears)."""
     try:
         row = agents.WORLD.get("skills", str(skill_id))
     except Exception:                                          # noqa: BLE001
         return False
+    _tc = int(row.get("type_code", -1))
     if int(row.get("target", -1)) != SELF_TARGET_BYTE \
-            or int(row.get("type_code", -1)) != SPELL_TYPE_CODE:
+            or (_tc != SPELL_TYPE_CODE and _tc not in effects.EFFECT_TYPES):
         return False
     if skill_projectile(skill_id) is not None:
         return False
@@ -18471,6 +18478,12 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
         # (1 of 1). A body as victim is RECONSTRUCTION (interrupt_body).
         interrupt_body(send, state, target_id, agent, conn_id, skill_id,
                        PLAYER_AGENT_ID)
+    # SKILLS-LV: the player's open episodes' ON-HIT riders (435's Poison on a
+    # physical attack) on the foe this weapon hit landed on -- a swing, a skill
+    # strike or an arrow, never a spell (`exact`), never a corpse.
+    if swing and exact is None and not target_dead(state, target_id):
+        apply_episode_riders(send, state, PLAYER_AGENT_ID, target_id,
+                             agents.PLAYER_WEAPON, conn_id, "the player")
     return "landed"
 
 
@@ -21217,9 +21230,15 @@ def cast_tick(send, state, conn_id):
                     inflicted = None          # each foe took its own inside
                 elif _how is None or launch_player_spell_shot(
                         send, state, conn_id, cast, _how, found[0], rank) is None:
-                    hit_enemy(send, state, target, conn_id, exact=float(found[0]),
-                              swing=False,
-                              label=f"skill {cast['skill_id']}")
+                    _st_res = hit_enemy(send, state, target, conn_id, exact=float(found[0]),
+                                        swing=False,
+                                        label=f"skill {cast['skill_id']}")
+                    if _st_res == "landed":
+                        # SKILLS-LV: the row's knock-down on the one target the
+                        # word landed on (231, 294) -- after the word, the
+                        # burst arms' order (RECONSTRUCTION for a damage row)
+                        nonattack_knock_down(send, state, cast["skill_id"], target,
+                                             conn_id, "the player's")
             # AND THE EFFECT, at the same instant as the damage and for the
             # same reason: E5 is the cast COMPLETING, so it is when a stance
             # goes on, not when the key was pressed. A skill can do both --
@@ -21260,6 +21279,13 @@ def cast_tick(send, state, conn_id):
             if inflicted and target:
                 victim = state.get("agents", {}).get(target)
                 if victim and not victim.get("dead"):
+                    if not _is_attack_skill(cast["skill_id"]) and not (
+                            found and found[1] == "standalone"):
+                        # SKILLS-LV: a condition-only non-attack row's
+                        # knock-down (784) BEFORE its condition -- retail's
+                        # completion order, OBSERVED 4 of 5 (nonattack_knock_down)
+                        nonattack_knock_down(send, state, cast["skill_id"], target,
+                                             conn_id, "the player's")
                     if _na_combo and NONATTACK_CHAIN_GATE and CHAIN_STATE:
                         # SKILLS-LU (C): "counts as an off-hand attack" on a
                         # non-attack (974): the chain moves as its condition
@@ -21925,6 +21951,18 @@ def skill_condition(skill_id, rank):
         row = agents.WORLD.get("skill_effect", str(skill_id))
     except Exception:                                          # noqa: BLE001
         return None
+    if row.get("condition_rider"):
+        # SKILLS-LV: the condition rides the WEARER's landed attacks
+        # (episode_condition_riders), never the cast -- the row's own field
+        # says so, and the gate emits it only on an episode type whose
+        # sentence names the wearer's attacks (435's Poison, 1997's Weakness).
+        return None
+    return _condition_terms(skill_id, row, rank)
+
+
+def _condition_terms(skill_id, row, rank):
+    """(condition_skill_id, seconds) from a skill_effect row's means, rider or
+    not -- skill_condition's reader, shared with the episode riders."""
     # DAGGERS-B2: the bonus slot first, then the SCALE slot -- Jagged Strike
     # (782) has args = 2 and its one wiki variable, `Bleeding duration`, sits
     # in scale 5..20. The refusal above still holds per slot: a slot whose bit
@@ -21938,10 +21976,131 @@ def skill_condition(skill_id, rank):
         try:
             seconds = skill_scale_value(skill_id, rank, slot)
         except ValueError:
-            continue
+            # SKILLS-LV: a bit-clear slot with EQUAL endpoints is the flat
+            # constant the client prints (skill_flat_constant's witnesses;
+            # 167's Blind 10/10, numbered by its template's %str2%), and the
+            # referee grades it AGREE_FLAT. Differing endpoints (1033's Deep
+            # Wound 5..20) stay refused: skill_flat_constant raises on them.
+            # --no-condition-flat-constants restores the refusal of both.
+            if not CONDITION_FLAT_CONSTANTS:
+                continue
+            try:
+                seconds = skill_flat_constant(skill_id, slot)
+            except (ValueError, agents.content.ContentError):
+                continue
         if seconds:
             return (condition, float(seconds))
     return None
+
+
+# ---- SKILLS-LV (2026-09-25, studies/skills 60): THE CONDITION RIDER ON EPISODES
+#
+# The gate's CONDITION_ON_EPISODE (skills 55.2) held back six rows because
+# `skill_condition` reads any type at the CAST while the text puts the
+# condition on a LATER event. The sentence says which event (skilldesc's
+# condition_rider): an ON-HIT rider -- "foes struck by your physical attacks
+# become Poisoned" (435, a Preparation), "target ally's melee attacks cause
+# Weakness" (1997, an Enchantment on the ally) -- rides the WEARER's landed
+# attacks. This arm reads the wearer's OPEN episodes at every landed weapon
+# hit (hit_enemy for the player; land_swing and land_swing_on_body for a
+# body, arrows included through their arrivals) and puts the row's condition
+# on the foe struck, the way swing_preparation_bonus rides an arrow -- and
+# only when the attacker's ITEM is of the row's `rider_weapon` class:
+# "physical" is the item's 587 damage-type word in [damage_type.classes]
+# physical (a fiery sword is not; an item with no type line is refused, less);
+# "melee" is the [weapon_type] row's delivery (a bow, a spear, a wand are not;
+# a body with no item row is refused, less); "any" every landed attack. A
+# rider row's skill_condition is None, so nothing lands at the cast -- the
+# over-application the exclusion refused. RECONSTRUCTION: the live corpus
+# (96 connections, 2026-09-25) holds NO cast of 435 or 1997 by anyone -- NOT
+# FOUND; the arm rests on the record and the sentence. NOT modelled, said: a
+# scythe's extra targets (scythe_extra_hit) take no rider.
+# --no-condition-riders reverts: the episode still opens (its icon and timer,
+# the pre-pass state of an excluded row), and no hit carries a condition.
+CONDITION_RIDERS = True
+# --no-condition-flat-constants: skill_condition refuses every bit-clear slot
+# again (167's Blind lands nothing, as until 2026-09-25).
+CONDITION_FLAT_CONSTANTS = True
+# --no-label-knockdowns: a LABEL-tier row's `knocks_down` is ignored (the hand
+# rows' -- Hammer Bash, Heavy Blow, Earthquake -- are not), on every path.
+LABEL_KNOCKDOWNS = True
+RIDER_ON_HIT = "on_hit"
+RIDER_WEAPON_ANY, RIDER_WEAPON_PHYSICAL, RIDER_WEAPON_MELEE = "any", "physical", "melee"
+
+
+def weapon_in_rider_class(item, cls):
+    """Is this item of the rider's weapon class? 'any' always; 'physical' by the
+    587 word against [damage_type.classes].physical; 'melee' by the
+    [weapon_type] delivery. No item, no type line, no row: False (less)."""
+    if cls == RIDER_WEAPON_ANY:
+        return True
+    if not item:
+        return False
+    if cls == RIDER_WEAPON_PHYSICAL:
+        try:
+            dt = combatmath.item_damage_type(item)
+            physical = [int(x) for x in agents.WORLD.get("damage_type", "classes")["physical"]]
+        except Exception:                                      # noqa: BLE001
+            return False
+        return dt is not None and int(dt) in physical
+    if cls == RIDER_WEAPON_MELEE:
+        row = WEAPON_TYPE_ROW.get(int(item.get("item_type", -1)))
+        return bool(row) and row.get("delivery") == "melee"
+    return False
+
+
+def episode_condition_riders(state, agent_id, item):
+    """[(condition id, seconds, skill, rank)] every open episode on `agent_id`
+    whose row is an on-hit rider of a class `item` belongs to puts on a foe this
+    agent's attack lands on. [] under --no-condition-riders."""
+    if not CONDITION_RIDERS:
+        return []
+    table = (state or {}).get("effects")
+    if not table:
+        return []
+    out = []
+    for ep in table.on_agent(agent_id):
+        try:
+            row = agents.WORLD.get("skill_effect", str(ep["skill"]))
+        except Exception:                                      # noqa: BLE001
+            continue
+        if row.get("condition_rider") != RIDER_ON_HIT:
+            continue
+        if not weapon_in_rider_class(item, row.get("rider_weapon")):
+            continue
+        terms = _condition_terms(int(ep["skill"]), row, int(ep.get("rank", 0)))
+        if terms:
+            out.append((terms[0], terms[1], int(ep["skill"]), int(ep.get("rank", 0))))
+    return out
+
+
+def apply_episode_riders(send, state, attacker_id, target_id, item, conn_id, who):
+    """Put every rider the attacker's open episodes carry on the foe its attack
+    just landed on (a living one; the callers check). Returns the skills."""
+    landed = []
+    for cond, seconds, sid, rank in episode_condition_riders(state, attacker_id, item):
+        print(f"[c{conn_id}] {who}'s landed attack carries skill {sid}'s "
+              f"{effects.CONDITION_SKILLS.get(cond, cond)} ({seconds:.0f}s) on agent "
+              f"{target_id}: the open episode's rider on a "
+              f"{skill_effect_row(sid).get('rider_weapon')} attack [SKILLS-LV]", flush=True)
+        apply_condition(send, state, target_id, cond, seconds, rank, conn_id, sid)
+        landed.append(sid)
+    return landed
+
+
+def nonattack_knock_down(send, state, skill_id, target_id, conn_id, who):
+    """SKILLS-LV: a NON-attack, single-target row's `knocks_down` (231's touch,
+    294's Signet on its target, 784's Spell) on a living target -- the term the
+    burst arms and the attack path already carry, on the one path that lacked
+    it. Retail's 784 completion (OBSERVED, 4 of 5 live: 20260819T132414 x3,
+    20260913T210901 x1): [58, caster], [20, target, caster, impact],
+    [63, target, 2.0], then the Poison (the status word 0x00F1 and the
+    degeneration) -- the knock-down BEFORE the condition, 2.0 s. Returns True
+    when the target fell."""
+    if not skill_knocks_down(skill_id) or target_dead(state, target_id):
+        return False
+    return knock_down(send, state, target_id, conn_id, f"{who} skill {skill_id} [SKILLS-LV]",
+                      skill_knock_down_seconds(skill_id))
 
 
 def apply_condition(send, state, target_id, condition_id, seconds, rank,
@@ -22958,11 +23117,16 @@ def refuse_move_while_down(state, conn_id, opcode):
 
 
 def skill_knocks_down(skill_id):
-    """`knocks_down = true` on the row (Hammer Bash, Heavy Blow)."""
+    """`knocks_down = true` on the row (Hammer Bash, Heavy Blow; SKILLS-LV: the
+    label rows the gate emits it on -- 187 231 294 784 1086 -- unless
+    --no-label-knockdowns, which ignores a LABEL-tier row's field only)."""
     try:
-        return bool(agents.WORLD.get("skill_effect", str(skill_id)).get("knocks_down"))
+        row = agents.WORLD.get("skill_effect", str(skill_id))
     except Exception:                                          # noqa: BLE001
         return False
+    if not LABEL_KNOCKDOWNS and row.get("tier") == agents.content.LABEL_TIER:
+        return False
+    return bool(row.get("knocks_down"))
 
 
 def skill_knocks_down_if_blocked(skill_id):
@@ -24982,6 +25146,11 @@ def land_swing_on_body(send, state, agent_id, agent, tid, conn_id, bonus=0.0,
     # skill could interrupt anything. A killing blow interrupts nothing.
     if skill_id is not None and not target_dead(state, tid):
         interrupt_body(send, state, tid, row, conn_id, skill_id, agent_id)
+    if not target_dead(state, tid):
+        # SKILLS-LV: the attacker's open episodes' ON-HIT riders on the body hit
+        apply_episode_riders(send, state, agent_id, tid,
+                             (body_weapon_items(agent) or (None,))[0], conn_id,
+                             f"agent {agent_id}")
     return "landed"
 
 
@@ -29706,6 +29875,12 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
         kill_player(send, state, conn_id)
         print(f"[c{conn_id}] THE PLAYER IS DEAD -- back up in "
               f"{PLAYER_REVIVE_AFTER:.0f}s", flush=True)
+    elif not state.get("player_dead"):
+        # SKILLS-LV: the body's open episodes' ON-HIT riders (1997's Weakness
+        # on a melee attack) on the player its weapon hit landed on
+        apply_episode_riders(send, state, agent_id, PLAYER_AGENT_ID,
+                             (body_weapon_items(agent) or (None,))[0], conn_id,
+                             f"agent {agent_id}")
     return "landed"
 
 
@@ -30065,6 +30240,10 @@ def land_skill(send, state, agent_id, agent, conn_id):
                   f"area and --no-caster-areas is set: its condition lands on NOBODY "
                   f"[SKILLS-LU]", flush=True)
     elif inflicted and _burst_terms is None and not target_dead(state, _tid):
+        if damage is None and _tid != agent_id:
+            # SKILLS-LV: a body's condition-only row's knock-down (784's shape)
+            # BEFORE its condition -- retail's completion order, OBSERVED 4 of 5
+            nonattack_knock_down(send, state, skill_id, _tid, conn_id, f"agent {agent_id}'s")
         apply_condition(send, state, _tid, inflicted[0],
                         inflicted[1], _rank, conn_id, skill_id)
 
@@ -30109,6 +30288,10 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # since section 37, shared with the projectile's arrival.
     body_spell_word(send, state, agent_id, skill_id, _tid, _tbody, dealt, frac,
                     spell_ar, damage[0], conn_id)
+    if _tid != agent_id:
+        # SKILLS-LV: a body's single-target damage row's knock-down (231, 294)
+        # after the word -- burst_body_spell's order (RECONSTRUCTION)
+        nonattack_knock_down(send, state, skill_id, _tid, conn_id, f"agent {agent_id}'s")
 
 
 def player_revive_due(send, state, conn_id):
@@ -40257,6 +40440,24 @@ def main():
               "1033) lands on NOBODY -- the gate's exclusion until 2026-09-23, for the "
               "player and for a body -- and a non-attack 'counts as an off-hand attack' "
               "(974) moves nothing [SKILLS-LU]", flush=True)
+    # SKILLS-LV (studies/skills 60): pass 2 of the residue, one revert each.
+    if a.no_condition_riders:
+        global CONDITION_RIDERS
+        CONDITION_RIDERS = False
+        print("NO CONDITION RIDERS: an on-hit rider row (435, 1997) opens its episode and "
+              "no landed attack carries its condition -- the excluded state until "
+              "2026-09-25 [SKILLS-LV]", flush=True)
+    if a.no_label_knockdowns:
+        global LABEL_KNOCKDOWNS
+        LABEL_KNOCKDOWNS = False
+        print("NO LABEL KNOCK-DOWNS: a LABEL-tier row's knocks_down (187, 231, 294, 784, "
+              "1086) is ignored on every path; the hand rows' stand [SKILLS-LV]", flush=True)
+    if a.no_condition_flat_constants:
+        global CONDITION_FLAT_CONSTANTS
+        CONDITION_FLAT_CONSTANTS = False
+        print("NO CONDITION FLAT CONSTANTS: skill_condition refuses a bit-clear slot "
+              "whatever its endpoints (167's Blind lands nothing), as until 2026-09-25 "
+              "[SKILLS-LV]", flush=True)
 
     if a.player_max_always:
         global PLAYER_MAX_ALWAYS
