@@ -9,6 +9,25 @@ profession, a body and a level. **Enemies**: up to four groups of up to four hos
 the boss — the groups and hostiles as a list on the left, the selected one's template,
 weapon, bar and ranks on the right — added from the list's **+ Group** and **+ Hostile**, each
 removed by the labelled **Remove** on its own page (a group holding hostiles asks first).
+The **Skill bar** (SANDBOX-N1, 2026-09-24) is eight wells over an inline, filterable library:
+click a well to select the slot, then tick or double-click a skill to fill it (the selected
+slot if empty, else the first empty; the selection moves on), drag a row onto a well to place
+it, a well onto a well to swap, a well onto the library to clear it, or type in the search
+and press Return. The library opens on the template's profession and the common skills with
+**Modelled or label** ticked (a skill this server does nothing with is a wasted slot); the
+combo offers every profession on request, because the compiler accepts any skill on a
+hostile, and a skill of another profession is flagged rather than refused — its attribute is
+one this hostile's ranks can never hold, so the chip warns and the cell says what that costs.
+Each cell's second line is the rank the server will ACT at (`sandbox.effective_rank`, the
+mirror of the gamesrv's rule, text-locked to it): a hostile with no ranks casts everything
+at 12 (a stand-in, ours: no capture gives a monster's ranks); with any rank set, an attribute
+its ranks omit acts at 0 — rank Hammer Mastery and forget Strength, and Power Attack's cell
+reads `Strength 0` while the Attributes row chip warns `1 on the bar, at rank 0`. A file is
+held VERBATIM on Open — a skill of another profession, an id the table lacks, a duplicate —
+where the old pickers dropped it in silence with the bar saying "Opened" alone; and a template
+change keeps the bar, the chip saying which skills are now another profession's (they used to
+be dropped in silence too). The **Attributes** card is one attribute to a row, the spins at
+one x whatever the template, each row a bar skill uses counting them.
 **Run**: the launch options, the stored character and its reset, the compiled result and the
 harness's output. The quest is the slice's own —
 Fisk in Ascalon City, the west portal into the corridor, the groups, the boss, the portal
@@ -34,10 +53,10 @@ python tools/orchestrator/orchestrator.py --theme light            # dark / ligh
 in one palette only (the light tab strip's focus fill was) is seen by running it with `--theme
 dark` and again with `--theme light`. Its verdict is the house ledger's (`toolkit/checks.py`):
 a law that cannot run declares a skip, printed in the verdict, and a run that executes fewer
-than its floor of 153 laws (the green run's 177 less the 24 behind a declared skip) fails naming
+than its floor of 162 laws (the green run's 195 less the 33 behind a declared skip) fails naming
 the shortfall. No mandatory law sits behind a state gate: a precondition (the hostile page
 stacked at 1,000 px) is a law of its own, since the floor cannot see a law that stops running
-while the gated ones do run.
+while the gated ones do run. A run takes about a minute.
 
 ```
 python tools/orchestrator/orchtheme.py                             # the contrast audit, no Qt needed
@@ -125,11 +144,12 @@ bar. The Skills list marks a skill this server models beyond its icon from a HAN
 2026-09-23) with a grey **label** pill: it acts too, but through a label parsed from the
 client's own description template (`vault/content/skill_labels.toml`, 47 rows on 38797; the
 file's header says how many) rather than a hand-verified row, and the server's log says so at
-every cast; `--no-skill-labels` on the gamesrv drops them. The Enemies tab's bar slots say
-`· modelled` / `· label` after the name in the same words, the Skills list's item text (what
-its filter matches and a screen reader says) carries the same words, so typing `modelled`
-into either filter finds the modelled rows, and the list's checkbox filter is **Modelled or
-label** because it keeps both. The rest draw and time correctly and do nothing.
+every cast; `--no-skill-labels` on the gamesrv drops them. The Enemies tab's bar cells carry
+the same pill, painted by the one painter both lists share, and its library's rows and the
+Skills list's item text (what the filters match and a screen reader says) carry `· modelled` /
+`· label` in the same words, so typing `modelled` into either search finds the modelled rows,
+and both checkbox filters are **Modelled or label** because they keep both. The rest draw and
+time correctly and do nothing.
 
 Templates marked `(unwatched)` load closed but have never been seen rendering
 (`studies/slice/RUN-PARADE.md` names the fifteen that have). A template's label is
@@ -177,9 +197,11 @@ framework:
   against the rendered cells); a template's label is bounded to 202 px in the picker's font
   (the name elided, the tag whole, the label whole on hover), so those derived widths hold for
   any content rather than for today's; a
-  narrow hostile page stacks its Body and Weapon cards on one shared label column, and a bar
-  goes to one column of eight where two would not hold the widest choice it holds NOW (a
-  Monk's list is wider than a Warrior's), so no picker clips.
+  narrow hostile page stacks its Body and Weapon cards on one shared label column, and the
+  Skill bar's strip goes from four cells a row to two off its OWN width, never off its
+  content (a bar whose shape followed its content was how a Monk's list cut a slot the
+  Warrior's had fitted); a cell elides a long name with the whole on hover, and its rank line
+  keeps the rank whole and elides the attribute's name instead.
 - **A hovered combo or spin box never changes under the wheel** unless it has focus; the wheel
   scrolls the page instead. (The wheel cannot GIVE it focus: Qt hands a hovered widget focus by
   its policy before any filter sees the event, so every combo and spin box is StrongFocus.)
@@ -207,9 +229,13 @@ tab's cue is a mark in the focus ring's ink, 3:1 against what it replaced (the f
 combo alone with the window inactive and then active (where a focused one still takes it, and
 an unlocked hero's Level spin scrolls the table), and no flag, file name, ident or hex id sits
 on the visible surface. Layout and words have their own: every profession and every body fits
-its heroes-table column, and every choice in EVERY example hostile's slots, Template and
-Weapon fits its field at 1,280, 1,120 and 1,000 px, and in one body per profession at 1,280,
-the bar re-picking its columns from each list at one width; a 218-character template name the
+its heroes-table column, and every choice in EVERY example hostile's Template and Weapon fits
+its field at 1,280, 1,120 and 1,000 px, every slotted skill's name fits its cell (or elides
+with the whole on hover) and its rank survives its line's elision, the strip four cells a row
+at 1,280 and 1,120 and two at 1,000 for every hostile at one height, and in one body per
+profession at 1,280 the strip keeps its columns while the library offers that profession's
+acting skills plus the common ones (all of them unticked), combo row 0 named as the template's
+and the search cleared, the Attributes spins at one x; a 218-character template name the
 smoke plants in its own world view (in memory, never in `content/` or the vault — the fit laws
 iterate today's content, which is how three 60-character names stacked the Character card at
 1,280 px with every law green until the merge) is shown elided with its tag whole and fits the
@@ -218,7 +244,28 @@ budget, the label whole is the row's hover, the picked field's and the encounter
 elided name is the page title and the roster's with the page flooring the window no wider, a
 word from the middle of the name typed into the picker's filter finds that row alone and
 completes with the shown label, and a visible hostile's `from_spec` to a different template
-opens no window of its own; stacked, the Body and Weapon
+opens no window of its own; the Skill bar's own: the strip renders a grade pill in a modelled
+skill's cell and a label skill's and none in an empty one (treatment and control on one cell,
+off grabs of the window), a Skill bar built by any caller houses its chip and its hint, a tick
+fills the selected slot if empty, else the first empty, and moves the selection on, an id
+already on the bar ticks to nothing, an untick clears both copies of a planted duplicate, a
+full bar's tick replaces the selected slot and `to_spec` collapses the gaps, a library row
+dropped on a cell is placed and one already on the bar MOVES, a cell on a cell swaps, a cell
+on the library clears, a foreign mime changes nothing, each write one `changed`, Return in the
+search fills the first shown skill and keeps the text and the focus so Return again takes the
+next, Escape clears, Down moves to the list where Space toggles, on the strip 1..8 select,
+Delete clears, Ctrl+Right swaps and Return returns to the search (the keyboard laws skip
+when the window cannot hold focus), a 200-character skill name the smoke plants in memory
+draws elided in its cell at the strip's unchanged height with the whole on the cell's and the
+library row's hover and a word from its middle finds the row through the search, the
+empty-filter placeholder names the way out (`untick Modelled or label to see all N`), the
+Attributes row chips count the bar (the raider's Strength `1 on the bar` and no other, the
+boss's Strength and Tactics, none WARN on the example, cleared with the slot), say `acting at
+12` with every rank at 0 as `sandbox.effective_rank` says and turn WARN `at rank 0` when
+Hammer Mastery alone is ranked with the cell reading `Strength 0`, a rank edit rewriting line
+2 at once, the Ranger's widest label whole in the column at 1,000 px, and a real wheel over
+the library scrolls the list and not the page until the list's end, where it scrolls the
+page; stacked, the Body and Weapon
 cards start their inputs at one x with every label's ink right-aligned up to it, and the
 Template field comes back where it was after a re-polish while stacked; the Character card is
 top-aligned beside the table and two rows of three when stacked, each stacked label under half
@@ -228,7 +275,9 @@ spin box and line edit on the four tabs is one height; the Skills filter shows i
 placeholder down to the window's minimum width, its checkbox twice as far from the bulk verbs
 as from its filters; the Skills list's grade pills stand in one column near the name, not
 flush right; a group's roster starts every row's facts at one x; a group page and a hostile
-page end at one right edge whether or not the hostile page scrolls; the tab carries one
+page end at one right edge at 860 px tall where the hostile page scrolls, and at the page's
+own height where it does not (the hidden window is resized past the screen for that arm, and
+a machine whose OS clamps it declares the skip); the tab carries one
 labelled Remove per object (a group holding hostiles asks first) and no icon-only verb, a
 removal lands on a group page, and a click repeated at one pixel takes at most one hostile
 before it meets a question; the status chip's right gap is the page gutter and the bar's
@@ -239,7 +288,9 @@ wells name what will appear, and every tooltip, special value and placeholder th
 sentence starts with a capital on every line. The window's STATE has laws of the same kind: the slice
 opens one window and adding hostiles opens none (a label shown with no parent is a window of
 its own), every input the compiler reads turns a fresh green **Compiled** into **Changed since
-compile** while the Skills filters leave it green, a hostile's edit reaches its group's roster
+compile** while the Skills filters and the Skill bar's search, offered set and checkbox leave
+it green and emit no change (the bar's six write paths -- a slot set, a tick, Clear slot, a
+swap, a drop, Delete -- each turn it, once), a hostile's edit reaches its group's roster
 line at once, a hostile at level 0 keeps that roster and the change signal, a spec file
 whose row fails inside the load leaves the spec as it was — a '(none)' off-hand included —
 with the chip, the selection and every hero row, and says so, a file the compiler refuses
@@ -258,8 +309,13 @@ no rank spin theirs, the chip tells rank 12 from rank 15 (the table prices both 
 prices to 12 and counts the ranks past it, the roster line following), a level-28 hostile
 carrying a rank of 16 opens whole with "Opened" alone, a file with level 300 AND rank 22 on ONE
 hostile is refused for both at compile and said on Open as "2 changes" with the spins holding
-255 and 21 (the compiler checks a hostile's ranks whether or not its level passed), and a Ranks
-built by any caller houses its chip. The Run tab's lifecycle
+255 and 21 (the compiler checks a hostile's ranks whether or not its level passed), a file with
+a Monk skill on the Warrior raider and one with an id the table lacks both pass `validate` and
+open WHOLE with "Opened" alone and `to_spec` carrying them (the old pickers held `[322]` of
+`[322, 281]` and said "Opened" all the same, measured before the Skill bar), a template change
+keeps the bar with the chip warning of the skill now another profession's and its cell's line
+2 beginning with the abbreviation, and a Ranks built by any caller houses its chip. The Run
+tab's lifecycle
 has its own: every line the end chip reads, and the crash line's prefix, is one the harness
 still PRINTS (its print calls read off the syntax tree, so a comment or a docstring quoting an
 old line is not one), a crash reads crit on exit 0 too, a run's verdict outlives the first edit
@@ -269,8 +325,10 @@ the no-archive dialog's face is a sentence and the command with the citation beh
 Details and Launch shows that dialog, the compiled status line names no path, the Compiled pane
 wraps, the live status repeats no caption on the tab and its say site puts the constant on the
 line whole, and the Output log keeps a scrolled-back reader's line under them at its block cap,
-wrapped lines included. `--snap` renders every surface to a PNG for a person to read; a visual
-claim nobody looked at is a guess.
+wrapped lines included. `--snap` renders every surface to a PNG for a person to read --
+`enemies_bar` and `narrow_enemies_bar` among them, the boss's page scrolled to its Skill bar
+with `ham` in the search; a visual claim nobody looked at is a guess, and a real drag (a
+nested event loop the smoke cannot drive) is proven only by a person on the live window.
 
 ## Open on the client
 
@@ -282,6 +340,8 @@ written before the run.
 
 ## Next
 
-A filterable skill and attribute picker for the Enemies tab (SANDBOX-N1), and adding or
-kicking heroes from the in-game party panel (SANDBOX-N2, whose client message is not yet
-found).
+Adding or kicking heroes from the in-game party panel (SANDBOX-N2, whose client message is not
+yet found). Open on the Skill bar: whether a hostile carrying two copies of one skill (a file
+may say so; `validate` does not refuse it) should be refused at compile, and one U-run with an
+Orison of Healing on a Warrior hostile to see the rank-0 claim on a client (it is read from the
+server's code, not run).

@@ -377,6 +377,7 @@ class SkillBar(QWidget):
         row = QHBoxLayout()
         row.setSpacing(8)
         self.filter = QLineEdit()
+        self.filter.setMinimumWidth(96)             # the placeholder 'Find a skill' whole (72 px)
         self.filter.setPlaceholderText("Find a skill")
         self.filter.setToolTip("Matches a skill's name, id, profession or attribute, or its grade in "
                                "the pills' words (modelled, label). Return puts the first shown "
@@ -390,16 +391,26 @@ class SkillBar(QWidget):
         self.prof.setAccessibleName("Skills offered")
         self.prof.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self.prof.setMinimumContentsLength(14)
-        self.prof.addItem("Common (the template's)", -2)
+        self.prof.addItem("Common", -2)
         self.prof.addItem("Every profession", 0)
         for pid, name in sandbox.PROFESSIONS.items():
             self.prof.addItem(f"{name} ({sandbox.ABBREV[pid]})", pid)
         self.prof.addItem("Common (no profession)", -1)
         self.prof.setMaxVisibleItems(self.prof.count())    # every row, none scrolled (the census)
-        self.prof.setToolTip("Which skills the list offers. The compiler accepts any skill on a "
-                            "hostile; its ranks must be its template's profession's, so another "
-                            "profession's skill acts at rank 0 once any rank is set, at 12 with "
-                            "none.")
+        # a plain combo CLIPS a text wider than its field, with no ellipsis
+        # (the first cut showed 'Warrior and common' with its tail cut, in
+        # --snap): sized to the widest label row 0 can ever carry
+        self.prof.ensurePolished()
+        fm = self.prof.fontMetrics()
+        widest = max(fm.horizontalAdvance(self.row0_label(p)) for p in list(sandbox.PROFESSIONS) + [0])
+        widest = max(widest, max(fm.horizontalAdvance(self.prof.itemText(i))
+                                 for i in range(self.prof.count())))
+        self.prof.setMinimumWidth(widest + 44)          # the field's padding and the arrow
+        self.prof.setToolTip("Which skills the list offers: the template's profession and the "
+                            "common skills, or every profession, or one. The compiler accepts any "
+                            "skill on a hostile; its ranks must be its template's profession's, so "
+                            "another profession's skill acts at rank 0 once any rank is set, at 12 "
+                            "with none.")
         # named with the pills' own two words, as the Skills tab's; TICKED here:
         # eight slots, and a skill this server does nothing with is a wasted one
         self.acts = QCheckBox("Modelled or label")
@@ -536,9 +547,7 @@ class SkillBar(QWidget):
         them), combo row 0 is relabelled and re-selected, the search cleared,
         the checkbox kept, the library repopulated. Never emits."""
         self.professions = tuple(int(p) for p in professions if p)
-        name = sandbox.PROFESSIONS.get(self.professions[0]) if self.professions else None
-        self.prof.setItemText(0, f"{name} and common (the template's)" if name
-                              else "Common (the template's)")
+        self.prof.setItemText(0, self.row0_label(self.professions[0] if self.professions else 0))
         self.prof.blockSignals(True)
         self.prof.setCurrentIndex(0)
         self.prof.blockSignals(False)
@@ -547,6 +556,14 @@ class SkillBar(QWidget):
         self.filter.blockSignals(False)
         self._populate()
         self._sync()
+
+    @staticmethod
+    def row0_label(prof):
+        """Combo row 0, the template's profession and the common skills:
+        'Warrior and common'; a template with no profession (or one the table
+        lacks) offers the common skills alone."""
+        name = sandbox.PROFESSIONS.get(int(prof or 0))
+        return f"{name} and common" if name else "Common"
 
     def set_ranks_view(self, pairs, template_pairs=None):
         """The ranks each cell's line 2 reads (the member's; the template's as
@@ -4034,22 +4051,40 @@ def smoke(win, app, out_dir):
         bar0.select_slot(3)                     # the measured cells keep the field fill
         settle(4)
         lost = {}
+        real_pill = orchui.paint_pill
+
+        def no_pill(_p, x, cy, grade, font=None):
+            """paint_pill's rect without its paint (the Skills list's delegate,
+            painted in the same grab, reads the rect back)."""
+            if grade not in orchui.GRADE_TEXT:
+                return None
+            w, h = orchui.pill_size(grade, font)
+            return QRect(x, cy - h // 2, w, h)
+
         for i, tag in ((0, "modelled"), (1, "label"), (2, "empty")):
             it = bar0.strip.item(i)
-            parts = it.data(ROLE_PARTS)
             cell = bar0.strip.cell_rect(i)
-            at = bar0.strip.viewport().mapTo(win, cell.topLeft())
-            box = QRect(at, cell.size())
+            # the CONTROL is the same cell with the one painter made a no-op --
+            # not the grade taken away, which also widens line 2 (a cell then
+            # changed for another reason, and a delegate that skipped the
+            # pill passed); measured inside the pill's own rect
+            pill_r = orchui.SlotStrip.layout(cell, it.data(ROLE_PARTS))[4]
+            box_r = pill_r if pill_r is not None else cell
+            at = bar0.strip.viewport().mapTo(win, box_r.topLeft())
+            box = QRect(at, box_r.size())
             with_pill = win.grab().toImage().copy(box)
-            it.setData(ROLE_PARTS, (parts[0], parts[1], None) if parts else None)
+            orchui.paint_pill = no_pill
+            bar0.strip.viewport().update()
             settle(3)
             without = win.grab().toImage().copy(box)
-            it.setData(ROLE_PARTS, parts)
+            orchui.paint_pill = real_pill
+            bar0.strip.viewport().update()
             settle(2)
             lost[tag] = _diff(with_pill, without)
         check(lost["modelled"] > 40 and lost["label"] > 40 and lost["empty"] == 0,
               f"the strip RENDERS a grade pill in a modelled skill's cell and a label skill's, and "
-              f"none in an empty one (pixels a cell loses without its grade: {lost})")
+              f"none in an empty one (pixels a cell's pill rect loses with paint_pill made a no-op: "
+              f"{lost})")
         bar0.set_values(keep_ids)
         settle()
     else:
@@ -4085,7 +4120,8 @@ def smoke(win, app, out_dir):
 
     def cut_choices(ed):
         cut = []
-        for tag, combo in (("Template", ed.template), ("Weapon", ed.weapon_item)):
+        for tag, combo in (("Template", ed.template), ("Weapon", ed.weapon_item),
+                           ("Skills offered", ed.bar.prof)):
             for i in range(combo.count()):
                 if not _fits(combo, combo.itemText(i)):
                     cut.append((ed.template.value(), tag, combo.itemText(i)[:40],
@@ -4165,10 +4201,11 @@ def smoke(win, app, out_dir):
                         shown2.split(" ")[-1] == line2.split(" ")[-1]
                         and meta_fm.horizontalAdvance(shown2) <= r.width())
         check(not cut and all(ed.weapon_item.itemText(0).startswith("(none") for ed in eds),
-              f"at {w} px every choice in each example hostile's Template and Weapon fits its "
-              f"field, and every slotted skill's name fits its cell, its rank line whole in the "
-              f"cell's text and its pill inside the cell (the strips {cols} cells a row, the "
-              f"cards {'stacked' if m0.stacked else 'side by side'}; cut: {cut[:2] or 'none'})")
+              f"at {w} px every choice in each example hostile's Template, Weapon and Skills "
+              f"offered combos fits its field, and every slotted skill's name fits its cell, its "
+              f"rank line whole in the cell's text and its pill inside the cell (the strips {cols} "
+              f"cells a row, the cards {'stacked' if m0.stacked else 'side by side'}; cut: "
+              f"{cut[:2] or 'none'})")
         # the strip's columns come off its OWN width (four while the viewport
         # holds four cells a name can live in, else two), never off its content
         # -- the 840-constant defect -- so every hostile's strip is one shape
@@ -4276,7 +4313,7 @@ def smoke(win, app, out_dir):
         m0.bar.acts.setChecked(True)
         settle()
         pname = sandbox.PROFESSIONS.get(p)      # a template may carry a profession the table lacks (11)
-        label0 = f"{pname} and common (the template's)" if pname else "Common (the template's)"
+        label0 = f"{pname} and common" if pname else "Common"
         offered[p] = (sorted(ticked) == sorted(s for s in want if s in acting),
                       sorted(untied) == sorted(want), m0.bar.prof.itemText(0) == label0,
                       m0.bar.prof.currentIndex() == 0, m0.bar.filter.text() == "")
@@ -4542,25 +4579,34 @@ def smoke(win, app, out_dir):
     settle(4)
     h_before = bar0.strip.height()
     it0 = bar0.strip.item(0)
+    parts0 = it0.data(ROLE_PARTS)
     cell0 = bar0.strip.cell_rect(0)
-    well0, _n, name0, _m, _p = orchui.SlotStrip.layout(cell0, it0.data(ROLE_PARTS),
-                                                       body_fm=bar0.strip.fontMetrics(), meta_fm=meta_fm)
-    at0 = bar0.strip.viewport().mapTo(win, QPoint(0, 0))
-    band = QRect(at0.x() + name0.left(), at0.y() + name0.top(), well0.right() - 1 - name0.left(),
-                 name0.height())
-    _first, last_ink = _ink_span(win.grab().toImage(), band, pal["field"])
+    _w0, _n, name0, _m, _p = orchui.SlotStrip.layout(cell0, parts0, body_fm=bar0.strip.fontMetrics(),
+                                                     meta_fm=meta_fm)
+    # elided, not CLIPPED: drawText clips to its rect, so the ink of an unelided
+    # name ends inside the rect too. The cell painted with the long name must
+    # equal, pixel for pixel, the cell painted with its elided string -- the
+    # ellipsis, where a clipped name shows a cut glyph
+    box = QRect(bar0.strip.viewport().mapTo(win, name0.topLeft()), name0.size())
+    long_img = win.grab().toImage().copy(box)
     shown0 = bar0.strip.fontMetrics().elidedText(SMOKE_LONG_SKILL, Qt.ElideRight, name0.width())
+    it0.setData(ROLE_PARTS, (shown0, parts0[1], parts0[2]))
+    settle(3)
+    elided_img = win.grab().toImage().copy(box)
+    it0.setData(ROLE_PARTS, parts0)
+    settle(2)
+    same = _diff(long_img, elided_img)
     lib_row = next((it for it in bar0._items() if int(it.data(ROLE_ID)) == 322), None)
     bar0.filter.setText("gravelbeard")
     settle()
     found = bar0.visible_ids()
     bar0.filter.setText("")
-    check(len(SMOKE_LONG_SKILL) >= 200 and last_ink is not None
-          and last_ink <= at0.x() + name0.right() + 1 and shown0.endswith("…") and shown0 != SMOKE_LONG_SKILL
-          and bar0.strip.height() == h_before and SMOKE_LONG_SKILL in it0.toolTip()
+    check(len(SMOKE_LONG_SKILL) >= 200 and same == 0 and shown0.endswith("…")
+          and shown0 != SMOKE_LONG_SKILL and bar0.strip.height() == h_before
+          and SMOKE_LONG_SKILL in it0.toolTip()
           and lib_row is not None and SMOKE_LONG_SKILL in lib_row.toolTip() and found == [322],
-          f"a {len(SMOKE_LONG_SKILL)}-character skill name draws elided in its cell (its ink ends at "
-          f"{last_ink} of the name rect's {at0.x() + name0.right()}), the strip's height unchanged "
+          f"a {len(SMOKE_LONG_SKILL)}-character skill name draws ELIDED in its cell (painted as its "
+          f"elided string is, {same} px apart; {shown0[-8:]!r}), the strip's height unchanged "
           f"({bar0.strip.height()}), the whole name on the cell's and the library row's hover, and "
           f"'gravelbeard' typed into the search finds that row alone ({found})")
     if keep_name is None:
@@ -5280,7 +5326,7 @@ def smoke(win, app, out_dir):
     kept = (m0.bar.values()[:2], m0.bar.chip.text(), m0.bar.chip.property("kind"),
             m0.bar.strip.item(0).data(ROLE_SLOT)[1], m0.bar.prof.itemText(0))
     check(kept[0] == [322, 281] and kept[2] == "warn" and kept[1].endswith("1 of another profession")
-          and kept[3].startswith("W · Strength ") and kept[4] == "Monk and common (the template's)",
+          and kept[3].startswith("W · Strength ") and kept[4] == "Monk and common",
           f"a template change to the Monk KEEPS the bar, the chip warning of the Warrior skill now "
           f"of another profession and its cell's line 2 beginning with the abbreviation ({kept})")
     win.from_spec(held_spec)
@@ -6208,7 +6254,9 @@ def snap(win, app, out_dir, theme):
         win.enemies.select(boss)
         boss.bar.filter.setText("ham")
         page = win.enemies._pages[boss]
-        page.ensureWidgetVisible(boss.bar.strip, 0, 24)
+        for _ in range(3):
+            app.processEvents()
+        page.ensureWidgetVisible(boss.bar.hint, 0, 24)      # the card's foot: the whole card in view
         grab(tag)
         boss.bar.filter.setText("")
         page.verticalScrollBar().setValue(0)
