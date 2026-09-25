@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=619)   # 2026-09-24 DESKWORK-D8 steps 3/4 FIXER +23 (section_leash_caster_review: the caster notice gate CD-1/EV-4, the short-leash no-loop CD-2, lost-contact-walks-home EV-2, revive-clears-the-return CD-8, the NPC_FOLLOW gate CD-9, the per-skill touch/half reach EV-1, the engaged/dwell/plumbing terms CD-5, the standing-fight give-up EV-8), plus the EV-9/CD-4 planted-record check made real, from the green run (619)  # 2026-09-24 DESKWORK-D8 steps 3/4 +44 (section_leash_return 26: the anchor, the dwell give-up, the legs home, the party bodies untouched, the revert arm; section_caster_opening 18: who is a caster, the stand-and-cast, the leg to range, the hold, the revert arm), from the green run (596)  # 2026-09-23 SANDBOX-N2 add +1 (the load-order walk locates _handle_request_players), from the green run  # 2026-09-17 CAST-TARGET-DIED +4 (an ally cast whose target died lands on nothing), from the green run  # 2026-09-15 (probe-walk noise) +2 (the CONTROL is pinned to one name and captured: quiet prints nothing, the failure is named to the caller), from the green run; 2026-09-15 (later) HEROLIB +2 (no 0x001D send site may zero the account library -- the GmSkSlot.cpp:206 crash of run 20260915T201538; the negative control restores the literal and reddens naming the line); 2026-09-15 +2 (offset_y honoured); SLICE-F43 +3 (the wipe countdown and its stop), from the green run   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=628)   # 2026-09-24 DESKWORK-D8 step 4, the caster's held-slot stall +9 (section_caster_held_slot: the run's shape 20260924T210744 stepped past, the held slot uncharged and unswung, the touch cast from melee, the hold with every ready slot out of reach, the held-set bound, the re-pick through the resource / heal / swing-clock gates, the REAL vault row -- a declared skip on a bare machine, where the floor is 627), from the green run (628)  # 2026-09-24 DESKWORK-D8 steps 3/4 FIXER +23 (section_leash_caster_review: the caster notice gate CD-1/EV-4, the short-leash no-loop CD-2, lost-contact-walks-home EV-2, revive-clears-the-return CD-8, the NPC_FOLLOW gate CD-9, the per-skill touch/half reach EV-1, the engaged/dwell/plumbing terms CD-5, the standing-fight give-up EV-8), plus the EV-9/CD-4 planted-record check made real, from the green run (619)  # 2026-09-24 DESKWORK-D8 steps 3/4 +44 (section_leash_return 26: the anchor, the dwell give-up, the legs home, the party bodies untouched, the revert arm; section_caster_opening 18: who is a caster, the stand-and-cast, the leg to range, the hold, the revert arm), from the green run (596)  # 2026-09-23 SANDBOX-N2 add +1 (the load-order walk locates _handle_request_players), from the green run  # 2026-09-17 CAST-TARGET-DIED +4 (an ally cast whose target died lands on nothing), from the green run  # 2026-09-15 (probe-walk noise) +2 (the CONTROL is pinned to one name and captured: quiet prints nothing, the failure is named to the caller), from the green run; 2026-09-15 (later) HEROLIB +2 (no 0x001D send site may zero the account library -- the GmSkSlot.cpp:206 crash of run 20260915T201538; the negative control restores the literal and reddens naming the line); 2026-09-15 +2 (offset_y honoured); SLICE-F43 +3 (the wipe countdown and its stop), from the green run   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
 def section_weapon_damage():
@@ -542,6 +542,7 @@ def main():
     section_leash_return()
     section_caster_opening()
     section_leash_caster_review()
+    section_caster_held_slot()
     section_npc_attack_skill()
     section_facing()
     section_enemy_skill()
@@ -3492,6 +3493,261 @@ def section_leash_caster_review():
          authsrv._is_attack_skill, authsrv.skill_cost, authsrv.skill_damage,
          authsrv.skill_condition, authsrv.agents.WORLD,
          authsrv._caster_skill_reach) = saved
+
+
+def section_caster_held_slot():
+    """DESKWORK-D8 step 4, the held-slot stall (2026-09-24): a slot the caster
+    cannot reach from where it stands is STEPPED PAST, not re-picked forever.
+
+    OBSERVED on the client, harness run 20260924T210744 (loopback): the default
+    --enemy Hatcher -- a Monk, bar [276, 253, 312, 289], no weapon -- standing
+    300 u from a player who did not move cast 253 ONCE at t=3.4 s and then
+    NOTHING for ~57 s: no cast, no swing, no move, though 253 recharges in 5 s.
+    Under --no-caster-opening (the control, 20260924T210957) the same body
+    cycled 253 / 312 / 289 all run long. The cause: the pass-6 landing
+    re-emitted vault/content/skills.toml with `touch_range` / `half_range`, 312
+    (Holy Strike) is touch, the EV-1 reach gate held it at 300 u by setting
+    slot = None -- and `pick_skill` is round robin from `last_slot + 1`, which
+    only a CAST advanced, so the held 312 came back on every tick and 289 / 253
+    were never reached. The heal gate solved the same shape on 2026-09-12
+    (SLICE-B3: step past, re-pick, bounded by what was held); the reach gate
+    now does the same, and a re-pick passes every gate the first pick did --
+    the resource gate, the heal gate, the swing clock, the reach gate.
+
+    The touch bit reaches the tick through a PLANTED skills row over the real
+    table, so every check but the last runs on a bare machine; the last reads
+    the REAL vault row for 312 and is a declared skip where there is none.
+    RECONSTRUCTION, like the rest of the caster: pick_skill stays the testing
+    fixture its docstring declares, and stepping past what cannot be cast from
+    here is not a policy about what to cast next.
+    """
+    import authsrv
+    import contextlib
+    import io
+    print("\n== DESKWORK-D8 step 4: the caster's held-slot stall ==")
+    INT_T = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+    SPELL, TOUCH, ENCH = 253, 312, 289          # the run's bar minus its heal
+    ATTACK, HEAL, TOUCH2 = 382, 281, 313        # an attack skill, a heal, a 2nd touch
+    real = authsrv.agents.WORLD
+    saved = (authsrv.CASTER_OPENING, authsrv.NPC_FOLLOW, authsrv._is_attack_skill,
+             authsrv.skill_cost, authsrv.skill_damage, authsrv.skill_condition,
+             authsrv.skill_target_kind, authsrv.skill_heal, authsrv.agents.WORLD)
+
+    class _Planted:
+        """The real table with the TOUCH rows planted OVER it: the bit the
+        re-emitted vault table carries on 312, and a second touch row (313).
+        Everything else is the real world's -- which on a bare machine has no
+        skills rows at all: a missing row reads as the full cast range in
+        `_caster_skill_reach` (its own rule) and as no effect in
+        `apply_effect`, and the stubs below (the file's precedent) answer for
+        cost, damage, condition, target kind and heal. A planted row over NO
+        base row is partial (the bit alone) -- fine for a touch slot, which
+        these checks never land -- so nothing else is planted: a partial 253
+        crashed the landing on the bare path (`effects.applies_effect` reads
+        `type_code`), which the empty-vault run in the lane's scratch found."""
+
+        def __init__(self, base, rows):
+            self._base, self._rows = base, rows
+
+        def get(self, kind, key):
+            if kind == "skills" and key in self._rows:
+                try:
+                    row = dict(self._base.get(kind, key))
+                except Exception:                              # noqa: BLE001
+                    row = {}                                   # a bare machine
+                row.update(self._rows[key])
+                return row
+            return self._base.get(kind, key)
+
+        def __getattr__(self, name):
+            return getattr(self._base, name)
+
+    def stubs():
+        authsrv._is_attack_skill = lambda sid: sid == ATTACK
+        authsrv.skill_cost = lambda sid: (0, 0)
+        authsrv.skill_damage = lambda sid, r: None
+        authsrv.skill_condition = lambda sid, r: None
+        authsrv.skill_target_kind = lambda sid: "ally" if sid == HEAL else "foe"
+        authsrv.skill_heal = lambda sid, r: 40.0 if sid == HEAL else None
+        authsrv.agents.WORLD = _Planted(real, {
+            str(TOUCH): {"touch_range": True, "half_range": False},
+            str(TOUCH2): {"touch_range": True, "half_range": False}})
+
+    def mk(player=(300.0, 0.0),
+           skills=((SPELL, 1.0, 5.0), (TOUCH, 0.75, 8.0), (ENCH, 0.75, 2.0)), **over):
+        # ENGAGED (target_locked): the run's bout had opened -- 253 went out at
+        # 3.4 s -- so the reach gate is the skill's, not the notice radius.
+        st = _bull(pos=(0.0, 0.0), player=player, npc={"profession": 3},
+                   skills=[tuple(s) for s in skills],
+                   skill_ready=[0.0] * len(skills), target_locked=True)
+        st["player_dead"] = False
+        st["player_health"] = 1e9
+        st["player_max_health"] = 1e9
+        st["agents"][10].update(over)
+        return st
+
+    def casts(sent):
+        return [v for op, v, _l in sent if op == INT_T and v[0] in (60, 50)]
+
+    def land(st):
+        """The cast in flight lands -- its window over, one more tick, through
+        land_skill as a run's would -- so the next tick is a fresh pick."""
+        ag = st["agents"][10]
+        if ag.get("cast_lands_at") is not None:
+            ag["cast_lands_at"] = time.time() - 0.001
+            _swings(st)
+
+    try:
+        authsrv.CASTER_OPENING = True
+        authsrv.NPC_FOLLOW = True
+        stubs()
+
+        # ---- A. THE RUN'S SHAPE, and the check that was red before the fix.
+        st = mk()
+        ag = st["agents"][10]
+        assert authsrv.hostile_caster(ag), "the fixture must be a caster"
+        seq = [casts(_swings(st))]                    # 253 from 300 u
+        land(st)
+        seq.append(casts(_swings(st)))                # the run: NOTHING, for 57 s
+        land(st)
+        ag["skill_ready"][0] = 0.0                    # 253 recharged, by hand
+        seq.append(casts(_swings(st)))
+        LEDGER.ok(seq == [[[60, 10, 1, SPELL]], [[60, 10, 1, ENCH]], [[60, 10, 1, SPELL]]],
+                  "THE RUN'S SHAPE (20260924T210744): a Monk 300 u from a standing "
+                  "player, bar [253, 312 touch, 289] -- 253, then 289 on the very "
+                  "next pick, then 253 again once it recharged: the held touch slot "
+                  "is STEPPED PAST (before the fix: 253 once, then nothing -- 312 "
+                  "re-picked on every tick, 289 and 253 never reached)",
+                  f"casts per tick {seq}")
+        LEDGER.ok(ag["skill_ready"][1] == 0.0 and ag.get("last_slot") == 0
+                  and not [v for t in seq for v in t if v[3] == TOUCH],
+                  "the held 312 was never CHARGED (nothing was cast) and never CAST "
+                  "from 300 u (the EV-1 gate still refuses it); the cursor ends on "
+                  "the slot last cast (253), not on the held one",
+                  f"skill_ready {ag['skill_ready']}, last_slot {ag.get('last_slot')}")
+
+        # ---- B. THE HELD SLOT'S OWN CAST: inside body reach it goes out. -----
+        st = mk(player=(85.0, 0.0), last_slot=0)     # 253 just cast; next pick is 312
+        near = _swings(st)
+        LEDGER.ok(casts(near) == [[60, 10, 1, TOUCH]],
+                  "the SAME bar with the player at 85 u (inside body reach, 92): the "
+                  "touch slot is not held -- Holy Strike goes out from melee, the "
+                  "hold was about reach and nothing else",
+                  f"casts {casts(near)}")
+
+        # ---- C. EVERY READY SLOT OUT OF REACH: the caster holds its ground. --
+        st = mk(last_slot=0)
+        ag = st["agents"][10]
+        ag["skill_ready"][0] = ag["skill_ready"][2] = time.time() + 60.0
+        far = _swings(st, n=3)
+        moved = _walk(st)
+        LEDGER.ok(far == [] and moved == [] and ag.get("swing_lands_at") is None
+                  and ag.get("cast_lands_at") is None and ag["skill_ready"][1] == 0.0
+                  and ag.get("last_slot") == 1,
+                  "with only the touch slot ready and the player 300 u out the caster "
+                  "HOLDS ITS GROUND as before: no cast, no swing, no move over three "
+                  "ticks; the held slot uncharged; the cursor parked ON it, so the "
+                  "next tick scans the whole bar again (before the fix the cursor "
+                  "stayed at 0 -- the same answer, by the wrong route)",
+                  f"attack {[(hex(op), v) for op, v, _l in far]}, move "
+                  f"{[hex(op) for op, _v, _l in moved]}, ready {ag['skill_ready']}, "
+                  f"last_slot {ag.get('last_slot')}")
+
+        # ---- D. BOUNDED BY THE HELD SET, never by a count. --------------------
+        st = mk(skills=((TOUCH, 0.75, 8.0), (TOUCH2, 0.75, 8.0)))
+        ag = st["agents"][10]
+        both = _swings(st)
+        LEDGER.ok(both == [] and ag["skill_ready"] == [0.0, 0.0]
+                  and ag.get("last_slot") == 1 and ag.get("casting") is None,
+                  "two touch slots, both out of reach: the first is held, the re-pick "
+                  "holds the second, the next re-pick returns a slot already held THIS "
+                  "tick and the search ends with nothing in hand -- never falling out "
+                  "by exhaustion with a held slot and casting it (the heal gate's "
+                  "20260912T122339 trap, the count version)",
+                  f"sent {[(hex(op), v) for op, v, _l in both]}, ready "
+                  f"{ag['skill_ready']}, last_slot {ag.get('last_slot')}")
+
+        # ---- E. A RE-PICK PASSES EVERY GATE THE FIRST PICK DID. --------------
+        # (a) the resource gate: the re-picked slot is unpayable -> refused.
+        authsrv.skill_cost = lambda sid: (999, 0) if sid == ENCH else (0, 0)
+        st = mk(skills=((TOUCH, 0.75, 8.0), (ENCH, 0.75, 2.0)))
+        ag = st["agents"][10]
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            sent = _swings(st)
+        authsrv.skill_cost = lambda sid: (0, 0)
+        LEDGER.ok(casts(sent) == [] and ag.get("casting") is None
+                  and f"cannot cast skill {ENCH}: needs 999 energy" in buf.getvalue()
+                  and ag.get("last_slot") == 0,
+                  "the RESOURCE gate: 312 held, the re-picked 289 costs 999 energy "
+                  "and is refused by name -- a slot is not cast because a hold "
+                  "re-picked it (the heal gate's own re-pick used to skip this gate)",
+                  f"casts {casts(sent)}, log {buf.getvalue().strip()[-60:]!r}")
+        # (b) the heal gate, with SLICE-B3's line byte for byte.
+        st = mk(skills=((TOUCH, 0.75, 8.0), (HEAL, 1.0, 2.0)))
+        ag = st["agents"][10]
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            sent = _swings(st)
+        LEDGER.ok(casts(sent) == [] and ag.get("casting") is None
+                  and ag.get("last_slot") == 1 and ag["skill_ready"] == [0.0, 0.0]
+                  and (f"agent 10 holds skill {HEAL}: target ally, and nobody is "
+                       f"under {authsrv.HERO_HEAL_AT:.0%}") in buf.getvalue(),
+                  "the HEAL gate: 312 held, the re-picked Orison with nobody under "
+                  f"{authsrv.HERO_HEAL_AT:.0%} is held by SLICE-B3's rule and prints "
+                  "SLICE-B3's line unchanged; both held, both uncharged, nothing cast",
+                  f"casts {casts(sent)}, last_slot {ag.get('last_slot')}, log "
+                  f"{[l for l in buf.getvalue().splitlines() if 'holds' in l]}")
+        # (c) the swing clock: a re-picked attack skill waits its interval.
+        # `swinging` planted with the stamp: the bout's opening tick zeroes
+        # `last_swing` ("swing on arrival"), which would void the clock.
+        st = mk(skills=((TOUCH, 0.75, 8.0), (ATTACK, 0.0, 6.0)),
+                last_swing=time.time(), swinging=True)
+        ag = st["agents"][10]
+        first = _swings(st)
+        ag["last_swing"] = 0.0
+        second = _swings(st)
+        LEDGER.ok(casts(first) == [] and ag["skill_ready"][0] == 0.0
+                  and casts(second) == [[50, 10, 1, ATTACK]] and ag.get("last_slot") == 1,
+                  "the SWING CLOCK: 312 held, the re-picked attack skill inside its "
+                  "interval waits (nothing this tick; a clock hold keeps the cursor) "
+                  "and strikes on the next tick from where the cursor was left -- "
+                  "the held touch slot is not picked first again",
+                  f"first {casts(first)}, second {casts(second)}, last_slot "
+                  f"{ag.get('last_slot')}")
+
+        # ---- F. THE REAL TABLE: the vault's re-emitted row, or a named skip. --
+        (authsrv._is_attack_skill, authsrv.skill_cost, authsrv.skill_damage,
+         authsrv.skill_condition, authsrv.skill_target_kind, authsrv.skill_heal,
+         authsrv.agents.WORLD) = saved[2:]
+        try:
+            bit = bool(real.get("skills", str(TOUCH)).get("touch_range"))
+        except Exception:                                      # noqa: BLE001
+            bit = None
+        if not bit:
+            LEDGER.skip("the REAL vault row for 312 carries touch_range",
+                        "no re-emitted skills table on this machine (the vault "
+                        "overlay is absent or predates the pass-6 re-emit); the "
+                        "planted row above stood in for it")
+        else:
+            st = mk()
+            ag = st["agents"][10]
+            seq = [casts(_swings(st))]
+            land(st)
+            seq.append(casts(_swings(st)))
+            LEDGER.ok(seq == [[[60, 10, 1, SPELL]], [[60, 10, 1, ENCH]]]
+                      and abs(authsrv._caster_skill_reach(ag, TOUCH)
+                              - authsrv.body_reach(ag)) < 1e-9,
+                      "on the REAL table (312 `touch_range = true`, the row the "
+                      "pass-6 landing re-emitted) with every reader real: the run's "
+                      "bar casts 253 and then 289 -- the stall the run showed does "
+                      "not happen on this tree",
+                      f"casts per tick {seq}, reach(312) "
+                      f"{authsrv._caster_skill_reach(ag, TOUCH)}")
+    finally:
+        (authsrv.CASTER_OPENING, authsrv.NPC_FOLLOW, authsrv._is_attack_skill,
+         authsrv.skill_cost, authsrv.skill_damage, authsrv.skill_condition,
+         authsrv.skill_target_kind, authsrv.skill_heal, authsrv.agents.WORLD) = saved
 
 
 def section_npc_attack_skill():
