@@ -2181,9 +2181,9 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   (§12.9). Which rows is the operator's call.
 * **DESKWORK-D8 steps 3 and 4 SHIPPED at the desk (2026-09-24, PLAN-LOG "DESKWORK-D8 steps 3
   and 4" and its fix pass); the client run 2026-09-24 (CONFIRM-2 §9): the return, the caster
-  opening and its notice gate HELD, and it found a DEFECT — the caster STALLS after its first
-  cast** (a touch slot held out of reach is never stepped past; fix on branch `desk-casterfix`,
-  then ARMs B and C re-run). `--no-leash-return` / `--no-caster-opening`. Residues: (i) **SLICE-F22's "no swing mid-follow" is contradicted at
+  opening and its notice gate HELD, and it found a DEFECT — the caster stalled after its first
+  cast — FIXED at the desk 2026-09-25** (PLAN-LOG "the caster's held-slot stall": a slot out of
+  reach is stepped past; world gates before clock gates); ARMs B and C re-run owed. `--no-leash-return` / `--no-caster-opening`. Residues: (i) **SLICE-F22's "no swing mid-follow" is contradicted at
   n = 2 on the caught-runner case** — retail opened an `attack_started` between two follows with
   the follow re-issue PAUSED ~1.15–1.21 s, one swing landing and one STOPPED without landing,
   both under a 1.5× Bull's Charge burst (monsterai §15 L4); ours halts on the clock, owes the

@@ -334,6 +334,118 @@ too is one line in `run_client` and a behaviour change for every harness run; no
 
 ---
 
+### DESKWORK-D8 step 4, the caster's held-slot stall -- 2026-09-24, reviewed and fixed 2026-09-25 -- **the default Hatcher cast once and stood for 57 s: the EV-1 reach gate held its touch skill and the round robin re-picked it every tick; a slot the caster cannot cast from where it stands is now STEPPED PAST and the bar re-picked on the same tick, bounded by the held set, every re-pick through every gate -- and the WORLD gates run before the CLOCK gates, so such a slot is never waited on for energy either**
+
+OBSERVED on the client, harness run 20260924T210744 (loopback; control 20260924T210957): the
+default `--enemy` Hatcher -- since step 4 a Monk, bar [276, 253, 312, 289], no weapon,
+`hostile_caster()` True -- standing 300 u from a player who did not move cast 253 ONCE at
+t=3.4 s and then NOTHING for ~57 s: no cast, no swing, no move, though 253 recharges in 5 s.
+Under `--no-caster-opening` (the control) the same body cycled 253 / 312 / 289 all run long.
+
+The cause, read by the orchestrator and reproduced offline before a line changed (the lane's
+`repro_stall.py`: the same bar minus its heal, the real vault table, `VERDICT: STALL`): the
+pass-6 landing re-emitted `vault/content/skills.toml` with `touch_range` / `half_range`, 312
+(Holy Strike) is touch, so `_caster_skill_reach` reads it as body reach (92 u) and the EV-1
+gate in `enemy_attack_tick` held it at 300 u by `slot = None` -- and `pick_skill` is round
+robin from `last_slot + 1`, which only a CAST advanced, so the held 312 came back on every
+tick and 289 (ready) and 253 (recharged) were never reached. The heal gate had solved exactly
+this shape on 2026-09-12 (SLICE-B3: step past, re-pick on the same tick, bounded by what was
+held, never by a count); the reach gate had not.
+
+Shipped (08509c01 the fix, f6a211a9 the review's five fixes, branch `desk-casterfix`): the four
+gates after the pick -- the heal/target gate, the EV-1 reach gate, the resource gate, the
+attack-skill swing clock (F24) -- are one loop per pick, in THAT order: the two WORLD gates
+first, the two CLOCK gates after, on the first pick and on every re-pick alike. A hold that
+waits on the WORLD (nobody hurt; the target beyond THIS skill's reach) adds the slot to
+`_held`, moves the cursor onto it, charges nothing, and re-picks through the top of the loop;
+a re-pick that lands on a slot already held this tick ends the search with nothing in hand. A
+hold that waits on the CLOCK (an unpayable slot; an attack skill inside its swing interval)
+keeps the cursor and retries next tick, as before -- the pool fills and the interval runs out.
+If every ready slot is held the caster holds its ground as before (the step-4 hold).
+
+**Why world-first, and what it changes (the review's RV-1).** The fix's first version kept the
+straight line's order -- the resource gate first -- and its own re-pick met that gate BEFORE
+the heal gate, so a heal hold that re-picked an unpayable heal nobody needed clock-held the
+whole bar until the pool could pay for a cast the heal gate would then hold: the review's
+Warrior with [Orison 5e, Heal Other 10e, 252 5e] and 7 energy cast 252 at t=0.00 on bb84484e
+(whose heal re-pick never met the resource gate) and at t=2.00 on the first version, and a
+heal it could never pay for (fuzz-990: 999 energy) held the bar for good -- the stall this fix
+exists for, one gate over. So a slot that cannot be cast FROM HERE is never waited on. Against
+bb84484e this changes two non-caster arms, both said in the code and pinned in the test: a
+FIRST pick that is an unpayable heal nobody needs is stepped past (bb84484e waited for the
+energy and then held it anyway), and a lone hostile's unpayable other-ally skill is refused as
+"target other ally, and it has none" rather than as unpayable. The heal gate holds what it held
+and prints its line byte for byte. The resource refusal moved to its own rate-limit stamp
+(`pay_refused_at`): a hold ahead of a refusal is now the common tick, and on the shared
+`cast_refused_at` the hold silenced the refusal for as long as the hold lasted -- a run reader
+would have seen no cast and never learned the pool was empty. The reach hold has its own line,
+`holds skill N: D u from T, its reach R u [DESKWORK-D8]`, on its own stamp (`reach_held_at`),
+and T is labelled by its SIDE (`cast_target_label`, RV-5): a hostile's heal aims at a fellow
+hostile, which `target_label` -- right for an attack's target -- called a party agent. No new
+flag: the reach hold is the caster's and `hostile_caster` is False under `--no-caster-opening`,
+which reverts it with the rest of the caster. RECONSTRUCTION, like the rest of step 4;
+`pick_skill` stays the testing fixture its docstring declares -- stepping past what cannot be
+cast from here is not a policy about what to cast next.
+
+The differential against bb84484e (the reviewer's 2,015-scenario driver -- 15 named arms and
+2,000 fuzzed bars of up to four slots, both trees on a frozen clock and a seeded RNG, the pool
+read integrated to `now` in both because the world tick does that for every live agent and the
+driver does not run it): with every cost zeroed, every non-caster trace is byte-identical
+(1,832 identical, 183 caster step-pasts); with real costs, every difference is one of five
+named arms -- 175 reach step-pasts, 20 first-pick unpayable unneeded heals stepped past (13 of
+them non-caster), 9 crashes turned refusals, 9 has-none wordings -- and none is unexplained.
+The reviewer's invariants hold on the fixed tree (80,900 ticks, 2,903 casts, 0 violations: no
+cast unready, unpayable, beyond its reach, an untargeted heal, or an attack skill inside the
+swing interval; at most 4 picks a tick). On the REAL table the default bar at 300 u casts
+{253: 7, 289: 9} over 60 s (bb84484e: {253: 1}, the run's stall) and at 85 u {253: 6, 312: 5,
+289: 7} on both trees; the lone Hatcher at 7 energy with 253 and 312 recharging, which raised
+`PoolError` on bb84484e, now refuses 289 by name.
+
+`test_agentlife.py`, `section_caster_held_slot` (+17; floor 619 -> 635, THE CORE): the run's
+shape -- a Monk 300 u out, bar [253, 312 touch, 289] -- casts 253, then 289 on the very next
+pick, then 253 again once recharged, RED on the unfixed tree (253 once, then nothing) and green
+after; the held 312 never charged and never cast from 300 u; the same bar at 85 u casts 312
+from melee; with only the touch slot ready the caster holds its ground (no cast, no swing, no
+move over three ticks); two touch slots both held and the search ends with nothing in hand;
+the search's bound made VISIBLE (RV-2) -- every tick runs `pick_skill` through a counter that
+raises past len(bar) + 1 picks, so checks C and D report a leaked bound as a named FAIL where
+the reviewer's R9 sabotage hung the section for 90 s and the whole file for 240 with no
+verdict (`run_suite.run_one` runs a test with no timeout); the re-pick refused by the resource
+gate by name, held by the heal gate with SLICE-B3's line unchanged, and waited out by the swing
+clock on a THREE-slot bar (RV-3) -- nothing cast, not even the castable 253 behind the
+clock-held attack skill, the cursor left on the held 312; on the two-slot bar a swing clock
+that stepped past had nothing left to cast and the check could not tell -- then struck on the
+next tick; the gate ORDER in four arms -- the review's Warrior casts 253 on the first tick
+with both heals held, the first-pick unpayable heal nobody needs stepped past (red on
+bb84484e AND on the first version: the disclosed change), the unpayable touch slot at 300 u
+stepped past, the crash arm refused BY NAME on the same tick as the hold; the hostile-side
+label; and the REAL vault row for 312 (`touch_range = true`) with every reader real, or a
+declared skip. Every check reddens under a one-line sabotage of its guard in a scratch copy
+(the fix's eight and the review's five: the reach hold's held-set add, the swing clock stepping
+past, the resource gate moved back ahead of the heal gate, the shared stamp, the label) and
+under the two older `authsrv.py` files. The floor is the core (RV-4): 636 with the vault's
+re-emitted skills table, 635 + 1 declared skip on a table that predates it (`touch_range`
+stripped from the real rows -- on the first version's floor of 628 that run FAILED by
+shortfall), and the whole file does not run on an EMPTY vault at all, before or after this
+change (`section_hold_plane` refuses without attribute cost rows), so there is no bare-machine
+number for this file and neither the ledger nor TESTS.md claims one. The sweep over the
+affected set (the implementer's 167 minus the four port-binders): `162 of 162 green, 10,463
+checks`, plus test_agentlife 636 / 635 + 1 skip and the five lints green.
+
+Open: the client run that would show the cycle on the wire -- the same two launches as the
+runs above, expecting 253 / 289 / 253 from the default bar with 312 held until the player
+walks in (and cast the moment they do); the row's `touch_range` on the REAL bar is only
+witnessed offline here. `--no-caster-opening` remains the control. Not changed and worth a
+line: the "has none" hold and the heal hold still share `cast_refused_at` (both target-gate
+holds), and the resource gate's own stamp is new, so a run's refusal lines are no rarer than
+before and sometimes more frequent.
+
+---
+
+**Landed** (merge into `deskwork` with main's SANDBOX-N1 `f4a8c32a`; the orchestrator committed the implementer's `08509c01` unchanged after it died on a usage limit, its sweep 167 of 167 green): the merged tree's sweep, 168 of 168 green, 11,583 checks, then test_webgate 9, test_handshake 24, test_harness 181, test_preflight_owner 30 serially. The orchestrator ratified the fixer's world-before-clock ordering: the two non-caster arms it changes are the same stall one gate over, and every non-caster trace with costs zeroed is byte-identical to `bb84484e`.
+
+---
+
 ### DESKWORK pass 6, the kick and leash runs on the client -- 2026-09-24 -- **the henchman kick CONFIRMED; the leash return, the caster opening and its notice gate HELD; a caster stall found**
 
 Eleven harness launches on the landed tree `bb84484e` (studies/deskwork/CONFIRM-2026-09-24.md §9),
