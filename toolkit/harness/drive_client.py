@@ -805,11 +805,14 @@ def orbit(hwnd, pid, dx, dy, steps=12):
 # the doll's head slot to a free backpack cell" and "double-click the helm in
 # the backpack to equip it". Until then the harness could single-click
 # (click), hover (hover) and right-drag the camera (orbit), and none of the
-# three can carry an item or equip one. WHETHER THE GUILD WARS CLIENT ACCEPTS
-# THESE AS A DRAG AND A DOUBLE-CLICK IS UNVERIFIED until a client run: the
-# unit tests pin the API and the event shapes, and only the client can say the
-# helm moved. That is the same position orbit() was in on 2026-08-11, and the
-# lesson from that day is built in below -- every motion is a real input event.
+# three can carry an item or equip one. The unit tests pin the API and the
+# event shapes, and only the client can say the helm moved -- the position
+# orbit() was in on 2026-08-11, whose lesson is built in below: every motion is
+# a real input event. CONFIRMED on the client 2026-09-25 (studies/deskwork
+# CONFIRM-2026-09-24.md section 10, runs 20260925T124927 / 125138 / 125334):
+# the drag sent ITEM_MOVE to the aimed backpack cell and the double-click sent
+# EQUIP_ITEM, both on target with no correction, at the harness's usual
+# 1936x1040 window on the owner's mixed-DPI desk.
 
 def _virtual_desk():
     """(left, top, width, height) of the virtual desktop, or None.
@@ -992,7 +995,7 @@ def drag(hwnd, pid, fx0, fy0, fx1, fy1, seconds=0.6, steps=None):
     wants where the pointer landed, and a print alone would not survive
     into the report.
 
-    UNVERIFIED against the client until a run -- see the comment above.
+    CONFIRMED on the client 2026-09-25 -- see the comment above.
     """
     if not _own_foreground(hwnd, pid):
         return False
@@ -1139,8 +1142,8 @@ def double_click(hwnd, pid, fx, fy):
     in physical pixels for the call, for drag()'s reason. Returns False when
     nothing was pressed; otherwise a dict -- `at` (the pixel asked for),
     `pressed_at`, `after` and `on_target` -- and as with drag() the dict is
-    not the verdict, `on_target` is. UNVERIFIED against the client until a
-    run -- see the comment above drag().
+    not the verdict, `on_target` is. CONFIRMED on the client 2026-09-25 --
+    see the comment above drag().
     """
     if not _own_foreground(hwnd, pid):
         return False
