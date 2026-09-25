@@ -175,7 +175,10 @@ key, a binary, a real email address, a `C:\Users\<real name>` path, a character 
 travelling as UTF-16 hex. It is per-clone because `core.hooksPath` is local
 configuration: a fresh clone, a new worktree with its own config, or a machine you
 have not run this on is **unguarded until you run it**. Check with
-`git config core.hooksPath`, which must print `.githooks`.
+`git config core.hooksPath`, which must print `.githooks` — or, in a worktree the
+desktop app made, main's absolute `...\.githooks`, which the app writes into that
+worktree's own config and which is installed too (`toolkit/test_precommit.py` §4
+accepts both, and says which).
 
 **Why a hook and not just `.gitignore`:** the ignore rules cover the vault by
 DIRECTORY, so a capture written into the checkout root — by a tool whose `--out`

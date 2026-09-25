@@ -13677,7 +13677,23 @@ zero. §3 drives real temporary indexes — refusals carry path and line, a clea
 file inside a dirty commit is not named, a NUL byte under `.md` is caught, a
 DELETION is never judged (`--diff-filter=ACMR`, or the gate would block its own
 cleanups), the module's exit codes and printed override read back. §4 pins the
-wrapper and that THIS clone has `core.hooksPath` set. §5 breaks each rule on
+wrapper and that THIS clone has it installed — **read the way git reads it, not
+as the string `.githooks`** (2026-09-25): the merged `core.hooksPath`, a relative
+one resolved against the worktree root, must name a directory holding the wrapper.
+The literal compare was red in every worktree the desktop app makes, which writes
+main's ABSOLUTE `.githooks` into `.git/worktrees/<name>/config.worktree` — a clone
+that IS gated, by its own rules: git runs hooks from the worktree root and the
+wrapper execs a cwd-relative module, so only the sh is main's. Main's wrapper
+byte-identical to this tree's is a PASS noted "MAIN's hooks"; a branch that has
+EDITED the wrapper passes installation and declares a skip, because git runs main's
+copy there and no commit in that worktree exercises the edit (the skip names
+`git config --worktree core.hooksPath .githooks`). §4b rebuilds that config in a
+temporary repo + `git worktree add`, with global/system config shut out, and
+commits through it with stand-in rules modules that name whose copy ran: the app's
+config runs THIS tree's rules via main's wrapper; with the wrapper edited, main's
+still runs; relative `.githooks` runs the edit; unset, a hookless directory and a
+foreign pre-commit are each refused, and the unset commit going straight through
+is the control that the refusals were the hook. §5 breaks each rule on
 purpose and asserts only that rule's own control goes green.
 **EVERY FIXTURE IS ASSEMBLED FROM PARTS AT RUN TIME, and that is the file's real
 lesson**: §2 sweeps every tracked text file including itself, so a literal secret
@@ -13687,8 +13703,10 @@ ones, a credential GUID and an encoded character-name fragment, both removed fro
 every blob and message hours earlier by the history rewrite (`studies/prepub/FINDINGS.md`
 §8). Committing it would have put them back, in the one file whose job is keeping
 them out. `probe_self` runs the content rules over this file and is the check that
-proves it. Stdlib only, no vault, no socket, no client. 76 checks, floor 60; the
-wrapper's index-mode check declares a skip until the wrapper is tracked. ~3 s)
+proves it. Stdlib only, no vault, no socket, no client. 87 checks, floor 60 —
+under the 61 of §1/§2/§5, which always run; §3, §4 and §4b are the sections that
+declare skips (no git, no wrapper, no python on git's sh PATH), and the wrapper's
+index-mode check declares one until the wrapper is tracked. ~8 s)
 
 `toolkit/test_vaultpath.py` (**the vault resolver and the WRITE guard.** `vaultpath`
 is the most-depended-on module in the toolkit and it had no test at all until
