@@ -1547,6 +1547,74 @@ TRANSFER_ARRIVALS = {}            # (world_id, player_id) -> (map, issued_at):
                                   # never popped, so a relaunch asking for the
                                   # last destination would read as a re-entry.
 PORTAL_REARM = 1.25               # outside radius*this re-arms the portal
+# NOMESH-RECT: portal destinations whose map FILE this archive does not hold,
+# map_id -> why; filled once at startup by portal_unservable_scan (a running
+# client locks the archive, so it cannot be asked at fire time), read by
+# portal_tick, which refuses them. travel's TRAVEL_UNSERVABLE is the sibling.
+PORTAL_UNSERVABLE = {}
+
+
+def portal_unservable(table, dat_path, static_config=None, world=None):
+    """{map_id: why} -- the enabled portals' destinations whose file id is
+    not in `table` (an archive's file_id_table). Pure over its arguments.
+
+    WHY A MISSING FILE AND NOT A MISSING MESH. The client handed a map whose
+    file it cannot load does not refuse it: it logs `Creating default map`
+    and plays on a (-3072, -3072, 3072, 3072) stand-in (maprect.py), so
+    every authored coordinate past that asserts agint.h(929) -- the
+    corridor's boss at y = 10400 on create (harness 20260914T085004), a
+    lead's re-grant at x = 4136 (20260925T083808). Both runs zoned in
+    through `ascalon_to_corridor` on an archive without 0x5F0B3. A file that
+    is present with its mesh missing is a different case -- the client has
+    the real map, and the no-mesh door bounds the lead to its Map
+    Parameters rect -- so it is not withheld here.
+
+    A destination with no static config is skipped: it has no file id to
+    look up, and MAP_STATIC_CONFIG's fallback is the server's business at
+    load, not this scan's.
+    """
+    cfg = MAP_STATIC_CONFIG if static_config is None else static_config
+    rows = (world or agents.WORLD).rows("portal")
+    out = {}
+    for _key, row in sorted(rows.items()):
+        if not row.get("enabled", True):
+            continue
+        dest = int(row["to_map"])
+        entry = cfg.get(dest)
+        if entry is None or dest in out:
+            continue
+        if entry[0] not in table:
+            out[dest] = (f"its file 0x{int(entry[0]):X} is not in {dat_path}, "
+                         f"so the client would build its DEFAULT map and "
+                         f"assert on the first authored point past (-3072, "
+                         f"-3072, 3072, 3072)")
+    return out
+
+
+def portal_unservable_scan():
+    """Fill PORTAL_UNSERVABLE from the default archive, at STARTUP (before any
+    client can lock it). ~0.15 s: one file-id table, no decompression. With no
+    archive to read, nothing is withheld and the line says the check did not
+    run -- the historical behaviour, named."""
+    try:
+        from archive import Archive, file_id_table            # noqa: E402
+        ar = Archive()
+    except Exception as exc:                                  # noqa: BLE001
+        print(f"[map] portal destinations UNCHECKED ({exc}): a portal into a "
+              f"map this archive lacks would hand the client its default map "
+              f"[NOMESH-RECT]")
+        return {}
+    try:
+        found = portal_unservable(file_id_table(ar), ar.path)
+    finally:
+        ar.close()
+    PORTAL_UNSERVABLE.clear()
+    PORTAL_UNSERVABLE.update(found)
+    for dest, why in sorted(found.items()):
+        print(f"[map] portal destination map {dest} WITHHELD: {why} -- a "
+              f"portal into it is refused with nothing sent (serve the archive "
+              f"that holds it: RURIK_DAT) [NOMESH-RECT]")
+    return found
 
 
 def portal_rows(map_id):
@@ -1639,6 +1707,15 @@ def portal_tick(send, state, conn_id, local_host):
         if d > r * PORTAL_REARM:
             armed[key] = True
         elif d <= r and armed.get(key):
+            why = PORTAL_UNSERVABLE.get(int(row["to_map"]))
+            if why is not None:
+                # NOMESH-RECT: once per entry -- disarmed, so standing in the
+                # circle does not repeat it; leaving re-arms it as usual.
+                armed[key] = False
+                print(f"[c{conn_id}] PORTAL {key!r} REFUSED: the player is "
+                      f"{d:.0f} u in, but map {row['to_map']} is withheld -- "
+                      f"{why}; nothing sent [NOMESH-RECT]", flush=True)
+                continue
             print(f"[c{conn_id}] PORTAL {key!r}: the player is {d:.0f} u in "
                   f"(radius {r:.0f}) -- transferring to map {row['to_map']}",
                   flush=True)
@@ -5754,6 +5831,64 @@ def fog_init_for_map(map_id, reveal=False):
 _PATHMAPS = {}
 _PATHMAP_LOCK = threading.Lock()
 
+# NOMESH-RECT (maprect.py has the specimen): the rect a MESHLESS instance's
+# leads are bounded to, keyed by file id beside _PATHMAPS and filled at the
+# same moment -- the mesh read's failure, while the archive is still ours to
+# read (a running client holds it exclusively; see load_pathmap). Each value is
+# (rect, source) with source one of maprect.RECT_SOURCES, or (None, why not).
+import maprect  # noqa: E402
+_MAPRECTS = {}
+
+
+def _read_no_mesh_rect(map_file_id, archive=None, table=None):
+    """(rect, source) for a map whose navmesh did not load, or (None, why).
+
+    `client-default` when the archive holds no such file id: the client,
+    holding the same archive (prewarm_pathmap's doctrine), builds its DEFAULT
+    map -- maprect.CLIENT_DEFAULT_MAP_RECT, OBSERVED twice. `map-params` when
+    the file is there and only its mesh is missing: the file's own Map
+    Parameters rect through `mapexport.map_rect`, the one parser, with the
+    client's two gates. Imported here and not at the top because the archive
+    is optional (the PathingMap import below is guarded for the same reason);
+    this runs only on a failure path.
+    """
+    try:
+        from archive import Archive, ffna_chunks, file_id_table   # noqa: E402
+        from mapexport import MAP_PARAMS_CHUNK, map_rect          # noqa: E402
+    except Exception as exc:                                  # noqa: BLE001
+        return None, f"no archive reader ({exc})"
+    own = archive is None
+    try:
+        ar = archive or Archive()
+    except Exception as exc:                                  # noqa: BLE001
+        return None, f"no archive ({exc})"
+    try:
+        tbl = table if table is not None else file_id_table(ar)
+        row = tbl.get(map_file_id)
+        if row is None:
+            return maprect.CLIENT_DEFAULT_MAP_RECT, "client-default"
+        data = ar.read(ar.row(row))
+        for chunk_id, off, size in ffna_chunks(data):
+            if chunk_id == MAP_PARAMS_CHUNK:
+                return (tuple(float(v) for v in
+                              map_rect(bytes(data[off:off + size]))),
+                        "map-params")
+        return None, (f"file id 0x{map_file_id:X} (row {row}) carries no Map "
+                      f"Parameters chunk")
+    except Exception as exc:                                  # noqa: BLE001
+        return None, f"unread ({exc})"
+    finally:
+        if own:
+            ar.close()
+
+
+def no_mesh_rect(map_file_id):
+    """(rect, source) recorded when `map_file_id`'s mesh failed to load, or
+    (None, why) -- never a read: by instance load the client may hold the
+    archive, so the answer is whatever load_pathmap learned when it failed."""
+    return _MAPRECTS.get(map_file_id,
+                         (None, "no mesh failure recorded for this file id"))
+
 
 def load_pathmap(map_file_id, archive=None, table=None, role=None):
     """The walkable geometry for a map, or None if we cannot get it.
@@ -5793,11 +5928,15 @@ def load_pathmap(map_file_id, archive=None, table=None, role=None):
             if role is None:
                 print("[map] collision is OFF; the character can walk through walls")
             pm = None
+            _MAPRECTS[map_file_id] = (None, "the archive is held by the "
+                                            "client, so the rect was not read")
         except Exception as exc:                              # noqa: BLE001
             print(f"[map] no navmesh for 0x{map_file_id:X}: {exc}")
             if role is None:
                 print("[map] collision is OFF; the character can walk through walls")
             pm = None
+            _MAPRECTS[map_file_id] = _read_no_mesh_rect(
+                map_file_id, archive=archive, table=table)
         _PATHMAPS[map_file_id] = pm
         return pm
 
@@ -6477,6 +6616,42 @@ def _sync_position(state, now):
     if gone >= dist:
         return to
     return (frm[0] + dx / dist * gone, frm[1] + dy / dist * gone)
+
+
+def _rect_bound_wire_point(state, opcode, values):
+    """(values, from_point) -- NOMESH-RECT's backstop, called first in send().
+
+    The keyboard lead is bounded at its own clip (the no-mesh door in
+    _a2_clip_lead_ray), which keeps the leg model and the wire in step. This
+    is for every OTHER sender of a point -- a click's verbatim grant, a
+    follow, an NPC's walk, a hard set -- for the reason the hooks in send()
+    exist at all: it is the one place that sees them whatever sent them.
+
+    It CLAMPS rather than drops. A 0x0029 withheld after its 0x002B leaves
+    the client's STALE flag set and the next arrival asserts AgAgent.cpp:1198
+    (MOVECODE-1z-cm), so a refusal here would trade one assert for another.
+    Only with NO mesh and a KNOWN rect, so a meshed instance's wire is
+    byte-identical; `values` comes back as the same object, and `from_point`
+    None, whenever nothing moved.
+    """
+    if opcode not in (GAME_SMSG_AGENT_MOVE_TO_POINT,
+                      GAME_SMSG_AGENT_UPDATE_DESTINATION,
+                      GAME_SMSG_AGENT_UPDATE_POSITION):
+        return values, None
+    if state.get("pathmap") is not None:
+        return values, None
+    rect = state.get("map_rect")
+    if rect is None or not values or len(values) < 2:
+        return values, None
+    point = values[1]
+    if not (isinstance(point, (list, tuple)) and len(point) == 2):
+        return values, None
+    got, moved = maprect.clamp_point(point, rect)
+    if not moved:
+        return values, None
+    out = list(values)
+    out[1] = tuple(got) if isinstance(point, tuple) else got
+    return out, (float(point[0]), float(point[1]))
 
 
 def _note_wire_move(state, opcode, values, now, rec=None):
@@ -8654,7 +8829,8 @@ def a2_clip_lead(state, reported, dest):
     doors on the result. Returns (dest, clipped, why); a door that fired
     appends its tag to `why` ("clear+disc-past", "clipped+w0-route")."""
     got, clipped, why = _a2_clip_lead_ray(state, reported, dest)
-    if why in ("no-mesh", "origin-unwalkable", "origin-ambiguous"):
+    if why in ("no-mesh", "no-mesh-rect", "origin-unwalkable",
+               "origin-ambiguous"):
         return got, clipped, why
     pm = state.get("pathmap")
     plane = None
@@ -8676,8 +8852,10 @@ def a2_clip_lead(state, reported, dest):
 def _a2_clip_lead_ray(state, reported, dest):
     """Clip a D1 lead's endpoint to the navmesh along the REPORT's own ray.
 
-    (dest, clipped, why) -- why is one of "no-mesh" / "origin-unwalkable" /
-    "origin-ambiguous" / "clear" / "clipped" / "plane-seam", and it exists because of the P-17 run
+    (dest, clipped, why) -- why is one of "no-mesh" / "no-mesh-rect" /
+    "origin-unwalkable" / "origin-ambiguous" / "clear" / "clipped" /
+    "plane-seam" ("no-mesh-rect" is NOMESH-RECT: no mesh, the ray stopped at
+    the map's rect), and it exists because of the P-17 run
     (sec.0.18): the wall press pushed the client's reported position
     ~0.25 u past the mesh edge, the off-mesh door opened, and the ONLY
     trace was `lead_clipped=false` on a row whose ray a later session had
@@ -8718,7 +8896,17 @@ def _a2_clip_lead_ray(state, reported, dest):
     """
     pm = state.get("pathmap")
     if pm is None:
-        return dest, False, "no-mesh"
+        # NOMESH-RECT: the door no longer passes the ray unbounded. With no
+        # mesh, the 1z-di re-grant chain walked the copy 520 u per arrival
+        # off the client's map and it asserted agint.h(929) on the fourth
+        # grant's own point (maprect.py, run 20260925T083808). The ray stops
+        # at the map's rect when one is known -- RECONSTRUCTION, the rect's
+        # source is OBSERVED -- and keeps the historical answer when not.
+        rect = state.get("map_rect")
+        if rect is None:
+            return dest, False, "no-mesh"
+        got, clipped = maprect.clip_ray(reported, dest, rect)
+        return got, clipped, ("no-mesh-rect" if clipped else "no-mesh")
     rx, ry = float(reported[0]), float(reported[1])
     plane = None
     sliver = False
@@ -32975,6 +33163,20 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
         s2c_seq = itertools.count()
 
         def send(opcode, values, label, quiet=False):
+            # NOMESH-RECT: FIRST, so every hook below sees the wire's point.
+            # A no-op (the same values object) unless the instance has no
+            # mesh, a known rect, and a point past it.
+            values, _rect_from = _rect_bound_wire_point(state, opcode, values)
+            if _rect_from is not None:
+                label = (f"{label} [RECT-CLAMPED from ({_rect_from[0]:.0f},"
+                         f"{_rect_from[1]:.0f}): past the map's rect with no "
+                         f"mesh -- a sender this backstop should never see; "
+                         f"NOMESH-RECT]")
+                rec.event("rect_clamp", opcode=opcode, agent=values[0],
+                          point=[round(float(values[1][0]), 1),
+                                 round(float(values[1][1]), 1)],
+                          was=[round(_rect_from[0], 1),
+                               round(_rect_from[1], 1)])
             # WHERE EVERY BODY IS, recorded from the message that puts it there.
             # The interact range gate needs an agent's position and there was
             # nowhere to get one: probes create agents by sending 0x0020
@@ -33322,6 +33524,25 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             state["sync_from"], state["sync_to"] = spawn[1], None
             state["sync_at"] = state["pos_seen"]
             state["pathmap"] = load_pathmap(spawn[0])
+            # NOMESH-RECT: with no mesh, the one bound left is the map's rect
+            # (maprect.py) -- read when the mesh failed, never here.
+            state["map_rect"] = None
+            if state["pathmap"] is None:
+                _rect, _rsrc = no_mesh_rect(spawn[0])
+                state["map_rect"] = _rect
+                if _rect is not None:
+                    print(f"[c{conn_id}] NO-MESH BOUND: every lead and grant on "
+                          f"map {state['map_id']} stays "
+                          f"{maprect.NO_MESH_RECT_INSET:.0f} u inside the rect "
+                          f"({_rect[0]:.0f},{_rect[1]:.0f},{_rect[2]:.0f},"
+                          f"{_rect[3]:.0f}) [{_rsrc}: "
+                          f"{maprect.RECT_SOURCES[_rsrc]}] [NOMESH-RECT]",
+                          flush=True)
+                else:
+                    print(f"[c{conn_id}] NO-MESH, NO BOUND on map "
+                          f"{state['map_id']}: {_rsrc} -- leads are unbounded, "
+                          f"and a lead past the client's map asserts agint.h(929) "
+                          f"[NOMESH-RECT]", flush=True)
             # The AgTrack guard's mirror pair starts from the same one
             # known-true instant the sync model does (its own HOLE-D rule).
             _agtrack_guard_seed(state, spawn[1], spawn[2], conn_id)
@@ -37628,6 +37849,15 @@ def main():
         print("[map] no --map: no navmesh is pre-warmed (portals included), so "
               "a travel destination's mesh would be read at its load -- late if "
               "a client holds the archive (see prewarm_pathmap)")
+
+    # NOMESH-RECT: and which portal destinations this archive cannot serve AT
+    # ALL -- a missing map file, which the client meets with its default map
+    # (maprect.py). With or without --map: harness 20260925T083808 had none
+    # and zoned into 0x5F0B3's absence all the same. `a.no_portals` is read
+    # directly, as the travel prewarm reads a.no_map_travel -- the PORTALS
+    # global is only rebound by the flag block further down.
+    if not a.no_portals:
+        portal_unservable_scan()
 
     if a.area:
         global AREA_NAME

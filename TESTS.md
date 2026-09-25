@@ -3587,6 +3587,27 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   destination is reachable at startup** (`portal_reachable` follows chains and skips disabled rows)
   -- the corridor loaded with NO NAVMESH on a re-entry before it. `--no-portals` arms and fires
   nothing. Floor 28, MEASURED 2026-09-12 (22 before §6/§7). No vault, no client; ~2 s),
+  `toolkit/authsrv/test_nomeshrect.py` (**NOMESH-RECT (2026-09-25)**, the meshless instance's
+  bound, from harness `20260925T083808`: a backpedal into `ascalon_to_corridor` zoned to map 168,
+  whose file 0x5F0B3 neither archive held; the client logged `Creating default map`, and the 1z-di
+  re-grant chain walked the copy east 520 u per arrival until the client asserted `pos.x <=
+  worldDims.x1` (agint.h(929)) in the 0x0029 handler on RE-GRANT 4's own point (4136, 1536). §1 the
+  default rect (-3072,-3072,3072,3072) against the client's own log line in that run and the
+  second witness `20260914T085004`, and the 32 u inset against the log's per-frame steps; §2
+  `maprect.py`'s geometry (a clipped diagonal keeps its HEADING; an origin past the bound gets the
+  nearest point inside); §3 the lead's no-mesh door -- `no-mesh-rect` with a rect, the historical
+  unbounded `no-mesh` without one (the revert arm), and a MESHED instance never consulting the rect;
+  §4 **the capture replayed through the real `kbd_lead_chain_tick`: the known-bad arm reproduces
+  the run's eight wire points exactly** (2576 .. 6216), and the bounded arm sends two, the second at
+  x = 3040, then `regrant-stop`; §5 `send()`'s backstop for every other sender of a point (0x0029 /
+  0x002A / 0x002C, any agent), clamping not dropping, the same object back on a meshed instance,
+  creates untouched, locked as `send()`'s first statement; §6 the rect read where the mesh fails,
+  against the real archive -- `client-default` for an absent file, the file's own Map Parameters
+  rect for a present one, **positive control: all 6,120 trapezoids of map 148's mesh inside the
+  rect its file declares** -- and a client-held archive recording no rect with the reason; §7 the
+  portal refusal on the real `ascalon_to_corridor` row (withheld: nothing sent, disarmed, re-armed
+  by leaving) with the firing control, and the startup scan's lock (outside the `--map` branch).
+  Floor 37, the vault-free core; 45 MEASURED 2026-09-25 with the vault. ~12 s),
   `toolkit/authsrv/test_interact.py` (the interact path — the walk order and the
   interact that is HELD rather than dropped. **Nothing exercised
   `_handle_interact` at all before 2026-08-19**; `test_dispatch.py` named it once
