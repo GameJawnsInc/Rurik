@@ -101,6 +101,38 @@ WHAT THE TAPE SAYS (studies/cmsg/FINDINGS.md "The party family", capture
     not (a zone starts a fresh instance without it -- the deferred field
     carry).
 
+THE REFUSAL AT THE CAP (desk-partyfull, 2026-09-25; studies/cmsg/FINDINGS.md
+"The refusal at the cap"). The client SENDS 0x009F at max_party (OBSERVED,
+harness runs 20260924T085818 and 20260924T205051 on map 148, cap 4: the third
+add at 4 of 4 reached the server) and this server refuses it with nothing
+sent. What retail's server sends back is NOT FOUND: over 96 live connections
+the own party reached its map's cap exactly once (:53419, 1 -> 4 by the three
+adds) and nothing was attempted past it; no 0x01B8 / 0x01BC / 0x01D6 / 0x01E3
+(below) is on any tape at all, and no party-block string id is among the 44
+server-line ids retail ever sent. What the CLIENT holds (build 38797, read
+from the binary): four one-byte messages -- 0x01B8, 0x01BC, 0x01D6, 0x01E3,
+dispatch 0x00856A10 / 0x00856AA0 / 0x00856E70 / 0x00857380 -- whose workers
+each hand the byte to ONE function, 0x00858300, which indexes a dword table
+of 82 string ids at 0x00B97968 (the byte is the index), posts the sentence on
+chat channel 10 through 0x0082CE20 and fires a frame-bus event; 0x01BC's
+worker is the plain one (it clears no request-in-flight bit; 0x01B8 clears
+bit 0 of [party+0x10], the bit the 0x98/0x99 senders set; 0x01D6 bit 1;
+0x01E3 bit 2). That path is CONFIRMED ON OUR CLIENT for index 0: the
+2026-08-13 sweep sent each of the four with byte 0 and the operator read the
+table's row-0 sentence on screen (schema/overrides.json 440/444/470, named
+after that sentence). The table has NO row that says the party is full: the
+nearest are 37 (#2595, the henchman already in the party -- the exact
+sentence for our `already in the party` refusal), 64 (#2616, the merged
+party too large) and 78/79 (#89154/#89155, no more than 4/2 henchmen). The
+sentence a player would expect -- #57757, templated on the name -- is a
+CLIENT-side const text (index 267 of the 4,962-row table at 0x00BB19B8, the
+getter at 0x008EDF89), so retail's client may refuse locally and never send;
+why ours sent instead is UNVERIFIED (the three UI callers of the 0x9F thunk,
+0x00562F60 / 0x0056427A / 0x0056BA86, compare no size before the call).
+So `party_full_reply(code)` is armed DEFAULT OFF, behind --party-full-reply
+CODE, labelled RECONSTRUCTION: one 0x01BC [code], the carrier's byte chosen
+by the operator from the table above, and the runsheet reads the screen.
+
 Read-only of the tape; the batch itself is what the server sends. authsrv.py
 mirrors the opcodes below as GAME_SMSG_PARTY_HENCHMAN_HIREABLE,
 GAME_SMSG_PLAYER_PARTY_SIZE and GAME_SMSG_PARTY_HENCHMAN_REMOVE;
@@ -132,6 +164,17 @@ AGENT_PROPERTY_UPDATE_INT = 0x009F
 # docstring, THE KICK). UPSTREAM name PARTY_HENCHMAN_REMOVE; the handler read
 # is ours. On no retail tape (0 of 96). authsrv's GAME_SMSG_PARTY_HENCHMAN_REMOVE.
 PARTY_HENCHMAN_REMOVE = 0x01C0
+# 0x01BC -- [byte code]: the party error PROMPT. Its worker 0x00858C00 hands
+# the byte to the shower 0x00858300, which indexes the 82-row string-id table
+# at 0x00B97968 and posts the sentence on channel 10 with a centre-screen
+# popup (the 2026-08-13 sweep saw both for code 0; overrides.json 444 names it
+# ACCOUNT_UNNAMED_PROMPT after that row-0 sentence). The one carrier of the
+# four that clears no request-in-flight bit (the module docstring, THE
+# REFUSAL AT THE CAP). On no retail tape (0 of 96). RECONSTRUCTION as a
+# refusal reply; the code is the operator's (--party-full-reply).
+PARTY_ERROR_PROMPT = 0x01BC
+PARTY_ERROR_CODE_MAX = 81              # the table's last row (82 rows, 0..81), build 38797
+PARTY_ERROR_CODE_HENCHMAN_IN_PARTY = 37   # #2595 -- the exact sentence for "already in the party"
 
 
 def hireable_mark(agent_id):
@@ -250,3 +293,35 @@ def party_is_full(member_count, cap):
     cap is the client's own AreaInfo max_party for the served map (242 -> 4);
     the server holds it as one constant today (authsrv.OUTPOST_PARTY_CAP)."""
     return int(member_count) >= int(cap)
+
+
+def party_full_reply(code):
+    """The OPT-IN reply to an add refused at the cap: ONE 0x01BC [code], the
+    party error prompt (the module docstring, THE REFUSAL AT THE CAP).
+
+    RECONSTRUCTION. No retail tape carries a refused add or any of the four
+    error carriers (0 of 96 live connections), so neither the carrier nor the
+    code is measured as a refusal; what IS measured is the mechanism -- the
+    client's worker 0x00858C00 -> 0x00858300 indexes the 82-row table at
+    0x00B97968 by this byte and shows the row's sentence, CONFIRMED on our
+    client for code 0 (the 2026-08-13 sweep). The table has no "party is
+    full" row; `code` is the operator's choice (--party-full-reply CODE), and
+    the runsheet reads what the screen says. `None` is the default arm:
+    nothing sent, today's silent refusal. Out of the table's range is refused
+    here rather than sent as a row the client would read past the table's
+    end. Each element is (op, vals, label)."""
+    if code is None:
+        return []
+    if isinstance(code, bool) or not isinstance(code, int):
+        raise ValueError(f"party-full reply code {code!r} must be an int 0..{PARTY_ERROR_CODE_MAX} "
+                         f"(a row of the client's party error table)")
+    if not 0 <= code <= PARTY_ERROR_CODE_MAX:
+        raise ValueError(f"party-full reply code {code} is outside the client's party error "
+                         f"table (rows 0..{PARTY_ERROR_CODE_MAX}, build 38797); the shower "
+                         f"would index past the table")
+    return [
+        (PARTY_ERROR_PROMPT, [int(code)],
+         f"PARTY_ERROR_PROMPT(code {code}) -- the add refused at the cap "
+         f"[RECONSTRUCTION, --party-full-reply: the carrier's mechanism is the "
+         f"client's, the code the operator's; on no retail tape]"),
+    ]

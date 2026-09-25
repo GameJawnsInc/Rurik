@@ -12124,6 +12124,19 @@ OUTPOST_PARTY_CAP = 4          # The party cap a henchman add AND a hero add
                                # table is the next step. --henchman-cap
                                # overrides (N >= 1). Heroes AND henchmen count
                                # against it (party_member_count).
+PARTY_FULL_REPLY_CODE = None   # --party-full-reply CODE (desk-partyfull,
+                               # 2026-09-25): when set, an add refused at the
+                               # cap -- henchman 0x009F or hero 0x001E -- is
+                               # answered with ONE 0x01BC [CODE], the client's
+                               # party error prompt (henchparty.party_full_reply).
+                               # DEFAULT OFF = today's silent refusal: retail's
+                               # reply is NOT FOUND (no tape carries a refused
+                               # add or any error carrier, 0 of 96), the
+                               # client's 82-row error table has no "party is
+                               # full" row, and the sentence a player expects
+                               # (#57757) is a CLIENT-side const text -- so
+                               # retail's client may refuse locally and its
+                               # server may send nothing. RECONSTRUCTION.
 AI_MODE_FIGHT, AI_MODE_GUARD, AI_MODE_AVOID = 0, 1, 2   # 0x0015's byte (pvpui 28.5)
 AI_MODE_NAMES = {0: "Fight", 1: "Guard", 2: "Avoid Combat"}
 SPIRIT_RANGE = 2512.0          # u -- WIKI (GWW "Range"): binding rituals /
@@ -25674,8 +25687,10 @@ def handle_hero_add(values, send, state, conn_id):
         print(f"[c{conn_id}] HERO_ADD({hid}) refused: the party already holds "
               f"{party_member_count(state)} members (heroes and henchmen), the "
               f"served cap (OUTPOST_PARTY_CAP={OUTPOST_PARTY_CAP}, --henchman-cap "
-              f"overrides); nothing sent (retail's refusal reply NOT FOUND) "
+              f"overrides); {party_full_refusal_note()} "
               f"[DESKWORK-D1]", flush=True)
+        for op, vals, label in henchparty.party_full_reply(PARTY_FULL_REPLY_CODE):
+            send(op, vals, label + " [HERO_ADD]")
         return
     if not (HERO_RIG_RETAIL and HERO_ACTIVATE):
         print(f"[c{conn_id}] HERO_ADD({hid}) refused: the load ran the LEGACY "
@@ -25769,6 +25784,17 @@ def party_size_on_wire(state):
     return party_member_count(state, count_heroes=PARTY_SIZE_COUNTS_HEROES)
 
 
+def party_full_refusal_note():
+    """What the two cap refusals (henchman add, hero add) print about the wire:
+    nothing sent by default -- retail's refusal reply is NOT FOUND -- or, under
+    --party-full-reply CODE, the one 0x01BC [CODE] that follows the line
+    (henchparty.party_full_reply; RECONSTRUCTION, the code the operator's)."""
+    if PARTY_FULL_REPLY_CODE is None:
+        return "nothing sent (retail's refusal reply NOT FOUND)"
+    return (f"0x01BC PARTY_ERROR_PROMPT [code {PARTY_FULL_REPLY_CODE}] follows "
+            f"(--party-full-reply; RECONSTRUCTION, retail's reply NOT FOUND)")
+
+
 def handle_henchman_add(values, send, state, conn_id):
     """GAME_CMSG 0x009F HENCHMAN_ADD: the party window's Add Henchman click --
     hire a standing outpost henchman into the party (DESKWORK-D1 step 5).
@@ -25804,8 +25830,10 @@ def handle_henchman_add(values, send, state, conn_id):
               f"{party_member_count(state)} members (heroes and henchmen), the "
               f"served cap (OUTPOST_PARTY_CAP={OUTPOST_PARTY_CAP} -- a constant, "
               f"the AreaInfo max_party of the maps we serve; --henchman-cap "
-              f"overrides); nothing sent (retail's refusal reply NOT FOUND) "
+              f"overrides); {party_full_refusal_note()} "
               f"[DESKWORK-D1]", flush=True)
+        for op, vals, label in henchparty.party_full_reply(PARTY_FULL_REPLY_CODE):
+            send(op, vals, label + " [HENCHMAN_ADD]")
         return
     party[aid] = hench
     size = party_size_on_wire(state)
@@ -38692,6 +38720,21 @@ def main():
               f"the hero add refuse at {OUTPOST_PARTY_CAP} party members (heroes "
               f"and henchmen counted), overriding the constant 4 (the AreaInfo "
               f"max_party of the maps we serve).", flush=True)
+    if a.party_full_reply is not None:
+        global PARTY_FULL_REPLY_CODE
+        # the leaf refuses a code outside the client's table before a byte is sent
+        try:
+            henchparty.party_full_reply(int(a.party_full_reply))
+        except ValueError as exc:
+            raise SystemExit(f"--party-full-reply {a.party_full_reply}: {exc}") from None
+        PARTY_FULL_REPLY_CODE = int(a.party_full_reply)
+        print(f"[party] --party-full-reply {PARTY_FULL_REPLY_CODE}: an add refused at "
+              f"the cap (henchman 0x009F, hero 0x001E) is answered with 0x01BC "
+              f"PARTY_ERROR_PROMPT [code {PARTY_FULL_REPLY_CODE}] -- the client's "
+              f"party error table row {PARTY_FULL_REPLY_CODE} shown on channel 10 "
+              f"with a centre-screen popup. RECONSTRUCTION: retail's reply to a "
+              f"refused add is NOT FOUND (0 of 96 live connections) and the table "
+              f"has no 'party is full' row; the default sends nothing.", flush=True)
     if a.party_no_fight:
         global PARTY_FIGHTS
         PARTY_FIGHTS = False

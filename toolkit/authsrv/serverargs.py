@@ -1074,6 +1074,26 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "per-map read (248/280 read 8, 55/238 read 6; a per-map "
                          "table is next). Heroes and hired henchmen both count "
                          "against it. N is 1 or more (the player counts).")
+    ap.add_argument("--party-full-reply", type=int, default=None, metavar="CODE",
+                    help="OPT-IN (desk-partyfull, 2026-09-25): answer an add refused "
+                         "at the cap -- henchman 0x009F or hero 0x001E -- with ONE "
+                         "0x01BC PARTY_ERROR_PROMPT [CODE], the client's party "
+                         "error message: its worker indexes an 82-row string-id "
+                         "table (rows 0..81, build 38797) by the byte and shows the "
+                         "row on channel 10 with a centre-screen popup (CONFIRMED on "
+                         "our client for row 0 by the 2026-08-13 sweep). The DEFAULT "
+                         "sends nothing, which is today's silent refusal: retail's "
+                         "reply to a refused add is NOT FOUND (no tape carries one, "
+                         "nor any of the four error carriers, 0 of 96 live "
+                         "connections), the table has NO 'party is full' row, and "
+                         "the sentence a player expects (#57757) is a CLIENT-side "
+                         "text, so retail's client may refuse locally and its "
+                         "server send nothing. RECONSTRUCTION -- the mechanism is "
+                         "the client's, the CODE is yours: 64 is the row that says "
+                         "the merged party would be too large, 78 the row for no "
+                         "more than 4 henchmen; read the screen and record it "
+                         "(studies/cmsg/FINDINGS.md 'The refusal at the cap'). A "
+                         "CODE outside 0..81 is refused at launch.")
     ap.add_argument("--no-zone-carry", action="store_true",
                     help="THE REVERT ARM for JARIN: a zone forgets the death "
                          "penalty and the hero's stance. Retail carries the "
