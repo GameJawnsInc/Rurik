@@ -213,13 +213,14 @@ FALLBACK_EXE = _pinned.LIVE_INSTALL
 # Legacy prefixes that make one instruction decode twice at consecutive offsets.
 _PREFIXES = (0x66, 0x67, 0xF2, 0xF3)
 
-# Every rel32 branch `xrefs` searches, as (opcode bytes, kind). ONE tuple, and
+# Every rel32 branch `xrefs` searches lives in rel32.py, as ONE tuple, and
 # `xref_forms` builds the footer's scope sentence from it, so what `--xrefs`
-# says it searched cannot drift from what it did. `0F 80..8F` is jcc: sixteen
-# condition codes, one rel32 form. It was missing until 2026-09-25 -- see the
-# module docstring's FIFTH defect.
-_REL32_BRANCHES = ((b"\xE8", "call"), (b"\xE9", "jmp")) + tuple(
-    (bytes([0x0F, cc]), "jcc") for cc in range(0x80, 0x90))
+# says it searched cannot drift from what it did. `0F 80..8F` (jcc) was missing
+# until 2026-09-25 -- see the module docstring's FIFTH defect. It moved out of
+# this file the same day so that sendsites.py's caller column, which must stay
+# capstone-free, scans exactly the same forms (read here by `xrefs`,
+# `xref_forms` and `main`).
+import rel32                                                  # noqa: E402
 
 # x87 memory stores. capstone marks their memory operand as a READ, so the
 # access flag alone would hide every floating-point store in the image.
@@ -1044,24 +1045,14 @@ class Image:
         The scope statement, as data rather than a sentence in `main()`, for the
         same reason `field_encodings` is: a zero is only as good as the list of
         forms it was looked for in, and a list in a print statement is one that
-        no test can read. The branch rows are built from `_REL32_BRANCHES`, the
+        no test can read. The branch rows are built from `rel32.BRANCHES`, the
         tuple the scan itself walks.
         """
-        ops = {}
-        for op, kind in _REL32_BRANCHES:
-            ops.setdefault(kind, []).append(op.hex(" ").upper())
-        searched = []
-        for kind, spell in ops.items():
-            detail = (spell[0] if len(spell) == 1 else
-                      f"{spell[0]}..{spell[-1]}, all {len(spell)} conditions")
-            searched.append((f"{kind} rel32", f"{detail}, over .text"))
+        searched = rel32.searched()
         searched.append(("the VA as a four-byte word",
                          "at EVERY alignment, in every section"))
         blind = [
-            ("rel8 short branches",
-             "`jmp short` (EB), `jcc short` (70..7F), `loop`/`jecxz` -- a "
-             "one-byte displacement reaches only 128 bytes either side, so "
-             "`--dis` the neighbourhood when the answer is zero"),
+            rel32.REL8_BLIND,
             ("indirect calls", "through a register or a vtable"),
             ("computed addresses",
              "any address the image computes rather than stores"),
@@ -1097,19 +1088,9 @@ class Image:
         Sites are [(va, kind)], va the branch's first opcode byte. Words are
         [(va, section, aligned, carrier_or_None)].
         """
-        calls = []
-        blob, tva = self.tdata, self.tva
-        for op, kind in _REL32_BRANCHES:
-            # The rel32 follows the opcode, and the branch is relative to the
-            # END of the instruction: 5 bytes for E8/E9, 6 for 0F 8x.
-            end = len(op) + 4
-            p = blob.find(op)
-            while p != -1:
-                if p + end <= len(blob):
-                    rel = struct.unpack_from("<i", blob, p + len(op))[0]
-                    if tva + p + end + rel == target:
-                        calls.append((tva + p, kind))
-                p = blob.find(op, p + 1)
+        # The branch half is rel32.py's scan, the one sendsites.py's caller
+        # column runs too.
+        calls = rel32.refs(self.tdata, self.tva, (target,)).get(target, [])
 
         words, needle = [], struct.pack("<I", target)
         for s in self.pe.sections:
@@ -1392,8 +1373,7 @@ def main():
         calls, words = img.xrefs(t)
         naligned = sum(1 for w in words if w[2])
         per = collections.Counter(kind for _va, kind in calls)
-        split = ", ".join(f"{per[k]} {k}"
-                          for k in dict.fromkeys(k for _o, k in _REL32_BRANCHES))
+        split = ", ".join(f"{per[k]} {k}" for k in rel32.kinds())
         print(f"0x{t:08X}: {len(calls)} direct rel32 reference(s) ({split}), "
               f"{len(words)} word(s) holding the VA "
               f"({naligned} aligned, {len(words) - naligned} not)")

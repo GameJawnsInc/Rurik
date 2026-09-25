@@ -762,7 +762,7 @@ retail, unhandled, unnamed, and not dropped on purpose (the route estimated ~19)
 | `0x000B` | 29 | 29 | blob16, 4 dwords, string16 ×2 | load burst | `0x00491820` (the `0x000A` builder) | dropped, unnamed — the OS name and client version string; `0x000A`'s companion |
 | `0x000C` | 2 | 2 | header only | none consistent | — | dropped, n=2 |
 | `0x000D` | 31 | 30 | header only | `0x019F` 11 | NOT FOUND on the game channel | dropped — a load-sequence marker between `0x0090` and `0x0092` |
-| `0x0013` | 2 | 1 | header only | `0x00A2` 1 | `0x0091FC30` CharMsg, 0 direct callers | dropped, n=2 |
+| `0x0013` | 2 | 1 | header only | `0x00A2` 1 | `0x0091FC30` CharMsg ← `jmp` at `0x0080DAC3`, the tail of `0x0080DAA0` (no prologue: `call 0x47f660`, `[[eax+0x2c]+0x528] = -1`, `call 0x633d70(0x10000150, 0, 0)`, then the `jmp`), whose one caller is `0x0057BE06`; "0 direct callers" until 2026-09-25, when `sendsites.py` counted `call` only | dropped, n=2 |
 | `0x0023` | 1 | 1 | byte, agent_id | `0x0034` | `0x00920030` CharMsg | dropped, n=1 |
 | `0x0041` | 1 | 1 | agent_id, byte | movement | `0x00920800` CharMsg | dropped, n=1 |
 | `0x0044` | 1 | 1 | dword | `0x009F` | `0x009208B0` CharMsg | dropped, n=1 |
@@ -775,7 +775,7 @@ retail, unhandled, unnamed, and not dropped on purpose (the route estimated ~19)
 | `0x0089` | 5 | 5 | header only | load burst | `0x008526E0` | dropped — the 5 character-creation connections |
 | `0x008B` | 5 | 5 | string16(20), blob8, dword | `0x0099` 5 of 5, then `0x0188` | `0x00852740` MsCliMsg | dropped — character creation's name commit (the string is a typed character name) |
 | **`0x009F`** | 3 | 1 | word agent_id | **`0x00B0` 3 of 3, then `0x01BF`** | `0x0085BE40`, 1 caller | **NAMED `HENCHMAN_ADD` (medium)**; dropped until step 5 |
-| **`0x00B1`** | 10 | 10 | word, byte, word, byte, byte | **`0x01D9` 9 of 10, then `0x01A5`, `0x0099`** | `0x0085C280`, 0 direct callers | **NAMED `MAP_TRAVEL` (medium)**; dropped until step 7 |
+| **`0x00B1`** | 10 | 10 | word, byte, word, byte, byte | **`0x01D9` 9 of 10, then `0x01A5`, `0x0099`** | `0x0085C280` ← `jmp` thunk `0x008576E0` ← `0x004A791F`; "0 direct callers" until 2026-09-25 (`call`-only census) | **NAMED `MAP_TRAVEL` (medium)**; dropped until step 7 |
 
 Loopback counts for the same opcodes (UNHANDLED events, one per connection per
 opcode, over the 1,557 loopback connection logs under `vault/captures/gamesrv` —
@@ -808,9 +808,14 @@ slot]` echoes them 4 of 4 (`[4, 2, 1]` → `[1, 213, 2, 1]`, `[1, 136, 6]` → `
 followed 4 of 4, and claimed zero loopback arrivals — there is ONE loopback decode
 (`authsrv-20260810T151946-c1`, t=334.0, `[0, 4, 1]`), from before UNHANDLED logging.
 The route's "one caller
-`0x004A791F`" for the travel wrapper is not what the census reads — `0x0085C280` has
-NO direct caller on 38797 (reached through a pointer); the survey text stays
-unverified there. The fifteen others are UNNAMED on purpose: a name is DESKWORK-D2's
+`0x004A791F`" for the travel wrapper is right, one hop back: `0x0085C280`'s only
+reference in the image is the one-instruction thunk `0x008576E0` (`jmp 0x85c280`), and
+the thunk's one caller is `0x004A791F` (the send gate, below). **CORRECTED 2026-09-25:**
+this sentence said `0x0085C280` "has NO direct caller on 38797 (reached through a
+pointer)" and left the survey unverified. `sendsites.py` counted `call` sites only, and
+no word in the image holds the VA (`codescan --xrefs`). The send-gate section's fix
+pass had already corrected the pointer reading (TRAV-EV-7); this paragraph was not
+re-read then. The fifteen others are UNNAMED on purpose: a name is DESKWORK-D2's
 product, and each allowlist row says what was measured and what would name it.
 
 **What the first-reply column is and is not.** A CORRELATION on a busy wire. The
@@ -1092,7 +1097,8 @@ run.
 **The message, statically (38797; `sendsites.py`, `codescan.py --xrefs/--dis`,
 `msghandler.py --callers`, `asserts.py --at`).** The game wrapper is `0x0091FD80` (12
 bytes; `0x00920700` on 38888, `0x0091FDE0` on 38833/38849, `0x00915B40` on 38519), and
-the census's "0 callers" is because it is reached by a tail `jmp` from ChCliApi
+the census's "0 callers" (until 2026-09-25, when it counted `call` only; it now
+lists `jmp 0x0080E01E`) is because it is reached by a tail `jmp` from ChCliApi
 `0x0080E000`, which asserts the hotKey bound (below 8; ChCliApi, source line 4359) and — unlike its neighbours
 `0x0080E030`/`0x0080E050`, the `0x001A`/`0x001B` senders, which gate on
 `MissionCliGetMap() == 1` — has **no map gate**. The schema's shape holds: `[agent_id,
@@ -1692,6 +1698,8 @@ the current code from the getter, finds the chosen code's row, and calls
 direct caller (the widget), which is also the answer to a question the c2s triage's
 "callers 0" column raised: the CharMsg wrappers are reached through the 0x8161xx thunk band
 (`0x0030`'s at 0x008161D0), so a wrapper's caller count is the thunk's, not the sender's.
+(The column counted `call` sites only until 2026-09-25; it now lists each thunk's `jmp`,
+`jmp 0x00816C10` on this row.)
 **`0x0057` is on no tape** — 0 of 13,320 c2s over 96 live connections — so retail's reply is
 not witnessed. What the binary settles about it: the client applies nothing locally (the
 sender's arm writes no state; the byte's only writer is `0x00EF`'s handler), so a server
@@ -1788,7 +1796,7 @@ arm starts an item DRAG (a `GmCtlItemImage` of kind 0x2A), which read like a men
 minutes; the widget is the class registered from 0x008ECE90/0x008ECF30 with the
 `InvVisibilityStatus.cpp` file string at 0xBA38E4. (2) `sendsites.py`'s "callers 0" on the
 CharMsg wrappers is not "unreachable": the wrappers are reached through `jmp` thunks in the
-0x8161xx–0x816Cxx band. (3) The three-slot count in the task: the retail screenshot has four
+0x8161xx–0x816Cxx band (and since 2026-09-25 the census lists those `jmp`s itself). (3) The three-slot count in the task: the retail screenshot has four
 eyes and ours four circled bars. (4) By the fix pass: the landing's `CODE_STRING_ID` had
 codes 3/4/5 as 0x32E/0x32F/0x330 — the switch's case bodies taken in ADDRESS order; through
 the jump table at 0x008ECE3C (and the menu builder's copy at 0x008ED080) code 3 is 0x330,
@@ -2221,7 +2229,8 @@ UNREPRODUCED, worth reproducing only if the client run shows a UI race.
 
 **The send gate, statically (38797; `sendsites.py`, `codescan.py --xrefs/--dis`,
 `asserts.py`; corrected by the fix pass).** The travel wrapper `0x0085C280` has no
-direct CALL — `sendsites.py` counts calls — and is NOT "reached through a pointer":
+direct CALL — `sendsites.py` counted calls only until 2026-09-25, and now lists this
+`jmp` — and is NOT "reached through a pointer":
 `codescan --xrefs` finds 0 stored words holding its VA and exactly one direct reference,
 the one-instruction thunk `0x008576E0` (`jmp 0x85c280`), whose one caller is the `call`
 at `0x004A791F`. **The route's "one caller `0x004A791F`" was right**; the landing's
@@ -2542,9 +2551,9 @@ other `0x98–0xB2` c2s was ever sent, so every other row below is static only.
 | `0xAD` | `[u16]` | `0x0085C070` ← `0x0085B519` | 0 | — | UNVERIFIED |
 | `0xAE` | `[u8]` | `0x0085C0A0` ← `0x0085BB4B` | 0 | — | UNVERIFIED |
 | `0xAF` | `[u8]` | `0x0085C1F0` ← `0x0085AC50` | 0 | — | UNVERIFIED |
-| `0xB0` | `[blob16, u8]` (24 B) | `0x0085C220`, 0 direct callers | 0 | — | UNVERIFIED |
-| **`0xB1`** | `[u16, u8, u16, u8, u8]` (24 B) | `0x0085C280`, 0 direct callers | **10 of 10** | TRAVEL | **MAP_TRAVEL, OBSERVED — step 7's lane** |
-| `0xB2` | `[u8]` | `0x0085C2E0`, 0 direct callers | 0 | — | UNVERIFIED |
+| `0xB0` | `[blob16, u8]` (24 B) | `0x0085C220` ← `jmp` thunk `0x008576D0` ← `0x004A7934` (in `0x004A78C0`, the UI record's `[+0x20] == 0` arm; "The send gate", below). "0 direct callers" until 2026-09-25: `sendsites.py` counted `call` sites only | 0 | — | UNVERIFIED |
+| **`0xB1`** | `[u16, u8, u16, u8, u8]` (24 B) | `0x0085C280` ← `jmp` thunk `0x008576E0` ← `0x004A791F` (in `0x004A78C0`, the `== 1` arm). "0 direct callers" until 2026-09-25, as `0xB0` | **10 of 10** | TRAVEL | **MAP_TRAVEL, OBSERVED — step 7's lane** |
+| `0xB2` | `[u8]` | `0x0085C2E0` ← `jmp` thunk `0x008576F0` ← `0x004A794D` (in `0x004A78C0`, the `== 2` arm). "0 direct callers" until 2026-09-25, as `0xB0` | 0 | — | UNVERIFIED |
 
 The `0xA3..0xAF` callers carry `PyCliParty` `m_partyClient` asserts
 (`:1650/:1659/:1692/:1719/:1755/:1797`). **INVITE and ACCEPT (a player joining)

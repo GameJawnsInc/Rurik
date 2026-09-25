@@ -28,6 +28,64 @@ move back.
 
 ---
 
+### `sendsites.py`'s callers column counts every rel32 branch -- 2026-09-25 -- **`call`, `jmp` and `jcc`, each labelled; 75 of the census's 82 "0 callers" rows were a branch it never looked for; studies/cmsg's `0x0013`, `0xB0`/`0xB1`/`0xB2` rows and the step-7 travel paragraph corrected**
+
+The entry below left `sendsites.py` listing `E8` callers only. Re-checking with the fixed
+`codescan --xrefs` on the pinned 38797 showed that choice was not a scope; it was a defect.
+**82 of 214 rows read "0 callers" on both 38797 and 38888, and 75 of them are reached by a
+`jmp` or a `jcc`.** The `jmp`s are one-instruction thunks (the CharMsg band 0x8161xx, the
+party sends' `0x008576D0`/`E0`/`F0`) and tail-jumps at the end of a caller; the `jcc`s are
+`0x00A2`, `0x00AB`, `0x0028` and `0x0063`. Four passages in studies/cmsg/FINDINGS.md had to
+explain the zero away, and a fifth turned it into "reached through a pointer" against a
+route survey that had the travel caller right. **So the column counts every rel32 branch, rather than printing
+"E8 only" beside a zero that is wrong three times in four.** It stays a bare-machine byte
+scan. The rel32 half of `--xrefs` was always one, and capstone only decodes a stored word's
+carrier. The tuple and the scan moved to a new stdlib leaf,
+`toolkit/clientscan/rel32.py`, which both tools now run, so their forms cannot drift again.
+`--xrefs` prints the same rows, and its rel8 note now says `codescan.py --dis`. The CLI
+prints `callers 1 (jmp 0x008576E0)` and a footer with the scope: what a 0 does not cover
+(rel8 branches, stored pointers) and the **framer tail refs**, any `jmp`/`jcc` into a
+framer, which would be a send site this `call`-only site census cannot see. MEASURED 0
+on both builds. The 7 rows still at zero are four wrappers (`0x00491E50` = `0x0009`,
+`0x00491820`, `0x004923D0`, `0x00493E30`), and `codescan --xrefs` finds each held by one
+stored pointer, a .data word or a pushed immediate. **All 80 `jmp`/`jcc` caller hits on
+38797 decode as a branch to their wrapper at a confirmed instruction boundary** (codescan
+`dis` + `boundary_status`, scratch), so the byte scan found no false hits. Four rows that
+already had a `call` gain a count: `0x0008` 1→3, auth `0x000E`, `0x0090` and `0x002C`
+1→2. c2striage's `--static` "callers N" moves with it, and `retail_c2s.json` does not
+carry that count. `test_sendsites.py` §6 pins the tally (132 / 75 / 7), no framer tail
+refs (with a positive control), and eight rows by wrapper and caller on both builds. Its
+KNOWN-BAD arm is the `E8`-only rule reproduced inline: it misses all six `jmp`/`jcc` rows
+and reads exactly 82 zeros, it finds `0x009F`'s `call`, and the fixed column minus
+`jmp`/`jcc` equals it on every row. 128 checks (was 85); restricting the scan to `call`
+reddens 16. test_codescan 152, test_c2striage 36, test_srclint 26, test_buildpins 49 and
+test_provlint 19 are green.
+**The FINDINGS corrections** (labels unchanged; no evidence moved one):
+* The step-7 table's `0x0013` row is now `0x0091FC30` ← `jmp` at `0x0080DAC3`, the tail of
+  `0x0080DAA0`, called once from `0x0057BE06`.
+* Its `0x00B1` row, and the party table's `0xB0`/`0xB1`/`0xB2` rows, are now `jmp` thunks
+  `0x008576D0`/`E0`/`F0` ← `0x004A7934`/`791F`/`794D`. All three calls sit in
+  `0x004A78C0`, on its `[+0x20]` = 0/1/2 arms, re-read with `--dis`.
+* The step-7 paragraph that called `0x0085C280` pointer-reached now credits the route's
+  `0x004A791F`. The send-gate section's fix pass had corrected the same claim
+  (TRAV-EV-7) without re-reading this paragraph.
+* Three passages that described the census in the present tense are now dated: the
+  `0x0019` wrapper, the `0x0057` thunk, and the send gate.
+
+**Not done:**
+* The party table's `0xA2` row still reads "0 direct callers (pointer-reached)" on main.
+  The unmerged `desk-partycap` (`c60201ac`) rewrites that row, and editing it here would
+  only buy a conflict.
+* `desk-partycap`'s "The leave" says `codescan --xrefs` "scans `call`/`jmp` rel32 and data
+  words only", which has been stale since `b4c13a1b`. It is not on main yet, so it is
+  corrected when that branch lands.
+
+No other study quotes a sendsites zero. The `codescan` zeros in
+studies/profession, studies/movecode and studies/monsterai were re-run with the jcc scan
+and hold, each VA held by one stored word.
+
+---
+
 ### `codescan --xrefs` scans conditional branches -- 2026-09-25 -- **`jcc rel32` (`0F 80..8F`) is searched beside `call` and `jmp`, each row says which of the three it is; the `0x00AB` row in studies/cmsg's party table corrected**
 
 `--xrefs` searched `E8` and `E9` only, so a function reached only by a conditional tail-jump

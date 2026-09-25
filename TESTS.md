@@ -9031,8 +9031,26 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   excludes. §5 is the known-bad arm: a bogus framer VA yields zero rows from
   `census()`, and the CLI REFUSES it with exit status 2 (with and without
   --anchors; the first cut exited 0 on "coverage: 0 sites"), with the real CLI
-  run as the positive control. Needs the vault (the 38797 and 38888 client
-  snapshots); an absent or incomplete `vault/client` declares a skip. Floor 85,
+  run as the positive control. **§6 (2026-09-25): the callers column counts
+  every rel32 branch, each labelled `call`, `jmp` or `jcc`.** It counted `E8`
+  sites alone, and 82 of 214 rows read "0 callers" on both builds, 75 of them
+  wrongly: they are reached by a `jmp` (the CharMsg thunk band 0x8161xx, the
+  MAP_TRAVEL thunk 0x008576E0) or a `jcc` (0x00A2, 0x00AB), and
+  studies/cmsg/FINDINGS.md had read MAP_TRAVEL's zero as "reached through a
+  pointer". The forms and the scan are `rel32.py`'s, shared with `codescan
+  --xrefs`. §6 pins per build the tally (132 rows by a call, 75 by jmp/jcc only,
+  7 by nothing — the 7 are four pointer-reached wrappers), no jmp/jcc into
+  either framer (so the SITES stay `call`-only by measurement; aimed at the
+  MAP_TRAVEL wrapper the same check finds its jmp, the positive control), and
+  eight rows by wrapper and caller: 0x0013/0x00B0/0x00B1/0x00B2 `jmp`,
+  0x00A2/0x00AB `jcc`, 0x009F `call`, 0x0009 none. The KNOWN-BAD arm is the old
+  `E8`-only rule REPRODUCED inline: it misses all six jmp/jcc rows and reads
+  exactly 82 rows as zero, its positive control finds 0x009F's `call`, and the
+  fixed column minus its jmp/jcc callers must equal it on every row. The CLI
+  prints `callers 1 (jmp 0x008576E0)` for 0x00B1 and a footer naming what a 0
+  does not cover (rel8, stored pointers). Sabotage run: restricting the scan to
+  `call` reddens 16. Needs the vault (the 38797 and 38888 client snapshots); an
+  absent or incomplete `vault/client` declares a skip. Floor 128 (was 85),
   ~8 s),
   `toolkit/clientscan/test_avevents.py` (the two AgentView event allocators,
   located by ArenaNet's own asserts — `studies/crossbuild/FINDINGS.md` §2.5, and
@@ -10442,7 +10460,12 @@ the same-tick ALIAS**: the
   rel32 forms searched, the rel8 short branches named as not. Vault-gated on the
   PRISTINE pinned client, skipped otherwise. Sabotage run: dropping the jcc rows
   from the tuple reddens 13a twice and 13e. 152 checks with capstone (was 135)
-  and 45 without — §13 declares one skip, so the stdlib floor is unmoved),
+  and 45 without — §13 declares one skip, so the stdlib floor is unmoved.
+  The same day the tuple and the branch scan moved to the stdlib leaf
+  `toolkit/clientscan/rel32.py`, which `sendsites.py`'s caller column (bare
+  machine) runs too, so the two tools' forms cannot drift; §13 re-ran unchanged,
+  152 green, and `--xrefs` prints the same rows (the rel8 footer note now says
+  `codescan.py --dis`, because `sendsites.py` prints it too)),
   `toolkit/clientscan/test_consttable.py` (the `Gw\Const\*.cpp` table locator, and
   the correction it made to the recon that commissioned it. MSVC emits a translation
   unit's static data and its string literals in source order, so every one of these

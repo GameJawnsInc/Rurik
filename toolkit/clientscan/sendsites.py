@@ -88,6 +88,23 @@ not-two-framers result with exit status 2 -- the first cut printed
 "coverage: 0 sites" and exited 0, which on a new ArenaNet build whose signature
 drifted reads as a clean "no c2s opcodes". `main()` returns 2 in both cases.
 
+THE CALLERS COLUMN COUNTS EVERY REL32 BRANCH, NOT ONLY `call`. Until
+2026-09-25 `callers` held the `E8 rel32` sites alone, and no row said so. On
+38797 that left 82 of 214 rows at "0 callers", and 75 of those 82 are reached
+by a `jmp` (a thunk, or a tail-jump at the end of a caller) or a `jcc` (a
+conditional tail-jump). The CharMsg wrappers come in through the 0x8161xx thunk
+band, and the MAP_TRAVEL wrapper 0x0085C280 through the thunk 0x008576E0.
+studies/cmsg/FINDINGS.md read that last zero as "reached through a pointer",
+against a route survey that had named the caller one hop back. Each caller now
+carries its kind, and the forms come from rel32.py, the same tuple and scan
+`codescan --xrefs` uses. The footer says which forms were searched and which
+were not. On 38797 seven rows (four wrappers) still read 0, and `codescan
+--xrefs` finds each of the four held by a stored pointer, a .data word or a
+pushed immediate, which this census does not search. So a 0 here means "no
+rel32 branch", not "unreachable". The send SITES stay `call`-only on purpose:
+MEASURED on 38797 and 38888, no `jmp` or `jcc` lands on either framer, and the
+footer's `framer tail refs` re-measures that on every build.
+
 STANDARD LIBRARY ONLY. READ ONLY: opens the exe for reading and nothing else.
 Not `codescan.py`'s job -- that disassembles, this counts, and the boundary is
 the bare-machine rule (CLAUDE.md carve-out (1)).
@@ -107,6 +124,7 @@ from gwpe import PE                                          # noqa: E402
 import pinned                                                # noqa: E402
 import buildid                                               # noqa: E402
 import asserts as assertsmod                                 # noqa: E402
+import rel32                                                 # noqa: E402
 
 find_exe = pinned.find
 
@@ -197,8 +215,8 @@ def find_framers(pe):
 def _call_targets(data, base):
     """{target_va: [call_site_va, ...]} for every `E8 rel32` in .text.
 
-    One pass over the section builds the whole call graph, so a census over
-    both framers and a per-wrapper caller list share it.
+    The framers' send SITES, which are `call`s by measurement (see the module
+    docstring). A wrapper's callers are every rel32 branch, from `rel32.refs`.
     """
     out = {}
     i = data.find(bytes([CALL]))
@@ -471,8 +489,10 @@ def census(pe, framers=None):
     store_distance, site_va, wrapper_va, framer_va, channel, callers, module).
 
     `framers` overrides the signature scan -- the known-bad arm passes a bogus
-    VA and gets [] back. `callers` is the sorted list of `E8 rel32` sites that
-    call the wrapper; `module` is the nearest assert's source module (a label).
+    VA and gets [] back. `callers` is the sorted [(site_va, kind)] of every
+    rel32 branch into the wrapper, kind `call`, `jmp` or `jcc` (`rel32.py`; it
+    was `E8` sites alone until 2026-09-25); `module` is the nearest assert's
+    source module (a label).
     """
     data, base = _text(pe)
     if framers is None:
@@ -485,12 +505,15 @@ def census(pe, framers=None):
     conns = connection_globals(pe, data, base, all_sites)
     az = assertsmod.Asserts(pe.path)
     assert_vas = sorted((a.va, a.module) for a in az.items)
+    wraps = {site: wrapper_start(data, base, site) for site in all_sites}
+    branches = rel32.refs(data, base,
+                          {w & 0xFFFFFFFF for w in wraps.values() if w})
     rows = []
     for framer, sites in sites_by_framer.items():
         for site in sites:
             fields = opcode_before(pe, data, base, site)
-            wrap = wrapper_start(data, base, site)
-            callers = sorted(targets.get(wrap & 0xFFFFFFFF, [])) if wrap else []
+            wrap = wraps[site]
+            callers = branches.get(wrap & 0xFFFFFFFF, []) if wrap else []
             row = {
                 "site_va": site,
                 "wrapper_va": wrap,
@@ -503,6 +526,36 @@ def census(pe, framers=None):
             rows.append(row)
     rows.sort(key=lambda r: (r["framer_va"], r["site_va"]))
     return rows
+
+
+def framer_tail_refs(pe, framers):
+    """[(site_va, kind)] of every `jmp`/`jcc` rel32 that lands on a framer.
+
+    The census finds send SITES as `call`s only. A tail-jump into a framer
+    would be a send site it cannot see, so this counts them rather than
+    assuming none: 0 on 38797 and 38888 (MEASURED), and the footer prints it.
+    """
+    data, base = _text(pe)
+    hits = rel32.refs(data, base, {f & 0xFFFFFFFF for f in framers})
+    return sorted(h for hs in hits.values() for h in hs if h[1] != "call")
+
+
+def caller_scope():
+    """(searched, blind) for the callers column, each [(name, detail)].
+
+    The scope as data, the way `codescan.Image.xref_forms` gives it: the
+    branch rows come from `rel32.BRANCHES`, the tuple the scan walks, so the
+    footer cannot claim a form the scan skipped.
+    """
+    blind = [
+        rel32.REL8_BLIND,
+        ("stored pointers",
+         "the VA as a data word or an instruction immediate (a vtable, a "
+         "callback table, a pushed handler); `codescan.py --xrefs <wrapper>` "
+         "searches those"),
+        ("indirect calls", "through a register or a vtable"),
+    ]
+    return rel32.searched(), blind
 
 
 def _nearest_module(assert_vas, va):
@@ -555,8 +608,11 @@ def anchors(rows):
 
 
 def coverage(rows):
-    """A summary footer: totals, resolved opcodes, channels, distinct wrappers."""
+    """A summary footer: totals, resolved opcodes, channels, distinct wrappers,
+    and how each row's wrapper is reached -- by at least one `call`, by
+    `jmp`/`jcc` only, or by no rel32 branch at all."""
     resolved = [r for r in rows if r["opcode"] is not None]
+    kinds = [{k for _va, k in r["callers"]} for r in rows]
     confident = [r for r in rows if r["confident"]]
     per_framer = Counter(r["framer_va"] for r in rows)
     per_channel = Counter(r["channel"] for r in rows)
@@ -575,6 +631,9 @@ def coverage(rows):
         "per_channel": dict(per_channel),
         "per_framer_channel": dict(per_framer_channel),
         "max_store_distance": max(dists) if dists else None,
+        "callers_call": sum(1 for ks in kinds if "call" in ks),
+        "callers_branch_only": sum(1 for ks in kinds if ks and "call" not in ks),
+        "callers_none": sum(1 for ks in kinds if not ks),
     }
 
 
@@ -667,7 +726,7 @@ def _report(exe, args):
         tag = ("" if r["confident"] and not r["static"]
                else " static" if r["static"] else " ~")
         cs = r["callers"]
-        callers = (f"{len(cs)}" + (f" ({', '.join('0x%08X' % c for c in cs[:3])}"
+        callers = (f"{len(cs)}" + (f" ({', '.join('%s 0x%08X' % (k, c) for c, k in cs[:3])}"
                                    f"{', ...' if len(cs) > 3 else ''})" if cs else ""))
         print(f"  {r['channel']:<4} {_fmt_op(r['opcode'])}{tag:<7} wrap {wv}  "
               f"site 0x{r['site_va']:08X}  len {r['length']}  callers {callers}"
@@ -684,6 +743,19 @@ def _report(exe, args):
           f"{', '.join('%s=%d' % (k, v) for k, v in sorted(cov['per_channel'].items()))}")
     print(f"            per framer x channel: "
           f"{', '.join('0x%08X/%s=%d' % (k[0], k[1], v) for k, v in sorted(cov['per_framer_channel'].items()))}")
+    tails = framer_tail_refs(pe, fr)
+    print(f"  callers: {cov['callers_call']} rows reached by a call, "
+          f"{cov['callers_branch_only']} by jmp/jcc only, "
+          f"{cov['callers_none']} by no rel32 branch; framer tail refs "
+          f"(a jmp/jcc into a framer, a send site this census cannot see): "
+          f"{', '.join('%s 0x%08X' % (k, s) for s, k in tails) or '0'}")
+    searched, blind = caller_scope()
+    for n, d in searched:
+        print(f"  callers searched: {n} -- {d}")
+    for n, d in blind:
+        print(f"  callers NOT searched: {n} -- {d}")
+    print("  A caller count of 0 is 'no rel32 branch reaches the wrapper', "
+          "not 'unreachable'.")
     return 0
 
 
