@@ -28,6 +28,73 @@ move back.
 
 ---
 
+### SANDBOX-N1, the Enemies tab's skill and attribute selector -- 2026-09-24 -- **eight wells over an inline, filterable library in place of eight combos; each skill's cell shows the rank the server ACTS at; the window holds what the compiler accepts; `--smoke` 177 → 208, floor 170**
+
+The owner, 2026-09-22 (verbatim): "the enemies and run tab can remain the same for now, but I'd like a
+better/filterable skill/attribute selector for them. mark this as a next step"; picked as the next job
+2026-09-24. Three independent designs (operator-first, the window's laws first, Guild Wars native) were
+synthesized into one ruling; one implementer built it, three adversarial verifiers reviewed it in their
+own worktrees (35 findings, two BLOCKERS -- both laws that could not fail), and a repair pass fixed what
+was ruled in. Branch `orch-beauty`: `3e397421` (stdlib), `c1d37c3d` (the window), `78a35542` (laws and
+README), `677bb042` (repair 1: the server's create path, the compiler), `9925c586` (repair 2: the window),
+`69243d13` (main merged in, clean).
+
+**What the Enemies tab does now.** Each hostile's **Skill bar** card is eight wells -- line 1 the slot and
+the skill's name, line 2 its attribute and the rank the server will ACT at, with the grade pill -- over an
+inline library: search (name, id, profession abbreviation, attribute, grade words), an offered-set combo
+(the template's profession and common by default; every profession, each one, or common alone on
+request), 'Modelled or label' TICKED by default (a skill this server does nothing with is a wasted slot),
+checkable rows (ticked = on the bar). Mouse: tick or double-click a row (fills the selected slot, or the
+first empty; the selection advances; a full bar replaces the selected slot; an untick clears every copy),
+drag a row onto a well (place; a skill already on the bar MOVES), a well onto a well (swap), a well onto
+the library (clear); drops elsewhere do nothing. Keyboard: type and Return fills with the first shown
+unticked row, Return again the next; Down to the list, Space or Return toggle; on the wells 1..8, Delete,
+Ctrl+arrows swap. 'Clear slot' sits in the card's head beside the '3 of 8 slots' chip, which WARNS
+'· N of another profession' / '· N not in the skill table'. The **Attributes** card is one attribute to a
+row with a chip on each attribute the bar uses: 'N on the bar', WARN 'N on the bar, at rank 0' when it
+acts at 0, 'N on the bar, acting at 12' when the hostile has no ranks at all.
+
+**The rank the window shows is the server's** (`sandbox.effective_rank`, `UNRANKED_SKILL_RANK`,
+`skill_attribute`, `skill_varies`; OURS, read from the source and text-locked): the spawn row's ranks,
+else its template's, else none -- none acts at `ENEMY_SKILL_RANK` 12 (a stand-in: no capture gives a
+monster's ranks); with any rank set an unranked attribute acts at 0, another profession's included (this
+window can never rank it). The trap it now shows: rank Hammer Mastery, forget Strength, and Power Attack
+drops from 12 to 0. A no-attribute skill whose numbers vary (Light of Deldrimor, Whirlwind Attack and two
+more) scales at 0 / 12 the same way and says so; a flat one says nothing scales. The verifiers found the
+operative fallback for an AREA body is the create path, not `agent_attributes`, and that it mangled a
+dict-shaped template (`{"13" = 9}` became `{1: 3}`): `authsrv.rank_pairs` now reads both shapes there,
+and `test_sandbox` locks the create path's fallback and `agent_attributes`' block as text
+(`test_population` 114 → 116: a dict-shaped template's ranks reach the body intact).
+
+**The window's range is the compiler's.** Before: a file with a Monk skill or an unknown id on a hostile
+passed `validate`, opened as 'Opened X', and the window HELD LESS than the file; a template change emptied
+every slot the new profession's combo lacked, in silence. Now both are held, drawn and saved. A hostile's
+member keys the page does not edit ride through Save (the slice's own `weapon_attribute` 19 / 14 had been
+dropped, moving the monk's swing rank from 1 to 2); a template change drops a `weapon_attribute` the new
+profession cannot rank. `validate` refuses a hostile with more than 8 skills, as it does the player's and
+a hero's, so Open says it could not hold a ninth. A 0 inside a hostile's list is an empty slot, dropped on
+save.
+
+**The laws.** `--smoke` 177 → 208 in both themes, SMOKE_FLOOR 153 → 170 (38 gated; none skipped on this
+machine), every changed behaviour proven red under its own plant (the build's 33, the repair's 31 plus a
+first drag-source plant that correctly stayed green -- its mime carried no token, so nothing broke). The
+blockers the verifiers proved: no law read the wells' TEXT off pixels (the name and line 2 could vanish,
+green), and no law drove the owner's MOUSE paths (the tick box and the double-click could be cut, green);
+both now do, as do the pill's grade, the Pickers' start of text (a retired law's live subject), the combo
+reset on a template change, the template's own ranks (planted), the library's height (ungated), each drag
+source's mime, the selected well against the accent, the hover fill and the drop edge. `test_sandbox`
+140 → 156. Opening the example spec 6.3 → 1.1 s and sixteen hostiles 20.5 → 3.3 s (the eight Pickers per
+hostile were the cost). The merged tree's gate: 74 of 74 green, 6,545 checks (the 65 tests that read authsrv.py as text, test_population 116, test_harness 181, test_sandbox 156, test_orchtheme 37, test_bareimport 8, --smoke 208 in dark and light, and the seven lints).
+
+**Choices on record, each a one-line change if the owner prefers otherwise:** 'Modelled or label' ticked
+by default; the library in name order (not grade first); a drop on nothing does nothing (Guild Wars
+clears the slot); the grade pill on line 2 (on line 1 it would elide 19 names at 1,120 px to keep 11
+attributes whole). **Open** (`PLAN.md` §8.1, "SANDBOX-N1's residue"): all-zero ranks from a file open as
+none; one skill twice is not refused; the rank-0 / 12 claim is the server's source, never run on a client;
+a real OS drag is the owner's to try.
+
+---
+
 ### R-SANDBOX, the hostile rank ceiling's source -- 2026-09-24 -- **21 re-sourced from "WIKI, weak" to GWW's Attribute page, quoted by the owner; no behaviour change**
 
 Corrects the source, not the value, of the entry "R-SANDBOX, hostile level and rank caps lifted --
