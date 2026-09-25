@@ -28,6 +28,25 @@ move back.
 
 ---
 
+### SANDBOX-F4, CONFIRMED from the orchestrator on the client -- 2026-09-25 -- **a heroless spec, opened in the window and launched with its own Launch button, puts the player alone in Ascalon City; party size 1, no hero record**
+
+The run the entry below left unrun, on the owner's go-ahead, harness `20260925T170126` (`main`
+`0ee4a44e`). The spec (`vault/sandbox/heroless.toml`: the slice's example with no `[[heroes]]` table,
+the shape the Party tab saves with no hero ticked) was opened through the Run tab's Open into the real
+`Window`, the Time limit set to 60 s, and the **Launch button** clicked by a driver that sends nothing
+to the client (`QAbstractButton.click` -> `RunTab.launch`: compile, `write_overlay`, `session.py`);
+the window's own compile showed "0 heroes", no store warnings, and `heroes = []` in the overlay it
+wrote. **Scored against predictions registered before the launch, all four as predicted:** the Run
+tab's chip `Ended · exit 0` (105 s); gamesrv line 3 `PARTY 'sandbox': NO heroes -- the player alone`,
+no traceback in any of the three server logs; `RUN VERDICT: PASS (target: map)`, the eight
+checkpoints green, not retracted; on the wire `PLAYER_PARTY_SIZE(1)` and no `HERO_INFO`,
+`HERO_ACTIVATE` or `0x0074` -- only the account's `PVP_UNLOCKED_HEROES`, as every run. The frame 12 s
+into the hold (foreground-guarded) shows the level-3 Warrior at 140 / 20 in the town beside the errand
+giver; a town withholds party bodies anyway (SLICE-H2b), so the frame is context and the wire is the
+evidence. One scripted click (`play`), no other input.
+
+---
+
 ### SANDBOX-F4, the heroless party -- 2026-09-25 -- **a sandbox spec with no heroes starts: the compiler writes `heroes = []`, and `main()` reads a party row with neither `heroes` nor `hero` as the player alone**
 
 **Branch `claude/sharp-albattani-9a3f5f`, `61c9dfbd`; `studies/sandbox/PLAN.md` §4 SANDBOX-F4.** The defect
