@@ -152,7 +152,9 @@ def card(title=None, *, trailing=None, margins=(16, 12, 16, 16), spacing=10):
     """A QFrame card, the replacement for QGroupBox: QSS can colour a group
     box's title and nothing else (no size, no weight), and the title sits ON
     the border. Here the title is a real label inside the fill, with real
-    padding. Returns the frame; fill `frame.body` (a QVBoxLayout)."""
+    padding. Returns the frame; fill `frame.body` (a QVBoxLayout). `trailing`
+    is one widget for the head's right end, or a sequence of them left to
+    right (the Skill bar's Clear slot and its chip)."""
     box = QFrame()
     box.setProperty("role", "card")
     outer = QVBoxLayout(box)
@@ -170,7 +172,8 @@ def card(title=None, *, trailing=None, margins=(16, 12, 16, 16), spacing=10):
             head.addWidget(box.title_label)
         head.addStretch(1)
         if trailing is not None:
-            head.addWidget(trailing)
+            for w in (trailing if isinstance(trailing, (list, tuple)) else (trailing,)):
+                head.addWidget(w)
         outer.addLayout(head)
     box.body = QVBoxLayout()
     box.body.setContentsMargins(0, 0, 0, 0)
@@ -326,24 +329,38 @@ ROLE_SLOT = Qt.UserRole + 4                     # a Skill bar cell's (slot index
 
 GRADE_TEXT = {"hand": "modelled", "label": "label"}
 # A skill dragged between the Skill bar's strip and its library: 'sid' from
-# the library, 'sid,slot' from a strip cell. Any other mime is ignored.
+# the library, 'sid,slot,token' from a strip cell -- the token is the STRIP's
+# own (SlotStrip.token), so a cell dragged from another window's strip is a
+# PLACE of its skill on this one, never a swap of this strip's own two slots
+# (the verifier's a9, 2026-09-24). Any other mime is ignored, and so is a
+# slot outside the strip (a crafted '322,12' raised inside dropEvent; '322,-1'
+# swapped with slot 8).
 MIME_SKILL = "application/x-rurik-skill"
 
 
-def skill_mime(sid, from_slot=None):
+def skill_mime(sid, from_slot=None, token=""):
     md = QMimeData()
     md.setData(MIME_SKILL, (f"{int(sid)}" if from_slot is None
-                            else f"{int(sid)},{int(from_slot)}").encode("ascii"))
+                            else f"{int(sid)},{int(from_slot)},{token}").encode("ascii"))
     return md
 
 
-def parse_skill_mime(md):
-    """(sid, from_slot or None), or None when the mime is not a skill's."""
+def parse_skill_mime(md, token=""):
+    """(sid, from_slot or None), or None when the mime is not a skill's or
+    names a slot the strip has not. `from_slot` survives only when the mime's
+    token is `token` (the reading strip's): a cell of another strip is a
+    library drop of its skill, and a library row carries no slot."""
     if md is None or not md.hasFormat(MIME_SKILL):
         return None
     try:
         parts = bytes(md.data(MIME_SKILL)).decode("ascii").split(",")
-        return int(parts[0]), (int(parts[1]) if len(parts) > 1 else None)
+        sid = int(parts[0])
+        if len(parts) == 1:
+            return sid, None
+        slot = int(parts[1])
+        if not 0 <= slot < SlotStrip.SLOTS:
+            return None
+        return sid, (slot if len(parts) > 2 and parts[2] == str(token) and token else None)
     except (ValueError, IndexError):
         return None
 
@@ -536,9 +553,16 @@ class SlotStrip(QListWidget):
     NUM_W = 16                                  # the slot number's column
     WIDE_FROM = 624                             # four columns from this viewport width (name room 145+)
     SLOTS = 8
+    _born = 0                                   # the token counter (per process; the pid joins it)
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        # this strip's own mark on the mime a cell's drag carries: unique in
+        # the process (a counter) and across processes (the pid), so a cell
+        # from another window's strip lands here as a PLACE, never a swap
+        SlotStrip._born += 1
+        self.token = f"{os.getpid()}-{SlotStrip._born}"
+        self.drop_row = -1                      # the cell under a drag, painted with the focus edge
         self.setProperty("role", "flat")
         self.setViewMode(QListView.IconMode)
         self.setFlow(QListView.LeftToRight)
@@ -624,6 +648,18 @@ class SlotStrip(QListWidget):
 
     # ---- the strip's own drag (a cell), and every drop
 
+    def drag_mime(self, row):
+        """The mime a drag of cell `row` carries (its skill, the slot, THIS
+        strip's token), or None for an empty cell -- factored so the smoke
+        can read what the source builds without a QDrag.exec (modal)."""
+        sid = int(self.item(row).data(ROLE_ID) or 0)
+        return skill_mime(sid, row, self.token) if sid else None
+
+    def drag_pixmap(self, row):
+        """The cell itself, so the skill travels with the cursor (the Guild
+        Wars idiom; a bare QDrag showed nothing under the pointer)."""
+        return self.viewport().grab(self.cell_rect(row))
+
     def mousePressEvent(self, ev):
         super().mousePressEvent(ev)
         it = self.itemAt(ev.position().toPoint())
@@ -633,11 +669,13 @@ class SlotStrip(QListWidget):
         if self._press is not None and ev.buttons() & Qt.LeftButton:
             at, row = self._press
             if (ev.position().toPoint() - at).manhattanLength() >= QApplication.startDragDistance():
-                sid = int(self.item(row).data(ROLE_ID) or 0)
+                md = self.drag_mime(row)
                 self._press = None
-                if sid:
+                if md is not None:
                     drag = QDrag(self)
-                    drag.setMimeData(skill_mime(sid, row))
+                    drag.setMimeData(md)
+                    drag.setPixmap(self.drag_pixmap(row))
+                    drag.setHotSpot(at - self.cell_rect(row).topLeft())
                     drag.exec(Qt.MoveAction | Qt.CopyAction, Qt.MoveAction)
                 return
         super().mouseMoveEvent(ev)
@@ -646,20 +684,33 @@ class SlotStrip(QListWidget):
         self._press = None
         super().mouseReleaseEvent(ev)
 
+    def _set_drop_row(self, row):
+        if row != self.drop_row:
+            self.drop_row = row
+            self.viewport().update()
+
     def dragEnterEvent(self, ev):
-        if parse_skill_mime(ev.mimeData()) is not None:
+        if parse_skill_mime(ev.mimeData(), self.token) is not None:
             ev.acceptProposedAction()
         else:
             ev.ignore()
 
     def dragMoveEvent(self, ev):
-        if parse_skill_mime(ev.mimeData()) is not None and self.itemAt(ev.position().toPoint()):
+        it = self.itemAt(ev.position().toPoint())
+        if parse_skill_mime(ev.mimeData(), self.token) is not None and it is not None:
+            self._set_drop_row(self.row(it))    # the target cell lights up under the drag
             ev.acceptProposedAction()
         else:
+            self._set_drop_row(-1)
             ev.ignore()
 
+    def dragLeaveEvent(self, ev):
+        self._set_drop_row(-1)
+        super().dragLeaveEvent(ev)
+
     def dropEvent(self, ev):
-        got = parse_skill_mime(ev.mimeData())
+        self._set_drop_row(-1)
+        got = parse_skill_mime(ev.mimeData(), self.token)
         it = self.itemAt(ev.position().toPoint())
         if got is None or it is None:
             ev.ignore()
@@ -670,13 +721,20 @@ class SlotStrip(QListWidget):
 
 
 class SlotDelegate(QStyledItemDelegate):
-    """A Skill bar cell: a well (the field fill, the border edge; the
-    selection fill when selected, the focus ink on its edge while the strip
-    has focus), the slot number and the skill's name on line 1, the attribute
-    and the rank it ACTS at on line 2 with the grade pill at the right -- the
-    same pill the Skills list draws (paint_pill). An empty cell says 'empty'
-    in the muted ink. Everything is painted here, from the tokens: the sheet's
-    item rules never run for a cell."""
+    """A Skill bar cell: a well (the field fill, the border edge; the hover
+    fill under the pointer, as every list row in the window has from the
+    sheet; the selection fill when selected, the focus ink on its edge while
+    the strip has focus, and on the edge of the cell a drag is over), the
+    slot number and the skill's name on line 1, the attribute and the rank
+    it ACTS at on line 2 with the grade pill at the right -- the same pill
+    the Skills list draws (paint_pill). An empty cell says 'empty' in the
+    muted ink. Everything is painted here, from the tokens: the sheet's item
+    rules never run for a cell.
+
+    The pill stays on LINE 2 (measured 2026-09-24 over 22 example cells with
+    the names resolved: on line 1, right of the name, it would elide 19 names
+    at 1,120 px to keep 11 more attributes whole, and 1 name for 4 at 1,280;
+    at 1,000 nothing elides either way)."""
 
     def __init__(self, view):
         super().__init__(view)
@@ -694,12 +752,15 @@ class SlotDelegate(QStyledItemDelegate):
         well, num_r, name_r, meta_r, pill_r = SlotStrip.layout(
             opt.rect, parts, body_fm=body_fm, meta_fm=meta_fm, pfont=self.pill_font)
         selected = bool(opt.state & QStyle.State_Selected)
+        hovered = bool(opt.state & QStyle.State_MouseOver)
         focused = selected and self.view.hasFocus()
+        target = idx.row() == self.view.drop_row       # the cell a drag is over
         r = orchtheme.RADIUS["md"]
         p.save()
         p.setRenderHint(QPainter.Antialiasing)
-        p.setPen(QColor(PAL["focus"] if focused else PAL["border"]))
-        p.setBrush(QColor(PAL["selection_bg"] if selected else PAL["field"]))
+        p.setPen(QColor(PAL["focus"] if focused or target else PAL["border"]))
+        p.setBrush(QColor(PAL["selection_bg"] if selected else PAL["hover"] if hovered
+                          else PAL["field"]))
         p.drawRoundedRect(well.adjusted(0, 0, -1, -1), r, r)
         p.setRenderHint(QPainter.Antialiasing, False)
         p.setFont(self.meta_font)
@@ -738,23 +799,37 @@ class SkillLibrary(PlaceholderList):
     def __init__(self, placeholder="", parent=None):
         super().__init__(placeholder, parent)
         self.on_clear = None                    # callable(slot)
+        self.strip_token = ""                   # the bar's own strip: only ITS cells clear a slot here
         self.setDragEnabled(True)
         self.setAcceptDrops(True)
         self.viewport().setAcceptDrops(True)    # the strip's note: the viewport is the target
         self.setDefaultDropAction(Qt.CopyAction)
 
+    @staticmethod
+    def drag_mime(it):
+        """The mime a drag of row `it` carries: the skill's id ALONE (no slot,
+        so the strip PLACES it; a slot would make every place a swap) -- or
+        None for a row with no id."""
+        sid = int(it.data(ROLE_ID) or 0) if it is not None else 0
+        return skill_mime(sid) if sid else None
+
+    def drag_pixmap(self, it):
+        """The row itself, so the skill travels with the cursor."""
+        return self.viewport().grab(self.visualItemRect(it))
+
     def startDrag(self, actions):
         it = self.currentItem()
-        sid = int(it.data(ROLE_ID) or 0) if it is not None else 0
-        if not sid:
+        md = self.drag_mime(it)
+        if md is None:
             return
         drag = QDrag(self)
-        drag.setMimeData(skill_mime(sid))
+        drag.setMimeData(md)
+        drag.setPixmap(self.drag_pixmap(it))
         drag.exec(Qt.CopyAction | Qt.MoveAction, Qt.CopyAction)   # never super(): a Move would
         # clear the source row (QAbstractItemView's own clearOrRemove)
 
     def dragEnterEvent(self, ev):
-        got = parse_skill_mime(ev.mimeData())
+        got = parse_skill_mime(ev.mimeData(), self.strip_token)
         if got is not None and got[1] is not None:
             ev.acceptProposedAction()
         else:
@@ -764,7 +839,7 @@ class SkillLibrary(PlaceholderList):
         self.dragEnterEvent(ev)
 
     def dropEvent(self, ev):
-        got = parse_skill_mime(ev.mimeData())
+        got = parse_skill_mime(ev.mimeData(), self.strip_token)
         if got is None or got[1] is None:
             ev.ignore()
             return
