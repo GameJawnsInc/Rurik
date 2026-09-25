@@ -6981,18 +6981,24 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   applies to a field only (RV-5); `_item_moves_commit` counts what the gate returned (RV-3)),
   and the real handlers in a TOWN: the head out (`0x004F`) and back (`0x0030`) carry `0x006F
   [player, 6, 0]` / `[player, 6, head]` while the hammer out and back in the SAME state still
-  ride `0x014B` alone (a town hand's write is never planned); the `0x0072` drag of the head
+  ride `0x014B` alone (the hands reach no wire in a town; whether they are PLANNED is the leaf
+  pin's and the strip-off pin's to tell, RV2-3); the `0x0072` drag of the head
   carries the same two; the KNOWN-BAD arm (`0x014B` alone, every run before the lane, and it
   disagrees); the flag leaving the FIELD's head visual alone; Hide in Towns + a town head equip
   going out ZEROED `[player, 6, 0]` with the TOWN ARMOUR log saying "item 7 hidden by the
   display mode, sent 0" (RV-4); `--no-town-weapon-strip` + a town hammer out and back still
   `0x014B` alone — that arm's own picture, which the lane's planned-then-dropped hands broke
-  (RV-2); the commit log's "1 message(s)" for the town hammer and "2" for the head (RV-3);
+  (RV-2); the commit log's "1 message(s)" for the town hammer and "2" for the head, and the
+  RV2-3 DISCRIMINATOR — a direct `_item_moves_commit` of a batch the gate SHORTENS (`0x014B` + a
+  town hand `0x006F`, strip ON) sends the `0x014B` alone and logs "1 message(s)" where the
+  planned count would say 2: since RV-2 no handler batch holds a dropped write, so the two
+  handler counts alone could not tell RV-3's fix from its bug (the bug planted in a scratch copy
+  left the whole test green, 72 checks) (RV-3, RV2-3);
   both gates off + a town head out still labelled and logged (RV-5); the town-edge check's head
   label tagged, and the both-off edge check re-cut to the same. Drives the real handlers,
-  launches nothing. Floor 72 from the green run with `RURIK_VAULT` pointed at an empty
-  directory (the bare-machine core; §2's 15 ride the vault, 87 vaulted; 66/81 at the lane's
-  commit, 55/70 before the town
+  launches nothing. Floor 73 from the green run with `RURIK_VAULT` pointed at an empty
+  directory (the bare-machine core; §2's 15 ride the vault, 88 vaulted; 72/87 at the first
+  review round, 66/81 at the lane's commit, 55/70 before the town
   armour, 45/60 before the
   field shield of 2026-09-24 and 36/48 before the CONFIRM-2 carrier fix the same day, each
   re-set from its own bare run; the CONFIRM-2 fix pass replaced one check and added

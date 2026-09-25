@@ -25718,9 +25718,12 @@ def handle_henchman_kick(values, send, state, conn_id):
     (build 38797; henchparty.py THE KICK): the client's 0x01C0 worker
     0x00858DE0 removes the row 0x01BF inserted from the same stride-0x34 array
     and returns silently on an unknown party or agent; its party lookup is the
-    0x01C3 worker's own, and our 0x01C3 [1, ...] is CONFIRMED on the client,
-    so party id 1 resolves. The standing NPC is NOT destroyed (no 0x0021; the
-    add created no body) and it stays hireable, so the panel can re-add it.
+    0x01C3 worker's (straight to [mgr+0x50] / [mgr+0x3c][id], where 0x01BF's
+    and 0x01C2's workers try the manager's [mgr+0x4c] party first), and our
+    CONFIRMED 0x01C2 / 0x01C3 [1, ...] pair shows the two lookups agree for
+    party id 1, so it resolves (the review's RV2-5). The standing NPC is NOT
+    destroyed (no 0x0021; the add created no body) and it stays hireable, so
+    the panel can re-add it.
     No 0x0075 / 0x00F8 / 0x003E / 0x0145: those are the hero's agent-record
     and container teardown; a 0x00F8 or 0x003E on a standing agent would sweep
     a body the client draws.
@@ -25732,8 +25735,10 @@ def handle_henchman_kick(values, send, state, conn_id):
     refused with its own reason: its 0x01BF row is the load's, not a hire --
     its count is a launch global and no 0x0071 marks it hireable, so a kick
     could neither be counted per connection nor undone by the panel; not
-    modelled (the review's RV-6; the client sends 0x00A8 for any row of the
-    own party, so the click reaches here). henchparty.kick_refusal. Nothing
+    modelled (the review's RV-6; whether the panel offers a Kick on the
+    launch row at all is UNVERIFIED -- nothing in the sender 0x0085A820
+    excludes it, it tests only the party's "is mine" bit, but no run has
+    clicked one; RV2-4). henchparty.kick_refusal. Nothing
     is persisted: the hire is not either (a zone starts a fresh instance
     without it -- the deferred field carry), so a stored kick would outlive
     the thing it kicked."""

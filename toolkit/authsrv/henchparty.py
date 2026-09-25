@@ -84,10 +84,15 @@ WHAT THE TAPE SAYS (studies/cmsg/FINDINGS.md "The party family", capture
     0x00858D9D; the review's RV-8) -- raises frame-bus event 0x1000011c and
     refreshes the agent through 0x007DFED0 (shared by all four roster
     workers; returns when the agent is not found). 0x01C3's worker
-    0x00859030 uses the IDENTICAL party lookup and our 0x01C3 [1, ...] is
-    CONFIRMED on the client (the hero kick, 2026-09-23), so party id 1
-    resolves for 0x01C0 too. `henchman_kick_batch` is 0x01C0 then 0x00B0 --
-    ROW THEN SIZE, the hero kick's shape (the only OBSERVED kick; the add is
+    0x00859030 uses the same party lookup -- id 0 -> [mgr+0x50], else
+    [mgr+0x3c][id], straight, with no [mgr+0x4c] step; the same logic on
+    ecx where 0x01C0's is on esi, not the same bytes -- where 0x01BF's and
+    0x01C2's workers try the manager's [mgr+0x4c] party FIRST. Our 0x01C2
+    [1, ...] add AND 0x01C3 [1, ...] kick are both CONFIRMED on the client
+    (the hero pair, 2026-09-23), so the two lookups agree for party id 1 and
+    it resolves for 0x01C0 too (CORROBORATED; the review's RV2-5).
+    `henchman_kick_batch` is 0x01C0 then 0x00B0 -- ROW THEN SIZE, the hero
+    kick's shape (the only OBSERVED kick; the add is
     size-then-row). RECONSTRUCTION: no tape carries the batch. No 0x0075 /
     0x00F8 / 0x003E / 0x0145 -- those tear down a hero's agent record and
     container; the henchman's NPC keeps standing (the add created no body
@@ -218,10 +223,12 @@ def kick_refusal(party, agent_id, launch_agent=None):
     is the LAUNCH henchman's agent id when --henchman put one in the party at
     load: its 0x01BF row is the load's, not a hire -- its count is a launch
     global and no 0x0071 marks it hireable, so a kick could neither be counted
-    per connection nor undone by the panel -- and the client sends 0x00A8 for
-    any row of the own party (the sender tests only the party's "is mine"
-    bit), so it is refused with THAT reason, not "no row" (the review's
-    RV-6)."""
+    per connection nor undone by the panel -- so it is refused with THAT
+    reason, not "no row" (the review's RV-6). Whether the panel offers a Kick
+    on the launch row at all is UNVERIFIED: nothing in the sender 0x0085A820
+    excludes it (it tests only the party's "is mine" bit and sends the agent
+    it was given), but no run has clicked one; the refusal holds either way
+    (RV2-4)."""
     try:
         aid = int(agent_id)
     except (TypeError, ValueError):
