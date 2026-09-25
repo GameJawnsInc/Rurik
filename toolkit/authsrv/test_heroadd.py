@@ -76,7 +76,7 @@ import checks                                                # noqa: E402
 import charstore                                             # noqa: E402
 import authsrv                                               # noqa: E402
 
-led = checks.Ledger("hero add (SANDBOX-N2)", floor=78)   # 2026-09-23 fix pass, from the green run (48 in the first cut)
+led = checks.Ledger("hero add (SANDBOX-N2)", floor=86)   # 2026-09-25 desk-partycap, from the green run: +6 in section 2b (the per-map cap) and +2 locks; 78 at the 2026-09-23 fix pass (48 in the first cut)
 
 SRC_PATH = os.path.join(HERE, "authsrv.py")
 KICK, ADD = authsrv.GAME_CMSG_HERO_KICK, authsrv.GAME_CMSG_HERO_ADD
@@ -252,11 +252,13 @@ try:
            "a hero ALREADY IN THE PARTY sends nothing (the kick's 'already "
            "kicked' mirror)")
     # A party of eight needs an EIGHT-cap map: since DESKWORK-D1 step 5's fix
-    # pass the hero add also refuses at the served map's party cap
-    # (OUTPOST_PARTY_CAP, a constant 4 = the AreaInfo max_party of the maps we
-    # serve; --henchman-cap overrides), with heroes AND hired henchmen counted
-    # -- test_henchparty drives that refusal. These two checks are about the
-    # client's own hero cap, so they run under the largest max_party (8).
+    # pass the hero add also refuses at the served map's party cap (party_cap:
+    # the map's own AreaInfo max_party from content/partycap.toml since
+    # 2026-09-25, the constant OUTPOST_PARTY_CAP for a state with no map id;
+    # --henchman-cap overrides), with heroes AND hired henchmen counted --
+    # test_henchparty drives that refusal. These two checks are about the
+    # client's own hero cap, so they run under the largest max_party (8): the
+    # states carry no map id, so the constant is what party_cap answers.
     _saved_cap = authsrv.OUTPOST_PARTY_CAP
     authsrv.OUTPOST_PARTY_CAP = 8
     authsrv.HERO_IDS = [1, 2, 3, 4, 5, 6, 7, 8]
@@ -279,6 +281,62 @@ try:
            f"size {dict(s5).get(PARTY_SIZE)}")
     authsrv.OUTPOST_PARTY_CAP = _saved_cap
     authsrv.HERO_IDS = [6]
+
+    # -- §2b THE PER-MAP CAP (desk-partycap, 2026-09-25) -------------------------
+    # The hero add refuses at the SERVED MAP's own max_party (content/partycap.toml
+    # through authsrv.party_cap), not at a constant: the same party -- the player and
+    # three hired henchmen, 4 members -- takes the re-added hero on map 248 (8) and
+    # refuses it on map 148 (4); a map with no row falls back to 4 and the log says
+    # so; --constant-party-cap is the KNOWN-BAD flag arm; --henchman-cap overrides.
+    import contextlib
+    import io
+    _saved_pm = authsrv.PARTY_CAP_PER_MAP
+    authsrv.PARTY_CAP_PER_MAP = True
+    HIRED = {31: {"name": "W"}, 32: {"name": "R"}, 33: {"name": "A"}}
+
+    def _party_of_four(map_id):
+        return {"agents": {}, "char_uuid": UUID, "kicked_heroes": {6}, "map_id": map_id,
+                "party_henchmen": dict(HIRED)}
+
+    def _add(st):
+        s, snd = fake_send_factory()
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            authsrv.handle_hero_add([ADD, 6], snd, st, 0)
+        return s, buf.getvalue()
+    led.ok(authsrv.MAP_PARTY_CAPS.get(248) == 8 and authsrv.MAP_PARTY_CAPS.get(148) == 4,
+           "the content rows: map 248's max_party is 8, map 148's is 4 (client-table, build 38797)")
+    st8 = _party_of_four(248)
+    s8, log8 = _add(st8)
+    led.ok(add_order(ops(s8)) and dict(s8).get(PARTY_SIZE) == [68, 5] and not authsrv.hero_kicked(st8, 6)
+           and "the party cap here is 8" in log8,
+           "map 248 (max_party 8): the player + 3 hired henchmen + the re-added hero = 5 goes THROUGH, "
+           "0x00B0 = 5, the cap line naming 8", f"size {dict(s8).get(PARTY_SIZE)}")
+    st4 = _party_of_four(148)
+    s4, log4 = _add(st4)
+    led.ok(s4 == [] and authsrv.hero_kicked(st4, 6) and "HERO_ADD(6) refused" in log4
+           and "(4: map 148's own AreaInfo max_party" in log4,
+           "KNOWN-BAD per map: the same party on map 148 (max_party 4) is REFUSED -- nothing sent, the "
+           "hero stays kicked, the line names the map's own row", log4.strip()[:150])
+    st9 = _party_of_four(999)
+    s9, log9 = _add(st9)
+    led.ok(s9 == [] and authsrv.hero_kicked(st9, 6) and "map 999 has NO map_party_cap row" in log9
+           and "UNVERIFIED" in log9 and "the constant 4 stands in" in log9,
+           "the fallback: map 999 has no row, the constant 4 stands in (refused at 4 of 4) and the log "
+           "SAYS so -- NO row, UNVERIFIED", log9.strip()[:150])
+    authsrv.PARTY_CAP_PER_MAP = False
+    stc = _party_of_four(248)
+    sc, logc = _add(stc)
+    led.ok(sc == [] and authsrv.hero_kicked(stc, 6) and "--constant-party-cap" in logc,
+           "KNOWN-BAD flag arm: --constant-party-cap on map 248 refuses at 4 -- the behaviour before "
+           "the table, exactly", logc.strip()[:150])
+    authsrv.OUTPOST_PARTY_CAP = 8                      # what --henchman-cap 8 sets (with PER_MAP off)
+    sth = _party_of_four(148)
+    sh, logh = _add(sth)
+    led.ok(add_order(ops(sh)) and dict(sh).get(PARTY_SIZE) == [68, 5] and "the party cap here is 8" in logh,
+           "--henchman-cap 8 overrides map 148's 4: the same add goes through at 5")
+    authsrv.OUTPOST_PARTY_CAP = _saved_cap
+    authsrv.PARTY_CAP_PER_MAP = _saved_pm
 
     # -- §3 the round trip under --persist ---------------------------------------
     authsrv.PERSIST = True
@@ -624,6 +682,17 @@ led.ok("HERO_RIG_RETAIL and HERO_ACTIVATE" in _add_src
 led.ok("hero_kicked" in _calls(add_fn),
        "LOCK: handle_hero_add checks hero_kicked -- the guard the block's "
        "ChCliAttrib:313 depends on (a kick sent 0x00F8, or the load skipped the block)")
+# desk-partycap: the cap is resolved per map (party_cap) before the cap check, and the
+# constant is never compared directly.
+_CAP_CALL = "cap, cap_why = party_cap(state)"
+led.ok("party_cap" in _calls(add_fn) and _add_src.count(_CAP_CALL) == 1
+       and _add_src.index(_CAP_CALL) < _add_src.index("henchparty.party_is_full(party_member_count(state), cap)")
+       and "party_is_full(party_member_count(state), OUTPOST_PARTY_CAP)" not in _add_src,
+       "LOCK: handle_hero_add resolves the cap through party_cap(state) BEFORE the cap check and "
+       "never compares OUTPOST_PARTY_CAP directly (the per-map cap, 2026-09-25)")
+_mut_cap = ast.parse(SRC.replace(_CAP_CALL, 'cap, cap_why = OUTPOST_PARTY_CAP, ""'))
+led.ok("party_cap" not in _calls(_func(_mut_cap, "handle_hero_add")),
+       "KNOWN-BAD: the constant restored in place of party_cap(state) fails the lock")
 
 # One body implementation, two callers, both keyed on the OWNED slot.
 load_fn = _func(TREE, "_handle_request_players")

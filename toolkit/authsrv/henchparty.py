@@ -101,6 +101,42 @@ WHAT THE TAPE SAYS (studies/cmsg/FINDINGS.md "The party family", capture
     not (a zone starts a fresh instance without it -- the deferred field
     carry).
 
+  * THE LEAVE (desk-partycap, 2026-09-25). c2s `0x00A2 []` is the party
+    window's Leave -- OBSERVED on OUR client (vault/captures/gamesrv/
+    authsrv-20260913T093718-c1.jsonl: opcode 162 at t=29.754946, then
+    0x001F [40] 85 us later, both unhandled then), on NO retail tape (0 of
+    96). Read from the binary (build 38797): the wrapper 0x0085BEF0 has
+    exactly ONE reference in the image, the conditional tail-jump `ja
+    0x0085BEF0` at 0x008585FD inside 0x008585D0 (PyCliParty:615
+    m_partyClient), which sums the own party's players ([party+0x0c], the
+    stride-12 array PyCliParty:606 `player != term` walks), henchmen
+    ([party+0x1c], the stride-0x34 array 0x01BF fills) and heroes
+    ([party+0x2c], the array 0x01C2's worker 0x00858F50 appends to) and
+    SENDS ONLY WHEN THE SUM EXCEEDS 1; it removes no row and sets no
+    request-in-flight bit. Its one caller is the thunk 0x00856910 (`ecx =
+    [ctx+0x4c]+4; jmp`), whose one caller is case 1 of the four-way switch
+    (on the control's kind at +0x34, jump table 0x0056E998) in the PtJoin
+    button handler 0x0056E900 -- PtJoin.cpp asserts :102/:103
+    `selection.memberType == MEMBER_TYPE_INVITE_IN` / `selection.partyId`
+    beside it -- which then pushes HEROES (0x28 = 40) into the hero-kick
+    sender 0x0080E2A0 (ChCliApi:4459 `hero <= HEROES`, `cmp esi, 0x28`; the
+    ADD's bound is `<`; outpost-gated by MissionCliGetMap): the Leave is
+    0x00A2 for the party and 0x001F [40] -- an index EQUAL to the bound,
+    every hero -- for the heroes. (`codescan --xrefs` scans call/jmp rel32
+    only, so the FINDINGS table's "0 direct callers (pointer-reached)" was
+    the tool's blind spot; a jcc rel32 is a reference too.) The reply is
+    RECONSTRUCTION, on no tape: `party_leave_batch` -- every hired
+    henchman's 0x01C0 row, in hire order, then ONE 0x00B0 -- the kick's
+    row-then-size once for all rows, each 0x01C0 the table operation the
+    client's worker performs for our party id (CONFIRMED on the client for
+    one row, CONFIRM-2 section 9); the heroes are the hero kick's business
+    (authsrv.handle_hero_kick's HEROES_ALL arm: each party hero's own
+    OBSERVED batch, its kick persisted). A FIELD's Leave is refused with
+    nothing sent (retail's client sends 0x00A2 there too, the sum
+    permitting, and its server returns the player to the outpost --
+    UNVERIFIED, not modelled); the launch henchman stays, as the kick leaves
+    it. Revert --no-party-leave gates both arms.
+
 THE REFUSAL AT THE CAP (desk-partyfull, 2026-09-25; studies/cmsg/FINDINGS.md
 "The refusal at the cap"). The client SENDS 0x009F at max_party (OBSERVED,
 harness runs 20260924T085818 and 20260924T205051 on map 148, cap 4: the third
@@ -265,6 +301,40 @@ def henchman_kick_batch(party_id, player_number, party_size, agent_id):
     ]
 
 
+def party_leave_batch(party_id, player_number, party_size, agent_ids):
+    """The reply to c2s 0x00A2 PARTY_LEAVE (the module docstring, THE LEAVE):
+    one 0x01C0 row-remove per hired henchman, in hire order, then ONE 0x00B0
+    -- the kick's row-then-size, once for all rows. RECONSTRUCTION: no tape
+    carries a 0x00A2 or its reply (0 of 96 live connections); each 0x01C0 is
+    the table operation the client's worker 0x00858DE0 performs for our party
+    id (CONFIRMED on the client for one row, CONFIRM-2 section 9) and 0x00B0
+    is the add's own size message through agents.py's tested builder.
+    `party_size` is the party AFTER the leave (the player, its heroes until
+    the client's own 0x001F [40] takes them, the launch henchman). Refused:
+    no agents (nothing to leave -- the caller says so and sends nothing), a
+    non-positive agent, party 0 (the client's 'own party' spelling, not the
+    id 0x01BF declared). Each element is (op, vals, label)."""
+    ids = [int(a) for a in (agent_ids or ())]
+    if not ids:
+        raise ValueError("party_leave_batch with no agents: a leave that drops nobody "
+                         "sends nothing (the caller prints why)")
+    if not isinstance(party_id, int) or party_id <= 0:
+        raise ValueError(
+            f"party_id {party_id!r} must be a positive int -- 0 means 'the own "
+            f"party' to the client's worker and is not the id 0x01BF declared")
+    if any(a <= 0 for a in ids):
+        raise ValueError(f"leave agent ids {ids} must all be positive -- each is a hired "
+                         f"henchman's standing agent, 0x01BF's own second word")
+    out = [(PARTY_HENCHMAN_REMOVE, [int(party_id), a],
+            f"PARTY_HENCHMAN_REMOVE(party {party_id}, agent {a}) "
+            f"[RECONSTRUCTION: the kick's row, once per hired henchman on a Leave]")
+           for a in ids]
+    out.append((PLAYER_PARTY_SIZE,
+                agents.player_party_size(player_number, party_size),
+                f"PLAYER_PARTY_SIZE({party_size}) -- after the leave"))
+    return out
+
+
 def kick_refusal(party, agent_id, launch_agent=None):
     """Why a c2s 0x00A8 for `agent_id` is refused (a string), or None when it
     is a hired henchman of `party` ({agent id: record}, the server's
@@ -300,9 +370,51 @@ def kick_refusal(party, agent_id, launch_agent=None):
 def party_is_full(member_count, cap):
     """True when the party (player + heroes + henchmen already in it) is at or
     over the cap, so a further add -- henchman OR hero -- must be refused. The
-    cap is the client's own AreaInfo max_party for the served map (242 -> 4);
-    the server holds it as one constant today (authsrv.OUTPOST_PARTY_CAP)."""
+    cap is the client's own AreaInfo max_party for the served map (242 -> 4),
+    resolved per map by `party_cap` below (authsrv.party_cap over
+    content/partycap.toml since 2026-09-25; one constant, 4, before that)."""
     return int(member_count) >= int(cap)
+
+
+def party_cap(map_caps, map_id, constant, per_map=True):
+    """(cap, why) -- the party cap the two adds refuse at, for the instance's
+    `map_id` (DESKWORK-D1, desk-partycap, 2026-09-25).
+
+    `map_caps` is {map id: max_party}, the served maps' own AreaInfo
+    `max_party` read out of the client with toolkit/clientscan/areatable.py
+    (content/partycap.toml, source client-table, build 38797: 4 for 148/146/
+    242/449, 8 for 248/280, 6 for 55, 1 for the Ascalon Academy slot 143).
+    `constant` is authsrv.OUTPOST_PARTY_CAP -- 4, the value every map got
+    before the table, or --henchman-cap N. `per_map` False is the revert arm
+    (--constant-party-cap) and the override (--henchman-cap sets it too):
+    the constant for every map, exactly the pre-2026-09-25 behaviour.
+
+    A map with NO row falls back to the constant and the `why` SAYS so,
+    labelled UNVERIFIED for that map -- the row is one areatable.py run away,
+    and a silent 4 on an 8-cap map is the defect this function replaces. The
+    `why` is what the refusal line and the once-per-connection cap line print.
+    The rows' values are the CLIENT's: the party window's denominator is its
+    reading of the same field ("(2/4)" on 148, CONFIRM-2), so a server cap
+    that disagrees with the panel is the wrong one, whichever way."""
+    try:
+        mid = None if map_id is None else int(map_id)
+    except (TypeError, ValueError):
+        mid = None
+    const = int(constant)
+    if not per_map:
+        return const, (f"the constant {const} for every map "
+                       f"(--constant-party-cap / --henchman-cap)")
+    if mid is not None and mid in map_caps:
+        return int(map_caps[mid]), (
+            f"map {mid}'s own AreaInfo max_party (content/partycap.toml, "
+            f"client-table, build 38797, areatable.py)")
+    if mid is None:
+        return const, (f"no map id on this connection -- the constant {const} "
+                       f"stands in (UNVERIFIED)")
+    return const, (f"map {mid} has NO map_party_cap row -- the constant {const} "
+                   f"stands in, UNVERIFIED for this map (read its row with "
+                   f"toolkit/clientscan/areatable.py and add it to "
+                   f"content/partycap.toml)")
 
 
 def party_full_reply(code):

@@ -1,0 +1,209 @@
+# The per-map PARTY CAP: each served map's own `max_party`, read out of the client's
+# area table (`s_missionClientData`, VA 0x0096DE38 on build 38797, 888 records, the
+# structural and the code locators agreeing) with toolkit/clientscan/areatable.py.
+# One row per served map -- content/maps.toml's slots -- because that is the join
+# authsrv.py performs: `party_cap(state)` looks the instance's map id up here and the
+# henchman add (c2s 0x009F) and the hero add (c2s 0x001E) refuse at the number
+# (DESKWORK-D1, desk-partycap, 2026-09-25). Before this file the cap was ONE
+# CONSTANT, 4 (authsrv.OUTPOST_PARTY_CAP), which was right for 148/146/242/449 and
+# wrong for every 6- and 8-cap map the server can serve; `--constant-party-cap`
+# restores that exactly, `--henchman-cap N` still overrides every map.
+#
+# WHY THE CLIENT'S NUMBER IS THE ONE TO REFUSE AT -- RECONSTRUCTION, consistent with
+# two witnesses that are NOT a refusal: the party window's counter is the client's own
+# reading of this field (on 148 it drew "(2/4)" for the player and one hero,
+# studies/deskwork/CONFIRM-2026-09-24.md section 2, and 148's row below reads 4 -- the
+# same client table, and the denominator's reader is not traced, so this is the table
+# counted once more, not a second lineage); and on retail's 242 (also 4) three henchman
+# adds filled 1 -> 4 and nothing was attempted past it (studies/cmsg/FINDINGS.md "The
+# party family" -- reachable, not refused). Retail's refusal AT max_party is NOT FOUND
+# (henchparty.py THE REFUSAL AT THE CAP; no tape carries a refused add). The lane's
+# first cut said CORROBORATED; its review (RV-5, 2026-09-25) corrected the label.
+#
+# A MAP WITH NO ROW falls back to the constant 4 and the server prints why, labelled
+# UNVERIFIED for that map -- extract its row (below) rather than trusting the fallback.
+#
+# THE AUTHORED SLOTS (143, 144, 165, 166, 167, 168) reuse retail map ids as labels, so
+# the cap here is the LABEL's: the client reads its area table by the map id it was
+# told, and its panel will show that id's denominator. 143 (the Ascalon Academy slot)
+# reads max_party 1 -- a solo map on retail -- so on that slot every add is refused
+# and the panel says "(1/1)"; a run that needs a party there passes --henchman-cap.
+#
+# EVERY NUMBER IS BUILD 38797 and moves when ArenaNet ships. To regenerate:
+#   python toolkit/clientscan/areatable.py --rows 0 --out vault/areatable/areatable.json
+# and read rows[<map id>]["max_party"] (and ["min_party"], recorded beside it: 1 on every
+# served row but 167/168, whose retail rows say 7 -- the server reads only max_party);
+# test_henchparty section 5 re-reads every row below out of the pinned client when the
+# vault holds it and goes red on a mismatch in either field.
+
+[map_party_cap.148]
+min_party = 1
+max_party = 4
+[map_party_cap.148.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/areatable.py"
+build = 38797
+verified = "s_missionClientData row 148 (Ascalon City, type 10), OFF_MAX_PARTY (+0x1C) = 4, OFF_MIN_PARTY = 1; areatable.py --out, both locators at VA 0x0096DE38; extracted 2026-09-25. The panel drew (2/4) here on 2026-09-24."
+
+[map_party_cap.146]
+min_party = 1
+max_party = 4
+[map_party_cap.146.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/areatable.py"
+build = 38797
+verified = "s_missionClientData row 146 (Lakeside County, type 2), OFF_MAX_PARTY (+0x1C) = 4, OFF_MIN_PARTY = 1; areatable.py --out; extracted 2026-09-25."
+
+[map_party_cap.449]
+min_party = 1
+max_party = 4
+[map_party_cap.449.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/areatable.py"
+build = 38797
+verified = "s_missionClientData row 449 (Kamadan, type 13), OFF_MAX_PARTY (+0x1C) = 4, OFF_MIN_PARTY = 1; areatable.py --out; extracted 2026-09-25."
+
+[map_party_cap.242]
+min_party = 1
+max_party = 4
+[map_party_cap.242.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/areatable.py"
+build = 38797
+verified = "s_missionClientData row 242 (type 13, the tape's outpost where three adds filled 1 -> 4), OFF_MAX_PARTY (+0x1C) = 4, OFF_MIN_PARTY = 1; areatable.py --out; extracted 2026-09-25."
+
+[map_party_cap.248]
+min_party = 1
+max_party = 8
+[map_party_cap.248.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/areatable.py"
+build = 38797
+verified = "s_missionClientData row 248 (Great Temple of Balthazar, type 13), OFF_MAX_PARTY (+0x1C) = 8, OFF_MIN_PARTY = 1; areatable.py --out; extracted 2026-09-25 (maps.toml's own row already quoted 'party 1-8' for it on 2026-08-17)."
+
+[map_party_cap.280]
+min_party = 1
+max_party = 8
+[map_party_cap.280.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/areatable.py"
+build = 38797
+verified = "s_missionClientData row 280 (Isle of the Nameless, type 2), OFF_MAX_PARTY (+0x1C) = 8, OFF_MIN_PARTY = 1; areatable.py --out; extracted 2026-09-25."
+
+[map_party_cap.55]
+min_party = 1
+max_party = 6
+[map_party_cap.55.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/areatable.py"
+build = 38797
+verified = "s_missionClientData row 55 (Lion's Arch, type 13), OFF_MAX_PARTY (+0x1C) = 6, OFF_MIN_PARTY = 1; areatable.py --out; extracted 2026-09-25."
+
+[map_party_cap.27]
+min_party = 1
+max_party = 6
+[map_party_cap.27.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/areatable.py"
+build = 38797
+verified = "s_missionClientData row 27 (type 2), OFF_MAX_PARTY (+0x1C) = 6, OFF_MIN_PARTY = 1; areatable.py --out; extracted 2026-09-25."
+
+[map_party_cap.194]
+min_party = 1
+max_party = 8
+[map_party_cap.194.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/areatable.py"
+build = 38797
+verified = "s_missionClientData row 194 (type 13), OFF_MAX_PARTY (+0x1C) = 8, OFF_MIN_PARTY = 1; areatable.py --out; extracted 2026-09-25."
+
+[map_party_cap.474]
+min_party = 1
+max_party = 8
+[map_party_cap.474.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/areatable.py"
+build = 38797
+verified = "s_missionClientData row 474 (Domain of Anguish, type 8), OFF_MAX_PARTY (+0x1C) = 8, OFF_MIN_PARTY = 1; areatable.py --out; extracted 2026-09-25."
+
+[map_party_cap.558]
+min_party = 1
+max_party = 8
+[map_party_cap.558.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/areatable.py"
+build = 38797
+verified = "s_missionClientData row 558 (Sparkfly Swamp, type 2), OFF_MAX_PARTY (+0x1C) = 8, OFF_MIN_PARTY = 1; areatable.py --out; extracted 2026-09-25."
+
+[map_party_cap.90]
+min_party = 1
+max_party = 8
+[map_party_cap.90.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/areatable.py"
+build = 38797
+verified = "s_missionClientData row 90 (type 2), OFF_MAX_PARTY (+0x1C) = 8, OFF_MIN_PARTY = 1; areatable.py --out; extracted 2026-09-25."
+
+[map_party_cap.310]
+min_party = 1
+max_party = 4
+[map_party_cap.310.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/areatable.py"
+build = 38797
+verified = "s_missionClientData row 310 (type 11), OFF_MAX_PARTY (+0x1C) = 4, OFF_MIN_PARTY = 1; areatable.py --out; extracted 2026-09-25."
+
+# The authored slots: the cap is the LABEL's retail row (the header).
+[map_party_cap.143]
+min_party = 1
+max_party = 1
+[map_party_cap.143.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/areatable.py"
+build = 38797
+verified = "s_missionClientData row 143 (the Ascalon Academy slot, type 10), OFF_MAX_PARTY (+0x1C) = 1, OFF_MIN_PARTY = 1 -- a SOLO map on retail; every add is refused on this slot unless --henchman-cap raises it; areatable.py --out; extracted 2026-09-25."
+
+[map_party_cap.144]
+min_party = 1
+max_party = 8
+[map_party_cap.144.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/areatable.py"
+build = 38797
+verified = "s_missionClientData row 144 (an authored slot; retail's row is type 2), OFF_MAX_PARTY (+0x1C) = 8, OFF_MIN_PARTY = 1; areatable.py --out; extracted 2026-09-25."
+
+[map_party_cap.165]
+min_party = 1
+max_party = 4
+[map_party_cap.165.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/areatable.py"
+build = 38797
+verified = "s_missionClientData row 165 (the slice's slot; retail's row is type 10), OFF_MAX_PARTY (+0x1C) = 4, OFF_MIN_PARTY = 1; areatable.py --out; extracted 2026-09-25."
+
+[map_party_cap.166]
+min_party = 1
+max_party = 4
+[map_party_cap.166.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/areatable.py"
+build = 38797
+verified = "s_missionClientData row 166 (the slice's slot; retail's row is type 10), OFF_MAX_PARTY (+0x1C) = 4, OFF_MIN_PARTY = 1; areatable.py --out; extracted 2026-09-25."
+
+[map_party_cap.167]
+min_party = 7
+max_party = 8
+[map_party_cap.167.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/areatable.py"
+build = 38797
+verified = "s_missionClientData row 167 (the slice's slot; retail's row is campaign 0, continent 3, type 3 -- the lane's first cut wrote 'campaign 7', which is the min_party value misfiled; the review's RV-3), OFF_MAX_PARTY (+0x1C) = 8, OFF_MIN_PARTY (+0x18) = 7 -- the one pair of served rows whose minimum is not 1; areatable.py --out; extracted 2026-09-25."
+
+[map_party_cap.168]
+min_party = 7
+max_party = 8
+[map_party_cap.168.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/areatable.py"
+build = 38797
+verified = "s_missionClientData row 168 (the slice's corridor slot; retail's row is campaign 0, continent 3, type 3 -- 'campaign 7' in the first cut was min_party misfiled; the review's RV-3), OFF_MAX_PARTY (+0x1C) = 8, OFF_MIN_PARTY (+0x18) = 7 -- the one pair of served rows whose minimum is not 1; areatable.py --out; extracted 2026-09-25."

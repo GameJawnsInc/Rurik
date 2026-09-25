@@ -43,7 +43,12 @@ WHAT THIS PINS.
     something to hire. Under --no-henchman-add nothing is marked; in a FIELD
     (--explorable) the bodies are created but neither message goes out
     (retail marks henchmen in outposts only, 11 of 96 live connections, all
-    outposts -- ENG-HENCH-11).
+    outposts -- ENG-HENCH-11). THE 248 SET (the review's RV-1): the same
+    wiring over `outpost_henchmen_248` on map 248 creates and marks 34/35/36,
+    and that area served on 148 places nothing (spawn_row_on_map) -- the
+    per-map cap's client run needs an add on a map whose cap is not 4, and
+    the 148 rows could not give it one; §2 (n) checks the set exists and §5
+    (vaulted) that its three rows stand on 248's own mesh.
   * §4 SOURCE LOCKS on authsrv.py, EACH WITH A MUTATION THAT REDDENS IT (the
     landing claimed mutations it did not carry -- HENCH-EVR-3 / ENG-HENCH-8):
     the 0x009F arm is gated on HENCHMAN_ADD_ENABLED; main() wires
@@ -80,15 +85,57 @@ WHAT THIS PINS.
     0x00A8 is OFF the DROPPED_ON_PURPOSE allowlist; the leaf's 0x01C0 equals
     authsrv's. Each lock with a mutation that reddens it.
 
+  * THE PER-MAP CAP (desk-partycap, 2026-09-25; content/partycap.toml,
+    henchparty.party_cap, authsrv.party_cap): §2 (n) the served map's own
+    AreaInfo max_party -- on map 248 (8) four henchmen fill 1 -> 5 and the
+    cap line prints ONCE naming the row; the same adds on map 148 (4) stop
+    at 4 (the per-map KNOWN-BAD); a map with NO row (999) falls back to 4
+    and the log SAYS so (NO row, UNVERIFIED); --constant-party-cap on 248
+    stops at 4 (the flag's KNOWN-BAD arm, the pre-2026-09-25 behaviour);
+    --henchman-cap 6 on 248 stops at 6; a zone from 148 to 248 prints the
+    cap again at 8; the pure rule's five answers; every served map has a
+    row (the join the server performs); the hero add on 248 goes through at
+    5 (vaulted) and on 148 is refused (bare). §5 the rows against the PINNED
+    CLIENT (vaulted): the code locator names 0x0096DE38, 888 records
+    validate, and every row's max_party equals the client's own -- a check
+    the binary can refute.
+  * THE LEAVE (desk-partycap, 2026-09-25; henchparty.py THE LEAVE): §1l the
+    batch `party_leave_batch` is one 0x01C0 per hired henchman then ONE
+    0x00B0, encoded through the codec (6 + 6 + 5 bytes for two); refused
+    with no agents, agent 0, party 0. §2 (o) the real `handle_party_leave`
+    in an outpost with a hero and two hired henchmen: two 0x01C0 rows then
+    0x00B0 [14, 2], the NPCs standing and hireable, the hero still in; the
+    client's own companion 0x001F [40] (HEROES_ALL) through the real
+    `handle_hero_kick`: hero 6's OBSERVED batch, 0x00B0 [14, 1], the hero
+    kicked -- and persisted under --persist (a real store); two heroes ->
+    two batches, sizes 2 then 1; [40] with no party hero and a second leave
+    send nothing; the dropped henchman can be hired again; the launch
+    henchman stays and the line names it; a FIELD's leave is refused with
+    nothing sent; under --no-party-leave the [40] is ignored and the hero
+    stays; the leave with an opaque store attached touches it not at all.
+    §4 locks: the 0x00A2 arm gated on PARTY_LEAVE_ENABLED and the constant;
+    main() wires --no-party-leave and --constant-party-cap through globals
+    (--henchman-cap turns the per-map read off too); handle_party_leave
+    refuses a field first, pops every hired henchman, sizes through
+    party_size_on_wire, sends party_leave_batch and names no store;
+    handle_hero_kick's HEROES_ALL arm sits BEFORE the owned check and is
+    gated on PARTY_LEAVE_ENABLED; both handlers resolve the cap through
+    party_cap(state) before the cap check; serverargs declares both flags;
+    0x00A2 is off the allowlist. Each with a mutation that reddens it. §5
+    (vaulted) the leave's four client sites read as documented and the `ja`
+    lands on the 0xA2 wrapper.
+
 Floor = the bare-machine core, measured with RURIK_VAULT pointed at an empty
-directory (§1 and the two accepting hero adds declare skips there); the vault
-adds 15.
+directory (§1, §5 and the accepting hero adds declare skips there); the vault
+adds the rest.
 """
 import ast
 import contextlib
 import io
 import os
+import shutil
 import sys
+import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
@@ -99,11 +146,12 @@ if os.path.join(os.path.dirname(HERE), "schema") not in sys.path:
     sys.path.insert(0, os.path.join(os.path.dirname(HERE), "schema"))
 import checks                                                # noqa: E402
 import codec as codecmod                                     # noqa: E402
+import charstore                                             # noqa: E402
 import henchparty                                            # noqa: E402
 import authsrv                                               # noqa: E402
 import livewire                                              # noqa: E402
 
-led = checks.Ledger("henchman add (DESKWORK-D1 step 5)", floor=108)   # 2026-09-25 (desk-partyfull, its review): the bare-machine core from the green run with RURIK_VAULT pointed at an empty directory -- 107 at the lane's commit, +1 at the review (code 81 joins the bad codes; the hero-half vacuity guard is vaulted, a declared skip bare); 82 at CLEANUP-3's review (79 at the lane's commit, +3 at the review: (l) the launch henchman's refusal x2 and the launch-guard mutation; 49 before the kick; +30 on the kick), +25 on the refusal at the cap: (m) the reply's bytes, the off arm, five bad codes, both handlers ARMED, the line, the two silent refusals, the vacuity guard, the OFF arm, and the locks (serverargs, the module default, HA x4, HD x3, main x3); the vault adds 16 (124 vaulted)
+led = checks.Ledger("henchman add (DESKWORK-D1 step 5)", floor=179)   # 2026-09-25 (desk-partycap's review, RV-1): 179 bare from the green run with RURIK_VAULT at an empty directory (204 vaulted: +2 in section 5, the 248 set on 165811's mesh and the arrival control, a declared skip bare) -- +3 bare: (n) the 248 hireable set exists, section 3 the set creates and marks 34/35/36 on 248 and nothing on 148; 176 at the lane's commit (desk-partycap): the bare-machine core from the green run with RURIK_VAULT pointed at an empty directory (199 vaulted: +1 hero add on 248, +6 in section 5 against the pinned client, +16 the tape and the two hero adds as before) -- +68 bare on the per-map cap ((n): the rows, the join, the provenance, the pure rule x6, 248/148/999, the flag arm, --henchman-cap 6, the zone, the hero add refused on 148) and the leave (section 1l x7, (o) x15, the locks: the arm x4, main x3, handle_party_leave x5, the HEROES_ALL arm x4, --constant-party-cap x4, party_cap x3, the caps load x3, serverargs, the allowlist x2, and +2 mutations each on HA and HD); 108 at desk-partyfull's review (124 vaulted; 107 at that lane's commit, +1 at the review: code 81 joins the bad codes; the hero-half vacuity guard is vaulted, a declared skip bare); 82 at CLEANUP-3's review (79 at the lane's commit, +3 at the review: (l) the launch henchman's refusal x2 and the launch-guard mutation; 49 before the kick; +30 on the kick), +25 on the refusal at the cap: (m) the reply's bytes, the off arm, five bad codes, both handlers ARMED, the line, the two silent refusals, the vacuity guard, the OFF arm, and the locks (serverargs, the module default, HA x4, HD x3, main x3)
 
 COD = codecmod.Codec()
 SRC_PATH = os.path.join(HERE, "authsrv.py")
@@ -191,6 +239,29 @@ led.ok(henchparty.kick_refusal({4: {}}, 4) is None
        "non-int and no party at all are each refused with a reason")
 
 
+# -- §1l the LEAVE batch (desk-partycap; bare-machine: no tape carries it) ----
+lb = henchparty.party_leave_batch(1, 14, 2, [4, 2])
+led.ok([op for op, _v, _l in lb] == [0x01C0, 0x01C0, 0x00B0] and lb[0][1] == [1, 4]
+       and lb[1][1] == [1, 2] and lb[2][1] == [14, 2] and "RECONSTRUCTION" in lb[0][2],
+       "(§1l) the leave batch is one 0x01C0 [party 1, agent] per hired henchman, in hire order, "
+       "THEN one 0x00B0 [player 14, size 2] -- the kick's row-then-size once for all rows, "
+       "labelled RECONSTRUCTION (no tape carries it)", f"{[(hex(o), v) for o, v, _l in lb]}")
+wire_l = encode_batch(lb)
+led.ok(len(wire_l) == 17 and wire_l[:6] == bytes.fromhex("c001" "0100" "0400")
+       and wire_l[6:12] == bytes.fromhex("c001" "0100" "0200")
+       and wire_l[12:] == bytes.fromhex("b000" "0e00" "02"),
+       "(§1l) ...it encodes through the codec: two 6-byte 0x01C0 rows then 0x00B0's 5, 17 in all",
+       f"{wire_l.hex()}")
+for bad_args in ((1, 14, 2, []), (1, 14, 2, None), (0, 14, 2, [4]), (1, 14, 2, [4, 0]), (1, 14, 2, [-1])):
+    try:
+        henchparty.party_leave_batch(*bad_args)
+        led.ok(False, f"(§1l) party_leave_batch{bad_args} is refused")
+    except ValueError:
+        led.ok(True, f"(§1l) party_leave_batch{bad_args} is refused (no agents / party 0 / agent 0 / "
+                     f"a negative agent: nothing to leave sends nothing, and 0 is the client's 'own "
+                     f"party' spelling, not our declared id)")
+
+
 # -- §2 the real handlers ----------------------------------------------------
 def fake_send():
     sent = []
@@ -225,6 +296,7 @@ def hero_add_or_skip(what, send, state):
 ADD, KICK = authsrv.GAME_CMSG_HENCHMAN_ADD, authsrv.GAME_CMSG_HERO_KICK
 HADD = authsrv.GAME_CMSG_HERO_ADD
 KICKH = authsrv.GAME_CMSG_HENCHMAN_KICK
+LEAVE = authsrv.GAME_CMSG_PARTY_LEAVE
 
 _saved = {k: getattr(authsrv, k) for k in
           ("HERO_IDS", "HENCHMAN", "PLAYER_NUMBER", "HENCHMAN_ADD_ENABLED", "HENCHMAN_KICK_ENABLED",
@@ -232,7 +304,9 @@ _saved = {k: getattr(authsrv, k) for k in
            "PERSIST", "HERO_KICK_ENABLED", "HERO_ADD_ENABLED", "RESET_HERO_KICKS",
            "PARTY_COMMANDS", "HERO_BAGS", "HERO_INVENTORY", "HERO_CHAR",
            "HERO_BODY", "EXPLORABLE", "OUTPOST", "PARTY_BODY_IN_OUTPOST",
-           "HERO_RIG_RETAIL", "HERO_ACTIVATE")}
+           "HERO_RIG_RETAIL", "HERO_ACTIVATE", "PARTY_CAP_PER_MAP", "PARTY_LEAVE_ENABLED")}
+_saved_caps = dict(authsrv.MAP_PARTY_CAPS)
+_store_base = tempfile.mkdtemp(prefix="henchparty-test-")
 try:
     authsrv.HERO_IDS = []
     authsrv.HENCHMAN = None
@@ -240,6 +314,8 @@ try:
     authsrv.HENCHMAN_ADD_ENABLED = True
     authsrv.HENCHMAN_KICK_ENABLED = True
     authsrv.OUTPOST_PARTY_CAP = 4
+    authsrv.PARTY_CAP_PER_MAP = True      # the per-map read ON; the states below carry no
+    authsrv.PARTY_LEAVE_ENABLED = True    # map_id (the constant stands in) unless a case says so
     authsrv.PARTY_SIZE_COUNTS_HEROES = True
     # the commander rig the hero kick/add are armed for (test_heroadd's own
     # setup): a town, no bags, no body.
@@ -616,6 +692,286 @@ try:
            "(retail's refusal reply NOT FOUND)' -- today's silent refusal is the default arm")
     authsrv.HERO_IDS = []
 
+    # (n) THE PER-MAP CAP (desk-partycap, 2026-09-25): the served map's own AreaInfo
+    #     max_party (content/partycap.toml through party_cap), not a constant. A map
+    #     at 8 admits a 5th member; the same adds on a map at 4 stop there; a map
+    #     with no row falls back to 4 and SAYS so; --constant-party-cap is the
+    #     KNOWN-BAD flag arm (4 on the 8-cap map, the pre-2026-09-25 behaviour);
+    #     --henchman-cap N overrides every map.
+    caps = authsrv.MAP_PARTY_CAPS
+    led.ok(caps.get(148) == 4 and caps.get(146) == 4 and caps.get(242) == 4 and caps.get(449) == 4
+           and caps.get(248) == 8 and caps.get(280) == 8 and caps.get(55) == 6 and caps.get(143) == 1,
+           "(n) content/partycap.toml loads: 148/146/242/449 -> 4 (the old constant's four), 248/280 "
+           "-> 8, 55 -> 6, the Ascalon Academy slot 143 -> 1 (client-table, build 38797, areatable.py)",
+           f"{sorted(caps.items())}")
+    _prov = {k: r.provenance for k, r in authsrv.agents.WORLD.rows("map_party_cap").items()}
+    led.ok(all(p["source"] == "client-table" and p["extractor"] == "toolkit/clientscan/areatable.py"
+               and int(p["build"]) == 38797 and "OFF_MAX_PARTY" in p["verified"] for p in _prov.values()),
+           "(n) every row is client-table, names areatable.py as its extractor, records build 38797 and "
+           "says which field it read -- the 2026-08-11 ruling's three conditions, per row")
+    _missing = sorted(set(authsrv.MAP_STATIC_CONFIG) - set(caps))
+    led.ok(not _missing and len(caps) >= 19,
+           f"(n) every served map (content/maps.toml, {len(authsrv.MAP_STATIC_CONFIG)} rows) has a "
+           f"map_party_cap row -- the join party_cap performs; a map added without one would fall "
+           f"back to 4 in silence but for this check", f"missing {_missing}")
+    # THE RUN'S PRECONDITION (the review's RV-1): a cap other than 4 is only
+    # observable through an add, and an add needs a hireable row ON THAT MAP --
+    # the 148 set pins map = 148 and spawn_row_on_map places it nowhere else.
+    _spawns = authsrv.agents.WORLD.rows("spawn")
+    _h248 = {k: r for k, r in _spawns.items() if r.get("hireable") and int(r.get("map") or 0) == 248}
+    _h148 = {k: r for k, r in _spawns.items() if r.get("hireable") and int(r.get("map") or 0) == 148}
+    led.ok(len(_h248) == 3 and {r["area"] for r in _h248.values()} == {"outpost_henchmen_248"}
+           and sorted(int(r["agent_id"]) for r in _h248.values()) == [34, 35, 36]
+           and not ({int(r["agent_id"]) for r in _h248.values()} & {int(r["agent_id"]) for r in _h148.values()})
+           and {r["npc"] for r in _h248.values()} == {r["npc"] for r in _h148.values()}
+           and all(r.provenance["source"] == "invented" and "165811" in r.provenance["verified"]
+                   for r in _h248.values()),
+           "(n) map 248 (cap 8) HAS a hireable set -- content/world.toml's outpost_henchmen_248: three "
+           "rows on map 248, fresh agent ids 34/35/36 disjoint from the 148 set's, the 148 set's three "
+           "templates, each provenance naming the mesh it was checked on -- so the runsheet's launch "
+           "can send an add there at all (RV-1: on 248 the 148 rows place nothing)",
+           f"248: {sorted((k, int(r['agent_id'])) for k, r in _h248.items())}")
+    pc = henchparty.party_cap
+    led.ok(pc({248: 8}, 248, 4) == (8, pc({248: 8}, "248", 4)[1]) and "max_party" in pc({248: 8}, 248, 4)[1]
+           and pc({248: 8}, "248", 4)[0] == 8,
+           "(n) party_cap: a map with a row returns the row (an int or a string id alike), the why "
+           "naming max_party")
+    _f = pc({248: 8}, 148, 4)
+    led.ok(_f[0] == 4 and "NO map_party_cap row" in _f[1] and "UNVERIFIED" in _f[1] and "148" in _f[1],
+           "(n) party_cap: a map with NO row falls back to the constant and the why says NO row, "
+           "UNVERIFIED, naming the map", _f[1])
+    led.ok(pc({248: 8}, None, 4)[0] == 4 and "no map id" in pc({248: 8}, None, 4)[1]
+           and pc({248: 8}, "x", 4)[0] == 4,
+           "(n) party_cap: no map id, or a malformed one, is the constant with its own why")
+    _c = pc({248: 8}, 248, 4, per_map=False)
+    led.ok(_c[0] == 4 and "--constant-party-cap" in _c[1],
+           "(n) party_cap(per_map=False): the constant even where a row exists -- the revert arm and "
+           "--henchman-cap's override", _c[1])
+    led.ok(pc({248: 8}, 248, 6, per_map=False)[0] == 6,
+           "(n) ...and the constant is whatever --henchman-cap made it (6)")
+    HENCH6 = dict(HENCH)
+    HENCH6.update({8: {"enc_name": "DDDD", "profession": 3, "level": 3, "name": "M"},
+                   9: {"enc_name": "EEEE", "profession": 4, "level": 3, "name": "N"},
+                   10: {"enc_name": "FFFF", "profession": 5, "level": 3, "name": "E"}})
+
+    def adds(st, agents_in):
+        out, snd = fake_send()
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            for a in agents_in:
+                authsrv.handle_henchman_add([ADD, a], snd, st, 0)
+        return out, buf.getvalue()
+
+    # map 248 (cap 8): four adds fill 1 -> 5 -- a 5th member the constant refused.
+    st8 = seeded(HENCH6, map_id=248)
+    s8, log8 = adds(st8, (4, 2, 6, 8))
+    led.ok(len(st8["party_henchmen"]) == 4 and sizes_of(s8) == [2, 3, 4, 5],
+           "(n) on map 248 (max_party 8) four henchmen are admitted: 0x00B0 climbs 2, 3, 4, 5 -- the "
+           "5th member the constant 4 refused", f"sizes {sizes_of(s8)}")
+    led.ok(log8.count("the party cap here is") == 1 and "the party cap here is 8" in log8
+           and "map 248's own AreaInfo max_party" in log8,
+           "(n) the cap line prints ONCE per connection, naming 8 and the row it came from",
+           log8.strip().splitlines()[0][:150] if log8.strip() else "")
+    # KNOWN-BAD per map: the SAME four adds on map 148 (max_party 4) stop at 4.
+    st4 = seeded(HENCH6, map_id=148)
+    s4, log4 = adds(st4, (4, 2, 6, 8))
+    led.ok(len(st4["party_henchmen"]) == 3 and sizes_of(s4) == [2, 3, 4] and 8 not in st4["party_henchmen"]
+           and "HENCHMAN_ADD(8) refused" in log4 and "(4: map 148's own AreaInfo max_party" in log4,
+           "(n) the same four adds on map 148 (max_party 4) stop at 4: the fourth is refused and the "
+           "line names the map's own row", f"sizes {sizes_of(s4)}")
+    # the fallback: a map with NO row -> 4, and the log SAYS so.
+    st9 = seeded(HENCH6, map_id=999)
+    s9, log9 = adds(st9, (4, 2, 6, 8))
+    led.ok(len(st9["party_henchmen"]) == 3 and sizes_of(s9) == [2, 3, 4]
+           and "map 999 has NO map_party_cap row" in log9 and "UNVERIFIED" in log9
+           and "the constant 4 stands in" in log9 and "the party cap here is 4" in log9,
+           "(n) map 999 has no row: the constant 4 stands in, the fourth is refused, and the cap line "
+           "says NO row / UNVERIFIED / the constant 4", log9.strip().splitlines()[0][:150] if log9.strip() else "")
+    # the KNOWN-BAD flag arm: --constant-party-cap on map 248 -> 4, the pre-2026-09-25 picture.
+    authsrv.PARTY_CAP_PER_MAP = False
+    stc = seeded(HENCH6, map_id=248)
+    sc, logc = adds(stc, (4, 2, 6, 8))
+    led.ok(len(stc["party_henchmen"]) == 3 and sizes_of(sc) == [2, 3, 4]
+           and "the party cap here is 4" in logc and "--constant-party-cap" in logc,
+           "(n) KNOWN-BAD flag arm: --constant-party-cap on map 248 refuses the fourth at 4 and the "
+           "cap line names the flag -- exactly the behaviour before the table")
+    # --henchman-cap 6 (main sets OUTPOST_PARTY_CAP = 6 and turns the per-map read off): on
+    # map 248 five henchmen are admitted (1 + 5 = 6) and the sixth refused, where 8 admitted it.
+    authsrv.OUTPOST_PARTY_CAP = 6
+    sth = seeded(HENCH6, map_id=248)
+    sh, logh = adds(sth, (4, 2, 6, 8, 9, 10))
+    led.ok(len(sth["party_henchmen"]) == 5 and sizes_of(sh) == [2, 3, 4, 5, 6] and 10 not in sth["party_henchmen"]
+           and "the party cap here is 6" in logh,
+           "(n) --henchman-cap 6 overrides map 248's 8: five admitted (1 + 5 = 6), the sixth refused",
+           f"sizes {sizes_of(sh)}")
+    authsrv.OUTPOST_PARTY_CAP = 4
+    authsrv.PARTY_CAP_PER_MAP = True
+    # a zone: the cap follows the map and the line prints again.
+    stz = seeded(HENCH6, map_id=148)
+    bufz = io.StringIO()
+    with contextlib.redirect_stdout(bufz):
+        c1 = authsrv.party_cap(stz)
+        c1b = authsrv.party_cap(stz)
+        stz["map_id"] = 248
+        c2 = authsrv.party_cap(stz)
+    led.ok(c1[0] == 4 and c1b == c1 and c2[0] == 8 and bufz.getvalue().count("the party cap here is") == 2,
+           "(n) a zone from 148 to 248: party_cap answers 4 then 8, and the cap line prints once per "
+           "answer (twice), not per call (three)", f"{bufz.getvalue().count('the party cap here is')} line(s)")
+    # the HERO ADD at the per-map cap: player + 3 hired henchmen (4 of 8) on map 248 -> the
+    # re-added hero goes THROUGH at 5 (vaulted: the accepting path builds the hero block);
+    # the same party on map 148 (4 of 4) -> REFUSED, bare.
+    authsrv.HERO_IDS = [6]
+    sth8 = seeded(HENCH6, map_id=248)
+    authsrv.kicked_heroes_set(sth8).add(6)
+    for a in (4, 2, 6):
+        authsrv.handle_henchman_add([ADD, a], fake_send()[1], sth8, 0)
+    sv8, sendv8 = fake_send()
+    with contextlib.redirect_stdout(io.StringIO()):
+        ran = hero_add_or_skip("(n) the hero add on map 248 (cap 8) with 4 members goes through", sendv8, sth8)
+    if ran:
+        led.ok(0x01C2 in ops_of(sv8) and sizes_of(sv8) == [5] and not authsrv.hero_kicked(sth8, 6),
+               "(n) the hero add on map 248 (cap 8) with the player and 3 henchmen goes THROUGH: 0x00B0 "
+               "= 5 and the 0x01C2 row", f"{[hex(o) for o in ops_of(sv8)]} sizes {sizes_of(sv8)}")
+    sth4 = seeded(HENCH6, map_id=148)
+    authsrv.kicked_heroes_set(sth4).add(6)
+    for a in (4, 2, 6):
+        authsrv.handle_henchman_add([ADD, a], fake_send()[1], sth4, 0)
+    sr4, sendr4 = fake_send()
+    bufr4 = io.StringIO()
+    with contextlib.redirect_stdout(bufr4):
+        authsrv.handle_hero_add([HADD, 6], sendr4, sth4, 0)
+    led.ok(sr4 == [] and authsrv.hero_kicked(sth4, 6) and "HERO_ADD(6) refused" in bufr4.getvalue()
+           and "(4: map 148's own AreaInfo max_party" in bufr4.getvalue(),
+           "(n) the same hero add on map 148 (cap 4, 4 of 4) is REFUSED, nothing sent, the line naming "
+           "the map's row", bufr4.getvalue().strip()[:150])
+    authsrv.HERO_IDS = []
+
+    # (o) THE LEAVE (desk-partycap, 2026-09-25; henchparty.py THE LEAVE): 0x00A2 in an
+    #     outpost with a hero and two hired henchmen -> two 0x01C0 rows then 0x00B0 [14, 2];
+    #     the client's own companion 0x001F [40] -> the hero's kick batch, size 1, kicked.
+    led.ok(LEAVE == 0x00A2 and authsrv.HEROES_ALL == 40,
+           "(o) the leave's c2s is 0x00A2 and HEROES_ALL is 40 (0x28, the client's HEROES bound: the "
+           "kick sender's `hero <= HEROES`, the Leave click's push)")
+    authsrv.HERO_IDS = [6]
+    sto = seeded(HENCH, map_id=148)
+    for a in (4, 2):
+        authsrv.handle_henchman_add([ADD, a], fake_send()[1], sto, 0)
+    so, sendo = fake_send()
+    bufo = io.StringIO()
+    with contextlib.redirect_stdout(bufo):
+        authsrv.handle_party_leave([LEAVE], sendo, sto, 0)
+    led.ok(ops_of(so) == [0x01C0, 0x01C0, 0x00B0] and so[0][1] == [1, 4] and so[1][1] == [1, 2]
+           and sizes_of(so) == [2],
+           "(o) the leave with a hero and two hired henchmen sends exactly 0x01C0 [1, 4], 0x01C0 [1, 2] "
+           "then 0x00B0 [14, 2] -- the rows in hire order, the size with the hero still counted",
+           f"{[(hex(o), v) for o, v in so]}")
+    led.ok(not sto["party_henchmen"] and 4 in sto["agents"] and 2 in sto["agents"]
+           and 4 in sto["hireable_henchmen"] and 2 in sto["hireable_henchmen"]
+           and 0x0021 not in ops_of(so) and authsrv.party_member_count(sto) == 2
+           and not authsrv.hero_kicked(sto, 6),
+           "(o) ...the henchmen leave the party (count 2: player + hero), the NPCs stand (no 0x0021) "
+           "and stay hireable, the hero is still in -- the heroes are the [40]'s business")
+    led.ok("2 hired henchman(s) dropped" in bufo.getvalue() and "RECONSTRUCTION" in bufo.getvalue()
+           and f"0x001F [{authsrv.HEROES_ALL}]" in bufo.getvalue(),
+           "(o) the line counts the drop, labels the reply RECONSTRUCTION and names the [40] that follows",
+           bufo.getvalue().strip()[:160])
+    # the companion: 0x001F [40] through the REAL handle_hero_kick -> hero 6's own batch.
+    so.clear()
+    with contextlib.redirect_stdout(io.StringIO()):
+        authsrv.handle_hero_kick([KICK, 40], sendo, sto, 0)
+    led.ok(ops_of(so) == [0x0075, 0x01C3, 0x00F8, 0x003E, 0x00B0] and sizes_of(so) == [1]
+           and authsrv.hero_kicked(sto, 6) and authsrv.party_member_count(sto) == 1,
+           "(o) 0x001F [40] (HEROES_ALL) kicks every party hero: hero 6's OBSERVED batch (0x0075, "
+           "0x01C3, 0x00F8, 0x003E, 0x00B0 [14, 1]) and the hero is kicked -- the party is the player "
+           "alone", f"{[hex(o) for o in ops_of(so)]} sizes {sizes_of(so)}")
+    so.clear()
+    with contextlib.redirect_stdout(io.StringIO()):
+        authsrv.handle_hero_kick([KICK, 40], sendo, sto, 0)
+        authsrv.handle_party_leave([LEAVE], sendo, sto, 0)
+    led.ok(so == [] and authsrv.party_member_count(sto) == 1,
+           "(o) a second [40] (no party hero) and a second leave (no hired henchman) send NOTHING")
+    so.clear()
+    authsrv.handle_henchman_add([ADD, 4], sendo, sto, 0)
+    led.ok(ops_of(so) == [0x00B0, 0x01BF] and sizes_of(so) == [1 + 1] and 4 in sto["party_henchmen"],
+           "(o) a dropped henchman can be hired again after the leave: 0x00B0 [14, 2] + the row")
+    # two heroes: [40] kicks both, sizes 2 then 1 (each its own kick, each with its 0x00B0).
+    authsrv.HERO_IDS = [6, 7]
+    st2 = seeded(HENCH, map_id=148)
+    s2o, send2o = fake_send()
+    with contextlib.redirect_stdout(io.StringIO()):
+        authsrv.handle_hero_kick([KICK, 40], send2o, st2, 0)
+    led.ok(ops_of(s2o).count(0x01C3) == 2 and sizes_of(s2o) == [2, 1]
+           and authsrv.hero_kicked(st2, 6) and authsrv.hero_kicked(st2, 7),
+           "(o) with two party heroes [40] kicks both: two 0x01C3 rows, sizes 2 then 1, both kicked",
+           f"sizes {sizes_of(s2o)}")
+    authsrv.HERO_IDS = [6]
+    # the launch henchman stays (not modelled, as the kick leaves it) and the line says so.
+    authsrv.HENCHMAN = "hench_warrior"
+    stl = seeded(HENCH, map_id=148)
+    authsrv.handle_henchman_add([ADD, 4], fake_send()[1], stl, 0)
+    sl, sendl = fake_send()
+    bufl = io.StringIO()
+    with contextlib.redirect_stdout(bufl):
+        authsrv.handle_party_leave([LEAVE], sendl, stl, 0)
+    led.ok(ops_of(sl) == [0x01C0, 0x00B0] and sl[0][1] == [1, 4] and sizes_of(sl) == [3]
+           and "the LAUNCH henchman (--henchman" in bufl.getvalue() and "stays" in bufl.getvalue()
+           and authsrv.party_member_count(stl) == 3,
+           "(o) with the launch henchman in the party the leave drops the HIRED one only (size 3: "
+           "player + hero + launch) and the line says the launch henchman stays (not modelled)",
+           bufl.getvalue().strip()[:160])
+    authsrv.HENCHMAN = None
+    # a FIELD's leave: refused, nothing sent, the party untouched.
+    authsrv.EXPLORABLE = True
+    stf = seeded(HENCH, map_id=148)
+    for a in (4, 2):
+        authsrv.handle_henchman_add([ADD, a], fake_send()[1], stf, 0)
+    sf, sendf = fake_send()
+    buff = io.StringIO()
+    with contextlib.redirect_stdout(buff):
+        authsrv.handle_party_leave([LEAVE], sendf, stf, 0)
+    led.ok(sf == [] and sorted(stf["party_henchmen"]) == [2, 4] and "FIELD" in buff.getvalue()
+           and "not modelled" in buff.getvalue(),
+           "(o) in a FIELD the leave is refused with nothing sent and the party kept (retail's return "
+           "to the outpost is UNVERIFIED and not modelled)", buff.getvalue().strip()[:150])
+    authsrv.EXPLORABLE = False
+    # --no-party-leave: the [40] arm is ignored as before (the 0x00A2 arm's gate is a lock).
+    authsrv.PARTY_LEAVE_ENABLED = False
+    stn = seeded(HENCH, map_id=148)
+    sn, sendn = fake_send()
+    bufn = io.StringIO()
+    with contextlib.redirect_stdout(bufn):
+        authsrv.handle_hero_kick([KICK, 40], sendn, stn, 0)
+    led.ok(sn == [] and not authsrv.hero_kicked(stn, 6) and "--no-party-leave" in bufn.getvalue()
+           and "ignored" in bufn.getvalue(),
+           "(o) under --no-party-leave 0x001F [40] is ignored, nothing sent, the hero stays -- the "
+           "picture before 2026-09-25", bufn.getvalue().strip()[:150])
+    authsrv.PARTY_LEAVE_ENABLED = True
+    # persistence: the [40]'s kicks write the store (the kick's own), the leave touches none.
+    authsrv.PERSIST = True
+    store = charstore.Store.open("henchparty@rurik.invalid", base=_store_base)
+    store.ensure_character(UUID, "Leaver", "cc" * 37)
+    stp = seeded(HENCH, map_id=148, charstore_game=store)
+    authsrv.handle_henchman_add([ADD, 4], fake_send()[1], stp, 0)
+    sp, sendp = fake_send()
+    with contextlib.redirect_stdout(io.StringIO()):
+        authsrv.handle_party_leave([LEAVE], sendp, stp, 0)
+        authsrv.handle_hero_kick([KICK, 40], sendp, stp, 0)
+    led.ok(store.kicked_heroes(UUID) == [6] and ops_of(sp)[:2] == [0x01C0, 0x00B0]
+           and 0x01C3 in ops_of(sp),
+           "(o) under --persist the [40]'s kick is written to the store (hero 6 kicked, as a click's "
+           "kick is) after the leave's rows went out")
+    authsrv.HERO_IDS = []        # no hero: the count would otherwise read the store for the kicked set
+    stq = seeded(HENCH, map_id=148, charstore_game=object())
+    authsrv.handle_henchman_add([ADD, 4], fake_send()[1], stq, 0)
+    sq, sendq = fake_send()
+    with contextlib.redirect_stdout(io.StringIO()):
+        authsrv.handle_party_leave([LEAVE], sendq, stq, 0)
+    led.ok(ops_of(sq) == [0x01C0, 0x00B0] and not stq["party_henchmen"],
+           "(o) ...and the leave itself, with an OPAQUE store attached, touches it not at all (the hire "
+           "is not persisted, so neither is the leave)")
+    authsrv.PERSIST = False
+    authsrv.HERO_IDS = []
+
     # -- §3 the spawn wiring -------------------------------------------------
     class _Mesh:
         def walkable(self, x, y):
@@ -692,12 +1048,41 @@ try:
                "marked or levelled: retail offers henchmen in outposts only",
                f"creates {sorted(creates4)} ops {sorted(set(hex(o) for o in ops_of(sent4)))}")
         authsrv.EXPLORABLE = False
+
+        # THE 248 SET (the review's RV-1): the same wiring on the 8-cap map, and
+        # the SLICE-B8 map filter that kept the 148 set OFF 248 keeps the 248
+        # set off 148 -- the reason the per-map cap's run needed its own rows.
+        authsrv.AREA_NAME = "outpost_henchmen_248"
+        sent5, send5 = fake_send()
+        st5 = {"agents": {}, "map_id": 248, "pathmap": _Mesh()}
+        authsrv.spawn_population(send5, st5, (-5574.0, -4945.0, 0), 0)
+        marks5 = [v[0] for op, v in sent5 if op == henchparty.HENCHMAN_HIREABLE]
+        creates5 = [v[0] for op, v in sent5 if op == authsrv.GAME_SMSG_WORLD_CREATE_AGENT]
+        profs5 = {a: r["profession"] for a, r in (st5.get("hireable_henchmen") or {}).items()}
+        led.ok(sorted(marks5) == [34, 35, 36] and sorted(creates5) == [34, 35, 36]
+               and profs5 == {34: 1, 35: 2, 36: 7},
+               "(§3) on map 248 the outpost_henchmen_248 set creates and marks 34/35/36 hireable "
+               "(W/R/A, the 148 set's templates) -- the per-map cap's run has something to add",
+               f"marks {sorted(marks5)} creates {sorted(creates5)} profs {profs5}")
+        sent6, send6 = fake_send()
+        st6 = {"agents": {}, "map_id": 148, "pathmap": _Mesh()}
+        authsrv.spawn_population(send6, st6, (9826.0, 8077.0, 0), 0)
+        led.ok(not [v for op, v in sent6 if op == henchparty.HENCHMAN_HIREABLE]
+               and not [v for op, v in sent6 if op == authsrv.GAME_SMSG_WORLD_CREATE_AGENT]
+               and not st6.get("hireable_henchmen"),
+               "(§3) ...and the same area served on 148 creates and marks NOTHING (spawn_row_on_map: "
+               "a row stands on its own map only -- why the 148 set could not serve the 248 run)",
+               f"ops {sorted(set(hex(o) for o in ops_of(sent6)))}")
+        authsrv.AREA_NAME = "outpost_henchmen"
     finally:
         authsrv.place_on_mesh = _saved_place
         authsrv.AREA_NAME = _saved_area
 finally:
     for k, v in _saved.items():
         setattr(authsrv, k, v)
+    authsrv.MAP_PARTY_CAPS.clear()
+    authsrv.MAP_PARTY_CAPS.update(_saved_caps)
+    shutil.rmtree(_store_base, ignore_errors=True)
 
 
 # -- §4 source locks, each with a mutation that reddens it -------------------
@@ -709,7 +1094,8 @@ FUNCS = {n.name: (ast.get_source_segment(SRC, n) or "")
          for n in ast.walk(TREE) if isinstance(n, ast.FunctionDef)
          and n.name in ("main", "spawn_population", "handle_henchman_add",
                         "handle_hero_kick", "handle_hero_add", "party_size_on_wire",
-                        "handle_henchman_kick")}
+                        "handle_henchman_kick", "handle_party_leave", "party_cap",
+                        "_load_map_party_caps")}
 with open(os.path.join(HERE, "serverargs.py"), encoding="utf-8") as _fh:
     ARGS = _fh.read()
 
@@ -719,6 +1105,12 @@ def _mut(text, old, new):
     unchanged, and the caller's `msrc != src` check then reddens (a stale
     mutation string cannot pass as a redden)."""
     return text.replace(old, new, 1) if old in text else text
+
+
+def _mut_last(text, old, new):
+    """`text` with the LAST `old` -> `new` (the same absent-old rule as _mut)."""
+    at = text.rfind(old)
+    return text[:at] + new + text[at + len(old):] if at >= 0 else text
 
 
 def lock_arm(src):
@@ -745,12 +1137,22 @@ def lock_spawn(s):
             and "if instance_is_field(state):" in s)
 
 
-CAP_CHECK = "henchparty.party_is_full(party_member_count(state), OUTPOST_PARTY_CAP)"
+CAP_CHECK = "henchparty.party_is_full(party_member_count(state), cap)"
+# desk-partycap: the cap is RESOLVED per map right before it is checked, in both handlers.
+CAP_CALL = "cap, cap_why = party_cap(state)"
+OLD_CAP_CHECK = "henchparty.party_is_full(party_member_count(state), OUTPOST_PARTY_CAP)"
 OLD_SUM = "1 + (1 if HENCHMAN is not None else 0)"
 
 
+def lock_cap_resolved(s):
+    """party_cap(state) is called once, before the cap check, and the constant is
+    not compared directly (the pre-2026-09-25 text is the mutation)."""
+    return (s.count(CAP_CALL) == 1 and CAP_CHECK in s and s.find(CAP_CALL) < s.find(CAP_CHECK)
+            and OLD_CAP_CHECK not in s)
+
+
 def lock_hench_add(s):
-    return (CAP_CHECK in s and 'state.setdefault("party_henchmen"' in s
+    return (CAP_CHECK in s and lock_cap_resolved(s) and 'state.setdefault("party_henchmen"' in s
             and "size = party_size_on_wire(state)" in s)
 
 
@@ -760,7 +1162,7 @@ def lock_hero_kick(s):
 
 def lock_hero_add(s):
     return ("party_size = party_size_on_wire(state)" in s and OLD_SUM not in s
-            and CAP_CHECK in s)
+            and CAP_CHECK in s and lock_cap_resolved(s))
 
 
 def lock_wire(s):
@@ -802,6 +1204,69 @@ def lock_kick_allowlist(dropped):
     return 0x00A8 not in dropped
 
 
+# THE LEAVE's locks and THE PER-MAP CAP's (desk-partycap, 2026-09-25)
+def lock_leave_arm(src):
+    at = src.find("elif opcode == GAME_CMSG_PARTY_LEAVE:")
+    arm = src[at:at + 700] if at >= 0 else ""
+    return (at >= 0 and "if PARTY_LEAVE_ENABLED:" in arm
+            and "handle_party_leave(values, send, state, conn_id)" in arm
+            and src.count("def handle_party_leave(") == 1
+            and "GAME_CMSG_PARTY_LEAVE = 0x00A2" in src
+            and "HEROES_ALL = 40" in src)
+
+
+def lock_main_leave(m):
+    return ("a.no_party_leave" in m and "PARTY_LEAVE_ENABLED = False" in m
+            and "global PARTY_LEAVE_ENABLED" in m)
+
+
+LEAVE_FIELD = "if instance_is_field(state):"
+LEAVE_POP = "for aid in ids:\n        party.pop(aid)"
+LEAVE_BATCH = "henchparty.party_leave_batch(1, PLAYER_NUMBER, size, ids)"
+
+
+def lock_party_leave(s):
+    return (LEAVE_FIELD in s and LEAVE_POP in s and s.find(LEAVE_FIELD) < s.find(LEAVE_POP)
+            and "size = party_size_on_wire(state)" in s and LEAVE_BATCH in s
+            and 'state.setdefault("party_henchmen"' in s
+            and "charstore" not in s and "set_hero_kicked" not in s)
+
+
+HK_ALL = "if hid == HEROES_ALL:"
+HK_GATE = "if not PARTY_LEAVE_ENABLED:"
+HK_EACH = "handle_hero_kick([values[0], h], send, state, conn_id)"
+
+
+def lock_hero_kick_all(s):
+    """The HEROES_ALL arm sits BEFORE the owned-hero lookup (40 is no owned index,
+    so after it the arm could never run), is gated on PARTY_LEAVE_ENABLED, and
+    kicks each party hero through the handler itself."""
+    at = s.find(HK_ALL)
+    return (at >= 0 and at < s.find("slot = next(") and s.count(HK_ALL) == 1
+            and HK_GATE in s[at:] and HK_EACH in s[at:]
+            and s.find(HK_GATE) < s.find(HK_EACH))
+
+
+def lock_main_constant_cap(m):
+    """--constant-party-cap turns the per-map read off, and so does --henchman-cap
+    (the override covers every map)."""
+    return ("a.constant_party_cap" in m and m.count("PARTY_CAP_PER_MAP = False") == 2
+            and "global OUTPOST_PARTY_CAP, PARTY_CAP_PER_MAP" in m)
+
+
+def lock_party_cap_fn(s):
+    return ("henchparty.party_cap(MAP_PARTY_CAPS, state.get(\"map_id\")" in s
+            and "per_map=PARTY_CAP_PER_MAP" in s and 'state.get("party_cap_said")' in s)
+
+
+def lock_caps_load(s):
+    return ('world.rows("map_party_cap")' in s and "if n < 1:" in s and "raise SystemExit" in s)
+
+
+def lock_leave_allowlist(dropped):
+    return 0x00A2 not in dropped
+
+
 # the arm's gate: mutate the first "if HENCHMAN_ADD_ENABLED:" AFTER the anchor.
 _at = SRC.find("elif opcode == GAME_CMSG_HENCHMAN_ADD:")
 _g = SRC.find("if HENCHMAN_ADD_ENABLED:", _at) if _at >= 0 else -1
@@ -809,12 +1274,64 @@ MUT_ARM = (SRC[:_g] + "if True:" + SRC[_g + len("if HENCHMAN_ADD_ENABLED:"):]) i
 _atk = SRC.find("elif opcode == GAME_CMSG_HENCHMAN_KICK:")
 _gk = SRC.find("if HENCHMAN_KICK_ENABLED:", _atk) if _atk >= 0 else -1
 MUT_KICK_ARM = (SRC[:_gk] + "if True:" + SRC[_gk + len("if HENCHMAN_KICK_ENABLED:"):]) if _gk >= 0 else SRC
+_atl = SRC.find("elif opcode == GAME_CMSG_PARTY_LEAVE:")
+_gl = SRC.find("if PARTY_LEAVE_ENABLED:", _atl) if _atl >= 0 else -1
+MUT_LEAVE_ARM = (SRC[:_gl] + "if True:" + SRC[_gl + len("if PARTY_LEAVE_ENABLED:"):]) if _gl >= 0 else SRC
 
-M, SP, HA, HK, HD, PW, HKK = (FUNCS.get(k, "") for k in
-                               ("main", "spawn_population", "handle_henchman_add",
-                                "handle_hero_kick", "handle_hero_add", "party_size_on_wire",
-                                "handle_henchman_kick"))
+M, SP, HA, HK, HD, PW, HKK, HPL, PCF, MPC = (
+    FUNCS.get(k, "") for k in
+    ("main", "spawn_population", "handle_henchman_add", "handle_hero_kick", "handle_hero_add",
+     "party_size_on_wire", "handle_henchman_kick", "handle_party_leave", "party_cap",
+     "_load_map_party_caps"))
 LOCKS = [
+    ("the 0x00A2 arm exists, is gated on PARTY_LEAVE_ENABLED, calls handle_party_leave once, and "
+     "the constants are 0x00A2 / HEROES_ALL 40 (desk-partycap)",
+     lock_leave_arm, SRC, [("the gate removed", MUT_LEAVE_ARM),
+                           ("the constant renumbered", _mut(SRC, "GAME_CMSG_PARTY_LEAVE = 0x00A2",
+                                                             "GAME_CMSG_PARTY_LEAVE = 0x00A3")),
+                           ("HEROES_ALL renumbered", _mut(SRC, "HEROES_ALL = 40", "HEROES_ALL = 41"))]),
+    ("main() reads --no-party-leave and turns both arms off through a `global`",
+     lock_main_leave, M,
+     [("the assignment inverted", _mut(M, "PARTY_LEAVE_ENABLED = False", "PARTY_LEAVE_ENABLED = True")),
+      ("the global dropped", _mut(M, "global PARTY_LEAVE_ENABLED", "pass"))]),
+    ("handle_party_leave refuses a field FIRST, pops every hired henchman, sizes through "
+     "party_size_on_wire, sends party_leave_batch and names no store",
+     lock_party_leave, HPL,
+     [("the field gate removed", _mut(HPL, LEAVE_FIELD, "if False:")),
+      ("the pop made a read", _mut(HPL, LEAVE_POP, "for aid in ids:\n        party.get(aid)")),
+      ("the size taken from the count", _mut(HPL, "size = party_size_on_wire(state)",
+                                              "size = party_member_count(state)")),
+      ("a store write added", HPL.replace(LEAVE_POP, LEAVE_POP + "\n    "
+                                          "state['charstore_game'].set_hero_kicked(0, aid)", 1))]),
+    ("handle_hero_kick's HEROES_ALL arm sits before the owned-hero lookup, is gated on "
+     "PARTY_LEAVE_ENABLED and kicks each party hero through the handler",
+     lock_hero_kick_all, HK,
+     [("the gate dropped", _mut(HK, HK_GATE, "if False:")),
+      ("the arm disabled", _mut(HK, HK_ALL, "if False:")),
+      ("the arm moved after the owned check", HK.replace(HK_ALL, "if False:", 1).replace(
+          "slot = next(", "if hid == HEROES_ALL:\n        pass\n    slot = next(", 1))]),
+    ("main() reads --constant-party-cap and turns the per-map read off, and --henchman-cap turns "
+     "it off too (the override covers every map)",
+     lock_main_constant_cap, M,
+     [("the flag's assignment dropped", _mut(M, "PARTY_CAP_PER_MAP = False", "pass")),
+      ("--henchman-cap's line dropped", _mut_last(M, "PARTY_CAP_PER_MAP = False", "pass")),
+      ("the global dropped", _mut(M, "global OUTPOST_PARTY_CAP, PARTY_CAP_PER_MAP", "pass"))]),
+    ("party_cap(state) resolves through henchparty.party_cap over MAP_PARTY_CAPS and the map id, "
+     "rides PARTY_CAP_PER_MAP, and prints once per answer",
+     lock_party_cap_fn, PCF,
+     [("the flag ignored", _mut(PCF, "per_map=PARTY_CAP_PER_MAP", "per_map=True")),
+      ("the once-guard dropped", _mut(PCF, 'state.get("party_cap_said")', "None"))]),
+    ("MAP_PARTY_CAPS is built from the map_party_cap content rows and a cap below 1 refuses the launch",
+     lock_caps_load, MPC,
+     [("the refusal dropped", _mut(MPC, "if n < 1:", "if False:")),
+      ("another kind read", _mut(MPC, 'world.rows("map_party_cap")', 'world.rows("map")'))]),
+]
+led.ok('"--no-party-leave"' in ARGS and ARGS.index('"--no-party-leave"') > ARGS.index('"--no-henchman-kick"')
+       and '"--constant-party-cap"' in ARGS
+       and ARGS.index('"--constant-party-cap"') > ARGS.index('"--party-full-reply"'),
+       "LOCK: serverargs.py declares --no-party-leave beside --no-henchman-kick and "
+       "--constant-party-cap beside --party-full-reply")
+LOCKS += [
     ("the 0x00A8 arm exists, is gated on HENCHMAN_KICK_ENABLED, calls the handler once, and the "
      "constant is 0x00A8 (CLEANUP-3)",
      lock_kick_arm, SRC, [("the gate removed", MUT_KICK_ARM),
@@ -857,21 +1374,25 @@ LOCKS += [
      [("the flag gate removed", _mut(SP, 'row.get("hireable") and HENCHMAN_ADD_ENABLED',
                                      'row.get("hireable")')),
       ("the field gate removed", _mut(SP, "if instance_is_field(state):", "if False:"))]),
-    ("handle_henchman_add caps on party_member_count vs OUTPOST_PARTY_CAP, records the "
-     "henchman and sizes through party_size_on_wire",
+    ("handle_henchman_add resolves the cap through party_cap(state), caps on party_member_count vs "
+     "it, records the henchman and sizes through party_size_on_wire",
      lock_hench_add, HA,
      [("the cap check removed", _mut(HA, CAP_CHECK, "False")),
+      ("the constant compared directly (the pre-2026-09-25 text)",
+       _mut(HA, CAP_CHECK, OLD_CAP_CHECK)),
+      ("the per-map resolution dropped", _mut(HA, CAP_CALL, 'cap, cap_why = OUTPOST_PARTY_CAP, ""')),
       ("the size taken from the count", _mut(HA, "size = party_size_on_wire(state)",
                                               "size = party_member_count(state)"))]),
     ("handle_hero_kick sizes through party_size_on_wire (hired henchmen counted)",
      lock_hero_kick, HK,
      [("the landing's sum restored", _mut(HK, "party_size = party_size_on_wire(state)",
                                           "party_size = " + OLD_SUM + " + len(remaining)"))]),
-    ("handle_hero_add sizes through party_size_on_wire and refuses at the same cap",
+    ("handle_hero_add sizes through party_size_on_wire and refuses at the same per-map cap",
      lock_hero_add, HD,
      [("the landing's sum restored", _mut(HD, "party_size = party_size_on_wire(state)",
                                           "party_size = " + OLD_SUM + " + len(party_hero_slots(state))")),
-      ("the cap check removed", _mut(HD, CAP_CHECK, "False"))]),
+      ("the cap check removed", _mut(HD, CAP_CHECK, "False")),
+      ("the per-map resolution dropped", _mut(HD, CAP_CALL, 'cap, cap_why = OUTPOST_PARTY_CAP, ""'))]),
     ("party_size_on_wire rides PARTY_SIZE_COUNTS_HEROES (the load's revert arm)",
      lock_wire, PW,
      [("the flag ignored", _mut(PW, "count_heroes=PARTY_SIZE_COUNTS_HEROES", "count_heroes=True"))]),
@@ -942,5 +1463,103 @@ led.ok(lock_kick_allowlist(test_dispatch.DROPPED_ON_PURPOSE),
        "LOCK: 0x00A8 HENCHMAN_KICK is off DROPPED_ON_PURPOSE (its arm landed, CLEANUP-3)")
 led.ok(not lock_kick_allowlist(set(test_dispatch.DROPPED_ON_PURPOSE) | {0x00A8}),
        "KNOWN-BAD: 0x00A8 on the allowlist reddens the lock")
+led.ok(lock_leave_allowlist(test_dispatch.DROPPED_ON_PURPOSE),
+       "LOCK: 0x00A2 PARTY_LEAVE is off DROPPED_ON_PURPOSE (its arm landed, desk-partycap)")
+led.ok(not lock_leave_allowlist(set(test_dispatch.DROPPED_ON_PURPOSE) | {0x00A2}),
+       "KNOWN-BAD: 0x00A2 on the allowlist reddens the lock")
+
+
+# -- §5 the content rows and the leave's sites against the PINNED CLIENT (vaulted) ---
+# A check the binary can refute: every content/partycap.toml max_party equals the
+# client's own AreaInfo field, read fresh; and the leave's four sites hold the bytes
+# the docstrings quote. A bare machine (no pinned client) declares the skip.
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "clientscan"))
+try:
+    import pinned                                             # noqa: E402
+    import areatable                                          # noqa: E402
+    from gwpe import PE                                       # noqa: E402
+    _exe, _why = pinned.find()
+except (SystemExit, Exception) as exc:                        # noqa: BLE001
+    led.skip("§5 the pinned client", f"no pinned build 38797 in the vault: {str(exc)[:80]}")
+else:
+    _pe = PE(_exe)
+    _base = 0x0096DE38
+    _off = _pe.rva_to_off(_base - _pe.image_base)
+    led.ok(_base in areatable.locate_from_code(_pe),
+           "(§5) the code locator (`imul reg, reg, 0x7C` + a nearby .rdata base) names VA "
+           "0x0096DE38, the area table content/partycap.toml's rows cite")
+    led.ok(areatable.extent(_pe.data, _off) == 888,
+           "(§5) 888 consecutive records validate from it (the table's own extent)")
+    _bad = {}
+    _rows = authsrv.agents.WORLD.rows("map_party_cap")
+    for _m, _cap in sorted(_saved_caps.items()):
+        _rec = areatable.parse_record(_pe.data, _off + _m * areatable.RECORD_SIZE)
+        _min = int(_rows[str(_m)]["min_party"])
+        if _rec["max_party"] != _cap or _rec["min_party"] != _min:
+            _bad[_m] = ((_rec["min_party"], _rec["max_party"]), (_min, _cap))
+    led.ok(not _bad and len(_saved_caps) >= 19,
+           f"(§5) every content/partycap.toml row ({len(_saved_caps)}) equals the client's own "
+           f"min_party / max_party (OFF_MIN_PARTY +0x18 / OFF_MAX_PARTY +0x1C) -- re-read out of "
+           f"the pinned build, not recalled (the first cut said min 1 everywhere and this check "
+           f"reddened on 167/168, whose retail rows say 7)", f"mismatches (client, row) {_bad}")
+    _rec148 = areatable.parse_record(_pe.data, _off + 148 * areatable.RECORD_SIZE)
+    led.ok(_rec148["max_party"] == 4 and _rec148["type"] == 10 and _rec148["name_id"] == 10478,
+           "(§5) CONTROL: row 148 reads max_party 4, type 10, name id 10478 -- the row the panel's "
+           "(2/4) was drawn from", f"{_rec148}")
+
+    def _at(va, n):
+        o = _pe.rva_to_off(va - _pe.image_base)
+        return _pe.data[o:o + n]
+    led.ok(_at(0x0085BEF7, 7) == bytes.fromhex("c745fca2000000")
+           and _at(0x008585FD, 2) == bytes.fromhex("0f87")
+           and _at(0x0080E2A7, 3) == bytes.fromhex("83fe28")
+           and _at(0x0056E95D, 2) == bytes.fromhex("6a28"),
+           "(§5) the leave's four sites read as documented on build 38797: the 0xA2 store at "
+           "0x0085BEF7, the `ja` at 0x008585FD, the `cmp esi, 0x28` (HEROES) at 0x0080E2A7 and "
+           "PtJoin's `push 0x28` at 0x0056E95D")
+    _rel = int.from_bytes(_at(0x008585FF, 4), "little", signed=True)
+    led.ok(0x008585FD + 6 + _rel == 0x0085BEF0,
+           "(§5) ...and the `ja` lands on the 0xA2 wrapper 0x0085BEF0 -- the one reference codescan "
+           "--xrefs (call/jmp only) reported as none", f"target 0x{0x008585FD + 6 + _rel:08X}")
+
+# -- §5 the 248 set stands on 248's OWN mesh (vaulted: the archive) -----------------
+# A check the archive can refute (the review's RV-1): each outpost_henchmen_248 row
+# is walkable on file 165811's compiled pathing chunk with place_on_mesh moving it
+# 0 u -- the rows' provenance says so, and this is what says so about the provenance.
+# The archive is found through vaultpath (RURIK_VAULT), so a bare machine declares
+# the skip and the floor excludes these.
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "mapdata"))
+try:
+    import vaultpath                                          # noqa: E402
+    from archive import Archive                               # noqa: E402
+    from pathmap import PathingMap                            # noqa: E402
+    import population                                         # noqa: E402
+    _dat = vaultpath.vault_path("dat_study", "Gw.dat")
+    if not os.path.exists(_dat):
+        raise FileNotFoundError(_dat)
+    _ar = Archive(_dat)
+    try:
+        _pm248 = PathingMap.load(165811, archive=_ar)
+    finally:
+        _ar.close()
+except (SystemExit, Exception) as exc:                        # noqa: BLE001
+    led.skip("§5 the 248 set on its mesh", f"no archive with file 165811 in the vault: {str(exc)[:80]}")
+else:
+    _rows248 = {k: r for k, r in authsrv.agents.WORLD.rows("spawn").items()
+                if r.get("area") == "outpost_henchmen_248"}
+    _moved = {}
+    for _k, _r in sorted(_rows248.items()):
+        _res = population.place_on_mesh(_pm248, float(_r["x"]), float(_r["y"]), _k)
+        if _res is None or _res[2] != 0.0:
+            _moved[_k] = _res
+    led.ok(len(_rows248) == 3 and not _moved,
+           "(§5) the three outpost_henchmen_248 rows stand on map 248's own mesh (file 165811, "
+           f"{len(_pm248.planes)} planes / {len(_pm248.trapezoids)} trapezoids): place_on_mesh "
+           "moves none of them -- re-read out of the archive, as the rows' provenance claims",
+           f"nudged/refused {_moved}")
+    _arr = authsrv.MAP_STATIC_CONFIG[248][1]
+    led.ok(_pm248.walkable(float(_arr[0]), float(_arr[1])),
+           "(§5) CONTROL: 248's own arrival (maps.toml spawn_x/spawn_y) is walkable on that mesh -- "
+           "the point the three offsets are measured from", f"arrival {_arr}")
 
 sys.exit(led.verdict())

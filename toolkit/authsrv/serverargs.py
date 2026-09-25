@@ -1065,15 +1065,37 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "(henchparty.py). The standing NPC keeps standing and can be "
                          "re-hired; an agent that is not a hired henchman is refused "
                          "with nothing sent. Not persisted, as the hire is not.")
+    ap.add_argument("--no-party-leave", action="store_true",
+                    help="THE REVERT ARM for desk-partycap (2026-09-25): ignore c2s "
+                         "0x00A2 PARTY_LEAVE -- the party window's Leave -- and "
+                         "ignore 0x001F [40], the every-hero kick the same click "
+                         "sends next (40 is the client's own HEROES bound, "
+                         "ChCliApi:4459 `hero <= HEROES`), so the Leave does "
+                         "nothing: the picture of every run before this flag "
+                         "(20260913T093718 c1 put both words in the unhandled "
+                         "census). The default answers 0x00A2 with every hired "
+                         "henchman's 0x01C0 PARTY_HENCHMAN_REMOVE row then ONE "
+                         "0x00B0 PLAYER_PARTY_SIZE -- RECONSTRUCTION, the kick's "
+                         "rows once for all (each CONFIRMED on the client) -- and "
+                         "[40] with every party hero's own OBSERVED kick batch, the "
+                         "kick persisted as a kick is. The client sends 0x00A2 only "
+                         "when players + henchmen + heroes exceed 1 (read from its "
+                         "sender 0x008585D0). A field's Leave is refused with "
+                         "nothing sent (retail returns the player to the outpost, "
+                         "UNVERIFIED, not modelled); the launch henchman stays.")
     ap.add_argument("--henchman-cap", type=int, default=None, metavar="N",
                     help="Override the party cap the henchman add AND the hero add "
-                         "refuse at (DESKWORK-D1 step 5). The default is a CONSTANT "
-                         "4 for every served map -- the client's AreaInfo max_party "
-                         "of the maps we serve (Ascalon City, Lakeside, Shing Jea, "
-                         "Kamadan; OBSERVED via areatable.py, build 38797), not a "
-                         "per-map read (248/280 read 8, 55/238 read 6; a per-map "
-                         "table is next). Heroes and hired henchmen both count "
-                         "against it. N is 1 or more (the player counts).")
+                         "refuse at (DESKWORK-D1 step 5), on EVERY map. The default "
+                         "since 2026-09-25 is the served map's OWN AreaInfo max_party "
+                         "(content/partycap.toml, client-table, build 38797, "
+                         "toolkit/clientscan/areatable.py: 4 for Ascalon City, "
+                         "Lakeside, Shing Jea and Kamadan, 8 for the Great Temple and "
+                         "the Isle, 6 for Lion's Arch, 1 for the Ascalon Academy "
+                         "slot), with the constant 4 standing in -- and saying so -- "
+                         "for a map with no row; before that it was that constant "
+                         "for every map (--constant-party-cap). Heroes and hired "
+                         "henchmen both count against it. N is 1 or more (the "
+                         "player counts).")
     ap.add_argument("--party-full-reply", type=int, default=None, metavar="CODE",
                     help="OPT-IN (desk-partyfull, 2026-09-25): answer an add refused "
                          "at the cap -- henchman 0x009F or hero 0x001E -- with ONE "
@@ -1095,6 +1117,20 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "(studies/cmsg/FINDINGS.md 'The refusal at the cap'). A "
                          "CODE outside 0..80 is refused at launch (81 is the client's own "
                          "no-error sentinel and would show the next table's row 0).")
+    ap.add_argument("--constant-party-cap", action="store_true",
+                    help="THE REVERT ARM for the per-map party cap (DESKWORK-D1, "
+                         "desk-partycap, 2026-09-25): refuse the henchman add and the "
+                         "hero add at ONE constant, 4, on every served map -- the "
+                         "behaviour before content/partycap.toml, when 4 (the AreaInfo "
+                         "max_party of 148/146/242/449, OBSERVED via areatable.py) "
+                         "stood for every map, the 8-cap ones included. The default "
+                         "reads the served map's own max_party from that file "
+                         "(client-table, build 38797; 248/280 read 8, 55 reads 6, the "
+                         "Ascalon Academy slot 143 reads 1 -- a solo map) and falls "
+                         "back to 4, saying so in the log, for a map with no row. The "
+                         "panel's '(N/M)' denominator is the client's own reading of "
+                         "the same field, so the per-map cap is the one that agrees "
+                         "with the screen. --henchman-cap N overrides both.")
     ap.add_argument("--no-zone-carry", action="store_true",
                     help="THE REVERT ARM for JARIN: a zone forgets the death "
                          "penalty and the hero's stance. Retail carries the "

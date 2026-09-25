@@ -6646,9 +6646,18 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   `PARTY_SIZE_COUNTS_HEROES` (dropping the count fails, so does counting with no
   flag); `hero_inventory_declare` exists with two callers and the pair's labels
   appear once, the kick SETS `hero_inv_destroyed` and the declaration CLEARS it; 0x0018
-  has ONE sender; `main()` reads `HEROES_PARTY_MAX`, not the literal 7. Drives the real
+  has ONE sender; `main()` reads `HEROES_PARTY_MAX`, not the literal 7. §2b THE PER-MAP
+  CAP (desk-partycap, 2026-09-25): the hero add refuses at the SERVED MAP's own
+  `max_party` (`content/partycap.toml` through `authsrv.party_cap`), not at a constant --
+  the player and three hired henchmen take the re-added hero on map 248 (max_party 8,
+  `0x00B0` = 5, the cap line naming 8) and are refused on map 148 (4; the line names the
+  map's row); map 999 (no row) falls back to 4 and the log says NO row / UNVERIFIED;
+  `--constant-party-cap` on 248 refuses at 4 (the flag's KNOWN-BAD arm); `--henchman-cap 8`
+  on 148 goes through. §7 gains the lock that `handle_hero_add` resolves the cap through
+  `party_cap(state)` BEFORE the check and never compares `OUTPOST_PARTY_CAP` directly,
+  with the constant restored as the mutation. Drives the real
   handlers with a fake send and a scratch store like `test_herokick.py`. Floor 48 ->
-  78 from the green run, ~3 s),
+  78 -> 86 from the green run, ~3 s),
   `toolkit/authsrv/test_heroskilltoggle.py` (**2026-09-23, DESKWORK-D1 step 6: the hero
   panel's SUPPRESS click, c2s 0x0019 HERO_SKILL_TOGGLE**, `studies/cmsg/FINDINGS.md`
   §DESKWORK-D1 "The hero skill toggle". RECONSTRUCTION end to end -- no retail tape and
@@ -6784,9 +6793,73 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   those plus the ends check, 8; the reviewer's own 0x01BC after the hero add's bare batch
   reddens the hero half vaulted and nothing else, and nothing bare where it is a declared
   skip) and went red.
-  Drives the real functions with a fake send and a scratch
-  state. Floor 108 = the bare-machine core, measured with RURIK_VAULT at an empty
-  directory (124 with the vault; 107 / 122 at the desk-partyfull lane's commit, +1 bare
+  THE PER-MAP CAP (desk-partycap, 2026-09-25; `content/partycap.toml`,
+  `henchparty.party_cap`, `authsrv.party_cap`, `studies/cmsg/FINDINGS.md` "The per-map
+  cap"): §2 (n) the served map's own AreaInfo `max_party` -- the rows load (148/146/242/449
+  4, 248/280 8, 55 6, the Ascalon Academy slot 143 1) and every served map has one (the
+  join the server performs); every row is client-table / `areatable.py` / build 38797 and
+  names its field; the pure rule's answers (a row, a string id, NO row -> the constant
+  with "NO map_party_cap row … UNVERIFIED", no map id, `per_map=False` -> the constant
+  naming `--constant-party-cap`, a raised constant); on map 248 four henchmen fill
+  1 -> 5 (the 5th member the constant refused) and the cap line prints ONCE naming the
+  row; the same adds on map 148 stop at 4 (the per-map KNOWN-BAD, the refusal line
+  naming the row); map 999 falls back to 4 saying so; `--constant-party-cap` on 248
+  stops at 4 (the flag's KNOWN-BAD arm); `--henchman-cap 6` on 248 stops at 6; a zone
+  148 -> 248 answers 4 then 8 and prints once per answer; the hero add on 248 goes
+  through at 5 (vaulted) and on 148 is refused (bare). §5 (vaulted) the rows against
+  the PINNED CLIENT: the code locator names `0x0096DE38`, 888 records validate, every
+  row's `min_party` / `max_party` equals the client's own (the first cut said min 1
+  everywhere and this check reddened on 167/168, whose retail rows say 7), row 148 as
+  the control. THE LEAVE (desk-partycap, 2026-09-25; `henchparty.py` THE LEAVE,
+  `studies/cmsg/FINDINGS.md` "The leave"): c2s `0x00A2` PARTY_LEAVE, OBSERVED on our
+  client (`20260913T093718` c1, beside a `0x001F [40]`) and read from its one reference
+  (a `ja` tail-jump; the party window's Leave, sent when players + henchmen + heroes
+  exceed 1, then `0x001F [HEROES = 40]` for every hero). §1l the batch
+  `party_leave_batch` is one `0x01C0` per hired henchman then ONE `0x00B0`, 17 bytes for
+  two through the codec, refused with no agents / party 0 / agent 0 / a negative agent;
+  §2 (o) the real `handle_party_leave` with a hero and two hired henchmen sends two rows
+  then `0x00B0 [14, 2]`, the NPCs standing (no `0x0021`) and hireable, the hero still
+  in; the companion `0x001F [40]` through the real `handle_hero_kick` sends hero 6's
+  OBSERVED batch and `0x00B0 [14, 1]`, the hero kicked -- and written to a real store
+  under `--persist`; two heroes -> two batches, sizes 2 then 1; a second `[40]` and a
+  second leave send nothing; the dropped henchman is hireable again; the launch henchman
+  stays and the line names it; a FIELD's leave is refused with nothing sent; under
+  `--no-party-leave` the `[40]` is ignored and the hero stays; the leave with an opaque
+  store touches it not at all. §4 locks, each with a mutation that reddens it: the
+  `0x00A2` arm gated on PARTY_LEAVE_ENABLED and the constants 0x00A2 / HEROES_ALL 40;
+  `main()` wires `--no-party-leave` through a `global`; `handle_party_leave` refuses a
+  field FIRST, pops every hired henchman, sizes through `party_size_on_wire`, sends
+  `party_leave_batch` and names no store; `handle_hero_kick`'s HEROES_ALL arm sits before
+  the owned-hero lookup and is gated; `main()` wires `--constant-party-cap` and
+  `--henchman-cap` both turn the per-map read off; `party_cap` rides PARTY_CAP_PER_MAP
+  and prints once; `_load_map_party_caps` reads the `map_party_cap` kind and refuses a
+  cap below 1; both handlers resolve the cap through `party_cap(state)` before the check
+  and never compare the constant directly (the pre-2026-09-25 text is the mutation);
+  `serverargs.py` declares both flags; 0x00A2 is off the allowlist. §5 (vaulted) the
+  leave's four client sites hold the documented bytes and the `ja` lands on the 0xA2
+  wrapper. Every new check was inverted in a scratch COPY (the lane's `redden.py`:
+  nine inversions -- map 248's row forced to 4, `party_cap` made the constant, the leave
+  handler silenced, HEROES_ALL renumbered, the field gate blinded, the per-map flag
+  ignored, a content row mis-recorded, the `[40]` gate ignored, the once-guard dropped)
+  and each went red. THE 248 SET (the lane's review, RV-1, 2026-09-25;
+  `content/world.toml` `outpost_henchmen_248`): the per-map cap's client run needs an
+  add on a map whose cap is not 4, and the `outpost_henchmen` rows pin `map = 148`
+  (`spawn_row_on_map` places a row on its own map only), so the runsheet's launch on 248
+  would have had an empty Henchmen tab and its `--constant-party-cap` control would have
+  looked identical. §2 (n) map 248 HAS a hireable set: three rows on 248 in that area,
+  fresh agent ids 34/35/36 disjoint from the 148 set's, the 148 set's three templates,
+  each provenance naming the mesh it was checked on; §3 `spawn_population` over the new
+  area on 248 creates and marks 34/35/36 (W/R/A) and, served on 148, creates and marks
+  NOTHING (the SLICE-B8 filter); §5 (vaulted: the archive through `vaultpath`, a bare
+  machine declares the skip) the three rows stand on map 248's OWN mesh -- file 165811
+  opened from the vault, `place_on_mesh` moving none of them -- with 248's arrival as
+  the control. Three inversions in a scratch copy (the fixer's `fix_redden.py`: a row's
+  map forced to 148 reddens (n) and both §3 checks; a row nudged to x = -15000 reddens
+  the mesh check; a row's agent id set to 31 reddens (n) and the 248 wiring) each went
+  red and the unmutated control stayed green. Drives the real functions with a fake send
+  and a scratch state. Floor 179 = the bare-machine core, measured with RURIK_VAULT at
+  an empty directory (204 with the vault; 176 / 199 at the desk-partycap lane's commit,
+  +3 bare and +2 vaulted at its review; 108 / 124 at desk-partyfull's review; 107 / 122 at the desk-partyfull lane's commit, +1 bare
   for code 81 and +1 vaulted for the hero half at its review; 82 / 97 at CLEANUP-3's
   review, +25 on the refusal at the cap; 79 / 94 at the kick lane's commit, +3 at its review; 49 / 64
   before the kick; the landing's floor of 27 was

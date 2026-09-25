@@ -275,7 +275,9 @@ Spawned HOSTILE by the corridor rows; the template carries no allegiance."""
 # wire from the definition's own 0x0056 name (recorded in the study). It is the
 # name 0x01BF carries and is the same class of value as every other NPC row's.
 # The place name is a label (PLAN.md section 7 Q17). Placed in our served outpost
-# (Ascalon City, map 148) by content/world.toml's `outpost_henchmen` area.
+# (Ascalon City, map 148) by content/world.toml's `outpost_henchmen` area, and in
+# the Great Temple (248, an 8-cap map, for the per-map party cap's run) by its
+# `outpost_henchmen_248` area (desk-partycap review RV-1, 2026-09-25).
 
 [npc.hench_warrior]
 name = "an outpost Warrior henchman (Shing Jea's Fighter, retail wire)"

@@ -5856,6 +5856,29 @@ def build_of_mission_mask(width):
 # so this commit moves data and touches no consumer. Run
 # `python toolkit/content.py --explain 148` for a row's full reasoning.
 MAP_STATIC_CONFIG = agents.WORLD.map_static_config()
+
+
+def _load_map_party_caps(world):
+    """{map id: max_party} from content/partycap.toml's `map_party_cap` rows --
+    each served map's own AreaInfo max_party, read out of the client with
+    toolkit/clientscan/areatable.py (source client-table, build 38797;
+    DESKWORK-D1, desk-partycap, 2026-09-25). `party_cap(state)` reads it and
+    the henchman add and the hero add refuse at it. A row below 1 would
+    refuse every add, the hero's included, so it is refused HERE, at startup,
+    naming the row -- a content fact the server cannot serve is a launch that
+    does not start, not a wish."""
+    caps = {}
+    for key, row in world.rows("map_party_cap").items():
+        n = int(row["max_party"])
+        if n < 1:
+            raise SystemExit(f"content map_party_cap row {key}: max_party {n} -- the cap "
+                             f"counts the player, so it is 1 or more (0 would refuse "
+                             f"every add, the hero's included)")
+        caps[int(key)] = n
+    return caps
+
+
+MAP_PARTY_CAPS = _load_map_party_caps(agents.WORLD)
 # The fallback for maps we have no entry for. It used to catch map 148 as well,
 # which meant the character stood in Kamadan's geometry under Ascalon City's
 # name -- knowingly inconsistent, and accepted at the time because Ascalon's
@@ -10858,6 +10881,20 @@ GAME_CMSG_HENCHMAN_ADD = 0x009F
 # one caller (0x0085A84A in 0x0085A820: asserts PyCliParty:1650 m_partyClient,
 # tests the "is mine" bit 0x80, removes no row itself). handle_henchman_kick.
 GAME_CMSG_HENCHMAN_KICK = 0x00A8
+# desk-partycap (2026-09-25): the party window's LEAVE -- no payload. Sent by
+# OUR client once before this row existed (vault/captures/gamesrv/
+# authsrv-20260913T093718-c1.jsonl: `GAME_CMSG:0x00a2` 1 in the unhandled
+# census, beside a 0x001F [40]); on NO retail tape (0 of 96). Read from the
+# binary (build 38797): the wrapper 0x0085BEF0 is reached by ONE conditional
+# tail-jump -- `ja 0x0085BEF0` at 0x008585FD inside 0x008585D0 (PyCliParty:615
+# m_partyClient), which sends only when the own party's players + henchmen +
+# heroes ([party+0x0c] + [party+0x1c] + [party+0x2c]) exceed 1 -- from the
+# PtJoin button handler 0x0056E900's case 1 (thunk 0x00856910), which then
+# pushes HEROES (0x28 = 40) into the hero-kick sender 0x0080E2A0: the Leave
+# is 0x00A2 for the party and 0x001F [40] for every hero. `codescan --xrefs`
+# scans call/jmp only, so its "0 direct callers" was the tool's blind spot.
+# handle_party_leave; the [40] arm is handle_hero_kick's.
+GAME_CMSG_PARTY_LEAVE = 0x00A2
 # The message that MARKS an agent as a hireable henchman, so the party window's
 # henchman list offers it: the client's handler 0x0091E220 -> 0x008113D0
 # BINARY-SEARCH-INSERTS the agent id into a sorted dword set at
@@ -11600,6 +11637,29 @@ HERO_IDS = []
 # while main() still carried the literal 7). It stays for a store or a flag that
 # ever grows the owned set past the CLI.
 HEROES_PARTY_MAX = 7
+HEROES_ALL = 40                # 0x28, the client's HEROES bound. The hero-KICK
+                               # sender 0x0080E2A0 asserts ChCliApi:4459
+                               # `hero <= HEROES` (`cmp esi, 0x28; jle`) where
+                               # the ADD's 0x0080E250 asserts `hero < HEROES`
+                               # (:4446), and the party window's Leave (PtJoin
+                               # 0x0056E900 case 1) pushes exactly 0x28 into
+                               # the kick sender right after its 0x00A2. The
+                               # LABELS, split (the review's RV-6): the bytes
+                               # (`6a28` at 0x0056E95D, `83fe28 7e` at
+                               # 0x0080E2A7) and the wire word are OBSERVED
+                               # (build 38797; 20260913T093718 c1: 0x001F [40]
+                               # beside the 0x00A2, both unhandled then); that
+                               # an index EQUAL to the bound means EVERY hero
+                               # is RECONSTRUCTION from them, CORROBORATED by
+                               # GWCA's own KickAllHeroes() = KickHero(0x26)
+                               # (UPSTREAM, MIT -- vault/mirrors
+                               # GregLando113__GWCA Source/PartyMgr.cpp:360;
+                               # its HeroID enum ends at ZeiRi = 37, so 0x26 =
+                               # 38 is one past ITS last hero: the same
+                               # sentinel shape at an older bound). Retail's
+                               # server-side answer to [40] is NOT FOUND.
+                               # handle_hero_kick's HEROES_ALL arm, gated on
+                               # PARTY_LEAVE_ENABLED. desk-partycap 2026-09-25.
 
 
 def hero_slots():
@@ -12393,19 +12453,44 @@ HENCHMAN_KICK_ENABLED = True   # False (--no-henchman-kick): c2s 0x00A8 is
                                # removes the 0x01BF row and returns silently on
                                # an unknown party or agent (henchparty.py THE
                                # KICK). handle_henchman_kick.
+PARTY_LEAVE_ENABLED = True     # False (--no-party-leave): c2s 0x00A2 PARTY_LEAVE
+                               # is dispatched and ignored, and 0x001F [40] --
+                               # the Leave click's every-hero kick -- is ignored
+                               # as an unowned index: the party window's Leave
+                               # does nothing, the picture of every run before
+                               # 2026-09-25 (20260913T093718 c1 put both words
+                               # in the unhandled census). Default ON: 0x00A2 is
+                               # answered with every hired henchman's 0x01C0 row
+                               # then 0x00B0 -- RECONSTRUCTION, the kick's rows
+                               # (each CONFIRMED on the client, CONFIRM-2 sec. 9),
+                               # once for all -- and [40] kicks every party hero
+                               # through the hero kick's own OBSERVED batch, its
+                               # kick persisted (henchparty.py THE LEAVE).
+                               # handle_party_leave, handle_hero_kick.
 OUTPOST_PARTY_CAP = 4          # The party cap a henchman add AND a hero add
-                               # refuse at. ONE CONSTANT for every served map,
-                               # not a per-map read: it is the client's own
-                               # AreaInfo max_party, read with
-                               # toolkit/clientscan/areatable.py (build 38797),
-                               # for the maps we serve -- 4 for Ascalon City
-                               # (148), Lakeside (146), Shing Jea (242 -- the
-                               # tape's outpost, where 3 adds fill 1 player ->
-                               # 4) and Kamadan (449). OBSERVED for those four;
-                               # 248/280 read 8 and 55/238 read 6, so a per-map
-                               # table is the next step. --henchman-cap
-                               # overrides (N >= 1). Heroes AND henchmen count
-                               # against it (party_member_count).
+                               # refuse at when the served map has NO
+                               # map_party_cap row (party_cap prints why,
+                               # UNVERIFIED for that map), or for every map
+                               # under --constant-party-cap / --henchman-cap N.
+                               # 4 is the client's own AreaInfo max_party, read
+                               # with toolkit/clientscan/areatable.py (build
+                               # 38797), for Ascalon City (148), Lakeside
+                               # (146), Shing Jea (242 -- the tape's outpost,
+                               # where 3 adds fill 1 player -> 4) and Kamadan
+                               # (449). OBSERVED for those four; it was ONE
+                               # CONSTANT for every map until 2026-09-25, when
+                               # 248/280 (8), 55 (6) and the rest got their own
+                               # rows (MAP_PARTY_CAPS, content/partycap.toml).
+                               # Heroes AND henchmen count against it
+                               # (party_member_count).
+PARTY_CAP_PER_MAP = True       # False (--constant-party-cap, or --henchman-cap
+                               # N): OUTPOST_PARTY_CAP for every map -- the
+                               # pre-2026-09-25 behaviour, exactly. Default ON:
+                               # the served map's own max_party from
+                               # MAP_PARTY_CAPS (henchparty.party_cap). The
+                               # panel's denominator is the client's reading of
+                               # the same field ("(2/4)" on 148, CONFIRM-2), so
+                               # the per-map cap is what agrees with the screen.
 PARTY_FULL_REPLY_CODE = None   # --party-full-reply CODE (desk-partyfull,
                                # 2026-09-25): when set, an add refused at the
                                # cap -- henchman 0x009F or hero 0x001E -- is
@@ -25990,6 +26075,37 @@ def handle_hero_kick(values, send, state, conn_id):
         (379 was never created), so it tolerates the body being gone.
     """
     hid = int(values[1])
+    if hid == HEROES_ALL:
+        # THE LEAVE'S COMPANION (desk-partycap, 2026-09-25): the party window's
+        # Leave sends 0x00A2 and then 0x001F [HEROES = 40] -- an index equal
+        # to the client's own bound (ChCliApi:4459 `hero <= HEROES`, where the
+        # add's is `<`). The word is OBSERVED on our client (20260913T093718
+        # c1, unhandled then: "names no hero, UNEXPLAINED") and the push read
+        # from the binary; that it means EVERY hero is RECONSTRUCTION,
+        # CORROBORATED by GWCA's KickAllHeroes() = KickHero(0x26), one past
+        # ITS last HeroID (HEROES_ALL's comment). Retail's answer to [40] is
+        # NOT FOUND (its one 0x001F carried [6]); RECONSTRUCTION: each party
+        # hero leaves through its own kick -- the OBSERVED batch, the kick
+        # persisted -- exactly as N clicks would. Gated with the leave.
+        in_party = [h for h, _a, _d in party_hero_slots(state)]
+        if not PARTY_LEAVE_ENABLED:
+            print(f"[c{conn_id}] HERO_KICK({hid}) ignored: {HEROES_ALL} is the "
+                  f"client's HEROES bound -- the Leave click's every-hero kick -- "
+                  f"and --no-party-leave leaves it unhandled, as before "
+                  f"2026-09-25 [DESKWORK-D1]", flush=True)
+            return
+        if not in_party:
+            print(f"[c{conn_id}] HERO_KICK({hid}): the client's HEROES bound, "
+                  f"every party hero -- none is in the party; nothing sent "
+                  f"[DESKWORK-D1]", flush=True)
+            return
+        print(f"[c{conn_id}] HERO_KICK({hid}): the client's HEROES bound -- every "
+              f"party hero leaves, {in_party}, each through its own kick (the "
+              f"Leave click's companion send; RECONSTRUCTION, retail's answer to "
+              f"[{HEROES_ALL}] NOT FOUND) [DESKWORK-D1]", flush=True)
+        for h in in_party:
+            handle_hero_kick([values[0], h], send, state, conn_id)
+        return
     slot = next(((h, a, d) for (h, a, d) in hero_slots() if h == hid), None)
     if slot is None:
         print(f"[c{conn_id}] HERO_KICK({hid}) ignored: not an owned hero of "
@@ -26177,11 +26293,14 @@ def handle_hero_add(values, send, state, conn_id):
     # DESKWORK-D1 step 5's fix pass: the MAP's cap, henchmen counted -- the
     # henchman add refused at it while this add did not, so with the player and
     # three hired henchmen (4 of 4) a re-added hero made 5 (HENCH-EVR-1 /
-    # ENG-HENCH-1). The same rule and constant as handle_henchman_add.
-    if henchparty.party_is_full(party_member_count(state), OUTPOST_PARTY_CAP):
+    # ENG-HENCH-1). The same rule and the same per-map cap as
+    # handle_henchman_add (party_cap: the served map's own max_party since
+    # 2026-09-25; the constant 4 before).
+    cap, cap_why = party_cap(state)
+    if henchparty.party_is_full(party_member_count(state), cap):
         print(f"[c{conn_id}] HERO_ADD({hid}) refused: the party already holds "
               f"{party_member_count(state)} members (heroes and henchmen), the "
-              f"served cap (OUTPOST_PARTY_CAP={OUTPOST_PARTY_CAP}, --henchman-cap "
+              f"served cap ({cap}: {cap_why}; --henchman-cap "
               f"overrides); {party_full_refusal_note()} "
               f"[DESKWORK-D1]", flush=True)
         for op, vals, label in henchparty.party_full_reply(PARTY_FULL_REPLY_CODE):
@@ -26269,6 +26388,23 @@ def party_member_count(state, count_heroes=True):
             + len(state.get("party_henchmen", {})))
 
 
+def party_cap(state):
+    """(cap, why) -- the party cap this connection's two adds refuse at:
+    henchparty.party_cap over MAP_PARTY_CAPS (content/partycap.toml, the
+    served map's own AreaInfo max_party) for state["map_id"], the constant
+    OUTPOST_PARTY_CAP for a map with no row (the `why` says so, UNVERIFIED
+    for that map) or under --constant-party-cap / --henchman-cap. Printed
+    once per connection, and again when it changes (a zone to another map).
+    DESKWORK-D1, desk-partycap, 2026-09-25."""
+    cap, why = henchparty.party_cap(MAP_PARTY_CAPS, state.get("map_id"),
+                                    OUTPOST_PARTY_CAP, per_map=PARTY_CAP_PER_MAP)
+    if state.get("party_cap_said") != (cap, why):
+        state["party_cap_said"] = (cap, why)
+        print(f"[party] the party cap here is {cap}: {why}; heroes and hired "
+              f"henchmen count against it [DESKWORK-D1]", flush=True)
+    return cap, why
+
+
 def party_size_on_wire(state):
     """The size 0x00B0 carries after a hero kick, a hero add or a henchman add:
     party_member_count with the heroes counted unless --party-size-no-heroes
@@ -26308,8 +26444,10 @@ def handle_henchman_add(values, send, state, conn_id):
     default off; the review of 2026-09-25, RV-4). The three: an agent that is
     not a hireable henchman of this
     outpost; one already in the party; and one that would put the party over the
-    map's cap (OUTPOST_PARTY_CAP -- heroes count against it too, the same value
-    the load's 0x00B0 carries)."""
+    map's cap (party_cap(state): the served map's own max_party from
+    content/partycap.toml, OUTPOST_PARTY_CAP for a map with no row or under
+    --constant-party-cap / --henchman-cap -- heroes count against it too, the
+    same value the load's 0x00B0 carries)."""
     aid = int(values[1])
     hench = (state.get("hireable_henchmen") or {}).get(aid)
     if hench is None:
@@ -26323,11 +26461,11 @@ def handle_henchman_add(values, send, state, conn_id):
         print(f"[c{conn_id}] HENCHMAN_ADD({aid}) refused: already in the party; "
               f"nothing sent [DESKWORK-D1]", flush=True)
         return
-    if henchparty.party_is_full(party_member_count(state), OUTPOST_PARTY_CAP):
+    cap, cap_why = party_cap(state)
+    if henchparty.party_is_full(party_member_count(state), cap):
         print(f"[c{conn_id}] HENCHMAN_ADD({aid}) refused: the party already holds "
               f"{party_member_count(state)} members (heroes and henchmen), the "
-              f"served cap (OUTPOST_PARTY_CAP={OUTPOST_PARTY_CAP} -- a constant, "
-              f"the AreaInfo max_party of the maps we serve; --henchman-cap "
+              f"served cap ({cap}: {cap_why}; --henchman-cap "
               f"overrides); {party_full_refusal_note()} "
               f"[DESKWORK-D1]", flush=True)
         for op, vals, label in henchparty.party_full_reply(PARTY_FULL_REPLY_CODE):
@@ -26403,6 +26541,83 @@ def handle_henchman_kick(values, send, state, conn_id):
           f"the party; size now {size}; the NPC keeps standing and stays hireable "
           f"(0x01C0 then 0x00B0 -- RECONSTRUCTION, the hero kick's shape; not "
           f"persisted, as the hire is not) [CLEANUP-3]", flush=True)
+
+
+def handle_party_leave(values, send, state, conn_id):
+    """GAME_CMSG 0x00A2 PARTY_LEAVE: the party window's Leave -- the player
+    leaves the party it formed, so every hired henchman is dropped
+    (desk-partycap, DESKWORK-D1, 2026-09-25).
+
+    THE REQUEST is OBSERVED on OUR client -- vault/captures/gamesrv/
+    authsrv-20260913T093718-c1.jsonl carried ONE `GAME_CMSG:0x00a2` in its
+    unhandled census beside a `0x001F [40]` -- and on NO retail tape (0 of 96
+    live connections, c2striage). Read from the binary (build 38797; the
+    prediction was written first, the lane's scratch): the 0xA2 wrapper
+    0x0085BEF0 has exactly ONE reference in the image, a conditional
+    tail-jump `ja 0x0085BEF0` at 0x008585FD inside 0x008585D0 (PyCliParty:615
+    `m_partyClient`), which sums the own party's players ([party+0x0c]),
+    henchmen ([party+0x1c], the stride-0x34 array 0x01BF fills) and heroes
+    ([party+0x2c], the array 0x01C2 fills) and SENDS ONLY WHEN THAT SUM
+    EXCEEDS 1 -- a lone player's click sends nothing. It removes no row
+    itself and sets no request-in-flight bit. Its one caller is the thunk
+    0x00856910, whose one caller is case 1 of the PtJoin button handler
+    0x0056E900 (a 4-way switch on the control's kind at +0x34; PtJoin.cpp
+    asserts :102/:103 `selection.memberType == MEMBER_TYPE_INVITE_IN` /
+    `selection.partyId` nearby), which right after pushes HEROES (0x28) into
+    the hero-kick sender 0x0080E2A0 (ChCliApi:4459 `hero <= HEROES`, in an
+    outpost only): so the client's Leave is 0x00A2 for the party plus
+    0x001F [40] for every hero, and the heroes are the hero kick's business
+    (handle_hero_kick's HEROES_ALL arm). `codescan --xrefs` searches
+    call/jmp rel32 only, so the table's "0 direct callers (pointer-reached)"
+    for 0xA2 was the tool's blind spot, not a pointer.
+
+    THE REPLY is RECONSTRUCTION -- no tape carries it -- modelled on the kick
+    the client already consumes for our party id (CONFIRM-2 section 9):
+    every hired henchman's 0x01C0 PARTY_HENCHMAN_REMOVE row, then ONE 0x00B0
+    PLAYER_PARTY_SIZE (henchparty.party_leave_batch, the kick's row-then-size
+    once for all rows). Each 0x01C0 is a table operation the client's worker
+    0x00858DE0 performs on the row 0x01BF inserted, returning silently on an
+    unknown agent; nothing here is a message the client has not consumed
+    from us. The standing NPCs keep standing and stay hireable (no 0x0021),
+    as after a kick. Nothing is persisted, as the hire is not.
+
+    WHAT IT DOES NOT DO, and says so: a FIELD's Leave (retail's client sends
+    0x00A2 there too, the sum permitting, but no 0x001F -- that send is
+    outpost-gated) means a return to the outpost on retail, UNVERIFIED and
+    not modelled, so it is refused with nothing sent; the LAUNCH henchman
+    (--henchman) stays, as the kick leaves it (its row is the load's, not a
+    hire; RV-6); other players there are none. With no hired henchman the
+    click has nothing to drop here and the line says so -- the heroes still
+    go by the [40] that follows. Revert: --no-party-leave (both arms)."""
+    if instance_is_field(state):
+        print(f"[c{conn_id}] PARTY_LEAVE refused: in a FIELD the client's Leave "
+              f"means a return to the outpost on retail (UNVERIFIED, on no tape) "
+              f"-- not modelled; nothing sent, the party stays [DESKWORK-D1]",
+              flush=True)
+        return
+    party = state.setdefault("party_henchmen", {})
+    launch_note = (f"; the LAUNCH henchman (--henchman, agent {HENCHMAN_AGENT_ID}) "
+                   f"stays, as the kick leaves it (not modelled)"
+                   if HENCHMAN is not None else "")
+    if not party:
+        print(f"[c{conn_id}] PARTY_LEAVE: no hired henchman to drop -- nothing "
+              f"sent; the heroes go by the client's own 0x001F [{HEROES_ALL}] "
+              f"that follows the click in an outpost{launch_note} [DESKWORK-D1]",
+              flush=True)
+        return
+    ids = list(party)
+    names = [party[a].get("name", a) for a in ids]
+    for aid in ids:
+        party.pop(aid)
+    size = party_size_on_wire(state)
+    for op, vals, label in henchparty.party_leave_batch(1, PLAYER_NUMBER, size, ids):
+        send(op, vals, label + " [PARTY_LEAVE]")
+    print(f"[c{conn_id}] PARTY_LEAVE: {len(ids)} hired henchman(s) dropped "
+          f"({', '.join(str(n) for n in names)}; agents {ids}); size now {size}; "
+          f"the NPCs keep standing and stay hireable (0x01C0 x{len(ids)} then "
+          f"0x00B0 -- RECONSTRUCTION, the kick's rows once for all; not "
+          f"persisted, as the hire is not); the heroes go by the client's own "
+          f"0x001F [{HEROES_ALL}]{launch_note} [DESKWORK-D1]", flush=True)
 
 
 def hero_panel_bar_ids(state, hid, stored_bar=None):
@@ -35055,6 +35270,18 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         else:
                             print(f"[c{conn_id}] HENCHMAN_KICK ignored "
                                   f"(--no-henchman-kick) [CLEANUP-3]", flush=True)
+                    elif opcode == GAME_CMSG_PARTY_LEAVE:
+                        # desk-partycap (2026-09-25): the party window's Leave.
+                        # Sent by OUR client (20260913T093718 c1, unhandled
+                        # then); on no retail tape. The reply -- every hired
+                        # henchman's 0x01C0 row then 0x00B0 -- is RECONSTRUCTION
+                        # (henchparty.py THE LEAVE); the heroes go by the
+                        # click's own 0x001F [40] (handle_hero_kick).
+                        if PARTY_LEAVE_ENABLED:
+                            handle_party_leave(values, send, state, conn_id)
+                        else:
+                            print(f"[c{conn_id}] PARTY_LEAVE ignored "
+                                  f"(--no-party-leave) [DESKWORK-D1]", flush=True)
                     elif opcode == GAME_CMSG_SET_CHAR_VISIBILITY_FLAGS:
                         # The owner's answer (2026-09-23): the inventory
                         # panel's DISPLAY MODE drop-down. On no retail tape;
@@ -39287,17 +39514,35 @@ def main():
               "2 step 6) and every run before CLEANUP-3, though the word is not in the "
               "unhandled census those runs put it in.",
               flush=True)
+    if a.no_party_leave:
+        global PARTY_LEAVE_ENABLED
+        PARTY_LEAVE_ENABLED = False
+        print("[party] --no-party-leave: c2s 0x00A2 PARTY_LEAVE is dispatched and "
+              "ignored, and 0x001F [40] (the Leave click's every-hero kick, the "
+              "client's HEROES bound) is ignored as an unowned index -- the party "
+              "window's Leave does nothing, the picture of every run before "
+              "2026-09-25 (20260913T093718 c1: both words in the unhandled census).",
+              flush=True)
+    if a.constant_party_cap:
+        global OUTPOST_PARTY_CAP, PARTY_CAP_PER_MAP
+        PARTY_CAP_PER_MAP = False
+        print(f"[party] --constant-party-cap: the henchman add and the hero add "
+              f"refuse at ONE constant, {OUTPOST_PARTY_CAP}, on every served map -- "
+              f"the behaviour before content/partycap.toml (2026-09-25), when 4 "
+              f"stood for the 8-cap maps too; the per-map AreaInfo max_party rows "
+              f"({len(MAP_PARTY_CAPS)} maps) are not read. DESKWORK-D1.", flush=True)
     if a.henchman_cap is not None:
-        global OUTPOST_PARTY_CAP
         if int(a.henchman_cap) < 1:
             raise SystemExit(f"--henchman-cap {a.henchman_cap}: the cap counts the "
                              f"player, so it is 1 or more (0 or less would refuse "
                              f"every add, including the hero's).")
         OUTPOST_PARTY_CAP = int(a.henchman_cap)
+        PARTY_CAP_PER_MAP = False
         print(f"[party] --henchman-cap {OUTPOST_PARTY_CAP}: the henchman add and "
               f"the hero add refuse at {OUTPOST_PARTY_CAP} party members (heroes "
-              f"and henchmen counted), overriding the constant 4 (the AreaInfo "
-              f"max_party of the maps we serve).", flush=True)
+              f"and henchmen counted) on EVERY map, overriding the served map's "
+              f"own AreaInfo max_party (content/partycap.toml) and the fallback "
+              f"constant 4 alike.", flush=True)
     if a.party_full_reply is not None:
         global PARTY_FULL_REPLY_CODE
         # the leaf refuses a code outside the client's table before a byte is sent
