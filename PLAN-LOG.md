@@ -334,6 +334,18 @@ too is one line in `run_client` and a behaviour change for every harness run; no
 
 ---
 
+### DESKWORK-D8 step 4, the stall's fix CONFIRMED on the client -- 2026-09-25 -- **the caster cycles past its held touch skill: 16 casts from 300 u, 13 from its 450 u range point**
+
+Two harness launches on `1926a31f` (studies/deskwork/CONFIRM-2026-09-24.md §9, the addendum), the
+owner's go-ahead for the kick and leash runs: ARM B again (`20260925T012823`), the default caster
+300 u from a standing player, cast 253 and 289 sixteen times, held 312 on every pass with its
+reason (`its reach 92 u`), held 276 with nobody hurt, and waited out its pool by name; ARM C again
+(`20260925T013011`) took its one `0x0029` leg to 446 u and cast thirteen times from there. No
+follow, no dialog. The stall the pass-6 runs found (`20260924T210744`, `211150`) is gone.
+`PLAN.md` 8.1's D8 line closes the stall; the leash and the caster's feel stay the owner's.
+
+---
+
 ### DESKWORK-D8 step 4, the caster's held-slot stall -- 2026-09-24, reviewed and fixed 2026-09-25 -- **the default Hatcher cast once and stood for 57 s: the EV-1 reach gate held its touch skill and the round robin re-picked it every tick; a slot the caster cannot cast from where it stands is now STEPPED PAST and the bar re-picked on the same tick, bounded by the held set, every re-pick through every gate -- and the WORLD gates run before the CLOCK gates, so such a slot is never waited on for energy either**
 
 OBSERVED on the client, harness run 20260924T210744 (loopback; control 20260924T210957): the
