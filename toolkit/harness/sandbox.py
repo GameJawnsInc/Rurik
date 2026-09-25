@@ -899,6 +899,12 @@ def overlay_text(spec, world):
              "", f"[party.{PARTY_KEY}]"]
     prow = party_row(spec, world)
     heroes = prow.pop("heroes")
+    if not heroes:
+        # TOML has no empty array-of-tables: zero [[...heroes]] headers write
+        # no key at all, so a heroless party says `heroes = []` in the row
+        # (harness 20260925T161150: the server read the missing list as the
+        # single-hero shape and died on `hero`)
+        prow["heroes"] = []
     _emit(lines, prow, note, f"party.{PARTY_KEY}")
     for h in heroes:
         lines.append(f"[[party.{PARTY_KEY}.heroes]]")
