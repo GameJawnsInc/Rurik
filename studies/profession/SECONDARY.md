@@ -510,3 +510,40 @@ wrongly); R2's rows lingering (Q4); any assert on `0x003B`/`0x0038` mid-session 
   owns those chapters. R2b answers it on screen; the static half is what `0x00927690`
   reads out of `0x0048EF60(1)` / `0x0048EF30(1)` and where this server's login stream sets
   them (F6 leaves that UNVERIFIED).
+
+## 6. The client run, 2026-09-25 — SECONDARY-R1..R6 CONFIRMED (main `016a319d`)
+
+The owner's go-ahead; loopback, build 38797, map 148 (Ascalon City, areatable type 10 — an
+ordinary outpost, not the Great Temple) unless said. Every row OBSERVED from the gamesrv log
+and the frames. The character store was backed up before (sha256 `8aa662a2…`) and restored
+after. The panel's geometry at the harness's 1936×1040 window: the profession drop-down at
+(0.6085, 0.4962); its entries 14 px apart from y 0.5154 (the first) — `None` is an entry only
+while the secondary is 0, so every entry moves up one row once a secondary is set; the K
+panel's portrait row at y 0.4375, the player at x 0.395, the first hero at x 0.4184; the
+attribute rows sorted by attribute id at LOAD (the secondary's first) but appended after a
+live change.
+
+| Run | What | The wire | The screen |
+|---|---|---|---|
+| R1 `20260925T202226` / `202350` | load, K, open the drop-down | `AGENT_PROFESSIONS(prof 1/0)` then `AGENT_PROFESSION_BITS(0x07FD)` | **the drop-down ENABLED with ten entries** — Warrior, Warrior/Ranger … Warrior/Dervish — in an ordinary type-10 outpost; the list unfiltered (Air Magic first) while the secondary is none, F4's rule |
+| R1b `202531` | pick Necromancer (`--persist`) | c2s `0x0041`; `AGENT_PROFESSIONS(player 1/4)` → `AGENT_SET_PROFESSION(player 1/4)` → `UPDATE_UNLOCKED_SKILLS`; `persisted` | **without a reload**: the drop-down re-labelled, the rows gained Curses / Death Magic / Blood Magic (Soul Reaping, the Necromancer's primary attribute, correctly absent), the list narrowed to Warrior + Necromancer groups |
+| R3 (inside R2's launch, `205446`) | relaunch under `--persist` | `AGENT_PROFESSIONS(prof 1/4)` at load | the panel opens as Warrior/Necromancer, filtered |
+| R2, the bar `205446` | a Curses skill (2237, Atrophy) dragged to slot 6, then Monk | `SKILLBAR_UPDATE_SKILL(player slot 5 <- skill 2237)`; at the pick `SKILLBAR_UPDATE_SKILL(player slot 5: skill 2237 of profession 4 leaves) [SECONDARY-B3]` after the batch | the slot empties; Warrior/Monk rows (Protection / Healing / Smiting Prayers; Divine Favor correctly absent); the Necromancer rows gone at rank 0 by the client's own rebuild (F5); the drop-down shows NINE entries with a secondary set — no `Warrior` |
+| R2, the points `205758` | 2 points in Healing Prayers as W/Mo, then Ranger | `ATTRIBUTE_POINTS_AVAILABLE(187 of 200: +3 refunded from profession 3's ranks)` and `AGENT_UPDATE_ATTRIBUTE(player attr 13 = 0)` BEFORE the `0x00B7` | 184 → 187 unused; **the Healing Prayers row GONE** — so the zero-before-the-`0x00B7` order is right (**Q4 answered**); Marksmanship / Beast Mastery / Wilderness Survival added |
+| R2b `205758` | Assassin, then Dervish | two more batches, `1/7`, `1/10` | Shadow Arts / Dagger Mastery / Deadly Arts, then Scythe Mastery / Earth Prayers / Wind Prayers — **the chapter-2 and chapter-3 rows appear: this server's account stream owns those chapters (Q8 answered)**; the list follows each |
+| R4 `211213` | `--party slice`: K, the hero's portrait (0.4184, 0.4375), Monk/Elementalist | c2s `0x0041`; `AGENT_PROFESSIONS(hero 3 3/6)` → `AGENT_SET_PROFESSION(hero 3 3/6)`, no `0x00DB`; `persisted` | Tahlkora's panel: ten entries (Monk + nine Monk/X — the client's own `0x7FF` for a hero), then Monk/Elementalist with Air / Earth / Fire / Water Magic added (Energy Storage correctly absent) and Air Magic in her list |
+| R4b `211400` | relaunch | `HERO_INFO(hero 3, …, prof 3/6)`, `AGENT_PROFESSIONS(hero agent 200, prof 3/6)`, both hero `0x00A6` sends 3/6 | **the party window reads `Mo/E3 Tahlkora`** and her panel reopens as Monk/Elementalist |
+| R5 `211532` | `--no-secondary-change` | `NO SECONDARY CHANGE` at start; no `AGENT_PROFESSION_BITS` | the drop-down GREYED; the list unfiltered |
+| R6 `211654` | `--explorable` (0x0199 `is_explorable=1, FORCED`) | `AGENT_PROFESSION_BITS(0x07FD)` still at load | the drop-down GREYED by the client's own field gate (the attribute arrows too) |
+
+So F3 is no longer CONTESTED for an ordinary outpost: **the control works in a type-10 town**
+(R1), which also answers **Q5** — AttribFrame's creation is not map-gated there. Open after
+the run: **Q1** (the `0x00B7` flag), **Q2** and **Q7** (what the client does on its own with an
+old or a third profession's bar skill — R2 showed only the server's strip), **Q3**, **Q6**.
+
+Two defects the run met, neither this build's: the harness skipped its Play click when the
+client was slow to open its window (fixed the same evening, `3de069a9`,
+`PLAY_LOGIN_TIMEOUT`); and a stored attribute spend above the launch's budget crashed the
+load's `0x0037` (`20260925T210048`, Code=007 on the client: the store held 13 points spent
+under the 200-point default and `--party slice` budgets 10) — filed as its own task. Both are
+in the PLAN-LOG entry.
