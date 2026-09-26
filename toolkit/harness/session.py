@@ -337,6 +337,15 @@ ACTIONS = {
 # drive clicked. An earlier value of 0.936 was measured against a wrong height and landed
 # just above the button.
 PLAY_FX, PLAY_FY = 0.834, 0.972
+# How long the Play step waits for the login -- and, since 2026-09-25, for the
+# client's window before it. The action loop used to require a window within 5 s
+# of launch for EVERY action, Play included, and skipped the action otherwise, so a
+# client slower than that to open its window (a loaded machine) never reached
+# _play at all: OBSERVED on runs 20260925T205446, 205758 and 210048, each logging
+# "action 0:play: NO WINDOW" and sitting at character select for 10-15 s until the
+# operator pressed Enter by hand -- input during a HANDS OFF window, which is the
+# failure this harness exists to prevent. Play now waits as long as the login may.
+PLAY_LOGIN_TIMEOUT = 90
 
 
 def _play(tails, proc, outdir, warn=3.0):
@@ -352,7 +361,7 @@ def _play(tails, proc, outdir, warn=3.0):
     matters.
     """
     login = by_any(by(kind="login_ok"), by(kind="login_rejected"))
-    ev, idx = tails["auth"].wait_for(login, timeout=90)
+    ev, idx = tails["auth"].wait_for(login, timeout=PLAY_LOGIN_TIMEOUT)
     if not ev:
         print("  play: login never completed", flush=True)
         return False
@@ -975,7 +984,10 @@ def run_client(a, outdir):
             delay, kind = float(parts[0]), parts[1]
             extra, how = {}, None   # a pointer verb's row facts and its verdict line
             time.sleep(delay)
-            hwnd, _ = dc.wait_window(proc.pid, timeout=5)
+            # Play waits PLAY_LOGIN_TIMEOUT for the window (see there); every
+            # other action still wants a window that is already up.
+            hwnd, _ = dc.wait_window(
+                proc.pid, timeout=PLAY_LOGIN_TIMEOUT if kind == "play" else 5)
             if not hwnd:
                 sent.append({"spec": spec, "sent": False})
                 print(f"  action {spec}: NO WINDOW", flush=True)

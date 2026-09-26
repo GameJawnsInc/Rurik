@@ -91,7 +91,7 @@ import checks  # noqa: E402
 # the arm's syntax-tree check with a control, and the pre-launch pass over
 # --actions. Still deterministic, still the total. The commit message lists
 # which sabotage reddened which.
-LEDGER = checks.Ledger("harness", floor=216)   # 1z-cw: +2, the steer verb; 2026-09-14: +6, test_client_build; +5, the skill slot; 2026-09-15: +4, dashed values; 2026-09-25: +20, drag and double_click; +15, the review
+LEDGER = checks.Ledger("harness", floor=218)   # 2026-09-25 (later): +2, the Play step's window wait; 1z-cw: +2, the steer verb; 2026-09-14: +6, test_client_build; +5, the skill slot; 2026-09-15: +4, dashed values; 2026-09-25: +20, drag and double_click; +15, the review
 check = checks.adopt_named(LEDGER)
 
 
@@ -2281,8 +2281,38 @@ def section_window_geometry():
               "non-standard window becomes a refusal instead of a run")
 
 
+def section_play_window_wait():
+    """The Play step waits for a slow client's window instead of skipping itself.
+
+    2026-09-25: three runs logged "action 0:play: NO WINDOW" and sat at
+    character select until the operator pressed Enter -- the action loop gave
+    every action, Play included, 5 s to find a window. The check reads the
+    loop's wait off the syntax tree: the ONE dc.wait_window call inside
+    run_client's action loop must give 'play' PLAY_LOGIN_TIMEOUT, and that
+    must be at least a minute. Sabotage (the old `timeout=5`) reddens both.
+    """
+    print("\n12. the Play step waits for a slow client's window")
+    tree = ast.parse(inspect.getsource(session.run_client).replace("\r\n", "\n"))
+    loop = next((n for n in ast.walk(tree) if isinstance(n, ast.For)
+                 and ast.unparse(n.iter) == "enumerate(actions.split())"), None)
+    waits = [c for c in ast.walk(loop) if isinstance(c, ast.Call)
+             and ast.unparse(c.func) == "dc.wait_window"] if loop else []
+    kw = ({k.arg: ast.unparse(k.value) for k in waits[0].keywords}
+          if len(waits) == 1 else {})
+    LEDGER.ok(len(waits) == 1
+              and kw.get("timeout") == "PLAY_LOGIN_TIMEOUT if kind == 'play' else 5",
+              "the action loop's one window wait gives Play PLAY_LOGIN_TIMEOUT",
+              f"{len(waits)} wait(s), timeout={kw.get('timeout')!r} -- a 5 s wait "
+              f"for Play skipped the click on a slow client (2026-09-25)")
+    LEDGER.ok(getattr(session, "PLAY_LOGIN_TIMEOUT", 0) >= 60
+              and "timeout=PLAY_LOGIN_TIMEOUT" in inspect.getsource(session._play),
+              "PLAY_LOGIN_TIMEOUT is at least a minute and _play's login wait uses it",
+              f"PLAY_LOGIN_TIMEOUT={getattr(session, 'PLAY_LOGIN_TIMEOUT', None)}")
+
+
 section_press_key()
 section_hold_key()
 section_drag_dclick()
 section_window_geometry()
+section_play_window_wait()
 sys.exit(LEDGER.verdict())
