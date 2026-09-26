@@ -1019,9 +1019,13 @@ which builder serves roleplaying characters is the largest open question.
 
 > **CONTESTED, 2026-09-25 — refuted on two independent legs, kept here as history
 > (SECONDARY-F3, [SECONDARY.md](SECONDARY.md)).** (1) **Retail used the drop-down in map
-> 248**, the Great Temple of Balthazar — an ordinary outpost (areatable type 13, flags
-> `0x8000`, not one of the `0x40000`-flag arenas above): capture `20260824T074002`
-> :61329 carries c2s `0x0041 [568, 4]` and the `0x00B7`/`0x00A6`/`0x00DB` reply 44 ms later.
+> 248**, the Great Temple of Balthazar — areatable type 13, region 21, campaign 0 (the PvP
+> characters' hub, the same region as Codex Arena 796; flags `0x8000`, not one of the
+> `0x40000`-flag arenas above, and not a type-10 outpost such as 148 — the first pass
+> called it "an ordinary outpost", corrected by the fix pass, EV-4; the drop-down rather
+> than the template loader is inferred from no `0x0010` or bar load following): capture
+> `20260824T074002` :61329 carries c2s `0x0041 [568, 4]` and the `0x00B7`/`0x00A6`/`0x00DB`
+> reply 44 ms later.
 > (2) **The static re-read finds no whitelist**: the builder's `[obj+8] & 0x10` test is the
 > CREATE FLAG the Skills & Attributes window (AttribFrame) passes when it creates its third
 > GmDeckBuilder child, unconditionally, and nothing in GmDeckBuilder clears it; the enable

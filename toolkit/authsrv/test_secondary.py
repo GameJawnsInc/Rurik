@@ -9,10 +9,12 @@ WHAT THIS PINS, and what each part rests on:
     default mask is retail's PvP form, 0x7FF & ~(1 << primary) -- the two
     literals on tape, 2045 for a Warrior and 1919 for an Assassin -- and
     `load_secondary_offer()` is the three regimes in one expression (the
-    default, the --secondary-bits override, the revert's 0). The burst site
-    is locked on its SOURCE: the 0x00B6 send is guarded by `if _offer:`,
-    sits IMMEDIATELY after the player's 0x00B7 with no other send between
-    (retail's adjacency, 95 of 95) and before the 0x00A6, and the 0x00B7
+    default, the --secondary-bits override, the revert's 0). The burst has
+    TWO 0x00B6 sites (the fix pass, EV-3/CD-4): the feature's, IMMEDIATELY
+    after the player's 0x00B7 (retail's adjacency, 95 of 95) and before the
+    0x00A6, guarded by `_offer and SECONDARY_CHANGE_ENABLED`; and 57e89956's
+    own, after the 0x00A6, taken only under the revert. Both are locked on
+    the syntax tree, and §7 DRIVES the real burst in each regime. The 0x00B7
     carries player_secondary(state) through the builder.
   * §2 THE PLAYER'S CHANGE (the n=1 witness, capture 20260824T074002 :61329):
     c2s 0x0041 [player, 4] answers ONE batch in retail's order, 0x00B7 ->
@@ -37,16 +39,36 @@ WHAT THIS PINS, and what each part rests on:
     a reopened store reads it, a fresh connection's player_secondary and
     attribute state carry it OVER the launch value (the bar's precedent), a
     stored secondary equal to a moved primary is ignored loudly, the revert
-    does not read it; the hero's likewise; the store's three refusals; the
-    mirrored CHAR_PROFESSIONS; the CLI; and the client's own AUTH 0x0009 blob
-    round-trips VERBATIM with its secondary bits intact (verified, not
-    assumed).
-  * §7 THE MASTER REVERT against literals recorded from the 57e89956 tree
-    before any edit (scratch head_literals.py): no 0x00B6 without
-    --secondary-bits, 0x00B7 [1, 1, 0, 0] / [200, 7, 0, 0], 0x00A6 [1, 1, 0],
-    0x0041 dropped with nothing sent and no state written.
+    does not read it; the hero's likewise (its equal-pair guard and its
+    revert, the fix pass CD-5); the hero's cleanup REOPENED from the file
+    (bar and ranks, CD-5); the store's three refusals; the mirrored
+    CHAR_PROFESSIONS; the CLI, whose `--secondary 0` CLEARS the key so the
+    launch value answers again (the fix pass, CD-2/EV-6 -- a stored 0 used
+    to WIN over --spawn-secondary); a skill granted this session rides the
+    change batch's 0x00DB without a store (the fix pass, CD-6); and the
+    client's own AUTH 0x0009 blob round-trips VERBATIM with its secondary
+    bits intact (verified, not assumed).
+  * §7 THE MASTER REVERT against literals recorded from a `git archive
+    57e89956` export of that tree (the fix pass; the first pass recorded the
+    builders' values only): the REAL load burst driven in three regimes --
+    the revert with --secondary-bits 0x44 reproduces the export's 43-send
+    opcode list and whole-burst digest with the 0x00B6 AFTER the 0x00A6
+    (57e89956's site), the revert alone reproduces its 42-send list and
+    digest, and the feature on is that list plus ONE 0x00B6 right after the
+    player's 0x00B7; 0x0041 under the revert takes 57e89956's PATH
+    (note_unhandled: the census the disconnect report reads, the "unhandled"
+    capture event) with nothing sent and no state written.
   * §8 SOURCE LOCKS: the arm, main()'s two flags, serverargs' two strings,
     the dropped-list row gone, overrides.json's name, the hero sites.
+  * §9 THE LOAD WITH A STORED PAIR (the fix pass, CD-1/EV-1): the real burst
+    under --persist with a scratch store holding the player's 4 and hero 6's
+    5, in a town and a field, on the retail and the legacy rig -- EVERY
+    0x00B7 / 0x00A6 addressed to the hero's agent carries [3, 5] (the town's
+    bodiless-row 0x00A6, the field's body-create 0x00A6 and the legacy rig's
+    0x00B7 all defaulted the secondary to 0 and, being LAST, overwrote the
+    roster's summary record), the player's 0x00B7 / 0x00A6 carry 4, the
+    0x0073 HERO_INFO's field 4 carries 5, and the 0x00B6 still follows the
+    0x00B7.
 
 SABOTAGE HOOK: RURIK_SECONDARY_AUTHSRV=<path> loads THAT copy of authsrv.py
 as `authsrv` (siblings still from toolkit/authsrv), so each new guard can be
@@ -58,6 +80,7 @@ test_heroadd.py. Floor from the green run (see the ledger line).
 """
 import ast
 import contextlib
+import hashlib
 import importlib.util
 import io
 import json
@@ -66,6 +89,7 @@ import re
 import shutil
 import sys
 import tempfile
+import threading
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
@@ -90,7 +114,7 @@ if _ALT:
 else:
     import authsrv                                           # noqa: E402
 
-led = checks.Ledger("secondary profession change (SECONDARY-B1..B5)", floor=108)   # 2026-09-25, from the green run (108 checks)
+led = checks.Ledger("secondary profession change (SECONDARY-B1..B5)", floor=152)   # 2026-09-25: 108 from the first green run; 152 after the fix pass (§7's real-burst drives, §9's four load drives, CD-2/CD-5/CD-6/EV-8/EV-11's checks), from its green run
 
 SRC_PATH = authsrv.__file__
 ARGS_PATH = os.path.join(HERE, "serverargs.py")
@@ -112,6 +136,23 @@ assert authsrv.GAME_SMSG_SKILLBAR_UPDATE_SKILL == BAR_ONE
 HEAD = {"player_0x00B7": [1, 1, 0, 0], "hero_0x00B7_prof7_agent200": [200, 7, 0, 0],
         "player_0x00A6": [1, 1, 0], "SECONDARY_BITS": 0,
         "unhandled_count_after_one_0x0041": 1}
+# The 57e89956 LOAD BURST, recorded from `git archive 57e89956` by scratch
+# base_ops.py (the fix pass): _handle_request_players driven with the module
+# defaults but PERSIST False, SPAWN 1/0, OUTPOST True, state {"agents": {},
+# "char_uuid": "3"*32, "map_id": 148}, no hero. Every opcode in send order,
+# and the sha256[:16] of repr([(op, vals)]) over the whole list. A change to
+# the load by ANOTHER arc reddens the list check legitimately -- the list
+# says at which index -- and the relative check below it (revert == feature
+# minus one 0x00B6) stays green across such changes.
+BASE_OPS_BITS_0x44 = [390, 394, 242, 31, 89, 176, 177, 466, 459, 467, 434, 159, 240, 32, 55,
+                      183, 166, 182, 29, 219, 218, 233, 239, 58, 156, 159, 159, 162, 110, 72,
+                      53, 34, 398, 86, 87, 240, 32, 159, 166, 38, 53, 159, 159]
+BASE_OPS_BITS_0 = [390, 394, 242, 31, 89, 176, 177, 466, 459, 467, 434, 159, 240, 32, 55,
+                   183, 166, 29, 219, 218, 233, 239, 58, 156, 159, 159, 162, 110, 72,
+                   53, 34, 398, 86, 87, 240, 32, 159, 166, 38, 53, 159, 159]
+BASE_DIGEST_BITS_0x44, BASE_DIGEST_BITS_0 = "fb571a5b08ef885b", "85facec2223fa2e9"
+BASE_PROF_BITS_0x44 = [(0xB7, [1, 1, 0, 0]), (0xA6, [1, 1, 0]), (0xB6, [1, 0x44])]
+assert BASE_OPS_BITS_0x44[15:18] == [0xB7, 0xA6, 0xB6] and BASE_OPS_BITS_0[15:17] == [0xB7, 0xA6]
 # The retail witness (OBSERVED, capture 20260824T074002 :61329, map 248).
 WITNESS_REQ = [568, 4]
 WITNESS_0x00B7, WITNESS_0x00A6 = [568, 1, 4, 1], [568, 1, 4]
@@ -167,10 +208,68 @@ _saved = {k: getattr(authsrv, k) for k in
           ("PERSIST", "SPAWN_PROFESSION", "SPAWN_SECONDARY", "SECONDARY_BITS",
            "SECONDARY_CHANGE_ENABLED", "SECONDARY_CLEANUP_ENABLED", "HERO_IDS",
            "HERO_AGENT_ID", "HERO_ROWS", "HERO_KICK_ENABLED", "EXPLORABLE",
-           "OUTPOST", "HERO_BODY", "HERO_ATTRIBUTES", "HERO_SKILLS")}
+           "OUTPOST", "HERO_BODY", "HERO_ATTRIBUTES", "HERO_SKILLS",
+           # the load-drive rig (§7, §9): drive_load's, restored per drive
+           "HERO", "HERO_BODY_NPC", "HERO_ACTIVATE", "HERO_PIPELINE_FIRST",
+           "HERO_CHAR", "HERO_INVENTORY", "HERO_BAGS", "HERO_RIG_RETAIL",
+           "UNLOCKED")}
 _saved_bar = list(authsrv.SKILLBAR)
 _saved_store_dir = charstore.store_dir
 base = tempfile.mkdtemp(prefix="secondary-test-")
+
+# The test's standing fixture (a Koss-shaped hero 6 at agent 200, bodiless),
+# re-applied after every load drive so §7/§9's rigs cannot leak forward.
+FIXTURE = {"PERSIST": False, "SPAWN_PROFESSION": 1, "SPAWN_SECONDARY": 0,
+           "SECONDARY_BITS": 0, "SECONDARY_CHANGE_ENABLED": True,
+           "SECONDARY_CLEANUP_ENABLED": True, "HERO_IDS": [6], "HERO_AGENT_ID": 200,
+           "HERO_ROWS": {6: {"hero": 6, "body": "koss", "profession": 3,
+                             "skills": [105, 1, 2]}},
+           "HERO_KICK_ENABLED": True, "HERO_BODY": False, "HERO_ATTRIBUTES": {},
+           "EXPLORABLE": False, "OUTPOST": False}
+
+
+def apply(cfg):
+    for k, v in cfg.items():
+        setattr(authsrv, k, v)
+
+
+def drive_load(*, town, rig="retail", cfg=None, state_extra=None, bar=None):
+    """Run the REAL load burst (_handle_request_players) and return its send
+    list [(op, vals, label)]. `rig="none"` is the module's own defaults (the
+    57e89956 recording's configuration); "retail"/"legacy" is drive_load.py's
+    party rig: hero 6 at agent 200 with the academy_monk body. `cfg` is
+    applied LAST (the regime under test: the two flags, PERSIST)."""
+    apply({k: _saved[k] for k in _saved})               # the module's defaults first
+    del authsrv.SKILLBAR[:]
+    authsrv.SKILLBAR.extend(bar if bar is not None else _saved_bar)
+    apply({"PERSIST": False, "SPAWN_PROFESSION": 1, "SPAWN_SECONDARY": 0,
+           "OUTPOST": bool(town), "EXPLORABLE": not town})
+    if rig != "none":
+        apply({"HERO": 6, "HERO_IDS": [6], "HERO_AGENT_ID": 200,
+               "HERO_ROWS": {6: {"hero": 6, "body": "academy_monk", "profession": 3,
+                                 "skills": [105, 1, 2]}},
+               "HERO_BODY": True, "HERO_BODY_NPC": "academy_monk", "HERO_ACTIVATE": True,
+               "HERO_PIPELINE_FIRST": rig == "retail", "HERO_CHAR": True,
+               "HERO_INVENTORY": 2, "HERO_BAGS": True, "HERO_RIG_RETAIL": rig == "retail"})
+    apply(cfg or {})
+    st = {"agents": {}, "char_uuid": UUID, "map_id": 148}
+    st.update(state_extra or {})
+    sent = []
+
+    def send(op, vals, label=None):
+        sent.append((op, vals, label))
+    quiet(authsrv._handle_request_players, send, st, 0, threading.Event(), FakeRec())
+    return sent, st
+
+
+def burst_digest(sent):
+    return hashlib.sha256(repr([(op, vals) for op, vals, _l in sent]).encode()).hexdigest()[:16]
+
+
+def to_agent(sent, agent, *ops):
+    """[(index, op, vals)] of the sends of `ops` addressed to `agent`."""
+    return [(i, op, vals) for i, (op, vals, _l) in enumerate(sent)
+            if op in ops and isinstance(vals, list) and vals and vals[0] == agent]
 try:
     authsrv.PERSIST = False
     authsrv.SPAWN_PROFESSION, authsrv.SPAWN_SECONDARY = 1, 0
@@ -248,38 +347,49 @@ try:
     i_b6 = names.index("GAME_SMSG_AGENT_PROFESSION_BITS") if "GAME_SMSG_AGENT_PROFESSION_BITS" in names else None
     i_a6 = names.index("GAME_SMSG_AGENT_SET_PROFESSION") if "GAME_SMSG_AGENT_SET_PROFESSION" in names else None
     led.ok(i_b7 is not None and i_b6 is not None and i_b6 == i_b7 + 1,
-           "the load's 0x00B6 send is the NEXT send after the player's 0x00B7 "
-           "(retail: adjacent on 95 of 95; the record 0x00B6 writes into is "
+           "the load's FIRST 0x00B6 send site is the NEXT send after the player's "
+           "0x00B7 (retail: adjacent on 95 of 95; the record 0x00B6 writes into is "
            "created by 0x00B7)",
            f"sends around it: {names[max(0, (i_b7 or 0) - 1):(i_b7 or 0) + 3]}")
     led.ok(i_a6 is not None and i_b6 is not None and i_b6 < i_a6,
            "...and before the player's 0x00A6 (it sat after it under "
            "--secondary-bits until 2026-09-25)",
            f"0x00B6 at index {i_b6}, 0x00A6 at {i_a6}")
-    b6_call = [n for n in ast.walk(players)
-               if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
-               and n.func.id == "send" and n.args and isinstance(n.args[0], ast.Name)
-               and n.args[0].id == "GAME_SMSG_AGENT_PROFESSION_BITS"]
-    guard_ok = False
-    for node in ast.walk(players):
-        if isinstance(node, ast.If) and isinstance(node.test, ast.Name) \
-                and node.test.id == "_offer":
-            if any(c is b6_call[0] for c in ast.walk(node)) if b6_call else False:
-                guard_ok = True
-    led.ok(guard_ok and "_offer = load_secondary_offer()" in psrc,
-           "the 0x00B6 send is guarded by `if _offer:` with `_offer = "
-           "load_secondary_offer()` -- one expression for the three regimes",
-           "a second copy of the regime logic at the site is where the handler "
-           "and the burst would drift apart")
+    i_b6_all = [i for i, nm in enumerate(names) if nm == "GAME_SMSG_AGENT_PROFESSION_BITS"]
+    led.ok(len(i_b6_all) == 2 and i_a6 is not None and i_b6_all[1] > i_a6,
+           "and there is exactly ONE more 0x00B6 site, AFTER the 0x00A6 -- "
+           "57e89956's own placement, the revert's (the fix pass, EV-3/CD-4)",
+           f"0x00B6 sites at send indices {i_b6_all}, 0x00A6 at {i_a6}")
+    b6_calls = [n for n in ast.walk(players)
+                if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                and n.func.id == "send" and n.args and isinstance(n.args[0], ast.Name)
+                and n.args[0].id == "GAME_SMSG_AGENT_PROFESSION_BITS"]
+    b6_calls.sort(key=lambda n: n.lineno)
+
+    def guard_of(call):
+        best = None
+        for node in ast.walk(players):
+            if isinstance(node, ast.If) and any(c is call for c in ast.walk(node)):
+                if best is None or node.lineno > best.lineno:
+                    best = node                      # the innermost If holding the call
+        return ast.unparse(best.test) if best is not None else None
+    guards = [guard_of(c) for c in b6_calls]
+    led.ok(guards == ["_offer and SECONDARY_CHANGE_ENABLED",
+                      "_offer and (not SECONDARY_CHANGE_ENABLED)"]      # ast.unparse's spelling
+           and "_offer = load_secondary_offer()" in psrc,
+           "the two sites are guarded by the SAME `_offer = load_secondary_offer()` "
+           "split on SECONDARY_CHANGE_ENABLED -- the feature's site and the "
+           "revert's, one expression for the mask in every regime",
+           f"guards {guards}")
     led.ok("_psec = player_secondary(state)" in psrc
            and "spawn_profession_values(secondary=_psec)" in psrc,
            "the player's 0x00B7 carries player_secondary(state) through the "
            "builder (the stored change over the launch value)")
-    led.ok(len(b6_call) == 1 and all(
-        isinstance(inner, ast.Call) and isinstance(inner.func, ast.Attribute)
-        and inner.func.attr == "agent_set_secondary_bits"
-        for inner in [b6_call[0].args[1]]),
-           "and the mask goes through agents.agent_set_secondary_bits (the u32 "
+    led.ok(len(b6_calls) == 2 and all(
+        isinstance(c.args[1], ast.Call) and isinstance(c.args[1].func, ast.Attribute)
+        and c.args[1].func.attr == "agent_set_secondary_bits"
+        for c in b6_calls),
+           "and both masks go through agents.agent_set_secondary_bits (the u32 "
            "bound)")
 
     # -- §2 the player's change: the witness's shape ---------------------------
@@ -335,6 +445,19 @@ try:
            "batch (the client's record update is idempotent)",
            f"got {[hex(o) for o in ops(sent)]}")
     led.ok(st["player_secondary"] == 4, "...and moves nothing")
+    # (the fix pass, CD-5 M4) a no-op re-pick with a RANK in the current
+    # secondary: the cleanup is gated on `changed`, so nothing is zeroed
+    ast_noop = authsrv.attribute_state(st)
+    ast_noop.points_total = 200
+    ast_noop.ranks.clear()
+    ast_noop.ranks.update({5: 2})                      # Necro attr 5, the CURRENT secondary's
+    sent, rec, out = change(st, 1, 4)
+    led.ok(ops(sent) == [PROFS, SETPROF, LIBRARY] and ast_noop.ranks.get(5) == 2
+           and rec.events[-1][1].get("zeroed") == [],
+           "a no-op re-pick with a rank in the CURRENT secondary sends exactly the "
+           "batch and keeps the rank (the cleanup is gated on a real change)",
+           f"got {[hex(o) for o in ops(sent)]}, attr 5 at {ast_noop.ranks.get(5)}")
+    ast_noop.ranks.clear()
     # a second real change, from 4 to 6, no ranks and no bar skill of 4 yet
     del authsrv.SKILLBAR[:]
     authsrv.SKILLBAR.extend([1, 2, 0, 0, 0, 0, 0, 0])
@@ -510,8 +633,11 @@ try:
            "kept (the RECONSTRUCTION's own revert)",
            f"got {[hex(o) for o in ops(sent)]}")
     authsrv.SECONDARY_CLEANUP_ENABLED = True
-    # a hero with a rank and a bar skill in its old secondary
+    # a hero with a rank and a bar skill in its old secondary -- and a BODY
+    # in the world (the fix pass, CD-5 M5): the body row casts the edited bar
     st = town_state(hero_secondary={6: 4})
+    st["agents"][200] = {"skills": list(authsrv.bar_triples([105, 1, 2])),
+                         "skill_ready": [0.0, 0.0, 0.0], "hero": 6}
     hst = authsrv.hero_attribute_state(st, 6)
     led.ok(hst.secondary == 4 and hst.primary == 3,
            "hero 6 as a Mo/N (session secondary 4)")
@@ -520,6 +646,10 @@ try:
     hst.ranks.update({5: 2})
     h_avail = hst.available
     sent, rec, out = change(st, 200, 1)
+    led.ok([s[0] for s in st["agents"][200]["skills"]] == [1, 2]
+           and "now casts [1, 2]" in out,
+           "the hero's BODY casts the edited bar from now on (sync_hero_body_bar: "
+           "105 gone from its skills)", f"{st['agents'][200]['skills']}")
     got = ops(sent)
     led.ok(got == [POINTS_AVAIL, ATTR_ONE, PROFS, SETPROF, BAR_ONE],
            "the hero's cleanup: 0x0038 -> 0x003B, 0x00B7 -> 0x00A6 (no 0x00DB), "
@@ -611,13 +741,101 @@ try:
            and {op: v for op, v, _l in authsrv.hero_character_block(freshh, 200, 6)}[PROFS]
            == [200, 3, 5, 0],
            "a fresh connection's hero block carries [200, 3, 5, 0]")
+    # (the fix pass, CD-5 M1/M8) the hero's equal-pair guard and its revert
+    store_h = charstore.Store.open("secondary@rurik.invalid", base=base)
+    store_h.set_hero_secondary(UUID, 6, 3)             # == hero 6's row profession
+    val, out = quiet(authsrv.hero_secondary,
+                     town_state(charstore_game=charstore.Store.open("secondary@rurik.invalid", base=base)), 6)
+    led.ok(val == 0 and "ignored" in out and "hero 6" in out,
+           "a stored hero secondary EQUAL to the hero's primary (3/3) is ignored "
+           "loudly and 0 answers", out.strip()[-140:])
+    store_h.set_hero_secondary(UUID, 6, 5)
+    authsrv.SECONDARY_CHANGE_ENABLED = False
+    led.ok(authsrv.hero_secondary(
+        town_state(charstore_game=charstore.Store.open("secondary@rurik.invalid", base=base)), 6) == 0,
+           "under --no-secondary-change a stored HERO secondary is not read either")
+    authsrv.SECONDARY_CHANGE_ENABLED = True
+    # (the fix pass, CD-5 M2/M3) the hero's cleanup, REOPENED from the file:
+    # a Mo/N hero with a rank in 5 and 105 on its stored bar goes to Mo/W
+    store_c = charstore.Store.open("secondary@rurik.invalid", base=base)
+    store_c.set_hero_secondary(UUID, 6, 4)
+    store_c.set_hero_skillbar(UUID, 6, [105, 1, 2, 0, 0, 0, 0, 0])
+    store_c.set_hero_attributes(UUID, 6, [(5, 2)])
+    st = town_state(charstore_game=store_c)
+    hst = authsrv.hero_attribute_state(st, 6)
+    led.ok(hst.secondary == 4 and hst.ranks.get(5) == 2
+           and authsrv.hero_panel_bar_ids(st, 6)[0] == 105,
+           "(a Mo/N hero from the store: attr 5 at 2, 105 on the stored bar)")
+    sent, rec, out = change(st, 200, 1)
+    reopened_h = charstore.Store.open("secondary@rurik.invalid", base=base).hero_row(UUID, 6)
+    led.ok(ops(sent) == [POINTS_AVAIL, ATTR_ONE, PROFS, SETPROF, BAR_ONE]
+           and reopened_h.get("secondary") == 1
+           and reopened_h.get("skillbar") == [0, 1, 2, 0, 0, 0, 0, 0]
+           and [list(p) for p in reopened_h.get("attributes") or []] == [],
+           "the hero's cleanup PERSISTS all three, read back from the FILE: "
+           "secondary 1, the bar without 105, the ranks without attr 5",
+           f"row {reopened_h}")
+    # (the fix pass, CD-2/EV-6) the documented reset restores the LAUNCH value
+    store_r = charstore.Store.open("secondary@rurik.invalid", base=base)
+    store_r.set_character_secondary(UUID, 4)
+    authsrv.SPAWN_SECONDARY = 2                        # --spawn-secondary 2 / a party row's 2
+    led.ok(authsrv.player_secondary(
+        town_state(charstore_game=charstore.Store.open("secondary@rurik.invalid", base=base))) == 4,
+           "(a stored 4 wins over the launch 2, as §6 says)")
+    charstore.store_dir = lambda: base
+    _r, out = quiet(charstore._main, ["--account", "secondary@rurik.invalid",
+                                      "--character", "Sec Tester", "--secondary", "0"])
+    charstore.store_dir = _saved_store_dir
+    row_r = charstore.Store.open("secondary@rurik.invalid", base=base).character_by_uuid(UUID)
+    led.ok("secondary" not in row_r
+           and authsrv.player_secondary(
+               town_state(charstore_game=charstore.Store.open("secondary@rurik.invalid", base=base))) == 2,
+           "`charstore.py --secondary 0` CLEARS the key and the launch value (2) "
+           "answers again -- a stored 0 used to WIN over --spawn-secondary "
+           "(reviewers' CD-2/EV-6)", f"row keys {sorted(row_r)}")
+    store_z = charstore.Store.open("secondary@rurik.invalid", base=base)
+    store_z.character_by_uuid(UUID)["secondary"] = 0   # a hand-edited file holding 0
+    store_z.save()
+    led.ok(charstore.Store.open("secondary@rurik.invalid", base=base).character_by_uuid(UUID).get("secondary") == 0
+           and charstore.Store.open("secondary@rurik.invalid", base=base).character_secondary(UUID) is None
+           and authsrv.player_secondary(
+               town_state(charstore_game=charstore.Store.open("secondary@rurik.invalid", base=base))) == 2,
+           "...and a file that still HOLDS a 0 reads as absent (the launch value)")
+    led.ok(charstore.Store.open("secondary@rurik.invalid", base=base).hero_secondary(UUID, 6) == 1
+           and charstore.Store.open("secondary@rurik.invalid", base=base).set_hero_secondary(UUID, 6, 0) == 0
+           and "secondary" not in charstore.Store.open("secondary@rurik.invalid", base=base).hero_row(UUID, 6)
+           and authsrv.hero_secondary(
+               town_state(charstore_game=charstore.Store.open("secondary@rurik.invalid", base=base)), 6) == 0,
+           "the hero's setter clears on 0 the same way")
+    authsrv.SPAWN_SECONDARY = 0
+    # (the fix pass, CD-6) a skill GRANTED this session rides the batch's 0x00DB
+    authsrv.PERSIST = False
+    authsrv.UNLOCKED = skillunlock.words_from_ids([1, 2])
+    st = town_state()                                  # no store attached
+    sent, send = fake_send_factory()
+    quiet(authsrv.grant_skill, send, st, 105, 0)
+    granted_ops = ops(sent)
+    sent, rec, out = change(st, 1, 4)
+    lib_ids = set(skillunlock.ids_from_words(dict(sent)[LIBRARY][0]))
+    led.ok(0x00DC in granted_ops and st.get("skills_known") == {105}
+           and lib_ids == {1, 2, 105},
+           "without a store, a skill grant_skill taught this session (0x00DC 105) is "
+           "in the change batch's 0x00DB beside the flag library {1, 2} -- the "
+           "re-send cannot contradict the server's own grant",
+           f"granted {[hex(o) for o in granted_ops]}, library {sorted(lib_ids)}")
+    authsrv.UNLOCKED = _saved["UNLOCKED"]
+    del authsrv.SKILLBAR[:]
+    authsrv.SKILLBAR.extend([105, 1, 2, 0, 0, 0, 0, 0])
+    authsrv.PERSIST = True
     # the store's refusals
+    BAD_UUID = "44444444444444444444444444444444"   # its own uuid: §9's directory scan must not find it
+
     def refuses_file(mutate):
         p = charstore.path_for("bad@rurik.invalid", base)
         data = charstore._fresh("bad@rurik.invalid")
-        data["characters"][UUID] = {"name": "Bad", "settings_blob": "", "level": 1,
-                                    "xp": 0, "skill_points": 0, "attributes": []}
-        mutate(data["characters"][UUID])
+        data["characters"][BAD_UUID] = {"name": "Bad", "settings_blob": "", "level": 1,
+                                        "xp": 0, "skill_points": 0, "attributes": []}
+        mutate(data["characters"][BAD_UUID])
         with open(p, "w", encoding="utf-8") as f:
             json.dump(data, f)
         try:
@@ -683,17 +901,71 @@ try:
     st = town_state()
     sent, rec, out = change(st, 1, 4)
     led.ok(sent == [] and "dropped" in out and "--no-secondary-change" in out
-           and "player_secondary" not in st
-           and rec.events[-1][1].get("refused") == "--no-secondary-change",
+           and "player_secondary" not in st,
            "REVERT: c2s 0x0041 is dropped -- nothing sent, no state written, "
            "the log says which flag", out.strip()[-140:])
+    led.ok(st.get("unhandled", {}).get(("GAME_CMSG", CHANGE))
+           == HEAD["unhandled_count_after_one_0x0041"]
+           and rec.events and rec.events[-1][0] == "unhandled"
+           and rec.events[-1][1].get("opcode") == CHANGE
+           and "UNHANDLED GAME_CMSG 0x8041" in out,
+           "REVERT: 0x0041 takes 57e89956's PATH -- note_unhandled's census counts "
+           "it once (the disconnect report's and msgmix.py's number) and the "
+           "capture records an 'unhandled' event (the fix pass, EV-8/CD-4)",
+           f"unhandled {st.get('unhandled')}, events {[e[0] for e in rec.events]}")
     led.ok(authsrv.player_secondary(st) == 0 and authsrv.attribute_state(st).secondary == 0,
            "REVERT: the pair the burst would carry is the launch pair (1/0)")
     authsrv.SECONDARY_BITS = 0x44
     led.ok(authsrv.load_secondary_offer() == 0x44,
            "REVERT + --secondary-bits 0x44: 0x00B6 with 0x44, as 57e89956 sent it")
-    authsrv.SECONDARY_BITS = 0
-    authsrv.SECONDARY_CHANGE_ENABLED = True
+    # THE REAL BURST, three regimes, against the export's recording (the fix
+    # pass, EV-3/CD-4). drive_load restores the module defaults first, so the
+    # configuration is the recording's.
+    sent44, _st = drive_load(town=True, rig="none",
+                             cfg={"SECONDARY_CHANGE_ENABLED": False, "SECONDARY_BITS": 0x44})
+    prof44 = [(op, vals) for op, vals, _l in sent44 if op in (PROFS, BITS, SETPROF)
+              and isinstance(vals, list) and vals and vals[0] == 1]
+    led.ok(prof44 == BASE_PROF_BITS_0x44,
+           "REVERT + --secondary-bits 0x44, the real burst: 0x00B7 [1,1,0,0] -> "
+           "0x00A6 [1,1,0] -> 0x00B6 [1, 0x44] -- 57e89956's ORDER (the 0x00B6 "
+           "after the 0x00A6), not the feature's",
+           f"got {[(hex(o), v) for o, v in prof44]}")
+    def first_diff(a, b):
+        for i, (x, y) in enumerate(zip(a, b)):
+            if x != y:
+                return i
+        return None if len(a) == len(b) else min(len(a), len(b))
+    ops44 = [op for op, _v, _l in sent44]
+    led.ok(ops44 == BASE_OPS_BITS_0x44,
+           f"...and the whole {len(BASE_OPS_BITS_0x44)}-send opcode list is the export's",
+           f"{len(ops44)} sends; first difference at index {first_diff(ops44, BASE_OPS_BITS_0x44)}")
+    led.ok(burst_digest(sent44) == BASE_DIGEST_BITS_0x44,
+           "...values included (the whole-burst digest is the export's)",
+           f"{burst_digest(sent44)} vs {BASE_DIGEST_BITS_0x44}")
+    sent0, _st = drive_load(town=True, rig="none",
+                            cfg={"SECONDARY_CHANGE_ENABLED": False, "SECONDARY_BITS": 0})
+    ops0 = [op for op, _v, _l in sent0]
+    led.ok(ops0 == BASE_OPS_BITS_0 and BITS not in ops0,
+           f"REVERT alone, the real burst: the export's {len(BASE_OPS_BITS_0)}-send "
+           f"opcode list, no 0x00B6",
+           f"{len(ops0)} sends; first difference at index {first_diff(ops0, BASE_OPS_BITS_0)}")
+    led.ok(burst_digest(sent0) == BASE_DIGEST_BITS_0,
+           "...and its whole-burst digest", f"{burst_digest(sent0)} vs {BASE_DIGEST_BITS_0}")
+    senton, _st = drive_load(town=True, rig="none",
+                             cfg={"SECONDARY_CHANGE_ENABLED": True, "SECONDARY_BITS": 0})
+    opson = [op for op, _v, _l in senton]
+    i_on = opson.index(BITS) if BITS in opson else None
+    led.ok(i_on is not None and opson.count(BITS) == 1 and opson[i_on - 1] == PROFS
+           and senton[i_on][1] == [1, 2045]
+           and [(op, vals) for op, vals, _l in senton if op != BITS]
+           == [(op, vals) for op, vals, _l in sent0],
+           "the FEATURE ON is the revert's burst plus exactly ONE 0x00B6 [1, 2045] "
+           "right after the player's 0x00B7 -- values included, nothing else moves "
+           "(the relative check that outlives another arc's change to the load)",
+           f"0x00B6 at index {i_on}, {len(senton)} sends vs {len(sent0)}")
+    apply(FIXTURE)
+    del authsrv.SKILLBAR[:]
+    authsrv.SKILLBAR.extend([105, 1, 2, 0, 0, 0, 0, 0])
 
     # -- §8 source locks ---------------------------------------------------------
     import test_dispatch                                  # its harvesters, not its run
@@ -751,6 +1023,61 @@ try:
            and "GAME_SMSG_AGENT_PROFESSION_BITS" not in hsc,
            "the handler never sends 0x0037 (the CREATOR asserts ChCliAttrib:313 on "
            "a live record), 0x003A (the load's bulk fill) or a 0x00B6 re-send")
+    led.ok("return instance_is_field(state)" in ast.get_source_segment(SRC, func_node("instance_is_explorable"))
+           and "1 if instance_is_field(state) else 0" in ast.get_source_segment(SRC, func_node("handle")),
+           "instance_is_explorable is an alias of instance_is_field and the 0x0199 "
+           "send site evaluates the same helper -- one copy of the town byte's rule "
+           "(the fix pass, EV-11)")
+
+    # -- §9 the LOAD with a stored pair (the fix pass, CD-1/EV-1, CD-5) ----------
+    # A scratch store holding the player's 4 and hero 6's 5, found by the REAL
+    # --persist path (charstore.find_character over a patched store_dir).
+    store9 = charstore.Store.open("secondary@rurik.invalid", base=base)
+    store9.set_character_secondary(UUID, 4)
+    store9.set_hero_secondary(UUID, 6, 5)
+    charstore.store_dir = lambda: base
+    try:
+        for town, rig in ((True, "retail"), (False, "retail"), (True, "legacy"), (False, "legacy")):
+            where = f"{'town' if town else 'field'}/{rig}"
+            sent9, st9 = drive_load(town=town, rig=rig, cfg={"PERSIST": True})
+            led.ok(st9.get("charstore_game") is not None
+                   and st9["charstore_game"].character_secondary(UUID) == 4,
+                   f"[{where}] the load found the scratch store through --persist's own path",
+                   f"{len(sent9)} sends")
+            hero_pairs = to_agent(sent9, 200, PROFS, SETPROF)
+            led.ok(len(hero_pairs) >= 2
+                   and all(vals[1:3] == [3, 5] for _i, _op, vals in hero_pairs),
+                   f"[{where}] EVERY 0x00B7 / 0x00A6 addressed to the hero's agent carries "
+                   f"the stored pair [3, 5] -- {len(hero_pairs)} of them, the LAST included "
+                   f"(the summary record the roster reads is last-write-wins)",
+                   f"{[(i, hex(op), vals) for i, op, vals in hero_pairs]}")
+            led.ok(hero_pairs and hero_pairs[-1][2][1:3] == [3, 5],
+                   f"[{where}] ...and the last one in particular",
+                   f"last {hero_pairs[-1] if hero_pairs else None}")
+            info = [vals for op, vals, _l in sent9 if op == 0x0073 and vals and vals[0] == 6]
+            if rig == "retail":                        # the legacy rig sends no 0x0073 (JARIN's message)
+                led.ok(info and info[0][2:4] == [3, 5],
+                       f"[{where}] the 0x0073 HERO_INFO for hero 6 carries the pair in fields 3-4",
+                       f"{info[0][:5] if info else None}")
+            player_pairs = to_agent(sent9, 1, PROFS, SETPROF)
+            led.ok([vals for _i, _op, vals in player_pairs] == [[1, 1, 4, 0], [1, 1, 4]],
+                   f"[{where}] the player's 0x00B7 [1, 1, 4, 0] and 0x00A6 [1, 1, 4] carry the "
+                   f"stored 4 over the launch 0",
+                   f"{[(hex(op), vals) for _i, op, vals in player_pairs]}")
+            i_b7p = [i for i, op, vals in to_agent(sent9, 1, PROFS)][0]
+            led.ok(sent9[i_b7p + 1][0] == BITS and sent9[i_b7p + 1][1] == [1, 2045],
+                   f"[{where}] the 0x00B6 [1, 2045] still follows the player's 0x00B7",
+                   f"{hex(sent9[i_b7p + 1][0])} {sent9[i_b7p + 1][1]}")
+            if not town:
+                body = [(i, vals, l) for i, (op, vals, l) in enumerate(sent9)
+                        if op == SETPROF and vals and vals[0] == 200]
+                led.ok(body and (body[-1][2] or "").startswith("AGENT_SET_PROFESSION(200, 3/5")
+                       and body[-1][1] == [200, 3, 5],
+                       f"[{where}] the LAST hero 0x00A6 is the body's create-burst send "
+                       f"(create_agent_world), and it carries the pair", f"{body}")
+    finally:
+        charstore.store_dir = _saved_store_dir
+        apply(FIXTURE)
 finally:
     for k, v in _saved.items():
         setattr(authsrv, k, v)

@@ -45,9 +45,14 @@ the Warrior "Jack Jawnson" (`0x00B7` primary 1) and `1919 = 0x77F` on all 4 of t
 ~(1 << 1), 0x7FF & ~(1 << 7))"` → `2045 1919`. **The mask never changed within a
 connection**, the one in-game secondary change (F2) included.
 
-`0x00B7` AGENT_PROFESSIONS: 130 sightings — one per player load (95), one per hero load
-(4), one per character-creation `0x0060` (25 of 25 echoing the request's profession as
-field 2, `[agent, p, 0, 0]`), one in-game change (F2). **Field 4 (the trailing bool) is 1
+`0x00B7` AGENT_PROFESSIONS: 130 sightings — 90 map-load player blocks; 10 openers on the
+five character-creation connections (each opens `[agent, 0, 0, 0]` — **a primary of 0**,
+the corpus's only zeros, adjacent to its `0x00B6 [agent, 0]` — and then `[agent, 1, 0, 0]`
+before any `0x0060`); 25 answers to a `0x0060` (25 of 25 echoing the request's profession
+as field 2, `[agent, p, 0, 0]`); one per hero load (4); one in-game change (F2). (The first
+pass wrote "95 + 4 + 25 + 1", which is 125: it folded the five creation connections' first
+opener into the player loads and missed their second — the fix pass, EV-9, scratch
+`census_creation.py`.) **Field 4 (the trailing bool) is 1
 on exactly the connections whose `0x00B6` is non-zero and whose login summary blob says
 `is_pvp = 1`** — 46 + 4 rows of `(1, 0x7FD|0x77F, is_pvp 1, off-pair skills present)`,
 27 rows of `(0, 0, is_pvp 0, none)`, 18 rows of `(0, 0, no blob on tape, none)` —
@@ -56,7 +61,10 @@ six PvE characters are on tape, none of the PvE ones with a secondary unlocked, 
 PvP character" and "may change secondary" cannot be told apart from the wire.
 
 `0x00A6` AGENT_SET_PROFESSION: 4,064 sightings (the 136 in `overrides.json`'s row 166 was
-the first pass). **The player's own is NOT in the character block**: it arrives directly
+the first pass, whose ranges — field 2 in 1..6, field 3 in 0..8 — were that pass's; the
+census's own are **field 2 in 1..10, 0 never** (7 ×153, 8 ×395, 9 ×100, 10 ×170) and
+**field 3 in 0..10, 0 the mode at 1,014 of 4,064** — the fix pass, EV-7, scratch
+`census_b7.py`). **The player's own is NOT in the character block**: it arrives directly
 after that player's `0x0059 → 0x00B0 → 0x00B1` (90 of 90 map connections), values always
 equal to the player's `0x00B7` pair; four connections carry it three times because the
 whole agent list was re-sent there. Our server's placement (right after the `0x00B7`)
@@ -112,8 +120,17 @@ census row is the census's own reading and is left.
 
 RUNS.md §13 said the drop-down builder self-gates on maps 796 and 823–836 and that
 "which builder serves roleplaying characters is the largest open question". **(1)** F2's
-witness used it in map 248, an ordinary outpost (areatable type 13, flags `0x8000`, not a
-`0x40000`-flag arena). **(2)** The static re-read: the builder's `[obj+8] & 0x10` test is
+witness sent `0x0041` from map 248, the Great Temple of Balthazar — areatable (pinned
+38797) **type 13, region 21, campaign 0**: the PvP characters' hub, in the same region as
+Codex Arena 796 (type 1, `0x04040003`), flags `0x8000` (not a `0x40000`-flag arena), and
+**not a type-10 outpost such as 148** (type 10, region 7). So the retail leg refutes the
+FIFTEEN-MAP list, not the narrower reading "a PvP-flavoured map"; the ordinary-outpost
+half rests on leg (2) until R1 runs in 148 (the fix pass, EV-4 — the first pass called 248
+"an ordinary outpost"). The sender is attributed to the drop-down rather than to the
+template loader, `0x00816D70`'s other rel32 caller, **by inference**: no c2s `0x0010`
+ATTRIBUTE_LOAD and no bar load follow the `0x0041` (a template applies attributes and
+eight slots), only a single `0x005C` 3.1 s later; one `0x0041` cannot tell the two callers
+apart on the wire. **(2)** The static re-read: the builder's `[obj+8] & 0x10` test is
 the CREATE FLAG the Skills & Attributes window (AttribFrame) passes when it creates its
 third GmDeckBuilder child, unconditionally, and nothing in GmDeckBuilder clears the bit.
 **The enable rule is two gates and nothing else**: `0x00502543..0x00502568` `call 0x84d9b0;
@@ -194,9 +211,18 @@ the entry **only when the entry's +8 and +0xC are both zero** (`0x00819FC1 cmp [
 0; jne keep` / `0x00819FC8 cmp [..+0xc], 0; jne keep`), posting `0x1000002D {agent,
 attrib}`. Then (`0x0081A036..`) it inserts the primary's attributes — **only if the primary's
 chapter bit is in the mask** (`0x0081A056 test esi, edx / je 0x81a205`) — and the
-secondary's non-primary attributes. **So the panel's rows for a NEW secondary appear with
-no further message, and an OLD secondary's row that still carries a rank or points is
-KEPT until the server zeroes it.** That is what SECONDARY-B3 is built on.
+secondary's non-primary attributes, **and that insertion is chapter-gated too** (the fix
+pass, EV-2, `codescan --dis 0x0081A1F0`): `0x0081A205 mov ebx, [ebp-0x1c]` (the secondary,
+from getter `0x81FAA0` at `0x00819EE8`) / `test ebx, ebx; je 0x81a404` / `call 0x5ab810`
+(`s_profChapter`) / `mov eax, 1; shl eax, cl; test esi, eax; je 0x81a404` with `esi =
+[ebp-4]`, the same mask the primary's gate tests. `s_profChapter` is `[0,0,0,0,0,0,0,2,2,
+3,3]` ([FINDINGS.md](FINDINGS.md) §C4), so **Assassin and Ritualist need chapter bit 2 and
+Paragon and Dervish bit 3** — for four of the nine secondaries the default mask offers,
+the rows appear only if this server's account stream sets those bits (UNVERIFIED,
+SECONDARY-Q8; R2b tests it). **So the panel's rows for a NEW secondary of chapter 0
+appear with no further message, and an OLD secondary's row that still carries a rank or
+points is KEPT until the server zeroes it.** That is what SECONDARY-B3 is built on, with
+the same chapter caveat.
 
 ### SECONDARY-F6 — `0x00B7` field 4 selects a chapter-ownership mask; this server keeps sending 0 — OBSERVED (static 38797), UNVERIFIED what our account data yields
 
@@ -209,11 +235,14 @@ LOCAL-PLAYER branch only (`0x00819EF2 call 0x80d3e0; cmp esi, eax; jne` → othe
 (= `[ctx+0x44]+0x60`); flag 0: `call 0x84d800` (= `[ctx+0x44]+0x5C | +0x54`)**. Both caches are
 filled lazily (when -1) by `0x00927690`, which walks a per-chapter table at `0xBCB568`
 against two 64-bit account bitfields — `0x0048EF60(1)` and `0x0048EF30(1)`, the globals at
-`0xC03330..0xC0334C` (the account's product/feature bits, set from the login/feature
-stream) — masking `0x70003F`/`0x700`/`0x60000`/`3` per chapter and OR-ing chapter bits into
-four outputs (+0x54, +0x58, +0x5C, +0x60). So **the flag chooses WHICH ownership mask
-decides whether an attribute row is kept and whether the primary's attributes are inserted
-at all** — flag 1 reads the narrower +0x60 alone. What this server's account stream leaves
+`0xC03330..0xC0334C` (the account's product/feature bits; **where they are set is
+UNVERIFIED** — the login/feature stream is the guess) — masking `0x70003F`/`0x700`/
+`0x60000`/`3` per chapter and OR-ing chapter bits into four outputs (+0x54, +0x58, +0x5C,
++0x60), each filled independently (whether +0x60 is a subset of +0x5C|+0x54 was not read;
+the first pass's "narrower" was unlabelled — the fix pass, EV-9). So **the flag chooses
+WHICH ownership mask decides whether an attribute row is kept and whether the primary's
+and the secondary's attributes are inserted at all** (F5) — flag 1 reads +0x60 alone. What
+this server's account stream leaves
 in +0x60 is UNVERIFIED, and **an empty mask inserts no attribute for the primary** (F5's
 `0x0081A056`). Retail pairs 1 with a non-zero `0x00B6` (F1), but every run to date — RUNS
 §14's ungreyed drop-down included — has worked under 0, and the drop-down itself never
@@ -270,9 +299,17 @@ primary for a hero (F3). **Anything else sends nothing and says why in the log �
 RECONSTRUCTION, retail's refusal is unobserved.** The reply is retail's batch in retail's
 order: `0x00B7 [agent, primary, new, 0]` → `0x00A6 [agent, primary, new]` → for the player
 `0x00DB` (the character library exactly as the load resolves it — unchanged, as retail's
-was); **for a hero `0x00B7` + `0x00A6` only**, because the hero's list re-enumerates on
-`0x00B7`'s own event from heroData + the account set and `0x00DB`'s event is local-player
-only (F4). No `0x00B6` re-send (retail: none; the record keeps its mask on an update).
+was — **plus** any skill `grant_skill` taught this session, `state["skills_known"]`, so
+that without a store the re-send cannot contradict the server's own `0x00DC` grant; under
+`--persist` the store already holds them — the fix pass, CD-6); **for a hero `0x00B7` +
+`0x00A6` only — RECONSTRUCTION** (the fix pass, EV-5): no retail hero change is on tape
+(4 of 4 hero `0x00B7` are Koss `[x, 1, 0, 0]` on a PvE Ranger, and no hero on a PvP
+character), so the hero reply rests on the static read alone — the hero list branch
+(`0x0050282F`/`0x0050283D`) reads the pair off the +0x6BC record through
+`0x816d10`/`0x816d30` and re-enumerates on `0x1000004E`, which the `0x00B7` upsert posts
+(`0x0081FDAE`); `0x00DB`'s event is local-player only (F4). The `0x0073` heroData copy of
+the pair is NOT refreshed in-session. No `0x00B6` re-send (retail: none; the record keeps
+its mask on an update).
 
 **SECONDARY-B3 — the old secondary's state — RECONSTRUCTION** (retail's only witness
 changed from none: nothing was on its bar or in its attributes, so both halves are built
@@ -289,35 +326,64 @@ bonus on such an attribute keeps its row (F5's rule; effective is sent as the tr
 **(b)** Its skills leave the bar: `0x00D9 [agent, slot, 0, 0]` per slot, after the
 `0x00DB` so the observed triple stays contiguous; the player's `SKILLBAR` and a hero's
 session bar (`state["hero_bars"]`, the panel's and the body's one expression) and the store
-follow; a hero's body casts the edited bar from then on (`sync_hero_body_bar`). A skill with
-no content row on this machine (the bare-machine rule) stays and is named in the log.
-Whether the client itself strips or refuses an old-secondary skill on the bar was not
-traced (SECONDARY-Q2). `--no-secondary-cleanup` keeps both halves.
+follow; a hero's body casts the edited bar from then on (`sync_hero_body_bar`). **Only the
+OLD secondary's skills** (`sp == old`), which is narrower than "any skill the pair does not
+own" (the fix pass, EV-10): a first pick from none (old == 0 — the witness's case and this
+server's default spawn) strips nothing, and a third profession's skill equipped while the
+list was unfiltered (F4; `handle_skillbar_skill_set` applies no profession check) stays on
+the bar — what retail does with such a slot is UNVERIFIED (SECONDARY-Q7); the witness's
+own bar held only Warrior and common skills. A skill with no content row on this machine
+(the bare-machine rule) stays and is named in the log. Whether the client itself strips or
+refuses an old-secondary skill on the bar was not traced (SECONDARY-Q2).
+`--no-secondary-cleanup` keeps both halves.
 
 **SECONDARY-B4 — persistence.** `charstore`: an optional `secondary` (int 0..10, 0 = none)
 on the character row and on each hero row, `STORE_VERSION` unbumped (the purse's precedent:
 absent = never changed = today's bytes), `_validate_secondary` refusing 11, a bool, a
 negative; `character_secondary` / `set_character_secondary` / `hero_secondary` /
-`set_hero_secondary`; the CLI's `--secondary N` and `--hero-secondary N`; `CHAR_PROFESSIONS
-= 11` mirrored from `agents` (test-checked). In `authsrv`, `player_secondary(state)` and
+`set_hero_secondary`; the CLI's `--secondary N` and `--hero-secondary N`, **where 0 CLEARS
+the key** (the fix pass, CD-2/EV-6: the first pass stored a present 0, which then WON over
+`--spawn-secondary` and a party row's `player_secondary`, so the documented reset pinned
+"no secondary" against the launch seed instead of restoring it; the in-game change never
+writes 0, the setters pop the key on 0, and the readers answer None for a 0 a hand-edited
+file still holds — either way the launch value answers again); `CHAR_PROFESSIONS = 11`
+mirrored from `agents` (test-checked). In `authsrv`, `player_secondary(state)` and
 `hero_secondary(state, hid)` resolve once per connection — the session's value once a
 change is accepted, else the STORED one under `--persist`, else the launch value — and feed
 the load's `0x00B7`, the player's `0x00A6`, the hero block's `0x00B7`/`0x00A6`, the
-`0x0073` HERO_INFO's field 4, and both attribute states. **Precedence: the stored value
-WINS over `--spawn-secondary` / a `[party.KEY]` row's `player_secondary`**, the way a stored
-`skillbar` wins over `--skills` and the persisted ranks win over the content row — the
-launch value is the SEED a character starts from, the store is what the character has
-since done. Under `--no-secondary-change` the store is NOT read (`--no-hero-kick`'s
-precedent for a revert arm). A stored secondary equal to a MOVED launch primary is ignored
-loudly (GmDeckBuilder:2321). The client's own AUTH `0x0009` push (F2) is absorbed by the
-existing verbatim `update_settings` — VERIFIED in `test_secondary` §6: a `charsummary`
-blob with secondary 4 stores as its own hex and decodes back to 4.
+`0x0073` HERO_INFO's field 4, both attribute states, **and every other hero profession
+send of the load** — the town's bodiless-row `0x00A6`, the field body's create-burst
+`0x00A6` (`create_agent_world` reads `secondary` off the hero's row dict) and the legacy
+rig's `0x00B7` (the fix pass, CD-1/EV-1: those three defaulted the secondary to 0 and, being
+the LAST writes to the summary record the roster label reads, dropped a hero's stored pair
+from the party window on the next load while the panel kept it; `test_secondary` §9 drives
+the whole load in a town and a field on both rigs and checks every send to the hero's
+agent). The orchestrator's pre-launch store warnings (`sandbox.store_state` /
+`store_warnings`) surface the stored secondary, treat its ranks and bar skills as the
+character's own, and say it wins over the spec (the fix pass, CD-3). **Precedence: the
+stored value WINS over `--spawn-secondary` / a `[party.KEY]` row's `player_secondary`**,
+the way a stored `skillbar` wins over `--skills` and the persisted ranks win over the
+content row — the launch value is the SEED a character starts from, the store is what the
+character has since done. Under `--no-secondary-change` the store is NOT read
+(`--no-hero-kick`'s precedent for a revert arm). A stored secondary equal to a MOVED launch
+primary is ignored loudly (GmDeckBuilder:2321). The client's own AUTH `0x0009` push (F2)
+is absorbed by the existing verbatim `update_settings` — VERIFIED in `test_secondary` §6:
+a `charsummary` blob with secondary 4 stores as its own hex and decodes back to 4.
 
 **SECONDARY-B5 — the master revert.** `--no-secondary-change`: no `0x00B6` unless
-`--secondary-bits`, `0x0041` dropped with nothing sent and no state written, the store's
-secondary not read — 57e89956's bytes, pinned against literals recorded from that tree
-before any edit (`0x00B7 [1, 1, 0, 0]` / `[200, 7, 0, 0]`, `0x00A6 [1, 1, 0]`,
-`SECONDARY_BITS 0`, no constant at `0x0041`).
+`--secondary-bits` — **and then at 57e89956's own site, AFTER the player's `0x00A6`**
+(the fix pass, EV-3/CD-4: the first pass sent it at the feature's site before the `0x00A6`
+under the revert too, so "57e89956's bytes" held for the values and not the order);
+`0x0041` takes that tree's PATH — `note_unhandled`, the per-connection census the
+disconnect report and `msgmix.py` read, the capture's `unhandled` event — with nothing sent
+and no state written (EV-8; only the NAME in the log line is today's); the store's
+secondary not read. Pinned against the REAL load burst recorded from a `git archive
+57e89956` export (scratch `base_ops.py`, `test_secondary` §7): the 43-send opcode list and
+whole-burst digest `fb571a5b08ef885b` under `--secondary-bits 0x44`, the 42-send list and
+digest `85facec2223fa2e9` under the revert alone, and the feature on being that burst plus
+exactly one `0x00B6 [1, 2045]` after the player's `0x00B7` — plus the builders' literals
+(`0x00B7 [1, 1, 0, 0]` / `[200, 7, 0, 0]`, `0x00A6 [1, 1, 0]`, `SECONDARY_BITS 0`, no
+constant at `0x0041`, one UNHANDLED per `0x0041`).
 
 ---
 
@@ -344,9 +410,40 @@ tree's siblings on the path — and shown to redden:
 (The table is the sabotage run's own output, `scratchpad/impl-skillpanel/sabotage.txt`,
 ten scratch copies, all ten exit 1 against a green 108-check baseline.)
 
+**The fix pass (2026-09-25, the reviewers' EV-1..EV-11 and CD-1..CD-7).** The test grew
+to **152 checks (floor 152)**: §7 drives the real load burst in three regimes against the
+57e89956 export's recording, §9 drives it under `--persist` with a stored pair in a town
+and a field on both rigs, and §2/§5/§6 gained the behavioural checks the reviewers' nine
+surviving inversions (CD-5) called for. The second table, scratch
+`fix-skillpanel/sabotage.py` — a fresh copy of the working tree per mutation, `test_secondary`
+run inside it (the last two rows `test_sandbox`), against a green 152-check baseline; **19
+of 19 exit 1**:
+
+| mutation (scratch copy) | FAILs | what reddened |
+|---|---|---|
+| the town's bodiless-row `0x00A6` sends secondary 0 (CD-1) | 3 | §9 town/retail and town/legacy: "EVERY 0x00B7/0x00A6 to the hero's agent" and "the last one" |
+| the legacy rig's hero `0x00B7` drops the secondary (CD-1) | 4 | §9 the two legacy drives, both checks |
+| the body create's `0x00A6` sends secondary 0 (CD-1) | 5 | §9 the two field drives: every-send, the last, and the create_agent_world check |
+| the revert's `0x00B6` moved back to the feature's site (EV-3/CD-4) | 4 | §1 the two-site lock and the guard lock; §7 the `[0x00B7, 0x00A6, 0x00B6]` order and the 43-send list |
+| the revert skips `note_unhandled` (EV-8) | 1 | §7 the census/capture check |
+| this session's `0x00DC` grants left out of the batch's `0x00DB` (CD-6) | 1 | §6 the grant-then-change check |
+| `charstore` reads a stored 0 as 0 (CD-2) | 1 | §6 "a file that still holds a 0 reads as absent" |
+| `charstore`'s setter keeps a 0 instead of popping the key (CD-2) | 1 | §6 the CLI reset |
+| `instance_is_explorable` no longer the alias (EV-11) | 5 | §3 the four field preconditions/refusals and §8's alias lock |
+| M1 the hero's equal-pair guard off | 1 | §6 |
+| M2 the hero's stripped bar not stored | 1 | §6 the reopened hero row |
+| M3 the hero's zeroed ranks not persisted | 1 | §6 the reopened hero row |
+| M4 the zeroing on a no-op re-pick too | 1 | §2 the rank-kept check |
+| M5 `sync_hero_body_bar` skipped | 1 | §5 the body row |
+| M8 the hero's store read under the revert | 1 | §6 |
+| M11 the load's player `0x00A6` on the launch secondary | 4 | §9 all four drives |
+| M13 HERO_INFO field 4 zeroed (the comment kept the text lock green) | 2 | §9 the two retail drives |
+| `sandbox.store_state` drops `secondary` (CD-3) | 3 | test_sandbox: the surfaced field, the "wins" line, the ranks line |
+| `sandbox.store_warnings` ignores the stored secondary (CD-3) | 2 | test_sandbox: the "wins" line and the ranks line |
+
 The sweep after the edits: every test that imports or reads `authsrv.py`, `charstore.py`,
-`serverargs.py`, `test_dispatch.py`, `test_agentlife.py`, `probecharacter.py` or
-`overrides.json` as text — see the landing entry for the count.
+`serverargs.py`, `sandbox.py`, `test_dispatch.py`, `test_agentlife.py`, `probecharacter.py`
+or `overrides.json` as text — see the landing entry for the count.
 
 ---
 
@@ -363,9 +460,11 @@ window fractions). Watch the gamesrv log for the tags `[SECONDARY-B1]`, `[SECOND
 | **R1** | an OUTPOST load (e.g. 148), `K` | gamesrv: `AGENT_PROFESSION_BITS(0x07FD) [default: all but the primary, SECONDARY-B1]` right after `AGENT_PROFESSIONS`; the drop-down is UNGREYED with **ten** entries (None + every profession but the primary), no crash, the attribute rows and skill list as before the arc (the flag is still 0) |
 | **R1b** | pick Necromancer | gamesrv: `c2s 0x0041 [1, 4]` then `SECONDARY CHANGE (player): 1/0 -> 1/4 ... [SECONDARY-B2]` and the three sends `0x00B7`, `0x00A6`, `0x00DB`; **on screen without a reload**: the drop-down re-labels to Necromancer, the panel's skill list NARROWS to common + Warrior + Necromancer (F4: the filter arms the moment the secondary is non-zero), the attribute rows GAIN Blood/Curses/Death/Soul Reaping (F5: the rebuild inserts them; Soul Reaping's `+` is refused server-side as another profession's primary), the party roster's label reads `W/N` |
 | **R2** | spend two points in Curses, drag a Necromancer skill onto the bar, pick Monk | gamesrv: `ATTRIBUTE_POINTS_AVAILABLE(... refunded ...)`, `AGENT_UPDATE_ATTRIBUTE(player attr N = 0) [SECONDARY-B3]`, the batch, `SKILLBAR_UPDATE_SKILL(player slot S: skill X of profession 4 leaves)`; on screen the Necromancer rows GO (F5: zero/zero at rebuild time), the points return to the pool, the slot empties, the list shows Warrior + Monk; the Warrior rows and skills untouched. **If the Necromancer rows LINGER** the `0x003B`-before-`0x00B7` order is wrong for the client (SECONDARY-Q4) — try the arm `--no-secondary-cleanup` to confirm it is the cleanup and not the batch |
-| **R3** | relaunch the same character with `--persist` (the sandbox always does) | gamesrv: `AGENT_PROFESSIONS(prof 1/2)` at load, `AGENT_SET_PROFESSION(player, 1/2)`; the panel opens as W/Mo with the Monk rows and the narrowed list; `python toolkit/authsrv/charstore.py --account <email> --show` prints `secondary: 2`. To start over: `charstore.py --account <email> --character <name> --secondary 0` |
-| **R4** | a hero's panel (`--party` with a hero; open the hero's K panel from its roster row), pick a secondary | gamesrv: `c2s 0x0041 [200, N]`, `SECONDARY CHANGE (hero 6): P/0 -> P/N` and TWO sends (`0x00B7`, `0x00A6`, no `0x00DB`); the hero's drop-down re-labels and its attribute rows gain N's; the hero roster label shows the pair. A pick with a rank in the old secondary follows R2's shape on the hero's agent |
-| **R5** | the master revert: `--no-secondary-change` | gamesrv prints `NO SECONDARY CHANGE ...` at start; no `AGENT_PROFESSION_BITS` at load; the drop-down is GREYED with one entry; a pick is impossible (nothing to pick); `--secondary-bits 0x44` under the same flag ungreys it with three entries and a pick logs `SECONDARY CHANGE dropped (--no-secondary-change)` with nothing sent |
+| **R2b** | pick a chapter-2 and a chapter-3 secondary — Assassin (7), then Dervish (10) (the fix pass, EV-2) | the batch as R1b; **the rows (Critical Strikes / Dagger Mastery / Deadly Arts / Shadow Arts; then Scythe Mastery / Wind Prayers / Earth Prayers / Mysticism) appear ONLY IF this server's account stream sets chapter bits 2 and 3** in the mask F6 names (`[ctx+0x44]+0x5C\|+0x54` under flag 0) — UNVERIFIED either way (SECONDARY-Q8). The drop-down re-labels and the list narrows regardless (those are F3/F4, not the rebuild). If the rows are missing: our account data leaves those chapters unowned, and the four Factions/Nightfall secondaries are offer-only until the account stream sets them |
+| **R3** | relaunch the same character with `--persist` (the sandbox always does) | gamesrv: `AGENT_PROFESSIONS(prof 1/2)` at load, `AGENT_SET_PROFESSION(player, 1/2)`; the panel opens as W/Mo with the Monk rows and the narrowed list; **the party window's label reads W/Mo**; `python toolkit/authsrv/charstore.py --account <email> --show` prints `secondary: 2`. To start over: `charstore.py --account <email> --character <name> --secondary 0` — this CLEARS the key, so the launch value answers again (the fix pass, CD-2) |
+| **R4** | a hero's panel (`--party` with a hero; open the hero's K panel from its roster row), pick a secondary | gamesrv: `c2s 0x0041 [200, N]`, `SECONDARY CHANGE (hero 6): P/0 -> P/N` and TWO sends (`0x00B7`, `0x00A6`, no `0x00DB`) — RECONSTRUCTION, no retail hero change on tape (EV-5); the hero's drop-down re-labels and its attribute rows gain N's; the hero's roster label shows the pair (`0x00A6` writes the agent's copy); **the hero's `0x0073` heroData copy is NOT refreshed in-session**, so anything the client draws from heroData (the hero panel's own header, if it reads +0x1c's neighbours) may still show the old pair until R4b. A pick with a rank in the old secondary follows R2's shape on the hero's agent |
+| **R4b** | relaunch with the same party under `--persist` (the fix pass, CD-1/EV-1) | gamesrv: `HERO_INFO(hero 6, ..., prof P/N)`, `AGENT_PROFESSIONS(hero agent 200, prof P/N)`, `0x00A6 for hero agent 200 (prof P/N)` AND — in a town — `AGENT_SET_PROFESSION(hero agent 200, P/N) -- no body in a town`, in a field `AGENT_SET_PROFESSION(200, P/N)` from the body create: **every** send to the hero's agent carries the pair; **the party window's hero label reads P/N** and the hero's panel opens on it. Before the fix pass the last of those sends carried P/0 and the roster label lost the secondary while the panel kept it |
+| **R5** | the master revert: `--no-secondary-change` | gamesrv prints `NO SECONDARY CHANGE ...` at start; no `AGENT_PROFESSION_BITS` at load; the drop-down is GREYED with one entry; a pick is impossible (nothing to pick); `--secondary-bits 0x44` under the same flag ungreys it with three entries — the `0x00B6` now logged AFTER `AGENT_SET_PROFESSION(player, ...)`, 57e89956's site (EV-3) — and a pick logs `UNHANDLED GAME_CMSG 0x8041 ...` then `SECONDARY CHANGE dropped (--no-secondary-change)` with nothing sent (EV-8) |
 | **R6** | a FIELD (`--explorable` or map 146) | `AGENT_PROFESSION_BITS(0x07FD)` still at load (retail sends it in fields too); the drop-down is GREYED (the client's own field-3 gate); nothing to pick |
 
 What would refute the build: R1's drop-down staying greyed with ten entries logged (the
@@ -397,3 +496,17 @@ wrongly); R2's rows lingering (Q4); any assert on `0x003B`/`0x0038` mid-session 
 - **Q6** — a PvE character with an unlocked secondary on tape: is retail's mask "unlocked
   minus primary", and is its flag 0 or 1? No such character is on tape; the owner's
   decision (2) makes it moot for this server.
+- **Q7** (the fix pass, EV-10) — a THIRD profession's skill on the bar at a change: while
+  the secondary is 0 the list is unfiltered (F4) and `handle_skillbar_skill_set` applies no
+  profession check, so a W/- can equip a Necromancer skill; the first pick (old == 0)
+  strips nothing, and B3 strips only the OLD secondary's. What retail does with such a
+  slot — strip it, refuse the cast, or leave it — is UNVERIFIED; the witness's bar held
+  only Warrior and common skills. A `--no-secondary-cleanup` run with a Necromancer skill
+  equipped as W/- and then a pick of Monk would show what the client does on its own.
+- **Q8** (the fix pass, EV-2) — the chapter bits on this server's account stream: F5's
+  rebuild inserts a secondary's attributes only if `s_profChapter[secondary]`'s bit is in
+  the ownership mask (`0x0081A222`), so Assassin/Ritualist (bit 2) and Paragon/Dervish (bit
+  3) — four of the nine the default mask offers — get their rows only if our account data
+  owns those chapters. R2b answers it on screen; the static half is what `0x00927690`
+  reads out of `0x0048EF60(1)` / `0x0048EF30(1)` and where this server's login stream sets
+  them (F6 leaves that UNVERIFIED).

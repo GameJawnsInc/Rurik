@@ -7958,18 +7958,22 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   load: `secondary_offer_mask` gives the two OBSERVED literals (2045 Warrior, 1919
   Assassin; bit 0 kept, ids 2..10, nothing past 10; 0x7FF for a custom primary),
   `load_secondary_offer()` is the three regimes (default, `--secondary-bits` override which
-  still sends under the revert, the revert's 0), and the burst site is locked on its SOURCE
-  through `_handle_request_players`' sends in file order — the 0x00B6 send is the NEXT
-  send after the player's 0x00B7 (retail adjacent 95 of 95) and before the 0x00A6, guarded
-  by `if _offer:` with `_offer = load_secondary_offer()`, the 0x00B7 carrying
-  `player_secondary(state)` through the builder, the mask through
-  `agents.agent_set_secondary_bits`. §2 the player's change: exactly 0x00B7 → 0x00A6 →
+  still sends under the revert, the revert's 0), and the burst's TWO 0x00B6 sites are
+  locked on the SOURCE through `_handle_request_players`' sends in file order — the
+  feature's is the NEXT send after the player's 0x00B7 (retail adjacent 95 of 95) and
+  before the 0x00A6, 57e89956's own sits after the 0x00A6 for the revert (the fix pass,
+  EV-3/CD-4), both guarded by the same `_offer = load_secondary_offer()` split on
+  SECONDARY_CHANGE_ENABLED, the 0x00B7 carrying `player_secondary(state)` through the
+  builder, both masks through `agents.agent_set_secondary_bits`. §2 the player's change:
+  exactly 0x00B7 → 0x00A6 →
   0x00DB, the pair fields equal to the witness's on both, the flag 0 BY DECISION where the
   witness had 1 (SECONDARY-F6: its sole reader picks a chapter mask this server's account
   data has not been shown to fill), the library the load's own words, the session and the
   live attribute state at 4, the next 0x00B7 built from it, the capture row; the current
-  secondary re-picked is a no-op that still answers; a change with nothing of the old
-  secondary on the bar or in the ranks is the bare batch (the witness's exact case). §3
+  secondary re-picked is a no-op that still answers, and with a RANK in the current
+  secondary it zeroes nothing (the cleanup is gated on a real change; the fix pass, CD-5);
+  a change with nothing of the old secondary on the bar or in the ranks is the bare batch
+  (the witness's exact case). §3
   REFUSALS send nothing and move nothing: outside `--secondary-bits 0x44` (6 accepted as
   the control), the primary itself, `--explorable` (OUTPOST's override accepted as the
   control), map 146 by its row alone, agent 77, a KICKED hero's agent, id 0 when the
@@ -7985,31 +7989,58 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   0x003B [1, 5, 0, 0], the Warrior's attr 18 and the common skill 2 untouched, the bar [0,
   1, 2, …]; `--no-secondary-cleanup` keeps rank and bar (the arm's own revert); the same
   for a hero (0x0038 [200, +3], 0x003B [200, 5, 0, 0], 0x00D9 [200, 0, 0, 0], the session
-  bar the panel and body read). §6 persistence through a scratch charstore: absent = never
-  changed = the launch value; the change writes `secondary` = 4 and says so; a reopened
-  store reads it; a FRESH connection's `player_secondary` and attribute state carry the
-  stored 4 OVER the launch 0 (the bar's and the ranks' precedent); a stored secondary equal
-  to a MOVED launch primary is ignored loudly (GmDeckBuilder:2321); the revert does not
-  read the store; a change with a rank and a bar skill persists secondary + ranks + bar
-  together; the hero's row and its fresh block; the store's three refusals (11, a bool, a
-  hero's −1) with 0 as the control; the mirrored CHAR_PROFESSIONS; the setter's refusal;
-  the CLI's `--secondary` / `--hero-secondary` on the scratch base; and the client's own
-  AUTH 0x0009 summary blob round-tripping VERBATIM through `update_settings` with its
-  secondary bits intact (charsummary decodes 4 back) — verified, not assumed. §7 the
-  MASTER REVERT against literals recorded from the 57e89956 tree before any edit: no
-  0x00B6, 0x00B7 [1, 1, 0, 0] / [200, 7, 0, 0], 0x00A6 [1, 1, 0], 0x0041 dropped with
-  nothing sent and no state written, the launch pair, `--secondary-bits` still sending. §8
-  SOURCE LOCKS: the arm on GAME_CMSG_SET_SECONDARY_PROFESSION (57e89956 had no constant at
-  0x0041), 0x0041 off DROPPED_ON_PURPOSE, one call site, main()'s two flags, serverargs'
-  two strings and its corrected `--secondary-bits` help, overrides.json's name at medium
-  with the catalog's layout, row 182 corrected, `hero_character_block`'s two sites and the
-  0x0073 HERO_INFO site carrying `hero_secondary`, the handler's send sites in the batch's
-  order in the source, and never 0x0037 (the CREATOR asserts ChCliAttrib:313 on a live
-  record), 0x003A or a 0x00B6 re-send. SABOTAGE HOOK: `RURIK_SECONDARY_AUTHSRV=<path>`
-  loads that copy as `authsrv`; each new guard was inverted in a scratch copy and reddened
-  (the study's table names which mutation reddens which section). Needs the content
-  overlay's skill and attribute rows (this machine's); no client. 108 checks, floor 108,
-  from the green run. ~12 s),
+  bar the panel and body read, and its BODY row in `state["agents"]` now casting [1, 2] —
+  `sync_hero_body_bar`, the fix pass CD-5). §6 persistence through a scratch charstore:
+  absent = never changed = the launch value; the change writes `secondary` = 4 and says
+  so; a reopened store reads it; a FRESH connection's `player_secondary` and attribute
+  state carry the stored 4 OVER the launch 0 (the bar's and the ranks' precedent); a stored
+  secondary equal to a MOVED launch primary is ignored loudly (GmDeckBuilder:2321); the
+  revert does not read the store; a change with a rank and a bar skill persists secondary
+  + ranks + bar together; the hero's row and its fresh block; a stored HERO secondary equal
+  to its primary ignored loudly and not read under the revert; the hero's cleanup REOPENED
+  from the file (secondary 1, the bar without 105, the ranks without attr 5 — the fix
+  pass, CD-5); the documented reset `charstore.py … --secondary 0` CLEARING the key so the
+  launch value (2) answers again, a file still holding a 0 reading as absent, the hero's
+  setter clearing on 0 (the fix pass, CD-2/EV-6 — a stored 0 used to WIN over
+  `--spawn-secondary`); a skill `grant_skill` taught this session (0x00DC 105) riding the
+  change batch's 0x00DB beside the flag library {1, 2} without a store (the fix pass,
+  CD-6); the store's three refusals (11, a bool, a hero's −1) on a store of its own uuid
+  with 0 as the control; the mirrored CHAR_PROFESSIONS; the setter's refusal; the CLI's
+  `--secondary` / `--hero-secondary` on the scratch base; and the client's own AUTH 0x0009
+  summary blob round-tripping VERBATIM through `update_settings` with its secondary bits
+  intact (charsummary decodes 4 back) — verified, not assumed. §7 the MASTER REVERT
+  against the 57e89956 tree: the builders' literals (no 0x00B6, 0x00B7 [1, 1, 0, 0] / [200,
+  7, 0, 0], 0x00A6 [1, 1, 0], the launch pair, `--secondary-bits` still sending), 0x0041
+  under the revert taking that tree's PATH (nothing sent, no state written, `note_unhandled`'s
+  census at 1 and the capture's `unhandled` event — the fix pass, EV-8), and the REAL load
+  burst driven three times with the module defaults against the recording from a `git
+  archive 57e89956` export: the revert with `--secondary-bits 0x44` reproduces its 43-send
+  opcode list and whole-burst digest with the 0x00B6 [1, 0x44] AFTER the 0x00A6, the revert
+  alone its 42-send list and digest, and the feature on is that burst plus exactly one
+  0x00B6 [1, 2045] after the player's 0x00B7 (a relative check that outlives another arc's
+  change to the load). §8 SOURCE LOCKS: the arm on GAME_CMSG_SET_SECONDARY_PROFESSION
+  (57e89956 had no constant at 0x0041), 0x0041 off DROPPED_ON_PURPOSE, one call site,
+  main()'s two flags, serverargs' two strings and its corrected `--secondary-bits` help,
+  overrides.json's name at medium with the catalog's layout, row 182 corrected,
+  `hero_character_block`'s two sites and the 0x0073 HERO_INFO site carrying
+  `hero_secondary`, the handler's send sites in the batch's order in the source, never
+  0x0037 (the CREATOR asserts ChCliAttrib:313 on a live record), 0x003A or a 0x00B6
+  re-send, and `instance_is_explorable` an alias of `instance_is_field` with the 0x0199
+  send site on the same helper (the fix pass, EV-11). §9 THE LOAD WITH A STORED PAIR (the
+  fix pass, CD-1/EV-1): the real burst under `--persist` finding a scratch store (patched
+  `store_dir`) that holds the player's 4 and hero 6's 5, in a town and a field on the
+  retail and the legacy rig — EVERY 0x00B7 / 0x00A6 addressed to the hero's agent carries
+  [3, 5], the last one in particular (the town's bodiless-row 0x00A6, the field's
+  body-create 0x00A6 and the legacy rig's 0x00B7 all sent 0 before the fix and, being last,
+  overwrote the roster's summary record), the retail rig's 0x0073 field 4 is 5, the
+  player's 0x00B7 [1, 1, 4, 0] / 0x00A6 [1, 1, 4], the 0x00B6 [1, 2045] still after the
+  0x00B7, and in a field the last hero 0x00A6 is `create_agent_world`'s. SABOTAGE HOOK:
+  `RURIK_SECONDARY_AUTHSRV=<path>` loads that copy as `authsrv`; each new guard was
+  inverted in a scratch copy and reddened (the study's two tables name which mutation
+  reddens which section — the first pass's ten and the fix pass's, including the
+  reviewers' nine inversions that had survived). Needs the content overlay's skill and
+  attribute rows (this machine's); no client. 152 checks, floor 152, from the green run
+  (108 before the fix pass). ~13 s),
   `toolkit/authsrv/test_recharge.py` (**2026-09-23, DESKWORK-D5 step 4 — an NPC's per-slot
   recharge runs from the cast's COMPLETION, not its start.** §1 is the sender, fixture-less:
   `npc_recharge_anchor` returns the activation under the completion anchor and 0 under

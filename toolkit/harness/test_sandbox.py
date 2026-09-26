@@ -34,7 +34,7 @@ import checks   # noqa: E402
 import content  # noqa: E402
 import sandbox  # noqa: E402
 
-led = checks.Ledger("sandbox", floor=156)     # 88 from the green run 2026-09-20; +19 SANDBOX-B7 (2026-09-22); +2 SKILLS-LT sec.5, the hand / label split (2026-09-23); +2 the fix pass (one LABEL_TIER, gamesrv_args); +1 budget_for_level (2026-09-24); +4 a hostile's ranks checked (2026-09-24); +7 the pre-merge pass: a hostile's level range, the no-level fallback told from 2 and 20, no npc rows (2026-09-24); +4 hostiles exempt from the budget, the owner's ruling: two budget refusals inverted, three kept rules and a hero's budget as controls, the no-level fallback re-witnessed on spawn_rows and validate's level range (2026-09-24); +2 the verifier's fixes: a malformed pair and an id outside the table on a hostile, the two kept rules with no hostile witness (2026-09-24); +10 the hostile caps lifted, the owner's ruling: rank 13 and 21 accepted, 22 refused, a level-255 hostile accepted and 24 too, 256 refused, the player's and a hero's rank 13 and level 21 refused (four controls that did not exist), HOSTILE_LEVEL_MAX tied to 0x0056's byte in the schema and to the codec's raise, a definition per (template, level) with its ids in range (2026-09-24); +1 the lift's verifier's fix: one member past both caps refused for both (`if tmpl:`, the elif hid the rank reason) (2026-09-24); +10 SANDBOX-N1 sec. 6: the rank a hostile's skill acts at (effective_rank, skill_attribute, UNRANKED_SKILL_RANK) and the text locks to authsrv.py (2026-09-24); +6 the repair (2026-09-24): a hostile's nine skills refused, skill_varies twice, spawn_rows' [] -> None, the locks re-pointed at the create path's fallback and agent_attributes' contiguous block (+2 net)
+led = checks.Ledger("sandbox", floor=160)     # 88 from the green run 2026-09-20; +4 SECONDARY-B4's store_state/store_warnings (the fix pass, CD-3, 2026-09-25); +19 SANDBOX-B7 (2026-09-22); +2 SKILLS-LT sec.5, the hand / label split (2026-09-23); +2 the fix pass (one LABEL_TIER, gamesrv_args); +1 budget_for_level (2026-09-24); +4 a hostile's ranks checked (2026-09-24); +7 the pre-merge pass: a hostile's level range, the no-level fallback told from 2 and 20, no npc rows (2026-09-24); +4 hostiles exempt from the budget, the owner's ruling: two budget refusals inverted, three kept rules and a hero's budget as controls, the no-level fallback re-witnessed on spawn_rows and validate's level range (2026-09-24); +2 the verifier's fixes: a malformed pair and an id outside the table on a hostile, the two kept rules with no hostile witness (2026-09-24); +10 the hostile caps lifted, the owner's ruling: rank 13 and 21 accepted, 22 refused, a level-255 hostile accepted and 24 too, 256 refused, the player's and a hero's rank 13 and level 21 refused (four controls that did not exist), HOSTILE_LEVEL_MAX tied to 0x0056's byte in the schema and to the codec's raise, a definition per (template, level) with its ids in range (2026-09-24); +1 the lift's verifier's fix: one member past both caps refused for both (`if tmpl:`, the elif hid the rank reason) (2026-09-24); +10 SANDBOX-N1 sec. 6: the rank a hostile's skill acts at (effective_rank, skill_attribute, UNRANKED_SKILL_RANK) and the text locks to authsrv.py (2026-09-24); +6 the repair (2026-09-24): a hostile's nine skills refused, skill_varies twice, spawn_rows' [] -> None, the locks re-pointed at the create path's fallback and agent_attributes' contiguous block (+2 net)
 
 
 # ---------------------------------------------------------------- the fixture
@@ -662,7 +662,14 @@ with tempfile.TemporaryDirectory() as tmp:
                                            "attributes": [[13, 2], [17, 1]],
                                            "heroes": {"3": {"skillbar": [281, 0, 0, 0, 0, 0, 0, 0],
                                                             "attributes": [[13, 1]],
-                                                            "attribute_points": 10}}}}}, fh)
+                                                            "attribute_points": 10}}},
+                                  # SECONDARY-B4 (the fix pass, CD-3): a character whose
+                                  # K-panel change stored secondary 3 (Monk) with a Monk
+                                  # rank, and a hero with a stored secondary
+                                  "2222": {"name": "Sec Tester", "level": 3,
+                                           "secondary": 3,
+                                           "attributes": [[13, 2]],
+                                           "heroes": {"3": {"secondary": 5}}}}}, fh)
     real_path = sandbox.store_path
     sandbox.store_path = lambda email=None: stpath
     try:
@@ -682,6 +689,24 @@ with tempfile.TemporaryDirectory() as tmp:
                "a stored rank in another profession's attribute is warned about")
         led.ok(any("hero 3 keeps its stored bar [281]" in w for w in warn),
                "a party hero's stored bar is said to win over the spec")
+        # SECONDARY-B4 (the fix pass, CD-3): the stored secondary is surfaced and
+        # said to win, and the new secondary's own ranks are NOT "another profession"
+        led.ok(st["characters"]["Sec Tester"]["secondary"] == 3
+               and st["characters"]["Sec Tester"]["heroes"][3]["secondary"] == 5
+               and st["characters"]["Test Warrior"]["secondary"] is None,
+               "store_state surfaces the character's and each hero's stored secondary "
+               "(None when never changed)", st["characters"]["Sec Tester"])
+        led.ok(any("Sec Tester's stored secondary 3 wins over the spec's player.secondary 0" in w
+                   for w in warn),
+               "a stored secondary is said to WIN over the spec's player.secondary, with "
+               "the charstore.py reset named", warn)
+        led.ok(not any(w.startswith("Sec Tester's stored ranks include") for w in warn)
+               and any(w.startswith("Test Warrior's stored ranks include attributes [13]") for w in warn),
+               "...and the stored secondary's own rank (Monk attr 13 on a W/Mo) is NOT flagged "
+               "as another profession's, while the same rank on the W/- still is",
+               [w for w in warn if "stored ranks" in w])
+        led.ok(any("hero 3 keeps its stored secondary 5" in w for w in warn),
+               "a party hero's stored secondary is said to win over the spec")
         led.ok(sandbox.store_warnings(spec(), WORLD, None) == [],
                "no store, no warnings")
         c = sandbox.compile_spec(spec(unlocks=[382]), WORLD, tmp, exe="x", dat="y", store=st)

@@ -455,9 +455,11 @@ def _profession_secondary_steps(agent_id):
     and the builder returns immediately. `--map 796`.
 
     CONTESTED 2026-09-25 (SECONDARY-F3, studies/profession/SECONDARY.md): the
-    whitelist is refuted -- retail used the drop-down in map 248, an ordinary
-    outpost, and the static re-read finds only the two gates (>= 2 entries and
-    0x0199 field 3 == 0). The probe still works; it no longer needs 796. Since
+    whitelist is refuted -- retail used the drop-down in map 248, the Great
+    Temple (areatable type 13, the PvP hub; not one of the fifteen), and the
+    static re-read finds only the two gates (>= 2 entries and 0x0199 field 3
+    == 0); a type-10 outpost is the runsheet's R1. The probe still works; it
+    no longer needs 796. Since
     SECONDARY-B1 every load sends 0x00B6 by default, so this probe's three
     masks now OVERRIDE a mask rather than supply the only one.
     """
@@ -1246,8 +1248,10 @@ PROBES = {
              "of 823-836. The builder self-gates on that 15-map whitelist and "
              "outside it panel init zeroes the gate, so a null result "
              "elsewhere says nothing about 0x00B6. [CONTESTED 2026-09-25, "
-             "SECONDARY-F3: refuted -- retail used the drop-down in map 248; "
-             "any town works, studies/profession/SECONDARY.md.] Sends NO 0x00B7 on "
+             "SECONDARY-F3: refuted -- retail used the drop-down in map 248, the "
+             "Great Temple (type 13, the PvP hub); the static read finds no map "
+             "gate, and a type-10 outpost is the runsheet's R1, "
+             "studies/profession/SECONDARY.md.] Sends NO 0x00B7 on "
              "purpose: an opening 0x00B7 with primary == secondary asserts "
              "GmDeckBuilder:2321 at the end of every builder run and would "
              "crash the client before the mask is read. The spawn burst has "

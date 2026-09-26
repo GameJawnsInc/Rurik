@@ -1004,10 +1004,15 @@ def store_state(email=None):
         chars[str(row.get("name", _uuid))] = {
             "level": row.get("level"), "skillbar": row.get("skillbar"),
             "attributes": row.get("attributes"),
+            # SECONDARY-B4 (the fix pass, CD-3): the secondary the K panel's
+            # change stored, which wins over the spec's player.secondary at
+            # load; a stored 0 is charstore's "cleared" and reads as absent.
+            "secondary": row.get("secondary") or None,
             "kicked_heroes": list(row.get("kicked_heroes") or []),
             "heroes": {int(k): {"skillbar": v.get("skillbar"),
                                 "attributes": v.get("attributes"),
-                                "attribute_points": v.get("attribute_points")}
+                                "attribute_points": v.get("attribute_points"),
+                                "secondary": v.get("secondary") or None}
                        for k, v in (row.get("heroes") or {}).items()}}
     return {"path": path,
             "account_unlocked": (data.get("account") or {}).get("unlocked_skills"),
@@ -1034,20 +1039,35 @@ def store_warnings(spec, world, st):
         profs.add(int(player["secondary"]))
     rules = attribute_rules(world)
     party = {int(h["hero"]) for h in spec.get("heroes") or [] if h.get("hero") is not None}
+    primary = int(player.get("profession", 1))
     for name, c in st["characters"].items():
+        # SECONDARY-B4 (the fix pass, CD-3): a stored secondary WINS over the
+        # spec's player.secondary at load (authsrv.player_secondary), so the
+        # character's pair for these warnings is the STORED one when present
+        # -- else the new secondary's own ranks and bar skills would be
+        # flagged "of another profession" -- and the operator is told, the
+        # way the hero bar line below says the store wins.
+        cprofs = set(profs)
+        stored_sec = c.get("secondary")
+        if stored_sec and int(stored_sec) != primary:
+            cprofs.discard(int(player.get("secondary", 0)) or -1)
+            cprofs.add(int(stored_sec))
+            out.append(f"{name}'s stored secondary {int(stored_sec)} wins over the spec's "
+                       f"player.secondary {int(player.get('secondary', 0))} "
+                       f"(charstore.py --account E --character N --secondary 0 to clear)")
         bar = [s for s in (c.get("skillbar") or []) if s]
         unbacked = [s for s in bar if s not in unlocks]
         if unbacked:
             out.append(f"{name}'s stored bar carries {unbacked}, outside this run's "
                        f"unlocks: they draw, and dragging one asserts the client")
         if bar:
-            foreign = [s for s in bar if skill_owned(world, s, profs) is False]
+            foreign = [s for s in bar if skill_owned(world, s, cprofs) is False]
             if foreign:
                 out.append(f"{name}'s stored bar carries {foreign}, skills of a profession "
                            f"this character is not")
         if rules and c.get("attributes"):
             off = [a for a, _r in c["attributes"]
-                   if rules.attributes.get(int(a), {}).get("profession") not in profs]
+                   if rules.attributes.get(int(a), {}).get("profession") not in cprofs]
             if off:
                 out.append(f"{name}'s stored ranks include attributes {off} of another "
                            f"profession; the panel will carry them")
@@ -1055,6 +1075,10 @@ def store_warnings(spec, world, st):
             if idx in party and h.get("skillbar"):
                 out.append(f"hero {idx} keeps its stored bar {[s for s in h['skillbar'] if s]} "
                            f"(the store wins over the spec)")
+            if idx in party and h.get("secondary"):
+                out.append(f"hero {idx} keeps its stored secondary {int(h['secondary'])} "
+                           f"(the store wins over the spec, which authors no hero "
+                           f"secondary; charstore.py --hero {idx} --hero-secondary 0 to clear)")
     return out
 
 

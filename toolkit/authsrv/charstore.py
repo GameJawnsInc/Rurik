@@ -973,44 +973,63 @@ class Store:
     # the seed, the store is what the character has since done. The primary
     # is NOT stored (a launch setting, the owner's decision), so the equal-
     # pair guard lives at the reader (authsrv.player_secondary), not here.
+    #
+    # ZERO MEANS ABSENT (the fix pass, CD-2/EV-6). The in-game change never
+    # writes 0 (handle_secondary_change accepts 1..10 and a no-op writes
+    # nothing), so the only writer of 0 is the operator's reset -- and until
+    # this pass `charstore.py --secondary 0` stored a present 0 that WON over
+    # --spawn-secondary / a party row's player_secondary, so the documented
+    # reset pinned "no secondary" against the launch seed instead of
+    # restoring it. Now: the setters POP the key on 0 (the file returns to
+    # "never changed"), and the readers answer None for a 0 that a hand-edited
+    # file still holds. Either way the launch value answers again.
     def character_secondary(self, uuid_hex):
-        """The stored secondary, or None when the row exists but never
-        stored one (and None when there is no such character)."""
+        """The stored secondary (1..10), or None when the row exists but
+        never stored one, stores 0 (= cleared; the launch value answers), or
+        there is no such character."""
         row = self.character_by_uuid(uuid_hex)
         if row is None:
             return None
         s = row.get("secondary")
-        return int(s) if isinstance(s, int) and not isinstance(s, bool) else None
+        return int(s) if isinstance(s, int) and not isinstance(s, bool) and s else None
 
     def set_character_secondary(self, uuid_hex, secondary):
-        """Record the secondary (0..10, 0 = none); saves. Returns the stored
-        int, None when there is no row, or False when save() refused a stale
-        write (the purse's contract)."""
+        """Record the secondary (1..10), or CLEAR it with 0 (the key is
+        removed: absent = the launch value answers); saves. Returns the int
+        given, None when there is no row, or False when save() refused a
+        stale write (the purse's contract)."""
         row = self.character_by_uuid(uuid_hex)
         if row is None:
             return None
         _validate_secondary(self.path, f"character {row['name']!r}", secondary)
-        row["secondary"] = int(secondary)
+        if int(secondary):
+            row["secondary"] = int(secondary)
+        else:
+            row.pop("secondary", None)
         if not self.save():
             return False
         return int(secondary)
 
     def hero_secondary(self, uuid_hex, hero_index):
-        """One hero's stored secondary, or None when none is stored."""
+        """One hero's stored secondary (1..10), or None when none is stored
+        or a 0 (cleared) is."""
         hero = self.hero_row(uuid_hex, hero_index)
         if hero is None:
             return None
         s = hero.get("secondary")
-        return int(s) if isinstance(s, int) and not isinstance(s, bool) else None
+        return int(s) if isinstance(s, int) and not isinstance(s, bool) and s else None
 
     def set_hero_secondary(self, uuid_hex, hero_index, secondary):
-        """Record one hero's secondary; saves. Same contract as the
-        character's setter."""
+        """Record one hero's secondary, or clear it with 0; saves. Same
+        contract as the character's setter."""
         hero = self.ensure_hero(uuid_hex, hero_index)
         if hero is None:
             return None
         _validate_secondary(self.path, f"hero {int(hero_index)}", secondary)
-        hero["secondary"] = int(secondary)
+        if int(secondary):
+            hero["secondary"] = int(secondary)
+        else:
+            hero.pop("secondary", None)
         if not self.save():
             return False
         return int(secondary)
@@ -1116,11 +1135,13 @@ def _main(argv=None):
     ap.add_argument("--bar", help="replace the CHARACTER's own eight slots")
     ap.add_argument("--secondary", type=int, metavar="N",
                     help="set THIS CHARACTER's stored secondary profession "
-                         "(0..10, 0 = none) -- what the K panel's change wrote; "
-                         "it wins over --spawn-secondary at the next load "
-                         "(SECONDARY-B4)")
+                         "(1..10) -- what the K panel's change wrote; it wins "
+                         "over --spawn-secondary at the next load (SECONDARY-B4). "
+                         "0 CLEARS it: the key is removed and the launch value "
+                         "(--spawn-secondary / the party row) answers again")
     ap.add_argument("--hero-secondary", type=int, metavar="N",
-                    help="set the hero's stored secondary (requires --hero)")
+                    help="set the hero's stored secondary (requires --hero); "
+                         "0 clears it, as --secondary 0 does")
     a = ap.parse_args(argv)
 
     if a.list:
