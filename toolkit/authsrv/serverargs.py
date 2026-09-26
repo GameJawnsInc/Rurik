@@ -2211,6 +2211,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "-- the record's target byte 16) lands on its one target with no "
                          "explosion and no word for the foes around it -- the reading every "
                          "run before 2026-09-20 made.")
+    ap.add_argument("--no-areas-over-time", action="store_true",
+                    help="studies/weapons 42 REVERT: an area over TIME (Fire Storm, Meteor "
+                         "Shower, Eruption -- the record's target byte 16 with a duration) "
+                         "lands ONE word on its target at the completion, no ground effect, "
+                         "no ticks -- the reading every run before 2026-09-26 made. "
+                         "--no-spell-areas reverts it too (the older flag wins).")
     ap.add_argument("--no-spell-projectiles", action="store_true",
                     help="studies/weapons 36 / 37 REVERT: a projectile SPELL (Flare, "
                          "Lightning Orb, Dancing Daggers) lands its damage at the E5 (the "

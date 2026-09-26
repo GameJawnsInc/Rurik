@@ -863,12 +863,18 @@ def main():
             d = authsrv.skill_damage(sid, 0)
             return authsrv.spell_burst(sid) is not None and bool(d) and d[1] == "standalone"
         disagree = [s for s in lab_ids if ("AREA_BURST" in lab[str(s)]["tier_detail"]) != _bursts(s)]
+        # 2026-09-26 (DESKWORK-D6 step 2, studies/weapons 42): 192 and 197 are HAND rows now --
+        # areas over TIME the server serves through area_over_time, its own predicate -- so
+        # they are no longer in the label tier; spell_burst still refuses both (a duration).
         check(disagree == [] and authsrv.spell_burst(192) is None and authsrv.spell_burst(197) is None
-              and authsrv.spell_burst(187) == 156.0 and "AREA_BURST" not in lab["192"]["tier_detail"]
-              and "DURATION_UNMODELLED" in lab["192"]["tier_detail"],
+              and authsrv.spell_burst(187) == 156.0 and "192" not in lab and "197" not in lab
+              and authsrv.area_over_time(192, 0) is not None
+              and authsrv.area_over_time(197, 0) is not None
+              and agents.WORLD.get("skill_effect", "192").get("tier") is None,
               f"AREA_BURST agrees with spell_burst + a standalone damage on all {len(lab_ids)} "
-              f"label rows; the areas over time 192 and 197 are refused by the server (a "
-              f"duration) and marked ONE_TARGET + DURATION_UNMODELLED", disagree)
+              f"label rows; the areas over time 192 and 197 are refused by spell_burst (a "
+              f"duration) and served by area_over_time from their HAND rows, which shadow the "
+              f"label rows (ONE_TARGET + DURATION_UNMODELLED) since 2026-09-26", disagree)
         # LT-R4 / SKILLS-LU: a shipped non-attack with a chain requirement carries the
         # CHAIN_GATED mark -- the player's E5 judges it (NONATTACK_CHAIN_GATE) -- and
         # 784 (combo_req 2, a Spell) is such a row once the overlay is regenerated

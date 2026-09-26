@@ -2622,3 +2622,106 @@ second field means (4 for a Fire Storm tick, 11 for Fireball, 25 for a melee hit
 ambient `0x00A1` effects 1292-1303 / 1685-1687 (agent 0, on two PvE tapes) were not checked
 for damage (UNVERIFIED). Monster scatter has no retail witness and stays WIKI plus
 RECONSTRUCTION.
+
+## 42. Areas over time -- 2026-09-26: on the server (DESKWORK-D6 step 2)
+
+**What the server now does** (`authsrv.py` section 42, the banner beside `spell_burst`; the
+leaf `toolkit/authsrv/areatime.py`). A record row with target byte 16, type 5, no projectile of
+its own, a duration and an `aoe_range` is an AREA OVER TIME (`areatime.area_over_time_row`,
+OBSERVED: exactly §41's fourteen on the pinned table), and it is a predicate of its own --
+`spell_burst` still refuses every duration (locked). The completion OPENS the area
+(`open_area`) at the target's position NOW (CORROBORATED, §41) and lands NOTHING on the target:
+the player's E5 batch is E5, `[58, me, 0]`, then `0x00A1 [P, 0, 0, area_visual, 0, 0]`; a body's
+is `[58, it, 0]` then the same 0x00A1 IMMEDIATELY behind it (OBSERVED 17/17), no word, no
+condition, no terms computed at the completion. The area sits on `state["areas"]` with every
+instant computed from the completion -- `tick_instants`: t0 + k x period, k = 1 .. duration /
+period (Fire Storm +1..+10, OBSERVED); `visual_instants`: t0 + 3j while 3j <= duration - 4 (0 / 3
+/ 6 for 10 s, OBSERVED; the 3 and the 4 are FITTED to that one duration, so any other duration's
+re-draw schedule is RECONSTRUCTION) -- and its next tick and next re-draw feed
+`combat_deadlines`. `area_tick`, called from `projectile_tick` beside `spell_queue_tick` (both
+tick sites, no new one), serves each due instant in order: the re-drawn ground effect first when
+it shares the instant (OBSERVED 19/19), then the tick -- `foes_within` at P as they stand NOW
+(the dead excluded, a late entrant included, a revived taker again), the player's ticks through
+`hit_enemy`'s exact word (armed, so the swing gate never swallows a tick; no skill id, so no
+interrupt), a body's through `body_spell_terms` computed for EVERY foe before the first send
+(the refusal contract per tick: a refused fraction skips THAT foe for THAT tick with a printed
+line and never raises -- an exception there would fuse the deadline thread), then the row's
+knock-down and condition on each struck living foe. To the player a body's tick is the tape's
+shape by construction: the gain, `[10, me, sid]`, the word (§41, 12/12). No 58, no `[20]`, no
+`0x00A7` on a tick (OBSERVED 0/74). The area closes after its last tick and last re-draw; `state`
+is per connection, so a zone change or a disconnect drops it for free. One `[DESKWORK-D6]` log
+line per opened area, per tick, per close.
+
+**Every RECONSTRUCTION, named.**
+- **The caster's death does not end the area.** The tape is INCONCLUSIVE (§41: 2 casts, both
+  areas empty; the 350 re-sent after the caster died, n = 1); the wiki is silent. A dead or
+  despawned BODY caster's ticks resolve from its row snapshotted at the completion (the strike
+  level), and `foes_within` is told the caster's side outright so a vanished row cannot flip it.
+  Locked: a caster killed at k = 4 still words the player and the monk at k = 5 and 6.
+- **The re-draw schedule for any duration but 10** (above).
+- **Meteor Shower 192** (WIKI, GWW "Meteor Shower" rev. 2722820, read 2026-09-26: "For 9
+  seconds, foes adjacent to that location are struck for 7...112 fire damage and knocked down
+  every 3 seconds"; Notes: the first event 3 s after the cast): `tick_period = 3.0`,
+  `knocks_down = true` -- ticks at +3 / +6 / +9, each a word then the fall; NO ground effect (no
+  id is known; the log says so). NOT FOUND on any tape (§41 P8).
+- **Eruption 167** (WIKI, GWW "Eruption" rev. 2683897, read 2026-09-26: "Each second for 5
+  seconds, foes near this location are struck for 10...40 earth damage and are Blinded for 10
+  seconds"): the Blind rides EVERY tick on each foe struck (the page puts both on every second),
+  a re-applied Blind under the longer-stands rule `apply_condition` already keeps; nothing at
+  the completion (the pre-D6 shape put the word AND the Blind on the one target there). NOT
+  FOUND on any tape. The hand row's Blind seconds are the record's flat 10 in a bit-clear slot,
+  read by SKILLS-LV's flat reader -- the one HAND row that reader moves, named in
+  test_labelconsumers §8.
+- **The other eleven** (77, 196, 215, 830, 844, 910, 1083, 1094, 1372, 1380, 2222) carry no hand
+  row: no damage resolves for them and they land as before today (inert, or one target through
+  a label row) until a row names them. Said in the banner.
+- **Scale.** The player's ticks are NOT armour-scaled (hit_enemy's exact gap, studies/isle 4.2,
+  unchanged); a body's ticks scale by the PLAYER's spell armour whoever the taker is
+  (body_spell_terms's standing shape, aotR-server §2's surprise) -- both pre-existing gaps, not
+  this step's, and named rather than fixed.
+- **The player's completion order.** The tape's casters are never the observer, so a player's
+  own E5 batch for an area over time is UNOBSERVED; ours puts the 0x00A1 behind the 58 and the
+  (silent, for these three rows) caster visual, where the burst's explosion sits.
+
+**The content rows** (`content/world.toml` skill_effect 197 / 192 / 167, provenance per row):
+197 is a CAPTURE row (`20260817T231139`, live) -- `area_visual = 350` (in no column of the
+record; its impact_visual is 351), `tick_period = 1.0`, fire; 192 and 167 are WIKI rows with
+the revision ids above. Each REPLACES the vault's label row for its id under content.py's tier
+rule, so it names everything the label named (the damage label; 167's Blind). `tick_period`
+is a new optional field, read by `area_tick_period` (default `AREA_TICK_PERIOD` 1.0);
+content.py has no field whitelist, so nothing there changed.
+
+**The last_hit interaction, fixed.** A player tick stamps the foe's `last_hit` through
+hit_enemy, and the single-target spell fallback at the E5 (`_st_res = hit_enemy(...)`) was NOT
+armed -- so the player's own Flare on a foe an area had ticked inside the last ATTACK_INTERVAL
+was silently swallowed by the swing gate (a latent defect the areas made reachable every
+second). The gate's stated purpose is the SWING timer, and a spell is not a swing: the fallback
+now passes `armed=True` (the same call otherwise; `armed` on a `swing=False` call skips the gate
+and nothing else). Locked with the known-bad arm: the pre-fix shape swallowed right after a
+tick, the real E5 path landing.
+
+**Flags.** `--no-areas-over-time` (serverargs; `AREAS_OVER_TIME` at column 0, `main()` flips it
+with a banner) reverts to the single word at the completion -- byte-identical to
+`--no-spell-areas`, which reverts it TOO (it has reverted every target-16 area since §38 and
+keeps that meaning: the older flag wins). Locked: the two streams compared equal.
+
+**The lock.** `test_weapons.py` section 30 (13 checks bare, 1 vault-only; floor 265 -> 278, a
+vault run 309): the predicate and its two refusals; the schedule; the player's Fire Storm
+through the real press and E5 over three hostiles inside and one at 200 u, served a second at a
+time through the real `projectile_tick` (k = 1..10, the late entrant from k = 5, the one killed
+at k = 3 never again, the 350 before the words at +3 / +6, clean ticks, closed after k = 10);
+the last_hit arm; Meteor Shower's +3 / +6 / +9 and its falls; Eruption's per-tick Blind; a
+hostile's Fire Storm through the real `land_skill` (the completion, the tape's order at k = 1,
+the monk through hurt_agent_row, the caster's death at k = 4); the refused fraction; the two
+reverts byte-identical; the source locks; and the tape: the seventeen casts' ticks are exactly
+k = 1..10 and the 350 exactly at +0 / +3 / +6, the schedule the server produces for 197.
+`test_guards` section 10 pins the new callers (`_area_strike` <- `area_tick` <-
+`projectile_tick`; `open_area` <- `cast_tick`, `land_skill`); `test_skilldamage` §14 and
+`test_labelconsumers` §5c / §8 re-pointed for the shadowed label rows (TESTS.md).
+
+**Left.** Monster scatter (`scatter_struck` is the hook, a no-op here; studies/monsterai 16);
+D6's later steps (Mind Burn 185 / hex 179, the seven area hexes, Dazed and Cracked Armor); an
+armour-scaled player tick and a taker-scaled body tick (the two gaps above); a ground visual id
+for 192 and 167 (unknown); the player's own completion batch for an area (unobserved); D6's own
+text in `studies/deskwork/PLAN.md` still says "Fifteen area skills" and "words at +3, +4, +5 s"
+(§41's corrections stand; the landing rewrites it).

@@ -24,7 +24,7 @@ import agents  # noqa: E402
 import authsrv  # noqa: E402
 import combatmath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=265)   # the BARE-MACHINE number: 265 = 257 + 8 (section 29, areas over time on retail's wire -- aotjoin, 2026-09-26; a vault run gives 295 -- the record's classes, P1-P9 and the tick batch order are the eleven vault-only checks; section 29 alone under a missing RURIK_VAULT runs its 8 and declares the skip); before that 257 = 251 + 6 (section 28, a point-blank burst, 2026-09-20; a vault run gives 276 -- the corpus's target-16 announces are the one vault-only check); before that 251 = 237 + 14 (section 27, the hit test, 2026-09-20; a vault run gives 269 -- the corpus's dodge words are the one vault-only check); before that 237 = 228 + 9 (section 26, Fireball's splash, 2026-09-20; a vault run gives 254 -- the tape's bursts are the one vault-only check); before that 228 = 219 + 9 (section 25, a body's spell projectile, 2026-09-20; a vault run gives 244 -- the tape's activations are the one vault-only check); before that 219 = 208 + 11 (section 24, a player's spell projectile, 2026-09-20; a vault run gives 234 -- the tapes' speeds are the one vault-only check); before that 208 = 203 + 5 (section 23, base armour penetration, 2026-09-19; a vault run gives 222 -- the six checks that read the skills table are vault-only); before that 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=278)   # the BARE-MACHINE number: 278 = 265 + 13 (section 30, areas over time on the server -- DESKWORK-D6 step 2, 2026-09-26; a vault run gives 309 -- the server's 197 schedule against the tape's is the one vault-only check, on capture 20260817T231139 alone); before that 265 = 257 + 8 (section 29, areas over time on retail's wire -- aotjoin, 2026-09-26; a vault run gives 295 -- the record's classes, P1-P9 and the tick batch order are the eleven vault-only checks; section 29 alone under a missing RURIK_VAULT runs its 8 and declares the skip); before that 257 = 251 + 6 (section 28, a point-blank burst, 2026-09-20; a vault run gives 276 -- the corpus's target-16 announces are the one vault-only check); before that 251 = 237 + 14 (section 27, the hit test, 2026-09-20; a vault run gives 269 -- the corpus's dodge words are the one vault-only check); before that 237 = 228 + 9 (section 26, Fireball's splash, 2026-09-20; a vault run gives 254 -- the tape's bursts are the one vault-only check); before that 228 = 219 + 9 (section 25, a body's spell projectile, 2026-09-20; a vault run gives 244 -- the tape's activations are the one vault-only check); before that 219 = 208 + 11 (section 24, a player's spell projectile, 2026-09-20; a vault run gives 234 -- the tapes' speeds are the one vault-only check); before that 208 = 203 + 5 (section 23, base armour penetration, 2026-09-19; a vault run gives 222 -- the six checks that read the skills table are vault-only); before that 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
 check = LEDGER.ok
 
 LEGACY_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
@@ -3832,6 +3832,429 @@ def section_aot_tape():
               f"{sc['visual_before_words']}/{sc['visual_in_tick']} {sc['revived_struck']}")
 
 
+def _aot_rows():
+    """The record rows section 30 injects: three areas over time and four that are
+    not -- every field the E5 path reads (the rank, the scale, the bonus slot)."""
+    base = {"activation": 2.0, "aftercast": 0.75, "recharge": 20, "energy": 10,
+            "adrenaline": 0, "adrenaline_units": 0, "profession": 6, "combo": 0,
+            "combo_req": 0, "weapon_req": 0, "skill_arguments": 2, "bonus_scale0": 0,
+            "bonus_scale15": 0, "projectile": 2077, "impact_visual": 2077}
+    return {"197": dict(base, attribute=10, type_code=5, target=16, aoe_range=156.0,
+                        duration0=10, duration15=10, scale0=5, scale15=35, impact_visual=351),
+            "192": dict(base, attribute=10, type_code=5, target=16, aoe_range=156.0,
+                        duration0=9, duration15=9, scale0=7, scale15=112, activation=5.0),
+            "167": dict(base, attribute=9, type_code=5, target=16, aoe_range=240.0,
+                        duration0=5, duration15=5, scale0=10, scale15=40,
+                        bonus_scale0=10, bonus_scale15=10),
+            "186": dict(base, attribute=10, type_code=5, target=16, aoe_range=240.0,
+                        duration0=0, duration15=0, scale0=7, scale15=112, projectile=343),
+            "170": dict(base, attribute=9, type_code=5, target=16, aoe_range=240.0,
+                        duration0=0, duration15=0, scale0=26, scale15=100),
+            "52": dict(base, attribute=2, type_code=4, target=16, aoe_range=240.0,
+                       duration0=1, duration15=10, scale0=0, scale15=0),
+            "194": dict(base, attribute=10, type_code=5, target=5, aoe_range=156.0,
+                        duration0=0, duration15=0, scale0=20, scale15=65, projectile=343)}
+
+
+def _aot_advance(st, send, seconds):
+    """Move every open area's clock back by `seconds` (as section 26 does with
+    `arrives_at`) and serve through the REAL projectile_tick."""
+    for area in st.get("areas") or ():
+        area["t0"] -= seconds
+        area["ticks"] = [t - seconds for t in area["ticks"]]
+        area["visuals"] = [t - seconds for t in area["visuals"]]
+    authsrv.projectile_tick(send, st, 1)
+
+
+def section_areas_over_time():
+    print("\n30. an area over time on the server: the completion opens it, a tick a second, "
+          "the ground effect re-drawn, nothing on the target at the completion")
+    import contextlib                                                 # noqa: PLC0415
+    import io                                                         # noqa: PLC0415
+    import areatime                                                   # noqa: PLC0415
+    saved = (authsrv.skill_damage, authsrv._is_attack_skill, authsrv.skill_projectile,
+             authsrv.skill_impact_visual, authsrv.SPELL_AREAS, authsrv.AREAS_OVER_TIME,
+             authsrv.skill_timing, authsrv.skill_cost, authsrv.weapon_satisfies,
+             agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+             authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,
+             authsrv.body_spell_terms)
+    A1 = authsrv.GAME_SMSG_EFFECT_AT_POINT
+    words = lambda batch: [v for op, v in batch if op == 0x00A3 and v[0] in (16, 17)]   # noqa: E731
+    grounds = lambda batch: [v for op, v in batch if op == A1]                          # noqa: E731
+    fin58 = lambda batch: [v for op, v in batch if op == 0x009F and v[0] == 58]         # noqa: E731
+    impacts = lambda batch: [v for op, v in batch if op == 0x00A0 and v[0] == agents.GV_EFFECT_ON_TARGET]  # noqa: E731
+    arrivals = lambda batch: [v for op, v in batch if op == 0x00A7]                     # noqa: E731
+    ops = lambda batch: [op for op, _v in batch]                                        # noqa: E731
+
+    def clean(batch):
+        """A tick's batch as the tape has it: no 58, no [20], no 0x00A7."""
+        return not fin58(batch) and not impacts(batch) and not arrivals(batch)
+
+    def blinded(st, aid):
+        return any(ep["skill"] == 479 for ep in authsrv.effect_table(st).on_agent(aid))
+
+    tables = agents.WORLD.tables
+    had, kept = "skills" in tables, tables.get("skills")
+    tables["skills"] = _aot_rows()
+    try:
+        authsrv.skill_projectile = lambda sid: 343 if sid in (186, 194) else None
+        # (a) the predicate
+        got = {s: authsrv.area_over_time(s, 12) for s in (197, 192, 167, 186, 170, 52, 194, 99999)}
+        authsrv.AREAS_OVER_TIME = False
+        off_a = authsrv.area_over_time(197, 12)
+        authsrv.AREAS_OVER_TIME = True
+        authsrv.SPELL_AREAS = False
+        off_b = authsrv.area_over_time(197, 12)
+        authsrv.SPELL_AREAS = True
+        raw = {s: areatime.area_over_time_row(tables["skills"][str(s)]) for s in (197, 192, 167, 186, 170, 52, 194)}
+        check(got == {197: (156.0, 10.0), 192: (156.0, 9.0), 167: (240.0, 5.0), 186: None,
+                      170: None, 52: None, 194: None, 99999: None}
+              and off_a is None and off_b is None
+              and raw == {197: (156.0, 10.0), 192: (156.0, 9.0), 167: (240.0, 5.0),
+                          186: None, 170: None, 52: None, 194: None}
+              and authsrv.spell_burst(197) is None and authsrv.spell_burst(192) is None
+              and authsrv.spell_burst(170) == 240.0
+              and areatime.area_over_time_row(None) is None
+              and areatime.area_over_time_row({"target": "x"}) is None,
+              "the predicate: Fire Storm (156 u, 10 s), Meteor Shower (156, 9) and Eruption "
+              "(240, 5) are areas over time; Fireball flies, Earthquake has no duration, Panic "
+              "is a hex, Flare is one target, an unknown id none; --no-areas-over-time AND "
+              "--no-spell-areas each refuse; spell_burst still refuses every duration and "
+              "still bursts Earthquake -- two predicates, not one widened", str(got))
+        # (b) the schedule
+        t0 = 1000.37
+        tk = areatime.tick_instants(t0, 10.0)
+        check([round(t - t0, 6) for t in tk] == [float(k) for k in range(1, 11)]
+              and [round(t - t0, 6) for t in areatime.tick_instants(t0, 9.0, 3.0)] == [3.0, 6.0, 9.0]
+              and [round(t - t0, 6) for t in areatime.tick_instants(t0, 5.0)] == [1.0, 2.0, 3.0, 4.0, 5.0]
+              and areatime.tick_instants(t0, 0.0) == [] and areatime.tick_instants(t0, 10.0, 0.0) == []
+              and [round(t - t0, 6) for t in areatime.visual_instants(t0, 10.0)] == [0.0, 3.0, 6.0]
+              and [round(t - t0, 6) for t in areatime.visual_instants(t0, 9.0)] == [0.0, 3.0]
+              and [round(t - t0, 6) for t in areatime.visual_instants(t0, 5.0)] == [0.0]
+              and [round(t - t0, 6) for t in areatime.visual_instants(t0, 3.0)] == [0.0]
+              and authsrv.area_tick_period(197) == 1.0 and authsrv.area_tick_period(192) == 3.0
+              and authsrv.area_tick_period(170) == 1.0,
+              "the schedule from t0: ticks at +1..+10 for 10 s (OBSERVED), +3/+6/+9 at a 3 s "
+              "period for 9 s, +1..+5 for 5 s, none for no duration or no period; the ground "
+              "effect at 0/3/6 for 10 s (OBSERVED), 0/3 for 9 and 0 alone for 5 or 3 "
+              "(RECONSTRUCTION); the period off the row (Meteor Shower's 3.0) else 1.0")
+        # (c) the player's Fire Storm through the real press and E5
+        authsrv._is_attack_skill = lambda sid: False
+        authsrv.skill_damage = lambda sid, rank: (60.0, "standalone")
+        authsrv.skill_impact_visual = lambda sid: None
+        authsrv.skill_timing = lambda sid: (2.0, 0.75, 0.0)
+        authsrv.skill_cost = lambda sid: (0, 0)
+        authsrv.weapon_satisfies = lambda sid: True
+        authsrv.apply_party_character({"player_weapon": "starter_wand"})
+
+        def player_cast(sid, extra=()):
+            st, sent = _world(600.0), []
+            send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+            for aid, pos in extra:
+                st["agents"][aid] = dict(st["agents"][FOE], pos=pos)
+            authsrv.handle_skill_press([0, sid, 0, FOE], send, st, 1, authsrv.GAME_CMSG_USE_SKILL)
+            sent.clear()
+            for cast in st["pending_casts"]:
+                for k in ("begin_at", "e5_at", "e3_at", "e6_at"):
+                    cast[k] -= 30.0
+            authsrv.cast_tick(send, st, 1)
+            return st, sent, send
+
+        st, sent, send = player_cast(197, [(11, (650.0, 0.0)), (13, (600.0, 100.0)),
+                                           (12, (800.0, 0.0))])
+        i58 = next((i for i, (op, v) in enumerate(sent) if op == 0x009F and v[0] == 58), None)
+        area = (st.get("areas") or [None])[0]
+        check(ops(sent)[0] == 0x00E5 and i58 is not None and sent[i58][1] == [58, PLAYER, 0]
+              and sent[i58 + 1] == (A1, [[600.0, 0.0], 0, 0, 350, 0, 0])
+              and grounds(sent) == [[[600.0, 0.0], 0, 0, 350, 0, 0]]
+              and not words(sent) and not impacts(sent)
+              and all(st["agents"][a]["health"] == 9000.0 for a in (FOE, 11, 12, 13))
+              and area is not None and area["caster"] == PLAYER and area["caster_kind"] == "player"
+              and area["skill_id"] == 197 and area["amount"] == 60.0 and area["radius"] == 156.0
+              and area["point"] == (600.0, 0.0) and area["n"] == 10 and area["k"] == 0
+              and [round(t - area["t0"], 6) for t in area["ticks"]] == [float(k) for k in range(1, 11)]
+              and [round(t - area["t0"], 6) for t in area["visuals"]] == [3.0, 6.0]
+              and area["visual"] == 350 and not area["knocks_down"] and area["condition"] is None
+              and area["ticks"][0] in authsrv.combat_deadlines(st)
+              and area["visuals"][0] in authsrv.combat_deadlines(st),
+              "the player's Fire Storm at the E5: E5, [58, me, 0], then IMMEDIATELY 0x00A1 "
+              "[(600, 0), 0, 0, 350, 0, 0] at the target's position, NO word and no [20] on "
+              "anybody, nobody hurt; the area on state -- 156 u, 60 a tick, ticks at +1..+10 "
+              "and the 350 due again at +3 and +6, both instants in combat_deadlines",
+              str([(hex(op), v) for op, v in sent]))
+        # serve it, a second at a time
+        per_tick, order_ok, clean_ok = {}, True, True
+        for k in range(1, 11):
+            sent.clear()
+            if k == 5:
+                st["agents"][12]["pos"] = (700.0, 0.0)          # walks in late
+            _aot_advance(st, send, 1.0)
+            w = words(sent)
+            per_tick[k] = [v[1] for v in w]
+            clean_ok = clean_ok and clean(sent) and all(v[2] == PLAYER and v[0] == 16 for v in w)
+            g = grounds(sent)
+            if k in (3, 6):
+                first_word = ops(sent).index(0x00A3)
+                order_ok = order_ok and g == [[[600.0, 0.0], 0, 0, 350, 0, 0]] \
+                    and ops(sent).index(A1) < first_word
+            else:
+                order_ok = order_ok and not g
+            if k == 3:
+                st["agents"][13]["dead"] = True                  # killed at k = 3
+        sent.clear()
+        _aot_advance(st, send, 1.0)
+        after = list(sent)
+        check(per_tick == {1: [FOE, 11, 13], 2: [FOE, 11, 13], 3: [FOE, 11, 13],
+                           4: [FOE, 11], 5: [FOE, 11, 12], 6: [FOE, 11, 12], 7: [FOE, 11, 12],
+                           8: [FOE, 11, 12], 9: [FOE, 11, 12], 10: [FOE, 11, 12]}
+              and order_ok and clean_ok
+              and st["agents"][FOE]["health"] == 9000.0 - 600.0
+              and st["agents"][11]["health"] == 9000.0 - 600.0
+              and st["agents"][13]["health"] == 9000.0 - 180.0
+              and st["agents"][12]["health"] == 9000.0 - 360.0
+              and not st.get("areas") and not after,
+              "served a second at a time: k = 1..10, one word [16, foe, me, frac] per foe inside "
+              "156 u a tick (the target, the one 50 u beside it, the one 100 u above), none for "
+              "the one 200 u off until it walks in at k = 5 and every tick from then; the one "
+              "killed at k = 3 never again; the 350 re-sent at +3 and +6 BEFORE that tick's "
+              "words and at no other tick; no 58, no [20], no 0x00A7 on any tick; 60 each; the "
+              "area closes after k = 10 and an eleventh second serves nothing",
+              f"{per_tick} order={order_ok} clean={clean_ok} after={after}")
+        # (g) the last_hit arm: the player's own single-target spell right after a tick
+        st, sent, send = player_cast(197)
+        sent.clear()
+        _aot_advance(st, send, 1.0)                              # k = 1 stamps FOE's last_hit
+        stamped = st["agents"][FOE]["last_hit"]
+        hp = st["agents"][FOE]["health"]
+        sent.clear()
+        bad = authsrv.hit_enemy(send, st, FOE, 1, exact=60.0, swing=False, label="pre-D6 arm")
+        bad_sent = list(sent)
+        sent.clear()
+        for cast in list(st["pending_casts"]):
+            st["pending_casts"].remove(cast)
+        authsrv.skill_projectile = lambda sid: 343 if sid == 186 else None    # Flare with no flight
+        authsrv.handle_skill_press([0, 194, 0, FOE], send, st, 1, authsrv.GAME_CMSG_USE_SKILL)
+        sent.clear()
+        for cast in st["pending_casts"]:
+            for kk in ("begin_at", "e5_at", "e3_at", "e6_at"):
+                cast[kk] -= 30.0
+        authsrv.cast_tick(send, st, 1)
+        authsrv.skill_projectile = lambda sid: 343 if sid in (186, 194) else None
+        check(stamped > 0.0 and time.time() - stamped < authsrv.ATTACK_INTERVAL
+              and bad is None and words(bad_sent) == [] and hp == 9000.0 - 60.0
+              and [v[1:3] for v in words(sent)] == [[FOE, PLAYER]]
+              and st["agents"][FOE]["health"] == 9000.0 - 120.0,
+              "the last_hit arm: a tick stamps the foe's last_hit, and the pre-D6 shape of the "
+              "single-target spell (hit_enemy exact, not armed) is SWALLOWED by the swing gate "
+              "inside the interval -- nothing sent, nothing dealt; the real E5 path lands the "
+              "player's Flare on that foe (armed: a spell is not a swing)",
+              str((bad, bad_sent, [(hex(op), v) for op, v in sent])))
+        # (f) Meteor Shower: a strike every 3 s, each a knock-down, no ground effect known
+        st, sent, send = player_cast(192, [(11, (650.0, 0.0))])
+        area = (st.get("areas") or [None])[0]
+        no_ground = not grounds(sent) and fin58(sent) == [[58, PLAYER, 0]] and not words(sent)
+        sched = ([round(t - area["t0"], 6) for t in area["ticks"]], area["visuals"], area["knocks_down"])
+        hits = {}
+        for step in (1.0, 1.0, 1.0, 3.0, 3.0):
+            sent.clear()
+            for a in (FOE, 11):
+                st["agents"][a]["knocked_until"] = 0.0
+            _aot_advance(st, send, step)
+            hits[len(hits) + 1] = (
+                [v[1] for v in words(sent)],
+                [v[1] for op, v in sent if op == 0x00A2 and v[0] == agents.GV_KNOCKED_DOWN],
+                authsrv.knocked_down(st, FOE) and authsrv.knocked_down(st, 11))
+        check(no_ground and sched == ([3.0, 6.0, 9.0], [], True)
+              and hits == {1: ([], [], False), 2: ([], [], False),
+                           3: ([FOE, 11], [FOE, 11], True), 4: ([FOE, 11], [FOE, 11], True),
+                           5: ([FOE, 11], [FOE, 11], True)}
+              and not st.get("areas")
+              and st["agents"][FOE]["health"] == 9000.0 - 180.0,
+              "Meteor Shower: the completion draws NO ground effect (no id is known) and lands "
+              "nothing; ticks at +3, +6, +9 only (nothing at +1, +2), each a word then "
+              "[63, foe, 2.0] knocking every foe inside down; the area closes after the third",
+              str((no_ground, sched, hits)))
+        # Eruption: the Blind rides EVERY tick, never the completion (WIKI, rev. 2683897)
+        st, sent, send = player_cast(167, [(11, (650.0, 0.0)), (12, (900.0, 0.0))])
+        at_completion = (blinded(st, FOE), words(sent), grounds(sent))
+        sent.clear()
+        _aot_advance(st, send, 1.0)
+        k1 = ([v[1] for v in words(sent)], blinded(st, FOE), blinded(st, 11), blinded(st, 12),
+              ops(sent)[0] == 0x00A3)                    # the word ahead of the Blind's status
+        for _ in range(4):
+            sent.clear()
+            _aot_advance(st, send, 1.0)
+        check(at_completion == (False, [], []) and k1 == ([FOE, 11], True, True, False, True)
+              and not st.get("areas") and st["agents"][FOE]["health"] == 9000.0 - 300.0
+              and (st.get("areas") or []) == [],
+              "Eruption: no Blind and no word at the completion (the pre-D6 shape put both on "
+              "the target there); at k = 1 the word then a 10 s Blind on each of the two foes "
+              "inside 240 u, none on the one at 300 u; five ticks and it closes",
+              str((at_completion, k1)))
+        # (d) a hostile's Fire Storm at the player through the real land_skill
+        st = _body_world((900.0, 0.0), skills=[[197, 0.0, 20.0]], skill_ready=[0.0],
+                         casting=0, cast_target=PLAYER)
+        st["agents"][HERO]["health"] = st["agents"][HERO]["max_health"] = 9000.0   # outlives ten ticks
+        st["agents"][300] = dict(st["agents"][HERO], pos=(0.0, 400.0))
+        sent = []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+        health, monk_hp = st["player_health"], st["agents"][HERO]["health"]
+        authsrv.land_skill(send, st, FOE, st["agents"][FOE], 1)
+        area = (st.get("areas") or [None])[0]
+        ar = authsrv.spell_armour_for(197)
+        want = authsrv._whole_points(60.0 * authsrv.strike_multiplier(
+            authsrv.agent_strike_level(st["agents"][FOE]), ar))
+        check(sent[0] == (0x009F, [58, FOE, 0]) and sent[1] == (A1, [[0.0, 0.0], 0, 0, 350, 0, 0])
+              and not words(sent) and not impacts(sent)
+              and st["player_health"] == health and st["agents"][HERO]["health"] == monk_hp
+              and st["agents"][FOE]["casting"] is None
+              and area is not None and area["caster"] == FOE and area["caster_kind"] == "body"
+              and area["hostile"] is True and area["point"] == (0.0, 0.0)
+              and area["caster_row"]["npc"]["level"] == 5 and area["n"] == 10,
+              "a hostile's Fire Storm completes: [58, it, 0] then IMMEDIATELY the 350 at the "
+              "player's position, nothing on the player or the monk, the caster released; the "
+              "area records the caster's side and its row (the strike level snapshotted)",
+              str([(hex(op), v) for op, v in sent]))
+        sent.clear()
+        _aot_advance(st, send, 1.0)
+        o = ops(sent)
+        i10 = next((i for i, (op, v) in enumerate(sent) if op == 0x009F and v[:3] == [10, PLAYER, 197]), None)
+        check(i10 is not None and sent[i10 + 1][0] == 0x00A3 and sent[i10 + 1][1][:3] == [16, PLAYER, FOE]
+              and [v[1] for v in words(sent)] == [PLAYER, HERO]
+              and clean(sent) and not grounds(sent)
+              and ar == 25.0 and st["player_health"] == health - want
+              and st["agents"][HERO]["health"] < monk_hp and st["agents"][300]["health"] == monk_hp
+              and (0x00CF not in o or o.index(0x00CF) < i10),
+              "k = 1: the player's word (60 against the pieces' 25 at the caster's strike level) "
+              "immediately behind [10, me, 197] -- the gain, if any, ahead of both (the tape's "
+              "0x00CF / [10] / word, 12/12) -- then the monk's word through hurt_agent_row; the "
+              "body 400 u off untouched; no 58, no [20], no 0x00A7, no 350 at k = 1",
+              str([(hex(op), v) for op, v in sent]))
+        # (e) the caster dies at k = 4: the area persists (RECONSTRUCTION)
+        for _ in range(3):
+            sent.clear()
+            _aot_advance(st, send, 1.0)
+        st["agents"][FOE]["dead"], st["agents"][FOE]["died_at"] = True, time.time()
+        hp4 = st["player_health"]
+        sent.clear()
+        _aot_advance(st, send, 1.0)                              # k = 5
+        k5 = [v[1] for v in words(sent)]
+        sent.clear()
+        _aot_advance(st, send, 1.0)                              # k = 6, the 350 again
+        k6 = ([v[1] for v in words(sent)], grounds(sent), ops(sent).index(A1) < ops(sent).index(0x00A3))
+        check(k5 == [PLAYER, HERO] and st["player_health"] == hp4 - 2 * want
+              and k6 == ([PLAYER, HERO], [[[0.0, 0.0], 0, 0, 350, 0, 0]], True),
+              "the caster dies at k = 4 and the area OUTLIVES it: k = 5 and k = 6 still word the "
+              "player (at the snapshotted strike level) and the monk, the 350 re-drawn at +6 "
+              "ahead of the words -- the stated choice (the tape is inconclusive)",
+              str((k5, k6)))
+        # (h) a refused fraction on one foe: skipped, printed, the others land, nothing raises
+        st = _body_world((900.0, 0.0), skills=[[197, 0.0, 20.0]], skill_ready=[0.0],
+                         casting=0, cast_target=PLAYER)
+        sent = []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+        authsrv.land_skill(send, st, FOE, st["agents"][FOE], 1)
+        real_terms = saved[-1]
+
+        def refusing(state, agent, sid, amount, tid, tbody):
+            if tid == HERO:
+                raise ValueError("a fraction the guard refuses (the test's arm)")
+            return real_terms(state, agent, sid, amount, tid, tbody)
+        authsrv.body_spell_terms = refusing
+        health, monk_hp = st["player_health"], st["agents"][HERO]["health"]
+        sent.clear()
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            _aot_advance(st, send, 1.0)
+        authsrv.body_spell_terms = real_terms
+        check([v[1] for v in words(sent)] == [PLAYER] and st["player_health"] == health - want
+              and st["agents"][HERO]["health"] == monk_hp and "REFUSED" in buf.getvalue()
+              and st["areas"][0]["k"] == 1,
+              "a refused fraction for the monk at k = 1 raises nothing out of the tick (an "
+              "exception there would fuse the deadline thread): the monk is skipped THIS tick "
+              "with a printed line, the player's word lands, the area goes on",
+              buf.getvalue()[-300:])
+        # (i) the reverts: one word, byte-identical under either flag
+        st_on, sent_on, _s = player_cast(197, [(11, (650.0, 0.0))])
+        authsrv.AREAS_OVER_TIME = False
+        st_a, sent_a, _s = player_cast(197, [(11, (650.0, 0.0))])
+        authsrv.AREAS_OVER_TIME = True
+        authsrv.SPELL_AREAS = False
+        st_b, sent_b, _s = player_cast(197, [(11, (650.0, 0.0))])
+        authsrv.SPELL_AREAS = True
+        check(len(sent_on) > 0 and sent_a == sent_b and not grounds(sent_a) and not st_a.get("areas")
+              and [v[1:3] for v in words(sent_a)] == [[FOE, PLAYER]]
+              and st_a["agents"][FOE]["health"] == 9000.0 - 60.0 and st_a["agents"][11]["health"] == 9000.0
+              and not st_b.get("areas") and st_b["agents"][11]["health"] == 9000.0
+              and grounds(sent_on) and not words(sent_on),
+              "--no-areas-over-time: Fire Storm lands ONE word on its target at the E5, no 350, "
+              "no area, the hostile beside it untouched -- the reading every run before "
+              "2026-09-26 made; --no-spell-areas gives the byte-identical stream (the older "
+              "flag wins); with both on the same press opens the area and words nobody",
+              str([(hex(op), v) for op, v in sent_a]))
+        # (j) the source
+        src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+        sargs = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
+        check('_aot = (area_over_time(cast["skill_id"], rank)' in src
+              and src.count("                elif _aot is not None:") == 1
+              and 'open_area(send, state, conn_id, PLAYER_AGENT_ID, cast["skill_id"], rank,' in src
+              and "open_area(send, state, conn_id, agent_id, skill_id, _rank, float(damage[0])," in src
+              and "elif damage is not None and _spell_how is None and _aot is not None:" in src
+              and "    area_tick(send, state, conn_id)                          # studies/weapons 42" in src
+              and 'for area in state.get("areas") or ():' in src
+              and "swing=False, armed=True," in src
+              and "scatter_struck(state, area, struck, now)" in src
+              and '_burst = spell_burst(cast["skill_id"]) if _how is None else None' in src
+              and "from areatime import (" in src
+              and '"--no-areas-over-time"' in sargs and "global AREAS_OVER_TIME" in src,
+              "the source: the E5 and the completion both branch to open_area behind the burst "
+              "arm and the burst line stands verbatim; a body's completion computes no terms for "
+              "an area; area_tick sits in projectile_tick; the areas feed combat_deadlines; the "
+              "single-target spell is armed; the scatter hook is named; the leaf is re-exported; "
+              "the flag exists and main() flips it")
+    finally:
+        if had:
+            tables["skills"] = kept
+        else:
+            del tables["skills"]
+        (authsrv.skill_damage, authsrv._is_attack_skill, authsrv.skill_projectile,
+         authsrv.skill_impact_visual, authsrv.SPELL_AREAS, authsrv.AREAS_OVER_TIME,
+         authsrv.skill_timing, authsrv.skill_cost, authsrv.weapon_satisfies,
+         agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
+         authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE,
+         authsrv.body_spell_terms) = saved
+    # (k) the vault: the server's schedule for 197 against the tape's
+    try:
+        import aotjoin as aj                                              # noqa: PLC0415
+        c = aj.census(stamps=("20260817T231139",))
+        rows = c["casts"]
+        if not rows:
+            raise RuntimeError("no Fire Storm cast on the witness capture")
+        tape_ks = sorted({k for r in rows for k in r["tick_ks"]})
+        tape_vis = sorted({round(v, 1) for r in rows for v in r["visual_offsets"]})
+        stray = [(r["capture"], r["port"], r["tick_ks"], r["visual_offsets"]) for r in rows
+                 if set(r["tick_ks"]) - set(range(1, 11))
+                 or {round(v, 1) for v in r["visual_offsets"]} - {0.0, 3.0, 6.0}]
+    except (Exception, SystemExit) as e:                                   # noqa: BLE001
+        rows = None
+        LEDGER.skip("section 30", f"capture 20260817T231139 is absent ({type(e).__name__}) "
+                    f"-- 1 check (the server's 197 schedule against the tape's)")
+    if rows is not None:
+        ours_ticks = [round(t, 6) for t in areatime.tick_instants(
+            0.0, 10.0, authsrv.area_tick_period(197))]
+        ours_vis = [round(t, 6) for t in areatime.visual_instants(
+            0.0, 10.0, authsrv.AREA_VISUAL_PERIOD, authsrv.AREA_VISUAL_TAIL)]
+        check(len(rows) == 17 and tape_ks == list(range(1, 11)) and tape_vis == [0.0, 3.0, 6.0]
+              and ours_ticks == [float(k) for k in range(1, 11)] and ours_vis == [0.0, 3.0, 6.0]
+              and not stray and authsrv.spell_area_visual(197) == 350
+              and authsrv.area_over_time(197, 12) == (156.0, 10.0),
+              "and the tape says so: over the seventeen casts on 20260817T231139 the ticks "
+              "observed are exactly k = 1..10 and the 350 exactly at +0 / +3 / +6 -- the "
+              "schedule the server now produces for 197 from its row (156 u, 10 s, period 1, "
+              "the 350) -- and no cast carries a k or a re-draw outside it",
+              str((len(rows), tape_ks, tape_vis, stray)))
+
+
 def main():
     section_table()
     section_skills()
@@ -3862,6 +4285,7 @@ def main():
     section_dodge()
     section_bursts()
     section_aot_tape()
+    section_areas_over_time()
     return LEDGER.verdict()
 
 

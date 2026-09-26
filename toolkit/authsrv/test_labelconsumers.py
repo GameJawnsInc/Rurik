@@ -893,9 +893,15 @@ def main():
                 if srow_ is not None and not int(srow_["skill_arguments"]) & bit:
                     hand_clear.append(k)
         if any(str(k) in skills_loaded for k in hand_rows_loaded):
-            check(hand_clear == [],
-                  "no HAND row's condition means sits on a bit-clear slot -- the flat reader moves no "
-                  "hand row (the census of 2026-09-25)", hand_clear)
+            # 2026-09-26 (DESKWORK-D6 step 2, studies/weapons 42): Eruption 167 became a HAND
+            # row -- an area over time whose Blind rides every tick -- and its `bonus_scale_means
+            # = "Blind"` sits on the record's bit-clear 10 / 10 slot ON PURPOSE (the row's own
+            # comment): the flat reader is how its seconds resolve. It is the one hand row the
+            # reader moves, named here; a second one reddens this line.
+            check(hand_clear == [167],
+                  "the flat reader moves exactly ONE hand row -- Eruption 167, whose Blind is the "
+                  "record's flat 10 s by the row's own word (2026-09-26); no other HAND row's "
+                  "condition means sits on a bit-clear slot (the census of 2026-09-25)", hand_clear)
         else:
             LEDGER.skip("8. the hand rows' condition slots (1 check)", "no skills table (a bare machine)")
 
@@ -1019,10 +1025,20 @@ def main():
             flat_off = sorted(s for s in lab if authsrv.skill_condition(s, 0) is not None)
             authsrv.CONDITION_FLAT_CONSTANTS = True
             flat_pred = sorted(set(flat_on) - set(flat_off))
-            check(marks_lv["CONDITION_FLAT_CONSTANT"] == flat_pred and len(flat_pred) >= 1,
+            # 2026-09-26: the overlay's one CONDITION_FLAT_CONSTANT row (167) is SHADOWED by
+            # Eruption's hand row (DESKWORK-D6 step 2, studies/weapons 42), so the label tier
+            # may hold no witness; the hand row is then the witness -- its Blind resolves
+            # only through the flat reader, exactly as the label row's did.
+            hand_167 = ("167" not in lab and authsrv.skill_condition(167, 0) == (479, 10.0))
+            if hand_167:
+                authsrv.CONDITION_FLAT_CONSTANTS = False
+                hand_167 = authsrv.skill_condition(167, 0) is None
+                authsrv.CONDITION_FLAT_CONSTANTS = True
+            check(marks_lv["CONDITION_FLAT_CONSTANT"] == flat_pred and (len(flat_pred) >= 1 or hand_167),
                   f"every loaded CONDITION_FLAT_CONSTANT row ({len(flat_pred)}) is exactly a row whose "
                   f"condition resolves ONLY through the flat reader (the flag off removes it) -- and no "
-                  f"other label row is", (marks_lv["CONDITION_FLAT_CONSTANT"], flat_on, flat_off))
+                  f"other label row is; the witness is 167, as a label row or (since 2026-09-26) as "
+                  f"the hand row that shadows it", (marks_lv["CONDITION_FLAT_CONSTANT"], flat_on, flat_off, hand_167))
     finally:
         tables["skills"] = saved_tables["skills"]
         tables["skill_effect"] = saved_tables["skill_effect"]

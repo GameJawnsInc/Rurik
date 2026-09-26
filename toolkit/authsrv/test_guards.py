@@ -708,11 +708,21 @@ def section_concurrency():
     # cast_tick's helper (a body's through `burst_body_spell`, land_skill's).
     # SKILLS-LU (skills 59): the CASTER-centred area lands through
     # `burst_player_caster_area`, cast_tick's helper -- the same tick site.
+    # studies/weapons 42 (2026-09-26): an area over TIME's ticks land through
+    # `_area_strike`, `area_tick`'s helper and nobody else's; `area_tick` is
+    # projectile_tick's (beside spell_queue_tick) -- the same two tick sites,
+    # no new one -- and `open_area` (the completion) is cast_tick's and
+    # land_skill's. The walk goes one level up for the helper, as for
+    # _land_player_swing.
     check(callers == {"_land_player_swing", "cast_tick", "hit_enemy",
                       "dual_second_strike", "second_strike_tick",
                       "projectile_tick", "land_player_skill_shot",
                       "land_player_spell_shot", "land_player_spell_area",
-                      "burst_player_spell", "burst_player_caster_area"}
+                      "burst_player_spell", "burst_player_caster_area",
+                      "_area_strike"}
+          and callers_of("_area_strike") == {"area_tick"}
+          and callers_of("area_tick") == {"projectile_tick"}
+          and callers_of("open_area") == {"cast_tick", "land_skill"}
           and callers_of("land_player_skill_shot") == {"projectile_tick"}
           and callers_of("burst_player_spell") == {"cast_tick"}
           and callers_of("burst_player_caster_area") == {"cast_tick"}

@@ -4733,6 +4733,8 @@ def combat_deadlines(state):
         out.append(q["launch_at"])
     for shot in state.get("body_projectiles") or ():         # WEAPONS-W6a
         out.append(shot["arrives_at"])
+    for area in state.get("areas") or ():                    # studies/weapons 42
+        out.extend(area["ticks"][:1] + area["visuals"][:1])  # its next tick, its next re-draw
     for cast in state.get("pending_casts") or ():
         if cast.get("cancelled"):
             continue
@@ -14073,6 +14075,7 @@ def projectile_tick(send, state, conn_id):
     track_velocities(state)                                  # studies/weapons 39
     body_projectile_tick(send, state, conn_id)               # WEAPONS-W6a
     spell_queue_tick(send, state, conn_id)                   # studies/weapons 36
+    area_tick(send, state, conn_id)                          # studies/weapons 42
     flying = state.get("player_projectiles")
     if not flying:
         return
@@ -14500,13 +14503,17 @@ def send_ground_visual(send, point, agent_id, visual, why):
          [[float(point[0]), float(point[1])], 0, int(agent_id), int(visual), 0, 0], why)
 
 
-def foes_within(state, caster_id, point, radius):
+def foes_within(state, caster_id, point, radius, hostile=None):
     """Living FOES of `caster_id` inside `radius` of `point`: for a hostile
     caster the player (first) and the party's bodies, for the player or a
-    party body the hostiles. The caster itself never."""
+    party body the hostiles. The caster itself never. `hostile` names the
+    caster's side outright (studies/weapons 42: an area outlives a caster
+    whose row may be gone -- read from the row, a vanished caster would flip
+    sides); None reads it from the row as before."""
     table = state.get("agents", {})
-    hostile = (caster_id != PLAYER_AGENT_ID
-               and (table.get(caster_id) or {}).get("allegiance") == agents.ALLEGIANCE_HOSTILE)
+    if hostile is None:
+        hostile = (caster_id != PLAYER_AGENT_ID
+                   and (table.get(caster_id) or {}).get("allegiance") == agents.ALLEGIANCE_HOSTILE)
     px, py = float(point[0]), float(point[1])
     out = []
     if hostile:
@@ -14817,6 +14824,251 @@ def burst_body_spell(send, state, conn_id, who, sid, terms, amount, rank, inflic
                             conn_id, sid)
     print(f"[c{conn_id}] agent {who}'s skill {sid} bursts over {len(terms)} foe(s) "
           f"[studies/weapons 40]", flush=True)
+
+
+# ---- AN AREA OVER TIME: a point that strikes once a second (2026-09-26,
+# studies/weapons 42; DESKWORK-D6 step 2. The tape read is 41, aotjoin.py)
+#
+# The record's target byte 16 with a DURATION -- section 40's banner named
+# fourteen of them and turned them away ("a mechanism of their own"). The
+# witness is Fire Storm 197, 17 casts on 20260817T231139 (OBSERVED, weapons
+# 41, every clause below with its count): the announce; at the activation
+# `[58, caster, 0]` then IMMEDIATELY the ground effect `0x00A1 [P, 0, 0, 350,
+# 0, 0]` (17/17), P the target's position at the completion (CORROBORATED
+# with WIKI "Area of effect": "where the foe was when casting finished");
+# the 350 re-sent at P at +3.0 and +6.0 (51 = 17 x 3, none at +9, no end
+# marker), ahead of that tick's words (19/19) and even when nobody is ticked;
+# a TICK at the completion + k s, k = 1..10 (phase within 0.020 s, none at the
+# completion, none at +11): per foe inside, `0x00A3 [16, foe, caster, frac]`
+# with the caster as cause (152 words, 1-4 foes a tick, foes only), NO 58, NO
+# [20], NO 0x00A7 on a clean tick (0/74); a tick striking the observer is
+# 0x00CF [obs, 4], [10, obs, 197], the word (12/12) -- the shape a body's
+# spell word to the player already has (body_spell_word); the dead never
+# struck, a revived foe struck again, a foe that walks in late struck; the
+# area STAYS at P while the caster walks (7 casts). Caster death:
+# INCONCLUSIVE on the tape (2 casts, both areas empty; the 350 was re-sent
+# after the caster died, n = 1) -- the server KEEPS the area, a dead body
+# caster's ticks resolving from its strike level snapshotted at the
+# completion (RECONSTRUCTION, said at open_area).
+#
+# The SHAPE is Fire Storm's; the other two rows content carries are WIKI +
+# RECONSTRUCTION (NOT FOUND on any tape, aotjoin P8): Meteor Shower 192
+# strikes every 3 s (`tick_period`) and knocks down each foe it reaches;
+# Eruption 167 ticks every second for 5 and Blinds each foe struck (its
+# condition rides EVERY tick, the page's "each second ... are struck ... and
+# are Blinded"). No ground visual id is known for either: none is sent, said
+# in the log. THE OTHER ELEVEN areas over time (77, 196, 215, 830, 844, 910,
+# 1083, 1094, 1372, 1380, 2222) carry no hand row: no damage resolves for
+# them and they land as before today -- inert or one target through a label
+# row -- until a row names them.
+#
+# Where it runs: the completion opens the area (open_area at the player's E5
+# and at a body's 58) and lands NOTHING on the target -- today's single word
+# is superseded, that is the whole change; the ticks are served by area_tick
+# from projectile_tick, so both the world tick and combat_pass reach them and
+# every instant sits in combat_deadlines. Every instant is computed from the
+# completion (areatime.tick_instants), never previous + period, so a late
+# serve never drifts the phase. Per tick, in this order: the re-sent ground
+# effect if one is due, then the foes inside AS THEY STAND NOW (foes_within:
+# dead excluded, late entrants included) -- the player's ticks through
+# hit_enemy's exact word (armed, so the swing gate never swallows a tick; no
+# skill_id, so no interrupt), a body's through body_spell_terms computed for
+# EVERY foe before the first send (the refusal contract, per tick: a refused
+# fraction skips THAT foe for THAT tick with a printed line and never raises
+# out of the tick -- an exception here would fuse the deadline thread), then
+# the row's knock-down and condition on each struck living foe. The player's
+# ticks are NOT armour-scaled (hit_enemy's exact gap, studies/isle 4.2); a
+# body's scale by the PLAYER's spell armour whoever the taker is
+# (body_spell_terms's standing shape). Then scatter_struck -- a no-op here,
+# the monster scatter's hook (studies/monsterai 16 fills it).
+#
+# --no-areas-over-time reverts: the single word at the completion, the
+# reading every run before today made; --no-spell-areas reverts it TOO (it
+# has reverted every target-16 area since section 38, and keeps that
+# meaning: the older flag wins).
+AREAS_OVER_TIME = True
+AREA_TICK_PERIOD = 1.0       # s between ticks when the row names no `tick_period` (OBSERVED, 197)
+AREA_VISUAL_PERIOD = 3.0     # s between re-draws of the ground effect (OBSERVED for duration 10:
+AREA_VISUAL_TAIL = 4.0       # 0 / 3 / 6, none at 9 -- both FITTED to that one duration)
+
+from areatime import (  # noqa: E402  -- read by test_weapons 30 (bare) as authsrv.*
+    area_over_time_row, tick_instants, visual_instants)
+
+
+def area_over_time(skill_id, rank):
+    """(radius, duration at `rank`) when this skill's RECORD is an area over
+    time and both flags are on, else None. The predicate is areatime's; the
+    duration at rank is the server's one duration rule (effects.resolve_
+    duration) -- a row it refuses (an unwitnessed endpoint shape) is printed
+    and lands as before today rather than on a guessed schedule."""
+    if not AREAS_OVER_TIME or not SPELL_AREAS:
+        return None
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return None
+    if skill_projectile(skill_id) is not None:
+        return None
+    got = area_over_time_row(row, (0, SKILL_NO_PROJECTILE))
+    if got is None:
+        return None
+    radius, duration = got
+    try:
+        at_rank = effects.resolve_duration(row, rank)
+    except KeyError:
+        at_rank = None                  # a row with no skill_arguments (an injected one)
+    except effects.EffectError as exc:
+        print(f"skill {skill_id} is an area over time whose duration the server's rule "
+              f"refuses ({exc}) -- it lands as before today, one target [studies/weapons 42]",
+              flush=True)
+        return None
+    return radius, float(at_rank) if at_rank else duration
+
+
+def area_tick_period(skill_id):
+    """Seconds between an area's ticks: the row's `tick_period` (Meteor
+    Shower's 3.0, WIKI) else AREA_TICK_PERIOD (Fire Storm's 1.0, OBSERVED)."""
+    v = skill_effect_row(skill_id).get("tick_period")
+    return float(v) if v else float(AREA_TICK_PERIOD)
+
+
+def open_area(send, state, conn_id, caster_id, skill_id, rank, amount, point, aot,
+              agent=None):
+    """The completion opens an area over time at `point` (the target's
+    position NOW -- CORROBORATED): the ground effect at once when the row
+    names one (Fire Storm's 350, OBSERVED 17/17 immediately behind the 58),
+    the tick and re-draw instants computed from this instant, and the record
+    on state["areas"] that area_tick serves. A BODY caster's row is
+    snapshotted (`caster_row`) so a caster killed or despawned mid-area still
+    resolves its ticks at the strike level it had -- the area OUTLIVES its
+    caster (RECONSTRUCTION; the tape is inconclusive, weapons 41). Returns the
+    area."""
+    radius, duration = aot
+    now = time.time()
+    period = area_tick_period(skill_id)
+    ticks = tick_instants(now, duration, period)
+    visual = spell_area_visual(skill_id)
+    visuals = []
+    if visual is not None:
+        visuals = visual_instants(now, duration, AREA_VISUAL_PERIOD, AREA_VISUAL_TAIL)
+        send_ground_visual(send, point, 0, visual,
+                           f"skill {skill_id}'s area ({visual}) opens at ({point[0]:.0f}, "
+                           f"{point[1]:.0f}) [studies/weapons 42]")
+        visuals = visuals[1:]                     # the one at the completion just went out
+    table = state.get("agents", {})
+    row = table.get(caster_id) if caster_id != PLAYER_AGENT_ID else None
+    area = {"id": state.get("area_seq", 0) + 1,
+            "caster": caster_id,
+            "caster_kind": "player" if caster_id == PLAYER_AGENT_ID else "body",
+            "hostile": bool(row and row.get("allegiance") == agents.ALLEGIANCE_HOSTILE),
+            "skill_id": int(skill_id), "rank": rank, "amount": float(amount),
+            "point": (float(point[0]), float(point[1])), "radius": float(radius),
+            "t0": now, "period": period, "n": len(ticks), "k": 0,
+            "ticks": ticks, "visuals": visuals, "visual": visual,
+            "knocks_down": skill_knocks_down(skill_id),
+            "condition": skill_condition(skill_id, rank),
+            "caster_row": dict(agent if agent is not None else (row or {}))}
+    state["area_seq"] = area["id"]
+    state.setdefault("areas", []).append(area)
+    who = "the player" if caster_id == PLAYER_AGENT_ID else f"agent {caster_id}"
+    print(f"[c{conn_id}] [DESKWORK-D6] {who}'s skill {skill_id} opens area #{area['id']}: "
+          f"{radius:.0f} u at ({point[0]:.0f}, {point[1]:.0f}), {len(ticks)} tick(s) every "
+          f"{period:g} s for {duration:g} s, {amount:.0f} each"
+          + (f", the {visual} re-drawn at +{', +'.join(f'{t - now:.0f}' for t in visuals)} s"
+             if visuals else (f", the {visual} once" if visual is not None
+                              else ", NO ground effect (no visual id is known)"))
+          + (", knocks down" if area["knocks_down"] else "")
+          + (f", condition {area['condition'][0]} for {area['condition'][1]:g} s a tick"
+             if area["condition"] else "")
+          + " [studies/weapons 42]", flush=True)
+    return area
+
+
+def scatter_struck(state, area, struck, now):
+    """The monster scatter's hook: every hostile `struck` by this tick of
+    `area`, at `now`. A NO-OP in this step -- studies/monsterai 16 (the
+    scatter arc) fills it; nothing here changes when it does."""
+    return None
+
+
+def _area_strike(send, state, conn_id, area, now):
+    """One tick of an area: the foes inside as they stand now, each worded
+    by the caster's own path -- no 58, no [20], no 0x00A7 (OBSERVED 0/74) --
+    then the row's knock-down and condition on each struck living foe."""
+    sid, caster, k, n = area["skill_id"], area["caster"], area["k"], area["n"]
+    foes = foes_within(state, caster, area["point"], area["radius"],
+                       hostile=area["hostile"])
+    struck = []
+    if area["caster_kind"] == "player":
+        for foe in foes:
+            res = hit_enemy(send, state, foe, conn_id, exact=area["amount"], swing=False,
+                            armed=True, label=f"skill {sid}'s tick {k}/{n} on agent {foe}")
+            if res == "landed":
+                struck.append(foe)
+    else:
+        table = state.get("agents", {})
+        terms = []
+        for foe in foes:
+            tbody = foe != PLAYER_AGENT_ID and foe in table
+            try:
+                terms.append((foe, tbody, body_spell_terms(
+                    state, area["caster_row"], sid, area["amount"], foe, tbody)))
+            except ValueError as exc:
+                # the refusal contract, per tick: THIS foe, THIS tick, nothing sent
+                print(f"[c{conn_id}] [DESKWORK-D6] area #{area['id']} tick {k}/{n}: the "
+                      f"fraction for {target_label(state, foe)} is REFUSED ({exc}) -- "
+                      f"skipped this tick, the others land", flush=True)
+        for foe, tbody, (dealt, conversion, frac, spell_ar) in terms:
+            if conversion is not None:
+                resolve_taker_conversion(send, state, conversion, conn_id)
+            if frac is None:
+                continue
+            body_spell_word(send, state, caster, sid, foe, tbody, dealt, frac, spell_ar,
+                            area["amount"], conn_id)
+            struck.append(foe)
+    for foe in struck:
+        if target_dead(state, foe):
+            continue
+        if area["knocks_down"]:
+            knock_down(send, state, foe, conn_id, f"skill {sid}'s tick {k}/{n}",
+                       skill_knock_down_seconds(sid))
+        if area["condition"]:
+            apply_condition(send, state, foe, area["condition"][0], area["condition"][1],
+                            area["rank"], conn_id, sid)
+    who = "the player" if caster == PLAYER_AGENT_ID else f"agent {caster}"
+    print(f"[c{conn_id}] [DESKWORK-D6] {who}'s skill {sid} area #{area['id']} tick {k}/{n} "
+          f"at +{now - area['t0']:.2f} s: {len(foes)} foe(s) inside, {len(struck)} struck"
+          + (f" ({', '.join(str(f) for f in struck)})" if struck else "")
+          + " [studies/weapons 42]", flush=True)
+    scatter_struck(state, area, struck, now)
+
+
+def area_tick(send, state, conn_id):
+    """Serve every area whose next instant is up -- the re-drawn ground
+    effect first when one shares the instant (OBSERVED 19/19), then the tick
+    -- and close an area past its last tick and last re-draw. Called from
+    projectile_tick, so the world tick and combat_pass both reach it."""
+    areas = state.get("areas")
+    if not areas:
+        return
+    now = time.time()
+    for area in list(areas):
+        due = sorted([(t, 0) for t in area["visuals"] if t <= now]
+                     + [(t, 1) for t in area["ticks"] if t <= now])
+        for t, kind in due:
+            if kind == 0:
+                area["visuals"].remove(t)
+                send_ground_visual(send, area["point"], 0, area["visual"],
+                                   f"skill {area['skill_id']}'s area #{area['id']} re-drawn "
+                                   f"at +{t - area['t0']:.0f} s [studies/weapons 42]")
+            else:
+                area["ticks"].remove(t)
+                area["k"] += 1
+                _area_strike(send, state, conn_id, area, now)
+        if not area["ticks"] and not area["visuals"]:
+            areas.remove(area)
+            print(f"[c{conn_id}] [DESKWORK-D6] area #{area['id']} (skill {area['skill_id']}) "
+                  f"closes after its {area['k']} tick(s) [studies/weapons 42]", flush=True)
 
 
 # ---- SKILLS-LU: THE CASTER-CENTRED AREA (2026-09-23, studies/skills 59; the
@@ -22174,14 +22426,27 @@ def cast_tick(send, state, conn_id):
                 # single-packet burst's radius of the target's position.
                 _how = spell_shot_how(cast["skill_id"])
                 _burst = spell_burst(cast["skill_id"]) if _how is None else None
+                _aot = (area_over_time(cast["skill_id"], rank)
+                        if _how is None and _burst is None else None)   # studies/weapons 42
                 if _burst is not None:
                     burst_player_spell(send, state, conn_id, cast, found[0], rank,
                                        _burst)
                     inflicted = None          # each foe took its own inside
+                elif _aot is not None:
+                    # studies/weapons 42: an area over TIME opens at the
+                    # target's position and lands NOTHING on the target at the
+                    # completion -- the ticks are area_tick's; the row's
+                    # condition rides each tick (open_area holds it).
+                    open_area(send, state, conn_id, PLAYER_AGENT_ID, cast["skill_id"], rank,
+                              float(found[0]), target_pos(state, target), _aot)
+                    inflicted = None
                 elif _how is None or launch_player_spell_shot(
                         send, state, conn_id, cast, _how, found[0], rank) is None:
+                    # studies/weapons 42: `armed` -- a spell is not a swing, and
+                    # the interval gate is the SWING timer; without it a foe an
+                    # area ticked inside the last interval swallowed this word.
                     _st_res = hit_enemy(send, state, target, conn_id, exact=float(found[0]),
-                                        swing=False,
+                                        swing=False, armed=True,
                                         label=f"skill {cast['skill_id']}")
                     if _st_res == "landed":
                         # SKILLS-LV: the row's knock-down on the one target the
@@ -31432,6 +31697,12 @@ def land_skill(send, state, agent_id, agent, conn_id):
               if damage is not None and damage[1] == "standalone"
               and _spell_how is None and _tid != agent_id else None)
     _burst_terms = None
+    # studies/weapons 42: an area over TIME -- no terms at the completion (the
+    # first word is a tick away, and every tick computes its own before it
+    # sends); the area opens behind the 58 below and nothing lands on _tid.
+    _aot = (area_over_time(skill_id, _rank)
+            if damage is not None and damage[1] == "standalone"
+            and _spell_how is None and _burst is None and _tid != agent_id else None)
     # SKILLS-LU (A): a CASTER-centred area -- the record's byte 0 with a
     # radius -- bursts from the caster's own position (the terms below, the
     # emission through burst_body_spell); under --no-caster-areas the row
@@ -31467,6 +31738,8 @@ def land_skill(send, state, agent_id, agent, conn_id):
             _fbody = _foe != PLAYER_AGENT_ID and _foe in _table
             _burst_terms.append((_foe, _fbody, body_spell_terms(
                 state, agent, skill_id, damage[0], _foe, _fbody)))
+    elif damage is not None and _spell_how is None and _aot is not None:
+        pass                        # studies/weapons 42: the terms are each tick's own
     elif damage is not None and _spell_how is None:
         dealt, conversion, frac, spell_ar = body_spell_terms(
             state, agent, skill_id, damage[0], _tid, _tbody)
@@ -31484,6 +31757,11 @@ def land_skill(send, state, agent_id, agent, conn_id):
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.GV_SKILL_FINISHED, agent_id, 0],
              f"agent {agent_id} finishes casting {skill_id}")
+    if _aot is not None:
+        # studies/weapons 42: the ground effect IMMEDIATELY behind the 58
+        # (OBSERVED 17/17) and the area on state; the ticks are area_tick's.
+        open_area(send, state, conn_id, agent_id, skill_id, _rank, float(damage[0]),
+                  target_pos(state, _tid), _aot, agent=agent)
     # The on-body visual rides the same slot for an NPC's cast as for the
     # player's -- behind the 58, ahead of the effect and the damage
     # (ANIMREF-R8). An NPC skill aims at the player, so this is the channel's
@@ -31520,6 +31798,8 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # the pips are three pixels; with it the player's own HUD shows the arrows,
     # which is what closes `studies/isle` B4's one UNVERIFIED clause.
     inflicted = skill_condition(skill_id, _rank)
+    if _aot is not None:
+        inflicted = None        # studies/weapons 42: the area's condition rides its ticks
     if inflicted and _carea_row and _burst_terms is None:
         # SKILLS-LU (A): a condition-only caster area (840): on every foe
         # around the CASTER -- or on nobody under --no-caster-areas; never
@@ -31561,6 +31841,9 @@ def land_skill(send, state, agent_id, agent, conn_id):
             print(f"[c{conn_id}] agent {agent_id} cast skill {skill_id}: no "
                   f"modelled effect (its scale is not damage -- see "
                   f"content/world.toml skill_effect)", flush=True)
+        return
+    if _aot is not None:                                      # studies/weapons 42
+        agent["casting"] = None       # the area is open; nothing lands on _tid here
         return
     if _burst_terms is not None:                              # studies/weapons 40
         agent["casting"] = None
@@ -41597,7 +41880,15 @@ def main():
         SPELL_AREAS = False
         print("SPELLS: --no-spell-areas -- a burst spell (Fireball, Earthquake) lands on "
               "its one target and draws no explosion, the reading every run before "
-              "2026-09-20 made [studies/weapons 38 / 40 revert]", flush=True)
+              "2026-09-20 made [studies/weapons 38 / 40 revert]; an area over time "
+              "(Fire Storm) lands its one word too [42]", flush=True)
+    if a.no_areas_over_time:
+        global AREAS_OVER_TIME
+        AREAS_OVER_TIME = False
+        print("SPELLS: --no-areas-over-time -- an area over time (Fire Storm, Meteor "
+              "Shower, Eruption) lands ONE word on its target at the completion, no "
+              "ground effect and no ticks, the reading every run before 2026-09-26 "
+              "made [studies/weapons 42 revert]", flush=True)
     if a.no_spell_projectiles:
         global SPELL_PROJECTILES
         SPELL_PROJECTILES = False

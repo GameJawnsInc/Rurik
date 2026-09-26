@@ -2725,6 +2725,85 @@ word then [20, foe, caster, 304], the knock-down on each. NOT modelled, said her
 (exhaustion), the burst on a foe out of the caster's line of sight."""
 
 # ---------------------------------------------------------------------------
+# AREAS OVER TIME -- DESKWORK-D6 step 2 (2026-09-26, studies/weapons/PLAN.md 41
+# and 42). The record's target byte 16 with a DURATION: the area opens at the
+# target's position at the completion and strikes every foe inside it once a
+# `tick_period` for the duration (Fire Storm: 10 ticks, OBSERVED); a ground
+# effect `area_visual` is drawn at the completion and re-drawn at +3 / +6 (the
+# 350, OBSERVED 51 of 51). A row here REPLACES the label row the vault carries
+# for the same id (content.py's tier rule), so it names everything the label
+# named. The other eleven areas over time keep their label row (or none) and
+# stay ONE TARGET, as every run before today -- named in authsrv's banner.
+[skill_effect.197]
+scale_means = "Fire damage"
+damage_type = 5                # fire ([damage_type.table]): the page's own word; the wire carries no kind for a tick
+area_visual = 350              # 0x00A1 [P, 0, 0, 350, 0, 0] at the completion, +3.0 and +6.0 -- 51 of 51 (weapons 41, P3/P4)
+tick_period = 1.0              # a tick every second, k = 1..10 -- 79 tick instants within 0.020 s (weapons 41, P5)
+[skill_effect.197.provenance]
+source = "capture"
+capture = "20260817T231139"
+origin = "live"
+verified = """studies/weapons/PLAN.md 41, aotjoin.py (P1-P9 all PASS 2026-09-26). OBSERVED, 17 casts \
+by four PvP casters: announce 0x00A0 [60, caster, target, 197]; at +2.0 s [58, caster, 0] then \
+IMMEDIATELY 0x00A1 [P, 0, 0, 350, 0, 0] (17/17) -- 350 is in no column of the row (its \
+impact_visual is 351), so this row carries it, as Fireball's row carries 333; the 350 re-sent at P \
+at +3.0 and +6.0 (51 = 17 x 3, none at +9, no end marker), ahead of that tick's words (19/19); a tick \
+at the completion + k s, k = 1..10, per foe inside 0x00A3 [16, foe, caster, frac] with the caster \
+as cause (152 words, 1-4 foes a tick, foes only), no 58 / [20] / 0x00A7 on a clean tick (0/74); \
+the dead never struck, a revived foe struck again, a late entrant struck; the area STAYS at P \
+while the caster walks. Client (38797): type_code 5, TARGET BYTE 16, aoe_range 156, duration 10 / \
+10, scale 5->35 args = 2, projectile 2077 (none), activation 2.0, recharge 20, energy 10. WIKI \
+(GWW "Fire Storm", read 2026-09-26): var1 `Fire damage` 5->35, "Create a Fire Storm at target \
+foe's location. For 10 seconds, foes adjacent to that location are struck for 5...35 fire damage \
+each second". NOT modelled, said here: who stands inside 156 u at \
+each tick on the tape (every non-observer position is a lead); whether the caster's death ends the \
+area (INCONCLUSIVE, 2 casts -- the server keeps it, RECONSTRUCTION)."""
+
+[skill_effect.192]
+scale_means = "Fire damage"
+damage_type = 5                # fire ([damage_type.table]), the page's own word
+tick_period = 3.0              # "every 3 seconds" -- a strike at +3, +6, +9 of the record's 9 s (WIKI)
+knocks_down = true             # "each of which knocks down" -- every foe a strike reaches (WIKI)
+[skill_effect.192.provenance]
+source = "wiki"
+page = 'GWW, "Meteor Shower", {{Skill infobox}} + {{Skill progression}}, rev. 2722820, read 2026-09-26'
+verified = """studies/weapons/PLAN.md 42. Wiki: "Spell. Create a Meteor Shower at target foe's \
+location. For 9 seconds, foes adjacent to that location are struck for 7...112 fire damage and \
+knocked down every 3 seconds"; Notes: "the first damage and knock down event does not occur until \
+3 seconds after the spell has been cast" (an "immediate visual indication of rocks hitting the \
+ground" exists; its id is unknown); var1 `Fire damage` 7->112; `aoe = adjacent`, 25 energy, 5 s \
+activation, 60 s recharge, overcast 10. Client (38797): id 192, type_code 5, attribute 10 (Fire \
+Magic), TARGET BYTE 16, aoe_range 156 (the client's own adjacent, section 38), projectile 2077 \
+(none), impact_visual 2077 (none), duration 9 / 9, scale 7->112 args = 2. NEVER cast on any live \
+tape (NOT FOUND, aotjoin P8 over 96 connections), so the schedule is Fire Storm's shape at the \
+page's period (RECONSTRUCTION): the completion, then at +3 / +6 / +9 per foe inside 156 u of the \
+target's position the word and the knock-down; NO ground effect (no visual id is known -- the \
+server says so in its log). NOT modelled, said here: the overcast (exhaustion), the three-second \
+cadence's own phase (the first strike is taken to be a full period after the completion)."""
+
+[skill_effect.167]
+scale_means = "Earth damage"
+bonus_scale_means = "Blind"    # the flat 10 s in the bonus slot (CONDITION_FLAT_CONSTANT, SKILLS-LV)
+damage_type = 11               # earth ([damage_type.table]), the page's own word
+[skill_effect.167.provenance]
+source = "wiki"
+page = 'GWW, "Eruption", {{Skill infobox}} + {{Skill progression}}, rev. 2683897, read 2026-09-26'
+verified = """studies/weapons/PLAN.md 42. Wiki: "Spell. Cause an Eruption at target foe's location. \
+Each second for 5 seconds, foes near this location are struck for 10...40 earth damage and are \
+Blinded for 10 seconds"; concise: "Deals 10...40 earth damage each second (5 seconds). Hits foes \
+near target's initial location. Inflicts Blindness condition (10 seconds)"; var1 `Earth damage` \
+10->40; 25 energy, 2 s activation, 30 s recharge. Client (38797): id 167, type_code 5, attribute 9 \
+(Earth Magic), TARGET BYTE 16, aoe_range 240 (the client's own nearby), projectile 2077 (none), \
+impact_visual 2077 (none), duration 5 / 5, scale 10->40 args = 2, bonus 10 / 10 with its bit clear \
+(the Blind's flat seconds, the slot the label row already read). NEVER cast on any live tape (NOT \
+FOUND, aotjoin P8), so the schedule is Fire Storm's (RECONSTRUCTION): ticks at +1 .. +5 per foe \
+inside 240 u of the target's position, each tick the word THEN the Blind for 10 s on that foe -- \
+the page's "each second ... are struck ... and are Blinded" puts both on every second, and a \
+re-applied Blind is the longer-stands rule apply_condition already keeps (WIKI "Condition"). \
+NO ground effect (no visual id is known). The label row this replaces carried the same two \
+labels; what it lacked was the area and the seconds."""
+
+# ---------------------------------------------------------------------------
 # THE OUTPOST HENCHMEN -- DESKWORK-D1 step 5 (2026-09-23). Three standing NPCs
 # in our served outpost (Ascalon City, map 148) that the party window offers for
 # hire: `hireable = true` makes spawn_population send the displayed level (prop
