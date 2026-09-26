@@ -19798,11 +19798,27 @@ def attribute_state(state):
     stored = persisted_attribute_row(state)
     # SLICE-H8: the ranks and the budget are the agents globals -- the content
     # row's at import, a [party.KEY] row's after apply_party_character.
+    # THE BUDGET BINDS THE STORE (2026-09-25, run 20260925T210048): ranks
+    # spent under the content row's 200 and loaded under the slice's 10 gave
+    # available -3, and 0x0037's byte killed the load. A stored build the
+    # launch cannot pay for yields to the launch's own ranks, loudly;
+    # attribspend.fit_ranks says why that and not a raised or trimmed budget.
+    launch = [list(p) for p in agents.PLAYER_ATTRIBUTE_RANKS]
+    stored_ranks = (stored or {}).get("attributes")
+    budget = attribute_budget(state, agents.PLAYER_ATTRIBUTE_POINTS, "the player")
+    ranks, source, refused = attribspend.fit_ranks(
+        rules, budget,
+        *([("store", attribspend.seed_ranks(launch, stored_ranks))]
+          if stored_ranks else []),
+        ("launch", attribspend.seed_ranks(launch, None)))
+    if refused:
+        say_attribute_fit(state, attribute_fit_line(
+            f"character {stored_character_name(state)!r}", rules, budget,
+            refused, source, ranks))
     st = attribspend.AttributeState(
         rules,
-        attribspend.seed_ranks([list(p) for p in agents.PLAYER_ATTRIBUTE_RANKS],
-                               (stored or {}).get("attributes")),
-        int(agents.PLAYER_ATTRIBUTE_POINTS),
+        ranks,
+        budget,
         bonuses=equipped_attribute_bonuses(),
         primary=SPAWN_PROFESSION,
         # SANDBOX-B4: the secondary, when a row or --spawn-secondary gives one
@@ -19814,6 +19830,64 @@ def attribute_state(state):
         secondary=player_secondary(state))
     state["attributes"] = st
     return st
+
+
+# 0x0037's two value fields and 0x0038's one are BYTES (schema/messages.json,
+# GAME_SMSG 55 and 56), and the codec raises struct.error outside 0..255 --
+# inside send(), which kills the connection's thread mid-load. Retail's own
+# total is 200 in 8 of 8 live sightings (GWW's level-20 maximum), so this
+# bounds authoring mistakes, not characters.
+ATTRIBUTE_POINTS_WIRE_MAX = 255
+
+
+def attribute_budget(state, points, who):
+    """`points` as a budget 0x0037 can carry: clamped into 0..255, loudly.
+
+    Every budget the load sends passes through here -- the player's, a hero's
+    stored `attribute_points`, a hero row's `points` -- so available, which
+    fit_ranks keeps inside 0..budget, cannot leave the byte either.
+    """
+    points = int(points)
+    fitted = min(max(points, 0), ATTRIBUTE_POINTS_WIRE_MAX)
+    if fitted != points:
+        say_attribute_fit(state, (
+            f"ATTRIBUTES: {who}'s budget of {points} point(s) is outside "
+            f"0..{ATTRIBUTE_POINTS_WIRE_MAX}, the width of 0x0037's byte; "
+            f"{fitted} is sent and spent against instead. Fix the row or the "
+            f"store that says {points}."))
+    return fitted
+
+
+def say_attribute_fit(state, line):
+    """Print `line` once per connection: attribute_state is built once, but
+    a hero's budget is resolved by the spend state and by the load's block."""
+    said = state.setdefault("attribute_fit_said", set())
+    if line not in said:
+        said.add(line)
+        print(line, flush=True)
+
+
+def stored_character_name(state):
+    """The connection's character name from the store, else its uuid."""
+    store = state.get("charstore_game")
+    row = None if store is None else store.character_by_uuid(state.get("char_uuid", ""))
+    return (row or {}).get("name") or state.get("char_uuid") or "?"
+
+
+def attribute_fit_line(who, rules, budget, refused, source, ranks,
+                       budget_from="this launch's budget"):
+    """The one loud line for a build the budget could not pay for."""
+    named = {"store": "the stored ranks", "launch": "the launch's ranks"}
+    over = "; ".join(f"{named.get(s, s)} spend {spend}" for s, spend in refused)
+    if source == "none":
+        took = f"the session starts with NO ranks, all {budget} point(s) unspent"
+    else:
+        took = (f"the session starts from {named.get(source, source)} ("
+                + ", ".join(f"{a}={r}" for a, r in sorted(ranks.items()))
+                + f": {rules.total_spent(ranks)} of {budget} spent)")
+    return (f"ATTRIBUTES: {who} -- {over}, and {budget_from} is "
+            f"{budget}: {took}. The store is untouched until a spend in the "
+            f"panel rewrites it.")
 
 
 def equipped_attribute_bonuses():
@@ -19901,6 +19975,44 @@ def send_attribute_reply(send, st, agent_id, sequence, attribute):
             if st.bonus_of(attribute) else "") + ")")
 
 
+def hero_budget(state, hero_index, stored_points):
+    """One hero's attribute budget: the stored `attribute_points`, else its
+    row's `points` (SANDBOX-B7), else None -- no budget, and the total is
+    whatever the ranks cost (hero_attribute_state says why). Wire-clamped."""
+    points = stored_points if stored_points is not None else hero_points(hero_index)
+    return None if points is None else attribute_budget(state, points, f"hero {hero_index}")
+
+
+def hero_seed_ranks(state, hero_index, stored_ranks, stored_points, rules):
+    """The ranks one hero starts from, for the spend state AND both load
+    blocks: the store's when it holds a list (an empty one included --
+    hero_build's absence-is-not-emptiness rule), else the row's.
+
+    ...unless its budget cannot pay for them (2026-09-25). The player's rule,
+    for the player's reason: the budget is the launch's (or the store's own
+    `attribute_points`) and binds, a build over it yields to the row's ranks
+    and then to none, loudly -- attribspend.fit_ranks. A hero with no budget
+    at all has nothing to overspend, and a build that fits is returned as
+    the very object it was, so every load that did not overspend is
+    unchanged."""
+    chosen = stored_ranks if stored_ranks is not None else hero_attributes(hero_index)
+    budget = hero_budget(state, hero_index, stored_points)
+    if budget is None:
+        return chosen
+    ranks, source, refused = attribspend.fit_ranks(
+        rules, budget,
+        *([("store", stored_ranks)] if stored_ranks is not None else []),
+        ("launch", hero_attributes(hero_index) or {}))
+    if not refused:
+        return chosen
+    say_attribute_fit(state, attribute_fit_line(
+        f"hero {hero_index} of character {stored_character_name(state)!r}",
+        rules, budget, refused, source, ranks,
+        budget_from=("its stored attribute_points" if stored_points is not None
+                     else "its row's points")))
+    return ranks
+
+
 def hero_attribute_state(state, hero_index):
     """One hero's live, MUTABLE attribute state -- the player's object, per hero.
 
@@ -19925,13 +20037,12 @@ def hero_attribute_state(state, hero_index):
         return st
     player = attribute_state(state)          # for its rules tables only
     _own, _bar, ranks, points = hero_build(state, hero_index)
-    ranks = dict(ranks) if ranks is not None else dict(hero_attributes(hero_index) or {})
+    ranks = dict(hero_seed_ranks(state, hero_index, ranks, points, player.rules) or {})
     spent = player.rules.total_spent(ranks)
-    if points is None:
-        points = hero_points(hero_index)                # SANDBOX-B7: the row's budget
+    points = hero_budget(state, hero_index, points)     # SANDBOX-B7: else the row's budget
     st = attribspend.AttributeState(
         player.rules, ranks,
-        int(points) if points is not None else spent,
+        points if points is not None else spent,
         primary=hero_profession(hero_index),        # SANDBOX-B3: this hero's own
         secondary=hero_secondary(state, hero_index))   # SECONDARY-B4: stored, else 0
     cache[hero_index] = st
@@ -26383,7 +26494,8 @@ def hero_character_block(state, haid, hid):
     _hattr = attribute_state(state)
     # --persist: this character's own stored build for this hero.
     _hs_skills, _hs_bar, _hs_ranks, _hs_points = hero_build(state, hid)
-    _h_ranks = _hs_ranks if _hs_ranks is not None else hero_attributes(hid)
+    # The store's ranks else the row's, fitted to the budget (2026-09-25).
+    _h_ranks = hero_seed_ranks(state, hid, _hs_ranks, _hs_points, _hattr.rules)
     if _h_ranks:
         # THE BUDGET IS THE HERO'S OWN, and when the store names one the hero
         # can have UNSPENT points -- which is what makes the panel's plus
@@ -26396,14 +26508,13 @@ def hero_character_block(state, haid, hid):
         # curve is exactly the kind of number this repo keeps having to walk
         # back; the player's own budget is an authored content row too.
         _hspent = _hattr.rules.total_spent(_h_ranks)
-        _htotal = (int(_hs_points) if _hs_points is not None
-                   else hero_points(hid) if hero_points(hid) is not None   # SANDBOX-B7
-                   else _hspent)
+        _hbudget = hero_budget(state, hid, _hs_points)   # stored, else the row's (SANDBOX-B7)
+        _htotal = _hbudget if _hbudget is not None else _hspent
         _havail = _htotal - _hspent
     elif hero_points(hid) is not None:
         # SANDBOX-B7: no ranks anywhere, a budget on the row -- the whole
         # budget is unspent, for the panel.
-        _havail = _htotal = hero_points(hid)
+        _havail = _htotal = hero_budget(state, hid, None)
     else:
         _havail, _htotal = _hattr.available, _hattr.points_total
     out.append((GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS, [haid, _havail, _htotal],
@@ -34201,7 +34312,8 @@ def _handle_request_players(send, state, conn_id, stop, rec):
         # points, so there is no mutable state to hold.
         _hattr = attribute_state(state)
         _, _, _hs_ranks, _hs_points = hero_build(state, _hid)
-        _h_ranks = _hs_ranks if _hs_ranks is not None else hero_attributes(_hid)
+        # Fitted to the budget, as hero_character_block (2026-09-25).
+        _h_ranks = hero_seed_ranks(state, _hid, _hs_ranks, _hs_points, _hattr.rules)
         if _h_ranks:
             # SLICE-H8: the hero's OWN ranks and budget -- every point of
             # its level's allowance spent on the party row's ranks.
@@ -34210,7 +34322,8 @@ def _handle_request_players(send, state, conn_id, stop, rec):
             # and what the panel's plus buttons need. See hero_character_block
             # for the arithmetic that confirms the reading.
             _hspent = _hattr.rules.total_spent(_h_ranks)
-            _htotal = int(_hs_points) if _hs_points is not None else _hspent
+            _htotal = (attribute_budget(state, _hs_points, f"hero {_hid}")
+                       if _hs_points is not None else _hspent)
             _havail = _htotal - _hspent
         else:
             _havail, _htotal = _hattr.available, _hattr.points_total

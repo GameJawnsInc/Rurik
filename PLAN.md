@@ -2278,6 +2278,8 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   pick with points and a bar skill in the old secondary (R2 can refute SECONDARY-Q4's 0x003B-before-0x00B7
   order); R2b the chapter-2/3 rows (Q8); a relaunch under `--persist`; a hero's panel (R4, R4b);
   `--no-secondary-change`; a field. Behind it: Q1 the 0x00B7 flag, Q2 the client's own bar strip, Q7.
+  A launch whose budget is below the store's spend (`--party slice`'s 10 against the 13 the B runs spent) is
+  also the client check of PLAN-LOG's 2026-09-25 overspent-store fix: the load completes, the panel shows 0 of 10.
 
 ### 8.2 Waiting on the owner, or on a live capture
 

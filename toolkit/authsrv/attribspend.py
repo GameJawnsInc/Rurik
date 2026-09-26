@@ -90,6 +90,45 @@ def seed_ranks(content_ranks, stored_ranks):
     return {int(a): int(r) for a, r in (content_ranks or [])}
 
 
+def fit_ranks(rules, points_total, *candidates):
+    """The first candidate build the budget can pay for: (ranks, source, refused).
+
+    `candidates` are (source, ranks) pairs in precedence order -- the store's
+    first when it holds a build, then the launch's. `refused` lists
+    (source, spend) for each one passed over, and is empty when the first one
+    fit. When none fits the answer is ({}, "none", refused): no ranks, the
+    whole budget unspent.
+
+    WHY THIS EXISTS (2026-09-25, harness run 20260925T210048, the client's
+    Code=007): the store's ranks were spent under one launch's budget (the
+    content row's 200 points) and loaded under a smaller one (`--party slice`,
+    10), so `available` came out at 10 - 13 = -3 and the load's 0x0037, whose
+    field is a byte, raised struct.error and dropped the connection. The
+    client refuses a negative too -- ArenaNet's own assert is
+    `(int)attribState->attribPointsAvail >= 0` (ChCliAttrib.cpp:43) -- so no
+    encoding of an overspent build is legal on the wire.
+
+    THE BUDGET BINDS AND THE STORE YIELDS, and that choice is RECONSTRUCTION:
+    retail's lifetime total only ever grows, so a build over its own budget
+    has no retail witness to copy. The budget is the launch's -- a content or
+    party row, or the sandbox's points_for_level(level) -- and it is not ours
+    to raise (`persist_attributes` stores ranks only for exactly that reason),
+    so max(budget, spend) would send a total no character of that level has.
+    Trimming the stored build until it fits would pick which ranks to drop,
+    which is a guess. The launch's own build is the one the launch's author
+    priced against that budget, so it is the fallback.
+    """
+    budget = int(points_total)
+    refused = []
+    for source, ranks in candidates:
+        ranks = {int(a): int(r) for a, r in dict(ranks or {}).items()}
+        spend = rules.total_spent(ranks)
+        if spend <= budget:
+            return ranks, source, refused
+        refused.append((source, spend))
+    return {}, "none", refused
+
+
 class AttributeState:
     """One character's ranks and point budget, with the client's refusals.
 
