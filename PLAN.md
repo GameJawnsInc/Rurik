@@ -2270,6 +2270,15 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   146's defs 1428 / 1433 / 1434 / 1442) and the window offers it; which arm is right wants a
   retail witness of a level-0 foe's damage, not a guess.
 
+**Profession** — [studies/profession/SECONDARY.md](studies/profession/SECONDARY.md)
+
+* **SECONDARY-R1..R6, the owed client run** of the K panel's secondary change (landed offline, PLAN-LOG
+  "SECONDARY-B1..B5", 2026-09-25): an outpost load with the drop-down ungreyed; a pick answered by the
+  0x00B7 -> 0x00A6 -> 0x00DB batch, the list narrowing and the new rows appearing without a reload; a second
+  pick with points and a bar skill in the old secondary (R2 can refute SECONDARY-Q4's 0x003B-before-0x00B7
+  order); R2b the chapter-2/3 rows (Q8); a relaunch under `--persist`; a hero's panel (R4, R4b);
+  `--no-secondary-change`; a field. Behind it: Q1 the 0x00B7 flag, Q2 the client's own bar strip, Q7.
+
 ### 8.2 Waiting on the owner, or on a live capture
 
 * **DESKWORK-D14's off-disk vault copy** waits on a second disk: the owner has none
