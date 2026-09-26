@@ -24,7 +24,7 @@ import agents  # noqa: E402
 import authsrv  # noqa: E402
 import combatmath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=257)   # the BARE-MACHINE number: 257 = 251 + 6 (section 28, a point-blank burst, 2026-09-20; a vault run gives 276 -- the corpus's target-16 announces are the one vault-only check); before that 251 = 237 + 14 (section 27, the hit test, 2026-09-20; a vault run gives 269 -- the corpus's dodge words are the one vault-only check); before that 237 = 228 + 9 (section 26, Fireball's splash, 2026-09-20; a vault run gives 254 -- the tape's bursts are the one vault-only check); before that 228 = 219 + 9 (section 25, a body's spell projectile, 2026-09-20; a vault run gives 244 -- the tape's activations are the one vault-only check); before that 219 = 208 + 11 (section 24, a player's spell projectile, 2026-09-20; a vault run gives 234 -- the tapes' speeds are the one vault-only check); before that 208 = 203 + 5 (section 23, base armour penetration, 2026-09-19; a vault run gives 222 -- the six checks that read the skills table are vault-only); before that 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=265)   # the BARE-MACHINE number: 265 = 257 + 8 (section 29, areas over time on retail's wire -- aotjoin, 2026-09-26; a vault run gives 295 -- the record's classes, P1-P9 and the tick batch order are the eleven vault-only checks; section 29 alone under a missing RURIK_VAULT runs its 8 and declares the skip); before that 257 = 251 + 6 (section 28, a point-blank burst, 2026-09-20; a vault run gives 276 -- the corpus's target-16 announces are the one vault-only check); before that 251 = 237 + 14 (section 27, the hit test, 2026-09-20; a vault run gives 269 -- the corpus's dodge words are the one vault-only check); before that 237 = 228 + 9 (section 26, Fireball's splash, 2026-09-20; a vault run gives 254 -- the tape's bursts are the one vault-only check); before that 228 = 219 + 9 (section 25, a body's spell projectile, 2026-09-20; a vault run gives 244 -- the tape's activations are the one vault-only check); before that 219 = 208 + 11 (section 24, a player's spell projectile, 2026-09-20; a vault run gives 234 -- the tapes' speeds are the one vault-only check); before that 208 = 203 + 5 (section 23, base armour penetration, 2026-09-19; a vault run gives 222 -- the six checks that read the skills table are vault-only); before that 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
 check = LEDGER.ok
 
 LEGACY_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
@@ -3642,6 +3642,196 @@ def section_bursts():
          authsrv.PLAYER_SWING_DAMAGE) = saved
 
 
+# The record's fourteen areas over time and seven area hexes (target byte 16), as
+# aotjoin.classify reads the pinned skills table -- OBSERVED 2026-09-26.
+AOT_IDS = [77, 167, 192, 196, 197, 215, 830, 844, 910, 1083, 1094, 1372, 1380, 2222]
+AHEX_IDS = [52, 56, 108, 136, 204, 211, 234]
+
+
+def _aot_tape(caster=14, foes=(7, 8), point=(500.0, 0.0), ticks=range(1, 11),
+              values=(-0.0306, -0.0559), extra=(), tokens=None):
+    """A synthetic connection in deepwoundjoin.sequence's shape ([(i, t, op, v)], the
+    header at v[0]): one Fire Storm announce at t=100 with a PREVIOUS skill's 58 in its
+    batch, the completion at +2.0 ([55] self, [58], the 350), the 350 re-sent at +3/+6
+    ahead of that tick's words, one word per foe per tick at completion + k."""
+    f2b = lambda f: struct.unpack("<I", struct.pack("<f", f))[0]    # noqa: E731
+    att1, att2 = 0x61747431, 0x61747432
+    tokens = tokens or {}
+    ev = []
+    for ag, tok in [(caster, att1)] + [(f, att2) for f in foes]:
+        ev.append((50.0, 0x0020, [32, ag, 0, 0, 9, (0.0, 0.0), 0, 0, 0, 0, 0, 0,
+                                  tokens.get(ag, tok)]))
+    ev.append((100.0, 0x00A0, [160, 60, caster, foes[0], 197]))
+    ev.append((100.01, 0x009F, [159, 58, caster, 0]))             # the previous skill's end
+    tc = 102.0
+    ev.append((tc, 0x00A3, [163, 55, caster, caster, f2b(0.0829)]))
+    ev.append((tc, 0x009F, [159, 58, caster, 0]))
+    ev.append((tc, 0x00A1, [161, point, 0, 0, 350, 0, 0]))
+    for k in ticks:
+        t = tc + k
+        if k in (3, 6):
+            ev.append((t, 0x00A1, [161, point, 0, 0, 350, 0, 0]))
+        for f, val in zip(foes, values):
+            ev.append((t, 0x00A3, [163, 16, f, caster, f2b(val)]))
+    ev = ev + list(extra)
+    ev.sort(key=lambda e: e[0])
+    return [(i, t, op, v) for i, (t, op, v) in enumerate(ev)]
+
+
+def _aot_score(aj, seq, sweep=None):
+    rows = aj.rows_of(seq)
+    for r in rows:
+        r.update(capture="SYNTHETIC", port="1", observer=None)
+    return aj.score({"casts": rows, "unattributed": aj.unattributed(seq, rows), "refused": [],
+                     "connections": 1, "captures": 1,
+                     "sweep": collections.Counter(sweep or {(197, "0x00A0[60]"): 1}),
+                     "aot": AOT_IDS, "ahex": AHEX_IDS, "other": [186, 170]})
+
+
+def section_aot_tape():
+    print("\n29. areas over time on retail's wire: aotjoin's reader, its nine predictions, "
+          "and the arms that let each go red")
+    import aotjoin as aj                                              # noqa: PLC0415
+    # the classifier, on injected rows (bare machine)
+    rows = {"197": {"type_code": 5, "target": 16, "aoe_range": 156.0, "projectile": 2077,
+                    "duration0": 10, "duration15": 10},
+            "192": {"type_code": 5, "target": 16, "aoe_range": 156.0, "projectile": 2077,
+                    "duration0": 9, "duration15": 9},
+            "167": {"type_code": 5, "target": 16, "aoe_range": 240.0, "projectile": None,
+                    "duration0": 0, "duration15": 5},
+            "186": {"type_code": 5, "target": 16, "aoe_range": 240.0, "projectile": 343,
+                    "duration0": 0, "duration15": 0},
+            "170": {"type_code": 5, "target": 16, "aoe_range": 240.0, "projectile": 2077,
+                    "duration0": 0, "duration15": 0},
+            "52": {"type_code": 4, "target": 16, "aoe_range": 240.0, "projectile": 2077,
+                   "duration0": 1, "duration15": 10},
+            "194": {"type_code": 5, "target": 5, "aoe_range": 156.0, "projectile": 343,
+                    "duration0": 5, "duration15": 5},
+            "900": {"type_code": 5, "target": 16, "aoe_range": 156.0, "projectile": 343,
+                    "duration0": 5, "duration15": 5},
+            "901": {"type_code": 5, "target": 16, "aoe_range": 0.0, "projectile": 2077,
+                    "duration0": 5, "duration15": 5}}
+    aot, ahex, other = aj.classify(rows)
+    check(sorted(aot) == [167, 192, 197] and sorted(ahex) == [52]
+          and sorted(other) == [170, 186, 900, 901] and 194 not in aot | ahex | other,
+          "the classifier: Fire Storm, Meteor Shower and a duration15-only row are areas over "
+          "time, Panic an area hex; Fireball (flies), Earthquake (no duration), a duration "
+          "with a projectile and a duration with no aoe_range are not; a target-5 row is "
+          "not target 16 at all", str((sorted(aot), sorted(ahex), sorted(other))))
+    scratch = {int(k) for k, r in rows.items() if r["target"] == 16 and r["type_code"] == 5
+               and (r["duration0"] or r["duration15"])}
+    check(900 in scratch and 901 in scratch and 900 not in aot and 901 not in aot
+          and sorted(aj.classify({int(k): r for k, r in rows.items()})[0]) == sorted(aot),
+          "the arm: the scratch lane's classifier (target 16, type 5, a duration) would take "
+          "the projectile row and the radius-0 row too; the committed one refuses both, and "
+          "reads int keys as it reads str keys")
+    # the reader, on a synthetic tape (bare machine)
+    seq = _aot_tape()
+    good = aj.rows_of(seq)
+    saved_min = aj.COMPLETION_MIN
+    try:
+        aj.COMPLETION_MIN = 0.0
+        bad = aj.rows_of(seq)
+    finally:
+        aj.COMPLETION_MIN = saved_min
+    check(len(good) == 1 and good[0]["completion_dt"] == 2.0 and good[0]["tick_ks"]
+          == list(range(1, 11)) and good[0]["visual_offsets"] == [0.0, 3.0, 6.0]
+          and bad[0]["completion_dt"] == 0.01,
+          "the completion is the caster's 58 at least 0.5 s after the announce: +2.0, ticks "
+          "k=1..10, the 350 at 0/3/6 -- and with that rule off the previous skill's 58 in the "
+          "announce batch is taken for it (+0.01, the scratch join's first-run bug)",
+          str((good[0]["completion_dt"], bad[0]["completion_dt"])))
+    s = _aot_score(aj, seq)
+    check(all(s[f"p{i}"] for i in (2, 3, 4, 5, 6, 7, 8, 9)) and not s["p1"],
+          "the synthetic cast satisfies P2-P9 (and not P1, which is scored on the witness "
+          "tape's own four ports)", str({f"p{i}": s[f"p{i}"] for i in range(1, 10)}))
+    t_k4 = 102.0 + 4
+    drift = _aot_tape(extra=[(t_k4 + 0.2, 0x00A3, [163, 16, 7, 14,
+                                                  struct.unpack("<I", struct.pack("<f", -0.0306))[0]])])
+    drift = [(i, t, op, v) for i, t, op, v in drift
+             if not (abs(t - t_k4) < 1e-9 and op == 0x00A3 and v[2] == 7)]
+    eleven = _aot_tape(ticks=range(1, 12))
+    check(not _aot_score(aj, drift)["p5"] and _aot_score(aj, drift)["stray_tick_values"]
+          and not _aot_score(aj, eleven)["p5"],
+          "P5 can go red: a tick 0.2 s off phase lands outside the gate as a stray tick value, "
+          "and an eleventh tick at +11 is a k the prediction does not allow")
+    fs58 = _aot_tape(extra=[(104.0, 0x009F, [159, 58, 14, 0])])
+    fx20 = _aot_tape(extra=[(105.0, 0x00A0, [160, 20, 7, 14, 999])])
+    check(not _aot_score(aj, fs58)["p6"] and _aot_score(aj, fs58)["fs58_on_tick"] == 1
+          and not _aot_score(aj, fx20)["p6"] and _aot_score(aj, fx20)["unexplained_20_or_a7"] == 1,
+          "P6 can go red: a 58 on a tick attributed to Fire Storm itself, and a [20] on a "
+          "tick that no other announced skill's 58 explains")
+    late = _aot_tape(extra=[(106.5, 0x00A1, [161, (500.0, 0.0), 0, 0, 350, 0, 0])])
+    stray = _aot_tape(extra=[(106.5, 0x00A1, [161, (9000.0, 0.0), 0, 0, 350, 0, 0])])
+    moved55 = [(i, t, op, v) for i, t, op, v in _aot_tape()]
+    j58 = next(n for n, (_i, t, op, v) in enumerate(moved55) if op == 0x009F and t == 102.0)
+    moved55[j58 - 1], moved55[j58] = moved55[j58], moved55[j58 - 1]     # 58 then [55] then 350
+    check(not _aot_score(aj, late)["p4"] and not _aot_score(aj, stray)["p7"]
+          and _aot_score(aj, stray)["unattributed"] == 1 and not _aot_score(aj, moved55)["p3"],
+          "P3, P4 and P7 can go red: a 350 at +4.5 is off the 0/3/6 schedule, a 350 at a "
+          "point no area stands on is unattributed, and anything between the 58 and the 350 "
+          "breaks 'immediately after'")
+    mon = _aot_tape(tokens={8: 0x6D6F6E31})
+    check(not _aot_score(aj, mon)["p9"] and _aot_score(aj, mon)["monster_takers"] == 1
+          and not _aot_score(aj, seq, {(197, "0x00A0[60]"): 1, (192, "0x00A0[60]"): 1})["p8"]
+          and not _aot_score(aj, seq, {(197, "0x00A0[60]"): 1, (234, "0x00E5"): 1})["p8"],
+          "P8 and P9 can go red: a 'mon1' taker is a monster in a Fire Storm (the scatter "
+          "witness), a Meteor Shower announce is another area over time, and an own E5 of "
+          "Deep Freeze is an area hex")
+    # the corpus (vault only): aotjoin's full read, P1-P9 as registered, and the facts
+    # B2 builds on
+    try:
+        c = aj.census()
+        sc = aj.score(c)
+    except (Exception, SystemExit) as e:                               # noqa: BLE001
+        sc = None
+        LEDGER.skip("section 29", f"the live corpus or the skills table is absent "
+                    f"({type(e).__name__}) -- 11 checks (the record's classes, P1-P9, "
+                    f"the tick batch order) on capture 20260817T231139 and the corpus")
+    if sc is not None:
+        fs = agents.WORLD.get("skills", "197")
+        check(sc["aot"] == AOT_IDS and sc["ahex"] == AHEX_IDS and len(sc["other"]) == 13
+              and float(fs["aoe_range"]) == 156.0 and int(fs["duration0"]) == 10
+              and int(fs["duration15"]) == 10 and int(fs["impact_visual"]) == 351,
+              "the record: FOURTEEN areas over time (not weapons §40's 'Fifteen'), seven area "
+              "hexes, thirteen others; Fire Storm 156 u, 10 s at every rank, and its "
+              "impact_visual 351 is NOT the 350 the wire draws",
+              str((sc["aot"], sc["ahex"], len(sc["other"]))))
+        check(sc["p1"], "P1: 17 Fire Storm announces on 20260817T231139, 13+2+1+1 over four "
+              "connections, all 0x00A0 [60, caster, target, 197], none the observer's",
+              str(sc["witness_per_port"]))
+        check(sc["p2"], "P2: every cast completes with ONE [58, caster, 0] at +2.0 +- 0.05 s",
+              str(sc["completion_dt"]))
+        check(sc["p3"], "P3: the ground 0x00A1 [P, 0, 0, 350, 0, 0] immediately after the "
+              "caster's 58, one per completion batch", f"{sc['a1_right_after_58']}")
+        check(sc["p4"] and sc["n350"] == 51,
+              "P4: the 350 re-sent at +3 and +6 and nowhere else -- three per cast, 51 in all",
+              str(sc["per_cast_350"]))
+        check(sc["p5"] and sc["tick_instants"] == 79,
+              "P5: ticks at completion + k s for k = 1..10 only, phase within 0.100 s (the "
+              "tape: 0.020), no tick value outside the gate or at the completion",
+              f"{sc['k_hist']} {sc['phase']}")
+        check(sc["p6"], "P6: no Fire Storm 58 on a tick; every [20] / 0x00A7 on a tick is "
+              "another announced skill's completion", f"{sc['fs58_on_tick']} "
+              f"{sc['unexplained_20_or_a7']}")
+        check(sc["p7"], "P7: every 350 in the corpus sits at a Fire Storm area inside its life",
+              str(sc["unattributed"]))
+        check(sc["p8"], "P8: no other area over time and no area hex was ever announced or "
+              "cast by the observer on a live tape", str(sc["sweep"]))
+        check(sc["p9"], "P9: nobody a Fire Storm ticked carries a monster token -- the corpus "
+              "has NO scatter witness", str(sc["taker_tokens"]))
+        check(sc["observer_hit_ticks"] >= 12
+              and sc["observer_prefix_ok"] == sc["observer_hit_ticks"]
+              and sc["visual_in_tick"] >= 19
+              and sc["visual_before_words"] == sc["visual_in_tick"]
+              and sc["struck_while_dead"] == 0 and len(sc["revived_struck"]) == 2,
+              "the order B2 builds on: a tick striking the observer is 0x00CF [obs, 4] then "
+              "[10, obs, 197] then the word (12/12); a re-sent 350 rides its tick BEFORE the "
+              "words (19/19); the dead are never struck, a revived taker is struck again",
+              f"{sc['observer_prefix_ok']}/{sc['observer_hit_ticks']} "
+              f"{sc['visual_before_words']}/{sc['visual_in_tick']} {sc['revived_struck']}")
+
+
 def main():
     section_table()
     section_skills()
@@ -3671,6 +3861,7 @@ def main():
     section_spell_areas()
     section_dodge()
     section_bursts()
+    section_aot_tape()
     return LEDGER.verdict()
 
 

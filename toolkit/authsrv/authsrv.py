@@ -14707,11 +14707,11 @@ def projectile_connects(state, shot):
 #
 # The record's target byte 16 marks 34 rows (section 38): two projectiles
 # (Fireball, Phoenix -- section 38's flight and burst), seven hexes on an
-# area (Panic, Suffering...), fifteen areas over TIME (Fire Storm, Meteor
+# area (Panic, Suffering...), fourteen areas over TIME (Fire Storm, Meteor
 # Shower, Churning Earth...: a duration in the record, ticking at a point --
 # the corpus's only target-16 casts, Fire Storm x17 on 20260817T231139, are
 # these, and they are a mechanism of their own with a ground effect and a
-# scatter, NOT this), and ten SINGLE-PACKET bursts -- a spell (type 5) with
+# scatter, NOT this), and eleven SINGLE-PACKET bursts -- a spell (type 5) with
 # no projectile and no duration: Earthquake / Dragon's Stomp (240), Meteor
 # (156), Rodgort's Invocation (240), Searing Flames, Ravenous Gaze, Feast of
 # Corruption, Plague Sending, Enfeebling Blood, Desecrate / Defile
@@ -14727,7 +14727,8 @@ def projectile_connects(state, shot):
 # knock-down on each; a foe's number is its own. RUN-WEAPONS-1B's Suits stand
 # 150 u apart: an Earthquake at the middle one predicts three words. The
 # same radius, the same foes_within and the same flag as section 38
-# (--no-spell-areas: one target).
+# (--no-spell-areas: one target). COUNTS CORRECTED 2026-09-26 (studies/weapons
+# 41, aotjoin): this banner said fifteen and ten; the lists always named 14 and 11.
 SPELL_TYPE_CODE = 5          # the record's type byte for a Spell (a hex is 4, an attack 14)
 
 

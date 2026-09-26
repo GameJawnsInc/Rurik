@@ -2446,6 +2446,12 @@ model steers between samples; the `[55]` energy word; the bonus penetration tier
 
 ## 40. A point-blank burst -- 2026-09-20: no flight -- every foe around the target, at the completion
 
+> **Correction, 2026-09-26 (§41, `aotjoin.py`).** Two statements below are wrong and stand
+> as written: the completion batch's `[55]` is a self HEALTH gain from the caster's build,
+> not "the energy"; and the "Fifteen" areas over time and "Ten" single-packet bursts
+> are 14 and 11 -- the lists were right, the counts were not. The one-350-per-completion
+> reading is right; the 350 is then re-sent at +3 and +6 s (§41).
+
 **What §38 left.** The record's target byte 16 marks 34 rows; two fly (Fireball, Phoenix --
 §38's flight and burst). The other 32 landed on one target.
 
@@ -2508,3 +2514,111 @@ per Suit within 240 u (three), word first -- the burst's shape on retail, at las
 **Left.** The areas over time (Fire Storm's seventeen casts are the witness: the ground
 effect 350, the once-a-second ticks, the scatter); the area hexes; line of sight; the `[55]`
 energy word; the bonus penetration tier (item word 574).
+
+## 41. Areas over time -- 2026-09-26: the tape read
+
+**Why now.** DESKWORK-D6 step 1 (`studies/deskwork/PLAN.md`): read retail's one area over
+time off the bytes, with the predictions stated first, and lock the shape BEFORE any server
+line is written. §40 and D6 described the same witness and disagreed (one ground 350 at the
+completion against three); this section settles it and corrects §40 where it was wrong.
+
+**The instrument.** `toolkit/authsrv/aotjoin.py`, the committed port of the D6 tape lane's
+scratch join (the lane's one fix kept: a completion is the caster's `[58]` at least 0.5 s
+after the announce -- the first cut took a PREVIOUS skill's 58 sharing the announce batch on
+54071 at 638.048, and its three 350s came out "unattributed"). Captures through
+`livewire.live_captures()` (origin LIVE only) behind `vaultpath.require_dir`; each
+connection through `deepwoundjoin.sequence` (refuses a connection that does not frame
+whole); the observer through `spellhitjoin.observer_of`. Denominator: 35 live captures, 96
+connections framed whole, 0 refused. `python toolkit/authsrv/aotjoin.py` prints P1-P9
+PASS/FAIL; `--rows` prints every cast with its completion batch in wire order.
+
+**The record (OBSERVED, the pinned skills table).** Of the 34 target-16 rows, `classify`
+reads **14** areas over time (type 5, no projectile, a duration, `aoe_range` > 0): 77, 167,
+192, 196, 197, 215, 830, 844, 910, 1083, 1094, 1372, 1380, 2222; **7** area hexes (type 4
+with a radius): 52, 56, 108, 136, 204, 211, 234; and 13 others (two projectile bursts and
+§40's **11** single-packet bursts). Fire Storm 197: 156 u, duration 10 at every rank,
+activation 2.0, energy 10, `impact_visual` 351 -- and the wire draws **350**, which is in no
+column of the row (Fireball's 333, §38, is the same case).
+
+**The predictions, registered before the reader ran (D6's acceptance and the build spec),
+and their outcomes** -- all nine PASS on the full corpus, 2026-09-26:
+
+| aotjoin | prediction | outcome (OBSERVED) |
+|---|---|---|
+| P1 | 17 Fire Storm announces on `20260817T231139`, 13+2+1+1 over four connections, all `0x00A0 [60, caster, target, 197]`, none by the observer | PASS: 54071 13, 50527 2, 50513 1, 50286 1; 17/17 the targeted form; 0 by the observer; no other capture holds one |
+| P2 | one `[58, caster, 0]` at +2.0 +- 0.05 s, no other agent's 58 in the batch | PASS: 17/17, 1.982..2.022 s |
+| P3 | the ground `0x00A1 [P, 0, 0, 350, 0, 0]` immediately after the 58 | PASS: 17/17, exactly one 350 per completion batch |
+| P4 | the 350 re-sent at +3 and +6 (+- 0.05 s) and nowhere else | PASS: 3 per cast, 51 in all, at +2.978..3.020 and +5.978..6.017; none at +9, nothing at P after +6.02, no end marker |
+| P5 | ticks at completion + k s, k = 1..10 only, phase within 0.100 s | PASS: 79 tick instants, k 1:15 2:15 3:13 4:6 5:6 6:6 7:6 8:4 9:4 10:4, phase -0.020..+0.020; no tick at the completion, none at k >= 11 |
+| P6 | no 58 and no `[20]` on a tick | PASS: Fire Storm's 58 on a tick 0/79; the 5 mixed tick batches carry the same caster's 58 of ANOTHER announced skill (Mind Burn 185 x1, Fireball 186 x2, 179 x2) and the 3 `[20]`s on ticks are theirs |
+| P7 | 0 unattributed 350s | PASS: 51/51 at a Fire Storm area's point inside its life |
+| P8 | 0 announces of any other area over time or area hex | PASS: over 96 connections the only target-16 skills announced are Fire Storm x17 and Fireball 186 x36 (NOT FOUND: the other 13 areas over time and all 7 area hexes) |
+| P9 | 0 monster takers | PASS: 16 struck agents, every one with a create, tokens att2 12 / att1 4 -- all PvP; NO retail witness of monster scatter (NOT FOUND) |
+
+P5's first run FAILED on an arm the reader added, not on the registered half: it counted
+a wand hit (`0x00A4` launch, `0x00A7`, `[16, 9, 14, -0.0306]` at +10.653 on 54071) whose ~17
+health equals the pair's tick value as a tick outside the gate. The operand was wrong -- a
+word group carrying an `0x00A7`, a `[20]` or the caster's 58 is another action -- and the
+arm now counts only CLEAN groups (and a tick value in the completion batch); both are what
+let P5's phase half go red although the tick gate is 0.05 s wide.
+
+**Also read off the tape (OBSERVED; step 2 builds on these).**
+- **A tick** is, per foe inside, `0x00A3 [16, foe, caster, frac]` with the caster as cause
+  (152 words); 1 foe on 40 ticks, 2 on 18, 3 on 18, 4 on 3; foes only. One fraction per
+  (cast, taker) on 36 of 37 pairs (~16, 17 or 31 health against the connection's last
+  maximum -- approximate). A clean tick carries no 58, no `[20]`, no `0x00A7` (0/74).
+- **A tick striking the observer** is `0x00CF [obs, 4]` (adrenaline gain) then `0x009F [10,
+  obs, 197]` (the skill-damage property naming the skill) then the word, 12/12 -- the shape
+  a body's spell word to the player already has.
+- **The re-sent 350** rides its tick's batch BEFORE the tick's words, 19/19, and is sent
+  when nobody is ticked (cast 765.486 ticked nobody and still drew all three).
+- **The point P** is the announced target's position at the completion: equal to its latest
+  `0x0029` point on 5/17 (the other 12 rest on stale leads) -- CORROBORATED with WIKI (GWW
+  "Area of effect", rev 2685457: such spells "take place where the foe was when casting
+  finished").
+- **Who is struck**: the dead never (0 words on a dead taker); a revived taker inside is
+  struck again (2: agent 7 revived +8.444, agent 12 revived +9.044); a foe that walks in
+  late is struck (cast 443.127: the announced target never ticked, agent 8 from k = 8).
+- **The area stays at P while the caster walks** (7 casts tick after the caster's first
+  `0x0029`). **Caster death: INCONCLUSIVE** -- 2 casts (#10 +4.676, #13 +6.92), no ticks after
+  either but both areas already empty; the 350 WAS re-sent after the caster died (#10, +6.002;
+  n = 1).
+- **Who stands inside 156 u at each tick is UNTESTABLE here**: every non-observer position on
+  these tapes is a lead (shoutjoin's lead check, median 765 u off). The loopback lock takes
+  the radius from the record.
+
+**Two corrections to §40** (the dated note at §40 points here; §40's text stands as written):
+1. **"[55 the energy]" is wrong.** Property 55 on `0x00A3` is a HEALTH GAIN (`agents.py`),
+   and the word is `[55, caster, caster, +0.0829]` -- a self-heal from the caster's build,
+   on 15/17 completions (absent on #8 and #11, both caster 10's on 54071, whose other four
+   casts carry it), riding the same caster's other skills' completions too (179 +0.0829, 185
+   +0.0414). No energy property appears in any completion batch (0/17; the casters are never
+   the observer, so the tape could not show their energy anyway). The completion shape is
+   `[58, caster, 0]` then the 350; the `[55]` is not Fire Storm's.
+2. **The counts.** §40's heading says "Fifteen" areas over time and "Ten" single-packet
+   bursts; its own lists name 14 and 11, and the record agrees with the lists. The same
+   miscount was copied into `authsrv.py`'s section-40 banner (corrected there today, a
+   comment; no lock read it) and into D6's thesis ("15 skills").
+
+D6's "three ground-350 0x00A1s" is right as a count and wrong if read as three at the
+completion (they are +0, +3, +6); its "words at +3, +4, +5 s" is from the ANNOUNCE and is only
+the first three ticks -- they run to the completion + 10 s.
+
+**The lock.** `test_weapons.py` section 29 (8 checks bare, 11 vault-only; floor 257 -> 265,
+a vault run 295): the classifier on injected rows and its arm (the scratch lane's looser
+classifier would take a duration row with a projectile and one with no radius); the reader
+on a SYNTHETIC tape -- the completion rule against its known-bad arm (0.5 s off: the previous
+skill's 58 is taken, +0.01), P2-P9 pass, and each of P3-P9 driven red by the mutation that
+should redden it (a tick 0.2 s off phase, an eleventh tick, a Fire Storm 58 on a tick, an
+unexplained `[20]`, a 350 at +4.5, a 350 at a foreign point, a message between the 58 and the
+350, a `mon1` taker, a Meteor Shower announce, an own E5 of Deep Freeze); and on the vault the
+record's classes, P1-P9 as registered, and the tick batch order above. The vault half reads
+the whole corpus (about a minute, decode-bound), the house pattern for a corpus prediction.
+
+**Left (D6's later steps, not this one).** Step 2, the areas over time on the server (the
+schedule above is its target); Mind Burn 185 and hex 179; the seven area hexes; Dazed and
+Cracked Armor. Open on the tape: whether the caster's death ends the area; what `0x00CF`'s
+second field means (4 for a Fire Storm tick, 11 for Fireball, 25 for a melee hit); the
+ambient `0x00A1` effects 1292-1303 / 1685-1687 (agent 0, on two PvE tapes) were not checked
+for damage (UNVERIFIED). Monster scatter has no retail witness and stays WIKI plus
+RECONSTRUCTION.
