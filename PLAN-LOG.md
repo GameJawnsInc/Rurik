@@ -28,6 +28,37 @@ move back.
 
 ---
 
+### SECONDARY-R1..R6, the K panel's secondary change CONFIRMED on the client -- 2026-09-25 -- **the drop-down works in an ordinary outpost, a pick narrows the list and swaps the attribute rows without a reload, the old secondary's points and bar skill come back, the pair survives a relaunch for the player and a hero, the revert and a field grey it; and two defects the run met: the harness's Play step and an overspent stored build**
+
+The owner's go-ahead ran the runsheet on `main` `016a319d` (studies/profession/SECONDARY.md
+section 6; fourteen launches, two of them discovery and one the crash below). In Ascalon
+City, a type-10 outpost, the Skills and Attributes panel's profession drop-down is ENABLED with
+ten entries (R1) -- so RUNS 13's 15-map gate is refuted for an ordinary outpost too, and
+AttribFrame is not map-gated there (Q5). Picking Necromancer (R1b) draws c2s `0x0041` and our
+`0x00B7` -> `0x00A6` -> `0x00DB` reply; without a reload the drop-down re-labels, the rows gain
+Curses / Death / Blood Magic (not Soul Reaping, primary-only) and the list narrows to Warrior +
+Necromancer -- the client's own filter, the library untouched, as retail. A relaunch loads it
+(R3). A Curses skill on the bar leaves at the next pick, and two points in Healing Prayers come
+back (184 -> 187) with the row gone, which settles Q4 (zero the rank before the `0x00B7`) (R2);
+Assassin and Dervish get their rows, so this server's account stream owns chapters 2 and 3
+(Q8) (R2b). A hero's panel, reached from the K window's portrait row, offers the client's own
+ten and a pick of Monk/Elementalist swaps her rows (R4); a relaunch shows `Mo/E3 Tahlkora` in
+the party window and her panel reopens on it (R4b). `--no-secondary-change` greys the control
+and sends no mask (R5); a field greys it by the client's own gate though the mask is sent (R6).
+Open: Q1 (the `0x00B7` flag), Q2 / Q7 (the client's own handling of an old or a third
+profession's bar skill), Q3, Q6. **Two defects the run met, neither the build's.** (1) The
+harness gave every action, Play included, 5 s to find a window, so on a loaded machine Play
+never ran and the operator pressed Enter by hand at character select (three runs); fixed the
+same evening, `3de069a9` (`PLAY_LOGIN_TIMEOUT`, 90 s; test_harness 216 -> 218). (2) A stored
+attribute spend above the launch's budget crashes the load: the store held 13 points (spent
+under the 200-point default, one of them by this run's own mis-aimed clicks) and `--party
+slice` budgets 10, so 0x0037's available byte went negative and `struct.error` dropped the
+connection (`20260925T210048`, Code=007 on the client). Pre-existing, filed as its own task;
+the runs restored the store to its backup and went on. The store was restored after the run
+(sha256 `8aa662a2…`).
+
+---
+
 ### SECONDARY-B1..B5, the Skills and Attributes panel's secondary-profession change -- 2026-09-25 -- **the drop-down is offered all nine other professions on every load (0x00B6, retail's PvP mask), a pick (c2s 0x0041) is answered with retail's 0x00B7 -> 0x00A6 -> 0x00DB batch, the old secondary's ranks and bar skills are cleaned up (RECONSTRUCTION), the pair persists per character and per hero; the skill list is left for the client to filter, as retail does**
 
 The Skills and Attributes panel's secondary drop-down works on our server: it is populated on every load, a pick is answered, the old secondary's state is cleaned up, and the pair persists. Four read-only research angles ran first and [studies/profession/SECONDARY.md](studies/profession/SECONDARY.md) is their record and the build's, labelled. What they found, against what the repo believed: retail sends 0x00B6 AGENT_PROFESSION_BITS on **95 of 95** live game connections, once, for the player only, immediately after the player's 0x00B7 — 0 on the PvE characters (45), `0x7FF & ~(1 << primary)` on the PvP ones (2045 = 0x7FD ×46 Warrior, 1919 = 0x77F ×4 Assassin, bit 0 kept) — so overrides.json's "never captured" and authsrv's "11 of 11 mask 0" were stale counts (SECONDARY-F1; the corpus's 130 0x00B7 are 90 map loads, 10 creation-connection openers — each creation connection opens `[agent, 0, 0, 0]`, a primary of 0, then `[agent, 1, 0, 0]` — 25 answers to 0x0060, 4 heroes and 1 change). The pick sends c2s **0x0041 [agent_id, u8]** (GmDeckBuilder 0x00500533.. → API 0x00816D70 → wrapper 0x00920800, static 38797; the template loader is its other caller) and the one witness — capture 20260824T074002 :61329, **map 248, the Great Temple of Balthazar (areatable type 13, region 21: the PvP hub, not a type-10 outpost)**, a PvP Warrior picking Necromancer — is answered 44 ms later in ONE segment `0x00B7 [568,1,4,1] → 0x00A6 [568,1,4] → 0x00DB` byte-identical to the load's; no 0x00B6 re-send, no attribute or bar message; the client's AUTH 0x0009 blob push follows with secondary 0 → 4 (F2; the drop-down rather than the template loader is inferred from no 0x0010 or bar load following). **RUNS.md §13's 15-map whitelist is CONTESTED**: retail used the control outside the fifteen, and the static re-read finds only the two gates, >= 2 entries and 0x0199 field 3 == 0 (F3; an ordinary type-10 outpost is R1's question; marked in RUNS.md, probecharacter.py and serverargs, nothing deleted). The client filters the local player's list to {common, primary, secondary} itself and skips the filter while the secondary is 0 — which is what Run 5's 43 attribute groups on a Warrior were (F4). On 0x00B7 it rebuilds the attribute-id list itself, drops a lost profession's row only at rank 0 / points 0, and inserts BOTH the primary's and the secondary's attributes only if their chapter's bit is in an ownership mask — so Assassin/Ritualist (chapter 2) and Paragon/Dervish (chapter 3) get rows only if our account stream owns those chapters, UNVERIFIED (F5). 0x00B7's field 4 selects which chapter-ownership mask ([ctx+0x44]+0x60 under 1) — what our account stream leaves there is UNVERIFIED, so **the flag stays 0** (F6). No in-world primary change exists anywhere (F7), and no upstream implements a live secondary change (F8).

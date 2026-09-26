@@ -2272,12 +2272,10 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 
 **Profession** — [studies/profession/SECONDARY.md](studies/profession/SECONDARY.md)
 
-* **SECONDARY-R1..R6, the owed client run** of the K panel's secondary change (landed offline, PLAN-LOG
-  "SECONDARY-B1..B5", 2026-09-25): an outpost load with the drop-down ungreyed; a pick answered by the
-  0x00B7 -> 0x00A6 -> 0x00DB batch, the list narrowing and the new rows appearing without a reload; a second
-  pick with points and a bar skill in the old secondary (R2 can refute SECONDARY-Q4's 0x003B-before-0x00B7
-  order); R2b the chapter-2/3 rows (Q8); a relaunch under `--persist`; a hero's panel (R4, R4b);
-  `--no-secondary-change`; a field. Behind it: Q1 the 0x00B7 flag, Q2 the client's own bar strip, Q7.
+* **The K panel's secondary change is CONFIRMED on the client** (SECONDARY.md section 6, 2026-09-25;
+  PLAN-LOG "SECONDARY-R1..R6"). Open: **SECONDARY-Q1** (0x00B7's flag on a client), **Q2 / Q7** (what the
+  client does by itself with an old or a third profession's bar skill; only the server's strip is seen),
+  **Q3** (which control's notification reaches the send), **Q6** (a PvE character with unlocks, on tape).
 
 ### 8.2 Waiting on the owner, or on a live capture
 
