@@ -28,6 +28,56 @@ move back.
 
 ---
 
+### SANDBOX-F4, CONFIRMED from the orchestrator on the client -- 2026-09-25 -- **a heroless spec, opened in the window and launched with its own Launch button, puts the player alone in Ascalon City; party size 1, no hero record**
+
+The run the entry below left unrun, on the owner's go-ahead, harness `20260925T170126` (`main`
+`0ee4a44e`). The spec (`vault/sandbox/heroless.toml`: the slice's example with no `[[heroes]]` table,
+the shape the Party tab saves with no hero ticked) was opened through the Run tab's Open into the real
+`Window`, the Time limit set to 60 s, and the **Launch button** clicked by a driver that sends nothing
+to the client (`QAbstractButton.click` -> `RunTab.launch`: compile, `write_overlay`, `session.py`);
+the window's own compile showed "0 heroes", no store warnings, and `heroes = []` in the overlay it
+wrote. **Scored against predictions registered before the launch, all four as predicted:** the Run
+tab's chip `Ended · exit 0` (105 s); gamesrv line 3 `PARTY 'sandbox': NO heroes -- the player alone`,
+no traceback in any of the three server logs; `RUN VERDICT: PASS (target: map)`, the eight
+checkpoints green, not retracted; on the wire `PLAYER_PARTY_SIZE(1)` and no `HERO_INFO`,
+`HERO_ACTIVATE` or `0x0074` -- only the account's `PVP_UNLOCKED_HEROES`, as every run. The frame 12 s
+into the hold (foreground-guarded) shows the level-3 Warrior at 140 / 20 in the town beside the errand
+giver; a town withholds party bodies anyway (SLICE-H2b), so the frame is context and the wire is the
+evidence. One scripted click (`play`), no other input.
+
+---
+
+### SANDBOX-F4, the heroless party -- 2026-09-25 -- **a sandbox spec with no heroes starts: the compiler writes `heroes = []`, and `main()` reads a party row with neither `heroes` nor `hero` as the player alone**
+
+**Branch `claude/sharp-albattani-9a3f5f`, `61c9dfbd`; `studies/sandbox/PLAN.md` §4 SANDBOX-F4.** The defect
+the entry below found (CONFIRM-2 §11 III, harness `20260925T161150`): a heroless spec died at startup on
+`_prow["hero"]`, `KeyError`, before any socket. TOML has no empty array-of-tables -- `overlay_text` wrote
+one `[[party.sandbox.heroes]]` per hero, so zero heroes wrote NO `heroes` key -- and `main()` read the
+missing list as the SLICE-H2 single-hero shape. SANDBOX-B3 had defined the empty list as the player alone,
+but nothing ever produced one: SANDBOX-F1's startup was a spec with a hero, and `test_sandbox`'s
+`party_row(spec(heroes=[]))` check read the dict, which had the list all along. **Fixed on both sides, each
+for its own reason.** `authsrv.party_heroes`, called once by `main()`, closes the CLASS at the one consumer
+(a hand-written content row has the same absence): a `heroes` list as dict copies, `heroes = []` or a row
+with neither key as `[]`, the single-hero shape as None, and a row carrying a hero's field
+(`PARTY_SINGLE_HERO_FIELDS`) without `hero` REFUSED by name rather than read as heroless, which would drop
+the hero. The compiler writes `heroes = []`, so the overlay says what it means rather than leaning on the
+reader. **Tests:** `test_partyrow.py` (new, 15, ~10 s) drives `main()` itself -- `authsrv.py --party KEY
+--list-probes` runs the whole party block and returns before any socket (test_agentlife's SLICE-H2 comment,
+"only the text can lock it", does not hold for this block) -- on the compiled heroless overlay, on the
+defect's own TOML (that overlay without its `heroes = []` line, checked to carry neither key) and on
+[party.slice] as the control, plus the function's shapes and refusal and an ast lock that every key the
+party block reads is in the refusal's list; `test_sandbox` 156 → 158 reads the overlay FILE back through
+`content.load`. Proven red: `main()`'s fix reverted brings back the original `KeyError: 'hero'` on the
+defect's TOML with the other two arms green; `overlay_text`'s fix reverted reddens its own checks while the
+compiled overlay still starts on `party_heroes` alone; the refusal and the field list each reddened by a
+plant. **The sweep:** the 85 tests that import or read `authsrv.py`, 85 of 85 green (7,029 checks; among
+them `test_agentlife` 636, `test_heroadd` 86, `test_handshake` 24, `test_harness` 216,
+`test_preflight_owner` 30); the five lints green. **No client launched** -- CONFIRM-2 §11 III's six launches
+already ran the `heroes = []` row the compiler now writes; a heroless spec launched from the window itself
+is unrun.
+
+---
+
 ### DESKWORK pass 7, CONFIRMED on the client -- 2026-09-25 -- **the shout's bubble over the head, the 248 party at 5/8, the Leave emptying the party through the client's own `0x00A2` + `0x001F [40]`, the label knock-down on the ground, the Poison green on the targeting bar; a heroless sandbox spec crashes the server**
 
 The owner's go-ahead ran pass 7's runsheet on `main` `8c97d37f` (CONFIRM-2 §11, twelve scored

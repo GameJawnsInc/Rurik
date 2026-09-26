@@ -34,7 +34,7 @@ import checks   # noqa: E402
 import content  # noqa: E402
 import sandbox  # noqa: E402
 
-led = checks.Ledger("sandbox", floor=160)     # 88 from the green run 2026-09-20; +4 SECONDARY-B4's store_state/store_warnings (the fix pass, CD-3, 2026-09-25); +19 SANDBOX-B7 (2026-09-22); +2 SKILLS-LT sec.5, the hand / label split (2026-09-23); +2 the fix pass (one LABEL_TIER, gamesrv_args); +1 budget_for_level (2026-09-24); +4 a hostile's ranks checked (2026-09-24); +7 the pre-merge pass: a hostile's level range, the no-level fallback told from 2 and 20, no npc rows (2026-09-24); +4 hostiles exempt from the budget, the owner's ruling: two budget refusals inverted, three kept rules and a hero's budget as controls, the no-level fallback re-witnessed on spawn_rows and validate's level range (2026-09-24); +2 the verifier's fixes: a malformed pair and an id outside the table on a hostile, the two kept rules with no hostile witness (2026-09-24); +10 the hostile caps lifted, the owner's ruling: rank 13 and 21 accepted, 22 refused, a level-255 hostile accepted and 24 too, 256 refused, the player's and a hero's rank 13 and level 21 refused (four controls that did not exist), HOSTILE_LEVEL_MAX tied to 0x0056's byte in the schema and to the codec's raise, a definition per (template, level) with its ids in range (2026-09-24); +1 the lift's verifier's fix: one member past both caps refused for both (`if tmpl:`, the elif hid the rank reason) (2026-09-24); +10 SANDBOX-N1 sec. 6: the rank a hostile's skill acts at (effective_rank, skill_attribute, UNRANKED_SKILL_RANK) and the text locks to authsrv.py (2026-09-24); +6 the repair (2026-09-24): a hostile's nine skills refused, skill_varies twice, spawn_rows' [] -> None, the locks re-pointed at the create path's fallback and agent_attributes' contiguous block (+2 net)
+led = checks.Ledger("sandbox", floor=162)     # 88 from the green run 2026-09-20; +4 SECONDARY-B4's store_state/store_warnings (the fix pass, CD-3, 2026-09-25); +19 SANDBOX-B7 (2026-09-22); +2 SKILLS-LT sec.5, the hand / label split (2026-09-23); +2 the fix pass (one LABEL_TIER, gamesrv_args); +1 budget_for_level (2026-09-24); +4 a hostile's ranks checked (2026-09-24); +7 the pre-merge pass: a hostile's level range, the no-level fallback told from 2 and 20, no npc rows (2026-09-24); +4 hostiles exempt from the budget, the owner's ruling: two budget refusals inverted, three kept rules and a hero's budget as controls, the no-level fallback re-witnessed on spawn_rows and validate's level range (2026-09-24); +2 the verifier's fixes: a malformed pair and an id outside the table on a hostile, the two kept rules with no hostile witness (2026-09-24); +10 the hostile caps lifted, the owner's ruling: rank 13 and 21 accepted, 22 refused, a level-255 hostile accepted and 24 too, 256 refused, the player's and a hero's rank 13 and level 21 refused (four controls that did not exist), HOSTILE_LEVEL_MAX tied to 0x0056's byte in the schema and to the codec's raise, a definition per (template, level) with its ids in range (2026-09-24); +1 the lift's verifier's fix: one member past both caps refused for both (`if tmpl:`, the elif hid the rank reason) (2026-09-24); +10 SANDBOX-N1 sec. 6: the rank a hostile's skill acts at (effective_rank, skill_attribute, UNRANKED_SKILL_RANK) and the text locks to authsrv.py (2026-09-24); +6 the repair (2026-09-24): a hostile's nine skills refused, skill_varies twice, spawn_rows' [] -> None, the locks re-pointed at the create path's fallback and agent_attributes' contiguous block (+2 net); +2 the heroless party (2026-09-25): a heroless spec's overlay loads with `heroes = []`, and a hero's overlay writes none
 
 
 # ---------------------------------------------------------------- the fixture
@@ -282,6 +282,28 @@ with tempfile.TemporaryDirectory() as tmp:
     led.ok(any("corridor_boss" in ln and "BOSS" in ln for ln in lines) and
            any("player: W/-" in ln for ln in lines),
            "the summary names the boss and the player's pair")
+
+# THE HEROLESS PARTY (harness 20260925T161150). TOML has no empty
+# array-of-tables: zero [[party.sandbox.heroes]] headers wrote no `heroes` key,
+# and the gamesrv read the row as the single-hero shape and died on `hero`. The
+# party_row check in sec. 3 read the dict, which had `heroes = []` all along --
+# the list was lost in overlay_text, between the dict and the file, so this
+# reads the FILE the way the server does. (main()'s side: test_partyrow.py.)
+with tempfile.TemporaryDirectory() as tmp:
+    bare = sandbox.compile_spec(spec(name="heroless", heroes=[]), WORLD, tmp,
+                                exe=r"X:\Gw.exe", dat=r"X:\Gw.dat", store={})
+    sandbox.write_overlay(bare)
+    w0 = content.load(repo_dir=tmp, vault_dir="", overrides_dir=os.path.join(tmp, "none"),
+                      extra_dirs=[bare["overlay_dir"]])
+    row0 = w0.get("party", "sandbox")
+    led.ok(row0.get("heroes") == [] and "hero" not in row0
+           and "[[party.sandbox.heroes]]" not in bare["overlay"],
+           "a heroless spec's overlay loads through content.py with `heroes = []` and no "
+           "single-hero field -- the SANDBOX-B3 empty list the gamesrv reads as the "
+           "player alone", sorted(row0))
+led.ok(sandbox.overlay_text(S, WORLD).count("heroes = []") == 0,
+       "...and its twin: a party with a hero writes no `heroes = []` beside its "
+       "[[party.sandbox.heroes]] table (TOML would refuse the key twice)")
 
 # ---------------------------------------------------------------- 3. refusals, each beside its twin
 ok, why = refuses(spec(player=dict(S["player"], skills=[281])), "belongs to profession 3")
