@@ -30,11 +30,24 @@ WHAT EACH SECTION RESTS ON:
      hero's values are the fitted ones, the 0x003A columns carry the same ranks the
      spend state holds, and the store on disk is untouched. The control within
      budget keeps the stored ranks and prints no line.
+  §4 A HERO WITH NO RANKS ANYWHERE (2026-09-25, found driving this burst offline):
+     `attributes = []` on its row, nothing stored, HERO_ATTRIBUTES None -- the
+     sandbox compiler's default hero (SANDBOX-B7) -- was sent the PLAYER's ranks in
+     its 0x003A (attribute_columns() with no argument), and on the legacy rig the
+     player's 0x0037 too, while its spend state held {}. Both blocks now read
+     hero_attribute_state, as the player's pair reads attribute_state. PERSIST off,
+     the content player's launch (the defect's own), three rigs: (a) a row budget ->
+     an empty 0x003A and [200, 10, 10], and HERO_ADD's re-sent block draws a raise;
+     (b) the JARIN fallback (no `attributes` field, no budget) -> the SAME bytes as
+     before, and the spend state now holds that build; (c) CONTROL, a hero with
+     ranks -> the same bytes; (d) `attributes = []` with no budget -> its own empty
+     columns at 0 of 0, the fallback being for an ABSENT field only.
 
 SABOTAGE HOOK: RURIK_ATTRIBBUDGET_AUTHSRV=<path> loads THAT copy of authsrv.py as
 `authsrv` (siblings still from toolkit/authsrv). Pointed at the pre-fix file
 (`git show 3de069a9:toolkit/authsrv/authsrv.py`), §2's and §3's overspent checks go
-red and the controls stay green; the counts are in TESTS.md.
+red and the controls stay green; pointed at 2d51d3d0's, §4's agreement checks go
+red and its byte checks stay green; the counts are in TESTS.md.
 
 Vault-backed (the attribute tables are client-table content); no socket, no client.
 """
@@ -70,7 +83,7 @@ if _ALT:
 else:
     import authsrv                                           # noqa: E402
 
-led = checks.Ledger("attribute budget binds the stored ranks", floor=56)   # 2026-09-25: 56 from the first green run (the pre-fix authsrv.py reds 37 of them)
+led = checks.Ledger("attribute budget binds the stored ranks", floor=78)   # 2026-09-25: 56 from the first green run (the pre-fix authsrv.py reds 37 of them); 78 with §4 (2d51d3d0's reds 13)
 
 UUID = "44444444444444444444444444444444"
 NAME = "Budget Fitter"
@@ -128,9 +141,9 @@ def apply(cfg):
         setattr(authsrv, k, v)
 
 
-def launch(ranks=SLICE_RANKS, points=SLICE_POINTS):
+def launch(ranks=SLICE_RANKS, points=SLICE_POINTS, persist=True):
     apply({k: _saved[k] for k in _SAVED_NAMES})
-    apply({"PERSIST": True, "SPAWN_PROFESSION": 1, "SPAWN_SECONDARY": 0,
+    apply({"PERSIST": persist, "SPAWN_PROFESSION": 1, "SPAWN_SECONDARY": 0,
            "SECONDARY_BITS": 0})
     agents.PLAYER_ATTRIBUTE_RANKS = tuple(ranks)
     agents.PLAYER_ATTRIBUTE_POINTS = points
@@ -360,10 +373,9 @@ try:
                f"[{where}] the store on disk still holds both overspent builds", f"{on_disk()}")
 
     # The sandbox's shape (SANDBOX-B7): no stored budget, the hero ROW's
-    # `points` (points_for_level) binds the stored ranks. The retail rig's
-    # block and the spend state read the row's points; the legacy block never
-    # has (its total is the spend, JARIN's answer), so only its bytes and its
-    # ranks are asserted there.
+    # `points` (points_for_level) binds the stored ranks. Both rigs' blocks and
+    # the spend state read the row's points -- the legacy block only since
+    # 2026-09-25 (§4), when both blocks began reading the spend state.
     for rig in ("retail", "legacy"):
         where = f"row budget, town/{rig}"
         launch()
@@ -380,10 +392,9 @@ try:
                f"[{where}] a stored 13 against the hero row's points = 10 yields to the "
                f"row's ranks in the burst and in the spend state, and encodes",
                f"{h37} {columns(h3a[-1]) if h3a else None} {err!r}")
-        if rig == "retail":
-            led.ok(h37 == [[HERO_AGENT, 1, 10]],
-                   f"[{where}] the retail block's 0x0037 is [200, 1, 10], the spend state's",
-                   f"{h37}")
+        led.ok(h37 == [[HERO_AGENT, 1, 10]],
+               f"[{where}] the block's 0x0037 is [200, 1, 10], the spend state's",
+               f"{h37}")
         led.ok(any("hero 6" in ln and "row's points is 10" in ln for ln in attribute_lines(out)),
                f"[{where}] the hero's line names the row's points as the budget",
                f"{attribute_lines(out)}")
@@ -419,6 +430,98 @@ try:
            and to_agent(sent, HERO_AGENT, POINTS) == [[HERO_AGENT, 252, 255]],
            "budgets of 300 (the player's row, the hero's store) load as 255 and encode",
            f"{to_agent(sent, 1, POINTS)} {to_agent(sent, HERO_AGENT, POINTS)} {bad} {err!r}")
+
+    # -- §4 a hero with NO ranks anywhere ---------------------------------------
+    # The defect's launch: the content player (Warrior ranks 19=12, 17=9, 21=6,
+    # 18=3, 20=1, 173 of 200 spent), --persist OFF, the monk hero. Each case
+    # asserts the load against the spend state (the agreement) and, where the
+    # row is one an existing rig carries, against the pre-fix formula (the
+    # bytes): attribute_columns() with no argument and the player's pair for the
+    # JARIN fallback, the row's sorted ranks and their spend for the control.
+    print("\n4. a hero with no ranks anywhere: its own columns, or the JARIN fallback")
+    PLAYER_RANKS, PLAYER_POINTS = _saved_agents
+    for town, rig in ((True, "retail"), (True, "legacy"), (False, "retail")):
+        where = f"{'town' if town else 'field'}/{rig}"
+
+        def hero_load(extra):
+            launch(ranks=PLAYER_RANKS, points=PLAYER_POINTS, persist=False)
+            sent, st, out, err = drive_load(town=town, rig=rig, hero_row_extra=extra)
+            h37, h3a = to_agent(sent, HERO_AGENT, POINTS), to_agent(sent, HERO_AGENT, ATTRS)
+            hs = None if err else authsrv.hero_attribute_state(st, HERO_ID)
+            return sent, st, err, h37, h3a, hs
+
+        def agrees(h37, h3a, hs):
+            return (hs is not None and len(h37) == 1 and len(h3a) == 1
+                    and columns(h3a[0]) == hs.ranks
+                    and h37[0] == [HERO_AGENT, hs.available, hs.points_total])
+
+        # (a) the sandbox's hero: `attributes = []`, the row's `points` = 10.
+        sent, st, err, h37, h3a, hs = hero_load({"attributes": [], "points": 10})
+        led.ok(err is None and h3a and h3a[-1] == [HERO_AGENT, []],
+               f"[{where}] a rankless hero with a row budget is sent an EMPTY 0x003A, "
+               f"not the player's 19=12, 17=9, ... (the defect)",
+               f"{h3a} {err!r}")
+        led.ok(agrees(h37, h3a, hs) and h37 == [[HERO_AGENT, 10, 10]],
+               f"[{where}] ...its 0x0037 is [200, 10, 10] and both are the spend state's "
+               f"(the legacy rig sent the player's [27, 200])",
+               f"{h37} {columns(h3a[-1]) if h3a else None} "
+               f"{(hs.ranks, hs.available, hs.points_total) if hs else None}")
+        if where == "town/retail":
+            # HERO_ADD re-sends this block mid-session: it must draw the LIVE
+            # state, a raise included, not the seed.
+            why = hs.refuse_increase(13) if hs else "no state"
+            if why is None:
+                hs.increase(13)
+            blk, _o, berr = quiet(authsrv.hero_character_block, st, HERO_AGENT, HERO_ID)
+            b37 = [v for op, v, _l in (blk or []) if op == POINTS]
+            b3a = [v for op, v, _l in (blk or []) if op == ATTRS]
+            led.ok(why is None and berr is None and b3a and columns(b3a[-1]) == {13: 1}
+                   and b37 == [[HERO_AGENT, 10 - R.spent_on(1), 10]],
+                   f"[{where}] after a raise of 13, the re-sent block (HERO_ADD's) draws "
+                   f"13=1 and {10 - R.spent_on(1)} of 10: the live state, not the seed",
+                   f"{why} {b37} {b3a} {berr!r}")
+
+        # (b) the JARIN fallback: no `attributes` field, no budget anywhere.
+        sent, st, err, h37, h3a, hs = hero_load({})
+        ps = None if err else authsrv.attribute_state(st)
+        led.ok(err is None and ps is not None
+               and h3a == [[HERO_AGENT, authsrv.attribute_columns(None)]]
+               and h37 == [[HERO_AGENT, ps.available, ps.points_total]],
+               f"[{where}] JARIN FALLBACK, the bytes: a hero with neither ranks nor a budget "
+               f"is still sent attribute_columns() (content order) and the player's "
+               f"(available, total)", f"{h37} {h3a} {err!r}")
+        led.ok(agrees(h37, h3a, hs) and hs.ranks == dict(PLAYER_RANKS),
+               f"[{where}] JARIN FALLBACK, the agreement: the spend state holds that same "
+               f"build and budget (it held {{}} at 0 of 0)",
+               f"{(hs.ranks, hs.available, hs.points_total) if hs else None}")
+
+        # (c) CONTROL: a hero with ranks and no budget (the SLICE rows' shape).
+        sent, st, err, h37, h3a, hs = hero_load({"attributes": HERO_ROW_RANKS})
+        spent = R.total_spent(dict(HERO_ROW_RANKS))
+        led.ok(err is None
+               and h3a == [[HERO_AGENT, authsrv.attribute_columns(sorted(
+                   (a, r) for a, r in HERO_ROW_RANKS))]]
+               and h37 == [[HERO_AGENT, 0, spent]],
+               f"[{where}] CONTROL, the bytes: a hero with ranks is sent its sorted ranks "
+               f"and [200, 0, {spent}], unchanged", f"{h37} {h3a} {err!r}")
+        led.ok(agrees(h37, h3a, hs),
+               f"[{where}] CONTROL, the agreement: ...which the spend state holds",
+               f"{(hs.ranks, hs.available, hs.points_total) if hs else None}")
+
+    # (d) the rule's boundary: an AUTHORED empty list with no budget is an
+    # answer, not an absence -- its own empty columns and 0 of 0, not the
+    # player's build.
+    for rig in ("retail", "legacy"):
+        where = f"town/{rig}"
+        launch(ranks=PLAYER_RANKS, points=PLAYER_POINTS, persist=False)
+        sent, st, out, err = drive_load(town=True, rig=rig, hero_row_extra={"attributes": []})
+        h37, h3a = to_agent(sent, HERO_AGENT, POINTS), to_agent(sent, HERO_AGENT, ATTRS)
+        hs = None if err else authsrv.hero_attribute_state(st, HERO_ID)
+        led.ok(err is None and h3a == [[HERO_AGENT, []]] and h37 == [[HERO_AGENT, 0, 0]]
+               and hs is not None and hs.ranks == {} and (hs.available, hs.points_total) == (0, 0),
+               f"[{where}] `attributes = []` with no budget: an empty 0x003A and [200, 0, 0], "
+               f"the spend state's -- the fallback is for an ABSENT field only",
+               f"{h37} {h3a} {err!r}")
 finally:
     for k, v in _saved.items():
         setattr(authsrv, k, v)

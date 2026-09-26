@@ -14333,7 +14333,7 @@ No vault, no client, no server. 150 checks, floor 150. ~1 s)
   a stored build over it yields to the launch's ranks and then to none, one loud
   `ATTRIBUTES:` line names the character, the stored spend and the budget, and the store is
   not written. A hero's 0x0037 has the same shape: `hero_seed_ranks` is the one resolver
-  the spend state and BOTH load blocks read, and every budget passes `attribute_budget`,
+  the spend state reads (and both load blocks read the spend state, §4), and every budget passes `attribute_budget`,
   clamped to 0..255 (`ATTRIBUTE_POINTS_WIRE_MAX`). §1 `fit_ranks` on the client's cost
   table: the crash's 13 priced with no free parameter (spent_on(2) + spent_on(4)), the
   slice's own ranks at exactly 10, each tier, and the boundary (spend == budget fits). §2
@@ -14350,11 +14350,36 @@ No vault, no client, no server. 150 checks, floor 150. ~1 s)
   [1, 0, 10] and its 0x003A the launch's 17=2, 20=3, 21=1, the hero's (stored 13 against
   its stored 10) is [200, 1, 10] with the row's 13=3, 15=2, and the SPEND states hold
   exactly what the load drew; the row-budget case (no stored `attribute_points`, the hero
-  row's `points` binds -- the sandbox's shape) on both rigs; CONTROLS within budget ([1, 4,
+  row's `points` binds -- the sandbox's shape) on both rigs, [200, 1, 10] on the legacy
+  rig too since §4; CONTROLS within budget ([1, 4,
   10] and [200, 7, 10], the stored ranks, no line); budgets of 300 through the burst as 255.
+  **§4, the rankless hero (2026-09-25, found driving this burst offline):** a hero with
+  `attributes = []` on its row (the sandbox compiler's default, SANDBOX-B7), nothing
+  stored and HERO_ATTRIBUTES None was sent the PLAYER's ranks in its 0x003A
+  (`attribute_columns()` with no argument) -- a Monk's panel drawing Strength 12 -- and on
+  the legacy rig the player's [27, 200] in its 0x0037, against a spend state holding {}.
+  Both hero blocks (and HERO_ADD's re-send) now read `hero_attribute_state`, as the
+  player's pair reads `attribute_state`; `hero_attributes` reads an authored `[]` as {}.
+  PERSIST off, the content player's launch, town/retail, town/legacy and field/retail,
+  every 0x003A column set and 0x0037 checked against the spend state: (a) a row budget of
+  10 -> `[200, []]` and [200, 10, 10], and after a raise of 13 the re-sent block draws
+  13=1, 9 of 10 (the LIVE state, not the seed); (b) the JARIN FALLBACK -- no `attributes`
+  field and no budget, the only case that still borrows the player's launch build
+  (RECONSTRUCTION, kept so an unconfigured rig's wire does not move) -- sends EXACTLY the
+  pre-fix bytes (`attribute_columns(None)` in content order, the player's (available,
+  total)) and its spend state now holds that build, where it held {} at 0 of 0; (c)
+  CONTROL, a hero with ranks and no budget -> its sorted ranks and [200, 0, 9], the
+  pre-fix bytes; (d) the boundary, `attributes = []` with no budget -> `[200, []]` and
+  [200, 0, 0], not the fallback.
   PROVEN RED: `RURIK_ATTRIBBUDGET_AUTHSRV` pointed at the pre-fix `authsrv.py`
   (`git show 3de069a9:toolkit/authsrv/authsrv.py`, placed in `toolkit/authsrv/` so its
   sibling imports resolve) reddens 37 of 56 -- "the load completes" on all three rigs
   with the run's own `'B' format requires 0 <= number <= 255` -- while the 19 that cannot
   tell the two apart stay green (§1's pure checks, the controls, the store untouched).
-  Needs the vault's attribute tables. No client, no socket. 56 checks, floor 56. ~2 s)
+  Pointed at §4's pre-fix file (`git show 2d51d3d0:toolkit/authsrv/authsrv.py`, same
+  placement) it reddens 13 of 78 -- the legacy row-budget 0x0037 ([200, 0, 9]), all
+  seven of (a) with the defect's own numbers (retail [200, 10, 10] beside the player's
+  19=12, 17=9, 21=6, 18=3, 20=1; legacy [200, 27, 200]), (b)'s three agreements
+  (`({}, 0, 0)`) and both of (d) -- while (b)'s and (c)'s byte checks and all of §1-§3
+  stay green. Needs the vault's attribute tables. No client, no socket. 78 checks, floor
+  78. ~2 s)

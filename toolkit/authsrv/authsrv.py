@@ -12262,8 +12262,15 @@ def hero_vitals(hid):
 
 
 def hero_attributes(hid):
+    """The hero row's ranks as {attribute: rank}, else HERO_ATTRIBUTES.
+
+    An authored EMPTY list is an answer, {} -- the rule hero_bar_authored
+    follows for the bar. Until 2026-09-25 `attributes = []` (the sandbox
+    compiler's default for every hero, SANDBOX-B7) read as "no field", fell
+    through to HERO_ATTRIBUTES (None), and the load blocks drew the PLAYER's
+    ranks on the hero's panel (hero_borrows_player_build)."""
     r = hero_row(hid)
-    if r.get("attributes"):
+    if r.get("attributes") is not None:
         return {int(a): int(k) for a, k in r["attributes"]}
     return HERO_ATTRIBUTES
 
@@ -19984,8 +19991,8 @@ def hero_budget(state, hero_index, stored_points):
 
 
 def hero_seed_ranks(state, hero_index, stored_ranks, stored_points, rules):
-    """The ranks one hero starts from, for the spend state AND both load
-    blocks: the store's when it holds a list (an empty one included --
+    """The ranks one hero starts from, for the spend state (which both load
+    blocks read): the store's when it holds a list (an empty one included --
     hero_build's absence-is-not-emptiness rule), else the row's.
 
     ...unless its budget cannot pay for them (2026-09-25). The player's rule,
@@ -20013,6 +20020,17 @@ def hero_seed_ranks(state, hero_index, stored_ranks, stored_points, rules):
     return ranks
 
 
+def hero_borrows_player_build(state, hero_index):
+    """True when NOTHING gives this hero ranks or a budget of its own: no
+    stored ranks or `attribute_points`, no `attributes` field on its row (an
+    empty one is an answer -- hero_attributes), no HERO_ATTRIBUTES, no row
+    `points`. That is the JARIN rig's bare `--hero`, and such a hero is given
+    the PLAYER's launch build (hero_attribute_state says why)."""
+    _own, _bar, ranks, points = hero_build(state, hero_index)
+    return (ranks is None and points is None
+            and hero_attributes(hero_index) is None and hero_points(hero_index) is None)
+
+
 def hero_attribute_state(state, hero_index):
     """One hero's live, MUTABLE attribute state -- the player's object, per hero.
 
@@ -20022,24 +20040,50 @@ def hero_attribute_state(state, hero_index):
     property of whose body it is -- and only the ranks, the budget and the
     profession differ.
 
+    THE ONE SOURCE for the hero's 0x0037 and 0x003A in both load blocks and
+    HERO_ADD, as attribute_state is for the player's (2026-09-25): what the
+    panel draws is what its next +/- is refereed against.
+
     THE BUDGET IS WHAT MAKES SPENDING POSSIBLE AT ALL. With no stored
-    `attribute_points` the total is whatever the ranks already cost, so
-    `available` is 0 and every raise is refused for want of points -- which
-    is exactly the old behaviour and is correct for a hero nobody has given a
-    budget. Author `attribute_points` and the panel's plus buttons come alive.
-    Retail's own numbers for a level-3 Koss are 6 available of 10 total
-    against ranks 2 and 1, and the client's cost table prices those at
-    3 + 1 = 4 = 10 - 6 (capture 20260914T005758).
+    `attribute_points` and no row `points` the total is whatever the ranks
+    already cost, so `available` is 0 and every raise is refused for want of
+    points -- correct for a hero nobody has given a budget. Author one and the
+    panel's plus buttons come alive. Retail's own numbers for a level-3 Koss
+    are 6 available of 10 total against ranks 2 and 1, and the client's cost
+    table prices those at 3 + 1 = 4 = 10 - 6 (capture 20260914T005758).
+
+    A HERO WITH NEITHER RANKS NOR A BUDGET (hero_borrows_player_build) is
+    seeded with the PLAYER's launch build: its content ranks fitted to its
+    budget, which is what attribute_state holds for a character with nothing
+    stored. RECONSTRUCTION, and not retail's -- retail sends a hero its own
+    build (the Koss capture above). It is the wire the JARIN rig has sent
+    since 2026-08-16 (0x0037 the player's pair, 0x003A attribute_columns()
+    with no argument), kept so an unconfigured launch's bytes do not move;
+    what changed is that the spend state now holds the same build, where it
+    held {} at 0 of 0 and refused every raise the panel offered. One edge,
+    said rather than fixed: under --persist a spend stores the ranks with NO
+    budget (persist_hero_attributes writes ranks only), so the next load takes
+    the stored ranks at 0 unspent -- author `points` for a hero meant to be
+    spent on.
     """
     cache = state.setdefault("hero_attributes", {})
     st = cache.get(hero_index)
     if st is not None:
         return st
     player = attribute_state(state)          # for its rules tables only
-    _own, _bar, ranks, points = hero_build(state, hero_index)
-    ranks = dict(hero_seed_ranks(state, hero_index, ranks, points, player.rules) or {})
+    if hero_borrows_player_build(state, hero_index):
+        # The player's own no-store seed (attribute_state's last candidate),
+        # in the content row's order -- hero_load_rank_pairs sends it so.
+        points = attribute_budget(state, agents.PLAYER_ATTRIBUTE_POINTS, "the player")
+        ranks, _source, _refused = attribspend.fit_ranks(
+            player.rules, points,
+            ("launch", attribspend.seed_ranks(
+                [list(p) for p in agents.PLAYER_ATTRIBUTE_RANKS], None)))
+    else:
+        _own, _bar, ranks, points = hero_build(state, hero_index)
+        ranks = dict(hero_seed_ranks(state, hero_index, ranks, points, player.rules) or {})
+        points = hero_budget(state, hero_index, points)     # SANDBOX-B7: else the row's budget
     spent = player.rules.total_spent(ranks)
-    points = hero_budget(state, hero_index, points)     # SANDBOX-B7: else the row's budget
     st = attribspend.AttributeState(
         player.rules, ranks,
         points if points is not None else spent,
@@ -20047,6 +20091,18 @@ def hero_attribute_state(state, hero_index):
         secondary=hero_secondary(state, hero_index))   # SECONDARY-B4: stored, else 0
     cache[hero_index] = st
     return st
+
+
+def hero_load_rank_pairs(state, hero_index):
+    """The (attribute, rank) pairs a hero's 0x003A carries: its spend state's,
+    sorted as the player's are -- except a hero borrowing the player's build,
+    whose pairs keep the content row's order, the order attribute_columns()
+    with no argument sent them (byte-identity for the JARIN rig). Empty for a
+    hero with no ranks: an empty 0x003A, and the panel's rows still come from
+    the 0x00B7 pair (OBSERVED, SECONDARY-R1b: rows gained on 0x00B7 with no
+    0x003A sent); a zero-length 0x003A on a client is SANDBOX-U5's, UNVERIFIED."""
+    pairs = list(hero_attribute_state(state, hero_index).ranks.items())
+    return pairs if hero_borrows_player_build(state, hero_index) else sorted(pairs)
 
 
 def persist_hero_attributes(state, hero_index, conn_id):
@@ -26491,32 +26547,21 @@ def hero_character_block(state, haid, hid):
     and are not modelled here.) Returns [(op, vals, label)] for `_seq`."""
     out = []
     _hprof = hero_profession(hid)                       # SANDBOX-B3: per hero
-    _hattr = attribute_state(state)
     # --persist: this character's own stored build for this hero.
     _hs_skills, _hs_bar, _hs_ranks, _hs_points = hero_build(state, hid)
-    # The store's ranks else the row's, fitted to the budget (2026-09-25).
-    _h_ranks = hero_seed_ranks(state, hid, _hs_ranks, _hs_points, _hattr.rules)
-    if _h_ranks:
-        # THE BUDGET IS THE HERO'S OWN, and when the store names one the hero
-        # can have UNSPENT points -- which is what makes the panel's plus
-        # buttons live. Retail sends exactly that: 0x0037 [117, 6, 10] for a
-        # level-3 Koss holding ranks 2 and 1, and the client's own cost table
-        # prices those at 3 + 1 = 4 = 10 - 6 (capture 20260914T005758, and the
-        # same arithmetic closes on both players in the corpus, 195 of 200 at
-        # level 20). Without a stored total we keep the old answer -- spent as
-        # the total, nothing available -- because inventing a level->points
-        # curve is exactly the kind of number this repo keeps having to walk
-        # back; the player's own budget is an authored content row too.
-        _hspent = _hattr.rules.total_spent(_h_ranks)
-        _hbudget = hero_budget(state, hid, _hs_points)   # stored, else the row's (SANDBOX-B7)
-        _htotal = _hbudget if _hbudget is not None else _hspent
-        _havail = _htotal - _hspent
-    elif hero_points(hid) is not None:
-        # SANDBOX-B7: no ranks anywhere, a budget on the row -- the whole
-        # budget is unspent, for the panel.
-        _havail = _htotal = hero_budget(state, hid, None)
-    else:
-        _havail, _htotal = _hattr.available, _hattr.points_total
+    # THE SPEND STATE IS THE ONE SOURCE (2026-09-25), as attribute_state is
+    # for the player's pair. THE BUDGET IS THE HERO'S OWN when the store or
+    # its row names one, and then the hero can hold UNSPENT points -- retail's
+    # 0x0037 [117, 6, 10] for a level-3 Koss holding ranks 2 and 1, which the
+    # client's cost table prices at 3 + 1 = 4 = 10 - 6 (capture
+    # 20260914T005758; the same arithmetic closes on both players in the
+    # corpus, 195 of 200 at level 20). Until today this block resolved the
+    # build itself, and a hero with no ranks anywhere (a sandbox row's
+    # `attributes = []`) was sent its own budget here and the PLAYER's ranks
+    # in 0x003A, against an empty spend state. hero_attribute_state says what
+    # a hero with neither ranks nor a budget gets.
+    _hst = hero_attribute_state(state, hid)
+    _havail, _htotal = _hst.available, _hst.points_total
     out.append((GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS, [haid, _havail, _htotal],
                 f"AGENT_ATTRIBUTE_POINTS(hero agent {haid}: {_havail} of {_htotal}) [JARIN rig]"))
     _hsec = hero_secondary(state, hid)                  # SECONDARY-B4: stored, else 0
@@ -26562,8 +26607,7 @@ def hero_character_block(state, haid, hid):
     out.append((GAME_SMSG_AGENT_SET_PROFESSION,
                 agents.agent_set_profession(haid, int(_hprof), _hsec),   # SECONDARY-B4
                 f"0x00A6 for hero agent {haid} (prof {_hprof}/{_hsec}) [JARIN rig]"))
-    _hcols = attribute_columns(
-        ranks=sorted(_h_ranks.items()) if _h_ranks else None)
+    _hcols = attribute_columns(ranks=hero_load_rank_pairs(state, hid))
     out.append((GAME_SMSG_AGENT_UPDATE_ATTRIBUTES, [haid, _hcols],
                 f"AGENT_UPDATE_ATTRIBUTES(hero agent {haid}, {len(_hcols) // 3} attrs) [JARIN rig]"))
     return out
@@ -34302,31 +34346,20 @@ def _handle_request_players(send, state, conn_id, stop, rec):
         # that assert on 2026-08-16, which is the repo's
         # own recorded knowledge re-earning itself.
         _hprof = hero_profession(_hid)                  # SANDBOX-B3: per hero
-        # The hero gets the same budget as the player,
-        # because it is sent the player's own default
-        # ranks two lines below (attribute_columns() with
-        # no argument) -- and (available, total) must
-        # AGREE with the ranks that follow or the panel
-        # shows a build nobody paid for. Its own state is
-        # not modelled: nothing lets us spend a hero's
-        # points, so there is no mutable state to hold.
-        _hattr = attribute_state(state)
-        _, _, _hs_ranks, _hs_points = hero_build(state, _hid)
-        # Fitted to the budget, as hero_character_block (2026-09-25).
-        _h_ranks = hero_seed_ranks(state, _hid, _hs_ranks, _hs_points, _hattr.rules)
-        if _h_ranks:
-            # SLICE-H8: the hero's OWN ranks and budget -- every point of
-            # its level's allowance spent on the party row's ranks.
-            # A STORED attribute_points changes that: it lets the hero hold
-            # UNSPENT points, which is what retail sends (0x0037 [117, 6, 10])
-            # and what the panel's plus buttons need. See hero_character_block
-            # for the arithmetic that confirms the reading.
-            _hspent = _hattr.rules.total_spent(_h_ranks)
-            _htotal = (attribute_budget(state, _hs_points, f"hero {_hid}")
-                       if _hs_points is not None else _hspent)
-            _havail = _htotal - _hspent
-        else:
-            _havail, _htotal = _hattr.available, _hattr.points_total
+        # THE SPEND STATE IS THE ONE SOURCE, as in
+        # hero_character_block (2026-09-25): (available,
+        # total) must AGREE with the ranks that follow or
+        # the panel shows a build nobody paid for, and both
+        # must be what the next +/- is refereed against.
+        # This block used to resolve the build itself and
+        # never read the row's `points` (SANDBOX-B7 changed
+        # the retail block only), so a rankless sandbox hero
+        # got the PLAYER's pair here and the PLAYER's ranks
+        # below. A hero with neither ranks nor a budget
+        # still gets the player's launch build -- the JARIN
+        # rig's wire (hero_attribute_state says why).
+        _hst = hero_attribute_state(state, _hid)
+        _havail, _htotal = _hst.available, _hst.points_total
         hsend(GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS,
              [_haid, _havail, _htotal],
              f"AGENT_ATTRIBUTE_POINTS(hero agent "
@@ -34338,8 +34371,7 @@ def _handle_request_players(send, state, conn_id, stop, rec):
              spawn_profession_values(_hprof, _haid, secondary=_hsec_legacy),
              f"AGENT_PROFESSIONS(hero agent "
              f"{_haid}, prof {_hprof}/{_hsec_legacy})")
-        _hcols = attribute_columns(
-            ranks=sorted(_h_ranks.items()) if _h_ranks else None)
+        _hcols = attribute_columns(ranks=hero_load_rank_pairs(state, _hid))
         hsend(GAME_SMSG_AGENT_UPDATE_ATTRIBUTES,
              [_haid, _hcols],
              f"AGENT_UPDATE_ATTRIBUTES(hero agent "
