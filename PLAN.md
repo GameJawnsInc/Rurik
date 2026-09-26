@@ -2276,6 +2276,8 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   PLAN-LOG "SECONDARY-R1..R6"). Open: **SECONDARY-Q1** (0x00B7's flag on a client), **Q2 / Q7** (what the
   client does by itself with an old or a third profession's bar skill; only the server's strip is seen),
   **Q3** (which control's notification reaches the send), **Q6** (a PvE character with unlocks, on tape).
+  The overspent-store load fix (PLAN-LOG, 2026-09-25) is offline only: its client check spends past 10
+  points under a larger budget, then launches `--party slice` -- the load completes, the panel at 0 of 10.
 
 ### 8.2 Waiting on the owner, or on a live capture
 

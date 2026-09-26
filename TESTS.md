@@ -14322,4 +14322,39 @@ No vault, no client, no server. 150 checks, floor 150. ~1 s)
   (`stray = []`) reddens the two refusal checks; `weapon_attribute` dropped from the tuple
   reddens the lock and the ten-field check. Needs the tree's npc rows for the example spec
   (declares a skip if the compiler refuses). No client, no socket. 15 checks, floor 15.
-  ~10 s)
+  ~10 s),
+  `toolkit/authsrv/test_attribbudget.py` (**2026-09-25, the overspent store's load
+  crash** -- harness `20260925T210048`, the client's Code=007: the store held ranks
+  [[19, 2], [20, 4]] (3 + 10 = 13 points, spent under the content row's 200) and the run
+  loaded them under `--party slice`'s budget of 10, so `attribute_state` -- the STORE's
+  ranks, the LAUNCH's budget -- made available -3 and the load's 0x0037, a byte, raised
+  struct.error inside send() and killed the thread. The chosen outcome, RECONSTRUCTION
+  (`attribspend.fit_ranks` says why not a raised or a trimmed budget): **the budget binds**,
+  a stored build over it yields to the launch's ranks and then to none, one loud
+  `ATTRIBUTES:` line names the character, the stored spend and the budget, and the store is
+  not written. A hero's 0x0037 has the same shape: `hero_seed_ranks` is the one resolver
+  the spend state and BOTH load blocks read, and every budget passes `attribute_budget`,
+  clamped to 0..255 (`ATTRIBUTE_POINTS_WIRE_MAX`). §1 `fit_ranks` on the client's cost
+  table: the crash's 13 priced with no free parameter (spent_on(2) + spent_on(4)), the
+  slice's own ranks at exactly 10, each tier, and the boundary (spend == budget fits). §2
+  `attribute_state` over a scratch store: the overspent build takes the launch's ranks at
+  0 of 10 with ONE line naming 'Budget Fitter', 13 and 10, the file untouched; CONTROLS --
+  a build within budget still wins silently, a fresh character (stored []) takes the
+  launch's; the last tier (the launch's own 10 over a budget of 5 -> no ranks, 5 of 5);
+  the wire bound tied to the schema's field widths (0x0037's two value fields and 0x0038's
+  one are `byte`), 300 clamped to 255 and -5 to 0, loudly. **§3 is the load-bearing one:
+  the REAL burst** (`_handle_request_players`, the store found by --persist's own lookup
+  over a patched `store_dir`) with a fake send that ENCODES every message as the real one
+  does, on the retail rig (`hero_character_block`), the legacy rig (the inline hero block)
+  and a field: the load completes, every 0x0037 / 0x0038 encodes, the player's 0x0037 is
+  [1, 0, 10] and its 0x003A the launch's 17=2, 20=3, 21=1, the hero's (stored 13 against
+  its stored 10) is [200, 1, 10] with the row's 13=3, 15=2, and the SPEND states hold
+  exactly what the load drew; the row-budget case (no stored `attribute_points`, the hero
+  row's `points` binds -- the sandbox's shape) on both rigs; CONTROLS within budget ([1, 4,
+  10] and [200, 7, 10], the stored ranks, no line); budgets of 300 through the burst as 255.
+  PROVEN RED: `RURIK_ATTRIBBUDGET_AUTHSRV` pointed at the pre-fix `authsrv.py`
+  (`git show 3de069a9:toolkit/authsrv/authsrv.py`, placed in `toolkit/authsrv/` so its
+  sibling imports resolve) reddens 37 of 56 -- "the load completes" on all three rigs
+  with the run's own `'B' format requires 0 <= number <= 255` -- while the 19 that cannot
+  tell the two apart stay green (§1's pure checks, the controls, the store untouched).
+  Needs the vault's attribute tables. No client, no socket. 56 checks, floor 56. ~2 s)
