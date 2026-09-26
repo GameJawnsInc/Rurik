@@ -14382,4 +14382,34 @@ No vault, no client, no server. 150 checks, floor 150. ~1 s)
   19=12, 17=9, 21=6, 18=3, 20=1; legacy [200, 27, 200]), (b)'s three agreements
   (`({}, 0, 0)`) and both of (d) -- while (b)'s and (c)'s byte checks and all of §1-§3
   stay green. Needs the vault's attribute tables. No client, no socket. 78 checks, floor
-  78. ~2 s)
+  78. ~2 s),
+  `toolkit/authsrv/test_ingamebuild.py` (**2026-09-25, SANDBOX-U5's first client run,
+  harness `20260925T230749`** -- a character and a hero starting with EMPTY bars and no
+  ranks, built in the K panel in outpost 148, then taken into the corridor. Three defects,
+  none the panel's: **D1** `default_skillbar`'s `if PARTY_SKILLBAR:` read the sandbox's
+  authored `player_skills = []` as no field, so the load drew the content
+  [player.skillbar] (`[351, 359, 352, 356, 322, 346, 1, 2]`); now `is not None`. **D2**
+  the 0x005C set handler stored ONE slot and the store's slot writer seeds a missing bar
+  as eight empties, so with no stored bar the next load ("a stored bar wins") sent
+  `[2067, 0, 0, 0, 0, 0, 0, 0]` for a bar the panel had shown whole; it now stores the
+  whole bar, as the swap handler already did, for the character and a hero. **D3** a
+  hero's BODY was created with its ROW's ranks, so a build spent in-game never reached it
+  and a sandbox hero (`attributes = []`) acted at ENEMY_SKILL_RANK 12 -- Heal Party healed
+  66 where the client's own tooltip at Healing Prayers 1 read 33; now `hero_body_ranks`
+  (the spend state's ranks, every attribute the pair owns present at 0 where unspent, so
+  agent_skill_rank's 12-when-empty stays the hostiles'), followed after a raise, a lower
+  and a secondary change by `sync_hero_body_ranks`; the JARIN fallback keeps its body's
+  old ranks. Drives the real code: `_handle_request_players` with an encoding send
+  (test_attribbudget's rig), the 0x005C and 0x000F handlers, a scratch store found by
+  --persist's lookup. §1 D1: `default_skillbar()` and the load's 0x00DA over `[]`;
+  CONTROLS None (the content bar) and an authored bar. §2 D2: a fresh store and the
+  content bar on screen, a slot set -> the store and the NEXT load carry the whole bar;
+  a hero with its row's bar [281, 276, 2]; CONTROL over a stored bar. §3 D3: a FIELD
+  load's hero body -- the run's own state (13=1 stored) carries {13: 1, 14: 0, 15: 0,
+  16: 0}, Heal Party scales at 1 and `skill_heal` gives the tooltip's 33 (and at 12 the
+  wire's 66, the defect priced); nothing spent acts at 0; a raise reaches the body at
+  once; CONTROLS the SLICE-shaped row (13=3) and the JARIN fallback (12). PROVEN RED:
+  `RURIK_INGAMEBUILD_AUTHSRV` at 6a7ffe04's `authsrv.py` (placed in `toolkit/authsrv/`)
+  reddens 9 of 19 with the run's own values -- `[351, ...]`, `[3, 0, ...]`, `[0, 1, 0,
+  ...]`, `{}`, rank 12, heal 66 -- while the 10 premises and controls stay green. Needs
+  the vault's skill and attribute tables. No client, no socket. 19 checks, floor 19. ~3 s)

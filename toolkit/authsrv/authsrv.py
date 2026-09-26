@@ -5867,8 +5867,14 @@ def default_skillbar():
     """The bar a session gets by not choosing: the party row's `player_skills`
     (SLICE-H9, the sword bar), else content/world.toml [player.skillbar]
     (SLICE-H7 -- eight skills the server models, on the hammer warrior), else
-    TEST_SKILLBAR, the probe bar. --skills overrides."""
-    if PARTY_SKILLBAR:
+    TEST_SKILLBAR, the probe bar. --skills overrides.
+
+    `is not None`, and it is a fix (SANDBOX-U5, harness 20260925T230749): a
+    sandbox row's `player_skills = []` -- the bar the in-game panel fills --
+    was falsy here and loaded the content default [player.skillbar] instead,
+    though apply_party_character had already bound the empty list as an
+    answer (the same absent-vs-empty rule hero_bar_authored keeps)."""
+    if PARTY_SKILLBAR is not None:
         return list(PARTY_SKILLBAR)
     try:
         row = agents.WORLD.get("player", "skillbar")
@@ -20107,6 +20113,46 @@ def hero_load_rank_pairs(state, hero_index):
     return pairs if hero_borrows_player_build(state, hero_index) else sorted(pairs)
 
 
+def hero_body_ranks(state, hero_index):
+    """{attribute: rank} a hero's BODY acts at: the spend state's, the build
+    its panel shows, with every attribute its profession pair owns present
+    and 0 where nothing is spent.
+
+    A FIX, SANDBOX-U5 (harness 20260925T230749). The body was created with
+    the ROW's ranks, so a build spent in-game never reached it, and a
+    sandbox hero's `attributes = []` gave agent_skill_rank nothing, so it
+    acted at ENEMY_SKILL_RANK (12) in everything: Heal Party healed 66 where
+    the client's own tooltip at Healing Prayers 1 said 33. The explicit zeros
+    are how an unspent attribute says 0 rather than "unranked" --
+    agent_skill_rank's 12-when-empty is the hostiles' convention (sandbox's
+    effective_rank rests on it) and stays theirs.
+
+    A hero borrowing the player's build (the JARIN rig's bare --hero) keeps
+    what its body always had: the row's ranks, else nothing -- 12."""
+    if hero_borrows_player_build(state, hero_index):
+        return dict(hero_attributes(hero_index) or {})
+    st = hero_attribute_state(state, hero_index)
+    ranks = {int(a): 0 for a, row in st.rules.attributes.items()
+             if st.owns_profession(int(row.get("profession", 0)))}
+    ranks.update((int(a), int(r)) for a, r in st.ranks.items())
+    return ranks
+
+
+def sync_hero_body_ranks(state, hero_index, conn_id, why):
+    """After the spend state changed: the hero's body acts at the new ranks
+    from now on, as sync_hero_body_bar does for the bar. A town has no hero
+    body, so there this is a no-op and the next field's create reads the
+    same state."""
+    ranks = hero_body_ranks(state, hero_index)
+    for agent_id, row in (state.get("agents") or {}).items():
+        if row.get("hero") == hero_index:
+            row["attributes"] = dict(ranks)
+            print(f"[c{conn_id}] hero agent {agent_id} now acts at "
+                  + (", ".join(f"{a}={r}" for a, r in sorted(ranks.items()) if r)
+                     or "rank 0 in every attribute")
+                  + f" ({why}) [SANDBOX-U5]", flush=True)
+
+
 def persist_hero_attributes(state, hero_index, conn_id):
     """Write one hero's ranks back to the store. No-op without a store."""
     store = state.get("charstore_game")
@@ -20210,14 +20256,21 @@ def handle_skillbar_skill_set(values, send, state, conn_id, rec):
 
     dup = herolib.duplicate_of(before, slot, skill_id)
     after = herolib.apply_bar_slot(before, slot, skill_id)
+    # THE WHOLE BAR IS STORED, as the swap handler below stores it (SANDBOX-U5,
+    # harness 20260925T230749). This wrote the one slot, and the store's slot
+    # writer seeds a missing bar as eight empties -- so with no stored bar yet
+    # (a fresh character, or a hero whose bar is its row's) the store held the
+    # slot and seven zeros while the client and SKILLBAR held `after`, and the
+    # next load's "a stored bar wins" put seven slots the panel had shown back
+    # to empty ([351, 359, ...] edited to [2067, 359, ...] reloaded [2067, 0, ...]).
     if is_player:
         del SKILLBAR[:]
         SKILLBAR.extend(after)
         if store is not None:
-            store.set_character_bar_slot(uuid_hex, slot, skill_id)
+            store.set_character_skillbar(uuid_hex, after)
     else:
         if store is not None:
-            store.set_hero_bar_slot(uuid_hex, hero_index, slot, skill_id)
+            store.set_hero_skillbar(uuid_hex, hero_index, after)
         state.setdefault("hero_bars", {})[hero_index] = list(after)   # the fix pass, ENG-M1
         # The fix pass, EVID-D1C-1: the client's 0x005C sender (0x008212C0,
         # ChCliSkill:258) CLEARS the set slot's suppress bit (`btr [+0xA4],
@@ -20390,6 +20443,8 @@ def handle_attribute_spend(values, send, state, conn_id, rec, raise_it):
             persist_attributes(state, conn_id)
         else:
             persist_hero_attributes(state, hero_index, conn_id)
+            sync_hero_body_ranks(state, hero_index, conn_id,
+                                 f"its panel's {verb} of {attribute}")
     else:
         print(f"[c{conn_id}] ATTRIBUTE {verb} REFUSED: {why} "
               f"(seq {sequence}) -- answering anyway so the client's own "
@@ -20618,6 +20673,11 @@ def handle_secondary_change(values, send, state, conn_id, rec):
         _hst = (state.get("hero_attributes") or {}).get(hero_index)
         if _hst is not None:
             _hst.secondary = prof
+        if changed:
+            # SANDBOX-U5: the cleanup above and the new pair's attributes
+            # reach the body (a no-op in a town, where there is none).
+            sync_hero_body_ranks(state, hero_index, conn_id,
+                                 f"its secondary {old} -> {prof}")
     persisted = False
     if changed and store is not None:
         # The setter answers the purse's contract: the int written, None for
@@ -25792,7 +25852,7 @@ def hero_body_create(hsend, state, _i, _hid, _haid, _hdef, pos, plane, conn_id):
          "base_max_energy": float(_hvt[1]) if _hvt else 30.0,
          "hero": _hid,                     # JARIN: the body IS a hero (effect list, pools, skill family)
          "weapon_item_id": (HERO_WEAPON_ITEM_ID + _i) if _wkey is not None else None,
-         "attributes": dict(hero_attributes(_hid) or {}),      # SANDBOX-B3: per hero
+         "attributes": hero_body_ranks(state, _hid),   # SANDBOX-U5: the spend state's, not the row's
          "armor_rating": hero_armor(_hid),
          "damage": (list(hero_damage(_hid)) if hero_damage(_hid) else None),
          "weapon_attribute": hero_weapon_attribute(_hid),

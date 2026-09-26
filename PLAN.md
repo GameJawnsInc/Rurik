@@ -2247,7 +2247,9 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
   follow and cast), **U3** (a body of another profession carries the declared one),
   **U4** (a four-strong group pulls as one) and **U5** (a character and a hero built
   entirely in-game from empty bars and unspent points keep the build across a run; the
-  hero's panel opening rankless is already CONFIRMED, harness `20260925T223247`) — predictions in §3 there.
+  hero's panel opening rankless is already CONFIRMED, harness `20260925T223247`, and the
+  build itself ran (`20260925T230749`, three defects fixed, PLAN-LOG "SANDBOX-U5, run A");
+  owed: a fresh run A on the fixed server and run B, the relaunch) — predictions in §3 there.
 * **SANDBOX-N1's residue** (the selector landed 2026-09-24, PLAN-LOG "SANDBOX-N1, the Enemies
   tab's skill and attribute selector"): a file's explicit all-zero ranks (`[[17, 0]]`) open as
   NONE, so its hostile acts at 12 where the file's acts at 0 (pre-existing, file-only); a
