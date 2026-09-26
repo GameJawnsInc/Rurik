@@ -20098,9 +20098,11 @@ def hero_load_rank_pairs(state, hero_index):
     sorted as the player's are -- except a hero borrowing the player's build,
     whose pairs keep the content row's order, the order attribute_columns()
     with no argument sent them (byte-identity for the JARIN rig). Empty for a
-    hero with no ranks: an empty 0x003A, and the panel's rows still come from
-    the 0x00B7 pair (OBSERVED, SECONDARY-R1b: rows gained on 0x00B7 with no
-    0x003A sent); a zero-length 0x003A on a client is SANDBOX-U5's, UNVERIFIED."""
+    hero with no ranks: a zero-length 0x003A, which the client takes as "every
+    rank 0" -- its writer zeroes the array and skips the fill on n == 0
+    (0x00819BB0, `jbe` at 0x00819C9D, build 38797) -- and draws the rows from
+    the 0x00B7 pair. OBSERVED on the client, harness 20260925T223247: the
+    hero's K panel read "10 unused points" with its four Monk rows at 0."""
     pairs = list(hero_attribute_state(state, hero_index).ranks.items())
     return pairs if hero_borrows_player_build(state, hero_index) else sorted(pairs)
 
