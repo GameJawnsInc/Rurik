@@ -4253,8 +4253,9 @@ def scythe_extra_hit(send, state, aid, conn_id, rank, bonus_damage, damage_mult,
     maximum, the word (WEAPONS-W3). `base` is the swing's base penetration
     (an attack skill's, studies/weapons 35). Returns the points dealt."""
     foe = state["agents"][aid]
-    armour = penetrated_armour(foe.get("armor_rating"), agents.PLAYER_WEAPON,
-                               base=base)                 # Q2 (0 for a scythe) + 35
+    armour = penetrated_armour(cracked_body_armour(state, aid, foe.get("armor_rating")),
+                               agents.PLAYER_WEAPON,
+                               base=base)                 # Q2 (0 for a scythe) + 35; B4 Cracked
     critical = False
     if PLAYER_SWING_DAMAGE and rank is not None and armour is not None:
         critical = random.random() < critical_rate(rank) + (
@@ -4363,7 +4364,8 @@ def preparation_splash(send, state, prep_skill, prep_bonus, target_id, conn_id,
         foe = state.get("agents", {}).get(aid)
         if foe is None:
             continue
-        arm = penetrated_armour(foe.get("armor_rating"), agents.PLAYER_WEAPON)  # Q2
+        arm = penetrated_armour(cracked_body_armour(state, aid, foe.get("armor_rating")),
+                                agents.PLAYER_WEAPON)                   # Q2; B4 Cracked
         scale = (strike_multiplier(attack_strength(rank), float(arm))
                  if rank is not None and arm is not None and ARMOUR_TERM
                  else 1.0)
@@ -13254,12 +13256,20 @@ def player_armour_at(location_key, damage_type="physical", state=None,
         # (spell_armour_for says so).
         _iid = armour_item_id_at(location_key)
         if _iid is not None and (state["items"].get(_iid) or {}).get("bag") != EQUIPPED_BAG_ID:
-            return 0.0 + offhand_armour(damage_type, state)
+            return combatmath.net_armour(0.0, 0.0, shield=offhand_armour(damage_type, state),
+                                         cracked=cracked_penalty(state, PLAYER_AGENT_ID),
+                                         floor=CRACKED_ARMOUR_FLOOR)
+    # studies/skills 62 (B4): the shield and the Cracked Armor penalty go INTO
+    # the leaf -- the penalty into the bonus category ahead of its cap, the
+    # shield as core -- through combatmath.net_armour; unchanged numbers when
+    # the player is not Cracked (cracked 0 is the old sum).
     got = combatmath.player_armour_at(location_key, damage_type, EQUIP_ARMOUR,
                                       ARMOR_RATING_MODIFIER,
                                       ARMOR_VS_TYPE_MODIFIER,
-                                      level=player_level_of(state))   # a 573 piece
-    return None if got is None else got + offhand_armour(damage_type, state)
+                                      level=player_level_of(state),   # a 573 piece
+                                      shield=offhand_armour(damage_type, state),
+                                      cracked=cracked_penalty(state, PLAYER_AGENT_ID))
+    return got
 
 
 def armour_item_id_at(location_key):
@@ -13271,16 +13281,18 @@ def armour_item_id_at(location_key):
     return None
 
 
-def player_spell_armour():
+def player_spell_armour(state=None):
     """Forwards to combatmath; the chain below is threaded inside the leaf.
     The shield rides here too (SLICE-H9), elemental -- its `+N vs. physical`
-    line, if it ever carries one, does not."""
+    line, if it ever carries one, does not. `state`: the player's Cracked
+    Armor penalty (studies/skills 62), into the leaf ahead of the cap."""
     got = combatmath.player_spell_armour(EQUIP_ARMOUR, ARMOR_RATING_MODIFIER,
-                                         ARMOR_VS_TYPE_MODIFIER)
+                                         ARMOR_VS_TYPE_MODIFIER,
+                                         cracked=cracked_penalty(state, PLAYER_AGENT_ID))
     return None if got is None else got + offhand_armour("elemental")
 
 
-def spell_armour_for(skill_id):
+def spell_armour_for(skill_id, state=None):
     """Forwards to combatmath with all four armour flags read at call time --
     and the spell's OWN type (spell_damage_type), "elemental" when none is
     read: the pieces' `+N vs. physical` never meets a fire spell, a `+N vs.
@@ -13288,7 +13300,9 @@ def spell_armour_for(skill_id):
     spell's OWN base penetration comes off (studies/weapons 35: an Air Magic
     lightning spell's 25 % -- Lightning Orb onto 80 lands as onto 60, the
     tape's 101 / 286), BEFORE the taker's casting penalty the call site adds
-    (the wiki's step 4).
+    (the wiki's step 4). `state` (B4, studies/skills 62): the player's
+    Cracked Armor penalty, into the leaf AHEAD of the cap and of the
+    penetration here -- the wiki's order; None (the old callers) is 0.
 
     OPEN EDGE (DESKWORK-D1 step 8, the fix pass): with SPELL_LOCATION_ROLL the
     leaf rolls the location itself and reads the fixture's piece there -- a
@@ -13304,7 +13318,8 @@ def spell_armour_for(skill_id):
                                        SPELL_LOCATION_ROLL=SPELL_LOCATION_ROLL,
                                        damage_type=(spell_damage_type(skill_id)
                                                     if spell_damage_type(skill_id) is not None
-                                                    else "elemental"))
+                                                    else "elemental"),
+                                       cracked=cracked_penalty(state, PLAYER_AGENT_ID))
     return penetrated_armour(got, None, base=skill_base_penetration(skill_id))
 
 
@@ -13902,13 +13917,14 @@ def body_spell_armour(state, skill_id, tid, tbody):
     penetration -- see the banner above. --body-spell-player-armour: every
     taker the player's pieces."""
     if not tbody or not BODY_SPELL_TAKER_ARMOUR:
-        return spell_armour_for(skill_id)
+        return spell_armour_for(skill_id, state)          # B4: the player's Cracked Armor
     if not combatmath.spell_respects_armour(skill_id, SPELL_ARMOUR, ARMOUR_TERM,
                                             ARMOUR_RESPECTING_MEANS,
                                             SCALE_MEANS_DAMAGE):
         return None
     row = state.get("agents", {}).get(tid) or {}
-    return penetrated_armour(body_armour_rating(row), None,
+    # B4 (studies/skills 62): the taker's Cracked Armor ahead of the penetration.
+    return penetrated_armour(cracked_body_armour(state, tid, body_armour_rating(row)), None,
                              base=skill_base_penetration(skill_id))
 
 
@@ -15358,6 +15374,124 @@ SPELL_ENERGY_BONUS = True
 ENERGY_BONUS_PER_FOE = True                         # --energy-bonus-target-only reverts
 ENERGY_BONUS_MEANS = "caster energy higher"         # the row label: bonus_if
 _HEX_END_NO_DAMAGE = set()
+# ---- CRACKED ARMOR AND DAZED (DESKWORK-D6 step 5, B4, 2026-09-27; studies/skills 62)
+#
+# The last two of the ten conditions to DO something (effects.py's own list
+# said "Dazed and Cracked Armor are not [modelled]"). Neither was ever
+# inflicted by a skill on any live tape -- the Isle's one Dazed and two
+# Cracked Armors are environmental (hexjoin C1: field3 0, [6, 25, 28] /
+# [6, 25, 29]) and no tape shows either modifier at work -- so every number
+# here is the CONDITION's OWN client record (build 38797, d6U-records-dump:
+# Cracked Armor 2077 scale 20/20 + bonus 60/60, Dazed 485 scale 200/200; the
+# two records are not in the served skills table, so they are constants
+# here, not reads) and every rule is WIKI, RECONSTRUCTION at the sites.
+#   * CRACKED_ARMOR -- "-20 armor (minimum 60)" (GWW "Cracked Armor", rev.
+#     2659695), applied BEFORE the +25 bonus cap ("takes effect before the
+#     armor cap", the page's Notes) and before penetration, floored at 60 or
+#     the core if lower (GWW "Effect stacking", rev. 2739765, the armour-cap
+#     row); the casting penalty (Healing Signet's -40) stays AFTER both, the
+#     order casting_armour_penalty's own quote gives. The arithmetic is
+#     combatmath.net_armour; the player's three readers (player_armour_at,
+#     player_spell_armour, spell_armour_for) pass the penalty into the leaf
+#     with the shield, a body's five sites go through cracked_body_armour.
+#     The player's spells on foes are armour-free (the standing hit_enemy
+#     gap), so Cracked moves nothing there. The client's own panel has no
+#     armour property on the wire, so whether it draws the -20 is UNVERIFIED.
+#   * DAZED -- "you take twice as long to cast spells, and all your spells
+#     are easily interrupted" (GWW "Dazed", rev. 2667526): SPELLS only
+#     (combatmath.is_spell_type on the record's type_code -- a signet, a
+#     shout, an attack skill keep their time), x2 at the three activation
+#     sites behind signet_activation (the recharge anchors take the doubled
+#     value); "easily interrupted" is "any successful ATTACK will interrupt
+#     the skill during its activation" (GWW "Easily interruptible", rev.
+#     2610199 -- an attack, not any hit: a spell's damage does not), read at
+#     land_swing (the player as victim), hit_enemy and land_swing_on_body (a
+#     body as victim) in the new skill-less mode "spell" (a SPELL in
+#     activation, never an attack skill, never a swing); and the page's bug
+#     note -- "Dazed will interrupt spells upon application, regardless of
+#     the source" -- at apply_condition, the instant it lands. Property 61
+#     GV_CASTTIME is never sent: whether the client stretches its own bar for
+#     a Dazed player is UNVERIFIED (the cast_modifier_order probe is unrun).
+#     The interrupter named is Dazed's own id (485), whose row carries no
+#     disable. A shorter re-application (nothing on the wire) interrupts
+#     nothing: UNVERIFIED, the quieter reading.
+#   Inflicters (content/world.toml): Shell Shock 2059 (Cracked Armor 5..20 s
+#   behind 10..30 lightning; the Overcast clause NOT modelled) and Beguiling
+#   Haze 799 (Dazed 3..9 s; the Shadow Step NOT modelled), both through the
+#   existing skill_condition join. --no-cracked-armor / --no-dazed revert.
+CRACKED_ARMOR = True
+CRACKED_ARMOUR_PENALTY = 20.0          # the record's scale 20/20 (build 38797)
+CRACKED_ARMOUR_FLOOR = 60.0            # its bonus 60/60 == combatmath.ARMOR_BASELINE
+DAZED = True
+DAZED_ACTIVATION_FACTOR = 2.0          # the record's scale 200/200: "twice as long"
+INTERRUPT_MODE_SPELL = "spell"         # a SPELL in activation: never a swing, never an attack skill
+DAZED_ID = effects.CONDITION_BY_NAME["Dazed"]                  # 485
+CRACKED_ARMOR_ID = effects.CONDITION_BY_NAME["Cracked Armor"]  # 2077
+
+
+def cracked_penalty(state, agent_id):
+    """The Cracked Armor penalty this agent carries NOW: 20 while the
+    condition is up (episodemods.is_cracked), else 0; 0 with the flag off or
+    no state (the printing callers pass none)."""
+    if not CRACKED_ARMOR or state is None:
+        return 0.0
+    return CRACKED_ARMOUR_PENALTY if is_cracked(state, agent_id) else 0.0
+
+
+def cracked_body_armour(state, agent_id, rating):
+    """A BODY's rating as Cracked Armor leaves it -- net_armour with no bonus
+    category and no shield: rating - 20, floored at 60 or the rating when
+    it is lower; None stays None (an armour-less row); unchanged when the
+    body is not Cracked. The one helper every body site reads, ahead of
+    penetrated_armour (the wiki's order)."""
+    if rating is None:
+        return None
+    cracked = cracked_penalty(state, agent_id)
+    if cracked <= 0.0:
+        return rating
+    return combatmath.net_armour(rating, 0.0, cracked=cracked,
+                                 floor=CRACKED_ARMOUR_FLOOR)
+
+
+def _is_spell_skill(skill_id):
+    """The record's type_code is a spell's (combatmath.SPELL_TYPE_CODES_HSR:
+    hex, spell, enchantment, ward, well, item spell, weapon spell). A rowless
+    id is not one."""
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return False
+    return combatmath.is_spell_type(row.get("type_code"))
+
+
+def dazed_activation(state, agent_id, skill_id, activation):
+    """`activation` doubled when the caster is Dazed and `skill_id` is a
+    SPELL, else unchanged. The three activation sites (the press,
+    enemy_attack_tick, ally_cast_tick) pass through here right behind
+    signet_activation, so the recharge anchors take the doubled value."""
+    if not DAZED or not _is_spell_skill(skill_id) or not is_dazed(state, agent_id):
+        return activation
+    print(f"[skills] agent {agent_id}'s spell {skill_id} activates x{DAZED_ACTIVATION_FACTOR:g} "
+          f"under Dazed: {activation:.2f} -> {activation * DAZED_ACTIVATION_FACTOR:.2f} s "
+          f"(the client's own bar: UNVERIFIED, no property 61) [studies/skills 62]", flush=True)
+    return activation * DAZED_ACTIVATION_FACTOR
+
+
+def dazed_interrupt(send, state, conn_id, victim_id, by_agent):
+    """A DAZED victim's SPELL in activation is interrupted -- by a successful
+    attack landing on it (land_swing, hit_enemy, land_swing_on_body) and by
+    Dazed itself landing (apply_condition). Mode "spell": a spell in
+    activation only. The interrupter named is Dazed's own id; `by_agent` is
+    the attacker or the inflicter, "?" when the caller does not know it.
+    Returns interrupt_player's / interrupt_body's verdict, or None."""
+    if not DAZED or not is_dazed(state, victim_id):
+        return None
+    who = by_agent if by_agent is not None else "?"
+    if victim_id == PLAYER_AGENT_ID:
+        return interrupt_player(send, state, conn_id, DAZED_ID, who,
+                                mode=INTERRUPT_MODE_SPELL)
+    return interrupt_body(send, state, victim_id, state.get("agents", {}).get(victim_id),
+                          conn_id, DAZED_ID, who, mode=INTERRUPT_MODE_SPELL)
 
 
 def _hex_damage_slot(skill_id, row, rank):
@@ -19637,7 +19771,11 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     # WEAPONS-Q2: the hornbow's 10 % comes off the rating first (wiki step 3)
     # -- on top of the hit's BASE penetration (studies/weapons 35): an attack
     # skill's own or Strength's 1 % a rank, the larger; a plain swing's is 0.
-    armour = penetrated_armour(agent.get("armor_rating"), agents.PLAYER_WEAPON,
+    # B4 (studies/skills 62): the foe's Cracked Armor ahead of the penetration;
+    # a row with no rating stays armour-less (not routed through the creature
+    # formula: land_swing_on_body's rule, the standing inconsistency, named).
+    armour = penetrated_armour(cracked_body_armour(state, target_id, agent.get("armor_rating")),
+                               agents.PLAYER_WEAPON,
                                base=player_base_penetration(state, skill_id))
     _prep_scale = 1.0                   # WEAPONS-W2e: the arrow's own armour term
     if exact is not None:
@@ -19936,6 +20074,11 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
         # (1 of 1). A body as victim is RECONSTRUCTION (interrupt_body).
         interrupt_body(send, state, target_id, agent, conn_id, skill_id,
                        PLAYER_AGENT_ID)
+    # B4 (studies/skills 62): a successful ATTACK -- a swing, a skill strike
+    # or an arrow, never a spell (`exact`) -- on a DAZED body interrupts the
+    # spell it is activating.
+    if swing and exact is None and not target_dead(state, target_id):
+        dazed_interrupt(send, state, conn_id, target_id, PLAYER_AGENT_ID)
     # SKILLS-LV: the player's open episodes' ON-HIT riders (435's Poison on a
     # physical attack) on the foe this weapon hit landed on -- a swing, a skill
     # strike or an arrow, never a spell (`exact`), never a corpse.
@@ -20291,8 +20434,12 @@ def interrupt_player(send, state, conn_id, by_skill, by_agent, mode=None):
     if cast is not None:
         # INTERRUPT_MODE_SKILL (B2, Panic's chain): any cast in activation,
         # attack skill or not; the swing branch below does not take it.
+        # INTERRUPT_MODE_SPELL (B4, Dazed): a SPELL in activation only -- not
+        # an attack skill, not a signet, never the swing branch.
         if not (mode == "action" or mode == INTERRUPT_MODE_SKILL
-                or (mode == "attacking" and cast.get("attack"))):
+                or (mode == "attacking" and cast.get("attack"))
+                or (mode == INTERRUPT_MODE_SPELL and not cast.get("attack")
+                    and _is_spell_skill(cast["skill_id"]))):
             return None
         recharge = int(cast["recharge"])
         extra = skill_interrupt_disable(by_skill)
@@ -20396,8 +20543,11 @@ def interrupt_body(send, state, agent_id, agent, conn_id, by_skill, by_agent,
         skill_id = skills[slot][0]
         _atk = _is_attack_skill(skill_id)
         # INTERRUPT_MODE_SKILL (B2): a cast in activation, never the swing below.
+        # INTERRUPT_MODE_SPELL (B4, Dazed): a SPELL in activation only.
         if not (mode == "action" or mode == INTERRUPT_MODE_SKILL
-                or (mode == "attacking" and _atk)):
+                or (mode == "attacking" and _atk)
+                or (mode == INTERRUPT_MODE_SPELL and not _atk
+                    and _is_spell_skill(skill_id))):
             return None
         if INSTANT_ANNOUNCE and not _atk and _is_instant_skill(skill_id):
             # SKILLS-IA: a body's armed instant skill lands on the next tick
@@ -22123,6 +22273,9 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
     # B2 (studies/weapons 43): a SIGNET under Rust activates x2 -- the E5 clock
     # below reads the scaled value. The client's own bar: UNVERIFIED (no 61).
     activation = signet_activation(state, PLAYER_AGENT_ID, skill_id, activation)
+    # B4 (studies/skills 62): a SPELL under Dazed activates x2 -- the E5 clock
+    # below reads it; the client's own bar is UNVERIFIED (no property 61).
+    activation = dazed_activation(state, PLAYER_AGENT_ID, skill_id, activation)
     # The skill's FAMILY, read once: it picks the animation property below
     # (50 vs 60) and rides the pending entry for the movement-cancel
     # asymmetry and the cast-end property. From the content row's type code,
@@ -23307,7 +23460,8 @@ def cast_tick(send, state, conn_id):
                     _rc = skill_random_condition(cast["skill_id"])
                     if _rc is not None:
                         apply_condition(send, state, target, _rc[0], _rc[1],
-                                        rank, conn_id, cast["skill_id"])
+                                        rank, conn_id, cast["skill_id"],
+                                        by_agent=PLAYER_AGENT_ID)
                 if skill_self_knocks_down(cast["skill_id"]):
                     knock_down(send, state, PLAYER_AGENT_ID, conn_id,
                                f"skill {cast['skill_id']} (its own price)",
@@ -23441,7 +23595,7 @@ def cast_tick(send, state, conn_id):
                                        f"non-attack chain step [SKILLS-LU]")
                     apply_condition(send, state, target, inflicted[0],
                                     inflicted[1], rank, conn_id,
-                                    cast["skill_id"])
+                                    cast["skill_id"], by_agent=PLAYER_AGENT_ID)
             # SKILLS-RC: the heal, the cure and the recipient's legality in
             # one place, shared with the enemy's cast (resolve_heal).
             if not _na_fail:                                    # SKILLS-LU (C)
@@ -24486,8 +24640,10 @@ def nonattack_knock_down(send, state, skill_id, target_id, conn_id, who):
 
 
 def apply_condition(send, state, target_id, condition_id, seconds, rank,
-                    conn_id, by_skill):
+                    conn_id, by_skill, by_agent=None):
     """Put a condition on an agent, as an episode on the same effect channel.
+    `by_agent` (B4): the inflicter's agent id when the caller knows it --
+    named in Dazed's on-application interrupt, nowhere else.
 
     Conditions are not a separate mechanism: retail applies them with the same
     `0x0042` that carries a hex or a stance, and `bufflog` reads six of them
@@ -24570,6 +24726,11 @@ def apply_condition(send, state, target_id, condition_id, seconds, rank,
     # from the tick because the corpus's mid-life property-44s fire when the
     # RATE CHANGES, and applying a condition is the change.
     push_regen(send, state, target_id, conn_id)
+    # B4 (studies/skills 62): "Dazed will interrupt spells upon application,
+    # regardless of the source of the condition" (GWW "Dazed", the bug note)
+    # -- the spell the target is activating stops, behind the batch above.
+    if condition_id == DAZED_ID:
+        dazed_interrupt(send, state, conn_id, target_id, by_agent)
     return ep
 
 
@@ -25411,6 +25572,7 @@ def end_on_skill_use(send, state, agent_id, skill_id, conn_id):
 
 
 from episodemods import weakened, weakened_rank  # noqa: F401,E402  (SKILLS-WK; read by test_mechanics as authsrv.<name>)
+from episodemods import has_condition, is_cracked, is_dazed  # noqa: F401,E402  (B4, studies/skills 62; test_mechanics 39-40)
 
 
 def push_attributes(send, state, agent_id, conn_id):
@@ -26753,6 +26915,7 @@ def enemy_attack_tick(send, state, conn_id):
             skill_id, activation, recharge = agent["skills"][slot]
             # B2: a signet under Rust (x2); the recharge anchor takes it too.
             activation = signet_activation(state, agent_id, skill_id, activation)
+            activation = dazed_activation(state, agent_id, skill_id, activation)   # B4: a spell x2
             agent["cast_target"] = cast_target
             if cast_target == _tid:
                 agent["target_locked"] = True     # SLICE-H3: the bout opened
@@ -27052,6 +27215,7 @@ def ally_cast_tick(send, state, conn_id):
         skill_id, activation, recharge = skills[slot]
         # B2: a signet under Rust (x2); the recharge anchor takes it too.
         activation = signet_activation(state, agent_id, skill_id, activation)
+        activation = dazed_activation(state, agent_id, skill_id, activation)   # B4: a spell x2
         kind = skill_target_kind(skill_id)
         if ENERGY:
             cost, units = skill_cost(skill_id)
@@ -27589,6 +27753,7 @@ def land_swing_on_body(send, state, agent_id, agent, tid, conn_id, bonus=0.0,
     dealt = float(row["max_health"]) * (PARTY_HIT_FRACTION if party
                                         else ENEMY_HIT_FRACTION)
     armour = body_armour_rating(row)     # its rating, else the creature formula
+    armour = cracked_body_armour(state, tid, armour)      # B4: Cracked Armor, before penetration
     armour = penetrated_armour(armour, (body_weapon_items(agent) or (None,))[0],
                                base=body_base_penetration(agent, skill_id))  # Q2 + 35
     if ARMOUR_TERM and armour is not None:
@@ -27641,6 +27806,8 @@ def land_swing_on_body(send, state, agent_id, agent, tid, conn_id, bonus=0.0,
     # skill could interrupt anything. A killing blow interrupts nothing.
     if skill_id is not None and not target_dead(state, tid):
         interrupt_body(send, state, tid, row, conn_id, skill_id, agent_id)
+    if not target_dead(state, tid):
+        dazed_interrupt(send, state, conn_id, tid, agent_id)     # B4: a Dazed body's spell
     if not target_dead(state, tid):
         # SKILLS-LV: the attacker's open episodes' ON-HIT riders on the body hit
         apply_episode_riders(send, state, agent_id, tid,
@@ -33077,6 +33244,11 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
     # A killing blow interrupts nothing: the death batch owns the release.
     if skill_id is not None and state["player_health"] > 0.0:
         interrupt_player(send, state, conn_id, skill_id, agent_id)
+    # B4 (studies/skills 62): a successful ATTACK on a DAZED player interrupts
+    # the spell it is activating -- behind the attack skill's own interrupt,
+    # which already emptied the slot when the row carries one.
+    if state["player_health"] > 0.0:
+        dazed_interrupt(send, state, conn_id, PLAYER_AGENT_ID, agent_id)
     # ADRENALINE, both directions of the enemy's swing. WIKI: the swinger gets
     # a strike for a successful weapon hit; the player gets one unit per 1% of
     # MAXIMUM health lost, floored -- so a hit for under 1% grants nothing and,
@@ -33366,14 +33538,14 @@ def land_skill(send, state, agent_id, agent, conn_id):
             _rc = skill_random_condition(skill_id)
             if _rc is not None:
                 apply_condition(send, state, _tid, _rc[0], _rc[1], _rank,
-                                conn_id, skill_id)
+                                conn_id, skill_id, by_agent=agent_id)
         if skill_self_knocks_down(skill_id):
             knock_down(send, state, agent_id, conn_id,
                        f"its own skill {skill_id}",
                        skill_knock_down_seconds(skill_id))
         if inflicted and not target_dead(state, _tid):
             apply_condition(send, state, _tid, inflicted[0],
-                            inflicted[1], _rank, conn_id, skill_id)
+                            inflicted[1], _rank, conn_id, skill_id, by_agent=agent_id)
         resolve_heal(send, state, skill_id, _rank, agent_id,
                      agent.get("cast_target"), conn_id)
         return
@@ -33578,7 +33750,7 @@ def land_skill(send, state, agent_id, agent, conn_id):
             # of the Poison on the 2 that show one (nonattack_knock_down)
             nonattack_knock_down(send, state, skill_id, _tid, conn_id, f"agent {agent_id}'s")
         apply_condition(send, state, _tid, inflicted[0],
-                        inflicted[1], _rank, conn_id, skill_id)
+                        inflicted[1], _rank, conn_id, skill_id, by_agent=agent_id)
 
     # The enemy heals too, and its own bar has one: Restore Condition (276),
     # whose GWW variable is `Healing` 10..70. It has been on that bar since the
@@ -43757,6 +43929,18 @@ def main():
               "comparison against the TARGET's energy for every foe struck (the wiki's "
               "wording; retail's 647.300 refutes it) [studies/skills 61, the known-bad "
               "arm]", flush=True)
+    if a.no_cracked_armor:
+        global CRACKED_ARMOR
+        CRACKED_ARMOR = False
+        print("CONDITIONS: --no-cracked-armor -- Cracked Armor is an icon and the 0x0002 "
+              "bit alone: no -20, player or body, this server's reading until 2026-09-27 "
+              "[studies/skills 62 revert]", flush=True)
+    if a.no_dazed:
+        global DAZED
+        DAZED = False
+        print("CONDITIONS: --no-dazed -- Dazed is an icon and the 0x0002 bit alone: spells "
+              "activate at their table time and nothing interrupts them, this server's "
+              "reading until 2026-09-27 [studies/skills 62 revert]", flush=True)
     if a.no_spell_projectiles:
         global SPELL_PROJECTILES
         SPELL_PROJECTILES = False

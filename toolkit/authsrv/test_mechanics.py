@@ -19,6 +19,8 @@ import sys
 import math
 import time
 import struct
+import random
+import inspect
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -27,9 +29,10 @@ import checks       # noqa: E402
 import authsrv      # noqa: E402
 import agents       # noqa: E402
 import effects      # noqa: E402
+import combatmath   # noqa: E402
 
 # Floor set from a real green run (39 checks, 2026-08-22; 99 checks, 2026-09-09 SKILLS-DW; 129 checks, 2026-09-10 SKILLS-BL; 153 checks, 2026-09-10 SKILLS-RC; 162 checks, 2026-09-10 SKILLS-MA).
-LEDGER = checks.Ledger("effect mechanics", floor=297)  # 2026-09-27: +40, DESKWORK-D6 B2 sec.35-38 (Suffering's hex pips, Soothing Images' adrenaline block, Rust's explicit damage + signet x2, Panic's chain), from the green run  # 2026-09-26: +1, sec.16 (a HOSTILE's heal-kill under Deep Wound still pays the kill reward -- the control on hurt_agent_row's rule at heal_agent's door; the party arm is test_agentlife JARIN-S 5b), from the green run  # 2026-09-23: +11, SKILLS-MC sec.34 (Mend Condition: heal IF removed, the no-condition control, the other-ally byte, the revert), from the green run  # 2026-09-17: +5, RUN-SKILLS-WKL sec.33 + WKL1-2 (a cast that lifts Weakness heals at the weakened rank), from the green run  # 2026-09-17: +12, SKILLS-WK sec.31-32 (Weakness takes one off every attribute), from the green run  # 2026-09-16: +14, SLICE-F48 sec.8b (movement speed on the wire), from the green run  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
+LEDGER = checks.Ledger("effect mechanics", floor=337)  # 2026-09-27 (later): +40, DESKWORK-D6 B4 sec.39-40 (Cracked Armor: -20 into the bonus category before the cap and the penetration, the floor, the player and the five body sites; Dazed: spells x2, a landed attack or Dazed itself landing interrupts the spell in activation, never a signet or a swing), from the green run  # 2026-09-27: +40, DESKWORK-D6 B2 sec.35-38 (Suffering's hex pips, Soothing Images' adrenaline block, Rust's explicit damage + signet x2, Panic's chain), from the green run  # 2026-09-26: +1, sec.16 (a HOSTILE's heal-kill under Deep Wound still pays the kill reward -- the control on hurt_agent_row's rule at heal_agent's door; the party arm is test_agentlife JARIN-S 5b), from the green run  # 2026-09-23: +11, SKILLS-MC sec.34 (Mend Condition: heal IF removed, the no-condition control, the other-ally byte, the revert), from the green run  # 2026-09-17: +5, RUN-SKILLS-WKL sec.33 + WKL1-2 (a cast that lifts Weakness heals at the weakened rank), from the green run  # 2026-09-17: +12, SKILLS-WK sec.31-32 (Weakness takes one off every attribute), from the green run  # 2026-09-16: +14, SLICE-F48 sec.8b (movement speed on the wire), from the green run  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
 check = checks.adopt(LEDGER)
 
 FRENZY, RUSH, ROF, GLYPH, IGNITE, FAINT = 346, 319, 307, 200, 431, 135
@@ -2611,5 +2614,514 @@ try:
           "still 2")
 finally:
     (authsrv.HEX_SKILL_USE_CHAIN, authsrv.INTERRUPTS, authsrv.ENERGY, authsrv.NPC_FOLLOW) = saved
+
+# ---------------------------------------------------------------------------
+# 39-40: DESKWORK-D6 step 5, B4 (2026-09-27; studies/skills/FINDINGS.md 62): the last
+#        two conditions to DO something -- Cracked Armor 2077 and Dazed 485. NEITHER
+#        was ever inflicted by a skill on any live tape (the Isle's are environmental,
+#        hexjoin C1), so every number is the condition's OWN client record and every
+#        rule is the wiki's; every check names its control and its known-bad arm.
+CRACKED = effects.CONDITION_BY_NAME["Cracked Armor"]
+DAZED_C = effects.CONDITION_BY_NAME["Dazed"]
+SHELL, HAZE, ORB_J, POWER = 2059, 799, 230, 322       # Shell Shock, Beguiling Haze, Lightning Javelin, Power Attack
+CR_PEN, CR_FLOOR = 20.0, 60.0
+
+
+def cond_on(state, cid, agent=PLAYER, rank=12, seconds=8.0):
+    return state["effects"].apply(agent, cid, rank, seconds, time.time(), type_code=8)
+
+
+def pending_spell(state, sid=ORB_J, activation=1.0, recharge=5, attack=False):
+    now = time.time()
+    state["action_hold"] = 1
+    authsrv.player_pools(state)
+    state["pending_casts"] = [{"skill_id": sid, "copy": 0, "begun": True, "cost": 0, "units": 0,
+                               "target": 10, "begin_at": now, "attack": attack,
+                               "e5_at": now + activation, "e3_at": now + activation + 0.75,
+                               "e6_at": now + 10.0, "recharge": recharge, "e5_sent": False,
+                               "e3_sent": False, "approach": None, "activation": activation,
+                               "aftercast": 0.75, "recharge_s": float(recharge)}]
+    return state["pending_casts"][0]
+
+
+def stops(sent, who):
+    return [v[0] for op, v, _l in sent if op == INT and v[1] == who
+            and v[0] in (agents.GV_SKILL_STOPPED, agents.GV_INTERRUPTED)]
+
+
+print("== 39. Cracked Armor (2077): -20 INTO the bonus category before its cap, before the "
+      "penetration, floored at 60 or the core -- the player and every body site ==")
+saved = (authsrv.CRACKED_ARMOR, authsrv.ARMOUR_TERM, authsrv.ENERGY, authsrv.BLIND,
+         authsrv.CASTING_ARMOUR, authsrv.roll_hit_location, authsrv.NPC_FOLLOW,
+         authsrv.PLAYER_SWING_DAMAGE, random.random)
+try:
+    authsrv.CRACKED_ARMOR = True
+    authsrv.ARMOUR_TERM = True
+    authsrv.ENERGY = False
+    authsrv.BLIND = False
+    authsrv.CASTING_ARMOUR = True
+    authsrv.NPC_FOLLOW = False
+    row = agents.WORLD.get("skill_effect", str(SHELL))
+    rec = agents.WORLD.get("skills", str(SHELL))
+    check(row.get("scale_means") == "Lightning damage" and row.get("bonus_scale_means") == "Cracked Armor"
+          and row.get("damage_type") == 4 and int(rec["skill_arguments"]) == 6
+          and (int(rec["scale0"]), int(rec["scale15"]), int(rec["bonus_scale0"]), int(rec["bonus_scale15"]))
+          == (10, 30, 5, 20)
+          and authsrv.skill_condition(SHELL, 12) == (CRACKED, 17.0)
+          and authsrv.skill_damage(SHELL, 12) == (26, "standalone")
+          and authsrv.skill_base_penetration(SHELL) == 0.25,
+          "the inflicter, Shell Shock 2059: the word 10..30 lightning (26 at rank 12), Cracked "
+          "Armor 5..20 s (17 at rank 12) through the EXISTING skill_condition join, and Air "
+          "Magic's 25 % already on skill_base_penetration -- zero join code")
+    na = combatmath.net_armour
+    check([na(80, 20), na(80, 20, 0, CR_PEN), na(60, 0, 0, CR_PEN), na(50, 0, 0, CR_PEN),
+           na(50, 20, 0, CR_PEN), na(60, 0, 16, CR_PEN), na(0, 0, 16, CR_PEN)]
+          == [100.0, 80.0, 60.0, 50.0, 50.0, 60.0, 16.0],
+          "net_armour: 80 + 20 = 100 uncracked and 80 cracked; 60 cracked stays 60 (the floor); "
+          "50 stays 50 and 50 + 20 falls to 50 (a core below 60 is its own floor -- WIKI "
+          "'Effect stacking'); a 60 core with a 16 shield holds at 60; a bare location with a "
+          "shield keeps the shield")
+    check(na(80, 46, 0, CR_PEN) == na(80, 46) == 105.0
+          and na(80, 40, 0, CR_PEN) == 100.0 and na(80, 40) == 105.0,
+          "BEFORE THE CAP: a +46 boost leaves Cracked Armor without effect (46 - 20 = 26 caps to "
+          "the same 25 -- the page's own bug note), while +40 - 20 = 20 loses five of the capped "
+          "25; subtracting AFTER the cap could not produce the note")
+    st = fresh_state()
+    check(not authsrv.is_cracked(st, PLAYER) and authsrv.cracked_penalty(st, PLAYER) == 0.0
+          and authsrv.cracked_penalty(None, PLAYER) == 0.0,
+          "no episode: not Cracked, no penalty; no state (the printing callers) no penalty")
+    cond_on(st, CRACKED)
+    check(authsrv.is_cracked(st, PLAYER) and authsrv.has_condition(st, PLAYER, CRACKED)
+          and authsrv.cracked_penalty(st, PLAYER) == 20.0 and authsrv.cracked_penalty(st, 10) == 0.0,
+          "Cracked Armor on the player: 20 for the player, 0 for agent 10 (per wearer)")
+    # THE PLAYER'S PHYSICAL RATING, and a hostile's swing landing on it.
+    _loc = authsrv.roll_hit_location()
+    authsrv.roll_hit_location = lambda: _loc
+    plain_ar = authsrv.player_armour_at(_loc, physical=True, state=fresh_state())
+    cracked_ar = authsrv.player_armour_at(_loc, physical=True, state=st)
+    piece = agents.item_template(agents.worn_piece_key(_loc))
+    rating, bonus = combatmath.armour_of_piece(piece, "physical", authsrv.ARMOR_RATING_MODIFIER,
+                                               authsrv.ARMOR_VS_TYPE_MODIFIER,
+                                               level=authsrv.player_level_of(st))
+    check(plain_ar is not None and plain_ar == na(rating, bonus)
+          and cracked_ar == na(rating, bonus, 0.0, CR_PEN) and cracked_ar == plain_ar - 20.0,
+          f"the location's physical rating is the piece's {rating:.0f} + its {bonus:.0f} vs. "
+          f"physical = {plain_ar:.0f}; Cracked eats the bonus: {cracked_ar:.0f} (-20)",
+          f"plain={plain_ar} cracked={cracked_ar} piece={rating, bonus}")
+    _foe = {"name": "hatcher", "dead": False, "pos": (0.0, 0.0)}
+
+    def _swing(state):
+        sent, send = collector()
+        authsrv.land_swing(send, state, ENEMY, _foe, 0)
+        return 100.0 - state["player_health"]
+
+    base = authsrv.player_full_max_health(fresh_state()) * authsrv.ENEMY_HIT_FRACTION
+    quiet = _swing(fresh_state())
+    cracked = _swing(st)
+    check(quiet == math.floor(base * authsrv.armour_multiplier(plain_ar))
+          and cracked == math.floor(base * authsrv.armour_multiplier(cracked_ar))
+          and cracked > quiet,
+          f"a hostile's swing on the Cracked player: {quiet:.0f} quiet, {cracked:.0f} cracked "
+          f"-- the fraction at the cracked rating, 2^(20/40) to the whole point",
+          f"quiet={quiet} cracked={cracked}")
+    st2 = fresh_state()
+    cond_on(st2, CRACKED)
+    st2["pending_casts"] = [{"skill_id": 1, "begin_at": 0.0, "e5_at": math.inf, "e5_sent": False}]
+    both = _swing(st2)
+    check(both == math.floor(base * authsrv.armour_multiplier(cracked_ar - 40.0)),
+          "Cracked Armor AND Healing Signet's -40 in use: the -40 comes off the CRACKED rating "
+          "after the cap (the wiki's step 4 -- casting_armour_penalty's own quote)", f"{both}")
+    # THE ELEMENTAL FLOOR: the starter set's 25 elemental is its core and cannot be cracked.
+    sp_plain = authsrv.spell_armour_for(ORB_J, fresh_state())
+    sp_cracked = authsrv.spell_armour_for(ORB_J, st)
+    check(sp_plain is not None and sp_cracked == sp_plain
+          and combatmath.armour_of_piece(piece, "elemental", authsrv.ARMOR_RATING_MODIFIER,
+                                         authsrv.ARMOR_VS_TYPE_MODIFIER,
+                                         level=authsrv.player_level_of(st))[0] < CR_FLOOR,
+          f"a spell on the Cracked player meets the SAME rating ({sp_plain}): the set's elemental "
+          f"core is below 60 and a core below 60 is its own floor -- Cracked Armor moves nothing "
+          f"there (WIKI 'Effect stacking'; the physical +20 above is what it eats)",
+          f"plain={sp_plain} cracked={sp_cracked}")
+    # BODIES: the one helper, then the three real paths.
+    st = fresh_state()
+    hostile(st, 10, armor_rating=100.0)
+    plain_b = [authsrv.cracked_body_armour(st, 10, r) for r in (100.0, 60.0, 50.0, None)]
+    cond_on(st, CRACKED, agent=10)
+    check(plain_b == [100.0, 60.0, 50.0, None]
+          and [authsrv.cracked_body_armour(st, 10, r) for r in (100.0, 60.0, 50.0, None)]
+          == [80.0, 60.0, 50.0, None],
+          "cracked_body_armour: identity uncracked; cracked 100 -> 80, 60 stays 60, 50 stays 50, "
+          "an armour-less row (None) stays armour-less")
+    dealt = {}
+    for cr in (False, True):
+        st = fresh_state()
+        hostile(st, 10, (0.0, 0.0))
+        body = hostile(st, 12, (10.0, 0.0), allegiance=agents.ALLEGIANCE_PLAYER,
+                       armor_rating=100.0, max_health=1000.0, health=1000.0)
+        if cr:
+            cond_on(st, CRACKED, agent=12)
+        sent, send = collector()
+        res = authsrv.land_swing_on_body(send, st, 10, st["agents"][10], 12, 0)
+        dealt[cr] = (res, 1000.0 - body["health"])
+    check(dealt == {False: ("landed", 50.0), True: ("landed", 70.0)},
+          "land_swing_on_body, a hostile at a party body of 1000/100 AR: 50 uncracked "
+          "(1000 x 0.10 x 2^-1), 70 cracked (at 80: 2^-0.5 = 70.7)", f"{dealt}")
+    random.random = lambda: 1.0            # no critical, no block: the roll alone
+    authsrv.PLAYER_SWING_DAMAGE = (100, 100)
+    dealt = {}
+    for cr in (False, True):
+        st = fresh_state()
+        body = hostile(st, 10, armor_rating=100.0, max_health=1000.0, health=1000.0)
+        if cr:
+            cond_on(st, CRACKED, agent=10)
+        sent, send = collector()
+        res = authsrv.hit_enemy(send, st, 10, 0)
+        dealt[cr] = (res, 1000.0 - body["health"])
+    random.random = saved[-1]
+    authsrv.PLAYER_SWING_DAMAGE = saved[-2]
+    check(dealt[False][0] == "landed" and dealt[True][0] == "landed"
+          and dealt[True][1] > dealt[False][1]
+          and abs(dealt[True][1] / dealt[False][1] - 2 ** 0.5) < 0.03,
+          "hit_enemy, the player's flat 100 hammer on a 100-AR hostile: the cracked hit is "
+          "2^(20/40) the plain one to the whole point (the rating read now wraps "
+          "cracked_body_armour)", f"{dealt}")
+    terms = {}
+    for cr in (False, True):
+        st = fresh_state()
+        hostile(st, 10)
+        hostile(st, 12, allegiance=agents.ALLEGIANCE_PLAYER, armor_rating=100.0)
+        if cr:
+            cond_on(st, CRACKED, agent=12)
+        terms[cr] = authsrv.body_spell_terms(st, st["agents"][10], ORB_J, 40.0, 12, True)[3]
+    check(terms == {False: 75.0, True: 60.0},
+          "body_spell_terms, a Javelin (25 % penetration) at a Cracked party body of 100 AR: "
+          "75 uncracked, 60 cracked = (100 - 20) x 0.75 -- BEFORE the penetration (after it "
+          "would read 55)", f"{terms}")
+    # THE REAL INFLICTER: a hostile's Shell Shock at the player through land_skill.
+    st = world(1, bar=((SHELL, 1.0, 8.0),))
+    a = st["agents"][10]
+    a.update({"casting": 0, "cast_lands_at": time.time() - 0.01, "cast_target": PLAYER})
+    sent, send = collector()
+    authsrv.land_skill(send, st, 10, a, 0)
+    ops = [(op, v[:3]) for op, v, _l in sent]
+    applies = [v for op, v, _l in sent if op == authsrv.GAME_SMSG_EFFECT_APPLY]
+    check(ops[0] == (INT, [agents.GV_SKILL_FINISHED, 10, 0])
+          and applies and applies[0][:2] == [PLAYER, CRACKED] and applies[0][4] == authsrv._f32(17.0)
+          and authsrv.is_cracked(st, PLAYER)
+          and [v for op, v, _l in sent if op == FLOAT_T and v[0] == agents.PROP_DAMAGE],
+          "through the real land_skill: [58, 10, 0], 0x0042 [me, 2077, r, buff, 17.0], the word "
+          "-- the player is Cracked; the -20 then meets the NEXT hit", f"{ops}")
+    before = st["player_health"]
+    _swing(st)
+    cracked2 = before - st["player_health"]
+    check(cracked2 == cracked,
+          f"and the next hostile swing on that player deals the cracked {cracked:.0f}, not the "
+          f"quiet {quiet:.0f}", f"{cracked2}")
+    # THE KNOWN-BAD ARM: the flag off -- the icon and the bit alone.
+    authsrv.CRACKED_ARMOR = False
+    st = fresh_state()
+    cond_on(st, CRACKED)
+    hostile(st, 10, armor_rating=100.0)
+    cond_on(st, CRACKED, agent=10)
+    check(authsrv.cracked_penalty(st, PLAYER) == 0.0
+          and authsrv.player_armour_at(_loc, physical=True, state=st) == plain_ar
+          and authsrv.cracked_body_armour(st, 10, 100.0) == 100.0 and _swing(st) == quiet
+          and authsrv.is_cracked(st, PLAYER),
+          "--no-cracked-armor: the condition is up and moves nothing -- the plain rating, the "
+          "quiet swing, the body's 100 (the reading every run before 2026-09-27 made)")
+    authsrv.CRACKED_ARMOR = True
+    src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+    i_ls = src.index("def land_swing(")
+    i_bsa, i_lsob, i_he = (src.index("def body_spell_armour("), src.index("def land_swing_on_body("),
+                           src.index("def hit_enemy("))
+    check(src.count("cracked_body_armour(state, ") == 6           # five sites + the def
+          and src.index("def scythe_extra_hit(") < src.index("cracked_body_armour(state, aid, foe.get(")
+          < src.rindex("cracked_body_armour(state, aid, foe.get(") < i_bsa
+          < src.index("cracked_body_armour(state, tid, body_armour_rating(row))") < i_he
+          < src.index("cracked_body_armour(state, target_id, agent.get(") < i_lsob
+          < src.index("armour = cracked_body_armour(state, tid, armour)")
+          and src.count("cracked=cracked_penalty(state, PLAYER_AGENT_ID)") == 4
+          and src.index("armour = penetrated_armour(armour, (body_weapon_items(agent) or (None,))[0],", i_ls)
+          < src.index("armour += casting_armour_penalty(state)", i_ls)
+          and "return spell_armour_for(skill_id, state)" in src[i_bsa:i_bsa + 1500]
+          and "armour = body_armour_rating(row)" in src[i_lsob:i_lsob + 3000]
+          and 'row.get("armor_rating")' not in inspect.getsource(authsrv.land_swing_on_body),
+          "the source: the five body sites through cracked_body_armour (the scythe's extra hit, "
+          "the preparation splash, body_spell_armour, hit_enemy, land_swing_on_body; 6 with the def), the "
+          "player's four reads passing the penalty INTO the leaf, land_swing's casting penalty "
+          "still after the penetration, and test_agentlife's literals intact")
+finally:
+    (authsrv.CRACKED_ARMOR, authsrv.ARMOUR_TERM, authsrv.ENERGY, authsrv.BLIND,
+     authsrv.CASTING_ARMOUR, authsrv.roll_hit_location, authsrv.NPC_FOLLOW,
+     authsrv.PLAYER_SWING_DAMAGE, random.random) = saved
+
+print("== 40. Dazed (485): spells activate x2, a landed ATTACK interrupts the spell in "
+      "activation, and Dazed landing interrupts it at once -- never a signet, never a swing ==")
+saved = (authsrv.DAZED, authsrv.INTERRUPTS, authsrv.ENERGY, authsrv.NPC_FOLLOW, authsrv.BLIND,
+         authsrv.ARMOUR_TERM)
+try:
+    authsrv.DAZED = True
+    authsrv.INTERRUPTS = True
+    authsrv.ENERGY = False
+    authsrv.NPC_FOLLOW = False
+    authsrv.BLIND = False
+    authsrv.ARMOUR_TERM = True
+    row = agents.WORLD.get("skill_effect", str(HAZE))
+    rec = agents.WORLD.get("skills", str(HAZE))
+    check(row.get("scale_means") == "Dazed" and int(rec["skill_arguments"]) == 2
+          and (int(rec["scale0"]), int(rec["scale15"])) == (3, 9) and int(rec["type_code"]) == 5
+          and authsrv.skill_condition(HAZE, 12) == (DAZED_C, 8.0),
+          "the inflicter, Beguiling Haze 799: Dazed 3..9 s in the scale slot (8 at rank 12) "
+          "through the existing join; a Spell, so a hostile casts it at the player (the Shadow "
+          "Step is NOT modelled, said in the row)")
+    check(authsrv._is_spell_skill(ORB_J) and authsrv._is_spell_skill(234) and authsrv._is_spell_skill(ROF)
+          and not authsrv._is_spell_skill(HEAL_SIG) and not authsrv._is_spell_skill(FRENZY)
+          and not authsrv._is_spell_skill(POWER) and not authsrv._is_spell_skill(99999),
+          "_is_spell_skill: a spell, a hex, an enchantment yes; a signet, a stance, an attack "
+          "skill, a rowless id no (combatmath.is_spell_type on the record)")
+    st = fresh_state()
+    check(not authsrv.is_dazed(st, PLAYER) and authsrv.dazed_activation(st, PLAYER, ORB_J, 2.0) == 2.0,
+          "not Dazed: the activation untouched")
+    cond_on(st, DAZED_C)
+    check(authsrv.is_dazed(st, PLAYER)
+          and authsrv.dazed_activation(st, PLAYER, ORB_J, 2.0) == 4.0
+          and authsrv.dazed_activation(st, PLAYER, 234, 2.0) == 4.0
+          and authsrv.dazed_activation(st, PLAYER, HEAL_SIG, 2.0) == 2.0
+          and authsrv.dazed_activation(st, PLAYER, POWER, 0.0) == 0.0
+          and authsrv.dazed_activation(st, PLAYER, FRENZY, 0.0) == 0.0
+          and authsrv.dazed_activation(st, 10, ORB_J, 2.0) == 2.0,
+          "Dazed: a spell 2.0 -> 4.0 (the record's 200 %), a hex too; a signet, an attack skill "
+          "and a stance keep their time; another agent is untouched")
+    # THE BODY SITE, for real: a hostile casting Restore Condition (a Spell) / Healing Signet.
+    lands = {}
+    for dz in (False, True):
+        st = world(2, bar=((RC, 0.75, 2.0),))
+        if dz:
+            cond_on(st, DAZED_C, agent=10)
+        now = time.time()
+        tick(st)
+        a = st["agents"][10]
+        lands[dz] = (a.get("casting"), round(a["cast_lands_at"] - now, 2),
+                     round(a["skill_ready"][0] - now, 2))
+    check(lands[False][:2] == (0, 0.75) and lands[True][:2] == (0, 1.5)
+          and abs((lands[True][2] - lands[False][2]) - 0.75) < 1e-6,
+          "enemy_attack_tick: the hostile's Restore Condition lands at +0.75 s plain and +1.5 s "
+          "Dazed, its recharge anchor moved by the same 0.75 (completion-anchored)", f"{lands}")
+    st = world(1, bar=((HEAL_SIG, 2.0, 4.0),))
+    cond_on(st, DAZED_C, agent=10)
+    now = time.time()
+    tick(st)
+    check(st["agents"][10].get("casting") == 0
+          and round(st["agents"][10]["cast_lands_at"] - now, 1) == 2.0,
+          "CONTROL: the same hostile's Healing Signet under Dazed lands at +2.0 -- a signet is "
+          "not a spell (the wiki's word)")
+    # THE MODE, on the player: a spell in activation, and only that.
+    E5, E2 = authsrv.GAME_SMSG_SKILL_RECHARGE, authsrv.GAME_SMSG_SKILL_REFUSED
+    st = fresh_state()
+    hostile(st, 10, (50.0, 0.0))
+    cast = pending_spell(st)
+    cond_on(st, DAZED_C)
+    sent, send = collector()
+    res = authsrv.dazed_interrupt(send, st, 0, PLAYER, 10)
+    ops = [(op, v[:3]) for op, v, _l in sent]
+    check(res == "cast" and ops == [(INT, [8, PLAYER, 0]), (E5, [PLAYER, ORB_J, 0]),
+                                    (INT, [agents.GV_SKILL_STOPPED, PLAYER, 0]),
+                                    (E2, [PLAYER, ORB_J, 0]), (INT, [agents.GV_INTERRUPTED, PLAYER, 0])]
+          and cast["e5_sent"] and cast["recharge"] == 5
+          and [v[3] for op, v, _l in sent if op == E5] == [5],
+          "a Dazed player's spell: retail's victim run [8,0] E5(5) [59] E2 [35] and NO disable "
+          "(the interrupter named is Dazed's own id, whose row carries none)", f"{res} {ops}")
+    for sid, attack, what in ((HEAL_SIG, False, "a signet"), (POWER, True, "an attack skill")):
+        st = fresh_state()
+        hostile(st, 10, (50.0, 0.0))
+        cast = pending_spell(st, sid=sid, attack=attack)
+        cond_on(st, DAZED_C)
+        sent, send = collector()
+        res = authsrv.dazed_interrupt(send, st, 0, PLAYER, 10)
+        check(res is None and not sent and not cast["e5_sent"],
+              f"a Dazed player activating {what} ({sid}) is NOT interrupted -- mode 'spell' is "
+              f"spells only", f"{res} {sent}")
+    st = fresh_state()
+    hostile(st, 10, (50.0, 0.0))
+    cast = pending_spell(st)
+    sent, send = collector()
+    check(authsrv.dazed_interrupt(send, st, 0, PLAYER, 10) is None and not sent,
+          "CONTROL, not Dazed: nothing")
+    # THE REAL ATTACK SITE: a hostile's swing landing on the Dazed casting player.
+    _foe = {"name": "hatcher", "dead": False, "pos": (0.0, 0.0)}
+    shapes = {}
+    for dz in (False, True):
+        st = fresh_state()
+        hostile(st, 10, (0.0, 0.0))
+        cast = pending_spell(st)
+        if dz:
+            cond_on(st, DAZED_C)
+        sent, send = collector()
+        authsrv.land_swing(send, st, 10, _foe, 0)
+        shapes[dz] = (stops(sent, PLAYER), cast["e5_sent"], st["player_health"] < 100.0)
+    check(shapes[False] == ([], False, True)
+          and shapes[True] == ([agents.GV_SKILL_STOPPED, agents.GV_INTERRUPTED], True, True),
+          "land_swing: the hostile's plain swing lands on the casting player -- untouched when "
+          "not Dazed (CONTROL), [59] [35] and the cast gone when Dazed (any successful ATTACK, "
+          "WIKI 'Easily interruptible')", f"{shapes}")
+    i_word = i_stop = None
+    check(sent and [k for k, (op, v, _l) in enumerate(sent) if op == FLOAT_T and v[0] == agents.PROP_DAMAGE]
+          < [k for k, (op, v, _l) in enumerate(sent) if op == INT and v[0] == agents.GV_SKILL_STOPPED],
+          "and the interrupt run rides BEHIND the swing's damage word (retail's order for an "
+          "interrupting attack, 1 of 1)")
+    st = fresh_state()
+    hostile(st, 10, (0.0, 0.0))
+    cast = pending_spell(st)
+    cond_on(st, DAZED_C)
+    sent, send = collector()
+    authsrv.body_spell_word(send, st, 10, ORB_J, PLAYER, False, 10.0, authsrv._f32(0.1), None, 10.0, 0)
+    check(not stops(sent, PLAYER) and not cast["e5_sent"] and st["player_health"] == 90.0,
+          "CONTROL: a body's SPELL (Javelin's word) landing on the Dazed casting player interrupts "
+          "nothing -- an attack, not any hit (the Javelin's own 'attacking' does not reach a "
+          "spell either)")
+    # A BODY AS VICTIM: a hostile's swing on a Dazed casting party body; the player's swing on
+    # a Dazed casting hostile; a swinging Dazed body is never touched.
+    RC_BAR = ((RC, 0.75, 2.0),)
+
+    def casting(aid, st, at=0.5):
+        a = st["agents"][aid]
+        a.update({"skills": RC_BAR, "skill_ready": [0.0], "casting": 0,
+                  "cast_lands_at": time.time() + at, "cast_recharge": 2.0})
+        return a
+
+    shapes = {}
+    for dz in (False, True):
+        st = fresh_state()
+        hostile(st, 10, (0.0, 0.0))
+        hostile(st, 12, (10.0, 0.0), allegiance=agents.ALLEGIANCE_PLAYER, max_health=1000.0,
+                health=1000.0)
+        casting(12, st)
+        if dz:
+            cond_on(st, DAZED_C, agent=12)
+        sent, send = collector()
+        authsrv.land_swing_on_body(send, st, 10, st["agents"][10], 12, 0)
+        shapes[dz] = (stops(sent, 12), st["agents"][12]["casting"])
+    check(shapes == {False: ([], 0), True: ([agents.GV_SKILL_STOPPED, agents.GV_INTERRUPTED], None)},
+          "land_swing_on_body: a hostile's swing on a party body casting RC -- untouched plain, "
+          "[59, 12, 0] [35, 12, 0] and the slot cleared when Dazed", f"{shapes}")
+    shapes = {}
+    for dz in (False, True):
+        st = fresh_state()
+        casting(10, hostile(st, 10, max_health=1000.0, health=1000.0) and st)
+        if dz:
+            cond_on(st, DAZED_C, agent=10)
+        sent, send = collector()
+        res = authsrv.hit_enemy(send, st, 10, 0)
+        shapes[dz] = (res, stops(sent, 10), st["agents"][10]["casting"])
+    check(shapes[False][0] == shapes[True][0] == "landed"
+          and shapes[False][1:] == ([], 0)
+          and shapes[True][1:] == ([agents.GV_SKILL_STOPPED, agents.GV_INTERRUPTED], None),
+          "hit_enemy: the player's swing on a hostile casting RC -- untouched plain, [59, 10, 0] "
+          "[35, 10, 0] when Dazed", f"{shapes}")
+    st = fresh_state()
+    a = hostile(st, 10)
+    a.update({"casting": None, "swing_lands_at": time.time() + 0.5, "swinging": True})
+    cond_on(st, DAZED_C, agent=10)
+    sent, send = collector()
+    check(authsrv.dazed_interrupt(send, st, 0, 10, PLAYER) is None and not sent
+          and a["swing_lands_at"] is not None
+          and authsrv.interrupt_body(send, st, 10, a, 0, DAZED_C, PLAYER, mode="action") == "swing",
+          "a SWINGING Dazed body is never touched by mode 'spell' -- and the KNOWN-BAD arm, mode "
+          "'action', does stop it (the mode is load-bearing)")
+    # ON APPLICATION: Dazed landing stops the spell at once; Bleeding landing does not.
+    st = fresh_state()
+    hostile(st, 10, (50.0, 0.0))
+    cast = pending_spell(st)
+    sent, send = collector()
+    authsrv.apply_condition(send, st, PLAYER, DAZED_C, 8.0, 12, 0, HAZE, by_agent=10)
+    ops = [(op, v[:3]) for op, v, _l in sent]
+    check(ops[:2] == [(authsrv.GAME_SMSG_EFFECT_APPLY, [PLAYER, DAZED_C, 12]), (OP_STATUS, [PLAYER, 0x02])]
+          and ops[2:] == [(INT, [8, PLAYER, 0]), (E5, [PLAYER, ORB_J, 0]),
+                          (INT, [agents.GV_SKILL_STOPPED, PLAYER, 0]),
+                          (E2, [PLAYER, ORB_J, 0]), (INT, [agents.GV_INTERRUPTED, PLAYER, 0])]
+          and cast["e5_sent"],
+          "apply_condition: Dazed on the casting player -- 0x0042 [me, 485, 12], 0x00F1 0x02, "
+          "THEN the victim run (the page's bug note: interrupts upon application)", f"{ops}")
+    st = fresh_state()
+    hostile(st, 10, (50.0, 0.0))
+    cast = pending_spell(st)
+    sent, send = collector()
+    authsrv.apply_condition(send, st, PLAYER, BLEED, 8.0, 12, 0, 382, by_agent=10)
+    check(not stops(sent, PLAYER) and not cast["e5_sent"],
+          "CONTROL: Bleeding on the casting player stops nothing")
+    st = fresh_state()
+    hostile(st, 10, (50.0, 0.0))
+    sent, send = collector()
+    authsrv.apply_condition(send, st, PLAYER, DAZED_C, 8.0, 12, 0, HAZE, by_agent=10)
+    check(not stops(sent, PLAYER) and len(sent) == 2,
+          "CONTROL: Dazed on a player casting nothing is the two-message batch alone")
+    st = fresh_state()
+    casting(10, hostile(st, 10) and st)
+    sent, send = collector()
+    authsrv.apply_condition(send, st, 10, DAZED_C, 8.0, 12, 0, HAZE, by_agent=PLAYER)
+    check(stops(sent, 10) == [agents.GV_SKILL_STOPPED, agents.GV_INTERRUPTED]
+          and st["agents"][10]["casting"] is None,
+          "Dazed landing on a casting hostile: its status word, then [59, 10, 0] [35, 10, 0]")
+    # THE REAL INFLICTER: a hostile's Beguiling Haze at the casting player through land_skill.
+    st = world(1, bar=((HAZE, 0.25, 20.0),))
+    a = st["agents"][10]
+    a.update({"casting": 0, "cast_lands_at": time.time() - 0.01, "cast_target": PLAYER})
+    cast = pending_spell(st)
+    sent, send = collector()
+    authsrv.land_skill(send, st, 10, a, 0)
+    ops = [(op, v[:3]) for op, v, _l in sent]
+    applies = [v for op, v, _l in sent if op == authsrv.GAME_SMSG_EFFECT_APPLY]
+    check(ops[0] == (INT, [agents.GV_SKILL_FINISHED, 10, 0])
+          and applies and applies[0][:2] == [PLAYER, DAZED_C] and applies[0][4] == authsrv._f32(8.0)
+          and stops(sent, PLAYER) == [agents.GV_SKILL_STOPPED, agents.GV_INTERRUPTED]
+          and authsrv.is_dazed(st, PLAYER) and cast["e5_sent"],
+          "through the real land_skill: [58, 10, 0], 0x0042 [me, 485, r, buff, 8.0], the word, "
+          "then the player's Javelin in activation takes the victim run -- Dazed for 8 s "
+          "(its next spells x2)", f"{ops}")
+    # THE KNOWN-BAD ARM: the flag off -- the icon and the bit alone.
+    authsrv.DAZED = False
+    st = fresh_state()
+    hostile(st, 10, (50.0, 0.0))
+    cast = pending_spell(st)
+    cond_on(st, DAZED_C)
+    sent, send = collector()
+    res = authsrv.dazed_interrupt(send, st, 0, PLAYER, 10)
+    off = authsrv.dazed_activation(st, PLAYER, ORB_J, 2.0)
+    authsrv.apply_condition(send, st, PLAYER, DAZED_C, 9.0, 12, 0, HAZE, by_agent=10)
+    check(res is None and off == 2.0 and not stops(sent, PLAYER) and not cast["e5_sent"]
+          and authsrv.is_dazed(st, PLAYER),
+          "--no-dazed: the condition is up, the spell keeps its 2.0 and nothing interrupts it "
+          "(the reading every run before 2026-09-27 made)")
+    authsrv.DAZED = True
+    src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+    i_press = src.index("def handle_skill_press(")
+    i_eat, i_act = src.index("def enemy_attack_tick("), src.index("def ally_cast_tick(")
+    i_ip, i_ib = src.index("def interrupt_player("), src.index("def interrupt_body(")
+    i_da = src.index("def dazed_activation(")
+    check(src.count("activation = dazed_activation(state, agent_id, skill_id, activation)") == 2
+          and src.count("activation = dazed_activation(state, PLAYER_AGENT_ID, skill_id, activation)") == 1
+          and src.index("activation = signet_activation(state, PLAYER_AGENT_ID, skill_id, activation)", i_press)
+          < src.index("activation = dazed_activation(state, PLAYER_AGENT_ID, skill_id, activation)", i_press)
+          < src.index("e5_at = begin + activation", i_press)
+          and i_eat < src.index("activation = dazed_activation(state, agent_id, skill_id, activation)")
+          < i_act < src.rindex("activation = dazed_activation(state, agent_id, skill_id, activation)")
+          and src.count("mode == INTERRUPT_MODE_SPELL") == 2
+          and i_ip < src.index("mode == INTERRUPT_MODE_SPELL") < i_ib
+          < src.rindex("mode == INTERRUPT_MODE_SPELL")
+          and src.count("mode == INTERRUPT_MODE_SKILL") == 2
+          and src.count('mode in ("action", "attacking")') == 2
+          and src.count("dazed_interrupt(send, state, conn_id, ") == 5    # four sites + the def
+          and "GV_CASTTIME" not in src[i_da:src.index("def _hex_damage_slot(")]
+          and src.index("push_regen(send, state, target_id, conn_id)", src.index("def apply_condition("))
+          < src.index("if condition_id == DAZED_ID:", src.index("def apply_condition(")),
+          "the source: the three activation sites behind signet_activation (the press between it "
+          "and the E5 clock; enemy_attack_tick; ally_cast_tick); mode 'spell' in both cast "
+          "branches and in neither swing gate (B2's two locks intact); four dazed_interrupt sites "
+          "(land_swing, hit_enemy, land_swing_on_body, apply_condition behind its push_regen; 5 "
+          "with the def); "
+          "property 61 still never sent")
+finally:
+    (authsrv.DAZED, authsrv.INTERRUPTS, authsrv.ENERGY, authsrv.NPC_FOLLOW, authsrv.BLIND,
+     authsrv.ARMOUR_TERM) = saved
 
 sys.exit(LEDGER.verdict())

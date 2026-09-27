@@ -241,10 +241,13 @@ def armour_energy_bonus(keys):
 
 
 def player_armour_at(location_key, damage_type, EQUIP_ARMOUR,
-                     ARMOR_RATING_MODIFIER, ARMOR_VS_TYPE_MODIFIER, level=None):
+                     ARMOR_RATING_MODIFIER, ARMOR_VS_TYPE_MODIFIER, level=None,
+                     shield=0.0, cracked=0.0):
     """The player's effective AR at one body location against `damage_type`
     (an id or a class name -- armour_of_piece), or None if unarmoured;
-    `level` is the wearer's, for a 573 piece."""
+    `level` is the wearer's, for a 573 piece. `shield` is the off-hand's
+    contribution (core, uncapped) and `cracked` the wearer's Cracked Armor
+    penalty, both through net_armour (studies/skills 62)."""
     if not EQUIP_ARMOUR:
         return None
     try:
@@ -256,12 +259,12 @@ def player_armour_at(location_key, damage_type, EQUIP_ARMOUR,
     if got is None:
         return None
     rating, bonus = got
-    return rating + bonus_armour(bonus)
+    return net_armour(rating, bonus, shield, cracked)
 
 
 def player_spell_armour(EQUIP_ARMOUR, ARMOR_RATING_MODIFIER,
                         ARMOR_VS_TYPE_MODIFIER, location_key=None,
-                        damage_type="elemental"):
+                        damage_type="elemental", cracked=0.0):
     """The rating an incoming armour-respecting spell resolves against --
     against `damage_type`, the spell's OWN (a type id from the client's
     fourteen, or a class name; "elemental" for a spell with no type read,
@@ -297,7 +300,7 @@ def player_spell_armour(EQUIP_ARMOUR, ARMOR_RATING_MODIFIER,
     for key, _w in HIT_LOCATION_ODDS:
         ar = player_armour_at(key, damage_type, EQUIP_ARMOUR,
                               ARMOR_RATING_MODIFIER,
-                              ARMOR_VS_TYPE_MODIFIER)
+                              ARMOR_VS_TYPE_MODIFIER, cracked=cracked)
         if ar is not None:
             ratings[key] = ar
     if not ratings:
@@ -340,9 +343,10 @@ def spell_armour_for(skill_id, SPELL_ARMOUR, ARMOUR_TERM,
                      ARMOUR_RESPECTING_MEANS, SCALE_MEANS_DAMAGE,
                      EQUIP_ARMOUR, ARMOR_RATING_MODIFIER,
                      ARMOR_VS_TYPE_MODIFIER, SPELL_LOCATION_ROLL=False,
-                     damage_type="elemental"):
+                     damage_type="elemental", cracked=0.0):
     """The rating an incoming cast of `skill_id` scales by ON THE PLAYER, or
-    None (unscaled).
+    None (unscaled). `cracked`: the player's Cracked Armor penalty, into the
+    bonus category ahead of the cap (net_armour).
 
     None means "deal the stated amount": the label is armour-ignoring, or
     the term is off, or the player wears nothing. Read from the same
@@ -356,7 +360,7 @@ def spell_armour_for(skill_id, SPELL_ARMOUR, ARMOUR_TERM,
     return player_spell_armour(
         EQUIP_ARMOUR, ARMOR_RATING_MODIFIER, ARMOR_VS_TYPE_MODIFIER,
         location_key=roll_hit_location() if SPELL_LOCATION_ROLL else None,
-        damage_type=damage_type)
+        damage_type=damage_type, cracked=cracked)
 
 
 def bonus_armour(net):
@@ -378,6 +382,34 @@ def bonus_armour(net):
     second bonus ever lands on a piece, this is the line to settle first.
     """
     return float(net) if net <= BONUS_ARMOUR_CAP else float(BONUS_ARMOUR_CAP)
+
+
+def net_armour(rating, bonus, shield=0.0, cracked=0.0, floor=ARMOR_BASELINE):
+    """Steps 1 and 2 of GWW's "Armor calculation" in one place (DESKWORK-D6
+    step 5, 2026-09-27; studies/skills 62): the CORE -- the piece's rating
+    plus the shield's contribution, uncapped -- plus the Bonus category
+    through its cap, with a NEGATIVE bonus (Cracked Armor's 20) summed INTO
+    the category BEFORE the cap, and the whole floored at 60 or at the core
+    when the core is lower.
+
+    WIKI: GWW "Cracked Armor" (rev. 2659695) -- "-20 armor (minimum 60)",
+    Notes: "Cracked Armor takes effect before the armor cap", and its bug
+    note that a +46 boost leaves it without effect (46 - 20 = 26 caps to
+    25, the 25 the boost gave alone -- exactly what summing it ahead of the
+    cap produces); GWW "Effect stacking" (rev. 2739765), the armour-cap row:
+    "Negative bonus armor can only reduce your armor to 60, or to your core
+    armor rating if that is below 60". Penetration (step 3) and the casting
+    penalty (the wiki's step 4) are the CALLER's, after this. With `cracked`
+    0 this is exactly rating + bonus_armour(bonus) + shield, the sum every
+    caller made before. RECONSTRUCTION, said: that the shield counts as core
+    for the floor (it sits outside the cap here since SLICE-H9; the page
+    names no shield), and every number -- no Cracked Armor was ever inflicted
+    on any live tape (the Isle's two are environmental, hexjoin C1)."""
+    core = float(rating) + float(shield)
+    total = core + bonus_armour(float(bonus) - float(cracked))
+    if cracked > 0.0:
+        total = max(total, min(float(floor), core))
+    return total
 
 
 def roll_hit_location():

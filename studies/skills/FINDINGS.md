@@ -9343,3 +9343,132 @@ carries field3 == its f32 (23/23); an environmental one carries field3 0 (38/38)
   end that landed nothing on a target dying within 0.13 s.
 - **Owed**: a loopback run to watch the client draw the twin and the Burning icon on a foe
   under the per-foe rule (a live cast would settle the comparison; a loopback cannot).
+
+## 62. SKILLS-CD — Cracked Armor and Dazed: the last two conditions to do something, from the conditions' own records and the wiki's sentences; one inflicter each so a run can reach them (2026-09-27)
+
+**Status: SHIPPED, behind two revert flags, RECONSTRUCTION throughout.** DESKWORK-D6 step 5
+(B4). Build 38797. Locks: `toolkit/authsrv/test_mechanics.py` §39–40 (40 checks, floor 297 →
+337; the real `land_swing`, `land_swing_on_body`, `hit_enemy`, `body_spell_terms`,
+`enemy_attack_tick`, `apply_condition` and `land_skill`); `test_weapons.py` §26's two
+penetration literals re-pinned; `test_content.py` (the two rows). Rows: `content/world.toml`
+`skill_effect.2059` / `.799`, **client-table** provenance (`toolkit/clientscan/skilldesc.py`,
+both AGREE_PROGRESSION). `SKILLS-CD<n>` = a finding of this section; convention:
+[studies/idents/CONVENTION.md](../idents/CONVENTION.md).
+
+**What the tape has, and has not.** No skill inflicted either condition on any of the 96
+live connections. The corpus's one Dazed and two Cracked Armors are the Isle's environmental
+applies (§61.3 L4 / hexjoin C1: `0x0042` with field3 0, then `[6, 25, 28]` for Dazed and
+`[6, 25, 29]` for Cracked Armor on the wearer), and **no tape shows either modifier at work** —
+no doubled cast bar, no armour number moved by a -20. So nothing here is OBSERVED beyond the
+two conditions' own client records, which the records lane read on 38797 (`d6U-records-dump`):
+**Cracked Armor 2077 — scale 20/20, bonus 60/60; Dazed 485 — scale 200/200**, both with the
+placeholder duration 20/20 that every condition carries (§ effects.py: a condition's applied
+duration is the inflicter's). The two records are not in the served skills table (they are
+type 8, never a bar's), so the numbers are constants in `authsrv.py` with that citation, not
+reads. The rules are WIKI (the wiki lane's Q1, `d6R-wiki.md`), each with its revision id below.
+
+### 62.1 SKILLS-CD1 — Cracked Armor: -20 INTO the bonus category before its cap, before the penetration, floored at 60 or the core
+
+- **WIKI**, GWW "Cracked Armor" rev. 2659695: "-20 armor (minimum 60)"; Notes: "Cracked Armor
+  takes effect before the armor cap"; the bug note: no effect under a boost of "+46 or more".
+  GWW "Effect stacking" rev. 2739765, the armour-cap row: "Negative bonus armor can only
+  reduce your armor to 60, or to your core armor rating if that is below 60."
+- **The arithmetic is one function**, `combatmath.net_armour(rating, bonus, shield, cracked,
+  floor)`: core = the piece's rating + the shield's contribution (uncapped); total = core +
+  `bonus_armour(bonus - cracked)`; floored at `min(60, core)` when cracked. The bug note falls
+  out of the order: 46 - 20 = 26 caps to the same 25 the boost gave alone, while +40 - 20 = 20
+  loses five of the capped 25 — subtracting after the cap could not produce the note. With
+  `cracked` 0 it is byte for byte the sum every caller made before. That the SHIELD counts as
+  core for the floor is RECONSTRUCTION (it sits outside the cap here since SLICE-H9; the page
+  names no shield).
+- **The player**: `player_armour_at` / `player_spell_armour` / `spell_armour_for` take `state`
+  and pass the shield and the penalty INTO the leaf (before: the leaf capped the bonus and the
+  wrapper added the shield after). Penetration (`penetrated_armour`) stays behind it at every
+  site and the casting penalty (Healing Signet's -40) behind both — the order
+  `casting_armour_penalty`'s own quote gives ("applied after the armor cap and the effects of
+  Cracked Armor and armor penetration"), which is what corrected D6's "where Healing Signet's
+  -40 enters". **The default set's numbers**: a location's physical rating is the piece's 25 +
+  its 20 vs. physical = 45, and Cracked eats the bonus (25); a hostile's swing then deals 18
+  instead of 12. **The elemental floor**: the same set's elemental core is 25, below 60, so a
+  core below 60 is its own floor and a spell on the Cracked player meets the SAME rating —
+  Cracked Armor moves nothing there. A real consequence of the wiki's rule on a low-level
+  set, and a check pins it rather than a "-20 everywhere" that would have been wrong.
+- **Bodies**: `cracked_body_armour(state, tid, rating)` at the five sites that read a body's
+  rating — `body_spell_armour`, `land_swing_on_body`, `hit_enemy`, `scythe_extra_hit`, the
+  preparation splash — ahead of each site's `penetrated_armour`: a Javelin's 25 % on a Cracked
+  100-AR body reads 60 = (100 - 20) × 0.75, not 55. `hit_enemy` keeps reading the row's
+  `armor_rating` directly (an armour-less row stays armour-less against the player's swing
+  while a body's swing would use the creature formula — the standing inconsistency d6R-server
+  named; routing it through `body_armour_rating` would move fabricated fixtures' numbers and
+  is NOT done here). The player's spells on foes are armour-free (the standing `hit_enemy`
+  exact gap), so Cracked does nothing there either.
+- **The client's panel**: armour has no property on the wire (RESKIN 1766-1771), so whether the
+  client subtracts the 20 in its own panel is UNVERIFIED and a run's readout.
+
+### 62.2 SKILLS-CD2 — Dazed: spells x2, a landed ATTACK interrupts the spell in activation, and Dazed landing interrupts it at once
+
+- **WIKI**, GWW "Dazed" rev. 2667526: "While Dazed, you take twice as long to cast spells, and
+  all your spells are easily interrupted." — SPELLS: a signet, a shout, an attack skill keep
+  their time and are not "easily interrupted". GWW "Easily interruptible" rev. 2610199: "any
+  successful attack will interrupt the skill during its activation" — an ATTACK, which narrows
+  the code's own older phrasing "any hit interrupts a spell" (authsrv.py's 5544 / 19673 notes):
+  a spell's damage word does not. The Dazed page's bug note: "Dazed will interrupt spells upon
+  application, regardless of the source of the condition."
+- **x2** (`DAZED_ACTIVATION_FACTOR`, the record's 200 %) at the three activation sites right
+  behind B2's `signet_activation` — the press (between `skill_timing` and the E5 clock),
+  `enemy_attack_tick`, `ally_cast_tick` — for a skill whose record type is a spell's
+  (`combatmath.is_spell_type`: hex, spell, enchantment, ward, well, item and weapon spell); the
+  recharge anchors take the doubled value (Restore Condition lands at +1.5 instead of +0.75,
+  its anchor +0.75 later). **Property 61 `GV_CASTTIME` is never sent**: whether the client
+  stretches its own bar for a Dazed player is UNVERIFIED (the `cast_modifier_order` probe,
+  skillcast §, is unrun) — the same open question B2's Rust left, now with a second witness
+  to look for.
+- **"Easily interrupted"** is a new skill-less mode `"spell"` in both cast branches of
+  `interrupt_player` / `interrupt_body` (a SPELL in activation: not an attack skill, not a
+  signet, never either swing gate — B2's mode `"skill"` locks are intact), fired by
+  `dazed_interrupt` at the three sites where an attack LANDS: `land_swing` (the player as
+  victim, behind the damage word and behind the attack skill's own interrupt when its row
+  carries one), `hit_enemy` (a body as victim, gated `swing and exact is None` — a swing, a
+  skill strike or an arrow, never a spell's exact) and `land_swing_on_body`. The interrupter
+  named is Dazed's own id 485, whose row carries no disable, so the run is retail's victim run
+  less the second E5: `[8,0] E5(R) [59] E2 [35]` (the Disrupting Chop witness's shape,
+  interruptjoin). A body's spell word at a Dazed caster interrupts nothing (the control).
+- **On application** — the bug note — at `apply_condition`, behind its batch (`0x0042`,
+  `0x00F1`, the regen), through the same helper: the spell in activation stops the instant
+  Dazed lands, whatever inflicted it; `by_agent` is threaded from `cast_tick` and `land_skill`
+  for the log line and is "?" elsewhere. A SHORTER re-application (nothing on the wire) does
+  not re-fire it — UNVERIFIED, the quieter reading.
+
+### 62.3 SKILLS-CD3 — the inflicters, and why not the spec's
+
+- **Shell Shock 2059** (Cracked Armor): a Spell, Air Magic, args = 6 with the word 10..30 in the
+  scale slot and Cracked Armor 5..20 s in the bonus slot — Gash's shape, through the existing
+  `skill_condition` join with zero join code; the 25 % penetration is the Air Magic rule
+  `skill_base_penetration` already applies to an attribute-8 lightning spell (weapons §35).
+  NOT modelled, said in the row: the Overcast clause ("strikes adjacent foes"; the server has no
+  Overcast). Chosen over the spec's example Weaken Armor 159, whose only number sits in the
+  DURATION slot (`_condition_terms` reads the scale and bonus slots — a duration-slot condition
+  would be join code) and whose "foes adjacent to your target" the join does not reach.
+- **Beguiling Haze 799** (Dazed): a Spell, args = 2 with Dazed 3..9 s in the scale slot (the
+  duration slot repeats the numbers with its bit clear). The one UNCONDITIONAL Dazed inflicter
+  among the sixteen whose other clause is ignorable (d6R-records §2: the rest hang the Dazed on
+  a knocked-down, moving or casting target, an enchantment, a lead attack, or are traps and
+  areas). NOT modelled, said: the Shadow Step (the caster does not move).
+- **Provenance is the CLIENT's, not the wiki's**, and that is a departure from B1–B3's rows:
+  the numbers are the records' slots and the labels are the records' own description text,
+  refereed by `skilldesc.py --row` (both AGREE_PROGRESSION), so the rows say `source =
+  "client-table"` with the extractor and the build, the Frenzy-346 hand-row shape. The two
+  GWW pages were not read this session and are not cited.
+
+### 62.4 What stays open
+
+- Whether the client's own cast bar doubles for a Dazed player (property 61 never sent) and
+  whether its panel shows the -20 — both a harness run's readout: a hostile with Beguiling
+  Haze or Shell Shock on its bar at the player is the exposure.
+- The shield as core for the floor (RECONSTRUCTION); a shorter Dazed re-application not
+  re-firing the on-application interrupt (UNVERIFIED); which attacks retail counts as
+  "successful" for a Dazed caster — a block or a miss is not one here, as the wiki's word
+  says, and a spell's damage is not one, but a preparation's splash and a scythe's extra hit
+  are not attack LANDINGS on this server and do not fire it (the riders' rule).
+- A condition on a FOE still draws no `[6, foe, id]` here (§61.4's open item) — Dazed's
+  `[6, 25, 28]` and Cracked Armor's `[6, 25, 29]` are the ids, unsent.

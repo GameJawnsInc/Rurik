@@ -472,3 +472,34 @@ def signet_activation_factor(state, agent_id):
         if mult:
             factor *= float(mult)
     return factor
+
+
+# ---- DESKWORK-D6 step 5 (B4, 2026-09-27, studies/skills 62): CRACKED ARMOR AND DAZED
+#
+# The two conditions the substrate carried as icon + the 0x0002 bit alone
+# (effects.py's "Dazed and Cracked Armor are not [modelled]"). What each DOES is
+# the wearer's business and is read here, purely: a condition is an episode
+# whose skill IS the condition's own id (apply_condition's shape, 478..486 and
+# 2077), so "is the agent Dazed" is one scan of its open episodes. The numbers
+# and the sites are authsrv's (CRACKED_ARMOUR_PENALTY / FLOOR, combatmath.net_
+# armour; DAZED_ACTIVATION_FACTOR, dazed_activation, dazed_interrupt).
+CRACKED_ARMOR_ID = effects.CONDITION_BY_NAME["Cracked Armor"]
+DAZED_ID = effects.CONDITION_BY_NAME["Dazed"]
+
+
+def has_condition(state, agent_id, condition_id):
+    """True while an open episode on the agent IS that condition."""
+    table = state.get("effects")
+    if not table:
+        return False
+    return any(ep["skill"] == condition_id for ep in table.on_agent(agent_id))
+
+
+def is_cracked(state, agent_id):
+    """Cracked Armor (2077) is up on the agent."""
+    return has_condition(state, agent_id, CRACKED_ARMOR_ID)
+
+
+def is_dazed(state, agent_id):
+    """Dazed (485) is up on the agent."""
+    return has_condition(state, agent_id, DAZED_ID)

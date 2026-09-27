@@ -1288,9 +1288,10 @@ try:
            "them (ENG-B3)")
     paa = ast.get_source_segment(SRC, _func(TREE, "player_armour_at"))
     led.ok("armour_item_id_at" in _calls(_func(TREE, "player_armour_at"))
-           and 'state.get("items")' in paa and "return 0.0 + offhand_armour(damage_type, state)" in paa,
+           and 'state.get("items")' in paa
+           and "return combatmath.net_armour(0.0, 0.0, shield=offhand_armour(damage_type, state)," in paa,
            "LOCK: player_armour_at reads the item store and a removed piece leaves a bare location "
-           "(ENG-B5)")
+           "(ENG-B5; since B4 the bare 0.0 and the shield go through net_armour, studies/skills 62)")
     with open(os.path.join(HERE, "test_dispatch.py"), encoding="utf-8") as f:
         TD = f.read()
     led.ok("    0x004F: " not in TD and "    0x0030: " not in TD and "    0x0072: " not in TD,

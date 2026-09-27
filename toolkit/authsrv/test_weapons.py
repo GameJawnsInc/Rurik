@@ -665,8 +665,8 @@ def section_skill_shots():
     COND = ("a condition", 5.0)
     authsrv.attack_skill_terms = lambda state, sid, rank, tid, bonus, conn, who: (bonus, COND, False)
     applied = []
-    authsrv.apply_condition = lambda send, state, tid, cond, dur, rank, conn, sid=None: \
-        applied.append((tid, cond, dur, sid))
+    authsrv.apply_condition = lambda send, state, tid, cond, dur, rank, conn, sid=None, by_agent=None: \
+        applied.append((tid, cond, dur, sid))            # by_agent: B4's Dazed log line, unused here
 
     def press_and_e5(distance, skill=394, armour=True):
         authsrv.apply_party_character({"player_weapon": "starter_bow"})
@@ -1083,8 +1083,8 @@ def section_dual_shot():
     COND = ("a condition", 5.0)
     authsrv.attack_skill_terms = lambda state, sid, rank, tid, bonus, conn, who: (bonus, COND, False)
     applied = []
-    authsrv.apply_condition = lambda send, state, tid, cond, dur, rank, conn, sid=None: \
-        applied.append((tid, cond, dur, sid))
+    authsrv.apply_condition = lambda send, state, tid, cond, dur, rank, conn, sid=None, by_agent=None: \
+        applied.append((tid, cond, dur, sid))            # by_agent: B4's Dazed log line, unused here
 
     def press_and_e5(distance, skill, rng=(8, 8)):
         authsrv.apply_party_character({"player_weapon": "starter_bow"})
@@ -2483,9 +2483,9 @@ def section_bow_classes():
         authsrv.BOW_CLASSES = True
         src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
         sargs = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
-        check('armour = penetrated_armour(agent.get("armor_rating"), agents.PLAYER_WEAPON,' in src
+        check('armour = penetrated_armour(cracked_body_armour(state, target_id, agent.get("armor_rating")),' in src
               and "armour = penetrated_armour(armour, (body_weapon_items(agent) or (None,))[0]," in src
-              and 'arm = penetrated_armour(foe.get("armor_rating"), agents.PLAYER_WEAPON)' in src
+              and 'arm = penetrated_armour(cracked_body_armour(state, aid, foe.get("armor_rating")),' in src
               and "_rate = weapon_rate_key(agents.PLAYER_WEAPON)" in src
               and '"--no-bow-classes"' in sargs,
               "the penetration sits at hit_enemy's rating read, at a body's swing on the player "

@@ -480,7 +480,7 @@ def main():
                 authsrv.SPELL_LOCATION_ROLL)
     lopsided = {"warrior_body": 25.0, "warrior_legs": 25.0}
     try:
-        cm.player_armour_at = lambda key, physical, *_a: lopsided.get(key)
+        cm.player_armour_at = lambda key, physical, *_a, **_k: lopsided.get(key)   # **_k: B4's cracked=
         cm.roll_hit_location = lambda: "warrior_head"
         bare = authsrv.spell_armour_for(194)
         cm.roll_hit_location = lambda: "warrior_body"
@@ -547,7 +547,7 @@ def main():
     # = 1/64, so 20 becomes 0.31 and truncates to nothing -- still sends its
     # damage word, as -0.0, and the pool does not move. Retail's -0.0 words
     # are the witness (F46.7). Not "fully converted": no conversion is open.
-    st_z, dmg_z = _cast(194, spell_armour_for=lambda _sid: 300.0)
+    st_z, dmg_z = _cast(194, spell_armour_for=lambda _sid, *_a: 300.0)   # *_a: B4's state
     check(len(dmg_z) == 1 and dmg_z[0] == 0.0 and math.copysign(1.0, dmg_z[0]) < 0
           and st_z["player_health"] == 100.0,
           "Flare grazing to nothing still sends [16, player, caster, -0.0] and "

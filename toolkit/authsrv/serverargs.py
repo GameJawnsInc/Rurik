@@ -2308,6 +2308,16 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "is ONE comparison, the caster's energy against the TARGET's, "
                          "applied to every foe struck (the wiki's wording). Retail decided "
                          "it PER FOE (647.300: the target single, an adjacent foe twin).")
+    ap.add_argument("--no-cracked-armor", action="store_true",
+                    help="studies/skills 62 REVERT: Cracked Armor (2077) is an icon and the "
+                         "0x0002 bit alone -- no -20 armour before the cap and the "
+                         "penetration, no floor of 60, on the player or on a body; the "
+                         "reading every run before 2026-09-27 made.")
+    ap.add_argument("--no-dazed", action="store_true",
+                    help="studies/skills 62 REVERT: Dazed (485) is an icon and the 0x0002 bit "
+                         "alone -- a spell activates at its table time and neither a landed "
+                         "attack nor Dazed's own landing interrupts it; the reading every "
+                         "run before 2026-09-27 made.")
     ap.add_argument("--no-spell-projectiles", action="store_true",
                     help="studies/weapons 36 / 37 REVERT: a projectile SPELL (Flare, "
                          "Lightning Orb, Dancing Daggers) lands its damage at the E5 (the "

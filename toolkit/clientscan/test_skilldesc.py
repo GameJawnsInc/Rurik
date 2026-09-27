@@ -971,7 +971,7 @@ if records is not None:
           f"the rest nothing (815)", dict(g))
     cbt = skilldesc.census_by_type(records, grades, rep)
     n_hand_14 = sum(1 for sid in hand_rows if sid in records and int(records[sid]["type_code"]) == 14)
-    check(cbt[5]["n"] == 287 and cbt[5]["nothing"] >= 270 and cbt[14]["modelled"] == n_hand_14
+    check(cbt[5]["n"] == 287 and cbt[5]["nothing"] >= 268 and cbt[14]["modelled"] == n_hand_14   # 269 since B4's two Spell hand rows (2059, 799)
           and cbt[6]["episode-only"] + cbt[6]["episode-refused"] + sum(
               1 for sid in hand_rows if sid in records and int(records[sid]["type_code"]) == 6) == 227,
           "by type: 270+ of 287 Spells resolve nothing; the type-14 modelled count is the hand rows' "
@@ -1152,9 +1152,9 @@ if records is not None:
     check(dt == {"AREA_BURST": 3, "AREA_CASTER": 6, "HEAL_PARTY": 2, "CHAIN_GATED": 3,
                  "CHAIN_STEP_ADVANCES": 1, "AREA_ONE_TARGET": 21, "CONDITION_BIT_CLEAR_REFUSED": 1,
                  "CONDITION_FLAT_CONSTANT": 1, "CONDITION_RIDER_ON_HIT": 2, "KNOCKDOWN_APPLIED": 5,
-                 "INDETERMINATE_SLOT": 1, "DURATION_UNMODELLED": 10, "CONDITION_UNNUMBERED": 2,
+                 "INDETERMINATE_SLOT": 1, "DURATION_UNMODELLED": 9, "CONDITION_UNNUMBERED": 2,
                  "LITERAL_DROPPED": 5, "CLAUSE_MOVE_SPEED": 1, "CLAUSE_KNOCKDOWN": 2,
-                 "CLAUSE_SHADOW_STEP": 4, "CLAUSE_INTERRUPT": 2, "CLAUSE_REMOVAL": 3,
+                 "CLAUSE_SHADOW_STEP": 3, "CLAUSE_INTERRUPT": 2, "CLAUSE_REMOVAL": 3,
                  "CLAUSE_ALSO_CASTER": 3, "CLAUSE_DISABLE": 1, "CLAUSE_DOUBLE_DAMAGE": 1,
                  "CLAUSE_CAST_SPEED": 1, "CLAUSE_RANGE": 4, "CLAUSE_REVEAL": 1, "CLAUSE_UNBLOCKABLE": 1},
           "MARKED, counted: 3 bursts spell_burst covers (187 189 1086), 6 caster-centred areas "
@@ -1164,12 +1164,13 @@ if records is not None:
           "knock-downs APPLIED (187 231 294 784 1086) with 2 still dropped (192's shower would fall "
           "for its 9 s, 3425's 'attacking foes' is a class the server cannot test), 167's Blind now "
           "a FLAT CONSTANT and 1033's Deep Wound the 1 bit-clear refusal (the 1 INDETERMINATE slot), "
-          "10 non-episode durations, 2 unnumbered conditions, 5 literal constants, and the dropped "
-          "clauses by kind: 4 shadow steps, 2 interrupts, 3 removals, 3 'you and', a disable, a "
+          "9 non-episode durations, 2 unnumbered conditions, 5 literal constants, and the dropped "
+          "clauses by kind: 3 shadow steps (10 and 4 until B4's Beguiling Haze 799 became a hand "
+          "row, studies/skills 62), 2 interrupts, 3 removals, 3 'you and', a disable, a "
           "double damage, 1996's cast and move slows, 4 half ranges, 2212's compass reveal, 1041's "
           "'cannot be blocked'", dict(dt))
     under = sorted(s for s in lrows_lift if set(lrows_lift[s]["tier_detail"]) & set(skilldesc.DETAILS))
-    check(len(under) == 49
+    check(len(under) == 48                    # 49 until B4's 799 left the tier (studies/skills 62)
           and sorted(set(lrows_lift) - set(under)) == [117, 191, 220, 286, 293, 959, 1043, 1120, 1404, 1686, 1762]
           and [s for s in sorted(lrows_lift) if "AREA_BURST" in lrows_lift[s]["tier_detail"]] == [187, 189, 1086]
           and [s for s in sorted(lrows_lift) if "AREA_CASTER" in lrows_lift[s]["tier_detail"]] == [183, 188, 840, 1041, 1113, 2212]
@@ -1180,7 +1181,7 @@ if records is not None:
           and [s for s in sorted(lrows_lift) if "CLAUSE_KNOCKDOWN" in lrows_lift[s]["tier_detail"]] == [192, 3425]
           and {"AREA_ONE_TARGET", "DURATION_UNMODELLED"} <= set(lrows_lift[192]["tier_detail"])
           and {"AREA_ONE_TARGET", "DURATION_UNMODELLED"} <= set(lrows_lift[197]["tier_detail"]),
-          "49 of 60 rows carry a mark (the lifted reading; 46 of the 57 the overlay ships); the eleven without one are the same single-clause templates "
+          "48 of 59 rows carry a mark (the lifted reading; 45 of the 56 the overlay ships; 49 of 60 until B4's Beguiling Haze 799 became a hand row); the eleven without one are the same single-clause templates "
           "as before SKILLS-LU (every new row rides a consumer that is named); AREA_BURST is exactly "
           "187 189 1086, AREA_CASTER 183 188 840 1041 1113 2212, HEAL_PARTY 287 2221, CHAIN_GATED 784 "
           "973 1033, CONDITION_RIDER_ON_HIT 435 1997, KNOCKDOWN_APPLIED 187 231 294 784 1086 with "

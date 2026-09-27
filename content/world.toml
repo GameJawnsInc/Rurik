@@ -3033,6 +3033,57 @@ Blossom's flag) through adjacent_player_spell / adjacent_body_spell, and by ener
 --no-spell-energy-bonus reverts the twin and the Burning; --energy-bonus-target-only is the \
 page's one comparison, the known-bad arm."""
 
+# CRACKED ARMOR 2077 AND DAZED 485 -- DESKWORK-D6 step 5 (B4, 2026-09-27, studies/skills/
+# FINDINGS.md 62). The two conditions get their mechanism in authsrv (Cracked Armor: -20 into the
+# bonus category ahead of its cap, before penetration, floored at 60 or the core --
+# combatmath.net_armour; Dazed: spells activate x2 and a landed ATTACK, or Dazed itself landing,
+# interrupts the spell in activation) and ONE inflicter each so a run can reach them, both
+# through the existing skill_condition join: the label names the condition, the slot's own
+# endpoints are the seconds, zero join code. Neither condition was ever inflicted by a skill on
+# any live tape (the Isle's are environmental), so the rows' provenance is the CLIENT's: the
+# record's slots and its own description text, refereed by skilldesc.py (AGREE_PROGRESSION on
+# every numbered slot) -- the GWW pages were not read this session and are not cited.
+[skill_effect.2059]
+scale_means = "Lightning damage"                  # 10..30, the scale slot (bit set) -- the word first
+bonus_scale_means = "Cracked Armor"               # 5..20 s, the bonus slot (bit set) -- then the condition
+damage_type = 4                                   # lightning ([damage_type.table]); Air Magic's 25 % rides skill_base_penetration
+[skill_effect.2059.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilldesc.py"
+build = 38797
+verified = """B4 (studies/skills 62). Client (38797, vault/client/2026-07-29_221c13772c7a): id 2059 \
+Shell Shock, type_code 5 (a Spell), profession 6, attribute 8 (Air Magic), 5 energy, 1.0 s \
+activation, 8 s recharge, TARGET BYTE 5, aoe_range 156, args = 6 (scale | bonus), scale 10->30, \
+bonus 5->20, duration 0 / 0, projectile 2077 (none). Its own description, resolved with textrec: \
+"Target foe is struck for %str1% lightning damage and has Cracked Armor for %str2% second[s]. \
+This spell has 25% armor penetration. If you are Overcast, this spell strikes adjacent foes." -- \
+skilldesc --row 2059: str1 -> scale AGREE_PROGRESSION 10/30 LIGHTNING_DAMAGE, str2 -> bonus_scale \
+AGREE_PROGRESSION 5/20 CONDITION_DURATION:Cracked Armor. The 25 % is the Air Magic rule \
+skill_base_penetration already applies to an attribute-8 lightning spell (studies/weapons 35). \
+NOT modelled, said: the Overcast clause (the server has no Overcast; the aoe_range is its). Chosen \
+over the spec's Weaken Armor 159, whose seconds sit in the DURATION slot (unread by \
+_condition_terms) and whose adjacent foes the join does not reach. Read by skill_damage (the word) \
+and skill_condition (the Cracked Armor) at the completion, the player's and a body's; the -20 \
+then meets the NEXT hit on the target (cracked_penalty / cracked_body_armour)."""
+
+[skill_effect.799]
+scale_means = "Dazed"                             # 3..9 s, the scale slot (bit set); the duration slot repeats it (bit clear)
+[skill_effect.799.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilldesc.py"
+build = 38797
+verified = """B4 (studies/skills 62). Client (38797): id 799 Beguiling Haze, type_code 5 (a Spell, \
+elite), profession 7 (Assassin), attribute 31 (Deadly Arts), 10 energy, 0.25 s activation, 20 s \
+recharge, TARGET BYTE 5, aoe_range 0, args = 2 (scale), scale 3->9, duration 3->9 (bit clear, the \
+same numbers), bonus 0 / 0. Its own description: "Shadow Step to target foe. That foe becomes Dazed \
+for %str1% second[s]." -- skilldesc --row 799: str1 -> scale AGREE_PROGRESSION 3/9 \
+CONDITION_DURATION:Dazed; flags CLAUSE_SHADOW_STEP, TARGET_FOE. NOT modelled, said: the Shadow \
+Step (the caster does not move; no teleport exists on this server). Chosen as the one UNCONDITIONAL \
+Dazed inflicter among the 16 (d6R-records) whose only other clause is ignorable; the others hang \
+the Dazed on a knock-down, a moving or casting target, an enchantment or a lead attack. Read by \
+skill_condition at the completion; a hostile's cast at the player puts Dazed on the player (its \
+spells x2, easily interrupted) -- the shape a harness run watches for the client's own bar."""
+
 # ---------------------------------------------------------------------------
 # THE OUTPOST HENCHMEN -- DESKWORK-D1 step 5 (2026-09-23). Three standing NPCs
 # in our served outpost (Ascalon City, map 148) that the party window offers for
