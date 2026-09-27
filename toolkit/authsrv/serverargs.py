@@ -2243,7 +2243,9 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "attacker's item deals (its 587 word) -- the reading every "
                          "run before 2026-09-19 made. With it on, a hostile bow "
                          "whose 587 reads 3 (cold) is not met by the pieces' "
-                         "+20 vs. physical.")
+                         "+20 vs. physical -- and (2026-09-27) a preparation's "
+                         "own word meets its own type (Kindle Arrows' fire the "
+                         "elemental 25), which this flag reads physical too.")
     ap.add_argument("--no-unmet-requirement", action="store_true",
                     help="WEAPONS-W4 REVERT: an item's 633 requirement is read and "
                          "printed at launch and costs nothing -- a weapon whose "
