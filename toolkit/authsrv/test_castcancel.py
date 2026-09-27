@@ -48,6 +48,13 @@ LEDGER = checks.Ledger("cast cancel", floor=44)   # 2026-09-12: +1 the queued dr
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
+# An ATTACK skill names its foe. Since the attack-target gate (2026-09-27) one
+# pressed at target 0 is refused with retail's #1934 and never casts, so the
+# Power Shot presses below name agent 40 -- a row these states do not hold,
+# test_castcycle 2b's convention: accepted, no approach walk, a whiff at the
+# strike. Nothing these sections measure (the cancel, the root, the queue)
+# reads the target.
+FOE = 40
 
 
 def _press(authsrv, send, state, skill=42, copy=7, target=0):
@@ -159,7 +166,7 @@ def section_attack_skills():
     authsrv.skill_timing = lambda sid: (1.0, 0.0, 3.0)
     authsrv._is_attack_skill = lambda sid: True
     try:
-        _press(authsrv, send, state, skill=394)            # begins NOW
+        _press(authsrv, send, state, skill=394, target=FOE)  # begins NOW
         sent.clear()
         authsrv.cancel_on_move(send, state, 0)
         check(not state["pending_casts"][0].get("cancelled"),
@@ -182,7 +189,7 @@ def section_attack_skills():
         authsrv._is_attack_skill = lambda sid: sid == 394
         authsrv.skill_timing = lambda sid: (2.0, 0.75, 8.0)
         _press(authsrv, send2, state, skill=105)           # activating
-        _press(authsrv, send2, state, skill=394)           # QUEUED behind it
+        _press(authsrv, send2, state, skill=394, target=FOE)  # QUEUED behind it
         sent2.clear()
         authsrv.cancel_on_move(send2, state, 0)
         marked = [c.get("cancelled") for c in state["pending_casts"]]
@@ -245,7 +252,7 @@ def section_attack_skill_roots():
         # a begun attack skill roots through its windup
         authsrv._is_attack_skill = lambda sid: True
         state = {"agents": {}}
-        _press(authsrv, send, state, skill=394)
+        _press(authsrv, send, state, skill=394, target=FOE)
         cast = authsrv.attack_skill_roots(state)
         check(cast is not None and cast["skill_id"] == 394,
               "a begun attack skill short of its strike is the cast that "
@@ -305,7 +312,7 @@ def section_attack_skill_roots():
         # with nothing withheld the strike releases nothing (retail 0 of 3:
         # the hold goes on the next input instead)
         state = {"agents": {}}
-        _press(authsrv, send, state, skill=394)
+        _press(authsrv, send, state, skill=394, target=FOE)
         sent.clear()
         _rewind(state, 1.0)
         authsrv.cast_tick(send, state, 0)
@@ -330,7 +337,7 @@ def section_attack_skill_roots():
         # the revert arm
         authsrv.ATTACK_SKILL_ROOT = False
         state = {"agents": {}}
-        _press(authsrv, send, state, skill=394)
+        _press(authsrv, send, state, skill=394, target=FOE)
         check(authsrv.attack_skill_roots(state) is None,
               "--no-attack-skill-root: nothing roots, the report is answered "
               "at once (the pre-run arm)")
@@ -689,7 +696,7 @@ def section_cancel_action_door():
     authsrv.skill_timing = lambda sid: (1.0, 0.0, 3.0)
     authsrv._is_attack_skill = lambda sid: True
     try:
-        _press(authsrv, send, state, skill=394)
+        _press(authsrv, send, state, skill=394, target=FOE)
         authsrv.cancel_action(send, state, 0)
         check(state["pending_casts"][0].get("cancelled") == "cancel action",
               "an attack skill mid-activation IS cancelled through this "

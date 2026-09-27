@@ -782,9 +782,15 @@ def section_cast_stop():
             # -- the console line IS the scorable record, so a test that
             # cannot see it cannot protect the telemetry.
             buf = io.StringIO()
+            # The attack arm names its foe (agent 40, a row the state does
+            # not hold -- no approach walk): since the attack-target gate
+            # (2026-09-27) an attack skill at target 0 is refused with
+            # retail's #1934 and never reaches the burst. The retail presses
+            # the arm is modelled on (SLICE-F20) named theirs.
             with contextlib.redirect_stdout(buf):
-                authsrv.handle_skill_press([0, 42, 7, 0], send, st,
-                                           0, authsrv.GAME_CMSG_USE_SKILL)
+                authsrv.handle_skill_press([0, 42, 7, 40 if attack else 0],
+                                           send, st, 0,
+                                           authsrv.GAME_CMSG_USE_SKILL)
             st["_console"] = buf.getvalue()
             return sent, st
         stops = lambda sent: [i for i, (op, _, _) in enumerate(sent)

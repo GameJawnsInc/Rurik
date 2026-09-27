@@ -198,6 +198,15 @@ REFUSAL_ENCRYPTED_NEIGHBOURS = tuple(range(1928, 1934)) + tuple(range(1994, 2001
 # only under --refusal-reasons (default OFF: the bare release, the shape
 # retail uses 3 of 43 for a refusal whose reason we cannot name).
 REFUSE_WEAPON_TYPE = 1985
+# THE ATTACK-TARGET GATE'S REASON (2026-09-27; authsrv.ATTACK_TARGET_GATE's
+# banner). 1934 is OBSERVED answering an attack skill pressed with TARGET 0:
+# 20260819T132414 :52606 t=238.496, skill 780, c2s 0x0027 [780, 0, 0, 0] ->
+# 0x005D #1934, 0x005E [1, 7], 0x00E2 [27, 780, 0], no E4. The live corpus
+# re-counted that day: 1 of 159 attack-skill presses carries target 0, and
+# #1934 answers 1 of that 1 and 0 of the 158 that name a target. Sent
+# always, as 1960 is -- the sentence is the observed one.
+REFUSE_INVALID_ATTACK_TARGET = 1934
+assert REFUSAL_REASONS[REFUSE_INVALID_ATTACK_TARGET] == "invalid_attack_target"
 assert REFUSAL_REASONS[REFUSE_NOT_ENOUGH_ADRENALINE] == "not_enough_adrenaline"
 assert REFUSAL_REASONS[REFUSE_NOT_ENOUGH_ENERGY] == "not_enough_energy"
 assert len(REFUSAL_REASONS) == REFUSAL_BLOCK[1] - REFUSAL_BLOCK[0] + 1

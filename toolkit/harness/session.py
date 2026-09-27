@@ -505,7 +505,9 @@ def parse_walk(text):
             # A walk verb for the same reason attack: is one (frames and
             # the episode overlap by construction), and NOT INPUT for the
             # reason control.request_skill records: no scripted key press
-            # has reached the bar on this rig.
+            # has reached the bar on this rig. An ATTACK skill must name its
+            # TARGET: the server refuses one pressed at 0 with retail's #1934
+            # (authsrv.ATTACK_TARGET_GATE, 2026-09-27).
             sid, _, tgt = arg.partition(",")
             try:
                 sid, tgt = int(sid, 0), int(tgt or "0", 0)
