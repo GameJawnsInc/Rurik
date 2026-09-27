@@ -4253,7 +4253,9 @@ def scythe_extra_hit(send, state, aid, conn_id, rank, bonus_damage, damage_mult,
     maximum, the word (WEAPONS-W3). `base` is the swing's base penetration
     (an attack skill's, studies/weapons 35). Returns the points dealt."""
     foe = state["agents"][aid]
-    armour = penetrated_armour(foe.get("armor_rating"), agents.PLAYER_WEAPON,
+    armour = penetrated_armour(creature_typed_rating(foe.get("armor_rating"), foe,
+                                                     player_damage_type()),
+                               agents.PLAYER_WEAPON,
                                base=base)                 # Q2 (0 for a scythe) + 35
     critical = False
     if PLAYER_SWING_DAMAGE and rank is not None and armour is not None:
@@ -13919,15 +13921,12 @@ def row_spell_armour(state, skill_id, tid):
                                             SCALE_MEANS_DAMAGE):
         return None
     row = state.get("agents", {}).get(tid) or {}
-    rating = body_armour_rating(row)
-    if rating is not None and TYPED_CREATURE_ARMOUR:
-        # a CREATURE Warrior's +20 meets physical damage only (WIKI + OBSERVED,
-        # combatmath.creature_physical_bonus): a spell of any other class takes
-        # it off. Only a spawned hostile carries the field; a party body wears
-        # armour (a hero's 573 base is 3 x level + 20 whatever the type).
-        _dt = spell_damage_type(skill_id)
-        if combatmath.damage_class(_dt if _dt is not None else "elemental") != "physical":
-            rating = float(rating) - float(row.get("armor_vs_physical") or 0.0)
+    # a CREATURE Warrior's +20 meets physical damage only (WIKI + OBSERVED,
+    # combatmath.creature_physical_bonus): a spell of any other class takes it
+    # off -- an untyped spell reads as elemental, as spell_armour_for reads it.
+    _dt = spell_damage_type(skill_id)
+    rating = creature_typed_rating(body_armour_rating(row), row,
+                                   _dt if _dt is not None else "elemental")
     return penetrated_armour(rating, None, base=skill_base_penetration(skill_id))
 
 
@@ -13958,9 +13957,26 @@ def row_spell_armour(state, skill_id, tid):
 # not 7), and so is the untyped creature formula (29 gives 4) --
 # TYPED_CREATURE_ARMOUR takes the Warrior's physical-only +20 off a spell
 # (combatmath's banner), and then all sixteen reproduce (test_weapons 31).
-# `--untyped-creature-armour` reverts that alone, for every spell caster.
+# `--untyped-creature-armour` reverts that alone, for every caster -- and,
+# since the same day, for every weapon hit (creature_typed_rating, test_weapons 32).
 PLAYER_SPELL_ARMOUR = True   # --player-spell-exact reverts: the player's spells deal their stated amount
-TYPED_CREATURE_ARMOUR = True  # --untyped-creature-armour reverts: a Warrior creature's +20 meets every spell
+TYPED_CREATURE_ARMOUR = True  # --untyped-creature-armour reverts: a Warrior creature's +20 meets every hit
+
+
+def creature_typed_rating(rating, row, damage_type):
+    """`rating` less a CREATURE Warrior's physical-only +20 (the row's
+    `armor_vs_physical`, combatmath.creature_physical_bonus) when the hit's
+    `damage_type` is not physical -- elemental, chaos, dark, holy. Unchanged
+    for a physical or an untyped hit, a row with no such part (a party body,
+    a content override, a fixture), None, or --untyped-creature-armour. The
+    one test a spell (row_spell_armour) and every weapon hit onto a row
+    (hit_enemy, scythe_extra_hit, land_swing_on_body) apply."""
+    if rating is None or not TYPED_CREATURE_ARMOUR:
+        return rating
+    part = float((row or {}).get("armor_vs_physical") or 0.0)
+    if not part or combatmath.damage_class(damage_type) in (None, "physical"):
+        return rating
+    return float(rating) - part
 
 
 def player_spell_amount(state, skill_id, tid, amount):
@@ -15741,6 +15757,16 @@ def body_damage_type(agent):
         if dt is not None:
             return dt
     return "physical"
+
+
+def player_damage_type():
+    """The 587 type of what the PLAYER swings or shoots -- body_damage_type's
+    reading for the player's own hands: the held weapon's type line, else
+    "physical"; "physical" with nothing equipped or under --no-typed-armour."""
+    if not TYPED_ARMOUR or not (EQUIP_WEAPON and agents.PLAYER_WEAPON):
+        return "physical"
+    dt = combatmath.item_damage_type(agents.PLAYER_WEAPON)
+    return dt if dt is not None else "physical"
 
 
 def requirement_banner(item, what="weapon", state=None):
@@ -19145,7 +19171,14 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     # WEAPONS-Q2: the hornbow's 10 % comes off the rating first (wiki step 3)
     # -- on top of the hit's BASE penetration (studies/weapons 35): an attack
     # skill's own or Strength's 1 % a rank, the larger; a plain swing's is 0.
-    armour = penetrated_armour(agent.get("armor_rating"), agents.PLAYER_WEAPON,
+    # 2026-09-27: a creature Warrior's +20 meets PHYSICAL damage only -- a wand's
+    # chaos or a staff's holy skips it (creature_typed_rating, the spell path's test).
+    # WIKI (the bonus is typed by DAMAGE, "vs. physical damage"), CORROBORATED on a
+    # spell (def 3113); for a WEAPON hit the corpus holds no witness -- NULL: 355
+    # non-physical weapon shots, none on a hostile Warrior (PLAN-LOG 2026-09-27).
+    armour = penetrated_armour(creature_typed_rating(agent.get("armor_rating"), agent,
+                                                     player_damage_type()),
+                               agents.PLAYER_WEAPON,
                                base=player_base_penetration(state, skill_id))
     _prep_scale = 1.0                   # WEAPONS-W2e: the arrow's own armour term
     if exact is not None:
@@ -26953,7 +26986,9 @@ def land_swing_on_body(send, state, agent_id, agent, tid, conn_id, bonus=0.0,
         return "blocked"
     dealt = float(row["max_health"]) * (PARTY_HIT_FRACTION if party
                                         else ENEMY_HIT_FRACTION)
-    armour = body_armour_rating(row)     # its rating, else the creature formula
+    armour = creature_typed_rating(body_armour_rating(row), row,    # its rating, else
+                                   body_damage_type(agent))      # the creature formula;
+    # a creature Warrior's physical-only +20 off for a staff's or wand's type (2026-09-27)
     armour = penetrated_armour(armour, (body_weapon_items(agent) or (None,))[0],
                                base=body_base_penetration(agent, skill_id))  # Q2 + 35
     if ARMOUR_TERM and armour is not None:
@@ -42895,9 +42930,9 @@ def main():
     if a.untyped_creature_armour:
         global TYPED_CREATURE_ARMOUR
         TYPED_CREATURE_ARMOUR = False
-        print("SPELLS: --untyped-creature-armour -- a Warrior creature's +20 meets every "
-              "spell as well as every swing, the reading every run before 2026-09-27 "
-              "made [the typed-creature-armour revert]", flush=True)
+        print("ARMOUR: --untyped-creature-armour -- a Warrior creature's +20 meets every "
+              "spell and every weapon hit whatever its type, the reading every run before "
+              "2026-09-27 made [the typed-creature-armour revert]", flush=True)
     if a.no_weakness_attributes:
         episodemods.WEAKNESS_ATTRIBUTES = False
         print("NO WEAKNESS ATTRIBUTES: Weakness cuts attack damage only; "
