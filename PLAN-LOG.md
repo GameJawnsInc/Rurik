@@ -28,6 +28,20 @@ move back.
 
 ---
 
+### The world-entry auto-select uses the same view rule -- 2026-09-27 -- **at map load the client picked a foe 765 u away on screen over one 381 u away behind the camera; creation order and nearest both predicted the other. No code change**
+
+**The question** (the entry below, "UNVERIFIED: ... whether the world-entry auto-selection uses the same rule"). At map load nothing has been input, so the camera looks along the spawn facing (east on map 148) and the layout alone decides what is on screen. Every earlier entry had the in-view foe also be the nearest one.
+
+**The layout was designed offline**, with the server's own `load_pathmap` (map 148, file 0x1B97D) and `population.enemy_spots`, searched for one foe near and behind and one far and in view with a walkable straight line to it (a proxy for no occlusion). The model reproduced every live placement this session, and this run's too: agent 10 at (9476, 7927), **381 u, bearing −157°**; agent 11 at (10576, 7927), **765 u, bearing −11°**. No layout on this map mirrors the ids, and none was needed: creation order was already refuted by `20260927T134632`, which picked 11.
+
+**`20260927T150135`: the first `0x00C1` was `[11, 0]`** -- the far foe on screen -- and the entry frame shows it with the selection marker, foe 10 out of frame. Pre-registered: `[11, 0]` = the view rule, `[10, 0]` = nearest, `[200, 0]` = neither eligible; void if 10 was on screen or 11 was not (it was not void).
+
+**OBSERVED, n=1 discriminating**, consistent with all nine other entries this session: the in-view nearer foe 2 of 2 in two-foe layouts, the lone foe in view in every single-foe run, and the HERO when the only foe stood 800 u behind (3 of 3). **UNVERIFIED:** whether entry reads the camera or the character facing (they coincide at map load; the revive pair below says camera for re-acquisition), and whether occlusion counts.
+
+**Edited:** studies/skills 38.5. **Tests:** doc linters.
+
+---
+
 ### A revived foe is re-acquired when it is ON SCREEN, not when it is near -- 2026-09-27 -- **the client's auto field takes a revived foe back at 800 u with the camera on it and not at 800 u with the camera turned away; distance, facing and movement held. Answers the known-bad entry's "whether distance gates that re-acquisition". No code change**
 
 **The question** (the entry below, "Also seen, not chased"): in every run the revived practice target went back into `0x00C1`'s auto field within 44 ms, except `20260927T134031`, where the player had walked past the corpse -- 209 u away, the foe behind the character and off screen. Distance, facing, view and movement had all changed at once.
