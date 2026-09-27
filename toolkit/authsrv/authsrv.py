@@ -15160,8 +15160,8 @@ SNARE_STATUS_BIT = True
 #   * SIGNET_ACTIVATION -- a `signet_activation_multiplier` wearer's SIGNET
 #     (type 7) activates that many times slower at the press (the player) and
 #     at a body's cast start; the recharge anchor takes the scaled value.
-#     Property 61 GV_CASTTIME is never sent: whether the client stretches its
-#     own bar is UNVERIFIED (the cast_modifier_order probe is unrun). Rust's
+#     The client's own bar gets the scaled time from property 61 at the announce
+#     (cast_time_word, retail's shape 3/3; 2026-09-27). Rust's
 #     Overcast clause (signet interrupt + disable) is NOT modelled -- the
 #     server has no Overcast.
 #   * HEX_SKILL_USE_CHAIN -- Panic: "When a foe hexed with Panic successfully
@@ -15449,9 +15449,9 @@ _HEX_END_NO_DAMAGE = set()
 #     body as victim) in the new skill-less mode "spell" (a SPELL in
 #     activation, never an attack skill, never a swing); and the page's bug
 #     note -- "Dazed will interrupt spells upon application, regardless of
-#     the source" -- at apply_condition, the instant it lands. Property 61
-#     GV_CASTTIME is never sent: whether the client stretches its own bar for
-#     a Dazed player is UNVERIFIED (the cast_modifier_order probe is unrun).
+#     the source" -- at apply_condition, the instant it lands. The client's own
+#     bar: WITHOUT a word it drew the record's 2 s over a Dazed 4 s cast (harness
+#     20260927T181940, OBSERVED); cast_time_word now sends property 61 at the announce.
 #     The interrupter named is Dazed's own id (485), whose row carries no
 #     disable. A shorter re-application (nothing on the wire) interrupts
 #     nothing: UNVERIFIED, the quieter reading.
@@ -15513,7 +15513,7 @@ def dazed_activation(state, agent_id, skill_id, activation):
         return activation
     print(f"[skills] agent {agent_id}'s spell {skill_id} activates x{DAZED_ACTIVATION_FACTOR:g} "
           f"under Dazed: {activation:.2f} -> {activation * DAZED_ACTIVATION_FACTOR:.2f} s "
-          f"(the client's own bar: UNVERIFIED, no property 61) [studies/skills 62]", flush=True)
+          f"(property 61 tells the client, cast_time_word) [studies/skills 62]", flush=True)
     return activation * DAZED_ACTIVATION_FACTOR
 
 
@@ -22294,6 +22294,48 @@ def cast_anim_msg(prop, caster, target, skill_id):
     return (GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [prop, caster, skill_id])
 
 
+# THE CAST-TIME WORD (2026-09-27; DESKWORK-D6's client run 20260927T181940). OBSERVED 3 of 3 on
+# 20260917T224104 :62557: when a cast's time differs from the skill record's activation, retail
+# sends 0x00A3 [61 GV_CASTTIME, caster, target, seconds] IMMEDIATELY AHEAD of the cast's [60]
+# announce, and the completion lands at that time -- skill 220 (record 0.75) at 0.375 s,
+# completion +0.383; 230 (1.0) at 0.5; 229 (2.0) at 1.0, completion +1.019; a body (117) casting at
+# the observer each time. The run that found the need: a Dazed player's 4.00 s Fire Storm drew
+# the client's own 2 s bar (full and fading at 2.9 s, gone at 3.7 s) because nothing told the
+# client the time had doubled. So a Dazed spell (x2) and a Rusted signet (x2) now carry the word
+# at the announce. RECONSTRUCTION for the PLAYER's own cast (retail's three are a body's) -- the
+# harness run checks the player's bar -- and for an untargeted cast, which rides 0x00A2 [61,
+# caster, seconds] by the channel-follows-target rule cast_anim_msg states (no witness).
+CAST_TIME_WORD = True                # --no-cast-time-word reverts: the record's bar, as before
+
+
+def cast_time_word(send, caster, target, skill_id, activation, who):
+    """Send property 61 ahead of a cast's [60] when `activation` is not the record's."""
+    if not CAST_TIME_WORD:
+        return False
+    if _is_attack_skill(skill_id):
+        # an ATTACK skill's time is the weapon's windup, not the record's activation
+        # (the attack-skill path), and retail's arrival burst carries no 61 (test_castcycle,
+        # 3 of 3); the three 61s on tape are all spells (220, 230, 229)
+        return False
+    try:
+        base = float(skill_timing(skill_id)[0])
+    except Exception:                                          # noqa: BLE001
+        return False
+    if activation is None or abs(float(activation) - base) < 1e-6:
+        return False
+    if target:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+             [agents.GV_CASTTIME, caster, target, _f32(float(activation))],
+             f"cast time {float(activation):.3f} s for {who}'s skill {skill_id} "
+             f"(the record's {base:.3f}) [61, OBSERVED shape]")
+    else:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+             [agents.GV_CASTTIME, caster, _f32(float(activation))],
+             f"cast time {float(activation):.3f} s for {who}'s untargeted skill {skill_id} "
+             f"(the record's {base:.3f}) [61, RECONSTRUCTION]")
+    return True
+
+
 # THE ATTACK-TARGET GATE (2026-09-27, PLAN-LOG "The attack-target gate"). An
 # ATTACK skill (type_code 14) pressed with TARGET 0 names no foe, and retail
 # refuses it at the press: 20260819T132414 :52606 t=238.496, c2s 0x0027
@@ -22366,10 +22408,10 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
     now = time.time()
     activation, aftercast, recharge = skill_timing(skill_id)
     # B2 (studies/weapons 43): a SIGNET under Rust activates x2 -- the E5 clock
-    # below reads the scaled value. The client's own bar: UNVERIFIED (no 61).
+    # below reads the scaled value; cast_time_word tells the client (property 61).
     activation = signet_activation(state, PLAYER_AGENT_ID, skill_id, activation)
     # B4 (studies/skills 62): a SPELL under Dazed activates x2 -- the E5 clock
-    # below reads it; the client's own bar is UNVERIFIED (no property 61).
+    # below reads it; cast_time_word tells the client (property 61, at the announce).
     activation = dazed_activation(state, PLAYER_AGENT_ID, skill_id, activation)
     # The skill's FAMILY, read once: it picks the animation property below
     # (50 vs 60) and rides the pending entry for the movement-cancel
@@ -22886,6 +22928,7 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
                   f"property 60 at the press, [48] rides its completion "
                   f"[SKILLS-IA]", flush=True)
         else:
+            cast_time_word(send, PLAYER_AGENT_ID, target, skill_id, activation, "the player")
             _op, _vals = cast_anim_msg(
                 agents.GV_ATTACK_SKILL_ACTIVATED if is_attack
                 else agents.GV_SKILL_ACTIVATED,
@@ -23087,6 +23130,9 @@ def begin_cast(send, state, cast, conn_id):
               f"property 60 at cast-begin, [48] rides its completion "
               f"[SKILLS-IA]", flush=True)
         return True
+    if math.isfinite(cast.get("e5_at", math.inf)) and cast.get("begin_at") is not None:
+        cast_time_word(send, PLAYER_AGENT_ID, cast.get("target"), skill_id,
+                       cast["e5_at"] - cast["begin_at"], "the player")
     _op, _vals = cast_anim_msg(
         agents.GV_ATTACK_SKILL_ACTIVATED if cast["attack"]
         else agents.GV_SKILL_ACTIVATED,
@@ -27086,6 +27132,8 @@ def enemy_attack_tick(send, state, conn_id):
                       f"instant skill {skill_id}: no property 60, [48] at the "
                       f"landing [SKILLS-IA]", flush=True)
             else:
+                cast_time_word(send, agent_id, cast_target, skill_id, activation,
+                               f"agent {agent_id}")
                 _op, _vals = cast_anim_msg(
                     agents.GV_ATTACK_SKILL_ACTIVATED if _atk
                     else agents.GV_SKILL_ACTIVATED,
@@ -27407,6 +27455,8 @@ def ally_cast_tick(send, state, conn_id):
                   f"instant skill {skill_id}: no property 60, [48] at the "
                   f"landing [SKILLS-IA]", flush=True)
         else:
+            cast_time_word(send, agent_id, target, skill_id, activation,
+                           f"party agent {agent_id}")
             _op, _vals = cast_anim_msg(agents.GV_ATTACK_SKILL_ACTIVATED if _atk
                                        else agents.GV_SKILL_ACTIVATED, agent_id,
                                        target, skill_id)
@@ -43994,6 +44044,11 @@ def main():
               "made -- except that the word lands on a foe hit inside the last "
               "ATTACK_INTERVAL too (the single word is restored, not the swing gate's "
               "swallow of a spell) [studies/weapons 42 revert]", flush=True)
+    if a.no_cast_time_word:
+        global CAST_TIME_WORD
+        CAST_TIME_WORD = False
+        print("[skills] --no-cast-time-word: no property 61 ahead of a modified cast -- "
+              "the client draws the record's bar, as before 2026-09-27", flush=True)
     if a.no_area_hexes:
         global AREA_HEXES
         AREA_HEXES = False

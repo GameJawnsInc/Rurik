@@ -2259,6 +2259,11 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "swing gate swallowed it. The revert restores the single word, "
                          "not the interval swallow. --no-spell-areas reverts it too (the "
                          "older flag wins).")
+    ap.add_argument("--no-cast-time-word", action="store_true",
+                    help="Send no property 61 GV_CASTTIME ahead of a cast whose time differs "
+                         "from the record's (a Dazed spell, a Rusted signet): the client draws "
+                         "the record's bar over the longer cast, as before 2026-09-27. Retail's "
+                         "shape is OBSERVED 3/3 (20260917T224104).")
     ap.add_argument("--no-area-hexes", action="store_true",
                     help="studies/weapons 43 REVERT: an area HEX (Deep Freeze, Ice Spikes, "
                          "Shadow of Fear -- the record's type 4 with target byte 16) opens "

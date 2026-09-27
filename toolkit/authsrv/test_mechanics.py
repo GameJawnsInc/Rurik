@@ -32,7 +32,7 @@ import effects      # noqa: E402
 import combatmath   # noqa: E402
 
 # Floor set from a real green run (39 checks, 2026-08-22; 99 checks, 2026-09-09 SKILLS-DW; 129 checks, 2026-09-10 SKILLS-BL; 153 checks, 2026-09-10 SKILLS-RC; 162 checks, 2026-09-10 SKILLS-MA).
-LEDGER = checks.Ledger("effect mechanics", floor=355)  # 2026-09-27 (the D6 client runs): +1 -- sec.37 one episode per skill (strongest_per_skill): two Rusts x2 not x4, Suffering and Shadow of Fear re-applied count once, two different skills still combine; measured 355; before that 2026-09-27 (the D6 review's repair): +17 -- sec.35 the cap that binds (M1) and the [44] at the apply through land_skill (HEX-2); sec.36 the four body gates through the real functions (M8); sec.37 the press and ally_cast_tick under Rust (M3); sec.38 the player's chain through the real press + E5 (M4); sec.39 200 AR (M2), the Core reading's arm (R34-3), the scythe and the splash (M9), the shield inside the leaf (R34-7); sec.40 the spell word on a Dazed caster (M7), the press and ally_cast_tick under Dazed (M3); the source locks through _lock (M13), main()'s eight flips pinned (M10); sec.16's heal-kill re-pinned to the whole death word + step-down (EV-2); MEASURED from the green run, 354 checks, floor 337 -> 354  2026-09-27 (later): +40, DESKWORK-D6 B4 sec.39-40 (Cracked Armor: -20 into the bonus category before the cap and the penetration, the floor, the player and the five body sites; Dazed: spells x2, a landed attack or Dazed itself landing interrupts the spell in activation, never a signet or a swing), from the green run  # 2026-09-27: +40, DESKWORK-D6 B2 sec.35-38 (Suffering's hex pips, Soothing Images' adrenaline block, Rust's explicit damage + signet x2, Panic's chain), from the green run  # 2026-09-26: +1, sec.16 (a HOSTILE's heal-kill under Deep Wound still pays the kill reward -- the control on hurt_agent_row's rule at heal_agent's door; the party arm is test_agentlife JARIN-S 5b), from the green run  # 2026-09-23: +11, SKILLS-MC sec.34 (Mend Condition: heal IF removed, the no-condition control, the other-ally byte, the revert), from the green run  # 2026-09-17: +5, RUN-SKILLS-WKL sec.33 + WKL1-2 (a cast that lifts Weakness heals at the weakened rank), from the green run  # 2026-09-17: +12, SKILLS-WK sec.31-32 (Weakness takes one off every attribute), from the green run  # 2026-09-16: +14, SLICE-F48 sec.8b (movement speed on the wire), from the green run  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
+LEDGER = checks.Ledger("effect mechanics", floor=358)  # 2026-09-27 (the cast-time word): +3 -- sec.41 property 61 ahead of a modified cast's [60] (the Dazed press, the Rusted untargeted signet, the attack skill that sends none, the revert; a Dazed hostile; the source); measured 358; before that 2026-09-27 (the D6 client runs): +1 -- sec.37 one episode per skill (strongest_per_skill): two Rusts x2 not x4, Suffering and Shadow of Fear re-applied count once, two different skills still combine; measured 355; before that 2026-09-27 (the D6 review's repair): +17 -- sec.35 the cap that binds (M1) and the [44] at the apply through land_skill (HEX-2); sec.36 the four body gates through the real functions (M8); sec.37 the press and ally_cast_tick under Rust (M3); sec.38 the player's chain through the real press + E5 (M4); sec.39 200 AR (M2), the Core reading's arm (R34-3), the scythe and the splash (M9), the shield inside the leaf (R34-7); sec.40 the spell word on a Dazed caster (M7), the press and ally_cast_tick under Dazed (M3); the source locks through _lock (M13), main()'s eight flips pinned (M10); sec.16's heal-kill re-pinned to the whole death word + step-down (EV-2); MEASURED from the green run, 354 checks, floor 337 -> 354  2026-09-27 (later): +40, DESKWORK-D6 B4 sec.39-40 (Cracked Armor: -20 into the bonus category before the cap and the penetration, the floor, the player and the five body sites; Dazed: spells x2, a landed attack or Dazed itself landing interrupts the spell in activation, never a signet or a swing), from the green run  # 2026-09-27: +40, DESKWORK-D6 B2 sec.35-38 (Suffering's hex pips, Soothing Images' adrenaline block, Rust's explicit damage + signet x2, Panic's chain), from the green run  # 2026-09-26: +1, sec.16 (a HOSTILE's heal-kill under Deep Wound still pays the kill reward -- the control on hurt_agent_row's rule at heal_agent's door; the party arm is test_agentlife JARIN-S 5b), from the green run  # 2026-09-23: +11, SKILLS-MC sec.34 (Mend Condition: heal IF removed, the no-condition control, the other-ally byte, the revert), from the green run  # 2026-09-17: +5, RUN-SKILLS-WKL sec.33 + WKL1-2 (a cast that lifts Weakness heals at the weakened rank), from the green run  # 2026-09-17: +12, SKILLS-WK sec.31-32 (Weakness takes one off every attribute), from the green run  # 2026-09-16: +14, SLICE-F48 sec.8b (movement speed on the wire), from the green run  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
 check = checks.adopt(LEDGER)
 
 FRENZY, RUSH, ROF, GLYPH, IGNITE, FAINT = 346, 319, 307, 200, 431, 135
@@ -2729,7 +2729,8 @@ try:
                                                  _idx(src, "    if a.no_signet_activation:", _idx(src, "\ndef main():")) + 160]),
           "the source: the three activation sites (the press between skill_timing and the E5 "
           "clock; enemy_attack_tick; ally_cast_tick) all pass through signet_activation, "
-          "property 61 is still never sent (the client's own bar: UNVERIFIED), main() flips "
+          "property 61 is not sent from signet_activation itself (cast_time_word sends it at the "
+          "announce, section 41), main() flips "
           "SIGNET_ACTIVATION = False under --no-signet-activation (M10)")
 finally:
     (authsrv.SIGNET_ACTIVATION, authsrv.ENERGY, authsrv.NPC_FOLLOW, authsrv.AREA_HEXES,
@@ -3501,9 +3502,89 @@ try:
           "branches and in neither swing gate (B2's two locks intact); four dazed_interrupt sites "
           "(land_swing, hit_enemy, land_swing_on_body, apply_condition behind its push_regen; 5 "
           "with the def); "
-          "property 61 still never sent; main() flips DAZED = False under --no-dazed (M10)")
+          "property 61 is not sent from dazed_activation itself (cast_time_word sends it at the "
+          "announce, section 41); main() flips DAZED = False under --no-dazed (M10)")
 finally:
     (authsrv.DAZED, authsrv.INTERRUPTS, authsrv.ENERGY, authsrv.NPC_FOLLOW, authsrv.BLIND,
      authsrv.ARMOUR_TERM) = saved
+
+
+# ---- 41. THE CAST-TIME WORD (2026-09-27, the D6 client run 20260927T181940) -----------------------
+# A Dazed player's 4.00 s cast drew the client's own 2 s bar: nothing told the client. Retail's
+# shape, OBSERVED 3 of 3 on 20260917T224104 :62557: 0x00A3 [61 GV_CASTTIME, caster, target, seconds]
+# immediately ahead of the cast's [60] announce whenever the time differs from the record's.
+print("\n41. the cast-time word: property 61 ahead of a modified cast's [60]")
+_saved41 = (authsrv.skill_cost, authsrv.weapon_satisfies, authsrv.CAST_TIME_WORD)
+authsrv.skill_cost = lambda sid: (0, 0)
+authsrv.weapon_satisfies = lambda sid: True
+try:
+    def press_batch(sid, target, cond=None, hexid=None):
+        st = fresh_state()
+        hostile(st, 10, (50.0, 0.0))
+        now = time.time()
+        if cond is not None:
+            st["effects"].apply(PLAYER, cond, 12, 30.0, now, type_code=8)
+        if hexid is not None:
+            st["effects"].apply(PLAYER, hexid, 12, 30.0, now, type_code=4, caster=10)
+        sent, send = collector()
+        authsrv.handle_skill_press([0, sid, 0, target], send, st, 0, authsrv.GAME_CMSG_USE_SKILL)
+        return [(op, v) for op, v, _l in sent]
+
+    def f32(bits):
+        return struct.unpack("<f", struct.pack("<I", int(bits) & 0xFFFFFFFF))[0]
+
+    def word61(batch):
+        return [(op, v[:-1] + [round(f32(v[-1]), 3)]) for op, v in batch
+                if op in (0x00A3, 0x00A2) and v and v[0] == agents.GV_CASTTIME]
+
+    def i60(batch):
+        return next((i for i, (op, v) in enumerate(batch)
+                     if op in (0x00A0, 0x009F) and v and v[0] == agents.GV_SKILL_ACTIVATED), None)
+
+    dazed = press_batch(ORB_J, 10, cond=DAZED_C)
+    plain = press_batch(ORB_J, 10)
+    rusted = press_batch(HEAL_SIG, 0, hexid=RUST)
+    power = press_batch(POWER, 10, cond=DAZED_C)
+    authsrv.CAST_TIME_WORD = False
+    reverted = press_batch(ORB_J, 10, cond=DAZED_C)
+    authsrv.CAST_TIME_WORD = True
+    i61 = next((i for i, (op, v) in enumerate(dazed) if op == 0x00A3 and v and v[0] == agents.GV_CASTTIME), None)
+    check(word61(dazed) == [(0x00A3, [agents.GV_CASTTIME, PLAYER, 10, 2.0])]
+          and i61 is not None and i60(dazed) is not None and i61 + 1 == i60(dazed)
+          and word61(plain) == [] and word61(reverted) == []
+          and word61(rusted) == [(0x00A2, [agents.GV_CASTTIME, PLAYER, 4.0])]
+          and word61(power) == [],
+          "a Dazed player's Lightning Javelin (record 1.0 s): 0x00A3 [61, me, 10, 2.0] IMMEDIATELY ahead "
+          "of the [60] (retail's order, 3/3); undazed -- nothing (the record's time needs no word); "
+          "--no-cast-time-word -- nothing (the known-bad arm: the client draws a 1 s bar over a 2 s "
+          "cast); a Rusted Healing Signet (self, untargeted) rides 0x00A2 [61, me, 4.0] "
+          "(RECONSTRUCTION, the channel-follows-target rule); an ATTACK skill (Power Attack) under "
+          "Dazed sends none -- its time is the weapon's, and Dazed is spells-only",
+          (word61(dazed), word61(plain), word61(rusted), word61(power), word61(reverted)))
+    # the body site: a Dazed hostile casting a spell at the player
+    st = fresh_state()
+    hostile(st, 10, (80.0, 0.0), skills=[[ORB_J, 1.0, 5.0]], skill_ready=[0.0], npc={"profession": 6},
+            cast_range=1200.0, target=PLAYER, target_locked=True)
+    st["effects"].apply(10, DAZED_C, 12, 30.0, time.time(), type_code=8)
+    sent, send = collector()
+    authsrv.enemy_attack_tick(send, st, 1)
+    body = [(op, v) for op, v, _l in sent]
+    j61 = next((i for i, (op, v) in enumerate(body) if op == 0x00A3 and v and v[0] == agents.GV_CASTTIME), None)
+    j60 = next((i for i, (op, v) in enumerate(body) if op in (0x00A0, 0x009F) and v
+                and v[0] == agents.GV_SKILL_ACTIVATED and v[1] == 10), None)
+    check(j61 is not None and j60 is not None and j61 + 1 == j60
+          and body[j61][1][:3] == [agents.GV_CASTTIME, 10, PLAYER]
+          and round(f32(body[j61][1][3]), 3) == 2.0,
+          "a Dazed HOSTILE's Lightning Javelin at the player: [61, it, me, 2.0] immediately ahead of its "
+          "[60] -- retail's own shape (a body casting at the observer, 3 of 3)",
+          [(hex(op), v) for op, v in body][:8])
+    src = open(authsrv.__file__, encoding="utf-8").read()
+    check(src.count("cast_time_word(send, ") == 5                  # four sites + the def
+          and "CAST_TIME_WORD = False" in src[_idx(src, "    if a.no_cast_time_word:"):
+                                              _idx(src, "    if a.no_cast_time_word:") + 120],
+          "the source: four announce sites (the press, the queued begin, the hostile, the hero) and "
+          "main() flips CAST_TIME_WORD = False under --no-cast-time-word")
+finally:
+    authsrv.skill_cost, authsrv.weapon_satisfies, authsrv.CAST_TIME_WORD = _saved41
 
 sys.exit(LEDGER.verdict())
