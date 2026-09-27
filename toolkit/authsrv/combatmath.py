@@ -99,6 +99,40 @@ def creature_armor_rating(npc, override=None):
     return float(3 * int(npc["level"]) + bonus)
 
 
+# ---- A CREATURE WARRIOR'S +20 MEETS PHYSICAL DAMAGE ONLY (2026-09-27) --------
+#
+# The banner above reads each profession's bonus off "Basic armor"'s max-AR
+# column as one untyped number. The creature formula's own link says otherwise
+# for the Warrior: WIKI (GWW "Armor rating": "creature AR = 3 * Level + [[Armor
+# bonus]], where armor bonus is profession specific"; "Armor bonus" -> "Basic
+# armor", read 2026-09-27) types the Warrior's as "Armor +20 (vs. physical
+# damage)" -- and the Ranger's as "+30 (vs. elemental damage)". OBSERVED, and
+# independent of the wiki: on 20260819T132414 a level-2 player's Dancing
+# Daggers (earth, 7 at Deadly Arts 1) landed 6 on both agents of definition
+# 3113, a LEVEL-3 WARRIOR, five of five -- where 3 x 3 + 20 = 29 gives
+# trunc(7 x 2^((6 - 29)/40)) = 4 and 3 x 3 = 9 gives 6 (the elemental rating
+# is pinned to (6, 14.9] by the one value); the level-2 Necromancer and level-1
+# Monk beside it took 7, as both readings say. CORROBORATED for the Warrior,
+# one definition. So the swing path's number is unchanged (a swing is
+# physical) and a creature records the part that meets physical damage only;
+# a spell subtracts it. The Ranger's +30 elemental, and whether the 70 / 80
+# columns of the Assassin, Dervish and Paragon are bonuses at all under the
+# typed reading, have no witness and are NOT changed here.
+CREATURE_BONUS_VS_PHYSICAL = frozenset({1})       # the Warrior
+
+
+def creature_physical_bonus(npc, override=None):
+    """The part of creature_armor_rating's number that meets PHYSICAL damage
+    only: the Warrior's +20. 0 for every other profession, for a content
+    override (a measured rating is one number and says nothing typed), or a
+    row with no level."""
+    if override is not None or not npc or npc.get("level") is None:
+        return 0.0
+    if npc.get("profession") not in CREATURE_BONUS_VS_PHYSICAL:
+        return 0.0
+    return float(ARMOR_BONUS_BY_PROFESSION.get(npc.get("profession"), 0))
+
+
 # ---- THE PLAYER'S OWN ARMOUR, which nothing read until 2026-08-20 ----------
 #
 # Five pieces went out carrying `Armor: 25` and `Armor +20 (vs. physical

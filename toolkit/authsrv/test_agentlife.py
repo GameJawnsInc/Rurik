@@ -456,7 +456,8 @@ def section_body_spell_taker_armour():
                   "3 x level + the profession's bonus (a level-5 Warrior 35, a "
                   "Monk 15), else None", str(got))
         src = inspect.getsource(authsrv.land_swing_on_body)
-        spell_src = inspect.getsource(authsrv.body_spell_armour)
+        spell_src = (inspect.getsource(authsrv.body_spell_armour)
+                     + inspect.getsource(authsrv.row_spell_armour))   # 2026-09-27: the line moved
         terms_src = inspect.getsource(authsrv.body_spell_terms)
         LEDGER.ok("armour = body_armour_rating(row)" in src
                   and 'row.get("armor_rating")' not in src
@@ -464,7 +465,7 @@ def section_body_spell_taker_armour():
                   and "spell_ar = body_spell_armour(state, skill_id, tid, tbody)" in terms_src
                   and "spell_armour_for(" not in terms_src,
                   "the source: a body's swing (land_swing_on_body) and a body's "
-                  "spell (body_spell_armour) read ONE rating rule, and "
+                  "spell (body_spell_armour, through row_spell_armour) read ONE rating rule, and "
                   "body_spell_terms asks body_spell_armour, never the player's "
                   "spell_armour_for directly")
 

@@ -2197,7 +2197,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 * **DESKWORK-D6 steps 3–5**: Mind Burn 185 and Incendiary Bonds 179; the seven area hexes (Deep Freeze's snare needs only its row); Cracked Armor and Dazed ([studies/deskwork/PLAN.md](studies/deskwork/PLAN.md) D6).
 * **The other eleven areas over time** carry no row and are inert; Meteor Shower and Eruption have no ground-visual id; whether a caster's death ends its area is UNVERIFIED (ours outlives it, an n = 1 lean).
 * **MONSTERAI-S9**: heroes and henchmen scatter too (WIKI), deferred; the normal-mode rate (`--scatter-after`, default 2) is the owner's feel to set; return-to-post and routing around a live area are NOT FOUND.
-* **The taker gap the ticks inherit**: the player's spell words are not armour-scaled (`hit_enemy` exact); the body half closed on main 2026-09-26 (`0ab2a52e`, PLAN-LOG).
+* **Typed creature armour, past the Warrior**: a creature Warrior's +20 now meets physical damage only (WIKI + the owner's Daggers on def 3113, one definition; PLAN-LOG 2026-09-27). Open: the Ranger's typed "+30 vs. elemental", whether the Assassin / Dervish / Paragon 70 / 80 columns are creature bonuses at all, and an ELEMENTAL weapon swing (a wand's 587 type) onto a Warrior creature, which still meets the +20.
 
 **Heroes** — [studies/heroes/RUN-HEROLIB.md](studies/heroes/RUN-HEROLIB.md)
 
