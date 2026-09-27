@@ -5181,6 +5181,41 @@ selection; the revive re-acquisition presumably shares it, UNVERIFIED. What
 the cone's half-angle is, and whether a range term sits beside it (765 u
 picked, 800 u re-acquired, nothing farther tried), are open.
 
+**The cone is 60°, apex at the PLAYER, axis along the view — and it is not the
+screen.** Seven more world-entry runs, one foe each, the hero present as the
+fallback, the camera read live with `toolkit/clientscan/fovread.py` at map
+load: position (9436, 8077, −805.4), target (9826, 8077, −716.6) in every run,
+to the last digit — the camera sits 390 u behind the player, looks along +x,
+pitched 12.8° down, FOV 75.000° horizontal.
+
+| harness run | foe from the player | foe from the camera axis | on screen | picked |
+|---|---|---|---|---|
+| `20260927T151714` | 500 u, 55.00° | 31.2° | yes | **foe** |
+| `20260927T151913` | 300 u, 75° | 30.6° | **yes** (frame: right edge) | **hero** |
+| `20260927T152104` | 500 u, 65.0° | — | — | hero |
+| `20260927T152233` | 500 u, 60.004° | — | — | hero |
+| `20260927T152404` | 500 u, 57.48° | — | — | foe |
+| `20260927T152535` | 500 u, 58.98° | — | — | foe |
+| `20260927T152712` | 500 u, 59.90° | — | — | foe (after `[200, 0]` in the same instant) |
+
+- **Not the frustum:** `T151913`'s foe stood plainly on screen (30.6° off the
+  camera axis, inside the 37.5° half-FOV) and was passed over, while
+  `T151714`'s at 31.2° was taken. No cone with its apex at the CAMERA orders
+  those two; one at the PLAYER does (55° in, 75° out).
+- **The half-angle is 60°**, bracketed (59.90°, 60.004°) at 500 u — a
+  boundary at `dot(axis, foe − player) > 0.5` exactly, which is what it looks
+  like. The only same-instant flip (`[200, 0]` then `[10, 0]`) came at 59.90°,
+  a hair inside it. OBSERVED, n=1 per angle; placements exact (the server's
+  own positions, integer offsets, ≈0.115° per unit at 500 u).
+- **The axis** is the view direction — the revive pair above (the camera
+  turned, the character not) says so; at map load the character faces the
+  same way, so these runs cannot separate the two on their own.
+- "On screen" in the paragraphs above was the right answer for the questions
+  they asked (every foe they tested sat well inside or well outside 60°) and
+  the wrong mechanism. Open: a range term (765 u picked; nothing farther
+  tried), and whether the cone is the same for the revive re-acquisition
+  (presumed).
+
 **And the schema route had the right fact with the wrong conclusion.** It found
 that 226 and 227 share a dispatch and concluded `0x00E2` was therefore
 disqualified as a carrier of "refused". That sharing is exactly *why* the
