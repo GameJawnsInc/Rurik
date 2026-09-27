@@ -4962,15 +4962,16 @@ def section_area_hexes():
         # retail's death order, its snared base restored behind the step-down
         st, sent, send = player_cast(234, cluster, before=lambda s: s["agents"][FOE].update(health=5.0, max_health=5.0))
         d_ops = [(op, v) for op, v in sent]
-        i_kill = next(i for i, (op, v) in enumerate(d_ops) if op == STATUS and v == [FOE, 0xC10])
+        i_kill = next((i for i, (op, v) in enumerate(d_ops) if op == STATUS and v == [FOE, 0xC10]), None)
         i_7 = [i for i, (op, v) in enumerate(d_ops) if op == 0x009F and v[0] == 7]
-        i_step = next(i for i, (op, v) in enumerate(d_ops) if op == STATUS and v == [FOE, 0x10])
-        i_base = next(i for i, (op, v) in enumerate(d_ops) if op == SPEED and v[0] == FOE and round(v[1], 2) == 288.0)
-        i_flags = next(i for i, (op, v) in enumerate(d_ops) if op == 0x0026)
-        i_w13 = next(i for i, (op, v) in enumerate(d_ops) if op == 0x00A3 and v[1] == 13)
+        i_step = next((i for i, (op, v) in enumerate(d_ops) if op == STATUS and v == [FOE, 0x10]), None)
+        i_base = next((i for i, (op, v) in enumerate(d_ops) if op == SPEED and v[0] == FOE and round(v[1], 2) == 288.0), None)
+        i_flags = next((i for i, (op, v) in enumerate(d_ops) if op == 0x0026), None)
+        i_w13 = next((i for i, (op, v) in enumerate(d_ops) if op == 0x00A3 and v[1] == 13), None)
         check(eps(st) == [(11, 2, 234), (13, 3, 234)] and st["agents"][FOE]["dead"]
               and [v[1:3] for v in words(sent)] == [[FOE, PLAYER], [11, PLAYER], [13, PLAYER]]
               and removes(sent) == [(7, FOE, 1), (7, FOE, 12)]
+              and None not in (i_kill, i_step, i_base, i_flags, i_w13) and len(i_7) == 2
               and i_kill < i_7[0] < i_7[1] < i_step < i_base < i_flags < i_w13
               and dict(st.get("aura_refs")) == {(11, 1): 1, (11, 12): 1, (13, 1): 1, (13, 12): 1}
               and st["agents"][11]["health"] == 8990.0 and st["agents"][13]["health"] == 8990.0,
