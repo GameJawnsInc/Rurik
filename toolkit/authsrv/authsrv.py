@@ -22631,7 +22631,22 @@ def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, w
     print(f"[c{conn_id}] {what}: {amount:.0f} to agent {target_id} "
           f"({agent['health']:.0f}/{pool:.0f})", flush=True)
     if agent["health"] <= 0.0:
-        kill_agent(send, state, target_id, agent, conn_id, time.time())
+        # THE REWARD IS hurt_agent_row's RULE: a hostile pays it, a party body
+        # pays nobody. This half is reachable on a PARTY body --
+        # land_swing_on_body fires on_attack_triggers with the party attacker,
+        # so a foe's Empathy on a hero punishes the hero's own swing, here --
+        # and the default reward=True paid a KILL_REWARD, the objective and the
+        # morale experience for that hero's death while skipping its
+        # hero_death_tick. WIKI (GWW, "Experience"): nobody earns experience
+        # for a party member's death. The wire is RECONSTRUCTION -- kill_agent's
+        # SLICE-H3 party template; no retail tape holds a hero killed by an
+        # armour-ignoring word.
+        hostile = agent.get("allegiance") == agents.ALLEGIANCE_HOSTILE
+        kill_agent(send, state, target_id, agent, conn_id, time.time(),
+                   reward=hostile)
+        if not hostile:
+            print(f"[c{conn_id}] PARTY AGENT {target_id} IS DEAD -- it waits "
+                  f"for a resurrection (SLICE-H3)", flush=True)
     return amount
 
 
@@ -24510,8 +24525,19 @@ def heal_agent(send, state, target_id, caster_id, amount, conn_id,
             kill_player(send, state, conn_id,
                         "a heal under Deep Wound that did not clear zero")
         else:
-            kill_agent(send, state, target_id, state["agents"][target_id],
-                       conn_id, time.time())
+            # hurt_agent_row's RULE again: a hostile pays the reward, a party
+            # body nobody. Reachable on a HERO -- a foe's skill puts Deep Wound
+            # on the body it targets (SLICE-H3), deep_wound_open takes its
+            # health below zero unclamped, and any heal on it that does not
+            # clear zero lands here. WIKI (GWW, "Experience"): no experience
+            # for a party member's death. RECONSTRUCTION on the wire, as above.
+            row = state["agents"][target_id]
+            hostile = row.get("allegiance") == agents.ALLEGIANCE_HOSTILE
+            kill_agent(send, state, target_id, row, conn_id, time.time(),
+                       reward=hostile)
+            if not hostile:
+                print(f"[c{conn_id}] PARTY AGENT {target_id} IS DEAD -- it "
+                      f"waits for a resurrection (SLICE-H3)", flush=True)
     return landed
 
 
