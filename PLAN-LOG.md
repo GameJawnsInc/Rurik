@@ -28,6 +28,20 @@ move back.
 
 ---
 
+### A preparation onto the PLAYER meets the pieces against its own type -- 2026-09-27 -- **a hostile's arrow under Kindle Arrows: the arrow's piercing word still meets the pieces' physical 45, its preparation's own FIRE word now meets their elemental 25 (18 where it was 12); an untyped preparation rides its arrow's type, so nothing else moves; `--no-typed-armour` reads it physical again**
+
+**Why.** WEAPONS-W4 typed the player's pieces by what the attacker's item deals (its 587), and the preparation's own word (W2f) rode the ARROW's typed rating -- so a hostile's Kindle Arrows fire met the pieces' `+20 vs. physical`. The creature side was typed the same morning ("A creature Warrior's +20 skips a preparation's own damage too", below); this is its player-side twin, found in passing there and named in `PLAN.md` §8.1.
+
+**What shipped.** `land_swing` hands `body_preparation_word` a function of the preparation's type: `player_armour_at` at the ARROW's own location, against that type, with the arrow's penetration and the casting penalty, through the same baseline `armour_multiplier` as before -- only the type moves. `preparation_damage_type(skill, arrow_type)` now falls back to the ARROW's type when the preparation names none (434's "+ Damage" rides what it rides on), where this morning it fell back to physical -- a latent difference no content row reached (every arrow-firing bow here is piercing), corrected before it could; every caller passes its arrow's type (`player_damage_type()` for the player's hit and splash, `body_damage_type(agent)` for a body's word). `--no-typed-armour`'s help and banner name the preparation.
+
+**The witness: NULL, said.** No body's preparation word onto the owner is on tape: the only words onto the observer beside a 344 / 734 impact from their cause are four single words on the arena tape `20260817T231139` -- Fireball arrivals (344 is Fireball's impact too), not arrow-plus-preparation pairs. WIKI (the preparation's damage is its own fire) and W4's typed pieces -- RECONSTRUCTION for the number.
+
+**Tests.** `test_weapons.py` section 34 (+4, all bare; floor 319 -> 323 measured, 15 declared skips; a vault run 350): the fallback (434 cold on a cold arrow, piercing on a piercing one; Kindle fire on any arrow; `--no-typed-armour` physical); through the real `land_swing` a hostile archer's piercing arrow under Kindle Arrows -- the arrow 6 on both arms, the fire word 18 against 12 under `--no-typed-armour`, the pieces 45 / 25; an untyped preparation on the same arrow 12, unchanged; the source. Section 33's source lock and section 23's base-penetration count (3 -> 4: this read carries the body's base too) re-aimed. Sweep: the same 69 files, green (the port binders serially).
+
+**Still open** (`PLAN.md` §8.1): the Ranger's "+30 vs. elemental" and the Assassin / Dervish / Paragon columns under the typed reading; a witness for any of today's three typed halves (a single-weapon capture on a hostile Warrior; any preparation on tape but the owner's own Kindle Arrows on a level-1 Mesmer).
+
+---
+
 ### 0x00C1's second field is the auto-selection, and an attack skill follows it -- 2026-09-27 -- **with an ally manually selected, the client's attack skill names the foe in TARGET_SELECT's field 2 (4 of 4), not the nearest foe (1 of 1 discriminating); with no foe there it names the ally (the party-target gate's refusal, now exercised by a real client press). `overrides.json`'s "never field 2" is qualified for 0x0027; no server change**
 
 **This answers the "Open" line of "The attack-target gate on the client"**, below: the field is the auto-selection (the client's own `AvSelect.cpp` names it -- `schema/overrides.json` had it all along, and that entry's run should have started there), and the press follows it.

@@ -4368,7 +4368,8 @@ def preparation_splash(send, state, prep_skill, prep_bonus, target_id, conn_id,
         # 2026-09-27: typed by the PREPARATION's own damage (Ignite Arrows' fire),
         # so a creature Warrior's physical-only +20 stays out of it
         arm = penetrated_armour(creature_typed_rating(foe.get("armor_rating"), foe,
-                                                  preparation_damage_type(prep_skill)),
+                                                  preparation_damage_type(prep_skill,
+                                                                          player_damage_type())),
                                 agents.PLAYER_WEAPON)  # Q2
         scale = (strike_multiplier(attack_strength(rank), float(arm))
                  if rank is not None and arm is not None and ARMOUR_TERM
@@ -13738,7 +13739,7 @@ def body_preparation_word(state, agent, agent_id, armour_mult):
     if not bonus:
         return 0.0, None, None
     if callable(armour_mult):
-        armour_mult = armour_mult(preparation_damage_type(sid))
+        armour_mult = armour_mult(preparation_damage_type(sid, body_damage_type(agent)))
     return _whole_points(float(bonus) * float(armour_mult)), sid, skill_impact_visual(sid)
 
 
@@ -15778,15 +15779,17 @@ def player_damage_type():
     return dt if dt is not None else "physical"
 
 
-def preparation_damage_type(skill_id):
+def preparation_damage_type(skill_id, arrow_type="physical"):
     """The type a PREPARATION's own damage carries -- its skill_effect row's
     `damage_type`, else the one its label names (Ignite Arrows: no
     damage_type, its arrow keeps the weapon's kind, but its explosion is
-    "Fire damage"), else "physical"; "physical" under --no-typed-armour."""
+    "Fire damage"), else the ARROW's own `arrow_type` -- an untyped
+    preparation (434's "+ Damage") rides what it rides on, the reading every
+    site made before its word was typed; "physical" under --no-typed-armour."""
     if not TYPED_ARMOUR or skill_id is None:
         return "physical"
     dt = combatmath.spell_damage_type_of(skill_effect_row(skill_id))
-    return dt if dt is not None else "physical"
+    return dt if dt is not None else arrow_type
 
 
 def requirement_banner(item, what="weapon", state=None):
@@ -19274,7 +19277,8 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
             # arrow's -- a creature Warrior's physical-only +20 stays out of it.
             if _prep_sl is not None:
                 _prep_ar = penetrated_armour(creature_typed_rating(
-                    agent.get("armor_rating"), agent, preparation_damage_type(prep_skill)),
+                    agent.get("armor_rating"), agent,
+                    preparation_damage_type(prep_skill, player_damage_type())),
                     agents.PLAYER_WEAPON, base=player_base_penetration(state, skill_id))
                 if _prep_ar is not None:
                     _prep_scale = strike_multiplier(_prep_sl, float(_prep_ar))
@@ -32415,10 +32419,21 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
     dealt *= float(mult)                 # WEAPONS-W2f: a several-arrow skill's share
     # WEAPONS-W2f: the body's preparation, its own word after the arrow's,
     # through the armour term the arrow took (the baseline one; the body's
-    # strike level is not re-derived here -- said, not hidden).
-    _prep_pts, _prep_sid, _prep_vis = body_preparation_word(
-        state, agent, agent_id,
-        armour_multiplier(armour) if (ARMOUR_TERM and armour is not None) else 1.0)
+    # strike level is not re-derived here -- said, not hidden). 2026-09-27:
+    # at the SAME location, penetration and casting penalty, but the pieces'
+    # rating against the PREPARATION's own type (WEAPONS-W4's typing, one step
+    # further): Kindle Arrows' fire meets the elemental 25, not the arrow's
+    # physical 45. --no-typed-armour reads it physical again.
+    def _prep_mult(prep_type):
+        if not ARMOUR_TERM or location is None:
+            return 1.0
+        _pa = player_armour_at(location, damage_type=prep_type, state=state)
+        _pa = penetrated_armour(_pa, (body_weapon_items(agent) or (None,))[0],
+                                base=body_base_penetration(agent, skill_id))
+        if _pa is None:
+            return 1.0
+        return armour_multiplier(_pa + casting_armour_penalty(state))
+    _prep_pts, _prep_sid, _prep_vis = body_preparation_word(state, agent, agent_id, _prep_mult)
     # THE TAKER'S OWN EPISODES SPEAK LAST -- Frenzy's doubling, then a
     # conversion (Reversal of Fortune), per GWW's modifier order. Decided
     # here, before the first send, so the guard below sees the number that
@@ -43080,8 +43095,8 @@ def main():
         global TYPED_ARMOUR
         TYPED_ARMOUR = False
         print("ARMOUR: --no-typed-armour -- every attack on the player reads as "
-              "physical, a spell as elemental, whatever the item's 587 says "
-              "[WEAPONS-W4 revert]", flush=True)
+              "physical (a preparation's own word too), a spell as elemental, "
+              "whatever the item's 587 says [WEAPONS-W4 revert]", flush=True)
     if a.no_unmet_requirement:
         global UNMET_REQUIREMENT
         UNMET_REQUIREMENT = False
