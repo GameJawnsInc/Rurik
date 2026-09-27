@@ -459,7 +459,7 @@ def section_body_spell_taker_armour():
         spell_src = (inspect.getsource(authsrv.body_spell_armour)
                      + inspect.getsource(authsrv.row_spell_armour))   # 2026-09-27: the line moved
         terms_src = inspect.getsource(authsrv.body_spell_terms)
-        LEDGER.ok("armour = body_armour_rating(row)" in src
+        LEDGER.ok("armour = creature_typed_rating(body_armour_rating(row), row," in src
                   and 'row.get("armor_rating")' not in src
                   and "body_armour_rating(row)" in spell_src
                   and "spell_ar = body_spell_armour(state, skill_id, tid, tbody)" in terms_src

@@ -2152,9 +2152,10 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "spell's own penetration.")
     ap.add_argument("--untyped-creature-armour", action="store_true",
                     help="REVERT (2026-09-27): a Warrior CREATURE's +20 armour meets "
-                         "every spell as it meets every swing -- the reading every "
-                         "run before 2026-09-27 made. By default a spell that is not "
-                         "physical meets 3 x level: GWW types the Warrior's bonus "
+                         "every hit whatever its type -- the reading every run before "
+                         "2026-09-27 made. By default a spell or a weapon hit that is "
+                         "not physical (a wand's chaos, a staff's holy or earth) "
+                         "meets 3 x level: GWW types the Warrior's bonus "
                          "'vs. physical damage', and a level-3 Warrior took the "
                          "owner's Dancing Daggers as 6 of 7 on 20260819T132414, "
                          "where the untyped 29 gives 4. Party bodies are unchanged "

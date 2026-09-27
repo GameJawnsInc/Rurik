@@ -113,9 +113,11 @@ def creature_armor_rating(npc, override=None):
 # trunc(7 x 2^((6 - 29)/40)) = 4 and 3 x 3 = 9 gives 6 (the elemental rating
 # is pinned to (6, 14.9] by the one value); the level-2 Necromancer and level-1
 # Monk beside it took 7, as both readings say. CORROBORATED for the Warrior,
-# one definition. So the swing path's number is unchanged (a swing is
-# physical) and a creature records the part that meets physical damage only;
-# a spell subtracts it. The Ranger's +30 elemental, and whether the 70 / 80
+# one definition. So a creature records the part that meets physical damage
+# only, and a hit of any other type subtracts it -- a spell by its own type,
+# and (the same day) a weapon hit by its 587: a wand's chaos, a staff's holy
+# (authsrv.creature_typed_rating). A hammer or a sword still meets the whole
+# number. The Ranger's +30 elemental, and whether the 70 / 80
 # columns of the Assassin, Dervish and Paragon are bonuses at all under the
 # typed reading, have no witness and are NOT changed here.
 CREATURE_BONUS_VS_PHYSICAL = frozenset({1})       # the Warrior
