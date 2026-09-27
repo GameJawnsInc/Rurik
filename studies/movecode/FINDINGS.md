@@ -5562,9 +5562,52 @@ that same name would then fail with a sharing violation, and the capture would k
 the previous snapshot, at most `FLUSH_MS` stale. The window is one snapshot's write
 every 15 s. The fix is one line, a distinct temp name for the detach write, and it
 was **not taken**: one change per test, and no test here can reach that window yet.
+**(Taken the same day with a test that manufactures the window, §2b.6. The
+sharing violation is now OBSERVED, not reasoned.)**
 
 **Suite:** `test_movehook.py` **312 checks green** on the fixed build (302 before;
 §16 26 → 36), floor unchanged at 169.
+
+### 2b.6 The exit write's own temp file
+
+**FIXED 2026-09-27**, `movehook.c` `PART_RUN`/`PART_EXIT` + `test_movehook.py`
+§16(f3s)/(f3). This is the residual §2b.5 left as RECONSTRUCTION.
+
+**The shape.** `write_bin` opens its temp file with share mode 0 and renames it over
+`movehook.bin`. Process exit terminates the worker wherever it is, and a handle
+outlives the thread that opened it. So a worker killed between `CreateFileA` and
+`CloseHandle`, in the middle of a periodic snapshot, leaves `movehook.bin.part` held
+for the rest of the process's life. The detach write then aimed at **the same name**.
+
+**Manufactured, not waited for.** The natural window is one snapshot's write every
+`FLUSH_MS`, and no run lands in it on purpose. Sharing is checked per open file,
+not per process, so the test holds the worker's temp name, read out of
+`movehook.c`'s `PART_RUN`, with `CreateFileW(share = 0)` from its own process. A
+held handle refuses the host's open exactly as the dead worker's leaked one would.
+An **exposure control** requires a second open of the held file to be refused, so
+the arm cannot pass on a hold that locks nothing. The host is then closed gracefully.
+
+**OBSERVED against the §2b.5 build (`c4b40450`):** the hold took, the exit write
+produced **nothing** (no `movehook.bin`, nothing in the DEFDIR sentinel either), and
+exactly one check in the file went red. So the residual was real, and reasoning
+alone had not established that.
+
+**The fix.** Two named temp files: `PART_RUN` (`movehook.bin.part`) for the
+worker's snapshot and final write, and `PART_EXIT` (`movehook.bin.exit.part`) for
+the detach write. `write_bin` takes the name as a parameter. The detach path is the
+only writer that can run while a dead writer's handle is still open, so it is the
+one that needs a name of its own. A leaked `movehook.bin.part` stays on disk after
+such an exit. That is the dead snapshot's debris, and `movehook.bin` is complete.
+
+**The test.** **(f3s)** is structural: every `write_bin` call's temp name is
+resolved through the source's own `#define`s, and the detach call's name must not
+be one any worker-side call uses. A control plants `PART_RUN` into the detach call
+and must go red. **(f3)** is behavioural: the held-name exit above, requiring the
+capture in the configured directory, nothing in the sentinel, `MVHK`, and a
+nonzero base.
+
+**Suite:** `test_movehook.py` **320 checks green** on the fixed build (312 before;
+§16 36 → 44), floor unchanged at 169.
 
 ## 1z-b. R5b — the run R5 should have been: instrument green, P1–P4 all read, and the operator could NOT reproduce the no-clip
 
