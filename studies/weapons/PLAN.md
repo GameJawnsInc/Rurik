@@ -2799,9 +2799,13 @@ Mesmer's Empathy. The end is `[7, T, 1] [7, T, class]` → `0x00F1` with 0x800 c
 first on the observer. A snare hex (Teinai's Prison, −66 %) carries `0x0027 [T, 288 × 0.34 =
 97.92]` in the apply batch and `0x0027 [T, 288.0]` in the end batch, 6/6, with `0x00F1` bit 0x400
 set alongside 0x800 and cleared at the snare's end while another hex kept 0x800 up (0xC00 →
-0x803). Several foes in one batch go out in ASCENDING agent id, 23/23. A hex whose target died
-mid-cast ended with `[59 GV_SKILL_STOPPED]` at its scheduled completion and landed nothing (179,
-2/2, body casters).
+0x803). Several foes in one batch go out in ASCENDING agent id, 24 of 25 (hexjoin L2; the one
+exception is two groups in one window -- the D6 review's EV-12 corrected the lane's 23/23). A hex
+whose target died mid-cast ended with `[59 GV_SKILL_STOPPED]` at its scheduled completion and
+landed nothing (179, 2/2, body casters). **A hexed foe's DEATH** (EV-2, 4 of the 7 death ends
+inspected, 4/4): the death word comes FIRST with the hex bit still up (0x833), THEN the [7]s, THEN
+the step-down (0x10) -- the opposite of the expiry's [7]s-then-0x00F1, and the first cut sent the
+[7]s ahead of the death word; `kill_agent` follows the tape since the review.
 
 **What the server now does** (`authsrv.py` section 43, the banner beside `area_tick_period`; the
 leaf `areatime.area_hex_row`). A record row with target byte 16, type 4 and an `aoe_range` is an
@@ -2818,13 +2822,17 @@ episode draws `[6, wearer, 1]` and `[6, wearer, class]` between its `0x0042` and
 reference-counted per wearer (a second live hex holding the `1` sends no second `[6, wearer, 1]`;
 the `[7]` goes when the last holder closes, behind the `0x0044` and ahead of the `0x00F1`) --
 `aura_on` / `aura_off`, which already carried Empathy's row `auras = [1, 4]` (a row naming its own
-sends those and nothing synthesised). The class is `HEX_EFFECT_CLASS`, keyed on the SKILL record's
-profession column (6 Elementalist → 12, 5 Mesmer → 4): a **deviation from the spec's "the
-caster's profession"** -- the three witnesses cannot separate the two (each caster's primary was
-the skill's profession), the record's column is available on a bare machine, and the class is
-plausibly the hex's rather than whoever casts it (a W/E's Deep Freeze); RECONSTRUCTION either way,
-and a profession with no observed id sends the `1` alone, printed once (NOT FOUND: Shadow of Fear,
-a Necromancer hex). **The snare** (`bonus_scale_means = "Movement speed decrease"`, the flat 66 in
+sends those and nothing synthesised). The refcount's witness is the BASE id alone (38/39 sent, 1
+withheld at 651.779; its end side too: 652.788 sends `[7, 32, 12]` alone while Empathy's `1`
+stays live) -- that the CLASS id is refcounted the same way is RECONSTRUCTION extended from it,
+no same-class overlap being on any tape (EV-11). The class is `HEX_EFFECT_CLASS`, keyed on the
+SKILL record's profession column (6 Elementalist → 12, 5 Mesmer → 4): a **deviation from the
+spec's "the caster's profession"** -- the three witnesses cannot separate the two (that each
+caster's primary was the skill's profession is UNVERIFIED for 1097's tutorial NPC), the record's
+column is available on a bare machine, and the class is plausibly the hex's rather than whoever
+casts it (a W/E's Deep Freeze); the ATTRIBUTE is REFUTED as a direct key (179 attribute 10 and
+1097 attribute 11 both draw 12); RECONSTRUCTION either way, and a profession with no observed id
+sends the `1` alone, printed once (NOT FOUND: Shadow of Fear, a Necromancer hex). **The snare** (`bonus_scale_means = "Movement speed decrease"`, the flat 66 in
 the bit-clear bonus slot) rides `episodemods.move_speed_terms` with no code of its own: `0x0027
 [foe, base × 0.34]` with each apply and the base back at the end -- Teinai's Prison's exact
 arithmetic, OBSERVED 6/6 -- and `0x00F1` bit 0x400 while it is live (`effects.STATUS_SNARED`,
@@ -2838,13 +2846,24 @@ its 58 (the refusal contract; the taker's own armour) -- so `test_guards`' calle
 untouched. The explicit field is the gate: a hex's scale otherwise describes what the effect does
 while it is up (the rule above `skill_damage`, whose `_resolves_at_cast` still refuses every hex --
 that is the line 3818-3823 named as the one to revisit, revisited by a field rather than by
-widening). ORDER: the player's path lands the words then the hexes, a body's the hexes then the
-words -- each path's existing order, both UNWITNESSED. An area hex never reaches `scatter_struck`
+widening). ORDER: the HEXES then the words on BOTH paths since the D6 review -- the player's path
+sent the words first until then, and its burst could KILL the target ahead of the apply, after
+which `apply_effect` refused the hex on every foe, the living ones beside the corpse included
+(HEX-3); with the hexes ahead the cluster is hexed and the burst's kill strips the corpse's own,
+in retail's death order. Which order retail sends is UNWITNESSED (no area hex on any tape). An
+area hex never reaches `scatter_struck`
 (WIKI: Panic and a non-damage area never scatter; a single packet does not either; locked). **A
 target dead at the completion lands nothing** -- `apply_effect` refuses a hex (single or area) on
 a known corpse and the burst is refused with it; until today the player's path opened the episode
-on the corpse (the D6 server lane's finding). Whether the player's E5 carries a `[59]` there, as
-retail's body casters did, is OPEN and unchanged.
+on the corpse (the D6 server lane's finding). A target whose ROW is gone at the completion (a
+despawned corpse) lands nothing either: `hex_wearers` centres on `area_corpse_point` and returns
+[] for an unknown target -- the first cut fell back to `target_pos`'s PLAYER position and hexed
+the foes around the player and the removed id (HEX-4). Whether the player's E5 carries a `[59]`
+there, as retail's body casters did, is OPEN and unchanged. **Two over-cap snares** on one foe
+(Deep Freeze + Ice Spikes, or the AI's re-cast) read the LARGEST single snare, x0.34 --
+`episodemods._capped_snare`; the boosts' `_capped` summed them to 132 and declared `0x0027 [foe,
+-92.16]` (HEX-1; RECONSTRUCTION: retail's stacking of two over-cap snares is on no tape, the
+MOVESPEED arc's snare row is still open).
 
 **Rows** (`content/world.toml`, hand, WIKI-provenanced with the revision ids): Deep Freeze 234
 (`Cold damage` 10..85, the snare, `hits_on_cast`, impact 414, 312 u, 10 s flat), Ice Spikes 211
@@ -2854,11 +2873,18 @@ for 52, 56, 108 and 204 come with their mechanisms (B2: the hex pips, the adrena
 explicit slots and the signet factor, Panic's interrupt chain).
 
 **Flags.** `--no-area-hexes` (the one-target hex and no on-cast hit -- the reading every run
-before today made; `--no-spell-areas` reverts it too, the older flag winning as for §42),
+before today made; `--no-spell-areas` reverts it too, the older flag winning as for §42 -- and the
+rows' own snare `0x0027 [w, 97.92]` / `[w, 288.0]` STAYS under both, because it is Deep Freeze's
+and Ice Spikes' content row riding `move_speed_terms`, not code: removing the row is its revert,
+Faintheartedness's attack-speed row being the precedent -- HEX-5),
 `--no-hex-effect-words` (the status bit alone; a row's own `auras` in the pre-D6 slot, unrefcounted),
 `--no-snare-status-bit`.
 
-**Tests** (`test_weapons.py` §31, floor 299 → 309 bare, MEASURED; a vault run gives 336): the
+**Tests** (`test_weapons.py` §31, floor 299 → 309 bare, MEASURED; a vault run gives 336; the D6
+review's repair: +4 bare, 313 / 340 -- the burst killing the target (HEX-3, retail's death batch
+order with the snared base back), the gone row (HEX-4), two snares (HEX-1, the boosts' `_capped`
+as the known-bad arm), the wearer filters (M11: an ally and a corpse inside the radius, the
+player outside a body's), the words re-pinned BEHIND the hexes): the
 predicate on injected rows and, vault-only, the seven against the pinned table; Deep Freeze through
 the real press and E5 over a cluster (three inside, one at 400 u): the words and [20]s per foe in id
 order, then per wearer its own episode as `[6, w, 1]`, `[6, w, 12]`, `0x00F1 0xC00`, no `0x0042`
@@ -2893,7 +2919,10 @@ no `%str%` at all). So the number or the rule enters through an EXPLICIT row fie
   That a hex shares the conditions' cap is RECONSTRUCTION (GWW "Health degeneration" caps the whole
   and names no second ledger). `CONDITION_PIPS` and `pips_from` are untouched (test_effects 4e's
   exact pin stands; the hex pips sit beside it). Degeneration is not damage: no word, no [10], no
-  scatter (WIKI "Area damage over time"). **This LIGHTS UP Faintheartedness 135's dormant
+  scatter (WIKI "Area damage over time", rev. 2550879). The RATE reaches the client since the D6
+  review (HEX-2): `_apply_effect_on` ends with `push_regen`, so a hex row that moves the pips
+  sends `0x00A2 [44]` at the apply as a condition's does (and the 0 back at the close); the first
+  cut sent none, and the wearer bled in silence against a bar the client drew full. **This LIGHTS UP Faintheartedness 135's dormant
   `bonus_scale_means = "Health degeneration"`** -- its row named the label since 2026-08-22 and
   nothing read it (the D6 server lane's surprise): decided ON here, 3 pips at rank 15, and
   `--no-hex-degeneration` reverts both hexes.
@@ -2935,7 +2964,7 @@ no `%str%` at all). So the number or the rule enters through an EXPLICIT row fie
   the completion chosen); "all other nearby foes" read as the other WEARERS (the spec's reading)
   rather than every foe near the user; and the same-caster family. The two slots differ between
   the paths (the player's at its batch end, a body's behind its 58) -- both UNWITNESSED. Never
-  scatters (WIKI "Scatter": Panic is a named non-trigger). `--no-hex-skill-use-chain`.
+  scatters (WIKI "Scatter", rev. 2735452: Panic is a named non-trigger). `--no-hex-skill-use-chain`.
 
 **Tests** (`test_mechanics.py` §35-38, floor 257 → 297 bare = the only number it has, MEASURED,
 every section with its flag's known-bad arm; the TESTS.md entry has the checks). `test_weapons` (336
@@ -2944,11 +2973,12 @@ vault / 309 bare, unchanged), `test_effects`, `test_labelconsumers`, `test_inter
 `test_castcycle`, `test_guards`, `test_agentlife`, `test_content`, `test_bareimport`, `test_srclint`,
 `test_provlint` green on the same tree.
 
-**Left.** The wire ORDER of an area hex with damage (the player's words-then-hexes vs a body's
-hexes-then-words; one `[20]` per foe vs one) -- a loopback run can show what our client draws, only
-a live cast what retail sends; the class id's key (profession of the skill vs the caster, vs the
-attribute); whether a foe on the area's edge gets the full duration (not on GWW); how the 66 stacks
-with Crippled (CONTESTED, slice 48.3); the `[59]` on the player's E5 for a dead target; Rust's
+**Left.** The wire ORDER of an area hex with damage (hexes-then-words on both paths now; one `[20]`
+per foe vs one) -- a loopback run can show what our client draws, only a live cast what retail
+sends; the class id's key (profession of the skill vs the caster -- the attribute is out, §43);
+whether a foe on the area's edge gets the full duration (not on GWW); how the 66 stacks with
+Crippled (CONTESTED, slice 48.3) and how two over-cap snares stack (the largest wins here,
+RECONSTRUCTION); the `[59]` on the player's E5 for a dead target; Rust's
 10..70 vs 10..85 (a tooltip run); whether a Rusted PLAYER's cast bar needs property 61 (a harness
 run with Healing Signet under Rust); Panic's trigger instant and its reach (other wearers vs every
 nearby foe) -- a live Panic is the only witness; whether a hex's degeneration shares the

@@ -5980,7 +5980,9 @@ on agents 12/11/13 in one instant and the 72/45/39 packets 115 ms later, **the s
 0.735 ratio on three different bodies at once**. A per-hit location roll cannot
 give three characters the same ratio in the same tick; a second skill's payoff
 can. (Which rating puts Incendiary Bonds' 15…67 at 72 on that body is not
-resolved — the caster's rank and the target's rating are both off the wire.)
+resolved — the caster's rank and the target's rating are both off the wire. §61.1
+reads the same 72 as `hex_end_damage(179, 13)` on the ASSUMPTION the armour factor
+is 1 — CORROBORATED, not exact, for that reason.)
 
 ### 43.6 Shipped, and the number it changes on our wire
 
@@ -9206,7 +9208,15 @@ printed so, with the corrected reading beside each, never rewritten:
 
 M3 (Burning on the target when it is the observer) was UNTESTABLE: no Mind Burn was ever
 cast onto the observer; it was struck as an ADJACENT foe twice, with twins, and its Burning
-was `0x0042 [obs, 480, 9, buff, 9.0]` (M3c). The other twelve held as registered.
+was `0x0042 [obs, 480, 9, buff, 9.0]` (M3c). M4's FIRST clause held (no caster is the
+observer, so no caster's energy is on the wire); its SECOND clause — "on a cast onto the
+observer the observer's energy IS, so a twin gives a bound" — is UNTESTABLE for the same
+null as M3 and because the observer's CURRENT energy is never on the wire either (its
+maximum, regen and spends are); the reader prints it so (the D6 review's EV-5: the first
+port had dropped the clause). C1's "all on Isle connections" clause is UNSCORED — the reader
+does not read the map id; the two stamps are the Isle's by the vault's filing. The per-port
+announce counts I1 / M1 are held to were registered AFTER the lane's first run, from its
+output, and the reader says so. The other eleven held as registered.
 
 ### 61.1 SKILLS-HX1 — Incendiary Bonds 179: the damage is the hex's END, and it fires three ways
 
@@ -9218,8 +9228,12 @@ hex's `0x0042 [obs, 179, 13, buff, 3.0]` is on the wire once (the target was the
 observer): between the `[20]` and the `[6]`s, field3 13 the caster's Fire Magic, the f32
 the duration, removed at +3.021. **Its END** (followed `[6, T, ..]` → `[7, T, ..]`, 28/28):
 
-- **scheduled**, +2.986..+3.022 (20): 19 carried the payoff (the twentieth's target died
-  within 0.13 s; the reader counts a Fire Storm tick word there, a mixed instant);
+- **scheduled**, +2.986..+3.022 (20): 18 carried the payoff; the nineteenth (690.819) carries
+  ONE word onto the target and it is the caster's Fire Storm TICK — the same (caster, value)
+  landed on that foe in the completion batch, one value a second — so the reader sets it aside
+  (`i_payoff_tick`, a mixed instant, not a payoff; the D6 review's EV-6), and the target dies
+  22 ms later carrying a `[6, 7, 25]` with no damage word (OPEN, §61.4); the twentieth
+  (543.444) landed nothing on a target dying within 0.13 s;
 - **removed** by the target's own Remove Hex 301 (4, at +1.072 / +1.102 / +2.056 / +2.967):
   **0 payoff, 4/4** — CORROBORATED with WIKI (GWW "Incendiary Bonds" rev 2733032, the
   anomaly note: removing the hex before it ends negates the end effect);
@@ -9232,19 +9246,27 @@ the duration, removed at +3.021. **Its END** (followed `[6, T, ..]` → `[7, T, 
 (`0x0042 480` on the observer) → `[6, foe, 25]` → `0x00F1` (+0x02) → `0x00A2 [44, foe, f]`;
 after every foe the hex's own end (`0x0044` on the observer, `[7, T, 1] [7, T, 12]`, `0x00F1`
 with 0x800 cleared). No 58 of 179, no `[20]`; two payoffs share their instant with the
-caster's OTHER skill completing (a mixed batch). Takers 1 (×11), 2 (×5), 3 (×5), 4 (×1),
-every one a foe by allegiance token, the target among them whenever it lived. A struck
+caster's OTHER skill completing (a mixed batch). Takers 1 (×10), 2 (×5), 3 (×5), 4 (×1),
+every one a foe by allegiance token, the target among them whenever it lived. **Who stands
+inside 240 u is NOT testable from the tape** — the other agents' positions are leads — so
+the takers are OBSERVED and the radius (the record's aoe_range) is RECONSTRUCTION (the D6
+review's EV-8). A struck
 observer gets the `0x00CF [obs, n]` → `[10, obs, 179]` → word prefix (3/3, Fire Storm's).
 Burning on the takers: 28 new `[6, foe, 25]`, 11 already burning; on the observer
 `0x0042 [obs, 480, 3, buff, 3.0]` removed at +3.000..+3.002 (3/3). Fire damage is one value
 per (caster, taker): 0.12973 on a 555 pool is **72**, which is `hex_end_damage(179, 13)` —
-the record's scale 20..80 at the caster's 13 — on this server, exactly.
+the record's scale 20..80 at the caster's 13 — on this server, on the ASSUMPTION that the
+taker's armour factor is 1: the server's number is pre-armour, the wire's post-armour, and
+both the rank and the rating are off the wire (§43.5). CORROBORATED, not exact (EV-8).
 
 **Shipped.** `skill_effect.179`: `scale_means = "Fire damage"`, `bonus_scale_means =
 "Burning"`, `damage_type = 5`, **`on_end = "burst"`**, **`end_radius = 240`** (the record's
 aoe_range, "nearby"). `authsrv.hex_end_arm` at the apply puts `end_burst` on the episode
 (the radius, the caster's side and a snapshot of its row — `open_area`'s precedent, so a
-body caster killed or despawned still resolves its payoff at the strike level it had).
+body caster killed or despawned still resolves its payoff at the strike level it had); a
+wearer ALREADY carrying an armed 179 arms no second one — one payoff per wearer, the client
+drawing the first hex (an overlapping 0x0042 is discarded) — RECONSTRUCTION, no double 179 on
+any tape (the D6 review's R34-4: the first cut fired twice).
 `authsrv.hex_end_burst(send, state, conn_id, ep, why)`: every living foe of the caster
 within the radius of the WEARER's position now (`area_corpse_point`: the corpse's when it
 just died) — the player caster through `hit_enemy(exact, swing=False, armed=True)` per foe
@@ -9258,11 +9280,17 @@ close** — the payoff, THEN the hex's own `0x0044` / `[7]`s / `0x00F1`, retail'
 and, because a payoff can kill its own wearer (whose strip closes and words the episode),
 the tick re-checks the episode is still live before closing it; `strip_effects` calls it
 under **`if dead:`** only — the wearer's death fires it early on the foes still standing
-(WIKI + 2/3), a strip while ALIVE (a cure, a removal) fires nothing (WIKI + 4/4). The
-death payoff's slot inside the death batch (behind the corpse's own `0x0044`s, ahead of its
-death word) is **UNWITNESSED** — the tape shows the payoff riding the death batch, not
-its order inside it. `skill_condition` returns None for an `on_end` row, so the completion
-Burns nobody (retail 0/28). **`--no-hex-end-burst`** reverts: the hex expires with its
+(WIKI + 2/3), a strip while ALIVE (a cure, a removal) fires nothing (WIKI + 4/4). **The
+death payoff's slot is OBSERVED, 2/2** (the D6 review's EV-1 / R34-1; `hexjoin --rows`
+631.935 and 642.688): the death word FIRST with the corpse's live bits (`0x00F1 [8, 0x833]`),
+the reward block, THEN the payoff on the adjacent foe, THEN the corpse's own `[7, 8, 1]
+[7, 8, 12]` stepping the word down, the `0x0026` flags byte LAST. The first cut sent the
+opposite on both counts ([7]s, payoff, death word) and called the slot unwitnessed;
+`kill_agent` now sends the whole word, the reward, the strip (the payoff ahead of the
+removal loop in `strip_effects`), the step-down and the flags in that order — the same
+shape for ANY effect on a dying body (EV-2: 179 at 367.995 and Empathy at 653.979 step the
+word down behind the [7]s too, 4/4 inspected of the 7 death ends). `skill_condition` returns
+None for an `on_end` row, so the completion Burns nobody (retail 0/28). **`--no-hex-end-burst`** reverts: the hex expires with its
 `[7]`s and nothing fires (this server's bytes until today).
 
 ### 61.2 SKILLS-HX2 — Mind Burn 185: the second packet and its Burning are decided PER FOE
@@ -9296,8 +9324,13 @@ completion (every foe's terms before the 58, the words behind it): per foe ascen
 target and the foes within 156 u of it — the base word, then, when
 `energy_bonus_holds(caster, foe, target)`, an IDENTICAL second word (a body's reuses the
 same terms — retail's twin is identical 21/22) and the Burning (1..10 at the caster's
-rank: 9 at 13, 8 at a body's 12, 1 at the player's 0). No `[20]` per foe — the target's is
-`send_skill_visual`'s. The comparison is the caster's pool against THAT foe's pool
+rank: 9 at 13, 8 at a body's 12, 1 at the player's 0). No `[20]` per foe — the target's
+`[20, T, c, 331]` is `send_skill_visual`'s, from a `skill_visual` row added at the D6 review
+(EV-4: the first cut had no row for 185 or 179, sent neither the 331 nor 179's `[21, c, 347]`
++ `[20, T, c, 348]`, and §11d locked the absence; `skilltable.py` on the pinned client reads
++0x78 / +0x7c as exactly the wire's 347 / 348 / 331, ANIMREF-R8's route). A target DEAD at
+the E5 lands nothing on the foes beside it either (R34-2; a targeted spell fails with its
+target, only an area at a location survives it). The comparison is the caster's pool against THAT foe's pool
 (`agent_energy_now`: the player's `player_energy`, a body's `agent_energy` — **a hostile's
 is this server's invented ENEMY_ENERGY 30**), strictly more, read after the cast's cost is
 paid (the instant is **UNVERIFIED**). **`--no-spell-energy-bonus`** reverts the twin and the
@@ -9305,6 +9338,9 @@ Burning; **`--energy-bonus-target-only`** is the wiki's one comparison against t
 for every foe — the KNOWN-BAD ARM, which the lock shows cannot produce 647.300's shape
 (two singles at the target 20 / adjacent 5, two twins at 10 / 20). `skill_condition`
 returns None for a `bonus_if` row: the Burning is the twin's, never the completion's.
+COUPLED, said (R34-5): the twin and the Burning ride the adjacent path, so
+**`--no-area-damage` takes them too** — under it Mind Burn is the pre-2026-09-27 one-target
+word, energy clause and all.
 
 ### 61.3 SKILLS-HX3 — how ANY hex lands, the snare, the effect ids (the post-hoc facts, L1–L4)
 
@@ -9315,12 +9351,17 @@ Teinai's Prison 1097 `[1, 12]` 5/6 and `[12]` once (651.779: the target already 
 Empathy's live `1`), Empathy 26 `[1, 4]` 5/5; Lightning Strike 222 (type 4 in the table)
 lands NO `[6]` and no 0x800, 14/14 (hexes only when Overcast, WIKI rev 2738740). This is
 B1's `HEX_EFFECT_WORDS` (weapons §43). **L2**: a multi-foe batch goes out in ascending
-agent id (23 of 24 clean; the one exception is two groups in one window). **L3**: Teinai's
+agent id (the reader's count: **24 of 25** on the witness tape — 179 11, 185 13, one 185
+exception at 640.689 that is two groups in one window; the D6 review's EV-12). **L3**: Teinai's
 Prison carries `0x0027 [T, 97.92]` (288 × 0.34) in its apply batch and `0x0027 [T, 288.0]`
 in its end batch, with 0x00F1 bit 0x400 set alongside 0x800 and cleared at the snare's end
 while another hex keeps 0x800 (0xC00 → 0x803) — 6/6; B1's snare bit. **L4**: the `[6]` ids
 beside the observer's condition 0x0042s: Bleeding 23, Blind 24, **Burning 25**, Disease 26,
-Poison 27, **Dazed 28**, Weakness 29 and **Cracked Armor 29**. Conditions corpus-wide: 313
+Poison 27, **Dazed 28**, Weakness 29 and **Cracked Armor 29** — so **id 29 is shared** by
+Weakness and Cracked Armor: a class, not a per-condition id (R34-8). And an id is not every
+condition's: Mind Burn's twin Burning on the observer carries NO `[6]` at all (2/2 on the
+witness tape), nor do the corpus's Crippled and Deep Wound applies on the observer (4 / 4);
+179's payoff Burning on the observer carries `[6, obs, 25]` 3/3. Conditions corpus-wide: 313
 `0x0042` / 297 `0x0044`, 61 condition applies; Dazed ×1 and Cracked Armor ×2 exist (the Isle,
 `20260821T152147` / `20260821T155022`, observer 25, field3 0, f32 10.0, no 58 in the batch)
 — B4's inflicters have a wire shape to match. C2c: a SKILL-applied condition (a
@@ -9336,11 +9377,19 @@ carries field3 == its f32 (23/23); an environmental one carries field3 0 (38/38)
   server's `apply_condition` sends a foe the status word alone (MANTID) and no `[6]` — the
   payoff's Burning on a foe is `0x00F1` + `[44]` here. Named; the condition-id words are a
   B4-sized change of their own.
-- **UNWITNESSED**: the death payoff's slot inside the death batch; a party body as the
-  wearer (only hostiles and the observer wore 179 on tape); the energy comparison's instant
-  and both pools (M4 — a live cast with known energies is the only witness).
+- **UNWITNESSED**: a party body as the wearer (only hostiles and the observer wore 179 on
+  tape); the energy comparison's instant and both pools (M4 — a live cast with known energies
+  is the only witness); the death payoff's slot for a PARTY body (`kill_agent`'s
+  `reward=False` arm puts the strip between the hero's morale tick and the flags, the
+  player's shape). The death payoff's slot for a FOE is OBSERVED 2/2 (§61.1), no longer here.
 - **NOT modelled**: the caster's death firing the payoff (n = 1); the twentieth scheduled
-  end that landed nothing on a target dying within 0.13 s.
+  end (543.444) that landed nothing on a target dying within 0.13 s.
+- **OPEN**: 690.819 — the target carries a new `[6, 7, 25]` (Burning) at the hex's end with
+  no damage word from the caster (the one word there is the Fire Storm tick), 22 ms before it
+  dies; whether that Burning is the payoff's with its word lost to the death, or another
+  skill's, the tape does not say (the lane's open item, restored — EV-6).
+- **The radius**: 240 u is the record's aoe_range, RECONSTRUCTION — 1..4 takers are OBSERVED,
+  who stood inside 240 is not (EV-8).
 - **Owed**: a loopback run to watch the client draw the twin and the Burning icon on a foe
   under the per-foe rule (a live cast would settle the comparison; a loopback cannot).
 
@@ -9383,7 +9432,10 @@ reads. The rules are WIKI (the wiki lane's Q1, `d6R-wiki.md`), each with its rev
   names no shield).
 - **The player**: `player_armour_at` / `player_spell_armour` / `spell_armour_for` take `state`
   and pass the shield and the penalty INTO the leaf (before: the leaf capped the bonus and the
-  wrapper added the shield after). Penetration (`penetrated_armour`) stays behind it at every
+  wrapper added the shield after — and `player_spell_armour` still did until the D6 review's
+  R34-7: a Cracked 60 core with a 16 shield read 76 there and 60 in `player_armour_at`; now
+  60 in both, the shield inside `net_armour`'s floor. `spell_armour_for`, the live spell path,
+  never added the shield at all — a gap that predates this arc, still open). Penetration (`penetrated_armour`) stays behind it at every
   site and the casting penalty (Healing Signet's -40) behind both — the order
   `casting_armour_penalty`'s own quote gives ("applied after the armor cap and the effects of
   Cracked Armor and armor penetration"), which is what corrected D6's "where Healing Signet's
@@ -9393,6 +9445,14 @@ reads. The rules are WIKI (the wiki lane's Q1, `d6R-wiki.md`), each with its rev
   core below 60 is its own floor and a spell on the Cracked player meets the SAME rating —
   Cracked Armor moves nothing there. A real consequence of the wiki's rule on a low-level
   set, and a check pins it rather than a "-20 everywhere" that would have been wrong.
+- **CONTESTED (R34-3)**: how much Cracked Armor does on the PLAYER rests on the ambiguity
+  `combatmath.bonus_armour` already recorded — whether the pieces' `+20 vs. physical` is
+  capped BONUS armour (GWW "Armor calculation": inherent mods are Bonus) or uncapped CORE
+  armour (GWW "Basic armor" prints the Warrior's +20 vs. physical as basic). `net_armour`
+  takes the BONUS reading, which is what the 45 → 25 and 12 → 18 above are. Under the CORE
+  reading the core is 45, the floor min(60, 45) = 45, and Cracked Armor moves NOTHING on the
+  starter set — the elemental outcome again. §39 pins both arms; a tooltip / armour-panel
+  read in a harness run, or a live Cracked Armor exposure, settles it.
 - **Bodies**: `cracked_body_armour(state, tid, rating)` at the five sites that read a body's
   rating — `body_spell_armour`, `land_swing_on_body`, `hit_enemy`, `scythe_extra_hit`, the
   preparation splash — ahead of each site's `penetrated_armour`: a Javelin's 25 % on a Cracked
@@ -9471,4 +9531,7 @@ reads. The rules are WIKI (the wiki lane's Q1, `d6R-wiki.md`), each with its rev
   says, and a spell's damage is not one, but a preparation's splash and a scythe's extra hit
   are not attack LANDINGS on this server and do not fire it (the riders' rule).
 - A condition on a FOE still draws no `[6, foe, id]` here (§61.4's open item) — Dazed's
-  `[6, 25, 28]` and Cracked Armor's `[6, 25, 29]` are the ids, unsent.
+  `[6, 25, 28]` and Cracked Armor's `[6, 25, 29]` are the ids, unsent; and 29 is Weakness's
+  id too (hexjoin L4, 9/9) — a class shared by two conditions, not Cracked Armor's own
+  (R34-8), which anyone sending it must know first.
+- The Bonus-vs-Core reading of the pieces' +20 (§62.1, CONTESTED).

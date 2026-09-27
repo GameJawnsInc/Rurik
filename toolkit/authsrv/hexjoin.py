@@ -50,10 +50,15 @@ hex end, bufflog's "179 -> (13, 3.0)", the skills-FINDINGS status-word table). T
 of them FAILED as registered -- I4, M2, C2 -- and this reader prints each one FAILED
 with the corrected reading (I4c, M2c, C2c) beside it. They are not rewritten: a
 prediction that is edited to fit the tape after the run is a prediction nothing could
-have refuted.
+have refuted. Two things beside them are NOT the lane's registrations and say so: the
+per-port announce counts EXPECT_179_PER_PORT / EXPECT_185_PER_PORT are the lane's
+FIRST-RUN OUTPUT (registered after it, printed as such), and M4's second clause is
+UNTESTABLE on this corpus (below).
 
  179 Incendiary Bonds (record: type 4, target 5, act 1.0, dur 3/3, scale 20..80, bonus 1..3, aoe 240)
   I1  every announce is 0x00A0 [60, caster, target, 179]; completion [58, caster, 0] at +1.0 +- 0.05 s.
+      (The per-port counts the reader also holds it to -- 19 / 4 / 4 / 3 on the witness tape --
+      were registered AFTER the first run, from its output; a floor on the corpus, exact per tape.)
   I2  the completion batch carries a [20, target, caster, 348] and NO damage word from the
       caster onto the target.
   I3  when the target is the observer, the completion batch carries 0x0042 [obs, 179, rank, buff, 3.0]
@@ -71,12 +76,18 @@ have refuted.
       foes still standing; and no payoff batch carries a 58 of 179 (a 58 / [20] of the caster's
       OTHER skill completing in the same instant is a mixed batch, aotjoin's word; two of them).
       WIKI (GWW "Incendiary Bonds" rev 2733032) names the target's death and the removal.
+      A word in the end batch whose (caster, value) ALREADY landed on that foe in the completion
+      batch is the caster's periodic TICK (Fire Storm's, repeating one value a second), not the
+      payoff's -- 690.819's only "payoff" word is one (the D6 review's EV-6); such an end is
+      counted as mixed (`i_payoff_tick`), never as a payoff.
   I5  every trigger word's taker is a foe of the caster (allegiance token), 1..4 takers.
   I6  a Burning 0x0042 [obs, 480, n, buff, n.0] lands on the observer whenever the observer takes
       a trigger word, duration 3.0, removed by 0x0044 at + duration.
 
  185 Mind Burn (record: type 5, target 5, act 1.0, scale 15..60, bonus 1..10, aoe 156)
   M1  every announce 0x00A0 [60, c, t, 185]; [58, c, 0] at +1.0 +- 0.05.
+      (The per-port counts -- 17 / 4 / 3 / 3 on the witness tape -- registered after the first
+      run, as I1's.)
   M2  the completion batch carries [20, target, caster, 331] and one or two IDENTICAL 16 words onto
       the target (two = the energy clause, P4's twin); on a twin cast the adjacent foes ALSO take a
       word -- a non-twin cast strikes the target alone.
@@ -91,8 +102,14 @@ have refuted.
       UNTESTABLE AS REGISTERED: no Mind Burn was ever cast ONTO the observer. The observer was
       struck as an ADJACENT foe (twice), with twins: 0x0042 [obs, 480, 9, buff, 9.0] -- printed as
       M3c, the same claim on the foe the tape does hold.
-  M4  DECIDABILITY: the caster's energy is never on the wire (no caster is the observer), so the
-      comparison is undecidable from the tape, only bounded.
+  M4  DECIDABILITY: the caster's energy is never on the wire (casters are not the observer); on a
+      cast onto the observer the observer's energy IS, so a twin gives only "caster energy > the
+      observer's energy then" -- the comparison is undecidable from the tape, only bounded.
+      The first clause holds (scored). The second is UNTESTABLE AS REGISTERED: no Mind Burn was
+      cast onto the observer (M3's own null), and the observer's CURRENT energy is never on the
+      wire either -- its maximum (prop 41), its regen (43) and its spends (62) are, a current
+      value is not -- so the "bound" the clause promised cannot be taken from any tape here.
+      Printed so beside M4 (the D6 review's EV-5); an earlier port dropped the clause.
 
  generic hex apply (every type-4 skill announced anywhere in the live corpus)
   G1  the 0x0042 is visible ONLY on the observer (or a hero): 0 hex applies on any other agent.
@@ -102,8 +119,11 @@ have refuted.
   G4  the removal is 0x0044 [obs, buff] at apply + f32 within 0.05 s unless stripped.
 
  conditions
-  C1  >= 1 apply of Dazed 485 and >= 2 of Cracked Armor 2077 in the LIVE corpus, none inside a
-      cast's 58 batch (environmental).
+  C1  >= 1 apply of Dazed 485 and >= 2 of Cracked Armor 2077 in the LIVE corpus, all on
+      Pre-Searing (Isle) connections, none inside a cast's 58 batch (environmental).
+      The Isle clause is UNSCORED: this reader does not read the map id; the applies are on
+      20260821T152147 / 20260821T155022, the Isle captures by their stamps (skills 61.3), and
+      that is a reading of the vault's filing, not of the bytes (the D6 review's EV-5).
   C2  Burning (480) and Bleeding (478) applies: field3 == the f32 (integer seconds) on every one,
       removal at + f32.
       FAILED AS REGISTERED: field3 equals the duration only on CAST-applied conditions (Burning
@@ -129,7 +149,13 @@ REGISTERED AFTER THE LANE'S FIRST RUN, from what that run showed, and locked on 
       Cracked Armor 29.
 
 Corpus totals are FLOORS (a later capture is confirming evidence); the witness tape's own
-counts (20260817T231139: 30 announces of 179, 27 of 185) are exact, per tape.
+counts (20260817T231139: 30 announces of 179, 27 of 185) are exact, per tape. score() keeps
+the two apart: every exact number (completions, ends, takers, twins, the [6] ids, the order
+census) is computed on the WITNESS capture alone, the invariants (every hex 0x0042 on the
+observer, every G3 residual, every cast-applied condition's field3) and the floors on the
+whole corpus -- so a later capture holding the same casts again reddens nothing
+(test_skilldamage 12c appends one and checks; the D6 review's EV-3 found the first port
+pinning corpus totals as per-tape exacts).
 
 Standard library only; reads the vault through `vaultpath`.
 """
@@ -202,6 +228,9 @@ SNARE_BASE = 288.0          # u/s; the declared base every 0x0027 restores (slic
 SNARE_FACTOR = 0.34         # 1 - 0.66; L3
 
 EXPECT_CAPTURE = "20260817T231139"
+# the captures the post-hoc L1 facts were read on (179 / Teinai's Prison + Empathy /
+# Lightning Strike x2): their [6] counts are exact PER TAPE; any other stamp is a floor
+L1_WITNESSES = (EXPECT_CAPTURE, "20260913T210901", "20260914T005758", "20260916T150306")
 EXPECT_179_PER_PORT = {"54071": 19, "50527": 4, "50513": 4, "50286": 3}
 EXPECT_185_PER_PORT = {"54071": 17, "50527": 4, "50513": 3, "50286": 3}
 
@@ -462,6 +491,13 @@ def incendiary_rows(conns, table):
             r["scheduled"] = (abs(r["end_dt"] - PAYOFF_AT) <= PAYOFF_TOL
                               and not any(w.startswith("removed") for w in why))
             words = _words_by_foe(c, cst, eb)
+            # a foe whose end-batch words ALL already landed on it from this caster in
+            # the COMPLETION batch is taking the caster's periodic tick (Fire Storm's,
+            # one value a second), not the payoff (690.819: EV-6) -- set aside, printed
+            at_completion = _words_by_foe(c, cst, bb)
+            r["payoff_tick"] = {foe: ws for foe, ws in words.items()
+                                if ws and all(w in at_completion.get(foe, ()) for w in ws)}
+            words = {foe: ws for foe, ws in words.items() if foe not in r["payoff_tick"]}
             r["payoff"] = dict(words)
             r["payoff_takers_foe"] = [c.foe(cst, foe) for foe in words]
             r["payoff_own58"] = [(v[2], (c.latest_announce(v[2], t) or (None, None))[1])
@@ -691,31 +727,37 @@ def score(c):
     hcasts, happlies = hex_rows(conns, table, types)
     every42 = all_applies(conns)
     conds = condition_rows(conns)
-    order = multi_foe_batches(conns, table)
+    # THE WITNESS AND THE CORPUS ARE KEPT APART (EV-3): every EXACT number below is the
+    # witness capture's (EXPECT_CAPTURE, the tape the predictions were registered on);
+    # a `*_corpus` key is the whole corpus's and a FLOOR. A confirming later capture
+    # (the same casts again) moves the floors and nothing else.
+    wcon = [cc for cc in conns if cc.stamp == EXPECT_CAPTURE]
+    order = multi_foe_batches(wcon, table)                  # exact, per tape
     s = {"captures": c["captures"], "connections": c["connections"], "refused": len(c["refused"]),
-         "observer_named": c["observer_named"]}
+         "observer_named": c["observer_named"], "witness": EXPECT_CAPTURE}
 
     # ---- 179
     wit = [r for r in inc if r["capture"] == EXPECT_CAPTURE]
-    done = [r for r in inc if r["tc"] is not None]
+    done_c = [r for r in inc if r["tc"] is not None]        # corpus
+    done = [r for r in wit if r["tc"] is not None]          # witness: exact
     stopped = [(r["port"], round(r["ta"], 3), r["stop"]) for r in inc if r["tc"] is None]
-    s["i_announces"] = len(inc)
+    s["i_announces"], s["i_announces_corpus"] = len(wit), len(inc)
     s["i_per_port"] = dict(collections.Counter(r["port"] for r in wit))
     s["i_forms"] = dict(collections.Counter(r["form"] for r in inc))
     s["i_by_observer"] = sum(1 for r in inc if r["caster"] == r["observer"])
-    s["i_completed"], s["i_stopped"] = len(done), stopped
-    dts = [r["dt"] for r in done]
+    s["i_completed"], s["i_completed_corpus"], s["i_stopped"] = len(done), len(done_c), stopped
+    dts = [r["dt"] for r in done_c]
     s["i_dt"] = (min(dts), max(dts)) if dts else None
     s["i1"] = (s["i_per_port"] == EXPECT_179_PER_PORT and s["i_by_observer"] == 0
                and set(s["i_forms"]) == {"0x00A0[60]"} and bool(done)
                and all(abs(dt - 1.0) <= COMPLETION_TOL for dt in dts))
-    s["i_fx20_348"] = sum(1 for r in done if (r["target"], 348) in r["fx20"])
-    s["i_words_on_target"] = sum(r["words_on_target"] for r in done)
-    s["i2"] = bool(done) and s["i_fx20_348"] == len(done) and s["i_words_on_target"] == 0
-    hx = [r["hex_apply"] for r in done if r["hex_apply"]]
+    s["i_fx20_348"] = sum(1 for r in done_c if (r["target"], 348) in r["fx20"])
+    s["i_words_on_target"] = sum(r["words_on_target"] for r in done_c)
+    s["i2"] = bool(done) and s["i_fx20_348"] == len(done_c) and s["i_words_on_target"] == 0
+    hx = [r["hex_apply"] for r in done_c if r["hex_apply"]]
     s["i_hex_applies"] = hx
     s["i3"] = (len(hx) >= 1 and all(h["dur"] == 3.0 and h["order_58_42_f1"] for h in hx)
-               and all(any(b & HEX_BIT for b in r["status_hex"]) for r in done if r["hex_apply"]))
+               and all(any(b & HEX_BIT for b in r["status_hex"]) for r in done_c if r["hex_apply"]))
     ends = [r for r in done if r["end"] is not None]
     sched = [r for r in ends if r["scheduled"]]
     early = [r for r in ends if not r["scheduled"]]
@@ -746,6 +788,10 @@ def score(c):
     s["i_payoff_58_of_179"] = sum(1 for r in with_words for _w, sk in r["payoff_own58"] if sk == INCENDIARY)
     s["i_payoff_mixed"] = [(r["port"], round(r["ta"], 3), r["payoff_own58"], r["payoff_fx20"])
                            for r in with_words if r["payoff_own58"] or r["payoff_fx20"]]
+    # EV-6: a scheduled end whose only word is the caster's periodic tick (set aside in
+    # incendiary_rows) is a mixed instant, not a payoff -- 690.819, printed
+    s["i_payoff_tick"] = [(r["port"], round(r["ta"], 3), r["end_dt"], r["payoff_tick"])
+                          for r in ends if r.get("payoff_tick")]
     s["i4c"] = (len(sched) >= 18 and s["i_scheduled_with_words"] >= 18
                 and len(removed) >= 4 and all(n == 0 for _p, _t, _d, n in s["i_removed"])
                 and sum(1 for r in tdied if r["payoff"]) >= 2
@@ -770,23 +816,24 @@ def score(c):
 
     # ---- 185
     mwit = [r for r in mb if r["capture"] == EXPECT_CAPTURE]
-    mdone = [r for r in mb if r["tc"] is not None]
-    s["m_announces"] = len(mb)
+    mdone_c = [r for r in mb if r["tc"] is not None]        # corpus
+    mdone = [r for r in mwit if r["tc"] is not None]        # witness: exact
+    s["m_announces"], s["m_announces_corpus"] = len(mwit), len(mb)
     s["m_per_port"] = dict(collections.Counter(r["port"] for r in mwit))
     s["m_by_observer"] = sum(1 for r in mb if r["caster"] == r["observer"])
-    s["m_completed"] = len(mdone)
+    s["m_completed"], s["m_completed_corpus"] = len(mdone), len(mdone_c)
     s["m_stopped"] = [(r["port"], round(r["ta"], 3), r["stop"]) for r in mb if r["tc"] is None]
-    mdts = [r["dt"] for r in mdone]
+    mdts = [r["dt"] for r in mdone_c]
     s["m_dt"] = (min(mdts), max(mdts)) if mdts else None
     s["m1"] = (s["m_per_port"] == EXPECT_185_PER_PORT and bool(mdone)
                and all(abs(dt - 1.0) <= COMPLETION_TOL for dt in mdts)
                and set(collections.Counter(r["form"] for r in mb)) == {"0x00A0[60]"})
     twin = [r for r in mdone if len(r["on_target"]) >= 2]
     single = [r for r in mdone if len(r["on_target"]) == 1]
-    none_ = [r for r in mdone if not r["on_target"]]
+    none_ = [r for r in mdone_c if not r["on_target"]]      # an invariant: none anywhere
     s["m_twin"], s["m_single"], s["m_none"] = len(twin), len(single), len(none_)
     s["m_twin_identical"] = sum(1 for r in twin if len(set(r["on_target"])) == 1)
-    s["m_fx20_331"] = sum(1 for r in mdone if (r["target"], 331) in r["fx20"])
+    s["m_fx20_331"] = sum(1 for r in mdone_c if (r["target"], 331) in r["fx20"])
     mixed = [r for r in mdone if r["others"]
              and any(len(ws) != len(r["on_target"]) for ws in r["others"].values())]
     s["m_mixed"] = [(r["port"], round(r["ta"], 3), r["target"], len(r["on_target"]),
@@ -795,7 +842,7 @@ def score(c):
                                           if len(r["on_target"]) == 1
                                           and any(len(w) >= 2 for w in r["others"].values())]
     # M2 AS REGISTERED: a twin cast strikes the adjacent too, a single strikes the target alone
-    s["m2"] = (bool(mdone) and s["m_fx20_331"] == len(mdone) and not none_
+    s["m2"] = (bool(mdone) and s["m_fx20_331"] == len(mdone_c) and not none_
                and all(len(set(r["on_target"])) == 1 for r in twin)
                and not any(r["others"] for r in single) and not mixed)
     sig = collections.Counter((n, kind, "target" if foe == r["target"] else "adjacent")
@@ -815,6 +862,7 @@ def score(c):
     s["m3c"] = (len(ob) >= 2 and all(1 <= f3 <= 10 and float(f3) == dur and rem is not None
                                      and abs(rem - dur) <= REMOVAL_TOL for f3, dur, rem in ob))
     s["m4"] = bool(mb) and s["m_by_observer"] == 0
+    s["m4_second_clause"] = None            # UNTESTABLE: no cast onto the observer, no current energy
     # the rank CORROBORATION: 179's hex field3 (the caster's Fire Magic) predicts both Burnings
     ranks = {h["field3"] for h in hx}
     s["m_rank_fits"] = (len(ranks) == 1 and all(
@@ -842,7 +890,10 @@ def score(c):
     s["g4"] = len(happlies) >= 1 and all(
         a["stripped"] or (a["residual"] is not None and abs(a["residual"]) <= REMOVAL_TOL)
         for a in happlies)
-    hdone = [r for r in hcasts if r["tc"] is not None]
+    hdone_c = [r for r in hcasts if r["tc"] is not None]                              # corpus
+    hdone = [r for r in hdone_c if r["capture"] in L1_WITNESSES]                      # witnesses
+    s["l_adds_corpus"] = {f"{k[0]} {list(k[1])}": n for k, n in sorted(collections.Counter(
+        (r["skill"], tuple(r["adds"])) for r in hdone_c).items())}
     adds = collections.Counter((r["skill"], tuple(r["adds"])) for r in hdone)
     s["l_adds"] = {f"{k[0]} {list(k[1])}": n for k, n in sorted(adds.items())}
     ended = [r for r in hdone if r["end_dt"] is not None]
@@ -871,6 +922,7 @@ def score(c):
     s["l_not_ascending"] = [(sk, p, t, tg, seq) for sk, p, t, tg, seq, asc, _tf in order if not asc]
     s["l2"] = (sum(1 for x in order if x[5]) >= 23 and len(s["l_not_ascending"]) <= 2
                and all(len(seq) > len(set(seq)) for _s, _p, _t, _tg, seq in s["l_not_ascending"]))
+    s["l_ascending"] = sum(1 for x in order if x[5])       # 24 of 25 on the witness (EV-12)
     tp = [r for r in hdone if r["skill"] == TEINAIS_PRISON]
     s["l_snare"] = [(r["speed_at_apply"], r["speed_at_end"],
                      [hex(w) for w in r["status_at_apply"]], [hex(w) for w in r["status_at_end"]])
@@ -910,7 +962,20 @@ def score(c):
         if x["on_observer"]:
             for i in x["effect_ids"]:
                 ids[x["name"]][i] += 1
-    s["c_effect_ids"] = {k: dict(v) for k, v in sorted(ids.items())}
+    s["c_effect_ids"] = {k: dict(v) for k, v in sorted(ids.items())}       # corpus: a floor
+    wids = collections.defaultdict(collections.Counter)
+    for x in conds:
+        if x["on_observer"] and x["capture"] == EXPECT_CAPTURE:
+            for i in x["effect_ids"]:
+                wids[x["name"]][i] += 1
+    s["c_effect_ids_witness"] = {k: dict(v) for k, v in sorted(wids.items())}   # exact
+    # an observer condition with NO [6] id in its batch at all (Mind Burn's two Burnings
+    # on the observer, 20260817T231139) -- counted, so the ids above are not read as n/n
+    s["c_observer_no_id"] = dict(collections.Counter(               # the witness tape: exact
+        x["name"] for x in conds if x["on_observer"] and not x["effect_ids"]
+        and x["capture"] == EXPECT_CAPTURE))
+    s["c_observer_no_id_corpus"] = dict(collections.Counter(        # corpus: a floor
+        x["name"] for x in conds if x["on_observer"] and not x["effect_ids"]))
     s["l4"] = (ids["Burning"].get(BURNING_EFFECT_ID, 0) >= 1
                and ids["Dazed"].get(DAZED_EFFECT_ID, 0) >= 1
                and ids["Cracked Armor"].get(CRACKED_EFFECT_ID, 0) >= 1)
@@ -994,9 +1059,11 @@ def main():
         print_rows(c)
         print()
     print("---- 179 Incendiary Bonds")
-    print(f"[{_v(s['i1'])}] I1 announces on {EXPECT_CAPTURE} per port {s['i_per_port']} (predicted "
-          f"{EXPECT_179_PER_PORT}), corpus {s['i_announces']}, forms {s['i_forms']}, by the observer "
-          f"{s['i_by_observer']}; completed {s['i_completed']} at +{s['i_dt']}; stopped {s['i_stopped']}")
+    print(f"[{_v(s['i1'])}] I1 announces on {EXPECT_CAPTURE} per port {s['i_per_port']} (registered "
+          f"AFTER the first run, from its output: {EXPECT_179_PER_PORT}), corpus {s['i_announces_corpus']} "
+          f"(a floor), forms {s['i_forms']}, by the observer {s['i_by_observer']}; completed "
+          f"{s['i_completed']} on the witness / {s['i_completed_corpus']} corpus at +{s['i_dt']}; "
+          f"stopped {s['i_stopped']}")
     print(f"[{_v(s['i2'])}] I2 [20, T, 348] in {s['i_fx20_348']}/{s['i_completed']} completion batches; "
           f"damage words on the target there {s['i_words_on_target']}")
     print(f"[{_v(s['i3'])}] I3 the hex's 0x0042 on the observer: {s['i_hex_applies']} (n = "
@@ -1011,7 +1078,8 @@ def main():
           f"{len(s['i_removed'])}), the target's death fires early on the foes standing "
           f"({sum(1 for x in s['i_target_died'] if x[3])}/{len(s['i_target_died'])}), no payoff batch "
           f"carries a 58 of 179 ({s['i_payoff_58_of_179']}); MIXED instants (the caster's OTHER "
-          f"skill completing there, its 58 / [20]) {s['i_payoff_mixed']}")
+          f"skill completing there, its 58 / [20]) {s['i_payoff_mixed']}; ends whose only word is "
+          f"the caster's periodic TICK, not a payoff (port, t, end, foe: values) {s['i_payoff_tick']}")
     print(f"[{_v(s['i5'])}] I5 takers per payoff {s['i_takers_hist']}, not a foe {s['i_takers_not_foe']}; "
           f"the target among them {s['i_target_struck']}/{s['i_target_struck_of']} (alive); Burning on the "
           f"takers {s['i_payoff_burning']}")
@@ -1019,9 +1087,10 @@ def main():
           f"word {s['i_observer_prefix_ok']}); its Burning (field3, f32, removed after) "
           f"{s['i_observer_burning']}")
     print("---- 185 Mind Burn")
-    print(f"[{_v(s['m1'])}] M1 announces per port {s['m_per_port']} (predicted {EXPECT_185_PER_PORT}), "
-          f"corpus {s['m_announces']}, by the observer {s['m_by_observer']}; completed {s['m_completed']} "
-          f"at +{s['m_dt']}; stopped {s['m_stopped']}")
+    print(f"[{_v(s['m1'])}] M1 announces per port {s['m_per_port']} (registered AFTER the first run: "
+          f"{EXPECT_185_PER_PORT}), corpus {s['m_announces_corpus']} (a floor), by the observer "
+          f"{s['m_by_observer']}; completed {s['m_completed']} on the witness / {s['m_completed_corpus']} "
+          f"corpus at +{s['m_dt']}; stopped {s['m_stopped']}")
     print(f"[{_v(s['m2'])}] M2 AS REGISTERED (one comparison; a twin cast strikes the adjacent, a single "
           f"the target alone): [20, T, 331] {s['m_fx20_331']}/{s['m_completed']}; on the target twin "
           f"{s['m_twin']} (identical {s['m_twin_identical']}), single {s['m_single']}, none {s['m_none']}; "
@@ -1034,8 +1103,12 @@ def main():
     print(f"[{_v(s['m3c'])}] M3c the observer struck as an ADJACENT foe: Burning (field3, f32, removed "
           f"after) {s['m_observer_burning']} -- an integer in 1..10, field3 == f32; the 179 hex's field3 "
           f"{sorted({h['field3'] for h in s['i_hex_applies']})} predicts 3 and 9: {s['m_rank_fits']}")
-    print(f"[{_v(s['m4'])}] M4 no caster is the observer, so the caster's energy is never on the wire: "
-          f"the comparison is bounded, not decided")
+    print(f"[{_v(s['m4'])}] M4 (first clause) no caster is the observer, so the caster's energy is never "
+          f"on the wire: the comparison is not decided")
+    print(f"[----] M4 (second clause) UNTESTABLE as registered: 'on a cast onto the observer the "
+          f"observer's energy IS on the wire, so a twin gives a bound' -- casts onto the observer "
+          f"{s['m_onto_observer']}, and the observer's CURRENT energy is never on the wire (41 / 43 / 62 "
+          f"are); no bound can be taken")
     print("---- every hex")
     print(f"[{_v(s['g1'])}] G1 hex 0x0042s {s['h_42_per_skill']}: on the observer {s['h_42_on_observer']}, "
           f"elsewhere {s['h_42_elsewhere']}; ALL 0x0042 {s['all_42']}: on the observer "
@@ -1045,19 +1118,26 @@ def main():
     print(f"[{_v(s['g4'])}] G4 removal residuals (skill, s) {s['h_residuals']}")
     print(f"[{_v(s['l1'])}] L1 type-4 announces {s['h_announces']} at {s['h_where']}; [6, T, ids] at the "
           f"landing {s['l_adds']}; ended {s['l_ended']} at {s['l_end_ranges']}")
-    print(f"[{_v(s['l2'])}] L2 multi-foe batches {s['l_order']}; not ascending {s['l_not_ascending']} "
+    print(f"[{_v(s['l2'])}] L2 multi-foe batches (the witness tape) {s['l_order']}: {s['l_ascending']} of "
+          f"{len(s['l_not_ascending']) + s['l_ascending']} ascending; not ascending {s['l_not_ascending']} "
           f"(each a repeated agent: two groups in one window)")
     print(f"[{_v(s['l3'])}] L3 Teinai's Prison (speed at apply, at end, status at apply, at end) {s['l_snare']}")
     print("---- conditions")
     print(f"[{_v(s['c1'])}] C1 0x0042 {s['c_total_42']} / 0x0044 {s['c_total_44']} corpus-wide; conditions "
           f"{s['c_applies']}; Dazed {s['c_dazed']}; Cracked Armor {s['c_cracked']} (no 58 in the batch, "
-          f"field3 0)")
+          f"field3 0; the 'all on Isle connections' clause is UNSCORED -- the map id is not read here, "
+          f"the stamps are the Isle's by the vault's filing)")
     print(f"[{_v(s['c2'])}] C2 AS REGISTERED (Burning and Bleeding: field3 == f32): "
           f"(name, field3, f32, cast-applied, residual) {s['c_burn_bleed']}")
     print(f"[{_v(s['c2c'])}] C2c skill-applied conditions (a [10, me, skill], or a 58 whose announce named me) "
           f"{s['c_cast_applied']}, field3 != f32 on {s['c_cast_applied_off']}; environmental "
           f"{s['c_environmental']}, field3 != 0 on {s['c_environmental_off']}")
-    print(f"[{_v(s['l4'])}] L4 [6] ids beside the observer's condition 0x0042s {s['c_effect_ids']}")
+    print(f"[{_v(s['l4'])}] L4 [6] ids beside the observer's condition 0x0042s {s['c_effect_ids']} "
+          f"(the witness tape's: {s['c_effect_ids_witness']}; observer conditions carrying NO [6] id "
+          f"{s['c_observer_no_id']} on the witness tape -- Mind Burn's twin Burning on the observer "
+          f"sends none, 2/2 -- and {s['c_observer_no_id_corpus']} corpus-wide); NOTE "
+          f"id 29 is shared by Weakness and Cracked Armor -- a class, not a per-condition id (the D6 "
+          f"review's R34-8)")
     ok = all(v.values())
     print(f"hexjoin: {'THE READING HOLDS' if ok else 'THE READING FAILS'} -- registered "
           f"{_v(v['registered_hold'])}, I4/M2/C2 failed as registered {_v(v['failed_as_registered'])}, "

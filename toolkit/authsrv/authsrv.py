@@ -5543,8 +5543,11 @@ SKILL_DAMAGE_WORD = True
 # Healing Signet AGREES with the page (the survey read "spell" there; it does
 # not say spell). Content rows carry the flags (`interrupts`, `interrupt_disable`
 # on skill_effect 340 and 230). A body or hero as VICTIM is RECONSTRUCTION
-# (interrupt_body). Dazed's "any hit interrupts a spell" is D6's and NOT here.
-# --no-interrupts reverts to the server that could not interrupt anything.
+# (interrupt_body). The two skill-less modes ride `mode=`: "skill" (Panic's
+# chain, B2) and "spell" (Dazed, B4 -- "any successful ATTACK will interrupt
+# the skill during its activation", GWW "Easily interruptible" rev 2610199: an
+# attack, not any hit; a spell's damage does not). --no-interrupts reverts to
+# the server that could not interrupt anything.
 INTERRUPTS = True
 
 # NPC RECHARGE FROM COMPLETION (DESKWORK-D5 step 4, 2026-09-23; `rechargeprobe.py`).
@@ -13286,10 +13289,13 @@ def player_spell_armour(state=None):
     The shield rides here too (SLICE-H9), elemental -- its `+N vs. physical`
     line, if it ever carries one, does not. `state`: the player's Cracked
     Armor penalty (studies/skills 62), into the leaf ahead of the cap."""
-    got = combatmath.player_spell_armour(EQUIP_ARMOUR, ARMOR_RATING_MODIFIER,
-                                         ARMOR_VS_TYPE_MODIFIER,
-                                         cracked=cracked_penalty(state, PLAYER_AGENT_ID))
-    return None if got is None else got + offhand_armour("elemental")
+    # The shield goes INTO the leaf with the penalty (the review's R34-7: added
+    # after the leaf, a Cracked 60 + 16 read 76 here and 60 in player_armour_at
+    # -- the floor is net_armour's, so the shield must be inside it).
+    return combatmath.player_spell_armour(EQUIP_ARMOUR, ARMOR_RATING_MODIFIER,
+                                          ARMOR_VS_TYPE_MODIFIER,
+                                          shield=offhand_armour("elemental", state),
+                                          cracked=cracked_penalty(state, PLAYER_AGENT_ID))
 
 
 def spell_armour_for(skill_id, state=None):
@@ -15054,7 +15060,8 @@ def area_tick_period(skill_id):
 # connections, aotjoin P8), so the per-foe shape is RECONSTRUCTION from the
 # single-target hexes that ARE on tape (d6U-tape-join, 39 of 39 hexes that
 # landed: 179 x28, Teinai's Prison 1097 x6, Empathy 26 x5) and from the
-# multi-foe batches (23 of 23 ascending by agent id):
+# multi-foe batches (24 of 25 ascending by agent id -- hexjoin L2; the one
+# exception is two groups in one window):
 #
 #   * the HEX HALF (apply_effect): every living foe of the caster inside the
 #     record's `aoe_range` of the TARGET's position, the target among them at
@@ -15073,8 +15080,10 @@ def area_tick_period(skill_id):
 #     terms computed before its 58 (the refusal contract). A hex with no such
 #     field hits nothing at cast, as every hex did (the line 3818-3823 named
 #     as the one to revisit; `_resolves_at_cast` itself is unchanged). ORDER:
-#     each path's existing one -- the player's words then the hexes, a body's
-#     hexes then the words -- both unwitnessed, said so. Never scatter_struck
+#     the HEXES then the words on BOTH paths since the D6 review (the player's
+#     path sent the words first until then -- HEX-3: the burst killed the
+#     target ahead of the apply and no foe was hexed); UNWITNESSED either way,
+#     said so. Never scatter_struck
 #     (WIKI: Panic and a non-damage area never scatter; a single packet does
 #     not either).
 #   * a SNARE HEX (bonus_scale_means = "Movement speed decrease", the flat 66)
@@ -15093,15 +15102,24 @@ def area_tick_period(skill_id):
 AREA_HEXES = True
 # THE HEX'S VISUAL WORDS (every hex, not only an area hex). OBSERVED 39/39: at
 # the landing `[6, T, 1]` and `[6, T, class]` between the [20] / the 0x0042 and
-# the 0x00F1; at the end `[7, T, 1] [7, T, class]` behind the 0x0044 and ahead
-# of the 0x00F1 with 0x800 cleared. The `1` is left out when the wearer
-# already carries a live hex holding it (651.779, Empathy live: once), so the
-# ids are REFERENCE-COUNTED per wearer (aura_on / aura_off). The class id is
-# 12 for 179 and 1097 (both Elementalist) and 4 for Empathy 26 (Mesmer); what
-# it is keyed on is RECONSTRUCTION -- keyed HERE on the SKILL record's own
-# profession column (available bare, and the class of the hex rather than of
-# whoever casts it; a W/E's Deep Freeze draws an Elementalist hex), which the
-# three witnesses cannot separate from the caster's primary. A profession
+# the 0x00F1; at an EXPIRY or a removal `[7, T, 1] [7, T, class]` behind the
+# 0x0044 and ahead of the 0x00F1 with 0x800 cleared (the 39 landed hexes less
+# the 7 that ended at the wearer's death); at a DEATH the death word comes
+# FIRST (0x833, the hex bit still up), then the [7]s, then the step-down
+# (0x10) -- 4 of the 7 inspected, 4/4 (179 at 367.995 / 631.935 / 642.688,
+# Empathy at 653.979), kill_agent's order since the D6 review (EV-2). The `1`
+# is left out when the wearer already carries a live hex holding it (38/39, 1
+# withheld: 651.779, Empathy live), so the base id is REFERENCE-COUNTED per
+# wearer (aura_on / aura_off); that the CLASS id is refcounted the same way is
+# RECONSTRUCTION extended from the base -- no same-class overlap is on any
+# tape (the review's EV-11). The class id is 12 for 179 and 1097 (both
+# Elementalist) and 4 for Empathy 26 (Mesmer); what it is keyed on is
+# RECONSTRUCTION -- keyed HERE on the SKILL record's own profession column
+# (available bare, and the class of the hex rather than of whoever casts it;
+# a W/E's Deep Freeze draws an Elementalist hex), which the three witnesses
+# cannot separate from the caster's primary (UNVERIFIED for 1097's tutorial
+# NPC); the attribute is REFUTED as a direct key (179 attribute 10 and 1097
+# attribute 11 both draw 12). A profession
 # with no observed id sends the `1` alone and says so once (NOT FOUND). A row
 # that names its own `auras` (Empathy's [1, 4]) sends those and nothing
 # synthesised -- never both. --no-hex-effect-words reverts: the status bit
@@ -15112,7 +15130,7 @@ HEX_EFFECT_CLASS = {
     6: 12,      # Elementalist: Incendiary Bonds 179 (28/28), Teinai's Prison 1097 (6/6)
     5: 4,       # Mesmer: Empathy 26 (5/5) -- also its row's own `auras`
 }
-HEX_EFFECT_BASE = 1             # every hex, 39/39 (once withheld: already live)
+HEX_EFFECT_BASE = 1             # every hex, 38/39 sent + 1 withheld (already live)
 HEX_TYPE_CODE = 4               # effects.EFFECT_TYPES' hex, areatime.HEX_TYPE
 _HEX_CLASS_UNWITNESSED = set()
 # 0x00F1 bit 0x400 while a movement-speed-DECREASE episode is live on the
@@ -15201,9 +15219,17 @@ def hex_cast_damage(skill_id, rank):
 
 def hex_wearers(state, caster_id, target_id, radius):
     """The living foes of `caster_id` inside `radius` of the TARGET's position,
-    the target itself among them (distance 0), ascending by agent id."""
-    out = set(foes_within(state, caster_id, target_pos(state, target_id), radius))
-    out.add(target_id)
+    the target itself among them (distance 0) while it lives, ascending by
+    agent id. The centre is area_corpse_point's -- the player's position or
+    the row's -- and a target whose row is GONE gives [] (the review's HEX-4:
+    target_pos falls back to the PLAYER's position, which put a foe's area
+    hex on the foes around the player and an episode on the removed id)."""
+    point = area_corpse_point(state, target_id)
+    if point is None:
+        return []
+    out = set(foes_within(state, caster_id, point, radius))
+    if not target_dead(state, target_id):
+        out.add(target_id)
     return sorted(out)
 
 
@@ -15330,19 +15356,29 @@ def hex_skill_use_chain(send, state, conn_id, user_id, skill_id):
 #     ([58] [20, T, 348] [6, T, 1] [6, T, 12] 0x00F1 0x800; 0 damage words on
 #     the target, 28/28); its END -- at expiry (+2.986..+3.022, 20 scheduled),
 #     EARLY on the target's death (3, 2 of them striking an adjacent foe),
-#     NEGATED by the target's Remove Hex (4/4, 0 payoff) -- strikes every foe
-#     within the record's 240 u of the target: per foe in ascending id
-#     `0x00A3 [16, foe, caster, f]` then Burning ([6, foe, 25], 0x00F1, the
+#     NEGATED by the target's Remove Hex (4/4, 0 payoff) -- strikes the foes
+#     around the target (1..4 takers OBSERVED; that the radius is the record's
+#     240 u is RECONSTRUCTION -- who stands inside 240 is not testable from
+#     the tape, whose other agents' positions are leads): per foe in ascending
+#     id `0x00A3 [16, foe, caster, f]` then Burning ([6, foe, 25], 0x00F1, the
 #     regen word; 0x0042 480 for the observer), THEN the hex's own end (0x0044,
-#     [7]s, 0x00F1). No 58, no [20], no 0x00A1 (18/18 clean payoffs; two mixed
-#     instants). Burning round(interp(1, 3, rank)): 3 at the caster's 13. WIKI
-#     (GWW "Incendiary Bonds" rev 2733032) names all three triggers. One payoff
-#     fired early in the batch where the CASTER died (n = 1, not in the wiki):
-#     NOT modelled, named. So: a row's `on_end = "burst"` + `end_radius` arms
-#     the episode at its apply (hex_end_arm: the caster's side and row
-#     snapshotted, open_area's precedent); hex_end_burst fires from
-#     effect_tick AHEAD of the close and from strip_effects when the wearer is
-#     DEAD -- a strip while alive (a cure) fires nothing. The player caster's
+#     [7]s, 0x00F1). No 58, no [20], no 0x00A1 (18 clean payoffs; one
+#     scheduled end whose only word is the caster's Fire Storm TICK -- 690.819,
+#     a mixed instant, not a payoff -- and two payoffs sharing their instant
+#     with the caster's other skill). Burning round(interp(1, 3, rank)): 3 at
+#     the caster's 13. WIKI (GWW "Incendiary Bonds" rev 2733032) names all
+#     three triggers. One payoff fired early in the batch where the CASTER
+#     died (n = 1, not in the wiki): NOT modelled, named. So: a row's `on_end
+#     = "burst"` + `end_radius` arms the episode at its apply (hex_end_arm:
+#     the caster's side and row snapshotted, open_area's precedent; a wearer
+#     already carrying an armed one arms no second -- R34-4, RECONSTRUCTION);
+#     hex_end_burst fires from effect_tick AHEAD of the close and from
+#     strip_effects when the wearer is DEAD -- behind the death word and the
+#     reward, ahead of the corpse's [7]s, OBSERVED 2/2 (631.935, 642.688;
+#     kill_agent's order) -- and a strip while alive (a cure) fires nothing.
+#     The tape's 72 (0.12973 x 555) equals hex_end_damage(179, 13) on the
+#     ASSUMPTION the taker's armour factor is 1 (CORROBORATED, not exact: the
+#     armour is off the wire, skills 43.4 / 43.5). The player caster's
 #     words are hit_enemy's exact (armour-free, the standing gap), a body's
 #     body_spell_terms per foe first (the refusal contract) then
 #     body_spell_word. skill_condition returns None for the row, so the
@@ -15363,11 +15399,15 @@ def hex_skill_use_chain(send, state, conn_id, user_id, skill_id):
 #     row's `adjacent_damage = "scale"` reaches the adjacent foes with the
 #     base word (spell_adjacent, under --no-area-damage as Death Blossom's is)
 #     through adjacent_player_spell / adjacent_body_spell -- no [20] per foe,
-#     the target's is send_skill_visual's -- and `bonus_if = "caster energy
-#     higher"` adds the twin and the Burning per foe. --no-spell-energy-bonus:
-#     the base words alone, no Burning; --energy-bonus-target-only: the
-#     wiki's wording, one comparison against the target for every foe (the
-#     known-bad arm 647.300 refutes).
+#     the target's [20, T, c, 331] is send_skill_visual's (the skill_visual
+#     row, +0x7c = 331) -- and `bonus_if = "caster energy higher"` adds the
+#     twin and the Burning per foe. --no-spell-energy-bonus: the base words
+#     alone, no Burning; --energy-bonus-target-only: the wiki's wording, one
+#     comparison against the target for every foe (the known-bad arm 647.300
+#     refutes). NOTE the coupling (the review's R34-5): the twin and the
+#     Burning ride the adjacent path, so --no-area-damage takes them too --
+#     under it Mind Burn is the one-target word of the pre-2026-09-27 server,
+#     energy clause and all.
 HEX_END_BURST = True
 HEX_END_MEANS = "burst"                             # the row label: on_end
 SPELL_ENERGY_BONUS = True
@@ -15530,6 +15570,21 @@ def hex_end_arm(state, ep, caster_id, row, erow):
     a caster whose row may be gone)."""
     if erow.get("on_end") != HEX_END_MEANS:
         return
+    live = state.get("effects")
+    for other in (live.on_agent(ep["agent"]) if live else ()):
+        if (other is not ep and other["skill"] == ep["skill"]
+                and other.get("end_burst") and not other.get("end_fired")):
+            # the review's R34-4: a SECOND Incendiary Bonds on a wearer already
+            # carrying an armed one is not a second payoff -- the client draws
+            # the first (an overlapping 0x0042 is discarded, _apply_effect_on's
+            # note), so the first's end is the one that fires; the newer
+            # episode opens (retail's overlapping shape) and arms nothing.
+            # RECONSTRUCTION: no double 179 on one wearer is on any tape.
+            print(f"[skills] hex {ep['skill']} on agent {ep['agent']}: an armed end "
+                  f"effect is already live (buff {other['buff']}), so buff {ep['buff']} "
+                  f"arms none (one payoff per wearer, RECONSTRUCTION) [studies/skills 61]",
+                  flush=True)
+            return
     try:
         radius = float(erow.get("end_radius") or row.get("aoe_range") or 0.0)
     except (TypeError, ValueError):
@@ -19632,25 +19687,61 @@ def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
     # NPC's energy at all.
     if ENERGY:
         agent_adrenaline(agent).clear()
-    # A CORPSE CARRIES NO EFFECTS. Not tidiness: `bufflog` classifies a
-    # removal landing before apply + duration as `stripped` and names
-    # death as one of its three causes, so leaving them running would put
-    # an episode on the wire that our own reader scores as `open` for the
-    # rest of the session.
-    strip_effects(send, state, target_id, conn_id, "the agent died")
     # DAGGERS-B5: and the attacker's chain icon comes down with it -- retail
     # clears 0x005C in the dead bit's own instant, 6 of 6 (daggers F6).
     chain_clear(send, state, target_id, "the target died")
     # THE ORDER IS ARENANET'S, read off the two uncontaminated kills in the
     # corpus (agent 278 t=23.202 and agent 40 t=23.511): status, then the
     # reward, then the flags byte. Same tick, same agent, all three.
-    send(GAME_SMSG_AGENT_UPDATE_STATUS, [target_id, agents.EFFECT_DEAD],
+    #
+    # A HEXED BODY'S DEATH (the D6 review, EV-1 / EV-2 / R34-1, 2026-09-27;
+    # hexjoin --rows 20260817T231139 at 631.935 and 642.688, Empathy's wearer
+    # on 20260913T210901 at 653.979, 179's at 367.995 +2.015): OBSERVED 4/4,
+    # the death word comes FIRST and carries the corpse's live bits (0x833:
+    # dead | hexed | ...), THEN the reward block, THEN the hex's end effect
+    # on the foes beside the corpse (2/2 that struck one), THEN the corpse's
+    # own [7]s stepping the word down (0x33, 0x32, 0x10), and the 0x0026
+    # flags byte LAST. Until 2026-09-27 the strip ran ahead of the status
+    # (the [7]s and the payoff ahead of the death word, the opposite order
+    # on both counts). So: the WHOLE word (kill_player's MORALE-Q8 shape;
+    # the two uncontaminated kills wore nothing, so their 16 is this word
+    # too), the reward, the strip (the payoff first, then the [7]s -- in
+    # strip_effects), the step-down once the effects are gone (retail steps
+    # per effect; ONE step here, the player's 18 -> 16 shape), the flags.
+    _word = (agent_status_word(state, target_id) if STATUS_WORD
+             else agents.EFFECT_DEAD)
+    send(GAME_SMSG_AGENT_UPDATE_STATUS, [target_id, _word],
          f"KILL agent {target_id}")
+    if STATUS_WORD:
+        state.setdefault("status_word", {})[target_id] = _word
+
+    def _strip_and_step_down():
+        # A CORPSE CARRIES NO EFFECTS. Not tidiness: `bufflog` classifies a
+        # removal landing before apply + duration as `stripped` and names
+        # death as one of its three causes, so leaving them running would put
+        # an episode on the wire that our own reader scores as `open` for the
+        # rest of the session.
+        strip_effects(send, state, target_id, conn_id, "the agent died")
+        if STATUS_WORD:
+            _after = agent_status_word(state, target_id)
+            if _after != _word:
+                send(GAME_SMSG_AGENT_UPDATE_STATUS, [target_id, _after],
+                     "the corpse's word once its effects are gone (retail's "
+                     "step-down, 0x833 -> 0x10 at 631.935)")
+                state.setdefault("status_word", {})[target_id] = _after
+        # and a snared corpse's base back -- 0x0027 [8, 288.0] behind the
+        # step-down, ahead of the flags (631.935, 1/1); nothing when the
+        # base is where it was
+        push_speed(send, state, target_id, conn_id)
+
     if not reward:
         # SLICE-H3: a PARTY body's death -- the status and the flags byte,
         # no kill reward, no objective: nobody is paid for it. JARIN: a HERO
-        # takes its own morale tick between the two (307.83 s).
+        # takes its own morale tick between the two (307.83 s). The strip
+        # sits between the tick and the flags (UNWITNESSED for a party body;
+        # the player's strips ride behind its morale tick the same way).
         hero_death_tick(send, state, target_id, agent, conn_id)
+        _strip_and_step_down()
         send(GAME_SMSG_AGENT_UPDATE_FLAGS, [target_id, AGENT_FLAGS_KILLED],
              f"flags {AGENT_FLAGS_KILLED} on the dying party agent {target_id}")
         return
@@ -19665,6 +19756,7 @@ def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
     send(GAME_SMSG_AGENT_KILL_REWARD,
          [KILL_REWARD_ATTR, KILL_REWARD_VALUE],
          f"kill reward [{KILL_REWARD_ATTR}, {KILL_REWARD_VALUE}]")
+    _strip_and_step_down()             # between the reward and the flags: 631.935
     send(GAME_SMSG_AGENT_UPDATE_FLAGS, [target_id, AGENT_FLAGS_KILLED],
          f"flags {AGENT_FLAGS_KILLED} on the dying agent {target_id}")
     # JARIN-Q5: a hero locked on this target is released on the wire.
@@ -20379,8 +20471,11 @@ def interrupt_player(send, state, conn_id, by_skill, by_agent, mode=None):
     step 2; `interruptjoin.py`; castmech P1 / animref D5, 2026-09-23 notes).
     Returns "cast", "swing" or None (nothing to interrupt, or the flag off).
     `mode` overrides the interrupter's content row ("action" / "attacking"):
-    the entry point for a skill-less interrupt -- Dazed's "any hit interrupts
-    a spell" is D6's and rides this when built; nothing passes it today.
+    the entry point for a skill-less interrupt. Two pass it (DESKWORK-D6):
+    INTERRUPT_MODE_SKILL "skill" (Panic's chain, hex_skill_use_chain -- any
+    cast in activation, never a swing) and INTERRUPT_MODE_SPELL "spell"
+    (Dazed, dazed_interrupt -- a SPELL in activation, fired by a landed
+    ATTACK, GWW "Easily interruptible" rev 2610199: an attack, not any hit).
 
     A CAST in activation -- OBSERVED 1 of 1 (Disrupting Chop 340 on Healing
     Signet, 1.55 s into 2.0 s; 20260916T213125 conn 57894 t=484.333), sent in
@@ -23229,6 +23324,7 @@ def cast_tick(send, state, conn_id):
             # behind the standalone one below; None under either area flag.
             _ahex = area_hex(cast["skill_id"])
             _ahex_hit = hex_cast_damage(cast["skill_id"], rank) if _ahex is not None else None
+            _ahex_applied = False         # set by the area-hex arm (hexes ahead of the burst)
             # WEAPONS-W2c: a RANGED weapon's attack skill RELEASES at its E5
             # and lands a flight later, and its E5 batch carries NO 46 --
             # retail's bow skill shots are 0x00E5, 0x00A4, 0x00E3 in one
@@ -23503,10 +23599,14 @@ def cast_tick(send, state, conn_id):
                         open_area(send, state, conn_id, PLAYER_AGENT_ID, cast["skill_id"],
                                   rank, float(found[0]), _apt, _aot)
                     inflicted = None
-                elif _adj is not None:
+                elif _adj is not None and not target_dead(state, target):
                     # studies/skills 61: Mind Burn -- the base word on the target
                     # and the adjacent foes, the energy clause's twin and Burning
-                    # per foe (no [20] per foe: the target's went out above)
+                    # per foe (no [20] per foe: the target's went out above). A
+                    # target DEAD at the E5 falls to the one-target arm, which
+                    # lands nothing on a corpse (the review's R34-2: the foes
+                    # beside the corpse took the word; only an area at a
+                    # LOCATION survives its target's death, WIKI rev 2685457).
                     adjacent_player_spell(send, state, conn_id, cast, found[0], rank, _adj)
                     inflicted = None          # each foe took its own inside
                 elif _how is None or launch_player_spell_shot(
@@ -23527,10 +23627,18 @@ def cast_tick(send, state, conn_id):
                     and not target_dead(state, target):
                 # studies/weapons 43: an AREA HEX that hits on cast bursts its
                 # scale over every foe inside the radius of the target's
-                # position -- the words and [20]s here, ahead of the hexes
-                # apply_effect opens below (this path's own order; a body's is
-                # the reverse; both UNWITNESSED). A dead target lands nothing
-                # (apply_effect refuses the hex too). Never scatter.
+                # position. THE HEXES FIRST, then the words and [20]s -- the
+                # body path's order, ONE order for both paths since the D6
+                # review (HEX-3: with the words first the burst could kill the
+                # target and apply_effect then refused the hex on EVERY foe,
+                # the living ones beside the corpse included; now the hexes
+                # open on the live cluster and the burst's kill strips the
+                # corpse's own). Which order retail sends is UNWITNESSED (no
+                # area hex on any tape). A dead target lands nothing. Never
+                # scatter.
+                _ahex_applied = True
+                apply_effect(send, state, PLAYER_AGENT_ID, cast["skill_id"],
+                             rank, target, conn_id)
                 burst_player_spell(send, state, conn_id, cast, _ahex_hit[0], rank,
                                    _ahex)
                 inflicted = None          # each foe took its own inside
@@ -23541,8 +23649,9 @@ def cast_tick(send, state, conn_id):
             # and `apply_effect` returns None for the skills that do neither,
             # which is most of them.
             if not _na_fail:                                    # SKILLS-LU (C)
-                apply_effect(send, state, PLAYER_AGENT_ID, cast["skill_id"],
-                             rank, target, conn_id)
+                if not _ahex_applied:     # the area-hex arm above applied it already
+                    apply_effect(send, state, PLAYER_AGENT_ID, cast["skill_id"],
+                                 rank, target, conn_id)
             # AND THE HEAL, the other direction the same cast can resolve. A
             # skill is not restricted to one of the three -- damage, effect,
             # heal are asked independently and most skills answer None to all
@@ -24200,6 +24309,14 @@ def apply_effect(send, state, caster_id, skill_id, rank, target_id, conn_id):
     party = PARTY_WIDE_SHOUTS and erow.get("party_wide") == "earshot"
     if ahex is not None:
         wearers = hex_wearers(state, caster_id, wearer, ahex)
+        if not wearers:
+            # the target's row is GONE (a despawned corpse mid-cast): no point
+            # to centre the area on -- nothing lands, never the player's
+            # position (the review's HEX-4)
+            print(f"[c{conn_id}] [DESKWORK-D6] hex {skill_id} by agent {caster_id}: its "
+                  f"target (agent {wearer}) has no row -- no point to centre the area "
+                  f"hex on, nothing lands [studies/weapons 43]", flush=True)
+            return None
         print(f"[c{conn_id}] [DESKWORK-D6] hex {skill_id} by agent {caster_id}: an "
               f"area hex over {len(wearers)} foe(s) within {ahex:.0f} u of agent "
               f"{wearer} -- {wearers} [studies/weapons 43]", flush=True)
@@ -24377,6 +24494,13 @@ def _apply_effect_on(send, state, caster_id, skill_id, rank, wearer, conn_id,
     push_attributes(send, state, ep["agent"], conn_id)
     if not HEX_EFFECT_WORDS:
         aura_on(send, state, ep, conn_id)         # the pre-D6 slot, behind the 0x00F1
+    # AND THE REGEN RATE, when the row moved it (the review's HEX-2): a `Health
+    # degeneration` hex (Suffering, Faintheartedness) is a rate change exactly
+    # as a condition is -- apply_condition's push_regen has sent the 0x00A2
+    # [44] since the Isle; nothing sent it for a hex, so the wearer bled in
+    # silence against a bar the client drew full. Sent only on change (every
+    # other row leaves the rate where it was and sends nothing).
+    push_regen(send, state, ep["agent"], conn_id)
     return ep
 
 
@@ -24392,33 +24516,35 @@ def strip_effects(send, state, agent_id, conn_id, why):
     if not EFFECTS:
         return []
     gone = effect_table(state).strip_agent(agent_id)
-    for ep in gone:
-        effect_list_send(send, state, GAME_SMSG_EFFECT_REMOVE, [ep["agent"], ep["buff"]],
-             f"EFFECT_REMOVE(buff {ep['buff']}, skill {ep['skill']}, "
-             f"STRIPPED: {why})")
     if agent_id == PLAYER_AGENT_ID:
         dead = bool(state.get("player_dead"))
     else:
         _agent = state.get("agents", {}).get(agent_id)
         dead = bool(_agent and _agent.get("dead"))
-    for ep in gone:
-        if ep["skill"] == effects.CONDITION_BY_NAME["Deep Wound"]:
-            deep_wound_close(send, state, agent_id, conn_id, dead=dead)
     if dead:
         # studies/skills 61: the wearer's DEATH fires a hex's end effect EARLY
         # (Incendiary Bonds: WIKI + 2 of 3 on retail, an adjacent foe struck); a
         # strip while ALIVE -- a cure, a removal -- fires nothing (Remove Hex
-        # negated it 4 of 4). The slot -- behind the corpse's own 0x0044s, ahead
-        # of its death word -- is UNWITNESSED (the payoff rides the death batch;
-        # its order inside it is not read).
+        # negated it 4 of 4). THE SLOT IS OBSERVED 2/2 (the D6 review's EV-1;
+        # hexjoin --rows 631.935 and 642.688): behind the death word and the
+        # reward block (kill_agent sends both before calling here), and AHEAD
+        # of the corpse's own [7]s -- the payoff on foe 9, then [7, 8, 1]
+        # [7, 8, 12]. So it fires before the removal loop below.
         for ep in gone:
             hex_end_burst(send, state, conn_id, ep, why)
+    for ep in gone:
+        effect_list_send(send, state, GAME_SMSG_EFFECT_REMOVE, [ep["agent"], ep["buff"]],
+             f"EFFECT_REMOVE(buff {ep['buff']}, skill {ep['skill']}, "
+             f"STRIPPED: {why})")
+    for ep in gone:
+        if ep["skill"] == effects.CONDITION_BY_NAME["Deep Wound"]:
+            deep_wound_close(send, state, agent_id, conn_id, dead=dead)
     if dead:
-        # The kill path sends the death word itself, in its measured slot;
-        # record it so the next effect on the revived body is compared
-        # against what the client was actually told.
-        if STATUS_WORD:
-            state.setdefault("status_word", {})[agent_id] = effects.STATUS_DEAD
+        # The kill path sends the death word itself, in its measured slot,
+        # and the step-down once the effects are gone (kill_agent /
+        # kill_player); nothing here. (Until 2026-09-27 this recorded
+        # STATUS_DEAD for the body path, whose kill word was the bare 16.)
+        pass
     elif gone:
         push_status(send, state, agent_id, conn_id)
         push_speed(send, state, agent_id, conn_id)     # SLICE-F48

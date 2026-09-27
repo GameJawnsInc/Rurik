@@ -264,7 +264,7 @@ def player_armour_at(location_key, damage_type, EQUIP_ARMOUR,
 
 def player_spell_armour(EQUIP_ARMOUR, ARMOR_RATING_MODIFIER,
                         ARMOR_VS_TYPE_MODIFIER, location_key=None,
-                        damage_type="elemental", cracked=0.0):
+                        damage_type="elemental", cracked=0.0, shield=0.0):
     """The rating an incoming armour-respecting spell resolves against --
     against `damage_type`, the spell's OWN (a type id from the client's
     fourteen, or a class name; "elemental" for a spell with no type read,
@@ -300,13 +300,15 @@ def player_spell_armour(EQUIP_ARMOUR, ARMOR_RATING_MODIFIER,
     for key, _w in HIT_LOCATION_ODDS:
         ar = player_armour_at(key, damage_type, EQUIP_ARMOUR,
                               ARMOR_RATING_MODIFIER,
-                              ARMOR_VS_TYPE_MODIFIER, cracked=cracked)
+                              ARMOR_VS_TYPE_MODIFIER, cracked=cracked,
+                              shield=shield)                 # inside net_armour (R34-7)
         if ar is not None:
             ratings[key] = ar
     if not ratings:
         return None
     if location_key is not None:
-        return ratings.get(location_key, 0.0)
+        # a bare location: the shield alone, through the same floor
+        return ratings.get(location_key, net_armour(0.0, 0.0, shield, cracked))
     if len(set(ratings.values())) > 1 and not _SPELL_ARMOUR_WARNED:
         _SPELL_ARMOUR_WARNED.append(True)
         print("SPELL ARMOUR: the five pieces disagree elementally "
@@ -404,7 +406,20 @@ def net_armour(rating, bonus, shield=0.0, cracked=0.0, floor=ARMOR_BASELINE):
     caller made before. RECONSTRUCTION, said: that the shield counts as core
     for the floor (it sits outside the cap here since SLICE-H9; the page
     names no shield), and every number -- no Cracked Armor was ever inflicted
-    on any live tape (the Isle's two are environmental, hexjoin C1)."""
+    on any live tape (the Isle's two are environmental, hexjoin C1).
+
+    AND THE AMBIGUITY bonus_armour records is LIVE here (the D6 review's
+    R34-3): a NEGATIVE bonus is exactly the case where the two readings of
+    the pieces' `+20 vs. physical` disagree. This function takes the BONUS
+    reading (GWW "Armor calculation": inherent mods are Bonus armour) --
+    on the starter set the physical 25 + 20 = 45 reads 25 Cracked, and a
+    hostile's swing goes 12 -> 18. Under the CORE reading (GWW "Basic
+    armor" prints the Warrior's +20 vs. physical as part of the basic
+    rating) the core is 45, the floor min(60, 45) = 45, and Cracked Armor
+    moves NOTHING on the starter set -- the same outcome the elemental 25
+    already has. CONTESTED between the two pages; a tooltip or armour-panel
+    read in a harness run, or a live Cracked Armor exposure, settles it.
+    test_mechanics 39 pins both arms."""
     core = float(rating) + float(shield)
     total = core + bonus_armour(float(bonus) - float(cracked))
     if cracked > 0.0:

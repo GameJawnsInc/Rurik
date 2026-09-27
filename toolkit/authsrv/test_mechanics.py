@@ -32,7 +32,7 @@ import effects      # noqa: E402
 import combatmath   # noqa: E402
 
 # Floor set from a real green run (39 checks, 2026-08-22; 99 checks, 2026-09-09 SKILLS-DW; 129 checks, 2026-09-10 SKILLS-BL; 153 checks, 2026-09-10 SKILLS-RC; 162 checks, 2026-09-10 SKILLS-MA).
-LEDGER = checks.Ledger("effect mechanics", floor=337)  # 2026-09-27 (later): +40, DESKWORK-D6 B4 sec.39-40 (Cracked Armor: -20 into the bonus category before the cap and the penetration, the floor, the player and the five body sites; Dazed: spells x2, a landed attack or Dazed itself landing interrupts the spell in activation, never a signet or a swing), from the green run  # 2026-09-27: +40, DESKWORK-D6 B2 sec.35-38 (Suffering's hex pips, Soothing Images' adrenaline block, Rust's explicit damage + signet x2, Panic's chain), from the green run  # 2026-09-26: +1, sec.16 (a HOSTILE's heal-kill under Deep Wound still pays the kill reward -- the control on hurt_agent_row's rule at heal_agent's door; the party arm is test_agentlife JARIN-S 5b), from the green run  # 2026-09-23: +11, SKILLS-MC sec.34 (Mend Condition: heal IF removed, the no-condition control, the other-ally byte, the revert), from the green run  # 2026-09-17: +5, RUN-SKILLS-WKL sec.33 + WKL1-2 (a cast that lifts Weakness heals at the weakened rank), from the green run  # 2026-09-17: +12, SKILLS-WK sec.31-32 (Weakness takes one off every attribute), from the green run  # 2026-09-16: +14, SLICE-F48 sec.8b (movement speed on the wire), from the green run  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
+LEDGER = checks.Ledger("effect mechanics", floor=354)  # 2026-09-27 (the D6 review's repair): +17 -- sec.35 the cap that binds (M1) and the [44] at the apply through land_skill (HEX-2); sec.36 the four body gates through the real functions (M8); sec.37 the press and ally_cast_tick under Rust (M3); sec.38 the player's chain through the real press + E5 (M4); sec.39 200 AR (M2), the Core reading's arm (R34-3), the scythe and the splash (M9), the shield inside the leaf (R34-7); sec.40 the spell word on a Dazed caster (M7), the press and ally_cast_tick under Dazed (M3); the source locks through _lock (M13), main()'s eight flips pinned (M10); sec.16's heal-kill re-pinned to the whole death word + step-down (EV-2); MEASURED from the green run, 354 checks, floor 337 -> 354  2026-09-27 (later): +40, DESKWORK-D6 B4 sec.39-40 (Cracked Armor: -20 into the bonus category before the cap and the penetration, the floor, the player and the five body sites; Dazed: spells x2, a landed attack or Dazed itself landing interrupts the spell in activation, never a signet or a swing), from the green run  # 2026-09-27: +40, DESKWORK-D6 B2 sec.35-38 (Suffering's hex pips, Soothing Images' adrenaline block, Rust's explicit damage + signet x2, Panic's chain), from the green run  # 2026-09-26: +1, sec.16 (a HOSTILE's heal-kill under Deep Wound still pays the kill reward -- the control on hurt_agent_row's rule at heal_agent's door; the party arm is test_agentlife JARIN-S 5b), from the green run  # 2026-09-23: +11, SKILLS-MC sec.34 (Mend Condition: heal IF removed, the no-condition control, the other-ally byte, the revert), from the green run  # 2026-09-17: +5, RUN-SKILLS-WKL sec.33 + WKL1-2 (a cast that lifts Weakness heals at the weakened rank), from the green run  # 2026-09-17: +12, SKILLS-WK sec.31-32 (Weakness takes one off every attribute), from the green run  # 2026-09-16: +14, SLICE-F48 sec.8b (movement speed on the wire), from the green run  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
 check = checks.adopt(LEDGER)
 
 FRENZY, RUSH, ROF, GLYPH, IGNITE, FAINT = 346, 319, 307, 200, 431, 135
@@ -760,9 +760,13 @@ agent["health"] = -10.0
 sent, send = collector()
 authsrv.heal_agent(send, state, ENEMY, ENEMY, 5.0, 0)
 check(agent["dead"] is True
-      and [v for op, v, _l in sent if op == OP_STATUS] == [[ENEMY, agents.EFFECT_DEAD]],
+      and [v for op, v, _l in sent if op == OP_STATUS]
+      == [[ENEMY, agents.EFFECT_DEAD | 0x22], [ENEMY, agents.EFFECT_DEAD]],
       "a heal that does not clear zero kills the agent through kill_agent's "
-      "measured template (status 0x10)")
+      "measured template -- the WHOLE word first (0x32: dead | the Deep Wound's "
+      "0x20 | the condition bit, retail's 0x833 at 631.935 / the player's 18), then the "
+      "step-down to 0x10 once the strip took the condition (the D6 review's EV-2; "
+      "until 2026-09-27 a body's kill word was the bare 16 with the strip ahead of it)")
 check(authsrv.GAME_SMSG_AGENT_KILL_REWARD in [op for op, _v, _l in sent],
       "and a HOSTILE's heal-kill pays the kill reward: hurt_agent_row's rule, "
       "whose party arm (a hero's pays nobody) is test_agentlife's JARIN-S 5b",
@@ -2195,6 +2199,105 @@ def hostile(state, aid, pos=(0.0, 0.0), **more):
     return row
 
 
+
+# The D6 review's M13: the source locks below used bare `src.index`, so ONE missing
+# substring raised ValueError and skipped every later section. `_idx` / `_ridx` record
+# a miss (and return -1, which a `<` comparison could pass), and `_lock` fails the check
+# whenever one was recorded during its evaluation -- one miss, one red check, the rest runs.
+_MISSING = []
+
+
+def _idx(text, needle, start=0):
+    try:
+        return text.index(needle, start)
+    except ValueError:
+        _MISSING.append(needle[:70])
+        return -1
+
+
+def _ridx(text, needle):
+    try:
+        return text.rindex(needle)
+    except ValueError:
+        _MISSING.append(needle[:70])
+        return -1
+
+
+def _lock(value):
+    missed, _MISSING[:] = list(_MISSING), []
+    if missed:
+        print(f"      source lock: MISSING substring(s) {missed}")
+        return False
+    return bool(value)
+
+
+
+
+def press_e5(sid, target, hexid=None, cond=None):
+    """The player's REAL press (handle_skill_press) with the costs and the weapon gate stubbed:
+    the E5 clock it armed, in seconds. `hexid` / `cond` go on the player first."""
+    _saved = (authsrv.skill_cost, authsrv.weapon_satisfies)
+    authsrv.skill_cost = lambda sid: (0, 0)
+    authsrv.weapon_satisfies = lambda sid: True
+    try:
+        st = fresh_state()
+        hostile(st, 10, (50.0, 0.0))
+        now = time.time()
+        if hexid is not None:
+            st["effects"].apply(PLAYER, hexid, 12, 30.0, now, type_code=4, caster=10)
+        if cond is not None:
+            st["effects"].apply(PLAYER, cond, 12, 30.0, now, type_code=8)
+        sent, send = collector()
+        authsrv.handle_skill_press([0, sid, 0, target], send, st, 0, authsrv.GAME_CMSG_USE_SKILL)
+        c = (st.get("pending_casts") or [None])[0]
+        return None if c is None else round(c["e5_at"] - c["begin_at"], 3)
+    finally:
+        authsrv.skill_cost, authsrv.weapon_satisfies = _saved
+
+
+def e5_batch(sid, target, st, send):
+    """Press `sid` at `target` on `st` and run the real cast_tick through its E5 (the
+    clocks wound back 30 s); `send` collects the E5 batch alone."""
+    _saved = (authsrv.skill_cost, authsrv.weapon_satisfies)
+    authsrv.skill_cost = lambda sid: (0, 0)
+    authsrv.weapon_satisfies = lambda sid: True
+    try:
+        sink, drop = collector()
+        authsrv.handle_skill_press([0, sid, 0, target], drop, st, 0, authsrv.GAME_CMSG_USE_SKILL)
+        for cast in st["pending_casts"]:
+            for k in ("begin_at", "e5_at", "e3_at", "e6_at"):
+                cast[k] -= 30.0
+        authsrv.cast_tick(send, st, 0)
+    finally:
+        authsrv.skill_cost, authsrv.weapon_satisfies = _saved
+
+
+def ally_cast(bar, hexid=None, cond=None, monk_health=100.0):
+    """A party monk (200) with `bar` through the REAL ally_cast_tick, the player hurt (40/100):
+    (its landing offset, its cast target, its recharge anchor offset)."""
+    _saved = authsrv.HERO_SKILLS
+    authsrv.HERO_SKILLS = bar
+    try:
+        st = fresh_state(health=40.0)
+        st["player_dead"] = False
+        row = {"name": "Academy Monk", "dead": False, "died_at": 0.0, "health": monk_health,
+               "max_health": 100.0, "last_hit": 0.0, "pos": (50.0, 0.0), "plane": 0,
+               "allegiance": agents.ALLEGIANCE_PLAYER, "attack_speed": 1.0, "effects": 0,
+               "attacks_back": False, "skills": bar, "skill_ready": [0.0] * len(bar)}
+        st["agents"][200] = row
+        now = time.time()
+        if hexid is not None:
+            st["effects"].apply(200, hexid, 12, 30.0, now, type_code=4, caster=10)
+        if cond is not None:
+            st["effects"].apply(200, cond, 12, 30.0, now, type_code=8)
+        sent, send = collector()
+        authsrv.ally_cast_tick(send, st, 0)
+        a = st["agents"][200]
+        return (None if a.get("cast_lands_at") is None else round(a["cast_lands_at"] - now, 2),
+                a.get("cast_target"), round(a["skill_ready"][0] - now, 2))
+    finally:
+        authsrv.HERO_SKILLS = _saved
+
 print("== 35. Suffering (108): a `Health degeneration` HEX degenerates its wearer -- the "
       "explicit endpoints, one cap with the conditions, Faintheartedness lit up ==")
 saved = (authsrv.HEX_DEGENERATION, authsrv.EFFECTS)
@@ -2241,6 +2344,39 @@ try:
           and effects.pips_from(st["effects"].on_agent(PLAYER)) == 7.0,
           "Burning (7) + Suffering (3) = 10, ONE cap shared with the conditions (RECONSTRUCTION: "
           "the wiki caps 'health degeneration' as a whole); pips_from alone still says 7")
+    hex_on(st, FAINT, rank=15)
+    check(authsrv.net_pips(st, PLAYER) == 10.0
+          and authsrv.hex_pips(st, PLAYER) == 6.0
+          and effects.pips_from(st["effects"].on_agent(PLAYER)) + authsrv.hex_pips(st, PLAYER) == 13.0,
+          "and Burning (7) + Suffering (3) + Faintheartedness (3) = 13 reads 10 -- the cap BINDS "
+          "(the review's M1: 7 + 3 was exactly 10, so the cap was never exercised)")
+    # the review's HEX-2: the rate reaches the CLIENT -- a hostile's Suffering at the player
+    # through the real land_skill sends 0x00A2 [44] at the apply and 0 at the close
+    st = world(1, bar=((SUFFER, 1.0, 10.0),))
+    a = st["agents"][10]
+    a.update({"casting": 0, "cast_lands_at": time.time() - 0.01, "cast_target": PLAYER})
+    sent, send = collector()
+    authsrv.land_skill(send, st, 10, a, 0)
+    regen = [v[1] for op, v, _l in sent if op == REGEN_FLOAT and v[0] == agents.GV_CHANGE_HEALTH_REGEN]
+    rate_at_apply = st.get("regen_rate", {}).get(PLAYER)
+    i_42 = next((i for i, (op, v, _l) in enumerate(sent) if op == authsrv.GAME_SMSG_EFFECT_APPLY), None)
+    i_f1 = next((i for i, (op, v, _l) in enumerate(sent) if op == OP_STATUS and v[0] == PLAYER), None)
+    i_44 = next((i for i, (op, v, _l) in enumerate(sent) if op == REGEN_FLOAT and v[1] == PLAYER), None)
+    at_apply = list(sent)
+    sent.clear()
+    for e in st["effects"].live.values():
+        e["expires_at"] -= 60.0
+    authsrv.effect_tick(send, st, 0)
+    close = [v[:2] for op, v, _l in sent if op == REGEN_FLOAT]
+    check(regen == [PLAYER] and rate_at_apply is not None and abs(rate_at_apply - (-0.04)) < 1e-9
+          and abs(st["regen_rate"].get(PLAYER, 0.0) - 0.0) < 1e-9
+          and i_42 is not None and i_f1 is not None and i_44 is not None and i_42 < i_f1 < i_44
+          and close == [[agents.GV_CHANGE_HEALTH_REGEN, PLAYER]],
+          "a hostile's Suffering at the player through the real land_skill: ONE 0x00A2 [44, me] "
+          "behind the 0x0042 and the 0x00F1 (2 pips at rank 12: -0.04/s on a 100 pool), and the "
+          "0 back at the close -- the review's HEX-2: no apply path sent the rate, so the wearer "
+          "bled in silence against a bar the client drew full",
+          f"regen={regen} apply={[(hex(op), v) for op, v, _l in at_apply]} close={close}")
     check(effects.CONDITION_PIPS == {478: 3, 480: 7, 483: 4, 484: 4}
           and effects.pips_from([{"skill": SUFFER}, {"skill": FAINT}]) == 0.0,
           "the hex pips sit BESIDE effects.pips_from, not inside it: CONDITION_PIPS is exactly "
@@ -2285,14 +2421,19 @@ try:
           "7 still counts -- the reading every run before 2026-09-27 made", f"{off}")
     authsrv.HEX_DEGENERATION = True
     src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
-    check(src.count("effects.pips_from(") == 1
+    check(_lock(src.count("effects.pips_from(") == 1
           and src.count("pips = net_pips(state, agent_id, live)") == 1
           and src.count("pips = net_pips(state, agent_id, table.on_agent(agent_id))") == 1
-          and src.index("def push_regen(") < src.index("pips = net_pips(state, agent_id, live)")
-          and src.index("def degen_tick(") < src.index("pips = net_pips(state, agent_id, table.on_agent(agent_id))")
-          and "hex_pips, blocks_adrenaline, signet_activation_factor," in src,
+          and _idx(src, "def push_regen(") < _idx(src, "pips = net_pips(state, agent_id, live)")
+          and _idx(src, "def degen_tick(") < _idx(src, "pips = net_pips(state, agent_id, table.on_agent(agent_id))")
+          and "hex_pips, blocks_adrenaline, signet_activation_factor," in src
+          and "HEX_DEGENERATION = False" in src[_idx(src, "    if a.no_hex_degeneration:", _idx(src, "\ndef main():")):
+                                              _idx(src, "    if a.no_hex_degeneration:", _idx(src, "\ndef main():")) + 160]
+          and _idx(src, "    push_regen(send, state, ep[\"agent\"], conn_id)\n    return ep", _idx(src, "def _apply_effect_on(")) > 0),
           "the source: effects.pips_from is read ONCE, inside net_pips; push_regen and degen_tick "
-          "both go through net_pips; the leaf readers are re-exported")
+          "both go through net_pips; the leaf readers are re-exported; main() flips "
+          "HEX_DEGENERATION = False under --no-hex-degeneration (M10); _apply_effect_on ends with "
+          "push_regen (HEX-2)")
 finally:
     authsrv.HEX_DEGENERATION, authsrv.EFFECTS = saved
 
@@ -2350,6 +2491,69 @@ try:
           and [v for op, v, _l in sent if op == authsrv.AGENT_ADRENALINE_GAIN] == [],
           "hexed: the hit lands (80 left) and the pool takes NOTHING; no 0x00CF names it",
           f"units={units}")
+    # THE REVIEW'S M8: the four body sites that were only text-checked, through the real
+    # functions -- hit_enemy (the player's swing on a hexed hostile), hurt_agent_row's PARTY
+    # arm, land_swing (a hexed hostile landing its swing), scythe_extra_hit.
+    _saved_36 = (random.random, authsrv.PLAYER_SWING_DAMAGE, authsrv.BLIND, authsrv.NPC_FOLLOW)
+    random.random = lambda: 1.0
+    authsrv.PLAYER_SWING_DAMAGE = (10, 10)
+    authsrv.BLIND = False
+    authsrv.NPC_FOLLOW = False
+    try:
+        got = {}
+        for hexed in (False, True):
+            st = fresh_state()
+            body = hostile(st, 10, skills=((317, 0.0, 0.0),), max_health=1000.0, health=1000.0)
+            if hexed:
+                hex_on(st, SOOTHE, agent=10, caster=PLAYER)
+            sent, send = collector()
+            res = authsrv.hit_enemy(send, st, 10, 0)
+            got[hexed] = (res, dict(authsrv.agent_adrenaline(body).units))
+        check(got[False][0] == got[True][0] == "landed" and got[False][1].get(317, 0) > 0
+              and got[True][1] == {317: 0},
+              "hit_enemy: the player's swing lands on a hostile either way (its pool charges); "
+              "the HEXED one's pool takes nothing", f"{got}")
+        got = {}
+        for hexed in (False, True):
+            st = fresh_state()
+            body = hostile(st, 12, allegiance=agents.ALLEGIANCE_PLAYER, skills=((317, 0.0, 0.0),))
+            if hexed:
+                hex_on(st, SOOTHE, agent=12, caster=10)
+            sent, send = collector()
+            authsrv.hurt_agent_row(send, st, 10, 12, 20.0, 0.2, 0, "a hit")
+            got[hexed] = (body["health"], dict(authsrv.agent_adrenaline(body).units),
+                          [v for op, v, _l in sent if op == authsrv.AGENT_ADRENALINE_GAIN])
+        check(got[False] == (80.0, {317: 20}, []) and got[True] == (80.0, {317: 0}, []),
+              "hurt_agent_row's PARTY arm: a party body hit for 20 % charges 20 units unhexed and "
+              "NOTHING hexed (the hit lands either way; no 0x00CF for a plain party body)", f"{got}")
+        got = {}
+        for hexed in (False, True):
+            st = fresh_state()
+            body = hostile(st, 10, (0.0, 0.0), skills=((317, 0.0, 0.0),))
+            if hexed:
+                hex_on(st, SOOTHE, agent=10, caster=PLAYER)
+            sent, send = collector()
+            authsrv.land_swing(send, st, 10, body, 0)
+            got[hexed] = (st["player_health"] < 100.0, dict(authsrv.agent_adrenaline(body).units))
+        check(got[False] == (True, {317: 25}) and got[True] == (True, {317: 0}),
+              "land_swing: a hostile's swing lands on the player either way; the HEXED one gains "
+              "no strike units (25 unhexed)", f"{got}")
+        got = {}
+        for hexed in (False, True):
+            st = fresh_state()
+            body = hostile(st, 11, (10.0, 0.0), skills=((317, 0.0, 0.0),), max_health=1000.0,
+                           health=1000.0)
+            if hexed:
+                hex_on(st, SOOTHE, agent=11, caster=PLAYER)
+            sent, send = collector()
+            dealt = authsrv.scythe_extra_hit(send, st, 11, 0, None, 0.0, 1.0, time.time(), "extra")
+            got[hexed] = (dealt, dict(authsrv.agent_adrenaline(body).units))
+        check(got[False][0] == got[True][0] == 10.0 and got[False][1].get(317, 0) > 0
+              and got[True][1] == {317: 0},
+              "scythe_extra_hit: the extra target takes the same 10 either way and the HEXED one's "
+              "pool takes nothing", f"{got}")
+    finally:
+        random.random, authsrv.PLAYER_SWING_DAMAGE, authsrv.BLIND, authsrv.NPC_FOLLOW = _saved_36
     # THE KNOWN-BAD ARM: the flag off -- the hexed player gains as if unhexed.
     authsrv.ADRENALINE_BLOCK = False
     sent, send = collector()
@@ -2362,23 +2566,26 @@ try:
           "reading every run before 2026-09-27 made")
     authsrv.ADRENALINE_BLOCK = True
     src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
-    i_pg = src.index("def player_gains_adrenaline(")
-    check(src.count("adrenaline_blocked(state, ") == 7
-          and src.index("if adrenaline_blocked(state, PLAYER_AGENT_ID):", i_pg)
-          < src.index("if ADREN_BAR_GATE and not bar_holds_adrenal():", i_pg)
+    i_pg = _idx(src, "def player_gains_adrenaline(")
+    check(_lock(src.count("adrenaline_blocked(state, ") == 7
+          and _idx(src, "if adrenaline_blocked(state, PLAYER_AGENT_ID):", i_pg)
+          < _idx(src, "if ADREN_BAR_GATE and not bar_holds_adrenal():", i_pg)
           and src.count("if ENERGY and not adrenaline_blocked(state, aid):") == 1
           and src.count("if ENERGY and not adrenaline_blocked(state, target_id):") == 1
           and src.count("\n        if ENERGY and not adrenaline_blocked(state, tid):") == 1
           and src.count("\n    elif ENERGY and not adrenaline_blocked(state, tid):") == 1
           and src.count("if not adrenaline_blocked(state, agent_id):") == 1
-          and all(src.index(site) > src.index("def " + fn + "(")
+          and all(_idx(src, site) > _idx(src, "def " + fn + "(")
               for site, fn in (("if ENERGY and not adrenaline_blocked(state, aid):", "scythe_extra_hit"),
                                ("if ENERGY and not adrenaline_blocked(state, target_id):", "hit_enemy"),
                                ("if ENERGY and not adrenaline_blocked(state, tid):", "hurt_agent_row"),
-                               ("if not adrenaline_blocked(state, agent_id):", "land_swing"))),
+                               ("if not adrenaline_blocked(state, agent_id):", "land_swing")))
+          and "ADRENALINE_BLOCK = False" in src[_idx(src, "    if a.no_adrenaline_block:", _idx(src, "\ndef main():")):
+                                               _idx(src, "    if a.no_adrenaline_block:", _idx(src, "\ndef main():")) + 160]),
           "the source: the gate reads at the player's sender (ahead of the bar gate) and at the "
           "five body sites -- scythe_extra_hit, hit_enemy, hurt_agent_row's two arms, land_swing's "
-          "hit landed (the hero's 0x00CF inside the gated block) -- 7 reads with the def")
+          "hit landed (the hero's 0x00CF inside the gated block) -- 7 reads with the def; main() "
+          "flips ADRENALINE_BLOCK = False under --no-adrenaline-block (M10)")
 finally:
     authsrv.ADRENALINE_BLOCK, authsrv.ENERGY, authsrv.ADREN_BAR_GATE = saved
 
@@ -2455,28 +2662,48 @@ try:
           "enemy_attack_tick: the hostile's Healing Signet lands at +2.0 s unhexed and +4.0 s "
           "under Rust, and its recharge anchor moves by the same 2.0 (completion-anchored)",
           f"{lands}")
+    # THE PLAYER'S PRESS and ALLY_CAST_TICK, for real (the review's M3: both sites were only
+    # text-checked; a plant that left the text in a comment stayed green).
+    got = {}
+    for rust in (False, True):
+        got[rust] = press_e5(HEAL_SIG, PLAYER, hexid=RUST if rust else None)
+    check(got == {False: 2.0, True: 4.0},
+          "handle_skill_press: the player's Healing Signet's E5 clock is 2.0 s plain and 4.0 s "
+          "under Rust -- the doubled activation reaches the real press", f"{got}")
+    got = {}
+    for rust in (False, True):
+        got[rust] = ally_cast(((HEAL_SIG, 2.0, 4.0),), hexid=RUST if rust else None, monk_health=40.0)
+    check(got[False][:2] == (2.0, 200) and got[True][:2] == (4.0, 200)
+          and abs((got[True][2] - got[False][2]) - 2.0) < 1e-6,
+          "ally_cast_tick: a hurt party monk's Healing Signet on itself lands at +2.0 plain and "
+          "+4.0 under Rust, its recharge anchor moved by the same 2.0", f"{got}")
     # THE KNOWN-BAD ARM.
     authsrv.SIGNET_ACTIVATION = False
     st = fresh_state()
     hex_on(st, RUST, caster=10)
-    check(authsrv.signet_activation(st, PLAYER, HEAL_SIG, 2.0) == 2.0,
-          "--no-signet-activation: the signet keeps its table time under Rust")
+    check(authsrv.signet_activation(st, PLAYER, HEAL_SIG, 2.0) == 2.0
+          and press_e5(HEAL_SIG, PLAYER, hexid=RUST) == 2.0,
+          "--no-signet-activation: the signet keeps its table time under Rust, at the reader and "
+          "at the real press")
     authsrv.SIGNET_ACTIVATION = True
     src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
-    i_press = src.index("def handle_skill_press(")
-    check(src.count("activation = signet_activation(state, agent_id, skill_id, activation)") == 2
+    i_press = _idx(src, "def handle_skill_press(")
+    check(_lock(src.count("activation = signet_activation(state, agent_id, skill_id, activation)") == 2
           and src.count("activation = signet_activation(state, PLAYER_AGENT_ID, skill_id, activation)") == 1
-          and src.index("activation, aftercast, recharge = skill_timing(skill_id)", i_press)
-          < src.index("activation = signet_activation(state, PLAYER_AGENT_ID, skill_id, activation)", i_press)
-          < src.index("e5_at = begin + activation", i_press)
-          and src.index("def enemy_attack_tick(")
-          < src.index("activation = signet_activation(state, agent_id, skill_id, activation)")
-          < src.index("def ally_cast_tick(")
-          < src.rindex("activation = signet_activation(state, agent_id, skill_id, activation)")
-          and "GV_CASTTIME" not in src[src.index("def signet_activation("):src.index("def hex_skill_use_chain(")],
+          and _idx(src, "activation, aftercast, recharge = skill_timing(skill_id)", i_press)
+          < _idx(src, "activation = signet_activation(state, PLAYER_AGENT_ID, skill_id, activation)", i_press)
+          < _idx(src, "e5_at = begin + activation", i_press)
+          and _idx(src, "def enemy_attack_tick(")
+          < _idx(src, "activation = signet_activation(state, agent_id, skill_id, activation)")
+          < _idx(src, "def ally_cast_tick(")
+          < _ridx(src, "activation = signet_activation(state, agent_id, skill_id, activation)")
+          and "GV_CASTTIME" not in src[_idx(src, "def signet_activation("):_idx(src, "def hex_skill_use_chain(")]
+          and "SIGNET_ACTIVATION = False" in src[_idx(src, "    if a.no_signet_activation:", _idx(src, "\ndef main():")):
+                                                 _idx(src, "    if a.no_signet_activation:", _idx(src, "\ndef main():")) + 160]),
           "the source: the three activation sites (the press between skill_timing and the E5 "
-          "clock; enemy_attack_tick; ally_cast_tick) all pass through signet_activation, and "
-          "property 61 is still never sent (the client's own bar: UNVERIFIED)")
+          "clock; enemy_attack_tick; ally_cast_tick) all pass through signet_activation, "
+          "property 61 is still never sent (the client's own bar: UNVERIFIED), main() flips "
+          "SIGNET_ACTIVATION = False under --no-signet-activation (M10)")
 finally:
     (authsrv.SIGNET_ACTIVATION, authsrv.ENERGY, authsrv.NPC_FOLLOW, authsrv.AREA_HEXES,
      authsrv.SPELL_AREAS) = saved
@@ -2568,6 +2795,28 @@ try:
           "the hero (a wearer) completes: the PLAYER's Healing Signet in activation takes retail's "
           "victim run [8,0] E5(4) [59] E2 [35] and NO disable E5 (test_interrupt 1's shape less "
           "the +20)", f"hit={hit} ops={ops}")
+    # THE PLAYER'S REAL PATH (the review's M4): the player wears Panic, so does a casting hostile
+    # 100 u off (the same caster's); the player's Flare through the real press + E5 closes its
+    # batch with [59, 11, 0] [35, 11, 0]; under the flag the hostile keeps casting.
+    got = {}
+    for on in (True, False):
+        authsrv.HEX_SKILL_USE_CHAIN = on
+        st = fresh_state()
+        hostile(st, 10, (50.0, 0.0))
+        foe11 = casting(11, hostile(st, 11, (100.0, 0.0)) and st)
+        hex_on(st, PANIC, agent=PLAYER, caster=10)
+        hex_on(st, PANIC, agent=11, caster=10)
+        sent, send = collector()
+        e5_batch(194, 10, st, send)
+        ops = [(v[0], v[1]) for op, v, _l in sent if op == INT]
+        got[on] = (ops[-2:], foe11.get("casting"))
+    authsrv.HEX_SKILL_USE_CHAIN = True
+    check(got[True] == ([(agents.GV_SKILL_STOPPED, 11), (agents.GV_INTERRUPTED, 11)], None)
+          and got[False][1] == 0
+          and not [x for x in got[False][0] if x[0] in (agents.GV_SKILL_STOPPED, agents.GV_INTERRUPTED)],
+          "the PLAYER completes Flare through the real press + E5 wearing Panic: the batch ends "
+          "[59, 11, 0] [35, 11, 0] and the hostile's cast is gone; --no-hex-skill-use-chain: it "
+          "keeps casting (the review's M4: the hook `... and False` stayed green)", f"{got}")
     # THE BODY'S REAL PATH: land_skill's completion, the chain right behind the 58.
     st = world(2, bar=RC_BAR)
     for aid in (10, 11):
@@ -2597,18 +2846,21 @@ try:
           "--no-hex-skill-use-chain: the completion interrupts nobody and 11 keeps casting")
     authsrv.HEX_SKILL_USE_CHAIN = True
     src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
-    i_ip, i_ib = src.index("def interrupt_player("), src.index("def interrupt_body(")
-    check(src.count("hex_skill_use_chain(send, state, conn_id, PLAYER_AGENT_ID, cast[\"skill_id\"])") == 1
+    i_ip, i_ib = _idx(src, "def interrupt_player("), _idx(src, "def interrupt_body(")
+    check(_lock(src.count("hex_skill_use_chain(send, state, conn_id, PLAYER_AGENT_ID, cast[\"skill_id\"])") == 1
           and src.count("hex_skill_use_chain(send, state, conn_id, agent_id, skill_id)") == 1
-          and src.index("def cast_tick(") < src.index("if HEX_SKILL_USE_CHAIN and not _na_fail:")
-          < src.index("def apply_effect(")
-          and src.index("def land_skill(") < src.index("hex_skill_use_chain(send, state, conn_id, agent_id, skill_id)")
+          and _idx(src, "def cast_tick(") < _idx(src, "if HEX_SKILL_USE_CHAIN and not _na_fail:")
+          < _idx(src, "def apply_effect(")
+          and _idx(src, "def land_skill(") < _idx(src, "hex_skill_use_chain(send, state, conn_id, agent_id, skill_id)")
           and src.count('mode in ("action", "attacking")') == 2
           and src.count("mode == INTERRUPT_MODE_SKILL") == 2
-          and i_ip < src.index("mode == INTERRUPT_MODE_SKILL") < i_ib
-          < src.rindex("mode == INTERRUPT_MODE_SKILL")
-          and src.count("if not _na_fail:") == 2,
-          "the source: the two hook sites (the player's E5 batch, a body's land_skill); the new "
+          and i_ip < _idx(src, "mode == INTERRUPT_MODE_SKILL") < i_ib
+          < _ridx(src, "mode == INTERRUPT_MODE_SKILL")
+          and src.count("if not _na_fail:") == 2
+          and "HEX_SKILL_USE_CHAIN = False" in src[_idx(src, "    if a.no_hex_skill_use_chain:", _idx(src, "\ndef main():")):
+                                                   _idx(src, "    if a.no_hex_skill_use_chain:", _idx(src, "\ndef main():")) + 160]),
+          "the source: the two hook sites (the player's E5 batch, a body's land_skill), main() "
+          "flips HEX_SKILL_USE_CHAIN = False under its flag (M10); the new "
           "mode is read in both cast branches and in NEITHER swing branch (the two 'action / "
           "attacking' swing gates are untouched); test_labelconsumers' `if not _na_fail:` count "
           "still 2")
@@ -2795,8 +3047,73 @@ try:
         terms[cr] = authsrv.body_spell_terms(st, st["agents"][10], ORB_J, 40.0, 12, True)[3]
     check(terms == {False: 75.0, True: 60.0},
           "body_spell_terms, a Javelin (25 % penetration) at a Cracked party body of 100 AR: "
-          "75 uncracked, 60 cracked = (100 - 20) x 0.75 -- BEFORE the penetration (after it "
-          "would read 55)", f"{terms}")
+          "75 uncracked, 60 cracked = (100 - 20) x 0.75 -- BEFORE the penetration", f"{terms}")
+    terms = {}
+    for cr in (False, True):
+        st = fresh_state()
+        hostile(st, 10)
+        hostile(st, 12, allegiance=agents.ALLEGIANCE_PLAYER, armor_rating=200.0)
+        if cr:
+            cond_on(st, CRACKED, agent=12)
+        terms[cr] = authsrv.body_spell_terms(st, st["agents"][10], ORB_J, 40.0, 12, True)[3]
+    check(terms == {False: 150.0, True: 135.0},
+          "and at 200 AR, where the floor cannot bite: 150 uncracked, 135 cracked = (200 - 20) x "
+          "0.75 -- after the penetration it would read 150 - 20 = 130 (the review's M2: at 100 AR "
+          "both orders read 60, the floor lifting 55 back)", f"{terms}")
+    # THE REVIEW'S R34-3: the Bonus-vs-Core ambiguity bonus_armour records is LIVE here -- the
+    # Core reading's arm, pinned beside the shipped Bonus reading (CONTESTED).
+    check(na(rating, bonus, 0.0, CR_PEN) == rating and na(rating + bonus, 0.0, 0.0, CR_PEN) == rating + bonus,
+          f"CONTESTED (net_armour's docstring): under the BONUS reading (shipped, GWW 'Armor "
+          f"calculation') the {rating:.0f} + {bonus:.0f} vs. physical reads {rating:.0f} Cracked; "
+          f"under the CORE reading (GWW 'Basic armor' prints the +20 as basic) the core is "
+          f"{rating + bonus:.0f} < 60 and is its own floor -- Cracked Armor moves NOTHING on the "
+          f"starter set; a tooltip / armour-panel read in a run settles it",
+          f"bonus={na(rating, bonus, 0.0, CR_PEN)} core={na(rating + bonus, 0.0, 0.0, CR_PEN)}")
+    # THE REVIEW'S M9: scythe_extra_hit and the preparation splash, through the real functions.
+    random.random = lambda: 1.0
+    authsrv.PLAYER_SWING_DAMAGE = (100, 100)
+    dealt = {}
+    for cr in (False, True):
+        st = fresh_state()
+        body = hostile(st, 11, (10.0, 0.0), armor_rating=100.0, max_health=1000.0, health=1000.0)
+        if cr:
+            cond_on(st, CRACKED, agent=11)
+        sent, send = collector()
+        dealt[cr] = authsrv.scythe_extra_hit(send, st, 11, 0, 0, 0.0, 1.0, time.time(), "extra")
+    random.random = saved[-1]
+    authsrv.PLAYER_SWING_DAMAGE = saved[-2]
+    check(dealt[True] > dealt[False] and abs(dealt[True] / dealt[False] - 2 ** 0.5) < 0.03,
+          "scythe_extra_hit on a 100-AR foe: the cracked extra hit is 2^(20/40) the plain one to "
+          "the whole point", f"{dealt}")
+    splash = {}
+    for cr in (False, True):
+        st = fresh_state()
+        hostile(st, 10, (0.0, 0.0), armor_rating=100.0, max_health=1000.0, health=1000.0)
+        body = hostile(st, 11, (50.0, 0.0), armor_rating=100.0, max_health=1000.0, health=1000.0)
+        if cr:
+            cond_on(st, CRACKED, agent=11)
+        sent, send = collector()
+        reached = authsrv.preparation_splash(send, st, IGNITE, 100.0, 10, 0, 12, None)
+        splash[cr] = (reached, 1000.0 - body["health"])
+    check(splash[False][0] == splash[True][0] == [11] and splash[True][1] > splash[False][1]
+          and abs(splash[True][1] / splash[False][1] - 2 ** 0.5) < 0.03,
+          "the preparation splash (Ignite Arrows, 156 u) on the 100-AR foe beside the target: "
+          "reached either way, the cracked splash 2^(20/40) the plain one", f"{splash}")
+    # THE REVIEW'S R34-7: player_spell_armour puts the SHIELD inside the leaf's floor, as
+    # player_armour_at does -- a Cracked 60 core with a 16 shield holds at 60, not 76.
+    _saved_39 = (authsrv.offhand_armour, combatmath.armour_of_piece)
+    authsrv.offhand_armour = lambda damage_type="physical", state=None: 16.0
+    combatmath.armour_of_piece = lambda *a, **k: (60.0, 0.0)
+    try:
+        st_c = fresh_state()
+        cond_on(st_c, CRACKED)
+        psa = (authsrv.player_spell_armour(fresh_state()), authsrv.player_spell_armour(st_c))
+    finally:
+        authsrv.offhand_armour, combatmath.armour_of_piece = _saved_39
+    check(psa == (76.0, 60.0) and psa[1] == na(60.0, 0.0, 16.0, CR_PEN),
+          "player_spell_armour with a 60 piece and a 16 shield: 76 plain, 60 Cracked -- the shield "
+          "inside net_armour's floor (the first cut added it after the leaf and read 76 Cracked, "
+          "76 != player_armour_at's 60)", f"{psa}")
     # THE REAL INFLICTER: a hostile's Shell Shock at the player through land_skill.
     st = world(1, bar=((SHELL, 1.0, 8.0),))
     a = st["agents"][10]
@@ -2831,25 +3148,28 @@ try:
           "quiet swing, the body's 100 (the reading every run before 2026-09-27 made)")
     authsrv.CRACKED_ARMOR = True
     src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
-    i_ls = src.index("def land_swing(")
-    i_bsa, i_lsob, i_he = (src.index("def body_spell_armour("), src.index("def land_swing_on_body("),
-                           src.index("def hit_enemy("))
-    check(src.count("cracked_body_armour(state, ") == 6           # five sites + the def
-          and src.index("def scythe_extra_hit(") < src.index("cracked_body_armour(state, aid, foe.get(")
-          < src.rindex("cracked_body_armour(state, aid, foe.get(") < i_bsa
-          < src.index("cracked_body_armour(state, tid, body_armour_rating(row))") < i_he
-          < src.index("cracked_body_armour(state, target_id, agent.get(") < i_lsob
-          < src.index("armour = cracked_body_armour(state, tid, armour)")
+    i_ls = _idx(src, "def land_swing(")
+    i_bsa, i_lsob, i_he = (_idx(src, "def body_spell_armour("), _idx(src, "def land_swing_on_body("),
+                           _idx(src, "def hit_enemy("))
+    check(_lock(src.count("cracked_body_armour(state, ") == 6           # five sites + the def
+          and _idx(src, "def scythe_extra_hit(") < _idx(src, "cracked_body_armour(state, aid, foe.get(")
+          < _ridx(src, "cracked_body_armour(state, aid, foe.get(") < i_bsa
+          < _idx(src, "cracked_body_armour(state, tid, body_armour_rating(row))") < i_he
+          < _idx(src, "cracked_body_armour(state, target_id, agent.get(") < i_lsob
+          < _idx(src, "armour = cracked_body_armour(state, tid, armour)")
           and src.count("cracked=cracked_penalty(state, PLAYER_AGENT_ID)") == 4
-          and src.index("armour = penetrated_armour(armour, (body_weapon_items(agent) or (None,))[0],", i_ls)
-          < src.index("armour += casting_armour_penalty(state)", i_ls)
+          and _idx(src, "armour = penetrated_armour(armour, (body_weapon_items(agent) or (None,))[0],", i_ls)
+          < _idx(src, "armour += casting_armour_penalty(state)", i_ls)
           and "return spell_armour_for(skill_id, state)" in src[i_bsa:i_bsa + 1500]
           and "armour = body_armour_rating(row)" in src[i_lsob:i_lsob + 3000]
-          and 'row.get("armor_rating")' not in inspect.getsource(authsrv.land_swing_on_body),
+          and 'row.get("armor_rating")' not in inspect.getsource(authsrv.land_swing_on_body)
+          and "CRACKED_ARMOR = False" in src[_idx(src, "    if a.no_cracked_armor:", _idx(src, "\ndef main():")):
+                                             _idx(src, "    if a.no_cracked_armor:", _idx(src, "\ndef main():")) + 160]),
           "the source: the five body sites through cracked_body_armour (the scythe's extra hit, "
           "the preparation splash, body_spell_armour, hit_enemy, land_swing_on_body; 6 with the def), the "
           "player's four reads passing the penalty INTO the leaf, land_swing's casting penalty "
-          "still after the penetration, and test_agentlife's literals intact")
+          "still after the penetration, test_agentlife's literals intact, main() flips "
+          "CRACKED_ARMOR = False under --no-cracked-armor (M10)")
 finally:
     (authsrv.CRACKED_ARMOR, authsrv.ARMOUR_TERM, authsrv.ENERGY, authsrv.BLIND,
      authsrv.CASTING_ARMOUR, authsrv.roll_hit_location, authsrv.NPC_FOLLOW,
@@ -3018,6 +3338,39 @@ try:
           and shapes[True][1:] == ([agents.GV_SKILL_STOPPED, agents.GV_INTERRUPTED], None),
           "hit_enemy: the player's swing on a hostile casting RC -- untouched plain, [59, 10, 0] "
           "[35, 10, 0] when Dazed", f"{shapes}")
+    # THE REVIEW'S M7: the player's SPELL word (hit_enemy's exact) on a Dazed casting hostile
+    # interrupts nothing -- an attack, not any hit; the swing beside it does.
+    shapes = {}
+    for swing in (True, False):
+        st = fresh_state()
+        casting(10, hostile(st, 10, max_health=1000.0, health=1000.0) and st)
+        cond_on(st, DAZED_C, agent=10)
+        sent, send = collector()
+        if swing:
+            res = authsrv.hit_enemy(send, st, 10, 0)
+        else:
+            res = authsrv.hit_enemy(send, st, 10, 0, exact=10.0, swing=False, armed=True,
+                                    label="the player's spell")
+        shapes[swing] = (res, stops(sent, 10), st["agents"][10]["casting"])
+    check(shapes[True] == ("landed", [agents.GV_SKILL_STOPPED, agents.GV_INTERRUPTED], None)
+          and shapes[False] == ("landed", [], 0),
+          "hit_enemy on a Dazed casting hostile: the player's SWING interrupts, the player's "
+          "SPELL word (exact, swing=False) lands and interrupts NOTHING -- the `swing and exact "
+          "is None` gate the review's M7 found untested", f"{shapes}")
+    # THE REVIEW'S M3: the player's press and ally_cast_tick under Dazed, for real.
+    got = {}
+    for dz in (False, True):
+        got[dz] = press_e5(ORB_J, 10, cond=DAZED_C if dz else None)
+    check(got == {False: 1.0, True: 2.0},
+          "handle_skill_press: the player's Javelin's E5 clock is 1.0 s plain and 2.0 s Dazed -- "
+          "the doubling reaches the real press", f"{got}")
+    got = {}
+    for dz in (False, True):
+        got[dz] = ally_cast(((RC, 0.75, 2.0),), cond=DAZED_C if dz else None)
+    check(got[False][:2] == (0.75, PLAYER) and got[True][:2] == (1.5, PLAYER)
+          and abs((got[True][2] - got[False][2]) - 0.75) < 1e-6,
+          "ally_cast_tick: a party monk's Restore Condition at the hurt player lands at +0.75 "
+          "plain and +1.5 Dazed, its recharge anchor moved by the same 0.75", f"{got}")
     st = fresh_state()
     a = hostile(st, 10)
     a.update({"casting": None, "swing_lands_at": time.time() + 0.5, "swinging": True})
@@ -3094,32 +3447,34 @@ try:
           "(the reading every run before 2026-09-27 made)")
     authsrv.DAZED = True
     src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
-    i_press = src.index("def handle_skill_press(")
-    i_eat, i_act = src.index("def enemy_attack_tick("), src.index("def ally_cast_tick(")
-    i_ip, i_ib = src.index("def interrupt_player("), src.index("def interrupt_body(")
-    i_da = src.index("def dazed_activation(")
-    check(src.count("activation = dazed_activation(state, agent_id, skill_id, activation)") == 2
+    i_press = _idx(src, "def handle_skill_press(")
+    i_eat, i_act = _idx(src, "def enemy_attack_tick("), _idx(src, "def ally_cast_tick(")
+    i_ip, i_ib = _idx(src, "def interrupt_player("), _idx(src, "def interrupt_body(")
+    i_da = _idx(src, "def dazed_activation(")
+    check(_lock(src.count("activation = dazed_activation(state, agent_id, skill_id, activation)") == 2
           and src.count("activation = dazed_activation(state, PLAYER_AGENT_ID, skill_id, activation)") == 1
-          and src.index("activation = signet_activation(state, PLAYER_AGENT_ID, skill_id, activation)", i_press)
-          < src.index("activation = dazed_activation(state, PLAYER_AGENT_ID, skill_id, activation)", i_press)
-          < src.index("e5_at = begin + activation", i_press)
-          and i_eat < src.index("activation = dazed_activation(state, agent_id, skill_id, activation)")
-          < i_act < src.rindex("activation = dazed_activation(state, agent_id, skill_id, activation)")
+          and _idx(src, "activation = signet_activation(state, PLAYER_AGENT_ID, skill_id, activation)", i_press)
+          < _idx(src, "activation = dazed_activation(state, PLAYER_AGENT_ID, skill_id, activation)", i_press)
+          < _idx(src, "e5_at = begin + activation", i_press)
+          and i_eat < _idx(src, "activation = dazed_activation(state, agent_id, skill_id, activation)")
+          < i_act < _ridx(src, "activation = dazed_activation(state, agent_id, skill_id, activation)")
           and src.count("mode == INTERRUPT_MODE_SPELL") == 2
-          and i_ip < src.index("mode == INTERRUPT_MODE_SPELL") < i_ib
-          < src.rindex("mode == INTERRUPT_MODE_SPELL")
+          and i_ip < _idx(src, "mode == INTERRUPT_MODE_SPELL") < i_ib
+          < _ridx(src, "mode == INTERRUPT_MODE_SPELL")
           and src.count("mode == INTERRUPT_MODE_SKILL") == 2
           and src.count('mode in ("action", "attacking")') == 2
           and src.count("dazed_interrupt(send, state, conn_id, ") == 5    # four sites + the def
-          and "GV_CASTTIME" not in src[i_da:src.index("def _hex_damage_slot(")]
-          and src.index("push_regen(send, state, target_id, conn_id)", src.index("def apply_condition("))
-          < src.index("if condition_id == DAZED_ID:", src.index("def apply_condition(")),
+          and "GV_CASTTIME" not in src[i_da:_idx(src, "def _hex_damage_slot(")]
+          and _idx(src, "push_regen(send, state, target_id, conn_id)", _idx(src, "def apply_condition("))
+          < _idx(src, "if condition_id == DAZED_ID:", _idx(src, "def apply_condition("))
+          and "DAZED = False" in src[_idx(src, "    if a.no_dazed:", _idx(src, "\ndef main():")):
+                                     _idx(src, "    if a.no_dazed:", _idx(src, "\ndef main():")) + 160]),
           "the source: the three activation sites behind signet_activation (the press between it "
           "and the E5 clock; enemy_attack_tick; ally_cast_tick); mode 'spell' in both cast "
           "branches and in neither swing gate (B2's two locks intact); four dazed_interrupt sites "
           "(land_swing, hit_enemy, land_swing_on_body, apply_condition behind its push_regen; 5 "
           "with the def); "
-          "property 61 still never sent")
+          "property 61 still never sent; main() flips DAZED = False under --no-dazed (M10)")
 finally:
     (authsrv.DAZED, authsrv.INTERRUPTS, authsrv.ENERGY, authsrv.NPC_FOLLOW, authsrv.BLIND,
      authsrv.ARMOUR_TERM) = saved

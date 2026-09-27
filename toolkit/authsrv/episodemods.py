@@ -343,6 +343,21 @@ def _capped(terms, cap):
     return total
 
 
+def _capped_snare(terms, cap):
+    """The snare percent: the boosts' rule below the cap, and ABOVE it the
+    LARGEST single snare, never the sum. A single 66 passes the 50 cap
+    (Teinai's Prison's x0.34, OBSERVED 6/6) and, until the D6 review
+    (HEX-1, 2026-09-27), two of them SUMMED to 132 through `_capped` and
+    declared a negative speed (0x0027 [foe, -92.16]) -- Deep Freeze +
+    Ice Spikes on one foe, or the placeholder AI's re-cast. RECONSTRUCTION:
+    retail's stacking of two over-cap snares is on no tape (the MOVESPEED
+    arc's snare row is still open); whatever the rule is, a speed below the
+    strongest single snare's is wrong under all of them."""
+    if max(terms) > cap:
+        return max(terms)
+    return _capped(terms, cap)
+
+
 def move_speed_factor(state, agent_id):
     """What the agent's open episodes do to its declared 0x0027 base. 1.0 = nothing."""
     boosts, snares, crippled = move_speed_terms(state, agent_id)
@@ -350,7 +365,7 @@ def move_speed_factor(state, agent_id):
     if boosts:
         factor *= 1.0 + _capped(boosts, MOVE_SPEED_CAP_UP) / 100.0
     if snares:
-        factor *= 1.0 - _capped(snares, MOVE_SPEED_CAP_DOWN) / 100.0
+        factor *= 1.0 - _capped_snare(snares, MOVE_SPEED_CAP_DOWN) / 100.0
     if crippled:
         factor *= CRIPPLED_FACTOR
     return factor

@@ -2264,7 +2264,10 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "Shadow of Fear -- the record's type 4 with target byte 16) opens "
                          "its episode on its ONE target and lands no on-cast damage -- "
                          "the reading every run before 2026-09-27 made. --no-spell-areas "
-                         "reverts it too (the older flag wins).")
+                         "reverts it too (the older flag wins). The rows' own snare "
+                         "(Deep Freeze's / Ice Spikes' 0x0027 x0.34) STAYS under both: it is "
+                         "the content row on move_speed_terms, not code -- removing the row "
+                         "is its revert.")
     ap.add_argument("--no-hex-effect-words", action="store_true",
                     help="studies/weapons 43 REVERT: a hex sends no [6, wearer, 1] / "
                          "[6, wearer, class] at its apply and no [7]s at its close -- the "

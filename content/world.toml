@@ -1642,6 +1642,23 @@ bit 0 clear; 1,765 units from the nearest flags-0 ground."""
 # ids are carried opaque: nothing in this repo reads the component space they
 # index, and nothing needs to.
 
+[skill_visual.179]
+caster = 347
+recipient = 348
+[skill_visual.179.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38797
+verified = "s_skill row 179, +0x78 = 347, +0x7c = 348; extracted 2026-09-27 (the D6 review's EV-4), the wire's own [21, c, 347] + [20, T, c, 348] on 28 of 28 completions (hexjoin I2, 20260817T231139)."
+
+[skill_visual.185]
+recipient = 331
+[skill_visual.185.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38797
+verified = "s_skill row 185, +0x7c = 331 (+0x78 = 2077, none); extracted 2026-09-27 (the D6 review's EV-4), the wire's own [20, T, c, 331] on 25 of 25 completions (hexjoin M2, 20260817T231139)."
+
 [skill_visual.135]
 recipient = 245
 [skill_visual.135.provenance]
@@ -2835,8 +2852,9 @@ wiki's 322 -- the standing CONTESTED offset), duration 10 / 10, scale 10->85 arg
 bonus 66 / 66 with its bit clear (the flat snare, skill_flat_constant's shape: Rush's 25, \
 Faintheartedness's 50), projectile 2077 (none), impact_visual 414. NEVER cast on any live tape \
 (NOT FOUND, aotjoin P8), so: one hex per foe within 312 u of the target's position at the \
-completion, each foe's word ahead of the hexes at the player's E5 and behind them at a body's \
-58 (each path's own order, UNWITNESSED), 0x0027 [foe, base x 0.34] with each apply and the base \
+completion, the hexes AHEAD of the words on both paths (the body path's order, taken by the \
+player's too at the D6 review's HEX-3; UNWITNESSED either way), 0x0027 [foe, base x 0.34] with \
+each apply and the base \
 back at +10 s -- the arithmetic OBSERVED on Teinai's Prison 1097 (6/6, 288 x 0.34 = 97.92). The \
 hex on any body draws [6, foe, 1] + [6, foe, 12] (the Elementalist class, 179 and 1097's; \
 keyed on this record's profession -- RECONSTRUCTION) and 0x00F1 0x800 | 0x400 (the snare bit, \
@@ -2871,7 +2889,8 @@ verified = """studies/weapons/PLAN.md 43. Wiki: "Hex Spell. Target foe and all a
 the page's literal at every rank. Client (38797): id 136, type_code 4, attribute 7 (Curses), \
 profession 4, TARGET BYTE 16, aoe_range 156, duration 5->30 args = 1 (duration), scale 50 / 50 \
 with its bit clear (the flat constant Faintheartedness 135's row reads the same way: a decrease \
-of p % multiplies the wearer's attack duration by (1 + p/100), GWW "Attack speed"'s own table), \
+of p % multiplies the wearer's attack duration by (1 + p/100), GWW "Attack speed"'s own table -- \
+cited from row 135's / the atkspeed row's earlier read (rev. 2026-07-03), NOT re-read this arc), \
 bonus 0 / 0, projectile 2077 (none), impact_visual 247. No damage, no snare: ZERO code of its \
 own -- the row and the area predicate are the whole change. NEVER cast on any live tape (NOT \
 FOUND, aotjoin P8). The hex on any body draws [6, foe, 1] alone: no [6, foe, class] id is \
@@ -2899,8 +2918,9 @@ profession 4, TARGET BYTE 16, aoe_range 240 (the client's own nearby), duration 
 INDETERMINATE), bonus 0 / 0. The endpoints above are the client's own scale0/15, carried \
 explicitly because the bitfield does not enable the slot -- interpolated by the client's formula \
 at the caster's rank (rank 12: 2 pips; 15: 3). Read by episodemods.hex_pips and summed with the \
-conditions' pips under ONE cap of 10 (WIKI "Health degeneration"; that a hex shares the cap is \
-RECONSTRUCTION). Degeneration is not damage: no word, no scatter (WIKI "Area damage over time"). \
+conditions' pips under ONE cap of 10 (WIKI "Health degeneration", cited from studies/isle's read of \
+2026-08-18, NOT re-read this arc; that a hex shares the cap is RECONSTRUCTION). Degeneration is \
+not damage: no word, no scatter (WIKI "Area damage over time", rev. 2550879, the aot arc's read). \
 This field's reader also lights up Faintheartedness 135's `Health degeneration` bonus (its bit is \
 SET, read from the slot), dormant since 2026-08-22. --no-hex-degeneration reverts both. The hex \
 draws [6, foe, 1] alone (a Necromancer hex, no class id observed: NOT FOUND)."""
@@ -2965,7 +2985,8 @@ the user that is activating a skill is interrupted in the skill-less mode "skill
 attack skill or not; never a swing; no disable). "Successfully uses": which instant retail \
 means is UNVERIFIED -- the completion is the one chosen; "all other nearby foes" is read as \
 the other WEARERS (the D6 spec's reading), not every foe near the user. Never scatters (WIKI \
-"Scatter": Panic is a named non-trigger). --no-hex-skill-use-chain reverts. The hex draws [6, \
+"Scatter", rev. 2735452, the aot arc's read: Panic is a named non-trigger). --no-hex-skill-use-chain \
+reverts. The hex draws [6, \
 foe, 1] + [6, foe, 4] (Mesmer)."""
 
 # INCENDIARY BONDS 179 AND MIND BURN 185 -- DESKWORK-D6 step 3 (2026-09-27, studies/skills/
@@ -2994,15 +3015,24 @@ aoe_range 240 (the client's own nearby), duration 3 / 3, scale 20->80, bonus 1->
 (scale | bonus), projectile 2077 (none), impact_visual 2077. OBSERVED on retail (28 completions, \
 20260817T231139): the completion lands the hex ALONE -- [58] [20, T, 348] [6, T, 1] [6, T, 12] \
 0x00F1 0x800, 0 damage words on the target (28/28); the END -- at expiry (+2.986..+3.022, 20 \
-scheduled), EARLY on the target's death (3, 2 striking an adjacent foe), NEGATED by the target's \
-Remove Hex (4/4, 0 payoff) -- strikes every foe within 240 u of the target, per foe ascending \
-0x00A3 [16, foe, caster, f] then Burning ([6, foe, 25]; 0x0042 480 3.0 s on the observer, 3/3), \
-THEN the hex's own end; no 58, no [20]. 1 payoff fired early in the batch where the CASTER died \
-(n = 1, not on the page): NOT modelled. Read by authsrv.hex_end_arm at the apply and \
-hex_end_burst from effect_tick (ahead of the 0x0044) and from strip_effects when the wearer is \
-DEAD; a strip while alive fires nothing. The player caster's words are armour-free (the standing \
-hit_enemy gap), a body's meet each taker's armour. The slot of the death payoff inside the death \
-batch is UNWITNESSED. --no-hex-end-burst reverts. The hex draws [6, foe, 1] + [6, foe, 12]."""
+scheduled: 18 with the payoff, one whose only word is the caster's Fire Storm TICK -- 690.819, a \
+mixed instant, not a payoff -- and one that landed nothing), EARLY on the target's death (3, 2 \
+striking an adjacent foe), NEGATED by the target's Remove Hex (4/4, 0 payoff) -- strikes the foes \
+around the target (1..4 takers OBSERVED; that the radius is the record's 240 u is RECONSTRUCTION: \
+who stands inside 240 is not testable from the tape, whose other agents' positions are leads), per \
+foe ascending 0x00A3 [16, foe, caster, f] then Burning ([6, foe, 25]; 0x0042 480 3.0 s on the \
+observer, 3/3), THEN the hex's own end; no 58, no [20]. 1 payoff fired early in the batch where \
+the CASTER died (n = 1, not on the page): NOT modelled. Read by authsrv.hex_end_arm at the apply \
+(a wearer already carrying an armed 179 arms no second -- one payoff per wearer, RECONSTRUCTION, \
+the D6 review's R34-4) and hex_end_burst from effect_tick (ahead of the 0x0044) and from \
+strip_effects when the wearer is DEAD; a strip while alive fires nothing. The player caster's \
+words are armour-free (the standing hit_enemy gap), a body's meet each taker's armour; the tape's \
+72 (0.12973 x 555) equals hex_end_damage(179, 13) on the ASSUMPTION the taker's armour factor is \
+1 (CORROBORATED, the armour is off the wire). The death payoff's slot is OBSERVED 2/2 (631.935, \
+642.688): behind the death word and the reward block, AHEAD of the corpse's [7]s, the 0x0026 \
+flags byte last -- kill_agent's order since the D6 review (EV-1). The visuals [21, c, 347] + \
+[20, T, c, 348] are the skill_visual row's. --no-hex-end-burst reverts. The hex draws [6, foe, \
+1] + [6, foe, 12]."""
 
 [skill_effect.185]
 scale_means = "Fire damage"                       # the base word, 15..60 (the scale slot, bit set)
@@ -3031,7 +3061,10 @@ against that foe's after the cast's cost (the instant UNVERIFIED); a hostile's p
 server's ENEMY_ENERGY 30. Read by authsrv.spell_adjacent (under --no-area-damage, Death \
 Blossom's flag) through adjacent_player_spell / adjacent_body_spell, and by energy_bonus_holds. \
 --no-spell-energy-bonus reverts the twin and the Burning; --energy-bonus-target-only is the \
-page's one comparison, the known-bad arm."""
+page's one comparison, the known-bad arm. COUPLED, said (the D6 review's R34-5): the twin and \
+the Burning ride the adjacent path, so --no-area-damage takes them too -- under it Mind Burn is \
+the pre-2026-09-27 one-target word. A target dead at the E5 lands nothing on the foes beside it \
+(R34-2). The [20, T, c, 331] is the skill_visual row's (+0x7c)."""
 
 # CRACKED ARMOR 2077 AND DAZED 485 -- DESKWORK-D6 step 5 (B4, 2026-09-27, studies/skills/
 # FINDINGS.md 62). The two conditions get their mechanism in authsrv (Cracked Armor: -20 into the
