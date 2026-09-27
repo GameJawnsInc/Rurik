@@ -733,14 +733,14 @@ def main():
         arm = next(iter(authsrv.effect_table(st).live.values())).get("end_burst")
         vis21 = [v for op, v in sent if op == 0x009F and v[0] == agents.GV_EFFECT_ON_AGENT]
         vis20 = [v for op, v in sent if op == 0x00A0 and v[0] == agents.GV_EFFECT_ON_TARGET]
-        i58 = next(i for i, (op, v) in enumerate(sent) if op == 0x009F and v[0] == 58)
-        i21 = next(i for i, (op, v) in enumerate(sent) if op == 0x009F and v[0] == agents.GV_EFFECT_ON_AGENT)
-        i20 = next(i for i, (op, v) in enumerate(sent) if op == 0x00A0)
-        i6 = next(i for i, (op, v) in enumerate(sent) if op == 0x009F and v[0] == 6)
+        i58 = next((i for i, (op, v) in enumerate(sent) if op == 0x009F and v[0] == 58), None)
+        i21 = next((i for i, (op, v) in enumerate(sent) if op == 0x009F and v[0] == agents.GV_EFFECT_ON_AGENT), None)
+        i20 = next((i for i, (op, v) in enumerate(sent) if op == 0x00A0), None)
+        i6 = next((i for i, (op, v) in enumerate(sent) if op == 0x009F and v[0] == 6), None)
         check(fin58(sent) == [[58, PLAYER, 0]] and not words(sent) and not applies(sent)
               and adds(sent) == [(6, FOE, 1), (6, FOE, 12)] and status(sent) == [(FOE, 0x800)]
               and vis21 == [[21, PLAYER, 347]] and vis20 == [[20, FOE, PLAYER, 348]]
-              and i58 < i21 < i20 < i6
+              and None not in (i58, i21, i20, i6) and i58 < i21 < i20 < i6
               and eps(st) == [(FOE, 1, 179, 3.0)]
               and arm == {"radius": 240.0, "hostile": False, "caster_row": None}
               and all(st["agents"][a]["health"] == 9000.0 for a in (FOE, 11, 12)),
@@ -779,15 +779,16 @@ def main():
         sent.clear()
         expire(st, send)
         d_ops = [(op, v) for op, v in dead_batch]
-        i_kill = next(i for i, (op, v) in enumerate(d_ops) if op == STATUS and v == [FOE, 0x810])
-        i_rew = next(i for i, (op, v) in enumerate(d_ops) if op == 0x00EE)
-        i_pay = next(i for i, (op, v) in enumerate(d_ops) if op == WORD and v[1] == 11)
+        i_kill = next((i for i, (op, v) in enumerate(d_ops) if op == STATUS and v == [FOE, 0x810]), None)
+        i_rew = next((i for i, (op, v) in enumerate(d_ops) if op == 0x00EE), None)
+        i_pay = next((i for i, (op, v) in enumerate(d_ops) if op == WORD and v[1] == 11), None)
         i_7 = [i for i, (op, v) in enumerate(d_ops) if op == 0x009F and v[0] == 7]
-        i_step = next(i for i, (op, v) in enumerate(d_ops) if op == STATUS and v == [FOE, 0x10])
-        i_flags = next(i for i, (op, v) in enumerate(d_ops) if op == 0x0026)
+        i_step = next((i for i, (op, v) in enumerate(d_ops) if op == STATUS and v == [FOE, 0x10]), None)
+        i_flags = next((i for i, (op, v) in enumerate(d_ops) if op == 0x0026), None)
         check(words(dead_batch) == [[16, FOE, PLAYER], [16, 11, PLAYER]]
               and removes(dead_batch) == [(7, FOE, 1), (7, FOE, 12)]
               and status(dead_batch) == [(FOE, 0x810), (11, 0x002), (FOE, 0x10)]
+              and None not in (i_kill, i_rew, i_pay, i_step, i_flags) and len(i_7) == 2
               and i_kill < i_rew < i_pay < i_7[0] < i_7[1] < i_step < i_flags
               and st["agents"][FOE]["dead"] and st["agents"][11]["health"] == 8980.0
               and st["agents"][12]["health"] == 9000.0
