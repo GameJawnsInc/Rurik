@@ -2757,3 +2757,27 @@ armour-scaled player tick and a taker-scaled body tick (the two gaps above); a g
 for 192 and 167 (unknown); the player's own completion batch for an area (unobserved); D6's own
 text in `studies/deskwork/PLAN.md` still says "Fifteen area skills" and "words at +3, +4, +5 s"
 (§41's corrections stand; the landing rewrites it).
+
+### 42.1 CONFIRMED on our client -- 2026-09-26 (agent-driven, the owner's go-ahead)
+
+Three loopback runs, the questions registered before each launch, read from the gamesrv log
+and the walk frames (the harness's own verdict is PASS on all three; no assert, no crash).
+
+- **A, the player's storm on a melee group** (`20260926T214247`: a W/E with 197 on the bar,
+  `--enemies 4 --enemy-cluster 100 --enemy-passive --enemy-hit 0.02 --no-enemy-skills`, one
+  swing to provoke the group, then `skill:197,10`). The completion opened area #1 at hostile
+  10's position; ticks at +1.00 ... +10.00 s, 4 struck, then 3, then none once the group had
+  fled; the 350 re-drawn at +3 and +6. **The client draws the storm**: frames 9 and 11 show
+  the burning ground where hostile 10 fell (its corpse lies in the fire -- the player's own
+  swing killed it between the first two ticks) and the rest of the group standing clear.
+- **C, a hostile's storm on the player** (`20260926T214944`, `--enemy-skills 197`): the
+  hostile's `[58]`, then the 350 at the player's position, then per tick `0x00CF` (the
+  adrenaline from damage), `[10, player, 197]`, the word -- retail's observer prefix (§41,
+  12 of 12) -- 19 a second against the player's elemental 25; the player died at the sixth,
+  the area ticked on past the corpse and closed at ten; the recast after the 20 s recharge
+  opened area #2 over the revived player. **The client's own damage monitor reads "x6 Fire
+  Storm"** (it took the property-10 word as the damage's skill) and frame 10 shows the
+  storm's falling fire over the player.
+- **The void first launch** (`20260926T213904`): the player died to the fixture Hatcher's own
+  bar (skill 312) before the cast; `--enemy-hit` governs swings only, so a run that wants the
+  player alive against a group passes `--no-enemy-skills`. Recorded so nobody re-derives it.

@@ -743,6 +743,8 @@ RUNBOOK section, one owner question.
 
 ### DESKWORK-D6 — area spells and the last two conditions: Fire Storm as the areas-over-time template, the seven area hexes with Deep Freeze's snare row, Dazed and Cracked Armor
 
+**Status 2026-09-26: steps 1 and 2 LANDED, with the monster scatter** (PLAN-LOG "DESKWORK-D6 steps 1-2 and MONSTERAI-S"; studies/weapons §41-§42, studies/monsterai §16), CONFIRMED on our client. Steps 3-5 are open (`PLAN.md` §8.1). Two corrections to the text below, read off the table and the tape: the record has **14** areas over time (and 11 single-packet bursts), not 15 -- weapons §40's headings miscounted their own lists; and "words at +3, +4, +5 s" (from the announce) is only the first three ticks -- a storm ticks at the completion + 1 ... + 10 s, the ground fire drawn at + 0, + 3 and + 6.
+
 **Thesis.** Point-blank bursts and Fireball's splash landed 09-20 (SPELL_AREAS,
 `authsrv.py:12769`); areas over TIME and the area hexes are unbuilt (`authsrv.py` ~13004;
 `PLAN.md` §8's W4 line). The one such mechanism with a retail witness (15 skills: Meteor

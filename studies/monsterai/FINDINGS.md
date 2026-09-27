@@ -2266,6 +2266,23 @@ Storm on the bar; the pre-registered question is *"do all three break off togeth
 outward, and come back only after the ground fire ends?"*, with `--no-scatter` as the
 control. The owner's feel is the only instrument.
 
+**CONFIRMED on our client 2026-09-26** (agent-driven, the owner's go-ahead; the question
+registered before the launch). Run A, `20260926T214247`: a passive group of four at
+`--enemy-cluster 100`, provoked by one swing, closed to melee; the player's Fire Storm on it.
+Tick 1 struck all four ("1 of 2 -- not yet"); hostile 10 died to the player's swing before
+tick 2; **tick 2 decided the group at once** -- `attack_stopped` for 11, 12 and 13, one
+`0x0029` each to exactly 256 u from the point (the ray, 0.6-0.8 s to arrive), then every one
+HELD ("its way in lies inside area [1]") while the player stood in the fire; ticks 3-9 struck
+nobody; at the close each hold lifted and the group fought on (frame 17, the `-2`s on the
+player). Frames 9 and 11: the three standing clear of the burning ground. Hostile 10 revived
+at ~+9.5 s, walked into the fire and took tick 10 alone -- counted toward a NEW solo decision
+(1 of 2), S7's re-entry rule, seen once. **The control**, run B, `20260926T214721`, the same
+script under `--no-scatter`: no `[SCATTER]` line; all four stood in the fire and took every
+tick until hostile 10 died at the third, the other three all ten. So the answer to the
+registered question is **yes** -- they broke off together, ran outward, and came back only
+after the ground fire ended -- and the A/B separates. What no run can settle is whether
+retail's normal-mode foes break at the second tick; that stays the owner's feel (S2).
+
 ### Open, ranked
 
 1. **Party bodies** (S9) — buildable now, the same hook with the hostile flag inverted and
