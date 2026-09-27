@@ -26,7 +26,7 @@ import authsrv  # noqa: E402
 import combatmath  # noqa: E402
 import vaultpath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=264)   # the BARE-MACHINE number, MEASURED 2026-09-26 -- a real run with RURIK_VAULT at a nonexistent path: 264 checks and 12 declared skips (17 checks) against a vault run's 281. It is the first number on this line a bare run has produced since at least dcaf0d60: until that day's repair the bare run died at section 13 on a KeyError and, past it, failed sixteen checks instead of skipping, so the 260 below and the chain behind it were vault deltas carried down, not runs. The repair carries the record's rows (RECORD, the attribute tables) into the blocks that read them -- section 20's three press checks run bare now -- decides every tape skip on its capture directory, and adds section 2b (2 vault-only checks: the carried rows against the vault's); before that 260 = 257 + 3 (2026-09-26, a body's spell meets its TAKER's armour: sections 25 / 26 / 28 +1 each; a vault run gives 279, measured, from 276. The bare run could NOT be re-measured: with RURIK_VAULT at a nonexistent path it stops at section 13's KeyError (dual["body_projectiles"]) on main too, so the +3 is the vault run's delta carried over -- and section 25's new check, like its `ar == 19.0` neighbour, reads the Orb's Air Magic attribute off the vault's skills table); before that 257 = 251 + 6 (section 28, a point-blank burst, 2026-09-20; a vault run gives 276 -- the corpus's target-16 announces are the one vault-only check); before that 251 = 237 + 14 (section 27, the hit test, 2026-09-20; a vault run gives 269 -- the corpus's dodge words are the one vault-only check); before that 237 = 228 + 9 (section 26, Fireball's splash, 2026-09-20; a vault run gives 254 -- the tape's bursts are the one vault-only check); before that 228 = 219 + 9 (section 25, a body's spell projectile, 2026-09-20; a vault run gives 244 -- the tape's activations are the one vault-only check); before that 219 = 208 + 11 (section 24, a player's spell projectile, 2026-09-20; a vault run gives 234 -- the tapes' speeds are the one vault-only check); before that 208 = 203 + 5 (section 23, base armour penetration, 2026-09-19; a vault run gives 222 -- the six checks that read the skills table are vault-only); before that 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=268)   # the BARE-MACHINE number, MEASURED 2026-09-26: 268 = 264 + 4 (section 23's four behaviour checks -- the hits at Strength 9, the revert, a body's base, the incoming Orb -- run bare on carried rows 194 / 229 / 230 / 322 / 339 / 398; its two checks whose subject is the vault's table still skip; 12 declared skips (13 checks), a vault run gives 281, unchanged); before that 264, MEASURED 2026-09-26 -- a real run with RURIK_VAULT at a nonexistent path: 264 checks and 12 declared skips (17 checks) against a vault run's 281. It is the first number on this line a bare run has produced since at least dcaf0d60: until that day's repair the bare run died at section 13 on a KeyError and, past it, failed sixteen checks instead of skipping, so the 260 below and the chain behind it were vault deltas carried down, not runs. The repair carries the record's rows (RECORD, the attribute tables) into the blocks that read them -- section 20's three press checks run bare now -- decides every tape skip on its capture directory, and adds section 2b (2 vault-only checks: the carried rows against the vault's); before that 260 = 257 + 3 (2026-09-26, a body's spell meets its TAKER's armour: sections 25 / 26 / 28 +1 each; a vault run gives 279, measured, from 276. The bare run could NOT be re-measured: with RURIK_VAULT at a nonexistent path it stops at section 13's KeyError (dual["body_projectiles"]) on main too, so the +3 is the vault run's delta carried over -- and section 25's new check, like its `ar == 19.0` neighbour, reads the Orb's Air Magic attribute off the vault's skills table); before that 257 = 251 + 6 (section 28, a point-blank burst, 2026-09-20; a vault run gives 276 -- the corpus's target-16 announces are the one vault-only check); before that 251 = 237 + 14 (section 27, the hit test, 2026-09-20; a vault run gives 269 -- the corpus's dodge words are the one vault-only check); before that 237 = 228 + 9 (section 26, Fireball's splash, 2026-09-20; a vault run gives 254 -- the tape's bursts are the one vault-only check); before that 228 = 219 + 9 (section 25, a body's spell projectile, 2026-09-20; a vault run gives 244 -- the tape's activations are the one vault-only check); before that 219 = 208 + 11 (section 24, a player's spell projectile, 2026-09-20; a vault run gives 234 -- the tapes' speeds are the one vault-only check); before that 208 = 203 + 5 (section 23, base armour penetration, 2026-09-19; a vault run gives 222 -- the six checks that read the skills table are vault-only); before that 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
 check = LEDGER.ok
 
 
@@ -70,12 +70,20 @@ RECORD = {
                    343, 344),                                   # Flare
     "229": _record(2.0, 0.75, 5, 15, 8, 6, 5, 5, 0.0, 2, (0, 0), (10, 100), (1800, 1800),
                    403, 404),                                   # Lightning Orb
+    "230": _record(1.0, 0.75, 5, 5, 8, 6, 5, 5, 100.0, 2, (0, 0), (15, 50), (1, 10),
+                   405, 404),                                   # Lightning Javelin
     "317": _record(0.0, 0.0, 0, 0, 17, 1, 3, 0, 0.0, 1, (5, 20), (33, 33), (0, 0),
                    2077, 2077, adrenaline=(4, 80)),             # the default bar's adrenal stance
+    "322": _record(0.0, 0.0, 3, 5, 17, 1, 14, 5, 0.0, 2, (0, 0), (10, 40), (0, 0),
+                   2077, 2077, weapon_req=185),                 # Power Attack
+    "339": _record(0.0, 0.0, 0, 0, 18, 1, 14, 5, 0.0, 2, (0, 0), (5, 20), (20, 20),
+                   2077, 588, weapon_req=1, adrenaline=(5, 120)),  # Penetrating Blow
     "394": _record(0.0, 0.0, 3, 10, 25, 2, 14, 5, 0.0, 2, (0, 0), (25, 50), (0, 0),
                    680, 2077, weapon_req=2),                    # Power Shot
     "396": _record(0.0, 0.0, 10, 10, 51, 2, 14, 5, 0.0, 0, (0, 0), (16, 16), (0, 0),
                    680, 2077, weapon_req=2),                    # Dual Shot
+    "398": _record(0.75, 0.6, 4, 10, 25, 2, 14, 5, 0.0, 2, (0, 0), (5, 25), (10, 10),
+                   680, 682, weapon_req=2),                     # Penetrating Attack
     "431": _record(2.0, 0.0, 12, 10, 24, 2, 19, 0, 156.0, 2, (24, 24), (3, 18), (0, 0),
                    735, 734),                                   # Ignite Arrows
     "433": _record(2.0, 0.0, 12, 5, 24, 2, 19, 0, 0.0, 2, (24, 24), (3, 24), (0, 0),
@@ -2572,6 +2580,7 @@ def section_spell_own_type():
          authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE, authsrv.SPELL_OWN_TYPE) = saved
 
 
+@attribute_rows()                   # the hits read the bow's rank
 def section_base_penetration():
     print("\n23. base armour penetration: the largest base source, the bonus on top, at every site")
     cm = combatmath
@@ -2638,16 +2647,13 @@ def section_base_penetration():
               "penetrated_armour composes the tiers: a 9 % base alone 60 -> 55, a 10 % base under a "
               "hornbow 48 (the bonus stacks), under a longbow 54, the hornbow alone 54 as before, "
               "nothing 60, None None; no skill, an unknown skill and a plain swing carry no base")
-        # the skills' own numbers and the client's slot -- the vault's skills table
-        try:
-            _ = agents.WORLD.get("skills", "398")["bonus_scale0"]
-            have_table = True
-        except Exception:                                                  # noqa: BLE001
-            have_table = False
-            LEDGER.skip("section 23", "the vault's skills table is absent -- 6 checks (the "
-                        "skills' own numbers, the slot, the hits, the revert, the bodies, the "
-                        "incoming Orb)")
-        if have_table:
+        # the skills' own numbers and the client's slot: the vault's skills table
+        # IS the subject, so these two skip without it (a carried row would only
+        # re-measure the row)
+        if not full_skills_table(agents.WORLD.rows("skills")):
+            LEDGER.skip("section 23", "the full skills table (vault/content) is absent -- 2 "
+                        "checks (the skills' own numbers, the slot)")
+        else:
             got = {s: authsrv.skill_base_penetration(s)
                    for s in (398, 1191, 339, 1136, 1551, 229, 230, 322, 194, 336, 433)}
             check(got == {398: 0.10, 1191: 0.10, 339: 0.20, 1136: 0.20, 1551: 0.25,
@@ -2669,6 +2675,8 @@ def section_base_penetration():
                   "and the client's own record holds the wiki's number in the bonus slot with equal "
                   "endpoints on five of five (bit clear on the four, set on the spear's), and NOT "
                   "on Lightning Orb (1800) -- its 25 % is the attribute (8) rule")
+        # the behaviour on the record's rows, so a bare machine runs it too
+        with skills_rows("194", "229", "230", "322", "339", "398"):
             # through the real hit_enemy at the seed's Strength 9
             authsrv.critical_rate = lambda rank: 0.0
 

@@ -28,6 +28,16 @@ move back.
 
 ---
 
+### `test_weapons.py` section 23 runs on a bare machine -- 2026-09-26 -- **the four behaviour checks the entry below left skipping now run on carried rows; bare floor 264 -> 268, measured, vault 281 unchanged; and the `aot` lander's number that entry gave is superseded (299, not 294)**
+
+**This completes the entry below** ("`test_weapons.py` runs on a bare machine"), whose "Still skipped bare, on purpose" paragraph named section 23's four behaviour checks as runnable on about eight more carried rows. It took four: `RECORD` gains 230, 322, 339 and 398 (skilltable.py, build 38797; with 194 and 229 already carried), and the hits at Strength 9 through the real `hit_enemy`, `--no-base-penetration`, a body's base and the incoming Orb run under `skills_rows` on those six rows, the section under `attribute_rows` for the bow's rank. The two checks whose subject IS the vault's table -- a skill's own base read off eleven rows, and the client's slot read back -- stay vault-only, now decided on `full_skills_table` rather than on 398's row being present. As before, the carried rows REPLACE the table for the block: dropping 398 from it turned the VAULT run red (run once, reverted). Section 2b now holds fifteen carried rows to the vault's own.
+
+**Tests:** `test_weapons.py` bare 268 / 12 declared skips (13 checks), vault 281 -- TESTS.md.
+
+**For whoever lands `aot` -- this replaces the entry below's number.** `aot` has since merged main (`badf885a`), and a trial merge of it onto this commit's tree measured bare 299 checks / 14 declared skips and vault 325; the floor on landing is 299, measured. `test_weapons.py` still conflicts on the floor line only.
+
+---
+
 ### `test_weapons.py` runs on a bare machine -- 2026-09-26 -- **its "bare-machine" floor had been vault arithmetic: with `RURIK_VAULT` at a nonexistent path the run died at section 13 and, past it, failed sixteen checks. It now completes bare, 264 checks and 12 declared skips, against a vault run's 281 -- the floor is that measured 264. Landed `da945c6e` (merge `2e76d500`); test-only, no server change, no flag**
 
 **This answers the taker-armour entry below**, whose "Found in passing and filed, not fixed" line reads that `test_weapons.py` "cannot finish a bare-machine run on main". Reproduced at `dcaf0d60` and again on `adb168ee`.
