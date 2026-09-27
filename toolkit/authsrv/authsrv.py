@@ -14559,6 +14559,19 @@ def spell_area(skill_id):
     return radius if radius > 0.0 else None
 
 
+def foe_only_skill(skill_id):
+    """True when the client's own target byte aims a skill at a FOE: 5,
+    effects.FOE_TARGET ("target foe" -- all 199 Attacks, CORROBORATED), or 16,
+    AREA_TARGET_BYTE ("target foe and the foes around it", the 34 burst rows).
+    False for every other byte and for a skill with no row (the bare machine):
+    the party-target gate refuses only what the table says is aimed at a foe."""
+    try:
+        byte = int(agents.WORLD.get("skills", str(skill_id))["target"])
+    except Exception:                                          # noqa: BLE001
+        return False
+    return byte in (effects.FOE_TARGET, AREA_TARGET_BYTE)
+
+
 def spell_area_visual(skill_id):
     """The ground visual a burst draws at the aim (the row's `area_visual`:
     Fireball's 333, OBSERVED 35 of 35), or None."""
@@ -16656,6 +16669,82 @@ def action_hold(send, state, value, why):
          f"action {'holds' if value else 'released'}: {why}")
 
 
+# THE PLAYER DOES NOT ATTACK ITS OWN PARTY (the party-target gate, 2026-09-26,
+# PLAN-LOG). `hit_enemy` refuses only a missing row or a corpse, and until this
+# gate nothing upstream of it asked whose side a target was on: an attack
+# order or a foe skill naming a hero put the player's swing, the skill's
+# damage, its condition and its hex on the player's own party body -- and
+# `hit_enemy`'s swing stamped `leader_engaged` on the hero, so the party
+# engaged its own member. Refused at the two doors every one of the player's
+# single-target hits enters by: `begin_attack` (the 0x0026 arm and the harness
+# `attack:N` mailbox) and `handle_skill_press` (0x0046 / 0x0027 and the
+# harness `skill:ID` mailbox). Nothing downstream re-reads the target's side,
+# and nothing has to: `state["attacking"]` and a pending cast's `target` are
+# written only behind these two doors, and no row's `allegiance` changes
+# after its create. The area paths were already safe (`foes_within`).
+#
+# WHAT RETAIL DOES (the live corpus, 35 captures, 192 game channel-directions
+# framed to residual 0; the census is the PLAN-LOG entry's):
+#   OBSERVED -- retail's client never names a party body in an attack: 0 of 369
+#     0x0026 and 0 of 159 0x0027 target an agent carrying the party's own
+#     allegiance token (hero, henchman, allied NPC, or an arena teammate). Its
+#     one 0x0046 that does is Resurrection Signet on a dead ally (target byte
+#     6), which is what that skill is for.
+#   OBSERVED, n=1 -- the operator's SELECTION was an allied body (69
+#     0x00C1 selections named one) when they pressed an attack skill:
+#     20260819T132414 :52606 t=238.496, skill 780, the selection an allied NPC
+#     carrying 'play'. The client sent the press with TARGET 0, not the ally,
+#     and retail answered 0x005D #1934 (invalid_attack_target), 0x005E
+#     [1, 7], 0x00E2 -- the refusal shape, no E4 (skills 38.5 had the answer
+#     and not the selection).
+#   NOT OBSERVED -- what retail's server does with a press that NAMES a party
+#     body, because its client never sends one. With an ally selected no
+#     0x0026 was sent at all, so whether the client swallows the attack key
+#     there or the operator never pressed it is UNVERIFIED.
+# So the refusal is RECONSTRUCTION in form, and each door answers in the
+# nearest retail shape: the attack order with NOTHING (no swing is opened, a
+# running chain is not retargeted, no wire -- retail's client sends nothing
+# in this situation, so its server has nothing to answer); the skill press
+# with refuse_press, #1934 for an attack skill (the id OBSERVED answering this
+# operator action) and #1986 for a foe spell only under --refusal-reasons
+# (RECONSTRUCTION, never on a wire). No flag: a player damaging their own
+# hero is a defect, not a divergence with a retail reading worth keeping.
+#
+# `== ALLEGIANCE_PLAYER`, NOT `!= ALLEGIANCE_HOSTILE`: the party is what is
+# refused. A row with no `allegiance` key (many test fixtures) and a
+# noncombatant row keep today's answer; whether an attack on a 'nonc' row
+# should be refused is its own question (retail: 166 selections, 0 attacks).
+
+
+def party_body(state, target_id):
+    """The row `target_id` names when it is a PARTY body -- a hero, a henchman,
+    an allied NPC: `allegiance == agents.ALLEGIANCE_PLAYER`, dead or alive --
+    else None. The player itself is not a row and is never returned."""
+    agent = state.get("agents", {}).get(target_id) if target_id else None
+    if agent is not None and agent.get("allegiance") == agents.ALLEGIANCE_PLAYER:
+        return agent
+    return None
+
+
+def refuse_party_target(state, target_id, conn_id, rec, what, skill_id=None):
+    """The party-target gate's refusal: True -- after the print and the
+    `press_verdict` row -- when `target_id` names a party body, else False and
+    nothing happens. `what` names the door in the print; the row carries
+    `reason="party-target"` and, for a skill press, the skill."""
+    agent = party_body(state, target_id)
+    if agent is None:
+        return False
+    print(f"[c{conn_id}] REFUSED {what} at agent {target_id} "
+          f"({agent.get('name')}): a PARTY body -- the player does not attack "
+          f"its own party (the party-target gate, 2026-09-26)", flush=True)
+    row = {"fired": False, "reason": "party-target", "target": target_id,
+           "age": 0.0}
+    if skill_id is not None:
+        row["skill"] = skill_id
+    _press_row(rec, **row)
+    return True
+
+
 def begin_attack(send, state, target_id, conn_id, rec=None):
     """A click on a hostile agent starts an attack that the tick keeps up.
 
@@ -16681,6 +16770,12 @@ def begin_attack(send, state, target_id, conn_id, rec=None):
         _press_row(rec, fired=False,
                    reason=("no-target" if agent is None else "dead-target"),
                    target=target_id, age=0.0)
+        return
+    if refuse_party_target(state, target_id, conn_id, rec, "the attack order"):
+        # THE PARTY-TARGET GATE (its banner above party_body). AFTER the
+        # corpse test, so a dead hero keeps the corpse's answer; and unlike
+        # it, the running chain is NOT stopped: a refused order is the order
+        # retail's client never sends, and nothing sent changes nothing.
         return
     # THE PRESS SUPERSEDES THE KEYBOARD BELIEF (ANIMREF-RE 41): read by
     # _player_body_moving against `kbd_moving_at`, nowhere else. Stamped on
@@ -21082,7 +21177,10 @@ def cast_anim_msg(prop, caster, target, skill_id):
 # judges the skill against the character: the weapon gate and the resource
 # gate below. Its order against the weapon gate is UNVERIFIED (no corpus
 # press fails both); after the knock-down test, because a down body
-# activates nothing whatever it names.
+# activates nothing whatever it names. Beside the party-target gate
+# (2026-09-26, party_body's banner) and disjoint from it: that gate refuses
+# the NAMED-ally form retail's client never sends, this one the target-0
+# form it does send when an ally is selected.
 #
 # NOT OBSERVED: what the client sends with NOTHING selected. The one witness
 # had an ally selected (0x00C1 [58, 0], an allied NPC carrying 'play') and
@@ -21138,7 +21236,10 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
     # ---- THE ATTACK-TARGET GATE, ahead of the weapon and resource gates --
     # An attack skill that names no foe begins nothing and costs nothing
     # (ATTACK_TARGET_GATE's banner): retail's #1934, the chat pair and the
-    # release, before the first send. OBSERVED 1 of 1.
+    # release, before the first send. OBSERVED 1 of 1. Disjoint from the
+    # party-target gate below, so their order is immaterial: party_body
+    # (state, 0) is None. This is the FORM retail's client sends for the
+    # action that gate refuses -- an ally selected, the press at 0.
     if ATTACK_TARGET_GATE and is_attack and not target:
         print(f"[c{conn_id}] REFUSED skill {skill_id}: an ATTACK skill "
               f"pressed with target 0 names no foe -- retail's #1934 "
@@ -21147,6 +21248,23 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
                    age=0.0, skill=skill_id)
         refuse_press(send, skill_id, copy, conn_id,
                      chatdefs.REFUSE_INVALID_ATTACK_TARGET)
+        return
+
+    # ---- THE PARTY-TARGET GATE, ahead of the weapon and resource gates ---
+    # A skill the client's own target byte aims at a FOE, pressed at a PARTY
+    # body, begins nothing and costs nothing (the banner above party_body):
+    # the refusal before the first send, as the two gates below do. The
+    # answer is refuse_press's shape -- retail's for this operator action,
+    # which its client sends as target 0 (#1934, OBSERVED n=1) -- with #1934
+    # for an attack skill and, for a foe spell, #1986 under --refusal-reasons
+    # only (RECONSTRUCTION) or the bare release. An ally-, self- or dead-ally
+    # skill naming a hero is untouched: that is what those skills are for.
+    if foe_only_skill(skill_id) and refuse_party_target(
+            state, target, conn_id, rec, f"skill {skill_id}", skill_id=skill_id):
+        refuse_press(send, skill_id, copy, conn_id,
+                     chatdefs.REFUSE_INVALID_ATTACK_TARGET if is_attack
+                     else (chatdefs.REFUSE_INVALID_SPELL_TARGET
+                           if REFUSAL_REASON_IDS else None))
         return
 
     # ---- DAGGERS-B4: THE WEAPON GATE, ahead of the resource gate ---------
@@ -36085,9 +36203,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # tick's next act, not the leg's arrival.
                         # MOVECODE-1z-y (a2): a press ends an in-flight
                         # keyboard lead before it ends the click leg.
-                        _kbd_lead_kill(send, state, conn_id, rec, "press")
-                        _press_supersedes(send, state, conn_id, values[1],
-                                          rec=rec)
+                        # NOT for an order at a living PARTY body:
+                        # begin_attack refuses it (the party-target gate),
+                        # and a refused order must not end the walk it never
+                        # replaced. (A dead one keeps the corpse's answer.)
+                        _pb = party_body(state, values[1])
+                        if _pb is None or _pb.get("dead"):
+                            _kbd_lead_kill(send, state, conn_id, rec, "press")
+                            _press_supersedes(send, state, conn_id, values[1],
+                                              rec=rec)
                         begin_attack(send, state, values[1], conn_id, rec=rec)
                     elif opcode == GAME_CMSG_INTERACT_AGENT:
                         # "I clicked that agent meaning to interact with it" --
@@ -41984,8 +42108,9 @@ def main():
         global REFUSAL_REASON_IDS
         REFUSAL_REASON_IDS = True
         print("REFUSAL REASONS: RECONSTRUCTED reason ids from the client's refusal "
-              "block go out with the release (today: the weapon gate's #1985). The "
-              "OBSERVED 1960/1961 are sent either way.", flush=True)
+              "block go out with the release (today: the weapon gate's #1985 and "
+              "the party-target gate's #1986 on a foe spell). The OBSERVED "
+              "1934/1960/1961 are sent either way.", flush=True)
 
     if a.no_npc_recharge_from_completion:
         global NPC_RECHARGE_FROM_COMPLETION

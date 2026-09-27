@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=650)   # 2026-09-26 a body's spell meets its TAKER's armour: section_body_spell_taker_armour +11, floor 639 -> 650 = THE CORE, from the green run (651 with the vault's re-emitted skills table)  # 2026-09-26 the party-death doors +4 (JARIN-S 5b: the known-bad arm -- kill_agent's default on a hero pays a KILL_REWARD and skips the death tick, and the predicate refuses it; a foe's Empathy (26, the real rows) killing the hero on its own swing through on_attack_triggers -> armour_ignoring_damage; the hostile control on that door; a heal on a Deep Wounded hero that does not clear zero), floor 635 -> 639 = THE CORE, from the green run (640 with the vault's re-emitted skills table, as before); HEAD's pre-fix authsrv.py reddens the two door checks  # 2026-09-25 DESKWORK-D8 step 4 REVIEWED, RV-1..RV-5 fixed: section_caster_held_slot +8 (17 in the section: the search's bound made VISIBLE for checks C and D -- a pick counter that raises past len(bar) + 1, a leaked bound a named FAIL and not a hang; the swing-clock check split over a three-slot bar so a clock hold that stepped past would show; the gate ORDER, world gates before clock gates, in four arms -- the review's Warrior with two heals and 7 energy, the first-pick unpayable heal nobody needs, the unpayable touch slot at 300 u, the crash arm refused by name on its own stamp; the reach-hold line's hostile-side label), floor 628 -> 635 = THE CORE, every check but the real-table one, from the green runs: 636 with the vault's re-emitted skills table, 635 + 1 declared skip on a table that predates it (touch_range stripped from the real rows), and the whole file does not run on an EMPTY vault at all -- section_hold_plane refuses without attribute cost rows, before and after -- so there is no bare-machine number for this file  # 2026-09-24 DESKWORK-D8 step 4, the caster's held-slot stall +9 (section_caster_held_slot: the run's shape 20260924T210744 stepped past, the held slot uncharged and unswung, the touch cast from melee, the hold with every ready slot out of reach, the held-set bound, the re-pick through the resource / heal / swing-clock gates, the REAL vault row -- a declared skip on a bare machine, where the floor is 627), from the green run (628)  # 2026-09-24 DESKWORK-D8 steps 3/4 FIXER +23 (section_leash_caster_review: the caster notice gate CD-1/EV-4, the short-leash no-loop CD-2, lost-contact-walks-home EV-2, revive-clears-the-return CD-8, the NPC_FOLLOW gate CD-9, the per-skill touch/half reach EV-1, the engaged/dwell/plumbing terms CD-5, the standing-fight give-up EV-8), plus the EV-9/CD-4 planted-record check made real, from the green run (619)  # 2026-09-24 DESKWORK-D8 steps 3/4 +44 (section_leash_return 26: the anchor, the dwell give-up, the legs home, the party bodies untouched, the revert arm; section_caster_opening 18: who is a caster, the stand-and-cast, the leg to range, the hold, the revert arm), from the green run (596)  # 2026-09-23 SANDBOX-N2 add +1 (the load-order walk locates _handle_request_players), from the green run  # 2026-09-17 CAST-TARGET-DIED +4 (an ally cast whose target died lands on nothing), from the green run  # 2026-09-15 (probe-walk noise) +2 (the CONTROL is pinned to one name and captured: quiet prints nothing, the failure is named to the caller), from the green run; 2026-09-15 (later) HEROLIB +2 (no 0x001D send site may zero the account library -- the GmSkSlot.cpp:206 crash of run 20260915T201538; the negative control restores the literal and reddens naming the line); 2026-09-15 +2 (offset_y honoured); SLICE-F43 +3 (the wipe countdown and its stop), from the green run   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=661)   # 2026-09-26 the party-target gate: section_party_target_gate +11 (the two KNOWN-BAD ARMS -- an order and a pending cast reaching the tick at a hero damage it, and the swing engages the party on its own member; the attack order refused with nothing on the wire and a party-target row; a refused order leaves a running chain alone; a foe spell, an attack skill (#1934, retail's answer to the same operator action), --refusal-reasons' #1986 and a target-byte-16 spell refused at the press; the controls: a keyless row and a dead hero keep their answers, ally/other-ally/dead-ally skills at a hero and a foe spell at the foe are accepted; the 0x0026 arm's order), floor 650 -> 661 = THE CORE, from the green run (662 with the vault's re-emitted skills table); HEAD's pre-gate authsrv.py reddens 7 of the 11, the four arms and controls stay green  # 2026-09-26 a body's spell meets its TAKER's armour: section_body_spell_taker_armour +11, floor 639 -> 650 = THE CORE, from the green run (651 with the vault's re-emitted skills table)  # 2026-09-26 the party-death doors +4 (JARIN-S 5b: the known-bad arm -- kill_agent's default on a hero pays a KILL_REWARD and skips the death tick, and the predicate refuses it; a foe's Empathy (26, the real rows) killing the hero on its own swing through on_attack_triggers -> armour_ignoring_damage; the hostile control on that door; a heal on a Deep Wounded hero that does not clear zero), floor 635 -> 639 = THE CORE, from the green run (640 with the vault's re-emitted skills table, as before); HEAD's pre-fix authsrv.py reddens the two door checks  # 2026-09-25 DESKWORK-D8 step 4 REVIEWED, RV-1..RV-5 fixed: section_caster_held_slot +8 (17 in the section: the search's bound made VISIBLE for checks C and D -- a pick counter that raises past len(bar) + 1, a leaked bound a named FAIL and not a hang; the swing-clock check split over a three-slot bar so a clock hold that stepped past would show; the gate ORDER, world gates before clock gates, in four arms -- the review's Warrior with two heals and 7 energy, the first-pick unpayable heal nobody needs, the unpayable touch slot at 300 u, the crash arm refused by name on its own stamp; the reach-hold line's hostile-side label), floor 628 -> 635 = THE CORE, every check but the real-table one, from the green runs: 636 with the vault's re-emitted skills table, 635 + 1 declared skip on a table that predates it (touch_range stripped from the real rows), and the whole file does not run on an EMPTY vault at all -- section_hold_plane refuses without attribute cost rows, before and after -- so there is no bare-machine number for this file  # 2026-09-24 DESKWORK-D8 step 4, the caster's held-slot stall +9 (section_caster_held_slot: the run's shape 20260924T210744 stepped past, the held slot uncharged and unswung, the touch cast from melee, the hold with every ready slot out of reach, the held-set bound, the re-pick through the resource / heal / swing-clock gates, the REAL vault row -- a declared skip on a bare machine, where the floor is 627), from the green run (628)  # 2026-09-24 DESKWORK-D8 steps 3/4 FIXER +23 (section_leash_caster_review: the caster notice gate CD-1/EV-4, the short-leash no-loop CD-2, lost-contact-walks-home EV-2, revive-clears-the-return CD-8, the NPC_FOLLOW gate CD-9, the per-skill touch/half reach EV-1, the engaged/dwell/plumbing terms CD-5, the standing-fight give-up EV-8), plus the EV-9/CD-4 planted-record check made real, from the green run (619)  # 2026-09-24 DESKWORK-D8 steps 3/4 +44 (section_leash_return 26: the anchor, the dwell give-up, the legs home, the party bodies untouched, the revert arm; section_caster_opening 18: who is a caster, the stand-and-cast, the leg to range, the hold, the revert arm), from the green run (596)  # 2026-09-23 SANDBOX-N2 add +1 (the load-order walk locates _handle_request_players), from the green run  # 2026-09-17 CAST-TARGET-DIED +4 (an ally cast whose target died lands on nothing), from the green run  # 2026-09-15 (probe-walk noise) +2 (the CONTROL is pinned to one name and captured: quiet prints nothing, the failure is named to the caller), from the green run; 2026-09-15 (later) HEROLIB +2 (no 0x001D send site may zero the account library -- the GmSkSlot.cpp:206 crash of run 20260915T201538; the negative control restores the literal and reddens naming the line); 2026-09-15 +2 (offset_y honoured); SLICE-F43 +3 (the wipe countdown and its stop), from the green run   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
 def section_weapon_damage():
@@ -725,6 +725,7 @@ def main():
     section_hostile_heal_target()
     section_passive_hostiles()
     section_cast_target_died()
+    section_party_target_gate()
     section_chase()
     section_follow_router()
     section_npc_plane()
@@ -811,6 +812,263 @@ def _swings(state, n=1, gap=0.0):
             state, 1)
     return sent
 
+
+
+def section_party_target_gate():
+    """THE PARTY-TARGET GATE (2026-09-26, PLAN-LOG): the player's attack
+    order and a FOE skill refuse a PARTY body.
+
+    Until that day `begin_attack` refused only a missing row or a corpse, and
+    `handle_skill_press` stored the client's raw target byte, so an order or a
+    foe skill naming a hero reached `hit_enemy` -- the player's own swing, the
+    spell's damage and its condition on the player's own party, and the swing
+    stamping `leader_engaged` on the hero. Both KNOWN-BAD ARMS below write
+    exactly what the pre-gate doors wrote (`attacking`, a pending cast's
+    `target`) and show the downstream damaging the hero, so the predicate the
+    gate checks is one that can go red. Retail's client never names a party
+    body in an attack (0 of 528 attack and attack-skill presses in the live
+    corpus); with an ally selected it sends an attack skill as target 0, and
+    retail answers #1934 and the release -- the shape the attack-skill
+    refusal sends here.
+    """
+    import authsrv
+    import chatdefs
+    print("\nPARTY-TARGET: the player's attack order and a foe skill refuse a "
+          "party body")
+    HERO, FOE, PLAYER = 200, 10, authsrv.PLAYER_AGENT_ID
+    E2, E4 = authsrv.GAME_SMSG_SKILL_REFUSED, authsrv.GAME_SMSG_SKILL_ACTIVATED_BROADCAST
+    DMG = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
+    STOPPED = [agents.GV_ATTACK_STOPPED, PLAYER, 0]
+    SPELL, AREA, STRIKE = 191, 167, 322     # byte 5 spell, byte 16, an attack skill
+
+    class _Rec:
+        def __init__(self):
+            self.rows = []
+
+        def event(self, kind, **kw):
+            self.rows.append(dict(kw, kind=kind))
+
+    def _st():
+        st = _world(dist=50.0, armor_rating=26.0)
+        st["player_health"] = 140.0
+        st["pending_casts"] = []
+        st["agents"][HERO] = dict(st["agents"][FOE], name="monk", pos=(40.0, 20.0),
+                                  allegiance=agents.ALLEGIANCE_PLAYER,
+                                  attacks_back=False, skills=(), skill_ready=[])
+        return st
+
+    def _sends():
+        out = []
+        return out, (lambda op, vals, label="", quiet=False: out.append((op, list(vals))))
+
+    def _untouched(st, sent):
+        """The hero: full health, no damage word naming it, no episode."""
+        return (st["agents"][HERO]["health"] == 100.0
+                and not any(op == DMG and v[1] == HERO for op, v in sent)
+                and not authsrv.effect_table(st).on_agent(HERO))
+
+    def _swing(st, send):
+        """Open the chain's swing, then land it: tick, rewind, tick."""
+        authsrv.attack_tick(send, st, 0)
+        if st.get("player_swing"):
+            st["player_swing"]["lands_at"] -= 5.0
+        authsrv.attack_tick(send, st, 0)
+
+    def _land(st, send):
+        for cast in st.get("pending_casts", ()):
+            for k in ("begin_at", "e5_at", "e3_at", "e6_at"):
+                cast[k] -= 30.0
+        for _ in range(3):
+            authsrv.cast_tick(send, st, 1)
+
+    def _byte(skill):
+        """The client table's own target byte, read without the helper under test."""
+        return int(agents.WORLD.get("skills", str(skill))["target"])
+
+    def _press(st, send, skill, target, rec=None):
+        authsrv.handle_skill_press([0, skill, 0, target], send, st, 1,
+                                   authsrv.GAME_CMSG_USE_SKILL, rec=rec)
+
+    saved = (authsrv.skill_cost, authsrv.REFUSAL_REASON_IDS)
+    try:
+        # The price is not what is measured (test_castcycle's precedent).
+        authsrv.skill_cost = lambda sid: (0, 0)
+
+        # 1. KNOWN-BAD ARM, the attack: the pre-gate begin_attack's write.
+        st = _st(); sent, send = _sends()
+        st["attacking"] = HERO
+        _swing(st, send)
+        LEDGER.ok(not _untouched(st, sent)
+                  and st["agents"][HERO]["health"] < 100.0
+                  and (st.get("leader_engaged") or {}).get("target") == HERO,
+                  "the KNOWN-BAD ARM: an order that reaches the tick at a hero "
+                  "swings, lands a damage word on the hero and engages the party "
+                  "on its own member -- the predicate refuses it",
+                  f"health {st['agents'][HERO]['health']}, engaged "
+                  f"{st.get('leader_engaged')}")
+
+        # 2. THE GATE, the attack: the order is refused with NOTHING on the wire.
+        st = _st(); sent, send = _sends(); rec = _Rec()
+        authsrv.begin_attack(send, st, HERO, 0, rec=rec)
+        _pre = list(sent)
+        _swing(st, send)
+        LEDGER.ok(_pre == [] and st.get("attacking") is None
+                  and _untouched(st, sent) and st.get("leader_engaged") is None
+                  and [(r["kind"], r["reason"], r["target"]) for r in rec.rows]
+                  == [("press_verdict", "party-target", HERO)],
+                  "an attack order at a hero is REFUSED: nothing sent, no chain, "
+                  "no swing, the hero untouched, and one press_verdict row "
+                  "saying party-target",
+                  f"pre {_pre}, attacking {st.get('attacking')}, health "
+                  f"{st['agents'][HERO]['health']}, rows {rec.rows}")
+
+        # 3. a refused order does not retarget the chain running on a foe.
+        st = _st(); sent, send = _sends()
+        authsrv.begin_attack(send, st, FOE, 0)
+        authsrv.attack_tick(send, st, 0)                   # the swing at the foe
+        n = len(sent)
+        authsrv.begin_attack(send, st, HERO, 0)
+        _mid = sent[n:]
+        if st.get("player_swing"):
+            st["player_swing"]["lands_at"] -= 5.0
+        authsrv.attack_tick(send, st, 0)
+        LEDGER.ok(_mid == [] and st.get("attacking") == FOE
+                  and st["agents"][FOE]["health"] < 100.0 and _untouched(st, sent)
+                  and not any(v == STOPPED for _op, v in sent),
+                  "an order at a hero mid-chain changes nothing: no attack_stopped, "
+                  "the chain keeps the foe and its swing still lands there",
+                  f"mid {_mid}, attacking {st.get('attacking')}, foe "
+                  f"{st['agents'][FOE]['health']}")
+
+        # 4. CONTROL: a row with NO allegiance key (the fixtures' convention)
+        # and a dead hero keep today's answers -- the gate is `== PLAYER`,
+        # after the corpse test.
+        st = _st(); sent, send = _sends(); rec = _Rec()
+        del st["agents"][FOE]["allegiance"]
+        authsrv.begin_attack(send, st, FOE, 0)
+        _swing(st, send)
+        _bare = st["agents"][FOE]["health"] < 100.0
+        st["agents"][HERO].update(dead=True, health=0.0)
+        st["attacking"] = FOE
+        authsrv.begin_attack(send, st, HERO, 0, rec=rec)
+        LEDGER.ok(_bare and st.get("attacking") is None
+                  and [r["reason"] for r in rec.rows] == ["dead-target"],
+                  "CONTROLS: a row with no allegiance key is still attacked, and "
+                  "a DEAD hero gets the corpse's answer (dead-target, the chain "
+                  "stopped) -- not the gate's",
+                  f"bare row hit {_bare}, attacking {st.get('attacking')}, rows "
+                  f"{rec.rows}")
+
+        # 5. KNOWN-BAD ARM, the cast: the pre-gate press's stored target.
+        st = _st(); sent, send = _sends()
+        _press(st, send, SPELL, FOE)
+        _acc = any(op == E4 for op, _v in sent)
+        st["pending_casts"][0]["target"] = HERO
+        _land(st, send)
+        LEDGER.ok(_acc and not _untouched(st, sent)
+                  and st["agents"][HERO]["health"] < 100.0
+                  and st["agents"][FOE]["health"] == 100.0,
+                  f"the KNOWN-BAD ARM: a foe spell ({SPELL}) whose pending cast "
+                  f"names a hero lands its damage and its condition on the hero "
+                  f"-- the predicate refuses it",
+                  f"accepted {_acc}, hero {st['agents'][HERO]['health']}, "
+                  f"episodes {authsrv.effect_table(st).on_agent(HERO)}")
+
+        # 6. THE GATE, a foe spell: the bare release, before any E4.
+        st = _st(); sent, send = _sends(); rec = _Rec()
+        _press(st, send, SPELL, HERO, rec=rec)
+        _pre = list(sent)
+        _land(st, send)
+        LEDGER.ok(_pre == [(E2, [PLAYER, SPELL, 0])] and not st["pending_casts"]
+                  and _untouched(st, sent)
+                  and [(r["reason"], r["target"], r.get("skill")) for r in rec.rows]
+                  == [("party-target", HERO, SPELL)],
+                  f"a foe spell ({SPELL}, target byte 5) at a hero is REFUSED at "
+                  f"the press: the bare 0x00E2 release and nothing else, no "
+                  f"pending cast, the hero untouched, a party-target row",
+                  f"sent {_pre}, pending {st['pending_casts']}, rows {rec.rows}")
+
+        # 7. THE GATE, an attack skill: retail's #1934 shape, and no chain.
+        st = _st(); sent, send = _sends()
+        _press(st, send, STRIKE, HERO)
+        _pre = list(sent)
+        _land(st, send)
+        LEDGER.ok(_pre == [(authsrv.GAME_SMSG_CHAT_MESSAGE_CORE,
+                            [chatdefs.refusal_body(1934)]),
+                           (authsrv.GAME_SMSG_CHAT_MESSAGE_SERVER,
+                            [authsrv.PLAYER_NUMBER, chatdefs.CHANNEL_WARNING]),
+                           (E2, [PLAYER, STRIKE, 0])]
+                  and chatdefs.REFUSE_INVALID_ATTACK_TARGET == 1934
+                  and st.get("attacking") is None and not st["pending_casts"]
+                  and _untouched(st, sent),
+                  f"an attack skill ({STRIKE}) at a hero answers as retail answered "
+                  f"the same operator action: 0x005D #1934 (invalid_attack_target), "
+                  f"0x005E [player, 7], 0x00E2 -- no E4, no chain, no strike",
+                  f"sent {_pre}, attacking {st.get('attacking')}")
+
+        # 8. --refusal-reasons names the foe spell's refusal, #1986.
+        authsrv.REFUSAL_REASON_IDS = True
+        st = _st(); sent, send = _sends()
+        _press(st, send, SPELL, HERO)
+        authsrv.REFUSAL_REASON_IDS = saved[1]
+        LEDGER.ok([op for op, _v in sent]
+                  == [authsrv.GAME_SMSG_CHAT_MESSAGE_CORE,
+                      authsrv.GAME_SMSG_CHAT_MESSAGE_SERVER, E2]
+                  and sent[0][1] == [chatdefs.refusal_body(1986)]
+                  and chatdefs.REFUSAL_REASONS[1986] == "invalid_spell_target",
+                  "under --refusal-reasons the foe spell's release carries #1986 "
+                  "(RECONSTRUCTION, never on a wire)",
+                  f"{sent}")
+
+        # 9. THE GATE, target byte 16: with no burst row the area spell falls
+        # to one target, which would have been the hero.
+        st = _st(); sent, send = _sends()
+        _press(st, send, AREA, HERO)
+        _pre = list(sent)
+        _land(st, send)
+        LEDGER.ok(_pre == [(E2, [PLAYER, AREA, 0])] and _untouched(st, sent)
+                  and _byte(AREA) == 16
+                  and authsrv.spell_burst(AREA) is None,
+                  f"a target-byte-16 spell ({AREA}, 'the foe and the foes around "
+                  f"it') at a hero is refused the same way",
+                  f"sent {_pre}")
+
+        # 10. CONTROLS: what the other bytes are FOR is untouched -- an ally
+        # skill (281, byte 3), an other-ally skill (286, byte 4), a dead-ally
+        # skill at a dead hero (2, byte 6: retail's one ally-named press) --
+        # and a foe spell at the foe is accepted and lands.
+        _took = {}
+        for skill, dead in ((281, False), (286, False), (2, True)):
+            st = _st(); sent, send = _sends()
+            if dead:
+                st["agents"][HERO].update(dead=True, health=0.0)
+            _press(st, send, skill, HERO)
+            _took[skill] = (any(op == E4 for op, _v in sent)
+                            and [c["target"] for c in st["pending_casts"]] == [HERO])
+        st = _st(); sent, send = _sends()
+        _press(st, send, SPELL, FOE)
+        _land(st, send)
+        _foe_hit = (any(op == E4 for op, _v in sent)
+                    and st["agents"][FOE]["health"] < 100.0)
+        LEDGER.ok(all(_took.values()) and _foe_hit
+                  and [_byte(s) for s in _took] == [3, 4, 6],
+                  "CONTROLS: an ally, other-ally and dead-ally skill at a hero are "
+                  "ACCEPTED at it (E4, the pending cast names the hero); a foe "
+                  "spell at the foe is accepted and lands",
+                  f"took {_took}, foe hit {_foe_hit}")
+
+        # 11. the 0x0026 arm: a party target skips the walk-ending pair.
+        src = open(authsrv.__file__, encoding="utf-8").read()
+        i = src.find("_pb = party_body(state, values[1])")
+        j = src.find('_kbd_lead_kill(send, state, conn_id, rec, "press")', i)
+        k = src.find("begin_attack(send, state, values[1], conn_id, rec=rec)", i)
+        LEDGER.ok(0 < i < j < k and k - i < 700,
+                  "the 0x0026 arm asks party_body BEFORE the lead kill and the "
+                  "leg supersede, then hands the order to begin_attack -- a "
+                  "refused order ends no walk",
+                  f"offsets {i}, {j}, {k}")
+    finally:
+        authsrv.skill_cost, authsrv.REFUSAL_REASON_IDS = saved
 
 
 def section_cast_target_died():

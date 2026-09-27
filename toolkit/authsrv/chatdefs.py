@@ -198,15 +198,25 @@ REFUSAL_ENCRYPTED_NEIGHBOURS = tuple(range(1928, 1934)) + tuple(range(1994, 2001
 # only under --refusal-reasons (default OFF: the bare release, the shape
 # retail uses 3 of 43 for a refusal whose reason we cannot name).
 REFUSE_WEAPON_TYPE = 1985
-# THE ATTACK-TARGET GATE'S REASON (2026-09-27; authsrv.ATTACK_TARGET_GATE's
-# banner). 1934 is OBSERVED answering an attack skill pressed with TARGET 0:
-# 20260819T132414 :52606 t=238.496, skill 780, c2s 0x0027 [780, 0, 0, 0] ->
-# 0x005D #1934, 0x005E [1, 7], 0x00E2 [27, 780, 0], no E4. The live corpus
-# re-counted that day: 1 of 159 attack-skill presses carries target 0, and
-# #1934 answers 1 of that 1 and 0 of the 158 that name a target. Sent
-# always, as 1960 is -- the sentence is the observed one.
+# THE PARTY-TARGET GATE'S REASONS (2026-09-26; authsrv.party_body's banner).
+# 1934 is the id OBSERVED answering the operator action that gate refuses:
+# 20260819T132414 :52606 t=238.496, the selection an allied body carrying the
+# party's token, an attack skill (780) pressed -- retail's client sent it with
+# target 0 (it never names the ally: 0 of 528 attack and attack-skill presses
+# do) and retail answered #1934, [1, 7], 0x00E2. So the SENTENCE is observed
+# for the action and the named-ally FORM is RECONSTRUCTION; sent with every
+# attack-skill refusal at a party body, as the observed 1960/1961 are.
+# AND THE ATTACK-TARGET GATE'S (2026-09-27; authsrv.ATTACK_TARGET_GATE's
+# banner), which sends 1934 for the form that press actually took -- an
+# attack skill at TARGET 0 -- where the id is OBSERVED outright: 1 of the
+# live corpus's 159 attack-skill presses carries target 0, and #1934 answers
+# 1 of that 1 and 0 of the 158 that name a target. Sent always, as 1960 is.
 REFUSE_INVALID_ATTACK_TARGET = 1934
+# 1986 is RECONSTRUCTION from the sentence's own condition, never on any wire
+# we hold: a foe SPELL at a party body, sent only under --refusal-reasons.
+REFUSE_INVALID_SPELL_TARGET = 1986
 assert REFUSAL_REASONS[REFUSE_INVALID_ATTACK_TARGET] == "invalid_attack_target"
+assert REFUSAL_REASONS[REFUSE_INVALID_SPELL_TARGET] == "invalid_spell_target"
 assert REFUSAL_REASONS[REFUSE_NOT_ENOUGH_ADRENALINE] == "not_enough_adrenaline"
 assert REFUSAL_REASONS[REFUSE_NOT_ENOUGH_ENERGY] == "not_enough_energy"
 assert len(REFUSAL_REASONS) == REFUSAL_BLOCK[1] - REFUSAL_BLOCK[0] + 1
