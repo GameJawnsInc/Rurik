@@ -5088,6 +5088,40 @@ Every click produced exactly one press (9 of 9), so no stray input.
   would go to. UNVERIFIED, n=1; retail's `[58, 0]` carried 0 and its press went
   to 0, which fits that reading.
 
+**The second field, checked the same day — it is the AUTO-selection, and an
+attack skill follows it.** The field already had a name from the client's own
+code (`schema/overrides.json`, TARGET_SELECT: `AvSelect.cpp` takes
+`(manualAgentId, autoAgentId)`; field 1 is the effective selection, field 2
+the auto one), which this paragraph should have started from. Four more loopback
+runs, two practice targets, the hero in the party:
+
+| harness run | layout / step | c2s | press names |
+|---|---|---|---|
+| `20260927T134031` | kill 10, click the hero's row, walk | no field 2 after the revive (the hero, `--party-no-fight`, never attacked) | **the hero** `[322, 0, 200, 0]` — the party-target gate's #1934 |
+| `20260927T134450` | 10 near (250 u E), 11 far (450 u W); row click; hero ordered onto 11 | `[10, 0]` at entry, `[200, 10]` on the click, **nothing** when the hero fought 11 | 10 (field 2 = nearest: not discriminating) |
+| `20260927T134632` | mirrored: 11 near, 10 far | `[11, 0]` at entry, `[200, 11]` | 11 (field 2 = nearest: not discriminating) |
+| **`20260927T134814`** | as T134632, then **backpedal 1.5 s** so 10 is nearest | `[11, 0]`, `[200, 11]`, **nothing** during the walk | **11** — at 531 u, with 10 at 169 u |
+
+OBSERVED (loopback, n as stated):
+- **An attack skill with an ally manually selected goes to the auto-selection**,
+  field 2 — 4 of 4, and **not to the nearest foe** (1 of 1 discriminating,
+  T134814). The client then makes that foe its selection (`[foe, 0]`).
+- **With no foe in the auto field it names the ally itself** (1 of 1, T134031),
+  so our client CAN send an attack at a party body; retail's 0 of 528 is its
+  operators never producing that state, and retail's server's answer to it is
+  still NOT OBSERVED.
+- **The auto-selection** is the nearest (or in-front — the two coincided in
+  both layouts) foe at world entry (5 of 5 runs), becomes an ally when that foe
+  dies (4 of 4), takes a revived foe back (5 of 6), and does **not** re-pick as
+  the player walks (1 of 1) or follow the hero's target (1 of 1).
+- **The corpus says the same for attack skills and only for them.** Over all
+  1,473 retail `0x00C1`, the next target-bearing message names field 1 for
+  `0x0026` 369 of 369 and `0x0039` 95 of 95 — but `0x0027` names **field 2** in
+  2 of 159, both with field 1 a hostile (`[100, 102]` → 102, `[70, 72]` → 72).
+  Why a manually selected hostile lost to the auto one there is UNVERIFIED
+  (field 1 not attackable is one reading). `overrides.json`'s "never field 2"
+  was measured on 75 sends and is now qualified in place.
+
 **And the schema route had the right fact with the wrong conclusion.** It found
 that 226 and 227 share a dispatch and concluded `0x00E2` was therefore
 disqualified as a carrier of "refused". That sharing is exactly *why* the

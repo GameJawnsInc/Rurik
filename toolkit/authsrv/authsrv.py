@@ -17134,6 +17134,11 @@ def action_hold(send, state, value, why):
 #     body, because its client never sends one. With an ally selected no
 #     0x0026 was sent at all, so whether the client swallows the attack key
 #     there or the operator never pressed it is UNVERIFIED.
+#   OBSERVED on loopback 2026-09-27 (harness 20260927T134031): the client CAN
+#     send one. The hero selected by a party-row click and no foe in 0x00C1's
+#     auto field -> 0x0027 [322, 0, 200, 0], and this gate answered #1934
+#     ("Invalid attack target." on screen), n=1. Retail's server's answer to
+#     that press stays NOT OBSERVED; retail's operators never produced it.
 # So the refusal is RECONSTRUCTION in form, and each door answers in the
 # nearest retail shape: the attack order with NOTHING (no swing is opened, a
 # running chain is not retargeted, no wire -- retail's client sends nothing
@@ -21647,9 +21652,11 @@ def cast_anim_msg(prop, caster, target, skill_id):
 # own re-selection, not an operator's click. An attack skill pressed then,
 # with the ally selected OR with nothing selected, goes out as target 0
 # (1 of 1 each) -- the client does not refuse it itself -- and this gate's
-# #1934 draws "Invalid attack target." on screen. With an ally selected and
-# a LIVE foe the client knew (0x00C1 [200, 10]), the press named the foe
-# instead (1 of 1). Esc and a ground click do not deselect (1 of 1 each).
+# #1934 draws "Invalid attack target." on screen. With the hero selected by
+# a click and a live foe in 0x00C1's AUTO field ([200, foe]), the press names
+# that auto foe (4 of 4) -- not the nearest foe (1 of 1 against it, harness
+# 20260927T134814) -- and with no foe there it names the HERO (1 of 1, the
+# party-target gate's refusal). Esc and a ground click do not deselect.
 # The harness `skill:ID` verb defaults its
 # target to 0 (session.py), so a scripted attack skill names its foe --
 # `skill:ID,TARGET` -- or meets this refusal, which is the retail answer to
@@ -37539,7 +37546,14 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # Field 2 is the auto-selection and is 0 in 363 of 363
                         # of our own samples; it is stored because a corpus that
                         # has never seen a value is not evidence the value
-                        # cannot occur.
+                        # cannot occur. IT OCCURS (2026-09-27, loopback): a
+                        # party-row click on the hero while the client holds a
+                        # foe as its auto-selection sends [200, foe] (4 of 4),
+                        # and the client's next attack skill names FIELD 2, not
+                        # field 1 -- and not the nearest foe (1 of 1 against
+                        # it, harness 20260927T134814; studies/skills 38.5).
+                        # Retail: 2 of 159 attack-skill presses name field 2.
+                        # Nothing here reads it: the press carries its target.
                         state["target"] = values[1]
                         state["target_auto"] = values[2]
                     elif opcode == GAME_CMSG_ROTATE_PLAYER:
