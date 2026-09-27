@@ -10023,6 +10023,21 @@ the same-tick ALIAS**: the
   reddens exactly the two (f2) checks that name the defect, and nothing else. (f)
   stays green because an in-loop exit was never broken, and the vault file's mtime
   does not move. 302 → 312 checks, §16 26 → 36, floor unchanged.
+  **§16(f3s)/(f3), the same day: the exit write has its own temp file** (movecode
+  FINDINGS §2b.6). `write_bin` opens its temp with share mode 0, and a handle
+  outlives its thread, so a worker killed mid-snapshot leaves `movehook.bin.part`
+  held, and the detach write used to aim at that same name. The window is one
+  snapshot's write every `FLUSH_MS`, so (f3) **manufactures** it rather than waiting.
+  It holds `PART_RUN` (read out of `movehook.c`) with `CreateFileW(share = 0)` from
+  the test's own process, since sharing is per open file, not per process. An
+  **exposure control** requires a second open to be refused, and then the host exits
+  gracefully. The capture must land in the configured directory. (f3s) resolves
+  every `write_bin` call's temp name through the source's `#define`s and requires
+  the detach call's to be unused by any worker-side call, with a planted-`PART_RUN`
+  control. **Known-bad arm:** the `c4b40450` build (§2b.5's fix, one shared name)
+  reddens exactly the one (f3) write check. The hold took and nothing was written
+  anywhere, which is how the residual went from RECONSTRUCTION to OBSERVED.
+  312 → 320, §16 36 → 44, floor unchanged.
   **§15b and §17 are the MapFindPath RETURN tap, 2026-08-29 (HANDOFF-PLANE §4.2).**
   §15b exists because §15 structurally cannot catch the bug the second emulation
   shape introduces: the emulation is now a branch on `SITES[i].shape`, and the way

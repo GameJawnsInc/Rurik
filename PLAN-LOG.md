@@ -46,6 +46,25 @@ move back.
 
 ---
 
+### MOVECODE-2b.6: movehook's exit write gets its own temp file -- 2026-09-27 -- **the residual MOVECODE-2b.5 left as RECONSTRUCTION, now OBSERVED and fixed: a worker killed mid-snapshot leaks its share-mode-0 handle on `movehook.bin.part`, and the detach write aimed at that same name and wrote nothing. The detach write now goes through `movehook.bin.exit.part`; test_movehook §16(f3) manufactures the held handle**
+
+**Where it came from.** MOVECODE-2b.5's entry (below) listed it as a residual and did not take it, because no test reached the window: one change per test. The owner asked for it the same day, so the test came first.
+
+**Manufactured, not waited for.** The natural window is one snapshot's write every `FLUSH_MS`. §16(f3) holds the worker's temp name, read out of `movehook.c`'s `PART_RUN`, with `CreateFileW(share = 0)` from the test's own process. Sharing is checked per open file, so that refuses the host exactly as the dead worker's leaked handle would. An **exposure control** requires a second open to be refused, and then the host exits gracefully. OBSERVED against the 2b.5 build (`c4b40450`): the hold took, and **no capture was written anywhere**. Exactly one check in the file went red.
+
+**The fix** (`toolkit/clientscan/movehook/movehook.c`). `PART_RUN` (`movehook.bin.part`) serves the worker's snapshot and final write, and `PART_EXIT` (`movehook.bin.exit.part`) serves the detach write. `write_bin` takes the name. The detach path is the only writer that can run while a dead writer's handle is open, so it is the one that needs a name of its own.
+
+**Tests** (`test_movehook.py` §16, 312 -> 320, floor unchanged at 169, TESTS.md; movecode FINDINGS §2b.6).
+- **(f3s)** is structural: each `write_bin` call's temp name is resolved through the source's `#define`s, and the detach call's must be unused by any worker-side call. A planted-`PART_RUN` control must go red.
+- **(f3)** is the held-name exit, with the configured directory, an empty DEFDIR sentinel, `MVHK` and a nonzero base required.
+- (f0)'s planted-fallback control follows the new detach signature.
+
+Known-bad arm red as stated. Fixed build green 320/320 on a `build.ps1` build and on three builds made fresh by §6. The vault stub's mtime did not move. Lints: srclint, provlint, citelint, identlint, checks, precommit.
+
+**Owed by the owner.** `main`'s `movehook.dll`, rebuilt at 11:40 from the 2b.5 source, predates `PART_EXIT`, so it will fail §16(f3) until it is rebuilt once more with `build.ps1 movehook.c`. Its sites stamp cannot tell.
+
+---
+
 ### DESKWORK-D6 steps 1-2 and MONSTERAI-S: areas over time, and the monster scatter -- 2026-09-26 -- **retail's seventeen Fire Storm casts read off the tape by a committed joiner (nine pre-registered predictions, all PASS); the server opens a lasting area at the target that strikes every foe inside once a second, the ground fire re-drawn at +3 / +6; a hostile group struck twice by it cancels, runs clear, holds off the fire and fights on when it ends -- CONFIRMED on our client (harness `20260926T214247`, its `--no-scatter` control `20260926T214721`, a hostile's storm `20260926T214944`)**
 
 **The tape** (`toolkit/authsrv/aotjoin.py`, `test_weapons` §29; studies/weapons §41; `a70508ff`). On `20260817T231139`, 17 casts (13+2+1+1 over four connections, P1): the caster's `[58]` at +1.982..2.022 s (P2), then IMMEDIATELY `0x00A1 [P, 0, 0, 350, 0, 0]` at the target's position (P3, 17/17), the 350 re-sent at +3 and +6 and nowhere else (P4, 51 = 17 x 3), ticks at the completion + k s, k = 1..10, phase within +-0.020 s, none at the completion (P5, 79 instants), no 58 and no `[20]` on a clean tick (P6), no unattributed 350 (P7), no other area over time and no area hex anywhere in 96 connections (P8), and 0 of 16 struck takers a monster -- the corpus holds NO retail witness of scatter (P9). A tick onto the observer is `0x00CF`, `[10, obs, 197]`, the word, 12 of 12. Two corrections recorded at weapons §40: the table has **14** areas over time and **11** single-packet bursts (§40's headings said fifteen and ten over their own lists of 14 and 11), and the completion's `[55]` is a self HEAL from the caster's build, not energy.
