@@ -125,7 +125,9 @@ import checks                                                   # noqa: E402
 # 2026-09-27, THE EXIT RACE (movecode FINDINGS §2b.5). A whole green run on this
 # machine is 312 (was 302), read off the banner: §16 26 -> 36, from (f0)'s three
 # structural checks and the two exit arms' seven more. §16 is outside the core as
-# before, so the floor does not move.
+# before, so the floor does not move. Same day, the exit write's own temp file
+# (§2b.6): 320, §16 36 -> 44 -- (f3s)'s check and control, PART_RUN declared,
+# and the held-temp arm (f3)'s five.
 LEDGER = checks.Ledger("movehook", floor=169)
 check = checks.adopt(LEDGER)
 
@@ -1463,6 +1465,73 @@ def _detach_depends_on_worker(src):
     return out
 
 
+def _exit_part_clash(src):
+    """({writer: temp name}, [problems]) for write_bin's callers. See §16(f3).
+
+    write_bin opens its temp file with share mode 0, and a handle outlives the
+    thread that opened it -- so a worker terminated mid-snapshot leaves ITS temp
+    name held for the rest of the process's life, and a detach write aimed at
+    the same name fails with a sharing violation. The detach write's temp name
+    must therefore be one no other writer uses. Names are resolved through the
+    source's own #defines, never restated here.
+    """
+    code = _strip_c_comments(src)
+    defs = {m.group(1): m.group(2).replace("\\\\", "\\")
+            for m in re.finditer(r'#define\s+(\w+)\s+"([^"]*)"', code)}
+    try:
+        cut = code.index("BOOL WINAPI DllMain")
+        det = code[code.index("DLL_PROCESS_DETACH", cut):]
+    except ValueError:
+        return {}, ["could not locate DllMain's detach branch"]
+    parts = {"worker": set(), "detach": set()}
+    for name, span in (("worker", code[:cut]), ("detach", det)):
+        # Non-greedy: `if (write_bin(...))` must close on its own paren, not
+        # run on to the next statement's semicolon.
+        for m in re.finditer(r"\bwrite_bin\(([^;{]*?)\)\s*[;)]", span):
+            args = [a.strip() for a in m.group(1).split(",")]
+            if len(args) != 3 or "const char" in m.group(1):
+                continue                          # the definition, not a call
+            parts[name].add(defs.get(args[2], args[2]))
+    out = []
+    if not parts["detach"]:
+        out.append("the detach path makes no three-argument write_bin call")
+    if not parts["worker"]:
+        out.append("no worker-side write_bin call was found to compare with")
+    shared = parts["detach"] & parts["worker"]
+    if shared:
+        out.append(f"the detach write shares {sorted(shared)} with the worker")
+    return {k: sorted(v) for k, v in parts.items()}, out
+
+
+def _hold_exclusive(path):
+    """Open `path` for writing with share mode 0; return the handle or None.
+
+    The state a writer terminated between its CreateFileA and CloseHandle leaves
+    behind. Sharing is checked per open file, not per process, so a handle held
+    here refuses the host's open of the same name exactly as the dead worker's
+    own leaked handle would.
+    """
+    import ctypes
+    from ctypes import wintypes
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.CreateFileW.restype = wintypes.HANDLE
+    k32.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                                wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD,
+                                wintypes.HANDLE]
+    h = k32.CreateFileW(path, 0x40000000, 0, None, 2, 0x80, None)
+    if h is None or h == ctypes.c_void_p(-1).value:
+        return None
+    return h
+
+
+def _release(h):
+    import ctypes
+    from ctypes import wintypes
+    k32 = ctypes.WinDLL("kernel32")
+    k32.CloseHandle.argtypes = [wintypes.HANDLE]
+    k32.CloseHandle(h)
+
+
 def _build_hint():
     return ("powershell -ExecutionPolicy Bypass -File "
             f"\"{os.path.join(HERE, 'build.ps1')}\" movehook.c")
@@ -1503,11 +1572,13 @@ def _stage_dll(src, dllpath, stagedir):
     return staged
 
 
-def _exit_arm(tmp, src, dllpath, arm, wait_armed):
+def _exit_arm(tmp, src, dllpath, arm, wait_armed, hold_part=None):
     """One §16 exit arm in its own host and its own staged DLL. Returns a dict.
 
     `wait_armed`: exit once the worker's status file says "armed" (inside the
     poll loop), else exit the moment injection returns (inside the controls).
+    `hold_part`: a temp-file leaf to hold open with share mode 0 in the output
+    directory across the exit -- the handle a worker killed mid-snapshot leaks.
     """
     base = os.path.join(tmp, f"exit-{arm}")
     stagedir, hostdir = os.path.join(base, "dll"), os.path.join(base, "host")
@@ -1524,7 +1595,8 @@ def _exit_arm(tmp, src, dllpath, arm, wait_armed):
     binfile = os.path.join(exitdir, "movehook.bin")
     fallback = os.path.join(hostdir, _FALLBACK, "movehook.bin")
     got = {"binfile": binfile, "fallback_file": fallback, "armed": False,
-           "pre": False, "rc": None, "exit": None}
+           "pre": False, "rc": None, "exit": None, "held": None}
+    held = None
     proc = subprocess.Popen([WOW64_CMD, "/k", "rem movehook exit test"],
                             cwd=hostdir, stdin=subprocess.PIPE,
                             stdout=subprocess.DEVNULL,
@@ -1554,6 +1626,18 @@ def _exit_arm(tmp, src, dllpath, arm, wait_armed):
                 if not got["armed"]:
                     time.sleep(0.1)
             got["pre"] = os.path.isfile(binfile)
+        if hold_part:
+            os.makedirs(exitdir, exist_ok=True)
+            held = _hold_exclusive(os.path.join(exitdir, hold_part))
+            # THE EXPOSURE CONTROL: the hold must really refuse a second open,
+            # or this arm manufactures nothing and its green means nothing.
+            refused = False
+            if held is not None:
+                try:
+                    open(os.path.join(exitdir, hold_part), "ab").close()
+                except OSError:
+                    refused = True
+            got["held"] = held is not None and refused
         proc.stdin.close()                        # graceful exit -> DllMain
         proc.wait(timeout=20)
         got["exit"] = proc.returncode
@@ -1570,6 +1654,8 @@ def _exit_arm(tmp, src, dllpath, arm, wait_armed):
             proc.kill()
         except Exception:
             pass
+        if held is not None:
+            _release(held)
     got["bin"] = os.path.isfile(binfile)
     got["fallback"] = os.path.isfile(fallback)
     got["magic"], got["base"] = None, None
@@ -1774,11 +1860,25 @@ def section_16(tmp):
           "DETECTED",
           "a checker that cannot find the shape it was written for is "
           "decoration")
-    planted = src.replace("write_bin(g_outdir, (DWORD)n);",
-                          "write_bin(g_outdir[0] ? g_outdir : DEFDIR, (DWORD)n);",
-                          1)
+    planted = src.replace(
+        "write_bin(g_outdir, (DWORD)n, PART_EXIT);",
+        "write_bin(g_outdir[0] ? g_outdir : DEFDIR, (DWORD)n, PART_EXIT);", 1)
     check(planted != src and _detach_depends_on_worker(planted) != [],
           "16. CONTROL: and so is a DEFDIR fallback in the detach path")
+
+    # (f3s) THE DETACH WRITE HAS ITS OWN TEMP NAME -- structurally. (f3) below
+    # is the behavioural half; see _exit_part_clash for why.
+    parts, clash = _exit_part_clash(src)
+    check(clash == [],
+          "16. the detach write renames from its OWN temp file, not the "
+          "worker's -- a worker killed mid-snapshot still holds that one open",
+          f"found {clash}; temp names by writer: {parts}")
+    planted = src.replace("write_bin(g_outdir, (DWORD)n, PART_EXIT);",
+                          "write_bin(g_outdir, (DWORD)n, PART_RUN);", 1)
+    check(planted != src and _exit_part_clash(planted)[1] != [],
+          "16. CONTROL: sharing the worker's temp name is DETECTED",
+          "a checker that cannot find the shape it was written for is "
+          "decoration")
 
     # (f) THE PROCESS-EXIT WRITE, FOR REAL. Everything above is structural;
     # this is the R5 scenario itself -- a run still armed when the host exits.
@@ -1810,12 +1910,40 @@ def section_16(tmp):
         # INSIDE the poll loop -- the R5 shape. (f2) exits it the moment
         # injection returns, INSIDE the controls, before the worker has armed
         # or resolved anything -- the shape that lost the owner's capture.
-        for arm, wait_armed in (("f", True), ("f2", False)):
-            got = _exit_arm(tmp, src, dllpath, arm, wait_armed)
+        # (f3) exits it while the WORKER'S temp file is held open with share
+        # mode 0 -- the handle a worker killed mid-snapshot leaks, manufactured
+        # rather than waited for, because the natural window is one snapshot's
+        # write every FLUSH_MS and no run would ever land in it on purpose.
+        # Its name is read out of movehook.c's PART_RUN, never restated.
+        m_part = re.search(r'#define\s+PART_RUN\s+"([^"]+)"', src)
+        run_part = (m_part.group(1).replace("\\\\", "\\").lstrip("\\")
+                    if m_part else None)
+        check(run_part is not None, "16. movehook.c names the worker's temp "
+              "file as PART_RUN", "(f3) has to hold the name the worker uses")
+        for arm, wait_armed, hold in (("f", True, None), ("f2", False, None),
+                                      ("f3", False, run_part)):
+            if arm == "f3" and not run_part:
+                LEDGER.skip("16(f3). the held temp file", "no PART_RUN to hold")
+                continue
+            got = _exit_arm(tmp, src, dllpath, arm, wait_armed, hold_part=hold)
             if "skip" in got:
                 LEDGER.skip(f"16({arm}). the process-exit write", got["skip"])
                 continue
-            if wait_armed:
+            if hold:
+                check(got["rc"] == 0 and got["held"],
+                      f"16. CONTROL: {hold} is held open EXCLUSIVELY across "
+                      f"the exit -- a second open is refused",
+                      f"inject rc={got['rc']}; held={got['held']} -- without a "
+                      f"refusing hold this arm manufactures nothing")
+                check(got["bin"],
+                      "16. AND THE EXIT WRITE LANDS WHILE THE WORKER'S TEMP "
+                      "FILE IS STILL HELD OPEN",
+                      f"nothing at {got['binfile']} (exit code {got['exit']}) -- "
+                      f"the detach write aimed at the worker's own temp name and "
+                      f"met the sharing violation a worker killed mid-snapshot "
+                      f"leaves behind. If this DLL predates PART_EXIT, rebuild "
+                      f"it: {_build_hint()}")
+            elif wait_armed:
                 check(got["armed"] and got["rc"] == 0 and not got["pre"],
                       "16. CONTROL: mid-run, with a long timer, nothing is "
                       "written yet",
