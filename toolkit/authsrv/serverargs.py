@@ -2259,6 +2259,23 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "swing gate swallowed it. The revert restores the single word, "
                          "not the interval swallow. --no-spell-areas reverts it too (the "
                          "older flag wins).")
+    ap.add_argument("--no-area-hexes", action="store_true",
+                    help="studies/weapons 43 REVERT: an area HEX (Deep Freeze, Ice Spikes, "
+                         "Shadow of Fear -- the record's type 4 with target byte 16) opens "
+                         "its episode on its ONE target and lands no on-cast damage -- "
+                         "the reading every run before 2026-09-27 made. --no-spell-areas "
+                         "reverts it too (the older flag wins).")
+    ap.add_argument("--no-hex-effect-words", action="store_true",
+                    help="studies/weapons 43 REVERT: a hex sends no [6, wearer, 1] / "
+                         "[6, wearer, class] at its apply and no [7]s at its close -- the "
+                         "status bit alone, this server's bytes until 2026-09-27; a row's "
+                         "own `auras` (Empathy) still go, in the pre-D6 slot (behind the "
+                         "0x00F1 at the apply, ahead of the 0x0044 at the close) and "
+                         "without the reference count.")
+    ap.add_argument("--no-snare-status-bit", action="store_true",
+                    help="studies/weapons 43 REVERT: 0x00F1 bit 0x400 (RECONSTRUCTION: "
+                         "snared -- Teinai's Prison 6/6) is never set while a "
+                         "movement-speed-decrease episode is live.")
     ap.add_argument("--no-spell-projectiles", action="store_true",
                     help="studies/weapons 36 / 37 REVERT: a projectile SPELL (Flare, "
                          "Lightning Orb, Dancing Daggers) lands its damage at the E5 (the "

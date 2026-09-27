@@ -26,7 +26,7 @@ import authsrv  # noqa: E402
 import combatmath  # noqa: E402
 import vaultpath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=299)   # the second aot merge (2026-09-27): the BARE-MACHINE number, MEASURED -- 299 checks, 0 failed, 14 declared skips (26 checks) with RURIK_VAULT at a nonexistent path, = main's measured 268 + aot's 31 bare (section 29 12, section 30 19) ;; aot's side: the merged tree (aot + main, 2026-09-26): 291 = aot's 287 + main's +3 + 1 (section 30 (d'): a body's tick meets the monk's own armour, 60 against 50 under --body-spell-player-armour -- the two landings pinned together) (a body's spell meets its TAKER's armour, sections 25 / 26 / 28 +1 each), both from base 257; aot's chain: the BARE-MACHINE number: 287 = 285 + 2 (the orchestrator's corpse correction, 2026-09-26: section 30 +2 bare -- the dead-at-the-E5 check now opens the area at the corpse (WIKI) instead of locking the refusal, and adds the gone-row refusal and the hostile's cast kept past its target's death with its non-area control; a vault run gives 319); before that 285 = 278 + 7 (the review repaired, 2026-09-26: section 29 +4 bare (the token list, P2, P3/P7, the order facts driven red) + 1 vault-only (the per-tape scoring arm), section 30 +3 bare (the late serve, the dead target, the interval corner under the flag); a vault run gives 317); before that 278 = 265 + 13 (section 30, areas over time on the server -- DESKWORK-D6 step 2, 2026-09-26; a vault run gives 309 -- the server's 197 schedule against the tape's is the one vault-only check, on capture 20260817T231139 alone); before that 265 = 257 + 8 (section 29, areas over time on retail's wire -- aotjoin, 2026-09-26; a vault run gives 295 -- the record's classes, P1-P9 and the tick batch order are the eleven vault-only checks; section 29 alone under a missing RURIK_VAULT runs its 8 and declares the skip); before that 257 = 251 + 6 (section 28, a point-blank burst, 2026-09-20; a vault run gives 276 -- the corpus's target-16 announces are the one vault-only check); before that 251 = 237 + 14 (section 27, the hit test, 2026-09-20; a vault run gives 269 -- the corpus's dodge words are the one vault-only check); before that 237 = 228 + 9 (section 26, Fireball's splash, 2026-09-20; a vault run gives 254 -- the tape's bursts are the one vault-only check); before that 228 = 219 + 9 (section 25, a body's spell projectile, 2026-09-20; a vault run gives 244 -- the tape's activations are the one vault-only check); before that 219 = 208 + 11 (section 24, a player's spell projectile, 2026-09-20; a vault run gives 234 -- the tapes' speeds are the one vault-only check); before that 208 = 203 + 5 (section 23, base armour penetration, 2026-09-19; a vault run gives 222 -- the six checks that read the skills table are vault-only); before that 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114) ;; main's chain: the BARE-MACHINE number: 260 = 257 + 3 (2026-09-26, a body's spell meets its TAKER's armour: sections 25 / 26 / 28 +1 each; a vault run gives 279, measured, from 276. The bare run could NOT be re-measured: with RURIK_VAULT at a nonexistent path it stops at section 13's KeyError (dual["body_projectiles"]) on main too, so the +3 is the vault run's delta carried over -- and section 25's new check, like its `ar == 19.0` neighbour, reads the Orb's Air Magic attribute off the vault's skills table); before that 257 = 251 + 6 (section 28, a point-blank burst, 2026-09-20; a vault run gives 276 -- the corpus's target-16 announces are the one vault-only check); before that 251 = 237 + 14 (section 27, the hit test, 2026-09-20; a vault run gives 269 -- the corpus's dodge words are the one vault-only check); before that 237 = 228 + 9 (section 26, Fireball's splash, 2026-09-20; a vault run gives 254 -- the tape's bursts are the one vault-only check); before that 228 = 219 + 9 (section 25, a body's spell projectile, 2026-09-20; a vault run gives 244 -- the tape's activations are the one vault-only check); before that 219 = 208 + 11 (section 24, a player's spell projectile, 2026-09-20; a vault run gives 234 -- the tapes' speeds are the one vault-only check); before that 208 = 203 + 5 (section 23, base armour penetration, 2026-09-19; a vault run gives 222 -- the six checks that read the skills table are vault-only); before that 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114) ;; main's side: the BARE-MACHINE number, MEASURED 2026-09-26: 268 = 264 + 4 (section 23's four behaviour checks -- the hits at Strength 9, the revert, a body's base, the incoming Orb -- run bare on carried rows 194 / 229 / 230 / 322 / 339 / 398; its two checks whose subject is the vault's table still skip; 12 declared skips (13 checks), a vault run gives 281, unchanged); before that 264, MEASURED 2026-09-26 -- a real run with RURIK_VAULT at a nonexistent path: 264 checks and 12 declared skips (17 checks) against a vault run's 281. It is the first number on this line a bare run has produced since at least dcaf0d60: until that day's repair the bare run died at section 13 on a KeyError and, past it, failed sixteen checks instead of skipping, so the 260 below and the chain behind it were vault deltas carried down, not runs. The repair carries the record's rows (RECORD, the attribute tables) into the blocks that read them -- section 20's three press checks run bare now -- decides every tape skip on its capture directory, and adds section 2b (2 vault-only checks: the carried rows against the vault's); before that 260 = 257 + 3 (2026-09-26, a body's spell meets its TAKER's armour: sections 25 / 26 / 28 +1 each; a vault run gives 279, measured, from 276. The bare run could NOT be re-measured: with RURIK_VAULT at a nonexistent path it stops at section 13's KeyError (dual["body_projectiles"]) on main too, so the +3 is the vault run's delta carried over -- and section 25's new check, like its `ar == 19.0` neighbour, reads the Orb's Air Magic attribute off the vault's skills table); before that 257 = 251 + 6 (section 28, a point-blank burst, 2026-09-20; a vault run gives 276 -- the corpus's target-16 announces are the one vault-only check); before that 251 = 237 + 14 (section 27, the hit test, 2026-09-20; a vault run gives 269 -- the corpus's dodge words are the one vault-only check); before that 237 = 228 + 9 (section 26, Fireball's splash, 2026-09-20; a vault run gives 254 -- the tape's bursts are the one vault-only check); before that 228 = 219 + 9 (section 25, a body's spell projectile, 2026-09-20; a vault run gives 244 -- the tape's activations are the one vault-only check); before that 219 = 208 + 11 (section 24, a player's spell projectile, 2026-09-20; a vault run gives 234 -- the tapes' speeds are the one vault-only check); before that 208 = 203 + 5 (section 23, base armour penetration, 2026-09-19; a vault run gives 222 -- the six checks that read the skills table are vault-only); before that 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=309)   # section 31, the area hexes (DESKWORK-D6 step 4, 2026-09-27): the BARE-MACHINE number, MEASURED -- 309 checks, 0 failed, 15 declared skips with RURIK_VAULT at a nonexistent path = 299 + 10 bare (section 31's eleven less the one vault-only check, the seven ids against the pinned table); a vault run gives 336 = 325 + 11 ;; before that the second aot merge (2026-09-27): the BARE-MACHINE number, MEASURED -- 299 checks, 0 failed, 14 declared skips (26 checks) with RURIK_VAULT at a nonexistent path, = main's measured 268 + aot's 31 bare (section 29 12, section 30 19) ;; aot's side: the merged tree (aot + main, 2026-09-26): 291 = aot's 287 + main's +3 + 1 (section 30 (d'): a body's tick meets the monk's own armour, 60 against 50 under --body-spell-player-armour -- the two landings pinned together) (a body's spell meets its TAKER's armour, sections 25 / 26 / 28 +1 each), both from base 257; aot's chain: the BARE-MACHINE number: 287 = 285 + 2 (the orchestrator's corpse correction, 2026-09-26: section 30 +2 bare -- the dead-at-the-E5 check now opens the area at the corpse (WIKI) instead of locking the refusal, and adds the gone-row refusal and the hostile's cast kept past its target's death with its non-area control; a vault run gives 319); before that 285 = 278 + 7 (the review repaired, 2026-09-26: section 29 +4 bare (the token list, P2, P3/P7, the order facts driven red) + 1 vault-only (the per-tape scoring arm), section 30 +3 bare (the late serve, the dead target, the interval corner under the flag); a vault run gives 317); before that 278 = 265 + 13 (section 30, areas over time on the server -- DESKWORK-D6 step 2, 2026-09-26; a vault run gives 309 -- the server's 197 schedule against the tape's is the one vault-only check, on capture 20260817T231139 alone); before that 265 = 257 + 8 (section 29, areas over time on retail's wire -- aotjoin, 2026-09-26; a vault run gives 295 -- the record's classes, P1-P9 and the tick batch order are the eleven vault-only checks; section 29 alone under a missing RURIK_VAULT runs its 8 and declares the skip); before that 257 = 251 + 6 (section 28, a point-blank burst, 2026-09-20; a vault run gives 276 -- the corpus's target-16 announces are the one vault-only check); before that 251 = 237 + 14 (section 27, the hit test, 2026-09-20; a vault run gives 269 -- the corpus's dodge words are the one vault-only check); before that 237 = 228 + 9 (section 26, Fireball's splash, 2026-09-20; a vault run gives 254 -- the tape's bursts are the one vault-only check); before that 228 = 219 + 9 (section 25, a body's spell projectile, 2026-09-20; a vault run gives 244 -- the tape's activations are the one vault-only check); before that 219 = 208 + 11 (section 24, a player's spell projectile, 2026-09-20; a vault run gives 234 -- the tapes' speeds are the one vault-only check); before that 208 = 203 + 5 (section 23, base armour penetration, 2026-09-19; a vault run gives 222 -- the six checks that read the skills table are vault-only); before that 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114) ;; main's chain: the BARE-MACHINE number: 260 = 257 + 3 (2026-09-26, a body's spell meets its TAKER's armour: sections 25 / 26 / 28 +1 each; a vault run gives 279, measured, from 276. The bare run could NOT be re-measured: with RURIK_VAULT at a nonexistent path it stops at section 13's KeyError (dual["body_projectiles"]) on main too, so the +3 is the vault run's delta carried over -- and section 25's new check, like its `ar == 19.0` neighbour, reads the Orb's Air Magic attribute off the vault's skills table); before that 257 = 251 + 6 (section 28, a point-blank burst, 2026-09-20; a vault run gives 276 -- the corpus's target-16 announces are the one vault-only check); before that 251 = 237 + 14 (section 27, the hit test, 2026-09-20; a vault run gives 269 -- the corpus's dodge words are the one vault-only check); before that 237 = 228 + 9 (section 26, Fireball's splash, 2026-09-20; a vault run gives 254 -- the tape's bursts are the one vault-only check); before that 228 = 219 + 9 (section 25, a body's spell projectile, 2026-09-20; a vault run gives 244 -- the tape's activations are the one vault-only check); before that 219 = 208 + 11 (section 24, a player's spell projectile, 2026-09-20; a vault run gives 234 -- the tapes' speeds are the one vault-only check); before that 208 = 203 + 5 (section 23, base armour penetration, 2026-09-19; a vault run gives 222 -- the six checks that read the skills table are vault-only); before that 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114) ;; main's side: the BARE-MACHINE number, MEASURED 2026-09-26: 268 = 264 + 4 (section 23's four behaviour checks -- the hits at Strength 9, the revert, a body's base, the incoming Orb -- run bare on carried rows 194 / 229 / 230 / 322 / 339 / 398; its two checks whose subject is the vault's table still skip; 12 declared skips (13 checks), a vault run gives 281, unchanged); before that 264, MEASURED 2026-09-26 -- a real run with RURIK_VAULT at a nonexistent path: 264 checks and 12 declared skips (17 checks) against a vault run's 281. It is the first number on this line a bare run has produced since at least dcaf0d60: until that day's repair the bare run died at section 13 on a KeyError and, past it, failed sixteen checks instead of skipping, so the 260 below and the chain behind it were vault deltas carried down, not runs. The repair carries the record's rows (RECORD, the attribute tables) into the blocks that read them -- section 20's three press checks run bare now -- decides every tape skip on its capture directory, and adds section 2b (2 vault-only checks: the carried rows against the vault's); before that 260 = 257 + 3 (2026-09-26, a body's spell meets its TAKER's armour: sections 25 / 26 / 28 +1 each; a vault run gives 279, measured, from 276. The bare run could NOT be re-measured: with RURIK_VAULT at a nonexistent path it stops at section 13's KeyError (dual["body_projectiles"]) on main too, so the +3 is the vault run's delta carried over -- and section 25's new check, like its `ar == 19.0` neighbour, reads the Orb's Air Magic attribute off the vault's skills table); before that 257 = 251 + 6 (section 28, a point-blank burst, 2026-09-20; a vault run gives 276 -- the corpus's target-16 announces are the one vault-only check); before that 251 = 237 + 14 (section 27, the hit test, 2026-09-20; a vault run gives 269 -- the corpus's dodge words are the one vault-only check); before that 237 = 228 + 9 (section 26, Fireball's splash, 2026-09-20; a vault run gives 254 -- the tape's bursts are the one vault-only check); before that 228 = 219 + 9 (section 25, a body's spell projectile, 2026-09-20; a vault run gives 244 -- the tape's activations are the one vault-only check); before that 219 = 208 + 11 (section 24, a player's spell projectile, 2026-09-20; a vault run gives 234 -- the tapes' speeds are the one vault-only check); before that 208 = 203 + 5 (section 23, base armour penetration, 2026-09-19; a vault run gives 222 -- the six checks that read the skills table are vault-only); before that 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
 check = LEDGER.ok
 
 
@@ -4675,6 +4675,367 @@ def section_areas_over_time():
               str((len(rows), tape_ks, tape_vis, stray)))
 
 
+def _ahex_rows():
+    """The record rows section 31 injects: the three area hexes with hand rows
+    (Deep Freeze 234, Ice Spikes 211, Shadow of Fear 136), a byte-5 hex
+    (Faintheartedness 135), an area over time (197) and a one-target spell
+    (194) -- every field the E5 path and the readers touch. The values are the
+    pinned table's (d6R-records.md, build 38797); section 31 (a') holds the
+    predicate to the vault's own table."""
+    base = {"activation": 2.0, "aftercast": 0.75, "recharge": 20, "energy": 10,
+            "adrenaline": 0, "adrenaline_units": 0, "profession": 6, "combo": 0,
+            "combo_req": 0, "weapon_req": 0, "skill_arguments": 2, "bonus_scale0": 0,
+            "bonus_scale15": 0, "projectile": 2077, "impact_visual": 2077}
+    return {"234": dict(base, attribute=11, type_code=4, target=16, aoe_range=312.0,
+                        duration0=10, duration15=10, scale0=10, scale15=85,
+                        bonus_scale0=66, bonus_scale15=66, impact_visual=414),
+            "211": dict(base, attribute=11, type_code=4, target=16, aoe_range=156.0,
+                        duration0=2, duration15=6, scale0=20, scale15=80, skill_arguments=3,
+                        bonus_scale0=66, bonus_scale15=66),
+            "136": dict(base, attribute=7, profession=4, type_code=4, target=16,
+                        aoe_range=156.0, duration0=5, duration15=30, scale0=50, scale15=50,
+                        skill_arguments=1, impact_visual=247),
+            "135": dict(base, attribute=7, profession=4, type_code=4, target=5, aoe_range=0.0,
+                        duration0=3, duration15=16, scale0=50, scale15=50, skill_arguments=5,
+                        bonus_scale0=0, bonus_scale15=3),
+            "197": dict(base, attribute=10, type_code=5, target=16, aoe_range=156.0,
+                        duration0=10, duration15=10, scale0=5, scale15=35, impact_visual=351),
+            "194": dict(base, attribute=10, type_code=5, target=5, aoe_range=156.0,
+                        duration0=0, duration15=0, scale0=20, scale15=65, projectile=343)}
+
+
+def section_area_hexes():
+    print("\n31. an area hex on the server: one hex per foe around the target, the on-cast "
+          "hit through the burst, the hex's own words, the snare's speed and bit")
+    import io                                                         # noqa: PLC0415
+    import areatime                                                   # noqa: PLC0415
+    import effects                                                    # noqa: PLC0415
+    saved = (authsrv._is_attack_skill, authsrv.skill_projectile, authsrv.SPELL_AREAS,
+             authsrv.AREA_HEXES, authsrv.HEX_EFFECT_WORDS, authsrv.SNARE_STATUS_BIT,
+             authsrv.skill_timing, authsrv.skill_cost, authsrv.weapon_satisfies,
+             agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.scatter_struck,
+             authsrv.hex_target_dead)
+    STATUS, SPEED, APPLY, REMOVE = 0x00F1, 0x0027, 0x0042, 0x0044
+    words = lambda batch: [v for op, v in batch if op == 0x00A3 and v[0] in (16, 17)]   # noqa: E731
+    fin58 = lambda batch: [v for op, v in batch if op == 0x009F and v[0] == 58]         # noqa: E731
+    impacts = lambda batch: [v for op, v in batch if op == 0x00A0 and v[0] == agents.GV_EFFECT_ON_TARGET]  # noqa: E731
+    adds = lambda batch: [tuple(v) for op, v in batch if op == 0x009F and v[0] == agents.PROP_AURA_ON]    # noqa: E731
+    removes = lambda batch: [tuple(v) for op, v in batch if op == 0x009F and v[0] == agents.PROP_AURA_OFF]  # noqa: E731
+    status = lambda batch: [tuple(v) for op, v in batch if op == STATUS]                # noqa: E731
+    speeds = lambda batch: [(v[0], round(v[1], 2)) for op, v in batch if op == SPEED]  # noqa: E731
+    applies = lambda batch: [v for op, v in batch if op == APPLY]                       # noqa: E731
+    ops = lambda batch: [op for op, _v in batch]                                        # noqa: E731
+    scatter_calls = []
+    authsrv.scatter_struck = lambda *a, **k: scatter_calls.append(a)
+
+    def eps(st):
+        return sorted((e["agent"], e["buff"], e["skill"]) for e in authsrv.effect_table(st).live.values())
+
+    def expire(st, send, skill=None):
+        """Run every (or one skill's) episode out and serve the real effect_tick."""
+        for e in authsrv.effect_table(st).live.values():
+            if skill is None or e["skill"] == skill:
+                e["expires_at"] -= 60.0
+        authsrv.effect_tick(send, st, 1)
+
+    tables = agents.WORLD.tables
+    had, kept = "skills" in tables, tables.get("skills")
+    tables["skills"] = _ahex_rows()
+    try:
+        authsrv.skill_projectile = lambda sid: 343 if sid == 194 else None
+        # (a) the predicate and the readers
+        raw = {s: areatime.area_hex_row(tables["skills"][str(s)]) for s in (234, 211, 136, 135, 197, 194)}
+        got = {s: authsrv.area_hex(s) for s in (234, 211, 136, 135, 197, 194, 99999)}
+        authsrv.AREA_HEXES = False
+        off_a = authsrv.area_hex(234)
+        authsrv.AREA_HEXES = True
+        authsrv.SPELL_AREAS = False
+        off_b = authsrv.area_hex(234)
+        authsrv.SPELL_AREAS = True
+        check(raw == {234: 312.0, 211: 156.0, 136: 156.0, 135: None, 197: None, 194: None}
+              and got == {234: 312.0, 211: 156.0, 136: 156.0, 135: None, 197: None, 194: None,
+                          99999: None}
+              and off_a is None and off_b is None
+              and areatime.area_hex_row(None) is None and areatime.area_hex_row({"target": "x"}) is None
+              and authsrv.spell_burst(234) is None and authsrv.area_over_time(234, 12) is None
+              and authsrv.hex_cast_damage(234, 0) == (10, "standalone")
+              and authsrv.hex_cast_damage(234, 12) == (70, "standalone")
+              and authsrv.hex_cast_damage(211, 12) == (68, "standalone")
+              and authsrv.hex_cast_damage(136, 12) is None and authsrv.hex_cast_damage(135, 12) is None
+              and authsrv.hex_cast_damage(99999, 12) is None
+              and authsrv.skill_damage(234, 12) is None
+              and authsrv.hex_effect_ids(234) == (1, 12) and authsrv.hex_effect_ids(136) == (1,)
+              and authsrv.hex_effect_ids(99999) == (1,),
+              "the predicate: Deep Freeze (312 u), Ice Spikes (156) and Shadow of Fear (156) are "
+              "area hexes; Faintheartedness is a byte-5 hex, Fire Storm a spell, Flare one target, "
+              "an unknown id none; --no-area-hexes AND --no-spell-areas each refuse; spell_burst "
+              "and area_over_time still refuse a hex (three predicates, none widened); "
+              "hex_cast_damage reads the hits_on_cast rows (10 / 70 at rank 0 / 12; Ice Spikes 68) "
+              "and nothing else, skill_damage still None for a hex; the [6] ids: (1, 12) for an "
+              "Elementalist hex, the 1 alone for a Necromancer's and for no row", str((raw, got)))
+        # (a') the real table (vault-only): exactly the seven
+        if full_skills_table(kept):
+            seven = sorted(int(k) for k, r in kept.items() if areatime.area_hex_row(r) is not None)
+            check(seven == AHEX_IDS
+                  and {int(k): areatime.area_hex_row(r) for k, r in kept.items()
+                       if int(k) in (234, 211, 136)} == {234: 312.0, 211: 156.0, 136: 156.0}
+                  and all(int(kept[str(s)]["profession"]) == 6 for s in (234, 211))
+                  and int(kept["136"]["profession"]) == 4,
+                  "and the pinned table: area_hex_row selects exactly the seven area hexes "
+                  "(52, 56, 108, 136, 204, 211, 234) with the injected radii and professions",
+                  str(seven))
+        else:
+            LEDGER.skip("section 31", "the vault's skills table is absent -- 1 check (the seven)")
+        # (b) Deep Freeze through the real press and E5 on a cluster
+        authsrv._is_attack_skill = lambda sid: False
+        authsrv.skill_timing = lambda sid: (2.0, 0.75, 0.0)
+        authsrv.skill_cost = lambda sid: (0, 0)
+        authsrv.weapon_satisfies = lambda sid: True
+        authsrv.apply_party_character({"player_weapon": "starter_wand"})
+
+        def player_cast(sid, extra=(), before=None, st=None):
+            if st is None:
+                st = _world(600.0)
+                for aid, pos in extra:
+                    st["agents"][aid] = dict(st["agents"][FOE], pos=pos)
+            sent = []
+            send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+            authsrv.handle_skill_press([0, sid, 0, FOE], send, st, 1, authsrv.GAME_CMSG_USE_SKILL)
+            sent.clear()
+            for cast in st["pending_casts"]:
+                for k in ("begin_at", "e5_at", "e3_at", "e6_at"):
+                    cast[k] -= 30.0
+            if before is not None:
+                before(st)
+            authsrv.cast_tick(send, st, 1)
+            for cast in list(st["pending_casts"]):
+                st["pending_casts"].remove(cast)
+            return st, sent, send
+
+        cluster = [(11, (650.0, 0.0)), (13, (600.0, 100.0)), (12, (1000.0, 0.0))]
+        st, sent, send = player_cast(234, cluster)
+        i58 = next((i for i, (op, v) in enumerate(sent) if op == 0x009F and v[0] == 58), None)
+        i_w = [i for i, (op, v) in enumerate(sent) if op == 0x00A3]
+        i_6 = [i for i, (op, v) in enumerate(sent) if op == 0x009F and v[0] == 6]
+        i_f = [i for i, (op, v) in enumerate(sent) if op == STATUS]
+        i_s = [i for i, (op, v) in enumerate(sent) if op == SPEED]
+        check(ops(sent)[0] == 0x00E5 and i58 == 1 and fin58(sent) == [[58, PLAYER, 0]]
+              and [v[1:3] for v in words(sent)] == [[FOE, PLAYER], [11, PLAYER], [13, PLAYER]]
+              and impacts(sent) == [[20, FOE, PLAYER, 414], [20, 11, PLAYER, 414], [20, 13, PLAYER, 414]]
+              and all(st["agents"][a]["health"] == 9000.0 - 10.0 for a in (FOE, 11, 13))
+              and st["agents"][12]["health"] == 9000.0
+              and eps(st) == [(FOE, 1, 234), (11, 2, 234), (13, 3, 234)]
+              and adds(sent) == [(6, FOE, 1), (6, FOE, 12), (6, 11, 1), (6, 11, 12), (6, 13, 1), (6, 13, 12)]
+              and status(sent) == [(FOE, 0xC00), (11, 0xC00), (13, 0xC00)]
+              and speeds(sent) == [(FOE, 97.92), (11, 97.92), (13, 97.92)]
+              and not applies(sent) and st.get("effect_list_suppressed") == 3
+              and i_w[-1] < i_6[0] and i_6[1] < i_f[0] < i_6[2] and i_f[-1] < i_s[0]
+              and all(abs(authsrv.move_speed_factor(st, a) - 0.34) < 1e-9 for a in (FOE, 11, 13))
+              and authsrv.move_speed_factor(st, 12) == 1.0
+              and all(e["duration"] == 10.0 for e in authsrv.effect_table(st).live.values())
+              and not scatter_calls,
+              "the player's Deep Freeze at the E5 over the target, the foe 50 u beside it and the "
+              "one 100 u above (the one 400 u off untouched): E5, [58, me, 0], then per foe in id "
+              "order the word (10 at rank 0) and [20, foe, me, 414]; then per wearer its OWN "
+              "episode (buff 1, 2, 3, 10 s) as [6, w, 1], [6, w, 12], 0x00F1 [w, 0xC00] (hexed | "
+              "snared), no 0x0042 for a foe (3 suppressed); then every 0x0027 [w, 97.92 = 288 x "
+              "0.34] ascending; the words ahead of the hexes; scatter untouched",
+              str([(hex(op), v) for op, v in sent]))
+        # (c) the expiry restores the speed and sends the [7]s
+        sent.clear()
+        expire(st, send)
+        i_7 = [i for i, (op, v) in enumerate(sent) if op == 0x009F and v[0] == 7]
+        i_f = [i for i, (op, v) in enumerate(sent) if op == STATUS]
+        check(removes(sent) == [(7, FOE, 1), (7, FOE, 12), (7, 11, 1), (7, 11, 12), (7, 13, 1), (7, 13, 12)]
+              and status(sent) == [(FOE, 0), (11, 0), (13, 0)]
+              and speeds(sent) == [(FOE, 288.0), (11, 288.0), (13, 288.0)]
+              and REMOVE not in ops(sent) and not eps(st)
+              and i_7[1] < i_f[0] < i_7[2]
+              and all(authsrv.move_speed_factor(st, a) == 1.0 for a in (FOE, 11, 13))
+              and not st.get("aura_refs"),
+              "at +10 s each wearer's expiry: [7, w, 1], [7, w, 12], 0x00F1 [w, 0] (both bits "
+              "cleared), 0x0027 [w, 288.0] -- the base back; no 0x0044 for a foe; no episode and "
+              "no held aura left", str([(hex(op), v) for op, v in sent]))
+        # (d) the reference count: a second hex on a wearer sends no second [6, w, 1]
+        st, sent1, send = player_cast(136, [(11, (650.0, 0.0))])
+        buf = io.StringIO()
+        authsrv._HEX_CLASS_UNWITNESSED.discard(136)
+        with contextlib.redirect_stdout(buf):
+            st, sent1, send = player_cast(136, [(11, (650.0, 0.0))])
+        aif = (authsrv.attack_interval_factor(st, FOE), authsrv.attack_interval_factor(st, 11))
+        st, sent2, send = player_cast(234, st=st)
+        sent = []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+        expire(st, send, skill=136)
+        after136 = (removes(sent), status(sent), eps(st), dict(st.get("aura_refs") or {}))
+        sent.clear()
+        expire(st, send, skill=234)
+        check(adds(sent1) == [(6, FOE, 1), (6, 11, 1)] and status(sent1) == [(FOE, 0x800), (11, 0x800)]
+              and not words(sent1) and not impacts(sent1) and not speeds(sent1)
+              and "no [6, wearer, class] id is observed" in buf.getvalue()
+              and aif == (1.5, 1.5) and authsrv.attack_interval_factor(st, 12) == 1.0
+              and adds(sent2) == [(6, FOE, 12), (6, 11, 12)]
+              and status(sent2) == [(FOE, 0xC00), (11, 0xC00)]
+              and [v[1:3] for v in words(sent2)] == [[FOE, PLAYER], [11, PLAYER]]
+              and after136 == ([], [], [(FOE, 3, 234), (11, 4, 234)],
+                               {(FOE, 1): 1, (FOE, 12): 1, (11, 1): 1, (11, 12): 1})
+              and removes(sent) == [(7, FOE, 1), (7, FOE, 12), (7, 11, 1), (7, 11, 12)]
+              and status(sent) == [(FOE, 0), (11, 0)] and not eps(st),
+              "Shadow of Fear on the target and the foe beside it: [6, w, 1] ALONE (no class id "
+              "is observed for a Necromancer hex, printed), 0x800, no word, no [20], no speed; "
+              "each wearer's attack interval x1.5 (the flat 50, Faintheartedness's reader), the "
+              "far one x1.0; then Deep Freeze on the same pair sends [6, w, 12] and NO second "
+              "[6, w, 1] (held by the live hex: the tape's 651.779), 0xC00; Shadow of Fear's "
+              "expiry sends NO [7] (Deep Freeze still holds both ids) and no status change; Deep "
+              "Freeze's sends both [7]s and 0x00F1 0",
+              str((adds(sent1), adds(sent2), after136, removes(sent))))
+        # (e) a hostile's Ice Spikes on the player and a hero through the real land_skill
+        st = _body_world((100.0, 0.0), skills=[[211, 0.0, 20.0]], skill_ready=[0.0],
+                         casting=0, cast_target=PLAYER)
+        st["agents"][HERO]["hero"] = True
+        st["agents"][300] = dict(st["agents"][HERO], pos=(0.0, 400.0), hero=False)
+        sent = []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+        health, monk_hp = st["player_health"], st["agents"][HERO]["health"]
+        authsrv.land_skill(send, st, FOE, st["agents"][FOE], 1)
+        ar = authsrv.spell_armour_for(211)
+        want = authsrv._whole_points(68.0 * authsrv.strike_multiplier(
+            authsrv.agent_strike_level(st["agents"][FOE]), ar))
+        i_6 = [i for i, (op, v) in enumerate(sent) if op == 0x009F and v[0] == 6]
+        i_w = [i for i, (op, v) in enumerate(sent) if op == 0x00A3]
+        i10 = next((i for i, (op, v) in enumerate(sent) if op == 0x009F and v[:3] == [10, PLAYER, 211]), None)
+        check(sent[0] == (0x009F, [58, FOE, 0])
+              and applies(sent) == [[PLAYER, 211, 12, 1, authsrv._f32(5.0)], [HERO, 211, 12, 2, authsrv._f32(5.0)]]
+              and adds(sent) == [(6, PLAYER, 1), (6, PLAYER, 12), (6, HERO, 1), (6, HERO, 12)]
+              and status(sent) == [(PLAYER, 0xC00), (HERO, 0xC00)]
+              and speeds(sent) == [(PLAYER, 97.92), (HERO, 97.92)]
+              and ops(sent).index(APPLY) < i_6[0] < ops(sent).index(STATUS)
+              and [v[1:3] for v in words(sent)] == [[PLAYER, FOE], [HERO, FOE]]
+              and i10 is not None and i10 + 1 == i_w[0] and i_6[-1] < i_w[0]
+              and st["player_health"] == health - want and st["agents"][HERO]["health"] < monk_hp
+              and st["agents"][300]["health"] == monk_hp
+              and eps(st) == [(PLAYER, 1, 211), (HERO, 2, 211)]
+              and abs(st["declared_speed_base"] - 97.92) < 1e-6
+              and st["agents"][FOE]["casting"] is None and not scatter_calls,
+              "a hostile's Ice Spikes at the player 100 u off with the hero 110 u above: [58, it, "
+              "0], then the player's 0x0042 [me, 211, 12, buff 1, 5.0 s (rank 12)], [6, me, 1], "
+              "[6, me, 12], 0x00F1 [me, 0xC00], the hero's 0x0042 and words, then 0x0027 [me, "
+              "97.92], [hero, 97.92]; THEN [10, me, 211] and the player's word (68 against the "
+              "pieces' elemental rating at the caster's strike level) and the monk's -- the hexes "
+              "ahead of the words on a body's path; the body 400 u off untouched; the player's "
+              "declared base is the snared one", str([(hex(op), v) for op, v in sent]))
+        # (f) a target DEAD at the completion: nothing lands, no episode on a corpse
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            st, sent, send = player_cast(234, cluster, before=lambda s: s["agents"][FOE].update(dead=True))
+        dead_shape = (fin58(sent), words(sent), adds(sent), status(sent), speeds(sent), eps(st),
+                      st["agents"][11]["health"])
+        # KNOWN-BAD ARM: the pre-2026-09-27 player path opened the episode on the corpse
+        authsrv.hex_target_dead = lambda s, a: False
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                st_bad, sent_bad, _s = player_cast(234, cluster, before=lambda s: s["agents"][FOE].update(dead=True))
+        finally:
+            authsrv.hex_target_dead = saved[-1]
+        check(dead_shape == ([[58, PLAYER, 0]], [], [], [], [], [], 9000.0)
+              and "no episode on a corpse" in buf.getvalue()
+              and eps(st_bad) == [(FOE, 1, 234), (11, 2, 234), (13, 3, 234)]
+              and not words(sent_bad),
+              "a target killed mid-cast (dead at the E5): the 58 and NOTHING else -- no word on "
+              "anybody (the foe beside the corpse included), no [6], no status, no speed, no "
+              "episode, printed; KNOWN-BAD ARM: with hex_target_dead stubbed out the hex opens "
+              "on the CORPSE and the two living foes (the pre-2026-09-27 player path's shape) "
+              "while the burst is still refused -- the check is what keeps the hex off the corpse",
+              str((dead_shape, buf.getvalue()[-200:], eps(st_bad))))
+        # (g) the reverts: --no-area-hexes and --no-spell-areas byte-identical, the one-target hex
+        st_on, sent_on, _s = player_cast(234, [(11, (650.0, 0.0))])
+        authsrv.AREA_HEXES = False
+        st_a, sent_a, _s = player_cast(234, [(11, (650.0, 0.0))])
+        authsrv.AREA_HEXES = True
+        authsrv.SPELL_AREAS = False
+        st_b, sent_b, _s = player_cast(234, [(11, (650.0, 0.0))])
+        authsrv.SPELL_AREAS = True
+        check(sent_a == sent_b and eps(st_a) == [(FOE, 1, 234)] and eps(st_b) == [(FOE, 1, 234)]
+              and not words(sent_a) and not impacts(sent_a)
+              and adds(sent_a) == [(6, FOE, 1), (6, FOE, 12)] and status(sent_a) == [(FOE, 0xC00)]
+              and speeds(sent_a) == [(FOE, 97.92)]
+              and st_a["agents"][FOE]["health"] == 9000.0 and st_a["agents"][11]["health"] == 9000.0
+              and eps(st_on) == [(FOE, 1, 234), (11, 2, 234)] and len(words(sent_on)) == 2,
+              "--no-area-hexes: Deep Freeze opens ONE hex on its target, hits nobody (no hex hit "
+              "anything before 2026-09-27), the foe beside it untouched -- and --no-spell-areas "
+              "gives the byte-identical stream (the older flag wins); with both on the same press "
+              "hexes and words both", str([(hex(op), v) for op, v in sent_a]))
+        # (h) --no-hex-effect-words: the status-only wire, at the apply and at the close
+        authsrv.HEX_EFFECT_WORDS = False
+        st_h, sent_h, send_h = player_cast(234, [(11, (650.0, 0.0))])
+        sent_h2 = []
+        send_h2 = lambda op, vals, label="", quiet=False: sent_h2.append((op, list(vals)))   # noqa: E731
+        expire(st_h, send_h2)
+        authsrv.HEX_EFFECT_WORDS = True
+        check(not adds(sent_h) and not removes(sent_h2)
+              and status(sent_h) == [(FOE, 0xC00), (11, 0xC00)] and speeds(sent_h) == [(FOE, 97.92), (11, 97.92)]
+              and status(sent_h2) == [(FOE, 0), (11, 0)] and speeds(sent_h2) == [(FOE, 288.0), (11, 288.0)]
+              and len(words(sent_h)) == 2 and eps(st_h) == [] and "aura_refs" not in st_h,
+              "--no-hex-effect-words: no [6] at the apply and no [7] at the close -- the status "
+              "word, the speed and the words alone, this server's bytes until 2026-09-27; no "
+              "reference count is kept", str([(hex(op), v) for op, v in sent_h]))
+        # (i) --no-snare-status-bit
+        authsrv.SNARE_STATUS_BIT = False
+        st_n, sent_n, _s = player_cast(234, [(11, (650.0, 0.0))])
+        authsrv.SNARE_STATUS_BIT = True
+        check(status(sent_n) == [(FOE, 0x800), (11, 0x800)] and speeds(sent_n) == [(FOE, 97.92), (11, 97.92)]
+              and effects.STATUS_SNARED == 0x400
+              and effects.status_word([{"skill": 234, "type_code": 4}]) == 0x800,
+              "--no-snare-status-bit: 0x800 alone with the same 0x0027 x0.34; effects.status_word "
+              "itself never sets 0x400 (it stays a pure function of the episodes' ids and types "
+              "-- the bit is agent_status_word's, from the live snare terms)",
+              str(status(sent_n)))
+        # (j) the source
+        src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+        sargs = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
+        i_std = src.index('elif target and found and found[1] == "standalone":')
+        i_hex = src.index("elif target and _ahex_hit is not None and not _na_fail \\")
+        i_eff = src.index("# AND THE EFFECT, at the same instant as the damage and for the")
+        i_flip = src.index("    if a.no_area_hexes:")
+        i_flip2 = src.index("    if a.no_hex_effect_words:")
+        i_flip3 = src.index("    if a.no_snare_status_bit:")
+        check(i_std < i_hex < i_eff
+              and src.count("burst_player_spell(send, state, conn_id, cast, _ahex_hit[0], rank,") == 1
+              and '_ahex = area_hex(cast["skill_id"])' in src
+              and "        damage = hex_cast_damage(skill_id, _rank)" in src
+              and src.count("elif damage is not None and _spell_how is None and _ahex is not None:") == 1
+              and src.index("elif damage is not None and _spell_how is None and _ahex is not None:")
+              < src.index("elif damage is not None and _spell_how is None:\n")
+              and 'if family == "hex" and hex_target_dead(state, wearer):' in src
+              and "wearers = hex_wearers(state, caster_id, wearer, ahex)" in src
+              and "if (party or ahex is not None) and not PER_WEARER_BATCH_ORDER:" in src
+              and "AREA_HEXES = False" in src[i_flip:i_flip + 160]
+              and "HEX_EFFECT_WORDS = False" in src[i_flip2:i_flip2 + 160]
+              and "SNARE_STATUS_BIT = False" in src[i_flip3:i_flip3 + 160]
+              and "area_over_time_row, tick_instants, visual_instants, area_hex_row)" in src
+              and src.count("    scatter_struck(state, area, struck, now)") == 1
+              and src.count("scatter_struck(") == 2       # the def and _area_strike's call
+              and "word |= effects.STATUS_SNARED" in src
+              and '"--no-area-hexes"' in sargs and '"--no-hex-effect-words"' in sargs
+              and '"--no-snare-status-bit"' in sargs,
+              "the source: the E5's area-hex arm sits BEHIND the standalone one and ahead of the "
+              "effect (test_labelconsumers' index order kept); a body's damage comes from "
+              "hex_cast_damage and its terms arm precedes the one-target arm; apply_effect refuses "
+              "a dead hex target and shares the party grouping; main() flips all three flags; the "
+              "leaf is re-exported; scatter_struck is called from _area_strike alone; the snare "
+              "bit is agent_status_word's; the three flags exist")
+    finally:
+        if had:
+            tables["skills"] = kept
+        else:
+            del tables["skills"]
+        (authsrv._is_attack_skill, authsrv.skill_projectile, authsrv.SPELL_AREAS,
+         authsrv.AREA_HEXES, authsrv.HEX_EFFECT_WORDS, authsrv.SNARE_STATUS_BIT,
+         authsrv.skill_timing, authsrv.skill_cost, authsrv.weapon_satisfies,
+         agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.scatter_struck,
+         authsrv.hex_target_dead) = saved
+
+
 def main():
     section_table()
     section_skills()
@@ -4707,6 +5068,7 @@ def main():
     section_bursts()
     section_aot_tape()
     section_areas_over_time()
+    section_area_hexes()
     return LEDGER.verdict()
 
 

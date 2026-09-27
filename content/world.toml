@@ -2806,6 +2806,77 @@ re-applied Blind is the longer-stands rule apply_condition already keeps (WIKI "
 NO ground effect (no visual id is known). The label row this replaces carried the same two \
 labels; what it lacked was the area and the seconds."""
 
+# THE AREA HEXES -- DESKWORK-D6 step 4 (2026-09-27, studies/weapons/PLAN.md 43). The
+# record's type 4 with target byte 16 (`areatime.area_hex_row`, seven rows). A row here
+# opens ONE HEX PER FOE inside the record's aoe_range of the target's position, each its
+# own episode (authsrv.apply_effect, `--no-area-hexes` reverts to the one target); a
+# `hits_on_cast = true` row also lands its scale as a single-packet burst over the same
+# foes (authsrv.hex_cast_damage) -- the explicit field, because a hex's scale otherwise
+# describes what the effect does while it is up (the rule above skill_damage). NO area
+# hex was ever cast on a live tape (aotjoin P8, 0 of 96 connections): the per-foe shape
+# is RECONSTRUCTION from the single-target hexes that are (d6U-tape-join, 39/39). The
+# snare (`Movement speed decrease`, the flat 66) rides episodemods.move_speed_terms with
+# no code of its own -- Teinai's Prison 1097's 0x0027 x0.34 is OBSERVED 6/6 and is the
+# same arithmetic. Rows for 52, 56, 108 and 204 follow with their mechanisms (B2).
+[skill_effect.234]
+scale_means = "Cold damage"
+bonus_scale_means = "Movement speed decrease"     # the flat 66 in the bonus slot (bit clear, equal): x0.34
+damage_type = 3                # cold ([damage_type.table]), the page's own word
+hits_on_cast = true            # "are struck for 10..85 cold damage, and for 10 seconds ..." -- the hit AND the hex
+[skill_effect.234.provenance]
+source = "wiki"
+page = 'GWW, "Deep Freeze", {{Skill infobox}} + {{Skill progression}}, rev. 2695783, read 2026-09-27'
+verified = """studies/weapons/PLAN.md 43. Wiki: "Hex Spell. You cause a Deep Freeze at target foe's \
+location. All foes in this area are struck for 10...85 cold damage, and for 10 seconds, they \
+move 66% slower."; `aoe = in the area`; var1 `Cold damage` 10->85; the 66 % and the 10 s are the \
+page's literals at every rank. Client (38797): id 234, type_code 4, attribute 11 (Water Magic), \
+profession 6, TARGET BYTE 16, aoe_range 312 (the client's own "in the area", 10 u under the \
+wiki's 322 -- the standing CONTESTED offset), duration 10 / 10, scale 10->85 args = 2 (scale), \
+bonus 66 / 66 with its bit clear (the flat snare, skill_flat_constant's shape: Rush's 25, \
+Faintheartedness's 50), projectile 2077 (none), impact_visual 414. NEVER cast on any live tape \
+(NOT FOUND, aotjoin P8), so: one hex per foe within 312 u of the target's position at the \
+completion, each foe's word ahead of the hexes at the player's E5 and behind them at a body's \
+58 (each path's own order, UNWITNESSED), 0x0027 [foe, base x 0.34] with each apply and the base \
+back at +10 s -- the arithmetic OBSERVED on Teinai's Prison 1097 (6/6, 288 x 0.34 = 97.92). The \
+hex on any body draws [6, foe, 1] + [6, foe, 12] (the Elementalist class, 179 and 1097's; \
+keyed on this record's profession -- RECONSTRUCTION) and 0x00F1 0x800 | 0x400 (the snare bit, \
+RECONSTRUCTION). NOT modelled, said here: whether a foe on the area's edge gets the full 10 s \
+(not stated on GWW); how the 66 stacks with Crippled (CONTESTED, slice 48.3)."""
+
+[skill_effect.211]
+scale_means = "Cold damage"
+bonus_scale_means = "Movement speed decrease"     # the flat 66 in the bonus slot: x0.34, as Deep Freeze's
+damage_type = 3                # cold ([damage_type.table]), the page's own word
+hits_on_cast = true            # "are struck for 20..80 cold damage and move 66% slower for 2..6 seconds"
+[skill_effect.211.provenance]
+source = "wiki"
+page = 'GWW, "Ice Spikes", {{Skill infobox}} + {{Skill progression}}, rev. 2733035, read 2026-09-27'
+verified = """studies/weapons/PLAN.md 43. Wiki: "Hex Spell. Target and adjacent foes are struck for \
+20...80 cold damage and move 66% slower for 2...6 seconds."; `aoe = adjacent`; var1 `Cold damage` \
+20->80, var2 `Duration` 2->6. Client (38797): id 211, type_code 4, attribute 11 (Water Magic), \
+profession 6, TARGET BYTE 16, aoe_range 156 (the client's own adjacent), duration 2->6 args = 3 \
+(duration | scale), scale 20->80, bonus 66 / 66 with its bit clear (the flat snare), projectile \
+2077 (none), impact_visual 2077 (none). NEVER cast on any live tape (NOT FOUND, aotjoin P8): the \
+same shape as Deep Freeze's row above at 156 u, the hex's duration at the caster's rank \
+(effects.resolve_duration: 2 s at rank 0, 5 s at rank 12). The words carry no [20] (no impact \
+visual in the record)."""
+
+[skill_effect.136]
+scale_means = "Attack speed decrease"             # the flat 50 in the scale slot, Faintheartedness 135's shape
+[skill_effect.136.provenance]
+source = "wiki"
+page = 'GWW, "Shadow of Fear", {{Skill infobox}} + {{Skill progression}}, rev. 2695850, read 2026-09-27'
+verified = """studies/weapons/PLAN.md 43. Wiki: "Hex Spell. Target foe and all adjacent foes attack \
+50% slower for the next 5...30 seconds."; `aoe = adjacent`; var1 `Duration` 5->30; the 50 % is \
+the page's literal at every rank. Client (38797): id 136, type_code 4, attribute 7 (Curses), \
+profession 4, TARGET BYTE 16, aoe_range 156, duration 5->30 args = 1 (duration), scale 50 / 50 \
+with its bit clear (the flat constant Faintheartedness 135's row reads the same way: a decrease \
+of p % multiplies the wearer's attack duration by (1 + p/100), GWW "Attack speed"'s own table), \
+bonus 0 / 0, projectile 2077 (none), impact_visual 247. No damage, no snare: ZERO code of its \
+own -- the row and the area predicate are the whole change. NEVER cast on any live tape (NOT \
+FOUND, aotjoin P8). The hex on any body draws [6, foe, 1] alone: no [6, foe, class] id is \
+observed for a Necromancer hex (NOT FOUND; witnessed classes are Elementalist 12, Mesmer 4)."""
+
 # ---------------------------------------------------------------------------
 # THE OUTPOST HENCHMEN -- DESKWORK-D1 step 5 (2026-09-23). Three standing NPCs
 # in our served outpost (Ascalon City, map 148) that the party window offers for

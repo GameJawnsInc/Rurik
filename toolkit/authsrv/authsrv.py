@@ -14987,8 +14987,8 @@ AREA_TICK_PERIOD = 1.0       # s between ticks when the row names no `tick_perio
 AREA_VISUAL_PERIOD = 3.0     # s between re-draws of the ground effect (OBSERVED for duration 10:
 AREA_VISUAL_TAIL = 4.0       # 0 / 3 / 6, none at 9 -- both FITTED to that one duration)
 
-from areatime import (  # noqa: E402  -- read by test_weapons 30 (bare) as authsrv.*
-    area_over_time_row, tick_instants, visual_instants)
+from areatime import (  # noqa: E402  -- read by test_weapons 30 / 31 (bare) as authsrv.*
+    area_over_time_row, tick_instants, visual_instants, area_hex_row)
 
 
 def area_over_time(skill_id, rank):
@@ -15026,6 +15026,156 @@ def area_tick_period(skill_id):
     Shower's 3.0, WIKI) else AREA_TICK_PERIOD (Fire Storm's 1.0, OBSERVED)."""
     v = skill_effect_row(skill_id).get("tick_period")
     return float(v) if v else float(AREA_TICK_PERIOD)
+
+
+# ---- AN AREA HEX: one hex per foe around the target (2026-09-27, studies/weapons
+# 43; DESKWORK-D6 step 4)
+#
+# The record's target byte 16 with type 4 -- the SEVEN rows section 40's banner
+# named and turned away (Panic 52, Soothing Images 56, Suffering 108, Shadow of
+# Fear 136, Rust 204, Ice Spikes 211, Deep Freeze 234; `areatime.area_hex_row`,
+# OBSERVED on the pinned table). NOT ONE was cast on any live tape (0 of 96
+# connections, aotjoin P8), so the per-foe shape is RECONSTRUCTION from the
+# single-target hexes that ARE on tape (d6U-tape-join, 39 of 39 hexes that
+# landed: 179 x28, Teinai's Prison 1097 x6, Empathy 26 x5) and from the
+# multi-foe batches (23 of 23 ascending by agent id):
+#
+#   * the HEX HALF (apply_effect): every living foe of the caster inside the
+#     record's `aoe_range` of the TARGET's position, the target among them at
+#     distance 0, each its OWN episode and buff id (effects.EffectTable), in
+#     ASCENDING agent id, every apply then every 0x0027 (SKILLS-IA's order,
+#     the party shout's grouping reused). Only the player's or a hero's
+#     0x0042 is on the wire (EFFECT_LIST_SELF_ONLY); a foe shows the hex's
+#     words: `[6 GV_ADD_EFFECT, foe, 1]` + `[6, foe, class]` + 0x00F1 with
+#     0x800 (hex_effect_ids, below) -- how the client draws a hex on an
+#     unselected model, OBSERVED 39/39 on the single-target hexes.
+#   * the DAMAGE HALF (hex_cast_damage): a row that says `hits_on_cast`
+#     (Deep Freeze, Ice Spikes: "are struck for 10..85 cold damage, and for 10
+#     seconds they move 66% slower") lands its scale as a single-packet burst
+#     over the same foes through the EXISTING emitters -- burst_player_spell
+#     at the player's E5, burst_body_spell at a body's completion with the
+#     terms computed before its 58 (the refusal contract). A hex with no such
+#     field hits nothing at cast, as every hex did (the line 3818-3823 named
+#     as the one to revisit; `_resolves_at_cast` itself is unchanged). ORDER:
+#     each path's existing one -- the player's words then the hexes, a body's
+#     hexes then the words -- both unwitnessed, said so. Never scatter_struck
+#     (WIKI: Panic and a non-damage area never scatter; a single packet does
+#     not either).
+#   * a SNARE HEX (bonus_scale_means = "Movement speed decrease", the flat 66)
+#     rides episodemods.move_speed_terms with no code of its own: 0x0027
+#     [foe, base x 0.34] at the apply and the base back at the end -- Teinai's
+#     Prison 1097 OBSERVED 6/6 (288 x 0.34 = 97.92), Deep Freeze's exact
+#     arithmetic. And 0x00F1 bit 0x400 while it is live (SNARE_STATUS_BIT).
+#   * a target DEAD at the completion lands NOTHING -- no episode on a corpse
+#     and no words (retail's 179 ended with [59] and nothing landed, 2/2,
+#     body casters; whether the player's E5 carries a 59 there is OPEN).
+#
+# --no-area-hexes reverts: the hex on its ONE target (the reading every run
+# before 2026-09-27 made) and no on-cast damage (no hex hit anything); --no-
+# spell-areas reverts it TOO (it has reverted every target-16 area since
+# section 38; the older flag wins, as for areas over time).
+AREA_HEXES = True
+# THE HEX'S VISUAL WORDS (every hex, not only an area hex). OBSERVED 39/39: at
+# the landing `[6, T, 1]` and `[6, T, class]` between the [20] / the 0x0042 and
+# the 0x00F1; at the end `[7, T, 1] [7, T, class]` behind the 0x0044 and ahead
+# of the 0x00F1 with 0x800 cleared. The `1` is left out when the wearer
+# already carries a live hex holding it (651.779, Empathy live: once), so the
+# ids are REFERENCE-COUNTED per wearer (aura_on / aura_off). The class id is
+# 12 for 179 and 1097 (both Elementalist) and 4 for Empathy 26 (Mesmer); what
+# it is keyed on is RECONSTRUCTION -- keyed HERE on the SKILL record's own
+# profession column (available bare, and the class of the hex rather than of
+# whoever casts it; a W/E's Deep Freeze draws an Elementalist hex), which the
+# three witnesses cannot separate from the caster's primary. A profession
+# with no observed id sends the `1` alone and says so once (NOT FOUND). A row
+# that names its own `auras` (Empathy's [1, 4]) sends those and nothing
+# synthesised -- never both. --no-hex-effect-words reverts: the status bit
+# alone for a hex, a row's `auras` in the pre-D6 slot (behind the 0x00F1,
+# ahead of the 0x0044), no reference count.
+HEX_EFFECT_WORDS = True
+HEX_EFFECT_CLASS = {
+    6: 12,      # Elementalist: Incendiary Bonds 179 (28/28), Teinai's Prison 1097 (6/6)
+    5: 4,       # Mesmer: Empathy 26 (5/5) -- also its row's own `auras`
+}
+HEX_EFFECT_BASE = 1             # every hex, 39/39 (once withheld: already live)
+HEX_TYPE_CODE = 4               # effects.EFFECT_TYPES' hex, areatime.HEX_TYPE
+_HEX_CLASS_UNWITNESSED = set()
+# 0x00F1 bit 0x400 while a movement-speed-DECREASE episode is live on the
+# wearer. RECONSTRUCTION: set with Teinai's Prison's 0x0027 x0.34 and cleared
+# at its end while another hex kept 0x800 up (651.779: 0xC00 -> 0x803), 6/6;
+# effects.py's census knew the bit only from the Isle's 999 and left it
+# unmapped. Crippled (0x0A, 2/2) is not a snare here, as in move_speed_terms.
+# --no-snare-status-bit reverts.
+SNARE_STATUS_BIT = True
+
+
+def area_hex(skill_id):
+    """The radius when this skill's RECORD is an area hex and both flags are
+    on, else None. The predicate is areatime's (type 4, target 16, a radius)."""
+    if not AREA_HEXES or not SPELL_AREAS:
+        return None
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return None
+    return area_hex_row(row)
+
+
+def hex_cast_damage(skill_id, rank):
+    """(amount, "standalone") when this hex's content row says it HITS ON
+    CAST (`hits_on_cast`) and its scale is a standalone damage label, else
+    None. The explicit field is the gate: a hex's scale otherwise describes
+    what the effect does while it is up (the rule above skill_damage, whose
+    `_resolves_at_cast` still refuses every hex). A disabled scale bit raises
+    (skill_scale_value's refusal, deliberate); a missing `skills` row is None,
+    as skill_damage's is."""
+    row = skill_effect_row(skill_id)
+    if not row.get("hits_on_cast"):
+        return None
+    mode = SCALE_MEANS_DAMAGE.get(row.get("scale_means"))
+    if mode != "standalone":
+        return None
+    try:
+        return skill_scale_value(skill_id, rank), mode
+    except agents.content.ContentError:
+        skill_timing(skill_id)          # announces the missing row, once
+        return None
+
+
+def hex_wearers(state, caster_id, target_id, radius):
+    """The living foes of `caster_id` inside `radius` of the TARGET's position,
+    the target itself among them (distance 0), ascending by agent id."""
+    out = set(foes_within(state, caster_id, target_pos(state, target_id), radius))
+    out.add(target_id)
+    return sorted(out)
+
+
+def hex_effect_ids(skill_id):
+    """The [6] ids a hex draws on ANY body: HEX_EFFECT_BASE, then the class id
+    keyed on the skill record's profession where one is observed."""
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return (HEX_EFFECT_BASE,)
+    prof = int(row.get("profession") or 0)
+    cls = HEX_EFFECT_CLASS.get(prof)
+    if cls is None:
+        if skill_id not in _HEX_CLASS_UNWITNESSED:
+            _HEX_CLASS_UNWITNESSED.add(skill_id)
+            print(f"[skills] hex {skill_id} (profession {prof}): no [6, wearer, class] "
+                  f"id is observed for its profession, so the base word goes alone "
+                  f"(NOT FOUND; witnessed: Elementalist 12, Mesmer 4) [studies/weapons 43]",
+                  flush=True)
+        return (HEX_EFFECT_BASE,)
+    return (HEX_EFFECT_BASE, cls)
+
+
+def hex_target_dead(state, agent_id):
+    """A hex's target KNOWN dead: the player's flag, or a body row that says
+    so. An unknown id is not a corpse (a fabricated state names none)."""
+    if agent_id == PLAYER_AGENT_ID:
+        return bool(state.get("player_dead"))
+    row = state.get("agents", {}).get(agent_id)
+    return bool(row and row.get("dead"))
 
 
 # A TARGET THAT DIES UNDER THE CAST DOES NOT STOP AN AREA OVER TIME. WIKI (GWW
@@ -22489,6 +22639,12 @@ def cast_tick(send, state, conn_id):
             # does nothing to the target at all.
             _label_tier_note(cast["skill_id"], conn_id, "the player's")   # SKILLS-LT
             found = skill_damage(cast["skill_id"], rank)
+            # studies/weapons 43 (DESKWORK-D6 step 4): an AREA HEX's radius and
+            # its on-cast hit (Deep Freeze, Ice Spikes: `hits_on_cast`), read
+            # here beside `found` (None for every hex) and landed in the arm
+            # behind the standalone one below; None under either area flag.
+            _ahex = area_hex(cast["skill_id"])
+            _ahex_hit = hex_cast_damage(cast["skill_id"], rank) if _ahex is not None else None
             # WEAPONS-W2c: a RANGED weapon's attack skill RELEASES at its E5
             # and lands a flight later, and its E5 batch carries NO 46 --
             # retail's bow skill shots are 0x00E5, 0x00A4, 0x00E3 in one
@@ -22774,6 +22930,17 @@ def cast_tick(send, state, conn_id):
                         # burst arms' order (RECONSTRUCTION for a damage row)
                         nonattack_knock_down(send, state, cast["skill_id"], target,
                                              conn_id, "the player's")
+            elif target and _ahex_hit is not None and not _na_fail \
+                    and not target_dead(state, target):
+                # studies/weapons 43: an AREA HEX that hits on cast bursts its
+                # scale over every foe inside the radius of the target's
+                # position -- the words and [20]s here, ahead of the hexes
+                # apply_effect opens below (this path's own order; a body's is
+                # the reverse; both UNWITNESSED). A dead target lands nothing
+                # (apply_effect refuses the hex too). Never scatter.
+                burst_player_spell(send, state, conn_id, cast, _ahex_hit[0], rank,
+                                   _ahex)
+                inflicted = None          # each foe took its own inside
             # AND THE EFFECT, at the same instant as the damage and for the
             # same reason: E5 is the cast COMPLETING, so it is when a stance
             # goes on, not when the key was pressed. A skill can do both --
@@ -23101,13 +23268,19 @@ def effect_list_send(send, state, op, values, label):
     A REMOVE also switches the episode's auras off, whoever wears it -- retail
     sent [7, foe, 1] and [7, foe, 4] when the hexed hatchling died."""
     agent_id = values[0]
-    if op == GAME_SMSG_EFFECT_REMOVE:
-        aura_off(send, state, values[1])
+    if op == GAME_SMSG_EFFECT_REMOVE and not HEX_EFFECT_WORDS:
+        aura_off(send, state, values[1])          # the pre-D6 slot: ahead of the 0x0044
     if effect_list_visible(state, agent_id):
         send(op, values, label)
-        return True
-    state["effect_list_suppressed"] = state.get("effect_list_suppressed", 0) + 1
-    return False
+        shown = True
+    else:
+        state["effect_list_suppressed"] = state.get("effect_list_suppressed", 0) + 1
+        shown = False
+    if op == GAME_SMSG_EFFECT_REMOVE and HEX_EFFECT_WORDS:
+        # studies/weapons 43: the [7]s BEHIND the 0x0044 (the observer's copy)
+        # and ahead of the caller's 0x00F1 -- retail's end batch, 39/39 hexes.
+        aura_off(send, state, values[1])
+    return shown
 
 
 def skill_effect_row(skill_id):
@@ -23119,15 +23292,31 @@ def skill_effect_row(skill_id):
 
 def aura_on(send, state, ep, conn_id):
     """Properties 6 for each aura id the skill's content row names (OBSERVED for
-    Empathy: [6, foe, 1], [6, foe, 4], 5 of 5), remembered by buff for the off."""
+    Empathy: [6, foe, 1], [6, foe, 4], 5 of 5), remembered by buff for the off.
+
+    studies/weapons 43 (HEX_EFFECT_WORDS): a HEX whose row names no `auras`
+    draws hex_effect_ids -- `1` and its profession's class (OBSERVED 39/39 on
+    the single-target hexes); and every id is REFERENCE-COUNTED per wearer,
+    so a second live hex holding the `1` sends no second [6, wearer, 1]
+    (651.779, once) and the [7] goes out when the last holder closes.
+    """
     ids = skill_effect_row(ep["skill"]).get("auras") or ()
+    if not ids and HEX_EFFECT_WORDS and int(ep.get("type_code", 0)) == HEX_TYPE_CODE:
+        ids = hex_effect_ids(ep["skill"])
     if not ids:
         return
+    ids = tuple(int(a) for a in ids)
+    refs = state.setdefault("aura_refs", {}) if HEX_EFFECT_WORDS else None
     for aura in ids:
+        if refs is not None:
+            key = (ep["agent"], aura)
+            refs[key] = refs.get(key, 0) + 1
+            if refs[key] > 1:
+                continue                    # a live episode already draws it
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-             [agents.PROP_AURA_ON, ep["agent"], int(aura)],
+             [agents.PROP_AURA_ON, ep["agent"], aura],
              f"aura {aura} on agent {ep['agent']} (skill {ep['skill']})")
-    state.setdefault("auras_by_buff", {})[ep["buff"]] = (ep["agent"], tuple(int(a) for a in ids))
+    state.setdefault("auras_by_buff", {})[ep["buff"]] = (ep["agent"], ids)
 
 
 def aura_off(send, state, buff):
@@ -23135,7 +23324,15 @@ def aura_off(send, state, buff):
     if not held:
         return
     agent_id, ids = held
+    refs = state.get("aura_refs") if HEX_EFFECT_WORDS else None
     for aura in ids:
+        if refs is not None:
+            key = (agent_id, int(aura))
+            left = refs.get(key, 0) - 1
+            if left > 0:
+                refs[key] = left            # another live episode still draws it
+                continue
+            refs.pop(key, None)
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.PROP_AURA_OFF, agent_id, int(aura)],
              f"aura {aura} off agent {agent_id}")
@@ -23375,6 +23572,24 @@ def apply_effect(send, state, caster_id, skill_id, rank, target_id, conn_id):
         return None
 
     wearer = effects.effect_recipient(row, caster_id, target_id)
+    if family == "hex" and hex_target_dead(state, wearer):
+        # studies/weapons 43 (DESKWORK-D6 step 4): a hex completing on a DEAD
+        # target lands nothing -- no episode on a corpse. Until 2026-09-27 the
+        # player's path opened one (nothing checked ahead of this call).
+        # Retail's body casts of 179 whose target died mid-cast ended with
+        # [59 GV_SKILL_STOPPED] and landed nothing, 2/2; the body path's
+        # dead-target exit (land_skill) never reaches here.
+        print(f"[c{conn_id}] {family} {skill_id} by agent {caster_id}: its target "
+              f"(agent {wearer}) is dead -- nothing lands, no episode on a corpse "
+              f"[studies/weapons 43]", flush=True)
+        return None
+    # studies/weapons 43 (DESKWORK-D6 step 4): an AREA HEX opens one episode
+    # per living foe inside its radius of the TARGET's position (hex_wearers,
+    # the target among them), through the party shout's grouping below --
+    # every apply ascending, then every 0x0027 ascending. RECONSTRUCTION (no
+    # area hex on any tape); the per-foe shape is the single-target hex's,
+    # OBSERVED 39/39. A byte-5 hex stays one wearer, as before.
+    ahex = area_hex(skill_id) if family == "hex" and wearer != caster_id else None
     # DESKWORK-D5 step 5: A PARTY-WIDE SHOUT reaches every living ally inside
     # the skill's own radius, each with its OWN episode (its own buff id, its
     # own arithmetic, its own status / speed / attribute words). OBSERVED on
@@ -23386,7 +23601,17 @@ def apply_effect(send, state, caster_id, skill_id, rank, target_id, conn_id):
     # henchman gets the episode and the words. --no-party-wide-shouts is the
     # caster-alone arm.
     party = PARTY_WIDE_SHOUTS and erow.get("party_wide") == "earshot"
-    if party and not PER_WEARER_BATCH_ORDER:
+    if ahex is not None:
+        wearers = hex_wearers(state, caster_id, wearer, ahex)
+        print(f"[c{conn_id}] [DESKWORK-D6] hex {skill_id} by agent {caster_id}: an "
+              f"area hex over {len(wearers)} foe(s) within {ahex:.0f} u of agent "
+              f"{wearer} -- {wearers} [studies/weapons 43]", flush=True)
+    elif party:
+        wearers = sorted({wearer, *shout_wearers(state, caster_id, row, wearer,
+                                                 conn_id)})
+    else:
+        wearers = [wearer]
+    if (party or ahex is not None) and not PER_WEARER_BATCH_ORDER:
         # SKILLS-IA (2026-09-25, skills 56.9): RETAIL'S BATCH ORDER -- every
         # 0x0042 (each with its own cure and status word), THEN every 0x0027,
         # each run in ASCENDING AGENT ID. OBSERVED: 43 of 43 apply+speed
@@ -23406,9 +23631,8 @@ def apply_effect(send, state, caster_id, skill_id, rank, target_id, conn_id):
         # retail's 191.52 / 383.04 pair sits behind the E3 too, slice 48.2)
         # and the words are flushed here, once per agent, ascending.
         # --per-wearer-batch-order is the interleave this server sent until
-        # today, the caster's wearer first.
-        wearers = sorted({wearer, *shout_wearers(state, caster_id, row, wearer,
-                                                 conn_id)})
+        # today, the caster's wearer first. (The `wearers` list is computed
+        # above since 2026-09-27, shared with the area hex -- studies/weapons 43.)
         state["speed_deferred"] = []
         eps = {}
         try:
@@ -23422,9 +23646,9 @@ def apply_effect(send, state, caster_id, skill_id, rank, target_id, conn_id):
         return eps.get(wearer)
     ep = _apply_effect_on(send, state, caster_id, skill_id, rank, wearer, conn_id,
                           row, erow, family, duration)
-    if party:
-        for ally in shout_wearers(state, caster_id, row, wearer, conn_id):
-            _apply_effect_on(send, state, caster_id, skill_id, rank, ally, conn_id,
+    for other in wearers:
+        if other != wearer:                  # the interleave arm: the primary first
+            _apply_effect_on(send, state, caster_id, skill_id, rank, other, conn_id,
                              row, erow, family, duration)
     return ep
 
@@ -23546,10 +23770,15 @@ def _apply_effect_on(send, state, caster_id, skill_id, rank, wearer, conn_id,
     # enchantment 0x80, everything else on this path moves nothing and sends
     # nothing (effects.status_word). THEN THE SPEED BASE (SLICE-F48), which is
     # where retail puts it: [0x0042 160, 0x00F1 0x80, 0x0027 383.04].
+    if HEX_EFFECT_WORDS:
+        # studies/weapons 43: the [6]s sit between the 0x0042 and the 0x00F1
+        # (OBSERVED 39/39 hexes; Empathy's own [6, foe, 1], [6, foe, 4] too)
+        aura_on(send, state, ep, conn_id)
     push_status(send, state, ep["agent"], conn_id)
     push_speed(send, state, ep["agent"], conn_id)
     push_attributes(send, state, ep["agent"], conn_id)
-    aura_on(send, state, ep, conn_id)
+    if not HEX_EFFECT_WORDS:
+        aura_on(send, state, ep, conn_id)         # the pre-D6 slot, behind the 0x00F1
     return ep
 
 
@@ -24123,7 +24352,14 @@ def agent_status_word(state, agent_id):
     else:
         agent = state.get("agents", {}).get(agent_id)
         dead = bool(agent and agent.get("dead"))
-    return effects.status_word(live, dead)
+    word = effects.status_word(live, dead)
+    if SNARE_STATUS_BIT and live and move_speed_terms(state, agent_id)[1]:
+        # studies/weapons 43: 0x400 while a movement-speed-DECREASE episode
+        # is live (Teinai's Prison 6/6, RECONSTRUCTION: "snared"); Crippled
+        # is not one (its 0x0A stands). Beside effects.status_word, which
+        # stays a pure function of the episodes (test_mechanics 17 pins it).
+        word |= effects.STATUS_SNARED
+    return word
 
 
 def push_status(send, state, agent_id, conn_id):
@@ -24930,7 +25166,8 @@ def resolve_taker_conversion(send, state, conversion, conn_id):
 # `authsrv.move_speed_percent` reads in test_castcycle.py and test_mechanics.py
 # bound in this module.
 from episodemods import (attack_interval_factor, move_speed_percent,  # noqa: F401,E402
-                         move_speed_factor)   # push_speed / speed_tick (SLICE-F48)
+                         move_speed_factor,   # push_speed / speed_tick (SLICE-F48)
+                         move_speed_terms)    # agent_status_word's snare bit (weapons 43)
 
 
 def swing_preparation_bonus(state, weapon_row, agent_id):
@@ -32595,6 +32832,14 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # apply_effect as a consequence; no skill on this bar both hexes and
     # damages, so nothing today can observe the reordering.)
     damage = skill_damage(skill_id, _rank)
+    # studies/weapons 43 (DESKWORK-D6 step 4): an AREA HEX that hits on cast
+    # (Deep Freeze, Ice Spikes) -- its scale is the burst's amount, every
+    # foe's terms computed below before the 58, the words behind the hexes
+    # through burst_body_spell's exit. None for every other hex, and under
+    # either area flag (the one-target hex, no hit -- the pre-D6 bytes).
+    _ahex = area_hex(skill_id) if _tid != agent_id else None
+    if damage is None and _ahex is not None:
+        damage = hex_cast_damage(skill_id, _rank)
     if NPC_ATTACK_SKILL_SWINGS and _is_attack_skill(skill_id):
         # SLICE-F24: THE STRIKE IS A WEAPON SWING PLUS THE SKILL'S BONUS --
         # [46, npc, 0] then the damage (retail's close for the family, 124
@@ -32745,6 +32990,15 @@ def land_skill(send, state, agent_id, agent, conn_id):
                 state, agent, skill_id, damage[0], _foe, _fbody)))
     elif damage is not None and _spell_how is None and _aot is not None:
         pass                        # studies/weapons 42: the terms are each tick's own
+    elif damage is not None and _spell_how is None and _ahex is not None:
+        # studies/weapons 43: the area hex's hit -- the same terms as a burst,
+        # every foe inside the radius of the TARGET's position, before the 58
+        _table = state.get("agents", {})
+        _burst_terms = []
+        for _foe in foes_within(state, agent_id, target_pos(state, _tid), _ahex):
+            _fbody = _foe != PLAYER_AGENT_ID and _foe in _table
+            _burst_terms.append((_foe, _fbody, body_spell_terms(
+                state, agent, skill_id, damage[0], _foe, _fbody)))
     elif damage is not None and _spell_how is None:
         dealt, conversion, frac, spell_ar = body_spell_terms(
             state, agent, skill_id, damage[0], _tid, _tbody)
@@ -42937,6 +43191,25 @@ def main():
               "made -- except that the word lands on a foe hit inside the last "
               "ATTACK_INTERVAL too (the single word is restored, not the swing gate's "
               "swallow of a spell) [studies/weapons 42 revert]", flush=True)
+    if a.no_area_hexes:
+        global AREA_HEXES
+        AREA_HEXES = False
+        print("HEXES: --no-area-hexes -- an area hex (Deep Freeze, Ice Spikes, Shadow "
+              "of Fear: the record's type 4 with target byte 16) lands on its ONE "
+              "target and hits nothing at cast, the reading every run before "
+              "2026-09-27 made [studies/weapons 43 revert]", flush=True)
+    if a.no_hex_effect_words:
+        global HEX_EFFECT_WORDS
+        HEX_EFFECT_WORDS = False
+        print("HEXES: --no-hex-effect-words -- a hex sends no [6, wearer, 1] / [6, "
+              "wearer, class] at its apply and no [7]s at its close (the status bit "
+              "alone; a row's own `auras` in the pre-D6 slot, unrefcounted), this "
+              "server's bytes until 2026-09-27 [studies/weapons 43 revert]", flush=True)
+    if a.no_snare_status_bit:
+        global SNARE_STATUS_BIT
+        SNARE_STATUS_BIT = False
+        print("HEXES: --no-snare-status-bit -- 0x00F1 bit 0x400 is never set for a "
+              "movement-speed-decrease episode [studies/weapons 43 revert]", flush=True)
     if a.no_spell_projectiles:
         global SPELL_PROJECTILES
         SPELL_PROJECTILES = False

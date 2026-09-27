@@ -2783,3 +2783,99 @@ and the walk frames (the harness's own verdict is PASS on all three; no assert, 
 - **The void first launch** (`20260926T213904`): the player died to the fixture Hatcher's own
   bar (skill 312) before the cast; `--enemy-hit` governs swings only, so a run that wants the
   player alive against a group passes `--no-enemy-skills`. Recorded so nobody re-derives it.
+
+## 43. Area hexes -- 2026-09-27: one hex per foe around the target (DESKWORK-D6 step 4, B1)
+
+**What retail's wire says** (OBSERVED, the D6 tape lane's join `d6U-tape-join.py` over 96 live
+connections; the scratch join is not committed -- B3 ports it as `hexjoin.py`). No area hex was
+ever cast on a live tape (0 of 96, aotjoin P8), so what is on tape is the SINGLE-TARGET hex, 39 of
+39 that landed (Incendiary Bonds 179 ×28, Teinai's Prison 1097 ×6, Empathy 26 ×5): in the caster's
+completion batch `[58, c, 0]` → (`[21, c, vis]`, 179 only) → `[20, T, c, visual]` → **`[6
+GV_ADD_EFFECT, T, 1]` + `[6, T, class]`** → `0x00F1 [T, word | 0x800]`; the `0x0042` only on the
+observer's / a hero's copy (EFFECT_LIST_SELF_ONLY, 313 = 289 + 24, 0 on any other body), between
+the `[20]` and the `[6]`s. The `[6, T, 1]` is withheld once, when the target already carries a live
+hex holding it (651.779, Empathy live). The class id is 12 for the two Elementalist hexes and 4 for
+Mesmer's Empathy. The end is `[7, T, 1] [7, T, class]` → `0x00F1` with 0x800 cleared, the `0x0044`
+first on the observer. A snare hex (Teinai's Prison, −66 %) carries `0x0027 [T, 288 × 0.34 =
+97.92]` in the apply batch and `0x0027 [T, 288.0]` in the end batch, 6/6, with `0x00F1` bit 0x400
+set alongside 0x800 and cleared at the snare's end while another hex kept 0x800 up (0xC00 →
+0x803). Several foes in one batch go out in ASCENDING agent id, 23/23. A hex whose target died
+mid-cast ended with `[59 GV_SKILL_STOPPED]` at its scheduled completion and landed nothing (179,
+2/2, body casters).
+
+**What the server now does** (`authsrv.py` section 43, the banner beside `area_tick_period`; the
+leaf `areatime.area_hex_row`). A record row with target byte 16, type 4 and an `aoe_range` is an
+AREA HEX -- exactly the SEVEN of §40's banner (52, 56, 108, 136, 204, 211, 234; OBSERVED on the
+pinned table, locked vault-only), a predicate of its own beside `spell_burst` and
+`area_over_time_row` (neither widened, locked). `apply_effect` opens ONE EPISODE PER LIVING FOE of
+the caster inside the radius of the TARGET's position, the target among them (`hex_wearers`;
+RECONSTRUCTION -- the per-foe shape is the single-target hex's), each with its own buff id, through
+the party shout's grouping: every apply ascending, then every `0x0027` ascending (SKILLS-IA's
+order; `--per-wearer-batch-order` is the interleave arm here too). Both cast sites reach it as
+they always did (`cast_tick`'s E5, `land_skill`'s completion). A byte-5 hex is one wearer, as
+before. **The hex's visual words** (every hex, not only an area hex; `HEX_EFFECT_WORDS`): a hex
+episode draws `[6, wearer, 1]` and `[6, wearer, class]` between its `0x0042` and its `0x00F1`,
+reference-counted per wearer (a second live hex holding the `1` sends no second `[6, wearer, 1]`;
+the `[7]` goes when the last holder closes, behind the `0x0044` and ahead of the `0x00F1`) --
+`aura_on` / `aura_off`, which already carried Empathy's row `auras = [1, 4]` (a row naming its own
+sends those and nothing synthesised). The class is `HEX_EFFECT_CLASS`, keyed on the SKILL record's
+profession column (6 Elementalist → 12, 5 Mesmer → 4): a **deviation from the spec's "the
+caster's profession"** -- the three witnesses cannot separate the two (each caster's primary was
+the skill's profession), the record's column is available on a bare machine, and the class is
+plausibly the hex's rather than whoever casts it (a W/E's Deep Freeze); RECONSTRUCTION either way,
+and a profession with no observed id sends the `1` alone, printed once (NOT FOUND: Shadow of Fear,
+a Necromancer hex). **The snare** (`bonus_scale_means = "Movement speed decrease"`, the flat 66 in
+the bit-clear bonus slot) rides `episodemods.move_speed_terms` with no code of its own: `0x0027
+[foe, base × 0.34]` with each apply and the base back at the end -- Teinai's Prison's exact
+arithmetic, OBSERVED 6/6 -- and `0x00F1` bit 0x400 while it is live (`effects.STATUS_SNARED`,
+RECONSTRUCTION "snared", applied by `agent_status_word` from the live snare terms so
+`effects.status_word` stays a pure function of the episodes; Crippled is not one, its 0x0A
+stands). **The damage half** (`hex_cast_damage`): a row that says `hits_on_cast = true` with a
+standalone damage label lands its scale as a single-packet burst over the same foes through the
+EXISTING emitters -- `burst_player_spell` at the E5 (armour-free, the standing `hit_enemy` exact
+gap), `burst_body_spell` at a body's completion with every foe's `body_spell_terms` computed before
+its 58 (the refusal contract; the taker's own armour) -- so `test_guards`' caller pins are
+untouched. The explicit field is the gate: a hex's scale otherwise describes what the effect does
+while it is up (the rule above `skill_damage`, whose `_resolves_at_cast` still refuses every hex --
+that is the line 3818-3823 named as the one to revisit, revisited by a field rather than by
+widening). ORDER: the player's path lands the words then the hexes, a body's the hexes then the
+words -- each path's existing order, both UNWITNESSED. An area hex never reaches `scatter_struck`
+(WIKI: Panic and a non-damage area never scatter; a single packet does not either; locked). **A
+target dead at the completion lands nothing** -- `apply_effect` refuses a hex (single or area) on
+a known corpse and the burst is refused with it; until today the player's path opened the episode
+on the corpse (the D6 server lane's finding). Whether the player's E5 carries a `[59]` there, as
+retail's body casters did, is OPEN and unchanged.
+
+**Rows** (`content/world.toml`, hand, WIKI-provenanced with the revision ids): Deep Freeze 234
+(`Cold damage` 10..85, the snare, `hits_on_cast`, impact 414, 312 u, 10 s flat), Ice Spikes 211
+(`Cold damage` 20..80, the snare, `hits_on_cast`, 156 u, 2..6 s), Shadow of Fear 136 (`Attack
+speed decrease`, the flat 50 -- Faintheartedness 135's reader, ZERO code; 156 u, 5..30 s). Rows
+for 52, 56, 108 and 204 come with their mechanisms (B2: the hex pips, the adrenaline block, Rust's
+explicit slots and the signet factor, Panic's interrupt chain).
+
+**Flags.** `--no-area-hexes` (the one-target hex and no on-cast hit -- the reading every run
+before today made; `--no-spell-areas` reverts it too, the older flag winning as for §42),
+`--no-hex-effect-words` (the status bit alone; a row's own `auras` in the pre-D6 slot, unrefcounted),
+`--no-snare-status-bit`.
+
+**Tests** (`test_weapons.py` §31, floor 299 → 309 bare, MEASURED; a vault run gives 336): the
+predicate on injected rows and, vault-only, the seven against the pinned table; Deep Freeze through
+the real press and E5 over a cluster (three inside, one at 400 u): the words and [20]s per foe in id
+order, then per wearer its own episode as `[6, w, 1]`, `[6, w, 12]`, `0x00F1 0xC00`, no `0x0042`
+for a foe, then every `0x0027 97.92` ascending; the expiry's `[7]`s, `0x00F1 0` and `0x0027 288`
+through the real `effect_tick`; the reference count (Shadow of Fear's `1` alone with each wearer's
+interval × 1.5, then Deep Freeze on the same pair adding only the `12`, the first expiry sending no
+`[7]`); a hostile's Ice Spikes on the player and a hero through the real `land_skill` (the player's
+`0x0042` at 5.0 s / rank 12, the hero's, the two `0x0027`s, THEN `[10, me, 211]` and the two
+words); the dead target with `hex_target_dead` stubbed out as the known-bad arm (the hex on the
+corpse); the three reverts, `--no-area-hexes` byte-identical to `--no-spell-areas`; scatter never
+called; the source locks. `test_mechanics` 29 (Empathy's auras), `test_shouts`, `test_instantannounce`,
+`test_labelconsumers`, `test_skilldamage`, `test_effects`, `test_agentlife`, `test_guards`, `test_content`,
+`test_srclint`, `test_provlint` green on the same tree.
+
+**Left.** The wire ORDER of an area hex with damage (the player's words-then-hexes vs a body's
+hexes-then-words; one `[20]` per foe vs one) -- a loopback run can show what our client draws, only
+a live cast what retail sends; the class id's key (profession of the skill vs the caster, vs the
+attribute); whether a foe on the area's edge gets the full duration (not on GWW); how the 66 stacks
+with Crippled (CONTESTED, slice 48.3); the `[59]` on the player's E5 for a dead target; B2's four
+rows; B3's 179 / 185; B4's Cracked Armor / Dazed.

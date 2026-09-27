@@ -326,7 +326,15 @@ MAX_PIPS = 10.0
 #   (none)  SHOUTS: 364's 47 applies carry no status message at all (46 of
 #           47 have no 0x00F1 in the batch; the one that does sets nothing).
 #   0x0400  set by the Isle's 999 (1 alone, 1 with 0x800); 999's identity is
-#           not in the player corpus and the bit is NOT mapped here.
+#           not in the player corpus and the bit is NOT mapped in status_word.
+#           2026-09-27 (studies/weapons 43): Teinai's Prison 1097, a -66 %
+#           snare hex, sets it with its 0x0027 x0.34 and clears it at its
+#           end while another hex keeps 0x800 up (0xC00 -> 0x803), 6/6 --
+#           STATUS_SNARED below, RECONSTRUCTION ("snared"), applied by
+#           authsrv.agent_status_word from the live movement-speed-decrease
+#           episodes, NOT here: this function stays a pure function of the
+#           episodes' ids and types (test_mechanics 17), and which episode
+#           snares is a content-row question (episodemods.move_speed_terms).
 #
 # What the bits MEAN to the client is the health-bar coloration table on GWW
 # "Health" (hexed, poison/disease, bleeding, deep wound) -- which is exactly
@@ -342,6 +350,7 @@ STATUS_DEAD = 0x0010            # agents.EFFECT_DEAD, the bit this file did not 
 STATUS_DEEP_WOUND = 0x0020
 STATUS_POISONED = 0x0040        # Disease and Poison share it
 STATUS_ENCHANTED = 0x0080
+STATUS_SNARED = 0x0400          # RECONSTRUCTION (1097, 6/6); set by authsrv.agent_status_word
 STATUS_HEXED = 0x0800
 CONDITION_STATUS_BITS = {
     478: STATUS_BLEEDING, 481: STATUS_CRIPPLED, 482: STATUS_DEEP_WOUND,

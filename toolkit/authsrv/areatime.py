@@ -36,14 +36,21 @@ these three names at its section-42 site.
     any other duration this is RECONSTRUCTION (d = 9 gives [0, 3]; d = 5 gives
     [0]), said here and at the call site.
 
-Standard library only, and no import of the server -- test_weapons section 30
-drives all three with no vault.
+  * `area_hex_row(row)` -- the AREA HEX's shape (DESKWORK-D6 step 4, weapons
+    43): target byte 16, a Hex (type 4), an `aoe_range` above 0. OBSERVED on
+    the pinned skills table: exactly the SEVEN rows aotjoin.classify names
+    (52, 56, 108, 136, 204, 211, 234). The radius is the record's own; the
+    duration and every per-wearer number are the server's readers'.
+
+Standard library only, and no import of the server -- test_weapons sections 30
+and 31 drive all four with no vault.
 """
 import math
 
 NO_PROJECTILE = (0, 2077)       # the record's "the weapon's own" values (authsrv SKILL_NO_PROJECTILE)
 AREA_TARGET = 16                # the record's target byte for "target foe and the foes around it"
 SPELL_TYPE = 5                  # the record's type byte for a Spell
+HEX_TYPE = 4                    # the record's type byte for a Hex Spell (effects.EFFECT_TYPES)
 
 
 def area_over_time_row(row, projectile_none=NO_PROJECTILE):
@@ -69,6 +76,25 @@ def area_over_time_row(row, projectile_none=NO_PROJECTILE):
     if max(lo, hi) <= 0 or radius <= 0.0:
         return None
     return radius, float(max(lo, hi))
+
+
+def area_hex_row(row):
+    """The radius when the RECORD row is an AREA HEX -- target 16, type 4, an
+    `aoe_range` above 0 -- else None. Pure: a dict in, a float or None out.
+    The duration is NOT read here (a hex's is `effects.resolve_duration`'s,
+    per wearer at the caster's rank), and a projectile is not refused: no
+    hex row carries one, and a hex that did would still be a hex."""
+    if not isinstance(row, dict):
+        return None
+    try:
+        if int(row.get("target", -1)) != AREA_TARGET:
+            return None
+        if int(row.get("type_code", -1)) != HEX_TYPE:
+            return None
+        radius = float(row.get("aoe_range", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        return None
+    return radius if radius > 0.0 else None
 
 
 def tick_instants(t0, duration, period=1.0):
