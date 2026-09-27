@@ -28,6 +28,23 @@ move back.
 
 ---
 
+### 0x00C1's second field is the auto-selection, and an attack skill follows it -- 2026-09-27 -- **with an ally manually selected, the client's attack skill names the foe in TARGET_SELECT's field 2 (4 of 4), not the nearest foe (1 of 1 discriminating); with no foe there it names the ally (the party-target gate's refusal, now exercised by a real client press). `overrides.json`'s "never field 2" is qualified for 0x0027; no server change**
+
+**This answers the "Open" line of "The attack-target gate on the client"**, below: the field is the auto-selection (the client's own `AvSelect.cpp` names it -- `schema/overrides.json` had it all along, and that entry's run should have started there), and the press follows it.
+
+**The runs** (loopback, clicks on the skill bar's icon so the client picks the target; `--party slice`, practice targets, scored from the gamesrv capture with the player's last reported position at each press):
+- `20260927T134031` -- one kill, the hero clicked, no field 2 after the revive (`--party-no-fight`): the press named **the hero**, `[322, 0, 200, 0]`, and the party-target gate answered #1934 with "Invalid attack target." on screen.
+- `20260927T134450`, `20260927T134632` -- two foes, 250 u and 450 u from spawn on opposite sides: the entry auto-selection took the nearer (or in-front) one both times, a hero click sent `[200, that foe]`, and the press named it. Not discriminating (field 2 was also the nearest); a server-side stance press ordering the hero onto the other foe did NOT change field 2.
+- **`20260927T134814`** -- as T134632, then a 1.5 s backpedal: the client sent nothing (field 2 stayed 11), and the press named **11 at 531 u with 10 at 169 u**. Pre-registered as the discriminating case, with a void condition on the reported position; not void.
+
+**Retail agrees, and only for attack skills.** Over the whole live corpus (1,473 `0x00C1`), the next target-bearing message names field 1 for `0x0026` 369/369 and `0x0039` 95/95; `0x0027` names field 2 in 2 of 159, field 1 a hostile both times (why the manual hostile lost is UNVERIFIED). `overrides.json`'s TARGET_SELECT row ("53 of 53 ... never field 2", measured on 75 sends) is qualified in place.
+
+**Edited** (comments and docs): `authsrv.py` -- the TARGET_SELECT arm (field 2 occurs, and what follows it), the party-target banner (our client CAN name a party body; retail's server answer stays NOT OBSERVED), the `ATTACK_TARGET_GATE` banner; `schema/overrides.json`; studies/skills 38.5 (the table).
+
+**Tests:** test_cmsgnames, test_codec, test_castcycle, test_agentlife, test_srclint and the three doc linters.
+
+---
+
 ### A creature Warrior's +20 skips a preparation's own damage too -- 2026-09-27 -- **Kindle Arrows' second word, Ignite Arrows' splash and a party body's preparation word now meet a spawned Warrior's rating typed by the PREPARATION's damage (fire), not the arrow's (piercing): the arrow's word is unchanged, the fire word meets 3 x level; `--untyped-creature-armour` reverts all three halves**
 
 **Why.** This morning's weapon half (below) typed the arrow by its 587 and left the preparation's own word on the arrow's number -- `PLAN.md` §8.1 named it. A preparation's damage is its own ("affected by armor rating and dealt separately", WEAPONS-W2e), of its own type: Kindle Arrows' row names fire (5); Ignite Arrows' row names none -- its ARROW keeps the weapon's kind (GWW: not converted to fire) -- but its explosion is "Fire damage" by its label, and `combatmath.spell_damage_type_of` reads the label.
