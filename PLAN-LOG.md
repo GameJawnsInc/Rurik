@@ -28,6 +28,20 @@ move back.
 
 ---
 
+### The ally fallback is a 200 u radius, any direction -- 2026-09-27 -- **with no foe in the cone the client auto-selects an ally within 200 u of the player: 199 u taken, 200 u not; 0°, 90° and 180° all taken inside it; 866 u on screen not. No code change**
+
+**The question** (the revive-cone entry below, "Open: the ally fallback's own rule"). What was known: the hero was picked at its formation slot (~110 u, 90° off the view axis -- outside the foe cone), so the fallback is not the foe rule.
+
+**Method.** World-entry selection with NO foe, one hero held where it spawned (`--no-hero-follow`, `--hero-body-offset=DX,0`), the camera read live and identical to every cone run. **The first hero's slot index is 0**, so `--hero-body-offset`'s `DY` (multiplied by the slot) does nothing for it -- one designed lateral probe (`0,-400`) put the hero ON the player instead and is kept only as the 0 u point; every other probe runs along x. Create positions decoded from each capture with the repo's codec; no hero move order in any run.
+
+**Results** (`20260927T16xxxx`, from the player): picked at 0 (`1554`), 150 (`2337`), 160 (`2501`), 180 (`2642`), 190 (`2827`), **199 (`3047`)** ahead and **150 behind (`3231`)**; not at **200 (`2228`)**, 250 (`2100`), 400 ahead (`1843`), 400 behind (`1944`, 10 u from the camera), 600 behind (`1349`) and 866 ahead on screen (`1708`). Each probe's prediction was stated before its launch; the adjacent range (156 u) was named as the candidate and refuted by 160.
+
+**OBSERVED, n=1 per point: the fallback takes an ally with `d < 200` from the PLAYER, no direction term, no view term.** A foe in the cone outranks it (`20260927T150135`); with neither, nothing is selected. **So the client's auto-selection, as measured: a foe within 1,250 u and 60° of the view axis (occlusion ignored), else an ally within 200 u, else nothing** -- at map load, after the selected foe dies, and on a revive. Open: which ally among several inside 200 u (one hero here), and non-party allies (retail's agent 58 was an allied NPC, so very likely yes).
+
+**Edited:** studies/skills 38.5. **Tests:** doc linters.
+
+---
+
 ### The revive re-acquisition uses the same cone -- 2026-09-27 -- **four probes 5° / 50 u either side of the entry cone's edges, all four as predicted: 55° and 1,199.58 u re-acquired, 65° and 1,300.35 u not. No code change**
 
 **The question** (the range entry below, "Open: whether the revive re-acquisition shares both numbers"). The geometry has to stay fixed from the kill through the revive, so each foe was killed from where the player spawned: a bow Power Shot (`--player-weapon starter_bow --skills 394 --enemy-health 3`, `C` first to select it), then no input until after the revive. The character turns to shoot; the camera does not (read twice with `fovread.py`, at entry and around the revive: identical, the axis +x). Placements checked offline with the server's own `enemy_spots`, all exact. Void conditions, pre-registered: no kill or revive, any player movement report, a server approach -- none occurred.

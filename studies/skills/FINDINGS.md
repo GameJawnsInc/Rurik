@@ -5262,6 +5262,36 @@ matches the entry cone to ±5° and ±50 u (OBSERVED, n=1 per point), and in eac
 run the two decisions agreed. The finer edges (60° to 0.1°, 1,250 u to
 0.035 u) were measured at entry only.
 
+**The ally fallback is a plain radius: an ally within 200 u of the player, any
+direction.** With no foe in the cone, the entry selection falls to an ally; its
+rule measured with one hero held in place (`--no-hero-follow`,
+`--hero-body-offset=DX,0` — the first hero's slot is 0, so `DY` does nothing
+for it, which voided one designed probe), no foe at all, the camera identical
+to every run above. Positions from the player; create positions decoded from
+the capture:
+
+| hero at | harness run | picked |
+|---|---|---|
+| 0 u (on the player) | `20260927T161554` | yes |
+| ~110 u, 90° (the formation slot, reached ~0.6 s before the pick) | `T144426`, `T144243`, `T151913` | yes |
+| 150 u **behind**, 180° | `20260927T163231` | yes |
+| 150, 160, 180, 190 u ahead | `T162337`, `T162501`, `T162642`, `T162827` | yes |
+| **199 u** ahead | `20260927T163047` | **yes** |
+| **200 u** ahead | `20260927T162228` | **no** |
+| 250, 400 u ahead | `T162100`, `T161843` | no |
+| 400, 600 u behind | `T161944`, `T161349` | no |
+| 866 u ahead, on screen | `20260927T161708` | no |
+
+OBSERVED, n=1 per point: **`d < 200`** (the edge in (199, 200]), measured
+from the PLAYER — the −400 hero stood 10 u from the camera and was not taken —
+with **no direction term** (0°, 90°, 180° all taken inside it) and no view
+term (866 u on screen was not). Excluded on the way: the adjacent range (156 u
+— 160 was taken). **A foe in the cone outranks an ally in the radius**
+(`20260927T150135` took the foe with the hero at its slot). With neither,
+nothing is selected. Open: which ally when several are inside 200 u (one hero
+here), and whether a non-party ally counts — retail's witness, agent 58, was an
+allied NPC carrying `play`, so it very likely does.
+
 **And the schema route had the right fact with the wrong conclusion.** It found
 that 226 and 227 share a dispatch and concluded `0x00E2` was therefore
 disqualified as a carrier of "refused". That sharing is exactly *why* the
