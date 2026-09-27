@@ -5122,6 +5122,34 @@ OBSERVED (loopback, n as stated):
   (field 1 not attackable is one reading). `overrides.json`'s "never field 2"
   was measured on 75 sends and is now qualified in place.
 
+**What gates the re-acquisition of a revived foe — the CAMERA VIEW, not the
+distance (to 800 u).** The auto field takes a revived foe back 17–44 ms after
+`revive agent N` in most runs, and one run (`T134031`) never did. Loopback,
+the hero manually selected, one practice target killed and revived 8 s later.
+A re-acquisition is a `0x00C1` naming the foe within 200 ms of the revive:
+
+| harness run | distance | the character faces the foe | the foe on screen | re-acquired |
+|---|---|---|---|---|
+| 7 revives in the runs above | ~80 u | yes | yes | 7 of 7 |
+| `20260927T144829` (camera orbited `yaw:2250`) | ~80 u | yes | yes — at the frame's bottom edge | yes |
+| **`20260927T144426`** (bow, 800 u, camera still east) | **800 u** | yes — it turned to shoot | **no** — behind the camera | **no** |
+| **`20260927T145037`** (the same, then `yaw:2250`) | **800 u** | yes | **yes** | **yes** |
+| `20260927T134031` (walked past the corpse) | 209 u | no | no | no |
+
+The two bold runs are the discriminating pair — distance, facing and movement
+(none: no movement report, no server approach) held, the camera the only
+change — and they split on it. **OBSERVED, n=1 per arm:** the client
+re-acquires a revived foe that is on screen at 800 u and not one that is off
+screen at 800 u. UNVERIFIED: whether "on screen" is the frustum, a
+line-of-sight test or a range with a view term; and whether the world-entry
+auto-selection uses the same rule — consistent so far (with the only foe 800 u
+behind the camera it picked the HERO, `T144243`/`T144426`; with a foe in view it
+picked the foe, 5 of 5). Two runs are void and excluded: `T144622` (the ←
+key never turned the character — no rotation message, the view unchanged) and
+`T144243` (the bow shot left the foe at 3 of 10 hp). A camera orbit does not
+turn a standing character, so at 80 u the foe stays in view and "near and
+behind" is not reachable this way.
+
 **And the schema route had the right fact with the wrong conclusion.** It found
 that 226 and 227 share a dispatch and concluded `0x00E2` was therefore
 disqualified as a carrier of "refused". That sharing is exactly *why* the
