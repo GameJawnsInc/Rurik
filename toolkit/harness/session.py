@@ -507,7 +507,11 @@ def parse_walk(text):
             # reason control.request_skill records: no scripted key press
             # has reached the bar on this rig. An ATTACK skill must name its
             # TARGET: the server refuses one pressed at 0 with retail's #1934
-            # (authsrv.ATTACK_TARGET_GATE, 2026-09-27).
+            # (authsrv.ATTACK_TARGET_GATE, 2026-09-27). A CLICK on the bar's
+            # own icon DOES reach it, and exercises the client's own press
+            # decision (which target it names): click:0.4850,0.9615 is slot 4
+            # in the 1936x1040 window, the slot pitch ~0.0289 -- 9 of 9
+            # clicks, 9 presses, harness 20260927T131849/T132325/T132530.
             sid, _, tgt = arg.partition(",")
             try:
                 sid, tgt = int(sid, 0), int(tgt or "0", 0)
