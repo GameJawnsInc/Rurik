@@ -28,6 +28,30 @@ move back.
 
 ---
 
+### The attack-target gate on the client: three loopback runs -- 2026-09-27 -- **the client sends an attack skill as TARGET 0 when its selected foe has died -- with the ally it auto-selects, or with nothing -- and does not refuse it itself; the gate's #1934 draws "Invalid attack target." on screen. Retail's witness was the client's own re-selection, not an operator's click. No code change: the banner, the harness comment and studies/skills 38.5**
+
+**This pays the "Owed on the client" line of the attack-target entry below** and corrects a cause that entry and the party-target entry both gave: "the operator had an ALLY selected". The client's state was right; its cause was not.
+
+**How.** `session.py --walk` with `click:` on the skill bar's own icon (`0.4850,0.9615` is slot 4 at 1936x1040): unlike a digit key (`project-rurik-harness-skill-mailbox`), the click reaches the bar and the CLIENT decides what target the press names -- the `skill:ID` mailbox cannot ask that question. 9 of 9 clicks gave exactly one `0x0027` each, so no stray input. Skill 322, a practice target 300 u out, `--explorable`. Scored from the gamesrv capture's decoded c2s and its sends on one wall clock (a scratch scorer).
+- `20260927T131849` -- `--party slice` (hero, agent 200): the pre-registered cases as first scripted.
+- `20260927T132325` -- the same, plus `--party-no-fight --enemy-health 10 --settle 0.3`, so the first press kills the foe on cue and the second lands before the 8 s revive.
+- `20260927T132530` -- the same with no party at all (the base hammer bar, 322 in slot 5).
+
+**OBSERVED (loopback, our client):**
+- **The client selects by itself.** It selects the foe at world entry with no input (4 of 4 runs). When that foe dies it sends `0x00C1 [0, 0]` 34-154 ms later and, 0-17 ms after that, **auto-selects the hero**: `[200, 0]`, 4 of 4. With no party it stays at `[0, 0]` (2 of 2). The revived foe is selected again (5 of 6). Esc and a click on empty ground do not deselect (1 of 1 each).
+- **Retail's t=238.496 witness is that shape**: `[0, 0]` then `[58, 0]` 30 ms after foe 217 died. No person selects in 30 ms.
+- **The target-0 press, both forms, 1 of 1 each:** with the hero auto-selected (`T132325` t=19.450) and with nothing selected (`T132530` t=17.333), the press went out as `0x0027 [322, 0, 0, 0]`, the gate answered `#1934`, `[1, 7]`, `0x00E2`, and the client drew **"Invalid attack target."** in red above the player (`w002-step7.png` in both). Energy untouched. Retail's sequence, end to end on our server.
+- **With the hero selected and a LIVE foe the client knew**, the press named the foe -- `[322, 0, 10, 0]`, then the client re-selected `[10, 0]` (1 of 1, `T131849` t=51.153). The selection before it read `[200, 10]`, sent 41 ms after the foe revived and on no click (the party-row click at t=43.8 sent nothing: the hero was already selected). **So `0x00C1`'s second field may be the foe an attack skill would go to** -- UNVERIFIED, n=1; retail's `[58, 0]` carried 0 and its press went to 0, which fits.
+- **Pre-registered and refuted:** "with an ally selected the press goes out at target 0" -- true only when the client knows no live foe. The case the gate refuses is the foe-dead case, and there it is 2 of 2.
+
+**Nothing changes in the server.** The gate's answer was retail's before this run; the run shows the client needs it and draws it. Edited: the `ATTACK_TARGET_GATE` banner's NOT OBSERVED paragraph (answered), `session.py`'s `skill:` comment (the skill-bar click route), studies/skills 38.5 (the loopback addendum).
+
+**Tests:** comments and docs only -- test_castcycle, test_srclint and the three doc linters re-run.
+
+**Open:** what `0x00C1`'s second field is. One run that selects the hero by a party-row click while the foe is alive, then presses, would say whether the press follows that field or the nearest foe.
+
+---
+
 ### A creature Warrior's +20 skips a non-physical WEAPON hit too -- 2026-09-27 -- **the typed rule landed for spells this morning ("The player's spell meets its target's armour", below) now reaches every weapon hit onto a spawned Warrior: the player's swing, arrow or attack-skill strike and the scythe's extras by the held weapon's 587, a party body's swing by `body_damage_type` -- a wand's chaos or a staff's holy meets 3 x level, a hammer or a sword the whole 3 x level + 20; `--untyped-creature-armour` reverts both halves**
 
 **Why.** The rule is about the damage TYPE, not the delivery: GWW "Basic armor", which the creature formula's "Armor bonus" defers to, types the Warrior's bonus "Armor +20 (vs. physical damage)". The spell half shipped on the owner's Dancing Daggers (a level-3 Warrior took an earth spell as 6 of 7, where the untyped 29 gives 4). A wand or staff deals its 587 type (the corpus: wands and staves 3 / 4 / 5 / 6 / 7 / 8 / 11, `[damage_type.table]`), so until today the same Warrior met its physical-only +20 from a chaos wand -- the open line `PLAN.md` §8.1 named.
