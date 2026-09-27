@@ -28,6 +28,22 @@ move back.
 
 ---
 
+### A revived foe is re-acquired when it is ON SCREEN, not when it is near -- 2026-09-27 -- **the client's auto field takes a revived foe back at 800 u with the camera on it and not at 800 u with the camera turned away; distance, facing and movement held. Answers the known-bad entry's "whether distance gates that re-acquisition". No code change**
+
+**The question** (the entry below, "Also seen, not chased"): in every run the revived practice target went back into `0x00C1`'s auto field within 44 ms, except `20260927T134031`, where the player had walked past the corpse -- 209 u away, the foe behind the character and off screen. Distance, facing, view and movement had all changed at once.
+
+**The discriminating pair**, loopback, the hero manually selected, pre-registered with void conditions:
+- **`20260927T144426`** -- bow (`--player-weapon starter_bow --skills 394`), the foe 800 u away, killed by Power Shot with no movement at all (no movement report, no server approach); the character turned to shoot, the camera stayed on the other side. The revive drew **nothing**.
+- **`20260927T145037`** -- the same, then `yaw:2250` (≈180°, the confirmed −0.0800 °/px calibration) so the camera looks at the foe; the post-revive frame shows it standing at 800 u. The revive drew **`[200, 10]` in 33 ms**.
+
+**OBSERVED, n=1 per arm: the camera view gates it, not distance, to 800 u.** Consistent with every other revive this session (7 of 7 near and on screen; `20260927T144829`, the camera orbited 180° with the foe still at the frame's edge, re-acquired; `T134031` off screen, not). UNVERIFIED: frustum vs line of sight vs a range with a view term, and whether the world-entry auto-selection uses the same rule -- consistent (the only foe 800 u behind the camera -> it picked the hero; a foe in view -> the foe, 5 of 5).
+
+**Void and excluded:** `20260927T144622` (`left:1.5` never turned the character -- no rotation message, view unchanged; the digit-key chat-focus trap reaching the arrows too) and `20260927T144243` (the bow left the foe at 3 of 10 hp; `--enemy-health 3` in the pair). **A camera orbit does not turn a standing character**, so "near and behind" is out of this harness's reach without a walk.
+
+**Edited:** studies/skills 38.5 (the table). **Tests:** doc linters only.
+
+---
+
 ### The party-target gate's known-bad arm, on the client -- 2026-09-27 -- **one script against two servers: with the gate's call sites cut, the client's own press at its hero is accepted and the player's Power Attack lands CRITICAL 18 on the hero; on main the same press draws #1934 and nothing lands. Space in that state sends no 0x0026 either way. No code change**
 
 **Why this run.** The party-target entry below proved its gate with a desk known-bad arm (the pre-gate doors' writes reaching `hit_enemy`) and could not do better, because "retail's client never names a party body in an attack". The second-field entry above found the state in which OUR client does (`20260927T134031`: the hero selected by a party-row click, no foe in `0x00C1`'s auto field → `0x0027 [322, 0, 200, 0]`), so the gate's defect became reachable from a real press.
