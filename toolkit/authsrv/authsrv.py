@@ -14986,9 +14986,11 @@ def open_area(send, state, conn_id, caster_id, skill_id, rank, amount, point, ao
 
 def scatter_struck(state, area, struck, now):
     """The monster scatter's hook: every hostile `struck` by this tick of
-    `area`, at `now`. A NO-OP in this step -- studies/monsterai 16 (the
-    scatter arc) fills it; nothing here changes when it does."""
-    return None
+    `area`, at `now`. Filled 2026-09-26 (studies/monsterai 16, MONSTERAI-S1):
+    a damaging tick of a foe's area over time is the ONE trigger, and this
+    call MARKS rows -- the move tick walks them, so the tick that decided
+    never also moves them (`_scatter_mark`, beside the leash return)."""
+    return _scatter_mark(state, area, struck, now)
 
 
 def _area_strike(send, state, conn_id, area, now):
@@ -25278,6 +25280,20 @@ def enemy_attack_tick(send, state, conn_id):
             agent["cast_lands_at"] = None
             agent["casting"] = None
             continue
+        if scattering(agent):
+            # MONSTERAI-S7: fleeing an area over time it opens nothing, and --
+            # unlike the leash return -- nothing armed lands: the decision
+            # CANCELLED it (S5, here when combat_pass reaches this tick before
+            # the move tick does). The one survivor is an instant skill, which
+            # has no window to cancel (SKILLS-IA) and lands on its tick.
+            _scatter_cancel(send, state, conn_id, agent_id, agent, now)
+            _cast = agent.get("cast_lands_at")
+            if _cast is not None and now >= _cast:
+                agent["cast_lands_at"] = None
+                land_skill(send, state, agent_id, agent, conn_id)
+            if agent.get("cast_lands_at") is None:
+                agent["casting"] = None
+            continue
         if leash_returning(agent):
             # DESKWORK-D8 step 3: on its way home it opens nothing. A swing or
             # a cast already in flight still lands (F21: retreat 2's last
@@ -25668,6 +25684,10 @@ def enemy_attack_tick(send, state, conn_id):
             # an interrupted or aborted cast still holds the slot on recharge:
             # RECONSTRUCTION (no NPC's interrupted cast is on tape; the player's
             # does recharge, castmech 4; interrupt_body re-arms the slot itself).
+            # MONSTERAI-S5: the slot's readiness BEFORE this cast, so a scatter
+            # CANCEL can put it back (WIKI "Cancel": no recharge); an interrupt
+            # never reads it (interrupt_body re-arms the full recharge).
+            agent["cast_prev_ready"] = agent["skill_ready"][slot]
             agent["skill_ready"][slot] = now + recharge + npc_recharge_anchor(activation)
             agent["last_slot"] = slot          # the round-robin cursor
             agent["casting"] = slot
@@ -29332,12 +29352,34 @@ def enemy_move_tick(send, state, conn_id, rec=None):
             if agent.get("leash_return") is not None:
                 agent["leash_return"] = None
                 agent["leash_out_since"] = None
+            if agent.get("scatter") is not None or agent.get("scatter_pending") is not None:
+                # MONSTERAI-S7: a body killed mid-flight drops the flight (the CD-8 shape)
+                agent["scatter"] = None
+                agent.pop("scatter_pending", None)
             continue
         if knocked_down(state, agent_id, now):          # SLICE-H12: no walk
             continue
         if not _ally and agent.get("allegiance") != agents.ALLEGIANCE_HOSTILE:
             continue
         if agent.get("effects", 0) & agents.EFFECT_TRANSITION:
+            if agent.get("scatter") is not None:
+                agent["scatter"] = None                 # MONSTERAI-S7: burrowed mid-flight
+            continue
+        if not _ally and SCATTER and agent.get("scatter_pending") is not None:
+            # MONSTERAI-S8: it was DOWN on its group's decision tick and now
+            # stands -- it flees if the area is still live, else nothing.
+            _pend = agent.pop("scatter_pending")
+            _live = next((a for a in _foe_areas(state) if a["id"] == _pend["area"]), None)
+            if _live is not None and _scatter_eligible(agent) is None:
+                _scatter_arm(state, agent_id, agent, _live, now,
+                             float(_live["radius"]) + SCATTER_MARGIN)
+                print(f"[c{conn_id}] [SCATTER] agent {agent_id} ({agent.get('name', '?')}) "
+                      f"stands up into live area #{_live['id']}: it scatters now "
+                      f"[MONSTERAI-S8]", flush=True)
+        if not _ally and scattering(agent):
+            # MONSTERAI-S7: fleeing (or ceasing) an area over time -- no pick,
+            # no chase; the flight's own legs until the copy stands safe.
+            _scatter_tick(send, state, conn_id, agent_id, agent, now, pm, rec)
             continue
         if not _ally and passive_unprovoked(agent):
             # MONSTERAI-J: a passive row stands until it is hit -- no pick,
@@ -29365,6 +29407,11 @@ def enemy_move_tick(send, state, conn_id, rec=None):
                 agent["target_was"] = _tid
         tx, ty = (px, py) if _tid == PLAYER_AGENT_ID else target_pos(state, _tid)
         dist = math.hypot(tx - ax, ty - ay)
+        if not _ally and agent.get("scatter_hold") is not None and _scatter_held(
+                state, conn_id, agent_id, agent,
+                (_range_point(ax, ay, tx, ty, caster_range(agent)) if hostile_caster(agent)
+                 else (tx, ty)), now):
+            continue                                # MONSTERAI-S7: the hold
         if NPC_FOLLOW:
             _tgt = (tx, ty)
             _stop = HERO_FOLLOW_STOP if _ally else None
@@ -30594,6 +30641,471 @@ def _leash_return_tick(send, state, conn_id, agent_id, agent, now, pm, rec=None)
           f"RETURN leg {ret['legs']}: agent {agent_id} -> ({wx:.0f},{wy:.0f}) "
           f"plane {plane}->{wpl}, home ({anchor[0]:.0f},{anchor[1]:.0f}) "
           f"{d_home:.0f} u out [DESKWORK-D8, MONSTERAI-L3]")
+
+
+# ---- MONSTERAI-S: SCATTER (2026-09-26, studies/monsterai 16, S1..S11) ---------
+#
+# RECONSTRUCTION FROM WIKI, ALL OF IT, and said first: the live corpus holds
+# NO retail witness of a monster scattering -- every area over time on tape is
+# PvP, 0 of 55 struck agents carry a monster's token (aotjoin P9, weapons 41) --
+# so every rule below is GWW's sentence turned into code, with the number the
+# sentence lacks chosen by us and named. GWW "Scatter" rev 2735452 (2026-07-23):
+# "all AoE skills that cause damage over time also cause scatter ... AoE skills
+# with a single packet of damage do not"; "all targets in a group will scatter
+# at the same time, cancelling their current action"; "run from the epicenter
+# ... unless they would run into another skill that causes scatter in that
+# direction"; "cease all actions until they are in a safer location to use
+# skills"; "foes in normal mode do not scatter easily"; Double Dragon, Glimmering
+# Mark and Wastrel's Demise listed as areas that do NOT scatter. GWW "Area damage
+# over time" rev 2550879 (2013-07-18): scatter "happens more quickly in hard mode
+# than in normal mode"; area degeneration "is not technically damage". NO number
+# on either page (NOT FOUND): no rate, no delay, no safe distance, no return rule.
+# The second gate: PLAN.md 6.1's monster-AI row (GFDL / CC BY-NC-SA, attribution
+# in THIRD-PARTY-NOTICES.md) names these two pages and this module.
+#
+#   S1  TRIGGER: an area-over-time TICK of a FOE's area that DAMAGES a hostile --
+#       `scatter_struck` from _area_strike, the struck list only. Never the
+#       completion, never a burst / splash / hex (they never reach that hook), and
+#       never a row saying `scatters = false` (the wiki's three; no row carries it).
+#   S2  RATE = A DELAY, NOT A CHANCE: a GROUP scatters on the tick at which it has
+#       taken SCATTER_AFTER damaging ticks of THAT area (instants, not words;
+#       default 2, RECONSTRUCTION for "do not scatter easily" -- the owner's feel
+#       is the instrument; --scatter-after 1 is the hard-mode-like floor). One
+#       decision per (group, area) per flight; deterministic, no RNG. A group whose
+#       members are still walking counts nothing; once the walkers are done a
+#       re-entry struck again counts toward a NEW decision (S7).
+#   S3  GROUP: the struck row's `group` (MONSTERAI-J's field); None is a group of
+#       one. On the decision tick every living eligible member flees together; one
+#       already outside the safe radius CEASES (S5) and holds where it stands until
+#       the group's walkers arrive.
+#   S4  FLEE POINT (_scatter_point): from P through the body, at radius +
+#       SCATTER_MARGIN FROM P; the ray, then +-30, +-60, +-90, +-120 deg; the
+#       first that is walkable on its plane, routable from the copy, outside EVERY
+#       active foe area, and whose first corridor segment crosses no OTHER such
+#       area's disc. Within 1 u of P: away from its target, else from its anchor.
+#       Nothing passes -> place_on_mesh at the ray point; None -> stand, printed
+#       refusal, never an invented point. Walked with _return_leg, unchanged.
+#   S5  CANCEL (_scatter_cancel, on whichever tick first sees the mark): a cast in
+#       activation -> [59 | 49, body, 0], NO [35], `skill_ready[slot]` RESTORED to
+#       its pre-cast value (WIKI "Cancel": no recharge; the cast site stamps
+#       `cast_prev_ready`), energy stays spent; an instant skill is never cancelled
+#       (it lands from the attack tick's scatter branch); a swing in windup ->
+#       [3, body, 0] (the OBSERVED n=1 shape, MONSTERAI-L4), the landing dropped;
+#       a follow cleared as _leash_give_up clears it, NO 0x0028.
+#   S6  WIRE: the stop word (if something was armed), then 0x0029 legs; no 0x002B,
+#       no 0x002A, no 0x0028 at the arrival (the leash return's 3 of 3 shape).
+#   S7  WHILE FLEEING (`scattering`, the twin of leash_returning): the move tick
+#       walks legs, the attack tick opens nothing and lands nothing armed; no
+#       retarget, no provoke-turn, `leash_out_since` cleared. ON ARRIVAL the bout
+#       resumes with `target_locked` KEPT (EV-2 must not send it home) under a
+#       HOLD: while the area it fled is active, no destination INSIDE any active
+#       foe area -- a melee body whose target stands inside holds at its safe
+#       point, a caster in range casts from there; the hold lifts when the area
+#       expires. Killed or burrowed mid-flee drops the record (the CD-8 shape).
+#   S8  NEVER: dead, `attacks_back` False, EFFECT_TRANSITION, `stationary = true`
+#       (a spawn-row field; none exist), already walking home, non-hostile
+#       allegiances, the player. Knocked down: re-checked when it stands, if the
+#       area is still live (`scatter_pending`). A passive row is provoked by the
+#       tick's damage before this runs (hurt_agent_row -> provoke_hostile).
+#   S9  PARTY BODIES DO NOT SCATTER in this arc (WIKI says they do): DEFERRED.
+#   S10 test_agentlife section_scatter, each check with its known-bad arm.
+#   S11 --no-scatter reverts byte for byte (the mark is never made); --scatter-after N.
+SCATTER = True
+SCATTER_AFTER = 2          # damaging ticks of ONE area a group takes before it scatters.
+#                            RECONSTRUCTION: "do not scatter easily" has no number.
+SCATTER_MARGIN = 100.0     # u beyond the area's radius the flee point sits from P. OURS.
+SCATTER_ANGLES = (0, 30, -30, 60, -60, 90, -90, 120, -120)   # deg off the P->body ray
+
+
+def scattering(agent):
+    """MONSTERAI-S7: this hostile is fleeing (or ceasing) an area over time.
+    On the way it picks nobody, chases nobody, opens nothing, lands nothing."""
+    return bool(SCATTER and (agent or {}).get("scatter") is not None)
+
+
+def _scatter_group_key(agent_id, agent):
+    """S3: the row's `group`, else a group of one."""
+    g = agent.get("group")
+    return ("group", g) if g is not None else ("solo", agent_id)
+
+
+def _foe_areas(state):
+    """The active areas over time cast by the PLAYER or a party body -- the
+    ones a hostile flees and must not walk into (S4 c/d, S7's hold)."""
+    return [a for a in (state.get("areas") or ()) if not a.get("hostile")]
+
+
+def area_scatters(area):
+    """S1: a row may say `scatters = false` (WIKI: Double Dragon, Glimmering
+    Mark, Wastrel's Demise never scatter). Absent, the area scatters."""
+    v = skill_effect_row(area["skill_id"]).get("scatters")
+    return True if v is None else bool(v)
+
+
+def _scatter_eligible(agent):
+    """S8: None when this row may scatter, else the reason it never does."""
+    if agent.get("dead"):
+        return "dead"
+    if not agent.get("attacks_back"):
+        return "inanimate"
+    if agent.get("allegiance") != agents.ALLEGIANCE_HOSTILE:
+        return "not a hostile"
+    if agent.get("effects", 0) & agents.EFFECT_TRANSITION:
+        return "burrowing"
+    if agent.get("stationary"):
+        return "a stationary row"
+    if leash_returning(agent):
+        return "walking home"
+    if scattering(agent):
+        return "already scattering"
+    return None
+
+
+def _scatter_arm(state, agent_id, agent, area, now, safe):
+    """Mark one row for the flight (S3/S5): the record the ticks read. A member
+    already outside the safe radius ceases and HOLDS rather than walks."""
+    ax, ay = agent["pos"]
+    d = math.hypot(ax - area["point"][0], ay - area["point"][1])
+    agent["scatter"] = {"area": area["id"], "point": area["point"],
+                        "radius": float(area["radius"]), "t0": now, "legs": 0,
+                        "leg": None, "leg_at": now, "goal": None,
+                        "from": (float(ax), float(ay)), "cancelled": False,
+                        "hold": d > safe}
+    agent["leash_out_since"] = None            # S7: the dwell clock does not run
+    agent.pop("scatter_pending", None)
+    return agent["scatter"]["hold"]
+
+
+def _scatter_mark(state, area, struck, now):
+    """S1-S3: count this tick for every group it damaged; a group at
+    SCATTER_AFTER decides -- every living eligible member marked at once.
+    Returns the ids marked (walkers and ceasers)."""
+    if not SCATTER or area.get("hostile") or not struck:
+        return []
+    rows = state.get("agents", {})
+    hit = [aid for aid in struck if aid != PLAYER_AGENT_ID
+           and (rows.get(aid) or {}).get("allegiance") == agents.ALLEGIANCE_HOSTILE]
+    if not hit:
+        return []
+    if not area_scatters(area):
+        if not area.get("scatter_said"):
+            area["scatter_said"] = True
+            print(f"[SCATTER] area #{area['id']} (skill {area['skill_id']}) says "
+                  f"`scatters = false`: nobody scatters from it (WIKI, the three "
+                  f"exceptions) [MONSTERAI-S1]", flush=True)
+        return []
+    counts = state.setdefault("scatter_counts", {})
+    safe = float(area["radius"]) + SCATTER_MARGIN
+    out = []
+    for key in sorted({_scatter_group_key(aid, rows[aid]) for aid in hit}, key=str):
+        members = [(aid, r) for aid, r in rows.items()
+                   if r.get("allegiance") == agents.ALLEGIANCE_HOSTILE and not r.get("dead")
+                   and _scatter_group_key(aid, r) == key]
+        if any(scattering(r) for _a, r in members):
+            continue                          # mid-flight: nothing counts (S2/S7)
+        ck = (area["id"], key)
+        counts[ck] = counts.get(ck, 0) + 1
+        gname = key[1] if key[0] == "group" else f"agent {key[1]}"
+        if counts[ck] < SCATTER_AFTER:
+            print(f"[SCATTER] area #{area['id']} tick {area['k']}/{area['n']} damages "
+                  f"{gname!s}: {counts[ck]} of {SCATTER_AFTER} -- not yet "
+                  f"[MONSTERAI-S2]", flush=True)
+            continue
+        counts[ck] = 0
+        walkers, ceasers, never = [], [], []
+        for aid, r in members:
+            why = _scatter_eligible(r)
+            if why is not None:
+                never.append(f"{aid} ({why})")
+                continue
+            if knocked_down(state, aid, now):
+                r["scatter_pending"] = {"area": area["id"], "at": now}
+                never.append(f"{aid} (down -- re-checked when it stands)")
+                continue
+            (ceasers if _scatter_arm(state, aid, r, area, now, safe) else walkers).append(aid)
+            out.append(aid)
+        print(f"[SCATTER] area #{area['id']} (skill {area['skill_id']}) tick "
+              f"{area['k']}/{area['n']} at +{now - area['t0']:.1f} s: {gname!s} SCATTERS "
+              f"after {SCATTER_AFTER} tick(s) -- flee {walkers or 'nobody'}, cease "
+              f"{ceasers or 'nobody'}, never {never or 'nobody'} "
+              f"[MONSTERAI-S2/S3, RECONSTRUCTION]", flush=True)
+    return out
+
+
+def _scatter_cancel(send, state, conn_id, agent_id, agent, now):
+    """S5: what the decision cancels, ONCE, on whichever tick first sees the
+    mark (the move tick in the world loop, the attack tick under combat_pass)
+    -- so the stop word always precedes the first leg (S6). Returns what was
+    stopped: "cast", "swing" or None."""
+    sc = agent.get("scatter")
+    if sc is None or sc.get("cancelled"):
+        return None
+    sc["cancelled"] = True
+    what = None
+    slot = agent.get("casting")
+    skills = agent.get("skills") or ()
+    if slot is not None and agent.get("cast_lands_at") is not None and slot < len(skills):
+        sid = skills[slot][0]
+        _atk = _is_attack_skill(sid)
+        if INSTANT_ANNOUNCE and not _atk and _is_instant_skill(sid):
+            print(f"[c{conn_id}] [SCATTER] agent {agent_id}'s instant skill {sid} is "
+                  f"not cancelled: it lands on its tick (SKILLS-IA) [MONSTERAI-S5]",
+                  flush=True)
+        else:
+            agent["cast_lands_at"] = None
+            agent["casting"] = None
+            agent.pop("cast_recharge", None)
+            prev = agent.pop("cast_prev_ready", None)
+            ready = agent.get("skill_ready")
+            if prev is not None and ready is not None and slot < len(ready):
+                ready[slot] = prev             # WIKI "Cancel": no recharge
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                 [agents.GV_ATTACK_SKILL_STOPPED if _atk else agents.GV_SKILL_STOPPED,
+                  agent_id, 0],
+                 f"{'attack_skill' if _atk else 'skill'}_stopped: agent {agent_id} "
+                 f"CANCELS skill {sid} to scatter -- no [35], no recharge "
+                 f"[MONSTERAI-S5, RECONSTRUCTION]")
+            what = "cast"
+    elif agent.get("swing_lands_at") is not None or agent.get("swinging"):
+        agent["swing_lands_at"] = None
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_ATTACK_STOPPED, agent_id, 0],
+             f"attack_stopped: agent {agent_id} drops its swing to scatter "
+             f"[MONSTERAI-S5; the L4 shape, OBSERVED n=1]")
+        what = "swing"
+    # the follow, exactly as _leash_give_up forgets it -- and NO 0x0028
+    agent["follow"] = None
+    agent.pop("froute", None)
+    agent.pop("froute_at", None)
+    agent["swing_owed_at"] = None
+    agent["swinging"] = False
+    agent["cmodel_hold"] = False
+    agent["cmodel_slot"] = True
+    agent["moved_at"] = now
+    print(f"[c{conn_id}] [SCATTER] agent {agent_id} ({agent.get('name', '?')}) "
+          f"{'cancels its ' + what if what else 'had nothing armed'}"
+          f"{' and ' if what else ', '}"
+          f"{'ceases' if sc.get('hold') else 'flees'} area #{sc['area']} "
+          f"[MONSTERAI-S5]", flush=True)
+    return what
+
+
+def _segment_meets_disc(x0, y0, x1, y1, cx, cy, r):
+    """Does the segment (x0,y0)-(x1,y1) pass within `r` of (cx,cy)?"""
+    dx, dy = x1 - x0, y1 - y0
+    L2 = dx * dx + dy * dy
+    t = 0.0 if L2 <= 1e-12 else max(0.0, min(1.0, ((cx - x0) * dx + (cy - y0) * dy) / L2))
+    return math.hypot(x0 + t * dx - cx, y0 + t * dy - cy) <= r
+
+
+def _scatter_routable(pm, ax, ay, x, y, plane):
+    """S4 (b): a route exists from the copy (or, on a mesh without route(),
+    a clip that reaches the point). No mesh: yes."""
+    if pm is None:
+        return True
+    if hasattr(pm, "route"):
+        try:
+            r = pm.route(ax, ay, x, y, start_plane=plane, goal_plane=None, with_planes=True)
+        except TypeError:
+            try:
+                r = pm.route(ax, ay, x, y)
+            except Exception:                                  # noqa: BLE001
+                r = None
+        except Exception:                                      # noqa: BLE001
+            r = None
+        path = r[0] if isinstance(r, tuple) and len(r) == 2 else r
+        return bool(path) and len(path) >= 2
+    if hasattr(pm, "clip"):
+        cx, cy = pm.clip(ax, ay, x, y)
+        return math.hypot(cx - x, cy - y) <= NPC_LEG_DONE
+    return True
+
+
+def _scatter_point(pm, bx, by, px, py, radius, plane, areas, away=None, fled=None):
+    """S4: the flee point -- radius + SCATTER_MARGIN FROM P on the P->body ray,
+    else the rotations, each tested (a) walkable, (b) routable, (c) outside
+    every area in `areas`, (d) its first corridor leg crossing no OTHER area's
+    disc (`fled` is the one it is leaving, which the leg may cross). `away` is
+    the direction to use when the body stands ON P (the target's point, else
+    the anchor). Returns (x, y, plane) or None. RECONSTRUCTION throughout."""
+    dx, dy = bx - px, by - py
+    if math.hypot(dx, dy) < 1.0:
+        if away is not None and math.hypot(px - away[0], py - away[1]) >= 1.0:
+            dx, dy = px - away[0], py - away[1]
+        else:
+            dx, dy = 1.0, 0.0
+    dist = float(radius) + SCATTER_MARGIN
+    base = math.atan2(dy, dx)
+    for deg in SCATTER_ANGLES:
+        a = base + math.radians(deg)
+        x, y = px + dist * math.cos(a), py + dist * math.sin(a)
+        if pm is not None and hasattr(pm, "walkable") and not pm.walkable(x, y):
+            continue
+        if not _scatter_routable(pm, bx, by, x, y, plane):
+            continue
+        if any(math.hypot(x - ar["point"][0], y - ar["point"][1]) <= ar["radius"]
+               for ar in areas):
+            continue
+        lx, ly, lpl = _return_leg(pm, bx, by, (x, y), plane)
+        if any(ar["id"] != fled and _segment_meets_disc(bx, by, lx, ly, ar["point"][0],
+                                                          ar["point"][1], ar["radius"])
+               for ar in areas):
+            continue
+        return float(x), float(y), _point_plane(pm, x, y, plane)
+    return None
+
+
+def _scatter_goal(state, conn_id, agent_id, agent, pm, plane):
+    """Choose (once) where this body runs: _scatter_point, then the mesh's
+    nearest ground at the ray point, else a printed refusal and no move."""
+    sc = agent["scatter"]
+    px, py = sc["point"]
+    ax, ay = agent["pos"]
+    tgt = agent.get("target")
+    away = None
+    if tgt is not None and not target_dead(state, tgt):
+        away = target_pos(state, tgt)
+    elif agent.get("anchor") is not None:
+        away = (float(agent["anchor"][0]), float(agent["anchor"][1]))
+    goal = _scatter_point(pm, ax, ay, px, py, sc["radius"], plane, _foe_areas(state),
+                          away=away, fled=sc["area"])
+    how = "the ray" if goal is not None else None
+    if goal is None:
+        dx, dy = ax - px, ay - py
+        if math.hypot(dx, dy) < 1.0:
+            dx, dy = (px - away[0], py - away[1]) if away is not None else (1.0, 0.0)
+        d = math.hypot(dx, dy) or 1.0
+        rx, ry = px + dx / d * (sc["radius"] + SCATTER_MARGIN), py + dy / d * (sc["radius"] + SCATTER_MARGIN)
+        placed = population.place_on_mesh(pm, rx, ry, f"agent {agent_id}'s scatter point")
+        if placed is not None:
+            goal = (float(placed[0]), float(placed[1]), _point_plane(pm, placed[0], placed[1], plane))
+            how = f"the mesh's nearest ground, {placed[2]:.0f} u off the ray"
+    if goal is None:
+        print(f"[c{conn_id}] [SCATTER] agent {agent_id} ({agent.get('name', '?')}) has "
+              f"NOWHERE to run from ({px:.0f},{py:.0f}): no candidate walkable and routable "
+              f"outside every active area, and the mesh names no ground at the ray point "
+              f"-- it stands; no point is invented [MONSTERAI-S4]", flush=True)
+        return None
+    sc["goal"] = goal
+    print(f"[c{conn_id}] [SCATTER] agent {agent_id} ({agent.get('name', '?')}) runs to "
+          f"({goal[0]:.0f},{goal[1]:.0f}) -- {sc['radius'] + SCATTER_MARGIN:.0f} u from "
+          f"({px:.0f},{py:.0f}), {how} [MONSTERAI-S4, RECONSTRUCTION]", flush=True)
+    return goal
+
+
+def _scatter_arrive(conn_id, agent_id, agent, now, why):
+    """S7: safe. The bout resumes with target_locked KEPT, under the hold."""
+    sc = agent.get("scatter") or {}
+    agent["scatter"] = None
+    agent["scatter_hold"] = sc.get("area")
+    agent["moving"] = False
+    agent["cmodel_slot"] = False
+    agent["moved_at"] = now
+    agent["swinging"] = False
+    print(f"[c{conn_id}] [SCATTER] agent {agent_id} ({agent.get('name', '?')}) {why}: at "
+          f"({agent['pos'][0]:.0f},{agent['pos'][1]:.0f}) after {sc.get('legs', 0)} leg(s), "
+          f"{now - sc.get('t0', now):.1f} s -- holds off area #{sc.get('area')} until it "
+          f"expires, target kept [MONSTERAI-S7]", flush=True)
+
+
+def _scatter_tick(send, state, conn_id, agent_id, agent, now, pm, rec=None):
+    """S6/S7: one tick of the flight -- the cancel if no tick made it yet, the
+    goal once, then 0x0029 legs walked as the leash return walks its own (the
+    client's sync copy under NPC_CLIENT_MODEL, NPC_LEG_DONE, RETURN_LEG_TIMEOUT),
+    no 0x002B, no 0x0028 at the end. A ceaser stands until the group's walkers
+    are done."""
+    sc = agent.get("scatter")
+    if sc is None:
+        return
+    _scatter_cancel(send, state, conn_id, agent_id, agent, now)
+    if sc.get("hold"):
+        key = _scatter_group_key(agent_id, agent)
+        rows = state.get("agents", {})
+        walking = any(aid != agent_id and scattering(r) and not (r.get("scatter") or {}).get("hold")
+                      for aid, r in rows.items() if _scatter_group_key(aid, r) == key)
+        if not walking:
+            _scatter_arrive(conn_id, agent_id, agent, now, "ceased outside the area, and its group is safe")
+        return
+    ax, ay = agent["pos"]
+    elapsed = max(0.0, now - agent.get("moved_at", now))
+    agent["moved_at"] = now
+    agent["cmodel_slot"] = True
+    plane = agent["plane"] = _npc_plane(pm, ax, ay, agent.get("plane", 0), state=state)
+    if sc.get("goal") is None:
+        if _scatter_goal(state, conn_id, agent_id, agent, pm, plane) is None:
+            _scatter_arrive(conn_id, agent_id, agent, now, "stands (refused a point)")
+            return
+
+    def _send(op, vals, label):
+        send(op, vals, label)
+        _npc_model_emit(agent, op, vals, now)
+
+    leg = sc.get("leg")
+    if leg is not None:
+        if NPC_CLIENT_MODEL:
+            _npc_model_advance(state, agent, now, elapsed, rec, agent_id)
+        else:
+            budget = ENEMY_MOVE_RATE * npc_declared_speed(state, agent_id) * elapsed
+            d = math.hypot(leg[0] - ax, leg[1] - ay)
+            step = min(budget, d)
+            if step > 0.0 and d > 0.0:
+                nx = ax + (leg[0] - ax) / d * step
+                ny = ay + (leg[1] - ay) / d * step
+                if pm is not None:
+                    nx, ny = pm.clip(ax, ay, nx, ny)
+                agent["pos"] = (nx, ny)
+        ax, ay = agent["pos"]
+        agent["plane"] = _npc_plane(pm, ax, ay, agent.get("plane", 0), state=state)
+        if (math.hypot(ax - leg[0], ay - leg[1]) > NPC_LEG_DONE
+                and now - sc.get("leg_at", now) < RETURN_LEG_TIMEOUT):
+            return                                  # still walking this leg
+    gx, gy, _gpl = sc["goal"]
+    if math.hypot(ax - gx, ay - gy) <= NPC_LEG_DONE:
+        _scatter_arrive(conn_id, agent_id, agent, now, "is SAFE")
+        return
+    plane = agent["plane"] = _npc_plane(pm, ax, ay, agent.get("plane", 0), state=state)
+    wx, wy, wpl = _return_leg(pm, ax, ay, (gx, gy), plane)
+    sc["leg"] = (wx, wy)
+    sc["legs"] = sc.get("legs", 0) + 1
+    sc["leg_at"] = now
+    if rec is not None:
+        rec.event("npc_order", agent=agent_id, act="scatter-leg", n=sc["legs"],
+                  solve_from=[round(float(ax), 1), round(float(ay), 1)],
+                  to=[round(wx, 1), round(wy, 1)], plane=plane, dest_plane=wpl,
+                  area=sc["area"])
+    _send(GAME_SMSG_AGENT_MOVE_TO_POINT, [agent_id, (wx, wy), wpl, plane],
+          f"SCATTER leg {sc['legs']}: agent {agent_id} -> ({wx:.0f},{wy:.0f}) plane "
+          f"{plane}->{wpl}, away from area #{sc['area']} at ({sc['point'][0]:.0f},"
+          f"{sc['point'][1]:.0f}) [MONSTERAI-S6]")
+
+
+def _scatter_held(state, conn_id, agent_id, agent, dest, now):
+    """S7's hold, read by the move tick after the pick: True when this body
+    arrived from a flight, the area it fled is still active, and `dest` (the
+    target's point for a melee body, the range point for a caster) lies inside
+    an active foe area -- it stands. The hold lifts when that area expires."""
+    hid = agent.get("scatter_hold")
+    if not SCATTER or hid is None:
+        return False
+    live = [a["id"] for a in _foe_areas(state)]
+    if hid not in live:
+        agent["scatter_hold"] = None
+        agent.pop("scatter_hold_said", None)
+        print(f"[c{conn_id}] [SCATTER] agent {agent_id} ({agent.get('name', '?')}): area "
+              f"#{hid} is over -- the hold lifts, it fights on [MONSTERAI-S7]", flush=True)
+        return False
+    inside = [a["id"] for a in _foe_areas(state)
+              if math.hypot(dest[0] - a["point"][0], dest[1] - a["point"][1]) <= a["radius"]]
+    if not inside:
+        return False
+    agent["moving"] = False
+    agent["follow"] = None
+    if not agent.get("scatter_hold_said"):
+        agent["scatter_hold_said"] = True
+        print(f"[c{conn_id}] [SCATTER] agent {agent_id} ({agent.get('name', '?')}) HOLDS at "
+              f"({agent['pos'][0]:.0f},{agent['pos'][1]:.0f}): its way in lies inside area "
+              f"{inside} [MONSTERAI-S7, RECONSTRUCTION]", flush=True)
+    return True
 
 
 def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, pm,
@@ -40856,6 +41368,25 @@ def main():
               "weapon walks to the melee disc by a 0x002A and casts from 92 u "
               "-- every run before DESKWORK-D8 (2026-09-24); retail's caster "
               "casts from where it stands inside its range.", flush=True)
+    if a.no_scatter:
+        global SCATTER
+        SCATTER = False
+        print("[enemy] --no-scatter: a hostile struck by a foe's area over time "
+              "stands in it and fights on -- every run before MONSTERAI-S "
+              "(2026-09-26); by default its group cancels and runs clear of the "
+              "area after SCATTER_AFTER damaging ticks (WIKI, RECONSTRUCTION).",
+              flush=True)
+    if a.scatter_after is not None:
+        global SCATTER_AFTER
+        if int(a.scatter_after) < 1:
+            raise SystemExit(f"--scatter-after {a.scatter_after}: N must be >= 1 -- a "
+                             f"group scatters on its N-th damaging tick, and there is "
+                             f"no 0-th tick (use --no-scatter to turn it off)")
+        SCATTER_AFTER = int(a.scatter_after)
+        print(f"[enemy] --scatter-after {SCATTER_AFTER}: a group scatters on the tick "
+              f"at which it has taken {SCATTER_AFTER} damaging tick(s) of one area "
+              f"(default 2; 1 is the hard-mode-like floor) [MONSTERAI-S2].",
+              flush=True)
     if a.enemy_leash is not None:
         global ENEMY_LEASH
         ENEMY_LEASH = float(a.enemy_leash)

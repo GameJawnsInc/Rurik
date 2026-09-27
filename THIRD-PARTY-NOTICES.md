@@ -230,7 +230,13 @@ SOFTWARE.
 `content/maps.toml` — each carrying `source = "wiki"` with the page and revision id it
 was read from. Also cited throughout `studies/` wherever a client-derived number is
 checked against what the game displays to players; `.claude/skills/browse-gw-wiki/`
-is the tool that reads it and the place the citation format is defined.
+is the tool that reads it and the place the citation format is defined. **And three
+monster-AI *algorithms* in `toolkit/authsrv/authsrv.py`**, registered on `PLAN.md` §6.1's
+monster-AI row: the notice radius (GWW *Aggro* / *Danger Zone*), the leash return (*Aggro*;
+`--no-leash-return`) and the scatter (*Scatter* rev 2735452, *Area damage over time* rev
+2550879; `--no-scatter`; `studies/monsterai/FINDINGS.md` §16) — each a reconstruction of
+the page's prose with the revision id cited at the call site, which is the attribution
+the licence asks for.
 
 **Licence: GFDL 1.2 / CC BY-NC-SA 2.5 (dual)** — **attribution required**, and unlike
 every other entry in this file the grant is *not* permissive: the ShareAlike and

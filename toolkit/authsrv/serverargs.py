@@ -1447,6 +1447,27 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "The standing Hatcher is a Monk with four spells, so "
                          "`--enemy` alone spawns a caster now (--enemy-weapon, "
                          "--no-enemy-skills or this flag give the walk-in).")
+    ap.add_argument("--no-scatter", action="store_true",
+                    help="MONSTERAI-S REVERT (studies/monsterai 16): a hostile "
+                         "struck by the ticks of a foe's area over time (Fire "
+                         "Storm) stands in it and keeps fighting -- every run "
+                         "before 2026-09-26. By default the GROUP scatters on the "
+                         "tick at which it has taken SCATTER_AFTER damaging ticks "
+                         "of that area: every member cancels what it was doing "
+                         "([59 | 49] for a cast with no recharge, [3] for a "
+                         "swing), runs 0x0029 legs to a walkable point radius + "
+                         "100 u from the epicentre that avoids every other active "
+                         "area, and holds off the area until it expires. WIKI "
+                         "(GWW Scatter rev 2735452, Area damage over time rev "
+                         "2550879) turned into code -- RECONSTRUCTION with NO "
+                         "retail witness (no monster on tape was ever struck).")
+    ap.add_argument("--scatter-after", type=int, default=None, metavar="N",
+                    help="MONSTERAI-S2: how many damaging ticks of one area a "
+                         "group takes before it scatters (default 2 -- "
+                         "RECONSTRUCTION for the wiki's 'foes in normal mode do "
+                         "not scatter easily', which carries no number; 1 is the "
+                         "hard-mode-like floor, 'more quickly in hard mode'). "
+                         "N >= 1; the owner's feel is the instrument.")
     ap.add_argument("--enemy-leash", type=float, default=None, metavar="U",
                     help="DESKWORK-D8: the standing hostile's own leash "
                          "distance in units from its anchor (default "

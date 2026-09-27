@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=635)   # 2026-09-25 DESKWORK-D8 step 4 REVIEWED, RV-1..RV-5 fixed: section_caster_held_slot +8 (17 in the section: the search's bound made VISIBLE for checks C and D -- a pick counter that raises past len(bar) + 1, a leaked bound a named FAIL and not a hang; the swing-clock check split over a three-slot bar so a clock hold that stepped past would show; the gate ORDER, world gates before clock gates, in four arms -- the review's Warrior with two heals and 7 energy, the first-pick unpayable heal nobody needs, the unpayable touch slot at 300 u, the crash arm refused by name on its own stamp; the reach-hold line's hostile-side label), floor 628 -> 635 = THE CORE, every check but the real-table one, from the green runs: 636 with the vault's re-emitted skills table, 635 + 1 declared skip on a table that predates it (touch_range stripped from the real rows), and the whole file does not run on an EMPTY vault at all -- section_hold_plane refuses without attribute cost rows, before and after -- so there is no bare-machine number for this file  # 2026-09-24 DESKWORK-D8 step 4, the caster's held-slot stall +9 (section_caster_held_slot: the run's shape 20260924T210744 stepped past, the held slot uncharged and unswung, the touch cast from melee, the hold with every ready slot out of reach, the held-set bound, the re-pick through the resource / heal / swing-clock gates, the REAL vault row -- a declared skip on a bare machine, where the floor is 627), from the green run (628)  # 2026-09-24 DESKWORK-D8 steps 3/4 FIXER +23 (section_leash_caster_review: the caster notice gate CD-1/EV-4, the short-leash no-loop CD-2, lost-contact-walks-home EV-2, revive-clears-the-return CD-8, the NPC_FOLLOW gate CD-9, the per-skill touch/half reach EV-1, the engaged/dwell/plumbing terms CD-5, the standing-fight give-up EV-8), plus the EV-9/CD-4 planted-record check made real, from the green run (619)  # 2026-09-24 DESKWORK-D8 steps 3/4 +44 (section_leash_return 26: the anchor, the dwell give-up, the legs home, the party bodies untouched, the revert arm; section_caster_opening 18: who is a caster, the stand-and-cast, the leg to range, the hold, the revert arm), from the green run (596)  # 2026-09-23 SANDBOX-N2 add +1 (the load-order walk locates _handle_request_players), from the green run  # 2026-09-17 CAST-TARGET-DIED +4 (an ally cast whose target died lands on nothing), from the green run  # 2026-09-15 (probe-walk noise) +2 (the CONTROL is pinned to one name and captured: quiet prints nothing, the failure is named to the caller), from the green run; 2026-09-15 (later) HEROLIB +2 (no 0x001D send site may zero the account library -- the GmSkSlot.cpp:206 crash of run 20260915T201538; the negative control restores the literal and reddens naming the line); 2026-09-15 +2 (offset_y honoured); SLICE-F43 +3 (the wipe countdown and its stop), from the green run   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=665)   # 2026-09-26 MONSTERAI-S +30 (section_scatter: the delay, the group, the one trigger, the cancel against interrupt_body's shape, the flee point dodging a second area, the refusing mesh, the legs, the flight, the hold and its lift, the never set, the two flags, the end-to-end check through D6's real open_area / area_tick / hit_enemy) + 1 declared skip (S9, party bodies), floor 635 -> 665 from the green run (666 with the vault's re-emitted skills table; the file still has no bare-machine number)  # 2026-09-25 DESKWORK-D8 step 4 REVIEWED, RV-1..RV-5 fixed: section_caster_held_slot +8 (17 in the section: the search's bound made VISIBLE for checks C and D -- a pick counter that raises past len(bar) + 1, a leaked bound a named FAIL and not a hang; the swing-clock check split over a three-slot bar so a clock hold that stepped past would show; the gate ORDER, world gates before clock gates, in four arms -- the review's Warrior with two heals and 7 energy, the first-pick unpayable heal nobody needs, the unpayable touch slot at 300 u, the crash arm refused by name on its own stamp; the reach-hold line's hostile-side label), floor 628 -> 635 = THE CORE, every check but the real-table one, from the green runs: 636 with the vault's re-emitted skills table, 635 + 1 declared skip on a table that predates it (touch_range stripped from the real rows), and the whole file does not run on an EMPTY vault at all -- section_hold_plane refuses without attribute cost rows, before and after -- so there is no bare-machine number for this file  # 2026-09-24 DESKWORK-D8 step 4, the caster's held-slot stall +9 (section_caster_held_slot: the run's shape 20260924T210744 stepped past, the held slot uncharged and unswung, the touch cast from melee, the hold with every ready slot out of reach, the held-set bound, the re-pick through the resource / heal / swing-clock gates, the REAL vault row -- a declared skip on a bare machine, where the floor is 627), from the green run (628)  # 2026-09-24 DESKWORK-D8 steps 3/4 FIXER +23 (section_leash_caster_review: the caster notice gate CD-1/EV-4, the short-leash no-loop CD-2, lost-contact-walks-home EV-2, revive-clears-the-return CD-8, the NPC_FOLLOW gate CD-9, the per-skill touch/half reach EV-1, the engaged/dwell/plumbing terms CD-5, the standing-fight give-up EV-8), plus the EV-9/CD-4 planted-record check made real, from the green run (619)  # 2026-09-24 DESKWORK-D8 steps 3/4 +44 (section_leash_return 26: the anchor, the dwell give-up, the legs home, the party bodies untouched, the revert arm; section_caster_opening 18: who is a caster, the stand-and-cast, the leg to range, the hold, the revert arm), from the green run (596)  # 2026-09-23 SANDBOX-N2 add +1 (the load-order walk locates _handle_request_players), from the green run  # 2026-09-17 CAST-TARGET-DIED +4 (an ally cast whose target died lands on nothing), from the green run  # 2026-09-15 (probe-walk noise) +2 (the CONTROL is pinned to one name and captured: quiet prints nothing, the failure is named to the caller), from the green run; 2026-09-15 (later) HEROLIB +2 (no 0x001D send site may zero the account library -- the GmSkSlot.cpp:206 crash of run 20260915T201538; the negative control restores the literal and reddens naming the line); 2026-09-15 +2 (offset_y honoured); SLICE-F43 +3 (the wipe countdown and its stop), from the green run   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
 def section_weapon_damage():
@@ -540,6 +540,7 @@ def main():
     section_hold_plane()
     section_owed_swing()
     section_leash_return()
+    section_scatter()
     section_caster_opening()
     section_leash_caster_review()
     section_caster_held_slot()
@@ -2974,6 +2975,607 @@ def section_leash_return():
                   "the AGGRO_RANGE comment, rewritten 2026-09-24")
     finally:
         authsrv.LEASH_RETURN, authsrv.LEASH_SECONDS = _saved
+
+
+def _scatter_world(rows, player=(0.0, 0.0), group="g"):
+    """A player at `player` and hostiles at `rows` = [(id, (x, y)), ...], each a
+    standing Warrior body with an anchor where it stands (the _bull row) and one
+    `group` -- the fixture every scatter check drives."""
+    import authsrv
+    st = _bull(pos=rows[0][1], player=player, group=group)
+    base = dict(st["agents"][10])
+    for aid, pos in rows:
+        st["agents"][aid] = dict(base, pos=(float(pos[0]), float(pos[1])),
+                                 anchor=(float(pos[0]), float(pos[1])), name=f"g{aid}",
+                                 health=9000.0, max_health=9000.0, armor_rating=60.0,
+                                 skill_ready=[], follow=None, moving=False, moved_at=0.0)
+    return st
+
+
+def _area(aid, point, radius=156.0, sid=197, hostile=False, k=1, n=10, t0=0.0):
+    """A hand-made area record in open_area's shape (the fields the scatter reads)."""
+    return {"id": aid, "caster": 1, "caster_kind": "player", "hostile": hostile,
+            "skill_id": sid, "rank": 12, "amount": 60.0, "point": point, "radius": radius,
+            "t0": t0, "period": 1.0, "n": n, "k": k, "ticks": [], "visuals": [],
+            "visual": None, "knocks_down": False, "condition": None, "caster_row": {}}
+
+
+def _scatter_run(st, pm, aid, t0, t1, dt=0.05):
+    """Tick ONE hostile's flight on a fake clock until it is safe or t1; returns
+    ([(t, op, vals, label)], t_end)."""
+    import authsrv
+    ag = st["agents"][aid]
+    ag["moved_at"] = t0
+    out, t = [], t0
+    while t < t1 and authsrv.scattering(ag):
+        t += dt
+        _t = t
+        authsrv._scatter_tick(lambda op, vals, label="", quiet=False: out.append((_t, op, vals, label)),
+                              st, 1, aid, ag, t, pm)
+    return out, t
+
+
+def section_scatter():
+    """MONSTERAI-S (2026-09-26): monster scatter, studies/monsterai/FINDINGS.md 16.
+
+    RECONSTRUCTION FROM WIKI THROUGHOUT -- no monster on any live tape was ever
+    struck by an area over time (aotjoin P9: 0 of 55 struck agents carry a
+    monster's token), so every rule here is GWW's sentence (Scatter rev
+    2735452; Area damage over time rev 2550879) with the number the sentence
+    lacks chosen by us and named. Each check has the arm that makes it mean
+    something: SCATTER_AFTER-1 ticks against SCATTER_AFTER, the group against a
+    lone row, the cancel against interrupt_body's shape, the avoiding point
+    against the bare ray, the flag against a planted record.
+    """
+    import authsrv
+    import contextlib
+    import io
+    print("\n== MONSTERAI-S: scatter -- a group struck by a foe's area over time runs clear ==")
+    POINT = authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT
+    FOLLOW = authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION
+    HALT = authsrv.GAME_SMSG_AGENT_STOP_MOVING
+    SPEED = authsrv.GAME_SMSG_AGENT_UPDATE_SPEED
+    PROP = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+    START = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+    pm = _Flat()
+    P = (600.0, 0.0)
+    _saved = (authsrv.SCATTER, authsrv.SCATTER_AFTER, authsrv.SCATTER_MARGIN,
+              authsrv._is_attack_skill, authsrv._is_instant_skill, authsrv.skill_effect_row,
+              authsrv.LEASH_RETURN)
+    LEDGER.ok(_saved[0] is True and _saved[1] == 2 and abs(_saved[2] - 100.0) < 1e-9
+              and authsrv.SCATTER_ANGLES == (0, 30, -30, 60, -60, 90, -90, 120, -120),
+              "SCATTER is the DEFAULT arm (--no-scatter reverts); SCATTER_AFTER = 2 and "
+              "SCATTER_MARGIN = 100 are pinned literals -- RECONSTRUCTION, the wiki has no "
+              "number for either; the candidate fan is the ray then +-30/60/90/120",
+              f"{_saved[:3]}, {authsrv.SCATTER_ANGLES}")
+    try:
+        authsrv.SCATTER, authsrv.SCATTER_AFTER, authsrv.LEASH_RETURN = True, 2, True
+        authsrv._is_attack_skill = lambda sid: sid == 999
+        authsrv._is_instant_skill = lambda sid: sid == 998
+        _real_effect_row = _saved[5]
+        authsrv.skill_effect_row = lambda sid: ({"scatters": False} if sid == 99991
+                                                else _real_effect_row(sid))
+        safe = 156.0 + authsrv.SCATTER_MARGIN                       # 256 u from P
+
+        # ---- S2/S3: the delay and the group ------------------------------------
+        # 10 and 11 stand inside the area (struck), 12 at 300 u -- outside the
+        # SAFE radius (256), a group-mate never struck.
+        st = _scatter_world([(10, (650.0, 0.0)), (11, (600.0, 100.0)), (12, (600.0, 300.0))])
+        ar = _area(1, P)
+        m1 = authsrv.scatter_struck(st, ar, [10, 11], 100.0)
+        n1 = st.get("scatter_counts", {}).get((1, ("group", "g")))
+        LEDGER.ok(m1 == [] and n1 == 1
+                  and not any(authsrv.scattering(st["agents"][a]) for a in (10, 11, 12)),
+                  "the FIRST damaging tick on a group marks NOBODY at the default "
+                  "SCATTER_AFTER = 2 -- the count reads 1 of 2 (WIKI: normal-mode foes "
+                  "'do not scatter easily'; the delay is ours)",
+                  f"marked {m1}, count {n1}")
+        ar["k"] = 2
+        m2 = authsrv.scatter_struck(st, ar, [10, 11], 101.0)
+        rec = {a: st["agents"][a].get("scatter") for a in (10, 11, 12)}
+        LEDGER.ok(sorted(m2) == [10, 11, 12]
+                  and all(authsrv.scattering(st["agents"][a]) for a in (10, 11, 12))
+                  and rec[10]["hold"] is False and rec[11]["hold"] is False
+                  and rec[12]["hold"] is True
+                  and all(r["area"] == 1 and r["point"] == P and r["leg"] is None
+                          and r["cancelled"] is False for r in rec.values())
+                  and st["scatter_counts"][(1, ("group", "g"))] == 0,
+                  "the SECOND tick: ALL THREE mark at once (WIKI: 'all targets in a group "
+                  "will scatter at the same time') -- the two struck FLEE, the unstruck one "
+                  "300 u from P (past the 256 u safe radius) CEASES and holds; the count "
+                  "resets for the next decision",
+                  f"marked {sorted(m2)}, holds {[(a, r and r['hold']) for a, r in rec.items()]}")
+        st2 = _scatter_world([(10, (650.0, 0.0)), (11, (600.0, 100.0))], group=None)
+        ar2 = _area(2, P, k=2)
+        authsrv.scatter_struck(st2, ar2, [10], 100.0)
+        m = authsrv.scatter_struck(st2, ar2, [10], 101.0)
+        LEDGER.ok(m == [10] and authsrv.scattering(st2["agents"][10])
+                  and not authsrv.scattering(st2["agents"][11]),
+                  "`group = None`: a row is a group of ONE -- only the struck body marks, "
+                  "its unstruck neighbour 100 u away stands (the arm that makes the group "
+                  "check mean something)",
+                  f"marked {m}")
+
+        # ---- S1: the trigger is the area-over-time tick and nothing else ---------
+        src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read().splitlines()
+        callers = set()
+        for i, line in enumerate(src):
+            if "scatter_struck(" in line and not line.lstrip().startswith("def "):
+                for j in range(i, -1, -1):
+                    if src[j].startswith("def "):
+                        callers.add(src[j].split("(")[0][4:])
+                        break
+        st3 = _scatter_world([(10, (650.0, 0.0))])
+        hostile_area = _area(3, P, hostile=True, k=2)
+        authsrv.scatter_struck(st3, hostile_area, [1, 10], 100.0)
+        mh = authsrv.scatter_struck(st3, hostile_area, [1, 10], 101.0)
+        me = authsrv.scatter_struck(st3, _area(4, P, k=2), [], 100.0)
+        LEDGER.ok(callers == {"_area_strike"} and mh == [] and me == []
+                  and not authsrv.scattering(st3["agents"][10]),
+                  "the ONE trigger: scatter_struck is called from _area_strike (an area "
+                  "over time's tick) and nowhere else -- a burst, a splash and a hex never "
+                  "reach it; a HOSTILE's own area marks nobody (its struck are the party -- "
+                  "S9, deferred); an empty tick marks nobody",
+                  f"callers {sorted(callers)}, hostile-area {mh}, empty {me}")
+        st4 = _scatter_world([(10, (650.0, 0.0))])
+        ns = _area(5, P, sid=99991, k=2)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            authsrv.scatter_struck(st4, ns, [10], 100.0)
+            mn = authsrv.scatter_struck(st4, ns, [10], 101.0)
+            authsrv.scatter_struck(st4, ns, [10], 102.0)
+        LEDGER.ok(mn == [] and not authsrv.scattering(st4["agents"][10])
+                  and buf.getvalue().count("scatters = false") == 1
+                  and (5, ("group", "g")) not in st4.get("scatter_counts", {}),
+                  "a row saying `scatters = false` (WIKI: Double Dragon, Glimmering Mark, "
+                  "Wastrel's Demise) marks nobody on any tick, counts nothing, and is "
+                  "named ONCE",
+                  f"marked {mn}, said {buf.getvalue().count('scatters = false')}x")
+
+        # ---- S5/S6: the cancel, exactly ------------------------------------------
+        # a swing in windup
+        st = _scatter_world([(10, (650.0, 0.0))])
+        ag = st["agents"][10]
+        ag.update({"swing_lands_at": 500.0, "swinging": True, "last_swing": 99.0,
+                   "follow": {"told": (0.0, 0.0)}, "froute": {"x": 1}, "swing_owed_at": 99.5,
+                   "target": 1, "target_locked": True, "leash_out_since": 98.0})
+        authsrv.scatter_struck(st, _area(6, P, k=1), [10], 100.0)
+        authsrv.scatter_struck(st, _area(6, P, k=2), [10], 101.0)
+        log, _t = _scatter_run(st, pm, 10, 101.0, 101.1)
+        ops = [(op, v) for _t, op, v, _l in log]
+        LEDGER.ok(len(ops) == 2 and ops[0] == (PROP, [agents.GV_ATTACK_STOPPED, 10, 0])
+                  and ops[1][0] == POINT and ops[1][1][0] == 10
+                  and ag.get("swing_lands_at") is None and ag.get("swinging") is False
+                  and ag.get("last_swing") == 99.0 and ag.get("follow") is None
+                  and "froute" not in ag and ag.get("swing_owed_at") is None
+                  and ag.get("leash_out_since") is None and ag.get("target_locked") is True,
+                  "a SWING in windup: exactly [3 GV_ATTACK_STOPPED, 10, 0] then ONE 0x0029 "
+                  "(the L4 shape, OBSERVED n=1) -- no [35], no 0x0028; the landing is "
+                  "dropped, last_swing untouched, the follow and its debts forgotten as "
+                  "_leash_give_up forgets them, the dwell clock cleared, the lock KEPT",
+                  f"{[(hex(op), v) for op, v in ops]}, swing {ag.get('swing_lands_at')}")
+        # the known-bad arm: interrupt_body's shape carries [35]
+        stI = _scatter_world([(10, (650.0, 0.0))])
+        stI["agents"][10].update({"swing_lands_at": 500.0, "swinging": True})
+        isent = []
+        authsrv.interrupt_body(lambda op, v, l="", quiet=False: isent.append((op, v)), stI,
+                               10, stI["agents"][10], 1, 0, 1, mode="action")
+        LEDGER.ok([v[0] for op, v in isent if op == PROP] == [agents.GV_ATTACK_STOPPED,
+                                                              agents.GV_INTERRUPTED],
+                  "CONTROL: an INTERRUPT of the same swing sends [3] AND [35] -- the "
+                  "scatter's cancel is not that shape",
+                  f"{[(hex(op), v) for op, v in isent]}")
+        # a cast in activation, restored to its pre-cast readiness
+        for sid, stop in ((253, agents.GV_SKILL_STOPPED), (999, agents.GV_ATTACK_SKILL_STOPPED)):
+            st = _scatter_world([(10, (650.0, 0.0))])
+            ag = st["agents"][10]
+            ag.update({"skills": ((sid, 1.0, 20.0),), "skill_ready": [5.0], "casting": 0,
+                       "cast_lands_at": 500.0, "cast_prev_ready": 5.0, "cast_recharge": 20.0})
+            ag["skill_ready"][0] = 121.0                      # armed at the cast, as the site does
+            authsrv.scatter_struck(st, _area(7, P, k=1), [10], 100.0)
+            authsrv.scatter_struck(st, _area(7, P, k=2), [10], 101.0)
+            log, _t = _scatter_run(st, pm, 10, 101.0, 101.1)
+            ops = [(op, v) for _t, op, v, _l in log]
+            LEDGER.ok(len(ops) == 2 and ops[0] == (PROP, [stop, 10, 0]) and ops[1][0] == POINT
+                      and ag.get("casting") is None and ag.get("cast_lands_at") is None
+                      and ag["skill_ready"][0] == 5.0 and "cast_recharge" not in ag
+                      and "cast_prev_ready" not in ag,
+                      f"a {'SPELL' if sid == 253 else 'ATTACK SKILL'} in activation: exactly "
+                      f"[{stop}, 10, 0] then the leg, NO [35], and skill_ready[slot] is put "
+                      f"back to its PRE-CAST value 5.0 (WIKI 'Cancel': no recharge; the cast "
+                      f"site's `cast_prev_ready` stamp) -- energy stays spent",
+                      f"{[(hex(op), v) for op, v in ops]}, ready {ag['skill_ready']}")
+        stI = _scatter_world([(10, (650.0, 0.0))])
+        agI = stI["agents"][10]
+        agI.update({"skills": ((253, 1.0, 20.0),), "skill_ready": [121.0], "casting": 0,
+                    "cast_lands_at": 500.0, "cast_prev_ready": 5.0})
+        authsrv.interrupt_body(lambda op, v, l="", quiet=False: None, stI, 10, agI, 1, 0, 1,
+                               mode="action")
+        LEDGER.ok(agI["skill_ready"][0] >= time.time() + 19.0,
+                  "CONTROL: an INTERRUPT of the same cast re-arms the FULL recharge (now + "
+                  "20 s) -- the restore above is the cancel's own behaviour, not the default",
+                  f"ready {agI['skill_ready'][0] - time.time():.1f} s out")
+        # an instant skill is never cancelled, and the attack tick keeps it
+        st = _scatter_world([(10, (650.0, 0.0))])
+        ag = st["agents"][10]
+        ag.update({"skills": ((998, 0.0, 10.0),), "skill_ready": [111.0], "casting": 0,
+                   "cast_lands_at": time.time() + 30.0})
+        authsrv.scatter_struck(st, _area(8, P, k=1), [10], 100.0)
+        authsrv.scatter_struck(st, _area(8, P, k=2), [10], 101.0)
+        log, _t = _scatter_run(st, pm, 10, 101.0, 101.1)
+        sw = _swings(st)
+        LEDGER.ok([op for _t, op, v, _l in log] == [POINT]
+                  and ag.get("casting") == 0 and ag.get("cast_lands_at") is not None
+                  and sw == [] and authsrv.scattering(ag),
+                  "an INSTANT skill armed (SKILLS-IA, no window) is NOT cancelled: no stop "
+                  "word, only the leg; and the attack tick's scatter branch keeps it armed "
+                  "(it lands on its own tick) while opening nothing",
+                  f"ops {[hex(op) for _t, op, v, _l in log]}, casting {ag.get('casting')}, "
+                  f"swings {sw}")
+        stamp = [i for i, l in enumerate(src)
+                 if l.strip() == 'agent["cast_prev_ready"] = agent["skill_ready"][slot]']
+        LEDGER.ok(len(stamp) == 1 and src[stamp[0] + 1].strip()
+                  == 'agent["skill_ready"][slot] = now + recharge + npc_recharge_anchor(activation)',
+                  "SOURCE: the pre-cast stamp sits on the line before the cast site arms the "
+                  "slot -- the only place a hostile's skill_ready is armed by a cast",
+                  f"stamp at line {stamp}")
+
+        # ---- S4: the flee point ----------------------------------------------------
+        ray = authsrv._scatter_point(pm, 650.0, 0.0, P[0], P[1], 156.0, 0, [])
+        second = _area(9, (856.0, 0.0))
+        dodged = authsrv._scatter_point(pm, 650.0, 0.0, P[0], P[1], 156.0, 0, [second], fled=1)
+        bare = authsrv._scatter_point(pm, 650.0, 0.0, P[0], P[1], 156.0, 0, [], fled=1)
+        d_dodged = math.hypot(dodged[0] - P[0], dodged[1] - P[1]) if dodged else None
+        in_second = (dodged is not None
+                     and math.hypot(dodged[0] - 856.0, dodged[1]) <= 156.0)
+        LEDGER.ok(ray is not None and abs(ray[0] - 856.0) < 1e-6 and abs(ray[1]) < 1e-6
+                  and ray[2] == 0
+                  and dodged is not None and abs(d_dodged - safe) < 1e-6 and not in_second
+                  and abs(dodged[0] - (600.0 + safe * math.cos(math.radians(60)))) < 1e-6
+                  and abs(dodged[1] - safe * math.sin(math.radians(60))) < 1e-6
+                  and not authsrv._segment_meets_disc(650.0, 0.0, dodged[0], dodged[1],
+                                                      856.0, 0.0, 156.0)
+                  and math.hypot(bare[0] - 856.0, bare[1]) <= 156.0,
+                  f"the flee point is {safe:.0f} u FROM P on the P->body ray, (856, 0) for a "
+                  f"body at 650; with a SECOND active area sitting on that ray the +-30 "
+                  f"candidates fall inside it and the +60 one wins -- outside it, still "
+                  f"{safe:.0f} u from P, its first leg clear of the disc (WIKI: 'unless they "
+                  f"would run into another skill that causes scatter'); the CONTROL with no "
+                  f"areas passed returns the ray point, which IS inside the second disc",
+                  f"ray {ray}, dodged {dodged}, bare {bare}")
+        on_p = authsrv._scatter_point(pm, 600.0, 0.0, P[0], P[1], 156.0, 0, [], away=(0.0, 0.0))
+        LEDGER.ok(on_p is not None and abs(on_p[0] - 856.0) < 1e-6 and abs(on_p[1]) < 1e-6,
+                  "a body standing ON P runs AWAY from its target (the player at the "
+                  "origin): (856, 0), not an undefined direction",
+                  f"{on_p}")
+
+        class _Refuse:
+            """A mesh that calls nothing ground and routes nowhere."""
+            def walkable(self, x, y):
+                return False
+
+            def route(self, *a, **k):
+                return None
+
+            def clip(self, x0, y0, x1, y1, step=16.0):
+                return (x0, y0)
+
+            def plane_at(self, x, y, prefer=None):
+                return 0
+
+        st = _scatter_world([(10, (650.0, 0.0))])
+        ag = st["agents"][10]
+        authsrv.scatter_struck(st, _area(10, P, k=1), [10], 100.0)
+        authsrv.scatter_struck(st, _area(10, P, k=2), [10], 101.0)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            log, _t = _scatter_run(st, _Refuse(), 10, 101.0, 102.0)
+        LEDGER.ok([op for _t, op, v, _l in log] == []
+                  and ag["pos"] == (650.0, 0.0) and not authsrv.scattering(ag)
+                  and "NOWHERE to run" in buf.getvalue() and "no point is invented" in buf.getvalue()
+                  and ag.get("scatter_hold") == 10,
+                  "a mesh that REFUSES every candidate and names no ground at the ray point: "
+                  "no 0x0029, the body does not move, the refusal is PRINTED and no point is "
+                  "invented -- it stands (and holds off the area like an arrival)",
+                  f"ops {[hex(op) for _t, op, v, _l in log]}, pos {ag['pos']}")
+
+        # ---- S6/S7: the legs, the flight, the arrival ----------------------------
+        st = _scatter_world([(10, (650.0, 0.0)), (11, (600.0, 100.0)), (12, (600.0, 300.0))])
+        for a in (10, 11, 12):
+            st["agents"][a].update({"target": 1, "target_locked": True})
+        st["areas"] = [_area(11, P)]
+        authsrv.scatter_struck(st, st["areas"][0], [10, 11], 100.0)
+        st["areas"][0]["k"] = 2
+        authsrv.scatter_struck(st, st["areas"][0], [10, 11], 101.0)
+        logs = {}
+        for a in (10, 11):
+            logs[a], _t = _scatter_run(st, pm, a, 101.0, 140.0)
+        ag10, ag11, ag12 = (st["agents"][a] for a in (10, 11, 12))
+        legs10 = [v for _t, op, v, _l in logs[10] if op == POINT]
+        legs11 = [v for _t, op, v, _l in logs[11] if op == POINT]
+        others = [(hex(op), v) for a in (10, 11) for _t, op, v, _l in logs[a] if op != POINT]
+        step_ok = all(math.hypot(v[1][0] - f, v[1][1] - g) <= authsrv.RETURN_LEG_LENGTH + 1e-6
+                      for v, (f, g) in zip(legs10, [(650.0, 0.0)] + [tuple(v[1]) for v in legs10]))
+        LEDGER.ok(legs10 and legs11 and not others and step_ok
+                  and abs(legs10[-1][1][0] - 856.0) < 1e-6 and abs(legs10[-1][1][1]) < 1e-6
+                  and abs(legs11[-1][1][0] - 600.0) < 1e-6 and abs(legs11[-1][1][1] - 256.0) < 1e-6
+                  and not authsrv.scattering(ag10) and not authsrv.scattering(ag11)
+                  and math.hypot(ag10["pos"][0] - 856.0, ag10["pos"][1]) <= authsrv.NPC_LEG_DONE
+                  and math.hypot(ag11["pos"][0] - 600.0, ag11["pos"][1] - 256.0) <= authsrv.NPC_LEG_DONE
+                  and ag10.get("scatter_hold") == 11 and ag11.get("scatter_hold") == 11
+                  and ag10.get("target_locked") is True and ag10.get("target") == 1
+                  and ag10.get("moving") is False,
+                  "the WALKERS: 0x0029 legs only (nothing armed, so no stop word), each at "
+                  f"most {authsrv.RETURN_LEG_LENGTH:.0f} u, no 0x002B, no 0x002A, no 0x0028 at "
+                  "the end (the leash return's 3 of 3 shape); the last leg's point IS the "
+                  "flee point ((856, 0) and (600, 256)); each arrives SAFE with target and "
+                  "target_locked KEPT and the hold set on area #11",
+                  f"legs10 {[tuple(v[1]) for v in legs10]}, legs11 {[tuple(v[1]) for v in legs11]}, "
+                  f"others {others}")
+        cl, _t = _scatter_run(st, pm, 12, 101.0, 102.0)
+        LEDGER.ok(cl == [] and not authsrv.scattering(ag12) and ag12["pos"] == (600.0, 300.0)
+                  and ag12.get("scatter_hold") == 11,
+                  "the CEASER (300 u from P, never struck) sent nothing and never moved; once "
+                  "its group's walkers are safe it is released into the same hold",
+                  f"sent {cl}, pos {ag12['pos']}, hold {ag12.get('scatter_hold')}")
+        # mid-flight: no swing, no cast, no retarget, no re-follow, even when hit;
+        # a strike on a walker counts NOTHING; death drops the record.
+        st = _scatter_world([(10, (650.0, 0.0)), (11, (600.0, 100.0))])
+        st["agents"][10].update({"target": 1, "target_locked": True,
+                                 "skills": ((253, 1.0, 20.0),), "skill_ready": [0.0]})
+        st["areas"] = [_area(12, P)]
+        authsrv.scatter_struck(st, st["areas"][0], [10, 11], 100.0)
+        st["areas"][0]["k"] = 2
+        authsrv.scatter_struck(st, st["areas"][0], [10, 11], 101.0)
+        ag = st["agents"][10]
+        _scatter_run(st, pm, 10, 101.0, 101.1)                      # the first leg is out
+        st["pos"] = (ag["pos"][0] + 85.0, ag["pos"][1])              # the player in reach
+        st["agents"][10]["provoked"] = True
+        sw = _swings(st)
+        walk = _walk(st, elapsed=0.05)
+        mid = authsrv.scatter_struck(st, st["areas"][0], [10], 102.0)
+        authsrv.hurt_agent_row(lambda op, v, l="", quiet=False: None, st, 1, 10, 5.0, 0.001, 1,
+                               "a hit on the way")
+        LEDGER.ok(sw == [] and ag.get("casting") is None and not ag.get("swinging")
+                  and not [op for op, v, l in walk if op in (FOLLOW, SPEED, HALT)]
+                  and authsrv.scattering(ag) and ag.get("target") == 1
+                  and mid == [] and st["scatter_counts"].get((12, ("group", "g")), 0) == 0
+                  and ag.get("leash_out_since") is None,
+                  "WHILE FLEEING with the player 85 u away and a ready spell: the attack tick "
+                  "opens no swing and no cast, the move tick re-follows nobody (its own legs "
+                  "only), a hit does not retarget it, a strike on a walker COUNTS NOTHING, "
+                  "the dwell clock stays clear",
+                  f"swings {sw}, walk {[hex(op) for op, v, l in walk]}, target {ag.get('target')}, "
+                  f"mid {mid}")
+        ag["dead"] = True
+        _walk(st, elapsed=0.05)
+        LEDGER.ok(ag.get("scatter") is None and not authsrv.scattering(ag),
+                  "killed mid-flight, the dead branch drops the record (the CD-8 shape) -- "
+                  "a revive re-decides from where it rises",
+                  f"scatter {ag.get('scatter')}")
+
+        # ---- S7: the hold, its lift, the re-entry ----------------------------------
+        st = _scatter_world([(10, (856.0, 0.0))])
+        ag = st["agents"][10]
+        ag.update({"target": 1, "target_locked": True, "scatter_hold": 13})
+        st["areas"] = [_area(13, P)]
+        st["pos"] = (620.0, 0.0)                                     # the player INSIDE the area
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            held = _walk(st, elapsed=0.05)
+            held2 = _walk(st, elapsed=0.05)
+        st2 = _scatter_world([(10, (856.0, 0.0))])
+        st2["agents"][10].update({"target": 1, "target_locked": True, "scatter_hold": 13})
+        st2["areas"] = [_area(13, P)]
+        st2["pos"] = (1100.0, 0.0)                                   # OUTSIDE it, past reach
+        free = _walk(st2, elapsed=0.05)
+        LEDGER.ok(held == [] and held2 == [] and ag.get("follow") is None
+                  and ag.get("scatter_hold") == 13 and buf.getvalue().count("HOLDS at") == 1
+                  and [op for op, v, l in free if op in (SPEED, FOLLOW)]
+                  and st2["agents"][10].get("scatter_hold") == 13,
+                  "the HOLD: arrived at (856, 0) with the player standing INSIDE the live "
+                  "area, a melee body sends NO follow (printed once); the CONTROL with the "
+                  "player outside the area chases as ever -- the hold is about the "
+                  "destination, not the body",
+                  f"held {[hex(op) for op, v, l in held]}, free {[hex(op) for op, v, l in free]}")
+        st["areas"] = []                                             # the area expires
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            lifted = _walk(st, elapsed=0.05)
+        LEDGER.ok(ag.get("scatter_hold") is None and "the hold lifts" in buf.getvalue()
+                  and [op for op, v, l in lifted if op == FOLLOW]
+                  and not [op for op, v, l in lifted if op == POINT]
+                  and ag.get("target_locked") is True,
+                  "when the area EXPIRES the hold lifts (printed) and the body re-engages "
+                  "with target_locked kept -- a FOLLOW, not a RETURN leg (EV-2's lost-contact "
+                  "branch does not send it home)",
+                  f"lifted {[hex(op) for op, v, l in lifted]}, lock {ag.get('target_locked')}")
+        st = _scatter_world([(10, (650.0, 0.0))])
+        ag = st["agents"][10]
+        ag["scatter_hold"] = 14
+        ar = _area(14, P, k=5)
+        r1 = authsrv.scatter_struck(st, ar, [10], 105.0)
+        r2 = authsrv.scatter_struck(st, ar, [10], 106.0)
+        LEDGER.ok(r1 == [] and r2 == [10] and authsrv.scattering(ag),
+                  "RE-ENTRY: a body back inside the area after its flight is struck again "
+                  "and counts toward a NEW decision -- it scatters again on the "
+                  f"{authsrv.SCATTER_AFTER}nd tick (S7, RECONSTRUCTION)",
+                  f"{r1}, {r2}")
+
+        # ---- S8: who never scatters ------------------------------------------------
+        st = _scatter_world([(10, (650.0, 0.0)), (11, (600.0, 100.0)), (12, (620.0, 20.0)),
+                             (13, (640.0, -30.0)), (14, (600.0, -100.0)), (15, (660.0, 40.0)),
+                             (16, (630.0, 60.0))])
+        st["agents"][10]["dead"] = True
+        st["agents"][11]["attacks_back"] = False
+        st["agents"][12]["effects"] = agents.EFFECT_TRANSITION
+        st["agents"][13]["stationary"] = True
+        st["agents"][14]["leash_return"] = {"t0": 0.0, "legs": 0, "leg": None, "leg_at": 0.0,
+                                            "from": (0.0, 0.0)}
+        st["agents"][15]["allegiance"] = agents.ALLEGIANCE_PLAYER
+        st["agents"][16]["knocked_until"] = time.time() + 30.0
+        ar = _area(15, P, k=2)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            authsrv.scatter_struck(st, ar, [16], 100.0)
+            nv = authsrv.scatter_struck(st, ar, [16], 101.0)
+        LEDGER.ok(nv == [] and not any(authsrv.scattering(st["agents"][a]) for a in range(10, 17))
+                  and st["agents"][16].get("scatter_pending", {}).get("area") == 15
+                  and all(w in buf.getvalue() for w in ("(inanimate)", "(burrowing)",
+                                                        "(a stationary row)", "(walking home)",
+                                                        "(down -- re-checked when it stands)")),
+                  "the NEVER set on one decision: dead, inanimate (attacks_back False), "
+                  "burrowing (EFFECT_TRANSITION), a `stationary = true` row, one walking home "
+                  "on the leash, a party allegiance (not in the group) -- none marks; the "
+                  "KNOCKED-DOWN one is noted as pending, each reason printed",
+                  f"marked {nv}, pending {st['agents'][16].get('scatter_pending')}")
+        st["areas"] = [ar]
+        st["agents"][16]["knocked_until"] = time.time() - 1.0          # it stands
+        stood = _walk(st, elapsed=0.05)
+        LEDGER.ok(authsrv.scattering(st["agents"][16])
+                  and st["agents"][16].get("scatter_pending") is None
+                  and [op for op, v, l in stood if op == POINT and v[0] == 16],
+                  "and when it STANDS with the area still live, the move tick re-checks it: "
+                  "it flees now (its first leg on this tick)",
+                  f"stood {[(hex(op), v[0]) for op, v, l in stood]}")
+        st["agents"][16]["scatter"] = None
+        st["agents"][16]["scatter_pending"] = {"area": 15, "at": 100.0}
+        st["areas"] = []
+        _walk(st, elapsed=0.05)
+        LEDGER.ok(not authsrv.scattering(st["agents"][16])
+                  and st["agents"][16].get("scatter_pending") is None,
+                  "the CONTROL: standing up after the area is GONE, the pending mark is "
+                  "dropped and nothing flees",
+                  f"scatter {st['agents'][16].get('scatter')}")
+        LEDGER.skip("S9 party bodies scatter",
+                    "DEFERRED: WIKI says heroes and henchmen scatter too (the same rate in "
+                    "both modes); this arc marks HOSTILES only -- scatter_struck refuses a "
+                    "hostile's area outright. Named in studies/monsterai 16.")
+
+        # ---- S11: the flags --------------------------------------------------------
+        authsrv.SCATTER = False
+        st = _scatter_world([(10, (650.0, 0.0)), (11, (600.0, 100.0))])
+        ar = _area(16, P, k=2)
+        off1 = authsrv.scatter_struck(st, ar, [10, 11], 100.0)
+        off2 = authsrv.scatter_struck(st, ar, [10, 11], 101.0)
+        off3 = authsrv.scatter_struck(st, ar, [10, 11], 102.0)
+        # a PLANTED record under the revert: both ticks read the flag, not the record
+        ag = st["agents"][10]
+        ag["scatter"] = {"area": 16, "point": P, "radius": 156.0, "t0": 100.0, "legs": 0,
+                         "leg": None, "leg_at": 100.0, "goal": None, "from": (650.0, 0.0),
+                         "cancelled": False, "hold": False}
+        ag["scatter_hold"] = 16
+        st["areas"] = [ar]
+        st["pos"] = (735.0, 0.0)                                      # 85 u away, in reach
+        ag["provoked"] = True
+        sw = _swings(st)
+        walk = _walk(st, elapsed=0.05)
+        opened = [v for op, v, l in sw if op == START and v[0] == 4]
+        LEDGER.ok(off1 == [] and off2 == [] and off3 == [] and "scatter_counts" not in st
+                  and not authsrv.scattering(ag) and opened == [[4, 10, 1, 0]]
+                  and not [op for op, v, l in walk if op == POINT],
+                  "--no-scatter (SCATTER False): three ticks mark nobody and count nothing; a "
+                  "PLANTED record is ignored by both ticks -- the attack tick opens the swing "
+                  "at 85 u and the move tick sends no SCATTER leg (they read the flag, not the "
+                  "record) -- the pre-scatter stream byte for byte",
+                  f"marked {off1, off2, off3}, opened {opened}, walk {[hex(op) for op, v, l in walk]}")
+        authsrv.SCATTER, authsrv.SCATTER_AFTER = True, 1
+        st = _scatter_world([(10, (650.0, 0.0)), (11, (600.0, 100.0))])
+        one = authsrv.scatter_struck(st, _area(17, P, k=1), [10], 100.0)
+        LEDGER.ok(sorted(one) == [10, 11],
+                  "--scatter-after 1: the FIRST damaging tick scatters the group (the "
+                  "hard-mode-like floor, 'more quickly in hard mode')",
+                  f"marked {sorted(one)}")
+        authsrv.SCATTER_AFTER = 2
+        sa = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
+        s_all = "\n".join(src)
+        i_flag = s_all.index("SCATTER = True")
+        LEDGER.ok('"--no-scatter"' in sa and '"--scatter-after"' in sa
+                  and "SCATTER = True" in s_all and "SCATTER_AFTER = 2" in s_all
+                  and "SCATTER_MARGIN = 100.0" in s_all
+                  and "rev 2735452" in s_all[i_flag - 9000:i_flag]
+                  and "rev 2550879" in s_all[i_flag - 9000:i_flag]
+                  and "RECONSTRUCTION FROM WIKI" in s_all[i_flag - 9000:i_flag]
+                  and "NO retail witness" in s_all[i_flag - 9000:i_flag],
+                  "SOURCE: the flags exist in serverargs; the constants are literals at "
+                  "column 0; the WIKI citations (Scatter rev 2735452, Area damage over time "
+                  "rev 2550879) and the RECONSTRUCTION label sit at the call site with the "
+                  "no-witness statement",
+                  "authsrv.py / serverargs.py")
+
+        # ---- END TO END: the player's Fire Storm over a three-body group through the
+        #      REAL open_area / area_tick / hit_enemy, then the real move and attack ticks.
+        # The player stands INSIDE the area (620, 0) -- the position the hold reads.
+        st = _scatter_world([(10, (650.0, 0.0)), (11, (600.0, 100.0)), (12, (600.0, 300.0))],
+                            player=(620.0, 0.0))
+        for a in (10, 11, 12):
+            st["agents"][a].update({"target": 1, "target_locked": True, "provoked": True,
+                                    "attack_speed": 1.33})
+        st["player_health"] = 480.0
+        sent = []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals), label))  # noqa: E731
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            area = authsrv.open_area(send, st, 1, authsrv.PLAYER_AGENT_ID, 197, 12, 60.0, P,
+                                     (156.0, 10.0))
+            e2e, marked = {}, {}
+            for k in (1, 2):
+                for ar_ in st["areas"]:
+                    ar_["t0"] -= 1.0
+                    ar_["ticks"] = [t - 1.0 for t in ar_["ticks"]]
+                    ar_["visuals"] = [t - 1.0 for t in ar_["visuals"]]
+                mark = len(sent)
+                authsrv.area_tick(send, st, 1)
+                e2e[k] = sent[mark:]
+                marked[k] = sorted(a for a in (10, 11, 12) if authsrv.scattering(st["agents"][a]))
+            words1 = [v for op, v, l in e2e[1] if op == 0x00A3 and v[0] == 16]
+            words2 = [v for op, v, l in e2e[2] if op == 0x00A3 and v[0] == 16]
+            # the mark is made; nobody has moved yet (the tick that decides never walks)
+            moved_at_mark = [st["agents"][a]["pos"] for a in (10, 11, 12)]
+            walk1 = _walk(st, elapsed=0.05)
+            swings = _swings(st)
+            n, walks = 0, []
+            while any(authsrv.scattering(st["agents"][a]) for a in (10, 11, 12)) and n < 400:
+                n += 1
+                walks.extend(_walk(st, elapsed=0.05))
+            settle = _walk(st, elapsed=0.05) + _walk(st, elapsed=0.05)
+        out = buf.getvalue()
+        legs = [v for op, v, l in walk1 if op == POINT]
+        all_legs = [v for op, v, l in walks if op == POINT]
+        p10, p11, p12 = (st["agents"][a]["pos"] for a in (10, 11, 12))
+        LEDGER.ok(area is not None and len(words1) == 2 and len(words2) == 2
+                  and sorted(v[1] for v in words1) == [10, 11]
+                  and marked[1] == [] and marked[2] == [10, 11, 12]
+                  and moved_at_mark == [(650.0, 0.0), (600.0, 100.0), (600.0, 300.0)]
+                  and sorted(v[0] for v in legs) == [10, 11]
+                  and not [op for op, v, l in walk1 if op in (FOLLOW, SPEED, HALT)]
+                  and swings == []
+                  and "SCATTERS after 2 tick(s)" in out and "[DESKWORK-D6]" in out
+                  and not [1 for op, v, l in walks if op != POINT]
+                  and n < 400 and not any(authsrv.scattering(st["agents"][a]) for a in (10, 11, 12))
+                  and math.hypot(p10[0] - 856.0, p10[1]) <= authsrv.NPC_LEG_DONE
+                  and math.hypot(p11[0] - 600.0, p11[1] - 256.0) <= authsrv.NPC_LEG_DONE
+                  and p12 == (600.0, 300.0)
+                  and settle == [] and out.count("HOLDS at") == 3
+                  and all(st["agents"][a].get("scatter_hold") == area["id"] for a in (10, 11, 12))
+                  and all(st["agents"][a].get("target_locked") for a in (10, 11, 12)),
+                  "END TO END through B2's REAL open_area / area_tick / hit_enemy: the "
+                  "player's Fire Storm at (600, 0) words the two bodies inside on tick 1 "
+                  "(nobody marked) and tick 2 (ALL THREE marked, none yet moved); the next "
+                  "move tick sends the two walkers' first 0x0029 legs and nothing else, the "
+                  "attack tick opens nothing; the flight runs on legs alone to (856, 0) and "
+                  "(600, 256) while the ceaser never moves; then, the player standing inside "
+                  "the live area, all three HOLD at their points (printed once each, no "
+                  "follow) with their target locked",
+                  f"words {len(words1)}/{len(words2)}, marked {marked}, legs "
+                  f"{[(v[0], tuple(v[1])) for v in legs]}, {len(all_legs)} legs in all, ends "
+                  f"{[tuple(round(c) for c in p) for p in (p10, p11, p12)]}, swings {swings}, "
+                  f"{n} ticks, settle {[hex(op) for op, v, l in settle]}, holds "
+                  f"{out.count('HOLDS at')}")
+    finally:
+        (authsrv.SCATTER, authsrv.SCATTER_AFTER, authsrv.SCATTER_MARGIN,
+         authsrv._is_attack_skill, authsrv._is_instant_skill, authsrv.skill_effect_row,
+         authsrv.LEASH_RETURN) = _saved
 
 
 def section_caster_opening():

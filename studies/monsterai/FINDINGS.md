@@ -2044,6 +2044,205 @@ directly); each is corrected in the code and folded into L1–L5 above:
   vault re-emit of `skills.toml` with the new fields (until then the default fixture's
   touch skill 312 casts from 300 u).
 
+## 16. Scatter, built (2026-09-26)
+
+**Identifiers.** `MONSTERAI-S<n>` — the eleven decisions below, one token each (the
+orchestrator's spec for the DESKWORK-D6 + scatter arc, step B3). **Label, said first and
+once for the whole section: RECONSTRUCTION FROM WIKI.** No monster on any live tape was
+ever struck by an area over time — the corpus census behind D6 (`aotjoin.py` P9,
+[studies/weapons/PLAN.md](../weapons/PLAN.md) §41) found the Fire Storm ground visual on
+exactly one capture, `20260817T231139`, 17 casts, and every one of the 55 struck agents
+carries a PvP create token (35 `att2`, 16 `att1`, 4 the observer's own kind-5 body);
+0 `mon1`/`mons`. So §4.4's four implementable rules were turned into code with no retail
+witness for any of them, and the numbers the wiki does not give were chosen by us and are
+named as ours. The sources are the two pages the register row (`PLAN.md` §6.1, the
+monster-AI row, updated in the same commit) now cites for it: GWW *Scatter* rev 2735452
+(2026-07-23, the revision §4.4 already quotes) and GWW *Area damage over time* rev 2550879
+(2013-07-18). Both were re-read for this arc (the research lane's notes); the three clauses
+§4.4 did not carry are quoted where they bite. **Where it lives:**
+`toolkit/authsrv/authsrv.py`, the `MONSTERAI-S` block beside the leash return
+(`scattering`, `_scatter_mark`, `_scatter_cancel`, `_scatter_point`, `_scatter_tick`,
+`_scatter_held`), the hook `scatter_struck` that D6 step 2 left as a no-op in
+`_area_strike`, branches in `enemy_move_tick` and `enemy_attack_tick`, and one stamp at the
+hostile cast site. **Lock:** `toolkit/authsrv/test_agentlife.py` `section_scatter` (30 checks
++ 1 declared skip), each with the arm that makes it mean something. **Flags:** `--no-scatter`
+(the pre-scatter stream byte for byte), `--scatter-after N`. **Log:** `[SCATTER]` lines for
+the count, the decision, the cancel, the point, the legs, the arrival, the hold and its lift.
+
+### MONSTERAI-S1 — the trigger is a damaging tick of a foe's area over time, and nothing else
+
+WIKI (*Scatter*): *"all AoE skills that cause damage over time also cause scatter … AoE
+skills with a single packet of damage do not"*, Panic and Spiteful Spirit named as
+non-triggers; (*Area damage over time*): degeneration *"is not technically damage"*.
+**Built:** the one call is `scatter_struck(state, area, struck, now)` from `_area_strike`,
+with the tick's `struck` list — the foes that took a word on THIS tick. A burst, a splash, a
+hex and the completion itself never reach it (locked by a source walk: `_area_strike` is the
+only caller). A hostile's own area marks nobody (its struck are the party — S9). A row
+saying `scatters = false` (a new optional `skill_effect` field for the wiki's Double Dragon,
+Glimmering Mark and Wastrel's Demise; no row carries it) marks nobody on any tick and is
+named once. Any tick can trigger, not only the first.
+
+### MONSTERAI-S2 — the rate is a DELAY in ticks, not a chance
+
+WIKI: *"foes in normal mode do not scatter easily"* (*Scatter*), scatter *"happens more
+quickly in hard mode than in normal mode"* (*Area damage over time*). **No number on either
+page — NOT FOUND**, and the corpus cannot supply one (above). **Built, RECONSTRUCTION:** a
+GROUP scatters on the tick at which it has taken `SCATTER_AFTER` damaging ticks of THAT
+area — instants, not words — default **2**; `--scatter-after 1` is the hard-mode-like
+floor. Deterministic, no RNG. One decision per (group, area) per flight: the count is not
+advanced while any member is still walking, resets at the decision, and a body struck again
+after its flight counts toward a NEW decision (S7). The research lane proposed a seeded
+probability; the spec chose the delay because "more quickly" is a statement about time and
+because the owner's feel — the only instrument this arc has — can tune one integer.
+**Open:** whether retail's normal-mode rate is a delay, a damage threshold (*"large amounts
+of AoE damage"*) or a chance is undecidable here.
+
+### MONSTERAI-S3 — the group is the row's `group`, and it decides together
+
+WIKI: *"All targets in a group will scatter at the same time, cancelling their current
+action to do so."* **Built:** the group is the struck row's `group` field (MONSTERAI-J's,
+the one `provoke_hostile` and `party_within` read); `None` is a group of one. On the
+decision tick every living, eligible member is marked at once — struck or not. A member
+already OUTSIDE the safe radius (`radius + SCATTER_MARGIN` from P) does not walk: it CEASES
+(S5's cancel) and holds where it stands until the group's walkers arrive, then enters the
+same hold (S7). Locked: a group of three with two struck marks three; `group = None` marks
+only the struck one; the 300 u mate ceases and never moves.
+
+### MONSTERAI-S4 — the flee point: radius + 100 u from P, on the ray, avoiding other areas
+
+WIKI: *"Targets will run from the epicenter of the skill that causes scatter, unless they
+would run into another skill that causes scatter in that direction."* No distance
+(NOT FOUND — *"a safer location to use skills"*). **Built, `_scatter_point`:** the point at
+`radius + SCATTER_MARGIN` (100 u, OURS: the body's disc plus `NPC_LEG_DONE` with room)
+FROM P on the P→body ray; candidates the ray then ±30, ±60, ±90, ±120°; the first that is
+(a) walkable on its plane, (b) routable from the copy (`route()`, or a `clip` that reaches
+it on a mesh without one), (c) outside EVERY active foe area, (d) whose first corridor leg
+(`_return_leg`, unchanged) crosses no OTHER active area's disc. A body standing on P (within
+1 u) runs away from its target, else from its anchor. Nothing passes → `place_on_mesh` at
+the ray point; that too refuses → the body stands, a printed refusal, no invented point (it
+then holds off the area as an arrival does). Locked: (856, 0) for a body at 650 with P at
+(600, 0); with a second area sitting on the ray the ±30 candidates fall inside it and the
++60 one wins (the control with no areas passed returns the ray point, which IS inside the
+second disc); a refusing mesh sends nothing and prints "NOWHERE to run".
+
+### MONSTERAI-S5 — the cancel: the stop word, no [35], no recharge
+
+WIKI (*Scatter*): *"cancelling their current action"*; (*Cancel*, as the server already
+applies it to the player at `_mark_cancelled`): a cancelled skill does not activate, its
+costs stay paid, it does NOT recharge. **Built, `_scatter_cancel`, once per flight, on
+whichever tick first sees the mark** (the move tick in the world loop; the attack tick when
+`combat_pass` reaches it first — so the stop word always precedes the first leg, S6): a cast
+in activation → `[59 GV_SKILL_STOPPED | 49 GV_ATTACK_SKILL_STOPPED, body, 0]`, **no `[35]`**,
+`casting`/`cast_lands_at` cleared, and `skill_ready[slot]` **restored to its pre-cast value**
+(a new `cast_prev_ready` stamp at the hostile cast site, the only place a hostile's slot is
+armed by a cast; the energy stays spent); an instant skill (SKILLS-IA, no window) is never
+cancelled and lands from the attack tick's scatter branch; a swing in windup → `[3
+GV_ATTACK_STOPPED, body, 0]` — the one retail cancel-then-move on a hostile, MONSTERAI-L4
+(OBSERVED n=1, the Rogue Bull at 324.28 s on `20260915T155656`: `[3, 55, 0]`, then a
+`0x0029`, no damage word, no `0x0028`) — the landing dropped, `last_swing` untouched; a
+follow cleared exactly as `_leash_give_up` clears it, **no `0x0028`**. The known-bad arm is
+`interrupt_body`'s shape, locked beside each: it sends `[3]`+`[35]` and re-arms the FULL
+recharge.
+
+### MONSTERAI-S6 — the wire: legs only
+
+**Built:** after the stop word, `0x0029` legs of at most `RETURN_LEG_LENGTH` (500 u) along
+the corridor, the next when the copy stands on the last (`NPC_LEG_DONE`;
+`RETURN_LEG_TIMEOUT` as the leash's), no `0x002B`, no `0x002A`, no `0x0028` at the arrival
+— the leash return's OBSERVED 3 of 3 shape (MONSTERAI-L3) transplanted; the client's sync
+copy walks each leg under `NPC_CLIENT_MODEL`. Locked on two walkers: legs only, the last
+leg's point IS the flee point.
+
+### MONSTERAI-S7 — while fleeing, and after
+
+WIKI: *"cease all actions until they are in a safer location to use skills"*. Nothing about
+the return (NOT FOUND — no rule for whether or when a scattered foe goes back). **Built:**
+`scattering(agent)` — the twin of `leash_returning` — branches early in both ticks: the
+move tick walks legs (no pick, no chase), the attack tick opens nothing and, unlike the
+leash return, lands nothing armed (it was cancelled); a hit on the way does not retarget
+it, a strike on a walker counts nothing (S2), `leash_out_since` is cleared at the mark (the
+dwell clock does not run through a flight). **On arrival** the bout resumes with
+`target_locked` KEPT — so EV-2's lost-contact branch does not send it home — under a
+**HOLD** (`_scatter_held`): while the area it fled is still active, the move tick refuses
+any destination INSIDE an active foe area (the target's point for a melee body; the range
+point for a caster, which stays in range and casts from there — *"a safer location to use
+skills"*), printed once; when that area expires the hold lifts (printed) and the chase
+proceeds — a FOLLOW, not a return leg. A body killed or burrowed mid-flight drops the
+record (the CD-8 shape). Locked: the hold with the player inside the area and the control
+with the player outside (a follow), the lift on expiry with the lock kept, the re-entry
+that scatters again.
+
+### MONSTERAI-S8 — who never scatters
+
+WIKI names no foe-type exemptions (NOT FOUND; the page lists skills, not creatures).
+**Built:** dead; inanimate (`attacks_back` False); `EFFECT_TRANSITION` (a burrower, half in
+the world); a spawn row with `stationary = true` (a new optional field for the wiki's Siege
+Wurms and some spirits; none exist); already walking home on the leash (it is leaving; the
+wiki is silent); any allegiance but hostile; the player. **Knocked down:** noted as
+`scatter_pending` on the decision tick and re-checked by the move tick when it stands — it
+flees if the area is still live, else the mark is dropped. A passive row (MONSTERAI-J) is
+provoked by the tick's damage before the hook runs (`hurt_agent_row` → `provoke_hostile`),
+so it scatters as a provoked row. Each refusal is printed with its reason.
+
+### MONSTERAI-S9 — party bodies do NOT scatter in this arc (DEFERRED)
+
+WIKI: heroes and henchmen scatter too, *"the same scatter rate in both modes"*. A hostile's
+area over time reaches them (`foes_within` for a hostile caster is the player plus the
+party; D6 step 2 serves a body's ticks), so the case is exercisable — but this arc marks
+HOSTILES only: `scatter_struck` refuses an area whose `hostile` flag is set outright, and
+the test declares a `LEDGER.skip` naming it. Whether a Guard-mode or flagged hero scatters
+is UNVERIFIED either way. Owed as its own step.
+
+### MONSTERAI-S10 — the lock
+
+`test_agentlife.py` `section_scatter`, 30 checks + the S9 skip, floor 635 → 665 from the
+green run (666 with the vault's re-emitted skills table, as before +30): the constants; the
+delay (tick 1 marks nobody, tick 2 marks the group); `group = None`; the one caller;
+`scatters = false`; the swing cancel `[3]` then `0x0029` with `interrupt_body`'s `[3]`+`[35]`
+as the control; the cast cancel `[59]` / `[49]` with `skill_ready` restored, the interrupt's
+full recharge as the control; the instant not cancelled; the cast-site stamp (source); the
+flee point on the ray, dodging a second area (the bare ray as the control), from ON P; the
+refusing mesh; the walkers' legs and arrival; the ceaser; mid-flight (no swing, no cast, no
+retarget, no count); death; the hold, its control, its lift; re-entry; the never set with
+the knocked-down re-check and its control; `--no-scatter` with a planted record;
+`--scatter-after 1`; the source lock (citations at the call site); and **the end-to-end
+check through D6's REAL `open_area` / `area_tick` / `hit_enemy`** on a player Fire Storm
+over a three-body group, then the real move and attack ticks: tick 1 words two and marks
+nobody, tick 2 marks three with nobody moved, the next move tick sends the two walkers'
+first legs and nothing else, the attack tick opens nothing, the flight ends at (856, 0) and
+(600, 256) with the ceaser never moving, and — the player standing inside the live area —
+all three hold with their target locked.
+
+A correction the build itself made, recorded so nobody re-derives it: the first draft of
+that end-to-end check placed the player OUTSIDE the area and read agent 11's later position
+(560, 239) as "the client model parked it short, steered around the ceaser"; a rule was
+written for that reading and then withdrawn, because the printed log showed the body had
+arrived cleanly at (600, 256) and the displacement was its re-engagement follow — no hold
+applied, as designed, because the target stood outside the area. The check now puts the
+player inside it and locks the hold instead.
+
+### MONSTERAI-S11 — the flags and the client check
+
+`--no-scatter`: the mark is never made, both ticks read the flag and ignore even a planted
+record (the EV-9/CD-4 lesson) — the pre-scatter stream byte for byte. `--scatter-after N`
+(N ≥ 1; 0 is refused by name — use `--no-scatter`). **The client check is owed and is the
+arc's final-confirmation-needs-run:** a harness run with three grouped hostiles and Fire
+Storm on the bar; the pre-registered question is *"do all three break off together, run
+outward, and come back only after the ground fire ends?"*, with `--no-scatter` as the
+control. The owner's feel is the only instrument.
+
+### Open, ranked
+
+1. **Party bodies** (S9) — buildable now, the same hook with the hostile flag inverted and
+   the party as the group; Guard mode vs scatter UNVERIFIED.
+2. **The normal-mode rate** (S2) — a delay of 2 is a guess the owner tunes; the wiki's
+   *"large amounts of AoE damage"* could equally be a threshold on the fraction taken.
+3. **Return to post** — NOT FOUND on the wiki; here a scattered body resumes its bout from
+   its safe point and never walks back on its own (the leash decides that, as before).
+4. **Guard-mode heroes** — folded into 1.
+5. **Re-engagement pathing** — retail may path AROUND an active area on the way back in;
+   here the hold refuses a destination inside one and nothing routes around it.
+
 ---
 
 *Written 2026-08-11 from a five-angle fan-out with independent hostile review of every angle, a capture-campaign design and a completeness critic, then a verification pass by the orchestrator over every code-driving claim (§10). Nothing in this document was produced by launching a client or by pointing anything at ArenaNet. Every corpus figure quoted here was reproduced by at least two parties except where n and provenance are stated otherwise, and every claim that did not survive review is in §6 rather than deleted.*
