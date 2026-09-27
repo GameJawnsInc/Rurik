@@ -2163,7 +2163,11 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "likewise reads as GWW's 'Armor +30 (vs. elemental "
                          "damage)' -- 3 x level against every other type, + 30 "
                          "against an elemental one -- where this flag restores the "
-                         "untyped + 10 on every hit. Party bodies are unchanged "
+                         "untyped + 10 on every hit. An Assassin, Dervish or "
+                         "Paragon CREATURE has no armour line on GWW's 'Basic "
+                         "armor' at all and meets 3 x level on every hit; this "
+                         "flag restores the + 10 / + 10 / + 20 its max-armour "
+                         "column gave. Party bodies are unchanged "
                          "either way (a hero's armour base is 3 x level + 20).")
     ap.add_argument("--no-weakness-attributes", action="store_true",
                     help="Weakness cuts attack damage only: no rank is "
