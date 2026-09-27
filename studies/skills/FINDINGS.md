@@ -5057,6 +5057,37 @@ at t=237.835 drew the silent release. Retail answered #1934, not the recharge's
 silence: **the target was judged before the recharge** (n=1). What the client
 sends with nothing selected at all is NOT OBSERVED.
 
+**Answered on loopback the same day** — OBSERVED on our own client (the
+retail binary, our server's world), three harness runs whose presses are CLICKS
+on the skill bar's own icon, so the client decides the target itself:
+`20260927T131849`, `20260927T132325` (a hero in the party), `20260927T132530`
+(no party). Skill 322, a sword or hammer in hand, a practice target at 300 u.
+Every click produced exactly one press (9 of 9), so no stray input.
+- **The client selects by itself.** At world entry it selects the foe with no
+  input (4 of 4 runs, the discovery run `20260927T131504` included). When that
+  foe dies it clears the selection 34–154 ms after the kill and, **0–17 ms
+  later, selects an ally if one is near** — `0x00C1 [0, 0]` then `[200, 0]`,
+  4 of 4 with a hero; `[0, 0]` alone without one, 2 of 2. When the foe
+  revives, the client selects it again (5 of 6). Esc and a click on empty
+  ground do **not** deselect (1 of 1 each).
+- **So retail's witness above was the client's own re-selection.** Its
+  `[0, 0]` then `[58, 0]`, 30 ms after foe 217 died, is this shape; no person
+  selects in 30 ms. "The operator had an ally selected" (this section, the
+  party-target and attack-target entries in `PLAN-LOG.md`) describes the
+  client's state correctly and its cause wrongly.
+- **An attack skill pressed after the kill goes out as TARGET 0** — with the
+  hero auto-selected (`[322, 0, 0, 0]`, 1 of 1, run T132325) and with nothing
+  selected (1 of 1, run T132530). The client does **not** refuse it itself;
+  our gate answers #1934, `[1, 7]`, `0x00E2`, and the client draws **"Invalid
+  attack target."** in red above the player (frames `w002-step7.png` of both).
+  That is retail's t=238.496 sequence reproduced end to end.
+- **With the hero selected and a LIVE foe the client knew, the press named the
+  foe** (`[322, 0, 10, 0]`, then `0x00C1 [10, 0]`; 1 of 1, run T131849). The
+  selection before it read `[200, 10]` — sent 41 ms after the foe revived, not
+  on any click — so the second field of `0x00C1` may be the foe an attack skill
+  would go to. UNVERIFIED, n=1; retail's `[58, 0]` carried 0 and its press went
+  to 0, which fits that reading.
+
 **And the schema route had the right fact with the wrong conclusion.** It found
 that 226 and 227 share a dispatch and concluded `0x00E2` was therefore
 disqualified as a carrier of "refused". That sharing is exactly *why* the

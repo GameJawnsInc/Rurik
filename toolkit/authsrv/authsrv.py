@@ -21605,10 +21605,20 @@ def cast_anim_msg(prop, caster, target, skill_id):
 # the NAMED-ally form retail's client never sends, this one the target-0
 # form it does send when an ally is selected.
 #
-# NOT OBSERVED: what the client sends with NOTHING selected. The one witness
-# had an ally selected (0x00C1 [58, 0], an allied NPC carrying 'play') and
-# the client sent target 0 rather than name it; the gate answers target 0
-# whatever the client's reason. The harness `skill:ID` verb defaults its
+# WHEN THE CLIENT SENDS TARGET 0, OBSERVED on loopback 2026-09-27 (our
+# client, clicks on the skill bar's own icon -- harness 20260927T131849,
+# T132325, T132530; studies/skills 38.5): when the selected foe dies the
+# client clears its selection and, 0-17 ms later, auto-selects an ally if
+# one is near (0x00C1 [0, 0] then [200, 0], 4 of 4 with a hero; [0, 0]
+# alone with none, 2 of 2) -- retail's witness is the same shape, [0, 0] then
+# [58, 0] 30 ms after its foe died, so its "ally selected" was the client's
+# own re-selection, not an operator's click. An attack skill pressed then,
+# with the ally selected OR with nothing selected, goes out as target 0
+# (1 of 1 each) -- the client does not refuse it itself -- and this gate's
+# #1934 draws "Invalid attack target." on screen. With an ally selected and
+# a LIVE foe the client knew (0x00C1 [200, 10]), the press named the foe
+# instead (1 of 1). Esc and a ground click do not deselect (1 of 1 each).
+# The harness `skill:ID` verb defaults its
 # target to 0 (session.py), so a scripted attack skill names its foe --
 # `skill:ID,TARGET` -- or meets this refusal, which is the retail answer to
 # what the bare verb used to script.
