@@ -17153,6 +17153,14 @@ def action_hold(send, state, value, why):
 #     auto field -> 0x0027 [322, 0, 200, 0], and this gate answered #1934
 #     ("Invalid attack target." on screen), n=1. Retail's server's answer to
 #     that press stays NOT OBSERVED; retail's operators never produced it.
+#   THE KNOWN-BAD ARM ON THE CLIENT, same day: one script, two servers --
+#     harness 20260927T143324 with this gate's three call sites cut in a
+#     scratch tree, 20260927T143517 on main. The client's traffic is
+#     identical up to the press ([322, 0, 200, 0] both); cut, the press is
+#     ACCEPTED and the player's Power Attack lands CRITICAL 18 on its own
+#     hero; gated, #1934 and nothing lands. Space in that state sends NO
+#     0x0026 in either arm, so only the skill door is reachable from the
+#     client there (n=1 each).
 # So the refusal is RECONSTRUCTION in form, and each door answers in the
 # nearest retail shape: the attack order with NOTHING (no swing is opened, a
 # running chain is not retargeted, no wire -- retail's client sends nothing
