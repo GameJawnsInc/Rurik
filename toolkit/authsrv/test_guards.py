@@ -714,12 +714,24 @@ def section_concurrency():
     # no new one -- and `open_area` (the completion) is cast_tick's and
     # land_skill's. The walk goes one level up for the helper, as for
     # _land_player_swing.
+    # studies/skills 61 (2026-09-27, DESKWORK-D6 step 3): a hex's END EFFECT lands
+    # through `hex_end_burst` -- `effect_tick`'s helper (the world tick's own loop,
+    # `handle`) and `strip_effects`'s, itself reached from `kill_agent` and
+    # `kill_player` only, whose callers are the world-tick damage sites (hit_enemy,
+    # hurt_agent_row, degen_tick, heal_agent, ...). And Mind Burn's adjacent packet
+    # lands through `adjacent_player_spell`, cast_tick's helper (a body's through
+    # `adjacent_body_spell`, land_skill's). The same two tick sites, no new one.
     check(callers == {"_land_player_swing", "cast_tick", "hit_enemy",
                       "dual_second_strike", "second_strike_tick",
                       "projectile_tick", "land_player_skill_shot",
                       "land_player_spell_shot", "land_player_spell_area",
                       "burst_player_spell", "burst_player_caster_area",
-                      "_area_strike"}
+                      "_area_strike", "hex_end_burst", "adjacent_player_spell"}
+          and callers_of("hex_end_burst") == {"effect_tick", "strip_effects"}
+          and callers_of("effect_tick") == {"handle"}
+          and callers_of("strip_effects") == {"kill_agent", "kill_player"}
+          and callers_of("adjacent_player_spell") == {"cast_tick"}
+          and callers_of("adjacent_body_spell") == {"land_skill"}
           and callers_of("_area_strike") == {"area_tick"}
           and callers_of("area_tick") == {"projectile_tick"}
           and callers_of("open_area") == {"cast_tick", "land_skill"}

@@ -3122,8 +3122,16 @@ def section_body_spell_projectiles():
               "--no-spell-projectiles: the body's completion lands the word behind its 58 with "
               "nothing in the air -- the reading every run before 2026-09-20 made")
         st, send, sent, health = cast(900.0, 185)
-        check(not launches(sent) and len(words(sent)) == 1 and st["player_health"] < health,
-              "the control: Mind Burn (no projectile of its own) lands at the completion as ever")
+        # studies/skills 61 (2026-09-27): Mind Burn's row landed -- the base word reaches the
+        # hero 110 u from the player too, and the hostile's invented 30 energy over the
+        # player's 20 makes the player's word a TWIN; the control's claim is unchanged: no
+        # launch, everything at the completion behind the 58.
+        check(not launches(sent) and not st.get("body_projectiles") and sent[0][1][:2] == [58, FOE]
+              and [w[:3] for w in words(sent)] == [[16, PLAYER, FOE], [16, PLAYER, FOE], [16, HERO, FOE]]
+              and st["player_health"] < health,
+              "the control: Mind Burn (no projectile of its own) lands at the completion as ever "
+              "-- the player's twin and the hero's word (skills 61) all behind the 58, nothing in "
+              "the air", str([(hex(op), v) for op, v in sent]))
         src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
         check('if shot.get("spell") is not None:                      # studies/weapons 37' in src
               and "body_spell_queue_tick(send, state, conn_id)" in src

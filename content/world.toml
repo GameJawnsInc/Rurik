@@ -2968,6 +2968,71 @@ the other WEARERS (the D6 spec's reading), not every foe near the user. Never sc
 "Scatter": Panic is a named non-trigger). --no-hex-skill-use-chain reverts. The hex draws [6, \
 foe, 1] + [6, foe, 4] (Mesmer)."""
 
+# INCENDIARY BONDS 179 AND MIND BURN 185 -- DESKWORK-D6 step 3 (2026-09-27, studies/skills/
+# FINDINGS.md 61; the tape read is toolkit/authsrv/hexjoin.py). Both READ off retail's wire
+# before a server line was written: 179's damage is the hex's END effect (+3 s, the target's
+# death; a removal negates it), 185's second packet is decided PER FOE. `on_end = "burst"` +
+# `end_radius` arm the episode (authsrv.hex_end_burst); `adjacent_damage = "scale"` reaches
+# the adjacent foes with the base word (authsrv.spell_adjacent); `bonus_if = "caster energy
+# higher"` adds the twin and the Burning per foe. skill_condition returns None for both rows:
+# the Burning belongs to the payoff / the twin, never to the completion.
+[skill_effect.179]
+scale_means = "Fire damage"                       # the END effect's word, 20..80 (the scale slot, bit set)
+bonus_scale_means = "Burning"                     # 1..3 s on each foe the payoff strikes (the bonus slot, bit set)
+damage_type = 5                                   # fire ([damage_type.table]), the page's own word
+on_end = "burst"                                  # the damage is the hex's END, not its apply
+end_radius = 240                                  # the record's aoe_range ("nearby"), around the WEARER
+[skill_effect.179.provenance]
+source = "wiki"
+page = 'GWW, "Incendiary Bonds", {{Skill infobox}} + {{Skill progression}}, rev. 2733032, read 2026-09-27'
+verified = """studies/skills/FINDINGS.md 61 (hexjoin.py). Wiki: "Hex Spell. After 3 seconds, target foe \
+and all nearby foes are struck for 20...80 fire damage and are set on fire for 1...3 second[s]. \
+Activates early if target foe dies."; `aoe = nearby`; var1 `Fire damage` 20->80, var2 `Burning \
+duration` 1->3; the page's anomaly note: removing the hex before it ends NEGATES the end effect. \
+Client (38797): id 179, type_code 4, attribute 10 (Fire Magic), profession 6, TARGET BYTE 5, \
+aoe_range 240 (the client's own nearby), duration 3 / 3, scale 20->80, bonus 1->3, args = 6 \
+(scale | bonus), projectile 2077 (none), impact_visual 2077. OBSERVED on retail (28 completions, \
+20260817T231139): the completion lands the hex ALONE -- [58] [20, T, 348] [6, T, 1] [6, T, 12] \
+0x00F1 0x800, 0 damage words on the target (28/28); the END -- at expiry (+2.986..+3.022, 20 \
+scheduled), EARLY on the target's death (3, 2 striking an adjacent foe), NEGATED by the target's \
+Remove Hex (4/4, 0 payoff) -- strikes every foe within 240 u of the target, per foe ascending \
+0x00A3 [16, foe, caster, f] then Burning ([6, foe, 25]; 0x0042 480 3.0 s on the observer, 3/3), \
+THEN the hex's own end; no 58, no [20]. 1 payoff fired early in the batch where the CASTER died \
+(n = 1, not on the page): NOT modelled. Read by authsrv.hex_end_arm at the apply and \
+hex_end_burst from effect_tick (ahead of the 0x0044) and from strip_effects when the wearer is \
+DEAD; a strip while alive fires nothing. The player caster's words are armour-free (the standing \
+hit_enemy gap), a body's meet each taker's armour. The slot of the death payoff inside the death \
+batch is UNWITNESSED. --no-hex-end-burst reverts. The hex draws [6, foe, 1] + [6, foe, 12]."""
+
+[skill_effect.185]
+scale_means = "Fire damage"                       # the base word, 15..60 (the scale slot, bit set)
+bonus_scale_means = "Burning"                     # 1..10 s, on a foe that takes the twin (the bonus slot, bit set)
+damage_type = 5                                   # fire ([damage_type.table]), the page's own word
+adjacent_damage = "scale"                         # "Target foe and all adjacent foes take ..." -- the base word reaches 156
+bonus_if = "caster energy higher"                 # the second identical word + the Burning, decided PER FOE
+[skill_effect.185.provenance]
+source = "wiki"
+page = 'GWW, "Mind Burn", {{Skill infobox}} + {{Skill progression}}, rev. 2688422, read 2026-09-27'
+verified = """studies/skills/FINDINGS.md 61 (hexjoin.py; the twin's first read is 43.3, spellhitjoin P4). \
+Wiki: "Elite Spell. Target foe and all adjacent foes take 15...60 fire damage. If you have more \
+Energy than target foe, that foe and all adjacent foes take an additional 15...60 fire damage and \
+are set on fire for 1...10 second[s]."; `aoe = adjacent`; var1 `Fire damage` 15->60, var2 \
+`Burning duration` 1->10; the page's anomaly note: "This skill checks the energy condition \
+independently for each target hit." Client (38797): id 185, type_code 5 (a Spell, not a hex), \
+attribute 10 (Fire Magic), profession 6, TARGET BYTE 5, aoe_range 156 (the client's own \
+adjacent), duration 0 / 0, scale 15->60, bonus 1->10, args = 6, projectile 2077 (none). OBSERVED \
+on retail (25 completions, 20260817T231139): [58] [20, T, c, 331] then per foe (the target and the \
+adjacent) in ascending id the word, and a SECOND identical word + Burning ([6, foe, 25]; 0x0042 \
+480 9.0 s on the observer as an adjacent foe, 2/2) when the clause holds FOR THAT FOE -- 4 casts \
+mix twin and single foes, and at 647.300 the TARGET is single while adjacent foe 14 is twin, \
+which one comparison against the target cannot produce (CONTESTED against the page's wording, \
+n = 1). No caster's energy is on the wire, so the comparison is RECONSTRUCTION: the caster's pool \
+against that foe's after the cast's cost (the instant UNVERIFIED); a hostile's pool is this \
+server's ENEMY_ENERGY 30. Read by authsrv.spell_adjacent (under --no-area-damage, Death \
+Blossom's flag) through adjacent_player_spell / adjacent_body_spell, and by energy_bonus_holds. \
+--no-spell-energy-bonus reverts the twin and the Burning; --energy-bonus-target-only is the \
+page's one comparison, the known-bad arm."""
+
 # ---------------------------------------------------------------------------
 # THE OUTPOST HENCHMEN -- DESKWORK-D1 step 5 (2026-09-23). Three standing NPCs
 # in our served outpost (Ascalon City, map 148) that the party window offers for

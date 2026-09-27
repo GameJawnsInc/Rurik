@@ -9181,3 +9181,165 @@ the rider's own and touches nothing else.
 capture of 435 or 1997); the order word-then-fall for a damage row; why retail's 784 Poisons
 one clean target and not the next (CONTESTED, §60.3). **Owed:** §60.6's confirmation run
 with the corrected predictions; a body chain, then the 784 question.
+
+## 61. SKILLS-HX — Incendiary Bonds' end effect and Mind Burn's per-foe twin: READ off the wire first (`hexjoin.py`), then built; the plan's "hex plus area damage" and "one energy comparison" both corrected before a server line was written (2026-09-27)
+
+**Status: SHIPPED, behind three revert flags and one known-bad arm, from the vault's own
+records.** DESKWORK-D6 step 3. Build 38797. The reader: `toolkit/authsrv/hexjoin.py` (the
+committed port of the tape lane's scratch join, 35 live captures, 96 connections, 0
+refused, ~7 s). Locks: `toolkit/authsrv/test_skilldamage.py` §11c + §11d (15, the real
+press / E5, `effect_tick`, a killing hit, `strip_effects`, a hostile's `land_skill`) and
+§12c (3, the corpus); `test_guards.py` §9 (the two new `hit_enemy` callers pinned);
+`test_content.py` (the two rows). Rows: `content/world.toml` `skill_effect.179` / `.185`,
+WIKI with the revision ids. `SKILLS-HX<n>` = a finding of this section; convention:
+[studies/idents/CONVENTION.md](../idents/CONVENTION.md).
+
+**Prediction first, and what failed.** The lane registered sixteen predictions before its
+first run (the reader's docstring carries them verbatim); three FAILED AS REGISTERED and are
+printed so, with the corrected reading beside each, never rewritten:
+
+| as registered | verdict | what the tape said instead |
+|---|---|---|
+| I4 the payoff at +3.0 on EVERY cast whose target lived, no early trigger | **FAILED** | 20 ends scheduled (+2.986..+3.022); 4 hexes REMOVED by the target's Remove Hex (301) fired **nothing** (one at +2.967); 3 ended EARLY on the target's death, 2 striking an adjacent foe; 1 fired in the batch where the **caster** died (n = 1, not on the wiki) |
+| M2 one comparison: a twin cast strikes the adjacent foes too, a single strikes the target alone | **FAILED** | 4 of 25 casts MIX twin and single foes; at 54071 **647.300 the target got ONE word while adjacent foe 14 got TWO** — the second packet is decided PER FOE |
+| C2 Burning and Bleeding: field3 == the f32 on every apply | **FAILED** | true of the SKILL-applied ones only (Burning from 179 / 185, 5/5); the Isle's environmental Bleeding, Poison, Dazed, Cracked Armor carry field3 0 |
+
+M3 (Burning on the target when it is the observer) was UNTESTABLE: no Mind Burn was ever
+cast onto the observer; it was struck as an ADJACENT foe twice, with twins, and its Burning
+was `0x0042 [obs, 480, 9, buff, 9.0]` (M3c). The other twelve held as registered.
+
+### 61.1 SKILLS-HX1 — Incendiary Bonds 179: the damage is the hex's END, and it fires three ways
+
+OBSERVED, 28 completions (30 announces, all `0x00A0 [60]`, all on `20260817T231139`; the
+2 that ended with `[59]` had their target die mid-cast and landed nothing). **The
+completion lands the hex ALONE**: `[55 self]? [58, c, 0] [21, c, 347] [20, T, c, 348]
+[6, T, 1] [6, T, 12] 0x00F1 [T, word | 0x800]` — 0 damage words on the target, 28/28. The
+hex's `0x0042 [obs, 179, 13, buff, 3.0]` is on the wire once (the target was the
+observer): between the `[20]` and the `[6]`s, field3 13 the caster's Fire Magic, the f32
+the duration, removed at +3.021. **Its END** (followed `[6, T, ..]` → `[7, T, ..]`, 28/28):
+
+- **scheduled**, +2.986..+3.022 (20): 19 carried the payoff (the twentieth's target died
+  within 0.13 s; the reader counts a Fire Storm tick word there, a mixed instant);
+- **removed** by the target's own Remove Hex 301 (4, at +1.072 / +1.102 / +2.056 / +2.967):
+  **0 payoff, 4/4** — CORROBORATED with WIKI (GWW "Incendiary Bonds" rev 2733032, the
+  anomaly note: removing the hex before it ends negates the end effect);
+- **the target's death** (3, at +1.811 / +2.015 / +2.749): 2 struck the adjacent foe 9, 1
+  had nobody near — CORROBORATED with the same page's "Activates early if target foe dies";
+- **the caster's death** (1, +2.918): the payoff on target 14 in the batch where agent 10 went
+  to 0x10. Not on the wiki, n = 1: **NOT modelled**, named.
+
+**The payoff batch**, per struck foe in ascending id: `0x00A3 [16, foe, caster, f]` →
+(`0x0042 480` on the observer) → `[6, foe, 25]` → `0x00F1` (+0x02) → `0x00A2 [44, foe, f]`;
+after every foe the hex's own end (`0x0044` on the observer, `[7, T, 1] [7, T, 12]`, `0x00F1`
+with 0x800 cleared). No 58 of 179, no `[20]`; two payoffs share their instant with the
+caster's OTHER skill completing (a mixed batch). Takers 1 (×11), 2 (×5), 3 (×5), 4 (×1),
+every one a foe by allegiance token, the target among them whenever it lived. A struck
+observer gets the `0x00CF [obs, n]` → `[10, obs, 179]` → word prefix (3/3, Fire Storm's).
+Burning on the takers: 28 new `[6, foe, 25]`, 11 already burning; on the observer
+`0x0042 [obs, 480, 3, buff, 3.0]` removed at +3.000..+3.002 (3/3). Fire damage is one value
+per (caster, taker): 0.12973 on a 555 pool is **72**, which is `hex_end_damage(179, 13)` —
+the record's scale 20..80 at the caster's 13 — on this server, exactly.
+
+**Shipped.** `skill_effect.179`: `scale_means = "Fire damage"`, `bonus_scale_means =
+"Burning"`, `damage_type = 5`, **`on_end = "burst"`**, **`end_radius = 240`** (the record's
+aoe_range, "nearby"). `authsrv.hex_end_arm` at the apply puts `end_burst` on the episode
+(the radius, the caster's side and a snapshot of its row — `open_area`'s precedent, so a
+body caster killed or despawned still resolves its payoff at the strike level it had).
+`authsrv.hex_end_burst(send, state, conn_id, ep, why)`: every living foe of the caster
+within the radius of the WEARER's position now (`area_corpse_point`: the corpse's when it
+just died) — the player caster through `hit_enemy(exact, swing=False, armed=True)` per foe
+(armour-free, the standing hit_enemy gap), a body caster through `body_spell_terms` for
+every foe FIRST (the refusal contract; a refused fraction skips that foe, printed) then
+`body_spell_word` (the taker's armour; the player's `[10, me, 179]` prefix and its
+`0x0042 480`) — and behind EACH foe's word its Burning (`_condition_terms`, the bonus slot
+1..3: 3 at 13, 1 at the player's 0), the per-foe order the tape shows 18/18. It fires
+**once** per episode (`end_fired`). Two hook slots: `effect_tick` calls it **ahead of the
+close** — the payoff, THEN the hex's own `0x0044` / `[7]`s / `0x00F1`, retail's order —
+and, because a payoff can kill its own wearer (whose strip closes and words the episode),
+the tick re-checks the episode is still live before closing it; `strip_effects` calls it
+under **`if dead:`** only — the wearer's death fires it early on the foes still standing
+(WIKI + 2/3), a strip while ALIVE (a cure, a removal) fires nothing (WIKI + 4/4). The
+death payoff's slot inside the death batch (behind the corpse's own `0x0044`s, ahead of its
+death word) is **UNWITNESSED** — the tape shows the payoff riding the death batch, not
+its order inside it. `skill_condition` returns None for an `on_end` row, so the completion
+Burns nobody (retail 0/28). **`--no-hex-end-burst`** reverts: the hex expires with its
+`[7]`s and nothing fires (this server's bytes until today).
+
+### 61.2 SKILLS-HX2 — Mind Burn 185: the second packet and its Burning are decided PER FOE
+
+OBSERVED, 25 completions (27 announces, the same tape, none by the observer). `[55 self]?
+[58, c, 0] [20, T, c, 331]` (on the target only) then per foe in ascending id the word(s),
+`[6, foe, 25]`, `0x00F1`, `[44]`. 22 casts twin on the target (21 identical values; the odd
+one has a Fire Storm tick mixed in), 3 single. **The twin and the Burning go together per
+foe**: 36 twin foe-instances — 26 with a new `[6, foe, 25]`, the other 10 all already
+burning; 6 single foe-instances — 5 with no Burning signal, 1 (780.235) with a new one,
+unexplained. **4 casts mix** twins and singles across their foes, and at **647.300 the
+target 12 is single while adjacent foe 14 is twin** — the wiki's "if you have more Energy
+than target foe" (WIKI, GWW "Mind Burn" rev 2688422), read as ONE comparison, cannot
+produce it. Its own anomaly note can: "This skill checks the energy condition independently
+for each target hit." **CONTESTED** against the page's wording, n = 1 decisive cast; the
+per-foe reading fits all 25. Burning on the observer as an adjacent foe:
+`0x0042 [obs, 480, 9, buff, 9.0]` twice, removed at +9.0 — 9 = interp(1, 10, 13) = 8.8
+rounded, the same caster's 13 that gives 179's 3 (2.73), CORROBORATED across the two
+skills; round and ceil cannot be separated (M3c). **No caster's energy is on the wire**
+(M4 held): the observer's appears only as its maximum (prop 41), its regen (43) and its
+spends (62), never a current value; the comparison itself is **RECONSTRUCTION**.
+
+**Shipped.** `skill_effect.185`: `scale_means = "Fire damage"`, `bonus_scale_means =
+"Burning"`, `damage_type = 5`, **`adjacent_damage = "scale"`** (Death Blossom's and Ignite
+Arrows' field), **`bonus_if = "caster energy higher"`**. `authsrv.spell_adjacent`: the
+record's aoe_range (156) for a type-5 record aimed at a foe (byte 5; a burst's 16 stays
+`spell_burst`'s, a hex `area_hex`'s) whose row opts in — under the existing
+`--no-area-damage`. `adjacent_player_spell` at the E5 (inside the standalone arm, behind
+the area over time, ahead of the one-target word) and `adjacent_body_spell` at a body's
+completion (every foe's terms before the 58, the words behind it): per foe ascending — the
+target and the foes within 156 u of it — the base word, then, when
+`energy_bonus_holds(caster, foe, target)`, an IDENTICAL second word (a body's reuses the
+same terms — retail's twin is identical 21/22) and the Burning (1..10 at the caster's
+rank: 9 at 13, 8 at a body's 12, 1 at the player's 0). No `[20]` per foe — the target's is
+`send_skill_visual`'s. The comparison is the caster's pool against THAT foe's pool
+(`agent_energy_now`: the player's `player_energy`, a body's `agent_energy` — **a hostile's
+is this server's invented ENEMY_ENERGY 30**), strictly more, read after the cast's cost is
+paid (the instant is **UNVERIFIED**). **`--no-spell-energy-bonus`** reverts the twin and the
+Burning; **`--energy-bonus-target-only`** is the wiki's one comparison against the target
+for every foe — the KNOWN-BAD ARM, which the lock shows cannot produce 647.300's shape
+(two singles at the target 20 / adjacent 5, two twins at 10 / 20). `skill_condition`
+returns None for a `bonus_if` row: the Burning is the twin's, never the completion's.
+
+### 61.3 SKILLS-HX3 — how ANY hex lands, the snare, the effect ids (the post-hoc facts, L1–L4)
+
+Registered AFTER the lane's first run, from what it showed, and locked on its second
+(said so in the reader; not predictions). **L1**: a hex on any body is `[6, T, 1]` +
+`[6, T, class]` in the completion batch and `[7, T, ..]` at its end — 179 `[1, 12]` 28/28,
+Teinai's Prison 1097 `[1, 12]` 5/6 and `[12]` once (651.779: the target already carried
+Empathy's live `1`), Empathy 26 `[1, 4]` 5/5; Lightning Strike 222 (type 4 in the table)
+lands NO `[6]` and no 0x800, 14/14 (hexes only when Overcast, WIKI rev 2738740). This is
+B1's `HEX_EFFECT_WORDS` (weapons §43). **L2**: a multi-foe batch goes out in ascending
+agent id (23 of 24 clean; the one exception is two groups in one window). **L3**: Teinai's
+Prison carries `0x0027 [T, 97.92]` (288 × 0.34) in its apply batch and `0x0027 [T, 288.0]`
+in its end batch, with 0x00F1 bit 0x400 set alongside 0x800 and cleared at the snare's end
+while another hex keeps 0x800 (0xC00 → 0x803) — 6/6; B1's snare bit. **L4**: the `[6]` ids
+beside the observer's condition 0x0042s: Bleeding 23, Blind 24, **Burning 25**, Disease 26,
+Poison 27, **Dazed 28**, Weakness 29 and **Cracked Armor 29**. Conditions corpus-wide: 313
+`0x0042` / 297 `0x0044`, 61 condition applies; Dazed ×1 and Cracked Armor ×2 exist (the Isle,
+`20260821T152147` / `20260821T155022`, observer 25, field3 0, f32 10.0, no 58 in the batch)
+— B4's inflicters have a wire shape to match. C2c: a SKILL-applied condition (a
+`[10, me, skill]` in its batch, or a 58 whose announce named me — 179's payoff has no 58)
+carries field3 == its f32 (23/23); an environmental one carries field3 0 (38/38).
+
+### 61.4 What this refutes, what stays open
+
+- **Refuted**: D6's "179 = a hex plus area damage" (the area is the END effect, +3 s, around
+  the target; the apply lands the hex alone) and "Mind Burn = one energy comparison" (per
+  foe). The `hex plus damage at cast` shape is B1's `hits_on_cast` and does not apply here.
+- **Corpus, not code**: a condition on a FOE draws `[6, foe, 25]` on retail (L4); this
+  server's `apply_condition` sends a foe the status word alone (MANTID) and no `[6]` — the
+  payoff's Burning on a foe is `0x00F1` + `[44]` here. Named; the condition-id words are a
+  B4-sized change of their own.
+- **UNWITNESSED**: the death payoff's slot inside the death batch; a party body as the
+  wearer (only hostiles and the observer wore 179 on tape); the energy comparison's instant
+  and both pools (M4 — a live cast with known energies is the only witness).
+- **NOT modelled**: the caster's death firing the payoff (n = 1); the twentieth scheduled
+  end that landed nothing on a target dying within 0.13 s.
+- **Owed**: a loopback run to watch the client draw the twin and the Burning icon on a foe
+  under the per-foe rule (a live cast would settle the comparison; a loopback cannot).

@@ -15180,19 +15180,7 @@ def hex_cast_damage(skill_id, rank):
     row = skill_effect_row(skill_id)
     if not row.get("hits_on_cast"):
         return None
-    for which, key in (("scale", "scale_means"), ("bonus_scale", "bonus_scale_means")):
-        mode = SCALE_MEANS_DAMAGE.get(row.get(key))
-        if mode != "standalone":
-            continue
-        lo, hi = row.get("damage0"), row.get("damage15")
-        if lo is not None and hi is not None:
-            return effects.interp(int(lo), int(hi), rank), mode
-        try:
-            return skill_scale_value(skill_id, rank, which), mode
-        except agents.content.ContentError:
-            skill_timing(skill_id)          # announces the missing row, once
-            return None
-    return None
+    return _hex_damage_slot(skill_id, row, rank)      # B3: shared with hex_end_damage
 
 
 def hex_wearers(state, caster_id, target_id, radius):
@@ -15316,6 +15304,294 @@ def hex_skill_use_chain(send, state, conn_id, user_id, skill_id):
                       f"{skill_id} completes, so wearer {oid}'s cast is interrupted "
                       f"[studies/weapons 43, RECONSTRUCTION]", flush=True)
     return hit
+
+
+# INCENDIARY BONDS 179 AND MIND BURN 185 (B3, 2026-09-27; the tape read is
+# hexjoin.py, its reading studies/skills/FINDINGS.md 61). Both were READ off
+# retail's wire before a line here was written, and both corrected the plan:
+#   * 179's damage is the hex's END EFFECT, not an apply-time area. OBSERVED
+#     (28 completions on 20260817T231139): the completion lands the hex alone
+#     ([58] [20, T, 348] [6, T, 1] [6, T, 12] 0x00F1 0x800; 0 damage words on
+#     the target, 28/28); its END -- at expiry (+2.986..+3.022, 20 scheduled),
+#     EARLY on the target's death (3, 2 of them striking an adjacent foe),
+#     NEGATED by the target's Remove Hex (4/4, 0 payoff) -- strikes every foe
+#     within the record's 240 u of the target: per foe in ascending id
+#     `0x00A3 [16, foe, caster, f]` then Burning ([6, foe, 25], 0x00F1, the
+#     regen word; 0x0042 480 for the observer), THEN the hex's own end (0x0044,
+#     [7]s, 0x00F1). No 58, no [20], no 0x00A1 (18/18 clean payoffs; two mixed
+#     instants). Burning round(interp(1, 3, rank)): 3 at the caster's 13. WIKI
+#     (GWW "Incendiary Bonds" rev 2733032) names all three triggers. One payoff
+#     fired early in the batch where the CASTER died (n = 1, not in the wiki):
+#     NOT modelled, named. So: a row's `on_end = "burst"` + `end_radius` arms
+#     the episode at its apply (hex_end_arm: the caster's side and row
+#     snapshotted, open_area's precedent); hex_end_burst fires from
+#     effect_tick AHEAD of the close and from strip_effects when the wearer is
+#     DEAD -- a strip while alive (a cure) fires nothing. The player caster's
+#     words are hit_enemy's exact (armour-free, the standing gap), a body's
+#     body_spell_terms per foe first (the refusal contract) then
+#     body_spell_word. skill_condition returns None for the row, so the
+#     completion Burns nobody. --no-hex-end-burst: the hex expires and nothing
+#     fires (this server's bytes until 2026-09-27).
+#   * 185's second packet is decided PER FOE. OBSERVED (25 completions): [58]
+#     [20, T, c, 331] then per foe (the target AND the adjacent 156, ascending
+#     id) the word, and a SECOND identical word + Burning ([6, foe, 25]; 9.0 s
+#     on the observer at the caster's 13) when the clause holds FOR THAT FOE:
+#     4 casts mix twin and single foes, and at 647.300 the TARGET is single
+#     while adjacent foe 14 is twin -- the wiki's one comparison "if you have
+#     more Energy than target foe" cannot produce it (CONTESTED, n = 1; the
+#     page's own anomaly note agrees: "checks the energy condition
+#     independently for each target hit"). No caster's energy is on the wire
+#     (M4), so the COMPARISON is RECONSTRUCTION: the caster's pool against
+#     that foe's pool after the cast's cost is paid (the instant UNVERIFIED);
+#     a hostile's pool is this server's invented ENEMY_ENERGY 30. So: the
+#     row's `adjacent_damage = "scale"` reaches the adjacent foes with the
+#     base word (spell_adjacent, under --no-area-damage as Death Blossom's is)
+#     through adjacent_player_spell / adjacent_body_spell -- no [20] per foe,
+#     the target's is send_skill_visual's -- and `bonus_if = "caster energy
+#     higher"` adds the twin and the Burning per foe. --no-spell-energy-bonus:
+#     the base words alone, no Burning; --energy-bonus-target-only: the
+#     wiki's wording, one comparison against the target for every foe (the
+#     known-bad arm 647.300 refutes).
+HEX_END_BURST = True
+HEX_END_MEANS = "burst"                             # the row label: on_end
+SPELL_ENERGY_BONUS = True
+ENERGY_BONUS_PER_FOE = True                         # --energy-bonus-target-only reverts
+ENERGY_BONUS_MEANS = "caster energy higher"         # the row label: bonus_if
+_HEX_END_NO_DAMAGE = set()
+
+
+def _hex_damage_slot(skill_id, row, rank):
+    """(amount, "standalone") from a hex row's damage label in EITHER slot,
+    honouring an explicit `damage0/15` pair, else None -- hex_cast_damage's
+    reader (B2), shared with the end effect (B3). A disabled scale bit raises
+    (skill_scale_value's refusal, deliberate); a missing `skills` row is None."""
+    for which, key in (("scale", "scale_means"), ("bonus_scale", "bonus_scale_means")):
+        mode = SCALE_MEANS_DAMAGE.get(row.get(key))
+        if mode != "standalone":
+            continue
+        lo, hi = row.get("damage0"), row.get("damage15")
+        if lo is not None and hi is not None:
+            return effects.interp(int(lo), int(hi), rank), mode
+        try:
+            return skill_scale_value(skill_id, rank, which), mode
+        except agents.content.ContentError:
+            skill_timing(skill_id)          # announces the missing row, once
+            return None
+    return None
+
+
+def hex_end_damage(skill_id, rank):
+    """(amount, "standalone") a hex's END EFFECT deals (its row says `on_end =
+    "burst"` and names a standalone damage label), else None."""
+    row = skill_effect_row(skill_id)
+    if row.get("on_end") != HEX_END_MEANS:
+        return None
+    return _hex_damage_slot(skill_id, row, rank)
+
+
+def hex_end_arm(state, ep, caster_id, row, erow):
+    """At the apply: remember on the episode what its end effect needs -- the
+    radius (the row's `end_radius`, else the record's aoe_range), the caster's
+    side and a snapshot of its row (open_area's precedent: the effect outlives
+    a caster whose row may be gone)."""
+    if erow.get("on_end") != HEX_END_MEANS:
+        return
+    try:
+        radius = float(erow.get("end_radius") or row.get("aoe_range") or 0.0)
+    except (TypeError, ValueError):
+        radius = 0.0
+    table = state.get("agents", {})
+    crow = table.get(caster_id) if caster_id != PLAYER_AGENT_ID else None
+    ep["end_burst"] = {"radius": radius,
+                       "hostile": bool(crow and crow.get("allegiance") == agents.ALLEGIANCE_HOSTILE),
+                       "caster_row": dict(crow) if crow else None}
+
+
+def hex_end_burst(send, state, conn_id, ep, why):
+    """A hex's END EFFECT (Incendiary Bonds): every living foe of the caster
+    within the armed radius of the WEARER's position now (its corpse's, when
+    it just died) takes the row's damage -- the player caster through
+    hit_enemy's exact, a body caster through body_spell_terms (every foe's
+    terms first, the refusal contract) and body_spell_word -- then the row's
+    condition (Burning) on each struck living foe. No 58, no [20]. Fires ONCE
+    per episode (`end_fired`: a payoff that kills its own wearer strips it,
+    which would otherwise fire it again). Returns the foes struck."""
+    arm = ep.get("end_burst")
+    if not HEX_END_BURST or not arm or ep.get("end_fired"):
+        return []
+    ep["end_fired"] = True
+    sid, rank, caster, wearer = ep["skill"], ep["rank"], ep["caster"], ep["agent"]
+    point = area_corpse_point(state, wearer)
+    if point is None or arm["radius"] <= 0.0:
+        print(f"[c{conn_id}] hex {sid} on agent {wearer} ends ({why}): "
+              + ("its wearer's row is gone -- no point to fire at, nothing lands"
+                 if point is None else "its row names no end_radius -- nothing lands (refused)")
+              + " [studies/skills 61]", flush=True)
+        return []
+    found = hex_end_damage(sid, rank)
+    if found is None:
+        if sid not in _HEX_END_NO_DAMAGE:
+            _HEX_END_NO_DAMAGE.add(sid)
+            print(f"[c{conn_id}] hex {sid}'s row says on_end = \"burst\" but names no standalone "
+                  f"damage label -- its end fires nothing (refused, not guessed) "
+                  f"[studies/skills 61]", flush=True)
+        return []
+    amount = float(found[0])
+    foes = foes_within(state, caster, point, arm["radius"], hostile=arm["hostile"])
+    burn = _condition_terms(sid, skill_effect_row(sid), rank)
+    struck = []
+
+    def _then_burn(foe):
+        # PER FOE, behind its word: [6, foe, 25] 0x00F1 [44] on retail (the observer's
+        # 0x0042 480 too) before the next foe's word -- 18/18 payoffs
+        struck.append(foe)
+        if burn and not target_dead(state, foe):
+            apply_condition(send, state, foe, burn[0], burn[1], rank, conn_id, sid)
+    if caster == PLAYER_AGENT_ID:
+        for foe in foes:
+            res = hit_enemy(send, state, foe, conn_id, exact=amount, swing=False, armed=True,
+                            label=f"hex {sid}'s end on agent {foe}")
+            if res == "landed":
+                _then_burn(foe)
+    else:
+        crow = arm["caster_row"] or {}
+        table = state.get("agents", {})
+        terms = []
+        for foe in foes:
+            tbody = foe != PLAYER_AGENT_ID and foe in table
+            try:
+                terms.append((foe, tbody, body_spell_terms(state, crow, sid, amount, foe, tbody)))
+            except ValueError as exc:
+                print(f"[c{conn_id}] hex {sid}'s end: the fraction for "
+                      f"{target_label(state, foe)} is REFUSED ({exc}) -- skipped, the others land",
+                      flush=True)
+        for foe, tbody, (dealt, conversion, frac, spell_ar) in terms:
+            if conversion is not None:
+                resolve_taker_conversion(send, state, conversion, conn_id)
+            if frac is None:
+                continue
+            body_spell_word(send, state, caster, sid, foe, tbody, dealt, frac, spell_ar,
+                            amount, conn_id)
+            _then_burn(foe)
+    who = "the player" if caster == PLAYER_AGENT_ID else f"agent {caster}"
+    print(f"[c{conn_id}] hex {sid} on agent {wearer} ends ({why}): {who}'s end effect strikes "
+          f"{len(struck)} of {len(foes)} foe(s) within {arm['radius']:.0f} u for {amount:.0f}"
+          + (f", {effects.CONDITION_SKILLS.get(burn[0], burn[0])} {burn[1]:g} s each" if burn else "")
+          + " [studies/skills 61]", flush=True)
+    return struck
+
+
+def spell_adjacent(skill_id):
+    """The radius a SPELL's base packet reaches beyond its target: the row's
+    `adjacent_damage` on a type-5 record aimed at a foe (target byte 5, not a
+    burst's 16) with an aoe_range -- Mind Burn's "target foe and all adjacent
+    foes". None otherwise, and under --no-area-damage (Death Blossom's flag:
+    the same field, the same radius column)."""
+    if not AREA_DAMAGE or not skill_effect_row(skill_id).get("adjacent_damage"):
+        return None
+    try:
+        rec = agents.WORLD.get("skills", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return None
+    if int(rec.get("type_code", -1)) != SPELL_TYPE_CODE \
+            or int(rec.get("target", -1)) == AREA_TARGET_BYTE:
+        return None
+    radius = float(rec.get("aoe_range", 0.0) or 0.0)
+    return radius if radius > 0.0 else None
+
+
+def energy_bonus_row(skill_id):
+    """True when the row's `bonus_if` names the energy clause and the arm is on."""
+    return SPELL_ENERGY_BONUS and skill_effect_row(skill_id).get("bonus_if") == ENERGY_BONUS_MEANS
+
+
+def agent_energy_now(state, agent_id):
+    """An agent's energy NOW: the player's pool, a body's own (created full at
+    ENEMY_ENERGY when it has none -- this server's invention, said so). None
+    for an id nothing holds."""
+    now = time.time()
+    if agent_id == PLAYER_AGENT_ID:
+        pool = player_energy(state)
+    else:
+        row = state.get("agents", {}).get(agent_id)
+        if row is None:
+            return None
+        pool = agent_energy(row)
+    pool.tick(now)
+    return float(pool.current)
+
+
+def energy_bonus_holds(state, caster_id, foe_id, target_id):
+    """Does the caster have more energy than THIS foe (ENERGY_BONUS_PER_FOE,
+    the tape's reading) -- or than the TARGET, whoever the foe (the wiki's
+    wording, --energy-bonus-target-only)? Strictly more."""
+    if not SPELL_ENERGY_BONUS:
+        return False
+    other = foe_id if ENERGY_BONUS_PER_FOE else target_id
+    mine, theirs = agent_energy_now(state, caster_id), agent_energy_now(state, other)
+    if mine is None or theirs is None:
+        return False
+    return mine > theirs
+
+
+def adjacent_player_spell(send, state, conn_id, cast, amount, rank, radius):
+    """The player's spell at the E5 whose base packet reaches the target and
+    the foes within `radius` of it: per foe ascending, the word (hit_enemy's
+    exact), then -- when the row's energy clause holds for THAT foe -- an
+    identical second word and the row's condition. No [20] per foe: the
+    target's went out with send_skill_visual. Returns the foes the base word
+    landed on."""
+    sid, target = cast["skill_id"], cast["target"]
+    foes = set(foes_within(state, PLAYER_AGENT_ID, target_pos(state, target), radius))
+    if target in state.get("agents", {}) and not target_dead(state, target):
+        foes.add(target)
+    bonus = energy_bonus_row(sid)
+    burn = _condition_terms(sid, skill_effect_row(sid), rank) if bonus else None
+    landed, twins = [], []
+    for foe in sorted(foes):
+        res = hit_enemy(send, state, foe, conn_id, exact=float(amount), swing=False, armed=True,
+                        label=f"skill {sid} on agent {foe}")
+        if res != "landed":
+            continue
+        landed.append(foe)
+        if bonus and energy_bonus_holds(state, PLAYER_AGENT_ID, foe, target):
+            res = hit_enemy(send, state, foe, conn_id, exact=float(amount), swing=False,
+                            armed=True, label=f"skill {sid}'s energy bonus on agent {foe}")
+            if res != "landed":
+                continue
+            twins.append(foe)
+            if burn and not target_dead(state, foe):
+                apply_condition(send, state, foe, burn[0], burn[1], rank, conn_id, sid)
+    print(f"[c{conn_id}] skill {sid} reaches {len(landed)} foe(s) within {radius:.0f} u of agent "
+          f"{target} ({sorted(foes)}); the energy clause held for {twins} "
+          f"({'per foe' if ENERGY_BONUS_PER_FOE else 'against the target'}) [studies/skills 61]",
+          flush=True)
+    return landed
+
+
+def adjacent_body_spell(send, state, conn_id, who, sid, terms, amount, rank, target_id):
+    """A body's spell at its completion whose base packet reaches the target
+    and the adjacent foes (the 58 went out; `terms` were computed before it):
+    per foe its word, then -- when the energy clause holds for THAT foe -- the
+    SAME word again (retail's twin is identical, 21 of 22) and the row's
+    condition."""
+    bonus = energy_bonus_row(sid)
+    burn = _condition_terms(sid, skill_effect_row(sid), rank) if bonus else None
+    twins = []
+    for foe, tbody, (dealt, conversion, frac, spell_ar) in terms:
+        if conversion is not None:
+            resolve_taker_conversion(send, state, conversion, conn_id)
+        if frac is None:
+            continue
+        body_spell_word(send, state, who, sid, foe, tbody, dealt, frac, spell_ar, amount, conn_id)
+        if bonus and not target_dead(state, foe) and energy_bonus_holds(state, who, foe, target_id):
+            body_spell_word(send, state, who, sid, foe, tbody, dealt, frac, spell_ar, amount,
+                            conn_id)
+            twins.append(foe)
+            if burn and not target_dead(state, foe):
+                apply_condition(send, state, foe, burn[0], burn[1], rank, conn_id, sid)
+    print(f"[c{conn_id}] agent {who}'s skill {sid} reaches {len(terms)} foe(s) around agent "
+          f"{target_id}; the energy clause held for {twins} [studies/skills 61]", flush=True)
 
 
 # A TARGET THAT DIES UNDER THE CAST DOES NOT STOP AN AREA OVER TIME. WIKI (GWW
@@ -23047,6 +23323,8 @@ def cast_tick(send, state, conn_id):
                 _burst = spell_burst(cast["skill_id"]) if _how is None else None
                 _aot = (area_over_time(cast["skill_id"], rank)
                         if _how is None and _burst is None else None)   # studies/weapons 42
+                _adj = (spell_adjacent(cast["skill_id"])
+                        if _how is None and _burst is None and _aot is None else None)   # skills 61
                 if _burst is not None:
                     burst_player_spell(send, state, conn_id, cast, found[0], rank,
                                        _burst)
@@ -23071,6 +23349,12 @@ def cast_tick(send, state, conn_id):
                         open_area(send, state, conn_id, PLAYER_AGENT_ID, cast["skill_id"],
                                   rank, float(found[0]), _apt, _aot)
                     inflicted = None
+                elif _adj is not None:
+                    # studies/skills 61: Mind Burn -- the base word on the target
+                    # and the adjacent foes, the energy clause's twin and Burning
+                    # per foe (no [20] per foe: the target's went out above)
+                    adjacent_player_spell(send, state, conn_id, cast, found[0], rank, _adj)
+                    inflicted = None          # each foe took its own inside
                 elif _how is None or launch_player_spell_shot(
                         send, state, conn_id, cast, _how, found[0], rank) is None:
                     # studies/weapons 42: `armed` -- a spell is not a swing, and
@@ -23888,6 +24172,7 @@ def _apply_effect_on(send, state, caster_id, skill_id, rank, wearer, conn_id,
               flush=True)
     ep = table.apply(wearer, skill_id, rank, duration, time.time(),
                      type_code=row["type_code"], caster=caster_id)
+    hex_end_arm(state, ep, caster_id, row, erow)      # studies/skills 61: on_end = "burst"
     # FIELD 3 IS THE RANK. Not the duration -- 96 of 96 non-condition applies
     # in the live corpus predict the wire's duration from
     # interp(duration0, duration15, field3), and skill 160 carries field3 = 15
@@ -23966,6 +24251,15 @@ def strip_effects(send, state, agent_id, conn_id, why):
         if ep["skill"] == effects.CONDITION_BY_NAME["Deep Wound"]:
             deep_wound_close(send, state, agent_id, conn_id, dead=dead)
     if dead:
+        # studies/skills 61: the wearer's DEATH fires a hex's end effect EARLY
+        # (Incendiary Bonds: WIKI + 2 of 3 on retail, an adjacent foe struck); a
+        # strip while ALIVE -- a cure, a removal -- fires nothing (Remove Hex
+        # negated it 4 of 4). The slot -- behind the corpse's own 0x0044s, ahead
+        # of its death word -- is UNWITNESSED (the payoff rides the death batch;
+        # its order inside it is not read).
+        for ep in gone:
+            hex_end_burst(send, state, conn_id, ep, why)
+    if dead:
         # The kill path sends the death word itself, in its measured slot;
         # record it so the next effect on the revived body is compared
         # against what the client was actually told.
@@ -24013,6 +24307,12 @@ def skill_condition(skill_id, rank):
         # (episode_condition_riders), never the cast -- the row's own field
         # says so, and the gate emits it only on an episode type whose
         # sentence names the wearer's attacks (435's Poison, 1997's Weakness).
+        return None
+    if row.get("on_end") or row.get("bonus_if"):
+        # studies/skills 61: the condition belongs to the hex's END EFFECT
+        # (179's Burning rides the payoff, hex_end_burst) or to the per-foe
+        # ENERGY CLAUSE (185's rides the twin, adjacent_*_spell) -- never the
+        # cast's completion, which would Burn the target unconditionally.
         return None
     return _condition_terms(skill_id, row, rank)
 
@@ -25569,6 +25869,14 @@ def effect_tick(send, state, conn_id):
         return
     now = time.time()
     for ep in table.due(now):
+        if table.live.get(ep["buff"]) is not ep:
+            continue        # closed inside an earlier end this tick (a payoff's kill stripped it)
+        # studies/skills 61: a hex's END EFFECT (Incendiary Bonds) fires HERE, AHEAD
+        # of the hex's own end -- retail's payoff batch is the words and the Burnings,
+        # THEN the 0x0044 / [7]s / 0x00F1 (18 of 18 clean payoffs).
+        hex_end_burst(send, state, conn_id, ep, "it ran out")
+        if table.live.get(ep["buff"]) is not ep:
+            continue        # the payoff killed its own wearer: the strip closed and worded it
         table.close(ep["buff"])
         effect_list_send(send, state, GAME_SMSG_EFFECT_REMOVE, [ep["agent"], ep["buff"]],
              f"EFFECT_REMOVE(buff {ep['buff']}, skill {ep['skill']}, "
@@ -33119,6 +33427,13 @@ def land_skill(send, state, agent_id, agent, conn_id):
     _aot = (area_over_time(skill_id, _rank)
             if damage is not None and damage[1] == "standalone"
             and _spell_how is None and _burst is None and _tid != agent_id else None)
+    # studies/skills 61: a spell whose base packet reaches the ADJACENT foes too
+    # (Mind Burn) -- every foe's terms below before the 58, the words behind it
+    # through adjacent_body_spell's exit, the energy clause's twin per foe there.
+    _adj = (spell_adjacent(skill_id)
+            if damage is not None and damage[1] == "standalone" and _spell_how is None
+            and _burst is None and _aot is None and _tid != agent_id else None)
+    _adj_terms = None
     # SKILLS-LU (A): a CASTER-centred area -- the record's byte 0 with a
     # radius -- bursts from the caster's own position (the terms below, the
     # emission through burst_body_spell); under --no-caster-areas the row
@@ -33164,6 +33479,18 @@ def land_skill(send, state, agent_id, agent, conn_id):
         for _foe in foes_within(state, agent_id, target_pos(state, _tid), _ahex):
             _fbody = _foe != PLAYER_AGENT_ID and _foe in _table
             _burst_terms.append((_foe, _fbody, body_spell_terms(
+                state, agent, skill_id, damage[0], _foe, _fbody)))
+    elif damage is not None and _spell_how is None and _carea is None and _adj is not None:
+        # studies/skills 61: the target and the adjacent foes, ascending, each
+        # foe's terms before the 58 (the refusal contract)
+        _table = state.get("agents", {})
+        _adj_terms = []
+        _adj_foes = set(foes_within(state, agent_id, target_pos(state, _tid), _adj))
+        if not target_dead(state, _tid):
+            _adj_foes.add(_tid)
+        for _foe in sorted(_adj_foes):
+            _fbody = _foe != PLAYER_AGENT_ID and _foe in _table
+            _adj_terms.append((_foe, _fbody, body_spell_terms(
                 state, agent, skill_id, damage[0], _foe, _fbody)))
     elif damage is not None and _spell_how is None:
         dealt, conversion, frac, spell_ar = body_spell_terms(
@@ -33282,6 +33609,11 @@ def land_skill(send, state, agent_id, agent, conn_id):
         agent["casting"] = None
         burst_body_spell(send, state, conn_id, agent_id, skill_id, _burst_terms,
                          damage[0], _rank, inflicted)
+        return
+    if _adj_terms is not None:                                # studies/skills 61
+        agent["casting"] = None
+        adjacent_body_spell(send, state, conn_id, agent_id, skill_id, _adj_terms,
+                            damage[0], _rank, _tid)
         return
     if conversion is not None:
         resolve_taker_conversion(send, state, conversion, conn_id)
@@ -43406,6 +43738,25 @@ def main():
         HEX_SKILL_USE_CHAIN = False
         print("HEXES: --no-hex-skill-use-chain -- Panic's wearer completing a skill "
               "interrupts nobody [studies/weapons 43 revert]", flush=True)
+    if a.no_hex_end_burst:
+        global HEX_END_BURST
+        HEX_END_BURST = False
+        print("HEXES: --no-hex-end-burst -- a hex whose row says on_end = \"burst\" "
+              "(Incendiary Bonds) ends and nothing fires: no words, no Burning, this "
+              "server's bytes until 2026-09-27 [studies/skills 61 revert]", flush=True)
+    if a.no_spell_energy_bonus:
+        global SPELL_ENERGY_BONUS
+        SPELL_ENERGY_BONUS = False
+        print("SPELLS: --no-spell-energy-bonus -- a `bonus_if = \"caster energy "
+              "higher\"` row (Mind Burn) lands its base words alone: no twin, no "
+              "Burning [studies/skills 61 revert]", flush=True)
+    if a.energy_bonus_target_only:
+        global ENERGY_BONUS_PER_FOE
+        ENERGY_BONUS_PER_FOE = False
+        print("SPELLS: --energy-bonus-target-only -- Mind Burn's energy clause is ONE "
+              "comparison against the TARGET's energy for every foe struck (the wiki's "
+              "wording; retail's 647.300 refutes it) [studies/skills 61, the known-bad "
+              "arm]", flush=True)
     if a.no_spell_projectiles:
         global SPELL_PROJECTILES
         SPELL_PROJECTILES = False

@@ -47,7 +47,7 @@ import effects  # noqa: E402
 # a short run means a section stopped rather than passed.
 # SKILLS-HN +4 (44), SKILLS-FA +13 (57: 7 model + 6 corpus), each from its
 # green run. Section 12 needs the live corpus and declares a skip without it.
-LEDGER = checks.Ledger("skill damage", floor=74)  # 2026-09-23 SKILLS-OB +6 (sec.11b: whose connection it is, four bare; sec.12: the JARIN player, the pair onto it); 2026-09-23 SKILLS-LT +1 (sec.3: Hamstring inflicts through the bonus slot); 2026-09-17 SKILLS-LR +4 (the location roll: three unit, one corpus); 2026-09-16 RUN-SKILLS-RB +2 (section 13, the converted word); 2026-09-16 SLICE-F47 +1 (the penalty split in whole points); 2026-09-14 HEAL-INT +1, ZEROWORD +1;   # MANTID-S +1: the player-side control beside the foe-side refusal
+LEDGER = checks.Ledger("skill damage", floor=92)  # 2026-09-27 SKILLS-HX +18 (sec.11c Incendiary Bonds 9, sec.11d Mind Burn 6, sec.12c the hexjoin lock 3): MEASURED from the green run, 104 checks with the overlay = 86 + 18, floor 74 -> 92; 2026-09-23 SKILLS-OB +6 (sec.11b: whose connection it is, four bare; sec.12: the JARIN player, the pair onto it); 2026-09-23 SKILLS-LT +1 (sec.3: Hamstring inflicts through the bonus slot); 2026-09-17 SKILLS-LR +4 (the location roll: three unit, one corpus); 2026-09-16 RUN-SKILLS-RB +2 (section 13, the converted word); 2026-09-16 SLICE-F47 +1 (the penalty split in whole points); 2026-09-14 HEAL-INT +1, ZEROWORD +1;   # MANTID-S +1: the player-side control beside the foe-side refusal
 check = LEDGER.ok
 
 
@@ -633,6 +633,364 @@ def main():
           "(a press that walks into range first); it does not refute property 41",
           f"the E3 0.73 s after its press: {got}")
 
+
+    print("\n11c. Incendiary Bonds 179: the hex's END EFFECT -- at expiry, at the wearer's "
+          "death, negated by a removal (studies/skills 61, hexjoin.py)")
+    # The tape (28 completions): the completion lands the hex ALONE; its end strikes
+    # every foe within 240 u of the wearer, per foe the word THEN the Burning, then the
+    # hex's own end; the target's death fires it early on the foes standing; the
+    # target's Remove Hex negates it. Driven here through the real press / E5,
+    # effect_tick, a killing hit and a hostile's land_skill, against the vault's records.
+    FOE, HERO, PLAYER = 10, 200, authsrv.PLAYER_AGENT_ID
+    saved_b3 = (authsrv._is_attack_skill, authsrv.skill_timing, authsrv.skill_cost,
+                authsrv.weapon_satisfies, agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND,
+                authsrv.HEX_END_BURST, authsrv.SPELL_ENERGY_BONUS, authsrv.ENERGY_BONUS_PER_FOE,
+                authsrv.AREA_DAMAGE, authsrv.skill_condition)
+    STATUS, REGEN, WORD, APPLY, REMOVE = 0x00F1, 0x00A2, 0x00A3, 0x0042, 0x0044
+    words = lambda batch: [v[:3] for op, v in batch if op == WORD and v[0] in (16, 17)]   # noqa: E731
+    fracs = lambda batch: [v[3] for op, v in batch if op == WORD and v[0] in (16, 17)]    # noqa: E731
+    fin58 = lambda batch: [v for op, v in batch if op == 0x009F and v[0] == 58]           # noqa: E731
+    adds = lambda batch: [tuple(v) for op, v in batch if op == 0x009F and v[0] == agents.PROP_AURA_ON]    # noqa: E731
+    removes = lambda batch: [tuple(v) for op, v in batch if op == 0x009F and v[0] == agents.PROP_AURA_OFF]  # noqa: E731
+    status = lambda batch: [tuple(v) for op, v in batch if op == STATUS]                  # noqa: E731
+    applies = lambda batch: [v for op, v in batch if op == APPLY]                         # noqa: E731
+    ops = lambda batch: [op for op, _v in batch]                                          # noqa: E731
+
+    def eps(st):
+        return sorted((e["agent"], e["buff"], e["skill"], e["duration"])
+                      for e in authsrv.effect_table(st).live.values())
+
+    def expire(st, send):
+        for e in authsrv.effect_table(st).live.values():
+            e["expires_at"] -= 60.0
+        authsrv.effect_tick(send, st, 1)
+
+    def _world():
+        entry = {"name": "suit", "dead": False, "died_at": 0.0, "health": 9000.0,
+                 "max_health": 9000.0, "last_hit": 0.0, "pos": (100.0, 0.0), "plane": 0,
+                 "armor_rating": 60.0, "allegiance": agents.ALLEGIANCE_HOSTILE,
+                 "attack_speed": authsrv.ENEMY_ATTACK_SPEED, "effects": 0,
+                 "attacks_back": False, "skills": (), "skill_ready": []}
+        st = {"agents": {FOE: entry}, "pos": (0.0, 0.0), "player_health": 480.0}
+        st["agents"][11] = dict(entry, pos=(200.0, 0.0))   # 100 u from the target: inside 156 / 240
+        st["agents"][12] = dict(entry, pos=(600.0, 0.0))   # 500 u off: outside both
+        return st
+
+    def player_cast(sid, before=None):
+        st, sent = _world(), []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+        authsrv.handle_skill_press([0, sid, 0, FOE], send, st, 1, authsrv.GAME_CMSG_USE_SKILL)
+        sent.clear()
+        for cast in st["pending_casts"]:
+            for k in ("begin_at", "e5_at", "e3_at", "e6_at"):
+                cast[k] -= 30.0
+        if before is not None:
+            before(st)
+        authsrv.cast_tick(send, st, 1)
+        for cast in list(st["pending_casts"]):
+            st["pending_casts"].remove(cast)
+        return st, sent, send
+
+    def _body_world(sid):
+        foe = {"name": "archer", "dead": False, "died_at": 0.0, "health": 200.0,
+               "max_health": 200.0, "last_hit": 0.0, "pos": (100.0, 0.0), "plane": 0,
+               "allegiance": agents.ALLEGIANCE_HOSTILE, "attack_speed": 1.75, "effects": 0,
+               "attacks_back": True, "skills": [[sid, 0.0, 20.0]], "skill_ready": [0.0],
+               "npc": {"profession": 6, "level": 5}, "casting": 0, "cast_target": PLAYER}
+        monk = {"name": "monk", "dead": False, "died_at": 0.0, "health": 100.0,
+                "max_health": 100.0, "last_hit": 0.0, "pos": (0.0, 110.0), "plane": 0,
+                "allegiance": agents.ALLEGIANCE_PLAYER, "effects": 0, "attack_speed": 1.75,
+                "attacks_back": False, "skills": (), "skill_ready": [],
+                "npc": {"profession": 3, "level": 5}, "party_slot": 0, "weapon_item": "caster_staff"}
+        return {"agents": {FOE: foe, HERO: monk, 300: dict(monk, pos=(0.0, 400.0))},
+                "pos": (0.0, 0.0), "player_health": 480.0, "player_dead": False}
+
+    try:
+        authsrv._is_attack_skill = lambda sid: False
+        authsrv.skill_timing = lambda sid: (1.0, 0.75, 0.0)
+        authsrv.skill_cost = lambda sid: (0, 0)
+        authsrv.weapon_satisfies = lambda sid: True
+        authsrv.apply_party_character({"player_weapon": "starter_wand"})
+        r179 = agents.WORLD.get("skill_effect", "179")
+        # (a) the readers, against the record: 72 at rank 13 is the tape's own payoff word
+        # (0.12973 of a 555 pool, spellhitjoin 43.5), 3.0 s its Burning
+        check(authsrv.hex_end_damage(179, 0) == (20, "standalone")
+              and authsrv.hex_end_damage(179, 13) == (72, "standalone")
+              and authsrv.hex_end_damage(185, 0) is None and authsrv.hex_end_damage(99999, 0) is None
+              and authsrv.hex_cast_damage(179, 13) is None and authsrv.skill_damage(179, 13) is None
+              and authsrv.skill_condition(179, 13) is None
+              and authsrv._condition_terms(179, r179, 13) == (480, 3.0)
+              and r179.get("on_end") == "burst" and r179.get("end_radius") == 240
+              and authsrv.area_hex(179) is None and authsrv.spell_burst(179) is None,
+              "the row: on_end = burst, end_radius 240; hex_end_damage reads the scale (20 at rank "
+              "0, 72 at the tape caster's 13 -- retail's 0.12973 x 555), nothing hits at cast "
+              "(hex_cast_damage / skill_damage None), skill_condition is None (the Burning is the "
+              "payoff's: _condition_terms 3.0 s at 13), not an area hex, not a burst",
+              (authsrv.hex_end_damage(179, 13), dict(r179)))
+        # (b) the E5: the hex ALONE
+        st, sent, send = player_cast(179)
+        arm = next(iter(authsrv.effect_table(st).live.values())).get("end_burst")
+        check(fin58(sent) == [[58, PLAYER, 0]] and not words(sent) and not applies(sent)
+              and adds(sent) == [(6, FOE, 1), (6, FOE, 12)] and status(sent) == [(FOE, 0x800)]
+              and eps(st) == [(FOE, 1, 179, 3.0)]
+              and arm == {"radius": 240.0, "hostile": False, "caster_row": None}
+              and all(st["agents"][a]["health"] == 9000.0 for a in (FOE, 11, 12)),
+              "the player's Incendiary Bonds at the E5: [58, me, 0], [6, 10, 1], [6, 10, 12], "
+              "0x00F1 [10, 0x800] -- no word, no Burning, one 3.0 s episode on the target ARMED "
+              "(240 u, the player's side), the foes beside it untouched",
+              str([(hex(op), v) for op, v in sent]))
+        # (c) the expiry: the payoff per foe, THEN the hex's own end
+        sent.clear()
+        expire(st, send)
+        i_w = [i for i, (op, v) in enumerate(sent) if op == WORD]
+        i_7 = [i for i, (op, v) in enumerate(sent) if op == 0x009F and v[0] == 7]
+        i_f = [i for i, (op, v) in enumerate(sent) if op == STATUS]
+        i_r = [i for i, (op, v) in enumerate(sent) if op == REGEN]
+        check(words(sent) == [[16, FOE, PLAYER], [16, 11, PLAYER]] and len(set(fracs(sent))) == 1
+              and status(sent) == [(FOE, 0x802), (11, 0x002), (FOE, 0x002)]
+              and [v[:2] for op, v in sent if op == REGEN] == [[44, FOE], [44, 11]]
+              and i_w[0] < i_f[0] < i_r[0] < i_w[1] < i_f[1] < i_r[1] < i_7[0] < i_7[1] < i_f[2]
+              and removes(sent) == [(7, FOE, 1), (7, FOE, 12)] and REMOVE not in ops(sent)
+              and eps(st) == [(FOE, 2, 480, 1.0), (11, 3, 480, 1.0)]
+              and st["agents"][FOE]["health"] == 8980.0 and st["agents"][11]["health"] == 8980.0
+              and st["agents"][12]["health"] == 9000.0,
+              "at +3 s the END EFFECT: per foe within 240 u (the target, the one 100 u beside "
+              "it; not the one 500 u off) in id order the word [16, foe, me, 20] then its Burning "
+              "(0x00F1 +0x02, [44] -- 1.0 s at rank 0; no 0x0042 on a foe), THEN the hex's own "
+              "end [7, 10, 1] [7, 10, 12] 0x00F1 [10, 0x2]; no 0x0044 for a foe; no 58, no [20]",
+              str([(hex(op), v) for op, v in sent]))
+        # (d) the wearer's DEATH fires it early, once, on the foes still standing
+        st, sent, send = player_cast(179)
+        st["agents"][FOE]["health"] = 1.0
+        sent.clear()
+        authsrv.hit_enemy(send, st, FOE, 1, exact=5.0, swing=False, armed=True, label="a killing blow")
+        dead_batch = list(sent)
+        sent.clear()
+        expire(st, send)
+        check(words(dead_batch) == [[16, FOE, PLAYER], [16, 11, PLAYER]]
+              and removes(dead_batch) == [(7, FOE, 1), (7, FOE, 12)]
+              and status(dead_batch)[-1][0] == FOE and status(dead_batch)[-1][1] & 0x10
+              and st["agents"][FOE]["dead"] and st["agents"][11]["health"] == 8980.0
+              and st["agents"][12]["health"] == 9000.0
+              and eps(st) == [] and not words(sent) and not removes(sent),
+              "the target killed at +0 s: its own death word, then the payoff EARLY on the foe "
+              "beside the corpse (20, Burning) and not on the corpse; the episode is gone and "
+              "the tick that would have expired it fires NOTHING more (end_fired: once per hex)",
+              (str([(hex(op), v) for op, v in dead_batch]), eps(st)))
+        # (e) a REMOVAL negates it -- and the known-bad arm shows the dead gate is what negates
+        st, sent, send = player_cast(179)
+        ep = next(iter(authsrv.effect_table(st).live.values()))
+        sent.clear()
+        authsrv.strip_effects(send, st, FOE, 1, "a cure")
+        negated = (list(sent), eps(st), {a: st["agents"][a]["health"] for a in (FOE, 11)})
+        sent.clear()
+        authsrv.hex_end_burst(send, st, 1, ep, "a death-blind strip (the known-bad arm)")
+        check(removes(negated[0]) == [(7, FOE, 1), (7, FOE, 12)] and not words(negated[0])
+              and negated[1] == [] and negated[2] == {FOE: 9000.0, 11: 9000.0}
+              and words(sent) == [[16, FOE, PLAYER], [16, 11, PLAYER]]
+              and st["agents"][FOE]["health"] == 8980.0,
+              "a strip while ALIVE (a cure / Remove Hex): the [7]s and 0x00F1 0, no word on "
+              "anybody, no Burning -- NEGATED (retail 4/4); KNOWN-BAD ARM: the same stripped "
+              "episode handed to hex_end_burst as a death-blind strip would DETONATES on both "
+              "foes -- so the `if dead:` gate in strip_effects is what negates",
+              (str([(hex(op), v) for op, v in negated[0]]), str(words(sent))))
+        # (f) known-bad: the Burning at the COMPLETION (skill_condition ungated)
+        authsrv.skill_condition = lambda sid, r: authsrv._condition_terms(sid, authsrv.skill_effect_row(sid), r)
+        try:
+            st_b, sent_b, _s = player_cast(179)
+        finally:
+            authsrv.skill_condition = saved_b3[-1]
+        st_g, sent_g, _s = player_cast(179)
+        check(eps(st_b) == [(FOE, 1, 179, 3.0), (FOE, 2, 480, 1.0)] and status(sent_b)[-1] == (FOE, 0x802)
+              and eps(st_g) == [(FOE, 1, 179, 3.0)],
+              "KNOWN-BAD ARM: with skill_condition's on_end gate stubbed out the completion "
+              "Burns the target at once (retail: 0 of 28); the gate keeps the Burning for the "
+              "payoff", (eps(st_b), eps(st_g)))
+        # (g) --no-hex-end-burst
+        authsrv.HEX_END_BURST = False
+        st_n, sent_n, send_n = player_cast(179)
+        sent_n.clear()
+        expire(st_n, send_n)
+        authsrv.HEX_END_BURST = True
+        check(not words(sent_n) and removes(sent_n) == [(7, FOE, 1), (7, FOE, 12)]
+              and status(sent_n) == [(FOE, 0)] and eps(st_n) == []
+              and all(st_n["agents"][a]["health"] == 9000.0 for a in (FOE, 11)),
+              "--no-hex-end-burst: the hex expires with its [7]s and 0x00F1 0 and NOTHING fires "
+              "-- this server's bytes until 2026-09-27",
+              str([(hex(op), v) for op, v in sent_n]))
+        # (h) a hostile's 179 at the player, the hero 110 u above, a party body 400 u off
+        st = _body_world(179)
+        sent = []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+        authsrv.land_skill(send, st, FOE, st["agents"][FOE], 1)
+        at_e5 = list(sent)
+        sent.clear()
+        expire(st, send)
+        ar = authsrv.spell_armour_for(179)
+        want = authsrv._whole_points(68.0 * authsrv.strike_multiplier(
+            authsrv.agent_strike_level(st["agents"][FOE]), ar))
+        i10 = next((i for i, (op, v) in enumerate(sent) if op == 0x009F and v[:3] == [10, PLAYER, 179]), None)
+        i_w = [i for i, (op, v) in enumerate(sent) if op == WORD]
+        i_42 = [i for i, (op, v) in enumerate(sent) if op == APPLY]
+        i_44 = [i for i, (op, v) in enumerate(sent) if op == REMOVE]
+        i_7 = [i for i, (op, v) in enumerate(sent) if op == 0x009F and v[0] == 7]
+        check(at_e5[0] == (0x009F, [58, FOE, 0])
+              and applies(at_e5) == [[PLAYER, 179, 12, 1, authsrv._f32(3.0)]]
+              and adds(at_e5) == [(6, PLAYER, 1), (6, PLAYER, 12)] and status(at_e5) == [(PLAYER, 0x800)]
+              and not words(at_e5) and st["player_health"] == 480.0 - want
+              and words(sent) == [[16, PLAYER, FOE], [16, HERO, FOE]]
+              and i10 is not None and i10 + 1 == i_w[0]
+              and applies(sent) == [[PLAYER, 480, 12, 2, authsrv._f32(3.0)]]
+              and i_w[0] < i_42[0] < i_w[1] < i_44[0] < i_7[0] < i_7[1]
+              and removes(sent) == [(7, PLAYER, 1), (7, PLAYER, 12)]
+              and eps(st) == [(PLAYER, 2, 480, 3.0), (HERO, 3, 480, 3.0)]
+              and st["agents"][HERO]["health"] < 100.0 and st["agents"][300]["health"] == 100.0,
+              f"a hostile's Incendiary Bonds at the player: [58, it, 0], the player's 0x0042 [me, "
+              f"179, 12, 1, 3.0], [6, me, 1], [6, me, 12], 0x00F1 0x800, NO word; at +3 s: [10, me, "
+              f"179] then the player's word ({want} = 68 at rank 12 against the pieces' rating at "
+              f"the caster's strike level), its Burning 0x0042 480 3.0 s (rank 12: 2.6 -> 3), then "
+              f"the hero's word 110 u off and its Burning, THEN 0x0044 [me, 1], [7, me, 1], [7, me, "
+              f"12]; the body 400 u off untouched -- the caster's row snapshotted at the apply",
+              (str([(hex(op), v) for op, v in at_e5]), str([(hex(op), v) for op, v in sent])))
+        # (i) SOURCE: where the hook sits, and that the flag flips inside main()
+        src = open(authsrv.__file__, encoding="utf-8").read()
+        i_tick = src.index("\ndef effect_tick(")
+        i_fire = src.index('hex_end_burst(send, state, conn_id, ep, "it ran out")', i_tick)
+        i_close = src.index('table.close(ep["buff"])', i_tick)
+        i_strip = src.index("\ndef strip_effects(")
+        i_dead = src.index("    if dead:\n", i_strip)
+        i_sfire = src.index("hex_end_burst(send, state, conn_id, ep, why)", i_strip)
+        i_main = src.index("\ndef main():")
+        i_flag = src.index("    if a.no_hex_end_burst:", i_main)
+        check(i_tick < i_fire < i_close and i_strip < i_dead < i_sfire
+              and i_sfire - i_dead < 700
+              and src.count("    hex_end_arm(state, ep, caster_id, row, erow)      # studies/skills 61") == 1
+              and "HEX_END_BURST = False" in src[i_flag:i_flag + 160]
+              and src.count("    if row.get(\"on_end\") or row.get(\"bonus_if\"):") == 1,
+              "SOURCE LOCK: effect_tick fires the end effect BEFORE the close (the payoff ahead of "
+              "the hex's own end), strip_effects fires it under `if dead:` only, the arm is set "
+              "once at the apply, skill_condition gates on_end / bonus_if, main() flips "
+              "HEX_END_BURST = False under --no-hex-end-burst")
+
+        print("\n11d. Mind Burn 185: the base word on the target and the adjacent foes, the "
+              "energy clause's twin and Burning decided PER FOE (studies/skills 61)")
+        # 25 completions on the tape: [58] [20, T, c, 331] then per foe the word, and a second
+        # identical word + Burning when the clause holds FOR THAT FOE -- 647.300 has the target
+        # single and an adjacent foe twin, which one comparison against the target cannot make.
+        r185 = agents.WORLD.get("skill_effect", "185")
+        check(authsrv.skill_damage(185, 0) == (15, "standalone") and authsrv.skill_damage(185, 13) == (54, "standalone")
+              and authsrv.spell_adjacent(185) == 156.0 and authsrv.spell_adjacent(179) is None
+              and authsrv.spell_adjacent(194) is None and authsrv.spell_adjacent(99999) is None
+              and authsrv.energy_bonus_row(185) and not authsrv.energy_bonus_row(179)
+              and authsrv.skill_condition(185, 13) is None
+              and authsrv._condition_terms(185, r185, 13) == (480, 9.0)
+              and authsrv.spell_burst(185) is None and authsrv.area_over_time(185, 12) is None
+              and authsrv.player_rank_for_skill(185) == 0,
+              "the row: Fire damage 15..60 (54 at the tape caster's 13), adjacent_damage reaches "
+              "156 u (a type-5 spell at a foe; a hex or a projectile spell reach nothing), the "
+              "energy clause is the row's, skill_condition is None (the Burning is the twin's: "
+              "9.0 s at 13 -- retail's 9.0 on the observer), not a burst, not an area; the "
+              "player casts at rank 0", (authsrv.spell_adjacent(185), dict(r185)))
+
+        def energies(mine, foe, other):
+            def _set(s):
+                authsrv.player_energy(s).current = float(mine)
+                authsrv.agent_energy(s["agents"][FOE]).current = float(foe)
+                authsrv.agent_energy(s["agents"][11]).current = float(other)
+            return _set
+        # (b) the player at 15: the target (10) takes the twin + Burning, the adjacent (20) one word
+        st, sent, send = player_cast(185, before=energies(15, 10, 20))
+        i_w = [i for i, (op, v) in enumerate(sent) if op == WORD]
+        i_f = [i for i, (op, v) in enumerate(sent) if op == STATUS]
+        check(fin58(sent) == [[58, PLAYER, 0]]
+              and words(sent) == [[16, FOE, PLAYER], [16, FOE, PLAYER], [16, 11, PLAYER]]
+              and len(set(fracs(sent))) == 1 and status(sent) == [(FOE, 0x002)]
+              and i_w[1] < i_f[0] < i_w[2]
+              and not [v for op, v in sent if op == 0x00A0 and v[0] == agents.GV_EFFECT_ON_TARGET]
+              and eps(st) == [(FOE, 1, 480, 1.0)]
+              and st["agents"][FOE]["health"] == 8970.0 and st["agents"][11]["health"] == 8985.0
+              and st["agents"][12]["health"] == 9000.0,
+              "the player's Mind Burn (energy 15) on the target (10) with a foe 100 u beside it (20): "
+              "[58], the target's word TWICE (identical, 15 at rank 0) then its Burning (0x00F1 "
+              "+0x02, 1.0 s at rank 0), then the adjacent foe's ONE word; the foe 500 u off "
+              "untouched; no [20] per foe (the record has no impact visual)",
+              str([(hex(op), v) for op, v in sent]))
+        # (c) 647.300's shape: the target single, the adjacent foe twin
+        st, sent, send = player_cast(185, before=energies(15, 20, 5))
+        shape_647 = (words(sent), eps(st))
+        # (d) KNOWN-BAD: the wiki's one comparison against the target cannot produce it
+        authsrv.ENERGY_BONUS_PER_FOE = False
+        st_t, sent_t, _s = player_cast(185, before=energies(15, 20, 5))
+        st_t2, sent_t2, _s = player_cast(185, before=energies(15, 10, 20))
+        authsrv.ENERGY_BONUS_PER_FOE = True
+        check(shape_647 == ([[16, FOE, PLAYER], [16, 11, PLAYER], [16, 11, PLAYER]], [(11, 1, 480, 1.0)])
+              and words(sent_t) == [[16, FOE, PLAYER], [16, 11, PLAYER]] and eps(st_t) == []
+              and words(sent_t2) == [[16, FOE, PLAYER], [16, FOE, PLAYER], [16, 11, PLAYER], [16, 11, PLAYER]]
+              and eps(st_t2) == [(FOE, 1, 480, 1.0), (11, 2, 480, 1.0)],
+              "647.300's shape (the target at 20, the adjacent at 5, the caster 15): the target "
+              "SINGLE and the adjacent foe TWIN + Burning -- PER FOE; KNOWN-BAD ARM "
+              "--energy-bonus-target-only (the wiki's wording): the same pools give two singles, "
+              "and 15 vs (10, 20) gives two twins -- one comparison can never split them",
+              (shape_647, words(sent_t), words(sent_t2)))
+        # (e) the reverts
+        authsrv.SPELL_ENERGY_BONUS = False
+        st_e, sent_e, _s = player_cast(185, before=energies(15, 10, 20))
+        authsrv.SPELL_ENERGY_BONUS = True
+        authsrv.AREA_DAMAGE = False
+        st_a, sent_a, _s = player_cast(185, before=energies(15, 10, 20))
+        authsrv.AREA_DAMAGE = True
+        check(words(sent_e) == [[16, FOE, PLAYER], [16, 11, PLAYER]] and eps(st_e) == []
+              and words(sent_a) == [[16, FOE, PLAYER]] and eps(st_a) == []
+              and st_a["agents"][11]["health"] == 9000.0,
+              "--no-spell-energy-bonus: the base words alone, no Burning, whatever the pools; "
+              "--no-area-damage: the target's ONE word (the pre-2026-09-27 shape), the adjacent "
+              "foe untouched", (words(sent_e), words(sent_a)))
+        # (f) a hostile's Mind Burn at the player (30 vs 20: the twin), the hero (30 vs 30: single)
+        st = _body_world(185)
+        sent = []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+        authsrv.player_energy(st).current = 20.0
+        authsrv.agent_energy(st["agents"][HERO]).current = 30.0
+        authsrv.land_skill(send, st, FOE, st["agents"][FOE], 1)
+        ar = authsrv.spell_armour_for(185)
+        want = authsrv._whole_points(51.0 * authsrv.strike_multiplier(
+            authsrv.agent_strike_level(st["agents"][FOE]), ar))
+        i10 = [i for i, (op, v) in enumerate(sent) if op == 0x009F and v[:3] == [10, PLAYER, 185]]
+        i_w = [i for i, (op, v) in enumerate(sent) if op == WORD]
+        check(sent[0] == (0x009F, [58, FOE, 0])
+              and words(sent) == [[16, PLAYER, FOE], [16, PLAYER, FOE], [16, HERO, FOE]]
+              and fracs(sent)[0] == fracs(sent)[1] and len(i10) == 2
+              and i10[0] + 1 == i_w[0] and i10[1] + 1 == i_w[1]
+              and applies(sent) == [[PLAYER, 480, 12, 1, authsrv._f32(8.0)]]
+              and st["player_health"] == 480.0 - 2 * want
+              and st["agents"][HERO]["health"] < 100.0 and st["agents"][300]["health"] == 100.0
+              and eps(st) == [(PLAYER, 1, 480, 8.0)] and st["agents"][FOE]["casting"] is None
+              and float(authsrv.agent_energy_now(st, FOE)) == 30.0,
+              f"a hostile's Mind Burn (its pool is our ENEMY_ENERGY 30) at the player (20) with "
+              f"the hero 110 u above (30): [58, it, 0], then [10, me, 185] + the player's word "
+              f"TWICE ({want} each, identical -- retail's twin) and its Burning 0x0042 480 8.0 s "
+              f"(rank 12: 8.2 -> 8), then the hero's ONE word (30 is not more than 30); the body "
+              f"400 u off untouched; every foe's terms computed before the 58",
+              str([(hex(op), v) for op, v in sent]))
+        # (g) SOURCE: the adjacent arm sits inside the standalone arm, behind the area over time
+        i_std = src.index('elif target and found and found[1] == "standalone":')
+        i_aotl = src.index("                elif _aot is not None:", i_std)
+        i_adjl = src.index("                elif _adj is not None:", i_std)
+        i_std_hit = src.index("_st_res = hit_enemy(send, state, target, conn_id, exact=float(found[0]),", i_std)
+        check(i_std < i_aotl < i_adjl < i_std_hit
+              and src.count("                elif _adj is not None:") == 1
+              and src.count("    if _adj_terms is not None:                                # studies/skills 61") == 1
+              and src.count("    elif damage is not None and _spell_how is None and _carea is None and _adj is not None:") == 1
+              and src.index("    if _adj_terms is not None:") > src.index("    if _burst_terms is not None:                              # studies/weapons 40"),
+              "SOURCE LOCK: the player's adjacent arm sits inside the standalone arm behind the "
+              "area over time and ahead of the one-target word; a body's terms arm and its exit "
+              "sit beside the burst's (the terms before the 58, the words behind it)")
+    finally:
+        (authsrv._is_attack_skill, authsrv.skill_timing, authsrv.skill_cost,
+         authsrv.weapon_satisfies, agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND,
+         authsrv.HEX_END_BURST, authsrv.SPELL_ENERGY_BONUS, authsrv.ENERGY_BONUS_PER_FOE,
+         authsrv.AREA_DAMAGE, authsrv.skill_condition) = saved_b3
+
     print("\n12. the corpus: one caster, one skill, one target is ONE value "
           "(spellhitjoin)")
     # P1-P4 in spellhitjoin's own words. A location roll on a set whose
@@ -752,6 +1110,64 @@ def main():
           f"Lightning Orb 229 from the Master of Lightning: 101 and 286. The "
           f"single rating SKILLS-FA shipped (studies/skills 43) is REFUTED; "
           f"43.4's caveat -- equal pieces cannot tell -- was the whole story")
+
+
+    print("\n12c. the corpus: hexjoin -- Incendiary Bonds' end effect, Mind Burn's per-foe "
+          "twin, how a hex lands on any body, the conditions (studies/skills 61)")
+    # The committed port of the DESKWORK-D6 tape lane's join, its predictions as the lane
+    # REGISTERED them: three FAILED as registered (I4, M2, C2) and the reader prints them so,
+    # with the corrected readings beside them. This lock is the reader's own verdict plus the
+    # witness tape's exact counts (per tape) and the corpus floors.
+    import hexjoin
+    hc = hexjoin.census()
+    hs = hexjoin.score(hc)
+    hv = hexjoin.verdicts(hs)
+    check(all(hv.values()) and hs["refused"] == 0 and hs["connections"] >= 96
+          and not hs["i4"] and not hs["m2"] and not hs["c2"] and hs["m3"] is None
+          and hs["i4c"] and hs["m2c"] and hs["m3c"] and hs["c2c"],
+          "hexjoin's reading HOLDS: every prediction as registered but I4 / M2 / C2 (FAILED as "
+          "registered, printed so), their corrected readings hold, M3 is untestable (no Mind "
+          "Burn onto the observer) and its M3c holds, the four post-hoc facts hold; 0 refused",
+          str(hv))
+    check(hs["i_per_port"] == hexjoin.EXPECT_179_PER_PORT and hs["i_completed"] == 28
+          and hs["i_scheduled"] == 20 and hs["i_scheduled_with_words"] >= 18
+          and len(hs["i_removed"]) == 4 and all(n == 0 for _p, _t, _d, n in hs["i_removed"])
+          and len(hs["i_target_died"]) == 3 and sum(1 for x in hs["i_target_died"] if x[3]) == 2
+          and len(hs["i_caster_died"]) == 1 and hs["i_takers_hist"] == {1: 11, 2: 5, 3: 5, 4: 1}
+          and hs["i_takers_not_foe"] == 0 and hs["i_observer_struck"] == 3
+          and hs["i_observer_prefix_ok"] == 3
+          and [x[:2] for x in hs["i_observer_burning"]] == [(3, 3.0)] * 3
+          and hs["i_hex_applies"][0]["field3"] == 13
+          and authsrv.hex_end_damage(179, 13) == (72, "standalone"),
+          "179 on 20260817T231139 (exact, per tape): 30 announces (19 / 4 / 4 / 3 per port), 28 "
+          "completed; 20 scheduled ends at +3.0 (>= 18 with the payoff), 4 REMOVED by Remove Hex "
+          "with 0 payoff, 3 ended on the target's death (2 striking an adjacent foe), 1 in the "
+          "caster's death batch; takers 1..4 (11 / 5 / 5 / 1), every one a foe; the observer struck "
+          "3 times with the 0x00CF -> [10] -> word prefix and Burning (3, 3.0) each; the caster's "
+          "rank 13 -- the server's hex_end_damage(179, 13) is the tape's 72",
+          str({k: hs[k] for k in ("i_per_port", "i_scheduled", "i_removed", "i_target_died",
+                                  "i_takers_hist", "i_observer_burning")}))
+    check(hs["m_per_port"] == hexjoin.EXPECT_185_PER_PORT and hs["m_completed"] == 25
+          and hs["m_twin"] == 22 and hs["m_single"] == 3 and hs["m_none"] == 0
+          and len(hs["m_mixed"]) == 4 and hs["m_target_single_adjacent_twin"] == [("54071", 647.3)]
+          and hs["m_twin_no_burning"] == 0 and hs["m_single_with_burning"] <= 1
+          and [x[:2] for x in hs["m_observer_burning"]] == [(9, 9.0)] * 2 and hs["m_rank_fits"]
+          and hs["h_42_elsewhere"] == 0 and hs["h_42_on_observer"] == 1
+          and hs["l_adds"].get("179 [1, 12]") == 28 and hs["l_adds"].get("1097 [1, 12]") == 5
+          and hs["l_adds"].get("1097 [12]") == 1 and hs["l_adds"].get("26 [1, 4]") == 5
+          and hs["l_adds"].get("222 []") == 14
+          and len(hs["l_snare"]) == 6 and len(hs["c_dazed"]) >= 1 and len(hs["c_cracked"]) >= 2
+          and hs["c_cast_applied"] >= 20 and hs["c_environmental"] >= 30
+          and hs["c_effect_ids"]["Burning"] == {25: 5},
+          "185 on the same tape (exact): 27 announces (17 / 4 / 3 / 3), 25 completed, 22 twins / 3 "
+          "singles on the target, 4 casts mixing twins and singles, 647.300 the one target-single "
+          "adjacent-twin; no twin without a Burning signal; the observer's Burning (9, 9.0) twice, "
+          "the caster's 13 predicting both 3 and 9; the ONE hex 0x0042 in the corpus is on the "
+          "observer; [6, T, ids]: 179 [1, 12] x28, 1097 [1, 12] x5 + [12] x1, Empathy [1, 4] x5, "
+          "Lightning Strike none x14; 6 snares; Dazed >= 1, Cracked Armor >= 2 (floors); Burning's "
+          "[6] id is 25 (5/5)",
+          str({k: hs[k] for k in ("m_per_port", "m_twin", "m_single", "m_mixed", "l_adds",
+                                  "c_effect_ids")}))
 
     print("\n13. the corpus: the CONVERTED hit's word (healjoin P6, RUN-SKILLS-RB)")
     # RUN-SKILLS-RB (2026-09-16, 20260916T213125): ten hits taken under

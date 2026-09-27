@@ -2293,6 +2293,21 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                     help="studies/weapons 43 (B2) REVERT: a wearer of an `on_skill_use = "
                          "\"interrupt other wearers\"` hex (Panic 52) completing a skill "
                          "interrupts nobody.")
+    ap.add_argument("--no-hex-end-burst", action="store_true",
+                    help="studies/skills 61 REVERT: a hex whose row says `on_end = "
+                         "\"burst\"` (Incendiary Bonds 179) ends -- at expiry or at its "
+                         "wearer's death -- and nothing fires: no words on the foes "
+                         "around the wearer, no Burning; this server's bytes until "
+                         "2026-09-27.")
+    ap.add_argument("--no-spell-energy-bonus", action="store_true",
+                    help="studies/skills 61 REVERT: a `bonus_if = \"caster energy higher\"` "
+                         "row (Mind Burn 185) lands its base words alone -- no second "
+                         "identical word, no Burning -- whatever the pools say.")
+    ap.add_argument("--energy-bonus-target-only", action="store_true",
+                    help="studies/skills 61, THE KNOWN-BAD ARM: Mind Burn's energy clause "
+                         "is ONE comparison, the caster's energy against the TARGET's, "
+                         "applied to every foe struck (the wiki's wording). Retail decided "
+                         "it PER FOE (647.300: the target single, an adjacent foe twin).")
     ap.add_argument("--no-spell-projectiles", action="store_true",
                     help="studies/weapons 36 / 37 REVERT: a projectile SPELL (Flare, "
                          "Lightning Orb, Dancing Daggers) lands its damage at the E5 (the "
