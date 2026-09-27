@@ -13977,8 +13977,9 @@ TYPED_CREATURE_ARMOUR = True  # --untyped-creature-armour reverts: a Warrior cre
 
 def creature_typed_rating(rating, row, damage_type):
     """`rating` typed by the hit: less the untyped part the typed reading
-    withdraws from EVERY hit (a creature Ranger's column +10, the row's
-    `armor_untyped_bonus`); less a CREATURE Warrior's physical-only +20
+    withdraws from EVERY hit (a creature Ranger's column +10, an Assassin's
+    or a Dervish's +10, a Paragon's +20 -- the row's `armor_untyped_bonus`);
+    less a CREATURE Warrior's physical-only +20
     (`armor_vs_physical`, combatmath.creature_physical_bonus) when the hit is
     not physical -- elemental, chaos, dark, holy -- and plus a creature
     Ranger's +30 (`armor_vs_elemental`, creature_elemental_bonus) when it is
@@ -34153,7 +34154,8 @@ def spawn_population(send, state, origin, conn_id, area=None):
                 dict(npc, level=row.get("level", npc.get("level", 0))),
                 row.get("armor_rating")),
             # ...what an ELEMENTAL hit meets beyond it (a Ranger's +30, WIKI), and
-            # the untyped part the typed reading withdraws from every hit (its +10)
+            # the untyped part the typed reading withdraws from every hit (its +10;
+            # an Assassin's or a Dervish's +10 and a Paragon's +20, the same day)
             "armor_vs_elemental": creature_elemental_bonus(
                 dict(npc, level=row.get("level", npc.get("level", 0))),
                 row.get("armor_rating")),
@@ -43038,9 +43040,10 @@ def main():
         global TYPED_CREATURE_ARMOUR
         TYPED_CREATURE_ARMOUR = False
         print("ARMOUR: --untyped-creature-armour -- a Warrior creature's +20 meets every "
-              "spell, weapon hit and preparation whatever its type, and a Ranger creature's "
-              "untyped +10 every hit (no +30 vs. elemental), the reading every run before "
-              "2026-09-27 made [the typed-creature-armour revert]", flush=True)
+              "spell, weapon hit and preparation whatever its type, a Ranger creature's "
+              "untyped +10 every hit (no +30 vs. elemental), and an Assassin's, a "
+              "Dervish's or a Paragon's column (+10 / +10 / +20) every hit, the reading "
+              "every run before 2026-09-27 made [the typed-creature-armour revert]", flush=True)
     if a.no_weakness_attributes:
         episodemods.WEAKNESS_ATTRIBUTES = False
         print("NO WEAKNESS ATTRIBUTES: Weakness cuts attack damage only; "
