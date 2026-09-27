@@ -136,6 +136,48 @@ def creature_physical_bonus(npc, override=None):
     return float(ARMOR_BONUS_BY_PROFESSION.get(npc.get("profession"), 0))
 
 
+# ---- AND A CREATURE RANGER'S BONUS IS "+30 VS. ELEMENTAL", NOT AN UNTYPED +10 (2026-09-27)
+#
+# The same table's other typed line: WIKI (GWW "Basic armor", the page the
+# creature formula's "Armor bonus" defers to, read 2026-09-27) gives the Ranger
+# "Armor +30 (vs. elemental damage)" and no other armour line. The +10 the
+# creature banner above reads for it comes off the max-AR COLUMN (70 - 60) --
+# the reading def 3113 refuted for the Warrior (the column's +20 as a base
+# bonus gives its elemental 29; the tape says <= 14.9). So under the typed
+# reading a Ranger creature meets 3 x level against a physical, chaos, dark or
+# holy hit and 3 x level + 30 against an elemental one: the row records the
+# untyped +10 to WITHDRAW (creature_untyped_bonus) and the +30 an elemental
+# hit adds (creature_elemental_bonus); authsrv.creature_typed_rating applies
+# both. NO witness of its own: a recon over 36 live captures found one clean
+# physical sequence on a Ranger creature (the owner's level-3 sword on a
+# level-2 Ranger, def 4397: 3 / 4, the same band under every reading) and no
+# elemental hit with known inputs. WIKI, by the reading the Warrior's witness
+# supports. The Assassin / Dervish / Paragon columns (10 / 10 / 20) would go
+# the same way under it and are NOT touched here.
+CREATURE_BONUS_VS_ELEMENTAL = {2: 30}             # the Ranger
+CREATURE_UNTYPED_WITHDRAWN = frozenset({2})       # the Ranger's column +10
+
+
+def creature_untyped_bonus(npc, override=None):
+    """The part of creature_armor_rating's number the typed reading WITHDRAWS
+    from every hit, physical too: the Ranger's max-column +10. 0 for every
+    other profession, a content override, or a row with no level."""
+    if override is not None or not npc or npc.get("level") is None:
+        return 0.0
+    if npc.get("profession") not in CREATURE_UNTYPED_WITHDRAWN:
+        return 0.0
+    return float(ARMOR_BONUS_BY_PROFESSION.get(npc.get("profession"), 0))
+
+
+def creature_elemental_bonus(npc, override=None):
+    """What an ELEMENTAL hit meets on a creature beyond its rating: the
+    Ranger's +30. 0 for every other profession, a content override, or a row
+    with no level."""
+    if override is not None or not npc or npc.get("level") is None:
+        return 0.0
+    return float(CREATURE_BONUS_VS_ELEMENTAL.get(npc.get("profession"), 0))
+
+
 # ---- THE PLAYER'S OWN ARMOUR, which nothing read until 2026-08-20 ----------
 #
 # Five pieces went out carrying `Armor: 25` and `Armor +20 (vs. physical
