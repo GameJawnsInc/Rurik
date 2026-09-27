@@ -10,6 +10,7 @@ weapon. No vault: everything here is content and code.
 """
 import math
 import collections
+import contextlib
 import os
 import struct
 import sys
@@ -23,9 +24,116 @@ import checks  # noqa: E402
 import agents  # noqa: E402
 import authsrv  # noqa: E402
 import combatmath  # noqa: E402
+import vaultpath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=260)   # the BARE-MACHINE number: 260 = 257 + 3 (2026-09-26, a body's spell meets its TAKER's armour: sections 25 / 26 / 28 +1 each; a vault run gives 279, measured, from 276. The bare run could NOT be re-measured: with RURIK_VAULT at a nonexistent path it stops at section 13's KeyError (dual["body_projectiles"]) on main too, so the +3 is the vault run's delta carried over -- and section 25's new check, like its `ar == 19.0` neighbour, reads the Orb's Air Magic attribute off the vault's skills table); before that 257 = 251 + 6 (section 28, a point-blank burst, 2026-09-20; a vault run gives 276 -- the corpus's target-16 announces are the one vault-only check); before that 251 = 237 + 14 (section 27, the hit test, 2026-09-20; a vault run gives 269 -- the corpus's dodge words are the one vault-only check); before that 237 = 228 + 9 (section 26, Fireball's splash, 2026-09-20; a vault run gives 254 -- the tape's bursts are the one vault-only check); before that 228 = 219 + 9 (section 25, a body's spell projectile, 2026-09-20; a vault run gives 244 -- the tape's activations are the one vault-only check); before that 219 = 208 + 11 (section 24, a player's spell projectile, 2026-09-20; a vault run gives 234 -- the tapes' speeds are the one vault-only check); before that 208 = 203 + 5 (section 23, base armour penetration, 2026-09-19; a vault run gives 222 -- the six checks that read the skills table are vault-only); before that 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=264)   # the BARE-MACHINE number, MEASURED 2026-09-26 -- a real run with RURIK_VAULT at a nonexistent path: 264 checks and 12 declared skips (17 checks) against a vault run's 281. It is the first number on this line a bare run has produced since at least dcaf0d60: until that day's repair the bare run died at section 13 on a KeyError and, past it, failed sixteen checks instead of skipping, so the 260 below and the chain behind it were vault deltas carried down, not runs. The repair carries the record's rows (RECORD, the attribute tables) into the blocks that read them -- section 20's three press checks run bare now -- decides every tape skip on its capture directory, and adds section 2b (2 vault-only checks: the carried rows against the vault's); before that 260 = 257 + 3 (2026-09-26, a body's spell meets its TAKER's armour: sections 25 / 26 / 28 +1 each; a vault run gives 279, measured, from 276. The bare run could NOT be re-measured: with RURIK_VAULT at a nonexistent path it stops at section 13's KeyError (dual["body_projectiles"]) on main too, so the +3 is the vault run's delta carried over -- and section 25's new check, like its `ar == 19.0` neighbour, reads the Orb's Air Magic attribute off the vault's skills table); before that 257 = 251 + 6 (section 28, a point-blank burst, 2026-09-20; a vault run gives 276 -- the corpus's target-16 announces are the one vault-only check); before that 251 = 237 + 14 (section 27, the hit test, 2026-09-20; a vault run gives 269 -- the corpus's dodge words are the one vault-only check); before that 237 = 228 + 9 (section 26, Fireball's splash, 2026-09-20; a vault run gives 254 -- the tape's bursts are the one vault-only check); before that 228 = 219 + 9 (section 25, a body's spell projectile, 2026-09-20; a vault run gives 244 -- the tape's activations are the one vault-only check); before that 219 = 208 + 11 (section 24, a player's spell projectile, 2026-09-20; a vault run gives 234 -- the tapes' speeds are the one vault-only check); before that 208 = 203 + 5 (section 23, base armour penetration, 2026-09-19; a vault run gives 222 -- the six checks that read the skills table are vault-only); before that 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
 check = LEDGER.ok
+
+
+def _record(activation, aftercast, recharge, energy, attribute, profession, type_code,
+            target, aoe_range, skill_arguments, duration, scale, bonus_scale,
+            projectile, impact_visual, weapon_req=0, adrenaline=(0, 0), combo=0,
+            half_range=False):
+    return {"activation": activation, "aftercast": aftercast, "recharge": recharge,
+            "energy": energy, "adrenaline": adrenaline[0],
+            "adrenaline_units": adrenaline[1], "attribute": attribute,
+            "profession": profession, "type_code": type_code, "target": target,
+            "combo": combo, "combo_req": 0, "weapon_req": weapon_req,
+            "aoe_range": aoe_range, "skill_arguments": skill_arguments,
+            "duration0": duration[0], "duration15": duration[1], "scale0": scale[0],
+            "scale15": scale[1], "bonus_scale0": bonus_scale[0],
+            "bonus_scale15": bonus_scale[1], "projectile": projectile,
+            "impact_visual": impact_visual, "touch_range": False,
+            "half_range": half_range}
+
+
+# THE BARE MACHINE (2026-09-26). This file ran on a machine WITH the vault and on
+# no other: with RURIK_VAULT at a nonexistent path it died at section 13 on a
+# KeyError and, past that, failed sixteen checks rather than skipping them. So
+# the vault-only tables its checks read are carried here, as the record's own
+# rows (measured numbers -- CLAUDE.md's gate), and REPLACE the table for the
+# block that needs them, so a vault run takes exactly the bare path and cannot
+# pass on a row the bare machine lacks. Section 2b checks every row below
+# against the vault's own; a check whose SUBJECT is the vault (a tape, the
+# corpus, the whole table) skips instead, decided on the directory
+# (vaultpath.require_dir) or the table and never on an empty result.
+#
+# The skills rows: skilltable.py's record, build 38797.
+RECORD = {
+    "1": _record(2.0, 0.75, 4, 0, 21, 1, 7, 0, 0.0, 2, (0, 0), (82, 172), (0, 0),
+                 2077, 2077),                                   # a signet (section 20)
+    "83": _record(1.0, 0.75, 5, 5, 5, 4, 5, 0, 0.0, 2, (0, 0), (1, 17), (0, 0),
+                  2077, 2077),                                  # a 5 s self spell (section 20)
+    "185": _record(1.0, 0.75, 5, 5, 10, 6, 5, 5, 156.0, 6, (0, 0), (15, 60), (1, 10),
+                   2077, 2077),                                 # Mind Burn
+    "194": _record(1.0, 0.75, 0, 5, 10, 6, 5, 5, 156.0, 2, (0, 0), (20, 65), (1800, 1800),
+                   343, 344),                                   # Flare
+    "229": _record(2.0, 0.75, 5, 15, 8, 6, 5, 5, 0.0, 2, (0, 0), (10, 100), (1800, 1800),
+                   403, 404),                                   # Lightning Orb
+    "317": _record(0.0, 0.0, 0, 0, 17, 1, 3, 0, 0.0, 1, (5, 20), (33, 33), (0, 0),
+                   2077, 2077, adrenaline=(4, 80)),             # the default bar's adrenal stance
+    "394": _record(0.0, 0.0, 3, 10, 25, 2, 14, 5, 0.0, 2, (0, 0), (25, 50), (0, 0),
+                   680, 2077, weapon_req=2),                    # Power Shot
+    "396": _record(0.0, 0.0, 10, 10, 51, 2, 14, 5, 0.0, 0, (0, 0), (16, 16), (0, 0),
+                   680, 2077, weapon_req=2),                    # Dual Shot
+    "431": _record(2.0, 0.0, 12, 10, 24, 2, 19, 0, 156.0, 2, (24, 24), (3, 18), (0, 0),
+                   735, 734),                                   # Ignite Arrows
+    "433": _record(2.0, 0.0, 12, 5, 24, 2, 19, 0, 0.0, 2, (24, 24), (3, 24), (0, 0),
+                   343, 344),                                   # Kindle Arrows
+    "858": _record(1.0, 0.75, 5, 5, 30, 7, 5, 5, 0.0, 2, (0, 0), (5, 35), (1800, 1800),
+                   854, 855, combo=1, half_range=True),         # Dancing Daggers
+}
+
+# The attribute tables: the cost curve (clientscan/attribpoints.py) and each
+# attribute's profession and primary flag -- the three columns attribute_state
+# reads, and the only reader of either table. Without them it refuses, and every
+# rank a check reads is None.
+ATTRIBUTE_COST = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 9, 9: 11, 10: 13, 11: 16, 12: 20}
+ATTRIBUTE_PROFESSION = {0: 5, 1: 5, 2: 5, 3: 5, 4: 4, 5: 4, 6: 4, 7: 4, 8: 6, 9: 6, 10: 6,
+                        11: 6, 12: 6, 13: 3, 14: 3, 15: 3, 16: 3, 17: 1, 18: 1, 19: 1,
+                        20: 1, 21: 1, 22: 2, 23: 2, 24: 2, 25: 2, 26: 11, 27: 11, 28: 11,
+                        29: 7, 30: 7, 31: 7, 32: 8, 33: 8, 34: 8, 35: 7, 36: 8, 37: 9,
+                        38: 9, 39: 9, 40: 9, 41: 10, 42: 10, 43: 10, 44: 10, 45: 11,
+                        46: 11, 47: 11, 48: 11, 49: 11, 50: 11}
+ATTRIBUTE_PRIMARY = {0, 6, 12, 16, 17, 23, 35, 36, 40, 44}
+
+
+@contextlib.contextmanager
+def _tables(**replace):
+    """WORLD's tables REPLACED by these for the block, then put back."""
+    tables = agents.WORLD.tables
+    kept = {k: tables[k] for k in replace if k in tables}
+    tables.update(replace)
+    try:
+        yield
+    finally:
+        for k in replace:
+            if k in kept:
+                tables[k] = kept[k]
+            else:
+                del tables[k]
+
+
+def skills_rows(*ids):
+    """The skills table as exactly these RECORD rows, for a block or (as a
+    decorator) a section."""
+    return _tables(skills={k: dict(RECORD[k]) for k in ids})
+
+
+def attribute_rows():
+    """The two attribute tables as the record's, for a section whose checks
+    read a rank; a decorator too."""
+    return _tables(
+        attribute_cost={str(k): {"points": v} for k, v in ATTRIBUTE_COST.items()},
+        attribute={str(k): {"profession": v, "is_primary": k in ATTRIBUTE_PRIMARY}
+                   for k, v in ATTRIBUTE_PROFESSION.items()})
+
+
+def full_skills_table(table):
+    """True for the vault's whole extraction: the tracked content carries a
+    few dozen skills, and a column needs the whole table to be a column."""
+    return sum(1 for r in (table or {}).values() if r.get("weapon_req")) >= 100
+
 
 LEGACY_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
 LEGACY_RATE = {15: "hammer", 27: "sword", 2: "axe", 32: "daggers"}
@@ -104,9 +212,7 @@ def section_table():
 def section_skills():
     print("\n2. the req bits against the skill table's own attribute column")
     skills = agents.WORLD.rows("skills")
-    if sum(1 for r in skills.values() if r.get("weapon_req")) < 100:
-        # the tracked content carries a few dozen skills; the full table is the
-        # vault's extraction, and a column needs the whole table to be a column
+    if not full_skills_table(skills):
         LEDGER.skip("section 2", "the full skills table (vault/content) is absent -- 1 check")
         return
     agree = {}
@@ -118,6 +224,30 @@ def section_skills():
           "for every type, MOST skill rows whose weapon_req is exactly its bit carry its "
           "attribute -- the table's two columns are one fact, read off the client",
           str(agree))
+
+
+def section_record_rows():
+    print("\n2b. the rows this file carries for a bare machine, against the vault's own")
+    skills = agents.WORLD.rows("skills")
+    if not full_skills_table(skills):
+        LEDGER.skip("section 2b", "the full skills table (vault/content) is absent -- 1 check")
+    else:
+        off = {k: [c for c, v in row.items() if (skills.get(k) or {}).get(c, "absent") != v]
+               for k, row in RECORD.items()}
+        off = {k: cols for k, cols in off.items() if cols}
+        check(not off,
+              f"every one of the {len(RECORD)} skills rows RECORD carries is the vault's own, "
+              f"column for column -- so a block run on them takes the path a vault row would",
+              str(off))
+    cost, attrs = agents.WORLD.rows("attribute_cost"), agents.WORLD.rows("attribute")
+    if not cost or not attrs:
+        LEDGER.skip("section 2b", "the attribute tables (vault/content) are absent -- 1 check")
+    else:
+        check({int(k): int(r["points"]) for k, r in cost.items()} == ATTRIBUTE_COST
+              and {int(k): int(r["profession"]) for k, r in attrs.items()} == ATTRIBUTE_PROFESSION
+              and {int(k) for k, r in attrs.items() if r["is_primary"]} == ATTRIBUTE_PRIMARY,
+              "and the attribute tables it carries are the vault's: the cost curve, and every "
+              "attribute's profession and primary flag")
 
 
 def section_items():
@@ -1210,10 +1340,13 @@ def section_body_parity():
                            skills=[[396, 0.0, 10.0]], skill_ready=[0.0], casting=0,
                            cast_target=PLAYER, last_swing=time.time())
         sent = []
-        authsrv.land_skill(send, dual, FOE, dual["agents"][FOE], 1)
-        for shot in dual["body_projectiles"]:
-            shot["arrives_at"] -= 30.0
-        authsrv.projectile_tick(send, dual, 1)
+        # Dual Shot's record row: without it `_is_attack_skill` answers False, the
+        # body casts 396 as a spell and no arrow leaves
+        with skills_rows("396"):
+            authsrv.land_skill(send, dual, FOE, dual["agents"][FOE], 1)
+            for shot in dual.get("body_projectiles", ()):
+                shot["arrives_at"] -= 30.0
+            authsrv.projectile_tick(send, dual, 1)
         per_arrow = (480.0 - dual["player_health"]) / 2.0
         check(plain_hit >= 10.0 and per_arrow == float(int(plain_hit * 0.75))
               and per_arrow < plain_hit and len(words(sent)) == 2,
@@ -1225,6 +1358,8 @@ def section_body_parity():
          authsrv.swing_preparation_bonus, authsrv.ARMOUR_TERM) = saved
 
 
+@attribute_rows()                    # the hits below read the bow's rank
+@skills_rows("431", "433")          # and the radius the record carries
 def section_splash():
     print("\n14. WEAPONS-W7: Ignite Arrows' adjacency splash")
     IGNITE, KINDLE = 431, 433
@@ -1373,6 +1508,7 @@ def section_spear():
          authsrv.WEAPON_ATTACK_SPEED, authsrv.PLAYER_SWING_DAMAGE) = saved
 
 
+@skills_rows("317")                 # an adrenal bar: each hit carries its 0x00CF
 def section_scythe():
     print("\n16. WEAPONS-W3: the scythe's extra targets, and its smaller critical")
     NEAR, FAR, EDGE_IN, EDGE_OUT, A, B = 21, 22, 23, 24, 26, 27
@@ -1838,6 +1974,7 @@ def _mod(ident, arg, arg2=0):
     return (ident << 20) | (arg << 8) | arg2
 
 
+@attribute_rows()                   # player_weapon_rank reads a rank
 def section_damage_type_and_requirement():
     print("\n19. WEAPONS-W4: the damage type against the vs-type armour, and the 633 requirement")
     cm = combatmath
@@ -2121,6 +2258,8 @@ def section_damage_type_and_requirement():
          authsrv.TYPED_ARMOUR, authsrv.UNMET_REQUIREMENT, agents.item_template) = saved
 
 
+@attribute_rows()
+@skills_rows("83", "1")             # the roll asks a spell's type; the press, 83's row
 def section_half_recharge():
     print("\n20. WEAPONS-W5b: a staff's 570 -- halves a spell's recharge at the completion")
     cm = combatmath
@@ -2168,50 +2307,41 @@ def section_half_recharge():
               "--no-half-recharge: never, the chances still read")
         authsrv.HALF_RECHARGE = True
         # through the real press -> completion: the E5's integer and the E6 clock
-        try:
-            row = agents.WORLD.get("skills", "83")
-            ok_row = (int(row["type_code"]) == 5 and int(row["recharge"]) == 5
-                      and int(row["energy"]) <= 10)
-        except Exception:                                                  # noqa: BLE001
-            ok_row = False
-        if not ok_row:
-            LEDGER.skip("section 20", "skill 83's row (a 5 s self spell) is absent -- 3 checks")
-        else:
-            P = authsrv.PLAYER_AGENT_ID
+        P = authsrv.PLAYER_AGENT_ID
 
-            def press_spell(force):
-                authsrv.half_recharge_roll = (
-                    lambda items, sid, rng=None, _o=r: _o(items, sid, rng=lambda: force))
-                authsrv.apply_party_character({"player_weapon": "hsr_staff"})
-                st, sent = _world(300.0), []
-                send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
-                authsrv.handle_skill_press([0, 83, 0, P], send, st, 1,
-                                           authsrv.GAME_CMSG_USE_SKILL)
-                sent.clear()
-                casts = st.get("pending_casts") or []
-                for cast in casts:
-                    for k in ("begin_at", "e5_at", "e3_at", "e6_at"):
-                        cast[k] -= float(cast.get("activation", 1.0)) + 0.05
-                authsrv.cast_tick(send, st, 1)
-                e5 = [v for op, v in sent if op == 0x00E5]
-                cast = casts[0] if casts else {}
-                return e5, cast
+        def press_spell(force):
+            authsrv.half_recharge_roll = (
+                lambda items, sid, rng=None, _o=r: _o(items, sid, rng=lambda: force))
+            authsrv.apply_party_character({"player_weapon": "hsr_staff"})
+            st, sent = _world(300.0), []
+            send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+            authsrv.handle_skill_press([0, 83, 0, P], send, st, 1,
+                                       authsrv.GAME_CMSG_USE_SKILL)
+            sent.clear()
+            casts = st.get("pending_casts") or []
+            for cast in casts:
+                for k in ("begin_at", "e5_at", "e3_at", "e6_at"):
+                    cast[k] -= float(cast.get("activation", 1.0)) + 0.05
+            authsrv.cast_tick(send, st, 1)
+            e5 = [v for op, v in sent if op == 0x00E5]
+            cast = casts[0] if casts else {}
+            return e5, cast
 
-            e5_h, cast_h = press_spell(0.0)                 # the roll succeeds
-            e5_t, cast_t = press_spell(0.99)                # the roll misses
-            check(e5_h == [[P, 83, 0, 3]] and cast_h.get("recharge") == 3
-                  and abs(cast_h["e6_at"] - cast_h["e5_at"] - 3.0) < 1e-6,
-                  "a spell completing under a 570 that triggers: the 0x00E5 carries 3 where "
-                  "the table says 5, and the E6 clock is 3 s past the E5", f"{e5_h} / {cast_h}")
-            check(e5_t == [[P, 83, 0, 5]] and cast_t.get("recharge") == 5
-                  and abs(cast_t["e6_at"] - cast_t["e5_at"] - 5.0) < 1e-6,
-                  "and one whose roll misses carries the table's 5 with the E6 5 s out",
-                  f"{e5_t}")
-            authsrv.HALF_RECHARGE = False
-            e5_off, _c = press_spell(0.0)
-            authsrv.HALF_RECHARGE = True
-            check(e5_off == [[P, 83, 0, 5]],
-                  "--no-half-recharge: the table's 5 even when the roll would have hit")
+        e5_h, cast_h = press_spell(0.0)                 # the roll succeeds
+        e5_t, cast_t = press_spell(0.99)                # the roll misses
+        check(e5_h == [[P, 83, 0, 3]] and cast_h.get("recharge") == 3
+              and abs(cast_h["e6_at"] - cast_h["e5_at"] - 3.0) < 1e-6,
+              "a spell completing under a 570 that triggers: the 0x00E5 carries 3 where "
+              "the table says 5, and the E6 clock is 3 s past the E5", f"{e5_h} / {cast_h}")
+        check(e5_t == [[P, 83, 0, 5]] and cast_t.get("recharge") == 5
+              and abs(cast_t["e6_at"] - cast_t["e5_at"] - 5.0) < 1e-6,
+              "and one whose roll misses carries the table's 5 with the E6 5 s out",
+              f"{e5_t}")
+        authsrv.HALF_RECHARGE = False
+        e5_off, _c = press_spell(0.0)
+        authsrv.HALF_RECHARGE = True
+        check(e5_off == [[P, 83, 0, 5]],
+              "--no-half-recharge: the table's 5 even when the roll would have hit")
         authsrv.half_recharge_roll = r
         # a body: its staff's roll rides its own 0x00E5 through cast_recharge
         body = {"weapon_item": "hsr_staff"}
@@ -2238,6 +2368,7 @@ def section_half_recharge():
          authsrv.HALF_RECHARGE, authsrv.half_recharge_roll) = saved
 
 
+@attribute_rows()                   # the hornbow's hits at the Marksmanship rank
 def section_bow_classes():
     print("\n21. WEAPONS-Q2 and the hornbow's 10 %: the client's own bow-class names, the class rate, the penetration")
     saved = (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.ATTACK_INTERVAL,
@@ -2362,6 +2493,7 @@ def section_bow_classes():
          authsrv.BOW_CLASSES, agents.item_template, authsrv.critical_rate) = saved
 
 
+@skills_rows("194", "394")          # a spell's projectile and an attack skill's
 def section_spell_own_type():
     print("\n22. a spell's own damage type: the row's label, the armour it meets, the kind its projectile carries")
     cm = combatmath
@@ -2420,13 +2552,14 @@ def section_spell_own_type():
         try:
             sys.path.insert(0, HERE)
             import weaponcensus as wc                                     # noqa: PLC0415
+            vaultpath.require_dir("captures", "live", "20260819T132414")
             kinds, types = [], set()
             for _name, _gf, s2c in wc.connections("20260819T132414"):
                 for r in wc.skill_shots(s2c):
                     if r["skill"] == 858:
                         kinds.append(r.get("kind"))
                         types.add(r["type"])
-        except (Exception, SystemExit) as e:                               # noqa: BLE001
+        except SystemExit as e:
             kinds = None
             LEDGER.skip("section 22", f"capture 20260819T132414 is absent ({type(e).__name__}) -- 1 check")
         if kinds is not None:
@@ -2802,13 +2935,16 @@ def section_spell_projectiles():
             sys.path.insert(0, HERE)
             import weaponcensus as wc                                     # noqa: PLC0415
             got = collections.defaultdict(list)
-            for stamp in ("20260819T132414", "20260917T090355", "20260917T224104",
-                          "20260817T231139"):
+            stamps = ("20260819T132414", "20260917T090355", "20260917T224104",
+                      "20260817T231139")
+            for stamp in stamps:
+                vaultpath.require_dir("captures", "live", stamp)
+            for stamp in stamps:
                 for _name, _gf, s2c in wc.connections(stamp):
                     for r in wc.spell_speeds(s2c):
                         if r["speed"] is not None and r["distance"] >= 50.0:
                             got[r["projectile"]].append(round(r["speed"]))
-        except (Exception, SystemExit) as e:                               # noqa: BLE001
+        except SystemExit as e:
             got = None
             LEDGER.skip("section 24", f"the four tapes are absent ({type(e).__name__}) -- 1 check")
         if got is not None:
@@ -2833,6 +2969,7 @@ def section_spell_projectiles():
          authsrv.weapon_satisfies) = saved
 
 
+@skills_rows("229", "858", "185")   # the Orb's Air Magic penetrates the pieces
 def section_body_spell_projectiles():
     print("\n25. a body's spell projectile: the completion launches it, the arrival lands it")
     saved = (authsrv.skill_damage, authsrv._is_attack_skill, authsrv.skill_projectile,
@@ -2992,12 +3129,13 @@ def section_body_spell_projectiles():
         try:
             sys.path.insert(0, HERE)
             import weaponcensus as wc                                     # noqa: PLC0415
+            vaultpath.require_dir("captures", "live", "20260917T090355")
             at = collections.defaultdict(list)
             for _name, _gf, s2c in wc.connections("20260917T090355"):
                 for r in wc.skill_shots(s2c):
                     if r["skill"] in (229, 230) and r["event"] == "announce60":
                         at[r["skill"]].append(r["event_to_launch"])
-        except (Exception, SystemExit) as e:                               # noqa: BLE001
+        except SystemExit as e:
             at = None
             LEDGER.skip("section 25", f"capture 20260917T090355 is absent ({type(e).__name__}) -- 1 check")
         if at is not None:
@@ -3203,6 +3341,7 @@ def section_spell_areas():
         try:
             sys.path.insert(0, HERE)
             import weaponcensus as wc                                     # noqa: PLC0415
+            vaultpath.require_dir("captures", "live", "20260817T231139")
             n_arr, n_333, n_ground, n_direct, per_foe_ok = 0, 0, 0, 0, 0
             for _name, _gf, s2c in wc.connections("20260817T231139"):
                 for i, (tt, op, v) in enumerate(s2c):
@@ -3222,7 +3361,7 @@ def section_spell_areas():
                     vs = [w[2] for o, w in batch if o == 0x00A0 and w[1] == 20 and w[3] == v[1]]
                     if ws and all(f in vs for f in ws):
                         per_foe_ok += 1
-        except (Exception, SystemExit) as e:                               # noqa: BLE001
+        except SystemExit as e:
             n_arr = None
             LEDGER.skip("section 26", f"capture 20260817T231139 is absent ({type(e).__name__}) -- 1 check")
         if n_arr is not None:
@@ -3465,6 +3604,7 @@ def section_dodge():
         try:
             sys.path.insert(0, HERE)
             import weaponcensus as wc                                     # noqa: PLC0415
+            vaultpath.require_dir("captures", "live")
             with_a7, without, r3_with = 0, 0, 0
             for _name, _gf, s2c in wc.connections():
                 arrivals = set()
@@ -3479,7 +3619,7 @@ def section_dodge():
                             without += not rode
                         elif v[4] == 3:
                             r3_with += rode
-        except (Exception, SystemExit) as e:                               # noqa: BLE001
+        except SystemExit as e:
             with_a7 = None
             LEDGER.skip("section 27", f"the live corpus is absent ({type(e).__name__}) -- 1 check")
         if with_a7 is not None:
@@ -3658,12 +3798,13 @@ def section_bursts():
               "the source: the E5 and the completion both branch to the burst, a body's every "
               "foe's terms are computed before its 58, and the burst hands out the condition itself")
         # the corpus: no single-packet burst was ever cast; Fire Storm (an area over time) was
-        if had and kept:
+        if full_skills_table(kept):
             t16 = {int(k) for k, r in kept.items() if r.get("target") == 16
                    and int(r.get("projectile") or 2077) in (0, 2077)}     # the ones with no flight
             try:
                 sys.path.insert(0, HERE)
                 import weaponcensus as wc                                     # noqa: PLC0415
+                vaultpath.require_dir("captures", "live")
                 seen = collections.Counter()
                 for _name, _gf, s2c in wc.connections():
                     player = next((v[1] for _t, op, v in s2c if op == 0x00E3), None)
@@ -3672,7 +3813,7 @@ def section_bursts():
                             seen[v[4]] += 1
                         elif op == 0x00E5 and len(v) > 2 and v[1] == player and v[2] in t16:
                             seen[v[2]] += 1
-            except (Exception, SystemExit) as e:                               # noqa: BLE001
+            except SystemExit as e:
                 seen = None
                 LEDGER.skip("section 28", f"the live corpus is absent ({type(e).__name__}) -- 1 check")
             if seen is not None:
@@ -3700,6 +3841,7 @@ def section_bursts():
 def main():
     section_table()
     section_skills()
+    section_record_rows()
     section_items()
     section_character()
     section_ranged()
