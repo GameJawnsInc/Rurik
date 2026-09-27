@@ -44,6 +44,18 @@ move back.
 
 ---
 
+### Occlusion does not count for the view rule -- 2026-09-27 -- **the world-entry auto-select took a foe fully hidden behind the spawn pillar at 650 u, inside the view cone: the rule is the cone (an angle test), not line of sight. No code change**
+
+**The question** (the entry below, "whether occlusion counts"). Design offline, verify on the frame: the navmesh cannot tell a tall wall from a low fence, so a candidate had to be occluded in the picture, not just blocked on the mesh. The search (the server's own `load_pathmap` + `enemy_spots`, map 148) wanted a walkable spot within the 800 u already shown to work, in the cone, whose line from the player AND from a camera ~300 u behind crosses a long non-walkable run -- a footprint, not a fence. It returned eleven, all straight down the spawn line behind the tall slanted pillar at the centre of every spawn frame; the chosen one, `--enemy-offset 650,23`, is **650 u, bearing +2°, behind 220 u of footprint**, and the server placed it exactly there (10476, 8100).
+
+**`20260927T151007`:** one foe, the hero present, no input. **The client's first `0x00C1` was `[10, 0]`.** The entry frame and a 3× crop show no part of the Hatcher's body -- only its red name, drawn over the stone because it is the selected target -- and the compass dot straight ahead. Pre-registered: `[200, 0]` if occlusion counts (the hero, as when the only foe stood behind the camera, 3 of 3), `[10, 0]` if the cone alone does; void if the body showed. Not void.
+
+**OBSERVED, n=1:** the view rule is an angle test on the view, not a visibility test. **Open:** the cone's half-angle; a range term beside it (765 u picked at entry, 800 u re-acquired at a revive, nothing farther tried); and whether the revive re-acquisition shares the rule exactly (presumed, UNVERIFIED).
+
+**Edited:** studies/skills 38.5. **Tests:** doc linters.
+
+---
+
 ### The world-entry auto-select uses the same view rule -- 2026-09-27 -- **at map load the client picked a foe 765 u away on screen over one 381 u away behind the camera; creation order and nearest both predicted the other. No code change**
 
 **The question** (the entry below, "UNVERIFIED: ... whether the world-entry auto-selection uses the same rule"). At map load nothing has been input, so the camera looks along the spawn facing (east on map 148) and the layout alone decides what is on screen. Every earlier entry had the in-view foe also be the nearest one.
