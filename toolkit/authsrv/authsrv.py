@@ -13123,6 +13123,8 @@ from combatmath import (  # noqa: F401,E402
     ARMOR_BONUS_BY_PROFESSION,
     creature_armor_rating,
     creature_physical_bonus,
+    creature_elemental_bonus,
+    creature_untyped_bonus,
 )
 
 
@@ -13974,19 +13976,28 @@ TYPED_CREATURE_ARMOUR = True  # --untyped-creature-armour reverts: a Warrior cre
 
 
 def creature_typed_rating(rating, row, damage_type):
-    """`rating` less a CREATURE Warrior's physical-only +20 (the row's
-    `armor_vs_physical`, combatmath.creature_physical_bonus) when the hit's
-    `damage_type` is not physical -- elemental, chaos, dark, holy. Unchanged
-    for a physical or an untyped hit, a row with no such part (a party body,
-    a content override, a fixture), None, or --untyped-creature-armour. The
-    one test a spell (row_spell_armour) and every weapon hit onto a row
-    (hit_enemy, scythe_extra_hit, land_swing_on_body) apply."""
+    """`rating` typed by the hit: less the untyped part the typed reading
+    withdraws from EVERY hit (a creature Ranger's column +10, the row's
+    `armor_untyped_bonus`); less a CREATURE Warrior's physical-only +20
+    (`armor_vs_physical`, combatmath.creature_physical_bonus) when the hit is
+    not physical -- elemental, chaos, dark, holy -- and plus a creature
+    Ranger's +30 (`armor_vs_elemental`, creature_elemental_bonus) when it is
+    ELEMENTAL. Unchanged for a row with no such parts (a party body, a
+    content override, a fixture), None, or --untyped-creature-armour. The one
+    test a spell (row_spell_armour), every weapon hit and a preparation onto a
+    row apply."""
     if rating is None or not TYPED_CREATURE_ARMOUR:
         return rating
-    part = float((row or {}).get("armor_vs_physical") or 0.0)
-    if not part or combatmath.damage_class(damage_type) in (None, "physical"):
+    _withdrawn = float((row or {}).get("armor_untyped_bonus") or 0.0)
+    if _withdrawn:
+        rating = float(rating) - _withdrawn
+    cls = combatmath.damage_class(damage_type)
+    if cls in (None, "physical"):
         return rating
-    return float(rating) - part
+    rating = float(rating) - float((row or {}).get("armor_vs_physical") or 0.0)
+    if cls == "elemental":
+        rating += float((row or {}).get("armor_vs_elemental") or 0.0)
+    return rating
 
 
 def player_spell_amount(state, skill_id, tid, amount):
@@ -34141,6 +34152,14 @@ def spawn_population(send, state, origin, conn_id, area=None):
             "armor_vs_physical": creature_physical_bonus(
                 dict(npc, level=row.get("level", npc.get("level", 0))),
                 row.get("armor_rating")),
+            # ...what an ELEMENTAL hit meets beyond it (a Ranger's +30, WIKI), and
+            # the untyped part the typed reading withdraws from every hit (its +10)
+            "armor_vs_elemental": creature_elemental_bonus(
+                dict(npc, level=row.get("level", npc.get("level", 0))),
+                row.get("armor_rating")),
+            "armor_untyped_bonus": creature_untyped_bonus(
+                dict(npc, level=row.get("level", npc.get("level", 0))),
+                row.get("armor_rating")),
             "effects": 0,
             "resend_definition": bool(row.get("resend_definition", False)),
             "attacks_back": bool(row.get("attacks_back", False)),
@@ -34282,6 +34301,10 @@ def _spawn_one_enemy(send, state, agent_id, x, y, plane, conn_id, n_of=(1, 1)):
         "armor_rating": ENEMY_ARMOR_RATING,
         "armor_vs_physical": creature_physical_bonus(agents.HATCHER,      # 2026-09-27
                                                      _ENEMY.get("armor_rating")),
+        "armor_vs_elemental": creature_elemental_bonus(agents.HATCHER,
+                                                       _ENEMY.get("armor_rating")),
+        "armor_untyped_bonus": creature_untyped_bonus(agents.HATCHER,
+                                                      _ENEMY.get("armor_rating")),
         "dead": False,
         "name": agents.HATCHER["name"],
         # What create_agent_world needs to rebuild this agent from the entry alone,
@@ -43015,7 +43038,8 @@ def main():
         global TYPED_CREATURE_ARMOUR
         TYPED_CREATURE_ARMOUR = False
         print("ARMOUR: --untyped-creature-armour -- a Warrior creature's +20 meets every "
-              "spell, weapon hit and preparation whatever its type, the reading every run before "
+              "spell, weapon hit and preparation whatever its type, and a Ranger creature's "
+              "untyped +10 every hit (no +30 vs. elemental), the reading every run before "
               "2026-09-27 made [the typed-creature-armour revert]", flush=True)
     if a.no_weakness_attributes:
         episodemods.WEAKNESS_ATTRIBUTES = False

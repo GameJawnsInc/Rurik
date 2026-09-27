@@ -2159,7 +2159,11 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "meets 3 x level: GWW types the Warrior's bonus "
                          "'vs. physical damage', and a level-3 Warrior took the "
                          "owner's Dancing Daggers as 6 of 7 on 20260819T132414, "
-                         "where the untyped 29 gives 4. Party bodies are unchanged "
+                         "where the untyped 29 gives 4. A Ranger CREATURE's bonus "
+                         "likewise reads as GWW's 'Armor +30 (vs. elemental "
+                         "damage)' -- 3 x level against every other type, + 30 "
+                         "against an elemental one -- where this flag restores the "
+                         "untyped + 10 on every hit. Party bodies are unchanged "
                          "either way (a hero's armour base is 3 x level + 20).")
     ap.add_argument("--no-weakness-attributes", action="store_true",
                     help="Weakness cuts attack damage only: no rank is "
