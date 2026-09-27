@@ -4365,7 +4365,11 @@ def preparation_splash(send, state, prep_skill, prep_bonus, target_id, conn_id,
         foe = state.get("agents", {}).get(aid)
         if foe is None:
             continue
-        arm = penetrated_armour(foe.get("armor_rating"), agents.PLAYER_WEAPON)  # Q2
+        # 2026-09-27: typed by the PREPARATION's own damage (Ignite Arrows' fire),
+        # so a creature Warrior's physical-only +20 stays out of it
+        arm = penetrated_armour(creature_typed_rating(foe.get("armor_rating"), foe,
+                                                  preparation_damage_type(prep_skill)),
+                                agents.PLAYER_WEAPON)  # Q2
         scale = (strike_multiplier(attack_strength(rank), float(arm))
                  if rank is not None and arm is not None and ARMOUR_TERM
                  else 1.0)
@@ -13718,7 +13722,9 @@ def body_ranged(agent, state=None, agent_id=None):
 def body_preparation_word(state, agent, agent_id, armour_mult):
     """(points, skill, impact visual) of the preparation's OWN word a body's
     arrow lands beside the arrow's -- W2e's second word, the body's
-    (WEAPONS-W2f) -- or (0, None, None)."""
+    (WEAPONS-W2f) -- or (0, None, None). `armour_mult` is the arrow's
+    multiplier, or (2026-09-27) a function of the preparation's own damage
+    type returning the multiplier its word meets."""
     if not PREPARATION_WIRE:
         return 0.0, None, None
     key = (agent or {}).get("weapon_item")
@@ -13731,6 +13737,8 @@ def body_preparation_word(state, agent, agent_id, armour_mult):
     bonus, sid = swing_preparation_bonus(state, item, agent_id)
     if not bonus:
         return 0.0, None, None
+    if callable(armour_mult):
+        armour_mult = armour_mult(preparation_damage_type(sid))
     return _whole_points(float(bonus) * float(armour_mult)), sid, skill_impact_visual(sid)
 
 
@@ -13958,7 +13966,8 @@ def row_spell_armour(state, skill_id, tid):
 # TYPED_CREATURE_ARMOUR takes the Warrior's physical-only +20 off a spell
 # (combatmath's banner), and then all sixteen reproduce (test_weapons 31).
 # `--untyped-creature-armour` reverts that alone, for every caster -- and,
-# since the same day, for every weapon hit (creature_typed_rating, test_weapons 32).
+# since the same day, for every weapon hit and a preparation's own damage
+# (creature_typed_rating, test_weapons 32 / 33).
 PLAYER_SPELL_ARMOUR = True   # --player-spell-exact reverts: the player's spells deal their stated amount
 TYPED_CREATURE_ARMOUR = True  # --untyped-creature-armour reverts: a Warrior creature's +20 meets every hit
 
@@ -15766,6 +15775,17 @@ def player_damage_type():
     if not TYPED_ARMOUR or not (EQUIP_WEAPON and agents.PLAYER_WEAPON):
         return "physical"
     dt = combatmath.item_damage_type(agents.PLAYER_WEAPON)
+    return dt if dt is not None else "physical"
+
+
+def preparation_damage_type(skill_id):
+    """The type a PREPARATION's own damage carries -- its skill_effect row's
+    `damage_type`, else the one its label names (Ignite Arrows: no
+    damage_type, its arrow keeps the weapon's kind, but its explosion is
+    "Fire damage"), else "physical"; "physical" under --no-typed-armour."""
+    if not TYPED_ARMOUR or skill_id is None:
+        return "physical"
+    dt = combatmath.spell_damage_type_of(skill_effect_row(skill_id))
     return dt if dt is not None else "physical"
 
 
@@ -19181,6 +19201,7 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
                                agents.PLAYER_WEAPON,
                                base=player_base_penetration(state, skill_id))
     _prep_scale = 1.0                   # WEAPONS-W2e: the arrow's own armour term
+    _prep_sl = None                     # ...and its strike level (2026-09-27)
     if exact is not None:
         dealt = float(exact) + bonus_damage
     elif EQUIP_WEAPON and PLAYER_SWING_DAMAGE and armour is not None \
@@ -19196,6 +19217,7 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
                              mult=player_requirement_factor(state, rank),   # W4
                              strike_level=caster_strike_level(_lvl)) + bonus_damage
         _prep_scale = strike_multiplier(caster_strike_level(_lvl), float(armour))
+        _prep_sl = caster_strike_level(_lvl)
     elif EQUIP_WEAPON and PLAYER_SWING_DAMAGE and rank is not None \
             and armour is not None:
         critical = random.random() < critical_rate(rank) + (
@@ -19206,6 +19228,7 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
                              critical_armour_reduction=weapon_critical_reduction(
                                  agents.PLAYER_WEAPON)) + bonus_damage
         _prep_scale = strike_multiplier(attack_strength(rank), float(armour))
+        _prep_sl = attack_strength(rank)
     elif EQUIP_WEAPON and PLAYER_SWING_DAMAGE:
         # No rank or no armour rating on the target: the weapon's raw range,
         # which is what this server did between 2026-08-20 and the armour term
@@ -19241,6 +19264,15 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
             # WEAPONS-W2e: ITS OWN WORD, after the arrow's, through the same
             # armour term the arrow took (WIKI: "affected by armor rating and
             # dealt separately"); the impact visual before each word.
+            # 2026-09-27: the same penetration and strike level, but the rating
+            # typed by the preparation's OWN damage (Kindle Arrows' fire), not the
+            # arrow's -- a creature Warrior's physical-only +20 stays out of it.
+            if _prep_sl is not None:
+                _prep_ar = penetrated_armour(creature_typed_rating(
+                    agent.get("armor_rating"), agent, preparation_damage_type(prep_skill)),
+                    agents.PLAYER_WEAPON, base=player_base_penetration(state, skill_id))
+                if _prep_ar is not None:
+                    _prep_scale = strike_multiplier(_prep_sl, float(_prep_ar))
             prep_points = _whole_points(prep_bonus * _prep_scale)
             prep_visual = skill_impact_visual(prep_skill)
             _prep_raw = float(prep_bonus)   # WEAPONS-W7: the splash re-scales
@@ -27001,9 +27033,14 @@ def land_swing_on_body(send, state, agent_id, agent, tid, conn_id, bonus=0.0,
     dealt *= weakness_multiplier(state, agent_id)        # SLICE-H12
     dealt *= float(mult)                 # WEAPONS-W2f
     dealt += float(bonus)
-    _prep_pts, _prep_sid, _prep_vis = body_preparation_word(
-        state, agent, agent_id,
-        armour_multiplier(float(armour)) if (ARMOUR_TERM and armour is not None) else 1.0)
+    def _prep_mult(prep_type):
+        """The preparation's own term: the arrow's penetration, the rating typed
+        by the PREPARATION's damage (2026-09-27)."""
+        _pa = penetrated_armour(creature_typed_rating(body_armour_rating(row), row, prep_type),
+                                (body_weapon_items(agent) or (None,))[0],
+                                base=body_base_penetration(agent, skill_id))
+        return armour_multiplier(float(_pa)) if (ARMOUR_TERM and _pa is not None) else 1.0
+    _prep_pts, _prep_sid, _prep_vis = body_preparation_word(state, agent, agent_id, _prep_mult)
     if on_attack_triggers(send, state, agent_id, conn_id) and agent.get("dead"):
         return "landed"                                     # MANTID
     dealt = _whole_points(dealt)        # DAMAGE-INT: the books and the wire agree
@@ -42931,7 +42968,7 @@ def main():
         global TYPED_CREATURE_ARMOUR
         TYPED_CREATURE_ARMOUR = False
         print("ARMOUR: --untyped-creature-armour -- a Warrior creature's +20 meets every "
-              "spell and every weapon hit whatever its type, the reading every run before "
+              "spell, weapon hit and preparation whatever its type, the reading every run before "
               "2026-09-27 made [the typed-creature-armour revert]", flush=True)
     if a.no_weakness_attributes:
         episodemods.WEAKNESS_ATTRIBUTES = False

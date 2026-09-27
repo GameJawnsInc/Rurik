@@ -28,6 +28,22 @@ move back.
 
 ---
 
+### A creature Warrior's +20 skips a preparation's own damage too -- 2026-09-27 -- **Kindle Arrows' second word, Ignite Arrows' splash and a party body's preparation word now meet a spawned Warrior's rating typed by the PREPARATION's damage (fire), not the arrow's (piercing): the arrow's word is unchanged, the fire word meets 3 x level; `--untyped-creature-armour` reverts all three halves**
+
+**Why.** This morning's weapon half (below) typed the arrow by its 587 and left the preparation's own word on the arrow's number -- `PLAN.md` §8.1 named it. A preparation's damage is its own ("affected by armor rating and dealt separately", WEAPONS-W2e), of its own type: Kindle Arrows' row names fire (5); Ignite Arrows' row names none -- its ARROW keeps the weapon's kind (GWW: not converted to fire) -- but its explosion is "Fire damage" by its label, and `combatmath.spell_damage_type_of` reads the label.
+
+**What shipped.** `preparation_damage_type(skill)` (the row's type, else its label's, else physical; physical under `--no-typed-armour`). Three sites type by it through `creature_typed_rating`, each keeping the arrow's penetration and strike level so nothing but the typing moves: `hit_enemy`'s second word (the strike level the arrow's term used, `_prep_sl`, against the rating typed by the preparation), `preparation_splash` (each neighbour's own rating, typed by the preparation), and `body_preparation_word`, which now takes the arrow's multiplier or a function of the preparation's type (`land_swing_on_body` hands it one).
+
+**The witness: NULL, said.** The corpus's only preparation words are the player's Kindle Arrows landings on `20260914T005758` (the W2e witness, read again here: every one on definition 4439, a level-1 MESMER); Ignite Arrows appears nowhere. So, like the weapon half, this stands on the WIKI's typing by damage and on the spell witness (def 3113) -- RECONSTRUCTION for a preparation.
+
+**What moves (RECONSTRUCTION).** On a level-3 Warrior creature, a +10 fire preparation at strike level 60: 24, where it was 17; the arrow beside it unchanged. Every other target unchanged.
+
+**Tests.** `test_weapons.py` section 33 (+5, all bare on the record's 431 / 433 rows; floor 314 -> 319 measured, 15 declared skips; a vault run 346): the type reader (Kindle 5, Ignite 5 by its label with no `damage_type` on its row, unknown and None physical, `--no-typed-armour` physical); through the real `hit_enemy` the player's arrow under Kindle Arrows -- the piercing word 17 on both arms, the fire word 24 against 17; `preparation_splash` onto a Warrior 100 u from the target, 24 against 17; through the real `land_swing_on_body` a party body's arrow under Kindle Arrows, the arrow 6 on both arms and the fire word 24 against 17 (criticals and the rank pinned); the source. Section 32's site count re-aimed (8), section 21's splash lock at the typed read, and section 23's base-penetration counts (2 -> 3 each: the preparation's typed read carries the arrow's base too). Sweep: the same 69 files, green (the port binders serially).
+
+**Still open** (`PLAN.md` §8.1): the same typing on the PLAYER's side, found in passing -- a hostile's preparation word onto the player (`land_swing`'s `body_preparation_word`) meets the arrow's typed rating, so Kindle Arrows' fire meets the pieces' physical 45 rather than their elemental 25; the Ranger's "+30 vs. elemental" and the Assassin / Dervish / Paragon columns.
+
+---
+
 ### A creature Warrior's +20 skips a non-physical WEAPON hit too -- 2026-09-27 -- **the typed rule landed for spells this morning ("The player's spell meets its target's armour", below) now reaches every weapon hit onto a spawned Warrior: the player's swing, arrow or attack-skill strike and the scythe's extras by the held weapon's 587, a party body's swing by `body_damage_type` -- a wand's chaos or a staff's holy meets 3 x level, a hammer or a sword the whole 3 x level + 20; `--untyped-creature-armour` reverts both halves**
 
 **Why.** The rule is about the damage TYPE, not the delivery: GWW "Basic armor", which the creature formula's "Armor bonus" defers to, types the Warrior's bonus "Armor +20 (vs. physical damage)". The spell half shipped on the owner's Dancing Daggers (a level-3 Warrior took an earth spell as 6 of 7, where the untyped 29 gives 4). A wand or staff deals its 587 type (the corpus: wands and staves 3 / 4 / 5 / 6 / 7 / 8 / 11, `[damage_type.table]`), so until today the same Warrior met its physical-only +20 from a chaos wand -- the open line `PLAN.md` §8.1 named.

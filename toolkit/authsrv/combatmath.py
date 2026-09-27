@@ -116,7 +116,8 @@ def creature_armor_rating(npc, override=None):
 # one definition. So a creature records the part that meets physical damage
 # only, and a hit of any other type subtracts it -- a spell by its own type,
 # and (the same day) a weapon hit by its 587: a wand's chaos, a staff's holy
-# (authsrv.creature_typed_rating). A hammer or a sword still meets the whole
+# (authsrv.creature_typed_rating), and a preparation's own damage by ITS type
+# (Kindle / Ignite Arrows' fire). A hammer or a sword still meets the whole
 # number. The Ranger's +30 elemental, and whether the 70 / 80
 # columns of the Assassin, Dervish and Paragon are bonuses at all under the
 # typed reading, have no witness and are NOT changed here.
