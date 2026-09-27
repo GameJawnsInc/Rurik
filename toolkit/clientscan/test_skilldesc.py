@@ -63,7 +63,7 @@ from skilldesc import Label, SLOT_FIELD, shifted, referee_slot   # noqa: E402
 # 61 checks, 1 declared skip ("2. the corpus"), rc=0 -- the mandatory core per
 # checks.py (2026-09-23, SKILLS-LT: +21 in section 1b, the label tier's gate on
 # synthetic rows; 40 on 2026-09-22). A whole green run with the vault is 124.
-LEDGER = checks.Ledger("skill description templates", floor=91)   # 91 from the bare run of 2026-09-25 (SKILLS-LV: +14 in 1b; SKILLS-LU: +5; the fix pass before it: +11); 162 with the vault and the 60-row emit
+LEDGER = checks.Ledger("skill description templates", floor=91)   # 91 bare, unchanged by DESKWORK-D6 (2026-09-26: +1 vault-only in section 3 -- the three hand rows 167 192 197 leave the label set as HAND_ROW, the reading tallies move onto the lifted emit; 163 with the vault); 91 from the bare run of 2026-09-25 (SKILLS-LV: +14 in 1b; SKILLS-LU: +5; the fix pass before it: +11); 162 with the vault and the 60-row emit
 check = checks.adopt(LEDGER)
 
 
@@ -997,6 +997,20 @@ if records is not None:
           "WHILE 9, CHANCE 7, EXCEPTION 6", dict(cf))
     hand_ids = set(hand_rows)
     lrows, excluded, _p = skilldesc.label_rows(rep, records, hand_ids)
+    # DESKWORK-D6 (2026-09-26): 167, 192 and 197 are HAND rows now (content/world.toml --
+    # areas over time, studies/weapons 42), so the gate excludes them as HAND_ROW and the
+    # label set is three rows smaller. The generator's READING of those three descriptions
+    # is unchanged, and two known-bad arms below use it as their witness (167's flat Blind,
+    # 192's knock-down clause), so they read a second emit with the three lifted out of the
+    # hand set; this check pins that the real set differs from it by exactly those three.
+    AOT_HAND = {167, 192, 197}
+    lrows_lift, _xl, _pl = skilldesc.label_rows(rep, records, hand_ids - AOT_HAND)
+    check(AOT_HAND <= hand_ids and set(lrows_lift) - set(lrows) == AOT_HAND
+          and all((sid, skilldesc.EXCL_HAND_ROW) in excluded for sid in AOT_HAND)
+          and all(lrows_lift[sid] == lrows[sid] for sid in lrows),
+          "DESKWORK-D6's three hand rows (167 192 197) leave the label set as HAND_ROW and "
+          "nothing else moves: the emit with them lifted is the real one plus exactly those three",
+          sorted(set(lrows_lift) - set(lrows)))
     tally = collections.Counter(w for _s, w in excluded)
     by_reason = {w: sorted(s for s, ww in excluded if ww == w) for w in tally}
     n_hand_plain = sum(1 for sid in plain if sid in hand_ids)
@@ -1068,19 +1082,19 @@ if records is not None:
     for sid, mark, want in ((435, "CONDITION_RIDER_ON_HIT", "CONDITION_RIDER_ON_HIT mark"),
                             (187, "KNOCKDOWN_APPLIED", "KNOCKDOWN_APPLIED"),
                             (167, "CONDITION_FLAT_CONSTANT", "CONDITION_FLAT_CONSTANT")):
-        r = dict(lrows[sid])
+        r = dict(lrows_lift[sid])                    # 167: the lifted emit (DESKWORK-D6)
         r["tier_detail"] = [d for d in r["tier_detail"] if d != mark]
-        lv[sid] = (mark in lrows[sid]["tier_detail"],
-                   skilldesc.check_label_rows({sid: r}, rep, hand_ids, records), want)
+        lv[sid] = (mark in lrows_lift[sid]["tier_detail"],
+                   skilldesc.check_label_rows({sid: r}, rep, hand_ids - AOT_HAND, records), want)
     r926 = {"fields": {"scale_means": "Bleeding", "condition_rider": "on_hit", "rider_weapon": "any"},
             "type_code": 6, "tier": "label", "tier_detail": ["CONDITION_RIDER_ON_HIT"], "verified": [{"slot": 1}]}
     f926 = skilldesc.check_label_rows({926: r926}, rep, hand_ids, records)
     r2136 = {"fields": {"scale_means": "Blind"}, "type_code": 3, "tier": "label",
              "tier_detail": ["ALL_FOES", "AREA_ADJACENT", "AREA_CASTER"], "verified": [{"slot": 1}]}
     f2136 = skilldesc.check_label_rows({2136: r2136}, rep, hand_ids, records)
-    r192 = dict(lrows[192], fields={"scale_means": "Fire damage", "knocks_down": True},
-                tier_detail=[d for d in lrows[192]["tier_detail"] if d != "CLAUSE_KNOCKDOWN"] + ["KNOCKDOWN_APPLIED"])
-    f192 = skilldesc.check_label_rows({192: r192}, rep, hand_ids, records)
+    r192 = dict(lrows_lift[192], fields={"scale_means": "Fire damage", "knocks_down": True},
+                tier_detail=[d for d in lrows_lift[192]["tier_detail"] if d != "CLAUSE_KNOCKDOWN"] + ["KNOCKDOWN_APPLIED"])
+    f192 = skilldesc.check_label_rows({192: r192}, rep, hand_ids - AOT_HAND, records)
     r3425 = dict(lrows[3425], fields={"scale_means": "+ Damage", "knocks_down": True},
                  tier_detail=[d for d in lrows[3425]["tier_detail"] if d != "CLAUSE_KNOCKDOWN"] + ["KNOCKDOWN_APPLIED"])
     f3425 = skilldesc.check_label_rows({3425: r3425}, rep, hand_ids, records)
@@ -1099,7 +1113,7 @@ if records is not None:
           and lrows[1041]["fields"] == {"bonus_scale_means": "Blind"} and lrows[1041]["type_code"] == 3
           and records[1041]["aoe_range"] == 156.0 and "CLAUSE_UNBLOCKABLE" in lrows[1041]["tier_detail"]
           and all(lrows[s]["fields"].get("knocks_down") is True for s in (187, 231, 294, 784, 1086))
-          and all("knocks_down" not in lrows[s]["fields"] for s in (192, 3425))
+          and all("knocks_down" not in lrows_lift[s]["fields"] for s in (192, 3425))
           and records[192]["duration0"] == 9 and rep["rows"][3425]["knockdown"] == skilldesc.KD_QUALIFIED
           and rep["rows"][926]["slots"][1]["rider"] == skilldesc.RIDER_ON_HIT and records[926]["skill_arguments"] == 2
           and all(rep["rows"][s]["slots"][-1]["rider"] == skilldesc.RIDER_ON_STRUCK for s in (113, 2136)),
@@ -1132,7 +1146,9 @@ if records is not None:
           and "conditional wording" in faults[0],
           f"KNOWN-BAD ARM: a conditional SERVED row ({forced}) forced through the gate is the one "
           f"fault the checker names", faults)
-    dt = collections.Counter(d for r in lrows.values() for d in r["tier_detail"] if d in skilldesc.DETAILS)
+    # the generator's READING, counted over the lifted emit (DESKWORK-D6's three hand rows
+    # included -- the emitted overlay is these less 167 192 197, pinned above)
+    dt = collections.Counter(d for r in lrows_lift.values() for d in r["tier_detail"] if d in skilldesc.DETAILS)
     check(dt == {"AREA_BURST": 3, "AREA_CASTER": 6, "HEAL_PARTY": 2, "CHAIN_GATED": 3,
                  "CHAIN_STEP_ADVANCES": 1, "AREA_ONE_TARGET": 21, "CONDITION_BIT_CLEAR_REFUSED": 1,
                  "CONDITION_FLAT_CONSTANT": 1, "CONDITION_RIDER_ON_HIT": 2, "KNOCKDOWN_APPLIED": 5,
@@ -1152,24 +1168,24 @@ if records is not None:
           "clauses by kind: 4 shadow steps, 2 interrupts, 3 removals, 3 'you and', a disable, a "
           "double damage, 1996's cast and move slows, 4 half ranges, 2212's compass reveal, 1041's "
           "'cannot be blocked'", dict(dt))
-    under = sorted(s for s in lrows if set(lrows[s]["tier_detail"]) & set(skilldesc.DETAILS))
+    under = sorted(s for s in lrows_lift if set(lrows_lift[s]["tier_detail"]) & set(skilldesc.DETAILS))
     check(len(under) == 49
-          and sorted(set(lrows) - set(under)) == [117, 191, 220, 286, 293, 959, 1043, 1120, 1404, 1686, 1762]
-          and [s for s in sorted(lrows) if "AREA_BURST" in lrows[s]["tier_detail"]] == [187, 189, 1086]
-          and [s for s in sorted(lrows) if "AREA_CASTER" in lrows[s]["tier_detail"]] == [183, 188, 840, 1041, 1113, 2212]
-          and [s for s in sorted(lrows) if "HEAL_PARTY" in lrows[s]["tier_detail"]] == [287, 2221]
-          and [s for s in sorted(lrows) if "CHAIN_GATED" in lrows[s]["tier_detail"]] == [784, 973, 1033]
-          and [s for s in sorted(lrows) if "CONDITION_RIDER_ON_HIT" in lrows[s]["tier_detail"]] == [435, 1997]
-          and [s for s in sorted(lrows) if "KNOCKDOWN_APPLIED" in lrows[s]["tier_detail"]] == [187, 231, 294, 784, 1086]
-          and [s for s in sorted(lrows) if "CLAUSE_KNOCKDOWN" in lrows[s]["tier_detail"]] == [192, 3425]
-          and {"AREA_ONE_TARGET", "DURATION_UNMODELLED"} <= set(lrows[192]["tier_detail"])
-          and {"AREA_ONE_TARGET", "DURATION_UNMODELLED"} <= set(lrows[197]["tier_detail"]),
-          "49 of 60 rows carry a mark; the eleven without one are the same single-clause templates "
+          and sorted(set(lrows_lift) - set(under)) == [117, 191, 220, 286, 293, 959, 1043, 1120, 1404, 1686, 1762]
+          and [s for s in sorted(lrows_lift) if "AREA_BURST" in lrows_lift[s]["tier_detail"]] == [187, 189, 1086]
+          and [s for s in sorted(lrows_lift) if "AREA_CASTER" in lrows_lift[s]["tier_detail"]] == [183, 188, 840, 1041, 1113, 2212]
+          and [s for s in sorted(lrows_lift) if "HEAL_PARTY" in lrows_lift[s]["tier_detail"]] == [287, 2221]
+          and [s for s in sorted(lrows_lift) if "CHAIN_GATED" in lrows_lift[s]["tier_detail"]] == [784, 973, 1033]
+          and [s for s in sorted(lrows_lift) if "CONDITION_RIDER_ON_HIT" in lrows_lift[s]["tier_detail"]] == [435, 1997]
+          and [s for s in sorted(lrows_lift) if "KNOCKDOWN_APPLIED" in lrows_lift[s]["tier_detail"]] == [187, 231, 294, 784, 1086]
+          and [s for s in sorted(lrows_lift) if "CLAUSE_KNOCKDOWN" in lrows_lift[s]["tier_detail"]] == [192, 3425]
+          and {"AREA_ONE_TARGET", "DURATION_UNMODELLED"} <= set(lrows_lift[192]["tier_detail"])
+          and {"AREA_ONE_TARGET", "DURATION_UNMODELLED"} <= set(lrows_lift[197]["tier_detail"]),
+          "49 of 60 rows carry a mark (the lifted reading; 46 of the 57 the overlay ships); the eleven without one are the same single-clause templates "
           "as before SKILLS-LU (every new row rides a consumer that is named); AREA_BURST is exactly "
           "187 189 1086, AREA_CASTER 183 188 840 1041 1113 2212, HEAL_PARTY 287 2221, CHAIN_GATED 784 "
           "973 1033, CONDITION_RIDER_ON_HIT 435 1997, KNOCKDOWN_APPLIED 187 231 294 784 1086 with "
           "CLAUSE_KNOCKDOWN left on 192 and 3425; the areas over time 192 and 197 that spell_burst "
-          "refuses say ONE_TARGET + DURATION_UNMODELLED (ENG-2, LT-R7)", sorted(set(lrows) - set(under)))
+          "refuses say ONE_TARGET + DURATION_UNMODELLED (ENG-2, LT-R7)", sorted(set(lrows_lift) - set(under)))
     check(lrows[187]["fields"] == {"scale_means": "Fire damage", "knocks_down": True}
           and "AREA_BURST" in lrows[187]["tier_detail"]
           and lrows[220]["fields"] == {"bonus_scale_means": "Blind"}
@@ -1178,9 +1194,9 @@ if records is not None:
           and "CLAUSE_DOUBLE_DAMAGE" in lrows[831]["tier_detail"]
           and lrows[434]["fields"] == {"scale_means": "+ Damage"} and lrows[434]["type_code"] == 19
           and lrows[3425]["fields"] == {"scale_means": "+ Damage"}
-          and lrows[167]["fields"] == {"scale_means": "Earth damage", "bonus_scale_means": "Blind"}
+          and lrows_lift[167]["fields"] == {"scale_means": "Earth damage", "bonus_scale_means": "Blind"}
           and {"AREA_NEAR", "AREA_ONE_TARGET", "CONDITION_FLAT_CONSTANT", "DURATION_UNMODELLED"}
-          <= set(lrows[167]["tier_detail"]) and "CONDITION_BIT_CLEAR_REFUSED" not in lrows[167]["tier_detail"]
+          <= set(lrows_lift[167]["tier_detail"]) and "CONDITION_BIT_CLEAR_REFUSED" not in lrows_lift[167]["tier_detail"]
           and {"CLAUSE_MOVE_SPEED", "CLAUSE_CAST_SPEED"} <= set(lrows[1996]["tier_detail"])
           and "CHAIN_STEP_ADVANCES" in lrows[974]["tier_detail"]
           and "CHAIN_STEP_NOT_ADVANCED" not in lrows[974]["tier_detail"],

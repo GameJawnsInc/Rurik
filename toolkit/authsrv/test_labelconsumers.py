@@ -1040,9 +1040,13 @@ def main():
                 raw_marked = sorted(int(k) for k, r in (raw.get("skill_effect") or {}).items()
                                     if "CONDITION_FLAT_CONSTANT" in (r.get("tier_detail") or ()))
             except (Exception, SystemExit):                            # noqa: BLE001
-                raw_marked = []                     # no vault: the check below names it
+                raw_marked = []                     # no vault: 167 below still has a subject
+            # 167 is the mark's STANDING subject: an emit made after DESKWORK-D6's hand
+            # rows drops it from the overlay (HAND_ROW -- test_skilldesc section 3 pins
+            # that), and the check must not depend on the vault's overlay being stale.
+            subjects = sorted(set(raw_marked) | {167})
             shadowed_ok = {}
-            for s in raw_marked:
+            for s in subjects:
                 if s in flat_pred:
                     shadowed_ok[s] = "label row, in flat_pred"
                     continue
@@ -1052,15 +1056,15 @@ def main():
                 authsrv.CONDITION_FLAT_CONSTANTS = True
                 shadowed_ok[s] = (s not in lab and str(s) in saved_tables["skill_effect"]
                                   and on is not None and off is None)
-            check(marks_lv["CONDITION_FLAT_CONSTANT"] == flat_pred and len(raw_marked) >= 1
-                  and 167 in raw_marked and all(shadowed_ok.values())
+            check(marks_lv["CONDITION_FLAT_CONSTANT"] == flat_pred and 167 in shadowed_ok
+                  and all(shadowed_ok.values())
                   and authsrv.skill_condition(167, 0) == (479, 10.0),
                   f"every loaded CONDITION_FLAT_CONSTANT row ({len(flat_pred)}) is exactly a row whose "
                   f"condition resolves ONLY through the flat reader (the flag off removes it) -- and no "
-                  f"other label row is; and every id the RAW overlay marks ({raw_marked}) is either such "
-                  f"a loaded label row or is shadowed by a HAND row whose condition still resolves only "
-                  f"through the flat reader (167's Blind, 479 for 10 s) -- the mark keeps a subject "
-                  f"although the loaded tier holds none",
+                  f"other label row is; and every id the RAW overlay marks ({raw_marked}), and 167 "
+                  f"always, is either such a loaded label row or is shadowed by a HAND row whose "
+                  f"condition still resolves only through the flat reader (167's Blind, 479 for "
+                  f"10 s) -- the mark keeps a subject whether or not the overlay still carries 167",
                   (marks_lv["CONDITION_FLAT_CONSTANT"], flat_on, flat_off, raw_marked, shadowed_ok))
     finally:
         tables["skills"] = saved_tables["skills"]

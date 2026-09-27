@@ -403,9 +403,9 @@ def section_stop_answer():
           "ONE R6 gate and ONE R6-labelled send -- a gate whose send was "
           "deleted, or a second site borrowing R6's label, reddens this")
     sites = stop_moving_sites()
-    check(len(sites) == 5
+    check(len(sites) == 6
           and all(b == "agents.agent_stop_moving" for _, _, b, _ in sites),
-          "FIVE 0x0028 send sites, every payload from the builder the "
+          "SIX 0x0028 send sites, every payload from the builder the "
           "wire-shape check above drives -- never a hand-built [agent] "
           "literal, which would skip that builder's agent-id-0 refusal and "
           "put a silent no-op on the wire", f"{sites}")
@@ -433,12 +433,23 @@ def section_stop_answer():
     # (WIKI: a knocked-down character cannot move); it names the body's own
     # agent_id and never the player's (the player's fall drops the armed
     # swing and refuses reports instead, which is no 0x0028 at all).
-    check(len(npc) == 2 and len(chase) == 1
+    # MONSTERAI-S (2026-09-26, studies/monsterai 16 S5/S7): the THIRD is
+    # scatter's halt in _scatter_halt -- a group member already clear of the
+    # area (a ceaser) or a body whose hold engages while its copy is still
+    # walking stops where it stands. It names the body's own agent_id, only
+    # under SCATTER (--no-scatter never marks a row, so it never runs); a
+    # walker gets no halt, its first flee leg supersedes the follow.
+    # RECONSTRUCTION -- scatter has no retail witness -- but the halt's shape
+    # is retail's own NPC halt above (a bare 0x0028 [npc]).
+    check(len(npc) == 3 and len(chase) == 1
           and all(s[3] == "agent_id" for s in npc)
           and sorted(s[1] for s in npc) == [("_npc_follow_tick", "_halt"),
+                                            ("_scatter_halt",),
                                             ("knock_down",)]
           and npc_follow_call_gates() == ["NPC_FOLLOW"],
-          "and the two others name a NON-player agent: the chase halt in "
+          "and the three others name a NON-player agent (the knock-down's "
+          "halt, scatter's halt for a ceaser or a hold caught mid-chase -- "
+          "MONSTERAI-S, only under SCATTER -- and) the chase halt in "
           "_npc_follow_tick._halt, gated on NPC_FOLLOW (revert "
           "--legacy-npc-chase). Retail sends this one -- 5/7 chases "
           "(animref 40.2), and 187 of its 282 corpus-wide 0x0028s name a "
