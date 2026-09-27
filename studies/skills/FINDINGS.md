@@ -6017,6 +6017,8 @@ answer. The shape: **CORROBORATED** single elemental rating (§43.4's caveat is
 the residual). OUTGOING (`hit_enemy(exact=…)`) is unchanged and still blocked on a
 creature armour value that no channel carries.
 
+**2026-09-27: OUTGOING closed, and the objection above answered rather than waived.** No channel carries a creature's armour -- still true -- but the loop the objection feared (wiki armour back-computed from damage, then used to predict damage) is broken by the owner's OWN words: sixteen Dancing Daggers hits on 20260817T183756 / 20260819T132414 (a level-2 player, Deadly Arts 1, stated 7) land 7 on a level-2 Necromancer and a level-1 Monk and 6 on a level-3 Warrior. The exact word misses the Warrior; 3 x level against the creature formula reproduces all sixteen once the Warrior's +20 is typed vs. physical (GWW "Basic armor", which the creature formula's "Armor bonus" links to). `player_spell_amount`, `--player-spell-exact`, `--untyped-creature-armour`; test_weapons section 31 re-reads the sixteen from the tape. PLAN-LOG 2026-09-27.
+
 ### 43.8 SKILLS-OB — whose connection it is: the instrument's player rule was wrong, and four readers inherited it (2026-09-23)
 
 **Desk work, no client launched.** `spellhitjoin.player_of` named the connection's own

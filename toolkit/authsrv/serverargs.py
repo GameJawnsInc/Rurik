@@ -2142,6 +2142,23 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "armor_rating, else the creature formula: the swing "
                          "path's rule) less the spell's own penetration; the "
                          "player taker is unchanged either way.")
+    ap.add_argument("--player-spell-exact", action="store_true",
+                    help="REVERT (2026-09-27): the PLAYER's spell words onto a "
+                         "hostile deal the spell's stated amount (hit_enemy's "
+                         "`exact`, no armour term) -- the wire of every run before "
+                         "2026-09-27. By default an armour-respecting spell lands "
+                         "amount x 2^((3 x the player's level - the target's "
+                         "rating) / 40), the rating the body path reads less the "
+                         "spell's own penetration.")
+    ap.add_argument("--untyped-creature-armour", action="store_true",
+                    help="REVERT (2026-09-27): a Warrior CREATURE's +20 armour meets "
+                         "every spell as it meets every swing -- the reading every "
+                         "run before 2026-09-27 made. By default a spell that is not "
+                         "physical meets 3 x level: GWW types the Warrior's bonus "
+                         "'vs. physical damage', and a level-3 Warrior took the "
+                         "owner's Dancing Daggers as 6 of 7 on 20260819T132414, "
+                         "where the untyped 29 gives 4. Party bodies are unchanged "
+                         "either way (a hero's armour base is 3 x level + 20).")
     ap.add_argument("--no-weakness-attributes", action="store_true",
                     help="Weakness cuts attack damage only: no rank is "
                          "lowered and no 0x003B batch is sent. The revert for "

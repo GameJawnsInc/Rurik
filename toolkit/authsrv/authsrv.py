@@ -13115,6 +13115,7 @@ import combatmath  # noqa: E402
 from combatmath import (  # noqa: F401,E402
     ARMOR_BONUS_BY_PROFESSION,
     creature_armor_rating,
+    creature_physical_bonus,
 )
 
 
@@ -13903,13 +13904,78 @@ def body_spell_armour(state, skill_id, tid, tbody):
     taker the player's pieces."""
     if not tbody or not BODY_SPELL_TAKER_ARMOUR:
         return spell_armour_for(skill_id)
+    return row_spell_armour(state, skill_id, tid)
+
+
+def row_spell_armour(state, skill_id, tid):
+    """The rating a spell of `skill_id` meets on agent ROW `tid` -- its own
+    (body_armour_rating), a creature Warrior's physical-only +20 off for a
+    non-physical spell (TYPED_CREATURE_ARMOUR, 2026-09-27), less the spell's
+    own base penetration -- or None when the spell ignores armour or the term
+    is off. Whoever cast it: a body's spell (body_spell_armour) and the
+    player's (player_spell_amount) read this one line."""
     if not combatmath.spell_respects_armour(skill_id, SPELL_ARMOUR, ARMOUR_TERM,
                                             ARMOUR_RESPECTING_MEANS,
                                             SCALE_MEANS_DAMAGE):
         return None
     row = state.get("agents", {}).get(tid) or {}
-    return penetrated_armour(body_armour_rating(row), None,
-                             base=skill_base_penetration(skill_id))
+    rating = body_armour_rating(row)
+    if rating is not None and TYPED_CREATURE_ARMOUR:
+        # a CREATURE Warrior's +20 meets physical damage only (WIKI + OBSERVED,
+        # combatmath.creature_physical_bonus): a spell of any other class takes
+        # it off. Only a spawned hostile carries the field; a party body wears
+        # armour (a hero's 573 base is 3 x level + 20 whatever the type).
+        _dt = spell_damage_type(skill_id)
+        if combatmath.damage_class(_dt if _dt is not None else "elemental") != "physical":
+            rating = float(rating) - float(row.get("armor_vs_physical") or 0.0)
+    return penetrated_armour(rating, None, base=skill_base_penetration(skill_id))
+
+
+# ---- THE PLAYER'S SPELL MEETS ITS TARGET'S ARMOUR TOO (2026-09-27) ----------
+#
+# Until 2026-09-27 the player's spell words onto a hostile went out EXACT --
+# hit_enemy's `exact`, "no armour exponent" -- while every other damage path
+# here met its taker's armour: the player's swing, a body's swing, a body's
+# spell (above). hit_enemy's docstring called it "a gap rather than a
+# decision" (studies/isle 4.2): the per-skill armour-ignoring flag it waited
+# for is SKILLS-FA's label set, and combatmath.spell_respects_armour reads it.
+#
+# THE RULE IS THE BODY SPELL'S, mirrored. WIKI (GWW "Damage calculation"):
+# base x 2^((SL - AR) / 40), the strike level of a spell or any non-attack
+# skill 3 x the caster's LEVEL -- caster_strike_level, the curve the player's
+# wand and staff already swing at (WEAPONS-W4c) and agent_strike_level gives
+# a body's spells; AR is the TARGET's (row_spell_armour: its rating, else
+# the creature formula, less the spell's own penetration). The level is the
+# connection's (player_level_of), read at the landing: an arrival's and an
+# area tick's terms meet the target as it stands then, as a body's do.
+# `--player-spell-exact` reverts: the stated amount, the wire of every run
+# before 2026-09-27.
+#
+# OBSERVED, and it is why the next flag exists: the owner's own Dancing
+# Daggers on 20260817T183756 / 20260819T132414 (player level 2, Deadly Arts
+# 1, stated 7 -- sixteen words) landed 7 on a level-2 Necromancer and a
+# level-1 Monk and 6 on a level-3 WARRIOR: the exact word is refuted (6 is
+# not 7), and so is the untyped creature formula (29 gives 4) --
+# TYPED_CREATURE_ARMOUR takes the Warrior's physical-only +20 off a spell
+# (combatmath's banner), and then all sixteen reproduce (test_weapons 31).
+# `--untyped-creature-armour` reverts that alone, for every spell caster.
+PLAYER_SPELL_ARMOUR = True   # --player-spell-exact reverts: the player's spells deal their stated amount
+TYPED_CREATURE_ARMOUR = True  # --untyped-creature-armour reverts: a Warrior creature's +20 meets every spell
+
+
+def player_spell_amount(state, skill_id, tid, amount):
+    """The points the player's spell of `amount` deals to agent row `tid`
+    NOW, before hit_enemy truncates them: amount x 2^((3 x the player's
+    level - the target's rating) / 40) for an armour-respecting spell, the
+    amount unchanged for one that ignores armour, for a target with no
+    rating, or under --player-spell-exact. See the banner above."""
+    if not PLAYER_SPELL_ARMOUR or amount is None:
+        return amount
+    ar = row_spell_armour(state, skill_id, tid)
+    if ar is None:
+        return amount
+    return float(amount) * strike_multiplier(
+        caster_strike_level(player_level_of(state)), ar)
 
 
 # ---- A BODY'S SPELL PROJECTILE (2026-09-20, studies/weapons/PLAN.md 37) ------
@@ -14501,7 +14567,8 @@ def land_player_spell_shot(send, state, conn_id, shot, connected=True):
     # `armed`: the landing is not a swing and takes no swing-interval gate --
     # three daggers land inside 0.7 s on the tape (the E5's own exact hit
     # kept the gate, and keeps it on the revert arm).
-    _res = hit_enemy(send, state, tid, conn_id, exact=spell["amount"], swing=False,
+    _res = hit_enemy(send, state, tid, conn_id,
+                     exact=player_spell_amount(state, sid, tid, spell["amount"]), swing=False,
                      armed=True, projectile=True,
                      label=f"skill {sid}'s projectile lands", before_damage=before)
     if _res == "landed":
@@ -14646,7 +14713,8 @@ def land_player_spell_area(send, state, conn_id, shot, radius, connected=True):
     send_area_impact(send, state, shot, PLAYER_AGENT_ID, foes, vis, sid, connected)
     landed = 0
     for foe in foes:
-        res = hit_enemy(send, state, foe, conn_id, exact=spell["amount"], swing=False,
+        res = hit_enemy(send, state, foe, conn_id,
+                        exact=player_spell_amount(state, sid, foe, spell["amount"]), swing=False,
                         armed=True, projectile=True,
                         label=f"skill {sid}'s burst reaches agent {foe}")
         if res == "landed":
@@ -14858,7 +14926,8 @@ def burst_player_spell(send, state, conn_id, cast, amount, rank, radius):
     kd = skill_knocks_down(sid)
     landed = 0
     for foe in foes:
-        res = hit_enemy(send, state, foe, conn_id, exact=float(amount), swing=False,
+        res = hit_enemy(send, state, foe, conn_id,
+                        exact=player_spell_amount(state, sid, foe, float(amount)), swing=False,
                         armed=True, label=f"skill {sid} bursts on agent {foe}")
         if res != "landed":
             continue
@@ -15134,7 +15203,8 @@ def _area_strike(send, state, conn_id, area, now):
     struck = []
     if area["caster_kind"] == "player":
         for foe in foes:
-            res = hit_enemy(send, state, foe, conn_id, exact=area["amount"], swing=False,
+            res = hit_enemy(send, state, foe, conn_id,
+                            exact=player_spell_amount(state, sid, foe, area["amount"]), swing=False,
                             armed=True, label=f"skill {sid}'s tick {k}/{n} on agent {foe}")
             if res == "landed":
                 struck.append(foe)
@@ -15290,7 +15360,8 @@ def burst_player_caster_area(send, state, conn_id, cast, found, inflicted, rank,
     landed = 0
     for foe in foes:
         if amount is not None:
-            res = hit_enemy(send, state, foe, conn_id, exact=amount, swing=False,
+            res = hit_enemy(send, state, foe, conn_id,
+                            exact=player_spell_amount(state, sid, foe, amount), swing=False,
                             armed=True, label=f"skill {sid} bursts from the caster on agent {foe}")
             if res != "landed":
                 continue
@@ -19034,10 +19105,13 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     of a SWING (`agents.GV_MELEE_ATTACK_FINISHED`'s comment), and a spell is
     not one.
 
-    NOT ARMOUR-SCALED, and that is a gap rather than a decision: `studies/isle`
-    4.2 records that skill damage ignores armour here and that fixing it needs
-    a per-skill armour-ignoring flag GWW defines per skill. `exact` inherits
-    that gap unchanged -- it does not add a new one.
+    `exact` is dealt AS GIVEN -- the armour term is the CALLER's. Until
+    2026-09-27 that meant a spell's word went out unscaled, "a gap rather than
+    a decision" (`studies/isle` 4.2: it waited on a per-skill armour-ignoring
+    flag, which SKILLS-FA's labels now are). The player's six spell sites now
+    hand in player_spell_amount's number -- the target's armour at 3 x the
+    player's level -- and `--player-spell-exact` hands in the stated amount
+    again. The block punishment's `exact` (an attack skill's) is untouched.
     """
     agent = state.get("agents", {}).get(target_id)
     if agent is None or agent["dead"]:
@@ -22765,7 +22839,8 @@ def cast_tick(send, state, conn_id):
                     # studies/weapons 42: `armed` -- a spell is not a swing, and
                     # the interval gate is the SWING timer; without it a foe an
                     # area ticked inside the last interval swallowed this word.
-                    _st_res = hit_enemy(send, state, target, conn_id, exact=float(found[0]),
+                    _st_res = hit_enemy(send, state, target, conn_id, exact=player_spell_amount(
+                                            state, cast["skill_id"], target, float(found[0])),
                                         swing=False, armed=True,
                                         label=f"skill {cast['skill_id']}")
                     if _st_res == "landed":
@@ -33948,6 +34023,12 @@ def spawn_population(send, state, origin, conn_id, area=None):
             "armor_rating": creature_armor_rating(
                 dict(npc, level=row.get("level", npc.get("level", 0))),
                 row.get("armor_rating")),
+            # 2026-09-27: the part of that rating a Warrior creature holds against
+            # PHYSICAL damage only (combatmath.creature_physical_bonus); a spell
+            # takes it off (row_spell_armour), a swing does not.
+            "armor_vs_physical": creature_physical_bonus(
+                dict(npc, level=row.get("level", npc.get("level", 0))),
+                row.get("armor_rating")),
             "effects": 0,
             "resend_definition": bool(row.get("resend_definition", False)),
             "attacks_back": bool(row.get("attacks_back", False)),
@@ -34087,6 +34168,8 @@ def _spawn_one_enemy(send, state, agent_id, x, y, plane, conn_id, n_of=(1, 1)):
         "pos": (x, y), "plane": plane,
         "health": float(ENEMY_MAX_HEALTH), "max_health": float(ENEMY_MAX_HEALTH),
         "armor_rating": ENEMY_ARMOR_RATING,
+        "armor_vs_physical": creature_physical_bonus(agents.HATCHER,      # 2026-09-27
+                                                     _ENEMY.get("armor_rating")),
         "dead": False,
         "name": agents.HATCHER["name"],
         # What create_agent_world needs to rebuild this agent from the entry alone,
@@ -42803,6 +42886,18 @@ def main():
         print("SPELLS: --body-spell-player-armour -- a body's spell scales by the "
               "PLAYER's spell armour whoever takes it, the reading every run "
               "before 2026-09-26 made [the taker-armour revert]", flush=True)
+    if a.player_spell_exact:
+        global PLAYER_SPELL_ARMOUR
+        PLAYER_SPELL_ARMOUR = False
+        print("SPELLS: --player-spell-exact -- the player's spell words onto a "
+              "hostile deal the stated amount, no armour term, the reading every "
+              "run before 2026-09-27 made [the player-spell-armour revert]", flush=True)
+    if a.untyped_creature_armour:
+        global TYPED_CREATURE_ARMOUR
+        TYPED_CREATURE_ARMOUR = False
+        print("SPELLS: --untyped-creature-armour -- a Warrior creature's +20 meets every "
+              "spell as well as every swing, the reading every run before 2026-09-27 "
+              "made [the typed-creature-armour revert]", flush=True)
     if a.no_weakness_attributes:
         episodemods.WEAKNESS_ATTRIBUTES = False
         print("NO WEAKNESS ATTRIBUTES: Weakness cuts attack damage only; "

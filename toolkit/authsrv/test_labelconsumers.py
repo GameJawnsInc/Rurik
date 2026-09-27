@@ -853,7 +853,7 @@ def main():
               "is that case and test_weapons pins it; so --no-label-knockdowns reverts every fall this "
               "pass added and nothing else")
         check(src.count("        nonattack_knock_down(send, state,") == 4
-              and src.index("_st_res = hit_enemy(send, state, target, conn_id, exact=float(found[0]),")
+              and src.index("_st_res = hit_enemy(send, state, target, conn_id, exact=player_spell_amount(")
               < src.index("nonattack_knock_down(send, state, cast[\"skill_id\"], target,"),
               "SOURCE: the single-target term sits at four sites (the player's standalone word and "
               "condition-only land, a body's condition-only land and its word) and the player's "

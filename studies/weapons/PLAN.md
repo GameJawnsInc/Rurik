@@ -2699,7 +2699,9 @@ line per opened area, per tick, per close.
   record's bit-clear duration slot as the fall's flat constant, and for an area over time that
   slot IS THE AREA'S LENGTH (the same 9 `area_over_time` reads). The first cut shipped 9 s falls
   every 3 s; the lock now reads the seconds off the `[63]` word with the clock running.
-- **Scale.** The player's ticks are NOT armour-scaled (hit_enemy's exact gap, studies/isle 4.2,
+- **Scale.** (2026-09-27: the player's half closed too -- `player_spell_amount`, PLAN-LOG; a
+  player's tick now meets each foe's own armour at 3 x the player's level, test_weapons 31.)
+  The player's ticks are NOT armour-scaled (hit_enemy's exact gap, studies/isle 4.2,
   unchanged) -- a pre-existing gap, not this step's, named rather than fixed. The body half
   closed on main the same day (PLAN-LOG "A body's spell meets its TAKER's armour", `0ab2a52e`,
   `--body-spell-player-armour` reverts): `_area_strike` calls `body_spell_terms`, so a body's
