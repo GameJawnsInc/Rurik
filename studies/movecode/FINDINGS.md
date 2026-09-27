@@ -5508,6 +5508,12 @@ ZERO from the avoidance re-baker"). **No file of its size (3,614,672 bytes = 24 
 26×8 + 8,290×436) exists anywhere in the vault**, under any name. Its numbers survive
 in the `.txt` and in the animref text, and its records do not. The mtime dates only the
 LAST lost race. Any test run since 2026-08-28 that lost it wrote to the same path.
+**Moved aside the same day, at the owner's request**, to
+`vault/research/movecode/movehook.bin.TESTSTUB-cmdexe-20260927T010044`, a rename with
+its bytes and mtime unchanged and a name no default or `movehook.bin` glob matches. So
+`readhook.py` with no `--bin` now answers "no capture" instead of scoring a `cmd.exe`
+stub. The `movehook.txt` beside it stays, because it is the only record of the lost run.
+That supersedes the MOVECODE-2b.5 log entry's "left where it is".
 
 **The fix.** `DLL_PROCESS_ATTACH` now resolves `g_outdir`, `g_run_ms` and `g_base`
 before `CreateThread`, through a cfg reader with no CRT state in it: `CreateFileA`/
