@@ -28,6 +28,22 @@ move back.
 
 ---
 
+### The revive re-acquisition uses the same cone -- 2026-09-27 -- **four probes 5° / 50 u either side of the entry cone's edges, all four as predicted: 55° and 1,199.58 u re-acquired, 65° and 1,300.35 u not. No code change**
+
+**The question** (the range entry below, "Open: whether the revive re-acquisition shares both numbers"). The geometry has to stay fixed from the kill through the revive, so each foe was killed from where the player spawned: a bow Power Shot (`--player-weapon starter_bow --skills 394 --enemy-health 3`, `C` first to select it), then no input until after the revive. The character turns to shoot; the camera does not (read twice with `fovread.py`, at entry and around the revive: identical, the axis +x). Placements checked offline with the server's own `enemy_spots`, all exact. Void conditions, pre-registered: no kill or revive, any player movement report, a server approach -- none occurred.
+
+**Results** (`20260927T15xxxx`; re-acquired = a `0x00C1` naming the foe within 200 ms of `revive agent 10`):
+- **A** `5606` -- 500 u, 55° -- **re-acquired** (19 ms); the world-entry pick in the same run: the foe.
+- **B** `5720` -- 500 u, 65° -- **not**; entry: the hero.
+- **C** `5833` -- 1,199.58 u, 40° -- **re-acquired** (35 ms); entry: the foe.
+- **D** `5949` -- 1,300.35 u, 40° -- **not**; entry: the hero.
+
+**OBSERVED, n=1 per point: the revive's eligibility is the entry cone to ±5° and ±50 u -- 60° about the view axis, apex at the player, radius 1,250 u, occlusion presumed ignored as at entry** -- and the two decisions agreed in every run. The fine edges stay entry-only measurements. Open: the ally fallback's own rule.
+
+**Edited:** studies/skills 38.5. **Tests:** doc linters.
+
+---
+
 ### The auto-select cone has a radius: 1,250 u -- 2026-09-27 -- **a foe at +40° was picked at 1,249.962 u and passed over at 1,250.029 u; earshot (1,012) and the WIKI casting range (1,248, centre to centre) both excluded on the way. No code change**
 
 **The question** (the cone entry below, "Open: a range term"). One foe per world-entry run at player bearing +40° -- 20° inside the 60° cone, on walkable ground found offline with the server's own `load_pathmap` -- the hero the fallback pick, the camera read live and identical to the cone runs (`fovread.py`: 390 u behind, +x, 12.8° down). Distances from integer offsets on an integer spawn, so exact; the player never moves.

@@ -5242,6 +5242,26 @@ plaza is flat, so 2-D and 3-D distance coincide here. So the world-entry
 auto-selection eligibility is: a foe within **1,250 u of the player and within
 60° of the view axis**, occlusion ignored; with none, a nearby ally.
 
+**The revive re-acquisition uses the same cone.** Four runs, each foe killed by
+a bow Power Shot from where the player spawned (`--player-weapon starter_bow
+--skills 394 --enemy-health 3`, `C` to select it first), then no input through
+its revive; the camera read at entry AND around the revive, identical both
+times (the axis still +x); no player movement report and no server approach in
+any run. A re-acquisition is a `0x00C1` naming the foe within 200 ms of
+`revive agent 10`:
+
+| harness run | foe from the player | re-acquired | world-entry pick, same run |
+|---|---|---|---|
+| `20260927T155606` | 500 u, **55°** | **yes**, 19 ms | foe |
+| `20260927T155720` | 500 u, **65°** | **no** | hero |
+| `20260927T155833` | **1,199.58 u**, 40° | **yes**, 35 ms | foe |
+| `20260927T155949` | **1,300.35 u**, 40° | **no** | hero |
+
+All four pre-registered, all four as predicted: the revive's eligibility
+matches the entry cone to ±5° and ±50 u (OBSERVED, n=1 per point), and in each
+run the two decisions agreed. The finer edges (60° to 0.1°, 1,250 u to
+0.035 u) were measured at entry only.
+
 **And the schema route had the right fact with the wrong conclusion.** It found
 that 226 and 227 share a dispatch and concluded `0x00E2` was therefore
 disqualified as a carrier of "refused". That sharing is exactly *why* the
