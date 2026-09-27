@@ -5216,6 +5216,32 @@ pitched 12.8° down, FOV 75.000° horizontal.
   tried), and whether the cone is the same for the revive re-acquisition
   (presumed).
 
+**And the cone has a radius: 1,250 u, to ±0.035 u.** Nine more world-entry
+runs, one foe each at player bearing +40° (20° inside the cone; the last two
+within 1° of it), the hero the fallback, the camera identical to the runs
+above:
+
+| harness run | distance from the player | picked |
+|---|---|---|
+| `20260927T153515` | 1,000.10 (the +40° positive control) | foe |
+| `20260927T153639` | 1,049.78 | foe |
+| `20260927T153931` | 1,240.04 | foe |
+| `20260927T154051` | 1,247.09 | foe |
+| `20260927T154155` | 1,249.26 | foe |
+| **`20260927T154339`** | **1,249.962** | **foe** |
+| **`20260927T154500`** | **1,250.029** | **hero** |
+| `20260927T153806` | 1,250.67 | hero |
+| `20260927T153349` | 1,499.83 | hero |
+
+OBSERVED, n=1 per distance, placements exact (integer offsets from an integer
+spawn; the player never moves). Excluded on the way: earshot (1,012 — 1,049.78
+was picked) and the WIKI casting range (1,248, `PARTY_RANGED_REACH` — 1,249.26
+was picked) taken centre to centre. The edge sits 2 u past the WIKI number, and
+whether it is the same constant with a different convention is UNVERIFIED. The
+plaza is flat, so 2-D and 3-D distance coincide here. So the world-entry
+auto-selection eligibility is: a foe within **1,250 u of the player and within
+60° of the view axis**, occlusion ignored; with none, a nearby ally.
+
 **And the schema route had the right fact with the wrong conclusion.** It found
 that 226 and 227 share a dispatch and concluded `0x00E2` was therefore
 disqualified as a carrier of "refused". That sharing is exactly *why* the
