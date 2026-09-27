@@ -52,7 +52,7 @@ import pathmap  # noqa: E402
 # party-reserved ids, studies/unitsetup/FINDINGS.md 8 Q9). Every section is
 # synthetic -- no vault, no socket, no client -- so there is nothing here that
 # may skip.
-LEDGER = checks.Ledger("test_population", floor=116)  # SANDBOX-N1 repair 2026-09-24 +2 (section 6: a template's ranks in both shapes reach the body); R-SANDBOX 2026-09-24 +30 (section 8: the level guard) then +8 (the verifier's fixes: a --probe's own 0x0056 steps, the last line's tail), from the green run; SLICE-H11 +2 (section 7: the held weapon); SLICE-B2 +7, SLICE-B6 glow +4 (section 6)
+LEDGER = checks.Ledger("test_population", floor=117)  # MONSTERAI-S8 / R3-F3 2026-09-26 +1 (section 6: `stationary` reaches the entry), from the green run; SANDBOX-N1 repair 2026-09-24 +2 (section 6: a template's ranks in both shapes reach the body); R-SANDBOX 2026-09-24 +30 (section 8: the level guard) then +8 (the verifier's fixes: a --probe's own 0x0056 steps, the last line's tail), from the green run; SLICE-H11 +2 (section 7: the held weapon); SLICE-B2 +7, SLICE-B6 glow +4 (section 6)
 check = checks.adopt(LEDGER)
 
 AREA = "sculpt"
@@ -435,6 +435,16 @@ def section6():
           "and it now carries an armor_rating at all -- the key was ABSENT on "
           "this path, so every swing against an area body ran with no armour "
           "term", f"{bare.get('armor_rating')}")
+
+    # MONSTERAI-S8 (2026-09-26, R3-F3): `stationary = true` reaches the entry the
+    # scatter reads -- the builder copies an explicit key list, and the first cut
+    # left this one out, so the field could never take effect on a spawned row.
+    fixed = place({"a": row(agent_id=20, definition=5),
+                   "b": row(agent_id=21, definition=5, stationary=True)})
+    check(fixed[20].get("stationary") is False and fixed[21].get("stationary") is True,
+          "a row saying `stationary = true` spawns an entry carrying stationary True, "
+          "and one saying nothing carries False -- the key is on the entry, not "
+          "merely on the row", f"{fixed[20].get('stationary')}, {fixed[21].get('stationary')}")
 
     # DERIVED, not defaulted: level and profession drive it, and a row may
     # override. Two levels in one table, so the formula is what differs.

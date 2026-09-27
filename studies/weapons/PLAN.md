@@ -2564,7 +2564,10 @@ let P5's phase half go red although the tick gate is 0.05 s wide.
 
 **Also read off the tape (OBSERVED; step 2 builds on these).**
 - **A tick** is, per foe inside, `0x00A3 [16, foe, caster, frac]` with the caster as cause
-  (152 words); 1 foe on 40 ticks, 2 on 18, 3 on 18, 4 on 3; foes only. One fraction per
+  (142 words, aotjoin's `fs_words`; the lane's scratch probe said 152 because it also
+  counted instants where the cast did not tick, mixed-batch words of other skills and
+  overlaps between one caster's casts -- corrected 2026-09-26, LBL-3); 1 foe on 40 ticks,
+  2 on 18, 3 on 18, 4 on 3; foes only. One fraction per
   (cast, taker) on 36 of 37 pairs (~16, 17 or 31 health against the connection's last
   maximum -- approximate). A clean tick carries no 58, no `[20]`, no `0x00A7` (0/74).
 - **A tick striking the observer** is `0x00CF [obs, 4]` (adrenaline gain) then `0x009F [10,
@@ -2577,8 +2580,10 @@ let P5's phase half go red although the tick gate is 0.05 s wide.
   "Area of effect", rev 2685457: such spells "take place where the foe was when casting
   finished").
 - **Who is struck**: the dead never (0 words on a dead taker); a revived taker inside is
-  struck again (2: agent 7 revived +8.444, agent 12 revived +9.044); a foe that walks in
-  late is struck (cast 443.127: the announced target never ticked, agent 8 from k = 8).
+  struck again (2: agent 7 revived +8.444, agent 12 revived +9.044); a foe struck ONLY from
+  k = 8 on, not dead before (cast 443.127: the announced target never ticked, agent 8 from
+  k = 8, no death and no revival in the window) -- that it WALKED IN late is the
+  RECONSTRUCTION (positions are leads, below), not the observation.
 - **The area stays at P while the caster walks** (7 casts tick after the caster's first
   `0x0029`). **Caster death: INCONCLUSIVE** -- 2 casts (#10 +4.676, #13 +6.92), no ticks after
   either but both areas already empty; the 350 WAS re-sent after the caster died (#10, +6.002;
@@ -2672,9 +2677,20 @@ line per opened area, per tick, per close.
   FOUND on any tape. The hand row's Blind seconds are the record's flat 10 in a bit-clear slot,
   read by SKILLS-LV's flat reader -- the one HAND row that reader moves, named in
   test_labelconsumers §8.
-- **The other eleven** (77, 196, 215, 830, 844, 910, 1083, 1094, 1372, 1380, 2222) carry no hand
-  row: no damage resolves for them and they land as before today (inert, or one target through
-  a label row) until a row names them. Said in the banner.
+- **The other eleven** (77, 196, 215, 830, 844, 910, 1083, 1094, 1372, 1380, 2222) carry no
+  skill_effect row of any tier (checked 2026-09-26 in content/ and vault/content): no damage
+  resolves for them and they are inert, as before today. The day a row -- label or hand -- names
+  one with a damage it OPENS AN AREA (`area_over_time` reads the record, not the tier), not one
+  target. Said in the banner.
+- **A target dead at the completion opens nothing** (review 2026-09-26, B2-3): the player's E5
+  checks `target_dead` ahead of `open_area` and prints the refusal; a body's `land_skill` exits on
+  its dead-target branch before the area. The pre-D6 word returned None on a corpse and the
+  silence is kept; retail is UNVERIFIED (no tape has a cast whose target died under it). Locked.
+- **The knock-down's seconds** (review 2026-09-26, B2-1): Meteor Shower's fall is
+  `KNOCK_DOWN_SECONDS` (2 s, WIKI), never `skill_knock_down_seconds(192)` -- that reader takes the
+  record's bit-clear duration slot as the fall's flat constant, and for an area over time that
+  slot IS THE AREA'S LENGTH (the same 9 `area_over_time` reads). The first cut shipped 9 s falls
+  every 3 s; the lock now reads the seconds off the `[63]` word with the clock running.
 - **Scale.** The player's ticks are NOT armour-scaled (hit_enemy's exact gap, studies/isle 4.2,
   unchanged); a body's ticks scale by the PLAYER's spell armour whoever the taker is
   (body_spell_terms's standing shape, aotR-server §2's surprise) -- both pre-existing gaps, not
@@ -2703,17 +2719,25 @@ tick, the real E5 path landing.
 **Flags.** `--no-areas-over-time` (serverargs; `AREAS_OVER_TIME` at column 0, `main()` flips it
 with a banner) reverts to the single word at the completion -- byte-identical to
 `--no-spell-areas`, which reverts it TOO (it has reverted every target-16 area since §38 and
-keeps that meaning: the older flag wins). Locked: the two streams compared equal.
+keeps that meaning: the older flag wins). Locked: the two streams compared equal. **One corner
+the revert does NOT restore, on purpose** (review 2026-09-26, B2-2): the `armed=True` above is
+outside the flag, so under either revert a foe hit inside the last ATTACK_INTERVAL still takes
+the single word where every run before 2026-09-26 swallowed it. The revert restores the single
+word, not the swing gate's swallow of a spell; the flag's help, the banner and the lock say so.
 
-**The lock.** `test_weapons.py` section 30 (13 checks bare, 1 vault-only; floor 265 -> 278, a
-vault run 309): the predicate and its two refusals; the schedule; the player's Fire Storm
+**The lock.** `test_weapons.py` section 30 (16 checks bare, 1 vault-only; floor 265 -> 278 ->
+285 after the review's repairs, a vault run 317): the predicate and its two refusals; the
+schedule, and a tick served 0.3 s late leaving the next on the second (the schedule is from t0);
+the player's Fire Storm
 through the real press and E5 over three hostiles inside and one at 200 u, served a second at a
 time through the real `projectile_tick` (k = 1..10, the late entrant from k = 5, the one killed
 at k = 3 never again, the 350 before the words at +3 / +6, clean ticks, closed after k = 10);
-the last_hit arm; Meteor Shower's +3 / +6 / +9 and its falls; Eruption's per-tick Blind; a
-hostile's Fire Storm through the real `land_skill` (the completion, the tape's order at k = 1,
-the monk through hurt_agent_row, the caster's death at k = 4); the refused fraction; the two
-reverts byte-identical; the source locks; and the tape: the seventeen casts' ticks are exactly
+the last_hit arm; Meteor Shower's +3 / +6 / +9 and its 2 s falls read off the wire; Eruption's
+per-tick Blind, on a late entrant too; a target dead at the E5 opening nothing; a
+hostile's Fire Storm through the real `land_skill` (the completion, the tape's order at k = 1
+with the 0x00CF gain REQUIRED on a lit bar, the monk through hurt_agent_row, the caster's death
+at k = 4); the refused fraction; the two reverts byte-identical and the interval corner they
+keep; the source locks (main()'s flip included); and the tape: the seventeen casts' ticks are exactly
 k = 1..10 and the 350 exactly at +0 / +3 / +6, the schedule the server produces for 197.
 `test_guards` section 10 pins the new callers (`_area_strike` <- `area_tick` <-
 `projectile_tick`; `open_area` <- `cast_tick`, `land_skill`); `test_skilldamage` §14 and

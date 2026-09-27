@@ -2051,9 +2051,11 @@ orchestrator's spec for the DESKWORK-D6 + scatter arc, step B3). **Label, said f
 once for the whole section: RECONSTRUCTION FROM WIKI.** No monster on any live tape was
 ever struck by an area over time — the corpus census behind D6 (`aotjoin.py` P9,
 [studies/weapons/PLAN.md](../weapons/PLAN.md) §41) found the Fire Storm ground visual on
-exactly one capture, `20260817T231139`, 17 casts, and every one of the 55 struck agents
-carries a PvP create token (35 `att2`, 16 `att1`, 4 the observer's own kind-5 body);
-0 `mon1`/`mons`. So §4.4's four implementable rules were turned into code with no retail
+exactly one capture, `20260817T231139`, 17 casts, and every one of the 16 struck agents
+(P9's count: 16 distinct takers over 37 (cast, taker) pairs) carries a PvP create token
+(12 `att2`, 4 `att1`, the observer among the `att1`); 0 `mon1`/`mons`. (This paragraph said
+"55 struck agents (35 / 16 / 4)" until 2026-09-26; no instrument produces those numbers —
+LBL-2.) So §4.4's four implementable rules were turned into code with no retail
 witness for any of them, and the numbers the wiki does not give were chosen by us and are
 named as ours. The sources are the two pages the register row (`PLAN.md` §6.1, the
 monster-AI row, updated in the same commit) now cites for it: GWW *Scatter* rev 2735452
@@ -2089,9 +2091,16 @@ quickly in hard mode than in normal mode"* (*Area damage over time*). **No numbe
 page — NOT FOUND**, and the corpus cannot supply one (above). **Built, RECONSTRUCTION:** a
 GROUP scatters on the tick at which it has taken `SCATTER_AFTER` damaging ticks of THAT
 area — instants, not words — default **2**; `--scatter-after 1` is the hard-mode-like
-floor. Deterministic, no RNG. One decision per (group, area) per flight: the count is not
-advanced while any member is still walking, resets at the decision, and a body struck again
-after its flight counts toward a NEW decision (S7). The research lane proposed a seeded
+floor. Deterministic, no RNG. **ONE group decision per (group, area)**, kept on
+`state["scatter_decided"]` (the spec's S2 as written): the count is not advanced while any
+member is still walking; after the group has decided, a member struck again by the same
+area — a re-entry (S7) — counts ALONE toward its own decision and flees alone, and a member
+that cannot leave (a `stationary` row, one the mesh refused a point — `scatter_refused`)
+counts nothing. The first cut (1e152f2e) reset the count at the decision and let the whole
+group re-decide every `SCATTER_AFTER` ticks, so a member standing in the fire cancelled its
+group-mates' casts from their safe points, and a refused body re-decided itself five times in
+ten ticks — the review's R3-F2, repaired 2026-09-26 and locked (the stationary member, the
+re-entrant, the refusal printed once). The research lane proposed a seeded
 probability; the spec chose the delay because "more quickly" is a statement about time and
 because the owner's feel — the only instrument this arc has — can tune one integer.
 **Open:** whether retail's normal-mode rate is a delay, a damage threshold (*"large amounts
@@ -2119,17 +2128,23 @@ FROM P on the P→body ray; candidates the ray then ±30, ±60, ±90, ±120°; t
 it on a mesh without one), (c) outside EVERY active foe area, (d) whose first corridor leg
 (`_return_leg`, unchanged) crosses no OTHER active area's disc. A body standing on P (within
 1 u) runs away from its target, else from its anchor. Nothing passes → `place_on_mesh` at
-the ray point; that too refuses → the body stands, a printed refusal, no invented point (it
-then holds off the area as an arrival does). Locked: (856, 0) for a body at 650 with P at
-(600, 0); with a second area sitting on the ray the ±30 candidates fall inside it and the
-+60 one wins (the control with no areas passed returns the ray point, which IS inside the
-second disc); a refusing mesh sends nothing and prints "NOWHERE to run".
+the ray point, **held to the same (c) and (d)** — the first cut took the fallback unchecked
+and ran a corridor body into a second area's centre (R3-F4, repaired 2026-09-26); that too
+refuses → the body stands, a printed refusal (once; it counts nothing more for that area,
+S2), no invented point (it then holds off the area as an arrival does). Locked: (856, 0) for
+a body at 650 with P at (600, 0); with a second area sitting on the ray the ±30 candidates
+fall inside it and the +60 one wins (the control with no areas passed returns the ray point,
+which IS inside the second disc); clause (d) alone (a 60 u area at (760, 0): the ray point
+outside it, the leg through it, refused); the corridor with the fallback refused; the
+fallback's success path (a mesh refusing the nine exact points, the body running to the
+ground 48 u off the ray); a refusing mesh sends nothing and prints "NOWHERE to run" once.
 
 ### MONSTERAI-S5 — the cancel: the stop word, no [35], no recharge
 
-WIKI (*Scatter*): *"cancelling their current action"*; (*Cancel*, as the server already
-applies it to the player at `_mark_cancelled`): a cancelled skill does not activate, its
-costs stay paid, it does NOT recharge. **Built, `_scatter_cancel`, once per flight, on
+WIKI (*Scatter*): *"cancelling their current action"*; (*Cancel* rev 2574040, as the server
+already applies it to the player at `_mark_cancelled`): a cancelled skill does not activate,
+its costs stay paid, it does NOT recharge (*"The skill does not need to recharge"*). **Built,
+`_scatter_cancel`, once per flight, on
 whichever tick first sees the mark** (the move tick in the world loop; the attack tick when
 `combat_pass` reaches it first — so the stop word always precedes the first leg, S6): a cast
 in activation → `[59 GV_SKILL_STOPPED | 49 GV_ATTACK_SKILL_STOPPED, body, 0]`, **no `[35]`**,
@@ -2140,9 +2155,17 @@ cancelled and lands from the attack tick's scatter branch; a swing in windup →
 GV_ATTACK_STOPPED, body, 0]` — the one retail cancel-then-move on a hostile, MONSTERAI-L4
 (OBSERVED n=1, the Rogue Bull at 324.28 s on `20260915T155656`: `[3, 55, 0]`, then a
 `0x0029`, no damage word, no `0x0028`) — the landing dropped, `last_swing` untouched; a
-follow cleared exactly as `_leash_give_up` clears it, **no `0x0028`**. The known-bad arm is
-`interrupt_body`'s shape, locked beside each: it sends `[3]`+`[35]` and re-arms the FULL
-recharge.
+follow cleared exactly as `_leash_give_up` clears it, **no `0x0028` for a WALKER** (its first
+leg supersedes the chase). A CEASER never gets a leg, so a ceaser whose copy is still walking
+its last order is sent the chase's own halt `0x0028` through the model — and so is a body the
+S7 hold stops mid-chase: without it the client walked the copy on to its last destination
+(in the review's probe, straight through the fire) while the server's stood (R3-F1, repaired
+2026-09-26; locked with the standing ceaser and the standing hold as the controls, sent
+nothing). The stop word names the form the cast site ANNOUNCED — under `--npc-skill-instant`
+an attack skill opens as a spell and is cancelled with `[59]`, not `[49]` (R3-F5). The
+known-bad arm is `interrupt_body`'s shape, locked beside each: it sends `[3]`+`[35]` and
+re-arms the FULL recharge; the restore is also driven through the REAL cast site's stamp
+(enemy_attack_tick opens the cast, the cancel returns the slot to exactly its pre-cast value).
 
 ### MONSTERAI-S6 — the wire: legs only
 
@@ -2174,10 +2197,16 @@ that scatters again.
 
 ### MONSTERAI-S8 — who never scatters
 
-WIKI names no foe-type exemptions (NOT FOUND; the page lists skills, not creatures).
-**Built:** dead; inanimate (`attacks_back` False); `EFFECT_TRANSITION` (a burrower, half in
-the world); a spawn row with `stationary = true` (a new optional field for the wiki's Siege
-Wurms and some spirits; none exist); already walking home on the leash (it is leaving; the
+The *Scatter* page names no foe-type exemptions (NOT FOUND there; it lists skills, not
+creatures) — but §4.5 records WIKI's *"specifically-coded exceptions"*: Siege Wurms fully
+stationary, while sprout Plants, Brooding Thorns and some Scarab Nest Builders are stationary
+foes that DO move under area damage over time. So a blanket exemption is OURS, not the
+page's. **Built:** dead; inanimate (`attacks_back` False); `EFFECT_TRANSITION` (a burrower,
+half in the world); a spawn row with `stationary = true` — a new optional field,
+RECONSTRUCTION (the Siege Wurm is the WIKI-stationary case it fits; a Plant that scatters
+would want the field left off); none exist, and the builder now copies it onto the entry
+(the first cut's builder did not, so it could never have taken effect — R3-F3, locked in
+test_population §6); already walking home on the leash (it is leaving; the
 wiki is silent); any allegiance but hostile; the player. **Knocked down:** noted as
 `scatter_pending` on the decision tick and re-checked by the move tick when it stands — it
 flees if the area is still live, else the mark is dropped. A passive row (MONSTERAI-J) is
@@ -2195,8 +2224,9 @@ is UNVERIFIED either way. Owed as its own step.
 
 ### MONSTERAI-S10 — the lock
 
-`test_agentlife.py` `section_scatter`, 30 checks + the S9 skip, floor 635 → 665 from the
-green run (666 with the vault's re-emitted skills table, as before +30): the constants; the
+`test_agentlife.py` `section_scatter`, 42 checks + the S9 skip after the review's repairs
+(30 at 1e152f2e), floor 635 → 665 → 677 from the green runs (678 with the vault's
+re-emitted skills table): the constants; the
 delay (tick 1 marks nobody, tick 2 marks the group); `group = None`; the one caller;
 `scatters = false`; the swing cancel `[3]` then `0x0029` with `interrupt_body`'s `[3]`+`[35]`
 as the control; the cast cancel `[59]` / `[49]` with `skill_ready` restored, the interrupt's
@@ -2205,7 +2235,12 @@ flee point on the ray, dodging a second area (the bare ray as the control), from
 refusing mesh; the walkers' legs and arrival; the ceaser; mid-flight (no swing, no cast, no
 retarget, no count); death; the hold, its control, its lift; re-entry; the never set with
 the knocked-down re-check and its control; `--no-scatter` with a planted record;
-`--scatter-after 1`; the source lock (citations at the call site); and **the end-to-end
+`--scatter-after 1`; the source lock (citations at the call site, main()'s flip); the
+review's twelve (2026-09-26): the refusal once and no re-decision, the corridor's refused
+fallback, the fallback's success path, clause (d) alone, the burrow mid-flight, the ceaser
+and the hold halted mid-chase, the stationary member re-deciding nothing, the re-entrant
+fleeing alone, the `[59]` under `--npc-skill-instant`, the book dropped on close, the real
+cast site's stamp; and **the end-to-end
 check through D6's REAL `open_area` / `area_tick` / `hit_enemy`** on a player Fire Storm
 over a three-body group, then the real move and attack ticks: tick 1 words two and marks
 nobody, tick 2 marks three with nobody moved, the next move tick sends the two walkers'

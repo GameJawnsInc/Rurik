@@ -2732,8 +2732,10 @@ word then [20, foe, caster, 304], the knock-down on each. NOT modelled, said her
 # effect `area_visual` is drawn at the completion and re-drawn at +3 / +6 (the
 # 350, OBSERVED 51 of 51). A row here REPLACES the label row the vault carries
 # for the same id (content.py's tier rule), so it names everything the label
-# named. The other eleven areas over time keep their label row (or none) and
-# stay ONE TARGET, as every run before today -- named in authsrv's banner.
+# named. The other eleven areas over time carry NO skill_effect row of any tier
+# (checked 2026-09-26 in content/ and vault/content) and are INERT, as every run
+# before today; a row that names one -- label or hand -- with a damage OPENS AN
+# AREA (area_over_time reads the record, not the tier). Named in authsrv's banner.
 [skill_effect.197]
 scale_means = "Fire damage"
 damage_type = 5                # fire ([damage_type.table]): the page's own word; the wire carries no kind for a tick
@@ -2749,11 +2751,11 @@ IMMEDIATELY 0x00A1 [P, 0, 0, 350, 0, 0] (17/17) -- 350 is in no column of the ro
 impact_visual is 351), so this row carries it, as Fireball's row carries 333; the 350 re-sent at P \
 at +3.0 and +6.0 (51 = 17 x 3, none at +9, no end marker), ahead of that tick's words (19/19); a tick \
 at the completion + k s, k = 1..10, per foe inside 0x00A3 [16, foe, caster, frac] with the caster \
-as cause (152 words, 1-4 foes a tick, foes only), no 58 / [20] / 0x00A7 on a clean tick (0/74); \
+as cause (142 words, 1-4 foes a tick, foes only), no 58 / [20] / 0x00A7 on a clean tick (0/74); \
 the dead never struck, a revived foe struck again, a late entrant struck; the area STAYS at P \
 while the caster walks. Client (38797): type_code 5, TARGET BYTE 16, aoe_range 156, duration 10 / \
 10, scale 5->35 args = 2, projectile 2077 (none), activation 2.0, recharge 20, energy 10. WIKI \
-(GWW "Fire Storm", read 2026-09-26): var1 `Fire damage` 5->35, "Create a Fire Storm at target \
+(GWW "Fire Storm", rev. 2695857, read 2026-09-26): var1 `Fire damage` 5->35, "Create a Fire Storm at target \
 foe's location. For 10 seconds, foes adjacent to that location are struck for 5...35 fire damage \
 each second". NOT modelled, said here: who stands inside 156 u at \
 each tick on the tape (every non-observer position is a lead); whether the caster's death ends the \
@@ -2763,7 +2765,7 @@ area (INCONCLUSIVE, 2 casts -- the server keeps it, RECONSTRUCTION)."""
 scale_means = "Fire damage"
 damage_type = 5                # fire ([damage_type.table]), the page's own word
 tick_period = 3.0              # "every 3 seconds" -- a strike at +3, +6, +9 of the record's 9 s (WIKI)
-knocks_down = true             # "each of which knocks down" -- every foe a strike reaches (WIKI)
+knocks_down = true             # "knocked down every 3 seconds" -- every foe a strike reaches (WIKI); the fall is KNOCK_DOWN_SECONDS (2 s), the row's 9 s is the AREA's length
 [skill_effect.192.provenance]
 source = "wiki"
 page = 'GWW, "Meteor Shower", {{Skill infobox}} + {{Skill progression}}, rev. 2722820, read 2026-09-26'
@@ -2778,8 +2780,9 @@ Magic), TARGET BYTE 16, aoe_range 156 (the client's own adjacent, section 38), p
 tape (NOT FOUND, aotjoin P8 over 96 connections), so the schedule is Fire Storm's shape at the \
 page's period (RECONSTRUCTION): the completion, then at +3 / +6 / +9 per foe inside 156 u of the \
 target's position the word and the knock-down; NO ground effect (no visual id is known -- the \
-server says so in its log). NOT modelled, said here: the overcast (exhaustion), the three-second \
-cadence's own phase (the first strike is taken to be a full period after the completion)."""
+server says so in its log). The cadence's phase -- the first strike a full period after the \
+completion, +3 / +6 / +9 -- is the page's own Notes line (WIKI, rev. 2722820) and is what \
+areatime.tick_instants produces. NOT modelled, said here: the overcast (exhaustion)."""
 
 [skill_effect.167]
 scale_means = "Earth damage"

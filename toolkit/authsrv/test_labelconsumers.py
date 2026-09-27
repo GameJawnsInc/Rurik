@@ -45,6 +45,7 @@ import checks  # noqa: E402
 import agents  # noqa: E402
 import authsrv  # noqa: E402
 import effects  # noqa: E402
+import vaultpath  # noqa: E402
 
 # FLOOR 30, from the green run of 2026-09-23 (SKILLS-LU): 8 (A, player) + 6 (A,
 # body) + 7 (B) + 8 (C) + 1 (the flags) -- section 5b declares a skip without a
@@ -1026,19 +1027,41 @@ def main():
             authsrv.CONDITION_FLAT_CONSTANTS = True
             flat_pred = sorted(set(flat_on) - set(flat_off))
             # 2026-09-26: the overlay's one CONDITION_FLAT_CONSTANT row (167) is SHADOWED by
-            # Eruption's hand row (DESKWORK-D6 step 2, studies/weapons 42), so the label tier
-            # may hold no witness; the hand row is then the witness -- its Blind resolves
-            # only through the flat reader, exactly as the label row's did.
-            hand_167 = ("167" not in lab and authsrv.skill_condition(167, 0) == (479, 10.0))
-            if hand_167:
+            # Eruption's hand row (DESKWORK-D6 step 2, studies/weapons 42), so the LOADED label
+            # tier holds no marked row and `marks == flat_pred` compares [] to [] -- the "no
+            # other label row is" half keeps its teeth, the "marked implies reader" half lost
+            # its subject (the review's F13). The subject comes back from the RAW overlay
+            # file: every id it marks must either be a loaded label row in flat_pred or be
+            # shadowed by a hand row whose condition resolves ONLY through the flat reader.
+            raw_marked = []
+            try:
+                raw = agents.content._load_file(os.path.join(
+                    vaultpath.require_dir("content"), "skill_labels.toml"))
+                raw_marked = sorted(int(k) for k, r in (raw.get("skill_effect") or {}).items()
+                                    if "CONDITION_FLAT_CONSTANT" in (r.get("tier_detail") or ()))
+            except (Exception, SystemExit):                            # noqa: BLE001
+                raw_marked = []                     # no vault: the check below names it
+            shadowed_ok = {}
+            for s in raw_marked:
+                if s in flat_pred:
+                    shadowed_ok[s] = "label row, in flat_pred"
+                    continue
+                on = authsrv.skill_condition(s, 0)
                 authsrv.CONDITION_FLAT_CONSTANTS = False
-                hand_167 = authsrv.skill_condition(167, 0) is None
+                off = authsrv.skill_condition(s, 0)
                 authsrv.CONDITION_FLAT_CONSTANTS = True
-            check(marks_lv["CONDITION_FLAT_CONSTANT"] == flat_pred and (len(flat_pred) >= 1 or hand_167),
+                shadowed_ok[s] = (s not in lab and str(s) in saved_tables["skill_effect"]
+                                  and on is not None and off is None)
+            check(marks_lv["CONDITION_FLAT_CONSTANT"] == flat_pred and len(raw_marked) >= 1
+                  and 167 in raw_marked and all(shadowed_ok.values())
+                  and authsrv.skill_condition(167, 0) == (479, 10.0),
                   f"every loaded CONDITION_FLAT_CONSTANT row ({len(flat_pred)}) is exactly a row whose "
                   f"condition resolves ONLY through the flat reader (the flag off removes it) -- and no "
-                  f"other label row is; the witness is 167, as a label row or (since 2026-09-26) as "
-                  f"the hand row that shadows it", (marks_lv["CONDITION_FLAT_CONSTANT"], flat_on, flat_off, hand_167))
+                  f"other label row is; and every id the RAW overlay marks ({raw_marked}) is either such "
+                  f"a loaded label row or is shadowed by a HAND row whose condition still resolves only "
+                  f"through the flat reader (167's Blind, 479 for 10 s) -- the mark keeps a subject "
+                  f"although the loaded tier holds none",
+                  (marks_lv["CONDITION_FLAT_CONSTANT"], flat_on, flat_off, raw_marked, shadowed_ok))
     finally:
         tables["skills"] = saved_tables["skills"]
         tables["skill_effect"] = saved_tables["skill_effect"]

@@ -548,6 +548,17 @@ def census(stamps=None, codec=None):
     return out
 
 
+def narrow(c, stamp=EXPECT_CAPTURE):
+    """The census `c` cut to ONE capture -- what an exact count is scored on.
+    A corpus total (51 re-sent 350s, 79 tick instants, 2 revived takers) grows
+    the day another capture holds a Fire Storm, and that is confirming
+    evidence; the witness tape's own numbers do not move (P1's rule, applied to
+    every exact count -- review 2026-09-26, LBL-1)."""
+    return dict(c, casts=[r for r in c["casts"] if r.get("capture") == stamp],
+                unattributed=[u for u in c["unattributed"] if u and u[0] == stamp],
+                stamps=(stamp,))
+
+
 def _observer_prefix(x, obs, skill):
     """For a tick striking the observer: 0x00CF [obs, ...] then [10, obs, skill]
     then the word, in wire order (the tick's own batch)."""
