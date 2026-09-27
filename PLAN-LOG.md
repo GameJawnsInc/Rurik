@@ -28,6 +28,23 @@ move back.
 
 ---
 
+### The auto-select cone is 60°, apex at the player -- 2026-09-27 -- **bracketed (59.90°, 60.004°) at 500 u -- a `dot > 0.5` boundary -- and NOT the screen: an on-screen foe at 75° was passed over while one 31° off the camera axis at 55° was taken. Corrects the "on screen" wording of the three entries below. No code change**
+
+**The question** (the occlusion entry below, "Open: the cone's half-angle"). Two hypotheses were pre-registered: the view FRUSTUM (a 37.5° half-angle from the CAMERA, no free parameter -- the FOV is 75.000° horizontal, `fovread.py`) and a cone around the facing with its apex at the PLAYER.
+
+**Method.** World-entry auto-select, one foe per run, the hero present as the fallback pick, no input. A scratch launcher ran `session.py` and read the camera live with `toolkit/clientscan/fovread.py` once the body was in the map: position (9436, 8077, −805.4), target (9826, 8077, −716.6), identical in all seven runs -- 390 u behind the player, along +x, 12.8° down. Foes placed by `--enemy-offset` on the walkable −y side (checked offline with the server's own `load_pathmap`); every placement landed exactly.
+
+**Results** (from the player; the harness runs are `20260927T15xxxx`):
+- 55.00° / 500 u (`151714`, 31.2° off the camera axis) -- **foe**.
+- **75° / 300 u (`151913`, 30.6° off the camera axis, ON SCREEN at the frame's right edge) -- hero.** This refutes the frustum and every camera-apex cone: 31.2° in, 30.6° out.
+- 65.0° (`152104`), **60.004° (`152233`)** -- hero; 57.48° (`152404`), 58.98° (`152535`), **59.90° (`152712`)** -- foe, the last after a same-instant `[200, 0]`, the one flip in any run, a hair inside the edge.
+
+**OBSERVED, n=1 per angle: the cone's half-angle is 60° (within ~0.1°), apex at the player, axis the view direction** (the revive pair below separates view from character facing; at map load they coincide). A `dot(axis, foe − player) > 0.5` test is what that boundary looks like. **This corrects the three entries below**: "on screen" answered their questions (their foes sat well inside or well outside 60°) and named the wrong mechanism. **Open:** a range term (765 u picked, nothing farther tried) and whether the revive re-acquisition uses the same cone.
+
+**Edited:** studies/skills 38.5 (the table). **Tests:** doc linters.
+
+---
+
 ### A creature Ranger's bonus is "+30 vs. elemental" -- 2026-09-27 -- **a spawned Ranger creature now meets 3 x level against a physical, chaos, dark or holy hit and 3 x level + 30 against an elemental one, where it met an untyped 3 x level + 10 on everything; `--untyped-creature-armour` restores the +10 -- and NOTE the physical half: a Ranger creature takes MORE from a swing than it did (its armour against it, at level 5: 15, not 25)**
 
 **The reading, and why the +10 goes.** GWW "Armor rating": "creature AR = 3 * Level + [[Armor bonus]], where armor bonus is profession specific"; the link resolves ("Armor bonus" -> "Basic armor", read 2026-09-27) to the typed lines -- the Warrior's "Armor +20 (vs. physical damage)", the Ranger's "Armor +30 (vs. elemental damage)" -- and the Ranger has no other armour line. The untyped +10 `combatmath.ARMOR_BONUS_BY_PROFESSION` carries for it was read off the max-AR COLUMN (70 - 60), and the same reading applied to the Warrior (its column's +20 as a base bonus) predicts an elemental 29 on a level-3 Warrior where def 3113 showed <= 14.9 ("The player's spell meets its target's armour", below). So the reading consistent with the one witness and with the formula's own link is TYPED ONLY: 3 x level plus the typed line against its type. Keeping the +10 and adding +30 (physical 3L + 10, elemental 3L + 40) would mix the refuted reading into the typed one.
