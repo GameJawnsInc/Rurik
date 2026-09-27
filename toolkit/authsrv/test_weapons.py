@@ -24,7 +24,7 @@ import agents  # noqa: E402
 import authsrv  # noqa: E402
 import combatmath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=285)   # the BARE-MACHINE number: 285 = 278 + 7 (the review repaired, 2026-09-26: section 29 +4 bare (the token list, P2, P3/P7, the order facts driven red) + 1 vault-only (the per-tape scoring arm), section 30 +3 bare (the late serve, the dead target, the interval corner under the flag); a vault run gives 317); before that 278 = 265 + 13 (section 30, areas over time on the server -- DESKWORK-D6 step 2, 2026-09-26; a vault run gives 309 -- the server's 197 schedule against the tape's is the one vault-only check, on capture 20260817T231139 alone); before that 265 = 257 + 8 (section 29, areas over time on retail's wire -- aotjoin, 2026-09-26; a vault run gives 295 -- the record's classes, P1-P9 and the tick batch order are the eleven vault-only checks; section 29 alone under a missing RURIK_VAULT runs its 8 and declares the skip); before that 257 = 251 + 6 (section 28, a point-blank burst, 2026-09-20; a vault run gives 276 -- the corpus's target-16 announces are the one vault-only check); before that 251 = 237 + 14 (section 27, the hit test, 2026-09-20; a vault run gives 269 -- the corpus's dodge words are the one vault-only check); before that 237 = 228 + 9 (section 26, Fireball's splash, 2026-09-20; a vault run gives 254 -- the tape's bursts are the one vault-only check); before that 228 = 219 + 9 (section 25, a body's spell projectile, 2026-09-20; a vault run gives 244 -- the tape's activations are the one vault-only check); before that 219 = 208 + 11 (section 24, a player's spell projectile, 2026-09-20; a vault run gives 234 -- the tapes' speeds are the one vault-only check); before that 208 = 203 + 5 (section 23, base armour penetration, 2026-09-19; a vault run gives 222 -- the six checks that read the skills table are vault-only); before that 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=287)   # the BARE-MACHINE number: 287 = 285 + 2 (the orchestrator's corpse correction, 2026-09-26: section 30 +2 bare -- the dead-at-the-E5 check now opens the area at the corpse (WIKI) instead of locking the refusal, and adds the gone-row refusal and the hostile's cast kept past its target's death with its non-area control; a vault run gives 319); before that 285 = 278 + 7 (the review repaired, 2026-09-26: section 29 +4 bare (the token list, P2, P3/P7, the order facts driven red) + 1 vault-only (the per-tape scoring arm), section 30 +3 bare (the late serve, the dead target, the interval corner under the flag); a vault run gives 317); before that 278 = 265 + 13 (section 30, areas over time on the server -- DESKWORK-D6 step 2, 2026-09-26; a vault run gives 309 -- the server's 197 schedule against the tape's is the one vault-only check, on capture 20260817T231139 alone); before that 265 = 257 + 8 (section 29, areas over time on retail's wire -- aotjoin, 2026-09-26; a vault run gives 295 -- the record's classes, P1-P9 and the tick batch order are the eleven vault-only checks; section 29 alone under a missing RURIK_VAULT runs its 8 and declares the skip); before that 257 = 251 + 6 (section 28, a point-blank burst, 2026-09-20; a vault run gives 276 -- the corpus's target-16 announces are the one vault-only check); before that 251 = 237 + 14 (section 27, the hit test, 2026-09-20; a vault run gives 269 -- the corpus's dodge words are the one vault-only check); before that 237 = 228 + 9 (section 26, Fireball's splash, 2026-09-20; a vault run gives 254 -- the tape's bursts are the one vault-only check); before that 228 = 219 + 9 (section 25, a body's spell projectile, 2026-09-20; a vault run gives 244 -- the tape's activations are the one vault-only check); before that 219 = 208 + 11 (section 24, a player's spell projectile, 2026-09-20; a vault run gives 234 -- the tapes' speeds are the one vault-only check); before that 208 = 203 + 5 (section 23, base armour penetration, 2026-09-19; a vault run gives 222 -- the six checks that read the skills table are vault-only); before that 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
 check = LEDGER.ok
 
 LEGACY_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
@@ -4201,20 +4201,62 @@ def section_areas_over_time():
               "inside 240 u, none on the one at 300 u; that one walks in before k = 3 and is "
               "worded AND Blinded from k = 3 -- the Blind rides EVERY tick, not the first "
               "(F2); five ticks and it closes", str((at_completion, k1, k2_12, k3)))
-        # (B2-3) a target DEAD at the E5 opens nothing: the pre-D6 silence, kept
+        # A target DEAD at the E5 still opens the area, at the CORPSE (WIKI "Area of
+        # effect" rev 2685457: the spell "doesn't fail" -- the orchestrator's correction
+        # of the review repair's B2-3, which had refused it); the corpse is never worded,
+        # the foe beside it is. Known-bad arm: the refusal B2-3 shipped.
+        st, sent, send = player_cast(197, [(11, (650.0, 0.0))],
+                                     before=lambda s: s["agents"][FOE].update(dead=True))
+        at_e5 = (fin58(sent), grounds(sent), words(sent))
+        sent.clear()
+        _aot_advance(st, send, 1.0)
+        check(at_e5 == ([[58, PLAYER, 0]], [[[600.0, 0.0], 0, 0, 350, 0, 0]], [])
+              and [v[1] for v in words(sent)] == [11]
+              and st["agents"][FOE]["health"] == 9000.0
+              and len(st.get("areas") or []) == 1 and st["areas"][0]["point"] == (600.0, 0.0),
+              "a target killed mid-cast (dead at the E5): the 58 then the 350 AT THE CORPSE and "
+              "the area opens there (WIKI: an area over time does not fail on a dead target); "
+              "at k = 1 the foe beside the corpse is worded, the corpse is not",
+              str((at_e5, [(hex(op), v) for op, v in sent])))
+        # ... and a corpse whose ROW is gone opens nothing (no point to open at) --
+        # never target_pos's fallback, which is the PLAYER's position
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             st, sent, send = player_cast(197, [(11, (650.0, 0.0))],
-                                         before=lambda s: s["agents"][FOE].update(dead=True))
-            _aot_advance(st, send, 1.0)
+                                         before=lambda s: s["agents"].pop(FOE))
         check(fin58(sent) == [[58, PLAYER, 0]] and not grounds(sent) and not words(sent)
-              and not st.get("areas") and st["agents"][11]["health"] == 9000.0
-              and "died before the completion" in buf.getvalue(),
-              "a target killed mid-cast (dead at the E5): the E5 and the 58 go out, NO area "
-              "opens, no 350, no word on the "
-              "foe beside the corpse a second later, the refusal printed -- the pre-D6 word "
-              "returned None on a corpse and the silence is kept (retail UNVERIFIED, no tape "
-              "has such a cast; RECONSTRUCTION)", str([(hex(op), v) for op, v in sent]))
+              and not st.get("areas") and "its row is gone" in buf.getvalue()
+              and authsrv.area_corpse_point(st, FOE) is None
+              and authsrv.area_corpse_point(st, PLAYER) == st.get("pos", (0.0, 0.0)),
+              "a target whose row is GONE at the E5 opens nothing, printed -- the area never "
+              "falls back to the player's position", str([(hex(op), v) for op, v in sent]))
+        # ... and a HOSTILE's Fire Storm whose target (the player) dies mid-cast: the
+        # attack tick keeps the cast armed past the death and land_skill opens the area
+        # where the player fell. Control: a non-area spell in the same place still drops.
+        def hostile_cast_on_dead_player(sid):
+            st = _body_world((900.0, 0.0), skills=[[sid, 0.0, 20.0]], skill_ready=[0.0],
+                             casting=0, cast_target=PLAYER, target=PLAYER,
+                             cast_lands_at=time.time() - 0.01)
+            st["player_dead"] = True
+            sent = []
+            send = lambda op, vals, label="", quiet=False: sent.append((op, list(vals)))   # noqa: E731
+            with contextlib.redirect_stdout(io.StringIO()):
+                authsrv.enemy_attack_tick(send, st, 1)
+            return st, sent
+        st, sent = hostile_cast_on_dead_player(197)
+        st_ctl, sent_ctl = hostile_cast_on_dead_player(186)
+        check(fin58(sent) == [[58, FOE, 0]]
+              and grounds(sent) == [[list(map(float, st.get("pos", (0.0, 0.0)))), 0, 0, 350, 0, 0]]
+              and len(st.get("areas") or []) == 1
+              and st["agents"][FOE]["cast_lands_at"] is None
+              and not (st_ctl.get("areas") or []) and not grounds(sent_ctl)
+              and st_ctl["agents"][FOE]["casting"] is None
+              and not (st_ctl.get("body_projectiles") or []),
+              "a hostile's Fire Storm whose target (the player) died mid-cast lands at its time "
+              "through the attack tick: its 58, the 350 where the player fell, the area open; "
+              "the control -- a Fireball in the same place -- is dropped as before (no area, no "
+              "launch, the cast cleared)",
+              str(([(hex(op), v) for op, v in sent], [(hex(op), v) for op, v in sent_ctl])))
         # (d) a hostile's Fire Storm at the player through the real land_skill
         st = _body_world((900.0, 0.0), skills=[[197, 0.0, 20.0]], skill_ready=[0.0],
                          casting=0, cast_target=PLAYER)
@@ -4340,7 +4382,9 @@ def section_areas_over_time():
         check('_aot = (area_over_time(cast["skill_id"], rank)' in src
               and src.count("                elif _aot is not None:") == 1
               and 'open_area(send, state, conn_id, PLAYER_AGENT_ID, cast["skill_id"],' in src
-              and "                    if target_dead(state, target):" in src
+              and "                    _apt = (area_corpse_point(state, target)" in src
+              and "            if area_cast_outlives_target(agent):" in src
+              and "    if _tid != agent_id and target_dead(state, _tid) and _aot_corpse is None:" in src
               and "AREAS_OVER_TIME = False" in src[i_flip:i_flip + 160]
               and "not the interval swallow" in sargs
               and "open_area(send, state, conn_id, agent_id, skill_id, _rank, float(damage[0])," in src
@@ -4353,7 +4397,7 @@ def section_areas_over_time():
               and "from areatime import (" in src
               and '"--no-areas-over-time"' in sargs and "global AREAS_OVER_TIME" in src,
               "the source: the E5 and the completion both branch to open_area behind the burst "
-              "arm (the E5 behind a dead-target check) and the burst line stands verbatim; a "
+              "arm (a corpse opens it where it fell: the E5, the attack tick and land_skill's dead-target exit) and the burst line stands verbatim; a "
               "body's completion computes no terms for an area; area_tick sits in "
               "projectile_tick; the areas feed combat_deadlines; the single-target spell is "
               "armed; the scatter hook is named; the leaf is re-exported; the flag exists, its "

@@ -2682,10 +2682,18 @@ line per opened area, per tick, per close.
   resolves for them and they are inert, as before today. The day a row -- label or hand -- names
   one with a damage it OPENS AN AREA (`area_over_time` reads the record, not the tier), not one
   target. Said in the banner.
-- **A target dead at the completion opens nothing** (review 2026-09-26, B2-3): the player's E5
-  checks `target_dead` ahead of `open_area` and prints the refusal; a body's `land_skill` exits on
-  its dead-target branch before the area. The pre-D6 word returned None on a corpse and the
-  silence is kept; retail is UNVERIFIED (no tape has a cast whose target died under it). Locked.
+- **A target dead at the completion still opens the area, at the corpse** -- WIKI (GWW "Area of
+  effect" rev 2685457, Notes): an area over time at a foe's location takes place where the foe was
+  when casting finished and "doesn't fail if the target dies before the casting finishes". The
+  review repair (B2-3) first shipped the opposite -- the player's E5 refused the open on a corpse --
+  and the orchestrator corrected it the same day, because the wiki is explicit on exactly this
+  case: the player's E5 opens at `area_corpse_point` (the corpse row's position; the player's own
+  when the player is the target); a HOSTILE's cast is kept armed past its target's death by
+  `enemy_attack_tick` (`area_cast_outlives_target`) and lands at its time; `land_skill`'s
+  dead-target exit lets an area over time through. Every other spell still ends on a corpse, as
+  before. A corpse whose ROW is gone opens nothing (printed) -- never `target_pos`'s fallback,
+  which is the player's position. No tape holds such a cast (UNVERIFIED on the wire). Locked, with
+  a Fireball in the same place as the control.
 - **The knock-down's seconds** (review 2026-09-26, B2-1): Meteor Shower's fall is
   `KNOCK_DOWN_SECONDS` (2 s, WIKI), never `skill_knock_down_seconds(192)` -- that reader takes the
   record's bit-clear duration slot as the fall's flat constant, and for an area over time that
@@ -2733,7 +2741,7 @@ through the real press and E5 over three hostiles inside and one at 200 u, serve
 time through the real `projectile_tick` (k = 1..10, the late entrant from k = 5, the one killed
 at k = 3 never again, the 350 before the words at +3 / +6, clean ticks, closed after k = 10);
 the last_hit arm; Meteor Shower's +3 / +6 / +9 and its 2 s falls read off the wire; Eruption's
-per-tick Blind, on a late entrant too; a target dead at the E5 opening nothing; a
+per-tick Blind, on a late entrant too; a target dead at the E5 opening the area at the corpse (and a gone row opening nothing; a hostile's cast kept past its target's death, a Fireball the control); a
 hostile's Fire Storm through the real `land_skill` (the completion, the tape's order at k = 1
 with the 0x00CF gain REQUIRED on a lit bar, the monk through hurt_agent_row, the caster's death
 at k = 4); the refused fraction; the two reverts byte-identical and the interval corner they

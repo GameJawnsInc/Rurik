@@ -14944,6 +14944,41 @@ def area_tick_period(skill_id):
     return float(v) if v else float(AREA_TICK_PERIOD)
 
 
+# A TARGET THAT DIES UNDER THE CAST DOES NOT STOP AN AREA OVER TIME. WIKI (GWW
+# "Area of effect" rev 2685457, Notes): a spell that targets a foe with area damage
+# over time at a location, such as Fire Storm, takes place where the foe was when
+# casting finished, and "doesn't fail if the target dies before the casting
+# finishes". So the completion opens the area at the CORPSE's position -- for the
+# player's cast (cast_tick), a hostile's (enemy_attack_tick keeps the cast armed
+# past its target's death instead of dropping it) and a party body's (land_skill's
+# dead-target exit lets it through). Every other spell still ends on a corpse, as
+# before. No tape holds such a cast (UNVERIFIED on the wire; the rule is the
+# wiki's). The orchestrator's correction of the review repair's B2-3, which had
+# refused the open on a corpse -- the one place the wiki is explicit.
+def area_corpse_point(state, tid):
+    """Where an area over time opens for a target that died under the cast: the
+    player's position, else the corpse row's; None when the row is GONE (a
+    removed corpse) -- never `target_pos`'s fallback, which is the PLAYER's
+    position and would open a foe's area on the player."""
+    if tid == PLAYER_AGENT_ID:
+        return state.get("pos", (0.0, 0.0))
+    row = state.get("agents", {}).get(tid)
+    return tuple(row["pos"]) if row and row.get("pos") is not None else None
+
+
+def area_cast_outlives_target(agent):
+    """True when this body's cast in flight is an area over time (the flags on)
+    -- the one cast a dead target does not drop (WIKI, above)."""
+    slot = agent.get("casting")
+    if agent.get("cast_lands_at") is None or slot is None:
+        return False
+    skills = agent.get("skills") or ()
+    if not (0 <= slot < len(skills)):
+        return False
+    sid = skills[slot][0]
+    return area_over_time(sid, agent_skill_rank(agent, sid)) is not None
+
+
 def open_area(send, state, conn_id, caster_id, skill_id, rank, amount, point, aot,
               agent=None):
     """The completion opens an area over time at `point` (the target's
@@ -22465,19 +22500,20 @@ def cast_tick(send, state, conn_id):
                     # target's position and lands NOTHING on the target at the
                     # completion -- the ticks are area_tick's; the row's
                     # condition rides each tick (open_area holds it). A target
-                    # DEAD at the E5 (killed mid-cast) opens NOTHING: the
-                    # pre-D6 word returned None on a corpse, and no tape has
-                    # such a cast (UNVERIFIED; the silence is kept,
-                    # RECONSTRUCTION -- review 2026-09-26, B2-3).
-                    if target_dead(state, target):
+                    # DEAD at the E5 (killed mid-cast) still opens it, at the
+                    # corpse (WIKI "Area of effect" rev 2685457: the spell
+                    # "doesn't fail" -- area_corpse_point); only a corpse whose
+                    # row is GONE opens nothing, printed.
+                    _apt = (area_corpse_point(state, target)
+                            if target_dead(state, target) else target_pos(state, target))
+                    if _apt is None:
                         print(f"[c{conn_id}] [DESKWORK-D6] the player's skill "
-                              f"{cast['skill_id']}: its target (agent {target}) died "
-                              f"before the completion -- no area opens, nothing lands "
-                              f"(the pre-D6 silence; retail UNVERIFIED) [studies/weapons 42]",
-                              flush=True)
+                              f"{cast['skill_id']}: its target (agent {target}) died and "
+                              f"its row is gone -- no point to open the area at, nothing "
+                              f"lands [studies/weapons 42]", flush=True)
                     else:
                         open_area(send, state, conn_id, PLAYER_AGENT_ID, cast["skill_id"],
-                                  rank, float(found[0]), target_pos(state, target), _aot)
+                                  rank, float(found[0]), _apt, _aot)
                     inflicted = None
                 elif _how is None or launch_player_spell_shot(
                         send, state, conn_id, cast, _how, found[0], rank) is None:
@@ -25294,6 +25330,14 @@ def enemy_attack_tick(send, state, conn_id):
         if target_dead(state, _tid):
             agent["swinging"] = False
             agent["swing_lands_at"] = None
+            if area_cast_outlives_target(agent):
+                # studies/weapons 42: an area over time does not fail on a
+                # corpse (WIKI) -- the cast stays armed and lands at its time;
+                # land_skill opens the area where the target fell.
+                if now >= agent["cast_lands_at"]:
+                    agent["cast_lands_at"] = None
+                    land_skill(send, state, agent_id, agent, conn_id)
+                continue
             agent["cast_lands_at"] = None
             agent["casting"] = None
             continue
@@ -32190,8 +32234,16 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # whose target dies under it is NOT OBSERVED for an NPC; the close we
     # already send for every finished cast is the one message sent.
     # RECONSTRUCTION. A resurrection is the exception by construction: it
-    # returned above, and a corpse is exactly what it wants.
-    if _tid != agent_id and target_dead(state, _tid):
+    # returned above, and a corpse is exactly what it wants. AN AREA OVER TIME
+    # is the other (studies/weapons 42, WIKI "Area of effect" rev 2685457: it
+    # "doesn't fail" when the target dies before the completion) -- it passes
+    # through and opens where the target fell (area_corpse_point), unless the
+    # corpse's row is gone, when it ends here like any other.
+    _aot_corpse = (area_corpse_point(state, _tid)
+                   if (_tid != agent_id and target_dead(state, _tid)
+                       and area_over_time(skill_id, agent_skill_rank(agent, skill_id))
+                       is not None) else None)
+    if _tid != agent_id and target_dead(state, _tid) and _aot_corpse is None:
         agent["casting"] = None
         if _inst:
             # SKILLS-IA: the close an instant skill sends for every finished
@@ -32417,7 +32469,8 @@ def land_skill(send, state, agent_id, agent, conn_id):
         # studies/weapons 42: the ground effect IMMEDIATELY behind the 58
         # (OBSERVED 17/17) and the area on state; the ticks are area_tick's.
         open_area(send, state, conn_id, agent_id, skill_id, _rank, float(damage[0]),
-                  target_pos(state, _tid), _aot, agent=agent)
+                  (_aot_corpse if _aot_corpse is not None else target_pos(state, _tid)),
+                  _aot, agent=agent)
     # The on-body visual rides the same slot for an NPC's cast as for the
     # player's -- behind the 58, ahead of the effect and the damage
     # (ANIMREF-R8). An NPC skill aims at the player, so this is the channel's
