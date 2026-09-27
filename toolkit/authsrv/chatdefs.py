@@ -206,6 +206,11 @@ REFUSE_WEAPON_TYPE = 1985
 # do) and retail answered #1934, [1, 7], 0x00E2. So the SENTENCE is observed
 # for the action and the named-ally FORM is RECONSTRUCTION; sent with every
 # attack-skill refusal at a party body, as the observed 1960/1961 are.
+# AND THE ATTACK-TARGET GATE'S (2026-09-27; authsrv.ATTACK_TARGET_GATE's
+# banner), which sends 1934 for the form that press actually took -- an
+# attack skill at TARGET 0 -- where the id is OBSERVED outright: 1 of the
+# live corpus's 159 attack-skill presses carries target 0, and #1934 answers
+# 1 of that 1 and 0 of the 158 that name a target. Sent always, as 1960 is.
 REFUSE_INVALID_ATTACK_TARGET = 1934
 # 1986 is RECONSTRUCTION from the sentence's own condition, never on any wire
 # we hold: a foe SPELL at a party body, sent only under --refusal-reasons.

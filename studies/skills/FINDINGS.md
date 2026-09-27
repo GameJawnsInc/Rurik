@@ -5041,6 +5041,22 @@ The genuine recharge refusal is a **different** press 0.66 s earlier, and it is
 we hold. Neither route could have caught this alone — the corpus route
 deliberately refused to resolve text, the image route had no wire.
 
+**Re-counted 2026-09-27, when the server took the refusal (the attack-target
+gate, `PLAN-LOG.md`).** OBSERVED over the whole live corpus — 35 captures, 96
+game connections, every one framed to residual 0: **159 attack-skill presses
+(type_code 14), all on 0x0027, none on 0x0046; 1 carries target 0**, the one
+above (20260819T132414 :52606 t=238.496, `[780, 0, 0, 0]`), answered 0x005D
+#1934, 0x005E [1, 7], 0x00E2 [27, 780, 0], no E4. #1934 answers 0 of the 158
+that name a target. So "1 of 1" stands at n=1, now over a denominator that was
+counted rather than carried. Two facts the same window adds, both OBSERVED:
+the operator's selection at the press was **agent 58, an ally** (0x00C1 [0, 0]
+then [58, 0] at t=238.145, 33 ms after their foe 217 died) — the client sent
+target 0 rather than name it; and the press fell **inside skill 780's own
+recharge** (E5 at t=236.303 carried 3 s), the window in which the named press
+at t=237.835 drew the silent release. Retail answered #1934, not the recharge's
+silence: **the target was judged before the recharge** (n=1). What the client
+sends with nothing selected at all is NOT OBSERVED.
+
 **And the schema route had the right fact with the wrong conclusion.** It found
 that 226 and 227 share a dispatch and concluded `0x00E2` was therefore
 disqualified as a carrier of "refused". That sharing is exactly *why* the

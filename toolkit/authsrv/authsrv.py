@@ -21155,6 +21155,46 @@ def cast_anim_msg(prop, caster, target, skill_id):
     return (GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [prop, caster, skill_id])
 
 
+# THE ATTACK-TARGET GATE (2026-09-27, PLAN-LOG "The attack-target gate"). An
+# ATTACK skill (type_code 14) pressed with TARGET 0 names no foe, and retail
+# refuses it at the press: 20260819T132414 :52606 t=238.496, c2s 0x0027
+# [780, 0, 0, 0] answered 0x005D #1934 (invalid_attack_target), 0x005E
+# [1, 7], 0x00E2 [27, 780, 0] -- no E4, no animation, nothing paid. OBSERVED,
+# n=1, and the n is measured, not carried: the live corpus (35 captures, 96
+# game connections, every one framed to residual 0) holds 159 attack-skill
+# presses, all on 0x0027, and exactly 1 carries target 0; #1934 answers 1 of
+# that 1 and 0 of the 158 that name a target. Until this gate the press was
+# ACCEPTED here -- E4, the 0x009F cast animation, a pending cast, and at E5
+# the attack-skill close (46) with nothing landed and the recharge running:
+# a whiff retail never produces (every one of the corpus's 222 attack-skill
+# cast opens names its target, cast_anim_msg's census).
+#
+# ITS PLACE, and the one fact the same press gives about order: skill 780's
+# E5 at t=236.303 started a 3 s recharge, a NAMED press at t=237.835 inside
+# it was released silently (the bare 0x00E2), and the target-0 press at
+# t=238.496, still inside that recharge, drew #1934 instead -- retail judged
+# the target before the recharge. So the gate runs ahead of every gate that
+# judges the skill against the character: the weapon gate and the resource
+# gate below. Its order against the weapon gate is UNVERIFIED (no corpus
+# press fails both); after the knock-down test, because a down body
+# activates nothing whatever it names. Beside the party-target gate
+# (2026-09-26, party_body's banner) and disjoint from it: that gate refuses
+# the NAMED-ally form retail's client never sends, this one the target-0
+# form it does send when an ally is selected.
+#
+# NOT OBSERVED: what the client sends with NOTHING selected. The one witness
+# had an ally selected (0x00C1 [58, 0], an allied NPC carrying 'play') and
+# the client sent target 0 rather than name it; the gate answers target 0
+# whatever the client's reason. The harness `skill:ID` verb defaults its
+# target to 0 (session.py), so a scripted attack skill names its foe --
+# `skill:ID,TARGET` -- or meets this refusal, which is the retail answer to
+# what the bare verb used to script.
+#
+# --no-attack-target-gate is the revert: the acceptance and its whiff, kept
+# because the evidence is one press.
+ATTACK_TARGET_GATE = True
+
+
 def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
     """One skill press, either half (0x0046 USE_SKILL or 0x0027 ATTACK_SKILL).
 
@@ -21192,6 +21232,23 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
     # not from which of the two press opcodes carried it -- the table is the
     # authority on what the skill IS, and both opcodes land here.
     is_attack = _is_attack_skill(skill_id)
+
+    # ---- THE ATTACK-TARGET GATE, ahead of the weapon and resource gates --
+    # An attack skill that names no foe begins nothing and costs nothing
+    # (ATTACK_TARGET_GATE's banner): retail's #1934, the chat pair and the
+    # release, before the first send. OBSERVED 1 of 1. Disjoint from the
+    # party-target gate below, so their order is immaterial: party_body
+    # (state, 0) is None. This is the FORM retail's client sends for the
+    # action that gate refuses -- an ally selected, the press at 0.
+    if ATTACK_TARGET_GATE and is_attack and not target:
+        print(f"[c{conn_id}] REFUSED skill {skill_id}: an ATTACK skill "
+              f"pressed with target 0 names no foe -- retail's #1934 "
+              f"(the attack-target gate, 2026-09-27)", flush=True)
+        _press_row(rec, fired=False, reason="attack-target-0", target=0,
+                   age=0.0, skill=skill_id)
+        refuse_press(send, skill_id, copy, conn_id,
+                     chatdefs.REFUSE_INVALID_ATTACK_TARGET)
+        return
 
     # ---- THE PARTY-TARGET GATE, ahead of the weapon and resource gates ---
     # A skill the client's own target byte aims at a FOE, pressed at a PARTY
@@ -22120,8 +22177,13 @@ def cast_tick(send, state, conn_id):
             # and lands a flight later, and its E5 batch carries NO 46 --
             # retail's bow skill shots are 0x00E5, 0x00A4, 0x00E3 in one
             # batch, 22 of 22, with the attack trio's close beside none of
-            # them (studies/weapons section 13). A press with no target keeps
-            # the close below: a whiffed action still ends.
+            # them (studies/weapons section 13). An attack cast with no target
+            # keeps the close below: a whiffed action still ends. Since the
+            # attack-target gate (2026-09-27) no accepted press makes one --
+            # handle_skill_press refuses target 0 with retail's #1934, and the
+            # press is this entry's only writer -- so the arm runs only under
+            # --no-attack-target-gate, the revert. Kept, not deleted: the
+            # `and target` term is what keeps that arm off the arrow path.
             _shot = player_ranged(state) if (cast["attack"] and target) else None
             if cast["attack"] and ATTACK_FINISH_BATCH and _shot is None:
                 # ANIMREF-R6: 46 OPENS the execution batch, 40 of 40, and it
@@ -41736,6 +41798,12 @@ def main():
         WEAPON_GATE = False
         print("NO WEAPON GATE: an attack skill fires whatever the character "
               "holds (the pre-DAGGERS-B4 arm).")
+    if a.no_attack_target_gate:
+        global ATTACK_TARGET_GATE
+        ATTACK_TARGET_GATE = False
+        print("NO ATTACK-TARGET GATE: an attack skill pressed with target 0 is "
+              "ACCEPTED and whiffs at its E5 (the pre-2026-09-27 arm; retail "
+              "answers it #1934, OBSERVED 1 of 1).", flush=True)
     if a.enemy_health is not None:
         global ENEMY_MAX_HEALTH
         if a.enemy_health < 1:
