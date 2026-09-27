@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=646)   # 2026-09-26 a body's spell meets its TAKER's armour: section_body_spell_taker_armour +11, floor 635 -> 646 = THE CORE again, from the green run (647 with the vault's re-emitted skills table, 636 before)  # 2026-09-25 DESKWORK-D8 step 4 REVIEWED, RV-1..RV-5 fixed: section_caster_held_slot +8 (17 in the section: the search's bound made VISIBLE for checks C and D -- a pick counter that raises past len(bar) + 1, a leaked bound a named FAIL and not a hang; the swing-clock check split over a three-slot bar so a clock hold that stepped past would show; the gate ORDER, world gates before clock gates, in four arms -- the review's Warrior with two heals and 7 energy, the first-pick unpayable heal nobody needs, the unpayable touch slot at 300 u, the crash arm refused by name on its own stamp; the reach-hold line's hostile-side label), floor 628 -> 635 = THE CORE, every check but the real-table one, from the green runs: 636 with the vault's re-emitted skills table, 635 + 1 declared skip on a table that predates it (touch_range stripped from the real rows), and the whole file does not run on an EMPTY vault at all -- section_hold_plane refuses without attribute cost rows, before and after -- so there is no bare-machine number for this file  # 2026-09-24 DESKWORK-D8 step 4, the caster's held-slot stall +9 (section_caster_held_slot: the run's shape 20260924T210744 stepped past, the held slot uncharged and unswung, the touch cast from melee, the hold with every ready slot out of reach, the held-set bound, the re-pick through the resource / heal / swing-clock gates, the REAL vault row -- a declared skip on a bare machine, where the floor is 627), from the green run (628)  # 2026-09-24 DESKWORK-D8 steps 3/4 FIXER +23 (section_leash_caster_review: the caster notice gate CD-1/EV-4, the short-leash no-loop CD-2, lost-contact-walks-home EV-2, revive-clears-the-return CD-8, the NPC_FOLLOW gate CD-9, the per-skill touch/half reach EV-1, the engaged/dwell/plumbing terms CD-5, the standing-fight give-up EV-8), plus the EV-9/CD-4 planted-record check made real, from the green run (619)  # 2026-09-24 DESKWORK-D8 steps 3/4 +44 (section_leash_return 26: the anchor, the dwell give-up, the legs home, the party bodies untouched, the revert arm; section_caster_opening 18: who is a caster, the stand-and-cast, the leg to range, the hold, the revert arm), from the green run (596)  # 2026-09-23 SANDBOX-N2 add +1 (the load-order walk locates _handle_request_players), from the green run  # 2026-09-17 CAST-TARGET-DIED +4 (an ally cast whose target died lands on nothing), from the green run  # 2026-09-15 (probe-walk noise) +2 (the CONTROL is pinned to one name and captured: quiet prints nothing, the failure is named to the caller), from the green run; 2026-09-15 (later) HEROLIB +2 (no 0x001D send site may zero the account library -- the GmSkSlot.cpp:206 crash of run 20260915T201538; the negative control restores the literal and reddens naming the line); 2026-09-15 +2 (offset_y honoured); SLICE-F43 +3 (the wipe countdown and its stop), from the green run   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=650)   # 2026-09-26 a body's spell meets its TAKER's armour: section_body_spell_taker_armour +11, floor 639 -> 650 = THE CORE, from the green run (651 with the vault's re-emitted skills table)  # 2026-09-26 the party-death doors +4 (JARIN-S 5b: the known-bad arm -- kill_agent's default on a hero pays a KILL_REWARD and skips the death tick, and the predicate refuses it; a foe's Empathy (26, the real rows) killing the hero on its own swing through on_attack_triggers -> armour_ignoring_damage; the hostile control on that door; a heal on a Deep Wounded hero that does not clear zero), floor 635 -> 639 = THE CORE, from the green run (640 with the vault's re-emitted skills table, as before); HEAD's pre-fix authsrv.py reddens the two door checks  # 2026-09-25 DESKWORK-D8 step 4 REVIEWED, RV-1..RV-5 fixed: section_caster_held_slot +8 (17 in the section: the search's bound made VISIBLE for checks C and D -- a pick counter that raises past len(bar) + 1, a leaked bound a named FAIL and not a hang; the swing-clock check split over a three-slot bar so a clock hold that stepped past would show; the gate ORDER, world gates before clock gates, in four arms -- the review's Warrior with two heals and 7 energy, the first-pick unpayable heal nobody needs, the unpayable touch slot at 300 u, the crash arm refused by name on its own stamp; the reach-hold line's hostile-side label), floor 628 -> 635 = THE CORE, every check but the real-table one, from the green runs: 636 with the vault's re-emitted skills table, 635 + 1 declared skip on a table that predates it (touch_range stripped from the real rows), and the whole file does not run on an EMPTY vault at all -- section_hold_plane refuses without attribute cost rows, before and after -- so there is no bare-machine number for this file  # 2026-09-24 DESKWORK-D8 step 4, the caster's held-slot stall +9 (section_caster_held_slot: the run's shape 20260924T210744 stepped past, the held slot uncharged and unswung, the touch cast from melee, the hold with every ready slot out of reach, the held-set bound, the re-pick through the resource / heal / swing-clock gates, the REAL vault row -- a declared skip on a bare machine, where the floor is 627), from the green run (628)  # 2026-09-24 DESKWORK-D8 steps 3/4 FIXER +23 (section_leash_caster_review: the caster notice gate CD-1/EV-4, the short-leash no-loop CD-2, lost-contact-walks-home EV-2, revive-clears-the-return CD-8, the NPC_FOLLOW gate CD-9, the per-skill touch/half reach EV-1, the engaged/dwell/plumbing terms CD-5, the standing-fight give-up EV-8), plus the EV-9/CD-4 planted-record check made real, from the green run (619)  # 2026-09-24 DESKWORK-D8 steps 3/4 +44 (section_leash_return 26: the anchor, the dwell give-up, the legs home, the party bodies untouched, the revert arm; section_caster_opening 18: who is a caster, the stand-and-cast, the leg to range, the hold, the revert arm), from the green run (596)  # 2026-09-23 SANDBOX-N2 add +1 (the load-order walk locates _handle_request_players), from the green run  # 2026-09-17 CAST-TARGET-DIED +4 (an ally cast whose target died lands on nothing), from the green run  # 2026-09-15 (probe-walk noise) +2 (the CONTROL is pinned to one name and captured: quiet prints nothing, the failure is named to the caller), from the green run; 2026-09-15 (later) HEROLIB +2 (no 0x001D send site may zero the account library -- the GmSkSlot.cpp:206 crash of run 20260915T201538; the negative control restores the literal and reddens naming the line); 2026-09-15 +2 (offset_y honoured); SLICE-F43 +3 (the wipe countdown and its stop), from the green run   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
 def section_weapon_damage():
@@ -8462,6 +8462,70 @@ def section_hold_plane():
                   "maxima at 85 % (prop 41 = 17, prop 42 = 85) and the flags byte 8 "
                   "LAST -- retail's 307.83 s tick; the row's maximum shrinks with it",
                   f"{[(hex(op), v) for op, v in sent]}")
+        # 5b. THE OTHER DOORS a hero dies through take check 5's template too.
+        # Until 2026-09-26 armour_ignoring_damage's row half and heal_agent's
+        # Deep Wound kill passed kill_agent's DEFAULT (reward=True) for any
+        # row -- a KILL_REWARD, the objective and the morale experience for a
+        # hero's death, and no death tick. The predicate is check 5's; its
+        # known-bad arm is that default, and the predicate must refuse it.
+        KILLRW = authsrv.GAME_SMSG_AGENT_KILL_REWARD
+
+        def _hero_death_ok(sent, st):
+            ops = [op for op, _v in sent]
+            return (st["agents"][HERO]["dead"]
+                    and (STATUS, [HERO, agents.EFFECT_DEAD]) in sent
+                    and KILLRW not in ops
+                    and (authsrv.GAME_SMSG_AGENT_MORALE, [HERO, 85]) in sent
+                    and bool(sent) and sent[-1] == (FLAGS, [HERO, 8]))
+
+        def _foe(**over):
+            row = _koss(name="empath", hero=None, party_slot=None, pos=(200.0, 0.0),
+                        allegiance=agents.ALLEGIANCE_HOSTILE)
+            row.update(over)
+            return row
+
+        st5k = _jw(); st5k["agents"][HERO] = _koss(); sent.clear()
+        authsrv.kill_agent(send, st5k, HERO, st5k["agents"][HERO], 0, time.time())
+        _bad = list(sent)
+        LEDGER.ok(not _hero_death_ok(_bad, st5k) and KILLRW in [op for op, _v in _bad]
+                  and (authsrv.GAME_SMSG_AGENT_MORALE, [HERO, 85]) not in _bad,
+                  "the KNOWN-BAD arm: kill_agent's default on a hero pays a "
+                  "KILL_REWARD and skips the death tick -- the predicate refuses it",
+                  f"{[(hex(op), v) for op, v in _bad]}")
+        # (a) a foe's Empathy (26) on the hero punishes the hero's own swing:
+        # land_swing_on_body -> on_attack_triggers(hero) -> armour_ignoring_damage.
+        st5a = _jw(); st5a["agents"][HERO] = _koss(health=8.0); st5a["agents"][10] = _foe()
+        sent.clear()
+        _ep = authsrv.apply_effect(send, st5a, 10, 26, 0, HERO, 0)
+        sent.clear()
+        _dealt = authsrv.on_attack_triggers(send, st5a, HERO, 0)
+        LEDGER.ok(_ep is not None and _dealt == 10.0 and _hero_death_ok(sent, st5a),
+                  "a foe's Empathy kills the hero on its own swing (10 armour-ignoring "
+                  "on 8 health): the death tick, the flags byte 8 last, NO kill "
+                  "reward -- nobody is paid for a party death (WIKI, GWW 'Experience')",
+                  f"ep {_ep is not None}, dealt {_dealt}, {[(hex(op), v) for op, v in sent]}")
+        # (b) the control: the same door on a HOSTILE still pays the reward
+        st5c = _jw(); st5c["agents"][10] = _foe(health=4.0); sent.clear()
+        authsrv.armour_ignoring_damage(send, st5c, 10, authsrv.PLAYER_AGENT_ID, 10.0, 0,
+                                       "a trigger")
+        LEDGER.ok(st5c["agents"][10]["dead"] and KILLRW in [op for op, _v in sent],
+                  "and the same word killing a HOSTILE still pays the KILL_REWARD "
+                  "(hurt_agent_row's rule keeps its hostile arm)",
+                  f"{[(hex(op), v) for op, v in sent]}")
+        # (c) a foe's Deep Wound on the hero, then a heal that does not clear zero
+        st5d = _jw(); st5d["agents"][HERO] = _koss(); st5d["agents"][10] = _foe()
+        sent.clear()
+        authsrv.apply_condition(send, st5d, HERO,
+                                authsrv.effects.CONDITION_BY_NAME["Deep Wound"],
+                                10.0, 0, 0, by_skill=337)
+        _book = dict(st5d.get("deep_wound") or {})
+        st5d["agents"][HERO]["health"] = -10.0
+        sent.clear()
+        authsrv.heal_agent(send, st5d, HERO, 10, 5.0, 0)
+        LEDGER.ok(_book == {HERO: 20} and _hero_death_ok(sent, st5d),
+                  "a heal on a Deep Wounded hero that leaves it below zero kills "
+                  "through the same template: the death tick, NO kill reward",
+                  f"book {_book}, {[(hex(op), v) for op, v in sent]}")
         # 6. the rise: the flags byte 9 closes it and the grace window starts
         sent.clear()
         authsrv.revive_party_body(send, st3, HERO, st3["agents"][HERO], 0)
