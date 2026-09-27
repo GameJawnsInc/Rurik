@@ -9393,6 +9393,16 @@ carries field3 == its f32 (23/23); an environmental one carries field3 0 (38/38)
 - **Owed**: a loopback run to watch the client draw the twin and the Burning icon on a foe
   under the per-foe rule (a live cast would settle the comparison; a loopback cannot).
 
+### 61.5 CONFIRMED on our server, stable on our client -- 2026-09-27
+
+Harness `20260927T180352` (a W/E's Incendiary Bonds on a foe in a four-strong melee group, then
+Mind Burn): the hex ran out at +3 s and its end struck **4 of 4 foes within 240 u** for 20 with
+Burning 1 s each (rank 0), ahead of the hex's own end; Mind Burn reached the 4 foes within 156 u
+of its target, and the energy clause held for NONE -- the player's 20 against the hostiles'
+invented `ENEMY_ENERGY` 30, the named RECONSTRUCTION doing what it says. The client ran the whole
+fight without an assert (verdict PASS); the frames are a melee cloud with no clean read of the
+per-foe numbers, so the confirmation is the server's log plus the client's stability.
+
 ## 62. SKILLS-CD — Cracked Armor and Dazed: the last two conditions to do something, from the conditions' own records and the wiki's sentences; one inflicter each so a run can reach them (2026-09-27)
 
 **Status: SHIPPED, behind two revert flags, RECONSTRUCTION throughout.** DESKWORK-D6 step 5
@@ -9535,3 +9545,32 @@ reads. The rules are WIKI (the wiki lane's Q1, `d6R-wiki.md`), each with its rev
   id too (hexjoin L4, 9/9) — a class shared by two conditions, not Cracked Armor's own
   (R34-8), which anyone sending it must know first.
 - The Bonus-vs-Core reading of the pieces' +20 (§62.1, CONTESTED).
+
+### 62.5 CONFIRMED on the client, and the cast-time word -- 2026-09-27
+
+Harness runs with a hostile carrying Beguiling Haze 799 and / or Shell Shock 2059 at the player:
+
+- **The icons** (`20260927T180710`): Dazed (8 s) and Cracked Armor (17 s) reach the player as
+  `0x0042`, and the effect bar draws the Cracked Armor icon with a condition's border.
+- **Dazed's on-application interrupt, twice** (`20260927T180710`, `20260927T181301`): a Dazed
+  landing while the player casts Deep Freeze stops it -- `skill 485 interrupts the cast`, the
+  full recharge -- the GWW bug note (rev 2667526), seen on our client.
+- **The doubled cast** (`20260927T181551`): a press inside a live Dazed completes at **4.00 s**
+  (28.432 -> 32.434) where the record says 2.0.
+- **The client's own bar did NOT know** (`20260927T181940`, frames every 0.5 s): over a Dazed
+  4.00 s Fire Storm the client drew its record's 2 s bar -- ~88 % at 2.08 s, full and fading at
+  2.89 s, gone at 3.71 s. OBSERVED.
+- **Retail's answer is on the wire already** -- **SKILLS-CD4**: `0x00A3 [61 GV_CASTTIME, caster,
+  target, seconds]` IMMEDIATELY ahead of the cast's `[60]` announce whenever the time differs
+  from the record's, the completion landing at that time. OBSERVED 3 of 3 on `20260917T224104`
+  :62557 (a body, agent 117, casting at the observer): skill 220 (record 0.75) at 0.375,
+  completion +0.383; 230 (1.0) at 0.5; 229 (2.0) at 1.0, completion +1.019. `cast_time_word`
+  sends it at the four announce sites -- the player's press and queued begin, a hostile, a hero --
+  for a Dazed spell (x2) and a Rusted signet (x2), never for an attack skill (the weapon's time;
+  retail's arrival burst carries no 61, test_castcycle 3/3). `--no-cast-time-word` reverts.
+  RECONSTRUCTION for the player's own cast and for an untargeted one (0x00A2 [61, caster,
+  seconds], the channel-follows-target rule) -- and the player's half is now **CONFIRMED on our
+  client** (`20260927T183801`): the same Dazed Fire Storm with the word draws a bar that fills
+  over the whole 4 s -- ~15 % at +0.8, ~45 % at +2.0, ~65 % at +2.9, ~85 % at +3.6, the completion
+  flash at +4.4. Whether RETAIL sends the word for a player's own cast stays UNVERIFIED (its three
+  are a body's); that the client honours it for the player is now OBSERVED.

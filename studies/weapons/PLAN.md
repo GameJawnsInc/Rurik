@@ -2984,3 +2984,29 @@ run with Healing Signet under Rust); Panic's trigger instant and its reach (othe
 nearby foe) -- a live Panic is the only witness; whether a hex's degeneration shares the
 conditions' cap; the blocked gain's wire (0x00CF 0 vs nothing); B3's 179 / 185; B4's Cracked Armor
 / Dazed.
+
+### 43.2 CONFIRMED on our client -- 2026-09-27 (agent-driven, the owner's go-ahead)
+
+Loopback runs, each question registered before its launch; read from the gamesrv log and the
+frames (every harness verdict PASS, no assert).
+
+- **Deep Freeze on a four-strong melee group** (`20260927T173829`, the player died to the swings
+  before the frames; re-run `20260927T174232` with `--enemy-hit 0.005`): one hex per foe inside
+  312 u -- buff ids 1..4, the `[6, w, 1]` + `[6, w, 12]` pair on each, each foe's `0x0027` at
+  97.92 (x0.34), 10 cold damage each, the impact 414 on each; at the 10 s expiry each foe's `[7]`
+  pair and `0x0027 288.0`. **The client draws the hex**: the selected foe's targeting bar
+  (`c`) fills MAGENTA with the magenta hex triangle while the hex is live (frame at +5 s) and is
+  red with no triangle after the expiry (+12 s). The SLOWED CHASE itself was not photographed --
+  the player never broke out of the melee, so nothing chased -- and stays CORROBORATED (the words
+  are Teinai's Prison's exact shape, section 0 of the D6 spec; the client honours 0x0027,
+  slice F48), not CONFIRMED.
+- **A hostile's Suffering on the player** (`20260927T174700`): the player's `0x0042` (25 s at
+  rank 12), the regen word, and **the effect bar draws the hex** (magenta border, draining
+  timer) with degeneration arrows on the health bar. **It also found a defect**: the hostile's
+  second Suffering, cast while the first was live, DOUBLED the pips (2 -> 4, -8 health/s): the
+  episode readers summed over EPISODES. Fixed in `episodemods.strongest_per_skill` (`475bae62`):
+  one episode per skill -- the highest rank, the later on a tie -- for the hex pips, the signet
+  factor, the attack interval and the movement terms (WIKI GWW "Effect stacking" rev 2739765:
+  most skill effects do not stack; the most recent or most powerful takes precedence). The
+  table still holds the overlapping episode (retail's new buff id, skills 16.1); B2's "two
+  Rusts multiply (x4)" became x2.
