@@ -44,7 +44,7 @@ import effects  # noqa: E402
 from codec import Codec  # noqa: E402
 
 RITUAL, RITUAL_SENTINEL = 22, 10000.0   # type_code; the range effect's "until you leave"
-LEDGER = checks.Ledger("the effect channel", floor=85)   # 2026-09-17: +1, the ritual range-effect exception (RB2 re-pin), from the green run #   # SLICE-F26 +1 (the death kills the lead in flight); SLICE-F25 +2 (0x002D in the death batch; the mirror stops); SLICE-F24 +1 (the death hold); SLICE-F23 +6 (the degen clock across quiet ticks; a corpse does not walk); from the green run
+LEDGER = checks.Ledger("the effect channel", floor=91)   # 2026-09-26: +6, section 4h (a body degenerated to 0 dies through kill_agent: the hostile's template, silent, stripped; the known-bad clamp arm; the party body unpaid; the survivor control), from the green run (91)  # 2026-09-17: +1, the ritual range-effect exception (RB2 re-pin), from the green run #   # SLICE-F26 +1 (the death kills the lead in flight); SLICE-F25 +2 (0x002D in the death batch; the mirror stops); SLICE-F24 +1 (the death hold); SLICE-F23 +6 (the degen clock across quiet ticks; a corpse does not walk); from the green run
 
 
 
@@ -751,6 +751,85 @@ def section_degeneration():
               f"{[round(authsrv._f32_of(v[2]), 4) for v in regens]} -- the "
               f"icon going away and the arrows staying is exactly the bug this "
               f"catches, and it is invisible from the server side")
+
+    print("\n4h. a BODY degenerated to 0 dies -- through kill_agent, silently")
+    # 2026-09-26: the agent-row half of degen_tick only clamped, so a hostile
+    # bled to 0 stood at 0 still swinging and casting. The player's half had
+    # called kill_player all along. WIKI (GWW "Death"): a creature dies when
+    # its health drops to zero, whatever took it there.
+    import agents
+    FOE = 41
+
+    def _degen(allegiance, health):
+        st = {"player_health": 100.0, "player_energy": 50.0,
+              "agents": {FOE: {"name": "degen body", "health": health,
+                               "max_health": 100.0,
+                               "allegiance": allegiance}}}
+        authsrv.effect_table(st).apply(FOE, 480, 3, 9.0, _time.time(),
+                                       type_code=8)         # Burning, 7 pips
+        st["degen_at"] = _time.time() - 2.0                 # 7 x 2 x 2 s = 28
+        out = []
+        authsrv.degen_tick(lambda op, vals, why="", quiet=False:
+                           out.append((op, list(vals))), st, 0)
+        return st, out
+
+    def _killed(st, out):
+        return (st["agents"][FOE].get("dead") is True
+                and (authsrv.GAME_SMSG_AGENT_UPDATE_STATUS,
+                     [FOE, agents.EFFECT_DEAD]) in out
+                and (authsrv.GAME_SMSG_AGENT_UPDATE_FLAGS,
+                     [FOE, authsrv.AGENT_FLAGS_KILLED]) in out)
+
+    st, out = _degen(agents.ALLEGIANCE_HOSTILE, 5.0)
+    ops = [op for op, _v in out]
+    LEDGER.ok(_killed(st, out)
+              and authsrv.GAME_SMSG_AGENT_KILL_REWARD in ops
+              and ops.index(authsrv.GAME_SMSG_AGENT_UPDATE_STATUS)
+              < ops.index(authsrv.GAME_SMSG_AGENT_KILL_REWARD)
+              < ops.index(authsrv.GAME_SMSG_AGENT_UPDATE_FLAGS),
+              "a HOSTILE burned from 5 to 0 DIES: the dead bit, the kill "
+              "reward, the flags byte -- kill_agent's template, in its order",
+              f"dead {st['agents'][FOE].get('dead')}, health "
+              f"{st['agents'][FOE]['health']:.1f}, {[hex(o) for o in ops]}")
+    LEDGER.ok(authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET not in ops,
+              "and NOTHING draws a number on the way there -- no property-16, "
+              "no float word naming a source",
+              f"{[hex(o) for o in ops]} -- isle B4, 'passive ticks are never "
+              f"streamed'; the death is the only new traffic")
+    LEDGER.ok(authsrv.effect_table(st).on_agent(FOE) == [],
+              "and the corpse carries no Burning -- the death strip ran",
+              f"{authsrv.effect_table(st).on_agent(FOE)}")
+    # THE KNOWN-BAD ARM: the pre-fix body -- the clamp with no door behind
+    # it -- is degen_tick with kill_agent doing nothing, and the predicate
+    # above must go red on it or it cannot tell the fix from the bug.
+    saved_kill = authsrv.kill_agent
+    authsrv.kill_agent = lambda *a, **k: None
+    try:
+        bad, bad_out = _degen(agents.ALLEGIANCE_HOSTILE, 5.0)
+    finally:
+        authsrv.kill_agent = saved_kill
+    LEDGER.ok(not _killed(bad, bad_out)
+              and bad["agents"][FOE]["health"] == 0.0
+              and not bad["agents"][FOE].get("dead"),
+              "KNOWN-BAD ARM: the pre-fix clamp leaves the row ALIVE at 0 "
+              "health, and the death predicate is red on it",
+              f"health {bad['agents'][FOE]['health']}, dead "
+              f"{bad['agents'][FOE].get('dead')}, {len(bad_out)} message(s) "
+              f"-- the zombie that kept swinging")
+    st, out = _degen(agents.ALLEGIANCE_PLAYER, 5.0)
+    LEDGER.ok(_killed(st, out)
+              and authsrv.GAME_SMSG_AGENT_KILL_REWARD not in
+              [op for op, _v in out],
+              "a PARTY body degenerated to 0 dies too, and pays NOBODY -- "
+              "hurt_agent_row's reward rule (SLICE-H3)",
+              f"dead {st['agents'][FOE].get('dead')}, "
+              f"{[hex(op) for op, _v in out]}")
+    st, out = _degen(agents.ALLEGIANCE_HOSTILE, 100.0)
+    LEDGER.ok(not st["agents"][FOE].get("dead")
+              and abs(st["agents"][FOE]["health"] - 72.0) < 0.5 and not out,
+              "CONTROL: a hostile with health left after the tick is alive "
+              "and the tick still sends nothing",
+              f"{st['agents'][FOE]['health']:.1f}/100, {len(out)} message(s)")
 
 
 def agents_gv_regen():
