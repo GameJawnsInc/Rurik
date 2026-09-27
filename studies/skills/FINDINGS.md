@@ -5166,6 +5166,21 @@ behind, 3 of 3). At world entry the character and the camera face the same
 way, so this run cannot say which of the two the rule reads; the revive pair
 above says the CAMERA for the re-acquisition.
 
+**Occlusion does not count: the rule is the view cone, not line of sight.**
+`20260927T151007`: one foe at **650 u, bearing +2°, straight behind the tall
+slanted pillar** that stands at the centre of every spawn frame — found
+offline as a walkable spot whose line from the player and from a camera
+300 u behind crosses ≥ 220 u of non-walkable footprint, then checked on the
+frame. The client's first `0x00C1` was **`[10, 0]`**. The entry frame (and a
+3× crop of it) shows no part of the Hatcher's body — only its red name,
+drawn through the stone because it is the selected target — and the compass
+dot straight ahead. Pre-registered: `[200, 0]` (the hero, as with the only
+foe behind the camera) if occlusion counts, `[10, 0]` if the cone alone
+does; void if the body showed (it did not). OBSERVED, n=1, for the world-entry
+selection; the revive re-acquisition presumably shares it, UNVERIFIED. What
+the cone's half-angle is, and whether a range term sits beside it (765 u
+picked, 800 u re-acquired, nothing farther tried), are open.
+
 **And the schema route had the right fact with the wrong conclusion.** It found
 that 226 and 227 share a dispatch and concluded `0x00E2` was therefore
 disqualified as a carrier of "refused". That sharing is exactly *why* the
