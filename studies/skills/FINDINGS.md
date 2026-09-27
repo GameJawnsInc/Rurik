@@ -5057,6 +5057,241 @@ at t=237.835 drew the silent release. Retail answered #1934, not the recharge's
 silence: **the target was judged before the recharge** (n=1). What the client
 sends with nothing selected at all is NOT OBSERVED.
 
+**Answered on loopback the same day** — OBSERVED on our own client (the
+retail binary, our server's world), three harness runs whose presses are CLICKS
+on the skill bar's own icon, so the client decides the target itself:
+`20260927T131849`, `20260927T132325` (a hero in the party), `20260927T132530`
+(no party). Skill 322, a sword or hammer in hand, a practice target at 300 u.
+Every click produced exactly one press (9 of 9), so no stray input.
+- **The client selects by itself.** At world entry it selects the foe with no
+  input (4 of 4 runs, the discovery run `20260927T131504` included). When that
+  foe dies it clears the selection 34–154 ms after the kill and, **0–17 ms
+  later, selects an ally if one is near** — `0x00C1 [0, 0]` then `[200, 0]`,
+  4 of 4 with a hero; `[0, 0]` alone without one, 2 of 2. When the foe
+  revives, the client selects it again (5 of 6). Esc and a click on empty
+  ground do **not** deselect (1 of 1 each).
+- **So retail's witness above was the client's own re-selection.** Its
+  `[0, 0]` then `[58, 0]`, 30 ms after foe 217 died, is this shape; no person
+  selects in 30 ms. "The operator had an ally selected" (this section, the
+  party-target and attack-target entries in `PLAN-LOG.md`) describes the
+  client's state correctly and its cause wrongly.
+- **An attack skill pressed after the kill goes out as TARGET 0** — with the
+  hero auto-selected (`[322, 0, 0, 0]`, 1 of 1, run T132325) and with nothing
+  selected (1 of 1, run T132530). The client does **not** refuse it itself;
+  our gate answers #1934, `[1, 7]`, `0x00E2`, and the client draws **"Invalid
+  attack target."** in red above the player (frames `w002-step7.png` of both).
+  That is retail's t=238.496 sequence reproduced end to end.
+- **With the hero selected and a LIVE foe the client knew, the press named the
+  foe** (`[322, 0, 10, 0]`, then `0x00C1 [10, 0]`; 1 of 1, run T131849). The
+  selection before it read `[200, 10]` — sent 41 ms after the foe revived, not
+  on any click — so the second field of `0x00C1` may be the foe an attack skill
+  would go to. UNVERIFIED, n=1; retail's `[58, 0]` carried 0 and its press went
+  to 0, which fits that reading.
+
+**The second field, checked the same day — it is the AUTO-selection, and an
+attack skill follows it.** The field already had a name from the client's own
+code (`schema/overrides.json`, TARGET_SELECT: `AvSelect.cpp` takes
+`(manualAgentId, autoAgentId)`; field 1 is the effective selection, field 2
+the auto one), which this paragraph should have started from. Four more loopback
+runs, two practice targets, the hero in the party:
+
+| harness run | layout / step | c2s | press names |
+|---|---|---|---|
+| `20260927T134031` | kill 10, click the hero's row, walk | no field 2 after the revive (the hero, `--party-no-fight`, never attacked) | **the hero** `[322, 0, 200, 0]` — the party-target gate's #1934 |
+| `20260927T134450` | 10 near (250 u E), 11 far (450 u W); row click; hero ordered onto 11 | `[10, 0]` at entry, `[200, 10]` on the click, **nothing** when the hero fought 11 | 10 (field 2 = nearest: not discriminating) |
+| `20260927T134632` | mirrored: 11 near, 10 far | `[11, 0]` at entry, `[200, 11]` | 11 (field 2 = nearest: not discriminating) |
+| **`20260927T134814`** | as T134632, then **backpedal 1.5 s** so 10 is nearest | `[11, 0]`, `[200, 11]`, **nothing** during the walk | **11** — at 531 u, with 10 at 169 u |
+
+OBSERVED (loopback, n as stated):
+- **An attack skill with an ally manually selected goes to the auto-selection**,
+  field 2 — 4 of 4, and **not to the nearest foe** (1 of 1 discriminating,
+  T134814). The client then makes that foe its selection (`[foe, 0]`).
+- **With no foe in the auto field it names the ally itself** (1 of 1, T134031),
+  so our client CAN send an attack at a party body; retail's 0 of 528 is its
+  operators never producing that state, and retail's server's answer to it is
+  still NOT OBSERVED.
+- **The auto-selection** is the nearest (or in-front — the two coincided in
+  both layouts) foe at world entry (5 of 5 runs), becomes an ally when that foe
+  dies (4 of 4), takes a revived foe back (5 of 6), and does **not** re-pick as
+  the player walks (1 of 1) or follow the hero's target (1 of 1).
+- **The corpus says the same for attack skills and only for them.** Over all
+  1,473 retail `0x00C1`, the next target-bearing message names field 1 for
+  `0x0026` 369 of 369 and `0x0039` 95 of 95 — but `0x0027` names **field 2** in
+  2 of 159, both with field 1 a hostile (`[100, 102]` → 102, `[70, 72]` → 72).
+  Why a manually selected hostile lost to the auto one there is UNVERIFIED
+  (field 1 not attackable is one reading). `overrides.json`'s "never field 2"
+  was measured on 75 sends and is now qualified in place.
+
+**What gates the re-acquisition of a revived foe — the CAMERA VIEW, not the
+distance (to 800 u).** The auto field takes a revived foe back 17–44 ms after
+`revive agent N` in most runs, and one run (`T134031`) never did. Loopback,
+the hero manually selected, one practice target killed and revived 8 s later.
+A re-acquisition is a `0x00C1` naming the foe within 200 ms of the revive:
+
+| harness run | distance | the character faces the foe | the foe on screen | re-acquired |
+|---|---|---|---|---|
+| 7 revives in the runs above | ~80 u | yes | yes | 7 of 7 |
+| `20260927T144829` (camera orbited `yaw:2250`) | ~80 u | yes | yes — at the frame's bottom edge | yes |
+| **`20260927T144426`** (bow, 800 u, camera still east) | **800 u** | yes — it turned to shoot | **no** — behind the camera | **no** |
+| **`20260927T145037`** (the same, then `yaw:2250`) | **800 u** | yes | **yes** | **yes** |
+| `20260927T134031` (walked past the corpse) | 209 u | no | no | no |
+
+The two bold runs are the discriminating pair — distance, facing and movement
+(none: no movement report, no server approach) held, the camera the only
+change — and they split on it. **OBSERVED, n=1 per arm:** the client
+re-acquires a revived foe that is on screen at 800 u and not one that is off
+screen at 800 u. UNVERIFIED: whether "on screen" is the frustum, a
+line-of-sight test or a range with a view term; and whether the world-entry
+auto-selection uses the same rule — consistent so far (with the only foe 800 u
+behind the camera it picked the HERO, `T144243`/`T144426`; with a foe in view it
+picked the foe, 5 of 5). Two runs are void and excluded: `T144622` (the ←
+key never turned the character — no rotation message, the view unchanged) and
+`T144243` (the bow shot left the foe at 3 of 10 hp). A camera orbit does not
+turn a standing character, so at 80 u the foe stays in view and "near and
+behind" is not reachable this way.
+
+**The world-entry auto-selection uses the same view rule.** At map load, before
+any input, the camera looks along the spawn facing, so "in view" and "behind"
+are fixed by where the foes stand. `20260927T150135` put one foe **381 u
+behind** (agent 10, bearing −157°) and one **765 u in view** with a clear line
+to it (agent 11, bearing −11°), laid out offline with the server's own
+`load_pathmap` + `population.enemy_spots`, which reproduced every live
+placement this session (`--enemies 2 --enemy-offset=-350,-150
+--enemy-cluster 1100`). The client's first `0x00C1` was **`[11, 0]`** — the
+farther foe, on screen — and the entry frame shows it selected with foe 10
+out of frame. Creation order predicted 10, and so did nearest. OBSERVED, n=1
+discriminating; consistent with every other entry this session (the in-view
+nearer foe, 2 of 2 in two-foe layouts; the HERO when the only foe stood 800 u
+behind, 3 of 3). At world entry the character and the camera face the same
+way, so this run cannot say which of the two the rule reads; the revive pair
+above says the CAMERA for the re-acquisition.
+
+**Occlusion does not count: the rule is the view cone, not line of sight.**
+`20260927T151007`: one foe at **650 u, bearing +2°, straight behind the tall
+slanted pillar** that stands at the centre of every spawn frame — found
+offline as a walkable spot whose line from the player and from a camera
+300 u behind crosses ≥ 220 u of non-walkable footprint, then checked on the
+frame. The client's first `0x00C1` was **`[10, 0]`**. The entry frame (and a
+3× crop of it) shows no part of the Hatcher's body — only its red name,
+drawn through the stone because it is the selected target — and the compass
+dot straight ahead. Pre-registered: `[200, 0]` (the hero, as with the only
+foe behind the camera) if occlusion counts, `[10, 0]` if the cone alone
+does; void if the body showed (it did not). OBSERVED, n=1, for the world-entry
+selection; the revive re-acquisition presumably shares it, UNVERIFIED. What
+the cone's half-angle is, and whether a range term sits beside it (765 u
+picked, 800 u re-acquired, nothing farther tried), are open.
+
+**The cone is 60°, apex at the PLAYER, axis along the view — and it is not the
+screen.** Seven more world-entry runs, one foe each, the hero present as the
+fallback, the camera read live with `toolkit/clientscan/fovread.py` at map
+load: position (9436, 8077, −805.4), target (9826, 8077, −716.6) in every run,
+to the last digit — the camera sits 390 u behind the player, looks along +x,
+pitched 12.8° down, FOV 75.000° horizontal.
+
+| harness run | foe from the player | foe from the camera axis | on screen | picked |
+|---|---|---|---|---|
+| `20260927T151714` | 500 u, 55.00° | 31.2° | yes | **foe** |
+| `20260927T151913` | 300 u, 75° | 30.6° | **yes** (frame: right edge) | **hero** |
+| `20260927T152104` | 500 u, 65.0° | — | — | hero |
+| `20260927T152233` | 500 u, 60.004° | — | — | hero |
+| `20260927T152404` | 500 u, 57.48° | — | — | foe |
+| `20260927T152535` | 500 u, 58.98° | — | — | foe |
+| `20260927T152712` | 500 u, 59.90° | — | — | foe (after `[200, 0]` in the same instant) |
+
+- **Not the frustum:** `T151913`'s foe stood plainly on screen (30.6° off the
+  camera axis, inside the 37.5° half-FOV) and was passed over, while
+  `T151714`'s at 31.2° was taken. No cone with its apex at the CAMERA orders
+  those two; one at the PLAYER does (55° in, 75° out).
+- **The half-angle is 60°**, bracketed (59.90°, 60.004°) at 500 u — a
+  boundary at `dot(axis, foe − player) > 0.5` exactly, which is what it looks
+  like. The only same-instant flip (`[200, 0]` then `[10, 0]`) came at 59.90°,
+  a hair inside it. OBSERVED, n=1 per angle; placements exact (the server's
+  own positions, integer offsets, ≈0.115° per unit at 500 u).
+- **The axis** is the view direction — the revive pair above (the camera
+  turned, the character not) says so; at map load the character faces the
+  same way, so these runs cannot separate the two on their own.
+- "On screen" in the paragraphs above was the right answer for the questions
+  they asked (every foe they tested sat well inside or well outside 60°) and
+  the wrong mechanism. Open: a range term (765 u picked; nothing farther
+  tried), and whether the cone is the same for the revive re-acquisition
+  (presumed).
+
+**And the cone has a radius: 1,250 u, to ±0.035 u.** Nine more world-entry
+runs, one foe each at player bearing +40° (20° inside the cone; the last two
+within 1° of it), the hero the fallback, the camera identical to the runs
+above:
+
+| harness run | distance from the player | picked |
+|---|---|---|
+| `20260927T153515` | 1,000.10 (the +40° positive control) | foe |
+| `20260927T153639` | 1,049.78 | foe |
+| `20260927T153931` | 1,240.04 | foe |
+| `20260927T154051` | 1,247.09 | foe |
+| `20260927T154155` | 1,249.26 | foe |
+| **`20260927T154339`** | **1,249.962** | **foe** |
+| **`20260927T154500`** | **1,250.029** | **hero** |
+| `20260927T153806` | 1,250.67 | hero |
+| `20260927T153349` | 1,499.83 | hero |
+
+OBSERVED, n=1 per distance, placements exact (integer offsets from an integer
+spawn; the player never moves). Excluded on the way: earshot (1,012 — 1,049.78
+was picked) and the WIKI casting range (1,248, `PARTY_RANGED_REACH` — 1,249.26
+was picked) taken centre to centre. The edge sits 2 u past the WIKI number, and
+whether it is the same constant with a different convention is UNVERIFIED. The
+plaza is flat, so 2-D and 3-D distance coincide here. So the world-entry
+auto-selection eligibility is: a foe within **1,250 u of the player and within
+60° of the view axis**, occlusion ignored; with none, a nearby ally.
+
+**The revive re-acquisition uses the same cone.** Four runs, each foe killed by
+a bow Power Shot from where the player spawned (`--player-weapon starter_bow
+--skills 394 --enemy-health 3`, `C` to select it first), then no input through
+its revive; the camera read at entry AND around the revive, identical both
+times (the axis still +x); no player movement report and no server approach in
+any run. A re-acquisition is a `0x00C1` naming the foe within 200 ms of
+`revive agent 10`:
+
+| harness run | foe from the player | re-acquired | world-entry pick, same run |
+|---|---|---|---|
+| `20260927T155606` | 500 u, **55°** | **yes**, 19 ms | foe |
+| `20260927T155720` | 500 u, **65°** | **no** | hero |
+| `20260927T155833` | **1,199.58 u**, 40° | **yes**, 35 ms | foe |
+| `20260927T155949` | **1,300.35 u**, 40° | **no** | hero |
+
+All four pre-registered, all four as predicted: the revive's eligibility
+matches the entry cone to ±5° and ±50 u (OBSERVED, n=1 per point), and in each
+run the two decisions agreed. The finer edges (60° to 0.1°, 1,250 u to
+0.035 u) were measured at entry only.
+
+**The ally fallback is a plain radius: an ally within 200 u of the player, any
+direction.** With no foe in the cone, the entry selection falls to an ally; its
+rule measured with one hero held in place (`--no-hero-follow`,
+`--hero-body-offset=DX,0` — the first hero's slot is 0, so `DY` does nothing
+for it, which voided one designed probe), no foe at all, the camera identical
+to every run above. Positions from the player; create positions decoded from
+the capture:
+
+| hero at | harness run | picked |
+|---|---|---|
+| 0 u (on the player) | `20260927T161554` | yes |
+| ~110 u, 90° (the formation slot, reached ~0.6 s before the pick) | `T144426`, `T144243`, `T151913` | yes |
+| 150 u **behind**, 180° | `20260927T163231` | yes |
+| 150, 160, 180, 190 u ahead | `T162337`, `T162501`, `T162642`, `T162827` | yes |
+| **199 u** ahead | `20260927T163047` | **yes** |
+| **200 u** ahead | `20260927T162228` | **no** |
+| 250, 400 u ahead | `T162100`, `T161843` | no |
+| 400, 600 u behind | `T161944`, `T161349` | no |
+| 866 u ahead, on screen | `20260927T161708` | no |
+
+OBSERVED, n=1 per point: **`d < 200`** (the edge in (199, 200]), measured
+from the PLAYER — the −400 hero stood 10 u from the camera and was not taken —
+with **no direction term** (0°, 90°, 180° all taken inside it) and no view
+term (866 u on screen was not). Excluded on the way: the adjacent range (156 u
+— 160 was taken). **A foe in the cone outranks an ally in the radius**
+(`20260927T150135` took the foe with the hero at its slot). With neither,
+nothing is selected. Open: which ally when several are inside 200 u (one hero
+here), and whether a non-party ally counts — retail's witness, agent 58, was an
+allied NPC carrying `play`, so it very likely does.
+
 **And the schema route had the right fact with the wrong conclusion.** It found
 that 226 and 227 share a dispatch and concluded `0x00E2` was therefore
 disqualified as a carrier of "refused". That sharing is exactly *why* the
@@ -6018,6 +6253,8 @@ is 1 — CORROBORATED, not exact, for that reason.)
 answer. The shape: **CORROBORATED** single elemental rating (§43.4's caveat is
 the residual). OUTGOING (`hit_enemy(exact=…)`) is unchanged and still blocked on a
 creature armour value that no channel carries.
+
+**2026-09-27: OUTGOING closed, and the objection above answered rather than waived.** No channel carries a creature's armour -- still true -- but the loop the objection feared (wiki armour back-computed from damage, then used to predict damage) is broken by the owner's OWN words: sixteen Dancing Daggers hits on 20260817T183756 / 20260819T132414 (a level-2 player, Deadly Arts 1, stated 7) land 7 on a level-2 Necromancer and a level-1 Monk and 6 on a level-3 Warrior. The exact word misses the Warrior; 3 x level against the creature formula reproduces all sixteen once the Warrior's +20 is typed vs. physical (GWW "Basic armor", which the creature formula's "Armor bonus" links to). `player_spell_amount`, `--player-spell-exact`, `--untyped-creature-armour`; test_weapons section 31 re-reads the sixteen from the tape. PLAN-LOG 2026-09-27.
 
 ### 43.8 SKILLS-OB — whose connection it is: the instrument's player rule was wrong, and four readers inherited it (2026-09-23)
 

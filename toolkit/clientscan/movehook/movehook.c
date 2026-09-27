@@ -999,9 +999,22 @@ static int put(HANDLE h, const void *p, DWORD n)
     return WriteFile(h, p, n, &done, NULL) && done == n;
 }
 
-/* Serialise `n` records to <dir>\movehook.bin. Same v6 layout as before, byte
- * for byte -- readhook.py is unchanged. */
-static int write_bin(const char *dir, DWORD n)
+/* THE TEMP NAME EACH WRITER RENAMES FROM -- TWO, NOT ONE (2026-09-27).
+ *
+ * The temp file is opened with share mode 0, and a handle outlives the thread
+ * that opened it. So a worker terminated mid-snapshot -- which is what process
+ * exit does to it -- leaves PART_RUN open for the rest of the process's life,
+ * and a detach write aiming at the same name failed with a sharing violation
+ * and wrote nothing, keeping the last snapshot. The detach path is the only
+ * writer that can run while a dead writer's handle is still open, so it gets
+ * its own name. test_movehook.py §16(f3) holds PART_RUN open exclusively and
+ * exits the host, which is that state manufactured. */
+#define PART_RUN  "\\movehook.bin.part"
+#define PART_EXIT "\\movehook.bin.exit.part"
+
+/* Serialise `n` records to <dir>\movehook.bin, through the temp file `part`.
+ * Same v6 layout as before, byte for byte -- readhook.py is unchanged. */
+static int write_bin(const char *dir, DWORD n, const char *part)
 {
     char path[MAX_PATH];
     HANDLE h;
@@ -1024,7 +1037,7 @@ static int write_bin(const char *dir, DWORD n)
      * reader never sees a half-flushed snapshot. */
     {
         char tmp[MAX_PATH];
-        path_join(tmp, sizeof tmp, dir, "\\movehook.bin.part");
+        path_join(tmp, sizeof tmp, dir, part);
         h = CreateFileA(tmp, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
                         FILE_ATTRIBUTE_NORMAL, NULL);
         if (h == INVALID_HANDLE_VALUE) {
@@ -1081,7 +1094,7 @@ static void snapshot(const char *dir)
 {
     LONG n = g_n;
     n = (n > (LONG)FLUSH_SLACK) ? n - (LONG)FLUSH_SLACK : 0;
-    write_bin(dir, (DWORD)n);
+    write_bin(dir, (DWORD)n, PART_RUN);
 }
 
 /* The one report that is still written when the configured output path is not
@@ -1211,7 +1224,7 @@ static DWORD WINAPI worker(LPVOID unused)
 
     /* The final write. No FLUSH_SLACK here: the sites are disarmed and the
      * in-flight sleep is done, so every claimed slot is filled. */
-    if (write_bin(dir, (DWORD)g_n))
+    if (write_bin(dir, (DWORD)g_n, PART_RUN))
         InterlockedExchange(&g_final_written, 1);
     write_status(dir, g_final_written ? "finished, capture written"
                                       : "finished, BUT THE WRITE FAILED");
@@ -1301,11 +1314,13 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID reserved)
          * IT READS NOTHING THE WORKER SETS. g_outdir and g_base come from
          * DLL_PROCESS_ATTACH; the worker may have died anywhere, including
          * inside its controls before it armed a site (§16(f2) exits the host
-         * exactly there). */
+         * exactly there). Nor does it share a file with it: the worker may
+         * have died holding PART_RUN open, so this writes through PART_EXIT
+         * (§16(f3)). */
         if (!g_final_written) {
             LONG n = g_n;
             n = (n > (LONG)FLUSH_SLACK) ? n - (LONG)FLUSH_SLACK : 0;
-            write_bin(g_outdir, (DWORD)n);
+            write_bin(g_outdir, (DWORD)n, PART_EXIT);
         }
     }
     return TRUE;

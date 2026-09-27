@@ -2142,6 +2142,33 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "armor_rating, else the creature formula: the swing "
                          "path's rule) less the spell's own penetration; the "
                          "player taker is unchanged either way.")
+    ap.add_argument("--player-spell-exact", action="store_true",
+                    help="REVERT (2026-09-27): the PLAYER's spell words onto a "
+                         "hostile deal the spell's stated amount (hit_enemy's "
+                         "`exact`, no armour term) -- the wire of every run before "
+                         "2026-09-27. By default an armour-respecting spell lands "
+                         "amount x 2^((3 x the player's level - the target's "
+                         "rating) / 40), the rating the body path reads less the "
+                         "spell's own penetration.")
+    ap.add_argument("--untyped-creature-armour", action="store_true",
+                    help="REVERT (2026-09-27): a Warrior CREATURE's +20 armour meets "
+                         "every hit whatever its type -- the reading every run before "
+                         "2026-09-27 made. By default a spell, a weapon hit or a "
+                         "preparation's own damage that is not physical (a wand's "
+                         "chaos, a staff's holy, Kindle or Ignite Arrows' fire) "
+                         "meets 3 x level: GWW types the Warrior's bonus "
+                         "'vs. physical damage', and a level-3 Warrior took the "
+                         "owner's Dancing Daggers as 6 of 7 on 20260819T132414, "
+                         "where the untyped 29 gives 4. A Ranger CREATURE's bonus "
+                         "likewise reads as GWW's 'Armor +30 (vs. elemental "
+                         "damage)' -- 3 x level against every other type, + 30 "
+                         "against an elemental one -- where this flag restores the "
+                         "untyped + 10 on every hit. An Assassin, Dervish or "
+                         "Paragon CREATURE has no armour line on GWW's 'Basic "
+                         "armor' at all and meets 3 x level on every hit; this "
+                         "flag restores the + 10 / + 10 / + 20 its max-armour "
+                         "column gave. Party bodies are unchanged "
+                         "either way (a hero's armour base is 3 x level + 20).")
     ap.add_argument("--no-weakness-attributes", action="store_true",
                     help="Weakness cuts attack damage only: no rank is "
                          "lowered and no 0x003B batch is sent. The revert for "
@@ -2224,7 +2251,9 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "attacker's item deals (its 587 word) -- the reading every "
                          "run before 2026-09-19 made. With it on, a hostile bow "
                          "whose 587 reads 3 (cold) is not met by the pieces' "
-                         "+20 vs. physical.")
+                         "+20 vs. physical -- and (2026-09-27) a preparation's "
+                         "own word meets its own type (Kindle Arrows' fire the "
+                         "elemental 25), which this flag reads physical too.")
     ap.add_argument("--no-unmet-requirement", action="store_true",
                     help="WEAPONS-W4 REVERT: an item's 633 requirement is read and "
                          "printed at launch and costs nothing -- a weapon whose "

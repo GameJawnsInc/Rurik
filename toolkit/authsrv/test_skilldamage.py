@@ -1070,7 +1070,7 @@ def main():
         i_std = src.index('elif target and found and found[1] == "standalone":')
         i_aotl = src.index("                elif _aot is not None:", i_std)
         i_adjl = src.index("                elif _adj is not None and not target_dead(state, target):", i_std)
-        i_std_hit = src.index("_st_res = hit_enemy(send, state, target, conn_id, exact=float(found[0]),", i_std)
+        i_std_hit = src.index("_st_res = hit_enemy(send, state, target, conn_id, exact=player_spell_amount(", i_std)
         check(i_std < i_aotl < i_adjl < i_std_hit
               and src.count("                elif _adj is not None and not target_dead(state, target):") == 1
               and src.count("    if _adj_terms is not None:                                # studies/skills 61") == 1

@@ -3180,21 +3180,22 @@ try:
     i_bsa, i_lsob, i_he = (_idx(src, "def body_spell_armour("), _idx(src, "def land_swing_on_body("),
                            _idx(src, "def hit_enemy("))
     check(_lock(src.count("cracked_body_armour(state, ") == 6           # five sites + the def
-          and _idx(src, "def scythe_extra_hit(") < _idx(src, "cracked_body_armour(state, aid, foe.get(")
-          < _ridx(src, "cracked_body_armour(state, aid, foe.get(") < i_bsa
-          < _idx(src, "cracked_body_armour(state, tid, body_armour_rating(row))") < i_he
-          < _idx(src, "cracked_body_armour(state, target_id, agent.get(") < i_lsob
+          and _idx(src, "def scythe_extra_hit(") < _idx(src, "cracked_body_armour(state, aid, creature_typed_rating(foe.get(")
+          < _ridx(src, "cracked_body_armour(state, aid, creature_typed_rating(foe.get(") < i_bsa
+          < _idx(src, "rating = cracked_body_armour(state, tid, rating)") < i_he
+          < _idx(src, "cracked_body_armour(state, target_id, creature_typed_rating(agent.get(") < i_lsob
           < _idx(src, "armour = cracked_body_armour(state, tid, armour)")
           and src.count("cracked=cracked_penalty(state, PLAYER_AGENT_ID)") == 4
           and _idx(src, "armour = penetrated_armour(armour, (body_weapon_items(agent) or (None,))[0],", i_ls)
           < _idx(src, "armour += casting_armour_penalty(state)", i_ls)
           and "return spell_armour_for(skill_id, state)" in src[i_bsa:i_bsa + 1500]
-          and "armour = body_armour_rating(row)" in src[i_lsob:i_lsob + 3000]
+          and "armour = creature_typed_rating(body_armour_rating(row), row," in src[i_lsob:i_lsob + 3000]
           and 'row.get("armor_rating")' not in inspect.getsource(authsrv.land_swing_on_body)
           and "CRACKED_ARMOR = False" in src[_idx(src, "    if a.no_cracked_armor:", _idx(src, "\ndef main():")):
                                              _idx(src, "    if a.no_cracked_armor:", _idx(src, "\ndef main():")) + 160]),
           "the source: the five body sites through cracked_body_armour (the scythe's extra hit, "
-          "the preparation splash, body_spell_armour, hit_enemy, land_swing_on_body; 6 with the def), the "
+          "the preparation splash, body_spell_armour (in main's row_spell_armour since the merge, the typed "
+          "rating then cracked), hit_enemy, land_swing_on_body; 6 with the def), the "
           "player's four reads passing the penalty INTO the leaf, land_swing's casting penalty "
           "still after the penetration, test_agentlife's literals intact, main() flips "
           "CRACKED_ARMOR = False under --no-cracked-armor (M10)")

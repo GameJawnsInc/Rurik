@@ -99,6 +99,103 @@ def creature_armor_rating(npc, override=None):
     return float(3 * int(npc["level"]) + bonus)
 
 
+# ---- A CREATURE WARRIOR'S +20 MEETS PHYSICAL DAMAGE ONLY (2026-09-27) --------
+#
+# The banner above reads each profession's bonus off "Basic armor"'s max-AR
+# column as one untyped number. The creature formula's own link says otherwise
+# for the Warrior: WIKI (GWW "Armor rating": "creature AR = 3 * Level + [[Armor
+# bonus]], where armor bonus is profession specific"; "Armor bonus" -> "Basic
+# armor", read 2026-09-27) types the Warrior's as "Armor +20 (vs. physical
+# damage)" -- and the Ranger's as "+30 (vs. elemental damage)". OBSERVED, and
+# independent of the wiki: on 20260819T132414 a level-2 player's Dancing
+# Daggers (earth, 7 at Deadly Arts 1) landed 6 on both agents of definition
+# 3113, a LEVEL-3 WARRIOR, five of five -- where 3 x 3 + 20 = 29 gives
+# trunc(7 x 2^((6 - 29)/40)) = 4 and 3 x 3 = 9 gives 6 (the elemental rating
+# is pinned to (6, 14.9] by the one value); the level-2 Necromancer and level-1
+# Monk beside it took 7, as both readings say. CORROBORATED for the Warrior,
+# one definition. So a creature records the part that meets physical damage
+# only, and a hit of any other type subtracts it -- a spell by its own type,
+# and (the same day) a weapon hit by its 587: a wand's chaos, a staff's holy
+# (authsrv.creature_typed_rating), and a preparation's own damage by ITS type
+# (Kindle / Ignite Arrows' fire). A hammer or a sword still meets the whole
+# number. The Ranger's +30 elemental, and whether the 70 / 80
+# columns of the Assassin, Dervish and Paragon are bonuses at all under the
+# typed reading, had no witness and were not changed here (both typed below,
+# the same day).
+CREATURE_BONUS_VS_PHYSICAL = frozenset({1})       # the Warrior
+
+
+def creature_physical_bonus(npc, override=None):
+    """The part of creature_armor_rating's number that meets PHYSICAL damage
+    only: the Warrior's +20. 0 for every other profession, for a content
+    override (a measured rating is one number and says nothing typed), or a
+    row with no level."""
+    if override is not None or not npc or npc.get("level") is None:
+        return 0.0
+    if npc.get("profession") not in CREATURE_BONUS_VS_PHYSICAL:
+        return 0.0
+    return float(ARMOR_BONUS_BY_PROFESSION.get(npc.get("profession"), 0))
+
+
+# ---- AND A CREATURE RANGER'S BONUS IS "+30 VS. ELEMENTAL", NOT AN UNTYPED +10 (2026-09-27)
+#
+# The same table's other typed line: WIKI (GWW "Basic armor", the page the
+# creature formula's "Armor bonus" defers to, read 2026-09-27) gives the Ranger
+# "Armor +30 (vs. elemental damage)" and no other armour line. The +10 the
+# creature banner above reads for it comes off the max-AR COLUMN (70 - 60) --
+# the reading def 3113 refuted for the Warrior (the column's +20 as a base
+# bonus gives its elemental 29; the tape says <= 14.9). So under the typed
+# reading a Ranger creature meets 3 x level against a physical, chaos, dark or
+# holy hit and 3 x level + 30 against an elemental one: the row records the
+# untyped +10 to WITHDRAW (creature_untyped_bonus) and the +30 an elemental
+# hit adds (creature_elemental_bonus); authsrv.creature_typed_rating applies
+# both. NO witness of its own: a recon over 36 live captures found one clean
+# physical sequence on a Ranger creature (the owner's level-3 sword on a
+# level-2 Ranger, def 4397: 3 / 4, the same band under every reading) and no
+# elemental hit with known inputs. WIKI, by the reading the Warrior's witness
+# supports.
+CREATURE_BONUS_VS_ELEMENTAL = {2: 30}             # the Ranger
+
+
+# ---- AND AN ASSASSIN, DERVISH OR PARAGON CREATURE HAS NO PROFESSION BONUS (2026-09-27)
+#
+# The table's other three columns: WIKI (GWW "Basic armor", read 2026-09-27)
+# gives the Assassin 10...70, the Dervish 10...70 and the Paragon 20...80, and
+# their rows carry energy, energy recovery and (the Dervish's) health -- NO
+# armour line of any type. The 10 / 10 / 20 the creature banner above reads
+# for them is those columns less 60: the reading def 3113 refuted for the
+# Warrior. Under the typed reading an Assassin, Dervish or Paragon creature
+# meets 3 x level on every hit, so its row records its whole column bonus to
+# WITHDRAW (creature_untyped_bonus), as the Ranger's +10 is -- every hit on
+# one now meets 10 less armour (20 on a Paragon), physical included.
+# NO witness: a recon over 36 live captures finds 43 definitions of the three
+# and not one hostile -- the 13 ever created are party members and town NPCs
+# -- so no damage word lands on one. WIKI, by the Warrior's reading.
+CREATURE_UNTYPED_WITHDRAWN = frozenset({2, 7, 9, 10})   # Ranger, Assassin, Paragon, Dervish
+
+
+def creature_untyped_bonus(npc, override=None):
+    """The part of creature_armor_rating's number the typed reading WITHDRAWS
+    from every hit, physical too: the Ranger's max-column +10, and the whole
+    column bonus of an Assassin (+10), a Dervish (+10) or a Paragon (+20),
+    none of which is typed. 0 for every other profession, a content
+    override, or a row with no level."""
+    if override is not None or not npc or npc.get("level") is None:
+        return 0.0
+    if npc.get("profession") not in CREATURE_UNTYPED_WITHDRAWN:
+        return 0.0
+    return float(ARMOR_BONUS_BY_PROFESSION.get(npc.get("profession"), 0))
+
+
+def creature_elemental_bonus(npc, override=None):
+    """What an ELEMENTAL hit meets on a creature beyond its rating: the
+    Ranger's +30. 0 for every other profession, a content override, or a row
+    with no level."""
+    if override is not None or not npc or npc.get("level") is None:
+        return 0.0
+    return float(CREATURE_BONUS_VS_ELEMENTAL.get(npc.get("profession"), 0))
+
+
 # ---- THE PLAYER'S OWN ARMOUR, which nothing read until 2026-08-20 ----------
 #
 # Five pieces went out carrying `Armor: 25` and `Armor +20 (vs. physical
