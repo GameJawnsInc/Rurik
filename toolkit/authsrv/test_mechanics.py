@@ -29,7 +29,7 @@ import agents       # noqa: E402
 import effects      # noqa: E402
 
 # Floor set from a real green run (39 checks, 2026-08-22; 99 checks, 2026-09-09 SKILLS-DW; 129 checks, 2026-09-10 SKILLS-BL; 153 checks, 2026-09-10 SKILLS-RC; 162 checks, 2026-09-10 SKILLS-MA).
-LEDGER = checks.Ledger("effect mechanics", floor=257)  # 2026-09-26: +1, sec.16 (a HOSTILE's heal-kill under Deep Wound still pays the kill reward -- the control on hurt_agent_row's rule at heal_agent's door; the party arm is test_agentlife JARIN-S 5b), from the green run  # 2026-09-23: +11, SKILLS-MC sec.34 (Mend Condition: heal IF removed, the no-condition control, the other-ally byte, the revert), from the green run  # 2026-09-17: +5, RUN-SKILLS-WKL sec.33 + WKL1-2 (a cast that lifts Weakness heals at the weakened rank), from the green run  # 2026-09-17: +12, SKILLS-WK sec.31-32 (Weakness takes one off every attribute), from the green run  # 2026-09-16: +14, SLICE-F48 sec.8b (movement speed on the wire), from the green run  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
+LEDGER = checks.Ledger("effect mechanics", floor=297)  # 2026-09-27: +40, DESKWORK-D6 B2 sec.35-38 (Suffering's hex pips, Soothing Images' adrenaline block, Rust's explicit damage + signet x2, Panic's chain), from the green run  # 2026-09-26: +1, sec.16 (a HOSTILE's heal-kill under Deep Wound still pays the kill reward -- the control on hurt_agent_row's rule at heal_agent's door; the party arm is test_agentlife JARIN-S 5b), from the green run  # 2026-09-23: +11, SKILLS-MC sec.34 (Mend Condition: heal IF removed, the no-condition control, the other-ally byte, the revert), from the green run  # 2026-09-17: +5, RUN-SKILLS-WKL sec.33 + WKL1-2 (a cast that lifts Weakness heals at the weakened rank), from the green run  # 2026-09-17: +12, SKILLS-WK sec.31-32 (Weakness takes one off every attribute), from the green run  # 2026-09-16: +14, SLICE-F48 sec.8b (movement speed on the wire), from the green run  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
 check = checks.adopt(LEDGER)
 
 FRENZY, RUSH, ROF, GLYPH, IGNITE, FAINT = 346, 319, 307, 200, 431, 135
@@ -2164,5 +2164,452 @@ try:
     authsrv.CONDITION_HEAL_RULE = True
 finally:
     authsrv.CONDITION_HEAL_RULE, authsrv.ENERGY = saved
+
+
+# ---------------------------------------------------------------------------
+# 35-38: DESKWORK-D6 step 4, B2 (2026-09-27; studies/weapons/PLAN.md 43): the four
+#        area hexes that need a mechanism of their own. NONE was cast on any live
+#        tape (aotjoin P8), so every shape here is RECONSTRUCTION from the wiki's
+#        sentence and the client's record, and every check names its known-bad
+#        arm (the flag off) so the rule is shown load-bearing, not decorative.
+SUFFER, SOOTHE, RUST, PANIC = 108, 56, 204, 52
+HEAL_SIG, RES_SIG = 1, 2          # signets: type_code 7, OBSERVED 4 of 4
+BURN = effects.CONDITION_BY_NAME["Burning"]
+REGEN_FLOAT = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT
+
+
+def hex_on(state, sid, agent=PLAYER, rank=12, caster=None, seconds=8.0):
+    return state["effects"].apply(agent, sid, rank, seconds, time.time(),
+                                  type_code=4, caster=caster)
+
+
+def hostile(state, aid, pos=(0.0, 0.0), **more):
+    row = {"name": "t", "dead": False, "died_at": 0.0, "health": 100.0,
+           "max_health": 100.0, "last_hit": 0.0, "armor_rating": 60, "pos": pos,
+           "allegiance": agents.ALLEGIANCE_HOSTILE, "attacks_back": True}
+    row.update(more)
+    state["agents"][aid] = row
+    return row
+
+
+print("== 35. Suffering (108): a `Health degeneration` HEX degenerates its wearer -- the "
+      "explicit endpoints, one cap with the conditions, Faintheartedness lit up ==")
+saved = (authsrv.HEX_DEGENERATION, authsrv.EFFECTS)
+try:
+    authsrv.HEX_DEGENERATION = True
+    authsrv.EFFECTS = True
+    row = agents.WORLD.get("skill_effect", str(SUFFER))
+    rec = agents.WORLD.get("skills", str(SUFFER))
+    check(row.get("scale_means") == "Health degeneration"
+          and (row.get("health_degeneration0"), row.get("health_degeneration15")) == (0, 3)
+          and (int(rec["scale0"]), int(rec["scale15"])) == (0, 3)
+          and not int(rec["skill_arguments"]) & 2,
+          "the row carries the client's own scale0/15 (0, 3) EXPLICITLY, because the slot's "
+          "bit is clear with differing endpoints -- the shape both readers refuse")
+    try:
+        authsrv.skill_scale_value(SUFFER, 12)
+        check(False, "skill_scale_value must refuse Suffering's scale slot")
+    except ValueError:
+        check(True, "and skill_scale_value DOES refuse it (a disabled set is not a progression) "
+                    "-- the explicit field is the only way the number enters")
+    st = fresh_state()
+    check(authsrv.hex_pips(st, PLAYER) == 0.0 and authsrv.net_pips(st, PLAYER) == 0.0,
+          "no episodes: no hex pips, no net pips")
+    got = {}
+    for r in (0, 5, 12, 15):
+        st = fresh_state()
+        hex_on(st, SUFFER, rank=r)
+        got[r] = authsrv.hex_pips(st, PLAYER)
+    check(got == {0: 0.0, 5: 1.0, 12: 2.0, 15: 3.0},
+          "Suffering's pips by the client's formula on the explicit endpoints: 0 / 1 / 2 / 3 "
+          "at rank 0 / 5 / 12 / 15 (2.4 rounds to 2, 1.0 exact)", f"{got}")
+    sent, send = collector()
+    st = fresh_state()
+    hex_on(st, SUFFER, rank=15)
+    rate = authsrv.push_regen(send, st, PLAYER, 0)
+    check(abs(rate - (-0.06)) < 1e-9 and len(sent) == 1 and sent[0][0] == REGEN_FLOAT
+          and sent[0][1][:2] == [agents.GV_CHANGE_HEALTH_REGEN, PLAYER],
+          "push_regen sends prop 44 at -3 x 2 / 100 = -0.06/s for a rank-15 Suffering -- the "
+          "same wire a three-pip Bleeding sends (test_effects 4e)", f"rate={rate} sent={sent}")
+    st = fresh_state()
+    hex_on(st, SUFFER, rank=15)
+    st["effects"].apply(PLAYER, BURN, 3, 9.0, time.time(), type_code=8)
+    check(authsrv.net_pips(st, PLAYER) == 10.0
+          and effects.pips_from(st["effects"].on_agent(PLAYER)) == 7.0,
+          "Burning (7) + Suffering (3) = 10, ONE cap shared with the conditions (RECONSTRUCTION: "
+          "the wiki caps 'health degeneration' as a whole); pips_from alone still says 7")
+    check(effects.CONDITION_PIPS == {478: 3, 480: 7, 483: 4, 484: 4}
+          and effects.pips_from([{"skill": SUFFER}, {"skill": FAINT}]) == 0.0,
+          "the hex pips sit BESIDE effects.pips_from, not inside it: CONDITION_PIPS is exactly "
+          "test_effects 4e's four, and pips_from knows no hex")
+    st = fresh_state()
+    hex_on(st, FAINT, rank=15)
+    lit = authsrv.net_pips(st, PLAYER)
+    st0 = fresh_state()
+    hex_on(st0, FAINT, rank=0)
+    check(lit == 3.0 and authsrv.net_pips(st0, PLAYER) == 0.0,
+          "Faintheartedness's `Health degeneration` bonus (bit SET, read from the slot) is LIT "
+          "UP by the same reader: 3 pips at rank 15, 0 at rank 0 -- dormant since 2026-08-22, "
+          "a behaviour change decided on (--no-hex-degeneration is its revert too)", f"{lit}")
+    sent, send = collector()
+    st = fresh_state()
+    st["player_energy"] = 50.0
+    hex_on(st, SUFFER, rank=15)
+    st["degen_at"] = time.time() - 1.0
+    authsrv.degen_tick(send, st, 0)
+    check(abs(st["player_health"] - 94.0) < 0.05 and not sent,
+          "degen_tick spends 3 pips x 2 x 1 s = 6 health off the player and SENDS NOTHING: "
+          "degeneration is not damage -- no word, no [10], no scatter (WIKI)",
+          f"health={st['player_health']} sent={sent}")
+    sent, send = collector()
+    st = fresh_state()
+    body = hostile(st, 10)
+    hex_on(st, SUFFER, agent=10, rank=15, caster=PLAYER)
+    st["degen_at"] = time.time() - 1.0
+    authsrv.degen_tick(send, st, 0)
+    check(abs(body["health"] - 94.0) < 0.05 and not sent and not body["dead"],
+          "a hexed BODY degenerates the same 6 in silence (the hex is the player's; the body "
+          "path reads net_pips too)", f"health={body['health']}")
+    # THE KNOWN-BAD ARM: the flag off -- the hex degenerates nothing, Burning still does.
+    authsrv.HEX_DEGENERATION = False
+    st = fresh_state()
+    hex_on(st, SUFFER, rank=15)
+    hex_on(st, FAINT, rank=15)
+    off = authsrv.net_pips(st, PLAYER)
+    st["effects"].apply(PLAYER, BURN, 3, 9.0, time.time(), type_code=8)
+    check(off == 0.0 and authsrv.net_pips(st, PLAYER) == 7.0,
+          "--no-hex-degeneration: Suffering and Faintheartedness degenerate NOTHING and Burning's "
+          "7 still counts -- the reading every run before 2026-09-27 made", f"{off}")
+    authsrv.HEX_DEGENERATION = True
+    src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+    check(src.count("effects.pips_from(") == 1
+          and src.count("pips = net_pips(state, agent_id, live)") == 1
+          and src.count("pips = net_pips(state, agent_id, table.on_agent(agent_id))") == 1
+          and src.index("def push_regen(") < src.index("pips = net_pips(state, agent_id, live)")
+          and src.index("def degen_tick(") < src.index("pips = net_pips(state, agent_id, table.on_agent(agent_id))")
+          and "hex_pips, blocks_adrenaline, signet_activation_factor," in src,
+          "the source: effects.pips_from is read ONCE, inside net_pips; push_regen and degen_tick "
+          "both go through net_pips; the leaf readers are re-exported")
+finally:
+    authsrv.HEX_DEGENERATION, authsrv.EFFECTS = saved
+
+print("== 36. Soothing Images (56): a `blocks_adrenaline` wearer gains NOTHING and nothing is "
+      "sent -- the player's sender and a body's site ==")
+saved = (authsrv.ADRENALINE_BLOCK, authsrv.ENERGY, authsrv.ADREN_BAR_GATE)
+try:
+    authsrv.ADRENALINE_BLOCK = True
+    authsrv.ENERGY = True
+    authsrv.ADREN_BAR_GATE = False        # the bar gate is SKILLS-B1's question, not this one
+    row = agents.WORLD.get("skill_effect", str(SOOTHE))
+    rec = agents.WORLD.get("skills", str(SOOTHE))
+    check(row.get("blocks_adrenaline") is True
+          and (int(rec["scale0"]), int(rec["scale15"]), int(rec["bonus_scale0"])) == (0, 0, 0),
+          "the row states the rule; the record's slots are 0/0 (unnumbered text)")
+    st = fresh_state()
+    check(not authsrv.blocks_adrenaline(st, PLAYER) and not authsrv.adrenaline_blocked(st, PLAYER),
+          "no hex: not blocked")
+    hex_on(st, SOOTHE, caster=10)
+    check(authsrv.blocks_adrenaline(st, PLAYER) and authsrv.adrenaline_blocked(st, PLAYER)
+          and not authsrv.adrenaline_blocked(st, 10),
+          "Soothing Images on the player: the player is blocked, agent 10 is not (per wearer)")
+    # THE PLAYER'S SENDER, control then treatment.
+    sent, send = collector()
+    st = fresh_state()
+    authsrv.player_gains_adrenaline(send, st, 25, time.time(), 0, "a hit")
+    ctl = dict(authsrv.player_adrenaline(st).units)
+    check(len(sent) == 1 and sent[0][0] == authsrv.AGENT_ADRENALINE_GAIN
+          and sent[0][1] == [PLAYER, 25] and ctl and all(v == 25 for v in ctl.values()),
+          "CONTROL, unhexed: 0x00CF [player, 25] goes out and every pool takes 25",
+          f"sent={sent} units={ctl}")
+    sent, send = collector()
+    st = fresh_state()
+    hex_on(st, SOOTHE, caster=10)
+    authsrv.player_gains_adrenaline(send, st, 25, time.time(), 0, "a hit")
+    units = dict(authsrv.player_adrenaline(st).units)
+    check(not sent and units and all(v == 0 for v in units.values()),
+          "hexed: NOTHING is sent and NOTHING is granted (0x00CF 0 vs silence: UNVERIFIED, "
+          "silence chosen)", f"sent={sent} units={units}")
+    # A BODY'S SITE: hurt_agent_row's hostile arm, control then treatment.
+    sent, send = collector()
+    st = fresh_state()
+    body = hostile(st, 10, skills=((317, 0.0, 0.0),))
+    authsrv.hurt_agent_row(send, st, PLAYER, 10, 20.0, 0.2, 0, "a hit")
+    ctl = dict(authsrv.agent_adrenaline(body).units)
+    check(ctl == {317: 20} and body["health"] == 80.0,
+          "CONTROL, an unhexed hostile hit for 20 % of its maximum: 20 units into its pool")
+    sent, send = collector()
+    st = fresh_state()
+    body = hostile(st, 10, skills=((317, 0.0, 0.0),))
+    hex_on(st, SOOTHE, agent=10, caster=PLAYER)
+    authsrv.hurt_agent_row(send, st, PLAYER, 10, 20.0, 0.2, 0, "a hit")
+    units = dict(authsrv.agent_adrenaline(body).units)
+    check(units == {317: 0} and body["health"] == 80.0
+          and [v for op, v, _l in sent if op == authsrv.AGENT_ADRENALINE_GAIN] == [],
+          "hexed: the hit lands (80 left) and the pool takes NOTHING; no 0x00CF names it",
+          f"units={units}")
+    # THE KNOWN-BAD ARM: the flag off -- the hexed player gains as if unhexed.
+    authsrv.ADRENALINE_BLOCK = False
+    sent, send = collector()
+    st = fresh_state()
+    hex_on(st, SOOTHE, caster=10)
+    authsrv.player_gains_adrenaline(send, st, 25, time.time(), 0, "a hit")
+    check(len(sent) == 1 and sent[0][1] == [PLAYER, 25]
+          and all(v == 25 for v in authsrv.player_adrenaline(st).units.values()),
+          "--no-adrenaline-block: the hexed player gains and the 0x00CF goes out -- the "
+          "reading every run before 2026-09-27 made")
+    authsrv.ADRENALINE_BLOCK = True
+    src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+    i_pg = src.index("def player_gains_adrenaline(")
+    check(src.count("adrenaline_blocked(state, ") == 7
+          and src.index("if adrenaline_blocked(state, PLAYER_AGENT_ID):", i_pg)
+          < src.index("if ADREN_BAR_GATE and not bar_holds_adrenal():", i_pg)
+          and src.count("if ENERGY and not adrenaline_blocked(state, aid):") == 1
+          and src.count("if ENERGY and not adrenaline_blocked(state, target_id):") == 1
+          and src.count("\n        if ENERGY and not adrenaline_blocked(state, tid):") == 1
+          and src.count("\n    elif ENERGY and not adrenaline_blocked(state, tid):") == 1
+          and src.count("if not adrenaline_blocked(state, agent_id):") == 1
+          and all(src.index(site) > src.index("def " + fn + "(")
+              for site, fn in (("if ENERGY and not adrenaline_blocked(state, aid):", "scythe_extra_hit"),
+                               ("if ENERGY and not adrenaline_blocked(state, target_id):", "hit_enemy"),
+                               ("if ENERGY and not adrenaline_blocked(state, tid):", "hurt_agent_row"),
+                               ("if not adrenaline_blocked(state, agent_id):", "land_swing"))),
+          "the source: the gate reads at the player's sender (ahead of the bar gate) and at the "
+          "five body sites -- scythe_extra_hit, hit_enemy, hurt_agent_row's two arms, land_swing's "
+          "hit landed (the hero's 0x00CF inside the gated block) -- 7 reads with the def")
+finally:
+    authsrv.ADRENALINE_BLOCK, authsrv.ENERGY, authsrv.ADREN_BAR_GATE = saved
+
+print("== 37. Rust (204): the on-cast Cold damage from EXPLICIT endpoints (CONTESTED 10..70 vs "
+      "the wiki's 10..85), and a signet under it activates x2 ==")
+saved = (authsrv.SIGNET_ACTIVATION, authsrv.ENERGY, authsrv.NPC_FOLLOW, authsrv.AREA_HEXES,
+         authsrv.SPELL_AREAS)
+try:
+    authsrv.SIGNET_ACTIVATION = True
+    authsrv.ENERGY = False
+    authsrv.NPC_FOLLOW = False
+    authsrv.AREA_HEXES = True
+    authsrv.SPELL_AREAS = True
+    row = agents.WORLD.get("skill_effect", str(RUST))
+    rec = agents.WORLD.get("skills", str(RUST))
+    check(row.get("bonus_scale_means") == "Cold damage" and row.get("hits_on_cast") is True
+          and (row.get("damage0"), row.get("damage15")) == (10, 70)
+          and (int(rec["bonus_scale0"]), int(rec["bonus_scale15"])) == (10, 70)
+          and int(rec["skill_arguments"]) == 1 and row.get("signet_activation_multiplier") == 2,
+          "the row: `Cold damage` in the BONUS slot with the client's own 10..70 carried "
+          "explicitly (args = 1: both slots bit-clear and differing), hits_on_cast, x2 signets")
+    got = [authsrv.hex_cast_damage(RUST, r) for r in (0, 12, 15)]
+    check(got == [(10, "standalone"), (58, "standalone"), (70, "standalone")],
+          "hex_cast_damage: 10 / 58 / 70 at rank 0 / 12 / 15 -- the CLIENT's number, CONTESTED "
+          "against the wiki's 10..85 (a tooltip run settles it)", f"{got}")
+    check(authsrv.area_hex(RUST) == 156.0,
+          "and it is an area hex at the record's 156 u (adjacent), so the burst rides B1's arms")
+    for k in ("damage0", "damage15"):
+        row.pop(k)
+    try:
+        try:
+            authsrv.hex_cast_damage(RUST, 12)
+            check(False, "without the explicit endpoints the bonus slot must be REFUSED")
+        except ValueError:
+            check(True, "CONTROL: without damage0/15 the read falls to the slot and skill_scale_value "
+                        "REFUSES it (the bit is clear) -- the field is load-bearing, and a "
+                        "mislabelled row raises at the completion rather than dealing a number")
+    finally:
+        row["damage0"], row["damage15"] = 10, 70
+    check(authsrv.is_signet(HEAL_SIG) and authsrv.is_signet(RES_SIG)
+          and not authsrv.is_signet(RUST) and not authsrv.is_signet(FRENZY)
+          and not authsrv.is_signet(99999),
+          "is_signet: Healing Signet and Resurrection Signet (type 7) yes; a hex, a stance, a "
+          "rowless id no")
+    st = fresh_state()
+    check(authsrv.signet_activation_factor(st, PLAYER) == 1.0
+          and authsrv.signet_activation(st, PLAYER, HEAL_SIG, 2.0) == 2.0,
+          "no episodes: factor 1.0, the activation untouched")
+    hex_on(st, RUST, caster=10)
+    check(authsrv.signet_activation_factor(st, PLAYER) == 2.0
+          and authsrv.signet_activation(st, PLAYER, HEAL_SIG, 2.0) == 4.0
+          and authsrv.signet_activation(st, PLAYER, RES_SIG, 3.0) == 6.0
+          and authsrv.signet_activation(st, PLAYER, FRENZY, 0.0) == 0.0
+          and authsrv.signet_activation(st, PLAYER, 234, 2.0) == 2.0,
+          "under Rust: Healing Signet 2.0 -> 4.0, Resurrection Signet 3.0 -> 6.0; a stance and a "
+          "spell keep their own time (signets only, the wiki's word)")
+    hex_on(st, RUST, caster=11)
+    check(authsrv.signet_activation_factor(st, PLAYER) == 4.0,
+          "two Rusts multiply (x4) -- RECONSTRUCTION, no tape and no cap row for it; said, not hidden")
+    # THE BODY SITE, for real: a hostile casting Healing Signet through enemy_attack_tick.
+    lands = {}
+    for rust in (False, True):
+        st = world(1, bar=((HEAL_SIG, 2.0, 4.0),))
+        if rust:
+            hex_on(st, RUST, agent=10, caster=PLAYER)
+        now = time.time()
+        tick(st)
+        a = st["agents"][10]
+        lands[rust] = (a.get("casting"), round(a["cast_lands_at"] - now, 1),
+                       round(a["skill_ready"][0] - now, 1))
+    check(lands[False][0] == 0 and lands[True][0] == 0
+          and lands[False][1] == 2.0 and lands[True][1] == 4.0
+          and lands[True][2] - lands[False][2] == 2.0,
+          "enemy_attack_tick: the hostile's Healing Signet lands at +2.0 s unhexed and +4.0 s "
+          "under Rust, and its recharge anchor moves by the same 2.0 (completion-anchored)",
+          f"{lands}")
+    # THE KNOWN-BAD ARM.
+    authsrv.SIGNET_ACTIVATION = False
+    st = fresh_state()
+    hex_on(st, RUST, caster=10)
+    check(authsrv.signet_activation(st, PLAYER, HEAL_SIG, 2.0) == 2.0,
+          "--no-signet-activation: the signet keeps its table time under Rust")
+    authsrv.SIGNET_ACTIVATION = True
+    src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+    i_press = src.index("def handle_skill_press(")
+    check(src.count("activation = signet_activation(state, agent_id, skill_id, activation)") == 2
+          and src.count("activation = signet_activation(state, PLAYER_AGENT_ID, skill_id, activation)") == 1
+          and src.index("activation, aftercast, recharge = skill_timing(skill_id)", i_press)
+          < src.index("activation = signet_activation(state, PLAYER_AGENT_ID, skill_id, activation)", i_press)
+          < src.index("e5_at = begin + activation", i_press)
+          and src.index("def enemy_attack_tick(")
+          < src.index("activation = signet_activation(state, agent_id, skill_id, activation)")
+          < src.index("def ally_cast_tick(")
+          < src.rindex("activation = signet_activation(state, agent_id, skill_id, activation)")
+          and "GV_CASTTIME" not in src[src.index("def signet_activation("):src.index("def hex_skill_use_chain(")],
+          "the source: the three activation sites (the press between skill_timing and the E5 "
+          "clock; enemy_attack_tick; ally_cast_tick) all pass through signet_activation, and "
+          "property 61 is still never sent (the client's own bar: UNVERIFIED)")
+finally:
+    (authsrv.SIGNET_ACTIVATION, authsrv.ENERGY, authsrv.NPC_FOLLOW, authsrv.AREA_HEXES,
+     authsrv.SPELL_AREAS) = saved
+
+print("== 38. Panic (52): a wearer's skill COMPLETION interrupts every OTHER wearer in 240 u "
+      "that is activating -- the skill-less mode, never a swing ==")
+saved = (authsrv.HEX_SKILL_USE_CHAIN, authsrv.INTERRUPTS, authsrv.ENERGY, authsrv.NPC_FOLLOW)
+try:
+    authsrv.HEX_SKILL_USE_CHAIN = True
+    authsrv.INTERRUPTS = True
+    authsrv.ENERGY = False
+    authsrv.NPC_FOLLOW = False
+    RC_BAR = ((RC, 0.75, 2.0),)
+    row = agents.WORLD.get("skill_effect", str(PANIC))
+    rec = agents.WORLD.get("skills", str(PANIC))
+    check(row.get("on_skill_use") == "interrupt other wearers"
+          and float(rec["aoe_range"]) == 240.0 and int(rec["target"]) == 16,
+          "the row states the chain; the record's radius is 240 (nearby), target byte 16")
+
+    def casting(aid, st, at=0.5):
+        a = st["agents"][aid]
+        a.update({"skills": RC_BAR, "skill_ready": [0.0], "casting": 0,
+                  "cast_lands_at": time.time() + at, "cast_recharge": 2.0})
+        return a
+
+    def swinging(aid, st):
+        a = st["agents"][aid]
+        a.update({"casting": None, "swing_lands_at": time.time() + 0.5, "swinging": True})
+        return a
+
+    st = fresh_state()
+    for aid, pos in ((10, (0.0, 0.0)), (11, (100.0, 0.0)), (12, (300.0, 0.0)),
+                     (13, (50.0, 0.0)), (14, (60.0, 0.0)), (15, (70.0, 0.0))):
+        hostile(st, aid, pos)
+    for aid in (10, 11, 12, 13, 14):
+        casting(aid, st)
+    swinging(15, st)
+    for aid in (10, 11, 12, 14, 15):
+        hex_on(st, PANIC, agent=aid, caster=PLAYER)     # the player's Panic on five
+    hex_on(st, PANIC, agent=13, caster=99)               # another caster's Panic on 13
+    st["agents"][14]["casting"] = None                   # a wearer activating nothing
+    st["agents"][14]["cast_lands_at"] = None
+    sent, send = collector()
+    hit = authsrv.hex_skill_use_chain(send, st, 0, 10, RC)
+    ops = [(v[0], v[1]) for op, v, _l in sent if op == INT]
+    check(hit == [11] and ops == [(agents.GV_SKILL_STOPPED, 11), (agents.GV_INTERRUPTED, 11)]
+          and st["agents"][11]["casting"] is None
+          and st["agents"][10]["casting"] == 0 and st["agents"][12]["casting"] == 0
+          and st["agents"][13]["casting"] == 0
+          and st["agents"][15]["swing_lands_at"] is not None,
+          "wearer 10 completes: wearer 11 (100 u, casting) gets [59, 11, 0] [35, 11, 0] and its "
+          "cast is gone; 12 (300 u), 13 (another caster's Panic), 14 (activating nothing), 15 "
+          "(swinging) and 10 itself are untouched", f"hit={hit} ops={ops}")
+    check(not [v for op, v, _l in sent if op == authsrv.GAME_SMSG_SKILL_RECHARGE]
+          and st["agents"][11]["skill_ready"][0] - time.time() < 2.5,
+          "no disable: the interrupted slot recharges its own 2 s and nothing more (the "
+          "interrupter named is the hex, whose row carries no interrupt_disable)")
+    # THE MODE IS LOAD-BEARING: the swinging wearer under the OLD mode would be stopped.
+    sent, send = collector()
+    res = authsrv.interrupt_body(send, st, 15, st["agents"][15], 0, PANIC, 10, mode="action")
+    check(res == "swing" and st["agents"][15]["swing_lands_at"] is None,
+          "KNOWN-BAD ARM, mode 'action': the same swinging wearer IS stopped -- so the chain's "
+          "mode 'skill' is what spares the swing (the wiki's 'interrupted' read as a skill, "
+          "RECONSTRUCTION)")
+    # THE PLAYER AS VICTIM: a hostile's Panic on the player and a hero; the hero completes.
+    st = fresh_state()
+    st["action_hold"] = 1
+    authsrv.player_pools(st)
+    hostile(st, 10, (50.0, 0.0))
+    hero = hostile(st, 12, (80.0, 0.0), allegiance=agents.ALLEGIANCE_PLAYER)
+    casting(12, st)
+    hex_on(st, PANIC, agent=PLAYER, caster=10)
+    hex_on(st, PANIC, agent=12, caster=10)
+    now = time.time()
+    st["pending_casts"] = [{"skill_id": HEAL_SIG, "copy": 0, "begun": True, "cost": 0, "units": 0,
+                            "target": None, "begin_at": now, "attack": False,
+                            "e5_at": now + 1.0, "e3_at": now + 1.75, "e6_at": now + 5.0,
+                            "recharge": 4, "e5_sent": False, "e3_sent": False, "approach": None,
+                            "activation": 2.0, "aftercast": 0.75, "recharge_s": 4.0}]
+    sent, send = collector()
+    hit = authsrv.hex_skill_use_chain(send, st, 0, 12, RC)
+    ops = [(op, v[:3]) for op, v, _l in sent]
+    E5, E2 = authsrv.GAME_SMSG_SKILL_RECHARGE, authsrv.GAME_SMSG_SKILL_REFUSED
+    check(hit == [PLAYER] and ops == [(INT, [8, PLAYER, 0]), (E5, [PLAYER, HEAL_SIG, 0]),
+                                       (INT, [agents.GV_SKILL_STOPPED, PLAYER, 0]),
+                                       (E2, [PLAYER, HEAL_SIG, 0]),
+                                       (INT, [agents.GV_INTERRUPTED, PLAYER, 0])]
+          and st["pending_casts"][0]["e5_sent"] and st["pending_casts"][0]["recharge"] == 4,
+          "the hero (a wearer) completes: the PLAYER's Healing Signet in activation takes retail's "
+          "victim run [8,0] E5(4) [59] E2 [35] and NO disable E5 (test_interrupt 1's shape less "
+          "the +20)", f"hit={hit} ops={ops}")
+    # THE BODY'S REAL PATH: land_skill's completion, the chain right behind the 58.
+    st = world(2, bar=RC_BAR)
+    for aid in (10, 11):
+        hex_on(st, PANIC, agent=aid, caster=PLAYER)
+        st["agents"][aid].update({"casting": 0, "cast_lands_at": time.time() - 0.01,
+                                  "cast_target": aid})
+    sent, send = collector()
+    authsrv.land_skill(send, st, 10, st["agents"][10], 0)
+    ops = [(v[0], v[1]) for op, v, _l in sent if op == INT]
+    check(ops[:3] == [(agents.GV_SKILL_FINISHED, 10), (agents.GV_SKILL_STOPPED, 11),
+                      (agents.GV_INTERRUPTED, 11)]
+          and st["agents"][11]["casting"] is None and st["agents"][10]["casting"] is None,
+          "through the real land_skill: [58, 10, 0] then [59, 11, 0] [35, 11, 0] -- the chain "
+          "right behind the completion property", f"{ops}")
+    # THE KNOWN-BAD ARM: the flag off.
+    authsrv.HEX_SKILL_USE_CHAIN = False
+    st = world(2, bar=RC_BAR)
+    for aid in (10, 11):
+        hex_on(st, PANIC, agent=aid, caster=PLAYER)
+        st["agents"][aid].update({"casting": 0, "cast_lands_at": time.time() - 0.01,
+                                  "cast_target": aid})
+    sent, send = collector()
+    authsrv.land_skill(send, st, 10, st["agents"][10], 0)
+    check(authsrv.hex_skill_use_chain(send, st, 0, 10, RC) == []
+          and st["agents"][11]["casting"] == 0
+          and not [v for op, v, _l in sent if op == INT and v[0] == agents.GV_INTERRUPTED],
+          "--no-hex-skill-use-chain: the completion interrupts nobody and 11 keeps casting")
+    authsrv.HEX_SKILL_USE_CHAIN = True
+    src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+    i_ip, i_ib = src.index("def interrupt_player("), src.index("def interrupt_body(")
+    check(src.count("hex_skill_use_chain(send, state, conn_id, PLAYER_AGENT_ID, cast[\"skill_id\"])") == 1
+          and src.count("hex_skill_use_chain(send, state, conn_id, agent_id, skill_id)") == 1
+          and src.index("def cast_tick(") < src.index("if HEX_SKILL_USE_CHAIN and not _na_fail:")
+          < src.index("def apply_effect(")
+          and src.index("def land_skill(") < src.index("hex_skill_use_chain(send, state, conn_id, agent_id, skill_id)")
+          and src.count('mode in ("action", "attacking")') == 2
+          and src.count("mode == INTERRUPT_MODE_SKILL") == 2
+          and i_ip < src.index("mode == INTERRUPT_MODE_SKILL") < i_ib
+          < src.rindex("mode == INTERRUPT_MODE_SKILL")
+          and src.count("if not _na_fail:") == 2,
+          "the source: the two hook sites (the player's E5 batch, a body's land_skill); the new "
+          "mode is read in both cast branches and in NEITHER swing branch (the two 'action / "
+          "attacking' swing gates are untouched); test_labelconsumers' `if not _na_fail:` count "
+          "still 2")
+finally:
+    (authsrv.HEX_SKILL_USE_CHAIN, authsrv.INTERRUPTS, authsrv.ENERGY, authsrv.NPC_FOLLOW) = saved
 
 sys.exit(LEDGER.verdict())

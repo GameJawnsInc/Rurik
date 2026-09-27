@@ -4291,7 +4291,7 @@ def scythe_extra_hit(send, state, aid, conn_id, rank, bonus_damage, damage_mult,
                            f"the scythe's extra hit ({label})")],
          f"{'CRITICAL' if critical else 'damage'} {dealt:.0f} to agent {aid} "
          f"(the scythe's extra target)")
-    if ENERGY:
+    if ENERGY and not adrenaline_blocked(state, aid):           # B2: Soothing Images
         agent_adrenaline(foe).on_damage_taken(dealt / float(foe["max_health"]), now)
     if foe["health"] <= 0.0:
         kill_agent(send, state, aid, foe, conn_id, now)
@@ -15106,6 +15106,48 @@ _HEX_CLASS_UNWITNESSED = set()
 # unmapped. Crippled (0x0A, 2/2) is not a snare here, as in move_speed_terms.
 # --no-snare-status-bit reverts.
 SNARE_STATUS_BIT = True
+# THE FOUR HEXES THAT NEED A MECHANISM (B2, 2026-09-27) -- Suffering 108,
+# Soothing Images 56, Rust 204, Panic 52: rows in content/world.toml, the
+# readers in episodemods (hex_pips, blocks_adrenaline, signet_activation_
+# factor), the hooks here. Every one RECONSTRUCTION from the wiki's sentence
+# and the record: none was cast on any live tape (aotjoin P8), and none has a
+# numbered client slot the house readers accept (108's 0..3 and 204's 1..10 /
+# 10..70 are bit-clear with differing endpoints; 56's and 52's mechanics are
+# unnumbered text). One revert per behaviour:
+#   * HEX_DEGENERATION -- a `Health degeneration` row degenerates its wearer:
+#     net_pips sums episodemods.hex_pips with effects.pips_from under the cap
+#     of 10 at push_regen (the 0x00A2 prop 44) and degen_tick (the spend). This
+#     LIGHTS UP Faintheartedness 135's dormant bonus slot too (its row has named
+#     the label since 2026-08-22 and nothing read it): a behaviour change,
+#     decided ON here, --no-hex-degeneration is both hexes' revert.
+#   * ADRENALINE_BLOCK -- a `blocks_adrenaline` wearer gains nothing at every
+#     gain site, player and body, and nothing goes on the wire (0x00CF 0 vs
+#     nothing: UNVERIFIED).
+#   * SIGNET_ACTIVATION -- a `signet_activation_multiplier` wearer's SIGNET
+#     (type 7) activates that many times slower at the press (the player) and
+#     at a body's cast start; the recharge anchor takes the scaled value.
+#     Property 61 GV_CASTTIME is never sent: whether the client stretches its
+#     own bar is UNVERIFIED (the cast_modifier_order probe is unrun). Rust's
+#     Overcast clause (signet interrupt + disable) is NOT modelled -- the
+#     server has no Overcast.
+#   * HEX_SKILL_USE_CHAIN -- Panic: "When a foe hexed with Panic successfully
+#     uses a skill, all other nearby foes are interrupted" (WIKI rev 2695691).
+#     A row's `on_skill_use = "interrupt other wearers"` fires at the wearer's
+#     skill COMPLETION (the player's E5, a body's 58 in land_skill) and
+#     interrupts every OTHER wearer of the same hex from the same caster within
+#     the record's aoe_range of the user that is activating a skill, through
+#     interrupt_player / interrupt_body in the skill-less mode "skill" (a cast
+#     in activation, attack skill or not; never a swing; no disable -- the
+#     interrupter named is the hex, whose row carries none). Which instant
+#     retail means by "successfully uses" (the press, the start, the
+#     completion) is UNVERIFIED; the completion is the one chosen.
+HEX_DEGENERATION = True
+ADRENALINE_BLOCK = True
+SIGNET_ACTIVATION = True
+HEX_SKILL_USE_CHAIN = True
+HEX_USE_INTERRUPTS = "interrupt other wearers"      # the row label (Panic 52)
+INTERRUPT_MODE_SKILL = "skill"                      # a cast in activation, never a swing
+_HEX_CHAIN_NO_RADIUS = set()
 
 
 def area_hex(skill_id):
@@ -15127,18 +15169,30 @@ def hex_cast_damage(skill_id, rank):
     what the effect does while it is up (the rule above skill_damage, whose
     `_resolves_at_cast` still refuses every hex). A disabled scale bit raises
     (skill_scale_value's refusal, deliberate); a missing `skills` row is None,
-    as skill_damage's is."""
+    as skill_damage's is.
+
+    B2: the label may sit in EITHER slot (Rust 204's `Cold damage` 10..70 is
+    its BONUS slot; its scale 1..10 is the Overcast disable, unmodelled), and
+    a row may carry the endpoints itself as `damage0/15` -- the glyph's
+    `energy_reduction0/15` precedent -- for a slot the bitfield does not
+    enable (Rust's is bit-clear with differing endpoints, refused by both
+    readers). The client's own formula interpolates them (effects.interp)."""
     row = skill_effect_row(skill_id)
     if not row.get("hits_on_cast"):
         return None
-    mode = SCALE_MEANS_DAMAGE.get(row.get("scale_means"))
-    if mode != "standalone":
-        return None
-    try:
-        return skill_scale_value(skill_id, rank), mode
-    except agents.content.ContentError:
-        skill_timing(skill_id)          # announces the missing row, once
-        return None
+    for which, key in (("scale", "scale_means"), ("bonus_scale", "bonus_scale_means")):
+        mode = SCALE_MEANS_DAMAGE.get(row.get(key))
+        if mode != "standalone":
+            continue
+        lo, hi = row.get("damage0"), row.get("damage15")
+        if lo is not None and hi is not None:
+            return effects.interp(int(lo), int(hi), rank), mode
+        try:
+            return skill_scale_value(skill_id, rank, which), mode
+        except agents.content.ContentError:
+            skill_timing(skill_id)          # announces the missing row, once
+            return None
+    return None
 
 
 def hex_wearers(state, caster_id, target_id, radius):
@@ -15176,6 +15230,92 @@ def hex_target_dead(state, agent_id):
         return bool(state.get("player_dead"))
     row = state.get("agents", {}).get(agent_id)
     return bool(row and row.get("dead"))
+
+
+def net_pips(state, agent_id, live=None):
+    """The agent's degeneration pips: the conditions' (effects.pips_from) plus
+    the hex rows' (episodemods.hex_pips) under ONE cap of 10 (B2). `live` is
+    the episode list when the caller already has it."""
+    if live is None:
+        table = state.get("effects")
+        live = table.on_agent(agent_id) if table else []
+    pips = effects.pips_from(live)
+    if HEX_DEGENERATION:
+        pips = min(pips + hex_pips(state, agent_id), effects.MAX_PIPS)
+    return pips
+
+
+def adrenaline_blocked(state, agent_id):
+    """A wearer of a live `blocks_adrenaline` row (Soothing Images) gains
+    nothing -- read at every gain site, player and body (B2)."""
+    return ADRENALINE_BLOCK and blocks_adrenaline(state, agent_id)
+
+
+def signet_activation(state, agent_id, skill_id, activation):
+    """`activation` scaled by the caster's live `signet_activation_multiplier`s
+    when `skill_id` is a SIGNET (type 7), else unchanged (B2, Rust). The three
+    activation sites (the press, enemy_attack_tick, ally_cast_tick) all pass
+    through here, so the recharge anchors take the scaled value with it."""
+    if not SIGNET_ACTIVATION or not is_signet(skill_id):
+        return activation
+    factor = signet_activation_factor(state, agent_id)
+    if factor == 1.0:
+        return activation
+    print(f"[skills] agent {agent_id}'s signet {skill_id} activates x{factor:g}: "
+          f"{activation:.2f} -> {activation * factor:.2f} s (Rust's 'twice as long "
+          f"to activate signets', RECONSTRUCTION) [studies/weapons 43]", flush=True)
+    return activation * factor
+
+
+def hex_skill_use_chain(send, state, conn_id, user_id, skill_id):
+    """Panic's chain (B2): `user_id` has just COMPLETED `skill_id`. For every
+    live hex on it whose row says `on_skill_use = "interrupt other wearers"`,
+    every OTHER wearer of the same hex from the same caster inside the
+    record's aoe_range of the user, ascending, that is activating a skill is
+    interrupted in the skill-less mode "skill" (a cast, attack skill or not;
+    never a swing; no disable -- the interrupter named is the hex, whose row
+    carries none). Returns the ids interrupted. RECONSTRUCTION throughout
+    (the banner above HEX_DEGENERATION)."""
+    if not HEX_SKILL_USE_CHAIN:
+        return []
+    table = state.get("effects")
+    if not table:
+        return []
+    hit = []
+    ux, uy = target_pos(state, user_id)
+    for ep in sorted(table.on_agent(user_id), key=lambda e: e["buff"]):
+        if skill_effect_row(ep["skill"]).get("on_skill_use") != HEX_USE_INTERRUPTS:
+            continue
+        try:
+            radius = float(agents.WORLD.get("skills", str(ep["skill"])).get("aoe_range") or 0.0)
+        except Exception:                                      # noqa: BLE001
+            radius = 0.0
+        if radius <= 0.0:
+            if ep["skill"] not in _HEX_CHAIN_NO_RADIUS:
+                _HEX_CHAIN_NO_RADIUS.add(ep["skill"])
+                print(f"[skills] hex {ep['skill']} chains an interrupt but its record "
+                      f"names no aoe_range, so the chain reaches NOBODY (refused, "
+                      f"not guessed) [studies/weapons 43]", flush=True)
+            continue
+        others = sorted({e["agent"] for e in table.live.values()
+                         if e["skill"] == ep["skill"] and e["caster"] == ep["caster"]
+                         and e["agent"] != user_id})
+        for oid in others:
+            ox, oy = target_pos(state, oid)
+            if math.hypot(float(ox) - float(ux), float(oy) - float(uy)) > radius:
+                continue
+            if oid == PLAYER_AGENT_ID:
+                res = interrupt_player(send, state, conn_id, ep["skill"], user_id,
+                                       mode=INTERRUPT_MODE_SKILL)
+            else:
+                res = interrupt_body(send, state, oid, state.get("agents", {}).get(oid),
+                                     conn_id, ep["skill"], user_id, mode=INTERRUPT_MODE_SKILL)
+            if res == "cast":
+                hit.append(oid)
+                print(f"[c{conn_id}] hex {ep['skill']} CHAINS: agent {user_id}'s skill "
+                      f"{skill_id} completes, so wearer {oid}'s cast is interrupted "
+                      f"[studies/weapons 43, RECONSTRUCTION]", flush=True)
+    return hit
 
 
 # A TARGET THAT DIES UNDER THE CAST DOES NOT STOP AN AREA OVER TIME. WIKI (GWW
@@ -19503,7 +19643,7 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     # measured rather than tidy: every one of the 9 corpus connections carrying
     # a 0x00CF names exactly ONE agent, its own. `player_gains_adrenaline`
     # carries the rest.
-    if ENERGY:
+    if ENERGY and not adrenaline_blocked(state, target_id):      # B2: Soothing Images
         # The player's strike went out ABOVE, in retail's own batch position.
         # THIS half is SILENT, and a later session must not "fix" the
         # asymmetry: retail is 9 of 9 self-scoped, so a 0x00CF naming an enemy
@@ -19873,7 +20013,10 @@ def interrupt_player(send, state, conn_id, by_skill, by_agent, mode=None):
         # not a cast to interrupt. RECONSTRUCTION (_mark_cancelled's rule).
         cast = None
     if cast is not None:
-        if not (mode == "action" or (mode == "attacking" and cast.get("attack"))):
+        # INTERRUPT_MODE_SKILL (B2, Panic's chain): any cast in activation,
+        # attack skill or not; the swing branch below does not take it.
+        if not (mode == "action" or mode == INTERRUPT_MODE_SKILL
+                or (mode == "attacking" and cast.get("attack"))):
             return None
         recharge = int(cast["recharge"])
         extra = skill_interrupt_disable(by_skill)
@@ -19976,7 +20119,9 @@ def interrupt_body(send, state, agent_id, agent, conn_id, by_skill, by_agent,
     if slot is not None and agent.get("cast_lands_at") is not None and slot < len(skills):
         skill_id = skills[slot][0]
         _atk = _is_attack_skill(skill_id)
-        if not (mode == "action" or (mode == "attacking" and _atk)):
+        # INTERRUPT_MODE_SKILL (B2): a cast in activation, never the swing below.
+        if not (mode == "action" or mode == INTERRUPT_MODE_SKILL
+                or (mode == "attacking" and _atk)):
             return None
         if INSTANT_ANNOUNCE and not _atk and _is_instant_skill(skill_id):
             # SKILLS-IA: a body's armed instant skill lands on the next tick
@@ -20151,6 +20296,13 @@ def player_gains_adrenaline(send, state, units, now, conn_id, why):
     retail's wire and the other is not.
     """
     if not ENERGY or units < 0:
+        return
+    if adrenaline_blocked(state, PLAYER_AGENT_ID):
+        # B2 (studies/weapons 43): Soothing Images -- "cannot gain adrenaline".
+        # Nothing granted, nothing sent; the clock is not marked (the wearer
+        # is not "gaining"). 0x00CF 0 vs silence: UNVERIFIED.
+        print(f"[c{conn_id}] adrenaline +{int(units)} BLOCKED ({why}): a live hex "
+              f"says the player cannot gain adrenaline [studies/weapons 43]", flush=True)
         return
     if ADREN_BAR_GATE and not bar_holds_adrenal():
         # Retail's silence to a dark bar, gains AND the AD4 zero alike: the
@@ -21692,6 +21844,9 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
     skill_id, copy, target = values[1], values[2], values[3]
     now = time.time()
     activation, aftercast, recharge = skill_timing(skill_id)
+    # B2 (studies/weapons 43): a SIGNET under Rust activates x2 -- the E5 clock
+    # below reads the scaled value. The client's own bar: UNVERIFIED (no 61).
+    activation = signet_activation(state, PLAYER_AGENT_ID, skill_id, activation)
     # The skill's FAMILY, read once: it picks the animation property below
     # (50 vs 60) and rides the pending entry for the movement-cancel
     # asymmetry and the cast-end property. From the content row's type code,
@@ -23022,6 +23177,10 @@ def cast_tick(send, state, conn_id):
                             f"skill {cast['skill_id']} completes")
                 action_hold(send, state, 1,
                             f"the aftercast of skill {cast['skill_id']}")
+            if HEX_SKILL_USE_CHAIN and not _na_fail:
+                # B2 (Panic): the player "successfully uses a skill" at its
+                # completion -- the other wearers' interrupts close the batch.
+                hex_skill_use_chain(send, state, conn_id, PLAYER_AGENT_ID, cast["skill_id"])
         if cast["e5_sent"] and cast.get("second_at") is not None \
                 and not cast.get("second_done") and now >= cast["second_at"]:
             dual_second_strike(send, state, cast, conn_id)       # DAGGERS-B6
@@ -24327,7 +24486,7 @@ def push_regen(send, state, agent_id, conn_id):
         return None
     table = state.get("effects")
     live = table.on_agent(agent_id) if table else []
-    pips = effects.pips_from(live)
+    pips = net_pips(state, agent_id, live)      # conditions + hex rows (B2), one cap
     rate = -(pips * effects.PIP_HEALTH_PER_SECOND) / pool
     seen = state.setdefault("regen_rate", {})
     if abs(seen.get(agent_id, 0.0) - rate) < 1e-9:
@@ -24537,7 +24696,7 @@ def degen_tick(send, state, conn_id):
     if dt <= 0:
         return
     for agent_id in sorted({ep["agent"] for ep in table.live.values()}):
-        pips = effects.pips_from(table.on_agent(agent_id))
+        pips = net_pips(state, agent_id, table.on_agent(agent_id))     # B2: hex rows too
         if not pips:
             continue
         lost = pips * effects.PIP_HEALTH_PER_SECOND * dt
@@ -25167,7 +25326,9 @@ def resolve_taker_conversion(send, state, conversion, conn_id):
 # bound in this module.
 from episodemods import (attack_interval_factor, move_speed_percent,  # noqa: F401,E402
                          move_speed_factor,   # push_speed / speed_tick (SLICE-F48)
-                         move_speed_terms)    # agent_status_word's snare bit (weapons 43)
+                         move_speed_terms,    # agent_status_word's snare bit (weapons 43)
+                         hex_pips, blocks_adrenaline, signet_activation_factor,
+                         is_signet)           # net_pips / adrenaline_blocked / signet_activation (43, B2); test_mechanics 35-37 read them as authsrv.*
 
 
 def swing_preparation_bonus(state, weapon_row, agent_id):
@@ -26282,6 +26443,8 @@ def enemy_attack_tick(send, state, conn_id):
             break                       # every gate passed: this slot is cast
         if slot is not None:
             skill_id, activation, recharge = agent["skills"][slot]
+            # B2: a signet under Rust (x2); the recharge anchor takes it too.
+            activation = signet_activation(state, agent_id, skill_id, activation)
             agent["cast_target"] = cast_target
             if cast_target == _tid:
                 agent["target_locked"] = True     # SLICE-H3: the bout opened
@@ -26579,6 +26742,8 @@ def ally_cast_tick(send, state, conn_id):
             if slot is None:
                 continue
         skill_id, activation, recharge = skills[slot]
+        # B2: a signet under Rust (x2); the recharge anchor takes it too.
+        activation = signet_activation(state, agent_id, skill_id, activation)
         kind = skill_target_kind(skill_id)
         if ENERGY:
             cost, units = skill_cost(skill_id)
@@ -27051,14 +27216,14 @@ def hurt_agent_row(send, state, attacker_id, tid, dealt, frac, conn_id, what):
         provoke_hostile(state, tid, attacker_id, conn_id)          # MONSTERAI-J
     if not hostile:
         row["last_hit"] = now
-        if ENERGY:
+        if ENERGY and not adrenaline_blocked(state, tid):        # B2: Soothing Images
             # JARIN: a party body charges on the hit it takes, and a HERO's
             # charge is on the wire ([30, 2] at 175.4 s, before the damage word).
             _frac = dealt / float(row["max_health"] or 1.0)
             agent_adrenaline(row).on_damage_taken(_frac, now)
             hero_pool_gain(send, state, tid, row, pools.damage_units(_frac),
                            "hit taken")
-    elif ENERGY:
+    elif ENERGY and not adrenaline_blocked(state, tid):          # B2: Soothing Images
         # SILENT, as hit_enemy's own half is: retail's adrenaline traffic is
         # self-scoped 9 of 9 -- for a HOSTILE. A hero's is not (JARIN).
         agent_adrenaline(row).on_damage_taken(
@@ -32557,9 +32722,10 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
     # finished marker first.
     if ENERGY:
         _now = time.time()
-        agent_adrenaline(agent).on_hit_landed(_now)   # SILENT for a hostile: self-scoped, 9/9
-        hero_pool_gain(send, state, agent_id, agent, pools.STRIKE_UNITS,
-                       "hit landed")                         # a HERO's is on the wire (JARIN)
+        if not adrenaline_blocked(state, agent_id):            # B2: Soothing Images
+            agent_adrenaline(agent).on_hit_landed(_now)   # SILENT for a hostile: self-scoped, 9/9
+            hero_pool_gain(send, state, agent_id, agent, pools.STRIKE_UNITS,
+                           "hit landed")                     # a HERO's is on the wire (JARIN)
         # The gain reads the damage that LANDS -- WIKI puts the one-unit-per-1%
         # rule on health lost -- as a fraction of the CURRENT maximum, the
         # same number the damage word below divides by (SKILLS-AD2: 11 of 11
@@ -33016,6 +33182,13 @@ def land_skill(send, state, agent_id, agent, conn_id):
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.GV_SKILL_FINISHED, agent_id, 0],
              f"agent {agent_id} finishes casting {skill_id}")
+    # B2 (Panic): a body "successfully uses a skill" at this completion --
+    # the other wearers' interrupts right behind the 58 (not on the
+    # dead-target exit above, which lands nothing). The player's ride the END
+    # of its E5 batch instead (cast_tick: its `_na_fail` -- a non-attack whose
+    # requirement failed is not "successfully used" -- is only known there,
+    # and this function has six exits). Both slots UNWITNESSED; RECONSTRUCTION.
+    hex_skill_use_chain(send, state, conn_id, agent_id, skill_id)
     if _aot is not None:
         # studies/weapons 42: the ground effect IMMEDIATELY behind the 58
         # (OBSERVED 17/17) and the area on state; the ticks are area_tick's.
@@ -43210,6 +43383,29 @@ def main():
         SNARE_STATUS_BIT = False
         print("HEXES: --no-snare-status-bit -- 0x00F1 bit 0x400 is never set for a "
               "movement-speed-decrease episode [studies/weapons 43 revert]", flush=True)
+    if a.no_hex_degeneration:
+        global HEX_DEGENERATION
+        HEX_DEGENERATION = False
+        print("HEXES: --no-hex-degeneration -- a `Health degeneration` hex row "
+              "(Suffering, Faintheartedness) degenerates nothing; only the "
+              "conditions' pips count, the reading every run before 2026-09-27 "
+              "made [studies/weapons 43 revert]", flush=True)
+    if a.no_adrenaline_block:
+        global ADRENALINE_BLOCK
+        ADRENALINE_BLOCK = False
+        print("HEXES: --no-adrenaline-block -- a `blocks_adrenaline` wearer (Soothing "
+              "Images) gains adrenaline as if unhexed [studies/weapons 43 revert]",
+              flush=True)
+    if a.no_signet_activation:
+        global SIGNET_ACTIVATION
+        SIGNET_ACTIVATION = False
+        print("HEXES: --no-signet-activation -- a signet under Rust activates at its "
+              "table time (no x2) [studies/weapons 43 revert]", flush=True)
+    if a.no_hex_skill_use_chain:
+        global HEX_SKILL_USE_CHAIN
+        HEX_SKILL_USE_CHAIN = False
+        print("HEXES: --no-hex-skill-use-chain -- Panic's wearer completing a skill "
+              "interrupts nobody [studies/weapons 43 revert]", flush=True)
     if a.no_spell_projectiles:
         global SPELL_PROJECTILES
         SPELL_PROJECTILES = False

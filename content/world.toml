@@ -2877,6 +2877,97 @@ own -- the row and the area predicate are the whole change. NEVER cast on any li
 FOUND, aotjoin P8). The hex on any body draws [6, foe, 1] alone: no [6, foe, class] id is \
 observed for a Necromancer hex (NOT FOUND; witnessed classes are Elementalist 12, Mesmer 4)."""
 
+# THE FOUR AREA HEXES WITH A MECHANISM OF THEIR OWN (DESKWORK-D6 step 4, B2, 2026-09-27;
+# studies/weapons/PLAN.md 43). Each carries its number or its rule as an explicit field
+# because the client's own slot cannot: Suffering's 0..3 and Rust's 10..70 sit in bit-clear
+# slots with DIFFERING endpoints (the shape both skillread readers refuse; the glyph's
+# `energy_reduction0/15` is the precedent for carrying the endpoints on the row), and
+# Soothing Images', Rust's x2 and Panic's chain are unnumbered text. NONE was cast on any
+# live tape (aotjoin P8): every mechanism is RECONSTRUCTION from the wiki's sentence.
+[skill_effect.108]
+scale_means = "Health degeneration"              # the 0..3 in the SCALE slot (135's is its bonus)
+health_degeneration0 = 0                         # the explicit endpoints: the slot's bit is clear
+health_degeneration15 = 3                        # and 0 != 3, so skill_scale_value refuses it
+[skill_effect.108.provenance]
+source = "wiki"
+page = 'GWW, "Suffering", {{Skill infobox}} + {{Skill progression}}, rev. 2683651, read 2026-09-27'
+verified = """studies/weapons/PLAN.md 43 (B2). Wiki: "Hex Spell. For 6...30 seconds, target foe \
+and all nearby foes suffer 0...-3 Health degeneration."; `aoe = nearby`; var1 `Duration` 6->30, \
+var2 `Health degeneration` 0->-3. Client (38797): id 108, type_code 4, attribute 7 (Curses), \
+profession 4, TARGET BYTE 16, aoe_range 240 (the client's own nearby), duration 6->30 args = 1 \
+(duration only), scale 0 / 3 with its bit CLEAR and differing (skilldesc reads it HEALTH_DEGEN, \
+INDETERMINATE), bonus 0 / 0. The endpoints above are the client's own scale0/15, carried \
+explicitly because the bitfield does not enable the slot -- interpolated by the client's formula \
+at the caster's rank (rank 12: 2 pips; 15: 3). Read by episodemods.hex_pips and summed with the \
+conditions' pips under ONE cap of 10 (WIKI "Health degeneration"; that a hex shares the cap is \
+RECONSTRUCTION). Degeneration is not damage: no word, no scatter (WIKI "Area damage over time"). \
+This field's reader also lights up Faintheartedness 135's `Health degeneration` bonus (its bit is \
+SET, read from the slot), dormant since 2026-08-22. --no-hex-degeneration reverts both. The hex \
+draws [6, foe, 1] alone (a Necromancer hex, no class id observed: NOT FOUND)."""
+
+[skill_effect.56]
+blocks_adrenaline = true                         # "cannot gain adrenaline" -- no client slot
+[skill_effect.56.provenance]
+source = "wiki"
+page = 'GWW, "Soothing Images", {{Skill infobox}} + {{Skill progression}}, rev. 2714814, read 2026-09-27'
+verified = """studies/weapons/PLAN.md 43 (B2). Wiki: "Hex Spell. For 8...20 seconds, target foe \
+and all adjacent foes cannot gain adrenaline."; `aoe = adjacent`; var1 `Duration` 8->20 and no \
+other variable. Client (38797): id 56, type_code 4, attribute 1 (Illusion Magic), profession 5, \
+TARGET BYTE 16, aoe_range 156, duration 8->20 args = 3 (duration | scale), scale 0 / 0, bonus 0 / \
+0 -- the rule is unnumbered text, so the row states it. Read by episodemods.blocks_adrenaline at \
+every gain site (player_gains_adrenaline; the five body sites: hit_enemy, the scythe's extra \
+hit, hurt_agent_row's two arms, land_swing's hit landed): nothing granted, nothing sent, the \
+25 s clock not marked. Whether retail sends 0x00CF 0 or nothing to a blocked gain is \
+UNVERIFIED (no tape holds one). --no-adrenaline-block reverts. The hex draws [6, foe, 1] + \
+[6, foe, 4] (the Mesmer class, Empathy's; keyed on this record's profession, RECONSTRUCTION)."""
+
+[skill_effect.204]
+bonus_scale_means = "Cold damage"                # the 10..70 in the BONUS slot (the scale 1..10 is the Overcast disable, unmodelled)
+damage0 = 10                                     # the explicit endpoints: the bonus bit is clear
+damage15 = 70                                    # and 10 != 70 -- CONTESTED against the wiki's 10..85
+damage_type = 3                                  # cold ([damage_type.table]), the page's own word
+hits_on_cast = true                              # "Deals 10..85 cold damage to target and adjacent foes." -- the hit AND the hex
+signet_activation_multiplier = 2                 # "take twice as long to activate signets" -- no client slot
+[skill_effect.204.provenance]
+source = "wiki"
+page = 'GWW, "Rust", {{Skill infobox}} + {{Skill progression}}, rev. 2740665, read 2026-09-27'
+verified = """studies/weapons/PLAN.md 43 (B2). Wiki: "Hex Spell. Deals 10...85 cold damage to \
+target and adjacent foes. For 5...20 seconds, target foe and all adjacent foes take twice as long \
+to activate signets. If you are Overcast, foes struck with Rust have their signets interrupted and \
+disabled for 1...10 second[s]."; `aoe = adjacent`. Client (38797): id 204, type_code 4, attribute \
+11 (Water Magic), profession 6, TARGET BYTE 16, aoe_range 156, duration 5->20 args = 1 (duration \
+only), scale 1 / 10 (skilldesc: DISABLE_DURATION, the Overcast clause -- no consumer), bonus 10 / \
+70 (skilldesc: COLD_DAMAGE) -- BOTH bit-clear with differing endpoints. THE DAMAGE IS CONTESTED: \
+the client's bonus slot says 10..70 and the wiki's progression says 10..85 (the same line Deep \
+Freeze's page carries); the row ships the CLIENT's number, and a tooltip read in a run settles \
+it. Read by hex_cast_damage (the explicit `damage0/15`, interpolated by the client's formula; \
+rank 12: 58) as the on-cast burst over every foe within 156 u of the target, like Deep Freeze's. \
+The x2 is read by episodemods.signet_activation_factor for a SIGNET (type_code 7, OBSERVED 4/4) \
+at the player's press and a body's cast start; the recharge anchor takes the scaled value; \
+property 61 is never sent (the client's own bar: UNVERIFIED). NOT modelled, said here: the \
+Overcast clause (the server has no Overcast). --no-signet-activation reverts the x2; the burst \
+rides --no-area-hexes. The hex draws [6, foe, 1] + [6, foe, 12] (Elementalist)."""
+
+[skill_effect.52]
+on_skill_use = "interrupt other wearers"         # the chain -- no client slot (the bonus 10..82 matches no %str%)
+[skill_effect.52.provenance]
+source = "wiki"
+page = 'GWW, "Panic", {{Skill infobox}} + {{Skill progression}}, rev. 2695691, read 2026-09-27'
+verified = """studies/weapons/PLAN.md 43 (B2). Wiki: "Elite Hex Spell. For 1...10 second[s], \
+target foe and all nearby foes are hexed with Panic. When a foe hexed with Panic successfully \
+uses a skill, all other nearby foes are interrupted."; `aoe = nearby`; var1 `Duration` 1->10. \
+Client (38797): id 52, type_code 4, attribute 2 (Domination Magic), profession 5, TARGET BYTE \
+16, aoe_range 240 (the client's own nearby), duration 1->10 args = 5 (duration | bonus), scale 2 \
+/ 2, bonus 10 / 82 -- a slot no %str% in the description names (skilldesc: unnumbered), so it \
+carries no number here. Read by authsrv.hex_skill_use_chain at a wearer's skill COMPLETION (the \
+player's E5, a body's 58): every OTHER wearer of this hex from the same caster within 240 u of \
+the user that is activating a skill is interrupted in the skill-less mode "skill" (a cast, \
+attack skill or not; never a swing; no disable). "Successfully uses": which instant retail \
+means is UNVERIFIED -- the completion is the one chosen; "all other nearby foes" is read as \
+the other WEARERS (the D6 spec's reading), not every foe near the user. Never scatters (WIKI \
+"Scatter": Panic is a named non-trigger). --no-hex-skill-use-chain reverts. The hex draws [6, \
+foe, 1] + [6, foe, 4] (Mesmer)."""
+
 # ---------------------------------------------------------------------------
 # THE OUTPOST HENCHMEN -- DESKWORK-D1 step 5 (2026-09-23). Three standing NPCs
 # in our served outpost (Ascalon City, map 148) that the party window offers for

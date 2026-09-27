@@ -2873,9 +2873,84 @@ called; the source locks. `test_mechanics` 29 (Empathy's auras), `test_shouts`, 
 `test_labelconsumers`, `test_skilldamage`, `test_effects`, `test_agentlife`, `test_guards`, `test_content`,
 `test_srclint`, `test_provlint` green on the same tree.
 
+### 43.1 B2 (2026-09-27): the four hexes that need a mechanism of their own
+
+Suffering 108, Soothing Images 56, Rust 204, Panic 52 -- rows in `content/world.toml` (hand, WIKI
+with the revision ids), the readers in `episodemods` (`hex_pips`, `blocks_adrenaline`,
+`signet_activation_factor`, `is_signet`), the hooks in `authsrv` (the banner beside
+`HEX_DEGENERATION`). Every one RECONSTRUCTION: none was cast on any live tape (aotjoin P8), and none
+has a numbered client slot the house readers accept -- 108's 0..3 and 204's 1..10 / 10..70 sit in
+BIT-CLEAR slots with DIFFERING endpoints (the refused "no witness" class, skillread.py:112-116), and
+56's, 204's ×2 and 52's chain are unnumbered text (the records lane: Panic's bonus 10..82 matches
+no `%str%` at all). So the number or the rule enters through an EXPLICIT row field, the glyph's
+`energy_reduction0/15` precedent (skillread.py:100-102), interpolated by the client's own formula
+(`effects.interp`) where it is a progression. One revert per behaviour.
+
+- **Suffering -- health degeneration from a HEX** (`scale_means = "Health degeneration"`,
+  `health_degeneration0/15 = 0/3`, the client's own scale0/15 carried explicitly). `net_pips` sums
+  `episodemods.hex_pips` with `effects.pips_from` under ONE cap of 10 at `push_regen` (the 0x00A2
+  prop 44) and `degen_tick` (the spend): rank 12 → 2 pips, 15 → 3; Burning + Suffering caps at 10.
+  That a hex shares the conditions' cap is RECONSTRUCTION (GWW "Health degeneration" caps the whole
+  and names no second ledger). `CONDITION_PIPS` and `pips_from` are untouched (test_effects 4e's
+  exact pin stands; the hex pips sit beside it). Degeneration is not damage: no word, no [10], no
+  scatter (WIKI "Area damage over time"). **This LIGHTS UP Faintheartedness 135's dormant
+  `bonus_scale_means = "Health degeneration"`** -- its row named the label since 2026-08-22 and
+  nothing read it (the D6 server lane's surprise): decided ON here, 3 pips at rank 15, and
+  `--no-hex-degeneration` reverts both hexes.
+- **Soothing Images -- "cannot gain adrenaline"** (`blocks_adrenaline = true`). `adrenaline_blocked`
+  reads at the player's sender (`player_gains_adrenaline`, ahead of the bar gate) and at the five
+  body gain sites (`scythe_extra_hit`, `hit_enemy`, `hurt_agent_row`'s hostile and party arms --
+  the hero's 0x00CF inside the gated block -- and `land_swing`'s hit landed): a wearer gains
+  NOTHING, nothing goes on the wire, the 25 s clock is not marked. 0x00CF 0 vs silence for a
+  blocked gain is UNVERIFIED (no tape holds one); silence chosen. `--no-adrenaline-block`.
+- **Rust -- Cold damage + signets take twice as long.** The damage: `bonus_scale_means = "Cold
+  damage"` (the record's BONUS slot; its scale 1..10 is the Overcast disable duration, unmodelled),
+  `hits_on_cast = true`, `damage0/15 = 10/70`, `damage_type = 3` -- `hex_cast_damage` now reads the
+  label in EITHER slot and honours the explicit endpoints (rank 12: 58), so the burst rides B1's
+  arms unchanged (`burst_player_spell` at the E5, `burst_body_spell` behind a body's 58, 156 u,
+  `--no-area-hexes`). **CONTESTED:** the client's bonus slot says 10..70, the wiki's progression
+  says 10..85 (the line Deep Freeze's page carries); the client's number ships and a tooltip read
+  in a run settles it. The ×2: `signet_activation_multiplier = 2` (a number with no client slot,
+  Frenzy's `damage_taken_multiplier` shape), read by `signet_activation` for a SIGNET (type_code 7,
+  OBSERVED 4/4: 1, 2, 294, 1778) at the three activation sites -- the player's press between
+  `skill_timing` and the E5 clock, `enemy_attack_tick`, `ally_cast_tick` -- so the recharge anchors
+  take the scaled value (a hostile's Healing Signet lands at +4.0 s under Rust, its slot ready 2.0 s
+  later than unhexed). Two Rusts multiply (×4, RECONSTRUCTION, no tape). Property 61 GV_CASTTIME is
+  never sent: whether the client stretches its own bar is UNVERIFIED (the `cast_modifier_order`
+  probe is unrun; a harness run looks). NOT modelled, named: the Overcast clause (signet interrupt +
+  disable) -- the server has no Overcast. `--no-signet-activation`.
+- **Panic -- the interrupt chain** (`on_skill_use = "interrupt other wearers"`). WIKI rev 2695691:
+  "When a foe hexed with Panic successfully uses a skill, all other nearby foes are interrupted."
+  `hex_skill_use_chain` fires at a wearer's skill COMPLETION -- the player's E5 batch (its end,
+  behind the hold pulse, because `_na_fail` -- a non-attack whose requirement failed is not
+  "successfully used" -- is only known there) and a body's `land_skill` right behind its 58 (not
+  on the dead-target exit, which lands nothing; the function has six exits) -- and interrupts every
+  OTHER wearer of the same hex from the SAME CASTER within the record's 240 u of the user that is
+  activating a skill, ascending, through `interrupt_player` / `interrupt_body` in the new skill-less
+  mode `"skill"` (`INTERRUPT_MODE_SKILL`): a cast in activation, attack skill or not; NEVER a swing
+  (the two `("action", "attacking")` swing gates are untouched, and the test's known-bad arm shows
+  mode "action" stopping the same swing); no disable (the interrupter named is the hex, whose row
+  carries no `interrupt_disable`); a wearer activating nothing is untouched. Three readings named
+  as RECONSTRUCTION: which instant "successfully uses" is (the press, the start, the completion --
+  the completion chosen); "all other nearby foes" read as the other WEARERS (the spec's reading)
+  rather than every foe near the user; and the same-caster family. The two slots differ between
+  the paths (the player's at its batch end, a body's behind its 58) -- both UNWITNESSED. Never
+  scatters (WIKI "Scatter": Panic is a named non-trigger). `--no-hex-skill-use-chain`.
+
+**Tests** (`test_mechanics.py` §35-38, floor 257 → 297 bare = the only number it has, MEASURED,
+every section with its flag's known-bad arm; the TESTS.md entry has the checks). `test_weapons` (336
+vault / 309 bare, unchanged), `test_effects`, `test_labelconsumers`, `test_interrupt`,
+`test_instantannounce`, `test_pools`, `test_adrenwire`, `test_skilldamage`, `test_shouts`,
+`test_castcycle`, `test_guards`, `test_agentlife`, `test_content`, `test_bareimport`, `test_srclint`,
+`test_provlint` green on the same tree.
+
 **Left.** The wire ORDER of an area hex with damage (the player's words-then-hexes vs a body's
 hexes-then-words; one `[20]` per foe vs one) -- a loopback run can show what our client draws, only
 a live cast what retail sends; the class id's key (profession of the skill vs the caster, vs the
 attribute); whether a foe on the area's edge gets the full duration (not on GWW); how the 66 stacks
-with Crippled (CONTESTED, slice 48.3); the `[59]` on the player's E5 for a dead target; B2's four
-rows; B3's 179 / 185; B4's Cracked Armor / Dazed.
+with Crippled (CONTESTED, slice 48.3); the `[59]` on the player's E5 for a dead target; Rust's
+10..70 vs 10..85 (a tooltip run); whether a Rusted PLAYER's cast bar needs property 61 (a harness
+run with Healing Signet under Rust); Panic's trigger instant and its reach (other wearers vs every
+nearby foe) -- a live Panic is the only witness; whether a hex's degeneration shares the
+conditions' cap; the blocked gain's wire (0x00CF 0 vs nothing); B3's 179 / 185; B4's Cracked Armor
+/ Dazed.

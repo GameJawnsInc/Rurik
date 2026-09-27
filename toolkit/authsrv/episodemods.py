@@ -364,3 +364,111 @@ def move_speed_percent(state, agent_id):
     """
     boosts, _snares, _crippled = move_speed_terms(state, agent_id)
     return _capped(boosts, MOVE_SPEED_CAP_UP) if boosts else 0.0
+
+
+# THE HEX MECHANISMS (DESKWORK-D6 step 4, B2, 2026-09-27; studies/weapons 43).
+# Three more pure readers over the wearer's open episodes, each keyed on a
+# content-row field because the client's own slot cannot carry the number:
+#
+#   * `hex_pips`  -- "Health degeneration" on a row (Suffering 108's 0..-3,
+#     Faintheartedness 135's 0..3): pips the wearer LOSES, summed by the caller
+#     with effects.pips_from under the same cap of 10 (WIKI, GWW "Health
+#     degeneration"). Suffering's 0..3 sits in a BIT-CLEAR slot with DIFFERING
+#     endpoints (args = 1), the shape both skillread readers refuse, so the row
+#     carries the endpoints itself -- `health_degeneration0/15`, the glyph's
+#     `energy_reduction0/15` precedent -- interpolated by the client's own
+#     formula; a row without them reads its slot (135's bonus bit IS set).
+#     Degeneration is not damage: it never words and never scatters (WIKI,
+#     GWW "Area damage over time"). Whether a HEX's pips share the conditions'
+#     cap of 10 is RECONSTRUCTION -- the wiki caps "health degeneration" as a
+#     whole and names no separate ledger.
+#   * `blocks_adrenaline` -- Soothing Images 56's "cannot gain adrenaline"
+#     (WIKI, GWW "Soothing Images" rev. 2714814), a row field with no client
+#     slot (the record's scale and bonus are 0/0). The caller grants nothing
+#     and SENDS nothing; whether retail sends a 0x00CF 0 to a blocked gain is
+#     UNVERIFIED (no tape holds a blocked gain).
+#   * `signet_activation_factor` -- Rust 204's "take twice as long to activate
+#     signets" (WIKI, GWW "Rust" rev. 2740665): `signet_activation_multiplier`
+#     on the row, a number with NO client slot (Frenzy's
+#     `damage_taken_multiplier` shape), multiplied over the live episodes. The
+#     caller applies it to a SIGNET (type_code 7, OBSERVED 4 of 4: Healing
+#     Signet 1, Resurrection Signet 2, 294, Signet of Return 1778) and to
+#     nothing else.
+HEX_DEGEN_MEANS = "Health degeneration"
+SIGNET_TYPE_CODE = 7
+_HEX_DEGEN_UNREADABLE = set()
+
+
+def is_signet(skill_id):
+    """The client's own type code says signet (7). A rowless id is not one."""
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return False
+    return int(row.get("type_code") or 0) == SIGNET_TYPE_CODE
+
+
+def hex_pips(state, agent_id):
+    """Degeneration pips the agent's open NON-condition episodes name
+    (`Health degeneration` in either slot), uncapped -- the caller caps the
+    sum with the conditions' pips. 0.0 with no such episode."""
+    table = state.get("effects")
+    if not table:
+        return 0.0
+    total = 0.0
+    for ep in table.on_agent(agent_id):
+        try:
+            row = agents.WORLD.get("skill_effect", str(ep["skill"]))
+        except Exception:                                      # noqa: BLE001
+            continue
+        for which, key in (("scale", "scale_means"), ("bonus_scale", "bonus_scale_means")):
+            if row.get(key) != HEX_DEGEN_MEANS:
+                continue
+            lo, hi = row.get("health_degeneration0"), row.get("health_degeneration15")
+            if lo is not None and hi is not None:
+                total += effects.interp(int(lo), int(hi), ep.get("rank", 0))
+                continue
+            try:
+                total += skill_scale_value(ep["skill"], ep.get("rank", 0), which)
+            except ValueError as ex:
+                if ep["skill"] not in _HEX_DEGEN_UNREADABLE:
+                    _HEX_DEGEN_UNREADABLE.add(ep["skill"])
+                    print(f"[effects] {ep['skill']} names a health degeneration "
+                          f"with an UNREADABLE slot and no health_degeneration0/15 "
+                          f"on its row, so it degenerates nothing: {ex}", flush=True)
+    return float(total)
+
+
+def blocks_adrenaline(state, agent_id):
+    """True while an open episode's row says `blocks_adrenaline`."""
+    table = state.get("effects")
+    if not table:
+        return False
+    for ep in table.on_agent(agent_id):
+        try:
+            row = agents.WORLD.get("skill_effect", str(ep["skill"]))
+        except Exception:                                      # noqa: BLE001
+            continue
+        if row.get("blocks_adrenaline"):
+            return True
+    return False
+
+
+def signet_activation_factor(state, agent_id):
+    """The product of the open episodes' `signet_activation_multiplier`s
+    (Rust: 2). 1.0 with none. Two Rusts multiply (RECONSTRUCTION -- GWW's
+    activation-time cap row is about additive bonuses, and two Rusts on one
+    foe are on no tape)."""
+    table = state.get("effects")
+    if not table:
+        return 1.0
+    factor = 1.0
+    for ep in table.on_agent(agent_id):
+        try:
+            row = agents.WORLD.get("skill_effect", str(ep["skill"]))
+        except Exception:                                      # noqa: BLE001
+            continue
+        mult = row.get("signet_activation_multiplier")
+        if mult:
+            factor *= float(mult)
+    return factor

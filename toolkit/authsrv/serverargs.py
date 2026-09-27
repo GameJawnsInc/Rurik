@@ -2276,6 +2276,23 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                     help="studies/weapons 43 REVERT: 0x00F1 bit 0x400 (RECONSTRUCTION: "
                          "snared -- Teinai's Prison 6/6) is never set while a "
                          "movement-speed-decrease episode is live.")
+    ap.add_argument("--no-hex-degeneration", action="store_true",
+                    help="studies/weapons 43 (B2) REVERT: a skill_effect row naming "
+                         "`Health degeneration` (Suffering 108's 0..3, Faintheartedness "
+                         "135's) degenerates NOTHING -- only the four conditions' pips "
+                         "count, the reading every run before 2026-09-27 made.")
+    ap.add_argument("--no-adrenaline-block", action="store_true",
+                    help="studies/weapons 43 (B2) REVERT: a `blocks_adrenaline` wearer "
+                         "(Soothing Images 56) gains adrenaline as if unhexed, at every "
+                         "gain site.")
+    ap.add_argument("--no-signet-activation", action="store_true",
+                    help="studies/weapons 43 (B2) REVERT: a signet cast under a "
+                         "`signet_activation_multiplier` hex (Rust 204's x2) activates "
+                         "at its table time.")
+    ap.add_argument("--no-hex-skill-use-chain", action="store_true",
+                    help="studies/weapons 43 (B2) REVERT: a wearer of an `on_skill_use = "
+                         "\"interrupt other wearers\"` hex (Panic 52) completing a skill "
+                         "interrupts nobody.")
     ap.add_argument("--no-spell-projectiles", action="store_true",
                     help="studies/weapons 36 / 37 REVERT: a projectile SPELL (Flare, "
                          "Lightning Orb, Dancing Daggers) lands its damage at the E5 (the "
