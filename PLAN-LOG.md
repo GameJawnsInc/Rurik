@@ -28,6 +28,25 @@ move back.
 
 ---
 
+### `test_weapons.py` runs on a bare machine -- 2026-09-26 -- **its "bare-machine" floor had been vault arithmetic: with `RURIK_VAULT` at a nonexistent path the run died at section 13 and, past it, failed sixteen checks. It now completes bare, 264 checks and 12 declared skips, against a vault run's 281 -- the floor is that measured 264. Landed `da945c6e` (merge `2e76d500`); test-only, no server change, no flag**
+
+**This answers the taker-armour entry below**, whose "Found in passing and filed, not fixed" line reads that `test_weapons.py` "cannot finish a bare-machine run on main". Reproduced at `dcaf0d60` and again on `adb168ee`.
+
+**The defect, three shapes** (`project-rurik-bare-machine-defect-class`'s list grows to five):
+* **A path that reads the vault-only skills table, with no row there.** Section 13's body Dual Shot: without skill 396's row `_is_attack_skill` answers False, the body casts it as a spell, no arrow leaves, and `dual["body_projectiles"]` raised the `KeyError` that stopped the run. Past it the same shape failed Ignite Arrows' radius (14), the adrenal bar behind each hit's `0x00CF` (16), a staff's half-recharge roll on a spell's type (20), the kind on a spell's shot (22) and the Orb's Air Magic penetration (25's `ar == 19.0`, and the taker-armour entry's Orb onto the monk beside it). And `attribute_state` REFUSES without the vault's `attribute_cost` / `attribute` tables, so every rank read None and the splash's armour (14), `player_weapon_rank` (19) and the hornbow's hits (21) quietly computed a different number.
+* **A tape check that skipped only on an exception.** A nonexistent vault does not raise: `livewire.live_captures` swallows the `OSError`, the extractor returns nothing, and the six tape and corpus checks (22, 24-28) FAILED on empty results instead of skipping.
+* **"Is the vault's table here" decided by presence.** Section 28 asked `had and kept`, but a bare machine carries the tracked content's fourteen skills rows, so it walked into the corpus check with a fourteen-row "record".
+
+**The fix.** The file carries the record's own rows -- skills 1, 83, 185, 194, 229, 317, 394, 396, 431, 433 and 858 (skilltable.py, build 38797) and the attribute cost curve with each attribute's profession and primary flag, the three columns `attribute_state` reads -- and `skills_rows()` / `attribute_rows()` REPLACE the table for the block or section that reads them, rather than merge into it, so a vault run takes exactly the bare path and cannot pass on a row the bare machine lacks: taking 229 out of section 25's rows turned the VAULT run red (run once, reverted). Section 20's three press checks, which skipped wherever 83's row was missing, now run everywhere. Every tape and corpus check skips on `vaultpath.require_dir` of its capture directory, never on an empty result, and its `except` is narrowed to `SystemExit`, so on a vault machine a real extractor error goes red where it used to become a skip. Section 28's table test is section 2's (`full_skills_table`, weapon_req on at least 100 rows). New section 2b (vault-only, two checks) holds every carried row to the vault's own, column for column; breaking one skills value and one cost-curve entry turned both red.
+
+**Still skipped bare, on purpose:** section 23's six checks. Two have the vault's own numbers as their subject; the other four (the hits at Strength 9, the revert, a body's base, the incoming Orb) are behaviour and could run bare on about eight more carried rows -- not done here.
+
+**Tests:** `test_weapons.py` bare 264 / 12 declared skips (17 checks), vault 281 (279 + section 2b's two), floor 260 -> 264 -- TESTS.md; `test_srclint.py` 26.
+
+**For whoever lands `aot`:** `test_weapons.py` conflicts on the floor line only. A trial merge of `aot` (80ec8b9e) onto `da945c6e` completed bare at 294 checks / 14 declared skips (sections 29 and 30 already skip on a missing capture) and a vault run at 324, so the floor on landing is 294, measured.
+
+---
+
 ### A body's spell meets its TAKER's armour -- 2026-09-26 -- **`body_spell_terms` scaled every taker by the PLAYER's equipped spell armour; a body taker now meets its own rating (the swing path's rule) less the spell's own penetration, the player taker is byte-identical, `--body-spell-player-armour` reverts**
 
 **The defect.** `body_spell_terms` -- a body's spell against its taker, for a single-target cast at the completion, a projectile spell's arrival, a burst and a splash, and (on the `aot` branch, DESKWORK-D6) every tick of a body's area over time -- took its armour term from `spell_armour_for`, which returns `combatmath.player_spell_armour(EQUIP_ARMOUR, ...)`: the player's five pieces, 25 elemental, whoever the taker was. A hostile's Fireball onto a hero, a hero's Flare onto a hostile and a Fire Storm tick on the monk were all scaled by the player's armour. The player-as-taker case was right. The gap was found by the D6 server review (`studies/weapons/PLAN.md` §42 "Scale" on `aot`, "a body's ticks scale by the PLAYER's spell armour whoever the taker is").
