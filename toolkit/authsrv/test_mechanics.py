@@ -32,7 +32,7 @@ import effects      # noqa: E402
 import combatmath   # noqa: E402
 
 # Floor set from a real green run (39 checks, 2026-08-22; 99 checks, 2026-09-09 SKILLS-DW; 129 checks, 2026-09-10 SKILLS-BL; 153 checks, 2026-09-10 SKILLS-RC; 162 checks, 2026-09-10 SKILLS-MA).
-LEDGER = checks.Ledger("effect mechanics", floor=354)  # 2026-09-27 (the D6 review's repair): +17 -- sec.35 the cap that binds (M1) and the [44] at the apply through land_skill (HEX-2); sec.36 the four body gates through the real functions (M8); sec.37 the press and ally_cast_tick under Rust (M3); sec.38 the player's chain through the real press + E5 (M4); sec.39 200 AR (M2), the Core reading's arm (R34-3), the scythe and the splash (M9), the shield inside the leaf (R34-7); sec.40 the spell word on a Dazed caster (M7), the press and ally_cast_tick under Dazed (M3); the source locks through _lock (M13), main()'s eight flips pinned (M10); sec.16's heal-kill re-pinned to the whole death word + step-down (EV-2); MEASURED from the green run, 354 checks, floor 337 -> 354  2026-09-27 (later): +40, DESKWORK-D6 B4 sec.39-40 (Cracked Armor: -20 into the bonus category before the cap and the penetration, the floor, the player and the five body sites; Dazed: spells x2, a landed attack or Dazed itself landing interrupts the spell in activation, never a signet or a swing), from the green run  # 2026-09-27: +40, DESKWORK-D6 B2 sec.35-38 (Suffering's hex pips, Soothing Images' adrenaline block, Rust's explicit damage + signet x2, Panic's chain), from the green run  # 2026-09-26: +1, sec.16 (a HOSTILE's heal-kill under Deep Wound still pays the kill reward -- the control on hurt_agent_row's rule at heal_agent's door; the party arm is test_agentlife JARIN-S 5b), from the green run  # 2026-09-23: +11, SKILLS-MC sec.34 (Mend Condition: heal IF removed, the no-condition control, the other-ally byte, the revert), from the green run  # 2026-09-17: +5, RUN-SKILLS-WKL sec.33 + WKL1-2 (a cast that lifts Weakness heals at the weakened rank), from the green run  # 2026-09-17: +12, SKILLS-WK sec.31-32 (Weakness takes one off every attribute), from the green run  # 2026-09-16: +14, SLICE-F48 sec.8b (movement speed on the wire), from the green run  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
+LEDGER = checks.Ledger("effect mechanics", floor=355)  # 2026-09-27 (the D6 client runs): +1 -- sec.37 one episode per skill (strongest_per_skill): two Rusts x2 not x4, Suffering and Shadow of Fear re-applied count once, two different skills still combine; measured 355; before that 2026-09-27 (the D6 review's repair): +17 -- sec.35 the cap that binds (M1) and the [44] at the apply through land_skill (HEX-2); sec.36 the four body gates through the real functions (M8); sec.37 the press and ally_cast_tick under Rust (M3); sec.38 the player's chain through the real press + E5 (M4); sec.39 200 AR (M2), the Core reading's arm (R34-3), the scythe and the splash (M9), the shield inside the leaf (R34-7); sec.40 the spell word on a Dazed caster (M7), the press and ally_cast_tick under Dazed (M3); the source locks through _lock (M13), main()'s eight flips pinned (M10); sec.16's heal-kill re-pinned to the whole death word + step-down (EV-2); MEASURED from the green run, 354 checks, floor 337 -> 354  2026-09-27 (later): +40, DESKWORK-D6 B4 sec.39-40 (Cracked Armor: -20 into the bonus category before the cap and the penetration, the floor, the player and the five body sites; Dazed: spells x2, a landed attack or Dazed itself landing interrupts the spell in activation, never a signet or a swing), from the green run  # 2026-09-27: +40, DESKWORK-D6 B2 sec.35-38 (Suffering's hex pips, Soothing Images' adrenaline block, Rust's explicit damage + signet x2, Panic's chain), from the green run  # 2026-09-26: +1, sec.16 (a HOSTILE's heal-kill under Deep Wound still pays the kill reward -- the control on hurt_agent_row's rule at heal_agent's door; the party arm is test_agentlife JARIN-S 5b), from the green run  # 2026-09-23: +11, SKILLS-MC sec.34 (Mend Condition: heal IF removed, the no-condition control, the other-ally byte, the revert), from the green run  # 2026-09-17: +5, RUN-SKILLS-WKL sec.33 + WKL1-2 (a cast that lifts Weakness heals at the weakened rank), from the green run  # 2026-09-17: +12, SKILLS-WK sec.31-32 (Weakness takes one off every attribute), from the green run  # 2026-09-16: +14, SLICE-F48 sec.8b (movement speed on the wire), from the green run  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
 check = checks.adopt(LEDGER)
 
 FRENZY, RUSH, ROF, GLYPH, IGNITE, FAINT = 346, 319, 307, 200, 431, 135
@@ -2643,8 +2643,35 @@ try:
           "under Rust: Healing Signet 2.0 -> 4.0, Resurrection Signet 3.0 -> 6.0; a stance and a "
           "spell keep their own time (signets only, the wiki's word)")
     hex_on(st, RUST, caster=11)
-    check(authsrv.signet_activation_factor(st, PLAYER) == 4.0,
-          "two Rusts multiply (x4) -- RECONSTRUCTION, no tape and no cap row for it; said, not hidden")
+    per_episode = 1.0
+    for _ep in st["effects"].on_agent(PLAYER):             # the first cut's product
+        per_episode *= float(authsrv.agents.WORLD.get("skill_effect", str(_ep["skill"]))
+                             .get("signet_activation_multiplier") or 1.0)
+    check(authsrv.signet_activation_factor(st, PLAYER) == 2.0 and per_episode == 4.0
+          and len(st["effects"].on_agent(PLAYER)) == 2,
+          "two Rusts count ONCE (x2), though the table holds both episodes (retail's "
+          "overlapping shape): WIKI GWW 'Effect stacking' rev 2739765 -- most skill effects do "
+          "not stack, the strongest application takes precedence (strongest_per_skill). The "
+          "known-bad arm, the per-episode product the first cut shipped, reads x4 -- found by "
+          "harness run 20260927T174700, a hostile's second Suffering doubling the pips")
+    # the same rule for the other two hex readers the D6 hexes ride
+    st2 = fresh_state()
+    hex_on(st2, SUFFER, caster=10)
+    one_suffer = authsrv.episodemods.hex_pips(st2, PLAYER)
+    hex_on(st2, SUFFER, caster=10)
+    two_suffer = authsrv.episodemods.hex_pips(st2, PLAYER)
+    hex_on(st2, FAINT, caster=11)
+    with_faint = authsrv.episodemods.hex_pips(st2, PLAYER)
+    st3 = fresh_state()
+    hex_on(st3, 136, caster=10)
+    one_fear = authsrv.episodemods.attack_interval_factor(st3, PLAYER)
+    hex_on(st3, 136, caster=10, rank=0)
+    two_fear = authsrv.episodemods.attack_interval_factor(st3, PLAYER)
+    check(one_suffer > 0 and two_suffer == one_suffer and with_faint > two_suffer
+          and one_fear == 1.5 and two_fear == one_fear,
+          "Suffering re-applied degenerates ONCE (the same pips), Faintheartedness beside it ADDS "
+          "(two skills, the conditions' additive rule); Shadow of Fear re-applied slows the swing "
+          "ONCE (x1.5, not x2.25)", (one_suffer, two_suffer, with_faint, one_fear, two_fear))
     # THE BODY SITE, for real: a hostile casting Healing Signet through enemy_attack_tick.
     lands = {}
     for rust in (False, True):

@@ -171,6 +171,24 @@ def taker_damage(state, agent_id, dealt):
     return dealt, conversion
 
 
+
+def strongest_per_skill(table, agent_id):
+    """The agent's live episodes with ONE per skill id: the most powerful (the highest
+    rank) and, on a tie, the most recent (the later `applied_at`). WIKI (GWW "Effect
+    stacking" rev 2739765, Skill effects: "Most skill effects do not stack -- the most
+    recent or the most powerful application takes precedence"). The table still HOLDS
+    every overlapping episode -- a re-application gets its own buff id, retail's shape
+    (skills 16.1) -- but what an effect DOES counts its skill once. Found by harness run
+    20260927T174700 (DESKWORK-D6): a hostile's second Suffering on the player summed to
+    4 pips where one Suffering is 2. Different skills still combine, each by its own rule."""
+    best = {}
+    for ep in table.on_agent(agent_id):
+        cur = best.get(ep["skill"])
+        key = (ep.get("rank", 0) or 0, ep.get("applied_at", 0.0) or 0.0, ep["buff"])
+        if cur is None or key > cur[0]:
+            best[ep["skill"]] = (key, ep)
+    return sorted((v[1] for v in best.values()), key=lambda ep: ep["buff"])
+
 def attack_interval_factor(state, agent_id):
     """What the agent's open episodes do to its attack DURATION. 1.0 = nothing.
 
@@ -190,7 +208,7 @@ def attack_interval_factor(state, agent_id):
     if not table:
         return 1.0
     factor = 1.0
-    for ep in table.on_agent(agent_id):
+    for ep in strongest_per_skill(table, agent_id):     # one per skill (WIKI, Effect stacking)
         try:
             row = agents.WORLD.get("skill_effect", str(ep["skill"]))
         except Exception:                                      # noqa: BLE001
@@ -313,7 +331,7 @@ def move_speed_terms(state, agent_id):
     boosts, snares, crippled = [], [], False
     if not table:
         return boosts, snares, crippled
-    for ep in table.on_agent(agent_id):
+    for ep in strongest_per_skill(table, agent_id):     # one per skill (WIKI, Effect stacking)
         if ep["skill"] == effects.CONDITION_BY_NAME["Crippled"]:
             crippled = True
             continue
@@ -431,7 +449,7 @@ def hex_pips(state, agent_id):
     if not table:
         return 0.0
     total = 0.0
-    for ep in table.on_agent(agent_id):
+    for ep in strongest_per_skill(table, agent_id):     # one per skill (WIKI, Effect stacking)
         try:
             row = agents.WORLD.get("skill_effect", str(ep["skill"]))
         except Exception:                                      # noqa: BLE001
@@ -471,14 +489,14 @@ def blocks_adrenaline(state, agent_id):
 
 def signet_activation_factor(state, agent_id):
     """The product of the open episodes' `signet_activation_multiplier`s
-    (Rust: 2). 1.0 with none. Two Rusts multiply (RECONSTRUCTION -- GWW's
-    activation-time cap row is about additive bonuses, and two Rusts on one
-    foe are on no tape)."""
+    (Rust: 2). 1.0 with none. Two Rusts count ONCE -- one per skill,
+    `strongest_per_skill` (WIKI, Effect stacking); the first cut multiplied them (x4),
+    found by the D6 client runs."""
     table = state.get("effects")
     if not table:
         return 1.0
     factor = 1.0
-    for ep in table.on_agent(agent_id):
+    for ep in strongest_per_skill(table, agent_id):     # one per skill (WIKI, Effect stacking)
         try:
             row = agents.WORLD.get("skill_effect", str(ep["skill"]))
         except Exception:                                      # noqa: BLE001
