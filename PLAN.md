@@ -2197,7 +2197,7 @@ study doc as UNVERIFIED, which is the honest label for "no closure found".
 * **DESKWORK-D6 steps 3–5**: Mind Burn 185 and Incendiary Bonds 179; the seven area hexes (Deep Freeze's snare needs only its row); Cracked Armor and Dazed ([studies/deskwork/PLAN.md](studies/deskwork/PLAN.md) D6).
 * **The other eleven areas over time** carry no row and are inert; Meteor Shower and Eruption have no ground-visual id; whether a caster's death ends its area is UNVERIFIED (ours outlives it, an n = 1 lean).
 * **MONSTERAI-S9**: heroes and henchmen scatter too (WIKI), deferred; the normal-mode rate (`--scatter-after`, default 2) is the owner's feel to set; return-to-post and routing around a live area are NOT FOUND.
-* **Two taker gaps the ticks inherit**: the player's spell words are not armour-scaled (`hit_enemy` exact), and `body_spell_terms` scales every taker by the PLAYER's spell armour.
+* **The taker gap the ticks inherit**: the player's spell words are not armour-scaled (`hit_enemy` exact); the body half closed on main 2026-09-26 (`0ab2a52e`, PLAN-LOG).
 
 **Heroes** — [studies/heroes/RUN-HEROLIB.md](studies/heroes/RUN-HEROLIB.md)
 

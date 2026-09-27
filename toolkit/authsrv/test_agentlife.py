@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=677)   # 2026-09-26 (later) the scatter review repaired, R3-F1..F5 + the mutation pass F3-F7: section_scatter +12 (the refusal once, the corridor, the pocked mesh, clause (d) alone, the burrow, the ceaser and the hold halted mid-chase, the stationary member, the re-entrant, the [59] form, the book on close, the real cast site), floor 665 -> 677 from the green run (678 with the vault's re-emitted skills table; still no bare-machine number)  # 2026-09-26 MONSTERAI-S +30 (section_scatter: the delay, the group, the one trigger, the cancel against interrupt_body's shape, the flee point dodging a second area, the refusing mesh, the legs, the flight, the hold and its lift, the never set, the two flags, the end-to-end check through D6's real open_area / area_tick / hit_enemy) + 1 declared skip (S9, party bodies), floor 635 -> 665 from the green run (666 with the vault's re-emitted skills table; the file still has no bare-machine number)  # 2026-09-25 DESKWORK-D8 step 4 REVIEWED, RV-1..RV-5 fixed: section_caster_held_slot +8 (17 in the section: the search's bound made VISIBLE for checks C and D -- a pick counter that raises past len(bar) + 1, a leaked bound a named FAIL and not a hang; the swing-clock check split over a three-slot bar so a clock hold that stepped past would show; the gate ORDER, world gates before clock gates, in four arms -- the review's Warrior with two heals and 7 energy, the first-pick unpayable heal nobody needs, the unpayable touch slot at 300 u, the crash arm refused by name on its own stamp; the reach-hold line's hostile-side label), floor 628 -> 635 = THE CORE, every check but the real-table one, from the green runs: 636 with the vault's re-emitted skills table, 635 + 1 declared skip on a table that predates it (touch_range stripped from the real rows), and the whole file does not run on an EMPTY vault at all -- section_hold_plane refuses without attribute cost rows, before and after -- so there is no bare-machine number for this file  # 2026-09-24 DESKWORK-D8 step 4, the caster's held-slot stall +9 (section_caster_held_slot: the run's shape 20260924T210744 stepped past, the held slot uncharged and unswung, the touch cast from melee, the hold with every ready slot out of reach, the held-set bound, the re-pick through the resource / heal / swing-clock gates, the REAL vault row -- a declared skip on a bare machine, where the floor is 627), from the green run (628)  # 2026-09-24 DESKWORK-D8 steps 3/4 FIXER +23 (section_leash_caster_review: the caster notice gate CD-1/EV-4, the short-leash no-loop CD-2, lost-contact-walks-home EV-2, revive-clears-the-return CD-8, the NPC_FOLLOW gate CD-9, the per-skill touch/half reach EV-1, the engaged/dwell/plumbing terms CD-5, the standing-fight give-up EV-8), plus the EV-9/CD-4 planted-record check made real, from the green run (619)  # 2026-09-24 DESKWORK-D8 steps 3/4 +44 (section_leash_return 26: the anchor, the dwell give-up, the legs home, the party bodies untouched, the revert arm; section_caster_opening 18: who is a caster, the stand-and-cast, the leg to range, the hold, the revert arm), from the green run (596)  # 2026-09-23 SANDBOX-N2 add +1 (the load-order walk locates _handle_request_players), from the green run  # 2026-09-17 CAST-TARGET-DIED +4 (an ally cast whose target died lands on nothing), from the green run  # 2026-09-15 (probe-walk noise) +2 (the CONTROL is pinned to one name and captured: quiet prints nothing, the failure is named to the caller), from the green run; 2026-09-15 (later) HEROLIB +2 (no 0x001D send site may zero the account library -- the GmSkSlot.cpp:206 crash of run 20260915T201538; the negative control restores the literal and reddens naming the line); 2026-09-15 +2 (offset_y honoured); SLICE-F43 +3 (the wipe countdown and its stop), from the green run   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=692)   # the merged tree (aot + main, 2026-09-26): 692 = aot's 677 + main's +15 (the taker's armour +11, the party-death doors +4), both from base 635; aot's chain: 2026-09-26 (later) the scatter review repaired, R3-F1..F5 + the mutation pass F3-F7: section_scatter +12 (the refusal once, the corridor, the pocked mesh, clause (d) alone, the burrow, the ceaser and the hold halted mid-chase, the stationary member, the re-entrant, the [59] form, the book on close, the real cast site), floor 665 -> 677 from the green run (678 with the vault's re-emitted skills table; still no bare-machine number)  # 2026-09-26 MONSTERAI-S +30 (section_scatter: the delay, the group, the one trigger, the cancel against interrupt_body's shape, the flee point dodging a second area, the refusing mesh, the legs, the flight, the hold and its lift, the never set, the two flags, the end-to-end check through D6's real open_area / area_tick / hit_enemy) + 1 declared skip (S9, party bodies), floor 635 -> 665 from the green run (666 with the vault's re-emitted skills table; the file still has no bare-machine number)  # 2026-09-25 DESKWORK-D8 step 4 REVIEWED, RV-1..RV-5 fixed: section_caster_held_slot +8 (17 in the section: the search's bound made VISIBLE for checks C and D -- a pick counter that raises past len(bar) + 1, a leaked bound a named FAIL and not a hang; the swing-clock check split over a three-slot bar so a clock hold that stepped past would show; the gate ORDER, world gates before clock gates, in four arms -- the review's Warrior with two heals and 7 energy, the first-pick unpayable heal nobody needs, the unpayable touch slot at 300 u, the crash arm refused by name on its own stamp; the reach-hold line's hostile-side label), floor 628 -> 635 = THE CORE, every check but the real-table one, from the green runs: 636 with the vault's re-emitted skills table, 635 + 1 declared skip on a table that predates it (touch_range stripped from the real rows), and the whole file does not run on an EMPTY vault at all -- section_hold_plane refuses without attribute cost rows, before and after -- so there is no bare-machine number for this file  # 2026-09-24 DESKWORK-D8 step 4, the caster's held-slot stall +9 (section_caster_held_slot: the run's shape 20260924T210744 stepped past, the held slot uncharged and unswung, the touch cast from melee, the hold with every ready slot out of reach, the held-set bound, the re-pick through the resource / heal / swing-clock gates, the REAL vault row -- a declared skip on a bare machine, where the floor is 627), from the green run (628)  # 2026-09-24 DESKWORK-D8 steps 3/4 FIXER +23 (section_leash_caster_review: the caster notice gate CD-1/EV-4, the short-leash no-loop CD-2, lost-contact-walks-home EV-2, revive-clears-the-return CD-8, the NPC_FOLLOW gate CD-9, the per-skill touch/half reach EV-1, the engaged/dwell/plumbing terms CD-5, the standing-fight give-up EV-8), plus the EV-9/CD-4 planted-record check made real, from the green run (619)  # 2026-09-24 DESKWORK-D8 steps 3/4 +44 (section_leash_return 26: the anchor, the dwell give-up, the legs home, the party bodies untouched, the revert arm; section_caster_opening 18: who is a caster, the stand-and-cast, the leg to range, the hold, the revert arm), from the green run (596)  # 2026-09-23 SANDBOX-N2 add +1 (the load-order walk locates _handle_request_players), from the green run  # 2026-09-17 CAST-TARGET-DIED +4 (an ally cast whose target died lands on nothing), from the green run  # 2026-09-15 (probe-walk noise) +2 (the CONTROL is pinned to one name and captured: quiet prints nothing, the failure is named to the caller), from the green run; 2026-09-15 (later) HEROLIB +2 (no 0x001D send site may zero the account library -- the GmSkSlot.cpp:206 crash of run 20260915T201538; the negative control restores the literal and reddens naming the line); 2026-09-15 +2 (offset_y honoured); SLICE-F43 +3 (the wipe countdown and its stop), from the green run   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run ;; main's chain: 2026-09-26 a body's spell meets its TAKER's armour: section_body_spell_taker_armour +11, floor 639 -> 650 = THE CORE, from the green run (651 with the vault's re-emitted skills table)  # 2026-09-26 the party-death doors +4 (JARIN-S 5b: the known-bad arm -- kill_agent's default on a hero pays a KILL_REWARD and skips the death tick, and the predicate refuses it; a foe's Empathy (26, the real rows) killing the hero on its own swing through on_attack_triggers -> armour_ignoring_damage; the hostile control on that door; a heal on a Deep Wounded hero that does not clear zero), floor 635 -> 639 = THE CORE, from the green run (640 with the vault's re-emitted skills table, as before); HEAD's pre-fix authsrv.py reddens the two door checks  # 2026-09-25 DESKWORK-D8 step 4 REVIEWED, RV-1..RV-5 fixed: section_caster_held_slot +8 (17 in the section: the search's bound made VISIBLE for checks C and D -- a pick counter that raises past len(bar) + 1, a leaked bound a named FAIL and not a hang; the swing-clock check split over a three-slot bar so a clock hold that stepped past would show; the gate ORDER, world gates before clock gates, in four arms -- the review's Warrior with two heals and 7 energy, the first-pick unpayable heal nobody needs, the unpayable touch slot at 300 u, the crash arm refused by name on its own stamp; the reach-hold line's hostile-side label), floor 628 -> 635 = THE CORE, every check but the real-table one, from the green runs: 636 with the vault's re-emitted skills table, 635 + 1 declared skip on a table that predates it (touch_range stripped from the real rows), and the whole file does not run on an EMPTY vault at all -- section_hold_plane refuses without attribute cost rows, before and after -- so there is no bare-machine number for this file  # 2026-09-24 DESKWORK-D8 step 4, the caster's held-slot stall +9 (section_caster_held_slot: the run's shape 20260924T210744 stepped past, the held slot uncharged and unswung, the touch cast from melee, the hold with every ready slot out of reach, the held-set bound, the re-pick through the resource / heal / swing-clock gates, the REAL vault row -- a declared skip on a bare machine, where the floor is 627), from the green run (628)  # 2026-09-24 DESKWORK-D8 steps 3/4 FIXER +23 (section_leash_caster_review: the caster notice gate CD-1/EV-4, the short-leash no-loop CD-2, lost-contact-walks-home EV-2, revive-clears-the-return CD-8, the NPC_FOLLOW gate CD-9, the per-skill touch/half reach EV-1, the engaged/dwell/plumbing terms CD-5, the standing-fight give-up EV-8), plus the EV-9/CD-4 planted-record check made real, from the green run (619)  # 2026-09-24 DESKWORK-D8 steps 3/4 +44 (section_leash_return 26: the anchor, the dwell give-up, the legs home, the party bodies untouched, the revert arm; section_caster_opening 18: who is a caster, the stand-and-cast, the leg to range, the hold, the revert arm), from the green run (596)  # 2026-09-23 SANDBOX-N2 add +1 (the load-order walk locates _handle_request_players), from the green run  # 2026-09-17 CAST-TARGET-DIED +4 (an ally cast whose target died lands on nothing), from the green run  # 2026-09-15 (probe-walk noise) +2 (the CONTROL is pinned to one name and captured: quiet prints nothing, the failure is named to the caller), from the green run; 2026-09-15 (later) HEROLIB +2 (no 0x001D send site may zero the account library -- the GmSkSlot.cpp:206 crash of run 20260915T201538; the negative control restores the literal and reddens naming the line); 2026-09-15 +2 (offset_y honoured); SLICE-F43 +3 (the wipe countdown and its stop), from the green run   # JARIN-S +25 (the hero's family, the lock, the flag, the death tick, the wipe, the carry, the rig); SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
 def section_weapon_damage():
@@ -387,6 +387,203 @@ def section_player_armour():
               "log")
 
 
+def section_body_spell_taker_armour():
+    """A BODY's spell meets its TAKER's armour (2026-09-26).
+
+    Until that day body_spell_terms scaled every taker by `spell_armour_for`,
+    the PLAYER's equipped pieces: a hostile's spell onto a hero, a hero's onto
+    a hostile, a body's area-over-time tick -- all at the player's 25. The
+    rule is now the swing path's (`body_armour_rating`: the row's
+    armor_rating, else the creature formula) less the spell's own base
+    penetration; the player taker keeps the very call it always made.
+
+    Every check carries the arm that could fail it: a hero and a hostile whose
+    ratings are NOT 25, so the player's number and the taker's cannot agree
+    by accident; the revert arm (`--body-spell-player-armour`) landing the
+    old number through the same land_skill; and the player's path compared
+    byte for byte -- its sends AND its RNG draws -- across both arms.
+    """
+    import random
+    import authsrv
+    import agents
+    print("\n== a body's spell scales by its TAKER's armour, not the player's pieces (2026-09-26) ==")
+    PLAYER, FOE, HERO = authsrv.PLAYER_AGENT_ID, 10, 200
+    FLARE, ORB, BANISH = 194, 229, 252     # fire, Air lightning (25 % off), holy
+
+    def world(hero_over=None, foe_over=None):
+        foe = {"name": "raider", "dead": False, "died_at": 0.0, "health": 500.0,
+               "max_health": 500.0, "last_hit": 0.0, "pos": (100.0, 0.0), "plane": 0,
+               "allegiance": agents.ALLEGIANCE_HOSTILE, "attack_speed": 1.75,
+               "effects": 0, "attacks_back": True, "skills": (), "skill_ready": [],
+               "npc": {"profession": 1, "level": 5}, "armor_rating": 60.0}
+        hero = {"name": "monk", "dead": False, "died_at": 0.0, "health": 500.0,
+                "max_health": 500.0, "last_hit": 0.0, "pos": (0.0, 110.0), "plane": 0,
+                "allegiance": agents.ALLEGIANCE_PLAYER, "effects": 0,
+                "attack_speed": 1.75, "attacks_back": False, "skills": (),
+                "skill_ready": [], "npc": {"profession": 3, "level": 5},
+                "party_slot": 0}
+        foe.update(foe_over or {})
+        hero.update(hero_over or {})
+        return {"agents": {FOE: foe, HERO: hero}, "pos": (0.0, 0.0),
+                "player_health": 480.0, "player_dead": False}
+
+    def land(st, caster, target, skill=FLARE):
+        """One body cast of `skill` at `target`, landed at its completion."""
+        row = st["agents"][caster]
+        row.update(skills=[[skill, 1.0, 5.0]], skill_ready=[0.0], casting=0,
+                   cast_target=target)
+        sent = []
+        authsrv.land_skill(
+            lambda op, vals, label="", quiet=False: sent.append((op, list(vals))),
+            st, caster, row, 1)
+        return sent
+
+    saved = (authsrv.skill_damage, authsrv.skill_projectile,
+             authsrv.BODY_SPELL_TAKER_ARMOUR, authsrv.SPELL_ARMOUR,
+             authsrv.ARMOUR_TERM)
+    try:
+        # 1. the one rule, read by both paths
+        rows = {"override": {"armor_rating": 60.0, "npc": {"profession": 3, "level": 5}},
+                "zero": {"armor_rating": 0.0, "npc": {"profession": 1, "level": 20}},
+                "warrior": {"npc": {"profession": 1, "level": 5}},
+                "monk": {"npc": {"profession": 3, "level": 5}},
+                "bare": {"npc": {}}}
+        got = {k: authsrv.body_armour_rating(r) for k, r in rows.items()}
+        LEDGER.ok(got == {"override": 60.0, "zero": 0.0, "warrior": 35.0,
+                          "monk": 15.0, "bare": None},
+                  "body_armour_rating: a row's armor_rating wins (an explicit 0 "
+                  "too -- an answer, not an absence), else the creature formula "
+                  "3 x level + the profession's bonus (a level-5 Warrior 35, a "
+                  "Monk 15), else None", str(got))
+        src = inspect.getsource(authsrv.land_swing_on_body)
+        spell_src = inspect.getsource(authsrv.body_spell_armour)
+        terms_src = inspect.getsource(authsrv.body_spell_terms)
+        LEDGER.ok("armour = body_armour_rating(row)" in src
+                  and 'row.get("armor_rating")' not in src
+                  and "body_armour_rating(row)" in spell_src
+                  and "spell_ar = body_spell_armour(state, skill_id, tid, tbody)" in terms_src
+                  and "spell_armour_for(" not in terms_src,
+                  "the source: a body's swing (land_swing_on_body) and a body's "
+                  "spell (body_spell_armour) read ONE rating rule, and "
+                  "body_spell_terms asks body_spell_armour, never the player's "
+                  "spell_armour_for directly")
+
+        # 2. the rating a body's spell meets, and its gates
+        st = world()
+        ar = {s: (authsrv.body_spell_armour(st, s, HERO, True),
+                  authsrv.body_spell_armour(st, s, FOE, True))
+              for s in (FLARE, ORB, BANISH)}
+        pieces = authsrv.spell_armour_for(FLARE)
+        LEDGER.ok(ar == {FLARE: (15.0, 60.0), ORB: (11.0, 45.0), BANISH: (None, None)}
+                  and pieces == 25.0,
+                  "a body taker meets ITS OWN rating: Flare onto the level-5 "
+                  "monk 15 and onto the raider's 60 (the player's pieces read "
+                  "25); the Orb's own 25 % comes off each (15 -> 11, 60 -> 45, "
+                  "studies/weapons 35); Banish (holy) is armour-ignoring for "
+                  "every taker", f"{ar}, the player's {pieces}")
+        LEDGER.ok(authsrv.body_spell_armour(world(hero_over={"npc": {}}), FLARE,
+                                            HERO, True) is None,
+                  "a body with no rating and no level meets None -- the stated "
+                  "amount, as the unarmoured player's spell does")
+        authsrv.SPELL_ARMOUR = False
+        off_spell = authsrv.body_spell_armour(st, FLARE, FOE, True)
+        authsrv.SPELL_ARMOUR = True
+        authsrv.ARMOUR_TERM = False
+        off_term = authsrv.body_spell_armour(st, FLARE, FOE, True)
+        authsrv.ARMOUR_TERM = True
+        LEDGER.ok(off_spell is None and off_term is None,
+                  "the player's gates gate a body taker too: --no-spell-armour and "
+                  "--no-armour-term leave a body's spell unscaled "
+                  "(combatmath.spell_respects_armour is the one predicate)",
+                  f"{off_spell} / {off_term}")
+        authsrv.BODY_SPELL_TAKER_ARMOUR = False
+        rev = (authsrv.body_spell_armour(st, FLARE, HERO, True),
+               authsrv.body_spell_armour(st, FLARE, FOE, True))
+        authsrv.BODY_SPELL_TAKER_ARMOUR = True
+        LEDGER.ok(rev == (25.0, 25.0),
+                  "KNOWN-BAD ARM --body-spell-player-armour: every body taker "
+                  "meets the player's 25 again", str(rev))
+
+        # 3. the player's path: the same call, the same RNG draws, either arm
+        def draws(tid, tbody, flag):
+            """Twelve reads from one seed, and the random() that follows them."""
+            authsrv.BODY_SPELL_TAKER_ARMOUR = flag
+            random.seed(20260926)
+            vals = [authsrv.body_spell_armour(st, FLARE, tid, tbody) for _ in range(12)]
+            return vals, random.random()
+        random.seed(20260926)
+        first = random.random()
+        random.seed(20260926)
+        want = [authsrv.spell_armour_for(FLARE) for _ in range(12)], random.random()
+        p_on, p_off = draws(PLAYER, False, True), draws(PLAYER, False, False)
+        b_on, b_off = draws(HERO, True, True), draws(HERO, True, False)
+        authsrv.BODY_SPELL_TAKER_ARMOUR = True
+        LEDGER.ok(authsrv.SPELL_LOCATION_ROLL and want[1] != first
+                  and p_on == want and p_off == want
+                  and b_on == ([15.0] * 12, first) and b_off == want,
+                  "the PLAYER taker is spell_armour_for itself under either arm -- "
+                  "the same values and the same location-roll draws (the random() "
+                  "after twelve reads matches); a BODY taker rolls no location (the "
+                  "next random() is the seed's first), and under the revert arm it "
+                  "rolls the player's again, draw for draw",
+                  f"player {p_on[1]:.6f}/{p_off[1]:.6f} want {want[1]:.6f}; body "
+                  f"{b_on[1]:.6f} (first {first:.6f}) / revert {b_off[1]:.6f}")
+
+        # 4. end to end through land_skill, both arms
+        authsrv.skill_damage = lambda sid, rank: (60.0, "standalone")
+        authsrv.skill_projectile = lambda sid: None          # land at the completion
+
+        def hit(caster, target, flag, **over):
+            authsrv.BODY_SPELL_TAKER_ARMOUR = flag
+            st = world(**over)
+            before = (st["agents"][target]["health"] if target != PLAYER
+                      else st["player_health"])
+            random.seed(20260926)
+            sent = land(st, caster, target)
+            after = (st["agents"][target]["health"] if target != PLAYER
+                     else st["player_health"])
+            return before - after, sent, st
+        h_on, _s, _st = hit(HERO, FOE, True)
+        h_off, _s, _st = hit(HERO, FOE, False)
+        authsrv.BODY_SPELL_TAKER_ARMOUR = True
+        LEDGER.ok(h_on == 27.0 and h_off == 50.0,
+                  "a HERO's Flare (60, strike level 15) onto the raider's own 60 "
+                  "lands 60 x 2^((15 - 60)/40) = 27; --body-spell-player-armour "
+                  "lands it against the player's 25, 50", f"{h_on} / {h_off}")
+        f_on, _s, _st = hit(FOE, HERO, True, hero_over={"armor_rating": 80.0})
+        f_off, _s, _st = hit(FOE, HERO, False, hero_over={"armor_rating": 80.0})
+        m_on, _s, _st = hit(FOE, HERO, True)
+        authsrv.BODY_SPELL_TAKER_ARMOUR = True
+        LEDGER.ok(f_on == 19.0 and f_off == 50.0 and m_on == 60.0,
+                  "a HOSTILE's Flare onto a hero whose row carries armour 80 "
+                  "(hero_armor's [party] `armor`) lands 19, onto a hero with no "
+                  "row rating its level-5 Monk formula 15 -> 60; the revert arm "
+                  "50 on the first", f"{f_on} / {f_off} / {m_on}")
+        pl_on, s_on, st_on = hit(FOE, PLAYER, True)
+        pl_off, s_off, st_off = hit(FOE, PLAYER, False)
+        authsrv.BODY_SPELL_TAKER_ARMOUR = True
+        LEDGER.ok(pl_on == pl_off == 50.0 and s_on == s_off and s_on
+                  and st_on["player_health"] == st_off["player_health"],
+                  "the PLAYER taker is byte-identical across the arms: the same "
+                  "sends in the same order and the same health (60 against its "
+                  "pieces' 25 -> 50)", f"{pl_on} / {pl_off}, {len(s_on)} sends")
+
+        # 5. the flag reaches the parser, main() and the capture's census
+        sargs = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
+        main_src = inspect.getsource(authsrv.main)
+        LEDGER.ok('"--body-spell-player-armour"' in sargs
+                  and "if a.body_spell_player_armour:" in main_src
+                  and "BODY_SPELL_TAKER_ARMOUR = False" in main_src
+                  and authsrv.capture_flags().get("BODY_SPELL_TAKER_ARMOUR") is True,
+                  "--body-spell-player-armour exists, main() flips "
+                  "BODY_SPELL_TAKER_ARMOUR with it, and a capture's flag census "
+                  "records the arm")
+    finally:
+        (authsrv.skill_damage, authsrv.skill_projectile,
+         authsrv.BODY_SPELL_TAKER_ARMOUR, authsrv.SPELL_ARMOUR,
+         authsrv.ARMOUR_TERM) = saved
+
+
 def main():
     import authsrv
     import probes
@@ -551,6 +748,7 @@ def main():
     section_weapon_damage()
     section_armour_and_crit()
     section_player_armour()
+    section_body_spell_taker_armour()
     section_opcode_pins()
     section_opcode_catalog()
     section_probe_encoding()
@@ -9134,6 +9332,70 @@ def section_hold_plane():
                   "maxima at 85 % (prop 41 = 17, prop 42 = 85) and the flags byte 8 "
                   "LAST -- retail's 307.83 s tick; the row's maximum shrinks with it",
                   f"{[(hex(op), v) for op, v in sent]}")
+        # 5b. THE OTHER DOORS a hero dies through take check 5's template too.
+        # Until 2026-09-26 armour_ignoring_damage's row half and heal_agent's
+        # Deep Wound kill passed kill_agent's DEFAULT (reward=True) for any
+        # row -- a KILL_REWARD, the objective and the morale experience for a
+        # hero's death, and no death tick. The predicate is check 5's; its
+        # known-bad arm is that default, and the predicate must refuse it.
+        KILLRW = authsrv.GAME_SMSG_AGENT_KILL_REWARD
+
+        def _hero_death_ok(sent, st):
+            ops = [op for op, _v in sent]
+            return (st["agents"][HERO]["dead"]
+                    and (STATUS, [HERO, agents.EFFECT_DEAD]) in sent
+                    and KILLRW not in ops
+                    and (authsrv.GAME_SMSG_AGENT_MORALE, [HERO, 85]) in sent
+                    and bool(sent) and sent[-1] == (FLAGS, [HERO, 8]))
+
+        def _foe(**over):
+            row = _koss(name="empath", hero=None, party_slot=None, pos=(200.0, 0.0),
+                        allegiance=agents.ALLEGIANCE_HOSTILE)
+            row.update(over)
+            return row
+
+        st5k = _jw(); st5k["agents"][HERO] = _koss(); sent.clear()
+        authsrv.kill_agent(send, st5k, HERO, st5k["agents"][HERO], 0, time.time())
+        _bad = list(sent)
+        LEDGER.ok(not _hero_death_ok(_bad, st5k) and KILLRW in [op for op, _v in _bad]
+                  and (authsrv.GAME_SMSG_AGENT_MORALE, [HERO, 85]) not in _bad,
+                  "the KNOWN-BAD arm: kill_agent's default on a hero pays a "
+                  "KILL_REWARD and skips the death tick -- the predicate refuses it",
+                  f"{[(hex(op), v) for op, v in _bad]}")
+        # (a) a foe's Empathy (26) on the hero punishes the hero's own swing:
+        # land_swing_on_body -> on_attack_triggers(hero) -> armour_ignoring_damage.
+        st5a = _jw(); st5a["agents"][HERO] = _koss(health=8.0); st5a["agents"][10] = _foe()
+        sent.clear()
+        _ep = authsrv.apply_effect(send, st5a, 10, 26, 0, HERO, 0)
+        sent.clear()
+        _dealt = authsrv.on_attack_triggers(send, st5a, HERO, 0)
+        LEDGER.ok(_ep is not None and _dealt == 10.0 and _hero_death_ok(sent, st5a),
+                  "a foe's Empathy kills the hero on its own swing (10 armour-ignoring "
+                  "on 8 health): the death tick, the flags byte 8 last, NO kill "
+                  "reward -- nobody is paid for a party death (WIKI, GWW 'Experience')",
+                  f"ep {_ep is not None}, dealt {_dealt}, {[(hex(op), v) for op, v in sent]}")
+        # (b) the control: the same door on a HOSTILE still pays the reward
+        st5c = _jw(); st5c["agents"][10] = _foe(health=4.0); sent.clear()
+        authsrv.armour_ignoring_damage(send, st5c, 10, authsrv.PLAYER_AGENT_ID, 10.0, 0,
+                                       "a trigger")
+        LEDGER.ok(st5c["agents"][10]["dead"] and KILLRW in [op for op, _v in sent],
+                  "and the same word killing a HOSTILE still pays the KILL_REWARD "
+                  "(hurt_agent_row's rule keeps its hostile arm)",
+                  f"{[(hex(op), v) for op, v in sent]}")
+        # (c) a foe's Deep Wound on the hero, then a heal that does not clear zero
+        st5d = _jw(); st5d["agents"][HERO] = _koss(); st5d["agents"][10] = _foe()
+        sent.clear()
+        authsrv.apply_condition(send, st5d, HERO,
+                                authsrv.effects.CONDITION_BY_NAME["Deep Wound"],
+                                10.0, 0, 0, by_skill=337)
+        _book = dict(st5d.get("deep_wound") or {})
+        st5d["agents"][HERO]["health"] = -10.0
+        sent.clear()
+        authsrv.heal_agent(send, st5d, HERO, 10, 5.0, 0)
+        LEDGER.ok(_book == {HERO: 20} and _hero_death_ok(sent, st5d),
+                  "a heal on a Deep Wounded hero that leaves it below zero kills "
+                  "through the same template: the death tick, NO kill reward",
+                  f"book {_book}, {[(hex(op), v) for op, v in sent]}")
         # 6. the rise: the flags byte 9 closes it and the grace window starts
         sent.clear()
         authsrv.revive_party_body(send, st3, HERO, st3["agents"][HERO], 0)

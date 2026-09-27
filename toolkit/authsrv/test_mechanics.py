@@ -29,7 +29,7 @@ import agents       # noqa: E402
 import effects      # noqa: E402
 
 # Floor set from a real green run (39 checks, 2026-08-22; 99 checks, 2026-09-09 SKILLS-DW; 129 checks, 2026-09-10 SKILLS-BL; 153 checks, 2026-09-10 SKILLS-RC; 162 checks, 2026-09-10 SKILLS-MA).
-LEDGER = checks.Ledger("effect mechanics", floor=256)  # 2026-09-23: +11, SKILLS-MC sec.34 (Mend Condition: heal IF removed, the no-condition control, the other-ally byte, the revert), from the green run  # 2026-09-17: +5, RUN-SKILLS-WKL sec.33 + WKL1-2 (a cast that lifts Weakness heals at the weakened rank), from the green run  # 2026-09-17: +12, SKILLS-WK sec.31-32 (Weakness takes one off every attribute), from the green run  # 2026-09-16: +14, SLICE-F48 sec.8b (movement speed on the wire), from the green run  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
+LEDGER = checks.Ledger("effect mechanics", floor=257)  # 2026-09-26: +1, sec.16 (a HOSTILE's heal-kill under Deep Wound still pays the kill reward -- the control on hurt_agent_row's rule at heal_agent's door; the party arm is test_agentlife JARIN-S 5b), from the green run  # 2026-09-23: +11, SKILLS-MC sec.34 (Mend Condition: heal IF removed, the no-condition control, the other-ally byte, the revert), from the green run  # 2026-09-17: +5, RUN-SKILLS-WKL sec.33 + WKL1-2 (a cast that lifts Weakness heals at the weakened rank), from the green run  # 2026-09-17: +12, SKILLS-WK sec.31-32 (Weakness takes one off every attribute), from the green run  # 2026-09-16: +14, SLICE-F48 sec.8b (movement speed on the wire), from the green run  # 2026-09-14 (late night): +2, PVPMAX sec.16 (the 42 rides the next hit)  # 2026-09-14 (night): +2, SLICE-H17's rank sweep and not-a-double   # SLICE-H14 +7 (section 30), from the green run; JARIN-S +4 (section 7b rewritten), from the green run; MANTID-S +17 (section 29), from the green run; SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
 check = checks.adopt(LEDGER)
 
 FRENZY, RUSH, ROF, GLYPH, IGNITE, FAINT = 346, 319, 307, 200, 431, 135
@@ -505,7 +505,8 @@ def dw_state(health=100.0, enemy=False):
         state["agents"][ENEMY] = {"name": "hatcher", "dead": False,
                                   "pos": (0.0, 0.0), "health": 100.0,
                                   "max_health": 100.0, "skills": (),
-                                  "skill_ready": []}
+                                  "skill_ready": [],
+                                  "allegiance": agents.ALLEGIANCE_HOSTILE}
     return state
 
 
@@ -759,6 +760,10 @@ check(agent["dead"] is True
       and [v for op, v, _l in sent if op == OP_STATUS] == [[ENEMY, agents.EFFECT_DEAD]],
       "a heal that does not clear zero kills the agent through kill_agent's "
       "measured template (status 0x10)")
+check(authsrv.GAME_SMSG_AGENT_KILL_REWARD in [op for op, _v, _l in sent],
+      "and a HOSTILE's heal-kill pays the kill reward: hurt_agent_row's rule, "
+      "whose party arm (a hero's pays nobody) is test_agentlife's JARIN-S 5b",
+      f"ops {[hex(op) for op, _v, _l in sent]}")
 check(not state["deep_wound"].get(ENEMY) and agent["max_health"] == 100.0,
       "death stripped it and restored the agent's book")
 

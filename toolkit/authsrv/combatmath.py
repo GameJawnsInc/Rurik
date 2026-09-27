@@ -317,27 +317,41 @@ def player_spell_armour(EQUIP_ARMOUR, ARMOR_RATING_MODIFIER,
 _SPELL_ARMOUR_WARNED = []
 
 
+def spell_respects_armour(skill_id, SPELL_ARMOUR, ARMOUR_TERM,
+                          ARMOUR_RESPECTING_MEANS, SCALE_MEANS_DAMAGE):
+    """Whether a cast of `skill_id` scales by its taker's armour at all: the
+    term is on and the skill's `skill_effect` row is standalone damage under
+    an armour-respecting label. The half of spell_armour_for that does not
+    depend on WHO takes the spell -- the player's pieces or a body's own
+    rating (authsrv.body_spell_armour) -- so the two cannot disagree on it.
+    """
+    if not (SPELL_ARMOUR and ARMOUR_TERM):
+        return False
+    try:
+        row = agents.WORLD.get("skill_effect", str(skill_id))
+    except Exception:                                     # noqa: BLE001
+        return False
+    if row.get("scale_means") not in ARMOUR_RESPECTING_MEANS:
+        return False
+    return SCALE_MEANS_DAMAGE.get(row.get("scale_means")) == "standalone"
+
+
 def spell_armour_for(skill_id, SPELL_ARMOUR, ARMOUR_TERM,
                      ARMOUR_RESPECTING_MEANS, SCALE_MEANS_DAMAGE,
                      EQUIP_ARMOUR, ARMOR_RATING_MODIFIER,
                      ARMOR_VS_TYPE_MODIFIER, SPELL_LOCATION_ROLL=False,
                      damage_type="elemental"):
-    """The rating an incoming cast of `skill_id` scales by, or None (unscaled).
+    """The rating an incoming cast of `skill_id` scales by ON THE PLAYER, or
+    None (unscaled).
 
     None means "deal the stated amount": the label is armour-ignoring, or
     the term is off, or the player wears nothing. Read from the same
     `skill_effect` row `skill_damage` reads, so a skill that resolves no
-    damage there resolves no armour here either.
+    damage there resolves no armour here either. The player's pieces only:
+    a body taker's rating is authsrv.body_spell_armour's.
     """
-    if not (SPELL_ARMOUR and ARMOUR_TERM):
-        return None
-    try:
-        row = agents.WORLD.get("skill_effect", str(skill_id))
-    except Exception:                                     # noqa: BLE001
-        return None
-    if row.get("scale_means") not in ARMOUR_RESPECTING_MEANS:
-        return None
-    if SCALE_MEANS_DAMAGE.get(row.get("scale_means")) != "standalone":
+    if not spell_respects_armour(skill_id, SPELL_ARMOUR, ARMOUR_TERM,
+                                 ARMOUR_RESPECTING_MEANS, SCALE_MEANS_DAMAGE):
         return None
     return player_spell_armour(
         EQUIP_ARMOUR, ARMOR_RATING_MODIFIER, ARMOR_VS_TYPE_MODIFIER,

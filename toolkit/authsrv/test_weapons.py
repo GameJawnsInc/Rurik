@@ -24,7 +24,7 @@ import agents  # noqa: E402
 import authsrv  # noqa: E402
 import combatmath  # noqa: E402
 
-LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=287)   # the BARE-MACHINE number: 287 = 285 + 2 (the orchestrator's corpse correction, 2026-09-26: section 30 +2 bare -- the dead-at-the-E5 check now opens the area at the corpse (WIKI) instead of locking the refusal, and adds the gone-row refusal and the hostile's cast kept past its target's death with its non-area control; a vault run gives 319); before that 285 = 278 + 7 (the review repaired, 2026-09-26: section 29 +4 bare (the token list, P2, P3/P7, the order facts driven red) + 1 vault-only (the per-tape scoring arm), section 30 +3 bare (the late serve, the dead target, the interval corner under the flag); a vault run gives 317); before that 278 = 265 + 13 (section 30, areas over time on the server -- DESKWORK-D6 step 2, 2026-09-26; a vault run gives 309 -- the server's 197 schedule against the tape's is the one vault-only check, on capture 20260817T231139 alone); before that 265 = 257 + 8 (section 29, areas over time on retail's wire -- aotjoin, 2026-09-26; a vault run gives 295 -- the record's classes, P1-P9 and the tick batch order are the eleven vault-only checks; section 29 alone under a missing RURIK_VAULT runs its 8 and declares the skip); before that 257 = 251 + 6 (section 28, a point-blank burst, 2026-09-20; a vault run gives 276 -- the corpus's target-16 announces are the one vault-only check); before that 251 = 237 + 14 (section 27, the hit test, 2026-09-20; a vault run gives 269 -- the corpus's dodge words are the one vault-only check); before that 237 = 228 + 9 (section 26, Fireball's splash, 2026-09-20; a vault run gives 254 -- the tape's bursts are the one vault-only check); before that 228 = 219 + 9 (section 25, a body's spell projectile, 2026-09-20; a vault run gives 244 -- the tape's activations are the one vault-only check); before that 219 = 208 + 11 (section 24, a player's spell projectile, 2026-09-20; a vault run gives 234 -- the tapes' speeds are the one vault-only check); before that 208 = 203 + 5 (section 23, base armour penetration, 2026-09-19; a vault run gives 222 -- the six checks that read the skills table are vault-only); before that 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
+LEDGER = checks.Ledger("weapons: one table, a row and an item per type", floor=291)   # the merged tree (aot + main, 2026-09-26): 291 = aot's 287 + main's +3 + 1 (section 30 (d'): a body's tick meets the monk's own armour, 60 against 50 under --body-spell-player-armour -- the two landings pinned together) (a body's spell meets its TAKER's armour, sections 25 / 26 / 28 +1 each), both from base 257; aot's chain: the BARE-MACHINE number: 287 = 285 + 2 (the orchestrator's corpse correction, 2026-09-26: section 30 +2 bare -- the dead-at-the-E5 check now opens the area at the corpse (WIKI) instead of locking the refusal, and adds the gone-row refusal and the hostile's cast kept past its target's death with its non-area control; a vault run gives 319); before that 285 = 278 + 7 (the review repaired, 2026-09-26: section 29 +4 bare (the token list, P2, P3/P7, the order facts driven red) + 1 vault-only (the per-tape scoring arm), section 30 +3 bare (the late serve, the dead target, the interval corner under the flag); a vault run gives 317); before that 278 = 265 + 13 (section 30, areas over time on the server -- DESKWORK-D6 step 2, 2026-09-26; a vault run gives 309 -- the server's 197 schedule against the tape's is the one vault-only check, on capture 20260817T231139 alone); before that 265 = 257 + 8 (section 29, areas over time on retail's wire -- aotjoin, 2026-09-26; a vault run gives 295 -- the record's classes, P1-P9 and the tick batch order are the eleven vault-only checks; section 29 alone under a missing RURIK_VAULT runs its 8 and declares the skip); before that 257 = 251 + 6 (section 28, a point-blank burst, 2026-09-20; a vault run gives 276 -- the corpus's target-16 announces are the one vault-only check); before that 251 = 237 + 14 (section 27, the hit test, 2026-09-20; a vault run gives 269 -- the corpus's dodge words are the one vault-only check); before that 237 = 228 + 9 (section 26, Fireball's splash, 2026-09-20; a vault run gives 254 -- the tape's bursts are the one vault-only check); before that 228 = 219 + 9 (section 25, a body's spell projectile, 2026-09-20; a vault run gives 244 -- the tape's activations are the one vault-only check); before that 219 = 208 + 11 (section 24, a player's spell projectile, 2026-09-20; a vault run gives 234 -- the tapes' speeds are the one vault-only check); before that 208 = 203 + 5 (section 23, base armour penetration, 2026-09-19; a vault run gives 222 -- the six checks that read the skills table are vault-only); before that 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114) ;; main's chain: the BARE-MACHINE number: 260 = 257 + 3 (2026-09-26, a body's spell meets its TAKER's armour: sections 25 / 26 / 28 +1 each; a vault run gives 279, measured, from 276. The bare run could NOT be re-measured: with RURIK_VAULT at a nonexistent path it stops at section 13's KeyError (dual["body_projectiles"]) on main too, so the +3 is the vault run's delta carried over -- and section 25's new check, like its `ar == 19.0` neighbour, reads the Orb's Air Magic attribute off the vault's skills table); before that 257 = 251 + 6 (section 28, a point-blank burst, 2026-09-20; a vault run gives 276 -- the corpus's target-16 announces are the one vault-only check); before that 251 = 237 + 14 (section 27, the hit test, 2026-09-20; a vault run gives 269 -- the corpus's dodge words are the one vault-only check); before that 237 = 228 + 9 (section 26, Fireball's splash, 2026-09-20; a vault run gives 254 -- the tape's bursts are the one vault-only check); before that 228 = 219 + 9 (section 25, a body's spell projectile, 2026-09-20; a vault run gives 244 -- the tape's activations are the one vault-only check); before that 219 = 208 + 11 (section 24, a player's spell projectile, 2026-09-20; a vault run gives 234 -- the tapes' speeds are the one vault-only check); before that 208 = 203 + 5 (section 23, base armour penetration, 2026-09-19; a vault run gives 222 -- the six checks that read the skills table are vault-only); before that 203 = 198 + 5 (section 22, a spell's own damage type, 2026-09-19; a vault run gives 211 -- the Dancing Daggers tape is the one vault-only check); before that 198 = 195 + 3 (section 19 gains identifier 573, 2026-09-19; a vault run gives 205); before that 195 = 186 + 9 (section 21, WEAPONS-Q2 / the hornbow, 2026-09-19; a vault run gives 202 -- the extractor read-back is the one vault-only check); before that 186 = 177 + 9 (section 20, WEAPONS-W5b, 2026-09-19; a vault run gives 192 -- the three press checks want skill 83's row); before that 177 = 155 + 22 (section 19, WEAPONS-W4, 2026-09-19; a vault run gives 180 -- the pinned-client read-back is the one vault-only check); before that 155 = 151 + 4 (section 18, the W9 desk close, 2026-09-19; a vault run gives 157); before that 151 = 129 + 22 (section 18, WEAPONS-W9, 2026-09-19; a vault run gives 152); before that 129 = 114 + 15 (sections 15-17, 2026-09-19; a vault run gives 131); before that 114 without the vault's full skills table (section 2 skips), 115 with it; from green runs (WEAPONS-W2c: 43 -> 59; W2b: 59 -> 66; W5: 66 -> 74; W4c: 74 -> 84; W2d: 84 -> 91; W2e: 91 -> 101; W2f: 101 -> 105; W7: 105 -> 114)
 check = LEDGER.ok
 
 LEGACY_ATTRIBUTE = {15: 19, 27: 20, 2: 18, 32: 29}
@@ -2893,6 +2893,30 @@ def section_body_spell_projectiles():
               "off, section 35) at the caster's strike level, computed at the arrival",
               f"{[(hex(op), v) for op, v in arr]} want {want}")
 
+        # 2026-09-26: the same Orb at the MONK meets the monk's OWN rating at the arrival --
+        # the creature formula's 15 less the Orb's own 25 % (11), not the pieces' 19
+        def orb_at_monk(flag):
+            authsrv.BODY_SPELL_TAKER_ARMOUR = flag
+            try:
+                st_m = _body_world((900.0, 0.0), skills=[[229, 0.0, 5.0]], skill_ready=[0.0],
+                                   casting=0, cast_target=HERO)
+                quiet = lambda op, vals, label="", quiet=False: None    # noqa: E731
+                hp = st_m["agents"][HERO]["health"]
+                authsrv.land_skill(quiet, st_m, FOE, st_m["agents"][FOE], 1)
+                shots = len(st_m.get("body_projectiles") or ())
+                for s in st_m.get("body_projectiles") or ():
+                    s["arrives_at"] -= 30.0
+                authsrv.projectile_tick(quiet, st_m, 1)
+                return hp - st_m["agents"][HERO]["health"], shots
+            finally:
+                authsrv.BODY_SPELL_TAKER_ARMOUR = True
+        (m_on, n_on), (m_off, n_off) = orb_at_monk(True), orb_at_monk(False)
+        check(n_on == n_off == 1 and m_on == 64.0 and m_off == 55.0,
+              "a hostile's Orb at the MONK flies too and lands against the monk's own rating: its "
+              "creature formula's 15 less the Orb's 25 % is 11, and 60 x 2^((15 - 11)/40) = 64; the "
+              "revert arm --body-spell-player-armour lands 55 against the pieces' 19",
+              f"{m_on} / {m_off}, shots {n_on} / {n_off}")
+
         # a body's Dancing Daggers: three, a third of a second apart, each behind its visual
         st, send, sent, health = cast(600.0, 858)
         launch = launches(sent)
@@ -3089,6 +3113,12 @@ def section_spell_areas():
               "explosion 0x00A1 [aim, 0, 0, 333, 0, 0], then the player's word and [20, me, it, "
               "344], then the monk's word and its [20] -- word first per foe, each its own number; "
               "the body 400 u off untouched", str([(hex(op), v) for op, v in arr]))
+        check(monk_hp - st["agents"][HERO]["health"] == 60.0
+              and st["player_health"] == health - 50.0,
+              "each its own number, 2026-09-26: the monk meets its OWN armour (a level-5 Monk's 15, "
+              "60 x 2^0 = 60) where the player meets its pieces' 25 (50) -- before that day both "
+              "took 50 (section 28 carries the revert arm)",
+              f"monk {monk_hp - st['agents'][HERO]['health']}, player {health - st['player_health']}")
 
         # the target ran: the impact on the ground, the monk alone in the area
         st = _body_world((900.0, 0.0), skills=[[186, 0.0, 7.0]], skill_ready=[0.0],
@@ -3576,6 +3606,31 @@ def section_bursts():
               "pieces' 25 at its strike level) and [20, me, it, 304], then the monk's word and its "
               "[20], both knocked down; the body 400 u off untouched; the caster released",
               str([(hex(op), v) for op, v in sent]))
+        # 2026-09-26: each taker ITS OWN armour -- the monk (a level-5 Monk, no row rating)
+        # meets the creature formula's 15, not the player's pieces; the revert arm
+        # (--body-spell-player-armour) meets the pieces' 25 again, and the player's own word
+        # is the same bytes under both arms
+        monk_took = monk_hp - st["agents"][HERO]["health"]
+        mine = [v for op, v in sent if op == 0x00A3 and v[0] in (16, 17) and v[1] == PLAYER]
+        authsrv.BODY_SPELL_TAKER_ARMOUR = False
+        try:
+            st_r = _body_world((900.0, 0.0), skills=[[170, 0.0, 15.0]], skill_ready=[0.0],
+                               casting=0, cast_target=PLAYER)
+            sent_r = []
+            authsrv.land_skill(lambda op, vals, label="", quiet=False: sent_r.append((op, list(vals))),
+                               st_r, FOE, st_r["agents"][FOE], 1)
+        finally:
+            authsrv.BODY_SPELL_TAKER_ARMOUR = True
+        mine_r = [v for op, v in sent_r if op == 0x00A3 and v[0] in (16, 17) and v[1] == PLAYER]
+        check(authsrv.body_armour_rating(st["agents"][HERO]) == 15.0 and monk_took == 60.0
+              and monk_hp - st_r["agents"][HERO]["health"] == 50.0
+              and mine == mine_r and len(mine) == 1
+              and st_r["player_health"] == st["player_health"],
+              "each taker its OWN armour: the monk (a level-5 Monk, creature formula 15) takes 60 x "
+              "2^((15 - 15)/40) = 60 of the burst, not 50 against the player's pieces; the revert arm "
+              "--body-spell-player-armour lands the monk's 50 again and the player's word is the same "
+              "bytes under both arms", f"monk {monk_took} / revert "
+              f"{monk_hp - st_r['agents'][HERO]['health']}; the player's {mine} / {mine_r}")
 
         # the revert: one target, no visual, no knock-down
         authsrv.SPELL_AREAS = False
@@ -4299,6 +4354,31 @@ def section_areas_over_time():
               "the tape's 0x00CF / [10] / word 12/12 (B2-4) -- then the monk's word through "
               "hurt_agent_row; the body 400 u off untouched; no 58, no [20], no 0x00A7, no 350 "
               "at k = 1", str([(hex(op), v) for op, v in sent]))
+        # (d') the merge with main's taker armour (0ab2a52e): a body's tick meets EACH
+        # taker's own armour through body_spell_terms -- the monk's tick against the same
+        # tick under --body-spell-player-armour, the player's word the same under both
+        monk_taker, player_taker = monk_hp - st["agents"][HERO]["health"], health - st["player_health"]
+        def _one_tick(taker_armour):
+            was = authsrv.BODY_SPELL_TAKER_ARMOUR
+            authsrv.BODY_SPELL_TAKER_ARMOUR = taker_armour
+            try:
+                w = _body_world((900.0, 0.0), skills=[[197, 0.0, 20.0]], skill_ready=[0.0],
+                                casting=0, cast_target=PLAYER)
+                w["agents"][HERO]["health"] = w["agents"][HERO]["max_health"] = 9000.0
+                snd = lambda op, vals, label="", quiet=False: None   # noqa: E731
+                h0, m0 = w["player_health"], w["agents"][HERO]["health"]
+                authsrv.land_skill(snd, w, FOE, w["agents"][FOE], 1)
+                _aot_advance(w, snd, 1.0)
+                return m0 - w["agents"][HERO]["health"], h0 - w["player_health"]
+            finally:
+                authsrv.BODY_SPELL_TAKER_ARMOUR = was
+        monk_rev, player_rev = _one_tick(False)
+        check((monk_taker, player_taker) == _one_tick(True) and monk_taker == 60.0
+              and monk_rev == 50.0 and player_rev == player_taker == want,
+              "and the monk's tick meets the MONK's armour (main's taker armour, 0ab2a52e): 60 on "
+              "the level-5 Monk against 50 under --body-spell-player-armour (the player's pieces), "
+              "the player's own word the same under both arms",
+              str(((monk_taker, player_taker), (monk_rev, player_rev), want)))
         # (e) the caster dies at k = 4: the area persists (RECONSTRUCTION)
         for _ in range(3):
             sent.clear()

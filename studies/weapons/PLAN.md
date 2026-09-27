@@ -2700,9 +2700,11 @@ line per opened area, per tick, per close.
   slot IS THE AREA'S LENGTH (the same 9 `area_over_time` reads). The first cut shipped 9 s falls
   every 3 s; the lock now reads the seconds off the `[63]` word with the clock running.
 - **Scale.** The player's ticks are NOT armour-scaled (hit_enemy's exact gap, studies/isle 4.2,
-  unchanged); a body's ticks scale by the PLAYER's spell armour whoever the taker is
-  (body_spell_terms's standing shape, aotR-server §2's surprise) -- both pre-existing gaps, not
-  this step's, and named rather than fixed.
+  unchanged) -- a pre-existing gap, not this step's, named rather than fixed. The body half
+  closed on main the same day (PLAN-LOG "A body's spell meets its TAKER's armour", `0ab2a52e`,
+  `--body-spell-player-armour` reverts): `_area_strike` calls `body_spell_terms`, so a body's
+  tick now meets each taker's own armour with no change here -- a hostile's storm tick onto a
+  level-5 Monk measured 60 (its own 15) against 50 under the revert, the player's 50 either way.
 - **The player's completion order.** The tape's casters are never the observer, so a player's
   own E5 batch for an area over time is UNOBSERVED; ours puts the 0x00A1 behind the 58 and the
   (silent, for these three rows) caster visual, where the burst's explosion sits.
@@ -2753,7 +2755,7 @@ k = 1..10 and the 350 exactly at +0 / +3 / +6, the schedule the server produces 
 
 **Left.** Monster scatter (`scatter_struck` is the hook, a no-op here; studies/monsterai 16);
 D6's later steps (Mind Burn 185 / hex 179, the seven area hexes, Dazed and Cracked Armor); an
-armour-scaled player tick and a taker-scaled body tick (the two gaps above); a ground visual id
+armour-scaled player tick (the gap above; the body half closed on main, `0ab2a52e`); a ground visual id
 for 192 and 167 (unknown); the player's own completion batch for an area (unobserved); D6's own
 text in `studies/deskwork/PLAN.md` still says "Fifteen area skills" and "words at +3, +4, +5 s"
 (§41's corrections stand; the landing rewrites it).

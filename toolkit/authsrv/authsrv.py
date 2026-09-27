@@ -13847,6 +13847,71 @@ def land_body_skill_shot(send, state, conn_id, shot, agent, strike):
     return _res
 
 
+# ---- A BODY'S SPELL MEETS ITS TAKER'S ARMOUR (2026-09-26) --------------------
+#
+# Until 2026-09-26 body_spell_terms scaled every taker by `spell_armour_for`,
+# which is the PLAYER's equipped pieces -- so a hostile's Fireball onto a hero,
+# a hero's Flare onto a hostile and every tick of a body's area over time all
+# met the player's 25 elemental, whoever stood in them. The player-as-taker
+# case was right and is untouched: it still makes the SAME call, location roll
+# and all, so its wire and its RNG draws are byte-identical.
+#
+# THE RULE IS NOT NEW. WIKI (GWW "Damage calculation"): damage scales by the
+# armour rating of the one it lands on. A BODY's rating is `body_armour_rating`
+# -- the rule land_swing_on_body has read for a body's swing since SLICE-H3 /
+# H4: the row's `armor_rating` (a hostile's is creature_armor_rating at spawn,
+# a content override winning; a hero's its [party] row's `armor`), else the
+# creature formula over its level and profession (WIKI, GWW "Armor rating" --
+# for a hero the same line, studies/weapons 33). Onto it the spell's OWN base
+# penetration comes off (studies/weapons 35 -- Air Magic's 25 %, a property of
+# the spell, not of whom it meets), exactly as spell_armour_for takes it off
+# the player's. No location roll (a body carries one rating) and no casting
+# penalty (only the player's pending casts live on `state`) -- both as before.
+# A body carries no `+N vs.` bonus either, so the spell's own type cannot move
+# its number, which is the swing path's shape too.
+#
+# RECONSTRUCTION, said: no tape here prices a body's spell on another body.
+# Every body-cast damage word in the corpus lands on the observer (the
+# Master's Orb onto the owner, 11 of 11, studies/weapons 37); Fireball's
+# bursts put different fractions on the foes of one explosion (studies/weapons
+# 38), which per-taker armour predicts and which their different maxima also
+# explain -- consistent, not a measurement. Gated by the same predicate the
+# player's reads (combatmath.spell_respects_armour): an armour-ignoring label,
+# --no-spell-armour and --no-armour-term leave a body's spell unscaled too.
+# `--body-spell-player-armour` reverts: every body taker meets the player's
+# pieces again, through the same call, RNG draw included.
+BODY_SPELL_TAKER_ARMOUR = True   # --body-spell-player-armour reverts: the player's pieces on every taker
+
+
+def body_armour_rating(row):
+    """A body's own armour rating, or None: its row's `armor_rating`, else the
+    creature formula over its npc level and profession. The one rule both a
+    body's swing (land_swing_on_body) and a body's spell (body_spell_armour)
+    read -- WIKI, the creature formula; a row's override is its own claim."""
+    armour = row.get("armor_rating")
+    if armour is None:
+        armour = creature_armor_rating(row.get("npc") or {})
+    return armour
+
+
+def body_spell_armour(state, skill_id, tid, tbody):
+    """The rating a body's spell of `skill_id` scales by on its taker `tid`,
+    or None (deal the stated amount). The player (`tbody` false) meets its
+    pieces through spell_armour_for, the call body_spell_terms always made; a
+    body meets ITS OWN rating (body_armour_rating) less the spell's own base
+    penetration -- see the banner above. --body-spell-player-armour: every
+    taker the player's pieces."""
+    if not tbody or not BODY_SPELL_TAKER_ARMOUR:
+        return spell_armour_for(skill_id)
+    if not combatmath.spell_respects_armour(skill_id, SPELL_ARMOUR, ARMOUR_TERM,
+                                            ARMOUR_RESPECTING_MEANS,
+                                            SCALE_MEANS_DAMAGE):
+        return None
+    row = state.get("agents", {}).get(tid) or {}
+    return penetrated_armour(body_armour_rating(row), None,
+                             base=skill_base_penetration(skill_id))
+
+
 # ---- A BODY'S SPELL PROJECTILE (2026-09-20, studies/weapons/PLAN.md 37) ------
 #
 # W6's spell half, the body side of section 36. OBSERVED on every body spell
@@ -13876,7 +13941,13 @@ def body_spell_terms(state, agent, skill_id, amount, tid, tbody):
     strike level, then the taker's own episodes (Frenzy, a conversion) and
     the whole-point word (DAMAGE-INT). Refusable: _damage_fraction raises
     on an invalid fraction, so a caller sends nothing before calling."""
-    spell_ar = spell_armour_for(skill_id)
+    # THE TAKER'S armour (2026-09-26): the player's pieces when the player
+    # takes it (spell_armour_for, unchanged); a body's own rating when a body
+    # does -- body_armour_rating, the swing path's rule, less the spell's own
+    # penetration. WIKI for the rule, RECONSTRUCTION for a body taker (no
+    # tape prices one); see body_spell_armour's banner. Revert:
+    # --body-spell-player-armour.
+    spell_ar = body_spell_armour(state, skill_id, tid, tbody)
     base = float(amount)
     if spell_ar is not None:
         # SLICE-H14: the taker's own casting penalty (Healing Signet's -40
@@ -22972,7 +23043,22 @@ def armour_ignoring_damage(send, state, target_id, source_id, amount, conn_id, w
     print(f"[c{conn_id}] {what}: {amount:.0f} to agent {target_id} "
           f"({agent['health']:.0f}/{pool:.0f})", flush=True)
     if agent["health"] <= 0.0:
-        kill_agent(send, state, target_id, agent, conn_id, time.time())
+        # THE REWARD IS hurt_agent_row's RULE: a hostile pays it, a party body
+        # pays nobody. This half is reachable on a PARTY body --
+        # land_swing_on_body fires on_attack_triggers with the party attacker,
+        # so a foe's Empathy on a hero punishes the hero's own swing, here --
+        # and the default reward=True paid a KILL_REWARD, the objective and the
+        # morale experience for that hero's death while skipping its
+        # hero_death_tick. WIKI (GWW, "Experience"): nobody earns experience
+        # for a party member's death. The wire is RECONSTRUCTION -- kill_agent's
+        # SLICE-H3 party template; no retail tape holds a hero killed by an
+        # armour-ignoring word.
+        hostile = agent.get("allegiance") == agents.ALLEGIANCE_HOSTILE
+        kill_agent(send, state, target_id, agent, conn_id, time.time(),
+                   reward=hostile)
+        if not hostile:
+            print(f"[c{conn_id}] PARTY AGENT {target_id} IS DEAD -- it waits "
+                  f"for a resurrection (SLICE-H3)", flush=True)
     return amount
 
 
@@ -24017,7 +24103,9 @@ def degen_tick(send, state, conn_id):
 
     DEGENERATION CAN KILL, and it goes through the same door a swing does --
     `kill_player` exists because this is the third caller and the first two had
-    the sequence copied out longhand.
+    the sequence copied out longhand. An agent row goes through `kill_agent`,
+    the door every other health loss on a row uses; until 2026-09-26 this half
+    only clamped, and a body degenerated to 0 stood at 0 and kept fighting.
     """
     if not EFFECTS:
         return
@@ -24055,6 +24143,32 @@ def degen_tick(send, state, conn_id):
             if not agent or agent.get("dead"):
                 continue
             agent["health"] = max(0.0, agent["health"] - lost)
+            if agent["health"] > 0.0:
+                continue
+            # A BODY DEGENERATED TO 0 DIES. The clamp used to be all there was,
+            # so a hostile bled to 0 stood at 0 still swinging and casting.
+            # WIKI (GWW, "Death", rev. 2020-08-12): death "occurs whenever a
+            # creature's health drops to zero" -- no cause named; and GWW
+            # "Minion" (rev. 2026-06-28) has a creature whose inherent
+            # degeneration is what ends it. NOT OBSERVED: no retail tape in
+            # studies/ holds an NPC's degeneration death (grep 'bled out',
+            # 'degeneration', studies/isle), so the WIRE is RECONSTRUCTION --
+            # kill_agent's measured hit-kill template (status, reward, flags)
+            # reused for a kill no damage word precedes. Still silent up to
+            # the death: no property-16 here, isle B4. The reward is
+            # hurt_agent_row's rule -- a hostile pays it, a party body pays
+            # nobody -- and a kill with no killing blow still pays: WIKI (GWW,
+            # "Experience", rev. 2026-09-09) ties kill XP to having aggroed
+            # the foe, not to landing the last hit.
+            hostile = agent.get("allegiance") == agents.ALLEGIANCE_HOSTILE
+            print(f"[c{conn_id}] {'agent' if hostile else 'party agent'} "
+                  f"{agent_id} ({agent.get('name', '?')}) degenerated to 0 "
+                  f"({pips:.0f} pips)", flush=True)
+            kill_agent(send, state, agent_id, agent, conn_id, now,
+                       reward=hostile)
+            if not hostile:
+                print(f"[c{conn_id}] PARTY AGENT {agent_id} IS DEAD -- it "
+                      f"waits for a resurrection (SLICE-H3)", flush=True)
 
 
 # ------------------------------------------------- taker-side damage modifiers
@@ -24851,8 +24965,19 @@ def heal_agent(send, state, target_id, caster_id, amount, conn_id,
             kill_player(send, state, conn_id,
                         "a heal under Deep Wound that did not clear zero")
         else:
-            kill_agent(send, state, target_id, state["agents"][target_id],
-                       conn_id, time.time())
+            # hurt_agent_row's RULE again: a hostile pays the reward, a party
+            # body nobody. Reachable on a HERO -- a foe's skill puts Deep Wound
+            # on the body it targets (SLICE-H3), deep_wound_open takes its
+            # health below zero unclamped, and any heal on it that does not
+            # clear zero lands here. WIKI (GWW, "Experience"): no experience
+            # for a party member's death. RECONSTRUCTION on the wire, as above.
+            row = state["agents"][target_id]
+            hostile = row.get("allegiance") == agents.ALLEGIANCE_HOSTILE
+            kill_agent(send, state, target_id, row, conn_id, time.time(),
+                       reward=hostile)
+            if not hostile:
+                print(f"[c{conn_id}] PARTY AGENT {target_id} IS DEAD -- it "
+                      f"waits for a resurrection (SLICE-H3)", flush=True)
     return landed
 
 
@@ -26579,9 +26704,7 @@ def land_swing_on_body(send, state, agent_id, agent, tid, conn_id, bonus=0.0,
         return "blocked"
     dealt = float(row["max_health"]) * (PARTY_HIT_FRACTION if party
                                         else ENEMY_HIT_FRACTION)
-    armour = row.get("armor_rating")
-    if armour is None:
-        armour = creature_armor_rating(row.get("npc") or {})
+    armour = body_armour_rating(row)     # its rating, else the creature formula
     armour = penetrated_armour(armour, (body_weapon_items(agent) or (None,))[0],
                                base=body_base_penetration(agent, skill_id))  # Q2 + 35
     if ARMOUR_TERM and armour is not None:
@@ -42494,6 +42617,12 @@ def main():
         SPELL_ARMOUR = False
         print("NO SPELL ARMOUR: an incoming fire spell deals its stated "
               "amount, unscaled by the player's armour.")
+    if a.body_spell_player_armour:
+        global BODY_SPELL_TAKER_ARMOUR
+        BODY_SPELL_TAKER_ARMOUR = False
+        print("SPELLS: --body-spell-player-armour -- a body's spell scales by the "
+              "PLAYER's spell armour whoever takes it, the reading every run "
+              "before 2026-09-26 made [the taker-armour revert]", flush=True)
     if a.no_weakness_attributes:
         episodemods.WEAKNESS_ATTRIBUTES = False
         print("NO WEAKNESS ATTRIBUTES: Weakness cuts attack damage only; "
