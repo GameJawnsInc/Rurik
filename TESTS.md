@@ -9994,6 +9994,35 @@ the same-tick ALIAS**: the
   the cfg through `fopen` on every call and the DETACH path called it, at the one moment
   the CRT cannot be trusted, so the path is now resolved once at arm time and the
   shutdown path builds strings with kernel32 rather than `snprintf`.
+  **§16(f0)/(f)/(f2), 2026-09-27: "arm time" was the defect, and a lost race
+  overwrote a real capture** (movecode FINDINGS §2b.5). Arm time was in the WORKER,
+  after both controls. Control B is 40 whole-system Toolhelp thread snapshots, and it
+  measured 3.4–5.8 s from injection to `armed` in §16's `cmd.exe` host, against (f)'s
+  blind 6.0 s sleep. A host that exited first ran `DLL_PROCESS_DETACH` with
+  `g_outdir` empty, and the detach write fell back to DEFDIR, the owner's
+  `vault/research/movecode`. There a 232-byte `cmd.exe` stub replaced the 2026-09-01
+  capture that studies/animref cites. **The red was flaky and it looked like a
+  build difference.** It was not: a fresh build and `main`'s old DLL differ only in
+  their two PE timestamps. The fix resolves `g_outdir`, `g_base` and the run length
+  in `DLL_PROCESS_ATTACH` with a kernel32-only cfg reader, and it removes the DEFDIR
+  fallback. **(f0)** is the structural half and is process-free: the detach path
+  reads nothing the worker sets, with two controls that plant each half of the old
+  shape back in. **(f) and (f2) inject a STAGED COPY, never `movehook.dll` itself**:
+  DEFDIR is read out of `movehook.c`, required exactly once in the DLL, and rewritten
+  to a relative sentinel, and each host runs in its own directory. So a DLL built
+  before the fix, which any tree's gitignored build may be, reports its fallback to
+  the sentinel and cannot write into the vault. The copy reads its own cfg and writes
+  its own status file, so (f) no longer touches the tree's. (f) now waits for the
+  worker's `armed` status instead of sleeping, which makes it exit from INSIDE the
+  poll loop, the R5 shape. **(f2) exits the moment injection returns, INSIDE the
+  controls**, the shape that lost the capture. Its **exposure control** requires that
+  no status file exists afterwards, because a status file would mean the worker had
+  armed first and the arm tested nothing new. It then requires the capture in the
+  configured directory, nothing in the sentinel, and the host's image base in the
+  header rather than `0`. **Known-bad arm:** `main`'s 2026-09-01 DLL in this tree
+  reddens exactly the two (f2) checks that name the defect, and nothing else. (f)
+  stays green because an in-loop exit was never broken, and the vault file's mtime
+  does not move. 302 → 312 checks, §16 26 → 36, floor unchanged.
   **§15b and §17 are the MapFindPath RETURN tap, 2026-08-29 (HANDOFF-PLANE §4.2).**
   §15b exists because §15 structurally cannot catch the bug the second emulation
   shape introduces: the emulation is now a branch on `SITES[i].shape`, and the way
@@ -12198,7 +12227,19 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   is_attack:` (gone since SLICE-C2) to the bare `if CAST_STOP:`, and its recv-loop attach-point
   census from 2+1 to the three qualified sites (C5 gated one on the player being alive, C2's
   replay continued the other's condition) -- both reddened unrun by that arc.
-  `toolkit/authsrv/test_castcycle.py` (**2026-09-17, SKILLS §49.1: §11, retail's own swing windup through `iaswindup.py` — W3 the exposure is real (≥ 2 groups under a modifier other than 1.0, on ≥ 2 bases: Frenzy's 0.67 on the two Warrior tapes), W1 every group median within 20 ms of `modifier × base / 2 − 0.1` (27 groups, worst 7 ms), W2 the no-additive-term candidate off by more than 50 ms everywhere; skips by name without the vault, so the BARE-MACHINE floor stays 49 (51 → 54 with the vault).** the four-opcode cast cycle against
+  `toolkit/authsrv/test_castcycle.py` (**2026-09-27, the attack-target gate: §2f, an attack
+  skill pressed with TARGET 0 is refused with retail's #1934 before the first send. The
+  referent is one press whose n was re-counted that day (159 live attack-skill presses, all on
+  0x0027; 1 at target 0 — 20260819T132414 t=238.496 — answered #1934, [1, 7], 0x00E2, no E4;
+  #1934 on 0 of the 158 named). Nine checks: the KNOWN-BAD ARM (`--no-attack-target-gate`,
+  the pre-gate server: accepted, E4, a pending cast, a 46 whiff at E5); the observed press's
+  own 0x0027 shape answered as retail answered it and nothing else, no pool touched, the tick
+  finding nothing; its `press_verdict` row; the ORDER — ahead of the weapon gate and of the
+  resource gate, each shown by the same press at a named target drawing that gate's answer
+  (the bare release, #1961) — and behind the knock-down; CONTROLS (the named attack press
+  and a non-attack at 0 are accepted); the flag's wiring; and the real skill 780 row end to
+  end, a declared skip without the vault. The gate block cut from the press path reddens 5
+  of the 9. Floor 49 → 57, the bare number (63 with the vault).** **2026-09-17, SKILLS §49.1: §11, retail's own swing windup through `iaswindup.py` — W3 the exposure is real (≥ 2 groups under a modifier other than 1.0, on ≥ 2 bases: Frenzy's 0.67 on the two Warrior tapes), W1 every group median within 20 ms of `modifier × base / 2 − 0.1` (27 groups, worst 7 ms), W2 the no-additive-term candidate off by more than 50 ms everywhere; skips by name without the vault, so the BARE-MACHINE floor stays 49 (51 → 54 with the vault).** the four-opcode cast cycle against
   ArenaNet's own template — six complete cycles, two live captures, same order
   every time: E4 at the press, E5 at cast end carrying the recharge in whole
   seconds, E3 an aftercast later, E6 at E5+recharge to within 13.7 ms on all
@@ -12422,7 +12463,10 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   quotes the arm). §7's "the client sends the stop 36 of 36" is rewritten with
   its refutation; §10j's call-site pin now names the recorder argument.
   Floor 42 → 55 → 82 → 96 → 116; §6–§11 are fixture-free so 116 is the bare-machine number),
-  `toolkit/authsrv/test_castcancel.py` (movement cancels the cast, and the
+  `toolkit/authsrv/test_castcancel.py` (**2026-09-27: its six Power Shot presses name
+  `FOE` = agent 40, a row the state does not hold (test_castcycle §2b's convention) — they
+  pressed at target 0, which the attack-target gate now refuses with #1934; nothing the
+  sections measure reads the target, and the count is unchanged at 44.** movement cancels the cast, and the
   contract is the wiki's expressed as wire SILENCE: the connection thread
   MARKS (`cancel_on_move`) and sends only the movement's own `[8 → 0]` hold
   release (4 of 4 movement instants in the corpus — during aftercast too,
@@ -12522,7 +12566,11 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   other-agent machine (60/50 opens, 58 finish, 59 cancel, reopen, censor,
   timeout sweep), 0x00F1 recorded as a mark and never a close, and the
   property census keeping unknown ids; the batch clustering (eps=0 exact for live tapes, 5 ms for gamesrv logs whose sends stamp their own clocks); and scan_ours itself over a synthetic RURIK_VAULT -- hand-packed 0x009F rows the codec must frame, the tape-replay exclusion by label, and the era filter that makes the pre-castmech known-bad control possible. Floor 41),
-  `toolkit/authsrv/test_cancelwalk.py` (**2026-09-26, MONSTERAI-S: the 0x0028 census re-aimed, not bumped -- SIX send sites, every one from the builder; still exactly THREE name the player (the safety count, unchanged); the third non-player site is `_scatter_halt` (a scatter ceaser, or a hold engaging while the copy still walks, stops where it stands; the body's own agent_id, only under SCATTER). 124 checks.** **2026-09-07: its halt-site finder now accepts the
+  `toolkit/authsrv/test_cancelwalk.py` (**2026-09-26, MONSTERAI-S: the 0x0028 census re-aimed, not bumped -- SIX send sites, every one from the builder; still exactly THREE name the player (the safety count, unchanged); the third non-player site is `_scatter_halt` (a scatter ceaser, or a hold engaging while the copy still walks, stops where it stands; the body's own agent_id, only under SCATTER). 124 checks.** **2026-09-27: the cast-stop burst's ATTACK arm
+  presses at agent 40 (no row, so no approach walk) instead of target 0 — the attack-target
+  gate refuses an attack skill at 0, and the SLICE-F20 retail presses that arm models named
+  their foe; the spell arms stay at 0; the count is unchanged at 124.**
+  **2026-09-07: its halt-site finder now accepts the
   `_send` wrapper `_npc_follow_tick` has used since NPCTRACK-Q1 (d8bcb5c); the two
   site-count locks had been red on main from that commit until then.** Everything AROUND the
   CANCELWALK

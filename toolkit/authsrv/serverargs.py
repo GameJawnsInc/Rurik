@@ -2156,6 +2156,13 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "item the character holds. The revert for DAGGERS-B4 "
                          "(studies/daggers F3): before it a dagger attack "
                          "fired with a hammer in hand.")
+    ap.add_argument("--no-attack-target-gate", action="store_true",
+                    help="an attack skill pressed with target 0 is ACCEPTED "
+                         "-- E4, the animation, a pending cast that whiffs at "
+                         "its E5 and recharges. The revert for the "
+                         "attack-target gate (2026-09-27): retail answers "
+                         "that press with #1934 and the release, OBSERVED 1 "
+                         "of 1 (20260819T132414 t=238.496).")
     ap.add_argument("--enemy-health", type=int, default=None, metavar="N",
                     help="the --enemy body's maximum health, in place of the "
                          "spawn row's 100. A rig knob, not a claim about any "

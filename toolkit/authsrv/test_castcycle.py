@@ -40,7 +40,10 @@ file's alone:
 
 MEASURED, both ways, from green runs (re-measured 2026-09-01 after the
 ANIMREF-RE checks landed, again after the same-day revert, and again on
-2026-09-12 after SLICE-C1/C2: 51 with the vault, 49 without; the older figures: 35 checks
+2026-09-12 after SLICE-C1/C2: 51 with the vault, 49 without; and on
+2026-09-27 after 2f, the attack-target gate: 63 with the vault, 57 without
+plus three declared skips -- 2f's real row, 5, and 11's corpus windup,
+which the 2026-09-12 figures predate; the older figures: 35 checks
 with the vault, 33 without
 plus one declared skip. The floor is the BARE-MACHINE number -- the shape
 test_armour.py and test_position_trust.py both use, so that a machine with
@@ -59,7 +62,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("cast cycle", floor=49)   # the BARE-MACHINE number: 49 without the vault (section 5 skips), 51 with it; 2d (reach at the strike) +6, 2e (the approach, SLICE-C2) +12, 2026-09-12; from green runs of both
+LEDGER = checks.Ledger("cast cycle", floor=57)   # the BARE-MACHINE number: 57 without the vault (2f's real row, 5 and 11 skip), 63 with it; 2f (the attack-target gate) +8 bare / +9 vault, 2026-09-27 -- the pre-gate press path reddens 5 of the 9; 2d (reach at the strike) +6, 2e (the approach, SLICE-C2) +12, 2026-09-12; from green runs of both
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -731,6 +734,224 @@ def section_strike_approach():
          authsrv.PLAYER_SWING_DAMAGE, authsrv.skill_cost) = saved
 
 
+def section_attack_target_gate():
+    """THE ATTACK-TARGET GATE (2026-09-27, PLAN-LOG): an attack skill pressed
+    with TARGET 0 is refused with retail's #1934, before the first send.
+
+    The referent is one press, and its n is measured rather than carried: the
+    live corpus holds 159 attack-skill presses, all on 0x0027, and exactly 1
+    carries target 0 -- 20260819T132414 :52606 t=238.496, [780, 0, 0, 0] --
+    answered 0x005D #1934, 0x005E [1, 7], 0x00E2 [27, 780, 0] and no E4;
+    #1934 answers 0 of the 158 that name a target. The KNOWN-BAD ARM is
+    --no-attack-target-gate, which is the server before the gate: the same
+    press is accepted and whiffs, so the predicate every check below reads
+    can go red -- and against the pre-gate authsrv.py it does.
+    """
+    import authsrv
+    import chatdefs
+
+    print("\n2f. the attack-target gate: an attack skill at target 0 is "
+          "refused, #1934")
+    E4, E5, E2 = 0x00E4, 0x00E5, authsrv.GAME_SMSG_SKILL_REFUSED
+    CORE = authsrv.GAME_SMSG_CHAT_MESSAGE_CORE
+    SERVER = authsrv.GAME_SMSG_CHAT_MESSAGE_SERVER
+    STRIKE, SPELL = 780, 42      # the observed press's skill; a non-attack
+
+    def refused(reason, copy=7):
+        """The observed refusal shape: sentence, panel, release -- in order."""
+        return [(CORE, [chatdefs.refusal_body(reason)]),
+                (SERVER, [authsrv.PLAYER_NUMBER, chatdefs.CHANNEL_WARNING]),
+                (E2, [PLAYER, STRIKE, copy])]
+
+    class _Rec:
+        def __init__(self):
+            self.rows = []
+
+        def event(self, kind, **kw):
+            self.rows.append(dict(kw, kind=kind))
+
+    def _sends():
+        out = []
+        return out, (lambda op, vals, label="", quiet=False:
+                     out.append((op, list(vals))))
+
+    saved = (authsrv.skill_timing, authsrv._is_attack_skill,
+             authsrv.skill_cost, authsrv.weapon_satisfies,
+             authsrv.WEAPON_GATE, authsrv.ATTACK_TARGET_GATE)
+    authsrv.skill_timing = lambda sid: (0.5, 0.0, 3.0)
+    # Stubbed, as 2b's are: on a bare machine no id is an attack. The real
+    # row is checked at the end, and skips without a vault.
+    authsrv._is_attack_skill = lambda sid: sid == STRIKE
+    authsrv.skill_cost = lambda sid: (5, 0)
+    try:
+        # 1. THE KNOWN-BAD ARM: --no-attack-target-gate, the pre-gate server.
+        authsrv.ATTACK_TARGET_GATE = False
+        state = {"agents": {}}
+        sent, send = _sends()
+        _press(authsrv, send, state, skill=STRIKE, target=0)
+        took = (sent[:1] == [(E4, [PLAYER, STRIKE, 7])]
+                and len(state.get("pending_casts") or ()) == 1)
+        sent.clear()
+        _rewind(state, 5.0)
+        authsrv.cast_tick(send, state, 0)
+        ops = [op for op, _ in sent]
+        own46 = [v for op, v in sent if op == 0x009F
+                 and v[0] == authsrv.agents.GV_ATTACK_SKILL_FINISHED]
+        check(took and E5 in ops and own46 and CORE not in ops,
+              "the KNOWN-BAD ARM (--no-attack-target-gate, the server before "
+              "2026-09-27): an attack skill at target 0 is ACCEPTED -- E4, a "
+              "pending cast -- and at its E5 sends the attack close (46) and "
+              "the recharge with nothing landed: the whiff retail never "
+              "produced, and what every check below refuses",
+              f"accepted {took}, E5 ops {[hex(o) for o in ops]}")
+        authsrv.ATTACK_TARGET_GATE = True
+
+        # 2. THE GATE, on the observed press's own opcode and shape.
+        state = {"agents": {}}
+        sent, send = _sends()
+        rec = _Rec()
+        authsrv.handle_skill_press([0x8000 | authsrv.GAME_CMSG_ATTACK_SKILL,
+                                    STRIKE, 0, 0, 0], send, state, 0,
+                                   authsrv.GAME_CMSG_ATTACK_SKILL, rec=rec)
+        pre = list(sent)
+        _rewind(state, 30.0)
+        authsrv.cast_tick(send, state, 0)
+        check(pre == refused(1934, copy=0) and sent == pre
+              and not state.get("pending_casts")
+              and "cast_busy_until" not in state and "energy" not in state,
+              "0x0027 [780, 0, 0, 0] -- the observed press -- is answered as "
+              "retail answered it at 20260819T132414 t=238.496: 0x005D #1934 "
+              "(invalid_attack_target), 0x005E [player, 7], 0x00E2 [player, "
+              "780, 0], and NOTHING else: no E4, no animation, no pending "
+              "cast, no busy window, no pool touched, and the tick finds "
+              "nothing to fire",
+              f"sent {[(hex(o), v) for o, v in sent]}, pending "
+              f"{state.get('pending_casts')}")
+        check(rec.rows == [{"kind": "press_verdict", "fired": False,
+                            "reason": "attack-target-0", "target": 0,
+                            "age": 0.0, "skill": STRIKE}]
+              and chatdefs.REFUSE_INVALID_ATTACK_TARGET == 1934
+              and chatdefs.refusal_evidence(1934) == "OBSERVED",
+              "and one press_verdict row names the refusal (the R11 rule: a "
+              "suppressed grant is printed, never silent); the constant is "
+              "1934, an OBSERVED id",
+              f"{rec.rows}")
+
+        # 3. THE ORDER: ahead of the weapon and resource gates, behind the
+        # knock-down. Each arm's CONTROL is the same press at a named target,
+        # which proves the other gate was armed and would have answered.
+        authsrv.WEAPON_GATE = True
+        authsrv.weapon_satisfies = lambda sid: False
+        s0, s1 = {"agents": {}}, {"agents": {}}
+        a0, send0 = _sends()
+        a1, send1 = _sends()
+        _press(authsrv, send0, s0, skill=STRIKE, target=0)
+        _press(authsrv, send1, s1, skill=STRIKE, target=40)
+        check(a0 == refused(1934) and a1 == [(E2, [PLAYER, STRIKE, 7])],
+              "AHEAD OF THE WEAPON GATE: with the wrong weapon in hand, "
+              "target 0 still draws #1934, while the same press at a foe "
+              "draws the weapon gate's bare release (UNVERIFIED on retail: "
+              "no corpus press fails both)",
+              f"target 0 {a0}, named {a1}")
+        authsrv.WEAPON_GATE = saved[4]
+        authsrv.weapon_satisfies = saved[3]
+        authsrv.skill_cost = lambda sid: (25, 0)
+        s0, s1 = {"agents": {}}, {"agents": {}}
+        authsrv.player_energy(s0).current = 1.0
+        authsrv.player_energy(s1).current = 1.0
+        a0, send0 = _sends()
+        a1, send1 = _sends()
+        _press(authsrv, send0, s0, skill=STRIKE, target=0)
+        _press(authsrv, send1, s1, skill=STRIKE, target=40)
+        check(a0 == refused(1934) and a1 == [
+                  (CORE, [chatdefs.refusal_body(1961)]),
+                  (SERVER, [authsrv.PLAYER_NUMBER, chatdefs.CHANNEL_WARNING]),
+                  (E2, [PLAYER, STRIKE, 7])]
+              and abs(s0["energy"].current - 1.0) < 0.1,
+              "AHEAD OF THE RESOURCE GATE: 1 energy against a cost of 25, and "
+              "target 0 still draws #1934 while the named press draws #1961 "
+              "-- the observed order's direction (the same retail press was "
+              "inside skill 780's recharge, whose own answer is the silent "
+              "release, and drew #1934)",
+              f"target 0 {a0}, named {a1}")
+        authsrv.skill_cost = lambda sid: (5, 0)
+        s0 = {"agents": {}, "player_knocked_until": _time.time() + 5.0}
+        a0, send0 = _sends()
+        _press(authsrv, send0, s0, skill=STRIKE, target=0)
+        check(a0 == [(E2, [PLAYER, STRIKE, 7])],
+              "BEHIND THE KNOCK-DOWN: a body on the ground activates nothing "
+              "whatever it names -- the bare release, not #1934",
+              f"{a0}")
+
+        # 4. CONTROLS: what the gate must leave alone.
+        s0, s1 = {"agents": {}}, {"agents": {}}
+        a0, send0 = _sends()
+        a1, send1 = _sends()
+        _press(authsrv, send0, s0, skill=STRIKE, target=40)
+        _press(authsrv, send1, s1, skill=SPELL, target=0)
+        check(a0[:1] == [(E4, [PLAYER, STRIKE, 7])]
+              and a1[:1] == [(E4, [PLAYER, SPELL, 7])]
+              and len(s0["pending_casts"]) == len(s1["pending_casts"]) == 1
+              and CORE not in [op for op, _ in a0 + a1],
+              "CONTROLS: the attack skill at a NAMED target is accepted (E4, "
+              "a pending cast), and a NON-attack skill at target 0 -- the "
+              "self cast every spell bar is full of -- is accepted too: the "
+              "gate is attack skills at 0 and nothing else",
+              f"named {a0[:2]}, spell {a1[:2]}")
+
+        # 5. THE REVERT FLAG'S WIRING: it parses, and main() drops the gate.
+        import serverargs
+        ap = serverargs.build_parser(
+            doc="x", GAME_SRV_HOST=authsrv.GAME_SRV_HOST,
+            GAME_SRV_PORT=authsrv.GAME_SRV_PORT,
+            HOST_FIELD_ENCODING=authsrv.HOST_FIELD_ENCODING,
+            TEST_SKILLBAR=authsrv.TEST_SKILLBAR,
+            GRANT_MIN_INTERVAL=authsrv.GRANT_MIN_INTERVAL,
+            PROF_WARRIOR=authsrv.PROF_WARRIOR,
+            VAULT_DEFAULT=authsrv.VAULT_DEFAULT)
+        src = open(authsrv.__file__, encoding="utf-8").read()
+        i_main = src.index("\ndef main():")
+        i_flag = src.index("    if a.no_attack_target_gate:", i_main)
+        i_set = src.index("ATTACK_TARGET_GATE = False", i_flag)
+        i_listen = src.index("srv.listen(", i_main)
+        check(ap.parse_args([]).no_attack_target_gate is False
+              and ap.parse_args(["--no-attack-target-gate"])
+              .no_attack_target_gate is True
+              and i_main < i_flag < i_set < i_listen and i_set - i_flag < 120,
+              "--no-attack-target-gate parses (default off) and main() "
+              "clears ATTACK_TARGET_GATE before the listener opens -- the "
+              "known-bad arm above is one flag away in a session too")
+
+        # 6. THE REAL ROW: skill 780 is an attack by the client's own table.
+        authsrv._is_attack_skill = saved[1]
+        authsrv.skill_cost = saved[2]
+        try:
+            row = authsrv.agents.WORLD.get("skills", str(STRIKE))
+        except Exception:
+            row = None
+        if row is None:
+            LEDGER.skip("2f. the real row: skill 780 from the content store",
+                        "no 'skills' content rows -- vault overlay absent on "
+                        "this machine; the gate is pinned above with the "
+                        "family stubbed, as 2b pins it")
+        else:
+            state = {"agents": {}}
+            sent, send = _sends()
+            _press(authsrv, send, state, skill=STRIKE, target=0)
+            check(int(row["type_code"]) == authsrv.ATTACK_TYPE_CODE
+                  and authsrv._is_attack_skill(STRIKE)
+                  and sent == refused(1934),
+                  "with the REAL rows: skill 780's type_code is 14, the "
+                  "server's own _is_attack_skill says attack, and the target-0 "
+                  "press draws #1934 -- the observed press, end to end on the "
+                  "shipped table",
+                  f"type {row.get('type_code')}, sent {sent}")
+    finally:
+        (authsrv.skill_timing, authsrv._is_attack_skill, authsrv.skill_cost,
+         authsrv.weapon_satisfies, authsrv.WEAPON_GATE,
+         authsrv.ATTACK_TARGET_GATE) = saved
+
+
 def section_skill_visual():
     """ANIMREF-R8: the on-body effect visual, and the channel rule.
 
@@ -977,6 +1198,7 @@ def main():
     section_attack_finish_batch()
     section_strike_reach()
     section_strike_approach()
+    section_attack_target_gate()
     section_skill_visual()
     section_order_pinned_when_inverted()
     section_queue_law()
