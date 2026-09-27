@@ -9994,6 +9994,35 @@ the same-tick ALIAS**: the
   the cfg through `fopen` on every call and the DETACH path called it, at the one moment
   the CRT cannot be trusted, so the path is now resolved once at arm time and the
   shutdown path builds strings with kernel32 rather than `snprintf`.
+  **§16(f0)/(f)/(f2), 2026-09-27: "arm time" was the defect, and a lost race
+  overwrote a real capture** (movecode FINDINGS §2b.5). Arm time was in the WORKER,
+  after both controls. Control B is 40 whole-system Toolhelp thread snapshots, and it
+  measured 3.4–5.8 s from injection to `armed` in §16's `cmd.exe` host, against (f)'s
+  blind 6.0 s sleep. A host that exited first ran `DLL_PROCESS_DETACH` with
+  `g_outdir` empty, and the detach write fell back to DEFDIR, the owner's
+  `vault/research/movecode`. There a 232-byte `cmd.exe` stub replaced the 2026-09-01
+  capture that studies/animref cites. **The red was flaky and it looked like a
+  build difference.** It was not: a fresh build and `main`'s old DLL differ only in
+  their two PE timestamps. The fix resolves `g_outdir`, `g_base` and the run length
+  in `DLL_PROCESS_ATTACH` with a kernel32-only cfg reader, and it removes the DEFDIR
+  fallback. **(f0)** is the structural half and is process-free: the detach path
+  reads nothing the worker sets, with two controls that plant each half of the old
+  shape back in. **(f) and (f2) inject a STAGED COPY, never `movehook.dll` itself**:
+  DEFDIR is read out of `movehook.c`, required exactly once in the DLL, and rewritten
+  to a relative sentinel, and each host runs in its own directory. So a DLL built
+  before the fix, which any tree's gitignored build may be, reports its fallback to
+  the sentinel and cannot write into the vault. The copy reads its own cfg and writes
+  its own status file, so (f) no longer touches the tree's. (f) now waits for the
+  worker's `armed` status instead of sleeping, which makes it exit from INSIDE the
+  poll loop, the R5 shape. **(f2) exits the moment injection returns, INSIDE the
+  controls**, the shape that lost the capture. Its **exposure control** requires that
+  no status file exists afterwards, because a status file would mean the worker had
+  armed first and the arm tested nothing new. It then requires the capture in the
+  configured directory, nothing in the sentinel, and the host's image base in the
+  header rather than `0`. **Known-bad arm:** `main`'s 2026-09-01 DLL in this tree
+  reddens exactly the two (f2) checks that name the defect, and nothing else. (f)
+  stays green because an in-loop exit was never broken, and the vault file's mtime
+  does not move. 302 → 312 checks, §16 26 → 36, floor unchanged.
   **§15b and §17 are the MapFindPath RETURN tap, 2026-08-29 (HANDOFF-PLANE §4.2).**
   §15b exists because §15 structurally cannot catch the bug the second emulation
   shape introduces: the emulation is now a branch on `SITES[i].shape`, and the way

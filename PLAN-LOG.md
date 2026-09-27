@@ -28,6 +28,30 @@ move back.
 
 ---
 
+### MOVECODE-2b.5: movehook's exit write no longer depends on the worker -- 2026-09-27 -- **`test_movehook` §16(f)'s flake was a RACE, not the build (a fresh DLL and `main`'s old one differ only in their two PE timestamps). The detach write's output directory was resolved by the worker after both controls (3.4-5.8 s measured), so a host that exited sooner wrote into DEFDIR, the owner's `vault/research/movecode`, where a 232-byte test stub has replaced the 2026-09-01 capture studies/animref cites. It is now resolved in `DLL_PROCESS_ATTACH`, and the test can no longer reach the vault**
+
+**Where it came from.** In the `aot` worktree, §16 ("AND THE CAPTURE IS WRITTEN WHEN THE HOST EXITS MID-RUN") failed 3 of 4 on a fresh build and passed with `main`'s 2026-09-01 DLL copied in. The hypothesis handed over was that the difference was the binary.
+
+**What was measured** (movecode FINDINGS §2b.5 has the table). OBSERVED: a fresh build here against `main`'s DLL gives identical Rich headers (MSVC 14.51.36231) and byte-identical `.text` and `.data`. The files differ in six bytes, `TimeDateStamp` at `0x100` and the debug directory's copy at `0x1E63C`. So that hypothesis is REFUTED. Time from injection to the worker's `armed` status in §16's host was 4.3-4.5 s (old, n=3), 5.0-5.8 s (fresh, n=3) and 3.4 s (fixed, n=2): the same code at different loads, against (f)'s blind 6.0 s. It is the first line after control B's 40 whole-system Toolhelp thread snapshots. The positive control, exiting at 2.0 s or at once, sent both old and fresh DLLs to DEFDIR 7 of 7 times, with a header base of `0` on the immediate exit. Every trial used a staged copy whose DEFDIR pointed at a relative sentinel.
+
+**The cost.** `vault/research/movecode/movehook.bin` is a `cmd.exe` stub (base `0x00A50000`, 0 records) dated 2026-09-27 01:00:44. The `.txt` beside it describes what it replaced: the owner's 2026-09-01 10:51 capture, 8,290 records, the one studies/animref/FINDINGS.md cites for "310 bakes, ZERO from the avoidance re-baker". **No file of its size exists anywhere in the vault.** The numbers survive in the `.txt` and the animref text, and the records do not. The stub itself is left where it is, for the owner. `readhook.py` with no `--bin` now reads it.
+
+**The fix** (`toolkit/clientscan/movehook/movehook.c`). `DLL_PROCESS_ATTACH` sets `g_outdir`, `g_run_ms` and `g_base` before `CreateThread`. It reads them through a new cfg reader with no CRT state in it (`CreateFileA`/`ReadFile`, which Microsoft lists as safe in `DllMain`), and that reader replaces the stdio pair. The detach path reads nothing the worker sets, and **its DEFDIR fallback is gone**: an empty `g_outdir` is a refused write, not someone else's directory. It undoes a race that §2b.4's 2026-08-28 fix introduced by caching the path "at arm time".
+
+**Tests** (`test_movehook.py` §16, 302 -> 312 on this machine, floor unchanged at 169, TESTS.md).
+- **(f0)** is structural and process-free: the detach path reads nothing the worker sets, and two controls plant each half of the old shape back in.
+- **(f) and (f2) inject a staged copy** of the DLL with DEFDIR rewritten to a relative sentinel, in a host with its own cwd. A pre-fix DLL, which is what `main`'s gitignored build still is, therefore reports its fallback there and cannot touch the vault. The copy reads its own cfg, so (f) no longer rewrites the tree's `movehook.cfg`.
+- **(f)** waits for `armed` and exits from inside the poll loop.
+- **(f2)** exits the moment injection returns, inside the controls. It carries an exposure control (no status file afterwards) and requires the configured directory, an empty sentinel, and a nonzero header base.
+
+The fixed build, built fresh by §6, went green 312/312 on four runs, plus one on a `build.ps1` build. **Known-bad arm:** `main`'s 2026-09-01 DLL in this tree reddens exactly the two (f2) checks that name the defect, on both of 2 runs. (f) and (f0) stay green, and the vault stub's mtime did not move.
+
+**Owed by the owner, not done here.** `main`'s own `toolkit/clientscan/movehook/movehook.dll` predates the fix. Left untouched as instructed, it will fail §16(f2) (harmlessly now, with the sentinel) until it is rebuilt with `build.ps1 movehook.c`, or deleted so that §6 rebuilds it. `attach.py`'s sites stamp cannot tell it is stale, because `sites.h` did not change.
+
+**Residual, RECONSTRUCTION:** a worker killed mid-snapshot keeps `movehook.bin.part` open with share mode 0, so the detach write's `CreateFileA` on that name would fail and the capture would keep the previous snapshot. The one-line fix is a distinct detach temp name. It was not taken, because no test reaches that window.
+
+---
+
 ### The attack-target gate: an attack skill pressed at TARGET 0 is refused with retail's #1934 -- 2026-09-27 -- **`handle_skill_press` accepted it -- E4, the animation, a pending cast, a 46 whiff at E5 and a recharge; retail answers it with the sentence and the release and no E4 (OBSERVED 1 of 1, the n re-counted over the whole corpus). Refused before the first send, ahead of the weapon and resource gates; `--no-attack-target-gate` reverts**
 
 **Where it came from.** Found 2026-09-26 by the party-target gate (its census is what explained why retail's one target-0 attack-skill press was target 0: the operator had an ALLY selected and the client substituted 0 for it) and spun off as its own task. studies/skills 38.5 had carried the answer since the refusal work as "1 of 1 against 0 of 42".

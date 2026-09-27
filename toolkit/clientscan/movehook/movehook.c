@@ -182,57 +182,80 @@ static void clear_stop(void)
     if (path[0]) DeleteFileA(path);
 }
 
+/* THE CFG READER HAS NO CRT STATE IN IT -- no stdio, no heap, no locale --
+ * because DLL_PROCESS_ATTACH calls it, under the loader lock. kernel32 file
+ * I/O is on Microsoft's own list of things that are safe in DllMain; fopen is
+ * not something this file will bet a client on. It was fgets/strtoul until
+ * 2026-09-27, which was fine while only the worker called it.
+ *
+ * Returns 1 and fills `out` when `key=` is present with a NON-EMPTY value.
+ * Same semantics as the stdio version it replaced: the FIRST matching line
+ * wins, and an empty value falls through to the environment rather than
+ * meaning "empty". */
+static int cfg_raw(const char *key, char *out, DWORD n)
+{
+    char path[MAX_PATH], buf[4096], *p, *e, *v;
+    HANDLE h;
+    DWORD got = 0;
+    int klen = lstrlenA(key), vlen;
+    out[0] = 0;
+    cfg_path(path, sizeof path);
+    if (!path[0]) return 0;
+    h = CreateFileA(path, GENERIC_READ,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                    NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE) return 0;
+    if (!ReadFile(h, buf, sizeof buf - 1, &got, NULL)) got = 0;
+    CloseHandle(h);
+    buf[got] = 0;
+    for (p = buf; *p; p = e) {
+        for (e = p; *e && *e != '\n'; e++) ;
+        if (*e) *e++ = 0;                       /* this line is now a string */
+        if (strncmp(p, key, klen) != 0 || p[klen] != '=') continue;
+        v = p + klen + 1;
+        vlen = lstrlenA(v);
+        while (vlen && v[vlen - 1] == '\r') v[--vlen] = 0;
+        if (!vlen) return 0;
+        lstrcpynA(out, v, (int)n);
+        return 1;
+    }
+    return 0;
+}
+
+/* Decimal, no locale. Leading blanks skipped, stops at the first non-digit,
+ * saturates rather than wrapping -- strtoul's behaviour for everything this
+ * file ever passes it. */
+static DWORD parse_u32(const char *s)
+{
+    DWORD v = 0;
+    while (*s == ' ' || *s == '\t') s++;
+    for (; *s >= '0' && *s <= '9'; s++) {
+        DWORD d = (DWORD)(*s - '0');
+        if (v > (0xFFFFFFFFu - d) / 10u) return 0xFFFFFFFFu;
+        v = v * 10u + d;
+    }
+    return v;
+}
+
 /* `key` from movehook.cfg, else the environment, else `dflt`. */
 static DWORD cfg_dword(const char *key, const char *envname, DWORD dflt)
 {
-    char path[MAX_PATH], line[512];
-    FILE *f;
-    size_t klen = strlen(key);
-    cfg_path(path, sizeof path);
-    if (path[0] && (f = fopen(path, "r")) != NULL) {
-        while (fgets(line, sizeof line, f)) {
-            if (strncmp(line, key, klen) == 0 && line[klen] == '=') {
-                DWORD v = (DWORD)strtoul(line + klen + 1, NULL, 10);
-                fclose(f);
-                if (v) return v;
-                break;
-            }
-        }
-        fclose(f);
-    }
-    {
-        char buf[32];
-        DWORD n = GetEnvironmentVariableA(envname, buf, sizeof buf);
-        if (n && n < sizeof buf) return (DWORD)strtoul(buf, NULL, 10);
-    }
+    char buf[512];
+    DWORD v, n;
+    if (cfg_raw(key, buf, sizeof buf) && (v = parse_u32(buf)) != 0) return v;
+    n = GetEnvironmentVariableA(envname, buf, sizeof buf);
+    if (n && n < sizeof buf) return parse_u32(buf);
     return dflt;
 }
 
 static void cfg_string(const char *key, const char *envname,
-                       char *out, size_t n, const char *dflt)
+                       char *out, DWORD n, const char *dflt)
 {
-    char path[MAX_PATH], line[512];
-    FILE *f;
-    size_t klen = strlen(key);
-    cfg_path(path, sizeof path);
-    if (path[0] && (f = fopen(path, "r")) != NULL) {
-        while (fgets(line, sizeof line, f)) {
-            if (strncmp(line, key, klen) == 0 && line[klen] == '=') {
-                char *v = line + klen + 1, *e;
-                e = v + strlen(v);
-                while (e > v && (e[-1] == 10 || e[-1] == 13)) *--e = 0;
-                if (*v) { strncpy(out, v, n - 1); out[n - 1] = 0; fclose(f); return; }
-                break;
-            }
-        }
-        fclose(f);
-    }
-    {
-        DWORD got = GetEnvironmentVariableA(envname, out, (DWORD)n);
-        if (got && got < n) return;
-    }
-    strncpy(out, dflt, n - 1);
-    out[n - 1] = 0;
+    DWORD got;
+    if (cfg_raw(key, out, n)) return;
+    got = GetEnvironmentVariableA(envname, out, n);
+    if (got && got < n) return;
+    lstrcpynA(out, dflt, (int)n);
 }
 
 /* One event. Fixed size and self-describing: the reader takes `reclen` from the
@@ -885,13 +908,6 @@ static DWORD sample_client_eip(DWORD lo, DWORD hi)
     return found;
 }
 
-static const char *outdir(void)
-{
-    static char buf[MAX_PATH];
-    cfg_string("out", OUTENV, buf, sizeof buf, DEFDIR);
-    return buf;
-}
-
 static int mkdirs(const char *dir)
 {
     char buf[MAX_PATH];
@@ -939,26 +955,30 @@ static int mkdirs(const char *dir)
  *      movehook.txt, and in a `movehook.status` file BESIDE THE DLL, which is
  *      the one place still writable when the configured output path is not.
  * ------------------------------------------------------------------------- */
-/* THE OUTPUT PATH, RESOLVED ONCE AND CACHED -- and this is not a tidy-up.
+/* THE OUTPUT PATH, RESOLVED ONCE -- AT DLL_PROCESS_ATTACH, NOT BY THE WORKER.
  *
- * `outdir()` reads movehook.cfg through fopen/fgets EVERY call. At
- * DLL_PROCESS_DETACH every other thread has already been terminated, possibly
- * inside the CRT holding its locks, so calling it there can return an empty
- * buffer or hang -- and an empty dir makes write_bin fail with no file and no
- * clue. That is the exact hazard this file already documents for the WRITER,
- * walked into again one line away from it. Caught by test_movehook.py §16 only
- * once the periodic snapshot existed: before that, the detach write was the
- * first write of the run, so "a file appeared" could not tell the two apart.
- * The mtime comparison is what made it visible.
+ * Two fixes deep, and the second undoes a race the first one introduced.
  *
- * So: the worker resolves the path once, while the process is healthy, and the
- * detach path reads this and never the file. */
+ * 2026-08-28: the detach path used to call a reader that went through
+ * fopen/fgets on EVERY call, and at DLL_PROCESS_DETACH every other thread has
+ * been terminated, possibly inside the CRT holding its locks. So the path was
+ * resolved once into g_outdir -- BY THE WORKER, "at arm time" -- and the
+ * detach path read the cache, falling back to DEFDIR while it was empty.
+ *
+ * 2026-09-27: "at arm time" is AFTER BOTH CONTROLS, and control B alone is 40
+ * whole-system Toolhelp thread snapshots; MEASURED on this machine at 3.4-5.8 s
+ * after injection into test_movehook.py §16's cmd.exe host, varying with load,
+ * against a 6.0 s sleep. A host that exits inside that window runs DLL_PROCESS_DETACH with the
+ * cache still empty, and the fallback writes a real header-only capture into
+ * DEFDIR -- the owner's vault/research/movecode, where it replaced the
+ * 2026-09-01 10:51 capture that studies/animref cites. A detach write cannot
+ * wait for the worker (it is dead, and this is the loader lock), so anything
+ * the detach path reads has to exist BEFORE the worker does. That is why
+ * DllMain resolves it now, with the kernel32-only cfg reader above, and why
+ * there is no DEFDIR fallback here any more: an empty g_outdir is a refusal
+ * (write_bin records ERROR_BAD_PATHNAME), never somebody else's directory. */
 static char g_outdir[MAX_PATH];
-
-static const char *outdir_cached(void)
-{
-    return g_outdir[0] ? g_outdir : DEFDIR;
-}
+static DWORD g_run_ms = DEF_RUN_MS;
 
 /* Path building for the shutdown path uses kernel32 rather than the CRT, for
  * the same reason. lstrcpynA/lstrcatA are kernel32 exports and stay valid. */
@@ -1092,14 +1112,12 @@ static DWORD WINAPI worker(LPVOID unused)
 {
     PVOID veh;
     unsigned i;
-    DWORD waited = 0, tlo = 0, thi = 0, run_ms;
+    DWORD waited = 0, tlo = 0, thi = 0, run_ms = g_run_ms;
     char path[MAX_PATH];
-    const char *dir;
+    const char *dir = g_outdir;         /* resolved by DllMain, see g_outdir */
     FILE *f;
     (void)unused;
 
-    run_ms = cfg_dword("ms", MSENV, DEF_RUN_MS);
-    g_base = (DWORD)(ULONG_PTR)GetModuleHandleW(NULL);
     for (i = 0; i < NSITES; i++) g_addr[i] = g_base + SITES[i].rva;
 
     veh = AddVectoredExceptionHandler(1, on_bp);
@@ -1152,11 +1170,9 @@ static DWORD WINAPI worker(LPVOID unused)
     for (i = 0; i < NSITES; i++)
         g_armed[i] = poke(g_addr[i], 0xCC, &g_orig[i]);
 
-    /* The output directory is resolved and PROVEN WRITABLE BEFORE the run,
-     * not after it. R5 spent eight minutes capturing into a path that was
-     * never created; the status file says so in the first second instead. */
-    lstrcpynA(g_outdir, outdir(), MAX_PATH);
-    dir = outdir_cached();
+    /* The status file names the output directory BEFORE the run, not after
+     * it. R5 spent eight minutes capturing into a path that was never
+     * created; the status file says so as soon as the sites are armed. */
     write_status(dir, "armed");
 
     waited = 0;
@@ -1251,6 +1267,15 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID reserved)
     if (reason == DLL_PROCESS_ATTACH) {
         g_self = h;
         DisableThreadLibraryCalls(h);
+        /* EVERYTHING THE DETACH PATH READS IS SET HERE, BEFORE THE WORKER
+         * EXISTS. The detach can only run after this returns, so it can never
+         * see these unset -- whereas anything the worker sets, it sets at
+         * some point the host is free to exit before (see g_outdir). The
+         * header's image base is one of them; the cfg's `ms` rides along so
+         * the run's whole configuration is read at a single moment. */
+        g_base = (DWORD)(ULONG_PTR)GetModuleHandleW(NULL);
+        g_run_ms = cfg_dword("ms", MSENV, DEF_RUN_MS);
+        cfg_string("out", OUTENV, g_outdir, sizeof g_outdir, DEFDIR);
         CloseHandle(CreateThread(NULL, 0, worker, NULL, 0, NULL));
     } else if (reason == DLL_PROCESS_DETACH) {
         /* THE CLIENT IS EXITING WITH A RUN STILL ARMED -- the case that cost
@@ -1271,12 +1296,16 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID reserved)
          * diagnosis, where nothing on disk could not be told apart from
          * nothing captured. It also makes this path TESTABLE against a real
          * process exit (test_movehook.py §16), which the n > 0 version was
-         * not. */
+         * not.
+         *
+         * IT READS NOTHING THE WORKER SETS. g_outdir and g_base come from
+         * DLL_PROCESS_ATTACH; the worker may have died anywhere, including
+         * inside its controls before it armed a site (§16(f2) exits the host
+         * exactly there). */
         if (!g_final_written) {
-            const char *d = outdir_cached();
             LONG n = g_n;
             n = (n > (LONG)FLUSH_SLACK) ? n - (LONG)FLUSH_SLACK : 0;
-            write_bin(d, (DWORD)n);
+            write_bin(g_outdir, (DWORD)n);
         }
     }
     return TRUE;
