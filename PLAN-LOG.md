@@ -28,6 +28,18 @@ move back.
 
 ---
 
+### The auto-select cone has a radius: 1,250 u -- 2026-09-27 -- **a foe at +40° was picked at 1,249.962 u and passed over at 1,250.029 u; earshot (1,012) and the WIKI casting range (1,248, centre to centre) both excluded on the way. No code change**
+
+**The question** (the cone entry below, "Open: a range term"). One foe per world-entry run at player bearing +40° -- 20° inside the 60° cone, on walkable ground found offline with the server's own `load_pathmap` -- the hero the fallback pick, the camera read live and identical to the cone runs (`fovread.py`: 390 u behind, +x, 12.8° down). Distances from integer offsets on an integer spawn, so exact; the player never moves.
+
+**The runs** (`20260927T15xxxx`): 1,499.83 u (`3349`) hero; 1,000.10 (`3515`, the +40° positive control -- every cone probe before it was on the −y side) foe; 1,049.78 (`3639`) foe, **earshot out**; 1,250.67 (`3806`) hero; 1,240.04 (`3931`) foe; 1,247.09 (`4051`) foe; 1,249.26 (`4155`) foe, **the 1,248 casting range out**; **1,249.962 (`4339`) foe; 1,250.029 (`4500`) hero.** Each probe's prediction was stated before its launch; the last pair was chosen from an integer-offset search for the closest points either side of 1,250.
+
+**OBSERVED, n=1 per distance: the radius is 1,250 u (±0.035)**, 2 u past the WIKI casting range -- whether they are one constant under two conventions is UNVERIFIED. The plaza is flat, so 2-D and 3-D distance coincide here. **So the world-entry auto-select takes a foe within 1,250 u of the player and within 60° of the view axis, occlusion ignored; with none, a nearby ally.** Open: whether the revive re-acquisition shares both numbers (presumed), and the ally fallback's own rule.
+
+**Edited:** studies/skills 38.5. **Tests:** doc linters.
+
+---
+
 ### An Assassin, Dervish or Paragon creature has no profession bonus -- 2026-09-27 -- **a spawned Assassin, Dervish or Paragon creature now meets 3 x level against every hit, where it met its max-armour column's untyped 3 x level + 10 / + 10 / + 20; `--untyped-creature-armour` restores the column -- and every hit on one now meets LESS armour, physical included (a level-5 Paragon: 15, not 35)**
 
 **The reading.** The same one the Warrior's witness supports and the Ranger landing used, applied to the three columns it left: GWW "Armor rating" gives "creature AR = 3 * Level + [[Armor bonus]], where armor bonus is profession specific", and "Armor bonus" defers to "Basic armor" (read 2026-09-27), whose table gives the Assassin 10...70, the Dervish 10...70 and the Paragon 20...80 with energy, energy recovery and (the Dervish's) health lines -- and NO armour line of any type. The 10 / 10 / 20 `combatmath.ARMOR_BONUS_BY_PROFESSION` carries for them is those columns less 60, the reading def 3113 refuted for the Warrior (its column's +20 as a base bonus gives an elemental 29 on a level-3 Warrior; the tape says <= 14.9). With no typed line there is nothing to keep, so the typed reading gives all three 3 x level on every hit.
