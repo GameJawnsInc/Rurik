@@ -5444,7 +5444,9 @@ for the *writer*, walked into again one line away from it. The path is now resol
 at arm time into `g_outdir`, and the shutdown path builds its strings with kernel32
 (`lstrcpynA`/`lstrcatA`) rather than `snprintf`. It was not the cause of the red, and it
 is committed as a fix on its own merits — not as the answer to a question it did not
-answer.
+answer. **(Superseded 2026-09-27, §2b.5: "arm time" was in the worker, after both
+controls, so a host exiting in the first ~5 s wrote to DEFDIR, the owner's vault. It
+is now resolved in `DLL_PROCESS_ATTACH`.)**
 
 **§16 now runs one host per mechanism.** (f) injects, confirms by control that nothing is
 on disk before the first flush, then closes stdin for a **graceful** exit and requires the
@@ -5455,6 +5457,114 @@ written — and requires what survived to be a capture `readhook.py` parses. Tha
 host is the operator's own scenario if the WM_CLOSE path ever times out.
 
 **Suite:** `test_movehook.py` **180 checks green**, floor 105 → 118.
+
+### 2b.5 The 2b.4 fix made the exit write depend on the worker, and a lost race overwrote a real capture
+
+**FIXED 2026-09-27**, `movehook.c` `DllMain` + `test_movehook.py` §16(f0)/(f)/(f2).
+
+**The symptom, as it arrived.** In the `aot` worktree a fresh build of the tracked
+`movehook.c` failed §16(f) three times in four ("nothing at …\hookout-exit\movehook.bin
+(exit code 0)"). The same tree passed 302/302 with `main`'s older `movehook.dll` copied
+in. The hypothesis carried in was that the difference was the BINARY: a toolchain,
+flags, or a non-determinism.
+
+**REFUTED: the two builds are the same code.** OBSERVED, comparing a fresh build in
+this worktree with `main`'s DLL (built 2026-09-01 06:52): identical Rich headers (one
+toolchain, MSVC 14.51.36231), and `.text` and `.data` byte-identical. The whole files
+differ in **six bytes**: the PE `TimeDateStamp` at file offset `0x100` and the debug
+directory's copy of it at `0x1E63C`. A timestamp changes no behaviour. So the red was a
+race, and "old passes, fresh fails" was a small sample of it. (The `aot` build itself
+no longer exists to compare, because `main`'s copy overwrote it. It came off the
+machine's one MSVC.)
+
+**The mechanism.** §2b.4 moved the detach path's output directory off a per-call
+`fopen` reader and onto `g_outdir`, "resolved once at arm time". Arm time is **in
+the worker, after both controls**. Control B alone is 40 samples, and each one takes a
+whole-system `CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD)` and then `Sleep(25)`. A host
+that exits before the worker gets that far runs `DLL_PROCESS_DETACH` with `g_outdir`
+empty, and `outdir_cached()` then fell back to **DEFDIR**. §16(f) exited its host a
+blind 6.0 s after injection. OBSERVED, from injection returning to the worker's own
+`armed` status, in §16's `cmd.exe` host on this machine:
+
+| DLL | inject → `armed` | exit at 6.0 s | exit at 2.0 s | exit at once |
+|---|---|---|---|---|
+| `main`'s 2026-09-01 build | 4.3–4.5 s (n=3) | configured dir 3/3 | **DEFDIR 2/2** | **DEFDIR 3/3**, header base `0` |
+| fresh build, same source | 5.0–5.8 s (n=3) | configured dir 3/3 | **DEFDIR 2/2** | — |
+| fixed build | 3.4 s (n=2) | configured dir 2/2 | configured dir 3/3 | configured dir 5/5, base `0xA50000` |
+
+These are the same code at different moments, so the spread is machine load. A
+fully loaded suite pushes it past 6.0 s. Every DLL in the table was a staged copy with
+DEFDIR rewritten to a relative sentinel, so none of these runs could reach the vault.
+
+**The cost, which is the part that matters.** DEFDIR is `vault/research/movecode`, and
+it is `attach.py`'s default `--out` and `readhook.py`'s default `--bin`. OBSERVED:
+`vault/research/movecode/movehook.bin` is now **232 bytes**: `MVHK` v9, base
+`0x00A50000` (a `cmd.exe`), 26 sites, 0 records, mtime **2026-09-27 01:00:44**, which
+falls inside the `aot` session's failing runs. The `movehook.txt` beside it says what
+used to be there: the owner's own capture of **2026-09-01 10:51**, 8,290 records over
+27.7 s, stopped by request, both controls fired. That is the capture
+[studies/animref/FINDINGS.md](../animref/FINDINGS.md) cites as evidence ("310 bakes,
+ZERO from the avoidance re-baker"). **No file of its size (3,614,672 bytes = 24 +
+26×8 + 8,290×436) exists anywhere in the vault**, under any name. Its numbers survive
+in the `.txt` and in the animref text, and its records do not. The mtime dates only the
+LAST lost race. Any test run since 2026-08-28 that lost it wrote to the same path.
+
+**The fix.** `DLL_PROCESS_ATTACH` now resolves `g_outdir`, `g_run_ms` and `g_base`
+before `CreateThread`, through a cfg reader with no CRT state in it: `CreateFileA`/
+`ReadFile`, no stdio, heap or locale. File I/O is on Microsoft's own list of what is
+safe in `DllMain`. The detach cannot run before the attach returns, so it can never
+see those globals unset. That holds no matter where the worker died, including inside
+its controls. **The detach path has no DEFDIR fallback any more.** An empty
+`g_outdir` is refused by `write_bin` (`ERROR_BAD_PATHNAME`) and is never written into
+somebody else's directory. A side effect: the run's whole configuration is read at one
+moment, the injection, instead of about 5 s later.
+
+**The rule this adds to §2b.4's.** A `DLL_PROCESS_DETACH` path runs after every other
+thread has been terminated and under the loader lock, so it cannot wait for the
+worker and cannot know how far the worker got. **Everything it reads must exist
+before the worker does.** §2b.4 moved one hazard (CRT at shutdown) and in doing so
+created a dependency (the worker's progress). Its own red was attributed correctly,
+"not the cause of the red", and the fix still went in untested against the shape it
+created. This is the repo's "audit the fix" lesson, paid for with a capture.
+
+**The test, and why it can no longer write into the vault.** §16(f) injects a **staged
+copy** of `movehook.dll` and never the file itself. The copy has DEFDIR, read out of
+`movehook.c` and required to occur exactly once in the DLL, rewritten to the relative
+sentinel `DEFDIR-FALLBACK`. The host runs in its own directory, so a fallback lands
+where the section can see it and name it. The copy also reads its own cfg and writes
+its own status file, so the tree's `movehook.cfg` and `movehook.status` (the owner's,
+in `main`) are no longer touched by (f). That protects the vault from **a DLL built
+before this fix**, which any tree's gitignored `movehook.dll` may be.
+- **(f0)**, structural and process-free: the detach path reads nothing the worker
+  sets. `g_outdir` and `g_base` are set in the attach branch ahead of `CreateThread`,
+  the worker assigns neither, and the detach names no DEFDIR. Two controls plant each
+  half of the 2026-08-28 shape back in and must go red.
+- **(f)** now waits for the worker's `armed` status instead of a blind 6.0 s, so it
+  deterministically exits from INSIDE the poll loop. That is the R5 shape.
+- **(f2)**, new: it exits the host the moment injection returns, INSIDE the controls.
+  An **exposure control** requires that no status file exists afterwards, because a
+  status file would mean the worker had armed and the arm measured nothing new. The
+  capture must then land in the configured directory, nothing may land in the
+  sentinel, and its header must carry the host's image base rather than `0`.
+
+**Against the known-bad binary** (`main`'s 2026-09-01 DLL copied into this worktree),
+the file goes red on **exactly the two (f2) checks the defect predicts**. They are "written
+when the host exits before the worker has resolved anything" and "nothing fell back to
+DEFDIR", and the failure text names the rebuild. (f) stays green, as it must, because
+an exit from inside the poll loop was never the broken case. The structural (f0) stays
+green because it reads the fixed source. `vault/research/movecode/movehook.bin`'s
+mtime did not move.
+
+**Residual, RECONSTRUCTION, not observed.** If the worker is killed in the middle of a
+periodic snapshot, it leaves `movehook.bin.part` open with share mode 0. Thread
+termination does not close a process's handles. The detach write's `CreateFileA` on
+that same name would then fail with a sharing violation, and the capture would keep
+the previous snapshot, at most `FLUSH_MS` stale. The window is one snapshot's write
+every 15 s. The fix is one line, a distinct temp name for the detach write, and it
+was **not taken**: one change per test, and no test here can reach that window yet.
+
+**Suite:** `test_movehook.py` **312 checks green** on the fixed build (302 before;
+§16 26 → 36), floor unchanged at 169.
 
 ## 1z-b. R5b — the run R5 should have been: instrument green, P1–P4 all read, and the operator could NOT reproduce the no-clip
 

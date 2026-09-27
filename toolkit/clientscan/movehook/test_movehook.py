@@ -121,6 +121,11 @@ import checks                                                   # noqa: E402
 # rather than dying when the image is absent -- `pinned.find()` exits the
 # process rather than raising, so an `except Exception` around it catches
 # nothing, which is a trap §2 is still standing in.
+#
+# 2026-09-27, THE EXIT RACE (movecode FINDINGS §2b.5). A whole green run on this
+# machine is 312 (was 302), read off the banner: §16 26 -> 36, from (f0)'s three
+# structural checks and the two exit arms' seven more. §16 is outside the core as
+# before, so the floor does not move.
 LEDGER = checks.Ledger("movehook", floor=169)
 check = checks.adopt(LEDGER)
 
@@ -436,7 +441,11 @@ def section_6_7(tmp):
             return
         check(rc == 0, "7. the DLL injects into a live 32-bit process",
               f"inject.main returned {rc}")
-        # control B samples for up to ~1 s, then the run is 1.5 s, then it writes.
+        # control B samples 40 times, then the run is 1.5 s, then it writes.
+        # "Up to ~1 s" was this comment's figure until 2026-09-27; each sample
+        # is a whole-system Toolhelp thread snapshot and the 40 MEASURED
+        # 3.4-5.8 s on this machine (§16(f), where a 6.0 s sleep built on the
+        # same premise was losing the race).
         deadline = time.time() + 25
         side = os.path.join(outdir, "movehook.txt")
         while time.time() < deadline and not os.path.isfile(side):
@@ -1407,6 +1416,171 @@ def _loop_escapes(src):
     return out
 
 
+def _strip_c_comments(s):
+    return re.sub(r"/\*.*?\*/", "", s, flags=re.S)
+
+
+def _detach_depends_on_worker(src):
+    """[reasons] the DLL_PROCESS_DETACH write depends on the worker. See §16(f0).
+
+    The detach path runs after every other thread has been terminated, under
+    the loader lock, so it cannot wait for the worker and cannot know how far
+    the worker got. Whatever it reads must therefore be set BEFORE the worker
+    exists -- in DLL_PROCESS_ATTACH, ahead of the CreateThread. The two globals
+    that decide WHERE and WHAT it writes are g_outdir and g_base. Until
+    2026-09-27 the worker resolved g_outdir after both controls (3.4-5.8 s
+    measured) and the detach path fell back to DEFDIR while it was empty.
+    """
+    code = _strip_c_comments(src)
+    out = []
+    try:
+        dm = code[code.index("BOOL WINAPI DllMain"):]
+        att = dm[dm.index("DLL_PROCESS_ATTACH"):dm.index("DLL_PROCESS_DETACH")]
+        det = dm[dm.index("DLL_PROCESS_DETACH"):]
+        before = att[:att.index("CreateThread")]
+        worker = code[code.index("static DWORD WINAPI worker"):
+                      code.index("BOOL WINAPI DllMain")]
+    except ValueError:
+        return ["could not locate DllMain's two branches or the worker"]
+    if not re.search(r"\bg_outdir\b", before):
+        out.append("g_outdir is not resolved in DLL_PROCESS_ATTACH before the "
+                   "worker starts")
+    if not re.search(r"\bg_base\s*=", before):
+        out.append("g_base is not set in DLL_PROCESS_ATTACH before the worker "
+                   "starts")
+    # The worker may READ both; it must not be where either is decided.
+    for m in re.finditer(r"\bg_outdir\b", worker):
+        ln = worker[worker.rfind("\n", 0, m.start()) + 1:
+                    worker.find("\n", m.end())].strip()
+        if not re.search(r"=\s*g_outdir\s*;", ln):
+            out.append(f"the worker writes g_outdir: {ln}")
+    if re.search(r"\bg_base\s*=(?!=)", worker):
+        out.append("the worker assigns g_base")
+    if "DEFDIR" in det or "outdir_cached" in det:
+        out.append("the detach path can fall back to DEFDIR")
+    if "g_outdir" not in det:
+        out.append("the detach path does not write to g_outdir")
+    return out
+
+
+def _build_hint():
+    return ("powershell -ExecutionPolicy Bypass -File "
+            f"\"{os.path.join(HERE, 'build.ps1')}\" movehook.c")
+
+
+# The sentinel a staged copy's DEFDIR is rewritten to. RELATIVE on purpose: the
+# host runs with its own directory as cwd, so a detach write that falls back
+# lands at <arm dir>\DEFDIR-FALLBACK, where §16 can see it -- and never in the
+# vault, whatever the DLL was built from.
+_FALLBACK = "DEFDIR-FALLBACK"
+
+
+def _stage_dll(src, dllpath, stagedir):
+    """Copy movehook.dll into `stagedir` with its DEFDIR made harmless.
+
+    Returns the staged path, or raises ValueError naming why it refused. The
+    DEFDIR string is read out of movehook.c, never restated, and must occur
+    EXACTLY ONCE in the DLL: zero means the DLL was built against a different
+    default (stale), and then nobody knows where its fallback would land.
+    """
+    m = re.search(r'#define\s+DEFDIR\s+"([^"]+)"', src)
+    if not m:
+        raise ValueError("movehook.c declares no DEFDIR")
+    old = m.group(1).replace("\\\\", "\\").encode("ascii") + b"\0"
+    new = _FALLBACK.encode("ascii").ljust(len(old), b"\0")
+    if len(new) != len(old):
+        raise ValueError(f"DEFDIR {old!r} is shorter than the sentinel")
+    blob = open(dllpath, "rb").read()
+    n = blob.count(old)
+    if n != 1:
+        raise ValueError(f"movehook.dll holds movehook.c's DEFDIR {n} times, "
+                         f"not once -- stale against the source? rebuild: "
+                         f"{_build_hint()}")
+    os.makedirs(stagedir, exist_ok=True)
+    staged = os.path.join(stagedir, "movehook.dll")
+    with open(staged, "wb") as fh:
+        fh.write(blob.replace(old, new))
+    return staged
+
+
+def _exit_arm(tmp, src, dllpath, arm, wait_armed):
+    """One §16 exit arm in its own host and its own staged DLL. Returns a dict.
+
+    `wait_armed`: exit once the worker's status file says "armed" (inside the
+    poll loop), else exit the moment injection returns (inside the controls).
+    """
+    base = os.path.join(tmp, f"exit-{arm}")
+    stagedir, hostdir = os.path.join(base, "dll"), os.path.join(base, "host")
+    os.makedirs(hostdir, exist_ok=True)
+    try:
+        staged = _stage_dll(src, dllpath, stagedir)
+    except ValueError as ex:
+        return {"skip": str(ex)}
+    exitdir = os.path.join(base, "hookout-exit")
+    with open(os.path.join(stagedir, "movehook.cfg"), "w", encoding="ascii",
+              newline="\n") as fh:
+        fh.write("ms=600000\nout=" + exitdir + "\n")
+    status = os.path.join(stagedir, "movehook.status")
+    binfile = os.path.join(exitdir, "movehook.bin")
+    fallback = os.path.join(hostdir, _FALLBACK, "movehook.bin")
+    got = {"binfile": binfile, "fallback_file": fallback, "armed": False,
+           "pre": False, "rc": None, "exit": None}
+    proc = subprocess.Popen([WOW64_CMD, "/k", "rem movehook exit test"],
+                            cwd=hostdir, stdin=subprocess.PIPE,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            creationflags=0x08000000)
+    try:
+        sys.path.insert(0, os.path.join(TOOLKIT, "harness"))
+        import keytap
+        import inject
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            try:
+                keytap.module_base(proc.pid, "KERNEL32.DLL")
+                break
+            except Exception:
+                time.sleep(0.2)
+        got["rc"] = inject.main([str(proc.pid), staged])
+        if wait_armed:
+            # Control B alone can take its 40 samples plus CTLB_MS; budget it.
+            deadline = time.time() + 45
+            while time.time() < deadline and not got["armed"]:
+                try:
+                    got["armed"] = "armed" in open(status, encoding="ascii",
+                                                   errors="replace").read()
+                except OSError:
+                    pass
+                if not got["armed"]:
+                    time.sleep(0.1)
+            got["pre"] = os.path.isfile(binfile)
+        proc.stdin.close()                        # graceful exit -> DllMain
+        proc.wait(timeout=20)
+        got["exit"] = proc.returncode
+        if not wait_armed:
+            got["armed"] = os.path.isfile(status)
+        deadline = time.time() + 10
+        while time.time() < deadline and not os.path.isfile(binfile) \
+                and not os.path.isfile(fallback):
+            time.sleep(0.25)
+    except Exception as ex:                                    # noqa: BLE001
+        return {"skip": f"host/inject failed: {ex}"}
+    finally:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+    got["bin"] = os.path.isfile(binfile)
+    got["fallback"] = os.path.isfile(fallback)
+    got["magic"], got["base"] = None, None
+    if got["bin"]:
+        head = open(binfile, "rb").read(12)
+        got["magic"] = head[:4]
+        if len(head) == 12:
+            got["base"] = struct.unpack_from("<I", head, 8)[0]
+    return got
+
+
 # ---------------------------------------------------------------- §16
 def section_16(tmp):
     """DURABILITY: a run must not be able to end with nothing on disk.
@@ -1582,77 +1756,109 @@ def section_16(tmp):
             with open(cfgp, "w", encoding="ascii", newline="\n") as fh:
                 fh.write(saved_cfg)
 
+    # (f0) THE DETACH PATH READS NOTHING THE WORKER SETS -- structurally, so a
+    # bare machine with no compiler and no cmd.exe still guards it. (f2) below
+    # is the behavioural half. See _detach_depends_on_worker for why.
+    bad = _detach_depends_on_worker(src)
+    check(bad == [],
+          "16. the detach path reads nothing the worker sets -- g_outdir and "
+          "g_base come from DLL_PROCESS_ATTACH, and there is no DEFDIR fallback",
+          f"found {bad} -- a host that exits before the worker gets there "
+          f"writes into DEFDIR, which is the owner's vault/research/movecode")
+    # CONTROL, both halves of the 2026-08-28 shape planted back in turn.
+    planted = src.replace(
+        '        cfg_string("out", OUTENV, g_outdir, sizeof g_outdir, DEFDIR);\n',
+        "", 1)
+    check(planted != src and _detach_depends_on_worker(planted) != [],
+          "16. CONTROL: resolving g_outdir anywhere but DLL_PROCESS_ATTACH is "
+          "DETECTED",
+          "a checker that cannot find the shape it was written for is "
+          "decoration")
+    planted = src.replace("write_bin(g_outdir, (DWORD)n);",
+                          "write_bin(g_outdir[0] ? g_outdir : DEFDIR, (DWORD)n);",
+                          1)
+    check(planted != src and _detach_depends_on_worker(planted) != [],
+          "16. CONTROL: and so is a DEFDIR fallback in the detach path")
+
     # (f) THE PROCESS-EXIT WRITE, FOR REAL. Everything above is structural;
     # this is the R5 scenario itself -- a run still armed when the host exits.
     # `cmd /k` with a held-open stdin exits GRACEFULLY when that pipe closes,
     # which is what runs DLL_PROCESS_DETACH (TerminateProcess would not, and a
     # test built on kill() would prove nothing).
+    #
+    # IT INJECTS A STAGED COPY, NEVER movehook.dll ITSELF, since 2026-09-27.
+    # This used to exit the host a blind 6.0 s after injection, on the premise
+    # that the worker was in its poll loop by then; it MEASURED 3.4-5.8 s on
+    # this machine, and a host that exits first ran a DLL whose detach write
+    # fell back to DEFDIR -- the owner's vault/research/movecode -- where a
+    # header-only cmd.exe stub replaced the 2026-09-01 capture studies/animref
+    # cites. The fix is in movehook.c; THIS makes the test safe against a DLL
+    # built before it, which any tree's gitignored movehook.dll may be. The copy
+    # carries DEFDIR rewritten to a RELATIVE sentinel and the host runs in its
+    # own directory, so a fallback lands where this section can see it and
+    # name it. The copy also reads its own cfg and writes its own status file,
+    # so neither of the tree's is touched.
     dllpath = os.path.join(HERE, "movehook.dll")
     if not os.path.isfile(WOW64_CMD) or not os.path.isfile(dllpath):
         LEDGER.skip("16. the process-exit write",
                     "needs a 32-bit cmd.exe and a built DLL")
     else:
-        exitdir = os.path.join(tmp, "hookout-exit")
-        cfg = os.path.join(HERE, "movehook.cfg")
-        saved = open(cfg, encoding="ascii").read() if os.path.isfile(cfg) else None
-        # ms is LONG on purpose: the worker must still be in its poll loop when
-        # the host exits, so the only thing that can write is the detach path.
-        with open(cfg, "w", encoding="ascii", newline="\n") as fh:
-            fh.write("ms=600000\nout=" + exitdir + "\n")
-        proc = subprocess.Popen([WOW64_CMD, "/k", "rem movehook exit test"],
-                                stdin=subprocess.PIPE,
-                                stdout=subprocess.DEVNULL,
-                                stderr=subprocess.DEVNULL,
-                                creationflags=0x08000000)
-        try:
-            sys.path.insert(0, os.path.join(TOOLKIT, "harness"))
-            import keytap
-            import inject
-            deadline = time.time() + 10
-            while time.time() < deadline:
-                try:
-                    keytap.module_base(proc.pid, "KERNEL32.DLL")
-                    break
-                except Exception:
-                    time.sleep(0.2)
-            rc = inject.main([str(proc.pid), dllpath])
-            binfile = os.path.join(exitdir, "movehook.bin")
-            # Let the worker get past its controls and INTO the poll loop, then
-            # confirm nothing has been written yet -- otherwise a file produced
-            # by the normal ending would be mistaken for the detach path's.
-            time.sleep(6.0)
-            pre = os.path.isfile(binfile)
-            check(rc == 0 and not pre,
-                  "16. CONTROL: mid-run, with a long timer, nothing is written yet",
-                  f"inject rc={rc}; bin present already: {pre} -- if it is, this "
-                  f"section cannot attribute the file to the exit path")
-            proc.stdin.close()                    # graceful exit -> DllMain
-            proc.wait(timeout=20)
-            deadline = time.time() + 10
-            while time.time() < deadline and not os.path.isfile(binfile):
-                time.sleep(0.25)
-            check(os.path.isfile(binfile),
-                  "16. AND THE CAPTURE IS WRITTEN WHEN THE HOST EXITS MID-RUN",
-                  f"nothing at {binfile} (exit code {proc.returncode}) -- this "
-                  f"is the R5 failure exactly: a run still armed when the "
-                  f"client goes away")
-            if os.path.isfile(binfile):
-                check(open(binfile, "rb").read(4) == b"MVHK",
-                      "16. and it is a real capture, not a stub",
-                      "the exit path must write the same format as any other")
-        except Exception as ex:                                # noqa: BLE001
-            LEDGER.skip("16. the process-exit write", f"host/inject failed: {ex}")
-        finally:
-            try:
-                proc.kill()
-            except Exception:
-                pass
-            if saved is None:
-                if os.path.isfile(cfg):
-                    os.remove(cfg)
+        # ms is LONG on purpose: the normal ending can never happen, so the
+        # only thing that can write before FLUSH_MS is the detach path.
+        #
+        # (f) waits for the worker's "armed" status and exits the host from
+        # INSIDE the poll loop -- the R5 shape. (f2) exits it the moment
+        # injection returns, INSIDE the controls, before the worker has armed
+        # or resolved anything -- the shape that lost the owner's capture.
+        for arm, wait_armed in (("f", True), ("f2", False)):
+            got = _exit_arm(tmp, src, dllpath, arm, wait_armed)
+            if "skip" in got:
+                LEDGER.skip(f"16({arm}). the process-exit write", got["skip"])
+                continue
+            if wait_armed:
+                check(got["armed"] and got["rc"] == 0 and not got["pre"],
+                      "16. CONTROL: mid-run, with a long timer, nothing is "
+                      "written yet",
+                      f"inject rc={got['rc']}; armed={got['armed']}; bin "
+                      f"present already: {got['pre']} -- if it is, this section "
+                      f"cannot attribute the file to the exit path")
+                check(got["bin"],
+                      "16. AND THE CAPTURE IS WRITTEN WHEN THE HOST EXITS MID-RUN",
+                      f"nothing at {got['binfile']} (exit code {got['exit']}) -- "
+                      f"this is the R5 failure exactly: a run still armed when "
+                      f"the client goes away")
             else:
-                with open(cfg, "w", encoding="ascii", newline="\n") as fh:
-                    fh.write(saved)
+                # THE EXPOSURE CONTROL. The claim below is only about an exit
+                # the worker had not reached its arm point by; a status file
+                # means it had, and then this arm measured nothing new.
+                check(got["rc"] == 0 and not got["armed"],
+                      "16. CONTROL: the early host exited before the worker "
+                      "armed -- no status file beside the staged DLL",
+                      f"inject rc={got['rc']}; armed={got['armed']} -- the exit "
+                      f"did not land inside the controls, so this arm did not "
+                      f"exercise the window it exists for")
+                check(got["bin"],
+                      "16. AND IT IS WRITTEN WHEN THE HOST EXITS BEFORE THE "
+                      "WORKER HAS RESOLVED ANYTHING",
+                      f"nothing at {got['binfile']} (exit code {got['exit']})"
+                      + (" -- it went to DEFDIR instead: this DLL resolves its "
+                         "output directory in the worker, after the controls. "
+                         "If it predates 2026-09-27, rebuild it: "
+                         + _build_hint() if got["fallback"] else ""))
+            check(not got["fallback"],
+                  f"16({arm}). and NOTHING fell back to the compiled-in DEFDIR",
+                  f"{got['fallback_file']} exists -- a real run's DEFDIR is the "
+                  f"owner's vault/research/movecode, and the file there is the "
+                  f"one this would have replaced")
+            if got["bin"]:
+                check(got["magic"] == b"MVHK",
+                      f"16({arm}). and it is a real capture, not a stub",
+                      "the exit path must write the same format as any other")
+                check(got["base"] not in (None, 0),
+                      f"16({arm}). and its header names the host's image base, "
+                      f"not 0",
+                      f"base={got['base']!r} -- g_base is set by DllMain now; a 0 "
+                      f"is a header written before the worker's first line ran")
 
     # (g) THE PERIODIC SNAPSHOT, AND THE HARD KILL IT EXISTS FOR.
     #
