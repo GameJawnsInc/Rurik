@@ -2111,6 +2111,16 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "The revert for SKILLS-FA (studies/skills 43); "
                          "--no-armour-term drops it too, along with the "
                          "swing's.")
+    ap.add_argument("--body-spell-player-armour", action="store_true",
+                    help="REVERT (2026-09-26): a BODY's armour-respecting spell "
+                         "(a hostile's Fireball onto a hero, a hero's Flare onto "
+                         "a hostile, a body's area-over-time tick) scales by the "
+                         "PLAYER's equipped spell armour whoever takes it -- the "
+                         "reading every run before 2026-09-26 made. By default a "
+                         "body taker meets its OWN rating (its row's "
+                         "armor_rating, else the creature formula: the swing "
+                         "path's rule) less the spell's own penetration; the "
+                         "player taker is unchanged either way.")
     ap.add_argument("--no-weakness-attributes", action="store_true",
                     help="Weakness cuts attack damage only: no rank is "
                          "lowered and no 0x003B batch is sent. The revert for "
