@@ -1018,14 +1018,18 @@ if records is not None:
           and all(w in skilldesc.EXCLUSIONS for w in tally),
           f"the plain rows a hand row already covers are excluded as HAND_ROW ({n_hand_plain}; 10 "
           f"on 2026-09-23), every reason from the enum", dict(tally))
-    check(tally.get("DURATION_ONLY") == 41
+    # DESKWORK-D6 steps 3-5 (2026-09-27): 56 Soothing Images and 136 Shadow of Fear have HAND
+    # rows now (area hexes, studies/weapons 43), so the gate excludes them as HAND_ROW ahead of
+    # DURATION_ONLY -- 41 -> 39, and both sit in the HAND_ROW list the check above counts
+    check(tally.get("DURATION_ONLY") == 39
+          and {56, 136} <= set(by_reason.get("HAND_ROW", ()))
           and by_reason.get("CONDITION_ON_EPISODE") == [113, 2136]
           and by_reason.get("EPISODE_REFUSED") == [926]
           and "CONDITION_RIDER_CLASS" not in by_reason and "CONDITION_RIDER_NO_EPISODE" not in by_reason
           and by_reason.get("PET_ATTACK") == [441]
           and by_reason.get("RECIPIENT_NOT_A_FOE") == [769, 770, 917, 1364, 1468]
           and by_reason.get("RECIPIENT_NOT_AN_ALLY") == [918, 1032, 1354],
-          "THE EXCLUSIONS, client-side: 41 duration-only; SKILLS-LV split the 6 conditions an "
+          "THE EXCLUSIONS, client-side: 39 duration-only (41 until D6 step 4 gave 56 and 136 hand rows, 2026-09-27); SKILLS-LV split the 6 conditions an "
           "episode inflicts later -- 113 and 2136 stay (ON-STRUCK riders: whoever strikes the wearer), "
           "926 is EPISODE_REFUSED (an on-hit rider whose 5..30 bit-clear duration never opens), 435 "
           "and 1997 ship as on-hit riders and 1041 at its activation through the caster arm; no rider "
@@ -1043,9 +1047,10 @@ if records is not None:
           "fleshiness, the spirits of 2051 and 2100; the two class heals a person read as NOT "
           "including the caster -- 1262 excludes it, 943 heals only the relieved (287 and 2221 ship "
           "HEAL_PARTY)", by_reason)
-    check(len(lrows) == 131 - n_hand_plain - 61 and len(lrows) + len(excluded) == 131,
-          f"THE SET: {len(lrows)} label-tier rows = 131 plain - {n_hand_plain} hand - 61 excluded "
-          f"(60 on 2026-09-25 after SKILLS-LV's riders and 1041's activation; 57 on 2026-09-23 after "
+    check(len(lrows) == 131 - n_hand_plain - 59 and len(lrows) + len(excluded) == 131
+          and 799 in hand_ids and 799 not in lrows,
+          f"THE SET: {len(lrows)} label-tier rows = 131 plain - {n_hand_plain} hand - 59 excluded "
+          f"(56 on 2026-09-27: D6 step 5's hand row for 799 Beguiling Haze takes it out of the tier, and 56 / 136 move from the 61 excluded to the hand rows; 60 on 2026-09-25 after SKILLS-LV's riders and 1041's activation; 57 on 2026-09-23 after "
           f"SKILLS-LU; 47 after the fix pass, 59 before it); nothing shrinks silently",
           (len(lrows), len(excluded)))
     check(not (set(lrows) & hand_ids) and skilldesc.check_label_rows(lrows, rep, hand_ids, records) == [],

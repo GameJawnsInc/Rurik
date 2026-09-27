@@ -3087,9 +3087,10 @@ build = 38797
 verified = """B4 (studies/skills 62). Client (38797, vault/client/2026-07-29_221c13772c7a): id 2059 \
 Shell Shock, type_code 5 (a Spell), profession 6, attribute 8 (Air Magic), 5 energy, 1.0 s \
 activation, 8 s recharge, TARGET BYTE 5, aoe_range 156, args = 6 (scale | bonus), scale 10->30, \
-bonus 5->20, duration 0 / 0, projectile 2077 (none). Its own description, resolved with textrec: \
-"Target foe is struck for %str1% lightning damage and has Cracked Armor for %str2% second[s]. \
-This spell has 25% armor penetration. If you are Overcast, this spell strikes adjacent foes." -- \
+bonus 5->20, duration 0 / 0, projectile 2077 (none). Its own description is string 61607 (name 61606), resolved at run time \
+with toolkit/clientscan/textrec.py and never committed (CLAUDE.md, authored text): lightning \
+damage from str1 on the target, Cracked Armor for str2 seconds, 25 % armour penetration, and an \
+Overcast clause striking adjacent foes -- \
 skilldesc --row 2059: str1 -> scale AGREE_PROGRESSION 10/30 LIGHTNING_DAMAGE, str2 -> bonus_scale \
 AGREE_PROGRESSION 5/20 CONDITION_DURATION:Cracked Armor. The 25 % is the Air Magic rule \
 skill_base_penetration already applies to an attribute-8 lightning spell (studies/weapons 35). \
@@ -3108,8 +3109,9 @@ build = 38797
 verified = """B4 (studies/skills 62). Client (38797): id 799 Beguiling Haze, type_code 5 (a Spell, \
 elite), profession 7 (Assassin), attribute 31 (Deadly Arts), 10 energy, 0.25 s activation, 20 s \
 recharge, TARGET BYTE 5, aoe_range 0, args = 2 (scale), scale 3->9, duration 3->9 (bit clear, the \
-same numbers), bonus 0 / 0. Its own description: "Shadow Step to target foe. That foe becomes Dazed \
-for %str1% second[s]." -- skilldesc --row 799: str1 -> scale AGREE_PROGRESSION 3/9 \
+same numbers), bonus 0 / 0. Its own description is string 26375 (name 26374), resolved at run \
+time with textrec and never committed: a shadow step to the target, which is Dazed for str1 \
+seconds -- skilldesc --row 799: str1 -> scale AGREE_PROGRESSION 3/9 \
 CONDITION_DURATION:Dazed; flags CLAUSE_SHADOW_STEP, TARGET_FOE. NOT modelled, said: the Shadow \
 Step (the caster does not move; no teleport exists on this server). Chosen as the one UNCONDITIONAL \
 Dazed inflicter among the 16 (d6R-records) whose only other clause is ignorable; the others hang \
