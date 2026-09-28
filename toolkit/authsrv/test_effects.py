@@ -44,7 +44,77 @@ import effects  # noqa: E402
 from codec import Codec  # noqa: E402
 
 RITUAL, RITUAL_SENTINEL = 22, 10000.0   # type_code; the range effect's "until you leave"
-LEDGER = checks.Ledger("the effect channel", floor=91)   # 2026-09-26: +6, section 4h (a body degenerated to 0 dies through kill_agent: the hostile's template, silent, stripped; the known-bad clamp arm; the party body unpaid; the survivor control), from the green run (91)  # 2026-09-17: +1, the ritual range-effect exception (RB2 re-pin), from the green run #   # SLICE-F26 +1 (the death kills the lead in flight); SLICE-F25 +2 (0x002D in the death batch; the mirror stops); SLICE-F24 +1 (the death hold); SLICE-F23 +6 (the degen clock across quiet ticks; a corpse does not walk); from the green run
+
+# CASTAI-Z1 (2026-09-28). The Zaishen Challenge tape, the first capture after the
+# pin below, and the facts section 2 now asserts about it. PIN_STAMP is the first
+# capture NOT in the corpus the old claims were written over: every stamp before
+# it re-scans to the old numbers exactly.
+PIN_STAMP = "20260928T103123"
+PIN_BUILD = 38797                     # skilltable.find_exe()'s pinned table
+ZAISHEN_TAPE = "20260928T103123"
+# The capture-declared gapped connections (livewire.declared_gaps), EXACT: a
+# new one must redden this, never vanish from the corpus.
+DECLARED_GAPPED = [("20260928T103123", "10.0.0.210:65009->98.95.137.136:80")]
+FAINTHEARTEDNESS = 135
+FAINT_ENDPOINTS = {38797: (3, 16), 38833: (3, 16), 38849: (3, 16), 38888: (4, 18)}
+FAINT_WITNESS = [("10.0.0.210:50061->54.198.7.73:80", 11, 14.0)] * 2
+PVP_PAST_PIN_TABLE = [3443]           # Frenzy's (346) PvP split, build 38888 only
+
+
+class _Table:
+    """One build's skill table, by id, REFUSING an id past its end.
+
+    `skilltable.parse_record` computes base + id * stride and reads whatever is
+    there, so an id the table does not hold decodes to confident garbage --
+    1193880282 for 3443 against build 38797's 3443-record table, the "prediction"
+    in CASTAI-Z1's red. This is the bounds check that call site lacked."""
+
+    def __init__(self, data, base, count, build):
+        self.data, self.base, self.count, self.build = data, base, count, build
+
+    def row(self, sid):
+        import skilltable
+        if not 0 <= sid < self.count:
+            raise KeyError(f"skill {sid} is past build {self.build}'s "
+                           f"{self.count}-record table")
+        return skilltable.parse_record(self.data, self.base, sid)
+
+
+def _load_table(build):
+    """The pristine image of `build`, verified by `pinned.find` (SystemExit if absent)."""
+    import pinned
+    import skilltable
+    exe, _why = pinned.find(build=build)
+    with open(exe, "rb") as fh:
+        data = fh.read()
+    base, count, _score = skilltable.locate_table(data)
+    return _Table(data, base, count, build)
+
+
+def _capture_build(cap, conn_path):
+    """The client build a connection was captured with, never guessed.
+
+    The connection file's own version record (origin.build_of) first. Files from
+    before 38833 shipped (2026-08-14) carry none, and for those the capture's
+    manifest names the exe it launched, filed under its snapshot stamp, which
+    `pinned.known_build` maps to a build. Neither -> ValueError, loudly."""
+    import json
+    import origin
+    import pinned
+    b, _why = origin.build_of(conn_path)
+    if b is not None:
+        return b
+    try:
+        with open(os.path.join(cap, "manifest.json"), encoding="utf-8") as fh:
+            exe = json.load(fh).get("exe") or ""
+    except (OSError, ValueError):
+        exe = ""
+    known = pinned.known_build(os.path.basename(os.path.dirname(exe))) if exe else None
+    if known is None:
+        raise ValueError(f"{conn_path}: no build in the file and none in its "
+                         f"capture's manifest")
+    return known.number
+LEDGER = checks.Ledger("the effect channel", floor=95)   # 2026-09-28 (CASTAI-Z1): +4, section 2 (the declared-gap set-aside; the pinned-table claim re-scoped to the pin and its own-build successor over the corpus; Faintheartedness re-balanced in 38888; the PvP split past the pinned table), from the green run (95)  # 2026-09-26: +6, section 4h (a body degenerated to 0 dies through kill_agent: the hostile's template, silent, stripped; the known-bad clamp arm; the party body unpaid; the survivor control), from the green run (91)  # 2026-09-17: +1, the ritual range-effect exception (RB2 re-pin), from the green run #   # SLICE-F26 +1 (the death kills the lead in flight); SLICE-F25 +2 (0x002D in the death batch; the mirror stops); SLICE-F24 +1 (the death hold); SLICE-F23 +6 (the degen clock across quiet ticks; a corpse does not walk); from the green run
 
 
 
@@ -214,65 +284,209 @@ def section_corpus_oracle():
     decoder cannot force it true, because both inputs come from outside.
     """
     print("\n2. the live corpus: does field3 predict the duration on the wire?")
+    # THE ONLY SKIP, on one cause: the vault's live captures are not on this
+    # machine (CASTAI-Z1 review; test_adrenwire.live_corpus_dir and test_pools
+    # do the same). This used to be `except (Exception, SystemExit)` around the
+    # imports, require_dir AND the pinned-table read, so a broken import or an
+    # unreadable table was reported as "no vault here". SystemExit is caught
+    # because require_dir raises it by design; nothing else is.
     try:
-        import bufflog
-        import skilltable
-        import tape
         import vaultpath
-        from pathlib import Path
         live = vaultpath.require_dir("captures", "live",
                                      why="the effect-channel oracle")
-        exe, why = skilltable.find_exe()
-        data = Path(exe).read_bytes()
-        base, count, _score = skilltable.locate_table(data)
-    except (Exception, SystemExit) as ex:                                    # noqa: BLE001
+    except (SystemExit, ImportError) as ex:
         LEDGER.skip("the live-corpus oracle",
-                    f"no vault captures or no pinned client here ({ex}). "
+                    f"no live captures here ({ex}). "
                     f"This is the section that carries the module -- a green "
                     f"run without it has checked the arithmetic and none of "
                     f"the evidence")
         return
+    import bufflog
+    import livewire
+    import skilltable
+    import tape
+    from pathlib import Path
+    # The captures ARE here, so the pinned build's table must be too: every
+    # apply below is predicted from a pinned image (`_load_table` for the
+    # other builds is unguarded the same way). pinned.find's SystemExit is a
+    # loud stop naming the build, not a skip.
+    exe, why = skilltable.find_exe()
+    data = Path(exe).read_bytes()
+    base, count, _score = skilltable.locate_table(data)
+    pin_table = _Table(data, base, count, PIN_BUILD)
 
     codec = Codec()
-    applies = []
+    applies, set_aside = [], []
     for stamp in sorted(os.listdir(live)):
         cap = os.path.join(live, stamp)
         if not os.path.isdir(cap):
             continue
+        declared = livewire.declared_gaps(cap)
         for conn in tape.channel_files(cap):
-            try:
-                ev = bufflog.read_effects(cap, conn["connection"], codec)
-            except Exception:                                  # noqa: BLE001
+            # A GAPPED CONNECTION is set aside ONLY because its own capture's
+            # manifest declares it (CASTAI-Z1, livewire.declared_gaps), and it
+            # must STILL be refused -- no blanket except: any other failure to
+            # read a connection is a crash, not a quiet `continue`.
+            if conn["connection"] in declared:
+                try:
+                    bufflog.read_effects(cap, conn["connection"], codec)
+                    refused = False
+                except tape.TapeError:
+                    refused = True
+                set_aside.append((stamp, conn["connection"], refused))
+                print(f"  (set aside: {stamp} {conn['connection']} -- its manifest "
+                      f"declares s2c gaps {declared[conn['connection']]})")
                 continue
-            applies.extend(ev["applies"])
+            ev = bufflog.read_effects(cap, conn["connection"], codec)
+            build = _capture_build(cap, conn["path"])
+            for a in ev["applies"]:
+                applies.append(dict(a, stamp=stamp, conn=conn["connection"],
+                                    build=build))
+
+    LEDGER.ok([(s, c) for s, c, _r in set_aside] == DECLARED_GAPPED
+              and all(r for _s, _c, r in set_aside),
+              f"the connections set aside are EXACTLY the capture-declared gapped "
+              f"ones, and each is still refused by the reader: {set_aside}",
+              f"expected {DECLARED_GAPPED}. A future gapped connection reddens "
+              f"this rather than vanishing from the corpus, and one that stops "
+              f"being refused would mean the reader started decoding a stream "
+              f"with a hole in it")
 
     LEDGER.ok(len(applies) >= 100,
               f"the corpus still holds its {len(applies)} effect applies",
               f"102 when this was written. A corpus that shrank is a vault "
               f"that moved, and the numbers below would quietly get easier")
 
-    hits = misses = conds = 0
-    worst, rituals = [], []
-    for a in applies:
-        row = skilltable.parse_record(data, base, a["skill"])
-        pred = effects.interp(row["duration0"], row["duration15"], a["field3"])
-        if a["skill"] in bufflog.CONDITION_SKILLS:
-            conds += 1
-        elif row.get("type_code") == RITUAL and abs(pred - a["duration"]) >= 1e-6:
-            rituals.append((a["skill"], a["field3"], a["duration"], pred))
-        elif abs(pred - a["duration"]) < 1e-6:
-            hits += 1
-        else:
-            misses += 1
-            worst.append((a["skill"], a["field3"], a["duration"], pred))
+    # WHICH BUILD'S TABLE. The corpus spans 38797 / 38833 / 38849 / 38888, and
+    # until CASTAI-Z1 every apply was predicted from the PINNED 38797 table,
+    # green only because no effect row it met had changed between builds. The
+    # Zaishen tape (20260928T103123, build 38888) met two: Faintheartedness 135,
+    # re-balanced (below), and 3443, an id the 38797 table does not HAVE --
+    # 38797 holds 3443 records, ids 0..3442, and `parse_record` walks past the
+    # end without complaint, which is where the "prediction" 1193880282 came
+    # from. So each apply is now predicted from its OWN build's table, and the
+    # pinned table keeps its original claim on the captures that existed at the
+    # pin. `_Table.row` refuses an id past the end rather than reading garbage.
+    tables = {PIN_BUILD: pin_table}
 
-    LEDGER.ok(misses == 0 and hits >= 90,
+    def own(a):
+        b = a["build"]
+        if b not in tables:
+            tables[b] = _load_table(b)
+        return tables[b]
+
+    def score(rows_of, population):
+        hits = misses = conds = 0
+        worst, rituals = [], []
+        for a in population:
+            row = rows_of(a).row(a["skill"])
+            pred = effects.interp(row["duration0"], row["duration15"], a["field3"])
+            if a["skill"] in bufflog.CONDITION_SKILLS:
+                conds += 1
+            elif row.get("type_code") == RITUAL and abs(pred - a["duration"]) >= 1e-6:
+                rituals.append((a["skill"], a["field3"], a["duration"], pred))
+            elif abs(pred - a["duration"]) < 1e-6:
+                hits += 1
+            else:
+                misses += 1
+                worst.append((a["skill"], a["field3"], a["duration"], pred))
+        return hits, misses, conds, worst, rituals
+
+    # An id past a table's end is NAMED by the check it would break, not raised
+    # out of score() before that check can report (CASTAI-Z1 review): `beyond`
+    # is computed first, those rows are kept out of the scoring, and the check
+    # carries `not beyond` as a conjunct -- so one such id is still a FAIL, now
+    # with its (build, id) in the message instead of a KeyError traceback.
+    at_pin = [a for a in applies if a["stamp"] < PIN_STAMP]
+    beyond_pin = sorted({a["skill"] for a in at_pin if a["skill"] >= pin_table.count})
+    hits, misses, _c, worst, _r = score(
+        lambda a: pin_table, [a for a in at_pin if a["skill"] < pin_table.count])
+    LEDGER.ok(misses == 0 and hits >= 90 and not beyond_pin,
               f"{hits} of {hits + misses} NON-CONDITION applies predicted "
-              f"exactly, {misses} missed",
+              f"exactly, {misses} missed -- AS OF THE PIN (captures before "
+              f"{PIN_STAMP}), from the pinned build-{PIN_BUILD} table",
+              f"ids past its {pin_table.count}-record end: {beyond_pin}. "
               f"interp(duration0, duration15, field3) == the f32 on the wire. "
               f"The endpoints are the client's, the formula was measured for "
               f"the DAMAGE scale, and field3 and the duration are retail's "
-              f"bytes -- nothing was fitted. Misses: {worst[:4]}")
+              f"bytes -- nothing was fitted. Misses: {worst[:4]}. RE-SCOPED "
+              f"2026-09-28 (CASTAI-Z1), not loosened: this is the claim exactly "
+              f"as it was, on the corpus it was made over; the next check "
+              f"carries it past the pin")
+
+    beyond = sorted({(a["build"], a["skill"]) for a in applies
+                     if a["skill"] >= own(a).count})
+    hits, misses, conds, worst, rituals = score(
+        own, [a for a in applies if a["skill"] < own(a).count])
+    LEDGER.ok(misses == 0 and hits >= 90 and not beyond,
+              f"{hits} of {hits + misses} NON-CONDITION applies predicted "
+              f"exactly, {misses} missed, EACH FROM ITS OWN BUILD'S TABLE, over "
+              f"the whole corpus",
+              f"builds {sorted({a['build'] for a in applies})}; ids past their "
+              f"own table's end: {beyond}. Misses: {worst[:9]}")
+
+    # THE FINDING THE ZAISHEN TAPE BROUGHT (CASTAI-Z1): Faintheartedness 135 was
+    # RE-BALANCED in build 38888. OBSERVED in the client tables: duration 3..16
+    # on 38797 / 38833 / 38849, 4..18 on 38888. WIKI (GWW, "Faintheartedness",
+    # rev. 2739052, 2026-08-28): the same edit, {{gr|3|16}} -> {{gr|4|18}}
+    # seconds. OBSERVED on the wire: both of the tape's applies, field3 11 (the
+    # Degeneration Team's Necromancer's Curses), carry 14.0 --
+    # interp(4, 18, 11) = 14, interp(3, 16, 11) = 13. Three witnesses with no
+    # shared author: CORROBORATED.
+    fh = [(a["conn"], a["field3"], a["duration"]) for a in applies
+          if a["skill"] == FAINTHEARTEDNESS and a["stamp"] == ZAISHEN_TAPE]
+    ends = {}
+    for b in FAINT_ENDPOINTS:
+        try:
+            r = (tables[b] if b in tables else _load_table(b)).row(FAINTHEARTEDNESS)
+            ends[b] = (r["duration0"], r["duration15"])
+        except (SystemExit, OSError, KeyError) as ex:
+            # pinned.find's SystemExit (the build is not in the vault), a read
+            # failure, or _Table.row's KeyError past the table's end -- each is
+            # written into `ends`, which then fails the equality below.
+            ends[b] = f"unreadable: {ex}"
+    LEDGER.ok(fh == FAINT_WITNESS and ends == FAINT_ENDPOINTS
+              and effects.interp(4, 18, 11) == 14 and effects.interp(3, 16, 11) == 13,
+              f"Faintheartedness {FAINTHEARTEDNESS} was re-balanced in build 38888: "
+              f"{ends}, and the Zaishen tape's applies read the NEW curve",
+              f"{fh} on {ZAISHEN_TAPE}. EXACT, per tape (a tape does not grow). "
+              f"The pinned table predicts 13 for both; the tape's own build "
+              f"predicts 14, which is what the wire carries")
+
+    # THE IDS THE PINNED TABLE LACKS, by rule (R8), not by a blanket except. An id
+    # past the end of 38797's table must be a PvP-ONLY row of its own build that
+    # splits off a player skill (`linked_id`). Zaishen Challenge plays the PvP
+    # versions: 3443 is Frenzy's (346) PvP split, and the observer's own bar
+    # carried it (studies/monsterai; test_pools 2c reads the same id's cost).
+    past_pin = sorted({(a["build"], a["skill"]) for a in applies
+                       if a["skill"] >= pin_table.count})
+    pvp = {}
+    for b, sid in past_pin:
+        if (b, sid) in beyond:
+            # Past its OWN build's table too: no row to read, so no split to
+            # accept. Recorded (and failing split_ok) rather than raised; the
+            # own-build check above has already named it.
+            pvp[sid] = (b, None, None, None, "past its own build's table")
+            continue
+        r = tables[b].row(sid)
+        pvp[sid] = (b, r["pvp_only"], r["equip_family"], r["linked_id"],
+                    (r["duration0"], r["duration15"]))
+    on_tape = sorted({a["skill"] for a in applies
+                      if a["stamp"] == ZAISHEN_TAPE and a["skill"] >= pin_table.count})
+    split_ok = all(v[1] and v[2] == 0 and v[3] is not None
+                   and v[3] < pin_table.count for v in pvp.values())
+    LEDGER.ok(bool(pvp) and split_ok and on_tape == PVP_PAST_PIN_TABLE,
+              f"every id past the pinned table's {pin_table.count} records is a "
+              f"PvP-only split of a player skill, read from its own build: "
+              f"{pvp}",
+              f"as (build, pvp_only, equip_family, linked_id, endpoints -- carried, "
+              f"not compared: a PvP split exists to differ). On "
+              f"{ZAISHEN_TAPE} the set is exactly {PVP_PAST_PIN_TABLE} (3443 -> "
+              f"346, Frenzy). The rule, stated: a row the pinned table cannot "
+              f"hold is read from the capture's own build, and only a PvP split "
+              f"is accepted there")
+    # The remaining checks of this section read `rituals` / `conds` from the
+    # own-build scoring above.
 
     # RB2 RE-PIN (2026-09-17): the owner ran through a Ranger spirit's range on
     # 20260917T090355 and skill 475 (type_code 22, a ritual) rode 0x0042 at
