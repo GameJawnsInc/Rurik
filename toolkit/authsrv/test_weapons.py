@@ -4124,7 +4124,7 @@ def section_aot_tape():
         have_corpus = True
     except (Exception, SystemExit) as e:                               # noqa: BLE001
         have_corpus = False
-        LEDGER.skip("section 29", f"the live corpus is absent ({type(e).__name__}) -- 16 "
+        LEDGER.skip("section 29", f"the live corpus is absent ({type(e).__name__}) -- 17 "
                     f"checks (the record's classes, P1-P9 at the registration and on the whole "
                     f"corpus, the re-statements, the tick batch order, the per-tape scoring) "
                     f"on capture 20260817T231139, 20260928T103123 and the corpus")
@@ -4205,8 +4205,13 @@ def section_aot_tape():
         # 58 came at its own completion, before the flight). P6 AS REGISTERED FAILS on the
         # whole corpus; P6r (the [20] is another announced skill's 58 or its projectile's
         # landing) holds there.
+        # The unexplained count is exact PER TAPE (2 on the Zaishen tape, 0 at the
+        # registration) and only a FLOOR on the whole corpus, so a later tape carrying
+        # the same landings (confirming evidence) cannot redden it -- the whole corpus
+        # carries the signature (P6 fails, P6r holds, no Fire Storm 58 on any tick).
         check(not sc["p6"] and sc["p6r"] and scp["p6r"] and sc["fs58_on_tick"] == 0
-              and sc["unexplained_20_or_a7"] == 2
+              and scz["unexplained_20_or_a7"] == 2 and scp["unexplained_20_or_a7"] == 0
+              and sc["unexplained_20_or_a7"] >= 2
               and scz["landings_on_tick"] == [
                   (ZAISHEN, "50061", 174.724, 2, [(3, 344), (3, 344)], [186]),
                   (ZAISHEN, "50295", 502.828, 5, [(3, 344), (6, 344)], [186])]
@@ -4216,8 +4221,10 @@ def section_aot_tape():
               "projectile's landing -- the [20] carrying the impact_visual of a flying skill the "
               "caster announced before the tick) -- on 20260928T103123 (exact, per tape) two "
               "ticks, 50061 174.724 k = 2 and 50295 502.828 k = 5, each agent 9's Fireball "
-              "(186, impact 344) landing; still no Fire Storm 58 on any tick",
-              str((sc["unexplained_20_or_a7"], scz["landings_on_tick"], sc["unexplained_r"])))
+              "(186, impact 344) landing, 0 at the registration, at least 2 corpus-wide; "
+              "still no Fire Storm 58 on any tick",
+              str((scz["unexplained_20_or_a7"], scp["unexplained_20_or_a7"],
+                   sc["unexplained_20_or_a7"], scz["landings_on_tick"], sc["unexplained_r"])))
         check(sc["p7"], "P7: every 350 in the corpus sits at a Fire Storm area inside its life",
               str(sc["unattributed"]))
         check(sc["p8"], "P8: no other area over time and no area hex was ever announced or "
