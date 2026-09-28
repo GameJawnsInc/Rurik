@@ -322,7 +322,8 @@ DROPPED_ON_PURPOSE = {
             "menu to send and no arena behind it; answering with an empty or "
             "invented 0x01D7 would be a layout we have not read. Armed with "
             "the arena, not before.",
-    0x00A3: "UNNAMED -- header only, n=1 (20260928T103123 conn :50267, "
+    0x00A3: "ZAISHEN_CHALLENGE_CANCEL (named medium, overrides.json, the owner's "
+            "decision 2026-09-28) -- header only, n=1 (20260928T103123 conn :50267, "
             "t=377.611), 2.469 s after a ZAISHEN_CHALLENGE_ENTER [320, 55, 0] "
             "and before its transfer was due (3.06 s on the other four); "
             "answered 32 ms later by 0x01D9 [0, 0, ''] -- the only 0x01D9 of "
@@ -332,9 +333,8 @@ DROPPED_ON_PURPOSE = {
             "corroborates the cancel reading: GWCA Opcodes.h 0x00A1 (at ours "
             "minus 2) and Py4GW Packet_enums.py 0x00A3 (at ours; no licence, "
             "so used only to check our reading) name it "
-            "PARTY_CANCEL_ENTER_CHALLENGE. On the PARTY_LEAVE precedent, n=1 "
-            "plus that corroboration would support a medium name; the naming "
-            "decision is left open. Unnamed or named, with no entry to cancel "
+            "PARTY_CANCEL_ENTER_CHALLENGE. Named medium on the PARTY_LEAVE "
+            "precedent (n=1 plus that corroboration). With no entry to cancel "
             "here there is nothing to answer.",
     0x00A6: "ZAISHEN_CHALLENGE_ENTER (named medium, overrides.json) -- [map, "
             "team, 0], 5 sends on 4 connections of one capture: 0x01D9 [2, 1, "
