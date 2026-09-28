@@ -2435,6 +2435,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "that activation (Jagged Strike 0.5 s) instead of at "
                          "the windup of it (0.15 s, retail n = 33). The revert "
                          "for SLICE-F51 (1).")
+    ap.add_argument("--no-body-attack-activation-windup", action="store_true",
+                    help="a hostile's or a party body's attack skill with a "
+                         "LISTED activation lands -- a bow: launches -- at that "
+                         "activation (Distracting Shot 0.5 s) instead of at the "
+                         "windup of it (0.15 s; retail 18 of 18 bow shots, "
+                         "studies/monsterai 18.2). The revert for CASTAI-ZF16.")
     ap.add_argument("--legacy-swing-restart-windup", action="store_true",
                     help="after an attack skill's hit the next swing opens one "
                          "windup later (ANIMREF-R7b) instead of one recovery, "
