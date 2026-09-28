@@ -326,19 +326,33 @@ else:
 # non-clock s2c within 50 ms as (opcode, summary), the map of the first 0x01A5
 # transfer within 4 s or None). Scoped to that capture, so a later tape can
 # add evidence but never redden it. What it pins: 0x009A is answered by the
-# 0x01D7 menu (maps 321/318/320/319/322) 4 of 4; 0x00A6 [map, team, 0] by
+# 0x01D7 menu (maps 321/318/320/319/322 and the ids of its six (id, dword,
+# dword) triples, 51/52/55/57/50/60) 4 of 4; 0x00A6 [map, team, 0] by
 # 0x01D9 [2, 1] + 0x01BB and a transfer to ITS map 4 of 4 -- except the one
 # followed by 0x00A3, answered 0x01D9 [0, 0] with NO transfer (the control).
+ZAISHEN_OPS = (0x009A, 0x00A3, 0x00A6)
+
+
 def zaishen_sends(capdir):
+    """(sends, aside): sends as above; aside = {connection: how many of the
+    three its (whole) c2s side carries} for each connection the capture's
+    manifest declares gapped -- set aside BY NAME and printed, never dropped
+    silently. Its s2c is refused, so it can answer nothing, but its c2s still
+    decodes and is counted."""
     gaps = livewire.declared_gaps(capdir)
-    out = []
+    out, aside = [], {}
     for gf in livewire.connections(capdir):
-        if livewire.conn_name(gf) in gaps:
-            continue       # match 2's arena connection: none of the three is sent there
+        name = livewire.conn_name(gf)
         _conn, merged, _ok = livewire.decode_conn(capdir, gf)
-        port = int(livewire.conn_name(gf).split("->")[0].rsplit(":", 1)[1])
+        if name in gaps:
+            aside[name] = sum(1 for _t, d, op, _v in merged
+                              if d == "c2s" and op in ZAISHEN_OPS)
+            print(f"      [aside] {name}: declared gapped by its manifest "
+                  f"({gaps[name]}); {aside[name]} of the three on its c2s")
+            continue
+        port = int(name.split("->")[0].rsplit(":", 1)[1])
         for i, (t, d, op, v) in enumerate(merged):
-            if d != "c2s" or op not in (0x009A, 0x00A3, 0x00A6):
+            if d != "c2s" or op not in ZAISHEN_OPS:
                 continue
             ans, transfer = [], None
             for t2, d2, op2, v2 in merged[i + 1:]:
@@ -347,15 +361,78 @@ def zaishen_sends(capdir):
                 if d2 != "s2c":
                     continue
                 if t2 - t <= 0.050 and op2 != c2striage.TICK:
-                    ans.append((op2, tuple(v2[1]) if op2 == 0x01D7
-                                else tuple(v2[1:3])))
+                    ans.append((op2, (tuple(v2[1]), tuple(x[0] for x in v2[2]))
+                                if op2 == 0x01D7 else tuple(v2[1:3])))
                 if op2 == 0x01A5 and transfer is None:
                     transfer = v2[4]
             out.append((port, round(t, 3), op, tuple(v[1:]), tuple(ans), transfer))
-    return sorted(out, key=lambda r: r[1])
+    return sorted(out, key=lambda r: r[1]), aside
 
 
-MENU = (0x01D7, (321, 318, 320, 319, 322))
+def _ints(v):
+    if isinstance(v, (list, tuple)):
+        for x in v:
+            yield from _ints(x)
+    elif isinstance(v, int):
+        yield v
+
+
+def zaishen_matches(capdir):
+    """(matches, aside) for every 0x00A6 whose 0x01A5 transfer came (within
+    4 s, as zaishen_sends reads it). The match connection is the FIRST
+    connection to start after that transfer whose server address is the one
+    the transfer names (0x01A5 field 1 is a sockaddr_in: family 2, port
+    6112, then the IPv4 -- RECONSTRUCTION, refuted here if the link lands
+    nowhere). matches = {connection: (team = the 0x00A6's field 2, the map
+    the ENTER named, the map the connection's own first 0x0099 loads, s2c
+    messages carrying the value 2809 anywhere in their fields)}; aside =
+    {connection: (team, map)} for a linked connection its manifest declares
+    gapped -- its s2c is refused, so it is printed by name, never counted."""
+    gaps = livewire.declared_gaps(capdir)
+    starts, decoded = [], {}
+    for gf in livewire.connections(capdir):
+        name = livewire.conn_name(gf)
+        _c, ev, _e = livewire.build_events(capdir, gf, "c2s")
+        starts.append((ev[0][0] if ev else float("inf"), name, gf))
+        decoded[name] = livewire.decode_conn(capdir, gf)[1]
+    starts.sort()
+    matches, aside = {}, {}
+    for name, merged in decoded.items():
+        if name in gaps:
+            continue
+        for i, (t, d, op, v) in enumerate(merged):
+            if d != "c2s" or op != 0x00A6:
+                continue
+            xfer = next(((t2, v2) for t2, d2, op2, v2 in merged[i + 1:]
+                         if d2 == "s2c" and op2 == 0x01A5 and t2 - t <= 4.0),
+                        None)
+            if xfer is None:
+                continue          # the cancelled entry: no transfer, no match
+            t_x, sa = xfer[0], bytes(xfer[1][1])
+            ip = ".".join(str(b) for b in sa[4:8])
+            nxt = next((n for s, n, _g in starts
+                        if s > t_x and n.split("->")[1].rsplit(":", 1)[0] == ip),
+                       None)
+            team, emap = v[2], v[1]
+            if nxt is None:
+                matches[f"(no connection to {ip} after t={t_x:.3f})"] = (
+                    team, emap, None, None)
+            elif nxt in gaps:
+                aside[nxt] = (team, emap)
+                print(f"      [aside] {nxt}: ENTER [{emap}, {team}] leads here; "
+                      f"declared gapped by its manifest ({gaps[nxt]}), its s2c "
+                      f"refused -- not counted")
+            else:
+                m = decoded[nxt]
+                lmap = next((v2[1] for _t, d2, op2, v2 in m
+                             if d2 == "s2c" and op2 == 0x0099), None)
+                n = sum(1 for _t, d2, _op, v2 in m
+                        if d2 == "s2c" and 2809 in _ints(v2))
+                matches[nxt] = (team, emap, lmap, n)
+    return matches, aside
+
+
+MENU = (0x01D7, ((321, 318, 320, 319, 322), (51, 52, 55, 57, 50, 60)))
 HOLD = ((0x01D9, (2, 1)), (0x01BB, (3, 1)))
 ZAISHEN_WITNESS = [
     (51300, 86.55, 0x009A, (), (MENU,), None),
@@ -370,14 +447,50 @@ ZAISHEN_WITNESS = [
     (64494, 545.081, 0x00A6, (318, 55, 0), HOLD, 318),
 ]
 zdir = os.path.join(livewire.captures_root(), "20260928T103123")
+# Which connection each transferred ENTER led to, and what it carried: skill
+# id 2809 (WIKI label Obsidian Flame (PvP), the Obsidian Spike team's skill)
+# is on the team-52 match only -- the evidence behind overrides.json 0x00A6's
+# "field 2 selects the OPPONENTS". Exact, scoped to this one capture.
+ZAISHEN_MATCHES = {
+    "10.0.0.210:50061->54.198.7.73:80": (55, 320, 320, 0),
+    "10.0.0.210:50295->54.198.7.73:80": (52, 322, 322, 34),
+    "10.0.0.210:58544->98.95.137.136:80": (55, 318, 318, 0),
+}
+ZAISHEN_MATCH_ASIDE = {"10.0.0.210:65009->98.95.137.136:80": (55, 318)}
 if os.path.isdir(zdir):
-    zs = zaishen_sends(zdir)
+    zs, zaside = zaishen_sends(zdir)
     led.ok(zs == ZAISHEN_WITNESS,
-           "WITNESS (20260928T103123, exact): 0x009A -> the 0x01D7 menu 4 of 4; "
-           "0x00A6 [map, team, 0] -> 0x01D9 [2, 1] + 0x01BB and a transfer to "
-           "ITS map 4 of 4; the one 0x00A6 followed by 0x00A3 -> 0x01D9 [0, 0] "
-           "and NO transfer",
+           "WITNESS (20260928T103123, exact): 0x009A -> the 0x01D7 menu (maps "
+           "and triple ids) 4 of 4; 0x00A6 [map, team, 0] -> 0x01D9 [2, 1] + "
+           "0x01BB and a transfer to ITS map 4 of 4; the one 0x00A6 followed by "
+           "0x00A3 -> 0x01D9 [0, 0] and NO transfer",
            "\n      " + "\n      ".join(repr(r) for r in zs))
+    led.ok(zaside == {"10.0.0.210:65009->98.95.137.136:80": 0},
+           "...the witness sets aside exactly the manifest's gapped connection "
+           "(match 2), by name, and its decodable c2s carries none of the three",
+           f"aside {zaside}")
+    # Every ENTER's map and team come from the menu its connection received:
+    # the last 0x009A before it on the same port was answered by 0x01D7, and
+    # [map, team] are a map of its list and an id of its triples.
+    menu_of, picks = {}, []
+    for port, _t, op, pay, ans, _x in zs:
+        if op == 0x009A:
+            menu_of[port] = next((a[1] for a in ans if a[0] == 0x01D7), None)
+        elif op == 0x00A6:
+            mn = menu_of.get(port)
+            picks.append(mn is not None and pay[0] in mn[0] and pay[1] in mn[1])
+    led.ok(len(picks) == 5 and all(picks),
+           "every 0x00A6 (5 of 5) names a map from its connection's 0x01D7 map "
+           "list and a team id from its 0x01D7 triples",
+           f"picks {picks}")
+    zm, zmaside = zaishen_matches(zdir)
+    led.ok(zm == ZAISHEN_MATCHES and zmaside == ZAISHEN_MATCH_ASIDE,
+           "0x00A6 field 2 SELECTS THE OPPONENTS (20260928T103123, exact): each "
+           "transferred ENTER links to the next connection at the address its "
+           "0x01A5 names, that connection loads the ENTER's map, and skill id "
+           "2809 is on 34 s2c of the team-52 match and 0 of both decodable "
+           "team-55 matches; the gapped team-55 match is set aside by name",
+           f"matches {zm}; aside {zmaside}")
 else:
     led.skip("the Zaishen witness", "capture 20260928T103123 (CASTAI-Z1) missing")
 # The status vocabulary, and the reverse predicate's known-bad arm.

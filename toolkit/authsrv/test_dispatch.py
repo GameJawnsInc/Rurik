@@ -328,9 +328,14 @@ DROPPED_ON_PURPOSE = {
             "answered 32 ms later by 0x01D9 [0, 0, ''] -- the only 0x01D9 of "
             "that value in the live corpus -- and no 0x01A5 transfer followed. "
             "Reads as cancelling the pending entry (RECONSTRUCTION, n=1). "
-            "Wrapper 0x0085BF20 on 38797 (Array, one caller). A second witness "
-            "or a labelled run would name it; with no entry to cancel here, "
-            "there is nothing to answer.",
+            "Wrapper 0x0085BF20 on 38797 (Array, one caller). UPSTREAM "
+            "corroborates the cancel reading: GWCA Opcodes.h 0x00A1 (at ours "
+            "minus 2) and Py4GW Packet_enums.py 0x00A3 (at ours; no licence, "
+            "so used only to check our reading) name it "
+            "PARTY_CANCEL_ENTER_CHALLENGE. On the PARTY_LEAVE precedent, n=1 "
+            "plus that corroboration would support a medium name; the naming "
+            "decision is left open. Unnamed or named, with no entry to cancel "
+            "here there is nothing to answer.",
     0x00A6: "ZAISHEN_CHALLENGE_ENTER (named medium, overrides.json) -- [map, "
             "team, 0], 5 sends on 4 connections of one capture: 0x01D9 [2, 1, "
             "''] + 0x01BB at 31-38 ms, then 3.06 s later the 0x01A5 transfer to "
