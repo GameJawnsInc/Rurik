@@ -17411,6 +17411,17 @@ CHAIN_RESTART_PACED = True    # False (--legacy-chain-restart): same-tick
 #     satisfies. --legacy-swing-restart-windup is the control.
 ATTACK_ACTIVATION_WINDUP = True
 SWING_RESTART_RECOVERY = True
+# CASTAI-ZF16 (2026-09-28): law (1) holds for a BODY's attack skill too.
+# OBSERVED 18 of 18, bows, [50] announcement -> projectile launch: the
+# Degeneration Ranger (agent 6, live 20260928T103123) fires Distracting Shot
+# 399 x5 and Savage Shot 426 x6, activation 0.5, at 0.1377-0.1674 s --
+# swing_windup(0.5) = 0.15; agent 28 on 20260819T132414 fires 1197 x7,
+# activation 0.75, at 0.2681-0.2865 s -- swing_windup(0.75) = 0.275
+# (test_weaponcensus's per-tape witness; studies/monsterai 18.2). Both body
+# loops used the raw activation, 0.5 / 0.75 s. The modifier term is the
+# player's law carried over: every activated row so far is at 1.0.
+# --no-body-attack-activation-windup is the control.
+BODY_ATTACK_ACTIVATION_WINDUP = True
 
 
 def attack_skill_clock(state, activation):
@@ -17424,6 +17435,19 @@ def attack_skill_clock(state, activation):
     if activation > 0.0 and ATTACK_ACTIVATION_WINDUP:
         return swing_windup(activation * factor), activation * factor
     return activation, None
+
+
+def body_attack_skill_clock(state, agent_id, activation, interval):
+    """[50] -> landing seconds for a BODY's attack skill: attack_skill_clock's
+    law on the body's own clock. `interval` is the body's current swing
+    (base x attack_interval_factor), the windup of a table-0.0 skill (F24);
+    a listed activation is scaled by the same factor and wound up
+    (CASTAI-ZF16). A ranged body launches its shot at this instant."""
+    if activation == 0.0:
+        return swing_windup(interval)
+    if BODY_ATTACK_ACTIVATION_WINDUP:
+        return swing_windup(activation * attack_interval_factor(state, agent_id))
+    return activation
 
 # ANIMREF-RE §31, LAW A's decoded complement: freeze the swing clock while
 # the player's body is moving, so the next attack-started fires one interval
@@ -22804,9 +22828,16 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
     # 1.1387 s -- and the windup law derived at ANIMREF-R1 (sec.1) lands on
     # 1.1375 for the ranger's 2.475 s bow: the attack skill's E5 IS the
     # skill-swing's hit instant, begin + swing_windup(current interval).
-    # Wired for the measured case only (table activation 0.0); a LISTED
-    # activation still wins, per the wiki's "activation replaces the weapon
-    # time" reading -- UPSTREAM, no corpus cycle exercises it yet.
+    # A LISTED activation is wound up the same way: E5 at
+    # swing_windup(activation x factor), the caster occupied for the
+    # activation (attack_skill_clock). OBSERVED twice over, no free
+    # parameter: the player's Jagged Strike / Fox Fangs (0.5) land 0.147-
+    # 0.151 s after the debit, n = 33 (SLICE-F51); and bodies' bow shots
+    # launch 0.1377-0.1674 s after [50] for 399 / 426 (0.5, n = 11, live
+    # 20260928T103123 agent 6) and 0.2681-0.2865 s for 1197 (0.75, n = 7,
+    # 20260819T132414 agent 28) -- CASTAI-ZF16, body_attack_skill_clock.
+    # This line read "a LISTED activation still wins ... UPSTREAM, no corpus
+    # cycle exercises it yet" until F51 and ZF16 each exercised it.
     _free = None
     if is_attack:
         _to_e5, _free = attack_skill_clock(state, activation)   # SLICE-F51
@@ -27591,9 +27622,11 @@ def enemy_attack_tick(send, state, conn_id):
                      f"skill {skill_id}")
             # SLICE-F24: an attack skill's strike is a windup away (retail
             # [50] -> [46] p50 0.564 s), the table activation for a spell.
-            # A LISTED activation on an attack skill wins, the player's rule.
-            if _atk and activation == 0.0:
-                agent["cast_lands_at"] = now + swing_windup(interval)
+            # A LISTED activation on an attack skill is wound up too, the
+            # player's rule (CASTAI-ZF16, body_attack_skill_clock).
+            if _atk:
+                agent["cast_lands_at"] = now + body_attack_skill_clock(
+                    state, agent_id, activation, interval)
             else:
                 agent["cast_lands_at"] = now + activation
             # THIS LINE'S SHAPE IS abrun.py's `agent_casts` counter (anchored
@@ -27895,8 +27928,8 @@ def ally_cast_tick(send, state, conn_id):
         agent["casting"] = slot
         if _atk:
             agent["last_swing"] = now
-            agent["cast_lands_at"] = (now + swing_windup(_interval)
-                                      if activation == 0.0 else now + activation)
+            agent["cast_lands_at"] = now + body_attack_skill_clock(
+                state, agent_id, activation, _interval)             # CASTAI-ZF16
         else:
             agent["cast_lands_at"] = now + activation
         face_player(send, state, agent_id, agent, conn_id,
@@ -44705,6 +44738,13 @@ def main():
         ATTACK_ACTIVATION_WINDUP = False
         print("NO ATTACK ACTIVATION WINDUP: an attack skill with a listed "
               "activation lands AT that activation (the pre-SLICE-F51 arm).")
+    if a.no_body_attack_activation_windup:
+        global BODY_ATTACK_ACTIVATION_WINDUP
+        BODY_ATTACK_ACTIVATION_WINDUP = False
+        print("NO BODY ATTACK ACTIVATION WINDUP: a hostile's or a party "
+              "body's attack skill with a listed activation lands (a bow: "
+              "launches) AT that activation, 0.5 s for Distracting Shot "
+              "(the pre-CASTAI-ZF16 arm).")
     if a.legacy_swing_restart_windup:
         global SWING_RESTART_RECOVERY
         SWING_RESTART_RECOVERY = False

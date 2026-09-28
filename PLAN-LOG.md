@@ -63,6 +63,50 @@ passed, 1 declared skip); the vault run has 55 checks. The affected set is green
   (`_mark_cancelled`). That is older than this change and one tick wide.
 - The other half of ZF17, no interrupt rows for 399 / 426, stays in `PLAN.md` §8.1.
 
+### CASTAI-ZF16: a body's activated attack skill lands at swing_windup(activation) -- 2026-09-28 -- **SHIPPED `c4c3d1d0`, both body loops, revert `--no-body-attack-activation-windup`; driven against all 18 retail witnesses; two halves left open**
+
+**The finding** (studies/monsterai §18.2 row CASTAI-ZF16; weapons PLAN §44): retail launches a
+body's bow ATTACK skill that carries a table activation swing_windup(activation × the 0x0035
+modifier) after its [50]. OBSERVED 18 of 18 at modifier 1.0: Distracting Shot 399 ×5 at
+0.1418–0.1674 s and Savage Shot 426 ×6 at 0.1377–0.1589 s (activation 0.5, swing_windup = 0.15;
+live `20260928T103123` agent 6), 1197 ×7 at 0.2681–0.2865 s (0.75 → 0.275; `20260819T132414`
+agent 28). That is SLICE-F51's law for the player (`attack_skill_clock`). Our body loops armed
+the landing at the raw activation, 0.5 / 0.75 s -- for a bow, the launch.
+
+**What shipped** (`c4c3d1d0`): `authsrv.body_attack_skill_clock(state, agent_id, activation,
+interval)` -- activation 0 → swing_windup(interval), F24's branch unchanged; a listed
+activation → swing_windup(activation × `attack_interval_factor` of that body). Both
+`enemy_attack_tick` and `ally_cast_tick` call it for every attack skill. Behind
+`BODY_ATTACK_ACTIVATION_WINDUP` (default ON); `--no-body-attack-activation-windup` is the
+control. The modifier term is the player's law carried over, UNVERIFIED on bodies (every
+activated row on tape is at 1.0). **The press handler's "a LISTED activation still wins ...
+UPSTREAM, no corpus cycle exercises it yet" had been stale since F51** measured it on the
+player's daggers (n = 33); it now reads OBSERVED and names both witnesses.
+
+**The test** (`test_bodywindup`, new, in TESTS.md): a hostile archer through the real
+`enemy_attack_tick`, and a party archer through `ally_cast_tick`, on a fake clock stepped
+1 ms. Each [50] → 0x00A4 gap lands inside the span of that skill's retail witnesses: 0.1500 s
+for 399 / 426, 0.2750 s for 1197. The known-bad arm launches at 0.5000 / 0.7500 s, outside
+every witness. The control, Power Shot 394, launches at swing_windup(2.475) = 1.1375 under both
+arms. §6 re-derives the 18 witnesses from the two captures (`weaponcensus.skill_shots`) and
+checks the carried skill rows against the vault's. Floor 21 bare, 23 with the vault.
+Affected tests, all green: 20 behaviour tests, 2,692 checks (`test_agentlife` 704,
+`test_weapons` 382, `test_mechanics` 369, `test_playerswing` 191, `test_castgate` 81,
+`test_weaponcensus` 50, ...). The full suite was not run.
+
+**Left open, in §8.1's residue line; detail in weapons PLAN §44:**
+- (a) **The busy window.** The body is now free at its launch, where F51's player is occupied
+  for the whole activation. Retail's two archers never act inside it (0 of 18 next events;
+  the earliest is 0.995 s after the [50]), so the tape cannot separate the readings. With a
+  spell ready, ours can now start it 0.35 / 0.475 s sooner than before. No hold was added:
+  that would be a second, unwitnessed behaviour change.
+- (b) **The next swing.** Where the next event is a plain [4], 7 of 12 come 1.60–1.88 s after
+  the [50] (the other 5 at 2.01–5.22 s); ours opens a full 2.475 s interval after it. 1197's
+  1.602 / 1.613 sit on launch + interval − windup(interval) = 1.6125, the player's
+  SWING_RESTART_RECOVERY; 399 / 426 fit no single law. UNVERIFIED.
+
+---
+
 ### CASTAI-Z1: the Zaishen run scored, and the 19 suite reds its capture caused read, not re-pinned -- 2026-09-28 -- **Z1.P4 / P5 / P6 HELD, P7 FAILED, P1-P3 under their floors; the Necromancer's hex class id is 9 and SHIPPED; every red was a test, not the server**
 
 **The run** (studies/monsterai §18.1): the owner's live capture `20260928T103123` (secondary

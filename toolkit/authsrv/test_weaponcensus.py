@@ -613,7 +613,8 @@ def _windup_signature(d):
     ids are kept as positive controls inside it, and every body bow row outside it is
     classified by a stated rule below: an attack skill WITH an activation launches
     swing_windup(activation x modifier) (`_activated_signature`, the rule
-    authsrv.attack_skill_clock already applies to the PLAYER), and the non-attack rows
+    authsrv.attack_skill_clock applies to the PLAYER and, since CASTAI-ZF16,
+    authsrv.body_attack_skill_clock to a body), and the non-attack rows
     are asserted exactly, so a new kind is seen, never absorbed."""
     if HERE not in sys.path:
         sys.path.insert(0, HERE)
@@ -712,9 +713,11 @@ def _classes(rowless, other):
 def _activated_signature(slow_kind, authsrv):
     """A body's bow ATTACK skill WITH a table activation launches swing_windup(activation
     x modifier) after its [50] announcement -- the rule authsrv.attack_skill_clock applies
-    to the player's attack skills (ATTACK_ACTIVATION_WINDUP, 'UPSTREAM, no corpus cycle
-    exercises it yet'), OBSERVED here on bodies: 399 / 426 (0.5) at swing_windup(0.5) =
-    0.15, 1197 (0.75) at swing_windup(0.75) = 0.275. Judged in the SAME pinned residual
+    to the player's attack skills (ATTACK_ACTIVATION_WINDUP, SLICE-F51), OBSERVED here on
+    bodies: 399 / 426 (0.5) at swing_windup(0.5) = 0.15, 1197 (0.75) at swing_windup(0.75)
+    = 0.275. The server's body loops follow it since CASTAI-ZF16
+    (authsrv.body_attack_skill_clock; test_bodywindup drives them against these
+    witnesses). Judged in the SAME pinned residual
     band as the activation-0 signature (-0.0375 .. +0.0225), no new tolerance. The
     modifier term is UNVERIFIED on bodies: every such row so far is at modifier 1.0."""
     res = [(r, row, r["event_to_launch"]

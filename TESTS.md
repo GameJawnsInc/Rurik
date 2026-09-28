@@ -4409,6 +4409,24 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   the corpus is exactly `capgaps.KNOWN_GAPPED`, still refused; KNOWN-BAD: with the
   declaration withheld the walks raise on :65009 rather than skipping it. `cmsgstream`
   itself is covered by `test_cmsgnames` §0 / §0b. Floor 4 from the green run; bare 2),
+  `toolkit/authsrv/test_bodywindup.py` (**2026-09-28, CASTAI-ZF16: a BODY's attack skill
+  with a LISTED activation lands -- a bow: launches -- at swing_windup(activation x its
+  duration factor), not at the raw activation.** OBSERVED 18 of 18 on the live corpus:
+  399 / 426 (0.5) at 0.1377-0.1674 s after the [50] (20260928T103123 agent 6), 1197
+  (0.75) at 0.2681-0.2865 s (20260819T132414 agent 28) -- the player's SLICE-F51 law.
+  Both body loops now arm the landing through `authsrv.body_attack_skill_clock`, behind
+  `BODY_ATTACK_ACTIVATION_WINDUP` (`--no-body-attack-activation-windup`). §1 the clock on
+  literals, the revert, activation 0 untouched, the body's own factor. §2 the SENDER: a
+  hostile archer through the real `enemy_attack_tick` on a fake clock stepped 1 ms --
+  [50] then one 0x00A4, the gap inside the span of that skill's retail witnesses for
+  399, 426 and 1197; the KNOWN-BAD arm launches at 0.5 / 0.75 s, outside every one. §3
+  the same through `ally_cast_tick` (a party archer at the leader's target). §4 CONTROL:
+  Power Shot 394 (activation 0) launches at swing_windup(2.475) under both arms. §5
+  source: the flag, main()'s flip, both loops calling the clock, the press handler no
+  longer calling the law UPSTREAM. §6 (vault) the carried WITNESS re-derived from the two
+  captures via `weaponcensus.skill_shots`, and the carried skill rows against the
+  vault's; skips only on an absent capture directory / skills table. Floor 21 from the
+  bare green run; 23 with the vault. ~3 s),
   `toolkit/authsrv/test_livewire.py` (**2026-09-28, CASTAI-Z1: the first GAPPED live
   connection (20260928T103123 :65009, 38 + 20 s2c bytes at offsets 38045 / 38548), which
   `decode_conn` refuses by design, is NAMED, not absorbed. `declared_gaps` reads it from
