@@ -421,7 +421,10 @@ def section_corpus_oracle():
         try:
             r = (tables[b] if b in tables else _load_table(b)).row(FAINTHEARTEDNESS)
             ends[b] = (r["duration0"], r["duration15"])
-        except (Exception, SystemExit) as ex:                 # noqa: BLE001
+        except (SystemExit, OSError, KeyError) as ex:
+            # pinned.find's SystemExit (the build is not in the vault), a read
+            # failure, or _Table.row's KeyError past the table's end -- each is
+            # written into `ends`, which then fails the equality below.
             ends[b] = f"unreadable: {ex}"
     LEDGER.ok(fh == FAINT_WITNESS and ends == FAINT_ENDPOINTS
               and effects.interp(4, 18, 11) == 14 and effects.interp(3, 16, 11) == 13,

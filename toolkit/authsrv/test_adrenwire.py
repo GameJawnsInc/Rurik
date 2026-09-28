@@ -103,7 +103,8 @@ import checks  # noqa: E402
 # `checks.py`'s own instruction for a test whose count varies with the fixture.
 # BOTH NUMBERS ARE FROM RUNS ACTUALLY PERFORMED on 2026-08-21, neither is a
 # guess and neither is above what a run produces: a full green run on this
-# machine executes 72 (55 until 12-13 landed), and a run with neither the
+# machine executes 72 (55 until 12-13 landed; 90 since CASTAI-Z1, 2026-09-28),
+# and a run with neither the
 # captures nor the pinned image
 # executes 10 -- forced by pointing `RURIK_VAULT` at an empty directory, which
 # also turns §3 RED (3 failures, not a skip) because the content overlay is NOT
@@ -117,7 +118,7 @@ import checks  # noqa: E402
 # RUNBOOK.md recreates a particular one. THE PINNED IMAGE is skippable for the
 # same reason `pinned.find()` raises rather than falling through to `C:\gw`.
 #
-# WHAT THIS FLOOR DOES NOT CATCH, said plainly because 10 of 72 is a weak
+# WHAT THIS FLOOR DOES NOT CATCH, said plainly because 10 of 90 is a weak
 # backstop and a reader should not over-read it: on a machine that HAS both
 # fixtures, one section quietly ceasing to run would still clear 10. The guards
 # against that are elsewhere and are deliberate -- §4's first check pins the
@@ -309,6 +310,10 @@ ZAISHEN_MOVED = [(384, 12, 3), (384, 14, 4), (384, 16, 4), (384, 25, 7), (384, 5
 DAMAGE_RULE_GAINS = 175
 # The spend skill content lacks, on the witness tape: the PvP split of 348.
 PVP_SPENDS_WITNESS = {2858: 348}
+# The CAST ids no rule resolves on the captures before the pin, EXACT (R8,
+# CASTAI-Z1 review): an NPC's own skill, outside the player corpus. test_pools
+# 2d pins the same set from its own walk.
+UNRESOLVED_CASTS_AT_PIN = {1870}
 
 # THE BAR GATE, measured 2026-08-21 (12). Split the 58 usable connections on
 # whether the observing player's skillbar ever carried a skill with a non-zero
@@ -731,6 +736,22 @@ def skill_row(world, skill, builds, used=None):
                      f"content and is not a PvP split of a player skill")
 
 
+def outside_player_corpus(skill, builds):
+    """True when every build in `builds` that can be read has a client row for
+    `skill` OUTSIDE the player corpus (`skilltable.player_corpus`: equip_family
+    1, PvP clear), and at least one can -- the stated reason content's `skills`
+    table lacks it. False for an id past every table or with no build."""
+    import skilltable
+    seen = []
+    for build in sorted(b for b in builds if b is not None):
+        data, base, count = _client_table(build)
+        if not 0 <= skill < count:
+            continue
+        r = skilltable.parse_record(data, base, skill)
+        seen.append(not (r["equip_family"] == 1 and not r["pvp_only"]))
+    return bool(seen) and all(seen)
+
+
 def _capture_build(cap, conn_path):
     """The client build a connection was captured with, never guessed.
 
@@ -752,8 +773,43 @@ def _capture_build(cap, conn_path):
     return known.number if known else None
 
 
-def scan_corpus():
+def live_corpus_dir():
+    """The live-capture directory, or None and a DECLARED skip when it is absent.
+
+    THIS IS THE ONLY PLACE THE LIVE ORACLE MAY BE SKIPPED, and it skips on one
+    cause: the vault (or its `captures/live`) is not on this machine. Until the
+    CASTAI-Z1 review `main()` wrapped the whole of `scan_corpus()` in
+    `except (Exception, SystemExit)`, so once the per-connection blanket except
+    came out, a gapped connection the manifest does NOT declare raised a
+    `TapeError` that the same handler turned into "no live captures here" -- a
+    GREEN run (41 checks, 1 declared skip) with the declared-gap check never
+    executed. Resolving the directory here and calling `scan_corpus` outside any
+    handler makes that case what it is: a crash naming the connection.
+
+    SystemExit is caught deliberately: `vaultpath.require_dir` raises it by
+    design and it is not an Exception subclass, so without it a missing vault
+    would kill the run with a traceback instead of declaring the skip the floor
+    rule is built around.
+    """
+    try:
+        import vaultpath
+        return vaultpath.require_dir("captures", "live",
+                                     why="the adrenaline wire oracle")
+    except (SystemExit, ImportError) as ex:
+        LEDGER.skip("the live-corpus oracle (sections 4-7, 12)",
+                    f"no live captures here ({ex}). These are the sections "
+                    f"that put the model against ArenaNet's own wire -- a "
+                    f"green run without them has checked the client and none "
+                    f"of the traffic")
+        return None
+
+
+def scan_corpus(live):
     """Every message of the family in the live corpus, per connection.
+
+    `live` is the directory `live_corpus_dir()` resolved. Nothing in here may be
+    caught by the caller: a connection that fails to load and is not declared
+    gapped by its own manifest propagates as a crash.
 
     Returns a dict of aggregates. `tape.load_tape` refuses a non-live origin by
     itself (`toolkit/origin.py`), so nothing here can pool our own server's
@@ -769,11 +825,8 @@ def scan_corpus():
     import adrenjoin
     import livewire
     import tape
-    import vaultpath
     from codec import Codec
 
-    live = vaultpath.require_dir("captures", "live",
-                                 why="the adrenaline wire oracle")
     codec = Codec()
     agg = {
         "set_aside": [],         # (stamp, connection, still refused)
@@ -784,6 +837,7 @@ def scan_corpus():
         "spend_builds": collections.defaultdict(set),
         "spend_pairs_by_stamp": collections.defaultdict(collections.Counter),
         "cast_builds": collections.defaultdict(set),
+        "cast_stamps": collections.defaultdict(set),
         "captures": 0, "connections": 0, "messages": 0,
         "census": collections.Counter(),
         "amounts": collections.Counter(),
@@ -849,6 +903,7 @@ def scan_corpus():
                         casts.append((i, t, v[2], v[-1], v[1]))
                         agg["cast_skills"][v[-1]] += 1
                         agg["cast_builds"][v[-1]].add(build)
+                        agg["cast_stamps"][v[-1]].add(stamp)
 
             _classify_gains(agg, stamp, conn["connection"], msgs, adrenjoin)
             if on_207:
@@ -1175,12 +1230,13 @@ def section_spend_join(agg):
               f"send a 210 for, and which skills the client's own table gives "
               f"a cost. Neither was fitted to the other")
 
-    free, free_skills = 0, set()
+    free, free_skills, unresolved = 0, set(), set()
     for skill, n in agg["cast_skills"].items():
         try:
             units = int(skill_row(world, skill, agg["cast_builds"][skill])
                         ["adrenaline_units"])
         except MissingRow:
+            unresolved.add(skill)   # named and asserted just below
             continue            # an NPC's own skill: no player bar holds it
 
         if not units:
@@ -1194,6 +1250,23 @@ def section_spend_join(agg):
               f"discriminates: the corpus is full of skills that would fail "
               f"it, and none of them ever gets a 210. A join that could only "
               f"pass is not a join")
+
+    # WHICH cast ids the control drops (R8, CASTAI-Z1 review): as of the pin
+    # EXACTLY UNRESOLVED_CASTS_AT_PIN, and every one, before or after it, has a
+    # row in its own build's client table OUTSIDE the player corpus -- the
+    # stated reason the player-corpus content lacks it.
+    un_at_pin = {sk for sk in unresolved
+                 if any(st < PIN_STAMP for st in agg["cast_stamps"][sk])}
+    unexplained = sorted(sk for sk in unresolved
+                         if not outside_player_corpus(sk, agg["cast_builds"][sk]))
+    LEDGER.ok(un_at_pin == UNRESOLVED_CASTS_AT_PIN and not unexplained,
+              f"the control drops only ids outside the player corpus: "
+              f"{sorted(unresolved)} over the corpus, {sorted(un_at_pin)} as of "
+              f"the pin",
+              f"expected {sorted(UNRESOLVED_CASTS_AT_PIN)} before {PIN_STAMP}, "
+              f"EXACT. Unexplained (a row inside the player corpus, or none): "
+              f"{unexplained}. skilltable.player_corpus is the extractor's own "
+              f"membership rule, so this states why content lacks them")
 
     # AGAINST THE MEASURED CENSUS, not against CENSUS[...]. That constant became
     # a FLOOR on 2026-08-27 and this site was still reading it as an exact
@@ -2211,21 +2284,10 @@ def main():
     section_pin_consistency()
     section_cost_column()
 
-    try:
-        agg = scan_corpus()
-    except (Exception, SystemExit) as ex:                      # noqa: BLE001
-        # SystemExit is deliberate, not defensive: `vaultpath.require_dir`
-        # raises it by design and it is NOT an Exception subclass, so a bare
-        # `except Exception` would let a missing vault kill the run with a
-        # traceback and exit 1 instead of declaring the skip the floor rule is
-        # built around. A crash and a skip look nothing alike to a reader and
-        # identical to a CI exit code.
-        agg = None
-        LEDGER.skip("the live-corpus oracle (sections 4-7)",
-                    f"no live captures here ({ex}). These are the sections "
-                    f"that put the model against ArenaNet's own wire -- a "
-                    f"green run without them has checked the client and none "
-                    f"of the traffic")
+    live = live_corpus_dir()
+    # Deliberately OUTSIDE any handler (CASTAI-Z1 review): a load failure here
+    # is a crash, never a skip.
+    agg = scan_corpus(live) if live is not None else None
     if agg is not None:
         section_census(agg)
         section_populations(agg)
