@@ -28,6 +28,72 @@ move back.
 
 ---
 
+### CASTAI-ZF21: the two interrupters' damage clauses -- 2026-09-28 -- **Distracting Shot 399 deals its row's armour-ignoring amount in place of the weapon's; Savage Shot 426's +13...28 lands only on a target activating a spell; both OBSERVED on the Zaishen tape, both behind their own revert**
+
+**What the tape said** (studies/monsterai §18.2, CASTAI-ZF21; `20260928T103123`, the
+Degeneration Ranger, agent 6). A word is a fraction of its victim's maximum. The
+observer's maximum is on the wire; a body's is the one integer fit that closes all of its
+words.
+- **399 dealt 8 on every hit whose maximum is known, 4 of 4.** The targets: the observer
+  (a warrior, x 480), agent 8 (a monk henchman, x 483 and x 555), and agent 10 as a
+  critical (prop 17, bit-identical to agent 8's -8/555). Agent 6's plain shots on the same
+  targets ran 12-18 and 25-42. That is one amount through two armour classes and a
+  critical: GWW's "deals only 1...16", variable "Armor-ignoring damage", and the client's
+  template labels `%str1%` DAMAGE 1..16.
+- **426's bonus is on spells only.** On agent 8 activating spells it dealt 70 (x 555,
+  beside a 393 shot of 42) and 58 (x 402, beside 30 / 36). On the observer's Healing
+  Signet it dealt 36 = 2 x 18: a plain shot through the signet's -40, nothing on top
+  (n = 1). GWW: "If that action was a spell, you strike for +13...28 damage", and "even
+  if spell interruption is prevented".
+
+**A first reading, refuted before it shipped.** That 36 looked like the bonus landing on a
+signet, against the wiki. It is Healing Signet's -40 (`skill_effect.1`'s
+`armour_while_casting`, which land_swing already applies) doubling a plain 18. A bonus on
+top of a doubled shot could not come to 36, given agent 6's smallest plain word on the
+observer (12).
+
+**What shipped** (`3fd2a8bc`):
+- **Content.** `[skill_effect.399]` gets `scale_means = "Armor-ignoring damage"`; the new
+  label is in `SCALE_MEANS_DAMAGE` as standalone and not in `ARMOUR_RESPECTING_MEANS`.
+  `[skill_effect.426]` gets `scale_means = "+ Damage"` and `bonus_requires = "spell"`.
+  `skilldesc.HAND_FAMILY` learns the label, so both hand rows AGREE with the client's
+  templates (the hand census is now 70 AGREE, 0 CONFLICT).
+- **`ATTACK_FIXED_DAMAGE`** (`--no-attack-fixed-damage` reverts). An attack skill whose
+  scale is standalone deals exactly the row's amount in place of the weapon's: no armour,
+  no critical multiplier, no Weakness, no arrow share. It is still an attack: it can miss
+  or be blocked, it gains adrenaline and carries a preparation, and a critical still
+  sends prop 17.
+- **`BONUS_REQUIRES_SPELL`** (`--no-bonus-requires-spell` reverts). The gate is judged
+  in the three landings (`hit_enemy`, `land_swing`, `land_swing_on_body`) through
+  `strike_bonus_at_hit` and `activating_spell`, so an arrow's is read at its ARRIVAL.
+  "Activating a spell" is the interrupt's own windows, with the instant excluded.
+- `casting_armour_penalty`'s docstring no longer says the corpus holds no Healing Signet
+  cast.
+
+**Tests.** `test_interruptshots` is new. It covers:
+- the rules;
+- each landing path, with both known-bad arms;
+- an armour control over 20 seeds: 399 is 8 on every seed, while the plain shot's total
+  goes 59 -> 113 through the signet;
+- a forced critical;
+- the arrival;
+- one end-to-end 399 through `enemy_attack_tick` and `body_projectile_tick`;
+- the source;
+- the tape's witnesses in points (vault).
+
+Ten plants, each red. 24 checks, floor 19 (bare, measured; the first cut declared 21
+from a guess). 33 affected test files green (3,600 checks); the full suite on
+`8858bbfd`, 250 green / 0 red of 250, 16,602 checks.
+
+**This closes** two of CASTAI-ZF17 (the interrupters)' open lines: "399's 'deals only
+1...16'" and "426's +13...28". **Still open:**
+- **Distracting Shot's Dazed exemption.** GWW: a skill "easily interrupted (including
+  Dazed)" is not disabled.
+- **Criticals on bodies.** Our body landings never roll a critical, so a body's 399 is
+  always prop 16, where retail's was 17 twice in five. That is an older gap than this.
+- **The two ranks.** The Degeneration Ranger's are RECONSTRUCTION (7 fits 399's 8; 426's
+  +28 at rank 15 would fit agent 8's 70 - 42, but a plain roll varies too much to say).
+
 ### CASTAI-ZF17 (the interrupters): the Zaishen tape's two interrupters, and the observer's two runs on our sender -- 2026-09-28 -- **rows 399 / 426 (OBSERVED); no E5(0) for a 0-recharge skill; a resuming chain re-takes the hold ahead of the disable; each arm reverts alone; both runs match the tape byte for byte, one named `[4]` set aside**
 
 **What the tape said** (studies/monsterai §18.2, CASTAI-ZF17; `20260928T103123`, the

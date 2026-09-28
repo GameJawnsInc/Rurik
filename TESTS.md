@@ -4427,6 +4427,30 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   captures via `weaponcensus.skill_shots`, and the carried skill rows against the
   vault's; skips only on an absent capture directory / skills table. Floor 21 from the
   bare green run; 23 with the vault. ~3 s),
+  `toolkit/authsrv/test_interruptshots.py` (**2026-09-28, CASTAI-ZF21: the damage clauses
+  of the Zaishen tape's two interrupters.** Distracting Shot 399's "Armor-ignoring damage"
+  replaces the weapon's number on an attack (`ATTACK_FIXED_DAMAGE`,
+  `--no-attack-fixed-damage`). Savage Shot 426's "+ Damage" lands only on a target
+  activating a spell, judged at the hit (`bonus_requires = "spell"`,
+  `BONUS_REQUIRES_SPELL`, `--no-bonus-requires-spell`). §1 the rules on the carried rows:
+  the scales at ranks 0 / 7 / 15, `attack_fixed_damage` for a body and the player,
+  `activating_spell` (a spell yes; a signet, an attack skill, idle no),
+  `strike_bonus_at_hit`, and each revert. §2 body -> player (`land_swing`): 399 is 8 then
+  the interrupt's [35]; it is 8 on all 20 seeds through Healing Signet's -40, where the
+  plain shot's total doubles (59 -> 113). 426 is +20 on a spell and nothing on skill 2 or
+  on Healing Signet. Both KNOWN-BAD arms. §3 body -> body: 399 is 8 at armour 60 and 100;
+  426 +20 on a henchman casting 288. §4 player -> hostile (`hit_enemy`): 399 is 8 at
+  armour 60 and 120, and a forced critical sends prop 17 carrying 8. §5 one released
+  strike, judged at the ARRIVAL (`land_body_skill_shot`). §6 end to end: a hostile
+  archer's 399 through `enemy_attack_tick` and `body_projectile_tick` lands 8 on the
+  player mid-cast. §7 source and the two rows. §8 (vault):
+  - the carried rows equal the table;
+  - 399 on the observer is 8.000 at its declared 480;
+  - agent 8 on :58544 has ONE maximum (555) closing all 17 of its words, and there 399
+    is 8, 426 on a spell 70, and 393 is 42;
+  - agent 10's 399 crit is bit-identical to agent 8's;
+  - the observer's Healing Signet took 36 = 2 x 18 with no bonus room.
+  Ten plants, each red. Floor 19 from the bare green run; 24 with the vault. ~5 s),
   `toolkit/authsrv/test_livewire.py` (**2026-09-28, CASTAI-Z1: the first GAPPED live
   connection (20260928T103123 :65009, 38 + 20 s2c bytes at offsets 38045 / 38548), which
   `decode_conn` refuses by design, is NAMED, not absorbed. `declared_gaps` reads it from
