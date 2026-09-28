@@ -284,25 +284,35 @@ def section_corpus_oracle():
     decoder cannot force it true, because both inputs come from outside.
     """
     print("\n2. the live corpus: does field3 predict the duration on the wire?")
+    # THE ONLY SKIP, on one cause: the vault's live captures are not on this
+    # machine (CASTAI-Z1 review; test_adrenwire.live_corpus_dir and test_pools
+    # do the same). This used to be `except (Exception, SystemExit)` around the
+    # imports, require_dir AND the pinned-table read, so a broken import or an
+    # unreadable table was reported as "no vault here". SystemExit is caught
+    # because require_dir raises it by design; nothing else is.
     try:
-        import bufflog
-        import livewire
-        import skilltable
-        import tape
         import vaultpath
-        from pathlib import Path
         live = vaultpath.require_dir("captures", "live",
                                      why="the effect-channel oracle")
-        exe, why = skilltable.find_exe()
-        data = Path(exe).read_bytes()
-        base, count, _score = skilltable.locate_table(data)
-    except (Exception, SystemExit) as ex:                                    # noqa: BLE001
+    except (SystemExit, ImportError) as ex:
         LEDGER.skip("the live-corpus oracle",
-                    f"no vault captures or no pinned client here ({ex}). "
+                    f"no live captures here ({ex}). "
                     f"This is the section that carries the module -- a green "
                     f"run without it has checked the arithmetic and none of "
                     f"the evidence")
         return
+    import bufflog
+    import livewire
+    import skilltable
+    import tape
+    from pathlib import Path
+    # The captures ARE here, so the pinned build's table must be too: every
+    # apply below is predicted from a pinned image (`_load_table` for the
+    # other builds is unguarded the same way). pinned.find's SystemExit is a
+    # loud stop naming the build, not a skip.
+    exe, why = skilltable.find_exe()
+    data = Path(exe).read_bytes()
+    base, count, _score = skilltable.locate_table(data)
     pin_table = _Table(data, base, count, PIN_BUILD)
 
     codec = Codec()
@@ -382,12 +392,20 @@ def section_corpus_oracle():
                 worst.append((a["skill"], a["field3"], a["duration"], pred))
         return hits, misses, conds, worst, rituals
 
+    # An id past a table's end is NAMED by the check it would break, not raised
+    # out of score() before that check can report (CASTAI-Z1 review): `beyond`
+    # is computed first, those rows are kept out of the scoring, and the check
+    # carries `not beyond` as a conjunct -- so one such id is still a FAIL, now
+    # with its (build, id) in the message instead of a KeyError traceback.
     at_pin = [a for a in applies if a["stamp"] < PIN_STAMP]
-    hits, misses, _c, worst, _r = score(lambda a: pin_table, at_pin)
-    LEDGER.ok(misses == 0 and hits >= 90,
+    beyond_pin = sorted({a["skill"] for a in at_pin if a["skill"] >= pin_table.count})
+    hits, misses, _c, worst, _r = score(
+        lambda a: pin_table, [a for a in at_pin if a["skill"] < pin_table.count])
+    LEDGER.ok(misses == 0 and hits >= 90 and not beyond_pin,
               f"{hits} of {hits + misses} NON-CONDITION applies predicted "
               f"exactly, {misses} missed -- AS OF THE PIN (captures before "
               f"{PIN_STAMP}), from the pinned build-{PIN_BUILD} table",
+              f"ids past its {pin_table.count}-record end: {beyond_pin}. "
               f"interp(duration0, duration15, field3) == the f32 on the wire. "
               f"The endpoints are the client's, the formula was measured for "
               f"the DAMAGE scale, and field3 and the duration are retail's "
@@ -398,7 +416,8 @@ def section_corpus_oracle():
 
     beyond = sorted({(a["build"], a["skill"]) for a in applies
                      if a["skill"] >= own(a).count})
-    hits, misses, conds, worst, rituals = score(own, applies)
+    hits, misses, conds, worst, rituals = score(
+        own, [a for a in applies if a["skill"] < own(a).count])
     LEDGER.ok(misses == 0 and hits >= 90 and not beyond,
               f"{hits} of {hits + misses} NON-CONDITION applies predicted "
               f"exactly, {misses} missed, EACH FROM ITS OWN BUILD'S TABLE, over "
@@ -443,13 +462,19 @@ def section_corpus_oracle():
                        if a["skill"] >= pin_table.count})
     pvp = {}
     for b, sid in past_pin:
+        if (b, sid) in beyond:
+            # Past its OWN build's table too: no row to read, so no split to
+            # accept. Recorded (and failing split_ok) rather than raised; the
+            # own-build check above has already named it.
+            pvp[sid] = (b, None, None, None, "past its own build's table")
+            continue
         r = tables[b].row(sid)
         pvp[sid] = (b, r["pvp_only"], r["equip_family"], r["linked_id"],
                     (r["duration0"], r["duration15"]))
     on_tape = sorted({a["skill"] for a in applies
                       if a["stamp"] == ZAISHEN_TAPE and a["skill"] >= pin_table.count})
-    split_ok = all(v[1] and v[2] == 0 and v[3] < pin_table.count
-                   for v in pvp.values())
+    split_ok = all(v[1] and v[2] == 0 and v[3] is not None
+                   and v[3] < pin_table.count for v in pvp.values())
     LEDGER.ok(bool(pvp) and split_ok and on_tape == PVP_PAST_PIN_TABLE,
               f"every id past the pinned table's {pin_table.count} records is a "
               f"PvP-only split of a player skill, read from its own build: "
