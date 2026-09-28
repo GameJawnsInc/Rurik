@@ -34,7 +34,7 @@ import checks       # noqa: E402
 import stalepair    # noqa: E402
 import vaultpath    # noqa: E402
 
-LEDGER = checks.Ledger("MOVECODE-1z-cm, the stale-pair gate", floor=44)   # from the green run
+LEDGER = checks.Ledger("MOVECODE-1z-cm, the stale-pair gate", floor=45)   # from the green run; 44 -> 45 on 2026-09-28 (CASTAI-Z1): [4]'s gapped-connection audit
 check = checks.adopt(LEDGER)
 
 RATE, TICK, DEST, DEST2 = (stalepair.OPCODE_RATE, stalepair.OPCODE_TICK,
@@ -234,10 +234,23 @@ def section_retail():
     if not livewire.live_captures():
         LEDGER.skip("4. the retail control", "no LIVE captures under the vault")
         return
-    c = stalepair_retail.retail_census()
+    # 2026-09-28 (CASTAI-Z1): the first GAPPED live connection (20260928T103123 :65009)
+    # cannot close by design. It is set aside BY NAME from its capture's own manifest,
+    # and "every connection closes" is split in two: every connection NOT declared
+    # gapped closes (the old claim, unweakened), and the set aside is exactly the
+    # manifests' declared set, the known set, and still refused by decode_conn.
+    import capgaps
+    aside = []
+    c = stalepair_retail.retail_census(set_aside=aside)
     check(c["conns"] >= 61 and c["bad_conns"] == 0,
-          "the live corpus decodes closed on every connection",
-          f"{c['conns']} connections, {c['bad_conns']} not closed")
+          "the live corpus decodes closed on every connection its manifest does not "
+          "declare gapped",
+          f"{c['conns']} connections, {c['bad_conns']} not closed, {len(aside)} set aside")
+    gap_ok, gap_detail = capgaps.audit(
+        aside, [d for d, _w in livewire.live_captures()], livewire.refuses)
+    check(gap_ok, "and the connections set aside are EXACTLY the ones their manifests "
+          "declare gapped, the known set, and decode_conn still REFUSES each",
+          gap_detail)
     check(c["pairs"] >= RETAIL_PAIRS_FLOOR - 1,
           f"retail pairs at or above the 2026-09-08 floor ({RETAIL_PAIRS_FLOOR - 1})",
           f"{c['pairs']} pairs, {c['bare']} bare of {c['total']}")

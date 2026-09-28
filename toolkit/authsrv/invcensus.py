@@ -43,7 +43,7 @@ OPS = {STREAM_CREATE: "STREAM_CREATE", HERO_ACTIVATE: "HERO_ACTIVATE",
        CREATE_BAG: "CREATE_BAG"}
 
 
-def backpack_items():
+def backpack_items(set_aside=None):
     """[(capture, connection, declaration)] for every BACKPACK item in the corpus.
 
     The join is `0x013F` field 6 -> the `0x0161` that declares that id in the
@@ -51,11 +51,15 @@ def backpack_items():
     element 0 is the per-connection handle and everything after it is
     ArenaNet's. Consumed by `test_playerbags.py`, which asserts our own
     content row reproduces it field for field.
+
+    A connection its capture's own manifest declares gapped is set aside by name
+    (`tape.whole_channels`; appended to `set_aside` when a list is passed).
     """
     codec = Codec()
     out = []
+    set_aside = [] if set_aside is None else set_aside
     for capture_dir in npcdefs.live_captures():
-        for row in tape.channel_files(capture_dir):
+        for row in tape.whole_channels(capture_dir, set_aside):
             connection = row["connection"]
             info, events = tape.load_tape(capture_dir, connection)
             if info.get("origin", "unknown") != "live":
@@ -74,7 +78,7 @@ def backpack_items():
     return out
 
 
-def bag_shapes():
+def bag_shapes(set_aside=None):
     """[(capture, connection, [(type, model, slots)], {backpack item ids},
         {other inventory key: [(type, model, slots)]})].
 
@@ -92,11 +96,15 @@ def bag_shapes():
     else, and every nonzero value is an item id declared by an `0x0161` in the
     SAME tape. Guild Wars agrees -- the Backpack is a real item; the equipped,
     storage and material containers are not.
+
+    A connection its capture's own manifest declares gapped is set aside by name
+    (`tape.whole_channels`; appended to `set_aside` when a list is passed).
     """
     codec = Codec()
     out = []
+    set_aside = [] if set_aside is None else set_aside
     for capture_dir in npcdefs.live_captures():
-        for row in tape.channel_files(capture_dir):
+        for row in tape.whole_channels(capture_dir, set_aside):
             connection = row["connection"]
             info, events = tape.load_tape(capture_dir, connection)
             if info.get("origin", "unknown") != "live":
@@ -163,8 +171,9 @@ def print_bag_shapes():
 def main():
     codec = Codec()
     connections = violations = 0
+    set_aside = []
     for capture_dir in npcdefs.live_captures():
-        for row in tape.channel_files(capture_dir):
+        for row in tape.whole_channels(capture_dir, set_aside):
             connection = row["connection"]
             info, events = tape.load_tape(capture_dir, connection)
             origin = info.get("origin", "unknown")

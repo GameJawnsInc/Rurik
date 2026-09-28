@@ -51,6 +51,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "harness"))
 import origin  # noqa: E402
+import capgaps  # noqa: E402  (the leaf both this and livewire read a manifest's gaps through)
 
 # The s2c handshake our own server writes for itself: SERVER_SEED, u16 header plus a
 # 20-byte seed. It is plaintext on the wire, it precedes the keystream, and it is
@@ -218,6 +219,32 @@ def channel_files(capture_dir):
             out.append({"file": f, "path": path, "connection": conn, "s2c": plain})
     out.sort(key=lambda d: len(d["s2c"]), reverse=True)
     return out
+
+
+def whole_channels(capture_dir, set_aside):
+    """`channel_files(capture_dir)` minus every connection the capture's OWN manifest
+    declares gapped (capgaps.py) -- each of those PRINTED by name and appended to the
+    `set_aside` list, which the caller then asserts with `capgaps.audit(set_aside,
+    capdirs, tape.refuses)`: exactly the declared set, exactly the known set, and every
+    one still refused.
+
+    The corpus iterators' one door past a gapped connection. It is not a catch: an
+    undeclared connection is returned and `load_tape` still raises on it, and nothing
+    here reads a TapeError. `set_aside` is required, not defaulted, so no caller can step
+    past a connection without holding the list that says so."""
+    gaps = capgaps.declared_gaps(resolve_capture(capture_dir))
+    return [c for c in channel_files(capture_dir)
+            if not (gaps and capgaps.set_aside(capture_dir, c["connection"], gaps, set_aside))]
+
+
+def refuses(capture_dir, connection):
+    """True when `load_tape` REFUSES this one named connection -- the assertion that a
+    declared-gapped connection is still refused, never a way to skip one."""
+    try:
+        load_tape(capture_dir, connection)
+    except TapeError:
+        return True
+    return False
 
 
 def load_tape(capture_dir, connection=None):

@@ -27,14 +27,18 @@ sys.path.insert(0, os.path.dirname(HERE))
 
 import checks      # noqa: E402
 import livewire    # noqa: E402
+import capgaps     # noqa: E402
+import tape        # noqa: E402
 
 # MEASURED from the real green run on 2026-08-26: 12 checks against the
 # 20-capture live corpus. Set AT the run per the house rule -- zero headroom.
 # 2026-09-28 (CASTAI-Z1): 16 -- section 1's two declared-gaps doors and section
 # 5's two checks on the first gapped live connection. (A bare machine runs
 # section 1 only, 4 checks, below this floor as it always has been.)
+# 2026-09-28 (CASTAI-Z1, the gap lane): 18 -- capgaps' set_aside/audit door in
+# section 1 (bare, so a bare run is 5) and the whole-corpus set-aside audit in 5.
 LEDGER = checks.Ledger("livewire: the committed retail-decode recipe",
-                       floor=16)
+                       floor=18)
 check = checks.adopt(LEDGER)
 
 
@@ -60,6 +64,23 @@ def main():
                 {"connection": "1.2.3.4:6->6.7.8.9:80", "gaps": {"s2c": [[100, 7]]}},
                 {"connection": "1.2.3.4:7->6.7.8.9:80", "gaps": {"c2s": [], "s2c": []}}]}}, fh)
         got = livewire.declared_gaps(td)
+        # the ONE set-aside (capgaps.py, 2026-09-28): only a declared connection is
+        # stepped past, and the audit is RED on a declared gap nobody has named in
+        # KNOWN_GAPPED -- the next gapped capture is seen, never absorbed
+        for port in (5, 6):
+            open(os.path.join(td, f"game-1.2.3.4_{port}-to-6.7.8.9_80.jsonl"), "w").close()
+        into = []
+        stepped = [capgaps.set_aside(td, f"game-1.2.3.4_{p}-to-6.7.8.9_80.jsonl", got, into)
+                   for p in (5, 6, 7)]
+        unnamed_ok, unnamed_why = capgaps.audit(into, [td], lambda _c, _n: True)
+        stamp = os.path.basename(td)
+    check(stepped == [False, True, False]
+          and into == [{"capture": stamp, "connection": "1.2.3.4:6->6.7.8.9:80",
+                        "gaps": {"s2c": [[100, 7]]}}]
+          and not unnamed_ok,
+          "set_aside steps past ONLY the declared connection and records it by name; "
+          "the audit is RED for a declared gap KNOWN_GAPPED does not name, though it "
+          "is set aside and still refused", unnamed_why)
     check(empty == {} and got == {"1.2.3.4:6->6.7.8.9:80": {"s2c": [[100, 7]]}},
           "declared_gaps: no manifest -> {}; of three connections, only the one whose "
           "report lists missing bytes is declared (an empty gap list is not a gap)",
@@ -177,6 +198,21 @@ def main():
               "decode_conn still REFUSES it (a hole dates later messages with the wrong "
               "bytes), and every connection the manifest does not declare decodes whole",
               f"gapped ok={ok_gapped}; others {sum(oks.values())}/{len(oks)}")
+        # the corpus iterators' set-aside, over the WHOLE live corpus: exactly the known
+        # set, refused by BOTH doors (decode_conn and load_tape); and the audit's teeth --
+        # a refusal callback that answers "decodes" turns it red
+        aside = []
+        n_yield = sum(1 for _ in livewire.live_connections(set_aside=aside))
+        caps = [d for d, _w in livewire.live_captures()]
+        a_ok, a_why = capgaps.audit(aside, caps, livewire.refuses)
+        t_ok, _t_why = capgaps.audit(aside, caps, tape.refuses)
+        bad_ok, _bad_why = capgaps.audit(aside, caps, lambda _c, _n: False)
+        check(a_ok and t_ok and not bad_ok and n_yield > 0
+              and len(aside) == len(capgaps.KNOWN_GAPPED),
+              "live_connections(set_aside=) sets aside EXACTLY capgaps.KNOWN_GAPPED over "
+              "the whole corpus, each still refused by decode_conn AND load_tape; "
+              "KNOWN-BAD: an audit told it decodes goes red",
+              f"{n_yield} yielded; {a_why}")
 
     return LEDGER.verdict()
 

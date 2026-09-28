@@ -67,6 +67,7 @@ import checks  # noqa: E402
 import content  # noqa: E402
 import npcdefs  # noqa: E402
 import tape  # noqa: E402
+import capgaps  # noqa: E402
 from codec import Codec  # noqa: E402
 
 # Floor 23, measured from a green run on 2026-08-11: 4 corpus + 3 declaration +
@@ -74,7 +75,7 @@ from codec import Codec  # noqa: E402
 # vault-dependent section declares its skips, so a run without the live captures lands
 # below the floor and goes RED -- which is the point, since a compiler checked against
 # nothing is the failure checks.py exists for.
-LEDGER = checks.Ledger("npcdefs: capture -> content rows", floor=60)
+LEDGER = checks.Ledger("npcdefs: capture -> content rows", floor=63)
 # floor 25 -> 32 on 2026-08-16, measured from the green run that added the
 # named-capture selection, the fourth-capture proof and the mode plumbing;
 # 32 -> 40 on 2026-08-22 with section 7 (field 9 is per-instance, the full
@@ -96,6 +97,11 @@ LEDGER = checks.Ledger("npcdefs: capture -> content rows", floor=60)
 # together are refused -- the `None not in groups` conjunct had no witness
 # (the mixed pool is refused by the group count alone), and a scratch copy of
 # npcdefs.py with the conjunct dropped ran 59/59; it reddens this check alone.
+# 60 -> 63 on 2026-09-28 (CASTAI-Z1, from the green run): the September pool's read
+# split in two -- every connection its manifest does not declare gapped read whole,
+# and the set-aside audited (exactly the declared set, the known set, still
+# refused) -- and the 294/40 pin re-scoped to its 13-capture pin pool with a
+# floor-and-signature check on the whole, grown pool beside it.
 
 # Measured 2026-08-11 over the three keyed captures. Written as literals rather than
 # computed from the module under test, because a symbol appearing in a test file is not
@@ -108,6 +114,10 @@ SURROGATE_DEFS = {397, 1469, 1473, 1488, 1505, 7809}
 # The corpus every count above was measured on. A LIST OF NAMES, deliberately:
 # the pins are facts about these captures, not about whatever the vault holds.
 CAPTURES = ("20260807T133758", "20260807T143055", "20260810T235916")
+# The September client build section 8 pools, and the first capture stamp AFTER its
+# pins were measured (2026-09-24): 20260928T103123, the Zaishen Challenge tape.
+SEPT_BUILD = "2026-09-01_44fbd68767a8"
+PIN_CUT = "20260928T103123"
 
 
 def main():
@@ -415,7 +425,28 @@ def main():
                   "index is not a global name across builds",
                   str(exc).splitlines()[0])
     july = npcdefs.read(npcdefs.live_captures(build="2026-07-29_221c13772c7a"))[0]
-    sept = npcdefs.read(npcdefs.live_captures(build="2026-09-01_44fbd68767a8"))[0]
+    # 2026-09-28 (CASTAI-Z1): the September build's pool holds the first capture with a
+    # GAPPED connection (20260928T103123 :65009), which load_tape refuses by design and
+    # crashed this read. read() now sets it aside BY NAME from the capture's own
+    # manifest; the two checks below are the old "every connection reads" claim split in
+    # two -- every connection NOT declared gapped is read whole, and the set aside is
+    # exactly the manifests' declared set, the known set, and still refused.
+    sept_caps = npcdefs.live_captures(build=SEPT_BUILD)
+    sept_aside = []
+    sept, sept_iv = npcdefs.read(sept_caps, set_aside=sept_aside)
+    sept_chans = {(os.path.basename(c), r["connection"])
+                  for c in sept_caps for r in tape.channel_files(c)}
+    sept_gapped = capgaps.corpus_declared(sept_caps)
+    LEDGER.ok(set(sept_iv) == sept_chans - sept_gapped and len(sept_iv) >= 1,
+              "read() reads EVERY connection of the September pool its manifest does "
+              "not declare gapped, whole (a partial frame still refuses)",
+              f"{len(sept_iv)} read of {len(sept_chans)} channel(s); "
+              f"missing {sorted(sept_chans - sept_gapped - set(sept_iv))[:3]}")
+    gap_ok, gap_detail = capgaps.audit(sept_aside, sept_caps, tape.refuses)
+    LEDGER.ok(gap_ok,
+              "and the connections it set aside are EXACTLY the ones their manifests "
+              "declare gapped, the known set, and load_tape still REFUSES each",
+              gap_detail)
     LEDGER.ok(7809 in july and 7809 in sept
               and july[7809].payload[0] == 141285 and july[7809].payload[6] == 5
               and sept[7809].payload[0] == 16271 and sept[7809].payload[6] == 20,
@@ -587,13 +618,38 @@ def main():
     # build) map-146 tapes, per definition, never pooled across builds: six
     # of the original seven hostiles are created there (1434 is not), and
     # seven definitions the 2026-08-11 corpus never saw. Pinned as literals.
-    sept = npcdefs.read(npcdefs.live_captures(build="2026-09-01_44fbd68767a8"))[0]
+    # RE-SCOPED 2026-09-28 (CASTAI-Z1). "294 definitions, 40 hostile" was pinned on the
+    # build's 13-capture pool, and the pool GREW: 20260928T103123 (the Zaishen
+    # Challenge, build 38888 under the same client key) added 12 definitions, so the
+    # whole-pool count is 306 -- a size pin, not a defect. The literals stay EXACT on
+    # their original scope, the captures that existed at the pin (stamps before
+    # 20260928T103123); the whole pool gets a FLOOR and a SIGNATURE that carries the
+    # claim and that confirming evidence cannot redden (a later tape adds
+    # definitions to a pool, it never removes one; a conflicting declaration would
+    # refuse in read() instead). Every per-definition pin below reads the pin pool.
+    sept_all = sept
+    pin_caps = [c for c in sept_caps if os.path.basename(c) < PIN_CUT]
+    sept = npcdefs.read(pin_caps)[0]
     sept_host = npcdefs.hostile(sept)
-    LEDGER.ok(len({i: d for i, d in sept.items() if d.declared}) == 294
+    LEDGER.ok(len(pin_caps) == 13
+              and len({i: d for i, d in sept.items() if d.declared}) == 294
               and len(sept_host) == 40,
-              "the 2026-09-01 build's 13-capture pool declares 294 definitions, "
-              "40 hostile (every map: the Isle's furniture is in there)",
-              f"{len(sept)} declared, {len(sept_host)} hostile")
+              "the 2026-09-01 build's 13-capture pool (as of the pin) declares 294 "
+              "definitions, 40 hostile (every map: the Isle's furniture is in there)",
+              f"{len(pin_caps)} captures, "
+              f"{len({i for i, d in sept.items() if d.declared})} declared, "
+              f"{len(sept_host)} hostile")
+    all_decl = {i for i, d in sept_all.items() if d.declared}
+    pin_decl = {i for i, d in sept.items() if d.declared}
+    all_host = set(npcdefs.hostile(sept_all))
+    LEDGER.ok(len(sept_caps) >= 13 and len(all_decl) >= 294 and len(all_host) >= 40
+              and pin_decl <= all_decl and set(sept_host) <= all_host,
+              "and the WHOLE build pool keeps every one of them: floors 13 captures / "
+              "294 declared / 40 hostile, the pin pool's definitions and hostiles a "
+              "subset of the whole pool's",
+              f"{len(sept_caps)} captures, {len(all_decl)} declared, {len(all_host)} "
+              f"hostile; lost {sorted(pin_decl - all_decl)[:5]} / "
+              f"{sorted(set(sept_host) - all_host)[:5]}")
     ON_146 = {1346, 1397, 1405, 1409, 1411, 1420, 1421, 1428, 1431, 1432,
               1433, 1437, 1442}
     # THE MAP FILTER IS THE CHECK. The first version asserted only that
@@ -602,8 +658,7 @@ def main():
     # in for 1397 passed it. The roster is read per connection with its
     # VERSION frame's map_id, and the hostile definitions CREATED on map 146
     # must equal the 13 exactly.
-    rosters = agentroster.read_roster(
-        npcdefs.live_captures(build="2026-09-01_44fbd68767a8"))
+    rosters = agentroster.read_roster(sept_caps)
     on146 = [r for r in rosters if r["map_id"] == 146]
     created = {c["definition"] for r in on146 for c in r["creates"]
                if c["tag"] == agentroster.TAG_NPC
