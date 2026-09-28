@@ -93,6 +93,37 @@ them, not the tape):
       monster allegiance token (MONSTER_TOKENS, agents.py's vocabulary) -- the corpus's
       whole scatter witness (there is none; every area on tape is PvP).
 
+THE ZAISHEN CAPTURE (2026-09-28, CASTAI-Z1, 20260928T103123 -- after the registration; the
+predictions above are NOT re-worded). Its eight Fire Storms (all agent 9, the Zaishen Mage)
+break two of them, and each is scored three ways -- AS REGISTERED on the corpus as it stood
+before that stamp (`upto`, where it holds exactly as on the day it was registered), AS
+REGISTERED on the whole corpus (FAILED, printed so), and RE-STATED (`p2r`, `p6r`, no free
+parameter) on the whole corpus:
+  P2  six casts complete at +1.332..+1.341 -- each carries a `0x00A3 [61 GV_CASTTIME,
+      caster, target, 1.34]` IMMEDIATELY ahead of its announce (commit 974f8748's word; the
+      two without one complete at +2.002 / +2.035); and on 50295 502.828 another agent's 58
+      (agent 5's, with its own [21]) lands 18 ms after the caster's, inside the 0.05 s batch.
+      P2r: every cast completes at the [61] seconds when the word was sent, else the record's
+      activation, +- COMPLETION_TOL; and no other agent's 58 shares the caster's 58's own
+      INSTANT (the same arrival).
+  P6  two tick batches (50061 174.724 k = 2, 50295 502.828 k = 5) carry the caster's
+      `[20, T, 9, 344]` with no 58 of another skill: Fireball 186's projectile LANDING (the
+      record's impact_visual 344; its 58 came at the cast's completion, before the flight).
+      P6r: every [20] / 0x00A7 on a tick is another announced skill's -- its 58 in the batch
+      (as registered) or its projectile's landing: every [20] from the caster carries the
+      impact_visual of a projectile skill (a row whose projectile is not "none") the caster
+      announced before the tick (the batch's 0x00A7 from the caster is that projectile's own
+      arrival -- agent 10's Fireball landings on the same tape carry one too; a tick batch
+      with an 0x00A7 and NO such [20] stays unexplained). A skill with no row explains
+      nothing (R8's stated rule: counted, never assumed).
+The order fact "a re-sent 350 rides its tick BEFORE the words" meets its first batch with
+another agent's words in it (50295 502.828 k = 3: agent 10's Fireball landing on 5 comes
+first); `visual_before_caster_words` reads the claim's own operand -- the tick's own caster's
+words -- beside the as-first-coded `visual_before_words` (any word), and
+`visual_other_words_first` names every batch where another cause's word leads.
+A connection the capture's OWN manifest declares gapped (`livewire.declared_gaps`) is set
+aside BY NAME, printed, and decoded once to show it still refuses (`set_aside`).
+
 ALSO REPORTED, not predicted (spec §0): the `[55, caster, caster, +f]` self health gain
 before the 58 (a heal in the caster's build, NOT energy -- property 55 is a health gain,
 agents.py); the observer-hit prefix (`0x00CF [obs, 4]` then `0x009F [10, obs, 197]` then
@@ -141,7 +172,9 @@ OP_INT_TARGET = 0x00A0
 OP_POINT_EFFECT = 0x00A1
 OP_FLOAT_TARGET = 0x00A3
 OP_A7 = 0x00A7
+OP_FLOAT = 0x00A2          # [prop, agent, f32]
 OP_ADRENALINE = 0x00CF     # adrenjoin.ADRENALINE_GAIN
+PROP_CAST_TIME = 61        # agents.GV_CASTTIME: a modified cast's seconds, ahead of its [60]
 OP_STATUS = 0x00F1
 OWN_OPS = (0x00E2, 0x00E3, 0x00E4, 0x00E5)
 PROP_SKILL_DAMAGE = 10
@@ -246,24 +279,61 @@ def _fmt(op, v):
     return f"0x{op:04X} {s if len(s) < 90 else s[:87] + '...'}"
 
 
-def rows_of(seq, skill=FIRE_STORM, ground=GROUND):
+def _cast_time_word(op, v):
+    """(caster, seconds) when (op, v) is a [61] cast-time word, else None."""
+    if op == OP_FLOAT_TARGET and len(v) > 4 and v[1] == PROP_CAST_TIME:
+        return v[2], round(_f32(v[4]), 4)
+    if op == OP_FLOAT and len(v) > 3 and v[1] == PROP_CAST_TIME:
+        return v[2], round(_f32(v[3]), 4)
+    return None
+
+
+def _projectile_impacts(table):
+    """{skill: impact_visual} for every row that flies (projectile not "none"); a row
+    without the fields explains no landing."""
+    out = {}
+    for key, r in (table or {}).items():
+        proj = _int(r.get("projectile"), NO_PROJECTILE)
+        vis = _int(r.get("impact_visual"), NO_PROJECTILE)
+        if proj not in (0, NO_PROJECTILE) and vis not in (0, NO_PROJECTILE):
+            out[int(key)] = vis
+    return out
+
+
+def rows_of(seq, skill=FIRE_STORM, ground=GROUND, table=None):
     """Per-cast rows for every announce of `skill` in one connection's `seq`
-    ([(index, t, op, values)], deepwoundjoin.sequence)."""
+    ([(index, t, op, values)], deepwoundjoin.sequence). `table` ({skill: row}) is read
+    only to explain a tick's [20] as a projectile's landing (P6r); None reads the
+    client's own rows, and an absent row explains nothing."""
+    if table is None:
+        table = skills_table()      # {} on a machine without the rows: no landing explained
+    impacts = _projectile_impacts(table)
     times = [t for _i, t, _op, _v in seq]
     creates = {}
     announces = collections.defaultdict(list)     # caster -> [(t, skill, target, form)]
+    cast_time = {}                                # (caster, announce t) -> [61] seconds
+    last61 = {}
     deaths = collections.defaultdict(list)        # agent -> [(t, dead)]
     moves = collections.defaultdict(list)         # agent -> [(t, xy, op)]
     last_status = {}
     for _i, t, op, v in seq:
-        if op == OP_CREATE and len(v) > 12:
+        w61 = _cast_time_word(op, v)
+        if w61 is not None:
+            last61[w61[0]] = (t, w61[1])
+        elif op == OP_CREATE and len(v) > 12:
             creates[int(v[1])] = (int(v[4]), int(v[12]))
             if _xy(v[5]):
                 moves[int(v[1])].append((t, _xy(v[5]), op))
         elif op == OP_INT_TARGET and len(v) > 4 and v[1] == PROP_ANNOUNCE:
             announces[v[2]].append((t, v[4], v[3], "0x00A0"))
+            w = last61.pop(v[2], None)
+            if w is not None and abs(w[0] - t) < 1e-6:     # the same instant, ahead of it
+                cast_time[(v[2], t)] = w[1]
         elif op == OP_INT and len(v) > 3 and v[1] == PROP_ANNOUNCE:
             announces[v[2]].append((t, v[3], None, "0x009F"))
+            w = last61.pop(v[2], None)
+            if w is not None and abs(w[0] - t) < 1e-6:
+                cast_time[(v[2], t)] = w[1]
         elif op == OP_STATUS and len(v) > 2:
             dead = bool(int(v[2]) & DEAD_BIT)
             if last_status.get(v[1]) != dead:
@@ -292,7 +362,8 @@ def rows_of(seq, skill=FIRE_STORM, ground=GROUND):
                 continue
             row = {"caster": caster, "target": target, "announce_t": ta,
                    "announce_form": form, "caster_create": creates.get(caster),
-                   "target_create": creates.get(target)}
+                   "target_create": creates.get(target),
+                   "cast_time": cast_time.get((caster, ta))}
             tc, stop = None, None
             for _i, t, op, v in span(ta, ta + 4.0):
                 if op == OP_INT and len(v) > 3 and v[2] == caster and v[1] in (58, 59, 45, 35):
@@ -325,6 +396,10 @@ def rows_of(seq, skill=FIRE_STORM, ground=GROUND):
             row["own55_right_before_58"] = j55 is not None and j58 is not None and j55 + 1 == j58
             row["batch_58s"] = sorted({v[2] for _i, _t, op, v in b
                                        if op == OP_INT and v[1] == PROP_FINISHED})
+            # another agent's 58 in the batch, and whether it shares the caster's 58's own
+            # instant (P2r) -- (agent, offset from the caster's 58)
+            row["other_58s"] = [(v[2], round(t - tc, 3), t == tc) for _i, t, op, v in b
+                                if op == OP_INT and v[1] == PROP_FINISHED and v[2] != caster]
             row["batch_55"] = [(v[2], v[3], round(_f32(v[4]), 4)) for _i, _t, op, v in b
                                if op == OP_FLOAT_TARGET and v[1] == PROP_HEALTH_GAIN]
             row["completion_words"] = [(v[2], round(_f32(v[4]), 4)) for _i, _t, op, v in b
@@ -367,8 +442,17 @@ def rows_of(seq, skill=FIRE_STORM, ground=GROUND):
                 a7 = any(op == OP_A7 and len(v) > 1 and v[1] == caster for _t, op, v in bb)
                 fx20 = [(v[2], v[4]) for _t, op, v in bb
                         if op == OP_INT_TARGET and v[1] == PROP_EFFECT_ON_TARGET and v[3] == caster]
+                # P6r: a [20] that is a projectile skill's LANDING -- its visual is the
+                # impact_visual of a flying skill this caster announced before the tick
+                flown = {impacts[s] for (ta2, s, _tg, _f) in announces.get(caster, ())
+                         if ta2 < gr["t"] - BATCH and s in impacts}
+                landing = [(tg2, vis) for tg2, vis in fx20 if vis in flown]
                 ent = {"off": round(off, 3), "k": k, "t": gr["t"], "words": gr["words"],
                        "own58": own58, "a7": a7, "fx20": fx20,
+                       "landing": bool(fx20) and len(landing) == len(fx20),
+                       "landing_skills": sorted({s for (ta2, s, _tg, _f) in announces.get(caster, ())
+                                                 if ta2 < gr["t"] - BATCH and s in impacts
+                                                 and impacts[s] in {vis for _tg2, vis in landing}}),
                        "a1": [(v[4], v[3]) for _t, op, v in bb if op == OP_POINT_EFFECT],
                        "skill_damage_10": [(v[2], v[3]) for _t, op, v in bb
                                            if op == OP_INT and v[1] == PROP_SKILL_DAMAGE],
@@ -517,14 +601,30 @@ def census(stamps=None, codec=None):
     t16 = set(aot) | set(ahex) | set(other)
     out = {"casts": [], "unattributed": [], "refused": [], "connections": 0, "captures": 0,
            "sweep": collections.Counter(), "sweep_where": collections.defaultdict(set),
+           "sweep_by_stamp": collections.defaultdict(collections.Counter),
+           "set_aside": [], "declared_not_refused": [],
            "aot": sorted(aot), "ahex": sorted(ahex), "other": sorted(other),
            "stamps": stamps}
+    table = skills_table()
     for capdir, _who in livewire.live_captures(root):
         stamp = os.path.basename(capdir)
         if stamps and stamp not in stamps:
             continue
         out["captures"] += 1
+        declared = livewire.declared_gaps(capdir)
         for ch in tape.channel_files(capdir):
+            if ch["connection"] in declared:
+                # the capture's OWN manifest declares this connection gapped: set it aside
+                # BY NAME, and decode it once to show it still refuses
+                try:
+                    deepwoundjoin.sequence(capdir, ch["connection"], codec)
+                except (bufflog.BuffLogError, tape.TapeError) as exc:
+                    out["set_aside"].append((stamp, ch["connection"], str(exc)[:100]))
+                    print(f"   SET ASIDE {stamp} {ch['connection']}: its manifest declares it "
+                          f"gapped {declared[ch['connection']]} -- still refused")
+                else:
+                    out["declared_not_refused"].append((stamp, ch["connection"]))
+                continue
             try:
                 seq = deepwoundjoin.sequence(capdir, ch["connection"], codec)
             except (bufflog.BuffLogError, tape.TapeError) as exc:
@@ -532,7 +632,7 @@ def census(stamps=None, codec=None):
                 continue
             out["connections"] += 1
             port = ch["connection"].split("->")[0].rsplit(":", 1)[-1]
-            rows = rows_of(seq)
+            rows = rows_of(seq, table=table)
             observer = None
             if rows:
                 c2s = spellhitjoin.c2s_of(capdir, ch["file"])
@@ -545,6 +645,7 @@ def census(stamps=None, codec=None):
             for k, n in sweep(seq, t16).items():
                 out["sweep"][k] += n
                 out["sweep_where"][k].add(f"{stamp}/{port}")
+                out["sweep_by_stamp"][stamp][k] += n
     return out
 
 
@@ -588,8 +689,37 @@ def _visual_before_words(x, P):
     return i_w is None or i_a1 < i_w
 
 
+def _visual_before_caster_words(x, P, caster):
+    """For a tick batch carrying the re-sent 350 at P: (is it before the tick's own
+    caster's first word, [the causes of any word ahead of it])."""
+    order = x["order"]
+    i_a1 = next((n for n, (op, v) in enumerate(order)
+                 if op == OP_POINT_EFFECT and v[4] == GROUND and _xy(v[1])
+                 and math.dist(_xy(v[1]), P) <= POINT_EPS), None)
+    if i_a1 is None:
+        return None, []
+    i_w = next((n for n, (op, v) in enumerate(order)
+                if op == OP_FLOAT_TARGET and v[1] in PROP_DAMAGE and v[3] == caster), None)
+    ahead = sorted({v[3] for op, v in order[:i_a1]
+                    if op == OP_FLOAT_TARGET and v[1] in PROP_DAMAGE})
+    return (i_w is None or i_a1 < i_w), ahead
+
+
+def upto(c, stamp):
+    """The census `c` cut to the captures BEFORE `stamp` -- the corpus as it stood when a
+    prediction was registered or a number pinned (casts, unattributed 350s, the sweep).
+    connections / captures are corpus totals and are not cut."""
+    sweep = collections.Counter()
+    for st, cnt in (c.get("sweep_by_stamp") or {}).items():
+        if st < stamp:
+            sweep.update(cnt)
+    return dict(c, casts=[r for r in c["casts"] if r.get("capture", "") < stamp],
+                unattributed=[u for u in c["unattributed"] if u and u[0] < stamp],
+                sweep=sweep, set_aside=[e for e in c.get("set_aside", ()) if e[0] < stamp])
+
+
 def score(c):
-    """The numbers P1-P9 are judged on."""
+    """The numbers P1-P9 are judged on (as registered), and P2r / P6r beside them."""
     casts = c["casts"]
     done = [r for r in casts if r.get("completion_t") is not None]
     ticks = [(r, x) for r in done for x in r["ticks"]]
@@ -605,6 +735,16 @@ def score(c):
     p2 = (bool(casts) and len(done) == len(casts)
           and all(abs(dt - ACTIVATION) <= COMPLETION_TOL for dt in dts)
           and all(r["batch_58s"] == [r["caster"]] for r in done))
+    # P2r (the re-statement, 2026-09-28): the [61] seconds when sent, else the activation;
+    # no other agent's 58 at the caster's 58's own instant
+    def own_time(r):
+        return r["cast_time"] if r.get("cast_time") is not None else ACTIVATION
+    p2r_off = [(r["capture"], r["port"], r["announce_t"], r["completion_dt"], r.get("cast_time"))
+               for r in done if abs(r["completion_dt"] - own_time(r)) > COMPLETION_TOL]
+    other58 = [(r["capture"], r["port"], round(r["announce_t"], 3)) + tuple(o)
+               for r in done for o in r.get("other_58s", ())]
+    p2r = (bool(casts) and len(done) == len(casts) and not p2r_off
+           and not any(o[-1] for o in other58))
     # P3
     after58 = sum(1 for r in done if r["a1_right_after_58"])
     one350 = sum(1 for r in done if r["completion_350s"] == 1)
@@ -636,6 +776,13 @@ def score(c):
     unexplained = [x for x in vis_ticks
                    if not any(s is not None and s != FIRE_STORM for _o, s in x["own58"])]
     p6 = bool(ticks) and fs58 == 0 and not unexplained
+    # P6r: or the [20] is another announced skill's projectile LANDING
+    unexplained_ids = {id(x) for x in unexplained}
+    landings = [(r["capture"], r["port"], round(r["announce_t"], 3), x["k"], x["fx20"],
+                 x.get("landing_skills")) for r, x in ticks
+                if id(x) in unexplained_ids and x.get("landing")]
+    unexplained_r = [x for x in unexplained if not x.get("landing")]
+    p6r = bool(ticks) and fs58 == 0 and not unexplained_r
     # P7
     n350 = sum(len(r["visual_offsets"]) for r in done)
     p7 = n350 > 0 and not c["unattributed"]
@@ -660,6 +807,15 @@ def score(c):
     prefix = [_observer_prefix(x, r["observer"], FIRE_STORM) for r, x in obs_hits]
     vis_in_tick = [_visual_before_words(x, r["point"]) for r, x in ticks]
     vis_in_tick = [v for v in vis_in_tick if v is not None]
+    vis_own, vis_other_first = [], []
+    for r, x in ticks:
+        ok, ahead = _visual_before_caster_words(x, r["point"], r["caster"])
+        if ok is None:
+            continue
+        vis_own.append(ok)
+        if ahead:
+            vis_other_first.append((r["capture"], r["port"], round(r["announce_t"], 3), x["k"],
+                                    ahead))
     const, varied = 0, []
     for r in done:
         vals = collections.defaultdict(set)
@@ -683,6 +839,10 @@ def score(c):
         "completion_dt": (min(dts), max(dts)) if dts else None,
         "single_58": sum(1 for r in done if r["batch_58s"] == [r["caster"]]),
         "p2": p2,
+        "cast_time_casts": [(r["capture"], r["port"], round(r["announce_t"], 3), r["cast_time"],
+                             r["completion_dt"]) for r in done if r.get("cast_time") is not None],
+        "p2r_off": p2r_off, "other_58s": other58,
+        "p2r": p2r,
         "a1_right_after_58": after58, "one_350_in_batch": one350, "fields_ok": fields_ok,
         "p3": p3,
         "per_cast_350": dict(per_cast_350), "n350": n350,
@@ -699,6 +859,8 @@ def score(c):
         "unexplained_20_or_a7": len(unexplained),
         "clean_ticks": sum(1 for _r, x in ticks if x["clean"]),
         "p6": p6,
+        "landings_on_tick": landings, "unexplained_r": len(unexplained_r),
+        "p6r": p6r,
         "unattributed": len(c["unattributed"]),
         "p7": p7,
         "sweep": {f"{k[0]} {k[1]}": n for k, n in sorted(c["sweep"].items())},
@@ -719,6 +881,8 @@ def score(c):
         "observer_prefix_cf": dict(collections.Counter(n for _ok, n in prefix)),
         "visual_in_tick": len(vis_in_tick),
         "visual_before_words": sum(1 for v in vis_in_tick if v),
+        "visual_before_caster_words": sum(1 for v in vis_own if v),
+        "visual_other_words_first": vis_other_first,
         "pairs_constant": const, "pairs_varied": varied,
         "struck_while_dead": sum(r["struck_while_dead"] for r in done),
         "revived_struck": [(r["port"], r["announce_t"], tg, r["taker_revivals"][tg])
@@ -789,6 +953,9 @@ def main():
           f"whole, {s['refused']} refused")
     for r in c["refused"]:
         print(f"   refused {r}")
+    print(f"   set aside by their capture's own manifest (gapped, still refused): "
+          f"{c['set_aside'] or 'none'}; declared but decoding whole: "
+          f"{c['declared_not_refused'] or 'none'}")
     print(f"   the record's target-16 rows: {len(s['aot'])} areas over time {s['aot']}; "
           f"{len(s['ahex'])} area hexes {s['ahex']}; {len(s['other'])} other")
     if a.rows:
@@ -817,6 +984,11 @@ def main():
           f"carrying a [20]/0x00A7 {s['ticks_with_20_or_a7']}, not explained by another "
           f"skill's 58 {s['unexplained_20_or_a7']}; clean {s['clean_ticks']}, mixed "
           f"{s['mixed_ticks']}")
+    print(f"   RE-STATED (docstring, THE ZAISHEN CAPTURE): P2r {_verdict(s['p2r'])} -- casts "
+          f"carrying a [61] word {s['cast_time_casts']}, off their own time {s['p2r_off']}, "
+          f"other agents' 58s in a completion batch (agent, offset, same instant) "
+          f"{s['other_58s']}; P6r {_verdict(s['p6r'])} -- tick batches whose [20] is a "
+          f"projectile's landing {s['landings_on_tick']}, still unexplained {s['unexplained_r']}")
     print(f"[{_verdict(s['p7'])}] P7 unattributed 350s: {s['unattributed']} of "
           f"{s['n350'] + s['unattributed']}")
     for u in c["unattributed"][:20]:
