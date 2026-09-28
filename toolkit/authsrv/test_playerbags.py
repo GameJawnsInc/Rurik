@@ -58,7 +58,10 @@ import agents  # noqa: E402
 import authsrv  # noqa: E402
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("player bags vs ArenaNet's own set", floor=19)
+# floor 19 -> 21 on 2026-09-28 (CASTAI-Z1, from the green run): the corpus census's
+# gapped-connection audit and its did-it-measure-anything guard. A bare machine
+# (no capture directory) declares the corpus skip and lands below it, as before.
+LEDGER = checks.Ledger("player bags vs ArenaNet's own set", floor=21)
 
 # (type, model, slots), in retail's own send order. Duplicated here rather than
 # imported from authsrv so the check has two independent sides: if someone
@@ -153,12 +156,33 @@ def shadowed_by_bag_loop(tree):
 def main():
     src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
     # ---- 1-4. against ArenaNet's own wire -------------------------------
-    try:
-        import invcensus
-        rows = invcensus.bag_shapes()
-    except Exception as exc:                                # pragma: no cover
-        rows = []
-        LEDGER.skip("1-4. the corpus sections", f"no live captures: {exc}")
+    # The skip is on a MISSING CAPTURE DIRECTORY and nothing else. Until 2026-09-28
+    # it was on ANY exception from the census, labelled "no live captures" -- and
+    # when one gapped connection (20260928T103123 :65009) made load_tape refuse,
+    # that label disabled all four corpus sections on a machine that HAS the corpus.
+    # A refusal now raises and reddens this file; the gapped connection is set aside
+    # BY NAME from its manifest (invcensus -> tape.whole_channels) and audited below.
+    import vaultpath                                            # noqa: E402
+    import invcensus                                            # noqa: E402
+    import tape                                                 # noqa: E402
+    import capgaps                                              # noqa: E402
+    live = vaultpath.vault_path("captures", "live")
+    rows, aside = [], []
+    if not os.path.isdir(live):
+        LEDGER.skip("1-4. the corpus sections",
+                    f"no live capture directory at {live}")
+    else:
+        rows = invcensus.bag_shapes(set_aside=aside)
+        caps = invcensus.npcdefs.live_captures()
+        gap_ok, gap_detail = capgaps.audit(aside, caps, tape.refuses)
+        LEDGER.ok(gap_ok,
+                  "the corpus census sets aside EXACTLY the connections their "
+                  "manifests declare gapped, the known set, and load_tape still "
+                  "REFUSES each (every other connection must frame whole or the "
+                  "census raises)", gap_detail)
+        LEDGER.ok(bool(rows),
+                  "and the census MEASURED something: live connections carry bags",
+                  f"{len(rows)} connection(s) with bags over {len(caps)} capture(s)")
     if rows:
         sets = collections.Counter(tuple(s) for _c, _n, s, _i, _x in rows)
         LEDGER.ok(len(sets) == 1,
@@ -211,7 +235,7 @@ def main():
                   f"SAME TAPE. Guild Wars agrees: the Backpack is a real "
                   f"item, the equipped/storage/material containers are not")
 
-        packs = invcensus.backpack_items()
+        packs = invcensus.backpack_items(set_aside=[])
         theirs_item = {freeze(d[1:]) for _c, _n, d in packs}
         ours_item = freeze(agents.named_item(
             authsrv.BACKPACK_ITEM_ID,
