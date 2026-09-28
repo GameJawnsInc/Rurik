@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 import checks  # noqa: E402
 import weaponcensus as wc  # noqa: E402
 
-LEDGER = checks.Ledger("weaponcensus: held weapon types, swings and shots", floor=20)   # the BARE-MACHINE number: 20 without the vault (section 2 skips), 46 with it; from green runs (WEAPONS-W2c: 16 -> 20; CASTAI-Z1 2026-09-28: 38 -> 46 with the vault, the pin-scoped literals plus their signatures)
+LEDGER = checks.Ledger("weaponcensus: held weapon types, swings and shots", floor=20)   # the BARE-MACHINE number: 20 without the vault (section 2 skips), 49 with it; from green runs (WEAPONS-W2c: 16 -> 20; CASTAI-Z1 2026-09-28: 38 -> 46 with the vault, the pin-scoped literals plus their signatures; -> 49, the windup signature by the table and its two fast-launch witnesses)
 check = LEDGER.ok
 
 ME, WANDER, ARCHER, LIAR, FOE = 7, 51, 50, 52, 9
@@ -212,7 +212,7 @@ def section_vault():
         c = None
         print(f"   (corpus unreadable: {exc!r})")
     if not c or not c["shooters"]:
-        LEDGER.skip("section 2", "no live corpus -- 26 checks")
+        LEDGER.skip("section 2", "no live corpus -- 29 checks")
         return
     check({2, 5, 15, 22, 26, 27, 32, 35, 36}.issubset(c["lead"]) and {1, 28}.issubset(c["lead"])
           and {12, 24}.issubset(c["off"]),
@@ -600,13 +600,37 @@ def _absent_rows(absent):
 
 
 def _windup_signature(d):
-    """A body's bow skill launches one windup of its CURRENT attack duration after its
-    announcement: swing_windup(base x modifier) of the body's latest 0x0035."""
+    """A body's bow ATTACK skill with NO activation launches one windup of its CURRENT
+    attack duration after its announcement: swing_windup(base x modifier) of the body's
+    latest 0x0035.
+
+    REPAIRED 2026-09-28 (CASTAI-Z1, round-2 review): the domain used to be the id list
+    (392, 394, 396, 402, 404) inherited from the pin-scoped check, which silently left
+    out every other body bow skill -- on the Zaishen capture agent 6's 393 (which obeys
+    the rule) and 399 / 426 (which do NOT: they launch ~0.15 s after the announcement),
+    and before the pin 1197 (the same, ~0.28 s). The domain is now the TABLE's own
+    signature -- type_code == authsrv.ATTACK_TYPE_CODE and activation == 0 -- the five
+    ids are kept as positive controls inside it, and every body bow row outside it is
+    classified by a stated rule below, exact, so a new kind is seen, never absorbed."""
     if HERE not in sys.path:
         sys.path.insert(0, HERE)
     import authsrv                                              # noqa: PLC0415
-    rows = [r for r in d["skill"] if not r["player"] and r["type"] == 5
-            and r["skill"] in (392, 394, 396, 402, 404)]
+    table = _skills()
+    body = [r for r in d["skill"] if not r["player"] and r["type"] == 5]
+    # R8: a body bow row whose skill has NO table row cannot be classified; the stated
+    # rule is that there are none (the corpus's only absent ids are the observer's
+    # PvP 2858, a player row -- _absent_rows), and one appearing reddens _classes.
+    rowless = sorted({r["skill"] for r in body if str(r["skill"]) not in table})
+    typed = [(r, table[str(r["skill"])]) for r in body if str(r["skill"]) in table]
+
+    def attack(row):
+        return int(row.get("type_code", -1)) == authsrv.ATTACK_TYPE_CODE
+
+    rows = [r for r, row in typed if attack(row) and float(row.get("activation", -1)) == 0.0]
+    slow_kind = [(r, row) for r, row in typed if attack(row)
+                 and float(row.get("activation", -1)) > 0.0]
+    other = [(r, row) for r, row in typed if not attack(row)]
+    ids = {r["skill"] for r in rows}
     res = [(r, r["event_to_launch"] - authsrv.swing_windup(r["speed"][0] * r["speed"][1]))
            for r in rows if r["speed"] is not None]
     slowed = [(r, e) for r, e in res if abs(r["speed"][1] - 1.0) > 1e-6]
@@ -620,29 +644,103 @@ def _windup_signature(d):
                      for r, e in res if not -0.0375 < e < 0.0225)
     witnessed = [(ZAISHEN, "50061", 217.821), (ZAISHEN, "50295", 476.727)]
     check(len(res) == len(rows) >= 44 and abs(statistics.median(e for _r, e in res)) < 0.01
+          and {392, 394, 396, 402, 404} <= ids
           and slowed and all(-0.0375 < e < 0.0225 for _r, e in slowed)
           and outband == witnessed,
-          f"SIGNATURE (whole corpus): a body's bow skill launches swing_windup(base x modifier) "
-          f"of its latest 0x0035 after the announcement -- median residual "
-          f"{statistics.median(e for _r, e in res) * 1000:+.1f} ms over {len(res)}; EVERY row "
-          f"inside the pinned band (1.10 .. 1.16 around 1.1375, carried to its own windup), "
-          f"the {len(slowed)} under a modifier among them, except exactly the two witnessed "
-          f"Zaishen shots {[(p, t) for _c, p, t in witnessed]}",
+          f"SIGNATURE (whole corpus): a body's bow ATTACK skill (type_code "
+          f"{authsrv.ATTACK_TYPE_CODE}) whose table activation is 0 launches "
+          f"swing_windup(base x modifier) of its latest 0x0035 after the announcement -- "
+          f"median residual {statistics.median(e for _r, e in res) * 1000:+.1f} ms over "
+          f"{len(res)}, ids {sorted(ids)} (the five named 392 394 396 402 404 among them as "
+          f"positive controls); EVERY row inside the pinned band (1.10 .. 1.16 around 1.1375, "
+          f"carried to its own windup), the {len(slowed)} under a modifier among them, except "
+          f"exactly the two witnessed Zaishen shots {[(p, t) for _c, p, t in witnessed]}",
           f"{len(rows)} rows, {len(res)} with a 0x0035; out of band {outband}; slowed "
           f"{[(round(r['t'], 3), r['speed'], round(e, 4)) for r, e in slowed]}")
+    _classes(rowless, slow_kind, other)
     z = [(r, e) for r, e in res if r["capture"] == ZAISHEN]
-    zs = sorted((_port(r["conn"]), round(r["t"], 3)) for r, e in z
+    za = [(r, e) for r, e in z if r["agent"] == 10]
+    zs = sorted((_port(r["conn"]), round(r["t"], 3)) for r, e in za
                 if abs(r["speed"][1] - 1.5) < 1e-6)
     out = sorted((_port(r["conn"]), round(r["t"], 3), round(r["event_to_launch"], 4))
-                 for r, e in z if abs(r["speed"][1] - 1.0) < 1e-6 and not -0.0375 < e < 0.0225)
-    check(len(z) == 64 and {r["agent"] for r, _e in z} == {10}
+                 for r, e in za if abs(r["speed"][1] - 1.0) < 1e-6 and not -0.0375 < e < 0.0225)
+    r6 = sorted((_port(r["conn"]), round(r["t"], 3), r["skill"]) for r, e in z
+                if r["agent"] == 6)
+    check(len(za) == 64 and sorted({r["agent"] for r, _e in z}) == [6, 10]
+          and {r["skill"] for r, _e in za} <= {392, 394, 396, 402, 404}
           and len(zs) == 10 and {p for p, _t in zs} == {"50061", "58544"}
-          and out == [("50061", 217.821, 1.0948), ("50295", 476.727, 1.2242)],
+          and out == [("50061", 217.821, 1.0948), ("50295", 476.727, 1.2242)]
+          and r6 == [("50061", 189.614, 393), ("50061", 196.615, 393),
+                     ("58544", 596.407, 393), ("58544", 620.52, 393)]
+          and all(-0.0375 < e < 0.0225 for r, e in z if r["agent"] == 6),
           f"NEW (OBSERVED, {ZAISHEN}): the Zaishen Archer's (agent 10) 64 body bow skill shots "
           f"-- 10 under a 0x0035 modifier of 1.5 (Dual Shot's two arrows count two) launch at swing_windup(2.475 x 1.5) = 1.75625 "
           f"(each window opens ~1-4 s after a [60, 4, 10, 135] -- 135 is a Necromancer hex); "
-          f"and exactly 2 at modifier 1.0 fall outside the pinned band, cause UNVERIFIED",
-          f"slowed {zs}; outside {out}")
+          f"and exactly 2 at modifier 1.0 fall outside the pinned band, cause UNVERIFIED; the "
+          f"signature's only other rows here are the Degeneration Ranger's (agent 6) 4 x 393, "
+          f"activation 0, all inside the band",
+          f"slowed {zs}; outside {out}; agent 6 {r6}")
+    _fast_launch_witness(slow_kind)
+
+
+# The ATTACK skills with a table activation > 0 that a body has fired a bow skill shot
+# of. NO windup rule is claimed for them (they launch well BEFORE one windup): the set is
+# asserted EXACTLY so a new id is seen and classified, never absorbed (R3/R5, CASTAI-Z1).
+ACTIVATED_BOW_ATTACKS = {399, 426, 1197}
+# The one body bow "skill shot" whose skill is NOT an attack skill: 20260817T231139
+# :54071 agent 8, skill 2 (type_code 7, activation 3.0), launched 0.000 s after its
+# event -- skill_shots() filing a weapon shot behind a non-attack event (the finding-4
+# class). Outside the windup claim by type; asserted exactly for the same reason.
+NONATTACK_BODY_BOW = [("20260817T231139", "54071", 8, 2)]
+
+
+def _classes(rowless, slow_kind, other):
+    got_slow = {r["skill"] for r, _row in slow_kind}
+    got_other = sorted((r["capture"], _port(r["conn"]), r["agent"], r["skill"])
+                       for r, _row in other)
+    check(not rowless and got_slow == ACTIVATED_BOW_ATTACKS and got_other == NONATTACK_BODY_BOW,
+          f"and every body bow skill shot OUTSIDE that signature is classified: none lacks a "
+          f"table row; the attack skills WITH an activation are exactly "
+          f"{sorted(ACTIVATED_BOW_ATTACKS)} (no windup rule claimed -- they launch early, "
+          f"witnessed below); the only non-attack row is {NONATTACK_BODY_BOW}",
+          f"rowless {rowless}; activated {sorted(got_slow)} "
+          f"{sorted({(r['skill'], row.get('activation')) for r, row in slow_kind})}; "
+          f"non-attack {got_other}")
+
+
+def _fast_launch_witness(slow_kind):
+    """OBSERVED (CASTAI-Z1): a body's bow attack skill WITH an activation launches a
+    fraction of a second after its [50] announcement -- not one windup after it."""
+    z = sorted((_port(r["conn"]), round(r["t"], 3)) for r, _row in slow_kind
+               if r["capture"] == ZAISHEN)
+    zr = [(r, row) for r, row in slow_kind if r["capture"] == ZAISHEN]
+    e2l = [r["event_to_launch"] for r, _row in zr]
+    check(z == [("50061", 174.875), ("50061", 179.625), ("50061", 190.642),
+                ("50061", 197.123), ("50061", 205.142), ("50061", 216.63),
+                ("58544", 593.777), ("58544", 597.269), ("58544", 605.765),
+                ("58544", 607.769), ("58544", 621.005)]
+          and {r["agent"] for r, _row in zr} == {6}
+          and sorted(r["skill"] for r, _row in zr) == [399] * 5 + [426] * 6
+          and all(float(row["activation"]) == 0.5 for _r, row in zr)
+          and all(0.13 < x < 0.18 for x in e2l),
+          f"NEW (OBSERVED, {ZAISHEN}): the Degeneration Ranger's (agent 6) 11 body bow shots "
+          f"of 399 x5 and 426 x6 (table activation 0.5) launch 0.13 .. 0.18 s after their "
+          f"[50, 6, target] announcement, ~1 s before swing_windup(2.475) = 1.1375",
+          f"{z}; event->launch {[round(x, 4) for x in e2l]}")
+    pre = "20260819T132414"
+    p = [(r, row) for r, row in slow_kind if r["capture"] == pre]
+    pt = sorted((_port(r["conn"]), round(r["t"], 3)) for r, _row in p)
+    pe = [r["event_to_launch"] for r, _row in p]
+    check(pt == [("52606", 180.556), ("52606", 190.794), ("52606", 204.939),
+                 ("52606", 237.077), ("52606", 255.193), ("52606", 262.066),
+                 ("52606", 263.069)]
+          and {r["agent"] for r, _row in p} == {28} and {r["skill"] for r, _row in p} == {1197}
+          and all(float(row["activation"]) == 0.75 for _r, row in p)
+          and all(0.26 < x < 0.29 for x in pe),
+          f"and before the pin ({pre}, :52606): agent 28's 7 shots of 1197 (activation 0.75) "
+          f"launch 0.26 .. 0.29 s after the announcement -- the same class, silently outside "
+          f"the old id list",
+          f"{pt}; event->launch {[round(x, 4) for x in pe]}")
 
 
 def main():
