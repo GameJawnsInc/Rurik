@@ -149,7 +149,9 @@ REGISTERED AFTER THE LANE'S FIRST RUN, from what that run showed, and locked on 
       Cracked Armor 29.
 
 THE ZAISHEN CAPTURE (2026-09-28, CASTAI-Z1, 20260928T103123 -- after the registration; the
-predictions above are NOT re-worded). Its casts break six registered predictions and one
+predictions above are NOT re-worded; every tape is scored on its OWN build's table, read
+from the vault's pristine image of that build -- `build_table`, since 2026-09-28). Its casts
+break six registered predictions and one
 corrected reading. Each is scored AS REGISTERED on the corpus as it stood before that stamp
 (the test cuts the census there, where the reading holds exactly as on the day it was
 registered), AS REGISTERED on the whole corpus (FAILED, printed so), and -- where a
@@ -172,6 +174,18 @@ re-statement with no free parameter exists -- RE-STATED on the whole corpus (`RE
            f32 14.0, where interp(3, 16, 11) = 12.533 -- the first hex in the corpus whose
            duration is NOT constant across ranks (every earlier G3 row, 179's 3 / 3, could not
            fail). No re-statement: FAILED, its witness exact; the cause is UNMEASURED.
+           RE-STATED 2026-09-28 (the regenerate-from-38888 arc), the cause now MEASURED, in two
+           parts, neither fitted: (a) the row was the wrong BUILD's -- this reader took every
+           tape's rows from the vault's one bulk table (38797), and the Zaishen tape is build
+           38888 (its VERSION frame), where 135 is 4..18 (CASTAI-ZF7's re-balance; 3..16 on
+           38797 / 38833 / 38849, each read from its pristine image); every tape is now scored
+           on its own build's table (`build_table`); and (b) G3 as registered is UNROUNDED,
+           while the client's own two-point scaler (0x005A8920, `effects.interp`) rounds
+           half-up: interp(4, 18, 11) = 14.267 unrounded, 14 rounded -- the wire's 14.0.
+           G3 AS REGISTERED still FAILS on this tape (14.267 != 14.0, printed so).
+           G3r: f32 == effects.interp(duration0, duration15, field3) on the tape's own
+           build's row, on every hex apply. Each half is needed: on the 38797 row (the
+           known-bad arm, `with_table`) G3r predicts 13 and FAILS too.
   C2c      one skill-applied condition carries field3 0 (Crippled 15 s under a [10, obs, 334]
            at :50061 219.517), and three conditions this reader calls environmental carry field3
            == f32 -- a Deep Wound in the batch where the observer's hex 44 ends (203.938) and two
@@ -192,7 +206,8 @@ whole corpus -- so a later capture holding the same casts again reddens nothing
 (test_skilldamage 12c appends one and checks; the D6 review's EV-3 found the first port
 pinning corpus totals as per-tape exacts).
 
-Standard library only; reads the vault through `vaultpath`.
+Standard library only; reads the vault through `vaultpath`, and each tape's own build's skill
+table out of the vault's pristine image of that build (`clientscan/pinned.py` + `skilltable.py`).
 """
 import argparse
 import bisect
@@ -209,10 +224,13 @@ if HERE not in sys.path:
 PARENT = os.path.dirname(HERE)
 if PARENT not in sys.path:
     sys.path.insert(0, PARENT)
+CLIENTSCAN = os.path.join(PARENT, "clientscan")      # pinned / skilltable: the per-build table
+if CLIENTSCAN not in sys.path:
+    sys.path.insert(0, CLIENTSCAN)
 
-import agents           # noqa: E402  (the client's skill rows)
 import bufflog          # noqa: E402
 import deepwoundjoin    # noqa: E402  (sequence: refuses a connection that does not frame whole)
+import effects          # noqa: E402  (interp: the client's own ROUNDED scaler, G3r)
 import livewire         # noqa: E402  (live_captures: origin LIVE only)
 import spellhitjoin     # noqa: E402  (observer_of / c2s_of)
 import tape             # noqa: E402
@@ -289,9 +307,65 @@ def _int(x, default=0):
         return default
 
 
-def skills_table():
-    """{skill_id: row} from the client's own skill rows (agents.WORLD)."""
-    return {int(k): r for k, r in agents.WORLD.rows("skills").items()}
+_BUILD_TABLES = {}          # build -> (rows, types) | LookupError
+
+
+def build_table(build):
+    """(rows, types) of `build`: {skill_id: row} over that build's player corpus, read out
+    of the vault's PRISTINE image of that build (`pinned.find(build=...)`, verified) with
+    `skilltable.parse_record` -- the rows `skilltable.py --emit-content` writes for that
+    build (equip_family 1, PvP-only excluded) -- and {skill_id: type_code}.
+
+    WHY PER BUILD (2026-09-28, the regenerate-from-38888 arc). This reader used to take
+    every tape's rows from `agents.WORLD` -- the vault's ONE bulk table, whichever build it
+    was generated from -- so a prediction for a tape recorded on build B was scored against
+    another build's row, and the verdict moved when the vault did: Faintheartedness 135 is
+    3..16 on 38797 / 38833 / 38849 and 4..18 on 38888 (the re-balance, CASTAI-ZF7), and the
+    Zaishen tape (build 38888) lands it at field3 11. A tape is now scored against ITS OWN
+    build's table (the client's VERSION frame names the build, `tape.client_version`), as
+    rechargeprobe.table_for and test_effects section 2 already do, so the result depends
+    on the tapes and the pinned images and on nothing the vault's content overlay says.
+    Raises LookupError (cached) when the vault holds no pristine image of `build`: a
+    connection is never scored against another build's table."""
+    got = _BUILD_TABLES.get(build)
+    if isinstance(got, LookupError):
+        raise got
+    if got is not None:
+        return got
+    import pinned           # noqa: E402  (clientscan, stdlib-only)
+    import skilltable       # noqa: E402
+    try:
+        exe, _why = pinned.find(build=build)
+    except SystemExit as exc:
+        err = LookupError(f"no pristine image of build {build} in the vault: {str(exc)[:80]}")
+        _BUILD_TABLES[build] = err
+        raise err from None
+    with open(exe, "rb") as fh:
+        data = fh.read()
+    if skilltable.build_of(data) != build:
+        err = LookupError(f"{exe} is not the pristine image of build {build}")
+        _BUILD_TABLES[build] = err
+        raise err
+    base, count, _score = skilltable.locate_table(data)
+    every = [skilltable.parse_record(data, base, i) for i in range(count)]
+    rows = {i: every[i] for i in skilltable.player_corpus(every)}
+    types = {k: _int(r.get("type_code"), -1) for k, r in rows.items()}
+    _BUILD_TABLES[build] = (rows, types)
+    return rows, types
+
+
+def with_table(c, build):
+    """THE KNOWN-BAD ARM: the census `c` with EVERY connection scored against `build`'s
+    table instead of its own -- what this reader did before 2026-09-28 when the vault's
+    bulk table was `build`. Nothing is re-decoded; each Conn is a shallow copy."""
+    import copy
+    rows, types = build_table(build)
+    conns = []
+    for cc in c["conns"]:
+        d = copy.copy(cc)
+        d.table, d.types, d.table_build = rows, types, build
+        conns.append(d)
+    return dict(c, conns=conns)
 
 
 def _fmt(op, v):
@@ -313,8 +387,12 @@ def _fmt(op, v):
 class Conn:
     """One decoded game connection, indexed for the joins below."""
 
-    def __init__(self, stamp, port, seq, observer):
+    def __init__(self, stamp, port, seq, observer, build, table, types):
         self.stamp, self.port, self.seq, self.observer = stamp, port, seq, observer
+        # the connection's own build (its VERSION frame) and that build's table
+        # (build_table); `table_build` is the build the rows were read from --
+        # `build` except under with_table's known-bad arm
+        self.build, self.table, self.types, self.table_build = build, table, types, build
         self.times = [t for _i, t, _o, _v in seq]
         self.announces = collections.defaultdict(list)   # caster -> [(t, skill, target, form)]
         self.alleg, self.kind = {}, {}
@@ -424,15 +502,18 @@ class Conn:
         return live
 
 
-def casts_of(conns, skills, table):
-    """Every announce of a skill in `skills`, with its completion."""
+def casts_of(conns, skills):
+    """Every announce of a skill in `skills` (a set, or a function of the connection
+    naming the set on its build's table), with its completion; the activation is the
+    connection's own build's."""
     out = []
     for c in conns:
+        want = skills(c) if callable(skills) else skills
         for caster, lst in c.announces.items():
             for (ta, sk, target, form) in lst:
-                if sk not in skills:
+                if sk not in want:
                     continue
-                act = float(table.get(sk, {}).get("activation") or 1.0)
+                act = float(c.table.get(sk, {}).get("activation") or 1.0)
                 tc, stop = c.completion(caster, ta, act)
                 out.append({"c": c, "capture": c.stamp, "port": c.port, "observer": c.observer,
                             "caster": caster, "target": target, "skill": sk, "ta": ta,
@@ -491,11 +572,11 @@ def _order_of(c, caster, batch):
 
 
 # ---------------------------------------------------------------- 179
-def incendiary_rows(conns, table):
+def incendiary_rows(conns):
     """One row per 179 cast: the completion, the hex's lifecycle ([6] -> [7]), how it
     ended and the payoff batch."""
     rows = []
-    for r in casts_of(conns, {INCENDIARY}, table):
+    for r in casts_of(conns, {INCENDIARY}):
         c, cst, tg, tc = r["c"], r["caster"], r["target"], r["tc"]
         if tc is None:
             rows.append(r)
@@ -621,9 +702,9 @@ def incendiary_rows(conns, table):
 
 
 # ---------------------------------------------------------------- 185
-def mind_burn_rows(conns, table):
+def mind_burn_rows(conns):
     rows = []
-    for r in casts_of(conns, {MIND_BURN}, table):
+    for r in casts_of(conns, {MIND_BURN}):
         c, cst, tg, tc = r["c"], r["caster"], r["target"], r["tc"]
         if tc is None:
             rows.append(r)
@@ -654,12 +735,11 @@ def mind_burn_rows(conns, table):
 
 
 # ---------------------------------------------------------------- generic hex
-def hex_rows(conns, table, types):
+def hex_rows(conns):
     """Every type-4 cast that completed: its [6]s and how it ended (L1); every hex 0x0042
     (G1-G4); the snare words (L3)."""
-    hexes = {k for k, t in types.items() if t == TYPE_HEX}
     casts = []
-    for r in casts_of(conns, hexes, table):
+    for r in casts_of(conns, lambda c: {k for k, t in c.types.items() if t == TYPE_HEX}):
         c, cst, tg, tc = r["c"], r["caster"], r["target"], r["tc"]
         if tc is None:
             casts.append(r)
@@ -688,11 +768,13 @@ def hex_rows(conns, table, types):
     applies = []
     for c in conns:
         for a in c.applies:
-            if types.get(a["skill"]) != TYPE_HEX:
+            if c.types.get(a["skill"]) != TYPE_HEX:
                 continue
-            row = table.get(a["skill"], {})
-            pred = interp(float(row.get("duration0") or 0), float(row.get("duration15") or 0),
-                          a["field3"])
+            row = c.table.get(a["skill"], {})
+            d0, d15 = float(row.get("duration0") or 0), float(row.get("duration15") or 0)
+            pred = interp(d0, d15, a["field3"])
+            # G3r: the client's own two-point scaler (0x005A8920), which ROUNDS
+            pred_r = effects.interp(d0, d15, a["field3"])
             rt = c.removal(a["target"], a["buff"], a["t"])
             bb = c.batch(a["t"])
             ops = [(op, v) for _i, _t, op, v in bb]
@@ -708,6 +790,9 @@ def hex_rows(conns, table, types):
                             "t": round(a["t"], 3),
                             "field3": a["field3"], "dur": a["dur"], "pred": round(pred, 3),
                             "g3_ok": abs(pred - a["dur"]) < 0.01,
+                            "pred_r": pred_r, "g3r_ok": abs(pred_r - a["dur"]) < 0.01,
+                            "build": c.build, "table_build": c.table_build,
+                            "d0d15": (d0, d15),
                             "order_58_42_f1": None not in (i58, i42, if1) and i58 < i42 < if1,
                             # G2r: the 58 ahead of the 0x0042, then an 0x00F1 with the hex
                             # bit -- unless the target's status already carried it
@@ -731,15 +816,15 @@ def all_applies(conns):
     return out
 
 
-def multi_foe_batches(conns, table):
+def multi_foe_batches(conns):
     """179 payoff batches and 185 completion batches striking >= 2 foes: the order (L2)."""
     out = []
-    for r in incendiary_rows(conns, table):
+    for r in incendiary_rows(conns):
         if r.get("end") is not None and len(set(r["payoff"])) >= 2:
             seq = r["payoff_order"]
             out.append((INCENDIARY, r["port"], round(r["ta"], 3), r["target"], seq,
                         seq == sorted(seq), seq[0] == r["target"]))
-    for r in mind_burn_rows(conns, table):
+    for r in mind_burn_rows(conns):
         if r.get("tc") is not None and len(set(r["words"])) >= 2:
             seq = r["order"]
             out.append((MIND_BURN, r["port"], round(r["ta"], 3), r["target"], seq,
@@ -776,12 +861,12 @@ def condition_rows(conns):
 
 # ---------------------------------------------------------------- the census
 def census(stamps=None, codec=None):
-    """Every live capture (or those named), every game connection that frames whole."""
+    """Every live capture (or those named), every game connection that frames whole, each
+    with its own build (the client's VERSION frame) and that build's table (build_table).
+    A connection whose build cannot be read, or whose build has no pristine image in the
+    vault, is REFUSED with the reason -- never scored against another build's table."""
     codec = codec or bufflog.Codec()
     root = vaultpath.require_dir("captures", "live", why="hexjoin reads live captures")
-    table = skills_table()
-    types = {k: _int(r.get("type_code"), -1) for k, r in table.items()}
-    follow = {k for k, t in types.items() if t == TYPE_HEX} | {MIND_BURN}
     conns, refused = [], []
     set_aside, declared_not_refused = [], []
     captures = 0
@@ -806,9 +891,17 @@ def census(stamps=None, codec=None):
                 continue
             try:
                 seq = deepwoundjoin.sequence(capdir, ch["connection"], codec)
+                build = tape.client_version(capdir, ch["connection"])["build"]
             except (bufflog.BuffLogError, tape.TapeError) as exc:
                 refused.append((stamp, ch["connection"], str(exc)[:100]))
                 continue
+            try:
+                table, types = build_table(build)
+            except LookupError as exc:
+                refused.append((stamp, ch["connection"], f"no table for build {build}: "
+                                                         f"{str(exc)[:80]}"))
+                continue
+            follow = {k for k, t in types.items() if t == TYPE_HEX} | {MIND_BURN}
             port = ch["connection"].split("->")[0].rsplit(":", 1)[-1]
             wants_observer = any(op == OP_EFFECT_APPLY for _i, _t, op, _v in seq) or any(
                 (op == OP_INT_TARGET and len(v) > 4 and v[1] in ANNOUNCE_PROPS and v[4] in follow)
@@ -818,10 +911,11 @@ def census(stamps=None, codec=None):
             if wants_observer:
                 c2s = spellhitjoin.c2s_of(capdir, ch["file"])
                 observer, _press, _why = spellhitjoin.observer_of(seq, c2s)
-            conns.append(Conn(stamp, port, seq, observer))
+            conns.append(Conn(stamp, port, seq, observer, build, table, types))
     return {"captures": captures, "connections": len(conns), "refused": refused,
             "set_aside": set_aside, "declared_not_refused": declared_not_refused,
-            "conns": conns, "table": table, "types": types, "stamps": stamps,
+            "conns": conns, "stamps": stamps,
+            "builds": dict(collections.Counter(c.build for c in conns)),
             "observer_named": sum(1 for c in conns if c.observer is not None)}
 
 
@@ -848,10 +942,10 @@ def narrow(c, stamp):
 
 def score(c):
     """The numbers the predictions are judged on -- and the verdicts."""
-    conns, table, types = c["conns"], c["table"], c["types"]
-    inc = incendiary_rows(conns, table)
-    mb = mind_burn_rows(conns, table)
-    hcasts, happlies = hex_rows(conns, table, types)
+    conns = c["conns"]
+    inc = incendiary_rows(conns)
+    mb = mind_burn_rows(conns)
+    hcasts, happlies = hex_rows(conns)
     every42 = all_applies(conns)
     conds = condition_rows(conns)
     # THE WITNESS AND THE CORPUS ARE KEPT APART (EV-3): every EXACT number below is the
@@ -859,7 +953,7 @@ def score(c):
     # a `*_corpus` key is the whole corpus's and a FLOOR. A confirming later capture
     # (the same casts again) moves the floors and nothing else.
     wcon = [cc for cc in conns if cc.stamp == EXPECT_CAPTURE]
-    order = multi_foe_batches(wcon, table)                  # exact, per tape
+    order = multi_foe_batches(wcon)                  # exact, per tape
     s = {"captures": c["captures"], "connections": c["connections"], "refused": len(c["refused"]),
          "observer_named": c["observer_named"], "witness": EXPECT_CAPTURE}
 
@@ -1048,6 +1142,14 @@ def score(c):
     s["g3_miss_rows"] = [(a["capture"], a["port"], a["t"], a["skill"], a["field3"], a["dur"], a["pred"])
                          for a in happlies if not a["g3_ok"]]
     s["g3"] = len(happlies) >= 1 and s["g3_misses"] == 0
+    # G3r (docstring): the client's own ROUNDED scaler on the tape's own build's row
+    s["g3r_miss_rows"] = [(a["capture"], a["port"], a["t"], a["skill"], a["field3"], a["dur"],
+                           a["pred_r"]) for a in happlies if not a["g3r_ok"]]
+    s["g3r"] = len(happlies) >= 1 and not s["g3r_miss_rows"]
+    # every hex apply's (capture, port, t, skill, field3, f32, the row's endpoints, the
+    # tape's build, the build the row was read from) -- what G3 / G3r were scored on
+    s["g3_rows"] = [(a["capture"], a["port"], a["t"], a["skill"], a["field3"], a["dur"],
+                     a["d0d15"], a["build"], a["table_build"]) for a in happlies]
     s["h_residuals"] = [(a["skill"], a["residual"]) for a in happlies]
     s["g4"] = len(happlies) >= 1 and all(
         a["stripped"] or (a["residual"] is not None and abs(a["residual"]) <= REMOVAL_TOL)
@@ -1151,10 +1253,12 @@ UNTESTABLE = ("m3",)
 CORRECTED = ("i4c", "m2c", "m3c", "c2c")
 LOCKED_LATER = ("l1", "l2", "l3", "l4")
 # THE ZAISHEN CAPTURE (2026-09-28, docstring): the registered predictions it FAILS, and the
-# re-statement (no free parameter) each one's verdict rests on beside it. G3 and the corrected
-# C2c have none -- they stand FAILED on that tape, their witnesses exact in test_skilldamage.
+# re-statement (no free parameter) each one's verdict rests on beside it. The corrected C2c
+# has none -- it stands FAILED on that tape, its witness exact in test_skilldamage. G3 had none
+# until 2026-09-28 (the regenerate-from-38888 arc): G3r, the client's own rounded scaler on the
+# tape's OWN build's row, is its re-statement (docstring), and G3 as registered stays FAILED.
 FAILED_ON_ZAISHEN = ("i1", "i2", "i3", "m1", "g2", "g3")
-RESTATED = {"i1": "i1r", "i2": "i2r", "i3": "i3r", "m1": "m1r", "g2": "g2r"}
+RESTATED = {"i1": "i1r", "i2": "i2r", "i3": "i3r", "m1": "m1r", "g2": "g2r", "g3": "g3r"}
 CORRECTED_FAILED_ON_ZAISHEN = ("c2c",)
 
 
@@ -1173,12 +1277,12 @@ def verdicts(s):
 def restated_verdicts(s):
     """The whole corpus's verdict since the Zaishen capture: every registered prediction
     holds as registered or through its re-statement, except the three FAILED at
-    registration (I4 / M2 / C2) and those the Zaishen tape FAILED with none (G3); M3
+    registration (I4 / M2 / C2) -- G3 included since 2026-09-28, through G3r; M3
     untestable; the corrected readings but C2c hold; the post-hoc facts hold."""
     skip = FAILED_AS_REGISTERED + UNTESTABLE
     return {
         "registered_or_restated_hold": all(s[k] or (k in RESTATED and s[RESTATED[k]])
-                                           for k in REGISTERED if k not in skip and k != "g3"),
+                                           for k in REGISTERED if k not in skip),
         "restatements_hold": all(s[v] for v in RESTATED.values()),
         "failed_as_registered": all(not s[k] for k in FAILED_AS_REGISTERED),
         "corrected_hold": all(s[k] for k in CORRECTED if k not in CORRECTED_FAILED_ON_ZAISHEN),
@@ -1199,9 +1303,8 @@ def _v(ok):
 
 
 def print_rows(c):
-    table = c["table"]
     n = 0
-    for r in incendiary_rows(c["conns"], table) + mind_burn_rows(c["conns"], table):
+    for r in incendiary_rows(c["conns"]) + mind_burn_rows(c["conns"]):
         n += 1
         print(f"\n#{n} skill {r['skill']} {r['capture']} {r['port']} observer={r['observer']} "
               f"caster={r['caster']} -> target={r['target']} announce t={r['ta']:.3f} "
@@ -1301,7 +1404,8 @@ def main():
           f"elsewhere {s['h_42_elsewhere']}; ALL 0x0042 {s['all_42']}: on the observer "
           f"{s['all_42_on_observer']}, elsewhere {s['all_42_elsewhere']}")
     print(f"[{_v(s['g2'])}] G2 58 < 0x0042 < 0x00F1 on every hex apply (n = {len(s['h_residuals'])})")
-    print(f"[{_v(s['g3'])}] G3 f32 == interp(d0, d15, field3): misses {s['g3_misses']}")
+    print(f"[{_v(s['g3'])}] G3 f32 == interp(d0, d15, field3), unrounded as registered, on the tape's "
+          f"own build's row: misses {s['g3_misses']}")
     print(f"[{_v(s['g4'])}] G4 removal residuals (skill, s) {s['h_residuals']}")
     print(f"[{_v(s['l1'])}] L1 type-4 announces {s['h_announces']} at {s['h_where']}; [6, T, ids] at the "
           f"landing {s['l_adds']}; ended {s['l_ended']} at {s['l_end_ranges']}")
@@ -1332,7 +1436,9 @@ def main():
           f"{s['i_words_on_target_tick']}")
     print(f"[{_v(s['i3r'])}] I3r / [{_v(s['g2r'])}] G2r no 0x00F1 when already hexed: 179 "
           f"{s['i_hex_already']}; every hex {s['g2_already_hexed']}")
-    print(f"[----] G3 misses (no re-statement) {s['g3_miss_rows']}; C2c off (no re-statement) "
+    print(f"[{_v(s['g3r'])}] G3r f32 == the client's ROUNDED scaler on the tape's own build's row: "
+          f"G3's misses {s['g3_miss_rows']}, G3r's {s['g3r_miss_rows']}")
+    print(f"[----] C2c off (no re-statement) "
           f"{s['c_cast_applied_off']} / {s['c_environmental_off']}; the 179 hexes' ranks "
           f"corpus-wide {s['m_ranks_corpus']}")
     rv = restated_verdicts(s)

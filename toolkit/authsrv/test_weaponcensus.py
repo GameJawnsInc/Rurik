@@ -580,23 +580,44 @@ def _absent_rows(absent):
     import pinned                                               # noqa: PLC0415
     import skilltable                                           # noqa: PLC0415
     try:
-        exe, _why = pinned.find()
+        pinned.find()
     except SystemExit as exc:
         LEDGER.skip("why the absent ids are absent", f"no pinned client: {str(exc)[:60]}")
         return
-    with open(exe, "rb") as fh:
-        data = fh.read()
-    base = skilltable.locate_table(data)[0]
-    recs = {i: skilltable.parse_record(data, base, i) for i in ids}
+    # The rule is read from the record of EVERY build the table's rows were emitted from
+    # (their provenance.build: 38797 plus the repo's row-level 38888 overrides on the table
+    # until 2026-09-28, 38888 after its regeneration) and from the pin's -- never from the
+    # pin alone, which stopped being the table's build the day the table was regenerated
+    # (the check this replaces required the pin to be among the table's builds, and read
+    # 2858's record only there). MEASURED: 2858 is equip_family 0, PvP-only on 38797 AND on
+    # 38888. A table build with no pristine image in the vault FAILS, naming the build.
     builds = {int(r.provenance.get("build", 0)) for r in _skills().values()}
-    check(ids and skilltable.build_of(data) in builds
-          and all(r["equip_family"] != 1 or r["pvp_only"] for r in recs.values())
-          and not set(ids) & set(skilltable.player_corpus(list(recs.values()))),
-          "and each is absent BY THE EXTRACTOR'S RULE: the pinned client's own record puts it "
-          "outside the player corpus (equip_family != 1 or PvP-only), and the table's rows "
-          "were emitted from that build (among others)",
-          f"{ {i: (r['equip_family'], r['pvp_only']) for i, r in recs.items()} }, table "
-          f"builds {builds}, client {skilltable.build_of(data)}")
+    recs, missing = {}, []
+    for b in sorted(builds | {pinned.PINNED.number}):
+        try:
+            exe, _why = pinned.find(build=b)
+        except SystemExit as exc:
+            missing.append((b, str(exc)[:60]))
+            continue
+        with open(exe, "rb") as fh:
+            data = fh.read()
+        if skilltable.build_of(data) != b:
+            missing.append((b, f"{exe} is not build {b}'s pristine image"))
+            continue
+        base, count = skilltable.locate_table(data)[:2]
+        recs[b] = {i: skilltable.parse_record(data, base, i) for i in ids if 0 <= i < count}
+    check(ids and builds and not missing
+          and all(len(recs[b]) == len(ids) for b in recs)
+          and all(r["equip_family"] != 1 or r["pvp_only"]
+                  for rb in recs.values() for r in rb.values())
+          and all(not set(ids) & set(skilltable.player_corpus(list(rb.values())))
+                  for rb in recs.values()),
+          "and each is absent BY THE EXTRACTOR'S RULE: the record of every build the table's "
+          "rows were emitted from, and the pinned client's, puts it outside the player corpus "
+          "(equip_family != 1 or PvP-only)",
+          f"{ {b: {i: (r['equip_family'], r['pvp_only']) for i, r in rb.items()} for b, rb in recs.items()} }, "
+          f"table builds {sorted(builds)}, pin {pinned.PINNED.number}, "
+          f"no image for {missing}")
 
 
 def _windup_signature(d):
