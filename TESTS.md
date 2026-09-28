@@ -11726,7 +11726,11 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   briefly 90 earlier that day and moved because 90 left 2, and the rationale beside the
   constant already records re-arming *three* short as a mistake that "fires on the next
   session's ordinary work": a tripwire re-armed inside its own noise is a false alarm
-  with a delay, not an early warning. A "defining site" is only a table row or a heading
+  with a delay, not an early warning. **It fired again on 2026-09-28 (133, at `main`
+  2e15a970) and was raised 132 → 200, the same rule applied.** All 133 were read. 109 are
+  bare letter-series. 22 are prefixed tokens that collide only because a log entry, a RUN
+  file or a PLAN cites their defining row; the 133rd is `CASTAI-ZF17`'s PLAN-LOG heading.
+  2 are rung citations. None is the 2.2(a) defect. A "defining site" is only a table row or a heading
   that OPENS with the token, because §2's census pattern was table-rows-only and this
   one is still a FLOOR: prose definitions, bold list-leads (`- **C6** — …`), mid-heading
   references, `RUNBOOK.md`'s F-namespace and §2.4's bare-integer commit prefixes are all

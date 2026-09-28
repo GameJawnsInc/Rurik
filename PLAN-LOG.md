@@ -75,7 +75,11 @@ In §2, our two runs equal the tape's byte for byte. For 621.054 exactly one mes
 aside, the chain's `[4, 7, 4, 0]`, and it is named and counted. Six plants turned it red: the
 predicate unfixed, E5(0) forced, each default off, `no_e6` dropped, and the disable moved
 ahead of the re-take. 61 checks, floor 28 → 39 (a bare run: 39, 1 declared skip); merged over
-the knock-down half's §1v, 68 checks and floor 34 → 45 (an empty-vault run: 45, 1 declared skip). 26 affected tests green (3,436 checks).
+the knock-down half's §1v, 68 checks and floor 34 → 45 (an empty-vault run: 45, 1 declared skip).
+The full suite on the merged tree (`16a1f4e8`) was 248 green / 1 red of 249, 16,550 checks.
+The red was `test_identlint`, and it was red on `main` too: the knock-down half's ZF17
+heading made 133 collisions against a ceiling of 132. All 133 were read and are
+ordinary work, so the ceiling was raised 132 → 200 by the file's own 1.5× rule. 26 affected tests green (3,436 checks).
 
 **What stays open.**
 - **The chain's `[4]` position.** On retail it rode the interrupt batch at 621.054 but came
