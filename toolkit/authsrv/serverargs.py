@@ -2616,6 +2616,21 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "send [8,0], E5 (full recharge), [59], E2, [35], E5 "
                          "(+20) for a cast and [8,0], [3], [35], [8,1] for an "
                          "auto-attack.")
+    ap.add_argument("--interrupt-zero-e5", action="store_true",
+                    help="CASTAI-ZF17 REVERT: an interrupted skill whose recharge is 0 "
+                         "still gets the full-recharge 0x00E5 [player, skill, copy, 0] "
+                         "ahead of the stop, and its 0x00E6 -- every interrupt before "
+                         "2026-09-28. By default it gets none: OBSERVED, Distracting Shot "
+                         "399 on skill 2 (recharge 0), 20260928T103123 :58544 t=621.054, "
+                         "[8,0] [59] E2 [35] ... E5(20) with no first E5.")
+    ap.add_argument("--no-interrupt-chain-hold", action="store_true",
+                    help="CASTAI-ZF17 REVERT: a cast interrupted under an auto-attack "
+                         "chain that resumes sends no [8, player, 1] after the [35], and "
+                         "the disable 0x00E5 rides right behind the [35] -- every "
+                         "interrupt before 2026-09-28. By default the chain re-takes the "
+                         "hold and the disable follows it: OBSERVED on 20260928T103123, "
+                         "Savage Shot 426 at :50061 t=197.153 and Distracting Shot 399 at "
+                         ":58544 t=621.054, both with the observer's chain live.")
     ap.add_argument("--no-party-wide-shouts", action="store_true",
                     help="a shout whose skill_effect row says party_wide = "
                          "\"earshot\" opens its episode on the CASTER ALONE -- "

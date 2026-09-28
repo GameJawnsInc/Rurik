@@ -5564,6 +5564,43 @@ SKILL_DAMAGE_WORD = True
 # the server that could not interrupt anything.
 INTERRUPTS = True
 
+# CASTAI-ZF17 (studies/monsterai/FINDINGS.md 18.2, 2026-09-28): THE ZAISHEN TAPE'S TWO
+# RUNS AT THE OBSERVER, both by the Degeneration Ranger (agent 6) on 20260928T103123,
+# both with the observer's auto-attack chain LIVE under the cast (its [4] on agent 3 at
+# 195.296 and again at 197.279; on agent 4 at 619.286, stopped by the press's [3]):
+#   * Savage Shot 426 on Healing Signet (1, recharge 4), conn :50061 t=197.153:
+#       [8,0] E5(4) [59] E2 [35] [8,1]
+#     -- no disable E5 (426 carries none) and the chain RE-TAKES THE HOLD; the E6 lands
+#     at +3.995 s, so the E5(4) owns the clock.
+#   * Distracting Shot 399 on skill 2 (table recharge 0), conn :58544 t=621.054:
+#       [8,0] [59] E2 [35] [4,7,4,0] [8,1] E5(20)
+#     -- NO first E5, and the +20 disable E5 AFTER the chain's [4] and [8,1]. (Its E6 is
+#     not on tape: the connection ends at 636.163, before +20.)
+# The pinned 340 witness is the negative control for the hold: its observer had no chain
+# (last swing 180 s before, none after) and its batch ends at the disable E5.
+#
+# INTERRUPT_SKIPS_ZERO_E5: the full-recharge E5 is not sent when the interrupted skill's
+# recharge is 0 (OBSERVED n=1). With nothing recharging at all -- 0 and no disable --
+# no E6 is owed either, since no E5 opened one: RECONSTRUCTION, DAGGERS-B5's `no_e6`
+# ("a failed chain step never began a recharge"); no tape shows that case.
+# --interrupt-zero-e5 reverts: E5(0) first, as every interrupt before 2026-09-28.
+INTERRUPT_SKIPS_ZERO_E5 = True
+# INTERRUPT_CHAIN_RETAKES_HOLD: a cast interrupted under a chain that RESUMES -- a live
+# target in reach, no follow leg, nothing else short of its E3 (_player_chain_running
+# with the released entry set aside) -- sends [8, player, 1] after the [35], and the
+# disable E5 after that (OBSERVED n=2, the order n=1: 426 has no disable). A chain that
+# would NOT resume (walking in, out of reach) is unwitnessed and gets no [8,1], because a
+# hold nothing releases is the walk-gate trap ANIMREF-RE 35 took out of the swing.
+# THE WALK GATE, said out loud: our auto swing holds none (SWING_HOLDS_WALK_GATE), but a
+# COMPLETED cast already leaves the gate SET into the resumed chain until its first
+# landing (ANIMREF_E3_RELEASE off, LANDING_HOLD_RELEASE on), so this puts an interrupted
+# cast in the regime a completed one already runs -- it adds no new one. The chain's own
+# [4] is NOT sent here: attack_tick owns the swing and opens it on its clock, the next
+# tick at the earliest; retail's [4] rode the batch at 621.054 and came 126 ms later at
+# 197.153. --no-interrupt-chain-hold reverts: no re-take, the disable E5 right behind
+# the [35] whatever the chain does, as every interrupt before 2026-09-28.
+INTERRUPT_CHAIN_RETAKES_HOLD = True
+
 # NPC RECHARGE FROM COMPLETION (DESKWORK-D5 step 4, 2026-09-23; `rechargeprobe.py`).
 # Both NPC cast sites armed `skill_ready[slot] = now + recharge` at the cast's START
 # and said so: "a RECONSTRUCTION from the table's semantics ... no NPC in the corpus
@@ -20639,7 +20676,7 @@ def _open_player_cast(state):
     return None
 
 
-def _player_chain_running(state):
+def _player_chain_running(state, released=None):
     """Is the player's auto-attack chain actually SWINGING -- the state the
     swing witness was in (in reach, in its backswing)? False while the chain
     is PAUSED for a cast (any pending entry short of its E3: the pause the
@@ -20653,12 +20690,21 @@ def _player_chain_running(state):
     t=459.419; 230 at 20260917T090355 t=378.100 and 384.106) and none carries
     a [35], 3 of 3; the two that do interrupt hit a cast in activation and a
     chain in its backswing. What a hit on a chain WALKING IN or out of reach
-    does is UNOBSERVED (no such hit is on tape); it is left alone here."""
+    does is UNOBSERVED (no such hit is on tape); it is left alone here.
+
+    `released` (CASTAI-ZF17): the cast an interrupt is releasing, asked "will the
+    chain RESUME once it goes?" -- that entry, and anything still queued behind it
+    (the interrupt un-queues those), are set aside; every other clause stands, so the
+    answer is attack_tick's own gate on the next tick."""
     tid = state.get("attacking")
     if not tid:
         return False
-    if any(not c["e3_sent"] for c in state.get("pending_casts") or ()):
-        return False
+    for c in state.get("pending_casts") or ():
+        if released is not None and (c is released or not c.get("begun", True)
+                                     or c.get("cancelled")):
+            continue
+        if not c["e3_sent"]:
+            return False
     if state.get("approach") is not None:
         return False
     agent = state.get("agents", {}).get(tid)
@@ -20698,6 +20744,14 @@ def interrupt_player(send, state, conn_id, by_skill, by_agent, mode=None):
     "Any skills waiting to be activated will be un-queued") rides the
     measured pre-begin release ([45] + E2) -- no tape has a queue behind an
     interrupted cast.
+
+    TWO VARIANTS of the cast shape since CASTAI-ZF17 (OBSERVED, 20260928T103123;
+    the flags' banner has the batches): a skill whose recharge R is 0 gets NO
+    first E5 (INTERRUPT_SKIPS_ZERO_E5, Distracting Shot 399 on skill 2); and a
+    cast interrupted under an auto-attack chain that resumes gets [8, player, 1]
+    after the [35], the disable E5 after that (INTERRUPT_CHAIN_RETAKES_HOLD;
+    Savage Shot 426 and 399, both with the observer's chain live). The 340
+    witness above had no chain, and that is why its batch ends at the E5.
 
     An AUTO-ATTACK -- OBSERVED 1 of 1 (Lightning Javelin 230 on the chain in
     its backswing; 20260917T224104 conn 62557 t=434.658), sent BEFORE the
@@ -20743,11 +20797,18 @@ def interrupt_player(send, state, conn_id, by_skill, by_agent, mode=None):
         extra = skill_interrupt_disable(by_skill)
         stop = (agents.GV_ATTACK_SKILL_STOPPED if cast.get("attack")
                 else agents.GV_SKILL_STOPPED)
+        # CASTAI-ZF17 (the two flags' banner): no E5(0) for a 0-recharge skill, and
+        # the chain's hold re-taken when the chain resumes -- read BEFORE the books
+        # below mark anything, off the state the interrupt found.
+        first_e5 = recharge > 0 or not INTERRUPT_SKIPS_ZERO_E5
+        chain = (INTERRUPT_CHAIN_RETAKES_HOLD
+                 and _player_chain_running(state, released=cast))
         action_hold(send, state, 0, f"skill {by_skill} interrupts the cast")
-        send(GAME_SMSG_SKILL_RECHARGE,
-             [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"], recharge],
-             f"SKILL_RECHARGE(skill {cast['skill_id']}, {recharge}s): the "
-             f"interrupted skill's FULL recharge starts")
+        if first_e5:
+            send(GAME_SMSG_SKILL_RECHARGE,
+                 [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"], recharge],
+                 f"SKILL_RECHARGE(skill {cast['skill_id']}, {recharge}s): the "
+                 f"interrupted skill's FULL recharge starts")
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [stop, PLAYER_AGENT_ID, 0],
              f"{'attack_skill' if cast.get('attack') else 'skill'}_stopped: "
              f"agent {by_agent}'s skill {by_skill} interrupts skill {cast['skill_id']}")
@@ -20757,6 +20818,9 @@ def interrupt_player(send, state, conn_id, by_skill, by_agent, mode=None):
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.GV_INTERRUPTED, PLAYER_AGENT_ID, 0],
              f"interrupted: the stagger (skill {by_skill})")
+        if chain:
+            action_hold(send, state, 1, "the chain re-takes the hold after the "
+                                        "interrupted cast [CASTAI-ZF17]")
         if extra > 0:
             send(GAME_SMSG_SKILL_RECHARGE,
                  [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"], recharge + extra],
@@ -20775,6 +20839,10 @@ def interrupt_player(send, state, conn_id, by_skill, by_agent, mode=None):
         cast["recharge"] = recharge + extra
         cast["recharge_s"] = float(recharge + extra)
         cast["e6_at"] = now + recharge + extra
+        if not first_e5 and extra <= 0:
+            # nothing recharges and no E5 went out: no E6 closes one
+            # (INTERRUPT_SKIPS_ZERO_E5's banner; RECONSTRUCTION)
+            cast["no_e6"] = True
         state["cast_busy_until"] = now
         unqueued = 0
         for other in state.get("pending_casts") or ():
@@ -20787,6 +20855,8 @@ def interrupt_player(send, state, conn_id, by_skill, by_agent, mode=None):
               f"stops the player's skill {cast['skill_id']} -- full recharge "
               f"{recharge}s" + (f" + {extra}s disable" if extra else "")
               + (f", {unqueued} queued cast(s) un-queued" if unqueued else "")
+              + ("" if first_e5 else ", no E5(0) [CASTAI-ZF17]")
+              + (", the chain re-takes the hold [CASTAI-ZF17]" if chain else "")
               + " [DESKWORK-D5]", flush=True)
         return "cast"
     if _player_chain_running(state) and mode in ("action", "attacking"):
@@ -44879,6 +44949,22 @@ def main():
         print("NO INTERRUPTS: Disrupting Chop and Lightning Javelin land their "
               "damage and interrupt nothing, as this server did until 2026-09-23 "
               "(retail: interruptjoin.py's two witnesses).", flush=True)
+
+    if a.interrupt_zero_e5:
+        global INTERRUPT_SKIPS_ZERO_E5
+        INTERRUPT_SKIPS_ZERO_E5 = False
+        print("INTERRUPT ZERO E5: an interrupted skill with recharge 0 still gets "
+              "0x00E5 [player, skill, copy, 0] and its 0x00E6, as every interrupt before "
+              "2026-09-28 (retail: none, Distracting Shot 399 on skill 2, CASTAI-ZF17).",
+              flush=True)
+
+    if a.no_interrupt_chain_hold:
+        global INTERRUPT_CHAIN_RETAKES_HOLD
+        INTERRUPT_CHAIN_RETAKES_HOLD = False
+        print("NO INTERRUPT CHAIN HOLD: a cast interrupted under a resuming auto-attack "
+              "chain sends no [8, player, 1] and its disable E5 rides behind the [35], "
+              "as every interrupt before 2026-09-28 (retail re-takes the hold, 2 of 2, "
+              "CASTAI-ZF17).", flush=True)
 
     if a.no_party_wide_shouts:
         global PARTY_WIDE_SHOUTS

@@ -29,6 +29,17 @@ still RECONSTRUCTION. Section 2 holds the two against each other.)
 family's stop, then the [63], and no [35]; OBSERVED n = 1 on the same capture, held
 against its bytes in section 2. `--no-knock-down-stop` is that arm's known-bad flag.)
 
+CASTAI-ZF17 (2026-09-28) put the capture's two OBSERVER runs on the sender
+(`section_zf17`), both by the Degeneration Ranger with the observer's chain live:
+  Savage Shot 426 on Healing Signet (:50061 t=197.153):
+      [8, P, 0]  E5 [P, 1, 0, 4]  [59, P, 0]  E2  [35, P, 0]  [8, P, 1]
+  Distracting Shot 399 on skill 2, table recharge 0 (:58544 t=621.054):
+      [8, P, 0]  [59, P, 0]  E2  [35, P, 0]  ([4, P, 4, 0])  [8, P, 1]  E5 [P, 2, 0, 20]
+-- no E5(0) (INTERRUPT_SKIPS_ZERO_E5) and the chain re-taking the hold ahead of the disable
+(INTERRUPT_CHAIN_RETAKES_HOLD), each with its known-bad arm. The bracketed [4] is the
+chain's swing start: attack_tick sends it the next tick, and section 2 sets exactly that
+one message aside, by name, when it compares our bytes with the tape's.
+
 THE FIX PASS (2026-09-23, D5B-R1/R2, ENG-1/4/5/10d) added: the body victim through
 `land_swing_on_body` (a hostile's 340 on a party body -- the first cut had no hook on
 that path, so no NPC attack skill interrupted anything), the two hook sites that had no
@@ -70,7 +81,11 @@ import vaultpath                                               # noqa: E402
 # +6 (the knock-down's stop: the witness, the attack form, the instant, the swing, the
 # known-bad arm, land_skill end to end), floor 28 -> 34 from the run on an EMPTY vault
 # (34 + 1 declared skip); section 2 +1 (ours against the tape's batch), 55 with the vault.
-LEDGER = checks.Ledger("the interrupt on the wire", floor=34)
+# CASTAI-ZF17, the interrupters (same day, merged over the knock-down): section_zf17 +11
+# (the observer's two runs, their known-bad arms, the tick after, the no-E6 case, the
+# no-resume chains, the rows, the source), floor 34 -> 45 from an EMPTY-vault run (45 + 1
+# declared skip); section 2 +2 (our two runs against the tape's bytes), 68 with the vault.
+LEDGER = checks.Ledger("the interrupt on the wire", floor=45)
 check = checks.adopt(LEDGER)
 
 P = authsrv.PLAYER_AGENT_ID
@@ -87,6 +102,11 @@ CHOP_DISABLE = 20
 KD_FLT = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT
 KNOCKED, TWO_F32 = 63, 0x40000000                    # [63, agent, 2.0f], the tape's dword
 HEALING_BREEZE, HAMMER_BASH, STANCE = 288, 331, 380
+# CASTAI-ZF17: the Degeneration Ranger's two interrupters, and the observer's skill 2
+# (table recharge 0) that Distracting Shot interrupted on 20260928T103123 :58544.
+DISTRACT, SAVAGE, SKILL2 = 399, 426, 2
+DISTRACT_DISABLE = 20
+ITG = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
 
 # What section 1 produced, for section 2 to hold against the tape.
 PRODUCED = {}
@@ -431,6 +451,7 @@ def section_sender():
               "mode='action' passed explicitly (D6's entry point) interrupts the cast on a "
               "skill whose row says nothing, with no second E5",
               f"{res} {sent}")
+        section_zf17()
     finally:
         authsrv.INTERRUPTS = saved
     section_knockdown_stop()
@@ -531,6 +552,155 @@ def section_knockdown_stop():
     finally:
         (authsrv.KNOCK_DOWN, authsrv.KNOCK_DOWN_STOP, authsrv.NPC_ATTACK_SKILL_SWINGS,
          authsrv.INSTANT_ANNOUNCE, authsrv._is_attack_skill, authsrv._is_instant_skill) = saved
+
+
+def section_zf17():
+    """CASTAI-ZF17 (2026-09-28): the Zaishen tape's two runs at the observer, each on
+    our sender -- the shape as a literal here, the tape's bytes in section 2. Both had
+    the observer's chain LIVE (a target in reach, the swing paused for the cast); the
+    340 witness of (a) had none, and (a) still ends at its E5 -- the negative control."""
+    saved = (authsrv.INTERRUPT_SKIPS_ZERO_E5, authsrv.INTERRUPT_CHAIN_RETAKES_HOLD)
+
+    def chained(skill_id=SIGNET, recharge=4):
+        sent, send, st = _fake()
+        st["attacking"] = 104                      # 10 u away: in reach
+        st["pending_casts"] = [_cast(skill_id=skill_id, recharge=recharge)]
+        return sent, send, st
+
+    try:
+        authsrv.INTERRUPT_SKIPS_ZERO_E5 = authsrv.INTERRUPT_CHAIN_RETAKES_HOLD = True
+        # (v) INTERRUPT_CHAIN_RETAKES_HOLD's witness: Savage Shot 426 on Healing Signet,
+        # the chain live -- 20260928T103123 :50061 t=197.153.
+        sent, send, st = chained()
+        before = time.time()
+        res = authsrv.interrupt_player(send, st, 0, SAVAGE, 6)
+        PRODUCED["savage"] = list(sent)
+        cast = st["pending_casts"][0]
+        check(res == "cast" and sent == [(INT, [HOLD, P, 0]), (E5, [P, SIGNET, 0, 4]),
+                                         (INT, [STOP_SKILL, P, 0]), (E2, [P, SIGNET, 0]),
+                                         (INT, [INTERRUPTED, P, 0]), (INT, [HOLD, P, 1])]
+              and st["action_hold"] == 1 and cast["recharge"] == 4
+              and abs(cast["e6_at"] - (before + 4.0)) < 0.5 and not cast.get("no_e6"),
+              "426 on a cast under a live chain: [8,0] E5(4) [59] E2 [35] [8,1] -- no disable "
+              "E5, the chain re-takes the hold; the E6 owed at +4",
+              f"{res} {sent} -- retail's run on 20260928T103123 :50061 t=197.153")
+        authsrv.INTERRUPT_CHAIN_RETAKES_HOLD = False
+        sent, send, st = chained()
+        res = authsrv.interrupt_player(send, st, 0, SAVAGE, 6)
+        check(res == "cast" and sent == [(INT, [HOLD, P, 0]), (E5, [P, SIGNET, 0, 4]),
+                                         (INT, [STOP_SKILL, P, 0]), (E2, [P, SIGNET, 0]),
+                                         (INT, [INTERRUPTED, P, 0])]
+              and st["action_hold"] == 0,
+              "KNOWN-BAD ARM --no-interrupt-chain-hold: the same hit leaves the hold "
+              "released, no [8,1] (every interrupt before 2026-09-28)",
+              f"{res} {sent}")
+        authsrv.INTERRUPT_CHAIN_RETAKES_HOLD = True
+        # (w) INTERRUPT_SKIPS_ZERO_E5's witness, and the hold's second: Distracting Shot
+        # 399 on skill 2 (recharge 0), the chain live -- :58544 t=621.054. The tape's
+        # [4, 7, 4, 0] between the [35] and the [8,1] is the CHAIN's swing start, which
+        # attack_tick sends on its own clock (below); section 2 sets exactly it aside.
+        sent, send, st = chained(skill_id=SKILL2, recharge=0)
+        before = time.time()
+        res = authsrv.interrupt_player(send, st, 0, DISTRACT, 6)
+        PRODUCED["distract"] = list(sent)
+        cast = st["pending_casts"][0]
+        check(res == "cast" and sent == [(INT, [HOLD, P, 0]), (INT, [STOP_SKILL, P, 0]),
+                                         (E2, [P, SKILL2, 0]), (INT, [INTERRUPTED, P, 0]),
+                                         (INT, [HOLD, P, 1]),
+                                         (E5, [P, SKILL2, 0, DISTRACT_DISABLE])]
+              and cast["recharge"] == DISTRACT_DISABLE
+              and abs(cast["e6_at"] - (before + DISTRACT_DISABLE)) < 0.5
+              and not cast.get("no_e6"),
+              "399 on a 0-recharge skill under a live chain: [8,0] [59] E2 [35] [8,1] E5(20) "
+              "-- no first E5, the disable AFTER the re-take; the E6 owed at +20",
+              f"{res} {sent} -- retail's run on 20260928T103123 :58544 t=621.054")
+        # ... and the chain's own [4] comes from attack_tick, the next tick, with no
+        # second [8,1] (the hold is already set; our swing re-holds nothing anyway)
+        st["player_last_swing"] = 0.0
+        sent.clear()
+        authsrv.attack_tick(send, st, 0)
+        starts = [v for op, v in sent if op == ITG and v[0] == agents.GV_ATTACK_STARTED]
+        check(starts == [[agents.GV_ATTACK_STARTED, P, 104, 0]]
+              and (INT, [HOLD, P, 1]) not in sent and st["action_hold"] == 1,
+              "the tick after: attack_tick opens the resumed chain's swing -- [4, player, "
+              "104, 0], one, and no second [8,1] -- the tape's [4], one tick later",
+              f"{sent}")
+        authsrv.INTERRUPT_SKIPS_ZERO_E5 = False
+        sent, send, st = chained(skill_id=SKILL2, recharge=0)
+        res = authsrv.interrupt_player(send, st, 0, DISTRACT, 6)
+        check(res == "cast" and sent[:2] == [(INT, [HOLD, P, 0]), (E5, [P, SKILL2, 0, 0])]
+              and sent[2:] == PRODUCED["distract"][1:],
+              "KNOWN-BAD ARM --interrupt-zero-e5: the same hit sends E5(0) ahead of the "
+              "[59], the rest unchanged (every interrupt before 2026-09-28)",
+              f"{res} {sent}")
+        authsrv.INTERRUPT_CHAIN_RETAKES_HOLD = False
+        sent, send, st = chained(skill_id=SKILL2, recharge=0)
+        res = authsrv.interrupt_player(send, st, 0, DISTRACT, 6)
+        check(res == "cast" and sent == [(INT, [HOLD, P, 0]), (E5, [P, SKILL2, 0, 0]),
+                                         (INT, [STOP_SKILL, P, 0]), (E2, [P, SKILL2, 0]),
+                                         (INT, [INTERRUPTED, P, 0]),
+                                         (E5, [P, SKILL2, 0, DISTRACT_DISABLE])],
+              "BOTH ARMS OFF: the server before 2026-09-28 -- [8,0] E5(0) [59] E2 [35] E5(20)",
+              f"{res} {sent}")
+        authsrv.INTERRUPT_SKIPS_ZERO_E5 = authsrv.INTERRUPT_CHAIN_RETAKES_HOLD = True
+        # (x) RECONSTRUCTION, no tape: 0 recharge and no disable, no chain -- no E5 at
+        # all, so no E6 is owed (no_e6), and the tick drops the entry silently.
+        sent, send, st = _fake()
+        st["pending_casts"] = [_cast(skill_id=SKILL2, recharge=0)]
+        res = authsrv.interrupt_player(send, st, 0, SAVAGE, 6)
+        cast = st["pending_casts"][0]
+        check(res == "cast" and sent == [(INT, [HOLD, P, 0]), (INT, [STOP_SKILL, P, 0]),
+                                         (E2, [P, SKILL2, 0]), (INT, [INTERRUPTED, P, 0])]
+              and cast.get("no_e6"),
+              "426 on a 0-recharge skill, no chain: [8,0] [59] E2 [35] and no E5 at all; the "
+              "entry owes no E6 (RECONSTRUCTION, DAGGERS-B5's no_e6)",
+              f"{res} {sent}")
+        sent.clear()
+        authsrv.cast_tick(send, st, 0)
+        check(sent == [] and st["pending_casts"] == [],
+              "the tick after drops that entry with nothing on the wire -- no E6 for a "
+              "recharge that never began",
+              f"{sent} pending {st['pending_casts']}")
+        # (y) a chain that would NOT resume gets no [8,1] -- unwitnessed, left alone
+        sent, send, st = chained()
+        st["agents"][104]["pos"] = (5000.0, 0.0)
+        authsrv.interrupt_player(send, st, 0, SAVAGE, 6)
+        far = list(sent)
+        sent, send, st = chained()
+        st["approach"] = {"target": 104, "t0": time.time()}
+        authsrv.interrupt_player(send, st, 0, SAVAGE, 6)
+        check((INT, [HOLD, P, 1]) not in far and (INT, [HOLD, P, 1]) not in sent
+              and far == sent == PRODUCED["savage"][:-1],
+              "a chain whose target is out of reach, or whose follow leg is walking in, "
+              "does not resume on the next tick: no [8,1] (UNOBSERVED; a hold nothing "
+              "releases is not sent)",
+              f"far {far} / approach {sent}")
+        # (z) the two content rows
+        check(authsrv.skill_interrupts(DISTRACT) == "action"
+              and authsrv.skill_interrupt_disable(DISTRACT) == DISTRACT_DISABLE
+              and authsrv.skill_interrupts(SAVAGE) == "action"
+              and authsrv.skill_interrupt_disable(SAVAGE) == 0,
+              "content/world.toml: 399 interrupts any action with +20, 426 any action with "
+              "no disable (CASTAI-ZF17, OBSERVED on 20260928T103123)",
+              f"{authsrv.skill_interrupts(DISTRACT)} +{authsrv.skill_interrupt_disable(DISTRACT)}, "
+              f"{authsrv.skill_interrupts(SAVAGE)} +{authsrv.skill_interrupt_disable(SAVAGE)}")
+        # the source: both arms ship ON and each has its own revert, plumbed
+        src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+        args = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
+        main_at = src.index("\ndef main():")
+
+        def flips(flag, name):
+            i = src.find(f"    if a.{flag}:", main_at)
+            return i > 0 and f"{name} = False" in src[i:i + 200]
+        check(src.count("\nINTERRUPT_SKIPS_ZERO_E5 = True\n") == 1
+              and src.count("\nINTERRUPT_CHAIN_RETAKES_HOLD = True\n") == 1
+              and flips("interrupt_zero_e5", "INTERRUPT_SKIPS_ZERO_E5")
+              and flips("no_interrupt_chain_hold", "INTERRUPT_CHAIN_RETAKES_HOLD")
+              and '"--interrupt-zero-e5"' in args and '"--no-interrupt-chain-hold"' in args,
+              "the source: both ZF17 arms default ON, and main() turns each off only under "
+              "its own flag (--interrupt-zero-e5, --no-interrupt-chain-hold)")
+    finally:
+        (authsrv.INTERRUPT_SKIPS_ZERO_E5, authsrv.INTERRUPT_CHAIN_RETAKES_HOLD) = saved
 
 
 def _idx(sent, op, head):
@@ -714,9 +884,24 @@ def section_corpus():
                            (INT, [HOLD, 7, 1]), (E5, [7, 2, 0, 20])]},
           f"NEW (OBSERVED, {ZAISHEN}): the observer's two -- 426 on Healing Signet (1): the "
           f"table recharge's E5(4) and NO disable E5, then [8, 1]; 399 on skill 2 (table "
-          f"recharge 0): NO first E5, the disable E5(20) AFTER the chain's [4] and [8, 1]. Our "
-          f"server models neither interrupter (content rows 340 / 230 only): escalated",
+          f"recharge 0): NO first E5, the disable E5(20) AFTER the chain's [4] and [8, 1] "
+          f"(CASTAI-ZF17; rows 399 / 426 and the two flags since 2026-09-28)",
           f"{zo}")
+    # CASTAI-ZF17 landed: OUR runs against those bytes, victim id substituted. The one
+    # message set aside is named and counted -- B's [4, 7, 4, 0], the resumed chain's
+    # swing start, which attack_tick sends on its clock (section 1 (w)) -- never a filter.
+    ours_a = _subst(PRODUCED.get("savage", []), 7)
+    check(ours_a == zo.get(197.153),
+          "OUR 426 run == the tape's at 197.153, byte for byte ([8,0] E5(4) [59] E2 [35] [8,1])",
+          f"ours {ours_a}\n      tape {zo.get(197.153)}")
+    tape_b = zo.get(621.054) or []
+    chain4 = [m for m in tape_b if m[0] == ITG and m[1][0] == agents.GV_ATTACK_STARTED]
+    ours_b = _subst(PRODUCED.get("distract", []), 7)
+    check(chain4 == [(ITG, [agents.GV_ATTACK_STARTED, 7, 4, 0])]
+          and ours_b == [m for m in tape_b if m not in chain4],
+          "OUR 399 run == the tape's at 621.054 with exactly ONE message set aside, the "
+          "chain's [4, 7, 4, 0] (attack_tick's, the next tick): [8,0] [59] E2 [35] [8,1] E5(20)",
+          f"set aside {chain4}\n      ours {ours_b}\n      tape {tape_b}")
     # The own / other split, on the corrected observer (studies/skills 43.8): the
     # first-0x00E3 rule this reader used named the JARIN HERO as the player of
     # 20260914T005758 conn 56011 and nobody on 69 connections, and the fix pass's
