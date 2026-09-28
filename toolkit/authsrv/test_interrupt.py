@@ -21,6 +21,10 @@ RECONSTRUCTION, said so at the call sites and pinned here as ours: [49] for an
 interrupted attack skill (the cancel family's split); the un-queue of a queued cast
 (WIKI); a BODY as victim (`interrupt_body`: the stop + [35] without the hold, a hero's
 bar getting the E5 / E2 / E5 mirror). `--no-interrupts` is the known-bad arm.
+(2026-09-28, CASTAI-Z1: the NON-HERO body's cast arm is OBSERVED now -- the Zaishen
+capture's eight [35] on the observer's henchmen are [59, body, 0] [35, body, 0] back to
+back, no hold, no bar message, which is what `interrupt_body` sends; the hero's mirror is
+still RECONSTRUCTION. Section 2 holds the two against each other.)
 
 THE FIX PASS (2026-09-23, D5B-R1/R2, ENG-1/4/5/10d) added: the body victim through
 `land_swing_on_body` (a hostile's 340 on a party body -- the first cut had no hook on
@@ -57,7 +61,8 @@ import vaultpath                                               # noqa: E402
 
 # Floor from the green run of 2026-09-23: section 1 alone (the fixture-less sender,
 # 28 of the 39 after the observer fix; 28 of 38 after the fix pass; 21 of 30 before
-# it). Section 2 (the tape, 11) is declared a skip without the vault. The first cut declared 22 from a guess and the
+# it). Section 2 (the tape, 11; 20 since CASTAI-Z1 2026-09-28, the pin-scoped literals, their
+# signatures and the Zaishen capture's witnesses) is declared a skip without the vault. The first cut declared 22 from a guess and the
 # count came back 21 -- set from the run, both times.
 LEDGER = checks.Ledger("the interrupt on the wire", floor=28)
 check = checks.adopt(LEDGER)
@@ -257,6 +262,7 @@ def section_sender():
                      "cast_lands_at": time.time() + 1.0})
         before = time.time()
         res = authsrv.interrupt_body(send, st, 104, body, 0, CHOP, P)
+        PRODUCED["body_cast"] = list(sent)
         check(res == "cast" and sent == [(INT, [STOP_SKILL, 104, 0]), (INT, [INTERRUPTED, 104, 0])]
               and body["casting"] is None and body["cast_lands_at"] is None
               and abs(body["skill_ready"][0] - (before + 24.0)) < 0.5,
@@ -476,6 +482,29 @@ def _shape(msgs, victim):
     return out
 
 
+# THE PIN (2026-09-28, CASTAI-Z1): the captures stamped before the owner's Zaishen
+# Challenge capture are the corpus every literal of section 2 was written on.
+PIN = "20260928T103123"
+ZAISHEN = PIN
+FAMILY = (HOLD, INTERRUPTED, STOP_ATK, STOP_ATKSKILL, STOP_SKILL)
+
+
+def _body_family_of(msgs, victim):
+    """[(op, property or skill, index)] -- the interrupt family addressed to `victim` in a
+    batch of (op, values-after-opcode): the hold, the three stops, [35], E2 and E5."""
+    out = []
+    for k, (op, v) in enumerate(msgs):
+        if op == INT and len(v) > 1 and v[1] == victim and v[0] in FAMILY:
+            out.append((op, v[0], k))
+        elif op in (E2, E5) and v and v[0] == victim:
+            out.append((op, v[1], k))
+    return out
+
+
+def _body_family(r):
+    return _body_family_of([(op, list(v[1:])) for _dt, op, v in r["batch"]], r["agent"])
+
+
 def section_corpus():
     print("\n2. retail's tapes: the denominator, the two runs against section 1's output")
     try:
@@ -487,6 +516,20 @@ def section_corpus():
     c = interruptjoin.census()
     sc = interruptjoin.score(c)
     tfs = c["thirty_fives"]
+    # R4 (2026-09-28): the census's refusals are exactly the connections their capture's
+    # OWN manifest declares gapped -- printed by name, still refused, never absorbed.
+    import livewire
+    live = vaultpath.require_dir("captures", "live", why="the interrupt witnesses")
+    declared = {(st, conn): g for st in sorted(os.listdir(live))
+                if os.path.isdir(os.path.join(live, st))
+                for conn, g in livewire.declared_gaps(os.path.join(live, st)).items()}
+    for (st, conn), g in sorted(declared.items()):
+        print(f"   set aside BY ITS MANIFEST: {st} {conn} {g}")
+    check({(st, conn) for st, conn, _why in c["refused"]} == set(declared)
+          == {(ZAISHEN, "10.0.0.210:65009->98.95.137.136:80")},
+          "the census refuses exactly the connections their capture's manifest declares "
+          "gapped -- CASTAI-Z1's match 2 -- and nothing else",
+          f"refused {c['refused']}; declared {sorted(declared)}")
     # The write-up's corpus: [35] on tapes stamped up to the day it was written.
     dated = [r for r in tfs if r["capture"] <= "20260923T235959"]
     check(len(dated) == 2 and sc["n59"] >= 34 and sc["n49"] >= 12 and sc["n10"] >= 92,
@@ -494,11 +537,77 @@ def section_corpus():
           "tape of that day or earlier reddens this); >= 34 [59], >= 12 [49], >= 92 [10]",
           f"[35] {len(dated)} of {len(tfs)} dated, [59] {sc['n59']}, [49] {sc['n49']}, "
           f"[3] {sc['n3']}, [10] {sc['n10']}, [63] {sc['n63']}")
-    check(sc["p2"] and all(r["own"] and r["run_opens_family"] for r in tfs),
+    # RE-SCOPED 2026-09-28 (CASTAI-Z1), not reworded. The Zaishen capture put ten more [35]
+    # on the wire and eight of them land on the observer's HENCHMEN (the Degeneration
+    # Ranger's Distracting Shot 399 and Savage Shot 426), so "both victims are the
+    # observer" is a claim about the captures it was written on, and it stays exact there.
+    # interruptjoin's registered P2 is recorded FAILED as written on the corpus through
+    # that capture; the claim it carried is re-stated for the observer's own [35], and the
+    # body victim's shape -- RECONSTRUCTION in this file's header until today -- is a
+    # measured signature now, held against OUR interrupt_body.
+    at_pin = dict(c, stops=[r for r in c["stops"] if r["capture"] < PIN],
+                  thirty_fives=[r for r in tfs if r["capture"] < PIN])
+    sc_pin = interruptjoin.score(at_pin)
+    check(sc_pin["p2"] and len(at_pin["thirty_fives"]) == 2
+          and all(r["own"] and r["run_opens_family"] for r in at_pin["thirty_fives"]),
           "both victims are the observer; in each batch the FIRST interrupt-family message "
           "at the victim is the hold release [8, victim, 0] (no stop or bar message ahead of "
-          "it) and the run is contiguous",
-          f"{[(r['capture'], r['own'], r['run_opens_family'], r['run_contiguous']) for r in tfs]}")
+          "it) and the run is contiguous (the captures at the pin)",
+          f"{[(r['capture'], r['own'], r['run_opens_family'], r['run_contiguous']) for r in at_pin['thirty_fives']]}")
+    through = [r for r in tfs if r["capture"] <= PIN]
+    check(interruptjoin.score(dict(c, thirty_fives=through))["p2"] is False
+          and len(through) == 12 and sum(1 for r in through if not r["own"]) == 8,
+          f"interruptjoin P2 AS WRITTEN ('BOTH [35] name the connection's OWN player') is "
+          f"recorded FAILED on the corpus through {PIN}: 12 [35], 8 of them on bodies -- the "
+          f"verdict rests on the disclosed re-statement below, not on the registered wording",
+          f"{[(r['capture'], r['agent'], r['own']) for r in through]}")
+    mine = [r for r in tfs if r["own"]]
+    check(len(mine) >= 2 and all(r["run"] and r["run_opens_family"] and r["run_contiguous"]
+                                 for r in mine),
+          f"RE-STATED P2 (whole corpus): every [35] on the OBSERVER -- {len(mine)} -- opens its "
+          f"family at the victim with the hold release [8, victim, 0] and runs contiguous",
+          f"{[(r['capture'], round(r['t'], 3), r['run_opens_family'], r['run_contiguous']) for r in mine]}")
+    bodies = [(r, _body_family(r)) for r in tfs if not r["own"]]
+    bad = [(r["capture"], round(r["t"], 3), r["agent"], fam) for r, fam in bodies
+           if not (len(fam) == 2 and fam[0][1] in (STOP_SKILL, STOP_ATKSKILL, STOP_ATK)
+                   and fam[1][:2] == (INT, INTERRUPTED) and fam[0][2] + 1 == fam[1][2])]
+    check(len(bodies) >= 8 and not bad,
+          f"SIGNATURE (whole corpus): a [35] on a BODY -- {len(bodies)} -- is its stop and its "
+          f"[35] back to back and nothing else of the family: no hold release, no 0x00E2 / "
+          f"0x00E5 (floor 8, the Zaishen capture's)",
+          f"{bad}")
+    ours = _body_family_of(PRODUCED.get("body_cast", []), 104)
+    check([(op, p) for op, p, _k in ours] == [(INT, STOP_SKILL), (INT, INTERRUPTED)]
+          and all([(op, p) for op, p, _k in fam] == [(INT, STOP_SKILL), (INT, INTERRUPTED)]
+                  for r, fam in bodies if STOP_SKILL in r["stop"]),
+          "and OUR interrupt_body's cast arm sends exactly that for a non-hero body ([59] [35], "
+          "section 1 (k)) -- its RECONSTRUCTION now matches retail's shape on every cast stop",
+          f"ours {ours}")
+    z = sorted((r["port"], round(r["t"], 3), r["agent"], r["interrupter"], r["stop"][0])
+               for r, _f in bodies if r["capture"] == ZAISHEN)
+    check(z == [("50061", 174.9, 8, 399, 59), ("50061", 179.651, 10, 426, 59),
+                ("50061", 205.163, 8, 426, 59), ("50061", 216.726, 8, 426, 59),
+                ("58544", 593.808, 8, 426, 59), ("58544", 597.314, 8, 399, 59),
+                ("58544", 605.789, 9, 426, 59), ("58544", 607.819, 10, 399, 59)]
+          and all(r["interrupter_agent"] == 6 for r, _f in bodies if r["capture"] == ZAISHEN),
+          f"NEW (OBSERVED, {ZAISHEN}): the 8 body [35] -- the observer's henchmen 8 / 9 / 10, "
+          f"each mid-cast ([59]), interrupted by agent 6's 399 (x3) or 426 (x5), named by its "
+          f"announcement onto the victim",
+          f"{z}")
+    zo = {round(r["t"], 3): [(op, vals) for op, vals in r["run"]] for r in mine
+          if r["capture"] == ZAISHEN}
+    check(zo == {197.153: [(INT, [HOLD, 7, 0]), (E5, [7, SIGNET, 0, 4]),
+                           (INT, [STOP_SKILL, 7, 0]), (E2, [7, SIGNET, 0]),
+                           (INT, [INTERRUPTED, 7, 0]), (INT, [HOLD, 7, 1])],
+                 621.054: [(INT, [HOLD, 7, 0]), (INT, [STOP_SKILL, 7, 0]), (E2, [7, 2, 0]),
+                           (INT, [INTERRUPTED, 7, 0]),
+                           (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET, [4, 7, 4, 0]),
+                           (INT, [HOLD, 7, 1]), (E5, [7, 2, 0, 20])]},
+          f"NEW (OBSERVED, {ZAISHEN}): the observer's two -- 426 on Healing Signet (1): the "
+          f"table recharge's E5(4) and NO disable E5, then [8, 1]; 399 on skill 2 (table "
+          f"recharge 0): NO first E5, the disable E5(20) AFTER the chain's [4] and [8, 1]. Our "
+          f"server models neither interrupter (content rows 340 / 230 only): escalated",
+          f"{zo}")
     # The own / other split, on the corrected observer (studies/skills 43.8): the
     # first-0x00E3 rule this reader used named the JARIN HERO as the player of
     # 20260914T005758 conn 56011 and nobody on 69 connections, and the fix pass's
@@ -522,11 +631,31 @@ def section_corpus():
           "P5 as registered: no batch holds a [63] and a [35] on one agent (a real "
           "predicate now; the first cut's ended in `or True`)",
           f"p5 {sc['p5']}, [63] with [35]: {sc['knockdown_with_35']}")
-    check(sc["knockdown_with_35"] == 0
-          and all(r["kind"] != "knockdown" for r in c["stops"]),
+    # RE-SCOPED 2026-09-28 (CASTAI-Z1). The Zaishen capture holds the corpus's first stop
+    # riding a [63]: a knock-down landing on a body mid-cast. The conjunction stays exact on
+    # the captures it was written on; the half that is the claim -- a knock-down is not an
+    # interrupt, no [35] -- is carried over the whole corpus; the new stop is a witness.
+    check(sc_pin["knockdown_with_35"] == 0
+          and all(r["kind"] != "knockdown" for r in at_pin["stops"]),
           "no [63] rides a [35] batch and no stop rides a [63] batch: a knock-down is not "
-          "an interrupt on the wire (WIKI agrees)",
-          f"{sc['kinds']}, [63] with [35]: {sc['knockdown_with_35']}")
+          "an interrupt on the wire (WIKI agrees) (the captures at the pin)",
+          f"{sc_pin['kinds']}, [63] with [35]: {sc_pin['knockdown_with_35']}")
+    kd = [r for r in c["stops"] if r["kind"] == "knockdown"]
+    check(sc["knockdown_with_35"] == 0 and not any(r["knockdown_too"] for r in tfs)
+          and all(r["prop"] in (STOP_SKILL, STOP_ATKSKILL) and not r["e2"] and not r["e5"]
+                  for r in kd),
+          f"SIGNATURE (whole corpus): no [63] rides a [35] batch on one agent, and a stop "
+          f"that DOES ride a [63] -- {len(kd)} -- is a CAST's stop ([59] / [49]) carrying no "
+          f"[35]: a knock-down stops a cast without the interrupt's stagger",
+          f"{sc['kinds']}; {[(r['capture'], r['port'], round(r['t'], 3), r['prop'], r['agent']) for r in kd]}")
+    zk = [(r["port"], round(r["t"], 3), r["prop"], r["agent"], r["own"]) for r in kd
+          if r["capture"] <= PIN]
+    check(zk == [("50061", 168.977, STOP_SKILL, 8, False)],
+          f"NEW (OBSERVED, {ZAISHEN}): the corpus's one knock-down stop through that capture "
+          f"-- agent 8 (the Zaishen Healer, casting 288 Healing Breeze) mid-cast ([60, 8, 288] at 168.171 with a 2.0 s "
+          f"cast-time word), [59, 8, 0] and [63, 8, 2.0] in one batch after agent 5's [60, 5, "
+          f"8, 162] -- no [35]. OUR knock_down drops a body's cast with NO stop word: escalated",
+          f"{zk}")
     cast = sc["witnesses"].get("20260916T213125 57894 cast")
     swing = sc["witnesses"].get("20260917T224104 62557 swing")
     if cast is None or swing is None:
