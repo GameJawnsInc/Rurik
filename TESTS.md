@@ -14496,13 +14496,15 @@ No vault, no client, no server. 150 checks, floor 150. ~1 s)
   swapped for a Clock) and records a cast as a slot's recharge moving. §1 the leaf
   predicate on literal inputs (bare). §2 (a) the Hatcher's bar (ENEMY_SKILL_BAR) over 120 s:
   never two live 253 on the player, one close between each pair of 253 casts, every slot
-  fires, and after each close the gate's FIRST look at 253 passes and 253 is cast on that
-  tick; (a') a lone-253 caster re-casts on the SAME world tick as each close (gap 0 --
-  effect_tick runs before the AI ticks, so the [60] rides the 0x0044's batch): asserted AS
-  a RECONSTRUCTION faster than retail, whose AI re-casts come >= 0.228 s after a
-  same-skill end (0 of 95 inside 0.2 s), never as agreement; a faithful ~0.23 s hold would
-  redden it on purpose. With the full bar the re-cast waits for round robin's cursor to
-  come round, which is the selector's business, not the gate's. §3 (b) the KNOWN-BAD arm: the first 24 (tick,
+  fires, and after each close the gate's FIRST look at 253 HOLDS it (the re-arm,
+  `LIVE_EFFECT_REARM`, `--live-effect-rearm`), every look inside the next 0.25 s holds,
+  and the first look past the beat passes with 253 cast on that tick; (a') a lone-253
+  caster re-casts exactly 0.25 s (5 ticks) after each close -- never inside retail's
+  0.228 s minimum (OBSERVED 0 of 95 AI re-casts inside 0.2 s of a same-skill end; the beat
+  itself RECONSTRUCTION) -- and its KNOWN-BAD arm, `--live-effect-rearm 0`, re-casts on the
+  close's own tick (gap 0, the [60] in the 0x0044's batch: the slice as first shipped).
+  With the full bar the re-cast waits for round robin's cursor to come round, which is
+  the selector's business, not the gate's. §3 (b) the KNOWN-BAD arm: the first 24 (tick,
   skill) casts equal 19213513's own, recorded by driving this file's `fight` through a
   `git archive 19213513` export; the stacked 253s return (max live 3). §4 (c) a hostile's
   Flail (10) and a hero's Frenzy (346) re-cast while live, each replacing the live one;
@@ -14514,7 +14516,7 @@ No vault, no client, no server. 150 checks, floor 150. ~1 s)
   Poisoned player -- the wrapper's `area=` fact, driven; Sever Artery (382, an attack)
   never held;
   (g) an all-held two-253 bar casts nothing for 3 s, looks at each slot once a tick,
-  charges no recharge and resumes at the first look after the close. §5 (h) the form: a
+  charges no recharge and resumes past the re-arm beat, inside one swing's windup. §5 (h) the form: a
   rowless self cast (bare), the legacy cast form untouched -- its [60] AND its property
   61, which keeps the site's target (0x00A3) where the default self cast rides 0x00A2
   (bare); a hurt hostile's
@@ -14522,7 +14524,8 @@ No vault, no client, no server. 150 checks, floor 150. ~1 s)
   Healing Signet, the player's own Healing Signet pressed with a foe selected -- each
   0x009F [60, caster, skill], the revert restoring today's 0x00A0; a hero's Frenzy [48]
   on 0x009F; a targeted 253 on 0x00A0 both arms; property 61 on 0x00A2 / 0x00A3. §6 (i)
-  source: both flags in serverargs and flipped in main() (AST); the gate called once
+  source: both flags in serverargs and flipped in main() (AST); the re-arm's default
+  0.25 at import (a literal) and `--live-effect-rearm` set in main(); the gate called once
   from each loop and never from pick_skill; cast_anim_msg and cast_time_word resolve the
   landing; the gate between the target gate and the reach / resource gates; four
   cast_anim_msg sites. PROVEN RED by ten hand plants (the report of 2026-09-27): each
@@ -14531,7 +14534,9 @@ No vault, no client, no server. 150 checks, floor 150. ~1 s)
   main() flip removed, property 61 ignoring the landing, the gate ignoring its flag; and
   after the review, three more (the wrapper's area fact dropped, the legacy form's
   property 61 following the landing, 253's duration drifting to 17 s with the vault
-  present), each red. Needs the vault's skills table for §2-§5's driven halves, which
+  present), each red; and for the re-arm beat (the orchestrator's follow-up), three
+  more: the default set to 0, the re-arm removed, the re-arm never cleared -- 1, 2 and 6
+  red. Needs the vault's skills table for §2-§5's driven halves, which
   skip ONLY when vaultpath finds no vault `content/skills.toml`; a present vault missing
-  a row, or with 253 not at 18 s, is a FAIL. No client, no socket. 76 checks with the
-  vault, floor 34 (the bare run). ~40 s)
+  a row, or with 253 not at 18 s, is a FAIL. No client, no socket. 78 checks with the
+  vault, floor 35 (the bare run). ~40 s)

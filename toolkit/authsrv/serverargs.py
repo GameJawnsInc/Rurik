@@ -1447,6 +1447,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "The standing Hatcher is a Monk with four spells, so "
                          "`--enemy` alone spawns a caster now (--enemy-weapon, "
                          "--no-enemy-skills or this flag give the walk-in).")
+    ap.add_argument("--live-effect-rearm", type=float, default=None, metavar="SECONDS",
+                    help="CASTAI: how long after a held effect CLOSES its slot is free "
+                         "again (default 0.25 s, one retail AI beat -- OBSERVED 0 of 95 "
+                         "AI re-casts inside 0.2 s of a same-skill end, minimum 0.228 s). "
+                         "0 re-casts on the close's own tick, the [60] in the 0x0044's "
+                         "batch (the slice as first shipped).")
     ap.add_argument("--no-skip-live-effect", action="store_true",
                     help="CASTAI REVERT (DESKWORK-D8 step 6, owner's ruling PLAN.md "
                          "sec.7 Q19): a hostile or a party body casts the slot round "

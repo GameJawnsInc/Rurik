@@ -26,10 +26,12 @@ WHAT IT IS REALLY CHECKING. Two things shipped together, each behind its own rev
   2  (a) the Hatcher's bar (ENEMY_SKILL_BAR, {276, 253, 312, 289}) over a 120 s fight
      through the real ticks on a fake clock: never two live 253 episodes on the player,
      253 re-cast after every close, every slot fires, and after each close the gate's
-     first look at 253 lets it through and it is cast THAT tick; (a') a lone-253 caster
-     re-casts on the SAME world tick as each close (gap 0 -- a RECONSTRUCTION faster
-     than retail's 0.228 s minimum, stated, not claimed as agreement), the recharge
-     never charged by a hold.
+     first look at 253 HOLDS it for one AI beat (LIVE_EFFECT_REARM, 0.25 s) and the
+     first look past the beat lets it through and it is cast THAT tick; (a') a lone-253
+     caster re-casts exactly 0.25 s (5 ticks) after each close -- never inside retail's
+     0.228 s minimum (n=95) -- and its known-bad arm, --live-effect-rearm 0, re-casts on
+     the close's own tick (gap 0, the slice as first shipped); the recharge never
+     charged by a hold.
   3  (b) the KNOWN-BAD arm: --no-skip-live-effect gives the pre-CASTAI server's slot
      sequence exactly (the literal below was recorded by driving THIS fixture through
      a `git show 19213513:toolkit/authsrv/authsrv.py` export) and the stacked episodes
@@ -77,11 +79,12 @@ import episodemods                                             # noqa: E402
 import vaultpath                                               # noqa: E402
 
 # Floor from the BARE-MACHINE green run (RURIK_VAULT=C:/nonexistent-vault), 2026-09-27,
-# re-measured after the review fixes: 34 -- section 1's predicate (20), section 5's
+# re-measured after the re-arm beat: 35 -- section 1's predicate (20), section 5's
 # rowless form (5, the legacy property-61 check added) and section 6's source checks
-# (9). 76 with the vault. A driven section skips ONLY when the vault is absent; a
-# present vault missing a row is a FAIL (vault_skills / rows_problem).
-LEDGER = checks.Ledger("cast gate (CASTAI)", floor=34)
+# (10, the re-arm's default and flag added). 78 with the vault. A driven section skips
+# ONLY when the vault is absent; a present vault missing a row is a FAIL (vault_skills /
+# rows_problem).
+LEDGER = checks.Ledger("cast gate (CASTAI)", floor=35)
 check = checks.adopt(LEDGER)
 
 P = authsrv.PLAYER_AGENT_ID
@@ -100,7 +103,9 @@ HOSTILE, ALLY, HERO = 10, 11, 200
 TICK = 0.05
 T0 = 1_000_000.0
 FLAGS = ("SKIP_LIVE_EFFECT", "SELF_CAST_FORM", "CAST_FORM", "ENERGY", "NPC_FOLLOW",
-         "CASTER_OPENING", "CONDITION_HEAL_RULE", "EFFECTS", "INSTANT_ANNOUNCE")
+         "CASTER_OPENING", "CONDITION_HEAL_RULE", "EFFECTS", "INSTANT_ANNOUNCE",
+         "LIVE_EFFECT_REARM")
+BEAT = 0.25                          # authsrv.LIVE_EFFECT_REARM's default, as a LITERAL
 
 # THE KNOWN-BAD ARM'S LITERAL: the first 24 (tick index, skill) casts of fight(bar=the
 # Hatcher's) on the pre-CASTAI server, recorded 2026-09-27 by driving this file's
@@ -135,7 +140,8 @@ def arm(A=authsrv, clock=None, **flags):
     saved_time = A.time
     base = {"SKIP_LIVE_EFFECT": True, "SELF_CAST_FORM": True, "CAST_FORM": "follows-target",
             "ENERGY": False, "NPC_FOLLOW": False, "CASTER_OPENING": True,
-            "CONDITION_HEAL_RULE": True, "EFFECTS": True, "INSTANT_ANNOUNCE": True}
+            "CONDITION_HEAL_RULE": True, "EFFECTS": True, "INSTANT_ANNOUNCE": True,
+            "LIVE_EFFECT_REARM": BEAT}
     base.update(flags)
     for k, v in base.items():
         setattr(A, k, v)
@@ -235,8 +241,8 @@ def recording_consults(A=authsrv):
     real = A.live_effect_hold
     seen = []
 
-    def spy(state, caster_id, agent, skill_id, cast_target):
-        out = real(state, caster_id, agent, skill_id, cast_target)
+    def spy(state, caster_id, agent, skill_id, cast_target, now=None):
+        out = real(state, caster_id, agent, skill_id, cast_target, now)
         seen.append((A.time.time(), caster_id, skill_id, out is not None))
         return out
     A.live_effect_hold = spy
@@ -373,7 +379,7 @@ def section_hatcher():
           "every other slot still fires -- the hold steps the cursor past 253 rather "
           "than stalling the bar (DESKWORK-D8 step 4's lesson)",
           f"{sorted(fired)} counts {[sum(1 for _i, s in hat if s == k) for k in (RESTORE, SCOURGE, HOLY, VITAL)]}")
-    # THE FIRST LOOK AFTER A CLOSE LETS IT THROUGH, AND IT IS CAST THAT TICK.
+    # AFTER A CLOSE: THE FIRST LOOK HOLDS FOR ONE BEAT, THE FIRST LOOK PAST IT CASTS.
     looks = [(t, held) for t, a, s, held in rec["consults"] if a == HOSTILE and s == SCOURGE]
     good, detail = True, []
     for c in closes:
@@ -381,15 +387,24 @@ def section_hatcher():
         after = [(t, held) for t, held in looks if t >= tc]
         if not after:
             continue
-        t_first, held = after[0]
-        k = int(round((t_first - T0) / TICK))
-        cast_then = k in n253
-        detail.append((c, k, held, cast_then))
-        good = good and (not held) and cast_then
+        t_first, held_first = after[0]
+        inside = [held for t, held in after if t < t_first + BEAT - 1e-6]
+        past = [(t, held) for t, held in after if t >= t_first + BEAT - 1e-6]
+        if not past:
+            continue
+        t_go, held_go = past[0]
+        k_go = int(round((t_go - T0) / TICK))
+        cast_inside = [i for i in n253 if c <= i < k_go]
+        detail.append((c, int(round((t_first - T0) / TICK)), k_go, held_first,
+                       all(inside), held_go, k_go in n253))
+        good = (good and held_first and all(inside) and not held_go and k_go in n253
+                and not cast_inside)
     check(good and detail,
-          "after each close the gate's FIRST look at 253 lets it through and 253 is cast "
-          "on that very tick -- eligible once the close is in the table, nothing added",
-          f"(close, first look, held?, cast?) {detail}")
+          "after each close the gate's FIRST look at 253 HOLDS it (the re-arm), every look "
+          "inside the next 0.25 s holds, and the first look past the beat lets it through "
+          "and 253 is cast on that very tick -- no 253 inside the beat",
+          f"(close, first look, go tick, held first?, held inside?, held at go?, cast?) "
+          f"{detail}")
     held_while_live = sum(1 for _t, held in looks if held)
     check(held_while_live >= len(closes),
           "and the gate DID hold 253 while it was live (the arm is live, not vacuous)",
@@ -401,28 +416,40 @@ def section_hatcher():
           "its line names the skill, the target and 'already carries', at most once per "
           "5 s", f"{len(lines)} lines: {lines[:1]}")
 
-    print("== 2. (a') a lone-253 caster re-casts on the SAME world tick as each close ==")
-    with arm(clock=Clock(T0)):
-        st = world(authsrv)
-        st["agents"][HOSTILE] = body(authsrv, ((SCOURGE, 1.0, 5.0),),
-                                     agents.ALLEGIANCE_HOSTILE, attack_speed=1e6)
-        rec = fight(authsrv, st, 80.0)
-    n253 = [i for i, a, s in rec["casts"] if a == HOSTILE and s == SCOURGE]
-    closes = rec["closes"].get((P, SCOURGE), [])
-    gaps = [min((i - c for i in n253 if i >= c), default=None) for c in closes]
-    # WHAT THIS MEASURES, AND IT IS NOT RETAIL. effect_tick runs before the AI ticks in
-    # one world tick, so the close and the re-cast share a tick (gap 0) -- the [60]
-    # rides the 0x0044's own batch. RECONSTRUCTION, deviating from retail: OBSERVED 0 of
-    # 95 AI re-casts inside 0.2 s of a same-skill end, minimum 0.228 s (SKIP_LIVE_EFFECT's
-    # banner). Left so under Q19's narrow ruling; a faithful ~0.23 s hold reddens this
-    # check ON PURPOSE, and whoever adds it re-aims it.
-    check(len(closes) >= 3 and all(g == 0 for g in gaps),
-          "each re-cast starts on the SAME world tick as the close (gap 0) -- "
-          "RECONSTRUCTION, faster than retail's 0.228 s minimum (n=95 AI re-casts)",
+    print("== 2. (a') a lone-253 caster re-casts ONE AI BEAT (0.25 s) after each close ==")
+
+    def lone(rearm):
+        with arm(clock=Clock(T0), LIVE_EFFECT_REARM=rearm):
+            st = world(authsrv)
+            st["agents"][HOSTILE] = body(authsrv, ((SCOURGE, 1.0, 5.0),),
+                                         agents.ALLEGIANCE_HOSTILE, attack_speed=1e6)
+            rec = fight(authsrv, st, 80.0)
+        n253 = [i for i, a, s in rec["casts"] if a == HOSTILE and s == SCOURGE]
+        closes = rec["closes"].get((P, SCOURGE), [])
+        gaps = [min((i - c for i in n253 if i >= c), default=None) for c in closes]
+        return rec, n253, closes, gaps
+
+    rec, n253, closes, gaps = lone(BEAT)
+    # The close's own tick carries the 0x0044 (effect_tick runs before the AI ticks), and
+    # the lone slot is looked at every tick, so the re-cast's [60] trails the 0x0044 by
+    # exactly the beat: 5 ticks of 50 ms. OBSERVED retail: 0 of 95 AI re-casts inside
+    # 0.2 s of a same-skill end, minimum 0.228 s (castethogram-events.json; the Isle
+    # friendly's 160, n=79: 0.228 / 0.236 / 0.249 s fastest per build). The beat is
+    # RECONSTRUCTION (the ~0.25 s grid retail's AI casts sit on), not a measured constant.
+    beat_ticks = int(round(BEAT / TICK))
+    check(len(closes) >= 3 and all(g == beat_ticks for g in gaps)
+          and all(g * TICK >= 0.228 for g in gaps),
+          f"each re-cast starts exactly {BEAT} s ({beat_ticks} ticks) after the close -- never "
+          f"inside retail's 0.228 s minimum (n=95 AI re-casts)",
           f"closes {closes} casts {n253} gaps(ticks) {gaps}")
     check(len(n253) == len(closes) + 1 and rec["live"][(P, SCOURGE)] == 1,
           "one cast per episode, never two live -- the recharge (5 s) is not what paces it",
           f"{len(n253)} casts, {len(closes)} closes")
+    _rec0, n0, closes0, gaps0 = lone(0.0)
+    check(len(closes0) >= 3 and all(g == 0 for g in gaps0),
+          "KNOWN-BAD ARM, --live-effect-rearm 0: the re-cast rides the close's own tick "
+          "(gap 0, its [60] in the 0x0044's batch) -- the slice as first shipped, faster than "
+          "any retail AI re-cast", f"closes {closes0} casts {n0} gaps(ticks) {gaps0}")
     return True
 
 
@@ -594,8 +621,8 @@ def section_classes():
           f"{max(per_tick.values())}")
     check([s for _i, a, s in rec2["casts"] if a == HOSTILE][:1] == [SCOURGE]
           and rec2["casts"][0][0] * TICK <= swing_bound,
-          "and once the hex expires the bar resumes with a 253 -- at the first look, "
-          "inside one swing's windup of the close",
+          "and once the hex expires the bar resumes with a 253 -- past the 0.25 s re-arm "
+          "beat, inside one swing's windup of the close",
           f"{rec2['casts'][:2]}")
 
 
@@ -780,6 +807,13 @@ def section_source():
           "main() flips SELF_CAST_FORM off under --self-cast-names-target")
     check(authsrv.SKIP_LIVE_EFFECT is True and authsrv.SELF_CAST_FORM is True,
           "both default ON at import")
+    main_src = ast.get_source_segment(src, main_fn)
+    check('"--live-effect-rearm"' in args
+          and "LIVE_EFFECT_REARM = a.live_effect_rearm" in main_src
+          and authsrv.LIVE_EFFECT_REARM == BEAT,
+          "the re-arm beat defaults to 0.25 s at import (the literal, not the module's own "
+          "value) and --live-effect-rearm sets it in main()",
+          f"{authsrv.LIVE_EFFECT_REARM}")
     check(len(_calls(_func(tree, "enemy_attack_tick"), "live_effect_hold")) == 1
           and len(_calls(_func(tree, "ally_cast_tick"), "live_effect_hold")) == 1,
           "the gate is called once from each loop -- the hostile's and the party's")

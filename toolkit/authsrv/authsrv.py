@@ -26862,17 +26862,25 @@ def morale_experience(send, state, conn_id, gained):
 # and uncharged, the cursor stepped past it, a same-tick re-pick; a slot re-picked after
 # being held ends the search, so an all-held bar casts nothing and does not spin).
 #
-# RE-ELIGIBILITY IS A RECONSTRUCTION THAT DEVIATES FROM RETAIL, and is left so under
-# Q19's narrow ruling (no timing rule added). The world tick runs effect_tick BEFORE
-# enemy_attack_tick and ally_cast_tick, so the slot is eligible on the SAME world tick
-# that closes the episode: a caster whose cursor is on the slot re-casts 0 s after the
-# close, its [60] in the same batch as the 0x0044 (test_castgate 2(a'), gap 0 ticks; a
-# hostile's swing in flight can delay it). Retail is never that fast. OBSERVED
-# (castethogram-events.json): 0 of 95 AI casts with a same-skill end before them began
-# within 0.2 s of it, minimum 0.228 s; the Isle friendly 108's 160 on the player, n=79
-# over three builds, has a fastest re-cast of 0.228 / 0.236 / 0.249 s per build and 22 of
-# 79 inside 0.25 s. Holding the slot until the close plus about one retail AI beat
-# (~0.23 s) would be the faithful rule; it is the owner's call, not this slice's.
+# RE-ELIGIBILITY: ONE RETAIL AI BEAT AFTER THE CLOSE (LIVE_EFFECT_REARM, 0.25 s). The
+# world tick runs effect_tick BEFORE enemy_attack_tick and ally_cast_tick, so without a
+# re-arm the held slot is eligible on the SAME world tick that closes the episode and its
+# [60] rides the 0x0044's own batch -- what the slice first shipped (the review's WIRE-1).
+# Retail is never that fast. OBSERVED (castethogram-events.json): 0 of 95 AI casts with a
+# same-skill end before them began within 0.2 s of it, minimum 0.228 s; the Isle friendly
+# 108's 160 on the player, n=79 over three builds, has a fastest re-cast of 0.228 / 0.236 /
+# 0.249 s per build. So a slot this gate HELD stays held for 0.25 s after the first look
+# that finds its episode GONE -- which is the close's own tick when the gate was looking
+# (effect_tick runs first), so the [60] follows the 0x0044 by at least 0.25 s on the wire
+# and never by less, whether the episode expired or was removed early. Anchoring on the
+# planned end instead would put the wire gap at 0.20-0.25 s (the 0x0044 goes out on the
+# first 50 ms tick at or after it), partly under retail's 0.228 s. RECONSTRUCTION: the
+# beat is the ~0.25 s grid retail's AI casts sit on (the critic's CRIT-11: reactions
+# 0.228-0.25 s, Isle intervals on 0.25 s multiples), not a measured constant. A slot the
+# gate never held (its recharge outlasted the effect) is not re-armed: nothing lines it
+# up with the close.
+# --live-effect-rearm 0 is the same-tick re-cast. Added by the orchestrator after the
+# review, inside Q19's gate (when a held slot counts as free again), not a selection rule.
 #
 # THE EVIDENCE, and what it does not reach. WIKI (GWW "Hero behavior" rev 2741080):
 # heroes know every active effect and do not apply an enchantment, hex, condition or
@@ -26888,10 +26896,16 @@ def morale_experience(send, state, conn_id, gained):
 # is episodemods.live_effect_class's docstring. --no-skip-live-effect reverts: the cast
 # path as it was, round robin's slot cast whatever the target carries.
 SKIP_LIVE_EFFECT = True
+LIVE_EFFECT_REARM = 0.25             # --live-effect-rearm SECONDS; 0 = the close's own tick
 
 
-def live_effect_hold(state, caster_id, agent, skill_id, cast_target):
-    """(wearer, why) when the live-effect gate holds this slot, else None. Pure read.
+def live_effect_hold(state, caster_id, agent, skill_id, cast_target, now=None):
+    """(wearer, why) when the live-effect gate holds this slot, else None.
+
+    NOT A PURE READ since the re-arm: a hold marks agent['live_effect_seen'][(skill,
+    wearer)], and the first look that finds the episode gone turns the mark into
+    agent['live_effect_rearm'][(skill, wearer)] = that look + the beat (the banner
+    above). `now` defaults to the server clock the ticks read.
 
     THE LANDING TARGET, not the cast site's: land_skill lands the effect through
     apply_effect -> `effects.effect_recipient` (the record's byte 0 is the CASTER even
@@ -26918,9 +26932,6 @@ def live_effect_hold(state, caster_id, agent, skill_id, cast_target):
     caster; the two disagree for byte 3), and the fix is the landing's, not the gate's.
     """
     if not SKIP_LIVE_EFFECT:
-        return None
-    table = state.get("effects")
-    if not table or not table.live:
         return None
     try:
         row = agents.WORLD.get("skills", str(skill_id))
@@ -26951,8 +26962,28 @@ def live_effect_hold(state, caster_id, agent, skill_id, cast_target):
                   if klass == "same-skill" else tid)
     except (KeyError, TypeError, ValueError):
         return None
-    why = episodemods.carries_live_effect(table, wearer, skill_id, klass, condition_id)
-    return (wearer, why) if why else None
+    table = state.get("effects")
+    why = (episodemods.carries_live_effect(table, wearer, skill_id, klass, condition_id)
+           if table and table.live else None)
+    key = (skill_id, wearer)
+    if why:
+        agent.setdefault("live_effect_seen", {})[key] = True
+        agent.get("live_effect_rearm", {}).pop(key, None)
+        return (wearer, why)
+    if LIVE_EFFECT_REARM <= 0:
+        return None
+    now = time.time() if now is None else now
+    rearm = agent.setdefault("live_effect_rearm", {})
+    if key not in rearm:
+        seen = agent.get("live_effect_seen") or {}
+        if not seen.pop(key, False):
+            return None                  # never held: nothing lines it up with a close
+        rearm[key] = now + LIVE_EFFECT_REARM
+    at = rearm[key]
+    if now >= at - 1e-6:                 # the ticks' clock sums 50 ms steps
+        del rearm[key]
+        return None
+    return (wearer, f"skill {skill_id} (closed; re-armed in {at - now:.2f} s, one AI beat)")
 
 
 def live_effect_note(state, conn_id, caster_id, agent, skill_id, held, who, now):
@@ -27345,7 +27376,7 @@ def enemy_attack_tick(send, state, conn_id):
             # HOLD the slot the heal gate's way (SKIP_LIVE_EFFECT's banner; the
             # predicate is episodemods.live_effect_class). Its own stamp, like the
             # reach hold's: two holds on one tick are two facts for a run reader.
-            _carry = (live_effect_hold(state, agent_id, agent, _sid, cast_target)
+            _carry = (live_effect_hold(state, agent_id, agent, _sid, cast_target, now)
                       if cast_target is not None else None)
             if _carry is not None:
                 _held.add(slot)
@@ -27747,7 +27778,7 @@ def ally_cast_tick(send, state, conn_id):
                     # target already carries this skill's effect -- held like
                     # a slot with nobody to aim at, by the hold just below
                     # (SKIP_LIVE_EFFECT's banner).
-                    _carry = live_effect_hold(state, agent_id, agent, _sid, target)
+                    _carry = live_effect_hold(state, agent_id, agent, _sid, target, now)
                     if _carry is None:
                         break
                     live_effect_note(state, conn_id, agent_id, agent, _sid, _carry,
@@ -43404,6 +43435,16 @@ def main():
               "round robin picked even when its target already carries that effect "
               "-- every run before CASTAI (2026-09-27), the stacked hexes of "
               "studies/skills 16.1.", flush=True)
+    if a.live_effect_rearm is not None:
+        global LIVE_EFFECT_REARM
+        if a.live_effect_rearm < 0:
+            raise SystemExit(f"--live-effect-rearm {a.live_effect_rearm}: a delay is 0 or more "
+                             f"seconds (0 = the close's own tick)")
+        LIVE_EFFECT_REARM = a.live_effect_rearm
+        print(f"[enemy] --live-effect-rearm {LIVE_EFFECT_REARM:g}: a slot the live-effect "
+              f"gate held is free again {LIVE_EFFECT_REARM:g} s after the episode closes "
+              f"(default 0.25, one retail AI beat; 0 = the close's own tick, the slice as "
+              f"first shipped).", flush=True)
     if a.self_cast_names_target:
         global SELF_CAST_FORM
         SELF_CAST_FORM = False
