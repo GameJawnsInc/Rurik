@@ -91,6 +91,33 @@ RECORD = {
     "858": _record(1.0, 0.75, 5, 5, 30, 7, 5, 5, 0.0, 2, (0, 0), (5, 35), (1800, 1800),
                    854, 855, combo=1, half_range=True),         # Dancing Daggers
 }
+RECORD_BUILD = 38797      # the build RECORD's rows were copied from (section 2b checks it)
+# Where RECORD's 38797 copy differs from a loaded row, per the build that row records:
+# MEASURED 2026-09-28, skilltable.parse_record on the pristine 38888 image against the
+# 38797 one -- 229 energy 15 -> 10, 339 scale 5..20 -> 10..25, 858 aoe_range 0.0 -> 2400.0.
+RECORD_DRIFT = {38797: {},
+                38888: {"229": ["energy"], "339": ["scale0", "scale15"],
+                        "858": ["aoe_range"]}}
+
+
+def _client_rows(build):
+    """{skill_id: record} read by skilltable from the vault's pristine image of `build`,
+    or a string saying why there is none."""
+    cscan = os.path.join(os.path.dirname(HERE), "clientscan")
+    if cscan not in sys.path:
+        sys.path.insert(0, cscan)
+    import pinned                                               # noqa: PLC0415
+    import skilltable                                           # noqa: PLC0415
+    try:
+        exe, _why = pinned.find(build=build)
+    except SystemExit as exc:
+        return f"no pristine image of build {build}: {str(exc)[:60]}"
+    with open(exe, "rb") as fh:
+        data = fh.read()
+    if skilltable.build_of(data) != build:
+        return f"{exe} is not build {build}'s pristine image"
+    base, count, _score = skilltable.locate_table(data)
+    return {i: skilltable.parse_record(data, base, i) for i in range(count)}
 
 # The attribute tables: the cost curve (clientscan/attribpoints.py) and each
 # attribute's profession and primary flag -- the three columns attribute_state
@@ -240,13 +267,53 @@ def section_record_rows():
     if not full_skills_table(skills):
         LEDGER.skip("section 2b", "the full skills table (vault/content) is absent -- 1 check")
     else:
-        off = {k: [c for c, v in row.items() if (skills.get(k) or {}).get(c, "absent") != v]
+        # RECORD was copied from build 38797's rows (RECORD_BUILD), so it is compared with
+        # 38797's rows: the vault's own where the loaded row records 38797, else the 38797
+        # client table read by skilltable from the pristine image -- never with another
+        # build's row, and never re-copied to match one (2026-09-28, the regenerate-from-
+        # 38888 arc: on the 38888 table three rows differ, the next check).
+        ref, src, missing = {}, {}, []
+        pin_rows = None
+        for k in RECORD:
+            r = skills.get(k)
+            if r is not None and int(r.provenance.get("build", 0)) == RECORD_BUILD:
+                ref[k], src[k] = r, "vault"
+                continue
+            if pin_rows is None:
+                pin_rows = _client_rows(RECORD_BUILD)
+            if isinstance(pin_rows, str):
+                missing.append((k, pin_rows))
+                continue
+            ref[k], src[k] = pin_rows[int(k)], f"client {RECORD_BUILD}"
+        off = {k: [c for c, v in row.items() if (ref.get(k) or {}).get(c, "absent") != v]
                for k, row in RECORD.items()}
         off = {k: cols for k, cols in off.items() if cols}
-        check(not off,
-              f"every one of the {len(RECORD)} skills rows RECORD carries is the vault's own, "
-              f"column for column -- so a block run on them takes the path a vault row would",
-              str(off))
+        check(not off and not missing and len(ref) == len(RECORD),
+              f"every one of the {len(RECORD)} skills rows RECORD carries is build "
+              f"{RECORD_BUILD}'s own, column for column (the vault's rows where they record "
+              f"{RECORD_BUILD}, else that build's client table) -- so a block run on them takes "
+              f"the path a {RECORD_BUILD} vault row would",
+              str((off, missing, sorted(collections.Counter(src.values()).items()))))
+        # And against the rows the vault LOADED, keyed on the build each row records: the
+        # columns in which RECORD's 38797 copy differs from that build's row, MEASURED
+        # (RECORD_DRIFT). A row of a build with no entry there FAILS, naming the build.
+        drift, unknown = {}, []
+        for k, row in RECORD.items():
+            r = skills.get(k) or {}
+            b = int(r.provenance.get("build", 0)) if hasattr(r, "provenance") else None
+            if b not in RECORD_DRIFT:
+                unknown.append((k, b))
+                continue
+            cols = [c for c, v in row.items() if r.get(c, "absent") != v]
+            if cols or k in RECORD_DRIFT[b]:
+                drift[k] = (b, cols, RECORD_DRIFT[b].get(k, []))
+        check(not unknown and all(got == want for _b, got, want in drift.values()),
+              f"and against the vault's LOADED rows, RECORD differs exactly where its build "
+              f"was re-balanced: nowhere on a {RECORD_BUILD} row; on a 38888 row 229's energy "
+              f"(15 -> 10), 339's scale (5..20 -> 10..25) and 858's aoe_range (0 -> 2400) -- "
+              f"so on the 38888 table a block run on RECORD pins the {RECORD_BUILD} numbers, "
+              f"said so rather than passed",
+              str((drift, unknown)))
     cost, attrs = agents.WORLD.rows("attribute_cost"), agents.WORLD.rows("attribute")
     if not cost or not attrs:
         LEDGER.skip("section 2b", "the attribute tables (vault/content) are absent -- 1 check")
