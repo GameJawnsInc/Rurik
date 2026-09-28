@@ -2942,16 +2942,24 @@ UNVERIFIED (no tape holds one). --no-adrenaline-block reverts. The hex draws [6,
 [6, foe, 4] (the Mesmer class, Empathy's; keyed on this record's profession, RECONSTRUCTION)."""
 
 [skill_effect.204]
-bonus_scale_means = "Cold damage"                # the 10..70 in the BONUS slot (the scale 1..10 is the Overcast disable, unmodelled)
+bonus_scale_means = "Cold damage"                # the 10..85 in the BONUS slot (the scale 1..10 is the Overcast disable, unmodelled)
 damage0 = 10                                     # the explicit endpoints: the bonus bit is clear
-damage15 = 70                                    # and 10 != 70 -- CONTESTED against the wiki's 10..85
+damage15 = 85                                    # and 10 != 85 -- build 38888's client row, CORROBORATED by the wiki's 10..85
 damage_type = 3                                  # cold ([damage_type.table]), the page's own word
 hits_on_cast = true                              # "Deals 10..85 cold damage to target and adjacent foes." -- the hit AND the hex
 signet_activation_multiplier = 2                 # "take twice as long to activate signets" -- no client slot
 [skill_effect.204.provenance]
 source = "wiki"
 page = 'GWW, "Rust", {{Skill infobox}} + {{Skill progression}}, rev. 2740665, read 2026-09-27'
-verified = """studies/weapons/PLAN.md 43 (B2). Wiki: "Hex Spell. Deals 10...85 cold damage to \
+build = 38888                                    # the client build damage0/15 were read from (the RECORD's build; tests key on it)
+verified = """THE ENDPOINTS FOLLOW BUILD 38888 (the owner's ruling 2026-09-28, "regenerate content \
+from 38888"): damage0/15 = 10 / 85 is s_skill row 204's bonus slot on build 38888 (OBSERVED, \
+toolkit/clientscan/skilltable.py on vault/client/2026-09-01_44fbd68767a8/Gw.exe, read 2026-09-28: \
+bonus_scale0 10, bonus_scale15 85, every other field of the row identical to 38797's). The contest \
+below is RESOLVED on 38888 for the wiki's number: CORROBORATED, client table 38888 + WIKI (10..85). \
+Rank 12 is now 70 (10 + 75 x 12 / 15). The owner's 38797 loopback client draws its own 10..70 \
+tooltip while the server deals 38888's number (the SLICE-H17b precedent). History, as written for \
+38797: studies/weapons/PLAN.md 43 (B2). Wiki: "Hex Spell. Deals 10...85 cold damage to \
 target and adjacent foes. For 5...20 seconds, target foe and all adjacent foes take twice as long \
 to activate signets. If you are Overcast, foes struck with Rust have their signets interrupted and \
 disabled for 1...10 second[s]."; `aoe = adjacent`. Client (38797): id 204, type_code 4, attribute \
@@ -2959,9 +2967,9 @@ disabled for 1...10 second[s]."; `aoe = adjacent`. Client (38797): id 204, type_
 only), scale 1 / 10 (skilldesc: DISABLE_DURATION, the Overcast clause -- no consumer), bonus 10 / \
 70 (skilldesc: COLD_DAMAGE) -- BOTH bit-clear with differing endpoints. THE DAMAGE IS CONTESTED: \
 the client's bonus slot says 10..70 and the wiki's progression says 10..85 (the same line Deep \
-Freeze's page carries); the row ships the CLIENT's number, and a tooltip read in a run settles \
-it. Read by hex_cast_damage (the explicit `damage0/15`, interpolated by the client's formula; \
-rank 12: 58) as the on-cast burst over every foe within 156 u of the target, like Deep Freeze's. \
+Freeze's page carries); the row shipped the CLIENT's number (10 / 70 until 2026-09-28), and a \
+tooltip read in a run settles it. Read by hex_cast_damage (the explicit `damage0/15`, interpolated \
+by the client's formula; rank 12: 58 on 38797's endpoints, 70 on 38888's) as the on-cast burst over every foe within 156 u of the target, like Deep Freeze's. \
 The x2 is read by episodemods.signet_activation_factor for a SIGNET (type_code 7, OBSERVED 4/4) \
 at the player's press and a body's cast start; the recharge anchor takes the scaled value; \
 property 61 is never sent (the client's own bar: UNVERIFIED). NOT modelled, said here: the \
