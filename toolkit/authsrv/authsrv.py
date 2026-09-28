@@ -6025,6 +6025,15 @@ MAP_ID_COUNT_BY_BUILD = {
 }
 CLIENT_BUILD = 38797                               # the pin; rebound by --client-build
 MAP_ID_COUNT = MAP_ID_COUNT_BY_BUILD[CLIENT_BUILD]
+# ITS SIBLING, 2026-09-28: the client's SKILL record count per build (3,438 /
+# 3,443 x3 / 3,476), each MEASURED by skilltable.locate_table over the vaulted
+# image -- the table and how it was read live in skillunlock.py, beside the
+# SKILL_TABLE_ROWS it replaced, because sandbox.py reads it too and must not
+# import this file. main() rebinds SKILL_TABLE_ROWS to CLIENT_BUILD's row and
+# serves no skill at or past it (the 38888 overlay's 3446 to a 38797 client).
+# Read by main() and by test_skillbound.py, which re-measures every row.
+from skillunlock import SKILL_RECORD_COUNT_BY_BUILD  # noqa: F401,E402
+SKILL_TABLE_BUILD = CLIENT_BUILD   # whose count SKILL_TABLE_ROWS is; serve_client_skill_table rebinds both
 
 
 def mission_mask_bytes(map_count):
@@ -6038,6 +6047,65 @@ def build_of_mission_mask(width):
     the manifest sentinel but in time to say the flag was wrong."""
     return sorted(b for b, n in MAP_ID_COUNT_BY_BUILD.items()
                   if mission_mask_bytes(n) == width)
+
+
+def refuse_skills_past_table(ids, where):
+    """SystemExit naming every id in `ids` the served client has no skill
+    record for (id >= SKILL_TABLE_ROWS, CLIENT_BUILD's row), else nothing.
+    `where` says which flag or row handed them over."""
+    past = skillunlock.ids_past_table(ids, SKILL_TABLE_ROWS)
+    if past:
+        raise SystemExit(
+            f"{where}: skill {', '.join(map(str, past))} is past build "
+            f"{SKILL_TABLE_BUILD}'s skill table ({SKILL_TABLE_ROWS:,} records, ids "
+            f"0..{SKILL_TABLE_ROWS - 1}). That client has no record for it, so "
+            f"serving it is a missing record on a bar, a cast or the Skills "
+            f"panel (the unlock bit's assert is ChCliSkill.cpp:1022). Refusing "
+            f"at startup; give --client-build the client that has it, or take "
+            f"it off.")
+
+
+def serve_client_skill_table(build):
+    """Bound the served world by `build`'s skill table. Called by main() once
+    CLIENT_BUILD is settled, before any flag or row hands a skill to a body.
+
+    1. SKILL_TABLE_ROWS (here and in skillunlock, whose words_from_ids and
+       unlock_all_words read it at call time) becomes the build's row of
+       SKILL_RECORD_COUNT_BY_BUILD.
+    2. Every row of content.SKILL_KEYED_KINDS whose id is at or past it is
+       DROPPED from agents.WORLD and named once, in World.dropped and in the
+       log -- the 38888 overlay's 3446 is not served to a 38797 client.
+    3. A content row that still HANDS such an id to a body (a bar, a party
+       row, a spawn -- content.skill_references) is refused by name, since
+       dropping the definition would not take the id off the wire.
+
+    Returns the load's own World.dropped lines (those present before this
+    call), which main()'s CONTENT DROPPED loop prints -- the lines added here
+    are printed here, so none is printed twice."""
+    global SKILL_TABLE_ROWS, SKILL_TABLE_BUILD
+    rows = SKILL_RECORD_COUNT_BY_BUILD[build]
+    loaded = list(getattr(agents.WORLD, "dropped", ()))
+    SKILL_TABLE_ROWS = skillunlock.SKILL_TABLE_ROWS = rows
+    SKILL_TABLE_BUILD = build
+    lines = agents.WORLD.drop_past(
+        agents.content.SKILL_KEYED_KINDS, rows,
+        f"past build {build}'s skill table ({rows:,} records)")
+    print(f"[skills] --client-build {build}: the client's skill table holds "
+          f"{rows:,} records (ids 0..{rows - 1}); {len(lines)} content row(s) "
+          f"past it not served", flush=True)
+    for line in lines:
+        print(f"CONTENT DROPPED: {line}", flush=True)
+    refs = [(w, s) for w, s in agents.content.skill_references(agents.WORLD)
+            if s >= rows]
+    if refs:
+        raise SystemExit(
+            f"content hands a body a skill past build {build}'s skill table "
+            f"({rows:,} records): "
+            + "; ".join(f"{w} -> {s}" for w, s in refs)
+            + ". The row's definition was dropped above, but the id would still "
+              "go out on the wire. Refusing at startup: serve the client that "
+              "has it (--client-build), or take it off that row.")
+    return loaded
 
 # Where the world's facts live: content/maps.toml, loaded through toolkit/content.py.
 #
@@ -41980,6 +42048,15 @@ def main():
             ap.error(f"--client-build {a.client_build} has no MAP_ID_COUNT row; "
                      f"registered: {sorted(MAP_ID_COUNT_BY_BUILD)}. Add the row "
                      f"from test_quests.py sec. 19b's scan of that client")
+        # Its skill table too (SKILL_RECORD_COUNT_BY_BUILD, 2026-09-28): the
+        # rows at or past the count are not served, so a build with no count
+        # has no bound to serve by -- refused, not guessed from a neighbour.
+        if a.client_build not in SKILL_RECORD_COUNT_BY_BUILD:
+            ap.error(f"--client-build {a.client_build} has no "
+                     f"SKILL_RECORD_COUNT row; registered: "
+                     f"{sorted(SKILL_RECORD_COUNT_BY_BUILD)}. Add the row from "
+                     f"skilltable.locate_table over that client "
+                     f"(skillunlock.py says how; test_skillbound.py re-measures)")
         CLIENT_BUILD = a.client_build
         MAP_ID_COUNT = MAP_ID_COUNT_BY_BUILD[CLIENT_BUILD]
         NO_MARKER_MAP = MAP_ID_COUNT
@@ -41990,6 +42067,7 @@ def main():
           f"{' (given)' if a.client_build is not None else ' (default: the pin)'}"
           f": the manifest's 'no map' sentinel is {MAP_ID_COUNT}, the mission "
           f"mask expected {mission_mask_bytes(MAP_ID_COUNT)} bytes")
+    _loaded_drops = serve_client_skill_table(CLIENT_BUILD)
     if a.party:
         # SLICE-H2: THE PARTY AS CONTENT. The row names what the hero rig's
         # flags took one by one across studies/heroes and studies/pvpui; this
@@ -43177,6 +43255,7 @@ def main():
             _sid = int(_tok.strip(), 0)
             _act, _after, _rech = skill_timing(_sid)
             _hbar.append((_sid, _act, float(_rech)))
+        refuse_skills_past_table([s[0] for s in _hbar], "--hero-skills")
         HERO_SKILLS = tuple(_hbar)
         print(f"HERO BAR: {len(HERO_SKILLS)} skill(s) "
               f"{[s[0] for s in HERO_SKILLS]} -- the party body casts "
@@ -44854,9 +44933,10 @@ def main():
               "hostile casts ~20% too fast for a 1 s / 5 s spell with this flag).",
               flush=True)
 
-    for _line in getattr(agents.WORLD, "dropped", ()):
+    for _line in _loaded_drops:
         # SKILLS-LU's fix pass (content.LABEL_DETAILS_KNOWN): a label row with a
-        # mark this tree does not know was not served -- said at startup, once
+        # mark this tree does not know was not served -- said at startup, once.
+        # The load's lines only: serve_client_skill_table printed its own.
         print(f"CONTENT DROPPED: {_line}", flush=True)
     if a.no_skill_labels:
         _gone = agents.WORLD.drop_tier("skill_effect", agents.content.LABEL_TIER)
@@ -45248,6 +45328,7 @@ def main():
     if len(SKILLBAR) > SKILLBAR_SLOTS:
         raise SystemExit(f"--skills takes at most {SKILLBAR_SLOTS} ids, "
                          f"got {len(SKILLBAR)}")
+    refuse_skills_past_table(SKILLBAR, "--skills" if a.skills else "the default bar")
     print(f"skillbar: {SKILLBAR}")
     if a.spawn_profession is not None:
         try:

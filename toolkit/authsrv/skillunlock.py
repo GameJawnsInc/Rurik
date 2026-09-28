@@ -76,7 +76,48 @@ UNLOCK_ALL_WORD = 0xFFFFFFFF
 # MEASURED against build 38797. A different build has a different row count, and
 # this number is not read from the binary -- if the client starts asserting in
 # ChCliSkill.cpp again, re-derive it with repoint_skill.py --show.
-SKILL_TABLE_ROWS = 3443
+#
+# AND A DIFFERENT BUILD HAS ONE (2026-09-28, the "regenerate content from 38888"
+# arc). The single literal above became THIS TABLE, the way authsrv's
+# MAP_ID_COUNT_BY_BUILD did on 2026-09-14: one row per vaulted build, keyed by
+# build NUMBER, each MEASURED as `skilltable.locate_table(image)[1]` -- the
+# record count the extractor itself walks, read from record 0's +0x2C and
+# accepted only when the probe scores the table (1988 on every image below) --
+# over vault/client/<stamp>/Gw.exe, with buildid naming the build:
+#
+#     38519  2026-04-30_b174de1f2d8d  3,438 records at file 5,753,000
+#     38797  2026-07-29_221c13772c7a  3,443 records at file 5,799,632  (the pin)
+#     38833  2026-08-13_64fae3b1369b  3,443 records at file 5,799,632
+#     38849  2026-08-20_21511009c460  3,443 records at file 5,799,632
+#     38888  2026-09-01_44fbd68767a8  3,476 records at file 5,803,376
+#
+# test_skillbound.py re-measures every vaulted row on each run, so this cannot
+# drift silently, and holds its keys equal to MAP_ID_COUNT_BY_BUILD's. WHY IT
+# MATTERS NOW: the 38888 player corpus carries skill 3446, which the pin's table
+# (ids 0..3442) does not have, and the owner plays a 38797 loopback client. The
+# unlock bit is the MEASURED crash above; a bar or a cast naming the id is the
+# same missing record reached by another path (RECONSTRUCTION -- no run has
+# served one). authsrv.main() rebinds SKILL_TABLE_ROWS from --client-build and
+# stops serving every skill row at or past it; sandbox.compile_spec refuses a
+# spec that puts one on a bar before a client is launched.
+SKILL_RECORD_COUNT_BY_BUILD = {
+    38519: 3438,   # 2026-04-30
+    38797: 3443,   # 2026-07-29, the pin
+    38833: 3443,   # 2026-08-13
+    38849: 3443,   # 2026-08-20
+    38888: 3476,   # 2026-09-01
+}
+# The pin's row, rebound by authsrv.main() to --client-build's. words_from_ids
+# and unlock_all_words read it at CALL time, so the rebind reaches both.
+SKILL_TABLE_ROWS = SKILL_RECORD_COUNT_BY_BUILD[38797]
+
+
+def ids_past_table(ids, rows=None):
+    """The ids in `ids` a client whose skill table holds `rows` records
+    (default: SKILL_TABLE_ROWS, read now) has NO record for -- id >= rows --
+    sorted, each once. Id 0 and negatives are not skills and are not listed."""
+    bound = SKILL_TABLE_ROWS if rows is None else int(rows)
+    return sorted({int(s) for s in ids if int(s) >= bound})
 
 
 def unlock_all_words():
