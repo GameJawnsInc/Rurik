@@ -2579,10 +2579,23 @@ try:
     lit = authsrv.net_pips(st, PLAYER)
     st0 = fresh_state()
     hex_on(st0, FAINT, rank=0)
-    check(lit == 3.0 and authsrv.net_pips(st0, PLAYER) == 0.0,
+    # KEYED ON THE BUILD THE LOADED 135 ROW RECORDS (the content38888 arc,
+    # 2026-09-28): the pips are the bonus slot through the client's interpolator,
+    # round(bonus_scale0 + (bonus_scale15 - bonus_scale0) x rank / 15), and 38888
+    # re-balanced the slot. OBSERVED, skilltable.py on each pristine Gw.exe:
+    # 38797 0..3 -> (rank 15, rank 0) = (3, 0), this check's original literals;
+    # 38888 1..3 -> (3, 1). Any other build has no expectation and FAILS by name.
+    faint_pips = {38797: (3.0, 0.0), 38888: (3.0, 1.0)}
+    faint_build = agents.WORLD.get("skills", str(FAINT)).provenance.get("build")
+    faint_want = faint_pips.get(faint_build)
+    unlit = authsrv.net_pips(st0, PLAYER)
+    check(faint_want is not None and (lit, unlit) == faint_want,
           "Faintheartedness's `Health degeneration` bonus (bit SET, read from the slot) is LIT "
-          "UP by the same reader: 3 pips at rank 15, 0 at rank 0 -- dormant since 2026-08-22, "
-          "a behaviour change decided on (--no-hex-degeneration is its revert too)", f"{lit}")
+          "UP by the same reader: 3 pips at rank 15, and at rank 0 its row's bonus0 (build "
+          "38797: 0, build 38888: 1) -- dormant since 2026-08-22, a behaviour change decided "
+          "on (--no-hex-degeneration is its revert too)",
+          f"(rank 15, rank 0) = {(lit, unlit)} on a build-{faint_build} row, expected {faint_want}"
+          + ("" if faint_want is not None else f" -- NO EXPECTATION for build {faint_build}"))
     sent, send = collector()
     st = fresh_state()
     st["player_energy"] = 50.0
@@ -2794,12 +2807,48 @@ try:
     authsrv.SPELL_AREAS = True
     row = agents.WORLD.get("skill_effect", str(RUST))
     rec = agents.WORLD.get("skills", str(RUST))
+    # The content38888 arc (2026-09-28). skill_effect.204's damage0/15 = 10/70 is a
+    # RECORD copied from build 38797's client row (its provenance says "Client
+    # (38797) ... bonus 10 / 70"), so it is compared against BUILD 38797's row: the
+    # loaded row when the vault is 38797's, else the pristine 38797 client table read
+    # through pinned.find + skilltable (the lane never re-copies it from a newer
+    # vault). SEPARATELY, the loaded row's own bonus slot is keyed on the build that
+    # row records -- OBSERVED, skilltable.py on each pristine Gw.exe: 38797 (10, 70),
+    # 38888 (10, 85), the wiki's 10..85. A row of any other build FAILS by name.
+    rust_record_build = 38797
+    rust_slot_by_build = {38797: (10, 70), 38888: (10, 85)}
+    rust_build = rec.provenance.get("build")
+    rust_loaded = (int(rec["bonus_scale0"]), int(rec["bonus_scale15"]))
+    if rust_build == rust_record_build:
+        rust_record_src, rust_record_slot = "the loaded build-38797 row", rust_loaded
+    else:
+        try:
+            sys.path.insert(0, os.path.join(os.path.dirname(HERE), "clientscan"))
+            import pinned        # noqa: E402
+            import skilltable    # noqa: E402
+            _exe, _why = pinned.find(build=rust_record_build)
+            with open(_exe, "rb") as _fh:
+                _data = _fh.read()
+            _base, _count, _score = skilltable.locate_table(_data)
+            _r = skilltable.parse_record(_data, _base, RUST)
+            rust_record_src = f"the build-38797 client table ({_why})"
+            rust_record_slot = (int(_r["bonus_scale0"]), int(_r["bonus_scale15"]))
+        except (SystemExit, OSError, KeyError, ValueError) as exc:
+            rust_record_src, rust_record_slot = f"UNREADABLE build-38797 table: {exc}", None
     check(row.get("bonus_scale_means") == "Cold damage" and row.get("hits_on_cast") is True
           and (row.get("damage0"), row.get("damage15")) == (10, 70)
-          and (int(rec["bonus_scale0"]), int(rec["bonus_scale15"])) == (10, 70)
+          and rust_record_slot == (10, 70)
+          and rust_build in rust_slot_by_build
+          and rust_loaded == rust_slot_by_build[rust_build]
           and int(rec["skill_arguments"]) == 1 and row.get("signet_activation_multiplier") == 2,
           "the row: `Cold damage` in the BONUS slot with the client's own 10..70 carried "
-          "explicitly (args = 1: both slots bit-clear and differing), hits_on_cast, x2 signets")
+          "explicitly (args = 1: both slots bit-clear and differing), hits_on_cast, x2 signets "
+          "-- the 10..70 is build 38797's and checked against 38797's row; the loaded row's "
+          "slot is its own build's (38797: 10..70, 38888: 10..85)",
+          f"record (10, 70) vs {rust_record_slot} from {rust_record_src}; loaded build "
+          f"{rust_build} slot {rust_loaded}, expected {rust_slot_by_build.get(rust_build)}"
+          + ("" if rust_build in rust_slot_by_build else
+             f" -- NO EXPECTATION for build {rust_build}"))
     got = [authsrv.hex_cast_damage(RUST, r) for r in (0, 12, 15)]
     check(got == [(10, "standalone"), (58, "standalone"), (70, "standalone")],
           "hex_cast_damage: 10 / 58 / 70 at rank 0 / 12 / 15 -- the CLIENT's number, CONTESTED "
